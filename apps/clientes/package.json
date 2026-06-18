@@ -1,17 +1,32 @@
 {
-  "name": "shop-temp",
+  "name": "central-led-shop",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync:ui": "rm -rf node_modules/@myd-org/ui && mkdir -p node_modules/@myd-org/ui/dist && cp -R ../ui/dist/. node_modules/@myd-org/ui/dist/ && cp ../ui/package.json node_modules/@myd-org/ui/package.json",
+    "predev": "npm run sync:ui",
     "dev": "next dev",
+    "prebuild": "npm run sync:ui",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "postinstall": "npm run sync:ui"
   },
   "dependencies": {
+    "@myd-org/ui": "file:../ui",
+    "@radix-ui/react-dialog": "^1.1.17",
+    "@radix-ui/react-dropdown-menu": "^2.1.18",
+    "@radix-ui/react-select": "^2.3.1",
+    "@radix-ui/react-tabs": "^1.1.15",
+    "@radix-ui/react-tooltip": "^1.2.10",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "fuse.js": "^7.4.2",
+    "iron-session": "^8.0.4",
     "next": "16.2.9",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tailwind-merge": "^2.6.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

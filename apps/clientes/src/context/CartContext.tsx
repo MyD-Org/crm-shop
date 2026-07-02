@@ -18,14 +18,12 @@ interface CartContextValue {
   updateQty: (id: string, qty: number) => void;
   total: number;
   count: number;
-  lastAdded: CartItem | null;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
-  const [lastAdded, setLastAdded] = useState<CartItem | null>(null);
 
   const addItem = useCallback((newItem: Omit<CartItem, "qty">, qty = 1) => {
     setItems((prev) => {
@@ -35,8 +33,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, { ...newItem, qty }];
     });
-    // Dispara el feedback visual (nueva referencia siempre, aunque repita producto)
-    setLastAdded({ ...newItem, qty });
   }, []);
 
   const removeItem = useCallback((id: string) => {
@@ -51,7 +47,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const count = items.reduce((acc, i) => acc + i.qty, 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, total, count, lastAdded }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, total, count }}>
       {children}
     </CartContext.Provider>
   );

@@ -11,7 +11,18 @@ export interface SessionData {
 
 // Misma config que el CRM — cookie compartida en .cliente.example
 export const sessionOptions: SessionOptions = {
-  password: process.env.SESSION_SECRET ?? "development-secret-change-in-production-32chars",
+  // Getter: se evalua al atender el request, no al importar el modulo, para no
+  // romper el build donde la variable todavia no este cargada. Sin default a
+  // proposito: un secreto fijo en el repo permitiria falsificar sesiones.
+  get password() {
+    const secret = process.env.SESSION_SECRET
+    if (!secret) {
+      throw new Error(
+        "Falta SESSION_SECRET en el entorno. Debe ser el mismo valor que en el CRM para compartir la cookie de sesion. Revisar .env.local."
+      )
+    }
+    return secret
+  },
   cookieName: "portal-session",
   cookieOptions: {
     secure: process.env.NODE_ENV === "production",

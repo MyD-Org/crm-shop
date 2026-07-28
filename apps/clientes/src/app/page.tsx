@@ -5,7 +5,8 @@ import Image from "next/image";
 import { Badge, Button, ProductCard } from "@myd-org/ui";
 import { Footer } from "@/components/Footer";
 import { AddToCartButton } from "@/components/AddToCartButton";
-import { PRODUCTS } from "@/data/products";
+import { useEffect, useState } from "react";
+import type { Product } from "@/data/products";
 
 /* ── Icons ─────────────────────────────────────────────── */
 
@@ -74,11 +75,20 @@ const CATEGORIES = [
   { label: "Herramientas", count: 280 },
 ];
 
-const DESTACADOS = PRODUCTS.slice(0, 4);
 
 /* ── Page ───────────────────────────────────────────────── */
 
 export default function Home() {
+  const [destacados, setDestacados] = useState<Product[]>([]);
+
+  // Destacados desde Alegra (primeros del catálogo). Solo lectura.
+  useEffect(() => {
+    fetch("/api/shop/catalogo?limit=4")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Product[]) => setDestacados(Array.isArray(data) ? data : []))
+      .catch(() => setDestacados([]));
+  }, []);
+
   return (
     <>
 
@@ -263,7 +273,7 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {DESTACADOS.map((p) => (
+            {destacados.map((p) => (
               <Link key={p.id} href={`/producto/${p.id}`}>
                 <ProductCard
                   name={p.name}

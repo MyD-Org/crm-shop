@@ -37,7 +37,15 @@ export function connectionString(): string {
 
 function buildDb(url: string) {
   // `prepare: false` para compatibilidad con el pooler de Neon (pgbouncer).
-  const client = postgres(url, { prepare: false });
+  // Neon cobra el tiempo que el compute está despierto y sólo autosuspende tras
+  // ~5 min SIN conexiones abiertas. El default de postgres-js es
+  // idle_timeout=null (no cerrar nunca), así que una instancia tibia de Vercel
+  // mantenía el compute prendido sin hacer una sola query. Cerramos a los 20s.
+  const client = postgres(url, {
+    prepare: false,
+    idle_timeout: 20,
+    max_lifetime: 60 * 30,
+  });
   return drizzle(client, { schema });
 }
 

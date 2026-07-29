@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCatalogo } from "@/lib/catalog";
 
-// Lee de Alegra en cada request (datos de gestión, no cacheables estáticamente).
+// Lee el espejo local del catálogo en cada request.
 export const dynamic = "force-dynamic";
 
-/** Alegra limita las consultas a 30 items por request. */
-const MAX_LIMIT = 30;
+/**
+ * Tope de resultados. Ya no es el límite de Alegra (el espejo local no lo
+ * tiene): es para que el autocomplete y los destacados del home no se traigan
+ * el catálogo entero sin querer.
+ */
+const DEFAULT_LIMIT = 24;
+const MAX_LIMIT = 200;
 
 /**
  * GET /api/shop/catalogo?q=<texto>&limit=<n>
- * Devuelve Product[] mapeado desde Alegra. Solo lectura.
+ * Devuelve Product[] desde el espejo local. Solo lectura.
  * Lo consumen el buscador (autocomplete) y los destacados del home.
  */
 export async function GET(req: NextRequest) {
@@ -17,7 +22,7 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get("q")?.trim() || undefined;
   const limitRaw = Number(searchParams.get("limit"));
   const limit = Math.min(
-    Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : MAX_LIMIT,
+    Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : DEFAULT_LIMIT,
     MAX_LIMIT
   );
 

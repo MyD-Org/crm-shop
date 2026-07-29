@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCategorias } from "@/lib/catalog";
 
-// Sale de /item-categories de Alegra en cada request.
+// Sale del espejo local de categorías (lo refresca el cron diario).
 export const dynamic = "force-dynamic";
 
 /**

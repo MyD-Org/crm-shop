@@ -1,22 +1,34 @@
 /**
- * Capa de catálogo: adapta los items de Alegra a la forma `Product` que el
- * shop ya renderiza (ver src/data/products.ts y el ProductCard del DS).
+ * Capa de catálogo: adapta el catálogo a la forma `Product` que el shop ya
+ * renderiza (ver src/data/products.ts y el ProductCard del DS).
  *
- * SOLO servidor: usa el cliente de Alegra. Consumir desde Server Components o
- * API routes, nunca desde el browser.
+ * De dónde sale cada cosa (ver docs/arquitectura-integraciones.md):
+ * - LISTAR y BUSCAR → espejo local en Postgres (`catalog_products`), que
+ *   refresca el cron diario `/api/cron/catalog-sync`. Alegra topea en 30 items
+ *   por request y el catálogo tiene ~2800: no se puede paginar en vivo.
+ * - COMPROMETER un precio o un stock (ficha de producto, checkout) → EN VIVO
+ *   contra Alegra. Un número que el shop le promete al cliente nunca sale de
+ *   una cache de hasta 24 h.
+ *
+ * SOLO servidor: usa la DB y el cliente de Alegra. Consumir desde Server
+ * Components o API routes, nunca desde el browser.
  *
  * Los campos de marketing (oldPrice, discount, badge) NO vienen de Alegra: son
- * concepto del shop y viven en su propia capa (ver docs/arquitectura-integraciones.md).
+ * concepto del shop y viven en su propia capa.
  */
 
 import { cache } from "react";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
+import { getDb } from "@/db";
+import { catalogCategories, catalogProducts } from "@/db/schema";
 import {
   getItem,
-  getItemCategories,
-  getItems,
+  marcaDeCustomFields,
+  precioDeLista,
   resolverPrecio,
   type AlegraItem,
+  type AlegraPrice,
 } from "./alegra";
 import type { Product } from "@/data/products";
 
@@ -24,61 +36,128 @@ import type { Product } from "@/data/products";
 const STOCK_BAJO = 5;
 
 /**
- * Deriva el estado de stock del shop a partir del inventario de Alegra.
- * - Item sin inventario (servicio / no inventariable) → siempre disponible.
- * - Con inventario: >= STOCK_BAJO = "in", >0 = "low", 0 = "out".
+ * Deriva el estado de stock del shop a partir de una cantidad de inventario.
+ * - null/undefined (servicio / no inventariable) → siempre disponible.
+ * - >= STOCK_BAJO = "in", >0 = "low", 0 = "out".
  */
-function derivarStock(item: AlegraItem): ProductStock {
-  const qty = item.inventory?.availableQuantity;
+function derivarStock(qty: number | null | undefined): ProductStock {
   if (qty == null) return "in";
   if (qty <= 0) return "out";
   if (qty < STOCK_BAJO) return "low";
   return "in";
 }
 
-/**
- * Extrae la marca. Alegra no tiene un campo "marca" nativo, así que se busca
- * en customFields (por nombre) y se cae a la categoría del item.
- * TODO: confirmar contra la cuenta real dónde cargan la marca (customField vs
- * itemCategory) y ajustar acá.
- */
-function extraerMarca(item: AlegraItem): string {
-  const custom = item.customFields as
-    | Array<{ name?: string; value?: unknown }>
-    | undefined;
-  const campoMarca = custom?.find((c) =>
-    /marca|brand/i.test(c.name ?? "")
-  );
-  if (campoMarca?.value) return String(campoMarca.value);
+// ---------------------------------------------------------------------------
+// Lectura desde el espejo local
+// ---------------------------------------------------------------------------
 
-  const categoria = item.itemCategory as { name?: string } | undefined;
-  return categoria?.name ?? "";
+/** Fila del join productos × categorías, tal como la devuelve la query. */
+interface FilaCatalogo {
+  alegraId: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  brand: string | null;
+  prices: unknown;
+  stock: string | null;
+  categoryName: string | null;
 }
 
-/**
- * Mapea un item de Alegra a un `Product` del shop.
- * @param idPriceList  lista de precios del cliente logueado (si tiene una).
- */
-export function mapItemToProduct(
-  item: AlegraItem,
-  idPriceList?: string
-): Product {
-  const categoria = item.itemCategory as { name?: string } | undefined;
+function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Product {
+  const qty = fila.stock != null ? Number(fila.stock) : null;
   return {
-    id: item.id,
-    name: item.name,
-    brand: extraerMarca(item),
-    price: resolverPrecio(item, idPriceList),
-    stock: derivarStock(item),
-    stockQty: item.inventory?.availableQuantity ?? undefined,
-    sku: item.reference || undefined,
-    description: item.description || undefined,
-    category: categoria?.name || undefined,
+    id: fila.alegraId,
+    // La marca sale del customField de Alegra; si no está cargado, cae al
+    // nombre de la categoría (mismo criterio que la ficha en vivo).
+    brand: fila.brand || fila.categoryName || "",
+    name: fila.name,
+    price: precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList),
+    stock: derivarStock(qty),
+    stockQty: qty ?? undefined,
+    sku: fila.code || undefined,
+    description: fila.description || undefined,
+    category: fila.categoryName || undefined,
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
 }
 
-/** Trae un item puntual por id. Devuelve null si Alegra no lo encuentra. */
+/** Columnas del join, en un solo lugar para no repetirlas entre queries. */
+const COLUMNAS_CATALOGO = {
+  alegraId: catalogProducts.alegraId,
+  name: catalogProducts.name,
+  code: catalogProducts.code,
+  description: catalogProducts.description,
+  brand: catalogProducts.brand,
+  prices: catalogProducts.prices,
+  stock: catalogProducts.stock,
+  categoryName: catalogCategories.name,
+};
+
+/**
+ * Condición de búsqueda por texto, insensible a mayúsculas Y a tildes.
+ *
+ * Las tildes importan: el catálogo dice "Termomagnético" y el cliente escribe
+ * "termomagnetico". `ILIKE` solo resuelve mayúsculas, así que se normalizan los
+ * dos lados con `immutable_unaccent` (ver drizzle/0001_unaccent.sql).
+ *
+ * Busca en el nombre, en el código y en la descripción — en esta cuenta de
+ * Alegra el nombre comercial vive en `description`, así que sin ese tercer
+ * campo la búsqueda no encontraría casi nada.
+ */
+function coincideTexto(q: string) {
+  const patron = `%${q}%`;
+  const norm = (col: unknown) =>
+    sql`immutable_unaccent(lower(${col})) LIKE immutable_unaccent(lower(${patron}))`;
+  return or(
+    norm(catalogProducts.name),
+    norm(catalogProducts.code),
+    norm(catalogProducts.description)
+  );
+}
+
+/**
+ * Trae el catálogo desde el espejo local. Solo productos activos.
+ *
+ * Sin `limit` devuelve el catálogo completo: es una sola query indexada, y las
+ * facetas del catálogo solo son correctas si se calculan sobre todo el conjunto.
+ * `idPriceList` aplica la lista de precios del cliente logueado si tiene una.
+ */
+export async function getCatalogo(opts?: {
+  idPriceList?: string;
+  limit?: number;
+  offset?: number;
+  busqueda?: string;
+}): Promise<Product[]> {
+  const q = opts?.busqueda?.trim();
+
+  let query = getDb()
+    .select(COLUMNAS_CATALOGO)
+    .from(catalogProducts)
+    .leftJoin(
+      catalogCategories,
+      eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId)
+    )
+    .where(
+      and(
+        eq(catalogProducts.status, "active"),
+        q ? coincideTexto(q) : undefined
+      )
+    )
+    .orderBy(asc(catalogProducts.name))
+    .$dynamic();
+
+  if (opts?.limit != null) query = query.limit(opts.limit);
+  if (opts?.offset != null) query = query.offset(opts.offset);
+
+  const filas = await query;
+  return filas.map((f) => mapFilaToProduct(f, opts?.idPriceList));
+}
+
+/**
+ * Trae un producto puntual EN VIVO desde Alegra. Es la ficha de producto: el
+ * precio y el stock que se muestran acá son los que el shop compromete, así que
+ * no salen del espejo. Devuelve null si Alegra no lo encuentra.
+ */
 export async function getProducto(
   id: string,
   idPriceList?: string
@@ -91,24 +170,28 @@ export async function getProducto(
   }
 }
 
-/**
- * Trae el catálogo desde Alegra y lo mapea a `Product[]`.
- * Solo items activos. `idPriceList` aplica la lista del cliente si corresponde.
- */
-export async function getCatalogo(opts?: {
-  idPriceList?: string;
-  limit?: number;
-  start?: number;
-  busqueda?: string;
-}): Promise<Product[]> {
-  const items = await getItems({
-    status: "active",
-    limit: opts?.limit,
-    start: opts?.start,
-    name: opts?.busqueda,
-  });
-  return items.map((item) => mapItemToProduct(item, opts?.idPriceList));
+/** Mapea un item en vivo de Alegra a un `Product` del shop. */
+export function mapItemToProduct(
+  item: AlegraItem,
+  idPriceList?: string
+): Product {
+  const categoria = item.itemCategory as { name?: string } | undefined;
+  return {
+    id: item.id,
+    name: item.name,
+    brand: marcaDeCustomFields(item.customFields) || categoria?.name || "",
+    price: resolverPrecio(item, idPriceList),
+    stock: derivarStock(item.inventory?.availableQuantity),
+    stockQty: item.inventory?.availableQuantity ?? undefined,
+    sku: item.reference || undefined,
+    description: item.description || undefined,
+    category: categoria?.name || undefined,
+  };
 }
+
+// ---------------------------------------------------------------------------
+// Facetas y navegación
+// ---------------------------------------------------------------------------
 
 /** Una opcion de filtro con la cantidad real de productos que la cumplen. */
 export interface Faceta {
@@ -134,9 +217,9 @@ function contar(valores: (string | undefined)[]): Faceta[] {
 }
 
 /**
- * Facetas de los productos que se estan mostrando. Son filtros sobre el
- * resultado en pantalla, asi que los conteos se refieren a esa lista y no al
- * catalogo completo. Funcion pura: no consulta Alegra.
+ * Facetas de una lista de productos ya cargada. Función pura: los conteos son
+ * de esa lista, así que solo son los del catálogo completo si se la llama con
+ * el catálogo completo.
  */
 export function facetasDe(productos: Product[]): Facetas {
   return {
@@ -146,20 +229,35 @@ export function facetasDe(productos: Product[]): Facetas {
 }
 
 /**
- * Categorias del catalogo completo, para la navegacion (menu del header y
- * grilla del home). Sale del endpoint /item-categories de Alegra: no se puede
- * derivar de los items porque Alegra devuelve como maximo 30 por request y el
- * catalogo tiene ~2800.
+ * Categorías del catálogo, para la navegación (menú del header y grilla del
+ * home). Salen del espejo local, filtrando las que no tienen ningún producto
+ * activo — una categoría vacía en el menú es un callejón sin salida.
  *
- * Envuelto en `cache` de React para consultarlo una sola vez por request.
+ * Envuelto en `cache` de React para consultarla una sola vez por request.
  */
 export const getCategorias = cache(async function getCategorias(): Promise<
   string[]
 > {
-  const cats = await getItemCategories({ limit: 30 });
-  return cats
-    .filter((c) => c.status !== "inactive")
-    .map((c) => c.name)
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, "es"));
+  const filas = await getDb()
+    .selectDistinct({ name: catalogCategories.name })
+    .from(catalogCategories)
+    .innerJoin(
+      catalogProducts,
+      and(
+        eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId),
+        eq(catalogProducts.status, "active")
+      )
+    )
+    .where(eq(catalogCategories.status, "active"))
+    .orderBy(asc(catalogCategories.name));
+
+  return filas.map((f) => f.name).filter(Boolean);
 });
+
+/** Fecha de la última sync exitosa, para mostrar frescura del catálogo. */
+export async function ultimaSincronizacion(): Promise<Date | null> {
+  const [fila] = await getDb()
+    .select({ max: sql<Date | null>`max(synced_at)` })
+    .from(catalogProducts);
+  return fila?.max ?? null;
+}

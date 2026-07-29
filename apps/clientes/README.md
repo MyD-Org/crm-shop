@@ -24,6 +24,39 @@ registry=https://registry.npmjs.org/
 //npm.pkg.github.com/:_authToken=TU_TOKEN
 ```
 
+## Base de datos
+
+El shop tiene **su propio Postgres** (separado del CRM — ver
+`docs/arquitectura-integraciones.md`). Hoy guarda el espejo del catálogo de
+Alegra, que refresca el cron diario.
+
+| Variable | Para qué |
+|---|---|
+| `DATABASE_URL` **o** `POSTGRES_URL` | Conexión a Postgres. La integración Neon/Vercel inyecta `POSTGRES_URL`, así que el código acepta las dos (`DATABASE_URL` gana si están ambas). |
+| `POSTGRES_URL_NON_POOLING` | Opcional. Si está, las migraciones la usan: el DDL conviene por la conexión directa y no por el pooler. |
+| `CRON_SECRET` | Protege `/api/cron/catalog-sync`. Sin esta variable el endpoint rechaza todo. |
+
+El pool de conexiones es un singleton (se reusa; uno por request agotaría las
+conexiones de Postgres). Está cacheado **junto a la URL con la que se creó**, así
+que si cambiás de base en el `.env.local` se reconecta solo en la próxima query
+y lo avisa por consola — no hace falta reiniciar `next dev`.
+
+Migraciones:
+
+```bash
+npm run db:generate   # genera SQL en drizzle/ a partir de src/db/schema.ts
+npm run db:migrate    # las aplica contra DATABASE_URL
+```
+
+Primera carga del catálogo (y para probar la sync a mano):
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/catalog-sync
+```
+
+Tarda un rato: recorre ~2800 ítems paginando de a 30. Cada corrida deja registro
+en `catalog_sync_log` (`status`, `items_synced`, `error`).
+
 ## Getting Started
 
 First, run the development server:

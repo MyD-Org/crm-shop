@@ -1,5 +1,29 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Setup: acceso al design system
+
+`@myd-org/ui` se publica en GitHub Packages (privado), no en npmjs. Antes del
+primer `npm install` hay que configurar el acceso **fuera del repo** — el
+`.npmrc` no se commitea, para que el token nunca viva en el codigo.
+
+**Local:** agregar a `~/.npmrc` (token con scope `read:packages`, generado en
+GitHub > Settings > Developer settings > Tokens classic):
+
+```
+@myd-org:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=TU_TOKEN
+```
+
+**Vercel:** variable de entorno `NPM_RC` con el contenido de ese archivo, mas
+la linea del registry publico. Vercel lo escribe como `.npmrc` en el build
+([docs](https://vercel.com/kb/guide/using-private-dependencies-with-vercel)):
+
+```
+registry=https://registry.npmjs.org/
+@myd-org:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=TU_TOKEN
+```
+
 ## Getting Started
 
 First, run the development server:

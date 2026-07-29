@@ -1,7 +1,7 @@
 import { getCatalogo, facetasDe } from "@/lib/catalog";
 import { CatalogoClient } from "@/components/CatalogoClient";
 
-// Lee el catálogo de Alegra en cada request.
+// Lee el espejo local del catálogo en cada request (lo refresca el cron diario).
 export const dynamic = "force-dynamic";
 
 export default async function CatalogoPage({
@@ -10,8 +10,10 @@ export default async function CatalogoPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
-  const productos = await getCatalogo({ busqueda: q, limit: 30 });
-  // Filtros sobre los productos mostrados: los conteos son de esta lista.
+  // Sin limit: el catálogo entero. Los filtros del cliente y los conteos de las
+  // facetas solo son correctos si operan sobre todo el conjunto, no sobre una
+  // primera página. TODO: paginar en el server cuando el payload moleste.
+  const productos = await getCatalogo({ busqueda: q });
   const facetas = facetasDe(productos);
 
   return (

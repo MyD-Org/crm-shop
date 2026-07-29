@@ -34,18 +34,14 @@ function MapPinIcon() {
   );
 }
 
-const NAV_CATEGORIES = [
-  "Iluminacion LED",
-  "Lamparas y tubos",
-  "Artefactos y luminarias",
-  "Tableros y proteccion",
-  "Cables y conductores",
-  "Tomas, llaves y modulos",
-  "Tiras LED y perfiles",
-  "Automatizacion",
-];
-
-export function HeaderUI({ sesion }: { sesion: { nombre: string } | null }) {
+export function HeaderUI({
+  sesion,
+  categorias,
+}: {
+  sesion: { nombre: string } | null;
+  /** Categorias reales del catalogo, resueltas en HeaderServer. */
+  categorias: string[];
+}) {
   const pathname = usePathname();
   // En "Mi cuenta" ocultamos la barra de categorias para que se sienta una
   // seccion propia y no de tienda.
@@ -98,10 +94,10 @@ export function HeaderUI({ sesion }: { sesion: { nombre: string } | null }) {
       </div>
 
       {/* Category nav */}
-      {!hideCategorias && (
+      {!hideCategorias && categorias.length > 0 && (
       <nav className="border-b border-border bg-elevated">
         <div className="no-scrollbar mx-auto flex max-w-7xl items-center gap-0 overflow-x-auto px-4">
-          {NAV_CATEGORIES.map((cat) => (
+          {categorias.map((cat) => (
             <Link
               key={cat}
               href={`/catalogo?categoria=${encodeURIComponent(cat)}`}

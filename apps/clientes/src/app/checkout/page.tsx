@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button, Field, Input } from "@myd-org/ui";
 import { Footer } from "@/components/Footer";
+import { useCart } from "@/context/CartContext";
 
 type Pago = "transferencia" | "efectivo";
 type Envio = "envio" | "retiro";
@@ -59,12 +60,6 @@ function RadioCard({
   );
 }
 
-const RESUMEN = [
-  { name: "Panel LED 48W 60x60 embutir", qty: 2, price: 14990 },
-  { name: "Cable unipolar 2.5mm x 100m", qty: 1, price: 45000 },
-  { name: "Lampara LED A60 12W E27", qty: 5, price: 3200 },
-];
-
 export default function CheckoutPage() {
   const [pago, setPago] = useState<Pago>("transferencia");
   const [envio, setEnvio] = useState<Envio>("retiro");
@@ -74,7 +69,8 @@ export default function CheckoutPage() {
   const [telefono, setTelefono] = useState("");
   const [confirmado, setConfirmado] = useState(false);
 
-  const subtotal = RESUMEN.reduce((a, i) => a + i.price * i.qty, 0);
+  // Carrito real del usuario, no un resumen de ejemplo.
+  const { items, total: subtotal } = useCart();
   const iva = Math.round(subtotal * 0.21);
   const total = subtotal + iva;
   const fmt = (n: number) =>
@@ -212,8 +208,11 @@ export default function CheckoutPage() {
             <h2 className="mb-4 text-base font-bold text-text">Resumen</h2>
 
             <ul className="mb-4 space-y-3">
-              {RESUMEN.map((item) => (
-                <li key={item.name} className="flex justify-between gap-2 text-sm">
+              {items.length === 0 && (
+                <li className="text-sm text-muted">Tu carrito esta vacio.</li>
+              )}
+              {items.map((item) => (
+                <li key={item.id} className="flex justify-between gap-2 text-sm">
                   <span className="text-muted">
                     {item.name}
                     <span className="ml-1 text-xs">x{item.qty}</span>

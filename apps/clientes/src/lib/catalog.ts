@@ -9,8 +9,15 @@
  * concepto del shop y viven en su propia capa (ver docs/arquitectura-integraciones.md).
  */
 
+import { cache } from "react";
 import type { ProductStock } from "@myd-org/ui";
-import { getItems, resolverPrecio, type AlegraItem } from "./alegra";
+import {
+  getItem,
+  getItemCategories,
+  getItems,
+  resolverPrecio,
+  type AlegraItem,
+} from "./alegra";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -56,14 +63,32 @@ export function mapItemToProduct(
   item: AlegraItem,
   idPriceList?: string
 ): Product {
+  const categoria = item.itemCategory as { name?: string } | undefined;
   return {
     id: item.id,
     name: item.name,
     brand: extraerMarca(item),
     price: resolverPrecio(item, idPriceList),
     stock: derivarStock(item),
+    stockQty: item.inventory?.availableQuantity ?? undefined,
+    sku: item.reference || undefined,
+    description: item.description || undefined,
+    category: categoria?.name || undefined,
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
+}
+
+/** Trae un item puntual por id. Devuelve null si Alegra no lo encuentra. */
+export async function getProducto(
+  id: string,
+  idPriceList?: string
+): Promise<Product | null> {
+  try {
+    const item = await getItem(id);
+    return mapItemToProduct(item, idPriceList);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -84,3 +109,57 @@ export async function getCatalogo(opts?: {
   });
   return items.map((item) => mapItemToProduct(item, opts?.idPriceList));
 }
+
+/** Una opcion de filtro con la cantidad real de productos que la cumplen. */
+export interface Faceta {
+  label: string;
+  count: number;
+}
+
+export interface Facetas {
+  categorias: Faceta[];
+  marcas: Faceta[];
+}
+
+/** Cuenta ocurrencias de un campo y las ordena de mayor a menor. */
+function contar(valores: (string | undefined)[]): Faceta[] {
+  const conteo = new Map<string, number>();
+  for (const v of valores) {
+    if (!v) continue;
+    conteo.set(v, (conteo.get(v) ?? 0) + 1);
+  }
+  return [...conteo.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/**
+ * Facetas de los productos que se estan mostrando. Son filtros sobre el
+ * resultado en pantalla, asi que los conteos se refieren a esa lista y no al
+ * catalogo completo. Funcion pura: no consulta Alegra.
+ */
+export function facetasDe(productos: Product[]): Facetas {
+  return {
+    categorias: contar(productos.map((p) => p.category)),
+    marcas: contar(productos.map((p) => p.brand)),
+  };
+}
+
+/**
+ * Categorias del catalogo completo, para la navegacion (menu del header y
+ * grilla del home). Sale del endpoint /item-categories de Alegra: no se puede
+ * derivar de los items porque Alegra devuelve como maximo 30 por request y el
+ * catalogo tiene ~2800.
+ *
+ * Envuelto en `cache` de React para consultarlo una sola vez por request.
+ */
+export const getCategorias = cache(async function getCategorias(): Promise<
+  string[]
+> {
+  const cats = await getItemCategories({ limit: 30 });
+  return cats
+    .filter((c) => c.status !== "inactive")
+    .map((c) => c.name)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "es"));
+});

@@ -6,16 +6,7 @@ import { Badge, Checkbox, Chip, ProductCard, Select } from "@myd-org/ui";
 import { Footer } from "@/components/Footer";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import type { Product } from "@/data/products";
-
-const CATEGORIES = [
-  { label: "Iluminación LED", count: 128 },
-  { label: "Paneles y plafones", count: 42 },
-  { label: "Cables", count: 96 },
-  { label: "Tableros", count: 34 },
-  { label: "Herramientas", count: 71 },
-];
-
-const BRANDS = ["Macroled", "Philips", "Osram", "Sica", "Kalop"];
+import type { Facetas } from "@/lib/catalog";
 
 const SORT_OPTIONS = [
   { label: "Más vendidos", value: "ventas" },
@@ -25,14 +16,16 @@ const SORT_OPTIONS = [
 ];
 
 /**
- * UI interactiva del catálogo (filtros, orden). Los productos llegan ya
- * resueltos desde Alegra vía el Server Component `catalogo/page.tsx`.
+ * UI interactiva del catálogo (filtros, orden). Los productos y las facetas
+ * llegan ya resueltos desde Alegra vía el Server Component `catalogo/page.tsx`.
  */
 export function CatalogoClient({
   productos,
+  facetas,
   query,
 }: {
   productos: Product[];
+  facetas: Facetas;
   query?: string;
 }) {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
@@ -47,7 +40,20 @@ export function CatalogoClient({
     );
 
   const sortedProducts = useMemo(() => {
-    const list = [...productos];
+    // Categorias y marcas se combinan con AND entre grupos y OR dentro de cada
+    // grupo: "Categoria A o B" Y "Marca X o Y".
+    const catsSel = activeFilters.filter((f) =>
+      facetas.categorias.some((c) => c.label === f),
+    );
+    const marcasSel = activeFilters.filter((f) =>
+      facetas.marcas.some((m) => m.label === f),
+    );
+
+    const list = productos.filter(
+      (p) =>
+        (catsSel.length === 0 || (p.category && catsSel.includes(p.category))) &&
+        (marcasSel.length === 0 || (p.brand && marcasSel.includes(p.brand))),
+    );
     switch (sort) {
       case "precio-asc":
         return list.sort((a, b) => a.price - b.price);
@@ -58,7 +64,7 @@ export function CatalogoClient({
       default:
         return list;
     }
-  }, [sort, productos]);
+  }, [sort, productos, activeFilters, facetas]);
 
   return (
     <>
@@ -71,7 +77,7 @@ export function CatalogoClient({
                 Categorías
               </h3>
               <ul className="space-y-2">
-                {CATEGORIES.map((c) => (
+                {facetas.categorias.map((c) => (
                   <li key={c.label}>
                     <label className="flex cursor-pointer items-center gap-2 text-sm">
                       <Checkbox
@@ -91,14 +97,15 @@ export function CatalogoClient({
                 Marcas
               </h3>
               <ul className="space-y-2">
-                {BRANDS.map((b) => (
-                  <li key={b}>
+                {facetas.marcas.map((b) => (
+                  <li key={b.label}>
                     <label className="flex cursor-pointer items-center gap-2 text-sm">
                       <Checkbox
-                        checked={activeFilters.includes(b)}
-                        onCheckedChange={() => toggleFilter(b)}
+                        checked={activeFilters.includes(b.label)}
+                        onCheckedChange={() => toggleFilter(b.label)}
                       />
-                      {b}
+                      <span className="flex-1">{b.label}</span>
+                      <span className="text-xs text-muted">{b.count}</span>
                     </label>
                   </li>
                 ))}

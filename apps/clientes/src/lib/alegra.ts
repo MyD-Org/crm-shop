@@ -156,6 +156,25 @@ export function getItem(id: string) {
 // Listas de precios
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Categorias de items
+// ---------------------------------------------------------------------------
+
+export interface AlegraItemCategory {
+  id: string;
+  name: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Categorias del catalogo. Endpoint propio: evita tener que escanear los ~2800
+ * items para saber que categorias existen (Alegra topea en 30 items/request).
+ */
+export function getItemCategories(params?: QueryParams) {
+  return apiFetch<AlegraItemCategory[]>("/item-categories", params);
+}
+
 export function getListasPrecios(params?: QueryParams) {
   return apiFetch<AlegraPriceList[]>("/price-lists", params);
 }

@@ -8,6 +8,7 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { useEffect, useState } from "react";
 import type { Product } from "@/data/products";
 
+
 /* ── Icons ─────────────────────────────────────────────── */
 
 function TruckIcon() {
@@ -64,22 +65,11 @@ function ChatIcon() {
 
 /* ── Data ───────────────────────────────────────────────── */
 
-const CATEGORIES = [
-  { label: "Iluminación LED", count: 1240 },
-  { label: "Lámparas y tubos", count: 860 },
-  { label: "Tableros y protección", count: 540 },
-  { label: "Cables y Conductores", count: 320 },
-  { label: "Tomas y módulos", count: 410 },
-  { label: "Tiras LED y perfiles", count: 190 },
-  { label: "Automatización", count: 150 },
-  { label: "Herramientas", count: 280 },
-];
-
-
 /* ── Page ───────────────────────────────────────────────── */
 
 export default function Home() {
   const [destacados, setDestacados] = useState<Product[]>([]);
+  const [categorias, setCategorias] = useState<string[]>([]);
 
   // Destacados desde Alegra (primeros del catálogo). Solo lectura.
   useEffect(() => {
@@ -87,6 +77,16 @@ export default function Home() {
       .then((r) => (r.ok ? r.json() : []))
       .then((data: Product[]) => setDestacados(Array.isArray(data) ? data : []))
       .catch(() => setDestacados([]));
+  }, []);
+
+  // Categorías del catálogo completo (endpoint /item-categories de Alegra).
+  useEffect(() => {
+    fetch("/api/shop/categorias")
+      .then((r) => (r.ok ? r.json() : { categorias: [] }))
+      .then((data: { categorias?: string[] }) =>
+        setCategorias(Array.isArray(data?.categorias) ? data.categorias : []),
+      )
+      .catch(() => setCategorias([]));
   }, []);
 
   return (
@@ -232,10 +232,10 @@ export default function Home() {
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {CATEGORIES.map((cat) => (
+            {categorias.map((cat) => (
               <Link
-                key={cat.label}
-                href={`/catalogo?categoria=${encodeURIComponent(cat.label)}`}
+                key={cat}
+                href={`/catalogo?categoria=${encodeURIComponent(cat)}`}
               >
                 <div className="group relative flex min-h-[80px] flex-col overflow-hidden rounded-[15px] bg-[linear-gradient(135deg,#0a2550,#143f82)] p-[14px] transition-transform hover:scale-[1.02]">
                   {/* glow radial sutil */}
@@ -245,12 +245,9 @@ export default function Home() {
                     <LightbulbIcon className="h-5 w-5 text-info" />
                   </div>
                   <div className="relative mt-auto pt-4">
-                    <p className="text-sm font-semibold text-white">
-                      {cat.label}
-                    </p>
-                    <p className="mt-0.5 text-xs text-white/50">
-                      {cat.count.toLocaleString("es-AR")} art.
-                    </p>
+                    {/* Sin contador: Alegra no expone cuantos items tiene cada
+                        categoria sin escanear el catalogo entero. */}
+                    <p className="text-sm font-semibold text-white">{cat}</p>
                   </div>
                 </div>
               </Link>

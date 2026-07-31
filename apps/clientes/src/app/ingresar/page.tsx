@@ -8,8 +8,8 @@ export default function IngresarPage() {
     : "http://localhost:3001"
 
   const crmUrl = isProd
-    ? "https://portal.cliente.example"
+    ? "https://crm.cliente.example"
     : "http://localhost:3000"
 
-  redirect(`${crmUrl}/login?redirect=${encodeURIComponent(shopUrl)}`)
+  redirect(`${crmUrl}/portal?redirect=${encodeURIComponent(shopUrl)}`)
 }

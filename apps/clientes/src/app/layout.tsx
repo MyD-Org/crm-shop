@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   title: "Central LED — Tienda Online",
   description:
     "Iluminación LED, materiales eléctricos y más. Precios mayoristas, stock en tiempo real.",
+  verification: {
+    other: {
+      "facebook-domain-verification": "rlakqld8a1l4usoqjwmgo4yr1vsoln",
+    },
+  },
 };
 
 export default function RootLayout({

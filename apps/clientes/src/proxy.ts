@@ -66,6 +66,7 @@ function gateHtml({ error }: { error: boolean }) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="facebook-domain-verification" content="rlakqld8a1l4usoqjwmgo4yr1vsoln" />
 <title>Central LED — Próximamente</title>
 <style>
   * { box-sizing: border-box; }

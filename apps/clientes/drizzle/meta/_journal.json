@@ -15,6 +15,34 @@
       "when": 1785329840024,
       "tag": "0001_unaccent",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786143113302,
+      "tag": "0002_flashy_rictor",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786147802026,
+      "tag": "0003_opposite_risque",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786148209367,
+      "tag": "0004_chilly_lily_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786372865039,
+      "tag": "0005_bitter_queen_noir",
+      "breakpoints": true
     }
   ]
 }

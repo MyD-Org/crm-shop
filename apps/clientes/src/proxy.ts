@@ -1,9 +1,21 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { NextFetchEvent, NextRequest } from "next/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { createHash, timingSafeEqual } from "crypto";
 
 const GATE_COOKIE = "site_gate";
 const GATE_PATH = "/__gate";
+
+/**
+ * Next 16 admite UNA sola función proxy por proyecto, así que el gate del sitio
+ * y Clerk no pueden vivir cada uno en su archivo: se componen acá.
+ *
+ * El orden importa. El gate corre PRIMERO porque es el "cartel de obra": si el
+ * sitio todavía no está abierto al público, nadie —ni siquiera alguien con
+ * sesión de Clerk válida— debería ver nada. Autenticarse no es lo mismo que
+ * tener permitido entrar.
+ */
+const clerk = clerkMiddleware();
 
 function gateToken(user: string, pass: string) {
   return createHash("sha256").update(`${user}:${pass}`).digest("hex");
@@ -15,20 +27,31 @@ function safeEqual(a: string, b: string) {
   return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
 }
 
-export async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
+  const bloqueo = await siteGate(request);
+  if (bloqueo) return bloqueo;
+  return clerk(request, event);
+}
+
+/**
+ * Gate de "próximamente". Devuelve una respuesta cuando corta el paso, y `null`
+ * cuando el request puede seguir — con `NextResponse.next()` acá, Clerk nunca
+ * llegaría a correr y `auth()` fallaría en toda la app.
+ */
+async function siteGate(request: NextRequest): Promise<Response | null> {
   const user = process.env.SITE_AUTH_USER;
   const pass = process.env.SITE_AUTH_PASSWORD;
 
   // Sin credenciales configuradas, no se bloquea el acceso.
   if (!user || !pass) {
-    return NextResponse.next();
+    return null;
   }
 
   const token = gateToken(user, pass);
   const cookie = request.cookies.get(GATE_COOKIE)?.value;
 
   if (cookie && safeEqual(cookie, token)) {
-    return NextResponse.next();
+    return null;
   }
 
   if (request.method === "POST" && request.nextUrl.pathname === GATE_PATH) {
@@ -262,5 +285,11 @@ function gateHtml({ error }: { error: boolean }) {
 }
 
 export const config = {
-  matcher: "/((?!_next/static|_next/image|favicon.ico|api/cron).*)",
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|api/cron).*)",
+    // Ruta interna de Clerk (auto-proxy del Frontend API). Ya la cubre el
+    // patrón de arriba, pero Clerk pide declararla explícitamente: si algún día
+    // se toca ese negative lookahead, esto evita romper el login sin darse cuenta.
+    "/__clerk/:path*",
+  ],
 };

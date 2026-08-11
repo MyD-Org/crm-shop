@@ -201,6 +201,24 @@ export async function estaLogueado(): Promise<boolean> {
 }
 
 /**
+ * Identificador estable y BARATO de quien hace el request, o null si no hay
+ * sesión. Pensado para rate limiting.
+ *
+ * No usa `identidadActual()` a propósito: esa sale a la red (Clerk
+ * `currentUser`, y por vía de la vinculación puede llegar a Alegra), lo que en
+ * un endpoint que se llama mientras el usuario tipea saldría más caro que lo
+ * que se está limitando. Acá alcanza con el JWT de Clerk o la cookie del CRM,
+ * las dos locales.
+ */
+export async function claveSolicitante(): Promise<string | null> {
+  const { userId } = await auth();
+  if (userId) return `clerk:${userId}`;
+
+  const crm = await sesionCrm();
+  return crm?.codigocliente ? `crm:${crm.codigocliente}` : null;
+}
+
+/**
  * Lista de precios del cliente en Alegra.
  *
  * Se re-lee de Alegra en vez de confiar en el snapshot de `client_links`: la

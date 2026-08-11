@@ -31,9 +31,15 @@ export async function POST(req: Request) {
   const resultado = await solicitarVinculacion(userId, cuit);
 
   if (!resultado.ok) {
-    // 429 solo para el rate limit; el resto es 400 con el detalle, que está
-    // redactado para poder mostrarse tal cual.
-    const status = resultado.motivo === "rate_limit" ? 429 : 400;
+    // Ninguno de estos motivos depende de si el CUIT consultado existe —ver el
+    // bloque de RESPUESTA UNIFORME en lib/vinculacion.ts—, así que se pueden
+    // devolver distinguidos sin filtrar la cartera de clientes.
+    const status =
+      resultado.motivo === "rate_limit"
+        ? 429
+        : resultado.motivo === "servicio_caido"
+          ? 503
+          : 400;
     return NextResponse.json(
       { error: resultado.detalle, motivo: resultado.motivo },
       { status },

@@ -24,7 +24,7 @@
  */
 
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clientLinks, linkOtps } from "@/db/schema";
 import {
@@ -35,13 +35,23 @@ import {
   idPriceListUsable,
 } from "./alegra";
 import { enmascararEmail, enviarEmail } from "./email";
+import { permitir } from "./rate-limit";
 
 /** Ventana de validez del código. */
 const VIGENCIA_MIN = 10;
 /** Intentos de verificación antes de quemar el código. */
 const MAX_INTENTOS = 5;
-/** Códigos que se pueden pedir por usuario dentro de la ventana de rate limit. */
+/** Códigos que se pueden ENVIAR por usuario dentro de la ventana. */
 const MAX_PEDIDOS = 3;
+/**
+ * Consultas por usuario dentro de la ventana, se envíe código o no.
+ *
+ * Es un límite distinto de MAX_PEDIDOS y es el que importa para la
+ * enumeración: el de envíos solo cuenta los códigos que salieron, así que
+ * sondear CUITs ajenos —que nunca llegan a generar uno— no lo movía nunca.
+ * Diez alcanza de sobra para alguien que se equivoca tipeando su propio CUIT.
+ */
+const MAX_SONDEOS = 10;
 const VENTANA_RATE_LIMIT_MIN = 15;
 
 /**
@@ -50,10 +60,22 @@ const VENTANA_RATE_LIMIT_MIN = 15;
  * y guardarlo sería teatro. Con el secreto, leer la base no alcanza.
  */
 function hashCodigo(clerkUserId: string, codigo: string): string {
-  const secret = process.env.OTP_SECRET ?? process.env.SESSION_SECRET;
+  /**
+   * Clave PROPIA, sin caer a `SESSION_SECRET`.
+   *
+   * `SESSION_SECRET` es el secreto de iron-session, y además está compartido
+   * con el CRM porque la cookie es de dominio común. Usarlo también como clave
+   * del HMAC ata dos cosas que no tienen por qué caer juntas: quien comprometa
+   * el secreto de sesión de cualquiera de las dos apps podría además generar
+   * los hashes de los códigos de vinculación.
+   *
+   * Sin la variable se corta acá, ruidosamente. Un OTP con una clave prestada
+   * parece que funciona, que es lo peor que puede hacer.
+   */
+  const secret = process.env.OTP_SECRET;
   if (!secret) {
     throw new Error(
-      "Falta OTP_SECRET (o SESSION_SECRET) en el entorno: sin secreto, el hash del código no protege nada.",
+      "Falta OTP_SECRET en el entorno: sin secreto propio, el hash del código no protege nada.",
     );
   }
   return createHmac("sha256", secret).update(`${clerkUserId}:${codigo}`).digest("hex");
@@ -133,32 +155,54 @@ export async function intentarVinculacionPorEmail(
   // empresa equivocada la mitad de las veces. Va por OTP, donde el cliente dice
   // explícitamente qué CUIT es el suyo.
   if (clientes.length !== 1) {
-    await db.insert(clientLinks).values({
-      clerkUserId,
-      alegraContactId: clientes.length === 0 ? "" : "ambiguo",
-      estado: "sin_coincidencia",
-      metodo: "email_verificado",
-    });
+    await db
+      .insert(clientLinks)
+      .values({
+        clerkUserId,
+        alegraContactId: clientes.length === 0 ? "" : "ambiguo",
+        estado: "sin_coincidencia",
+        metodo: "email_verificado",
+      })
+      .onConflictDoNothing();
     return null;
   }
 
   const contacto = clientes[0];
-  await db.insert(clientLinks).values({
-    clerkUserId,
-    alegraContactId: String(contacto.id),
-    razonSocial: contacto.name ?? null,
-    cuit: contacto.identification ?? null,
-    idPriceList: idPriceListUsable(contacto) ?? null,
-    estado: "activa",
-    metodo: "email_verificado",
-  });
+  /**
+   * El chequeo de `existente` de arriba y este insert NO son atómicos, y
+   * `identidadActual()` corre en el layout, en la página y en las rutas de API
+   * —que Next ejecuta en paralelo—. En el primer request de un usuario con
+   * match, dos de esas llamadas ven "no existe" y las dos insertan: el índice
+   * único parcial `cl_user_activa` hace tirar a la segunda y el usuario se come
+   * un 500 justo en su primer login.
+   *
+   * Que gane cualquiera de las dos es indistinto: insertan lo mismo. Quien
+   * llama relee el vínculo (`resolverVinculacion`), así que el perdedor de la
+   * carrera igual devuelve la fila correcta.
+   */
+  await db
+    .insert(clientLinks)
+    .values({
+      clerkUserId,
+      alegraContactId: String(contacto.id),
+      razonSocial: contacto.name ?? null,
+      cuit: contacto.identification ?? null,
+      idPriceList: idPriceListUsable(contacto) ?? null,
+      estado: "activa",
+      metodo: "email_verificado",
+    })
+    .onConflictDoNothing();
 
   return { alegraContactId: String(contacto.id), razonSocial: contacto.name };
 }
 
 export type ResultadoSolicitud =
-  | { ok: true; destinoMasked: string; expiraEn: number }
-  | { ok: false; motivo: "no_encontrado" | "sin_email" | "ya_vinculada" | "rate_limit" | "envio_fallido"; detalle: string };
+  | { ok: true; expiraEn: number }
+  | {
+      ok: false;
+      motivo: "formato" | "ya_vinculada" | "rate_limit" | "servicio_caido";
+      detalle: string;
+    };
 
 /**
  * Paso 1: el cliente dice quién es (CUIT) y le mandamos un código a SU casilla.
@@ -166,6 +210,31 @@ export type ResultadoSolicitud =
  * El contacto se busca ANTES de generar nada — al revés que el OTP del CRM, que
  * verificaba primero y recién después miraba si el cliente existía, con lo cual
  * nunca podía saber a dónde mandar el código.
+ *
+ * ── RESPUESTA UNIFORME ──────────────────────────────────────────────────────
+ *
+ * Todo lo que dependa de si ESE CUIT existe en Alegra devuelve exactamente la
+ * misma respuesta: que se haya encontrado el contacto, que no exista, que
+ * exista sin email cargado, o que el envío del mail falle.
+ *
+ * El motivo: en Argentina el CUIT es público (padrón de AFIP, cualquier
+ * factura). Si la respuesta distinguiera esos casos, con una lista de CUITs
+ * —y una cuenta de Google gratis— se reconstruye la cartera de clientes
+ * mayoristas de Central LED junto con el email de contacto de cada uno. Eso es
+ * información comercial, y para un competidor vale más que cualquier precio.
+ *
+ * Por eso tampoco se devuelve ya el destino enmascarado: decir "te lo mandamos
+ * a j***@empresa.com" es confirmar que ese CUIT es cliente.
+ *
+ * Lo que SÍ se puede distinguir sin filtrar nada, y por eso se distingue:
+ *  - `formato`: el CUIT está mal escrito. Es sintaxis, no existencia.
+ *  - `ya_vinculada` y `rate_limit`: hablan de la cuenta de QUIEN PREGUNTA.
+ *  - `servicio_caido`: Alegra no responde. Pasa igual para cualquier CUIT.
+ *
+ * Queda un canal residual por tiempo de respuesta: encontrar el contacto y
+ * mandar el mail tarda más que no encontrarlo. Cerrarlo del todo pide responder
+ * en tiempo constante; con el límite de sondeos de acá el costo de explotarlo
+ * no compensa, pero conviene saber que está.
  */
 export async function solicitarVinculacion(
   clerkUserId: string,
@@ -174,11 +243,33 @@ export async function solicitarVinculacion(
   const db = getDb();
   const cuit = normalizarCuit(cuitRaw);
 
-  if (cuit.length < 8) {
-    return { ok: false, motivo: "no_encontrado", detalle: "Ingresá un CUIT válido." };
+  /** La única respuesta para todo camino que dependa de la existencia del CUIT. */
+  const uniforme = { ok: true, expiraEn: VIGENCIA_MIN } as const;
+
+  /**
+   * Límite de SONDEOS, antes de tocar Alegra a propósito: sin esto cada consulta
+   * dispara una llamada a Alegra, así que el endpoint es además un amplificador
+   * capaz de agotar la cuota de la API y voltear catálogo y checkout.
+   */
+  if (
+    !permitir(
+      `vinculacion:sondeo:${clerkUserId}`,
+      MAX_SONDEOS,
+      VENTANA_RATE_LIMIT_MIN * 60_000,
+    )
+  ) {
+    return {
+      ok: false,
+      motivo: "rate_limit",
+      detalle: `Hiciste demasiadas consultas. Esperá ${VENTANA_RATE_LIMIT_MIN} minutos e intentá de nuevo.`,
+    };
   }
 
-  // --- Rate limit: frena el barrido de CUITs y el bombardeo a una casilla ---
+  if (cuit.length < 8) {
+    return { ok: false, motivo: "formato", detalle: "Ingresá un CUIT válido." };
+  }
+
+  // --- Rate limit de ENVÍOS: evita usar la casilla de un cliente como buzón ---
   const desde = new Date(Date.now() - VENTANA_RATE_LIMIT_MIN * 60_000);
   const [{ pedidos }] = await db
     .select({ pedidos: sql<number>`count(*)::int` })
@@ -213,32 +304,31 @@ export async function solicitarVinculacion(
   try {
     contacto = await buscarContactoPorIdentificacion(cuit);
   } catch (err) {
+    // Alegra caído no depende del CUIT consultado: falla igual para todos, así
+    // que decirlo no filtra nada y evita que el cliente espere un mail que no
+    // se generó nunca.
     console.error("[vinculacion] Alegra falló al buscar el contacto:", err);
     return {
       ok: false,
-      motivo: "envio_fallido",
+      motivo: "servicio_caido",
       detalle: "No pudimos verificar el CUIT en este momento. Probá de nuevo en unos minutos.",
     };
   }
 
-  if (!contacto) {
-    return {
-      ok: false,
-      motivo: "no_encontrado",
-      detalle: "No encontramos una cuenta con ese CUIT. Si ya sos cliente del local, escribinos y la damos de alta.",
-    };
-  }
+  // A partir de acá, todo camino devuelve `uniforme`: cualquier diferencia
+  // visible sería exactamente el dato que permite enumerar la cartera.
+  if (!contacto) return uniforme;
 
   const email = contacto.email?.trim();
+  // Caso frecuente en esta cuenta de Alegra: contactos viejos sin email. No hay
+  // a dónde mandar el código, y NO se acepta uno que escriba el usuario: sería
+  // devolverle la llave a quien la está pidiendo. Queda logueado para que un
+  // operador pueda cargar el email cuando el cliente llame preguntando.
   if (!email) {
-    // Caso frecuente en esta cuenta de Alegra: contactos viejos sin email.
-    // No hay a dónde mandar el código, y NO se acepta uno que escriba el
-    // usuario: sería devolverle la llave a quien la está pidiendo.
-    return {
-      ok: false,
-      motivo: "sin_email",
-      detalle: "Tu cuenta no tiene un email registrado. Pasá por el local o escribinos para cargarlo y vincularte.",
-    };
+    console.warn(
+      `[vinculacion] contacto ${contacto.id} sin email: no se puede vincular por OTP`,
+    );
+    return uniforme;
   }
 
   // --- Generar y guardar ---
@@ -273,15 +363,16 @@ export async function solicitarVinculacion(
       </div>`,
   });
 
+  // Un fallo de envío solo puede ocurrir cuando el contacto EXISTE y tiene
+  // email: devolverlo como error distinto reabriría la fuga por la ventana.
+  // Queda en el log, que es donde sirve.
   if (!envio.ok) {
-    return {
-      ok: false,
-      motivo: "envio_fallido",
-      detalle: "No pudimos enviarte el código. Probá de nuevo en unos minutos.",
-    };
+    console.error(
+      `[vinculacion] no se pudo enviar el código al contacto ${contacto.id}`,
+    );
   }
 
-  return { ok: true, destinoMasked, expiraEn: VIGENCIA_MIN };
+  return uniforme;
 }
 
 export type ResultadoConfirmacion =
@@ -322,16 +413,37 @@ export async function confirmarVinculacion(
     return { ok: false, detalle: "El código venció. Pedí uno nuevo." };
   }
 
-  if (otp.intentos >= MAX_INTENTOS) {
+  /**
+   * El intento se consume ANTES de comparar, y lo incrementa Postgres.
+   *
+   * Con `intentos + 1` calculado en Node, N requests concurrentes leen todas el
+   * mismo valor y escriben todas el mismo `+1`: el techo de MAX_INTENTOS nunca
+   * se alcanza y el espacio de 6 dígitos se puede barrer por fuerza bruta
+   * dentro de la ventana de vigencia. Acertar el código vincula la cuenta del
+   * atacante a la cuenta corriente de un cliente, que es exactamente lo que
+   * este mecanismo existe para impedir.
+   *
+   * `consumedAt is null` en el WHERE cierra además el replay de un código ya
+   * usado con éxito.
+   */
+  const [intento] = await db
+    .update(linkOtps)
+    .set({ intentos: sql`${linkOtps.intentos} + 1` })
+    .where(
+      and(
+        eq(linkOtps.id, otp.id),
+        lt(linkOtps.intentos, MAX_INTENTOS),
+        isNull(linkOtps.consumedAt),
+      ),
+    )
+    .returning({ intentos: linkOtps.intentos });
+
+  if (!intento) {
     return { ok: false, detalle: "Demasiados intentos fallidos. Pedí un código nuevo." };
   }
 
   if (!hashesIguales(otp.codeHash, hashCodigo(clerkUserId, limpio))) {
-    await db
-      .update(linkOtps)
-      .set({ intentos: otp.intentos + 1 })
-      .where(eq(linkOtps.id, otp.id));
-    const restantes = MAX_INTENTOS - (otp.intentos + 1);
+    const restantes = MAX_INTENTOS - intento.intentos;
     return {
       ok: false,
       detalle:
@@ -350,7 +462,7 @@ export async function confirmarVinculacion(
     return { ok: false, detalle: "No pudimos completar la vinculación. Probá de nuevo en unos minutos." };
   }
 
-  await db.transaction(async (tx) => {
+  const vinculado = await db.transaction(async (tx) => {
     // El código se consume dentro de la transacción: si la vinculación falla,
     // el código sigue vivo y el cliente no tiene que pedir otro.
     await tx
@@ -358,15 +470,32 @@ export async function confirmarVinculacion(
       .set({ consumedAt: new Date() })
       .where(eq(linkOtps.id, otp.id));
 
-    await tx.insert(clientLinks).values({
-      clerkUserId,
-      alegraContactId: otp.alegraContactId,
-      razonSocial: contacto?.name ?? null,
-      cuit: contacto?.identification ?? null,
-      idPriceList: idPriceListUsable(contacto) ?? null,
-      metodo: "otp_email",
-    });
+    // `solicitarVinculacion` ya rechaza a quien tiene un vínculo activo, pero
+    // entre pedir el código y confirmarlo pudo crearse uno (el match automático
+    // por email, por ejemplo). Sin esto, el índice único parcial tira y el
+    // cliente ve un 500 en vez de enterarse de que ya está vinculado.
+    const filas = await tx
+      .insert(clientLinks)
+      .values({
+        clerkUserId,
+        alegraContactId: otp.alegraContactId,
+        razonSocial: contacto?.name ?? null,
+        cuit: contacto?.identification ?? null,
+        idPriceList: idPriceListUsable(contacto) ?? null,
+        metodo: "otp_email",
+      })
+      .onConflictDoNothing()
+      .returning({ id: clientLinks.id });
+
+    return filas.length > 0;
   });
+
+  if (!vinculado) {
+    return {
+      ok: false,
+      detalle: "Tu cuenta ya está vinculada. Si necesitás cambiarla, escribinos.",
+    };
+  }
 
   return {
     ok: true,

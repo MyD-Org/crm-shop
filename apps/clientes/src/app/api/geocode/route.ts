@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { claveSolicitante } from "@/lib/auth";
+import { permitir } from "@/lib/rate-limit";
 
 /**
  * Autocompletado de direcciones argentinas contra Nominatim (OpenStreetMap).
@@ -12,10 +14,19 @@ import { NextResponse } from "next/server";
  * El riesgo de Nominatim es su política de uso: pide como máximo 1 request por
  * segundo y desaconseja el autocompletado. El bloqueo sería por IP del
  * servidor, o sea que dejaría sin sugerencias a TODOS los clientes a la vez.
- * Por eso el volumen se controla en tres lugares:
- *   1. Debounce de 500 ms y mínimo de 4 caracteres (DireccionAutocomplete).
- *   2. La cache de acá.
- *   3. Un `User-Agent` identificable, que su política exige.
+ *
+ * El volumen se controla en dos capas, y la distinción importa:
+ *
+ * En el SERVIDOR, que es lo único que de verdad frena a alguien:
+ *   1. Sesión obligatoria. Sin esto la ruta es un proxy abierto y cualquiera
+ *      con un `for` deja el autocompletado caído para todos los clientes.
+ *   2. Rate limit por usuario.
+ *   3. La cache de acá, que absorbe las búsquedas repetidas.
+ *
+ * En el CLIENTE, que solo mejora el caso honesto y no defiende de nada:
+ *   4. Debounce de 500 ms y mínimo de 4 caracteres (DireccionAutocomplete).
+ *
+ * Y un `User-Agent` identificable, que su política exige.
  *
  * Si algún día el volumen se va de escala, LocationIQ es Nominatim como
  * servicio: misma forma de respuesta, se cambia la URL base y se agrega la key.
@@ -44,6 +55,14 @@ const CACHE_SEGUNDOS = 60 * 60 * 24 * 7;
 const MIN_CARACTERES = 4;
 
 /**
+ * Techo por usuario. Con debounce de 500 ms, escribir una dirección entera
+ * genera del orden de 10 llamadas: 40 por minuto deja lugar para corregir y
+ * reintentar varias veces sin que nadie honesto lo note, y corta en seco a un
+ * script en loop.
+ */
+const MAX_POR_MINUTO = 40;
+
+/**
  * Saca los prefijos administrativos de OSM: devuelve "Municipio de Puerto
  * Iguazú" y "Provincia de Misiones", que en una factura quedan mal. También
  * normaliza el caso especial de CABA, que OSM llama "Ciudad Autónoma de Buenos
@@ -58,6 +77,20 @@ function limpiarNombre(v: string | undefined): string {
 }
 
 export async function GET(req: Request) {
+  // El autocompletado solo se usa en checkout y datos de facturación, las dos
+  // detrás de sesión: exigirla acá no le saca nada a nadie.
+  const clave = await claveSolicitante();
+  if (!clave) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  if (!permitir(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) {
+    return NextResponse.json(
+      { error: "Demasiadas búsquedas. Esperá un momento." },
+      { status: 429 },
+    );
+  }
+
   const { searchParams } = new URL(req.url);
   const text = searchParams.get("text")?.trim();
 

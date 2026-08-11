@@ -12,7 +12,6 @@ export function VincularClient() {
   const [paso, setPaso] = useState<Paso>("cuit");
   const [cuit, setCuit] = useState("");
   const [codigo, setCodigo] = useState("");
-  const [destino, setDestino] = useState("");
   const [razonSocial, setRazonSocial] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -31,7 +30,6 @@ export function VincularClient() {
         setError(json?.error ?? "No pudimos enviarte el código.");
         return;
       }
-      setDestino(json.destinoMasked);
       setPaso("codigo");
     } catch {
       setError("No pudimos conectarnos. Revisá tu conexión.");
@@ -137,10 +135,24 @@ export function VincularClient() {
       ) : (
         <>
           <h2 className="text-base font-bold text-text">Paso 2 · Ingresá el código</h2>
+          {/*
+            No se nombra la casilla a la que fue el código, ni siquiera
+            enmascarada: decir "te lo mandamos a j***@empresa.com" confirma que
+            ese CUIT es cliente nuestro, y el CUIT lo puede escribir cualquiera
+            (es público). Ver el bloque de RESPUESTA UNIFORME en
+            lib/vinculacion.ts.
+
+            El costo es real: el cliente no sabe qué casilla abrir. Por eso la
+            salida de abajo es parte del diseño, no un adorno — sin ella, quien
+            tiene cargado un mail viejo queda sin camino.
+          */}
           <p className="mt-1 text-sm text-muted">
-            Te mandamos un código de 6 dígitos a{" "}
-            <span className="font-semibold text-text">{destino}</span>. Vence en
-            10 minutos.
+            Si ese CUIT está registrado, te mandamos un código de 6 dígitos al
+            email que tenemos cargado en tu cuenta. Vence en 10 minutos.
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            ¿No te llegó? Puede que tengamos otro email cargado, o que la cuenta
+            todavía no esté registrada. Escribinos y lo resolvemos.
           </p>
 
           <div className="mt-5 max-w-[12rem]">

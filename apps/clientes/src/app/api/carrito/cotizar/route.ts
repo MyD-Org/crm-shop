@@ -2,9 +2,23 @@ import { NextResponse } from "next/server";
 import { identidadActual, idPriceListDe } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
+import { permitir } from "@/lib/rate-limit";
 
 // Precio y stock en vivo desde Alegra: nunca cacheable.
 export const dynamic = "force-dynamic";
+
+/**
+ * Techo por usuario.
+ *
+ * Esta ruta es un amplificador: un request se abre en hasta MAX_LINEAS (60)
+ * llamadas a Alegra. Sin límite, un solo usuario logueado agota la cuota de la
+ * API y se lleva puestos el catálogo y el checkout para todos.
+ *
+ * 20 por minuto es holgado para el uso real —el carrito recotiza al cambiar
+ * cantidades, con debounce— y deja el peor caso en 1.200 llamadas por minuto
+ * por usuario en vez de ilimitadas.
+ */
+const MAX_POR_MINUTO = 20;
 
 /**
  * POST /api/carrito/cotizar
@@ -18,6 +32,14 @@ export async function POST(req: Request) {
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const quien = clerkUserId ?? cliente!.codigocliente;
+  if (!permitir(`cotizar:${quien}`, MAX_POR_MINUTO, 60_000)) {
+    return NextResponse.json(
+      { error: "Estás recalculando muy seguido. Esperá unos segundos." },
+      { status: 429 },
+    );
   }
 
   let body: { items?: unknown; entregaTipo?: unknown; ciudad?: unknown };

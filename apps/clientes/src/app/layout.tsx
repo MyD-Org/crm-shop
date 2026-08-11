@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
+import { esAR } from "@/lib/clerk-localizacion";
 import "./globals.css";
 import { Header } from "@/components/HeaderServer";
 import { Providers } from "@/components/Providers";
@@ -22,10 +24,18 @@ export default function RootLayout({
   return (
     <html lang="es" className="h-full antialiased">
       <body className="flex min-h-full flex-col">
-        <Providers>
-          <Header />
-          {children}
-        </Providers>
+        {/*
+          ClerkProvider va DENTRO de <body>, no envolviendo <html>: en Next 16
+          envolver el documento entero fuerza render dinámico de todo el árbol.
+          La localización es castellano rioplatense: Clerk solo trae es-ES, que
+          trata de usted y desentona con el resto del sitio.
+        */}
+        <ClerkProvider localization={esAR}>
+          <Providers>
+            <Header />
+            {children}
+          </Providers>
+        </ClerkProvider>
       </body>
     </html>
   );

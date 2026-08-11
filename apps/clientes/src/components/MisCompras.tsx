@@ -2,23 +2,29 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Button, Field, Input } from "@myd-org/ui";
-import { ORDERS, ORDER_SUMMARY, ORDER_ESTADO_LABEL, type Order, type OrderEstado } from "@/data/orders";
+import { useRouter } from "next/navigation";
+import { Button, Field, Input, useToast } from "@myd-org/ui";
+import {
+  ORDER_ESTADO_LABEL,
+  PAGO_ESTADO_LABEL,
+  type Order,
+  type OrderEstado,
+  type OrderSummary,
+} from "@/data/orders";
+import { useClerk } from "@clerk/nextjs";
+import { useCart } from "@/context/CartContext";
+import { fmtPrecio as fmt, fmtFecha } from "@/lib/format";
+import { FacturacionForm, type PerfilFacturacionUI } from "./FacturacionForm";
+import { DireccionAutocomplete } from "./DireccionAutocomplete";
 
 const CRM_URL = process.env.NEXT_PUBLIC_CRM_URL ?? "https://crm.cliente.example";
 
-function fmt(n: number) {
-  return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 });
-}
-
-function fmtFecha(iso: string) {
-  return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" });
-}
-
 const ESTADO_COLOR: Record<OrderEstado, string> = {
-  entregado: "#16a34a",
-  en_camino: "#2563eb",
+  pendiente: "#64748b",
+  confirmado: "#2563eb",
   preparacion: "#d97706",
+  en_camino: "#2563eb",
+  entregado: "#16a34a",
   cancelado: "#dc2626",
 };
 
@@ -86,9 +92,26 @@ function EstadoPill({ estado }: { estado: OrderEstado }) {
 /* ── Order card ────────────────────────────────────────── */
 
 function OrderCard({ order }: { order: Order }) {
-  const total = order.items.reduce((acc, i) => acc + i.price * i.qty, 0);
+  // El total sale del pedido, no de sumar las líneas: es el número congelado
+  // que se le prometió al cliente, con su IVA real y su envío.
   const unidades = order.items.reduce((acc, i) => acc + i.qty, 0);
   const esEnvio = order.metodoEntrega.toLowerCase().includes("env");
+  const { addItem } = useCart();
+  const { toast } = useToast();
+  const router = useRouter();
+
+  function volverAComprar() {
+    for (const item of order.items) {
+      addItem({ id: item.id, name: item.name, brand: item.brand, price: item.price }, item.qty);
+    }
+    toast({
+      title: "Productos agregados al carrito",
+      description: "Confirmamos precio y stock actuales en el carrito.",
+      tone: "success",
+      action: { label: "Ver carrito", href: "/carrito" },
+    });
+    router.push("/carrito");
+  }
 
   return (
     <div className="rounded-xl border border-border bg-surface">
@@ -98,7 +121,14 @@ function OrderCard({ order }: { order: Order }) {
           <span className="text-sm font-bold text-text">Pedido {order.numero}</span>
           <span className="text-xs text-muted">{fmtFecha(order.fecha)}</span>
         </div>
-        <EstadoPill estado={order.estado} />
+        <div className="flex items-center gap-2">
+          {order.pagoEstado !== "pagado" && (
+            <span className="rounded-full bg-elevated px-2.5 py-1 text-xs font-semibold text-muted">
+              {PAGO_ESTADO_LABEL[order.pagoEstado]}
+            </span>
+          )}
+          <EstadoPill estado={order.estado} />
+        </div>
       </div>
 
       {/* Items */}
@@ -116,7 +146,7 @@ function OrderCard({ order }: { order: Order }) {
               <p className="truncate text-sm font-medium text-text">{item.name}</p>
               <p className="text-xs text-muted">{item.qty} u. · {fmt(item.price)} c/u</p>
             </div>
-            <p className="shrink-0 text-sm font-semibold text-text">{fmt(item.price * item.qty)}</p>
+            <p className="shrink-0 text-sm font-semibold text-text">{fmt(item.total)}</p>
           </Link>
         ))}
       </div>
@@ -129,7 +159,8 @@ function OrderCard({ order }: { order: Order }) {
         </span>
         <span className="text-sm text-text">
           {unidades} {unidades === 1 ? "producto" : "productos"} ·{" "}
-          <span className="font-extrabold">{fmt(total)}</span>
+          <span className="font-extrabold">{fmt(order.total)}</span>
+          <span className="ml-1 text-xs text-muted">IVA incl.</span>
         </span>
       </div>
 
@@ -140,15 +171,19 @@ function OrderCard({ order }: { order: Order }) {
             Ver detalle <ArrowRightIcon />
           </button>
         </Link>
-        <button className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-elevated">
+        <button
+          onClick={volverAComprar}
+          className="flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-elevated"
+        >
           <RefreshIcon />
           Volver a comprar
         </button>
-        {esEnvio && (
-          <button className="ml-auto flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-text">
+        {esEnvio && order.entregaDireccion && (
+          <span className="ml-auto flex items-center gap-2 text-sm font-medium text-muted">
             <TruckIcon />
-            Seguir envío
-          </button>
+            {order.entregaDireccion}
+            {order.entregaCiudad ? `, ${order.entregaCiudad}` : ""}
+          </span>
         )}
       </div>
     </div>
@@ -172,11 +207,25 @@ export function MisCompras({
   cuit,
   email,
   esCuentaCorriente,
+  razonSocialVinculada,
+  perfilFacturacion,
+  pedidos,
+  resumen,
 }: {
   nombre: string;
   cuit?: string;
   email?: string;
   esCuentaCorriente: boolean;
+  /** Perfil de facturación cargado por el cliente. null = todavía no lo cargó. */
+  perfilFacturacion: PerfilFacturacionUI | null;
+  /**
+   * Razon social del cliente de Alegra al que esta vinculada la cuenta.
+   * undefined = todavia no vinculo ninguna (compra a lista general).
+   */
+  razonSocialVinculada?: string;
+  /** Pedidos reales del cliente, cargados en el servidor. */
+  pedidos: Order[];
+  resumen: OrderSummary;
 }) {
   const [tab, setTab] = useState<Tab>("compras");
 
@@ -227,10 +276,15 @@ export function MisCompras({
         ))}
       </div>
 
-      {tab === "compras" && (
-        <ComprasTab nombre={nombre} esCuentaCorriente={esCuentaCorriente} />
+      {tab === "compras" && <ComprasTab pedidos={pedidos} resumen={resumen} />}
+      {tab === "datos" && (
+        <DatosTab
+          cuit={cuit}
+          email={email}
+          perfilFacturacion={perfilFacturacion}
+          razonSocialVinculada={razonSocialVinculada}
+        />
       )}
-      {tab === "datos" && <DatosTab nombre={nombre} cuit={cuit} email={email} />}
       {tab === "direcciones" && <DireccionesTab />}
     </div>
   );
@@ -238,19 +292,21 @@ export function MisCompras({
 
 /* ── Tab: Mis compras ──────────────────────────────────── */
 
-function ComprasTab({ nombre, esCuentaCorriente }: { nombre: string; esCuentaCorriente: boolean }) {
-  void nombre;
+function ComprasTab({ pedidos, resumen }: { pedidos: Order[]; resumen: OrderSummary }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Tarjetas resumen */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Pedidos este año" value={String(ORDER_SUMMARY.pedidosEsteAnio)} />
-        <SummaryCard label="En curso" value={`${ORDER_SUMMARY.enCurso} pedido${ORDER_SUMMARY.enCurso === 1 ? "" : "s"}`} />
-        <SummaryCard label="Comprado este año" value={fmt(ORDER_SUMMARY.compradoEsteAnio)} />
+        <SummaryCard label="Pedidos este año" value={String(resumen.pedidosEsteAnio)} />
+        <SummaryCard
+          label="En curso"
+          value={`${resumen.enCurso} pedido${resumen.enCurso === 1 ? "" : "s"}`}
+        />
+        <SummaryCard label="Comprado este año" value={fmt(resumen.compradoEsteAnio)} />
       </div>
 
       {/* Lista de pedidos */}
-      {ORDERS.length === 0 ? (
+      {pedidos.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface py-16 text-center">
           <p className="text-lg font-bold text-text">Todavía no hiciste compras</p>
           <Link href="/catalogo">
@@ -258,18 +314,11 @@ function ComprasTab({ nombre, esCuentaCorriente }: { nombre: string; esCuentaCor
           </Link>
         </div>
       ) : (
-        <>
-          <div className="flex flex-col gap-4">
-            {ORDERS.map((order) => (
-              <OrderCard key={order.id} order={order} />
-            ))}
-          </div>
-          <div className="flex justify-center pt-2">
-            <button className="rounded-lg border border-border bg-surface px-6 py-2.5 text-sm font-semibold text-text transition-colors hover:bg-elevated">
-              Ver pedidos anteriores
-            </button>
-          </div>
-        </>
+        <div className="flex flex-col gap-4">
+          {pedidos.map((order) => (
+            <OrderCard key={order.id} order={order} />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -286,108 +335,140 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
 
 /* ── Tab: Mis datos ────────────────────────────────────── */
 
-function DatosTab({ nombre, cuit, email }: { nombre: string; cuit?: string; email?: string }) {
-  const [editando, setEditando] = useState(false);
-  const [form, setForm] = useState({ razonsocial: nombre, email: email ?? "" });
-  const [guardando, setGuardando] = useState(false);
-  const [exito, setExito] = useState(false);
-  const [error, setError] = useState("");
+function DatosTab({
+  email,
+  perfilFacturacion,
+  razonSocialVinculada,
+  cuit,
+}: {
+  email?: string;
+  perfilFacturacion: PerfilFacturacionUI | null;
+  razonSocialVinculada?: string;
+  cuit?: string;
+}) {
+  const router = useRouter();
+  const { openUserProfile } = useClerk();
+  const vinculado = Boolean(razonSocialVinculada);
 
-  async function guardar() {
-    setGuardando(true);
-    setError("");
-    try {
-      const res = await fetch("/api/mi-cuenta/datos", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error();
-      setExito(true);
-      setEditando(false);
-      setTimeout(() => setExito(false), 3000);
-    } catch {
-      setError("No se pudieron guardar los cambios. Intentá de nuevo.");
-    } finally {
-      setGuardando(false);
-    }
-  }
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Datos de acceso — los administra Clerk, no el shop */}
+      <div className="rounded-xl border border-border bg-surface p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-text">Datos de acceso</h2>
+            <p className="mt-1 text-sm text-muted">
+              Entrás con{" "}
+              <span className="font-medium text-text">{email ?? "tu cuenta"}</span>.
+            </p>
+          </div>
+          {/*
+            Botón en vez de explicar dónde queda: `openUserProfile()` abre el
+            panel de Clerk en un modal, acá mismo. Mandar al usuario a buscar un
+            menú en otra esquina de la pantalla es hacerle hacer nuestro trabajo.
+          */}
+          <button
+            onClick={() => openUserProfile()}
+            className="shrink-0 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-elevated"
+          >
+            Editar mi cuenta
+          </button>
+        </div>
+      </div>
 
-  function cancelar() {
-    setForm({ razonsocial: nombre, email: email ?? "" });
-    setEditando(false);
-    setError("");
+      {/* Datos de facturación */}
+      <div className="rounded-xl border border-border bg-surface p-6">
+        <h2 className="text-base font-bold text-text">Datos de facturación</h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          {vinculado
+            ? "Estos datos vienen de tu cuenta en nuestro sistema. Si algo está mal, escribinos y lo corregimos."
+            : "Los necesitamos para emitirte la factura de tus compras."}
+        </p>
+
+        <div className="mt-5">
+          <FacturacionForm
+            perfil={perfilFacturacion}
+            bloqueado={vinculado}
+            onGuardado={() => router.refresh()}
+          />
+        </div>
+      </div>
+
+      <CuentaClienteCard
+        razonSocialVinculada={razonSocialVinculada}
+        cuit={cuit}
+        coincideConAlegra={Boolean(perfilFacturacion?.coincideConAlegra)}
+      />
+    </div>
+  );
+}
+
+/**
+ * Estado de la vinculación con la cuenta de cliente de Alegra.
+ *
+ * Se llama "cuenta de cliente" y no "cuenta corriente" a propósito: en Alegra
+ * también hay clientes de CONTADO, que no tienen cuenta corriente pero sí
+ * historial, facturas y su propia lista de precios. Llamarlo "cuenta corriente"
+ * dejaba afuera justamente a la mayoría.
+ *
+ * Vive acá y no en el header: le sirve a una minoría, y en el header ocupaba
+ * lugar permanente a todos los demás.
+ */
+function CuentaClienteCard({
+  razonSocialVinculada,
+  cuit,
+  coincideConAlegra,
+}: {
+  razonSocialVinculada?: string;
+  cuit?: string;
+  /** El documento que cargó ya existe como contacto en Alegra. */
+  coincideConAlegra?: boolean;
+}) {
+  if (razonSocialVinculada) {
+    return (
+      <div className="rounded-xl border border-border bg-surface p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-bold text-text">Tu cuenta de cliente</h2>
+            <p className="mt-1 text-sm text-muted">
+              Tu usuario está vinculado a{" "}
+              <span className="font-semibold text-text">{razonSocialVinculada}</span>
+              {cuit ? ` (CUIT ${cuit})` : ""}. Estás viendo tu lista de precios.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
+            Vinculada
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="rounded-xl border border-border bg-surface p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-bold text-text">Datos de la cuenta</h2>
-        {!editando && (
-          <button
-            onClick={() => setEditando(true)}
-            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-elevated"
-          >
-            Editar
-          </button>
-        )}
-      </div>
+      <h2 className="text-base font-bold text-text">¿Ya sos cliente del local?</h2>
 
-      {exito && (
-        <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-          Datos actualizados correctamente.
-        </div>
-      )}
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-          {error}
-        </div>
-      )}
-
-      {editando ? (
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Razón social">
-              <Input
-                value={form.razonsocial}
-                onChange={(e) => setForm((f) => ({ ...f, razonsocial: e.target.value }))}
-                placeholder="Razón social"
-              />
-            </Field>
-            <div>
-              <dt className="mb-1.5 text-xs uppercase tracking-wide text-muted">CUIT</dt>
-              <dd className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-muted">
-                {cuit ?? "—"}
-              </dd>
-            </div>
-            <Field label="Email">
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="correo@ejemplo.com"
-              />
-            </Field>
-          </div>
-          <div className="flex gap-3 pt-1">
-            <Button onClick={guardar} disabled={guardando || !form.razonsocial.trim()}>
-              {guardando ? "Guardando…" : "Guardar cambios"}
-            </Button>
-            <button
-              onClick={cancelar}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-elevated"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
+      {coincideConAlegra ? (
+        // Detectamos el documento en Alegra pero NO vinculamos solo: hacerlo
+        // sería regalarle la cuenta a cualquiera que escriba un CUIT ajeno.
+        // Se invita, y la prueba sigue siendo el código al email registrado.
+        <p className="mt-1 max-w-2xl text-sm text-text">
+          Encontramos una cuenta con ese documento en nuestro sistema. Vinculala
+          para ver <span className="font-medium">tus precios</span> y todas tus
+          facturas.
+        </p>
       ) : (
-        <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Dato label="Razón social" value={form.razonsocial || nombre} />
-          <Dato label="CUIT" value={cuit ?? "—"} />
-          <Dato label="Email" value={form.email || (email ?? "—")} />
-        </dl>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          Estás comprando a{" "}
+          <span className="font-medium text-text">precio de lista general</span>.
+          Si ya comprás en el local, vinculá tu cuenta para ver tus precios, tus
+          facturas y —si tenés cuenta corriente— tu saldo.
+        </p>
       )}
+
+      <Link href="/mi-cuenta/vincular" className="mt-4 inline-block">
+        <Button>Ya soy cliente del local</Button>
+      </Link>
     </div>
   );
 }
@@ -421,67 +502,23 @@ const EMPTY_FORM: Omit<Direccion, "id" | "principal"> = {
   referencia: "",
 };
 
-interface Sugerencia { label: string; calle: string; ciudad: string; cp: string }
-
 function DireccionesTab() {
   const [direcciones, setDirecciones] = useState<Direccion[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [direccionConfirmada, setDireccionConfirmada] = useState(false);
-  const [sugerencias, setSugerencias] = useState<Sugerencia[]>([]);
-  const [abierto, setAbierto] = useState(false);
-  const [indice, setIndice] = useState(-1);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  /**
+   * El usuario eligió cargar la dirección a mano. Va aparte de
+   * `direccionConfirmada` porque cambia una regla: en modo automático, seguir
+   * escribiendo la calle esconde los campos derivados; en modo manual eso
+   * sería absurdo, porque pidió completarlos él.
+   */
+  const [modoManual, setModoManual] = useState(false);
 
   const canSave = form.etiqueta.trim() && form.calle.trim() && form.ciudad && direccionConfirmada;
 
   function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function onCalleChange(value: string) {
-    setField("calle", value);
-    setDireccionConfirmada(false);
-    setIndice(-1);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.length < 3) { setSugerencias([]); setAbierto(false); return; }
-    debounceRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/geocode?text=${encodeURIComponent(value)}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSugerencias(data);
-          setAbierto(data.length > 0);
-        }
-      } catch { /* silencioso */ }
-    }, 300);
-  }
-
-  function seleccionarSugerencia(s: Sugerencia) {
-    setForm((prev) => ({ ...prev, calle: s.calle, ciudad: s.ciudad, cp: s.cp }));
-    setSugerencias([]);
-    setAbierto(false);
-    setIndice(-1);
-    setDireccionConfirmada(true);
-    inputRef.current?.blur();
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!abierto || sugerencias.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setIndice((i) => Math.min(i + 1, sugerencias.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setIndice((i) => Math.max(i - 1, -1));
-    } else if (e.key === "Enter" && indice >= 0) {
-      e.preventDefault();
-      seleccionarSugerencia(sugerencias[indice]);
-    } else if (e.key === "Escape") {
-      setAbierto(false);
-      setIndice(-1);
-    }
   }
 
   function guardar() {
@@ -491,8 +528,8 @@ function DireccionesTab() {
       { ...form, id: crypto.randomUUID(), principal: prev.length === 0 },
     ]);
     setForm(EMPTY_FORM);
-    setSugerencias([]);
     setDireccionConfirmada(false);
+    setModoManual(false);
     setShowForm(false);
   }
 
@@ -580,37 +617,52 @@ function DireccionesTab() {
 
           <div className="flex flex-col gap-4">
             {/* 1. Calle con autocomplete — siempre visible primero */}
-            <div className="relative">
-              <Field label="Calle y número">
-                <Input
-                  ref={inputRef}
-                  value={form.calle}
-                  onChange={(e) => onCalleChange(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  onBlur={() => setTimeout(() => setAbierto(false), 150)}
-                  onFocus={() => sugerencias.length > 0 && setAbierto(true)}
-                  placeholder="Escribí la calle para buscar…"
-                  autoComplete="off"
-                />
-              </Field>
-              {abierto && sugerencias.length > 0 && (
-                <ul className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
-                  {sugerencias.map((s, i) => (
-                    <li key={i}>
-                      <button
-                        type="button"
-                        onMouseDown={() => seleccionarSugerencia(s)}
-                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
-                          i === indice ? "bg-elevated text-primary" : "text-text hover:bg-elevated"
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <DireccionAutocomplete
+              label="Calle y número"
+              value={form.calle}
+              onChange={(v) => {
+                setField("calle", v);
+                // Volver a escribir invalida la dirección confirmada y esconde
+                // el resto... salvo en modo manual, donde el usuario ya dijo
+                // que lo completa él.
+                if (!modoManual) setDireccionConfirmada(false);
+              }}
+              onSeleccionar={(s) => {
+                setForm((prev) => ({
+                  ...prev,
+                  calle: s.calle,
+                  ciudad: s.ciudad || prev.ciudad,
+                  cp: s.cp || prev.cp,
+                }));
+                setModoManual(false);
+                setDireccionConfirmada(true);
+              }}
+              onCargarAMano={() => {
+                setModoManual(true);
+                setDireccionConfirmada(true);
+              }}
+              suspendido={modoManual}
+              placeholder="Escribí la calle para buscar…"
+            />
+
+            {/*
+              Escape a mano. Nominatim no tiene todas las calles de Iguazú
+              cargadas, así que sin esta salida alguien puede quedar sin poder
+              guardar su dirección de envío. Un autocompletado no puede ser la
+              única forma de entrar un dato obligatorio.
+            */}
+            {!direccionConfirmada && form.calle.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setModoManual(true);
+                  setDireccionConfirmada(true);
+                }}
+                className="self-start text-sm text-primary hover:underline"
+              >
+                No encuentro mi dirección — cargarla a mano
+              </button>
+            )}
 
             {/* 2. Resto del formulario — solo aparece al confirmar dirección */}
             {direccionConfirmada && (
@@ -649,7 +701,7 @@ function DireccionesTab() {
           <div className="mt-5 flex gap-3">
             <Button onClick={guardar} disabled={!canSave}>Guardar dirección</Button>
             <button
-              onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setSugerencias([]); setDireccionConfirmada(false); }}
+              onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setDireccionConfirmada(false); setModoManual(false); }}
               className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-elevated"
             >
               Cancelar

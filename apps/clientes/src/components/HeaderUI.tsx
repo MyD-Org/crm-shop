@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { CartPreview } from "./CartPreview";
 
@@ -35,10 +36,11 @@ function MapPinIcon() {
 }
 
 export function HeaderUI({
-  sesion,
+  nombre,
   categorias,
 }: {
-  sesion: { nombre: string } | null;
+  /** Razon social del cliente, o el nombre de la cuenta. null = anonimo. */
+  nombre: string | null;
   /** Categorias reales del catalogo, resueltas en HeaderServer. */
   categorias: string[];
 }) {
@@ -81,13 +83,33 @@ export function HeaderUI({
 
           {/* Actions */}
           <nav className="flex items-center gap-5">
-            <Link
-              href={sesion ? "/mi-cuenta" : "/ingresar"}
-              className="flex items-center gap-2 text-sm text-muted transition-colors hover:text-text"
-            >
-              <UserIcon />
-              {sesion ? sesion.nombre : "Ingresar"}
-            </Link>
+            <Show when="signed-out">
+              {/*
+                `mode="modal"` en vez de navegar a /ingresar: el cliente puede
+                estar a mitad del carrito, y sacarlo de la pagina para loguearse
+                es donde se pierden las compras.
+              */}
+              <SignInButton mode="modal">
+                <button className="flex items-center gap-2 text-sm text-muted transition-colors hover:text-text">
+                  <UserIcon />
+                  Ingresar
+                </button>
+              </SignInButton>
+            </Show>
+
+            <Show when="signed-in">
+              <Link
+                href="/mi-cuenta"
+                className="flex items-center gap-2 text-sm text-muted transition-colors hover:text-text"
+              >
+                <UserIcon />
+                <span className="hidden max-w-[14ch] truncate sm:inline">
+                  {nombre ?? "Mi cuenta"}
+                </span>
+              </Link>
+              <UserButton />
+            </Show>
+
             <CartPreview />
           </nav>
         </div>

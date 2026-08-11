@@ -125,6 +125,13 @@ export interface AlegraPrice {
   main?: boolean;
 }
 
+/** Impuesto asociado a un item. `percentage` puede venir string o number. */
+export interface AlegraTax {
+  id?: string | number;
+  name?: string;
+  percentage?: string | number;
+}
+
 export interface AlegraItem {
   id: string;
   name: string;
@@ -133,6 +140,8 @@ export interface AlegraItem {
   status: "active" | "inactive";
   /** Alegra suele devolver price como array (uno por lista de precios). */
   price: AlegraPrice[] | number;
+  /** Impuestos del item. En AR: IVA 21 / 10.5 / 0 (exento). */
+  tax?: AlegraTax[];
   inventory?: {
     availableQuantity?: number;
     unitCost?: number;
@@ -146,8 +155,12 @@ export interface AlegraContact {
   identification?: string; // CUIT / DNI
   email?: string;
   phonePrimary?: string;
-  /** Lista de precios asignada al cliente, si tiene una. */
-  priceList?: { id: string; name: string } | null;
+  /**
+   * Lista de precios asignada al cliente, si tiene una. `status` importa: en la
+   * cuenta real hay contactos apuntando a listas dadas de baja (una se llama
+   * literalmente "NO USAR"). Ver `idPriceListUsable`.
+   */
+  priceList?: { id: string; name: string; status?: string } | null;
   [key: string]: unknown;
 }
 
@@ -192,6 +205,53 @@ export async function buscarContactoPorIdentificacion(
 ): Promise<AlegraContact | null> {
   const results = await getContactos({ identification, limit: 1 });
   return results?.[0] ?? null;
+}
+
+/**
+ * Busca un contacto por email. Alegra filtra con el parametro `email`
+ * (verificado contra la cuenta real; `query` NO filtra, devuelve vacio).
+ *
+ * Devuelve TODOS los que matchean, no el primero: si dos contactos comparten
+ * casilla, quien llama tiene que decidir que hacer en vez de elegir uno al azar
+ * y vincular a la empresa equivocada.
+ */
+export async function buscarContactosPorEmail(
+  email: string
+): Promise<AlegraContact[]> {
+  const results = await getContactos({ email, limit: 5 });
+  return Array.isArray(results) ? results : [];
+}
+
+/** ¿Es un cliente? En esta cuenta la mayoria de los contactos son proveedores. */
+export function esCliente(contacto: AlegraContact): boolean {
+  const tipos = contacto.type;
+  return Array.isArray(tipos) && (tipos as string[]).includes("client");
+}
+
+/**
+ * Id de la lista de precios del contacto, SOLO si es usable.
+ *
+ * Una lista dada de baja en Alegra no deja de estar asignada al contacto: la
+ * referencia queda apuntando a una lista muerta. En la cuenta real hay un
+ * cliente cuya lista se llama literalmente "NO USAR" y esta `inactive`.
+ * Cotizarle contra eso es cobrarle cualquier cosa.
+ *
+ * `undefined` = usar la lista principal, que es el default correcto.
+ */
+export function idPriceListUsable(
+  contacto: Pick<AlegraContact, "priceList"> | null | undefined
+): string | undefined {
+  const lista = contacto?.priceList;
+  if (!lista?.id) return undefined;
+  // Solo se descarta si Alegra dice explicitamente que no esta activa: si no
+  // manda `status`, se asume usable para no romper cuentas bien cargadas.
+  if (lista.status && lista.status !== "active") {
+    console.warn(
+      `[alegra] lista de precios "${lista.name}" (${lista.id}) esta ${lista.status}: se ignora y se usa la principal`
+    );
+    return undefined;
+  }
+  return String(lista.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +421,26 @@ export function resolverPrecio(
 ): number {
   if (typeof item.price === "number") return item.price;
   return precioDeLista(item.price, idPriceList);
+}
+
+/**
+ * Alícuota de IVA de un item, en porcentaje (21, 10.5, 0…).
+ *
+ * Se suman todos los impuestos del item porque un mismo item puede tener IVA +
+ * un impuesto interno. Si Alegra no devuelve `tax` (item viejo o mal cargado)
+ * se cae a `IVA_DEFAULT`: es preferible cobrar de más y que un operador
+ * corrija, a facturar sin IVA algo que sí lo lleva.
+ */
+export const IVA_DEFAULT = 21;
+
+export function ivaDeItem(item: Pick<AlegraItem, "tax">): number {
+  if (!Array.isArray(item.tax) || item.tax.length === 0) return IVA_DEFAULT;
+  const total = item.tax.reduce((acc, t) => {
+    const pct = Number(t?.percentage);
+    return acc + (Number.isFinite(pct) ? pct : 0);
+  }, 0);
+  // Un array de impuestos presente pero con 0% es un item exento legítimo.
+  return total;
 }
 
 /**

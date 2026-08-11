@@ -303,11 +303,31 @@ export const orders = pgTable(
     total: numeric("total", { precision: 14, scale: 2 }).notNull(),
 
     notas: text("notas"),
+
+    /**
+     * Clave que manda el checkout para que un reintento no cree un pedido de más.
+     *
+     * El caso que resuelve no es el doble clic (eso lo tapa el botón
+     * deshabilitado), sino el peor: el POST llega, el pedido se crea, y la
+     * respuesta se pierde en el camino. El cliente ve "no pudimos conectarnos",
+     * reintenta, y termina con dos pedidos por una sola compra. Con pago online
+     * eso sería un cobro doble.
+     *
+     * Nullable porque los pedidos anteriores a esta columna no la tienen, y
+     * porque un pedido cargado a mano por un operador tampoco necesita una.
+     */
+    idempotencyKey: text("idempotency_key"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("orders_numero").on(t.numero),
+    // Parcial: los pedidos sin clave (históricos, o cargados por un operador) no
+    // deben chocar entre sí por tener todos NULL.
+    uniqueIndex("orders_idempotency")
+      .on(t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
     index("orders_cliente_fecha").on(t.clienteCodigo, t.createdAt),
     // "Mis pedidos" busca por quien compró, no por la cuenta corriente: si
     // alguien compra sin vincular y vincula después, sus pedidos siguen siendo

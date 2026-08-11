@@ -7,7 +7,7 @@ import {
   type EntregaTipo,
   type PagoMetodo,
 } from "@/lib/envio";
-import { crearPedido, listarPedidos } from "@/lib/pedidos";
+import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { domicilioEnLinea } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 
@@ -45,7 +45,16 @@ interface BodyPedido {
   entregaDireccion?: unknown;
   pagoMetodo?: unknown;
   notas?: unknown;
+  idempotencyKey?: unknown;
 }
+
+/**
+ * La clave la genera el checkout (un UUID por intento de compra). Se exige el
+ * formato para que no entre cualquier cosa en una columna con índice único, y
+ * porque un valor previsible —"1", el id del carrito— haría que dos clientes
+ * distintos colisionaran entre sí.
+ */
+const CLAVE_VALIDA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -81,6 +90,32 @@ export async function POST(req: Request) {
   const entregaCiudad = texto(body.entregaCiudad, 80);
   const entregaDireccion = texto(body.entregaDireccion, 200);
   const pagoMetodo = texto(body.pagoMetodo, 40) as PagoMetodo;
+
+  const idempotencyKey = texto(body.idempotencyKey, 40);
+  if (idempotencyKey && !CLAVE_VALIDA.test(idempotencyKey)) {
+    return NextResponse.json(
+      { error: "Clave de pedido inválida." },
+      { status: 400 },
+    );
+  }
+
+  /**
+   * Atajo del reintento: si esta clave ya creó un pedido, se devuelve ese y se
+   * corta acá. Sin esto, un reintento vuelve a cotizar contra Alegra —hasta 60
+   * llamadas— para terminar descubriendo lo mismo.
+   *
+   * No es la garantía contra duplicados: eso lo hace el índice único dentro de
+   * `crearPedido`. Dos requests simultáneos pasarían los dos por este chequeo.
+   */
+  if (idempotencyKey) {
+    const yaCreado = await getPedidoPorClave(idempotencyKey, {
+      clerkUserId,
+      clienteCodigo: cliente?.codigocliente,
+    });
+    if (yaCreado) {
+      return NextResponse.json({ ...yaCreado, repetido: true }, { status: 200 });
+    }
+  }
 
   if (!contactoNombre || !contactoTelefono) {
     return NextResponse.json(
@@ -181,11 +216,18 @@ export async function POST(req: Request) {
         // vinculó: un operador debe revisarlo antes de facturar, para no crear
         // un cliente duplicado con el mismo CUIT.
         requiereRevision: Boolean(perfil?.coincideConAlegra) && !cliente,
+        idempotencyKey: idempotencyKey || undefined,
       },
       cotizacion,
     );
 
-    return NextResponse.json({ ...pedido, cotizacion }, { status: 201 });
+    // 200 y no 201 cuando la clave ya existía: no se creó nada nuevo. El
+    // checkout trata los dos casos igual —muestra el número— pero la diferencia
+    // importa para cualquiera que lea los logs.
+    return NextResponse.json(
+      { ...pedido, cotizacion },
+      { status: pedido.repetido ? 200 : 201 },
+    );
   } catch (err) {
     console.error("[/api/pedidos] POST error:", err);
     return NextResponse.json(

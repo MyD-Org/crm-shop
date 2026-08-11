@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { Button, Field, Input } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
@@ -97,6 +97,20 @@ export function CheckoutClient({
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   const [confirmado, setConfirmado] = useState<{ numero: string } | null>(null);
 
+  /**
+   * Clave del intento de compra. Se genera en el PRIMER confirmar y se reusa en
+   * cada reintento, que es lo que la vuelve útil.
+   *
+   * El caso que resuelve no es el doble clic —eso ya lo tapa el botón
+   * deshabilitado— sino el peor: el POST llega, el pedido se crea, y la
+   * respuesta se pierde. Abajo eso se muestra como "no pudimos conectarnos", el
+   * cliente reintenta, y sin esta clave quedan dos pedidos por una sola compra.
+   *
+   * En un `ref` y no en `useState` porque cambiarla no tiene que repintar nada.
+   * Se genera acá y no en el render para no llamar a `crypto` durante el SSR.
+   */
+  const claveIntento = useRef<string | null>(null);
+
   const { cotizacion, estado, error, recotizar } = useCotizacion({
     entregaTipo: entrega,
     ciudad: entrega === "envio" ? ciudad : undefined,
@@ -131,11 +145,23 @@ export function CheckoutClient({
   async function confirmar() {
     setEnviando(true);
     setErrorEnvio(null);
+
+    // `randomUUID` pide contexto seguro (https o localhost). Si no está, se
+    // manda sin clave: se pierde la protección contra el duplicado, pero la
+    // compra sigue andando. Romper el checkout sería peor que el problema.
+    if (!claveIntento.current) {
+      claveIntento.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : null;
+    }
+
     try {
       const res = await fetch("/api/pedidos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          idempotencyKey: claveIntento.current ?? undefined,
           items: items.map((i) => ({ id: i.id, qty: i.qty })),
           contactoNombre: nombre,
           contactoTelefono: telefono,

@@ -64,6 +64,11 @@ export interface DatosPedido {
   };
   /** El documento coincide con un contacto de Alegra sin vincular. */
   requiereRevision?: boolean;
+  /**
+   * Clave del intento de compra, generada por el checkout. Reintentar el mismo
+   * intento devuelve el pedido que ya existe en vez de crear otro.
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -72,12 +77,17 @@ export interface DatosPedido {
  * Solo se persisten las líneas SIN problema. La validación de que no haya
  * problemas ocurre antes, en la API: si algo llegó roto hasta acá, es preferible
  * un pedido corto que uno con una línea de total 0 que nadie va a poder cobrar.
+ *
+ * Es IDEMPOTENTE cuando viene `idempotencyKey`: el segundo intento con la misma
+ * clave devuelve el pedido original con `repetido: true`, sin escribir nada. La
+ * decisión la toma Postgres con un índice único parcial, no un `select` previo
+ * — dos requests simultáneos pasarían los dos por ese select.
  */
 export async function crearPedido(
   cliente: DatosCliente,
   datos: DatosPedido,
   cotizacion: Cotizacion,
-): Promise<{ id: string; numero: string }> {
+): Promise<{ id: string; numero: string; repetido: boolean }> {
   const lineas = cotizacion.lineas.filter((l) => !l.problema);
   if (lineas.length === 0) {
     throw new Error("No hay líneas válidas para crear el pedido");
@@ -87,6 +97,7 @@ export async function crearPedido(
     const [pedido] = await tx
       .insert(orders)
       .values({
+        idempotencyKey: datos.idempotencyKey ?? null,
         clerkUserId: cliente.clerkUserId,
         clienteCodigo: cliente.codigo ?? null,
         clienteRazonSocial: cliente.razonSocial ?? null,
@@ -111,7 +122,38 @@ export async function crearPedido(
         costoEnvio: String(cotizacion.costoEnvio),
         total: String(cotizacion.total),
       })
+      // El `where` acá es el predicado del índice parcial, no un filtro de
+      // filas: sin él, Postgres no sabe qué índice usar para resolver el
+      // conflicto y rechaza el ON CONFLICT.
+      .onConflictDoNothing({
+        target: orders.idempotencyKey,
+        where: sql`${orders.idempotencyKey} is not null`,
+      })
       .returning({ id: orders.id, numero: orders.numero });
+
+    // Sin fila devuelta, la clave ya existía: es un reintento del mismo intento
+    // de compra. Se devuelve el pedido original y NO se escriben las líneas de
+    // nuevo — duplicarlas dejaría el pedido con el doble de todo.
+    if (!pedido) {
+      const [existente] = await tx
+        .select({ id: orders.id, numero: orders.numero })
+        .from(orders)
+        .where(eq(orders.idempotencyKey, datos.idempotencyKey!))
+        .limit(1);
+
+      if (!existente) {
+        // El insert chocó pero la fila no aparece: solo puede pasar si algo
+        // ajeno la borró en el medio. Preferible fallar que devolver un pedido
+        // inventado.
+        throw new Error("Conflicto de idempotencia sin pedido asociado");
+      }
+
+      return {
+        id: existente.id,
+        numero: formatearNumero(existente.numero),
+        repetido: true,
+      };
+    }
 
     await tx.insert(orderItems).values(
       lineas.map((l) => ({
@@ -129,8 +171,36 @@ export async function crearPedido(
       })),
     );
 
-    return { id: pedido.id, numero: formatearNumero(pedido.numero) };
+    return {
+      id: pedido.id,
+      numero: formatearNumero(pedido.numero),
+      repetido: false,
+    };
   });
+}
+
+/**
+ * Busca un pedido ya creado con esta clave de intento.
+ *
+ * Es un atajo, no la garantía: sirve para cortar el reintento ANTES de volver a
+ * cotizar contra Alegra (que son hasta 60 llamadas para descubrir algo que ya
+ * sabíamos). Quien garantiza que no haya duplicados es el índice único de
+ * `crearPedido`, porque dos requests simultáneos pasarían los dos por acá.
+ *
+ * Se filtra por dueño: la clave la elige el cliente, así que sin este filtro
+ * alguien podría adivinar una clave ajena y leer el número de pedido de otro.
+ */
+export async function getPedidoPorClave(
+  idempotencyKey: string,
+  dueno: DuenoPedidos,
+): Promise<{ id: string; numero: string } | null> {
+  const [fila] = await getDb()
+    .select({ id: orders.id, numero: orders.numero })
+    .from(orders)
+    .where(and(eq(orders.idempotencyKey, idempotencyKey), esDeSuDueno(dueno)))
+    .limit(1);
+
+  return fila ? { id: fila.id, numero: formatearNumero(fila.numero) } : null;
 }
 
 /** Fila cruda de `orders` + sus líneas, armada como `Order` de UI. */

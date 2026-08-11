@@ -43,6 +43,13 @@
       "when": 1786372865039,
       "tag": "0005_bitter_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786481059582,
+      "tag": "0006_youthful_blue_blade",
+      "breakpoints": true
     }
   ]
 }

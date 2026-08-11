@@ -109,12 +109,28 @@ export function validarFacturacion(
 
   if (condicion && EXIGEN_CUIT.includes(condicion) && tipoDoc !== "CUIT") {
     errores.tipoDoc = `Con ${CONDICION_IVA_LABEL[condicion].toLowerCase()} hace falta CUIT.`;
-  } else if (!nro) {
+  }
+
+  /**
+   * El número se valida SIEMPRE, en su propia cadena.
+   *
+   * Antes esto colgaba del mismo `else if` que el error de tipoDoc, y eso
+   * abría dos huecos: con el tipo de documento mal elegido el número no se
+   * miraba, y —peor— si `tipoDoc` venía sin definir no entraba en ninguna rama
+   * y un documento como "123" salía sin un solo error. Esta función recibe un
+   * `Partial<DatosFacturacion>`, así que ese caso no es hipotético: es lo que
+   * la firma invita a pasarle.
+   *
+   * Sin `tipoDoc` se valida como CUIT, que es el default del servidor y el
+   * criterio más estricto. Nunca dejar pasar un documento sin mirar.
+   */
+  const esDni = tipoDoc === "DNI";
+  if (!nro) {
     errores.nroDoc = "Ingresá tu número de documento.";
-  } else if (tipoDoc === "CUIT" && !cuitValido(nro)) {
-    errores.nroDoc = "Ese CUIT no es válido. Revisá los números.";
-  } else if (tipoDoc === "DNI" && !dniValido(nro)) {
-    errores.nroDoc = "Ese DNI no es válido.";
+  } else if (esDni ? !dniValido(nro) : !cuitValido(nro)) {
+    errores.nroDoc = esDni
+      ? "Ese DNI no es válido."
+      : "Ese CUIT no es válido. Revisá los números.";
   }
 
   // Domicilio obligatorio para TODOS, no solo para quien discrimina IVA.

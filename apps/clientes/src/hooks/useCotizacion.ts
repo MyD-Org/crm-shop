@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "@/context/CartContext";
 import type { Cotizacion } from "@/lib/cotizacion";
 import type { EntregaTipo, PagoMetodo } from "@/lib/envio";
@@ -22,6 +22,19 @@ export interface CotizacionResponse extends Cotizacion {
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
+
+/**
+ * Espera antes de recotizar tras un cambio.
+ *
+ * El `QuantityStepper` avisa en cada clic de + y −, así que subir una cantidad
+ * de 1 a 20 son 20 cambios en pocos segundos. Sin esta espera, cada uno abre un
+ * request que a su vez se abre en hasta 60 llamadas a Alegra, y el usuario
+ * termina chocando contra el rate limit de la ruta en pleno uso normal.
+ *
+ * 350 ms es más corto que la pausa entre dos clics deliberados, así que quien
+ * ajusta de a uno no lo percibe, y quien clickea rápido genera un solo request.
+ */
+const ESPERA_MS = 350;
 
 /**
  * Resultado de un fetch, etiquetado con los inputs que lo produjeron.
@@ -68,6 +81,12 @@ export function useCotizacion(opts: {
   );
 
   const vacio = items.length === 0;
+  /**
+   * La PRIMERA cotización no espera: al abrir el carrito, 350 ms de demora
+   * antes de ver los totales se notan. La espera solo tiene sentido para los
+   * cambios posteriores, que son los que llegan en ráfaga.
+   */
+  const yaCotizo = useRef(false);
 
   useEffect(() => {
     if (!ready || !activo || vacio) return;
@@ -76,7 +95,8 @@ export function useCotizacion(opts: {
     const ctrl = new AbortController();
     const etiqueta = { clave, nonce, entregaTipo, ciudad };
 
-    (async () => {
+    const timer = setTimeout(async () => {
+      yaCotizo.current = true;
       try {
         const r = await fetch("/api/carrito/cotizar", {
           method: "POST",
@@ -123,9 +143,14 @@ export function useCotizacion(opts: {
           error: "No pudimos conectarnos. Revisá tu conexión.",
         });
       }
-    })();
+    }, yaCotizo.current ? ESPERA_MS : 0);
 
-    return () => ctrl.abort();
+    // Limpiar el timer además de abortar: si el cambio llegó durante la espera,
+    // el request ni siquiera se abre.
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
   }, [clave, ready, activo, vacio, entregaTipo, ciudad, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada

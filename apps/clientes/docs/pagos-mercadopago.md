@@ -223,11 +223,25 @@ cobrar dos veces.
 
 ## 10. Riesgos abiertos — verificar antes de codear
 
-1. **Dos generaciones de API conviviendo.** MP está migrando de `/v1/payments`
-   (`approved`/`rejected`/`in_process`) a Orders API
-   (`processed`/`failed`/`processing`). La doc de Bricks apunta a la vieja; la
-   de estados que consultamos, a la nueva. **Hay que decidir cuál usar y no
-   mezclarlas.** Cambia el mapeo de §8 y parte de §5.
+1. ~~**Dos generaciones de API conviviendo.**~~ **RESUELTO: se usa `/v1/payments`.**
+
+   MP tiene dos caminos vivos. La Orders API existe y la están empujando, pero
+   es un **modelo de integración distinto** (Checkout API vía Orders, el del
+   formulario propio); Bricks documenta `/v1/payments`, y no hay aviso de
+   deprecación. Combinar el front de Bricks con un backend de Orders sería una
+   mezcla que la documentación no cubre, y un flujo de pagos no es el lugar para
+   improvisar sobre combinaciones no documentadas.
+
+   Los estados que se mapean, entonces, son los de `/v1/payments`:
+   `approved` / `in_process` / `pending` / `rejected`, con `status_detail`
+   `cc_rejected_*` y `pending_*`.
+
+   Lo que sí hay que prever: MP está unificando las notificaciones al topic
+   `order`, así que el webhook tiene que tolerar los dos topics y resolver por
+   ID en vez de asumir la forma del payload.
+
+   Si algún día se migra, el cambio queda contenido en `mercadopago.ts`: el
+   resto del sistema habla en los tipos propios de §3.
 2. **Compatibilidad del SDK.** Este proyecto corre React 19.2.4 y Next 16.2.9.
    Hay que confirmar que `@mercadopago/sdk-react` funcione ahí. Plan B: el SDK
    de JS puro montado a mano — funciona igual, da más trabajo.

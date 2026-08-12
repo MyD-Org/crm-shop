@@ -49,6 +49,11 @@ export function permitir(
   maxUsos: number,
   ventanaMs: number,
 ): boolean {
+  // Antes que nada: con un máximo de 0 (o negativo) no pasa nadie. Sin esto, la
+  // rama de "ventana nueva" de abajo devuelve `true` sin haber mirado el
+  // máximo, y un límite de 0 dejaría pasar el primero.
+  if (maxUsos <= 0) return false;
+
   const ahora = Date.now();
   const actual = ventanas.get(clave);
 

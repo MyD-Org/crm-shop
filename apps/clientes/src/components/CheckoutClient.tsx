@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button, Field, Input } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
+import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { fmtPrecio } from "@/lib/format";
 import {
   CIUDADES_ENVIO,
@@ -95,7 +96,17 @@ export function CheckoutClient({
 
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
-  const [confirmado, setConfirmado] = useState<{ numero: string } | null>(null);
+  /**
+   * El pedido ya existe en la base. Se guarda el total además del número porque
+   * el carrito se vacía en este mismo paso y la cotización deja de estar
+   * disponible — y el brick necesita un monto para mostrar.
+   */
+  const [confirmado, setConfirmado] = useState<{
+    numero: string;
+    id: string;
+    total: number;
+  } | null>(null);
+  const [pagado, setPagado] = useState(false);
 
   /**
    * Clave del intento de compra. Se genera en el PRIMER confirmar y se reusa en
@@ -189,13 +200,52 @@ export function CheckoutClient({
 
       // El carrito se vacía SOLO después del 201: si se limpiaba antes y el
       // POST fallaba, el cliente perdía el carrito sin haber comprado nada.
-      setConfirmado({ numero: json.numero });
+      // A partir de acá el registro de la compra es el pedido, no el carrito:
+      // si el pago falla, el pedido queda y se puede reintentar sin rehacer nada.
+      setConfirmado({
+        numero: json.numero,
+        id: json.id,
+        total: json.cotizacion?.total ?? cotizacion?.total ?? 0,
+      });
       clear();
     } catch {
       setErrorEnvio("No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.");
     } finally {
       setEnviando(false);
     }
+  }
+
+  // ------------------------------------------------------- pedido creado, a pagar
+  //
+  // El pedido YA existe cuando se llega acá. Si el cobro falla, no se pierde
+  // nada: queda pendiente y se puede pagar después desde "Mis pedidos" o por
+  // transferencia. Por eso el pedido se crea antes de intentar cobrar y no al
+  // revés.
+  if (confirmado && pagoElegido === "mercadopago" && !pagado) {
+    return (
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
+        <div className="text-center">
+          <h1 className="text-2xl font-extrabold text-text">Pagá tu pedido</h1>
+          <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
+          <p className="mt-2 text-sm text-muted">
+            Ya guardamos tu pedido. Si algo falla con la tarjeta, no lo perdés:
+            podés pagarlo más tarde o por transferencia.
+          </p>
+        </div>
+
+        <PagoMercadoPago
+          pedidoId={confirmado.id}
+          numero={confirmado.numero}
+          monto={confirmado.total}
+          emailComprador={emailCliente}
+          onPagado={() => setPagado(true)}
+        />
+
+        <Link href="/mi-cuenta" className="text-center text-sm text-muted underline">
+          Prefiero pagarlo después
+        </Link>
+      </main>
+    );
   }
 
   // ------------------------------------------------------------------ éxito
@@ -205,12 +255,23 @@ export function CheckoutClient({
         <span className="flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
           <CheckCircleIcon />
         </span>
-        <h1 className="text-2xl font-extrabold text-text">Pedido recibido</h1>
+        <h1 className="text-2xl font-extrabold text-text">
+          {pagado ? "¡Pago acreditado!" : "Pedido recibido"}
+        </h1>
         <p className="text-sm font-semibold text-text">{confirmado.numero}</p>
         <p className="text-sm text-muted">
-          Nos vamos a comunicar con vos para coordinar el{" "}
-          {entrega === "envio" ? "envío" : "retiro"} y el pago por{" "}
-          {PAGO_LABEL[pagoElegido].toLowerCase()}.
+          {pagado ? (
+            <>
+              Ya cobramos tu pedido. Nos comunicamos con vos para coordinar el{" "}
+              {entrega === "envio" ? "envío" : "retiro"}.
+            </>
+          ) : (
+            <>
+              Nos vamos a comunicar con vos para coordinar el{" "}
+              {entrega === "envio" ? "envío" : "retiro"} y el pago por{" "}
+              {PAGO_LABEL[pagoElegido].toLowerCase()}.
+            </>
+          )}
           {emailCliente && <> Te mandamos el detalle a {emailCliente}.</>}
         </p>
         <div className="flex gap-3">

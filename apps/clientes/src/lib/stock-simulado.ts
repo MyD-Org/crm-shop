@@ -14,9 +14,14 @@
  * Si estuviera en cualquiera de los dos, el otro arrastraría ese módulo entero.
  *
  * Doble llave, y las dos son necesarias:
- *  1. `NODE_ENV !== "production"` — no alcanza con acordarse de borrar la
+ *  1. `VERCEL_ENV !== "production"` — no alcanza con acordarse de borrar la
  *     variable de entorno; olvidarla cargada no puede hacer que el shop venda
- *     lo que no tiene.
+ *     lo que no tiene. Se usa `VERCEL_ENV` y no `NODE_ENV` porque en Vercel
+ *     Preview `NODE_ENV === "production"` (build de release), y sin poder
+ *     activar el mock en Preview no se puede probar el checkout deployado
+ *     mientras Alegra siga sin inventario cargado. `VERCEL_ENV` distingue
+ *     "production" de "preview" y "development". En local es undefined, que
+ *     también pasa este check.
  *  2. `SHOP_STOCK_SIMULADO === "1"` — explícita, nadie la activa sin querer.
  *
  * Esto NO resuelve el problema de fondo: que el shop no pueda vender porque
@@ -24,7 +29,7 @@
  */
 export function stockSimulado(): boolean {
   return (
-    process.env.NODE_ENV !== "production" &&
+    process.env.VERCEL_ENV !== "production" &&
     process.env.SHOP_STOCK_SIMULADO === "1"
   );
 }

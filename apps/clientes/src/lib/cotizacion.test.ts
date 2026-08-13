@@ -92,20 +92,32 @@ import type { AlegraItem } from "./alegra";
  * cuela a producción, el shop vende lo que no tiene.
  */
 describe("stockSimulado — las dos llaves", () => {
-  // `vi.stubEnv` y no asignación directa: NODE_ENV es de solo lectura en los
-  // tipos de Node, y escribirlo a mano rompe `tsc` aunque el test pase.
+  // `vi.stubEnv` y no asignación directa: los tipos de Node marcan estos como
+  // read-only, y escribirlos a mano rompe `tsc` aunque el test pase.
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
   it("apagado por defecto", () => {
-    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VERCEL_ENV", undefined);
     vi.stubEnv("SHOP_STOCK_SIMULADO", undefined);
     expect(stockSimulado()).toBe(false);
   });
 
-  it("se enciende en desarrollo con la variable explícita", () => {
-    vi.stubEnv("NODE_ENV", "development");
+  it("se enciende en local con la variable explícita (VERCEL_ENV undefined)", () => {
+    vi.stubEnv("VERCEL_ENV", undefined);
+    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
+    expect(stockSimulado()).toBe(true);
+  });
+
+  /**
+   * El motivo por el que se cambió de NODE_ENV a VERCEL_ENV: en Preview de
+   * Vercel `NODE_ENV === "production"` (compilación de release), y eso
+   * bloqueaba el mock justo cuando más se necesita, que es probar la rama
+   * deployada.
+   */
+  it("se enciende en Preview de Vercel", () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
     expect(stockSimulado()).toBe(true);
   });
@@ -115,13 +127,13 @@ describe("stockSimulado — las dos llaves", () => {
    * hacer que el shop venda lo que no tiene.
    */
   it("NO se enciende en producción, aunque la variable esté", () => {
-    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
     expect(stockSimulado()).toBe(false);
   });
 
   it("no se activa con cualquier valor", () => {
-    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("VERCEL_ENV", "preview");
     for (const v of ["true", "si", "0", "", "yes"]) {
       vi.stubEnv("SHOP_STOCK_SIMULADO", v);
       expect(stockSimulado(), v).toBe(false);

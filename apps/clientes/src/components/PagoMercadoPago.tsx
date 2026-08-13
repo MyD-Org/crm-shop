@@ -90,10 +90,22 @@ export function PagoMercadoPago({
     [monto, emailComprador],
   );
 
+  /**
+   * `mercadoPago: "all"` habilita dinero en cuenta dentro del mismo brick: MP
+   * abre un popup para que el comprador se loguee y elija saldo, y devuelve
+   * `payment_method_id: "account_money"` sin token. La doc §6 hablaba de un
+   * Wallet Brick separado con aviso previo, pero el propio card de MP dentro
+   * del Payment Brick ya cumple ese rol (logo grande, texto de MP) y ahorra
+   * mantener dos bricks distintos. El aviso literal está debajo del componente.
+   */
   const customization = useMemo(
     () =>
       ({
-        paymentMethods: { creditCard: "all", debitCard: "all" },
+        paymentMethods: {
+          creditCard: "all",
+          debitCard: "all",
+          mercadoPago: "all",
+        },
         visual: { style: { theme: "default" } },
       }) as const,
     [],
@@ -111,7 +123,19 @@ export function PagoMercadoPago({
       token?: string;
       installments?: number;
       payment_method_id?: string;
+      payment_type_id?: string;
     };
+
+    /**
+     * Detección del medio del lado del cliente: MP marca dinero en cuenta con
+     * `payment_method_id === "account_money"` (y `payment_type_id === "account_money"`).
+     * El server igual re-decide con lo que le llega — el cliente puede mentir —
+     * pero mandar el medio correcto acá evita que un dinero en cuenta se
+     * intente cobrar como tarjeta y falle por token faltante.
+     */
+    const esCuentaMp =
+      datos?.payment_method_id === "account_money" ||
+      datos?.payment_type_id === "account_money";
 
     try {
       const res = await fetch("/api/pagos/mercadopago", {
@@ -119,7 +143,7 @@ export function PagoMercadoPago({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pedidoId,
-          medio: "tarjeta",
+          medio: esCuentaMp ? "cuenta_mp" : "tarjeta",
           token: datos?.token,
           cuotas: datos?.installments,
           metodoPagoId: datos?.payment_method_id,
@@ -287,6 +311,16 @@ export function PagoMercadoPago({
           });
         }}
       />
+
+      {/*
+        Aviso previo de doc §6: "sin redirección" es literal para tarjeta, pero
+        con dinero en cuenta MP abre una ventana para iniciar sesión. Anticiparlo
+        evita que el comprador crea que perdió el formulario.
+      */}
+      <p className="mt-3 text-xs text-muted">
+        Si pagás con dinero en cuenta de Mercado Pago, se abrirá una ventana
+        para que inicies sesión.
+      </p>
     </div>
   );
 }

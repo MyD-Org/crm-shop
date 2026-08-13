@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
 import { Button } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
@@ -69,6 +69,35 @@ export function PagoMercadoPago({
   }, []);
 
   const faltaKey = !process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
+
+  /**
+   * `initialization` y `customization` DEBEN tener identidad estable.
+   *
+   * Eran objetos literales, o sea nuevos en cada render. Al apretar "Pagar" el
+   * estado pasa a "procesando", React vuelve a renderizar, el SDK ve props
+   * distintas y **reinicia el brick**: el comprador volvía a la pantalla de
+   * elegir medio de pago, con los datos de la tarjeta perdidos, y recién
+   * después le aparecía el error. Parecía que el pago no se había enviado.
+   *
+   * El remontado a propósito —cuando conviene reintentar— se sigue haciendo con
+   * `key={intento}`, que es explícito y controlado por nosotros.
+   */
+  const initialization = useMemo(
+    () => ({
+      amount: monto,
+      payer: emailComprador ? { email: emailComprador } : undefined,
+    }),
+    [monto, emailComprador],
+  );
+
+  const customization = useMemo(
+    () =>
+      ({
+        paymentMethods: { creditCard: "all", debitCard: "all" },
+        visual: { style: { theme: "default" } },
+      }) as const,
+    [],
+  );
 
   /**
    * El brick espera una promesa: mientras no se resuelva, mantiene el botón en
@@ -143,6 +172,27 @@ export function PagoMercadoPago({
       });
     }
   }
+
+  /**
+   * `onSubmit` también tiene que ser estable, por el mismo motivo que las props
+   * de arriba. Se guarda `enviar` en una ref en vez de memoizarla: depende de
+   * `onPagado`, que el padre pasa como función nueva en cada render, así que un
+   * `useCallback` volvería a cambiar de identidad y no resolvería nada.
+   */
+  const enviarRef = useRef(enviar);
+  // La asignación va en un efecto y no en el render: React prohíbe tocar refs
+  // durante el render. Corre después de cada uno, y `onSubmit` solo se invoca
+  // por interacción del comprador — siempre posterior.
+  useEffect(() => {
+    enviarRef.current = enviar;
+  });
+
+  const onSubmit = useCallback(
+    async ({ formData }: { formData: unknown }) => {
+      await enviarRef.current(formData);
+    },
+    [],
+  );
 
   if (faltaKey) {
     return (
@@ -224,17 +274,9 @@ export function PagoMercadoPago({
 
       <Payment
         key={intento}
-        initialization={{
-          amount: monto,
-          payer: emailComprador ? { email: emailComprador } : undefined,
-        }}
-        customization={{
-          paymentMethods: { creditCard: "all", debitCard: "all" },
-          visual: { style: { theme: "default" } },
-        }}
-        onSubmit={async ({ formData }) => {
-          await enviar(formData);
-        }}
+        initialization={initialization}
+        customization={customization}
+        onSubmit={onSubmit}
         onReady={() => setEstado((e) => (e.fase === "cargando" ? { fase: "formulario" } : e))}
         onError={(error) => {
           console.error("[brick mp]", error);

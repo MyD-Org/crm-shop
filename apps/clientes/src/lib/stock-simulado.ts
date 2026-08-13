@@ -24,12 +24,20 @@
  *     también pasa este check.
  *  2. `SHOP_STOCK_SIMULADO === "1"` — explícita, nadie la activa sin querer.
  *
+ * La primera llave se puede SALTAR con un opt-in explícito adicional:
+ *  3. `SHOP_STOCK_SIMULADO_EN_PRODUCCION === "1"` — solo se usa mientras el
+ *     sitio no está abierto al público y no hay inventario cargado en Alegra.
+ *     Es DOBLEMENTE explícita a propósito: hay que cargar dos variables con
+ *     nombres largos y distintos para que el mock funcione en producción, y
+ *     una de esas dos dice literalmente "EN_PRODUCCION" en el nombre. El
+ *     objetivo es que sea imposible activar esto sin darse cuenta, y que
+ *     desactivarlo el día del lanzamiento sea un solo `vercel env rm`.
+ *
  * Esto NO resuelve el problema de fondo: que el shop no pueda vender porque
  * Alegra no tiene inventario cargado sigue siendo una decisión del negocio.
  */
 export function stockSimulado(): boolean {
-  return (
-    process.env.VERCEL_ENV !== "production" &&
-    process.env.SHOP_STOCK_SIMULADO === "1"
-  );
+  if (process.env.SHOP_STOCK_SIMULADO !== "1") return false;
+  if (process.env.VERCEL_ENV !== "production") return true;
+  return process.env.SHOP_STOCK_SIMULADO_EN_PRODUCCION === "1";
 }

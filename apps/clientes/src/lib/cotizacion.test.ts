@@ -129,6 +129,27 @@ describe("stockSimulado — las dos llaves", () => {
   it("NO se enciende en producción, aunque la variable esté", () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
+    vi.stubEnv("SHOP_STOCK_SIMULADO_EN_PRODUCCION", undefined);
+    expect(stockSimulado()).toBe(false);
+  });
+
+  /**
+   * Opt-in explícito para producción. Existe mientras el sitio no está abierto
+   * y Alegra no tiene inventario: sin esto no se puede probar el checkout
+   * deployado. Requiere DOS envs distintas para que activarlo por accidente sea
+   * imposible.
+   */
+  it("se enciende en producción SOLO con el opt-in explícito", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
+    vi.stubEnv("SHOP_STOCK_SIMULADO_EN_PRODUCCION", "1");
+    expect(stockSimulado()).toBe(true);
+  });
+
+  it("el opt-in por sí solo no alcanza — falta la variable base", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("SHOP_STOCK_SIMULADO", undefined);
+    vi.stubEnv("SHOP_STOCK_SIMULADO_EN_PRODUCCION", "1");
     expect(stockSimulado()).toBe(false);
   });
 

@@ -80,7 +80,8 @@ describe("normalizarLineas", () => {
 // ---------------------------------------------------------------------------
 
 import { afterEach, vi } from "vitest";
-import { cotizarItem, stockSimulado } from "./cotizacion";
+import { cotizarItem } from "./cotizacion";
+import { stockSimulado } from "./stock-simulado";
 import type { AlegraItem } from "./alegra";
 
 /**

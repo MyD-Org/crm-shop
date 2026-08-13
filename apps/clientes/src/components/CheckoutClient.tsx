@@ -72,6 +72,19 @@ function RadioCard({
   );
 }
 
+/**
+ * Qué le pasa al comprador con cada medio. Es un mapa y no un ternario porque
+ * antes lo era: `transferencia` tenía su texto y TODO el resto heredaba "pagás
+ * al momento del retiro", así que al sumar Mercado Pago la tarjeta decía que se
+ * pagaba después. Con un Record, agregar un medio sin su texto no compila.
+ */
+const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
+  transferencia: "Te pasamos el CBU al confirmar el pedido",
+  efectivo: "Pagás al momento del retiro",
+  cuenta_corriente: "Se carga a tu cuenta corriente",
+  mercadopago: "Pagás ahora con tarjeta, en cuotas si querés",
+};
+
 interface Props {
   nombreSugerido: string;
   emailCliente?: string;
@@ -410,11 +423,7 @@ export function CheckoutClient({
                   selected={pagoElegido === m}
                   onClick={() => setPago(m)}
                   title={PAGO_LABEL[m]}
-                  description={
-                    m === "transferencia"
-                      ? "Te pasamos el CBU al confirmar el pedido"
-                      : "Pagás al momento del retiro"
-                  }
+                  description={DESCRIPCION_PAGO[m]}
                 />
               ))}
             </div>

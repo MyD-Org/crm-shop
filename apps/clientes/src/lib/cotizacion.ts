@@ -21,6 +21,7 @@ import {
   type AlegraItem,
 } from "./alegra";
 import { costoEnvio, type EntregaTipo } from "./envio";
+import { stockSimulado } from "./stock-simulado";
 
 /** Lo único que el cliente tiene derecho a elegir. */
 export interface LineaPedida {
@@ -73,32 +74,6 @@ export const MAX_LINEAS = 60;
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
-/**
- * Simulación de stock para poder probar la tienda sin acceso a Alegra.
- *
- * Existe por una razón concreta: hoy los 2818 ítems de la cuenta tienen
- * `availableQuantity: 0`, así que la regla de stock bloquea CUALQUIER pedido y
- * el flujo de compra no se puede recorrer ni una vez.
- *
- * Solo falsea la DISPONIBILIDAD. Precios, IVA, nombres y listas siguen saliendo
- * de Alegra en vivo, que es lo que hay que validar de verdad: un mock del
- * catálogo entero probaría un flujo que no es el que corre en producción.
- *
- * Doble llave, y las dos son necesarias:
- *  1. `NODE_ENV !== "production"` — no alcanza con olvidarse de borrar la
- *     variable de entorno.
- *  2. `SHOP_STOCK_SIMULADO === "1"` — explícita, nadie la activa sin querer.
- *
- * Esto NO es la solución al problema de fondo: que el shop no pueda vender
- * porque Alegra no tiene inventario cargado sigue siendo una decisión
- * pendiente del negocio.
- */
-export function stockSimulado(): boolean {
-  return (
-    process.env.NODE_ENV !== "production" &&
-    process.env.SHOP_STOCK_SIMULADO === "1"
-  );
-}
 
 /**
  * Normaliza y deduplica lo que llegó del browser. Se hace ANTES de tocar la red

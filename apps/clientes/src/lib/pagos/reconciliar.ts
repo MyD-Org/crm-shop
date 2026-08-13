@@ -17,7 +17,7 @@
  * caso es dos updates iguales, no un doble cobro.
  */
 
-import { and, eq, isNotNull, lt, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orders } from "@/db/schema";
 import { mercadoPago } from "./mercadopago";
@@ -77,11 +77,13 @@ export async function reconciliarPagosPendientes(
         // El `coalesce` cubre el hueco de las órdenes cuyo webhook nunca llegó
         // y por eso no tienen `pago_actualizado_en`: en esos casos se cae al
         // `created_at`, que siempre existe.
-        lt(
-          sql`coalesce(${orders.pagoActualizadoEn}, ${orders.createdAt})`,
-          corteWebhook,
-        ),
-        sql`${orders.createdAt} > ${corteAntiguedad}`,
+        //
+        // El corte va como ISO string a mano: en un template `sql` raw, el
+        // driver de neon-http NO serializa `Date` — lo pasa crudo y se cae con
+        // ERR_INVALID_ARG_TYPE. Los helpers tipados (`eq`, `gt`) sí saben
+        // convertir, por eso `gt(orders.createdAt, ...)` de abajo va directo.
+        sql`coalesce(${orders.pagoActualizadoEn}, ${orders.createdAt}) < ${corteWebhook.toISOString()}`,
+        gt(orders.createdAt, corteAntiguedad),
       ),
     )
     .orderBy(orders.createdAt)

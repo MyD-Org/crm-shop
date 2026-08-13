@@ -1,93 +1,127 @@
 /**
- * Traducción de los estados de Mercado Pago a los nuestros. Módulo PURO.
+ * Traducción de los estados de la Orders API de Mercado Pago. Módulo PURO.
  *
  * Vive separado del cliente HTTP a propósito: acá está la lógica que decide qué
  * ve el comprador cuando le rechazan la tarjeta, y esa lógica se testea sin
  * red, sin credenciales y sin tocar Mercado Pago.
  *
- * Se mapea la API `/v1/payments` (`approved` / `in_process` / `pending` /
- * `rejected`), que es la que documenta Checkout Bricks. Ver la §10 de
- * docs/pagos-mercadopago.md para por qué no la Orders API.
+ * Se mapea la **Orders API** (`POST /v1/orders`), no `/v1/payments`: MP marca
+ * esa última como *legacy* en su propio panel, y Orders acepta el token que
+ * genera Checkout Bricks. Ver §10 de docs/pagos-mercadopago.md.
  */
 
 import type { MotivoRechazo } from "./tipos";
 import type { PagoEstado } from "@/data/orders";
 
 /**
- * `status_detail` de un pago rechazado → motivo nuestro.
+ * `status_detail` de una transacción fallida → motivo nuestro.
  *
- * Lo que NO está en esta tabla cae en `desconocido`, que es el comportamiento
- * correcto: MP agrega códigos sin avisar, y es preferible un mensaje genérico
- * que un `undefined` paseándose por el checkout.
+ * Lo que NO está acá cae en `desconocido`, que es el comportamiento correcto:
+ * MP agrega códigos sin avisar, y es preferible un mensaje genérico que un
+ * `undefined` paseándose por el checkout.
  */
 const RECHAZOS: Record<string, MotivoRechazo> = {
-  // Se arreglan reescribiendo la tarjeta.
-  cc_rejected_bad_filled_card_number: "datos_invalidos",
-  cc_rejected_bad_filled_date: "datos_invalidos",
-  cc_rejected_bad_filled_security_code: "datos_invalidos",
-  cc_rejected_bad_filled_other: "datos_invalidos",
+  // Se arreglan reescribiendo la tarjeta en el formulario.
+  bad_filled_card_data: "datos_invalidos",
 
-  // Se arreglan con otra tarjeta o por transferencia.
-  cc_rejected_insufficient_amount: "fondos",
-  cc_amount_rate_limit_exceeded: "limite",
-  cc_rejected_invalid_installments: "cuotas_no_disponibles",
+  // Se arreglan con otra tarjeta, otras cuotas, o por transferencia.
+  insufficient_amount: "fondos",
+  card_insufficient_amount: "fondos",
+  amount_limit_exceeded: "limite",
+  invalid_installments: "cuotas_no_disponibles",
 
-  // Requieren que el cliente llame al banco.
-  cc_rejected_call_for_authorize: "requiere_autorizacion",
-  cc_rejected_card_disabled: "tarjeta_inhabilitada",
-  cc_rejected_other_reason: "banco_rechazo",
-  cc_rejected_card_error: "banco_rechazo",
+  // Requieren que el comprador hable con su banco.
+  rejected_by_issuer: "banco_rechazo",
+  required_call_for_authorize: "requiere_autorizacion",
+  card_disabled: "tarjeta_inhabilitada",
 
-  // Reintentar acá es lo peor que puede hacer.
-  cc_rejected_duplicated_payment: "duplicado",
-  cc_rejected_max_attempts: "demasiados_intentos",
+  // Reintentar YA es lo peor que puede hacer.
+  max_attempts_exceeded: "demasiados_intentos",
 
   // Antifraude. El motivo real nunca se le explica al comprador.
-  cc_rejected_high_risk: "riesgo",
-  cc_rejected_blacklist: "riesgo",
+  high_risk: "riesgo",
+
+  /**
+   * El desafío del banco venció (el comprador tiene ~40 minutos). Se reintenta
+   * y listo — decirle "revisá los datos de tu tarjeta" sería mandarlo a buscar
+   * un problema que no existe.
+   */
+  "3ds_challenge_expired": "desafio_vencido",
+
+  /**
+   * Token vencido o ya usado: los de Bricks son de un solo uso. Rehacer el
+   * formulario genera uno nuevo, así que alcanza con "probá de nuevo".
+   */
+  invalid_card_token: "desconocido",
+  processing_error: "desconocido",
 };
 
-/**
- * Estados de MP que son "todavía no se sabe".
- *
- * `pending_challenge` es 3DS: el banco quiere validar al titular y el pago
- * queda esperando. No es un rechazo — tratarlo como tal perdería ventas que
- * están a un paso de aprobarse.
- */
+/** Estados de orden que significan "todavía no se sabe". */
 const PENDIENTES = new Set([
-  "pending_challenge",
-  "pending_contingency",
-  "pending_review_manual",
-  "pending_capture",
-  "pending_waiting_payment",
-  "pending_waiting_transfer",
+  "created",
+  "processing",
+  "action_required",
+  "in_review",
 ]);
 
-/** Forma mínima de la respuesta de MP que nos interesa. */
+/**
+ * Estados donde la plata NO está con nosotros aunque en algún momento lo haya
+ * estado. Un contracargo es la única transición legítima de `pagado` a
+ * `fallido`: el resto de las bajadas desde `pagado` son eventos desordenados y
+ * hay que ignorarlas.
+ */
+const PERDIDOS = new Set(["failed", "canceled", "expired", "refunded", "charged_back"]);
+
+/** Forma mínima de la respuesta de Orders que nos interesa. */
 export interface RespuestaMercadoPago {
   id?: number | string;
   status?: string;
   status_detail?: string;
-  three_ds_info?: { external_resource_url?: string; creq?: string };
+  transactions?: {
+    payments?: Array<{
+      id?: string;
+      status?: string;
+      status_detail?: string;
+      three_ds_info?: { external_resource_url?: string; creq?: string };
+    }>;
+  };
 }
 
 /**
- * ¿En qué estado nuestro cae este pago?
+ * El detalle fino vive en la transacción; el estado general, en la orden.
  *
- * Solo `approved` cuenta como pagado. Todo lo que no sea explícitamente
- * aprobado, rechazado o pendiente conocido se trata como **pendiente**, no como
+ * Se prefiere el de la transacción cuando está: una orden `failed` no dice POR
+ * QUÉ falló, y ese "por qué" es lo único que le sirve al comprador.
+ */
+function transaccion(orden: RespuestaMercadoPago) {
+  return orden.transactions?.payments?.[0];
+}
+
+export function statusEfectivo(orden: RespuestaMercadoPago): string | undefined {
+  return transaccion(orden)?.status ?? orden.status;
+}
+
+export function detalleEfectivo(orden: RespuestaMercadoPago): string | undefined {
+  return transaccion(orden)?.status_detail ?? orden.status_detail;
+}
+
+/**
+ * ¿En qué estado nuestro cae esta orden?
+ *
+ * Solo `processed` cuenta como pagado. Todo lo que no sea explícitamente
+ * procesado o explícitamente perdido se trata como **pendiente**, no como
  * fallido: dar por perdido un pago que MP todavía está resolviendo sería
  * cancelarle la compra a alguien que sí pagó.
  */
 export function estadoDeMercadoPago(status: string | undefined): PagoEstado {
-  if (status === "approved" || status === "authorized") return "pagado";
-  if (status === "rejected" || status === "cancelled") return "fallido";
+  if (status === "processed") return "pagado";
+  if (status && PERDIDOS.has(status)) return "fallido";
   return "pendiente";
 }
 
 /**
- * Motivo del rechazo, en términos nuestros. `undefined` si el pago no está
- * rechazado — un motivo en un pago aprobado sería una contradicción.
+ * Motivo del rechazo, en términos nuestros. `undefined` si la orden no está
+ * caída — un motivo de rechazo en un pago acreditado sería una contradicción.
  */
 export function motivoDeMercadoPago(
   status: string | undefined,
@@ -101,19 +135,29 @@ export function motivoDeMercadoPago(
 /**
  * ¿Hay un desafío 3DS para renderizar?
  *
- * Se exige `pending_challenge` Y los dos campos: sin `external_resource_url` o
- * sin `creq` no hay nada que mostrar, y devolver un desafío incompleto haría
- * que el Status Screen Brick falle en pantalla.
+ * Se exigen los dos campos: un desafío a medias hace fallar al Status Screen
+ * Brick en pantalla, que es peor que no ofrecerlo — el comprador se queda sin
+ * pago y sin explicación.
  */
-export function desafio3DS(pago: RespuestaMercadoPago) {
-  if (pago.status_detail !== "pending_challenge") return undefined;
-  const url = pago.three_ds_info?.external_resource_url;
-  const creq = pago.three_ds_info?.creq;
+export function desafio3DS(orden: RespuestaMercadoPago) {
+  if (detalleEfectivo(orden) !== "pending_challenge") return undefined;
+  const info = transaccion(orden)?.three_ds_info;
+  const url = info?.external_resource_url;
+  const creq = info?.creq;
   if (!url || !creq) return undefined;
   return { externalResourceUrl: url, creq };
 }
 
-/** ¿Es un estado pendiente que Mercado Pago reconoce? Para observabilidad. */
-export function esPendienteConocido(statusDetail: string | undefined): boolean {
-  return statusDetail != null && PENDIENTES.has(statusDetail);
+/** ¿Es un estado pendiente que MP reconoce? Para observabilidad. */
+export function esPendienteConocido(status: string | undefined): boolean {
+  return status != null && PENDIENTES.has(status);
+}
+
+/**
+ * Un contracargo o una devolución son la ÚNICA razón legítima para bajar un
+ * pedido de `pagado`. Lo usa el webhook para no dejar que un evento desordenado
+ * desmarque un pago bueno.
+ */
+export function esReversion(status: string | undefined): boolean {
+  return status === "charged_back" || status === "refunded";
 }

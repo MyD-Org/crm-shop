@@ -223,25 +223,30 @@ cobrar dos veces.
 
 ## 10. Riesgos abiertos — verificar antes de codear
 
-1. ~~**Dos generaciones de API conviviendo.**~~ **RESUELTO: se usa `/v1/payments`.**
+1. ~~**Dos generaciones de API conviviendo.**~~ **RESUELTO: se usa la Orders API.**
 
-   MP tiene dos caminos vivos. La Orders API existe y la están empujando, pero
-   es un **modelo de integración distinto** (Checkout API vía Orders, el del
-   formulario propio); Bricks documenta `/v1/payments`, y no hay aviso de
-   deprecación. Combinar el front de Bricks con un backend de Orders sería una
-   mezcla que la documentación no cubre, y un flujo de pagos no es el lugar para
-   improvisar sobre combinaciones no documentadas.
+   Primero se decidió `/v1/payments`, con el argumento de que combinar el front
+   de Bricks con un backend de Orders no estaba documentado. **Ese argumento era
+   falso**: la documentación de Orders dice explícitamente que acepta el token
+   que generan los bricks. Verificarlo dio vuelta la decisión.
 
-   Los estados que se mapean, entonces, son los de `/v1/payments`:
-   `approved` / `in_process` / `pending` / `rejected`, con `status_detail`
-   `cc_rejected_*` y `pending_*`.
+   Se usa **`POST /v1/orders`** porque MP marca `/v1/payments` como *legacy* en
+   su propio panel de webhooks — eso es su hoja de ruta hablando— y porque no
+   había ninguna razón técnica para quedarse en la vieja.
 
-   Lo que sí hay que prever: MP está unificando las notificaciones al topic
-   `order`, así que el webhook tiene que tolerar los dos topics y resolver por
-   ID en vez de asumir la forma del payload.
+   Los estados que se mapean son los de Orders:
+   `created` / `processing` / `action_required` / `processed` / `failed` /
+   `expired` / `canceled` / `refunded` / `charged_back`, con `status_detail`
+   como `bad_filled_card_data`, `rejected_by_issuer`, `insufficient_amount`.
 
-   Si algún día se migra, el cambio queda contenido en `mercadopago.ts`: el
-   resto del sistema habla en los tipos propios de §3.
+   Dos consecuencias prácticas:
+
+   - En el panel de MP el topic a marcar es **Order**, no "Pagos (legacy)".
+   - Los montos van como **string con dos decimales**, no como número.
+
+   La lección para la próxima decisión de este tipo: verificar antes de
+   descartar. La migración salió barata solo porque no había nada construido
+   encima todavía.
 2. **Compatibilidad del SDK.** Este proyecto corre React 19.2.4 y Next 16.2.9.
    Hay que confirmar que `@mercadopago/sdk-react` funcione ahí. Plan B: el SDK
    de JS puro montado a mano — funciona igual, da más trabajo.

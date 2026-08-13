@@ -29,12 +29,13 @@ export type MotivoRechazo =
   | "fondos"
   | "limite"
   | "cuotas_no_disponibles"
+  /** Se resuelve rehaciendo el intento, sin cambiar nada. */
+  | "desafio_vencido"
   /** Requiere que el cliente hable con su banco. */
   | "banco_rechazo"
   | "tarjeta_inhabilitada"
   | "requiere_autorizacion"
   /** Situaciones donde reintentar YA es lo peor que puede hacer. */
-  | "duplicado"
   | "demasiados_intentos"
   /** Antifraude. Nunca se explica el motivo real. */
   | "riesgo"
@@ -57,14 +58,14 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
     "El monto supera el límite de tu tarjeta. Probá con otra, en cuotas, o por transferencia.",
   cuotas_no_disponibles:
     "Esa cantidad de cuotas no está disponible para tu tarjeta. Elegí otra opción de cuotas.",
+  desafio_vencido:
+    "Se venció el tiempo para validar el pago con tu banco. Volvé a intentar y completá la validación apenas te la pida.",
   banco_rechazo:
     "Tu banco rechazó la operación. Llamalos al número del dorso de la tarjeta y pedí que la habiliten para compras online.",
   tarjeta_inhabilitada:
     "Esta tarjeta está inhabilitada. Llamá a tu banco para activarla o usá otra.",
   requiere_autorizacion:
     "Tu banco necesita autorizar este pago. Llamalos al dorso de la tarjeta y volvé a intentar.",
-  duplicado:
-    "Ya hicimos un pago igual hace unos minutos. Revisá tus pedidos antes de reintentar.",
   demasiados_intentos:
     "Demasiados intentos con esta tarjeta. Esperá unos minutos o usá otra.",
   riesgo:
@@ -81,7 +82,11 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
  * llamada solo suma rechazos y baja la tasa de aprobación.
  */
 export function convieneReintentar(motivo: MotivoRechazo): boolean {
-  return motivo === "datos_invalidos" || motivo === "cuotas_no_disponibles";
+  return (
+    motivo === "datos_invalidos" ||
+    motivo === "cuotas_no_disponibles" ||
+    motivo === "desafio_vencido"
+  );
 }
 
 /** Desafío 3D Secure pendiente: el banco quiere validar al titular. */

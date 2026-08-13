@@ -76,6 +76,17 @@ export default function CarritoPage() {
   const iva = confirmado ? cotizacion.iva : null;
   const total = confirmado ? cotizacion.total : null;
 
+  /**
+   * Unidades que efectivamente suman al subtotal.
+   *
+   * Mientras no hay cotización se cuenta el carrito, que es lo único que hay.
+   * Cuando sí la hay, se cuentan solo las líneas sin problema — que son las que
+   * `cotizar` incluye en los totales.
+   */
+  const unidadesCotizadas = confirmado
+    ? cotizacion.lineas.filter((l) => !l.problema).reduce((a, l) => a + l.qty, 0)
+    : items.reduce((a, i) => a + i.qty, 0);
+
   return (
     <>
       <main className="mx-auto max-w-7xl flex-1 px-4 py-8">
@@ -172,7 +183,14 @@ export default function CarritoPage() {
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted">
-                  Subtotal ({items.reduce((a, i) => a + i.qty, 0)} productos)
+                  {/*
+                    Se cuentan las unidades que REALMENTE entran en el total, no
+                    las del carrito. La cotización deja afuera las líneas con
+                    problema, así que contar el carrito mostraba "1 productos"
+                    junto a un subtotal de $0 y parecía un error de cálculo.
+                  */}
+                  Subtotal ({unidadesCotizadas}{" "}
+                  {unidadesCotizadas === 1 ? "producto" : "productos"})
                 </span>
                 <span className="font-medium text-text">{fmtPrecio(subtotal)}</span>
               </div>

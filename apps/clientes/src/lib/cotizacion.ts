@@ -74,6 +74,33 @@ export const MAX_LINEAS = 60;
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
 /**
+ * Simulación de stock para poder probar la tienda sin acceso a Alegra.
+ *
+ * Existe por una razón concreta: hoy los 2818 ítems de la cuenta tienen
+ * `availableQuantity: 0`, así que la regla de stock bloquea CUALQUIER pedido y
+ * el flujo de compra no se puede recorrer ni una vez.
+ *
+ * Solo falsea la DISPONIBILIDAD. Precios, IVA, nombres y listas siguen saliendo
+ * de Alegra en vivo, que es lo que hay que validar de verdad: un mock del
+ * catálogo entero probaría un flujo que no es el que corre en producción.
+ *
+ * Doble llave, y las dos son necesarias:
+ *  1. `NODE_ENV !== "production"` — no alcanza con olvidarse de borrar la
+ *     variable de entorno.
+ *  2. `SHOP_STOCK_SIMULADO === "1"` — explícita, nadie la activa sin querer.
+ *
+ * Esto NO es la solución al problema de fondo: que el shop no pueda vender
+ * porque Alegra no tiene inventario cargado sigue siendo una decisión
+ * pendiente del negocio.
+ */
+export function stockSimulado(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" &&
+    process.env.SHOP_STOCK_SIMULADO === "1"
+  );
+}
+
+/**
  * Normaliza y deduplica lo que llegó del browser. Se hace ANTES de tocar la red
  * para no gastar requests a Alegra con basura, y porque dos líneas del mismo id
  * romperían la validación de stock (cada una pasaría por separado).
@@ -138,16 +165,26 @@ function lineaRota(
   };
 }
 
-function cotizarItem(
+export function cotizarItem(
   pedida: LineaPedida,
   item: AlegraItem,
   idPriceList?: string,
+  /** Ver `stockSimulado()`. Parámetro y no lectura directa del entorno, para
+   *  poder testear las dos ramas sin ensuciar `process.env`. */
+  simularStock = false,
 ): LineaCotizada {
   const categoria = item.itemCategory as { name?: string } | undefined;
   const precioUnitario = redondear(resolverPrecio(item, idPriceList));
   const ivaPorcentaje = ivaDeItem(item);
   const disponible = item.inventory?.availableQuantity;
-  const stockDisponible = disponible == null ? null : Number(disponible);
+  const real = disponible == null ? null : Number(disponible);
+  /**
+   * Con la simulación activa, un ítem sin stock se trata como NO inventariable
+   * —igual que un servicio—, que es el camino que el código ya sabe manejar.
+   * No se inventa una cantidad: se dice "no aplica", que es más honesto y no
+   * abre una rama nueva que en producción nunca correría.
+   */
+  const stockDisponible = simularStock && (real === null || real <= 0) ? null : real;
 
   const subtotal = redondear(precioUnitario * pedida.qty);
   const iva = redondear(subtotal * (ivaPorcentaje / 100));
@@ -195,13 +232,22 @@ export async function cotizar(
   pedidas: LineaPedida[],
   opts: { idPriceList?: string; entregaTipo?: EntregaTipo } = {},
 ): Promise<Cotizacion> {
+  const simular = stockSimulado();
+  if (simular) {
+    // Ruidoso a propósito: que nadie se pregunte por qué hay stock donde Alegra
+    // dice que no hay.
+    console.warn(
+      "[cotizacion] SHOP_STOCK_SIMULADO activo: la disponibilidad NO es la real de Alegra.",
+    );
+  }
+
   const lineas = await mapConcurrente(pedidas, CONCURRENCIA, async (pedida) => {
     try {
       const item = await getItem(pedida.id);
       if (!item?.id) {
         return lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
       }
-      return cotizarItem(pedida, item, opts.idPriceList);
+      return cotizarItem(pedida, item, opts.idPriceList, simular);
     } catch (err) {
       console.error(`[cotizacion] ${pedida.id}:`, err);
       return lineaRota(

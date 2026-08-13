@@ -107,6 +107,16 @@ export interface EstadoPago {
   detalle: string;
   /** Solo cuando `estado === "fallido"`. */
   motivo?: MotivoRechazo;
+  /**
+   * El proveedor informó un contracargo o una devolución.
+   *
+   * Lo calcula el proveedor, que es el único que ve su status crudo. Antes esto
+   * se intentaba deducir afuera comparando contra `estado` y `detalle`, y no
+   * podía funcionar: `estado` ya está traducido a nuestro vocabulario y
+   * `detalle` es el status_detail, así que la comparación nunca daba true y un
+   * contracargo no llegaba a desmarcar el pedido.
+   */
+  reversion?: boolean;
   /** Presente cuando el banco pide 3DS: hay que renderizar el desafío. */
   desafio?: Desafio3DS;
 }

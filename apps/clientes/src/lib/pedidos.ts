@@ -420,11 +420,21 @@ export async function registrarCobro(
   cobro: ResultadoCobro,
 ): Promise<boolean> {
   return getDb().transaction(async (tx) => {
+    /**
+     * `for update` no es decorativo: sin el lock, dos notificaciones que llegan
+     * juntas leen las dos el mismo estado viejo y la última en escribir gana.
+     *
+     * El caso que rompe: llega la acreditación y el contracargo casi a la vez.
+     * Las dos leen `pendiente`, las dos consideran válida su transición, y el
+     * pedido puede terminar en `pagado` cuando la plata ya se fue. Con el lock,
+     * la segunda espera, lee `pagado`, y aplica la reversión como corresponde.
+     */
     const [fila] = await tx
       .select({ estado: orders.pagoEstado })
       .from(orders)
       .where(eq(orders.id, pedidoId))
-      .limit(1);
+      .limit(1)
+      .for("update");
 
     if (!fila) return false;
 

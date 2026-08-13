@@ -11,6 +11,7 @@
  * mandarlo, y delegar la interpretación.
  */
 
+import { createHash, randomUUID } from "node:crypto";
 import type {
   DatosPago,
   EstadoPago,
@@ -19,6 +20,7 @@ import type {
 import {
   desafio3DS,
   detalleEfectivo,
+  esReversion,
   estadoDeMercadoPago,
   motivoDeMercadoPago,
   statusEfectivo,
@@ -40,10 +42,35 @@ function accessToken(): string {
 }
 
 /**
+ * Clave de idempotencia del intento de cobro.
+ *
+ * Tiene que ser estable dentro de UN intento y distinta entre intentos, y esas
+ * dos mitades importan por razones opuestas:
+ *
+ * - Si cambiara dentro del mismo intento, un reenvío del request cobraría dos
+ *   veces.
+ * - Si NO cambiara entre intentos, MP devolvería la respuesta cacheada del
+ *   primero: un rechazo por fondos quedaría pegado y el reintento con otra
+ *   tarjeta recibiría el mismo rechazo para siempre.
+ *
+ * El token de tarjeta cumple las dos: es de un solo uso y lo genera el brick en
+ * cada carga del formulario. Se hashea para no mandar el token dentro de un
+ * header además del cuerpo.
+ *
+ * Para `cuenta_mp` no hay token, así que se usa una clave aleatoria por intento.
+ */
+export function claveIdempotencia(datos: DatosPago): string {
+  const semilla = datos.token
+    ? createHash("sha256").update(`${datos.pedidoId}:${datos.token}`).digest("hex").slice(0, 32)
+    : randomUUID();
+  return `${datos.pedidoId}-${semilla}`;
+}
+
+/**
  * Traduce la respuesta cruda de MP a nuestro vocabulario. Un solo lugar, así
  * `crearPago` y `consultarPago` no pueden divergir.
  */
-function interpretar(orden: RespuestaMercadoPago): EstadoPago {
+export function interpretar(orden: RespuestaMercadoPago): EstadoPago {
   const status = statusEfectivo(orden);
   const detalle = detalleEfectivo(orden) ?? "";
   return {
@@ -53,6 +80,15 @@ function interpretar(orden: RespuestaMercadoPago): EstadoPago {
     referencia: String(orden.id ?? ""),
     detalle,
     motivo: motivoDeMercadoPago(status, detalle || undefined),
+    /**
+     * Se calcula ACÁ, que es el único lugar donde se ve el status crudo de MP.
+     * Afuera ya está todo traducido a nuestro vocabulario y la comparación no
+     * podría dar nunca — un contracargo se perdería en silencio.
+     *
+     * Se miran los dos niveles: el contracargo puede figurar en la orden o en
+     * la transacción según el momento del ciclo.
+     */
+    reversion: esReversion(status) || esReversion(orden.status),
     desafio: desafio3DS(orden),
   };
 }
@@ -144,8 +180,7 @@ export const mercadoPago: ProveedorPago = {
       await pedir(API, {
         method: "POST",
         body: JSON.stringify(cuerpo),
-        // Derivada del pedido: dos envíos del mismo intento son un solo cobro.
-        idempotencyKey: `pedido-${datos.pedidoId}`,
+        idempotencyKey: claveIdempotencia(datos),
       }),
     );
   },

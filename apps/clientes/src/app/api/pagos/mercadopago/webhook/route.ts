@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { esReversion } from "@/lib/pagos/mercadopago-estados";
 import { mercadoPago } from "@/lib/pagos/mercadopago";
 import { pedidoPorReferencia, registrarCobro } from "@/lib/pedidos";
 
@@ -59,7 +58,7 @@ export async function POST(req: Request) {
       referencia,
       estado: estado.estado,
       detalle: estado.detalle,
-      reversion: esReversion(estado.detalle) || esReversion(estado.estado),
+      reversion: estado.reversion,
     });
 
     console.log(

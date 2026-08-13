@@ -329,6 +329,145 @@ export async function getPedido(
   return armarOrder(fila, items);
 }
 
+// --- Pago online -----------------------------------------------------------
+
+/** Lo mínimo que necesita la ruta de pago, ya validado contra el dueño. */
+export interface PedidoParaPago {
+  id: string;
+  numero: string;
+  total: number;
+  pagoEstado: PagoEstado;
+  pagoMetodo: string;
+  clienteEmail: string | null;
+  facturacionTipoDoc: string | null;
+  facturacionNroDoc: string | null;
+}
+
+/**
+ * Trae un pedido para cobrarlo, SOLO si es de quien lo pide.
+ *
+ * El total sale de acá y de ningún otro lado: es el número congelado en la
+ * transacción que creó el pedido. Que el monto no venga del browser es la
+ * regla que sostiene todo lo demás (§2 de docs/pagos-mercadopago.md).
+ */
+export async function getPedidoParaPago(
+  id: string,
+  dueno: DuenoPedidos,
+): Promise<PedidoParaPago | null> {
+  const [fila] = await getDb()
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, id), esDeSuDueno(dueno)))
+    .limit(1);
+
+  if (!fila) return null;
+
+  return {
+    id: fila.id,
+    numero: formatearNumero(fila.numero),
+    total: num(fila.total),
+    pagoEstado: fila.pagoEstado as PagoEstado,
+    pagoMetodo: fila.pagoMetodo,
+    clienteEmail: fila.clienteEmail,
+    facturacionTipoDoc: fila.facturacionTipoDoc,
+    facturacionNroDoc: fila.facturacionNroDoc,
+  };
+}
+
+/** Lo que se persiste de un intento de cobro, venga de la ruta o del webhook. */
+export interface ResultadoCobro {
+  proveedor: string;
+  referencia: string;
+  estado: PagoEstado;
+  detalle: string;
+  medio?: string;
+  /** true si el proveedor informó un contracargo o una devolución. */
+  reversion?: boolean;
+}
+
+/**
+ * ¿Se permite pasar de `actual` a `nuevo`?
+ *
+ * Las notificaciones llegan desordenadas y repetidas. Sin estas reglas, un
+ * evento viejo puede desmarcar un pago bueno y dejar un pedido cobrado como
+ * pendiente — que es peor que no procesarlo, porque nadie se entera.
+ *
+ * - De `pagado` NO se baja, salvo contracargo o devolución: ahí la plata
+ *   efectivamente se fue y el pedido tiene que reflejarlo.
+ * - De `fallido` sí se sube: un reintento exitoso es legítimo.
+ */
+export function transicionPermitida(
+  actual: PagoEstado,
+  nuevo: PagoEstado,
+  reversion = false,
+): boolean {
+  if (actual === nuevo) return false;
+  if (actual === "pagado") return reversion && nuevo === "fallido";
+  return true;
+}
+
+/**
+ * Guarda el resultado de un cobro sobre el pedido.
+ *
+ * Idempotente por dos vías: el índice único parcial sobre `pago_referencia`, y
+ * el chequeo de transición. Reprocesar el mismo evento no cambia nada.
+ *
+ * Devuelve `true` si algo cambió, para poder distinguir en los logs un evento
+ * nuevo de un reintento de Mercado Pago.
+ */
+export async function registrarCobro(
+  pedidoId: string,
+  cobro: ResultadoCobro,
+): Promise<boolean> {
+  return getDb().transaction(async (tx) => {
+    const [fila] = await tx
+      .select({ estado: orders.pagoEstado })
+      .from(orders)
+      .where(eq(orders.id, pedidoId))
+      .limit(1);
+
+    if (!fila) return false;
+
+    const actual = fila.estado as PagoEstado;
+    // La referencia y el detalle se guardan SIEMPRE, aunque el estado no
+    // cambie: son lo que permite reconciliar y diagnosticar después.
+    await tx
+      .update(orders)
+      .set({
+        pagoProveedor: cobro.proveedor,
+        pagoReferencia: cobro.referencia,
+        pagoDetalle: cobro.detalle,
+        ...(cobro.medio ? { pagoMedio: cobro.medio } : {}),
+        ...(transicionPermitida(actual, cobro.estado, cobro.reversion)
+          ? { pagoEstado: cobro.estado }
+          : {}),
+        pagoActualizadoEn: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(orders.id, pedidoId));
+
+    return transicionPermitida(actual, cobro.estado, cobro.reversion);
+  });
+}
+
+/**
+ * Encuentra el pedido al que pertenece una referencia del proveedor.
+ *
+ * Es lo que usa el webhook: la notificación trae el id del pago, no el del
+ * pedido.
+ */
+export async function pedidoPorReferencia(
+  referencia: string,
+): Promise<{ id: string; pagoEstado: PagoEstado } | null> {
+  const [fila] = await getDb()
+    .select({ id: orders.id, estado: orders.pagoEstado })
+    .from(orders)
+    .where(eq(orders.pagoReferencia, referencia))
+    .limit(1);
+
+  return fila ? { id: fila.id, pagoEstado: fila.estado as PagoEstado } : null;
+}
+
 /**
  * Resumen del año para Mi cuenta. Se calcula en Postgres, no trayendo los
  * pedidos a memoria: es una tarjeta de tres números, no una lista.

@@ -7,6 +7,17 @@ const GATE_COOKIE = "site_gate";
 const GATE_PATH = "/__gate";
 
 /**
+ * Rutas que hablan con un sistema externo y NO pueden pasar por el gate ni por
+ * el auth de Clerk: quien las llama es un servidor, no una persona con cookies.
+ *
+ * El gate devuelve la página de "Próximamente" con **200** para cualquier ruta,
+ * así que sin esta lista Mercado Pago recibiría HTML, lo daría por entregado, y
+ * ningún pago se confirmaría jamás. Sin error en ningún lado: es la clase de
+ * falla que se descubre cuando un cliente reclama que pagó y no le llegó nada.
+ */
+const RUTAS_PUBLICAS = ["/api/pagos/mercadopago/webhook"];
+
+/**
  * Next 16 admite UNA sola función proxy por proyecto, así que el gate del sitio
  * y Clerk no pueden vivir cada uno en su archivo: se componen acá.
  *
@@ -28,6 +39,12 @@ function safeEqual(a: string, b: string) {
 }
 
 export async function proxy(request: NextRequest, event: NextFetchEvent) {
+  // Antes que nada, y antes del gate: estas rutas las llama un servidor externo
+  // que no tiene cookies ni sesión. Ver RUTAS_PUBLICAS.
+  if (RUTAS_PUBLICAS.includes(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   const bloqueo = await siteGate(request);
   if (bloqueo) return bloqueo;
   return clerk(request, event);

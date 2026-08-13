@@ -461,6 +461,34 @@ export async function registrarCobro(
 }
 
 /**
+ * Deja constancia de un intento de cobro que NUNCA llegó a crear un pago.
+ *
+ * Pasa cuando el proveedor rechaza la llamada: credenciales mal, red caída, un
+ * 400 por un campo. Sin esto el pedido queda en `pendiente` sin rastro alguno, y
+ * ni un operador ni nosotros podemos saber que hubo un intento ni por qué falló
+ * — que es exactamente lo que pasó la primera vez que se probó de verdad.
+ *
+ * NO toca `pago_estado`: que la llamada fallara no significa que el pago se
+ * haya rechazado. Puede no haber existido nunca. Marcarlo `fallido` sería
+ * afirmar algo que no sabemos.
+ *
+ * Tampoco toca `pago_referencia`: no hay ninguna.
+ */
+export async function registrarIntentoFallido(
+  pedidoId: string,
+  motivo: string,
+): Promise<void> {
+  await getDb()
+    .update(orders)
+    .set({
+      pagoDetalle: `error_proveedor: ${motivo}`.slice(0, 300),
+      pagoActualizadoEn: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(orders.id, pedidoId));
+}
+
+/**
  * Encuentra el pedido al que pertenece una referencia del proveedor.
  *
  * Es lo que usa el webhook: la notificación trae el id del pago, no el del

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { getPedidoParaPago, registrarCobro } from "@/lib/pedidos";
+import { getPedidoParaPago, registrarCobro, registrarIntentoFallido } from "@/lib/pedidos";
 import { MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos";
 import { mercadoPago } from "@/lib/pagos/mercadopago";
 import { permitir } from "@/lib/rate-limit";
@@ -125,6 +125,13 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("[/api/pagos/mercadopago] error:", err);
+    // Deja rastro del intento fallido. Sin esto el pedido queda en `pendiente`
+    // sin ninguna señal de que alguien trató de pagar y no pudo.
+    await registrarIntentoFallido(
+      pedido.id,
+      err instanceof Error ? err.message : String(err),
+    ).catch((e) => console.error("[/api/pagos/mercadopago] no se pudo registrar el intento:", e));
+
     return NextResponse.json(
       { error: "No pudimos procesar el pago. Probá de nuevo en un momento." },
       { status: 502 },

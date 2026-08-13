@@ -76,3 +76,114 @@ describe("normalizarLineas", () => {
     expect(normalizarLineas([{ id: "  a  ", qty: 1 }])).toEqual([{ id: "a", qty: 1 }]);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+import { afterEach, vi } from "vitest";
+import { cotizarItem } from "./cotizacion";
+import { stockSimulado } from "./stock-simulado";
+import type { AlegraItem } from "./alegra";
+
+/**
+ * Simulación de stock para poder recorrer la tienda sin acceso a Alegra.
+ *
+ * Hoy los 2818 ítems de la cuenta tienen `availableQuantity: 0`, así que sin
+ * esto el flujo de compra no se puede probar ni una vez. La contracara: si se
+ * cuela a producción, el shop vende lo que no tiene.
+ */
+describe("stockSimulado — las dos llaves", () => {
+  // `vi.stubEnv` y no asignación directa: los tipos de Node marcan estos como
+  // read-only, y escribirlos a mano rompe `tsc` aunque el test pase.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("apagado por defecto", () => {
+    vi.stubEnv("VERCEL_ENV", undefined);
+    vi.stubEnv("SHOP_STOCK_SIMULADO", undefined);
+    expect(stockSimulado()).toBe(false);
+  });
+
+  it("se enciende en local con la variable explícita (VERCEL_ENV undefined)", () => {
+    vi.stubEnv("VERCEL_ENV", undefined);
+    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
+    expect(stockSimulado()).toBe(true);
+  });
+
+  /**
+   * El motivo por el que se cambió de NODE_ENV a VERCEL_ENV: en Preview de
+   * Vercel `NODE_ENV === "production"` (compilación de release), y eso
+   * bloqueaba el mock justo cuando más se necesita, que es probar la rama
+   * deployada.
+   */
+  it("se enciende en Preview de Vercel", () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
+    expect(stockSimulado()).toBe(true);
+  });
+
+  /**
+   * LA GARANTÍA QUE IMPORTA. Olvidarse la variable cargada en Vercel no puede
+   * hacer que el shop venda lo que no tiene.
+   */
+  it("NO se enciende en producción, aunque la variable esté", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
+    expect(stockSimulado()).toBe(false);
+  });
+
+  it("no se activa con cualquier valor", () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    for (const v of ["true", "si", "0", "", "yes"]) {
+      vi.stubEnv("SHOP_STOCK_SIMULADO", v);
+      expect(stockSimulado(), v).toBe(false);
+    }
+  });
+});
+
+describe("cotizarItem con simulación de stock", () => {
+  const item = (cantidad: number | null) =>
+    ({
+      id: "1",
+      name: "Panel LED",
+      status: "active",
+      price: [{ idPriceList: "1", price: 1000, main: true }],
+      inventory: cantidad === null ? undefined : { availableQuantity: cantidad },
+    }) as unknown as AlegraItem;
+
+  it("sin simular, un ítem en cero queda sin stock", () => {
+    const linea = cotizarItem({ id: "1", qty: 2 }, item(0), undefined, false);
+    expect(linea.problema).toBe("sin_stock");
+  });
+
+  it("simulando, ese mismo ítem se puede comprar", () => {
+    const linea = cotizarItem({ id: "1", qty: 2 }, item(0), undefined, true);
+    expect(linea.problema).toBeUndefined();
+    // Se trata como no inventariable, igual que un servicio: no se inventa una
+    // cantidad, se dice "no aplica".
+    expect(linea.stockDisponible).toBeNull();
+  });
+
+  it("simulando, el precio y el IVA siguen siendo los reales", () => {
+    const linea = cotizarItem({ id: "1", qty: 2 }, item(0), undefined, true);
+    expect(linea.precioUnitario).toBeGreaterThan(0);
+    expect(linea.subtotal).toBe(linea.precioUnitario * 2);
+  });
+
+  /** La simulación es de stock, no de catálogo: un inactivo sigue bloqueado. */
+  it("simulando, un producto inactivo SIGUE bloqueado", () => {
+    const inactivo = { ...item(0), status: "inactive" } as unknown as AlegraItem;
+    expect(cotizarItem({ id: "1", qty: 1 }, inactivo, undefined, true).problema).toBe("inactivo");
+  });
+
+  it("simulando, un producto sin precio SIGUE bloqueado", () => {
+    const sinPrecio = { ...item(0), price: [] } as unknown as AlegraItem;
+    expect(cotizarItem({ id: "1", qty: 1 }, sinPrecio, undefined, true).problema).toBe("sin_precio");
+  });
+
+  it("no toca el stock real cuando lo hay", () => {
+    const linea = cotizarItem({ id: "1", qty: 2 }, item(50), undefined, true);
+    expect(linea.stockDisponible).toBe(50);
+    expect(linea.problema).toBeUndefined();
+  });
+});

@@ -8,7 +8,11 @@
  */
 
 export type EntregaTipo = "retiro" | "envio";
-export type PagoMetodo = "transferencia" | "efectivo" | "cuenta_corriente";
+export type PagoMetodo =
+  | "transferencia"
+  | "efectivo"
+  | "cuenta_corriente"
+  | "mercadopago";
 
 /** Únicas ciudades con envío propio. El resto del país se coordina aparte. */
 export const CIUDADES_ENVIO = ["Puerto Iguazú", "El Dorado"] as const;
@@ -25,6 +29,7 @@ export const PAGO_LABEL: Record<PagoMetodo, string> = {
   transferencia: "Transferencia bancaria",
   efectivo: "Efectivo en el local",
   cuenta_corriente: "Cuenta corriente",
+  mercadopago: "Tarjeta o Mercado Pago",
 };
 
 /**
@@ -59,9 +64,15 @@ export function costoEnvio(tipo: EntregaTipo): number {
   return tipo === "envio" ? 0 : 0;
 }
 
-/** Efectivo en el local solo tiene sentido si el cliente va a pasar por el local. */
+/**
+ * Efectivo en el local solo tiene sentido si el cliente va a pasar por el local.
+ * Mercado Pago no depende de la entrega: se cobra igual en los dos casos.
+ *
+ * El orden importa: es el que ve el cliente en el checkout, y `metodosPago[0]`
+ * es el fallback cuando el método elegido deja de estar disponible.
+ */
 export function pagosDisponibles(tipo: EntregaTipo): PagoMetodo[] {
   return tipo === "retiro"
-    ? ["transferencia", "efectivo"]
-    : ["transferencia"];
+    ? ["transferencia", "mercadopago", "efectivo"]
+    : ["transferencia", "mercadopago"];
 }

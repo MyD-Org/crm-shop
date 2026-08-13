@@ -1,0 +1,50 @@
+# Reconciliación de pagos pendientes contra Mercado Pago.
+#
+# Corre desde acá y no desde Vercel Cron por una razón concreta: el plan Hobby
+# de Vercel permite un solo cron total y solo con frecuencia diaria, y ese lugar
+# ya lo ocupa la sync del catálogo (`vercel.json`). Reconciliar pagos necesita
+# frecuencia alta —cada 15 minutos— porque el peor caso de un pedido cobrado
+# que no volvió al webhook es quedar sin actualizar hasta la próxima corrida.
+#
+# El endpoint autentica con `Authorization: Bearer $CRON_SECRET`. El secret vive
+# en GitHub Actions (Settings → Secrets → CRON_SECRET) y tiene que coincidir
+# con `CRON_SECRET` en Vercel Production del proyecto shop.
+#
+# Nota sobre el schedule de GH Actions: no es puntual — puede atrasar 5-15 min
+# en horas pico y saltar corridas. Está bien para reconciliación: el código ya
+# asume que este cron es best-effort, deja 5 min de gracia al webhook y una
+# ventana de 3 días para reconsultar.
+
+name: Reconciliar pagos MP
+
+on:
+  schedule:
+    # Cada 15 minutos. GH Actions puede diferir en picos, es aceptable.
+    - cron: "*/15 * * * *"
+  # Para disparar a mano desde la UI de Actions cuando se prueba algo puntual.
+  workflow_dispatch:
+
+# Si una corrida atrasa y coincide con la siguiente, no las apilamos: la nueva
+# reemplaza a la vieja. Perder una corrida no rompe nada (idempotente).
+concurrency:
+  group: pagos-reconciliar
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Llamar al endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Falta el secret CRON_SECRET en el repo." >&2
+            exit 1
+          fi
+          # `-f` corta si el status es >= 400. `-sS` es silencioso pero muestra
+          # errores. `--max-time` cierra la puerta si el server no responde.
+          curl -fsS --max-time 120 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://www.cliente.example/api/cron/pagos-reconciliar

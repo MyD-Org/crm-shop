@@ -223,11 +223,30 @@ cobrar dos veces.
 
 ## 10. Riesgos abiertos — verificar antes de codear
 
-1. **Dos generaciones de API conviviendo.** MP está migrando de `/v1/payments`
-   (`approved`/`rejected`/`in_process`) a Orders API
-   (`processed`/`failed`/`processing`). La doc de Bricks apunta a la vieja; la
-   de estados que consultamos, a la nueva. **Hay que decidir cuál usar y no
-   mezclarlas.** Cambia el mapeo de §8 y parte de §5.
+1. ~~**Dos generaciones de API conviviendo.**~~ **RESUELTO: se usa la Orders API.**
+
+   Primero se decidió `/v1/payments`, con el argumento de que combinar el front
+   de Bricks con un backend de Orders no estaba documentado. **Ese argumento era
+   falso**: la documentación de Orders dice explícitamente que acepta el token
+   que generan los bricks. Verificarlo dio vuelta la decisión.
+
+   Se usa **`POST /v1/orders`** porque MP marca `/v1/payments` como *legacy* en
+   su propio panel de webhooks — eso es su hoja de ruta hablando— y porque no
+   había ninguna razón técnica para quedarse en la vieja.
+
+   Los estados que se mapean son los de Orders:
+   `created` / `processing` / `action_required` / `processed` / `failed` /
+   `expired` / `canceled` / `refunded` / `charged_back`, con `status_detail`
+   como `bad_filled_card_data`, `rejected_by_issuer`, `insufficient_amount`.
+
+   Dos consecuencias prácticas:
+
+   - En el panel de MP el topic a marcar es **Order**, no "Pagos (legacy)".
+   - Los montos van como **string con dos decimales**, no como número.
+
+   La lección para la próxima decisión de este tipo: verificar antes de
+   descartar. La migración salió barata solo porque no había nada construido
+   encima todavía.
 2. **Compatibilidad del SDK.** Este proyecto corre React 19.2.4 y Next 16.2.9.
    Hay que confirmar que `@mercadopago/sdk-react` funcione ahí. Plan B: el SDK
    de JS puro montado a mano — funciona igual, da más trabajo.

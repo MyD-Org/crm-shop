@@ -289,9 +289,33 @@ export const orders = pgTable(
     requiereRevision: boolean("requiere_revision").notNull().default(false),
 
     // --- Pago ---
-    pagoMetodo: text("pago_metodo").notNull(), // 'transferencia' | 'efectivo' | 'cuenta_corriente'
-    /** 'pendiente' | 'pagado' | 'fallido'. Lo mueve un operador (fase 2). */
+    pagoMetodo: text("pago_metodo").notNull(), // 'transferencia' | 'efectivo' | 'cuenta_corriente' | 'mercadopago'
+    /**
+     * 'pendiente' | 'pagado' | 'fallido'.
+     *
+     * Para los métodos offline lo mueve un operador. Para los online lo mueve
+     * el webhook del proveedor, que es la ÚNICA fuente de verdad: la URL de
+     * retorno del comprador se puede escribir a mano en la barra del navegador.
+     */
     pagoEstado: text("pago_estado").notNull().default("pendiente"),
+
+    /** 'mercadopago' | 'mobbex' | 'modo'. null = pago offline. */
+    pagoProveedor: text("pago_proveedor"),
+    /**
+     * Id del pago en el proveedor. Único: es lo que hace idempotente al webhook,
+     * que MP reintenta y puede mandar repetido.
+     */
+    pagoReferencia: text("pago_referencia"),
+    /** 'tarjeta' | 'cuenta_mp'. Para poder mirar el mix de medios después. */
+    pagoMedio: text("pago_medio"),
+    /**
+     * `status_detail` crudo del proveedor. Se guarda sin traducir a propósito:
+     * cuando un cliente llama porque "no le anda la tarjeta", el motivo real es
+     * lo único que permite ayudarlo. El mensaje que ve él es una traducción de
+     * esto, no el dato.
+     */
+    pagoDetalle: text("pago_detalle"),
+    pagoActualizadoEn: timestamp("pago_actualizado_en", { withTimezone: true }),
 
     // --- Estado del pedido ---
     estado: text("estado").notNull().default("pendiente"),
@@ -328,6 +352,11 @@ export const orders = pgTable(
     uniqueIndex("orders_idempotency")
       .on(t.idempotencyKey)
       .where(sql`${t.idempotencyKey} is not null`),
+    // Misma lógica de índice parcial: hace idempotente al webhook sin que los
+    // pedidos offline (todos con referencia NULL) choquen entre sí.
+    uniqueIndex("orders_pago_referencia")
+      .on(t.pagoReferencia)
+      .where(sql`${t.pagoReferencia} is not null`),
     index("orders_cliente_fecha").on(t.clienteCodigo, t.createdAt),
     // "Mis pedidos" busca por quien compró, no por la cuenta corriente: si
     // alguien compra sin vincular y vincula después, sus pedidos siguen siendo

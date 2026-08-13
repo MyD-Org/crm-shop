@@ -30,6 +30,7 @@ import {
   type AlegraItem,
   type AlegraPrice,
 } from "./alegra";
+import { stockSimulado } from "./stock-simulado";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -40,9 +41,23 @@ const STOCK_BAJO = 5;
  * - null/undefined (servicio / no inventariable) → siempre disponible.
  * - >= STOCK_BAJO = "in", >0 = "low", 0 = "out".
  */
-function derivarStock(qty: number | null | undefined): ProductStock {
+export function derivarStock(
+  qty: number | null | undefined,
+  /** Ver `stockSimulado()`. Parámetro y no lectura del entorno, para poder
+   *  testear las dos ramas sin ensuciar `process.env`. */
+  simular = false,
+): ProductStock {
   if (qty == null) return "in";
-  if (qty <= 0) return "out";
+  /**
+   * Con la simulación activa, "sin stock" pasa a "disponible".
+   *
+   * Hace falta ACÁ además de en la cotización: el botón "agregar al carrito"
+   * está deshabilitado cuando el estado es "out"
+   * (CatalogoClient.tsx y ProductoClient.tsx), así que simular solo del lado
+   * del cotizador dejaba la tienda igual de intransitable — no se podía meter
+   * un producto en el carrito para llegar a cotizarlo.
+   */
+  if (qty <= 0) return simular ? "in" : "out";
   if (qty < STOCK_BAJO) return "low";
   return "in";
 }
@@ -65,6 +80,7 @@ interface FilaCatalogo {
 
 function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
+  const simular = stockSimulado();
   return {
     id: fila.alegraId,
     // La marca sale del customField de Alegra; si no está cargado, cae al
@@ -72,7 +88,7 @@ function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Product {
     brand: fila.brand || fila.categoryName || "",
     name: fila.name,
     price: precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList),
-    stock: derivarStock(qty),
+    stock: derivarStock(qty, simular),
     stockQty: qty ?? undefined,
     sku: fila.code || undefined,
     description: fila.description || undefined,
@@ -181,7 +197,7 @@ export function mapItemToProduct(
     name: item.name,
     brand: marcaDeCustomFields(item.customFields) || categoria?.name || "",
     price: resolverPrecio(item, idPriceList),
-    stock: derivarStock(item.inventory?.availableQuantity),
+    stock: derivarStock(item.inventory?.availableQuantity, stockSimulado()),
     stockQty: item.inventory?.availableQuantity ?? undefined,
     sku: item.reference || undefined,
     description: item.description || undefined,

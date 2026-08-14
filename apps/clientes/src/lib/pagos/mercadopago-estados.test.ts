@@ -15,22 +15,22 @@ import { MENSAJE_RECHAZO, convieneReintentar, type MotivoRechazo } from "./tipos
  * le decimos al comprador cuando le rechazan la tarjeta. La primera es plata; la
  * segunda es la diferencia entre recuperar una venta y perderla.
  *
- * Los códigos son los de la Orders API, no los de /v1/payments.
+ * Los códigos son los de Payments API (`/v1/payments`).
  */
 
 describe("estadoDeMercadoPago", () => {
-  it("solo `processed` cuenta como pagado", () => {
-    expect(estadoDeMercadoPago("processed")).toBe("pagado");
+  it("solo `approved` cuenta como pagado", () => {
+    expect(estadoDeMercadoPago("approved")).toBe("pagado");
   });
 
   it("marca fallido lo que dejó la plata fuera de casa", () => {
-    for (const s of ["failed", "canceled", "expired", "refunded", "charged_back"]) {
+    for (const s of ["rejected", "cancelled", "refunded", "charged_back"]) {
       expect(estadoDeMercadoPago(s), s).toBe("fallido");
     }
   });
 
   it("deja pendiente lo que está en curso", () => {
-    for (const s of ["created", "processing", "action_required", "in_review"]) {
+    for (const s of ["pending", "in_process", "in_mediation", "authorized"]) {
       expect(estadoDeMercadoPago(s), s).toBe("pendiente");
     }
   });
@@ -42,68 +42,66 @@ describe("estadoDeMercadoPago", () => {
    * cuando MP resuelva.
    */
   it("un estado desconocido queda PENDIENTE, nunca fallido", () => {
-    for (const raro of ["algo_nuevo", "", undefined, "PROCESSED", "approved"]) {
+    for (const raro of ["algo_nuevo", "", undefined, "APPROVED", "processed"]) {
       expect(estadoDeMercadoPago(raro), String(raro)).toBe("pendiente");
     }
   });
 
-  /** `approved` es de la API vieja: no debe colarse como pagado. */
-  it("no acepta los estados de la API legacy", () => {
-    expect(estadoDeMercadoPago("approved")).toBe("pendiente");
-    expect(estadoDeMercadoPago("rejected")).toBe("pendiente");
+  /**
+   * `processed` es de la Orders API (la que rechaza credenciales TEST-, y a la
+   * que vamos a volver cuando llegue la homologación de MP). No debe colarse
+   * como pagado mientras usemos Payments API.
+   */
+  it("no acepta los estados de la Orders API", () => {
+    expect(estadoDeMercadoPago("processed")).toBe("pendiente");
+    expect(estadoDeMercadoPago("failed")).toBe("pendiente");
+    expect(estadoDeMercadoPago("canceled")).toBe("pendiente");
   });
 });
 
 describe("statusEfectivo / detalleEfectivo", () => {
-  it("prefiere el detalle de la transacción sobre el de la orden", () => {
-    const orden = {
-      status: "failed",
-      status_detail: "failed",
-      transactions: { payments: [{ status: "failed", status_detail: "insufficient_amount" }] },
-    };
-    // Una orden `failed` no dice POR QUÉ falló, y ese porqué es lo único que le
-    // sirve al comprador.
-    expect(statusEfectivo(orden)).toBe("failed");
-    expect(detalleEfectivo(orden)).toBe("insufficient_amount");
+  it("lee el status del pago", () => {
+    expect(statusEfectivo({ status: "approved" })).toBe("approved");
+    expect(detalleEfectivo({ status_detail: "accredited" })).toBe("accredited");
   });
 
-  it("cae al nivel de orden cuando no hay transacción", () => {
-    expect(statusEfectivo({ status: "processed" })).toBe("processed");
-    expect(detalleEfectivo({ status_detail: "accredited" })).toBe("accredited");
+  it("devuelve undefined si no hay dato", () => {
+    expect(statusEfectivo({})).toBeUndefined();
+    expect(detalleEfectivo({})).toBeUndefined();
   });
 });
 
 describe("motivoDeMercadoPago", () => {
-  it("no devuelve motivo si la orden no está caída", () => {
-    expect(motivoDeMercadoPago("processed", "accredited")).toBeUndefined();
-    expect(motivoDeMercadoPago("processing", "in_review")).toBeUndefined();
+  it("no devuelve motivo si el pago no está caído", () => {
+    expect(motivoDeMercadoPago("approved", "accredited")).toBeUndefined();
+    expect(motivoDeMercadoPago("in_process", "pending_review_manual")).toBeUndefined();
   });
 
   it("traduce lo que se arregla reescribiendo la tarjeta", () => {
-    expect(motivoDeMercadoPago("failed", "bad_filled_card_data")).toBe("datos_invalidos");
+    expect(motivoDeMercadoPago("rejected", "bad_filled_card_data")).toBe("datos_invalidos");
   });
 
   it("distingue fondos, límite y cuotas, que se resuelven distinto", () => {
-    expect(motivoDeMercadoPago("failed", "insufficient_amount")).toBe("fondos");
-    expect(motivoDeMercadoPago("failed", "card_insufficient_amount")).toBe("fondos");
-    expect(motivoDeMercadoPago("failed", "amount_limit_exceeded")).toBe("limite");
-    expect(motivoDeMercadoPago("failed", "invalid_installments")).toBe("cuotas_no_disponibles");
+    expect(motivoDeMercadoPago("rejected", "insufficient_amount")).toBe("fondos");
+    expect(motivoDeMercadoPago("rejected", "card_insufficient_amount")).toBe("fondos");
+    expect(motivoDeMercadoPago("rejected", "amount_limit_exceeded")).toBe("limite");
+    expect(motivoDeMercadoPago("rejected", "invalid_installments")).toBe("cuotas_no_disponibles");
   });
 
   it("separa los casos que exigen llamar al banco", () => {
-    expect(motivoDeMercadoPago("failed", "rejected_by_issuer")).toBe("banco_rechazo");
-    expect(motivoDeMercadoPago("failed", "required_call_for_authorize")).toBe(
+    expect(motivoDeMercadoPago("rejected", "rejected_by_issuer")).toBe("banco_rechazo");
+    expect(motivoDeMercadoPago("rejected", "required_call_for_authorize")).toBe(
       "requiere_autorizacion",
     );
-    expect(motivoDeMercadoPago("failed", "card_disabled")).toBe("tarjeta_inhabilitada");
+    expect(motivoDeMercadoPago("rejected", "card_disabled")).toBe("tarjeta_inhabilitada");
   });
 
   it("marca el caso donde reintentar es lo peor", () => {
-    expect(motivoDeMercadoPago("failed", "max_attempts_exceeded")).toBe("demasiados_intentos");
+    expect(motivoDeMercadoPago("rejected", "max_attempts_exceeded")).toBe("demasiados_intentos");
   });
 
   it("agrupa el antifraude bajo riesgo", () => {
-    expect(motivoDeMercadoPago("failed", "high_risk")).toBe("riesgo");
+    expect(motivoDeMercadoPago("rejected", "high_risk")).toBe("riesgo");
   });
 
   /**
@@ -111,17 +109,17 @@ describe("motivoDeMercadoPago", () => {
    * tarjeta" sería mandarlo a buscar un problema que no existe.
    */
   it("el desafío 3DS vencido tiene motivo propio", () => {
-    expect(motivoDeMercadoPago("failed", "3ds_challenge_expired")).toBe("desafio_vencido");
+    expect(motivoDeMercadoPago("rejected", "3ds_challenge_expired")).toBe("desafio_vencido");
   });
 
   it("los errores técnicos caen en desconocido", () => {
-    expect(motivoDeMercadoPago("failed", "invalid_card_token")).toBe("desconocido");
-    expect(motivoDeMercadoPago("failed", "processing_error")).toBe("desconocido");
+    expect(motivoDeMercadoPago("rejected", "invalid_card_token")).toBe("desconocido");
+    expect(motivoDeMercadoPago("rejected", "processing_error")).toBe("desconocido");
   });
 
   it("un código nuevo de MP cae en desconocido, no rompe", () => {
-    expect(motivoDeMercadoPago("failed", "codigo_que_no_existe")).toBe("desconocido");
-    expect(motivoDeMercadoPago("failed", undefined)).toBe("desconocido");
+    expect(motivoDeMercadoPago("rejected", "codigo_que_no_existe")).toBe("desconocido");
+    expect(motivoDeMercadoPago("rejected", undefined)).toBe("desconocido");
   });
 });
 
@@ -188,10 +186,9 @@ describe("convieneReintentar", () => {
 
 describe("desafio3DS", () => {
   const conDesafio = (info?: Record<string, string>) => ({
-    status: "action_required",
-    transactions: {
-      payments: [{ status: "action_required", status_detail: "pending_challenge", three_ds_info: info }],
-    },
+    status: "pending",
+    status_detail: "pending_challenge",
+    three_ds_info: info,
   });
 
   it("devuelve el desafío cuando está completo", () => {
@@ -210,17 +207,12 @@ describe("desafio3DS", () => {
     expect(desafio3DS(conDesafio())).toBeUndefined();
   });
 
-  it("no devuelve desafío si la orden no lo está pidiendo", () => {
+  it("no devuelve desafío si el pago no lo está pidiendo", () => {
     expect(
       desafio3DS({
-        status: "processed",
-        transactions: {
-          payments: [{
-            status: "processed",
-            status_detail: "accredited",
-            three_ds_info: { external_resource_url: "https://banco.test/acs", creq: "abc" },
-          }],
-        },
+        status: "approved",
+        status_detail: "accredited",
+        three_ds_info: { external_resource_url: "https://banco.test/acs", creq: "abc" },
       }),
     ).toBeUndefined();
   });
@@ -228,9 +220,9 @@ describe("desafio3DS", () => {
 
 describe("esPendienteConocido / esReversion", () => {
   it("reconoce los pendientes documentados", () => {
-    expect(esPendienteConocido("action_required")).toBe(true);
-    expect(esPendienteConocido("processing")).toBe(true);
-    expect(esPendienteConocido("processed")).toBe(false);
+    expect(esPendienteConocido("pending")).toBe(true);
+    expect(esPendienteConocido("in_process")).toBe(true);
+    expect(esPendienteConocido("approved")).toBe(false);
     expect(esPendienteConocido(undefined)).toBe(false);
   });
 
@@ -242,7 +234,7 @@ describe("esPendienteConocido / esReversion", () => {
   it("distingue las reversiones de un simple fallo", () => {
     expect(esReversion("charged_back")).toBe(true);
     expect(esReversion("refunded")).toBe(true);
-    expect(esReversion("failed")).toBe(false);
-    expect(esReversion("processed")).toBe(false);
+    expect(esReversion("rejected")).toBe(false);
+    expect(esReversion("approved")).toBe(false);
   });
 });

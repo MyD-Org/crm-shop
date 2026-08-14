@@ -489,6 +489,76 @@ export async function registrarIntentoFallido(
 }
 
 /**
+ * Pedido pendiente de pago más reciente del comprador.
+ *
+ * Existe porque el carrito NO se vacía al confirmar el pedido (se vacía recién
+ * al pagar), y sin este chequeo un comprador que reintenta el checkout crearía
+ * un pedido-fantasma nuevo cada vez. Al montar el checkout, se busca acá; si
+ * hay algo se salta directo al brick con ese pedido en vez de crear otro.
+ *
+ * La ventana de 24h es pragmática: un pedido pendiente más viejo que eso
+ * probablemente el comprador ya se olvidó, y forzarlo a resumirlo lo confunde
+ * más que ayuda. Los sigue viendo en "Mis pedidos" para pagar por otra vía.
+ */
+export async function pedidoPendienteMasReciente(
+  dueno: DuenoPedidos,
+): Promise<{ id: string; numero: string; total: number } | null> {
+  const desde = new Date(Date.now() - 24 * 60 * 60_000);
+  const [fila] = await getDb()
+    .select({ id: orders.id, numero: orders.numero, total: orders.total })
+    .from(orders)
+    .where(
+      and(
+        esDeSuDueno(dueno),
+        eq(orders.pagoEstado, "pendiente"),
+        eq(orders.estado, "pendiente"),
+        eq(orders.pagoMetodo, "mercadopago"),
+        gte(orders.createdAt, desde),
+      ),
+    )
+    .orderBy(desc(orders.createdAt))
+    .limit(1);
+
+  if (!fila) return null;
+  return {
+    id: fila.id,
+    numero: formatearNumero(fila.numero),
+    total: num(fila.total),
+  };
+}
+
+/**
+ * Cancela un pedido pendiente. Es lo que dispara el botón "armar otro" en el
+ * checkout cuando el comprador quiere modificar el carrito en vez de pagar el
+ * pedido que dejó a medias.
+ *
+ * Requisitos:
+ *  - Es del dueño (sin este filtro, alguien adivinando ids podría cancelar
+ *    pedidos ajenos).
+ *  - Sigue en `pago_estado = 'pendiente'` — cancelar un pagado sería una
+ *    devolución, y eso pasa por otro flujo.
+ *
+ * Devuelve `true` solo si efectivamente cambió algo.
+ */
+export async function cancelarPedidoPendiente(
+  id: string,
+  dueno: DuenoPedidos,
+): Promise<boolean> {
+  const filas = await getDb()
+    .update(orders)
+    .set({ estado: "cancelado", updatedAt: new Date() })
+    .where(
+      and(
+        eq(orders.id, id),
+        esDeSuDueno(dueno),
+        eq(orders.pagoEstado, "pendiente"),
+      ),
+    )
+    .returning({ id: orders.id });
+  return filas.length > 0;
+}
+
+/**
  * Encuentra el pedido al que pertenece una referencia del proveedor.
  *
  * Es lo que usa el webhook: la notificación trae el id del pago, no el del

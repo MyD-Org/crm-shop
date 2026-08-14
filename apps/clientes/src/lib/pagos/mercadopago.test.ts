@@ -57,23 +57,23 @@ describe("claveIdempotencia", () => {
 });
 
 describe("interpretar", () => {
-  it("traduce una orden acreditada", () => {
+  it("traduce un pago acreditado", () => {
     const r = interpretar({
-      id: "ord-1",
-      status: "processed",
-      transactions: { payments: [{ status: "processed", status_detail: "accredited" }] },
+      id: 1001,
+      status: "approved",
+      status_detail: "accredited",
     });
     expect(r.estado).toBe("pagado");
-    expect(r.referencia).toBe("ord-1");
+    expect(r.referencia).toBe("1001");
     expect(r.motivo).toBeUndefined();
     expect(r.reversion).toBe(false);
   });
 
   it("traduce un rechazo con su motivo", () => {
     const r = interpretar({
-      id: "ord-2",
-      status: "failed",
-      transactions: { payments: [{ status: "failed", status_detail: "insufficient_amount" }] },
+      id: 1002,
+      status: "rejected",
+      status_detail: "insufficient_amount",
     });
     expect(r.estado).toBe("fallido");
     expect(r.motivo).toBe("fondos");
@@ -91,49 +91,33 @@ describe("interpretar", () => {
    */
   it("detecta un contracargo", () => {
     const r = interpretar({
-      id: "ord-3",
+      id: 1003,
       status: "charged_back",
-      transactions: { payments: [{ status: "charged_back", status_detail: "settled" }] },
+      status_detail: "settled",
     });
     expect(r.reversion).toBe(true);
     expect(r.estado).toBe("fallido");
   });
 
   it("detecta una devolución", () => {
-    expect(interpretar({ id: "ord-4", status: "refunded" }).reversion).toBe(true);
-  });
-
-  it("detecta el contracargo aunque solo figure a nivel de orden", () => {
-    // Según el momento del ciclo, el contracargo puede aparecer en la orden
-    // mientras la transacción todavía dice `processed`.
-    const r = interpretar({
-      id: "ord-5",
-      status: "charged_back",
-      transactions: { payments: [{ status: "processed", status_detail: "accredited" }] },
-    });
-    expect(r.reversion).toBe(true);
+    expect(interpretar({ id: 1004, status: "refunded" }).reversion).toBe(true);
   });
 
   it("un fallo común NO es una reversión", () => {
     const r = interpretar({
-      id: "ord-6",
-      status: "failed",
-      transactions: { payments: [{ status: "failed", status_detail: "bad_filled_card_data" }] },
+      id: 1006,
+      status: "rejected",
+      status_detail: "bad_filled_card_data",
     });
     expect(r.reversion).toBe(false);
   });
 
   it("propaga el desafío 3DS", () => {
     const r = interpretar({
-      id: "ord-7",
-      status: "action_required",
-      transactions: {
-        payments: [{
-          status: "action_required",
-          status_detail: "pending_challenge",
-          three_ds_info: { external_resource_url: "https://banco.test/acs", creq: "abc" },
-        }],
-      },
+      id: 1007,
+      status: "pending",
+      status_detail: "pending_challenge",
+      three_ds_info: { external_resource_url: "https://banco.test/acs", creq: "abc" },
     });
     expect(r.estado).toBe("pendiente");
     expect(r.desafio).toEqual({ externalResourceUrl: "https://banco.test/acs", creq: "abc" });

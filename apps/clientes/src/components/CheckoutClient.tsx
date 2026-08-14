@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button, Field, Input } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
@@ -111,8 +111,8 @@ export function CheckoutClient({
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   /**
    * El pedido ya existe en la base. Se guarda el total además del número porque
-   * el carrito se vacía en este mismo paso y la cotización deja de estar
-   * disponible — y el brick necesita un monto para mostrar.
+   * el brick necesita un monto para mostrar, y traer los pedidos completos por
+   * cada render sería innecesario.
    */
   const [confirmado, setConfirmado] = useState<{
     numero: string;
@@ -120,6 +120,35 @@ export function CheckoutClient({
     total: number;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  /**
+   * Al montar, se chequea si hay un pedido pendiente reciente de este comprador
+   * (ver `pedidoPendienteMasReciente` en pedidos.ts). Sin este atajo, quien
+   * vuelve al checkout después de abandonar el pago crearía un pedido-fantasma
+   * nuevo. Solo se dispara una vez y no bloquea el render — mientras carga se
+   * ve el checkout normal.
+   */
+  useEffect(() => {
+    let cancelado = false;
+    fetch("/api/pedidos/pendiente")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelado || !data?.pedido) return;
+        setConfirmado({
+          numero: data.pedido.numero,
+          id: data.pedido.id,
+          total: data.pedido.total,
+        });
+        setPago("mercadopago");
+      })
+      .catch(() => {
+        // Silencioso: fallar en la detección solo lleva al flujo normal, no
+        // rompe nada.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
   /**
    * Clave del intento de compra. Se genera en el PRIMER confirmar y se reusa en
@@ -211,16 +240,25 @@ export function CheckoutClient({
         return;
       }
 
-      // El carrito se vacía SOLO después del 201: si se limpiaba antes y el
-      // POST fallaba, el cliente perdía el carrito sin haber comprado nada.
-      // A partir de acá el registro de la compra es el pedido, no el carrito:
-      // si el pago falla, el pedido queda y se puede reintentar sin rehacer nada.
+      // El carrito NO se vacía acá — se vacía recién cuando el pago se
+      // confirma (ver `onPagado` más abajo). Motivo: si el pago con MP falla o
+      // el comprador cierra la ventana antes de completar, quiere volver y ver
+      // sus productos, no un carrito vacío. Para el reintento no hay riesgo de
+      // duplicar el pedido: el `useEffect` de arriba detecta el pendiente y lo
+      // reutiliza.
+      //
+      // Para métodos offline (transferencia / efectivo / cuenta corriente) el
+      // "pago" es una promesa: no hay confirmación online. Ahí el carrito sí
+      // se vacía inmediatamente porque el pedido ya está en la mesa del
+      // operador. La rama del render inferior se encarga de ese caso.
       setConfirmado({
         numero: json.numero,
         id: json.id,
         total: json.cotizacion?.total ?? cotizacion?.total ?? 0,
       });
-      clear();
+      if (pagoElegido !== "mercadopago") {
+        clear();
+      }
     } catch {
       setErrorEnvio("No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.");
     } finally {
@@ -230,20 +268,37 @@ export function CheckoutClient({
 
   // ------------------------------------------------------- pedido creado, a pagar
   //
-  // El pedido YA existe cuando se llega acá. Si el cobro falla, no se pierde
-  // nada: queda pendiente y se puede pagar después desde "Mis pedidos" o por
-  // transferencia. Por eso el pedido se crea antes de intentar cobrar y no al
-  // revés.
+  // El pedido YA existe cuando se llega acá (recién creado o rescatado por el
+  // useEffect que busca pendientes). El carrito sigue con productos hasta que
+  // el pago se confirma: si el cobro falla o el comprador se va, al volver ve
+  // sus items y el pendiente se reutiliza en vez de crear uno nuevo.
+  async function cancelarYVolver() {
+    if (!confirmado) return;
+    setCancelando(true);
+    try {
+      const res = await fetch(`/api/pedidos/${confirmado.id}/cancelar`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        setConfirmado(null);
+        // La `claveIntento` era del pedido cancelado: sin resetearla, el
+        // próximo confirmar reutilizaría la clave y traería el pedido viejo.
+        claveIntento.current = null;
+      }
+    } catch {
+      // Silencioso: si falla el cancelar, el estado UI no cambia y el usuario
+      // puede reintentar.
+    } finally {
+      setCancelando(false);
+    }
+  }
+
   if (confirmado && pagoElegido === "mercadopago" && !pagado) {
     return (
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
         <div className="text-center">
           <h1 className="text-2xl font-extrabold text-text">Pagá tu pedido</h1>
           <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
-          <p className="mt-2 text-sm text-muted">
-            Ya guardamos tu pedido. Si algo falla con la tarjeta, no lo perdés:
-            podés pagarlo más tarde o por transferencia.
-          </p>
         </div>
 
         <PagoMercadoPago
@@ -251,12 +306,27 @@ export function CheckoutClient({
           numero={confirmado.numero}
           monto={confirmado.total}
           emailComprador={emailCliente}
-          onPagado={() => setPagado(true)}
+          onPagado={() => {
+            setPagado(true);
+            // El carrito se vacía RECIÉN acá: el pedido está pago, la compra
+            // ya se completó, no hay razón para seguir mostrando los items.
+            clear();
+          }}
         />
 
-        <Link href="/mi-cuenta" className="text-center text-sm text-muted underline">
-          Prefiero pagarlo después
-        </Link>
+        <div className="flex flex-col items-center gap-2">
+          <Link href="/mi-cuenta" className="text-sm text-muted underline">
+            Prefiero pagarlo después
+          </Link>
+          <button
+            type="button"
+            onClick={cancelarYVolver}
+            disabled={cancelando}
+            className="text-sm text-muted underline disabled:opacity-50"
+          >
+            {cancelando ? "Cancelando…" : "Modificar el carrito y armar otro pedido"}
+          </button>
+        </div>
       </main>
     );
   }

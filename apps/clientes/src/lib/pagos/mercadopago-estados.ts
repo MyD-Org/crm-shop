@@ -1,13 +1,17 @@
 /**
- * Traducción de los estados de la Orders API de Mercado Pago. Módulo PURO.
+ * Traducción de los estados de la Payments API de Mercado Pago. Módulo PURO.
  *
  * Vive separado del cliente HTTP a propósito: acá está la lógica que decide qué
  * ve el comprador cuando le rechazan la tarjeta, y esa lógica se testea sin
  * red, sin credenciales y sin tocar Mercado Pago.
  *
- * Se mapea la **Orders API** (`POST /v1/orders`), no `/v1/payments`: MP marca
- * esa última como *legacy* en su propio panel, y Orders acepta el token que
- * genera Checkout Bricks. Ver §10 de docs/pagos-mercadopago.md.
+ * Se mapea la **Payments API** (`POST /v1/payments`), no `/v1/orders`. La razón
+ * es concreta: la Orders API RECHAZA credenciales TEST- con
+ * `"Test credentials are not supported"`, y hoy no tenemos credenciales de
+ * producción homologadas — sin este endpoint no se puede probar nada. Payments
+ * API está marcada como "legacy" por MP en su panel, pero no está deprecada y
+ * sigue siendo la que la mayoría de integraciones usan. Cuando llegue la
+ * homologación se puede volver a Orders: los `status_detail` son los mismos.
  */
 
 import type { MotivoRechazo } from "./tipos";
@@ -56,12 +60,12 @@ const RECHAZOS: Record<string, MotivoRechazo> = {
   processing_error: "desconocido",
 };
 
-/** Estados de orden que significan "todavía no se sabe". */
+/** Estados de pago que significan "todavía no se sabe". */
 const PENDIENTES = new Set([
-  "created",
-  "processing",
-  "action_required",
-  "in_review",
+  "pending",
+  "in_process",
+  "in_mediation",
+  "authorized",
 ]);
 
 /**
@@ -70,51 +74,38 @@ const PENDIENTES = new Set([
  * `fallido`: el resto de las bajadas desde `pagado` son eventos desordenados y
  * hay que ignorarlas.
  */
-const PERDIDOS = new Set(["failed", "canceled", "expired", "refunded", "charged_back"]);
+const PERDIDOS = new Set(["rejected", "cancelled", "refunded", "charged_back"]);
 
-/** Forma mínima de la respuesta de Orders que nos interesa. */
+/**
+ * Forma mínima de la respuesta de Payments que nos interesa. Payments API
+ * devuelve todo plano en el root — a diferencia de Orders, que anidaba en
+ * `transactions.payments[0]`.
+ */
 export interface RespuestaMercadoPago {
   id?: number | string;
   status?: string;
   status_detail?: string;
-  transactions?: {
-    payments?: Array<{
-      id?: string;
-      status?: string;
-      status_detail?: string;
-      three_ds_info?: { external_resource_url?: string; creq?: string };
-    }>;
-  };
+  three_ds_info?: { external_resource_url?: string; creq?: string };
+}
+
+export function statusEfectivo(pago: RespuestaMercadoPago): string | undefined {
+  return pago.status;
+}
+
+export function detalleEfectivo(pago: RespuestaMercadoPago): string | undefined {
+  return pago.status_detail;
 }
 
 /**
- * El detalle fino vive en la transacción; el estado general, en la orden.
+ * ¿En qué estado nuestro cae este pago?
  *
- * Se prefiere el de la transacción cuando está: una orden `failed` no dice POR
- * QUÉ falló, y ese "por qué" es lo único que le sirve al comprador.
- */
-function transaccion(orden: RespuestaMercadoPago) {
-  return orden.transactions?.payments?.[0];
-}
-
-export function statusEfectivo(orden: RespuestaMercadoPago): string | undefined {
-  return transaccion(orden)?.status ?? orden.status;
-}
-
-export function detalleEfectivo(orden: RespuestaMercadoPago): string | undefined {
-  return transaccion(orden)?.status_detail ?? orden.status_detail;
-}
-
-/**
- * ¿En qué estado nuestro cae esta orden?
- *
- * Solo `processed` cuenta como pagado. Todo lo que no sea explícitamente
- * procesado o explícitamente perdido se trata como **pendiente**, no como
+ * Solo `approved` cuenta como pagado. Todo lo que no sea explícitamente
+ * aprobado o explícitamente perdido se trata como **pendiente**, no como
  * fallido: dar por perdido un pago que MP todavía está resolviendo sería
  * cancelarle la compra a alguien que sí pagó.
  */
 export function estadoDeMercadoPago(status: string | undefined): PagoEstado {
-  if (status === "processed") return "pagado";
+  if (status === "approved") return "pagado";
   if (status && PERDIDOS.has(status)) return "fallido";
   return "pendiente";
 }
@@ -139,11 +130,10 @@ export function motivoDeMercadoPago(
  * Brick en pantalla, que es peor que no ofrecerlo — el comprador se queda sin
  * pago y sin explicación.
  */
-export function desafio3DS(orden: RespuestaMercadoPago) {
-  if (detalleEfectivo(orden) !== "pending_challenge") return undefined;
-  const info = transaccion(orden)?.three_ds_info;
-  const url = info?.external_resource_url;
-  const creq = info?.creq;
+export function desafio3DS(pago: RespuestaMercadoPago) {
+  if (detalleEfectivo(pago) !== "pending_challenge") return undefined;
+  const url = pago.three_ds_info?.external_resource_url;
+  const creq = pago.three_ds_info?.creq;
   if (!url || !creq) return undefined;
   return { externalResourceUrl: url, creq };
 }

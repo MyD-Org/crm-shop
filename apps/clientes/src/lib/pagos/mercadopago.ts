@@ -1,9 +1,14 @@
 /**
  * Proveedor Mercado Pago. SOLO servidor: acá vive el Access Token.
  *
- * Implementa `ProveedorPago` contra la **Orders API** (`POST /v1/orders`), que
- * acepta el token que genera Checkout Bricks. No se usa `/v1/payments`: MP la
- * marca como *legacy* en su propio panel. Ver §10 de docs/pagos-mercadopago.md.
+ * Implementa `ProveedorPago` contra la **Payments API** (`POST /v1/payments`).
+ * La Orders API sería el camino "moderno" según el panel de MP, pero rechaza
+ * credenciales TEST- con `"Test credentials are not supported"` — y hasta que
+ * Fede complete la homologación para tener credenciales de producción, es la
+ * única forma de probar. Payments API está marcada como legacy pero no está
+ * deprecada y es lo que la mayoría de integraciones usan. Volver a Orders es
+ * cambiar este archivo cuando llegue el momento; el vocabulario nuestro no
+ * depende del endpoint.
  *
  * La lógica que se puede testear sin red NO está acá a propósito: la traducción
  * de estados vive en `mercadopago-estados.ts` y la validación de firma en
@@ -28,7 +33,7 @@ import {
 } from "./mercadopago-estados";
 import { firmaValida } from "./mercadopago-firma";
 
-const API = "https://api.mercadopago.com/v1/orders";
+const API = "https://api.mercadopago.com/v1/payments";
 const TIMEOUT_MS = 15_000;
 
 function accessToken(): string {
@@ -70,26 +75,23 @@ export function claveIdempotencia(datos: DatosPago): string {
  * Traduce la respuesta cruda de MP a nuestro vocabulario. Un solo lugar, así
  * `crearPago` y `consultarPago` no pueden divergir.
  */
-export function interpretar(orden: RespuestaMercadoPago): EstadoPago {
-  const status = statusEfectivo(orden);
-  const detalle = detalleEfectivo(orden) ?? "";
+export function interpretar(pago: RespuestaMercadoPago): EstadoPago {
+  const status = statusEfectivo(pago);
+  const detalle = detalleEfectivo(pago) ?? "";
   return {
     estado: estadoDeMercadoPago(status),
-    // La referencia es el id de la ORDEN: es lo que MP manda en el webhook y
-    // con lo que después se vuelve a consultar.
-    referencia: String(orden.id ?? ""),
+    // La referencia es el id del PAGO: es lo que MP manda en el webhook y con
+    // lo que después se vuelve a consultar.
+    referencia: String(pago.id ?? ""),
     detalle,
     motivo: motivoDeMercadoPago(status, detalle || undefined),
     /**
      * Se calcula ACÁ, que es el único lugar donde se ve el status crudo de MP.
      * Afuera ya está todo traducido a nuestro vocabulario y la comparación no
      * podría dar nunca — un contracargo se perdería en silencio.
-     *
-     * Se miran los dos niveles: el contracargo puede figurar en la orden o en
-     * la transacción según el momento del ciclo.
      */
-    reversion: esReversion(status) || esReversion(orden.status),
-    desafio: desafio3DS(orden),
+    reversion: esReversion(status),
+    desafio: desafio3DS(pago),
   };
 }
 
@@ -132,35 +134,33 @@ export const mercadoPago: ProveedorPago = {
   /**
    * Crea el pago. El `monto` YA viene del pedido persistido — quien llama es
    * responsable de no tomarlo del browser (ver §2 del doc).
+   *
+   * A diferencia de Orders API, Payments API acepta el monto como NÚMERO y
+   * expone los campos planos en el root. Es lo mismo que hace la mayoría de
+   * ejemplos oficiales de MP.
    */
   async crearPago(datos: DatosPago): Promise<EstadoPago> {
-    /**
-     * Los montos de la Orders API van como STRING con dos decimales, no como
-     * número. Mandarlos como número es de los errores que devuelven un 400
-     * genérico y cuestan una tarde.
-     */
-    const monto = datos.monto.toFixed(2);
-
-    const metodo: Record<string, unknown> =
-      datos.medio === "cuenta_mp"
-        ? { type: "account_money" }
-        : {
-            type: "credit_card",
-            token: datos.token,
-            installments: datos.cuotas ?? 1,
-            ...(datos.metodoPagoId ? { id: datos.metodoPagoId } : {}),
-          };
-
     const cuerpo: Record<string, unknown> = {
-      type: "online",
-      processing_mode: "automatic",
-      total_amount: monto,
+      transaction_amount: datos.monto,
       description: datos.descripcion,
-      // Referencia nuestra: permite reconciliar una orden con su pedido sin
+      // Referencia nuestra: permite reconciliar un pago con su pedido sin
       // depender de que MP nos devuelva la metadata.
       external_reference: datos.pedidoId,
-      transactions: { payments: [{ amount: monto, payment_method: metodo }] },
+      // Habilita el desafío 3DS: el brick lo renderiza con Status Screen.
+      three_d_secure_mode: "optional",
     };
+
+    if (datos.medio === "cuenta_mp") {
+      // Dinero en cuenta: MP identifica al comprador por el email del payer, no
+      // hace falta token de tarjeta.
+      cuerpo.payment_method_id = "account_money";
+    } else {
+      // Tarjeta: el token viene del brick y es de un solo uso; installments y
+      // payment_method_id (marca de la tarjeta) también.
+      cuerpo.token = datos.token;
+      cuerpo.installments = datos.cuotas ?? 1;
+      if (datos.metodoPagoId) cuerpo.payment_method_id = datos.metodoPagoId;
+    }
 
     if (datos.emailComprador || datos.numeroDocumento) {
       cuerpo.payer = {
@@ -202,9 +202,9 @@ export const mercadoPago: ProveedorPago = {
    * firmar— y recién después en el cuerpo. Firmar contra el del cuerpo haría
    * que la validación falle contra las notificaciones reales.
    *
-   * El topic que nos interesa es `order`, que es el de la API que usamos. El
-   * handler igual ignora con 200 lo que no reconoce: MP manda eventos a los que
-   * uno no se suscribió, y devolver error haría que reintente para siempre.
+   * El topic que nos interesa es `payment`, que es el que emite Payments API.
+   * El handler igual ignora con 200 lo que no reconoce: MP manda eventos a los
+   * que uno no se suscribió, y devolver error haría que reintente para siempre.
    */
   async verificarWebhook(req: Request, cuerpo: string) {
     const url = new URL(req.url);

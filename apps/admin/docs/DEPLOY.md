@@ -61,9 +61,31 @@ actualizalos también allá.
 ### Routing / tenant
 | Var | Valor |
 |---|---|
-| `TENANT_IDS` | `central-led` |
-| `TENANT_OVERRIDE` | `central-led` — **necesario** mientras uses el dominio `*.vercel.app`. El middleware resuelve el tenant por subdominio; sin override, `xxx.vercel.app` no matchea y todo da 404. Al pasar a subdominios reales (`central-led.tudominio.com`) se quita. |
+| `TENANT_IDS` | `central-led` — **solo fallback de arranque**. La lista real sale de la tabla `tenants` (ver "Alta de una empresa"). Sirve para que el proxy responda si la DB está caída o todavía no existe. |
+| `TENANT_OVERRIDE` | `central-led` — **necesario** mientras uses el dominio `*.vercel.app`. El proxy resuelve el tenant por subdominio; sin override, `xxx.vercel.app` no matchea y todo da 404. Al pasar a subdominios reales (`empresa.plataforma.example`) se quita. Es no-op en Production por código (ver `tenantOverride()`). |
 | `NEXT_PUBLIC_BASE_URL` | La URL pública del deploy (ej. `https://crm-xxx.vercel.app`) |
+
+#### Alta de una empresa: una URL propia por cliente
+
+El modelo es **un subdominio por empresa** bajo el dominio de la plataforma:
+`avantec.plataforma.example`, `otracosa.plataforma.example`. El proxy toma el **primer label del host**
+y lo usa como id de tenant, así que el alta es un `INSERT` en `tenants` — **sin tocar env
+vars y sin redeploy**. El registro se cachea 60s (`getTenantRegistry` en
+`src/lib/tenants.ts`), o sea que la URL nueva responde dentro del minuto.
+
+Requisito único, y por una sola vez: el **dominio wildcard `*.plataforma.example` agregado al
+proyecto en Vercel** (Settings → Domains). Con eso, cada cliente nuevo no necesita alta de
+dominio ni certificado propio.
+
+- **Dominio propio** (ej. Central Led en `crm.cliente.example`): el primer label ("crm")
+  no matchea ningún id, así que hay que declarar el host completo en la columna
+  `tenants.domains` (coma-separada) y agregar ese dominio en Vercel. La env var
+  `{PREFIX}_DOMAINS` sigue existiendo solo como fallback.
+- **`plataforma.example` a secas y `www.`** dan 404 acá a propósito: la landing es otro proyecto
+  de Vercel, con su propio dominio.
+- **Renombrar el id de un tenant**: `npm run tenant:rename -- <viejo> <nuevo>` (dry-run;
+  agregar `--apply` para escribir). `tenant_id` es un FK sin `ON UPDATE CASCADE`, así que
+  no alcanza con un `UPDATE` sobre `tenants`.
 
 ### Tienda (opcional)
 | Var | Valor |

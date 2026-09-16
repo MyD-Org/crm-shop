@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import { Footer } from "@/components/Footer";
 import { useCart } from "@/context/CartContext";
@@ -97,7 +98,7 @@ export default function CarritoPage() {
             <p className="font-semibold text-text">Ingresá para ver tus precios</p>
             <p className="mt-1 text-muted">
               Los precios y el stock son los de tu cuenta.{" "}
-              <Link href="/ingresar" className="font-semibold text-primary hover:underline">
+              <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
                 Iniciar sesión
               </Link>
             </p>

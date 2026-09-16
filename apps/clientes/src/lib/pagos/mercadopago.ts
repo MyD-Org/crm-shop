@@ -64,6 +64,35 @@ function accessToken(): string {
  *
  * Para `cuenta_mp` no hay token, así que se usa una clave aleatoria por intento.
  */
+/**
+ * URL a la que Mercado Pago tiene que avisar los cambios de ESTE pago.
+ *
+ * Sin `notification_url` en el pago, MP usa la configurada en su panel, y esa
+ * depende del MODO de las credenciales, no del entorno: con credenciales TEST-,
+ * producción recibía sus notificaciones en la URL de "modo de prueba" (dev). Un
+ * pago que quedaba pendiente y se aprobaba después nunca le llegaba a producción.
+ *
+ * Mandándola en cada pago, cada entorno recibe las suyas.
+ *
+ * - Solo https y dominio público: MP rechaza el pago entero con 400 si la URL
+ *   es localhost, y en local no hay forma de que le llegue igual.
+ * - `source_news=webhooks` pide el formato Webhooks (firmado, con x-signature),
+ *   no el IPN viejo sin firma que el handler rechazaría.
+ */
+export function urlNotificacion(origen: string | null | undefined): string | undefined {
+  if (!origen) return undefined;
+  let url: URL;
+  try {
+    url = new URL(origen);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "https:") return undefined;
+  const host = url.hostname;
+  if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".local")) return undefined;
+  return `${url.origin}/api/pagos/mercadopago/webhook?source_news=webhooks`;
+}
+
 export function claveIdempotencia(datos: DatosPago): string {
   const semilla = datos.token
     ? createHash("sha256").update(`${datos.pedidoId}:${datos.token}`).digest("hex").slice(0, 32)
@@ -170,6 +199,7 @@ export const mercadoPago: ProveedorPago = {
       // Referencia nuestra: permite reconciliar un pago con su pedido sin
       // depender de que MP nos devuelva la metadata.
       external_reference: datos.pedidoId,
+      ...(datos.urlNotificacion ? { notification_url: datos.urlNotificacion } : {}),
       // Habilita el desafío 3DS: el brick lo renderiza con Status Screen.
       three_d_secure_mode: "optional",
     };

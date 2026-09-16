@@ -135,6 +135,12 @@ export interface DatosPago {
   metodoPagoId?: string;
   tipoDocumento?: string;
   numeroDocumento?: string;
+  /**
+   * URL del webhook del entorno que crea el pago. Ver `urlNotificacion()` en
+   * mercadopago.ts: sin esto MP usa la URL del panel, que depende del modo de
+   * las credenciales y no del entorno.
+   */
+  urlNotificacion?: string;
 }
 
 /**

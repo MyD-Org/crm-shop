@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { rutaIngreso } from "@/lib/ingreso";
 import { CheckoutClient } from "@/components/CheckoutClient";
 import { Footer } from "@/components/Footer";
 import { identidadActual } from "@/lib/auth";
@@ -12,7 +13,7 @@ import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 export default async function CheckoutPage() {
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
-    redirect("/ingresar");
+    redirect(rutaIngreso("/checkout"));
   }
 
   // Sin datos fiscales no se puede facturar la compra. Se resuelve acá y se

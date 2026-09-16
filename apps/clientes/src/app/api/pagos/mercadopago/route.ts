@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { getPedidoParaPago, registrarCobro, registrarIntentoFallido } from "@/lib/pedidos";
 import { MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos";
-import { mercadoPago } from "@/lib/pagos/mercadopago";
+import { mercadoPago, urlNotificacion } from "@/lib/pagos/mercadopago";
 import { permitir } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -91,6 +91,9 @@ export async function POST(req: Request) {
       pedidoId: pedido.id,
       monto: pedido.total,
       descripcion: `Pedido ${pedido.numero} — Central LED`,
+      // El dominio por el que entró el comprador: www en producción, dev en
+      // staging. Así el webhook vuelve al mismo entorno que creó el pago.
+      urlNotificacion: urlNotificacion(new URL(req.url).origin),
       medio,
       token: token || undefined,
       cuotas,

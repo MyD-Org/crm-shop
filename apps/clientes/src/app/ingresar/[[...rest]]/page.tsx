@@ -21,7 +21,13 @@ export default function IngresarPage() {
             Para ver tus precios, tu cuenta corriente y tus pedidos.
           </p>
         </div>
-        <SignIn />
+        {/*
+          Sin `redirect_url` en la URL, Clerk caía en su destino por defecto y el
+          comprador terminaba lejos de donde estaba. Las páginas protegidas ahora
+          mandan el destino (ver src/lib/ingreso.ts), que Clerk respeta por
+          encima de este fallback; esto cubre a quien entra directo a /ingresar.
+        */}
+        <SignIn fallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" />
       </main>
       <Footer />
     </>

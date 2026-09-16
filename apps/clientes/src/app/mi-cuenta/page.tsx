@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { rutaIngreso } from "@/lib/ingreso";
 import { MisCompras } from "@/components/MisCompras";
 import { Footer } from "@/components/Footer";
 import { identidadActual } from "@/lib/auth";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function MiCuentaPage() {
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
-    redirect("/ingresar");
+    redirect(rutaIngreso("/mi-cuenta"));
   }
 
   const dueno = { clerkUserId, clienteCodigo: cliente?.codigocliente };

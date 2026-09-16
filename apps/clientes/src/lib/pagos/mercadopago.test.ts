@@ -123,3 +123,40 @@ describe("interpretar", () => {
     expect(r.desafio).toEqual({ externalResourceUrl: "https://banco.test/acs", creq: "abc" });
   });
 });
+
+import { urlNotificacion } from "./mercadopago";
+
+describe("urlNotificacion", () => {
+  it("arma la URL del webhook del entorno que creó el pago", () => {
+    expect(urlNotificacion("https://www.cliente.example")).toBe(
+      "https://www.cliente.example/api/pagos/mercadopago/webhook?source_news=webhooks",
+    );
+    expect(urlNotificacion("https://dev.cliente.example")).toBe(
+      "https://dev.cliente.example/api/pagos/mercadopago/webhook?source_news=webhooks",
+    );
+  });
+
+  /**
+   * MP rechaza el pago ENTERO con 400 si `notification_url` es localhost. Mandarla
+   * en desarrollo no solo no serviría: rompería el cobro local.
+   */
+  it("no la manda en local", () => {
+    expect(urlNotificacion("http://localhost:3000")).toBeUndefined();
+    expect(urlNotificacion("https://localhost:3000")).toBeUndefined();
+    expect(urlNotificacion("http://127.0.0.1:3000")).toBeUndefined();
+  });
+
+  it("exige https", () => {
+    expect(urlNotificacion("http://www.cliente.example")).toBeUndefined();
+  });
+
+  it("tolera un origen ausente o inválido", () => {
+    expect(urlNotificacion(undefined)).toBeUndefined();
+    expect(urlNotificacion("")).toBeUndefined();
+    expect(urlNotificacion("no es una url")).toBeUndefined();
+  });
+
+  it("pide el formato Webhooks, que viene firmado", () => {
+    expect(urlNotificacion("https://www.cliente.example")).toContain("source_news=webhooks");
+  });
+});

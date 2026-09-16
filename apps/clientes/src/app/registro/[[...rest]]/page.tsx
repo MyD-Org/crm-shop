@@ -13,7 +13,7 @@ export default function RegistroPage() {
             corriente para ver tus precios.
           </p>
         </div>
-        <SignUp />
+        <SignUp fallbackRedirectUrl="/" signInFallbackRedirectUrl="/" />
       </main>
       <Footer />
     </>

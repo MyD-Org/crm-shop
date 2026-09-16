@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { rutaIngreso } from "@/lib/ingreso";
 import { Footer } from "@/components/Footer";
 import { VincularClient } from "@/components/VincularClient";
 import { identidadActual } from "@/lib/auth";
@@ -11,7 +12,7 @@ export default async function VincularPage() {
 
   // Vincular exige sesión de Clerk: la vinculación se ata a una cuenta de
   // acceso concreta, y una cookie heredada del CRM no identifica ninguna.
-  if (!clerkUserId) redirect("/ingresar");
+  if (!clerkUserId) redirect(rutaIngreso("/mi-cuenta/vincular"));
 
   return (
     <>

@@ -218,6 +218,32 @@ export function PagoMercadoPago({
     [],
   );
 
+  /**
+   * `onReady` y `onError` también tienen que ser estables. El `useEffect` del
+   * SDK depende de `[initialization, customization, onReady, onError, onSubmit,
+   * onBinChange]` y, cuando cambia cualquiera, DESMONTA y vuelve a crear el
+   * brick.
+   *
+   * Eran funciones inline. Al apretar "Pagar" el estado pasa a "procesando", el
+   * componente se re-renderiza, estas dos cambian de identidad y el comprador
+   * vuelve a la pantalla de elegir medio de pago mientras su pago se procesa.
+   * El arreglo anterior estabilizó las otras tres props y dejó estas dos.
+   *
+   * Solo usan `setEstado`, que React garantiza estable: sin dependencias.
+   */
+  const onReady = useCallback(() => {
+    setEstado((e) => (e.fase === "cargando" ? { fase: "formulario" } : e));
+  }, []);
+
+  const onError = useCallback((error: unknown) => {
+    console.error("[brick mp]", error);
+    setEstado({
+      fase: "rechazado",
+      mensaje: "Hubo un problema con el formulario de pago. Recargá la página.",
+      reintentable: false,
+    });
+  }, []);
+
   if (faltaKey) {
     return (
       <p className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
@@ -301,15 +327,8 @@ export function PagoMercadoPago({
         initialization={initialization}
         customization={customization}
         onSubmit={onSubmit}
-        onReady={() => setEstado((e) => (e.fase === "cargando" ? { fase: "formulario" } : e))}
-        onError={(error) => {
-          console.error("[brick mp]", error);
-          setEstado({
-            fase: "rechazado",
-            mensaje: "Hubo un problema con el formulario de pago. Recargá la página.",
-            reintentable: false,
-          });
-        }}
+        onReady={onReady}
+        onError={onError}
       />
 
       {/*

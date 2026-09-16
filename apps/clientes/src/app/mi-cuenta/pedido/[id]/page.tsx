@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { rutaIngreso } from "@/lib/ingreso";
 import { Footer } from "@/components/Footer";
 import { identidadActual } from "@/lib/auth";
 import { getPedido } from "@/lib/pedidos";
@@ -15,7 +16,7 @@ export default async function PedidoPage({
 }) {
   const { id } = await params;
   const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) redirect("/ingresar");
+  if (!clerkUserId && !cliente) redirect(rutaIngreso(`/mi-cuenta/pedido/${id}`));
 
   // getPedido filtra por dueño: un id ajeno da 404, no 403 — no confirmamos la
   // existencia de pedidos de otras cuentas.

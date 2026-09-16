@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { SearchAutocomplete } from "./SearchAutocomplete";
+import { destinoSeguro } from "@/lib/ingreso";
 import { CartPreview } from "./CartPreview";
 
 function UserIcon() {
@@ -89,7 +90,16 @@ export function HeaderUI({
                 estar a mitad del carrito, y sacarlo de la pagina para loguearse
                 es donde se pierden las compras.
               */}
-              <SignInButton mode="modal">
+              {/*
+                Destino explícito: la página donde está. Sin esto, al terminar el
+                ingreso con Google —que sale del sitio y vuelve— Clerk usaba su
+                destino por defecto y el comprador aparecía en otra pantalla.
+              */}
+              <SignInButton
+                mode="modal"
+                fallbackRedirectUrl={destinoSeguro(pathname)}
+                signUpFallbackRedirectUrl={destinoSeguro(pathname)}
+              >
                 <button className="flex items-center gap-2 text-sm text-muted transition-colors hover:text-text">
                   <UserIcon />
                   Ingresar

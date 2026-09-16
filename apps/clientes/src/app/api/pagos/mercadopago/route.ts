@@ -32,7 +32,7 @@ const texto = (v: unknown, max = 200) =>
  * total congelado en la transacción que lo creó.
  */
 export async function POST(req: Request) {
-  const { clerkUserId, cliente } = await identidadActual();
+  const { clerkUserId, cliente, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -95,7 +95,15 @@ export async function POST(req: Request) {
       token: token || undefined,
       cuotas,
       metodoPagoId: texto(body.metodoPagoId, 40) || undefined,
-      emailComprador: pedido.clienteEmail ?? undefined,
+      /**
+       * Mercado Pago EXIGE `payer.email`: sin él responde 400 "Params Error",
+       * sin decir cuál parámetro falta.
+       *
+       * El fallback a la sesión no es decorativo: los pedidos creados antes de
+       * este arreglo tienen `cliente_email` en null, y sin esto seguirían sin
+       * poder cobrarse aunque el comprador vuelva a intentar.
+       */
+      emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
       tipoDocumento: pedido.facturacionTipoDoc ?? undefined,
       numeroDocumento: pedido.facturacionNroDoc ?? undefined,
     });

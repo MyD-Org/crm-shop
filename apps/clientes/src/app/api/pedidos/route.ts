@@ -70,7 +70,7 @@ const texto = (v: unknown, max = 200) =>
 export async function POST(req: Request) {
   // Alcanza con estar logueado: quien no vinculó cuenta corriente compra igual,
   // a lista general. La vinculación da precios propios, no permiso de comprar.
-  const { clerkUserId, cliente } = await identidadActual();
+  const { clerkUserId, cliente, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -192,7 +192,16 @@ export async function POST(req: Request) {
         codigo: cliente?.codigocliente,
         razonSocial: cliente?.razonsocial,
         cuit: cliente?.cuit,
-        email: cliente?.email,
+        /**
+         * El email del contacto de Alegra, y si no hay, el de la cuenta con la
+         * que entró.
+         *
+         * Antes era solo el de Alegra, así que quien NO vinculó cuenta corriente
+         * —o sea casi todo el mundo— quedaba con `cliente_email` en null. Eso
+         * después rompe el cobro: Mercado Pago exige `payer.email` y responde
+         * "Params Error" sin decir cuál falta.
+         */
+        email: cliente?.email ?? email,
         idPriceList,
       },
       {

@@ -122,6 +122,30 @@ async function pedir(
     // El detalle va al log, nunca al comprador: los mensajes de MP filtran
     // información de la cuenta y del antifraude.
     console.error(`[mercadopago] ${res.status}:`, cuerpo?.message ?? cuerpo, cuerpo?.cause);
+
+    /**
+     * Qué campos llevaba el request. Solo los NOMBRES, nunca los valores: acá
+     * viajan el token de la tarjeta y el email del comprador.
+     *
+     * MP responde "Params Error" sin decir qué parámetro falta, y varios campos
+     * se mandan solo si existen. Sin esta línea, diagnosticar un 400 es adivinar
+     * — que es exactamente lo que costó descubrir que faltaba `payer.email`.
+     */
+    if (typeof resto.body === "string") {
+      try {
+        const enviado = JSON.parse(resto.body) as Record<string, unknown>;
+        const payer = enviado.payer as Record<string, unknown> | undefined;
+        console.error(
+          "[mercadopago] campos enviados:",
+          Object.keys(enviado).join(", "),
+          "| payer:",
+          payer ? Object.keys(payer).join(", ") : "AUSENTE",
+        );
+      } catch {
+        // Cuerpo no parseable: el error de arriba ya alcanza.
+      }
+    }
+
     throw new Error(`Mercado Pago respondió ${res.status}`);
   }
 

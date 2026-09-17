@@ -40,11 +40,11 @@ export const TEXTOS_CUOTAS = {
   cft: (pct: number) => `CFT ${fmtPct(pct)}`,
   tea: (pct: number) => `TEA ${fmtPct(pct)}`,
 
-  /** "6 cuotas sin interés de $20.000" / "Hasta 12 cuotas de $13.500". */
+  /** "6 cuotas sin interés de $20.000" / "12 cuotas de $13.500". */
   linea: (cuotas: number, montoCuota: number, sinInteres: boolean) =>
     sinInteres
       ? `${cuotasDe(cuotas)} sin interés de ${fmtMonto(montoCuota)}`
-      : `Hasta ${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,
+      : `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,
 
   /** Cuotas de una fila del modal: "6 cuotas de $20.000". */
   filaCuotas: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,

@@ -50,7 +50,7 @@ describe("textos", () => {
 
   it("línea de la card: sin interés con su cantidad; con interés 'Hasta N'", () => {
     expect(TEXTOS_CUOTAS.linea(6, 20000, true)).toBe("6 cuotas sin interés de $20.000");
-    expect(TEXTOS_CUOTAS.linea(12, 13500, false)).toBe("Hasta 12 cuotas de $13.500");
+    expect(TEXTOS_CUOTAS.linea(12, 13500, false)).toBe("12 cuotas de $13.500");
   });
 
   it("carrito: hasta N y te faltan para hasta N", () => {

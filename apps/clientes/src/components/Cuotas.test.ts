@@ -50,13 +50,13 @@ describe("CuotasLinea (card y ficha)", () => {
     expect(t).toBe("6 cuotas sin interés de $20.000");
   });
 
-  it("con interés: 'Hasta N cuotas de $X', no dice 'sin interés'", () => {
+  it("con interés: 'N cuotas de $X', no dice 'sin interés'", () => {
     const t = texto(
       renderToStaticMarkup(
         createElement(CuotasLinea, { opcion: opcion({ cuotas: 12, montoCuota: 13500, sinInteres: false }) }),
       ),
     );
-    expect(t).toBe("Hasta 12 cuotas de $13.500");
+    expect(t).toBe("12 cuotas de $13.500");
     expect(t).not.toContain("sin interés");
   });
 

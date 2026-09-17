@@ -73,9 +73,9 @@ describe("CuotasLinea (card y ficha)", () => {
 });
 
 describe("CuotasCard (slot installments de ProductCard)", () => {
-  it("línea + leyenda de referencia, sin bloque propio", () => {
+  it("sólo la línea de cuotas, sin bloque propio", () => {
     const html = renderToStaticMarkup(createElement(CuotasCard, { opcion: opcion({}) }));
-    expect(texto(html)).toBe("6 cuotas sin interés de $20.000 Valor de referencia");
+    expect(texto(html)).toBe("6 cuotas sin interés de $20.000");
     // Va adentro de la card: sólo spans, nada que rompa el layout del slot.
     expect(html.startsWith("<span")).toBe(true);
   });
@@ -143,7 +143,7 @@ describe("CuotasResumen (carrito)", () => {
     [ofertada({ cuotas: 3 }), ofertada({ cuotas: 6 })],
   );
 
-  it("máximo, te faltan, barra al 80% y leyenda", () => {
+  it("máximo, te faltan y barra al 80%", () => {
     const html = renderToStaticMarkup(createElement(CuotasResumen, { resumen: resumenCuotas(120000, o) }));
     const t = texto(html);
     expect(t).toContain("Hasta 3 cuotas sin interés");
@@ -151,7 +151,6 @@ describe("CuotasResumen (carrito)", () => {
     expect(html).toContain('role="progressbar"');
     expect(html).toContain('aria-valuenow="80"');
     expect(html).toContain("width:80%");
-    expect(t).toContain(TEXTOS_CUOTAS.leyenda);
   });
 
   it("sin resumen (carrito vacío, flag off, sin datos) → nada", () => {

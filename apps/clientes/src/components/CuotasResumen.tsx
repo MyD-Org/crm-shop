@@ -1,5 +1,4 @@
 import { Progress } from "@myd-org/ui";
-import { CuotasLeyenda } from "@/components/CuotasLeyenda";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { ResumenCuotas } from "@/lib/cuotas-exhibicion";
 
@@ -46,7 +45,6 @@ export function CuotasResumen({
           />
         </div>
       )}
-      <CuotasLeyenda className="mt-2" />
     </div>
   );
 }

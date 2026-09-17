@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Badge, Checkbox, Chip, ProductCard, Select } from "@myd-org/ui";
 import { Footer } from "@/components/Footer";
 import { AddToCartButton } from "@/components/AddToCartButton";
-import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasCard } from "@/components/CuotasCard";
 import type { Product } from "@/data/products";
 import type { Facetas } from "@/lib/catalog";
@@ -216,9 +215,6 @@ export function CatalogoClient({
                         disabled={p.stock === "out"}
                         product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
                       />
-                    }
-                    priceNote={
-                      <PrecioConImpuestos price={p.price} precioFinal={p.precioFinal} variante="nota" />
                     }
                     installments={<CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />}
                   />

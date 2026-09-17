@@ -7,7 +7,6 @@ import { Footer } from "@/components/Footer";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { useEffect, useState } from "react";
 import type { Product } from "@/data/products";
-import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasCard } from "@/components/CuotasCard";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -293,9 +292,6 @@ export function HomeClient({ oferta }: { oferta: OfertaCuotas | null }) {
                   }
                   image={<LightbulbIcon className="h-20 w-20 text-muted/25" />}
                   action={<AddToCartButton product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }} />}
-                  priceNote={
-                    <PrecioConImpuestos price={p.price} precioFinal={p.precioFinal} variante="nota" />
-                  }
                   installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
                 />
               </Link>

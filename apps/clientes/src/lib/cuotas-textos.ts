@@ -1,7 +1,7 @@
 /**
  * Textos de exhibición de cuotas. TODOS en un solo lugar: están sujetos a la
  * revisión del contador (tarea 0.4 de cuotas-configurables), así que cambiar
- * una leyenda no tiene que obligar a recorrer componentes.
+ * un texto no tiene que obligar a recorrer componentes.
  *
  * Módulo puro: lo usan componentes de cliente y de servidor.
  */
@@ -23,10 +23,8 @@ export function fmtPct(n: number): string {
 const cuotasDe = (n: number) => (n === 1 ? "1 cuota" : `${n} cuotas`);
 
 export const TEXTOS_CUOTAS = {
-  /** Leyenda obligatoria en toda superficie previa al Brick que muestre cuotas. */
+  /** Leyenda de referencia: ficha y modal de medios de pago (no en las cards). */
   leyenda: "Valores de referencia. El valor final de las cuotas depende de tu banco.",
-  /** Versión corta para la card del catálogo. */
-  leyendaCorta: "Valor de referencia",
 
   verMediosDePago: "Ver medios de pago",
   tituloModal: "Medios de pago",

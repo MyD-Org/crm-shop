@@ -10,7 +10,7 @@ import { PrecioConImpuestos } from "./PrecioConImpuestos";
 const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
 describe("PrecioConImpuestos", () => {
-  it("ficha: precio final grande y neto con la leyenda legal", () => {
+  it("precio final grande y neto con la leyenda legal", () => {
     const html = renderToStaticMarkup(
       createElement(PrecioConImpuestos, { price: 100000, precioFinal: 121000 }),
     );
@@ -29,17 +29,4 @@ describe("PrecioConImpuestos", () => {
     expect(t).not.toContain("SIN IMPUESTOS");
   });
 
-  it("variante nota (card): sólo la línea del neto, y nada si no hay precio final", () => {
-    const conFinal = texto(
-      renderToStaticMarkup(
-        createElement(PrecioConImpuestos, { price: 100000, precioFinal: 110500, variante: "nota" }),
-      ),
-    );
-    expect(conFinal).toBe("PRECIO SIN IMPUESTOS NACIONALES $100.000");
-
-    const sinFinal = renderToStaticMarkup(
-      createElement(PrecioConImpuestos, { price: 100000, variante: "nota" }),
-    );
-    expect(sinFinal).toBe("");
-  });
 });

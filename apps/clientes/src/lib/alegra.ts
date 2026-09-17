@@ -33,13 +33,30 @@ const PAGE_SIZE = 30;
 /**
  * Páginas que se piden en paralelo por tanda. Con ~2800 items, pedir de a una
  * (await secuencial) son ~94 round-trips y la función serverless se come el
- * timeout. Mismo valor y misma razón que en el CRM.
+ * timeout. Con 8 Alegra empezó a responder 429 (13/09/2026) y la sync diaria
+ * fallaba entera: 4 sigue entrando holgado en los 300 s del cron.
  */
-const PAGE_CONCURRENCY = 8;
+const PAGE_CONCURRENCY = 4;
+
+/** Reintentos ante 429 antes de rendirse. Backoff 1-2-4-8-16 s ≈ 31 s peor caso. */
+const MAX_RETRIES_429 = 5;
+const BACKOFF_BASE_MS = 1_000;
+/** Tope a un Retry-After exagerado: no puede comerse el presupuesto del cron. */
+const MAX_RETRY_AFTER_MS = 30_000;
+
+function esperaTras429(res: Response, intento: number): number {
+  const retryAfter = Number(res.headers.get("retry-after"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return Math.min(retryAfter * 1_000, MAX_RETRY_AFTER_MS);
+  }
+  return BACKOFF_BASE_MS * 2 ** intento;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Fetch generico contra la API de Alegra. Arma el querystring, aplica auth
- * y normaliza el manejo de errores.
+ * y normaliza el manejo de errores. Ante 429 (rate limit) espera y reintenta.
  */
 async function apiFetch<T>(path: string, params: QueryParams = {}): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
@@ -47,15 +64,21 @@ async function apiFetch<T>(path: string, params: QueryParams = {}): Promise<T> {
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: authHeader(),
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    // Datos de gestion: no cachear a nivel fetch, lo maneja cada caller.
-    cache: "no-store",
-  });
+  let res: Response;
+  for (let intento = 0; ; intento++) {
+    res = await fetch(url, {
+      headers: {
+        Authorization: authHeader(),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      // Datos de gestion: no cachear a nivel fetch, lo maneja cada caller.
+      cache: "no-store",
+    });
+    if (res.status !== 429 || intento >= MAX_RETRIES_429) break;
+    await res.body?.cancel();
+    await sleep(esperaTras429(res, intento));
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");

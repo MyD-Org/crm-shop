@@ -23,9 +23,6 @@ export function fmtPct(n: number): string {
 const cuotasDe = (n: number) => (n === 1 ? "1 cuota" : `${n} cuotas`);
 
 export const TEXTOS_CUOTAS = {
-  /** Leyenda de referencia: ficha y modal de medios de pago (no en las cards). */
-  leyenda: "Valores de referencia. El valor final de las cuotas depende de tu banco.",
-
   verMediosDePago: "Ver medios de pago",
   tituloModal: "Medios de pago",
   descripcionModal: (precio: number) => `Opciones de pago para ${fmtMonto(precio)}`,

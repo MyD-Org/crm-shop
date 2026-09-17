@@ -7,7 +7,6 @@ import { Footer } from "@/components/Footer";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
-import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
@@ -48,7 +47,9 @@ const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> =
  * Alegra provee: nombre, marca, SKU, descripcion, precio, stock y categoria.
  * NO provee imagenes, especificaciones, opiniones, variantes ni precios por
  * volumen: esas secciones se mantienen visibles pero vacias, a la espera de la
- * capa propia del shop (ver docs/arquitectura-integraciones.md).
+ * capa propia del shop (ver docs/arquitectura-integraciones.md). Variantes y
+ * precio por cantidad son la excepcion: sin datos no se dibuja nada, porque un
+ * bloque que siempre dice "no hay" no le sirve a nadie.
  */
 export function ProductoClient({
   producto,
@@ -126,7 +127,6 @@ export function ProductoClient({
                     oferta={oferta}
                     className="mt-1 text-[#9ed0ff]"
                   />
-                  <p className="mt-1 text-[11px] text-white/60">{TEXTOS_CUOTAS.leyenda}</p>
                 </div>
               )}
               <div className="mt-3 flex items-center gap-3">
@@ -143,12 +143,6 @@ export function ProductoClient({
               </div>
             </div>
 
-            {/* Variantes — sin datos en Alegra */}
-            <div>
-              <p className="mb-2 text-sm font-medium text-text">Variantes</p>
-              <SinDatos>Este producto no tiene variantes cargadas.</SinDatos>
-            </div>
-
             {/* Cantidad + agregar */}
             <div className="flex items-center gap-3">
               <QuantityStepper value={qty} onValueChange={setQty} min={1} max={999} />
@@ -160,12 +154,6 @@ export function ProductoClient({
                 <CartIcon />
                 {agotado ? "Sin stock" : "Agregar al carrito"}
               </Button>
-            </div>
-
-            {/* Precios por volumen — sin listas de precios cargadas todavia */}
-            <div>
-              <p className="mb-2 text-sm font-medium text-text">Precio por cantidad</p>
-              <SinDatos>No hay precios por volumen cargados.</SinDatos>
             </div>
           </div>
         </div>

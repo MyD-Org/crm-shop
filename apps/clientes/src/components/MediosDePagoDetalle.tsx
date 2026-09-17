@@ -1,4 +1,3 @@
-import { CuotasLeyenda } from "@/components/CuotasLeyenda";
 import { fmtMonto, TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { BloqueProveedor } from "@/lib/cuotas-exhibicion";
 
@@ -59,7 +58,6 @@ export function MediosDePagoDetalle({ bloques }: { bloques: BloqueProveedor[] })
           )}
         </section>
       ))}
-      <CuotasLeyenda />
     </div>
   );
 }

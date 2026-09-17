@@ -127,10 +127,6 @@ describe("MediosDePagoDetalle (modal de la ficha)", () => {
     expect(soloUnPago).toContain(TEXTOS_CUOTAS.sinOpcionesMedio);
   });
 
-  it("incluye la leyenda de referencia", () => {
-    expect(t).toContain(TEXTOS_CUOTAS.leyenda);
-  });
-
   it("secciones con encabezado accesible", () => {
     expect(html).toContain('aria-labelledby="proveedor-mercadopago"');
     expect(html).toContain('id="proveedor-mercadopago"');

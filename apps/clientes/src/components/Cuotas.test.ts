@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { CuotasCard } from "./CuotasCard";
 import { CuotasLinea } from "./CuotasLinea";
 import { CuotasResumen } from "./CuotasResumen";
 import { MediosDePagoDetalle } from "./MediosDePagoDetalle";
@@ -61,6 +62,26 @@ describe("CuotasLinea (card y ficha)", () => {
 
   it("sin opción → nada", () => {
     expect(renderToStaticMarkup(createElement(CuotasLinea, { opcion: null }))).toBe("");
+  });
+
+  it("tamaño sm (card) es más chico que el default", () => {
+    const sm = renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion({}), tamano: "sm" }));
+    const md = renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion({}) }));
+    expect(sm).toContain("text-xs");
+    expect(md).toContain("text-sm");
+  });
+});
+
+describe("CuotasCard (slot installments de ProductCard)", () => {
+  it("línea + leyenda de referencia, sin bloque propio", () => {
+    const html = renderToStaticMarkup(createElement(CuotasCard, { opcion: opcion({}) }));
+    expect(texto(html)).toBe("6 cuotas sin interés de $20.000 Valor de referencia");
+    // Va adentro de la card: sólo spans, nada que rompa el layout del slot.
+    expect(html.startsWith("<span")).toBe(true);
+  });
+
+  it("sin opción → nada", () => {
+    expect(renderToStaticMarkup(createElement(CuotasCard, { opcion: null }))).toBe("");
   });
 });
 

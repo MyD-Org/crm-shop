@@ -217,12 +217,11 @@ export function CatalogoClient({
                         product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
                       />
                     }
+                    priceNote={
+                      <PrecioConImpuestos price={p.price} precioFinal={p.precioFinal} variante="nota" />
+                    }
+                    installments={<CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />}
                   />
-                  {/* Fallback hasta que ProductCard de @myd-org/ui tenga slots `priceNote` / `installments`. */}
-                  <div className="px-1 pt-1">
-                    <PrecioConImpuestos price={p.price} precioFinal={p.precioFinal} variante="nota" />
-                    <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
-                  </div>
                 </Link>
               ))}
             </div>

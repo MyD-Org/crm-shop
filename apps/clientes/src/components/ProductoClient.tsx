@@ -120,7 +120,7 @@ export function ProductoClient({
               <PrecioConImpuestos price={producto.price} precioFinal={producto.precioFinal} />
               {mejorCuota && oferta && producto.precioFinal != null && (
                 <div className="mt-3 border-t border-white/15 pt-3">
-                  <CuotasLinea opcion={mejorCuota} tono="oscuro" grande />
+                  <CuotasLinea opcion={mejorCuota} tono="oscuro" tamano="lg" className="block" />
                   <MediosDePagoModal
                     precioFinal={producto.precioFinal}
                     oferta={oferta}

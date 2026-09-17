@@ -55,7 +55,7 @@ export function HeaderUI({
 
       {/* Main header */}
       <div className="border-b border-border bg-surface">
-        <div className="mx-auto flex h-[72px] max-w-7xl items-center gap-8 px-4">
+        <div className="mx-auto flex h-[72px] max-w-contenido items-center gap-8 px-4">
           {/* Logo */}
           <Link href="/" className="shrink-0">
             <div className="flex items-center gap-3">
@@ -128,7 +128,7 @@ export function HeaderUI({
       {/* Category nav */}
       {!hideCategorias && categorias.length > 0 && (
       <nav className="border-b border-border bg-elevated">
-        <div className="no-scrollbar mx-auto flex max-w-7xl items-center gap-0 overflow-x-auto px-4">
+        <div className="no-scrollbar mx-auto flex max-w-contenido items-center gap-0 overflow-x-auto px-4">
           {categorias.map((cat) => (
             <Link
               key={cat}

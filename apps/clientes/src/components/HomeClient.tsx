@@ -105,7 +105,7 @@ export function HomeClient({ oferta }: { oferta: OfertaCuotas | null }) {
         <section className="relative overflow-hidden bg-[#07193a]">
           <div className="absolute inset-0 bg-[radial-gradient(820px_380px_at_80%_18%,rgba(46,168,255,0.3),transparent_60%),radial-gradient(640px_460px_at_6%_100%,rgba(23,99,214,0.34),transparent_60%)]" />
 
-          <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-16 lg:grid-cols-2 lg:py-20">
+          <div className="relative mx-auto grid max-w-contenido gap-8 px-4 py-16 lg:grid-cols-2 lg:py-20">
             {/* Left */}
             <div className="flex flex-col justify-center">
               <span className="mb-5 inline-flex w-fit items-center gap-2 rounded-full border border-[#92d1ff]/30 bg-white/[0.08] px-[13px] py-1.5 text-xs font-bold text-[#9ed0ff]">
@@ -191,7 +191,7 @@ export function HomeClient({ oferta }: { oferta: OfertaCuotas | null }) {
 
         {/* ── Benefits bar ─────────────────────────────── */}
         <section className="bg-surface-darker">
-          <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-white/10 lg:grid-cols-4">
+          <div className="mx-auto grid max-w-contenido grid-cols-2 divide-x divide-white/10 lg:grid-cols-4">
             {[
               { icon: <TruckIcon />, text: "Envío gratis", sub: "+$100.000" },
               { icon: <StoreIcon />, text: "Retiro en local", sub: "sin cargo" },
@@ -220,7 +220,7 @@ export function HomeClient({ oferta }: { oferta: OfertaCuotas | null }) {
         </section>
 
         {/* ── Explorá por rubro ────────────────────────── */}
-        <section className="mx-auto max-w-7xl px-4 py-14">
+        <section className="mx-auto max-w-contenido px-4 py-14">
           <div className="mb-2 flex items-end justify-between">
             <div>
               <h2 className="text-2xl font-extrabold text-text">
@@ -263,7 +263,7 @@ export function HomeClient({ oferta }: { oferta: OfertaCuotas | null }) {
         </section>
 
         {/* ── Lo más vendido ───────────────────────────── */}
-        <section className="mx-auto max-w-7xl px-4 pb-14">
+        <section className="mx-auto max-w-contenido px-4 pb-14">
           <div className="mb-6 flex items-end justify-between">
             <h2 className="text-2xl font-extrabold text-text">
               Lo más vendido
@@ -300,7 +300,7 @@ export function HomeClient({ oferta }: { oferta: OfertaCuotas | null }) {
         </section>
 
         {/* ── WhatsApp CTA ─────────────────────────────── */}
-        <section className="mx-auto max-w-7xl px-4 pb-14">
+        <section className="mx-auto max-w-contenido px-4 pb-14">
           <div className="relative flex items-center justify-between gap-6 overflow-hidden rounded-2xl bg-[linear-gradient(120deg,#0a2550,#1763d6)] px-8 py-8 sm:px-12">
             {/* Cyan glow top-right */}
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(500px_200px_at_88%_0%,rgba(46,168,255,0.3),transparent_60%)]" />

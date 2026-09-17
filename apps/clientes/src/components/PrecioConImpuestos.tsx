@@ -1,5 +1,5 @@
 /**
- * Precio final con IVA + "PRECIO SIN IMPUESTOS NACIONALES" (Ley 27.743 /
+ * Precio final con IVA + "precio sin impuestos nacionales" (Ley 27.743 /
  * Res. 4/2025).
  *
  * No depende de CUOTAS_ENABLED. Sin `precioFinal` (producto sin IVA conocido)
@@ -23,8 +23,8 @@ export function PrecioConImpuestos({ price, precioFinal }: Props) {
     <div>
       <span className="text-4xl font-extrabold text-white">{fmt(precioFinal ?? price)}</span>
       {precioFinal != null && (
-        <p className="mt-1 text-xs uppercase tracking-wide text-white/70">
-          PRECIO SIN IMPUESTOS NACIONALES {fmt(price)}
+        <p className="mt-1 text-xs tracking-wide text-white/70">
+          precio sin impuestos nacionales {fmt(price)}
         </p>
       )}
     </div>

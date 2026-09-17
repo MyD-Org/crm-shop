@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useState, useSyncExternalStore } from "react";
 
 /**
  * Carrito del cliente, persistido en localStorage.
@@ -145,6 +145,12 @@ interface CartContextValue {
   count: number;
   /** false durante el render del servidor y la hidratación. */
   ready: boolean;
+  /**
+   * Contador que sube con cada `addItem`. El preview del header lo mira para
+   * abrirse solo: es un contador y no un booleano para que dos altas seguidas
+   * del mismo producto vuelvan a disparar el efecto.
+   */
+  aperturaPreview: number;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -159,7 +165,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     () => false,
   );
 
+  const [aperturaPreview, setAperturaPreview] = useState(0);
+
   const addItem = useCallback((newItem: Omit<CartItem, "qty">, qty = 1) => {
+    setAperturaPreview((n) => n + 1);
     actualizar((prev) => {
       const existing = prev.find((i) => i.id === newItem.id);
       if (existing) {
@@ -192,7 +201,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, clear, total, count, ready }}
+      value={{ items, addItem, removeItem, updateQty, clear, total, count, ready, aperturaPreview }}
     >
       {children}
     </CartContext.Provider>

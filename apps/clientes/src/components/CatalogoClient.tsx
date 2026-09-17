@@ -96,7 +96,7 @@ export function CatalogoClient({
 
   return (
     <>
-      <main className="mx-auto flex max-w-7xl flex-1 gap-6 px-4 py-8">
+      <main className="mx-auto flex max-w-contenido flex-1 gap-6 px-4 py-8">
         {/* Sidebar filtros */}
         <aside className="hidden w-60 shrink-0 lg:block">
           <div className="space-y-6">
@@ -190,7 +190,7 @@ export function CatalogoClient({
             <div
               // Mientras el server arma la página siguiente, la grilla vigente
               // se atenúa: el visitante ve que algo está pasando.
-              className={`grid grid-cols-1 gap-4 transition-opacity sm:grid-cols-2 xl:grid-cols-3 ${
+              className={`grid grid-cols-1 gap-4 transition-opacity sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 ${
                 navegando ? "opacity-50" : ""
               }`}
               aria-busy={navegando}

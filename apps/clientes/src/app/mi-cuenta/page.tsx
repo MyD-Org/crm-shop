@@ -24,7 +24,7 @@ export default async function MiCuentaPage() {
 
   return (
     <>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
         <MisCompras
           nombre={cliente?.razonsocial ?? nombre ?? email ?? "cliente"}
           cuit={cliente?.cuit}

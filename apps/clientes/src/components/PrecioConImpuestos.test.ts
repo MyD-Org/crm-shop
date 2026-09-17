@@ -16,7 +16,7 @@ describe("PrecioConImpuestos", () => {
     );
     const t = texto(html);
     expect(t).toContain("$121.000");
-    expect(t).toContain("PRECIO SIN IMPUESTOS NACIONALES $100.000");
+    expect(t).toContain("precio sin impuestos nacionales $100.000");
     // El final va antes que el neto: es el principal.
     expect(t.indexOf("$121.000")).toBeLessThan(t.indexOf("$100.000"));
   });
@@ -26,7 +26,7 @@ describe("PrecioConImpuestos", () => {
       renderToStaticMarkup(createElement(PrecioConImpuestos, { price: 100000 })),
     );
     expect(t).toBe("$100.000");
-    expect(t).not.toContain("SIN IMPUESTOS");
+    expect(t).not.toContain("sin impuestos");
   });
 
 });

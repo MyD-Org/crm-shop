@@ -1,7 +1,6 @@
 "use client";
 
 import { useCart, type CartItem } from "@/context/CartContext";
-import { useToast } from "@myd-org/ui";
 
 function PlusIcon() {
   return (
@@ -27,7 +26,6 @@ interface AddToCartButtonProps {
 
 export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
   const { items, addItem, removeItem, updateQty } = useCart();
-  const { toast } = useToast();
 
   const inCart = product ? items.find((i) => i.id === product.id) : null;
   const qty = inCart?.qty ?? 0;
@@ -35,13 +33,8 @@ export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
   function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     if (!product) return;
+    // Sin toast: el preview del header se abre solo y muestra lo que entró.
     addItem(product);
-    toast({
-      title: "Agregado al carrito",
-      description: `${product.name} · ${product.brand}`,
-      tone: "success",
-      action: { label: "Ver carrito", href: "/carrito" },
-    });
   }
 
   function handleIncrease(e: React.MouseEvent) {

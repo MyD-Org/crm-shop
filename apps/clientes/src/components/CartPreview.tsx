@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
@@ -29,7 +29,30 @@ const fmt = (n: number) =>
 export function CartPreview() {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { items, total, count } = useCart();
+  const { items, total, count, aperturaPreview } = useCart();
+
+  /**
+   * Agregar al carrito (desde una card o desde la ficha) abre el preview unos
+   * segundos: el comprador ve qué quedó adentro sin irse de donde está.
+   *
+   * La apertura se ajusta en el render, no en un efecto: así el dropdown ya
+   * sale pintado en el mismo commit del alta, sin un frame de más. El cierre
+   * sí va en un efecto, y usa el MISMO ref que el hover, para que el mouse
+   * encima lo cancele.
+   */
+  const [ultimaAlta, setUltimaAlta] = useState(0);
+  if (aperturaPreview !== ultimaAlta) {
+    setUltimaAlta(aperturaPreview);
+    setOpen(true);
+  }
+
+  useEffect(() => {
+    if (aperturaPreview === 0) return;
+    closeTimer.current = setTimeout(() => setOpen(false), 4000);
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, [aperturaPreview]);
 
   function handleMouseEnter() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -84,12 +107,12 @@ export function CartPreview() {
                   Carrito ({count} productos)
                 </p>
 
-                <ul className="max-h-72 space-y-3 overflow-y-auto">
+                <ul className="-mx-1 max-h-72 space-y-3 overflow-y-auto px-1">
                   {items.map((item) => (
                     <li key={item.id}>
                       <Link
                         href={`/producto/${item.id}`}
-                        className="flex items-center gap-3 rounded-lg p-1 -mx-1 transition-colors hover:bg-elevated"
+                        className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-elevated"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted/40">
                           <LightbulbIcon />

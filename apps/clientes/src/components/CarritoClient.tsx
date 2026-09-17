@@ -59,7 +59,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
   if (!ready) {
     return (
       <>
-        <main className="mx-auto flex max-w-7xl flex-1 items-center justify-center px-4 py-20">
+        <main className="mx-auto flex max-w-contenido flex-1 items-center justify-center px-4 py-20">
           <p className="text-sm text-muted">Cargando tu carrito…</p>
         </main>
         <Footer />
@@ -70,7 +70,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
   if (items.length === 0) {
     return (
       <>
-        <main className="mx-auto flex max-w-7xl flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
+        <main className="mx-auto flex max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
           <p className="text-2xl font-bold text-text">Tu carrito está vacío</p>
           <Link href="/catalogo">
             <Button>Ver catálogo</Button>
@@ -105,7 +105,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
 
   return (
     <>
-      <main className="mx-auto max-w-7xl flex-1 px-4 py-8">
+      <main className="mx-auto max-w-contenido flex-1 px-4 py-8">
         <h1 className="mb-6 text-2xl font-extrabold text-text">Carrito de compras</h1>
 
         {estado === "no_auth" && (

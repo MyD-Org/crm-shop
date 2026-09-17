@@ -2,6 +2,16 @@
 @import "@myd-org/ui/tailwind.css";
 @source "../../node_modules/@myd-org/ui/dist";
 
+/*
+ * Ancho del contenido. UN solo lugar: header, catálogo, ficha, carrito,
+ * checkout y footer usan `max-w-contenido` y quedan alineados entre sí. Antes
+ * era `max-w-contenido` (1280px) repetido en 16 lugares, que en monitores grandes
+ * dejaba medio pantalla de margen vacío.
+ */
+@theme {
+  --container-contenido: 1600px;
+}
+
 :root {
   --color-primary: #1763d6;
   --color-primary-hover: #1257bd;

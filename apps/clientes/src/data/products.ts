@@ -12,7 +12,15 @@ export interface Product {
   id: string;
   name: string;
   brand: string;
+  /** Precio NETO (sin IVA) de la lista del visitante. Lo usan carrito y cotización. */
   price: number;
+  /** Alícuota de IVA conocida del ítem. undefined = sin IVA persistido todavía. */
+  ivaPorcentaje?: number;
+  /**
+   * Precio final con IVA para exhibir (ver src/lib/precio-final.ts). undefined
+   * si no hay IVA conocido: se muestra `price` como siempre, sin neto.
+   */
+  precioFinal?: number;
   stock: ProductStock;
   /** Unidades disponibles segun Alegra. undefined = item sin inventario. */
   stockQty?: number;

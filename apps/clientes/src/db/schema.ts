@@ -11,6 +11,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
 
 /**
  * Espejo local del catálogo de Alegra.
@@ -64,6 +65,13 @@ export const catalogProducts = pgTable(
     prices: jsonb("prices").notNull().default([]),
     /** Snapshot de inventario. null = ítem no inventariable (siempre disponible). */
     stock: numeric("stock"),
+    /**
+     * Alícuota de IVA del ítem (21.00, 10.50, 0.00…), para exhibir precio final
+     * y "precio sin impuestos nacionales". null = Alegra no mandó `tax` o el
+     * producto todavía no pasó por una sync: se muestra el precio como antes.
+     * Nunca se completa con el default de la cotización (ver `ivaPersistible`).
+     */
+    ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }),
     status: text("status").notNull().default("active"),
     syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -342,6 +350,20 @@ export const orders = pgTable(
      */
     idempotencyKey: text("idempotency_key"),
 
+    // --- Cuotas (cambio cuotas-configurables) ---
+    /**
+     * Máximo de cuotas congelado al crear el pedido, calculado en el server sobre
+     * el total real. null = pedido anterior al cambio o sin oferta leíble al
+     * crearlo ⇒ la ruta de pago aplica el comportamiento legacy (clamp 1..24).
+     */
+    cuotasMax: integer("cuotas_max"),
+    /** Snapshot `PlanPedido` (máximo por medio, opciones, versión de config). */
+    cuotasPlan: jsonb("cuotas_plan").$type<PlanPedido>(),
+    /** Cuotas reales que informó el proveedor al confirmar el pago. */
+    pagoCuotas: integer("pago_cuotas"),
+    /** Total pagado real (con interés) según el proveedor. `total` no cambia. */
+    pagoTotalPagado: numeric("pago_total_pagado", { precision: 14, scale: 2 }),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -410,3 +432,37 @@ export const catalogSyncLog = pgTable(
   },
   (t) => [index("csl_started").on(t.startedAt)],
 );
+
+/**
+ * Última copia BUENA de los planes de cuotas de un proveedor para un medio
+ * (tasas reales, CFT, TEA). Se reemplaza sólo si la respuesta es válida: un
+ * fallo deja `planes` y `fetchedAt` como estaban y anota `lastError`.
+ */
+export const paymentPlanSnapshots = pgTable(
+  "payment_plan_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    proveedor: text("proveedor").notNull(), // 'mercadopago'
+    medio: text("medio").notNull(), // 'visa' | 'master'
+    planes: jsonb("planes").$type<PlanDeCuotas[]>().notNull().default([]),
+    /** null = nunca hubo una copia buena. */
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }),
+    /** Lock optimista: evita dos sync simultáneas (cron + lazy). */
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastError: text("last_error"),
+  },
+  (t) => [uniqueIndex("pps_proveedor_medio").on(t.proveedor, t.medio)],
+);
+
+/**
+ * Caché de la configuración de cuotas del CRM (contrato v1) por tenant. Un
+ * payload válido sin opciones se guarda igual: vacío válido no es un fallo.
+ */
+export const paymentConfigCache = pgTable("payment_config_cache", {
+  tenant: text("tenant").primaryKey(), // SHOP_TENANT_ID
+  payload: jsonb("payload"),
+  version: text("version"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  lastError: text("last_error"),
+});

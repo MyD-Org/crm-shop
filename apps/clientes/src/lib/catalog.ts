@@ -24,12 +24,14 @@ import { getDb } from "@/db";
 import { catalogCategories, catalogProducts } from "@/db/schema";
 import {
   getItem,
+  ivaPersistible,
   marcaDeCustomFields,
   precioDeLista,
   resolverPrecio,
   type AlegraItem,
   type AlegraPrice,
 } from "./alegra";
+import { precioFinal } from "./precio-final";
 import { stockSimulado } from "./stock-simulado";
 import type { Product } from "@/data/products";
 
@@ -75,19 +77,35 @@ interface FilaCatalogo {
   brand: string | null;
   prices: unknown;
   stock: string | null;
+  /** numeric de Postgres: llega como string. null = sin IVA conocido. */
+  ivaPorcentaje: string | null;
   categoryName: string | null;
 }
 
-function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Product {
+/**
+ * Campos de precio con impuestos, mismos para espejo y ficha en vivo. Sin IVA
+ * conocido quedan undefined y la exhibición muestra el precio como antes.
+ */
+function camposIva(
+  precioNeto: number,
+  iva: number | null,
+): Pick<Product, "ivaPorcentaje" | "precioFinal"> {
+  if (iva == null || !Number.isFinite(iva)) return {};
+  return { ivaPorcentaje: iva, precioFinal: precioFinal(precioNeto, iva) };
+}
+
+export function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
   const simular = stockSimulado();
+  const price = precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList);
   return {
     id: fila.alegraId,
     // La marca sale del customField de Alegra; si no está cargado, cae al
     // nombre de la categoría (mismo criterio que la ficha en vivo).
     brand: fila.brand || fila.categoryName || "",
     name: fila.name,
-    price: precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList),
+    price,
+    ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
     stock: derivarStock(qty, simular),
     stockQty: qty ?? undefined,
     sku: fila.code || undefined,
@@ -106,6 +124,7 @@ const COLUMNAS_CATALOGO = {
   brand: catalogProducts.brand,
   prices: catalogProducts.prices,
   stock: catalogProducts.stock,
+  ivaPorcentaje: catalogProducts.ivaPorcentaje,
   categoryName: catalogCategories.name,
 };
 
@@ -192,11 +211,13 @@ export function mapItemToProduct(
   idPriceList?: string
 ): Product {
   const categoria = item.itemCategory as { name?: string } | undefined;
+  const price = resolverPrecio(item, idPriceList);
   return {
     id: item.id,
     name: item.name,
     brand: marcaDeCustomFields(item.customFields) || categoria?.name || "",
-    price: resolverPrecio(item, idPriceList),
+    price,
+    ...camposIva(price, ivaPersistible(item)),
     stock: derivarStock(item.inventory?.availableQuantity, stockSimulado()),
     stockQty: item.inventory?.availableQuantity ?? undefined,
     sku: item.reference || undefined,

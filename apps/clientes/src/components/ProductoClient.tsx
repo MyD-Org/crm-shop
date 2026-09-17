@@ -4,6 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button, PriceTier, QuantityStepper } from "@myd-org/ui";
 import { Footer } from "@/components/Footer";
+import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
+import { CuotasLinea } from "@/components/CuotasLinea";
+import { MediosDePagoModal } from "@/components/MediosDePagoModal";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
+import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import type { Product } from "@/data/products";
 
@@ -44,10 +50,20 @@ const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> =
  * volumen: esas secciones se mantienen visibles pero vacias, a la espera de la
  * capa propia del shop (ver docs/arquitectura-integraciones.md).
  */
-export function ProductoClient({ producto }: { producto: Product }) {
+export function ProductoClient({
+  producto,
+  oferta = null,
+}: {
+  producto: Product;
+  /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
+  oferta?: OfertaCuotas | null;
+}) {
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState<"specs" | "desc" | "reviews">("desc");
   const { addItem } = useCart();
+
+  // Cuotas sobre el precio final unitario: sin IVA conocido no se calcula nada.
+  const mejorCuota = mejorOpcionPara(producto.precioFinal, oferta);
 
   const estado = ESTADO_STOCK[producto.stock];
   const agotado = producto.stock === "out";
@@ -101,11 +117,18 @@ export function ProductoClient({ producto }: { producto: Product }) {
 
             {/* Card de precio */}
             <div className="rounded-xl bg-[linear-gradient(135deg,#0a2550,#143f82)] p-5">
-              <div className="flex items-baseline gap-3">
-                <span className="text-4xl font-extrabold text-white">
-                  ${producto.price.toLocaleString("es-AR")}
-                </span>
-              </div>
+              <PrecioConImpuestos price={producto.price} precioFinal={producto.precioFinal} />
+              {mejorCuota && oferta && producto.precioFinal != null && (
+                <div className="mt-3 border-t border-white/15 pt-3">
+                  <CuotasLinea opcion={mejorCuota} tono="oscuro" grande />
+                  <MediosDePagoModal
+                    precioFinal={producto.precioFinal}
+                    oferta={oferta}
+                    className="mt-1 text-[#9ed0ff]"
+                  />
+                  <p className="mt-1 text-[11px] text-white/60">{TEXTOS_CUOTAS.leyenda}</p>
+                </div>
+              )}
               <div className="mt-3 flex items-center gap-3">
                 <span className="flex items-center gap-1.5 text-sm text-white/70">
                   <span className={`h-2 w-2 rounded-full ${estado.color}`} />

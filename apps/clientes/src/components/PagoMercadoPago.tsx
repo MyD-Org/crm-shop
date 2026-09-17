@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
 import { Button } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
+import { customizacionBrick } from "./pago-brick";
 
 /**
  * Cobro con tarjeta dentro del sitio, con Checkout Bricks.
@@ -41,6 +42,12 @@ interface Props {
   numero: string;
   monto: number;
   emailComprador?: string;
+  /**
+   * Máximo de cuotas congelado en el pedido (sólo con CUOTAS_ENABLED). Sin
+   * valor, el Brick ofrece lo que devuelva Mercado Pago, como antes. Es
+   * constante durante la vida del pedido: no reinicia el Brick.
+   */
+  maxCuotas?: number;
   /** Se llama cuando el cobro quedó confirmado. */
   onPagado: () => void;
 }
@@ -59,6 +66,7 @@ export function PagoMercadoPago({
   numero,
   monto,
   emailComprador,
+  maxCuotas,
   onPagado,
 }: Props) {
   const [estado, setEstado] = useState<Estado>({ fase: "cargando" });
@@ -97,19 +105,11 @@ export function PagoMercadoPago({
    * Wallet Brick separado con aviso previo, pero el propio card de MP dentro
    * del Payment Brick ya cumple ese rol (logo grande, texto de MP) y ahorra
    * mantener dos bricks distintos. El aviso literal está debajo del componente.
+   *
+   * `maxInstallments` sale del pedido congelado. La identidad sólo cambia si
+   * cambia `maxCuotas` (ver `pago-brick.ts` y su test de regresión #21).
    */
-  const customization = useMemo(
-    () =>
-      ({
-        paymentMethods: {
-          creditCard: "all",
-          debitCard: "all",
-          mercadoPago: "all",
-        },
-        visual: { style: { theme: "default" } },
-      }) as const,
-    [],
-  );
+  const customization = useMemo(() => customizacionBrick(maxCuotas), [maxCuotas]);
 
   /**
    * El brick espera una promesa: mientras no se resuelva, mantiene el botón en

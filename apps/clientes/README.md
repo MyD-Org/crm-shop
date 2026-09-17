@@ -34,7 +34,11 @@ Alegra, que refresca el cron diario.
 |---|---|
 | `DATABASE_URL` **o** `POSTGRES_URL` | Conexión a Postgres. La integración Neon/Vercel inyecta `POSTGRES_URL`, así que el código acepta las dos (`DATABASE_URL` gana si están ambas). |
 | `POSTGRES_URL_NON_POOLING` | Opcional. Si está, las migraciones la usan: el DDL conviene por la conexión directa y no por el pooler. |
-| `CRON_SECRET` | Protege `/api/cron/catalog-sync`. Sin esta variable el endpoint rechaza todo. |
+| `CRON_SECRET` | Protege `/api/cron/catalog-sync` y `/api/cron/cuotas-sync`. Sin esta variable el endpoint rechaza todo. |
+| `CUOTAS_ENABLED` | `1` muestra cuotas y aplica el límite de cuotas en el pago. Cualquier otro valor (default): checkout como antes, clamp 1..24. |
+| `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v1). |
+| `INTERNAL_SECRET` | Secreto compartido con el CRM: Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
+| `SHOP_TENANT_ID` | Tenant del CRM a leer (ej. `central-led`). |
 
 El pool de conexiones es un singleton (se reusa; uno por request agotaría las
 conexiones de Postgres). Está cacheado **junto a la URL con la que se creó**, así
@@ -52,6 +56,13 @@ Primera carga del catálogo (y para probar la sync a mano):
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/catalog-sync
+```
+
+Sync de cuotas (planes de Mercado Pago + config del CRM; cada fuente conserva
+su última copia buena si falla):
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/cuotas-sync
 ```
 
 Tarda un rato: recorre ~2800 ítems paginando de a 30. Cada corrida deja registro

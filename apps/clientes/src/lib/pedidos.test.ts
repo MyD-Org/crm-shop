@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatearNumero, transicionPermitida } from "./pedidos";
+import { camposCuotasCobro, formatearNumero, transicionPermitida } from "./pedidos";
 import type { PagoEstado } from "@/data/orders";
 
 describe("formatearNumero", () => {
@@ -59,5 +59,30 @@ describe("transicionPermitida", () => {
     // "Pendiente" significa "todavía no se sabe", y de un contracargo sí se
     // sabe: la plata volvió al comprador.
     expect(transicionPermitida("pagado", "pendiente", true)).toBe(false);
+  });
+});
+
+/** Cuotas reales y total pagado (L9): se guardan aparte, el total del pedido no se toca. */
+describe("camposCuotasCobro", () => {
+  const base = { proveedor: "mercadopago", referencia: "1", estado: "pagado" as const, detalle: "accredited" };
+
+  it("6 cuotas / 144.000 → pago_cuotas y pago_total_pagado, nunca total", () => {
+    const c = camposCuotasCobro({ ...base, cuotas: 6, totalPagado: 144000 });
+    expect(c).toEqual({ pagoCuotas: 6, pagoTotalPagado: "144000.00" });
+    expect(c).not.toHaveProperty("total");
+  });
+
+  it("sin datos del proveedor → no pisa nada", () => {
+    expect(camposCuotasCobro(base)).toEqual({});
+  });
+
+  it("valores inválidos se ignoran", () => {
+    expect(camposCuotasCobro({ ...base, cuotas: 0, totalPagado: -1 })).toEqual({});
+    expect(camposCuotasCobro({ ...base, cuotas: 2.5, totalPagado: Number.NaN })).toEqual({});
+  });
+
+  it("mismo evento dos veces → mismos campos (idempotente)", () => {
+    const cobro = { ...base, cuotas: 3, totalPagado: 120000.5 };
+    expect(camposCuotasCobro(cobro)).toEqual(camposCuotasCobro(cobro));
   });
 });

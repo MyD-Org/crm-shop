@@ -59,6 +59,8 @@ export async function POST(req: Request) {
       estado: estado.estado,
       detalle: estado.detalle,
       reversion: estado.reversion,
+      cuotas: estado.cuotasPagadas,
+      totalPagado: estado.totalPagado,
     });
 
     console.log(

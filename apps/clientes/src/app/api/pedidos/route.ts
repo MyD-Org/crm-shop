@@ -10,6 +10,10 @@ import {
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { domicilioEnLinea } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
+import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
+import { cuotasHabilitadas } from "@/lib/cuotas-flag";
+import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
+import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +59,10 @@ interface BodyPedido {
  * distintos colisionaran entre sí.
  */
 const CLAVE_VALIDA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** El Brick sólo recibe el máximo con el flag prendido (D13). */
+const cuotasParaCliente = (cuotasMax: number | null) =>
+  cuotasHabilitadas() ? cuotasMax : null;
 
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -113,7 +121,10 @@ export async function POST(req: Request) {
       clienteCodigo: cliente?.codigocliente,
     });
     if (yaCreado) {
-      return NextResponse.json({ ...yaCreado, repetido: true }, { status: 200 });
+      return NextResponse.json(
+        { ...yaCreado, cuotasMax: cuotasParaCliente(yaCreado.cuotasMax), repetido: true },
+        { status: 200 },
+      );
     }
   }
 
@@ -186,6 +197,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: envio.motivo, cotizacion }, { status: 409 });
     }
 
+    /**
+     * Plan de cuotas congelado sobre el total RE-COTIZADO, con la oferta de la
+     * DB del Shop. Nada de cuotas sale del body. Se congela también con el flag
+     * apagado (así prenderlo no deja pedidos a medias). Sin oferta leíble →
+     * null: el cobro usa el clamp legacy, no se bloquea la venta.
+     */
+    let oferta: OfertaCuotas | null = null;
+    if (pagoMetodo === "mercadopago") {
+      try {
+        oferta = await getOfertaCuotasParaPedido();
+      } catch (err) {
+        console.error("[/api/pedidos] oferta de cuotas ilegible:", err);
+      }
+    }
+    const plan = planParaPedido(pagoMetodo, cotizacion.total, oferta);
+
     const pedido = await crearPedido(
       {
         clerkUserId,
@@ -228,13 +255,14 @@ export async function POST(req: Request) {
         idempotencyKey: idempotencyKey || undefined,
       },
       cotizacion,
+      plan,
     );
 
     // 200 y no 201 cuando la clave ya existía: no se creó nada nuevo. El
     // checkout trata los dos casos igual —muestra el número— pero la diferencia
     // importa para cualquiera que lea los logs.
     return NextResponse.json(
-      { ...pedido, cotizacion },
+      { ...pedido, cuotasMax: cuotasParaCliente(pedido.cuotasMax), cotizacion },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

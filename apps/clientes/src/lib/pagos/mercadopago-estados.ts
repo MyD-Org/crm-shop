@@ -86,6 +86,10 @@ export interface RespuestaMercadoPago {
   status?: string;
   status_detail?: string;
   three_ds_info?: { external_resource_url?: string; creq?: string };
+  /** Cuotas con las que se cobró (las que eligió el comprador en el Brick). */
+  installments?: number;
+  /** `total_paid_amount` incluye el interés de las cuotas. */
+  transaction_details?: { total_paid_amount?: number };
 }
 
 export function statusEfectivo(pago: RespuestaMercadoPago): string | undefined {

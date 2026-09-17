@@ -174,6 +174,12 @@ export function useCotizacion(opts: {
     cotizacion: estado === "ok" && vigente ? res.data : null,
     estado,
     error: vigente ? res.error : null,
+    /**
+     * Últimas líneas cotizadas con éxito, aunque ya no correspondan al carrito
+     * actual. Sólo para ESTIMAR mientras se recotiza (ej. la barra de cuotas del
+     * carrito); nunca para mostrar un total como confirmado.
+     */
+    ultimasLineas: res?.data?.lineas ?? null,
     /** Fuerza una recotización (botón "reintentar", o antes de confirmar). */
     recotizar: () => setNonce((n) => n + 1),
   };

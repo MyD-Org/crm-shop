@@ -160,3 +160,34 @@ describe("urlNotificacion", () => {
     expect(urlNotificacion("https://www.cliente.example")).toContain("source_news=webhooks");
   });
 });
+
+describe("interpretar — cuotas reales (L9)", () => {
+  it("expone installments y transaction_details.total_paid_amount", () => {
+    const r = interpretar({
+      id: 2001,
+      status: "approved",
+      status_detail: "accredited",
+      installments: 6,
+      transaction_details: { total_paid_amount: 144000 },
+    });
+    expect(r.cuotasPagadas).toBe(6);
+    expect(r.totalPagado).toBe(144000);
+  });
+
+  it("sin esos campos → undefined", () => {
+    const r = interpretar({ id: 2002, status: "approved", status_detail: "accredited" });
+    expect(r.cuotasPagadas).toBeUndefined();
+    expect(r.totalPagado).toBeUndefined();
+  });
+
+  it("valores basura → undefined", () => {
+    const r = interpretar({
+      id: 2003,
+      status: "approved",
+      installments: 0,
+      transaction_details: { total_paid_amount: Number.NaN },
+    } as never);
+    expect(r.cuotasPagadas).toBeUndefined();
+    expect(r.totalPagado).toBeUndefined();
+  });
+});

@@ -7,6 +7,10 @@ import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { fmtPrecio } from "@/lib/format";
+import { CuotasResumen } from "@/components/CuotasResumen";
+import { resumenCuotas } from "@/lib/cuotas-exhibicion";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
+import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import {
   CIUDADES_ENVIO,
   PAGO_LABEL,
@@ -90,12 +94,15 @@ interface Props {
   emailCliente?: string;
   /** El perfil fiscal está completo: sin esto no se puede emitir la factura. */
   facturacionCompleta: boolean;
+  /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
+  oferta?: OfertaCuotas | null;
 }
 
 export function CheckoutClient({
   nombreSugerido,
   emailCliente,
   facturacionCompleta,
+  oferta = null,
 }: Props) {
   const { items, clear, ready } = useCart();
 
@@ -118,6 +125,8 @@ export function CheckoutClient({
     numero: string;
     id: string;
     total: number;
+    /** Máximo de cuotas congelado en el pedido. null = sin límite propio (flag off o legacy). */
+    cuotasMax: number | null;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -138,6 +147,7 @@ export function CheckoutClient({
           numero: data.pedido.numero,
           id: data.pedido.id,
           total: data.pedido.total,
+          cuotasMax: typeof data.pedido.cuotasMax === "number" ? data.pedido.cuotasMax : null,
         });
         setPago("mercadopago");
       })
@@ -255,6 +265,7 @@ export function CheckoutClient({
         numero: json.numero,
         id: json.id,
         total: json.cotizacion?.total ?? cotizacion?.total ?? 0,
+        cuotasMax: typeof json.cuotasMax === "number" ? json.cuotasMax : null,
       });
       if (pagoElegido !== "mercadopago") {
         clear();
@@ -301,11 +312,21 @@ export function CheckoutClient({
           <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
         </div>
 
+        {/*
+          Plan del pedido sobre su total real, recortado al máximo congelado:
+          nunca se promete más de lo que el Brick y la ruta de pago aceptan.
+        */}
+        <CuotasResumen
+          resumen={resumenCuotas(confirmado.total, oferta, { cuotasMax: confirmado.cuotasMax })}
+          titulo={TEXTOS_CUOTAS.checkoutTitulo}
+        />
+
         <PagoMercadoPago
           pedidoId={confirmado.id}
           numero={confirmado.numero}
           monto={confirmado.total}
           emailComprador={emailCliente}
+          maxCuotas={confirmado.cuotasMax ?? undefined}
           onPagado={() => {
             setPagado(true);
             // El carrito se vacía RECIÉN acá: el pedido está pago, la compra
@@ -578,6 +599,16 @@ export function CheckoutClient({
               Precio sin impuestos {fmtPrecio(cotizacion?.subtotal ?? 0)}
             </p>
           </div>
+
+          {pagoElegido === "mercadopago" && estado === "ok" && cotizacion && (
+            // Referencia sobre el total cotizado. El máximo definitivo se congela
+            // al confirmar, sobre el total real del pedido.
+            <CuotasResumen
+              resumen={resumenCuotas(cotizacion.total, oferta, { cuotasMax: null })}
+              titulo={TEXTOS_CUOTAS.checkoutTitulo}
+              className="mt-4"
+            />
+          )}
 
           {errorEnvio && (
             <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>

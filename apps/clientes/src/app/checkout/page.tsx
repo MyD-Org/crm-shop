@@ -4,6 +4,7 @@ import { CheckoutClient } from "@/components/CheckoutClient";
 import { Footer } from "@/components/Footer";
 import { identidadActual } from "@/lib/auth";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
+import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
 /**
  * El checkout exige estar logueado, pero NO tener cuenta corriente vinculada:
@@ -19,7 +20,11 @@ export default async function CheckoutPage() {
   // Sin datos fiscales no se puede facturar la compra. Se resuelve acá y se
   // avisa arriba de todo, en vez de dejar que llene el formulario entero y
   // recién rebote contra el 409 al apretar "Confirmar".
-  const perfil = clerkUserId ? await getPerfilFacturacion(clerkUserId) : null;
+  // En paralelo con la oferta de cuotas (null = sin cuotas: flag off, sin datos o error).
+  const [perfil, oferta] = await Promise.all([
+    clerkUserId ? getPerfilFacturacion(clerkUserId) : null,
+    getOfertaCuotas(),
+  ]);
 
   return (
     <>
@@ -29,6 +34,7 @@ export default async function CheckoutPage() {
         }
         emailCliente={cliente?.email ?? email}
         facturacionCompleta={perfilCompleto(perfil)}
+        oferta={oferta}
       />
       <Footer />
     </>

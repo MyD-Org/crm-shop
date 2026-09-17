@@ -119,6 +119,10 @@ export interface EstadoPago {
   reversion?: boolean;
   /** Presente cuando el banco pide 3DS: hay que renderizar el desafío. */
   desafio?: Desafio3DS;
+  /** Cuotas reales informadas por el proveedor. */
+  cuotasPagadas?: number;
+  /** Total que paga el comprador, con interés. Nunca reemplaza el total del pedido. */
+  totalPagado?: number;
 }
 
 /** Lo que hace falta para crear un pago. El monto NUNCA sale del browser. */

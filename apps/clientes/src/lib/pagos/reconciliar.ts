@@ -108,6 +108,8 @@ export async function reconciliarPagosPendientes(
         estado: estado.estado,
         detalle: estado.detalle,
         reversion: estado.reversion,
+        cuotas: estado.cuotasPagadas,
+        totalPagado: estado.totalPagado,
       });
       if (cambio) actualizados++;
     } catch (err) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
+import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { pedidoPendienteMasReciente } from "@/lib/pedidos";
 
 export const dynamic = "force-dynamic";
@@ -24,5 +25,11 @@ export async function GET() {
     clienteCodigo: cliente?.codigocliente,
   });
 
-  return NextResponse.json({ pedido });
+  // `cuotasMax` sólo con el flag prendido: con el flag apagado el Brick no
+  // recibe máximo y el cobro vuelve al clamp 1..24.
+  return NextResponse.json({
+    pedido: pedido
+      ? { ...pedido, cuotasMax: cuotasHabilitadas() ? pedido.cuotasMax : null }
+      : null,
+  });
 }

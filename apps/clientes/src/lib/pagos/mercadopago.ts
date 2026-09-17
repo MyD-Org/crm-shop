@@ -100,6 +100,9 @@ export function claveIdempotencia(datos: DatosPago): string {
   return `${datos.pedidoId}-${semilla}`;
 }
 
+const montoValido = (n: unknown): number | undefined =>
+  typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : undefined;
+
 /**
  * Traduce la respuesta cruda de MP a nuestro vocabulario. Un solo lugar, así
  * `crearPago` y `consultarPago` no pueden divergir.
@@ -121,6 +124,11 @@ export function interpretar(pago: RespuestaMercadoPago): EstadoPago {
      */
     reversion: esReversion(status),
     desafio: desafio3DS(pago),
+    cuotasPagadas:
+      Number.isInteger(pago.installments) && (pago.installments as number) >= 1
+        ? pago.installments
+        : undefined,
+    totalPagado: montoValido(pago.transaction_details?.total_paid_amount),
   };
 }
 

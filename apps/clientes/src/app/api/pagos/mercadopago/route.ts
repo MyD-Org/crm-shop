@@ -4,6 +4,8 @@ import { getPedidoParaPago, registrarCobro, registrarIntentoFallido } from "@/li
 import { MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos";
 import { mercadoPago, urlNotificacion } from "@/lib/pagos/mercadopago";
 import { permitir } from "@/lib/rate-limit";
+import { cuotasHabilitadas } from "@/lib/cuotas-flag";
+import { validarCuotasPago } from "@/lib/pagos/cuotas-validacion";
 
 export const dynamic = "force-dynamic";
 
@@ -80,11 +82,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ estado: "pagado", yaEstaba: true });
   }
 
-  const cuotasCrudas = Number(body.cuotas);
-  const cuotas =
-    Number.isFinite(cuotasCrudas) && cuotasCrudas >= 1 && cuotasCrudas <= 24
-      ? Math.floor(cuotasCrudas)
-      : 1;
+  const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
+
+  /**
+   * Cuotas contra el plan congelado en el pedido (global y por medio). Un
+   * rechazo corta ACÁ, sin llamar a Mercado Pago: el browser no decide cuántas
+   * cuotas se pueden. Flag apagado o pedido legacy (cuotas_max null) → clamp
+   * 1..24 de siempre.
+   */
+  const validacion = validarCuotasPago({
+    cuotas: body.cuotas,
+    metodoPagoId,
+    medio,
+    cuotasMax: pedido.cuotasMax,
+    maxPorMedio: pedido.cuotasMaxPorMedio,
+    habilitado: cuotasHabilitadas(),
+  });
+  if (!validacion.ok) {
+    return NextResponse.json(
+      { error: MENSAJE_RECHAZO.cuotas_no_disponibles, motivo: "cuotas_no_disponibles" },
+      { status: 422 },
+    );
+  }
+  const cuotas = validacion.cuotas;
 
   try {
     const resultado = await mercadoPago.crearPago({
@@ -97,7 +117,7 @@ export async function POST(req: Request) {
       medio,
       token: token || undefined,
       cuotas,
-      metodoPagoId: texto(body.metodoPagoId, 40) || undefined,
+      metodoPagoId,
       /**
        * Mercado Pago EXIGE `payer.email`: sin él responde 400 "Params Error",
        * sin decir cuál parámetro falta.
@@ -117,6 +137,8 @@ export async function POST(req: Request) {
       estado: resultado.estado,
       detalle: resultado.detalle,
       medio,
+      cuotas: resultado.cuotasPagadas,
+      totalPagado: resultado.totalPagado,
     });
 
     /**

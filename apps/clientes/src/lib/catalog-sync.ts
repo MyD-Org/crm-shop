@@ -80,6 +80,7 @@ export async function syncCatalog(
             brand: it.brand,
             prices: it.prices,
             stock: it.stock != null ? String(it.stock) : null,
+            ivaPorcentaje: it.ivaPorcentaje != null ? String(it.ivaPorcentaje) : null,
             status: it.status === "inactive" ? "inactive" : "active",
             syncedAt: new Date(),
           }))
@@ -94,6 +95,7 @@ export async function syncCatalog(
             brand: sql`excluded.brand`,
             prices: sql`excluded.prices`,
             stock: sql`excluded.stock`,
+            ivaPorcentaje: sql`excluded.iva_porcentaje`,
             status: sql`excluded.status`,
             syncedAt: sql`excluded.synced_at`,
           },

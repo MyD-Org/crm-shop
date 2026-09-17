@@ -36,13 +36,17 @@ export const TEXTOS_CUOTAS = {
   total: "Total",
   sinInteres: "Sin interés",
   sinOpcionesMedio: "Para este precio sólo 1 pago.",
+  /** Encabezado de cada bloque del modal: "Tarjetas de crédito (Mercado Pago)". */
+  tituloProveedor: (nombre: string) => `Tarjetas de crédito (${nombre})`,
 
   cft: (pct: number) => `CFT ${fmtPct(pct)}`,
   tea: (pct: number) => `TEA ${fmtPct(pct)}`,
 
-  /** "6 cuotas sin interés de $20.000" / "12 cuotas de $13.500". */
+  /** "6 cuotas sin interés de $20.000" / "Hasta 12 cuotas de $13.500". */
   linea: (cuotas: number, montoCuota: number, sinInteres: boolean) =>
-    `${cuotasDe(cuotas)}${sinInteres ? " sin interés" : ""} de ${fmtMonto(montoCuota)}`,
+    sinInteres
+      ? `${cuotasDe(cuotas)} sin interés de ${fmtMonto(montoCuota)}`
+      : `Hasta ${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,
 
   /** Cuotas de una fila del modal: "6 cuotas de $20.000". */
   filaCuotas: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,
@@ -51,9 +55,9 @@ export const TEXTOS_CUOTAS = {
   hasta: (cuotas: number, sinInteres: boolean) =>
     `Hasta ${cuotasDe(cuotas)}${sinInteres ? " sin interés" : ""}`,
 
-  /** "Te faltan $30.000 para 6 cuotas sin interés" / "… para 12 cuotas". */
-  teFaltan: (faltante: number, cuotas: number, sinInteres: boolean) =>
-    `Te faltan ${fmtMonto(faltante)} para ${cuotasDe(cuotas)}${sinInteres ? " sin interés" : ""}`,
+  /** "Te faltan $30.000 para hasta 6 cuotas". */
+  teFaltan: (faltante: number, cuotas: number) =>
+    `Te faltan ${fmtMonto(faltante)} para hasta ${cuotasDe(cuotas)}`,
 
   progresoEscalon: "Progreso hacia el próximo plan de cuotas",
   checkoutTitulo: "Cuotas para este pedido",

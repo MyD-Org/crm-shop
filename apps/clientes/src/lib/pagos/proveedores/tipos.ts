@@ -12,7 +12,10 @@ export type ResultadoPlanesMedio =
 export interface ProveedorCuotas {
   /** 'mercadopago'. Coincide con `MedioDePago.proveedor`. */
   id: string;
-  /** Medios a consultar si todavía no hay config del CRM. */
+  /**
+   * Marcas de crédito a consultar ('visa', 'master'). La config del CRM es por
+   * proveedor; el snapshot se guarda por marca y el motor las junta.
+   */
   mediosPorDefecto: string[];
   /**
    * Planes normalizados para los medios pedidos ('visa', 'master').

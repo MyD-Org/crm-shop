@@ -85,17 +85,16 @@ export async function POST(req: Request) {
   const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
 
   /**
-   * Cuotas contra el plan congelado en el pedido (global y por medio). Un
-   * rechazo corta ACÁ, sin llamar a Mercado Pago: el browser no decide cuántas
-   * cuotas se pueden. Flag apagado o pedido legacy (cuotas_max null) → clamp
-   * 1..24 de siempre.
+   * Cuotas contra el máximo congelado en el pedido (por proveedor, igual para
+   * todas las tarjetas). Un rechazo corta ACÁ, sin llamar a Mercado Pago: el
+   * browser no decide cuántas cuotas se pueden. Flag apagado o pedido legacy
+   * (cuotas_max null) → clamp 1..24 de siempre. `metodoPagoId` sólo viaja a
+   * Mercado Pago, no participa de la validación.
    */
   const validacion = validarCuotasPago({
     cuotas: body.cuotas,
-    metodoPagoId,
     medio,
     cuotasMax: pedido.cuotasMax,
-    maxPorMedio: pedido.cuotasMaxPorMedio,
     habilitado: cuotasHabilitadas(),
   });
   if (!validacion.ok) {

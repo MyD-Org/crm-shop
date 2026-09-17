@@ -1,6 +1,10 @@
 /**
- * Enforcement de cuotas en el cobro (spec cuotas-configurables, dominio 7).
- * Puro: lo usan la ruta de pago y la de pedidos, y se testea sin red ni DB.
+ * Enforcement de cuotas en el cobro. Puro: lo usan la ruta de pago y la de
+ * pedidos, y se testea sin red ni DB.
+ *
+ * v2: el tope es por proveedor (todas las tarjetas de crédito), así que sólo se
+ * compara contra `cuotas_max` del pedido. Ya no hay topes por marca ni hace
+ * falta `metodoPagoId` para validar.
  */
 import { planPedido } from "../cuotas";
 import type { OfertaCuotas, PlanPedido } from "./cuotas-tipos";
@@ -9,12 +13,9 @@ import type { PagoMedio } from "./tipos";
 export interface EntradaValidacionCuotas {
   /** Lo que mandó el browser (Brick `installments`). No confiable. */
   cuotas: unknown;
-  /** `payment_method_id` del Brick ('visa', 'master'). */
-  metodoPagoId: string | undefined;
   medio: PagoMedio;
   /** Congelado en el pedido. null = pedido legacy o sin oferta leíble. */
   cuotasMax: number | null;
-  maxPorMedio: Record<string, number> | null;
   /** `cuotasHabilitadas()`. */
   habilitado: boolean;
 }
@@ -41,23 +42,12 @@ export function validarCuotasPago(e: EntradaValidacionCuotas): ResultadoValidaci
   if (typeof e.cuotas !== "number" || !Number.isInteger(e.cuotas) || e.cuotas < 1) return rechazo;
   if (e.cuotas === 1) return { ok: true, cuotas: 1 };
   if (e.cuotas > e.cuotasMax) return rechazo;
-
-  // Con topes por medio, el medio es obligatorio: si no, omitir `metodoPagoId`
-  // en el POST alcanzaría para cobrar hasta el máximo global con cualquier tarjeta.
-  if (e.maxPorMedio && !e.metodoPagoId) return rechazo;
-  const topeMedio = e.metodoPagoId && e.maxPorMedio ? e.maxPorMedio[e.metodoPagoId] : undefined;
-  if (typeof topeMedio === "number" && e.cuotas > topeMedio) return rechazo;
-
   return { ok: true, cuotas: e.cuotas };
 }
 
 /**
  * Plan a congelar al crear un pedido. Sólo para Mercado Pago; con oferta
  * ilegible → null (cuotas_max null = legacy, no se bloquean ventas).
- *
- * Los medios de la oferta sin opciones para este total quedan con tope 1: el
- * Brick sólo acepta un máximo global, así que sin esto un medio que el admin no
- * ofrece en cuotas heredaría el máximo de otro.
  */
 export function planParaPedido(
   pagoMetodo: string,
@@ -65,9 +55,5 @@ export function planParaPedido(
   oferta: OfertaCuotas | null,
 ): PlanPedido | null {
   if (pagoMetodo !== "mercadopago") return null;
-  const plan = planPedido(total, oferta);
-  if (!plan || !oferta) return plan;
-  const topes: Record<string, number> = {};
-  for (const m of oferta.medios) topes[m.codigo] = 1;
-  return { ...plan, maxPorMedio: { ...topes, ...plan.maxPorMedio } };
+  return planPedido(total, oferta, "mercadopago");
 }

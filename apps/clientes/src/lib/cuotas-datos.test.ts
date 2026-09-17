@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import valido from "./__fixtures__/cuotas-contrato-v1/valido.json";
+import valido from "./__fixtures__/cuotas-contrato-v2/valido.json";
 import { leerOfertaCuotas, type DepsOfertaCuotas } from "./cuotas-datos";
 import type { FilaPlanesLeida, RepoCuotas } from "./cuotas-sync";
 import type { PlanDeCuotas } from "./pagos/cuotas-tipos";
 
-const AHORA = new Date("2026-09-16T15:00:00Z"); // 12:00 AR
+const AHORA = new Date("2026-09-17T15:00:00Z");
 const HACE_1H = new Date(AHORA.getTime() - 3600_000);
 const HACE_13H = new Date(AHORA.getTime() - 13 * 3600_000);
 
@@ -42,15 +42,20 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("leerOfertaCuotas", () => {
-  it("arma la oferta con vigencia en hora AR, configVersion y planesFetchedAt", async () => {
+  it("arma la oferta por proveedor juntando marcas, con configVersion y planesFetchedAt", async () => {
     const oferta = await leerOfertaCuotas(deps());
     expect(oferta).not.toBeNull();
-    expect(oferta!.hoy).toBe("2026-09-16");
     expect(oferta!.configVersion).toBe(valido.actualizadoEn);
     expect(oferta!.planesFetchedAt).toBe(HACE_1H.toISOString());
-    const visa = oferta!.medios.find((m) => m.codigo === "visa")!;
-    // valido.json: visa 6 vigente 2026-09-01..2026-09-30 → incluida.
-    expect(visa.opciones.map((o) => o.cuotas)).toEqual([3, 6]);
+    const mp = oferta!.proveedores.find((p) => p.proveedor === "mercadopago")!;
+    expect(mp.nombre).toBe("Mercado Pago");
+    expect(mp.escalones).toEqual([
+      { cuotasMax: 3, montoMinimo: 0 },
+      { cuotasMax: 6, montoMinimo: 180000 },
+      { cuotasMax: 12, montoMinimo: 450000.5 },
+    ]);
+    // visa 3, 6 (0%) + master 12 (30%) → una sola lista.
+    expect(mp.opciones.map((o) => [o.cuotas, o.sinInteres])).toEqual([[3, true], [6, true], [12, false]]);
     expect(programadas).toBe(0);
   });
 
@@ -65,6 +70,12 @@ describe("leerOfertaCuotas", () => {
     expect(await leerOfertaCuotas(deps())).toBeNull();
   });
 
+  it("caché con contrato v1 (deploy antes que el CRM) → null y programa sync", async () => {
+    config = { payload: { version: "v1", tenant: "central-led", actualizadoEn: "2026-09-16T20:00:00.000Z", medios: [], opciones: [] }, fetchedAt: HACE_1H };
+    expect(await leerOfertaCuotas(deps())).toBeNull();
+    expect(programadas).toBe(1);
+  });
+
   it("sin config → null y programa sync", async () => {
     config = null;
     expect(await leerOfertaCuotas(deps())).toBeNull();
@@ -75,6 +86,11 @@ describe("leerOfertaCuotas", () => {
     filas = filas.map((f) => ({ ...f, fetchedAt: null, planes: [] }));
     expect(await leerOfertaCuotas(deps())).toBeNull();
     expect(programadas).toBe(1);
+  });
+
+  it("planes de proveedores no configurados no cuentan como copia buena", async () => {
+    filas = [{ proveedor: "otro", medio: "visa", planes: [plan("visa", 3, 0)], fetchedAt: HACE_1H }];
+    expect(await leerOfertaCuotas(deps())).toBeNull();
   });
 
   it("copia > 12 h → oferta igual + sync lazy programada", async () => {
@@ -98,9 +114,9 @@ describe("leerOfertaCuotas", () => {
     expect(await leerOfertaCuotas(d)).not.toBeNull();
   });
 
-  it("config vacía válida → oferta leíble sin medios (≠ null)", async () => {
-    config = { payload: { ...valido, medios: [], opciones: [] }, fetchedAt: HACE_1H };
+  it("config vacía válida → oferta leíble sin proveedores (≠ null)", async () => {
+    config = { payload: { ...valido, proveedores: [] }, fetchedAt: HACE_1H };
     const oferta = await leerOfertaCuotas(deps());
-    expect(oferta).toMatchObject({ medios: [] });
+    expect(oferta).toMatchObject({ proveedores: [] });
   });
 });

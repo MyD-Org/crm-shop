@@ -1,20 +1,24 @@
 /**
- * Tipos neutrales del cambio cuotas-configurables (modelo Tiendanube).
+ * Tipos neutrales de cuotas (v2: config por proveedor).
  *
  * Ningún campo es propio de un proveedor: los adaptadores (Mercado Pago hoy)
- * normalizan a `PlanDeCuotas` y el CRM publica `MedioDePago` / `OpcionConfigurada`
- * según el contrato v1 (espejo en MyD-Org/platform/contracts/cuotas/v1).
+ * normalizan a `PlanDeCuotas` y el CRM publica `ProveedorConfigurado` según el
+ * contrato v2 (espejo en MyD-Org/platform/contracts/cuotas/v2).
  *
  * Sin imports de server ni de proveedor: lo usan el motor puro
  * (src/lib/cuotas.ts) y componentes de cliente.
  */
 
-/** Plan real del proveedor para un medio y una cantidad de cuotas. */
+/**
+ * Plan real del proveedor para una marca y una cantidad de cuotas. El snapshot
+ * se guarda por marca (visa, master), pero la oferta es por proveedor: el motor
+ * junta las marcas quedándose con la tasa más alta.
+ */
 export interface PlanDeCuotas {
   proveedor: string;
   medio: string;
   cuotas: number;
-  /** Recargo % sobre el precio contado (0 = sin interés en la cuenta). */
+  /** Recargo % sobre el precio contado. 0 = sin interés (lo define el proveedor). */
   tasaPct: number;
   cftPct: number | null;
   teaPct: number | null;
@@ -22,39 +26,41 @@ export interface PlanDeCuotas {
   montoMax: number | null;
 }
 
-/** Medio de pago configurado en el CRM. */
-export interface MedioDePago {
+/** Escalón configurado en el CRM: desde `montoMinimo` (con IVA) se ofrece hasta `cuotasMax`. */
+export interface EscalonCuotas {
   id: string;
+  /** 1..24. */
+  cuotasMax: number;
+  /** ≥ 0, ARS con IVA. */
+  montoMinimo: number;
+}
+
+/** Proveedor de pagos configurado en el CRM. Aplica a todas las tarjetas de crédito. */
+export interface ProveedorConfigurado {
+  id: string;
+  /** Id del proveedor: 'mercadopago'. Coincide con `ProveedorCuotas.id`. */
   proveedor: string;
-  /** Código del medio en el proveedor: 'visa', 'master'. */
-  codigo: string;
   nombre: string;
   activo: boolean;
   orden: number;
+  /** Ordenados por `montoMinimo` ascendente. */
+  escalones: EscalonCuotas[];
 }
 
-/** Opción de cuotas que el admin eligió ofrecer. Aplica a todos los productos. */
-export interface OpcionConfigurada {
-  id: string;
-  medioId: string;
-  /** 2..24. "1 pago" no se configura: siempre está disponible. */
-  cuotas: number;
-  /** Marcada sin interés en el CRM. Efectivo sólo si además la tasa es 0. */
-  sinInteres: boolean;
-  /** Monto base mínimo, con IVA. */
-  montoMinimo: number;
-  /** YYYY-MM-DD inclusive, hora Argentina. null = sin límite. */
-  vigenteDesde: string | null;
-  vigenteHasta: string | null;
-  activo: boolean;
+/** Payload de GET {CRM}/api/internal/shop/cuotas?tenant=… */
+export interface ContratoCuotasV2 {
+  version: "v2";
+  tenant: string;
+  /** ISO 8601. */
+  actualizadoEn: string;
+  proveedores: ProveedorConfigurado[];
 }
 
-/** Opción ya filtrada (activa, vigente, con plan) y cruzada con la tasa real. */
+/** Cantidad de cuotas del snapshot del proveedor (ya juntadas las marcas). */
 export interface OpcionOfertada {
   cuotas: number;
-  /** Sin interés EFECTIVO (doble llave: marcada y tasa 0). */
+  /** Tasa 0 del proveedor. */
   sinInteres: boolean;
-  montoMinimo: number;
   tasaPct: number;
   cftPct: number | null;
   teaPct: number | null;
@@ -64,22 +70,23 @@ export interface OpcionOfertada {
 
 /** Oferta compacta y serializable: viaja como prop al cliente. */
 export interface OfertaCuotas {
-  medios: {
-    codigo: string;
+  proveedores: {
+    proveedor: string;
     nombre: string;
     orden: number;
+    /** Válidos, ordenados por monto mínimo ascendente. */
+    escalones: { cuotasMax: number; montoMinimo: number }[];
+    /** Cantidades de 2 a 24 del snapshot, ascendentes. "1 pago" siempre existe. */
     opciones: OpcionOfertada[];
   }[];
-  /** Fecha de referencia (YYYY-MM-DD, hora AR) con la que se evaluó la vigencia. */
-  hoy: string;
   planesFetchedAt: string | null;
   configVersion: string | null;
 }
 
 /** Opción calculada para un monto base concreto. */
 export interface OpcionCuotas {
-  medio: string;
-  medioNombre: string;
+  proveedor: string;
+  proveedorNombre: string;
   cuotas: number;
   montoCuota: number;
   total: number;
@@ -89,33 +96,22 @@ export interface OpcionCuotas {
   sinInteres: boolean;
 }
 
-/** Próximo escalón de cuotas ("Te faltan $X para N cuotas sin interés"). */
+/** Próximo escalón ("Te faltan $X para hasta N cuotas"). */
 export interface Escalon {
+  /** Cantidad efectiva que se habilita (la mayor del snapshot ≤ cuotasMax). */
   cuotas: number;
-  sinInteres: boolean;
   montoMinimo: number;
   /** montoMinimo − base, redondeado hacia arriba al centavo. */
   faltante: number;
 }
 
-/** Plan congelado en el pedido (orders.cuotas_plan). */
+/** Plan congelado en el pedido (orders.cuotas_plan). Filas viejas pueden traer v1. */
 export interface PlanPedido {
-  version: "v1";
+  version: "v2";
+  proveedor: string;
   configVersion: string | null;
   planesFetchedAt: string | null;
-  hoy: string;
   totalBase: number;
   cuotasMax: number;
-  maxPorMedio: Record<string, number>;
   opciones: OpcionCuotas[];
-}
-
-/** Payload de GET {CRM}/api/internal/shop/cuotas?tenant=… */
-export interface ContratoCuotasV1 {
-  version: "v1";
-  tenant: string;
-  /** ISO 8601. */
-  actualizadoEn: string;
-  medios: MedioDePago[];
-  opciones: OpcionConfigurada[];
 }

@@ -12,8 +12,8 @@
  */
 import { after } from "next/server";
 import { cache } from "react";
-import { armarOferta, hoyArgentina } from "./cuotas";
-import { parsearContratoCuotasV1 } from "./cuotas-contrato";
+import { armarOferta } from "./cuotas";
+import { parsearContratoCuotasV2 } from "./cuotas-contrato";
 import { cuotasHabilitadas } from "./cuotas-flag";
 import { repoCuotasDrizzle } from "./cuotas-repo";
 import { syncCuotas, type RepoCuotas } from "./cuotas-sync";
@@ -48,20 +48,29 @@ export async function leerOfertaCuotas(deps: DepsOfertaCuotas): Promise<OfertaCu
       return null;
     }
     if (viejo(config.fetchedAt)) refrescar = true;
-    const payload = parsearContratoCuotasV1(config.payload);
+    let payload;
+    try {
+      payload = parsearContratoCuotasV2(config.payload);
+    } catch (e) {
+      // Caché de otra versión (p. ej. v1 guardada antes del deploy) o corrupta:
+      // sin cuotas hasta que una sync traiga una copia buena.
+      programar();
+      throw e;
+    }
 
-    const relevantes = new Set(payload.medios.filter((m) => m.activo).map((m) => `${m.proveedor}|${m.codigo}`));
-    const filas = (await deps.repo.leerPlanes()).filter((f) => relevantes.has(`${f.proveedor}|${f.medio}`));
+    const relevantes = new Set(payload.proveedores.filter((p) => p.activo).map((p) => p.proveedor));
+    const filas = (await deps.repo.leerPlanes()).filter((f) => relevantes.has(f.proveedor));
     const buenas = filas.filter((f) => f.fetchedAt !== null && Array.isArray(f.planes));
 
     if (relevantes.size > 0 && buenas.length === 0) {
       programar();
       return null;
     }
-    if (buenas.length < relevantes.size || filas.some((f) => viejo(f.fetchedAt))) refrescar = true;
+    // Una marca sin copia buena (fetchedAt null) o vieja → refrescar.
+    if (filas.some((f) => viejo(f.fetchedAt))) refrescar = true;
 
     const planes = buenas.flatMap((f) => f.planes as PlanDeCuotas[]);
-    const oferta = armarOferta(payload.medios, payload.opciones, planes, hoyArgentina(ahora));
+    const oferta = armarOferta(payload.proveedores, planes);
     const masVieja = buenas
       .map((f) => new Date(f.fetchedAt!))
       .sort((a, b) => a.getTime() - b.getTime())[0];

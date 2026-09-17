@@ -1,21 +1,22 @@
 import { CuotasLeyenda } from "@/components/CuotasLeyenda";
 import { fmtMonto, TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import type { BloqueMedio } from "@/lib/cuotas-exhibicion";
+import type { BloqueProveedor } from "@/lib/cuotas-exhibicion";
 
 /**
- * Contenido del modal "Ver medios de pago": un bloque por medio con 1 pago
- * (precio contado) y cada opción de cuotas con valor de cuota y total. Con
- * interés: CFT destacado y TEA secundaria. Sin interés: sin recargo, sin CFT.
+ * Contenido del modal "Ver medios de pago": un bloque por proveedor ("Tarjetas
+ * de crédito (Mercado Pago)") con 1 pago (precio contado) y cada cantidad de
+ * cuotas con valor de cuota y total. Con interés: CFT destacado y TEA
+ * secundaria. Sin interés (tasa 0 del proveedor): sin recargo, sin CFT.
  *
  * Separado del diálogo para poder testearlo con render estático.
  */
-export function MediosDePagoDetalle({ bloques }: { bloques: BloqueMedio[] }) {
+export function MediosDePagoDetalle({ bloques }: { bloques: BloqueProveedor[] }) {
   return (
     <div className="space-y-5">
       {bloques.map((b) => (
-        <section key={b.codigo} aria-labelledby={`medio-${b.codigo}`}>
-          <h3 id={`medio-${b.codigo}`} className="mb-2 text-sm font-bold text-text">
-            {b.nombre}
+        <section key={b.proveedor} aria-labelledby={`proveedor-${b.proveedor}`}>
+          <h3 id={`proveedor-${b.proveedor}`} className="mb-2 text-sm font-bold text-text">
+            {b.titulo}
           </h3>
           <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
             <li className="flex items-center justify-between gap-4 px-3 py-2.5">

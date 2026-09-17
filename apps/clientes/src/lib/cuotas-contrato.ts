@@ -1,20 +1,21 @@
 /**
- * Parser del contrato v1 CRM → Shop de cuotas configurables
- * (MyD-Org/platform contracts/cuotas/v1/schema.json). Manual a propósito: el
- * Shop no tiene zod y el shape es chico.
+ * Parser del contrato v2 CRM → Shop de cuotas (config por proveedor)
+ * (MyD-Org/platform contracts/cuotas/v2). Manual a propósito: el Shop no tiene
+ * zod y el shape es chico.
  *
- * Todo o nada: si algo no valida, se tira `ContratoInvalidoError` y la sync
- * conserva la última copia buena. Un payload válido vacío SÍ es válido.
+ * Todo o nada: si algo no valida (incluida otra versión, p. ej. una caché v1),
+ * se tira `ContratoInvalidoError` y la sync conserva la última copia buena. Un
+ * payload válido vacío SÍ es válido.
  *
- * Campos desconocidos se descartan en vez de rechazar el payload: así un
- * campo aditivo del CRM no deja al Shop sin config. La salida sólo trae los
- * campos del contrato.
+ * Campos desconocidos se descartan en vez de rechazar el payload: así un campo
+ * aditivo del CRM no deja al Shop sin config. La salida sólo trae los campos
+ * del contrato.
  */
-import type { ContratoCuotasV1, MedioDePago, OpcionConfigurada } from "./pagos/cuotas-tipos";
+import type { ContratoCuotasV2, EscalonCuotas, ProveedorConfigurado } from "./pagos/cuotas-tipos";
 
 export class ContratoInvalidoError extends Error {
   constructor(mensaje: string) {
-    super(`Contrato de cuotas v1 inválido: ${mensaje}`);
+    super(`Contrato de cuotas v2 inválido: ${mensaje}`);
     this.name = "ContratoInvalidoError";
   }
 }
@@ -48,40 +49,13 @@ function entero(o: Obj, campo: string, ruta: string, min?: number, max?: number)
   return v;
 }
 
-/** YYYY-MM-DD con mes y día plausibles, o null. La clave debe existir. */
-function fechaONull(o: Obj, campo: string, ruta: string): string | null {
-  if (!(campo in o) || o[campo] === undefined) fallar(`${ruta}.${campo}`, "YYYY-MM-DD o null");
+function lista(o: Obj, campo: string, ruta: string): unknown[] {
   const v = o[campo];
-  if (v === null) return null;
-  const m = typeof v === "string" ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) : null;
-  if (!m) fallar(`${ruta}.${campo}`, "YYYY-MM-DD o null");
-  const mes = Number(m[2]);
-  const dia = Number(m[3]);
-  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) fallar(`${ruta}.${campo}`, "una fecha válida");
-  return v as string;
-}
-
-function lista(o: Obj, campo: string): unknown[] {
-  const v = o[campo];
-  if (!Array.isArray(v)) fallar(campo, "array");
+  if (!Array.isArray(v)) fallar(ruta ? `${ruta}.${campo}` : campo, "array");
   return v;
 }
 
-function medio(v: unknown, i: number): MedioDePago {
-  const ruta = `medios[${i}]`;
-  if (!esObjeto(v)) fallar(ruta, "objeto");
-  return {
-    id: texto(v, "id", ruta),
-    proveedor: texto(v, "proveedor", ruta),
-    codigo: texto(v, "codigo", ruta),
-    nombre: texto(v, "nombre", ruta),
-    activo: booleano(v, "activo", ruta),
-    orden: entero(v, "orden", ruta),
-  };
-}
-
-function opcion(v: unknown, i: number): OpcionConfigurada {
-  const ruta = `opciones[${i}]`;
+function escalon(v: unknown, ruta: string): EscalonCuotas {
   if (!esObjeto(v)) fallar(ruta, "objeto");
   const montoMinimo = v.montoMinimo;
   if (typeof montoMinimo !== "number" || !Number.isFinite(montoMinimo) || montoMinimo < 0) {
@@ -89,28 +63,39 @@ function opcion(v: unknown, i: number): OpcionConfigurada {
   }
   return {
     id: texto(v, "id", ruta),
-    medioId: texto(v, "medioId", ruta),
-    cuotas: entero(v, "cuotas", ruta, 2, 24),
-    sinInteres: booleano(v, "sinInteres", ruta),
+    cuotasMax: entero(v, "cuotasMax", ruta, 1, 24),
     montoMinimo,
-    vigenteDesde: fechaONull(v, "vigenteDesde", ruta),
-    vigenteHasta: fechaONull(v, "vigenteHasta", ruta),
-    activo: booleano(v, "activo", ruta),
   };
 }
 
-export function parsearContratoCuotasV1(crudo: unknown): ContratoCuotasV1 {
+function proveedor(v: unknown, i: number): ProveedorConfigurado {
+  const ruta = `proveedores[${i}]`;
+  if (!esObjeto(v)) fallar(ruta, "objeto");
+  const base = {
+    id: texto(v, "id", ruta),
+    proveedor: texto(v, "proveedor", ruta),
+    nombre: texto(v, "nombre", ruta),
+    activo: booleano(v, "activo", ruta),
+    orden: entero(v, "orden", ruta),
+  };
+  const escalones = lista(v, "escalones", ruta)
+    .map((e, j) => escalon(e, `${ruta}.escalones[${j}]`))
+    // El CRM ya los manda ordenados; se reordena por defensa (sort estable).
+    .sort((a, b) => a.montoMinimo - b.montoMinimo);
+  return { ...base, escalones };
+}
+
+export function parsearContratoCuotasV2(crudo: unknown): ContratoCuotasV2 {
   if (!esObjeto(crudo)) fallar("payload", "objeto");
-  if (crudo.version !== "v1") fallar("version", '"v1"');
+  if (crudo.version !== "v2") fallar("version", '"v2"');
   const tenant = texto(crudo, "tenant", "payload");
   const actualizadoEn = texto(crudo, "actualizadoEn", "payload");
   if (Number.isNaN(Date.parse(actualizadoEn))) fallar("actualizadoEn", "fecha ISO 8601");
 
   return {
-    version: "v1",
+    version: "v2",
     tenant,
     actualizadoEn,
-    medios: lista(crudo, "medios").map(medio),
-    opciones: lista(crudo, "opciones").map(opcion),
+    proveedores: lista(crudo, "proveedores", "").map(proveedor),
   };
 }

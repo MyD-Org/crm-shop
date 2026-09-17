@@ -41,13 +41,13 @@ vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
 import { POST } from "./route";
 
 const ofertaCon6Desde150k: OfertaCuotas = {
-  hoy: "2026-09-16",
   planesFetchedAt: null,
   configVersion: null,
-  medios: [
+  proveedores: [
     {
-      codigo: "visa", nombre: "Visa", orden: 0,
-      opciones: [{ cuotas: 6, sinInteres: true, montoMinimo: 150000, tasaPct: 0, cftPct: 0, teaPct: 0, montoMin: null, montoMax: null }],
+      proveedor: "mercadopago", nombre: "Mercado Pago", orden: 0,
+      escalones: [{ cuotasMax: 6, montoMinimo: 150000 }],
+      opciones: [{ cuotas: 6, sinInteres: true, tasaPct: 0, cftPct: null, teaPct: null, montoMin: null, montoMax: null }],
     },
   ],
 };
@@ -83,12 +83,12 @@ describe("POST /api/pedidos — plan de cuotas congelado", () => {
     getOferta.mockResolvedValue(ofertaCon6Desde150k);
     const r = await post({ cuotasMax: 24, cuotas_max: 24, cuotasPlan: { cuotasMax: 24 } });
     expect(r.status).toBe(201);
-    expect(planGuardado()).toMatchObject({ cuotasMax: 6, totalBase: 200000, maxPorMedio: { visa: 6 } });
+    expect(planGuardado()).toMatchObject({ version: "v2", proveedor: "mercadopago", cuotasMax: 6, totalBase: 200000 });
     expect(await r.json()).toMatchObject({ cuotasMax: 6 });
   });
 
-  it("oferta leíble sin opciones para el total → cuotasMax 1", async () => {
-    getOferta.mockResolvedValue({ ...ofertaCon6Desde150k, medios: [{ ...ofertaCon6Desde150k.medios[0], opciones: [{ ...ofertaCon6Desde150k.medios[0].opciones[0], montoMinimo: 300000 }] }] });
+  it("oferta leíble sin escalón alcanzado para el total → cuotasMax 1", async () => {
+    getOferta.mockResolvedValue({ ...ofertaCon6Desde150k, proveedores: [{ ...ofertaCon6Desde150k.proveedores[0], escalones: [{ cuotasMax: 6, montoMinimo: 300000 }] }] });
     await post();
     expect(planGuardado()).toMatchObject({ cuotasMax: 1 });
   });

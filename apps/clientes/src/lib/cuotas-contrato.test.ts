@@ -1,79 +1,103 @@
 import { describe, expect, it } from "vitest";
-// Copias de MyD-Org/platform contracts/cuotas/v1/fixtures (commit 496cf79).
+// Fixtures del contrato v2 (espejo de MyD-Org/platform contracts/cuotas/v2).
 // Si el contrato cambia, re-copiar en el mismo PR.
-import invalido from "./__fixtures__/cuotas-contrato-v1/invalido.json";
-import vacioValido from "./__fixtures__/cuotas-contrato-v1/vacio-valido.json";
-import valido from "./__fixtures__/cuotas-contrato-v1/valido.json";
-import { ContratoInvalidoError, parsearContratoCuotasV1 } from "./cuotas-contrato";
+import cuotasMaxFueraDeRango from "./__fixtures__/cuotas-contrato-v2/invalido-cuotas-max-fuera-de-rango.json";
+import cuotasMaxString from "./__fixtures__/cuotas-contrato-v2/invalido-cuotas-max-string.json";
+import escalonesNoArray from "./__fixtures__/cuotas-contrato-v2/invalido-escalones-no-array.json";
+import montoMinimoNegativo from "./__fixtures__/cuotas-contrato-v2/invalido-monto-minimo-negativo.json";
+import proveedorSinNombre from "./__fixtures__/cuotas-contrato-v2/invalido-proveedor-sin-nombre.json";
+import sinProveedores from "./__fixtures__/cuotas-contrato-v2/invalido-sin-proveedores.json";
+import versionV1 from "./__fixtures__/cuotas-contrato-v2/invalido-version-v1.json";
+import vacioValido from "./__fixtures__/cuotas-contrato-v2/vacio-valido.json";
+import valido from "./__fixtures__/cuotas-contrato-v2/valido.json";
+import { ContratoInvalidoError, parsearContratoCuotasV2 } from "./cuotas-contrato";
 
 const clon = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
-describe("parsearContratoCuotasV1", () => {
+describe("parsearContratoCuotasV2", () => {
   it("fixture válido → objeto tipado igual al payload", () => {
-    expect(parsearContratoCuotasV1(valido)).toEqual(valido);
+    expect(parsearContratoCuotasV2(valido)).toEqual(valido);
   });
 
-  it("vacío válido (sin medios ni opciones) → se acepta", () => {
-    expect(parsearContratoCuotasV1(vacioValido)).toEqual(vacioValido);
+  it("vacío válido (sin proveedores) → se acepta", () => {
+    expect(parsearContratoCuotasV2(vacioValido)).toEqual(vacioValido);
   });
 
-  it("fixture inválido → tira ContratoInvalidoError", () => {
-    expect(() => parsearContratoCuotasV1(invalido)).toThrow(ContratoInvalidoError);
+  it.each([
+    ["version-v1", versionV1],
+    ["cuotas-max-fuera-de-rango", cuotasMaxFueraDeRango],
+    ["cuotas-max-string", cuotasMaxString],
+    ["monto-minimo-negativo", montoMinimoNegativo],
+    ["escalones-no-array", escalonesNoArray],
+    ["proveedor-sin-nombre", proveedorSinNombre],
+    ["sin-proveedores", sinProveedores],
+  ])("fixture inválido %s → ContratoInvalidoError", (_n, payload) => {
+    expect(() => parsearContratoCuotasV2(payload)).toThrow(ContratoInvalidoError);
   });
 
   it.each([
     ["no es objeto", () => "hola"],
     ["null", () => null],
-    ["version distinta", (p: Record<string, unknown>) => ({ ...p, version: "v2" })],
+    ["array", () => []],
     ["falta actualizadoEn", (p: Record<string, unknown>) => { const c = { ...p }; delete c.actualizadoEn; return c; }],
     ["actualizadoEn no es fecha", (p: Record<string, unknown>) => ({ ...p, actualizadoEn: "ayer" })],
     ["tenant vacío", (p: Record<string, unknown>) => ({ ...p, tenant: "" })],
-    ["medios no es array", (p: Record<string, unknown>) => ({ ...p, medios: {} })],
+    ["proveedores no es array", (p: Record<string, unknown>) => ({ ...p, proveedores: {} })],
   ])("raíz: %s → error", (_n, mutar) => {
-    expect(() => parsearContratoCuotasV1(mutar(clon(valido)))).toThrow(ContratoInvalidoError);
+    expect(() => parsearContratoCuotasV2(mutar(clon(valido)))).toThrow(ContratoInvalidoError);
   });
 
   it.each([
-    ["cuotas string", { cuotas: "6" }],
-    ["cuotas 1", { cuotas: 1 }],
-    ["cuotas 25", { cuotas: 25 }],
-    ["cuotas 2.5", { cuotas: 2.5 }],
-    ["montoMinimo negativo", { montoMinimo: -1 }],
-    ["montoMinimo NaN-ish", { montoMinimo: "100" }],
-    ["sinInteres no booleano", { sinInteres: "true" }],
-    ["vigenteDesde DD/MM/YYYY", { vigenteDesde: "30/09/2026" }],
-    ["vigenteHasta mes 13", { vigenteHasta: "2026-13-01" }],
-    ["vigenteHasta undefined (falta)", { vigenteHasta: undefined }],
-    ["medioId vacío", { medioId: "" }],
-    ["activo faltante", { activo: undefined }],
-  ])("opción: %s → error", (_n, parche) => {
+    ["cuotasMax 0", { cuotasMax: 0 }],
+    ["cuotasMax 2.5", { cuotasMax: 2.5 }],
+    ["montoMinimo string", { montoMinimo: "100" }],
+    ["montoMinimo faltante", { montoMinimo: undefined }],
+    ["id vacío", { id: "" }],
+  ])("escalón: %s → error", (_n, parche) => {
     const p = clon(valido);
-    p.opciones[0] = { ...p.opciones[0], ...parche } as (typeof p.opciones)[number];
-    expect(() => parsearContratoCuotasV1(p)).toThrow(ContratoInvalidoError);
+    p.proveedores[0].escalones[0] = { ...p.proveedores[0].escalones[0], ...parche } as never;
+    expect(() => parsearContratoCuotasV2(p)).toThrow(ContratoInvalidoError);
   });
 
   it.each([
     ["orden no entero", { orden: 1.5 }],
-    ["codigo vacío", { codigo: "" }],
+    ["proveedor vacío", { proveedor: "" }],
     ["activo string", { activo: "si" }],
-  ])("medio: %s → error", (_n, parche) => {
+  ])("proveedor: %s → error", (_n, parche) => {
     const p = clon(valido);
-    p.medios[0] = { ...p.medios[0], ...parche } as (typeof p.medios)[number];
-    expect(() => parsearContratoCuotasV1(p)).toThrow(ContratoInvalidoError);
+    p.proveedores[0] = { ...p.proveedores[0], ...parche } as never;
+    expect(() => parsearContratoCuotasV2(p)).toThrow(ContratoInvalidoError);
+  });
+
+  it("acepta cuotasMax 1 y 24 (bordes)", () => {
+    const p = clon(valido);
+    p.proveedores[0].escalones[0].cuotasMax = 1;
+    p.proveedores[0].escalones[2].cuotasMax = 24;
+    expect(() => parsearContratoCuotasV2(p)).not.toThrow();
   });
 
   it("el mensaje dice qué campo falló", () => {
     const p = clon(valido);
-    (p.opciones[1] as Record<string, unknown>).vigenteDesde = "2026/09/01";
-    expect(() => parsearContratoCuotasV1(p)).toThrow(/opciones\[1\]\.vigenteDesde/);
+    (p.proveedores[0].escalones[1] as Record<string, unknown>).cuotasMax = 30;
+    expect(() => parsearContratoCuotasV2(p)).toThrow(/proveedores\[0\]\.escalones\[1\]\.cuotasMax/);
+  });
+
+  it("escalones desordenados se devuelven por monto mínimo ascendente", () => {
+    const p = clon(valido);
+    p.proveedores[0].escalones.reverse();
+    expect(parsearContratoCuotasV2(p).proveedores[0].escalones.map((e) => e.montoMinimo)).toEqual([0, 180000, 450000.5]);
   });
 
   it("campos extra se descartan (la salida sólo trae los del contrato)", () => {
-    const p = clon(valido) as unknown as Record<string, unknown> & { medios: Record<string, unknown>[] };
+    const p = clon(valido) as unknown as Record<string, unknown> & {
+      proveedores: (Record<string, unknown> & { escalones: Record<string, unknown>[] })[];
+    };
     p.extra = 1;
-    p.medios[0].color = "azul";
-    const r = parsearContratoCuotasV1(p);
+    p.proveedores[0].color = "azul";
+    p.proveedores[0].escalones[0].sinInteres = true;
+    const r = parsearContratoCuotasV2(p);
     expect(r).not.toHaveProperty("extra");
-    expect(r.medios[0]).not.toHaveProperty("color");
+    expect(r.proveedores[0]).not.toHaveProperty("color");
+    expect(r.proveedores[0].escalones[0]).not.toHaveProperty("sinInteres");
   });
 });

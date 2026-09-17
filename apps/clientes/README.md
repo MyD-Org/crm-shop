@@ -36,8 +36,8 @@ Alegra, que refresca el cron diario.
 | `POSTGRES_URL_NON_POOLING` | Opcional. Si está, las migraciones la usan: el DDL conviene por la conexión directa y no por el pooler. |
 | `CRON_SECRET` | Protege `/api/cron/catalog-sync` y `/api/cron/cuotas-sync`. Sin esta variable el endpoint rechaza todo. |
 | `CUOTAS_ENABLED` | `1` muestra cuotas y aplica el límite de cuotas en el pago. Cualquier otro valor (default): checkout como antes, clamp 1..24. |
-| `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v1). |
-| `INTERNAL_SECRET` | Secreto compartido con el CRM: Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
+| `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v2: escalones por proveedor). |
+| `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
 | `SHOP_TENANT_ID` | Tenant del CRM a leer (ej. `central-led`). |
 
 El pool de conexiones es un singleton (se reusa; uno por request agotaría las

@@ -24,7 +24,10 @@ export function mejorOpcionPara(
 }
 
 export interface ResumenCuotas {
-  /** "Hasta 6 cuotas sin interés" / "Hasta 12 cuotas". null si hoy no hay opciones. */
+  /**
+   * "Hasta N cuotas" con N = la mayor cantidad disponible, + " sin interés" si
+   * esa cantidad tiene tasa 0. null si hoy no hay opciones.
+   */
   titulo: string | null;
   mejor: OpcionCuotas | null;
   escalon: {
@@ -51,16 +54,14 @@ export function resumenCuotas(
   const todas = opcionesPara(base, oferta);
   const opciones = typeof tope === "number" ? todas.filter((o) => o.cuotas <= tope) : todas;
   const mejor = mejorOpcion(opciones);
-  const { global } = maxCuotas(opciones);
-
-  let titulo: string | null = null;
-  if (mejor?.sinInteres) titulo = TEXTOS_CUOTAS.hasta(mejor.cuotas, true);
-  else if (global > 1) titulo = TEXTOS_CUOTAS.hasta(global, false);
+  const n = maxCuotas(opciones);
+  const titulo =
+    n > 1 ? TEXTOS_CUOTAS.hasta(n, opciones.some((o) => o.cuotas === n && o.sinInteres)) : null;
 
   const e = opts.cuotasMax === undefined ? proximoEscalon(base, oferta) : null;
   const escalon = e
     ? {
-        texto: TEXTOS_CUOTAS.teFaltan(e.faltante, e.cuotas, e.sinInteres),
+        texto: TEXTOS_CUOTAS.teFaltan(e.faltante, e.cuotas),
         progresoPct: Math.max(0, Math.min(100, Math.floor((base / e.montoMinimo) * 100))),
         faltante: e.faltante,
         montoMinimo: e.montoMinimo,
@@ -71,26 +72,31 @@ export function resumenCuotas(
   return { titulo, mejor, escalon };
 }
 
-export interface BloqueMedio {
-  codigo: string;
-  nombre: string;
+export interface BloqueProveedor {
+  proveedor: string;
+  /** "Tarjetas de crédito (Mercado Pago)". */
+  titulo: string;
   precioContado: number;
-  /** Vacío = para este precio el medio sólo tiene 1 pago. */
+  /** Vacío = para este precio el proveedor sólo tiene 1 pago. */
   opciones: OpcionCuotas[];
 }
 
-/** Modal "Ver medios de pago": un bloque por medio, en el orden de la oferta. */
+/**
+ * Modal "Ver medios de pago": un bloque por proveedor (aplica a todas las
+ * tarjetas de crédito), en el orden de la oferta, con todas las cantidades
+ * disponibles hasta el máximo del escalón.
+ */
 export function bloquesMediosDePago(
   precioFinal: number | null | undefined,
   oferta: OfertaCuotas | null,
-): BloqueMedio[] {
+): BloqueProveedor[] {
   if (!oferta || !montoValido(precioFinal)) return [];
   const opciones = opcionesPara(precioFinal, oferta);
-  return oferta.medios.map((m) => ({
-    codigo: m.codigo,
-    nombre: m.nombre,
+  return oferta.proveedores.map((p) => ({
+    proveedor: p.proveedor,
+    titulo: TEXTOS_CUOTAS.tituloProveedor(p.nombre),
     precioContado: precioFinal,
-    opciones: opciones.filter((o) => o.medio === m.codigo),
+    opciones: opciones.filter((o) => o.proveedor === p.proveedor),
   }));
 }
 

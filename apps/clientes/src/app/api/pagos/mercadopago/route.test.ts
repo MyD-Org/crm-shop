@@ -38,7 +38,7 @@ beforeEach(() => {
   pedido = {
     id: "p1", numero: "PED-1", total: 120000, pagoEstado: "pendiente", pagoMetodo: "mercadopago",
     clienteEmail: "a@b.com", facturacionTipoDoc: null, facturacionNroDoc: null,
-    cuotasMax: 3, cuotasMaxPorMedio: { visa: 3, master: 3 },
+    cuotasMax: 3,
   };
   crearPago.mockReset();
   crearPago.mockResolvedValue({ estado: "pagado", referencia: "r1", detalle: "accredited" });
@@ -57,13 +57,16 @@ describe("POST /api/pagos/mercadopago — cuotas", () => {
     expect(registrarCobro).toHaveBeenCalledTimes(0);
   });
 
-  it("límite por medio: master 12 con {visa:12, master:6} → 422; visa 12 → se cobra", async () => {
-    pedido = { ...pedido, cuotasMax: 12, cuotasMaxPorMedio: { visa: 12, master: 6 } };
-    expect((await pagar({ cuotas: 12, metodoPagoId: "master" })).status).toBe(422);
-    expect(crearPago).not.toHaveBeenCalled();
+  it("tope por proveedor: cualquier marca hasta el máximo; metodoPagoId sólo viaja a MP", async () => {
+    pedido = { ...pedido, cuotasMax: 12 };
+    expect((await pagar({ cuotas: 12, metodoPagoId: "master" })).status).toBe(200);
+    expect(crearPago).toHaveBeenLastCalledWith(expect.objectContaining({ cuotas: 12, metodoPagoId: "master" }));
+    expect((await pagar({ cuotas: 13, metodoPagoId: "visa" })).status).toBe(422);
+  });
 
-    expect((await pagar({ cuotas: 12, metodoPagoId: "visa" })).status).toBe(200);
-    expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ cuotas: 12, metodoPagoId: "visa" }));
+  it("sin metodoPagoId dentro del máximo → se cobra (ya no es obligatorio)", async () => {
+    expect((await pagar({ cuotas: 3 })).status).toBe(200);
+    expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ cuotas: 3, metodoPagoId: undefined }));
   });
 
   it("dentro del máximo → se cobra con esas cuotas", async () => {
@@ -78,7 +81,7 @@ describe("POST /api/pagos/mercadopago — cuotas", () => {
   });
 
   it("pedido legacy (cuotasMax null) → clamp 1..24 de siempre", async () => {
-    pedido = { ...pedido, cuotasMax: null, cuotasMaxPorMedio: null };
+    pedido = { ...pedido, cuotasMax: null };
     expect((await pagar({ cuotas: 12, metodoPagoId: "visa" })).status).toBe(200);
     expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ cuotas: 12 }));
   });

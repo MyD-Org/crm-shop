@@ -1,6 +1,6 @@
 /**
  * Sincronización de cuotas: planes reales del proveedor y config del CRM
- * (contrato v1) a la DB del Shop. SOLO servidor.
+ * (contrato v2, por proveedor) a la DB del Shop. SOLO servidor.
  *
  * Reglas (spec cuotas-configurables, dominio 3):
  * - Última copia buena: una fuente que falla o devuelve algo inválido deja su
@@ -13,10 +13,10 @@
  * La persistencia está detrás de `RepoCuotas` (Drizzle en `cuotas-repo.ts`),
  * así la lógica se testea sin DB.
  */
-import { parsearContratoCuotasV1 } from "./cuotas-contrato";
+import { parsearContratoCuotasV2 } from "./cuotas-contrato";
 import { repoCuotasDrizzle } from "./cuotas-repo";
 import { PROVEEDORES_CUOTAS } from "./pagos/proveedores";
-import type { ContratoCuotasV1, MedioDePago, PlanDeCuotas } from "./pagos/cuotas-tipos";
+import type { ContratoCuotasV2, PlanDeCuotas, ProveedorConfigurado } from "./pagos/cuotas-tipos";
 import type { ProveedorCuotas } from "./pagos/proveedores/tipos";
 
 export type TriggerSyncCuotas = "cron" | "lazy" | "ping" | "manual";
@@ -34,7 +34,7 @@ export interface FilaPlanesLeida {
 export interface RepoCuotas {
   /** Crea la fila si falta y toma el lock. `vencidoAntesDe` null = forzar. */
   tomarLockConfig(tenant: string, ahora: Date, vencidoAntesDe: Date | null): Promise<boolean>;
-  guardarConfig(tenant: string, payload: ContratoCuotasV1, ahora: Date): Promise<void>;
+  guardarConfig(tenant: string, payload: ContratoCuotasV2, ahora: Date): Promise<void>;
   errorConfig(tenant: string, error: string): Promise<void>;
   leerConfig(tenant: string): Promise<{ payload: unknown; fetchedAt: Date | null } | null>;
   /** Crea las filas que falten y devuelve los medios cuyo lock se tomó. */
@@ -54,7 +54,7 @@ export interface DepsSyncCuotas {
 }
 
 export type ResultadoSyncConfig =
-  | { ok: true; fetchedAt: string; payload: ContratoCuotasV1 }
+  | { ok: true; fetchedAt: string; payload: ContratoCuotasV2 }
   | { ok: false; error: string; omitido?: boolean };
 
 export interface ResultadoSyncPlanes {
@@ -94,7 +94,7 @@ export async function syncConfigCRM(
   }
 
   try {
-    const payload = parsearContratoCuotasV1(await deps.obtenerConfigCRM());
+    const payload = parsearContratoCuotasV2(await deps.obtenerConfigCRM());
     if (payload.tenant !== tenant) {
       throw new Error(`el CRM devolvió el tenant "${payload.tenant}" en vez de "${tenant}"`);
     }
@@ -109,23 +109,25 @@ export async function syncConfigCRM(
 }
 
 /**
- * Planes de cada proveedor para los medios activos de la config. Sin config
- * (nunca se leyó el CRM) se consultan los medios por defecto del proveedor.
+ * Planes de cada proveedor activo en la config. La config es por proveedor
+ * (todas las tarjetas de crédito), pero el snapshot se sigue guardando por
+ * marca (`mediosPorDefecto`: visa, master) porque así responde el proveedor.
+ * Sin config (nunca se leyó el CRM) se consultan todos los proveedores.
  * Nunca tira.
  */
 export async function syncPlanesProveedor(
   trigger: TriggerSyncCuotas,
   deps: DepsSyncCuotas = depsPorDefecto(),
-  mediosConfig: MedioDePago[] | null = null,
+  proveedoresConfig: ProveedorConfigurado[] | null = null,
 ): Promise<ResultadoSyncPlanes> {
   const { repo } = deps;
   const ahora = deps.ahora();
   const salida: ResultadoSyncPlanes["medios"] = [];
 
   for (const proveedor of deps.proveedores) {
-    const medios = mediosConfig
-      ? [...new Set(mediosConfig.filter((m) => m.activo && m.proveedor === proveedor.id).map((m) => m.codigo))]
-      : proveedor.mediosPorDefecto;
+    const configurado =
+      proveedoresConfig === null || proveedoresConfig.some((p) => p.activo && p.proveedor === proveedor.id);
+    const medios = configurado ? proveedor.mediosPorDefecto : [];
     if (medios.length === 0) continue;
 
     let tomados: string[];
@@ -162,50 +164,25 @@ export async function syncPlanesProveedor(
 }
 
 /** Config de la caché (si es legible) cuando el pull de esta corrida falló. */
-async function configVigente(deps: DepsSyncCuotas, config: ResultadoSyncConfig): Promise<ContratoCuotasV1 | null> {
+async function configVigente(deps: DepsSyncCuotas, config: ResultadoSyncConfig): Promise<ContratoCuotasV2 | null> {
   if (config.ok) return config.payload;
   if (!deps.tenant) return null;
   try {
     const fila = await deps.repo.leerConfig(deps.tenant);
-    return fila?.payload ? parsearContratoCuotasV1(fila.payload) : null;
+    return fila?.payload ? parsearContratoCuotasV2(fila.payload) : null;
   } catch {
     return null;
   }
 }
 
-/** Aviso operativo: el admin marcó sin interés pero la cuenta del proveedor cobra tasa. */
-async function advertirSinInteresConTasa(deps: DepsSyncCuotas, config: ContratoCuotasV1 | null) {
-  if (!config) return;
-  let filas: FilaPlanesLeida[];
-  try {
-    filas = await deps.repo.leerPlanes();
-  } catch {
-    return;
-  }
-  for (const o of config.opciones) {
-    if (!o.activo || !o.sinInteres) continue;
-    const medio = config.medios.find((m) => m.id === o.medioId);
-    if (!medio) continue;
-    const fila = filas.find((f) => f.proveedor === medio.proveedor && f.medio === medio.codigo);
-    const planes = Array.isArray(fila?.planes) ? (fila.planes as PlanDeCuotas[]) : [];
-    const p = planes.find((x) => x?.cuotas === o.cuotas);
-    if (p && typeof p.tasaPct === "number" && p.tasaPct > 0) {
-      console.warn(
-        `[cuotas-sync] ${medio.codigo} ${o.cuotas} cuotas está marcada sin interés en el CRM pero la tasa del proveedor es ${p.tasaPct}%: se mostrará con interés.`,
-      );
-    }
-  }
-}
-
-/** Corrida completa: config primero (define qué medios consultar), después planes. */
+/** Corrida completa: config primero (define qué proveedores consultar), después planes. */
 export async function syncCuotas(
   trigger: TriggerSyncCuotas,
   deps: DepsSyncCuotas = depsPorDefecto(),
 ): Promise<ResultadoSyncCuotas> {
   const config = await syncConfigCRM(trigger, deps);
   const vigente = await configVigente(deps, config);
-  const planes = await syncPlanesProveedor(trigger, deps, vigente ? vigente.medios : null);
-  await advertirSinInteresConTasa(deps, vigente);
+  const planes = await syncPlanesProveedor(trigger, deps, vigente ? vigente.proveedores : null);
   return { ok: config.ok && planes.ok, config, planes };
 }
 
@@ -213,13 +190,13 @@ export async function syncCuotas(
 // Dependencias reales
 // ---------------------------------------------------------------------------
 
-/** GET {CRM_INTERNAL_URL}/api/internal/shop/cuotas?tenant=… con Bearer INTERNAL_SECRET. */
+/** GET {CRM_INTERNAL_URL}/api/internal/shop/cuotas?tenant=… con Bearer SHOP_CRM_SECRET. */
 export async function obtenerConfigCRMHttp(): Promise<unknown> {
   const base = process.env.CRM_INTERNAL_URL;
-  const secreto = process.env.INTERNAL_SECRET;
+  const secreto = process.env.SHOP_CRM_SECRET;
   const tenant = process.env.SHOP_TENANT_ID;
   if (!base || !secreto || !tenant) {
-    throw new Error("Faltan CRM_INTERNAL_URL, INTERNAL_SECRET o SHOP_TENANT_ID en el entorno.");
+    throw new Error("Faltan CRM_INTERNAL_URL, SHOP_CRM_SECRET o SHOP_TENANT_ID en el entorno.");
   }
   const url = `${base.replace(/\/+$/, "")}/api/internal/shop/cuotas?tenant=${encodeURIComponent(tenant)}`;
   const res = await fetch(url, {

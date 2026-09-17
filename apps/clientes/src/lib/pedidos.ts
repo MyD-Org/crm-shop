@@ -355,18 +355,6 @@ export interface PedidoParaPago {
   facturacionNroDoc: string | null;
   /** Congelado al crear el pedido. null = legacy / sin oferta leíble. */
   cuotasMax: number | null;
-  cuotasMaxPorMedio: Record<string, number> | null;
-}
-
-/** `cuotas_plan.maxPorMedio` validado: jsonb viejo o corrupto → null (sólo tope global). */
-function maxPorMedioDe(plan: unknown): Record<string, number> | null {
-  const crudo = (plan as { maxPorMedio?: unknown } | null)?.maxPorMedio;
-  if (typeof crudo !== "object" || crudo === null || Array.isArray(crudo)) return null;
-  const salida: Record<string, number> = {};
-  for (const [medio, tope] of Object.entries(crudo)) {
-    if (Number.isInteger(tope) && (tope as number) >= 1) salida[medio] = tope as number;
-  }
-  return salida;
 }
 
 /**
@@ -398,7 +386,6 @@ export async function getPedidoParaPago(
     facturacionTipoDoc: fila.facturacionTipoDoc,
     facturacionNroDoc: fila.facturacionNroDoc,
     cuotasMax: fila.cuotasMax,
-    cuotasMaxPorMedio: fila.cuotasMax === null ? null : maxPorMedioDe(fila.cuotasPlan),
   };
 }
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import valido from "./__fixtures__/cuotas-contrato-v1/valido.json";
-import vacioValido from "./__fixtures__/cuotas-contrato-v1/vacio-valido.json";
+import valido from "./__fixtures__/cuotas-contrato-v2/valido.json";
+import vacioValido from "./__fixtures__/cuotas-contrato-v2/vacio-valido.json";
 import type { PlanDeCuotas } from "./pagos/cuotas-tipos";
 import type { ProveedorCuotas, ResultadoPlanesMedio } from "./pagos/proveedores/tipos";
 import {
@@ -127,10 +127,10 @@ describe("syncCuotas", () => {
   it("éxito: guarda config y snapshots con fetchedAt", async () => {
     const r = await syncCuotas("cron", deps());
     expect(r.ok).toBe(true);
-    expect(mem.config.get("central-led")).toMatchObject({ payload: valido, version: "v1", fetchedAt: T0, lastError: null });
+    expect(mem.config.get("central-led")).toMatchObject({ payload: valido, version: "v2", fetchedAt: T0, lastError: null });
     expect(mem.planes.get("mercadopago|visa")).toMatchObject({ fetchedAt: T0, lastError: null });
     expect(mem.planes.get("mercadopago|visa")!.planes).toHaveLength(3);
-    // Consulta los medios de la config del CRM.
+    // Mercado Pago está activo en la config: consulta sus marcas de crédito.
     expect(mp.consultados[0].sort()).toEqual(["master", "visa"]);
   });
 
@@ -169,7 +169,7 @@ describe("syncCuotas", () => {
   it("CRM inválido: payload intacto + lastError; los planes igual se sincronizan", async () => {
     await syncCuotas("cron", deps());
     reloj = DESPUES;
-    crm = async () => ({ ...valido, version: "v2" });
+    crm = async () => ({ ...valido, version: "v1" });
     const r = await syncCuotas("cron", deps());
 
     expect(r.config.ok).toBe(false);
@@ -185,14 +185,14 @@ describe("syncCuotas", () => {
     expect(mem.config.get("central-led")!.payload).toBeNull();
   });
 
-  it("CRM caído sin copia previa: usa medios por defecto para los planes", async () => {
+  it("CRM caído sin copia previa: consulta las marcas de todos los proveedores", async () => {
     crm = async () => { throw new Error("ECONNREFUSED"); };
     await syncCuotas("cron", deps());
     expect(mp.consultados[0].sort()).toEqual(["master", "visa"]);
     expect(mem.config.get("central-led")).toMatchObject({ payload: null, lastError: "ECONNREFUSED" });
   });
 
-  it("CRM vacío válido: se guarda y no consulta planes (no hay medios)", async () => {
+  it("CRM vacío válido: se guarda y no consulta planes (no hay proveedores)", async () => {
     await syncCuotas("cron", deps());
     reloj = DESPUES;
     crm = async () => vacioValido;
@@ -228,24 +228,20 @@ describe("syncCuotas", () => {
     expect(r).toMatchObject({ ok: false });
     expect(mem.config.size).toBe(0);
   });
-
-  it("console.warn por opción marcada sin interés con tasa > 0", async () => {
-    // valido.json: visa 3 y 6 marcadas sin interés; master 12 no marcada.
-    mp = proveedorFalso((medio) => ({ medio, ok: true, planes: [plan(medio, 3, 0), plan(medio, 6, 15), plan(medio, 12, 20)] }));
-    await syncCuotas("cron", deps());
-    const avisos = vi.mocked(console.warn).mock.calls.map((c) => c.join(" "));
-    expect(avisos).toHaveLength(1);
-    expect(avisos[0]).toMatch(/visa.*6.*15/);
-  });
 });
 
 describe("syncPlanesProveedor", () => {
-  it("medios inactivos o de otro proveedor no se consultan", async () => {
-    await syncPlanesProveedor("cron", deps(), [
-      { id: "1", proveedor: "mercadopago", codigo: "visa", nombre: "Visa", activo: true, orden: 0 },
-      { id: "2", proveedor: "mercadopago", codigo: "master", nombre: "Master", activo: false, orden: 1 },
-      { id: "3", proveedor: "mobbex", codigo: "amex", nombre: "Amex", activo: true, orden: 2 },
-    ]);
-    expect(mp.consultados).toEqual([["visa"]]);
+  const prov = (proveedor: string, activo = true) => ({
+    id: proveedor, proveedor, nombre: proveedor, activo, orden: 0, escalones: [],
+  });
+
+  it("consulta visa y master del proveedor activo; inactivos o sin adaptador no se consultan", async () => {
+    await syncPlanesProveedor("cron", deps(), [prov("mercadopago"), prov("mobbex")]);
+    expect(mp.consultados).toEqual([["visa", "master"]]);
+  });
+
+  it("proveedor inactivo en la config → no se consulta", async () => {
+    await syncPlanesProveedor("cron", deps(), [prov("mercadopago", false)]);
+    expect(mp.consultados).toEqual([]);
   });
 });

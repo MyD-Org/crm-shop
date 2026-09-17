@@ -6,7 +6,7 @@ export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
 /**
- * Ping del CRM tras guardar medios u opciones de cuotas (contrato v1, punto 2).
+ * Ping del CRM tras guardar proveedores o escalones de cuotas (contrato v2).
  *
  * El body se IGNORA siempre (ni se lee): el ping sólo dispara el re-pull del
  * GET interno del CRM, único camino de ingestión validado. Así un ping no
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * inválido (la caché anterior queda intacta).
  */
 export async function POST(req: Request) {
-  if (!bearerMatches(req.headers.get("authorization"), process.env.INTERNAL_SECRET)) {
+  if (!bearerMatches(req.headers.get("authorization"), process.env.SHOP_CRM_SECRET)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

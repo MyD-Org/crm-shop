@@ -357,7 +357,11 @@ export const orders = pgTable(
      * crearlo ⇒ la ruta de pago aplica el comportamiento legacy (clamp 1..24).
      */
     cuotasMax: integer("cuotas_max"),
-    /** Snapshot `PlanPedido` (máximo por medio, opciones, versión de config). */
+    /**
+     * Snapshot `PlanPedido` (proveedor, máximo, opciones, versión de config).
+     * Auditoría: la ruta de pago sólo lee `cuotas_max`. Pedidos anteriores a
+     * cuotas v2 pueden traer el shape v1 (con `maxPorMedio`).
+     */
     cuotasPlan: jsonb("cuotas_plan").$type<PlanPedido>(),
     /** Cuotas reales que informó el proveedor al confirmar el pago. */
     pagoCuotas: integer("pago_cuotas"),
@@ -455,8 +459,8 @@ export const paymentPlanSnapshots = pgTable(
 );
 
 /**
- * Caché de la configuración de cuotas del CRM (contrato v1) por tenant. Un
- * payload válido sin opciones se guarda igual: vacío válido no es un fallo.
+ * Caché de la configuración de cuotas del CRM (contrato v2) por tenant. Un
+ * payload válido sin proveedores se guarda igual: vacío válido no es un fallo.
  */
 export const paymentConfigCache = pgTable("payment_config_cache", {
   tenant: text("tenant").primaryKey(), // SHOP_TENANT_ID

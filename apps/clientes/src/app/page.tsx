@@ -1,7 +1,7 @@
 import { HomeClient } from "@/components/HomeClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
-// La oferta de cuotas se lee de la DB en cada request (vigencias por fecha y
+// La oferta de cuotas se lee de la DB en cada request (config del CRM y
 // refresh lazy): no puede quedar congelada en el build.
 export const dynamic = "force-dynamic";
 

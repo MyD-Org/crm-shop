@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge, Checkbox, Chip, ProductCard, Select } from "@myd-org/ui";
 import { Footer } from "@/components/Footer";
 import { AddToCartButton } from "@/components/AddToCartButton";
@@ -9,13 +10,19 @@ import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasCard } from "@/components/CuotasCard";
 import type { Product } from "@/data/products";
 import type { Facetas } from "@/lib/catalog";
+import {
+  hrefCon,
+  paginasVisibles,
+  type EstadoCatalogo,
+  type OrdenCatalogo,
+} from "@/lib/catalogo-url";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
 /** Precio principal que ve el visitante: final con IVA si se conoce, si no el de siempre. */
 const precioExhibido = (p: Product) => p.precioFinal ?? p.price;
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: { label: string; value: OrdenCatalogo }[] = [
   { label: "Más vendidos", value: "ventas" },
   { label: "Precio: menor a mayor", value: "precio-asc" },
   { label: "Precio: mayor a menor", value: "precio-desc" },
@@ -23,26 +30,41 @@ const SORT_OPTIONS = [
 ];
 
 /**
- * UI interactiva del catálogo (filtros, orden). Los productos y las facetas
- * llegan ya resueltos desde Alegra vía el Server Component `catalogo/page.tsx`.
+ * UI del catálogo (filtros, orden, paginación).
+ *
+ * El filtrado, el orden y el conteo ya NO pasan por acá: los resuelve Postgres
+ * y llegan resueltos desde `catalogo/page.tsx`. Este componente sólo traduce lo
+ * que toca el visitante a una URL nueva, porque el estado del catálogo vive en
+ * la query string (ver src/lib/catalogo-url.ts).
  */
 export function CatalogoClient({
   productos,
   facetas,
-  query,
+  estado,
+  total,
+  paginas,
   oferta = null,
 }: {
+  /** Sólo la página actual, nunca el catálogo entero. */
   productos: Product[];
   facetas: Facetas;
-  query?: string;
+  /** Filtros, orden y página vigentes, tal como los leyó el servidor. */
+  estado: EstadoCatalogo;
+  /** Productos que cumplen los filtros, más allá de esta página. */
+  total: number;
+  paginas: number;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
 }) {
-  const [activeFilters, setActiveFilters] = useState<string[]>([]);
-  const [sort, setSort] = useState("ventas");
+  const router = useRouter();
+  // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
+  // en vez de quedarse muda.
+  const [navegando, startTransition] = useTransition();
 
-  // Mejor opción por producto, sobre su precio final unitario. Una sola vez por
-  // catálogo/oferta: filtrar u ordenar no la recalcula.
+  const ir = (cambios: Parameters<typeof hrefCon>[1]) =>
+    startTransition(() => router.push(hrefCon(estado, cambios)));
+
+  // Mejor opción de cuotas por producto, sobre su precio final unitario.
   const cuotasPorProducto = useMemo(() => {
     const m = new Map<string, OpcionCuotas>();
     if (!oferta) return m;
@@ -53,40 +75,25 @@ export function CatalogoClient({
     return m;
   }, [productos, oferta]);
 
-  const removeFilter = (f: string) =>
-    setActiveFilters((prev) => prev.filter((x) => x !== f));
+  const toggleCategoria = (label: string) =>
+    ir({
+      categorias: estado.categorias.includes(label)
+        ? estado.categorias.filter((x) => x !== label)
+        : [...estado.categorias, label],
+    });
 
-  const toggleFilter = (f: string) =>
-    setActiveFilters((prev) =>
-      prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f],
-    );
+  const toggleMarca = (label: string) =>
+    ir({
+      marcas: estado.marcas.includes(label)
+        ? estado.marcas.filter((x) => x !== label)
+        : [...estado.marcas, label],
+    });
 
-  const sortedProducts = useMemo(() => {
-    // Categorias y marcas se combinan con AND entre grupos y OR dentro de cada
-    // grupo: "Categoria A o B" Y "Marca X o Y".
-    const catsSel = activeFilters.filter((f) =>
-      facetas.categorias.some((c) => c.label === f),
-    );
-    const marcasSel = activeFilters.filter((f) =>
-      facetas.marcas.some((m) => m.label === f),
-    );
-
-    const list = productos.filter(
-      (p) =>
-        (catsSel.length === 0 || (p.category && catsSel.includes(p.category))) &&
-        (marcasSel.length === 0 || (p.brand && marcasSel.includes(p.brand))),
-    );
-    switch (sort) {
-      case "precio-asc":
-        return list.sort((a, b) => precioExhibido(a) - precioExhibido(b));
-      case "precio-desc":
-        return list.sort((a, b) => precioExhibido(b) - precioExhibido(a));
-      case "nombre":
-        return list.sort((a, b) => a.name.localeCompare(b.name, "es"));
-      default:
-        return list;
-    }
-  }, [sort, productos, activeFilters, facetas]);
+  /** Chips de filtros activos: categorías y marcas juntas, como las ve el visitante. */
+  const chips = [
+    ...estado.categorias.map((label) => ({ label, quitar: () => toggleCategoria(label) })),
+    ...estado.marcas.map((label) => ({ label, quitar: () => toggleMarca(label) })),
+  ];
 
   return (
     <>
@@ -103,8 +110,8 @@ export function CatalogoClient({
                   <li key={c.label}>
                     <label className="flex cursor-pointer items-center gap-2 text-sm">
                       <Checkbox
-                        checked={activeFilters.includes(c.label)}
-                        onCheckedChange={() => toggleFilter(c.label)}
+                        checked={estado.categorias.includes(c.label)}
+                        onCheckedChange={() => toggleCategoria(c.label)}
                       />
                       <span className="flex-1">{c.label}</span>
                       <span className="text-xs text-muted">{c.count}</span>
@@ -123,8 +130,8 @@ export function CatalogoClient({
                   <li key={b.label}>
                     <label className="flex cursor-pointer items-center gap-2 text-sm">
                       <Checkbox
-                        checked={activeFilters.includes(b.label)}
-                        onCheckedChange={() => toggleFilter(b.label)}
+                        checked={estado.marcas.includes(b.label)}
+                        onCheckedChange={() => toggleMarca(b.label)}
                       />
                       <span className="flex-1">{b.label}</span>
                       <span className="text-xs text-muted">{b.count}</span>
@@ -141,46 +148,55 @@ export function CatalogoClient({
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h1 className="text-2xl font-extrabold text-text">
-                {query ? `Resultados para "${query}"` : "Catálogo"}
+                {estado.query ? `Resultados para "${estado.query}"` : "Catálogo"}
               </h1>
               <p className="mt-1 text-sm text-muted">
-                {sortedProducts.length} productos
+                {total === 0
+                  ? "Sin productos"
+                  : paginas > 1
+                    ? `${total} productos · página ${estado.pagina} de ${paginas}`
+                    : `${total} productos`}
               </p>
             </div>
             <Select
               options={SORT_OPTIONS}
-              value={sort}
-              onValueChange={setSort}
+              value={estado.orden}
+              onValueChange={(v) => ir({ orden: v as OrdenCatalogo })}
               aria-label="Ordenar productos"
               className="w-52"
             />
           </div>
 
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            {activeFilters.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                {activeFilters.map((f) => (
-                  <Chip key={f} variant="removable" onRemove={() => removeFilter(f)}>
-                    {f}
-                  </Chip>
-                ))}
-                <button
-                  onClick={() => setActiveFilters([])}
-                  className="text-xs font-medium text-primary hover:underline"
-                >
-                  Limpiar todo
-                </button>
-              </div>
-            )}
-          </div>
+          {chips.length > 0 && (
+            <div className="mb-6 flex flex-wrap items-center gap-2">
+              {chips.map((c) => (
+                <Chip key={c.label} variant="removable" onRemove={c.quitar}>
+                  {c.label}
+                </Chip>
+              ))}
+              <button
+                onClick={() => ir({ categorias: [], marcas: [] })}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Limpiar todo
+              </button>
+            </div>
+          )}
 
-          {sortedProducts.length === 0 ? (
+          {productos.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted">
               No se encontraron productos.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {sortedProducts.map((p) => (
+            <div
+              // Mientras el server arma la página siguiente, la grilla vigente
+              // se atenúa: el visitante ve que algo está pasando.
+              className={`grid grid-cols-1 gap-4 transition-opacity sm:grid-cols-2 xl:grid-cols-3 ${
+                navegando ? "opacity-50" : ""
+              }`}
+              aria-busy={navegando}
+            >
+              {productos.map((p) => (
                 <Link key={p.id} href={`/producto/${p.id}`}>
                   <ProductCard
                     name={p.name}
@@ -211,10 +227,90 @@ export function CatalogoClient({
               ))}
             </div>
           )}
+
+          <Paginacion estado={estado} paginas={paginas} />
+          {/* Sólo para lectores de pantalla: el cambio de página no mueve el foco. */}
+          <p className="sr-only" role="status">
+            {total === 0
+              ? "Sin resultados"
+              : `Mostrando ${productos.length} de ${total} productos, página ${estado.pagina} de ${paginas}`}
+          </p>
         </div>
       </main>
 
       <Footer />
     </>
+  );
+}
+
+/** Estilo compartido por todos los controles de la barra de paginación. */
+const CELDA =
+  "inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm";
+
+/**
+ * Barra de páginas numeradas. Son `<Link>`, no botones: cada página es una URL
+ * real, así que se puede compartir, abrir en otra pestaña e indexar.
+ */
+function Paginacion({
+  estado,
+  paginas,
+}: {
+  estado: EstadoCatalogo;
+  paginas: number;
+}) {
+  if (paginas <= 1) return null;
+
+  const { pagina } = estado;
+  const flecha = (destino: number, etiqueta: string, simbolo: string) =>
+    destino >= 1 && destino <= paginas ? (
+      <Link
+        href={hrefCon(estado, { pagina: destino })}
+        aria-label={etiqueta}
+        className={`${CELDA} border-border hover:border-primary hover:text-primary`}
+      >
+        {simbolo}
+      </Link>
+    ) : (
+      <span
+        aria-hidden
+        className={`${CELDA} border-border text-muted opacity-40`}
+      >
+        {simbolo}
+      </span>
+    );
+
+  return (
+    <nav aria-label="Paginación del catálogo" className="mt-8 flex justify-center">
+      <ul className="flex flex-wrap items-center gap-1">
+        <li>{flecha(pagina - 1, "Página anterior", "‹")}</li>
+        {paginasVisibles(pagina, paginas).map((n, i) =>
+          n == null ? (
+            <li key={`gap-${i}`} aria-hidden className="px-1 text-sm text-muted">
+              …
+            </li>
+          ) : (
+            <li key={n}>
+              {n === pagina ? (
+                <span
+                  aria-current="page"
+                  className={`${CELDA} border-primary bg-primary font-semibold text-white`}
+                >
+                  {n}
+                </span>
+              ) : (
+                <Link
+                  href={hrefCon(estado, { pagina: n })}
+                  aria-label={`Página ${n}`}
+                  className={`${CELDA} border-border hover:border-primary hover:text-primary`}
+                >
+                  {n}
+                </Link>
+              )}
+            </li>
+          )
+        )}
+        <li>{flecha(pagina + 1, "Página siguiente", "›")}</li>
+      </ul>
+    </nav>
   );
 }

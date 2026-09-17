@@ -1,4 +1,5 @@
-import { getCatalogo, facetasDe } from "@/lib/catalog";
+import { getFacetas, getPaginaCatalogo } from "@/lib/catalog";
+import { leerEstado, type ParamCrudo } from "@/lib/catalogo-url";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
@@ -8,21 +9,48 @@ export const dynamic = "force-dynamic";
 export default async function CatalogoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{
+    q?: ParamCrudo;
+    categoria?: ParamCrudo;
+    marca?: ParamCrudo;
+    orden?: ParamCrudo;
+    pagina?: ParamCrudo;
+  }>;
 }) {
-  const { q } = await searchParams;
-  // Sin limit: el catálogo entero. Los filtros del cliente y los conteos de las
-  // facetas solo son correctos si operan sobre todo el conjunto, no sobre una
-  // primera página. TODO: paginar en el server cuando el payload moleste.
-  // En paralelo: la oferta de cuotas es una lectura chica e independiente.
-  // null (flag apagado, sin datos o error) → el catálogo sale sin cuotas.
-  const [productos, oferta] = await Promise.all([
-    getCatalogo({ busqueda: q }),
+  const estado = leerEstado(await searchParams);
+
+  // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
+  // resuelven en Postgres: filtrar u ordenar después de paginar daría
+  // resultados incompletos.
+  //
+  // Las tres lecturas son independientes entre sí:
+  // - las facetas cuentan sobre TODO lo que matchea la búsqueda (no sobre lo
+  //   ya filtrado), que es lo que hacían cuando se calculaban en el cliente;
+  // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
+  //   o error) ⇒ el catálogo sale sin cuotas.
+  const [pagina, facetas, oferta] = await Promise.all([
+    getPaginaCatalogo({
+      filtros: {
+        busqueda: estado.query,
+        categorias: estado.categorias,
+        marcas: estado.marcas,
+      },
+      orden: estado.orden,
+      pagina: estado.pagina,
+    }),
+    getFacetas(estado.query),
     getOfertaCuotas(),
   ]);
-  const facetas = facetasDe(productos);
 
   return (
-    <CatalogoClient productos={productos} facetas={facetas} query={q} oferta={oferta} />
+    <CatalogoClient
+      productos={pagina.productos}
+      total={pagina.total}
+      paginas={pagina.paginas}
+      // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
+      estado={{ ...estado, pagina: pagina.pagina }}
+      facetas={facetas}
+      oferta={oferta}
+    />
   );
 }

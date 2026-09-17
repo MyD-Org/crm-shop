@@ -18,7 +18,7 @@
  */
 
 import { cache } from "react";
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
 import { catalogCategories, catalogProducts } from "@/db/schema";
@@ -31,6 +31,7 @@ import {
   type AlegraItem,
   type AlegraPrice,
 } from "./alegra";
+import type { OrdenCatalogo } from "./catalogo-url";
 import { precioFinal } from "./precio-final";
 import { stockSimulado } from "./stock-simulado";
 import type { Product } from "@/data/products";
@@ -115,6 +116,12 @@ export function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Prod
   };
 }
 
+/** Condición del join productos × categorías, compartida por todas las queries. */
+const JOIN_CATEGORIAS = eq(
+  catalogProducts.categoryAlegraId,
+  catalogCategories.alegraId
+);
+
 /** Columnas del join, en un solo lugar para no repetirlas entre queries. */
 const COLUMNAS_CATALOGO = {
   alegraId: catalogProducts.alegraId,
@@ -168,10 +175,7 @@ export async function getCatalogo(opts?: {
   let query = getDb()
     .select(COLUMNAS_CATALOGO)
     .from(catalogProducts)
-    .leftJoin(
-      catalogCategories,
-      eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId)
-    )
+    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .where(
       and(
         eq(catalogProducts.status, "active"),
@@ -186,6 +190,149 @@ export async function getCatalogo(opts?: {
 
   const filas = await query;
   return filas.map((f) => mapFilaToProduct(f, opts?.idPriceList));
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo paginado (filtros, orden y conteo en el servidor)
+// ---------------------------------------------------------------------------
+
+/** Cuántos productos entran en una página del catálogo. Múltiplo de la grilla (1/2/3 columnas). */
+export const PRODUCTOS_POR_PAGINA = 24;
+
+/** Filtros que aplica el servidor. Categorías y marcas son OR dentro del grupo. */
+export interface FiltrosCatalogo {
+  busqueda?: string;
+  categorias?: string[];
+  marcas?: string[];
+}
+
+export interface PaginaCatalogo {
+  productos: Product[];
+  /** Total de productos que cumplen los filtros (no los de esta página). */
+  total: number;
+  /** Página efectiva, 1-based y ya acotada al rango válido. */
+  pagina: number;
+  /** Cantidad de páginas. 0 productos ⇒ 1 página (la vacía). */
+  paginas: number;
+}
+
+/**
+ * Marca efectiva del producto, en SQL. Tiene que replicar el fallback de
+ * `mapFilaToProduct`: si el customField de Alegra vino vacío, la marca que se
+ * exhibe (y por la que se filtra) es el nombre de la categoría.
+ */
+const marcaSql = sql<string>`coalesce(nullif(${catalogProducts.brand}, ''), ${catalogCategories.name})`;
+
+/**
+ * Precio de lista principal, extraído del jsonb `prices`. Equivalente en SQL de
+ * `precioDeLista` sin lista de cliente: el que tiene `main`, si no el primero.
+ * El guard de `jsonb_typeof` evita que `jsonb_array_elements` explote si algún
+ * ítem quedó con un `prices` que no es array.
+ */
+const precioSql = sql<string>`coalesce(
+  case when jsonb_typeof(${catalogProducts.prices}) = 'array' then (
+    select (elem->>'price')::numeric
+    from jsonb_array_elements(${catalogProducts.prices}) elem
+    where (elem->>'main')::boolean
+    limit 1
+  ) end,
+  case when jsonb_typeof(${catalogProducts.prices}) = 'array'
+    then (${catalogProducts.prices}->0->>'price')::numeric end,
+  0
+)`;
+
+/**
+ * Precio que ve el visitante, en SQL: el final con IVA cuando se conoce la
+ * alícuota, si no el neto — mismo criterio que `precioExhibido` del cliente.
+ * No replica el redondeo al centavo de `precioFinal()` porque acá sólo se usa
+ * para ORDENAR; el número que se muestra sigue saliendo de `mapFilaToProduct`.
+ */
+const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${catalogProducts.ivaPorcentaje}, 0) / 100)`;
+
+/** WHERE compartido por la página, el conteo y las facetas. */
+function condicionesDe(filtros: FiltrosCatalogo, conFiltros: boolean) {
+  const q = filtros.busqueda?.trim();
+  return and(
+    eq(catalogProducts.status, "active"),
+    q ? coincideTexto(q) : undefined,
+    conFiltros && filtros.categorias?.length
+      ? inArray(catalogCategories.name, filtros.categorias)
+      : undefined,
+    conFiltros && filtros.marcas?.length
+      ? inArray(marcaSql, filtros.marcas)
+      : undefined,
+  );
+}
+
+/**
+ * ORDER BY según el criterio elegido. "ventas" no tiene todavía un dato de
+ * ventas detrás: ordena por nombre, igual que antes hacía el orden de la query.
+ * El desempate por nombre mantiene la paginación estable (sin él, dos productos
+ * del mismo precio pueden intercambiarse entre páginas).
+ */
+function ordenDe(orden: OrdenCatalogo) {
+  switch (orden) {
+    case "precio-asc":
+      return [sql`${precioExhibidoSql} asc`, asc(catalogProducts.name)];
+    case "precio-desc":
+      return [sql`${precioExhibidoSql} desc`, asc(catalogProducts.name)];
+    default:
+      return [asc(catalogProducts.name)];
+  }
+}
+
+/** Página 1-based acotada al rango válido. */
+export function acotarPagina(pagina: number, paginas: number): number {
+  if (!Number.isFinite(pagina)) return 1;
+  return Math.min(Math.max(Math.trunc(pagina), 1), Math.max(paginas, 1));
+}
+
+/**
+ * Una página del catálogo, con los filtros y el orden resueltos en Postgres.
+ *
+ * Todo esto vivía en el cliente sobre el catálogo entero (~2800 productos por
+ * request). Filtrar u ordenar después de paginar daría resultados incompletos,
+ * así que las tres cosas se hacen acá, en la misma query.
+ */
+export async function getPaginaCatalogo(opts?: {
+  filtros?: FiltrosCatalogo;
+  orden?: OrdenCatalogo;
+  /** 1-based. Si se pasa de largo, se devuelve la última página. */
+  pagina?: number;
+  porPagina?: number;
+  idPriceList?: string;
+}): Promise<PaginaCatalogo> {
+  const filtros = opts?.filtros ?? {};
+  const porPagina = opts?.porPagina ?? PRODUCTOS_POR_PAGINA;
+  const where = condicionesDe(filtros, true);
+
+  const [conteo] = await getDb()
+    .select({ total: sql<number>`count(*)::int` })
+    .from(catalogProducts)
+    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .where(where);
+
+  const total = conteo?.total ?? 0;
+  const paginas = Math.max(Math.ceil(total / porPagina), 1);
+  const pagina = acotarPagina(opts?.pagina ?? 1, paginas);
+
+  const filas = total
+    ? await getDb()
+        .select(COLUMNAS_CATALOGO)
+        .from(catalogProducts)
+        .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+        .where(where)
+        .orderBy(...ordenDe(opts?.orden ?? "ventas"))
+        .limit(porPagina)
+        .offset((pagina - 1) * porPagina)
+    : [];
+
+  return {
+    productos: filas.map((f) => mapFilaToProduct(f, opts?.idPriceList)),
+    total,
+    pagina,
+    paginas,
+  };
 }
 
 /**
@@ -241,29 +388,44 @@ export interface Facetas {
   marcas: Faceta[];
 }
 
-/** Cuenta ocurrencias de un campo y las ordena de mayor a menor. */
-function contar(valores: (string | undefined)[]): Faceta[] {
-  const conteo = new Map<string, number>();
-  for (const v of valores) {
-    if (!v) continue;
-    conteo.set(v, (conteo.get(v) ?? 0) + 1);
-  }
-  return [...conteo.entries()]
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+/**
+ * Facetas con sus conteos, calculadas en Postgres sobre TODO el conjunto que
+ * matchea la búsqueda.
+ *
+ * Los conteos NO miran las categorías/marcas ya tildadas: son las de "cuántos
+ * productos hay si tildo esto", igual que cuando se calculaban en el cliente
+ * sobre el catálogo entero. Por eso `condicionesDe(..., false)`.
+ *
+ * Antes salían de contar en memoria los ~2800 productos que el server mandaba
+ * al browser; ahora que sólo viaja una página, tienen que venir de la DB.
+ */
+export async function getFacetas(busqueda?: string): Promise<Facetas> {
+  const where = condicionesDe({ busqueda }, false);
+
+  const [categorias, marcas] = await Promise.all([
+    getDb()
+      .select({
+        label: sql<string>`${catalogCategories.name}`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(catalogProducts)
+      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .where(and(where, sql`nullif(${catalogCategories.name}, '') is not null`))
+      .groupBy(catalogCategories.name)
+      .orderBy(sql`count(*) desc`, asc(catalogCategories.name)),
+    getDb()
+      .select({ label: marcaSql, count: sql<number>`count(*)::int` })
+      .from(catalogProducts)
+      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .where(and(where, sql`nullif(${marcaSql}, '') is not null`))
+      .groupBy(marcaSql)
+      .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
+  ]);
+
+  return { categorias, marcas };
 }
 
-/**
- * Facetas de una lista de productos ya cargada. Función pura: los conteos son
- * de esa lista, así que solo son los del catálogo completo si se la llama con
- * el catálogo completo.
- */
-export function facetasDe(productos: Product[]): Facetas {
-  return {
-    categorias: contar(productos.map((p) => p.category)),
-    marcas: contar(productos.map((p) => p.brand)),
-  };
-}
+
 
 /**
  * Categorías del catálogo, para la navegación (menú del header y grilla del

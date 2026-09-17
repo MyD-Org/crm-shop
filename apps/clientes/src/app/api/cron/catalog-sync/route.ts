@@ -2,14 +2,23 @@ import { NextResponse } from "next/server";
 import { syncCatalog } from "@/lib/catalog-sync";
 import { bearerMatches } from "@/lib/secure-compare";
 
-// Recorrer ~2800 items paginando de a 30 no entra en el default: se pide el máximo.
+// Se pide el máximo del plan Hobby igual, aunque hoy no alcance para el catálogo
+// entero: sirve para el uso que le queda a esta ruta (ver abajo).
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 /**
  * Refresca el espejo local del catálogo desde Alegra.
- * Lo invoca Vercel Cron una vez por día (ver vercel.json), autenticado con
- * CRON_SECRET. En dev se dispara a mano:
+ *
+ * YA NO LO LLAMA NINGÚN CRON. La corrida diaria se mudó a GitHub Actions
+ * (.github/workflows/catalogo-sync.yml), que ejecuta la sync dentro del runner:
+ * el catálogo creció a ~5959 ítems y, con la paginación de a 30 de Alegra más
+ * los 429, la corrida pasó los 300 s que topea una función en el plan Hobby.
+ *
+ * La ruta se mantiene porque sigue siendo el disparo más cómodo a mano —en dev,
+ * o contra producción si hay que refrescar fuera de horario— pero contra un
+ * catálogo grande se va a comer el timeout. Para una corrida confiable:
+ * `npm run sync:catalogo`, o "Run workflow" en Actions.
  *
  *   curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/catalog-sync
  */

@@ -4,8 +4,11 @@
  * Upsert por `alegraId`; lo que no se vio en la corrida queda `inactive` (baja
  * lógica, nunca DELETE). Deja bitácora en `catalog_sync_log`.
  *
- * SOLO servidor, y solo desde el cron o un disparo manual: recorre ~2800 items
- * paginando de a 30 contra Alegra. Ver docs/arquitectura-integraciones.md.
+ * SOLO servidor, y solo desde la corrida diaria o un disparo manual: recorre
+ * ~5959 items paginando de a 30 contra Alegra y tarda ~3 min, por lo que la
+ * corrida programada vive en GitHub Actions (.github/workflows/catalogo-sync.yml
+ * → scripts/sync-catalogo.ts) y no en una función de Vercel.
+ * Ver docs/arquitectura-integraciones.md.
  */
 
 import { lt, sql } from "drizzle-orm";
@@ -13,7 +16,7 @@ import { getDb } from "@/db";
 import { catalogCategories, catalogProducts, catalogSyncLog } from "@/db/schema";
 import { listAllCategories, listAllItems } from "./alegra";
 
-/** Filas por INSERT. Con ~2800 items son ~6 statements, sin pasarse de límites de parámetros. */
+/** Filas por INSERT. Con ~5959 items son ~12 statements, sin pasarse de límites de parámetros. */
 const CHUNK = 500;
 
 function chunk<T>(arr: T[], size: number): T[][] {

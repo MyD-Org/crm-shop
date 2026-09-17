@@ -9,6 +9,7 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env.local src/db/migrate.ts",
+    "sync:catalogo": "tsx --env-file-if-exists=.env.local scripts/sync-catalogo.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

@@ -31,17 +31,18 @@ type QueryParams = Record<string, string | number | undefined>;
 const PAGE_SIZE = 30;
 
 /**
- * Páginas que se piden en paralelo por tanda. Con ~2800 items, pedir de a una
- * (await secuencial) son ~94 round-trips y la función serverless se come el
- * timeout. Con 8 Alegra empezó a responder 429 (13/09/2026) y la sync diaria
- * fallaba entera: 4 sigue entrando holgado en los 300 s del cron.
+ * Páginas que se piden en paralelo por tanda. Con ~5959 items, pedir de a una
+ * (await secuencial) son ~199 round-trips y no termina nunca. Con 8 Alegra
+ * empezó a responder 429 (13/09/2026) y la sync diaria fallaba entera: 4 es el
+ * equilibrio. La corrida entera tarda ~3 min, que es justamente por lo que la
+ * sync se mudó a GitHub Actions (no hay techo de 300 s ahí).
  */
 const PAGE_CONCURRENCY = 4;
 
 /** Reintentos ante 429 antes de rendirse. Backoff 1-2-4-8-16 s ≈ 31 s peor caso. */
 const MAX_RETRIES_429 = 5;
 const BACKOFF_BASE_MS = 1_000;
-/** Tope a un Retry-After exagerado: no puede comerse el presupuesto del cron. */
+/** Tope a un Retry-After exagerado: no puede comerse el presupuesto de la corrida. */
 const MAX_RETRY_AFTER_MS = 30_000;
 
 function esperaTras429(res: Response, intento: number): number {

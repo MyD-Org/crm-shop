@@ -61,11 +61,18 @@ crudos. **El Shop nunca calcula nada financiero.**
 
 **Decisión (2026-07-29).** El Shop mantiene una **copia local del catálogo de
 Alegra** en su propio Postgres (`catalog_products`, `catalog_categories`,
-`catalog_sync_log`), refrescada por un **cron diario**
-(`/api/cron/catalog-sync` → `src/lib/catalog-sync.ts`).
+`catalog_sync_log`), refrescada por una **corrida diaria**
+(`scripts/sync-catalogo.ts` → `src/lib/catalog-sync.ts`).
+
+**Dónde corre (actualizado 2026-09-17).** En GitHub Actions
+(`.github/workflows/catalogo-sync.yml`), no en Vercel Cron. El workflow ejecuta
+la sync dentro del runner en vez de pegarle a un endpoint: el catálogo pasó de
+~2800 a ~5959 ítems y, con la paginación de a 30 de Alegra y sus 429, la corrida
+(~3 min) ya no entra en los 300 s que topea una función en el plan Hobby.
+`/api/cron/catalog-sync` sigue existiendo para disparos manuales.
 
 **Por qué.** Alegra topea las consultas en **30 ítems por request** y el catálogo
-tiene **~2800**. Leerlo en vivo obligaba a mostrar solo los primeros 30, y
+tiene **~5959**. Leerlo en vivo obligaba a mostrar solo los primeros 30, y
 paginarlo entero dentro del request de un usuario no entra en el timeout de la
 función (el CRM ya se comió ese 504 con este mismo catálogo).
 

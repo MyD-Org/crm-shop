@@ -1,0 +1,97 @@
+# Sync diaria del catálogo de Alegra al espejo local (Postgres del shop).
+#
+# Por qué acá y no en Vercel Cron: hasta ahora esto era una entrada en
+# `vercel.json` que pegaba a `/api/cron/catalog-sync`. Dejó de funcionar. El
+# plan Hobby topea las funciones en 300 s y la corrida ya no entra: el catálogo
+# creció a ~5959 ítems, Alegra pagina de a 30 y devuelve 429 si se lo apura, así
+# que hay que ir despacio (concurrencia 4 + backoff). Una corrida local tarda
+# ~2m52s y va a seguir subiendo con el catálogo. Subir el timeout es plan Pro;
+# partir la sync en tandas con estado es complejidad que no paga.
+#
+# La diferencia con `pagos-reconciliar.yml`: ahí Actions solo hace de reloj y
+# llama al endpoint por HTTP. Acá NO — eso reintroduciría el timeout de la
+# función. El runner ejecuta la sync adentro suyo (`npm run sync:catalogo` →
+# `scripts/sync-catalogo.ts`), hablando directo con Alegra y con Postgres.
+# `/api/cron/catalog-sync` sigue vivo, pero solo para disparos a mano.
+#
+# Por qué el install es a mano y no `npm ci`: `@myd-org/ui` se publica en
+# GitHub Packages (privado) y el `GITHUB_TOKEN` del workflow da 403 al bajarlo
+# —paquete de otra org, el token del repo no alcanza—, así que `npm ci` falla
+# entero (es el mismo 403 que hoy rompe el CI del CRM). Pero este script es
+# backend puro: importa `catalog-sync.ts` → `db/index.ts` + `alegra.ts`, y eso
+# se resuelve con `drizzle-orm`, `postgres` y `tsx`. Nada de React ni del
+# design system. Se instalan esos tres clavados a las versiones de
+# `package-lock.json` y el registry privado deja de ser un problema, sin tener
+# que crear ni rotar un PAT.
+# IMPORTANTE: si se tocan esas versiones en `package.json`, actualizar acá. Y si
+# algún día el script pasa a necesitar `@myd-org/ui`, esto vuelve a ser `npm ci`
+# con un PAT con `read:packages` guardado como secret.
+#
+# Nota sobre el schedule de GH Actions: no es puntual, puede atrasar 5-15 min en
+# horas pico y saltear corridas. Para una sync diaria de un catálogo da igual —
+# el espejo se usa para listar y buscar; precio y stock comprometidos se leen en
+# vivo contra Alegra (ver docs/arquitectura-integraciones.md).
+
+name: Sync catálogo Alegra
+
+on:
+  schedule:
+    # 06:00 UTC = 03:00 en Argentina. Mismo horario que tenía el cron de Vercel.
+    - cron: "0 6 * * *"
+  # Para la carga inicial o para reintentar a mano desde la UI de Actions.
+  workflow_dispatch:
+
+# Sin `cancel-in-progress`: a diferencia de la reconciliación de pagos, acá
+# matar una corrida a mitad es peor que dejarla terminar. La sync marca como
+# `inactive` lo que no tocó, y ese paso solo corre si completó; cortarla deja
+# el espejo a medio actualizar y la fila de `catalog_sync_log` en `running`.
+concurrency:
+  group: catalogo-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # ~3 min hoy. 30 da aire de sobra para que el catálogo crezca y para una
+    # tanda mala de 429, sin dejar un job colgado consumiendo minutos si Alegra
+    # deja de responder.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          # Next 16 pide Node >= 20.9; se usa la LTS con la que se desarrolla.
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar dependencias del script
+        # Se instala en un directorio aparte y recién después se mueve el
+        # `node_modules` al workspace. Puede parecer una vuelta al pedo, pero no
+        # lo es: `npm install <paquete>` parado en el repo NO instala solo ese
+        # paquete, rearma el árbol entero a partir de `package.json` —y ahí
+        # vuelve `@myd-org/ui` y el 403. Corriendo en un directorio sin
+        # `package.json` bajan 5 paquetes y ninguno es privado.
+        run: |
+          mkdir -p "$RUNNER_TEMP/deps-sync"
+          npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/deps-sync" \
+            drizzle-orm@0.45.2 \
+            postgres@3.4.9 \
+            tsx@4.23.1
+          mv "$RUNNER_TEMP/deps-sync/node_modules" "$GITHUB_WORKSPACE/node_modules"
+
+      - name: Correr la sync
+        env:
+          ALEGRA_EMAIL: ${{ secrets.ALEGRA_EMAIL }}
+          ALEGRA_TOKEN: ${{ secrets.ALEGRA_TOKEN }}
+          # Opcional: solo si alguna vez hay que apuntar a otro host de Alegra.
+          # Si está vacío, `src/lib/alegra.ts` usa el default de producción.
+          ALEGRA_BASE_URL: ${{ secrets.ALEGRA_BASE_URL }}
+          # Conexión directa (sin pooler) de Neon: esto es un batch largo desde
+          # un runner, no una función serverless, así que no hay nada que poolear
+          # y el pooler solo agrega una capa que puede cortar la conexión.
+          # `DATABASE_URL` queda de fallback por si algún día no está la primera.
+          DATABASE_URL: ${{ secrets.POSTGRES_URL_NON_POOLING || secrets.DATABASE_URL }}
+        run: npm run sync:catalogo

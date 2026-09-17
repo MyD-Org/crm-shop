@@ -129,3 +129,21 @@ describe("apiFetch ante rate limit (429) de Alegra", () => {
     expect(fetchMock.mock.calls.length).toBe(tanda);
   });
 });
+
+describe("BASE_URL", () => {
+  it("ALEGRA_BASE_URL vacía (secret inexistente en Actions) usa el default", async () => {
+    vi.stubEnv("ALEGRA_BASE_URL", "");
+    vi.stubEnv("ALEGRA_EMAIL", "test@example.com");
+    vi.stubEnv("ALEGRA_TOKEN", "token");
+    vi.resetModules();
+    // Una Response nueva por llamada: el body se consume una sola vez.
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { listAllCategories } = await import("./alegra");
+    await listAllCategories();
+    const [url] = fetchMock.mock.calls[0] as unknown as [RequestInfo];
+    expect(String(url)).toMatch(/^https:\/\/api\.alegra\.com\/api\/v1\//);
+  });
+});

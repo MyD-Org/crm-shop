@@ -10,7 +10,11 @@
  * Docs: https://developer.alegra.com/reference
  */
 
-const BASE_URL = process.env.ALEGRA_BASE_URL ?? "https://api.alegra.com/api/v1";
+// `|| ` y no `?? `: en GitHub Actions un secret que no existe llega como STRING
+// VACÍO, no como undefined, y con `??` el default no entraba — la sync fallaba con
+// "Invalid URL" (corrida 35282628485, 17/09/2026).
+const BASE_URL =
+  process.env.ALEGRA_BASE_URL?.trim() || "https://api.alegra.com/api/v1";
 
 /** Header Authorization calculado una sola vez a partir del email + token. */
 function authHeader(): string {

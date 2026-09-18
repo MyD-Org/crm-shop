@@ -11,7 +11,7 @@ export function SiteFooter() {
     <SiteFooterDS
       brandName="Central"
       brandAccent="Led"
-      description="Materiales eléctricos e iluminación en Puerto Iguazú, Misiones. Venta mayorista y minorista con amor por la luz."
+      description="Materiales eléctricos e iluminación en Puerto Iguazú, Misiones, con amor por la luz."
       columns={[
         {
           title: "Rubros",

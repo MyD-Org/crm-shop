@@ -71,6 +71,13 @@
       "when": 1789608092735,
       "tag": "0009_cuotas_fundacion",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789747599669,
+      "tag": "0010_magical_morg",
+      "breakpoints": true
     }
   ]
 }

@@ -470,3 +470,11 @@ export const paymentConfigCache = pgTable("payment_config_cache", {
   lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
   lastError: text("last_error"),
 });
+
+/** Contenido administrable de la home. Una fila por sección; el CRM escribe vía
+ *  PUT /api/internal/home-content y la home la mergea con defaults en código. */
+export const homeContent = pgTable("home_content", {
+  key: text("key").primaryKey(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

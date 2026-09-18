@@ -11,6 +11,7 @@ import {
 } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { CuotasCard } from "@/components/CuotasCard";
+import { Reveal } from "@/components/Reveal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
@@ -138,80 +139,92 @@ export function HomeClient({
       <main className="flex-1">
         <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
           <div className="pt-[clamp(20px,3vw,36px)]">
-            <Hero
-              eyebrow={hero.eyebrow}
-              title={hero.titulo}
-              accent={hero.acento}
-              lead={hero.bajada}
-              imageSrc={hero.imagen}
-              imageAlt={hero.imagenAlt}
-              ctas={hero.ctas}
-              usps={hero.usps.map((u, i) => {
-                const Icon = ICONOS_USP[i % ICONOS_USP.length];
-                return { label: u.label, icon: <Icon /> };
-              })}
-            />
+            <Reveal>
+              <Hero
+                eyebrow={hero.eyebrow}
+                title={hero.titulo}
+                accent={hero.acento}
+                lead={hero.bajada}
+                imageSrc={hero.imagen}
+                imageAlt={hero.imagenAlt}
+                ctas={hero.ctas}
+                usps={hero.usps.map((u, i) => {
+                  const Icon = ICONOS_USP[i % ICONOS_USP.length];
+                  return { label: u.label, icon: <Icon /> };
+                })}
+              />
+            </Reveal>
           </div>
 
           <Marquee items={marquee.items} className="mt-[clamp(28px,4vw,48px)]" />
 
           {/* Ambientes */}
-          <section className="pt-[clamp(56px,7vw,96px)]">
-            <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
-            <RoomTiles items={aTilesDS(ambientes.items)} />
-          </section>
+          <Reveal>
+            <section className="pt-[clamp(56px,7vw,96px)]">
+              <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
+              <RoomTiles items={aTilesDS(ambientes.items)} />
+            </section>
+          </Reveal>
 
           {/* Destacados */}
-          <section className="pt-[clamp(56px,7vw,96px)]">
-            <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {destacados.map((p) => (
-                <Link key={p.id} href={`/producto/${p.id}`}>
-                  <ProductCard
-                    variant="editorial"
-                    name={p.name}
-                    brand={p.brand}
-                    price={p.precioFinal ?? p.price}
-                    oldPrice={p.oldPrice}
-                    badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
-                    image={<LightbulbIcon className="h-20 w-20 text-muted/30" />}
-                    action={
-                      <AddToCartButton
-                        product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
-                      />
-                    }
-                    installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
-                  />
-                </Link>
-              ))}
-            </div>
-          </section>
+          <Reveal>
+            <section className="pt-[clamp(56px,7vw,96px)]">
+              <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {destacados.map((p) => (
+                  <Link key={p.id} href={`/producto/${p.id}`}>
+                    <ProductCard
+                      variant="editorial"
+                      name={p.name}
+                      brand={p.brand}
+                      price={p.precioFinal ?? p.price}
+                      oldPrice={p.oldPrice}
+                      badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
+                      image={<LightbulbIcon className="h-20 w-20 text-muted/30" />}
+                      action={
+                        <AddToCartButton
+                          product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
+                        />
+                      }
+                      installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
+                    />
+                  </Link>
+                ))}
+              </div>
+            </section>
+          </Reveal>
 
           {/* Banner decorativo */}
-          <PromoBanner
-            className="mt-[clamp(56px,7vw,96px)]"
-            eyebrow={bannerDeco.eyebrow}
-            title={bannerDeco.titulo}
-            accent={bannerDeco.acento}
-            lead={bannerDeco.bajada}
-            cta={bannerDeco.cta}
-            imageSrc={bannerDeco.imagen}
-          />
+          <Reveal>
+            <PromoBanner
+              className="mt-[clamp(56px,7vw,96px)]"
+              eyebrow={bannerDeco.eyebrow}
+              title={bannerDeco.titulo}
+              accent={bannerDeco.acento}
+              lead={bannerDeco.bajada}
+              cta={bannerDeco.cta}
+              imageSrc={bannerDeco.imagen}
+            />
+          </Reveal>
 
           {/* Deco grid + chips */}
-          <section className="pt-[clamp(56px,7vw,96px)]">
-            <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
-            <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} />
-            <ChipRow chips={decoGrid.chips} className="mt-6" />
-          </section>
+          <Reveal>
+            <section className="pt-[clamp(56px,7vw,96px)]">
+              <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
+              <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} />
+              <ChipRow chips={decoGrid.chips} className="mt-6" />
+            </section>
+          </Reveal>
 
           {/* Servicios */}
-          <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
-            {servicios.items.map((s, i) => {
-              const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
-              return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
-            })}
-          </section>
+          <Reveal>
+            <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
+              {servicios.items.map((s, i) => {
+                const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
+                return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
+              })}
+            </section>
+          </Reveal>
 
           {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
           <section className="pb-[clamp(56px,7vw,96px)]">

@@ -20,6 +20,17 @@ import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 /** Precio principal que ve el visitante: final con IVA si se conoce, si no el de siempre. */
 const precioExhibido = (p: Product) => p.precioFinal ?? p.price;
 
+/** Placeholder de imagen: mismo foco que usa la home. */
+function LightbulbIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18h6" />
+      <path d="M10 22h4" />
+      <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
+    </svg>
+  );
+}
+
 const SORT_OPTIONS: { label: string; value: OrdenCatalogo }[] = [
   { label: "Más vendidos", value: "ventas" },
   { label: "Precio: menor a mayor", value: "precio-asc" },
@@ -145,7 +156,7 @@ export function CatalogoClient({
         <div className="flex-1">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-extrabold text-text">
+              <h1 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
                 {estado.query ? `Resultados para "${estado.query}"` : "Catálogo"}
               </h1>
               <p className="mt-1 text-sm text-muted">
@@ -189,7 +200,7 @@ export function CatalogoClient({
             <div
               // Mientras el server arma la página siguiente, la grilla vigente
               // se atenúa: el visitante ve que algo está pasando.
-              className={`grid grid-cols-1 gap-4 transition-opacity sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 ${
+              className={`grid grid-cols-1 gap-5 transition-opacity sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 ${
                 navegando ? "opacity-50" : ""
               }`}
               aria-busy={navegando}
@@ -197,18 +208,17 @@ export function CatalogoClient({
               {productos.map((p) => (
                 <Link key={p.id} href={`/producto/${p.id}`}>
                   <ProductCard
+                    variant="editorial"
                     name={p.name}
                     brand={p.brand}
                     price={precioExhibido(p)}
                     oldPrice={p.oldPrice}
-                    discount={p.discount}
-                    stock={p.stock}
                     badge={
                       p.badgeText ? (
                         <Badge tone={p.badgeTone}>{p.badgeText}</Badge>
                       ) : undefined
                     }
-                    image={<div className="text-5xl opacity-40">💡</div>}
+                    image={<LightbulbIcon className="h-20 w-20 text-muted/30" />}
                     action={
                       <AddToCartButton
                         disabled={p.stock === "out"}

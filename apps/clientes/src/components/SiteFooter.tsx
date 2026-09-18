@@ -23,18 +23,18 @@ export function SiteFooter() {
           ],
         },
         {
-          title: "Tienda",
-          links: [
-            { label: "Catálogo", href: "/catalogo" },
-            { label: "Carrito", href: "/carrito" },
-            { label: "Ingresar", href: "/ingresar" },
-          ],
-        },
-        {
           title: "Mi cuenta",
           links: [
             { label: "Mis pedidos", href: "/mi-cuenta" },
-            { label: "Vincular mi cuenta", href: "/mi-cuenta/vincular" },
+            { label: "Cuenta corriente", href: "/mi-cuenta/vincular" },
+          ],
+        },
+        {
+          title: "Contacto",
+          links: [
+            { label: "WhatsApp", href: "https://wa.me/5493757000000" },
+            { label: "Catálogo", href: "/catalogo" },
+            { label: "Carrito", href: "/carrito" },
           ],
         },
       ]}

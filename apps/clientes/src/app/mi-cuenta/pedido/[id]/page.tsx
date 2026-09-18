@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { rutaIngreso } from "@/lib/ingreso";
-import { Footer } from "@/components/Footer";
 import { identidadActual } from "@/lib/auth";
 import { getPedido } from "@/lib/pedidos";
 import { ORDER_ESTADO_LABEL, PAGO_ESTADO_LABEL } from "@/data/orders";
@@ -116,7 +115,6 @@ export default async function PedidoPage({
           </div>
         </section>
       </main>
-      <Footer />
     </>
   );
 }

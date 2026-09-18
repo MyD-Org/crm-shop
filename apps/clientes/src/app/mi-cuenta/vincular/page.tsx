@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { rutaIngreso } from "@/lib/ingreso";
-import { Footer } from "@/components/Footer";
 import { VincularClient } from "@/components/VincularClient";
 import { identidadActual } from "@/lib/auth";
 
@@ -54,7 +53,6 @@ export default async function VincularPage() {
           )}
         </div>
       </main>
-      <Footer />
     </>
   );
 }

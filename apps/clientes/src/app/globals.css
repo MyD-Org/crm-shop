@@ -4,45 +4,23 @@
 
 /*
  * Ancho del contenido. UN solo lugar: header, catálogo, ficha, carrito,
- * checkout y footer usan `max-w-contenido` y quedan alineados entre sí. Antes
- * era `max-w-contenido` (1280px) repetido en 16 lugares, que en monitores grandes
- * dejaba medio pantalla de margen vacío.
+ * checkout y footer usan `max-w-contenido` y quedan alineados entre sí.
+ * Token propio de la app (no existe en el DS).
  */
 @theme {
-  --container-contenido: 1600px;
+  --container-contenido: 1280px;
 }
 
+/* El tema editorial (crema/tinta/ámbar) viene del design system v0.11
+   ([data-theme='editorial'], activado en <html> del layout). Acá solo se
+   cablean las fuentes cargadas con next/font a los roles del DS. */
 :root {
-  --color-primary: #1763d6;
-  --color-primary-hover: #1257bd;
-  --color-primary-soft: #dbe7fb;
-  --color-on-primary: #ffffff;
-  --color-bg: #f6f8fb;
-  --color-surface: #ffffff;
-  --color-elevated: #eef0f3;
-  --color-border: #e2e5ea;
-  --color-border-strong: #c2cad6;
-  --color-ring: rgba(23, 99, 214, 0.28);
-  --color-text: #22272f;
-  --color-muted: #6b7280;
-  --color-subtle: #9aa1ac;
-  --color-accent: #1763d6;
-  --color-accent-strong: #143f82;
-  --color-success: #15803d;
-  --color-success-soft: #effaf2;
-  --color-danger: #e1242f;
-  --color-danger-soft: #fdecec;
-  --color-warning: #b45309;
-  --color-warning-soft: #fbf0db;
-  --color-info: #5cc6ff;
-  --color-info-soft: #eef4fe;
-  --color-surface-dark: #07193a;
-  --color-surface-darker: #0a2550;
-  --color-on-surface-dark: #ffffff;
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 18px;
-  --font-sans: 'Archivo', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+[data-theme="editorial"] {
+  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
 }
 
 body {
@@ -57,4 +35,23 @@ body {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* El SiteHeader del DS (v0.11) deja el strip de nav con `overflow-x-auto` pero
+   sin ocultar la scrollbar: con 8 rubros largos en desktop aparece una barra
+   de scroll horizontal bajo el menú. El header viejo usaba `.no-scrollbar`;
+   acá se lo reaplicamos al strip vía la clase `site-header` del componente. */
+.site-header > nav > div {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.site-header > nav > div::-webkit-scrollbar {
+  display: none;
+}
+
+/* Marca en ámbar según diseño original (el DS usa highlight; alinear en
+   próxima versión del DS). Solo el header: el footer no usa .site-header y
+   su <em> de marca queda en highlight, como el mockup. */
+.site-header em {
+  color: var(--color-accent);
 }

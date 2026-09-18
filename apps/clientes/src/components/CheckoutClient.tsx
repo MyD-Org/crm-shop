@@ -55,10 +55,10 @@ function RadioCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+      className={`flex w-full cursor-pointer items-start gap-3 rounded-[20px] p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
         selected
-          ? "border-primary bg-primary/5"
-          : "border-border bg-surface enabled:hover:border-border-strong"
+          ? "border-[1.5px] border-accent bg-surface shadow-2"
+          : "border border-border bg-surface hover:border-accent"
       }`}
     >
       <span
@@ -308,7 +308,9 @@ export function CheckoutClient({
     return (
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
         <div className="text-center">
-          <h1 className="text-2xl font-extrabold text-text">Pagá tu pedido</h1>
+          <h1 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
+            Pagá tu pedido
+          </h1>
           <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
         </div>
 
@@ -355,36 +357,38 @@ export function CheckoutClient({
   // ------------------------------------------------------------------ éxito
   if (confirmado) {
     return (
-      <main className="mx-auto flex max-w-lg flex-1 flex-col items-center gap-5 px-4 py-20 text-center">
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
-          <CheckCircleIcon />
-        </span>
-        <h1 className="text-2xl font-extrabold text-text">
-          {pagado ? "¡Pago acreditado!" : "Pedido recibido"}
-        </h1>
-        <p className="text-sm font-semibold text-text">{confirmado.numero}</p>
-        <p className="text-sm text-muted">
-          {pagado ? (
-            <>
-              Ya cobramos tu pedido. Nos comunicamos con vos para coordinar el{" "}
-              {entrega === "envio" ? "envío" : "retiro"}.
-            </>
-          ) : (
-            <>
-              Nos vamos a comunicar con vos para coordinar el{" "}
-              {entrega === "envio" ? "envío" : "retiro"} y el pago por{" "}
-              {PAGO_LABEL[pagoElegido].toLowerCase()}.
-            </>
-          )}
-          {emailCliente && <> Te mandamos el detalle a {emailCliente}.</>}
-        </p>
-        <div className="flex gap-3">
-          <Link href="/mi-cuenta">
-            <Button>Ver mis pedidos</Button>
-          </Link>
-          <Link href="/catalogo">
-            <Button variant="secondary">Seguir comprando</Button>
-          </Link>
+      <main className="mx-auto flex max-w-lg flex-1 flex-col items-center gap-5 px-4 py-20">
+        <div className="w-full rounded-[28px] border border-border bg-surface p-8 text-center">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
+            <CheckCircleIcon />
+          </span>
+          <h1 className="mt-4 text-2xl font-extrabold text-text">
+            {pagado ? "¡Pago acreditado!" : "Pedido recibido"}
+          </h1>
+          <p className="mt-2 text-sm font-semibold text-text">{confirmado.numero}</p>
+          <p className="mt-3 text-sm text-muted">
+            {pagado ? (
+              <>
+                Ya cobramos tu pedido. Nos comunicamos con vos para coordinar el{" "}
+                {entrega === "envio" ? "envío" : "retiro"}.
+              </>
+            ) : (
+              <>
+                Nos vamos a comunicar con vos para coordinar el{" "}
+                {entrega === "envio" ? "envío" : "retiro"} y el pago por{" "}
+                {PAGO_LABEL[pagoElegido].toLowerCase()}.
+              </>
+            )}
+            {emailCliente && <> Te mandamos el detalle a {emailCliente}.</>}
+          </p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Link href="/mi-cuenta">
+              <Button>Ver mis pedidos</Button>
+            </Link>
+            <Link href="/catalogo">
+              <Button variant="secondary">Seguir comprando</Button>
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -410,7 +414,9 @@ export function CheckoutClient({
         <span className="text-text">Finalizar pedido</span>
       </nav>
 
-      <h1 className="mb-6 text-2xl font-extrabold text-text">Finalizar pedido</h1>
+      <h1 className="mb-6 font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
+        Finalizar pedido
+      </h1>
 
       {!facturacionCompleta && (
         <div className="mb-6 rounded-xl border border-warning/40 bg-warning/5 p-4">
@@ -433,8 +439,8 @@ export function CheckoutClient({
       <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
         {/* ------------------------------------------------------ formulario */}
         <div className="space-y-8">
-          <section>
-            <h2 className="mb-4 text-base font-bold text-text">Datos de contacto</h2>
+          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            <h2 className="mb-4 font-display text-2xl font-medium text-text">Datos de contacto</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Nombre y apellido">
                 <Input
@@ -454,8 +460,8 @@ export function CheckoutClient({
             </div>
           </section>
 
-          <section>
-            <h2 className="mb-4 text-base font-bold text-text">Entrega</h2>
+          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            <h2 className="mb-4 font-display text-2xl font-medium text-text">Entrega</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <RadioCard
                 selected={entrega === "retiro"}
@@ -505,8 +511,8 @@ export function CheckoutClient({
             )}
           </section>
 
-          <section>
-            <h2 className="mb-4 text-base font-bold text-text">Forma de pago</h2>
+          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            <h2 className="mb-4 font-display text-2xl font-medium text-text">Forma de pago</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               {metodosPago.map((m) => (
                 <RadioCard
@@ -525,8 +531,8 @@ export function CheckoutClient({
             )}
           </section>
 
-          <section>
-            <h2 className="mb-4 text-base font-bold text-text">
+          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            <h2 className="mb-4 font-display text-2xl font-medium text-text">
               Aclaraciones <span className="font-normal text-muted">(opcional)</span>
             </h2>
             <textarea
@@ -541,7 +547,7 @@ export function CheckoutClient({
         </div>
 
         {/* --------------------------------------------------------- resumen */}
-        <div className="h-fit rounded-xl border border-border bg-surface p-5 lg:sticky lg:top-24">
+        <div className="h-fit rounded-[24px] border border-border bg-surface p-6 lg:sticky lg:top-24">
           <h2 className="mb-4 text-base font-bold text-text">Resumen</h2>
 
           {estado === "cargando" && !cotizacion && (

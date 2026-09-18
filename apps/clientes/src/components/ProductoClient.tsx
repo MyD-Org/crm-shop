@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button, PriceTier, QuantityStepper } from "@myd-org/ui";
-import { Footer } from "@/components/Footer";
+import { Button, QuantityStepper } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { formatRubro } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import type { Product } from "@/data/products";
@@ -74,15 +74,15 @@ export function ProductoClient({
       <main className="mx-auto max-w-contenido flex-1 px-4 py-8">
         {/* Breadcrumb */}
         <nav className="mb-6 text-sm text-muted">
-          <Link href="/" className="hover:text-primary">Inicio</Link>
+          <Link href="/" className="text-muted transition-colors hover:text-accent">Inicio</Link>
           {producto.category && (
             <>
               {" / "}
               <Link
                 href={`/catalogo?categoria=${encodeURIComponent(producto.category)}`}
-                className="hover:text-primary"
+                className="text-muted transition-colors hover:text-accent"
               >
-                {producto.category}
+                {formatRubro(producto.category)}
               </Link>
             </>
           )}
@@ -93,7 +93,7 @@ export function ProductoClient({
         <div className="grid gap-10 lg:grid-cols-2">
           {/* Galeria — Alegra no expone imagenes todavia */}
           <div className="flex aspect-square gap-3">
-            <div className="relative flex flex-1 items-center justify-center rounded-xl border border-border bg-surface">
+            <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-[24px] bg-elevated">
               <LightbulbIcon className="h-48 w-48 text-muted/20" />
             </div>
           </div>
@@ -106,7 +106,7 @@ export function ProductoClient({
                   {producto.brand}
                 </p>
               )}
-              <h1 className="mt-1 text-2xl font-extrabold leading-tight text-text">
+              <h1 className="font-display text-4xl font-medium tracking-tight text-text">
                 {producto.name}
               </h1>
               {producto.sku && (
@@ -117,25 +117,25 @@ export function ProductoClient({
             </div>
 
             {/* Card de precio */}
-            <div className="rounded-xl bg-[linear-gradient(135deg,#0a2550,#143f82)] p-5">
+            <div className="rounded-[24px] border border-border bg-surface p-6">
               <PrecioConImpuestos price={producto.price} precioFinal={producto.precioFinal} />
               {mejorCuota && oferta && producto.precioFinal != null && (
-                <div className="mt-3 border-t border-white/15 pt-3">
-                  <CuotasLinea opcion={mejorCuota} tono="oscuro" tamano="lg" className="block" />
+                <div className="mt-3 border-t border-border pt-3">
+                  <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />
                   <MediosDePagoModal
                     precioFinal={producto.precioFinal}
                     oferta={oferta}
-                    className="mt-1 text-[#9ed0ff]"
+                    className="mt-1 text-primary transition-colors hover:text-accent"
                   />
                 </div>
               )}
               <div className="mt-3 flex items-center gap-3">
-                <span className="flex items-center gap-1.5 text-sm text-white/70">
+                <span className="flex items-center gap-1.5 text-sm text-muted">
                   <span className={`h-2 w-2 rounded-full ${estado.color}`} />
                   {estado.texto}
                   {producto.stockQty != null && (
                     <>
-                      <span className="text-white/40">—</span>
+                      <span className="text-muted/60">—</span>
                       {producto.stockQty} disponibles
                     </>
                   )}
@@ -202,8 +202,6 @@ export function ProductoClient({
           </div>
         </section>
       </main>
-
-      <Footer />
     </>
   );
 }

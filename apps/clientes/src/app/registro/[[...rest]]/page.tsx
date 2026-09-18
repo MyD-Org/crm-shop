@@ -1,5 +1,4 @@
 import { SignUp } from "@clerk/nextjs";
-import { Footer } from "@/components/Footer";
 
 /** Alta de cuenta. Ver la nota sobre el catch-all en /ingresar. */
 export default function RegistroPage() {
@@ -15,7 +14,6 @@ export default function RegistroPage() {
         </div>
         <SignUp fallbackRedirectUrl="/" signInFallbackRedirectUrl="/" />
       </main>
-      <Footer />
     </>
   );
 }

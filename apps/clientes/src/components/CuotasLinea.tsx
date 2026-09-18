@@ -5,7 +5,8 @@ import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
  * Una línea con la mejor opción: "6 cuotas sin interés de $20.000" o
  * "12 cuotas de $13.500". Sin opción → nada.
  *
- * `tono="oscuro"` para la card de precio de la ficha (fondo azul).
+ * `tono="oscuro"` queda para cards de fondo oscuro (la ficha usa "claro"
+ * desde el reskin editorial).
  * `tamano`: "sm" dentro de la card del catálogo (debajo del precio, secundaria),
  * "md" por defecto, "lg" para la ficha de producto.
  */

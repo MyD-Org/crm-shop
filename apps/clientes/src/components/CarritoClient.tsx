@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
-import { Footer } from "@/components/Footer";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
@@ -62,7 +61,6 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
         <main className="mx-auto flex max-w-contenido flex-1 items-center justify-center px-4 py-20">
           <p className="text-sm text-muted">Cargando tu carrito…</p>
         </main>
-        <Footer />
       </>
     );
   }
@@ -76,7 +74,6 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
             <Button>Ver catálogo</Button>
           </Link>
         </main>
-        <Footer />
       </>
     );
   }
@@ -106,10 +103,12 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
   return (
     <>
       <main className="mx-auto max-w-contenido flex-1 px-4 py-8">
-        <h1 className="mb-6 text-2xl font-extrabold text-text">Carrito de compras</h1>
+        <h1 className="mb-6 font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
+          Tu carrito
+        </h1>
 
         {estado === "no_auth" && (
-          <div className="mb-6 rounded-xl border border-border bg-elevated p-4 text-sm">
+          <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
             <p className="font-semibold text-text">Ingresá para ver tus precios</p>
             <p className="mt-1 text-muted">
               Los precios y el stock son los de tu cuenta.{" "}
@@ -121,7 +120,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
         )}
 
         {estado === "error" && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-danger/40 bg-danger/5 p-4 text-sm">
+          <div className="mb-6 flex items-center justify-between gap-4 rounded-[20px] border border-danger/40 bg-danger/5 p-4 text-sm">
             <span className="text-text">{error}</span>
             <button onClick={recotizar} className="shrink-0 font-semibold text-primary hover:underline">
               Reintentar
@@ -140,8 +139,8 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
               return (
                 <div
                   key={item.id}
-                  className={`flex gap-4 rounded-xl border bg-surface p-4 ${
-                    linea?.problema ? "border-danger/40" : "border-border"
+                  className={`flex gap-4 rounded-[20px] border bg-surface p-4 ${
+                    linea?.problema ? "border-danger/40" : "border-border/50"
                   }`}
                 >
                   <Link href={`/producto/${item.id}`} className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-elevated transition-opacity hover:opacity-80">
@@ -193,7 +192,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
           </div>
 
           {/* Resumen */}
-          <div className="h-fit rounded-xl border border-border bg-surface p-5 lg:sticky lg:top-24">
+          <div className="h-fit rounded-[24px] border border-border bg-surface p-6 lg:sticky lg:top-24">
             <h2 className="mb-4 text-base font-bold text-text">Resumen del pedido</h2>
 
             <div className="space-y-2.5 text-sm">
@@ -257,8 +256,6 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
           </div>
         </div>
       </main>
-
-      <Footer />
     </>
   );
 }

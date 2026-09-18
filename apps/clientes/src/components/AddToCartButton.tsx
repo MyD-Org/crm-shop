@@ -55,7 +55,7 @@ export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
         disabled={disabled}
         onClick={handleAdd}
         aria-label="Agregar al carrito"
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0a1f44] text-white transition-colors hover:bg-primary disabled:opacity-40"
+        className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-on-primary transition-all hover:rotate-90 hover:bg-accent hover:text-white disabled:opacity-40"
       >
         <PlusIcon />
       </button>
@@ -63,11 +63,11 @@ export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
   }
 
   return (
-    <div className="flex items-center gap-1 rounded-xl bg-[#0a1f44] text-white">
+    <div className="flex items-center gap-1 rounded-full bg-primary text-on-primary">
       <button
         onClick={handleDecrease}
         aria-label="Quitar uno"
-        className="flex h-10 w-9 items-center justify-center rounded-l-xl transition-colors hover:bg-primary"
+        className="flex h-10 w-9 items-center justify-center rounded-l-xl transition-colors hover:bg-accent hover:text-white"
       >
         <MinusIcon />
       </button>
@@ -76,7 +76,7 @@ export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
         disabled={disabled}
         onClick={handleIncrease}
         aria-label="Agregar uno más"
-        className="flex h-10 w-9 items-center justify-center rounded-r-xl transition-colors hover:bg-primary disabled:opacity-40"
+        className="flex h-10 w-9 items-center justify-center rounded-r-xl transition-colors hover:bg-accent hover:text-white disabled:opacity-40"
       >
         <PlusIcon />
       </button>

@@ -15,7 +15,11 @@ const GATE_PATH = "/__gate";
  * ningún pago se confirmaría jamás. Sin error en ningún lado: es la clase de
  * falla que se descubre cuando un cliente reclama que pagó y no le llegó nada.
  */
-const RUTAS_PUBLICAS = ["/api/pagos/mercadopago/webhook"];
+const RUTAS_PUBLICAS = [
+  "/api/pagos/mercadopago/webhook",
+  // La escribe el CRM (Bearer SHOP_CRM_SECRET): no tiene cookie de gate.
+  "/api/internal/home-content",
+];
 
 /**
  * Next 16 admite UNA sola función proxy por proyecto, así que el gate del sitio

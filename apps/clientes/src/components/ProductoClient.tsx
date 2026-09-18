@@ -7,6 +7,7 @@ import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { formatRubro } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import type { Product } from "@/data/products";
@@ -81,7 +82,7 @@ export function ProductoClient({
                 href={`/catalogo?categoria=${encodeURIComponent(producto.category)}`}
                 className="text-muted transition-colors hover:text-accent"
               >
-                {producto.category}
+                {formatRubro(producto.category)}
               </Link>
             </>
           )}

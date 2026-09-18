@@ -8,6 +8,7 @@ import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { destinoSeguro } from "@/lib/ingreso";
 import { conBadgeNav } from "@/lib/nav-badge";
+import { formatRubro } from "@/lib/formato-rubro";
 import { CartPreview } from "./CartPreview";
 
 function UserIcon() {
@@ -38,8 +39,8 @@ export function HeaderUI({
 
   return (
     <div className="bg-bg">
-      {/* La barra de anuncio vive en la home (contenido administrable); acá solo
-          va el header+nav globales. */}
+      {/* La barra de anuncio vive en src/app/layout.tsx (global desde e88aec5,
+          contenido administrable); acá solo va el header+nav globales. */}
       <SiteHeader
         className="site-header"
         brandName="Central"
@@ -87,7 +88,7 @@ export function HeaderUI({
             ? []
             : conBadgeNav(
                 categorias.slice(0, 8).map((cat) => ({
-                  label: cat,
+                  label: formatRubro(cat),
                   href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
                 })),
                 navBadge,

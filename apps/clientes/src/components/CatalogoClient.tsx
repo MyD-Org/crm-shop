@@ -15,6 +15,7 @@ import {
   type OrdenCatalogo,
 } from "@/lib/catalogo-url";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { formatRubro } from "@/lib/formato-rubro";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
 /** Precio principal que ve el visitante: final con IVA si se conoce, si no el de siempre. */
@@ -122,7 +123,7 @@ export function CatalogoClient({
                         checked={estado.categorias.includes(c.label)}
                         onCheckedChange={() => toggleCategoria(c.label)}
                       />
-                      <span className="flex-1">{c.label}</span>
+                      <span className="flex-1">{formatRubro(c.label)}</span>
                       <span className="text-xs text-muted">{c.count}</span>
                     </label>
                   </li>
@@ -180,7 +181,7 @@ export function CatalogoClient({
             <div className="mb-6 flex flex-wrap items-center gap-2">
               {chips.map((c) => (
                 <Chip key={c.label} variant="removable" onRemove={c.quitar}>
-                  {c.label}
+                  {formatRubro(c.label)}
                 </Chip>
               ))}
               <button

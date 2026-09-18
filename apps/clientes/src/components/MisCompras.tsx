@@ -167,7 +167,7 @@ function OrderCard({ order }: { order: Order }) {
       {/* Acciones */}
       <div className="flex flex-wrap items-center gap-3 px-5 py-3.5">
         <Link href={`/mi-cuenta/pedido/${order.id}`}>
-          <button className="flex items-center gap-2 rounded-lg bg-[#0a1f44] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary">
+          <button className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white">
             Ver detalle <ArrowRightIcon />
           </button>
         </Link>
@@ -251,7 +251,7 @@ export function MisCompras({
             href={`${CRM_URL}/portal/dashboard`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-lg bg-[#0a1f44] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white"
           >
             <CardIcon />
             Portal cuenta corriente
@@ -552,7 +552,7 @@ function DireccionesTab() {
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="rounded-lg bg-[#0a1f44] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white"
           >
             + Agregar dirección
           </button>

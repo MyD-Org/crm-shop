@@ -32,7 +32,7 @@ export function SiteFooter() {
         {
           title: "Contacto",
           links: [
-            { label: "WhatsApp", href: "https://wa.me/5493757000000" },
+            { label: "WhatsApp", href: "https://wa.me/5492235903025" },
             { label: "Catálogo", href: "/catalogo" },
             { label: "Carrito", href: "/carrito" },
           ],

@@ -241,7 +241,7 @@ export function HomeClient({
                 </div>
               </div>
               <a
-                href="https://wa.me/5493757000000"
+                href="https://wa.me/5492235903025"
                 className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
               >
                 Consultar ahora

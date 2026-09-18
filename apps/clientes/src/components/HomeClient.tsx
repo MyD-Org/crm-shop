@@ -127,131 +127,124 @@ export function HomeClient({
   contenido: HomeContent;
   destacados: Product[];
 }) {
-  const { anuncio, hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios } = contenido;
+  const { hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios } = contenido;
 
   return (
-    <>
-      {/* Anuncio (contenido administrable) */}
-      <div className="bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary">
-        {anuncio.texto}
-      </div>
-
-      <main className="flex-1">
-        <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
-          <div className="pt-[clamp(20px,3vw,36px)]">
-            <Reveal>
-              <Hero
-                eyebrow={hero.eyebrow}
-                title={hero.titulo}
-                accent={hero.acento}
-                lead={hero.bajada}
-                imageSrc={hero.imagen}
-                imageAlt={hero.imagenAlt}
-                ctas={hero.ctas}
-                usps={hero.usps.map((u, i) => {
-                  const Icon = ICONOS_USP[i % ICONOS_USP.length];
-                  return { label: u.label, icon: <Icon /> };
-                })}
-              />
-            </Reveal>
-          </div>
-        </div>
-
-        <Marquee items={marquee.items} className="mt-[clamp(28px,4vw,48px)]" />
-
-        <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
-          {/* Ambientes */}
+    <main className="flex-1">
+      <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
+        <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
-            <section className="pt-[clamp(56px,7vw,96px)]">
-              <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
-              <RoomTiles items={aTilesDS(ambientes.items)} />
-            </section>
-          </Reveal>
-
-          {/* Destacados */}
-          <Reveal>
-            <section className="pt-[clamp(56px,7vw,96px)]">
-              <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                {destacados.map((p) => (
-                  <Link key={p.id} href={`/producto/${p.id}`}>
-                    <ProductCard
-                      variant="editorial"
-                      name={p.name}
-                      brand={p.brand}
-                      price={p.precioFinal ?? p.price}
-                      oldPrice={p.oldPrice}
-                      badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
-                      image={<LightbulbIcon className="h-20 w-20 text-muted/30" />}
-                      action={
-                        <AddToCartButton
-                          product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
-                        />
-                      }
-                      installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
-                    />
-                  </Link>
-                ))}
-              </div>
-            </section>
-          </Reveal>
-
-          {/* Banner decorativo */}
-          <Reveal>
-            <PromoBanner
-              className="mt-[clamp(56px,7vw,96px)]"
-              eyebrow={bannerDeco.eyebrow}
-              title={bannerDeco.titulo}
-              accent={bannerDeco.acento}
-              lead={bannerDeco.bajada}
-              cta={bannerDeco.cta}
-              imageSrc={bannerDeco.imagen}
+            <Hero
+              eyebrow={hero.eyebrow}
+              title={hero.titulo}
+              accent={hero.acento}
+              lead={hero.bajada}
+              imageSrc={hero.imagen}
+              imageAlt={hero.imagenAlt}
+              ctas={hero.ctas}
+              usps={hero.usps.map((u, i) => {
+                const Icon = ICONOS_USP[i % ICONOS_USP.length];
+                return { label: u.label, icon: <Icon /> };
+              })}
             />
           </Reveal>
+        </div>
+      </div>
 
-          {/* Deco grid + chips */}
-          <Reveal>
-            <section className="pt-[clamp(56px,7vw,96px)]">
-              <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
-              <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} />
-              <ChipRow chips={decoGrid.chips} className="mt-6" />
-            </section>
-          </Reveal>
+      <Marquee items={marquee.items} className="mt-[clamp(28px,4vw,48px)]" />
 
-          {/* Servicios */}
-          <Reveal>
-            <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
-              {servicios.items.map((s, i) => {
-                const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
-                return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
-              })}
-            </section>
-          </Reveal>
+      <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
+        {/* Ambientes */}
+        <Reveal>
+          <section className="pt-[clamp(56px,7vw,96px)]">
+            <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
+            <RoomTiles items={aTilesDS(ambientes.items)} />
+          </section>
+        </Reveal>
 
-          {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
-          <section className="pb-[clamp(56px,7vw,96px)]">
-            <div className="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[28px] bg-primary px-[clamp(24px,5vw,72px)] py-10 text-on-primary">
-              <div className="flex items-center gap-5">
-                <span className="[&_svg]:h-8 [&_svg]:w-8 [&_svg]:text-highlight">
-                  <ChatIcon />
-                </span>
-                <div>
-                  <p className="text-lg font-extrabold">¿Necesitás asesoramiento técnico?</p>
-                  <p className="text-sm text-on-primary/70">
-                    Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.
-                  </p>
-                </div>
-              </div>
-              <a
-                href="https://wa.me/5492235903025"
-                className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
-              >
-                Consultar ahora
-              </a>
+        {/* Destacados */}
+        <Reveal>
+          <section className="pt-[clamp(56px,7vw,96px)]">
+            <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {destacados.map((p) => (
+                <Link key={p.id} href={`/producto/${p.id}`}>
+                  <ProductCard
+                    variant="editorial"
+                    name={p.name}
+                    brand={p.brand}
+                    price={p.precioFinal ?? p.price}
+                    oldPrice={p.oldPrice}
+                    badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
+                    image={<LightbulbIcon className="h-20 w-20 text-muted/30" />}
+                    action={
+                      <AddToCartButton
+                        product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
+                      />
+                    }
+                    installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
+                  />
+                </Link>
+              ))}
             </div>
           </section>
-        </div>
-      </main>
-    </>
+        </Reveal>
+
+        {/* Banner decorativo */}
+        <Reveal>
+          <PromoBanner
+            className="mt-[clamp(56px,7vw,96px)]"
+            eyebrow={bannerDeco.eyebrow}
+            title={bannerDeco.titulo}
+            accent={bannerDeco.acento}
+            lead={bannerDeco.bajada}
+            cta={bannerDeco.cta}
+            imageSrc={bannerDeco.imagen}
+          />
+        </Reveal>
+
+        {/* Deco grid + chips */}
+        <Reveal>
+          <section className="pt-[clamp(56px,7vw,96px)]">
+            <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
+            <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} />
+            <ChipRow chips={decoGrid.chips} className="mt-6" />
+          </section>
+        </Reveal>
+
+        {/* Servicios */}
+        <Reveal>
+          <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
+            {servicios.items.map((s, i) => {
+              const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
+              return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
+            })}
+          </section>
+        </Reveal>
+
+        {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
+        <section className="pb-[clamp(56px,7vw,96px)]">
+          <div className="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[28px] bg-primary px-[clamp(24px,5vw,72px)] py-10 text-on-primary">
+            <div className="flex items-center gap-5">
+              <span className="[&_svg]:h-8 [&_svg]:w-8 [&_svg]:text-highlight">
+                <ChatIcon />
+              </span>
+              <div>
+                <p className="text-lg font-extrabold">¿Necesitás asesoramiento técnico?</p>
+                <p className="text-sm text-on-primary/70">
+                  Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.
+                </p>
+              </div>
+            </div>
+            <a
+              href="https://wa.me/5492235903025"
+              className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
+            >
+              Consultar ahora
+            </a>
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }

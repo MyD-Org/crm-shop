@@ -5,6 +5,7 @@ import { Fraunces, Nunito_Sans } from "next/font/google";
 import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Providers } from "@/components/Providers";
+import { getContenidoHome } from "@/lib/home-datos";
 import "./globals.css";
 
 const nunito = Nunito_Sans({
@@ -29,11 +30,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { anuncio } = await getContenidoHome();
   return (
     <html
       lang="es"
@@ -44,6 +46,10 @@ export default function RootLayout({
         {/* ClerkProvider DENTRO de <body>: envolver <html> fuerza render dinámico de todo el árbol */}
         <ClerkProvider localization={esAR}>
           <Providers>
+            {/* Anuncio global (contenido administrable): arriba de todo, sobre el header */}
+            <div className="bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary">
+              {anuncio.texto}
+            </div>
             <Header />
             {children}
             <SiteFooter />

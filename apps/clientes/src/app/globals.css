@@ -8,7 +8,7 @@
  * Token propio de la app (no existe en el DS).
  */
 @theme {
-  --container-contenido: 1600px;
+  --container-contenido: 1280px;
 }
 
 /* El tema editorial (crema/tinta/ámbar) viene del design system v0.11

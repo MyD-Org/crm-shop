@@ -36,3 +36,15 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* El SiteHeader del DS (v0.11) deja el strip de nav con `overflow-x-auto` pero
+   sin ocultar la scrollbar: con 8 rubros largos en desktop aparece una barra
+   de scroll horizontal bajo el menú. El header viejo usaba `.no-scrollbar`;
+   acá se lo reaplicamos al strip vía la clase `site-header` del componente. */
+.site-header > nav > div {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.site-header > nav > div::-webkit-scrollbar {
+  display: none;
+}

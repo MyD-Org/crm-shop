@@ -4,7 +4,6 @@ import { useMemo, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Checkbox, Chip, ProductCard, Select } from "@myd-org/ui";
-import { Footer } from "@/components/Footer";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { CuotasCard } from "@/components/CuotasCard";
 import type { Product } from "@/data/products";
@@ -232,8 +231,6 @@ export function CatalogoClient({
           </p>
         </div>
       </main>
-
-      <Footer />
     </>
   );
 }

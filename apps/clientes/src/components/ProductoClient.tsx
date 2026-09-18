@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button, PriceTier, QuantityStepper } from "@myd-org/ui";
-import { Footer } from "@/components/Footer";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
@@ -202,8 +201,6 @@ export function ProductoClient({
           </div>
         </section>
       </main>
-
-      <Footer />
     </>
   );
 }

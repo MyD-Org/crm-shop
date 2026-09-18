@@ -3,6 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { esAR } from "@/lib/clerk-localizacion";
 import { Fraunces, Nunito_Sans } from "next/font/google";
 import { Header } from "@/components/HeaderServer";
+import { SiteFooter } from "@/components/SiteFooter";
 import { Providers } from "@/components/Providers";
 import "./globals.css";
 
@@ -45,6 +46,7 @@ export default function RootLayout({
           <Providers>
             <Header />
             {children}
+            <SiteFooter />
           </Providers>
         </ClerkProvider>
       </body>

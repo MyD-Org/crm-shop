@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
-import { Footer } from "@/components/Footer";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
@@ -62,7 +61,6 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
         <main className="mx-auto flex max-w-contenido flex-1 items-center justify-center px-4 py-20">
           <p className="text-sm text-muted">Cargando tu carrito…</p>
         </main>
-        <Footer />
       </>
     );
   }
@@ -76,7 +74,6 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
             <Button>Ver catálogo</Button>
           </Link>
         </main>
-        <Footer />
       </>
     );
   }
@@ -257,8 +254,6 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
           </div>
         </div>
       </main>
-
-      <Footer />
     </>
   );
 }

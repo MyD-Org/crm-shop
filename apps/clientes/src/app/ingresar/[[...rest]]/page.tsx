@@ -1,5 +1,4 @@
 import { SignIn } from "@clerk/nextjs";
-import { Footer } from "@/components/Footer";
 
 /**
  * Login del shop.
@@ -29,7 +28,6 @@ export default function IngresarPage() {
         */}
         <SignIn fallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" />
       </main>
-      <Footer />
     </>
   );
 }

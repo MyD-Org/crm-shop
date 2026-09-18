@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CheckoutClient } from "@/components/CheckoutClient";
-import { Footer } from "@/components/Footer";
 import { identidadActual } from "@/lib/auth";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
@@ -36,7 +35,6 @@ export default async function CheckoutPage() {
         facturacionCompleta={perfilCompleto(perfil)}
         oferta={oferta}
       />
-      <Footer />
     </>
   );
 }

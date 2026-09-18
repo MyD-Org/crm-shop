@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { rutaIngreso } from "@/lib/ingreso";
 import { MisCompras } from "@/components/MisCompras";
-import { Footer } from "@/components/Footer";
 import { identidadActual } from "@/lib/auth";
 import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { listarPedidos, resumenPedidos } from "@/lib/pedidos";
@@ -44,7 +43,6 @@ export default async function MiCuentaPage() {
           resumen={resumen}
         />
       </main>
-      <Footer />
     </>
   );
 }

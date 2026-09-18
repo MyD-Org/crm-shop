@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Badge, Button, ProductCard } from "@myd-org/ui";
-import { Footer } from "@/components/Footer";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { useEffect, useState } from "react";
 import type { Product } from "@/data/products";
@@ -322,8 +321,6 @@ export function HomeClient({ oferta }: { oferta: OfertaCuotas | null }) {
           </div>
         </section>
       </main>
-
-      <Footer />
     </>
   );
 }

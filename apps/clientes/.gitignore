@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Claude Code (config local del editor)
 .claude/
+
+# mockups de brainstorming (visual companion)
+.superpowers/

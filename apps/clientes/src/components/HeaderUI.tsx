@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Show, SignInButton, UserButton } from "@clerk/nextjs";
 import { SiteHeader } from "@myd-org/ui";
+import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { destinoSeguro } from "@/lib/ingreso";
+import { conBadgeNav } from "@/lib/nav-badge";
 import { CartPreview } from "./CartPreview";
 
 function UserIcon() {
@@ -20,11 +22,14 @@ function UserIcon() {
 export function HeaderUI({
   nombre,
   categorias,
+  navBadge = null,
 }: {
   /** Razon social del cliente, o el nombre de la cuenta. null = anonimo. */
   nombre: string | null;
   /** Categorias reales del catalogo, resueltas en HeaderServer. */
   categorias: string[];
+  /** Badge administrable del nav: se pega al item de `categoria`. */
+  navBadge?: NavBadgeContent | null;
 }) {
   const pathname = usePathname();
   // En "Mi cuenta" ocultamos la barra de categorias para que se sienta una
@@ -80,10 +85,13 @@ export function HeaderUI({
         nav={
           hideCategorias
             ? []
-            : categorias.slice(0, 8).map((cat) => ({
-                label: cat,
-                href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
-              }))
+            : conBadgeNav(
+                categorias.slice(0, 8).map((cat) => ({
+                  label: cat,
+                  href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
+                })),
+                navBadge,
+              )
         }
       />
     </div>

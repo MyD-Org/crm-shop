@@ -48,3 +48,10 @@ body {
 .site-header > nav > div::-webkit-scrollbar {
   display: none;
 }
+
+/* Marca en ámbar según diseño original (el DS usa highlight; alinear en
+   próxima versión del DS). Solo el header: el footer no usa .site-header y
+   su <em> de marca queda en highlight, como el mockup. */
+.site-header em {
+  color: var(--color-accent);
+}

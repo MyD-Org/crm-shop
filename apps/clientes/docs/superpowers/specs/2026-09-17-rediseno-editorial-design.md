@@ -149,8 +149,10 @@ Content-Type: application/json
   nunca se rompe y el rediseño no depende del CRM para salir.
 - Payloads referencian imágenes por **URL pública**. El storage/upload lo
   resuelve el lado CRM (fuera de scope); el shop no se acopla a storage.
-- Set inicial de fotos de ambiente/hero: vive en `/public` del shop (versionado)
-  y los defaults apuntan ahí. La config del CRM puede pisarlas con otras URLs.
+- Los defaults no dependen de assets binarios: usan **placeholders SVG inline**
+  (data URIs en paleta editorial) generados en `src/data/home-defaults.ts`. Las
+  fotos reales de ambiente entran después — vía config del CRM (URLs públicas)
+  o versionadas en `/public` — sin tocar código.
 
 ## 4. Páginas
 
@@ -166,10 +168,12 @@ Content-Type: application/json
 ## 5. Assets
 
 El mockup usa fotos cálidas de ambiente que el catálogo real no tiene (las
-fotos de producto vienen de Alegra, sobre blanco). Se cura un set inicial de
-imágenes de ambiente/hero para `anuncio`, `hero`, `ambientes`, `bannerDeco` y
-`decoGrid` y se versiona en `/public`. La fuente definitiva de cada imagen es la
-config (CRM puede reemplazarlas).
+fotos de producto vienen de Alegra, sobre blanco). Para no bloquear el
+rediseño ni inventar assets, los defaults arrancan con **placeholders SVG
+generados** (degradados en paleta editorial, como data URIs en
+`home-defaults.ts`). La curaduría de fotos reales (generadas o de banco) se
+hace después y entra por config del CRM o como archivos en `/public` — la home
+ya lee cualquier URL pública, sin cambios de código.
 
 ## 6. Verificación
 

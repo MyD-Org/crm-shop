@@ -155,9 +155,11 @@ export function HomeClient({
               />
             </Reveal>
           </div>
+        </div>
 
-          <Marquee items={marquee.items} className="mt-[clamp(28px,4vw,48px)]" />
+        <Marquee items={marquee.items} className="mt-[clamp(28px,4vw,48px)]" />
 
+        <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
           {/* Ambientes */}
           <Reveal>
             <section className="pt-[clamp(56px,7vw,96px)]">

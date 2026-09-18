@@ -167,6 +167,15 @@ Content-Type: application/json
 
 ## 5. Assets
 
+**Posicionamiento del contenido default:** el lenguaje visual es el del mockup
+(cálido/deco — así se aprobó, "una tienda linda"), pero los defaults de la home
+representan el catálogo completo y hablan también al electricista: hero con
+hechos reales del negocio (stock real, marcas líderes, envíos, cuotas — SIN
+claims mayoristas: el negocio no es mayorista), sección "Comprá por rubro" con
+Iluminación LED / Tableros y protecciones / Cables, y "Asesoramiento técnico"
+en servicios. Las secciones deco (banner + deco grid) quedan como vidriera.
+Todo editable después desde el CRM.
+
 El mockup usa fotos cálidas de ambiente que el catálogo real no tiene (las
 fotos de producto vienen de Alegra, sobre blanco). Para no bloquear el
 rediseño ni inventar assets, los defaults arrancan con **placeholders SVG

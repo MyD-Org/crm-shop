@@ -541,6 +541,9 @@ function svgPlaceholder(desde: string, hacia: string, etiqueta: string): string 
 
 const PLACEHOLDER = {
   hero: svgPlaceholder("#efe7da", "#f3e3cb", "Living cálido"),
+  iluminacion: svgPlaceholder("#f3e3cb", "#efe7da", "Iluminación LED"),
+  tableros: svgPlaceholder("#e8dcc8", "#d9c7ad", "Tableros y protecciones"),
+  cables: svgPlaceholder("#efe7da", "#e8dcc8", "Cables e instalación"),
   colgantes: svgPlaceholder("#f3e3cb", "#efe7da", "Colgantes"),
   patio: svgPlaceholder("#e8dcc8", "#efe7da", "Patio y jardín"),
   dormitorio: svgPlaceholder("#efe7da", "#e8dcc8", "Dormitorio"),
@@ -559,36 +562,36 @@ export const DEFAULTS_HOME: HomeContent = {
     titulo: "La luz que hace",
     acento: "hogar",
     bajada:
-      "Lámparas, paneles, cables y todo para tu instalación. Stock real, marcas líderes y precios mayoristas.",
+      "Materiales eléctricos e iluminación con stock real y marcas líderes. Envíos a todo el país y 6 cuotas sin interés.",
     imagen: PLACEHOLDER.hero,
     imagenAlt: "Ambiente cálido iluminado",
     ctas: [
       { label: "Ver catálogo →", href: "/catalogo" },
-      { label: "Ofertas", href: "/catalogo?orden=ventas" },
+      { label: "Los más vendidos", href: "/catalogo?orden=ventas" },
     ],
     usps: [
       { label: "Envíos a todo el país" },
       { label: "Stock en tiempo real" },
-      { label: "Asesoramiento por WhatsApp" },
+      { label: "6 cuotas sin interés" },
     ],
   },
   marquee: {
     items: [
       "Más de 5.000 productos",
       "Despacho en 24 h",
-      "Precios mayoristas",
+      "Retiro en local sin cargo",
       "Puerto Iguazú, Misiones",
     ],
   },
   ambientes: {
     titulo: "Comprá por",
-    acento: "ambiente",
-    bajada: "Encontrá la solución ideal para cada rincón de tu casa o proyecto.",
+    acento: "rubro",
+    bajada: "Todo para tu instalación, ordenado por categoría.",
     linkTodos: "/catalogo",
     items: [
-      { eyebrow: "Interior", titulo: "Colgantes y lámparas de diseño", imagen: PLACEHOLDER.colgantes, href: "/catalogo" },
-      { eyebrow: "Exterior", titulo: "Patio y jardín", imagen: PLACEHOLDER.patio, href: "/catalogo" },
-      { eyebrow: "Interior", titulo: "Dormitorio", imagen: PLACEHOLDER.dormitorio, href: "/catalogo" },
+      { eyebrow: "Catálogo", titulo: "Iluminación LED", imagen: PLACEHOLDER.iluminacion, href: "/catalogo" },
+      { eyebrow: "Pro", titulo: "Tableros y protecciones", imagen: PLACEHOLDER.tableros, href: "/catalogo" },
+      { eyebrow: "Pro", titulo: "Cables e instalación", imagen: PLACEHOLDER.cables, href: "/catalogo" },
     ],
   },
   destacados: {
@@ -629,7 +632,7 @@ export const DEFAULTS_HOME: HomeContent = {
       { titulo: "Envío gratis", texto: "En compras desde $100.000 a todo el país." },
       { titulo: "Stock real", texto: "Sincronizado al instante con nuestro depósito." },
       { titulo: "6 cuotas sin interés", texto: "Y precios especiales por transferencia." },
-      { titulo: "Asesoramiento", texto: "Te ayudamos a elegir bien." },
+      { titulo: "Asesoramiento técnico", texto: "Te ayudamos por WhatsApp a elegir bien." },
     ],
   },
   navBadge: null,

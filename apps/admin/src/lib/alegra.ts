@@ -48,8 +48,15 @@ export interface AlegraProduct {
   categoryAlegraId: string | null
   prices: AlegraPrice[]
   stock: number | null
+  /** Estado que Alegra le pone al ítem. NO confundir con el `status` del espejo, que es "visto en la última corrida". */
   status: string
   images: string[]
+  /** Marca. No es nativa de Alegra: sale de customFields. */
+  brand: string | null
+  /** Alícuota de IVA del ítem, para el precio final. */
+  ivaPorcentaje: number | null
+  /** El ítem COMPLETO tal cual vino. Nada se descarta. */
+  raw: Record<string, unknown>
 }
 export interface AlegraContact {
   alegraId: string
@@ -365,6 +372,34 @@ function mapRawCategory(raw: Record<string, unknown>): AlegraCategory {
   }
 }
 
+/**
+ * Marca del ítem, desde los customFields.
+ *
+ * Alegra no tiene campo de marca: cada cuenta la modela como un campo personalizado. Se busca por
+ * nombre sin distinguir mayúsculas ni tildes, porque el nombre lo eligió quien configuró la cuenta.
+ */
+function marcaDeCustomFields(raw: Record<string, unknown>): string | null {
+  const campos = Array.isArray(raw.customFields) ? (raw.customFields as Record<string, unknown>[]) : []
+  for (const c of campos) {
+    const nombre = String(c?.name ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+    if (nombre === "marca" || nombre === "brand") {
+      const valor = String(c?.value ?? "").trim()
+      if (valor) return valor
+    }
+  }
+  return null
+}
+
+/** Alícuota de IVA del ítem. Alegra devuelve `tax` como lista; se toma la mayor. */
+function ivaDeItem(raw: Record<string, unknown>): number | null {
+  const taxes = Array.isArray(raw.tax) ? (raw.tax as Record<string, unknown>[]) : []
+  const pcts = taxes.map((t) => Number(t?.percentage)).filter((n) => Number.isFinite(n) && n >= 0)
+  return pcts.length ? Math.max(...pcts) : null
+}
+
 function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
   const priceRaw = Array.isArray(raw.price) ? (raw.price as Record<string, unknown>[]) : []
   const prices: AlegraPrice[] = priceRaw.map((p) => ({
@@ -385,6 +420,11 @@ function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
     stock: inv?.availableQuantity != null ? Number(inv.availableQuantity) : null,
     status: String(raw.status ?? "active"),
     images: imgs.map((i) => String(i.url ?? "")).filter(Boolean),
+    brand: marcaDeCustomFields(raw),
+    ivaPorcentaje: ivaDeItem(raw),
+    // Se guarda entero: cada vez que hizo falta un campo que el mapper no leía hubo que tocarlo
+    // y re-sincronizar. Con el crudo, se resuelve con una query.
+    raw,
   }
 }
 

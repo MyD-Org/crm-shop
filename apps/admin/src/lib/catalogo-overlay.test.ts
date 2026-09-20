@@ -204,24 +204,24 @@ describe("motivoNoPublicado — tabla de casos del contrato", () => {
   const precio = [{ idPriceList: "1", price: 1500 }]
 
   it("publicado: visible, activo y con precio (tenga o no fotos)", () => {
-    expect(motivoNoPublicado({ visible: true, status: "active", prices: precio })).toEqual([])
-    expect(estaPublicado({ visible: true, status: "active", prices: precio })).toBe(true)
+    expect(motivoNoPublicado({ visible: true, status: "active", alegraStatus: "active", prices: precio })).toEqual([])
+    expect(estaPublicado({ visible: true, status: "active", alegraStatus: "active", prices: precio })).toBe(true)
   })
 
   it("oculto a propósito", () => {
-    expect(motivoNoPublicado({ visible: false, status: "active", prices: precio })).toEqual(["oculto"])
+    expect(motivoNoPublicado({ visible: false, status: "active", alegraStatus: "active", prices: precio })).toEqual(["oculto"])
   })
 
   it("visible pero sin precio", () => {
-    expect(motivoNoPublicado({ visible: true, status: "active", prices: [] })).toEqual(["sin_precio"])
+    expect(motivoNoPublicado({ visible: true, status: "active", alegraStatus: "active", prices: [] })).toEqual(["sin_precio"])
   })
 
   it("inactivo en Alegra", () => {
-    expect(motivoNoPublicado({ visible: true, status: "inactive", prices: precio })).toEqual(["inactivo_en_alegra"])
+    expect(motivoNoPublicado({ visible: true, status: "inactive", alegraStatus: "active", prices: precio })).toEqual(["inactivo_en_alegra"])
   })
 
   it("devuelve TODOS los motivos que aplican, no el primero", () => {
-    expect(motivoNoPublicado({ visible: false, status: "inactive", prices: [] })).toEqual([
+    expect(motivoNoPublicado({ visible: false, status: "inactive", alegraStatus: "active", prices: [] })).toEqual([
       "oculto",
       "inactivo_en_alegra",
       "sin_precio",
@@ -229,7 +229,7 @@ describe("motivoNoPublicado — tabla de casos del contrato", () => {
   })
 
   it("sin fila de overlay (visible=false por default) el motivo es que está oculto", () => {
-    expect(motivoNoPublicado({ visible: false, status: "active", prices: precio })).toEqual(["oculto"])
+    expect(motivoNoPublicado({ visible: false, status: "active", alegraStatus: "active", prices: precio })).toEqual(["oculto"])
   })
 })
 

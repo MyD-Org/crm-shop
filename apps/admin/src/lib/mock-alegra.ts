@@ -33,16 +33,16 @@ function prices(publico: number, mayorista: number): AlegraProduct["prices"] {
 }
 
 export const mockItems: AlegraProduct[] = [
-  { alegraId: "it-1", code: "LED-12W-FRIA", name: "Lámpara LED 12W E27 luz fría", description: "Bajo consumo, 6500K", categoryAlegraId: "cat-led", prices: prices(1890, 1490), stock: 240, status: "active", images: [] },
-  { alegraId: "it-2", code: "LED-9W-CALIDA", name: "Lámpara LED 9W E27 luz cálida", description: "3000K", categoryAlegraId: "cat-led", prices: prices(1590, 1250), stock: 180, status: "active", images: [] },
-  { alegraId: "it-3", code: "PANEL-18W", name: "Panel LED 18W embutir redondo", description: "Plafón 22cm", categoryAlegraId: "cat-paneles", prices: prices(4290, 3490), stock: 60, status: "active", images: [] },
-  { alegraId: "it-4", code: "PANEL-48W", name: "Panel LED 48W 60x60 embutir", description: "Para cielorraso desmontable", categoryAlegraId: "cat-paneles", prices: prices(11900, 9900), stock: 25, status: "active", images: [] },
-  { alegraId: "it-5", code: "REFL-50W", name: "Reflector LED 50W exterior IP65", description: "Luz fría, alta potencia", categoryAlegraId: "cat-reflectores", prices: prices(9800, 7900), stock: 40, status: "active", images: [] },
-  { alegraId: "it-6", code: "REFL-100W", name: "Reflector LED 100W exterior IP65", description: "Para canchas y playas de estacionamiento", categoryAlegraId: "cat-reflectores", prices: prices(18900, 15500), stock: 12, status: "active", images: [] },
-  { alegraId: "it-7", code: "CAB-TALLER-2X075", name: "Cable taller 2x0.75mm (rollo 100m)", description: "Flexible, envainado", categoryAlegraId: "cat-cables", prices: prices(34500, 29900), stock: 8, status: "active", images: [] },
-  { alegraId: "it-8", code: "CAB-UNIP-2.5", name: "Cable unipolar 2.5mm (rollo 100m)", description: "Norma IRAM", categoryAlegraId: "cat-cables", prices: prices(41200, 35800), stock: 15, status: "active", images: [] },
-  { alegraId: "it-9", code: "TERM-2X16", name: "Termomagnética 2x16A", description: "Curva C", categoryAlegraId: "cat-tableros", prices: prices(8700, 6900), stock: 50, status: "active", images: [] },
-  { alegraId: "it-10", code: "DISY-2X25-30MA", name: "Disyuntor 2x25A 30mA", description: "Protección diferencial", categoryAlegraId: "cat-tableros", prices: prices(16400, 13200), stock: 22, status: "active", images: [] },
+  { alegraId: "it-1", code: "LED-12W-FRIA", name: "Lámpara LED 12W E27 luz fría", description: "Bajo consumo, 6500K", categoryAlegraId: "cat-led", prices: prices(1890, 1490), stock: 240, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-2", code: "LED-9W-CALIDA", name: "Lámpara LED 9W E27 luz cálida", description: "3000K", categoryAlegraId: "cat-led", prices: prices(1590, 1250), stock: 180, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-3", code: "PANEL-18W", name: "Panel LED 18W embutir redondo", description: "Plafón 22cm", categoryAlegraId: "cat-paneles", prices: prices(4290, 3490), stock: 60, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-4", code: "PANEL-48W", name: "Panel LED 48W 60x60 embutir", description: "Para cielorraso desmontable", categoryAlegraId: "cat-paneles", prices: prices(11900, 9900), stock: 25, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-5", code: "REFL-50W", name: "Reflector LED 50W exterior IP65", description: "Luz fría, alta potencia", categoryAlegraId: "cat-reflectores", prices: prices(9800, 7900), stock: 40, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-6", code: "REFL-100W", name: "Reflector LED 100W exterior IP65", description: "Para canchas y playas de estacionamiento", categoryAlegraId: "cat-reflectores", prices: prices(18900, 15500), stock: 12, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-7", code: "CAB-TALLER-2X075", name: "Cable taller 2x0.75mm (rollo 100m)", description: "Flexible, envainado", categoryAlegraId: "cat-cables", prices: prices(34500, 29900), stock: 8, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-8", code: "CAB-UNIP-2.5", name: "Cable unipolar 2.5mm (rollo 100m)", description: "Norma IRAM", categoryAlegraId: "cat-cables", prices: prices(41200, 35800), stock: 15, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-9", code: "TERM-2X16", name: "Termomagnética 2x16A", description: "Curva C", categoryAlegraId: "cat-tableros", prices: prices(8700, 6900), stock: 50, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
+  { alegraId: "it-10", code: "DISY-2X25-30MA", name: "Disyuntor 2x25A 30mA", description: "Protección diferencial", categoryAlegraId: "cat-tableros", prices: prices(16400, 13200), stock: 22, status: "active", images: [], brand: null, ivaPorcentaje: 21, raw: {} },
 ]
 
 const itemsById = new Map(mockItems.map((it) => [it.alegraId, it]))

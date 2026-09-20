@@ -228,7 +228,18 @@ export const catalogProducts = pgTable(
     // Todas las listas de precio del ítem: [{ idPriceList, name, price }] (diseño flexible)
     prices: jsonb("prices").notNull().default([]),
     stock: numeric("stock"), // snapshot de inventario
+    // OJO: `status` NO es el estado de Alegra, es "visto en la última corrida del sync":
+    // lo que no aparece se marca 'inactive' (baja lógica). El estado real de Alegra vive en
+    // `alegraStatus`. Eran lo mismo y se pisaban; por eso ahora son dos columnas.
     status: text("status").notNull().default("active"), // 'active' | 'inactive' (stale/baja)
+    /** Estado que Alegra le pone al ítem ('active' | 'inactive'). null = todavía no sincronizado. */
+    alegraStatus: text("alegra_status"),
+    /** No es nativa de Alegra: sale de customFields. La vidriera filtra por acá. */
+    brand: text("brand"),
+    /** Para el precio final con IVA. El espejo del Shop ya lo tiene; éste lo necesita para dárselo. */
+    ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }),
+    /** El ítem COMPLETO como lo devuelve Alegra. Nada se descarta. ~2,5 KB por ítem. */
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
     images: jsonb("images").notNull().default([]),
     syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
   },

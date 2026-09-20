@@ -320,8 +320,10 @@ export type MotivoNoPublicado = "oculto" | "inactivo_en_alegra" | "sin_precio"
 export interface EstadoPublicacion {
   /** overlay.visible; sin fila de overlay es false (fail-closed). */
   visible: boolean
-  /** catalog_products.status */
+  /** catalog_products.status — "visto en la última corrida del sync", NO el estado de Alegra. */
   status: string
+  /** catalog_products.alegra_status — el estado que le puso Alegra. null = sin sincronizar aún. */
+  alegraStatus: string | null
   /** catalog_products.prices tal cual viene de la sync. */
   prices: unknown
 }
@@ -345,7 +347,9 @@ export function tienePrecio(prices: unknown): boolean {
 export function motivoNoPublicado(fila: EstadoPublicacion): MotivoNoPublicado[] {
   const motivos: MotivoNoPublicado[] = []
   if (!fila.visible) motivos.push("oculto")
-  if (fila.status !== "active") motivos.push("inactivo_en_alegra")
+  // Dos cosas distintas, mismo motivo de cara al usuario: que Alegra lo haya dado de baja, o que
+  // haya desaparecido del catálogo entre dos corridas. En los dos casos no se puede vender.
+  if (fila.status !== "active" || fila.alegraStatus === "inactive") motivos.push("inactivo_en_alegra")
   if (!tienePrecio(fila.prices)) motivos.push("sin_precio")
   return motivos
 }

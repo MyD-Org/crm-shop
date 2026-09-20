@@ -73,7 +73,14 @@ export async function syncCatalog(config: TenantConfig, trigger: "cron" | "manua
             categoryAlegraId: it.categoryAlegraId,
             prices: it.prices,
             stock: it.stock != null ? String(it.stock) : null,
+            // `status` es "visto en esta corrida", NO el estado de Alegra: el de Alegra va a
+            // `alegraStatus`. Antes eran la misma columna y ésta lo pisaba, así que el estado
+            // real se perdía y el filtro del bot (`status = 'active'`) no filtraba nada.
             status: "active",
+            alegraStatus: it.status,
+            brand: it.brand,
+            ivaPorcentaje: it.ivaPorcentaje != null ? String(it.ivaPorcentaje) : null,
+            raw: it.raw,
             images: it.images,
             syncedAt: new Date(),
           })),
@@ -88,11 +95,41 @@ export async function syncCatalog(config: TenantConfig, trigger: "cron" | "manua
             prices: sql`excluded.prices`,
             stock: sql`excluded.stock`,
             status: sql`excluded.status`,
+            alegraStatus: sql`excluded.alegra_status`,
+            brand: sql`excluded.brand`,
+            ivaPorcentaje: sql`excluded.iva_porcentaje`,
+            raw: sql`excluded.raw`,
             images: sql`excluded.images`,
             syncedAt: sql`excluded.synced_at`,
           },
         })
     }
+
+    // ── Empujar al Shop los que dejaron de ser vendibles ──
+    //
+    // El delta hacia el Shop se mueve por `catalog_overlay.updated_at`, que sólo cambia cuando
+    // alguien edita en el panel. Sin esto, un producto que Alegra dio de baja (o que quedó en
+    // precio cero) seguiría publicado en la tienda para siempre: su fila del overlay no se tocó,
+    // así que el delta nunca lo volvería a mandar. Se le corre la marca de tiempo para que viaje
+    // una vez más, ya como visible:false.
+    await db.execute(sql`
+      UPDATE catalog_overlay o
+      SET updated_at = now()
+      FROM catalog_products p
+      WHERE o.tenant_id = ${config.id}
+        AND p.tenant_id = o.tenant_id
+        AND p.alegra_id = o.alegra_id
+        AND o.visible = true
+        AND NOT (
+          p.status = 'active'
+          AND (p.alegra_status IS NULL OR p.alegra_status <> 'inactive')
+          AND coalesce((
+            SELECT max((elem->>'price')::numeric)
+            FROM jsonb_array_elements(p.prices) elem
+            WHERE jsonb_typeof(p.prices) = 'array'
+          ), 0) > 0
+        )
+    `)
 
     // ── Stale: lo no visto en esta corrida queda inactive (no se borra, soft) ──
     await db

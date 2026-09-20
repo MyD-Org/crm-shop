@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll, afterEach, vi } from "vites
 import { and, eq, sql } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
-import { catalogOverlay, catalogOverlayTags, shopCategories, shopTags } from "@/db/schema"
+import { catalogOverlay, catalogOverlayTags, catalogProducts, shopCategories, shopTags } from "@/db/schema"
 import { seedTenant, truncateAll } from "./helpers"
 import { validarJsonSchema } from "../contracts/json-schema-lite"
 import schemaTaxonomia from "../contracts/catalogo-overlay/v1/schema-taxonomia.json"
@@ -48,7 +48,33 @@ async function seedTag(tenantId: string, nombre: string, slug: string) {
   return row
 }
 
-async function seedOverlay(tenantId: string, alegraId: string, extra: Partial<typeof catalogOverlay.$inferInsert> = {}) {
+/**
+ * Siembra el overlay Y el producto espejado que le corresponde.
+ *
+ * El producto hace falta porque el delta manda `visible:false` para lo que no se puede vender:
+ * sin fila en el espejo, o con precio cero, el ítem viaja oculto. Por defecto se siembra vendible;
+ * `producto` permite forzar el caso contrario.
+ */
+async function seedOverlay(
+  tenantId: string,
+  alegraId: string,
+  extra: Partial<typeof catalogOverlay.$inferInsert> = {},
+  producto: Partial<typeof catalogProducts.$inferInsert> | null = {},
+) {
+  if (producto) {
+    await getDb()
+      .insert(catalogProducts)
+      .values({
+        tenantId,
+        alegraId,
+        name: `P${alegraId}`,
+        status: "active",
+        alegraStatus: "active",
+        prices: [{ idPriceList: "1", name: "Lista", price: 1000 }],
+        ...producto,
+      })
+      .onConflictDoNothing()
+  }
   const [row] = await getDb()
     .insert(catalogOverlay)
     .values({ tenantId, alegraId, ...extra })

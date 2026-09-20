@@ -278,6 +278,17 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
         />
         <Select
           className={ANCHO_FILTRO}
+          aria-label="Filtrar por estado en Alegra"
+          value={filtros.alegra ?? TODOS}
+          onValueChange={(v) => cambiarFiltro("alegra", v)}
+          options={[
+            { value: TODOS, label: "Activos y de baja" },
+            { value: "active", label: "Activos en Alegra" },
+            { value: "inactive", label: "De baja en Alegra" },
+          ]}
+        />
+        <Select
+          className={ANCHO_FILTRO}
           aria-label="Filtrar por precio"
           value={filtros.precio ?? TODOS}
           onValueChange={(v) => cambiarFiltro("precio", v)}

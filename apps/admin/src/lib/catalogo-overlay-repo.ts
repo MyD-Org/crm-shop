@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
+import { esVendibleSql } from "./catalogo-vendible"
 import { basePublicaFotos } from "./shop-media"
 import {
   catalogCategories,
@@ -412,7 +413,14 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
 
   if (f.nombre === "sin") cond.push(sql`(o.nombre IS NULL OR btrim(o.nombre) = '')`)
 
-  if (f.alegra === "active" || f.alegra === "inactive") cond.push(sql`p.status = ${f.alegra}`)
+  // `p.status` es "visto en la última corrida", NO el estado de Alegra: ese vive en
+  // `alegra_status`. El filtro apuntaba a la columna equivocada, así que "inactivo" no devolvía
+  // nunca nada. Se acepta null como activo: son los que no pasaron por el sync nuevo todavía.
+  if (f.alegra === "active") {
+    cond.push(sql`(p.alegra_status IS NULL OR p.alegra_status <> 'inactive')`)
+  } else if (f.alegra === "inactive") {
+    cond.push(sql`p.alegra_status = 'inactive'`)
+  }
 
   // "Sin precio": la misma regla que `tienePrecio()` en TypeScript, pero en SQL, porque el
   // filtro y el conteo se resuelven en Postgres. El chequeo de formato antes del cast evita que
@@ -849,6 +857,7 @@ interface FilaListadoCruda {
   nombre_efectivo: string
   sku: string
   tag_ids: string[] | null
+  alegra_status: string | null
 }
 
 const iso = (v: Date | string | null): string | null =>
@@ -877,13 +886,13 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     fotos: f.fotos ?? [],
     actualizadoEn: iso(f.updated_at),
     // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
-    motivos: motivoNoPublicado({ visible, status: f.status, prices: f.prices }),
+    motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
   }
 }
 
 /** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
 const columnasListado = sql`
-  p.alegra_id, p.code, p.name, p.description, p.status, p.prices, p.stock, p.synced_at,
+  p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
   o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.updated_at,
   c.nombre AS categoria_nombre,
   ${nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`)} AS nombre_efectivo,
@@ -1093,7 +1102,9 @@ export async function contratoOverlayV1(
     : sql``
 
   const filas = (await db.execute(sql`
-    SELECT o.alegra_id, o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos,
+    SELECT o.alegra_id,
+           (o.visible AND p.id IS NOT NULL AND ${esVendibleSql("p")}) AS visible,
+           o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos,
            to_char(o.updated_at AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
            coalesce(
              array_agg(cot.tag_id::text ORDER BY cot.tag_id) FILTER (WHERE cot.tag_id IS NOT NULL),
@@ -1101,8 +1112,16 @@ export async function contratoOverlayV1(
            ) AS tag_ids
     FROM ${catalogOverlay} o
     LEFT JOIN ${catalogOverlayTags} cot ON cot.overlay_id = o.id
+    -- El producto entra sólo para saber si se puede vender. Un ítem dado de baja en Alegra o con
+    -- precio cero viaja SIEMPRE como visible:false, sin importar qué diga el overlay: el admin no
+    -- tiene por qué acordarse de despublicar a mano lo que Alegra bajó.
+    --
+    -- LEFT, no INNER: si el producto ya no está en el espejo, la fila del overlay TIENE que
+    -- viajar igual, como oculta. Con INNER desaparecía del delta y la tienda se quedaba
+    -- mostrándola para siempre, que es exactamente lo que se quiere evitar.
+    LEFT JOIN ${catalogProducts} p ON p.tenant_id = o.tenant_id AND p.alegra_id = o.alegra_id
     WHERE o.tenant_id = ${tenantId} ${keyset}
-    GROUP BY o.id
+    GROUP BY o.id, p.id
     ORDER BY o.updated_at ASC, o.alegra_id ASC
     LIMIT ${params.limit}
   `)) as unknown as FilaDeltaCruda[]

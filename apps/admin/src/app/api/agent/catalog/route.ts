@@ -1,6 +1,7 @@
 import { and, eq, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogProducts } from "@/db/schema"
+import { esVendible } from "@/lib/catalogo-vendible"
 import { authAgentTenantRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
 
@@ -49,7 +50,10 @@ export async function GET(req: Request) {
       .where(
         and(
           eq(catalogProducts.tenantId, tenant.id),
-          eq(catalogProducts.status, "active"),
+          // Misma regla que usa la tienda. Antes decía `status = 'active'`, que era SIEMPRE
+          // verdadero porque el sync lo escribía fijo: el bot podía cotizar productos dados de
+          // baja en Alegra y otros con precio cero.
+          esVendible(),
           ...searchTerms.map(tokenMatch),
         ),
       )

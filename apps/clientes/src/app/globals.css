@@ -11,16 +11,11 @@
   --container-contenido: 1600px;
 }
 
-/* El tema editorial (crema/tinta/ámbar) viene del design system v0.11
-   ([data-theme='editorial'], activado en <html> del layout). Acá solo se
-   cablean las fuentes cargadas con next/font a los roles del DS. */
+/* Fuentes: next/font las carga en el layout (--font-nunito / --font-sora) y
+   acá se cablean a los roles del DS para el caso sin data-theme. */
 :root {
   --font-sans: var(--font-nunito), ui-sans-serif, system-ui, -apple-system, sans-serif;
-}
-
-[data-theme="editorial"] {
-  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
@@ -57,14 +52,6 @@ body {
   font-style: normal;
 }
 
-/* El tema cálido vive en <html data-theme="calido">: los bloques de abajo
-   re-mapean los roles del DS a la paleta aprobada y esto pinta el fondo/tinta
-   base del documento. Todo el sitio (home incluida) comparte la misma piel. */
-[data-theme="calido"] {
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-
 /* ==================================================================
    DS (@myd-org/ui) en paleta cálida — las decisiones visuales del diseño
    aprobado viven ACÁ, como tokens, única fuente de verdad. El DS consume
@@ -75,6 +62,9 @@ body {
    Roles semánticos (success/warning/danger) quedan como en editorial.
    ================================================================== */
 [data-theme="calido"] {
+  background: var(--color-bg);
+  color: var(--color-text);
+
   /* superficies y tinta */
   --color-bg: #faf6ef; /* --bg del mockup */
   --color-surface: #fffdf8; /* --card */
@@ -113,17 +103,16 @@ body {
   --radius-sm: 14px;
   --radius: 20px;
   --radius-lg: 28px;
-  --font-sans: "Nunito Sans", system-ui, sans-serif;
-  --font-display: "Sora", system-ui, sans-serif;
+  --font-sans: var(--font-nunito), system-ui, sans-serif;
+  --font-display: var(--font-sora), system-ui, sans-serif;
   /* sombras cálidas (mismas fórmulas del mockup) */
   --shadow-1: 0 4px 12px rgba(36, 28, 20, 0.08);
   --shadow-2: 0 24px 44px -22px rgba(36, 28, 20, 0.28);
 }
 
-/* Segunda piel del DS: misma calidez, acento azul de marca (guía §2). El
-   mapeo está listo; falta el mecanismo de elección (guía §5: geo-IP por
-   middleware/cookie, A/B o ?tema=azul) y que el layout raíz lo lea para
-   data-theme del <html>. */
+/* Segunda piel del DS: misma calidez con acento azul de marca (guía §2).
+   El proxy la elige por geo-IP para Misiones (guía §5), `?tema=azul|calido`
+   la fuerza desde cualquier lugar y la cookie la persiste por un año. */
 [data-theme="calido-azul"] {
   --color-bg: #f8f8f6;
   --color-surface: #ffffff;
@@ -155,8 +144,8 @@ body {
   --radius-sm: 14px;
   --radius: 20px;
   --radius-lg: 28px;
-  --font-sans: "Nunito Sans", system-ui, sans-serif;
-  --font-display: "Sora", system-ui, sans-serif;
+  --font-sans: var(--font-nunito), system-ui, sans-serif;
+  --font-display: var(--font-sora), system-ui, sans-serif;
   --shadow-1: 0 4px 12px rgba(22, 40, 63, 0.08);
   --shadow-2: 0 24px 44px -22px rgba(22, 40, 63, 0.28);
 }

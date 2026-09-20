@@ -1,24 +1,26 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { ClerkProvider } from "@clerk/nextjs";
 import { esAR } from "@/lib/clerk-localizacion";
-import { Fraunces, Nunito_Sans } from "next/font/google";
+import { Nunito_Sans, Sora } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getContenidoHome } from "@/lib/home-datos";
-import { TEMA_COOKIE } from "@/lib/tema-ip";
+import { HEADER_TEMA, TEMA_COOKIE } from "@/lib/tema-ip";
 import "./globals.css";
 
+// Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
+// consume como var(--font-nunito) / var(--font-sora) desde globals.css.
 const nunito = Nunito_Sans({
   subsets: ["latin"],
+  style: ["normal", "italic"],
   variable: "--font-nunito",
 });
 
-const fraunces = Fraunces({
+const sora = Sora({
   subsets: ["latin"],
-  style: ["normal", "italic"],
-  variable: "--font-fraunces",
+  variable: "--font-sora",
 });
 
 export const metadata: Metadata = {
@@ -39,28 +41,27 @@ export default async function RootLayout({
 }>) {
   // Anuncio global: contenido administrable del CRM (mismo contrato que la home).
   const { anuncio } = await getContenidoHome();
-  // Tema por geo-IP (guía §5): la cookie la decide el proxy en la primera
-  // visita (Misiones → azul de marca) y `?tema=` la puede forzar.
+  // Tema por geo-IP (guía §5): el proxy decide en la primera visita
+  // (Misiones → azul de marca) y `?tema=` la puede forzar. El header
+  // x-centralled-tema trae la decisión de ESTE request y manda sobre la
+  // cookie, que recién se actualiza en la response: sin él, forzar el tema
+  // tardaría un request en verse.
+  const headerTema = (await headers()).get(HEADER_TEMA);
+  const cookieTema = (await cookies()).get(TEMA_COOKIE)?.value;
   const tema =
-    (await cookies()).get(TEMA_COOKIE)?.value === "calido-azul"
-      ? "calido-azul"
-      : "calido";
+    headerTema === "calido" || headerTema === "calido-azul"
+      ? headerTema
+      : cookieTema === "calido-azul"
+        ? "calido-azul"
+        : "calido";
 
   return (
     <html
       lang="es"
       data-theme={tema}
-      className={`h-full antialiased ${nunito.variable} ${fraunces.variable}`}
+      className={`h-full antialiased ${nunito.variable} ${sora.variable}`}
     >
       <body className="flex min-h-full flex-col">
-        {/* Fuentes del diseño aprobado (Sora + Nunito Sans, Google Fonts).
-            React 19 las hoista al <head>. */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Sora:wght@300..800&family=Nunito+Sans:ital,wght@0,300..900;1,300..900&display=swap"
-          rel="stylesheet"
-        />
         {/* ClerkProvider DENTRO de <body>: envolver <html> fuerza render dinámico de todo el árbol */}
         <ClerkProvider localization={esAR}>
           <Providers>

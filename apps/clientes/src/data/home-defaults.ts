@@ -48,7 +48,8 @@ export type DestacadosContent = {
   cantidad: number;
   /** Productos elegidos (SKUs de Alegra), en orden. El resto se completa con Iluminación. */
   skus?: string[];
-  /** Fotos de los productos destacados, por posición (misma URL pública que hero/tiles). */
+  /** Fotos de los productos destacados, por posición. Path local (empieza con
+      "/"): las sirve next/image, que no admite URLs externas sin remotePatterns. */
   imagenes?: string[];
 };
 
@@ -276,9 +277,12 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       if (o.skus !== undefined &&
           (!Array.isArray(o.skus) || !(o.skus as unknown[]).every(esTexto)))
         errores.push("skus debe ser un array de SKUs no vacíos");
+      // Paths locales: las sirve next/image, que no admite URLs externas sin
+      // remotePatterns (una URL externa rompería la foto en runtime).
       if (o.imagenes !== undefined &&
-          (!Array.isArray(o.imagenes) || !(o.imagenes as unknown[]).every(esTexto)))
-        errores.push("imagenes debe ser un array de URLs no vacías");
+          (!Array.isArray(o.imagenes) || !(o.imagenes as unknown[]).every(esTexto) ||
+           !(o.imagenes as string[]).every((u) => u.startsWith("/"))))
+        errores.push("imagenes debe ser un array de paths locales (empiezan con /)");
       break;
     }
     case "bannerDeco": {
@@ -313,7 +317,18 @@ export function combinarContenidoHome(filas: { key: string; payload: unknown }[]
     if (!porKey.has(key)) continue;
     const payload = resolverSeccion(key, porKey.get(key));
     if (payload !== null) {
-      Object.assign(resultado, { [key]: payload });
+      // Filas guardadas antes de que existieran skus/imagenes no traen esos
+      // campos: se heredan del default en vez de apagar los destacados
+      // curados (el reemplazo es de sección entera, no por campo).
+      const seccion =
+        key === "destacados" && typeof payload === "object"
+          ? {
+              skus: DEFAULTS_HOME.destacados.skus,
+              imagenes: DEFAULTS_HOME.destacados.imagenes,
+              ...(payload as Record<string, unknown>),
+            }
+          : payload;
+      Object.assign(resultado, { [key]: seccion });
     } else if (key === "navBadge") {
       resultado.navBadge = null;
     }

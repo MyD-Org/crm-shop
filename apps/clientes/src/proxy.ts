@@ -5,6 +5,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import {
   HEADER_PAIS,
   HEADER_REGION,
+  HEADER_TEMA,
   TEMA_COOKIE,
   UN_ANIO,
   resolverTema,
@@ -63,32 +64,48 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
   if (bloqueo) return bloqueo;
 
   // clerk() devuelve undefined cuando no intercepta: seguimos con la respuesta
-  // base para poder inyectarle la cookie del tema.
-  const res = (await clerk(request, event)) ?? NextResponse.next();
-  return conTema(res, request);
+  // base para poder inyectarle la cookie (y el header) del tema.
+  const res = await clerk(request, event);
+  if (res) return conTema(res, request);
+
+  // Camino normal: además de la cookie (que viaja en la response), pasamos la
+  // decisión como header del REQUEST para que el layout la aplique en ESTE
+  // render — sin eso, `?tema=` recién se vería en el próximo request.
+  const decision = decisionTema(request);
+  const headers = new Headers(request.headers);
+  if (decision === "calido" || decision === "calido-azul") {
+    headers.set(HEADER_TEMA, decision);
+  }
+  return conTema(NextResponse.next({ request: { headers } }), request, decision);
+}
+
+function decisionTema(request: NextRequest) {
+  return resolverTema({
+    consulta: request.nextUrl.searchParams.get("tema"),
+    cookie: request.cookies.get(TEMA_COOKIE)?.value,
+    pais: request.headers.get(HEADER_PAIS),
+    region: request.headers.get(HEADER_REGION),
+  });
 }
 
 /**
  * Tema cálido/azul por geo-IP (guía §5): la primera visita decide según la
  * geolocalización (Misiones → azul de marca) y guarda la elección en cookie;
  * `?tema=azul|calido` fuerza y persiste, `?tema=auto` vuelve a la geo.
- * Solo en GETs de páginas: nada de cookies en APIs ni en el Frontend API de Clerk.
+ * Solo en GETs de páginas: nada de cookies en APIs, assets de public/ ni en
+ * el Frontend API de Clerk.
  */
-function conTema(res: Response, request: NextRequest): Response {
+function conTema(res: Response, request: NextRequest, decision?: ReturnType<typeof decisionTema>): Response {
   const { pathname } = request.nextUrl;
   const esPagina =
     request.method === "GET" &&
     !pathname.startsWith("/api/") &&
     !pathname.startsWith("/__clerk") &&
-    pathname !== GATE_PATH;
+    pathname !== GATE_PATH &&
+    !/\.[^/]+$/.test(pathname); // assets de public/ (imágenes, robots.txt…)
   if (!esPagina) return res;
 
-  const decision = resolverTema({
-    consulta: request.nextUrl.searchParams.get("tema"),
-    cookie: request.cookies.get(TEMA_COOKIE)?.value,
-    pais: request.headers.get(HEADER_PAIS),
-    region: request.headers.get(HEADER_REGION),
-  });
+  decision ??= decisionTema(request);
 
   const previa = request.cookies.get(TEMA_COOKIE)?.value;
   const forzada = request.nextUrl.searchParams.has("tema");

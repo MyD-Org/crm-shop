@@ -80,3 +80,30 @@ describe("combinarContenidoHome", () => {
     expect(out.navBadge).toEqual({ categoria: "Decorativa", texto: "Nuevo" });
   });
 });
+
+describe("compatibilidad de filas guardadas antes de skus/imagenes", () => {
+  it("destacados viejo hereda skus/imagenes del default (no apaga lo curado)", () => {
+    const viejo = { ...DEFAULTS_HOME.destacados } as Record<string, unknown>;
+    delete viejo.skus;
+    delete viejo.imagenes;
+    const out = combinarContenidoHome([{ key: "destacados", payload: viejo }]);
+    expect(out.destacados.skus).toEqual(DEFAULTS_HOME.destacados.skus);
+    expect(out.destacados.imagenes).toEqual(DEFAULTS_HOME.destacados.imagenes);
+  });
+
+  it("destacados con skus propios los usa (no hereda los del default)", () => {
+    const out = combinarContenidoHome([
+      { key: "destacados", payload: { ...DEFAULTS_HOME.destacados, skus: ["OTRO-SKU"] } },
+    ]);
+    expect(out.destacados.skus).toEqual(["OTRO-SKU"]);
+  });
+
+  it("destacados rechaza imagenes externas (next/image no las sirve sin remotePatterns)", () => {
+    expect(
+      erroresSeccion("destacados", {
+        ...DEFAULTS_HOME.destacados,
+        imagenes: ["https://cdn.externa.com/foto.webp"],
+      }).length,
+    ).toBeGreaterThan(0);
+  });
+});

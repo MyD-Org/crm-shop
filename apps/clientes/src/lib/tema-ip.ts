@@ -35,5 +35,8 @@ export function resolverTema(input: {
 /** Nombre del header de país de Vercel (documentado en la plataforma). */
 export const HEADER_PAIS = "x-vercel-ip-country";
 export const HEADER_REGION = "x-vercel-ip-country-region";
+/** Decisión del tema para ESTE request: la inyecta el proxy como header para
+    que el layout la aplique de una (la cookie recién viaja en la response). */
+export const HEADER_TEMA = "x-centralled-tema";
 export const TEMA_COOKIE = "centralled-tema";
 export const UN_ANIO = 60 * 60 * 24 * 365;

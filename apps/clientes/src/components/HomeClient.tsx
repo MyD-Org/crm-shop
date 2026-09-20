@@ -251,13 +251,36 @@ export function HomeClient({
 
         {/* Servicios */}
         <Reveal>
-          <section className="grid grid-cols-1 gap-5 pt-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
             {servicios.items.map((s, i) => {
               const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
               return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
             })}
           </section>
         </Reveal>
+
+        {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
+        <section className="pb-[clamp(56px,7vw,96px)]">
+          <div className="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[28px] bg-primary px-[clamp(24px,5vw,72px)] py-10 text-on-primary">
+            <div className="flex items-center gap-5">
+              <span className="[&_svg]:h-8 [&_svg]:w-8 [&_svg]:text-highlight">
+                <ChatIcon />
+              </span>
+              <div>
+                <p className="text-lg font-extrabold">¿Necesitás asesoramiento técnico?</p>
+                <p className="text-sm text-on-primary/70">
+                  Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.
+                </p>
+              </div>
+            </div>
+            <a
+              href="https://wa.me/5492235903025"
+              className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
+            >
+              Consultar ahora
+            </a>
+          </div>
+        </section>
       </div>
     </main>
   );

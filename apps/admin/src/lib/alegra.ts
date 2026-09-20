@@ -228,19 +228,43 @@ export class AlegraRateLimitError extends Error {
 // que paginan en paralelo (PAGE_CONCURRENCY) lo tocan fácil, y antes un solo 429 en
 // cualquier página tiraba toda la operación. Se reintenta esa request sola, con espera
 // creciente y respetando Retry-After si viene.
-const RATE_LIMIT_RETRIES = 3
+const RATE_LIMIT_RETRIES = 5
 const RATE_LIMIT_BASE_DELAY_MS = 1000
+
+/**
+ * Techo de la espera, para que un `Retry-After` exagerado no se coma el presupuesto de la
+ * corrida. El techo viejo de 10s era demasiado corto en el otro sentido: se gastaban los tres
+ * intentos dentro de la misma ventana que acababa de rechazar el pedido.
+ */
+const RATE_LIMIT_MAX_DELAY_MS = 30_000
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Espera sugerida por el server (`Retry-After`, en segundos), acotada. */
-function retryAfterMs(res: Response, fallback: number): number {
-  const raw = res.headers.get("retry-after")
-  const secs = raw ? Number(raw) : NaN
-  if (Number.isFinite(secs) && secs > 0) return Math.min(secs * 1000, 10_000)
-  return fallback
+/**
+ * Cuánto esperar antes de reintentar, en milisegundos.
+ *
+ * Respeta `Retry-After` si viene; si no, espera creciente. En los dos casos suma **jitter**, que
+ * es lo que faltaba: al paginar en tandas paralelas, un 429 lo reciben las N requests de la tanda
+ * a la vez, y sin jitter las N esperan exactamente lo mismo y vuelven a chocar todas juntas
+ * contra la misma ventana. El jitter las desparrama.
+ *
+ * Pura y exportada para poder probarla: es la decisión que hacía fallar la sync del catálogo
+ * grande todos los días.
+ */
+export function esperaDeReintento(
+  attempt: number,
+  retryAfterHeader: string | null,
+  random: () => number = Math.random,
+): number {
+  const secs = retryAfterHeader ? Number(retryAfterHeader) : NaN
+  const base =
+    Number.isFinite(secs) && secs > 0
+      ? Math.min(secs * 1000, RATE_LIMIT_MAX_DELAY_MS)
+      : Math.min(RATE_LIMIT_BASE_DELAY_MS * 2 ** attempt, RATE_LIMIT_MAX_DELAY_MS)
+  // Hasta un 50% extra, nunca menos que la base: esperar de menos volvería a chocar.
+  return Math.round(base * (1 + random() * 0.5))
 }
 
 async function alegraFetch(
@@ -267,7 +291,7 @@ async function alegraFetch(
     if (res.status === 429) {
       const detail = await res.text().catch(() => "")
       if (attempt < RATE_LIMIT_RETRIES) {
-        await sleep(retryAfterMs(res, RATE_LIMIT_BASE_DELAY_MS * 2 ** attempt))
+        await sleep(esperaDeReintento(attempt, res.headers.get("retry-after")))
         continue
       }
       throw new AlegraRateLimitError(path, detail)
@@ -288,7 +312,15 @@ async function alegraFetch(
 // (await secuencial) tarda demasiado y hace que la función serverless llegue al timeout
 // (504 Vercel Runtime Timeout, visto con el catálogo de Central Led). Se piden varias
 // páginas en paralelo por tanda para bajar el tiempo total de wall-clock.
-const PAGE_CONCURRENCY = 8
+// 8 hacía que Alegra respondiera 429 y la sync diaria de Central Led (~5959 items ≈ 199 páginas)
+// fallara ENTERA todos los días, mientras la de Avantec (1715 ≈ 58 páginas) pasaba sin problema:
+// no era un problema de credenciales sino de volumen contra el límite por minuto.
+//
+// 4 es el mismo valor al que llegó el Shop el 13/09/2026 contra esta misma cuenta, por el mismo
+// motivo. La corrida tarda unos minutos, que no es un problema porque la sync corre en GitHub
+// Actions y no tiene el techo de 300 s de la función.
+const PAGE_CONCURRENCY = 4
+
 
 async function fetchAllPages<T>(
   config: TenantConfig,

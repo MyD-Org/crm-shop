@@ -20,9 +20,14 @@ export default async function setup() {
     await admin.end()
   }
 
-  // 2. Aplicar migraciones sobre la DB de test.
+  // 2. Extensiones que prod ya tiene y las migraciones no crean (las crea el proveedor, y
+  //    CREATE EXTENSION pide superusuario). `unaccent` la usan las búsquedas por texto del
+  //    catálogo: sin esto los tests que las tocan fallan con "function unaccent does not exist"
+  //    aunque el código sea correcto.
   const client = postgres(TEST_DATABASE_URL, { max: 1 })
   try {
+    await client.unsafe("CREATE EXTENSION IF NOT EXISTS unaccent")
+    // 3. Aplicar migraciones sobre la DB de test.
     await migrate(drizzle(client), { migrationsFolder: "./drizzle" })
   } finally {
     await client.end()

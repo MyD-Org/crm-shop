@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MyD-Org/platform/contracts/catalogo-overlay/v1/schema-taxonomia.json",
+  "title": "ContratoTaxonomiaV1",
+  "description": "Respuesta 200 de GET {CRM}/api/internal/shop/taxonomia?tenant=… — árbol completo de categorías propias (hasta 3 niveles, incluidas las inactivas) y diccionario completo de tags del tenant. Se aplica como REEMPLAZO ATÓMICO: los ids son los del CRM y se conservan tal cual.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "tenant", "actualizadoEn", "categorias", "tags"],
+  "properties": {
+    "version": { "const": "v1" },
+    "tenant": { "type": "string", "minLength": 1 },
+    "actualizadoEn": {
+      "description": "ISO 8601 (UTC). Máximo updatedAt entre categorías y tags; si no hay ninguna fila, el momento de la respuesta.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "categorias": {
+      "description": "Orden determinista: nivel, parentId (raíces primero), orden, nombre.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Categoria" }
+    },
+    "tags": {
+      "description": "Diccionario completo del tenant, lista PLANA (sin jerarquía ni orden entre sí), ordenada por nombre. Viaja acá y no en el delta para que renombrar un tag no empuje ni un solo producto al delta del overlay.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/Tag" }
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "Slug": {
+      "description": "Identificador de URL. Único entre hermanas (categorías) o dentro del tenant (tags).",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "Categoria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "parentId", "nombre", "slug", "orden", "nivel", "activa"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "parentId": {
+          "description": "null = raíz. El consumidor NO declara FK sobre esto: el árbol llega entero y se reemplaza atómicamente.",
+          "oneOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }]
+        },
+        "nombre": { "type": "string", "minLength": 1 },
+        "slug": { "$ref": "#/$defs/Slug" },
+        "orden": { "description": "Orden explícito entre hermanas.", "type": "integer", "minimum": 0 },
+        "nivel": { "description": "1..3. Denormalizado; la app garantiza nivel = padre.nivel + 1.", "type": "integer", "minimum": 1, "maximum": 3 },
+        "activa": { "description": "Las inactivas VIAJAN igual: el consumidor necesita saber que existen.", "type": "boolean" }
+      }
+    },
+    "Tag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "nombre", "slug"],
+      "properties": {
+        "id": { "description": "Referencia estable: renombrar el tag NO lo cambia.", "$ref": "#/$defs/Uuid" },
+        "nombre": { "type": "string", "minLength": 1 },
+        "slug": { "$ref": "#/$defs/Slug" }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "version": "v1",
+  "tenant": "tenant-demo",
+  "items": [
+    {
+      "alegraId": "12345",
+      "visible": "true",
+      "nombre": "Lámpara colgante E27",
+      "descripcion": null,
+      "categoriaId": null,
+      "orden": null,
+      "tagIds": ["oferta"],
+      "fotos": [],
+      "updatedAt": "2026-09-18T12:00:00.000Z",
+      "precio": 1500
+    }
+  ],
+  "hasMore": false
+}

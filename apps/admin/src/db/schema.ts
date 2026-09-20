@@ -8,9 +8,12 @@ import {
   boolean,
   numeric,
   date,
+  smallint,
   index,
   uniqueIndex,
+  primaryKey,
   customType,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 import type { WeeklySchedule, ScheduleException } from "@/lib/schedule"
@@ -252,6 +255,127 @@ export const catalogSyncLog = pgTable(
   },
   (t) => [index("csl_tenant_started").on(t.tenantId, t.startedAt)],
 )
+
+// ── Catálogo comercial del Shop, administrado desde el CRM (change `catalogo-shop`) ────────
+//
+// Alegra manda sobre identidad (alegra_id), stock y precio; todo lo demás se edita acá. Vive
+// en tablas aparte porque alegra-sync pisa TODAS las columnas de catalog_products.
+
+// Taxonomía propia de la tienda, hasta 3 niveles. El `nivel` está denormalizado (CHECK en la
+// migración) y la app garantiza nivel = padre.nivel + 1.
+export const shopCategories = pgTable(
+  "shop_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    // ON DELETE RESTRICT: borrar una categoría con hijas es un 409, no una cascada.
+    parentId: uuid("parent_id").references((): AnyPgColumn => shopCategories.id, {
+      onDelete: "restrict",
+    }),
+    nombre: text("nombre").notNull(),
+    slug: text("slug").notNull(),
+    orden: integer("orden").notNull().default(0),
+    nivel: smallint("nivel").notNull().default(1),
+    activa: boolean("activa").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Dos parciales y no un UNIQUE compuesto: en Postgres NULL <> NULL, así que un UNIQUE
+    // normal no impediría dos raíces con el mismo slug.
+    uniqueIndex("shop_categories_slug_raiz_uniq")
+      .on(t.tenantId, t.slug)
+      .where(sql`${t.parentId} is null`),
+    uniqueIndex("shop_categories_slug_hijo_uniq")
+      .on(t.tenantId, t.parentId, t.slug)
+      .where(sql`${t.parentId} is not null`),
+    index("shop_categories_tenant_parent_orden_idx").on(t.tenantId, t.parentId, t.orden),
+  ],
+)
+
+/**
+ * Una variante de foto del overlay. Las URLs son absolutas, públicas e inmutables: la misma
+ * foto nunca cambia de URL si no se la modificó (reemplazarla es una key nueva).
+ */
+export interface FotoOverlay {
+  url: string
+  w: number
+  alt?: string
+}
+
+// Overlay comercial, ESPARSO: sólo hay fila para los productos que alguien tocó. La ausencia
+// de fila equivale a todos los defaults (visible=false, sin nombre, sin categoría, sin fotos).
+export const catalogOverlay = pgTable(
+  "catalog_overlay",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    // Sin FK a catalog_products: el overlay puede preceder al espejo.
+    alegraId: text("alegra_id").notNull(),
+    visible: boolean("visible").notNull().default(false),
+    nombre: text("nombre"),
+    descripcion: text("descripcion"),
+    categoriaId: uuid("categoria_id").references(() => shopCategories.id, { onDelete: "set null" }),
+    orden: integer("orden"), // null = sin destacar (NULLS LAST en la vidriera)
+    fotos: jsonb("fotos").$type<FotoOverlay[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Insumo del delta hacia el Shop: lo setea el repo con now() de Postgres en CADA escritura.
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: text("updated_by"),
+  },
+  (t) => [
+    uniqueIndex("catalog_overlay_tenant_alegra_uniq").on(t.tenantId, t.alegraId),
+    // El orden de columnas es exactamente el del ORDER BY del cursor keyset.
+    index("catalog_overlay_tenant_updated_idx").on(t.tenantId, t.updatedAt, t.alegraId),
+    index("catalog_overlay_tenant_categoria_idx").on(t.tenantId, t.categoriaId),
+    // "Sin foto" es el filtro central del flujo de trabajo, no un extra.
+    index("catalog_overlay_sin_foto_idx")
+      .on(t.tenantId)
+      .where(sql`jsonb_array_length(${t.fotos}) = 0`),
+  ],
+)
+
+// Tags administrables: entidad propia, planos (sin jerarquía ni orden). El uuid es la
+// referencia estable ⇒ renombrar no toca ninguna fila de producto.
+export const shopTags = pgTable(
+  "shop_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    nombre: text("nombre").notNull(),
+    slug: text("slug").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("shop_tags_slug_uniq").on(t.tenantId, t.slug)],
+)
+
+// Relación N↔N. Toda escritura acá tiene que bumpear catalog_overlay.updated_at en la misma
+// transacción: los tags de un producto viven en OTRA tabla y el delta no se entera solo.
+export const catalogOverlayTags = pgTable(
+  "catalog_overlay_tags",
+  {
+    overlayId: uuid("overlay_id")
+      .notNull()
+      .references(() => catalogOverlay.id, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => shopTags.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.overlayId, t.tagId] }),
+    index("cot_tag_idx").on(t.tagId),
+  ],
+)
+
+// Frescura del aviso al Shop. El CRM registra SU último aviso entregado, no la sync del Shop.
+export const shopSyncPing = pgTable("shop_sync_ping", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id),
+  ultimoOkAt: timestamp("ultimo_ok_at", { withTimezone: true }),
+  ultimoIntentoAt: timestamp("ultimo_intento_at", { withTimezone: true }),
+})
 
 // Reglas de notificación por tenant (editables por SQL hasta que exista el panel)
 export const notificationRules = pgTable("notification_rules", {

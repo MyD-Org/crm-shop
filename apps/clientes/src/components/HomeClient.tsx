@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   Badge,
   ChipRow,
@@ -52,7 +53,7 @@ function CreditCardIcon() {
 }
 function ChatIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   );
@@ -94,12 +95,12 @@ function TituloSeccion({
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-6 max-md:flex-col max-md:items-start">
       <div>
-        <h2 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium leading-[1.08] tracking-tight text-text">
+        <h2 className="font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text">
           {titulo}
-          {acento ? <em className="italic text-accent"> {acento}</em> : null}
+          {acento ? <em className="not-italic text-accent"> {acento}</em> : null}
         </h2>
         {bajada ? (
-          <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-muted">{bajada}</p>
+          <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted">{bajada}</p>
         ) : null}
       </div>
       {linkTodos ? (
@@ -115,8 +116,16 @@ function TituloSeccion({
 }
 
 /**
- * Home editorial. Server component: recibe oferta, contenido (DB mergeada con
- * defaults) y destacados desde el Server Component app/page.tsx.
+ * Home sobre el design system. Server component: recibe oferta, contenido
+ * (DB mergeada con defaults del diseño aprobado) y destacados reales del
+ * catálogo, resueltos en app/page.tsx.
+ *
+ * Las correcciones tipográficas entre corchetes ([&_em]:not-italic,
+ * [&_h1]:font-bold, tono del primer CTA) alinean el DS al diseño aprobado
+ * sin valores numéricos sueltos: el DS hardcodea itálica en los <em>,
+ * títulos en medium y el CTA primario en night; el mockup los tiene rectos,
+ * en negrita y en acento. Cuando el DS exponga variantes (ctaTone, weight
+ * del display, emStyle) estas utilidades se van.
  */
 export function HomeClient({
   oferta,
@@ -128,13 +137,15 @@ export function HomeClient({
   destacados: Product[];
 }) {
   const { hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios } = contenido;
+  const imagenesDestacados = secDestacados.imagenes ?? [];
 
   return (
     <main className="flex-1">
-      <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
+      <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
             <Hero
+              className="[&_em]:not-italic [&_h1]:font-bold [&_a:first-of-type]:bg-accent [&_a:first-of-type:hover]:bg-primary"
               eyebrow={hero.eyebrow}
               title={hero.titulo}
               accent={hero.acento}
@@ -151,41 +162,67 @@ export function HomeClient({
         </div>
       </div>
 
-      <Marquee items={marquee.items} className="mt-[clamp(28px,4vw,48px)]" />
+      <Marquee
+        items={marquee.items}
+        className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
+      />
 
-      <div className="mx-auto max-w-[1280px] px-[clamp(18px,4vw,48px)]">
+      <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         {/* Ambientes */}
         <Reveal>
           <section className="pt-[clamp(56px,7vw,96px)]">
             <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
-            <RoomTiles items={aTilesDS(ambientes.items)} />
+            {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
+                min-h menores; la variante "mosaic" debería llevarla (DS gap). */}
+            <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(ambientes.items)} />
           </section>
         </Reveal>
 
-        {/* Destacados */}
+        {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
         <Reveal>
           <section className="pt-[clamp(56px,7vw,96px)]">
             <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {destacados.map((p) => (
-                <Link key={p.id} href={`/producto/${p.id}`}>
-                  <ProductCard
-                    variant="editorial"
-                    name={p.name}
-                    brand={p.brand}
-                    price={p.precioFinal ?? p.price}
-                    oldPrice={p.oldPrice}
-                    badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
-                    image={<LightbulbIcon className="h-20 w-20 text-muted/30" />}
-                    action={
-                      <AddToCartButton
-                        product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
-                      />
-                    }
-                    installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
-                  />
-                </Link>
-              ))}
+              {destacados.map((p, i) => {
+                const imagen = imagenesDestacados[i];
+                return (
+                  <Link
+                    key={p.id}
+                    href={`/producto/${p.id}`}
+                    className="block transition-transform duration-300 hover:-translate-y-1"
+                  >
+                    <ProductCard
+                      variant="editorial"
+                      className="h-full overflow-hidden"
+                      name={p.name}
+                      brand={p.brand}
+                      price={p.precioFinal ?? p.price}
+                      oldPrice={p.oldPrice}
+                      badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
+                      image={
+                        imagen ? (
+                          <Image
+                            src={imagen}
+                            alt={p.name}
+                            fill
+                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <LightbulbIcon className="h-20 w-20 text-muted/30" />
+                        )
+                      }
+                      priceNote={p.sku ? `Cód. ${p.sku}` : undefined}
+                      action={
+                        <AddToCartButton
+                          product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
+                        />
+                      }
+                      installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
+                    />
+                  </Link>
+                );
+              })}
             </div>
           </section>
         </Reveal>
@@ -193,7 +230,7 @@ export function HomeClient({
         {/* Banner decorativo */}
         <Reveal>
           <PromoBanner
-            className="mt-[clamp(56px,7vw,96px)]"
+            className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
             eyebrow={bannerDeco.eyebrow}
             title={bannerDeco.titulo}
             accent={bannerDeco.acento}
@@ -214,36 +251,13 @@ export function HomeClient({
 
         {/* Servicios */}
         <Reveal>
-          <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid grid-cols-1 gap-5 pt-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
             {servicios.items.map((s, i) => {
               const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
               return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
             })}
           </section>
         </Reveal>
-
-        {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
-        <section className="pb-[clamp(56px,7vw,96px)]">
-          <div className="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[28px] bg-primary px-[clamp(24px,5vw,72px)] py-10 text-on-primary">
-            <div className="flex items-center gap-5">
-              <span className="[&_svg]:h-8 [&_svg]:w-8 [&_svg]:text-highlight">
-                <ChatIcon />
-              </span>
-              <div>
-                <p className="text-lg font-extrabold">¿Necesitás asesoramiento técnico?</p>
-                <p className="text-sm text-on-primary/70">
-                  Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.
-                </p>
-              </div>
-            </div>
-            <a
-              href="https://wa.me/5492235903025"
-              className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
-            >
-              Consultar ahora
-            </a>
-          </div>
-        </section>
       </div>
     </main>
   );

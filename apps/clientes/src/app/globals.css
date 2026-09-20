@@ -49,9 +49,114 @@ body {
   display: none;
 }
 
-/* Marca en ámbar según diseño original (el DS usa highlight; alinear en
-   próxima versión del DS). Solo el header: el footer no usa .site-header y
-   su <em> de marca queda en highlight, como el mockup. */
+/* Marca del header en acento según diseño aprobado (el DS usa highlight;
+   alinear en próxima versión del DS). Solo el header: el footer no usa
+   .site-header y su <em> de marca queda en highlight (--warm), como el mockup. */
 .site-header em {
   color: var(--color-accent);
+  font-style: normal;
+}
+
+/* El tema cálido vive en <html data-theme="calido">: los bloques de abajo
+   re-mapean los roles del DS a la paleta aprobada y esto pinta el fondo/tinta
+   base del documento. Todo el sitio (home incluida) comparte la misma piel. */
+[data-theme="calido"] {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ==================================================================
+   DS (@myd-org/ui) en paleta cálida — las decisiones visuales del diseño
+   aprobado viven ACÁ, como tokens, única fuente de verdad. El DS consume
+   roles var(--color-*) / var(--radius-*) / var(--font-*) / var(--shadow-*);
+   redefiniéndolos bajo data-theme="calido" (en <html>), TODO el sitio
+   —home, catálogo, ficha, carrito, checkout, cuenta— hereda la piel sin
+   tocar código de los componentes. Valores: mockup aprobado + guía §2/§4.
+   Roles semánticos (success/warning/danger) quedan como en editorial.
+   ================================================================== */
+[data-theme="calido"] {
+  /* superficies y tinta */
+  --color-bg: #faf6ef; /* --bg del mockup */
+  --color-surface: #fffdf8; /* --card */
+  --color-elevated: #f3e4d3; /* --accent-soft */
+  --color-border: rgba(42, 33, 24, 0.1); /* --line */
+  --color-ring: rgba(180, 95, 46, 0.12); /* glow de focus */
+  --color-text: #2a2118; /* --ink */
+  --color-muted: #8b7f70; /* --ink-soft */
+  --color-subtle: #a8b0b9; /* placeholder/sku del mockup */
+  --color-border-strong: rgba(42, 33, 24, 0.26);
+  /* primario: espresso (botones, header, píldoras) */
+  --color-primary: #241c14; /* --night */
+  --color-primary-hover: #b45f2e; /* hover → --accent */
+  --color-primary-soft: #f3e4d3;
+  --color-on-primary: #f2e8d8; /* --on-night */
+  /* acento: terracota (links, tags, precios de cuotas) */
+  --color-accent: #b45f2e;
+  --color-accent-strong: #b45f2e; /* eyebrow/tiles/badge del DS = --accent */
+  --color-accent-soft: #f3e4d3;
+  --color-highlight: #eda63f; /* --warm: marca en footer, luz cálida */
+  /* informativos sin azul (mismo criterio que editorial) */
+  --color-info: #b45f2e;
+  --color-info-soft: #f3e4d3;
+  /* superficies oscuras (footer del DS) */
+  --color-surface-dark: #2a2118;
+  --color-surface-darker: #241c14;
+  --color-on-surface-dark: #f2e8d8;
+  /* semánticas: mismas del editorial (stock, errores de form) */
+  --color-success: #15803d;
+  --color-success-soft: #effaf2;
+  --color-danger: #e1242f;
+  --color-danger-soft: #fdecec;
+  --color-warning: #b45309;
+  --color-warning-soft: #fbf0db;
+  /* forma y tipografía del mockup */
+  --radius-sm: 14px;
+  --radius: 20px;
+  --radius-lg: 28px;
+  --font-sans: "Nunito Sans", system-ui, sans-serif;
+  --font-display: "Sora", system-ui, sans-serif;
+  /* sombras cálidas (mismas fórmulas del mockup) */
+  --shadow-1: 0 4px 12px rgba(36, 28, 20, 0.08);
+  --shadow-2: 0 24px 44px -22px rgba(36, 28, 20, 0.28);
+}
+
+/* Segunda piel del DS: misma calidez, acento azul de marca (guía §2). El
+   mapeo está listo; falta el mecanismo de elección (guía §5: geo-IP por
+   middleware/cookie, A/B o ?tema=azul) y que el layout raíz lo lea para
+   data-theme del <html>. */
+[data-theme="calido-azul"] {
+  --color-bg: #f8f8f6;
+  --color-surface: #ffffff;
+  --color-elevated: #e9f1fa;
+  --color-border: rgba(28, 39, 51, 0.1);
+  --color-ring: rgba(30, 90, 168, 0.1);
+  --color-text: #1c2733;
+  --color-muted: #77808a;
+  --color-subtle: #a8b0b9;
+  --color-primary: #16283f;
+  --color-primary-hover: #1e5aa8;
+  --color-primary-soft: #e9f1fa;
+  --color-on-primary: #eaf1f8;
+  --color-accent: #1e5aa8;
+  --color-accent-strong: #1e5aa8;
+  --color-accent-soft: #e9f1fa;
+  --color-highlight: #e8a13d;
+  --color-info: #1e5aa8;
+  --color-info-soft: #e9f1fa;
+  --color-surface-dark: #1c2733;
+  --color-surface-darker: #16283f;
+  --color-on-surface-dark: #eaf1f8;
+  --color-success: #15803d;
+  --color-success-soft: #effaf2;
+  --color-danger: #e1242f;
+  --color-danger-soft: #fdecec;
+  --color-warning: #b45309;
+  --color-warning-soft: #fbf0db;
+  --radius-sm: 14px;
+  --radius: 20px;
+  --radius-lg: 28px;
+  --font-sans: "Nunito Sans", system-ui, sans-serif;
+  --font-display: "Sora", system-ui, sans-serif;
+  --shadow-1: 0 4px 12px rgba(22, 40, 63, 0.08);
+  --shadow-2: 0 24px 44px -22px rgba(22, 40, 63, 0.28);
 }

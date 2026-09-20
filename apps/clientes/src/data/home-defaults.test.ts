@@ -14,8 +14,11 @@ describe("defaults de home", () => {
     }
   });
 
-  it("navBadge default es null", () => {
-    expect(DEFAULTS_HOME.navBadge).toBeNull();
+  it("navBadge default trae el tag Nuevo de Iluminación (diseño aprobado)", () => {
+    expect(DEFAULTS_HOME.navBadge).toEqual({
+      categoria: "ILUMINACION",
+      texto: "Nuevo",
+    });
   });
 });
 

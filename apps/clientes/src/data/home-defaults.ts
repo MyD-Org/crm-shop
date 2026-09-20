@@ -1,9 +1,13 @@
 /**
  * Contenido por defecto de la home, editable después desde el CRM vía
  * PUT /api/internal/home-content. Cada sección de la DB pisa a su default
- * solo si valida (ver erroresSeccion). Las imágenes default son placeholders
- * SVG inline (data URI) en la paleta editorial: se reemplazan desde el CRM
- * por URLs públicas de fotos reales.
+ * solo si valida (ver erroresSeccion).
+ *
+ * Los defaults reflejan el diseño aprobado ("Central Led — Diseño cálido sin
+ * azul", guía §4/§6): textos literales del mockup e imágenes comprimidas en
+ * public/images/ (.webp). `destacados.imagenes` asigna una foto (por posición)
+ * a cada producto destacado: el catálogo (Alegra) no provee imágenes de
+ * producto, así que la foto es contenido de la home, administrable.
  */
 
 export type Enlace = { label: string; href: string };
@@ -42,6 +46,10 @@ export type DestacadosContent = {
   bajada?: string;
   linkTodos: string;
   cantidad: number;
+  /** Productos elegidos (SKUs de Alegra), en orden. El resto se completa con Iluminación. */
+  skus?: string[];
+  /** Fotos de los productos destacados, por posición (misma URL pública que hero/tiles). */
+  imagenes?: string[];
 };
 
 export type BannerDecoContent = {
@@ -91,118 +99,100 @@ export const SECCIONES_HOME = [
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
 
-/** Placeholder SVG en paleta editorial (crema→ámbar suave) como data URI. */
-function svgPlaceholder(desde: string, hacia: string, etiqueta: string): string {
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">` +
-    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${desde}"/><stop offset="1" stop-color="${hacia}"/>` +
-    `</linearGradient></defs>` +
-    `<rect width="1200" height="900" fill="url(#g)"/>` +
-    `<circle cx="880" cy="240" r="150" fill="#f0c98f" opacity="0.4"/>` +
-    `<circle cx="240" cy="700" r="90" fill="#b3603f" opacity="0.18"/>` +
-    `<text x="60" y="830" font-family="Georgia, serif" font-size="46" fill="#8a7a66">${etiqueta}</text>` +
-    `</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
-const PLACEHOLDER = {
-  hero: svgPlaceholder("#efe7da", "#f3e3cb", "Living cálido"),
-  iluminacion: svgPlaceholder("#f3e3cb", "#efe7da", "Iluminación LED"),
-  tableros: svgPlaceholder("#e8dcc8", "#d9c7ad", "Tableros y protecciones"),
-  cables: svgPlaceholder("#efe7da", "#e8dcc8", "Cables e instalación"),
-  colgantes: svgPlaceholder("#f3e3cb", "#efe7da", "Colgantes"),
-  patio: svgPlaceholder("#e8dcc8", "#efe7da", "Patio y jardín"),
-  dormitorio: svgPlaceholder("#efe7da", "#e8dcc8", "Dormitorio"),
-  patioAnochecer: svgPlaceholder("#d9c7ad", "#b3603f", "Patio al atardecer"),
-  guirnaldas: svgPlaceholder("#efe7da", "#f3e3cb", "Guirnaldas"),
-  neones: svgPlaceholder("#e8dcc8", "#efe7da", "Neones y tiras"),
-  veladores: svgPlaceholder("#f3e3cb", "#efe7da", "Veladores"),
-};
+const CATALOGO_ILUMINACION = "/catalogo?categoria=ILUMINACION";
 
 export const DEFAULTS_HOME: HomeContent = {
   anuncio: {
     texto: "Envío gratis en compras desde $100.000 · 6 cuotas sin interés · Retiro en local sin cargo",
   },
   hero: {
-    eyebrow: "Nueva colección 2026",
-    titulo: "La luz que hace",
-    acento: "hogar",
+    eyebrow: "Iluminación LED · Ingresos 2026",
+    titulo: "Todo para iluminar",
+    acento: "tu casa y tu obra",
     bajada:
-      "Materiales eléctricos e iluminación con stock real y marcas líderes. Envíos a todo el país y 6 cuotas sin interés.",
-    imagen: PLACEHOLDER.hero,
-    imagenAlt: "Ambiente cálido iluminado",
+      "Lámparas, colgantes, guirnaldas y artefactos LED de marcas líderes. Fichas técnicas claras, stock real de depósito y precios para profesionales y particulares.",
+    imagen: "/images/hero-neutral.webp",
+    imagenAlt: "Living con lámparas de pie y de mesa",
     ctas: [
       { label: "Ver catálogo →", href: "/catalogo" },
-      { label: "Los más vendidos", href: "/catalogo?orden=ventas" },
+      { label: "Línea decorativa", href: CATALOGO_ILUMINACION },
     ],
     usps: [
       { label: "Envíos a todo el país" },
       { label: "Stock en tiempo real" },
-      { label: "6 cuotas sin interés" },
+      { label: "Asesoramiento por WhatsApp" },
     ],
   },
   marquee: {
     items: [
       "Más de 5.000 productos",
       "Despacho en 24 h",
-      "Retiro en local sin cargo",
+      "Precios mayoristas",
       "Puerto Iguazú, Misiones",
     ],
   },
   ambientes: {
     titulo: "Comprá por",
-    acento: "rubro",
-    bajada: "Todo para tu instalación, ordenado por categoría.",
+    acento: "ambiente",
+    bajada: "Interior, exterior, cálida o fría: cada ambiente pide su artefacto y su temperatura de color.",
     linkTodos: "/catalogo",
     items: [
-      { eyebrow: "Catálogo", titulo: "Iluminación LED", imagen: PLACEHOLDER.iluminacion, href: "/catalogo" },
-      { eyebrow: "Pro", titulo: "Tableros y protecciones", imagen: PLACEHOLDER.tableros, href: "/catalogo" },
-      { eyebrow: "Pro", titulo: "Cables e instalación", imagen: PLACEHOLDER.cables, href: "/catalogo" },
+      { eyebrow: "Interior", titulo: "Colgantes y lámparas de diseño", imagen: "/images/deco-colgante.webp", href: CATALOGO_ILUMINACION },
+      { eyebrow: "Exterior", titulo: "Patio y jardín", imagen: "/images/deco-guirnalda.webp", href: CATALOGO_ILUMINACION },
+      { eyebrow: "Interior", titulo: "Dormitorio", imagen: "/images/deco-velador.webp", href: CATALOGO_ILUMINACION },
     ],
   },
   destacados: {
     titulo: "Los más",
-    acento: "queridos",
-    bajada: "Los productos que eligen nuestros clientes, con stock confirmado y cuotas.",
+    acento: "vendidos",
+    bajada: "Rotación real del local y la web: especificaciones completas, stock confirmado y hasta 6 cuotas.",
     linkTodos: "/catalogo",
     cantidad: 4,
+    // Productos reales del catálogo (los del diseño aprobado que existen en
+    // Alegra). El CRM puede re-curarlos con la sección "destacados".
+    skus: ["ADF-D8-BCO-CO", "ADM-D10-BCO-CO", "ADM-D8-BCO-CO"],
+    imagenes: [
+      "/images/prod-bulb-warm.webp",
+      "/images/prod-panel-warm.webp",
+      "/images/prod-spot-warm.webp",
+      "/images/prod-string-warm.webp",
+    ],
   },
   bannerDeco: {
-    eyebrow: "Línea decorativa",
+    eyebrow: "Línea decorativa · Nuevo",
     titulo: "Ambientá tus noches con",
     acento: "luz cálida",
-    bajada: "Guirnaldas, neones, veladores y colgantes para transformar cualquier espacio.",
-    cta: { label: "Descubrir la línea →", href: "/catalogo" },
-    imagen: PLACEHOLDER.patioAnochecer,
+    bajada: "Guirnaldas IP44, neones flex 12V, veladores y colgantes: línea deco con specs de instalación serias.",
+    cta: { label: "Descubrir la línea →", href: CATALOGO_ILUMINACION },
+    imagen: "/images/deco-guirnalda.webp",
   },
   decoGrid: {
     titulo: "Decorativa para",
     acento: "cada rincón",
     linkTodos: "/catalogo",
     items: [
-      { eyebrow: "Exterior", titulo: "Guirnaldas", imagen: PLACEHOLDER.guirnaldas, href: "/catalogo" },
-      { eyebrow: "Interior", titulo: "Neones y tiras", imagen: PLACEHOLDER.neones, href: "/catalogo" },
-      { eyebrow: "Interior", titulo: "Veladores", imagen: PLACEHOLDER.veladores, href: "/catalogo" },
-      { eyebrow: "Interior", titulo: "Colgantes", imagen: PLACEHOLDER.colgantes, href: "/catalogo" },
+      { eyebrow: "Exterior", titulo: "Guirnaldas", imagen: "/images/deco-guirnalda.webp", href: CATALOGO_ILUMINACION },
+      { eyebrow: "Interior", titulo: "Neones y tiras", imagen: "/images/deco-neon.webp", href: CATALOGO_ILUMINACION },
+      { eyebrow: "Interior", titulo: "Veladores", imagen: "/images/deco-velador.webp", href: CATALOGO_ILUMINACION },
+      { eyebrow: "Interior", titulo: "Colgantes", imagen: "/images/deco-colgante.webp", href: CATALOGO_ILUMINACION },
     ],
     chips: [
-      { label: "Apliques de pared", href: "/catalogo" },
-      { label: "Faroles solares", href: "/catalogo" },
-      { label: "Smart / Wi-Fi", href: "/catalogo" },
-      { label: "Efecto fuego", href: "/catalogo" },
-      { label: "Listones y tubos", href: "/catalogo" },
+      { label: "Apliques de pared", href: CATALOGO_ILUMINACION },
+      { label: "Faroles solares", href: CATALOGO_ILUMINACION },
+      { label: "Smart / Wi-Fi", href: CATALOGO_ILUMINACION },
+      { label: "Efecto fuego", href: CATALOGO_ILUMINACION },
+      { label: "Listones y tubos", href: CATALOGO_ILUMINACION },
     ],
   },
   servicios: {
     items: [
       { titulo: "Envío gratis", texto: "En compras desde $100.000 a todo el país." },
-      { titulo: "Stock real", texto: "Sincronizado al instante con nuestro depósito." },
+      { titulo: "Stock real", texto: "Disponibilidad online sincronizada con nuestro depósito." },
       { titulo: "6 cuotas sin interés", texto: "Y precios especiales por transferencia." },
-      { titulo: "Asesoramiento técnico", texto: "Te ayudamos por WhatsApp a elegir bien." },
+      { titulo: "Asesoramiento técnico", texto: "Te ayudamos por WhatsApp con potencias, térmicas e instalación." },
     ],
   },
-  navBadge: null,
+  navBadge: { categoria: "ILUMINACION", texto: "Nuevo" },
 };
 
 // ---------------------------------------------------------------------------
@@ -283,6 +273,12 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       if (!esTexto(o.linkTodos)) errores.push("linkTodos debe ser un texto no vacío");
       if (typeof o.cantidad !== "number" || o.cantidad < 1 || o.cantidad > 24)
         errores.push("cantidad debe ser un número entre 1 y 24");
+      if (o.skus !== undefined &&
+          (!Array.isArray(o.skus) || !(o.skus as unknown[]).every(esTexto)))
+        errores.push("skus debe ser un array de SKUs no vacíos");
+      if (o.imagenes !== undefined &&
+          (!Array.isArray(o.imagenes) || !(o.imagenes as unknown[]).every(esTexto)))
+        errores.push("imagenes debe ser un array de URLs no vacías");
       break;
     }
     case "bannerDeco": {

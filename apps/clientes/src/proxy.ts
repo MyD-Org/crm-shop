@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextRequest } from "next/server";
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { createHash, timingSafeEqual } from "crypto";
+import {
+  HEADER_PAIS,
+  HEADER_REGION,
+  TEMA_COOKIE,
+  UN_ANIO,
+  resolverTema,
+} from "@/lib/tema-ip";
 
 const GATE_COOKIE = "site_gate";
 const GATE_PATH = "/__gate";
@@ -51,7 +58,57 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
 
   const bloqueo = await siteGate(request);
   if (bloqueo) return bloqueo;
-  return clerk(request, event);
+
+  // clerk() devuelve undefined cuando no intercepta: seguimos con la respuesta
+  // base para poder inyectarle la cookie del tema.
+  const res = (await clerk(request, event)) ?? NextResponse.next();
+  return conTema(res, request);
+}
+
+/**
+ * Tema cálido/azul por geo-IP (guía §5): la primera visita decide según la
+ * geolocalización (Misiones → azul de marca) y guarda la elección en cookie;
+ * `?tema=azul|calido` fuerza y persiste, `?tema=auto` vuelve a la geo.
+ * Solo en GETs de páginas: nada de cookies en APIs ni en el Frontend API de Clerk.
+ */
+function conTema(res: Response, request: NextRequest): Response {
+  const { pathname } = request.nextUrl;
+  const esPagina =
+    request.method === "GET" &&
+    !pathname.startsWith("/api/") &&
+    !pathname.startsWith("/__clerk") &&
+    pathname !== GATE_PATH;
+  if (!esPagina) return res;
+
+  const decision = resolverTema({
+    consulta: request.nextUrl.searchParams.get("tema"),
+    cookie: request.cookies.get(TEMA_COOKIE)?.value,
+    pais: request.headers.get(HEADER_PAIS),
+    region: request.headers.get(HEADER_REGION),
+  });
+
+  const previa = request.cookies.get(TEMA_COOKIE)?.value;
+  const forzada = request.nextUrl.searchParams.has("tema");
+
+  if (decision === "auto") {
+    if (previa === undefined) return res;
+  } else if (previa === decision && !forzada) {
+    return res;
+  }
+
+  const next = res instanceof NextResponse ? res : new NextResponse(res.body, res);
+  if (decision === "auto") {
+    next.cookies.delete(TEMA_COOKIE);
+  } else {
+    next.cookies.set(TEMA_COOKIE, decision, {
+      httpOnly: false, // la lee el layout (server component) para data-theme
+      secure: request.nextUrl.protocol === "https:",
+      sameSite: "lax",
+      path: "/",
+      maxAge: UN_ANIO,
+    });
+  }
+  return next;
 }
 
 /**

@@ -26,6 +26,9 @@ const RUTAS_PUBLICAS = [
   "/api/pagos/mercadopago/webhook",
   // La escribe el CRM (Bearer SHOP_CRM_SECRET): no tiene cookie de gate.
   "/api/internal/home-content",
+  // Idem: el aviso del CRM de que el catálogo cambió. Sin esto la cortina responde 200 con HTML,
+  // el CRM lo toma por éxito y el aviso se pierde sin que nadie se entere.
+  "/api/internal/catalogo/revalidar",
 ];
 
 /**

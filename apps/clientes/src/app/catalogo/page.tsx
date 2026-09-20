@@ -24,8 +24,9 @@ export default async function CatalogoPage({
   // resultados incompletos.
   //
   // Las tres lecturas son independientes entre sí:
-  // - las facetas cuentan sobre TODO lo que matchea la búsqueda (no sobre lo
-  //   ya filtrado), que es lo que hacían cuando se calculaban en el cliente;
+  // - las facetas cruzan los grupos: las marcas se cuentan dentro de las
+  //   categorías tildadas y las categorías dentro de las marcas tildadas, para
+  //   que la lista no ofrezca marcas ajenas a lo que se está viendo;
   // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
   //   o error) ⇒ el catálogo sale sin cuotas.
   const [pagina, facetas, oferta] = await Promise.all([
@@ -38,7 +39,11 @@ export default async function CatalogoPage({
       orden: estado.orden,
       pagina: estado.pagina,
     }),
-    getFacetas(estado.query),
+    getFacetas({
+      busqueda: estado.query,
+      categorias: estado.categorias,
+      marcas: estado.marcas,
+    }),
     getOfertaCuotas(),
   ]);
 

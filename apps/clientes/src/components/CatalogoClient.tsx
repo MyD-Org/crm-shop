@@ -201,15 +201,30 @@ export function CatalogoClient({
             <div
               // Mientras el server arma la página siguiente, la grilla vigente
               // se atenúa: el visitante ve que algo está pasando.
-              className={`grid grid-cols-1 gap-5 transition-opacity sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 ${
+              //
+              // 2/3/4 columnas: 24 productos por página entran justo en las
+              // tres grillas, sin filas huérfanas.
+              className={`grid grid-cols-2 gap-5 transition-opacity md:grid-cols-3 xl:grid-cols-4 ${
                 navegando ? "opacity-50" : ""
               }`}
               aria-busy={navegando}
             >
               {productos.map((p) => (
-                <Link key={p.id} href={`/producto/${p.id}`}>
+                // `h-full` en los dos niveles: el grid estira la celda, pero la
+                // card sólo la llena si se lo pedimos. Sin esto cada card mide
+                // lo que mide su contenido (nombre de 1 o 2 líneas, con o sin
+                // cuotas) y quedan de alturas distintas dentro de la misma fila.
+                <Link key={p.id} href={`/producto/${p.id}`} className="block h-full">
                   <ProductCard
                     variant="editorial"
+                    // - El nombre reserva sus dos líneas (ya viene
+                    //   line-clamp-2) para que el bloque de precio arranque
+                    //   siempre a la misma altura en toda la fila.
+                    // - El precio (el único `.font-display` de la card) escala
+                    //   con el viewport hasta los 22px del DS: con dos columnas
+                    //   en un teléfono, un precio de siete cifras
+                    //   ($ 4.516.253,76) no entra a 22px y se sale de la card.
+                    className="h-full [&_h3]:min-h-[2.5rem] [&_.font-display]:text-[clamp(15px,4.2vw,22px)]"
                     name={p.name}
                     brand={p.brand}
                     price={precioExhibido(p)}
@@ -226,7 +241,13 @@ export function CatalogoClient({
                         product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
                       />
                     }
-                    installments={<CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />}
+                    // Siempre presente, aunque el producto no tenga cuotas: le
+                    // reserva la línea para que el precio no baile entre cards.
+                    installments={
+                      <span className="block min-h-[1.125rem]">
+                        <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
+                      </span>
+                    }
                   />
                 </Link>
               ))}

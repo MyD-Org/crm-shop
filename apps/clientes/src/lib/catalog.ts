@@ -249,16 +249,24 @@ const precioSql = sql<string>`coalesce(
  */
 const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${catalogProducts.ivaPorcentaje}, 0) / 100)`;
 
-/** WHERE compartido por la página, el conteo y las facetas. */
-function condicionesDe(filtros: FiltrosCatalogo, conFiltros: boolean) {
+/**
+ * WHERE compartido por la página, el conteo y las facetas.
+ *
+ * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
+ * faceta excluye su propio grupo (ver `getFacetas`).
+ */
+function condicionesDe(
+  filtros: FiltrosCatalogo,
+  aplicar: { categorias: boolean; marcas: boolean },
+) {
   const q = filtros.busqueda?.trim();
   return and(
     eq(catalogProducts.status, "active"),
     q ? coincideTexto(q) : undefined,
-    conFiltros && filtros.categorias?.length
+    aplicar.categorias && filtros.categorias?.length
       ? inArray(catalogCategories.name, filtros.categorias)
       : undefined,
-    conFiltros && filtros.marcas?.length
+    aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)
       : undefined,
   );
@@ -304,7 +312,7 @@ export async function getPaginaCatalogo(opts?: {
 }): Promise<PaginaCatalogo> {
   const filtros = opts?.filtros ?? {};
   const porPagina = opts?.porPagina ?? PRODUCTOS_POR_PAGINA;
-  const where = condicionesDe(filtros, true);
+  const where = condicionesDe(filtros, { categorias: true, marcas: true });
 
   const [conteo] = await getDb()
     .select({ total: sql<number>`count(*)::int` })
@@ -389,18 +397,20 @@ export interface Facetas {
 }
 
 /**
- * Facetas con sus conteos, calculadas en Postgres sobre TODO el conjunto que
- * matchea la búsqueda.
+ * Facetas con sus conteos, calculadas en Postgres.
  *
- * Los conteos NO miran las categorías/marcas ya tildadas: son las de "cuántos
- * productos hay si tildo esto", igual que cuando se calculaban en el cliente
- * sobre el catálogo entero. Por eso `condicionesDe(..., false)`.
- *
- * Antes salían de contar en memoria los ~2800 productos que el server mandaba
- * al browser; ahora que sólo viaja una página, tienen que venir de la DB.
+ * Cada faceta cuenta sobre lo que matchea la búsqueda MÁS los filtros del OTRO
+ * grupo, y no sobre los propios: las marcas se cuentan dentro de las categorías
+ * tildadas (tildar "Herramientas" deja sólo las marcas que tienen herramientas,
+ * con la cantidad que tienen), pero siguen mostrándose todas las categorías
+ * disponibles para poder tildar otra sin destildar la primera. Antes no miraban
+ * ningún filtro: la lista de marcas era la del catálogo entero, con conteos que
+ * no correspondían a los productos que se estaban viendo.
  */
-export async function getFacetas(busqueda?: string): Promise<Facetas> {
-  const where = condicionesDe({ busqueda }, false);
+export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas> {
+  // Para contar categorías pesan las marcas tildadas, y viceversa.
+  const whereCategorias = condicionesDe(filtros, { categorias: false, marcas: true });
+  const whereMarcas = condicionesDe(filtros, { categorias: true, marcas: false });
 
   const [categorias, marcas] = await Promise.all([
     getDb()
@@ -410,14 +420,14 @@ export async function getFacetas(busqueda?: string): Promise<Facetas> {
       })
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
-      .where(and(where, sql`nullif(${catalogCategories.name}, '') is not null`))
+      .where(and(whereCategorias, sql`nullif(${catalogCategories.name}, '') is not null`))
       .groupBy(catalogCategories.name)
       .orderBy(sql`count(*) desc`, asc(catalogCategories.name)),
     getDb()
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
-      .where(and(where, sql`nullif(${marcaSql}, '') is not null`))
+      .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
       .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
   ]);

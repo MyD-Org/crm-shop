@@ -6,6 +6,7 @@ import {
   validarCategoria,
   validarMovimiento,
   validarTag,
+  validarCamposOverlay,
   nombreEfectivo,
   skuEfectivo,
   tienePrecio,
@@ -66,7 +67,7 @@ describe("validarCategoria", () => {
   })
 
   it("es parcial: lo que no viene en el body conserva el valor actual", () => {
-    const actual = { nombre: "Cables", slug: "cables", parentId: "p1", orden: 5, activa: true }
+    const actual = { nombre: "Cables", slug: "cables", parentId: "p1", orden: 5, activa: true, imagenKey: null, imagenAlt: null }
     const r = validarCategoria({ activa: false }, actual)
     expect(r.ok && r.value.nombre).toBe("Cables")
     expect(r.ok && r.value.parentId).toBe("p1")
@@ -229,5 +230,48 @@ describe("motivoNoPublicado — tabla de casos del contrato", () => {
 
   it("sin fila de overlay (visible=false por default) el motivo es que está oculto", () => {
     expect(motivoNoPublicado({ visible: false, status: "active", prices: precio })).toEqual(["oculto"])
+  })
+})
+
+describe("validarCamposOverlay", () => {
+  const valor = (body: unknown) => {
+    const r = validarCamposOverlay(body)
+    if (!r.ok) throw new Error(`esperaba ok, vino ${r.campo}: ${r.error}`)
+    return r.value
+  }
+
+  it("sólo devuelve los campos que vinieron (lo demás queda como estaba)", () => {
+    expect(valor({ nombre: "Térmica bipolar 16A" })).toEqual({ nombre: "Térmica bipolar 16A" })
+    expect(valor({})).toEqual({})
+  })
+
+  it("vaciar el nombre no es un error: vuelve al default de Alegra", () => {
+    expect(valor({ nombre: "   " })).toEqual({ nombre: null })
+    expect(valor({ nombre: null })).toEqual({ nombre: null })
+  })
+
+  it("ignora precio, stock y alegraId: no hay forma de mandarlos", () => {
+    expect(valor({ nombre: "X", prices: [{ price: 1 }], stock: "999", alegraId: "otro" })).toEqual({ nombre: "X" })
+  })
+
+  it("rechaza tipos equivocados con un mensaje en español formal de usted", () => {
+    const r = validarCamposOverlay({ visible: "si" })
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.campo).toBe("visible")
+      expect(r.error).not.toMatch(/\b(tu|tus|vos|te)\b/i)
+    }
+    expect(validarCamposOverlay({ orden: 1.5 }).ok).toBe(false)
+    expect(validarCamposOverlay({ orden: -1 }).ok).toBe(false)
+    expect(validarCamposOverlay({ tagIds: [1, 2] }).ok).toBe(false)
+    expect(validarCamposOverlay(null).ok).toBe(false)
+  })
+
+  it("categoría y orden vacíos significan 'sin categoría' y 'sin destacar'", () => {
+    expect(valor({ categoriaId: "", orden: null })).toEqual({ categoriaId: null, orden: null })
+  })
+
+  it("deduplica las etiquetas", () => {
+    expect(valor({ tagIds: ["a", "a", "b"] })).toEqual({ tagIds: ["a", "b"] })
   })
 })

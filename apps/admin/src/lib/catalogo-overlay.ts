@@ -53,6 +53,9 @@ export interface CategoriaValida {
   parentId: string | null
   orden: number
   activa: boolean
+  /** KEY del objeto en R2, nunca una url. Ver `urlPublicaFoto()`. */
+  imagenKey: string | null
+  imagenAlt: string | null
 }
 
 /** Lo mínimo que el validador de movimiento necesita saber de cada categoría del tenant. */
@@ -91,7 +94,24 @@ export function validarCategoria(body: unknown, actual?: CategoriaValida): Resul
   const crudoActiva = Object.prototype.hasOwnProperty.call(body, "activa") ? body.activa : (actual?.activa ?? true)
   if (typeof crudoActiva !== "boolean") return fail("activa", "Estado inválido")
 
-  return { ok: true, value: { nombre, slug, parentId, orden: crudoOrden, activa: crudoActiva } }
+  // Imagen: se guarda la KEY del objeto en R2, nunca una url. `null` explícito la quita.
+  const crudoImagen = Object.prototype.hasOwnProperty.call(body, "imagenKey")
+    ? body.imagenKey
+    : (actual?.imagenKey ?? null)
+  if (crudoImagen !== null && typeof crudoImagen !== "string") return fail("imagenKey", "Imagen inválida")
+  const imagenKey = crudoImagen === null || crudoImagen === "" ? null : crudoImagen
+  if (imagenKey && (imagenKey.includes("..") || !imagenKey.startsWith("categorias/"))) {
+    return fail("imagenKey", "Imagen inválida")
+  }
+
+  const crudoAlt = Object.prototype.hasOwnProperty.call(body, "imagenAlt") ? body.imagenAlt : (actual?.imagenAlt ?? null)
+  if (crudoAlt !== null && typeof crudoAlt !== "string") return fail("imagenAlt", "Texto alternativo inválido")
+  const imagenAlt = crudoAlt ? crudoAlt.trim().slice(0, 200) || null : null
+
+  return {
+    ok: true,
+    value: { nombre, slug, parentId, orden: crudoOrden, activa: crudoActiva, imagenKey, imagenAlt },
+  }
 }
 
 export type MotivoMovimiento = "ciclo" | "nivel" | "padre_inexistente"
@@ -148,6 +168,82 @@ export function validarMovimiento(
     return fail("parentId", `La jerarquía admite hasta ${NIVEL_MAX} niveles`)
   }
   return { ok: true, value: { nivel } }
+}
+
+// ─── Edición por producto ────────────────────────────────────────────────────────────────
+
+const DESCRIPCION_MAX = 2000
+
+/** Sólo los campos que vinieron: lo que no está en el body queda como estaba en el overlay. */
+export interface CamposOverlayValidos {
+  visible?: boolean
+  nombre?: string | null
+  descripcion?: string | null
+  categoriaId?: string | null
+  orden?: number | null
+  tagIds?: string[]
+}
+
+const presente = (body: Record<string, unknown>, clave: string): boolean =>
+  Object.prototype.hasOwnProperty.call(body, clave)
+
+/**
+ * Campos editables de un producto. Nada de precio, stock ni alegra_id: no viven en el overlay y
+ * no hay forma de mandarlos (REQ-OVL-02).
+ *
+ * Vaciar el nombre (cadena vacía o sólo espacios) NO es un error de validación: es la forma de
+ * volver al nombre por defecto de Alegra, y se persiste como null (REQ-NOM-01).
+ */
+export function validarCamposOverlay(body: unknown): Resultado<CamposOverlayValidos> {
+  if (!esObjeto(body)) return fail("body", "Datos inválidos")
+
+  const campos: CamposOverlayValidos = {}
+
+  if (presente(body, "visible")) {
+    if (typeof body.visible !== "boolean") return fail("visible", "Estado de publicación inválido")
+    campos.visible = body.visible
+  }
+
+  if (presente(body, "nombre")) {
+    if (body.nombre !== null && typeof body.nombre !== "string") return fail("nombre", "Indique un nombre válido")
+    const nombre = (body.nombre ?? "").trim()
+    if (nombre.length > NOMBRE_MAX) return fail("nombre", `El nombre no puede superar los ${NOMBRE_MAX} caracteres`)
+    campos.nombre = nombre === "" ? null : nombre
+  }
+
+  if (presente(body, "descripcion")) {
+    if (body.descripcion !== null && typeof body.descripcion !== "string") {
+      return fail("descripcion", "Indique una descripción válida")
+    }
+    const descripcion = (body.descripcion ?? "").trim()
+    if (descripcion.length > DESCRIPCION_MAX) {
+      return fail("descripcion", `La descripción no puede superar los ${DESCRIPCION_MAX} caracteres`)
+    }
+    campos.descripcion = descripcion === "" ? null : descripcion
+  }
+
+  if (presente(body, "categoriaId")) {
+    if (body.categoriaId !== null && typeof body.categoriaId !== "string") {
+      return fail("categoriaId", "Seleccione una categoría válida")
+    }
+    campos.categoriaId = body.categoriaId === null || body.categoriaId === "" ? null : body.categoriaId
+  }
+
+  if (presente(body, "orden")) {
+    if (body.orden === null || body.orden === "") campos.orden = null
+    else if (typeof body.orden !== "number" || !Number.isInteger(body.orden) || body.orden < 0 || body.orden > 9999) {
+      return fail("orden", "El orden tiene que ser un número entero entre 0 y 9999")
+    } else campos.orden = body.orden
+  }
+
+  if (presente(body, "tagIds")) {
+    if (!Array.isArray(body.tagIds) || body.tagIds.some((t) => typeof t !== "string")) {
+      return fail("tagIds", "Seleccione etiquetas válidas")
+    }
+    campos.tagIds = [...new Set(body.tagIds as string[])]
+  }
+
+  return { ok: true, value: campos }
 }
 
 // ─── Tags ────────────────────────────────────────────────────────────────────────────────
@@ -256,11 +352,8 @@ export function motivoNoPublicado(fila: EstadoPublicacion): MotivoNoPublicado[] 
 
 export const estaPublicado = (fila: EstadoPublicacion): boolean => motivoNoPublicado(fila).length === 0
 
-/** Textos del panel, en español formal de usted. */
-export const TEXTO_MOTIVO: Record<MotivoNoPublicado, string> = {
-  oculto: "Está oculto en la tienda. Puede publicarlo desde acá.",
-  inactivo_en_alegra: "Alegra lo marcó inactivo. Mientras siga así, publicarlo no lo muestra en la tienda.",
-  sin_precio: "No tiene precio en Alegra.",
-}
+// Los textos de estos motivos viven en el panel (src/components/admin/catalogo/tipos.ts):
+// son presentación y sólo los usa la UI, y traerlos desde acá metería este módulo —y con él
+// drizzle— dentro del bundle del navegador.
 
 export type { FotoOverlay } from "@/db/schema"

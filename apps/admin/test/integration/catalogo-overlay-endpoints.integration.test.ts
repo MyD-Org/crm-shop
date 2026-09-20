@@ -173,8 +173,8 @@ describe("endpoints internos del catálogo comercial", () => {
         categoriaId: categoria.id,
         orden: 0,
         fotos: [
-          { url: "https://fotos.example/shop/tenant-a/12345/0123456789abcdef01234567-1600.webp", w: 1600, alt: "Frente" },
-          { url: "https://fotos.example/shop/tenant-a/12345/0123456789abcdef01234567-800.webp", w: 800 },
+          { key: "shop/tenant-a/12345/0123456789abcdef01234567-1600.webp", w: 1600, alt: "Frente" },
+          { key: "shop/tenant-a/12345/0123456789abcdef01234567-800.webp", w: 800 },
         ],
       })
       await getDb()

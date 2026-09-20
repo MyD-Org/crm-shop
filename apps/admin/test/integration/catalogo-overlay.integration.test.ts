@@ -256,7 +256,7 @@ describe("updated_at avanza en TODA escritura del overlay", () => {
     await guardarOverlay(TENANT_A, "1", {
       visible: true,
       categoriaId: cat.row.id,
-      fotos: [{ url: "https://fotos.example/a-800.webp", w: 800 }],
+      fotos: [{ key: "a-800.webp", w: 800 }],
     })
     await envejecer(TENANT_A)
 
@@ -289,7 +289,7 @@ describe("acciones masivas por descriptor", () => {
     // 5 productos sin overlay + 1 con overlay y con foto.
     for (const id of ["1", "2", "3", "4", "5"]) await seedProducto(TENANT_A, id)
     await seedProducto(TENANT_A, "6")
-    await guardarOverlay(TENANT_A, "6", { fotos: [{ url: "https://fotos.example/x-800.webp", w: 800 }] })
+    await guardarOverlay(TENANT_A, "6", { fotos: [{ key: "x-800.webp", w: 800 }] })
     await seedProducto(TENANT_B, "1") // de otro tenant: nunca se toca
   })
 

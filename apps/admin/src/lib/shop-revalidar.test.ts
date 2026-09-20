@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { pingShopRevalidarCuotas, PING_TIMEOUT_MS } from "@/lib/shop-revalidar"
+import { pingShopRevalidarCatalogo, pingShopRevalidarCuotas, PING_TIMEOUT_MS } from "@/lib/shop-revalidar"
 
 const fetchMock = vi.fn()
 
@@ -65,6 +65,40 @@ describe("pingShopRevalidarCuotas", () => {
   it("sin SHOP_CRM_SECRET → no-op (no manda un Bearer vacío)", async () => {
     vi.stubEnv("SHOP_CRM_SECRET", "")
     await expect(pingShopRevalidarCuotas()).resolves.toEqual({ propagado: false })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+// El wrapper del catálogo comparte todo el cuerpo con el de cuotas (misma función privada) y
+// se diferencia en una sola cosa observable: el path. Los casos de arriba siguen tal cual —
+// que no haya hecho falta tocarlos es lo que prueba que el refactor no cambió comportamiento.
+describe("pingShopRevalidarCatalogo", () => {
+  it("pega al endpoint de revalidación del catálogo, no al de cuotas", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    await expect(pingShopRevalidarCatalogo()).resolves.toEqual({ propagado: true })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://shop.test/api/internal/catalogo/revalidar")
+    expect(init.method).toBe("POST")
+    expect(init.body).toBeUndefined()
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer s3cr3t")
+  })
+
+  it("error de red → no propagado, sin tirar", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"))
+    await expect(pingShopRevalidarCatalogo()).resolves.toEqual({ propagado: false })
+  })
+
+  it("502 → no propagado y el warn lleva la etiqueta del catálogo, no la de cuotas", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    fetchMock.mockResolvedValue(new Response("bad gateway", { status: 502 }))
+    await expect(pingShopRevalidarCatalogo()).resolves.toEqual({ propagado: false })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[catalogo]"))
+  })
+
+  it("sin configuración del Shop → no-op (no llama a fetch)", async () => {
+    vi.stubEnv("SHOP_INTERNAL_URL", "")
+    await expect(pingShopRevalidarCatalogo()).resolves.toEqual({ propagado: false })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

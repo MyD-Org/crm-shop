@@ -36,6 +36,7 @@ const cat = (extra: Partial<CategoriaFila>): CategoriaFila => ({
   orden: 0,
   nivel: 1,
   activa: true,
+  imagenKey: null,
   updatedAt: T,
   ...extra,
 })
@@ -89,14 +90,14 @@ describe("contrato catalogo-overlay v1: fixtures", () => {
 
 describe("armarContratoTaxonomiaV1", () => {
   it("vacío es un payload VÁLIDO, no un fallo, y usa `ahora`", () => {
-    const c = armarContratoTaxonomiaV1({ tenant: "t", categorias: [], tags: [], ahora: T })
+    const c = armarContratoTaxonomiaV1({ baseFotos: "https://fotos.test", tenant: "t", categorias: [], tags: [], ahora: T })
     expect(validarJsonSchema(schemaTaxonomia, c)).toEqual([])
     expect(c).toMatchObject({ version: "v1", categorias: [], tags: [], actualizadoEn: T.toISOString() })
   })
 
   it("ordena por nivel, parentId (raíces primero), orden y nombre; los tags por nombre", () => {
     const padre = "8f3a0c7e-0000-4000-8000-000000000002"
-    const c = armarContratoTaxonomiaV1({
+    const c = armarContratoTaxonomiaV1({ baseFotos: "https://fotos.test",
       tenant: "t",
       ahora: T,
       categorias: [
@@ -113,7 +114,7 @@ describe("armarContratoTaxonomiaV1", () => {
   })
 
   it("las inactivas viajan igual, y actualizadoEn es el máximo entre categorías y tags", () => {
-    const c = armarContratoTaxonomiaV1({
+    const c = armarContratoTaxonomiaV1({ baseFotos: "https://fotos.test",
       tenant: "t",
       ahora: new Date("2020-01-01T00:00:00.000Z"),
       categorias: [cat({ activa: false })],
@@ -126,13 +127,13 @@ describe("armarContratoTaxonomiaV1", () => {
 
 describe("armarContratoOverlayV1", () => {
   it("vacío: sin cursor y sin más páginas", () => {
-    const c = armarContratoOverlayV1({ tenant: "t", filas: [], limit: LIMIT_DEFAULT })
+    const c = armarContratoOverlayV1({ baseFotos: "https://fotos.test", tenant: "t", filas: [], limit: LIMIT_DEFAULT })
     expect(validarJsonSchema(schemaOverlay, c)).toEqual([])
     expect(c).toMatchObject({ items: [], nextCursor: null, hasMore: false })
   })
 
   it("nextCursor es el ÚLTIMO ítem de ESTA página cuando la página vino llena", () => {
-    const c = armarContratoOverlayV1({
+    const c = armarContratoOverlayV1({ baseFotos: "https://fotos.test",
       tenant: "t",
       limit: 2,
       filas: [fila({ alegraId: "12345" }), fila({ alegraId: "12346", updatedAt: ISO2 })],
@@ -144,13 +145,13 @@ describe("armarContratoOverlayV1", () => {
   })
 
   it("página incompleta ⇒ hasMore false y nextCursor null", () => {
-    const c = armarContratoOverlayV1({ tenant: "t", limit: 500, filas: [fila({})] })
+    const c = armarContratoOverlayV1({ baseFotos: "https://fotos.test", tenant: "t", limit: 500, filas: [fila({})] })
     expect(c.hasMore).toBe(false)
     expect(c.nextCursor).toBeNull()
   })
 
   it("nombre y descripción vacíos viajan como null (vaciar el campo vuelve al default de Alegra)", () => {
-    const c = armarContratoOverlayV1({
+    const c = armarContratoOverlayV1({ baseFotos: "https://fotos.test",
       tenant: "t",
       limit: 500,
       filas: [fila({ nombre: "   ", descripcion: "" })],
@@ -160,7 +161,7 @@ describe("armarContratoOverlayV1", () => {
   })
 
   it("despublicar viaja como visible:false, no como borrado, y valida contra el schema", () => {
-    const c = armarContratoOverlayV1({
+    const c = armarContratoOverlayV1({ baseFotos: "https://fotos.test",
       tenant: "t",
       limit: 500,
       filas: [
@@ -171,7 +172,7 @@ describe("armarContratoOverlayV1", () => {
           categoriaId: "8f3a0c7e-0000-4000-8000-000000000001",
           orden: 3,
           tagIds: ["1b7c0c7e-0000-4000-8000-000000000001"],
-          fotos: [{ url: "https://fotos.example/shop/t/9001/0123456789abcdef01234567-800.webp", w: 800, alt: "Térmica" }],
+          fotos: [{ key: "productos/t/9001/0123456789abcdef01234567-800.webp", w: 800, alt: "Térmica" }],
         }),
       ],
     })

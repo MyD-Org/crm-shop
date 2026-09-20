@@ -1,10 +1,14 @@
-import { and, asc, eq, inArray, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
+import { basePublicaFotos } from "./shop-media"
 import {
+  catalogCategories,
   catalogOverlay,
   catalogOverlayTags,
   catalogProducts,
+  catalogSyncLog,
   shopCategories,
+  shopSyncPing,
   shopTags,
   tenants,
 } from "@/db/schema"
@@ -16,12 +20,16 @@ import {
   type ParamsDelta,
 } from "@/lib/catalogo-overlay-contrato"
 import {
+  motivoNoPublicado,
   nombreEfectivoSql,
+  slugify,
+  skuEfectivoSql,
   validarCategoria,
   validarMovimiento,
   validarTag,
   type CategoriaValida,
   type FotoOverlay,
+  type MotivoNoPublicado,
   type NodoCategoria,
   type TagValido,
 } from "@/lib/catalogo-overlay"
@@ -79,6 +87,66 @@ export async function listarCategorias(tenantId: string): Promise<CategoriaRow[]
     .orderBy(asc(shopCategories.nivel), asc(shopCategories.parentId), asc(shopCategories.orden), asc(shopCategories.nombre))
 }
 
+export interface CategoriaConUso {
+  id: string
+  parentId: string | null
+  nombre: string
+  slug: string
+  orden: number
+  nivel: number
+  activa: boolean
+  /** Productos asignados DIRECTAMENTE a esta categoría (no incluye los del subárbol). */
+  productos: number
+  /** KEY del objeto en R2. La url se compone al servir, nunca se guarda. */
+  imagenKey: string | null
+}
+
+/**
+ * El árbol con el conteo de productos por categoría: es el número que la confirmación de
+ * borrado tiene que decir ANTES de confirmar (REQ-TAX-06), y el que la UI muestra al lado de
+ * cada rama. "Sin clasificar" NO sale de acá: es un cajón, no una fila de la taxonomía.
+ */
+export async function listarCategoriasConUso(tenantId: string): Promise<CategoriaConUso[]> {
+  return getDb()
+    .select({
+      id: shopCategories.id,
+      parentId: shopCategories.parentId,
+      nombre: shopCategories.nombre,
+      slug: shopCategories.slug,
+      orden: shopCategories.orden,
+      imagenKey: shopCategories.imagenKey,
+      nivel: shopCategories.nivel,
+      activa: shopCategories.activa,
+      productos: sql<number>`count(${catalogOverlay.id})::int`,
+    })
+    .from(shopCategories)
+    .leftJoin(
+      catalogOverlay,
+      and(eq(catalogOverlay.categoriaId, shopCategories.id), eq(catalogOverlay.tenantId, tenantId)),
+    )
+    .where(eq(shopCategories.tenantId, tenantId))
+    .groupBy(shopCategories.id)
+    .orderBy(asc(shopCategories.nivel), asc(shopCategories.parentId), asc(shopCategories.orden), asc(shopCategories.nombre))
+}
+
+/**
+ * ¿La categoría existe EN ESTE tenant? La FK de `catalog_overlay.categoria_id` apunta a
+ * `shop_categories.id` sin mirar el tenant, así que sin este chequeo un id ajeno sería aceptado
+ * por la base: es exactamente el agujero de aislamiento que REQ-MT-01 prohíbe.
+ */
+export async function categoriaPropia(
+  tenantId: string,
+  id: string,
+  ejecutor: Ejecutor = getDb(),
+): Promise<boolean> {
+  if (!esUuid(id)) return false
+  const [row] = await ejecutor
+    .select({ id: shopCategories.id })
+    .from(shopCategories)
+    .where(and(eq(shopCategories.id, id), eq(shopCategories.tenantId, tenantId)))
+  return !!row
+}
+
 const aNodos = (rows: { id: string; parentId: string | null }[]): NodoCategoria[] =>
   rows.map((r) => ({ id: r.id, parentId: r.parentId }))
 
@@ -90,9 +158,24 @@ async function nodosDelTenant(ejecutor: Ejecutor, tenantId: string): Promise<Nod
   return aNodos(rows)
 }
 
+
+/**
+ * La key de la imagen tiene que vivir bajo el prefijo de ESTE tenant.
+ *
+ * `validarCategoria` es puro y no conoce el tenant, así que sólo puede exigir el prefijo
+ * `categorias/`. Sin esta segunda comprobación, un PATCH podría apuntar la categoría de un tenant
+ * a la imagen de otro, que es justamente lo que el bucket compartido hace posible.
+ */
+function imagenDeOtroTenant(tenantId: string, imagenKey: string | null): boolean {
+  return imagenKey !== null && !imagenKey.startsWith(`categorias/${tenantId}/`)
+}
+
 export async function crearCategoria(tenantId: string, body: unknown): Promise<ResultadoCategoria> {
   const v = validarCategoria(body)
   if (!v.ok) return { kind: "invalid", campo: v.campo, error: v.error }
+  if (imagenDeOtroTenant(tenantId, v.value.imagenKey)) {
+    return { kind: "invalid", campo: "imagenKey", error: "Imagen inválida" }
+  }
   return escribirCategoria(tenantId, null, v.value)
 }
 
@@ -111,8 +194,13 @@ export async function actualizarCategoria(tenantId: string, id: string, body: un
     parentId: actual.parentId,
     orden: actual.orden,
     activa: actual.activa,
+    imagenKey: actual.imagenKey,
+    imagenAlt: actual.imagenAlt,
   })
   if (!v.ok) return { kind: "invalid", campo: v.campo, error: v.error }
+  if (imagenDeOtroTenant(tenantId, v.value.imagenKey)) {
+    return { kind: "invalid", campo: "imagenKey", error: "Imagen inválida" }
+  }
   return escribirCategoria(tenantId, id, v.value)
 }
 
@@ -274,6 +362,8 @@ export interface FiltrosAdmin {
   nombre?: "sin"
   /** Estado del producto en Alegra. */
   alegra?: "active" | "inactive"
+  /** "sin" = sin precio de lista mayor a cero en Alegra (uno de los motivos de no publicado). */
+  precio?: "con" | "sin"
   /** uuid de un tag. */
   tag?: string
 }
@@ -323,6 +413,19 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
   if (f.nombre === "sin") cond.push(sql`(o.nombre IS NULL OR btrim(o.nombre) = '')`)
 
   if (f.alegra === "active" || f.alegra === "inactive") cond.push(sql`p.status = ${f.alegra}`)
+
+  // "Sin precio": la misma regla que `tienePrecio()` en TypeScript, pero en SQL, porque el
+  // filtro y el conteo se resuelven en Postgres. El chequeo de formato antes del cast evita que
+  // un precio guardado como texto raro tumbe la query entera.
+  if (f.precio === "sin" || f.precio === "con") {
+    const conPrecio = sql`EXISTS (
+      SELECT 1 FROM jsonb_array_elements(p.prices) e
+      WHERE jsonb_typeof(p.prices) = 'array'
+        AND (e->>'price') ~ '^[0-9]+(\.[0-9]+)?$'
+        AND (e->>'price')::numeric > 0
+    )`
+    cond.push(f.precio === "con" ? conPrecio : sql`NOT ${conPrecio}`)
+  }
 
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (
@@ -448,7 +551,9 @@ export async function masivaOverlay(
 ): Promise<ResultadoMasiva> {
   const malo = validarSeleccion(seleccion)
   if (malo) return malo
-  if (accion.tipo === "categoria" && accion.categoriaId !== null && !esUuid(accion.categoriaId)) {
+  // Una categoría de otro tenant tiene que comportarse igual que una inexistente: la FK apunta
+  // a shop_categories.id sin mirar el tenant y sola no alcanza (REQ-MT-01).
+  if (accion.tipo === "categoria" && accion.categoriaId !== null && !(await categoriaPropia(tenantId, accion.categoriaId))) {
     return { kind: "invalid", campo: "categoriaId", error: "Seleccione una categoría válida" }
   }
 
@@ -691,6 +796,209 @@ export async function masivaTags(
   })
 }
 
+// ─── Listado y ficha del panel ───────────────────────────────────────────────────────────
+
+/** Una fila del listado del admin: lo de Alegra (sólo lectura) + lo editable del overlay. */
+export interface ProductoAdmin {
+  alegraId: string
+  /** Alegra, sólo lectura. */
+  code: string | null
+  nombreAlegra: string
+  descripcionAlegra: string | null
+  status: string
+  prices: unknown
+  stock: string | null
+  syncedAt: string | null
+  /** Overlay (editable). `null` en nombre/descripción = sin valor propio, cae al de Alegra. */
+  nombre: string | null
+  descripcion: string | null
+  nombreEfectivo: string
+  sku: string
+  visible: boolean
+  categoriaId: string | null
+  categoriaNombre: string | null
+  orden: number | null
+  tagIds: string[]
+  fotos: FotoOverlay[]
+  actualizadoEn: string | null
+  motivos: MotivoNoPublicado[]
+}
+
+export type OrdenListado = "nombre" | "nombre-desc" | "actualizado"
+
+export const LIMITE_LISTADO_DEFAULT = 50
+export const LIMITE_LISTADO_MAX = 200
+
+interface FilaListadoCruda {
+  alegra_id: string
+  code: string | null
+  name: string
+  description: string | null
+  status: string
+  prices: unknown
+  stock: string | null
+  synced_at: Date | string | null
+  visible: boolean | null
+  nombre: string | null
+  descripcion: string | null
+  categoria_id: string | null
+  categoria_nombre: string | null
+  orden: number | null
+  fotos: FotoOverlay[] | null
+  updated_at: Date | string | null
+  nombre_efectivo: string
+  sku: string
+  tag_ids: string[] | null
+}
+
+const iso = (v: Date | string | null): string | null =>
+  v === null ? null : v instanceof Date ? v.toISOString() : String(v)
+
+function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
+  const visible = f.visible ?? false
+  return {
+    alegraId: f.alegra_id,
+    code: f.code,
+    nombreAlegra: f.name,
+    descripcionAlegra: f.description,
+    status: f.status,
+    prices: f.prices,
+    stock: f.stock,
+    syncedAt: iso(f.synced_at),
+    nombre: f.nombre,
+    descripcion: f.descripcion,
+    nombreEfectivo: f.nombre_efectivo,
+    sku: f.sku,
+    visible,
+    categoriaId: f.categoria_id,
+    categoriaNombre: f.categoria_nombre,
+    orden: f.orden,
+    tagIds: f.tag_ids ?? [],
+    fotos: f.fotos ?? [],
+    actualizadoEn: iso(f.updated_at),
+    // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
+    motivos: motivoNoPublicado({ visible, status: f.status, prices: f.prices }),
+  }
+}
+
+/** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
+const columnasListado = sql`
+  p.alegra_id, p.code, p.name, p.description, p.status, p.prices, p.stock, p.synced_at,
+  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.updated_at,
+  c.nombre AS categoria_nombre,
+  ${nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`)} AS nombre_efectivo,
+  ${skuEfectivoSql(sql`p.code`, sql`p.name`)} AS sku,
+  coalesce(
+    (SELECT array_agg(cot.tag_id::text) FROM ${catalogOverlayTags} cot WHERE cot.overlay_id = o.id),
+    '{}'
+  ) AS tag_ids
+`
+
+const desdeListado = sql`
+  FROM ${catalogProducts} p
+  LEFT JOIN ${catalogOverlay} o ON (o.tenant_id = p.tenant_id AND o.alegra_id = p.alegra_id)
+  LEFT JOIN ${shopCategories} c ON (c.id = o.categoria_id AND c.tenant_id = p.tenant_id)
+`
+
+/**
+ * Página del listado del panel. Filtrado, conteo, orden y paginado se resuelven en Postgres:
+ * con ~5959 productos, traerlos al navegador para filtrar ahí no es una opción (REQ-ADM-01).
+ *
+ * El ORDER BY usa el MISMO coalesce que el SELECT (el nombre efectivo, no `p.name`): si se
+ * ordenara por una columna distinta de la exhibida, la paginación dejaría de corresponderse con
+ * lo que el usuario ve. El desempate por `alegra_id` la hace determinística.
+ *
+ * El listado sale de `catalog_products`: una fila de overlay sin producto espejado no aparece
+ * como producto y, sobre todo, no rompe el listado (REQ-OVL-03).
+ */
+export async function listarProductos(
+  tenantId: string,
+  filtros: FiltrosAdmin,
+  opciones: { start?: number; limit?: number; orden?: OrdenListado } = {},
+): Promise<{ items: ProductoAdmin[]; total: number }> {
+  const start = Math.max(0, opciones.start ?? 0)
+  const limit = Math.min(LIMITE_LISTADO_MAX, Math.max(1, opciones.limit ?? LIMITE_LISTADO_DEFAULT))
+  const where = whereListado(tenantId, filtros)
+  const nombre = nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`)
+  const orden =
+    opciones.orden === "nombre-desc"
+      ? sql`${nombre} DESC, p.alegra_id DESC`
+      : opciones.orden === "actualizado"
+        ? sql`o.updated_at DESC NULLS LAST, p.alegra_id ASC`
+        : sql`${nombre} ASC, p.alegra_id ASC`
+
+  const db = getDb()
+  const [filas, conteo] = await Promise.all([
+    db.execute(sql`
+      SELECT ${columnasListado} ${desdeListado}
+      WHERE ${where}
+      ORDER BY ${orden}
+      LIMIT ${limit} OFFSET ${start}
+    `),
+    db.execute(sql`SELECT count(*)::int AS n ${desdeListado} WHERE ${where}`),
+  ])
+
+  return {
+    items: (filas as unknown as FilaListadoCruda[]).map(aProductoAdmin),
+    total: Number((conteo[0] as { n: number }).n),
+  }
+}
+
+/** La ficha de un producto. null si ese `alegraId` no existe en el espejo de ESTE tenant. */
+export async function detalleProducto(tenantId: string, alegraId: string): Promise<ProductoAdmin | null> {
+  const filas = await getDb().execute(sql`
+    SELECT ${columnasListado} ${desdeListado}
+    WHERE p.tenant_id = ${tenantId} AND p.alegra_id = ${alegraId}
+    LIMIT 1
+  `)
+  const fila = (filas as unknown as FilaListadoCruda[])[0]
+  return fila ? aProductoAdmin(fila) : null
+}
+
+// ─── Frescura del aviso al Shop (decisión D1) ────────────────────────────────────────────
+//
+// El CRM registra SU propio último aviso entregado, no la sincronización del Shop: preguntarle
+// al Shop metería una dependencia Shop→CRM en el panel, que es exactamente el acoplamiento que
+// toda esta arquitectura existe para evitar. La UI lo rotula por lo que es ("Último aviso
+// entregado a la tienda") y dice "Desconocida" cuando no hay ninguno, nunca una fecha inventada.
+
+export interface AvisoShop {
+  ultimoOkAt: string | null
+  ultimoIntentoAt: string | null
+}
+
+export async function registrarAvisoShop(tenantId: string, propagado: boolean): Promise<void> {
+  await getDb().execute(sql`
+    INSERT INTO ${shopSyncPing} (tenant_id, ultimo_ok_at, ultimo_intento_at)
+    VALUES (${tenantId}, ${propagado ? sql`now()` : sql`null`}, now())
+    ON CONFLICT (tenant_id) DO UPDATE SET
+      ultimo_ok_at = ${propagado ? sql`now()` : sql`${shopSyncPing}.ultimo_ok_at`},
+      ultimo_intento_at = now()
+  `)
+}
+
+export async function leerAvisoShop(tenantId: string): Promise<AvisoShop> {
+  const [row] = await getDb()
+    .select({ ultimoOkAt: shopSyncPing.ultimoOkAt, ultimoIntentoAt: shopSyncPing.ultimoIntentoAt })
+    .from(shopSyncPing)
+    .where(eq(shopSyncPing.tenantId, tenantId))
+  return {
+    ultimoOkAt: row?.ultimoOkAt ? row.ultimoOkAt.toISOString() : null,
+    ultimoIntentoAt: row?.ultimoIntentoAt ? row.ultimoIntentoAt.toISOString() : null,
+  }
+}
+
+/** La última corrida OK de la sync de Alegra (el otro lado del indicador de frescura). */
+export async function ultimaSyncAlegra(tenantId: string): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ finishedAt: catalogSyncLog.finishedAt })
+    .from(catalogSyncLog)
+    .where(and(eq(catalogSyncLog.tenantId, tenantId), eq(catalogSyncLog.status, "ok")))
+    .orderBy(desc(catalogSyncLog.startedAt))
+    .limit(1)
+  return row?.finishedAt ? row.finishedAt.toISOString() : null
+}
+
 // ─── Contrato v1 hacia el Shop (platform/contracts/catalogo-overlay/v1) ──────────────────
 
 /**
@@ -717,6 +1025,7 @@ export async function contratoTaxonomiaV1(
         orden: shopCategories.orden,
         nivel: shopCategories.nivel,
         activa: shopCategories.activa,
+        imagenKey: shopCategories.imagenKey,
         updatedAt: shopCategories.updatedAt,
       })
       .from(shopCategories)
@@ -732,7 +1041,13 @@ export async function contratoTaxonomiaV1(
       .where(eq(shopTags.tenantId, tenantId)),
   ])
 
-  return armarContratoTaxonomiaV1({ tenant: tenant.id, categorias, tags: tagsFilas, ahora })
+  return armarContratoTaxonomiaV1({
+    tenant: tenant.id,
+    categorias,
+    tags: tagsFilas,
+    ahora,
+    baseFotos: basePublicaFotos(),
+  })
 }
 
 interface FilaDeltaCruda {
@@ -793,6 +1108,7 @@ export async function contratoOverlayV1(
   `)) as unknown as FilaDeltaCruda[]
 
   return armarContratoOverlayV1({
+    baseFotos: basePublicaFotos(),
     tenant: tenant.id,
     limit: params.limit,
     filas: filas.map((f) => ({
@@ -807,4 +1123,98 @@ export async function contratoOverlayV1(
       updatedAt: f.updated_at,
     })),
   })
+}
+
+// ─── Importación de categorías desde Alegra ──────────────────────────────────────────────
+
+export interface ResultadoImportacion {
+  /** Categorías propias creadas en esta corrida. */
+  creadas: number
+  /** Categorías de Alegra que ya se habían importado antes y se saltearon. */
+  existentes: number
+  /** Productos que quedaron clasificados por primera vez. */
+  clasificados: number
+}
+
+/**
+ * Crea una categoría propia por cada categoría ACTIVA de Alegra y clasifica con ella a los
+ * productos que la tengan.
+ *
+ * Existe porque la taxonomía propia arranca vacía y clasificar miles de productos a mano es el
+ * verdadero costo de este cambio: si Alegra ya sabe la categoría de una parte del catálogo,
+ * conviene partir de ahí y subdividir después, en vez de arrancar de cero.
+ *
+ * Dos reglas que la hacen segura de correr más de una vez:
+ *  - Se saltea toda categoría de Alegra ya importada (`origen_alegra_id`), así que no duplica.
+ *  - **Nunca pisa una clasificación existente**: sólo toca productos cuyo overlay no tiene
+ *    categoría. El trabajo manual siempre gana sobre lo que dice Alegra.
+ *
+ * Todo en UNA transacción: o queda el árbol con sus productos clasificados, o no queda nada.
+ */
+export async function importarCategoriasDeAlegra(
+  tenantId: string,
+  actor: string | null,
+): Promise<ResultadoImportacion> {
+  const db = getDb()
+
+  return db.transaction(async (tx) => {
+    const deAlegra = await tx
+      .select({ alegraId: catalogCategories.alegraId, name: catalogCategories.name })
+      .from(catalogCategories)
+      .where(and(eq(catalogCategories.tenantId, tenantId), eq(catalogCategories.status, "active")))
+      .orderBy(asc(catalogCategories.name))
+
+    const yaImportadas = await tx
+      .select({ origen: shopCategories.origenAlegraId })
+      .from(shopCategories)
+      .where(and(eq(shopCategories.tenantId, tenantId), sql`${shopCategories.origenAlegraId} is not null`))
+    const vistas = new Set(yaImportadas.map((r) => r.origen))
+
+    let creadas = 0
+    let clasificados = 0
+
+    for (const [i, cat] of deAlegra.entries()) {
+      if (vistas.has(cat.alegraId)) continue
+
+      // La jerarquía de Alegra NO se replica: sus categorías entran como nivel 1 y el árbol se
+      // subdivide después desde el panel. Importar una jerarquía que no se puede ordenar ni
+      // renombrar sin desincronizarse sería heredar el problema que la taxonomía propia resuelve.
+      const [row] = await tx
+        .insert(shopCategories)
+        .values({
+          tenantId,
+          nombre: cat.name,
+          slug: slugUnico(slugify(cat.name), cat.alegraId),
+          parentId: null,
+          nivel: 1,
+          orden: i,
+          origenAlegraId: cat.alegraId,
+        })
+        .returning({ id: shopCategories.id })
+      creadas++
+
+      // Alta del overlay para los productos de esa categoría que todavía no tienen una propia.
+      // `visible` NO se toca: clasificar no publica.
+      const res = await tx.execute(sql`
+        INSERT INTO catalog_overlay (tenant_id, alegra_id, categoria_id, updated_by, updated_at)
+        SELECT p.tenant_id, p.alegra_id, ${row.id}, ${actor}, now()
+        FROM catalog_products p
+        WHERE p.tenant_id = ${tenantId}
+          AND p.category_alegra_id = ${cat.alegraId}
+        ON CONFLICT (tenant_id, alegra_id) DO UPDATE
+          SET categoria_id = EXCLUDED.categoria_id,
+              updated_by = EXCLUDED.updated_by,
+              updated_at = now()
+          WHERE catalog_overlay.categoria_id IS NULL
+      `)
+      clasificados += Number((res as unknown as { count?: number }).count ?? 0)
+    }
+
+    return { creadas, existentes: vistas.size, clasificados }
+  })
+}
+
+/** Slug estable ante nombres repetidos en Alegra: le cuelga un sufijo del id de origen. */
+function slugUnico(base: string, alegraId: string): string {
+  return base ? `${base}-${alegraId}`.slice(0, 120) : `categoria-${alegraId}`
 }

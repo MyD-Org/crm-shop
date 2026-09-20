@@ -3,14 +3,67 @@
   "tenant": "tenant-demo",
   "actualizadoEn": "2026-09-18T12:00:00.000Z",
   "categorias": [
-    { "id": "8f3a0c7e-0000-4000-8000-000000000001", "parentId": null, "nombre": "Iluminación", "slug": "iluminacion", "orden": 0, "nivel": 1, "activa": true },
-    { "id": "8f3a0c7e-0000-4000-8000-000000000002", "parentId": null, "nombre": "Electricidad", "slug": "electricidad", "orden": 1, "nivel": 1, "activa": true },
-    { "id": "8f3a0c7e-0000-4000-8000-000000000003", "parentId": "8f3a0c7e-0000-4000-8000-000000000002", "nombre": "Cables", "slug": "cables", "orden": 0, "nivel": 2, "activa": true },
-    { "id": "8f3a0c7e-0000-4000-8000-000000000005", "parentId": "8f3a0c7e-0000-4000-8000-000000000002", "nombre": "Térmicas", "slug": "termicas", "orden": 1, "nivel": 2, "activa": false },
-    { "id": "8f3a0c7e-0000-4000-8000-000000000004", "parentId": "8f3a0c7e-0000-4000-8000-000000000003", "nombre": "Unipolares", "slug": "unipolares", "orden": 0, "nivel": 3, "activa": true }
+    {
+      "id": "8f3a0c7e-0000-4000-8000-000000000001",
+      "parentId": null,
+      "nombre": "Iluminación",
+      "slug": "iluminacion",
+      "orden": 0,
+      "nivel": 1,
+      "activa": true,
+      "imagen": "https://fotos.test/categorias/tenant-a/portada-800.webp"
+    },
+    {
+      "id": "8f3a0c7e-0000-4000-8000-000000000002",
+      "parentId": null,
+      "nombre": "Electricidad",
+      "slug": "electricidad",
+      "orden": 1,
+      "nivel": 1,
+      "activa": true,
+      "imagen": null
+    },
+    {
+      "id": "8f3a0c7e-0000-4000-8000-000000000003",
+      "parentId": "8f3a0c7e-0000-4000-8000-000000000002",
+      "nombre": "Cables",
+      "slug": "cables",
+      "orden": 0,
+      "nivel": 2,
+      "activa": true,
+      "imagen": null
+    },
+    {
+      "id": "8f3a0c7e-0000-4000-8000-000000000005",
+      "parentId": "8f3a0c7e-0000-4000-8000-000000000002",
+      "nombre": "Térmicas",
+      "slug": "termicas",
+      "orden": 1,
+      "nivel": 2,
+      "activa": false,
+      "imagen": null
+    },
+    {
+      "id": "8f3a0c7e-0000-4000-8000-000000000004",
+      "parentId": "8f3a0c7e-0000-4000-8000-000000000003",
+      "nombre": "Unipolares",
+      "slug": "unipolares",
+      "orden": 0,
+      "nivel": 3,
+      "activa": true,
+      "imagen": null
+    }
   ],
   "tags": [
-    { "id": "1b7c0c7e-0000-4000-8000-000000000002", "nombre": "Nuevo", "slug": "nuevo" },
-    { "id": "1b7c0c7e-0000-4000-8000-000000000001", "nombre": "Oferta", "slug": "oferta" }
+    {
+      "id": "1b7c0c7e-0000-4000-8000-000000000002",
+      "nombre": "Nuevo",
+      "slug": "nuevo"
+    },
+    {
+      "id": "1b7c0c7e-0000-4000-8000-000000000001",
+      "nombre": "Oferta",
+      "slug": "oferta"
+    }
   ]
 }

@@ -75,7 +75,7 @@ describe("la sync de Alegra no pisa el overlay", () => {
       descripcion: "Descripción comercial",
       categoriaId: cat.row.id,
       orden: 3,
-      fotos: [{ url: "https://fotos.example/abc-800.webp", w: 800, alt: "Térmica" }],
+      fotos: [{ key: "abc-800.webp", w: 800, alt: "Térmica" }],
     })
     await repo.asignarTagsProducto(TENANT, "1", [tag.row.id])
 

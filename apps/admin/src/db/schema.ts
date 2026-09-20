@@ -277,6 +277,13 @@ export const shopCategories = pgTable(
     orden: integer("orden").notNull().default(0),
     nivel: smallint("nivel").notNull().default(1),
     activa: boolean("activa").notNull().default(true),
+    // Foto de la categoría, para las tarjetas de la home y del menú de la tienda. Igual que en
+    // `catalog_overlay.fotos`, se guarda la KEY del objeto en R2 y la url se compone al servir.
+    imagenKey: text("imagen_key"),
+    imagenAlt: text("imagen_alt"),
+    // Categoría de Alegra de la que salió al importar, o null si se creó a mano. Evita duplicarla
+    // si la importación se corre dos veces.
+    origenAlegraId: text("origen_alegra_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -297,8 +304,11 @@ export const shopCategories = pgTable(
  * Una variante de foto del overlay. Las URLs son absolutas, públicas e inmutables: la misma
  * foto nunca cambia de URL si no se la modificó (reemplazarla es una key nueva).
  */
+// Se guarda la KEY del objeto en R2, NO la URL: la base pública de hoy es un `pub-*.r2.dev`
+// temporal, y mudarla a un dominio propio tiene que ser un cambio de env, no una migración de
+// datos. La URL se compone al leer, en `urlPublicaFoto()`.
 export interface FotoOverlay {
-  url: string
+  key: string
   w: number
   alt?: string
 }

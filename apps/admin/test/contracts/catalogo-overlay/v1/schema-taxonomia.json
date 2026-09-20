@@ -5,10 +5,21 @@
   "description": "Respuesta 200 de GET {CRM}/api/internal/shop/taxonomia?tenant=… — árbol completo de categorías propias (hasta 3 niveles, incluidas las inactivas) y diccionario completo de tags del tenant. Se aplica como REEMPLAZO ATÓMICO: los ids son los del CRM y se conservan tal cual.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "tenant", "actualizadoEn", "categorias", "tags"],
+  "required": [
+    "version",
+    "tenant",
+    "actualizadoEn",
+    "categorias",
+    "tags"
+  ],
   "properties": {
-    "version": { "const": "v1" },
-    "tenant": { "type": "string", "minLength": 1 },
+    "version": {
+      "const": "v1"
+    },
+    "tenant": {
+      "type": "string",
+      "minLength": 1
+    },
     "actualizadoEn": {
       "description": "ISO 8601 (UTC). Máximo updatedAt entre categorías y tags; si no hay ninguna fila, el momento de la respuesta.",
       "type": "string",
@@ -17,12 +28,16 @@
     "categorias": {
       "description": "Orden determinista: nivel, parentId (raíces primero), orden, nombre.",
       "type": "array",
-      "items": { "$ref": "#/$defs/Categoria" }
+      "items": {
+        "$ref": "#/$defs/Categoria"
+      }
     },
     "tags": {
       "description": "Diccionario completo del tenant, lista PLANA (sin jerarquía ni orden entre sí), ordenada por nombre. Viaja acá y no en el delta para que renombrar un tag no empuje ni un solo producto al delta del overlay.",
       "type": "array",
-      "items": { "$ref": "#/$defs/Tag" }
+      "items": {
+        "$ref": "#/$defs/Tag"
+      }
     }
   },
   "$defs": {
@@ -38,28 +53,82 @@
     "Categoria": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "parentId", "nombre", "slug", "orden", "nivel", "activa"],
+      "required": [
+        "id",
+        "parentId",
+        "nombre",
+        "slug",
+        "orden",
+        "nivel",
+        "activa",
+        "imagen"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Uuid" },
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
         "parentId": {
           "description": "null = raíz. El consumidor NO declara FK sobre esto: el árbol llega entero y se reemplaza atómicamente.",
-          "oneOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }]
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "nombre": { "type": "string", "minLength": 1 },
-        "slug": { "$ref": "#/$defs/Slug" },
-        "orden": { "description": "Orden explícito entre hermanas.", "type": "integer", "minimum": 0 },
-        "nivel": { "description": "1..3. Denormalizado; la app garantiza nivel = padre.nivel + 1.", "type": "integer", "minimum": 1, "maximum": 3 },
-        "activa": { "description": "Las inactivas VIAJAN igual: el consumidor necesita saber que existen.", "type": "boolean" }
+        "nombre": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slug": {
+          "$ref": "#/$defs/Slug"
+        },
+        "orden": {
+          "description": "Orden explícito entre hermanas.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "nivel": {
+          "description": "1..3. Denormalizado; la app garantiza nivel = padre.nivel + 1.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "activa": {
+          "description": "Las inactivas VIAJAN igual: el consumidor necesita saber que existen.",
+          "type": "boolean"
+        },
+        "imagen": {
+          "description": "Portada de la categoría, url ya compuesta, o null. La tienda la usa en las tarjetas del menú y de la home. Viaja como url y no como key: el Shop no conoce el layout de keys del CRM ni su dominio de almacenamiento, así que moverlo no le cambia nada.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
     "Tag": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "nombre", "slug"],
+      "required": [
+        "id",
+        "nombre",
+        "slug"
+      ],
       "properties": {
-        "id": { "description": "Referencia estable: renombrar el tag NO lo cambia.", "$ref": "#/$defs/Uuid" },
-        "nombre": { "type": "string", "minLength": 1 },
-        "slug": { "$ref": "#/$defs/Slug" }
+        "id": {
+          "description": "Referencia estable: renombrar el tag NO lo cambia.",
+          "$ref": "#/$defs/Uuid"
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slug": {
+          "$ref": "#/$defs/Slug"
+        }
       }
     }
   }

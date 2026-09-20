@@ -12,6 +12,8 @@ import { TEST_DATABASE_URL } from "./test/integration/db-url"
 
 const alias = { "@": fileURLToPath(new URL("./src", import.meta.url)) }
 const SESSION_SECRET = "test-session-secret-at-least-32-characters-long"
+// Base pública de las fotos. Componer una url no necesita credenciales, sólo el dominio.
+const BASE_FOTOS = "https://fotos.test"
 
 export default defineConfig({
   resolve: { alias },
@@ -30,7 +32,7 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["test/integration/**/*.test.ts"],
-          env: { SESSION_SECRET, DATABASE_URL: TEST_DATABASE_URL },
+          env: { SESSION_SECRET, DATABASE_URL: TEST_DATABASE_URL, R2_SHOP_MEDIA_PUBLIC_URL: BASE_FOTOS },
           globalSetup: ["./test/integration/global-setup.ts"],
           // Comparten la misma DB de test → sin paralelismo entre archivos para no pisarse.
           fileParallelism: false,

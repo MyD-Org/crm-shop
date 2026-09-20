@@ -22,6 +22,14 @@ export interface CategoriaContratoV1 {
   orden: number
   nivel: number
   activa: boolean
+  /**
+   * Portada de la categoría, url ya compuesta, o null.
+   *
+   * Es lo que la tienda usa en las tarjetas del menú y de la home. Viaja como url y no como key
+   * por el mismo motivo que las fotos de producto: el Shop no tiene por qué conocer el layout de
+   * keys del CRM ni su dominio de almacenamiento.
+   */
+  imagen: string | null
 }
 
 export interface TagContratoV1 {
@@ -38,8 +46,10 @@ export interface ContratoTaxonomiaV1 {
   tags: TagContratoV1[]
 }
 
-export interface CategoriaFila extends CategoriaContratoV1 {
+export interface CategoriaFila extends Omit<CategoriaContratoV1, "imagen"> {
   updatedAt: Date
+  /** KEY del objeto; la url se compone al serializar, con `baseFotos`. */
+  imagenKey: string | null
 }
 
 export interface TagFila extends TagContratoV1 {
@@ -62,6 +72,8 @@ export function armarContratoTaxonomiaV1(input: {
   categorias: CategoriaFila[]
   tags: TagFila[]
   ahora: Date
+  /** Base pública de las imágenes, sin barra final, o null si no hay bucket configurado. */
+  baseFotos: string | null
 }): ContratoTaxonomiaV1 {
   const categorias = [...input.categorias].sort(
     (a, b) =>
@@ -87,12 +99,20 @@ export function armarContratoTaxonomiaV1(input: {
       orden: c.orden,
       nivel: c.nivel,
       activa: c.activa,
+      imagen: input.baseFotos && c.imagenKey ? `${input.baseFotos}/${c.imagenKey}` : null,
     })),
     tags: tags.map((t) => ({ id: t.id, nombre: t.nombre, slug: t.slug })),
   }
 }
 
 // ─── Overlay (delta con cursor keyset) ───────────────────────────────────────────────────
+
+/** Lo que viaja al Shop: la url ya compuesta, no la key. Ver `urlPublicaFoto()`. */
+export interface FotoV1 {
+  url: string
+  w: number
+  alt?: string
+}
 
 export interface ItemOverlayV1 {
   alegraId: string
@@ -102,7 +122,7 @@ export interface ItemOverlayV1 {
   categoriaId: string | null
   orden: number | null
   tagIds: string[]
-  fotos: FotoOverlay[]
+  fotos: FotoV1[]
   updatedAt: string
 }
 
@@ -166,6 +186,12 @@ export function armarContratoOverlayV1(input: {
   tenant: string
   filas: OverlayFila[]
   limit: number
+  /**
+   * Base pública de las fotos, SIN barra final (`R2_SHOP_MEDIA_PUBLIC_URL`), o null si el bucket
+   * no está configurado. Entra por parámetro y no por `process.env` para que este módulo siga
+   * siendo puro. Con null, las fotos se omiten: mejor sin foto que con una url rota.
+   */
+  baseFotos: string | null
 }): ContratoOverlayV1 {
   const items: ItemOverlayV1[] = input.filas.map((f) => ({
     alegraId: f.alegraId,
@@ -175,7 +201,15 @@ export function armarContratoOverlayV1(input: {
     categoriaId: f.categoriaId,
     orden: f.orden,
     tagIds: f.tagIds,
-    fotos: f.fotos,
+    // La key se traduce a url ACÁ, al serializar: así mover la base pública a otro dominio no
+    // toca ni una fila de la base, sólo lo que se emite en la próxima sync.
+    fotos: input.baseFotos
+      ? f.fotos.map((foto) => ({
+          url: `${input.baseFotos}/${foto.key}`,
+          w: foto.w,
+          ...(foto.alt ? { alt: foto.alt } : {}),
+        }))
+      : [],
     updatedAt: f.updatedAt,
   }))
 

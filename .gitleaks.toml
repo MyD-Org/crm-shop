@@ -27,6 +27,17 @@ regex = '''npg_[A-Za-z0-9]{12,}'''
 id = "postgres-url-con-password"
 description = "Connection string de Postgres con contraseña"
 regex = '''postgres(ql)?://[^\s:@/]+:[^\s@/]{6,}@'''
+# Rellenos que NO son credenciales. La excepción mira solo la parte de la clave y es literal a
+# propósito: una clave real nunca tiene la forma <MAYUSCULAS_Y_GUIONES> ni es este texto fijo.
+# No se exceptúa por host ni por archivo: una URL real pegada en un doc o en un test tiene que
+# seguir saltando.
+[[rules.allowlists]]
+description = "Marcadores de documentación (<PASSWORD>) y la clave de relleno de los tests"
+regexTarget = "match"
+regexes = [
+  '''://[^\s:@/]+:<[A-Z][A-Z0-9_]*>@''',
+  '''://[^\s:@/]+:s3cr3t-placeholder@''',
+]
 
 [[rules]]
 id = "vercel-ids"

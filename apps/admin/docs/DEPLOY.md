@@ -1,9 +1,9 @@
 # Deploy a Vercel
 
-> **Monorepo.** Esta app vive en `apps/admin` del repo `crm-shop`. En el proyecto de Vercel, **Root Directory = `apps/admin`**; Install y Build Command quedan en sus valores por defecto (se ejecutan dentro de esa carpeta). Todos los comandos de este documento se corren parados en `apps/admin`. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta.
+> **Monorepo.** Esta app vive en `apps/admin` del repo `crm-shop`. En el proyecto de Vercel, **Root Directory = `apps/admin`**; Install y Build Command quedan en sus valores por defecto (se ejecutan dentro de esa carpeta). Todos los comandos de este documento se corren parados en `apps/admin`. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta. Los workflows programados de esta app están en `.github/workflows/admin-*.yml` de la raíz y usan secrets con prefijo `ADMIN_`. El script `scripts/r2-setup.ts` exige la variable `R2_ALLOWED_ORIGIN`.
 
 Guía para deployar el CRM en Vercel con Postgres en la nube (Neon). El repo ya está
-en GitHub (`MyD-Org/CRM`); el deploy se hace por la integración GitHub↔Vercel (cada push
+en GitHub (`MyD-Org/crm-shop`); el deploy se hace por la integración GitHub↔Vercel (cada push
 a `main` redeploya solo).
 
 > Los **valores secretos** no viven en este doc. Copialos de tu `.env.local` o generá
@@ -25,7 +25,7 @@ a `main` redeploya solo).
 
 ## 2. Proyecto en Vercel
 
-1. En [vercel.com](https://vercel.com) → **Add New → Project** → importar `MyD-Org/CRM`.
+1. En [vercel.com](https://vercel.com) → **Add New → Project** → importar `MyD-Org/crm-shop`.
 2. Framework: Next.js (autodetectado). No cambiar build/output.
 3. Cargar las variables de entorno (sección siguiente) en **Production**.
 4. Deploy. Los crons de `vercel.json` (`/api/cron/notifications` diario,

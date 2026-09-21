@@ -1,0 +1,472 @@
+/**
+ * Capa de catálogo: adapta el catálogo a la forma `Product` que el shop ya
+ * renderiza (ver src/data/products.ts y el ProductCard del DS).
+ *
+ * De dónde sale cada cosa (ver docs/arquitectura-integraciones.md):
+ * - LISTAR y BUSCAR → espejo local en Postgres (`catalog_products`), que
+ *   refresca el cron diario `/api/cron/catalog-sync`. Alegra topea en 30 items
+ *   por request y el catálogo tiene ~2800: no se puede paginar en vivo.
+ * - COMPROMETER un precio o un stock (ficha de producto, checkout) → EN VIVO
+ *   contra Alegra. Un número que el shop le promete al cliente nunca sale de
+ *   una cache de hasta 24 h.
+ *
+ * SOLO servidor: usa la DB y el cliente de Alegra. Consumir desde Server
+ * Components o API routes, nunca desde el browser.
+ *
+ * Los campos de marketing (oldPrice, discount, badge) NO vienen de Alegra: son
+ * concepto del shop y viven en su propia capa.
+ */
+
+import { cache } from "react";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import type { ProductStock } from "@myd-org/ui";
+import { getDb } from "@/db";
+import { catalogCategories, catalogProducts } from "@/db/schema";
+import {
+  getItem,
+  ivaPersistible,
+  marcaDeCustomFields,
+  precioDeLista,
+  resolverPrecio,
+  type AlegraItem,
+  type AlegraPrice,
+} from "./alegra";
+import type { OrdenCatalogo } from "./catalogo-url";
+import { precioFinal } from "./precio-final";
+import { stockSimulado } from "./stock-simulado";
+import type { Product } from "@/data/products";
+
+/** Debajo de esta cantidad, el stock se muestra como "bajo". */
+const STOCK_BAJO = 5;
+
+/**
+ * Deriva el estado de stock del shop a partir de una cantidad de inventario.
+ * - null/undefined (servicio / no inventariable) → siempre disponible.
+ * - >= STOCK_BAJO = "in", >0 = "low", 0 = "out".
+ */
+export function derivarStock(
+  qty: number | null | undefined,
+  /** Ver `stockSimulado()`. Parámetro y no lectura del entorno, para poder
+   *  testear las dos ramas sin ensuciar `process.env`. */
+  simular = false,
+): ProductStock {
+  if (qty == null) return "in";
+  /**
+   * Con la simulación activa, "sin stock" pasa a "disponible".
+   *
+   * Hace falta ACÁ además de en la cotización: el botón "agregar al carrito"
+   * está deshabilitado cuando el estado es "out"
+   * (CatalogoClient.tsx y ProductoClient.tsx), así que simular solo del lado
+   * del cotizador dejaba la tienda igual de intransitable — no se podía meter
+   * un producto en el carrito para llegar a cotizarlo.
+   */
+  if (qty <= 0) return simular ? "in" : "out";
+  if (qty < STOCK_BAJO) return "low";
+  return "in";
+}
+
+// ---------------------------------------------------------------------------
+// Lectura desde el espejo local
+// ---------------------------------------------------------------------------
+
+/** Fila del join productos × categorías, tal como la devuelve la query. */
+interface FilaCatalogo {
+  alegraId: string;
+  name: string;
+  code: string | null;
+  description: string | null;
+  brand: string | null;
+  prices: unknown;
+  stock: string | null;
+  /** numeric de Postgres: llega como string. null = sin IVA conocido. */
+  ivaPorcentaje: string | null;
+  categoryName: string | null;
+}
+
+/**
+ * Campos de precio con impuestos, mismos para espejo y ficha en vivo. Sin IVA
+ * conocido quedan undefined y la exhibición muestra el precio como antes.
+ */
+function camposIva(
+  precioNeto: number,
+  iva: number | null,
+): Pick<Product, "ivaPorcentaje" | "precioFinal"> {
+  if (iva == null || !Number.isFinite(iva)) return {};
+  return { ivaPorcentaje: iva, precioFinal: precioFinal(precioNeto, iva) };
+}
+
+export function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Product {
+  const qty = fila.stock != null ? Number(fila.stock) : null;
+  const simular = stockSimulado();
+  const price = precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList);
+  return {
+    id: fila.alegraId,
+    // La marca sale del customField de Alegra; si no está cargado, cae al
+    // nombre de la categoría (mismo criterio que la ficha en vivo).
+    brand: fila.brand || fila.categoryName || "",
+    name: fila.name,
+    price,
+    ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
+    stock: derivarStock(qty, simular),
+    stockQty: qty ?? undefined,
+    sku: fila.code || undefined,
+    description: fila.description || undefined,
+    category: fila.categoryName || undefined,
+    // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
+  };
+}
+
+/** Condición del join productos × categorías, compartida por todas las queries. */
+const JOIN_CATEGORIAS = eq(
+  catalogProducts.categoryAlegraId,
+  catalogCategories.alegraId
+);
+
+/** Columnas del join, en un solo lugar para no repetirlas entre queries. */
+const COLUMNAS_CATALOGO = {
+  alegraId: catalogProducts.alegraId,
+  name: catalogProducts.name,
+  code: catalogProducts.code,
+  description: catalogProducts.description,
+  brand: catalogProducts.brand,
+  prices: catalogProducts.prices,
+  stock: catalogProducts.stock,
+  ivaPorcentaje: catalogProducts.ivaPorcentaje,
+  categoryName: catalogCategories.name,
+};
+
+/**
+ * Condición de búsqueda por texto, insensible a mayúsculas Y a tildes.
+ *
+ * Las tildes importan: el catálogo dice "Termomagnético" y el cliente escribe
+ * "termomagnetico". `ILIKE` solo resuelve mayúsculas, así que se normalizan los
+ * dos lados con `immutable_unaccent` (ver drizzle/0001_unaccent.sql).
+ *
+ * Busca en el nombre, en el código y en la descripción — en esta cuenta de
+ * Alegra el nombre comercial vive en `description`, así que sin ese tercer
+ * campo la búsqueda no encontraría casi nada.
+ */
+function coincideTexto(q: string) {
+  const patron = `%${q}%`;
+  const norm = (col: unknown) =>
+    sql`immutable_unaccent(lower(${col})) LIKE immutable_unaccent(lower(${patron}))`;
+  return or(
+    norm(catalogProducts.name),
+    norm(catalogProducts.code),
+    norm(catalogProducts.description)
+  );
+}
+
+/**
+ * Trae el catálogo desde el espejo local. Solo productos activos.
+ *
+ * Sin `limit` devuelve el catálogo completo: es una sola query indexada, y las
+ * facetas del catálogo solo son correctas si se calculan sobre todo el conjunto.
+ * `idPriceList` aplica la lista de precios del cliente logueado si tiene una.
+ */
+export async function getCatalogo(opts?: {
+  idPriceList?: string;
+  limit?: number;
+  offset?: number;
+  busqueda?: string;
+}): Promise<Product[]> {
+  const q = opts?.busqueda?.trim();
+
+  let query = getDb()
+    .select(COLUMNAS_CATALOGO)
+    .from(catalogProducts)
+    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .where(
+      and(
+        eq(catalogProducts.status, "active"),
+        q ? coincideTexto(q) : undefined
+      )
+    )
+    .orderBy(asc(catalogProducts.name))
+    .$dynamic();
+
+  if (opts?.limit != null) query = query.limit(opts.limit);
+  if (opts?.offset != null) query = query.offset(opts.offset);
+
+  const filas = await query;
+  return filas.map((f) => mapFilaToProduct(f, opts?.idPriceList));
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo paginado (filtros, orden y conteo en el servidor)
+// ---------------------------------------------------------------------------
+
+/** Cuántos productos entran en una página del catálogo. Múltiplo de la grilla (1/2/3 columnas). */
+export const PRODUCTOS_POR_PAGINA = 24;
+
+/** Filtros que aplica el servidor. Categorías y marcas son OR dentro del grupo. */
+export interface FiltrosCatalogo {
+  busqueda?: string;
+  categorias?: string[];
+  marcas?: string[];
+}
+
+export interface PaginaCatalogo {
+  productos: Product[];
+  /** Total de productos que cumplen los filtros (no los de esta página). */
+  total: number;
+  /** Página efectiva, 1-based y ya acotada al rango válido. */
+  pagina: number;
+  /** Cantidad de páginas. 0 productos ⇒ 1 página (la vacía). */
+  paginas: number;
+}
+
+/**
+ * Marca efectiva del producto, en SQL. Tiene que replicar el fallback de
+ * `mapFilaToProduct`: si el customField de Alegra vino vacío, la marca que se
+ * exhibe (y por la que se filtra) es el nombre de la categoría.
+ */
+const marcaSql = sql<string>`coalesce(nullif(${catalogProducts.brand}, ''), ${catalogCategories.name})`;
+
+/**
+ * Precio de lista principal, extraído del jsonb `prices`. Equivalente en SQL de
+ * `precioDeLista` sin lista de cliente: el que tiene `main`, si no el primero.
+ * El guard de `jsonb_typeof` evita que `jsonb_array_elements` explote si algún
+ * ítem quedó con un `prices` que no es array.
+ */
+const precioSql = sql<string>`coalesce(
+  case when jsonb_typeof(${catalogProducts.prices}) = 'array' then (
+    select (elem->>'price')::numeric
+    from jsonb_array_elements(${catalogProducts.prices}) elem
+    where (elem->>'main')::boolean
+    limit 1
+  ) end,
+  case when jsonb_typeof(${catalogProducts.prices}) = 'array'
+    then (${catalogProducts.prices}->0->>'price')::numeric end,
+  0
+)`;
+
+/**
+ * Precio que ve el visitante, en SQL: el final con IVA cuando se conoce la
+ * alícuota, si no el neto — mismo criterio que `precioExhibido` del cliente.
+ * No replica el redondeo al centavo de `precioFinal()` porque acá sólo se usa
+ * para ORDENAR; el número que se muestra sigue saliendo de `mapFilaToProduct`.
+ */
+const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${catalogProducts.ivaPorcentaje}, 0) / 100)`;
+
+/**
+ * WHERE compartido por la página, el conteo y las facetas.
+ *
+ * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
+ * faceta excluye su propio grupo (ver `getFacetas`).
+ */
+function condicionesDe(
+  filtros: FiltrosCatalogo,
+  aplicar: { categorias: boolean; marcas: boolean },
+) {
+  const q = filtros.busqueda?.trim();
+  return and(
+    eq(catalogProducts.status, "active"),
+    q ? coincideTexto(q) : undefined,
+    aplicar.categorias && filtros.categorias?.length
+      ? inArray(catalogCategories.name, filtros.categorias)
+      : undefined,
+    aplicar.marcas && filtros.marcas?.length
+      ? inArray(marcaSql, filtros.marcas)
+      : undefined,
+  );
+}
+
+/**
+ * ORDER BY según el criterio elegido. "ventas" no tiene todavía un dato de
+ * ventas detrás: ordena por nombre, igual que antes hacía el orden de la query.
+ * El desempate por nombre mantiene la paginación estable (sin él, dos productos
+ * del mismo precio pueden intercambiarse entre páginas).
+ */
+function ordenDe(orden: OrdenCatalogo) {
+  switch (orden) {
+    case "precio-asc":
+      return [sql`${precioExhibidoSql} asc`, asc(catalogProducts.name)];
+    case "precio-desc":
+      return [sql`${precioExhibidoSql} desc`, asc(catalogProducts.name)];
+    default:
+      return [asc(catalogProducts.name)];
+  }
+}
+
+/** Página 1-based acotada al rango válido. */
+export function acotarPagina(pagina: number, paginas: number): number {
+  if (!Number.isFinite(pagina)) return 1;
+  return Math.min(Math.max(Math.trunc(pagina), 1), Math.max(paginas, 1));
+}
+
+/**
+ * Una página del catálogo, con los filtros y el orden resueltos en Postgres.
+ *
+ * Todo esto vivía en el cliente sobre el catálogo entero (~2800 productos por
+ * request). Filtrar u ordenar después de paginar daría resultados incompletos,
+ * así que las tres cosas se hacen acá, en la misma query.
+ */
+export async function getPaginaCatalogo(opts?: {
+  filtros?: FiltrosCatalogo;
+  orden?: OrdenCatalogo;
+  /** 1-based. Si se pasa de largo, se devuelve la última página. */
+  pagina?: number;
+  porPagina?: number;
+  idPriceList?: string;
+}): Promise<PaginaCatalogo> {
+  const filtros = opts?.filtros ?? {};
+  const porPagina = opts?.porPagina ?? PRODUCTOS_POR_PAGINA;
+  const where = condicionesDe(filtros, { categorias: true, marcas: true });
+
+  const [conteo] = await getDb()
+    .select({ total: sql<number>`count(*)::int` })
+    .from(catalogProducts)
+    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .where(where);
+
+  const total = conteo?.total ?? 0;
+  const paginas = Math.max(Math.ceil(total / porPagina), 1);
+  const pagina = acotarPagina(opts?.pagina ?? 1, paginas);
+
+  const filas = total
+    ? await getDb()
+        .select(COLUMNAS_CATALOGO)
+        .from(catalogProducts)
+        .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+        .where(where)
+        .orderBy(...ordenDe(opts?.orden ?? "ventas"))
+        .limit(porPagina)
+        .offset((pagina - 1) * porPagina)
+    : [];
+
+  return {
+    productos: filas.map((f) => mapFilaToProduct(f, opts?.idPriceList)),
+    total,
+    pagina,
+    paginas,
+  };
+}
+
+/**
+ * Trae un producto puntual EN VIVO desde Alegra. Es la ficha de producto: el
+ * precio y el stock que se muestran acá son los que el shop compromete, así que
+ * no salen del espejo. Devuelve null si Alegra no lo encuentra.
+ */
+export async function getProducto(
+  id: string,
+  idPriceList?: string
+): Promise<Product | null> {
+  try {
+    const item = await getItem(id);
+    return mapItemToProduct(item, idPriceList);
+  } catch {
+    return null;
+  }
+}
+
+/** Mapea un item en vivo de Alegra a un `Product` del shop. */
+export function mapItemToProduct(
+  item: AlegraItem,
+  idPriceList?: string
+): Product {
+  const categoria = item.itemCategory as { name?: string } | undefined;
+  const price = resolverPrecio(item, idPriceList);
+  return {
+    id: item.id,
+    name: item.name,
+    brand: marcaDeCustomFields(item.customFields) || categoria?.name || "",
+    price,
+    ...camposIva(price, ivaPersistible(item)),
+    stock: derivarStock(item.inventory?.availableQuantity, stockSimulado()),
+    stockQty: item.inventory?.availableQuantity ?? undefined,
+    sku: item.reference || undefined,
+    description: item.description || undefined,
+    category: categoria?.name || undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Facetas y navegación
+// ---------------------------------------------------------------------------
+
+/** Una opcion de filtro con la cantidad real de productos que la cumplen. */
+export interface Faceta {
+  label: string;
+  count: number;
+}
+
+export interface Facetas {
+  categorias: Faceta[];
+  marcas: Faceta[];
+}
+
+/**
+ * Facetas con sus conteos, calculadas en Postgres.
+ *
+ * Cada faceta cuenta sobre lo que matchea la búsqueda MÁS los filtros del OTRO
+ * grupo, y no sobre los propios: las marcas se cuentan dentro de las categorías
+ * tildadas (tildar "Herramientas" deja sólo las marcas que tienen herramientas,
+ * con la cantidad que tienen), pero siguen mostrándose todas las categorías
+ * disponibles para poder tildar otra sin destildar la primera. Antes no miraban
+ * ningún filtro: la lista de marcas era la del catálogo entero, con conteos que
+ * no correspondían a los productos que se estaban viendo.
+ */
+export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas> {
+  // Para contar categorías pesan las marcas tildadas, y viceversa.
+  const whereCategorias = condicionesDe(filtros, { categorias: false, marcas: true });
+  const whereMarcas = condicionesDe(filtros, { categorias: true, marcas: false });
+
+  const [categorias, marcas] = await Promise.all([
+    getDb()
+      .select({
+        label: sql<string>`${catalogCategories.name}`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(catalogProducts)
+      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .where(and(whereCategorias, sql`nullif(${catalogCategories.name}, '') is not null`))
+      .groupBy(catalogCategories.name)
+      .orderBy(sql`count(*) desc`, asc(catalogCategories.name)),
+    getDb()
+      .select({ label: marcaSql, count: sql<number>`count(*)::int` })
+      .from(catalogProducts)
+      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
+      .groupBy(marcaSql)
+      .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
+  ]);
+
+  return { categorias, marcas };
+}
+
+
+
+/**
+ * Categorías del catálogo, para la navegación (menú del header y grilla del
+ * home). Salen del espejo local, filtrando las que no tienen ningún producto
+ * activo — una categoría vacía en el menú es un callejón sin salida.
+ *
+ * Envuelto en `cache` de React para consultarla una sola vez por request.
+ */
+export const getCategorias = cache(async function getCategorias(): Promise<
+  string[]
+> {
+  const filas = await getDb()
+    .selectDistinct({ name: catalogCategories.name })
+    .from(catalogCategories)
+    .innerJoin(
+      catalogProducts,
+      and(
+        eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId),
+        eq(catalogProducts.status, "active")
+      )
+    )
+    .where(eq(catalogCategories.status, "active"))
+    .orderBy(asc(catalogCategories.name));
+
+  return filas.map((f) => f.name).filter(Boolean);
+});
+
+/** Fecha de la última sync exitosa, para mostrar frescura del catálogo. */
+export async function ultimaSincronizacion(): Promise<Date | null> {
+  const [fila] = await getDb()
+    .select({ max: sql<Date | null>`max(synced_at)` })
+    .from(catalogProducts);
+  return fila?.max ?? null;
+}

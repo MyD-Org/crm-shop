@@ -1,0 +1,1 @@
+ALTER TABLE "catalog_products" ADD COLUMN "iva_porcentaje" numeric(5, 2);

@@ -35,10 +35,10 @@
 name: clientes · Sync catálogo Alegra
 
 on:
-  # CUTOVER: descomentar en el PR de cutover de clientes (y deshabilitar el workflow del repo viejo ANTES).
-  # schedule:
-  #   # 06:00 UTC = 03:00 en Argentina. Mismo horario que tenía el cron de Vercel.
-  #   - cron: "0 6 * * *"
+  # Programado desde el cutover de clientes.
+  schedule:
+    # 06:00 UTC = 03:00 en Argentina. Mismo horario que tenía el cron de Vercel.
+    - cron: "0 6 * * *"
   # Para la carga inicial o para reintentar a mano desde la UI de Actions.
   workflow_dispatch:
 

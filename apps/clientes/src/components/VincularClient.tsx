@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Field, Input } from "@myd-org/ui";
+import { formatearDocAlEscribir } from "@/lib/facturacion";
 
 type Paso = "cuit" | "codigo" | "listo";
 
@@ -109,7 +110,7 @@ export function VincularClient() {
             <Field label="CUIT">
               <Input
                 value={cuit}
-                onChange={(e) => setCuit(e.target.value)}
+                onChange={(e) => setCuit(formatearDocAlEscribir("CUIT", e.target.value))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && cuit.trim() && !cargando) solicitar();
                 }}

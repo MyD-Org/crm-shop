@@ -10,6 +10,7 @@ import {
   TIPO_DOC_LABEL,
   TIPOS_DOC_POR_PAIS,
   formatearDoc,
+  formatearDocAlEscribir,
   validarFacturacion,
   type CondicionIva,
   type DatosFacturacion,
@@ -87,7 +88,10 @@ function desdePerfil(p: PerfilFacturacionUI | null): DatosFacturacion {
     // Los perfiles anteriores al campo son todos argentinos.
     pais: (p.pais as Pais) ?? PAIS_DEFAULT,
     tipoDoc: (p.tipoDoc as TipoDoc) ?? "CUIT",
-    nroDoc: p.nroDoc ?? "",
+    // Se guarda sin guiones; se muestra como se escribe.
+    nroDoc: formatearDocAlEscribir((p.tipoDoc as TipoDoc) ?? "CUIT", p.nroDoc ?? "", {
+      alSalir: true,
+    }),
     razonSocial: p.razonSocial ?? "",
     condicionIva: (p.condicionIva as CondicionIva) ?? "consumidor_final",
     domicilioCalle: p.domicilioCalle ?? "",
@@ -147,6 +151,16 @@ export function FacturacionForm({
       ? TIPOS_DOC_POR_PAIS.AR.slice(0, 1)
       : TIPOS_DOC_POR_PAIS[form.pais];
   const esPersona = esArgentina && form.condicionIva === "consumidor_final";
+
+  /** Cambia el tipo y reacomoda lo ya escrito a la forma del documento nuevo. */
+  function cambiarTipoDoc(tipoDoc: TipoDoc) {
+    setForm((f) => ({
+      ...f,
+      tipoDoc,
+      nroDoc: formatearDocAlEscribir(tipoDoc, f.nroDoc, { alSalir: true }),
+    }));
+    setErrores((e) => ({ ...e, tipoDoc: "", nroDoc: "" }));
+  }
 
   function cambiarPais(pais: Pais) {
     const argentina = pais === "AR";
@@ -247,7 +261,7 @@ export function FacturacionForm({
                 // Monotributo y RI no pueden facturar con DNI: se fuerza CUIT
                 // acá y no al validar, para que el formulario no muestre una
                 // opción que después va a rechazar.
-                if (c !== "consumidor_final") set("tipoDoc", "CUIT");
+                if (c !== "consumidor_final") cambiarTipoDoc("CUIT");
               }}
               className={SELECT_CLASS}
             />
@@ -283,7 +297,7 @@ export function FacturacionForm({
           <Select
             options={tiposDoc.map((t) => ({ label: TIPO_DOC_LABEL[t], value: t }))}
             value={form.tipoDoc}
-            onValueChange={(v) => set("tipoDoc", v as TipoDoc)}
+            onValueChange={(v) => cambiarTipoDoc(v as TipoDoc)}
             disabled={tiposDoc.length === 1}
             className={SELECT_CLASS}
           />
@@ -292,7 +306,12 @@ export function FacturacionForm({
         <Field label={`Número de ${TIPO_DOC_LABEL[form.tipoDoc]}`} error={errores.nroDoc}>
           <Input
             value={form.nroDoc}
-            onChange={(e) => set("nroDoc", e.target.value)}
+            // Los guiones y puntos se ponen solos. El del RUC recién al salir
+            // del campo: su número no tiene largo fijo.
+            onChange={(e) => set("nroDoc", formatearDocAlEscribir(form.tipoDoc, e.target.value))}
+            onBlur={() =>
+              set("nroDoc", formatearDocAlEscribir(form.tipoDoc, form.nroDoc, { alSalir: true }))
+            }
             placeholder={PLACEHOLDER_DOC[form.tipoDoc]}
             // El CNPJ nuevo trae letras: con teclado numérico no se podría tipear.
             inputMode={form.tipoDoc === "CNPJ" ? "text" : "numeric"}

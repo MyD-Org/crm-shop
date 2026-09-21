@@ -36,3 +36,5 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 > Parte del monorepo `crm-shop`: todos los comandos se corren parados en esta carpeta (`apps/admin`).
+
+Instrucciones para agentes: `AGENTS.md` de esta carpeta y el de la raíz del repo.

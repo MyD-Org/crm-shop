@@ -20,7 +20,9 @@ if [ "$mode" = "history" ]; then
   big=$(git rev-list --objects --all | git cat-file --batch-check='%(objecttype) %(objectsize) %(rest)' \
         | awk '$1=="blob" && $2>5242880 {print $2, $3}')
   if [ -n "$big" ]; then echo "::error::Blobs de más de 5 MB:"; printf '%s\n' "$big"; fail=1; fi
-  ids=$(git log --all --format=%h --pickaxe-regex -G"$PRIVATE_IDS" || true)
+  # -G ya interpreta una regex; --pickaxe-regex es solo para -S y git rechaza la combinación.
+  # Sin "|| true": si git falla, el guard tiene que fallar, no dar OK en silencio.
+  ids=$(git log --all --format=%h -E -G"$PRIVATE_IDS")
   if [ -n "$ids" ]; then echo "::error::Commits con identificadores privados:"; printf '%s\n' "$ids"; fail=1; fi
 else
   ids=$(git grep -IlE "$PRIVATE_IDS" -- . ':!.github/scripts/repo-guard.sh' || true)

@@ -1,0 +1,5 @@
+# Falsos positivos clasificados a mano (ver la evidencia del gate de publicación).
+# Ambos son valores de relleno de un .env de ejemplo dentro de un plan viejo: una URL de Postgres
+# con usuario y clave genéricos contra localhost, y una frase descriptiva como secreto de sesión.
+3729f709403af65da447eb4aa31d3b26dd5c898c:apps/clientes/docs/superpowers/plans/2026-06-08-portal-clientes.md:postgres-url-con-password:110
+3729f709403af65da447eb4aa31d3b26dd5c898c:apps/clientes/docs/superpowers/plans/2026-06-08-portal-clientes.md:generic-api-key:115

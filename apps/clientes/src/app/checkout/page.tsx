@@ -5,6 +5,7 @@ import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
+import { pagosHabilitados } from "@/lib/pagos-flag";
 
 /**
  * El checkout exige estar logueado, pero NO tener cuenta corriente vinculada:
@@ -21,9 +22,14 @@ export default async function CheckoutPage() {
   // avisa arriba de todo, en vez de dejar que llene el formulario entero y
   // recién rebote contra el 409 al apretar "Confirmar".
   // En paralelo con la oferta de cuotas (null = sin cuotas: flag off, sin datos o error).
+  //
+  // El flag de pagos se lee acá, en el server, y al checkout le llega como
+  // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
+  // no hay dónde mostrarla.
+  const pagos = pagosHabilitados();
   const [perfil, oferta] = await Promise.all([
     clerkUserId ? getPerfilFacturacion(clerkUserId) : null,
-    getOfertaCuotas(),
+    pagos ? getOfertaCuotas() : null,
   ]);
 
   return (
@@ -36,6 +42,7 @@ export default async function CheckoutPage() {
         facturacionCompleta={perfilCompleto(perfil)}
         admiteEnvio={admiteEnvio(perfil?.pais)}
         oferta={oferta}
+        pagosHabilitados={pagos}
       />
     </>
   );

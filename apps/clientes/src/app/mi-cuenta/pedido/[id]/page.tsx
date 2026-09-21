@@ -5,6 +5,8 @@ import { identidadActual } from "@/lib/auth";
 import { getPedido } from "@/lib/pedidos";
 import { ORDER_ESTADO_LABEL, PAGO_ESTADO_LABEL } from "@/data/orders";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
+import { pagosHabilitados } from "@/lib/pagos-flag";
+import { ocultarEstadoPago } from "@/lib/pago-estado-visible";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,10 @@ export default async function PedidoPage({
   });
   if (!pedido) notFound();
 
+  // Con los pagos apagados "Pago pendiente" no se muestra (igual que en la
+  // lista de Mis compras): el pago se coordina con un asesor, por fuera.
+  const verEstadoPago = !ocultarEstadoPago(pedido.pagoEstado, pagosHabilitados());
+
   return (
     <>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
@@ -43,7 +49,9 @@ export default async function PedidoPage({
             <span className="font-semibold text-text">
               {ORDER_ESTADO_LABEL[pedido.estado]}
             </span>
-            <span className="text-muted">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</span>
+            {verEstadoPago && (
+              <span className="text-muted">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</span>
+            )}
           </div>
         </header>
 
@@ -61,7 +69,9 @@ export default async function PedidoPage({
           <div className="rounded-xl border border-border bg-surface p-5">
             <h2 className="mb-2 text-sm font-bold text-text">Pago</h2>
             <p className="text-sm text-muted">{pedido.metodoPago}</p>
-            <p className="mt-1 text-sm text-text">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</p>
+            {verEstadoPago && (
+              <p className="mt-1 text-sm text-text">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</p>
+            )}
           </div>
         </section>
 

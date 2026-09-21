@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { identidadActual, idPriceListDe } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
+import { pagosHabilitados } from "@/lib/pagos-flag";
 import { permitir } from "@/lib/rate-limit";
 
 // Precio y stock en vivo desde Alegra: nunca cacheable.
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
       total: 0,
       hayProblemas: false,
       envio: evaluarEnvio(0, ciudad),
-      pagosDisponibles: pagosDisponibles(entregaTipo),
+      pagosDisponibles: pagosDisponibles(entregaTipo, pagosHabilitados()),
     });
   }
 
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...cotizacion,
       envio: evaluarEnvio(cotizacion.subtotal, ciudad),
-      pagosDisponibles: pagosDisponibles(entregaTipo),
+      pagosDisponibles: pagosDisponibles(entregaTipo, pagosHabilitados()),
     });
   } catch (err) {
     console.error("[/api/carrito/cotizar] error:", err);

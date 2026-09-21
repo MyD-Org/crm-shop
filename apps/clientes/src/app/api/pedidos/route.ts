@@ -12,6 +12,7 @@ import { admiteEnvio, domicilioEnLinea } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
+import { pagosHabilitados } from "@/lib/pagos-flag";
 import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 
@@ -140,7 +141,11 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (!pagosDisponibles(entregaTipo).includes(pagoMetodo)) {
+  // Se valida contra el flag de ESTE momento, no contra lo que ofreció la
+  // pantalla: con los pagos apagados un POST directo con "mercadopago" se
+  // rechaza igual que cualquier método no disponible, y con los pagos prendidos
+  // "a_coordinar" tampoco entra.
+  if (!pagosDisponibles(entregaTipo, pagosHabilitados()).includes(pagoMetodo)) {
     return NextResponse.json(
       { error: "Ese medio de pago no está disponible para la entrega elegida." },
       { status: 400 },

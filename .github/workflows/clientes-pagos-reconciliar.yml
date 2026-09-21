@@ -19,10 +19,10 @@
 name: clientes · Reconciliar pagos MP
 
 on:
-  # CUTOVER: descomentar en el PR de cutover de clientes (y deshabilitar el workflow del repo viejo ANTES).
-  # schedule:
-  #   # Cada 15 minutos. GH Actions puede diferir en picos, es aceptable.
-  #   - cron: "*/15 * * * *"
+  # Programado desde el cutover de clientes.
+  schedule:
+    # Cada 15 minutos. GH Actions puede diferir en picos, es aceptable.
+    - cron: "*/15 * * * *"
   # Para disparar a mano desde la UI de Actions cuando se prueba algo puntual.
   workflow_dispatch:
 

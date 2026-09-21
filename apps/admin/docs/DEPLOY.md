@@ -1,5 +1,7 @@
 # Deploy a Vercel
 
+> **Monorepo.** Esta app vive en `apps/admin` del repo `crm-shop`. En el proyecto de Vercel, **Root Directory = `apps/admin`**; Install y Build Command quedan en sus valores por defecto (se ejecutan dentro de esa carpeta). Todos los comandos de este documento se corren parados en `apps/admin`. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta.
+
 Guía para deployar el CRM en Vercel con Postgres en la nube (Neon). El repo ya está
 en GitHub (`MyD-Org/CRM`); el deploy se hace por la integración GitHub↔Vercel (cada push
 a `main` redeploya solo).

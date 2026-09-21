@@ -5,10 +5,10 @@
 name: admin · Sync catálogo Alegra
 
 on:
-  # CUTOVER: descomentar estas tres líneas en el PR de cutover de admin (y deshabilitar el workflow del repo viejo ANTES).
-  # schedule:
-  #   # 07:00 UTC = 04:00 en Argentina. NO cambiar: la sync de apps/clientes corre a las 06:00 UTC contra la misma cuenta.
-  #   - cron: "0 7 * * *"
+  # Programado desde el cutover de admin.
+  schedule:
+    # 07:00 UTC = 04:00 en Argentina. NO cambiar: la sync de apps/clientes corre a las 06:00 UTC contra la misma cuenta.
+    - cron: "0 7 * * *"
   # Permite dispararlo a mano desde la pestaña Actions.
   workflow_dispatch:
 

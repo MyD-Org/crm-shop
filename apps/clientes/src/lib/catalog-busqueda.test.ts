@@ -1,0 +1,41 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
+
+/**
+ * La búsqueda sin tildes usa una función SQL propia. Desde que las tablas del
+ * Shop viven en el esquema `shop` de la base del CRM, la función también: tiene
+ * que llamarse calificada, porque el `search_path` de la conexión no es algo de
+ * lo que se pueda depender (por el pooler, el del rol puede no aplicarse).
+ */
+
+let grabadora = dbGrabadora();
+vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
+
+import { getCatalogo } from "./catalog";
+
+beforeEach(() => {
+  grabadora = dbGrabadora();
+});
+
+describe("búsqueda del catálogo", () => {
+  it('llama a "shop".immutable_unaccent, nunca a la función sin calificar', async () => {
+    await getCatalogo({ busqueda: "lampara" });
+
+    const { sql, params } = grabadora.consultas[0];
+    expect(sql).toContain('"shop".immutable_unaccent(');
+    // Toda aparición del nombre viene precedida por el esquema.
+    const total = sql.match(/immutable_unaccent\(/g)?.length ?? 0;
+    const calificadas = sql.match(/"shop"\.immutable_unaccent\(/g)?.length ?? 0;
+    expect(total).toBeGreaterThan(0);
+    expect(calificadas).toBe(total);
+    expect(params).toContain("%lampara%");
+  });
+
+  it("lee del espejo del Shop, no del homónimo del CRM en public", async () => {
+    await getCatalogo({ busqueda: "lampara" });
+    const { sql } = grabadora.consultas[0];
+    expect(sql).toContain('"shop"."catalog_products"');
+    expect(sql).not.toContain('"public".');
+    expect(sql).not.toMatch(/from "catalog_products"/);
+  });
+});

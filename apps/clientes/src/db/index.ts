@@ -20,16 +20,20 @@ const globalForDb = globalThis as unknown as {
 };
 
 /**
- * Connection string. Se acepta `POSTGRES_URL` además de `DATABASE_URL` porque
- * es el nombre que inyecta la integración Neon/Vercel: si solo leyéramos
- * `DATABASE_URL`, en producción habría que duplicar la variable a mano y el
- * olvido se descubre recién en runtime.
+ * Connection string del runtime: SOLO `DATABASE_URL` (rol `shop_app`, pooled).
+ *
+ * Antes se aceptaba también `POSTGRES_URL`, el nombre que inyectaba la
+ * integración Neon/Vercel de la base vieja del Shop. Con el Shop mudado al
+ * esquema `shop` de la base del CRM, ese fallback era la forma más fácil de
+ * seguir escribiendo en la base anterior sin enterarse: si la variable vieja
+ * queda colgada en un entorno, tiene que fallar, no conectarse.
+ * Las migraciones usan otra variable (`MIGRATE_DATABASE_URL`, ver `migrate.ts`).
  */
 export function connectionString(): string {
-  const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+  const url = process.env.DATABASE_URL?.trim();
   if (!url) {
     throw new Error(
-      "Falta DATABASE_URL (o POSTGRES_URL) en el entorno. Revisar .env.local."
+      "Falta DATABASE_URL en el entorno (rol shop_app, conexión pooled). POSTGRES_URL ya no se usa."
     );
   }
   return url;

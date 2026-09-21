@@ -140,7 +140,12 @@ const COLUMNAS_CATALOGO = {
  *
  * Las tildes importan: el catálogo dice "Termomagnético" y el cliente escribe
  * "termomagnetico". `ILIKE` solo resuelve mayúsculas, así que se normalizan los
- * dos lados con `immutable_unaccent` (ver drizzle/0001_unaccent.sql).
+ * dos lados con `"shop".immutable_unaccent` (ver drizzle/0000_baseline.sql).
+ *
+ * La función se llama CALIFICADA con su esquema: vive en `shop`, y que se
+ * resuelva sin calificar dependería del `search_path` de la conexión, que por
+ * el pooler no está garantizado. Es el único objeto SQL que este código nombra
+ * a mano; las tablas las califica drizzle desde `pgSchema("shop")`.
  *
  * Busca en el nombre, en el código y en la descripción — en esta cuenta de
  * Alegra el nombre comercial vive en `description`, así que sin ese tercer
@@ -149,7 +154,7 @@ const COLUMNAS_CATALOGO = {
 function coincideTexto(q: string) {
   const patron = `%${q}%`;
   const norm = (col: unknown) =>
-    sql`immutable_unaccent(lower(${col})) LIKE immutable_unaccent(lower(${patron}))`;
+    sql`"shop".immutable_unaccent(lower(${col})) LIKE "shop".immutable_unaccent(lower(${patron}))`;
   return or(
     norm(catalogProducts.name),
     norm(catalogProducts.code),

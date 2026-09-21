@@ -25,6 +25,7 @@ import {
   type EntregaTipo,
   type PagoMetodo,
 } from "./envio";
+import { shopTenantId } from "./tenant";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -102,11 +103,12 @@ export async function crearPedido(
   return getDb().transaction(async (tx) => {
     const [pedido] = await tx
       .insert(orders)
-      // TODO(1C): falta `tenantId: shopTenantId()` (tarea 1.12). Se suprime el
-      // error de tipos en vez de inventar un valor: sin tenant el INSERT falla
-      // en la base por NOT NULL, que es el comportamiento seguro hasta entonces.
-      // @ts-expect-error -- TODO(1C): `tenant_id` es NOT NULL y todavía no se setea.
       .values({
+        // El tenant sale SIEMPRE del entorno, nunca de `datos` ni del request:
+        // la base es compartida con el CRM y este valor decide qué operadores
+        // ven el pedido. Los campos se copian uno por uno a propósito: nada que
+        // venga de más en `datos` llega a la fila.
+        tenantId: shopTenantId(),
         idempotencyKey: datos.idempotencyKey ?? null,
         clerkUserId: cliente.clerkUserId,
         clienteCodigo: cliente.codigo ?? null,
@@ -150,7 +152,12 @@ export async function crearPedido(
       const [existente] = await tx
         .select({ id: orders.id, numero: orders.numero, cuotasMax: orders.cuotasMax })
         .from(orders)
-        .where(eq(orders.idempotencyKey, datos.idempotencyKey!))
+        .where(
+          and(
+            eq(orders.idempotencyKey, datos.idempotencyKey!),
+            eq(orders.tenantId, shopTenantId()),
+          ),
+        )
         .limit(1);
 
       if (!existente) {
@@ -266,9 +273,24 @@ export interface DuenoPedidos {
 }
 
 /**
- * Condición de pertenencia. Devuelve `false` literal si no hay ninguna llave:
- * sin esto, un dueño vacío se traduciría en un WHERE vacío y la consulta
- * devolvería los pedidos de TODOS los clientes.
+ * El pedido es de este Shop. `orders` vive en la base del CRM, que es
+ * multi-tenant: toda consulta que no pase por `esDeSuDueno` tiene que llevar
+ * esto a mano (cobros, webhook, reconciliación).
+ */
+function esDeEsteTenant() {
+  return eq(orders.tenantId, shopTenantId());
+}
+
+/**
+ * Condición de pertenencia: del tenant de este Shop Y de quien lo pide.
+ *
+ * El tenant va acá adentro y no en cada consulta para que sea imposible
+ * olvidarlo: todo lo que el comprador lee o toca (Mis compras, detalle,
+ * resumen, idempotencia, rescate, pago, cancelar) pasa por esta función.
+ *
+ * Devuelve `false` literal si no hay ninguna llave de dueño: sin esto, un dueño
+ * vacío se traduciría en un WHERE sin dueño y la consulta devolvería los
+ * pedidos de TODOS los clientes.
  */
 function esDeSuDueno(dueno: DuenoPedidos) {
   const condiciones = [];
@@ -278,8 +300,8 @@ function esDeSuDueno(dueno: DuenoPedidos) {
   if (dueno.clienteCodigo) {
     condiciones.push(eq(orders.clienteCodigo, dueno.clienteCodigo));
   }
-  if (condiciones.length === 0) return sql`false`;
-  return or(...condiciones);
+  const deSuDueno = condiciones.length === 0 ? sql`false` : or(...condiciones);
+  return and(esDeEsteTenant(), deSuDueno);
 }
 
 /**
@@ -471,7 +493,7 @@ export async function registrarCobro(
     const [fila] = await tx
       .select({ estado: orders.pagoEstado })
       .from(orders)
-      .where(eq(orders.id, pedidoId))
+      .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
       .limit(1)
       .for("update");
 
@@ -494,7 +516,7 @@ export async function registrarCobro(
         pagoActualizadoEn: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(orders.id, pedidoId));
+      .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
 
     return transicionPermitida(actual, cobro.estado, cobro.reversion);
   });
@@ -525,7 +547,7 @@ export async function registrarIntentoFallido(
       pagoActualizadoEn: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(orders.id, pedidoId));
+    .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
 }
 
 /**
@@ -569,29 +591,56 @@ export async function pedidoPendienteMasReciente(
 }
 
 /**
+ * Motivo que queda cuando cancela el propio comprador. `cancelacion_motivo` es
+ * un dato INTERNO (se ve en el admin, nunca en el Shop) y la base exige que todo
+ * pedido cancelado tenga uno, lo cancele quien lo cancele.
+ */
+const MOTIVO_CANCELADO_POR_CLIENTE = "Cancelado por el cliente.";
+
+/**
  * Cancela un pedido pendiente. Es lo que dispara el botón "armar otro" en el
  * checkout cuando el comprador quiere modificar el carrito en vez de pagar el
  * pedido que dejó a medias.
  *
  * Requisitos:
- *  - Es del dueño (sin este filtro, alguien adivinando ids podría cancelar
- *    pedidos ajenos).
+ *  - Es del dueño y de este tenant (sin este filtro, alguien adivinando ids
+ *    podría cancelar pedidos ajenos).
+ *  - Sigue en `estado = 'pendiente'`: una vez que un operador lo confirmó, el
+ *    pedido ya no es del comprador para cancelar. Antes solo se miraba
+ *    `pago_estado`, y con los pagos apagados TODOS los pedidos quedan con el pago
+ *    pendiente para siempre: un comprador podía cancelar por API un pedido
+ *    confirmado, en camino o entregado, a espaldas de quien lo estaba preparando.
  *  - Sigue en `pago_estado = 'pendiente'` — cancelar un pagado sería una
  *    devolución, y eso pasa por otro flujo.
  *
- * Devuelve `true` solo si efectivamente cambió algo.
+ * Deja la misma auditoría que un cambio de estado hecho desde el admin, sin
+ * usuario (`estado_actualizado_por` es un id de `admin_users` y acá no hay
+ * ninguno): quién fue se lee en `estado_actualizado_por_nombre`.
+ *
+ * Devuelve `true` solo si efectivamente cambió algo. Quien llama no distingue
+ * el porqué del `false` a propósito: "no existe", "no es suyo" y "ya no se puede
+ * cancelar" contestan el mismo 404.
  */
 export async function cancelarPedidoPendiente(
   id: string,
   dueno: DuenoPedidos,
 ): Promise<boolean> {
+  const ahora = new Date();
   const filas = await getDb()
     .update(orders)
-    .set({ estado: "cancelado", updatedAt: new Date() })
+    .set({
+      estado: "cancelado",
+      cancelacionMotivo: MOTIVO_CANCELADO_POR_CLIENTE,
+      estadoActualizadoEn: ahora,
+      estadoActualizadoPor: null,
+      estadoActualizadoPorNombre: "Cliente",
+      updatedAt: ahora,
+    })
     .where(
       and(
         eq(orders.id, id),
         esDeSuDueno(dueno),
+        eq(orders.estado, "pendiente"),
         eq(orders.pagoEstado, "pendiente"),
       ),
     )
@@ -611,7 +660,7 @@ export async function pedidoPorReferencia(
   const [fila] = await getDb()
     .select({ id: orders.id, estado: orders.pagoEstado })
     .from(orders)
-    .where(eq(orders.pagoReferencia, referencia))
+    .where(and(eq(orders.pagoReferencia, referencia), esDeEsteTenant()))
     .limit(1);
 
   return fila ? { id: fila.id, pagoEstado: fila.estado as PagoEstado } : null;

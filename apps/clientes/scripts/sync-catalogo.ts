@@ -37,9 +37,8 @@ function validarEntorno(): void {
   const faltan = REQUERIDAS.filter(([name]) => !process.env[name]?.trim());
 
   // La conexión se resuelve como en el resto del código (`src/db/index.ts`):
-  // cualquiera de las dos sirve, así que se valida el par y no cada una.
-  const tieneDb =
-    process.env.DATABASE_URL?.trim() || process.env.POSTGRES_URL?.trim();
+  // solo `DATABASE_URL`. La variable vieja de la integración de Neon ya no se lee.
+  const tieneDb = process.env.DATABASE_URL?.trim();
 
   if (faltan.length === 0 && tieneDb) return;
 
@@ -47,7 +46,7 @@ function validarEntorno(): void {
   for (const [name, para] of faltan) console.error(`  - ${name}: ${para}`);
   if (!tieneDb) {
     console.error(
-      "  - DATABASE_URL (o POSTGRES_URL): conexión a Postgres del shop"
+      "  - DATABASE_URL: conexión a Postgres del shop (rol shop_app, esquema shop)"
     );
   }
   console.error(

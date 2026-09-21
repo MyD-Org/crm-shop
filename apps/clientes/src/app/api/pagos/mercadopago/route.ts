@@ -126,8 +126,16 @@ export async function POST(req: Request) {
        * poder cobrarse aunque el comprador vuelva a intentar.
        */
       emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
-      tipoDocumento: pedido.facturacionTipoDoc ?? undefined,
-      numeroDocumento: pedido.facturacionNroDoc ?? undefined,
+      // La cuenta de Mercado Pago es argentina y solo conoce documentos
+      // argentinos: con un CPF o un RUC en `identification.type` rechaza el
+      // pago. El documento es opcional, así que a un extranjero se le cobra sin
+      // él; el dato fiscal ya quedó en el pedido.
+      ...(pedido.facturacionTipoDoc === "CUIT" || pedido.facturacionTipoDoc === "DNI"
+        ? {
+            tipoDocumento: pedido.facturacionTipoDoc,
+            numeroDocumento: pedido.facturacionNroDoc ?? undefined,
+          }
+        : {}),
     });
 
     await registrarCobro(pedido.id, {

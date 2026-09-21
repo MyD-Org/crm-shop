@@ -13,7 +13,53 @@
  * `facturacion-db.ts`.
  */
 
-export type TipoDoc = "CUIT" | "DNI";
+/** País del documento. Define qué documentos se ofrecen y cómo se validan. */
+export type Pais = "AR" | "BR" | "PY";
+
+export const PAIS_LABEL: Record<Pais, string> = {
+  AR: "Argentina",
+  BR: "Brasil",
+  PY: "Paraguay",
+};
+
+export const PAIS_DEFAULT: Pais = "AR";
+
+export type TipoDoc = "CUIT" | "DNI" | "CPF" | "CNPJ" | "CI" | "RUC";
+
+/**
+ * Rótulo visible del tipo de documento. El valor guardado sigue siendo "CUIT":
+ * CUIT y CUIL comparten formato y dígito verificador, y MercadoPago y los
+ * pedidos leen ese valor tal cual.
+ */
+export const TIPO_DOC_LABEL: Record<TipoDoc, string> = {
+  CUIT: "CUIT / CUIL",
+  DNI: "DNI",
+  CPF: "CPF",
+  CNPJ: "CNPJ",
+  CI: "Cédula de identidad",
+  RUC: "RUC",
+};
+
+/**
+ * Documentos de cada país: el de la empresa primero y el de la persona después.
+ *
+ * El orden importa: el primero es el criterio más estricto del país, y es con
+ * el que se valida un número que llega sin `tipoDoc` (ver `validarFacturacion`).
+ */
+export const TIPOS_DOC_POR_PAIS: Record<Pais, TipoDoc[]> = {
+  AR: ["CUIT", "DNI"],
+  BR: ["CNPJ", "CPF"],
+  PY: ["RUC", "CI"],
+};
+
+/**
+ * Solo se envía dentro de Argentina. A un comprador con documento de otro país
+ * se le factura igual (factura B), pero retira o coordina la entrega.
+ */
+export function admiteEnvio(pais: string | null | undefined): boolean {
+  return (pais ?? PAIS_DEFAULT) === "AR";
+}
+
 export type CondicionIva =
   | "consumidor_final"
   | "monotributo"
@@ -32,6 +78,7 @@ export const CONDICION_IVA_LABEL: Record<CondicionIva, string> = {
 const EXIGEN_CUIT: CondicionIva[] = ["monotributo", "responsable_inscripto"];
 
 export interface DatosFacturacion {
+  pais: Pais;
   tipoDoc: TipoDoc;
   nroDoc: string;
   razonSocial: string;
@@ -75,6 +122,106 @@ export function dniValido(raw: string): boolean {
   return dni.length >= 7 && dni.length <= 8 && !/^0+$/.test(dni);
 }
 
+/**
+ * CPF brasileño: 11 dígitos, los dos últimos verificadores (módulo 11).
+ *
+ * Las secuencias de un mismo dígito (111.111.111-11) pasan la cuenta pero la
+ * Receita no las emite: se rechazan aparte.
+ */
+export function cpfValido(raw: string): boolean {
+  const cpf = soloDigitos(raw);
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+
+  const verificador = (largo: number) => {
+    let suma = 0;
+    for (let i = 0; i < largo; i++) suma += Number(cpf[i]) * (largo + 1 - i);
+    const resto = suma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+
+  return verificador(9) === Number(cpf[9]) && verificador(10) === Number(cpf[10]);
+}
+
+/** Deja letras y dígitos en mayúscula: el CNPJ nuevo es alfanumérico. */
+function soloAlfanumerico(v: string): string {
+  return v.toUpperCase().replace(/[^0-9A-Z]/g, "");
+}
+
+/**
+ * CNPJ brasileño: 14 posiciones, las dos últimas verificadores numéricos.
+ *
+ * Desde julio de 2026 la Receita emite CNPJ **alfanuméricos**: las primeras 12
+ * posiciones pueden traer letras. La cuenta es la misma de siempre tomando cada
+ * carácter como su código ASCII menos 48, así que un dígito vale lo que valía y
+ * los CNPJ numéricos viejos siguen validando igual.
+ */
+export function cnpjValido(raw: string): boolean {
+  const cnpj = soloAlfanumerico(raw);
+  if (!/^[0-9A-Z]{12}\d{2}$/.test(cnpj) || /^0+$/.test(cnpj)) return false;
+
+  const verificador = (largo: number) => {
+    let suma = 0;
+    let peso = 2;
+    for (let i = largo - 1; i >= 0; i--) {
+      suma += (cnpj.charCodeAt(i) - 48) * peso;
+      peso = peso === 9 ? 2 : peso + 1;
+    }
+    const resto = suma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+
+  return verificador(12) === Number(cnpj[12]) && verificador(13) === Number(cnpj[13]);
+}
+
+/** Cédula de identidad paraguaya: sin dígito verificador, entre 5 y 8 dígitos. */
+export function ciParaguayValida(raw: string): boolean {
+  const ci = soloDigitos(raw);
+  return ci.length >= 5 && ci.length <= 8 && !/^0+$/.test(ci);
+}
+
+/**
+ * RUC paraguayo: número base + un dígito verificador (módulo 11, como lo
+ * calcula la SET). Se escribe "80012345-6"; acá llega ya sin el guion.
+ */
+export function rucParaguayValido(raw: string): boolean {
+  const ruc = soloDigitos(raw);
+  if (ruc.length < 6 || ruc.length > 9 || /^0+$/.test(ruc)) return false;
+
+  const base = ruc.slice(0, -1);
+  let suma = 0;
+  let peso = 2;
+  for (let i = base.length - 1; i >= 0; i--) {
+    suma += Number(base[i]) * peso;
+    peso = peso === 11 ? 2 : peso + 1;
+  }
+  const resto = suma % 11;
+  const verificador = resto > 1 ? 11 - resto : 0;
+
+  return verificador === Number(ruc[ruc.length - 1]);
+}
+
+const VALIDADOR_DOC: Record<TipoDoc, (raw: string) => boolean> = {
+  CUIT: cuitValido,
+  DNI: dniValido,
+  CPF: cpfValido,
+  CNPJ: cnpjValido,
+  CI: ciParaguayValida,
+  RUC: rucParaguayValido,
+};
+
+/**
+ * Normaliza el número para guardarlo y compararlo: sin guiones, puntos ni
+ * espacios. Solo el CNPJ conserva letras.
+ */
+export function normalizarDoc(tipoDoc: TipoDoc, raw: string): string {
+  return tipoDoc === "CNPJ" ? soloAlfanumerico(raw) : soloDigitos(raw);
+}
+
+/** Formatea el documento para mostrar. Hoy solo el CUIT tiene formato propio. */
+export function formatearDoc(tipoDoc: TipoDoc, raw: string): string {
+  return tipoDoc === "CUIT" ? formatearCuit(raw) : raw;
+}
+
 /** Formatea una CUIT para mostrar: 30712345678 → 30-71234567-8. */
 export function formatearCuit(raw: string): string {
   const d = soloDigitos(raw);
@@ -92,22 +239,40 @@ export function validarFacturacion(
 ): Record<string, string> {
   const errores: Record<string, string> = {};
 
+  // Sin país se asume Argentina: es el default del servidor y de los perfiles
+  // guardados antes de que existiera el campo.
+  const pais = datos.pais ?? PAIS_DEFAULT;
+  const esArgentina = pais === "AR";
+  if (!(pais in PAIS_LABEL)) {
+    errores.pais = "Seleccione un país.";
+  }
+
+  // La condición frente al IVA es un concepto argentino: a un extranjero no se
+  // le pregunta, y el servidor la guarda como consumidor final.
   const condicion = datos.condicionIva;
-  if (!condicion || !(condicion in CONDICION_IVA_LABEL)) {
+  if (esArgentina && (!condicion || !(condicion in CONDICION_IVA_LABEL))) {
     errores.condicionIva = "Elegí tu condición frente al IVA.";
   }
 
   if (!datos.razonSocial?.trim()) {
-    errores.razonSocial =
-      condicion === "consumidor_final"
+    errores.razonSocial = !esArgentina
+      ? "Ingrese el nombre y apellido o la razón social."
+      : condicion === "consumidor_final"
         ? "Ingresá tu nombre y apellido."
         : "Ingresá la razón social.";
   }
 
   const tipoDoc = datos.tipoDoc;
-  const nro = soloDigitos(datos.nroDoc ?? "");
+  const tiposDelPais = TIPOS_DOC_POR_PAIS[pais] ?? TIPOS_DOC_POR_PAIS[PAIS_DEFAULT];
 
-  if (condicion && EXIGEN_CUIT.includes(condicion) && tipoDoc !== "CUIT") {
+  if (tipoDoc && !tiposDelPais.includes(tipoDoc)) {
+    errores.tipoDoc = "Ese documento no corresponde al país elegido.";
+  } else if (
+    esArgentina &&
+    condicion &&
+    EXIGEN_CUIT.includes(condicion) &&
+    tipoDoc !== "CUIT"
+  ) {
     errores.tipoDoc = `Con ${CONDICION_IVA_LABEL[condicion].toLowerCase()} hace falta CUIT.`;
   }
 
@@ -121,16 +286,20 @@ export function validarFacturacion(
    * `Partial<DatosFacturacion>`, así que ese caso no es hipotético: es lo que
    * la firma invita a pasarle.
    *
-   * Sin `tipoDoc` se valida como CUIT, que es el default del servidor y el
-   * criterio más estricto. Nunca dejar pasar un documento sin mirar.
+   * Sin `tipoDoc` —o con uno que no es del país— se valida con el primero del
+   * país, que es el criterio más estricto (CUIT en Argentina, el default del
+   * servidor). Nunca dejar pasar un documento sin mirar.
    */
-  const esDni = tipoDoc === "DNI";
+  const tipoParaValidar =
+    tipoDoc && tiposDelPais.includes(tipoDoc) ? tipoDoc : tiposDelPais[0];
+  const nro = normalizarDoc(tipoParaValidar, datos.nroDoc ?? "");
   if (!nro) {
     errores.nroDoc = "Ingresá tu número de documento.";
-  } else if (esDni ? !dniValido(nro) : !cuitValido(nro)) {
-    errores.nroDoc = esDni
-      ? "Ese DNI no es válido."
-      : "Ese CUIT no es válido. Revisá los números.";
+  } else if (!VALIDADOR_DOC[tipoParaValidar](nro)) {
+    errores.nroDoc =
+      tipoParaValidar === "DNI"
+        ? "Ese DNI no es válido."
+        : `El número de ${TIPO_DOC_LABEL[tipoParaValidar]} no es válido. Revise los números.`;
   }
 
   // Domicilio obligatorio para TODOS, no solo para quien discrimina IVA.

@@ -1,14 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Field, Input } from "@myd-org/ui";
+import { Button, Field, Input, Select } from "@myd-org/ui";
 import { DireccionAutocomplete } from "./DireccionAutocomplete";
 import {
   CONDICION_IVA_LABEL,
-  formatearCuit,
+  PAIS_DEFAULT,
+  PAIS_LABEL,
+  TIPO_DOC_LABEL,
+  TIPOS_DOC_POR_PAIS,
+  formatearDoc,
   validarFacturacion,
   type CondicionIva,
   type DatosFacturacion,
+  type Pais,
   type TipoDoc,
 } from "@/lib/facturacion";
 
@@ -24,6 +29,7 @@ import {
  */
 
 export interface PerfilFacturacionUI {
+  pais?: string | null;
   tipoDoc: string;
   nroDoc: string;
   razonSocial: string;
@@ -35,7 +41,31 @@ export interface PerfilFacturacionUI {
   coincideConAlegra?: string | null;
 }
 
+const CONDICION_IVA_OPTIONS = (Object.keys(CONDICION_IVA_LABEL) as CondicionIva[]).map((c) => ({
+  label: CONDICION_IVA_LABEL[c],
+  value: c,
+}));
+
+const PAIS_OPTIONS = (Object.keys(PAIS_LABEL) as Pais[]).map((p) => ({
+  label: PAIS_LABEL[p],
+  value: p,
+}));
+
+/** Ejemplo de cada documento, con la puntuación con la que la gente lo escribe. */
+const PLACEHOLDER_DOC: Record<TipoDoc, string> = {
+  CUIT: "30-71234567-8",
+  DNI: "27123456",
+  CPF: "123.456.789-09",
+  CNPJ: "12.345.678/0001-95",
+  CI: "4123456",
+  RUC: "80012345-6",
+};
+
+const SELECT_CLASS =
+  "border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0";
+
 const VACIO: DatosFacturacion = {
+  pais: PAIS_DEFAULT,
   // DNI para acompañar el default de abajo: un consumidor final factura con
   // DNI. Dejarlo en CUIT obligaría a cambiar dos campos en vez de ninguno.
   tipoDoc: "DNI",
@@ -54,6 +84,8 @@ const VACIO: DatosFacturacion = {
 function desdePerfil(p: PerfilFacturacionUI | null): DatosFacturacion {
   if (!p) return VACIO;
   return {
+    // Los perfiles anteriores al campo son todos argentinos.
+    pais: (p.pais as Pais) ?? PAIS_DEFAULT,
     tipoDoc: (p.tipoDoc as TipoDoc) ?? "CUIT",
     nroDoc: p.nroDoc ?? "",
     razonSocial: p.razonSocial ?? "",
@@ -106,8 +138,30 @@ export function FacturacionForm({
     setErrores((e) => ({ ...e, [k]: "" }));
   }
 
-  // Consumidor final es el único que puede facturar con DNI.
-  const puedeUsarDni = form.condicionIva === "consumidor_final";
+  const esArgentina = form.pais === "AR";
+  // En Argentina, consumidor final es el único que puede facturar con DNI:
+  // monotributo y responsable inscripto solo ven CUIT. Afuera no hay condición
+  // frente al IVA y se ofrecen los dos documentos del país.
+  const tiposDoc =
+    esArgentina && form.condicionIva !== "consumidor_final"
+      ? TIPOS_DOC_POR_PAIS.AR.slice(0, 1)
+      : TIPOS_DOC_POR_PAIS[form.pais];
+  const esPersona = esArgentina && form.condicionIva === "consumidor_final";
+
+  function cambiarPais(pais: Pais) {
+    const argentina = pais === "AR";
+    setForm((f) => ({
+      ...f,
+      pais,
+      // El documento de un país no sirve en otro: se arranca de cero con el de
+      // persona, que es el caso más frecuente, en vez de dejar un número que
+      // seguro no valida.
+      tipoDoc: argentina ? "DNI" : TIPOS_DOC_POR_PAIS[pais][1],
+      nroDoc: "",
+      condicionIva: "consumidor_final",
+    }));
+    setErrores((e) => ({ ...e, pais: "", tipoDoc: "", nroDoc: "", condicionIva: "" }));
+  }
 
   async function guardar() {
     const errs = validarFacturacion(form);
@@ -143,13 +197,16 @@ export function FacturacionForm({
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Dato label="Razón social" value={form.razonSocial || "—"} />
         <Dato
-          label={form.tipoDoc}
-          value={form.tipoDoc === "CUIT" ? formatearCuit(form.nroDoc) : form.nroDoc || "—"}
+          label={TIPO_DOC_LABEL[form.tipoDoc] ?? form.tipoDoc}
+          value={formatearDoc(form.tipoDoc, form.nroDoc) || "—"}
         />
-        <Dato
-          label="Condición IVA"
-          value={CONDICION_IVA_LABEL[form.condicionIva] ?? "—"}
-        />
+        <Dato label="País" value={PAIS_LABEL[form.pais] ?? "—"} />
+        {esArgentina && (
+          <Dato
+            label="Condición IVA"
+            value={CONDICION_IVA_LABEL[form.condicionIva] ?? "—"}
+          />
+        )}
         <Dato label="Domicilio fiscal" value={form.domicilioCalle || "—"} />
       </dl>
     );
@@ -169,58 +226,76 @@ export function FacturacionForm({
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Condición frente al IVA" error={errores.condicionIva}>
-          <select
-            value={form.condicionIva}
-            onChange={(e) => {
-              const c = e.target.value as CondicionIva;
-              set("condicionIva", c);
-              // Monotributo y RI no pueden facturar con DNI: se fuerza CUIT
-              // acá y no al validar, para que el formulario no muestre una
-              // opción que después va a rechazar.
-              if (c !== "consumidor_final") set("tipoDoc", "CUIT");
-            }}
-            className="w-full rounded-sm border-[1.5px] border-border-strong bg-surface px-3 py-2 text-sm text-text outline-none focus-visible:border-primary"
-          >
-            {(Object.keys(CONDICION_IVA_LABEL) as CondicionIva[]).map((c) => (
-              <option key={c} value={c}>
-                {CONDICION_IVA_LABEL[c]}
-              </option>
-            ))}
-          </select>
+        <Field label="País" error={errores.pais}>
+          <Select
+            options={PAIS_OPTIONS}
+            value={form.pais}
+            onValueChange={(v) => cambiarPais(v as Pais)}
+            className={SELECT_CLASS}
+          />
         </Field>
 
+        {/* La condición frente al IVA es un concepto argentino: afuera no se pregunta. */}
+        {esArgentina && (
+          <Field label="Condición frente al IVA" error={errores.condicionIva}>
+            <Select
+              options={CONDICION_IVA_OPTIONS}
+              value={form.condicionIva}
+              onValueChange={(v) => {
+                const c = v as CondicionIva;
+                set("condicionIva", c);
+                // Monotributo y RI no pueden facturar con DNI: se fuerza CUIT
+                // acá y no al validar, para que el formulario no muestre una
+                // opción que después va a rechazar.
+                if (c !== "consumidor_final") set("tipoDoc", "CUIT");
+              }}
+              className={SELECT_CLASS}
+            />
+          </Field>
+        )}
+
         <Field
-          label={form.condicionIva === "consumidor_final" ? "Nombre y apellido" : "Razón social"}
+          label={
+            !esArgentina
+              ? "Nombre y apellido o razón social"
+              : esPersona
+                ? "Nombre y apellido"
+                : "Razón social"
+          }
           error={errores.razonSocial}
+          // En Argentina la fila de arriba ya está completa (país + condición).
+          className={esArgentina ? "sm:col-span-2" : undefined}
         >
           <Input
             value={form.razonSocial}
             onChange={(e) => set("razonSocial", e.target.value)}
+            // Indicación y no un ejemplo: un nombre o una razón social inventados
+            // pueden coincidir con alguien real.
             placeholder={
-              form.condicionIva === "consumidor_final" ? "Juan Pérez" : "Electricidad SRL"
+              esArgentina && !esPersona
+                ? "Como figura en la constancia de inscripción"
+                : "Como figura en su documento"
             }
           />
         </Field>
 
         <Field label="Tipo de documento" error={errores.tipoDoc}>
-          <select
+          <Select
+            options={tiposDoc.map((t) => ({ label: TIPO_DOC_LABEL[t], value: t }))}
             value={form.tipoDoc}
-            onChange={(e) => set("tipoDoc", e.target.value as TipoDoc)}
-            disabled={!puedeUsarDni}
-            className="w-full rounded-sm border-[1.5px] border-border-strong bg-surface px-3 py-2 text-sm text-text outline-none focus-visible:border-primary disabled:opacity-60"
-          >
-            <option value="CUIT">CUIT</option>
-            {puedeUsarDni && <option value="DNI">DNI</option>}
-          </select>
+            onValueChange={(v) => set("tipoDoc", v as TipoDoc)}
+            disabled={tiposDoc.length === 1}
+            className={SELECT_CLASS}
+          />
         </Field>
 
-        <Field label={`Número de ${form.tipoDoc}`} error={errores.nroDoc}>
+        <Field label={`Número de ${TIPO_DOC_LABEL[form.tipoDoc]}`} error={errores.nroDoc}>
           <Input
             value={form.nroDoc}
             onChange={(e) => set("nroDoc", e.target.value)}
-            placeholder={form.tipoDoc === "CUIT" ? "30-71234567-8" : "27123456"}
-            inputMode="numeric"
+            placeholder={PLACEHOLDER_DOC[form.tipoDoc]}
+            // El CNPJ nuevo trae letras: con teclado numérico no se podría tipear.
+            inputMode={form.tipoDoc === "CNPJ" ? "text" : "numeric"}
           />
         </Field>
 

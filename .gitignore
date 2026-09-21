@@ -1,0 +1,19 @@
+.DS_Store
+node_modules/
+.next/
+.env*
+.vercel
+*.tsbuildinfo
+
+# Claude Code y brainstorming (config local)
+.claude/
+.superpowers/
+
+# planillas y datos: nunca al repo (es público)
+*.xlsx
+*.xls
+*.xlsm
+*.ods
+
+# salidas de scripts locales
+tmp/

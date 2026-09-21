@@ -215,7 +215,6 @@ export function MisCompras({
   razonSocialVinculada,
   perfilFacturacion,
   pedidos,
-  resumen,
 }: {
   nombre: string;
   cuit?: string;
@@ -230,7 +229,8 @@ export function MisCompras({
   razonSocialVinculada?: string;
   /** Pedidos reales del cliente, cargados en el servidor. */
   pedidos: Order[];
-  resumen: OrderSummary;
+  /** Resumen anual: hoy no se muestra, se conserva por si se vuelve a exponer. */
+  resumen?: OrderSummary;
 }) {
   // La pestaña activa vive en la URL (`?tab=`): así el menú del header puede
   // abrir "Mis datos" aunque el usuario ya esté en Mi cuenta. Al cambiar de
@@ -285,7 +285,7 @@ export function MisCompras({
         ))}
       </div>
 
-      {tab === "compras" && <ComprasTab pedidos={pedidos} resumen={resumen} />}
+      {tab === "compras" && <ComprasTab pedidos={pedidos} />}
       {tab === "datos" && (
         <DatosTab
           cuit={cuit}
@@ -300,19 +300,9 @@ export function MisCompras({
 
 /* ── Tab: Mis pedidos ──────────────────────────────────── */
 
-function ComprasTab({ pedidos, resumen }: { pedidos: Order[]; resumen: OrderSummary }) {
+function ComprasTab({ pedidos }: { pedidos: Order[] }) {
   return (
     <div className="flex flex-col gap-6">
-      {/* Tarjetas resumen */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryCard label="Pedidos este año" value={String(resumen.pedidosEsteAnio)} />
-        <SummaryCard
-          label="En curso"
-          value={`${resumen.enCurso} pedido${resumen.enCurso === 1 ? "" : "s"}`}
-        />
-        <SummaryCard label="Comprado este año" value={fmt(resumen.compradoEsteAnio)} />
-      </div>
-
       {/* Lista de pedidos */}
       {pedidos.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface py-16 text-center">
@@ -328,15 +318,6 @@ function ComprasTab({ pedidos, resumen }: { pedidos: Order[]; resumen: OrderSumm
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface p-5">
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-extrabold text-text">{value}</p>
     </div>
   );
 }

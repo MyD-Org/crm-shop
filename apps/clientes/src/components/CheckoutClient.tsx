@@ -533,7 +533,10 @@ export function CheckoutClient({
                   <Field label="Ciudad">
                     <Select
                       options={CIUDADES_ENVIO.map((c) => ({ label: c, value: c }))}
-                      value={ciudad || undefined}
+                      // Siempre controlado: con `undefined` al principio React avisa que el
+                      // Select pasa de no controlado a controlado al elegir. Radix muestra
+                      // el placeholder igual con "" (lo que no admite "" son las opciones).
+                      value={ciudad}
                       onValueChange={setCiudad}
                       placeholder="Seleccionar ciudad"
                       className="border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0"

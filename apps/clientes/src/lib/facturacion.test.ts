@@ -4,6 +4,7 @@ import {
   ciParaguayValida,
   cnpjValido,
   cpfValido,
+  formatearDocAlEscribir,
   normalizarDoc,
   rucParaguayValido,
   cuitValido,
@@ -248,6 +249,55 @@ describe("normalizarDoc", () => {
     expect(normalizarDoc("CUIT", "33-69345023-9")).toBe("33693450239");
     expect(normalizarDoc("CPF", "529.982.247-25")).toBe("52998224725");
     expect(normalizarDoc("CNPJ", "12.abc.345/01de-35")).toBe("12ABC34501DE35");
+  });
+});
+
+describe("formatearDocAlEscribir", () => {
+  it("CUIT: pone los guiones a medida que se escribe", () => {
+    expect(formatearDocAlEscribir("CUIT", "2")).toBe("2");
+    expect(formatearDocAlEscribir("CUIT", "203")).toBe("20-3");
+    expect(formatearDocAlEscribir("CUIT", "2012345678")).toBe("20-12345678");
+    expect(formatearDocAlEscribir("CUIT", "20123456789")).toBe("20-12345678-9");
+  });
+
+  it("no pone el separador hasta que hay algo después: borrar hacia atrás no se traba", () => {
+    expect(formatearDocAlEscribir("CUIT", "20")).toBe("20");
+    expect(formatearDocAlEscribir("CUIT", "20-")).toBe("20");
+    expect(formatearDocAlEscribir("CUIT", "20-12345678-")).toBe("20-12345678");
+  });
+
+  it("acepta un número pegado con o sin guiones, y descarta lo que sobra", () => {
+    expect(formatearDocAlEscribir("CUIT", "33-69345023-9")).toBe("33-69345023-9");
+    expect(formatearDocAlEscribir("CUIT", "33693450239")).toBe("33-69345023-9");
+    expect(formatearDocAlEscribir("CUIT", "336934502399999")).toBe("33-69345023-9");
+    expect(formatearDocAlEscribir("CUIT", "33 693.450/23 9")).toBe("33-69345023-9");
+  });
+
+  it("CPF y CNPJ, incluido el CNPJ alfanumérico", () => {
+    expect(formatearDocAlEscribir("CPF", "52998224725")).toBe("529.982.247-25");
+    expect(formatearDocAlEscribir("CPF", "5299")).toBe("529.9");
+    expect(formatearDocAlEscribir("CNPJ", "11222333000181")).toBe("11.222.333/0001-81");
+    expect(formatearDocAlEscribir("CNPJ", "12abc34501de35")).toBe("12.ABC.345/01DE-35");
+  });
+
+  it("DNI y cédula: solo dígitos, sin separadores", () => {
+    expect(formatearDocAlEscribir("DNI", "27.123.456")).toBe("27123456");
+    expect(formatearDocAlEscribir("DNI", "271234569")).toBe("27123456");
+    expect(formatearDocAlEscribir("CI", "4.123.456")).toBe("4123456");
+  });
+
+  it("RUC: el guion va recién al salir del campo, porque el largo del número varía", () => {
+    expect(formatearDocAlEscribir("RUC", "800005198")).toBe("800005198");
+    expect(formatearDocAlEscribir("RUC", "800005198", { alSalir: true })).toBe("80000519-8");
+    expect(formatearDocAlEscribir("RUC", "80000519-8")).toBe("800005198");
+    expect(formatearDocAlEscribir("RUC", "1234", { alSalir: true })).toBe("1234");
+  });
+
+  it("lo que produce siempre valida igual que el número pelado", () => {
+    expect(cuitValido(formatearDocAlEscribir("CUIT", "33693450239"))).toBe(true);
+    expect(cpfValido(formatearDocAlEscribir("CPF", "52998224725"))).toBe(true);
+    expect(cnpjValido(formatearDocAlEscribir("CNPJ", "12ABC34501DE35"))).toBe(true);
+    expect(rucParaguayValido(formatearDocAlEscribir("RUC", "800005198", { alSalir: true }))).toBe(true);
   });
 });
 

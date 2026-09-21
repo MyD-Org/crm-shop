@@ -2,16 +2,18 @@
  * Configuración puntual del bucket R2 de comprobantes (items de ops A0.2 + A0.3 del plan):
  *   - CORS: el navegador del portal sube el archivo DIRECTO a R2 con la URL PUT prefirmada
  *     (presignPut). Sin regla CORS el preflight OPTIONS lo rechaza y el upload nunca parte.
- *     Orígenes: dominios de los tenants (`*.plataforma.example`), deploys de preview
- *     (`*.vercel.app`) y localhost para desarrollo.
+ *     Orígenes: el de los tenants se toma de la variable de entorno OBLIGATORIA
+ *     R2_ALLOWED_ORIGIN (admite comodín), más los deploys de preview (`*.vercel.app`) y
+ *     localhost para desarrollo.
  *   - Lifecycle: borra los keys `tmp/` a 1 día. Los comprobantes confirmados viven en
  *     `receipts/` y no expiran nunca (respaldo contable).
  *
  *   npx tsx --env-file=.env scripts/r2-setup.ts
  *
- * Lee R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET del env
- * (R2_REGION opcional, default "auto"). Idempotente, pero PISA la config CORS/lifecycle
- * completa del bucket: si hubiera reglas manuales previas, el GET inicial las muestra.
+ * Lee R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET y la variable
+ * obligatoria R2_ALLOWED_ORIGIN del env (R2_REGION opcional, default "auto"). Idempotente,
+ * pero PISA la config CORS/lifecycle completa del bucket: si hubiera reglas manuales
+ * previas, el GET inicial las muestra.
  */
 import { AwsV4Signer } from "aws4fetch"
 import { r2Config, type R2Config } from "../src/lib/r2"
@@ -25,7 +27,17 @@ function requireR2Config(): R2Config {
   return cfg
 }
 
+function requireAllowedOrigin(): string {
+  const origin = process.env.R2_ALLOWED_ORIGIN
+  if (!origin) {
+    console.error("Falta la variable R2_ALLOWED_ORIGIN. Indique el origen permitido del bucket antes de ejecutar este script.")
+    process.exit(1)
+  }
+  return origin
+}
+
 const cfg = requireR2Config()
+const allowedOrigin = requireAllowedOrigin()
 
 console.log(`Bucket: ${cfg.bucket} (account ${cfg.accountId})`)
 
@@ -34,7 +46,7 @@ console.log(`Bucket: ${cfg.bucket} (account ${cfg.accountId})`)
 const CORS_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
   <CORSRule>
-    <AllowedOrigin>https://*.plataforma.example</AllowedOrigin>
+    <AllowedOrigin>${allowedOrigin}</AllowedOrigin>
     <AllowedOrigin>https://*.vercel.app</AllowedOrigin>
     <AllowedMethod>PUT</AllowedMethod>
     <AllowedMethod>GET</AllowedMethod>

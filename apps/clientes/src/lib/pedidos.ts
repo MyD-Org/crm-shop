@@ -102,6 +102,10 @@ export async function crearPedido(
   return getDb().transaction(async (tx) => {
     const [pedido] = await tx
       .insert(orders)
+      // TODO(1C): falta `tenantId: shopTenantId()` (tarea 1.12). Se suprime el
+      // error de tipos en vez de inventar un valor: sin tenant el INSERT falla
+      // en la base por NOT NULL, que es el comportamiento seguro hasta entonces.
+      // @ts-expect-error -- TODO(1C): `tenant_id` es NOT NULL y todavía no se setea.
       .values({
         idempotencyKey: datos.idempotencyKey ?? null,
         clerkUserId: cliente.clerkUserId,

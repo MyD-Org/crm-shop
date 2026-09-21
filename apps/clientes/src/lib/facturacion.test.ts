@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  admiteEnvio,
+  ciParaguayValida,
+  cnpjValido,
+  cpfValido,
+  normalizarDoc,
+  rucParaguayValido,
   cuitValido,
   dniValido,
   formatearCuit,
@@ -176,6 +182,141 @@ describe("validarFacturacion", () => {
       nroDoc: "33-69345024-9",
     });
     expect(errores.nroDoc).toBeTruthy();
+  });
+});
+
+describe("cpfValido — Brasil", () => {
+  it("acepta un CPF con los dos verificadores bien, con o sin puntuación", () => {
+    expect(cpfValido("529.982.247-25")).toBe(true);
+    expect(cpfValido("52998224725")).toBe(true);
+  });
+
+  it("rechaza un verificador cambiado y largos incorrectos", () => {
+    expect(cpfValido("529.982.247-26")).toBe(false);
+    expect(cpfValido("5299822472")).toBe(false);
+    expect(cpfValido("")).toBe(false);
+  });
+
+  it("rechaza las secuencias de un mismo dígito, que pasan la cuenta pero no existen", () => {
+    expect(cpfValido("111.111.111-11")).toBe(false);
+    expect(cpfValido("000.000.000-00")).toBe(false);
+  });
+});
+
+describe("cnpjValido — Brasil", () => {
+  it("acepta un CNPJ numérico", () => {
+    expect(cnpjValido("11.222.333/0001-81")).toBe(true);
+  });
+
+  it("acepta el CNPJ alfanumérico de ejemplo de la Receita, en minúscula también", () => {
+    expect(cnpjValido("12.ABC.345/01DE-35")).toBe(true);
+    expect(cnpjValido("12abc34501de35")).toBe(true);
+  });
+
+  it("rechaza verificadores mal, letras en los verificadores y todos ceros", () => {
+    expect(cnpjValido("11.222.333/0001-82")).toBe(false);
+    expect(cnpjValido("12.ABC.345/01DE-3A")).toBe(false);
+    expect(cnpjValido("00.000.000/0000-00")).toBe(false);
+  });
+});
+
+describe("documentos de Paraguay", () => {
+  it("RUC: acepta el verificador correcto y rechaza el resto", () => {
+    expect(rucParaguayValido("80000519-8")).toBe(true);
+    expect(rucParaguayValido("800005198")).toBe(true);
+    expect(rucParaguayValido("80000519-7")).toBe(false);
+    expect(rucParaguayValido("4000000-4")).toBe(false);
+  });
+
+  it("RUC: rechaza largos fuera de rango y todos ceros", () => {
+    expect(rucParaguayValido("1234")).toBe(false);
+    expect(rucParaguayValido("1234567890")).toBe(false);
+    expect(rucParaguayValido("000000")).toBe(false);
+  });
+
+  it("CI: no tiene verificador, solo se mira el largo", () => {
+    expect(ciParaguayValida("4.123.456")).toBe(true);
+    expect(ciParaguayValida("12345")).toBe(true);
+    expect(ciParaguayValida("1234")).toBe(false);
+    expect(ciParaguayValida("123456789")).toBe(false);
+    expect(ciParaguayValida("0000000")).toBe(false);
+  });
+});
+
+describe("normalizarDoc", () => {
+  it("deja solo dígitos, salvo en el CNPJ que conserva letras en mayúscula", () => {
+    expect(normalizarDoc("CUIT", "33-69345023-9")).toBe("33693450239");
+    expect(normalizarDoc("CPF", "529.982.247-25")).toBe("52998224725");
+    expect(normalizarDoc("CNPJ", "12.abc.345/01de-35")).toBe("12ABC34501DE35");
+  });
+});
+
+describe("admiteEnvio", () => {
+  it("solo Argentina, y un perfil sin país cuenta como Argentina", () => {
+    expect(admiteEnvio("AR")).toBe(true);
+    expect(admiteEnvio(null)).toBe(true);
+    expect(admiteEnvio(undefined)).toBe(true);
+    expect(admiteEnvio("BR")).toBe(false);
+    expect(admiteEnvio("PY")).toBe(false);
+  });
+});
+
+describe("validarFacturacion — por país", () => {
+  const completo = {
+    razonSocial: "Comercial Exemplo Ltda",
+    domicilioCalle: "Av. Victoria Aguirre 500",
+    domicilioCiudad: "Puerto Iguazú",
+  };
+
+  it("acepta los dos documentos de Brasil y los dos de Paraguay", () => {
+    expect(validarFacturacion({ ...completo, pais: "BR", tipoDoc: "CPF", nroDoc: "529.982.247-25" })).toEqual({});
+    expect(validarFacturacion({ ...completo, pais: "BR", tipoDoc: "CNPJ", nroDoc: "11.222.333/0001-81" })).toEqual({});
+    expect(validarFacturacion({ ...completo, pais: "PY", tipoDoc: "RUC", nroDoc: "80000519-8" })).toEqual({});
+    expect(validarFacturacion({ ...completo, pais: "PY", tipoDoc: "CI", nroDoc: "4123456" })).toEqual({});
+  });
+
+  it("a un extranjero no le pide la condición frente al IVA", () => {
+    const errores = validarFacturacion({ ...completo, pais: "BR", tipoDoc: "CPF", nroDoc: "529.982.247-25" });
+    expect(errores.condicionIva).toBeUndefined();
+  });
+
+  it("rechaza un documento que no es del país elegido, y valida el número igual", () => {
+    const errores = validarFacturacion({
+      ...completo,
+      pais: "BR",
+      tipoDoc: "CUIT",
+      nroDoc: "33-69345023-9",
+    });
+    expect(errores.tipoDoc).toBeDefined();
+    // Un CUIT válido no es un CNPJ válido: el número no pasa de largo.
+    expect(errores.nroDoc).toBeDefined();
+  });
+
+  it("rechaza un CPF con el verificador mal", () => {
+    const errores = validarFacturacion({ ...completo, pais: "BR", tipoDoc: "CPF", nroDoc: "529.982.247-26" });
+    expect(errores.nroDoc).toContain("CPF");
+  });
+
+  it("rechaza un país desconocido", () => {
+    const errores = validarFacturacion({
+      ...completo,
+      pais: "UY" as never,
+      tipoDoc: "CUIT",
+      nroDoc: "33-69345023-9",
+      condicionIva: "consumidor_final",
+    });
+    expect(errores.pais).toBeDefined();
+  });
+
+  it("sin país se comporta como Argentina", () => {
+    expect(
+      validarFacturacion({
+        ...completo,
+        condicionIva: "consumidor_final",
+        tipoDoc: "DNI",
+        nroDoc: "27123456",
+      }),
+    ).toEqual({});
   });
 });
 

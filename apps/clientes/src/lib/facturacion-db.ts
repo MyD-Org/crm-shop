@@ -10,10 +10,11 @@ import { getDb } from "@/db";
 import { billingProfiles } from "@/db/schema";
 import { buscarContactoPorIdentificacion } from "./alegra";
 import {
-  soloDigitos,
+  normalizarDoc,
   validarFacturacion,
   type CondicionIva,
   type DatosFacturacion,
+  type Pais,
   type TipoDoc,
 } from "./facturacion";
 
@@ -55,15 +56,18 @@ export async function guardarPerfilFacturacion(
   clerkUserId: string,
   datos: DatosFacturacion,
 ): Promise<PerfilFacturacion> {
-  const nroDoc = soloDigitos(datos.nroDoc);
+  const nroDoc = normalizarDoc(datos.tipoDoc, datos.nroDoc);
   const coincideConAlegra = await contactoExistenteEnAlegra(nroDoc);
 
   const valores = {
     clerkUserId,
+    pais: datos.pais,
     tipoDoc: datos.tipoDoc,
     nroDoc,
     razonSocial: datos.razonSocial.trim(),
-    condicionIva: datos.condicionIva,
+    // La condición frente al IVA es argentina: a un extranjero no se le
+    // pregunta y se le factura como consumidor final.
+    condicionIva: datos.pais === "AR" ? datos.condicionIva : "consumidor_final",
     domicilioCalle: datos.domicilioCalle?.trim() || null,
     domicilioCiudad: datos.domicilioCiudad?.trim() || null,
     domicilioProvincia: datos.domicilioProvincia?.trim() || null,
@@ -90,6 +94,7 @@ export function perfilCompleto(perfil: PerfilFacturacion | null): boolean {
   return (
     Object.keys(
       validarFacturacion({
+        pais: perfil.pais as Pais,
         tipoDoc: perfil.tipoDoc as TipoDoc,
         nroDoc: perfil.nroDoc,
         razonSocial: perfil.razonSocial,
@@ -107,6 +112,7 @@ export function perfilCompleto(perfil: PerfilFacturacion | null): boolean {
  */
 export async function documentoUsadoPorOtro(
   clerkUserId: string,
+  tipoDoc: TipoDoc,
   nroDoc: string,
 ): Promise<boolean> {
   const [fila] = await getDb()
@@ -114,7 +120,7 @@ export async function documentoUsadoPorOtro(
     .from(billingProfiles)
     .where(
       and(
-        eq(billingProfiles.nroDoc, soloDigitos(nroDoc)),
+        eq(billingProfiles.nroDoc, normalizarDoc(tipoDoc, nroDoc)),
         ne(billingProfiles.clerkUserId, clerkUserId),
       ),
     )

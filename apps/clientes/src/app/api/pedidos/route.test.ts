@@ -9,6 +9,7 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 const crearPedido = vi.fn();
 const getOferta = vi.fn();
 let flag = true;
+let pais = "AR";
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
@@ -31,10 +32,14 @@ vi.mock("@/lib/pedidos", () => ({
   listarPedidos: async () => [],
 }));
 vi.mock("@/lib/facturacion-db", () => ({
-  getPerfilFacturacion: async () => ({ tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF" }),
+  getPerfilFacturacion: async () => ({ pais, tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF" }),
   perfilCompleto: () => true,
 }));
-vi.mock("@/lib/facturacion", () => ({ domicilioEnLinea: () => "" }));
+vi.mock("@/lib/facturacion", async (original) => ({
+  // `admiteEnvio` es la regla real: mockearla sería testear el mock.
+  admiteEnvio: (await original<typeof import("@/lib/facturacion")>()).admiteEnvio,
+  domicilioEnLinea: () => "",
+}));
 vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: () => getOferta() }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
 
@@ -71,6 +76,7 @@ const planGuardado = () => crearPedido.mock.calls[0][3];
 
 beforeEach(() => {
   flag = true;
+  pais = "AR";
   crearPedido.mockReset();
   crearPedido.mockImplementation(async (_c, _d, _cot, plan) => ({
     id: "p1", numero: "PED-1", repetido: false, cuotasMax: plan?.cuotasMax ?? null,
@@ -119,5 +125,24 @@ describe("POST /api/pedidos — plan de cuotas congelado", () => {
     const r = await post();
     expect(planGuardado()).toMatchObject({ cuotasMax: 6 });
     expect((await r.json()).cuotasMax).toBeNull();
+  });
+});
+
+describe("POST /api/pedidos — envío solo dentro de Argentina", () => {
+  const conEnvio = { entregaTipo: "envio", entregaCiudad: "Puerto Iguazú", entregaDireccion: "Calle 1" };
+
+  it("rechaza el envío a un comprador con documento de otro país", async () => {
+    pais = "BR";
+    const r = await post({ ...conEnvio, pagoMetodo: "transferencia" });
+    expect(r.status).toBe(409);
+    expect((await r.json()).motivo).toBe("envio_no_disponible_pais");
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("al mismo comprador le acepta el retiro", async () => {
+    pais = "PY";
+    const r = await post({ pagoMetodo: "transferencia" });
+    expect(r.status).toBeLessThan(300);
+    expect(crearPedido).toHaveBeenCalled();
   });
 });

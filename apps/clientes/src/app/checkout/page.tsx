@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CheckoutClient } from "@/components/CheckoutClient";
 import { identidadActual } from "@/lib/auth";
+import { admiteEnvio } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
@@ -33,6 +34,7 @@ export default async function CheckoutPage() {
         }
         emailCliente={cliente?.email ?? email}
         facturacionCompleta={perfilCompleto(perfil)}
+        admiteEnvio={admiteEnvio(perfil?.pais)}
         oferta={oferta}
       />
     </>

@@ -165,9 +165,15 @@ export const billingProfiles = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     clerkUserId: text("clerk_user_id").notNull(),
 
-    /** 'CUIT' | 'DNI'. Consumidor final puede facturar con DNI. */
+    /**
+     * 'AR' | 'BR' | 'PY'. País del documento: define qué documentos se aceptan
+     * y cómo se validan, y si se ofrece envío (solo Argentina). El domicilio
+     * fiscal NO depende de esto.
+     */
+    pais: text("pais").notNull().default("AR"),
+    /** AR: 'CUIT' | 'DNI'. BR: 'CNPJ' | 'CPF'. PY: 'RUC' | 'CI'. */
     tipoDoc: text("tipo_doc").notNull(),
-    /** Solo dígitos, sin guiones: se normaliza al guardar. */
+    /** Sin guiones ni puntos: se normaliza al guardar. Solo el CNPJ trae letras. */
     nroDoc: text("nro_doc").notNull(),
     /** Razón social, o nombre y apellido si es consumidor final. */
     razonSocial: text("razon_social").notNull(),

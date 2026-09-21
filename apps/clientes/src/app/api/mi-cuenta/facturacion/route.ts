@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { validarFacturacion, type CondicionIva, type TipoDoc } from "@/lib/facturacion";
+import {
+  PAIS_DEFAULT,
+  PAIS_LABEL,
+  TIPO_DOC_LABEL,
+  TIPOS_DOC_POR_PAIS,
+  validarFacturacion,
+  type CondicionIva,
+  type Pais,
+  type TipoDoc,
+} from "@/lib/facturacion";
 import { getPerfilFacturacion, guardarPerfilFacturacion } from "@/lib/facturacion-db";
 
 export const dynamic = "force-dynamic";
@@ -37,11 +46,24 @@ export async function PUT(req: Request) {
   const texto = (v: unknown, max = 120) =>
     typeof v === "string" ? v.trim().slice(0, max) : "";
 
+  // Sin país (clientes viejos del formulario) se asume Argentina. Un país
+  // desconocido se deja pasar tal cual para que lo rechace el validador.
+  const pais = (texto(body.pais, 2) || PAIS_DEFAULT) as Pais;
+  const tipoDocRecibido = texto(body.tipoDoc, 10);
+
   const datos = {
-    tipoDoc: (body.tipoDoc === "DNI" ? "DNI" : "CUIT") as TipoDoc,
+    pais,
+    // Sin un tipo conocido se asume el primero del país, que es el criterio
+    // más estricto (CUIT en Argentina). Uno conocido pero de otro país pasa
+    // tal cual: lo rechaza el validador con su mensaje.
+    tipoDoc: (tipoDocRecibido in TIPO_DOC_LABEL
+      ? tipoDocRecibido
+      : (TIPOS_DOC_POR_PAIS[pais] ?? TIPOS_DOC_POR_PAIS[PAIS_DEFAULT])[0]) as TipoDoc,
     nroDoc: texto(body.nroDoc, 20),
     razonSocial: texto(body.razonSocial, 160),
-    condicionIva: texto(body.condicionIva, 40) as CondicionIva,
+    condicionIva: (pais in PAIS_LABEL && pais !== "AR"
+      ? "consumidor_final"
+      : texto(body.condicionIva, 40)) as CondicionIva,
     domicilioCalle: texto(body.domicilioCalle, 160),
     domicilioCiudad: texto(body.domicilioCiudad, 80),
     domicilioProvincia: texto(body.domicilioProvincia, 80),

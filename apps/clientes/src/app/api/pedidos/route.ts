@@ -8,7 +8,7 @@ import {
   type PagoMetodo,
 } from "@/lib/envio";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
-import { domicilioEnLinea } from "@/lib/facturacion";
+import { admiteEnvio, domicilioEnLinea } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
@@ -168,6 +168,19 @@ export async function POST(req: Request) {
       {
         error: "Antes de comprar necesitamos tus datos de facturación.",
         motivo: "facturacion_incompleta",
+      },
+      { status: 409 },
+    );
+  }
+
+  // Solo se envía dentro de Argentina. El checkout ya no le ofrece el envío a
+  // un comprador con documento de otro país; esto cubre el POST directo.
+  if (entregaTipo === "envio" && !admiteEnvio(perfil?.pais)) {
+    return NextResponse.json(
+      {
+        error:
+          "El envío a domicilio solo está disponible para compradores de Argentina. Seleccione retiro en el local.",
+        motivo: "envio_no_disponible_pais",
       },
       { status: 409 },
     );

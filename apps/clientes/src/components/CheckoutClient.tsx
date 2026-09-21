@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Button, Field, Input } from "@myd-org/ui";
+import { Button, Field, Input, Select } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
@@ -95,6 +95,12 @@ interface Props {
   emailCliente?: string;
   /** El perfil fiscal está completo: sin esto no se puede emitir la factura. */
   facturacionCompleta: boolean;
+  /**
+   * El comprador factura con documento argentino. Solo se envía dentro de
+   * Argentina: al resto se le ofrece únicamente el retiro. El servidor lo
+   * vuelve a controlar al crear el pedido.
+   */
+  admiteEnvio: boolean;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
 }
@@ -103,6 +109,7 @@ export function CheckoutClient({
   nombreSugerido,
   emailCliente,
   facturacionCompleta,
+  admiteEnvio,
   oferta = null,
 }: Props) {
   const { items, clear, ready } = useCart();
@@ -445,7 +452,6 @@ export function CheckoutClient({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Nombre y apellido">
                 <Input
-                  placeholder="Juan Pérez"
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
                 />
@@ -470,28 +476,32 @@ export function CheckoutClient({
                 title="Retiro en local / a coordinar"
                 description="Retirás en el local o coordinamos la entrega con vos"
               />
-              <RadioCard
-                selected={entrega === "envio"}
-                onClick={() => setEntrega("envio")}
-                title="Envío a domicilio"
-                description={`Sin cargo a ${CIUDADES_ENVIO.join(" y ")}`}
-              />
+              {admiteEnvio && (
+                <RadioCard
+                  selected={entrega === "envio"}
+                  onClick={() => setEntrega("envio")}
+                  title="Envío a domicilio"
+                  description={`Sin cargo a ${CIUDADES_ENVIO.join(" y ")}`}
+                />
+              )}
             </div>
+            {!admiteEnvio && (
+              <p className="mt-3 text-sm text-muted">
+                El envío a domicilio solo está disponible para compradores de Argentina.
+              </p>
+            )}
 
             {entrega === "envio" && (
               <>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <Field label="Ciudad">
-                    <select
-                      value={ciudad}
-                      onChange={(e) => setCiudad(e.target.value)}
-                      className="w-full rounded-sm border-[1.5px] border-border-strong bg-surface px-3 py-2 text-sm text-text outline-none focus-visible:border-primary"
-                    >
-                      <option value="">Seleccionar ciudad</option>
-                      {CIUDADES_ENVIO.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <Select
+                      options={CIUDADES_ENVIO.map((c) => ({ label: c, value: c }))}
+                      value={ciudad || undefined}
+                      onValueChange={setCiudad}
+                      placeholder="Seleccionar ciudad"
+                      className="border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0"
+                    />
                   </Field>
                   <Field label="Dirección">
                     <Input

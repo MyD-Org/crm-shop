@@ -109,8 +109,11 @@ export async function GET(req: Request) {
   let res: Response;
   try {
     res = await fetch(url.toString(), {
-      // La política de Nominatim exige identificarse con un contacto real.
-      headers: { "User-Agent": "CentralLed-Shop/1.0 (contacto@cliente.example)" },
+      // La política de Nominatim exige identificarse con un contacto real: va en
+      // GEOCODE_CONTACT_EMAIL. El respaldo es una dirección de ejemplo, solo para desarrollo.
+      headers: {
+        "User-Agent": `CentralLed-Shop/1.0 (${process.env.GEOCODE_CONTACT_EMAIL ?? "contacto@cliente.example"})`,
+      },
       signal: AbortSignal.timeout(5000),
       next: { revalidate: CACHE_SEGUNDOS },
     });

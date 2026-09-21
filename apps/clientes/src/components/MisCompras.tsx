@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Field, Input, useToast } from "@myd-org/ui";
 import {
   ORDER_ESTADO_LABEL,
@@ -14,6 +14,12 @@ import {
 import { useClerk } from "@clerk/nextjs";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio as fmt, fmtFecha } from "@/lib/format";
+import {
+  ETIQUETA_FACTURACION,
+  direccionDesdeFacturacion,
+  yaUsaDireccion,
+} from "@/lib/direccion-envio";
+import { tabInicial, type TabMiCuenta } from "@/lib/menu-usuario";
 import { FacturacionForm, type PerfilFacturacionUI } from "./FacturacionForm";
 import { DireccionAutocomplete } from "./DireccionAutocomplete";
 
@@ -192,12 +198,11 @@ function OrderCard({ order }: { order: Order }) {
 
 /* ── Tabs ──────────────────────────────────────────────── */
 
-type Tab = "compras" | "datos" | "direcciones";
+type Tab = TabMiCuenta;
 
 const TABS: { value: Tab; label: string }[] = [
-  { value: "compras", label: "Mis compras" },
+  { value: "compras", label: "Mis pedidos" },
   { value: "datos", label: "Mis datos" },
-  { value: "direcciones", label: "Direcciones" },
 ];
 
 /* ── Main ──────────────────────────────────────────────── */
@@ -227,7 +232,11 @@ export function MisCompras({
   pedidos: Order[];
   resumen: OrderSummary;
 }) {
-  const [tab, setTab] = useState<Tab>("compras");
+  // La pestaña activa vive en la URL (`?tab=`): así el menú del header puede
+  // abrir "Mis datos" aunque el usuario ya esté en Mi cuenta. Al cambiar de
+  // pestaña se reescribe la URL sin pasar por el servidor.
+  const tab = tabInicial(useSearchParams().get("tab"));
+  const setTab = (t: Tab) => window.history.replaceState(null, "", `?tab=${t}`);
 
   return (
     <div className="flex flex-col gap-6">
@@ -241,7 +250,7 @@ export function MisCompras({
       {/* Encabezado */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold text-text sm:text-3xl">Mis compras</h1>
+          <h1 className="text-2xl font-extrabold text-text sm:text-3xl">Mis pedidos</h1>
           <p className="mt-1 text-sm text-muted">
             Hola, <span className="font-semibold text-text">{nombre}</span> · revisá el estado y el detalle de tus pedidos.
           </p>
@@ -285,12 +294,11 @@ export function MisCompras({
           razonSocialVinculada={razonSocialVinculada}
         />
       )}
-      {tab === "direcciones" && <DireccionesTab />}
     </div>
   );
 }
 
-/* ── Tab: Mis compras ──────────────────────────────────── */
+/* ── Tab: Mis pedidos ──────────────────────────────────── */
 
 function ComprasTab({ pedidos, resumen }: { pedidos: Order[]; resumen: OrderSummary }) {
   return (
@@ -394,6 +402,8 @@ function DatosTab({
         </div>
       </div>
 
+      <DireccionesEnvio perfilFacturacion={perfilFacturacion} />
+
       <CuentaClienteCard
         razonSocialVinculada={razonSocialVinculada}
         cuit={cuit}
@@ -473,16 +483,7 @@ function CuentaClienteCard({
   );
 }
 
-function Dato({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-0.5 text-sm font-medium text-text">{value}</dd>
-    </div>
-  );
-}
-
-/* ── Tab: Direcciones ──────────────────────────────────── */
+/* ── Direcciones de envío (sección de "Mis datos") ─────── */
 
 interface Direccion {
   id: string;
@@ -502,7 +503,13 @@ const EMPTY_FORM: Omit<Direccion, "id" | "principal"> = {
   referencia: "",
 };
 
-function DireccionesTab() {
+function DireccionesEnvio({
+  perfilFacturacion,
+}: {
+  /** Para el atajo "usar mi dirección de facturación". */
+  perfilFacturacion: PerfilFacturacionUI | null;
+}) {
+  const domicilioFacturacion = direccionDesdeFacturacion(perfilFacturacion);
   const [direcciones, setDirecciones] = useState<Direccion[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -531,6 +538,29 @@ function DireccionesTab() {
     setDireccionConfirmada(false);
     setModoManual(false);
     setShowForm(false);
+  }
+
+  /**
+   * Atajo de otros ecommerce: copia la dirección de facturación al formulario
+   * de envío. Se puede seguir editando (referencia, etiqueta, la calle misma).
+   * Queda en modo manual: quien la toca después no quiere que se le esconda el
+   * resto del formulario.
+   */
+  // El atajo se ofrece una sola vez: desaparece cuando la dirección ya está en
+  // el formulario o ya hay un envío guardado con esa calle.
+  const mostrarAtajo =
+    domicilioFacturacion !== null &&
+    !yaUsaDireccion(domicilioFacturacion, [form.calle, ...direcciones.map((d) => d.calle)]);
+
+  function usarDireccionDeFacturacion() {
+    if (!domicilioFacturacion) return;
+    setForm((prev) => ({
+      ...prev,
+      ...domicilioFacturacion,
+      etiqueta: prev.etiqueta || ETIQUETA_FACTURACION,
+    }));
+    setModoManual(true);
+    setDireccionConfirmada(true);
   }
 
   function eliminar(id: string) {
@@ -616,6 +646,23 @@ function DireccionesTab() {
           </div>
 
           <div className="flex flex-col gap-4">
+            {mostrarAtajo && (
+              <button
+                type="button"
+                onClick={usarDireccionDeFacturacion}
+                className="flex flex-col items-start gap-0.5 rounded-lg border border-border px-4 py-3 text-left transition-colors hover:bg-elevated"
+              >
+                <span className="text-sm font-semibold text-primary">
+                  Usar mi dirección de facturación
+                </span>
+                <span className="text-xs text-muted">
+                  {[domicilioFacturacion.calle, domicilioFacturacion.ciudad]
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
+              </button>
+            )}
+
             {/* 1. Calle con autocomplete — siempre visible primero */}
             <DireccionAutocomplete
               label="Calle y número"

@@ -7,6 +7,7 @@ import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { fmtPrecio } from "@/lib/format";
+import { HREF_MIS_DATOS } from "@/lib/menu-usuario";
 import { CuotasResumen } from "@/components/CuotasResumen";
 import { resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
@@ -428,7 +429,7 @@ export function CheckoutClient({
             una sola vez.
           </p>
           <Link
-            href="/mi-cuenta"
+            href={HREF_MIS_DATOS}
             className="mt-3 inline-block text-sm font-semibold text-primary hover:underline"
           >
             Cargar mis datos →

@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Show, SignInButton, UserButton } from "@clerk/nextjs";
+import { Show, SignInButton } from "@clerk/nextjs";
 import { SiteHeader } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
@@ -10,6 +9,7 @@ import { destinoSeguro } from "@/lib/ingreso";
 import { conBadgeNav } from "@/lib/nav-badge";
 import { formatRubro } from "@/lib/formato-rubro";
 import { CartPreview } from "./CartPreview";
+import { MenuUsuario } from "./MenuUsuario";
 
 function UserIcon() {
   return (
@@ -68,16 +68,12 @@ export function HeaderUI({
             </Show>
 
             <Show when="signed-in">
-              <Link
-                href="/mi-cuenta"
-                className="flex items-center gap-2 text-[13.5px] font-bold text-text transition-colors hover:text-accent"
-              >
-                <UserIcon />
-                <span className="hidden max-w-[14ch] truncate sm:inline">
-                  {nombre ?? "Mi cuenta"}
-                </span>
-              </Link>
-              <UserButton />
+              {/*
+                Un solo avatar con menú propio (Mis pedidos / Mis datos /
+                Seguridad / Cerrar sesión). Los datos y la seguridad siguen
+                siendo el panel de Clerk: ver src/components/MenuUsuario.tsx.
+              */}
+              <MenuUsuario nombre={nombre} />
             </Show>
 
             <CartPreview />

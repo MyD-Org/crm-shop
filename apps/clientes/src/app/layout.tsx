@@ -34,6 +34,29 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Apariencia de los componentes de Clerk (SignIn, UserProfile, UserButton…)
+ * cableada a los tokens del tema editorial. Los componentes renderizan dentro
+ * del mismo árbol tematizado, así que las CSS vars del DS (--color-*, definidas
+ * en @myd-org/ui y activadas con data-theme en <html>) resuelven directo.
+ */
+const aparienciaClerk = {
+  variables: {
+    colorPrimary: "var(--color-primary)",
+    colorBackground: "var(--color-surface)",
+    colorInputBackground: "var(--color-bg)",
+    colorText: "var(--color-text)",
+    colorTextSecondary: "var(--color-muted)",
+    colorDanger: "var(--color-danger)",
+    fontFamily: "var(--font-sans)",
+    borderRadius: "0.5rem",
+  },
+  elements: {
+    // Las tarjetas del sitio no usan sombra: solo borde.
+    card: "shadow-none",
+  },
+};
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -63,7 +86,7 @@ export default async function RootLayout({
     >
       <body className="flex min-h-full flex-col">
         {/* ClerkProvider DENTRO de <body>: envolver <html> fuerza render dinámico de todo el árbol */}
-        <ClerkProvider localization={esAR}>
+        <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
           <Providers>
             {/* Anuncio global (contenido administrable): arriba de todo, sobre el header */}
             <div className="bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary">

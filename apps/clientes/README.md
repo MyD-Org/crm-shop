@@ -137,3 +137,7 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 > Parte del monorepo `crm-shop`: todos los comandos se corren parados en esta carpeta (`apps/clientes`).
+
+## Deploy
+
+Esta app vive en `apps/clientes` del monorepo `crm-shop`. En su proyecto de Vercel, **Root Directory = `apps/clientes`**; Install y Build Command quedan en sus valores por defecto. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta. Los workflows programados están en `.github/workflows/clientes-*.yml` de la raíz y usan secrets con prefijo `CLIENTES_`. La variable `NEXT_PUBLIC_CRM_URL` es obligatoria en Production y Preview.

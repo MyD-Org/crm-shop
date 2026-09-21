@@ -4,11 +4,17 @@ on:
   pull_request:
     paths:
       - "apps/admin/**"
+      # Los tests de integración aplican la baseline del Shop (esquema `shop`) y el test de
+      # contrato compara contra ella: un cambio ahí tiene que disparar este CI.
+      - "apps/clientes/drizzle/**"
       - ".github/workflows/admin-ci.yml"
   push:
     branches: [main]
     paths:
       - "apps/admin/**"
+      # Los tests de integración aplican la baseline del Shop (esquema `shop`) y el test de
+      # contrato compara contra ella: un cambio ahí tiene que disparar este CI.
+      - "apps/clientes/drizzle/**"
       - ".github/workflows/admin-ci.yml"
 
 permissions:

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants, adminUsers, paymentReceipts } from "@/db/schema"
+import { shopOrders, shopOrderItems, type ShopOrderItemRow, type ShopOrderRow } from "@/db/shop-schema"
 import { assertLocalTestDb } from "./db-url"
 
 // Helpers compartidos por los tests de integración: siembran datos mínimos (tenant, operador)
@@ -13,11 +14,15 @@ function guard() {
   assertLocalTestDb(process.env.DATABASE_URL || "")
 }
 
-/** Vacía las tablas que tocan los tests. CASCADE limpia también las que referencian por FK. */
+/**
+ * Vacía las tablas que tocan los tests. CASCADE limpia también las que referencian por FK.
+ * Incluye `shop.order_items` y `shop.orders` (drizzle las renderiza calificadas): los pedidos
+ * del Shop no cuelgan por FK de `tenants`, así que el CASCADE de arriba no los alcanza.
+ */
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderItems}, ${shopOrders} restart identity cascade`,
   )
 }
 
@@ -69,4 +74,59 @@ export async function seedOperator(
       passwordHash: "x", // cuenta "activa" (passwordHash != null)
     })
   return id
+}
+
+/**
+ * Pedido del Shop sembrado por el lado del CRM, a través del subset `shop-schema.ts`.
+ * Nunca fija `numero` (GENERATED ALWAYS: lo pone la secuencia). Datos inventados.
+ */
+export async function seedShopOrder(
+  tenantId: string,
+  overrides: Partial<typeof shopOrders.$inferInsert> = {},
+): Promise<ShopOrderRow> {
+  guard()
+  const [row] = await getDb()
+    .insert(shopOrders)
+    .values({
+      tenantId,
+      clienteEmail: "comprador@cliente.example",
+      contactoNombre: "Carla Compradora",
+      contactoTelefono: "+54 11 5555-0100",
+      entregaTipo: "retiro",
+      pagoMetodo: "a_coordinar",
+      pagoEstado: "pendiente",
+      estado: "pendiente",
+      subtotal: "1000.00",
+      iva: "210.00",
+      costoEnvio: "0.00",
+      total: "1210.00",
+      ...overrides,
+    })
+    .returning()
+  return row
+}
+
+export async function seedShopOrderItem(
+  orderId: string,
+  overrides: Partial<typeof shopOrderItems.$inferInsert> = {},
+): Promise<ShopOrderItemRow> {
+  guard()
+  const [row] = await getDb()
+    .insert(shopOrderItems)
+    .values({
+      orderId,
+      alegraItemId: "item-1",
+      code: "SKU-1",
+      name: "Lámpara de prueba",
+      brand: "Marca Test",
+      qty: "2.000",
+      precioUnitario: "500.00",
+      ivaPorcentaje: "21.00",
+      subtotal: "1000.00",
+      iva: "210.00",
+      total: "1210.00",
+      ...overrides,
+    })
+    .returning()
+  return row
 }

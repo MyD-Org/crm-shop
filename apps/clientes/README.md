@@ -32,14 +32,17 @@ Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
 
 | Variable | Para qué |
 |---|---|
-| `DATABASE_URL` **o** `POSTGRES_URL` | Conexión a Postgres. La integración Neon/Vercel inyecta `POSTGRES_URL`, así que el código acepta las dos (`DATABASE_URL` gana si están ambas). |
-| `POSTGRES_URL_NON_POOLING` | Opcional. Si está, las migraciones la usan: el DDL conviene por la conexión directa y no por el pooler. |
+| `DATABASE_URL` | Conexión de la app en tiempo de ejecución. Pooled, rol `shop_app`. Es la única variable que lee el runtime. |
+| `MIGRATE_DATABASE_URL` | Solo para `npm run db:migrate`. Conexión directa (sin pooler), rol dueño del esquema `shop`. El runtime nunca la usa. |
+| `SHOP_TENANT_ID` | Obligatoria: el Shop no arranca sin ella (falla en `src/instrumentation.ts`, salvo durante `next build`). Tiene que ser un valor de `public.tenants.id` del CRM. |
 | `CRON_SECRET` | Protege `/api/cron/catalog-sync` y `/api/cron/cuotas-sync`. Sin esta variable el endpoint rechaza todo. |
 | `ALEGRA_EMAIL` / `ALEGRA_TOKEN` | Auth Basic contra la API de Alegra. `ALEGRA_BASE_URL` es opcional (default: producción). |
 | `CUOTAS_ENABLED` | `1` muestra cuotas y aplica el límite de cuotas en el pago. Cualquier otro valor (default): checkout como antes, clamp 1..24. |
 | `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v2: escalones por proveedor). |
 | `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
-| `SHOP_TENANT_ID` | Tenant del CRM a leer (ej. `central-led`). |
+
+Detalle del esquema `shop` (rol, permisos, migración base y pasos de
+despliegue): `docs/una-base-esquema-shop.md`.
 
 El pool de conexiones es un singleton (se reusa; uno por request agotaría las
 conexiones de Postgres). Está cacheado **junto a la URL con la que se creó**, así
@@ -49,8 +52,8 @@ y lo avisa por consola — no hace falta reiniciar `next dev`.
 Migraciones:
 
 ```bash
-npm run db:generate   # genera SQL en drizzle/ a partir de src/db/schema.ts
-npm run db:migrate    # las aplica contra DATABASE_URL
+npm run db:generate   # genera SQL en drizzle/ a partir de src/db/schema.ts (no conecta a ninguna base)
+npm run db:migrate    # las aplica usando MIGRATE_DATABASE_URL (rol dueño, conexión directa)
 ```
 
 Sync del catálogo (primera carga, o para correrla a mano):
@@ -97,7 +100,7 @@ Secrets que hay que tener cargados en el repo (Settings → Secrets and variable
 |---|---|
 | `ALEGRA_EMAIL` | Sync del catálogo: auth contra Alegra. |
 | `ALEGRA_TOKEN` | Sync del catálogo: auth contra Alegra. |
-| `POSTGRES_URL_NON_POOLING` | Sync del catálogo: conexión directa a Neon (sin pooler). Si no está, se usa `DATABASE_URL`. |
+| `DATABASE_URL` | Sync del catálogo: conexión directa a Neon (sin pooler), rol `shop_app`. |
 | `ALEGRA_BASE_URL` | Opcional. Solo para apuntar a otro host de Alegra. |
 | `CRON_SECRET` | Reconciliación de pagos: Bearer del endpoint. Mismo valor que en Vercel Production. |
 

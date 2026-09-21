@@ -7,27 +7,31 @@
 # que no volvió al webhook es quedar sin actualizar hasta la próxima corrida.
 #
 # El endpoint autentica con `Authorization: Bearer $CRON_SECRET`. El secret vive
-# en GitHub Actions (Settings → Secrets → CRON_SECRET) y tiene que coincidir
-# con `CRON_SECRET` en Vercel Production del proyecto shop.
+# en GitHub Actions (Settings → Secrets → CLIENTES_CRON_SECRET) y tiene que
+# coincidir con `CRON_SECRET` en Vercel Production del proyecto shop. La URL va
+# en el secret CLIENTES_BASE_URL.
 #
 # Nota sobre el schedule de GH Actions: no es puntual — puede atrasar 5-15 min
 # en horas pico y saltar corridas. Está bien para reconciliación: el código ya
 # asume que este cron es best-effort, deja 5 min de gracia al webhook y una
 # ventana de 3 días para reconsultar.
 
-name: Reconciliar pagos MP
+name: clientes · Reconciliar pagos MP
 
 on:
-  schedule:
-    # Cada 15 minutos. GH Actions puede diferir en picos, es aceptable.
-    - cron: "*/15 * * * *"
+  # CUTOVER: descomentar en el PR de cutover de clientes (y deshabilitar el workflow del repo viejo ANTES).
+  # schedule:
+  #   # Cada 15 minutos. GH Actions puede diferir en picos, es aceptable.
+  #   - cron: "*/15 * * * *"
   # Para disparar a mano desde la UI de Actions cuando se prueba algo puntual.
   workflow_dispatch:
+
+permissions: {}
 
 # Si una corrida atrasa y coincide con la siguiente, no las apilamos: la nueva
 # reemplaza a la vieja. Perder una corrida no rompe nada (idempotente).
 concurrency:
-  group: pagos-reconciliar
+  group: clientes-pagos-reconciliar
   cancel-in-progress: true
 
 jobs:
@@ -37,14 +41,18 @@ jobs:
     steps:
       - name: Llamar al endpoint
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ secrets.CLIENTES_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CLIENTES_CRON_SECRET }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "Falta el secret CRON_SECRET en el repo." >&2
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Faltan los secrets CLIENTES_BASE_URL o CLIENTES_CRON_SECRET del repo." >&2
             exit 1
           fi
           # `-f` corta si el status es >= 400. `-sS` es silencioso pero muestra
           # errores. `--max-time` cierra la puerta si el server no responde.
+          # `-o /dev/null -w` para no volcar el cuerpo de la respuesta a logs públicos,
+          # solo el código HTTP.
           curl -fsS --max-time 120 \
+            -o /dev/null -w 'HTTP %{http_code}\n' \
             -H "Authorization: Bearer $CRON_SECRET" \
-            https://www.cliente.example/api/cron/pagos-reconciliar
+            "$BASE_URL/api/cron/pagos-reconciliar"

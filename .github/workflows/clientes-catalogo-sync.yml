@@ -16,11 +16,11 @@
 #
 # Por qué el install es a mano y no `npm ci`: `@myd-org/ui` se publica en
 # GitHub Packages (privado) y el `GITHUB_TOKEN` del workflow da 403 al bajarlo
-# —paquete de otra org, el token del repo no alcanza—, así que `npm ci` falla
-# entero (es el mismo 403 que hoy rompe el CI del CRM). Pero este script es
-# backend puro: importa `catalog-sync.ts` → `db/index.ts` + `alegra.ts`, y eso
-# se resuelve con `drizzle-orm`, `postgres` y `tsx`. Nada de React ni del
-# design system. Se instalan esos tres clavados a las versiones de
+# —el paquete es privado y exige dar acceso de Actions repo por repo—, así que
+# `npm ci` falla entero (es el mismo 403 que hoy rompe el CI del CRM). Pero
+# este script es backend puro: importa `catalog-sync.ts` → `db/index.ts` +
+# `alegra.ts`, y eso se resuelve con `drizzle-orm`, `postgres` y `tsx`. Nada de
+# React ni del design system. Se instalan esos tres clavados a las versiones de
 # `package-lock.json` y el registry privado deja de ser un problema, sin tener
 # que crear ni rotar un PAT.
 # IMPORTANTE: si se tocan esas versiones en `package.json`, actualizar acá. Y si
@@ -32,21 +32,23 @@
 # el espejo se usa para listar y buscar; precio y stock comprometidos se leen en
 # vivo contra Alegra (ver docs/arquitectura-integraciones.md).
 
-name: Sync catálogo Alegra
+name: clientes · Sync catálogo Alegra
 
 on:
-  schedule:
-    # 06:00 UTC = 03:00 en Argentina. Mismo horario que tenía el cron de Vercel.
-    - cron: "0 6 * * *"
+  # CUTOVER: descomentar en el PR de cutover de clientes (y deshabilitar el workflow del repo viejo ANTES).
+  # schedule:
+  #   # 06:00 UTC = 03:00 en Argentina. Mismo horario que tenía el cron de Vercel.
+  #   - cron: "0 6 * * *"
   # Para la carga inicial o para reintentar a mano desde la UI de Actions.
   workflow_dispatch:
 
-# Sin `cancel-in-progress`: a diferencia de la reconciliación de pagos, acá
-# matar una corrida a mitad es peor que dejarla terminar. La sync marca como
-# `inactive` lo que no tocó, y ese paso solo corre si completó; cortarla deja
-# el espejo a medio actualizar y la fila de `catalog_sync_log` en `running`.
+permissions:
+  contents: read
+
+# Grupo COMPARTIDO con admin-alegra-sync (misma cuenta de Alegra). Sin cancel-in-progress:
+# cortar una sync a mitad deja el espejo a medio actualizar.
 concurrency:
-  group: catalogo-sync
+  group: alegra-cuenta
   cancel-in-progress: false
 
 jobs:
@@ -56,6 +58,9 @@ jobs:
     # tanda mala de 429, sin dejar un job colgado consumiendo minutos si Alegra
     # deja de responder.
     timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/clientes
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,32 +71,34 @@ jobs:
           # Next 16 pide Node >= 20.9; se usa la LTS con la que se desarrolla.
           node-version: "22"
           cache: npm
+          cache-dependency-path: apps/clientes/package-lock.json
 
       - name: Instalar dependencias del script
         # Se instala en un directorio aparte y recién después se mueve el
-        # `node_modules` al workspace. Puede parecer una vuelta al pedo, pero no
-        # lo es: `npm install <paquete>` parado en el repo NO instala solo ese
+        # `node_modules` al workspace de la app. Puede parecer una vuelta al pedo, pero no
+        # lo es: `npm install <paquete>` parado en la app NO instala solo ese
         # paquete, rearma el árbol entero a partir de `package.json` —y ahí
         # vuelve `@myd-org/ui` y el 403. Corriendo en un directorio sin
         # `package.json` bajan 5 paquetes y ninguno es privado.
+        # Versiones clavadas a apps/clientes/package-lock.json: si cambian ahí, actualizar acá.
         run: |
           mkdir -p "$RUNNER_TEMP/deps-sync"
           npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/deps-sync" \
             drizzle-orm@0.45.2 \
             postgres@3.4.9 \
             tsx@4.23.1
-          mv "$RUNNER_TEMP/deps-sync/node_modules" "$GITHUB_WORKSPACE/node_modules"
+          mv "$RUNNER_TEMP/deps-sync/node_modules" "$GITHUB_WORKSPACE/apps/clientes/node_modules"
 
       - name: Correr la sync
         env:
-          ALEGRA_EMAIL: ${{ secrets.ALEGRA_EMAIL }}
-          ALEGRA_TOKEN: ${{ secrets.ALEGRA_TOKEN }}
+          ALEGRA_EMAIL: ${{ secrets.CLIENTES_ALEGRA_EMAIL }}
+          ALEGRA_TOKEN: ${{ secrets.CLIENTES_ALEGRA_TOKEN }}
           # Opcional: solo si alguna vez hay que apuntar a otro host de Alegra.
           # Si está vacío, `src/lib/alegra.ts` usa el default de producción.
-          ALEGRA_BASE_URL: ${{ secrets.ALEGRA_BASE_URL }}
+          ALEGRA_BASE_URL: ${{ secrets.CLIENTES_ALEGRA_BASE_URL }}
           # Conexión directa (sin pooler) de Neon: esto es un batch largo desde
           # un runner, no una función serverless, así que no hay nada que poolear
           # y el pooler solo agrega una capa que puede cortar la conexión.
           # `DATABASE_URL` queda de fallback por si algún día no está la primera.
-          DATABASE_URL: ${{ secrets.POSTGRES_URL_NON_POOLING || secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.CLIENTES_POSTGRES_URL_NON_POOLING || secrets.CLIENTES_DATABASE_URL }}
         run: npm run sync:catalogo

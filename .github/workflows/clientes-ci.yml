@@ -1,0 +1,61 @@
+name: clientes · CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/clientes/**"
+      - ".github/workflows/clientes-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/clientes/**"
+      - ".github/workflows/clientes-ci.yml"
+
+permissions:
+  contents: read
+  packages: read
+
+# Un run por rama: si se pushea de nuevo, se cancela el anterior en vez de encolarlo.
+concurrency:
+  group: clientes-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/clientes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # apps/clientes no tiene .npmrc: setup-node escribe uno temporal del runner para el
+      # scope @myd-org y lo autentica con NODE_AUTH_TOKEN. No se agrega .npmrc a la app.
+      # CLIENTES_NPM_TOKEN es el plan B (PAT classic read:packages); si no existe, se usa el
+      # token de Actions.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/clientes/package-lock.json
+          registry-url: https://npm.pkg.github.com
+          scope: "@myd-org"
+
+      - name: Instalar dependencias
+        run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.CLIENTES_NPM_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Lockfile intacto
+        run: git diff --exit-code -- package-lock.json
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test

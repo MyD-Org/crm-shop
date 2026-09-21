@@ -1,0 +1,38 @@
+title = "crm-shop"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "meta-access-token"
+description = "Token de acceso de Meta / WhatsApp"
+regex = '''EAA[A-Za-z0-9]{60,}'''
+
+[[rules]]
+id = "mercadopago-token"
+description = "Access token de Mercado Pago"
+regex = '''(APP_USR|TEST)-[0-9]{10,}-[0-9]{6}-[0-9a-f]{32}'''
+
+[[rules]]
+id = "resend-api-key"
+description = "API key de Resend"
+regex = '''re_[A-Za-z0-9]{8}_[A-Za-z0-9]{20,}'''
+
+[[rules]]
+id = "neon-password"
+description = "Contraseña de rol de Neon"
+regex = '''npg_[A-Za-z0-9]{12,}'''
+
+[[rules]]
+id = "postgres-url-con-password"
+description = "Connection string de Postgres con contraseña"
+regex = '''postgres(ql)?://[^\s:@/]+:[^\s@/]{6,}@'''
+
+[[rules]]
+id = "vercel-ids"
+description = "IDs de team o proyecto de Vercel"
+regex = '''(team|prj)_[A-Za-z0-9]{20,}'''
+
+[allowlist]
+description = "Lockfiles y tarball vendorizado"
+paths = ['''package-lock\.json$''', '''apps/admin/vendor/.*\.tgz$''']

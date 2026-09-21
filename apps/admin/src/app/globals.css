@@ -1,0 +1,170 @@
+@import url("https://fonts.googleapis.com/css2?family=Bowlby+One&display=swap");
+@import "tailwindcss";
+@import "@myd-org/ui/tailwind.css";
+@source "../../node_modules/@myd-org/ui/dist";
+
+:root {
+  --bg: #eef1f5;
+  --card: #ffffff;
+  --ink: #16191d;
+  --ink-soft: #5b626b;
+  --ink-faint: #8a9099;
+  --border: #d8dee6;
+  --border-strong: #c3cbd8;
+  --blue: #0c3ed6;
+  --blue-hover: #0930a6;
+  --blue-bright: #1f8cff;
+  --blue-soft: #dbe6fb;
+  --red: #d2150f;
+  --red-soft: #fdecec;
+  --green: #1b7a45;
+  --green-soft: #e8f5ec;
+  --wsp: #1f9d56;
+  --wsp-strong: #128a45;
+  --amber: #9a6400;
+  --amber-soft: #fbf0db;
+  --radius: 10px;
+  --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* Override de roles del DS con la paleta del CRM */
+  --color-primary: #0c3ed6;
+  --color-primary-hover: #0930a6;
+  --color-primary-soft: #dbe6fb;
+  --color-text: #16191d;
+  --color-muted: #5b626b;
+  --color-subtle: #8a9099;
+  --color-surface: #ffffff;
+  --color-elevated: #e3e8f0;
+  --color-bg: #eef1f5;
+  --color-border: rgba(15, 23, 42, 0.08);
+  --color-border-strong: #c3cbd8;
+  --color-danger: #d2150f;
+  --color-danger-soft: #fdecec;
+  --color-success: #1b7a45;
+  --color-success-soft: #e8f5ec;
+  --color-warning: #9a6400;
+  --color-warning-soft: #fbf0db;
+  --color-accent: #1f9d56;
+  --color-accent-strong: #128a45;
+  --radius-sm: 10px;
+  --radius: 10px;
+  --radius-lg: 10px;
+}
+
+@theme inline {
+  --font-sans: var(--font);
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-blue: var(--blue);
+  --color-blue-hover: var(--blue-hover);
+  --color-blue-bright: var(--blue-bright);
+  --color-blue-soft: var(--blue-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+  --color-green: var(--green);
+  --color-green-soft: var(--green-soft);
+  --color-wsp: var(--wsp);
+  --color-wsp-strong: var(--wsp-strong);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --radius-brand: var(--radius);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* El SideNav de @myd-org/ui usa bg-surface (misma variable que cards, inputs y
+   diálogos) para su <aside>. Esta regla lo saca del blanco sin tocar --color-surface
+   globalmente, así el resto de la UI no se ve afectado. */
+aside.bg-surface {
+  background-color: var(--color-bg);
+  border-right-color: transparent;
+}
+
+/* Con el borde vertical del aside ya transparente, las divisorias horizontales
+   bajo el logo y sobre el usuario quedaban como las únicas líneas duras del
+   sidebar. Las suavizamos para que todo el panel quede parejo. */
+aside.bg-surface > div.border-b,
+aside.bg-surface > div.border-t {
+  border-color: transparent;
+}
+
+/* Ítem activo del nav: el pill bg-primary-soft casi no se nota contra el
+   glow azulado del contenido, así que sumamos una barra de acento a la
+   izquierda (box-shadow para no correr el padding/ícono). */
+nav[aria-label="Navegación principal"] .bg-primary-soft {
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+/* Mismo glow radial del login (app/admin/(auth)/layout.tsx), aplicado al wrapper
+   raíz del SideNav. Selector específico para no afectar a FileDropZone, que
+   también usa bg-bg pero sin h-dvh/overflow-hidden. */
+.flex.h-dvh.overflow-hidden.bg-bg {
+  /* Origen del glow por encima del borde superior (y más ancho/alto) para que el azul
+     "arranque de más arriba" y el degradé se apague de forma gradual, sin el borde marcado
+     de la elipse que se leía como una línea horizontal cerca del tope. */
+  background-image: radial-gradient(ellipse 110% 55% at 50% -12%, rgba(31, 140, 255, 0.18) 0%, transparent 78%);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+
+/* iOS Safari auto-zoomea al enfocar un input cuya font-size sea <16px, incluso con
+   userScalable=false. Fuerza mínimo 16px en mobile a TODOS los inputs para evitar ese salto
+   de zoom al tap. En desktop dejamos que el design system defina el tamaño (usa clases
+   Tailwind text-sm etc.). */
+@media (max-width: 639px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Bug de hidratación del SideNav de @myd-org/ui en mobileMode="bottom-sheet":
+     el estado interno `isMobileViewport` arranca en false y recién pasa a true dentro
+     de un useEffect al montar. Durante el SSR + primer render del cliente NO se aplica
+     el `transform: translateY(100%)` inline, así que el sheet queda visible pegado al
+     fondo del viewport. Cuando el effect corre, aplica el transform CON `transition:
+     transform 200ms` → el browser anima el cambio y el usuario ve el menú "abriéndose
+     y cerrándose solo". Con este selector el translate está desde el primer paint;
+     cuando el JS toma el control con el mismo valor, no dispara animación porque el
+     transform no cambia. Selector escopado al aside del bottom-sheet (rounded-t-2xl
+     solo lo usa esa variante). */
+  aside.fixed.bottom-0.rounded-t-2xl {
+    transform: translateY(100%);
+  }
+}

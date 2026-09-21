@@ -1,0 +1,328 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import Image from "next/image"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
+import { MessageSquare, Users, LogOut, Settings, BarChart3, FileText, Package, Receipt } from "lucide-react"
+import { SideNav, ToastProvider } from "@myd-org/ui"
+import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
+import { NotificationsPrompt } from "./NotificationsPrompt"
+import { PendingRepliesDialog, type PendingContact } from "./PendingRepliesDialog"
+import type { InboxContact } from "@/lib/inbox-api"
+import { roleRank, type AdminRole } from "@/lib/roles"
+import { UnsavedGuardProvider, useUnsavedGuardCtx } from "@/lib/unsaved-guard"
+import { useVisiblePoll } from "@/lib/use-visible-poll"
+import { getLastVisit, SECTION_VISITED_EVENT, type BadgeSection } from "@/lib/admin-last-visit"
+
+interface AdminShellProps {
+  name: string
+  email: string
+  role: AdminRole
+  logoSrc?: string
+  // Icono cuadrado del tenant (el mismo del favicon). Se usa en el rail del sidebar en lugar
+  // del logo horizontal, que no entra en la barra angosta.
+  iconSrc?: string
+  tenantName?: string
+  availability: "available" | "away"
+  currentUserId: string
+  usagePanelEnabled?: boolean
+  children: React.ReactNode
+}
+
+// Contadores de "novedades" del sidebar (GET /api/admin/pending-counts): items nuevos desde
+// la última visita a cada sección (modelo last-visit en localStorage, por dispositivo).
+// `comprobantes` viene en null para operadores: la ruta no lo expone a ese rol y la UI lo
+// trata como "sin badge".
+interface PendingCounts {
+  inbox: number
+  comprobantes: number | null
+}
+
+const POLL_MS = 30_000
+
+/** Badge con el numerito de pendientes sobre el ícono del ítem. SideNav (del design system)
+ *  no soporta badge y no se toca en v1: se envuelve el ícono en un contenedor relativo y el
+ *  contador va absoluto arriba a la derecha. `count` en null o 0 no muestra nada. */
+function BadgeIcon({ icon, count }: { icon: React.ReactNode; count: number | null }) {
+  if (count === null || count <= 0) return <>{icon}</>
+  return (
+    <span className="relative inline-flex">
+      {icon}
+      <span
+        aria-hidden
+        className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-[10px] font-semibold leading-none"
+        style={{ background: "var(--red)", color: "#fff", minWidth: 15, height: 15, padding: "0 3px" }}
+      >
+        {count > 9 ? "9+" : count}
+      </span>
+    </span>
+  )
+}
+
+function usePendingCounts(): PendingCounts | null {
+  const [counts, setCounts] = useState<PendingCounts | null>(null)
+  // Last-visit por sección. Lazy (se lee en el primer load, no durante el render) y en ref:
+  // no es estado, no debe re-renderizar ni re-inicializar.
+  const sinceRef = useRef<{ inbox: string | null; comprobantes: string | null } | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      // Primer load: lectura lazy de localStorage (window no existe durante el render).
+      if (!sinceRef.current) {
+        sinceRef.current = { inbox: getLastVisit("inbox"), comprobantes: getLastVisit("comprobantes") }
+      }
+      const params = new URLSearchParams()
+      if (sinceRef.current.inbox) params.set("sinceInbox", sinceRef.current.inbox)
+      if (sinceRef.current.comprobantes) params.set("sinceComprobantes", sinceRef.current.comprobantes)
+      const qs = params.toString()
+      const res = await fetch(`/api/admin/pending-counts${qs ? `?${qs}` : ""}`, { cache: "no-store" })
+      if (!res.ok) return
+      setCounts((await res.json()) as PendingCounts)
+    } catch {
+      // Fallo de red o 502: mantener lo último conocido (badge viejo o ninguno), en silencio.
+    }
+  }, [])
+
+  // Carga inicial al montar; poll cada 30 s pausado con la pestaña oculta (useVisiblePoll,
+  // que además pega de una al volver). El caso "estoy en OTRA pestaña" lo cubre Web Push;
+  // acá el badge es para quien está dentro de la app. El endpoint cachea 15 s server-side
+  // y cuenta sobre el raw cacheado (barato). El focus de la ventana dispara otra pasada.
+  useEffect(() => {
+    // Falso positivo de la regla: el setState de load va después del await del fetch, no
+    // sincrónicamente dentro del effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load()
+  }, [load])
+  useVisiblePoll(() => void load(), POLL_MS)
+  useEffect(() => {
+    const onFocus = () => void load()
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+  }, [load])
+
+  // Visitar una sección (InboxList/ComprobantesShell marcan en cada load) actualiza su
+  // last-visit y recarga al instante: el badge se va en el momento, sin esperar el poll.
+  useEffect(() => {
+    const onVisited = (e: Event) => {
+      const section = (e as CustomEvent<{ section: BadgeSection }>).detail?.section
+      if (section !== "inbox" && section !== "comprobantes") return
+      if (sinceRef.current) sinceRef.current[section] = getLastVisit(section)
+      void load()
+    }
+    window.addEventListener(SECTION_VISITED_EVENT, onVisited)
+    return () => window.removeEventListener(SECTION_VISITED_EVENT, onVisited)
+  }, [load])
+
+  return counts
+}
+
+function roleLabel(role: AdminRole): string {
+  if (role === "superadmin") return "Superadmin"
+  if (role === "admin") return "Admin"
+  return "Operador"
+}
+
+// `flag`: entradas gateadas por feature flag (evaluado server-side y pasado por prop).
+// `minRole`: nivel mínimo para ver la entrada (usa el ranking de roles).
+// `badge`: contador de pendientes que va sobre el ícono (ver usePendingCounts).
+const NAV = [
+  { href: "/admin/inbox", label: "Mensajes", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
+  { href: "/admin/uso", label: "Uso del bot", icon: <BarChart3 size={16} strokeWidth={1.6} />, minRole: "superadmin" as const, flag: "usagePanel" as const },
+  { href: "/admin/configuracion", label: "Configuración", icon: <Settings size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/catalogo", label: "Catálogo", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/comprobantes", label: "Comprobantes", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
+  { href: "/admin/usuarios", label: "Usuarios", icon: <Users size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/plantillas", label: "Plantillas", icon: <FileText size={16} strokeWidth={1.6} />, minRole: "superadmin" as const },
+]
+
+export function AdminShell(props: AdminShellProps) {
+  // El Provider tiene que envolver TODO lo que renderea `AdminShellInner` (sidebar +
+  // children) para que cualquier form montado abajo pueda registrarse en el guard, y para
+  // que el interceptor del sidebar pueda leer el estado de dirty desde el mismo contexto.
+  return (
+    <UnsavedGuardProvider>
+      <AdminShellInner {...props} />
+    </UnsavedGuardProvider>
+  )
+}
+
+function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, availability: initialAvailability, currentUserId, usagePanelEnabled, children }: AdminShellProps) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const guard = useUnsavedGuardCtx()
+
+  const [warning, setWarning] = useState<{ action: "away" | "logout"; contacts: PendingContact[] } | null>(null)
+  const resolveWarning = useRef<((proceed: boolean) => void) | null>(null)
+  // Fuente de verdad de la disponibilidad. Se levantó del AvailabilityToggle para que la
+  // versión expanded (footerSlot) y la compact (footerSlotCompact, rail) muestren el mismo
+  // estado sin desincronizarse cuando el operador colapsa/expande el sidebar.
+  const [availability, setAvailability] = useState<Availability>(initialAvailability)
+  const pendingCounts = usePendingCounts()
+
+  // Antes de ausentarse o cerrar sesión, chequea si el operador tiene conversaciones
+  // asignadas dentro de la ventana de 24hs y sin responder; si las hay, pide confirmación.
+  async function guardAgainstPendingReplies(action: "away" | "logout"): Promise<boolean> {
+    let contacts: InboxContact[]
+    try {
+      const res = await fetch("/api/admin/inbox/contacts?scope=active")
+      if (!res.ok) return true
+      contacts = await res.json()
+    } catch {
+      // Fallo de red al chequear pendientes: no bloqueamos el logout/ausencia (fail-open),
+      // igual que cuando el server responde !ok. Evita un "Failed to fetch" no capturado.
+      return true
+    }
+    const pending = contacts.filter((c) => c.assigned_operator_id === currentUserId && c.awaiting_reply)
+    if (pending.length === 0) return true
+
+    return new Promise<boolean>((resolve) => {
+      resolveWarning.current = resolve
+      setWarning({ action, contacts: pending })
+    })
+  }
+
+  function closeWarning(proceed: boolean) {
+    resolveWarning.current?.(proceed)
+    resolveWarning.current = null
+    setWarning(null)
+  }
+
+  async function handleLogout() {
+    // Dos guards antes de cerrar sesión: primero "hay cambios sin guardar en algún form
+    // (horarios, usuarios…)" y después "tenés conversaciones pendientes de respuesta".
+    // Orden: primero el más barato / más visible (unsaved), después el que hace fetch.
+    if (guard && !(await guard.confirmLeave())) return
+    const ok = await guardAgainstPendingReplies("logout")
+    if (!ok) return
+    await fetch("/api/admin/auth/logout", { method: "POST" })
+    router.push("/admin/login")
+  }
+
+  // Intercepta clicks de items del sidebar. Si algún form está sucio, prevenimos la
+  // navegación del <Link> y disparamos el Dialog del guard; si el usuario elige "salir",
+  // navegamos programáticamente. Si no hay nada sucio, dejamos que el Link haga lo suyo
+  // (soft-nav de Next, más rápido que router.push).
+  function guardNavClick(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    if (!guard?.isDirty()) return
+    if (pathname === href) return
+    e.preventDefault()
+    guard.confirmLeave().then((leave) => {
+      if (leave) router.push(href)
+    })
+  }
+
+  const visibleNav = NAV.filter((item) => {
+    if (item.minRole && roleRank(role) < roleRank(item.minRole)) return false
+    if (item.flag === "usagePanel" && !usagePanelEnabled) return false
+    return true
+  })
+
+  const logo = logoSrc ? (
+    <div className="flex flex-col gap-1">
+      <Image src={logoSrc} alt={tenantName ?? "Logo"} width={120} height={32} style={{ width: 120, height: "auto" }} priority unoptimized />
+      <p className="text-[10px] font-medium uppercase tracking-wider text-subtle">Backoffice</p>
+    </div>
+  ) : (
+    <div className="flex flex-col gap-0.5">
+      <p className="text-sm font-semibold text-text">{tenantName ?? "Backoffice"}</p>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-subtle">Backoffice</p>
+    </div>
+  )
+
+  // Logo compacto para el rail: mismo icono cuadrado que usamos como favicon del tenant
+  // (public/logos/<tenant>-icon.svg). Si el caller no pasa iconSrc, cae al inicial del nombre
+  // como fallback prolijo.
+  const compactLogo = iconSrc ? (
+    <Image
+      src={iconSrc}
+      alt={tenantName ?? "Logo"}
+      width={32}
+      height={32}
+      style={{ width: 32, height: 32 }}
+      priority
+      unoptimized
+      title={tenantName ?? "Backoffice"}
+    />
+  ) : (
+    <div
+      className="flex h-8 w-8 items-center justify-center rounded-md text-sm font-semibold"
+      style={{ background: "var(--blue-soft)", color: "var(--blue)" }}
+      title={tenantName ?? "Backoffice"}
+    >
+      {(tenantName ?? "Backoffice").charAt(0).toUpperCase()}
+    </div>
+  )
+
+  return (
+    <ToastProvider>
+    <SideNav
+      logo={logo}
+      compactLogo={compactLogo}
+      // Modo rail al colapsar: en desktop/tablet (>=sm), apretar el toggle deja una barra
+      // angosta con solo los íconos (patrón VS Code / Notion). Da más pantalla al inbox sin
+      // perder navegación.
+      collapsedMode="rail"
+      // Arranca colapsado (rail) por default en desktop/tablet. El operador decide cuándo
+      // expandir; no persistimos preferencia entre sesiones para mantener el estado predecible
+      // (siempre igual al entrar). En mobile no aplica: el bottom sheet ya arranca cerrado.
+      defaultCollapsed={true}
+      // Mobile (<sm) usa bottom sheet en vez del drawer clásico: patrón "app nativa" con FAB
+      // abajo-derecha para abrir, drag hacia abajo para cerrar, backdrop tap también cierra.
+      // Más pulgar-friendly que la hamburguesa arriba-izquierda.
+      mobileMode="bottom-sheet"
+      // En el detalle de una conversación (/admin/inbox/c/*) escondemos el FAB de nav: ya hay
+      // un back button en el header del thread y el FAB taparía el botón de enviar del compose.
+      hideMobileTrigger={pathname.startsWith("/admin/inbox/c/")}
+      items={visibleNav.map((item) => ({
+        href: item.href,
+        label: item.label,
+        icon: item.badge ? <BadgeIcon icon={item.icon} count={pendingCounts ? pendingCounts[item.badge] : null} /> : item.icon,
+        active: pathname.startsWith(item.href),
+      }))}
+      user={{
+        name,
+        subtitle: `${email} · ${roleLabel(role)}`,
+        logoutIcon: <LogOut size={15} strokeWidth={1.6} />,
+        onLogout: handleLogout,
+      }}
+      renderLink={(href, content) => (
+        <Link href={href} className="block" onClick={(e) => guardNavClick(e, href)}>
+          {content}
+        </Link>
+      )}
+      /* Presencia del operador en el pie del sidebar, pegada a su cuenta (patrón Slack/Intercom):
+         vive con el usuario, no en el header. Así el header queda para el estado de la operación (bot). */
+      footerSlot={
+        <AvailabilityToggle
+          value={availability}
+          onChange={setAvailability}
+          onBeforeAway={() => guardAgainstPendingReplies("away")}
+        />
+      }
+      footerSlotCompact={
+        <div className="flex items-center justify-center">
+          <AvailabilityToggle
+            value={availability}
+            onChange={setAvailability}
+            onBeforeAway={() => guardAgainstPendingReplies("away")}
+            compact
+          />
+        </div>
+      }
+    >
+      {children}
+    </SideNav>
+    <NotificationsPrompt />
+    {warning && (
+      <PendingRepliesDialog
+        open
+        action={warning.action}
+        contacts={warning.contacts}
+        onCancel={() => closeWarning(false)}
+        onConfirm={() => closeWarning(true)}
+      />
+    )}
+    </ToastProvider>
+  )
+}

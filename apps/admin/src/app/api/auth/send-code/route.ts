@@ -1,0 +1,140 @@
+import { randomInt } from "node:crypto"
+import { cookies } from "next/headers"
+import { getIronSession } from "iron-session"
+import { otpSessionOptions } from "@/lib/session"
+import { getTenantConfig } from "@/lib/tenant-context"
+import { getClienteByIdentifier } from "@/lib/erp"
+import { AlegraRateLimitError } from "@/lib/alegra"
+import { sendEmail, maskEmail } from "@/lib/email"
+import { buildOtpEmail } from "@/lib/otp-email"
+import type { OtpSessionData } from "@/types"
+
+// Código de acceso al portal del cliente. El identificador (CUIT o email) se resuelve
+// contra Alegra y el código se manda SIEMPRE al email que el contacto tiene cargado
+// ahí — no al que se tipeó: el mail del ERP es el dato autoritativo, y así tipear el
+// email de otro no sirve para recibir su código.
+
+const OTP_TTL_MS = 10 * 60 * 1000
+
+// ── Límite de envíos ────────────────────────────────────────────────────────
+// Este endpoint es anónimo y dispara un mail: sin límite es un generador de spam
+// gratis contra los clientes del tenant. Ventana deslizante por (tenant, identificador),
+// mismo patrón que el login del admin.
+// CAVEAT (igual que allá): el Map es por proceso, no se comparte entre instancias de
+// Vercel y se reinicia con el deploy. Alcanza para el volumen del portal.
+const MAX_SENDS = 5
+const SEND_WINDOW_MS = 15 * 60 * 1000
+
+type SendBucket = { count: number; firstAt: number }
+const sendAttempts = new Map<string, SendBucket>()
+
+function sweep(now: number) {
+  for (const [key, b] of sendAttempts) {
+    if (now - b.firstAt > SEND_WINDOW_MS) sendAttempts.delete(key)
+  }
+}
+
+/** Consume una unidad de cuota. `false` = límite alcanzado. */
+function takeSendSlot(key: string, now: number): boolean {
+  let b = sendAttempts.get(key)
+  if (!b || now - b.firstAt > SEND_WINDOW_MS) b = { count: 0, firstAt: now }
+  if (b.count >= MAX_SENDS) {
+    sendAttempts.set(key, b)
+    return false
+  }
+  b.count += 1
+  sendAttempts.set(key, b)
+  return true
+}
+
+export async function POST(request: Request) {
+  try {
+    const tenant = await getTenantConfig()
+    const body = await request.json()
+    const { identifier: raw } = body as { identifier: string }
+
+    if (!raw || raw.trim().length < 3) {
+      return Response.json({ error: "Identificador inválido" }, { status: 400 })
+    }
+    const identifier = raw.trim()
+
+    const now = Date.now()
+    sweep(now)
+    if (!takeSendSlot(`${tenant.id}:${identifier.toLowerCase()}`, now)) {
+      return Response.json(
+        { error: "Pidió demasiados códigos. Espere unos minutos." },
+        { status: 429 },
+      )
+    }
+
+    // La cuenta se resuelve ACÁ y no recién al verificar: sin esto mandaríamos un mail
+    // (o ninguno) y el usuario se enteraría de que no existe después de tipear 6 dígitos.
+    const cliente = await getClienteByIdentifier(tenant, identifier)
+    if (!cliente) {
+      return Response.json(
+        { error: "No encontramos una cuenta con ese CUIT o email. Contáctese con atención al cliente." },
+        { status: 404 },
+      )
+    }
+    if (!cliente.email) {
+      return Response.json(
+        { error: "Su cuenta no tiene un email cargado. Contáctese con atención al cliente." },
+        { status: 409 },
+      )
+    }
+
+    // Código robusto: RNG criptográfico (no Math.random), 6 dígitos con padding.
+    const otp = String(randomInt(0, 1_000_000)).padStart(6, "0")
+
+    const { subject, html, text } = buildOtpEmail(tenant, cliente.razonsocial, otp)
+    let delivered: boolean
+    try {
+      delivered = await sendEmail(tenant, cliente.email, subject, html, text)
+    } catch (err) {
+      // No se guarda la sesión OTP: un código que no llegó no debe dejar al usuario
+      // esperando en la pantalla de los 6 dígitos.
+      console.error("send-code: falló el envío del email:", err)
+      return Response.json(
+        { error: "No pudimos enviar el código. Intente nuevamente en unos minutos." },
+        { status: 502 },
+      )
+    }
+
+    const cookieStore = await cookies()
+    // `attempts` (contador de intentos de verificación) no está en OtpSessionData;
+    // lo extendemos localmente. Vive dentro de la cookie sellada de iron-session,
+    // así que el cliente no puede resetearlo ni falsificarlo.
+    const session = await getIronSession<OtpSessionData & { attempts?: number }>(
+      cookieStore,
+      otpSessionOptions,
+    )
+    session.identifier = identifier
+    session.otp = otp
+    session.otpExpiry = Date.now() + OTP_TTL_MS
+    session.attempts = 0 // reinicia el contador al emitir un código nuevo
+    await session.save()
+
+    // No logueamos el OTP en claro. Fuera de producción se devuelve como devCode para QA
+    // (mismo patrón que ai-api /admin/auth/request-code): sin RESEND_API_KEY el envío es
+    // dry-run y este es el único modo de completar el login en local.
+    const isProd = process.env.NODE_ENV === "production"
+    return Response.json({
+      success: true,
+      message: "Código enviado",
+      sentTo: maskEmail(cliente.email),
+      ...(isProd ? {} : { devCode: otp, delivered }),
+    })
+  } catch (err) {
+    // Alegra limita por requests/minuto. Es transitorio y no es culpa de quien escribió su
+    // CUIT: merece un mensaje que diga qué hacer, no un 500 genérico.
+    if (err instanceof AlegraRateLimitError) {
+      console.error("send-code: Alegra rate limit:", err.message)
+      return Response.json(
+        { error: "El sistema está con mucha demanda en este momento. Intente nuevamente en un minuto." },
+        { status: 503 },
+      )
+    }
+    console.error("send-code error:", err)
+    return Response.json({ error: "Error interno del servidor" }, { status: 500 })
+  }
+}

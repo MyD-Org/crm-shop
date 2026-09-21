@@ -1,0 +1,26 @@
+{
+  "version": "v1",
+  "tenant": "tenant-demo",
+  "actualizadoEn": "2026-09-18T12:00:00.000Z",
+  "categorias": [
+    {
+      "id": "8f3a0c7e-0000-4000-8000-000000000001",
+      "parentId": null,
+      "nombre": "Iluminación",
+      "slug": "Iluminacion",
+      "orden": 0,
+      "nivel": 4,
+      "activa": true,
+      "descripcion": "campo de más",
+      "imagen": "https://fotos.test/categorias/tenant-a/portada-800.webp"
+    }
+  ],
+  "tags": [
+    {
+      "id": "1b7c0c7e-0000-4000-8000-000000000001",
+      "nombre": "Oferta",
+      "slug": "oferta",
+      "color": "#ff0000"
+    }
+  ]
+}

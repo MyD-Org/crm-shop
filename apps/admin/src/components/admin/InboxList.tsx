@@ -1,0 +1,324 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import Link from "next/link"
+import { MessageSquare, Clock, Bot, User, MessageCircleWarning, AlertTriangle } from "lucide-react"
+import { Tabs, Badge, EmptyState } from "@myd-org/ui"
+import { channelLabel, type InboxContact } from "@/lib/inbox-api"
+import { previewText } from "@/lib/message-text"
+import { useVisiblePoll } from "@/lib/use-visible-poll"
+import { markVisited } from "@/lib/admin-last-visit"
+
+type Tab = "active" | "history"
+type Scope = "all" | "mine"
+
+// Cada cuánto el poll pide además reconciliar la cola (?reconcile=1). Ver el comentario en
+// src/app/api/admin/inbox/contacts/route.ts: leer es barato, reconciliar escribe en la DB.
+const RECONCILE_EVERY_MS = 60_000
+
+interface Props {
+  initialContacts: InboxContact[]
+  currentUserId: string
+  initialBotEnabled: boolean
+}
+
+export function InboxList({ initialContacts, currentUserId, initialBotEnabled }: Props) {
+  const [contacts, setContacts] = useState(initialContacts)
+  const [botEnabled, setBotEnabled] = useState(initialBotEnabled)
+  const [tab, setTab] = useState<Tab>("active")
+  const [scope, setScope] = useState<Scope>("all")
+  // Los valores dependientes de "ahora" (color de urgencia, "hace 5m") se rendean solo
+  // despues del mount para evitar mismatch server/cliente: el SSR corre en Vercel (UTC) y
+  // el navegador en -03, ademas de que Date.now() difiere entre ambos. Un mismatch acá
+  // rompe la soft-navigation del App Router (los clicks a Link no cambian la URL).
+  // "mounted" como useSyncExternalStore (patrón "hydrated" de React): SSR = false y cliente
+  // = true tras hidratar, sin setState sincrónico en un effect (re-render en cascada).
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
+
+  // null = todavía no reconciliamos desde el cliente. El reloj arranca en el primer poll
+  // porque el server ya reconcilió al rendear la página (no hace falta repetirlo enseguida).
+  const lastReconcileAt = useRef<number | null>(null)
+  // Pedido explícito de reconciliar en el próximo poll (ver el chequeo de handoffs nuevos).
+  const forceReconcile = useRef(false)
+  // Conversaciones derivadas y sin dueño para las que YA pedimos una reconciliación. Sirve
+  // para reaccionar rápido a un handoff nuevo (se reconcilia en el próximo poll, ~10s) sin
+  // volver al comportamiento viejo cuando la conversación queda pendiente porque no hay
+  // nadie disponible en ese depto: en ese caso esperamos al tick de 60s.
+  const reconcileTriedFor = useRef(new Set<string>())
+
+  // La solapa vigente, para descartar la respuesta de un fetch que quedó en vuelo cuando el
+  // operador ya cambió de solapa (antes lo hacía el flag `cancelled` del cleanup del effect).
+  const tabRef = useRef(tab)
+  useEffect(() => {
+    tabRef.current = tab
+  }, [tab])
+
+  // El fetch depende solo de la solapa principal: "Activas" trae solo ventana abierta;
+  // "Históricas" trae todos. "Todas / Mis conversaciones" es una sub-solapa que filtra
+  // esa misma lista en el cliente, no dispara otro fetch.
+  const load = useCallback(async () => {
+    const fetchScope = tab === "active" ? "active" : "all"
+    // Leer va cada 10s, pero RECONCILIAR (que escribe en la DB) solo cada 60s: repartir la
+    // cola en cada pasada era carga constante sobre Neon, multiplicada por pestaña abierta.
+    const now = Date.now()
+    if (lastReconcileAt.current === null) lastReconcileAt.current = now
+    const shouldReconcile =
+      forceReconcile.current || now - lastReconcileAt.current >= RECONCILE_EVERY_MS
+    if (shouldReconcile) {
+      lastReconcileAt.current = now
+      forceReconcile.current = false
+    }
+
+    // `no-store`: sin esto el navegador cachea el GET (misma URL en cada poll) y la lista
+    // se queda con datos viejos —p. ej. una conversación recién asignada sigue "Sin asignar"—
+    // hasta un reload manual.
+    // Estado del kill switch: si el bot está pausado, las conversaciones en modo bot NO las
+    // atiende nadie, así que se muestran "Sin asignar" (no "Bot"). Se pollea para reflejar
+    // el toggle sin recargar. Las dos llamadas son independientes: en paralelo.
+    const [res, bs] = await Promise.all([
+      fetch(
+        `/api/admin/inbox/contacts?scope=${fetchScope}${shouldReconcile ? "&reconcile=1" : ""}`,
+        { cache: "no-store" },
+      ).catch(() => null),
+      fetch("/api/admin/inbox/bot-status", { cache: "no-store" }).catch(() => null),
+    ])
+    if (res?.ok && tabRef.current === tab) {
+      const next: InboxContact[] = await res.json()
+      setContacts(next)
+      // Está parado en la sección (load exitoso): marca la visita. El badge del sidebar se
+      // limpia en el acto vía el evento, y el poll de 10s vuelve a atrapar lo que llegue
+      // después sin salir de la pantalla.
+      markVisited("inbox")
+
+      // ¿Apareció una conversación derivada sin operador que todavía no intentamos
+      // repartir? Adelantamos la reconciliación al próximo poll en vez de esperar los 60s.
+      const fresh = next.filter(
+        (c) =>
+          c.mode === "human" &&
+          c.status !== "closed" &&
+          !c.assigned_operator_id &&
+          c.current_conversation_id &&
+          !reconcileTriedFor.current.has(c.current_conversation_id),
+      )
+      if (fresh.length) {
+        for (const c of fresh) reconcileTriedFor.current.add(c.current_conversation_id!)
+        forceReconcile.current = true
+      }
+    }
+    if (bs?.ok && tabRef.current === tab) setBotEnabled((await bs.json()).botEnabled)
+  }, [tab])
+
+  // Carga inmediata al montar y al cambiar de solapa.
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  // Poll cada 10s, pausado mientras la pestaña no esté visible (con la pestaña oculta el
+  // aviso lo da el push, no esto; ver use-visible-poll.ts).
+  useVisiblePoll(load, 10_000)
+
+  const mine = contacts.filter((c) => c.assigned_operator_id === currentUserId)
+  const pendingCount = contacts.filter((c) => c.awaiting_reply).length
+  const visible = scope === "mine" ? mine : contacts
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Tabs
+        variant="underline"
+        value={tab}
+        onValueChange={(v) => setTab(v as Tab)}
+        items={[
+          {
+            value: "active",
+            label: (
+              <span className="flex items-center gap-1.5">
+                Activas
+                {pendingCount > 0 && tab === "active" && (
+                  <Badge tone="warning" className="text-[10px] px-1.5 py-0">
+                    {pendingCount}
+                  </Badge>
+                )}
+              </span>
+            ),
+          },
+          { value: "history", label: "Históricas" },
+        ]}
+      />
+
+      <Tabs
+        variant="pill"
+        value={scope}
+        onValueChange={(v) => setScope(v as Scope)}
+        items={[
+          { value: "all", label: "Todas" },
+          {
+            value: "mine",
+            label: (
+              <span className="flex items-center gap-1.5">
+                Mis conversaciones
+                {mine.length > 0 && (
+                  <Badge tone="info" className="text-[10px] px-1.5 py-0">
+                    {mine.length}
+                  </Badge>
+                )}
+              </span>
+            ),
+          },
+        ]}
+      />
+
+      {!visible.length ? (
+        <EmptyState
+          icon={<MessageSquare size={28} strokeWidth={1.2} />}
+          title={
+            scope === "mine" ? "No tiene contactos asignados"
+              : tab === "history" ? "No hay contactos en el historial"
+                : "No hay conversaciones activas"
+          }
+        />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {visible.map((c) => (
+            <Link
+              key={c.end_user_id}
+              href={`/admin/inbox/c/${c.end_user_id}`}
+              className="flex items-center gap-3 md:gap-4 px-3 md:px-4 py-3 rounded-[var(--radius)] transition-colors hover:opacity-90 overflow-hidden"
+              style={{
+                background: c.awaiting_reply ? "var(--amber-soft)" : "var(--card)",
+                border: `1px solid ${c.awaiting_reply ? "var(--amber)" : "var(--border)"}`,
+                borderLeft: `3px solid ${c.awaiting_reply ? "var(--amber)" : mounted ? urgencyColor(c.last_inbound_at) : "transparent"}`,
+              }}
+            >
+              <div className="relative shrink-0">
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center"
+                  style={{ background: c.awaiting_reply ? "var(--amber)" : "var(--blue-soft)" }}
+                >
+                  {c.awaiting_reply
+                    ? <MessageCircleWarning size={16} strokeWidth={1.6} style={{ color: "white" }} />
+                    : <MessageSquare size={16} strokeWidth={1.6} style={{ color: "var(--blue)" }} />
+                  }
+                </div>
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium truncate" style={{ color: "var(--ink)" }}>
+                    {c.contact}
+                  </p>
+                  <ModeChip mode={c.mode} operatorName={c.assigned_operator_name ?? null} department={c.assigned_department ?? null} botPaused={!botEnabled} />
+                  {c.awaiting_reply && (
+                    <Badge tone="warning" className="flex items-center gap-1 shrink-0">
+                      <MessageCircleWarning size={9} />
+                      Sin respuesta
+                    </Badge>
+                  )}
+                  {c.has_failed_outbound && (
+                    <Badge tone="danger" className="flex items-center gap-1 shrink-0">
+                      <AlertTriangle size={9} />
+                      Falló envío
+                    </Badge>
+                  )}
+                </div>
+                {/* Mensaje (trunca) y hora en la misma línea, pero la hora es shrink-0 para que
+                    no se la coma el truncate cuando el mensaje es largo. */}
+                <div className="flex items-baseline gap-1 mt-0.5 text-xs" style={{ color: "var(--ink-soft)" }}>
+                  <span className="truncate">
+                    {c.last_message
+                      ? previewText(c.last_message)
+                      : `${channelLabel(c.channel)}${c.phone && c.phone !== c.contact ? ` · ${c.phone}` : ""}`}
+                  </span>
+                  <span className="shrink-0" suppressHydrationWarning>· {c.last_inbound_at && mounted ? formatTime(c.last_inbound_at) : "—"}</span>
+                </div>
+              </div>
+
+              <WindowBadge within={c.within_window} />
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const DEPARTMENT_LABELS: Record<string, string> = {
+  ventas: "Ventas",
+  "cuentas-corrientes": "Cuentas Corrientes",
+  soporte: "Soporte",
+}
+function departmentLabel(dept: string): string {
+  return DEPARTMENT_LABELS[dept] ?? dept
+}
+
+function ModeChip({ mode, operatorName, department, botPaused }: { mode: string; operatorName: string | null; department: string | null; botPaused: boolean }) {
+  if (mode !== "human") {
+    // Bot pausado (kill switch): en modo bot no lo atiende nadie, así que no mostramos "Bot"
+    // (haría creer que el bot la tiene) sino "Sin asignar", que necesita que un humano la tome.
+    if (botPaused) {
+      return (
+        <Badge tone="warning" className="flex items-center gap-1">
+          <User size={9} />
+          Sin asignar
+        </Badge>
+      )
+    }
+    return (
+      <Badge tone="info" className="flex items-center gap-1">
+        <Bot size={9} />
+        Bot
+      </Badge>
+    )
+  }
+  // En modo humano nunca mostramos el genérico "Humano": o el operador asignado, o un
+  // "Sin asignar" en alerta que además indica a qué departamento está esperando (si lo hay).
+  return operatorName
+    ? (
+      <Badge tone="success" className="flex items-center gap-1">
+        <User size={9} />
+        Asignado a {operatorName}
+      </Badge>
+    )
+    : (
+      <Badge tone="warning" className="flex items-center gap-1">
+        <User size={9} />
+        {department ? `Esperando ${departmentLabel(department)}` : "Sin asignar"}
+      </Badge>
+    )
+}
+
+function WindowBadge({ within }: { within: boolean }) {
+  return (
+    <Badge tone={within ? "success" : "neutral"} className="flex items-center gap-1 shrink-0">
+      <Clock size={10} />
+      {/* En mobile abreviamos ("Abierta"/"Cerrada") para no comerle ancho a la fila. */}
+      <span className="md:hidden">{within ? "Abierta" : "Cerrada"}</span>
+      <span className="hidden md:inline">{within ? "Ventana abierta" : "Ventana cerrada"}</span>
+    </Badge>
+  )
+}
+
+function urgencyColor(lastInboundAt: string | null): string {
+  if (!lastInboundAt) return "transparent"
+  const diffH = (Date.now() - new Date(lastInboundAt).getTime()) / 3_600_000
+  if (diffH > 6) return "var(--color-danger)"
+  if (diffH > 1) return "var(--color-warning)"
+  return "transparent"
+}
+
+// TZ pineada por consistencia con ContactThreadView y para evitar el mismatch UTC/-03 en prod
+// cuando un mensaje entra a la hora limite del cambio de dia (server y cliente rendearian dias distintos).
+function formatTime(iso: string) {
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffH = Math.floor(diffMs / 3_600_000)
+  const diffM = Math.floor(diffMs / 60_000)
+  if (diffM < 1) return "ahora"
+  if (diffM < 60) return `hace ${diffM}m`
+  if (diffH < 24) return `hace ${diffH}h`
+  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", timeZone: "America/Argentina/Buenos_Aires" })
+}

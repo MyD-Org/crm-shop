@@ -1,0 +1,216 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1781304256935,
+      "tag": "0000_outstanding_yellowjacket",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781356424305,
+      "tag": "0001_rich_shen",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782326540302,
+      "tag": "0002_boring_drax",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782332454088,
+      "tag": "0003_good_fat_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782412416092,
+      "tag": "0004_fancy_black_widow",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782421056486,
+      "tag": "0005_wakeful_nekra",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782741857270,
+      "tag": "0006_greedy_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782843172982,
+      "tag": "0007_fat_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783785198342,
+      "tag": "0008_regular_harpoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784049870879,
+      "tag": "0009_lonely_silver_surfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784067555170,
+      "tag": "0010_white_cobalt_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784211878342,
+      "tag": "0011_multi_departments",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784236301943,
+      "tag": "0012_magical_speed",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784657322093,
+      "tag": "0013_thankful_lily_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785810000000,
+      "tag": "0014_open_weekdays",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785820000000,
+      "tag": "0015_rename_business_hours_to_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1785830000000,
+      "tag": "0016_schedule_jsonb",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785840000000,
+      "tag": "0017_schedule_exceptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785850000000,
+      "tag": "0018_drop_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785870000000,
+      "tag": "0019_tenant_legal_info",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788480000000,
+      "tag": "0020_tenant_domains",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788566400000,
+      "tag": "0021_tenant_copilot_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789257600000,
+      "tag": "0022_notification_factura_alegra_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789344000000,
+      "tag": "0023_payment_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789346536472,
+      "tag": "0024_payment_receipts_alegra",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789617600000,
+      "tag": "0025_cuotas_configurables",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789704000000,
+      "tag": "0026_cuotas_por_proveedor",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1789790400000,
+      "tag": "0027_catalogo_overlay",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1789876800000,
+      "tag": "0028_categoria_imagen",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789963200000,
+      "tag": "0029_catalog_raw_alegra",
+      "breakpoints": true
+    }
+  ]
+}

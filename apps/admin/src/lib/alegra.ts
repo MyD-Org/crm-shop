@@ -1,0 +1,1238 @@
+import type { TenantConfig } from "./tenants"
+import {
+  mockCategories,
+  mockItems,
+  getMockItemLive,
+  mockContacts,
+  mockPriceLists,
+  mockPaymentTerms,
+  mockSellers,
+  mockTaxes,
+  mockCurrencies,
+  mockCreateEstimate,
+  mockDeleteEstimate,
+  mockListEstimates,
+  mockInvoicesByContact,
+  mockPaymentsByContact,
+} from "./mock-alegra"
+
+// Cliente de Alegra (productos, contactos, cotizaciones, listas de precio, formas de pago).
+// Auth HTTP Basic (email:token). Espejo del patrón de lib/flexxus.ts. Modo mock (alegraMock)
+// usa fixtures locales — permite construir/probar sin credenciales. Ver ADR catálogo Alegra.
+//
+// OJO: las cuentas de Alegra son REALES (no hay sandbox). Las lecturas son inocuas; las
+// escrituras deliberadas son cotizaciones (/estimates, borrables por API) y pagos (/payments,
+// decisión explícita del backoffice de comprobantes: el admin carga el cobro real del
+// cliente, imputado a facturas abiertas). No exponer creación de facturas desde acá.
+
+const ALEGRA_BASE = process.env.ALEGRA_BASE_URL ?? "https://api.alegra.com/api/v1"
+const PAGE_SIZE = 30 // Alegra topea limit en 30
+
+// ── Tipos normalizados (lo que consume la sync / el live), independientes del shape crudo ──
+export interface AlegraCategory {
+  alegraId: string
+  name: string
+  parentAlegraId: string | null
+  status: string
+}
+export interface AlegraPrice {
+  idPriceList: string
+  name: string
+  price: number
+}
+export interface AlegraProduct {
+  alegraId: string
+  code: string | null
+  name: string
+  description: string | null
+  categoryAlegraId: string | null
+  prices: AlegraPrice[]
+  stock: number | null
+  /** Estado que Alegra le pone al ítem. NO confundir con el `status` del espejo, que es "visto en la última corrida". */
+  status: string
+  images: string[]
+  /** Marca. No es nativa de Alegra: sale de customFields. */
+  brand: string | null
+  /** Alícuota de IVA del ítem, para el precio final. */
+  ivaPorcentaje: number | null
+  /** El ítem COMPLETO tal cual vino. Nada se descarta. */
+  raw: Record<string, unknown>
+}
+export interface AlegraContact {
+  alegraId: string
+  name: string
+  identification: string | null // CUIT/DNI según el país de la cuenta
+  email: string | null
+  phone: string | null
+  priceListId: string | null
+  sellerId: string | null
+  paymentTermId: string | null
+  status: string
+  // ── Información comercial ("Información comercial" en la ficha del contacto en Alegra).
+  // Vienen embebidos en /contacts, sin requests extra. Cualquiera puede faltar: en la cuenta
+  // de Avantec el plazo está en 90 de 107 contactos, la lista en 17, el vendedor en 3 y el
+  // límite de crédito en 5. Por eso son todos nullable y la UI esconde lo vacío.
+  /** Ej. "15 días", "De contado". */
+  paymentTermName: string | null
+  paymentTermDays: number | null
+  priceListName: string | null
+  sellerName: string | null
+  /** `null` = no cargado. Distinto de 0, que sería "sin crédito" puesto a propósito. */
+  creditLimit: number | null
+}
+export interface AlegraContactInput {
+  name: string
+  identification?: string // CUIT/DNI
+  email?: string
+  phone?: string
+}
+export interface AlegraPriceList {
+  alegraId: string
+  name: string
+  type: string | null // percentage | amount | ...
+  status: string
+}
+export interface AlegraPaymentTerm {
+  alegraId: string
+  name: string
+  days: number | null
+}
+export interface AlegraSeller {
+  alegraId: string
+  name: string
+  identification: string | null
+  status: string
+}
+export interface AlegraTax {
+  alegraId: string
+  name: string
+  percentage: number | null
+  status: string
+}
+export interface AlegraCurrency {
+  code: string
+  name: string
+  symbol: string | null
+  exchangeRate: number | null
+}
+export interface AlegraEstimateItemInput {
+  alegraId: string
+  quantity: number
+  price?: number // si no viene, Alegra usa el precio del ítem (según lista del cliente)
+  discount?: number // porcentaje
+}
+export interface AlegraEstimateInput {
+  contactAlegraId: string
+  items: AlegraEstimateItemInput[]
+  dueDate?: string // YYYY-MM-DD
+  observations?: string
+  anotation?: string // nota interna, no visible al cliente
+  priceListId?: string
+  sellerId?: string
+}
+export interface AlegraEstimate {
+  alegraId: string
+  number: string | null
+  date: string
+  dueDate: string | null
+  clientAlegraId: string
+  clientName: string
+  status: string
+  total: number
+  observations: string | null
+  items: { alegraId: string; name: string; quantity: number; price: number; discount: number }[]
+}
+export interface AlegraInvoice {
+  alegraId: string
+  number: string | null // fullNumber legible (ej. "FV-1-00012876") si Alegra lo trae
+  date: string // emisión, YYYY-MM-DD
+  dueDate: string | null // vencimiento, YYYY-MM-DD
+  total: number
+  balance: number // saldo pendiente (0 = pagada)
+  status: string // Alegra: open | closed | draft | void
+  clientAlegraId: string
+}
+export interface AlegraPaymentApplied {
+  invoiceAlegraId: string
+  invoiceNumber: string | null
+  amount: number
+}
+export interface AlegraPayment {
+  alegraId: string
+  number: string | null
+  date: string // YYYY-MM-DD
+  amount: number
+  method: string // paymentMethod (Transferencia, Efectivo, ...)
+  invoices: AlegraPaymentApplied[]
+}
+/** Saldo de cuenta corriente derivado de las facturas abiertas del contacto. */
+export interface AlegraContactBalance {
+  total: number // deuda total (saldo de facturas open)
+  overdue: number // vencido (dueDate < hoy)
+  toFallDue: number // a vencer
+}
+
+// ── Pagos: escritura real (backoffice de comprobantes) ──────────────────────
+// Hasta acá la única escritura era /estimates (borrable). Crear pagos es la excepción
+// deliberada del backoffice de comprobantes: el admin revisa el comprobante del cliente y
+// carga el cobro REAL en Alegra, imputado a facturas abiertas. Ver docs/pagos de Alegra:
+//   POST   /payments                → { client: {id}, date, paymentMethod, bankAccount,
+//                                       invoices: [{id, amount}], observations (≤500) }
+//   POST   /payments/{id}/attachment → multipart, campo `file`, un solo archivo, tope 2 MB.
+
+/** Métodos de pago que acepta Alegra (paymentMethod, tope 15 chars). */
+export const ALEGRA_PAYMENT_METHODS = ["transfer", "cash", "deposit", "check", "credit-card", "debit-card"] as const
+export type AlegraPaymentMethod = (typeof ALEGRA_PAYMENT_METHODS)[number]
+
+/** Tope de adjunto de la API de Alegra (POST /payments/{id}/attachment): 2 MB por archivo. */
+export const ALEGRA_ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024
+
+export interface AlegraBankAccount {
+  alegraId: string
+  name: string
+  type: string | null // bank | cash | credit-card
+  status: string
+}
+
+export interface AlegraPaymentCreateInput {
+  contactAlegraId: string
+  /** "YYYY-MM-DD". */
+  date: string
+  paymentMethod: AlegraPaymentMethod
+  bankAccountId?: string
+  invoices: { alegraId: string; amount: number }[]
+  /** Observaciones del pago: NO visibles en el documento impreso (tope 500 en Alegra). */
+  notes?: string
+}
+
+export interface AlegraPaymentCreated {
+  alegraId: string
+  /** Número del recibo de caja en Alegra, o null si la cuenta no numeró el pago. */
+  number: string | null
+}
+
+function authHeader(config: TenantConfig): string {
+  const basic = Buffer.from(`${config.alegraEmail}:${config.alegraToken}`).toString("base64")
+  return `Basic ${basic}`
+}
+
+/**
+ * Alegra contestó 429 (límite de requests por minuto) y los reintentos no alcanzaron.
+ *
+ * Tiene tipo propio para que quien llama pueda distinguir "el ERP nos está frenando"
+ * (transitorio, se reintenta más tarde) de un error real de datos, y contestarle al
+ * usuario algo mejor que "Error interno del servidor".
+ */
+export class AlegraRateLimitError extends Error {
+  readonly status = 429
+  constructor(path: string, detail: string) {
+    super(`Alegra rate limit (429) en ${path}${detail ? `: ${detail.slice(0, 300)}` : ""}`)
+    this.name = "AlegraRateLimitError"
+  }
+}
+
+// Alegra limita por requests/minuto y devuelve 429 sin avisar de antemano. Los listados
+// que paginan en paralelo (PAGE_CONCURRENCY) lo tocan fácil, y antes un solo 429 en
+// cualquier página tiraba toda la operación. Se reintenta esa request sola, con espera
+// creciente y respetando Retry-After si viene.
+const RATE_LIMIT_RETRIES = 5
+const RATE_LIMIT_BASE_DELAY_MS = 1000
+
+/**
+ * Techo de la espera, para que un `Retry-After` exagerado no se coma el presupuesto de la
+ * corrida. El techo viejo de 10s era demasiado corto en el otro sentido: se gastaban los tres
+ * intentos dentro de la misma ventana que acababa de rechazar el pedido.
+ */
+const RATE_LIMIT_MAX_DELAY_MS = 30_000
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Cuánto esperar antes de reintentar, en milisegundos.
+ *
+ * Respeta `Retry-After` si viene; si no, espera creciente. En los dos casos suma **jitter**, que
+ * es lo que faltaba: al paginar en tandas paralelas, un 429 lo reciben las N requests de la tanda
+ * a la vez, y sin jitter las N esperan exactamente lo mismo y vuelven a chocar todas juntas
+ * contra la misma ventana. El jitter las desparrama.
+ *
+ * Pura y exportada para poder probarla: es la decisión que hacía fallar la sync del catálogo
+ * grande todos los días.
+ */
+export function esperaDeReintento(
+  attempt: number,
+  retryAfterHeader: string | null,
+  random: () => number = Math.random,
+): number {
+  const secs = retryAfterHeader ? Number(retryAfterHeader) : NaN
+  const base =
+    Number.isFinite(secs) && secs > 0
+      ? Math.min(secs * 1000, RATE_LIMIT_MAX_DELAY_MS)
+      : Math.min(RATE_LIMIT_BASE_DELAY_MS * 2 ** attempt, RATE_LIMIT_MAX_DELAY_MS)
+  // Hasta un 50% extra, nunca menos que la base: esperar de menos volvería a chocar.
+  return Math.round(base * (1 + random() * 0.5))
+}
+
+async function alegraFetch(
+  config: TenantConfig,
+  path: string,
+  params?: Record<string, string>,
+  init?: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: unknown },
+) {
+  const url = new URL(`${ALEGRA_BASE}${path}`)
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
+
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url.toString(), {
+      method: init?.method ?? "GET",
+      headers: {
+        Authorization: authHeader(config),
+        Accept: "application/json",
+        ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+      cache: "no-store",
+    })
+
+    if (res.status === 429) {
+      const detail = await res.text().catch(() => "")
+      if (attempt < RATE_LIMIT_RETRIES) {
+        await sleep(esperaDeReintento(attempt, res.headers.get("retry-after")))
+        continue
+      }
+      throw new AlegraRateLimitError(path, detail)
+    }
+
+    if (!res.ok) {
+      // Alegra devuelve el motivo en el body (ej. validación de la cotización) — lo sumamos al error.
+      const detail = await res.text().catch(() => "")
+      throw new Error(`Alegra error ${res.status} en ${path}${detail ? `: ${detail.slice(0, 300)}` : ""}`)
+    }
+    if (res.status === 204) return null
+    return res.json()
+  }
+}
+
+// Pagina un endpoint de Alegra (start/limit) hasta agotar, mapeando cada fila a un tipo normalizado.
+// Alegra topea el limit en 30/página. Para catálogos grandes, pedir una página a la vez
+// (await secuencial) tarda demasiado y hace que la función serverless llegue al timeout
+// (504 Vercel Runtime Timeout, visto con el catálogo de Central Led). Se piden varias
+// páginas en paralelo por tanda para bajar el tiempo total de wall-clock.
+// 8 hacía que Alegra respondiera 429 y la sync diaria de Central Led (~5959 items ≈ 199 páginas)
+// fallara ENTERA todos los días, mientras la de Avantec (1715 ≈ 58 páginas) pasaba sin problema:
+// no era un problema de credenciales sino de volumen contra el límite por minuto.
+//
+// 4 es el mismo valor al que llegó el Shop el 13/09/2026 contra esta misma cuenta, por el mismo
+// motivo. La corrida tarda unos minutos, que no es un problema porque la sync corre en GitHub
+// Actions y no tiene el techo de 300 s de la función.
+const PAGE_CONCURRENCY = 4
+
+
+async function fetchAllPages<T>(
+  config: TenantConfig,
+  path: string,
+  map: (raw: Record<string, unknown>) => T,
+  extraParams: Record<string, string> = {},
+): Promise<T[]> {
+  const out: T[] = []
+  let start = 0
+  let done = false
+  while (!done) {
+    const starts = Array.from({ length: PAGE_CONCURRENCY }, (_, i) => start + i * PAGE_SIZE)
+    const pages = (await Promise.all(
+      starts.map((s) =>
+        alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) }),
+      ),
+    )) as Record<string, unknown>[][]
+
+    for (const page of pages) {
+      if (!Array.isArray(page) || page.length === 0) {
+        done = true
+        break
+      }
+      for (const row of page) out.push(map(row))
+      if (page.length < PAGE_SIZE) {
+        done = true
+        break
+      }
+    }
+    start += PAGE_CONCURRENCY * PAGE_SIZE
+  }
+  return out
+}
+
+// ── Mapeo crudo de Alegra → normalizado ──
+function mapRawCategory(raw: Record<string, unknown>): AlegraCategory {
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    parentAlegraId: raw.parent ? String((raw.parent as { id?: unknown }).id ?? raw.parent) : null,
+    status: String(raw.status ?? "active"),
+  }
+}
+
+/**
+ * Marca del ítem, desde los customFields.
+ *
+ * Alegra no tiene campo de marca: cada cuenta la modela como un campo personalizado. Se busca por
+ * nombre sin distinguir mayúsculas ni tildes, porque el nombre lo eligió quien configuró la cuenta.
+ */
+function marcaDeCustomFields(raw: Record<string, unknown>): string | null {
+  const campos = Array.isArray(raw.customFields) ? (raw.customFields as Record<string, unknown>[]) : []
+  for (const c of campos) {
+    const nombre = String(c?.name ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+    if (nombre === "marca" || nombre === "brand") {
+      const valor = String(c?.value ?? "").trim()
+      if (valor) return valor
+    }
+  }
+  return null
+}
+
+/** Alícuota de IVA del ítem. Alegra devuelve `tax` como lista; se toma la mayor. */
+function ivaDeItem(raw: Record<string, unknown>): number | null {
+  const taxes = Array.isArray(raw.tax) ? (raw.tax as Record<string, unknown>[]) : []
+  const pcts = taxes.map((t) => Number(t?.percentage)).filter((n) => Number.isFinite(n) && n >= 0)
+  return pcts.length ? Math.max(...pcts) : null
+}
+
+function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
+  const priceRaw = Array.isArray(raw.price) ? (raw.price as Record<string, unknown>[]) : []
+  const prices: AlegraPrice[] = priceRaw.map((p) => ({
+    idPriceList: String(p.idPriceList ?? p.id ?? ""),
+    name: String(p.name ?? ""),
+    price: Number(p.price ?? 0),
+  }))
+  const cat = raw.itemCategory as { id?: unknown } | undefined
+  const inv = raw.inventory as { availableQuantity?: unknown } | undefined
+  const imgs = Array.isArray(raw.images) ? (raw.images as Record<string, unknown>[]) : []
+  return {
+    alegraId: String(raw.id),
+    code: raw.reference ? String((raw.reference as { reference?: unknown }).reference ?? raw.reference) : null,
+    name: String(raw.name ?? ""),
+    description: raw.description ? String(raw.description) : null,
+    categoryAlegraId: cat?.id != null ? String(cat.id) : null,
+    prices,
+    stock: inv?.availableQuantity != null ? Number(inv.availableQuantity) : null,
+    status: String(raw.status ?? "active"),
+    images: imgs.map((i) => String(i.url ?? "")).filter(Boolean),
+    brand: marcaDeCustomFields(raw),
+    ivaPorcentaje: ivaDeItem(raw),
+    // Se guarda entero: cada vez que hizo falta un campo que el mapper no leía hubo que tocarlo
+    // y re-sincronizar. Con el crudo, se resuelve con una query.
+    raw,
+  }
+}
+
+function mapRawContact(raw: Record<string, unknown>): AlegraContact {
+  const ident = raw.identification
+  const priceList = raw.priceList as { id?: unknown; name?: unknown } | undefined
+  const seller = raw.seller as { id?: unknown; name?: unknown } | undefined
+  const term = raw.term as { id?: unknown; name?: unknown; days?: unknown } | undefined
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    // identification puede venir como string o como objeto { type, number } según el país
+    identification:
+      ident == null
+        ? null
+        : typeof ident === "object"
+          ? String((ident as { number?: unknown }).number ?? "") || null
+          : String(ident),
+    email: raw.email ? String(raw.email) : null,
+    phone: raw.phonePrimary ? String(raw.phonePrimary) : raw.mobile ? String(raw.mobile) : null,
+    priceListId: priceList?.id != null ? String(priceList.id) : null,
+    sellerId: seller?.id != null ? String(seller.id) : null,
+    paymentTermId: term?.id != null ? String(term.id) : null,
+    status: String(raw.status ?? "active"),
+    paymentTermName: term?.name ? String(term.name) : null,
+    // `days` llega como string ("15"); "De contado" puede traerlo vacío o en 0.
+    paymentTermDays: term?.days != null && term.days !== "" && !Number.isNaN(Number(term.days)) ? Number(term.days) : null,
+    priceListName: priceList?.name ? String(priceList.name) : null,
+    sellerName: seller?.name ? String(seller.name) : null,
+    creditLimit: raw.creditLimit != null && raw.creditLimit !== "" ? Number(raw.creditLimit) : null,
+  }
+}
+
+function mapRawPriceList(raw: Record<string, unknown>): AlegraPriceList {
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    type: raw.type ? String(raw.type) : null,
+    status: String(raw.status ?? "active"),
+  }
+}
+
+function mapRawPaymentTerm(raw: Record<string, unknown>): AlegraPaymentTerm {
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    days: raw.days != null ? Number(raw.days) : null,
+  }
+}
+
+function mapRawSeller(raw: Record<string, unknown>): AlegraSeller {
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    identification: raw.identification ? String(raw.identification) : null,
+    status: String(raw.status ?? "active"),
+  }
+}
+
+function mapRawTax(raw: Record<string, unknown>): AlegraTax {
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    percentage: raw.percentage != null ? Number(raw.percentage) : null,
+    status: String(raw.status ?? "active"),
+  }
+}
+
+function mapRawCurrency(raw: Record<string, unknown>): AlegraCurrency {
+  return {
+    code: String(raw.code ?? ""),
+    name: String(raw.name ?? ""),
+    symbol: raw.symbol ? String(raw.symbol) : null,
+    exchangeRate: raw.exchangeRate != null ? Number(raw.exchangeRate) : null,
+  }
+}
+
+function mapRawEstimate(raw: Record<string, unknown>): AlegraEstimate {
+  const client = (raw.client ?? {}) as Record<string, unknown>
+  const itemsRaw = Array.isArray(raw.items) ? (raw.items as Record<string, unknown>[]) : []
+  return {
+    alegraId: String(raw.id),
+    number: raw.number != null ? String(raw.number) : null,
+    date: String(raw.date ?? ""),
+    dueDate: raw.dueDate ? String(raw.dueDate) : null,
+    clientAlegraId: client.id != null ? String(client.id) : "",
+    clientName: String(client.name ?? ""),
+    status: String(raw.status ?? ""),
+    total: Number(raw.total ?? 0),
+    observations: raw.observations ? String(raw.observations) : null,
+    items: itemsRaw.map((it) => ({
+      alegraId: String(it.id),
+      name: String(it.name ?? ""),
+      quantity: Number(it.quantity ?? 0),
+      price: Number(it.price ?? 0),
+      discount: Number(it.discount ?? 0),
+    })),
+  }
+}
+
+function mapRawInvoice(raw: Record<string, unknown>): AlegraInvoice {
+  const client = (raw.client ?? {}) as Record<string, unknown>
+  const numberTemplate = raw.numberTemplate as { fullNumber?: unknown; formattedNumber?: unknown } | undefined
+  const fullNumber = numberTemplate?.fullNumber ?? numberTemplate?.formattedNumber ?? raw.number
+  return {
+    alegraId: String(raw.id),
+    number: fullNumber != null ? String(fullNumber) : null,
+    date: String(raw.date ?? ""),
+    dueDate: raw.dueDate ? String(raw.dueDate) : null,
+    total: Number(raw.total ?? 0),
+    balance: Number(raw.balance ?? 0),
+    status: String(raw.status ?? "open"),
+    clientAlegraId: client.id != null ? String(client.id) : "",
+  }
+}
+
+function mapRawPayment(raw: Record<string, unknown>): AlegraPayment {
+  const method = raw.paymentMethod as { name?: unknown } | string | undefined
+  const invoicesRaw = Array.isArray(raw.invoices) ? (raw.invoices as Record<string, unknown>[]) : []
+  return {
+    alegraId: String(raw.id),
+    number: raw.number != null ? String(raw.number) : null,
+    date: String(raw.date ?? ""),
+    amount: Number(raw.amount ?? 0),
+    method:
+      typeof method === "string" ? method : method?.name != null ? String(method.name) : String(raw.paymentMethod ?? ""),
+    invoices: invoicesRaw.map((inv) => {
+      const numberTemplate = inv.numberTemplate as { fullNumber?: unknown } | undefined
+      return {
+        invoiceAlegraId: String(inv.id),
+        invoiceNumber: numberTemplate?.fullNumber != null ? String(numberTemplate.fullNumber) : inv.number != null ? String(inv.number) : null,
+        // Alegra devuelve el monto imputado en `amount` dentro de cada factura del pago
+        amount: Number(inv.amount ?? 0),
+      }
+    }),
+  }
+}
+
+function mapRawBankAccount(raw: Record<string, unknown>): AlegraBankAccount {
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    type: raw.type != null ? String(raw.type) : null,
+    status: String(raw.status ?? "active"),
+  }
+}
+
+// ── API pública del cliente ──
+
+/** Todas las categorías de ítems del tenant. Para la sync. */
+export async function listAllCategories(config: TenantConfig): Promise<AlegraCategory[]> {
+  if (config.alegraMock) return mockCategories
+  return fetchAllPages(config, "/item-categories", mapRawCategory)
+}
+
+/** Todos los productos del tenant (modo advanced: trae categoría, inventario, precios). Para la sync. */
+export async function listAllItems(config: TenantConfig): Promise<AlegraProduct[]> {
+  if (config.alegraMock) return mockItems
+  return fetchAllPages(config, "/items", mapRawItem, { order_field: "id", order_direction: "ASC" })
+}
+
+/** Precio/stock EN VIVO de ítems puntuales (momento decisivo: checkout, presupuesto del bot). */
+export async function getItemsLive(config: TenantConfig, alegraIds: string[]): Promise<AlegraProduct[]> {
+  const ids = [...new Set(alegraIds)].filter(Boolean)
+  if (config.alegraMock) {
+    return ids.map((id) => getMockItemLive(id)).filter((x): x is AlegraProduct => x !== null)
+  }
+  const results = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const raw = (await alegraFetch(config, `/items/${id}`)) as Record<string, unknown>
+        return mapRawItem(raw)
+      } catch {
+        return null
+      }
+    }),
+  )
+  return results.filter((x): x is AlegraProduct => x !== null)
+}
+
+// ── Contactos (clientes de Alegra) ──
+
+/** Busca contactos por nombre/identificación. `query` usa la búsqueda global de Alegra. */
+export async function searchContacts(config: TenantConfig, query: string, limit = 20): Promise<AlegraContact[]> {
+  if (config.alegraMock) {
+    // Sin tildes para que "san martin" encuentre "San Martín" (la API real resuelve esto server-side)
+    const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    const q = fold(query)
+    return mockContacts
+      .filter(
+        (c) =>
+          fold(c.name).includes(q) ||
+          (c.identification ?? "").includes(query) ||
+          (c.email ?? "").toLowerCase() === query.toLowerCase(),
+      )
+      .slice(0, limit)
+  }
+  const page = (await alegraFetch(config, "/contacts", {
+    query,
+    limit: String(Math.min(limit, PAGE_SIZE)),
+  })) as Record<string, unknown>[]
+  return Array.isArray(page) ? page.map(mapRawContact) : []
+}
+
+/** Un contacto puntual por id de Alegra. */
+export async function getContact(config: TenantConfig, alegraId: string): Promise<AlegraContact | null> {
+  if (config.alegraMock) return mockContacts.find((c) => c.alegraId === alegraId) ?? null
+  try {
+    const raw = (await alegraFetch(config, `/contacts/${alegraId}`)) as Record<string, unknown>
+    return mapRawContact(raw)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Crea un contacto en Alegra (cliente nuevo). Lo usa el agente cuando el cliente da su
+ * CUIT y no existe todavía, para poder cotizarle. `name` es lo único obligatorio.
+ */
+export async function createContact(config: TenantConfig, input: AlegraContactInput): Promise<AlegraContact> {
+  if (config.alegraMock) {
+    const created: AlegraContact = {
+      alegraId: String(Date.now()),
+      name: input.name,
+      identification: input.identification ?? null,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      priceListId: null,
+      sellerId: null,
+      paymentTermId: null,
+      status: "active",
+      paymentTermName: null,
+      paymentTermDays: null,
+      priceListName: null,
+      sellerName: null,
+      creditLimit: null,
+    }
+    mockContacts.push(created)
+    return created
+  }
+  const body: Record<string, unknown> = { name: input.name }
+  if (input.identification) body.identification = input.identification
+  if (input.email) body.email = input.email
+  if (input.phone) body.phone = input.phone
+  const raw = (await alegraFetch(config, "/contacts", undefined, { method: "POST", body })) as Record<string, unknown>
+  return mapRawContact(raw)
+}
+
+// ── Identificación por teléfono ──
+//
+// El bot de WhatsApp necesita saber quién le escribe sin preguntarle el nombre: el número
+// llega verificado por Meta, mientras que un nombre lo escribe cualquiera. Y buscar por
+// nombre en esta cuenta es ambiguo de entrada — hay tres "Sergio", dos "Arrow", dos
+// "Roberto" y varios "Carlos".
+//
+// La búsqueda de Alegra (?query=) mira nombre e identificación, NO los teléfonos, así que
+// hay que traer los contactos y filtrar acá.
+
+/**
+ * Últimos 10 dígitos del teléfono, que en Argentina son área + abonado. El mismo número
+ * llega en formatos distintos según de dónde salga: "5492235550112" (wa_id, sin '+'),
+ * "+5492235550112" (Alegra), "02235550112" y "223 555 0112" (carga a mano). Comparar la
+ * cola evita tener que adivinar si trae código de país o el 15.
+ *
+ * Menos de 8 dígitos devuelve "": no alcanza para identificar una línea y matchearía de
+ * más, así que se trata como si no hubiera teléfono.
+ */
+export function normalizePhone(raw: unknown): string {
+  const digits = String(raw ?? "").replace(/\D/g, "")
+  if (digits.length < 8) return ""
+  return digits.slice(-10)
+}
+
+// Contactos que existen en Alegra pero no son un cliente al que se le pueda atribuir un
+// pedido: cuentas internas y marcadores. Si alguno tiene un teléfono cargado por arrastre,
+// un match automático le colgaría el pedido a "Stock general". Se filtran SOLO en la
+// búsqueda por teléfono, que es la automática y desatendida; la búsqueda por nombre la
+// dispara una persona y no conviene ocultarle resultados.
+const CUENTAS_NO_CLIENTE = new Set(["no usar", "stock taller", "stock general", "pos", "general", "empresa", "hotel"])
+
+function esCliente(name: string): boolean {
+  const n = name.trim().toLowerCase()
+  if (!n) return false
+  if (n.includes("no usar")) return false
+  return !CUENTAS_NO_CLIENTE.has(n)
+}
+
+/**
+ * Contactos cuyo teléfono coincide con el dado. Devuelve todos los que matchean: si vuelve
+ * más de uno, quien llama NO debe elegir — es justamente el caso ambiguo (mismo número
+ * cargado en varios contactos, como los dos "Lescano Diego").
+ */
+export async function searchContactsByPhone(config: TenantConfig, phone: string): Promise<AlegraContact[]> {
+  const buscado = normalizePhone(phone)
+  if (!buscado) return []
+
+  if (config.alegraMock) {
+    return mockContacts.filter((c) => normalizePhone(c.phone) === buscado && esCliente(c.name))
+  }
+
+  // Alegra guarda hasta tres números por contacto y el que buscamos puede estar en
+  // cualquiera: en esta cuenta hay contactos con el celular en "phonePrimary" y otros en
+  // "mobile".
+  const filas = await fetchAllPages(config, "/contacts", (raw) => ({
+    contact: mapRawContact(raw),
+    phones: [raw.phonePrimary, raw.phoneSecondary, raw.mobile].map(normalizePhone).filter(Boolean),
+  }))
+
+  return filas.filter((f) => f.phones.includes(buscado) && esCliente(f.contact.name)).map((f) => f.contact)
+}
+
+/** Todos los contactos (para una futura sync). Pagina hasta agotar. */
+export async function listAllContacts(config: TenantConfig): Promise<AlegraContact[]> {
+  if (config.alegraMock) return mockContacts
+  return fetchAllPages(config, "/contacts", mapRawContact)
+}
+
+// ── Configuración de venta: listas de precio, formas de pago, vendedores, impuestos, monedas ──
+
+export async function listPriceLists(config: TenantConfig): Promise<AlegraPriceList[]> {
+  if (config.alegraMock) return mockPriceLists
+  return fetchAllPages(config, "/price-lists", mapRawPriceList)
+}
+
+/** Términos/condiciones de pago (contado, 30 días, etc.). Endpoint /terms de Alegra. */
+export async function listPaymentTerms(config: TenantConfig): Promise<AlegraPaymentTerm[]> {
+  if (config.alegraMock) return mockPaymentTerms
+  const page = (await alegraFetch(config, "/terms")) as Record<string, unknown>[]
+  return Array.isArray(page) ? page.map(mapRawPaymentTerm) : []
+}
+
+export async function listSellers(config: TenantConfig): Promise<AlegraSeller[]> {
+  if (config.alegraMock) return mockSellers
+  const page = (await alegraFetch(config, "/sellers")) as Record<string, unknown>[]
+  return Array.isArray(page) ? page.map(mapRawSeller) : []
+}
+
+export async function listTaxes(config: TenantConfig): Promise<AlegraTax[]> {
+  if (config.alegraMock) return mockTaxes
+  const page = (await alegraFetch(config, "/taxes")) as Record<string, unknown>[]
+  return Array.isArray(page) ? page.map(mapRawTax) : []
+}
+
+export async function listCurrencies(config: TenantConfig): Promise<AlegraCurrency[]> {
+  if (config.alegraMock) return mockCurrencies
+  const page = (await alegraFetch(config, "/currencies")) as Record<string, unknown>[]
+  return Array.isArray(page) ? page.map(mapRawCurrency) : []
+}
+
+// ── Cotizaciones (estimates) — la única ESCRITURA permitida contra Alegra ──
+
+/** Crea una cotización. No es documento fiscal: se puede borrar por API (deleteEstimate). */
+export async function createEstimate(config: TenantConfig, input: AlegraEstimateInput): Promise<AlegraEstimate> {
+  if (config.alegraMock) return mockCreateEstimate(input)
+  const body: Record<string, unknown> = {
+    client: Number.isNaN(Number(input.contactAlegraId)) ? input.contactAlegraId : Number(input.contactAlegraId),
+    date: new Date().toISOString().slice(0, 10),
+    items: input.items.map((it) => ({
+      id: Number.isNaN(Number(it.alegraId)) ? it.alegraId : Number(it.alegraId),
+      quantity: it.quantity,
+      ...(it.price !== undefined ? { price: it.price } : {}),
+      ...(it.discount !== undefined ? { discount: it.discount } : {}),
+    })),
+  }
+  if (input.dueDate) body.dueDate = input.dueDate
+  if (input.observations) body.observations = input.observations
+  if (input.anotation) body.anotation = input.anotation
+  if (input.priceListId) body.priceList = Number(input.priceListId)
+  if (input.sellerId) body.seller = Number(input.sellerId)
+  const raw = (await alegraFetch(config, "/estimates", undefined, { method: "POST", body })) as Record<
+    string,
+    unknown
+  >
+  return mapRawEstimate(raw)
+}
+
+export async function getEstimate(config: TenantConfig, alegraId: string): Promise<AlegraEstimate | null> {
+  if (config.alegraMock) return mockListEstimates().find((e) => e.alegraId === alegraId) ?? null
+  try {
+    const raw = (await alegraFetch(config, `/estimates/${alegraId}`)) as Record<string, unknown>
+    return mapRawEstimate(raw)
+  } catch {
+    return null
+  }
+}
+
+/** Cotizaciones de un contacto (para "¿qué le coticé?"). */
+export async function listEstimatesByContact(config: TenantConfig, contactAlegraId: string): Promise<AlegraEstimate[]> {
+  if (config.alegraMock) return mockListEstimates().filter((e) => e.clientAlegraId === contactAlegraId)
+  const page = (await alegraFetch(config, "/estimates", {
+    client_id: contactAlegraId,
+    limit: String(PAGE_SIZE),
+    order_field: "id",
+    order_direction: "DESC",
+  })) as Record<string, unknown>[]
+  return Array.isArray(page) ? page.map(mapRawEstimate) : []
+}
+
+/** Borra una cotización. Lo usa el smoke test para no dejar datos en cuentas reales. */
+export async function deleteEstimate(config: TenantConfig, alegraId: string): Promise<void> {
+  if (config.alegraMock) {
+    mockDeleteEstimate(alegraId)
+    return
+  }
+  await alegraFetch(config, `/estimates/${alegraId}`, undefined, { method: "DELETE" })
+}
+
+// ── Facturas y pagos (cuenta corriente del cliente) ──
+// Alegra es el ERP: el portal lee de acá lo que antes venía de Flexxus. Ver lib/erp.ts.
+
+/** Facturas de venta de un contacto (todas; el portal filtra por estado). */
+export async function listInvoicesByContact(config: TenantConfig, contactAlegraId: string): Promise<AlegraInvoice[]> {
+  if (config.alegraMock) return mockInvoicesByContact(contactAlegraId)
+  return fetchAllPages(config, "/invoices", mapRawInvoice, {
+    client_id: contactAlegraId,
+    order_field: "date",
+    order_direction: "DESC",
+  })
+}
+
+/** Pagos (recibos) recibidos de un contacto, con sus imputaciones a facturas. */
+export async function listPaymentsByContact(config: TenantConfig, contactAlegraId: string): Promise<AlegraPayment[]> {
+  if (config.alegraMock) return mockPaymentsByContact(contactAlegraId)
+  return fetchAllPages(config, "/payments", mapRawPayment, {
+    client_id: contactAlegraId,
+    type: "in", // solo cobros al cliente, no pagos a proveedores
+    order_field: "date",
+    order_direction: "DESC",
+  })
+}
+
+/**
+ * Todas las facturas ABIERTAS (impagas) del contacto.
+ *
+ * Es un set chico (para un cliente con 1282 facturas son 10) y se trae entero: de acá salen el
+ * saldo, los contadores de vencidas/pendientes y los chips Pendientes/Vencidas. Alegra filtra
+ * por `status=open` pero no por vencimiento, así que el corte vencida/pendiente se hace sobre
+ * este set completo, no sobre una página.
+ *
+ * Límite conocido: no está paginado. Un cliente con cientos de facturas impagas haría varios
+ * pedidos. No hay alternativa: Alegra no tiene endpoint de saldo (probados /statement,
+ * /balance, /account-statement → 404, fields=balance → null).
+ */
+export async function listOpenInvoicesByContact(config: TenantConfig, contactAlegraId: string): Promise<AlegraInvoice[]> {
+  if (config.alegraMock) {
+    return (await listInvoicesByContact(config, contactAlegraId)).filter((i) => i.status === "open")
+  }
+  return fetchAllPages(config, "/invoices", mapRawInvoice, { client_id: contactAlegraId, status: "open" })
+}
+
+/** Saldo de cuenta corriente a partir de las facturas abiertas: vencido vs. a vencer. */
+export function computeBalance(invoices: AlegraInvoice[]): AlegraContactBalance {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  let total = 0
+  let overdue = 0
+  for (const inv of invoices) {
+    if (inv.status === "closed" || inv.status === "void" || inv.balance <= 0) continue
+    total += inv.balance
+    const due = inv.dueDate ? new Date(`${inv.dueDate}T00:00:00`) : null
+    if (due && due < today) overdue += inv.balance
+  }
+  return { total, overdue, toFallDue: total - overdue }
+}
+
+export async function getContactBalance(config: TenantConfig, contactAlegraId: string): Promise<AlegraContactBalance> {
+  return computeBalance(await listOpenInvoicesByContact(config, contactAlegraId))
+}
+
+/** Cuentas bancarias del tenant (para el select de cuenta destino al cargar un pago).
+ *  Por defecto Alegra devuelve solo las activas; las inactivas solo entran pidiéndolas. */
+export async function listBankAccounts(config: TenantConfig): Promise<AlegraBankAccount[]> {
+  if (config.alegraMock) return []
+  return fetchAllPages(config, "/bank-accounts", mapRawBankAccount)
+}
+
+/**
+ * Crea el pago (recibo de caja) en Alegra, imputado a las facturas dadas. `notes` va como
+ * `observations`: no se imprime en el documento que ve el cliente (la alternativa `anotation`
+ * sí se imprime). El número del pago viene en la respuesta del POST; si la cuenta no lo trae,
+ * se consulta el pago una vez (GET /payments/{id}, mismo shape) antes de rendirse con null.
+ */
+export async function createPayment(config: TenantConfig, input: AlegraPaymentCreateInput): Promise<AlegraPaymentCreated> {
+  if (config.alegraMock) {
+    // Id numérico puro: la fila guarda alegra_payment_id como integer.
+    return { alegraId: String(Date.now()), number: null }
+  }
+  const body: Record<string, unknown> = {
+    client: Number(input.contactAlegraId),
+    date: input.date,
+    paymentMethod: input.paymentMethod,
+    invoices: input.invoices.map((inv) => ({ id: Number(inv.alegraId), amount: inv.amount })),
+  }
+  if (input.bankAccountId) body.bankAccount = { id: Number(input.bankAccountId) }
+  if (input.notes) body.observations = input.notes.slice(0, 500)
+  const raw = (await alegraFetch(config, "/payments", undefined, { method: "POST", body })) as Record<string, unknown>
+
+  let created = mapRawPayment(raw)
+  if (created.number === null) {
+    try {
+      const fetched = (await alegraFetch(config, `/payments/${created.alegraId}`)) as Record<string, unknown>
+      created = mapRawPayment(fetched)
+    } catch {
+      // El pago existe pero no conseguimos su número: no vale fallar la carga por eso.
+    }
+  }
+  return { alegraId: created.alegraId, number: created.number }
+}
+
+/**
+ * Adjunta un archivo al pago de Alegra (POST multipart, campo `file`, tope 2 MB). El caller
+ * decide si vale la pena: acá el adjunto es best-effort — quien lo llama lo envuelve en
+ * try/catch y sigue aunque esto falle. Devuelve la URL firmada (vence a los 30 min) o null
+ * si Alegra no devolvió una.
+ */
+export async function attachFileToPayment(
+  config: TenantConfig,
+  paymentAlegraId: string,
+  file: { name: string; contentType: string; bytes: Uint8Array },
+): Promise<string | null> {
+  if (config.alegraMock) return null
+  const form = new FormData()
+  // Uint8Array genérico (ArrayBufferLike) no calza con BlobPart de TS 5.7+; el runtime acepta cualquier Uint8Array.
+  form.append("file", new Blob([file.bytes as unknown as BlobPart], { type: file.contentType }), file.name)
+
+  const url = `${ALEGRA_BASE}/payments/${paymentAlegraId}/attachment`
+  const res = await fetch(url, { method: "POST", headers: { Authorization: authHeader(config) }, body: form, cache: "no-store" })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "")
+    throw new Error(`Alegra error ${res.status} en /payments/${paymentAlegraId}/attachment${detail ? `: ${detail.slice(0, 300)}` : ""}`)
+  }
+  const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null
+  return raw && typeof raw.url === "string" ? raw.url : null
+}
+
+// ── PDF de documentos (facturas, recibos de pago, cotizaciones) ──────────────
+// Alegra no expone el PDF como recurso propio: hay que pedir el documento con
+// `?fields=pdf` y devuelve una URL FIRMADA de su CDN, con `Expires` y `Signature`.
+// Dos consecuencias:
+//   1. La URL vence → no sirve guardarla en la DB ni mandársela al cliente para después.
+//   2. Quien tenga la URL entra sin autenticarse → nunca se la devolvemos al navegador
+//      a secas: el portal valida primero que el documento sea del cliente logueado
+//      (por eso esto también devuelve el id del cliente dueño).
+
+/** Tipos de documento del portal y su recurso en Alegra. */
+export const DOCUMENT_RESOURCES = {
+  factura: "invoices",
+  pago: "payments",
+  presupuesto: "estimates",
+} as const
+
+export type DocumentKind = keyof typeof DOCUMENT_RESOURCES
+
+export interface AlegraDocumentPdf {
+  /** Id del contacto dueño del documento. `null` si Alegra no lo trae (→ tratar como ajeno). */
+  clientAlegraId: string | null
+  /** URL firmada del PDF, o `null` si Alegra no generó ninguno para este documento. */
+  pdfUrl: string | null
+  /** Número legible del documento, para nombrar el archivo que baja el cliente. */
+  number: string | null
+}
+
+/**
+ * Documento con su PDF firmado y el contacto dueño, para que el llamador valide
+ * la pertenencia ANTES de servirlo. No filtra por cliente: eso es responsabilidad
+ * de quien lo llama, que es el único que sabe quién está logueado.
+ */
+export async function getDocumentPdf(
+  config: TenantConfig,
+  kind: DocumentKind,
+  documentId: string,
+): Promise<AlegraDocumentPdf | null> {
+  const raw = (await alegraFetch(config, `/${DOCUMENT_RESOURCES[kind]}/${documentId}`, {
+    fields: "pdf",
+  })) as Record<string, unknown> | null
+  if (!raw || raw.id == null) return null
+
+  const client = (raw.client ?? {}) as Record<string, unknown>
+  const numberTemplate = raw.numberTemplate as { fullNumber?: unknown; formattedNumber?: unknown } | undefined
+  const fullNumber = numberTemplate?.fullNumber ?? numberTemplate?.formattedNumber ?? raw.number
+
+  return {
+    clientAlegraId: client.id != null ? String(client.id) : null,
+    pdfUrl: typeof raw.pdf === "string" && raw.pdf ? raw.pdf : null,
+    number: fullNumber != null ? String(fullNumber) : null,
+  }
+}
+
+// ── Búsqueda de contacto por identificador del portal (email o CUIT) ─────────
+// El `query` de /contacts de Alegra matchea SOLO por nombre: no mira `email` ni
+// `identification`. Verificado contra la cuenta real — buscar un email exacto de un
+// contacto existente devuelve []. Por eso el login del portal, que promete "CUIT o
+// email", necesita traer los contactos y filtrar acá, igual que `searchContactsByPhone`.
+
+/** Deja solo los dígitos: "20-12345678-9", "20123456789" y "20.123.456.789" son el mismo CUIT. */
+function normalizeIdentification(value: string | null | undefined): string {
+  return (value ?? "").replace(/\D/g, "")
+}
+
+/**
+ * Contacto por email o CUIT exactos, para el login del portal.
+ *
+ * Escanea todos los contactos porque la API no ofrece filtro por esos campos. Si el
+ * identificador no parece ni email ni documento, cae en la búsqueda por nombre de
+ * Alegra, que sí funciona y es una sola request.
+ */
+export async function findContactByIdentifier(
+  config: TenantConfig,
+  identifier: string,
+): Promise<AlegraContact | null> {
+  const trimmed = identifier.trim()
+  if (!trimmed) return null
+
+  if (config.alegraMock) {
+    const [match] = await searchContacts(config, trimmed, 1)
+    return match ?? null
+  }
+
+  const email = trimmed.toLowerCase()
+  const isEmail = trimmed.includes("@")
+  const documento = normalizeIdentification(trimmed)
+  // 6 dígitos = piso de un DNI. Menos que eso no es un documento, es otra cosa.
+  const isDocumento = !isEmail && documento.length >= 6
+
+  if (isEmail || isDocumento) {
+    const esExacto = (c: AlegraContact) =>
+      isEmail
+        ? (c.email ?? "").trim().toLowerCase() === email
+        : normalizeIdentification(c.identification) === documento
+
+    // Primero la búsqueda del propio Alegra (UNA request): su `query` matchea también
+    // email e identificación, no solo el nombre. El resultado NO se toma como bueno por
+    // venir en la lista — se le exige el mismo match exacto que al escaneo completo, así
+    // que un parcial no deja entrar a la cuenta equivocada.
+    // El escaneo de abajo baja ~6000 contactos de a 30 (cientos de requests en ráfaga) y es
+    // lo que hacía que Alegra devolviera 429 y el portal contestara "Error interno del
+    // servidor" en el login. Queda como fallback por si `query` no cubre algún caso.
+    const candidatos = await searchContacts(config, trimmed, PAGE_SIZE).catch((err) => {
+      // Si el 429 ya apareció acá, el escaneo completo solo empeora las cosas.
+      if (err instanceof AlegraRateLimitError) throw err
+      return [] as AlegraContact[]
+    })
+    const directo = candidatos.find(esExacto)
+    if (directo) return directo
+
+    const contacts = await listAllContacts(config)
+    const match = contacts.find(esExacto)
+    if (match) return match
+    // Sin match exacto no se intenta por nombre: un email nunca es el nombre de una
+    // empresa, y un match parcial acá deja entrar a la cuenta equivocada.
+    return null
+  }
+
+  const [byName] = await searchContacts(config, trimmed, 1)
+  return byName ?? null
+}
+
+// ── Facturas paginadas ──────────────────────────────────────────────────────
+// El portal no puede bajar el historial completo: un cliente con 1282 facturas son 43
+// páginas y ~7 s de espera.
+//
+// Qué acepta Alegra, probado contra la cuenta real (los nombres importan):
+//   date_afterOrNow / date_beforeOrNow  ✅ rango por fecha de EMISIÓN
+//   status=open|closed|void             ✅ y se combina con las fechas
+//   date_after                          ❌ no existe, se ignora en silencio
+//   dueDate_afterOrNow / _beforeOrNow   ❌ se ignoran: el vencimiento no se filtra
+//   number / query                      ❌ se ignoran: no se puede buscar por número
+//
+// `limit` tiene tope 30 y pedir más no falla: DEVUELVE BASURA (con limit=100 vuelven 2
+// filas). Por eso una ventana más grande se arma con varias requests de 30 en paralelo.
+
+export interface AlegraInvoicePage {
+  items: AlegraInvoice[]
+  /** Total de facturas del contacto según Alegra, para saber cuántas faltan. */
+  total: number
+}
+
+/**
+ * Una ventana de facturas del contacto, de la más reciente a la más vieja.
+ *
+ * El `total` sale de `metadata=true` e incluye los borradores, que el portal esconde: si
+ * el contacto tuviera borradores, el "mostrando X de Y" quedaría corto por esa cantidad.
+ */
+export interface AlegraInvoiceFilters {
+  /** `open` | `closed` | `void`. Alegra no acepta varios a la vez. */
+  status?: string
+  /** Fecha de EMISIÓN desde / hasta, "YYYY-MM-DD". Ojo: el vencimiento no se puede filtrar
+   *  — `dueDate_afterOrNow` y `dueDate_beforeOrNow` los ignora (probado). */
+  dateFrom?: string
+  dateTo?: string
+}
+
+/**
+ * Una ventana [start, start+limit) de un listado de Alegra, con el total.
+ *
+ * `pageSize` es el tamaño de cada request. Alegra topea en 30, pero pedir más no falla:
+ * devuelve basura (con limit=100 vuelven 2 filas). Una ventana más grande se arma con varias
+ * requests en paralelo. Para pagos conviene bajarlo: cada pago trae embebidas sus facturas
+ * imputadas y 30 tardan ~9 s.
+ */
+async function fetchWindow<T>(
+  config: TenantConfig,
+  path: string,
+  map: (raw: Record<string, unknown>) => T,
+  params: Record<string, string>,
+  { start, limit, pageSize = PAGE_SIZE }: { start: number; limit: number; pageSize?: number },
+): Promise<{ items: T[]; total: number }> {
+  const size = Math.min(pageSize, PAGE_SIZE)
+  const chunks = Math.max(1, Math.ceil(limit / size))
+  const responses = await Promise.all(
+    Array.from({ length: chunks }, (_, i) =>
+      alegraFetch(config, path, {
+        ...params,
+        start: String(start + i * size),
+        limit: String(Math.min(size, limit - i * size)),
+        // Solo la primera pide el total: viene igual en todas.
+        ...(i === 0 ? { metadata: "true" } : {}),
+      }),
+    ),
+  )
+  let total = 0
+  const items: T[] = []
+  responses.forEach((res, i) => {
+    // Con metadata=true la respuesta es { metadata, data }; sin él, el array pelado.
+    const rows = Array.isArray(res)
+      ? res
+      : ((res as { data?: unknown }).data as Record<string, unknown>[] | undefined) ?? []
+    if (i === 0 && !Array.isArray(res)) {
+      total = Number((res as { metadata?: { total?: unknown } }).metadata?.total ?? 0)
+    }
+    for (const row of rows) items.push(map(row))
+  })
+  return { items, total }
+}
+
+export async function listInvoicesPageByContact(
+  config: TenantConfig,
+  contactAlegraId: string,
+  { start, limit, filters = {} }: { start: number; limit: number; filters?: AlegraInvoiceFilters },
+): Promise<AlegraInvoicePage> {
+  if (config.alegraMock) {
+    const all = await listInvoicesByContact(config, contactAlegraId)
+    return { items: all.slice(start, start + limit), total: all.length }
+  }
+  return fetchWindow(config, "/invoices", mapRawInvoice, {
+    client_id: contactAlegraId,
+    order_field: "date",
+    order_direction: "DESC",
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.dateFrom ? { date_afterOrNow: filters.dateFrom } : {}),
+    ...(filters.dateTo ? { date_beforeOrNow: filters.dateTo } : {}),
+  }, { start, limit })
+}
+
+/**
+ * Pagos (recibos) del contacto, del más reciente al más viejo.
+ *
+ * Probado contra la cuenta real: hay total con metadata, pero `date_afterOrNow` y
+ * `date_beforeOrNow` se IGNORAN en pagos (a diferencia de facturas), así que no se ofrece
+ * filtro de fecha. Y son pesados: 30 pagos tardan ~9 s, 10 tardan ~3,7 s.
+ */
+export async function listPaymentsPageByContact(
+  config: TenantConfig,
+  contactAlegraId: string,
+  { start, limit }: { start: number; limit: number },
+): Promise<{ items: AlegraPayment[]; total: number }> {
+  if (config.alegraMock) {
+    const all = await listPaymentsByContact(config, contactAlegraId)
+    return { items: all.slice(start, start + limit), total: all.length }
+  }
+  return fetchWindow(config, "/payments", mapRawPayment, {
+    client_id: contactAlegraId,
+    type: "in",
+    order_field: "date",
+    order_direction: "DESC",
+  }, { start, limit, pageSize: limit })
+}
+
+export interface AlegraEstimateFilters {
+  /** `billed` (facturado = aceptado) | `unbilled`. Probado: sí filtra (126 + 78 de 205). */
+  status?: "billed" | "unbilled"
+  /** Fecha de emisión desde/hasta, "YYYY-MM-DD". Probado: date_afterOrNow sí filtra. */
+  dateFrom?: string
+  dateTo?: string
+}
+
+/**
+ * Presupuestos del contacto, del más reciente al más viejo.
+ *
+ * El orden explícito no es decorativo: sin `order_direction` Alegra devuelve del más VIEJO
+ * al más nuevo (probado: 2018 → 2022). Y antes esto pedía una sola página de 30 sin total,
+ * así que un cliente con 205 presupuestos veía 30 sin ningún aviso.
+ */
+export async function listEstimatesPageByContact(
+  config: TenantConfig,
+  contactAlegraId: string,
+  { start, limit, filters = {} }: { start: number; limit: number; filters?: AlegraEstimateFilters },
+): Promise<{ items: AlegraEstimate[]; total: number }> {
+  if (config.alegraMock) {
+    const all = await listEstimatesByContact(config, contactAlegraId)
+    return { items: all.slice(start, start + limit), total: all.length }
+  }
+  return fetchWindow(config, "/estimates", mapRawEstimate, {
+    client_id: contactAlegraId,
+    order_field: "date",
+    order_direction: "DESC",
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.dateFrom ? { date_afterOrNow: filters.dateFrom } : {}),
+    ...(filters.dateTo ? { date_beforeOrNow: filters.dateTo } : {}),
+  }, { start, limit })
+}

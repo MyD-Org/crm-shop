@@ -1,0 +1,144 @@
+import { NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
+import { getIronSession } from "iron-session"
+import { and, eq } from "drizzle-orm"
+import { Resend } from "resend"
+import { getDb } from "@/db"
+import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
+import { generateToken } from "@/lib/admin-crypto"
+import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { assignableRoles, canManageUsers, type AdminRole } from "@/lib/roles"
+
+async function getAdminSession() {
+  return getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
+}
+
+// Etiqueta visible del rol (para el email de invitación).
+function roleLabel(role: string): string {
+  if (role === "superadmin") return "Superadmin"
+  if (role === "admin") return "Admin"
+  return "Operador"
+}
+
+// Intenta enviar el email de invitación. Devuelve { sent, errorMsg }.
+// Resend v6 retorna { data, error } sin tirar excepción en errores de API.
+async function trySendInviteEmail({
+  tenant,
+  user,
+  role,
+  inviteUrl,
+}: {
+  tenant: { resendFrom?: string | null; name?: string | null } | undefined
+  user: { email: string; name: string }
+  role: string
+  inviteUrl: string
+}): Promise<{ sent: boolean; errorMsg?: string }> {
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    const { error } = await resend.emails.send({
+      from: tenant?.resendFrom ?? "noreply@example.com",
+      to: user.email,
+      subject: `Invitación al backoffice de ${tenant?.name ?? ""}`,
+      html: `
+        <p>Hola ${user.name},</p>
+        <p>Fuiste invitado como <strong>${roleLabel(role)}</strong> del backoffice.</p>
+        <p><a href="${inviteUrl}">Aceptar invitación y crear contraseña</a></p>
+        <p>El link vence en 7 días.</p>
+      `,
+    })
+    if (error) {
+      const msg = `${error.name}: ${error.message}`
+      console.error("[invite] Resend error:", msg)
+      return { sent: false, errorMsg: msg }
+    }
+    return { sent: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error("[invite] Resend exception:", msg)
+    return { sent: false, errorMsg: msg }
+  }
+}
+
+export async function GET() {
+  const session = await getAdminSession()
+  if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
+  if (!canManageUsers(session.role)) return NextResponse.json({ error: "prohibido" }, { status: 403 })
+
+  const db = getDb()
+  const users = await db
+    .select({
+      id: adminUsers.id,
+      email: adminUsers.email,
+      name: adminUsers.name,
+      role: adminUsers.role,
+      departments: adminUsers.departments,
+      createdAt: adminUsers.createdAt,
+      hasPassword: adminUsers.passwordHash,
+      inviteExpiresAt: adminPasswordTokens.expiresAt,
+      inviteAcceptedAt: adminPasswordTokens.usedAt,
+    })
+    .from(adminUsers)
+    .leftJoin(
+      adminPasswordTokens,
+      and(eq(adminPasswordTokens.userId, adminUsers.id), eq(adminPasswordTokens.type, "invite")),
+    )
+    .where(eq(adminUsers.tenantId, session.tenantId))
+
+  return NextResponse.json(users.map((u) => ({ ...u, hasPassword: !!u.hasPassword })))
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getAdminSession()
+  if (!session.userId || !canManageUsers(session.role)) {
+    return NextResponse.json({ error: "No tiene permisos de gestión de usuarios" }, { status: 403 })
+  }
+
+  const body = await req.json().catch(() => null)
+  if (!body?.email || !body?.name || !body?.role) {
+    return NextResponse.json({ error: "email, name y role son requeridos" }, { status: 400 })
+  }
+  // El actor solo puede crear roles dentro de lo que puede otorgar (un admin: solo operadores).
+  if (!assignableRoles(session.role).includes(body.role as AdminRole)) {
+    return NextResponse.json({ error: "No puede asignar ese rol" }, { status: 403 })
+  }
+
+  const db = getDb()
+  // Unicidad de email SCOPEADA al tenant: el mismo email puede existir en otro tenant
+  // (multi-tenant). Chequear global bloquearía altas legítimas y filtraría existencia
+  // de usuarios de otros tenants.
+  const existing = await db
+    .select({ id: adminUsers.id })
+    .from(adminUsers)
+    .where(and(eq(adminUsers.email, body.email.toLowerCase()), eq(adminUsers.tenantId, session.tenantId)))
+  if (existing.length) return NextResponse.json({ error: "El email ya está en uso" }, { status: 409 })
+
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [user] = await db.insert(adminUsers).values({
+    tenantId: session.tenantId,
+    email: body.email.toLowerCase(),
+    name: body.name,
+    role: body.role,
+    departments: Array.isArray(body.departments)
+      ? body.departments.map((d: unknown) => String(d).trim()).filter(Boolean)
+      : [],
+  }).returning()
+
+  const { token, tokenHash } = generateToken()
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 días para aceptar invitación
+  await db.insert(adminPasswordTokens).values({ userId: user.id, tokenHash, type: "invite", expiresAt })
+
+  // Base URL: preferimos derivarla del request (funciona en prod/preview/local sin
+  // configurar nada); NEXT_PUBLIC_BASE_URL queda como override opcional.
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? req.nextUrl.origin
+  const inviteUrl = `${baseUrl}/admin/reset-password/${token}`
+
+  const { sent: emailSent, errorMsg: emailError } = await trySendInviteEmail({ tenant, user, role: body.role, inviteUrl })
+
+  // Devolvemos el inviteUrl siempre (también en prod): mientras no haya servidor de
+  // mail configurado, el superadmin copia el link desde la UI y lo comparte a mano.
+  // La respuesta viaja por HTTPS al superadmin autenticado que crea la invitación.
+  return NextResponse.json(
+    { id: user.id, ok: true, emailSent, emailError, inviteUrl },
+    { status: 201 },
+  )
+}

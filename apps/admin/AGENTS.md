@@ -4,6 +4,7 @@ Las reglas comunes (Next.js, ecosistema, repo público, textos de UI) están en 
 
 - Correr todo parado en `apps/admin`. Los tests de integración usan rutas relativas al cwd (`./drizzle`) y una base local `crm_test`; la guarda `assertLocalTestDb` impide apuntar a una base real.
 - Las migraciones de producción NO corren solas en el deploy: se aplican a mano (`npm run db:migrate` parado en `apps/admin`) antes de mergear código que dependa de ellas.
+- Migración escrita a mano ⇒ regenerar el snapshot: `npx tsx scripts/drizzle-snapshot.ts` (no toca ninguna base). Si `drizzle/meta/` queda atrás de `schema.ts`, `drizzle-kit generate` abre un prompt de rename y falla sin TTY; lo vigila `src/db/snapshot-al-dia.test.ts`.
 - Integraciones de esta app:
   - **Chat de soporte (ai-widget + ai-api)**: el portal embebe el widget; las tools del agente consultan `/api/agent/*` con un `crm_token` (HMAC). Contrato: `platform/contracts/crm-ai-api.md`. Decisión de auth: `platform/decisions/0001`.
   - **Design system (`MyD-Org/ui`)**: se consume desde GitHub Packages (`.npmrc` de esta carpeta, variable `GITHUB_TOKEN`).

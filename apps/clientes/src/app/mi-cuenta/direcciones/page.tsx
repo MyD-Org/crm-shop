@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
-import { Alert, Card } from "@myd-org/ui";
+import { Alert, Card, EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
+import { DireccionesEnvio } from "@/components/mi-cuenta/DireccionesEnvio";
 import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
+import { direccionDesdeFacturacion } from "@/lib/direccion-envio";
+import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import { CIUDADES_ENVIO, ENTREGA_LABEL, MINIMO_ENVIO } from "@/lib/envio";
 import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { rutaIngreso } from "@/lib/ingreso";
@@ -12,50 +15,36 @@ import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 export const dynamic = "force-dynamic";
 
 /**
- * Direcciones y envíos (antes dos secciones: Direcciones y Envíos y retiro).
- * El domicilio de facturación, en sólo lectura y sólo con Clerk, se edita en
- * Mis datos. Las reglas de entrega (ciudades, mínimo, retiro) salen de
- * `src/lib/envio.ts`, las mismas que valida el checkout. Las direcciones de
- * entrega todavía no se guardan: se indican en cada compra (follow-up
- * `direcciones-envio`), y se dice así, sin un formulario que no persiste.
+ * Direcciones y envíos. Con Clerk: las direcciones de envío guardadas (alta y
+ * edición acá mismo, `DireccionesEnvio`), con el atajo de copiar el domicilio
+ * de facturación. El domicilio fiscal en sí vive en Mis datos. Con la cookie
+ * del CRM sin Clerk no hay dónde guardarlas: se invita a iniciar sesión.
+ * Debajo, compactas, las reglas de entrega de `src/lib/envio.ts` (las mismas
+ * que valida el checkout).
  */
 export default async function DireccionesPage() {
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.direcciones));
 
-  const perfil = clerkUserId ? await getPerfilFacturacion(clerkUserId) : null;
-  const lineas = perfil
-    ? [
-        perfil.domicilioCalle,
-        [perfil.domicilioCiudad, perfil.domicilioProvincia].filter(Boolean).join(", "),
-        perfil.domicilioCp ? `CP ${perfil.domicilioCp}` : null,
-      ].filter((l): l is string => Boolean(l))
-    : [];
+  const [direcciones, perfil] = clerkUserId
+    ? await Promise.all([listarDirecciones(clerkUserId), getPerfilFacturacion(clerkUserId)])
+    : [[], null];
 
   return (
     <section className="flex flex-col gap-4">
       <SeccionTitulo titulo="Direcciones y envíos" />
-      {clerkUserId && (
-        <Card
-          title="Domicilio de facturación"
+      {clerkUserId ? (
+        <DireccionesEnvio
+          iniciales={direcciones}
+          facturacion={direccionDesdeFacturacion(perfil)}
+        />
+      ) : (
+        <EmptyState
+          title="Inicie sesión con su usuario para guardar direcciones de envío."
           action={
-            <BotonEnlace variant="link" href={RUTAS_MI_CUENTA.datos}>
-              Editar en Mis datos
-            </BotonEnlace>
+            <BotonEnlace href={rutaIngreso(RUTAS_MI_CUENTA.direcciones)}>Iniciar sesión</BotonEnlace>
           }
-        >
-          {lineas.length > 0 ? (
-            <address className="text-sm not-italic text-text">
-              {lineas.map((l) => (
-                <span key={l} className="block">
-                  {l}
-                </span>
-              ))}
-            </address>
-          ) : (
-            <p className="text-sm text-muted">Todavía no cargó su domicilio de facturación.</p>
-          )}
-        </Card>
+        />
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title={ENTREGA_LABEL.envio}>
@@ -67,8 +56,9 @@ export default async function DireccionesPage() {
       </div>
       {/* El DS 0.13 no tiene Alert tone="info": neutral hasta que exista. */}
       <Alert tone="neutral">
-        La dirección de entrega se indica en cada compra. Para otras localidades, el envío se
-        coordina por separado.
+        {clerkUserId
+          ? "Al finalizar cada compra puede elegir una de sus direcciones o indicar otra. Para otras localidades, el envío se coordina por separado."
+          : "La dirección de entrega se indica en cada compra. Para otras localidades, el envío se coordina por separado."}
       </Alert>
     </section>
   );

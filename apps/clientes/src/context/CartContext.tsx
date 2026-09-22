@@ -168,6 +168,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [aperturaPreview, setAperturaPreview] = useState(0);
 
   const addItem = useCallback((newItem: Omit<CartItem, "qty">, qty = 1) => {
+    // Última barrera: nada entra al carrito a $ 0 aunque algún botón lo intente.
+    if (!(newItem.price > 0)) return;
     setAperturaPreview((n) => n + 1);
     actualizar((prev) => {
       const existing = prev.find((i) => i.id === newItem.id);

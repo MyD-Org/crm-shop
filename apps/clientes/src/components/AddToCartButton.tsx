@@ -27,6 +27,11 @@ interface AddToCartButtonProps {
 export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
   const { items, addItem, removeItem, updateQty } = useCart();
 
+  // Sin precio no hay venta posible: mismo criterio que el filtro de los
+  // listados (`conPrecioSql`) y que la ficha de producto.
+  const sinPrecio = product != null && !(product.price > 0);
+  disabled = disabled || sinPrecio;
+
   const inCart = product ? items.find((i) => i.id === product.id) : null;
   const qty = inCart?.qty ?? 0;
 

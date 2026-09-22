@@ -12,6 +12,7 @@
  * general. Ver `identidadActual()` para el objeto completo.
  */
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { auth, currentUser } from "@clerk/nextjs/server";
@@ -20,6 +21,7 @@ import { getDb } from "@/db";
 import { clientLinks } from "@/db/schema";
 import { getContacto, idPriceListUsable } from "./alegra";
 import { intentarVinculacionPorEmail } from "./vinculacion";
+import { nombrePila } from "./nombre-pila";
 import { sessionOptions, type SessionData } from "./session";
 
 /** Datos comerciales de un cliente ya resuelto. */
@@ -39,6 +41,12 @@ export interface Identidad {
   clerkUserId: string | null;
   email?: string;
   nombre?: string;
+  /**
+   * Para saludar en Mi cuenta: `firstName` de Clerk → primera palabra del
+   * nombre completo → razón social. null = se saluda con "cliente". Ver
+   * `nombre-pila.ts`. `nombre` se conserva aparte: lo usa el header.
+   */
+  nombrePila: string | null;
   /** null = logueado pero sin cuenta corriente vinculada. */
   cliente: ClienteComercial | null;
 }
@@ -96,8 +104,13 @@ async function resolverVinculacion(clerkUserId: string, email?: string) {
  * después la cookie del CRM como puente para quien ya estaba logueado ahí antes
  * de que existiera Clerk. La cookie es transitoria y se va a apagar; mientras
  * exista, un cliente que llega desde el CRM no tiene que re-probar nada.
+ *
+ * Envuelta en `cache()`: en un mismo request la piden el layout raíz, el
+ * header, el layout de Mi cuenta y la página. Sin esto cada uno volvería a
+ * salir a Clerk (y a la base por la vinculación). Fuera de un render de React
+ * (route handlers) `cache` no memoiza y se comporta como la función sola.
  */
-export async function identidadActual(): Promise<Identidad> {
+export const identidadActual = cache(async function identidadActual(): Promise<Identidad> {
   const { userId } = await auth();
 
   if (!userId) {
@@ -107,6 +120,7 @@ export async function identidadActual(): Promise<Identidad> {
       clerkUserId: null,
       email: crm?.email,
       nombre: crm?.razonsocial,
+      nombrePila: nombrePila({ razonSocial: crm?.razonsocial }),
       cliente: crm
         ? {
             codigocliente: crm.codigocliente!,
@@ -151,6 +165,11 @@ export async function identidadActual(): Promise<Identidad> {
       clerkUserId: userId,
       email,
       nombre,
+      nombrePila: nombrePila({
+        firstName: user?.firstName,
+        fullName: user?.fullName,
+        razonSocial: link.razonSocial,
+      }),
       cliente: {
         codigocliente: link.alegraContactId,
         razonsocial: link.razonSocial ?? undefined,
@@ -170,6 +189,11 @@ export async function identidadActual(): Promise<Identidad> {
     clerkUserId: userId,
     email,
     nombre,
+    nombrePila: nombrePila({
+      firstName: user?.firstName,
+      fullName: user?.fullName,
+      razonSocial: crm?.razonsocial,
+    }),
     cliente: crm
       ? {
           codigocliente: crm.codigocliente!,
@@ -181,7 +205,7 @@ export async function identidadActual(): Promise<Identidad> {
         }
       : null,
   };
-}
+});
 
 /**
  * Cliente comercial del request, o null.

@@ -6,17 +6,21 @@
  * Cuando eso cambie, el único lugar a tocar es `crearPedido`.
  */
 
+import { cache } from "react";
 import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { orderItems, orders } from "@/db/schema";
 import {
   ESTADOS_EN_CURSO,
+  type EntregaTipoPedido,
   type Order,
   type OrderEstado,
   type OrderItem,
   type OrderSummary,
   type PagoEstado,
 } from "@/data/orders";
+import type { Product } from "@/data/products";
+import { getProductosPorIds } from "./catalog";
 import type { Cotizacion } from "./cotizacion";
 import type { PlanPedido } from "./pagos/cuotas-tipos";
 import {
@@ -227,10 +231,23 @@ export async function getPedidoPorClave(
 }
 
 /** Fila cruda de `orders` + sus líneas, armada como `Order` de UI. */
-type FilaOrder = typeof orders.$inferSelect;
-type FilaItem = typeof orderItems.$inferSelect;
+export type FilaOrder = typeof orders.$inferSelect;
+export type FilaItem = typeof orderItems.$inferSelect;
 
-function armarOrder(fila: FilaOrder, items: FilaItem[]): Order {
+/**
+ * Arma el `Order` de UI. `productos` es el espejo del catálogo para los ítems
+ * de las líneas (ver `productosDeLineas`): de ahí salen el nombre real, el
+ * código y la foto. Un ítem que ya no está en el espejo cae al snapshot de la
+ * línea.
+ *
+ * @internal Exportada para testearla sin base; el resto del código consume
+ * `listarPedidos` / `getPedido`.
+ */
+export function armarOrder(
+  fila: FilaOrder,
+  items: FilaItem[],
+  productos: ReadonlyMap<string, Product> = new Map(),
+): Order {
   return {
     id: fila.id,
     numero: formatearNumero(fila.numero),
@@ -240,14 +257,17 @@ function armarOrder(fila: FilaOrder, items: FilaItem[]): Order {
     metodoPago: PAGO_LABEL[fila.pagoMetodo as PagoMetodo] ?? fila.pagoMetodo,
     metodoEntrega:
       ENTREGA_LABEL[fila.entregaTipo as EntregaTipo] ?? fila.entregaTipo,
+    entregaTipo: fila.entregaTipo as EntregaTipoPedido,
     entregaCiudad: fila.entregaCiudad ?? undefined,
     entregaDireccion: fila.entregaDireccion ?? undefined,
     subtotal: num(fila.subtotal),
     iva: num(fila.iva),
     costoEnvio: num(fila.costoEnvio),
     total: num(fila.total),
-    items: items.map(
-      (i): OrderItem => ({
+    items: items.map((i): OrderItem => {
+      const producto = productos.get(i.alegraItemId);
+      const imagen = producto?.images?.[0];
+      return {
         id: i.alegraItemId,
         name: i.name,
         brand: i.brand ?? "",
@@ -255,9 +275,21 @@ function armarOrder(fila: FilaOrder, items: FilaItem[]): Order {
         qty: num(i.qty),
         price: num(i.precioUnitario),
         total: num(i.total),
-      }),
-    ),
+        nombreVisible: producto?.name || i.name,
+        codigo: i.code || producto?.sku || i.name,
+        ...(imagen ? { imagen } : {}),
+      };
+    }),
   };
+}
+
+/**
+ * Espejo del catálogo para las líneas: UNA consulta con los ids sin repetir,
+ * sin filtro de estado ni de visibilidad (un pedido viejo sigue mostrando el
+ * nombre de un ítem despublicado). Sin líneas no consulta.
+ */
+function productosDeLineas(items: FilaItem[]): Promise<Map<string, Product>> {
+  return getProductosPorIds([...new Set(items.map((i) => i.alegraItemId))]);
 }
 
 /**
@@ -309,6 +341,7 @@ function esDeSuDueno(dueno: DuenoPedidos) {
  *
  * Dos queries y un agrupado en memoria en vez de un join: con el join, un pedido
  * de 40 líneas se repite 40 veces en el resultado y hay que deduplicar igual.
+ * Una tercera trae el nombre real y la foto de todos los ítems juntos.
  */
 export async function listarPedidos(
   dueno: DuenoPedidos,
@@ -342,19 +375,26 @@ export async function listarPedidos(
     else porPedido.set(item.orderId, [item]);
   }
 
-  return filas.map((f) => armarOrder(f, porPedido.get(f.id) ?? []));
+  const productos = await productosDeLineas(items);
+  return filas.map((f) => armarOrder(f, porPedido.get(f.id) ?? [], productos));
 }
 
-/** Un pedido puntual, solo si pertenece a quien lo pide. */
-export async function getPedido(
+/**
+ * `cache()` memoiza por identidad de cada argumento: por eso la versión
+ * cacheada recibe las llaves del dueño como primitivos y no el objeto (dos
+ * `{ clerkUserId, clienteCodigo }` iguales armados en lugares distintos no
+ * compartirían resultado).
+ */
+const getPedidoCacheado = cache(async function getPedidoCacheado(
   id: string,
-  dueno: DuenoPedidos,
+  clerkUserId: string | null,
+  clienteCodigo: string | undefined,
 ): Promise<Order | null> {
   const db = getDb();
   const [fila] = await db
     .select()
     .from(orders)
-    .where(and(eq(orders.id, id), esDeSuDueno(dueno)))
+    .where(and(eq(orders.id, id), esDeSuDueno({ clerkUserId, clienteCodigo })))
     .limit(1);
 
   if (!fila) return null;
@@ -364,7 +404,15 @@ export async function getPedido(
     .from(orderItems)
     .where(eq(orderItems.orderId, fila.id));
 
-  return armarOrder(fila, items);
+  return armarOrder(fila, items, await productosDeLineas(items));
+});
+
+/**
+ * Un pedido puntual, solo si pertenece a quien lo pide. Memoizado por request
+ * (`cache()`): la página del detalle y el breadcrumb lo comparten.
+ */
+export function getPedido(id: string, dueno: DuenoPedidos): Promise<Order | null> {
+  return getPedidoCacheado(id, dueno.clerkUserId, dueno.clienteCodigo);
 }
 
 // --- Pago online -----------------------------------------------------------
@@ -667,8 +715,12 @@ export async function pedidoPorReferencia(
 }
 
 /**
- * Resumen del año para Mi cuenta. Se calcula en Postgres, no trayendo los
- * pedidos a memoria: es una tarjeta de tres números, no una lista.
+ * Resumen para Mi cuenta. Se calcula en Postgres, no trayendo los pedidos a
+ * memoria: es una tarjeta de tres números, no una lista.
+ *
+ * "Del año" limita sólo los dos agregados anuales. Los pedidos EN CURSO se
+ * cuentan sin importar la fecha: un pedido en camino del 28/12 sigue en curso
+ * el 3/1. Por eso el año va dentro de cada `filter` y no en el `where`.
  *
  * Los cancelados no suman al total comprado.
  */
@@ -676,15 +728,16 @@ export async function resumenPedidos(
   dueno: DuenoPedidos,
 ): Promise<OrderSummary> {
   const inicioAnio = new Date(new Date().getFullYear(), 0, 1);
+  const delAnio = gte(orders.createdAt, inicioAnio);
 
   const [fila] = await getDb()
     .select({
-      pedidos: sql<number>`count(*)::int`,
+      pedidos: sql<number>`count(*) filter (where ${delAnio})::int`,
       enCurso: sql<number>`count(*) filter (where ${inArray(orders.estado, ESTADOS_EN_CURSO)})::int`,
-      comprado: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.estado} <> 'cancelado'), 0)::float8`,
+      comprado: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.estado} <> 'cancelado' and ${delAnio}), 0)::float8`,
     })
     .from(orders)
-    .where(and(esDeSuDueno(dueno), gte(orders.createdAt, inicioAnio)));
+    .where(esDeSuDueno(dueno));
 
   return {
     pedidosEsteAnio: fila?.pedidos ?? 0,

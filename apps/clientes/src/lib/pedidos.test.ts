@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { camposCuotasCobro, formatearNumero, transicionPermitida } from "./pedidos";
+import {
+  armarOrder,
+  camposCuotasCobro,
+  formatearNumero,
+  transicionPermitida,
+  type FilaItem,
+  type FilaOrder,
+} from "./pedidos";
 import type { PagoEstado } from "@/data/orders";
+import type { Product } from "@/data/products";
 
 describe("formatearNumero", () => {
   it("formatea el correlativo con ceros a la izquierda", () => {
@@ -84,5 +92,86 @@ describe("camposCuotasCobro", () => {
   it("mismo evento dos veces → mismos campos (idempotente)", () => {
     const cobro = { ...base, cuotas: 3, totalPagado: 120000.5 };
     expect(camposCuotasCobro(cobro)).toEqual(camposCuotasCobro(cobro));
+  });
+});
+
+/**
+ * Líneas de pedido con el nombre real: `order_items.name` guarda el código
+ * (así lo congela la cotización), así que el nombre visible sale del espejo
+ * del catálogo si el ítem sigue ahí.
+ */
+describe("armarOrder", () => {
+  const fila = {
+    id: "p-1",
+    numero: 1042,
+    createdAt: new Date("2026-09-01T12:00:00Z"),
+    estado: "preparacion",
+    pagoEstado: "pagado",
+    pagoMetodo: "transferencia",
+    entregaTipo: "envio",
+    entregaCiudad: "Ciudad Ejemplo",
+    entregaDireccion: null,
+    subtotal: "1000.00",
+    iva: "210.00",
+    costoEnvio: "0.00",
+    total: "1210.00",
+  } as unknown as FilaOrder;
+
+  const linea = (extra: Partial<FilaItem> = {}) =>
+    ({
+      id: "l-1",
+      orderId: "p-1",
+      alegraItemId: "42",
+      code: null,
+      name: "02141N",
+      brand: "Marca Ejemplo",
+      qty: "2.000",
+      precioUnitario: "500.00",
+      ivaPorcentaje: "21.00",
+      subtotal: "1000.00",
+      iva: "210.00",
+      total: "1210.00",
+      ...extra,
+    }) as FilaItem;
+
+  const lampara: Product = {
+    id: "42",
+    name: "Lámpara LED A60 9W E27",
+    brand: "Marca Ejemplo",
+    price: 500,
+    stock: "in",
+    sku: "02141N",
+    images: [{ url: "https://media.plataforma.example/42.jpg", w: 800 }],
+  };
+
+  it("con el producto en el espejo: nombre real, código y foto", () => {
+    const order = armarOrder(fila, [linea()], new Map([["42", lampara]]));
+    expect(order.items[0]).toMatchObject({
+      id: "42",
+      name: "02141N",
+      nombreVisible: "Lámpara LED A60 9W E27",
+      codigo: "02141N",
+      imagen: { url: "https://media.plataforma.example/42.jpg", w: 800 },
+      qty: 2,
+    });
+  });
+
+  it("sin el producto en el espejo: el snapshot de la línea, sin foto", () => {
+    const [item] = armarOrder(fila, [linea()], new Map()).items;
+    expect(item.nombreVisible).toBe("02141N");
+    expect(item.codigo).toBe("02141N");
+    expect(item.imagen).toBeUndefined();
+  });
+
+  it("el code congelado en la línea gana sobre el sku del espejo", () => {
+    const [item] = armarOrder(fila, [linea({ code: "REF-1" })], new Map([["42", lampara]])).items;
+    expect(item.codigo).toBe("REF-1");
+  });
+
+  it("expone el tipo de entrega crudo y conserva la etiqueta", () => {
+    const order = armarOrder(fila, [], new Map());
+    expect(order.entregaTipo).toBe("envio");
+    expect(order.metodoEntrega).not.toBe("envio");
+    expect(order.facturaId).toBeUndefined();
   });
 });

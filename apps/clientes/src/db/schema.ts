@@ -622,3 +622,32 @@ export const catalogoSyncState = shop.table("catalogo_sync_state", {
   lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
   lastError: text("last_error"),
 });
+
+/**
+ * Favoritos de Mi cuenta: qué productos guardó cada usuario de Clerk.
+ *
+ * - `tenant_id` obligatorio y sin default, por la misma razón que en `orders`:
+ *   la base es compartida y toda lectura/escritura filtra por el tenant del
+ *   entorno (`shopTenantId()`, ver src/lib/favoritos.ts).
+ * - El ancla es `clerk_user_id`, como en `billing_profiles`: un visitante con la
+ *   cookie del CRM y sin Clerk no tiene dónde guardar favoritos.
+ * - Sin FK a `catalog_products`: el espejo lo reescribe la sync y un ítem puede
+ *   desaparecer; el favorito queda y la lista simplemente lo omite.
+ * - El unique por (tenant, usuario, ítem) hace idempotente el alta
+ *   (`on conflict do nothing`); el índice por fecha sirve al "más nuevo primero".
+ */
+export const favorites = shop.table(
+  "favorites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    clerkUserId: text("clerk_user_id").notNull(),
+    /** Id del ítem en Alegra (el mismo que usa `/producto/[id]`). */
+    alegraItemId: text("alegra_item_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("fav_tenant_usuario_item").on(t.tenantId, t.clerkUserId, t.alegraItemId),
+    index("fav_tenant_usuario_fecha").on(t.tenantId, t.clerkUserId, t.createdAt),
+  ],
+);

@@ -7,10 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let userId: string | null = "user_1";
 let permitido = true;
-const permitir = vi.fn((..._a: unknown[]) => permitido);
-const agregarFavorito = vi.fn(async (..._a: unknown[]) => {});
-const quitarFavorito = vi.fn(async (..._a: unknown[]) => {});
-const idsFavoritos = vi.fn(async (..._a: unknown[]) => ["42"]);
+const permitir = vi.fn<(...a: unknown[]) => boolean>(() => permitido);
+const agregarFavorito = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {});
+const quitarFavorito = vi.fn<(...a: unknown[]) => Promise<void>>(async () => {});
+const idsFavoritos = vi.fn<(...a: unknown[]) => Promise<string[]>>(async () => ["42"]);
 
 // `vi.mock` se iza sobre las declaraciones: la clase tiene que izarse también.
 const { FavoritosLlenosError } = vi.hoisted(() => ({

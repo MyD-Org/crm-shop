@@ -16,14 +16,13 @@ const ids = (s: { id: string }[]) => s.map((x) => x.id);
 
 /** Navegación de Mi cuenta: secciones por identidad y despliegue (NAV-2, NAV-3). */
 describe("seccionesVisibles", () => {
-  it("Clerk vinculado con todo desplegado: 8 entradas en el orden del mockup", () => {
+  it("Clerk vinculado con todo desplegado: 7 entradas: Direcciones y envíos van juntas", () => {
     const s = seccionesVisibles({ clerk: true, vinculado: true }, TODO);
     expect(ids(s)).toEqual([
       "pedidos",
       "facturas",
       "favoritos",
       "direcciones",
-      "envios",
       "datos",
       "seguridad",
       "salir",
@@ -36,25 +35,25 @@ describe("seccionesVisibles", () => {
     expect(s.find((x) => x.id === "datos")?.href).toBe(RUTAS_MI_CUENTA.datos);
   });
 
-  it("cookie del CRM sin Clerk: sólo Pedidos, Facturas y Envíos y retiro", () => {
+  it("cookie del CRM sin Clerk: sólo Pedidos, Facturas y Direcciones y envíos", () => {
     const s = seccionesVisibles({ clerk: false, vinculado: true }, TODO);
-    expect(ids(s)).toEqual(["pedidos", "facturas", "envios"]);
+    expect(ids(s)).toEqual(["pedidos", "facturas", "direcciones"]);
   });
 
   it("Clerk sin vínculo también ve Facturas (la página ofrece vincular)", () => {
     expect(ids(seccionesVisibles({ clerk: true, vinculado: false }, TODO))).toContain("facturas");
   });
 
-  it("C desplegada sin D ni E: 6 entradas para Clerk", () => {
+  it("C desplegada sin D ni E: 5 entradas para Clerk", () => {
     const s = seccionesVisibles({ clerk: true, vinculado: true }, NADA);
-    expect(ids(s)).toEqual(["pedidos", "direcciones", "envios", "datos", "seguridad", "salir"]);
+    expect(ids(s)).toEqual(["pedidos", "direcciones", "datos", "seguridad", "salir"]);
   });
 
   it("la función es total: sin identidad quedan las secciones públicas", () => {
     expect(ids(seccionesVisibles({ clerk: false, vinculado: false }, TODO))).toEqual([
       "pedidos",
       "facturas",
-      "envios",
+      "direcciones",
     ]);
   });
 
@@ -70,8 +69,7 @@ describe("seccionesVisibles", () => {
       "Pedidos",
       "Facturas",
       "Favoritos",
-      "Direcciones",
-      "Envíos y retiro",
+      "Direcciones y envíos",
       "Mis datos",
       "Seguridad",
       "Cerrar sesión",
@@ -109,7 +107,6 @@ describe("seccionActiva", () => {
     ["/mi-cuenta/facturas?pagina=2", "facturas"],
     ["/mi-cuenta/favoritos", "favoritos"],
     ["/mi-cuenta/direcciones", "direcciones"],
-    ["/mi-cuenta/envios", "envios"],
     ["/mi-cuenta/datos", "datos"],
     ["/mi-cuenta/vincular", "datos"],
     ["/mi-cuenta/lo-que-sea", "pedidos"],
@@ -132,10 +129,10 @@ describe("migasMiCuenta", () => {
       { label: "Mi cuenta", href: "/mi-cuenta" },
       { label: "Favoritos" },
     ]);
-    expect(migasMiCuenta("/mi-cuenta/envios")).toEqual([
+    expect(migasMiCuenta("/mi-cuenta/direcciones")).toEqual([
       { label: "Inicio", href: "/" },
       { label: "Mi cuenta", href: "/mi-cuenta" },
-      { label: "Envíos y retiro" },
+      { label: "Direcciones y envíos" },
     ]);
   });
 

@@ -17,8 +17,8 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 | `/mi-cuenta/pedidos` | Todos los pedidos (los 50 más recientes). |
 | `/mi-cuenta/pedidos/[id]` | Detalle: seguimiento, entrega, pago, productos y totales. Un id ajeno o que no es uuid da 404 (nunca 403). |
 | `/mi-cuenta/datos` | Datos de acceso (panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente y, sólo con cuenta corriente, el portal del CRM. |
-| `/mi-cuenta/direcciones` | Domicilio de facturación en sólo lectura y un estado vacío honesto para la entrega. |
-| `/mi-cuenta/envios` | Envío a domicilio y retiro, derivado de `src/lib/envio.ts`. |
+| `/mi-cuenta/direcciones` | Direcciones y envíos: domicilio de facturación en sólo lectura (con Clerk), envío a domicilio y retiro derivados de `src/lib/envio.ts`, y el aviso de que la entrega se indica en cada compra. |
+| `/mi-cuenta/envios` | Redirige (308) a `/mi-cuenta/direcciones`: Envíos y retiro se unió a Direcciones. |
 | `/mi-cuenta/vincular` | Vinculación con la cuenta de cliente de Alegra (`VincularClient`). |
 
 "Seguridad" y "Cerrar sesión" no son rutas: son acciones de la navegación
@@ -57,8 +57,8 @@ marca la activa.
 | Identidad | Secciones |
 |---|---|
 | Anónimo | Ninguna: redirect al ingreso. |
-| Cookie heredada del CRM, sin Clerk | Pedidos, Envíos y retiro (+ Facturas cuando exista). `/datos` pide iniciar sesión; `/direcciones` sólo muestra el estado vacío. |
-| Clerk sin cuenta vinculada | Pedidos, Direcciones, Envíos y retiro, Mis datos, Seguridad, Cerrar sesión. |
+| Cookie heredada del CRM, sin Clerk | Pedidos, Direcciones y envíos (+ Facturas cuando exista). `/datos` pide iniciar sesión; en `/direcciones` no aparece el domicilio de facturación, sólo las reglas de envío. |
+| Clerk sin cuenta vinculada | Pedidos, Direcciones y envíos, Mis datos, Seguridad, Cerrar sesión. |
 | Clerk con cuenta vinculada | Igual, con facturación bloqueada y, si es cuenta corriente, el portal. |
 
 `CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas }`, hoy ambos en `false`)
@@ -110,4 +110,4 @@ shell. Lo que el DS no tenga se agrega al DS, no como excepción.
 - `direcciones-envio`: direcciones de entrega guardadas y precarga en el
   checkout.
 - Congelar el nombre real del producto en `order_items` al crear el pedido.
-- DS: `Alert` con tono `info` (hoy "Envíos y retiro" usa `neutral`).
+- DS: `Alert` con tono `info` (hoy "Direcciones y envíos" usa `neutral`).

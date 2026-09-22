@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   ENTRADAS_MENU,
+  HREF_FAVORITOS,
   HREF_MIS_DATOS,
   HREF_MIS_PEDIDOS,
+  entradasMenu,
   etiquetaBotonMenu,
   tabInicial,
 } from "./menu-usuario";
@@ -27,6 +29,34 @@ describe("menu del usuario", () => {
   it("el botón tiene etiqueta accesible con y sin nombre", () => {
     expect(etiquetaBotonMenu("María Romero")).toContain("María Romero");
     expect(etiquetaBotonMenu(null)).toBe("Menú de su cuenta");
+  });
+});
+
+describe("Favoritos en el menú, detrás de la capacidad de despliegue", () => {
+  it("apagada (hoy): el menú queda igual que antes", () => {
+    expect(entradasMenu({ favoritos: false, facturas: false }).map((e) => e.id)).toEqual([
+      "pedidos",
+      "datos",
+      "seguridad",
+      "salir",
+    ]);
+    expect(ENTRADAS_MENU).toEqual(entradasMenu({ favoritos: false, facturas: false }));
+  });
+
+  it("encendida: Favoritos va entre Mis pedidos y Mis datos, como en la navegación", () => {
+    const entradas = entradasMenu({ favoritos: true, facturas: true });
+    expect(entradas.map((e) => e.id)).toEqual(["pedidos", "favoritos", "datos", "seguridad", "salir"]);
+    expect(entradas.filter((e) => e.tone === "danger").map((e) => e.id)).toEqual(["salir"]);
+    expect(entradas.find((e) => e.id === "favoritos")?.label).toBe("Favoritos");
+  });
+
+  it("Facturas nunca entra al menú del header", () => {
+    expect(entradasMenu({ favoritos: true, facturas: true }).map((e) => e.id)).not.toContain("facturas");
+  });
+
+  it("Favoritos lleva a su sección; Mis pedidos sigue en el resumen", () => {
+    expect(HREF_FAVORITOS).toBe("/mi-cuenta/favoritos");
+    expect(HREF_MIS_PEDIDOS).toBe("/mi-cuenta");
   });
 });
 

@@ -190,6 +190,8 @@ producción.
 1. Dispare el workflow `clientes-catalogo-sync` a mano (`workflow_dispatch`)
    y confirme que termina en verde.
 2. Dispare desde el admin la sync de overlay y la de cuotas.
+   Qué lee el Shop del overlay y cuándo encender su filtro de visibilidad:
+   `docs/catalogo-overlay.md`.
 3. Humo: catálogo visible, búsqueda con acentos funciona, un pedido de
    prueba se puede armar, "Mis compras" lo muestra. Los perfiles de
    facturación y los vínculos de cliente arrancan vacíos — es esperado, no

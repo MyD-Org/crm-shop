@@ -10,6 +10,7 @@ import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { formatRubro } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
+import { BotonFavorito } from "@/components/BotonFavorito";
 import type { Product } from "@/data/products";
 
 function CartIcon() {
@@ -164,6 +165,7 @@ export function ProductoClient({
                 <CartIcon />
                 {sinPrecio ? "Consulte el precio" : agotado ? "Sin stock" : "Agregar al carrito"}
               </Button>
+              <BotonFavorito productId={producto.id} />
             </div>
           </div>
         </div>

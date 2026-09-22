@@ -242,6 +242,44 @@ export async function getCatalogo(opts?: {
   return filas.map((f) => mapFilaToProduct(f, opts?.idPriceList));
 }
 
+/**
+ * Productos del espejo por id de Alegra, para las líneas de pedido de Mi
+ * cuenta (y favoritos). Una sola consulta por llamada: quien tiene N líneas
+ * junta los ids y llama una vez, nunca una por línea.
+ *
+ * Sin filtro de estado por default: un pedido viejo sigue mostrando el nombre
+ * real de un ítem que después se despublicó. `soloActivos` aplica
+ * `status = 'active'` y, con el flag `SHOP_CATALOGO_SOLO_VISIBLES`, también
+ * `visible` (mismo criterio que la lista pública).
+ *
+ * Sin `orderBy` (el orden lo decide quien llama: pedidos por línea, favoritos
+ * por fecha) y sin `limit` (los ids ya vienen acotados por quien llama). Un id
+ * que el espejo no tiene simplemente no aparece en el `Map`.
+ */
+export async function getProductosPorIds(
+  alegraIds: readonly string[],
+  opts?: { idPriceList?: string; soloActivos?: boolean },
+): Promise<Map<string, Product>> {
+  if (alegraIds.length === 0) return new Map();
+
+  const filas = await getDb()
+    .select(COLUMNAS_CATALOGO)
+    .from(catalogProducts)
+    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .leftJoin(catalogOverlay, JOIN_OVERLAY)
+    .where(
+      and(
+        inArray(catalogProducts.alegraId, [...alegraIds]),
+        opts?.soloActivos ? eq(catalogProducts.status, "active") : undefined,
+        opts?.soloActivos ? soloVisiblesSql() : undefined,
+      ),
+    );
+
+  return new Map(
+    filas.map((f) => [f.alegraId, mapFilaToProduct(f, opts?.idPriceList)]),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Catálogo paginado (filtros, orden y conteo en el servidor)
 // ---------------------------------------------------------------------------

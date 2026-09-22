@@ -715,8 +715,12 @@ export async function pedidoPorReferencia(
 }
 
 /**
- * Resumen del año para Mi cuenta. Se calcula en Postgres, no trayendo los
- * pedidos a memoria: es una tarjeta de tres números, no una lista.
+ * Resumen para Mi cuenta. Se calcula en Postgres, no trayendo los pedidos a
+ * memoria: es una tarjeta de tres números, no una lista.
+ *
+ * "Del año" limita sólo los dos agregados anuales. Los pedidos EN CURSO se
+ * cuentan sin importar la fecha: un pedido en camino del 28/12 sigue en curso
+ * el 3/1. Por eso el año va dentro de cada `filter` y no en el `where`.
  *
  * Los cancelados no suman al total comprado.
  */
@@ -724,15 +728,16 @@ export async function resumenPedidos(
   dueno: DuenoPedidos,
 ): Promise<OrderSummary> {
   const inicioAnio = new Date(new Date().getFullYear(), 0, 1);
+  const delAnio = gte(orders.createdAt, inicioAnio);
 
   const [fila] = await getDb()
     .select({
-      pedidos: sql<number>`count(*)::int`,
+      pedidos: sql<number>`count(*) filter (where ${delAnio})::int`,
       enCurso: sql<number>`count(*) filter (where ${inArray(orders.estado, ESTADOS_EN_CURSO)})::int`,
-      comprado: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.estado} <> 'cancelado'), 0)::float8`,
+      comprado: sql<number>`coalesce(sum(${orders.total}) filter (where ${orders.estado} <> 'cancelado' and ${delAnio}), 0)::float8`,
     })
     .from(orders)
-    .where(and(esDeSuDueno(dueno), gte(orders.createdAt, inicioAnio)));
+    .where(esDeSuDueno(dueno));
 
   return {
     pedidosEsteAnio: fila?.pedidos ?? 0,

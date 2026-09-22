@@ -375,3 +375,26 @@ describe("líneas con el nombre real del espejo, sin N+1", () => {
     expect(grabadora.consultas[2].sql).not.toContain('"status"');
   });
 });
+
+describe("resumenPedidos: en curso sin importar el año", () => {
+  it("el año sólo limita los agregados anuales, no el WHERE ni el conteo en curso", async () => {
+    await resumenPedidos(DUENO);
+    const { sql } = grabadora.consultas[0];
+    esperaTenant(grabadora.consultas[0]);
+    expect(sql).toContain('"orders"."clerk_user_id" =');
+
+    const where = sql.slice(sql.indexOf(" where "));
+    expect(where).not.toContain('"created_at"');
+
+    // Tres agregados: pedidos del año, en curso (estado, SIN fecha) y
+    // comprado del año (sin cancelados).
+    const filtros = [...sql.matchAll(/filter \(where (.*?)\)::(int|float8)/g)].map((m) => m[1]);
+    expect(filtros).toHaveLength(3);
+    const [pedidosDelAnio, enCursoFiltro, comprado] = filtros;
+    expect(pedidosDelAnio).toContain('"orders"."created_at" >=');
+    expect(enCursoFiltro).toContain('"orders"."estado" in');
+    expect(enCursoFiltro).not.toContain('"created_at"');
+    expect(comprado).toContain('"orders"."created_at" >=');
+    expect(comprado).toContain("<> 'cancelado'");
+  });
+});

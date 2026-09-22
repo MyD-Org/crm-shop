@@ -1,13 +1,14 @@
 "use client";
 
 import { Field, Input, Textarea } from "@myd-org/ui";
-import type { DestacadosContent } from "@/data/home-defaults";
+import { DEFAULTS_HOME, type DestacadosContent } from "@/data/home-defaults";
+import { ListaEditable } from "../ListaEditable";
+import { CampoImagen } from "./CampoImagen";
 import type { EditorProps } from "./index";
 
 /**
- * Rebanada B2: solo textos, `linkTodos` y `cantidad`. `skus` e `imagenes`
- * se conservan sin UI (curación de productos: rebanada D opcional;
- * imágenes: rebanada C).
+ * `skus` se conserva sin UI (curación de productos: rebanada D opcional).
+ * `imagenes` se edita como lista de `CampoImagen` (rebanada C).
  */
 export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosContent>) {
   return (
@@ -33,9 +34,16 @@ export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosCont
           onChange={(e) => onChange({ ...valor, cantidad: Number(e.target.value) })}
         />
       </Field>
-      <p className="text-sm text-muted">
-        La selección de productos (SKUs) y sus fotos se podrán editar en una próxima versión.
-      </p>
+      <div>
+        <p className="mb-2 text-sm font-semibold text-text">Fotos de los destacados</p>
+        <ListaEditable
+          items={valor.imagenes ?? []}
+          onChange={(imagenes) => onChange({ ...valor, imagenes })}
+          nuevo={() => DEFAULTS_HOME.destacados.imagenes?.[0] ?? "/images/prod-bulb-warm.webp"}
+          renderItem={(item, onItem) => <CampoImagen valor={item} onChange={onItem} />}
+        />
+      </div>
+      <p className="text-sm text-muted">La selección de productos (SKUs) se podrá editar en una próxima versión.</p>
     </div>
   );
 }

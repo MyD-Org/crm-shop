@@ -1,11 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULTS_HOME,
   SECCIONES_HOME,
   erroresSeccion,
   combinarContenidoHome,
   esHref,
+  esImagen,
+  motivoImagenInvalida,
 } from "./home-defaults";
+
+const HOSTS = ["media.plataforma.example"];
 
 describe("defaults de home", () => {
   it("todas las secciones default validan sin errores", () => {
@@ -195,5 +199,95 @@ describe("compatibilidad de filas guardadas antes de skus/imagenes", () => {
         imagenes: ["https://cdn.externa.com/foto.webp"],
       }).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("esImagen / motivoImagenInvalida (home-editable C)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("Path local", () => {
+    expect(esImagen("/images/hero.webp", [])).toBe(true);
+  });
+
+  it("https de host habilitado", () => {
+    expect(esImagen("https://media.plataforma.example/home/t/abc-1600.webp", HOSTS)).toBe(true);
+  });
+
+  it("Rechazos", () => {
+    for (const v of [
+      "http://media.plataforma.example/x.webp",
+      "https://otro.example/x.webp",
+      "javascript:x",
+      "//media.plataforma.example/x",
+      "",
+      "images/x.webp",
+    ]) {
+      expect(esImagen(v, HOSTS), v).toBe(false);
+    }
+  });
+
+  it("motivoImagenInvalida distingue host de formato", () => {
+    expect(motivoImagenInvalida("https://otro.example/x.webp", HOSTS)).toBe("host");
+    expect(motivoImagenInvalida("images/x", HOSTS)).toBe("formato");
+    expect(motivoImagenInvalida("/images/x.webp", HOSTS)).toBeNull();
+    expect(motivoImagenInvalida("https://media.plataforma.example/x.webp", HOSTS)).toBeNull();
+  });
+
+  it("erroresSeccion(hero) con imagen https de host habilitado ⇒ []", () => {
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, imagen: "https://media.plataforma.example/x.webp" }, HOSTS)).toEqual([]);
+  });
+
+  it("erroresSeccion(hero) con hosts vacíos ⇒ error de host", () => {
+    const errores = erroresSeccion("hero", { ...DEFAULTS_HOME.hero, imagen: "https://media.plataforma.example/x.webp" }, []);
+    expect(errores).toContain("imagen: el host de la imagen no está habilitado (SHOP_MEDIA_HOSTS).");
+  });
+
+  it("erroresSeccion(hero) con formato inválido ⇒ error de formato", () => {
+    const errores = erroresSeccion("hero", { ...DEFAULTS_HOME.hero, imagen: "images/x" }, HOSTS);
+    expect(errores).toContain("imagen debe ser una ruta local (/images/...) o una URL https de un host habilitado.");
+  });
+
+  it("destacados.imagenes acepta https de host habilitado", () => {
+    expect(
+      erroresSeccion(
+        "destacados",
+        { ...DEFAULTS_HOME.destacados, imagenes: ["https://media.plataforma.example/home/t/a-1600.webp"] },
+        HOSTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it("destacados.imagenes con hosts vacíos ⇒ error que menciona SHOP_MEDIA_HOSTS", () => {
+    const errores = erroresSeccion(
+      "destacados",
+      { ...DEFAULTS_HOME.destacados, imagenes: ["https://media.plataforma.example/home/t/a-1600.webp"] },
+      [],
+    );
+    expect(errores.some((e) => e.includes("SHOP_MEDIA_HOSTS"))).toBe(true);
+  });
+
+  it("tiles (ambientes) aceptan https de host habilitado", () => {
+    expect(
+      erroresSeccion(
+        "ambientes",
+        { ...DEFAULTS_HOME.ambientes, items: [{ ...DEFAULTS_HOME.ambientes.items[0], imagen: "https://media.plataforma.example/x.webp" }] },
+        HOSTS,
+      ),
+    ).toEqual([]);
+  });
+
+  it("bannerDeco.imagen acepta https de host habilitado", () => {
+    expect(
+      erroresSeccion("bannerDeco", { ...DEFAULTS_HOME.bannerDeco, imagen: "https://media.plataforma.example/x.webp" }, HOSTS),
+    ).toEqual([]);
+  });
+
+  it("Default de hosts: usa SHOP_MEDIA_HOSTS cuando no se pasa el tercer argumento", () => {
+    vi.stubEnv("SHOP_MEDIA_HOSTS", "media.plataforma.example");
+    expect(
+      erroresSeccion("hero", { ...DEFAULTS_HOME.hero, imagen: "https://media.plataforma.example/h.webp" }),
+    ).toEqual([]);
   });
 });

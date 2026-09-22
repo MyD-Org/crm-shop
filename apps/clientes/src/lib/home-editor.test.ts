@@ -92,7 +92,7 @@ describe("normalizarPayload", () => {
     for (const key of SECCIONES_HOME) {
       if (key === "navBadge") continue;
       const payload = normalizarPayload(key, DEFAULTS_HOME[key as keyof typeof DEFAULTS_HOME]);
-      expect(erroresSeccion(key, payload)).toEqual([]);
+      expect(erroresSeccion(key, payload, ["media.plataforma.example"])).toEqual([]);
     }
   });
 

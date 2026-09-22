@@ -15,9 +15,24 @@ export default async function CatalogoPage({
     marca?: ParamCrudo;
     orden?: ParamCrudo;
     pagina?: ParamCrudo;
+    precio_min?: ParamCrudo;
+    precio_max?: ParamCrudo;
+    stock?: ParamCrudo;
+    vista?: ParamCrudo;
   }>;
 }) {
   const estado = leerEstado(await searchParams);
+
+  // Los mismos filtros para la página y para las facetas: `getFacetas` decide
+  // qué grupo excluye en cada conteo.
+  const filtros = {
+    busqueda: estado.query,
+    categorias: estado.categorias,
+    marcas: estado.marcas,
+    precioMin: estado.precioMin,
+    precioMax: estado.precioMax,
+    soloStock: estado.soloStock,
+  };
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
   // resuelven en Postgres: filtrar u ordenar después de paginar daría
@@ -26,24 +41,13 @@ export default async function CatalogoPage({
   // Las tres lecturas son independientes entre sí:
   // - las facetas cruzan los grupos: las marcas se cuentan dentro de las
   //   categorías tildadas y las categorías dentro de las marcas tildadas, para
-  //   que la lista no ofrezca marcas ajenas a lo que se está viendo;
+  //   que la lista no ofrezca marcas ajenas a lo que se está viendo; el rango
+  //   de precio sale del conjunto filtrado sin el propio rango;
   // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
   //   o error) ⇒ el catálogo sale sin cuotas.
   const [pagina, facetas, oferta] = await Promise.all([
-    getPaginaCatalogo({
-      filtros: {
-        busqueda: estado.query,
-        categorias: estado.categorias,
-        marcas: estado.marcas,
-      },
-      orden: estado.orden,
-      pagina: estado.pagina,
-    }),
-    getFacetas({
-      busqueda: estado.query,
-      categorias: estado.categorias,
-      marcas: estado.marcas,
-    }),
+    getPaginaCatalogo({ filtros, orden: estado.orden, pagina: estado.pagina }),
+    getFacetas(filtros),
     getOfertaCuotas(),
   ]);
 

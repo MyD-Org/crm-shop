@@ -132,16 +132,20 @@ export function HomeClient({
   oferta,
   contenido,
   destacados,
+  puedeEditar,
 }: {
   oferta: OfertaCuotas | null;
   contenido: HomeContent;
   destacados: Product[];
+  /** Admin del Shop (`esAdmin()`, `src/lib/auth.ts`). Habilita el modo
+   *  edición in-place (rebanada B1 de home-editable: `SeccionEditable`). */
+  puedeEditar: boolean;
 }) {
   const { hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios } = contenido;
   const imagenesDestacados = secDestacados.imagenes ?? [];
 
   return (
-    <main className="flex-1">
+    <main className="flex-1" data-puede-editar={puedeEditar || undefined}>
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>

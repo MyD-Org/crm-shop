@@ -1,18 +1,29 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { homeContent } from "@/db/schema";
 
-/** Upsert de una sección de home. Llama solo desde la API interna (CRM). */
+/**
+ * Upsert de una sección de home. Llaman las server actions de
+ * `home-acciones.ts` (editor in-place de la home). `payload === null`
+ * (navBadge apagado) se persiste como jsonb 'null': borrar la fila NO apaga
+ * el badge, vuelve el default (que sí lo trae).
+ */
 export async function guardarSeccionHome(
   key: string,
   payload: unknown,
 ): Promise<{ updatedAt: Date }> {
+  // La columna es jsonb NOT NULL: un `null` de JS iría como SQL NULL y
+  // fallaría. `sql\`'null'::jsonb\`` es el jsonb "null" válido.
+  const valor =
+    payload === null
+      ? sql`'null'::jsonb`
+      : (payload as Record<string, unknown>);
   const [fila] = await getDb()
     .insert(homeContent)
-    .values({ key, payload: payload as Record<string, unknown> })
+    .values({ key, payload: valor as unknown as Record<string, unknown> })
     .onConflictDoUpdate({
       target: homeContent.key,
-      set: { payload: payload as Record<string, unknown>, updatedAt: new Date() },
+      set: { payload: valor as unknown as Record<string, unknown>, updatedAt: new Date() },
     })
     .returning({ updatedAt: homeContent.updatedAt });
   return fila;

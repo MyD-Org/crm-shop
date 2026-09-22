@@ -1,12 +1,17 @@
 "use client";
 
-import { Button, Chip } from "@myd-org/ui";
+import { Chip } from "@myd-org/ui";
 import type { EstadoCatalogo, RangoPrecio } from "@/lib/catalogo-url";
-import { chipsActivos, limpiarFiltros } from "@/lib/catalogo-vista";
+import { chipsActivos } from "@/lib/catalogo-vista";
 
 /**
- * Filtros activos como chips removibles + "Limpiar filtros", debajo del
- * encabezado. Sin filtros no devuelve nada — ni el nodo ni su margen.
+ * Filtros activos como chips removibles, debajo del encabezado. Sin filtros no
+ * devuelve nada — ni el nodo ni su margen.
+ *
+ * Sin "Limpiar filtros" en la fila: cada chip ya tiene su `×`, y borrar todo
+ * de una sigue estando en el pie de la hoja de filtros. Al final de una fila
+ * que scrollea, además, quedaba fuera de pantalla en cuanto había tres o
+ * cuatro chips.
  *
  * Sólo debajo de `lg`: desde ahí el panel lateral ya muestra los tildes y los
  * chips repetirían la misma información al lado. En mobile los filtros viven
@@ -42,11 +47,6 @@ export function CatalogoChips({
           </Chip>
         </div>
       ))}
-      <div className="shrink-0">
-        <Button variant="link" size="inline" onClick={() => ir(limpiarFiltros())}>
-          Limpiar filtros
-        </Button>
-      </div>
     </div>
   );
 }

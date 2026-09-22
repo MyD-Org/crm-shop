@@ -1,8 +1,7 @@
 # Mi cuenta
 
-Área del cliente del Shop: pedidos, datos, direcciones y envíos, organizada
-por secciones sobre el design system (`@myd-org/ui` ≥ 0.13). Este documento
-se completa con las rebanadas de favoritos y facturas.
+Área del cliente del Shop: pedidos, datos, favoritos, direcciones y envíos,
+organizada por secciones sobre el design system (`@myd-org/ui` ≥ 0.13).
 
 ## Rutas
 
@@ -16,8 +15,8 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 | `/mi-cuenta` | Resumen: tarjetas "Pedidos en curso", "Productos en el carrito" y (con Clerk) "Favoritos guardados"; los últimos 3 pedidos y (con Clerk) los 4 favoritos más recientes, cada uno con "Ver todos". Ninguna llamada a Alegra. |
 | `/mi-cuenta/pedidos` | Todos los pedidos (los 50 más recientes). |
 | `/mi-cuenta/pedidos/[id]` | Detalle: seguimiento, entrega, pago, productos y totales. Un id ajeno o que no es uuid da 404 (nunca 403). |
-| `/mi-cuenta/datos` | Datos de acceso (panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente y, sólo con cuenta corriente, el portal del CRM. |
-| `/mi-cuenta/direcciones` | Direcciones y envíos: domicilio de facturación en sólo lectura (con Clerk), envío a domicilio y retiro derivados de `src/lib/envio.ts`, y el aviso de que la entrega se indica en cada compra. |
+| `/mi-cuenta/datos` | Datos personales (nombre y correo de Clerk, en lectura; "Editar mi cuenta" abre el panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente y, sólo con cuenta corriente, el portal del CRM. |
+| `/mi-cuenta/direcciones` | Direcciones y envíos: direcciones de envío guardadas (con Clerk; alta y edición en la misma sección, ver [Direcciones de envío](#direcciones-de-envío)), envío a domicilio y retiro derivados de `src/lib/envio.ts` y un aviso. El domicilio fiscal ya no está acá: vive en Mis datos. |
 | `/mi-cuenta/envios` | Redirige (308) a `/mi-cuenta/direcciones`: Envíos y retiro se unió a Direcciones. |
 | `/mi-cuenta/favoritos` | Favoritos del usuario de Clerk en cards compactas (ver [Favoritos](#favoritos)). |
 | `/mi-cuenta/vincular` | Vinculación con la cuenta de cliente de Alegra (`VincularClient`). |
@@ -58,7 +57,7 @@ marca la activa.
 | Identidad | Secciones |
 |---|---|
 | Anónimo | Ninguna: redirect al ingreso. |
-| Cookie heredada del CRM, sin Clerk | Pedidos, Direcciones y envíos (+ Facturas cuando exista). `/datos` pide iniciar sesión; en `/direcciones` no aparece el domicilio de facturación, sólo las reglas de envío. |
+| Cookie heredada del CRM, sin Clerk | Pedidos, Direcciones y envíos (+ Facturas cuando exista). `/datos` pide iniciar sesión; en `/direcciones` se invita a iniciar sesión para guardar direcciones y se ven las reglas de envío. El checkout no cambia. |
 | Clerk sin cuenta vinculada | Pedidos, Favoritos, Direcciones y envíos, Mis datos, Seguridad, Cerrar sesión. |
 | Clerk con cuenta vinculada | Igual, con facturación bloqueada y, si es cuenta corriente, el portal. |
 
@@ -134,6 +133,82 @@ en `src/lib/favoritos-cliente.ts`.
 porque la card está envuelta en un `<Link>`), en la ficha junto a "Agregar al
 carrito" y en las cards de favoritos. Neutro y `aria-disabled` hasta `ready`.
 
+## Direcciones de envío
+
+Guardadas por usuario de Clerk (como favoritos). Hasta **10** por usuario y
+exactamente **una predeterminada**.
+
+**Tabla** `shop.direcciones_envio` (migración `0003_direcciones_envio`):
+`tenant_id`, `clerk_user_id`, `etiqueta` (opcional: "Casa", "Obra"), `calle`,
+`ciudad`, `provincia`, `cp`, `referencias` (opcional, para quien entrega),
+`predeterminada`, `created_at`, `updated_at`. Índice por (tenant, usuario) e
+índice único **parcial** por (tenant, usuario) `WHERE predeterminada`: la
+base garantiza una sola predeterminada. `provincia` y `cp` son nullable en la
+base pero la API los exige. Aplicarla a mano en producción **antes** de
+desplegar (runbook en
+[`una-base-esquema-shop.md`](./una-base-esquema-shop.md#migraciones-posteriores-a-la-baseline)).
+
+**Reglas** (módulos puros, compartidos por formulario, checkout y API):
+
+- `src/lib/direcciones-envio.ts`: validación y normalización (calle,
+  localidad, provincia de la lista y CP obligatorios; CP de 4 dígitos o CPA),
+  tope, vista y la línea que viaja al pedido.
+- `src/lib/provincias.ts`: las 24 jurisdicciones y `provinciaCanonica`
+  (acentos, "Provincia de …", CABA).
+- `src/lib/envio.ts` → `ciudadConEnvio`: **única** definición de la zona de
+  envío para una dirección guardada. Se puede guardar cualquier dirección del
+  país; fuera de la zona (hoy `CIUDADES_ENVIO`) se guarda igual y se muestra
+  "El envío a … se coordina por separado". Cuando el envío se abra a todo el
+  país se cambia sólo `envio.ts` (`CIUDADES_ENVIO`/`ciudadConEnvio`/
+  `evaluarEnvio`).
+
+**Servidor** (`src/lib/direcciones-envio-db.ts`): toda consulta filtra por
+tenant + usuario. Lista con la predeterminada primero y después la más nueva.
+La primera que se guarda queda predeterminada; borrar la predeterminada
+promueve la más reciente de las que quedan; marcar otra desmarca y después
+marca, en una transacción. Editar no cambia la predeterminada salvo que se pida
+(no se "desmarca": se elige otra).
+
+**API** `/api/mi-cuenta/direcciones` (dinámica, `Cache-Control: private,
+no-store`, sólo Clerk). Toda mutación devuelve la lista completa.
+
+| Método y ruta | Body | Respuesta |
+|---|---|---|
+| `GET /api/mi-cuenta/direcciones` | — | `200 { direcciones }` |
+| `POST /api/mi-cuenta/direcciones` | `{ etiqueta?, calle, ciudad, provincia, cp, referencias?, predeterminada? }` | `201 { direccion, direcciones }` |
+| `PUT /api/mi-cuenta/direcciones/[id]` | igual que el alta (reemplaza los datos) | `200 { direccion, direcciones }` |
+| `DELETE /api/mi-cuenta/direcciones/[id]` | — | `200 { direcciones }` |
+| `POST /api/mi-cuenta/direcciones/[id]/predeterminada` | — | `200 { direcciones }` |
+
+Errores: `401 { error: "No autorizado" }` sin Clerk; `400 { error:
+"Solicitud inválida." }` si el cuerpo no es un objeto JSON; `404 { error: "No
+encontramos esa dirección." }` **uniforme** para un id ajeno, inexistente o
+que no es uuid (éste sin consultar la base); `422 { error: "Revise los datos
+de la dirección.", errores: { campo: mensaje } }` por validación y `422 {
+error: "Alcanzó el máximo de 10 direcciones guardadas." }` en el tope; `429`
+pasadas 60 solicitudes por minuto por usuario (`direcciones:clerk:<id>`,
+sumando todas las rutas).
+
+**UI** (`DireccionesEnvio` + `DireccionForm`, en `/mi-cuenta/direcciones`):
+cards con Badge "Predeterminada", "Editar" (el formulario reemplaza a la card),
+"Usar como predeterminada" y "Eliminar" (Dialog de confirmación). "Usar la
+misma dirección de facturación" copia calle, localidad, provincia y CP del
+perfil fiscal; no aparece sin domicilio fiscal ni si otra guardada ya usa esa
+calle. La calle se autocompleta con `DireccionAutocomplete` contra
+`/api/geocode` (Nominatim con `countrycodes=ar`: todo el país, sin sesgo a la
+zona de envío); localidad, provincia (`Select`) y CP están siempre a la vista,
+así que una calle que OSM no conoce se carga igual.
+
+**Checkout**: con Clerk y "Envío a domicilio", `SelectorDireccionEnvio`
+arranca en la predeterminada; se puede elegir otra guardada u "Otra dirección
+para esta compra" (los campos de siempre, sin tocar las guardadas). Con una
+guardada, el pedido recibe la ciudad escrita como en `CIUDADES_ENVIO` y en
+`entregaDireccion` calle, CP, provincia y referencias (hasta 200 caracteres).
+Una guardada fuera de zona se lista con el aviso y `evaluarEnvio` la rechaza
+para envío, igual que hoy cualquier ciudad fuera de la lista. Si leer las
+direcciones falla, el checkout sigue sin precarga. Anónimos y cookie del CRM
+sin Clerk: sin cambios. `POST /api/pedidos` no cambió.
+
 ## Componentes: servidor y cliente
 
 `@myd-org/ui` se publica con `"use client"`. Un componente de servidor puede
@@ -146,8 +221,8 @@ servidor está `BotonEnlace` (`Button` con `href` + `next/link`).
 ## Guarda anti-literales
 
 `src/components/mi-cuenta/sin-literales.test.ts` lee como texto
-`src/components/mi-cuenta/**`, `src/app/mi-cuenta/**` y
-`src/components/BotonFavorito.tsx`, y falla ante valores arbitrarios (`[16rem]`), `clamp(`,
+`src/components/mi-cuenta/**`, `src/app/mi-cuenta/**`,
+`src/components/BotonFavorito.tsx` y `src/components/SelectorDireccionEnvio.tsx`, y falla ante valores arbitrarios (`[16rem]`), `clamp(`,
 colores de la paleta o literales, overrides `[&_…]`, `style={}` o constantes
 de clases; también ante voseo o tuteo en el texto y ante un `<h1>` fuera del
 shell. Lo que el DS no tenga se agrega al DS, no como excepción.
@@ -158,8 +233,10 @@ shell. Lo que el DS no tenga se agrega al DS, no como excepción.
   seguimiento.
 - `pedidos-factura-vinculada` (cross-repo): guardar la factura del pedido para
   mostrar "Descargar factura" en la card.
-- `direcciones-envio`: direcciones de entrega guardadas y precarga en el
-  checkout.
+- Envío a todo el país: cambiar la zona en `src/lib/envio.ts`; las
+  direcciones guardadas fuera de zona pasan a servir para envío solas.
+- Usar `PROVINCIAS_AR` también en el domicilio fiscal de `FacturacionForm`
+  (hoy provincia de texto libre).
 - Congelar el nombre real del producto en `order_items` al crear el pedido.
 - Favoritos de anónimos guardados en el navegador y fusionados al ingresar.
 - DS: `Alert` con tono `info` (hoy "Direcciones y envíos" usa `neutral`).

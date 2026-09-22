@@ -17,15 +17,20 @@ import { describe, expect, it } from "vitest";
  * voseo ni tuteo en el texto) y un único `<h1>`, el del shell. Unificar las
  * dos guardas en una sola es un chore aparte.
  *
- * Alcance (NHM-3): `src/components/mi-cuenta/**`, `src/app/mi-cuenta/**` y
- * `src/components/BotonFavorito.tsx` cuando exista (rebanada de favoritos).
+ * Alcance (NHM-3): `src/components/mi-cuenta/**`, `src/app/mi-cuenta/**`,
+ * `src/components/BotonFavorito.tsx` (rebanada de favoritos) y
+ * `src/components/SelectorDireccionEnvio.tsx` (direcciones guardadas en el
+ * checkout; el resto del checkout sigue afuera).
  * NO inspecciona `VincularClient.tsx`, `MenuUsuario.tsx`, `HeaderUI.tsx`,
  * `CheckoutClient.tsx`, `FacturacionForm.tsx` ni `DireccionAutocomplete.tsx`.
  */
 
 const SRC = fileURLToPath(new URL("../..", import.meta.url));
 const CARPETAS = [join(SRC, "components", "mi-cuenta"), join(SRC, "app", "mi-cuenta")];
-const SUELTOS_SI_EXISTEN = [join(SRC, "components", "BotonFavorito.tsx")];
+const SUELTOS_SI_EXISTEN = [
+  join(SRC, "components", "BotonFavorito.tsx"),
+  join(SRC, "components", "SelectorDireccionEnvio.tsx"),
+];
 /** Único archivo que puede tener el `<h1>` de Mi cuenta (ID-2). */
 const SHELL = join(SRC, "components", "mi-cuenta", "MiCuentaShell.tsx");
 
@@ -157,6 +162,14 @@ describe("guarda de Mi cuenta: archivos del módulo", () => {
     expect(lista.some((a) => a.startsWith(join("components", "mi-cuenta")))).toBe(true);
     expect(lista.some((a) => a.startsWith(join("app", "mi-cuenta")))).toBe(true);
     expect(lista).not.toContain(join("components", "VincularClient.tsx"));
+  });
+
+  it("incluye los archivos nuevos de direcciones de envío (follow-up direcciones-envio)", () => {
+    const lista = archivos().map((a) => relative(SRC, a));
+    expect(lista).toContain(join("components", "mi-cuenta", "DireccionesEnvio.tsx"));
+    expect(lista).toContain(join("components", "mi-cuenta", "DireccionForm.tsx"));
+    expect(lista).toContain(join("components", "mi-cuenta", "DatosPersonalesCard.tsx"));
+    expect(lista).toContain(join("components", "SelectorDireccionEnvio.tsx"));
   });
 
   for (const regla of REGLAS) {

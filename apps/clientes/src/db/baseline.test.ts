@@ -101,6 +101,31 @@ describe("baseline del esquema shop (estático)", () => {
     expect(sql).not.toContain("REFERENCES");
   });
 
+  it("0003 crea shop.direcciones_envio con una sola predeterminada por usuario", () => {
+    const sql = readFileSync(`${DRIZZLE_DIR}/0003_direcciones_envio.sql`, "utf8");
+    expect(sql).toContain('CREATE TABLE "shop"."direcciones_envio"');
+    expect(sql).toContain('"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL');
+    expect(sql).toContain('"tenant_id" text NOT NULL');
+    expect(sql).toContain('"clerk_user_id" text NOT NULL');
+    expect(sql).toContain('"etiqueta" text,');
+    expect(sql).toContain('"calle" text NOT NULL');
+    expect(sql).toContain('"ciudad" text NOT NULL');
+    expect(sql).toContain('"provincia" text,');
+    expect(sql).toContain('"cp" text,');
+    expect(sql).toContain('"referencias" text,');
+    expect(sql).toContain('"predeterminada" boolean DEFAULT false NOT NULL');
+    expect(sql).toContain('"created_at" timestamp with time zone DEFAULT now() NOT NULL');
+    expect(sql).toContain('"updated_at" timestamp with time zone DEFAULT now() NOT NULL');
+    expect(sql).toMatch(
+      /CREATE INDEX "dir_envio_tenant_usuario" ON "shop"\."direcciones_envio" USING btree \("tenant_id","clerk_user_id"\)/,
+    );
+    // La base garantiza UNA predeterminada por usuario: índice único PARCIAL.
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX "dir_envio_una_predeterminada" ON "shop"\."direcciones_envio" USING btree \("tenant_id","clerk_user_id"\) WHERE "shop"\."direcciones_envio"\."predeterminada"/,
+    );
+    expect(sql).not.toContain("REFERENCES");
+  });
+
   it("0001 agrega el teléfono de contacto al perfil de facturación", () => {
     const sql = readFileSync(`${DRIZZLE_DIR}/0001_telefono_contacto.sql`, "utf8");
     expect(sql).toContain(

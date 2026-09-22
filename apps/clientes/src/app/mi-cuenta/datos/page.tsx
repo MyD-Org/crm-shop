@@ -11,12 +11,12 @@ import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 export const dynamic = "force-dynamic";
 
 /**
- * Mis datos. Con la cookie heredada del CRM y sin sesión de Clerk no hay
+ * Mis datos: datos personales (Clerk, en lectura) y de facturación. Con la cookie heredada del CRM y sin sesión de Clerk no hay
  * perfil posible (el perfil se ata al usuario de Clerk): no se muestran
  * formularios, se invita a iniciar sesión.
  */
 export default async function DatosPage() {
-  const { clerkUserId, cliente, email } = await identidadActual();
+  const { clerkUserId, cliente, email, nombre } = await identidadActual();
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.datos));
 
   if (!clerkUserId) {
@@ -37,7 +37,9 @@ export default async function DatosPage() {
     <section>
       <SeccionTitulo titulo="Mis datos" />
       <DatosCuenta
-        email={cliente?.email ?? email}
+        nombre={nombre}
+        // Datos personales = los de Clerk (el correo con el que ingresa).
+        email={email}
         perfilFacturacion={perfil}
         // Hay razón social vinculada sólo si vino de una vinculación propia o
         // del CRM: sin cliente, compra a lista general y se le ofrece vincular.

@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 import { direccionDesdeFacturacion, yaUsaDireccion } from "./direccion-envio";
 
 describe("direccionDesdeFacturacion", () => {
-  it("copia calle, ciudad y código postal", () => {
+  it("copia calle, ciudad, provincia y código postal", () => {
     expect(
       direccionDesdeFacturacion({
         domicilioCalle: "Av. Victoria Aguirre 100",
         domicilioCiudad: "Puerto Iguazú",
+        domicilioProvincia: "Misiones",
         domicilioCp: "3370",
       }),
-    ).toEqual({ calle: "Av. Victoria Aguirre 100", ciudad: "Puerto Iguazú", cp: "3370" });
+    ).toEqual({
+      calle: "Av. Victoria Aguirre 100",
+      ciudad: "Puerto Iguazú",
+      provincia: "Misiones",
+      cp: "3370",
+    });
   });
 
   it("recorta espacios sobrantes", () => {
@@ -22,6 +28,7 @@ describe("direccionDesdeFacturacion", () => {
     expect(direccionDesdeFacturacion({ domicilioCalle: "San Martín 5", domicilioCiudad: null })).toEqual({
       calle: "San Martín 5",
       ciudad: "",
+      provincia: "",
       cp: "",
     });
   });
@@ -35,7 +42,7 @@ describe("direccionDesdeFacturacion", () => {
 });
 
 describe("yaUsaDireccion", () => {
-  const fact = { calle: "San Martín 5", ciudad: "Puerto Iguazú", cp: "3370" };
+  const fact = { calle: "San Martín 5", ciudad: "Puerto Iguazú", provincia: "Misiones", cp: "3370" };
 
   it("detecta la calle ya usada, sin importar mayúsculas ni espacios", () => {
     expect(yaUsaDireccion(fact, ["Otra 1", "  san   martín 5 "])).toBe(true);

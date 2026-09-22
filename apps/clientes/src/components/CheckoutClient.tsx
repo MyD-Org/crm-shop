@@ -6,6 +6,8 @@ import { Button, Field, Input, Select } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
+import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
+import { eleccionInicial, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import { fmtPrecio } from "@/lib/format";
 import { HREF_MIS_DATOS } from "@/lib/menu-usuario";
 import { CuotasResumen } from "@/components/CuotasResumen";
@@ -135,6 +137,12 @@ interface Props {
    * servidor valida lo mismo al crear el pedido. Prendido: el checkout de antes.
    */
   pagosHabilitados: boolean;
+  /**
+   * Direcciones de envío guardadas en Mi cuenta (sólo con Clerk; la
+   * predeterminada primero). Vacío = el checkout de siempre: anónimos no
+   * llegan acá y la cookie del CRM sin Clerk no guarda direcciones.
+   */
+  direccionesGuardadas?: DireccionEnvio[];
 }
 
 export function CheckoutClient({
@@ -145,6 +153,7 @@ export function CheckoutClient({
   admiteEnvio,
   oferta = null,
   pagosHabilitados,
+  direccionesGuardadas = [],
 }: Props) {
   const { items, clear, ready } = useCart();
 
@@ -152,6 +161,20 @@ export function CheckoutClient({
   const [entrega, setEntrega] = useState<EntregaTipo>("retiro");
   const [ciudad, setCiudad] = useState("");
   const [direccion, setDireccion] = useState("");
+  // Envío a domicilio arranca con la predeterminada. `ciudad` y `direccion`
+  // quedan para "otra dirección para esta compra", que no toca las guardadas.
+  const [eleccionDireccion, setEleccionDireccion] = useState(() =>
+    eleccionInicial(direccionesGuardadas),
+  );
+  // Ciudad y dirección que viajan a la cotización y al pedido. La zona de envío
+  // sigue decidiéndose en `evaluarEnvio` (src/lib/envio.ts): una guardada fuera
+  // de zona llega con su ciudad y se rechaza igual que hoy.
+  const {
+    ciudad: ciudadEntrega,
+    direccion: direccionEntrega,
+    guardada,
+    fueraDeZona: guardadaFueraDeZona,
+  } = entregaElegida(direccionesGuardadas, eleccionDireccion, { ciudad, direccion });
   const [nombre, setNombre] = useState(nombreSugerido);
   const [telefono, setTelefono] = useState(telefonoSugerido);
   const [notas, setNotas] = useState("");
@@ -221,7 +244,7 @@ export function CheckoutClient({
 
   const { cotizacion, estado, error, recotizar } = useCotizacion({
     entregaTipo: entrega,
-    ciudad: entrega === "envio" ? ciudad : undefined,
+    ciudad: entrega === "envio" ? ciudadEntrega : undefined,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
@@ -241,7 +264,7 @@ export function CheckoutClient({
   const datosCompletos =
     nombre.trim() !== "" &&
     telefono.trim() !== "" &&
-    (entrega === "retiro" || (ciudad !== "" && direccion.trim() !== ""));
+    (entrega === "retiro" || (ciudadEntrega !== "" && direccionEntrega.trim() !== ""));
 
   const puedeConfirmar =
     estado === "ok" &&
@@ -277,8 +300,8 @@ export function CheckoutClient({
           contactoNombre: nombre,
           contactoTelefono: telefono,
           entregaTipo: entrega,
-          entregaCiudad: entrega === "envio" ? ciudad : undefined,
-          entregaDireccion: entrega === "envio" ? direccion : undefined,
+          entregaCiudad: entrega === "envio" ? ciudadEntrega : undefined,
+          entregaDireccion: entrega === "envio" ? direccionEntrega : undefined,
           pagoMetodo: pagoElegido,
           notas,
         }),
@@ -544,6 +567,14 @@ export function CheckoutClient({
 
             {entrega === "envio" && (
               <>
+                {direccionesGuardadas.length > 0 && (
+                  <SelectorDireccionEnvio
+                    direcciones={direccionesGuardadas}
+                    valor={eleccionDireccion}
+                    onCambiar={setEleccionDireccion}
+                  />
+                )}
+                {!guardada && (
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <Field label="Ciudad">
                     <Select
@@ -565,8 +596,10 @@ export function CheckoutClient({
                     />
                   </Field>
                 </div>
+                )}
 
-                {cotizacion && !envioDisponible && cotizacion.envio.motivo && (
+                {/* Con una guardada fuera de zona ya se ve el aviso del selector. */}
+                {cotizacion && !envioDisponible && cotizacion.envio.motivo && !guardadaFueraDeZona && (
                   <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">
                     <span className="mt-px text-warning"><AlertIcon /></span>
                     {cotizacion.envio.motivo}

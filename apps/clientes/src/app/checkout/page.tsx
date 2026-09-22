@@ -6,6 +6,22 @@ import { admiteEnvio } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { pagosHabilitados } from "@/lib/pagos-flag";
+import { listarDirecciones } from "@/lib/direcciones-envio-db";
+import type { DireccionEnvio } from "@/lib/direcciones-envio";
+
+/**
+ * Direcciones guardadas para precargar el envío. Si la consulta falla (por
+ * ejemplo, `0003` todavía sin aplicar) el checkout sigue como antes, sin
+ * direcciones: comprar importa más que la precarga.
+ */
+async function direccionesParaCheckout(clerkUserId: string): Promise<DireccionEnvio[]> {
+  try {
+    return await listarDirecciones(clerkUserId);
+  } catch (err) {
+    console.error("[checkout] no se pudieron leer las direcciones guardadas:", err);
+    return [];
+  }
+}
 
 /**
  * El checkout exige estar logueado, pero NO tener cuenta corriente vinculada:
@@ -27,9 +43,11 @@ export default async function CheckoutPage() {
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
   const pagos = pagosHabilitados();
-  const [perfil, oferta] = await Promise.all([
+  const [perfil, oferta, direcciones] = await Promise.all([
     clerkUserId ? getPerfilFacturacion(clerkUserId) : null,
     pagos ? getOfertaCuotas() : null,
+    // Sólo con Clerk: la cookie del CRM sin Clerk no guarda direcciones.
+    clerkUserId ? direccionesParaCheckout(clerkUserId) : [],
   ]);
 
   return (
@@ -44,6 +62,7 @@ export default async function CheckoutPage() {
         admiteEnvio={admiteEnvio(perfil?.pais)}
         oferta={oferta}
         pagosHabilitados={pagos}
+        direccionesGuardadas={direcciones}
       />
     </>
   );

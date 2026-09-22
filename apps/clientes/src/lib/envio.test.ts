@@ -3,6 +3,7 @@ import {
   CIUDADES_ENVIO,
   MINIMO_ENVIO,
   PAGO_LABEL,
+  ciudadConEnvio,
   costoEnvio,
   evaluarEnvio,
   pagosDisponibles,
@@ -112,5 +113,32 @@ describe("pagosDisponibles con los pagos apagados", () => {
 
   it("la etiqueta que ve el cliente habla de un asesor", () => {
     expect(PAGO_LABEL.a_coordinar).toBe("A coordinar con un asesor");
+  });
+});
+
+describe("ciudadConEnvio (zona de envío propia, única fuente)", () => {
+  it("devuelve la ciudad tal como la escribe CIUDADES_ENVIO", () => {
+    for (const ciudad of CIUDADES_ENVIO) {
+      expect(ciudadConEnvio(ciudad)).toBe(ciudad);
+    }
+  });
+
+  it("tolera acentos, mayúsculas, espacios y la grafía pegada", () => {
+    expect(ciudadConEnvio("puerto iguazu")).toBe("Puerto Iguazú");
+    expect(ciudadConEnvio("  PUERTO   IGUAZÚ ")).toBe("Puerto Iguazú");
+    expect(ciudadConEnvio("Eldorado")).toBe("El Dorado");
+    expect(ciudadConEnvio("el dorado")).toBe("El Dorado");
+  });
+
+  it("fuera de la zona (o vacío) devuelve null", () => {
+    expect(ciudadConEnvio("Córdoba")).toBeNull();
+    expect(ciudadConEnvio("Posadas")).toBeNull();
+    expect(ciudadConEnvio("")).toBeNull();
+    expect(ciudadConEnvio(null)).toBeNull();
+    expect(ciudadConEnvio(undefined)).toBeNull();
+  });
+
+  it("lo que devuelve lo acepta evaluarEnvio (checkout y servidor coinciden)", () => {
+    expect(evaluarEnvio(MINIMO_ENVIO, ciudadConEnvio("eldorado")).disponible).toBe(true);
   });
 });

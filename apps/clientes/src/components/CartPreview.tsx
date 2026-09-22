@@ -82,64 +82,70 @@ export function CartPreview() {
         </span>
       </Link>
 
-      {/* Dropdown */}
-      {open && (
-        <div
-          className="absolute right-0 top-full z-50 mt-3 w-80 overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          {/* Puntero */}
-          <div className="absolute -top-[7px] right-6 h-3 w-3 rotate-45 border-l border-t border-border bg-surface" />
+      {/* Dropdown. Queda montado siempre para poder animar también el cierre:
+          cerrado es `invisible` (fuera del árbol de accesibilidad y sin
+          clicks), y `visibility` entra en la transición para que recién se
+          oculte al terminar el fade. Crece desde la esquina del botón; con
+          reduced motion sólo cambia la opacidad. */}
+      <div
+        className={`absolute right-0 top-full z-50 mt-3 w-80 origin-top-right overflow-hidden rounded-xl border border-border bg-surface shadow-lg transition-[opacity,scale,visibility] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:scale-100 ${
+          open
+            ? "visible scale-100 opacity-100 duration-[180ms]"
+            : "pointer-events-none invisible scale-[0.96] opacity-0 duration-[120ms]"
+        }`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Puntero */}
+        <div className="absolute -top-[7px] right-6 h-3 w-3 rotate-45 border-l border-t border-border bg-surface" />
 
-          {items.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-              <p className="text-sm font-medium text-text">Tu carrito esta vacio</p>
-              <Link href="/catalogo" className="text-xs font-semibold text-primary hover:underline">
-                Ver catalogo
+        {items.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+            <p className="text-sm font-medium text-text">Tu carrito esta vacio</p>
+            <Link href="/catalogo" className="text-xs font-semibold text-primary hover:underline">
+              Ver catalogo
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
+                Carrito ({count} productos)
+              </p>
+
+              <ul className="-mx-1 max-h-72 space-y-3 overflow-y-auto px-1">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      href={`/producto/${item.id}`}
+                      className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-elevated"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted/40">
+                        <LightbulbIcon />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-text">{item.name}</p>
+                        <p className="text-xs text-muted">{item.qty} u. · {fmt(item.price)} c/u</p>
+                      </div>
+                      <p className="shrink-0 text-xs font-bold text-text">{fmt(item.price * item.qty)}</p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="border-t border-border px-4 py-3">
+              <div className="mb-3 flex items-center justify-between text-sm">
+                <span className="text-muted">Total</span>
+                <span className="font-extrabold text-text">{fmt(total)}</span>
+              </div>
+              <Link href="/carrito" className="block">
+                <Button className="w-full">Ver carrito</Button>
               </Link>
             </div>
-          ) : (
-            <>
-              <div className="p-4">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
-                  Carrito ({count} productos)
-                </p>
-
-                <ul className="-mx-1 max-h-72 space-y-3 overflow-y-auto px-1">
-                  {items.map((item) => (
-                    <li key={item.id}>
-                      <Link
-                        href={`/producto/${item.id}`}
-                        className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-elevated"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted/40">
-                          <LightbulbIcon />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium text-text">{item.name}</p>
-                          <p className="text-xs text-muted">{item.qty} u. · {fmt(item.price)} c/u</p>
-                        </div>
-                        <p className="shrink-0 text-xs font-bold text-text">{fmt(item.price * item.qty)}</p>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="border-t border-border px-4 py-3">
-                <div className="mb-3 flex items-center justify-between text-sm">
-                  <span className="text-muted">Total</span>
-                  <span className="font-extrabold text-text">{fmt(total)}</span>
-                </div>
-                <Link href="/carrito" className="block">
-                  <Button className="w-full">Ver carrito</Button>
-                </Link>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

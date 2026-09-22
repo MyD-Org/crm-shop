@@ -32,11 +32,11 @@ function LightbulbIcon({ className }: { className?: string }) {
   );
 }
 
+// Sin "Más vendidos": nunca hubo un dato de ventas detrás (ordenaba por nombre).
 const SORT_OPTIONS: { label: string; value: OrdenCatalogo }[] = [
-  { label: "Más vendidos", value: "ventas" },
+  { label: "Nombre A-Z", value: "nombre" },
   { label: "Precio: menor a mayor", value: "precio-asc" },
   { label: "Precio: mayor a menor", value: "precio-desc" },
-  { label: "Nombre A-Z", value: "nombre" },
 ];
 
 /**

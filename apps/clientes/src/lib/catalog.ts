@@ -31,7 +31,7 @@ import {
   type AlegraItem,
   type AlegraPrice,
 } from "./alegra";
-import type { OrdenCatalogo } from "./catalogo-url";
+import { ORDEN_DEFAULT, type OrdenCatalogo } from "./catalogo-url";
 import { precioFinal } from "./precio-final";
 import { stockSimulado } from "./stock-simulado";
 import type { Product } from "@/data/products";
@@ -288,8 +288,7 @@ function condicionesDe(
 }
 
 /**
- * ORDER BY según el criterio elegido. "ventas" no tiene todavía un dato de
- * ventas detrás: ordena por nombre, igual que antes hacía el orden de la query.
+ * ORDER BY según el criterio elegido. El default (`nombre`) es el alfabético.
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
  */
@@ -345,7 +344,7 @@ export async function getPaginaCatalogo(opts?: {
         .from(catalogProducts)
         .leftJoin(catalogCategories, JOIN_CATEGORIAS)
         .where(where)
-        .orderBy(...ordenDe(opts?.orden ?? "ventas"))
+        .orderBy(...ordenDe(opts?.orden ?? ORDEN_DEFAULT))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];

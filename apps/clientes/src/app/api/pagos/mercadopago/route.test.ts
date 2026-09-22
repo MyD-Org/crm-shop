@@ -22,6 +22,9 @@ vi.mock("@/lib/pagos/mercadopago", () => ({
   urlNotificacion: () => undefined,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
+// Estos tests son del cobro en sí: corren con los pagos prendidos. El flag
+// apagado y el método del pedido se prueban en route.pagos-flag.test.ts.
+vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
 
 import { POST } from "./route";
 

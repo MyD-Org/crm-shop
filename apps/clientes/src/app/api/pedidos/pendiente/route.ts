@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
+import { pagosHabilitados } from "@/lib/pagos-flag";
 import { pedidoPendienteMasReciente } from "@/lib/pedidos";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,14 @@ export async function GET() {
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  // Con los pagos apagados no hay rescate: este endpoint existe para retomar
+  // el cobro de un pedido de Mercado Pago, y sin cobros no hay nada que
+  // retomar. Se corta antes de consultar la base; el checkout tampoco lo llama
+  // (doble seguro del lado del server).
+  if (!pagosHabilitados()) {
+    return NextResponse.json({ pedido: null });
   }
 
   const pedido = await pedidoPendienteMasReciente({

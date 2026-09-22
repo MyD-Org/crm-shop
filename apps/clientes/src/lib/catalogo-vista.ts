@@ -1,0 +1,182 @@
+/**
+ * Textos y derivaciones de PRESENTACIÓN del catálogo: migas, título,
+ * contador, chips de filtros activos, etiqueta de stock, indexabilidad.
+ *
+ * Módulo puro (sin React ni DB): el Shop no tiene tests de render (vitest en
+ * node), así que todo lo que el catálogo muestra y se puede calcular vive
+ * acá, con tests. Los componentes de src/components/catalogo sólo lo pintan
+ * con el design system.
+ *
+ * Copy en español formal de usted (CLAUDE.md).
+ */
+import type { BreadcrumbItem } from "@myd-org/ui";
+import type { Product } from "@/data/products";
+import { fmtPrecio } from "@/lib/format";
+import { formatRubro } from "@/lib/formato-rubro";
+import {
+  ORDEN_DEFAULT,
+  VISTA_DEFAULT,
+  rangoEfectivo,
+  type EstadoCatalogo,
+  type RangoPrecio,
+} from "@/lib/catalogo-url";
+
+/** Pesos sin decimales, la misma pareja locale/moneda que la card del DS. */
+export const fmtPesos = fmtPrecio;
+
+const miles = new Intl.NumberFormat("es-AR");
+
+/**
+ * Ubicación: Inicio / Catálogo [/ rubro | / Resultados]. El rubro sólo con
+ * UNA categoría tildada (con dos no hay un "dónde estoy" único); con búsqueda
+ * el último tramo es "Resultados". El DS marca el último ítem como actual.
+ */
+export function migas(estado: EstadoCatalogo): BreadcrumbItem[] {
+  const items: BreadcrumbItem[] = [
+    { label: "Inicio", href: "/" },
+    { label: "Catálogo", href: "/catalogo" },
+  ];
+  if (estado.query) items.push({ label: "Resultados" });
+  else if (estado.categorias.length === 1)
+    items.push({ label: formatRubro(estado.categorias[0]) });
+  return items;
+}
+
+/** Título de la página: la búsqueda gana; si no, la categoría única. */
+export function tituloCatalogo(estado: EstadoCatalogo): string {
+  if (estado.query) return `Resultados para "${estado.query}"`;
+  if (estado.categorias.length === 1) return formatRubro(estado.categorias[0]);
+  return "Catálogo";
+}
+
+const productos = (n: number) =>
+  `${miles.format(n)} ${n === 1 ? "producto" : "productos"}`;
+
+/** Bajada del título: "2.626 productos · página 2 de 110". */
+export function contadorProductos(total: number, pagina: number, paginas: number): string {
+  if (total === 0) return "Sin productos";
+  return paginas > 1
+    ? `${productos(total)} · página ${pagina} de ${paginas}`
+    : productos(total);
+}
+
+/** Texto del `role="status"` para lectores de pantalla. */
+export function anuncioResultados(
+  mostrados: number,
+  total: number,
+  pagina: number,
+  paginas: number
+): string {
+  if (total === 0) return "Sin resultados";
+  return `Mostrando ${mostrados} de ${productos(total)}, página ${pagina} de ${paginas}`;
+}
+
+/**
+ * Etiqueta de stock cuando quedan pocas unidades y se sabe cuántas. En el
+ * resto de los casos `undefined`: el DS pone "En stock" / "Últimas
+ * unidades" / "Sin stock".
+ */
+export function etiquetaStock(p: Pick<Product, "stock" | "stockQty">): string | undefined {
+  return p.stock === "low" && p.stockQty != null ? `¡Últimas ${p.stockQty}!` : undefined;
+}
+
+/** Un chip de filtro activo y el cambio de estado que lo quita. */
+export interface ChipFiltro {
+  /** Única entre los chips: sirve de `key`. */
+  clave: string;
+  etiqueta: string;
+  removeLabel: string;
+  cambios: Partial<EstadoCatalogo>;
+}
+
+const hayPrecio = (e: Pick<EstadoCatalogo, "precioMin" | "precioMax">) =>
+  e.precioMin != null || e.precioMax != null;
+
+function etiquetaPrecio(estado: EstadoCatalogo, rango: RangoPrecio | null): string {
+  if (rango) {
+    const [min, max] = rangoEfectivo(estado, rango);
+    return `Precio: ${fmtPesos(min)} – ${fmtPesos(max)}`;
+  }
+  // Sin rango real (conjunto vacío) no hay límites contra qué completar.
+  if (estado.precioMin != null && estado.precioMax != null)
+    return `Precio: ${fmtPesos(estado.precioMin)} – ${fmtPesos(estado.precioMax)}`;
+  return estado.precioMin != null
+    ? `Precio: desde ${fmtPesos(estado.precioMin)}`
+    : `Precio: hasta ${fmtPesos(estado.precioMax ?? 0)}`;
+}
+
+/** Chips de filtros activos, en el orden del panel: categorías → marcas → precio → stock. */
+export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null): ChipFiltro[] {
+  const chip = (clave: string, etiqueta: string, cambios: Partial<EstadoCatalogo>) => ({
+    clave,
+    etiqueta,
+    removeLabel: `Quitar filtro ${etiqueta}`,
+    cambios,
+  });
+  return [
+    ...estado.categorias.map((c) =>
+      chip(`categoria:${c}`, formatRubro(c), {
+        categorias: estado.categorias.filter((x) => x !== c),
+      })
+    ),
+    ...estado.marcas.map((m) =>
+      chip(`marca:${m}`, `Marca: ${m}`, { marcas: estado.marcas.filter((x) => x !== m) })
+    ),
+    ...(hayPrecio(estado)
+      ? [
+          chip("precio", etiquetaPrecio(estado, rango), {
+            precioMin: undefined,
+            precioMax: undefined,
+          }),
+        ]
+      : []),
+    ...(estado.soloStock ? [chip("stock", "En stock", { soloStock: false })] : []),
+  ];
+}
+
+/**
+ * Cambios que borran todos los filtros. La búsqueda, el orden y la vista no
+ * se nombran, así que `hrefCon` los conserva.
+ */
+export function limpiarFiltros(): Partial<EstadoCatalogo> {
+  return {
+    categorias: [],
+    marcas: [],
+    precioMin: undefined,
+    precioMax: undefined,
+    soloStock: false,
+  };
+}
+
+/** ¿Hay algún filtro del panel aplicado? (la búsqueda no cuenta). */
+export function hayFiltros(estado: EstadoCatalogo): boolean {
+  return contarFiltrosActivos(estado) > 0;
+}
+
+/** Filtros activos para el contador del botón "Filtros" en mobile. */
+export function contarFiltrosActivos(estado: EstadoCatalogo): number {
+  return (
+    estado.categorias.length +
+    estado.marcas.length +
+    (hayPrecio(estado) ? 1 : 0) +
+    (estado.soloStock ? 1 : 0)
+  );
+}
+
+/**
+ * ¿Esta combinación merece estar en el índice de los buscadores? Sólo
+ * `/catalogo`, una categoría y sus páginas; el resto (búsquedas, marcas,
+ * precio, stock, orden, vista, varias categorías) queda `noindex, follow`:
+ * siguen siendo URLs compartibles, pero no se multiplican en el índice.
+ */
+export function indexable(estado: EstadoCatalogo): boolean {
+  return (
+    !estado.query &&
+    estado.marcas.length === 0 &&
+    !hayPrecio(estado) &&
+    !estado.soloStock &&
+    estado.orden === ORDEN_DEFAULT &&
+    estado.vista === VISTA_DEFAULT &&
+    estado.categorias.length <= 1
+  );
+}

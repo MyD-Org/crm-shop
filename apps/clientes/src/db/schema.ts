@@ -550,11 +550,11 @@ export const homeContent = shop.table("home_content", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ─── Catálogo comercial administrado desde el CRM (contrato catalogo-overlay/v1) ───
+// ─── Copia vieja del catálogo comercial del CRM (contrato catalogo-overlay/v1) ───
 //
-// Espejo, no fuente: el CRM manda. El Shop copia una vez por día (o cuando el CRM avisa) y
-// después lee SIEMPRE de acá, así una caída del CRM no afecta a la tienda.
-// Mono-tenant como el resto del Shop; los ids son los del CRM y se conservan tal cual.
+// OBSOLETAS: el Shop ya no las lee ni las escribe. Lee el catálogo comercial directo de las
+// tablas del CRM (ver src/db/crm.ts). Quedan declaradas sólo hasta borrarlas con una
+// migración propia; sacarlas de acá hace que el próximo `db:generate` emita los DROP.
 
 /** Taxonomía propia. Viaja entera y se reemplaza de una: no hay merge parcial. */
 export const shopCategories = shop.table(

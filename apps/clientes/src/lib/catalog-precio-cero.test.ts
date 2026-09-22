@@ -16,6 +16,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 import { getCatalogo, getFacetas, getPaginaCatalogo } from "./catalog";
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   // count(*) = 1 para que la página también dispare la consulta de filas.
   grabadora = dbGrabadora((c) => (c.sql.includes("count(*)") ? [[1]] : []));
 });

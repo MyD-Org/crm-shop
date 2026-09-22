@@ -18,6 +18,7 @@ const conConteo = (c: ConsultaGrabada) =>
   c.sql.startsWith("select count(*)::int") ? [[1]] : undefined;
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   grabadora = dbGrabadora(conConteo);
 });
 

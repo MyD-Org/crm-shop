@@ -47,7 +47,7 @@ export function dbGrabadora(responder: Responder = () => undefined) {
  * las consultas de productos la descartan con esto.
  */
 export const esLecturaDelArbol = (c: ConsultaGrabada) =>
-  /^select [^()]* from "shop"\."shop_categories" where/.test(c.sql);
+  /^select [^()]* from "public"\."shop_categories" where/.test(c.sql);
 
 /** Las consultas grabadas, sin la lectura del árbol de categorías. */
 export const sinLecturaDelArbol = (consultas: ConsultaGrabada[]) =>

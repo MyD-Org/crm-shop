@@ -27,7 +27,7 @@ const ARBOL: unknown[][] = [
   [SEGURIDAD, null, "SEGURIDAD", 2],
 ];
 
-const esConteoPorCategoria = (c: ConsultaGrabada) => c.sql.includes('group by "shop"."catalog_overlay"."categoria_id"');
+const esConteoPorCategoria = (c: ConsultaGrabada) => c.sql.includes('group by "public"."catalog_overlay"."categoria_id"');
 
 /** Árbol cargado; productos: 3 directos en ILUMINACION, 2 en Focos led, 4 en ELECTRICIDAD. */
 function conArbol() {
@@ -40,6 +40,7 @@ function conArbol() {
 }
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   grabadora = dbGrabadora((c) => (c.sql.includes("count(*)") ? [[1]] : []));
 });
 
@@ -81,15 +82,16 @@ describe("filtro por categoría", () => {
     await getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] } });
     for (const { sql, params } of grabadora.consultas) {
       expect(sql).toContain("with recursive arbol");
-      expect(sql).toContain('"shop"."catalog_overlay"."categoria_id" in');
+      expect(sql).toContain('"public"."catalog_overlay"."categoria_id" in');
       expect(params).toContain("ILUMINACION");
+      expect(params).toContain("tenant-test");
     }
   });
 
   it("sin árbol cae a la categoría de Alegra, en la misma consulta", async () => {
     await getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] } });
     for (const { sql } of grabadora.consultas) {
-      expect(sql).toMatch(/not exists \(select 1 from "shop"\."shop_categories" where activa\)/);
+      expect(sql).toMatch(/not exists \(select 1 from "public"\."shop_categories" where activa and tenant_id = \$\d+\)/);
       expect(sql).toContain('"shop"."catalog_categories"."name" in');
     }
   });

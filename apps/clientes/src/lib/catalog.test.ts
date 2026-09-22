@@ -61,7 +61,9 @@ describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
     description: "LAMPARA LED A60 9W",
   };
   const HOST = "media.plataforma.example";
-  const foto = { url: `https://${HOST}/a.jpg`, w: 800, alt: "Lámpara" };
+  const BASE = `https://${HOST}`;
+  // El CRM guarda la key de R2; la URL se compone con la base pública.
+  const foto = { key: "t1/a.jpg", w: 800, alt: "Lámpara" };
 
   it("el nombre del overlay gana; el código de Alegra queda como sku", () => {
     const p = mapFilaToProduct({ ...base, overlayNombre: "Lámpara LED A60" });
@@ -91,17 +93,22 @@ describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
   });
 
   it("sin fotos, images es undefined", () => {
-    expect(mapFilaToProduct({ ...base, overlayFotos: null }, undefined, [HOST]).images).toBeUndefined();
-    expect(mapFilaToProduct({ ...base, overlayFotos: [] }, undefined, [HOST]).images).toBeUndefined();
+    expect(mapFilaToProduct({ ...base, overlayFotos: null }, undefined, [HOST], BASE).images).toBeUndefined();
+    expect(mapFilaToProduct({ ...base, overlayFotos: [] }, undefined, [HOST], BASE).images).toBeUndefined();
   });
 
-  it("con fotos y host configurado, images mapea url, w y alt", () => {
-    const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, [HOST]);
-    expect(p.images).toEqual([foto]);
+  it("con fotos y host configurado, compone la url con la base y mapea w y alt", () => {
+    const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, [HOST], BASE);
+    expect(p.images).toEqual([{ url: `${BASE}/t1/a.jpg`, w: 800, alt: "Lámpara" }]);
   });
 
   it("con fotos pero sin host configurado, images es undefined (placeholder)", () => {
-    const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, []);
+    const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, [], BASE);
+    expect(p.images).toBeUndefined();
+  });
+
+  it("con fotos pero sin base pública configurada, images es undefined", () => {
+    const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, [HOST], null);
     expect(p.images).toBeUndefined();
   });
 });

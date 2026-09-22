@@ -62,6 +62,11 @@ describe("normalizarPayload", () => {
     expect("acento" in r).toBe(false);
   });
 
+  it("hero.imagenAlt vacío se omite (opcional)", () => {
+    const r = normalizarPayload("hero", { ...DEFAULTS_HOME.hero, imagenAlt: "" }) as Record<string, unknown>;
+    expect("imagenAlt" in r).toBe(false);
+  });
+
   it("destacados.cantidad se convierte a número y conserva skus/imagenes", () => {
     const r = normalizarPayload("destacados", { ...DEFAULTS_HOME.destacados, cantidad: "8" }) as Record<
       string,

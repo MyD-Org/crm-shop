@@ -56,7 +56,7 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
 };
 
 const OPCIONALES: Partial<Record<SeccionHome, readonly string[]>> = {
-  hero: ["acento"],
+  hero: ["acento", "imagenAlt"],
   ambientes: ["acento", "bajada"],
   destacados: ["acento", "bajada"],
   bannerDeco: ["acento"],

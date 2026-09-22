@@ -4,7 +4,10 @@ import {
   LARGOS_DIRECCION,
   MAX_DIRECCIONES,
   avisoFueraDeZona,
+  OTRA_DIRECCION,
+  eleccionInicial,
   entregaDesdeGuardada,
+  entregaElegida,
   esIdDireccion,
   etiquetaDireccion,
   fueraDeZona,
@@ -219,5 +222,36 @@ describe("esIdDireccion", () => {
     expect(esIdDireccion("abc")).toBe(false);
     expect(esIdDireccion("1; drop table x")).toBe(false);
     expect(esIdDireccion("")).toBe(false);
+  });
+});
+
+describe("checkout: elección de dirección", () => {
+  const casa = guardada({ id: "a", predeterminada: false, ciudad: "Puerto Iguazú" });
+  const obra = guardada({ id: "b", predeterminada: true, ciudad: "eldorado", etiqueta: "Obra" });
+  const rosario = guardada({ id: "c", predeterminada: false, ciudad: "Rosario", provincia: "Santa Fe" });
+  const tipeada = { ciudad: "Puerto Iguazú", direccion: "Tipeada 1" };
+
+  it("arranca en la predeterminada; sin guardadas, en 'otra'", () => {
+    expect(eleccionInicial([casa, obra])).toBe("b");
+    expect(eleccionInicial([])).toBe(OTRA_DIRECCION);
+    expect(eleccionInicial([casa])).toBe(OTRA_DIRECCION);
+  });
+
+  it("con una guardada en zona manda su ciudad normalizada y su línea", () => {
+    expect(entregaElegida([casa, obra], "b", tipeada)).toEqual({
+      ciudad: "El Dorado",
+      direccion: lineaEntrega(obra),
+      guardada: obra,
+      fueraDeZona: false,
+    });
+  });
+
+  it("'otra' (o un id que ya no está) usa lo tipeado y no toca las guardadas", () => {
+    expect(entregaElegida([casa], OTRA_DIRECCION, tipeada)).toEqual({ ...tipeada, guardada: null, fueraDeZona: false });
+    expect(entregaElegida([casa], "zzz", tipeada)).toEqual({ ...tipeada, guardada: null, fueraDeZona: false });
+  });
+
+  it("una guardada fuera de zona viaja con su ciudad y queda marcada", () => {
+    expect(entregaElegida([rosario], "c", tipeada)).toMatchObject({ ciudad: "Rosario", fueraDeZona: true });
   });
 });

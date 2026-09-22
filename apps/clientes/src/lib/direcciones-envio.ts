@@ -177,3 +177,26 @@ export function lineaEntrega(d: DireccionEnvio): string {
 export function entregaDesdeGuardada(d: DireccionEnvio): { ciudad: string; direccion: string } {
   return { ciudad: ciudadConEnvio(d.ciudad) ?? d.ciudad, direccion: lineaEntrega(d) };
 }
+
+/** Valor del selector del checkout para "otra dirección sólo para esta compra". */
+export const OTRA_DIRECCION = "otra";
+
+/** Con qué arranca el selector del checkout: la predeterminada, o "otra". */
+export function eleccionInicial(direcciones: DireccionEnvio[]): string {
+  return direcciones.find((d) => d.predeterminada)?.id ?? OTRA_DIRECCION;
+}
+
+/**
+ * Ciudad y dirección que el checkout cotiza y manda al pedido según lo elegido.
+ * "Otra" (o un id que ya no está) usa lo que se tipeó en los campos de siempre,
+ * sin tocar las guardadas.
+ */
+export function entregaElegida(
+  direcciones: DireccionEnvio[],
+  eleccion: string,
+  tipeada: { ciudad: string; direccion: string },
+): { ciudad: string; direccion: string; guardada: DireccionEnvio | null; fueraDeZona: boolean } {
+  const guardada = eleccion === OTRA_DIRECCION ? undefined : direcciones.find((d) => d.id === eleccion);
+  if (!guardada) return { ...tipeada, guardada: null, fueraDeZona: false };
+  return { ...entregaDesdeGuardada(guardada), guardada, fueraDeZona: fueraDeZona(guardada) };
+}

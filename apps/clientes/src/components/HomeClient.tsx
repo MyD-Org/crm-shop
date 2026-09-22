@@ -18,6 +18,7 @@ import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
 import type { HomeContent, TileContent } from "@/data/home-defaults";
+import { SeccionEditable } from "@/components/home/SeccionEditable";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
 
@@ -141,36 +142,40 @@ export function HomeClient({
    *  edición in-place (rebanada B1 de home-editable: `SeccionEditable`). */
   puedeEditar: boolean;
 }) {
-  const { hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios } = contenido;
+  const { hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios, whatsapp } = contenido;
   const imagenesDestacados = secDestacados.imagenes ?? [];
 
   return (
-    <main className="flex-1" data-puede-editar={puedeEditar || undefined}>
+    <main className="flex-1">
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
-            <Hero
-              className="[&_em]:not-italic [&_h1]:font-bold [&_a:first-of-type]:bg-accent [&_a:first-of-type:hover]:bg-primary"
-              eyebrow={hero.eyebrow}
-              title={hero.titulo}
-              accent={hero.acento}
-              lead={hero.bajada}
-              imageSrc={hero.imagen}
-              imageAlt={hero.imagenAlt}
-              ctas={hero.ctas}
-              usps={hero.usps.map((u, i) => {
-                const Icon = ICONOS_USP[i % ICONOS_USP.length];
-                return { label: u.label, icon: <Icon /> };
-              })}
-            />
+            <SeccionEditable seccion="hero" inicial={hero} puedeEditar={puedeEditar}>
+              <Hero
+                className="[&_em]:not-italic [&_h1]:font-bold [&_a:first-of-type]:bg-accent [&_a:first-of-type:hover]:bg-primary"
+                eyebrow={hero.eyebrow}
+                title={hero.titulo}
+                accent={hero.acento}
+                lead={hero.bajada}
+                imageSrc={hero.imagen}
+                imageAlt={hero.imagenAlt}
+                ctas={hero.ctas}
+                usps={hero.usps.map((u, i) => {
+                  const Icon = ICONOS_USP[i % ICONOS_USP.length];
+                  return { label: u.label, icon: <Icon /> };
+                })}
+              />
+            </SeccionEditable>
           </Reveal>
         </div>
       </div>
 
-      <Marquee
-        items={marquee.items}
-        className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
-      />
+      <SeccionEditable seccion="marquee" inicial={marquee} puedeEditar={puedeEditar}>
+        <Marquee
+          items={marquee.items}
+          className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
+        />
+      </SeccionEditable>
 
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         {/* Ambientes */}
@@ -258,36 +263,38 @@ export function HomeClient({
 
         {/* Servicios */}
         <Reveal>
-          <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
-            {servicios.items.map((s, i) => {
-              const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
-              return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
-            })}
-          </section>
+          <SeccionEditable seccion="servicios" inicial={servicios} puedeEditar={puedeEditar}>
+            <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
+              {servicios.items.map((s, i) => {
+                const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
+                return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
+              })}
+            </section>
+          </SeccionEditable>
         </Reveal>
 
         {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
-        <section className="pb-[clamp(56px,7vw,96px)]">
-          <div className="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[28px] bg-primary px-[clamp(24px,5vw,72px)] py-10 text-on-primary">
-            <div className="flex items-center gap-5">
-              <span className="[&_svg]:h-8 [&_svg]:w-8 [&_svg]:text-highlight">
-                <ChatIcon />
-              </span>
-              <div>
-                <p className="text-lg font-extrabold">¿Necesitás asesoramiento técnico?</p>
-                <p className="text-sm text-on-primary/70">
-                  Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.
-                </p>
+        <SeccionEditable seccion="whatsapp" inicial={whatsapp} puedeEditar={puedeEditar}>
+          <section className="pb-[clamp(56px,7vw,96px)]">
+            <div className="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[28px] bg-primary px-[clamp(24px,5vw,72px)] py-10 text-on-primary">
+              <div className="flex items-center gap-5">
+                <span className="[&_svg]:h-8 [&_svg]:w-8 [&_svg]:text-highlight">
+                  <ChatIcon />
+                </span>
+                <div>
+                  <p className="text-lg font-extrabold">{whatsapp.titulo}</p>
+                  <p className="text-sm text-on-primary/70">{whatsapp.texto}</p>
+                </div>
               </div>
+              <a
+                href={whatsapp.href}
+                className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
+              >
+                Consultar ahora
+              </a>
             </div>
-            <a
-              href="https://wa.me/5492235903025"
-              className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
-            >
-              Consultar ahora
-            </a>
-          </div>
-        </section>
+          </section>
+        </SeccionEditable>
       </div>
     </main>
   );

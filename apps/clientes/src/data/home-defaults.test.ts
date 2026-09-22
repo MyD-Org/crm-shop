@@ -4,6 +4,7 @@ import {
   SECCIONES_HOME,
   erroresSeccion,
   combinarContenidoHome,
+  esHref,
 } from "./home-defaults";
 
 describe("defaults de home", () => {
@@ -78,6 +79,95 @@ describe("combinarContenidoHome", () => {
       { key: "navBadge", payload: { categoria: "Decorativa", texto: "Nuevo" } },
     ]);
     expect(out.navBadge).toEqual({ categoria: "Decorativa", texto: "Nuevo" });
+  });
+});
+
+describe("sección whatsapp (home-editable B1)", () => {
+  it("SECCIONES_HOME contiene whatsapp", () => {
+    expect(SECCIONES_HOME).toContain("whatsapp");
+  });
+
+  it("el default valida sin errores", () => {
+    expect(erroresSeccion("whatsapp", DEFAULTS_HOME.whatsapp)).toEqual([]);
+  });
+
+  it("exige titulo y texto no vacíos", () => {
+    const errores = erroresSeccion("whatsapp", { titulo: "", texto: "x", href: "/contacto" });
+    expect(errores.length).toBeGreaterThan(0);
+    expect(errores.some((e) => e.includes("titulo"))).toBe(true);
+  });
+
+  it("rechaza un href inválido", () => {
+    const errores = erroresSeccion("whatsapp", { titulo: "a", texto: "b", href: "javascript:alert(1)" });
+    expect(errores.length).toBeGreaterThan(0);
+    expect(errores.some((e) => e.includes("href"))).toBe(true);
+  });
+
+  it("combinarContenidoHome: una fila válida reemplaza el CTA", () => {
+    const out = combinarContenidoHome([
+      { key: "whatsapp", payload: { titulo: "Consúltenos", texto: "t", href: "https://wa.me/5491100000000" } },
+    ]);
+    expect(out.whatsapp.titulo).toBe("Consúltenos");
+  });
+
+  it("combinarContenidoHome: una fila inválida deja el default", () => {
+    const out = combinarContenidoHome([{ key: "whatsapp", payload: { titulo: "" } }]);
+    expect(out.whatsapp).toEqual(DEFAULTS_HOME.whatsapp);
+  });
+});
+
+describe("esHref", () => {
+  it("acepta rutas internas y URLs https", () => {
+    for (const v of ["/", "/catalogo?categorias=ILUMINACION", "https://wa.me/5491100000000", "https://cliente.example/p"]) {
+      expect(esHref(v), v).toBe(true);
+    }
+  });
+
+  it("rechaza vacíos, http, javascript:, protocol-relative, mailto, rutas sin / y tipos no string", () => {
+    for (const v of ["", "   ", "http://cliente.example", "javascript:alert(1)", "//cliente.example", "mailto:a@cliente.example", "catalogo", 42, null]) {
+      expect(esHref(v), String(v)).toBe(false);
+    }
+  });
+
+  it("se aplica a hero.ctas, decoGrid.chips, bannerDeco.cta, ambientes.items[].href y los linkTodos", () => {
+    expect(
+      erroresSeccion("hero", { ...DEFAULTS_HOME.hero, ctas: [{ label: "Ir", href: "http://x.example" }] }).some((e) =>
+        e.includes("ctas"),
+      ),
+    ).toBe(true);
+    expect(
+      erroresSeccion("decoGrid", { ...DEFAULTS_HOME.decoGrid, chips: [{ label: "x", href: "http://x.example" }] }).some(
+        (e) => e.includes("chips"),
+      ),
+    ).toBe(true);
+    expect(
+      erroresSeccion("bannerDeco", { ...DEFAULTS_HOME.bannerDeco, cta: { label: "x", href: "http://x.example" } }).some(
+        (e) => e.includes("cta"),
+      ),
+    ).toBe(true);
+    expect(
+      erroresSeccion("ambientes", {
+        ...DEFAULTS_HOME.ambientes,
+        items: [{ ...DEFAULTS_HOME.ambientes.items[0], href: "http://x.example" }],
+      }).some((e) => e.includes("items")),
+    ).toBe(true);
+    expect(
+      erroresSeccion("ambientes", { ...DEFAULTS_HOME.ambientes, linkTodos: "http://x.example" }).some((e) =>
+        e.includes("linkTodos"),
+      ),
+    ).toBe(true);
+    expect(
+      erroresSeccion("destacados", { ...DEFAULTS_HOME.destacados, linkTodos: "http://x.example" }).some((e) =>
+        e.includes("linkTodos"),
+      ),
+    ).toBe(true);
+  });
+
+  it("los defaults siguen válidos tras endurecer esHref", () => {
+    for (const key of SECCIONES_HOME) {
+      if (key === "navBadge") continue;
+      expect(erroresSeccion(key, DEFAULTS_HOME[key as keyof typeof DEFAULTS_HOME])).toEqual([]);
+    }
   });
 });
 

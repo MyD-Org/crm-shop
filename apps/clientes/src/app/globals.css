@@ -14,6 +14,8 @@
 /* Fuentes: next/font las carga en el layout (--font-nunito / --font-sora) y
    acá se cablean a los roles del DS para el caso sin data-theme. */
 :root {
+  /* Sin data-theme: la marca del footer queda como la pinta el DS. */
+  --color-marca-sobre-oscuro: var(--color-highlight);
   --font-sans: var(--font-nunito), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
 }
@@ -44,11 +46,18 @@ body {
   display: none;
 }
 
-/* Marca del header en acento según diseño aprobado (el DS usa highlight;
-   alinear en próxima versión del DS). Solo el header: el footer no usa
-   .site-header y su <em> de marca queda en highlight (--warm), como el mockup. */
+/* Marca ("Led") con un solo color por tema: el acento. El DS la pinta en
+   highlight; se alinea acá hasta que el DS lo resuelva.
+   - Header (fondo claro): el acento tal cual.
+   - Footer (fondo oscuro): el mismo tono aclarado, --color-marca-sobre-oscuro,
+     porque el acento no se lee sobre oscuro (azul: 2,2:1). Cada tema lo
+     define; tema-marca.test.ts exige ≥ 4,5:1 contra --color-surface-dark. */
 .site-header em {
   color: var(--color-accent);
+  font-style: normal;
+}
+.site-footer em {
+  color: var(--color-marca-sobre-oscuro);
   font-style: normal;
 }
 
@@ -84,7 +93,8 @@ body {
   --color-accent: #b45f2e;
   --color-accent-strong: #b45f2e; /* eyebrow/tiles/badge del DS = --accent */
   --color-accent-soft: #f3e4d3;
-  --color-highlight: #eda63f; /* --warm: marca en footer, luz cálida */
+  --color-highlight: #eda63f; /* --warm: luz cálida */
+  --color-marca-sobre-oscuro: #d07a45; /* acento #b45f2e aclarado: 4,9:1 sobre el footer */
   /* informativos sin azul (mismo criterio que editorial) */
   --color-info: #b45f2e;
   --color-info-soft: #f3e4d3;
@@ -130,6 +140,7 @@ body {
   --color-accent-strong: #1e5aa8;
   --color-accent-soft: #e9f1fa;
   --color-highlight: #e8a13d;
+  --color-marca-sobre-oscuro: #5b8fd6; /* acento #1e5aa8 aclarado: 4,6:1 sobre el footer */
   --color-info: #1e5aa8;
   --color-info-soft: #e9f1fa;
   --color-surface-dark: #1c2733;

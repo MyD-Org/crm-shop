@@ -95,6 +95,35 @@ describe("normalizarPayload", () => {
       expect(erroresSeccion(key, payload)).toEqual([]);
     }
   });
+
+  it("ambientes.bajada vacía se omite (rebanada B2)", () => {
+    const r = normalizarPayload("ambientes", { ...DEFAULTS_HOME.ambientes, bajada: "" }) as Record<string, unknown>;
+    expect("bajada" in r).toBe(false);
+  });
+
+  it("decoGrid descarta chips con label vacío (rebanada B2)", () => {
+    const r = normalizarPayload("decoGrid", {
+      ...DEFAULTS_HOME.decoGrid,
+      chips: [{ label: " ", href: "/x" }, { label: "A", href: "/a" }],
+    }) as { chips: { label: string; href: string }[] };
+    expect(r.chips).toEqual([{ label: "A", href: "/a" }]);
+  });
+
+  it("ambientes.items recorta espacios y conserva la imagen (rebanada B2)", () => {
+    const tile = DEFAULTS_HOME.ambientes.items[0];
+    const r = normalizarPayload("ambientes", {
+      ...DEFAULTS_HOME.ambientes,
+      items: [{ ...tile, titulo: "  T  " }],
+    }) as { items: { titulo: string; imagen: string }[] };
+    expect(r.items[0].titulo).toBe("T");
+    expect(r.items[0].imagen).toBe(tile.imagen);
+  });
+
+  it("nuevoTile() valida una vez completados eyebrow y titulo", () => {
+    const tile = { ...nuevoTile(), eyebrow: "Interior", titulo: "Nuevo ambiente" };
+    const r = normalizarPayload("ambientes", { ...DEFAULTS_HOME.ambientes, items: [tile] });
+    expect(erroresSeccion("ambientes", r)).toEqual([]);
+  });
 });
 
 describe("TITULOS_SECCION", () => {

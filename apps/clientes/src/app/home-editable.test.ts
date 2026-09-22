@@ -36,6 +36,14 @@ describe("home-editable B1: whatsapp sale del contrato, no de literales", () => 
   });
 });
 
+describe("home-editable B2: las 8 secciones de HomeClient están envueltas en SeccionEditable", () => {
+  it("HomeClient.tsx tiene 8 <SeccionEditable", () => {
+    const texto = readFileSync(HOME_CLIENT, "utf8");
+    const ocurrencias = texto.match(/<SeccionEditable/g) ?? [];
+    expect(ocurrencias).toHaveLength(8);
+  });
+});
+
 describe("home-editable A: PUT /api/internal/home-content eliminado", () => {
   it("el endpoint deja de existir", () => {
     expect(existsSync(HOME_CONTENT_DIR)).toBe(false);

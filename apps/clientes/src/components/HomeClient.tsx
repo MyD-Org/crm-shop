@@ -180,19 +180,22 @@ export function HomeClient({
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         {/* Ambientes */}
         <Reveal>
-          <section className="pt-[clamp(56px,7vw,96px)]">
-            <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
-            {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
-                min-h menores; la variante "mosaic" debería llevarla (DS gap). */}
-            <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(ambientes.items)} />
-          </section>
+          <SeccionEditable seccion="ambientes" inicial={ambientes} puedeEditar={puedeEditar}>
+            <section className="pt-[clamp(56px,7vw,96px)]">
+              <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
+              {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
+                  min-h menores; la variante "mosaic" debería llevarla (DS gap). */}
+              <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(ambientes.items)} />
+            </section>
+          </SeccionEditable>
         </Reveal>
 
         {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
         <Reveal>
-          <section className="pt-[clamp(56px,7vw,96px)]">
-            <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <SeccionEditable seccion="destacados" inicial={secDestacados} puedeEditar={puedeEditar}>
+            <section className="pt-[clamp(56px,7vw,96px)]">
+              <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {destacados.map((p, i) => {
                 const imagen = imagenesDestacados[i];
                 return (
@@ -235,30 +238,35 @@ export function HomeClient({
                   </Link>
                 );
               })}
-            </div>
-          </section>
+              </div>
+            </section>
+          </SeccionEditable>
         </Reveal>
 
         {/* Banner decorativo */}
         <Reveal>
-          <PromoBanner
-            className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
-            eyebrow={bannerDeco.eyebrow}
-            title={bannerDeco.titulo}
-            accent={bannerDeco.acento}
-            lead={bannerDeco.bajada}
-            cta={bannerDeco.cta}
-            imageSrc={bannerDeco.imagen}
-          />
+          <SeccionEditable seccion="bannerDeco" inicial={bannerDeco} puedeEditar={puedeEditar}>
+            <PromoBanner
+              className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
+              eyebrow={bannerDeco.eyebrow}
+              title={bannerDeco.titulo}
+              accent={bannerDeco.acento}
+              lead={bannerDeco.bajada}
+              cta={bannerDeco.cta}
+              imageSrc={bannerDeco.imagen}
+            />
+          </SeccionEditable>
         </Reveal>
 
         {/* Deco grid + chips */}
         <Reveal>
-          <section className="pt-[clamp(56px,7vw,96px)]">
-            <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
-            <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} />
-            <ChipRow chips={decoGrid.chips} className="mt-6" />
-          </section>
+          <SeccionEditable seccion="decoGrid" inicial={decoGrid} puedeEditar={puedeEditar}>
+            <section className="pt-[clamp(56px,7vw,96px)]">
+              <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
+              <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} />
+              <ChipRow chips={decoGrid.chips} className="mt-6" />
+            </section>
+          </SeccionEditable>
         </Reveal>
 
         {/* Servicios */}

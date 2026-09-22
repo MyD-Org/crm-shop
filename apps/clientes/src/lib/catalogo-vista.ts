@@ -11,8 +11,8 @@
  */
 import type { BreadcrumbItem } from "@myd-org/ui";
 import type { Product } from "@/data/products";
-import { fmtPrecio } from "@/lib/format";
-import { formatRubro } from "@/lib/formato-rubro";
+import { fmtPesosEnteros } from "@/lib/format";
+import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import {
   ORDEN_DEFAULT,
   SOLO_STOCK_DEFAULT,
@@ -23,8 +23,8 @@ import {
   type RangoPrecio,
 } from "@/lib/catalogo-url";
 
-/** Pesos sin decimales, la misma pareja locale/moneda que la card del DS. */
-export const fmtPesos = fmtPrecio;
+/** Pesos sin decimales, para los bordes del filtro de precio (ver `fmtPesosEnteros`). */
+export const fmtPesos = fmtPesosEnteros;
 
 const miles = new Intl.NumberFormat("es-AR");
 
@@ -166,7 +166,7 @@ export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null):
       })
     ),
     ...estado.marcas.map((m) =>
-      chip(`marca:${m}`, `Marca: ${m}`, { marcas: estado.marcas.filter((x) => x !== m) })
+      chip(`marca:${m}`, `Marca: ${formatMarca(m)}`, { marcas: estado.marcas.filter((x) => x !== m) })
     ),
     ...(hayPrecio(estado)
       ? [

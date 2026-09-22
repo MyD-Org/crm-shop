@@ -162,12 +162,12 @@ describe("chipsActivos", () => {
 
     expect(chips.map((c) => c.etiqueta)).toEqual([
       "Iluminación",
-      "Marca: GENROD",
-      "Marca: MACROLED",
+      "Marca: Genrod",
+      "Marca: Macroled",
       "Precio: $ 500 – $ 50.000",
       "Incluye sin stock",
     ]);
-    expect(chips[1].removeLabel).toBe("Quitar filtro Marca: GENROD");
+    expect(chips[1].removeLabel).toBe("Quitar filtro Marca: Genrod");
     expect(chips[0].cambios).toEqual({ categorias: [] });
     expect(chips[1].cambios).toEqual({ marcas: ["MACROLED"] });
     expect(chips[3].cambios).toEqual({ precioMin: undefined, precioMax: undefined });

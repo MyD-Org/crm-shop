@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
+import { fmtPrecio } from "@/lib/format";
 
 function CartIcon() {
   return (
@@ -23,8 +24,11 @@ function LightbulbIcon() {
   );
 }
 
-const fmt = (n: number) =>
-  n.toLocaleString("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 });
+// El mismo formateador que la página del carrito y el checkout, con dos
+// decimales siempre: el preview es el mismo carrito y tiene que decir los
+// mismos números. El de antes tenía `minimumFractionDigits: 0` sin máximo, así
+// que $2.344.755,60 salía "$ 2.344.755,6", con un solo decimal.
+const fmt = fmtPrecio;
 
 export function CartPreview({
   autoAbrir = true,
@@ -121,7 +125,10 @@ export function CartPreview({
                 Carrito ({count} productos)
               </p>
 
-              <ul className="-mx-1 max-h-72 space-y-3 overflow-y-auto px-1">
+              {/* `scroll-fino` (utilidad del DS): la misma barra fina y del color de
+                  la piel que la lista de marcas, en vez de la gris del sistema.
+                  `pr-3` la separa de los precios. */}
+              <ul className="scroll-fino -mx-1 max-h-72 space-y-3 overflow-y-auto px-1 pr-3">
                 {items.map((item) => (
                   <li key={item.id}>
                     <Link

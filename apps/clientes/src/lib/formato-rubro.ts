@@ -62,3 +62,28 @@ export function formatRubro(rubro: string): string {
     })
     .join(" ");
 }
+
+/**
+ * Formateo de marcas para mostrar en los filtros. Alegra las manda en
+ * MAYÚSCULAS ("JADEVER", "GENROD") y en el panel se leen como nombre propio:
+ * "Jadever", "Genrod".
+ *
+ * No usa la tabla de acentos de los rubros: una marca es un nombre propio y
+ * no se le agregan tildes. Las palabras de hasta 3 letras se dejan como vienen
+ * porque en las marcas casi siempre son siglas ("DCK", "LG", "3M"); pasarlas a
+ * "Dck" las vuelve ilegibles.
+ *
+ * Sólo display: el valor crudo sigue siendo el que viaja en la URL y filtra.
+ */
+export function formatMarca(marca: string): string {
+  if (!esMayusculaSostenida(marca)) return marca;
+  return marca
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((palabra) => {
+      if (palabra.replace(/[^a-zA-Z0-9]/g, "").length <= 3) return palabra;
+      const baja = palabra.toLowerCase();
+      return baja.charAt(0).toUpperCase() + baja.slice(1);
+    })
+    .join(" ");
+}

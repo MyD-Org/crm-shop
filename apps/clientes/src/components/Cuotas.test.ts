@@ -47,7 +47,7 @@ const oferta = (
 describe("CuotasLinea (card y ficha)", () => {
   it("sin interés", () => {
     const t = texto(renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion({}) })));
-    expect(t).toBe("6 cuotas sin interés de $20.000");
+    expect(t).toBe("6 cuotas sin interés de $20.000,00");
   });
 
   it("con interés: 'N cuotas de $X', no dice 'sin interés'", () => {
@@ -56,7 +56,7 @@ describe("CuotasLinea (card y ficha)", () => {
         createElement(CuotasLinea, { opcion: opcion({ cuotas: 12, montoCuota: 13500, sinInteres: false }) }),
       ),
     );
-    expect(t).toBe("12 cuotas de $13.500");
+    expect(t).toBe("12 cuotas de $13.500,00");
     expect(t).not.toContain("sin interés");
   });
 
@@ -75,7 +75,7 @@ describe("CuotasLinea (card y ficha)", () => {
 describe("CuotasCard (slot installments de ProductCard)", () => {
   it("sólo la línea de cuotas, sin bloque propio", () => {
     const html = renderToStaticMarkup(createElement(CuotasCard, { opcion: opcion({}) }));
-    expect(texto(html)).toBe("6 cuotas sin interés de $20.000");
+    expect(texto(html)).toBe("6 cuotas sin interés de $20.000,00");
     // Va adentro de la card: sólo spans, nada que rompa el layout del slot.
     expect(html.startsWith("<span")).toBe(true);
   });
@@ -103,12 +103,12 @@ describe("MediosDePagoDetalle (modal de la ficha)", () => {
   it("un bloque por proveedor titulado 'Tarjetas de crédito (Mercado Pago)' con 1 pago", () => {
     expect(t).toContain("Tarjetas de crédito (Mercado Pago)");
     expect(t.match(/1 pago Precio contado/g)).toHaveLength(1);
-    expect(t).toContain("$120.000");
+    expect(t).toContain("$120.000,00");
   });
 
   it("todas las cantidades hasta el máximo; con interés CFT destacado y TEA, sin interés sin CFT", () => {
-    expect(t).toContain("6 cuotas de $20.000 Sin interés");
-    expect(t).toContain("12 cuotas de $14.000");
+    expect(t).toContain("6 cuotas de $20.000,00 Sin interés");
+    expect(t).toContain("12 cuotas de $14.000,00");
     expect(t).toContain("CFT 55,50%");
     expect(t).toContain("TEA 42,10%");
     expect(html).toMatch(/font-bold[^>]*>CFT 55,50%/);
@@ -143,7 +143,7 @@ describe("CuotasResumen (carrito)", () => {
     const html = renderToStaticMarkup(createElement(CuotasResumen, { resumen: resumenCuotas(120000, o) }));
     const t = texto(html);
     expect(t).toContain("Hasta 3 cuotas sin interés");
-    expect(t).toContain("Te faltan $30.000 para hasta 6 cuotas");
+    expect(t).toContain("Te faltan $30.000,00 para hasta 6 cuotas");
     expect(html).toContain('role="progressbar"');
     expect(html).toContain('aria-valuenow="80"');
     expect(html).toContain("width:80%");

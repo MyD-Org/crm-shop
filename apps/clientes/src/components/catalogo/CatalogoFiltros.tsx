@@ -8,7 +8,7 @@ import {
   rangoEfectivo,
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
-import { fmtPesos, hayFiltros, limpiarFiltros } from "@/lib/catalogo-vista";
+import { fmtPesos, hayFiltros, itemsDeFaceta, limpiarFiltros } from "@/lib/catalogo-vista";
 import { formatRubro } from "@/lib/formato-rubro";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
@@ -41,11 +41,11 @@ export function CatalogoFiltros({
     <div className="flex flex-col gap-5">
       <FacetGroup
         title="Categorías"
-        items={facetas.categorias.map((c) => ({
+        items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
           value: c.label,
           label: formatRubro(c.label),
           count: c.count,
-          checked: estado.categorias.includes(c.label),
+          checked: c.checked,
         }))}
         onToggle={(valor, tildado) =>
           ir({ categorias: alternar(estado.categorias, valor, tildado) })
@@ -55,11 +55,11 @@ export function CatalogoFiltros({
       <Divider />
       <FacetGroup
         title="Marcas"
-        items={facetas.marcas.map((m) => ({
+        items={itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
           value: m.label,
           label: m.label,
           count: m.count,
-          checked: estado.marcas.includes(m.label),
+          checked: m.checked,
         }))}
         onToggle={(valor, tildado) => ir({ marcas: alternar(estado.marcas, valor, tildado) })}
         searchable

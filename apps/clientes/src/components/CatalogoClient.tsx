@@ -65,7 +65,7 @@ export function CatalogoClient({
   const conFiltros = hayFiltros(estado);
 
   return (
-    <main className="mx-auto flex max-w-contenido flex-1 gap-6 px-4 py-8">
+    <main className="mx-auto flex w-full max-w-contenido flex-1 gap-6 px-4 py-8">
       <aside className="hidden w-64 shrink-0 lg:block">
         <CatalogoFiltros facetas={facetas} estado={estado} ir={ir} />
       </aside>

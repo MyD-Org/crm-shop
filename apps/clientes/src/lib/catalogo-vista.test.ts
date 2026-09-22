@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  itemsDeFaceta,
   anuncioResultados,
   chipsActivos,
   contadorProductos,
@@ -213,5 +214,33 @@ describe("indexable", () => {
     expect(indexable({ ...base, orden: "precio-asc" })).toBe(false);
     expect(indexable({ ...base, vista: "lista" })).toBe(false);
     expect(indexable({ ...base, categorias: ["A", "B"] })).toBe(false);
+  });
+});
+
+describe("itemsDeFaceta", () => {
+  const facetas = [
+    { label: "ELECTRICIDAD", count: 3385 },
+    { label: "HERRAMIENTAS", count: 12 },
+  ];
+
+  it("marca como tildados los valores del estado", () => {
+    const items = itemsDeFaceta(facetas, ["HERRAMIENTAS"]);
+    expect(items).toEqual([
+      { label: "ELECTRICIDAD", count: 3385, checked: false },
+      { label: "HERRAMIENTAS", count: 12, checked: true },
+    ]);
+  });
+
+  it("un valor tildado que la faceta no trae aparece igual, primero y con cuenta 0", () => {
+    // Iluminación + una marca que no tiene productos de iluminación: la
+    // faceta de categorías ya no trae ILUMINACION, pero sigue tildada.
+    const items = itemsDeFaceta(facetas, ["ILUMINACION"]);
+    expect(items[0]).toEqual({ label: "ILUMINACION", count: 0, checked: true });
+    expect(items).toHaveLength(3);
+  });
+
+  it("no duplica un tildado que la faceta sí trae", () => {
+    const items = itemsDeFaceta(facetas, ["ELECTRICIDAD"]);
+    expect(items.filter((i) => i.label === "ELECTRICIDAD")).toHaveLength(1);
   });
 });

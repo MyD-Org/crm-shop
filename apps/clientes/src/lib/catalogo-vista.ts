@@ -180,3 +180,22 @@ export function indexable(estado: EstadoCatalogo): boolean {
     estado.categorias.length <= 1
   );
 }
+
+/**
+ * Ítems de una faceta con su tilde. Un valor tildado que la faceta ya no trae
+ * (porque, cruzado con los otros filtros, cuenta cero) se agrega primero con
+ * cuenta 0: si desapareciera del panel, sólo se podría quitar desde el chip.
+ */
+export function itemsDeFaceta(
+  facetas: { label: string; count: number }[],
+  tildados: string[],
+): { label: string; count: number; checked: boolean }[] {
+  const presentes = new Set(facetas.map((f) => f.label));
+  const ausentes = tildados
+    .filter((t) => !presentes.has(t))
+    .map((label) => ({ label, count: 0, checked: true }));
+  return [
+    ...ausentes,
+    ...facetas.map((f) => ({ ...f, checked: tildados.includes(f.label) })),
+  ];
+}

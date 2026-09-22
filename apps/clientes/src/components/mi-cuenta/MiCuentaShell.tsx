@@ -6,7 +6,7 @@ import { useClerk } from "@clerk/nextjs";
 import { Card, SectionNav, type SectionNavItem } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
 import { RUTA_PANEL_SEGURIDAD } from "@/lib/menu-usuario";
-import { seccionActiva, type SeccionMiCuenta } from "@/lib/mi-cuenta-nav";
+import { bajadaMiCuenta, seccionActiva, type SeccionMiCuenta } from "@/lib/mi-cuenta-nav";
 import { ICONOS_SECCION } from "./iconos";
 
 /**
@@ -53,9 +53,7 @@ export function MiCuentaShell({
       <h1 className="mt-4 font-display text-3xl font-medium tracking-tight text-text md:text-4xl">
         Hola, {nombrePila ?? "cliente"}
       </h1>
-      <p className="mt-1 text-sm text-muted">
-        Revise el estado de sus pedidos, descargue facturas y repita compras con un clic.
-      </p>
+      <p className="mt-1 text-sm text-muted">{bajadaMiCuenta()}</p>
       <div className="mt-8 flex flex-col gap-6 md:flex-row">
         <Card className="w-full min-w-0 p-2 md:w-64 md:shrink-0 md:self-start">
           <SectionNav ariaLabel="Secciones de su cuenta" items={items} renderLink={linkNext} />

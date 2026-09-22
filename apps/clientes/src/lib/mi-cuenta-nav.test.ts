@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CAPACIDADES_DESPLIEGUE,
+  bajadaMiCuenta,
   RUTAS_MI_CUENTA,
   capacidadesDe,
   hrefPedido,
@@ -186,5 +187,23 @@ describe("registro", () => {
       ...rutas.flatMap((r) => migasMiCuenta(r).map((m) => m.label)),
     ].join(" ");
     expect(textos).not.toMatch(/\b(tu|tus|te|vos)\b/i);
+  });
+});
+
+describe("bajadaMiCuenta", () => {
+  it("sin facturas desplegadas no las promete", () => {
+    const texto = bajadaMiCuenta({ favoritos: false, facturas: false });
+    expect(texto).toBe("Revise el estado de sus pedidos y repita compras con un clic.");
+    expect(texto).not.toMatch(/factura/i);
+  });
+
+  it("con facturas desplegadas las menciona", () => {
+    expect(bajadaMiCuenta({ favoritos: false, facturas: true })).toBe(
+      "Revise el estado de sus pedidos, descargue facturas y repita compras con un clic.",
+    );
+  });
+
+  it("por defecto usa lo desplegado hoy", () => {
+    expect(bajadaMiCuenta()).toBe(bajadaMiCuenta(CAPACIDADES_DESPLIEGUE));
   });
 });

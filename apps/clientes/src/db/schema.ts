@@ -651,3 +651,41 @@ export const favorites = shop.table(
     index("fav_tenant_usuario_fecha").on(t.tenantId, t.clerkUserId, t.createdAt),
   ],
 );
+
+/**
+ * Direcciones de envío guardadas en Mi cuenta (migración `0003`).
+ *
+ * Por usuario de Clerk y tenant, como `favorites`: toda consulta filtra por los
+ * dos (`src/lib/direcciones-envio-db.ts`). Hasta 10 por usuario (lo controla el
+ * código) y exactamente UNA predeterminada: el índice único PARCIAL lo
+ * garantiza en la base, así que marcar otra obliga a desmarcar primero (en la
+ * misma transacción). `provincia` y `cp` quedan nullable en la base aunque la
+ * API los exige: la regla vive en `src/lib/direcciones-envio.ts`.
+ * Cualquier localidad del país es válida; la zona de envío la decide
+ * `src/lib/envio.ts` al usarla, no al guardarla.
+ */
+export const direccionesEnvio = shop.table(
+  "direcciones_envio",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    clerkUserId: text("clerk_user_id").notNull(),
+    /** Nombre corto opcional ("Casa", "Obra"). */
+    etiqueta: text("etiqueta"),
+    calle: text("calle").notNull(),
+    ciudad: text("ciudad").notNull(),
+    provincia: text("provincia"),
+    cp: text("cp"),
+    /** Indicaciones para quien entrega. */
+    referencias: text("referencias"),
+    predeterminada: boolean("predeterminada").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("dir_envio_tenant_usuario").on(t.tenantId, t.clerkUserId),
+    uniqueIndex("dir_envio_una_predeterminada")
+      .on(t.tenantId, t.clerkUserId)
+      .where(sql`${t.predeterminada}`),
+  ],
+);

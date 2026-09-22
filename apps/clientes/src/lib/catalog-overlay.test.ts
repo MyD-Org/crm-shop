@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
+import { dbGrabadora, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * Lectura del overlay del CRM en los listados públicos del espejo: join por
@@ -13,6 +13,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 import { getCatalogo, getCategorias, getFacetas, getPaginaCatalogo } from "./catalog";
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   // count(*) = 1 para que la página también dispare la consulta de filas.
   grabadora = dbGrabadora((c) => (c.sql.includes("count(*)") ? [[1]] : []));
 });
@@ -22,7 +23,7 @@ afterEach(() => {
 });
 
 const JOIN_OVERLAY =
-  /left join "shop"\."catalog_overlay" on "shop"\."catalog_overlay"\."alegra_id" = "shop"\."catalog_products"\."alegra_id"/;
+  /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "shop"\."catalog_products"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;
 
 describe("join al overlay", () => {
   it("la página del catálogo trae nombre y fotos del overlay", async () => {
@@ -42,7 +43,7 @@ describe("join al overlay", () => {
 
   it("las facetas joinean el overlay (para poder filtrar por visible)", async () => {
     await getFacetas({});
-    for (const c of grabadora.consultas) expect(c.sql).toMatch(JOIN_OVERLAY);
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(c.sql).toMatch(JOIN_OVERLAY);
   });
 
   it("getCategorias no se toca", async () => {
@@ -51,9 +52,9 @@ describe("join al overlay", () => {
   });
 });
 
-/** `"shop"."catalog_overlay"."visible" = $n` con `true` en ese parámetro. */
+/** `"public"."catalog_overlay"."visible" = $n` con `true` en ese parámetro. */
 function exigeVisible(c: { sql: string; params: unknown[] }) {
-  const m = c.sql.match(/"shop"\."catalog_overlay"\."visible" = \$(\d+)/);
+  const m = c.sql.match(/"public"\."catalog_overlay"\."visible" = \$(\d+)/);
   expect(m, c.sql).not.toBeNull();
   expect(c.params[Number(m![1]) - 1]).toBe(true);
 }
@@ -64,7 +65,7 @@ describe("SHOP_CATALOGO_SOLO_VISIBLES", () => {
     await getPaginaCatalogo({});
     await getCatalogo({ limit: 10 });
     await getFacetas({});
-    expect(grabadora.consultas).toHaveLength(6);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(6);
     for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
   });
 
@@ -90,8 +91,9 @@ describe("SHOP_CATALOGO_SOLO_VISIBLES", () => {
   it("encendido: las tres facetas exigen visible = true", async () => {
     vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
     await getFacetas({ marcas: ["GENROD"] });
-    expect(grabadora.consultas).toHaveLength(3);
-    for (const c of grabadora.consultas) exigeVisible(c);
+    const consultas = sinLecturaDelArbol(grabadora.consultas);
+    expect(consultas).toHaveLength(3);
+    for (const c of consultas) exigeVisible(c);
   });
 
   it("encendido: el predicado de precio positivo se mantiene", async () => {

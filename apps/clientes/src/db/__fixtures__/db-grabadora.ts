@@ -42,6 +42,18 @@ export function dbGrabadora(responder: Responder = () => undefined) {
 }
 
 /**
+ * La lectura del árbol de categorías propias que hacen `getFacetas` y
+ * `getCategorias` antes de consultar productos. Los tests que miran la forma de
+ * las consultas de productos la descartan con esto.
+ */
+export const esLecturaDelArbol = (c: ConsultaGrabada) =>
+  /^select [^()]* from "public"\."shop_categories" where/.test(c.sql);
+
+/** Las consultas grabadas, sin la lectura del árbol de categorías. */
+export const sinLecturaDelArbol = (consultas: ConsultaGrabada[]) =>
+  consultas.filter((c) => !esLecturaDelArbol(c));
+
+/**
  * Parte un `insert into … (cols) values (vals)` de UNA fila en un mapa
  * columna → valor real. `default` queda como la cadena "default": es lo que
  * drizzle emite para las columnas que el código no seteó.

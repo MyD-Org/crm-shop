@@ -5,22 +5,38 @@
 > en un issue un host o una URL de producción.
 
 El admin del CRM cura el catálogo (nombre comercial, fotos, visibilidad,
-taxonomía propia) y el Shop lo espeja en `shop.catalog_overlay` con la sync de
-overlay (`src/lib/catalogo-sync-overlay.ts`, contrato
-`src/lib/catalogo-contrato.ts`). El overlay es **esparso**: sólo hay fila para
-los productos que alguien tocó en el CRM.
+taxonomía propia) y el Shop lo lee **directo de las tablas del CRM**
+(`public.catalog_overlay` y `public.shop_categories`, filtradas por
+`SHOP_TENANT_ID`): las dos apps comparten base, así que no hay copia ni sync
+por HTTP. Las definiciones de lectura están en `src/db/crm.ts`, fuera de
+`schema.ts` para que las migraciones del Shop no las toquen. El overlay es
+**esparso**: sólo hay fila para los productos que alguien tocó en el CRM.
+
+Las tablas `shop.catalog_overlay`, `shop.shop_categories`, `shop.shop_tags` y
+`shop.catalogo_sync_state` son la copia vieja: ya no se leen ni se escriben y
+quedan para borrarlas con una migración aparte.
+
+El rol de runtime (`shop_app`) necesita `SELECT` sobre las dos tablas del CRM
+(ver "Lectura directa del catálogo del CRM" en
+[`una-base-esquema-shop.md`](./una-base-esquema-shop.md)).
 
 ## Qué se lee hoy
 
 Todas las lecturas públicas del espejo (`getCatalogo`, conteo y página de
-`getPaginaCatalogo`, las tres consultas de `getFacetas`) hacen `left join` a
-`catalog_overlay` por `alegra_id`. `getCategorias` (menú y home) no lo lee.
+`getPaginaCatalogo`, las consultas de `getFacetas`) hacen `left join` a
+`public.catalog_overlay` por `alegra_id` y tenant.
+
+Categorías: si el tenant armó su árbol en el admin, el menú (raíces), las
+facetas (árbol completo, con las subcategorías sangradas) y el filtro
+(`?categoria=`, que incluye el subárbol) salen de `public.shop_categories`, y
+un producto cae en la categoría que le asignaron en el overlay. Sin árbol, todo
+sigue con las categorías de Alegra.
 
 | Dato del Shop | De dónde sale |
 |---|---|
 | Nombre exhibido | `overlay.nombre` → si está vacío, `description` de Alegra → si también, `name` de Alegra (en esta cuenta es el código). |
 | SKU (`Cód.`) | `code` (reference de Alegra) → si falta, `name` de Alegra. |
-| Fotos (`images`, portada = la primera) | `overlay.fotos`, sólo las `https` de un host listado en `SHOP_MEDIA_HOSTS`. Sin fotos servibles, la card muestra el placeholder. |
+| Fotos (`images`, portada = la primera) | `overlay.fotos`: el CRM guarda la key de R2 y la URL se compone con `R2_SHOP_MEDIA_PUBLIC_URL` (la misma base que usa el CRM). Sólo pasan las `https` de un host listado en `SHOP_MEDIA_HOSTS`. Sin fotos servibles, la card muestra el placeholder. |
 | Visibilidad | `overlay.visible`, **sólo** con `SHOP_CATALOGO_SOLO_VISIBLES=1` (ver abajo). |
 
 La ficha de producto (`getProducto`) es en vivo contra Alegra y no lee el
@@ -74,7 +90,7 @@ Rollback: borre la variable y redespliegue.
 
 ## Qué sigue (fuera de este cambio)
 
-Taxonomía propia (`shop_categories`) en navegación y filtros, `orden` del
+`orden` del
 overlay, `overlay.descripcion` en la ficha, lectura del overlay en la ficha en
 vivo, búsqueda por `overlay.nombre` y redirects: quedan para el cambio
 `catalogo-shop` (F3).

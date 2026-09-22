@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
+import { dbGrabadora, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * Un ítem sin precio en Alegra llega al espejo con `prices` vacío y el SQL de
@@ -16,6 +16,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 import { getCatalogo, getFacetas, getPaginaCatalogo } from "./catalog";
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   // count(*) = 1 para que la página también dispare la consulta de filas.
   grabadora = dbGrabadora((c) => (c.sql.includes("count(*)") ? [[1]] : []));
 });
@@ -39,7 +40,8 @@ describe("productos sin precio (precio 0)", () => {
 
   it("getFacetas no los cuenta en categorías, marcas ni rango de precio", async () => {
     await getFacetas({});
-    expect(grabadora.consultas).toHaveLength(3);
-    for (const c of grabadora.consultas) exigePrecioPositivo(c.sql);
+    const consultas = sinLecturaDelArbol(grabadora.consultas);
+    expect(consultas).toHaveLength(3);
+    for (const c of consultas) exigePrecioPositivo(c.sql);
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora, type ConsultaGrabada } from "@/db/__fixtures__/db-grabadora";
+import { dbGrabadora, sinLecturaDelArbol, type ConsultaGrabada } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * Forma del SQL de los filtros nuevos del catálogo (precio, stock), del rango
@@ -18,6 +18,7 @@ const conConteo = (c: ConsultaGrabada) =>
   c.sql.startsWith("select count(*)::int") ? [[1]] : undefined;
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   grabadora = dbGrabadora(conConteo);
 });
 
@@ -120,7 +121,7 @@ describe('filtro "solo con stock" (SQL-1)', () => {
 describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
   it("son tres consultas: categorías, marcas y rango de precio", async () => {
     await getFacetas({});
-    expect(grabadora.consultas).toHaveLength(3);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
     const { categorias, marcas, precio } = facetas(grabadora.consultas);
     expect(categorias.sql).toContain('"shop"."catalog_categories"."name"');
     expect(marcas.sql).toContain('coalesce(nullif("shop"."catalog_products"."brand"');

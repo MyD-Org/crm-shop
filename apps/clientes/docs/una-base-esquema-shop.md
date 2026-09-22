@@ -280,6 +280,32 @@ nueva por los `DEFAULT PRIVILEGES` del Paso 1 (la crea `<OWNER_ROLE>`).
 Las tablas que suma Mi cuenta (favoritos y direcciones de envío) y cómo las usan sus rutas están en
 [`docs/mi-cuenta.md`](./mi-cuenta.md).
 
+## Lectura directa del catálogo del CRM
+
+El Shop lee el catálogo comercial (categorías propias y overlay) directo de
+las tablas del CRM, sin copia. Como el Paso 1 le quita a `shop_app` todo
+permiso sobre `public`, hay que dárselo explícito, sólo de lectura y sólo
+sobre esas dos tablas.
+
+**Dónde:** editor SQL de Neon, en la base de producción (y en cada rama donde
+corra el Shop), como `<OWNER_ROLE>`.
+
+```sql
+GRANT USAGE ON SCHEMA public TO shop_app;
+GRANT SELECT ON public.shop_categories, public.catalog_overlay TO shop_app;
+```
+
+**Verificación**, como `shop_app`:
+
+```sql
+SELECT count(*) FROM public.shop_categories;   -- responde (no permission denied)
+SELECT count(*) FROM public.catalog_overlay;   -- responde
+SELECT 1 FROM public.tenants LIMIT 1;          -- sigue fallando (permission denied)
+```
+
+Sin este paso, el catálogo, las facetas y el menú fallan con
+`permission denied for table catalog_overlay`.
+
 ## Nota sobre el ambiente local de tests (`crm_test`)
 
 Si en algún momento se regenera el baseline (`drizzle/0000_baseline.sql`)

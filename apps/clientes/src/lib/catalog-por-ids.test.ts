@@ -15,6 +15,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 import { getProductosPorIds } from "./catalog";
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   grabadora = dbGrabadora();
 });
 
@@ -23,7 +24,7 @@ afterEach(() => {
 });
 
 const JOIN_OVERLAY =
-  /left join "shop"\."catalog_overlay" on "shop"\."catalog_overlay"\."alegra_id" = "shop"\."catalog_products"\."alegra_id"/;
+  /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "shop"\."catalog_products"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;
 
 describe("getProductosPorIds", () => {
   it("una consulta con los ids en un IN y el overlay joineado", async () => {
@@ -73,6 +74,7 @@ describe("getProductosPorIds", () => {
 
   it("devuelve un Map por id de Alegra con el nombre del overlay, el sku y la foto", async () => {
     vi.stubEnv("SHOP_MEDIA_HOSTS", "media.plataforma.example");
+    vi.stubEnv("R2_SHOP_MEDIA_PUBLIC_URL", "https://media.plataforma.example");
     // Fila en el orden de COLUMNAS_CATALOGO: alegraId, name, code, description,
     // brand, prices, stock, ivaPorcentaje, categoryName, overlayNombre, overlayFotos.
     grabadora = dbGrabadora(() => [
@@ -87,7 +89,7 @@ describe("getProductosPorIds", () => {
         "21",
         "Iluminación",
         "Lámpara LED A60 9W E27",
-        [{ url: "https://media.plataforma.example/42.jpg", w: 800 }],
+        [{ key: "t1/42.jpg", w: 800 }],
       ],
     ]);
 
@@ -96,6 +98,7 @@ describe("getProductosPorIds", () => {
     const p = productos.get("42")!;
     expect(p.name).toBe("Lámpara LED A60 9W E27");
     expect(p.sku).toBe("02141N");
-    expect(p.images).toEqual([{ url: "https://media.plataforma.example/42.jpg", w: 800 }]);
+    // La url se compone con la base pública de R2 a partir de la key que guarda el CRM.
+    expect(p.images).toEqual([{ url: "https://media.plataforma.example/t1/42.jpg", w: 800 }]);
   });
 });

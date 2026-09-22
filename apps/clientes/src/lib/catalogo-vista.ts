@@ -244,10 +244,10 @@ export function indexable(estado: EstadoCatalogo): boolean {
  * (porque, cruzado con los otros filtros, cuenta cero) se agrega primero con
  * cuenta 0: si desapareciera del panel, sólo se podría quitar desde el chip.
  */
-export function itemsDeFaceta(
-  facetas: { label: string; count: number }[],
+export function itemsDeFaceta<F extends { label: string; count: number }>(
+  facetas: F[],
   tildados: string[],
-): { label: string; count: number; checked: boolean }[] {
+): ((F | { label: string; count: number }) & { checked: boolean })[] {
   const presentes = new Set(facetas.map((f) => f.label));
   const ausentes = tildados
     .filter((t) => !presentes.has(t))

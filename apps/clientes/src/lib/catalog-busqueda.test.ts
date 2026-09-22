@@ -14,6 +14,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 import { getCatalogo } from "./catalog";
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   grabadora = dbGrabadora();
 });
 
@@ -31,11 +32,11 @@ describe("búsqueda del catálogo", () => {
     expect(params).toContain("%lampara%");
   });
 
-  it("lee del espejo del Shop, no del homónimo del CRM en public", async () => {
+  it("lee los productos del espejo del Shop, no del homónimo del CRM en public", async () => {
     await getCatalogo({ busqueda: "lampara" });
     const { sql } = grabadora.consultas[0];
     expect(sql).toContain('"shop"."catalog_products"');
-    expect(sql).not.toContain('"public".');
+    expect(sql).not.toContain('"public"."catalog_products"');
     expect(sql).not.toMatch(/from "catalog_products"/);
   });
 });

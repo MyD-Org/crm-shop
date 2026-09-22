@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { esAdminMock, guardarMock, borrarMock, revalidateMock, r2Mock } = vi.hoisted(() => ({
+const { esAdminMock, guardarMock, borrarMock, revalidateMock, r2Mock, getCatalogoMock } = vi.hoisted(() => ({
   esAdminMock: vi.fn(),
   guardarMock: vi.fn(),
   borrarMock: vi.fn(),
   revalidateMock: vi.fn(),
   r2Mock: vi.fn(),
+  getCatalogoMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -31,7 +32,11 @@ vi.mock("@/lib/tenant", () => ({
   shopTenantId: () => "central-led",
 }));
 
-import { firmarSubidaImagenHome, guardarSeccion, restablecerSeccion } from "./home-acciones";
+vi.mock("@/lib/catalog", () => ({
+  getCatalogo: getCatalogoMock,
+}));
+
+import { buscarProductosHome, firmarSubidaImagenHome, guardarSeccion, restablecerSeccion } from "./home-acciones";
 
 describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
   beforeEach(() => {
@@ -212,6 +217,65 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
       const r = await firmarSubidaImagenHome({ bytes: 100 });
 
       expect(r).toEqual({ ok: false, errores: ["No se pudo preparar la subida. Inténtelo de nuevo."] });
+    });
+  });
+
+  describe("buscarProductosHome (rebanada D)", () => {
+    it("No-admin: no busca en el catálogo", async () => {
+      esAdminMock.mockResolvedValue(false);
+
+      const r = await buscarProductosHome("lampara");
+
+      expect(r).toEqual({ ok: false, errores: ["No tiene permisos para editar la página de inicio."] });
+      expect(getCatalogoMock).not.toHaveBeenCalled();
+    });
+
+    it("Admin: devuelve hasta 20 resultados del catálogo con sku, nombre y foto", async () => {
+      getCatalogoMock.mockResolvedValue([
+        {
+          id: "1",
+          name: "Lámpara colgante",
+          sku: "ADM-D8-BCO-CO",
+          price: 1000,
+          stock: "in",
+          images: [{ url: "/a.webp", w: 800 }],
+        },
+        { id: "2", name: "Lámpara de mesa", sku: "ADM-D9-BCO-CO", price: 900, stock: "in", images: [] },
+      ]);
+
+      const r = await buscarProductosHome("lampara");
+
+      expect(getCatalogoMock).toHaveBeenCalledWith({ busqueda: "lampara", limit: 20 });
+      expect(r).toEqual({
+        ok: true,
+        productos: [
+          { sku: "ADM-D8-BCO-CO", nombre: "Lámpara colgante", foto: "/a.webp" },
+          { sku: "ADM-D9-BCO-CO", nombre: "Lámpara de mesa", foto: undefined },
+        ],
+      });
+    });
+
+    it("Query vacía: no llama al catálogo y devuelve lista vacía", async () => {
+      const r = await buscarProductosHome("   ");
+
+      expect(getCatalogoMock).not.toHaveBeenCalled();
+      expect(r).toEqual({ ok: true, productos: [] });
+    });
+
+    it("Productos sin sku se descartan (no se pueden curar)", async () => {
+      getCatalogoMock.mockResolvedValue([{ id: "1", name: "Sin código", price: 1000, stock: "in" }]);
+
+      const r = await buscarProductosHome("x");
+
+      expect(r).toEqual({ ok: true, productos: [] });
+    });
+
+    it("Error del catálogo no se propaga como excepción", async () => {
+      getCatalogoMock.mockRejectedValue(new Error("db down"));
+
+      const r = await buscarProductosHome("x");
+
+      expect(r).toEqual({ ok: false, errores: ["No se pudo buscar productos. Inténtelo de nuevo."] });
     });
   });
 });

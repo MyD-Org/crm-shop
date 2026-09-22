@@ -101,6 +101,21 @@ describe("normalizarPayload", () => {
     expect("bajada" in r).toBe(false);
   });
 
+  it("destacados.skus recorta espacios y descarta vacíos (rebanada D)", () => {
+    const r = normalizarPayload("destacados", { ...DEFAULTS_HOME.destacados, skus: ["A", " ", "B"] }) as {
+      skus: string[];
+    };
+    expect(r.skus).toEqual(["A", "B"]);
+  });
+
+  it("destacados.skus vacío tras filtrar se omite (rebanada D)", () => {
+    const r = normalizarPayload("destacados", { ...DEFAULTS_HOME.destacados, skus: ["  "] }) as Record<
+      string,
+      unknown
+    >;
+    expect("skus" in r).toBe(false);
+  });
+
   it("decoGrid descarta chips con label vacío (rebanada B2)", () => {
     const r = normalizarPayload("decoGrid", {
       ...DEFAULTS_HOME.decoGrid,

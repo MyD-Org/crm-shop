@@ -4,10 +4,11 @@ import { Field, Input, Textarea } from "@myd-org/ui";
 import { DEFAULTS_HOME, type DestacadosContent } from "@/data/home-defaults";
 import { ListaEditable } from "../ListaEditable";
 import { CampoImagen } from "./CampoImagen";
+import { SelectorSkusDestacados } from "./SelectorSkusDestacados";
 import type { EditorProps } from "./index";
 
 /**
- * `skus` se conserva sin UI (curación de productos: rebanada D opcional).
+ * `skus` se edita con un buscador sobre el catálogo (rebanada D, opcional).
  * `imagenes` se edita como lista de `CampoImagen` (rebanada C).
  */
 export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosContent>) {
@@ -43,7 +44,14 @@ export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosCont
           renderItem={(item, onItem) => <CampoImagen valor={item} onChange={onItem} />}
         />
       </div>
-      <p className="text-sm text-muted">La selección de productos (SKUs) se podrá editar en una próxima versión.</p>
+      <div>
+        <p className="mb-2 text-sm font-semibold text-text">Productos destacados</p>
+        <p className="mb-2 text-sm text-muted">
+          Elija a mano los productos que aparecen primero en &ldquo;Destacados&rdquo;. El resto de la sección se
+          completa automáticamente con el catálogo.
+        </p>
+        <SelectorSkusDestacados skus={valor.skus ?? []} onChange={(skus) => onChange({ ...valor, skus })} />
+      </div>
     </div>
   );
 }

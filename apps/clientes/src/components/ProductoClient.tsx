@@ -8,6 +8,7 @@ import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { formatRubro } from "@/lib/formato-rubro";
+import { textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import { BotonFavorito } from "@/components/BotonFavorito";
@@ -69,6 +70,9 @@ export function ProductoClient({
 
   const estado = ESTADO_STOCK[producto.stock];
   const agotado = producto.stock === "out";
+  // Sin cantidad si es 0 o menos (pasa con la simulación de stock): nada de
+  // "En stock — 0 disponibles".
+  const disponibles = textoUnidadesDisponibles(producto);
   // Un ítem sin precio en Alegra llega a 0: nunca se ofrece a la venta (ver
   // `conPrecioSql` en src/lib/catalog.ts). La ficha se lee en vivo, así que el
   // filtro de los listados no la cubre y hay que cortar acá también.
@@ -144,10 +148,10 @@ export function ProductoClient({
                 <span className="flex items-center gap-1.5 text-sm text-muted">
                   <span className={`h-2 w-2 rounded-full ${estado.color}`} />
                   {estado.texto}
-                  {producto.stockQty != null && (
+                  {disponibles && (
                     <>
                       <span className="text-muted/60">—</span>
-                      {producto.stockQty} disponibles
+                      {disponibles}
                     </>
                   )}
                 </span>

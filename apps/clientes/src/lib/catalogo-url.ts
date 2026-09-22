@@ -10,6 +10,9 @@
  * `CatalogoClient` en el browser, así que los dos lados leen y escriben la URL
  * con exactamente las mismas reglas.
  */
+// Sólo el tipo: `import type` se borra al compilar y no arrastra el driver
+// de Postgres al bundle del browser.
+import type { FiltrosCatalogo } from "@/lib/catalog";
 
 /**
  * Criterios de orden que ofrece el catálogo. Viven ACÁ y no en `catalog.ts`
@@ -26,6 +29,20 @@ export const ORDEN_DEFAULT: OrdenCatalogo = "nombre";
 
 /** Orden que aceptan las URLs viejas y que hoy equivale al default. */
 const ORDEN_ALIAS_VIEJO = "ventas";
+
+/**
+ * "Solo con stock" viene PRENDIDO por defecto (decisión de producto): sin el
+ * parámetro, el catálogo muestra sólo lo que tiene disponibilidad. Apagarlo
+ * es lo que viaja en la URL, con un valor explícito (`?stock=todos`).
+ *
+ * Los links viejos con `?stock=1` (cuando el filtro era opt-in) siguen
+ * resolviendo: cualquier valor distinto de `todos` es el default, así que
+ * se normalizan a la URL sin el parámetro.
+ */
+export const SOLO_STOCK_DEFAULT = true;
+
+/** Valor de `?stock=` que apaga "Solo con stock" (incluye productos sin stock). */
+export const STOCK_INCLUYE_SIN_STOCK = "todos";
 
 /** Cómo se muestra la página de resultados. */
 export const VISTAS = ["grilla", "lista"] as const;
@@ -47,7 +64,10 @@ export interface EstadoCatalogo {
    */
   precioMin?: number;
   precioMax?: number;
-  /** `?stock=1`: sólo productos con disponibilidad. */
+  /**
+   * Sólo productos con disponibilidad. Default `true` (sin parámetro);
+   * `?stock=todos` lo apaga. Ver `SOLO_STOCK_DEFAULT`.
+   */
   soloStock: boolean;
   /** `?vista=lista`; cualquier otra cosa es grilla. */
   vista: VistaCatalogo;
@@ -104,6 +124,14 @@ export function comoPrecio(v: ParamCrudo): number | undefined {
   return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : undefined;
 }
 
+/**
+ * `stock=todos` exactamente apaga el filtro; cualquier otra cosa (incluido el
+ * `stock=1` de los links viejos) es el default.
+ */
+function comoSoloStock(v: ParamCrudo): boolean {
+  return primero(v) === STOCK_INCLUYE_SIN_STOCK ? false : SOLO_STOCK_DEFAULT;
+}
+
 /** `vista=lista` exactamente; cualquier otra cosa es la grilla. */
 function comoVista(v: ParamCrudo): VistaCatalogo {
   return primero(v) === "lista" ? "lista" : VISTA_DEFAULT;
@@ -137,7 +165,7 @@ export function leerEstado(params: {
     pagina: comoPagina(params.pagina),
     precioMin,
     precioMax,
-    soloStock: primero(params.stock) === "1",
+    soloStock: comoSoloStock(params.stock),
     vista: comoVista(params.vista),
   };
 }
@@ -157,7 +185,7 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   for (const m of estado.marcas) sp.append("marca", m);
   if (estado.precioMin != null) sp.set("precio_min", String(estado.precioMin));
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
-  if (estado.soloStock) sp.set("stock", "1");
+  if (estado.soloStock !== SOLO_STOCK_DEFAULT) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
   if (estado.orden !== ORDEN_DEFAULT) sp.set("orden", estado.orden);
   if (estado.vista !== VISTA_DEFAULT) sp.set("vista", estado.vista);
   if (estado.pagina > 1) sp.set("pagina", String(estado.pagina));
@@ -233,7 +261,26 @@ export function hrefCanonico(estado: EstadoCatalogo): string {
     marcas: [],
     orden: ORDEN_DEFAULT,
     pagina: estado.pagina,
-    soloStock: false,
+    soloStock: SOLO_STOCK_DEFAULT,
     vista: VISTA_DEFAULT,
   });
+}
+
+/**
+ * Filtros que la page le pasa a la consulta (`getPaginaCatalogo` /
+ * `getFacetas`). Vive acá, puro, para que el default de "Solo con stock"
+ * llegue al SQL con test: sin parámetros, `soloStock` es `true`.
+ *
+ * Mientras la simulación de stock esté activa (`stockSimulado()`), la
+ * consulta omite el predicado igual: este default no tiene efecto visible.
+ */
+export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosCatalogo {
+  return {
+    busqueda: estado.query,
+    categorias: estado.categorias,
+    marcas: estado.marcas,
+    precioMin: estado.precioMin,
+    precioMax: estado.precioMax,
+    soloStock: estado.soloStock,
+  };
 }

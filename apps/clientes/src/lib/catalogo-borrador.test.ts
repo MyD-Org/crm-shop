@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cambiarBorrador, hrefAlAplicar, limpiarBorrador } from "./catalogo-borrador";
-import type { EstadoCatalogo } from "./catalogo-url";
+import { STOCK_INCLUYE_SIN_STOCK, type EstadoCatalogo } from "./catalogo-url";
 
 const base: EstadoCatalogo = {
   query: undefined,
@@ -8,15 +8,15 @@ const base: EstadoCatalogo = {
   marcas: [],
   orden: "nombre",
   pagina: 1,
-  soloStock: false,
+  soloStock: true,
   vista: "grilla",
 };
 
 describe("cambiarBorrador", () => {
   it("acumula cambios sin navegar: el borrador es un estado completo", () => {
     let b = cambiarBorrador(base, { marcas: ["GENROD"] });
-    b = cambiarBorrador(b, { soloStock: true });
-    expect(b).toEqual({ ...base, marcas: ["GENROD"], soloStock: true });
+    b = cambiarBorrador(b, { soloStock: false });
+    expect(b).toEqual({ ...base, marcas: ["GENROD"], soloStock: false });
   });
 
   it("un cambio con undefined borra el valor (quitar el rango de precio)", () => {
@@ -36,7 +36,7 @@ describe("cambiarBorrador", () => {
 });
 
 describe("limpiarBorrador", () => {
-  it("vacía los filtros y conserva búsqueda, orden y vista", () => {
+  it("vacía los filtros, vuelve a sólo con stock y conserva búsqueda, orden y vista", () => {
     const b = limpiarBorrador({
       ...base,
       query: "led",
@@ -46,7 +46,7 @@ describe("limpiarBorrador", () => {
       categorias: ["ILUMINACION"],
       marcas: ["GENROD"],
       precioMin: 500,
-      soloStock: true,
+      soloStock: false,
     });
     expect(b).toEqual({
       ...base,
@@ -63,9 +63,11 @@ describe("limpiarBorrador", () => {
 describe("hrefAlAplicar", () => {
   it("scenario MOB-2 aplicar: una sola URL con todo el borrador", () => {
     const b = cambiarBorrador(cambiarBorrador(base, { marcas: ["GENROD"] }), {
-      soloStock: true,
+      soloStock: false,
     });
-    expect(hrefAlAplicar(base, b)).toBe("/catalogo?marca=GENROD&stock=1");
+    expect(hrefAlAplicar(base, b)).toBe(
+      `/catalogo?marca=GENROD&stock=${STOCK_INCLUYE_SIN_STOCK}`
+    );
   });
 
   it("vuelve a la página 1 y conserva búsqueda, orden y vista de la URL", () => {
@@ -87,7 +89,14 @@ describe("hrefAlAplicar", () => {
   });
 
   it("limpiar en el borrador y aplicar borra los filtros de la URL", () => {
-    const estado = { ...base, categorias: ["ILUMINACION"], precioMin: 500, soloStock: true };
+    const estado = { ...base, categorias: ["ILUMINACION"], precioMin: 500, soloStock: false };
     expect(hrefAlAplicar(estado, limpiarBorrador(estado))).toBe("/catalogo");
+  });
+
+  it("volver a sólo con stock desde incluir sin stock quita el parámetro", () => {
+    const estado = { ...base, soloStock: false };
+    expect(hrefAlAplicar(estado, cambiarBorrador(estado, { soloStock: true }))).toBe(
+      "/catalogo"
+    );
   });
 });

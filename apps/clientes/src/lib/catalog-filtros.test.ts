@@ -11,6 +11,7 @@ let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import { getFacetas, getPaginaCatalogo } from "./catalog";
+import { STOCK_INCLUYE_SIN_STOCK, filtrosDeEstado, leerEstado } from "./catalogo-url";
 
 /** count(*) = 1 para que la página también dispare la consulta de filas. */
 const conConteo = (c: ConsultaGrabada) =>
@@ -92,6 +93,26 @@ describe('filtro "solo con stock" (SQL-1)', () => {
     vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
     vi.stubEnv("VERCEL_ENV", "");
     await getPaginaCatalogo({ filtros: { soloStock: true } });
+    for (const { sql } of grabadora.consultas) expect(sql).not.toMatch(STOCK);
+  });
+
+  it("el estado por defecto de la URL (sin parámetros) filtra por stock", async () => {
+    await getPaginaCatalogo({ filtros: filtrosDeEstado(leerEstado({})) });
+    expect(grabadora.consultas).toHaveLength(2);
+    for (const { sql } of grabadora.consultas) expect(sql).toMatch(STOCK);
+  });
+
+  it("el estado por defecto no filtra por stock con la simulación activa", async () => {
+    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
+    vi.stubEnv("VERCEL_ENV", "");
+    await getPaginaCatalogo({ filtros: filtrosDeEstado(leerEstado({})) });
+    for (const { sql } of grabadora.consultas) expect(sql).not.toMatch(STOCK);
+  });
+
+  it("incluir sin stock no agrega el predicado", async () => {
+    await getPaginaCatalogo({
+      filtros: filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })),
+    });
     for (const { sql } of grabadora.consultas) expect(sql).not.toMatch(STOCK);
   });
 });

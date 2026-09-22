@@ -5,6 +5,7 @@ import {
   MAX_DIRECCIONES,
   avisoFueraDeZona,
   entregaDesdeGuardada,
+  esIdDireccion,
   etiquetaDireccion,
   fueraDeZona,
   lineaEntrega,
@@ -208,5 +209,15 @@ describe("entrega desde una dirección guardada (checkout)", () => {
     expect(entregaDesdeGuardada(guardada({ ciudad: "puerto iguazu" })).ciudad).toBe("Puerto Iguazú");
     expect(entregaDesdeGuardada(guardada({ ciudad: "Rosario" })).ciudad).toBe("Rosario");
     expect(entregaDesdeGuardada(guardada()).direccion).toBe(lineaEntrega(guardada()));
+  });
+});
+
+describe("esIdDireccion", () => {
+  it("sólo uuid (lo demás es 404 sin consultar la base)", () => {
+    expect(esIdDireccion("0b8f7d1e-7c55-4a38-9d0e-2c1f7f6b9a10")).toBe(true);
+    expect(esIdDireccion("0B8F7D1E-7C55-4A38-9D0E-2C1F7F6B9A10")).toBe(true);
+    expect(esIdDireccion("abc")).toBe(false);
+    expect(esIdDireccion("1; drop table x")).toBe(false);
+    expect(esIdDireccion("")).toBe(false);
   });
 });

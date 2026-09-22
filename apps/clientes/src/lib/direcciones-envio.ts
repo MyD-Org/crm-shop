@@ -62,6 +62,13 @@ export type ResultadoValidacion =
   /** Algún campo no pasa: la API responde 422 con los mensajes por campo. */
   | { ok: false; motivo: "campos"; errores: Partial<Record<CampoDireccion, string>> };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** ¿Tiene forma de id de dirección? Si no, la API responde 404 sin consultar. */
+export function esIdDireccion(id: string): boolean {
+  return UUID.test(id);
+}
+
 /** CP de 4 dígitos o CPA (letra de provincia + 4 dígitos + 3 letras). */
 const CP_VALIDO = /^(?:\d{4}|[A-Z]\d{4}[A-Z]{3})$/;
 

@@ -26,7 +26,12 @@ function LightbulbIcon() {
 const fmt = (n: number) =>
   n.toLocaleString("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 });
 
-export function CartPreview() {
+export function CartPreview({
+  autoAbrir = true,
+}: {
+  /** Hay dos instancias (header completo y barra compacta): solo la visible se abre sola al agregar. */
+  autoAbrir?: boolean;
+} = {}) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { items, total, count, aperturaPreview } = useCart();
@@ -43,7 +48,7 @@ export function CartPreview() {
   const [ultimaAlta, setUltimaAlta] = useState(0);
   if (aperturaPreview !== ultimaAlta) {
     setUltimaAlta(aperturaPreview);
-    setOpen(true);
+    if (autoAbrir) setOpen(true);
   }
 
   useEffect(() => {
@@ -76,7 +81,10 @@ export function CartPreview() {
         className="flex items-center gap-2 rounded-full bg-primary px-[18px] py-[9px] text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white"
       >
         <CartIcon />
-        <span>Carrito</span>
+        {/* En pantallas chicas queda sólo el ícono + la cantidad: la palabra
+            mide 52px y es lo que hace que el carrito no entre al lado de la
+            marca en la primera fila del header. El ícono ya dice qué es. */}
+        <span className="max-sm:sr-only">Carrito</span>
         <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/20 text-[11px] font-extrabold">
           {count}
         </span>

@@ -1,12 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Show, SignInButton } from "@clerk/nextjs";
 import { SiteHeader } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { destinoSeguro } from "@/lib/ingreso";
-import { conBadgeNav } from "@/lib/nav-badge";
+import { MAX_CATEGORIAS_NAV, conBadgeNav } from "@/lib/nav-badge";
 import { formatRubro } from "@/lib/formato-rubro";
 import { CartPreview } from "./CartPreview";
 import { MenuUsuario } from "./MenuUsuario";
@@ -33,20 +34,42 @@ export function HeaderUI({
   navBadge?: NavBadgeContent | null;
 }) {
   const pathname = usePathname();
-  // En "Mi cuenta" ocultamos la barra de categorias para que se sienta una
-  // seccion propia y no de tienda.
-  const hideCategorias = pathname?.startsWith("/mi-cuenta");
+
+  // La barra de categorías va SÓLO en la home. En /catalogo el panel de
+  // filtros hace ese trabajo y mejor —es exhaustivo y dice cuántos productos
+  // hay en cada categoría—, así que ahí repetía cuatro nombres de más; en el
+  // resto del sitio (ficha, carrito, Mi cuenta) no aporta y suma 52px de alto
+  // en todas las páginas.
+  const nav =
+    pathname === "/"
+      ? conBadgeNav(
+          categorias.slice(0, MAX_CATEGORIAS_NAV).map((cat) => ({
+            label: formatRubro(cat),
+            href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
+          })),
+          navBadge,
+        )
+      : [];
+
+  // Cuál de las dos instancias del carrito está a la vista (ver compactActions).
+  const [compacto, setCompacto] = useState(false);
 
   return (
     <div className="bg-bg">
       {/* La barra de anuncio vive en src/app/layout.tsx (global desde e88aec5,
           contenido administrable); acá solo va el header+nav globales. */}
       <SiteHeader
-        className="site-header"
+        brandPlacement="start"
+        compactOnScroll
+        onCompactChange={setCompacto}
+        // El preview del carrito se abre solo al agregar: con dos instancias
+        // montadas, sólo la que está a la vista debe abrirse.
+        compactActions={<CartPreview autoAbrir={compacto} />}
         brandName="Central"
         brandAccent="Led"
         brandSub="Iluminación · Electricidad"
         search={<SearchAutocomplete />}
+        nav={nav}
         actions={
           <>
             <Show when="signed-out">
@@ -76,19 +99,8 @@ export function HeaderUI({
               <MenuUsuario nombre={nombre} />
             </Show>
 
-            <CartPreview />
+            <CartPreview autoAbrir={!compacto} />
           </>
-        }
-        nav={
-          hideCategorias
-            ? []
-            : conBadgeNav(
-                categorias.slice(0, 8).map((cat) => ({
-                  label: formatRubro(cat),
-                  href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
-                })),
-                navBadge,
-              )
         }
       />
     </div>

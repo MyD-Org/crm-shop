@@ -15,6 +15,7 @@ import { fmtPrecio } from "@/lib/format";
 import { formatRubro } from "@/lib/formato-rubro";
 import {
   ORDEN_DEFAULT,
+  SOLO_STOCK_DEFAULT,
   VISTA_DEFAULT,
   rangoEfectivo,
   type EstadoCatalogo,
@@ -77,7 +78,28 @@ export function anuncioResultados(
  * unidades" / "Sin stock".
  */
 export function etiquetaStock(p: Pick<Product, "stock" | "stockQty">): string | undefined {
-  return p.stock === "low" && p.stockQty != null ? `¡Últimas ${p.stockQty}!` : undefined;
+  const n = unidadesPositivas(p);
+  return p.stock === "low" && n != null ? `¡Últimas ${n}!` : undefined;
+}
+
+/**
+ * Cantidad que se puede mostrar: conocida y mayor a cero, y sólo si el
+ * producto no figura sin stock. Con la simulación de stock (`stockSimulado()`)
+ * un producto con 0 o menos figura disponible: la cantidad no se muestra,
+ * para no decir "En stock — 0 disponibles".
+ */
+function unidadesPositivas(p: Pick<Product, "stock" | "stockQty">): number | undefined {
+  const n = p.stockQty;
+  return p.stock !== "out" && n != null && Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** "12 disponibles" / "1 disponible" junto al estado de stock de la ficha; si no, nada. */
+export function textoUnidadesDisponibles(
+  p: Pick<Product, "stock" | "stockQty">
+): string | undefined {
+  const n = unidadesPositivas(p);
+  if (n == null) return undefined;
+  return `${miles.format(n)} ${n === 1 ? "disponible" : "disponibles"}`;
 }
 
 /** Un chip de filtro activo y el cambio de estado que lo quita. */
@@ -105,6 +127,16 @@ function etiquetaPrecio(estado: EstadoCatalogo, rango: RangoPrecio | null): stri
     : `Precio: hasta ${fmtPesos(estado.precioMax ?? 0)}`;
 }
 
+/**
+ * "Solo con stock" prendido es el default y no se muestra como chip. Apagado
+ * sí: el chip "Incluye sin stock" permite volver al default.
+ */
+const ETIQUETA_INCLUYE_SIN_STOCK = "Incluye sin stock";
+
+/** ¿"Solo con stock" está fuera de su default? (cuenta como filtro activo). */
+const stockFueraDeDefault = (e: Pick<EstadoCatalogo, "soloStock">) =>
+  e.soloStock !== SOLO_STOCK_DEFAULT;
+
 /** Chips de filtros activos, en el orden del panel: categorías → marcas → precio → stock. */
 export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null): ChipFiltro[] {
   const chip = (clave: string, etiqueta: string, cambios: Partial<EstadoCatalogo>) => ({
@@ -130,13 +162,16 @@ export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null):
           }),
         ]
       : []),
-    ...(estado.soloStock ? [chip("stock", "En stock", { soloStock: false })] : []),
+    ...(stockFueraDeDefault(estado)
+      ? [chip("stock", ETIQUETA_INCLUYE_SIN_STOCK, { soloStock: SOLO_STOCK_DEFAULT })]
+      : []),
   ];
 }
 
 /**
- * Cambios que borran todos los filtros. La búsqueda, el orden y la vista no
- * se nombran, así que `hrefCon` los conserva.
+ * Cambios que vuelven los filtros a su default ("Solo con stock" prendido).
+ * La búsqueda, el orden y la vista no se nombran, así que `hrefCon` los
+ * conserva.
  */
 export function limpiarFiltros(): Partial<EstadoCatalogo> {
   return {
@@ -144,7 +179,7 @@ export function limpiarFiltros(): Partial<EstadoCatalogo> {
     marcas: [],
     precioMin: undefined,
     precioMax: undefined,
-    soloStock: false,
+    soloStock: SOLO_STOCK_DEFAULT,
   };
 }
 
@@ -159,7 +194,7 @@ export function contarFiltrosActivos(estado: EstadoCatalogo): number {
     estado.categorias.length +
     estado.marcas.length +
     (hayPrecio(estado) ? 1 : 0) +
-    (estado.soloStock ? 1 : 0)
+    (stockFueraDeDefault(estado) ? 1 : 0)
   );
 }
 
@@ -173,8 +208,9 @@ export function etiquetaBotonFiltros(activos: number): string {
 
 /**
  * ¿Esta combinación merece estar en el índice de los buscadores? Sólo
- * `/catalogo`, una categoría y sus páginas; el resto (búsquedas, marcas,
- * precio, stock, orden, vista, varias categorías) queda `noindex, follow`:
+ * `/catalogo`, una categoría y sus páginas (con "Solo con stock" en su
+ * default); el resto (búsquedas, marcas, precio, incluir sin stock, orden,
+ * vista, varias categorías) queda `noindex, follow`:
  * siguen siendo URLs compartibles, pero no se multiplican en el índice.
  */
 export function indexable(estado: EstadoCatalogo): boolean {
@@ -182,7 +218,7 @@ export function indexable(estado: EstadoCatalogo): boolean {
     !estado.query &&
     estado.marcas.length === 0 &&
     !hayPrecio(estado) &&
-    !estado.soloStock &&
+    !stockFueraDeDefault(estado) &&
     estado.orden === ORDEN_DEFAULT &&
     estado.vista === VISTA_DEFAULT &&
     estado.categorias.length <= 1

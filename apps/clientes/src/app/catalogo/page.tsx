@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getFacetas, getPaginaCatalogo } from "@/lib/catalog";
 import {
+  filtrosDeEstado,
   hrefCanonico,
   leerEstado,
   type EstadoCatalogo,
@@ -72,15 +73,9 @@ export default async function CatalogoPage({ searchParams }: Props) {
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
 async function CatalogoResultados({ estado }: { estado: EstadoCatalogo }) {
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
-  // qué grupo excluye en cada conteo.
-  const filtros = {
-    busqueda: estado.query,
-    categorias: estado.categorias,
-    marcas: estado.marcas,
-    precioMin: estado.precioMin,
-    precioMax: estado.precioMax,
-    soloStock: estado.soloStock,
-  };
+  // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
+  // defecto (ver `SOLO_STOCK_DEFAULT`).
+  const filtros = filtrosDeEstado(estado);
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
   // resuelven en Postgres: filtrar u ordenar después de paginar daría

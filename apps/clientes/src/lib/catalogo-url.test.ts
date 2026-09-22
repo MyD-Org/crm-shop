@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ORDENES,
   ORDEN_DEFAULT,
+  SOLO_STOCK_DEFAULT,
+  STOCK_INCLUYE_SIN_STOCK,
   cambiosDeRango,
   comoLista,
   comoOrden,
@@ -10,6 +12,7 @@ import {
   hrefCanonico,
   hrefCatalogo,
   hrefCon,
+  filtrosDeEstado,
   leerEstado,
   rangoEfectivo,
   type EstadoCatalogo,
@@ -22,7 +25,7 @@ const base: EstadoCatalogo = {
   marcas: [],
   orden: "nombre",
   pagina: 1,
-  soloStock: false,
+  soloStock: true,
   vista: "grilla",
 };
 
@@ -89,7 +92,7 @@ describe("lectura de la query string", () => {
         pagina: "2",
         precio_min: "500",
         precio_max: "50000",
-        stock: "1",
+        stock: STOCK_INCLUYE_SIN_STOCK,
         vista: "lista",
       })
     ).toEqual({
@@ -100,7 +103,7 @@ describe("lectura de la query string", () => {
       pagina: 2,
       precioMin: 500,
       precioMax: 50000,
-      soloStock: true,
+      soloStock: false,
       vista: "lista",
     });
   });
@@ -118,15 +121,27 @@ describe("lectura de la query string", () => {
     });
     expect(estado.precioMin).toBeUndefined();
     expect(estado.precioMax).toBeUndefined();
-    expect(estado.soloStock).toBe(false);
+    expect(estado.soloStock).toBe(SOLO_STOCK_DEFAULT);
     expect(estado.vista).toBe("grilla");
   });
 
-  it("stock sólo se activa con exactamente 1", () => {
-    expect(leerEstado({ stock: "1" }).soloStock).toBe(true);
-    expect(leerEstado({ stock: "0" }).soloStock).toBe(false);
-    expect(leerEstado({ stock: "true" }).soloStock).toBe(false);
-    expect(leerEstado({ stock: ["1", "0"] }).soloStock).toBe(true);
+  it("sólo con stock es el default: sin parámetro, el filtro está prendido", () => {
+    expect(SOLO_STOCK_DEFAULT).toBe(true);
+    expect(leerEstado({}).soloStock).toBe(true);
+  });
+
+  it("el filtro sólo se apaga con el valor explícito de incluir sin stock", () => {
+    expect(STOCK_INCLUYE_SIN_STOCK).toBe("todos");
+    expect(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK }).soloStock).toBe(false);
+    expect(leerEstado({ stock: [STOCK_INCLUYE_SIN_STOCK, "1"] }).soloStock).toBe(false);
+    expect(leerEstado({ stock: "0" }).soloStock).toBe(true);
+    expect(leerEstado({ stock: "true" }).soloStock).toBe(true);
+  });
+
+  it("un link viejo con stock=1 sigue funcionando y se normaliza sin el parámetro", () => {
+    const estado = leerEstado({ stock: "1", pagina: "2" });
+    expect(estado.soloStock).toBe(true);
+    expect(hrefCatalogo(estado)).toBe("/catalogo?pagina=2");
   });
 
   it("vista sólo es lista con exactamente lista", () => {
@@ -178,13 +193,13 @@ describe("armado de URLs", () => {
         marcas: ["GENROD"],
         precioMin: 500,
         precioMax: 50000,
-        soloStock: true,
+        soloStock: false,
         orden: "precio-asc",
         vista: "lista",
         pagina: 2,
       })
     ).toBe(
-      "/catalogo?categoria=ILUMINACION&marca=GENROD&precio_min=500&precio_max=50000&stock=1&orden=precio-asc&vista=lista&pagina=2"
+      `/catalogo?categoria=ILUMINACION&marca=GENROD&precio_min=500&precio_max=50000&stock=${STOCK_INCLUYE_SIN_STOCK}&orden=precio-asc&vista=lista&pagina=2`
     );
   });
 
@@ -214,9 +229,14 @@ describe("armado de URLs", () => {
     expect(hrefCon({ ...base, pagina: 7 }, { orden: "precio-asc" })).toBe(
       "/catalogo?orden=precio-asc"
     );
-    expect(hrefCon({ ...base, pagina: 7 }, { soloStock: true })).toBe(
-      "/catalogo?stock=1"
+    expect(hrefCon({ ...base, pagina: 7 }, { soloStock: false })).toBe(
+      `/catalogo?stock=${STOCK_INCLUYE_SIN_STOCK}`
     );
+  });
+
+  it("sólo con stock prendido (el default) no viaja en la URL", () => {
+    expect(hrefCatalogo({ ...base, soloStock: true })).toBe("/catalogo");
+    expect(hrefCon({ ...base, soloStock: false }, { soloStock: true })).toBe("/catalogo");
   });
 
   it("cambiar de vista conserva la página si el llamador la pasa explícita", () => {
@@ -297,9 +317,42 @@ describe("hrefCanonico", () => {
         marcas: ["GENROD"],
         precioMin: 500,
         precioMax: 900,
-        soloStock: true,
+        soloStock: false,
         orden: "precio-desc",
       })
     ).toBe("/catalogo");
+  });
+});
+
+describe("filtrosDeEstado", () => {
+  it("sin parámetros, la consulta pide sólo productos con stock", () => {
+    expect(filtrosDeEstado(leerEstado({})).soloStock).toBe(true);
+  });
+
+  it("con incluir sin stock, la consulta no filtra por stock", () => {
+    expect(
+      filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })).soloStock
+    ).toBe(false);
+  });
+
+  it("pasa búsqueda, categorías, marcas y precio tal cual", () => {
+    expect(
+      filtrosDeEstado(
+        leerEstado({
+          q: "led",
+          categoria: "ILUMINACION",
+          marca: "GENROD",
+          precio_min: "500",
+          precio_max: "900",
+        })
+      )
+    ).toEqual({
+      busqueda: "led",
+      categorias: ["ILUMINACION"],
+      marcas: ["GENROD"],
+      precioMin: 500,
+      precioMax: 900,
+      soloStock: true,
+    });
   });
 });

@@ -12,6 +12,7 @@ import {
   indexable,
   limpiarFiltros,
   migas,
+  textoUnidadesDisponibles,
   tituloCatalogo,
 } from "./catalogo-vista";
 import type { EstadoCatalogo } from "./catalogo-url";
@@ -22,7 +23,7 @@ const base: EstadoCatalogo = {
   marcas: [],
   orden: "nombre",
   pagina: 1,
-  soloStock: false,
+  soloStock: true,
   vista: "grilla",
 };
 
@@ -107,6 +108,29 @@ describe("etiquetaStock", () => {
     expect(etiquetaStock({ stock: "in", stockQty: 40 })).toBeUndefined();
     expect(etiquetaStock({ stock: "out", stockQty: 0 })).toBeUndefined();
   });
+
+  it("nunca dice ¡Últimas n! con n menor o igual a cero", () => {
+    expect(etiquetaStock({ stock: "low", stockQty: 0 })).toBeUndefined();
+    expect(etiquetaStock({ stock: "low", stockQty: -2 })).toBeUndefined();
+  });
+});
+
+describe("textoUnidadesDisponibles", () => {
+  it("con cantidad positiva conocida, la muestra", () => {
+    expect(textoUnidadesDisponibles({ stock: "in", stockQty: 40 })).toBe("40 disponibles");
+    expect(textoUnidadesDisponibles({ stock: "low", stockQty: 3 })).toBe("3 disponibles");
+    expect(textoUnidadesDisponibles({ stock: "low", stockQty: 1 })).toBe("1 disponible");
+  });
+
+  it("disponible con cantidad cero o negativa (simulación de stock) no muestra la cantidad", () => {
+    expect(textoUnidadesDisponibles({ stock: "in", stockQty: 0 })).toBeUndefined();
+    expect(textoUnidadesDisponibles({ stock: "in", stockQty: -5 })).toBeUndefined();
+  });
+
+  it("sin stock o sin cantidad conocida no muestra nada", () => {
+    expect(textoUnidadesDisponibles({ stock: "out", stockQty: 0 })).toBeUndefined();
+    expect(textoUnidadesDisponibles({ stock: "in" })).toBeUndefined();
+  });
 });
 
 describe("fmtPesos", () => {
@@ -118,7 +142,7 @@ describe("fmtPesos", () => {
 describe("chipsActivos", () => {
   const rango = { min: 120, max: 50000 };
 
-  it("sin filtros no hay chips", () => {
+  it("sin filtros no hay chips (sólo con stock es el default y no se muestra)", () => {
     expect(chipsActivos(base, rango)).toEqual([]);
   });
 
@@ -128,7 +152,7 @@ describe("chipsActivos", () => {
       categorias: ["ILUMINACION"],
       marcas: ["GENROD", "MACROLED"],
       precioMin: 500,
-      soloStock: true,
+      soloStock: false,
     };
     const chips = chipsActivos(estado, rango).map((c) => ({
       ...c,
@@ -141,13 +165,14 @@ describe("chipsActivos", () => {
       "Marca: GENROD",
       "Marca: MACROLED",
       "Precio: $ 500 – $ 50.000",
-      "En stock",
+      "Incluye sin stock",
     ]);
     expect(chips[1].removeLabel).toBe("Quitar filtro Marca: GENROD");
     expect(chips[0].cambios).toEqual({ categorias: [] });
     expect(chips[1].cambios).toEqual({ marcas: ["MACROLED"] });
     expect(chips[3].cambios).toEqual({ precioMin: undefined, precioMax: undefined });
-    expect(chips[4].cambios).toEqual({ soloStock: false });
+    expect(chips[4].removeLabel).toBe("Quitar filtro Incluye sin stock");
+    expect(chips[4].cambios).toEqual({ soloStock: true });
   });
 
   it("las claves son únicas (sirven de key de React)", () => {
@@ -173,7 +198,7 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
       marcas: [],
       precioMin: undefined,
       precioMax: undefined,
-      soloStock: false,
+      soloStock: true,
     });
   });
 
@@ -182,7 +207,8 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
     expect(hayFiltros({ ...base, query: "led", orden: "precio-asc", vista: "lista" })).toBe(false);
     expect(hayFiltros({ ...base, marcas: ["X"] })).toBe(true);
     expect(hayFiltros({ ...base, precioMax: 10 })).toBe(true);
-    expect(hayFiltros({ ...base, soloStock: true })).toBe(true);
+    expect(hayFiltros({ ...base, soloStock: true })).toBe(false);
+    expect(hayFiltros({ ...base, soloStock: false })).toBe(true);
   });
 
   it("cuenta cada categoría y marca, el precio como uno y el stock como uno", () => {
@@ -193,16 +219,18 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
         marcas: ["GENROD", "MACROLED"],
         precioMin: 500,
         precioMax: 900,
-        soloStock: true,
+        soloStock: false,
       })
     ).toBe(5);
     expect(contarFiltrosActivos(base)).toBe(0);
+    expect(contarFiltrosActivos({ ...base, soloStock: true })).toBe(0);
   });
 });
 
 describe("indexable", () => {
   it("indexan /catalogo, una categoría y sus páginas", () => {
     expect(indexable(base)).toBe(true);
+    expect(indexable({ ...base, soloStock: true })).toBe(true);
     expect(indexable({ ...base, categorias: ["ILUMINACION"], pagina: 3 })).toBe(true);
   });
 
@@ -211,7 +239,7 @@ describe("indexable", () => {
     expect(indexable({ ...base, marcas: ["X"] })).toBe(false);
     expect(indexable({ ...base, precioMin: 500 })).toBe(false);
     expect(indexable({ ...base, precioMax: 500 })).toBe(false);
-    expect(indexable({ ...base, soloStock: true })).toBe(false);
+    expect(indexable({ ...base, soloStock: false })).toBe(false);
     expect(indexable({ ...base, orden: "precio-asc" })).toBe(false);
     expect(indexable({ ...base, vista: "lista" })).toBe(false);
     expect(indexable({ ...base, categorias: ["A", "B"] })).toBe(false);

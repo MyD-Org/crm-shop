@@ -6,6 +6,7 @@ import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
 import { CatalogoEncabezado } from "@/components/catalogo/CatalogoEncabezado";
 import { CatalogoFiltros } from "@/components/catalogo/CatalogoFiltros";
+import { CatalogoFiltrosSheet } from "@/components/catalogo/CatalogoFiltrosSheet";
 import { CatalogoProductos } from "@/components/catalogo/CatalogoProductos";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
@@ -48,8 +49,8 @@ export function CatalogoClient({
   // en vez de quedarse muda.
   const [navegando, startTransition] = useTransition();
 
-  const ir = (cambios: Partial<EstadoCatalogo>) =>
-    startTransition(() => router.push(hrefCon(estado, cambios)));
+  const navegar = (href: string) => startTransition(() => router.push(href));
+  const ir = (cambios: Partial<EstadoCatalogo>) => navegar(hrefCon(estado, cambios));
 
   // Mejor opción de cuotas por producto, sobre su precio final unitario.
   const cuotasPorProducto = useMemo(() => {
@@ -72,8 +73,11 @@ export function CatalogoClient({
 
       <div className="flex min-w-0 flex-1 flex-col gap-6">
         <CatalogoEncabezado estado={estado} total={total} paginas={paginas} ir={ir} />
+        {/* Mobile: el aside no entra; el mismo panel va en una hoja. */}
+        <div className="lg:hidden">
+          <CatalogoFiltrosSheet facetas={facetas} estado={estado} navegar={navegar} />
+        </div>
         <CatalogoChips estado={estado} rango={facetas.precio} ir={ir} />
-        {/* Acá va el botón "Filtros" de mobile (hoja con el mismo panel). */}
 
         {productos.length === 0 ? (
           <EmptyState

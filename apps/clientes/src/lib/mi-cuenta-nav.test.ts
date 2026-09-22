@@ -58,10 +58,17 @@ describe("seccionesVisibles", () => {
     ]);
   });
 
-  it("por default usa el despliegue actual, que todavía no publica favoritos ni facturas", () => {
-    expect(CAPACIDADES_DESPLIEGUE).toEqual({ favoritos: false, facturas: false });
+  it("por default usa el despliegue actual, que ya publica favoritos", () => {
+    expect(CAPACIDADES_DESPLIEGUE.favoritos).toBe(true);
     expect(seccionesVisibles({ clerk: true, vinculado: true })).toEqual(
-      seccionesVisibles({ clerk: true, vinculado: true }, NADA),
+      seccionesVisibles({ clerk: true, vinculado: true }, CAPACIDADES_DESPLIEGUE),
+    );
+    expect(seccionesVisibles({ clerk: true, vinculado: false }).map((x) => x.id)).toContain(
+      "favoritos",
+    );
+    // La cookie del CRM sin Clerk no tiene dónde guardarlos.
+    expect(seccionesVisibles({ clerk: false, vinculado: true }).map((x) => x.id)).not.toContain(
+      "favoritos",
     );
   });
 

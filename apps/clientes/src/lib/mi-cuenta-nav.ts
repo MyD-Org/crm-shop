@@ -37,7 +37,7 @@ export interface CapacidadesDespliegue {
 }
 
 export const CAPACIDADES_DESPLIEGUE: Readonly<CapacidadesDespliegue> = {
-  favoritos: false,
+  favoritos: true,
   facturas: false,
 };
 

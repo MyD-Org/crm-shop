@@ -2,7 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 import {
   Badge,
-  ChipRow,
   CtaBanner,
   Hero,
   Marquee,
@@ -15,6 +14,7 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { Reveal } from "@/components/Reveal";
+import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
@@ -196,7 +196,7 @@ export function HomeClient({
           <SeccionEditable seccion="destacados" inicial={secDestacados} puedeEditar={puedeEditar}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <ProductosCarrusel label={`${secDestacados.titulo} ${secDestacados.acento ?? ""}`.trim()}>
               {destacados.map((p, i) => {
                 const imagen = imagenesDestacados[i];
                 return (
@@ -239,7 +239,7 @@ export function HomeClient({
                   </Link>
                 );
               })}
-              </div>
+              </ProductosCarrusel>
             </section>
           </SeccionEditable>
         </Reveal>
@@ -259,13 +259,14 @@ export function HomeClient({
           </SeccionEditable>
         </Reveal>
 
-        {/* Deco grid + chips */}
+        {/* Deco grid */}
         <Reveal>
           <SeccionEditable seccion="decoGrid" inicial={decoGrid} puedeEditar={puedeEditar}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
-              <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} />
-              <ChipRow chips={decoGrid.chips} className="mt-6" />
+              {/* Mobile: apiladas, se despegan al scrollear. Desde lg, la grilla. */}
+              <RoomTiles variant="stack" items={aTilesDS(decoGrid.items)} className="lg:hidden" />
+              <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} className="hidden lg:grid" />
             </section>
           </SeccionEditable>
         </Reveal>

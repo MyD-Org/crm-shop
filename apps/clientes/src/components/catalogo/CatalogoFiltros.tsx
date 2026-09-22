@@ -9,7 +9,7 @@ import {
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
 import { fmtPesos, hayFiltros, itemsDeFaceta, limpiarFiltros } from "@/lib/catalogo-vista";
-import { formatRubro } from "@/lib/formato-rubro";
+import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
 
@@ -57,7 +57,7 @@ export function CatalogoFiltros({
         title="Marcas"
         items={itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
           value: m.label,
-          label: m.label,
+          label: formatMarca(m.label),
           count: m.count,
           checked: m.checked,
         }))}

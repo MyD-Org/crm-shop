@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRubro } from "./formato-rubro";
+import { formatMarca, formatRubro } from "./formato-rubro";
 
 describe("formatRubro", () => {
   it("pasa a título un rubro en mayúsculas sin acentos", () => {
@@ -32,5 +32,29 @@ describe("formatRubro", () => {
     ]) {
       expect(formatRubro(formatRubro(rubro))).toBe(formatRubro(rubro));
     }
+  });
+});
+
+describe("formatMarca", () => {
+  it("pasa la marca en mayúsculas a nombre propio", () => {
+    expect(formatMarca("JADEVER")).toBe("Jadever");
+    expect(formatMarca("GENROD")).toBe("Genrod");
+    expect(formatMarca("MACROLED")).toBe("Macroled");
+  });
+
+  it("deja las siglas cortas como vienen", () => {
+    expect(formatMarca("DCK")).toBe("DCK");
+    expect(formatMarca("3M")).toBe("3M");
+    expect(formatMarca("UNV")).toBe("UNV");
+    expect(formatMarca("AKAI ENERGY LED")).toBe("Akai Energy LED");
+  });
+
+  it("no le agrega tildes ni diéresis: es un nombre propio", () => {
+    expect(formatMarca("WEIDMULLER")).toBe("Weidmuller");
+  });
+
+  it("si ya viene presentable, no la toca", () => {
+    expect(formatMarca("Philips")).toBe("Philips");
+    expect(formatMarca("iLED")).toBe("iLED");
   });
 });

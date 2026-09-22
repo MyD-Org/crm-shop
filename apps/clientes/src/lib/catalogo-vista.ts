@@ -11,19 +11,20 @@
  */
 import type { BreadcrumbItem } from "@myd-org/ui";
 import type { Product } from "@/data/products";
-import { fmtPrecio } from "@/lib/format";
-import { formatRubro } from "@/lib/formato-rubro";
+import { fmtPesosEnteros } from "@/lib/format";
+import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import {
   ORDEN_DEFAULT,
   SOLO_STOCK_DEFAULT,
   VISTA_DEFAULT,
   rangoEfectivo,
   type EstadoCatalogo,
+  type OrdenCatalogo,
   type RangoPrecio,
 } from "@/lib/catalogo-url";
 
-/** Pesos sin decimales, la misma pareja locale/moneda que la card del DS. */
-export const fmtPesos = fmtPrecio;
+/** Pesos sin decimales, para los bordes del filtro de precio (ver `fmtPesosEnteros`). */
+export const fmtPesos = fmtPesosEnteros;
 
 const miles = new Intl.NumberFormat("es-AR");
 
@@ -42,6 +43,19 @@ export function migas(estado: EstadoCatalogo): BreadcrumbItem[] {
     items.push({ label: formatRubro(estado.categorias[0]) });
   return items;
 }
+
+/**
+ * Opciones de orden, en el orden en que se ofrecen. Vive acá y no en un
+ * componente porque la usan los dos lugares donde se elige el orden: los
+ * controles de la grilla en desktop y la hoja de filtros en mobile.
+ *
+ * Sin "Más vendidos": nunca hubo un dato de ventas detrás (ordenaba por nombre).
+ */
+export const ORDENES: { label: string; value: OrdenCatalogo }[] = [
+  { label: "Nombre A-Z", value: "nombre" },
+  { label: "Precio: menor a mayor", value: "precio-asc" },
+  { label: "Precio: mayor a menor", value: "precio-desc" },
+];
 
 /** Título de la página: la búsqueda gana; si no, la categoría única. */
 export function tituloCatalogo(estado: EstadoCatalogo): string {
@@ -152,7 +166,7 @@ export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null):
       })
     ),
     ...estado.marcas.map((m) =>
-      chip(`marca:${m}`, `Marca: ${m}`, { marcas: estado.marcas.filter((x) => x !== m) })
+      chip(`marca:${m}`, `Marca: ${formatMarca(m)}`, { marcas: estado.marcas.filter((x) => x !== m) })
     ),
     ...(hayPrecio(estado)
       ? [

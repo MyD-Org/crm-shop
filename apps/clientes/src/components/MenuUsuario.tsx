@@ -89,7 +89,6 @@ export function MenuUsuario({ nombre }: { nombre: string | null }) {
   const { user } = useUser();
 
   const nombreVisible = nombre ?? user?.fullName ?? null;
-  const email = user?.primaryEmailAddress?.emailAddress;
 
   function alSeleccionar(id: IdEntradaMenu) {
     switch (id) {
@@ -111,32 +110,19 @@ export function MenuUsuario({ nombre }: { nombre: string | null }) {
     }
   }
 
-  const items: DropdownMenuEntry[] = [
-    {
-      type: "label",
-      label: (
-        <span className="block min-w-0">
-          <span className="block truncate text-sm font-semibold text-text">
-            {nombreVisible ?? "Mi cuenta"}
-          </span>
-          {email && (
-            <span className="block truncate text-xs font-normal text-muted">{email}</span>
-          )}
-        </span>
-      ),
-    },
-    { type: "separator" },
-    ...ENTRADAS_MENU.flatMap((entrada): DropdownMenuEntry[] => {
-      const item: DropdownMenuEntry = {
-        label: entrada.label,
-        icon: ICONOS[entrada.id],
-        tone: entrada.tone,
-        onSelect: () => alSeleccionar(entrada.id),
-      };
-      // Cerrar sesión va separado del resto.
-      return entrada.id === "salir" ? [{ type: "separator" }, item] : [item];
-    }),
-  ];
+  // Sin cabecera: el nombre ya está en el botón que abre el menú, a unos pocos
+  // píxeles, y el correo vive en Mis datos. Sin ella el menú es exactamente la
+  // misma lista que la barra lateral de Mi cuenta, flotando.
+  const items: DropdownMenuEntry[] = ENTRADAS_MENU.flatMap((entrada): DropdownMenuEntry[] => {
+    const item: DropdownMenuEntry = {
+      label: entrada.label,
+      icon: ICONOS[entrada.id],
+      tone: entrada.tone,
+      onSelect: () => alSeleccionar(entrada.id),
+    };
+    // Cerrar sesión va separado del resto.
+    return entrada.id === "salir" ? [{ type: "separator" }, item] : [item];
+  });
 
   return (
     <DropdownMenu items={items} align="end" className="min-w-[14rem] max-w-[18rem]">

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
+import { fmtPrecio } from "@/lib/format";
 
 function CartIcon() {
   return (
@@ -23,10 +24,18 @@ function LightbulbIcon() {
   );
 }
 
-const fmt = (n: number) =>
-  n.toLocaleString("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 0 });
+// El mismo formateador que la página del carrito y el checkout, con dos
+// decimales siempre: el preview es el mismo carrito y tiene que decir los
+// mismos números. El de antes tenía `minimumFractionDigits: 0` sin máximo, así
+// que $2.344.755,60 salía "$ 2.344.755,6", con un solo decimal.
+const fmt = fmtPrecio;
 
-export function CartPreview() {
+export function CartPreview({
+  autoAbrir = true,
+}: {
+  /** Hay dos instancias (header completo y barra compacta): solo la visible se abre sola al agregar. */
+  autoAbrir?: boolean;
+} = {}) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { items, total, count, aperturaPreview } = useCart();
@@ -43,7 +52,7 @@ export function CartPreview() {
   const [ultimaAlta, setUltimaAlta] = useState(0);
   if (aperturaPreview !== ultimaAlta) {
     setUltimaAlta(aperturaPreview);
-    setOpen(true);
+    if (autoAbrir) setOpen(true);
   }
 
   useEffect(() => {
@@ -76,7 +85,10 @@ export function CartPreview() {
         className="flex items-center gap-2 rounded-full bg-primary px-[18px] py-[9px] text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white"
       >
         <CartIcon />
-        <span>Carrito</span>
+        {/* En pantallas chicas queda sólo el ícono + la cantidad: la palabra
+            mide 52px y es lo que hace que el carrito no entre al lado de la
+            marca en la primera fila del header. El ícono ya dice qué es. */}
+        <span className="max-sm:sr-only">Carrito</span>
         <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/20 text-[11px] font-extrabold">
           {count}
         </span>
@@ -113,7 +125,10 @@ export function CartPreview() {
                 Carrito ({count} productos)
               </p>
 
-              <ul className="-mx-1 max-h-72 space-y-3 overflow-y-auto px-1">
+              {/* `scroll-fino` (utilidad del DS): la misma barra fina y del color de
+                  la piel que la lista de marcas, en vez de la gris del sistema.
+                  `pr-3` la separa de los precios. */}
+              <ul className="scroll-fino -mx-1 max-h-72 space-y-3 overflow-y-auto px-1 pr-3">
                 {items.map((item) => (
                   <li key={item.id}>
                     <Link

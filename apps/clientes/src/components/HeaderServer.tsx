@@ -6,12 +6,18 @@ import { HeaderUI } from "./HeaderUI"
 export async function Header() {
   const identidad = await identidadActual()
   // Badge administrable del nav (config de home, mismo contrato que el resto
-  // del contenido). cache() por request: no suma queries extra si la home
-  // también lo lee.
+  // del contenido). cache() por request: el layout ya la lee para el anuncio,
+  // así que acá no suma consultas.
   const { navBadge } = await getContenidoHome()
 
-  // Las categorias del menu salen del catalogo real. Si Alegra falla, el header
-  // se renderiza igual: la navegacion no debe tumbar toda la pagina.
+  // Las categorias del menu salen del catalogo real. Si la lectura falla, el
+  // header se renderiza igual: la navegacion no debe tumbar toda la pagina.
+  //
+  // El nav sólo se muestra en la home (lo decide HeaderUI por la ruta), pero
+  // la lectura corre en todas las páginas porque este componente vive en el
+  // layout y no sabe dónde está. Es una consulta al espejo local, en cache()
+  // por request; si alguna vez pesa, el proxy puede pasar la ruta en un header
+  // y saltearla fuera de la home.
   let categorias: string[] = []
   try {
     categorias = await getCategorias()

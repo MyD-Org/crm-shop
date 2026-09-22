@@ -6,11 +6,10 @@
  * Módulo puro: lo usan componentes de cliente y de servidor.
  */
 
-/** Montos: "$20.000" o "$10.333,33". Sin espacio, igual que PrecioConImpuestos. */
+/** Montos, siempre con dos decimales: "$20.000,00" o "$10.333,33". Sin espacio, igual que PrecioConImpuestos. */
 export function fmtMonto(n: number): string {
-  const conCentavos = Math.round(n * 100) % 100 !== 0;
   return `$${n.toLocaleString("es-AR", {
-    minimumFractionDigits: conCentavos ? 2 : 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }

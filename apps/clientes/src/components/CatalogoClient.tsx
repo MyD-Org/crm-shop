@@ -4,6 +4,7 @@ import { useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
+import { CatalogoControles } from "@/components/catalogo/CatalogoControles";
 import { CatalogoEncabezado } from "@/components/catalogo/CatalogoEncabezado";
 import { CatalogoFiltros } from "@/components/catalogo/CatalogoFiltros";
 import { CatalogoFiltrosSheet } from "@/components/catalogo/CatalogoFiltrosSheet";
@@ -17,7 +18,7 @@ import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
 /**
- * UI del catálogo: filtros, encabezado, chips, productos y paginación, todo
+ * UI del catálogo: encabezado, filtros, productos y paginación, todo
  * con componentes de `@myd-org/ui` (ver src/components/catalogo/).
  *
  * El filtrado, el orden y el conteo NO pasan por acá: los resuelve Postgres
@@ -66,74 +67,91 @@ export function CatalogoClient({
   const conFiltros = hayFiltros(estado);
 
   return (
-    <main className="mx-auto flex w-full max-w-contenido flex-1 gap-6 px-4 py-8">
-      {/*
-        Filtros sticky en desktop: quedan a la vista mientras se recorre la
-        grilla. `self-start` evita que el aside se estire al alto de la
-        grilla (sin eso no hay nada que "pegar").
-        - `top-6`: aunque el SiteHeader del DS declara `sticky`, en el Shop
-          no se queda fijo al bajar (su contenedor es corto) y se va con el
-          scroll; el panel se pega cerca del borde en vez de dejar un hueco
-          del alto del header. Si el header pasa a quedar fijo, este valor
-          tiene que subir a su alto (hoy ~132px en lg, sin token en el DS).
-        - Si el panel es más alto que la pantalla (marcas expandidas),
-          scrollea adentro: `max-h-screen` + `pb-6` compensa el `top-6`.
-          Sin valores arbitrarios.
-      */}
-      <aside className="sticky top-6 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-6 lg:block">
-        <CatalogoFiltros facetas={facetas} estado={estado} ir={ir} />
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <CatalogoEncabezado estado={estado} total={total} paginas={paginas} ir={ir} />
-        {/* Mobile: el aside no entra; el mismo panel va en una hoja. */}
-        <div className="lg:hidden">
-          <CatalogoFiltrosSheet facetas={facetas} estado={estado} navegar={navegar} />
-        </div>
-        <CatalogoChips estado={estado} rango={facetas.precio} ir={ir} />
-
-        {productos.length === 0 ? (
-          <EmptyState
-            title="No encontramos productos con esos filtros."
-            description={
-              estado.query && !conFiltros
-                ? "Pruebe con otra palabra o revise la ortografía."
-                : "Quite alguno de los filtros e inténtelo de nuevo."
-            }
-            action={
-              conFiltros ? (
-                <Button variant="secondary" onClick={() => ir(limpiarFiltros())}>
-                  Limpiar filtros
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <CatalogoProductos
-            productos={productos}
-            vista={estado.vista}
-            navegando={navegando}
-            cuotasPorProducto={cuotasPorProducto}
-          />
-        )}
-
-        {/* Cada página es una URL real: se comparte, se abre en otra pestaña y se indexa. */}
-        {paginas > 1 && (
-          <div className="flex justify-center">
-            <Pagination
-              page={estado.pagina}
-              totalPages={paginas}
-              hrefFor={(n) => hrefCon(estado, { pagina: n })}
-              renderLink={linkNext}
-              labels={{ ariaLabel: "Paginación del catálogo" }}
-            />
+    <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
+      {/* Encabezado a todo el ancho, por encima de las dos columnas. Vista y
+          orden van en la línea del título —y en mobile, con ellos, el botón
+          que abre la hoja— para que abajo el panel y la grilla arranquen a la
+          misma altura. */}
+      <CatalogoEncabezado
+        estado={estado}
+        acciones={
+          <div className="flex items-center gap-3 max-lg:w-full max-lg:justify-between">
+            <div className="lg:hidden">
+              <CatalogoFiltrosSheet facetas={facetas} estado={estado} navegar={navegar} />
+            </div>
+            <CatalogoControles estado={estado} ir={ir} />
           </div>
-        )}
+        }
+      />
 
-        {/* Sólo para lectores de pantalla: el cambio de página no mueve el foco. */}
-        <p className="sr-only" role="status">
-          {anuncioResultados(productos.length, total, estado.pagina, paginas)}
-        </p>
+      {/* Los filtros puestos, debajo del encabezado y sólo en mobile: en
+          desktop el panel lateral ya muestra los tildes. */}
+      <CatalogoChips estado={estado} rango={facetas.precio} ir={ir} />
+
+      <div className="mt-8 flex gap-6">
+        {/*
+          Filtros sticky en desktop: quedan a la vista mientras se recorre la
+          grilla. `self-start` evita que el aside se estire al alto de la
+          grilla (sin eso no hay nada que "pegar").
+          - `top-20` (80px): al bajar, el header completo se va y en su lugar
+            aparece la barra compacta fija del SiteHeader (`compactOnScroll`),
+            de 56px (`h-14` en el DS). El panel se pega debajo de ella con
+            24px de aire; con el `top-6` de antes quedaba tapado. Si la barra
+            cambia de alto en el DS, este valor tiene que acompañarla (el DS
+            no expone su alto como token).
+          - Si el panel es más alto que la pantalla (marcas expandidas),
+            scrollea adentro: `max-h-screen` + `pb-20` compensa el `top-20`
+            para que el final del panel no quede fuera de pantalla.
+            Sin valores arbitrarios.
+        */}
+        <aside className="sticky top-20 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-20 lg:block">
+          <CatalogoFiltros facetas={facetas} estado={estado} ir={ir} />
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-6">
+          {productos.length === 0 ? (
+            <EmptyState
+              title="No encontramos productos con esos filtros."
+              description={
+                estado.query && !conFiltros
+                  ? "Pruebe con otra palabra o revise la ortografía."
+                  : "Quite alguno de los filtros e inténtelo de nuevo."
+              }
+              action={
+                conFiltros ? (
+                  <Button variant="secondary" onClick={() => ir(limpiarFiltros())}>
+                    Limpiar filtros
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <CatalogoProductos
+              productos={productos}
+              vista={estado.vista}
+              navegando={navegando}
+              cuotasPorProducto={cuotasPorProducto}
+            />
+          )}
+
+          {/* Cada página es una URL real: se comparte, se abre en otra pestaña y se indexa. */}
+          {paginas > 1 && (
+            <div className="flex justify-center">
+              <Pagination
+                page={estado.pagina}
+                totalPages={paginas}
+                hrefFor={(n) => hrefCon(estado, { pagina: n })}
+                renderLink={linkNext}
+                labels={{ ariaLabel: "Paginación del catálogo" }}
+              />
+            </div>
+          )}
+
+          {/* Sólo para lectores de pantalla: el cambio de página no mueve el foco. */}
+          <p className="sr-only" role="status">
+            {anuncioResultados(productos.length, total, estado.pagina, paginas)}
+          </p>
+        </div>
       </div>
     </main>
   );

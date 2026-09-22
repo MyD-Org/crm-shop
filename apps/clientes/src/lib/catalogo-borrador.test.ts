@@ -93,6 +93,33 @@ describe("hrefAlAplicar", () => {
     expect(hrefAlAplicar(estado, limpiarBorrador(estado))).toBe("/catalogo");
   });
 
+  it("el orden se elige adentro de la hoja y sale del borrador", () => {
+    const estado = { ...base, categorias: ["ILUMINACION"] };
+    const b = cambiarBorrador(estado, { orden: "precio-desc" });
+    expect(hrefAlAplicar(estado, b)).toBe("/catalogo?categoria=ILUMINACION&orden=precio-desc");
+  });
+
+  it("cambiar sólo el orden ya es un cambio: no devuelve null", () => {
+    const estado = { ...base, marcas: ["GENROD"] };
+    expect(hrefAlAplicar(estado, cambiarBorrador(estado, { orden: "precio-asc" }))).toBe(
+      "/catalogo?marca=GENROD&orden=precio-asc"
+    );
+  });
+
+  it("orden y filtros en la misma navegación, con la página de vuelta en 1", () => {
+    const estado = { ...base, pagina: 9, orden: "nombre" as const };
+    const b = cambiarBorrador(cambiarBorrador(estado, { marcas: ["DCK"] }), {
+      orden: "precio-desc",
+    });
+    expect(hrefAlAplicar(estado, b)).toBe("/catalogo?marca=DCK&orden=precio-desc");
+  });
+
+  it("\"Limpiar filtros\" no toca el orden: no es un filtro", () => {
+    const estado = { ...base, categorias: ["ILUMINACION"], orden: "precio-desc" as const };
+    expect(limpiarBorrador(estado).orden).toBe("precio-desc");
+    expect(hrefAlAplicar(estado, limpiarBorrador(estado))).toBe("/catalogo?orden=precio-desc");
+  });
+
   it("volver a sólo con stock desde incluir sin stock quita el parámetro", () => {
     const estado = { ...base, soloStock: false };
     expect(hrefAlAplicar(estado, cambiarBorrador(estado, { soloStock: true }))).toBe(

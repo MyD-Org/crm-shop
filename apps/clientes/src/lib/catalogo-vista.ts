@@ -19,6 +19,7 @@ import {
   VISTA_DEFAULT,
   rangoEfectivo,
   type EstadoCatalogo,
+  type OrdenCatalogo,
   type RangoPrecio,
 } from "@/lib/catalogo-url";
 
@@ -42,6 +43,19 @@ export function migas(estado: EstadoCatalogo): BreadcrumbItem[] {
     items.push({ label: formatRubro(estado.categorias[0]) });
   return items;
 }
+
+/**
+ * Opciones de orden, en el orden en que se ofrecen. Vive acá y no en un
+ * componente porque la usan los dos lugares donde se elige el orden: los
+ * controles de la grilla en desktop y la hoja de filtros en mobile.
+ *
+ * Sin "Más vendidos": nunca hubo un dato de ventas detrás (ordenaba por nombre).
+ */
+export const ORDENES: { label: string; value: OrdenCatalogo }[] = [
+  { label: "Nombre A-Z", value: "nombre" },
+  { label: "Precio: menor a mayor", value: "precio-asc" },
+  { label: "Precio: mayor a menor", value: "precio-desc" },
+];
 
 /** Título de la página: la búsqueda gana; si no, la categoría única. */
 export function tituloCatalogo(estado: EstadoCatalogo): string {

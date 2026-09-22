@@ -91,6 +91,7 @@ export interface Filtros {
   nombre?: "sin"
   alegra?: "active" | "inactive"
   precio?: "con" | "sin"
+  stock?: "con" | "sin"
   tag?: string
 }
 

@@ -365,6 +365,8 @@ export interface FiltrosAdmin {
   alegra?: "active" | "inactive"
   /** "sin" = sin precio de lista mayor a cero en Alegra (uno de los motivos de no publicado). */
   precio?: "con" | "sin"
+  /** "con" = stock mayor a cero en el último sync. Sin dato de stock cuenta como "sin". */
+  stock?: "con" | "sin"
   /** uuid de un tag. */
   tag?: string
 }
@@ -434,6 +436,9 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
     )`
     cond.push(f.precio === "con" ? conPrecio : sql`NOT ${conPrecio}`)
   }
+
+  if (f.stock === "con") cond.push(sql`coalesce(p.stock, 0) > 0`)
+  else if (f.stock === "sin") cond.push(sql`coalesce(p.stock, 0) <= 0`)
 
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (

@@ -99,6 +99,12 @@ export function parsearQueryListado(url: URL): QueryListado | Response {
     filtros.precio = precio
   }
 
+  const stock = p.get("stock")
+  if (stock !== null) {
+    if (stock !== "con" && stock !== "sin") return invalidResponse("El filtro de stock es inválido", "stock")
+    filtros.stock = stock
+  }
+
   const tag = p.get("tag")
   if (tag !== null) {
     if (!esUuid(tag)) return invalidResponse("La etiqueta es inválida", "tag")
@@ -150,7 +156,7 @@ export function parsearSeleccion(body: unknown): Seleccion | Response {
     // masiva "sobre todo lo que coincide" tiene que resolver exactamente el mismo conjunto.
     const params = new URLSearchParams()
     if (esObjeto(s.filtros)) {
-      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "tag"]) {
+      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "tag"]) {
         const valor = s.filtros[clave]
         if (typeof valor === "string" && valor !== "") params.set(clave, valor)
       }

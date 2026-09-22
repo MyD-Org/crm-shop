@@ -20,6 +20,18 @@ import {
   type PagoMetodo,
 } from "@/lib/envio";
 
+/*
+ * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
+ * festejo). `starting:` es @starting-style: anima al montar sin JS, y el
+ * navegador que no lo soporta muestra todo quieto. El check entra con un leve
+ * rebote y el texto sube escalonado 60 ms; con reduced motion, sólo fade.
+ * Strings literales para que Tailwind las genere.
+ */
+const POP_EXITO =
+  "transition-[opacity,scale] duration-[400ms] ease-[cubic-bezier(0.34,1.56,0.64,1)] starting:scale-[0.6] starting:opacity-0 motion-reduce:starting:scale-100";
+const ENTRADA_EXITO =
+  "transition-[opacity,translate] duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)] starting:translate-y-2 starting:opacity-0 motion-reduce:starting:translate-y-0";
+
 function CheckCircleIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -395,14 +407,14 @@ export function CheckoutClient({
     return (
       <main className="mx-auto flex max-w-lg flex-1 flex-col items-center gap-5 px-4 py-20">
         <div className="w-full rounded-[28px] border border-border bg-surface p-8 text-center">
-          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success">
+          <span className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success ${POP_EXITO}`}>
             <CheckCircleIcon />
           </span>
-          <h1 className="mt-4 text-2xl font-extrabold text-text">
+          <h1 className={`mt-4 text-2xl font-extrabold text-text ${ENTRADA_EXITO} delay-[120ms]`}>
             {pagado ? "¡Pago acreditado!" : "Pedido recibido"}
           </h1>
-          <p className="mt-2 text-sm font-semibold text-text">{confirmado.numero}</p>
-          <p className="mt-3 text-sm text-muted">
+          <p className={`mt-2 text-sm font-semibold text-text ${ENTRADA_EXITO} delay-[180ms]`}>{confirmado.numero}</p>
+          <p className={`mt-3 text-sm text-muted ${ENTRADA_EXITO} delay-[240ms]`}>
             {pagado ? (
               <>
                 Ya cobramos tu pedido. Nos comunicamos con vos para coordinar el{" "}
@@ -428,7 +440,7 @@ export function CheckoutClient({
                 <> Le enviamos el detalle a {emailCliente}.</>
               ))}
           </p>
-          <div className="mt-6 flex justify-center gap-3">
+          <div className={`mt-6 flex justify-center gap-3 ${ENTRADA_EXITO} delay-[300ms]`}>
             <Link href="/mi-cuenta">
               <Button>Ver mis pedidos</Button>
             </Link>

@@ -12,7 +12,7 @@ type Redirects = Awaited<ReturnType<NonNullable<NextConfig["redirects"]>>>;
 describe("REDIRECTS_MI_CUENTA", () => {
   it("se puede devolver tal cual desde redirects() de next.config", () => {
     const comoNext: Redirects = [...REDIRECTS_MI_CUENTA];
-    expect(comoNext).toHaveLength(2);
+    expect(comoNext).toHaveLength(3);
   });
 
   it("?tab=datos → Mis datos, temporal (307)", () => {
@@ -42,8 +42,19 @@ describe("REDIRECTS_MI_CUENTA", () => {
   });
 });
 
+describe("Envíos y retiro se unió a Direcciones", () => {
+  it("/mi-cuenta/envios → /mi-cuenta/direcciones, permanente (308)", () => {
+    const r = REDIRECTS_MI_CUENTA.find((x) => x.source === "/mi-cuenta/envios");
+    expect(r).toEqual({
+      source: "/mi-cuenta/envios",
+      destination: RUTAS_MI_CUENTA.direcciones,
+      permanent: true,
+    });
+  });
+});
+
 describe("next.config.ts activa los redirects de Mi cuenta", () => {
-  it("redirects() devuelve las dos reglas, con su 307/308", async () => {
+  it("redirects() devuelve las reglas, con su 307/308", async () => {
     const { default: nextConfig } = await import("../../next.config");
     expect(nextConfig.redirects).toBeTypeOf("function");
     const reglas = await nextConfig.redirects!();

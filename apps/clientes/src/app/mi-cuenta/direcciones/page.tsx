@@ -1,19 +1,23 @@
 import { redirect } from "next/navigation";
-import { Card, EmptyState } from "@myd-org/ui";
+import { Alert, Card } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
+import { CIUDADES_ENVIO, ENTREGA_LABEL, MINIMO_ENVIO } from "@/lib/envio";
 import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { rutaIngreso } from "@/lib/ingreso";
+import { textoEnvio } from "@/lib/mi-cuenta-copy";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Direcciones, en sólo lectura. El domicilio de facturación se edita en Mis
- * datos; las direcciones de entrega todavía no se guardan (se indican en cada
- * compra, follow-up `direcciones-envio`): se dice así, sin un formulario que
- * no persiste.
+ * Direcciones y envíos (antes dos secciones: Direcciones y Envíos y retiro).
+ * El domicilio de facturación, en sólo lectura y sólo con Clerk, se edita en
+ * Mis datos. Las reglas de entrega (ciudades, mínimo, retiro) salen de
+ * `src/lib/envio.ts`, las mismas que valida el checkout. Las direcciones de
+ * entrega todavía no se guardan: se indican en cada compra (follow-up
+ * `direcciones-envio`), y se dice así, sin un formulario que no persiste.
  */
 export default async function DireccionesPage() {
   const { clerkUserId, cliente } = await identidadActual();
@@ -30,7 +34,7 @@ export default async function DireccionesPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <SeccionTitulo titulo="Direcciones" />
+      <SeccionTitulo titulo="Direcciones y envíos" />
       {clerkUserId && (
         <Card
           title="Domicilio de facturación"
@@ -53,10 +57,19 @@ export default async function DireccionesPage() {
           )}
         </Card>
       )}
-      <EmptyState
-        title="La dirección de entrega se indica en cada compra."
-        description="Pronto podrá guardar direcciones predeterminadas."
-      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card title={ENTREGA_LABEL.envio}>
+          <p className="text-sm text-muted">{textoEnvio(CIUDADES_ENVIO, MINIMO_ENVIO)}</p>
+        </Card>
+        <Card title="Retiro en local">
+          <p className="text-sm text-muted">{ENTREGA_LABEL.retiro}</p>
+        </Card>
+      </div>
+      {/* El DS 0.13 no tiene Alert tone="info": neutral hasta que exista. */}
+      <Alert tone="neutral">
+        La dirección de entrega se indica en cada compra. Para otras localidades, el envío se
+        coordina por separado.
+      </Alert>
     </section>
   );
 }

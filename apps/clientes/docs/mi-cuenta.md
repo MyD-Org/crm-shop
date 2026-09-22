@@ -13,19 +13,20 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 
 | Ruta | Qué muestra |
 |---|---|
-| `/mi-cuenta` | Resumen: tarjetas "Pedidos en curso" y "Productos en el carrito", y los últimos 3 pedidos con "Ver todos". Ninguna llamada a Alegra. |
+| `/mi-cuenta` | Resumen: tarjetas "Pedidos en curso", "Productos en el carrito" y (con Clerk) "Favoritos guardados"; los últimos 3 pedidos y (con Clerk) los 4 favoritos más recientes, cada uno con "Ver todos". Ninguna llamada a Alegra. |
 | `/mi-cuenta/pedidos` | Todos los pedidos (los 50 más recientes). |
 | `/mi-cuenta/pedidos/[id]` | Detalle: seguimiento, entrega, pago, productos y totales. Un id ajeno o que no es uuid da 404 (nunca 403). |
 | `/mi-cuenta/datos` | Datos de acceso (panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente y, sólo con cuenta corriente, el portal del CRM. |
 | `/mi-cuenta/direcciones` | Domicilio de facturación en sólo lectura y un estado vacío honesto para la entrega. |
 | `/mi-cuenta/envios` | Envío a domicilio y retiro, derivado de `src/lib/envio.ts`. |
+| `/mi-cuenta/favoritos` | Favoritos del usuario de Clerk en cards compactas (ver [Favoritos](#favoritos)). |
 | `/mi-cuenta/vincular` | Vinculación con la cuenta de cliente de Alegra (`VincularClient`). |
 
 "Seguridad" y "Cerrar sesión" no son rutas: son acciones de la navegación
 (`openUserProfile` y `signOut` de Clerk). `/mi-cuenta/seguridad` da 404.
 
-Favoritos (`/mi-cuenta/favoritos`) y Facturas (`/mi-cuenta/facturas`) todavía
-no existen: dan 404 y no aparecen en la navegación ni en el menú del header.
+Facturas (`/mi-cuenta/facturas`) todavía no existe: da 404 y no aparece en la
+navegación.
 
 ### Breadcrumb
 
@@ -58,12 +59,12 @@ marca la activa.
 |---|---|
 | Anónimo | Ninguna: redirect al ingreso. |
 | Cookie heredada del CRM, sin Clerk | Pedidos, Envíos y retiro (+ Facturas cuando exista). `/datos` pide iniciar sesión; `/direcciones` sólo muestra el estado vacío. |
-| Clerk sin cuenta vinculada | Pedidos, Direcciones, Envíos y retiro, Mis datos, Seguridad, Cerrar sesión. |
+| Clerk sin cuenta vinculada | Pedidos, Favoritos, Direcciones, Envíos y retiro, Mis datos, Seguridad, Cerrar sesión. |
 | Clerk con cuenta vinculada | Igual, con facturación bloqueada y, si es cuenta corriente, el portal. |
 
-`CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas }`, hoy ambos en `false`)
-enciende cada sección cuando su rebanada la publica: navegación y menú del
-header leen la misma bandera.
+`CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas }`) enciende cada sección
+cuando su rebanada la publica: navegación y menú del header leen la misma
+bandera. `favoritos` está encendida.
 
 ## Estado y seguimiento del pedido
 
@@ -83,6 +84,56 @@ header leen la misma bandera.
   (`getProductosPorIds`, sin filtro de visibilidad): un producto despublicado
   sigue mostrando su nombre en un pedido viejo.
 
+## Favoritos
+
+Guardados por usuario de Clerk. Quien entra sólo con la cookie del CRM no
+tiene dónde guardarlos: no ve el corazón y `/mi-cuenta/favoritos` le pide
+iniciar sesión.
+
+**Tabla** `shop.favorites` (migración `0002_favoritos`): `tenant_id`,
+`clerk_user_id`, `alegra_item_id`, `created_at`. Unique por
+(tenant, usuario, ítem), que hace idempotente el alta, e índice por
+(tenant, usuario, fecha) para el "más nuevo primero". Sin FK a
+`catalog_products` (el espejo lo reescribe la sync) ni a `public`. Aplicarla a
+mano en producción **antes** de desplegar: ver el runbook en
+[`una-base-esquema-shop.md`](./una-base-esquema-shop.md#migraciones-posteriores-a-la-baseline).
+
+**Servidor** (`src/lib/favoritos.ts`): toda consulta filtra por el tenant del
+entorno y el usuario. Tope de **200** por usuario: un ítem nuevo por encima
+lanza `FavoritosLlenosError`; volver a guardar uno existente no falla. La
+lista sale del espejo del catálogo con el precio de la lista del cliente y sin
+filtro de visibilidad; los ids que el espejo ya no tiene se omiten, así que la
+lista puede tener menos productos que filas (el contador cuenta filas).
+
+**API** `/api/mi-cuenta/favoritos` (dinámica, `Cache-Control: private,
+no-store`, sólo Clerk):
+
+| Método | Body | Respuesta |
+|---|---|---|
+| `GET` | — | `200 { ids }` del más nuevo al más viejo |
+| `PUT` | `{ alegraItemId }` | `200 { ok: true }` (idempotente) |
+| `DELETE` | `{ alegraItemId }` | `200 { ok: true }` (idempotente) |
+
+Errores: `401 { error: "No autorizado" }` sin sesión de Clerk; `400 { error:
+"Indique el producto." }` si el id falta, no es string o pasa de 64
+caracteres; `422 { error: "Alcanzó el máximo de 200 favoritos." }`; `429`
+pasadas 60 solicitudes por minuto por usuario (`favoritos:clerk:<id>`, en
+memoria de la instancia como el resto de `rate-limit.ts`).
+
+**Cliente**: `FavoritosProvider` (`src/context/FavoritosContext.tsx`, dentro de
+`Providers`) hace un GET al montar con sesión y expone `ready`, `disponible`,
+`count`, `esFavorito` y `toggle`. El toggle es optimista: si la API falla,
+revierte y muestra un toast en usted; un 401 revierte y abre el ingreso.
+Anónimo: el corazón abre el modal de Clerk y no llama a la API (no se recuerda
+el intento). `src/app/layout.tsx` le pasa `favoritosBloqueados` (cookie del CRM
+sin Clerk), resuelto con `identidadActual()` en `cache()`. La lógica pura está
+en `src/lib/favoritos-cliente.ts`.
+
+**Corazón** (`BotonFavorito`, `ToggleIconButton` del DS): en
+`ProductCard.cornerAction` del catálogo y de la home (ahí con `dentroDeLink`,
+porque la card está envuelta en un `<Link>`), en la ficha junto a "Agregar al
+carrito" y en las cards de favoritos. Neutro y `aria-disabled` hasta `ready`.
+
 ## Componentes: servidor y cliente
 
 `@myd-org/ui` se publica con `"use client"`. Un componente de servidor puede
@@ -95,8 +146,8 @@ servidor está `BotonEnlace` (`Button` con `href` + `next/link`).
 ## Guarda anti-literales
 
 `src/components/mi-cuenta/sin-literales.test.ts` lee como texto
-`src/components/mi-cuenta/**`, `src/app/mi-cuenta/**` (y `BotonFavorito.tsx`
-cuando exista) y falla ante valores arbitrarios (`[16rem]`), `clamp(`,
+`src/components/mi-cuenta/**`, `src/app/mi-cuenta/**` y
+`src/components/BotonFavorito.tsx`, y falla ante valores arbitrarios (`[16rem]`), `clamp(`,
 colores de la paleta o literales, overrides `[&_…]`, `style={}` o constantes
 de clases; también ante voseo o tuteo en el texto y ante un `<h1>` fuera del
 shell. Lo que el DS no tenga se agrega al DS, no como excepción.
@@ -110,4 +161,5 @@ shell. Lo que el DS no tenga se agrega al DS, no como excepción.
 - `direcciones-envio`: direcciones de entrega guardadas y precarga en el
   checkout.
 - Congelar el nombre real del producto en `order_items` al crear el pedido.
+- Favoritos de anónimos guardados en el navegador y fusionados al ingresar.
 - DS: `Alert` con tono `info` (hoy "Envíos y retiro" usa `neutral`).

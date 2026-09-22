@@ -10,8 +10,14 @@ import {
 import * as menu from "./menu-usuario";
 
 describe("menu del usuario", () => {
-  it("ofrece las cuatro entradas en orden, con Cerrar sesión al final", () => {
-    expect(ENTRADAS_MENU.map((e) => e.id)).toEqual(["pedidos", "datos", "seguridad", "salir"]);
+  it("ofrece las cinco entradas en orden, con Cerrar sesión al final", () => {
+    expect(ENTRADAS_MENU.map((e) => e.id)).toEqual([
+      "pedidos",
+      "favoritos",
+      "datos",
+      "seguridad",
+      "salir",
+    ]);
     expect(ENTRADAS_MENU.at(-1)).toMatchObject({ id: "salir", tone: "danger" });
   });
 
@@ -37,14 +43,17 @@ describe("menu del usuario", () => {
 });
 
 describe("Favoritos en el menú, detrás de la capacidad de despliegue", () => {
-  it("apagada (hoy): el menú queda igual que antes", () => {
+  it("apagada: el menú no ofrece Favoritos", () => {
     expect(entradasMenu({ favoritos: false, facturas: false }).map((e) => e.id)).toEqual([
       "pedidos",
       "datos",
       "seguridad",
       "salir",
     ]);
-    expect(ENTRADAS_MENU).toEqual(entradasMenu({ favoritos: false, facturas: false }));
+  });
+
+  it("el menú del despliegue actual es el de la capacidad encendida", () => {
+    expect(ENTRADAS_MENU).toEqual(entradasMenu({ favoritos: true, facturas: false }));
   });
 
   it("encendida: Favoritos va entre Mis pedidos y Mis datos, como en la navegación", () => {

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Badge, ProductCard, cn } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
+import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import type { Product } from "@/data/products";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
@@ -59,6 +60,8 @@ export function CatalogoProductos({
           price={p.precioFinal ?? p.price}
           oldPrice={p.oldPrice}
           badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
+          // El slot queda fuera del enlace estirado de la card: no navega.
+          cornerAction={<BotonFavorito productId={p.id} />}
           // Portada del overlay del CRM si hay una servible (host en
           // SHOP_MEDIA_HOSTS); si no, el placeholder.
           image={

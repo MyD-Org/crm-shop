@@ -23,6 +23,28 @@ const JOURNAL = `${DRIZZLE_DIR}/meta/_journal.json`;
 
 const leerBaseline = () => readFileSync(BASELINE, "utf8");
 
+/** Nombres de las tablas que crea la baseline (sin el esquema). */
+function tablasDeLaBaseline(): Set<string> {
+  const nombres = [...leerBaseline().matchAll(/^CREATE TABLE "shop"\."([^"]+)"/gm)].map(
+    (m) => m[1],
+  );
+  return new Set(nombres);
+}
+
+/**
+ * Qué viola una migración posterior a la baseline: recrear una tabla de la
+ * baseline o crear una tabla fuera del esquema `shop`. Devuelve las líneas.
+ */
+function infraccionesMigracion(sql: string, tablasBaseline: Set<string>): string[] {
+  return sql
+    .split("\n")
+    .filter((l) => l.includes("CREATE TABLE"))
+    .filter((l) => {
+      const m = l.match(/^CREATE TABLE "shop"\."([^"]+)"/);
+      return !m || tablasBaseline.has(m[1]);
+    });
+}
+
 describe("baseline del esquema shop (estático)", () => {
   it("la baseline es la primera migración y las siguientes son incrementales", () => {
     const sqls = readdirSync(DRIZZLE_DIR)
@@ -39,11 +61,44 @@ describe("baseline del esquema shop (estático)", () => {
     expect(journal.entries.map((e) => `${e.tag}.sql`)).toEqual(sqls);
     expect(journal.entries.map((e) => e.idx)).toEqual(sqls.map((_, i) => i));
 
-    // Nada después de la baseline vuelve a crear tablas: la baseline ya está
-    // aplicada en producción y solo se puede sumar por ALTER.
+    // Nada después de la baseline vuelve a crear una tabla de la baseline (ya
+    // está aplicada en producción: esas tablas sólo cambian por ALTER), y toda
+    // tabla nueva vive en el esquema `shop` (`public` es del CRM).
+    const tablasBaseline = tablasDeLaBaseline();
     for (const f of sqls.slice(1)) {
-      expect(readFileSync(`${DRIZZLE_DIR}/${f}`, "utf8")).not.toContain("CREATE TABLE");
+      const sql = readFileSync(`${DRIZZLE_DIR}/${f}`, "utf8");
+      expect(infraccionesMigracion(sql, tablasBaseline), f).toEqual([]);
     }
+  });
+
+  it("la guarda de migraciones posteriores atrapa lo que debe atrapar", () => {
+    const tablas = tablasDeLaBaseline();
+    // Recrear una tabla de la baseline.
+    expect(infraccionesMigracion('CREATE TABLE "shop"."orders" (\n);', tablas)).toHaveLength(1);
+    // Crear una tabla fuera del esquema del Shop (calificada o sin calificar).
+    expect(infraccionesMigracion('CREATE TABLE "public"."x" (\n);', tablas)).toHaveLength(1);
+    expect(infraccionesMigracion('CREATE TABLE "x" (\n);', tablas)).toHaveLength(1);
+    // Una tabla nueva del Shop y un ALTER pasan.
+    expect(infraccionesMigracion('CREATE TABLE "shop"."nueva" (\n);', tablas)).toEqual([]);
+    expect(
+      infraccionesMigracion('ALTER TABLE "shop"."orders" ADD COLUMN "x" text;', tablas),
+    ).toEqual([]);
+  });
+
+  it("0002 crea shop.favorites con unique por tenant/usuario/ítem", () => {
+    const sql = readFileSync(`${DRIZZLE_DIR}/0002_favoritos.sql`, "utf8");
+    expect(sql).toContain('CREATE TABLE "shop"."favorites"');
+    expect(sql).toContain('"tenant_id" text NOT NULL');
+    expect(sql).toContain('"clerk_user_id" text NOT NULL');
+    expect(sql).toContain('"alegra_item_id" text NOT NULL');
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX "fav_tenant_usuario_item" ON "shop"\."favorites" USING btree \("tenant_id","clerk_user_id","alegra_item_id"\)/,
+    );
+    expect(sql).toMatch(
+      /CREATE INDEX "fav_tenant_usuario_fecha" ON "shop"\."favorites" USING btree \("tenant_id","clerk_user_id","created_at"\)/,
+    );
+    // Sin FK: el espejo del catálogo se recrea por sync y `public` es del CRM.
+    expect(sql).not.toContain("REFERENCES");
   });
 
   it("0001 agrega el teléfono de contacto al perfil de facturación", () => {

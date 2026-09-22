@@ -241,15 +241,23 @@ motivo, y confirmar que el cliente ve el nuevo estado en "Mis compras".
 La baseline ya está aplicada en producción: todo cambio de esquema del Shop se
 suma como una migración incremental (`ALTER`), nunca regenerando la baseline.
 `src/db/baseline.test.ts` controla que cada `.sql` tenga su entrada en el
-journal y que ninguna migración posterior vuelva a crear tablas.
+journal, que ninguna migración posterior recree tablas de la baseline y que
+toda tabla nueva viva en el esquema `shop` (nunca en `public`).
 
 | Migración | Qué hace | Cuándo aplicarla |
 |---|---|---|
 | `0001_telefono_contacto` | `billing_profiles.telefono` (teléfono de contacto que el checkout precarga) | **Antes** de desplegar el código que la usa: el Shop selecciona la columna al leer el perfil y sin ella cae el checkout y Mis datos. |
+| `0002_favoritos` | `shop.favorites` (favoritos de Mi cuenta: tenant, usuario de Clerk e ítem, con unique por los tres) | **Antes** de mergear y desplegar la rebanada de favoritos: el Shop la lee en el resumen de Mi cuenta, en `/mi-cuenta/favoritos` y en la API del corazón (catálogo, home y ficha). |
 
 El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
 `MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
 `shop.__drizzle_migrations` tiene una fila más.
+
+Rollback de `0002_favoritos` (sólo si hay que retroceder la base; revertir el
+código alcanza, la tabla sin lectores es inofensiva): a mano y dejándolo
+registrado, `DROP TABLE "shop"."favorites";` y borrar la fila de
+`0002_favoritos` en `shop.__drizzle_migrations` (la de `created_at` más
+reciente), para que un próximo `db:migrate` la vuelva a aplicar.
 
 Las tablas que suma Mi cuenta (favoritos) y cómo las usan sus rutas están en
 [`docs/mi-cuenta.md`](./mi-cuenta.md).

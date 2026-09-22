@@ -11,6 +11,7 @@ import {
   ServiceCard,
 } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
+import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { Reveal } from "@/components/Reveal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
@@ -199,6 +200,8 @@ export function HomeClient({
                       price={p.precioFinal ?? p.price}
                       oldPrice={p.oldPrice}
                       badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
+                      // La card entera es un <Link>: el corazón corta la navegación.
+                      cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
                       image={
                         imagen ? (
                           <Image

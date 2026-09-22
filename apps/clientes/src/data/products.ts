@@ -1,6 +1,18 @@
 import type { ProductStock } from "@myd-org/ui";
 
 /**
+ * Foto de un producto, cargada en el overlay del CRM. Estructuralmente igual a
+ * `FotoOverlay` de src/db/schema.ts, pero propia: este archivo lo importan
+ * componentes cliente y no debe arrastrar el esquema de la base.
+ */
+export interface ProductImage {
+  url: string;
+  /** Ancho original en px. */
+  w: number;
+  alt?: string;
+}
+
+/**
  * Forma de producto que renderiza el shop. Se construye a partir de un item de
  * Alegra en src/lib/catalog.ts — no hay catalogo hardcodeado.
  *
@@ -29,6 +41,11 @@ export interface Product {
   description?: string;
   /** Categoria del item en Alegra (itemCategory.name). */
   category?: string;
+  /**
+   * Fotos del overlay del CRM (portada = [0]), ya filtradas a los hosts de
+   * medios permitidos (ver src/lib/catalogo-medios.ts). undefined = sin fotos.
+   */
+  images?: ProductImage[];
   oldPrice?: number;
   discount?: string;
   badgeTone?: "danger" | "info" | "warning" | "neutral";

@@ -63,17 +63,6 @@ export function IconoPin({ size }: { size?: number }) {
   );
 }
 
-export function IconoCamion({ size }: { size?: number }) {
-  return (
-    <Svg size={size}>
-      <path d="M1 4h14v12H1z" />
-      <path d="M15 8h4l3 3v5h-7V8Z" />
-      <circle cx="5.5" cy="18.5" r="2" />
-      <circle cx="18.5" cy="18.5" r="2" />
-    </Svg>
-  );
-}
-
 export function IconoPersona({ size }: { size?: number }) {
   return (
     <Svg size={size}>
@@ -158,7 +147,6 @@ export const ICONOS_SECCION: Record<IdSeccion, ReactNode> = {
   facturas: <IconoFactura />,
   favoritos: <IconoCorazon />,
   direcciones: <IconoPin />,
-  envios: <IconoCamion />,
   datos: <IconoPersona />,
   seguridad: <IconoEscudo />,
   salir: <IconoSalir />,

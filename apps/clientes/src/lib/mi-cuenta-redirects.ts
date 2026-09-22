@@ -7,6 +7,8 @@
  *   la ignora.
  * - `/mi-cuenta/pedido/:id` → `/mi-cuenta/pedidos/:id`, permanente (308), sin
  *   consultar la base: el dueño se valida en el destino.
+ * - `/mi-cuenta/envios` → `/mi-cuenta/direcciones`, permanente (308): Envíos y
+ *   retiro se unió a Direcciones en una sola sección.
  *
  * Los activa `next.config.ts` (`redirects`). Import relativo y sin alias `@/`
  * porque lo importa `next.config.ts`.
@@ -30,6 +32,11 @@ export const REDIRECTS_MI_CUENTA: readonly RedirectMiCuenta[] = [
   {
     source: "/mi-cuenta/pedido/:id",
     destination: hrefPedido(":id"),
+    permanent: true,
+  },
+  {
+    source: "/mi-cuenta/envios",
+    destination: RUTAS_MI_CUENTA.direcciones,
     permanent: true,
   },
 ];

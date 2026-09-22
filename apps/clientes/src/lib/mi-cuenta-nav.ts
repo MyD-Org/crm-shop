@@ -15,7 +15,6 @@ export const RUTAS_MI_CUENTA = {
   facturas: "/mi-cuenta/facturas",
   favoritos: "/mi-cuenta/favoritos",
   direcciones: "/mi-cuenta/direcciones",
-  envios: "/mi-cuenta/envios",
   datos: "/mi-cuenta/datos",
   vincular: "/mi-cuenta/vincular",
 } as const;
@@ -64,7 +63,6 @@ export type IdSeccion =
   | "facturas"
   | "favoritos"
   | "direcciones"
-  | "envios"
   | "datos"
   | "seguridad"
   | "salir";
@@ -81,7 +79,12 @@ interface DefinicionSeccion extends SeccionMiCuenta {
   visible: (c: Capacidades, d: CapacidadesDespliegue) => boolean;
 }
 
-/** En el orden del mockup. Cookie del CRM sin Clerk: Pedidos, Facturas, Envíos. */
+/**
+ * En el orden del mockup, con Direcciones y Envíos y retiro unidas en una
+ * sola sección. Cookie del CRM sin Clerk: Pedidos, Facturas, Direcciones y
+ * envíos (la página muestra las reglas de envío; el domicilio fiscal sólo con
+ * Clerk).
+ */
 const SECCIONES: readonly DefinicionSeccion[] = [
   { id: "pedidos", label: "Pedidos", href: RUTAS_MI_CUENTA.pedidos, visible: () => true },
   // Sin vínculo también se ve: la página ofrece vincular la cuenta.
@@ -92,8 +95,12 @@ const SECCIONES: readonly DefinicionSeccion[] = [
     href: RUTAS_MI_CUENTA.favoritos,
     visible: (c, d) => c.clerk && d.favoritos,
   },
-  { id: "direcciones", label: "Direcciones", href: RUTAS_MI_CUENTA.direcciones, visible: (c) => c.clerk },
-  { id: "envios", label: "Envíos y retiro", href: RUTAS_MI_CUENTA.envios, visible: () => true },
+  {
+    id: "direcciones",
+    label: "Direcciones y envíos",
+    href: RUTAS_MI_CUENTA.direcciones,
+    visible: () => true,
+  },
   { id: "datos", label: "Mis datos", href: RUTAS_MI_CUENTA.datos, visible: (c) => c.clerk },
   { id: "seguridad", label: "Seguridad", visible: (c) => c.clerk },
   { id: "salir", label: "Cerrar sesión", tone: "danger", visible: (c) => c.clerk },
@@ -126,7 +133,6 @@ export function seccionActiva(pathname: string): IdSeccion {
     case "facturas":
     case "favoritos":
     case "direcciones":
-    case "envios":
     case "datos":
       return seccion;
     case "vincular":
@@ -147,8 +153,7 @@ const LABEL_SECCION: Record<string, string> = {
   pedidos: "Pedidos",
   facturas: "Facturas",
   favoritos: "Favoritos",
-  direcciones: "Direcciones",
-  envios: "Envíos y retiro",
+  direcciones: "Direcciones y envíos",
   datos: "Mis datos",
 };
 

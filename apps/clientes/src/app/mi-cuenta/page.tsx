@@ -4,6 +4,7 @@ import { MisCompras } from "@/components/MisCompras";
 import { identidadActual } from "@/lib/auth";
 import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { listarPedidos, resumenPedidos } from "@/lib/pedidos";
+import { pagosHabilitados } from "@/lib/pagos-flag";
 
 // Los pedidos cambian con cada compra: nunca prerenderizar esta página.
 export const dynamic = "force-dynamic";
@@ -41,6 +42,8 @@ export default async function MiCuentaPage() {
           perfilFacturacion={perfilFacturacion}
           pedidos={pedidos}
           resumen={resumen}
+          // El flag se lee acá, en el server: al cliente le llega el booleano.
+          pagosHabilitados={pagosHabilitados()}
         />
       </main>
     </>

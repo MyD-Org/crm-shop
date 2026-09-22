@@ -42,6 +42,10 @@ vi.mock("@/lib/facturacion", async (original) => ({
 }));
 vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: () => getOferta() }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
+// Estos tests son del flujo CON cobros: corren con los pagos prendidos, que es
+// cómo se comportaba la ruta antes del flag de pagos. El flag apagado se prueba
+// aparte, en route.pagos-flag.test.ts.
+vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
 
 import { POST } from "./route";
 

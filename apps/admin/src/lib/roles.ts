@@ -13,6 +13,17 @@ export function roleRank(role: string): number {
   return RANK[role as AdminRole] ?? 0
 }
 
+/**
+ * ¿Es uno de los tres roles que existen? Para las secciones abiertas "desde operator".
+ *
+ * No alcanza con `roleRank(role) >= 0`: `roleRank` manda todo rol DESCONOCIDO a 0 (el mismo
+ * rango que operator), así que esa cuenta dejaría pasar cualquier string que aparezca en
+ * `admin_users.role` (la columna es `text`, sin CHECK). Acá la lista es explícita.
+ */
+export function isKnownAdminRole(role: string): role is AdminRole {
+  return Object.hasOwn(RANK, role)
+}
+
 // ¿Puede entrar a la gestión de usuarios? admin y superadmin.
 export function canManageUsers(role: string): boolean {
   return roleRank(role) >= RANK.admin

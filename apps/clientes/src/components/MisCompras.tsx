@@ -20,6 +20,7 @@ import {
   yaUsaDireccion,
 } from "@/lib/direccion-envio";
 import { tabInicial, type TabMiCuenta } from "@/lib/menu-usuario";
+import { ocultarEstadoPago } from "@/lib/pago-estado-visible";
 import { FacturacionForm, type PerfilFacturacionUI } from "./FacturacionForm";
 import { DireccionAutocomplete } from "./DireccionAutocomplete";
 
@@ -97,7 +98,13 @@ function EstadoPill({ estado }: { estado: OrderEstado }) {
 
 /* ── Order card ────────────────────────────────────────── */
 
-function OrderCard({ order }: { order: Order }) {
+function OrderCard({
+  order,
+  pagosHabilitados,
+}: {
+  order: Order;
+  pagosHabilitados: boolean;
+}) {
   // El total sale del pedido, no de sumar las líneas: es el número congelado
   // que se le prometió al cliente, con su IVA real y su envío.
   const unidades = order.items.reduce((acc, i) => acc + i.qty, 0);
@@ -128,7 +135,10 @@ function OrderCard({ order }: { order: Order }) {
           <span className="text-xs text-muted">{fmtFecha(order.fecha)}</span>
         </div>
         <div className="flex items-center gap-2">
-          {order.pagoEstado !== "pagado" && (
+          {/* Con los pagos apagados "Pago pendiente" no se muestra: el pago se
+              coordina por fuera y la etiqueta sólo confunde. */}
+          {order.pagoEstado !== "pagado" &&
+            !ocultarEstadoPago(order.pagoEstado, pagosHabilitados) && (
             <span className="rounded-full bg-elevated px-2.5 py-1 text-xs font-semibold text-muted">
               {PAGO_ESTADO_LABEL[order.pagoEstado]}
             </span>
@@ -215,6 +225,7 @@ export function MisCompras({
   razonSocialVinculada,
   perfilFacturacion,
   pedidos,
+  pagosHabilitados,
 }: {
   nombre: string;
   cuit?: string;
@@ -229,6 +240,11 @@ export function MisCompras({
   razonSocialVinculada?: string;
   /** Pedidos reales del cliente, cargados en el servidor. */
   pedidos: Order[];
+  /**
+   * Flag de pagos (src/lib/pagos-flag.ts) resuelto en el server (este componente es de cliente y
+   * no puede leer el env). Apagado: no se muestra "Pago pendiente".
+   */
+  pagosHabilitados: boolean;
   /** Resumen anual: hoy no se muestra, se conserva por si se vuelve a exponer. */
   resumen?: OrderSummary;
 }) {
@@ -285,7 +301,7 @@ export function MisCompras({
         ))}
       </div>
 
-      {tab === "compras" && <ComprasTab pedidos={pedidos} />}
+      {tab === "compras" && <ComprasTab pedidos={pedidos} pagosHabilitados={pagosHabilitados} />}
       {tab === "datos" && (
         <DatosTab
           cuit={cuit}
@@ -300,7 +316,13 @@ export function MisCompras({
 
 /* ── Tab: Mis pedidos ──────────────────────────────────── */
 
-function ComprasTab({ pedidos }: { pedidos: Order[] }) {
+function ComprasTab({
+  pedidos,
+  pagosHabilitados,
+}: {
+  pedidos: Order[];
+  pagosHabilitados: boolean;
+}) {
   return (
     <div className="flex flex-col gap-6">
       {/* Lista de pedidos */}
@@ -314,7 +336,11 @@ function ComprasTab({ pedidos }: { pedidos: Order[] }) {
       ) : (
         <div className="flex flex-col gap-4">
           {pedidos.map((order) => (
-            <OrderCard key={order.id} order={order} />
+            <OrderCard
+              key={order.id}
+              order={order}
+              pagosHabilitados={pagosHabilitados}
+            />
           ))}
         </div>
       )}

@@ -5,6 +5,7 @@ import {
   chipsActivos,
   contadorProductos,
   contarFiltrosActivos,
+  etiquetaBotonFiltros,
   etiquetaStock,
   fmtPesos,
   hayFiltros,
@@ -242,5 +243,15 @@ describe("itemsDeFaceta", () => {
   it("no duplica un tildado que la faceta sí trae", () => {
     const items = itemsDeFaceta(facetas, ["ELECTRICIDAD"]);
     expect(items.filter((i) => i.label === "ELECTRICIDAD")).toHaveLength(1);
+  });
+});
+
+describe("etiquetaBotonFiltros", () => {
+  it("scenario MOB-1: con filtros activos lleva el conteo", () => {
+    expect(etiquetaBotonFiltros(5)).toBe("Filtros (5)");
+  });
+
+  it("sin filtros es sólo \"Filtros\"", () => {
+    expect(etiquetaBotonFiltros(0)).toBe("Filtros");
   });
 });

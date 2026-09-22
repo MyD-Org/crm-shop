@@ -68,6 +68,10 @@ export function ProductoClient({
 
   const estado = ESTADO_STOCK[producto.stock];
   const agotado = producto.stock === "out";
+  // Un ítem sin precio en Alegra llega a 0: nunca se ofrece a la venta (ver
+  // `conPrecioSql` en src/lib/catalog.ts). La ficha se lee en vivo, así que el
+  // filtro de los listados no la cubre y hay que cortar acá también.
+  const sinPrecio = !(producto.price > 0);
 
   return (
     <>
@@ -118,8 +122,14 @@ export function ProductoClient({
 
             {/* Card de precio */}
             <div className="rounded-[24px] border border-border bg-surface p-6">
-              <PrecioConImpuestos price={producto.price} precioFinal={producto.precioFinal} />
-              {mejorCuota && oferta && producto.precioFinal != null && (
+              {sinPrecio ? (
+                <p className="text-lg font-semibold text-muted">
+                  Precio no disponible. Consulte por WhatsApp o por teléfono.
+                </p>
+              ) : (
+                <PrecioConImpuestos price={producto.price} precioFinal={producto.precioFinal} />
+              )}
+              {!sinPrecio && mejorCuota && oferta && producto.precioFinal != null && (
                 <div className="mt-3 border-t border-border pt-3">
                   <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />
                   <MediosDePagoModal
@@ -148,11 +158,11 @@ export function ProductoClient({
               <QuantityStepper value={qty} onValueChange={setQty} min={1} max={999} />
               <Button
                 onClick={() => addItem(producto, qty)}
-                disabled={agotado}
+                disabled={agotado || sinPrecio}
                 className="flex flex-1 items-center justify-center gap-2"
               >
                 <CartIcon />
-                {agotado ? "Sin stock" : "Agregar al carrito"}
+                {sinPrecio ? "Consulte el precio" : agotado ? "Sin stock" : "Agregar al carrito"}
               </Button>
             </div>
           </div>

@@ -184,6 +184,7 @@ export async function getCatalogo(opts?: {
     .where(
       and(
         eq(catalogProducts.status, "active"),
+        conPrecioSql,
         q ? coincideTexto(q) : undefined
       )
     )
@@ -255,6 +256,14 @@ const precioSql = sql<string>`coalesce(
 const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${catalogProducts.ivaPorcentaje}, 0) / 100)`;
 
 /**
+ * Sólo productos con precio. Un ítem sin precio en Alegra resuelve a 0 en
+ * `precioSql`; listarlo lo mostraría a "$ 0" con botón de comprar y la venta
+ * saldría a precio cero. El control de fondo es la visibilidad del overlay del
+ * CRM; esto es la red de seguridad del Shop para todo listado público.
+ */
+const conPrecioSql = sql`${precioSql} > 0`;
+
+/**
  * WHERE compartido por la página, el conteo y las facetas.
  *
  * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
@@ -267,6 +276,7 @@ function condicionesDe(
   const q = filtros.busqueda?.trim();
   return and(
     eq(catalogProducts.status, "active"),
+    conPrecioSql,
     q ? coincideTexto(q) : undefined,
     aplicar.categorias && filtros.categorias?.length
       ? inArray(catalogCategories.name, filtros.categorias)

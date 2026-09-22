@@ -306,8 +306,8 @@ function PorQueNoSePublica({ producto, sincronizacion }: { producto: ProductoDto
         </ul>
       )}
       <p className="mt-2 text-xs" style={{ color: "var(--ink-faint)" }}>
-        Esta evaluación es orientativa: la tienda vuelve a evaluarla sobre su propia copia y puede tardar en reflejar los
-        cambios. Último aviso entregado a la tienda: {fmtFechaHora(sincronizacion.avisoShop.ultimoOkAt)}.
+        Esta evaluación es orientativa: la tienda la vuelve a hacer con el precio y el stock de su propia sincronización
+        con Alegra. Último aviso entregado a la tienda: {fmtFechaHora(sincronizacion.avisoShop.ultimoOkAt)}.
       </p>
     </section>
   )

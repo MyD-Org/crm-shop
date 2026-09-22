@@ -15,9 +15,8 @@ import {
   type NodoCategoria,
 } from "./catalogo-overlay"
 
-// Lógica pura del catálogo comercial. La tabla de casos de motivoNoPublicado() es copia de la
-// del contrato (platform/contracts/catalogo-overlay/v1): es lo que prueba la paridad con el
-// Shop sin levantar los dos repos.
+// Lógica pura del catálogo comercial. La tabla de casos de motivoNoPublicado() es la regla de
+// publicado que el Shop replica sobre su espejo de Alegra.
 
 describe("slugify", () => {
   it("saca acentos, baja a minúsculas y colapsa separadores", () => {

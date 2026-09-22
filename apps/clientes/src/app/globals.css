@@ -46,6 +46,30 @@ body {
   display: none;
 }
 
+/* El SiteHeader del DS apila logo, buscador y acciones (usuario/carrito) en
+   una sola columna por debajo de `lg`, así que las acciones terminan abajo
+   de todo. Se pide que usuario/carrito queden arriba, a la altura del logo
+   y en la otra punta. Se sobreescribe el grid con selectores más específicos
+   que las utilidades `max-lg:*` del propio DS (misma técnica que el bloque
+   de arriba para el nav). */
+@media (max-width: 1023.98px) {
+  .site-header > div:first-child {
+    grid-template-columns: 1fr auto;
+  }
+  .site-header > div:first-child > :nth-child(1) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .site-header > div:first-child > :nth-child(2) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .site-header > div:first-child > :nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
 /* Marca ("Led") con un solo color por tema: el acento. El DS la pinta en
    highlight; se alinea acá hasta que el DS lo resuelva.
    - Header (fondo claro): el acento tal cual.

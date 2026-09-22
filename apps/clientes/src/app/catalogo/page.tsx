@@ -1,14 +1,14 @@
+import type { Metadata } from "next";
 import { getFacetas, getPaginaCatalogo } from "@/lib/catalog";
-import { leerEstado, type ParamCrudo } from "@/lib/catalogo-url";
+import { hrefCanonico, leerEstado, type ParamCrudo } from "@/lib/catalogo-url";
+import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
 // Lee el espejo local del catálogo en cada request (lo refresca el cron diario).
 export const dynamic = "force-dynamic";
 
-export default async function CatalogoPage({
-  searchParams,
-}: {
+type Props = {
   searchParams: Promise<{
     q?: ParamCrudo;
     categoria?: ParamCrudo;
@@ -20,7 +20,28 @@ export default async function CatalogoPage({
     stock?: ParamCrudo;
     vista?: ParamCrudo;
   }>;
-}) {
+};
+
+/**
+ * SEO de las combinaciones de filtros. Indexan `/catalogo`, una categoría y
+ * sus páginas; el resto queda `noindex, follow` (ver `indexable`).
+ *
+ * El `canonical` necesita una URL absoluta, que sale del `metadataBase` del
+ * layout (`NEXT_PUBLIC_SITE_URL`). Sin esa variable se omite: un canonical
+ * relativo sin base rompe el build y uno resuelto contra localhost es peor
+ * que ninguno.
+ */
+export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+  const estado = leerEstado(await searchParams);
+  return {
+    robots: { index: indexable(estado), follow: true },
+    ...(process.env.NEXT_PUBLIC_SITE_URL
+      ? { alternates: { canonical: hrefCanonico(estado) } }
+      : {}),
+  };
+}
+
+export default async function CatalogoPage({ searchParams }: Props) {
   const estado = leerEstado(await searchParams);
 
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide

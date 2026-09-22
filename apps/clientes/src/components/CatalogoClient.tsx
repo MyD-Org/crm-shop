@@ -1,52 +1,28 @@
 "use client";
 
 import { useMemo, useTransition } from "react";
-import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Badge, Checkbox, Chip, ProductCard, Select } from "@myd-org/ui";
-import { AddToCartButton } from "@/components/AddToCartButton";
-import { CuotasCard } from "@/components/CuotasCard";
+import { Button, EmptyState, Pagination } from "@myd-org/ui";
+import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
+import { CatalogoEncabezado } from "@/components/catalogo/CatalogoEncabezado";
+import { CatalogoFiltros } from "@/components/catalogo/CatalogoFiltros";
+import { CatalogoProductos } from "@/components/catalogo/CatalogoProductos";
+import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import type { Facetas } from "@/lib/catalog";
-import {
-  hrefCon,
-  paginasVisibles,
-  type EstadoCatalogo,
-  type OrdenCatalogo,
-} from "@/lib/catalogo-url";
+import { hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
+import { anuncioResultados, hayFiltros, limpiarFiltros } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
-import { formatRubro } from "@/lib/formato-rubro";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
-/** Precio principal que ve el visitante: final con IVA si se conoce, si no el de siempre. */
-const precioExhibido = (p: Product) => p.precioFinal ?? p.price;
-
-/** Placeholder de imagen: mismo foco que usa la home. */
-function LightbulbIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 18h6" />
-      <path d="M10 22h4" />
-      <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
-    </svg>
-  );
-}
-
-// Sin "Más vendidos": nunca hubo un dato de ventas detrás (ordenaba por nombre).
-const SORT_OPTIONS: { label: string; value: OrdenCatalogo }[] = [
-  { label: "Nombre A-Z", value: "nombre" },
-  { label: "Precio: menor a mayor", value: "precio-asc" },
-  { label: "Precio: mayor a menor", value: "precio-desc" },
-];
-
 /**
- * UI del catálogo (filtros, orden, paginación).
+ * UI del catálogo: filtros, encabezado, chips, productos y paginación, todo
+ * con componentes de `@myd-org/ui` (ver src/components/catalogo/).
  *
- * El filtrado, el orden y el conteo ya NO pasan por acá: los resuelve Postgres
- * y llegan resueltos desde `catalogo/page.tsx`. Este componente sólo traduce lo
- * que toca el visitante a una URL nueva, porque el estado del catálogo vive en
- * la query string (ver src/lib/catalogo-url.ts).
+ * El filtrado, el orden y el conteo NO pasan por acá: los resuelve Postgres
+ * y llegan resueltos desde `catalogo/page.tsx`. Este componente sólo traduce
+ * lo que toca el visitante a una URL nueva, porque el estado del catálogo
+ * vive en la query string (ver src/lib/catalogo-url.ts).
  */
 export function CatalogoClient({
   productos,
@@ -59,7 +35,7 @@ export function CatalogoClient({
   /** Sólo la página actual, nunca el catálogo entero. */
   productos: Product[];
   facetas: Facetas;
-  /** Filtros, orden y página vigentes, tal como los leyó el servidor. */
+  /** Filtros, orden, vista y página vigentes, tal como los leyó el servidor. */
   estado: EstadoCatalogo;
   /** Productos que cumplen los filtros, más allá de esta página. */
   total: number;
@@ -72,7 +48,7 @@ export function CatalogoClient({
   // en vez de quedarse muda.
   const [navegando, startTransition] = useTransition();
 
-  const ir = (cambios: Parameters<typeof hrefCon>[1]) =>
+  const ir = (cambios: Partial<EstadoCatalogo>) =>
     startTransition(() => router.push(hrefCon(estado, cambios)));
 
   // Mejor opción de cuotas por producto, sobre su precio final unitario.
@@ -86,270 +62,62 @@ export function CatalogoClient({
     return m;
   }, [productos, oferta]);
 
-  const toggleCategoria = (label: string) =>
-    ir({
-      categorias: estado.categorias.includes(label)
-        ? estado.categorias.filter((x) => x !== label)
-        : [...estado.categorias, label],
-    });
-
-  const toggleMarca = (label: string) =>
-    ir({
-      marcas: estado.marcas.includes(label)
-        ? estado.marcas.filter((x) => x !== label)
-        : [...estado.marcas, label],
-    });
-
-  /** Chips de filtros activos: categorías y marcas juntas, como las ve el visitante. */
-  const chips = [
-    ...estado.categorias.map((label) => ({ label, quitar: () => toggleCategoria(label) })),
-    ...estado.marcas.map((label) => ({ label, quitar: () => toggleMarca(label) })),
-  ];
+  const conFiltros = hayFiltros(estado);
 
   return (
-    <>
-      <main className="mx-auto flex max-w-contenido flex-1 gap-6 px-4 py-8">
-        {/* Sidebar filtros */}
-        <aside className="hidden w-60 shrink-0 lg:block">
-          <div className="space-y-6">
-            <div>
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
-                Categorías
-              </h3>
-              <ul className="space-y-2">
-                {facetas.categorias.map((c) => (
-                  <li key={c.label}>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={estado.categorias.includes(c.label)}
-                        onCheckedChange={() => toggleCategoria(c.label)}
-                      />
-                      <span className="flex-1">{formatRubro(c.label)}</span>
-                      <span className="text-xs text-muted">{c.count}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
+    <main className="mx-auto flex w-full max-w-contenido flex-1 gap-6 px-4 py-8">
+      <aside className="hidden w-64 shrink-0 lg:block">
+        <CatalogoFiltros facetas={facetas} estado={estado} ir={ir} />
+      </aside>
 
-            <div>
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
-                Marcas
-              </h3>
-              <ul className="space-y-2">
-                {facetas.marcas.map((b) => (
-                  <li key={b.label}>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={estado.marcas.includes(b.label)}
-                        onCheckedChange={() => toggleMarca(b.label)}
-                      />
-                      <span className="flex-1">{b.label}</span>
-                      <span className="text-xs text-muted">{b.count}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </aside>
+      <div className="flex min-w-0 flex-1 flex-col gap-6">
+        <CatalogoEncabezado estado={estado} total={total} paginas={paginas} ir={ir} />
+        <CatalogoChips estado={estado} rango={facetas.precio} ir={ir} />
+        {/* Acá va el botón "Filtros" de mobile (hoja con el mismo panel). */}
 
-        {/* Contenido principal */}
-        <div className="flex-1">
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h1 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
-                {estado.query ? `Resultados para "${estado.query}"` : "Catálogo"}
-              </h1>
-              <p className="mt-1 text-sm text-muted">
-                {total === 0
-                  ? "Sin productos"
-                  : paginas > 1
-                    ? `${total} productos · página ${estado.pagina} de ${paginas}`
-                    : `${total} productos`}
-              </p>
-            </div>
-            <Select
-              options={SORT_OPTIONS}
-              value={estado.orden}
-              onValueChange={(v) => ir({ orden: v as OrdenCatalogo })}
-              aria-label="Ordenar productos"
-              className="w-52"
+        {productos.length === 0 ? (
+          <EmptyState
+            title="No encontramos productos con esos filtros."
+            description={
+              estado.query && !conFiltros
+                ? "Pruebe con otra palabra o revise la ortografía."
+                : "Quite alguno de los filtros e inténtelo de nuevo."
+            }
+            action={
+              conFiltros ? (
+                <Button variant="secondary" onClick={() => ir(limpiarFiltros())}>
+                  Limpiar filtros
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <CatalogoProductos
+            productos={productos}
+            vista={estado.vista}
+            navegando={navegando}
+            cuotasPorProducto={cuotasPorProducto}
+          />
+        )}
+
+        {/* Cada página es una URL real: se comparte, se abre en otra pestaña y se indexa. */}
+        {paginas > 1 && (
+          <div className="flex justify-center">
+            <Pagination
+              page={estado.pagina}
+              totalPages={paginas}
+              hrefFor={(n) => hrefCon(estado, { pagina: n })}
+              renderLink={linkNext}
+              labels={{ ariaLabel: "Paginación del catálogo" }}
             />
           </div>
-
-          {chips.length > 0 && (
-            <div className="mb-6 flex flex-wrap items-center gap-2">
-              {chips.map((c) => (
-                <Chip key={c.label} variant="removable" onRemove={c.quitar}>
-                  {formatRubro(c.label)}
-                </Chip>
-              ))}
-              <button
-                onClick={() => ir({ categorias: [], marcas: [] })}
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                Limpiar todo
-              </button>
-            </div>
-          )}
-
-          {productos.length === 0 ? (
-            <p className="py-12 text-center text-sm text-muted">
-              No se encontraron productos.
-            </p>
-          ) : (
-            <div
-              // Mientras el server arma la página siguiente, la grilla vigente
-              // se atenúa: el visitante ve que algo está pasando.
-              //
-              // 2/3/4 columnas: 24 productos por página entran justo en las
-              // tres grillas, sin filas huérfanas.
-              className={`grid grid-cols-2 gap-5 transition-opacity md:grid-cols-3 xl:grid-cols-4 ${
-                navegando ? "opacity-50" : ""
-              }`}
-              aria-busy={navegando}
-            >
-              {productos.map((p) => (
-                // `h-full` en los dos niveles: el grid estira la celda, pero la
-                // card sólo la llena si se lo pedimos. Sin esto cada card mide
-                // lo que mide su contenido (nombre de 1 o 2 líneas, con o sin
-                // cuotas) y quedan de alturas distintas dentro de la misma fila.
-                <Link key={p.id} href={`/producto/${p.id}`} className="block h-full">
-                  <ProductCard
-                    variant="editorial"
-                    // - El nombre reserva sus dos líneas (ya viene
-                    //   line-clamp-2) para que el bloque de precio arranque
-                    //   siempre a la misma altura en toda la fila.
-                    // - El precio (el único `.font-display` de la card) escala
-                    //   con el viewport hasta los 22px del DS: con dos columnas
-                    //   en un teléfono, un precio de siete cifras
-                    //   ($ 4.516.253,76) no entra a 22px y se sale de la card.
-                    className="h-full [&_h3]:min-h-[2.5rem] [&_.font-display]:text-[clamp(15px,4.2vw,22px)]"
-                    name={p.name}
-                    brand={p.brand}
-                    price={precioExhibido(p)}
-                    oldPrice={p.oldPrice}
-                    badge={
-                      p.badgeText ? (
-                        <Badge tone={p.badgeTone}>{p.badgeText}</Badge>
-                      ) : undefined
-                    }
-                    // Portada del overlay del CRM si hay una servible (host en
-                    // SHOP_MEDIA_HOSTS); si no, el placeholder de siempre.
-                    image={
-                      p.images?.[0] ? (
-                        <Image
-                          src={p.images[0].url}
-                          alt={p.images[0].alt ?? p.name}
-                          fill
-                          sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
-                          className="object-contain p-4"
-                        />
-                      ) : (
-                        <LightbulbIcon className="h-20 w-20 text-muted/30" />
-                      )
-                    }
-                    action={
-                      <AddToCartButton
-                        disabled={p.stock === "out"}
-                        product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
-                      />
-                    }
-                    // Siempre presente, aunque el producto no tenga cuotas: le
-                    // reserva la línea para que el precio no baile entre cards.
-                    installments={
-                      <span className="block min-h-[1.125rem]">
-                        <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
-                      </span>
-                    }
-                  />
-                </Link>
-              ))}
-            </div>
-          )}
-
-          <Paginacion estado={estado} paginas={paginas} />
-          {/* Sólo para lectores de pantalla: el cambio de página no mueve el foco. */}
-          <p className="sr-only" role="status">
-            {total === 0
-              ? "Sin resultados"
-              : `Mostrando ${productos.length} de ${total} productos, página ${estado.pagina} de ${paginas}`}
-          </p>
-        </div>
-      </main>
-    </>
-  );
-}
-
-/** Estilo compartido por todos los controles de la barra de paginación. */
-const CELDA =
-  "inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm";
-
-/**
- * Barra de páginas numeradas. Son `<Link>`, no botones: cada página es una URL
- * real, así que se puede compartir, abrir en otra pestaña e indexar.
- */
-function Paginacion({
-  estado,
-  paginas,
-}: {
-  estado: EstadoCatalogo;
-  paginas: number;
-}) {
-  if (paginas <= 1) return null;
-
-  const { pagina } = estado;
-  const flecha = (destino: number, etiqueta: string, simbolo: string) =>
-    destino >= 1 && destino <= paginas ? (
-      <Link
-        href={hrefCon(estado, { pagina: destino })}
-        aria-label={etiqueta}
-        className={`${CELDA} border-border hover:border-primary hover:text-primary`}
-      >
-        {simbolo}
-      </Link>
-    ) : (
-      <span
-        aria-hidden
-        className={`${CELDA} border-border text-muted opacity-40`}
-      >
-        {simbolo}
-      </span>
-    );
-
-  return (
-    <nav aria-label="Paginación del catálogo" className="mt-8 flex justify-center">
-      <ul className="flex flex-wrap items-center gap-1">
-        <li>{flecha(pagina - 1, "Página anterior", "‹")}</li>
-        {paginasVisibles(pagina, paginas).map((n, i) =>
-          n == null ? (
-            <li key={`gap-${i}`} aria-hidden className="px-1 text-sm text-muted">
-              …
-            </li>
-          ) : (
-            <li key={n}>
-              {n === pagina ? (
-                <span
-                  aria-current="page"
-                  className={`${CELDA} border-primary bg-primary font-semibold text-white`}
-                >
-                  {n}
-                </span>
-              ) : (
-                <Link
-                  href={hrefCon(estado, { pagina: n })}
-                  aria-label={`Página ${n}`}
-                  className={`${CELDA} border-border hover:border-primary hover:text-primary`}
-                >
-                  {n}
-                </Link>
-              )}
-            </li>
-          )
         )}
-        <li>{flecha(pagina + 1, "Página siguiente", "›")}</li>
-      </ul>
-    </nav>
+
+        {/* Sólo para lectores de pantalla: el cambio de página no mueve el foco. */}
+        <p className="sr-only" role="status">
+          {anuncioResultados(productos.length, total, estado.pagina, paginas)}
+        </p>
+      </div>
+    </main>
   );
 }

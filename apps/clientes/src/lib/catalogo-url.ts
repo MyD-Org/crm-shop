@@ -222,24 +222,18 @@ export function cambiosDeRango(
 }
 
 /**
- * Números de página a mostrar, con `null` donde va una elipsis. Siempre incluye
- * la primera, la última y una ventana de tres alrededor de la actual, para que
- * la barra no crezca a 118 números cuando el catálogo tiene 2800 productos.
+ * URL canónica de un estado: la categoría (sólo la primera) y la página. Todo
+ * lo demás (búsqueda, marcas, precio, stock, orden, vista) son variantes de
+ * la misma página para los buscadores. La paginación vive en el DS
+ * (`Pagination` / `paginationWindow`).
  */
-export function paginasVisibles(actual: number, total: number): (number | null)[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-
-  const ventana = new Set<number>([1, total, actual]);
-  // La ventana se corre hacia adentro en los extremos, para no dejar un hueco
-  // de una sola página entre ella y la primera/última.
-  const desde = Math.min(Math.max(actual - 1, 2), total - 3);
-  for (let i = desde; i < desde + 3; i++) ventana.add(i);
-
-  const nums = [...ventana].sort((a, b) => a - b);
-  const salida: (number | null)[] = [];
-  for (const [i, n] of nums.entries()) {
-    if (i > 0 && n - nums[i - 1] > 1) salida.push(null);
-    salida.push(n);
-  }
-  return salida;
+export function hrefCanonico(estado: EstadoCatalogo): string {
+  return hrefCatalogo({
+    categorias: estado.categorias.slice(0, 1),
+    marcas: [],
+    orden: ORDEN_DEFAULT,
+    pagina: estado.pagina,
+    soloStock: false,
+    vista: VISTA_DEFAULT,
+  });
 }

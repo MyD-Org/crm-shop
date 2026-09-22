@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useTransition } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, Checkbox, Chip, ProductCard, Select } from "@myd-org/ui";
@@ -234,7 +235,21 @@ export function CatalogoClient({
                         <Badge tone={p.badgeTone}>{p.badgeText}</Badge>
                       ) : undefined
                     }
-                    image={<LightbulbIcon className="h-20 w-20 text-muted/30" />}
+                    // Portada del overlay del CRM si hay una servible (host en
+                    // SHOP_MEDIA_HOSTS); si no, el placeholder de siempre.
+                    image={
+                      p.images?.[0] ? (
+                        <Image
+                          src={p.images[0].url}
+                          alt={p.images[0].alt ?? p.name}
+                          fill
+                          sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
+                          className="object-contain p-4"
+                        />
+                      ) : (
+                        <LightbulbIcon className="h-20 w-20 text-muted/30" />
+                      )
+                    }
                     action={
                       <AddToCartButton
                         disabled={p.stock === "out"}

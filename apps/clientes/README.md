@@ -40,6 +40,8 @@ Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
 | `CUOTAS_ENABLED` | `1` muestra cuotas y aplica el límite de cuotas en el pago. Cualquier otro valor (default): checkout como antes, clamp 1..24. |
 | `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v2: escalones por proveedor). |
 | `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
+| `SHOP_CATALOGO_SOLO_VISIBLES` | `1` muestra sólo los productos publicados (`visible`) en el overlay del CRM. Cualquier otro valor (default): sin filtro de visibilidad. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
+| `SHOP_MEDIA_HOSTS` | Hosts de las fotos del overlay, separados por coma (ej. `media.plataforma.example`). Alimenta `images.remotePatterns`; sin ella las cards muestran el placeholder. Se lee en el build y en runtime: un cambio requiere redesplegar. |
 
 Detalle del esquema `shop` (rol, permisos, migración base y pasos de
 despliegue): `docs/una-base-esquema-shop.md`.

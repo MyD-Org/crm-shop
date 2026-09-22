@@ -81,3 +81,37 @@ describe("estadoPedidoPill", () => {
     expect(labels).not.toMatch(/\b(tu|tus|te|vos)\b/i);
   });
 });
+
+/**
+ * Con los pagos apagados (pagos-flag.ts) ningún pedido se paga en el Shop:
+ * "Pago pendiente" sólo confunde y ya estaba oculto antes del rediseño
+ * (pago-estado-visible.ts). La pill conserva esa decisión.
+ */
+describe("estadoPedidoPill con los pagos apagados", () => {
+  it("pendiente + pago pendiente no dice 'Pago pendiente'", () => {
+    expect(
+      estadoPedidoPill(
+        { estado: "pendiente", pagoEstado: "pendiente", entregaTipo: "retiro" },
+        { pagosHabilitados: false },
+      ),
+    ).toEqual({ label: "Pendiente", tone: "neutral" });
+  });
+
+  it("el resto de la matriz no cambia", () => {
+    for (const estado of ESTADOS) {
+      for (const pagoEstado of PAGOS) {
+        for (const entregaTipo of ENTREGAS) {
+          if (estado === "pendiente" && pagoEstado === "pendiente") continue;
+          const o = { estado, pagoEstado, entregaTipo };
+          expect(estadoPedidoPill(o, { pagosHabilitados: false })).toEqual(estadoPedidoPill(o));
+        }
+      }
+    }
+  });
+
+  it("por defecto (pagos prendidos) sigue diciendo 'Pago pendiente'", () => {
+    const o = { estado: "pendiente", pagoEstado: "pendiente", entregaTipo: "envio" } as const;
+    expect(estadoPedidoPill(o, { pagosHabilitados: true }).label).toBe("Pago pendiente");
+    expect(estadoPedidoPill(o).label).toBe("Pago pendiente");
+  });
+});

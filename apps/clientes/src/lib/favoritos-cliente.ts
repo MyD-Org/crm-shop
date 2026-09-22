@@ -53,3 +53,16 @@ export function disponible({
 }): boolean {
   return !!isSignedIn || !favoritosBloqueados;
 }
+
+/**
+ * Qué cards de una lista de favoritos se ven. Antes de `ready` todo lo que
+ * mandó el servidor; después, sólo lo que sigue guardado (quitar oculta la card
+ * al instante y, si el toggle se revierte, vuelve).
+ */
+export function visiblesEnLista<T extends { id: string }>(
+  productos: readonly T[],
+  ready: boolean,
+  esFavorito: (id: string) => boolean,
+): T[] {
+  return ready ? productos.filter((p) => esFavorito(p.id)) : [...productos];
+}

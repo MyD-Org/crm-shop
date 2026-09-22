@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { disponible, mensajeError, reducirToggle, revertir } from "./favoritos-cliente";
+import {
+  disponible,
+  mensajeError,
+  reducirToggle,
+  revertir,
+  visiblesEnLista,
+} from "./favoritos-cliente";
 
 describe("reducirToggle", () => {
   it("un id que no estaba se agrega con PUT, sin mutar el original", () => {
@@ -69,5 +75,21 @@ describe("disponible", () => {
   it("cookie del CRM sin Clerk no", () => {
     expect(disponible({ isSignedIn: false, favoritosBloqueados: true })).toBe(false);
     expect(disponible({ isSignedIn: undefined, favoritosBloqueados: true })).toBe(false);
+  });
+});
+
+describe("visiblesEnLista", () => {
+  const productos = [{ id: "42" }, { id: "7" }, { id: "9" }];
+
+  it("antes de ready muestra lo que mandó el servidor", () => {
+    expect(visiblesEnLista(productos, false, () => false)).toEqual(productos);
+  });
+
+  it("después de ready oculta al instante lo que se quitó, en el mismo orden", () => {
+    const guardados = new Set(["42", "9"]);
+    expect(visiblesEnLista(productos, true, (id) => guardados.has(id)).map((p) => p.id)).toEqual([
+      "42",
+      "9",
+    ]);
   });
 });

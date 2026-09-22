@@ -87,6 +87,19 @@ export interface DatosFacturacion {
   domicilioCiudad?: string;
   domicilioProvincia?: string;
   domicilioCp?: string;
+  /** Teléfono de contacto. Opcional en el perfil; el checkout lo exige. */
+  telefono?: string;
+}
+
+/**
+ * ¿Parece un teléfono? Se cuenta solo los dígitos: entre 8 (un fijo con
+ * característica) y 15 (el tope internacional). No se valida más que eso —
+ * la gente lo escribe con "+", espacios, guiones o paréntesis y todo eso
+ * tiene que pasar. El dato es para que un operador llame, no para marcar solo.
+ */
+export function telefonoValido(raw: string): boolean {
+  const digitos = soloDigitos(raw);
+  return digitos.length >= 8 && digitos.length <= 15;
 }
 
 /** Deja solo dígitos: la gente escribe el CUIT con guiones, puntos y espacios. */
@@ -368,6 +381,14 @@ export function validarFacturacion(
   }
   if (!datos.domicilioCiudad?.trim()) {
     errores.domicilioCiudad = "Ingresá la ciudad.";
+  }
+
+  // El teléfono no frena el guardado del perfil (el checkout lo pide igual),
+  // pero si vino algo, tiene que parecer un teléfono: "123" guardado hoy es
+  // un pedido sin contacto mañana.
+  const telefono = datos.telefono?.trim();
+  if (telefono && !telefonoValido(telefono)) {
+    errores.telefono = "Ingrese un teléfono válido, con código de área.";
   }
 
   return errores;

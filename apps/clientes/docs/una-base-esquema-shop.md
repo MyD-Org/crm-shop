@@ -234,6 +234,21 @@ desplegarlo, pruebe como operador y como admin: listar pedidos, filtrar, ver
 el detalle, pasar un pedido de "pendiente" a "confirmado", cancelar con
 motivo, y confirmar que el cliente ve el nuevo estado en "Mis compras".
 
+## Migraciones posteriores a la baseline
+
+La baseline ya está aplicada en producción: todo cambio de esquema del Shop se
+suma como una migración incremental (`ALTER`), nunca regenerando la baseline.
+`src/db/baseline.test.ts` controla que cada `.sql` tenga su entrada en el
+journal y que ninguna migración posterior vuelva a crear tablas.
+
+| Migración | Qué hace | Cuándo aplicarla |
+|---|---|---|
+| `0001_telefono_contacto` | `billing_profiles.telefono` (teléfono de contacto que el checkout precarga) | **Antes** de desplegar el código que la usa: el Shop selecciona la columna al leer el perfil y sin ella cae el checkout y Mis datos. |
+
+El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
+`MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
+`shop.__drizzle_migrations` tiene una fila más.
+
 ## Nota sobre el ambiente local de tests (`crm_test`)
 
 Si en algún momento se regenera el baseline (`drizzle/0000_baseline.sql`)

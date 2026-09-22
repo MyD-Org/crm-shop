@@ -5,12 +5,13 @@
  * validaciones sin arrastrar `postgres` al bundle del cliente.
  */
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { billingProfiles } from "@/db/schema";
 import { buscarContactoPorIdentificacion } from "./alegra";
 import {
   normalizarDoc,
+  telefonoValido,
   validarFacturacion,
   type CondicionIva,
   type DatosFacturacion,
@@ -72,6 +73,7 @@ export async function guardarPerfilFacturacion(
     domicilioCiudad: datos.domicilioCiudad?.trim() || null,
     domicilioProvincia: datos.domicilioProvincia?.trim() || null,
     domicilioCp: datos.domicilioCp?.trim() || null,
+    telefono: datos.telefono?.trim() || null,
     coincideConAlegra,
     updatedAt: new Date(),
   };
@@ -86,6 +88,50 @@ export async function guardarPerfilFacturacion(
     .returning();
 
   return fila;
+}
+
+/**
+ * Cambia SOLO el teléfono de contacto. Existe para el perfil vinculado a
+ * Alegra, que se muestra en solo lectura: la razón social y el CUIT los manda
+ * el sistema, pero el teléfono al que llamar por un pedido sigue siendo del
+ * cliente. Devuelve null si el usuario todavía no tiene perfil.
+ */
+export async function actualizarTelefono(
+  clerkUserId: string,
+  telefono: string,
+): Promise<PerfilFacturacion | null> {
+  const [fila] = await getDb()
+    .update(billingProfiles)
+    .set({ telefono: telefono.trim() || null, updatedAt: new Date() })
+    .where(eq(billingProfiles.clerkUserId, clerkUserId))
+    .returning();
+  return fila ?? null;
+}
+
+/**
+ * El perfil aprende el teléfono del primer pedido.
+ *
+ * Quien cargó sus datos antes de que existiera el campo (o lo dejó vacío) lo
+ * tipea igual en el checkout; guardarlo ahí evita pedírselo en cada compra.
+ * Solo se completa si el perfil NO tenía uno: el que está cargado es el que
+ * el cliente eligió, y un pedido puntual con otro número no lo pisa. Un número
+ * que no parece teléfono no se aprende.
+ */
+export async function guardarTelefonoSiFalta(
+  clerkUserId: string,
+  telefono: string,
+): Promise<void> {
+  const limpio = telefono.trim();
+  if (!telefonoValido(limpio)) return;
+  await getDb()
+    .update(billingProfiles)
+    .set({ telefono: limpio, updatedAt: new Date() })
+    .where(
+      and(
+        eq(billingProfiles.clerkUserId, clerkUserId),
+        isNull(billingProfiles.telefono),
+      ),
+    );
 }
 
 /** ¿Está completo como para poder facturar? */

@@ -11,6 +11,7 @@ import {
   TIPOS_DOC_POR_PAIS,
   formatearDoc,
   formatearDocAlEscribir,
+  telefonoValido,
   validarFacturacion,
   type CondicionIva,
   type DatosFacturacion,
@@ -39,6 +40,7 @@ export interface PerfilFacturacionUI {
   domicilioCiudad?: string | null;
   domicilioProvincia?: string | null;
   domicilioCp?: string | null;
+  telefono?: string | null;
   coincideConAlegra?: string | null;
 }
 
@@ -80,6 +82,7 @@ const VACIO: DatosFacturacion = {
   domicilioCiudad: "",
   domicilioProvincia: "",
   domicilioCp: "",
+  telefono: "",
 };
 
 function desdePerfil(p: PerfilFacturacionUI | null): DatosFacturacion {
@@ -98,6 +101,7 @@ function desdePerfil(p: PerfilFacturacionUI | null): DatosFacturacion {
     domicilioCiudad: p.domicilioCiudad ?? "",
     domicilioProvincia: p.domicilioProvincia ?? "",
     domicilioCp: p.domicilioCp ?? "",
+    telefono: p.telefono ?? "",
   };
 }
 
@@ -208,6 +212,7 @@ export function FacturacionForm({
 
   if (bloqueado) {
     return (
+      <div className="flex flex-col gap-6">
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Dato label="Razón social" value={form.razonSocial || "—"} />
         <Dato
@@ -223,6 +228,18 @@ export function FacturacionForm({
         )}
         <Dato label="Domicilio fiscal" value={form.domicilioCalle || "—"} />
       </dl>
+      {/*
+        El teléfono es lo único editable con la cuenta vinculada: la razón
+        social y el CUIT los manda Alegra, pero a quién llamar por un pedido
+        lo decide el cliente. Sin perfil guardado no hay fila donde ponerlo.
+      */}
+      {perfil && (
+        <TelefonoContactoForm
+          inicial={form.telefono ?? ""}
+          onGuardado={onGuardado}
+        />
+      )}
+      </div>
     );
   }
 
@@ -424,6 +441,24 @@ export function FacturacionForm({
               </div>
             )}
         </div>
+
+        {/*
+          Vive acá y no solo en el checkout para que se pida UNA vez: el
+          checkout lo precarga desde el perfil. No es obligatorio para guardar
+          los datos fiscales (no frena la factura), pero el pedido sí lo exige.
+        */}
+        <Field
+          label="Teléfono de contacto"
+          hint="Se precarga al finalizar cada pedido."
+          error={errores.telefono}
+        >
+          <Input
+            type="tel"
+            value={form.telefono ?? ""}
+            onChange={(e) => set("telefono", e.target.value)}
+            placeholder="+54 376 4000000"
+          />
+        </Field>
       </div>
 
       <div>
@@ -440,6 +475,83 @@ function Dato({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
       <dd className="mt-0.5 text-sm font-medium text-text">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * Editor del teléfono solo. Se usa cuando el resto del perfil está en solo
+ * lectura (cuenta vinculada): pega al PATCH, que no toca nada más.
+ */
+function TelefonoContactoForm({
+  inicial,
+  onGuardado,
+}: {
+  inicial: string;
+  onGuardado?: () => void;
+}) {
+  const [telefono, setTelefono] = useState(inicial);
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [exito, setExito] = useState(false);
+
+  async function guardar() {
+    if (!telefonoValido(telefono)) {
+      setError("Ingrese un teléfono válido, con código de área.");
+      return;
+    }
+    setGuardando(true);
+    setError("");
+    try {
+      const res = await fetch("/api/mi-cuenta/facturacion", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ telefono }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.errores?.telefono ?? json?.error ?? "No pudimos guardar el teléfono.");
+        return;
+      }
+      setExito(true);
+      setTimeout(() => setExito(false), 3000);
+      onGuardado?.();
+    } catch {
+      setError("No pudimos conectarnos. Revise su conexión.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {exito && (
+        <div className="rounded-lg bg-success/10 px-4 py-3 text-sm font-medium text-success">
+          Teléfono guardado.
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field
+          label="Teléfono de contacto"
+          hint="Se precarga al finalizar cada pedido."
+          error={error}
+        >
+          <Input
+            type="tel"
+            value={telefono}
+            onChange={(e) => {
+              setTelefono(e.target.value);
+              setError("");
+            }}
+            placeholder="+54 376 4000000"
+          />
+        </Field>
+      </div>
+      <div>
+        <Button onClick={guardar} disabled={guardando}>
+          {guardando ? "Guardando…" : "Guardar teléfono"}
+        </Button>
+      </div>
     </div>
   );
 }

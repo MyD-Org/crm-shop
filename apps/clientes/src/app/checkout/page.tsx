@@ -32,6 +32,7 @@ export default async function CheckoutPage() {
         nombreSugerido={
           perfil?.razonSocial ?? cliente?.razonsocial ?? nombre ?? ""
         }
+        telefonoSugerido={perfil?.telefono ?? ""}
         emailCliente={cliente?.email ?? email}
         facturacionCompleta={perfilCompleto(perfil)}
         admiteEnvio={admiteEnvio(perfil?.pais)}

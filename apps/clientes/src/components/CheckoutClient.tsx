@@ -92,6 +92,8 @@ const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
 
 interface Props {
   nombreSugerido: string;
+  /** Teléfono guardado en Mis datos. Vacío = se pide acá y el perfil lo aprende. */
+  telefonoSugerido?: string;
   emailCliente?: string;
   /** El perfil fiscal está completo: sin esto no se puede emitir la factura. */
   facturacionCompleta: boolean;
@@ -107,6 +109,7 @@ interface Props {
 
 export function CheckoutClient({
   nombreSugerido,
+  telefonoSugerido = "",
   emailCliente,
   facturacionCompleta,
   admiteEnvio,
@@ -119,7 +122,7 @@ export function CheckoutClient({
   const [ciudad, setCiudad] = useState("");
   const [direccion, setDireccion] = useState("");
   const [nombre, setNombre] = useState(nombreSugerido);
-  const [telefono, setTelefono] = useState("");
+  const [telefono, setTelefono] = useState(telefonoSugerido);
   const [notas, setNotas] = useState("");
 
   const [enviando, setEnviando] = useState(false);

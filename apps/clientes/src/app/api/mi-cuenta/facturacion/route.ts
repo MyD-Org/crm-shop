@@ -5,12 +5,17 @@ import {
   PAIS_LABEL,
   TIPO_DOC_LABEL,
   TIPOS_DOC_POR_PAIS,
+  telefonoValido,
   validarFacturacion,
   type CondicionIva,
   type Pais,
   type TipoDoc,
 } from "@/lib/facturacion";
-import { getPerfilFacturacion, guardarPerfilFacturacion } from "@/lib/facturacion-db";
+import {
+  actualizarTelefono,
+  getPerfilFacturacion,
+  guardarPerfilFacturacion,
+} from "@/lib/facturacion-db";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +73,7 @@ export async function PUT(req: Request) {
     domicilioCiudad: texto(body.domicilioCiudad, 80),
     domicilioProvincia: texto(body.domicilioProvincia, 80),
     domicilioCp: texto(body.domicilioCp, 12),
+    telefono: texto(body.telefono, 40),
   };
 
   // Se revalida en el servidor con la MISMA función que usa el formulario: si
@@ -88,6 +94,56 @@ export async function PUT(req: Request) {
     console.error("[/api/mi-cuenta/facturacion] error:", err);
     return NextResponse.json(
       { error: "No pudimos guardar tus datos. Probá de nuevo." },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * PATCH /api/mi-cuenta/facturacion — cambia solo el teléfono de contacto.
+ *
+ * Es la única edición que se permite sobre un perfil vinculado a Alegra: el
+ * resto lo manda el sistema, pero a quién llamar por un pedido lo decide el
+ * cliente. Sin perfil no hay dónde guardarlo (409): primero los datos fiscales.
+ */
+export async function PATCH(req: Request) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+  }
+
+  const telefono =
+    typeof body.telefono === "string" ? body.telefono.trim().slice(0, 40) : "";
+  if (!telefono || !telefonoValido(telefono)) {
+    return NextResponse.json(
+      {
+        error: "Revise el teléfono.",
+        errores: { telefono: "Ingrese un teléfono válido, con código de área." },
+      },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const perfil = await actualizarTelefono(userId, telefono);
+    if (!perfil) {
+      return NextResponse.json(
+        { error: "Cargue primero sus datos de facturación." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(perfil);
+  } catch (err) {
+    console.error("[/api/mi-cuenta/facturacion] PATCH error:", err);
+    return NextResponse.json(
+      { error: "No pudimos guardar el teléfono. Inténtelo de nuevo." },
       { status: 500 },
     );
   }

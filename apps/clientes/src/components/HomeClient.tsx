@@ -3,6 +3,7 @@ import Image from "next/image";
 import {
   Badge,
   ChipRow,
+  CtaBanner,
   Hero,
   Marquee,
   ProductCard,
@@ -283,25 +284,14 @@ export function HomeClient({
 
         {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
         <SeccionEditable seccion="whatsapp" inicial={whatsapp} puedeEditar={puedeEditar}>
-          <section className="pb-[clamp(56px,7vw,96px)]">
-            <div className="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[28px] bg-primary px-[clamp(24px,5vw,72px)] py-10 text-on-primary">
-              <div className="flex items-center gap-5">
-                <span className="[&_svg]:h-8 [&_svg]:w-8 [&_svg]:text-highlight">
-                  <ChatIcon />
-                </span>
-                <div>
-                  <p className="text-lg font-extrabold">{whatsapp.titulo}</p>
-                  <p className="text-sm text-on-primary/70">{whatsapp.texto}</p>
-                </div>
-              </div>
-              <a
-                href={whatsapp.href}
-                className="shrink-0 rounded-full border-2 border-on-primary/60 px-6 py-2.5 text-sm font-bold transition-colors hover:bg-on-primary hover:text-primary"
-              >
-                Consultar ahora
-              </a>
-            </div>
-          </section>
+          <div className="pb-[clamp(56px,7vw,96px)]">
+            <CtaBanner
+              icon={<ChatIcon />}
+              title={whatsapp.titulo}
+              text={whatsapp.texto}
+              cta={{ label: "Consultar ahora", href: whatsapp.href }}
+            />
+          </div>
         </SeccionEditable>
       </div>
     </main>

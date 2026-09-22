@@ -1,3 +1,5 @@
+import { hostsDeMedios } from "../lib/catalogo-medios";
+
 /**
  * Contenido por defecto de la home, editable desde la home por un usuario
  * admin (server actions en src/lib/home-acciones.ts). Cada sección de la DB
@@ -48,8 +50,8 @@ export type DestacadosContent = {
   cantidad: number;
   /** Productos elegidos (SKUs de Alegra), en orden. El resto se completa con Iluminación. */
   skus?: string[];
-  /** Fotos de los productos destacados, por posición. Path local (empieza con
-      "/"): las sirve next/image, que no admite URLs externas sin remotePatterns. */
+  /** Fotos de los productos destacados, por posición. Path local (/) o URL
+      https de un host de SHOP_MEDIA_HOSTS. */
   imagenes?: string[];
 };
 
@@ -233,13 +235,36 @@ function esEnlace(v: unknown): v is Enlace {
   return !!v && typeof v === "object" && esTexto(o.label) && esHref(o.href);
 }
 
-function esTile(v: unknown): v is TileContent {
+/**
+ * Motivo por el que `v` no es una imagen válida, o `null` si es válida.
+ * `true` sii `v` es una ruta interna (empieza con "/" y no con "//") o una
+ * URL `https:` cuyo `hostname` está en `hosts`.
+ */
+export function motivoImagenInvalida(v: unknown, hosts: readonly string[]): null | "host" | "formato" {
+  if (!esTexto(v)) return "formato";
+  const u = v.trim();
+  if (u.startsWith("/")) return u.startsWith("//") ? "formato" : null;
+  let parsed: URL;
+  try {
+    parsed = new URL(u);
+  } catch {
+    return "formato";
+  }
+  if (parsed.protocol !== "https:") return "formato";
+  return hosts.includes(parsed.hostname) ? null : "host";
+}
+
+export function esImagen(v: unknown, hosts: readonly string[]): v is string {
+  return motivoImagenInvalida(v, hosts) === null;
+}
+
+function esTile(v: unknown, hosts: readonly string[]): v is TileContent {
   const o = v as TileContent;
-  return !!v && typeof v === "object" && esTexto(o.eyebrow) && esTexto(o.titulo) && esTexto(o.imagen) && esHref(o.href);
+  return !!v && typeof v === "object" && esTexto(o.eyebrow) && esTexto(o.titulo) && esImagen(o.imagen, hosts) && esHref(o.href);
 }
 
 /** Devuelve la lista de problemas del payload para la sección ([] = válido). */
-export function erroresSeccion(key: string, payload: unknown): string[] {
+export function erroresSeccion(key: string, payload: unknown, hosts: readonly string[] = hostsDeMedios()): string[] {
   if (key === "navBadge") {
     if (payload === null) return [];
     const o = payload as NavBadgeContent;
@@ -259,6 +284,11 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
     if (opcional && (o[campo] === undefined || o[campo] === null)) return;
     if (!esTexto(o[campo])) errores.push(`${campo} debe ser un texto no vacío`);
   };
+  const imagen = (campo: string, v: unknown) => {
+    const m = motivoImagenInvalida(v, hosts);
+    if (m === "host") errores.push(`${campo}: el host de la imagen no está habilitado (SHOP_MEDIA_HOSTS).`);
+    else if (m === "formato") errores.push(`${campo} debe ser una ruta local (/images/...) o una URL https de un host habilitado.`);
+  };
 
   switch (key) {
     case "anuncio":
@@ -269,7 +299,8 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       texto("titulo");
       texto("acento", true);
       texto("bajada");
-      texto("imagen");
+      imagen("imagen", o.imagen);
+      texto("imagenAlt", true);
       if (!Array.isArray(o.ctas) || !o.ctas.every(esEnlace)) errores.push("ctas debe ser un array de { label, href }");
       if (!Array.isArray(o.usps) || o.usps.length === 0 || !(o.usps as { label?: unknown }[]).every((u) => esTexto(u?.label)))
         errores.push("usps debe ser un array no vacío de { label }");
@@ -285,7 +316,7 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       texto("acento", true);
       if (key === "ambientes") texto("bajada", true);
       if (!esHref(o.linkTodos)) errores.push("linkTodos debe ser una ruta interna (/) o una URL https");
-      if (!Array.isArray(o.items) || o.items.length === 0 || !o.items.every(esTile))
+      if (!Array.isArray(o.items) || o.items.length === 0 || !o.items.every((t) => esTile(t, hosts)))
         errores.push("items debe ser un array no vacío de tiles { eyebrow, titulo, imagen, href }");
       if (key === "decoGrid" && (!Array.isArray(o.chips) || !o.chips.every(esEnlace)))
         errores.push("chips debe ser un array de { label, href }");
@@ -301,12 +332,13 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       if (o.skus !== undefined &&
           (!Array.isArray(o.skus) || !(o.skus as unknown[]).every(esTexto)))
         errores.push("skus debe ser un array de SKUs no vacíos");
-      // Paths locales: las sirve next/image, que no admite URLs externas sin
-      // remotePatterns (una URL externa rompería la foto en runtime).
-      if (o.imagenes !== undefined &&
-          (!Array.isArray(o.imagenes) || !(o.imagenes as unknown[]).every(esTexto) ||
-           !(o.imagenes as string[]).every((u) => u.startsWith("/"))))
-        errores.push("imagenes debe ser un array de paths locales (empiezan con /)");
+      if (o.imagenes !== undefined) {
+        if (!Array.isArray(o.imagenes) || !(o.imagenes as unknown[]).every(esTexto)) {
+          errores.push("imagenes debe ser un array de textos");
+        } else if ((o.imagenes as string[]).some((u) => motivoImagenInvalida(u, hosts) !== null)) {
+          imagen("imagenes", (o.imagenes as string[]).find((u) => motivoImagenInvalida(u, hosts) !== null));
+        }
+      }
       break;
     }
     case "bannerDeco": {
@@ -314,7 +346,7 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       texto("titulo");
       texto("acento", true);
       texto("bajada");
-      texto("imagen");
+      imagen("imagen", o.imagen);
       if (!esEnlace(o.cta)) errores.push("cta debe ser { label, href }");
       break;
     }

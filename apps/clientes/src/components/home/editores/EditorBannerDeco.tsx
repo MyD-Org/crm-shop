@@ -2,6 +2,7 @@
 
 import { Field, Input, Textarea } from "@myd-org/ui";
 import type { BannerDecoContent } from "@/data/home-defaults";
+import { CampoImagen } from "./CampoImagen";
 import type { EditorProps } from "./index";
 
 export function EditorBannerDeco({ valor, onChange }: EditorProps<BannerDecoContent>) {
@@ -19,10 +20,7 @@ export function EditorBannerDeco({ valor, onChange }: EditorProps<BannerDecoCont
       <Field label="Bajada">
         <Textarea value={valor.bajada} onChange={(e) => onChange({ ...valor, bajada: e.target.value })} />
       </Field>
-      {/* La imagen se edita desde la rebanada C (subida a R2); acá es solo lectura. */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- previa de solo lectura; se reemplaza por CampoImagen en la rebanada C */}
-      <img src={valor.imagen} alt="" className="h-24 w-auto rounded-md object-cover" />
-      <p className="text-sm text-muted">La imagen se podrá cambiar próximamente.</p>
+      <CampoImagen valor={valor.imagen} onChange={(imagen) => onChange({ ...valor, imagen })} />
       <p className="text-sm font-semibold text-text">Enlace del banner</p>
       <Field label="Etiqueta">
         <Input value={valor.cta.label} onChange={(e) => onChange({ ...valor, cta: { ...valor.cta, label: e.target.value } })} />

@@ -154,4 +154,64 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
       errores: ["El almacenamiento de imágenes no está configurado. Avise al administrador."],
     });
   });
+
+  describe("firmarSubidaImagenHome", () => {
+    it("firma exitosa: key correcta, presignPut con los parámetros esperados y urlPublica", async () => {
+      const presignMock = vi.fn().mockResolvedValue({ url: "https://r2.example/x?sig", headers: { "content-type": "image/webp" } });
+      r2Mock.mockReturnValue({ presignPut: presignMock });
+
+      const r = await firmarSubidaImagenHome({ bytes: 100000 });
+
+      expect(presignMock).toHaveBeenCalledWith("home/central-led/fake-1600.webp", {
+        contentType: "image/webp",
+        contentLength: 100000,
+        ttlSeconds: 600,
+      });
+      expect(r).toEqual({
+        ok: true,
+        key: "home/central-led/fake-1600.webp",
+        url: "https://r2.example/x?sig",
+        headers: { "content-type": "image/webp" },
+        urlPublica: "https://media.plataforma.example/home/central-led/fake-1600.webp",
+      });
+    });
+
+    it.each([0, -1, 1.5, "abc", 5 * 1024 * 1024 + 1])("tamaño inválido (%s) ⇒ error y no firma", async (bytes) => {
+      const presignMock = vi.fn();
+      r2Mock.mockReturnValue({ presignPut: presignMock });
+
+      const r = await firmarSubidaImagenHome({ bytes: bytes as unknown as number });
+
+      expect(r).toEqual({ ok: false, errores: ["La imagen supera el tamaño permitido (5 MB)."] });
+      expect(presignMock).not.toHaveBeenCalled();
+    });
+
+    it("sin tenant ⇒ mensaje de almacenamiento no configurado (no propaga el Error de shopTenantId)", async () => {
+      vi.doMock("@/lib/tenant", () => ({
+        shopTenantId: () => {
+          throw new Error("Falta SHOP_TENANT_ID en el entorno.");
+        },
+      }));
+      vi.resetModules();
+      const { firmarSubidaImagenHome: firmarSinTenant } = await import("./home-acciones");
+      r2Mock.mockReturnValue({ presignPut: vi.fn() });
+
+      const r = await firmarSinTenant({ bytes: 100 });
+
+      expect(r).toEqual({
+        ok: false,
+        errores: ["El almacenamiento de imágenes no está configurado. Avise al administrador."],
+      });
+      vi.doUnmock("@/lib/tenant");
+      vi.resetModules();
+    });
+
+    it("presignPut rechaza ⇒ error de firma genérico", async () => {
+      r2Mock.mockReturnValue({ presignPut: vi.fn().mockRejectedValue(new Error("boom")) });
+
+      const r = await firmarSubidaImagenHome({ bytes: 100 });
+
+      expect(r).toEqual({ ok: false, errores: ["No se pudo preparar la subida. Inténtelo de nuevo."] });
+    });
+  });
 });

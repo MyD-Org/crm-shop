@@ -41,7 +41,12 @@ Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
 | `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v2: escalones por proveedor). |
 | `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
 | `SHOP_CATALOGO_SOLO_VISIBLES` | `1` muestra sólo los productos publicados (`visible`) en el overlay del CRM. Cualquier otro valor (default): sin filtro de visibilidad. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
-| `SHOP_MEDIA_HOSTS` | Hosts de las fotos del overlay, separados por coma (ej. `media.plataforma.example`). Alimenta `images.remotePatterns`; sin ella las cards muestran el placeholder. Se lee en el build y en runtime: un cambio requiere redesplegar. |
+| `SHOP_MEDIA_HOSTS` | Hosts de las fotos del overlay, separados por coma (ej. `media.plataforma.example`). Alimenta `images.remotePatterns`; sin ella las cards muestran el placeholder. Debe incluir el host de `R2_SHOP_MEDIA_PUBLIC_URL`; si no, el editor de la home rechaza las imágenes subidas. Se lee en el build y en runtime: un cambio requiere redesplegar. |
+| `R2_SHOP_MEDIA_ACCOUNT_ID` (o `R2_ACCOUNT_ID`) | Cuenta de Cloudflare del bucket público `shop-media`. Mismo par que el proyecto del CRM (rotarlo implica actualizar los dos proyectos de Vercel). |
+| `R2_SHOP_MEDIA_ACCESS_KEY_ID` | Llave de acceso para firmar las subidas a `shop-media`. Mismo par que el CRM. |
+| `R2_SHOP_MEDIA_SECRET_ACCESS_KEY` | Secreto de la llave anterior. Mismo par que el CRM. |
+| `R2_SHOP_MEDIA_BUCKET` | Bucket público (`shop-media`). Mismo par que el CRM. |
+| `R2_SHOP_MEDIA_PUBLIC_URL` | Base pública desde donde se sirven las imágenes (sin barra final; ejemplo `https://media.plataforma.example`). Mismo par que el CRM. |
 
 Detalle del esquema `shop` (rol, permisos, migración base y pasos de
 despliegue): `docs/una-base-esquema-shop.md`.
@@ -49,6 +54,23 @@ despliegue): `docs/una-base-esquema-shop.md`.
 **Rol admin del Shop**: en Clerk → Users → Metadata → Public, `{"role":"admin"}`.
 Habilita el modo edición de la home (`/`): editar cada sección in-place, sin
 pasar por el CRM (server actions en `src/lib/home-acciones.ts`).
+
+## Imágenes de la home (R2)
+
+El admin sube imágenes desde el editor in-place de la home (`/`, sección por
+sección). El flujo es: el navegador redimensiona la imagen a una variante
+webp de 1600 px, pide al servidor una URL PUT prefirmada
+(`firmarSubidaImagenHome`, `src/lib/home-acciones.ts`) y sube el archivo
+directo al bucket público `shop-media`, bajo el prefijo `home/{tenant}/`. La
+URL pública resultante se guarda recién al pulsar "Guardar" en el Dialog de
+la sección. No hay borrado de objetos huérfanos (si se cancela después de
+subir, el objeto queda aceptado en el bucket).
+
+**CORS del bucket** (Cloudflare R2 → `shop-media` → Settings → CORS): agregar
+los orígenes del Shop de forma explícita — producción, `http://localhost:3000`
+y cualquier preview que se vaya a probar — con `AllowedMethods: ["PUT"]` y
+`AllowedHeaders: ["content-type"]`, sin comodín. Conservar los orígenes que ya
+usa el CRM. Referencia: `apps/admin/docs/DEPLOY.md`.
 
 El pool de conexiones es un singleton (se reusa; uno por request agotaría las
 conexiones de Postgres). Está cacheado **junto a la URL con la que se creó**, así

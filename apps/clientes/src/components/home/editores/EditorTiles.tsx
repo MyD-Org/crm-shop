@@ -4,13 +4,13 @@ import { Field, Input, Textarea } from "@myd-org/ui";
 import type { DecoGridContent, SeccionTilesContent } from "@/data/home-defaults";
 import { nuevoEnlace, nuevoTile } from "@/lib/home-editor";
 import { ListaEditable } from "../ListaEditable";
+import { CampoImagen } from "./CampoImagen";
 import type { EditorProps } from "./index";
 
 /**
  * Editor de tiles compartido por `ambientes` y `decoGrid` (rebanada B2):
  * ambas secciones son un `SeccionTilesContent` (título + items); `decoGrid`
- * además tiene `chips`. La imagen de cada tile se conserva del valor actual
- * (se edita recién en la rebanada C: subida a R2).
+ * además tiene `chips`. La imagen de cada tile se sube a R2 (rebanada C).
  */
 export function EditorTiles({
   valor,
@@ -46,10 +46,7 @@ export function EditorTiles({
           nuevo={nuevoTile}
           renderItem={(item, onItem) => (
             <div className="flex flex-col gap-3">
-              {/* La imagen se edita desde la rebanada C (subida a R2); acá se conserva tal cual. */}
-              {/* eslint-disable-next-line @next/next/no-img-element -- previa de solo lectura; se reemplaza por CampoImagen en la rebanada C */}
-              <img src={item.imagen} alt="" className="h-20 w-auto rounded-md object-cover" />
-              <p className="text-sm text-muted">La imagen se podrá cambiar próximamente.</p>
+              <CampoImagen valor={item.imagen} onChange={(imagen) => onItem({ ...item, imagen })} />
               <Field label="Eyebrow">
                 <Input value={item.eyebrow} onChange={(e) => onItem({ ...item, eyebrow: e.target.value })} />
               </Field>

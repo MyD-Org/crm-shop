@@ -4,6 +4,7 @@ import { Field, Input, Textarea } from "@myd-org/ui";
 import type { HeroContent } from "@/data/home-defaults";
 import { nuevoEnlace } from "@/lib/home-editor";
 import { ListaEditable } from "../ListaEditable";
+import { CampoImagen } from "./CampoImagen";
 import type { EditorProps } from "./index";
 
 export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
@@ -21,13 +22,12 @@ export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
       <Field label="Bajada">
         <Textarea value={valor.bajada} onChange={(e) => onChange({ ...valor, bajada: e.target.value })} />
       </Field>
-      {/* La imagen se edita desde la rebanada C (subida a R2); acá es solo lectura. */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- previa de solo lectura; se reemplaza por CampoImagen en la rebanada C */}
-      <img src={valor.imagen} alt="" className="h-24 w-auto rounded-md object-cover" />
-      <p className="text-sm text-muted">La imagen se podrá cambiar próximamente.</p>
-      <Field label="Texto alternativo de la imagen">
-        <Input value={valor.imagenAlt} onChange={(e) => onChange({ ...valor, imagenAlt: e.target.value })} />
-      </Field>
+      <CampoImagen
+        valor={valor.imagen}
+        onChange={(imagen) => onChange({ ...valor, imagen })}
+        alt={valor.imagenAlt}
+        onAltChange={(imagenAlt) => onChange({ ...valor, imagenAlt })}
+      />
       <div>
         <p className="mb-2 text-sm font-semibold text-text">Enlaces (CTAs)</p>
         <ListaEditable

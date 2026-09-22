@@ -25,6 +25,7 @@ import {
   catalogCategories,
   catalogOverlay,
   catalogProducts,
+  shopCategories,
   type FotoOverlay,
 } from "@/db/schema";
 import {
@@ -359,6 +360,107 @@ const conPrecioSql = sql`${precioSql} > 0`;
  */
 const conStockSql = sql`(${catalogProducts.stock} is null or ${catalogProducts.stock} > 0)`;
 
+/**
+ * ¿Ya llegó el árbol de categorías propias del CRM? Mientras la tienda no lo
+ * tenga (sync del overlay nunca corrida), todo sigue con las de Alegra.
+ */
+const hayArbolSql = sql`exists (select 1 from ${shopCategories} where activa)`;
+
+/**
+ * Filtro por categorías, por NOMBRE (es lo que viaja en `?categoria=`).
+ *
+ * Con árbol propio, una categoría incluye todo su subárbol: tildar
+ * "ILUMINACION" trae también lo clasificado en "Focos led". El producto se
+ * ubica por la categoría que le asignaron en el CRM (`catalog_overlay`); sin
+ * clasificar no cae en ninguna. Sin árbol, el filtro de siempre sobre la
+ * categoría de Alegra.
+ */
+function filtroCategoriasSql(nombres: string[]) {
+  const lista = sql.join(
+    nombres.map((n) => sql`${n}`),
+    sql`, `,
+  );
+  const subarbol = sql`(
+    with recursive arbol as (
+      select id from ${shopCategories} where activa and nombre in (${lista})
+      union all
+      select c.id from ${shopCategories} c join arbol a on c.parent_id = a.id where c.activa
+    )
+    select id from arbol
+  )`;
+  return sql`((${hayArbolSql} and ${catalogOverlay.categoriaId} in ${subarbol})
+    or (not ${hayArbolSql} and ${inArray(catalogCategories.name, nombres)}))`;
+}
+
+/** Categoría propia activa, tal como la necesitan el menú y las facetas. */
+interface NodoCategoria {
+  id: string;
+  parentId: string | null;
+  nombre: string;
+  orden: number;
+}
+
+/** Árbol de categorías propias activas. Vacío = la tienda todavía no lo recibió. */
+const getArbolCategorias = cache(async function getArbolCategorias(): Promise<NodoCategoria[]> {
+  return getDb()
+    .select({
+      id: shopCategories.id,
+      parentId: shopCategories.parentId,
+      nombre: shopCategories.nombre,
+      orden: shopCategories.orden,
+    })
+    .from(shopCategories)
+    .where(eq(shopCategories.activa, true));
+});
+
+/**
+ * Suma los conteos por categoría hacia arriba (cada producto cuenta en su
+ * categoría y en todas las que la contienen) y devuelve el árbol en orden de
+ * lectura —una rama entera antes de la siguiente—, sin las ramas vacías.
+ * Una categoría inactiva corta su rama: lo que cuelga de ella no se muestra.
+ */
+export function enArbolConConteo(
+  arbol: NodoCategoria[],
+  conteos: Map<string, number>,
+): (Faceta & { nivel: number })[] {
+  const porId = new Map(arbol.map((n) => [n.id, n]));
+  const total = new Map<string, number>();
+  for (const [id, cantidad] of conteos) {
+    const vistos = new Set<string>();
+    for (let n = porId.get(id); n && !vistos.has(n.id); n = n.parentId ? porId.get(n.parentId) : undefined) {
+      vistos.add(n.id);
+      total.set(n.id, (total.get(n.id) ?? 0) + cantidad);
+    }
+  }
+  const hijas = (parentId: string | null) =>
+    arbol
+      .filter((n) => n.parentId === parentId)
+      .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre));
+  const salida: (Faceta & { nivel: number })[] = [];
+  const recorrer = (parentId: string | null, nivel: number) => {
+    for (const n of hijas(parentId)) {
+      const count = total.get(n.id) ?? 0;
+      if (count === 0) continue;
+      salida.push({ label: n.nombre, count, nivel });
+      recorrer(n.id, nivel + 1);
+    }
+  };
+  recorrer(null, 1);
+  return salida;
+}
+
+/** Productos por categoría propia (sólo la directa; `enArbolConConteo` suma hacia arriba). */
+async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>) {
+  const filas = await getDb()
+    .select({ id: catalogOverlay.categoriaId, count: sql<number>`count(*)::int` })
+    .from(catalogProducts)
+    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .leftJoin(catalogOverlay, JOIN_OVERLAY)
+    .where(and(where, sql`${catalogOverlay.categoriaId} is not null`))
+    .groupBy(catalogOverlay.categoriaId);
+  return new Map(filas.map((f) => [f.id as string, Number(f.count)]));
+}
+
 /** Qué grupos de filtros entran en un WHERE (ver `condicionesDe`). */
 interface AplicarFiltros {
   categorias: boolean;
@@ -392,7 +494,7 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
     soloVisiblesSql(),
     q ? coincideTexto(q) : undefined,
     aplicar.categorias && filtros.categorias?.length
-      ? inArray(catalogCategories.name, filtros.categorias)
+      ? filtroCategoriasSql(filtros.categorias)
       : undefined,
     aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)
@@ -530,6 +632,8 @@ export function mapItemToProduct(
 export interface Faceta {
   label: string;
   count: number;
+  /** Sólo categorías con árbol propio: 1 = raíz. Sirve para sangrar la lista. */
+  nivel?: number;
 }
 
 export interface Facetas {
@@ -559,8 +663,12 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
   const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false });
   const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false });
 
+  const arbol = await getArbolCategorias();
+
   const [categorias, marcas, [rango]] = await Promise.all([
-    getDb()
+    arbol.length
+      ? conteoPorCategoriaPropia(whereCategorias).then((c) => enArbolConConteo(arbol, c))
+      : getDb()
       .select({
         label: sql<string>`${catalogCategories.name}`,
         count: sql<number>`count(*)::int`,
@@ -604,14 +712,25 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
 
 /**
  * Categorías del catálogo, para la navegación (menú del header y grilla del
- * home). Salen del espejo local, filtrando las que no tienen ningún producto
- * activo — una categoría vacía en el menú es un callejón sin salida.
+ * home). Salen del árbol propio del CRM si ya llegó, y si no de las de
+ * Alegra; en los dos casos sin las que no tienen ningún producto — una
+ * categoría vacía en el menú es un callejón sin salida.
  *
  * Envuelto en `cache` de React para consultarla una sola vez por request.
  */
 export const getCategorias = cache(async function getCategorias(): Promise<
   string[]
 > {
+  // Con árbol propio el menú muestra sus raíces, en el orden del CRM, contando
+  // lo que se publica de verdad (mismo WHERE que la grilla sin filtros).
+  const arbol = await getArbolCategorias();
+  if (arbol.length) {
+    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS));
+    return enArbolConConteo(arbol, conteos)
+      .filter((c) => c.nivel === 1)
+      .map((c) => c.label);
+  }
+
   const filas = await getDb()
     .selectDistinct({ name: catalogCategories.name })
     .from(catalogCategories)

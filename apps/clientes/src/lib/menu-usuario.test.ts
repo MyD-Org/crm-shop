@@ -6,8 +6,8 @@ import {
   HREF_MIS_PEDIDOS,
   entradasMenu,
   etiquetaBotonMenu,
-  tabInicial,
 } from "./menu-usuario";
+import * as menu from "./menu-usuario";
 
 describe("menu del usuario", () => {
   it("ofrece las cuatro entradas en orden, con Cerrar sesión al final", () => {
@@ -15,10 +15,14 @@ describe("menu del usuario", () => {
     expect(ENTRADAS_MENU.at(-1)).toMatchObject({ id: "salir", tone: "danger" });
   });
 
-  it("Mis pedidos y Mis datos llevan a Mi cuenta, Mis datos a su pestaña", () => {
+  it("Mis pedidos lleva al resumen y Mis datos a su sección", () => {
     expect(HREF_MIS_PEDIDOS).toBe("/mi-cuenta");
-    expect(HREF_MIS_DATOS).toBe("/mi-cuenta?tab=datos");
-    expect(tabInicial("datos")).toBe("datos");
+    expect(HREF_MIS_DATOS).toBe("/mi-cuenta/datos");
+  });
+
+  it("ya no hay pestañas: Mi cuenta es por secciones", () => {
+    expect("tabInicial" in menu).toBe(false);
+    expect("TABS_MI_CUENTA" in menu).toBe(false);
   });
 
   it("los textos están en registro formal, sin voseo ni tuteo", () => {
@@ -57,24 +61,5 @@ describe("Favoritos en el menú, detrás de la capacidad de despliegue", () => {
   it("Favoritos lleva a su sección; Mis pedidos sigue en el resumen", () => {
     expect(HREF_FAVORITOS).toBe("/mi-cuenta/favoritos");
     expect(HREF_MIS_PEDIDOS).toBe("/mi-cuenta");
-  });
-});
-
-describe("tabInicial", () => {
-  it("abre la pestaña pedida", () => {
-    expect(tabInicial("datos")).toBe("datos");
-  });
-
-  it("toma el primero si viene repetido", () => {
-    expect(tabInicial(["datos", "compras"])).toBe("datos");
-  });
-
-  it("cae en Mis pedidos si falta o no existe", () => {
-    expect(tabInicial(undefined)).toBe("compras");
-    expect(tabInicial(null)).toBe("compras");
-    expect(tabInicial("")).toBe("compras");
-    expect(tabInicial("otra")).toBe("compras");
-    // Direcciones dejó de ser pestaña: ahora es una sección de Mis datos.
-    expect(tabInicial("direcciones")).toBe("compras");
   });
 });

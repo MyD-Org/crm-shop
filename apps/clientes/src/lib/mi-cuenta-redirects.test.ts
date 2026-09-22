@@ -6,8 +6,8 @@ import { REDIRECTS_MI_CUENTA } from "./mi-cuenta-redirects";
 type Redirects = Awaited<ReturnType<NonNullable<NextConfig["redirects"]>>>;
 
 /**
- * Redirects de las URLs viejas de Mi cuenta (NAV-5). En esta rebanada sólo
- * existe el módulo: `next.config.ts` los activa junto con las rutas nuevas.
+ * Redirects de las URLs viejas de Mi cuenta (NAV-5), activos en
+ * `next.config.ts`.
  */
 describe("REDIRECTS_MI_CUENTA", () => {
   it("se puede devolver tal cual desde redirects() de next.config", () => {
@@ -39,5 +39,16 @@ describe("REDIRECTS_MI_CUENTA", () => {
 
   it("todo source vive bajo /mi-cuenta", () => {
     for (const r of REDIRECTS_MI_CUENTA) expect(r.source).toMatch(/^\/mi-cuenta(\/|$)/);
+  });
+});
+
+describe("next.config.ts activa los redirects de Mi cuenta", () => {
+  it("redirects() devuelve las dos reglas, con su 307/308", async () => {
+    const { default: nextConfig } = await import("../../next.config");
+    expect(nextConfig.redirects).toBeTypeOf("function");
+    const reglas = await nextConfig.redirects!();
+    for (const r of REDIRECTS_MI_CUENTA) expect(reglas).toContainEqual(r);
+    expect(reglas.find((r) => r.source === "/mi-cuenta")).toMatchObject({ permanent: false });
+    expect(reglas.find((r) => r.source === "/mi-cuenta/pedido/:id")).toMatchObject({ permanent: true });
   });
 });

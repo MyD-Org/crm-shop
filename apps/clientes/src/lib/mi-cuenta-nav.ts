@@ -178,3 +178,15 @@ export function migasMiCuenta(pathname: string): Miga[] {
   }
   return [inicio, miCuenta, { label }];
 }
+
+/**
+ * Bajada del saludo de Mi cuenta. Sólo menciona las facturas cuando su
+ * sección está desplegada: no se promete algo que el visitante no encuentra.
+ */
+export function bajadaMiCuenta(
+  despliegue: CapacidadesDespliegue = CAPACIDADES_DESPLIEGUE,
+): string {
+  return despliegue.facturas
+    ? "Revise el estado de sus pedidos, descargue facturas y repita compras con un clic."
+    : "Revise el estado de sus pedidos y repita compras con un clic.";
+}

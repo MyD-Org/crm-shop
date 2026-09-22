@@ -8,9 +8,8 @@
  * - `/mi-cuenta/pedido/:id` → `/mi-cuenta/pedidos/:id`, permanente (308), sin
  *   consultar la base: el dueño se valida en el destino.
  *
- * Todavía NO los usa `next.config.ts`: se activan junto con las rutas destino
- * (sin ellas, `?tab=datos` terminaría en un 404). Import relativo y sin alias
- * `@/` porque lo va a importar `next.config.ts`.
+ * Los activa `next.config.ts` (`redirects`). Import relativo y sin alias `@/`
+ * porque lo importa `next.config.ts`.
  */
 import { hrefPedido, RUTAS_MI_CUENTA } from "./mi-cuenta-nav";
 

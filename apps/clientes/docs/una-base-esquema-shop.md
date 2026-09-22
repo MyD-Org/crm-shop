@@ -251,6 +251,9 @@ El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
 `MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
 `shop.__drizzle_migrations` tiene una fila más.
 
+Las tablas que suma Mi cuenta (favoritos) y cómo las usan sus rutas están en
+[`docs/mi-cuenta.md`](./mi-cuenta.md).
+
 ## Nota sobre el ambiente local de tests (`crm_test`)
 
 Si en algún momento se regenera el baseline (`drizzle/0000_baseline.sql`)

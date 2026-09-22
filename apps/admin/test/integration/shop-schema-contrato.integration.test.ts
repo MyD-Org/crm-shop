@@ -112,17 +112,22 @@ describe("contrato: shop-schema.ts del CRM vs. las migraciones reales del Shop",
     expect(nombres).toContain("orders_cancelacion_motivo_check")
   })
 
-  it("bookkeeping separado: la baseline vive en shop.__drizzle_migrations, no en el del CRM", async () => {
+  it("bookkeeping separado: las migraciones del Shop viven en shop.__drizzle_migrations, no en el del CRM", async () => {
+    // Se cuentan los journals y no un número fijo: el Shop suma migraciones propias
+    // (0001 teléfono, 0002 favoritos, …) y el test no debe romperse con cada una.
+    // El global-setup aplica todas las de apps/clientes/drizzle en el esquema `shop`.
+    const { readFileSync } = await import("node:fs")
+    const entradas = (ruta: string) =>
+      (JSON.parse(readFileSync(ruta, "utf8")) as { entries: unknown[] }).entries.length
+
     const [shopBk] = (await getDb().execute(
       sql`select count(*)::int as n from shop.__drizzle_migrations`,
     )) as unknown as { n: number }[]
-    expect(shopBk.n).toBe(1)
+    expect(shopBk.n).toBe(entradas("../clientes/drizzle/meta/_journal.json"))
 
-    // El bookkeeping del CRM tiene exactamente sus migraciones: la del Shop no se coló ahí.
+    // El bookkeeping del CRM tiene exactamente sus migraciones: las del Shop no se colaron ahí.
     // Se cuenta el journal y no los .sql: en drizzle/ hay un .sql histórico fuera del journal.
-    const { readFileSync } = await import("node:fs")
-    const journal = JSON.parse(readFileSync("./drizzle/meta/_journal.json", "utf8")) as { entries: unknown[] }
-    const propias = journal.entries.length
+    const propias = entradas("./drizzle/meta/_journal.json")
     const [crmBk] = (await getDb().execute(
       sql`select count(*)::int as n from drizzle.__drizzle_migrations`,
     )) as unknown as { n: number }[]

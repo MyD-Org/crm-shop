@@ -9,7 +9,11 @@ import {
 } from "@/lib/envio";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { admiteEnvio, domicilioEnLinea } from "@/lib/facturacion";
-import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
+import {
+  getPerfilFacturacion,
+  guardarTelefonoSiFalta,
+  perfilCompleto,
+} from "@/lib/facturacion-db";
 import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { pagosHabilitados } from "@/lib/pagos-flag";
@@ -275,6 +279,17 @@ export async function POST(req: Request) {
       cotizacion,
       plan,
     );
+
+    // El perfil aprende el teléfono del primer pedido, para no pedirlo en la
+    // próxima compra. Va DESPUÉS de crear el pedido y nunca lo hace fallar: el
+    // pedido ya existe y es lo que importa; el teléfono es una comodidad.
+    if (clerkUserId && perfil && !perfil.telefono && !pedido.repetido) {
+      try {
+        await guardarTelefonoSiFalta(clerkUserId, contactoTelefono);
+      } catch (err) {
+        console.error("[/api/pedidos] no se pudo guardar el teléfono en el perfil:", err);
+      }
+    }
 
     // 200 y no 201 cuando la clave ya existía: no se creó nada nuevo. El
     // checkout trata los dos casos igual —muestra el número— pero la diferencia

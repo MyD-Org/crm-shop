@@ -10,6 +10,7 @@ import {
   cuitValido,
   dniValido,
   formatearCuit,
+  telefonoValido,
   validarFacturacion,
   domicilioEnLinea,
 } from "./facturacion";
@@ -183,6 +184,45 @@ describe("validarFacturacion", () => {
       nroDoc: "33-69345024-9",
     });
     expect(errores.nroDoc).toBeTruthy();
+  });
+});
+
+describe("telefonoValido", () => {
+  it("acepta entre 8 y 15 dígitos, con la puntuación con la que se escribe", () => {
+    expect(telefonoValido("+54 376 4000000")).toBe(true);
+    expect(telefonoValido("(0376) 15-400-0000")).toBe(true);
+    expect(telefonoValido("40000000")).toBe(true);
+    expect(telefonoValido("+55 (11) 91234-5678")).toBe(true);
+  });
+
+  it("rechaza lo que no llega a teléfono o se pasa", () => {
+    expect(telefonoValido("")).toBe(false);
+    expect(telefonoValido("123")).toBe(false);
+    expect(telefonoValido("4000000")).toBe(false);
+    expect(telefonoValido("1234567890123456")).toBe(false);
+    expect(telefonoValido("sin números")).toBe(false);
+  });
+});
+
+describe("validarFacturacion — teléfono", () => {
+  const base = {
+    pais: "AR" as const,
+    tipoDoc: "DNI" as const,
+    nroDoc: "27123456",
+    razonSocial: "Ana",
+    condicionIva: "consumidor_final" as const,
+    domicilioCalle: "Calle 1",
+    domicilioCiudad: "Ciudad",
+  };
+
+  it("es opcional: vacío o ausente no da error", () => {
+    expect(validarFacturacion(base)).toEqual({});
+    expect(validarFacturacion({ ...base, telefono: "  " })).toEqual({});
+  });
+
+  it("si viene, tiene que parecer un teléfono", () => {
+    expect(validarFacturacion({ ...base, telefono: "+54 376 4000000" })).toEqual({});
+    expect(validarFacturacion({ ...base, telefono: "123" })).toHaveProperty("telefono");
   });
 });
 

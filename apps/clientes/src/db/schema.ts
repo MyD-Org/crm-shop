@@ -200,6 +200,14 @@ export const billingProfiles = shop.table(
     domicilioCp: text("domicilio_cp"),
 
     /**
+     * Teléfono de contacto para el pedido. Se guarda como lo escribió el
+     * cliente (con "+", espacios o guiones) y el checkout lo precarga: sin esto
+     * había que tipearlo en cada compra. Opcional en el perfil; el pedido lo
+     * sigue exigiendo y, si el perfil no lo tenía, lo aprende de ahí.
+     */
+    telefono: text("telefono"),
+
+    /**
      * Se detectó que este documento ya existe como contacto en Alegra. NO
      * vincula nada: solo habilita el aviso "parece que ya sos cliente" y marca
      * el pedido para que un operador lo mire antes de facturar. Vincular solo

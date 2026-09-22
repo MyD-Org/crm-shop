@@ -1,0 +1,1 @@
+ALTER TABLE "shop"."billing_profiles" ADD COLUMN "telefono" text;

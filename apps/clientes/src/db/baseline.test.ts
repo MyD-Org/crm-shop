@@ -24,15 +24,33 @@ const JOURNAL = `${DRIZZLE_DIR}/meta/_journal.json`;
 const leerBaseline = () => readFileSync(BASELINE, "utf8");
 
 describe("baseline del esquema shop (estático)", () => {
-  it("hay una sola migración: la baseline", () => {
-    const sqls = readdirSync(DRIZZLE_DIR).filter((f) => f.endsWith(".sql"));
-    expect(sqls).toEqual(["0000_baseline.sql"]);
+  it("la baseline es la primera migración y las siguientes son incrementales", () => {
+    const sqls = readdirSync(DRIZZLE_DIR)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+    expect(sqls[0]).toBe("0000_baseline.sql");
 
     const journal = JSON.parse(readFileSync(JOURNAL, "utf8")) as {
-      entries: { tag: string }[];
+      entries: { idx: number; tag: string }[];
     };
-    expect(journal.entries).toHaveLength(1);
     expect(journal.entries[0].tag).toBe("0000_baseline");
+    // Cada .sql tiene su entrada en el journal, en orden: un archivo suelto o
+    // una entrada sin archivo hacen que el migrador salte o falle en silencio.
+    expect(journal.entries.map((e) => `${e.tag}.sql`)).toEqual(sqls);
+    expect(journal.entries.map((e) => e.idx)).toEqual(sqls.map((_, i) => i));
+
+    // Nada después de la baseline vuelve a crear tablas: la baseline ya está
+    // aplicada en producción y solo se puede sumar por ALTER.
+    for (const f of sqls.slice(1)) {
+      expect(readFileSync(`${DRIZZLE_DIR}/${f}`, "utf8")).not.toContain("CREATE TABLE");
+    }
+  });
+
+  it("0001 agrega el teléfono de contacto al perfil de facturación", () => {
+    const sql = readFileSync(`${DRIZZLE_DIR}/0001_telefono_contacto.sql`, "utf8");
+    expect(sql).toContain(
+      'ALTER TABLE "shop"."billing_profiles" ADD COLUMN "telefono" text',
+    );
   });
 
   it("conserva las ediciones a mano (esquema idempotente, unaccent, función calificada)", () => {

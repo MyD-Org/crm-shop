@@ -8,8 +8,10 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 
 const crearPedido = vi.fn();
 const getOferta = vi.fn();
+const guardarTelefonoSiFalta = vi.fn();
 let flag = true;
 let pais = "AR";
+let telefonoPerfil: string | null = null;
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
@@ -32,8 +34,11 @@ vi.mock("@/lib/pedidos", () => ({
   listarPedidos: async () => [],
 }));
 vi.mock("@/lib/facturacion-db", () => ({
-  getPerfilFacturacion: async () => ({ pais, tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF" }),
+  getPerfilFacturacion: async () => ({
+    pais, tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF", telefono: telefonoPerfil,
+  }),
   perfilCompleto: () => true,
+  guardarTelefonoSiFalta: (...a: unknown[]) => guardarTelefonoSiFalta(...a),
 }));
 vi.mock("@/lib/facturacion", async (original) => ({
   // `admiteEnvio` es la regla real: mockearla sería testear el mock.
@@ -81,6 +86,9 @@ const planGuardado = () => crearPedido.mock.calls[0][3];
 beforeEach(() => {
   flag = true;
   pais = "AR";
+  telefonoPerfil = null;
+  guardarTelefonoSiFalta.mockReset();
+  guardarTelefonoSiFalta.mockResolvedValue(undefined);
   crearPedido.mockReset();
   crearPedido.mockImplementation(async (_c, _d, _cot, plan) => ({
     id: "p1", numero: "PED-1", repetido: false, cuotasMax: plan?.cuotasMax ?? null,
@@ -148,5 +156,27 @@ describe("POST /api/pedidos — envío solo dentro de Argentina", () => {
     const r = await post({ pagoMetodo: "transferencia" });
     expect(r.status).toBeLessThan(300);
     expect(crearPedido).toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/pedidos — el perfil aprende el teléfono", () => {
+  it("sin teléfono en el perfil, guarda el del pedido", async () => {
+    const r = await post({ contactoTelefono: "+54 376 4000000" });
+    expect(r.status).toBe(201);
+    expect(guardarTelefonoSiFalta).toHaveBeenCalledWith("user_1", "+54 376 4000000");
+  });
+
+  it("con teléfono ya cargado no lo pisa", async () => {
+    telefonoPerfil = "+54 376 5000000";
+    await post({ contactoTelefono: "+54 376 4000000" });
+    expect(guardarTelefonoSiFalta).not.toHaveBeenCalled();
+  });
+
+  it("si falla el guardado, el pedido se responde igual", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    guardarTelefonoSiFalta.mockRejectedValue(new Error("db"));
+    const r = await post();
+    expect(r.status).toBe(201);
+    expect(await r.json()).toMatchObject({ numero: "PED-1" });
   });
 });

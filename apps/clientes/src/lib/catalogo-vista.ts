@@ -164,6 +164,14 @@ export function contarFiltrosActivos(estado: EstadoCatalogo): number {
 }
 
 /**
+ * Nombre accesible del botón "Filtros" de mobile: "Filtros (5)" con filtros
+ * activos, "Filtros" sin ellos. El número también se ve en un `Badge`.
+ */
+export function etiquetaBotonFiltros(activos: number): string {
+  return activos > 0 ? `Filtros (${activos})` : "Filtros";
+}
+
+/**
  * ¿Esta combinación merece estar en el índice de los buscadores? Sólo
  * `/catalogo`, una categoría y sus páginas; el resto (búsquedas, marcas,
  * precio, stock, orden, vista, varias categorías) queda `noindex, follow`:

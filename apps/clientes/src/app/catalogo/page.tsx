@@ -1,8 +1,15 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { getFacetas, getPaginaCatalogo } from "@/lib/catalog";
-import { hrefCanonico, leerEstado, type ParamCrudo } from "@/lib/catalogo-url";
+import {
+  hrefCanonico,
+  leerEstado,
+  type EstadoCatalogo,
+  type ParamCrudo,
+} from "@/lib/catalogo-url";
 import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
+import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
 // Lee el espejo local del catálogo en cada request (lo refresca el cron diario).
@@ -41,9 +48,29 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   };
 }
 
+/**
+ * Suspense PARCIAL (sin `loading.tsx`): en la primera carga se ve la silueta
+ * del catálogo (`CatalogoSkeleton`) mientras Postgres resuelve; al filtrar,
+ * no. La navegación por `searchParams` es una transición y el segmento de la
+ * página conserva su identidad (Next 16.2.9, `layout-router.js`: la clave
+ * del segmento se arma SIN los search params), así que React deja la grilla
+ * vigente —atenuada por `CatalogoClient`— en lugar de volver al fallback.
+ *
+ * Plan B si alguna vez el skeleton apareciera al filtrar: sacar el
+ * `Suspense` y renderizar `CatalogoResultados` directo (queda sólo el
+ * atenuado; se pierde el skeleton de la primera carga).
+ */
 export default async function CatalogoPage({ searchParams }: Props) {
   const estado = leerEstado(await searchParams);
+  return (
+    <Suspense fallback={<CatalogoSkeleton estado={estado} />}>
+      <CatalogoResultados estado={estado} />
+    </Suspense>
+  );
+}
 
+/** Las lecturas del catálogo y el render del cliente (lo que suspende). */
+async function CatalogoResultados({ estado }: { estado: EstadoCatalogo }) {
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo.
   const filtros = {

@@ -6,6 +6,7 @@ import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
 import { CatalogoEncabezado } from "@/components/catalogo/CatalogoEncabezado";
 import { CatalogoFiltros } from "@/components/catalogo/CatalogoFiltros";
+import { CatalogoFiltrosSheet } from "@/components/catalogo/CatalogoFiltrosSheet";
 import { CatalogoProductos } from "@/components/catalogo/CatalogoProductos";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
@@ -48,8 +49,8 @@ export function CatalogoClient({
   // en vez de quedarse muda.
   const [navegando, startTransition] = useTransition();
 
-  const ir = (cambios: Partial<EstadoCatalogo>) =>
-    startTransition(() => router.push(hrefCon(estado, cambios)));
+  const navegar = (href: string) => startTransition(() => router.push(href));
+  const ir = (cambios: Partial<EstadoCatalogo>) => navegar(hrefCon(estado, cambios));
 
   // Mejor opción de cuotas por producto, sobre su precio final unitario.
   const cuotasPorProducto = useMemo(() => {
@@ -66,14 +67,31 @@ export function CatalogoClient({
 
   return (
     <main className="mx-auto flex w-full max-w-contenido flex-1 gap-6 px-4 py-8">
-      <aside className="hidden w-64 shrink-0 lg:block">
+      {/*
+        Filtros sticky en desktop: quedan a la vista mientras se recorre la
+        grilla. `self-start` evita que el aside se estire al alto de la
+        grilla (sin eso no hay nada que "pegar").
+        - `top-36` (144px): el SiteHeader del DS es sticky y en lg mide
+          ~132px (78 de la fila + 52 de la barra de categorías + bordes); el
+          DS no expone su alto como token, así que se usa el valor de la
+          escala que queda justo debajo.
+        - Si el panel es más alto que la pantalla (marcas expandidas),
+          scrollea adentro: `max-h-screen` + `pb-36` compensa el `top-36`
+          (la caja mide una pantalla y arranca 144px más abajo; el padding
+          deja el final del panel alcanzable). Sin valores arbitrarios: el
+          alto del header como token del DS es follow-up.
+      */}
+      <aside className="sticky top-36 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-36 lg:block">
         <CatalogoFiltros facetas={facetas} estado={estado} ir={ir} />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col gap-6">
         <CatalogoEncabezado estado={estado} total={total} paginas={paginas} ir={ir} />
+        {/* Mobile: el aside no entra; el mismo panel va en una hoja. */}
+        <div className="lg:hidden">
+          <CatalogoFiltrosSheet facetas={facetas} estado={estado} navegar={navegar} />
+        </div>
         <CatalogoChips estado={estado} rango={facetas.precio} ir={ir} />
-        {/* Acá va el botón "Filtros" de mobile (hoja con el mismo panel). */}
 
         {productos.length === 0 ? (
           <EmptyState

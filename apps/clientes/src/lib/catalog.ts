@@ -31,7 +31,7 @@ import {
   type AlegraItem,
   type AlegraPrice,
 } from "./alegra";
-import type { OrdenCatalogo } from "./catalogo-url";
+import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { precioFinal } from "./precio-final";
 import { stockSimulado } from "./stock-simulado";
 import type { Product } from "@/data/products";
@@ -210,6 +210,11 @@ export interface FiltrosCatalogo {
   busqueda?: string;
   categorias?: string[];
   marcas?: string[];
+  /** Extremos inclusivos del rango, sobre el precio exhibido (con IVA). */
+  precioMin?: number;
+  precioMax?: number;
+  /** Sólo productos con disponibilidad (ver `condicionesDe`). */
+  soloStock?: boolean;
 }
 
 export interface PaginaCatalogo {
@@ -250,8 +255,11 @@ const precioSql = sql<string>`coalesce(
 /**
  * Precio que ve el visitante, en SQL: el final con IVA cuando se conoce la
  * alícuota, si no el neto — mismo criterio que `precioExhibido` del cliente.
- * No replica el redondeo al centavo de `precioFinal()` porque acá sólo se usa
- * para ORDENAR; el número que se muestra sigue saliendo de `mapFilaToProduct`.
+ * No replica el redondeo al centavo de `precioFinal()`: acá se usa para
+ * ORDENAR, para el rango de precio del slider y para el filtro por rango, que
+ * viaja en enteros (`precio_min`/`precio_max`), así que el borde `>=`/`<=`
+ * sobre el valor sin redondear es indistinguible para el visitante. El número
+ * que se muestra sigue saliendo de `mapFilaToProduct`.
  */
 const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${catalogProducts.ivaPorcentaje}, 0) / 100)`;
 
@@ -264,15 +272,37 @@ const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${catalogProd
 const conPrecioSql = sql`${precioSql} > 0`;
 
 /**
+ * "Solo con stock", en SQL. Replica `derivarStock`: null = no inventariable
+ * = disponible; `<= 0` = sin stock.
+ */
+const conStockSql = sql`(${catalogProducts.stock} is null or ${catalogProducts.stock} > 0)`;
+
+/** Qué grupos de filtros entran en un WHERE (ver `condicionesDe`). */
+interface AplicarFiltros {
+  categorias: boolean;
+  marcas: boolean;
+  precio: boolean;
+  stock: boolean;
+}
+
+const APLICAR_TODOS: AplicarFiltros = {
+  categorias: true,
+  marcas: true,
+  precio: true,
+  stock: true,
+};
+
+/**
  * WHERE compartido por la página, el conteo y las facetas.
  *
  * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
  * faceta excluye su propio grupo (ver `getFacetas`).
+ *
+ * El filtro de stock se OMITE mientras la simulación de disponibilidad está
+ * activa (`stockSimulado()`): con ella todo se muestra "disponible", y filtrar
+ * por `stock > 0` escondería productos que la card dice que están.
  */
-function condicionesDe(
-  filtros: FiltrosCatalogo,
-  aplicar: { categorias: boolean; marcas: boolean },
-) {
+function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
   const q = filtros.busqueda?.trim();
   return and(
     eq(catalogProducts.status, "active"),
@@ -284,12 +314,20 @@ function condicionesDe(
     aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)
       : undefined,
+    aplicar.precio && filtros.precioMin != null
+      ? sql`${precioExhibidoSql} >= ${filtros.precioMin}`
+      : undefined,
+    aplicar.precio && filtros.precioMax != null
+      ? sql`${precioExhibidoSql} <= ${filtros.precioMax}`
+      : undefined,
+    aplicar.stock && filtros.soloStock && !stockSimulado()
+      ? conStockSql
+      : undefined,
   );
 }
 
 /**
- * ORDER BY según el criterio elegido. "ventas" no tiene todavía un dato de
- * ventas detrás: ordena por nombre, igual que antes hacía el orden de la query.
+ * ORDER BY según el criterio elegido. El default (`nombre`) es el alfabético.
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
  */
@@ -327,7 +365,7 @@ export async function getPaginaCatalogo(opts?: {
 }): Promise<PaginaCatalogo> {
   const filtros = opts?.filtros ?? {};
   const porPagina = opts?.porPagina ?? PRODUCTOS_POR_PAGINA;
-  const where = condicionesDe(filtros, { categorias: true, marcas: true });
+  const where = condicionesDe(filtros, APLICAR_TODOS);
 
   const [conteo] = await getDb()
     .select({ total: sql<number>`count(*)::int` })
@@ -345,7 +383,7 @@ export async function getPaginaCatalogo(opts?: {
         .from(catalogProducts)
         .leftJoin(catalogCategories, JOIN_CATEGORIAS)
         .where(where)
-        .orderBy(...ordenDe(opts?.orden ?? "ventas"))
+        .orderBy(...ordenDe(opts?.orden ?? ORDEN_DEFAULT))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];
@@ -409,25 +447,31 @@ export interface Faceta {
 export interface Facetas {
   categorias: Faceta[];
   marcas: Faceta[];
+  /**
+   * Rango real de precios exhibidos del conjunto filtrado, sin el propio
+   * filtro de precio (límites del slider). null = ningún producto cumple.
+   */
+  precio: RangoPrecio | null;
 }
 
 /**
  * Facetas con sus conteos, calculadas en Postgres.
  *
- * Cada faceta cuenta sobre lo que matchea la búsqueda MÁS los filtros del OTRO
- * grupo, y no sobre los propios: las marcas se cuentan dentro de las categorías
- * tildadas (tildar "Herramientas" deja sólo las marcas que tienen herramientas,
- * con la cantidad que tienen), pero siguen mostrándose todas las categorías
- * disponibles para poder tildar otra sin destildar la primera. Antes no miraban
- * ningún filtro: la lista de marcas era la del catálogo entero, con conteos que
- * no correspondían a los productos que se estaban viendo.
+ * Cada faceta cuenta sobre lo que matchea la búsqueda MÁS los filtros de los
+ * OTROS grupos, y no sobre el propio: las marcas se cuentan dentro de las
+ * categorías tildadas (tildar "Herramientas" deja sólo las marcas que tienen
+ * herramientas, con la cantidad que tienen), pero siguen mostrándose todas las
+ * categorías disponibles para poder tildar otra sin destildar la primera. Con
+ * el mismo criterio, el rango de precio se calcula sobre todo lo demás pero
+ * sin el rango vigente: si no, los límites del slider se achicarían a lo que
+ * el visitante acaba de elegir y ya no podría volver a abrirlo.
  */
 export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas> {
-  // Para contar categorías pesan las marcas tildadas, y viceversa.
-  const whereCategorias = condicionesDe(filtros, { categorias: false, marcas: true });
-  const whereMarcas = condicionesDe(filtros, { categorias: true, marcas: false });
+  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false });
+  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false });
+  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false });
 
-  const [categorias, marcas] = await Promise.all([
+  const [categorias, marcas, [rango]] = await Promise.all([
     getDb()
       .select({
         label: sql<string>`${catalogCategories.name}`,
@@ -445,9 +489,24 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
       .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
+    // Enteros hacia afuera (floor/ceil) para que ningún producto quede fuera
+    // de los límites que muestra el slider.
+    getDb()
+      .select({
+        min: sql<number | null>`floor(min(${precioExhibidoSql}))::int`,
+        max: sql<number | null>`ceil(max(${precioExhibidoSql}))::int`,
+      })
+      .from(catalogProducts)
+      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .where(wherePrecio),
   ]);
 
-  return { categorias, marcas };
+  const precio =
+    rango?.min != null && rango?.max != null
+      ? { min: rango.min, max: rango.max }
+      : null;
+
+  return { categorias, marcas, precio };
 }
 
 

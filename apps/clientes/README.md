@@ -46,6 +46,10 @@ Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
 Detalle del esquema `shop` (rol, permisos, migración base y pasos de
 despliegue): `docs/una-base-esquema-shop.md`.
 
+**Rol admin del Shop**: en Clerk → Users → Metadata → Public, `{"role":"admin"}`.
+Habilita el modo edición de la home (`/`): editar cada sección in-place, sin
+pasar por el CRM (server actions en `src/lib/home-acciones.ts`).
+
 El pool de conexiones es un singleton (se reusa; uno por request agotaría las
 conexiones de Postgres). Está cacheado **junto a la URL con la que se creó**, así
 que si cambiás de base en el `.env.local` se reconecta solo en la próxima query

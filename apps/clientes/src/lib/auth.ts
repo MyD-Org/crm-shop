@@ -22,6 +22,7 @@ import { clientLinks } from "@/db/schema";
 import { getContacto, idPriceListUsable } from "./alegra";
 import { intentarVinculacionPorEmail } from "./vinculacion";
 import { nombrePila } from "./nombre-pila";
+import { esRolAdmin } from "./rol-admin";
 import { sessionOptions, type SessionData } from "./session";
 
 /** Datos comerciales de un cliente ya resuelto. */
@@ -49,6 +50,8 @@ export interface Identidad {
   nombrePila: string | null;
   /** null = logueado pero sin cuenta corriente vinculada. */
   cliente: ClienteComercial | null;
+  /** Rol admin (Clerk publicMetadata.role). La cookie del CRM NUNCA lo otorga. */
+  esAdmin: boolean;
 }
 
 /** Sesión heredada del CRM (cookie compartida en .cliente.example). */
@@ -131,6 +134,7 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
             origen: "cookie_crm",
           }
         : null,
+      esAdmin: false,
     };
   }
 
@@ -179,6 +183,7 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
         idPriceList: link.idPriceList ?? undefined,
         origen: "vinculacion",
       },
+      esAdmin: esRolAdmin(user?.publicMetadata),
     };
   }
 
@@ -204,7 +209,25 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
           origen: "cookie_crm",
         }
       : null,
+    esAdmin: esRolAdmin(user?.publicMetadata),
   };
+});
+
+/**
+ * ¿El request lo hace un admin del Shop? Solo Clerk (`publicMetadata.role`),
+ * nunca la cookie del CRM. Aparte de `identidadActual()` a propósito: las
+ * server actions corren fuera de un render (`cache()` no memoiza ahí, ver
+ * más arriba) y no deben pagar la vinculación ni Alegra en cada guardado.
+ */
+export const esAdmin = cache(async function esAdmin(): Promise<boolean> {
+  try {
+    const { userId } = await auth();
+    if (!userId) return false;
+    const user = await currentUser();
+    return esRolAdmin(user?.publicMetadata);
+  } catch {
+    return false;
+  }
 });
 
 /**

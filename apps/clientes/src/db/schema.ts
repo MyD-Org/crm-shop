@@ -541,8 +541,9 @@ export const paymentConfigCache = shop.table("payment_config_cache", {
   lastError: text("last_error"),
 });
 
-/** Contenido administrable de la home. Una fila por sección; el CRM escribe vía
- *  PUT /api/internal/home-content y la home la mergea con defaults en código. */
+/** Contenido administrable de la home. Una fila por sección; la escriben las
+ *  server actions de src/lib/home-acciones.ts (usuario admin) y la home la
+ *  mergea con defaults en código. navBadge apagado = jsonb 'null'. */
 export const homeContent = shop.table("home_content", {
   key: text("key").primaryKey(),
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),

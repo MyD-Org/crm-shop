@@ -1,7 +1,7 @@
 /**
- * Contenido por defecto de la home, editable después desde el CRM vía
- * PUT /api/internal/home-content. Cada sección de la DB pisa a su default
- * solo si valida (ver erroresSeccion).
+ * Contenido por defecto de la home, editable desde la home por un usuario
+ * admin (server actions en src/lib/home-acciones.ts). Cada sección de la DB
+ * pisa a su default solo si valida (ver erroresSeccion).
  *
  * Los defaults reflejan el diseño aprobado ("Central Led — Diseño cálido sin
  * azul", guía §4/§6): textos literales del mockup e imágenes comprimidas en
@@ -150,7 +150,7 @@ export const DEFAULTS_HOME: HomeContent = {
     linkTodos: "/catalogo",
     cantidad: 4,
     // Productos reales del catálogo (los del diseño aprobado que existen en
-    // Alegra). El CRM puede re-curarlos con la sección "destacados".
+    // Alegra). Se re-curan desde el editor de la home.
     skus: ["ADF-D8-BCO-CO", "ADM-D10-BCO-CO", "ADM-D8-BCO-CO"],
     imagenes: [
       "/images/prod-bulb-warm.webp",
@@ -197,7 +197,7 @@ export const DEFAULTS_HOME: HomeContent = {
 };
 
 // ---------------------------------------------------------------------------
-// Validación mínima por sección (contrato del PUT /api/internal/home-content)
+// Validación por sección (la usan las server actions y combinarContenidoHome)
 // ---------------------------------------------------------------------------
 
 function esTexto(v: unknown): v is string {

@@ -7,6 +7,7 @@ import { Providers } from "@/components/Providers";
 import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getContenidoHome } from "@/lib/home-datos";
+import { identidadActual } from "@/lib/auth";
 import { HEADER_TEMA, TEMA_COOKIE } from "@/lib/tema-ip";
 import "./globals.css";
 
@@ -69,6 +70,11 @@ export default async function RootLayout({
 }>) {
   // Anuncio global: contenido administrable del CRM (mismo contrato que la home).
   const { anuncio } = await getContenidoHome();
+  // Favoritos se guardan por usuario de Clerk: quien entra sólo con la cookie
+  // del CRM no tiene dónde guardarlos y no ve el corazón. `identidadActual`
+  // está en `cache()`: el Header la resuelve en el mismo request.
+  const identidad = await identidadActual();
+  const favoritosBloqueados = !identidad.clerkUserId && !!identidad.cliente;
   // Tema por geo-IP (guía §5): el proxy decide en la primera visita
   // (Misiones → azul de marca) y `?tema=` la puede forzar. El header
   // x-centralled-tema trae la decisión de ESTE request y manda sobre la
@@ -92,7 +98,7 @@ export default async function RootLayout({
       <body className="flex min-h-full flex-col">
         {/* ClerkProvider DENTRO de <body>: envolver <html> fuerza render dinámico de todo el árbol */}
         <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
-          <Providers>
+          <Providers favoritosBloqueados={favoritosBloqueados}>
             {/* Anuncio global (contenido administrable): arriba de todo, sobre el header */}
             <div className="bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary">
               {anuncio.texto}

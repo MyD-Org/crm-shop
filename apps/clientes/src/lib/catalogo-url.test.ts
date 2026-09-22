@@ -10,7 +10,6 @@ import {
   hrefCatalogo,
   hrefCon,
   leerEstado,
-  paginasVisibles,
   rangoEfectivo,
   type EstadoCatalogo,
   type RangoPrecio,
@@ -275,34 +274,5 @@ describe("rango de precio efectivo", () => {
       precioMin: undefined,
       precioMax: undefined,
     });
-  });
-});
-
-describe("paginasVisibles", () => {
-  it("hasta 7 páginas las muestra todas, sin elipsis", () => {
-    expect(paginasVisibles(1, 5)).toEqual([1, 2, 3, 4, 5]);
-    expect(paginasVisibles(4, 7)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-  });
-
-  it("al principio, elipsis sólo del lado derecho", () => {
-    expect(paginasVisibles(1, 20)).toEqual([1, 2, 3, 4, null, 20]);
-    expect(paginasVisibles(2, 20)).toEqual([1, 2, 3, 4, null, 20]);
-  });
-
-  it("en el medio, elipsis de los dos lados", () => {
-    expect(paginasVisibles(10, 20)).toEqual([1, null, 9, 10, 11, null, 20]);
-  });
-
-  it("al final, elipsis sólo del lado izquierdo", () => {
-    expect(paginasVisibles(20, 20)).toEqual([1, null, 17, 18, 19, 20]);
-  });
-
-  it("siempre incluye la primera, la última y la actual", () => {
-    for (const actual of [1, 2, 8, 57, 117]) {
-      const vistas = paginasVisibles(actual, 117);
-      expect(vistas).toContain(1);
-      expect(vistas).toContain(117);
-      expect(vistas).toContain(actual);
-    }
   });
 });

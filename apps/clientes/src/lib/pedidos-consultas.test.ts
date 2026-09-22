@@ -5,7 +5,7 @@ import {
   valoresInsertados,
   type ConsultaGrabada,
 } from "@/db/__fixtures__/db-grabadora";
-import { orders } from "@/db/schema";
+import { orderItems, orders } from "@/db/schema";
 import type { Cotizacion } from "./cotizacion";
 
 /**
@@ -291,5 +291,87 @@ describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
   it("si cambió, true", async () => {
     grabadora = dbGrabadora(() => [[ID]]);
     expect(await cancelarPedidoPendiente(ID, DUENO)).toBe(true);
+  });
+});
+
+/**
+ * Fila cruda de una tabla en el orden de columnas del schema (así las devuelve
+ * `pg-proxy`), con valores de relleno salvo los que el test fija.
+ */
+function filaDe(
+  tabla: typeof orders | typeof orderItems,
+  valores: Record<string, unknown>,
+): unknown[] {
+  return Object.entries(getTableColumns(tabla)).map(([clave, col]) => {
+    if (clave in valores) return valores[clave];
+    if (col.dataType === "date") return "2026-01-01T00:00:00.000Z";
+    if (col.dataType === "number") return 1000;
+    if (col.dataType === "boolean") return false;
+    if (col.dataType === "json") return null;
+    return "x";
+  });
+}
+
+/** Ids del `in (...)` de la consulta a `catalog_products`, en orden. */
+function idsConsultados(c: ConsultaGrabada): unknown[] {
+  const m = c.sql.match(/"catalog_products"\."alegra_id" in \(([^)]*)\)/);
+  expect(m, c.sql).not.toBeNull();
+  return m![1].split(", ").map((t) => c.params[Number(t.slice(1)) - 1]);
+}
+
+describe("líneas con el nombre real del espejo, sin N+1", () => {
+  const PEDIDOS = ["p-1", "p-2", "p-3"];
+
+  function responder(lineas: unknown[][]) {
+    return (c: ConsultaGrabada) => {
+      if (c.sql.includes('from "shop"."order_items"')) return lineas;
+      if (c.sql.includes('from "shop"."orders"')) {
+        return PEDIDOS.map((id) => filaDe(orders, { id }));
+      }
+      return [];
+    };
+  }
+
+  it("listarPedidos: pedidos, líneas y UNA consulta de productos con ids sin repetir", async () => {
+    // 40 líneas repartidas en 3 pedidos, sobre 5 productos distintos.
+    const lineas = Array.from({ length: 40 }, (_, i) =>
+      filaDe(orderItems, { orderId: PEDIDOS[i % 3], alegraItemId: String(i % 5) }),
+    );
+    grabadora = dbGrabadora(responder(lineas));
+
+    const pedidos = await listarPedidos(DUENO, 3);
+
+    expect(pedidos).toHaveLength(3);
+    expect(grabadora.consultas).toHaveLength(3);
+    const [cabeceras, detalle, productos] = grabadora.consultas;
+    esperaTenant(cabeceras);
+    expect(cabeceras.sql).toContain('"orders"."clerk_user_id" =');
+    expect(detalle.sql).toContain('"shop"."order_items"');
+    expect(productos.sql).toContain('from "shop"."catalog_products"');
+    expect(idsConsultados(productos)).toEqual(["0", "1", "2", "3", "4"]);
+  });
+
+  it("sin líneas no consulta productos", async () => {
+    grabadora = dbGrabadora(responder([]));
+    await listarPedidos(DUENO, 3);
+    expect(grabadora.consultas).toHaveLength(2);
+  });
+
+  it("getPedido: tres consultas y la de productos no filtra por visible", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.includes('from "shop"."order_items"')) {
+        return [filaDe(orderItems, { orderId: ID, alegraItemId: "42" })];
+      }
+      if (c.sql.includes('from "shop"."orders"')) return [filaDe(orders, { id: ID })];
+      return [];
+    });
+
+    expect(await getPedido(ID, DUENO)).not.toBeNull();
+    expect(grabadora.consultas).toHaveLength(3);
+    esperaTenant(grabadora.consultas[0]);
+    expect(idsConsultados(grabadora.consultas[2])).toEqual(["42"]);
+    expect(grabadora.consultas[2].sql).not.toContain('"visible"');
+    expect(grabadora.consultas[2].sql).not.toContain('"status"');
   });
 });

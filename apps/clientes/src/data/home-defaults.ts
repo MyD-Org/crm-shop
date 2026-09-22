@@ -72,6 +72,7 @@ export type DecoGridContent = {
 
 export type ServiciosContent = { items: { titulo: string; texto: string }[] };
 export type NavBadgeContent = { categoria: string; texto: string };
+export type WhatsappContent = { titulo: string; texto: string; href: string };
 
 export type HomeContent = {
   anuncio: { texto: string };
@@ -84,6 +85,7 @@ export type HomeContent = {
   servicios: ServiciosContent;
   /** null = la categoría del nav no lleva badge. */
   navBadge: NavBadgeContent | null;
+  whatsapp: WhatsappContent;
 };
 
 export const SECCIONES_HOME = [
@@ -96,6 +98,7 @@ export const SECCIONES_HOME = [
   "decoGrid",
   "servicios",
   "navBadge",
+  "whatsapp",
 ] as const;
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
@@ -194,6 +197,11 @@ export const DEFAULTS_HOME: HomeContent = {
     ],
   },
   navBadge: { categoria: "ILUMINACION", texto: "Nuevo" },
+  whatsapp: {
+    titulo: "¿Necesitás asesoramiento técnico?",
+    texto: "Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.",
+    href: "https://wa.me/5492235903025",
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -204,14 +212,30 @@ function esTexto(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+/**
+ * `true` sii `v` es una ruta interna (empieza con "/" y no con "//", que es
+ * protocol-relative) o una URL `https:` completa. Rechaza `http:`,
+ * `javascript:`, `mailto:` y cualquier otro esquema.
+ */
+export function esHref(v: unknown): v is string {
+  if (!esTexto(v)) return false;
+  const h = v.trim();
+  if (h.startsWith("/")) return !h.startsWith("//");
+  try {
+    return new URL(h).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function esEnlace(v: unknown): v is Enlace {
   const o = v as Enlace;
-  return !!v && typeof v === "object" && esTexto(o.label) && esTexto(o.href);
+  return !!v && typeof v === "object" && esTexto(o.label) && esHref(o.href);
 }
 
 function esTile(v: unknown): v is TileContent {
   const o = v as TileContent;
-  return !!v && typeof v === "object" && esTexto(o.eyebrow) && esTexto(o.titulo) && esTexto(o.imagen) && esTexto(o.href);
+  return !!v && typeof v === "object" && esTexto(o.eyebrow) && esTexto(o.titulo) && esTexto(o.imagen) && esHref(o.href);
 }
 
 /** Devuelve la lista de problemas del payload para la sección ([] = válido). */
@@ -260,7 +284,7 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       texto("titulo");
       texto("acento", true);
       if (key === "ambientes") texto("bajada", true);
-      if (!esTexto(o.linkTodos)) errores.push("linkTodos debe ser un texto no vacío");
+      if (!esHref(o.linkTodos)) errores.push("linkTodos debe ser una ruta interna (/) o una URL https");
       if (!Array.isArray(o.items) || o.items.length === 0 || !o.items.every(esTile))
         errores.push("items debe ser un array no vacío de tiles { eyebrow, titulo, imagen, href }");
       if (key === "decoGrid" && (!Array.isArray(o.chips) || !o.chips.every(esEnlace)))
@@ -271,7 +295,7 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       texto("titulo");
       texto("acento", true);
       texto("bajada", true);
-      if (!esTexto(o.linkTodos)) errores.push("linkTodos debe ser un texto no vacío");
+      if (!esHref(o.linkTodos)) errores.push("linkTodos debe ser una ruta interna (/) o una URL https");
       if (typeof o.cantidad !== "number" || o.cantidad < 1 || o.cantidad > 24)
         errores.push("cantidad debe ser un número entre 1 y 24");
       if (o.skus !== undefined &&
@@ -298,6 +322,11 @@ export function erroresSeccion(key: string, payload: unknown): string[] {
       if (!Array.isArray(o.items) || o.items.length === 0 ||
           !(o.items as { titulo?: unknown; texto?: unknown }[]).every((s) => esTexto(s?.titulo) && esTexto(s?.texto)))
         errores.push("items debe ser un array no vacío de { titulo, texto }");
+      break;
+    case "whatsapp":
+      texto("titulo");
+      texto("texto");
+      if (!esHref(o.href)) errores.push("href debe ser una ruta interna (/) o una URL https");
       break;
   }
   return errores;

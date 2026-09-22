@@ -28,6 +28,14 @@ describe("home-editable A: puedeEditar llega desde el servidor", () => {
   });
 });
 
+describe("home-editable B1: whatsapp sale del contrato, no de literales", () => {
+  it("HomeClient.tsx no hardcodea el href ni el copy del CTA de WhatsApp", () => {
+    const texto = readFileSync(HOME_CLIENT, "utf8");
+    expect(texto).not.toContain("https://wa.me/");
+    expect(texto).not.toContain("¿Necesitás asesoramiento");
+  });
+});
+
 describe("home-editable A: PUT /api/internal/home-content eliminado", () => {
   it("el endpoint deja de existir", () => {
     expect(existsSync(HOME_CONTENT_DIR)).toBe(false);

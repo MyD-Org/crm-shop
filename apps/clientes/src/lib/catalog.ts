@@ -37,6 +37,7 @@ import {
   type AlegraPrice,
 } from "./alegra";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
+import { catalogoSoloVisibles } from "./catalogo-flag";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { precioFinal } from "./precio-final";
 import { stockSimulado } from "./stock-simulado";
@@ -150,6 +151,17 @@ const JOIN_CATEGORIAS = eq(
  */
 const JOIN_OVERLAY = eq(catalogOverlay.alegraId, catalogProducts.alegraId);
 
+/**
+ * Sólo productos publicados en el CRM, detrás del flag
+ * `SHOP_CATALOGO_SOLO_VISIBLES` (apagado por defecto). Fail-closed: sin fila
+ * de overlay el left join deja `visible` en NULL y el producto queda afuera,
+ * así que con el flag prendido y sin curaduría la tienda queda vacía. Se
+ * evalúa por consulta (no al cargar el módulo) para respetar el env vigente.
+ */
+function soloVisiblesSql() {
+  return catalogoSoloVisibles() ? eq(catalogOverlay.visible, true) : undefined;
+}
+
 /** Columnas del join, en un solo lugar para no repetirlas entre queries. */
 const COLUMNAS_CATALOGO = {
   alegraId: catalogProducts.alegraId,
@@ -216,6 +228,7 @@ export async function getCatalogo(opts?: {
       and(
         eq(catalogProducts.status, "active"),
         conPrecioSql,
+        soloVisiblesSql(),
         q ? coincideTexto(q) : undefined
       )
     )
@@ -338,6 +351,7 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
   return and(
     eq(catalogProducts.status, "active"),
     conPrecioSql,
+    soloVisiblesSql(),
     q ? coincideTexto(q) : undefined,
     aplicar.categorias && filtros.categorias?.length
       ? inArray(catalogCategories.name, filtros.categorias)

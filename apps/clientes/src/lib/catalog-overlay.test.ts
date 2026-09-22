@@ -50,3 +50,61 @@ describe("join al overlay", () => {
     for (const c of grabadora.consultas) expect(c.sql).not.toContain("catalog_overlay");
   });
 });
+
+/** `"shop"."catalog_overlay"."visible" = $n` con `true` en ese parámetro. */
+function exigeVisible(c: { sql: string; params: unknown[] }) {
+  const m = c.sql.match(/"shop"\."catalog_overlay"\."visible" = \$(\d+)/);
+  expect(m, c.sql).not.toBeNull();
+  expect(c.params[Number(m![1]) - 1]).toBe(true);
+}
+
+describe("SHOP_CATALOGO_SOLO_VISIBLES", () => {
+  it("apagado (default): ninguna consulta filtra por visible", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", undefined as unknown as string);
+    await getPaginaCatalogo({});
+    await getCatalogo({ limit: 10 });
+    await getFacetas({});
+    expect(grabadora.consultas).toHaveLength(6);
+    for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
+  });
+
+  it("con un valor distinto de '1' sigue apagado", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "true");
+    await getPaginaCatalogo({});
+    for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
+  });
+
+  it("encendido: conteo y página exigen visible = true", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    await getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] } });
+    expect(grabadora.consultas).toHaveLength(2);
+    for (const c of grabadora.consultas) exigeVisible(c);
+  });
+
+  it("encendido: getCatalogo (home y autocompletado) exige visible = true", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    await getCatalogo({ busqueda: "led", limit: 10 });
+    exigeVisible(grabadora.consultas[0]);
+  });
+
+  it("encendido: las tres facetas exigen visible = true", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    await getFacetas({ marcas: ["GENROD"] });
+    expect(grabadora.consultas).toHaveLength(3);
+    for (const c of grabadora.consultas) exigeVisible(c);
+  });
+
+  it("encendido: el predicado de precio positivo se mantiene", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    await getPaginaCatalogo({});
+    for (const c of grabadora.consultas) {
+      expect(c.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
+    }
+  });
+
+  it("encendido: getCategorias sigue sin tocar el overlay", async () => {
+    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    await getCategorias();
+    for (const c of grabadora.consultas) expect(c.sql).not.toContain("catalog_overlay");
+  });
+});

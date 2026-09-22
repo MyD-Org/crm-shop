@@ -12,9 +12,9 @@ por HTTP. Las definiciones de lectura están en `src/db/crm.ts`, fuera de
 `schema.ts` para que las migraciones del Shop no las toquen. El overlay es
 **esparso**: sólo hay fila para los productos que alguien tocó en el CRM.
 
-Las tablas `shop.catalog_overlay`, `shop.shop_categories`, `shop.shop_tags` y
-`shop.catalogo_sync_state` son la copia vieja: ya no se leen ni se escriben y
-quedan para borrarlas con una migración aparte.
+La copia vieja (`shop.catalog_overlay`, `shop.shop_categories`,
+`shop.shop_tags` y `shop.catalogo_sync_state`) se borra con la migración
+`0004_borrar_copia_catalogo`.
 
 El rol de runtime (`shop_app`) necesita `SELECT` sobre las dos tablas del CRM
 (ver "Lectura directa del catálogo del CRM" en

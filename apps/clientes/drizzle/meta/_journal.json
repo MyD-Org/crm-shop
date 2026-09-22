@@ -29,6 +29,13 @@
       "when": 1790085113556,
       "tag": "0003_direcciones_envio",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790118231242,
+      "tag": "0004_borrar_copia_catalogo",
+      "breakpoints": true
     }
   ]
 }

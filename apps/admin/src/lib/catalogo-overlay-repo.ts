@@ -1,7 +1,5 @@
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
-import { esVendibleSql } from "./catalogo-vendible"
-import { basePublicaFotos } from "./shop-media"
 import {
   catalogCategories,
   catalogOverlay,
@@ -11,15 +9,7 @@ import {
   shopCategories,
   shopSyncPing,
   shopTags,
-  tenants,
 } from "@/db/schema"
-import {
-  armarContratoOverlayV1,
-  armarContratoTaxonomiaV1,
-  type ContratoOverlayV1,
-  type ContratoTaxonomiaV1,
-  type ParamsDelta,
-} from "@/lib/catalogo-overlay-contrato"
 import {
   motivoNoPublicado,
   nombreEfectivoSql,
@@ -1011,142 +1001,6 @@ export async function ultimaSyncAlegra(tenantId: string): Promise<string | null>
     .orderBy(desc(catalogSyncLog.startedAt))
     .limit(1)
   return row?.finishedAt ? row.finishedAt.toISOString() : null
-}
-
-// ─── Contrato v1 hacia el Shop (platform/contracts/catalogo-overlay/v1) ──────────────────
-
-/**
- * Payload de taxonomía para `tenantId` (por `tenants.id`). null si el tenant no existe, que la
- * ruta traduce a 404 — distinguible del 400 de "falta el parámetro".
- *
- * Viaja el árbol entero, incluidas las inactivas, y el diccionario COMPLETO de tags.
- */
-export async function contratoTaxonomiaV1(
-  tenantId: string,
-  ahora = new Date(),
-): Promise<ContratoTaxonomiaV1 | null> {
-  const db = getDb()
-  const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, tenantId))
-  if (!tenant) return null
-
-  const [categorias, tagsFilas] = await Promise.all([
-    db
-      .select({
-        id: shopCategories.id,
-        parentId: shopCategories.parentId,
-        nombre: shopCategories.nombre,
-        slug: shopCategories.slug,
-        orden: shopCategories.orden,
-        nivel: shopCategories.nivel,
-        activa: shopCategories.activa,
-        imagenKey: shopCategories.imagenKey,
-        updatedAt: shopCategories.updatedAt,
-      })
-      .from(shopCategories)
-      .where(eq(shopCategories.tenantId, tenantId)),
-    db
-      .select({
-        id: shopTags.id,
-        nombre: shopTags.nombre,
-        slug: shopTags.slug,
-        updatedAt: shopTags.updatedAt,
-      })
-      .from(shopTags)
-      .where(eq(shopTags.tenantId, tenantId)),
-  ])
-
-  return armarContratoTaxonomiaV1({
-    tenant: tenant.id,
-    categorias,
-    tags: tagsFilas,
-    ahora,
-    baseFotos: basePublicaFotos(),
-  })
-}
-
-interface FilaDeltaCruda {
-  alegra_id: string
-  visible: boolean
-  nombre: string | null
-  descripcion: string | null
-  categoria_id: string | null
-  orden: number | null
-  tag_ids: string[]
-  fotos: FotoOverlay[]
-  /**
-   * ISO UTC con MICROSEGUNDOS, formateado en SQL. No se usa `Date`: toISOString() trunca al
-   * milisegundo y el cursor resultante queda por debajo del updated_at real de la fila, que
-   * entonces vuelve en cada página y el delta no avanza nunca.
-   */
-  updated_at: string
-}
-
-/**
- * Página del delta del overlay. null si el tenant no existe.
- *
- * El WHERE es un keyset COMPUESTO —`(updated_at, alegra_id) > (:desde, :cursor)`— y no
- * `updated_at > :desde`. Motivo concreto: una acción masiva escribe centenares de filas con el
- * MISMO `updated_at` (una transacción, un `now()`), y con un cursor simple una página que corta
- * en medio de ese lote empatado o pierde filas o las repite para siempre. El ORDER BY es
- * exactamente el orden del índice `catalog_overlay_tenant_updated_idx`.
- *
- * Los tags salen por `array_agg` sobre el LEFT JOIN, no con una query por ítem: con `limit` 500
- * un N+1 acá son 500 round-trips por página.
- */
-export async function contratoOverlayV1(
-  tenantId: string,
-  params: ParamsDelta,
-): Promise<ContratoOverlayV1 | null> {
-  const db = getDb()
-  const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, tenantId))
-  if (!tenant) return null
-
-  // Sin `desde` es la carga inicial: todo el overlay del tenant, paginado.
-  const keyset = params.desde
-    ? sql`AND (o.updated_at, o.alegra_id) > (${params.desde}::timestamptz, ${params.cursor})`
-    : sql``
-
-  const filas = (await db.execute(sql`
-    SELECT o.alegra_id,
-           (o.visible AND p.id IS NOT NULL AND ${esVendibleSql("p")}) AS visible,
-           o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos,
-           to_char(o.updated_at AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
-           coalesce(
-             array_agg(cot.tag_id::text ORDER BY cot.tag_id) FILTER (WHERE cot.tag_id IS NOT NULL),
-             '{}'
-           ) AS tag_ids
-    FROM ${catalogOverlay} o
-    LEFT JOIN ${catalogOverlayTags} cot ON cot.overlay_id = o.id
-    -- El producto entra sólo para saber si se puede vender. Un ítem dado de baja en Alegra o con
-    -- precio cero viaja SIEMPRE como visible:false, sin importar qué diga el overlay: el admin no
-    -- tiene por qué acordarse de despublicar a mano lo que Alegra bajó.
-    --
-    -- LEFT, no INNER: si el producto ya no está en el espejo, la fila del overlay TIENE que
-    -- viajar igual, como oculta. Con INNER desaparecía del delta y la tienda se quedaba
-    -- mostrándola para siempre, que es exactamente lo que se quiere evitar.
-    LEFT JOIN ${catalogProducts} p ON p.tenant_id = o.tenant_id AND p.alegra_id = o.alegra_id
-    WHERE o.tenant_id = ${tenantId} ${keyset}
-    GROUP BY o.id, p.id
-    ORDER BY o.updated_at ASC, o.alegra_id ASC
-    LIMIT ${params.limit}
-  `)) as unknown as FilaDeltaCruda[]
-
-  return armarContratoOverlayV1({
-    baseFotos: basePublicaFotos(),
-    tenant: tenant.id,
-    limit: params.limit,
-    filas: filas.map((f) => ({
-      alegraId: f.alegra_id,
-      visible: f.visible,
-      nombre: f.nombre,
-      descripcion: f.descripcion,
-      categoriaId: f.categoria_id,
-      orden: f.orden,
-      tagIds: f.tag_ids ?? [],
-      fotos: f.fotos ?? [],
-      updatedAt: f.updated_at,
-    })),
-  })
 }
 
 // ─── Importación de categorías desde Alegra ──────────────────────────────────────────────

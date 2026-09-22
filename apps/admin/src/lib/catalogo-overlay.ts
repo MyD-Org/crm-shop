@@ -2,11 +2,10 @@
 // jerarquía de categorías y de los tags, resolución de nombre/SKU y la regla de "publicado".
 // Sin DB: el acceso a datos vive en src/lib/catalogo-overlay-repo.ts.
 //
-// Dos cosas de acá son contrato compartido con el Shop (platform/contracts/catalogo-overlay/v1)
-// y por eso están escritas una sola vez:
+// Dos reglas de acá las replica el Shop, que lee estas tablas directo de la misma base:
 //   - la regla de nombre (REQ-NOM-01) y la de SKU (REQ-NOM-02),
 //   - la regla de publicado (REQ-PUB-01), que el CRM evalúa de forma ORIENTATIVA y el Shop
-//     vuelve a evaluar sobre su propia copia — su evaluación es la que manda.
+//     vuelve a evaluar sobre su espejo de Alegra — su evaluación es la que manda.
 
 import { sql, type SQL } from "drizzle-orm"
 

@@ -1,9 +1,10 @@
 import type { ProductStock } from "@myd-org/ui";
 
 /**
- * Foto de un producto, cargada en el overlay del CRM. Estructuralmente igual a
- * `FotoOverlay` de src/db/schema.ts, pero propia: este archivo lo importan
- * componentes cliente y no debe arrastrar el esquema de la base.
+ * Foto de un producto, cargada en el overlay del CRM, con la URL ya compuesta
+ * (el CRM guarda la key de R2, ver `FotoCrm` en src/db/crm.ts). Propia: este
+ * archivo lo importan componentes cliente y no debe arrastrar el esquema de la
+ * base.
  */
 export interface ProductImage {
   url: string;

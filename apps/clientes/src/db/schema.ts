@@ -6,7 +6,6 @@ import {
   jsonb,
   timestamp,
   integer,
-  smallint,
   numeric,
   boolean,
   index,
@@ -548,80 +547,6 @@ export const homeContent = shop.table("home_content", {
   key: text("key").primaryKey(),
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-// ─── Copia vieja del catálogo comercial del CRM (contrato catalogo-overlay/v1) ───
-//
-// OBSOLETAS: el Shop ya no las lee ni las escribe. Lee el catálogo comercial directo de las
-// tablas del CRM (ver src/db/crm.ts). Quedan declaradas sólo hasta borrarlas con una
-// migración propia; sacarlas de acá hace que el próximo `db:generate` emita los DROP.
-
-/** Taxonomía propia. Viaja entera y se reemplaza de una: no hay merge parcial. */
-export const shopCategories = shop.table(
-  "shop_categories",
-  {
-    id: uuid("id").primaryKey(),
-    parentId: uuid("parent_id"),
-    nombre: text("nombre").notNull(),
-    slug: text("slug").notNull(),
-    orden: integer("orden").notNull().default(0),
-    nivel: smallint("nivel").notNull().default(1),
-    activa: boolean("activa").notNull().default(true),
-    /** URL completa, ya compuesta por el CRM. El Shop no conoce su layout de keys. */
-    imagen: text("imagen"),
-  },
-  (t) => [index("shop_categories_parent_idx").on(t.parentId, t.orden), index("shop_categories_slug_idx").on(t.slug)],
-);
-
-export const shopTags = shop.table(
-  "shop_tags",
-  {
-    id: uuid("id").primaryKey(),
-    nombre: text("nombre").notNull(),
-    slug: text("slug").notNull(),
-  },
-  (t) => [index("shop_tags_slug_idx").on(t.slug)],
-);
-
-export interface FotoOverlay {
-  url: string;
-  w: number;
-  alt?: string;
-}
-
-/**
- * Overlay por producto. ESPARSO: sólo hay fila para los que alguien tocó en el CRM.
- * Sin fila, el producto no se publica — `visible` arranca en false y nada sale solo.
- */
-export const catalogOverlay = shop.table(
-  "catalog_overlay",
-  {
-    alegraId: text("alegra_id").primaryKey(),
-    visible: boolean("visible").notNull().default(false),
-    nombre: text("nombre"),
-    descripcion: text("descripcion"),
-    categoriaId: uuid("categoria_id"),
-    orden: integer("orden"),
-    tagIds: uuid("tag_ids").array().notNull().default(sql`'{}'`),
-    fotos: jsonb("fotos").$type<FotoOverlay[]>().notNull().default([]),
-    /** El del CRM, con MICROSEGUNDOS: es el cursor del delta y no puede truncarse. */
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
-  },
-  (t) => [
-    index("catalog_overlay_visible_idx").on(t.visible),
-    index("catalog_overlay_categoria_idx").on(t.categoriaId),
-  ],
-);
-
-/** Estado de la sync. Una fila. Última copia buena: un fallo no borra lo ya copiado. */
-export const catalogoSyncState = shop.table("catalogo_sync_state", {
-  tenant: text("tenant").primaryKey(), // SHOP_TENANT_ID
-  cursorUpdatedAt: text("cursor_updated_at"),
-  cursorAlegraId: text("cursor_alegra_id"),
-  taxonomiaFetchedAt: timestamp("taxonomia_fetched_at", { withTimezone: true }),
-  overlayFetchedAt: timestamp("overlay_fetched_at", { withTimezone: true }),
-  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
-  lastError: text("last_error"),
 });
 
 /**

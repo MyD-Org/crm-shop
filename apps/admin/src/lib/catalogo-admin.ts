@@ -30,8 +30,9 @@ export const conflictoResponse = (error: string, code: string): Response =>
   Response.json({ error, code }, { status: 409, headers: NO_STORE })
 
 /**
- * Aviso al Shop DESPUÉS de persistir. Nunca tira y nunca bloquea el guardado: si no propaga, el
- * cambio ya quedó y la tienda lo toma en su próximo ciclo. De paso registra la frescura que el
+ * Aviso al Shop DESPUÉS de persistir. Nunca tira y nunca bloquea el guardado: el Shop lee estas
+ * tablas directo, así que el cambio ya está a la vista; el aviso sólo le hace descartar lo que
+ * tenga renderizado en caché. De paso registra la frescura que el
  * panel muestra (decisión D1: el CRM informa su propio último aviso entregado, no le pregunta
  * al Shop cuándo sincronizó).
  */

@@ -1,10 +1,10 @@
-// Ping al Shop para que vuelva a leer del CRM. SIN payload: el Shop re-hace el GET
-// correspondiente, así un ping no puede inyectar configuración.
-//   - cuotas   → contrato platform/contracts/cuotas/v2, punto 2
-//   - catálogo → contrato platform/contracts/catalogo-overlay/v1 (taxonomía + overlay)
+// Ping al Shop. SIN payload, así un ping no puede inyectar configuración.
+//   - cuotas   → el Shop vuelve a leer del CRM (contrato platform/contracts/cuotas/v2, punto 2)
+//   - catálogo → el Shop ya lee el catálogo comercial directo de estas tablas (misma base); el
+//     ping sólo le hace descartar lo que tenga renderizado en caché, para que el cambio se vea
+//     en la próxima visita.
 //
-// Se llama DESPUÉS de persistir y NUNCA tira: si el Shop no responde, el guardado ya quedó y el
-// backoffice avisa "La tienda se actualizará en el próximo ciclo" (cron del Shop, ≤ 6 h).
+// Se llama DESPUÉS de persistir y NUNCA tira: si el Shop no responde, el guardado ya quedó.
 // Sin SHOP_INTERNAL_URL o SHOP_CRM_SECRET (ej. entornos sin Shop) es un no-op.
 //
 // `path` NUNCA viene de un input: son las dos constantes de acá. La función genérica es privada

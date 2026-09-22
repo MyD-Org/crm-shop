@@ -19,6 +19,8 @@ const fila = {
   ],
   stock: "10",
   categoryName: "Iluminación",
+  overlayNombre: null,
+  overlayFotos: null,
 };
 
 describe("mapFilaToProduct (espejo)", () => {
@@ -45,6 +47,62 @@ describe("mapFilaToProduct (espejo)", () => {
     expect(p.price).toBe(100000);
     expect(p.ivaPorcentaje).toBeUndefined();
     expect(p.precioFinal).toBeUndefined();
+  });
+});
+
+describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
+  // En esta cuenta de Alegra `name` es el código y el nombre comercial vive en
+  // `description`; el overlay del CRM puede pisar los dos.
+  const base = {
+    ...fila,
+    ivaPorcentaje: null,
+    name: "02141N",
+    code: null,
+    description: "LAMPARA LED A60 9W",
+  };
+  const HOST = "media.plataforma.example";
+  const foto = { url: `https://${HOST}/a.jpg`, w: 800, alt: "Lámpara" };
+
+  it("el nombre del overlay gana; el código de Alegra queda como sku", () => {
+    const p = mapFilaToProduct({ ...base, overlayNombre: "Lámpara LED A60" });
+    expect(p.name).toBe("Lámpara LED A60");
+    expect(p.sku).toBe("02141N");
+  });
+
+  it("sin overlay, el nombre es la descripción de Alegra", () => {
+    const p = mapFilaToProduct({ ...base, description: "Cable unipolar" });
+    expect(p.name).toBe("Cable unipolar");
+  });
+
+  it("un nombre de overlay vacío no pisa la descripción", () => {
+    const p = mapFilaToProduct({ ...base, overlayNombre: "", description: "Cable unipolar" });
+    expect(p.name).toBe("Cable unipolar");
+  });
+
+  it("sin overlay ni descripción cae al name de Alegra (y el sku también)", () => {
+    const p = mapFilaToProduct({ ...base, description: "" });
+    expect(p.name).toBe("02141N");
+    expect(p.sku).toBe("02141N");
+  });
+
+  it("con reference en Alegra, el sku es la reference", () => {
+    const p = mapFilaToProduct({ ...base, code: "REF-1" });
+    expect(p.sku).toBe("REF-1");
+  });
+
+  it("sin fotos, images es undefined", () => {
+    expect(mapFilaToProduct({ ...base, overlayFotos: null }, undefined, [HOST]).images).toBeUndefined();
+    expect(mapFilaToProduct({ ...base, overlayFotos: [] }, undefined, [HOST]).images).toBeUndefined();
+  });
+
+  it("con fotos y host configurado, images mapea url, w y alt", () => {
+    const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, [HOST]);
+    expect(p.images).toEqual([foto]);
+  });
+
+  it("con fotos pero sin host configurado, images es undefined (placeholder)", () => {
+    const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, []);
+    expect(p.images).toBeUndefined();
   });
 });
 

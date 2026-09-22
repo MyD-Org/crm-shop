@@ -21,7 +21,12 @@ import { cache } from "react";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
-import { catalogCategories, catalogProducts } from "@/db/schema";
+import {
+  catalogCategories,
+  catalogOverlay,
+  catalogProducts,
+  type FotoOverlay,
+} from "@/db/schema";
 import {
   getItem,
   ivaPersistible,
@@ -32,6 +37,7 @@ import {
   type AlegraPrice,
 } from "./alegra";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
+import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { precioFinal } from "./precio-final";
 import { stockSimulado } from "./stock-simulado";
 import type { Product } from "@/data/products";
@@ -69,7 +75,7 @@ export function derivarStock(
 // Lectura desde el espejo local
 // ---------------------------------------------------------------------------
 
-/** Fila del join productos × categorías, tal como la devuelve la query. */
+/** Fila del join productos × categorías × overlay, tal como la devuelve la query. */
 interface FilaCatalogo {
   alegraId: string;
   name: string;
@@ -81,6 +87,10 @@ interface FilaCatalogo {
   /** numeric de Postgres: llega como string. null = sin IVA conocido. */
   ivaPorcentaje: string | null;
   categoryName: string | null;
+  /** Nombre curado en el CRM. null = sin fila de overlay o sin nombre. */
+  overlayNombre: string | null;
+  /** Fotos del overlay. null = sin fila de overlay (left join). */
+  overlayFotos: FotoOverlay[] | null;
 }
 
 /**
@@ -95,7 +105,12 @@ function camposIva(
   return { ivaPorcentaje: iva, precioFinal: precioFinal(precioNeto, iva) };
 }
 
-export function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Product {
+export function mapFilaToProduct(
+  fila: FilaCatalogo,
+  idPriceList?: string,
+  /** Ver `hostsDeMedios()`. Parámetro para testear sin tocar `process.env`. */
+  hostsMedios: readonly string[] = hostsDeMedios(),
+): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
   const simular = stockSimulado();
   const price = precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList);
@@ -104,14 +119,20 @@ export function mapFilaToProduct(fila: FilaCatalogo, idPriceList?: string): Prod
     // La marca sale del customField de Alegra; si no está cargado, cae al
     // nombre de la categoría (mismo criterio que la ficha en vivo).
     brand: fila.brand || fila.categoryName || "",
-    name: fila.name,
+    // Nombre exhibido: el curado en el CRM; si no, la descripción de Alegra
+    // (en esta cuenta el nombre comercial vive ahí); si no, `name`, que en
+    // esta cuenta es el código. `||` y no `??`: un texto vacío no pisa.
+    name: fila.overlayNombre || fila.description || fila.name,
     price,
     ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
     stock: derivarStock(qty, simular),
     stockQty: qty ?? undefined,
-    sku: fila.code || undefined,
+    // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
+    // código (y es con lo que el CRM elige destacados, ver destacados.ts).
+    sku: fila.code || fila.name || undefined,
     description: fila.description || undefined,
     category: fila.categoryName || undefined,
+    images: fotosPermitidas(fila.overlayFotos, hostsMedios),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
 }
@@ -121,6 +142,13 @@ const JOIN_CATEGORIAS = eq(
   catalogProducts.categoryAlegraId,
   catalogCategories.alegraId
 );
+
+/**
+ * Condición del join al overlay del CRM (esparso: left join, la mayoría de los
+ * productos no tiene fila). Lo usan todas las lecturas públicas del espejo
+ * salvo `getCategorias`.
+ */
+const JOIN_OVERLAY = eq(catalogOverlay.alegraId, catalogProducts.alegraId);
 
 /** Columnas del join, en un solo lugar para no repetirlas entre queries. */
 const COLUMNAS_CATALOGO = {
@@ -133,6 +161,8 @@ const COLUMNAS_CATALOGO = {
   stock: catalogProducts.stock,
   ivaPorcentaje: catalogProducts.ivaPorcentaje,
   categoryName: catalogCategories.name,
+  overlayNombre: catalogOverlay.nombre,
+  overlayFotos: catalogOverlay.fotos,
 };
 
 /**
@@ -181,6 +211,7 @@ export async function getCatalogo(opts?: {
     .select(COLUMNAS_CATALOGO)
     .from(catalogProducts)
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .leftJoin(catalogOverlay, JOIN_OVERLAY)
     .where(
       and(
         eq(catalogProducts.status, "active"),
@@ -371,6 +402,7 @@ export async function getPaginaCatalogo(opts?: {
     .select({ total: sql<number>`count(*)::int` })
     .from(catalogProducts)
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .leftJoin(catalogOverlay, JOIN_OVERLAY)
     .where(where);
 
   const total = conteo?.total ?? 0;
@@ -382,6 +414,7 @@ export async function getPaginaCatalogo(opts?: {
         .select(COLUMNAS_CATALOGO)
         .from(catalogProducts)
         .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+        .leftJoin(catalogOverlay, JOIN_OVERLAY)
         .where(where)
         .orderBy(...ordenDe(opts?.orden ?? ORDEN_DEFAULT))
         .limit(porPagina)
@@ -479,6 +512,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       })
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .leftJoin(catalogOverlay, JOIN_OVERLAY)
       .where(and(whereCategorias, sql`nullif(${catalogCategories.name}, '') is not null`))
       .groupBy(catalogCategories.name)
       .orderBy(sql`count(*) desc`, asc(catalogCategories.name)),
@@ -486,6 +520,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .leftJoin(catalogOverlay, JOIN_OVERLAY)
       .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
       .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
@@ -498,6 +533,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       })
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .leftJoin(catalogOverlay, JOIN_OVERLAY)
       .where(wherePrecio),
   ]);
 

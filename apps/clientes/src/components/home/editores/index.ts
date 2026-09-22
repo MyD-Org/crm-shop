@@ -1,11 +1,13 @@
 import type { ComponentType } from "react";
 import type { SeccionHome } from "@/data/home-defaults";
 import { EditorAnuncio } from "./EditorAnuncio";
+import { EditorBannerDeco } from "./EditorBannerDeco";
+import { EditorDestacados } from "./EditorDestacados";
 import { EditorHero } from "./EditorHero";
 import { EditorMarquee } from "./EditorMarquee";
 import { EditorNavBadge } from "./EditorNavBadge";
-import { EditorPendiente } from "./EditorPendiente";
 import { EditorServicios } from "./EditorServicios";
+import { EditorTiles } from "./EditorTiles";
 import { EditorWhatsapp } from "./EditorWhatsapp";
 
 export interface EditorProps<T> {
@@ -14,19 +16,19 @@ export interface EditorProps<T> {
 }
 
 /**
- * Registro de editores por sección. En B1 solo están implementados los
- * editores simples (anuncio, hero, marquee, servicios, navBadge, whatsapp);
- * los de ambientes/decoGrid/bannerDeco/destacados llegan en B2.
+ * Registro de editores por sección. Con B2 quedan las 10 `SECCIONES_HOME`
+ * cubiertas: `ambientes`/`decoGrid` comparten `EditorTiles` (mismo
+ * contrato `SeccionTilesContent`, `decoGrid` además con `chips`).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- registro heterogéneo por sección: cada Editor tipa su propio payload
 export const EDITORES: Record<SeccionHome, ComponentType<EditorProps<any>>> = {
   anuncio: EditorAnuncio,
   hero: EditorHero,
   marquee: EditorMarquee,
-  ambientes: EditorPendiente,
-  destacados: EditorPendiente,
-  bannerDeco: EditorPendiente,
-  decoGrid: EditorPendiente,
+  ambientes: EditorTiles,
+  destacados: EditorDestacados,
+  bannerDeco: EditorBannerDeco,
+  decoGrid: EditorTiles,
   servicios: EditorServicios,
   navBadge: EditorNavBadge,
   whatsapp: EditorWhatsapp,

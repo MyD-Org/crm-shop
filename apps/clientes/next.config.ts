@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { hostsDeMedios } from "./src/lib/catalogo-medios";
+import { REDIRECTS_MI_CUENTA } from "./src/lib/mi-cuenta-redirects";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -19,6 +20,9 @@ const nextConfig: NextConfig = {
       pathname: "/**",
     })),
   },
+  // URLs viejas de Mi cuenta (pestañas y detalle en singular) a las rutas por
+  // sección. Se resuelven antes que el filesystem: no se renderiza nada.
+  redirects: async () => [...REDIRECTS_MI_CUENTA],
 };
 
 export default nextConfig;

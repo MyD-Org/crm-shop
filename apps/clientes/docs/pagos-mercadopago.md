@@ -118,7 +118,7 @@ primaria; el saldo en cuenta es una opción secundaria que **avisa antes de
 saltar** ("te vamos a pedir que inicies sesión en Mercado Pago"). Lo peor que
 podemos hacer es que alguien pierda el formulario sin entender por qué.
 
-Al volver, el pedido ya existe: se cae en `/mi-cuenta/pedido/[id]`, que muestra
+Al volver, el pedido ya existe: se cae en `/mi-cuenta/pedidos/[id]`, que muestra
 el estado real leído de nuestra DB, no de la URL.
 
 ## 7. 3D Secure

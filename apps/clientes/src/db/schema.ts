@@ -1,5 +1,6 @@
 import {
-  pgTable,
+  pgSchema,
+  check,
   uuid,
   text,
   jsonb,
@@ -15,6 +16,20 @@ import { sql } from "drizzle-orm";
 import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
 
 /**
+ * Todas las tablas del Shop viven en el esquema `shop` de la base del CRM.
+ *
+ * Una sola base, dos dueños de datos: el CRM ocupa `public` y el Shop ocupa
+ * `shop`. Declararlo con `pgSchema` (y no con un `search_path` del rol) hace que
+ * drizzle califique cada tabla (`"shop"."orders"`) en todo el SQL que genera:
+ * nada depende de cómo esté configurada la conexión, que detrás del pooler ni
+ * siquiera garantiza los settings a nivel rol.
+ *
+ * Las migraciones llevan su propio control en `shop.__drizzle_migrations` (ver
+ * drizzle.config.ts y src/db/migrate.ts), separado del `drizzle.*` del CRM.
+ */
+export const shop = pgSchema("shop");
+
+/**
  * Espejo local del catálogo de Alegra.
  *
  * Alegra sigue siendo el system of record: acá vive una copia de solo lectura
@@ -25,11 +40,9 @@ import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
  * Regla (misma que el CRM): la cache se usa para LISTAR y BUSCAR; el precio y
  * el stock que el shop COMPROMETE (ficha de producto, checkout) se confirman en
  * vivo contra Alegra. Ver docs/arquitectura-integraciones.md.
- *
- * A diferencia del CRM, el shop es mono-tenant: no hay columna tenant_id.
  */
 
-export const catalogCategories = pgTable(
+export const catalogCategories = shop.table(
   "catalog_categories",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -47,7 +60,7 @@ export const catalogCategories = pgTable(
   ],
 );
 
-export const catalogProducts = pgTable(
+export const catalogProducts = shop.table(
   "catalog_products",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -99,7 +112,7 @@ export const catalogProducts = pgTable(
  * Los datos del cliente quedan como SNAPSHOT para no pegarle a Alegra en cada
  * request. La lista de precios sí se re-lee al cotizar — ver src/lib/auth.ts.
  */
-export const clientLinks = pgTable(
+export const clientLinks = shop.table(
   "client_links",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -159,7 +172,7 @@ export const clientLinks = pgTable(
  * perfil queda de solo lectura: los datos ya no son "lo que el cliente dice"
  * sino "lo que factura el sistema".
  */
-export const billingProfiles = pgTable(
+export const billingProfiles = shop.table(
   "billing_profiles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -215,7 +228,7 @@ export const billingProfiles = pgTable(
  * El CUIT no alcanza como prueba: en Argentina es público — está en cada
  * factura y en el padrón de AFIP.
  */
-export const linkOtps = pgTable(
+export const linkOtps = shop.table(
   "link_otps",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -247,7 +260,7 @@ export const linkOtps = pgTable(
  * cliente cambia de lista, un pedido histórico no puede mutar — es el registro
  * de lo que se acordó, no una vista del catálogo actual.
  */
-export const orders = pgTable(
+export const orders = shop.table(
   "orders",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -257,6 +270,17 @@ export const orders = pgTable(
      * `max(numero) + 1` se pisan, la secuencia de Postgres no.
      */
     numero: integer("numero").generatedAlwaysAsIdentity({ startWith: 1000 }).notNull(),
+
+    /**
+     * Tenant dueño del pedido (slug de `public.tenants.id` del CRM).
+     *
+     * Obligatorio y sin default a propósito: la base es compartida con el CRM,
+     * que lista los pedidos por tenant; un pedido sin tenant sería invisible
+     * para todos, y un default lo asignaría en silencio al tenant equivocado.
+     * Sin FK: es otro esquema, y el rol de runtime del Shop no tiene REFERENCES
+     * sobre `public`.
+     */
+    tenantId: text("tenant_id").notNull(),
 
     // --- Cliente (snapshot de la sesión al momento de comprar) ---
     /**
@@ -334,6 +358,24 @@ export const orders = pgTable(
 
     // --- Estado del pedido ---
     estado: text("estado").notNull().default("pendiente"),
+    /**
+     * Motivo de la cancelación. Obligatorio cuando `estado = 'cancelado'` (lo
+     * garantiza `orders_cancelacion_motivo_check`, para los DOS escritores: el
+     * CRM y el propio Shop). Es un dato INTERNO: no se mapea nunca a lo que ve
+     * el cliente. No se reutiliza `notas`, que es la aclaración que escribió el
+     * comprador y que se le muestra de vuelta en Mis compras.
+     */
+    cancelacionMotivo: text("cancelacion_motivo"),
+    /**
+     * Auditoría del último cambio de estado. Todo null en un pedido recién
+     * creado. `estadoActualizadoPor` es el id del operador del CRM
+     * (`admin_users.id`), sin FK por ser otro esquema; queda null cuando el
+     * cambio lo hace el propio cliente. El nombre se guarda como snapshot
+     * para poder mostrar quién fue aunque el usuario se renombre o se borre.
+     */
+    estadoActualizadoEn: timestamp("estado_actualizado_en", { withTimezone: true }),
+    estadoActualizadoPor: uuid("estado_actualizado_por"),
+    estadoActualizadoPorNombre: text("estado_actualizado_por_nombre"),
 
     // --- Totales congelados ---
     subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
@@ -396,6 +438,19 @@ export const orders = pgTable(
     // suyos.
     index("orders_clerk_fecha").on(t.clerkUserId, t.createdAt),
     index("orders_estado").on(t.estado),
+    // El listado de pedidos del CRM: siempre por tenant, del más nuevo al más viejo.
+    index("orders_tenant_fecha").on(t.tenantId, t.createdAt),
+    // Los 6 valores de `OrderEstado` (src/data/orders.ts). En la base y no solo
+    // en el tipo porque ahora escriben dos apps sobre la misma tabla.
+    check(
+      "orders_estado_check",
+      sql`${t.estado} in ('pendiente','confirmado','preparacion','en_camino','entregado','cancelado')`,
+    ),
+    // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
+    check(
+      "orders_cancelacion_motivo_check",
+      sql`${t.estado} <> 'cancelado' or ${t.cancelacionMotivo} is not null`,
+    ),
   ],
 );
 
@@ -404,7 +459,7 @@ export const orders = pgTable(
  * propósito — se guarda el `alegraItemId` como referencia informativa, pero el
  * nombre y el precio que se muestran salen de acá, no de un join.
  */
-export const orderItems = pgTable(
+export const orderItems = shop.table(
   "order_items",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -429,7 +484,7 @@ export const orderItems = pgTable(
 );
 
 /** Bitácora de cada corrida de sync: observabilidad y "última sincronización". */
-export const catalogSyncLog = pgTable(
+export const catalogSyncLog = shop.table(
   "catalog_sync_log",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -449,7 +504,7 @@ export const catalogSyncLog = pgTable(
  * (tasas reales, CFT, TEA). Se reemplaza sólo si la respuesta es válida: un
  * fallo deja `planes` y `fetchedAt` como estaban y anota `lastError`.
  */
-export const paymentPlanSnapshots = pgTable(
+export const paymentPlanSnapshots = shop.table(
   "payment_plan_snapshots",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -469,7 +524,7 @@ export const paymentPlanSnapshots = pgTable(
  * Caché de la configuración de cuotas del CRM (contrato v2) por tenant. Un
  * payload válido sin proveedores se guarda igual: vacío válido no es un fallo.
  */
-export const paymentConfigCache = pgTable("payment_config_cache", {
+export const paymentConfigCache = shop.table("payment_config_cache", {
   tenant: text("tenant").primaryKey(), // SHOP_TENANT_ID
   payload: jsonb("payload"),
   version: text("version"),
@@ -480,7 +535,7 @@ export const paymentConfigCache = pgTable("payment_config_cache", {
 
 /** Contenido administrable de la home. Una fila por sección; el CRM escribe vía
  *  PUT /api/internal/home-content y la home la mergea con defaults en código. */
-export const homeContent = pgTable("home_content", {
+export const homeContent = shop.table("home_content", {
   key: text("key").primaryKey(),
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -493,7 +548,7 @@ export const homeContent = pgTable("home_content", {
 // Mono-tenant como el resto del Shop; los ids son los del CRM y se conservan tal cual.
 
 /** Taxonomía propia. Viaja entera y se reemplaza de una: no hay merge parcial. */
-export const shopCategories = pgTable(
+export const shopCategories = shop.table(
   "shop_categories",
   {
     id: uuid("id").primaryKey(),
@@ -509,7 +564,7 @@ export const shopCategories = pgTable(
   (t) => [index("shop_categories_parent_idx").on(t.parentId, t.orden), index("shop_categories_slug_idx").on(t.slug)],
 );
 
-export const shopTags = pgTable(
+export const shopTags = shop.table(
   "shop_tags",
   {
     id: uuid("id").primaryKey(),
@@ -529,7 +584,7 @@ export interface FotoOverlay {
  * Overlay por producto. ESPARSO: sólo hay fila para los que alguien tocó en el CRM.
  * Sin fila, el producto no se publica — `visible` arranca en false y nada sale solo.
  */
-export const catalogOverlay = pgTable(
+export const catalogOverlay = shop.table(
   "catalog_overlay",
   {
     alegraId: text("alegra_id").primaryKey(),
@@ -550,7 +605,7 @@ export const catalogOverlay = pgTable(
 );
 
 /** Estado de la sync. Una fila. Última copia buena: un fallo no borra lo ya copiado. */
-export const catalogoSyncState = pgTable("catalogo_sync_state", {
+export const catalogoSyncState = shop.table("catalogo_sync_state", {
   tenant: text("tenant").primaryKey(), // SHOP_TENANT_ID
   cursorUpdatedAt: text("cursor_updated_at"),
   cursorAlegraId: text("cursor_alegra_id"),

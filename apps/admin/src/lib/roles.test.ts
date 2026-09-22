@@ -1,11 +1,19 @@
 import { describe, it, expect } from "vitest"
-import { assignableRoles, canActOnRole, canManageUsers, roleRank } from "./roles"
+import { assignableRoles, canActOnRole, canManageUsers, isKnownAdminRole, roleRank } from "./roles"
 
 describe("roles", () => {
   it("ranking operator < admin < superadmin", () => {
     expect(roleRank("operator")).toBeLessThan(roleRank("admin"))
     expect(roleRank("admin")).toBeLessThan(roleRank("superadmin"))
     expect(roleRank("desconocido")).toBe(0) // fallback seguro (mínimo privilegio)
+  })
+
+  it("isKnownAdminRole: allow-list de los tres roles; lo desconocido NO pasa aunque su rank sea 0", () => {
+    for (const r of ["operator", "admin", "superadmin"]) expect(isKnownAdminRole(r)).toBe(true)
+    for (const r of ["viewer", "", "Operator", "admin ", "toString", "__proto__", "constructor"]) {
+      expect(isKnownAdminRole(r)).toBe(false)
+    }
+    expect(roleRank("viewer")).toBe(0) // por esto no se puede usar `rank >= 0` como permiso
   })
 
   it("canManageUsers: admin y superadmin sí, operator no", () => {

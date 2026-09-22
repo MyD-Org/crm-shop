@@ -99,6 +99,5 @@ jobs:
           # Conexión directa (sin pooler) de Neon: esto es un batch largo desde
           # un runner, no una función serverless, así que no hay nada que poolear
           # y el pooler solo agrega una capa que puede cortar la conexión.
-          # `DATABASE_URL` queda de fallback por si algún día no está la primera.
-          DATABASE_URL: ${{ secrets.CLIENTES_POSTGRES_URL_NON_POOLING || secrets.CLIENTES_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.CLIENTES_DATABASE_URL }}
         run: npm run sync:catalogo

@@ -222,6 +222,59 @@ export function formatearDoc(tipoDoc: TipoDoc, raw: string): string {
   return tipoDoc === "CUIT" ? formatearCuit(raw) : raw;
 }
 
+/**
+ * Forma escrita de cada documento: largo de cada grupo y separador que lo sigue.
+ *
+ * El DNI y la cédula paraguaya no llevan guiones. El RUC sí, pero su número
+ * base no tiene largo fijo (de 5 a 8 dígitos): mientras se tipea no se puede
+ * saber dónde va el guion, así que se resuelve al terminar (ver `alSalir`).
+ */
+const MASCARA_DOC: Partial<Record<TipoDoc, { grupos: number[]; separadores: string[] }>> = {
+  CUIT: { grupos: [2, 8, 1], separadores: ["-", "-"] },
+  CPF: { grupos: [3, 3, 3, 2], separadores: [".", ".", "-"] },
+  CNPJ: { grupos: [2, 3, 3, 4, 2], separadores: [".", ".", "/", "-"] },
+};
+
+/**
+ * Pone los guiones y puntos del documento mientras se escribe.
+ *
+ * Un separador aparece recién cuando hay un carácter **después** de él: "20"
+ * queda "20" y "203" pasa a "20-3". Si apareciera apenas se completa el grupo,
+ * borrar hacia atrás sería una trampa — se borra el guion, se vuelve a
+ * formatear, el guion reaparece, y el usuario no puede pasar de ahí.
+ *
+ * Descarta lo que sobra del largo del documento, así no se puede tipear de más.
+ *
+ * `alSalir` es para el blur: ahí se da por terminado el número y se puede
+ * poner el guion del RUC, que va siempre antes del último dígito.
+ */
+export function formatearDocAlEscribir(
+  tipoDoc: TipoDoc,
+  raw: string,
+  { alSalir = false }: { alSalir?: boolean } = {},
+): string {
+  const limpio = normalizarDoc(tipoDoc, raw);
+
+  if (tipoDoc === "RUC") {
+    const ruc = limpio.slice(0, 9);
+    return alSalir && ruc.length >= 6 ? `${ruc.slice(0, -1)}-${ruc.slice(-1)}` : ruc;
+  }
+
+  const mascara = MASCARA_DOC[tipoDoc];
+  // DNI: hasta 8 dígitos. Cédula paraguaya: ídem. Sin separadores.
+  if (!mascara) return limpio.slice(0, 8);
+
+  let salida = "";
+  let desde = 0;
+  mascara.grupos.forEach((largo, i) => {
+    const grupo = limpio.slice(desde, desde + largo);
+    if (!grupo) return;
+    salida += (i > 0 ? mascara.separadores[i - 1] : "") + grupo;
+    desde += largo;
+  });
+  return salida;
+}
+
 /** Formatea una CUIT para mostrar: 30712345678 → 30-71234567-8. */
 export function formatearCuit(raw: string): string {
   const d = soloDigitos(raw);

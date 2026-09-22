@@ -4,14 +4,19 @@ import { getDb } from "@/db";
 import { catalogOverlay, catalogoSyncState, shopCategories, shopTags } from "@/db/schema";
 import type { ContratoOverlay, ContratoTaxonomia } from "./catalogo-contrato";
 import type { Cursor, RepoCatalogo } from "./catalogo-sync-overlay";
-
-const TENANT = process.env.SHOP_TENANT_ID ?? "default";
+import { shopTenantId } from "./tenant";
 
 export function repoCatalogoDrizzle(): RepoCatalogo {
   const db = getDb();
 
   return {
+    // El tenant se resuelve al entrar a cada método y no a nivel de módulo:
+    // evaluarlo al importar rompería el build y cualquier test que toque este
+    // archivo de rebote. Va ANTES de la primera escritura para que, sin
+    // `SHOP_TENANT_ID`, no se borre ni se inserte nada. No hay valor por defecto:
+    // un tenant inventado dejaría el cursor en una fila que nadie vuelve a leer.
     async reemplazarTaxonomia(t: ContratoTaxonomia, ahora: Date) {
+      const tenant = shopTenantId();
       await db.transaction(async (tx) => {
         // DELETE + INSERT y no upsert: el contrato es un REEMPLAZO. Con upsert, una categoría
         // borrada en el CRM sobreviviría acá para siempre, porque no viene en el payload.
@@ -38,12 +43,13 @@ export function repoCatalogoDrizzle(): RepoCatalogo {
 
         await tx
           .insert(catalogoSyncState)
-          .values({ tenant: TENANT, taxonomiaFetchedAt: ahora })
+          .values({ tenant, taxonomiaFetchedAt: ahora })
           .onConflictDoUpdate({ target: catalogoSyncState.tenant, set: { taxonomiaFetchedAt: ahora, lastError: null } });
       });
     },
 
     async aplicarPaginaOverlay(items: ContratoOverlay["items"], cursor: Cursor | null, ahora: Date) {
+      const tenant = shopTenantId();
       await db.transaction(async (tx) => {
         if (items.length > 0) {
           await tx
@@ -81,7 +87,7 @@ export function repoCatalogoDrizzle(): RepoCatalogo {
         await tx
           .insert(catalogoSyncState)
           .values({
-            tenant: TENANT,
+            tenant,
             cursorUpdatedAt: cursor?.desde ?? null,
             cursorAlegraId: cursor?.cursor ?? null,
             overlayFetchedAt: ahora,
@@ -105,9 +111,10 @@ export function repoCatalogoDrizzle(): RepoCatalogo {
     },
 
     async registrarError(error: string, ahora: Date) {
+      const tenant = shopTenantId();
       await db
         .insert(catalogoSyncState)
-        .values({ tenant: TENANT, lastError: error.slice(0, 500), lastAttemptAt: ahora })
+        .values({ tenant, lastError: error.slice(0, 500), lastAttemptAt: ahora })
         .onConflictDoUpdate({
           target: catalogoSyncState.tenant,
           set: { lastError: error.slice(0, 500), lastAttemptAt: ahora },
@@ -115,9 +122,10 @@ export function repoCatalogoDrizzle(): RepoCatalogo {
     },
 
     async registrarIntento(ahora: Date) {
+      const tenant = shopTenantId();
       await db
         .insert(catalogoSyncState)
-        .values({ tenant: TENANT, lastAttemptAt: ahora })
+        .values({ tenant, lastAttemptAt: ahora })
         .onConflictDoUpdate({ target: catalogoSyncState.tenant, set: { lastAttemptAt: ahora } });
     },
   };

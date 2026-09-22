@@ -1,0 +1,244 @@
+# Runbook: una base, esquema `shop`
+
+> Mueve las tablas del Shop de tablas sueltas en `public` a un esquema propio
+> `shop`, con una única migración base (baseline) que ya incluye el tenant, la
+> auditoría de cambios de estado y el motivo de cancelación. Los Slices 2 y 3
+> no necesitan ninguna otra migración.
+>
+> Este documento no contiene datos reales: use siempre los placeholders
+> (`<OWNER_ROLE>`, `<PASSWORD_SHOP_APP>`, `<HOST_DIRECTO>`, `<HOST_POOLED>`,
+> `<DB>`, `<TENANT_SLUG>`) y nunca pegue valores reales en el repo, en un PR ni
+> en un issue.
+>
+> Estos pasos los ejecuta una persona, no un agente: implican acceso a bases
+> de datos y a los paneles de Neon, Vercel y GitHub.
+
+## Antes de empezar
+
+- El entorno local del Shop (`apps/clientes/.env.local`) apunta hoy a
+  **producción**. El Paso 0 lo repuntea a una rama de Neon antes de tocar
+  cualquier otra cosa.
+- `npm run db:migrate` (parado en `apps/clientes`) ejecuta
+  `tsx --env-file-if-exists=.env.local src/db/migrate.ts`. Lee **solo**
+  `MIGRATE_DATABASE_URL` (de `.env.local` o de la shell). Antes de aplicar
+  imprime:
+  ```
+  [db:migrate] destino → host=<host> base=<base> rol=<rol> esquema=shop tabla=shop.__drizzle_migrations
+  ```
+  y al terminar:
+  ```
+  [db:migrate] listo: shop.__drizzle_migrations tiene 1 fila(s)
+  ```
+  Falla enseguida (sin tocar nada) si falta la variable, si el host contiene
+  `-pooler`, o si el rol es `shop_app`. Correrlo de nuevo es seguro
+  (idempotente).
+- En tiempo de ejecución (la app corriendo) se lee **solo** `DATABASE_URL`.
+  `SHOP_TENANT_ID` es obligatoria: sin ella el Shop no arranca
+  (`src/instrumentation.ts`). Ese chequeo se salta durante `next build`, así
+  que un build sin la variable compila igual — la falta recién se nota al
+  levantar el servidor.
+
+## Paso 0 — Repuntar el entorno local
+
+**Dónde:** consola de Neon + terminal local, parado en `apps/clientes`.
+
+1. En Neon, cree una rama `ensayo-shop` a partir de la base del admin (la
+   misma que hoy usa el CRM).
+2. Edite **a mano** `apps/clientes/.env.local` (los agentes nunca leen
+   `.env*`, así que este paso es enteramente suyo):
+   - Elimine cualquier `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING` y el
+     `DATABASE_URL` viejo.
+   - Agregue:
+     ```
+     DATABASE_URL=postgres://shop_app:<PASSWORD_SHOP_APP>@<HOST_POOLED_RAMA>/<DB>?sslmode=require
+     MIGRATE_DATABASE_URL=postgres://<OWNER_ROLE>:<PASSWORD_OWNER>@<HOST_DIRECTO_RAMA>/<DB>?sslmode=require
+     SHOP_TENANT_ID=<TENANT_SLUG>
+     ```
+     `<TENANT_SLUG>` debe ser un valor existente en `public.tenants.id`.
+   - Deje `PAGOS_ENABLED` sin definir.
+
+**Verificación:** abra el archivo y confirme que no queda ningún
+`POSTGRES_URL*` ni un `DATABASE_URL` apuntando a producción.
+
+## Paso 1 — Rol y esquema en la rama de Neon
+
+**Dónde:** editor SQL de Neon, conectado a la rama `ensayo-shop`, como
+`<OWNER_ROLE>`.
+
+Ejecute:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS shop AUTHORIZATION <OWNER_ROLE>;
+CREATE ROLE shop_app LOGIN PASSWORD '<PASSWORD_SHOP_APP>';
+GRANT USAGE ON SCHEMA shop TO shop_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE <OWNER_ROLE> IN SCHEMA shop GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO shop_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE <OWNER_ROLE> IN SCHEMA shop GRANT USAGE, SELECT ON SEQUENCES TO shop_app;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM shop_app;
+ALTER ROLE shop_app SET search_path = shop, public;   -- red de seguridad; nada del código depende de esto
+SELECT extname, extnamespace::regnamespace FROM pg_extension WHERE extname = 'unaccent';  -- esperado: public
+```
+
+`<OWNER_ROLE>` tiene que ser el mismo rol usado en `MIGRATE_DATABASE_URL`: los
+`DEFAULT PRIVILEGES` solo aplican a los objetos que cree ese rol.
+
+**Verificación:** la última consulta devuelve `unaccent` en el esquema
+`public`.
+
+## Paso 2 — Ensayo en la rama
+
+**Dónde:** terminal local, parado en `apps/clientes`; SQL en Neon (rama
+`ensayo-shop`).
+
+1. `cd apps/clientes && npm run db:migrate`
+2. **Lea el banner**: el `host=` tiene que ser el de la rama `ensayo-shop`,
+   nunca producción. Al final debe imprimir
+   `[db:migrate] listo: shop.__drizzle_migrations tiene 1 fila(s)`.
+3. Como `<OWNER_ROLE>`, en Neon:
+   ```sql
+   SELECT count(*) FROM shop.__drizzle_migrations;                            -- 1
+   SELECT count(*) FROM information_schema.tables WHERE table_schema='shop';  -- 16 (15 tablas + bookkeeping)
+   SELECT max(created_at) FROM drizzle.__drizzle_migrations;                  -- igual que antes (bookkeeping del admin intacto)
+   REVOKE ALL ON shop.__drizzle_migrations FROM shop_app;                     -- el runtime no debe poder tocar el bookkeeping
+   ```
+4. Como `shop_app` (conéctese con esa credencial):
+   ```sql
+   SELECT 1 FROM public.tenants LIMIT 1;        -- DEBE fallar (permission denied)
+   SELECT 1 FROM drizzle.__drizzle_migrations;  -- DEBE fallar (permission denied)
+   SELECT count(*) FROM shop.orders;            -- 0
+   SELECT shop.immutable_unaccent('Cónico');    -- Conico
+   ```
+5. Chequeos negativos (no deberían tocar la base):
+   - Sacar `MIGRATE_DATABASE_URL` del entorno y correr `npm run db:migrate` →
+     falla con el mensaje explícito de la variable faltante.
+   - Sacar `SHOP_TENANT_ID` y levantar `npm run dev` → el servidor se niega a
+     arrancar.
+6. Con la app arriba (`npm run dev`): corra `npm run sync:catalogo`, dispare
+   desde el admin la sync de overlay y de cuotas (apuntando a la rama si es
+   posible), busque en el catálogo con acentos, arme un pedido de prueba y
+   confirme que la fila queda con `tenant_id=<TENANT_SLUG>` y aparece en "Mis
+   compras".
+7. Repita la búsqueda con acentos una vez más después de
+   `ALTER ROLE shop_app RESET search_path;` (reconectando), para probar que
+   nada depende de esa red de seguridad — y vuelva a fijarlo después.
+8. Adicional (verificaciones de diseño pendientes de confirmar en una base
+   real): confirme que el `CHECK` de `estado` rechaza un valor fuera de la
+   lista de 6; corra
+   `SELECT has_schema_privilege('shop_app','public','CREATE');` y decida si
+   hace falta reforzar permisos sobre `public` según el resultado; y confirme
+   que el rol del admin puede `select 1 from shop.orders` (el admin usa el rol
+   dueño, así que ya alcanza `shop.*` sin ningún grant adicional).
+
+**Esto es el gate de merge**: si algo de este paso falla, el problema se
+corrige en la implementación antes de seguir — no se avanza con el resto del
+runbook.
+
+## Paso 3 — Base de producción (con el PR todavía sin mergear)
+
+**Dónde:** editor SQL de Neon (base real, no la rama) + terminal local.
+
+1. Corra el SQL del Paso 1 contra la base real del admin (producción).
+2. Apunte **solo** `MIGRATE_DATABASE_URL` (en `.env.local`, de forma
+   temporal) a la conexión directa del owner en producción — no toque
+   `DATABASE_URL` ni `SHOP_TENANT_ID`, que siguen contra la rama.
+3. `npm run db:migrate`, lea el banner (el `host=` ahora es el de
+   producción) y confirme el mensaje final.
+4. Corra la verificación SQL del Paso 2.3 y el `REVOKE` contra producción.
+5. Vuelva a apuntar `MIGRATE_DATABASE_URL` a la rama `ensayo-shop`.
+
+**Verificación:** los mismos chequeos del Paso 2.3, esta vez contra la base
+real.
+
+## Paso 4 — Vercel (proyecto Shop)
+
+**Dónde:** panel de Vercel, proyecto del Shop, en cada environment en uso
+(Production y Preview).
+
+1. Configure `DATABASE_URL` = URL pooled de `shop_app` (producción).
+2. Configure `SHOP_TENANT_ID`.
+3. Borre cualquier `POSTGRES_URL*` y desconecte la integración vieja de Neon
+   (si sigue conectada, puede reinyectar esas variables en el próximo
+   deploy).
+4. **No redespliegue todavía** — alcanza con confirmar que el preview del PR
+   compila (eso valida que `next build` no necesita `SHOP_TENANT_ID`).
+
+**Verificación:** el build del preview del PR queda en verde.
+
+## Paso 5 — Secrets de GitHub
+
+**Dónde:** Settings → Secrets and variables → Actions, en la raíz del repo.
+
+1. Cree o actualice `CLIENTES_DATABASE_URL` con la URL directa (sin pooler)
+   de `shop_app` de la base nueva.
+2. Borre `CLIENTES_POSTGRES_URL_NON_POOLING` (ya no se usa).
+
+**Verificación:** `CLIENTES_POSTGRES_URL_NON_POOLING` ya no aparece en la
+lista de secrets.
+
+## Paso 6 — Mergear y desplegar
+
+Haga los Pasos 4, 5 y 6 **en una sola sesión**: el código nuevo y la base
+vieja son incompatibles entre sí, en cualquiera de los dos sentidos.
+
+1. Mergee el PR de este cambio.
+2. Espere el deploy a producción.
+
+## Paso 7 — Después del deploy
+
+**Dónde:** GitHub Actions (workflow `clientes-catalogo-sync`) + Shop en
+producción.
+
+1. Dispare el workflow `clientes-catalogo-sync` a mano (`workflow_dispatch`)
+   y confirme que termina en verde.
+2. Dispare desde el admin la sync de overlay y la de cuotas.
+3. Humo: catálogo visible, búsqueda con acentos funciona, un pedido de
+   prueba se puede armar, "Mis compras" lo muestra. Los perfiles de
+   facturación y los vínculos de cliente arrancan vacíos — es esperado, no
+   hay datos que rescatar de la base vieja.
+
+## Después: limpieza
+
+- Deje la base vieja del Shop intacta: es el respaldo de rollback. Se da de
+  baja en un cambio aparte, más adelante.
+- Borre la rama `ensayo-shop` de Neon cuando ya no la necesite.
+
+## Rollback
+
+Revierta el PR y restaure el entorno de Vercel más el secret de GitHub
+**juntos, en la misma operación**: el código nuevo con la base vieja (o el
+código viejo con la base nueva) no funcionan. La base vieja del Shop no se
+tocó en ningún momento, así que no hay pérdida de datos.
+
+Si además quiere limpiar el esquema nuevo:
+
+```sql
+DROP SCHEMA shop CASCADE;
+DROP ROLE shop_app;
+```
+
+(no toca `public` ni `drizzle`).
+
+## Nota para el Slice 2 (`PAGOS_ENABLED`)
+
+No necesita ningún paso de base de datos. Se despliega con los pagos
+apagados desde el arranque (`PAGOS_ENABLED` sin definir). Para habilitarlos
+más adelante: configure `PAGOS_ENABLED=1` en Vercel y redespliegue. Para
+volver atrás: apague la variable o revierta el PR — los pedidos
+`a_coordinar` que ya se generaron quedan válidos igual.
+
+## Nota para el Slice 3 (admin "Pedidos")
+
+No agrega ninguna migración: usa las tablas de este baseline. **No se puede
+mergear antes de que este Slice 1 esté desplegado en producción** — el
+código del admin espera columnas que recién existen después del Paso 6. Al
+desplegarlo, pruebe como operador y como admin: listar pedidos, filtrar, ver
+el detalle, pasar un pedido de "pendiente" a "confirmado", cancelar con
+motivo, y confirmar que el cliente ve el nuevo estado en "Mis compras".
+
+## Nota sobre el ambiente local de tests (`crm_test`)
+
+Si en algún momento se regenera el baseline (`drizzle/0000_baseline.sql`)
+antes de mergear este cambio, un `crm_test` local que ya tenía el esquema
+`shop` aplicado queda con la forma vieja: el migrador solo compara la fecha
+de la migración, no su contenido. Corra una vez
+`DROP SCHEMA shop CASCADE;` sobre ese `crm_test` local para que la próxima
+corrida de tests lo vuelva a crear desde cero.

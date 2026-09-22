@@ -88,7 +88,18 @@ const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
   efectivo: "Pagás al momento del retiro",
   cuenta_corriente: "Se carga a tu cuenta corriente",
   mercadopago: "Pagás ahora con tarjeta, en cuotas si querés",
+  // Hoy no se llega a mostrar: con los pagos apagados no hay sección "Forma de
+  // pago". Está porque el Record exige un texto por método.
+  a_coordinar: "Un asesor coordinará el pago con usted después de confirmar su pedido",
 };
+
+/**
+ * Aviso del checkout cuando los pagos están apagados: reemplaza a la sección
+ * "Forma de pago". El comprador tiene que saber ANTES de confirmar que no va a
+ * pagar ahora ni elegir cómo.
+ */
+const AVISO_PAGO_A_COORDINAR =
+  "El pago se coordina con un asesor después de confirmar su pedido.";
 
 interface Props {
   nombreSugerido: string;
@@ -103,6 +114,13 @@ interface Props {
   admiteEnvio: boolean;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
+  /**
+   * Flag de pagos (src/lib/pagos-flag.ts) resuelto en el server: acá llega el booleano, nunca el
+   * env. Apagado: no hay "Forma de pago", el pedido sale con "a_coordinar", no
+   * se rescata ningún pendiente de Mercado Pago y nunca se entra al cobro. El
+   * servidor valida lo mismo al crear el pedido. Prendido: el checkout de antes.
+   */
+  pagosHabilitados: boolean;
 }
 
 export function CheckoutClient({
@@ -111,6 +129,7 @@ export function CheckoutClient({
   facturacionCompleta,
   admiteEnvio,
   oferta = null,
+  pagosHabilitados,
 }: Props) {
   const { items, clear, ready } = useCart();
 
@@ -146,6 +165,9 @@ export function CheckoutClient({
    * ve el checkout normal.
    */
   useEffect(() => {
+    // Sin cobros no hay nada que retomar: el rescate fuerza el método a Mercado
+    // Pago y salta al cobro, justo lo que el flag apagado tiene que impedir.
+    if (!pagosHabilitados) return;
     let cancelado = false;
     fetch("/api/pedidos/pendiente")
       .then((r) => (r.ok ? r.json() : null))
@@ -166,7 +188,7 @@ export function CheckoutClient({
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [pagosHabilitados]);
 
   /**
    * Clave del intento de compra. Se genera en el PRIMER confirmar y se reusa en
@@ -189,7 +211,10 @@ export function CheckoutClient({
     activo: !confirmado,
   });
 
-  const metodosPago = pagosDisponibles(entrega);
+  // Con los pagos apagados esto es ["a_coordinar"], así que `pagoElegido` (abajo)
+  // deriva a "a_coordinar" sin estado extra y la rama de Mercado Pago queda
+  // inalcanzable.
+  const metodosPago = pagosDisponibles(entrega, pagosHabilitados);
 
   // Efectivo solo existe con retiro. Si el cliente lo eligió y después pasó a
   // envío, el método se corrige DERIVÁNDOLO en el render — no sincronizando el
@@ -380,6 +405,12 @@ export function CheckoutClient({
                 Ya cobramos tu pedido. Nos comunicamos con vos para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"}.
               </>
+            ) : !pagosHabilitados ? (
+              // Sin "el pago por …": no hay medio elegido que nombrar.
+              <>
+                Un asesor se comunicará con usted para coordinar el{" "}
+                {entrega === "envio" ? "envío" : "retiro"} y el pago.
+              </>
             ) : (
               <>
                 Nos vamos a comunicar con vos para coordinar el{" "}
@@ -387,7 +418,12 @@ export function CheckoutClient({
                 {PAGO_LABEL[pagoElegido].toLowerCase()}.
               </>
             )}
-            {emailCliente && <> Te mandamos el detalle a {emailCliente}.</>}
+            {emailCliente &&
+              (pagosHabilitados ? (
+                <> Te mandamos el detalle a {emailCliente}.</>
+              ) : (
+                <> Le enviamos el detalle a {emailCliente}.</>
+              ))}
           </p>
           <div className="mt-6 flex justify-center gap-3">
             <Link href="/mi-cuenta">
@@ -497,7 +533,10 @@ export function CheckoutClient({
                   <Field label="Ciudad">
                     <Select
                       options={CIUDADES_ENVIO.map((c) => ({ label: c, value: c }))}
-                      value={ciudad || undefined}
+                      // Siempre controlado: con `undefined` al principio React avisa que el
+                      // Select pasa de no controlado a controlado al elegir. Radix muestra
+                      // el placeholder igual con "" (lo que no admite "" son las opciones).
+                      value={ciudad}
                       onValueChange={setCiudad}
                       placeholder="Seleccionar ciudad"
                       className="border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0"
@@ -522,6 +561,14 @@ export function CheckoutClient({
             )}
           </section>
 
+          {!pagosHabilitados && (
+            <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+              <h2 className="mb-2 font-display text-2xl font-medium text-text">Pago</h2>
+              <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
+            </section>
+          )}
+
+          {pagosHabilitados && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
             <h2 className="mb-4 font-display text-2xl font-medium text-text">Forma de pago</h2>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -541,6 +588,7 @@ export function CheckoutClient({
               </p>
             )}
           </section>
+          )}
 
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
             <h2 className="mb-4 font-display text-2xl font-medium text-text">
@@ -650,7 +698,9 @@ export function CheckoutClient({
           )}
 
           <p className="mt-3 text-center text-xs text-muted">
-            No se te cobra nada ahora. Coordinamos el pago al confirmar el pedido.
+            {pagosHabilitados
+              ? "No se te cobra nada ahora. Coordinamos el pago al confirmar el pedido."
+              : "No se le cobrará nada ahora. Un asesor coordinará el pago con usted."}
           </p>
         </div>
       </div>

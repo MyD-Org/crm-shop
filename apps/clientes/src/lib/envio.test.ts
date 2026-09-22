@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CIUDADES_ENVIO,
   MINIMO_ENVIO,
+  PAGO_LABEL,
   costoEnvio,
   evaluarEnvio,
   pagosDisponibles,
@@ -60,21 +61,56 @@ describe("costoEnvio", () => {
   });
 });
 
-describe("pagosDisponibles", () => {
+describe("pagosDisponibles con los pagos habilitados (flag prendido)", () => {
   it("ofrece efectivo solo con retiro por el local", () => {
-    expect(pagosDisponibles("retiro")).toContain("efectivo");
-    expect(pagosDisponibles("envio")).not.toContain("efectivo");
+    expect(pagosDisponibles("retiro", true)).toContain("efectivo");
+    expect(pagosDisponibles("envio", true)).not.toContain("efectivo");
   });
 
   it("siempre ofrece transferencia", () => {
-    expect(pagosDisponibles("retiro")).toContain("transferencia");
-    expect(pagosDisponibles("envio")).toContain("transferencia");
+    expect(pagosDisponibles("retiro", true)).toContain("transferencia");
+    expect(pagosDisponibles("envio", true)).toContain("transferencia");
   });
 
   it("nunca devuelve una lista vacía", () => {
     // El checkout cae a `metodosPago[0]` cuando el elegido no está disponible:
     // una lista vacía dejaría el método en undefined y el pedido sin forma de pago.
-    expect(pagosDisponibles("retiro").length).toBeGreaterThan(0);
-    expect(pagosDisponibles("envio").length).toBeGreaterThan(0);
+    expect(pagosDisponibles("retiro", true).length).toBeGreaterThan(0);
+    expect(pagosDisponibles("envio", true).length).toBeGreaterThan(0);
+  });
+});
+
+describe("pagosDisponibles: regresión del flag prendido", () => {
+  // Con el flag en "1" las listas tienen que ser LITERALMENTE las de antes del
+  // flag, en el mismo orden: `metodosPago[0]` es el default del checkout.
+  it("retiro = transferencia, mercadopago, efectivo", () => {
+    expect(pagosDisponibles("retiro", true)).toEqual([
+      "transferencia",
+      "mercadopago",
+      "efectivo",
+    ]);
+  });
+
+  it("envío = transferencia, mercadopago", () => {
+    expect(pagosDisponibles("envio", true)).toEqual([
+      "transferencia",
+      "mercadopago",
+    ]);
+  });
+
+  it("nunca ofrece a_coordinar", () => {
+    expect(pagosDisponibles("retiro", true)).not.toContain("a_coordinar");
+    expect(pagosDisponibles("envio", true)).not.toContain("a_coordinar");
+  });
+});
+
+describe("pagosDisponibles con los pagos apagados", () => {
+  it("el único método es a_coordinar, para las dos entregas", () => {
+    expect(pagosDisponibles("retiro", false)).toEqual(["a_coordinar"]);
+    expect(pagosDisponibles("envio", false)).toEqual(["a_coordinar"]);
+  });
+
+  it("la etiqueta que ve el cliente habla de un asesor", () => {
+    expect(PAGO_LABEL.a_coordinar).toBe("A coordinar con un asesor");
   });
 });

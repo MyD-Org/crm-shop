@@ -22,6 +22,7 @@ import { getDb } from "@/db";
 import { orders } from "@/db/schema";
 import { mercadoPago } from "./mercadopago";
 import { registrarCobro } from "@/lib/pedidos";
+import { shopTenantId } from "@/lib/tenant";
 
 /**
  * Antigüedad mínima desde el último toque al pago antes de re-consultar. Menos
@@ -71,6 +72,9 @@ export async function reconciliarPagosPendientes(
     .from(orders)
     .where(
       and(
+        // La base es compartida con el CRM y acá no hay comprador que acote la
+        // consulta: sin esto, el cron de un Shop reconciliaría pedidos de otro.
+        eq(orders.tenantId, shopTenantId()),
         eq(orders.pagoEstado, "pendiente"),
         eq(orders.pagoProveedor, proveedor),
         isNotNull(orders.pagoReferencia),

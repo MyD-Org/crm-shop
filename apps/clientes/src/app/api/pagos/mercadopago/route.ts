@@ -5,6 +5,7 @@ import { MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos";
 import { mercadoPago, urlNotificacion } from "@/lib/pagos/mercadopago";
 import { permitir } from "@/lib/rate-limit";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
+import { pagosHabilitados } from "@/lib/pagos-flag";
 import { validarCuotasPago } from "@/lib/pagos/cuotas-validacion";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,21 @@ export async function POST(req: Request) {
   const { clerkUserId, cliente, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  // Con los pagos apagados no se INICIA ningún cobro, ni siquiera el de un
+  // pedido de Mercado Pago creado cuando estaban prendidos. El webhook y la
+  // conciliación siguen corriendo: un pago que ya estaba en vuelo se acredita
+  // igual. Se corta acá, antes de leer el pedido o de hablar con Mercado Pago.
+  if (!pagosHabilitados()) {
+    return NextResponse.json(
+      {
+        error:
+          "Los pagos en línea no están disponibles en este momento. Un asesor coordinará el pago con usted.",
+        motivo: "pagos_deshabilitados",
+      },
+      { status: 409 },
+    );
   }
 
   const clave = `pago:${clerkUserId ?? cliente?.codigocliente}`;
@@ -73,6 +89,15 @@ export async function POST(req: Request) {
   });
 
   if (!pedido) {
+    return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
+  }
+
+  // Sólo se cobra un pedido que el comprador confirmó PARA pagar por Mercado
+  // Pago. Sin esto, cualquier pedido propio era cobrable con sólo conocer su id:
+  // uno "a coordinar" (o por transferencia) terminaba con un cobro que nadie
+  // pidió. Mismo 404 que un pedido ajeno, y antes de cualquier llamada a Mercado
+  // Pago o de escribir un intento fallido: sus columnas de pago no se tocan.
+  if (pedido.pagoMetodo !== "mercadopago") {
     return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
   }
 

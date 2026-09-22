@@ -121,6 +121,21 @@ describe("mapItemToProduct (ficha en vivo)", () => {
     expect(p.precioFinal).toBe(121000);
   });
 
+  it("nombre exhibido: la descripción de Alegra, igual que la card del catálogo", () => {
+    const p = mapItemToProduct({ ...item, name: "02141N", description: "LAMPARA LED A60 9W" });
+    expect(p.name).toBe("LAMPARA LED A60 9W");
+  });
+
+  it("sin descripción, el nombre es el name de Alegra", () => {
+    expect(mapItemToProduct({ ...item, name: "02141N", description: "" }).name).toBe("02141N");
+    expect(mapItemToProduct({ ...item, name: "02141N" }).name).toBe("02141N");
+  });
+
+  it("sku: la reference; si falta, el name de Alegra (el código no se pierde de la ficha)", () => {
+    expect(mapItemToProduct({ ...item, name: "02141N", reference: "REF-1" }).sku).toBe("REF-1");
+    expect(mapItemToProduct({ ...item, name: "02141N", description: "Lámpara" }).sku).toBe("02141N");
+  });
+
   it("sin tax: misma regla que el espejo (sin default)", () => {
     const p = mapItemToProduct(item);
     expect(p.ivaPorcentaje).toBeUndefined();

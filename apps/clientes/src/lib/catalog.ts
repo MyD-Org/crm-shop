@@ -469,13 +469,16 @@ export function mapItemToProduct(
   const price = resolverPrecio(item, idPriceList);
   return {
     id: item.id,
-    name: item.name,
+    // Mismo nombre que la card del catálogo sin overlay (la ficha en vivo no
+    // lee el overlay): el comercial vive en `description`; `name` es el código.
+    name: item.description || item.name,
     brand: marcaDeCustomFields(item.customFields) || categoria?.name || "",
     price,
     ...camposIva(price, ivaPersistible(item)),
     stock: derivarStock(item.inventory?.availableQuantity, stockSimulado()),
     stockQty: item.inventory?.availableQuantity ?? undefined,
-    sku: item.reference || undefined,
+    // Como en el espejo: sin reference, el código es `name`.
+    sku: item.reference || item.name || undefined,
     description: item.description || undefined,
     category: categoria?.name || undefined,
   };

@@ -2,7 +2,7 @@
 
 import { Field, Input, Textarea } from "@myd-org/ui";
 import type { DecoGridContent, SeccionTilesContent } from "@/data/home-defaults";
-import { nuevoEnlace, nuevoTile } from "@/lib/home-editor";
+import { nuevoTile } from "@/lib/home-editor";
 import { ListaEditable } from "../ListaEditable";
 import { CampoImagen } from "./CampoImagen";
 import type { EditorProps } from "./index";
@@ -17,7 +17,6 @@ export function EditorTiles({
   onChange,
 }: EditorProps<SeccionTilesContent | DecoGridContent>) {
   const tieneBajada = "bajada" in valor;
-  const tieneChips = "chips" in valor;
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,26 +59,6 @@ export function EditorTiles({
           )}
         />
       </div>
-      {tieneChips ? (
-        <div>
-          <p className="mb-2 text-sm font-semibold text-text">Chips</p>
-          <ListaEditable
-            items={(valor as DecoGridContent).chips}
-            onChange={(chips) => onChange({ ...valor, chips })}
-            nuevo={nuevoEnlace}
-            renderItem={(item, onItem) => (
-              <div className="flex flex-col gap-3">
-                <Field label="Etiqueta">
-                  <Input value={item.label} onChange={(e) => onItem({ ...item, label: e.target.value })} />
-                </Field>
-                <Field label="Enlace" hint="Ruta interna (por ejemplo /catalogo) o URL https">
-                  <Input value={item.href} onChange={(e) => onItem({ ...item, href: e.target.value })} />
-                </Field>
-              </div>
-            )}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }

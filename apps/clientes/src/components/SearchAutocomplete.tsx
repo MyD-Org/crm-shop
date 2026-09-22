@@ -1,8 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
+import { fmtMonto } from "@/lib/cuotas-textos";
+import { LightbulbIcon } from "@/components/catalogo/iconos";
 
 function SearchIcon() {
   return (
@@ -90,15 +93,19 @@ export function SearchAutocomplete() {
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Buscar productos, marcas y codigos..."
-          className="flex-1 bg-transparent px-4 py-2.5 text-sm text-text placeholder:text-muted outline-none"
+          // Corto a propósito: al lado está la lupa, y cualquier texto más
+          // largo se cortaba a mitad de palabra en el header angosto.
+          placeholder="Buscar"
+          // El mask difumina el borde derecho: si el placeholder (o lo tipeado)
+          // no entra, se desvanece en vez de cortarse a mitad de palabra.
+          className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-text placeholder:text-muted outline-none [mask-image:linear-gradient(to_right,black_calc(100%-16px),transparent)]"
         />
         <button
           onClick={submit}
-          className="flex items-center gap-2 bg-transparent px-4 text-sm font-medium text-muted transition-colors hover:text-text"
+          aria-label="Buscar"
+          className="flex shrink-0 items-center gap-2 bg-transparent px-4 text-sm font-medium text-muted transition-colors hover:text-text"
         >
           <SearchIcon />
-          Buscar
         </button>
       </div>
 
@@ -120,15 +127,25 @@ export function SearchAutocomplete() {
                     onClick={() => { setOpen(false); router.push(`/producto/${p.id}`); }}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-elevated"
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-elevated text-muted">
-                      <SearchIcon />
+                    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-elevated text-muted">
+                      {p.images?.[0] ? (
+                        <Image
+                          src={p.images[0].url}
+                          alt={p.images[0].alt ?? p.name}
+                          fill
+                          sizes="44px"
+                          className="object-contain p-1"
+                        />
+                      ) : (
+                        <LightbulbIcon className="h-5 w-5 text-muted/50" />
+                      )}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-text">{p.name}</span>
-                      <span className="block text-xs text-muted">{p.brand}</span>
+                      <span className="block truncate text-xs text-muted">{p.brand}</span>
                     </span>
-                    <span className="shrink-0 text-sm font-semibold text-text">
-                      ${p.price.toLocaleString("es-AR")}
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
+                      {fmtMonto(p.precioFinal ?? p.price)}
                     </span>
                   </button>
                 </li>

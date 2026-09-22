@@ -20,6 +20,35 @@ export type PagoMetodo =
 /** Únicas ciudades con envío propio. El resto del país se coordina aparte. */
 export const CIUDADES_ENVIO = ["Puerto Iguazú", "El Dorado"] as const;
 
+/** Compara nombres de ciudad sin acentos, mayúsculas, espacios ni signos. */
+function claveCiudad(ciudad: string): string {
+  return ciudad
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * La ciudad tal como la escribe `CIUDADES_ENVIO` si está dentro de la zona de
+ * envío propio, o null. Tolera acentos, mayúsculas, espacios y la grafía
+ * pegada ("Eldorado" = "El Dorado"), que es como llega una dirección guardada
+ * o una sugerencia del geocodificador.
+ *
+ * Es la ÚNICA definición de "zona de envío" para una dirección guardada: Mi
+ * cuenta la usa para el aviso "se coordina por separado" y el checkout para
+ * decidir qué ciudad manda al pedido. Cuando el envío se abra a todo el país,
+ * se cambia acá (y en `evaluarEnvio`) y todo lo demás se acomoda solo.
+ */
+export function ciudadConEnvio(
+  ciudad: string | null | undefined,
+): (typeof CIUDADES_ENVIO)[number] | null {
+  if (!ciudad) return null;
+  const clave = claveCiudad(ciudad);
+  if (!clave) return null;
+  return CIUDADES_ENVIO.find((c) => claveCiudad(c) === clave) ?? null;
+}
+
 /** Piso de compra (sin IVA) para que el envío a domicilio esté disponible. */
 export const MINIMO_ENVIO = 100_000;
 

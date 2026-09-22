@@ -6,12 +6,14 @@
 interface DomicilioFacturacion {
   domicilioCalle?: string | null;
   domicilioCiudad?: string | null;
+  domicilioProvincia?: string | null;
   domicilioCp?: string | null;
 }
 
 export interface DireccionPrellenada {
   calle: string;
   ciudad: string;
+  provincia: string;
   cp: string;
 }
 
@@ -20,7 +22,7 @@ export const ETIQUETA_FACTURACION = "Facturación";
 
 /**
  * Los datos para prellenar el envío, o null si no hay domicilio de facturación
- * cargado (sin calle no hay nada útil que copiar). Ciudad y CP pueden venir
+ * cargado (sin calle no hay nada útil que copiar). Ciudad, provincia y CP pueden venir
  * vacíos: el formulario los deja completar.
  */
 export function direccionDesdeFacturacion(
@@ -31,6 +33,7 @@ export function direccionDesdeFacturacion(
   return {
     calle,
     ciudad: perfil?.domicilioCiudad?.trim() ?? "",
+    provincia: perfil?.domicilioProvincia?.trim() ?? "",
     cp: perfil?.domicilioCp?.trim() ?? "",
   };
 }

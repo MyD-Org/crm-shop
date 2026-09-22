@@ -2,14 +2,15 @@ import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
 
 /**
  * Footer global del layout. Textos del diseño aprobado; links a rutas reales
- * (categorías canónicas del catálogo). "Led" en highlight (--warm) sin itálica,
- * como el mockup (el DS lo itálica por defecto).
+ * (categorías canónicas del catálogo). "Led" con el color de marca del tema
+ * sobre oscuro y sin itálica (regla `.site-footer em` en globals.css), igual
+ * que el header.
  */
 export function SiteFooter() {
   const anio = new Date().getFullYear();
   return (
     <SiteFooterDS
-      className="[&_em]:not-italic"
+      className="site-footer"
       brandName="Central"
       brandAccent="Led"
       description="Casa de electricidad e iluminación en Puerto Iguazú, Misiones. Del disyuntor al velador: el local de siempre, ahora también online."

@@ -1,51 +1,54 @@
 import { redirect } from "next/navigation";
-import { rutaIngreso } from "@/lib/ingreso";
-import { MisCompras } from "@/components/MisCompras";
+import { EmptyState } from "@myd-org/ui";
+import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
+import { PedidoCard } from "@/components/mi-cuenta/PedidoCard";
+import { ResumenActividad } from "@/components/mi-cuenta/ResumenActividad";
+import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
-import { getPerfilFacturacion } from "@/lib/facturacion-db";
-import { listarPedidos, resumenPedidos } from "@/lib/pedidos";
+import { rutaIngreso } from "@/lib/ingreso";
+import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 import { pagosHabilitados } from "@/lib/pagos-flag";
+import { listarPedidos, resumenPedidos } from "@/lib/pedidos";
 
 // Los pedidos cambian con cada compra: nunca prerenderizar esta página.
 export const dynamic = "force-dynamic";
 
+/**
+ * Resumen de Mi cuenta: tarjetas de actividad y los últimos tres pedidos.
+ * Ninguna llamada a Alegra: todo sale de la base del Shop. El `?tab=datos`
+ * viejo lo resuelve un redirect de next.config.ts antes de llegar acá.
+ */
 export default async function MiCuentaPage() {
-  const { clerkUserId, cliente, nombre, email } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    redirect(rutaIngreso("/mi-cuenta"));
-  }
+  const { clerkUserId, cliente } = await identidadActual();
+  if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.resumen));
 
   const dueno = { clerkUserId, clienteCodigo: cliente?.codigocliente };
-  const [pedidos, resumen, perfilFacturacion] = await Promise.all([
-    listarPedidos(dueno),
-    resumenPedidos(dueno),
-    clerkUserId ? getPerfilFacturacion(clerkUserId) : null,
-  ]);
+  const [pedidos, resumen] = await Promise.all([listarPedidos(dueno, 3), resumenPedidos(dueno)]);
+  const pagos = pagosHabilitados();
 
   return (
-    <>
-      <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
-        <MisCompras
-          nombre={cliente?.razonsocial ?? nombre ?? email ?? "cliente"}
-          cuit={cliente?.cuit}
-          email={cliente?.email ?? email}
-          esCuentaCorriente={cliente?.tipoCuenta === "corriente"}
-          // Solo hay razón social vinculada si vino de una vinculación propia:
-          // la cookie heredada del CRM identifica al cliente pero no crea
-          // vínculo, y ofrecerle "vincular" a quien ya entró por el CRM sería
-          // pedirle que pruebe algo que ya probó.
-          razonSocialVinculada={
-            cliente
-              ? cliente.razonsocial ?? cliente.codigocliente
-              : undefined
-          }
-          perfilFacturacion={perfilFacturacion}
-          pedidos={pedidos}
-          resumen={resumen}
-          // El flag se lee acá, en el server: al cliente le llega el booleano.
-          pagosHabilitados={pagosHabilitados()}
+    <div className="flex flex-col gap-8">
+      <ResumenActividad enCurso={resumen.enCurso} mostrarFavoritos={false} />
+
+      <section aria-labelledby="pedidos-recientes">
+        <SeccionTitulo
+          id="pedidos-recientes"
+          titulo="Pedidos recientes"
+          href={pedidos.length > 0 ? RUTAS_MI_CUENTA.pedidos : undefined}
         />
-      </main>
-    </>
+        {pedidos.length === 0 ? (
+          <EmptyState
+            title="Todavía no realizó pedidos."
+            action={<BotonEnlace href="/catalogo">Ir al catálogo</BotonEnlace>}
+          />
+        ) : (
+          <div className="flex flex-col gap-4">
+            {pedidos.map((p) => (
+              <PedidoCard key={p.id} pedido={p} pagosHabilitados={pagos} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }

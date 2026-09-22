@@ -229,6 +229,7 @@ export function HomeClient({
                         )
                       }
                       priceNote={p.sku ? `Cód. ${p.sku}` : undefined}
+                      actionPlacement="below"
                       action={
                         <AddToCartButton
                           product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}

@@ -43,8 +43,9 @@ export function CatalogoFiltros({
         title="Categorías"
         items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
           value: c.label,
-          // Las subcategorías van debajo de su madre, marcadas con un guion por nivel.
-          label: `${"— ".repeat(Math.max(("nivel" in c ? (c.nivel ?? 1) : 1) - 1, 0))}${formatRubro(c.label)}`,
+          label: formatRubro(c.label),
+          // Las subcategorías van debajo de su madre, corridas un nivel.
+          depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
           count: c.count,
           checked: c.checked,
         }))}

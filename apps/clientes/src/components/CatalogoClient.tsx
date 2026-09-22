@@ -104,7 +104,7 @@ export function CatalogoClient({
             para que el final del panel no quede fuera de pantalla.
             Sin valores arbitrarios.
         */}
-        <aside className="sticky top-20 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-20 lg:block">
+        <aside className="scroll-fino sticky top-20 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-20 lg:block">
           <CatalogoFiltros facetas={facetas} estado={estado} ir={ir} />
         </aside>
 

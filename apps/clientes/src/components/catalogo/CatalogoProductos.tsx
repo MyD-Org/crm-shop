@@ -84,6 +84,9 @@ export function CatalogoProductos({
               <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
             </span>
           }
+          // Siempre abajo: el "+" se vuelve stepper al agregar, y al costado
+          // unas cards lo dejaban junto al precio y otras abajo según su largo.
+          actionPlacement="below"
           action={
             <AddToCartButton
               disabled={p.stock === "out"}

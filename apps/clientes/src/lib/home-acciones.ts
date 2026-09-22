@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { esAdmin } from "@/lib/auth";
+import { getCatalogo } from "@/lib/catalog";
 import { SECCIONES_HOME, erroresSeccion } from "@/data/home-defaults";
 import { borrarSeccionHome, guardarSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
@@ -16,16 +17,26 @@ export type ResultadoFirma =
   | { ok: true; key: string; url: string; headers: { "content-type": string }; urlPublica: string }
   | { ok: false; errores: string[] };
 
+/** Un producto del catálogo, tal como lo necesita el selector de destacados. */
+export type ProductoBusqueda = { sku: string; nombre: string; foto?: string };
+
+export type ResultadoBusquedaProductos =
+  | { ok: true; productos: ProductoBusqueda[] }
+  | { ok: false; errores: string[] };
+
 const SIN_PERMISO = "No tiene permisos para editar la página de inicio.";
 const SECCION_DESCONOCIDA = "La sección indicada no existe.";
 const ERROR_GUARDAR = "No se pudo guardar la sección. Inténtelo de nuevo.";
 const R2_NO_CONFIGURADO = "El almacenamiento de imágenes no está configurado. Avise al administrador.";
 const TAMANO_INVALIDO = "La imagen supera el tamaño permitido (5 MB).";
 const ERROR_FIRMA = "No se pudo preparar la subida. Inténtelo de nuevo.";
+const ERROR_BUSQUEDA = "No se pudo buscar productos. Inténtelo de nuevo.";
 
 const ANCHO_HOME = 1600;
 const TTL_FIRMA_S = 600;
 const MAX_BYTES_VARIANTE = 5 * 1024 * 1024;
+/** Tope de resultados del selector: alcanza para elegir a mano, sin paginar. */
+const LIMITE_BUSQUEDA_PRODUCTOS = 20;
 
 function esSeccionValida(seccion: string): boolean {
   return (SECCIONES_HOME as readonly string[]).includes(seccion);
@@ -111,5 +122,32 @@ export async function firmarSubidaImagenHome(input: { bytes: number }): Promise<
   } catch (err) {
     console.error("[home-acciones] no se pudo firmar la subida:", err);
     return { ok: false, errores: [ERROR_FIRMA] };
+  }
+}
+
+/**
+ * Busca productos del espejo del catálogo para el selector de SKUs curados de
+ * `destacados` (rebanada D). Solo admin. Sin `q` no consulta la DB (evita
+ * traer 20 productos al azar cuando el buscador está vacío). Los productos
+ * sin `sku` se descartan: `elegirDestacados` cura por SKU, así que no sirven
+ * para armar `skus`. Nunca lanza.
+ */
+export async function buscarProductosHome(q: string): Promise<ResultadoBusquedaProductos> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO] };
+
+  const busqueda = typeof q === "string" ? q.trim() : "";
+  if (!busqueda) return { ok: true, productos: [] };
+
+  try {
+    const productos = await getCatalogo({ busqueda, limit: LIMITE_BUSQUEDA_PRODUCTOS });
+    return {
+      ok: true,
+      productos: productos
+        .filter((p): p is typeof p & { sku: string } => !!p.sku)
+        .map((p) => ({ sku: p.sku, nombre: p.name, foto: p.images?.[0]?.url })),
+    };
+  } catch (err) {
+    console.error("[home-acciones] no se pudo buscar productos:", err);
+    return { ok: false, errores: [ERROR_BUSQUEDA] };
   }
 }

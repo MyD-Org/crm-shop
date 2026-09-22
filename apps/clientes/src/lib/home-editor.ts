@@ -93,7 +93,10 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
       if (!Number.isNaN(n)) o.cantidad = n;
     }
     if (Array.isArray(o.imagenes) && o.imagenes.length === 0) delete o.imagenes;
-    if (Array.isArray(o.skus) && o.skus.length === 0) delete o.skus;
+    if (Array.isArray(o.skus)) {
+      o.skus = (o.skus as string[]).filter(esTextoNoVacio);
+      if ((o.skus as string[]).length === 0) delete o.skus;
+    }
   }
 
   if (seccion === "marquee" && Array.isArray(o.items)) {

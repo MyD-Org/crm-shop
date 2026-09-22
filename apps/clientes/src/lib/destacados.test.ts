@@ -45,4 +45,14 @@ describe("elegirDestacados", () => {
   it("respeta la cantidad aunque falten productos", () => {
     expect(elegirDestacados(pool, [], 99).length).toBe(pool.length);
   });
+
+  it("SKU inexistente no rompe: devuelve cantidad productos sin lanzar (rebanada D)", () => {
+    expect(() => elegirDestacados(pool, ["NO-EXISTE"], 4)).not.toThrow();
+    expect(elegirDestacados(pool, ["NO-EXISTE"], 4).length).toBe(4);
+  });
+
+  it("respeta el orden guardado de los skus curados (rebanada D)", () => {
+    const r = elegirDestacados(pool, ["ADM-D10-BCO-CO", "ADF-D8-BCO-CO", "ADM-D8-BCO-CO"], 3);
+    expect(r.map((x) => x.id)).toEqual(["3", "2", "4"]);
+  });
 });

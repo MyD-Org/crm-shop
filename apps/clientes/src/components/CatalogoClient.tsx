@@ -71,17 +71,16 @@ export function CatalogoClient({
         Filtros sticky en desktop: quedan a la vista mientras se recorre la
         grilla. `self-start` evita que el aside se estire al alto de la
         grilla (sin eso no hay nada que "pegar").
-        - `top-36` (144px): el SiteHeader del DS es sticky y en lg mide
-          ~132px (78 de la fila + 52 de la barra de categorías + bordes); el
-          DS no expone su alto como token, así que se usa el valor de la
-          escala que queda justo debajo.
+        - `top-6`: aunque el SiteHeader del DS declara `sticky`, en el Shop
+          no se queda fijo al bajar (su contenedor es corto) y se va con el
+          scroll; el panel se pega cerca del borde en vez de dejar un hueco
+          del alto del header. Si el header pasa a quedar fijo, este valor
+          tiene que subir a su alto (hoy ~132px en lg, sin token en el DS).
         - Si el panel es más alto que la pantalla (marcas expandidas),
-          scrollea adentro: `max-h-screen` + `pb-36` compensa el `top-36`
-          (la caja mide una pantalla y arranca 144px más abajo; el padding
-          deja el final del panel alcanzable). Sin valores arbitrarios: el
-          alto del header como token del DS es follow-up.
+          scrollea adentro: `max-h-screen` + `pb-6` compensa el `top-6`.
+          Sin valores arbitrarios.
       */}
-      <aside className="sticky top-36 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-36 lg:block">
+      <aside className="sticky top-6 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-6 lg:block">
         <CatalogoFiltros facetas={facetas} estado={estado} ir={ir} />
       </aside>
 

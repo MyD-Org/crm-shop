@@ -24,6 +24,11 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
+  // Base de las URLs absolutas de metadata (canonical). Por entorno: el repo
+  // no lleva el dominio. Sin la variable, las páginas omiten el canonical.
+  metadataBase: process.env.NEXT_PUBLIC_SITE_URL
+    ? new URL(process.env.NEXT_PUBLIC_SITE_URL)
+    : undefined,
   title: "Central LED — Tienda Online",
   description:
     "Iluminación LED y materiales eléctricos en Puerto Iguazú, Misiones. Stock en tiempo real.",

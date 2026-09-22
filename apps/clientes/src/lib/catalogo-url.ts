@@ -220,3 +220,20 @@ export function cambiosDeRango(
     precioMax: max < rango.max ? max : undefined,
   };
 }
+
+/**
+ * URL canónica de un estado: la categoría (sólo la primera) y la página. Todo
+ * lo demás (búsqueda, marcas, precio, stock, orden, vista) son variantes de
+ * la misma página para los buscadores. La paginación vive en el DS
+ * (`Pagination` / `paginationWindow`).
+ */
+export function hrefCanonico(estado: EstadoCatalogo): string {
+  return hrefCatalogo({
+    categorias: estado.categorias.slice(0, 1),
+    marcas: [],
+    orden: ORDEN_DEFAULT,
+    pagina: estado.pagina,
+    soloStock: false,
+    vista: VISTA_DEFAULT,
+  });
+}

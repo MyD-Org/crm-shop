@@ -7,6 +7,7 @@ import {
   comoOrden,
   comoPagina,
   comoPrecio,
+  hrefCanonico,
   hrefCatalogo,
   hrefCon,
   leerEstado,
@@ -274,5 +275,31 @@ describe("rango de precio efectivo", () => {
       precioMin: undefined,
       precioMax: undefined,
     });
+  });
+});
+
+describe("hrefCanonico", () => {
+  it("conserva la categoría y la página; descarta la vista", () => {
+    expect(
+      hrefCanonico({ ...base, categorias: ["ILUMINACION"], vista: "lista", pagina: 2 })
+    ).toBe("/catalogo?categoria=ILUMINACION&pagina=2");
+  });
+
+  it("con varias categorías, sólo la primera", () => {
+    expect(hrefCanonico({ ...base, categorias: ["A", "B"] })).toBe("/catalogo?categoria=A");
+  });
+
+  it("descarta búsqueda, marcas, precio, stock y orden", () => {
+    expect(
+      hrefCanonico({
+        ...base,
+        query: "led",
+        marcas: ["GENROD"],
+        precioMin: 500,
+        precioMax: 900,
+        soloStock: true,
+        orden: "precio-desc",
+      })
+    ).toBe("/catalogo");
   });
 });

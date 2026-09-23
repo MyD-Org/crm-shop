@@ -98,13 +98,28 @@ function mapEstimate(e: AlegraEstimate, hoy: Date): Presupuesto {
   }
 }
 
+/**
+ * Cuenta corriente o contado, deducido del contacto: Alegra no tiene un campo propio.
+ * En la sucursal, a un cliente de cuenta corriente le cargan un plazo de pago y/o un
+ * límite de crédito; sin ninguno de los dos, es contado. Misma regla que la tienda
+ * (`tipoCuentaDe` en apps/clientes/src/lib/alegra.ts).
+ *
+ * Decide qué ve el portal: condiciones comerciales y tarjetas de deuda/límite solo
+ * para cuenta corriente. Antes estaba fijo en "corriente" para todos.
+ */
+export function tipoCuentaDeContacto(
+  c: Pick<AlegraContact, "paymentTermDays" | "creditLimit">,
+): "corriente" | "contado" {
+  return (c.paymentTermDays ?? 0) > 0 || (c.creditLimit ?? 0) > 0 ? "corriente" : "contado"
+}
+
 function mapContactToCliente(c: AlegraContact, balance?: { total: number; overdue: number; toFallDue: number }): Cliente {
   return {
     codigocliente: c.alegraId,
     razonsocial: c.name,
     cuit: c.identification ?? "",
     email: c.email ?? undefined,
-    tipoCuenta: "corriente",
+    tipoCuenta: tipoCuentaDeContacto(c),
     // Alegra SÍ lo expone (`creditLimit` del contacto). El comentario que había acá decía
     // lo contrario y por eso se hardcodeaba en 0.
     limitecredito: c.creditLimit,

@@ -33,6 +33,7 @@ import {
   esCliente,
   getContacto,
   idPriceListUsable,
+  tipoCuentaDe,
 } from "./alegra";
 import { enmascararEmail, enviarEmail } from "./email";
 import { permitir } from "./rate-limit";
@@ -188,6 +189,7 @@ export async function intentarVinculacionPorEmail(
       razonSocial: contacto.name ?? null,
       cuit: contacto.identification ?? null,
       idPriceList: idPriceListUsable(contacto) ?? null,
+      tipoCuenta: tipoCuentaDe(contacto),
       estado: "activa",
       metodo: "email_verificado",
     })
@@ -482,6 +484,7 @@ export async function confirmarVinculacion(
         razonSocial: contacto?.name ?? null,
         cuit: contacto?.identification ?? null,
         idPriceList: idPriceListUsable(contacto) ?? null,
+        tipoCuenta: tipoCuentaDe(contacto),
         metodo: "otp_email",
       })
       .onConflictDoNothing()

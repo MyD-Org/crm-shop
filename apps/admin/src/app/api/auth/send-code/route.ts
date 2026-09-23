@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     const identifier = typeof raw === "string" ? normalizarDocumento(raw) : null
     if (!identifier) {
       return Response.json(
-        { error: "Ingrese un CUIT, CUIL o DNI válido, solo con números." },
+        { error: "Ingrese una identificación válida, solo con números." },
         { status: 400 },
       )
     }
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error:
-            "No encontramos una cuenta con ese CUIT, CUIL o DNI. Verifique el número o comuníquese con la sucursal.",
+            "No encontramos una cuenta con esa identificación. Verifique el número o comuníquese con la sucursal.",
         },
         { status: 404 },
       )

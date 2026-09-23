@@ -11,11 +11,25 @@
 .light { transition: opacity 300ms ease-out; mix-blend-mode: screen; }
 .target { position: absolute; z-index: 0; min-width: 48px; min-height: 48px; transform: translate(-50%, -50%); border: 0; border-radius: 50%; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
 .target:focus-visible { outline: 2px solid var(--color-accent, #ad542e); outline-offset: 4px; background: #ffffff18; }
-/* Mobile: same full-card background as any hero photo. The card is taller than
-   3:2, so cover (not contain, which would leave grey bands) anchored at
-   COVER_X in hero-lights.ts to keep most of the lamps in frame. */
+/* Slower cross-fade for the first-view intro (INTRO_FADE_MS in InteractiveHero). */
+.root[data-intro] .light { transition-duration: 900ms; transition-timing-function: ease-in-out; }
+/* Mobile: the text column spans the card, so a full-card photo always lands the
+   lamps under the text. The photo stays the card background but is anchored to
+   the bottom in a 10:9 box (cover, crop at COVER_X), and the card above it takes
+   the photo's ceiling tone, with the photo's top edge faded into it. The text
+   sits at the top over the plain wall and the lamps show below it. */
 @media (max-width: 767px) {
-  .root > section > img { object-fit: cover; object-position: 88% center; background: none; }
+  /* The tone goes on .root: the section shares its stacking context, so its own
+     background would paint over the photo (-20) and the veil (-10). */
+  .root { border-radius: 28px; background-color: rgb(168 155 138); }
+  .root > section { align-items: flex-start; padding-bottom: calc(100% * 9 / 10 * .86); }
+  .root > section > div:last-child { justify-content: flex-start; }
+  .root > section > img {
+    top: auto; bottom: 0; height: auto; aspect-ratio: 10 / 9;
+    object-fit: cover; object-position: 88% bottom; background: none;
+    mask-image: linear-gradient(to bottom, transparent 0, #000 16%);
+  }
+  .scene { top: auto; height: auto; aspect-ratio: 10 / 9; }
   /* The DS veils are made for a photo beside the text; on mobile the text column
      spans the card and together they wash the scene out. One lighter veil keeps
      the text readable and the lamps visible. */

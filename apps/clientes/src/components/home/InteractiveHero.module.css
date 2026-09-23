@@ -11,9 +11,15 @@
 .light { transition: opacity 300ms ease-out; mix-blend-mode: screen; }
 .target { position: absolute; z-index: 0; min-width: 48px; min-height: 48px; transform: translate(-50%, -50%); border: 0; border-radius: 50%; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
 .target:focus-visible { outline: 2px solid var(--color-accent, #ad542e); outline-offset: 4px; background: #ffffff18; }
+/* Mobile: the scene is a full-width band below the content with the photo's own
+   3:2 ratio, so contain fills it edge to edge (no letterbox bands) and the SVG
+   geometry stays exact. The top edge fades into the card instead of a hard cut. */
 @media (max-width: 767px) {
-  .root > section { padding-bottom: clamp(260px, 76vw, 380px); }
-  .root > section > img { top: auto; bottom: 0; height: clamp(260px, 76vw, 380px); }
-  .scene { top: auto; height: clamp(260px, 76vw, 380px); }
+  .root > section { padding-bottom: calc(100% * 1024 / 1536); }
+  .root > section > img {
+    top: auto; bottom: 0; height: auto; aspect-ratio: 1536 / 1024; background: none;
+    mask-image: linear-gradient(to bottom, transparent 0, #000 10%);
+  }
+  .scene { top: auto; height: auto; aspect-ratio: 1536 / 1024; }
 }
 @media (prefers-reduced-motion: reduce) { .light { transition: none; } }

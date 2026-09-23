@@ -21,6 +21,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 import {
   cancelarPedidoPendiente,
   crearPedido,
+  intentoAbiertoDelPedido,
   getPedido,
   getPedidoParaPago,
   getPedidoPorClave,
@@ -225,9 +226,15 @@ describe("escrituras del flujo de pago", () => {
 
   /** Responde según a qué tabla y con qué forma le pega cada consulta. */
   const responder =
-    (r: { lock?: string; porReferencia?: unknown[]; reserva?: unknown[]; todos?: unknown[][] }) =>
+    (r: {
+      lock?: string;
+      pedido?: string;
+      porReferencia?: unknown[];
+      reserva?: unknown[];
+      todos?: unknown[][];
+    }) =>
     (c: ConsultaGrabada) => {
-      if (c.sql.includes("for update")) return r.lock ? [[r.lock]] : [];
+      if (c.sql.includes("for update")) return r.lock ? [[r.lock, r.pedido ?? "pendiente"]] : [];
       if (c.sql.startsWith('insert into "shop"."pago_intentos"')) return [["nuevo", "ref-1", "pendiente"]];
       if (!c.sql.startsWith('select') || !c.sql.includes('from "shop"."pago_intentos"')) return [];
       if (c.sql.includes('"pago_intentos"."referencia" = ')) return r.porReferencia ? [r.porReferencia] : [];
@@ -309,10 +316,63 @@ describe("escrituras del flujo de pago", () => {
     expect(updateDe("orders").sql).not.toContain('"pago_estado" =');
   });
 
+  /** Valor que el UPDATE del pedido le pone a `pago_revision` (null si va literal). */
+  const revisionEscrita = () => {
+    const { sql, params } = updateDe("orders");
+    const m = sql.match(/"pago_revision" = (\$(\d+)|null)/);
+    expect(m, "el update no escribe pago_revision").not.toBeNull();
+    return m![2] ? params[Number(m![2]) - 1] : null;
+  };
+
+  it("registrarCobro: dos intentos aprobados marcan cobro_duplicado para el CRM", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    grabadora = dbGrabadora(
+      responder({
+        lock: "pagado",
+        porReferencia: ["segundo", "ref-2", "pendiente"],
+        todos: [
+          ["primero", "ref-1", "pagado", "mercadopago", "accredited", null, null, null],
+          ["segundo", "ref-2", "pagado", "mercadopago", "accredited", null, null, null],
+        ],
+      }),
+    );
+    await registrarCobro(ID, { ...cobro, referencia: "ref-2" });
+    expect(revisionEscrita()).toBe("cobro_duplicado");
+  });
+
+  it("registrarCobro: un pago aprobado sobre un pedido cancelado marca pagado_cancelado", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    grabadora = dbGrabadora(
+      responder({
+        lock: "pendiente",
+        pedido: "cancelado",
+        porReferencia: ["i1", "ref-1", "pendiente"],
+        todos: [["i1", "ref-1", "pagado", "mercadopago", "accredited", null, null, null]],
+      }),
+    );
+    await registrarCobro(ID, cobro);
+    expect(revisionEscrita()).toBe("pagado_cancelado");
+  });
+
+  it("registrarCobro: con la devolución procesada, la marca se limpia sola", async () => {
+    grabadora = dbGrabadora(
+      responder({
+        lock: "pagado",
+        porReferencia: ["segundo", "ref-2", "pagado"],
+        todos: [
+          ["primero", "ref-1", "pagado", "mercadopago", "accredited", null, null, null],
+          ["segundo", "ref-2", "fallido", "mercadopago", "refunded", null, null, null],
+        ],
+      }),
+    );
+    await registrarCobro(ID, { ...cobro, referencia: "ref-2", estado: "fallido", reversion: true });
+    expect(revisionEscrita()).toBeNull();
+  });
+
   it("reservarIntento: bloquea el pedido y no abre otro si hay uno abierto", async () => {
     const creado = new Date("2026-09-23T12:00:00Z");
     grabadora = dbGrabadora((c) => {
-      if (c.sql.includes("for update")) return [[ID]];
+      if (c.sql.includes("for update")) return [[ID, "pendiente"]];
       if (c.sql.startsWith("select")) return [["i1", "mercadopago", "ref-1", creado.toISOString()]];
       return [];
     });
@@ -324,9 +384,15 @@ describe("escrituras del flujo de pago", () => {
     expect(grabadora.consultas.some((c) => c.sql.startsWith("insert"))).toBe(false);
   });
 
+  it("reservarIntento: re-chequea el estado con el lock; un pedido cancelado no abre intento", async () => {
+    grabadora = dbGrabadora((c) => (c.sql.includes("for update") ? [[ID, "cancelado"]] : []));
+    expect(await reservarIntento(ID, "mercadopago", "tarjeta")).toEqual({ noCobrable: true });
+    expect(grabadora.consultas.some((c) => c.sql.startsWith("insert"))).toBe(false);
+  });
+
   it("reservarIntento: sin intentos abiertos, inserta la reserva con tenant", async () => {
     grabadora = dbGrabadora((c) => {
-      if (c.sql.includes("for update")) return [[ID]];
+      if (c.sql.includes("for update")) return [[ID, "pendiente"]];
       if (c.sql.startsWith("insert")) return [["nuevo"]];
       return [];
     });
@@ -407,13 +473,23 @@ describe("motivoNoCobrable", () => {
 });
 
 describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
-  it("solo cancela desde estado pendiente, y del tenant actual", async () => {
+  /** Lock del pedido → intentos abiertos → update. */
+  const conPedido = (intentoAbierto = false) =>
+    dbGrabadora((c) => {
+      if (c.sql.includes("for update")) return [[ID]];
+      if (c.sql.includes('from "shop"."pago_intentos"')) return intentoAbierto ? [["i1"]] : [];
+      return [];
+    });
+
+  it("solo cancela desde estado pendiente, del dueño y del tenant actual", async () => {
+    grabadora = conPedido();
     await cancelarPedidoPendiente(ID, DUENO);
     const { sql, params } = grabadora.consultas[0];
     const where = sql.slice(sql.indexOf(" where "));
 
-    expect(sql).toMatch(/^update "shop"\."orders"/);
+    expect(sql).toContain("for update");
     esperaTenant(grabadora.consultas[0]);
+    expect(sql).toContain('"orders"."clerk_user_id" =');
 
     const estado = where.match(/"orders"\."estado" = \$(\d+)/);
     const pago = where.match(/"orders"\."pago_estado" = \$(\d+)/);
@@ -421,12 +497,17 @@ describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
     expect(pago, "falta el filtro por pago_estado").not.toBeNull();
     expect(params[Number(estado![1]) - 1]).toBe("pendiente");
     expect(params[Number(pago![1]) - 1]).toBe("pendiente");
+
+    const update = grabadora.consultas[2];
+    expect(update.sql).toMatch(/^update "shop"\."orders"/);
+    esperaTenant(update);
   });
 
   it("deja el motivo de sistema y la auditoría, sin usuario del admin", async () => {
+    grabadora = conPedido();
     const antes = Date.now();
     await cancelarPedidoPendiente(ID, DUENO);
-    const { sql, params } = grabadora.consultas[0];
+    const { sql, params } = grabadora.consultas[2];
     const set = sql.slice(0, sql.indexOf(" where "));
 
     const valorDe = (columna: string) => {
@@ -444,15 +525,33 @@ describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
     expect(en).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
-  it("si no cambió ninguna fila devuelve false (la ruta contesta el 404 de siempre)", async () => {
-    expect(await cancelarPedidoPendiente(ID, DUENO)).toBe(false);
+  it("si el pedido no califica devuelve null y no escribe (la ruta contesta el 404 de siempre)", async () => {
+    expect(await cancelarPedidoPendiente(ID, DUENO)).toBeNull();
+    expect(grabadora.consultas.some((c) => c.sql.startsWith("update"))).toBe(false);
   });
 
-  it("si cambió, true", async () => {
-    grabadora = dbGrabadora(() => [[ID]]);
-    expect(await cancelarPedidoPendiente(ID, DUENO)).toBe(true);
+  it("con un intento de cobro abierto no cancela: pago_en_curso", async () => {
+    grabadora = conPedido(true);
+    expect(await cancelarPedidoPendiente(ID, DUENO)).toBe("pago_en_curso");
+    expect(grabadora.consultas[1].sql).toContain('"pago_intentos"."tenant_id" =');
+    expect(grabadora.consultas.some((c) => c.sql.startsWith("update"))).toBe(false);
+  });
+
+  it("si cambió, cancelado", async () => {
+    grabadora = conPedido();
+    expect(await cancelarPedidoPendiente(ID, DUENO)).toBe("cancelado");
+  });
+
+  it("intentoAbiertoDelPedido filtra por dueño y tenant", async () => {
+    expect(await intentoAbiertoDelPedido(ID, DUENO)).toBeNull();
+    const { sql } = grabadora.consultas[0];
+    expect(sql).toContain('from "shop"."pago_intentos"');
+    expect(sql).toContain('"pago_intentos"."tenant_id" =');
+    expect(sql).toContain('"orders"."clerk_user_id" =');
+    esperaTenant(grabadora.consultas[0]);
   });
 });
+
 
 /**
  * Fila cruda de una tabla en el orden de columnas del schema (así las devuelve

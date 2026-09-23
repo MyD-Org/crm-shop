@@ -230,6 +230,7 @@ describe("admin: pedidos del Shop", () => {
         pagoEstado: "pendiente",
         total: 2500.5,
         requiereRevision: true,
+        pagoRevision: null,
       })
       // El motivo interno y los datos de contacto finos no viajan en el listado.
       expect(body.items[0]).not.toHaveProperty("cancelacionMotivo")
@@ -379,6 +380,14 @@ describe("admin: pedidos del Shop", () => {
       const pedido = await seedEn("cancelado")
       const body = await (await detail(pedido.id)).json()
       expect(body.cancelacionMotivo).toBe("Motivo original")
+    })
+
+    it("el pago a revisar que marcó el Shop llega al detalle; sin marca, null", async () => {
+      const duplicado = await seedShopOrder("tenant-a", { pagoEstado: "pagado", pagoRevision: "cobro_duplicado" })
+      expect((await (await detail(duplicado.id)).json()).pagoRevision).toBe("cobro_duplicado")
+
+      const normal = await seedShopOrder("tenant-a")
+      expect((await (await detail(normal.id)).json()).pagoRevision).toBeNull()
     })
   })
 

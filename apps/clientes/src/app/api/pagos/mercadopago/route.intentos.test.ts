@@ -126,6 +126,16 @@ describe("POST /api/pagos/mercadopago — un intento a la vez", () => {
   });
 });
 
+describe("POST /api/pagos/mercadopago — cancelado entre el chequeo y la reserva", () => {
+  it("la reserva lo detecta con el lock → 409 sin crear el pago", async () => {
+    reservarIntento.mockResolvedValue({ noCobrable: true });
+    const r = await pagar();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({ motivo: "pedido_no_cobrable" });
+    expect(crearPago).not.toHaveBeenCalled();
+  });
+});
+
 describe("POST /api/pagos/mercadopago — error al crear el pago", () => {
   it("Mercado Pago rechazó el request (4xx): se cierra la reserva", async () => {
     crearPago.mockRejectedValue(new ErrorProveedor("Mercado Pago respondió 400", 400));

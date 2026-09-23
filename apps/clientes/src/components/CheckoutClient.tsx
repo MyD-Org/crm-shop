@@ -195,6 +195,7 @@ export function CheckoutClient({
   } | null>(null);
   const [pagado, setPagado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   /**
    * Al montar, se chequea si hay un pedido pendiente reciente de este comprador
    * (ver `pedidoPendienteMasReciente` en pedidos.ts). Sin este atajo, quien
@@ -357,6 +358,7 @@ export function CheckoutClient({
   async function cancelarYVolver() {
     if (!confirmado) return;
     setCancelando(true);
+    setErrorCancelar(null);
     try {
       const res = await fetch(`/api/pedidos/${confirmado.id}/cancelar`, {
         method: "POST",
@@ -366,10 +368,18 @@ export function CheckoutClient({
         // La `claveIntento` era del pedido cancelado: sin resetearla, el
         // próximo confirmar reutilizaría la clave y traería el pedido viejo.
         claveIntento.current = null;
+        return;
       }
+      // Un 409 dice por qué no se puede (pago en curso, ya pagado): se muestra.
+      // El 404 no desglosa motivos a propósito, así que va el genérico.
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      setErrorCancelar(
+        res.status === 409 && json?.error
+          ? json.error
+          : "No se pudo cancelar el pedido. Inténtelo de nuevo en un momento.",
+      );
     } catch {
-      // Silencioso: si falla el cancelar, el estado UI no cambia y el usuario
-      // puede reintentar.
+      setErrorCancelar("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
     } finally {
       setCancelando(false);
     }
@@ -420,6 +430,11 @@ export function CheckoutClient({
           >
             {cancelando ? "Cancelando…" : "Modificar el carrito y armar otro pedido"}
           </button>
+          {errorCancelar && (
+            <p role="alert" className="text-center text-sm text-danger">
+              {errorCancelar}
+            </p>
+          )}
         </div>
       </main>
     );

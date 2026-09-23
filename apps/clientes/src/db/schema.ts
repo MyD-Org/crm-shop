@@ -423,6 +423,16 @@ export const orders = shop.table(
     pagoCuotas: integer("pago_cuotas"),
     /** Total pagado real (con interés) según el proveedor. `total` no cambia. */
     pagoTotalPagado: numeric("pago_total_pagado", { precision: 14, scale: 2 }),
+    /**
+     * Pago que un operador tiene que revisar, o null si está todo en orden:
+     * - `cobro_duplicado`: más de un intento aprobado; hay que devolver el
+     *   excedente.
+     * - `pagado_cancelado`: se aprobó un pago de un pedido ya cancelado; hay que
+     *   devolverlo o reactivar el pedido.
+     * Lo recalcula `registrarCobro` en cada evento: al procesarse la devolución
+     * en Mercado Pago, la marca se va sola. Lo lee el CRM.
+     */
+    pagoRevision: text("pago_revision"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -452,6 +462,10 @@ export const orders = shop.table(
     check(
       "orders_estado_check",
       sql`${t.estado} in ('pendiente','confirmado','preparacion','en_camino','entregado','cancelado')`,
+    ),
+    check(
+      "orders_pago_revision_check",
+      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado')`,
     ),
     // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
     check(

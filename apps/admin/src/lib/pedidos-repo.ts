@@ -164,6 +164,11 @@ export function formatearNumeroPedido(numero: number): string {
   return `PED-${String(numero).padStart(8, "0")}`
 }
 
+export type PagoRevision = "cobro_duplicado" | "pagado_cancelado"
+
+const esPagoRevision = (v: string | null): v is PagoRevision =>
+  v === "cobro_duplicado" || v === "pagado_cancelado"
+
 export interface PedidoListaDto {
   id: string
   numero: string
@@ -176,6 +181,8 @@ export interface PedidoListaDto {
   pagoEstado: string
   total: number
   requiereRevision: boolean
+  /** Pago a revisar (lo marca el Shop): cobrado dos veces, o cobrado estando cancelado. */
+  pagoRevision: PagoRevision | null
 }
 
 export interface PedidoItemDto {
@@ -232,6 +239,7 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
     pagoEstado: row.pagoEstado,
     total: num(row.total),
     requiereRevision: row.requiereRevision,
+    pagoRevision: esPagoRevision(row.pagoRevision) ? row.pagoRevision : null,
   }
 }
 

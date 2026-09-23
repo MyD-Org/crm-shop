@@ -29,6 +29,13 @@ interface Body {
   medio?: unknown;
 }
 
+/** Pedido cancelado, tomado por un operador o vencido. Ver `motivoNoCobrable`. */
+const NO_COBRABLE = {
+  error:
+    "Este pedido ya no se puede pagar en línea. Si todavía desea la compra, genere un pedido nuevo desde el carrito.",
+  motivo: "pedido_no_cobrable",
+};
+
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 
@@ -118,14 +125,7 @@ export async function POST(req: Request) {
   // cobra: el total congelado puede no valer más, o el pedido ya no existe
   // para nadie. Mismo corte temprano: sin tocar Mercado Pago.
   if (motivoNoCobrable(pedido)) {
-    return NextResponse.json(
-      {
-        error:
-          "Este pedido ya no se puede pagar en línea. Si todavía desea la compra, genere un pedido nuevo desde el carrito.",
-        motivo: "pedido_no_cobrable",
-      },
-      { status: 409 },
-    );
+    return NextResponse.json(NO_COBRABLE, { status: 409 });
   }
 
   const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
@@ -166,6 +166,9 @@ export async function POST(req: Request) {
   }
   if (!reserva) {
     return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
+  }
+  if ("noCobrable" in reserva) {
+    return NextResponse.json(NO_COBRABLE, { status: 409 });
   }
   if ("abierto" in reserva) {
     return NextResponse.json(

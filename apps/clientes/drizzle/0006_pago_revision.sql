@@ -1,0 +1,2 @@
+ALTER TABLE "shop"."orders" ADD COLUMN "pago_revision" text;--> statement-breakpoint
+ALTER TABLE "shop"."orders" ADD CONSTRAINT "orders_pago_revision_check" CHECK ("shop"."orders"."pago_revision" is null or "shop"."orders"."pago_revision" in ('cobro_duplicado','pagado_cancelado'));

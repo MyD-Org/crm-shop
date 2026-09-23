@@ -98,6 +98,17 @@ Si el primer pago quedaba pendiente, el comprador reintentaba y después se
 aprobaba el primero, el webhook ya no lo reconocía: plata cobrada sin
 registrar, o un pedido cobrado dos veces.
 
+`orders.pago_revision` (migración `0006`) marca un pago que un operador tiene
+que revisar: `cobro_duplicado` (más de un intento aprobado) o
+`pagado_cancelado` (se aprobó un pago de un pedido ya cancelado). La recalcula
+`registrarCobro` en cada evento, así que una devolución procesada en MP la
+limpia sola. El CRM la muestra como etiqueta en la lista y el detalle de
+Pedidos.
+
+La cancelación por parte del cliente (`POST /api/pedidos/:id/cancelar`) no
+corre con un intento abierto: primero intenta cancelarlo en MP, igual que antes
+de un reintento de cobro. Si ya se aprobó o no se puede cerrar, responde 409.
+
 `PagoMetodo` en `src/lib/envio.ts` suma `'mercadopago'`, con su label y su
 lugar en `pagosDisponibles()` (disponible tanto en retiro como en envío).
 

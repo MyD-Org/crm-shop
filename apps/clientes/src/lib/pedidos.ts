@@ -648,6 +648,23 @@ export function estadoDelPedido(estados: PagoEstado[]): PagoEstado | null {
   return "fallido";
 }
 
+/** Motivo por el que un operador tiene que revisar el pago. Ver `orders.pago_revision`. */
+export type PagoRevision = "cobro_duplicado" | "pagado_cancelado";
+
+/**
+ * ¿Hay que revisar este pago? Se recalcula en cada evento, así que una
+ * devolución procesada en el proveedor limpia la marca sola.
+ */
+export function revisionDelPago(
+  cobrados: number,
+  estadoPago: PagoEstado,
+  estadoPedido: OrderEstado,
+): PagoRevision | null {
+  if (cobrados > 1) return "cobro_duplicado";
+  if (estadoPago === "pagado" && estadoPedido === "cancelado") return "pagado_cancelado";
+  return null;
+}
+
 /**
  * Guarda el resultado de un cobro: primero en su intento, después el resumen
  * en el pedido.
@@ -679,7 +696,7 @@ export async function registrarCobro(
      * El lock es sobre el PEDIDO, así que también serializa intentos distintos.
      */
     const [fila] = await tx
-      .select({ estado: orders.pagoEstado })
+      .select({ estado: orders.pagoEstado, pedidoEstado: orders.estado })
       .from(orders)
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
       .limit(1)
@@ -725,12 +742,13 @@ export async function registrarCobro(
     const nuevo = estadoDelPedido(intentos.map((i) => i.estado as PagoEstado)) ?? actual;
 
     const cobrados = intentos.filter((i) => i.estado === "pagado");
-    if (cobrados.length > 1) {
-      // Dos pagos aprobados para el mismo pedido: el comprador pagó de más y
-      // hay que devolverle uno. No debería pasar (la ruta no abre un intento
-      // con otro abierto), así que si pasa tiene que hacer ruido.
+    const revision = revisionDelPago(cobrados.length, nuevo, fila.pedidoEstado as OrderEstado);
+    if (revision) {
+      // No debería pasar (la ruta no abre un intento con otro abierto, y la
+      // cancelación no corre con un pago en curso), así que si pasa tiene que
+      // hacer ruido además de quedar marcado para el CRM.
       console.error(
-        `[pagos] cobro duplicado pedido=${pedidoId} referencias=${cobrados.map((i) => i.referencia).join(",")}`,
+        `[pagos] ${revision} pedido=${pedidoId} referencias=${cobrados.map((i) => i.referencia).join(",")}`,
       );
     }
 
@@ -756,6 +774,7 @@ export async function registrarCobro(
             }
           : {}),
         ...(nuevo !== actual ? { pagoEstado: nuevo } : {}),
+        pagoRevision: revision,
         pagoActualizadoEn: new Date(),
         updatedAt: new Date(),
       })
@@ -785,15 +804,18 @@ export async function reservarIntento(
   pedidoId: string,
   proveedor: string,
   medio: string,
-): Promise<{ intentoId: string } | { abierto: IntentoAbierto } | null> {
+): Promise<{ intentoId: string } | { abierto: IntentoAbierto } | { noCobrable: true } | null> {
   return getDb().transaction(async (tx) => {
     const [pedido] = await tx
-      .select({ id: orders.id })
+      .select({ id: orders.id, estado: orders.estado })
       .from(orders)
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
       .limit(1)
       .for("update");
     if (!pedido) return null;
+    // Se vuelve a mirar el estado CON el lock: la ruta lo chequeó antes, pero
+    // el comprador (o un operador) pudo cancelarlo entre medio.
+    if (pedido.estado !== "pendiente") return { noCobrable: true };
 
     const [abierto] = await tx
       .select({
@@ -939,35 +961,96 @@ const MOTIVO_CANCELADO_POR_CLIENTE = "Cancelado por el cliente.";
  * usuario (`estado_actualizado_por` es un id de `admin_users` y acá no hay
  * ninguno): quién fue se lee en `estado_actualizado_por_nombre`.
  *
- * Devuelve `true` solo si efectivamente cambió algo. Quien llama no distingue
- * el porqué del `false` a propósito: "no existe", "no es suyo" y "ya no se puede
- * cancelar" contestan el mismo 404.
+ *  - No tiene un intento de cobro abierto (`pago_en_curso`).
+ *
+ * Devuelve `"cancelado"` solo si efectivamente cambió algo. Quien llama no
+ * distingue el porqué del `null` a propósito: "no existe", "no es suyo" y "ya no
+ * se puede cancelar" contestan el mismo 404.
  */
 export async function cancelarPedidoPendiente(
   id: string,
   dueno: DuenoPedidos,
-): Promise<boolean> {
-  const ahora = new Date();
-  const filas = await getDb()
-    .update(orders)
-    .set({
-      estado: "cancelado",
-      cancelacionMotivo: MOTIVO_CANCELADO_POR_CLIENTE,
-      estadoActualizadoEn: ahora,
-      estadoActualizadoPor: null,
-      estadoActualizadoPorNombre: "Cliente",
-      updatedAt: ahora,
+): Promise<"cancelado" | "pago_en_curso" | null> {
+  return getDb().transaction(async (tx) => {
+    // Mismo lock que `reservarIntento`: un intento de cobro y la cancelación
+    // del mismo pedido no pueden correr a la vez.
+    const [pedido] = await tx
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.id, id),
+          esDeSuDueno(dueno),
+          eq(orders.estado, "pendiente"),
+          eq(orders.pagoEstado, "pendiente"),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!pedido) return null;
+
+    /**
+     * Con un pago abierto no se cancela: si después se aprueba, queda un pedido
+     * cancelado y cobrado. Quien llama tiene que cerrar ese intento antes
+     * (`resolverIntentoAbierto`).
+     */
+    const [abierto] = await tx
+      .select({ id: pagoIntentos.id })
+      .from(pagoIntentos)
+      .where(
+        and(
+          eq(pagoIntentos.orderId, id),
+          eq(pagoIntentos.estado, "pendiente"),
+          intentoDeEsteTenant(),
+        ),
+      )
+      .limit(1);
+    if (abierto) return "pago_en_curso";
+
+    const ahora = new Date();
+    await tx
+      .update(orders)
+      .set({
+        estado: "cancelado",
+        cancelacionMotivo: MOTIVO_CANCELADO_POR_CLIENTE,
+        estadoActualizadoEn: ahora,
+        estadoActualizadoPor: null,
+        estadoActualizadoPorNombre: "Cliente",
+        updatedAt: ahora,
+      })
+      .where(and(eq(orders.id, id), esDeEsteTenant()));
+    return "cancelado";
+  });
+}
+
+/**
+ * Intento abierto de un pedido propio, para cerrarlo antes de cancelar. Filtra
+ * por dueño: la ruta de cancelación no lee el pedido por otro lado.
+ */
+export async function intentoAbiertoDelPedido(
+  id: string,
+  dueno: DuenoPedidos,
+): Promise<IntentoAbierto | null> {
+  const [fila] = await getDb()
+    .select({
+      id: pagoIntentos.id,
+      proveedor: pagoIntentos.proveedor,
+      referencia: pagoIntentos.referencia,
+      creadoEn: pagoIntentos.createdAt,
     })
+    .from(pagoIntentos)
+    .innerJoin(orders, eq(orders.id, pagoIntentos.orderId))
     .where(
       and(
-        eq(orders.id, id),
+        eq(pagoIntentos.orderId, id),
+        eq(pagoIntentos.estado, "pendiente"),
+        intentoDeEsteTenant(),
         esDeSuDueno(dueno),
-        eq(orders.estado, "pendiente"),
-        eq(orders.pagoEstado, "pendiente"),
       ),
     )
-    .returning({ id: orders.id });
-  return filas.length > 0;
+    .orderBy(asc(pagoIntentos.createdAt))
+    .limit(1);
+  return fila ?? null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

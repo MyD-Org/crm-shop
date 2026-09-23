@@ -1,0 +1,79 @@
+# Sync del espejo de contactos de Alegra (tabla alegra_contacts del CRM).
+# Dispara /api/cron/alegra-contactos-sync con CRON_SECRET, igual que admin-alegra-sync.
+# Ver apps/admin/docs/FUNCIONALIDADES.md, "Espejo de contactos de Alegra".
+
+name: admin · Sync contactos Alegra
+
+on:
+  schedule:
+    # 4 corridas por día: 02:15, 08:15, 14:15 y 20:15 UTC (23:15, 05:15, 11:15 y 17:15 en
+    # Argentina). Lejos de las 06:00 UTC (catálogo del Shop) y de las 07:00 UTC (catálogo del
+    # CRM), que usan la misma cuenta de Alegra.
+    - cron: "15 2,8,14,20 * * *"
+  # A mano desde la pestaña Actions; `tenant` vacío = todos los tenants con Alegra.
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: "Id de un tenant puntual (vacío = todos)"
+        required: false
+        default: ""
+
+permissions: {}
+
+# Grupo COMPARTIDO con los otros workflows que usan la cuenta de Alegra (150 req/min por
+# usuario): nunca corren en paralelo, el siguiente espera.
+concurrency:
+  group: alegra-cuenta
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Disparar la sincronización de contactos
+        env:
+          BASE_URL: ${{ secrets.ADMIN_BASE_URL }}
+          CRON_SECRET: ${{ secrets.ADMIN_CRON_SECRET }}
+          EVENTO: ${{ github.event_name }}
+          # Por env y no interpolado en el script: el input lo escribe una persona.
+          TENANT: ${{ github.event.inputs.tenant }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Faltan los secrets ADMIN_BASE_URL o ADMIN_CRON_SECRET del repo." >&2
+            exit 1
+          fi
+
+          query=""
+          if [ -n "$TENANT" ]; then
+            query="?tenant=$(jq -rn --arg t "$TENANT" '$t|@uri')"
+          elif [ "$EVENTO" = "workflow_dispatch" ]; then
+            query="?trigger=manual"
+          fi
+
+          # --max-time 320 > maxDuration=300 de la ruta: si Vercel corta, queremos ver su
+          # error, no un timeout de curl.
+          http_code=$(curl -sS -o response.json -w '%{http_code}' \
+            --max-time 320 \
+            -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/alegra-contactos-sync$query")
+
+          echo "HTTP $http_code"
+
+          # Resumen para logs públicos: solo identificador de tenant, estado y conteos.
+          # Nunca el campo "error" ni datos de contactos.
+          jq -c '.tenants[] | {tenant, ok, skipped, contactsSynced, markedInactive, requests}' response.json \
+            || echo "(respuesta no resumible)"
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::La sincronización falló con HTTP $http_code"
+            exit 1
+          fi
+
+          # La ruta responde 200 aunque un tenant falle (best-effort por tenant). Un tenant
+          # salteado (otra corrida en curso, sin credenciales) no es una falla.
+          if ! jq -e '[.tenants[] | select(.ok == false and (.skipped != true))] | length == 0' response.json > /dev/null; then
+            echo "::error::Al menos un tenant falló. Ver el detalle de arriba y alegra_contacts_sync_log."
+            exit 1
+          fi

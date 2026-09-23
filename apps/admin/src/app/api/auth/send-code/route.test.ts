@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   sendError: null as Error | null,
   session: {} as Record<string, unknown>,
   saved: 0,
+  busquedas: 0,
 }))
 
 vi.mock("next/headers", () => ({ cookies: async () => ({}) }))
@@ -30,7 +31,10 @@ vi.mock("@/lib/tenant-context", () => ({
 }))
 
 vi.mock("@/lib/erp", () => ({
-  getClienteByIdentifier: async () => state.cliente,
+  getClienteByIdentifier: async () => {
+    state.busquedas += 1
+    return state.cliente
+  },
 }))
 
 vi.mock("@/lib/email", async (importOriginal) => {
@@ -64,14 +68,15 @@ async function loadRoute() {
   state.sendError = null
   state.session = {}
   state.saved = 0
+  state.busquedas = 0
   const route = await import("./route")
   return route.POST
 }
 
-function req(identifier: string) {
+function req(identifier: string, ip = "203.0.113.1") {
   return new Request("http://avantec.plataforma.example/api/auth/send-code", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-forwarded-for": ip },
     body: JSON.stringify({ identifier }),
   })
 }
@@ -115,6 +120,8 @@ describe("POST /api/auth/send-code", () => {
     expect(state.saved).toBe(1)
     expect(state.session.otp).toBe(body.devCode)
     expect(state.session.identifier).toBe("20-12345678-9")
+    // verify-code lee el contacto por este id en vez de volver a buscarlo.
+    expect(state.session.codigocliente).toBe("42")
     expect(state.session.attempts).toBe(0)
     expect(state.session.otpExpiry as number).toBeGreaterThan(Date.now())
   })
@@ -162,6 +169,23 @@ describe("POST /api/auth/send-code", () => {
 
     expect(res.status).toBe(429)
     expect(state.sent).toHaveLength(5)
+  })
+
+  /**
+   * El límite por identificador se esquiva tipeando un CUIT distinto cada vez, y cada
+   * búsqueda gasta cuota de Alegra: por eso también hay techo por IP.
+   */
+  it("429 tras 20 envíos desde la misma IP aunque cambie el identificador, sin buscar en Alegra", async () => {
+    const POST = await loadRoute()
+    for (let i = 0; i < 20; i++) {
+      expect((await POST(req(`20-${String(i).padStart(8, "0")}-1`, "198.51.100.7"))).status).toBe(200)
+    }
+    const res = await POST(req("20-99999999-1", "198.51.100.7"))
+
+    expect(res.status).toBe(429)
+    expect(state.busquedas).toBe(20)
+    // Otra IP no queda afectada.
+    expect((await POST(req("20-99999999-1", "198.51.100.8"))).status).toBe(200)
   })
 
   it("400 si el identificador es muy corto", async () => {

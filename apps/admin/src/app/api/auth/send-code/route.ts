@@ -34,17 +34,30 @@ function sweep(now: number) {
   }
 }
 
+/**
+ * Por IP, aparte del límite por identificador: ese se esquiva tipeando un CUIT distinto
+ * en cada intento, y cada búsqueda gasta cuota de Alegra (compartida con el bot y el
+ * checkout del Shop). 20 cada 15 minutos sobra para una oficina detrás de una sola IP.
+ */
+const MAX_SENDS_POR_IP = 20
+
 /** Consume una unidad de cuota. `false` = límite alcanzado. */
-function takeSendSlot(key: string, now: number): boolean {
+function takeSendSlot(key: string, now: number, max = MAX_SENDS): boolean {
   let b = sendAttempts.get(key)
   if (!b || now - b.firstAt > SEND_WINDOW_MS) b = { count: 0, firstAt: now }
-  if (b.count >= MAX_SENDS) {
+  if (b.count >= max) {
     sendAttempts.set(key, b)
     return false
   }
   b.count += 1
   sendAttempts.set(key, b)
   return true
+}
+
+/** IP del cliente. En Vercel `x-forwarded-for` lo arma la plataforma (no el navegador). */
+function ipDe(request: Request): string {
+  const xff = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+  return xff || request.headers.get("x-real-ip")?.trim() || "desconocida"
 }
 
 export async function POST(request: Request) {
@@ -60,7 +73,10 @@ export async function POST(request: Request) {
 
     const now = Date.now()
     sweep(now)
-    if (!takeSendSlot(`${tenant.id}:${identifier.toLowerCase()}`, now)) {
+    if (
+      !takeSendSlot(`${tenant.id}:ip:${ipDe(request)}`, now, MAX_SENDS_POR_IP) ||
+      !takeSendSlot(`${tenant.id}:${identifier.toLowerCase()}`, now)
+    ) {
       return Response.json(
         { error: "Pidió demasiados códigos. Espere unos minutos." },
         { status: 429 },
@@ -109,6 +125,7 @@ export async function POST(request: Request) {
       otpSessionOptions,
     )
     session.identifier = identifier
+    session.codigocliente = cliente.codigocliente
     session.otp = otp
     session.otpExpiry = Date.now() + OTP_TTL_MS
     session.attempts = 0 // reinicia el contador al emitir un código nuevo

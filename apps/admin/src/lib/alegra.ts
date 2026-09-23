@@ -1014,10 +1014,14 @@ export async function getDocumentPdf(
 }
 
 // ── Búsqueda de contacto por identificador del portal (email o CUIT) ─────────
-// El `query` de /contacts de Alegra matchea SOLO por nombre: no mira `email` ni
-// `identification`. Verificado contra la cuenta real — buscar un email exacto de un
-// contacto existente devuelve []. Por eso el login del portal, que promete "CUIT o
-// email", necesita traer los contactos y filtrar acá, igual que `searchContactsByPhone`.
+// El `query` de /contacts de Alegra matchea por nombre (un email exacto de un contacto
+// existente devolvía []). Los filtros `email=` e `identification=` sí filtran: con un
+// valor inexistente devuelven [] en vez de la primera página (probado contra la cuenta
+// real, 2026-09-23), y son los que usa el Shop para vincular clientes.
+//
+// NUNCA se baja el padrón completo acá: el login es anónimo, y un CUIT inventado
+// disparaba ~200 requests en ráfaga contra una cuota que comparten el CRM, el bot y el
+// checkout del Shop (el 429 que tiró el login). El peor caso ahora son 4 requests.
 
 /** Deja solo los dígitos: "20-12345678-9", "20123456789" y "20.123.456.789" son el mismo CUIT. */
 function normalizeIdentification(value: string | null | undefined): string {
@@ -1025,11 +1029,38 @@ function normalizeIdentification(value: string | null | undefined): string {
 }
 
 /**
+ * Formas en que puede estar cargado un documento en Alegra, sin repetir: tal cual se
+ * tipeó, solo dígitos y, si es un CUIT (11 dígitos), con guiones XX-XXXXXXXX-X.
+ * `identification=` compara el texto, así que no se sabe cuál de las tres guarda cada
+ * contacto.
+ */
+export function variantesDocumento(tipeado: string): string[] {
+  const digitos = normalizeIdentification(tipeado)
+  const variantes = [tipeado.trim(), digitos]
+  if (digitos.length === 11) {
+    variantes.push(`${digitos.slice(0, 2)}-${digitos.slice(2, 10)}-${digitos.slice(10)}`)
+  }
+  return [...new Set(variantes.filter(Boolean))]
+}
+
+async function contactosFiltrados(
+  config: TenantConfig,
+  params: Record<string, string>,
+): Promise<AlegraContact[]> {
+  const page = (await alegraFetch(config, "/contacts", {
+    ...params,
+    limit: String(PAGE_SIZE),
+  })) as Record<string, unknown>[]
+  return Array.isArray(page) ? page.map(mapRawContact) : []
+}
+
+/**
  * Contacto por email o CUIT exactos, para el login del portal.
  *
- * Escanea todos los contactos porque la API no ofrece filtro por esos campos. Si el
- * identificador no parece ni email ni documento, cae en la búsqueda por nombre de
- * Alegra, que sí funciona y es una sola request.
+ * Usa los filtros de Alegra y le exige al resultado el match exacto: que un contacto
+ * venga en la lista no alcanza (un parcial dejaría entrar a la cuenta equivocada). Si
+ * el identificador no parece ni email ni documento, cae en la búsqueda por nombre de
+ * Alegra, que es una sola request.
  */
 export async function findContactByIdentifier(
   config: TenantConfig,
@@ -1055,24 +1086,23 @@ export async function findContactByIdentifier(
         ? (c.email ?? "").trim().toLowerCase() === email
         : normalizeIdentification(c.identification) === documento
 
-    // Primero la búsqueda del propio Alegra (UNA request): su `query` matchea también
-    // email e identificación, no solo el nombre. El resultado NO se toma como bueno por
-    // venir en la lista — se le exige el mismo match exacto que al escaneo completo, así
-    // que un parcial no deja entrar a la cuenta equivocada.
-    // El escaneo de abajo baja ~6000 contactos de a 30 (cientos de requests en ráfaga) y es
-    // lo que hacía que Alegra devolviera 429 y el portal contestara "Error interno del
-    // servidor" en el login. Queda como fallback por si `query` no cubre algún caso.
-    const candidatos = await searchContacts(config, trimmed, PAGE_SIZE).catch((err) => {
-      // Si el 429 ya apareció acá, el escaneo completo solo empeora las cosas.
-      if (err instanceof AlegraRateLimitError) throw err
-      return [] as AlegraContact[]
-    })
-    const directo = candidatos.find(esExacto)
-    if (directo) return directo
+    const intentos: Record<string, string>[] = isEmail
+      ? [{ email: trimmed }, { query: trimmed }]
+      : [...variantesDocumento(trimmed).map((v) => ({ identification: v })), { query: documento }]
 
-    const contacts = await listAllContacts(config)
-    const match = contacts.find(esExacto)
-    if (match) return match
+    for (const params of intentos) {
+      let candidatos: AlegraContact[]
+      try {
+        candidatos = await contactosFiltrados(config, params)
+      } catch (err) {
+        // Un 429 corta acá: seguir probando solo gasta más cuota. Cualquier otro error
+        // de un filtro no decide nada; se prueba el siguiente.
+        if (err instanceof AlegraRateLimitError) throw err
+        continue
+      }
+      const match = candidatos.find(esExacto)
+      if (match) return match
+    }
     // Sin match exacto no se intenta por nombre: un email nunca es el nombre de una
     // empresa, y un match parcial acá deja entrar a la cuenta equivocada.
     return null

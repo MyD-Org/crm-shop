@@ -1,0 +1,19 @@
+.root { position: relative; isolation: isolate; }
+/* Share one stacking context with the DS: image -20, light -15, veil -10,
+   controls 0, content 1. The content box cannot swallow empty scene space. */
+.root > section { isolation: auto; }
+.root > section > div:last-child { z-index: 1; pointer-events: none; }
+.root > section > div:last-child > * { pointer-events: auto; }
+.root > section > div:not(:last-child) { pointer-events: none; }
+.root > section > img { object-fit: contain; object-position: right center; background: #e4dfd5; }
+.scene { position: absolute; inset: 0; overflow: clip; border-radius: 28px; pointer-events: none; }
+.art { position: absolute; overflow: visible; z-index: -15; }
+.light { transition: opacity 300ms ease-out; mix-blend-mode: screen; }
+.target { position: absolute; z-index: 0; min-width: 48px; min-height: 48px; transform: translate(-50%, -50%); border: 0; border-radius: 50%; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+.target:focus-visible { outline: 2px solid var(--color-accent, #ad542e); outline-offset: 4px; background: #ffffff18; }
+@media (max-width: 767px) {
+  .root > section { padding-bottom: clamp(260px, 76vw, 380px); }
+  .root > section > img { top: auto; bottom: 0; height: clamp(260px, 76vw, 380px); }
+  .scene { top: auto; height: clamp(260px, 76vw, 380px); }
+}
+@media (prefers-reduced-motion: reduce) { .light { transition: none; } }

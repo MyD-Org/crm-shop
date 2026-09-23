@@ -43,11 +43,13 @@ Los de `.env.local` son placeholders de dev. Generar con `openssl`:
 ```bash
 openssl rand -base64 48   # SESSION_SECRET
 openssl rand -hex 32      # CRON_SECRET
+openssl rand -hex 32      # ALEGRA_WEBHOOK_SECRET
 ```
 | Var | Cómo |
 |---|---|
 | `SESSION_SECRET` | Nuevo (firma sesiones y los `crm_token` del agente) |
 | `CRON_SECRET` | Nuevo (protege los endpoints de cron) |
+| `ALEGRA_WEBHOOK_SECRET` | Nuevo (deriva el token de las URLs de webhooks de contactos de Alegra; cambiarlo obliga a recrear las suscripciones con `scripts/alegra-webhooks-contactos.ts`) |
 
 ### Secretos — reutilizar los de `.env.local`
 `INTERNAL_SECRET` y `STAFF_TOKEN_SECRET` son **compartidos con ai-api**: si los cambiás,

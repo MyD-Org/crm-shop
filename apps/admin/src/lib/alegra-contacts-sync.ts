@@ -21,8 +21,10 @@ import {
 } from "./alegra-contacts-repo"
 
 // Sync del padrón de contactos de Alegra al espejo (tabla alegra_contacts), por tenant y POR
-// TRAMOS. La dispara /api/cron/alegra-contactos-sync desde GitHub Actions, una vez por minuto
-// mientras quede padrón por leer.
+// TRAMOS. La dispara /api/cron/alegra-contactos-sync desde GitHub Actions (una vez por
+// semana), una vez por minuto mientras quede padrón por leer. Entre corridas, el espejo lo
+// mantienen los webhooks de Alegra (lib/alegra-contacts-webhook.ts): la pasada completa es el
+// control que corrige lo que un aviso perdido dejó desfasado y da de baja lo que ya no está.
 //
 // Por qué por tramos: `/contacts` admite ~5 requests por minuto por cuenta (probado contra
 // Alegra el 2026-09-23) y el login del portal y el bot comparten ese cupo. Central LED tiene
@@ -40,11 +42,12 @@ export const PAGINAS_POR_TRAMO = 3
 
 /**
  * Una pasada sin avanzar hace más de esto se da por abandonada y se empieza otra desde cero.
- * Más de 24 h a propósito: si la corrida de una noche no llega a terminar (tope del workflow),
- * la de la noche siguiente la RETOMA; si se reiniciara, un padrón más grande que el tope
- * nunca terminaría una pasada.
+ * Más de una semana a propósito: la sync corre UNA vez por semana (los webhooks mantienen el
+ * espejo al día entre corridas); si la de una semana no llega a terminar (tope del workflow),
+ * la de la semana siguiente —o un disparo a mano antes— la RETOMA. Si se reiniciara, un padrón
+ * más grande que el tope nunca terminaría una pasada.
  */
-export const PASADA_VENCE_MS = 30 * 60 * 60 * 1000
+export const PASADA_VENCE_MS = 8 * 24 * 60 * 60 * 1000
 
 /** Fracción mínima del padrón que la pasada tiene que ver para marcar bajas. */
 export const UMBRAL_CORRIDA_COMPLETA = 0.8

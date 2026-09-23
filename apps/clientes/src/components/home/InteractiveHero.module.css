@@ -11,9 +11,10 @@
 .light { transition: opacity 300ms ease-out; mix-blend-mode: screen; }
 .target { position: absolute; z-index: 0; min-width: 48px; min-height: 48px; transform: translate(-50%, -50%); border: 0; border-radius: 50%; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
 .target:focus-visible { outline: 2px solid var(--color-accent, #ad542e); outline-offset: 4px; background: #ffffff18; }
+/* Mobile: same full-card background as any hero photo. The card is taller than
+   3:2, so cover (not contain, which would leave grey bands) anchored at
+   COVER_X in hero-lights.ts to keep most of the lamps in frame. */
 @media (max-width: 767px) {
-  .root > section { padding-bottom: clamp(260px, 76vw, 380px); }
-  .root > section > img { top: auto; bottom: 0; height: clamp(260px, 76vw, 380px); }
-  .scene { top: auto; height: clamp(260px, 76vw, 380px); }
+  .root > section > img { object-fit: cover; object-position: 88% center; background: none; }
 }
 @media (prefers-reduced-motion: reduce) { .light { transition: none; } }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HERO_LIGHTS, isStudioImage, proximity, sceneRect } from "./hero-lights";
+import { COVER_X, HERO_LIGHTS, isStudioImage, proximity, sceneRect } from "./hero-lights";
 
 describe("studio lighting geometry", () => {
   it("keeps the entire source aligned with contain at desktop and touch sizes", () => {
@@ -15,6 +15,15 @@ describe("studio lighting geometry", () => {
         expect(screenY).toBeGreaterThan(0);
         expect(screenY).toBeLessThan(height);
       }
+    }
+  });
+  it("covers the whole mobile card with the crop anchored at COVER_X", () => {
+    for (const [width, height] of [[358, 760], [343, 640], [700, 820]]) {
+      const rect = sceneRect(width, height, true);
+      expect(rect.width).toBeGreaterThanOrEqual(width - 1e-9);
+      expect(rect.height).toBeGreaterThanOrEqual(height - 1e-9);
+      expect(rect.left).toBeCloseTo((width - rect.width) * COVER_X);
+      expect(rect.top * 2 + rect.height).toBeCloseTo(height);
     }
   });
   it("uses independent continuous falloff, with exact off outside the radius", () => {

@@ -13,11 +13,20 @@ export function proximity(x: number, y: number, light: typeof HERO_LIGHTS[number
   return t * t * (3 - 2 * t);
 }
 
-/** Matches object-fit: contain; object-position: right center. */
-export function sceneRect(width: number, height: number) {
-  const scale = Math.min(width / 1536, height / 1024);
+/** Horizontal anchor of the mobile cover crop; must match object-position in the CSS module. */
+export const COVER_X = .88;
+/** Viewports where the photo covers the card (the CSS module's mobile media query). */
+export const COVER_QUERY = "(max-width: 767px)";
+
+/**
+ * Where the 1536 × 1024 source lands inside the hero. Desktop matches
+ * object-fit: contain; object-position: right center. Mobile matches
+ * object-fit: cover; object-position: 88% center.
+ */
+export function sceneRect(width: number, height: number, cover = false) {
+  const scale = cover ? Math.max(width / 1536, height / 1024) : Math.min(width / 1536, height / 1024);
   return { scale, width: 1536 * scale, height: 1024 * scale,
-    left: width - 1536 * scale, top: (height - 1024 * scale) / 2 };
+    left: (width - 1536 * scale) * (cover ? COVER_X : 1), top: (height - 1024 * scale) / 2 };
 }
 
 export const STUDIO_IMAGE = "/images/central-led/studio-off.webp";

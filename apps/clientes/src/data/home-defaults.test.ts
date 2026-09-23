@@ -7,6 +7,7 @@ import {
   esHref,
   esImagen,
   migrarAcento,
+  sinCamposOcultos,
   sinMarcasDeAcento,
   motivoImagenInvalida,
 } from "./home-defaults";
@@ -355,5 +356,16 @@ describe("títulos con acento en cualquier posición y versión mobile", () => {
     const r = combinarContenidoHome([{ key: "bannerDeco", payload: viejo }]);
     expect(r.bannerDeco.titulo).toBe("Ambientá tus noches con *luz cálida*");
     expect("acento" in r.bannerDeco).toBe(false);
+  });
+
+  it("camposOcultos: valida los nombres y sinCamposOcultos saca el campo y su versión mobile", () => {
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, camposOcultos: ["eyebrow", "titulo"] })).toEqual([]);
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, camposOcultos: ["imagen"] }).length).toBeGreaterThan(0);
+    const hero = { ...DEFAULTS_HOME.hero, tituloMobile: "Corto", camposOcultos: ["titulo" as const] };
+    const visible = sinCamposOcultos(hero);
+    expect(visible.titulo).toBeUndefined();
+    expect(visible.tituloMobile).toBeUndefined();
+    expect(visible.bajada).toBe(DEFAULTS_HOME.hero.bajada);
+    expect(hero.titulo).toBe(DEFAULTS_HOME.hero.titulo); // no muta
   });
 });

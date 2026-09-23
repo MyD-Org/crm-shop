@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { DEFAULTS_HOME, SECCIONES_HOME, erroresSeccion } from "@/data/home-defaults";
 import {
   agregarItem,
+  aMarcas,
+  aMascara,
   alternarAcento,
   moverItem,
   normalizarPayload,
@@ -153,39 +155,50 @@ describe("TITULOS_SECCION", () => {
   });
 });
 
-describe("alternarAcento", () => {
-  const texto = "Todo lo que su proyecto necesita";
-  const desde = texto.indexOf("su proyecto");
-  const hasta = desde + "su proyecto".length;
-
-  it("envuelve la selección en marcas y la deja seleccionada", () => {
-    const r = alternarAcento(texto, desde, hasta);
-    expect(r?.texto).toBe("Todo lo que *su proyecto* necesita");
-    expect(r?.texto.slice(r.desde, r.hasta)).toBe("su proyecto");
+describe("máscara de acento (editor sin asteriscos)", () => {
+  it("aMascara y aMarcas son inversas", () => {
+    const m = aMascara("Todo lo que *su proyecto* necesita");
+    expect(m.texto).toBe("Todo lo que su proyecto necesita");
+    expect(m.acento.filter(Boolean)).toHaveLength("su proyecto".length);
+    expect(aMarcas(m)).toBe("Todo lo que *su proyecto* necesita");
   });
 
-  it("si el tramo ya está marcado, quita las marcas", () => {
-    const marcado = "Todo lo que *su proyecto* necesita";
-    const d = marcado.indexOf("su proyecto");
-    const r = alternarAcento(marcado, d, d + "su proyecto".length);
-    expect(r?.texto).toBe(texto);
-    expect(r?.texto.slice(r.desde, r.hasta)).toBe("su proyecto");
+  it("aMarcas deja los espacios de los bordes fuera de las marcas", () => {
+    const texto = "Los más vendidos";
+    const acento = [...texto].map((_, i) => i >= 3); // " más vendidos"
+    expect(aMarcas({ texto, acento })).toBe("Los *más vendidos*");
   });
 
-  it("también desmarca si la selección incluye los asteriscos", () => {
-    const marcado = "Los más *vendidos*";
-    const r = alternarAcento(marcado, marcado.indexOf("*"), marcado.length);
-    expect(r?.texto).toBe("Los más vendidos");
+  it("aMarcas descarta asteriscos escritos a mano", () => {
+    expect(aMarcas({ texto: "Precio *especial", acento: Array(16).fill(false) })).toBe("Precio especial");
+  });
+});
+
+describe("alternarAcento (offsets sobre el texto plano)", () => {
+  const plano = "Todo lo que su proyecto necesita";
+  const desde = plano.indexOf("proyecto");
+  const hasta = desde + "proyecto".length;
+
+  it("pinta la selección", () => {
+    expect(alternarAcento(plano, desde, hasta)).toBe("Todo lo que su *proyecto* necesita");
+  });
+
+  it("si ya estaba todo pintado, lo despinta", () => {
+    expect(alternarAcento("Todo lo que su *proyecto* necesita", desde, hasta)).toBe(plano);
+  });
+
+  it("si estaba pintado a medias, pinta todo y une los tramos", () => {
+    const d = plano.indexOf("su");
+    expect(alternarAcento("Todo lo que su *proyecto* necesita", d, hasta)).toBe("Todo lo que *su proyecto* necesita");
   });
 
   it("ignora los espacios de los bordes (doble clic)", () => {
-    const r = alternarAcento(texto, desde - 1, hasta + 1);
-    expect(r?.texto).toBe("Todo lo que *su proyecto* necesita");
+    expect(alternarAcento(plano, desde - 1, hasta + 1)).toBe("Todo lo que su *proyecto* necesita");
   });
 
   it("sin selección devuelve null", () => {
-    expect(alternarAcento(texto, 4, 4)).toBeNull();
-    expect(alternarAcento(texto, 4, 5)).toBeNull(); // solo un espacio
+    expect(alternarAcento(plano, 4, 4)).toBeNull();
+    expect(alternarAcento(plano, 4, 5)).toBeNull(); // solo un espacio
   });
 });
 
@@ -201,6 +214,13 @@ describe("normalizarPayload: textos opcionales", () => {
     expect("tituloMobile" in r).toBe(false);
     expect("bajadaMobile" in r).toBe(false);
     expect(erroresSeccion("hero", r)).toEqual([]);
+  });
+
+  it("camposOcultos vacío se omite; con campos se conserva", () => {
+    const vacio = normalizarPayload("hero", { ...DEFAULTS_HOME.hero, camposOcultos: [] }) as Record<string, unknown>;
+    expect("camposOcultos" in vacio).toBe(false);
+    const con = normalizarPayload("hero", { ...DEFAULTS_HOME.hero, camposOcultos: ["eyebrow"] });
+    expect(erroresSeccion("hero", con)).toEqual([]);
   });
 
   it("el eyebrow vacío de un tile se omite y el tile valida", () => {

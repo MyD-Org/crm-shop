@@ -11,10 +11,7 @@ import type { EditorProps } from "./index";
 export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
   return (
     <div className="flex flex-col gap-4">
-      <Field label="Eyebrow" hint="Opcional: el texto chico sobre el título">
-        <Input value={valor.eyebrow ?? ""} onChange={(e) => onChange({ ...valor, eyebrow: e.target.value })} />
-      </Field>
-      <CamposTitulo valor={valor} onChange={onChange} />
+      <CamposTitulo valor={valor} onChange={onChange} conEyebrow />
       <CampoImagen
         valor={valor.imagen}
         onChange={(imagen) => onChange({ ...valor, imagen })}
@@ -29,7 +26,7 @@ export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
           nuevo={nuevoEnlace}
           renderItem={(item, onItem) => (
             <div className="flex flex-col gap-3">
-              <Field label="Etiqueta" hint="Si la deja vacía, el botón no se muestra">
+              <Field label="Etiqueta" hint="Vacía: el botón no se muestra">
                 <Input value={item.label} onChange={(e) => onItem({ ...item, label: e.target.value })} />
               </Field>
               <Field label="Enlace" hint="Ruta interna (por ejemplo /catalogo) o URL https">

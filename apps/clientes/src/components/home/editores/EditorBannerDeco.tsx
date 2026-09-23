@@ -10,13 +10,10 @@ export function EditorBannerDeco({ valor, onChange }: EditorProps<BannerDecoCont
   const cta = valor.cta ?? { label: "", href: "" };
   return (
     <div className="flex flex-col gap-4">
-      <Field label="Eyebrow" hint="Opcional: el texto chico sobre el título">
-        <Input value={valor.eyebrow ?? ""} onChange={(e) => onChange({ ...valor, eyebrow: e.target.value })} />
-      </Field>
-      <CamposTitulo valor={valor} onChange={onChange} />
+      <CamposTitulo valor={valor} onChange={onChange} conEyebrow />
       <CampoImagen valor={valor.imagen} onChange={(imagen) => onChange({ ...valor, imagen })} />
       <p className="text-sm font-semibold text-text">Botón del banner</p>
-      <Field label="Etiqueta" hint="Opcional: si la deja vacía, el banner no muestra botón">
+      <Field label="Etiqueta" hint="Vacía: el banner no muestra botón">
         <Input value={cta.label} onChange={(e) => onChange({ ...valor, cta: { ...cta, label: e.target.value } })} />
       </Field>
       <Field label="Enlace" hint="Ruta interna (por ejemplo /catalogo) o URL https">

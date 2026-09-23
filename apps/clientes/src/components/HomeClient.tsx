@@ -19,7 +19,7 @@ import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
-import { sinMarcasDeAcento, type HomeContent, type SeccionHome, type TextosSeccion, type TileContent } from "@/data/home-defaults";
+import { sinCamposOcultos, sinMarcasDeAcento, type HomeContent, type SeccionHome, type TextosSeccion, type TileContent } from "@/data/home-defaults";
 import { SeccionEditable } from "@/components/home/SeccionEditable";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
@@ -140,7 +140,14 @@ export function HomeClient({
    *  edición in-place (rebanada B1 de home-editable: `SeccionEditable`). */
   puedeEditar: boolean;
 }) {
-  const { hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios, whatsapp } = contenido;
+  const { marquee, servicios, whatsapp } = contenido;
+  // Los textos apagados con "Mostrar" no se pintan; SeccionEditable recibe
+  // la sección completa (`contenido.*`) para que el editor los conserve.
+  const hero = sinCamposOcultos(contenido.hero);
+  const ambientes = sinCamposOcultos(contenido.ambientes);
+  const secDestacados = sinCamposOcultos(contenido.destacados);
+  const bannerDeco = sinCamposOcultos(contenido.bannerDeco);
+  const decoGrid = sinCamposOcultos(contenido.decoGrid);
   const imagenesDestacados = secDestacados.imagenes ?? [];
   const oculta = (s: SeccionHome) => contenido.ocultas.includes(s);
 
@@ -149,7 +156,7 @@ export function HomeClient({
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
-            <SeccionEditable seccion="hero" inicial={hero} puedeEditar={puedeEditar} oculta={oculta("hero")}>
+            <SeccionEditable seccion="hero" inicial={contenido.hero} puedeEditar={puedeEditar} oculta={oculta("hero")}>
               <Hero
                 className="[&_em]:not-italic [&_h1]:font-bold [&_a:first-of-type]:bg-accent [&_a:first-of-type:hover]:bg-primary"
                 eyebrow={hero.eyebrow}
@@ -180,7 +187,7 @@ export function HomeClient({
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         {/* Ambientes */}
         <Reveal>
-          <SeccionEditable seccion="ambientes" inicial={ambientes} puedeEditar={puedeEditar} oculta={oculta("ambientes")}>
+          <SeccionEditable seccion="ambientes" inicial={contenido.ambientes} puedeEditar={puedeEditar} oculta={oculta("ambientes")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={ambientes} linkTodos={ambientes.linkTodos} />
               {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
@@ -192,7 +199,7 @@ export function HomeClient({
 
         {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
         <Reveal>
-          <SeccionEditable seccion="destacados" inicial={secDestacados} puedeEditar={puedeEditar} oculta={oculta("destacados")}>
+          <SeccionEditable seccion="destacados" inicial={contenido.destacados} puedeEditar={puedeEditar} oculta={oculta("destacados")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
               <ProductosCarrusel label={sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados"}>
@@ -246,7 +253,7 @@ export function HomeClient({
 
         {/* Banner decorativo */}
         <Reveal>
-          <SeccionEditable seccion="bannerDeco" inicial={bannerDeco} puedeEditar={puedeEditar} oculta={oculta("bannerDeco")}>
+          <SeccionEditable seccion="bannerDeco" inicial={contenido.bannerDeco} puedeEditar={puedeEditar} oculta={oculta("bannerDeco")}>
             <PromoBanner
               className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
               eyebrow={bannerDeco.eyebrow}
@@ -262,7 +269,7 @@ export function HomeClient({
 
         {/* Deco grid */}
         <Reveal>
-          <SeccionEditable seccion="decoGrid" inicial={decoGrid} puedeEditar={puedeEditar} oculta={oculta("decoGrid")}>
+          <SeccionEditable seccion="decoGrid" inicial={contenido.decoGrid} puedeEditar={puedeEditar} oculta={oculta("decoGrid")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={decoGrid} linkTodos={decoGrid.linkTodos} />
               {/* Mobile: apiladas, se despegan al scrollear. Desde lg, la grilla. */}

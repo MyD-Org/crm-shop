@@ -14,10 +14,10 @@ export function EditorServicios({ valor, onChange }: EditorProps<ServiciosConten
       nuevo={nuevoServicio}
       renderItem={(item, onItem) => (
         <div className="flex flex-col gap-3">
-          <Field label="Título" hint="Opcional">
+          <Field label="Título">
             <Input value={item.titulo ?? ""} onChange={(e) => onItem({ ...item, titulo: e.target.value })} />
           </Field>
-          <Field label="Texto" hint="Opcional">
+          <Field label="Texto">
             <Input value={item.texto ?? ""} onChange={(e) => onItem({ ...item, texto: e.target.value })} />
           </Field>
         </div>

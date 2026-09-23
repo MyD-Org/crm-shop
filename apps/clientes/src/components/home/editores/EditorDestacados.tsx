@@ -16,7 +16,7 @@ export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosCont
   return (
     <div className="flex flex-col gap-4">
       <CamposTitulo valor={valor} onChange={onChange} />
-      <Field label="Enlace de 'Ver todos'" hint="Opcional: ruta interna (por ejemplo /catalogo) o URL https. Si lo deja vacío, no se muestra.">
+      <Field label="Enlace de 'Ver todos'" hint="Ruta interna (por ejemplo /catalogo) o URL https. Vacío: no se muestra.">
         <Input value={valor.linkTodos ?? ""} onChange={(e) => onChange({ ...valor, linkTodos: e.target.value })} />
       </Field>
       <Field label="Cantidad" hint="Entre 1 y 24 productos">

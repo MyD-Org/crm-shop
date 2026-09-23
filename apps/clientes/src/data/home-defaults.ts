@@ -22,7 +22,13 @@ export type Enlace = { label: string; href: string };
  * `acento` es el formato viejo (acento siempre al final): las filas guardadas
  * así se convierten al leerlas (ver `migrarAcento`) y el editor ya no lo usa.
  */
+/** Textos que el admin puede ocultar con el interruptor "Mostrar" sin borrarlos. */
+export const CAMPOS_OCULTABLES = ["eyebrow", "titulo", "bajada"] as const;
+export type CampoOcultable = (typeof CAMPOS_OCULTABLES)[number];
+
 export type TextosSeccion = {
+  /** Textos apagados con "Mostrar": se guardan pero no se muestran. */
+  camposOcultos?: CampoOcultable[];
   titulo?: string;
   tituloMobile?: string;
   /** @deprecated Formato viejo; use `*acento*` dentro de `titulo`. */
@@ -307,6 +313,12 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
   /** Título, acento viejo, título mobile y bajadas: todos opcionales. */
   const textosTitulo = () => {
     for (const campo of ["titulo", "tituloMobile", "acento", "bajada", "bajadaMobile"]) texto(campo, true);
+    const ocultos = o.camposOcultos;
+    if (
+      ocultos !== undefined &&
+      (!Array.isArray(ocultos) || !ocultos.every((c) => (CAMPOS_OCULTABLES as readonly unknown[]).includes(c)))
+    )
+      errores.push(`camposOcultos debe ser un array de ${CAMPOS_OCULTABLES.join(", ")}`);
   };
   const linkOpcional = (campo: string) => {
     if (o[campo] !== undefined && !esHref(o[campo])) errores.push(`${campo} debe ser una ruta interna (/) o una URL https`);
@@ -383,6 +395,21 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       break;
   }
   return errores;
+}
+
+/**
+ * La sección sin los textos que el admin apagó con "Mostrar" (y sin sus
+ * versiones mobile). Se aplica al pintar: el editor sigue viendo los textos.
+ */
+export function sinCamposOcultos<T extends TextosSeccion & { eyebrow?: string }>(seccion: T): T {
+  const ocultos = seccion.camposOcultos ?? [];
+  if (ocultos.length === 0) return seccion;
+  const copia: Record<string, unknown> = { ...seccion };
+  for (const campo of ocultos) {
+    delete copia[campo];
+    delete copia[`${campo}Mobile`];
+  }
+  return copia as T;
 }
 
 /**

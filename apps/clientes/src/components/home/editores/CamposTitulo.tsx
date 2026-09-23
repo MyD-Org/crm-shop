@@ -1,103 +1,140 @@
 "use client";
 
-import { useRef } from "react";
-import { AccentText, Button, Field, Input, Textarea } from "@myd-org/ui";
-import type { TextosSeccion } from "@/data/home-defaults";
-import { alternarAcento } from "@/lib/home-editor";
+import type { ReactNode } from "react";
+import { Input, Switch, Textarea } from "@myd-org/ui";
+import type { CampoOcultable, TextosSeccion } from "@/data/home-defaults";
+import { CampoAcento } from "./CampoAcento";
 
-const HINT_ACENTO = "Seleccione una o más palabras y toque «Marcar acento» para pintarlas en color acento.";
+type ConEyebrow = TextosSeccion & { eyebrow?: string };
 
-function CampoConAcento({
-  label,
-  hint,
-  value,
-  onChange,
+/**
+ * Un texto de la sección: interruptor "Mostrar" (apagado ⇒ se guarda pero no
+ * se muestra) y, si el texto admite versión mobile, interruptor "Distinto en
+ * mobile" que abre un segundo campo solo para pantallas chicas.
+ */
+function BloqueTexto({
+  etiqueta,
+  visible,
+  onVisible,
+  mobile,
+  onMobile,
+  editor,
+  editorMobile,
 }: {
-  label: string;
-  hint: string;
-  value: string;
-  onChange: (v: string) => void;
+  etiqueta: string;
+  visible: boolean;
+  onVisible: (v: boolean) => void;
+  mobile?: boolean;
+  onMobile?: (v: boolean) => void;
+  editor: ReactNode;
+  editorMobile?: ReactNode;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
-
-  function marcar() {
-    const input = ref.current;
-    if (!input) return;
-    const desde = input.selectionStart ?? 0;
-    const hasta = input.selectionEnd ?? 0;
-    const r = alternarAcento(value, desde, hasta);
-    if (!r) {
-      input.focus();
-      return;
-    }
-    onChange(r.texto);
-    // Deja seleccionado el mismo tramo, ya con (o sin) las marcas.
-    requestAnimationFrame(() => {
-      input.focus();
-      input.setSelectionRange(r.desde, r.hasta);
-    });
-  }
-
   return (
-    <Field label={label} hint={hint}>
-      <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <Input ref={ref} value={value} onChange={(e) => onChange(e.target.value)} className="flex-1" />
-          <Button
-            type="button"
-            variant="outline"
-            // Evita que el botón le robe el foco (y la selección) al campo.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={marcar}
-          >
-            Marcar acento
-          </Button>
-        </div>
-        {value.includes("*") ? (
-          <p className="text-sm text-muted">
-            Vista previa: <AccentText text={value} accentClassName="not-italic font-semibold text-accent" />
-          </p>
-        ) : null}
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-text">{etiqueta}</span>
+        <Switch size="sm" label="Mostrar" checked={visible} onCheckedChange={onVisible} />
       </div>
-    </Field>
+      {visible ? (
+        <>
+          {mobile ? <span className="text-xs font-semibold uppercase tracking-wide text-muted">Desktop</span> : null}
+          {editor}
+          {mobile ? (
+            <>
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted">Mobile</span>
+              {editorMobile}
+            </>
+          ) : null}
+          {onMobile ? <Switch size="sm" label="Distinto en mobile" checked={!!mobile} onCheckedChange={onMobile} /> : null}
+        </>
+      ) : null}
+    </div>
   );
 }
 
 /**
- * Título (con acento en cualquier posición) y bajada, cada uno con su versión
- * opcional para mobile. Si la versión mobile queda vacía, en mobile se muestra
- * el texto de desktop.
+ * Eyebrow, título con acento y bajada de una sección, con sus interruptores.
+ * `conEyebrow` para las secciones que lo tienen (portada y banner decorativo).
  */
-export function CamposTitulo<T extends TextosSeccion>({
+export function CamposTitulo<T extends ConEyebrow>({
   valor,
   onChange,
+  conEyebrow = false,
 }: {
   valor: T;
   onChange: (v: T) => void;
+  conEyebrow?: boolean;
 }) {
+  const ocultos = valor.camposOcultos ?? [];
+  const visible = (campo: CampoOcultable) => !ocultos.includes(campo);
+  const setVisible = (campo: CampoOcultable) => (v: boolean) =>
+    onChange({
+      ...valor,
+      camposOcultos: v ? ocultos.filter((c) => c !== campo) : [...ocultos, campo],
+    });
+  // Al prender "Distinto en mobile" arranca con el texto de desktop; al
+  // apagarlo se descarta (en mobile vuelve a verse el de desktop).
+  const setMobile = (campo: "tituloMobile" | "bajadaMobile", base: string | undefined) => (v: boolean) =>
+    onChange({ ...valor, [campo]: v ? (base ?? "") : undefined });
+
   return (
     <>
-      <CampoConAcento
-        label="Título"
-        hint={`Opcional. ${HINT_ACENTO}`}
-        value={valor.titulo ?? ""}
-        onChange={(titulo) => onChange({ ...valor, titulo })}
-      />
-      <CampoConAcento
-        label="Título en mobile"
-        hint="Opcional. Si lo deja vacío, en mobile se muestra el título de arriba."
-        value={valor.tituloMobile ?? ""}
-        onChange={(tituloMobile) => onChange({ ...valor, tituloMobile })}
-      />
-      <Field label="Bajada" hint="Opcional">
-        <Textarea value={valor.bajada ?? ""} onChange={(e) => onChange({ ...valor, bajada: e.target.value })} />
-      </Field>
-      <Field label="Bajada en mobile" hint="Opcional. Si la deja vacía, en mobile se muestra la bajada de arriba.">
-        <Textarea
-          value={valor.bajadaMobile ?? ""}
-          onChange={(e) => onChange({ ...valor, bajadaMobile: e.target.value })}
+      {conEyebrow ? (
+        <BloqueTexto
+          etiqueta="Eyebrow"
+          visible={visible("eyebrow")}
+          onVisible={setVisible("eyebrow")}
+          editor={
+            <Input
+              aria-label="Eyebrow"
+              value={valor.eyebrow ?? ""}
+              onChange={(e) => onChange({ ...valor, eyebrow: e.target.value })}
+            />
+          }
         />
-      </Field>
+      ) : null}
+      <BloqueTexto
+        etiqueta="Título"
+        visible={visible("titulo")}
+        onVisible={setVisible("titulo")}
+        mobile={valor.tituloMobile !== undefined}
+        onMobile={setMobile("tituloMobile", valor.titulo)}
+        editor={
+          <CampoAcento
+            ariaLabel="Título"
+            value={valor.titulo ?? ""}
+            onChange={(titulo) => onChange({ ...valor, titulo })}
+          />
+        }
+        editorMobile={
+          <CampoAcento
+            ariaLabel="Título en mobile"
+            value={valor.tituloMobile ?? ""}
+            onChange={(tituloMobile) => onChange({ ...valor, tituloMobile })}
+          />
+        }
+      />
+      <BloqueTexto
+        etiqueta="Bajada"
+        visible={visible("bajada")}
+        onVisible={setVisible("bajada")}
+        mobile={valor.bajadaMobile !== undefined}
+        onMobile={setMobile("bajadaMobile", valor.bajada)}
+        editor={
+          <Textarea
+            aria-label="Bajada"
+            value={valor.bajada ?? ""}
+            onChange={(e) => onChange({ ...valor, bajada: e.target.value })}
+          />
+        }
+        editorMobile={
+          <Textarea
+            aria-label="Bajada en mobile"
+            value={valor.bajadaMobile ?? ""}
+            onChange={(e) => onChange({ ...valor, bajadaMobile: e.target.value })}
+          />
+        }
+      />
     </>
   );
 }

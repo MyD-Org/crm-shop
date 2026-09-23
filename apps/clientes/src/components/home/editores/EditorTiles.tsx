@@ -20,7 +20,7 @@ export function EditorTiles({
   return (
     <div className="flex flex-col gap-4">
       <CamposTitulo valor={valor} onChange={onChange} />
-      <Field label="Enlace de 'Ver todos'" hint="Opcional: ruta interna (por ejemplo /catalogo) o URL https. Si lo deja vacío, no se muestra.">
+      <Field label="Enlace de 'Ver todos'" hint="Ruta interna (por ejemplo /catalogo) o URL https. Vacío: no se muestra.">
         <Input value={valor.linkTodos ?? ""} onChange={(e) => onChange({ ...valor, linkTodos: e.target.value })} />
       </Field>
       <div>
@@ -32,10 +32,10 @@ export function EditorTiles({
           renderItem={(item, onItem) => (
             <div className="flex flex-col gap-3">
               <CampoImagen valor={item.imagen} onChange={(imagen) => onItem({ ...item, imagen })} />
-              <Field label="Eyebrow" hint="Opcional">
+              <Field label="Eyebrow">
                 <Input value={item.eyebrow ?? ""} onChange={(e) => onItem({ ...item, eyebrow: e.target.value })} />
               </Field>
-              <Field label="Título" hint="Opcional">
+              <Field label="Título">
                 <Input value={item.titulo ?? ""} onChange={(e) => onItem({ ...item, titulo: e.target.value })} />
               </Field>
               <Field label="Enlace" hint="Ruta interna (por ejemplo /catalogo) o URL https">

@@ -55,36 +55,62 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
   whatsapp: "Contacto por WhatsApp",
 };
 
-/**
- * Marca (o desmarca) como acento el tramo `[desde, hasta)` de `texto`,
- * envolviéndolo en `*…*`. Si el tramo ya está entre marcas, las quita.
- * Devuelve el texto nuevo y la selección que queda sobre el mismo tramo, o
- * `null` si no hay nada seleccionado.
- */
-export function alternarAcento(
-  texto: string,
-  desde: number,
-  hasta: number,
-): { texto: string; desde: number; hasta: number } | null {
-  // El doble clic suele seleccionar también el espacio de al lado.
-  while (desde < hasta && texto[desde] === " ") desde++;
-  while (hasta > desde && texto[hasta - 1] === " ") hasta--;
-  if (desde >= hasta) return null;
+/** Texto plano + qué caracteres van en acento. El contrato guarda `*marcas*`;
+ *  el editor trabaja sobre este modelo para no mostrar los asteriscos. */
+export type Mascara = { texto: string; acento: boolean[] };
 
-  const sel = texto.slice(desde, hasta);
-  if (texto[desde - 1] === "*" && texto[hasta] === "*") {
-    return { texto: texto.slice(0, desde - 1) + sel + texto.slice(hasta + 1), desde: desde - 1, hasta: hasta - 1 };
+/** `"Los más *vendidos*"` ⇒ texto plano y máscara de acento. */
+export function aMascara(marcado: string): Mascara {
+  let texto = "";
+  const acento: boolean[] = [];
+  let desde = 0;
+  for (const m of marcado.matchAll(/\*([^*]+)\*/g)) {
+    const i = m.index ?? 0;
+    const normal = marcado.slice(desde, i);
+    texto += normal;
+    acento.push(...Array<boolean>(normal.length).fill(false));
+    texto += m[1];
+    acento.push(...Array<boolean>(m[1].length).fill(true));
+    desde = i + m[0].length;
   }
-  if (sel.length > 2 && sel.startsWith("*") && sel.endsWith("*")) {
-    const interior = sel.slice(1, -1);
-    return { texto: texto.slice(0, desde) + interior + texto.slice(hasta), desde, hasta: desde + interior.length };
+  const resto = marcado.slice(desde);
+  texto += resto;
+  acento.push(...Array<boolean>(resto.length).fill(false));
+  return { texto, acento };
+}
+
+/** Inversa de `aMascara`. Los `*` sueltos del texto se descartan: son la marca. */
+export function aMarcas({ texto, acento }: Mascara): string {
+  // Tramos consecutivos con el mismo estado de acento.
+  const tramos: { texto: string; acento: boolean }[] = [];
+  for (let i = 0; i < texto.length; i++) {
+    if (texto[i] === "*") continue;
+    const ultimo = tramos.at(-1);
+    if (ultimo && ultimo.acento === !!acento[i]) ultimo.texto += texto[i];
+    else tramos.push({ texto: texto[i], acento: !!acento[i] });
   }
-  const limpio = sel.replaceAll("*", "");
-  return {
-    texto: `${texto.slice(0, desde)}*${limpio}*${texto.slice(hasta)}`,
-    desde: desde + 1,
-    hasta: desde + 1 + limpio.length,
-  };
+  return tramos
+    .map((t) => {
+      if (!t.acento || t.texto.trim() === "") return t.texto;
+      // Los espacios de los bordes quedan afuera de las marcas.
+      const [, antes, medio, despues] = /^(\s*)([\s\S]*?)(\s*)$/.exec(t.texto)!;
+      return `${antes}*${medio}*${despues}`;
+    })
+    .join("");
+}
+
+/**
+ * Pinta (o despinta, si ya estaba todo pintado) el tramo `[desde, hasta)` del
+ * texto plano. Devuelve el texto con marcas, o `null` si no hay selección.
+ */
+export function alternarAcento(marcado: string, desde: number, hasta: number): string | null {
+  const m = aMascara(marcado);
+  while (desde < hasta && m.texto[desde] === " ") desde++;
+  while (hasta > desde && m.texto[hasta - 1] === " ") hasta--;
+  if (desde >= hasta) return null;
+  const pintar = !m.acento.slice(desde, hasta).every(Boolean);
+  const acento = m.acento.map((v, i) => (i >= desde && i < hasta ? pintar : v));
+  return aMarcas({ texto: m.texto, acento });
 }
 
 function trimProfundo(v: unknown): unknown {
@@ -146,6 +172,8 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
     if (Array.isArray(o.usps)) o.usps = (o.usps as { label?: string }[]).filter((u) => esTextoNoVacio(u?.label));
     if (Array.isArray(o.ctas)) o.ctas = (o.ctas as unknown[]).filter((e) => !sinEtiqueta(e));
   }
+
+  if (Array.isArray(o.camposOcultos) && o.camposOcultos.length === 0) delete o.camposOcultos;
 
   if (seccion === "bannerDeco" && o.cta !== undefined && sinEtiqueta(o.cta)) delete o.cta;
 

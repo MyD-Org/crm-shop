@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { findContactByIdentifier, variantesDocumento } from "./alegra"
 import type { TenantConfig } from "./tenants"
 
-// Login del portal: resolver el contacto por email/CUIT sin bajar el padrón entero.
+// Login del portal: resolver el contacto por CUIT/DNI sin bajar el padrón entero.
 // El endpoint es anónimo; antes un CUIT inventado disparaba ~200 requests a Alegra.
 
 const tenant = { id: "t", alegraMock: false, alegraEmail: "api@plataforma.example", alegraToken: "x" } as unknown as TenantConfig
@@ -46,20 +46,6 @@ describe("variantesDocumento", () => {
 })
 
 describe("findContactByIdentifier", () => {
-  it("email: lo encuentra con el filtro email= en UNA request", async () => {
-    alegra((p) => (p.get("email") === "compras@cliente.example" ? [contacto({ email: "Compras@cliente.example" })] : []))
-    const c = await findContactByIdentifier(tenant, "compras@cliente.example")
-    expect(c?.alegraId).toBe("42")
-    expect(params()).toEqual(["email=compras%40cliente.example"])
-  })
-
-  it("email inexistente: 2 requests (email= y query=) y null, nunca el padrón entero", async () => {
-    alegra(() => [])
-    expect(await findContactByIdentifier(tenant, "nadie@cliente.example")).toBeNull()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(params().some((p) => p.includes("start="))).toBe(false)
-  })
-
   it("CUIT inexistente: como mucho 4 requests (variantes + query=)", async () => {
     alegra(() => [])
     expect(await findContactByIdentifier(tenant, "20123456789")).toBeNull()
@@ -78,16 +64,23 @@ describe("findContactByIdentifier", () => {
   })
 
   it("exige match exacto: un parecido en la lista no entra", async () => {
-    alegra(() => [contacto({ email: "otro@cliente.example", identification: "20111111112" })])
-    expect(await findContactByIdentifier(tenant, "compras@cliente.example")).toBeNull()
+    alegra(() => [contacto({ identification: "20111111112" })])
     expect(await findContactByIdentifier(tenant, "20123456789")).toBeNull()
   })
 
   it("si un filtro falla (no 429), prueba el siguiente", async () => {
     alegra((p) =>
-      p.has("email") ? new Response("bad request", { status: 400 }) : [contacto({ email: "compras@cliente.example" })],
+      p.get("identification") === "20123456789"
+        ? new Response("bad request", { status: 400 })
+        : [contacto({ identification: "20123456789" })],
     )
-    const c = await findContactByIdentifier(tenant, "compras@cliente.example")
+    const c = await findContactByIdentifier(tenant, "20123456789")
     expect(c?.alegraId).toBe("42")
+  })
+
+  it("DNI: una variante (no lleva guiones) y query=", async () => {
+    alegra(() => [])
+    expect(await findContactByIdentifier(tenant, "12345678")).toBeNull()
+    expect(params()).toEqual(["identification=12345678", "query=12345678"])
   })
 })

@@ -127,7 +127,7 @@ export async function getCliente(config: TenantConfig, codigocliente: string): P
   return mapContactToCliente(contact, balance)
 }
 
-/** Resuelve el cliente por email o CUIT/identificación (usado por el login OTP). */
+/** Resuelve el cliente por CUIT o DNI, ya normalizado a dígitos (login OTP del portal). */
 export async function getClienteByIdentifier(config: TenantConfig, identifier: string): Promise<Cliente | null> {
   if (config.alegraMock) return mockCliente
   const contact = await findContactByIdentifier(config, identifier)

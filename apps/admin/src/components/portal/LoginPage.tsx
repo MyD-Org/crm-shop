@@ -22,7 +22,7 @@ export default function LoginPage({ logoSrc, tenantName, tenantSubtitle }: Login
   const [step, setStep] = useState<Step>("identify")
   const [identifier, setIdentifier] = useState("")
   // Email (enmascarado) al que el server mandó el código: el contacto de Alegra, que
-  // no tiene por qué ser lo que se tipeó (se puede entrar con CUIT).
+  // no es lo que se tipeó (se entra con CUIT o DNI).
   const [sentTo, setSentTo] = useState("")
   const [otp, setOtp] = useState(["", "", "", "", "", ""])
   const [loading, setLoading] = useState(false)
@@ -304,17 +304,18 @@ function IdentifyStep({
           Bienvenido
         </h1>
         <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
-          Ingrese su CUIT o email para acceder a su cuenta
+          Ingrese su CUIT o DNI para acceder a su cuenta
         </p>
       </div>
 
-      <Field label="CUIT o Email" error={error || undefined}>
+      <Field label="CUIT o DNI" error={error || undefined}>
         <Input
           id="identifier"
           type="text"
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
-          placeholder="20-12345678-9 o correo@empresa.com"
+          placeholder="20-12345678-9"
+          inputMode="numeric"
           autoFocus
           autoComplete="username"
           required
@@ -375,13 +376,9 @@ function OtpStep({
   error: string
   countdown: number
 }) {
-  // El server dice a qué email salió (enmascarado). Si no vino, se cae al identificador
-  // tipeado enmascarado acá — con CUIT eso no dice a qué casilla mirar, pero es mejor que nada.
-  const destino =
-    sentTo ||
-    (identifier.includes("@")
-      ? identifier.replace(/(.{2}).+(@.+)/, "$1***$2")
-      : identifier.replace(/^(.{4}).+(.{3})$/, "$1***$2"))
+  // El server dice a qué email salió (enmascarado). Si no vino, se cae al documento
+  // tipeado enmascarado acá: no dice a qué casilla mirar, pero es mejor que nada.
+  const destino = sentTo || identifier.replace(/^(.{4}).+(.{3})$/, "$1***$2")
 
   return (
     <form onSubmit={onSubmit} className="p-8 flex flex-col gap-6">

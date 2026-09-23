@@ -77,6 +77,8 @@ describe("POST /api/auth/verify-code", () => {
     expect(state.porId).toEqual(["42"])
     expect(state.porIdentificador).toEqual([])
     expect(state.sesion.codigocliente).toBe("42")
+    // El email de la sesión es el del contacto, no lo tipeado (el CUIT).
+    expect(state.sesion.email).toBe("compras@cliente.example")
     expect(state.sesion.isLoggedIn).toBe(true)
   })
 

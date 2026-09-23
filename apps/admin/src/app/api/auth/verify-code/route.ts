@@ -28,12 +28,12 @@ export async function POST(request: Request) {
     )
 
     if (!otpSession.otp || !otpSession.otpExpiry || !otpSession.identifier) {
-      return Response.json({ error: "Sesión de verificación expirada. Solicitá un nuevo código." }, { status: 400 })
+      return Response.json({ error: "La verificación expiró. Solicite un nuevo código." }, { status: 400 })
     }
 
     if (Date.now() > otpSession.otpExpiry) {
       otpSession.destroy()
-      return Response.json({ error: "El código ha expirado. Solicitá uno nuevo." }, { status: 400 })
+      return Response.json({ error: "El código expiró. Solicite uno nuevo." }, { status: 400 })
     }
 
     if (otpSession.otp !== code) {
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       if (attempts >= MAX_OTP_ATTEMPTS) {
         otpSession.destroy()
         return Response.json(
-          { error: "Demasiados intentos fallidos. Solicitá un nuevo código." },
+          { error: "Demasiados intentos fallidos. Solicite un nuevo código." },
           { status: 429 },
         )
       }
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       ? await getCliente(tenant, otpSession.codigocliente).catch(() => null)
       : await getClienteByIdentifier(tenant, otpSession.identifier)
     if (!clienteData) {
-      return Response.json({ error: "No encontramos una cuenta asociada. Contáctese con atención al cliente." }, { status: 404 })
+      return Response.json({ error: "No encontramos una cuenta asociada. Comuníquese con la sucursal." }, { status: 404 })
     }
 
     // Las opciones salen del HOST: una COOKIE_DOMAIN que no cubra este host hace que
@@ -71,7 +71,9 @@ export async function POST(request: Request) {
     session.codigocliente = clienteData.codigocliente
     session.razonsocial = clienteData.razonsocial
     session.cuit = clienteData.cuit
-    session.email = otpSession.identifier
+    // El email del contacto en Alegra, no lo tipeado (que es el CUIT o DNI). Lo leen los
+    // comprobantes del portal y la tienda como email del cliente.
+    session.email = clienteData.email
     session.tipoCuenta = clienteData.tipoCuenta
     await session.save()
 

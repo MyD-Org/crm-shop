@@ -4,15 +4,16 @@ import { getIronSession } from "iron-session"
 import { otpSessionOptions } from "@/lib/session"
 import { getTenantConfig } from "@/lib/tenant-context"
 import { getClienteByIdentifier } from "@/lib/erp"
+import { normalizarDocumento } from "@/lib/documento-portal"
 import { AlegraRateLimitError } from "@/lib/alegra"
 import { sendEmail, maskEmail } from "@/lib/email"
 import { buildOtpEmail } from "@/lib/otp-email"
 import type { OtpSessionData } from "@/types"
 
-// Código de acceso al portal del cliente. El identificador (CUIT o email) se resuelve
+// Código de acceso al portal del cliente. Se entra SOLO con CUIT o DNI: se resuelve
 // contra Alegra y el código se manda SIEMPRE al email que el contacto tiene cargado
-// ahí — no al que se tipeó: el mail del ERP es el dato autoritativo, y así tipear el
-// email de otro no sirve para recibir su código.
+// ahí. El mail del ERP es el dato autoritativo; sin mail cargado no hay acceso hasta
+// que la sucursal lo cargue.
 
 const OTP_TTL_MS = 10 * 60 * 1000
 
@@ -66,16 +67,19 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { identifier: raw } = body as { identifier: string }
 
-    if (!raw || raw.trim().length < 3) {
-      return Response.json({ error: "Identificador inválido" }, { status: 400 })
+    const identifier = typeof raw === "string" ? normalizarDocumento(raw) : null
+    if (!identifier) {
+      return Response.json(
+        { error: "Ingrese un CUIT o DNI válido, solo con números." },
+        { status: 400 },
+      )
     }
-    const identifier = raw.trim()
 
     const now = Date.now()
     sweep(now)
     if (
       !takeSendSlot(`${tenant.id}:ip:${ipDe(request)}`, now, MAX_SENDS_POR_IP) ||
-      !takeSendSlot(`${tenant.id}:${identifier.toLowerCase()}`, now)
+      !takeSendSlot(`${tenant.id}:${identifier}`, now)
     ) {
       return Response.json(
         { error: "Pidió demasiados códigos. Espere unos minutos." },
@@ -88,13 +92,19 @@ export async function POST(request: Request) {
     const cliente = await getClienteByIdentifier(tenant, identifier)
     if (!cliente) {
       return Response.json(
-        { error: "No encontramos una cuenta con ese CUIT o email. Contáctese con atención al cliente." },
+        {
+          error:
+            "No encontramos una cuenta con ese CUIT o DNI. Verifique el número o comuníquese con la sucursal.",
+        },
         { status: 404 },
       )
     }
     if (!cliente.email) {
       return Response.json(
-        { error: "Su cuenta no tiene un email cargado. Contáctese con atención al cliente." },
+        {
+          error:
+            "Su cuenta todavía no tiene un email cargado. Comuníquese con la sucursal para que le den el alta en el portal.",
+        },
         { status: 409 },
       )
     }

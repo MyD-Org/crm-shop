@@ -1013,7 +1013,7 @@ export async function getDocumentPdf(
   }
 }
 
-// ── Búsqueda de contacto por identificador del portal (email o CUIT) ─────────
+// ── Búsqueda de contacto por documento del portal (CUIT o DNI) ───────────────
 // El `query` de /contacts de Alegra matchea por nombre (un email exacto de un contacto
 // existente devolvía []). Los filtros `email=` e `identification=` sí filtran: con un
 // valor inexistente devuelven [] en vez de la primera página (probado contra la cuenta
@@ -1055,61 +1055,45 @@ async function contactosFiltrados(
 }
 
 /**
- * Contacto por email o CUIT exactos, para el login del portal.
+ * Contacto por CUIT o DNI exacto, para el login del portal. `documento` llega ya
+ * normalizado a dígitos (ver `normalizarDocumento`).
  *
- * Usa los filtros de Alegra y le exige al resultado el match exacto: que un contacto
- * venga en la lista no alcanza (un parcial dejaría entrar a la cuenta equivocada). Si
- * el identificador no parece ni email ni documento, cae en la búsqueda por nombre de
- * Alegra, que es una sola request.
+ * Usa el filtro `identification=` con las formas en que puede estar cargado y `query=`
+ * al final, y le exige al resultado el match exacto: que un contacto venga en la lista
+ * no alcanza (un parcial dejaría entrar a la cuenta equivocada).
  */
 export async function findContactByIdentifier(
   config: TenantConfig,
-  identifier: string,
+  documento: string,
 ): Promise<AlegraContact | null> {
-  const trimmed = identifier.trim()
-  if (!trimmed) return null
+  const digitos = normalizeIdentification(documento)
+  if (!digitos) return null
 
   if (config.alegraMock) {
-    const [match] = await searchContacts(config, trimmed, 1)
+    const [match] = await searchContacts(config, documento, 1)
     return match ?? null
   }
 
-  const email = trimmed.toLowerCase()
-  const isEmail = trimmed.includes("@")
-  const documento = normalizeIdentification(trimmed)
-  // 6 dígitos = piso de un DNI. Menos que eso no es un documento, es otra cosa.
-  const isDocumento = !isEmail && documento.length >= 6
+  const esExacto = (c: AlegraContact) => normalizeIdentification(c.identification) === digitos
+  const intentos: Record<string, string>[] = [
+    ...variantesDocumento(documento).map((v) => ({ identification: v })),
+    { query: digitos },
+  ]
 
-  if (isEmail || isDocumento) {
-    const esExacto = (c: AlegraContact) =>
-      isEmail
-        ? (c.email ?? "").trim().toLowerCase() === email
-        : normalizeIdentification(c.identification) === documento
-
-    const intentos: Record<string, string>[] = isEmail
-      ? [{ email: trimmed }, { query: trimmed }]
-      : [...variantesDocumento(trimmed).map((v) => ({ identification: v })), { query: documento }]
-
-    for (const params of intentos) {
-      let candidatos: AlegraContact[]
-      try {
-        candidatos = await contactosFiltrados(config, params)
-      } catch (err) {
-        // Un 429 corta acá: seguir probando solo gasta más cuota. Cualquier otro error
-        // de un filtro no decide nada; se prueba el siguiente.
-        if (err instanceof AlegraRateLimitError) throw err
-        continue
-      }
-      const match = candidatos.find(esExacto)
-      if (match) return match
+  for (const params of intentos) {
+    let candidatos: AlegraContact[]
+    try {
+      candidatos = await contactosFiltrados(config, params)
+    } catch (err) {
+      // Un 429 corta acá: seguir probando solo gasta más cuota. Cualquier otro error
+      // de un filtro no decide nada; se prueba el siguiente.
+      if (err instanceof AlegraRateLimitError) throw err
+      continue
     }
-    // Sin match exacto no se intenta por nombre: un email nunca es el nombre de una
-    // empresa, y un match parcial acá deja entrar a la cuenta equivocada.
-    return null
+    const match = candidatos.find(esExacto)
+    if (match) return match
   }
-
-  const [byName] = await searchContacts(config, trimmed, 1)
-  return byName ?? null
+  return null
 }
 
 // ── Facturas paginadas ──────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ vi.mock("@/flags", () => ({
   pagosFlag: async () => estadoFlags().pagos,
   cuotasFlag: async () => estadoFlags().cuotas,
   catalogoSoloVisiblesFlag: async () => estadoFlags()["catalogo-solo-visibles"],
+  envioFlag: async () => estadoFlags().envio,
 }));
 
 beforeEach(() => {

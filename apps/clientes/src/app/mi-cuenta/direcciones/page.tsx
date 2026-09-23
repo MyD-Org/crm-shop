@@ -7,6 +7,7 @@ import { identidadActual } from "@/lib/auth";
 import { direccionDesdeFacturacion } from "@/lib/direccion-envio";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import { CIUDADES_ENVIO, ENTREGA_LABEL, MINIMO_ENVIO } from "@/lib/envio";
+import { envioHabilitado } from "@/lib/envio-flag";
 import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { rutaIngreso } from "@/lib/ingreso";
 import { textoEnvio } from "@/lib/mi-cuenta-copy";
@@ -29,6 +30,7 @@ export default async function DireccionesPage() {
   const [direcciones, perfil] = clerkUserId
     ? await Promise.all([listarDirecciones(clerkUserId), getPerfilFacturacion(clerkUserId)])
     : [[], null];
+  const envio = await envioHabilitado();
 
   return (
     <section className="flex flex-col gap-4">
@@ -47,9 +49,11 @@ export default async function DireccionesPage() {
         />
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card title={ENTREGA_LABEL.envio}>
-          <p className="text-sm text-muted">{textoEnvio(CIUDADES_ENVIO, MINIMO_ENVIO)}</p>
-        </Card>
+        {envio && (
+          <Card title={ENTREGA_LABEL.envio}>
+            <p className="text-sm text-muted">{textoEnvio(CIUDADES_ENVIO, MINIMO_ENVIO)}</p>
+          </Card>
+        )}
         <Card title="Retiro en local">
           <p className="text-sm text-muted">{ENTREGA_LABEL.retiro}</p>
         </Card>

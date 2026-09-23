@@ -33,3 +33,10 @@ export const catalogoSoloVisiblesFlag = flag<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 });
+
+export const envioFlag = flag<boolean>({
+  key: "envio",
+  description: "Envío a domicilio en el checkout (apagado: solo retiro / a coordinar)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});

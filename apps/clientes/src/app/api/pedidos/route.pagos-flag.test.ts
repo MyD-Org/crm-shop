@@ -46,6 +46,7 @@ vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
 vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => pagos }));
 
 import { POST } from "./route";
+import { setFlag } from "@/test/flags";
 
 const NO_DISPONIBLE = "Ese medio de pago no está disponible para la entrega elegida.";
 
@@ -66,6 +67,8 @@ const post = (extra: Record<string, unknown> = {}) => {
 };
 
 beforeEach(() => {
+  // Estos casos ejercitan el envío propio: el flag `envio` prendido.
+  setFlag("envio", true);
   pagos = false;
   crearPedido.mockReset();
   crearPedido.mockImplementation(async (_c, _d, _cot, plan) => ({

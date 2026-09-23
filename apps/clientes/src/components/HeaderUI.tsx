@@ -55,7 +55,10 @@ export function HeaderUI({
   const [compacto, setCompacto] = useState(false);
 
   return (
-    <div className="bg-bg">
+    // `site-header` en el wrapper y no en <SiteHeader>: el DS pone className
+    // sólo en el <header> y la barra compacta queda afuera. La regla de
+    // globals.css le saca la itálica y le da el acento a "Led" en las dos.
+    <div className="site-header bg-bg">
       {/* La barra de anuncio vive en src/app/layout.tsx (global desde e88aec5,
           contenido administrable); acá solo va el header+nav globales. */}
       <SiteHeader

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
  */
 const css = readFileSync(join(__dirname, "globals.css"), "utf8");
 const footer = readFileSync(join(__dirname, "..", "components", "SiteFooter.tsx"), "utf8");
+const header = readFileSync(join(__dirname, "..", "components", "HeaderUI.tsx"), "utf8");
 
 function bloque(selector: string): string {
   const i = css.indexOf(`${selector} {`);
@@ -56,5 +57,16 @@ describe("marca del footer", () => {
 
   it("el footer ya no usa overrides arbitrarios", () => {
     expect(footer).not.toContain("[&_");
+  });
+});
+
+describe("marca del header", () => {
+  // El DS pinta "Led" en itálica; la regla `.site-header em` la endereza, pero
+  // sólo si algún ancestro lleva la clase (el DS no la pone).
+  it("el wrapper del header lleva site-header y la regla saca la itálica", () => {
+    expect(header).toMatch(/className="site-header[ "]/);
+    expect(css).toMatch(
+      /\.site-header em\s*\{[^}]*color:\s*var\(--color-accent\);[^}]*font-style:\s*normal;/,
+    );
   });
 });

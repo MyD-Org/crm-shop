@@ -13,6 +13,7 @@ let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import { getProducto, getProductosPorIds } from "./catalog";
+import { setFlag } from "@/test/flags";
 
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
@@ -41,7 +42,7 @@ describe("getProductosPorIds", () => {
   });
 
   it("sin soloActivos no filtra por estado ni por visible, aunque el flag esté prendido", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     await getProductosPorIds(["42"]);
     const { sql } = grabadora.consultas[0];
     expect(sql).not.toContain('"status"');
@@ -58,7 +59,7 @@ describe("getProductosPorIds", () => {
   });
 
   it("con soloActivos y el flag de visibles, también visible = true", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     await getProductosPorIds(["42"], { soloActivos: true });
     const { sql, params } = grabadora.consultas[0];
     const m = sql.match(/"catalog_overlay"\."visible" = \$(\d+)/);

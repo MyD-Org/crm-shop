@@ -88,14 +88,6 @@ describe('filtro "solo con stock" (SQL-1)', () => {
     for (const { sql } of grabadora.consultas) expect(sql).toMatch(STOCK);
   });
 
-  it("con la simulación de stock activa, el predicado no aparece", async () => {
-    // Con la simulación todo se muestra disponible: filtrar por stock > 0
-    // escondería productos que la card dice que están.
-    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
-    vi.stubEnv("VERCEL_ENV", "");
-    await getPaginaCatalogo({ filtros: { soloStock: true } });
-    for (const { sql } of grabadora.consultas) expect(sql).not.toMatch(STOCK);
-  });
 
   it("el estado por defecto de la URL (sin parámetros) filtra por stock", async () => {
     await getPaginaCatalogo({ filtros: filtrosDeEstado(leerEstado({})) });
@@ -103,12 +95,6 @@ describe('filtro "solo con stock" (SQL-1)', () => {
     for (const { sql } of grabadora.consultas) expect(sql).toMatch(STOCK);
   });
 
-  it("el estado por defecto no filtra por stock con la simulación activa", async () => {
-    vi.stubEnv("SHOP_STOCK_SIMULADO", "1");
-    vi.stubEnv("VERCEL_ENV", "");
-    await getPaginaCatalogo({ filtros: filtrosDeEstado(leerEstado({})) });
-    for (const { sql } of grabadora.consultas) expect(sql).not.toMatch(STOCK);
-  });
 
   it("incluir sin stock no agrega el predicado", async () => {
     await getPaginaCatalogo({

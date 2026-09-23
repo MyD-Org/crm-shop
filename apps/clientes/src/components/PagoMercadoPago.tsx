@@ -43,7 +43,7 @@ interface Props {
   monto: number;
   emailComprador?: string;
   /**
-   * Máximo de cuotas congelado en el pedido (sólo con CUOTAS_ENABLED). Sin
+   * Máximo de cuotas congelado en el pedido (sólo con el flag `cuotas`). Sin
    * valor, el Brick ofrece lo que devuelva Mercado Pago, como antes. Es
    * constante durante la vida del pedido: no reinicia el Brick.
    */

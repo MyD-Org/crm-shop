@@ -9,8 +9,10 @@
  * el checkout se comporta exactamente como antes de este flag. No se borró
  * código de pagos: prender el flag alcanza para volver a cobrar.
  *
- * Explícito a propósito (estilo src/lib/cuotas-flag.ts): sólo "1" enciende.
+ * Vive en Vercel Flags (key `pagos`, ver src/flags.ts): se cambia sin redeploy.
  */
-export function pagosHabilitados(): boolean {
-  return process.env.PAGOS_ENABLED === "1";
+import { pagosFlag } from "@/flags";
+
+export async function pagosHabilitados(): Promise<boolean> {
+  return pagosFlag();
 }

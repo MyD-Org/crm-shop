@@ -64,7 +64,7 @@ export async function POST(req: Request) {
       total: 0,
       hayProblemas: false,
       envio: evaluarEnvio(0, ciudad),
-      pagosDisponibles: pagosDisponibles(entregaTipo, pagosHabilitados()),
+      pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),
     });
   }
 
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...cotizacion,
       envio: evaluarEnvio(cotizacion.subtotal, ciudad),
-      pagosDisponibles: pagosDisponibles(entregaTipo, pagosHabilitados()),
+      pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),
     });
   } catch (err) {
     console.error("[/api/carrito/cotizar] error:", err);

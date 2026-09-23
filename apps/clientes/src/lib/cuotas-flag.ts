@@ -6,8 +6,10 @@
  * la ruta de pago vuelve al clamp 1..24. Precio final con IVA y neto NO dependen
  * de este flag. Cron, ping y congelado del plan en el pedido siguen corriendo.
  *
- * Explícito a propósito (estilo src/lib/stock-simulado.ts): sólo "1" enciende.
+ * Vive en Vercel Flags (key `cuotas`, ver src/flags.ts): se cambia sin redeploy.
  */
-export function cuotasHabilitadas(): boolean {
-  return process.env.CUOTAS_ENABLED === "1";
+import { cuotasFlag } from "@/flags";
+
+export async function cuotasHabilitadas(): Promise<boolean> {
+  return cuotasFlag();
 }

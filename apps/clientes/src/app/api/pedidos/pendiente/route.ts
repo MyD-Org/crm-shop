@@ -25,7 +25,7 @@ export async function GET() {
   // el cobro de un pedido de Mercado Pago, y sin cobros no hay nada que
   // retomar. Se corta antes de consultar la base; el checkout tampoco lo llama
   // (doble seguro del lado del server).
-  if (!pagosHabilitados()) {
+  if (!(await pagosHabilitados())) {
     return NextResponse.json({ pedido: null });
   }
 
@@ -38,7 +38,7 @@ export async function GET() {
   // recibe máximo y el cobro vuelve al clamp 1..24.
   return NextResponse.json({
     pedido: pedido
-      ? { ...pedido, cuotasMax: cuotasHabilitadas() ? pedido.cuotasMax : null }
+      ? { ...pedido, cuotasMax: (await cuotasHabilitadas()) ? pedido.cuotasMax : null }
       : null,
   });
 }

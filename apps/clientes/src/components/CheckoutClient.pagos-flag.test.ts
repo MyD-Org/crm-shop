@@ -8,9 +8,9 @@ import { describe, expect, it } from "vitest";
  * PagoMercadoPago.test.ts: acá no hay jsdom).
  *
  * Fija los tres puntos del checkout que el flag de pagos tiene que cortar, y
- * que el flag en sí nunca llegue al navegador: un client component que lea
- * `PAGOS_ENABLED` lo vería siempre `undefined` y dejaría los pagos apagados en
- * la pantalla y prendidos en el server (o al revés).
+ * que el flag en sí nunca llegue al navegador: el flag `pagos` de Vercel Flags
+ * se evalúa en el server, y un client component que lo importara no podría
+ * leerlo (y mostraría los pagos distinto de lo que valida el server).
  */
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
@@ -62,26 +62,14 @@ describe("CheckoutClient con el flag de pagos", () => {
   });
 });
 
-describe("PAGOS_ENABLED no sale del server", () => {
-  it("sólo lo nombran pagos-flag.ts y su test", () => {
-    // Ni en comentarios: así el chequeo es un grep literal, sin interpretar.
-    const loNombran = archivos(SRC)
-      .filter((p) => /\.(ts|tsx)$/.test(p))
-      .filter((p) => readFileSync(p, "utf8").includes("PAGOS_ENABLED"))
-      .map((p) => p.slice(SRC.length))
-      // Este archivo lo nombra para poder buscarlo.
-      .filter((p) => !p.endsWith("CheckoutClient.pagos-flag.test.ts"))
-      .sort();
-    expect(loNombran).toEqual(["lib/pagos-flag.test.ts", "lib/pagos-flag.ts"]);
-  });
-
-  it('ningún "use client" importa pagos-flag', () => {
+describe("el flag de pagos no sale del server", () => {
+  it('ningún "use client" importa pagos-flag ni @/flags', () => {
     const culpables = archivos(SRC)
       .filter((p) => /\.(ts|tsx)$/.test(p))
       .filter((p) => {
         const t = readFileSync(p, "utf8");
         // El import, no la mención: los comentarios sí apuntan al archivo.
-        return /^\s*["']use client["']/.test(t) && /from\s+["'][^"']*pagos-flag["']/.test(t);
+        return /^\s*["']use client["']/.test(t) && /from\s+["'](?:[^"']*pagos-flag|@\/flags)["']/.test(t);
       });
     expect(culpables).toEqual([]);
   });

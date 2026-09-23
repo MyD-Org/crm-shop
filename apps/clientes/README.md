@@ -37,16 +37,30 @@ Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
 | `SHOP_TENANT_ID` | Obligatoria: el Shop no arranca sin ella (falla en `src/instrumentation.ts`, salvo durante `next build`). Tiene que ser un valor de `public.tenants.id` del CRM. |
 | `CRON_SECRET` | Protege `/api/cron/catalog-sync` y `/api/cron/cuotas-sync`. Sin esta variable el endpoint rechaza todo. |
 | `ALEGRA_EMAIL` / `ALEGRA_TOKEN` | Auth Basic contra la API de Alegra. `ALEGRA_BASE_URL` es opcional (default: producción). |
-| `CUOTAS_ENABLED` | `1` muestra cuotas y aplica el límite de cuotas en el pago. Cualquier otro valor (default): checkout como antes, clamp 1..24. |
 | `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v2: escalones por proveedor). |
 | `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
-| `SHOP_CATALOGO_SOLO_VISIBLES` | `1` muestra sólo los productos publicados (`visible`) en el overlay del CRM. Cualquier otro valor (default): sin filtro de visibilidad. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
 | `SHOP_MEDIA_HOSTS` | Hosts de las fotos del overlay, separados por coma (ej. `media.plataforma.example`). Alimenta `images.remotePatterns`; sin ella las cards muestran el placeholder. Debe incluir el host de `R2_SHOP_MEDIA_PUBLIC_URL`; si no, el editor de la home rechaza las imágenes subidas. Se lee en el build y en runtime: un cambio requiere redesplegar. |
 | `R2_SHOP_MEDIA_ACCOUNT_ID` (o `R2_ACCOUNT_ID`) | Cuenta de Cloudflare del bucket público `shop-media`. Mismo par que el proyecto del CRM (rotarlo implica actualizar los dos proyectos de Vercel). |
 | `R2_SHOP_MEDIA_ACCESS_KEY_ID` | Llave de acceso para firmar las subidas a `shop-media`. Mismo par que el CRM. |
 | `R2_SHOP_MEDIA_SECRET_ACCESS_KEY` | Secreto de la llave anterior. Mismo par que el CRM. |
 | `R2_SHOP_MEDIA_BUCKET` | Bucket público (`shop-media`). Mismo par que el CRM. |
 | `R2_SHOP_MEDIA_PUBLIC_URL` | Base pública desde donde se sirven las imágenes (sin barra final; ejemplo `https://media.plataforma.example`). Mismo par que el CRM. |
+
+### Flags (Vercel Flags, sin redeploy)
+
+Los interruptores del Shop viven en Vercel Flags (`src/flags.ts`), no en variables
+de entorno: se cambian desde el dashboard del proyecto o con
+`vercel flags enable|disable <key> --environment production` y aplican en el
+próximo request. Todos arrancan apagados y, si Vercel Flags no responde, se
+sirven apagados.
+
+| Flag | Prendido |
+|---|---|
+| `pagos` | El checkout muestra "Forma de pago" (transferencia, Mercado Pago, efectivo). Apagado: sólo "a coordinar", sin cobros. |
+| `cuotas` | Muestra cuotas y aplica el límite de cuotas en el pago. Apagado: checkout sin cuotas, clamp 1..24. |
+| `catalogo-solo-visibles` | Sólo productos publicados (`visible`) en el overlay del CRM. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
+
+Los flags nuevos van en Vercel Flags, no como variable `=1`.
 
 Detalle del esquema `shop` (rol, permisos, migración base y pasos de
 despliegue): `docs/una-base-esquema-shop.md`.

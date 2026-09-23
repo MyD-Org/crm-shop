@@ -22,7 +22,6 @@ import {
   type AlegraItem,
 } from "./alegra";
 import { costoEnvio, type EntregaTipo } from "./envio";
-import { stockSimulado } from "./stock-simulado";
 
 /** Lo único que el cliente tiene derecho a elegir. */
 export interface LineaPedida {
@@ -146,22 +145,12 @@ export function cotizarItem(
   pedida: LineaPedida,
   item: AlegraItem,
   idPriceList?: string,
-  /** Ver `stockSimulado()`. Parámetro y no lectura directa del entorno, para
-   *  poder testear las dos ramas sin ensuciar `process.env`. */
-  simularStock = false,
 ): LineaCotizada {
   const categoria = item.itemCategory as { name?: string } | undefined;
   const precioUnitario = redondear(resolverPrecio(item, idPriceList));
   const ivaPorcentaje = ivaDeItem(item);
   const disponible = item.inventory?.availableQuantity;
-  const real = disponible == null ? null : Number(disponible);
-  /**
-   * Con la simulación activa, un ítem sin stock se trata como NO inventariable
-   * —igual que un servicio—, que es el camino que el código ya sabe manejar.
-   * No se inventa una cantidad: se dice "no aplica", que es más honesto y no
-   * abre una rama nueva que en producción nunca correría.
-   */
-  const stockDisponible = simularStock && (real === null || real <= 0) ? null : real;
+  const stockDisponible = disponible == null ? null : Number(disponible);
 
   const subtotal = redondear(precioUnitario * pedida.qty);
   const iva = redondear(subtotal * (ivaPorcentaje / 100));
@@ -209,22 +198,13 @@ export async function cotizar(
   pedidas: LineaPedida[],
   opts: { idPriceList?: string; entregaTipo?: EntregaTipo } = {},
 ): Promise<Cotizacion> {
-  const simular = stockSimulado();
-  if (simular) {
-    // Ruidoso a propósito: que nadie se pregunte por qué hay stock donde Alegra
-    // dice que no hay.
-    console.warn(
-      "[cotizacion] SHOP_STOCK_SIMULADO activo: la disponibilidad NO es la real de Alegra.",
-    );
-  }
-
   const lineas = await mapConcurrente(pedidas, CONCURRENCIA, async (pedida) => {
     try {
       const item = await getItem(pedida.id);
       if (!item?.id) {
         return lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
       }
-      return cotizarItem(pedida, item, opts.idPriceList, simular);
+      return cotizarItem(pedida, item, opts.idPriceList);
     } catch (err) {
       console.error(`[cotizacion] ${pedida.id}:`, err);
       return lineaRota(

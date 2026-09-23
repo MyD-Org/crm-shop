@@ -8,9 +8,11 @@
  * CRM deja la tienda VACÍA. Por eso el default es apagado y se enciende sólo
  * con la curaduría hecha (ver docs/catalogo-overlay.md).
  *
- * Se lee sólo en el server. Explícito a propósito (patrón de cuotas-flag.ts):
- * sólo "1" enciende.
+ * Se lee sólo en el server. Vive en Vercel Flags (key `catalogo-solo-visibles`,
+ * ver src/flags.ts): se cambia sin redeploy.
  */
-export function catalogoSoloVisibles(): boolean {
-  return process.env.SHOP_CATALOGO_SOLO_VISIBLES === "1";
+import { catalogoSoloVisiblesFlag } from "@/flags";
+
+export async function catalogoSoloVisibles(): Promise<boolean> {
+  return catalogoSoloVisiblesFlag();
 }

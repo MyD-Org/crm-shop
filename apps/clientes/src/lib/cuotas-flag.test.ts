@@ -1,22 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { setFlag } from "@/test/flags";
 import { cuotasHabilitadas } from "./cuotas-flag";
 
+/** Lee el flag `cuotas` de Vercel Flags (mockeado en src/test/setup-flags.ts). */
 describe("cuotasHabilitadas", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
+  it("apagado por defecto", async () => {
+    expect(await cuotasHabilitadas()).toBe(false);
   });
 
-  it("apagado por defecto", () => {
-    vi.stubEnv("CUOTAS_ENABLED", undefined as unknown as string);
-    expect(cuotasHabilitadas()).toBe(false);
-  });
-
-  it("sólo '1' lo enciende", () => {
-    vi.stubEnv("CUOTAS_ENABLED", "1");
-    expect(cuotasHabilitadas()).toBe(true);
-    for (const v of ["0", "true", "yes", ""]) {
-      vi.stubEnv("CUOTAS_ENABLED", v);
-      expect(cuotasHabilitadas()).toBe(false);
-    }
+  it("refleja el valor del flag", async () => {
+    setFlag("cuotas", true);
+    expect(await cuotasHabilitadas()).toBe(true);
   });
 });

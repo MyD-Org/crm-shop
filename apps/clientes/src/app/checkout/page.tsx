@@ -42,7 +42,7 @@ export default async function CheckoutPage() {
   // El flag de pagos se lee acá, en el server, y al checkout le llega como
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
-  const pagos = pagosHabilitados();
+  const pagos = await pagosHabilitados();
   const [perfil, oferta, direcciones] = await Promise.all([
     clerkUserId ? getPerfilFacturacion(clerkUserId) : null,
     pagos ? getOfertaCuotas() : null,

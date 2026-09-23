@@ -98,9 +98,7 @@ export function etiquetaStock(p: Pick<Product, "stock" | "stockQty">): string | 
 
 /**
  * Cantidad que se puede mostrar: conocida y mayor a cero, y sólo si el
- * producto no figura sin stock. Con la simulación de stock (`stockSimulado()`)
- * un producto con 0 o menos figura disponible: la cantidad no se muestra,
- * para no decir "En stock — 0 disponibles".
+ * producto no figura sin stock.
  */
 function unidadesPositivas(p: Pick<Product, "stock" | "stockQty">): number | undefined {
   const n = p.stockQty;

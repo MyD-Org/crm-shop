@@ -20,5 +20,5 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
   const pedido = await getPedido(id, { clerkUserId, clienteCodigo: cliente?.codigocliente });
   if (!pedido) notFound();
 
-  return <PedidoDetalle pedido={pedido} pagosHabilitados={pagosHabilitados()} />;
+  return <PedidoDetalle pedido={pedido} pagosHabilitados={await pagosHabilitados()} />;
 }

@@ -7,7 +7,14 @@ import { RefreshCw, ShoppingBag } from "lucide-react"
 import { Badge, Button, EmptyState, Select, Table, type TableColumn } from "@myd-org/ui"
 import type { PedidoListaDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
-import { entregaLabel, fmtFechaPedido, fmtMoneda, pagoMetodoLabel, tonoEstado } from "./format"
+import {
+  PAGO_REVISION_INFO,
+  entregaLabel,
+  fmtFechaPedido,
+  fmtMoneda,
+  pagoMetodoLabel,
+  tonoEstado,
+} from "./format"
 import { FILTRO_TODOS, opcionesDeFiltro, queryDeLista, textoRango, type FiltroEstado } from "./logica"
 
 interface ListaResponse {
@@ -136,6 +143,11 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
           {p.requiereRevision && (
             <span title="Los datos de facturación de este pedido requieren revisión.">
               <Badge tone="warning">Revisar</Badge>
+            </span>
+          )}
+          {p.pagoRevision && (
+            <span title={PAGO_REVISION_INFO[p.pagoRevision].detalle}>
+              <Badge tone="danger">{PAGO_REVISION_INFO[p.pagoRevision].label}</Badge>
             </span>
           )}
         </div>

@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { getPedidoParaPago, registrarCobro, registrarIntentoFallido } from "@/lib/pedidos";
-import { MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos";
+import {
+  getPedidoParaPago,
+  motivoNoCobrable,
+  registrarCobro,
+  registrarIntentoFallido,
+  reservarIntento,
+} from "@/lib/pedidos";
+import { ErrorProveedor, MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos";
+import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { mercadoPago, urlNotificacion } from "@/lib/pagos/mercadopago";
 import { permitir } from "@/lib/rate-limit";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
@@ -21,6 +28,13 @@ interface Body {
   metodoPagoId?: unknown;
   medio?: unknown;
 }
+
+/** Pedido cancelado, tomado por un operador o vencido. Ver `motivoNoCobrable`. */
+const NO_COBRABLE = {
+  error:
+    "Este pedido ya no se puede pagar en línea. Si todavía desea la compra, genere un pedido nuevo desde el carrito.",
+  motivo: "pedido_no_cobrable",
+};
 
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -58,7 +72,7 @@ export async function POST(req: Request) {
   const clave = `pago:${clerkUserId ?? cliente?.codigocliente}`;
   if (!permitir(clave, MAX_INTENTOS, VENTANA_MS)) {
     return NextResponse.json(
-      { error: "Demasiados intentos de pago. Esperá unos minutos." },
+      { error: "Demasiados intentos de pago. Espere unos minutos." },
       { status: 429 },
     );
   }
@@ -107,6 +121,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ estado: "pagado", yaEstaba: true });
   }
 
+  // Un pedido cancelado, ya tomado por un operador o demasiado viejo no se
+  // cobra: el total congelado puede no valer más, o el pedido ya no existe
+  // para nadie. Mismo corte temprano: sin tocar Mercado Pago.
+  if (motivoNoCobrable(pedido)) {
+    return NextResponse.json(NO_COBRABLE, { status: 409 });
+  }
+
   const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
 
   /**
@@ -129,6 +150,37 @@ export async function POST(req: Request) {
     );
   }
   const cuotas = validacion.cuotas;
+
+  /**
+   * Un intento a la vez. Si hay otro abierto se intenta cerrarlo (cancelándolo
+   * en Mercado Pago); si no se puede, el comprador espera. Dos pagos abiertos
+   * pueden aprobarse los dos.
+   */
+  let reserva = await reservarIntento(pedido.id, mercadoPago.id, medio);
+  if (reserva && "abierto" in reserva) {
+    const resolucion = await resolverIntentoAbierto(pedido.id, reserva.abierto, mercadoPago);
+    if (resolucion === "pagado") {
+      return NextResponse.json({ estado: "pagado", yaEstaba: true });
+    }
+    reserva = resolucion === "libre" ? await reservarIntento(pedido.id, mercadoPago.id, medio) : reserva;
+  }
+  if (!reserva) {
+    return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
+  }
+  if ("noCobrable" in reserva) {
+    return NextResponse.json(NO_COBRABLE, { status: 409 });
+  }
+  if ("abierto" in reserva) {
+    return NextResponse.json(
+      {
+        error:
+          "Ya hay un pago en proceso para este pedido. Espere unos minutos a que se confirme antes de intentarlo de nuevo.",
+        motivo: "pago_en_curso",
+      },
+      { status: 409 },
+    );
+  }
+  const { intentoId } = reserva;
 
   try {
     const resultado = await mercadoPago.crearPago({
@@ -163,15 +215,19 @@ export async function POST(req: Request) {
         : {}),
     });
 
-    await registrarCobro(pedido.id, {
-      proveedor: mercadoPago.id,
-      referencia: resultado.referencia,
-      estado: resultado.estado,
-      detalle: resultado.detalle,
-      medio,
-      cuotas: resultado.cuotasPagadas,
-      totalPagado: resultado.totalPagado,
-    });
+    await registrarCobro(
+      pedido.id,
+      {
+        proveedor: mercadoPago.id,
+        referencia: resultado.referencia,
+        estado: resultado.estado,
+        detalle: resultado.detalle,
+        medio,
+        cuotas: resultado.cuotasPagadas,
+        totalPagado: resultado.totalPagado,
+      },
+      { intentoId },
+    );
 
     /**
      * Se responde el estado traducido, nunca el crudo de Mercado Pago: sus
@@ -192,13 +248,21 @@ export async function POST(req: Request) {
     console.error("[/api/pagos/mercadopago] error:", err);
     // Deja rastro del intento fallido. Sin esto el pedido queda en `pendiente`
     // sin ninguna señal de que alguien trató de pagar y no pudo.
+    //
+    // La reserva se cierra sólo si Mercado Pago RESPONDIÓ con un rechazo del
+    // request (4xx): ahí es seguro que no hay pago. Con un timeout o un 5xx el
+    // pago pudo haberse creado igual; la reserva queda abierta para que la
+    // reclame el webhook, y si no llega nada se da por abandonada a los pocos
+    // minutos (`RESERVA_ABANDONADA_MS`).
+    const sinPago = err instanceof ErrorProveedor && err.status < 500;
     await registrarIntentoFallido(
       pedido.id,
       err instanceof Error ? err.message : String(err),
+      sinPago ? intentoId : undefined,
     ).catch((e) => console.error("[/api/pagos/mercadopago] no se pudo registrar el intento:", e));
 
     return NextResponse.json(
-      { error: "No pudimos procesar el pago. Probá de nuevo en un momento." },
+      { error: "No pudimos procesar el pago. Inténtelo de nuevo en un momento." },
       { status: 502 },
     );
   }

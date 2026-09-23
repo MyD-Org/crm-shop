@@ -12,10 +12,15 @@ vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
 }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
-vi.mock("@/lib/pedidos", () => ({
+vi.mock("@/lib/pedidos", async (original) => ({
+  motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
+  reservarIntento: async () => ({ intentoId: "i1" }),
   getPedidoParaPago: async () => pedido,
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
   registrarIntentoFallido: async () => undefined,
+}));
+vi.mock("@/lib/pagos/intento-abierto", () => ({
+  resolverIntentoAbierto: async () => "en_curso",
 }));
 vi.mock("@/lib/pagos/mercadopago", () => ({
   mercadoPago: { id: "mercadopago", crearPago: (...a: unknown[]) => crearPago(...a) },
@@ -41,7 +46,7 @@ beforeEach(() => {
   pedido = {
     id: "p1", numero: "PED-1", total: 120000, pagoEstado: "pendiente", pagoMetodo: "mercadopago",
     clienteEmail: "a@b.com", facturacionTipoDoc: null, facturacionNroDoc: null,
-    cuotasMax: 3,
+    cuotasMax: 3, estado: "pendiente", creadoEn: new Date(),
   };
   crearPago.mockReset();
   crearPago.mockResolvedValue({ estado: "pagado", referencia: "r1", detalle: "accredited" });

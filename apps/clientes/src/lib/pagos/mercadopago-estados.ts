@@ -85,6 +85,8 @@ export interface RespuestaMercadoPago {
   id?: number | string;
   status?: string;
   status_detail?: string;
+  /** Lo que mandamos al crear el pago: el id de nuestro pedido. */
+  external_reference?: string | null;
   three_ds_info?: { external_resource_url?: string; creq?: string };
   /** Cuotas con las que se cobró (las que eligió el comprador en el Brick). */
   installments?: number;

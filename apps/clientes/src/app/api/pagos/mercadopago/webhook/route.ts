@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { ErrorProveedor, type EstadoPago } from "@/lib/pagos";
 import { mercadoPago } from "@/lib/pagos/mercadopago";
-import { pedidoPorReferencia, registrarCobro } from "@/lib/pedidos";
+import { pedidoDelPago, registrarCobro } from "@/lib/pedidos";
 
 export const dynamic = "force-dynamic";
 
@@ -36,22 +37,41 @@ export async function POST(req: Request) {
   }
 
   try {
-    const pedido = await pedidoPorReferencia(referencia);
+    let pedido = await pedidoDelPago(mercadoPago.id, referencia);
+
+    // El payload solo dijo QUÉ mirar. El estado real se le pregunta a MP con
+    // nuestro Access Token.
+    let estado: EstadoPago;
+    try {
+      estado = await mercadoPago.consultarPago(referencia);
+    } catch (err) {
+      /**
+       * Un 404 de MP es un id que no existe para esta cuenta: pruebas desde el
+       * panel, eventos de otros topics. Reintentarlo es ruido infinito. Con
+       * cualquier otro error sí conviene que MP reintente (cae al 500).
+       */
+      if (err instanceof ErrorProveedor && err.status === 404 && !pedido) {
+        console.warn(`[webhook mp] referencia inexistente en MP: ${referencia}`);
+        return NextResponse.json({ ok: true, ignorado: "referencia desconocida" });
+      }
+      throw err;
+    }
 
     /**
-     * Referencia desconocida. Pasa de forma legítima: eventos de otros topics,
-     * pruebas desde el panel de MP, o la notificación de creación que llega
-     * antes de que terminemos de persistir la referencia. No es un error
-     * nuestro y no tiene sentido que MP lo reintente para siempre.
+     * La base no conoce este pago: se busca el pedido por el
+     * `external_reference` que informa MP. Así se rescata un intento viejo que
+     * se aprueba después de que el comprador reintentó, o uno cuya respuesta
+     * de creación nunca llegó a guardarse. Antes esto se descartaba, y quedaba
+     * un pago cobrado sin registrar.
      */
+    pedido ??= await pedidoDelPago(mercadoPago.id, referencia, estado.pedidoId);
+
+    // Sigue sin pedido: es de otro entorno (dev y prod comparten la cuenta de
+    // MP) o de algo que no es un pedido del Shop. No es un error nuestro.
     if (!pedido) {
       console.warn(`[webhook mp] referencia sin pedido: ${referencia}`);
       return NextResponse.json({ ok: true, ignorado: "referencia desconocida" });
     }
-
-    // El payload solo dijo QUÉ mirar. El estado real se le pregunta a MP con
-    // nuestro Access Token.
-    const estado = await mercadoPago.consultarPago(referencia);
 
     const cambio = await registrarCobro(pedido.id, {
       proveedor: mercadoPago.id,

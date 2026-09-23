@@ -8,6 +8,7 @@ import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
 import { CambiarEstadoControl } from "./CambiarEstadoControl"
 import {
+  PAGO_REVISION_INFO,
   condicionIvaLabel,
   entregaLabel,
   fmtCantidad,
@@ -134,10 +135,18 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
               <Badge tone="warning">Revisar</Badge>
             </span>
           )}
+          {pedido.pagoRevision && (
+            <Badge tone="danger">{PAGO_REVISION_INFO[pedido.pagoRevision].label}</Badge>
+          )}
         </div>
         <p className="text-sm mt-0.5" style={{ color: "var(--ink-soft)" }}>
           Realizado el {fmtFechaPedido(pedido.creadoEn)}
         </p>
+        {pedido.pagoRevision && (
+          <p role="alert" className="mt-2 text-sm text-danger">
+            {PAGO_REVISION_INFO[pedido.pagoRevision].detalle}
+          </p>
+        )}
       </div>
 
       <Seccion titulo="Estado del pedido">

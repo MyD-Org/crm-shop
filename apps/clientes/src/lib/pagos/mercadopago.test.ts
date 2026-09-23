@@ -191,3 +191,53 @@ describe("interpretar — cuotas reales (L9)", () => {
     expect(r.totalPagado).toBeUndefined();
   });
 });
+
+describe("interpretar — pedido del pago (external_reference)", () => {
+  it("expone el pedido que MP dice que tiene el pago", () => {
+    const r = interpretar({ id: 9, status: "approved", external_reference: "pedido-1" });
+    expect(r.pedidoId).toBe("pedido-1");
+  });
+
+  it("sin external_reference no inventa uno", () => {
+    expect(interpretar({ id: 9, status: "approved" }).pedidoId).toBeUndefined();
+    expect(interpretar({ id: 9, status: "approved", external_reference: null }).pedidoId).toBeUndefined();
+  });
+});
+
+import { afterEach, vi } from "vitest";
+import { mercadoPago } from "./mercadopago";
+import { ErrorProveedor } from "./tipos";
+
+describe("mercadoPago.cancelarPago / errores HTTP", () => {
+  const fetchMock = vi.fn();
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    fetchMock.mockReset();
+  });
+
+  const conRespuesta = (status: number, cuerpo: unknown) => {
+    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(cuerpo), { status }));
+    vi.stubGlobal("fetch", fetchMock);
+  };
+
+  it("cancela con un PUT status=cancelled sobre el pago", async () => {
+    conRespuesta(200, { id: 7, status: "cancelled", status_detail: "by_collector" });
+    const r = await mercadoPago.cancelarPago("7");
+    expect(r.estado).toBe("fallido");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.mercadopago.com/v1/payments/7");
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(init.body)).toEqual({ status: "cancelled" });
+  });
+
+  it("un error HTTP conserva el status, para distinguir un 404 de una caída", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    conRespuesta(404, { message: "not found" });
+    const err = await mercadoPago.consultarPago("123").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ErrorProveedor);
+    expect((err as ErrorProveedor).status).toBe(404);
+  });
+});

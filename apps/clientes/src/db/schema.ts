@@ -423,6 +423,16 @@ export const orders = shop.table(
     pagoCuotas: integer("pago_cuotas"),
     /** Total pagado real (con interés) según el proveedor. `total` no cambia. */
     pagoTotalPagado: numeric("pago_total_pagado", { precision: 14, scale: 2 }),
+    /**
+     * Pago que un operador tiene que revisar, o null si está todo en orden:
+     * - `cobro_duplicado`: más de un intento aprobado; hay que devolver el
+     *   excedente.
+     * - `pagado_cancelado`: se aprobó un pago de un pedido ya cancelado; hay que
+     *   devolverlo o reactivar el pedido.
+     * Lo recalcula `registrarCobro` en cada evento: al procesarse la devolución
+     * en Mercado Pago, la marca se va sola. Lo lee el CRM.
+     */
+    pagoRevision: text("pago_revision"),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -452,6 +462,10 @@ export const orders = shop.table(
     check(
       "orders_estado_check",
       sql`${t.estado} in ('pendiente','confirmado','preparacion','en_camino','entregado','cancelado')`,
+    ),
+    check(
+      "orders_pago_revision_check",
+      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado')`,
     ),
     // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
     check(
@@ -488,6 +502,57 @@ export const orderItems = shop.table(
     total: numeric("total", { precision: 14, scale: 2 }).notNull(),
   },
   (t) => [index("order_items_order").on(t.orderId)],
+);
+
+/**
+ * Un intento de cobro por fila. Un pedido puede tener varios: el comprador
+ * reintenta con otra tarjeta, abandona un 3DS, etc.
+ *
+ * Existe porque `orders.pago_referencia` guarda UNA sola referencia y cada
+ * intento la pisaba: si el primer pago quedaba pendiente y se aprobaba después
+ * del segundo intento, el webhook ya no lo reconocía y la plata cobrada no
+ * llegaba al pedido. Las columnas `pago_*` de `orders` siguen existiendo como
+ * RESUMEN (las lee el CRM); la verdad de cada intento vive acá.
+ *
+ * `referencia` es null mientras el intento está reservado y todavía no volvió
+ * la respuesta del proveedor.
+ */
+export const pagoIntentos = shop.table(
+  "pago_intentos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    proveedor: text("proveedor").notNull(),
+    /** Id del pago en el proveedor. null = reservado, sin respuesta todavía. */
+    referencia: text("referencia"),
+    /** 'pendiente' | 'pagado' | 'fallido', igual que `orders.pago_estado`. */
+    estado: text("estado").notNull().default("pendiente"),
+    detalle: text("detalle"),
+    medio: text("medio"),
+    cuotas: integer("cuotas"),
+    totalPagado: numeric("total_pagado", { precision: 14, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Idempotencia del webhook: el mismo pago nunca genera dos filas.
+    uniqueIndex("pago_intentos_referencia")
+      .on(t.proveedor, t.referencia)
+      .where(sql`${t.referencia} is not null`),
+    // "Un solo intento abierto por pedido" NO va como índice único: el webhook
+    // puede recuperar un intento viejo que sigue pendiente, y ese insert
+    // chocaría. La exclusión la da `reservarIntento`, que bloquea la fila del
+    // pedido antes de mirar los intentos abiertos.
+    index("pago_intentos_order").on(t.orderId),
+    index("pago_intentos_tenant_estado").on(t.tenantId, t.estado),
+    check(
+      "pago_intentos_estado_check",
+      sql`${t.estado} in ('pendiente','pagado','fallido')`,
+    ),
+  ],
 );
 
 /** Bitácora de cada corrida de sync: observabilidad y "última sincronización". */

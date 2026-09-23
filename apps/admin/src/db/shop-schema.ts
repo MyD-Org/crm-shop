@@ -62,6 +62,8 @@ export const shopOrders = shop.table("orders", {
   // --- Pago (el CRM sólo lo muestra; no lo modifica) ---
   pagoMetodo: text("pago_metodo").notNull(),
   pagoEstado: text("pago_estado").notNull().default("pendiente"),
+  // 'cobro_duplicado' | 'pagado_cancelado' | null. Lo escribe el Shop al registrar cada cobro.
+  pagoRevision: text("pago_revision"),
 
   // --- Estado + auditoría del último cambio ---
   estado: text("estado").notNull().default("pendiente"),

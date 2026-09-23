@@ -6,6 +6,7 @@
 // server (UTC) y otra en el navegador (-03) y React lo marca como hydration mismatch.
 
 import type { BadgeTone } from "@myd-org/ui"
+import type { PagoRevision } from "@/lib/pedidos-repo"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
 import { fmtMonto } from "../comprobantes/format"
 
@@ -118,4 +119,16 @@ export function textoUltimoCambio(nombre: string | null, iso: string | null): st
   const fecha = fmtFechaPedido(iso)
   const quien = nombre?.trim()
   return quien ? `por ${quien} el ${fecha}` : `el ${fecha}`
+}
+
+/** Etiqueta y explicación del pago a revisar. Mismo texto en el listado y en el detalle. */
+export const PAGO_REVISION_INFO: Record<PagoRevision, { label: string; detalle: string }> = {
+  cobro_duplicado: {
+    label: "Cobro duplicado",
+    detalle: "Este pedido se cobró más de una vez. Revise los pagos en Mercado Pago y devuelva el excedente.",
+  },
+  pagado_cancelado: {
+    label: "Pagado y cancelado",
+    detalle: "Se aprobó un pago de este pedido cancelado. Devuelva el pago en Mercado Pago o reactive el pedido.",
+  },
 }

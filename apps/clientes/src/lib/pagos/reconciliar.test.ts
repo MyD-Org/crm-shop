@@ -25,22 +25,24 @@ afterEach(() => {
 });
 
 describe("reconciliarPagosPendientes", () => {
-  it("solo busca candidatos del tenant de este Shop, en el esquema shop", async () => {
+  it("solo busca intentos del tenant de este Shop, en el esquema shop", async () => {
     const r = await reconciliarPagosPendientes();
     expect(r).toEqual({ revisados: 0, actualizados: 0, errores: 0 });
 
     const { sql, params } = grabadora.consultas[0];
-    expect(sql).toContain('from "shop"."orders"');
-    const m = sql.match(/"orders"\."tenant_id" = \$(\d+)/);
+    expect(sql).toContain('from "shop"."pago_intentos"');
+    const m = sql.match(/"pago_intentos"\."tenant_id" = \$(\d+)/);
     expect(m, "falta el filtro por tenant").not.toBeNull();
     expect(params[Number(m![1]) - 1]).toBe("tenant-a");
   });
 
-  it("sigue exigiendo proveedor y referencia: un pedido sin cobro iniciado no entra", async () => {
+  it("recorre intentos, no pedidos: un intento viejo abierto también se consulta", async () => {
     await reconciliarPagosPendientes();
     const { sql } = grabadora.consultas[0];
-    expect(sql).toContain('"orders"."pago_proveedor" =');
-    expect(sql).toContain('"orders"."pago_referencia" is not null');
+    expect(sql).not.toContain('"shop"."orders"');
+    expect(sql).toContain('"pago_intentos"."estado" =');
+    expect(sql).toContain('"pago_intentos"."proveedor" =');
+    expect(sql).toContain('"pago_intentos"."referencia" is not null');
   });
 
   it("sin SHOP_TENANT_ID no consulta nada", async () => {

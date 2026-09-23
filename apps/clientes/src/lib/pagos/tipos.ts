@@ -103,6 +103,13 @@ export interface EstadoPago {
   estado: PagoEstado;
   /** Id del pago en el proveedor. Lo que hace idempotente al webhook. */
   referencia: string;
+  /**
+   * Pedido al que pertenece el pago, según el propio proveedor (lo mandamos
+   * nosotros al crearlo). Es el respaldo del webhook para un pago cuya
+   * referencia no está en la base: sin esto, un intento viejo que se aprueba
+   * tarde se descartaba como "referencia desconocida".
+   */
+  pedidoId?: string;
   /** Código crudo del proveedor, sin traducir. Para poder diagnosticar. */
   detalle: string;
   /** Solo cuando `estado === "fallido"`. */
@@ -156,6 +163,12 @@ export interface ProveedorPago {
   crearPago(datos: DatosPago): Promise<EstadoPago>;
   consultarPago(referencia: string): Promise<EstadoPago>;
   /**
+   * Cancela un pago que todavía no se resolvió. Lo usa la ruta de cobro antes
+   * de permitir un intento nuevo: con dos pagos abiertos a la vez, los dos se
+   * pueden aprobar y el comprador paga dos veces. Devuelve el estado final.
+   */
+  cancelarPago(referencia: string): Promise<EstadoPago>;
+  /**
    * Valida la firma del webhook y devuelve la referencia a consultar. Nunca
    * devuelve el estado: el payload no es fuente de verdad, solo dice qué ID
    * mirar.
@@ -164,4 +177,19 @@ export interface ProveedorPago {
     req: Request,
     cuerpo: string,
   ): Promise<{ valido: boolean; referencia?: string }>;
+}
+
+/**
+ * El proveedor respondió con un error HTTP. Lleva el status para que quien
+ * llama distinga "ese pago no existe" (404: no tiene sentido reintentar) de
+ * "no pude ahora" (5xx, red: sí).
+ */
+export class ErrorProveedor extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ErrorProveedor";
+  }
 }

@@ -50,6 +50,8 @@ export function DatosCuenta({
       >
         <FacturacionForm
           perfil={perfilFacturacion}
+          // Vinculado: la razón social la manda el sistema, no se sugiere nada.
+          nombreSugerido={vinculado ? undefined : nombre}
           bloqueado={vinculado}
           onGuardado={() => router.refresh()}
         />

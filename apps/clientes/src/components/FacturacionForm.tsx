@@ -85,8 +85,10 @@ const VACIO: DatosFacturacion = {
   telefono: "",
 };
 
-function desdePerfil(p: PerfilFacturacionUI | null): DatosFacturacion {
-  if (!p) return VACIO;
+/** Sin perfil guardado arranca vacío, salvo el nombre: el de la cuenta (el
+ *  de Google, si entró con Google) como sugerencia editable. */
+function desdePerfil(p: PerfilFacturacionUI | null, nombreSugerido?: string): DatosFacturacion {
+  if (!p) return { ...VACIO, razonSocial: nombreSugerido?.trim() ?? "" };
   return {
     // Los perfiles anteriores al campo son todos argentinos.
     pais: (p.pais as Pais) ?? PAIS_DEFAULT,
@@ -107,15 +109,18 @@ function desdePerfil(p: PerfilFacturacionUI | null): DatosFacturacion {
 
 export function FacturacionForm({
   perfil,
+  nombreSugerido,
   bloqueado,
   onGuardado,
 }: {
   perfil: PerfilFacturacionUI | null;
+  /** Precarga "Nombre y apellido" cuando todavía no hay perfil guardado. */
+  nombreSugerido?: string;
   /** Vinculado a Alegra: los datos los manda el sistema, no el cliente. */
   bloqueado?: boolean;
   onGuardado?: () => void;
 }) {
-  const [form, setForm] = useState<DatosFacturacion>(desdePerfil(perfil));
+  const [form, setForm] = useState<DatosFacturacion>(desdePerfil(perfil, nombreSugerido));
   /**
    * ¿Hay una dirección ya resuelta? Controla si se muestran ciudad, provincia
    * y CP, que arrancan ocultos: primero una sola línea, y el resto aparece

@@ -55,7 +55,9 @@ export function MiCuentaShell({
       </h1>
       <p className="mt-1 text-sm text-muted">{bajadaMiCuenta()}</p>
       <div className="mt-8 flex flex-col gap-6 md:flex-row">
-        <Card className="w-full min-w-0 p-2 md:w-64 md:shrink-0 md:self-start">
+        {/* Desde md la navegación queda a la vista al scrollear, debajo de la
+            barra compacta del header (mismo top que los filtros del catálogo). */}
+        <Card className="w-full min-w-0 p-2 md:sticky md:top-20 md:w-64 md:shrink-0 md:self-start">
           <SectionNav ariaLabel="Secciones de su cuenta" items={items} renderLink={linkNext} />
         </Card>
         <div className="min-w-0 flex-1">{children}</div>

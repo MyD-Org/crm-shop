@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button, Switch } from "@myd-org/ui";
-import type { HomeContent, NavBadgeContent, SeccionHome } from "@/data/home-defaults";
+import { visibilidadDe, type HomeContent, type MapaVisibilidad, type NavBadgeContent, type Visibilidad } from "@/data/home-defaults";
 import { useModoEdicion } from "./ModoEdicion";
 import { DialogoSeccion } from "./DialogoSeccion";
 
@@ -10,21 +10,29 @@ import { DialogoSeccion } from "./DialogoSeccion";
  * Barra fija de modo edición, solo se monta si `puedeEditar` (ver
  * `src/app/page.tsx`). "Anuncio" y "Badge del menú" abren el Dialog de esas
  * dos secciones (no viven en `HomeClient.tsx`, así que no pasan por
- * `SeccionEditable`). Si están ocultas, el botón lo avisa: no hay otro
+ * `SeccionEditable`). Si están restringidas, el botón lo avisa: no hay otro
  * lugar donde se vea.
  */
+const SUFIJO: Record<Visibilidad, string> = {
+  siempre: "",
+  desktop: " (solo desktop)",
+  mobile: " (solo mobile)",
+  nunca: " (oculto)",
+};
 export function BarraEdicion({
   anuncio,
   navBadge,
-  ocultas,
+  visibilidad,
 }: {
   anuncio: HomeContent["anuncio"];
   navBadge: NavBadgeContent | null;
-  ocultas: readonly SeccionHome[];
+  visibilidad: MapaVisibilidad;
 }) {
   const { activo, setActivo } = useModoEdicion();
   const [abrirAnuncio, setAbrirAnuncio] = useState(false);
   const [abrirNavBadge, setAbrirNavBadge] = useState(false);
+  const vAnuncio = visibilidadDe(visibilidad, "anuncio");
+  const vNavBadge = visibilidadDe(visibilidad, "navBadge");
 
   return (
     <div
@@ -33,13 +41,13 @@ export function BarraEdicion({
     >
       <Switch label="Modo edición" checked={activo} onCheckedChange={setActivo} />
       <Button variant="outline" size="sm" onClick={() => setAbrirAnuncio(true)}>
-        {ocultas.includes("anuncio") ? "Anuncio (oculto)" : "Anuncio"}
+        {`Anuncio${SUFIJO[vAnuncio]}`}
       </Button>
       <Button variant="outline" size="sm" onClick={() => setAbrirNavBadge(true)}>
-        {ocultas.includes("navBadge") ? "Badge del menú (oculto)" : "Badge del menú"}
+        {`Badge del menú${SUFIJO[vNavBadge]}`}
       </Button>
-      <DialogoSeccion seccion="anuncio" inicial={anuncio} oculta={ocultas.includes("anuncio")} open={abrirAnuncio} onOpenChange={setAbrirAnuncio} />
-      <DialogoSeccion seccion="navBadge" inicial={navBadge} oculta={ocultas.includes("navBadge")} open={abrirNavBadge} onOpenChange={setAbrirNavBadge} />
+      <DialogoSeccion seccion="anuncio" inicial={anuncio} visibilidad={vAnuncio} open={abrirAnuncio} onOpenChange={setAbrirAnuncio} />
+      <DialogoSeccion seccion="navBadge" inicial={navBadge} visibilidad={vNavBadge} open={abrirNavBadge} onOpenChange={setAbrirNavBadge} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Providers } from "@/components/Providers";
 import { Header } from "@/components/HeaderServer";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getContenidoHome } from "@/lib/home-datos";
+import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
 import { identidadActual } from "@/lib/auth";
 import { HEADER_TEMA, TEMA_COOKIE } from "@/lib/tema-ip";
 import "./globals.css";
@@ -69,7 +70,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Anuncio global: contenido administrable del CRM (mismo contrato que la home).
-  const { anuncio, ocultas } = await getContenidoHome();
+  const { anuncio, visibilidad } = await getContenidoHome();
+  const vAnuncio = visibilidadDe(visibilidad, "anuncio");
   // Favoritos se guardan por usuario de Clerk: quien entra sólo con la cookie
   // del CRM no tiene dónde guardarlos y no ve el corazón. `identidadActual`
   // está en `cache()`: el Header la resuelve en el mismo request.
@@ -100,12 +102,10 @@ export default async function RootLayout({
         <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
           <Providers favoritosBloqueados={favoritosBloqueados}>
             {/* Anuncio global (contenido administrable): arriba de todo, sobre el header.
-                Oculto desde el editor o sin texto ⇒ no se muestra a nadie (se vuelve a
-                mostrar desde "Anuncio" en la barra de edición).
-                En mobile (< md) no se muestra: el texto ocupa varias filas.
-                Queda así hasta que el anuncio sea un carrusel de mensajes. */}
-            {ocultas.includes("anuncio") || !anuncio.texto ? null : (
-              <div className="hidden bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary md:block">
+                Dónde se ve lo decide el editor (default: solo desktop, porque en
+                mobile el texto ocupa varias filas hasta que sea un carrusel). */}
+            {vAnuncio === "nunca" || !anuncio.texto ? null : (
+              <div className={`bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary ${clasesVisibilidad(vAnuncio)}`}>
                 {anuncio.texto}
               </div>
             )}

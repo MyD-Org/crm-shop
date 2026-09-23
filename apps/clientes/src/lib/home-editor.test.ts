@@ -80,9 +80,14 @@ describe("normalizarPayload", () => {
     expect(r.imagenes).toEqual(DEFAULTS_HOME.destacados.imagenes);
   });
 
-  it("marquee descarta items vacíos", () => {
-    const r = normalizarPayload("marquee", { items: ["A", " ", "B"] }) as { items: string[] };
-    expect(r.items).toEqual(["A", "B"]);
+  it("marquee descarta items vacíos y pasa los textos sueltos a { texto }", () => {
+    const r = normalizarPayload("marquee", { items: ["A", { texto: " " }, { texto: "B", visibilidad: "mobile" }] });
+    expect((r as { items: unknown[] }).items).toEqual([{ texto: "A" }, { texto: "B", visibilidad: "mobile" }]);
+  });
+
+  it("visibilidadTextos sin valores se descarta", () => {
+    const r = normalizarPayload("hero", { ...DEFAULTS_HOME.hero, visibilidadTextos: { titulo: undefined } }) as Record<string, unknown>;
+    expect(r.visibilidadTextos).toBeUndefined();
   });
 
   it("hero.usps descarta usps con label vacío", () => {

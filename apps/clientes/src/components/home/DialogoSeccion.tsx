@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Alert, Button, Dialog, useToast } from "@myd-org/ui";
-import type { SeccionHome } from "@/data/home-defaults";
+import { useOptimistic, useState, useTransition } from "react";
+import { Alert, Button, Dialog, SegmentedControl, useToast } from "@myd-org/ui";
+import type { SeccionHome, Visibilidad } from "@/data/home-defaults";
 import { cambiarVisibilidadSeccion, guardarSeccion, restablecerSeccion } from "@/lib/home-acciones";
 import { normalizarPayload, TITULOS_SECCION } from "@/lib/home-editor";
 import { EDITORES } from "./editores";
+import { OPCIONES_VISIBILIDAD } from "./editores/SelectorVisibilidad";
 
 /**
  * Dialog genérico por sección: monta el editor del registro `EDITORES`,
@@ -13,19 +14,31 @@ import { EDITORES } from "./editores";
  * originales". El refresco visual lo hace `revalidatePath` dentro de la
  * action (D3): este componente NUNCA llama `router.refresh()`.
  *
- * "Ocultar sección" / "Mostrar sección" se aplica al instante, aparte del
- * borrador: no guarda los cambios de contenido que estén sin guardar.
+ * "Mostrar en" (siempre / desktop / mobile / nunca) se aplica al instante,
+ * aparte del borrador: no guarda los cambios de contenido sin guardar.
  */
+const AVISO_VISIBILIDAD: Record<Visibilidad, string | null> = {
+  siempre: null,
+  desktop: "En celulares esta sección no se muestra.",
+  mobile: "En computadoras esta sección no se muestra.",
+  nunca: "Los visitantes de la tienda no ven esta sección. Puede editarla igual y mostrarla cuando quiera.",
+};
+const TOAST_VISIBILIDAD: Record<Visibilidad, string> = {
+  siempre: "La sección se muestra siempre",
+  desktop: "La sección se muestra solo en desktop",
+  mobile: "La sección se muestra solo en mobile",
+  nunca: "Sección oculta en la tienda",
+};
 export function DialogoSeccion({
   seccion,
   inicial,
-  oculta,
+  visibilidad,
   open,
   onOpenChange,
 }: {
   seccion: SeccionHome;
   inicial: unknown;
-  oculta: boolean;
+  visibilidad: Visibilidad;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -33,6 +46,8 @@ export function DialogoSeccion({
   const [errores, setErrores] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
+  // El selector cambia al toque; la prop real llega cuando revalida la home.
+  const [visibilidadVista, setVisibilidadVista] = useOptimistic(visibilidad);
 
   // Reiniciar el borrador cada vez que el Dialog pasa de cerrado a abierto
   // (patrón "ajustar estado según props" de React: durante el render, no en
@@ -73,15 +88,16 @@ export function DialogoSeccion({
     });
   }
 
-  function cambiarVisibilidad() {
+  function cambiarVisibilidad(nueva: Visibilidad) {
+    if (nueva === visibilidadVista) return;
     startTransition(async () => {
-      const r = await cambiarVisibilidadSeccion(seccion, oculta);
+      setVisibilidadVista(nueva);
+      const r = await cambiarVisibilidadSeccion(seccion, nueva);
       if (!r.ok) {
         setErrores(r.errores);
         return;
       }
-      toast({ title: oculta ? "La sección vuelve a mostrarse" : "Sección oculta en la tienda", tone: "success" });
-      onOpenChange(false);
+      toast({ title: TOAST_VISIBILIDAD[nueva], tone: "success" });
     });
   }
 
@@ -93,9 +109,6 @@ export function DialogoSeccion({
       size="lg"
       footer={
         <>
-          <Button type="button" variant="outline" onClick={cambiarVisibilidad} disabled={pending}>
-            {oculta ? "Mostrar sección" : "Ocultar sección"}
-          </Button>
           <Button type="button" variant="outline" onClick={restablecer} disabled={pending}>
             Restablecer valores originales
           </Button>
@@ -109,9 +122,19 @@ export function DialogoSeccion({
       }
     >
       <div className="flex flex-col gap-4">
-        {oculta ? (
-          <Alert tone="warning" title="Sección oculta">
-            Los visitantes de la tienda no ven esta sección. Puede editarla igual y mostrarla cuando quiera.
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-medium text-text">Mostrar en</span>
+          <SegmentedControl
+            size="sm"
+            ariaLabel="Dónde se muestra la sección"
+            options={OPCIONES_VISIBILIDAD}
+            value={visibilidadVista}
+            onValueChange={(v) => cambiarVisibilidad(v as Visibilidad)}
+          />
+        </div>
+        {AVISO_VISIBILIDAD[visibilidadVista] ? (
+          <Alert tone="warning" title={visibilidadVista === "nunca" ? "Sección oculta" : "Sección restringida"}>
+            {AVISO_VISIBILIDAD[visibilidadVista]}
           </Alert>
         ) : null}
         {errores.length > 0 ? (

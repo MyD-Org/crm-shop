@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { HERO_LIGHTS, proximity, sceneRect } from "./hero-lights";
+import { COVER_QUERY, HERO_LIGHTS, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Keeps the DS Hero and its content intact. Only the background is enhanced. */
@@ -20,6 +20,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     const host = root.current;
     const surface = scene.current;
     const motion = matchMedia("(prefers-reduced-motion: reduce)");
+    const cover = matchMedia(COVER_QUERY);
     let interrupted = false;
     let started = false;
     let frame = 0;
@@ -33,7 +34,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       paint([]);
     };
     stopIntro.current = stop;
-    const resize = new ResizeObserver(() => setRect(sceneRect(surface.clientWidth, surface.clientHeight)));
+    const resize = new ResizeObserver(() => setRect(sceneRect(surface.clientWidth, surface.clientHeight, cover.matches)));
     resize.observe(surface);
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting || entry.intersectionRatio < .35 || started || interrupted || motion.matches) return;
@@ -50,7 +51,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const bounds = surface.getBoundingClientRect();
-        const fit = sceneRect(bounds.width, bounds.height);
+        const fit = sceneRect(bounds.width, bounds.height, cover.matches);
         if (!fit.scale) return;
         const x = (event.clientX - bounds.left - fit.left) / fit.scale;
         const y = (event.clientY - bounds.top - fit.top) / fit.scale;

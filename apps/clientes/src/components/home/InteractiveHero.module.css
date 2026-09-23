@@ -11,15 +11,10 @@
 .light { transition: opacity 300ms ease-out; mix-blend-mode: screen; }
 .target { position: absolute; z-index: 0; min-width: 48px; min-height: 48px; transform: translate(-50%, -50%); border: 0; border-radius: 50%; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
 .target:focus-visible { outline: 2px solid var(--color-accent, #ad542e); outline-offset: 4px; background: #ffffff18; }
-/* Mobile: the scene is a full-width band below the content with the photo's own
-   3:2 ratio, so contain fills it edge to edge (no letterbox bands) and the SVG
-   geometry stays exact. The top edge fades into the card instead of a hard cut. */
+/* Mobile: same full-card background as any hero photo. The card is taller than
+   3:2, so cover (not contain, which would leave grey bands) anchored at
+   COVER_X in hero-lights.ts to keep most of the lamps in frame. */
 @media (max-width: 767px) {
-  .root > section { padding-bottom: calc(100% * 1024 / 1536); }
-  .root > section > img {
-    top: auto; bottom: 0; height: auto; aspect-ratio: 1536 / 1024; background: none;
-    mask-image: linear-gradient(to bottom, transparent 0, #000 10%);
-  }
-  .scene { top: auto; height: auto; aspect-ratio: 1536 / 1024; }
+  .root > section > img { object-fit: cover; object-position: 88% center; background: none; }
 }
 @media (prefers-reduced-motion: reduce) { .light { transition: none; } }

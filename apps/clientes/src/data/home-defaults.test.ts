@@ -6,10 +6,17 @@ import {
   combinarContenidoHome,
   esHref,
   esImagen,
+  aVisibleOn,
+  difierePorTamano,
+  itemsEn,
   migrarAcento,
+  migrarVisibilidad,
   sinCamposOcultos,
+  sinItemsOcultos,
+  textoVisibleOn,
   sinMarcasDeAcento,
   motivoImagenInvalida,
+  type HeroContent,
 } from "./home-defaults";
 
 const HOSTS = ["media.plataforma.example"];
@@ -358,14 +365,65 @@ describe("títulos con acento en cualquier posición y versión mobile", () => {
     expect("acento" in r.bannerDeco).toBe(false);
   });
 
-  it("camposOcultos: valida los nombres y sinCamposOcultos saca el campo y su versión mobile", () => {
+  it("camposOcultos (formato viejo) sigue validando y se lee como visibilidadTextos en \"nunca\"", () => {
     expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, camposOcultos: ["eyebrow", "titulo"] })).toEqual([]);
     expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, camposOcultos: ["imagen"] }).length).toBeGreaterThan(0);
-    const hero = { ...DEFAULTS_HOME.hero, tituloMobile: "Corto", camposOcultos: ["titulo" as const] };
+    const out = combinarContenidoHome([{ key: "hero", payload: { ...DEFAULTS_HOME.hero, camposOcultos: ["titulo"] } }]);
+    expect(out.hero.camposOcultos).toBeUndefined();
+    expect(out.hero.visibilidadTextos).toEqual({ titulo: "nunca" });
+  });
+
+  it("sinCamposOcultos saca los textos en \"nunca\" y su versión mobile; los de un solo tamaño quedan", () => {
+    const hero: HeroContent = {
+      ...DEFAULTS_HOME.hero,
+      tituloMobile: "Corto",
+      visibilidadTextos: { titulo: "nunca", bajada: "mobile" },
+    };
     const visible = sinCamposOcultos(hero);
     expect(visible.titulo).toBeUndefined();
     expect(visible.tituloMobile).toBeUndefined();
     expect(visible.bajada).toBe(DEFAULTS_HOME.hero.bajada);
+    expect(textoVisibleOn(visible, "bajada")).toBe("mobile");
+    expect(textoVisibleOn(visible, "eyebrow")).toBeUndefined();
     expect(hero.titulo).toBe(DEFAULTS_HOME.hero.titulo); // no muta
+  });
+
+  it("visibilidadTextos: sólo campos conocidos y valores desktop/mobile/nunca", () => {
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, visibilidadTextos: { eyebrow: "desktop" } })).toEqual([]);
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, visibilidadTextos: { imagen: "nunca" } }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, visibilidadTextos: { titulo: "siempre" } }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("whatsapp", { ...DEFAULTS_HOME.whatsapp, visibilidadTextos: { texto: "mobile" } })).toEqual([]);
+    expect(erroresSeccion("whatsapp", { ...DEFAULTS_HOME.whatsapp, visibilidadTextos: { bajada: "mobile" } }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("visibilidad de ítems", () => {
+  it("cada ítem de lista acepta visibilidad y rechaza valores desconocidos", () => {
+    const hero = DEFAULTS_HOME.hero;
+    expect(erroresSeccion("hero", { ...hero, ctas: [{ label: "A", href: "/a", visibilidad: "mobile" }] })).toEqual([]);
+    expect(erroresSeccion("hero", { ...hero, usps: [{ label: "A", visibilidad: "desktop" }] })).toEqual([]);
+    expect(erroresSeccion("hero", { ...hero, usps: [{ label: "A", visibilidad: "a veces" }] }).length).toBeGreaterThan(0);
+    const tile = { ...DEFAULTS_HOME.ambientes.items[0], visibilidad: "nunca" };
+    expect(erroresSeccion("ambientes", { ...DEFAULTS_HOME.ambientes, items: [tile] })).toEqual([]);
+    expect(erroresSeccion("servicios", { items: [{ titulo: "A", visibilidad: "mobile" }] })).toEqual([]);
+    expect(erroresSeccion("marquee", { items: [{ texto: "A", visibilidad: "desktop" }, "B"] })).toEqual([]);
+    expect(erroresSeccion("marquee", { items: [{ texto: "" }] }).length).toBeGreaterThan(0);
+  });
+
+  it("la cinta guardada como textos sueltos se lee como { texto }", () => {
+    const out = combinarContenidoHome([{ key: "marquee", payload: { items: ["Uno", "Dos"] } }]);
+    expect(out.marquee.items).toEqual([{ texto: "Uno" }, { texto: "Dos" }]);
+    expect(migrarVisibilidad(out.marquee)).toEqual(out.marquee); // idempotente
+  });
+
+  it("helpers: filtrar por tamaño y detectar si hace falta una versión por tamaño", () => {
+    const items = [{ id: 1 }, { id: 2, visibilidad: "mobile" as const }, { id: 3, visibilidad: "nunca" as const }];
+    expect(sinItemsOcultos(items).map((i) => i.id)).toEqual([1, 2]);
+    expect(itemsEn(items, "mobile").map((i) => i.id)).toEqual([1, 2]);
+    expect(itemsEn(items, "desktop").map((i) => i.id)).toEqual([1]);
+    expect(difierePorTamano(items)).toBe(true);
+    expect(difierePorTamano([{ id: 1 }, { id: 3, visibilidad: "nunca" as const }])).toBe(false);
+    expect(aVisibleOn("nunca")).toBeUndefined();
+    expect(aVisibleOn("desktop")).toBe("desktop");
   });
 });

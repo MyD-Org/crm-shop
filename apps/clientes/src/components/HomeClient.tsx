@@ -19,7 +19,23 @@ import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
-import { sinCamposOcultos, sinMarcasDeAcento, type HomeContent, type SeccionHome, type TextosSeccion, type TileContent } from "@/data/home-defaults";
+import type { ReactNode } from "react";
+import {
+  aVisibleOn,
+  clasesVisibilidad,
+  difierePorTamano,
+  itemsEn,
+  sinCamposOcultos,
+  sinItemsOcultos,
+  sinMarcasDeAcento,
+  textoVisibleOn,
+  visibilidadDe,
+  type HomeContent,
+  type SeccionHome,
+  type SoloEn,
+  type TextosSeccion,
+  type TileContent,
+} from "@/data/home-defaults";
 import { SeccionEditable } from "@/components/home/SeccionEditable";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
@@ -85,20 +101,43 @@ function aTilesDS(items: TileContent[]) {
   }));
 }
 
+/**
+ * Pinta la lista una sola vez si todos sus ítems se ven en los dos tamaños; si
+ * alguno es solo de mobile o solo de desktop, una versión por tamaño (la otra
+ * se oculta por CSS). Así la cinta, el mosaico y la pila se arman con los
+ * ítems que de verdad quedan, en vez de dejar huecos.
+ */
+function PorTamano<T extends { visibilidad?: SoloEn }>({
+  items,
+  children,
+}: {
+  items: readonly T[];
+  children: (items: T[]) => ReactNode;
+}) {
+  const visibles = sinItemsOcultos(items);
+  if (!difierePorTamano(visibles)) return <>{children(visibles)}</>;
+  return (
+    <>
+      <div className="contents md:hidden">{children(itemsEn(visibles, "mobile"))}</div>
+      <div className="contents max-md:hidden">{children(itemsEn(visibles, "desktop"))}</div>
+    </>
+  );
+}
+
 function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos?: string }) {
-  const { titulo, tituloMobile, bajada, bajadaMobile } = textos;
+  const { titulo, tituloMobile, bajada, bajadaMobile, visibilidadTextos } = textos;
   const hayTitulo = !!(titulo || tituloMobile);
   if (!hayTitulo && !bajada && !bajadaMobile && !linkTodos) return null;
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-6 max-md:flex-col max-md:items-start">
       <div>
         {hayTitulo ? (
-          <h2 className="font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text">
+          <h2 className={`font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text ${clasesVisibilidad(visibilidadTextos?.titulo)}`}>
             <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName="not-italic text-accent" />
           </h2>
         ) : null}
         {bajada || bajadaMobile ? (
-          <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted">
+          <p className={`mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted ${clasesVisibilidad(visibilidadTextos?.bajada)}`}>
             <AccentText text={bajada ?? ""} mobileText={bajadaMobile} />
           </p>
         ) : null}
@@ -140,7 +179,7 @@ export function HomeClient({
    *  edición in-place (rebanada B1 de home-editable: `SeccionEditable`). */
   puedeEditar: boolean;
 }) {
-  const { marquee, servicios, whatsapp } = contenido;
+  const { marquee, servicios } = contenido;
   // Los textos apagados con "Mostrar" no se pintan; SeccionEditable recibe
   // la sección completa (`contenido.*`) para que el editor los conserve.
   const hero = sinCamposOcultos(contenido.hero);
@@ -148,58 +187,79 @@ export function HomeClient({
   const secDestacados = sinCamposOcultos(contenido.destacados);
   const bannerDeco = sinCamposOcultos(contenido.bannerDeco);
   const decoGrid = sinCamposOcultos(contenido.decoGrid);
+  const whatsapp = sinCamposOcultos(contenido.whatsapp);
   const imagenesDestacados = secDestacados.imagenes ?? [];
-  const oculta = (s: SeccionHome) => contenido.ocultas.includes(s);
+  const vis = (s: SeccionHome) => visibilidadDe(contenido.visibilidad, s);
 
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
-            <SeccionEditable seccion="hero" inicial={contenido.hero} puedeEditar={puedeEditar} oculta={oculta("hero")}>
+            <SeccionEditable seccion="hero" inicial={contenido.hero} puedeEditar={puedeEditar} visibilidad={vis("hero")}>
               <Hero
-                className="[&_em]:not-italic [&_h1]:font-bold [&_a:first-of-type]:bg-accent [&_a:first-of-type:hover]:bg-primary"
+                className="[&_em]:not-italic [&_h1]:font-bold [&_a.rounded-full:first-of-type]:bg-accent [&_a.rounded-full:first-of-type:hover]:bg-primary"
                 eyebrow={hero.eyebrow}
+                eyebrowVisibleOn={textoVisibleOn(hero, "eyebrow")}
                 title={hero.titulo}
                 titleMobile={hero.tituloMobile}
+                titleVisibleOn={textoVisibleOn(hero, "titulo")}
                 lead={hero.bajada}
                 leadMobile={hero.bajadaMobile}
+                leadVisibleOn={textoVisibleOn(hero, "bajada")}
                 imageSrc={hero.imagen}
                 imageAlt={hero.imagenAlt}
-                ctas={hero.ctas}
-                usps={hero.usps.map((u, i) => {
-                  const Icon = ICONOS_USP[i % ICONOS_USP.length];
-                  return { label: u.label, icon: <Icon /> };
-                })}
+                ctas={sinItemsOcultos(hero.ctas).map((c) => ({
+                  label: c.label,
+                  href: c.href,
+                  visibleOn: aVisibleOn(c.visibilidad),
+                }))}
+                usps={hero.usps
+                  .map((u, i) => {
+                    // El ícono va por la posición original: ocultar uno no le
+                    // cambia el ícono a los de al lado.
+                    const Icon = ICONOS_USP[i % ICONOS_USP.length];
+                    // El USP de WhatsApp lleva al mismo número que el CTA de abajo.
+                    const href = /whatsapp/i.test(u.label) ? whatsapp.href : undefined;
+                    return { label: u.label, icon: <Icon />, href, visibilidad: u.visibilidad };
+                  })
+                  .filter((u) => u.visibilidad !== "nunca")
+                  .map(({ visibilidad, ...u }) => ({ ...u, visibleOn: aVisibleOn(visibilidad) }))}
               />
             </SeccionEditable>
           </Reveal>
         </div>
       </div>
 
-      <SeccionEditable seccion="marquee" inicial={marquee} puedeEditar={puedeEditar} oculta={oculta("marquee")}>
-        <Marquee
-          items={marquee.items}
-          className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
-        />
+      <SeccionEditable seccion="marquee" inicial={marquee} puedeEditar={puedeEditar} visibilidad={vis("marquee")}>
+        <PorTamano items={marquee.items}>
+          {(items) => (
+            <Marquee
+              items={items.map((it) => it.texto)}
+              className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
+            />
+          )}
+        </PorTamano>
       </SeccionEditable>
 
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         {/* Ambientes */}
         <Reveal>
-          <SeccionEditable seccion="ambientes" inicial={contenido.ambientes} puedeEditar={puedeEditar} oculta={oculta("ambientes")}>
+          <SeccionEditable seccion="ambientes" inicial={contenido.ambientes} puedeEditar={puedeEditar} visibilidad={vis("ambientes")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={ambientes} linkTodos={ambientes.linkTodos} />
               {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
                   min-h menores; la variante "mosaic" debería llevarla (DS gap). */}
-              <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(ambientes.items)} />
+              <PorTamano items={ambientes.items}>
+                {(items) => <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(items)} />}
+              </PorTamano>
             </section>
           </SeccionEditable>
         </Reveal>
 
         {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
         <Reveal>
-          <SeccionEditable seccion="destacados" inicial={contenido.destacados} puedeEditar={puedeEditar} oculta={oculta("destacados")}>
+          <SeccionEditable seccion="destacados" inicial={contenido.destacados} puedeEditar={puedeEditar} visibilidad={vis("destacados")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
               <ProductosCarrusel label={sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados"}>
@@ -253,15 +313,22 @@ export function HomeClient({
 
         {/* Banner decorativo */}
         <Reveal>
-          <SeccionEditable seccion="bannerDeco" inicial={contenido.bannerDeco} puedeEditar={puedeEditar} oculta={oculta("bannerDeco")}>
+          <SeccionEditable seccion="bannerDeco" inicial={contenido.bannerDeco} puedeEditar={puedeEditar} visibilidad={vis("bannerDeco")}>
             <PromoBanner
               className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
               eyebrow={bannerDeco.eyebrow}
+              eyebrowVisibleOn={textoVisibleOn(bannerDeco, "eyebrow")}
               title={bannerDeco.titulo}
               titleMobile={bannerDeco.tituloMobile}
+              titleVisibleOn={textoVisibleOn(bannerDeco, "titulo")}
               lead={bannerDeco.bajada}
               leadMobile={bannerDeco.bajadaMobile}
-              cta={bannerDeco.cta}
+              leadVisibleOn={textoVisibleOn(bannerDeco, "bajada")}
+              cta={
+                bannerDeco.cta && bannerDeco.cta.visibilidad !== "nunca"
+                  ? { label: bannerDeco.cta.label, href: bannerDeco.cta.href, visibleOn: aVisibleOn(bannerDeco.cta.visibilidad) }
+                  : undefined
+              }
               imageSrc={bannerDeco.imagen}
             />
           </SeccionEditable>
@@ -269,35 +336,53 @@ export function HomeClient({
 
         {/* Deco grid */}
         <Reveal>
-          <SeccionEditable seccion="decoGrid" inicial={contenido.decoGrid} puedeEditar={puedeEditar} oculta={oculta("decoGrid")}>
+          <SeccionEditable seccion="decoGrid" inicial={contenido.decoGrid} puedeEditar={puedeEditar} visibilidad={vis("decoGrid")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={decoGrid} linkTodos={decoGrid.linkTodos} />
               {/* Mobile: apiladas, se despegan al scrollear. Desde lg, la grilla. */}
-              <RoomTiles variant="stack" items={aTilesDS(decoGrid.items)} className="lg:hidden" />
-              <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} className="hidden lg:grid" />
+              <PorTamano items={decoGrid.items}>
+                {(items) => (
+                  <>
+                    <RoomTiles variant="stack" items={aTilesDS(items)} className="lg:hidden" />
+                    <RoomTiles variant="grid" items={aTilesDS(items)} className="hidden lg:grid" />
+                  </>
+                )}
+              </PorTamano>
             </section>
           </SeccionEditable>
         </Reveal>
 
         {/* Servicios */}
         <Reveal>
-          <SeccionEditable seccion="servicios" inicial={servicios} puedeEditar={puedeEditar} oculta={oculta("servicios")}>
+          <SeccionEditable seccion="servicios" inicial={servicios} puedeEditar={puedeEditar} visibilidad={vis("servicios")}>
             <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
               {servicios.items.map((s, i) => {
+                if (s.visibilidad === "nunca") return null;
                 const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
-                return <ServiceCard key={`${i}-${s.titulo ?? ""}`} icon={<Icon />} title={s.titulo} text={s.texto} />;
+                return (
+                  <ServiceCard
+                    key={`${i}-${s.titulo ?? ""}`}
+                    // Solo dónde se ve la tarjeta (display), no su estilo.
+                    className={clasesVisibilidad(s.visibilidad) || undefined}
+                    icon={<Icon />}
+                    title={s.titulo}
+                    text={s.texto}
+                  />
+                );
               })}
             </section>
           </SeccionEditable>
         </Reveal>
 
         {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
-        <SeccionEditable seccion="whatsapp" inicial={whatsapp} puedeEditar={puedeEditar} oculta={oculta("whatsapp")}>
+        <SeccionEditable seccion="whatsapp" inicial={contenido.whatsapp} puedeEditar={puedeEditar} visibilidad={vis("whatsapp")}>
           <div className="pb-[clamp(56px,7vw,96px)]">
             <CtaBanner
               icon={<ChatIcon />}
               title={whatsapp.titulo}
+              titleVisibleOn={textoVisibleOn(whatsapp, "titulo")}
               text={whatsapp.texto}
+              textVisibleOn={textoVisibleOn(whatsapp, "texto")}
               cta={{ label: "Consultar ahora", href: whatsapp.href }}
             />
           </div>

@@ -165,7 +165,9 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
   }
 
   if (seccion === "marquee" && Array.isArray(o.items)) {
-    o.items = (o.items as string[]).filter(esTextoNoVacio);
+    o.items = (o.items as unknown[])
+      .map((it) => (typeof it === "string" ? { texto: it } : it))
+      .filter((it) => esTextoNoVacio((it as { texto?: unknown })?.texto));
   }
 
   if (seccion === "hero") {
@@ -174,6 +176,11 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
   }
 
   if (Array.isArray(o.camposOcultos) && o.camposOcultos.length === 0) delete o.camposOcultos;
+  if (o.visibilidadTextos && typeof o.visibilidadTextos === "object") {
+    const textos = Object.fromEntries(Object.entries(o.visibilidadTextos).filter(([, v]) => v !== undefined));
+    if (Object.keys(textos).length === 0) delete o.visibilidadTextos;
+    else o.visibilidadTextos = textos;
+  }
 
   if (seccion === "bannerDeco" && o.cta !== undefined && sinEtiqueta(o.cta)) delete o.cta;
 

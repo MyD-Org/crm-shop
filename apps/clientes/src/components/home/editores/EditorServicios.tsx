@@ -12,6 +12,8 @@ export function EditorServicios({ valor, onChange }: EditorProps<ServiciosConten
       items={valor.items}
       onChange={(items) => onChange({ items })}
       nuevo={nuevoServicio}
+      conVisibilidad
+      nombreItem="servicio"
       renderItem={(item, onItem) => (
         <div className="flex flex-col gap-3">
           <Field label="Título">

@@ -10,8 +10,12 @@ export function EditorMarquee({ valor, onChange }: EditorProps<MarqueeContent>) 
     <ListaEditable
       items={valor.items}
       onChange={(items) => onChange({ items })}
-      nuevo={() => ""}
-      renderItem={(item, onItem) => <Input value={item} onChange={(e) => onItem(e.target.value)} />}
+      nuevo={() => ({ texto: "" })}
+      conVisibilidad
+      nombreItem="mensaje"
+      renderItem={(item, onItem) => (
+        <Input aria-label="Mensaje" value={item.texto} onChange={(e) => onItem({ ...item, texto: e.target.value })} />
+      )}
     />
   );
 }

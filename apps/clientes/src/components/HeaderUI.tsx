@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Show, SignInButton } from "@clerk/nextjs";
-import { SiteHeader } from "@myd-org/ui";
+import { SiteHeader, type VisibleOn } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { destinoSeguro } from "@/lib/ingreso";
@@ -25,6 +25,7 @@ export function HeaderUI({
   nombre,
   categorias,
   navBadge = null,
+  navBadgeVisibleOn,
 }: {
   /** Razon social del cliente, o el nombre de la cuenta. null = anonimo. */
   nombre: string | null;
@@ -32,6 +33,8 @@ export function HeaderUI({
   categorias: string[];
   /** Badge administrable del nav: se pega al item de `categoria`. */
   navBadge?: NavBadgeContent | null;
+  /** El badge sólo en mobile o en desktop (visibilidad del editor). */
+  navBadgeVisibleOn?: VisibleOn;
 }) {
   const pathname = usePathname();
 
@@ -48,6 +51,7 @@ export function HeaderUI({
             href: `/catalogo?categoria=${encodeURIComponent(cat)}`,
           })),
           navBadge,
+          navBadgeVisibleOn,
         )
       : [];
 

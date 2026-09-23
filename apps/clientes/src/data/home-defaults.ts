@@ -1,3 +1,4 @@
+import type { VisibleOn } from "@myd-org/ui";
 import { hostsDeMedios } from "../lib/catalogo-medios";
 
 /**
@@ -12,7 +13,8 @@ import { hostsDeMedios } from "../lib/catalogo-medios";
  * producto, así que la foto es contenido de la home, administrable.
  */
 
-export type Enlace = { label: string; href: string };
+/** `visibilidad` (acá y en cada ítem de lista): dónde se ve. Ausente = siempre. */
+export type Enlace = { label: string; href: string; visibilidad?: SoloEn };
 
 /**
  * Título y bajada de una sección. El título marca su acento con `*así*`, en
@@ -22,12 +24,20 @@ export type Enlace = { label: string; href: string };
  * `acento` es el formato viejo (acento siempre al final): las filas guardadas
  * así se convierten al leerlas (ver `migrarAcento`) y el editor ya no lo usa.
  */
-/** Textos que el admin puede ocultar con el interruptor "Mostrar" sin borrarlos. */
+/** Textos que el admin puede mostrar solo en un tamaño u ocultar sin borrarlos. */
 export const CAMPOS_OCULTABLES = ["eyebrow", "titulo", "bajada"] as const;
 export type CampoOcultable = (typeof CAMPOS_OCULTABLES)[number];
+/** Los textos del recuadro de WhatsApp (no tiene eyebrow ni bajada). */
+export const CAMPOS_WHATSAPP = ["titulo", "texto"] as const;
+export type CampoWhatsapp = (typeof CAMPOS_WHATSAPP)[number];
+
+/** Dónde se ve cada texto; ausente = siempre. */
+export type VisibilidadTextos<K extends string> = Partial<Record<K, SoloEn>>;
 
 export type TextosSeccion = {
-  /** Textos apagados con "Mostrar": se guardan pero no se muestran. */
+  visibilidadTextos?: VisibilidadTextos<CampoOcultable>;
+  /** @deprecated Formato viejo (textos apagados); se convierte a
+   *  `visibilidadTextos` al leer (ver `migrarVisibilidad`). */
   camposOcultos?: CampoOcultable[];
   titulo?: string;
   tituloMobile?: string;
@@ -42,16 +52,19 @@ export type HeroContent = TextosSeccion & {
   imagen: string;
   imagenAlt: string;
   ctas: Enlace[];
-  usps: { label: string }[];
+  usps: { label: string; visibilidad?: SoloEn }[];
 };
 
-export type MarqueeContent = { items: string[] };
+export type ItemMarquee = { texto: string; visibilidad?: SoloEn };
+/** Las filas viejas guardan los ítems como textos sueltos: se convierten al leer. */
+export type MarqueeContent = { items: ItemMarquee[] };
 
 export type TileContent = {
   eyebrow?: string;
   titulo?: string;
   imagen: string;
   href: string;
+  visibilidad?: SoloEn;
 };
 
 export type SeccionTilesContent = TextosSeccion & {
@@ -81,9 +94,14 @@ export type DecoGridContent = TextosSeccion & {
   chips: Enlace[];
 };
 
-export type ServiciosContent = { items: { titulo?: string; texto?: string }[] };
+export type ServiciosContent = { items: { titulo?: string; texto?: string; visibilidad?: SoloEn }[] };
 export type NavBadgeContent = { categoria: string; texto: string };
-export type WhatsappContent = { titulo?: string; texto?: string; href: string };
+export type WhatsappContent = {
+  titulo?: string;
+  texto?: string;
+  href: string;
+  visibilidadTextos?: VisibilidadTextos<CampoWhatsapp>;
+};
 
 export type HomeContent = {
   anuncio: { texto?: string };
@@ -97,11 +115,20 @@ export type HomeContent = {
   /** null = la categoría del nav no lleva badge. */
   navBadge: NavBadgeContent | null;
   whatsapp: WhatsappContent;
-  /** Secciones que el admin ocultó desde el editor: no se muestran a los
-   *  visitantes. Se guarda en su propia fila de home_content (`ocultas`),
-   *  así ocultar no pisa el contenido de la sección. */
-  ocultas: SeccionHome[];
+  /** Dónde se ve cada sección que el admin restringió desde el editor (las
+   *  que no figuran se ven siempre). Se guarda en su propia fila de
+   *  home_content (`ocultas`), así no pisa el contenido de la sección. */
+  visibilidad: MapaVisibilidad;
 };
+
+/** Dónde se ve algo de la home. El corte es `md` (768px), el mismo de las
+ *  versiones mobile de los textos. */
+export const VISIBILIDADES = ["siempre", "desktop", "mobile", "nunca"] as const;
+export type Visibilidad = (typeof VISIBILIDADES)[number];
+/** Todo menos "siempre": lo que se guarda en textos e ítems (ausente = siempre). */
+export type SoloEn = Exclude<Visibilidad, "siempre">;
+/** Ausente = "siempre", salvo que el default diga otra cosa (anuncio). */
+export type MapaVisibilidad = Partial<Record<SeccionHome, Visibilidad>>;
 
 export const SECCIONES_HOME = [
   "anuncio",
@@ -143,10 +170,10 @@ export const DEFAULTS_HOME: HomeContent = {
   },
   marquee: {
     items: [
-      "Más de 5.000 productos",
-      "Despacho en 24 h",
-      "Precios mayoristas",
-      "Puerto Iguazú, Misiones",
+      { texto: "Más de 5.000 productos" },
+      { texto: "Despacho en 24 h" },
+      { texto: "Precios mayoristas" },
+      { texto: "Puerto Iguazú, Misiones" },
     ],
   },
   ambientes: {
@@ -212,7 +239,9 @@ export const DEFAULTS_HOME: HomeContent = {
     texto: "Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.",
     href: "https://wa.me/5492235903025",
   },
-  ocultas: [],
+  // El anuncio en mobile ocupa varias filas: arranca solo en desktop hasta que
+  // sea un carrusel de mensajes. El admin lo puede cambiar desde el editor.
+  visibilidad: { anuncio: "desktop" },
 };
 
 // ---------------------------------------------------------------------------
@@ -224,6 +253,17 @@ function esTexto(v: unknown): v is string {
 }
 
 /** Ausente o texto no vacío (los opcionales vacíos se descartan antes de guardar). */
+function esSoloEnOpcional(v: unknown): boolean {
+  return v === undefined || v === "desktop" || v === "mobile" || v === "nunca";
+}
+
+/** `visibilidadTextos` válido para esos campos (ausente también vale). */
+function esVisibilidadTextos(v: unknown, campos: readonly string[]): boolean {
+  if (v === undefined) return true;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  return Object.entries(v).every(([k, val]) => campos.includes(k) && esSoloEnOpcional(val));
+}
+
 function esTextoOpcional(v: unknown): boolean {
   return v === undefined || esTexto(v);
 }
@@ -246,7 +286,7 @@ export function esHref(v: unknown): v is string {
 
 function esEnlace(v: unknown): v is Enlace {
   const o = v as Enlace;
-  return !!v && typeof v === "object" && esTexto(o.label) && esHref(o.href);
+  return !!v && typeof v === "object" && esTexto(o.label) && esHref(o.href) && esSoloEnOpcional(o.visibilidad);
 }
 
 /**
@@ -280,7 +320,8 @@ function esTile(v: unknown, hosts: readonly string[]): v is TileContent {
     esTextoOpcional(o.eyebrow) &&
     esTextoOpcional(o.titulo) &&
     esImagen(o.imagen, hosts) &&
-    esHref(o.href)
+    esHref(o.href) &&
+    esSoloEnOpcional(o.visibilidad)
   );
 }
 
@@ -319,6 +360,8 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       (!Array.isArray(ocultos) || !ocultos.every((c) => (CAMPOS_OCULTABLES as readonly unknown[]).includes(c)))
     )
       errores.push(`camposOcultos debe ser un array de ${CAMPOS_OCULTABLES.join(", ")}`);
+    if (!esVisibilidadTextos(o.visibilidadTextos, CAMPOS_OCULTABLES))
+      errores.push(`visibilidadTextos debe indicar desktop, mobile o nunca para ${CAMPOS_OCULTABLES.join(", ")}`);
   };
   const linkOpcional = (campo: string) => {
     if (o[campo] !== undefined && !esHref(o[campo])) errores.push(`${campo} debe ser una ruta interna (/) o una URL https`);
@@ -340,11 +383,20 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       imagen("imagen", o.imagen);
       texto("imagenAlt", true);
       lista("ctas", esEnlace, "{ label, href }");
-      lista("usps", (u) => esTextoOpcional((u as { label?: unknown })?.label), "{ label }");
+      lista(
+        "usps",
+        (u) => esTextoOpcional((u as { label?: unknown })?.label) && esSoloEnOpcional((u as { visibilidad?: unknown })?.visibilidad),
+        "{ label, visibilidad? }",
+      );
       break;
     }
     case "marquee":
-      lista("items", esTexto, "textos");
+      // Textos sueltos (formato viejo) o { texto, visibilidad? }.
+      lista(
+        "items",
+        (v) => esTexto(v) || (!!v && typeof v === "object" && esTexto((v as ItemMarquee).texto) && esSoloEnOpcional((v as ItemMarquee).visibilidad)),
+        "{ texto, visibilidad? }",
+      );
       break;
     case "ambientes":
     case "decoGrid": {
@@ -382,8 +434,14 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       lista(
         "items",
         (v) => {
-          const it = v as { titulo?: unknown; texto?: unknown };
-          return !!v && typeof v === "object" && esTextoOpcional(it.titulo) && esTextoOpcional(it.texto);
+          const it = v as { titulo?: unknown; texto?: unknown; visibilidad?: unknown };
+          return (
+            !!v &&
+            typeof v === "object" &&
+            esTextoOpcional(it.titulo) &&
+            esTextoOpcional(it.texto) &&
+            esSoloEnOpcional(it.visibilidad)
+          );
         },
         "{ titulo?, texto? }",
       );
@@ -391,6 +449,8 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
     case "whatsapp":
       texto("titulo", true);
       texto("texto", true);
+      if (!esVisibilidadTextos(o.visibilidadTextos, CAMPOS_WHATSAPP))
+        errores.push(`visibilidadTextos debe indicar desktop, mobile o nunca para ${CAMPOS_WHATSAPP.join(", ")}`);
       if (!esHref(o.href)) errores.push("href debe ser una ruta interna (/) o una URL https");
       break;
   }
@@ -398,18 +458,47 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
 }
 
 /**
- * La sección sin los textos que el admin apagó con "Mostrar" (y sin sus
- * versiones mobile). Se aplica al pintar: el editor sigue viendo los textos.
+ * La sección sin los textos que el admin puso en "Nunca" (ni sus versiones
+ * mobile). Se aplica al pintar: el editor sigue viendo los textos. Los que se
+ * ven solo en un tamaño quedan: se ocultan por CSS (ver `textoVisibleOn`).
  */
-export function sinCamposOcultos<T extends TextosSeccion & { eyebrow?: string }>(seccion: T): T {
-  const ocultos = seccion.camposOcultos ?? [];
-  if (ocultos.length === 0) return seccion;
+export function sinCamposOcultos<T extends { visibilidadTextos?: Partial<Record<string, SoloEn>> }>(seccion: T): T {
+  const nunca = Object.entries(seccion.visibilidadTextos ?? {}).filter(([, v]) => v === "nunca");
+  if (nunca.length === 0) return seccion;
   const copia: Record<string, unknown> = { ...seccion };
-  for (const campo of ocultos) {
+  for (const [campo] of nunca) {
     delete copia[campo];
     delete copia[`${campo}Mobile`];
   }
   return copia as T;
+}
+
+/** Visibilidad → prop `visibleOn` del DS ("siempre" y "nunca" no llevan). */
+export function aVisibleOn(v: Visibilidad | undefined): VisibleOn | undefined {
+  return v === "desktop" || v === "mobile" ? v : undefined;
+}
+
+/** `visibleOn` de un texto de la sección. */
+export function textoVisibleOn<K extends string>(
+  seccion: { visibilidadTextos?: VisibilidadTextos<K> },
+  campo: NoInfer<K>,
+): VisibleOn | undefined {
+  return aVisibleOn(seccion.visibilidadTextos?.[campo]);
+}
+
+/** Los ítems sin los que están en "Nunca". */
+export function sinItemsOcultos<T extends { visibilidad?: SoloEn }>(items: readonly T[]): T[] {
+  return items.filter((it) => it.visibilidad !== "nunca");
+}
+
+/** Los ítems que se ven en ese tamaño. */
+export function itemsEn<T extends { visibilidad?: SoloEn }>(items: readonly T[], tamano: VisibleOn): T[] {
+  return items.filter((it) => it.visibilidad === undefined || it.visibilidad === tamano);
+}
+
+/** `true` si algún ítem se ve solo en un tamaño (hay que pintar dos versiones). */
+export function difierePorTamano<T extends { visibilidad?: SoloEn }>(items: readonly T[]): boolean {
+  return items.some((it) => it.visibilidad === "desktop" || it.visibilidad === "mobile");
 }
 
 /**
@@ -434,19 +523,70 @@ export function migrarAcento<T>(payload: T): T {
   return { ...resto, titulo: `${titulo} *${acento.trim()}*`.trim() } as T;
 }
 
+/**
+ * Pasa los formatos viejos de visibilidad al actual: `camposOcultos` ⇒
+ * `visibilidadTextos` en "nunca", y los ítems de la cinta como textos sueltos
+ * ⇒ `{ texto }`. Idempotente.
+ */
+export function migrarVisibilidad<T>(payload: T): T {
+  if (!payload || typeof payload !== "object") return payload;
+  let o = payload as Record<string, unknown>;
+  if (Array.isArray(o.camposOcultos)) {
+    const { camposOcultos, ...resto } = o;
+    const previos = (resto.visibilidadTextos ?? {}) as Record<string, SoloEn>;
+    const convertidos = Object.fromEntries((camposOcultos as string[]).map((c) => [c, "nunca"]));
+    const visibilidadTextos = { ...convertidos, ...previos };
+    o = Object.keys(visibilidadTextos).length > 0 ? { ...resto, visibilidadTextos } : resto;
+  }
+  if (Array.isArray(o.items) && o.items.some((it) => typeof it === "string")) {
+    o = { ...o, items: o.items.map((it) => (typeof it === "string" ? { texto: it } : it)) };
+  }
+  return o as T;
+}
+
 /** Payload usable para la sección, o null si hay que quedarse con el default. */
 export function resolverSeccion(key: string, payload: unknown): unknown {
   if (!(SECCIONES_HOME as readonly string[]).includes(key)) return null;
   return erroresSeccion(key, payload).length === 0 ? payload : null;
 }
 
-/** Key de home_content con la lista de secciones ocultas. */
+/** Key de home_content con la visibilidad de las secciones. Se llama así
+ *  porque antes guardaba sólo la lista de secciones ocultas. */
 export const KEY_OCULTAS = "ocultas";
 
-/** Lista de secciones ocultas saneada: sólo keys conocidas, sin repetir. */
-export function resolverOcultas(payload: unknown): SeccionHome[] {
-  if (!Array.isArray(payload)) return [];
-  return SECCIONES_HOME.filter((s) => payload.includes(s));
+/**
+ * Visibilidad por sección saneada: sólo keys y valores conocidos. Acepta el
+ * formato viejo (array de secciones ocultas ⇒ "nunca"). "siempre" se guarda
+ * explícito porque algunas secciones tienen otro default.
+ */
+export function resolverVisibilidad(payload: unknown): MapaVisibilidad {
+  const mapa: MapaVisibilidad = {};
+  if (Array.isArray(payload)) {
+    for (const s of SECCIONES_HOME) if (payload.includes(s)) mapa[s] = "nunca";
+    return mapa;
+  }
+  if (!payload || typeof payload !== "object") return mapa;
+  const o = payload as Record<string, unknown>;
+  for (const s of SECCIONES_HOME) {
+    const v = o[s];
+    if ((VISIBILIDADES as readonly unknown[]).includes(v)) mapa[s] = v as Visibilidad;
+  }
+  return mapa;
+}
+
+/** Dónde se ve una sección. */
+export function visibilidadDe(mapa: MapaVisibilidad, seccion: SeccionHome): Visibilidad {
+  return mapa[seccion] ?? "siempre";
+}
+
+/**
+ * Clases que ocultan algo según dónde se ve, por CSS (sin JS, sin salto de
+ * hidratación). "nunca" no tiene clase: eso se resuelve no pintándolo.
+ */
+export function clasesVisibilidad(v: Visibilidad | undefined): string {
+  if (v === "desktop") return "max-md:hidden";
+  if (v === "mobile") return "md:hidden";
+  return "";
 }
 
 /** Mergea filas de la DB sobre los defaults, sección por sección. */
@@ -468,11 +608,13 @@ export function combinarContenidoHome(filas: { key: string; payload: unknown }[]
               ...(payload as Record<string, unknown>),
             }
           : payload;
-      Object.assign(resultado, { [key]: migrarAcento(seccion) });
+      Object.assign(resultado, { [key]: migrarVisibilidad(migrarAcento(seccion)) });
     } else if (key === "navBadge") {
       resultado.navBadge = null;
     }
   }
-  if (porKey.has(KEY_OCULTAS)) resultado.ocultas = resolverOcultas(porKey.get(KEY_OCULTAS));
+  if (porKey.has(KEY_OCULTAS)) {
+    resultado.visibilidad = { ...DEFAULTS_HOME.visibilidad, ...resolverVisibilidad(porKey.get(KEY_OCULTAS)) };
+  }
   return resultado;
 }

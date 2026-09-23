@@ -3,7 +3,7 @@ import { getProducto } from "@/lib/catalog";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
-// Lee el producto de Alegra en cada request.
+// Lee el producto del espejo en cada request (stock y overlay cambian con la sync).
 export const dynamic = "force-dynamic";
 
 export default async function ProductoPage({

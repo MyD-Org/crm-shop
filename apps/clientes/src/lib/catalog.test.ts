@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AlegraItem } from "./alegra";
-import { mapFilaToProduct, mapItemToProduct } from "./catalog";
+import { mapFilaToProduct } from "./catalog";
 
 /**
  * `price` sigue siendo el NETO (lo usan carrito, AddToCartButton y cotización).
@@ -110,42 +109,5 @@ describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
   it("con fotos pero sin base pública configurada, images es undefined", () => {
     const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, [HOST], null);
     expect(p.images).toBeUndefined();
-  });
-});
-
-describe("mapItemToProduct (ficha en vivo)", () => {
-  const item: AlegraItem = {
-    id: "7",
-    name: "Lámpara",
-    status: "active",
-    price: [{ idPriceList: "1", price: 100000, main: true }],
-  };
-
-  it("usa el tax en vivo del ítem", () => {
-    const p = mapItemToProduct({ ...item, tax: [{ percentage: "21.00" }] });
-    expect(p.price).toBe(100000);
-    expect(p.ivaPorcentaje).toBe(21);
-    expect(p.precioFinal).toBe(121000);
-  });
-
-  it("nombre exhibido: la descripción de Alegra, igual que la card del catálogo", () => {
-    const p = mapItemToProduct({ ...item, name: "02141N", description: "LAMPARA LED A60 9W" });
-    expect(p.name).toBe("LAMPARA LED A60 9W");
-  });
-
-  it("sin descripción, el nombre es el name de Alegra", () => {
-    expect(mapItemToProduct({ ...item, name: "02141N", description: "" }).name).toBe("02141N");
-    expect(mapItemToProduct({ ...item, name: "02141N" }).name).toBe("02141N");
-  });
-
-  it("sku: la reference; si falta, el name de Alegra (el código no se pierde de la ficha)", () => {
-    expect(mapItemToProduct({ ...item, name: "02141N", reference: "REF-1" }).sku).toBe("REF-1");
-    expect(mapItemToProduct({ ...item, name: "02141N", description: "Lámpara" }).sku).toBe("02141N");
-  });
-
-  it("sin tax: misma regla que el espejo (sin default)", () => {
-    const p = mapItemToProduct(item);
-    expect(p.ivaPorcentaje).toBeUndefined();
-    expect(p.precioFinal).toBeUndefined();
   });
 });

@@ -12,7 +12,7 @@ import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { getProductosPorIds } from "./catalog";
+import { getProducto, getProductosPorIds } from "./catalog";
 
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
@@ -100,5 +100,30 @@ describe("getProductosPorIds", () => {
     expect(p.sku).toBe("02141N");
     // La url se compone con la base pública de R2 a partir de la key que guarda el CRM.
     expect(p.images).toEqual([{ url: "https://media.plataforma.example/t1/42.jpg", w: 800 }]);
+  });
+});
+
+/**
+ * Ficha pública: sale del espejo, nunca de Alegra. Un id inexistente o
+ * despublicado es 404 (null); un error de la base NO se disfraza de "no existe".
+ */
+describe("getProducto (ficha)", () => {
+  it("consulta el espejo con soloActivos y devuelve null si no está", async () => {
+    const p = await getProducto("42");
+    expect(p).toBeNull();
+    expect(grabadora.consultas).toHaveLength(1);
+    expect(grabadora.consultas[0].sql).toMatch(/"catalog_products"\."status" = \$\d+/);
+  });
+
+  it("id no numérico: null sin consultar", async () => {
+    expect(await getProducto("../contacts/1")).toBeNull();
+    expect(grabadora.consultas).toHaveLength(0);
+  });
+
+  it("si la base falla, tira en vez de devolver null", async () => {
+    grabadora = dbGrabadora(() => {
+      throw new Error("db caída");
+    });
+    await expect(getProducto("42")).rejects.toThrow(/Failed query/);
   });
 });

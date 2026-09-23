@@ -15,7 +15,7 @@ let telefonoPerfil: string | null = null;
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
-  idPriceListDe: async () => undefined,
+  idPriceListSnapshot: async () => undefined,
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),
@@ -180,3 +180,4 @@ describe("POST /api/pedidos — el perfil aprende el teléfono", () => {
     expect(await r.json()).toMatchObject({ numero: "PED-1" });
   });
 });
+

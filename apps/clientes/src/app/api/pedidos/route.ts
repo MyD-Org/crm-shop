@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual, idPriceListDe } from "@/lib/auth";
+import { identidadActual, idPriceListSnapshot } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import {
   evaluarEnvio,
@@ -75,10 +75,9 @@ const texto = (v: unknown, max = 200) =>
 /**
  * POST /api/pedidos — confirma el pedido.
  *
- * RE-COTIZA de cero contra Alegra en vez de confiar en la cotización que el
- * checkout ya mostró. Entre que el cliente vio el total y apretó "confirmar"
- * pueden pasar minutos: otro cliente pudo llevarse el último stock, o pudo
- * cambiar un precio. El total que se persiste es el de ESTA lectura.
+ * RE-COTIZA en el servidor (mismo espejo y misma lista que el checkout) en vez
+ * de confiar en montos del body: el precio nunca viaja desde el browser. Los
+ * precios que valen son los que publica la tienda; no se consulta Alegra.
  */
 export async function POST(req: Request) {
   // Alcanza con estar logueado: quien no vinculó cuenta corriente compra igual,
@@ -198,7 +197,7 @@ export async function POST(req: Request) {
   try {
     // Sin cuenta corriente vinculada no hay lista propia: cotiza a la principal.
     const idPriceList = cliente
-      ? await idPriceListDe(cliente.codigocliente)
+      ? await idPriceListSnapshot(cliente.codigocliente)
       : undefined;
     const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo });
 
@@ -207,7 +206,7 @@ export async function POST(req: Request) {
     if (cotizacion.hayProblemas) {
       return NextResponse.json(
         {
-          error: "Algunos productos cambiaron. Revisá el detalle antes de confirmar.",
+          error: "Algunos productos cambiaron. Revise el detalle antes de confirmar.",
           cotizacion,
         },
         { status: 409 },

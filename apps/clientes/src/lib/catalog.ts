@@ -6,9 +6,8 @@
  * - LISTAR y BUSCAR → espejo local en Postgres (`catalog_products`), que
  *   refresca el cron diario `/api/cron/catalog-sync`. Alegra topea en 30 items
  *   por request y el catálogo tiene ~2800: no se puede paginar en vivo.
- * - COMPROMETER un precio o un stock (ficha de producto, checkout) → EN VIVO
- *   contra Alegra. Un número que el shop le promete al cliente nunca sale de
- *   una cache de hasta 24 h.
+ * - Ficha, carrito, checkout y pedido → también el espejo: valen los precios
+ *   que publica la tienda (ver src/lib/cotizacion.ts).
  *
  * SOLO servidor: usa la DB y el cliente de Alegra. Consumir desde Server
  * Components o API routes, nunca desde el browser.

@@ -1,25 +1,29 @@
 /**
  * Cotización del carrito. El único lugar donde se calcula un total.
  *
- * REGLA CENTRAL: el precio, el IVA y el stock los resuelve el SERVIDOR leyendo
- * EN VIVO de Alegra. El navegador manda `{ id, qty }` y nada más.
+ * REGLA CENTRAL: el precio, el IVA y el stock los resuelve el SERVIDOR. El
+ * navegador manda `{ id, qty }` y nada más: si el precio viaja desde el
+ * cliente, el precio se edita desde el cliente.
  *
- * Dos razones, y las dos son duras:
- * 1. Seguridad. Si el precio viaja desde el cliente, el precio se edita desde
- *    el cliente. No hay validación parcial que arregle eso.
- * 2. Arquitectura. docs/arquitectura-integraciones.md: lo que el shop
- *    COMPROMETE no sale del espejo local, que puede tener hasta 24 h de atraso.
+ * Fuente: el espejo del catálogo (`catalog_products`). Los precios que valen
+ * son los que publica la tienda: el carrito, el checkout y el pedido usan el
+ * mismo número, en una sola consulta y sin llamadas a Alegra (decisión
+ * 2026-09-23). Antes era una llamada a Alegra por línea en cada cambio de
+ * cantidad: lento, y un riesgo para el rate limit de la cuenta.
  *
- * SOLO servidor: importa el cliente de Alegra con credenciales.
+ * SOLO servidor: usa la DB.
  */
 
+import { eq, inArray } from "drizzle-orm";
+import { getDb } from "@/db";
+import { catalogCategories, catalogProducts } from "@/db/schema";
 import {
   esIdAlegra,
-  getItem,
   ivaDeItem,
   marcaDeCustomFields,
   resolverPrecio,
   type AlegraItem,
+  type AlegraPrice,
 } from "./alegra";
 import { costoEnvio, type EntregaTipo } from "./envio";
 
@@ -67,17 +71,15 @@ export interface Cotizacion {
 
 /** Máximo de unidades por línea. Freno a un `qty` absurdo o negativo. */
 const QTY_MAX = 9_999;
-/** Ítems que se piden a Alegra en paralelo. Mismo criterio que la sync. */
-const CONCURRENCIA = 8;
-/** Techo de líneas por pedido: acota el fan-out contra Alegra en un request. */
+/** Techo de líneas por pedido. */
 export const MAX_LINEAS = 60;
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
 
 /**
- * Normaliza y deduplica lo que llegó del browser. Se hace ANTES de tocar la red
- * para no gastar requests a Alegra con basura, y porque dos líneas del mismo id
+ * Normaliza y deduplica lo que llegó del browser. Se hace ANTES de consultar
+ * para no gastar consultas en basura, y porque dos líneas del mismo id
  * romperían la validación de stock (cada una pasaría por separado).
  */
 export function normalizarLineas(raw: unknown): LineaPedida[] {
@@ -98,27 +100,6 @@ export function normalizarLineas(raw: unknown): LineaPedida[] {
 }
 
 /** Corre `fn` sobre `items` con paralelismo acotado, preservando el orden. */
-async function mapConcurrente<T, R>(
-  items: T[],
-  limite: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let cursor = 0;
-
-  async function worker() {
-    while (cursor < items.length) {
-      const i = cursor++;
-      out[i] = await fn(items[i]);
-    }
-  }
-
-  await Promise.all(
-    Array.from({ length: Math.min(limite, items.length) }, worker),
-  );
-  return out;
-}
-
 function lineaRota(
   pedida: LineaPedida,
   problema: ProblemaLinea,
@@ -187,32 +168,85 @@ export function cotizarItem(
   return linea;
 }
 
+/** Columnas del espejo que hacen falta para cotizar una línea. */
+export interface FilaEspejo {
+  alegraId: string;
+  name: string;
+  code: string | null;
+  brand: string | null;
+  prices: unknown;
+  stock: string | null;
+  ivaPorcentaje: string | null;
+  status: string;
+  categoryName: string | null;
+}
+
 /**
- * Cotiza el carrito contra Alegra en vivo.
+ * Fila del espejo con la forma de un ítem de Alegra, que es lo que calcula
+ * `cotizarItem`.
+ *
+ * - IVA null en el espejo → sin `tax`, y `ivaDeItem` cae a `IVA_DEFAULT`.
+ * - Stock null → ítem no inventariable (siempre disponible).
+ */
+export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
+  return {
+    id: fila.alegraId,
+    name: fila.name,
+    reference: fila.code ?? undefined,
+    status: fila.status === "active" ? "active" : "inactive",
+    price: Array.isArray(fila.prices) ? (fila.prices as AlegraPrice[]) : [],
+    tax:
+      fila.ivaPorcentaje != null
+        ? [{ percentage: Number(fila.ivaPorcentaje) }]
+        : undefined,
+    inventory:
+      fila.stock != null ? { availableQuantity: Number(fila.stock) } : undefined,
+    customFields: fila.brand ? [{ name: "Marca", value: fila.brand }] : undefined,
+    itemCategory: fila.categoryName ? { name: fila.categoryName } : undefined,
+  };
+}
+
+/** Una consulta para todas las líneas. Si la base falla, tira: no hay total. */
+async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
+  if (ids.length === 0) return new Map();
+  const filas: FilaEspejo[] = await getDb()
+    .select({
+      alegraId: catalogProducts.alegraId,
+      name: catalogProducts.name,
+      code: catalogProducts.code,
+      brand: catalogProducts.brand,
+      prices: catalogProducts.prices,
+      stock: catalogProducts.stock,
+      ivaPorcentaje: catalogProducts.ivaPorcentaje,
+      status: catalogProducts.status,
+      categoryName: catalogCategories.name,
+    })
+    .from(catalogProducts)
+    .leftJoin(
+      catalogCategories,
+      eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId),
+    )
+    .where(inArray(catalogProducts.alegraId, ids));
+  return new Map(filas.map((f) => [f.alegraId, itemDesdeEspejo(f)]));
+}
+
+/**
+ * Cotiza el carrito con los precios, el IVA y el stock del espejo.
  *
  * Nunca tira si un ítem falla: devuelve la línea marcada con `problema` para
- * que el checkout pueda decir QUÉ producto es el que traba el pedido. Un 502
- * genérico deja al cliente sin forma de arreglarlo solo.
+ * que el checkout pueda decir QUÉ producto es el que traba el pedido. Si falla
+ * la base sí tira: sin datos no hay total.
  */
 export async function cotizar(
   pedidas: LineaPedida[],
   opts: { idPriceList?: string; entregaTipo?: EntregaTipo } = {},
 ): Promise<Cotizacion> {
-  const lineas = await mapConcurrente(pedidas, CONCURRENCIA, async (pedida) => {
-    try {
-      const item = await getItem(pedida.id);
-      if (!item?.id) {
-        return lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
-      }
-      return cotizarItem(pedida, item, opts.idPriceList);
-    } catch (err) {
-      console.error(`[cotizacion] ${pedida.id}:`, err);
-      return lineaRota(
-        pedida,
-        "no_encontrado",
-        "No pudimos verificar este producto. Probá de nuevo en un momento.",
-      );
-    }
+  const items = await leerEspejo(pedidas.map((p) => p.id));
+  const lineas = pedidas.map((pedida) => {
+    const item = items.get(pedida.id);
+    return item
+      ? cotizarItem(pedida, item, opts.idPriceList)
+      : lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
   });
 
   const validas = lineas.filter((l) => !l.problema);

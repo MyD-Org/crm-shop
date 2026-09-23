@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { TenantConfig } from "@/lib/tenants"
 
 // Unit de la ruta cron de la sync de contactos. Sin base ni Alegra: se mockean el listado
-// de tenants, su config, la bitácora y `syncContacts`.
+// de tenants, su config y `syncContacts` (un tramo por tenant).
 
 const state = vi.hoisted(() => ({
   ids: [] as string[],
   configs: {} as Record<string, Partial<TenantConfig> | null>,
-  ultimas: new Map<string, Date>(),
+  pendientes: new Set<string>(),
   llamadas: [] as { tenant: string; trigger: string; deadline?: number }[],
   fallaEn: null as string | null,
 }))
@@ -25,15 +25,12 @@ vi.mock("@/lib/tenants", () => ({
   },
 }))
 
-vi.mock("@/lib/alegra-contacts-repo", () => ({
-  ultimaOkPorTenant: async () => state.ultimas,
-}))
-
 vi.mock("@/lib/alegra-contacts-sync", () => ({
   syncContacts: async (cfg: TenantConfig, trigger: string, opts: { deadline?: number }) => {
     state.llamadas.push({ tenant: cfg.id, trigger, deadline: opts.deadline })
     if (state.fallaEn === cfg.id) throw new Error("se cayó la base")
-    return { ok: true, contactsSynced: 3, markedInactive: 0, requests: 1 }
+    const done = !state.pendientes.has(cfg.id)
+    return { ok: true, done, contactsSynced: 3, totalPasada: 3, markedInactive: 0, requests: 1 }
   },
 }))
 
@@ -56,7 +53,7 @@ beforeEach(() => {
     "tenant-b": { alegraMock: true },
     "tenant-sin-alegra": {},
   }
-  state.ultimas = new Map()
+  state.pendientes = new Set()
   state.llamadas = []
   state.fallaEn = null
 })
@@ -72,7 +69,7 @@ describe("/api/cron/alegra-contactos-sync", () => {
     expect(state.llamadas).toEqual([])
   })
 
-  it("sin ?tenant=: todos los tenants con Alegra, como cron, con un deadline compartido", async () => {
+  it("sin ?tenant=: un tramo de cada tenant con Alegra, como cron, con un deadline corto compartido", async () => {
     const res = await pedir()
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -81,28 +78,28 @@ describe("/api/cron/alegra-contactos-sync", () => {
     const deadlines = new Set(state.llamadas.map((l) => l.deadline))
     expect(deadlines.size).toBe(1)
     const [deadline] = deadlines
-    expect(deadline! - Date.now()).toBeLessThanOrEqual(270_000)
-    expect(deadline! - Date.now()).toBeGreaterThan(260_000)
+    expect(deadline! - Date.now()).toBeLessThanOrEqual(45_000)
+    expect(deadline! - Date.now()).toBeGreaterThan(35_000)
   })
 
-  it("ordena por la última corrida OK más vieja; nunca sincronizado va primero", async () => {
-    state.ultimas = new Map([
-      ["tenant-a", new Date("2026-09-20T00:00:00Z")],
-      ["tenant-b", new Date("2026-09-23T00:00:00Z")],
-    ])
-    await pedir()
-    expect(state.llamadas.map((l) => l.tenant)).toEqual(["tenant-a", "tenant-b"])
-
-    state.llamadas = []
-    state.ultimas = new Map([["tenant-a", new Date("2026-09-20T00:00:00Z")]])
-    await pedir()
-    expect(state.llamadas.map((l) => l.tenant)).toEqual(["tenant-b", "tenant-a"])
+  it("la respuesta dice por tenant si la pasada terminó (done) o quedan páginas", async () => {
+    state.pendientes = new Set(["tenant-a"])
+    const body = await (await pedir()).json()
+    const porTenant = Object.fromEntries(body.tenants.map((t: { tenant: string; done: boolean }) => [t.tenant, t.done]))
+    expect(porTenant).toEqual({ "tenant-a": false, "tenant-b": true })
   })
 
   it("con ?tenant=x: solo ese tenant y como disparo manual", async () => {
     const body = await (await pedir("?tenant=tenant-b")).json()
-    expect(body.tenants).toEqual([{ tenant: "tenant-b", ok: true, contactsSynced: 3, markedInactive: 0, requests: 1 }])
+    expect(body.tenants).toEqual([
+      { tenant: "tenant-b", ok: true, done: true, contactsSynced: 3, totalPasada: 3, markedInactive: 0, requests: 1 },
+    ])
     expect(state.llamadas).toMatchObject([{ tenant: "tenant-b", trigger: "manual" }])
+  })
+
+  it("?tenant=x&trigger=cron (el workflow siguiendo un tenant pendiente) respeta el trigger", async () => {
+    await pedir("?tenant=tenant-a&trigger=cron")
+    expect(state.llamadas).toMatchObject([{ tenant: "tenant-a", trigger: "cron" }])
   })
 
   it("?trigger=manual (workflow_dispatch) marca la corrida como manual", async () => {
@@ -119,7 +116,7 @@ describe("/api/cron/alegra-contactos-sync", () => {
     state.fallaEn = "tenant-a"
     const body = await (await pedir()).json()
     const porTenant = Object.fromEntries(body.tenants.map((t: { tenant: string; ok: boolean }) => [t.tenant, t]))
-    expect(porTenant["tenant-a"]).toMatchObject({ ok: false, error: "error_interno" })
+    expect(porTenant["tenant-a"]).toMatchObject({ ok: false, done: true, error: "error_interno" })
     expect(porTenant["tenant-b"]).toMatchObject({ ok: true })
     // El mensaje del error original no viaja en la respuesta.
     expect(JSON.stringify(body)).not.toContain("se cayó la base")

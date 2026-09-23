@@ -286,7 +286,7 @@ Credenciales por tenant (`{PREFIX}_ALEGRA_EMAIL/TOKEN`); sin credenciales corre 
   (`alegra-sync.ts`, cron `/api/cron/alegra-sync`) — y `getItemsLive` (precio/stock al momento).
 - **Contactos (clientes)**: `searchContacts`, `getContact`, `listAllContacts`; para el
   [espejo](#espejo-de-contactos-de-alegra), las versiones crudas (`*Raw`),
-  `mapRawContactRow` y `listAllContactsPausado` (único que debe bajar el padrón entero).
+  `mapRawContactRow` y `paginaDeContactos` (una página por llamada; único que debe recorrer el padrón entero, de a tramos).
 - **Cuenta corriente**: `listInvoicesByContact`, `listPaymentsByContact`, `getContactBalance`
   (deuda total / vencido / a vencer, derivado de las facturas abiertas).
 - **Config de venta**: `listPriceLists`, `listPaymentTerms` (`/terms`), `listSellers`,
@@ -348,41 +348,69 @@ GRANT USAGE ON SCHEMA public TO shop_app;
 GRANT SELECT ON public.alegra_contacts_shop TO shop_app;
 ```
 
-**Sync** (`src/lib/alegra-contacts-sync.ts`, ruta `/api/cron/alegra-contactos-sync`,
+**Sync por tramos** (`src/lib/alegra-contacts-sync.ts`, ruta `/api/cron/alegra-contactos-sync`,
 workflow `admin-alegra-contactos-sync`):
 
-- Frecuencia: 4 veces por día (02:15, 08:15, 14:15 y 20:15 UTC), en el grupo de
-  concurrencia `alegra-cuenta` junto con las syncs de catálogo. El espejo puede quedar hasta
-  ~6 h atrás de Alegra.
-- Completa y pausada: páginas de 30 de a una, 700 ms entre inicios de request (≈85 req/min).
-  ~6000 contactos ≈ 200 requests ≈ 2,5 min.
-- Presupuesto: la ruta tiene `maxDuration = 300` y un deadline compartido de 270 s. El tenant
-  que se queda sin tiempo termina en `sin_tiempo` sin marcar bajas; los tenants se recorren
-  por su última corrida OK más vieja primero.
-- Bajas soft: al terminar OK, lo que no se vio pasa a `inactive`, **solo si** la corrida vio
-  al menos el 80 % de los activos previos; si no, la corrida queda en error
-  `corrida_sospechosa` y no se da de baja nada.
-- Candado por tenant (`pg_try_advisory_xact_lock`): si otra corrida del mismo tenant está
-  viva, se saltea (`skipped`).
+- Límite que manda: `/contacts` de Alegra admite **~5 requests por minuto por cuenta**
+  (probado el 2026-09-23; la 6ª en la misma ventana recibe un 400 con `{"code":429}` en el
+  body, que `alegraFetch` trata como 429). `/items` no tiene ese tope. El login del portal y el
+  bot comparten ese cupo, así que la sync usa **3 páginas por minuto** y les deja ~2.
+- Cada invocación de la ruta corre **un tramo por tenant**: a lo sumo `PAGINAS_POR_TRAMO` (3)
+  páginas de 30, cada una upserteada en el momento, y deja el cursor en la bitácora. Si
+  Alegra responde 429 a mitad de tramo, **no reintenta**: guarda lo leído y corta
+  (`cortado: "alegra_429"`); la próxima invocación sigue desde ahí.
+- Una **pasada** = de `start=0` hasta la página corta o vacía; la retoma la invocación
+  siguiente. Central LED (~6000 contactos, ~200 páginas) tarda ~70 min; Avantec, 2 tramos.
+- La respuesta dice por tenant `done` (la pasada cerró, bien o mal: no hace falta volver a
+  llamar), `contactsSynced` (leídos en este tramo), `totalPasada` (leídos en la pasada),
+  `markedInactive` y `requests` (de este tramo). Nunca datos de contactos ni mensajes de
+  Alegra.
+- Workflow: una vez por día a las 03:15 UTC (00:15 en Argentina), lejos de las 06:00 y 07:00
+  UTC (catálogos). Llama a la ruta, y cada ~60 s vuelve a llamar con `?tenant=` por cada
+  tenant con `done: false`, hasta que todos terminen o se cumpla el tope (80 min;
+  `timeout-minutes: 90`). Grupo de concurrencia `alegra-cuenta`. Un tenant que falla sale del
+  loop, los demás siguen y el job termina en error. Si se llega al tope, deja un aviso y la
+  pasada queda abierta: **la retoma la corrida de la noche siguiente**.
+- Pasada abandonada: si una pasada lleva más de 30 h sin avanzar (`PASADA_VENCE_MS`), se
+  cierra con `error = 'pasada_abandonada'` (sin bajas) y se arranca otra desde cero. Es más de
+  24 h a propósito, para que una pasada cortada por el tope se retome y no se reinicie.
+- Un error que no es 429 (Alegra 5xx, base) cierra la pasada en `error` sin bajas; la próxima
+  arranca desde cero.
+- Bajas soft: **solo al cerrar la pasada entera**. Lo que no se escribió desde el inicio de la
+  pasada (`synced_at` anterior a `started_at`) pasa a `inactive`, **solo si** la pasada vio al
+  menos el 80 % del padrón (vistos ≥ 80 % de vistos + activos no vistos); si no, queda en
+  error `corrida_sospechosa` y no se da de baja nada.
+- Candado por tenant (`pg_try_advisory_xact_lock`) durante el tramo (unos segundos): si otra
+  invocación del mismo tenant está en medio de un tramo, se saltea (`skipped`, `done: false`).
+- El espejo puede quedar hasta ~1 día atrás de Alegra. Para reflejar algo ya: disparo a mano
+  del workflow, o el fallback en vivo por id/documento.
 
-**Bitácora `alegra_contacts_sync_log`**: una fila por corrida y tenant con `status`
-(`running`/`ok`/`error`/`skipped`), `contacts_synced`, `marked_inactive`, `requests` (cuota
-consumida, reintentos incluidos) y `error` (motivo técnico: `sin_tiempo`, `alegra_429`,
-`alegra_http_<status>`, `corrida_sospechosa`, `corrida_en_curso`, `sin_credenciales`,
-`db_<código>`, `error_interno`). Nunca guarda nombres, emails ni documentos.
+**Bitácora `alegra_contacts_sync_log`**: una fila por **pasada** y tenant (no por tramo),
+sin columnas propias para el cursor:
+
+- `status`: `running` (pasada en curso) / `ok` / `error` / `skipped` (invocación que no hizo
+  nada: `sin_credenciales` o `corrida_en_curso`).
+- `contacts_synced`: contactos leídos en la pasada. Mientras está `running` **es el cursor**
+  (el próximo `start`): toda página que no es la última trae exactamente 30.
+- `requests`: cuota consumida en la pasada, reintentos incluidos.
+- `finished_at`: fin del último tramo mientras está `running`; fin de la pasada al cerrarla.
+- `error`: motivo técnico (`alegra_429`, `alegra_http_<status>`, `corrida_sospechosa`,
+  `pasada_abandonada`, `corrida_en_curso`, `sin_credenciales`, `db_<código>`,
+  `error_interno`). Nunca guarda nombres, emails ni documentos.
 
 **Disparo a mano**: Actions → *admin · Sync contactos Alegra* → *Run workflow*, con `tenant`
-vacío (todos) o un id de tenant. Equivale a:
+vacío (todos) o un id de tenant. El workflow hace el loop; un tramo suelto equivale a:
 
 ```bash
 curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
   "https://crm.plataforma.example/api/cron/alegra-contactos-sync?tenant=<TENANT_ID>"
 ```
 
-**Salida de emergencia**: si un padrón supera ~15.000 contactos (≈500 requests) no entra en
-los 270 s. Pasar esa sync al patrón runner de `clientes-catalogo-sync.yml` (el script corre en
-GitHub Actions, sin el techo de la función) o disparar una invocación por tenant con
-`?tenant=`.
+**Si el padrón crece**: por noche entran ~240 páginas (80 min × 3/min ≈ 7200 contactos).
+Central LED (~6000) entra con poco margen. Un padrón más grande igual termina: la pasada se
+retoma noche a noche, con el espejo más atrasado y las bajas demoradas hasta que cierre. Si
+eso molesta, subir el tope del loop y `timeout-minutes`, o `PAGINAS_POR_TRAMO` sabiendo que
+come cupo del portal y del bot.
 
 ---
 

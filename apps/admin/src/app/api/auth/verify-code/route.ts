@@ -3,6 +3,7 @@ import { getIronSession } from "iron-session"
 import { sessionOptionsForHost, otpSessionOptions } from "@/lib/session"
 import { getTenantConfig } from "@/lib/tenant-context"
 import { getCliente, getClienteByIdentifier } from "@/lib/erp"
+import { AlegraRateLimitError } from "@/lib/alegra"
 import type { SessionData, OtpSessionData } from "@/types"
 
 // Intentos de verificación permitidos por código antes de invalidarlo.
@@ -55,7 +56,10 @@ export async function POST(request: Request) {
     // volver a buscarlo por email/CUIT. Las sesiones emitidas antes de este cambio no
     // traen el id y caen a la búsqueda.
     const clienteData = otpSession.codigocliente
-      ? await getCliente(tenant, otpSession.codigocliente).catch(() => null)
+      ? await getCliente(tenant, otpSession.codigocliente).catch((err) => {
+          if (err instanceof AlegraRateLimitError) throw err
+          return null
+        })
       : await getClienteByIdentifier(tenant, otpSession.identifier)
     if (!clienteData) {
       return Response.json({ error: "No encontramos una cuenta asociada. Comuníquese con la sucursal." }, { status: 404 })
@@ -92,6 +96,15 @@ export async function POST(request: Request) {
     })()
     return Response.json({ success: true, redirect: safeRedirect })
   } catch (err) {
+    // Mismo criterio que send-code: el límite de Alegra es transitorio y el código sigue
+    // válido, así que se le dice qué hacer en vez de un 500 (o un "no encontramos su cuenta").
+    if (err instanceof AlegraRateLimitError) {
+      console.error("verify-code: Alegra rate limit:", err.name)
+      return Response.json(
+        { error: "El sistema está con mucha demanda en este momento. Intente nuevamente en un minuto." },
+        { status: 503 },
+      )
+    }
     console.error("verify-code error:", err)
     return Response.json({ error: "Error interno del servidor" }, { status: 500 })
   }

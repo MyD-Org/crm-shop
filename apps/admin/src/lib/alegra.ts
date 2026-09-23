@@ -312,10 +312,19 @@ async function alegraFetch(
   path: string,
   params?: Record<string, string>,
   init?: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: unknown },
-  // Se llama antes de CADA request HTTP, reintentos por 429 incluidos: es lo que se lleva
-  // la cuota. Lo usa la sync de contactos para registrar su presupuesto.
-  onRequest?: () => void,
+  extra: {
+    // Se llama antes de CADA request HTTP, reintentos por 429 incluidos: es lo que se lleva
+    // la cuota. Lo usa la sync de contactos para registrar su presupuesto.
+    onRequest?: () => void
+    // Cuántas veces reintentar un 429 antes de tirar AlegraRateLimitError. La sync de
+    // contactos pasa 0: prefiere cortar el tramo y seguir en la próxima invocación antes que
+    // gastar en reintentos las pocas requests por minuto que /contacts les deja al portal y
+    // al bot.
+    reintentos429?: number
+  } = {},
 ) {
+  const { onRequest } = extra
+  const reintentos429 = extra.reintentos429 ?? RATE_LIMIT_RETRIES
   const url = new URL(`${ALEGRA_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
 
@@ -336,7 +345,7 @@ async function alegraFetch(
     const detail400 = res.status === 400 ? await res.text().catch(() => "") : null
     if (res.status === 429 || (detail400 !== null && esLimiteDisfrazado(400, detail400))) {
       const detail = detail400 ?? (await res.text().catch(() => ""))
-      if (attempt < RATE_LIMIT_RETRIES) {
+      if (attempt < reintentos429) {
         await sleep(esperaDeReintento(attempt, res.headers.get("retry-after")))
         continue
       }
@@ -954,52 +963,37 @@ export async function listAllContacts(config: TenantConfig): Promise<AlegraConta
   return fetchAllPages(config, "/contacts", mapRawContact)
 }
 
-/** La sync pasó su presupuesto de tiempo. Quien la llama NO debe marcar bajas. */
-export class SinTiempoError extends Error {
-  constructor() {
-    super("sin_tiempo")
-    this.name = "SinTiempoError"
-  }
-}
-
 /**
- * Todo el padrón de contactos, CRUDO, para la sync del espejo (lib/alegra-contacts-sync.ts).
- * Es el ÚNICO lugar que debe bajar el padrón completo.
+ * UNA página del padrón de contactos, CRUDA, para la sync por tramos del espejo
+ * (lib/alegra-contacts-sync.ts). Es el ÚNICO lugar que recorre el padrón completo, y lo hace
+ * de a una página por llamada: el ritmo lo pone quien llama.
  *
- * A diferencia de `fetchAllPages`, pide las páginas de a una y deja `intervaloMs` entre el
- * INICIO de una request y el de la siguiente: 700 ms ≈ 85 req/min, y quedan ≥65 req/min de la
- * cuota de 150 para el bot, el portal y el checkout, que comparten la cuenta. El 429 lo sigue
- * absorbiendo `alegraFetch` (reintento con espera).
+ * `/contacts` admite ~5 requests por minuto por cuenta (probado 2026-09-23; `/items` no tiene
+ * ese tope) y el login del portal y el bot comparten ese cupo. Por eso la sync pide pocas
+ * páginas por invocación y NO reintenta el 429 por defecto (`reintentos429: 0`): lo recibe
+ * como `AlegraRateLimitError` y corta el tramo.
  *
- * `deadline` (epoch ms): si se pasa antes de pedir una página, tira `SinTiempoError`.
+ * Devuelve la página tal cual (hasta `PAGE_SIZE` filas; menos = última página).
  * `onRequest`: se llama por cada request HTTP, reintentos incluidos.
  */
-export async function listAllContactsPausado(
+export async function paginaDeContactos(
   config: TenantConfig,
-  opts: { intervaloMs?: number; deadline?: number; onRequest?: () => void } = {},
+  start: number,
+  opts: { onRequest?: () => void; reintentos429?: number } = {},
 ): Promise<Record<string, unknown>[]> {
-  if (config.alegraMock) return mockContacts.map(mockContactARaw)
-
-  const intervaloMs = opts.intervaloMs ?? 700
-  const out: Record<string, unknown>[] = []
-  for (let start = 0; ; start += PAGE_SIZE) {
-    if (opts.deadline != null && Date.now() > opts.deadline) throw new SinTiempoError()
-    const inicio = Date.now()
-    const page = (await alegraFetch(
-      config,
-      "/contacts",
-      { start: String(start), limit: String(PAGE_SIZE) },
-      undefined,
-      opts.onRequest,
-    )) as Record<string, unknown>[]
-    if (!Array.isArray(page) || page.length === 0) break
-    out.push(...page)
-    if (page.length < PAGE_SIZE) break
-    const espera = intervaloMs - (Date.now() - inicio)
-    if (espera > 0) await sleep(espera)
-  }
-  return out
+  if (config.alegraMock) return mockContacts.map(mockContactARaw).slice(start, start + PAGE_SIZE)
+  const page = (await alegraFetch(
+    config,
+    "/contacts",
+    { start: String(start), limit: String(PAGE_SIZE) },
+    undefined,
+    { onRequest: opts.onRequest, reintentos429: opts.reintentos429 ?? 0 },
+  )) as unknown
+  return Array.isArray(page) ? (page as Record<string, unknown>[]) : []
 }
+
+/** Tamaño de página de Alegra (topea `limit` en 30). La sync lo usa para detectar la última. */
+export const ALEGRA_PAGE_SIZE = PAGE_SIZE
 
 // ── Configuración de venta: listas de precio, formas de pago, vendedores, impuestos, monedas ──
 

@@ -1,15 +1,18 @@
-# Sync del espejo de contactos de Alegra (tabla alegra_contacts del CRM).
-# Dispara /api/cron/alegra-contactos-sync con CRON_SECRET, igual que admin-alegra-sync.
+# Sync del espejo de contactos de Alegra (tabla alegra_contacts del CRM), por tramos.
+# Llama a /api/cron/alegra-contactos-sync con CRON_SECRET una vez por minuto mientras algún
+# tenant tenga padrón por leer (`done: false`). Cada llamada lee a lo sumo 3 páginas por
+# tenant: /contacts admite ~5 requests por minuto por cuenta y el login del portal y el bot
+# comparten ese cupo.
 # Ver apps/admin/docs/FUNCIONALIDADES.md, "Espejo de contactos de Alegra".
 
 name: admin · Sync contactos Alegra
 
 on:
   schedule:
-    # 4 corridas por día: 02:15, 08:15, 14:15 y 20:15 UTC (23:15, 05:15, 11:15 y 17:15 en
-    # Argentina). Lejos de las 06:00 UTC (catálogo del Shop) y de las 07:00 UTC (catálogo del
-    # CRM), que usan la misma cuenta de Alegra.
-    - cron: "15 2,8,14,20 * * *"
+    # Una vez por día, de noche: 03:15 UTC (00:15 en Argentina). Central LED (~200 páginas)
+    # tarda ~70 min, así que termina antes de las 06:00 UTC (catálogo del Shop) y de las
+    # 07:00 UTC (catálogo del CRM), que usan la misma cuenta de Alegra.
+    - cron: "15 3 * * *"
   # A mano desde la pestaña Actions; `tenant` vacío = todos los tenants con Alegra.
   workflow_dispatch:
     inputs:
@@ -20,8 +23,8 @@ on:
 
 permissions: {}
 
-# Grupo COMPARTIDO con los otros workflows que usan la cuenta de Alegra (150 req/min por
-# usuario): nunca corren en paralelo, el siguiente espera.
+# Grupo COMPARTIDO con los otros workflows que usan la cuenta de Alegra: nunca corren en
+# paralelo, el siguiente espera.
 concurrency:
   group: alegra-cuenta
   cancel-in-progress: false
@@ -29,51 +32,111 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 90
     steps:
-      - name: Disparar la sincronización de contactos
+      - name: Sincronizar contactos por tramos
         env:
           BASE_URL: ${{ secrets.ADMIN_BASE_URL }}
           CRON_SECRET: ${{ secrets.ADMIN_CRON_SECRET }}
           EVENTO: ${{ github.event_name }}
           # Por env y no interpolado en el script: el input lo escribe una persona.
           TENANT: ${{ github.event.inputs.tenant }}
+          # Segundos entre el inicio de una ronda de llamadas y el de la siguiente.
+          PAUSA_SEG: "60"
+          # Tope del loop, por debajo de timeout-minutes para cerrar con resumen. Lo que no
+          # termine hoy lo retoma la corrida de mañana (la pasada queda abierta con su cursor).
+          TOPE_SEG: "4800"
         run: |
           if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "Faltan los secrets ADMIN_BASE_URL o ADMIN_CRON_SECRET del repo." >&2
             exit 1
           fi
 
-          query=""
-          if [ -n "$TENANT" ]; then
-            query="?tenant=$(jq -rn --arg t "$TENANT" '$t|@uri')"
-          elif [ "$EVENTO" = "workflow_dispatch" ]; then
-            query="?trigger=manual"
-          fi
+          trigger="cron"
+          if [ "$EVENTO" = "workflow_dispatch" ]; then trigger="manual"; fi
+          uri() { jq -rn --arg t "$1" '$t|@uri'; }
 
-          # --max-time 320 > maxDuration=300 de la ruta: si Vercel corta, queremos ver su
-          # error, no un timeout de curl.
-          http_code=$(curl -sS -o response.json -w '%{http_code}' \
-            --max-time 320 \
-            -X POST \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$BASE_URL/api/cron/alegra-contactos-sync$query")
-
-          echo "HTTP $http_code"
+          # Una llamada a la ruta; deja el cuerpo en response.json e imprime el HTTP status
+          # ("000" si curl no llegó). --max-time 90 > maxDuration=60 de la ruta: si Vercel
+          # corta, queremos ver su error, no un timeout de curl.
+          llamar() {
+            curl -sS -o response.json -w '%{http_code}' \
+              --max-time 90 \
+              -X POST \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "$BASE_URL/api/cron/alegra-contactos-sync$1" || true
+          }
 
           # Resumen para logs públicos: solo identificador de tenant, estado y conteos.
           # Nunca el campo "error" ni datos de contactos.
-          jq -c '.tenants[] | {tenant, ok, skipped, contactsSynced, markedInactive, requests}' response.json \
-            || echo "(respuesta no resumible)"
+          resumir() {
+            jq -c '.tenants[] | {tenant, ok, skipped, done, contactsSynced, totalPasada, markedInactive, requests}' response.json \
+              || echo "(respuesta no resumible)"
+          }
 
-          if [ "$http_code" != "200" ]; then
-            echo "::error::La sincronización falló con HTTP $http_code"
+          # Una respuesta 200 que no es el JSON de la ruta (p. ej. una página HTML de por
+          # medio) no puede pasar por "nada pendiente".
+          respuesta_valida() {
+            jq -e '.tenants | type == "array"' response.json > /dev/null 2>&1
+          }
+
+          # Tenants que fallaron (ok:false sin skipped). Un tenant salteado no es una falla.
+          fallidos=""
+          anotar_fallidos() {
+            for t in $(jq -r '.tenants[] | select(.ok == false and (.skipped != true)) | .tenant' response.json); do
+              fallidos="$fallidos $t"
+            done
+          }
+          # Tenants con padrón por leer: se los vuelve a llamar en la próxima ronda.
+          pendientes_de() {
+            jq -r '.tenants[] | select(.done == false and (.ok == true)) | .tenant' response.json
+          }
+
+          # Primera ronda: todos los tenants (o el del input) en una sola llamada.
+          if [ -n "$TENANT" ]; then
+            query="?tenant=$(uri "$TENANT")&trigger=$trigger"
+          else
+            query="?trigger=$trigger"
+          fi
+          inicio=$(date +%s)
+          ronda=$inicio
+          http_code=$(llamar "$query")
+          echo "HTTP $http_code"
+          if [ "$http_code" != "200" ] || ! respuesta_valida; then
+            echo "::error::La sincronización falló (HTTP $http_code o respuesta que no es la de la ruta)."
             exit 1
           fi
+          resumir
+          anotar_fallidos
+          pendientes=$(pendientes_de)
 
-          # La ruta responde 200 aunque un tenant falle (best-effort por tenant). Un tenant
-          # salteado (otra corrida en curso, sin credenciales) no es una falla.
-          if ! jq -e '[.tenants[] | select(.ok == false and (.skipped != true))] | length == 0' response.json > /dev/null; then
-            echo "::error::Al menos un tenant falló. Ver el detalle de arriba y alegra_contacts_sync_log."
+          # Rondas siguientes: un tramo por tenant pendiente, de a uno con ?tenant=, cada
+          # PAUSA_SEG. Un tenant que falla sale del loop; los demás siguen.
+          while [ -n "$pendientes" ]; do
+            if [ $(( $(date +%s) - inicio )) -ge "$TOPE_SEG" ]; then
+              echo "::warning::Tope de tiempo con pasadas sin terminar ($(echo $pendientes)). La corrida de mañana las retoma."
+              break
+            fi
+            espera=$(( PAUSA_SEG - ($(date +%s) - ronda) ))
+            if [ "$espera" -gt 0 ]; then sleep "$espera"; fi
+            ronda=$(date +%s)
+
+            siguientes=""
+            for t in $pendientes; do
+              http_code=$(llamar "?tenant=$(uri "$t")&trigger=$trigger")
+              if [ "$http_code" != "200" ] || ! respuesta_valida; then
+                echo "{\"tenant\":\"$t\",\"http\":\"$http_code\"}"
+                fallidos="$fallidos $t"
+                continue
+              fi
+              resumir
+              anotar_fallidos
+              if [ -n "$(pendientes_de)" ]; then siguientes="$siguientes $t"; fi
+            done
+            pendientes=$(echo $siguientes)
+          done
+
+          if [ -n "$fallidos" ]; then
+            echo "::error::Fallaron:$fallidos. Ver el detalle de arriba y alegra_contacts_sync_log."
             exit 1
           fi

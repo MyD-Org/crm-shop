@@ -9,7 +9,7 @@ import { MAX_LINEAS, normalizarLineas } from "./cotizacion";
 
 describe("normalizarLineas", () => {
   it("deja pasar líneas válidas", () => {
-    expect(normalizarLineas([{ id: "a", qty: 2 }])).toEqual([{ id: "a", qty: 2 }]);
+    expect(normalizarLineas([{ id: "101", qty: 2 }])).toEqual([{ id: "101", qty: 2 }]);
   });
 
   it("devuelve vacío si no es un array", () => {
@@ -25,14 +25,14 @@ describe("normalizarLineas", () => {
    */
   it("suma las cantidades de un id repetido en una sola línea", () => {
     expect(normalizarLineas([
-      { id: "a", qty: 2 },
-      { id: "a", qty: 3 },
-    ])).toEqual([{ id: "a", qty: 5 }]);
+      { id: "101", qty: 2 },
+      { id: "101", qty: 3 },
+    ])).toEqual([{ id: "101", qty: 5 }]);
   });
 
   it("descarta cantidades no positivas o no numéricas", () => {
     expect(normalizarLineas([
-      { id: "a", qty: 0 },
+      { id: "101", qty: 0 },
       { id: "b", qty: -5 },
       { id: "c", qty: NaN },
       { id: "d", qty: "muchas" },
@@ -49,31 +49,49 @@ describe("normalizarLineas", () => {
   });
 
   it("trunca los decimales hacia abajo", () => {
-    expect(normalizarLineas([{ id: "a", qty: 2.9 }])).toEqual([{ id: "a", qty: 2 }]);
+    expect(normalizarLineas([{ id: "101", qty: 2.9 }])).toEqual([{ id: "101", qty: 2 }]);
     // 0.5 baja a 0 y por lo tanto se descarta: no se puede pedir media unidad.
-    expect(normalizarLineas([{ id: "a", qty: 0.5 }])).toEqual([]);
+    expect(normalizarLineas([{ id: "101", qty: 0.5 }])).toEqual([]);
   });
 
   it("topea la cantidad por línea", () => {
-    const [linea] = normalizarLineas([{ id: "a", qty: 999_999_999 }]);
+    const [linea] = normalizarLineas([{ id: "101", qty: 999_999_999 }]);
     expect(linea.qty).toBeLessThanOrEqual(9_999);
   });
 
   it("topea la cantidad de líneas distintas", () => {
     const muchas = Array.from({ length: MAX_LINEAS + 40 }, (_, i) => ({
-      id: `item-${i}`,
+      id: `${1000 + i}`,
       qty: 1,
     }));
     expect(normalizarLineas(muchas)).toHaveLength(MAX_LINEAS);
   });
 
   it("acota el fan-out contra Alegra incluso con miles de líneas basura", () => {
-    const ruido = Array.from({ length: 5_000 }, (_, i) => ({ id: `x-${i}`, qty: 1 }));
+    const ruido = Array.from({ length: 5_000 }, (_, i) => ({ id: `${i}`, qty: 1 }));
     expect(normalizarLineas(ruido).length).toBeLessThanOrEqual(MAX_LINEAS);
   });
 
   it("normaliza el id a string y le saca los espacios", () => {
-    expect(normalizarLineas([{ id: "  a  ", qty: 1 }])).toEqual([{ id: "a", qty: 1 }]);
+    expect(normalizarLineas([{ id: "  101  ", qty: 1 }])).toEqual([{ id: "101", qty: 1 }]);
+    expect(normalizarLineas([{ id: 101, qty: 1 }])).toEqual([{ id: "101", qty: 1 }]);
+  });
+
+  /**
+   * El id termina en `/items/${id}` de Alegra. Con `"../contacts/123"` la URL
+   * se resolvía a `/contacts/123` y la cotización devolvía la razón social de
+   * cualquier cliente.
+   */
+  it("descarta ids que no son numéricos (path traversal a otros recursos)", () => {
+    expect(normalizarLineas([
+      { id: "../contacts/123", qty: 1 },
+      { id: "..%2Fcontacts%2F123", qty: 1 },
+      { id: "12/../../invoices/9", qty: 1 },
+      { id: "12?x=1", qty: 1 },
+      { id: "abc", qty: 1 },
+      { id: "-5", qty: 1 },
+      { id: "1.5", qty: 1 },
+    ])).toEqual([]);
   });
 });
 

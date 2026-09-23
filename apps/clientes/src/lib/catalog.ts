@@ -25,6 +25,7 @@ import { catalogCategories, catalogProducts } from "@/db/schema";
 import { crmCategorias, crmOverlay, type FotoCrm } from "@/db/crm";
 import {
   getItem,
+  esIdAlegra,
   ivaPersistible,
   marcaDeCustomFields,
   precioDeLista,
@@ -604,6 +605,8 @@ export async function getProducto(
   id: string,
   idPriceList?: string
 ): Promise<Product | null> {
+  // Un id que no es de Alegra no es un producto: ni se consulta.
+  if (!esIdAlegra(id)) return null;
   try {
     const item = await getItem(id);
     return mapItemToProduct(item, idPriceList);

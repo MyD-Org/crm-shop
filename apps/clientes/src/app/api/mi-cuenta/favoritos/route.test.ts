@@ -92,6 +92,8 @@ describe("PUT", () => {
     ["sólo espacios", { alegraItemId: "   " }],
     ["número", { alegraItemId: 42 }],
     ["más de 64 caracteres", { alegraItemId: "1".repeat(65) }],
+    ["id no numérico", { alegraItemId: "abc" }],
+    ["path traversal", { alegraItemId: "../contacts/123" }],
     ["no es JSON", "{nope"],
   ])("400 con %s", async (_caso, body) => {
     await esperaError(await PUT(conBody("PUT", body)), 400, "Indique el producto.");

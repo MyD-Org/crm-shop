@@ -220,7 +220,13 @@ export async function getFacturasPage(
   const { items, total } = await listInvoicesPageByContact(config, codigocliente, { start, limit, filters })
   // Los borradores se esconden (no son documentos emitidos), así que una página puede
   // traer menos de `limit` filas sin que eso signifique que se terminaron.
-  return { facturas: items.filter((i) => i.status !== "draft").map((i) => mapInvoice(i, hoy)), total }
+  const emitidas = items.filter((i) => i.status !== "draft")
+  // El `total` de Alegra cuenta los borradores. Sin descontarlos, un cliente con un solo
+  // borrador veía la tabla vacía con "1–0 de 1" y un "Siguiente" a una página vacía. Solo
+  // se descuentan los de esta ventana (Alegra no cuenta borradores aparte): los de otras
+  // páginas siguen sumando hasta que se llega a ellas.
+  const ocultas = items.length - emitidas.length
+  return { facturas: emitidas.map((i) => mapInvoice(i, hoy)), total: Math.max(0, total - ocultas) }
 }
 
 export async function getFacturas(config: TenantConfig, codigocliente: string): Promise<Factura[]> {

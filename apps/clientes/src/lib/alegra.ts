@@ -205,7 +205,25 @@ export interface AlegraContact {
    * literalmente "NO USAR"). Ver `idPriceListUsable`.
    */
   priceList?: { id: string; name: string; status?: string } | null;
+  /** Plazo de pago asignado ("Contado" = 0 días, "30 días"…). */
+  term?: { id?: string; name?: string; days?: number | string | null } | null;
+  /** Límite de crédito cargado en Alegra. */
+  creditLimit?: number | string | null;
   [key: string]: unknown;
+}
+
+/**
+ * Cuenta corriente o contado, deducido del contacto: Alegra no tiene un campo propio.
+ * En la sucursal, a un cliente de cuenta corriente le cargan un plazo de pago y/o un
+ * límite de crédito; sin ninguno de los dos, es contado. Misma regla que el CRM
+ * (`tipoCuentaDeContacto` en apps/admin/src/lib/erp.ts).
+ */
+export function tipoCuentaDe(
+  contacto: Pick<AlegraContact, "term" | "creditLimit"> | null | undefined,
+): "corriente" | "contado" {
+  const dias = Number(contacto?.term?.days ?? 0);
+  const limite = Number(contacto?.creditLimit ?? 0);
+  return dias > 0 || limite > 0 ? "corriente" : "contado";
 }
 
 export interface AlegraPriceList {

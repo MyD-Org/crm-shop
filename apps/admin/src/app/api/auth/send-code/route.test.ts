@@ -119,7 +119,8 @@ describe("POST /api/auth/send-code", () => {
 
     expect(state.saved).toBe(1)
     expect(state.session.otp).toBe(body.devCode)
-    expect(state.session.identifier).toBe("20-12345678-9")
+    // Se guarda normalizado a dígitos: "20-12345678-9" y "20123456789" son el mismo.
+    expect(state.session.identifier).toBe("20123456789")
     // verify-code lee el contacto por este id en vez de volver a buscarlo.
     expect(state.session.codigocliente).toBe("42")
     expect(state.session.attempts).toBe(0)
@@ -133,6 +134,7 @@ describe("POST /api/auth/send-code", () => {
     const res = await POST(req("99-99999999-9"))
 
     expect(res.status).toBe(404)
+    expect((await res.json()).error).toMatch(/Verifique el número o comuníquese con la sucursal/)
     expect(state.sent).toHaveLength(0)
     expect(state.saved).toBe(0)
   })
@@ -144,6 +146,7 @@ describe("POST /api/auth/send-code", () => {
     const res = await POST(req("20-12345678-9"))
 
     expect(res.status).toBe(409)
+    expect((await res.json()).error).toMatch(/Comuníquese con la sucursal para que le den el alta/)
     expect(state.sent).toHaveLength(0)
     expect(state.saved).toBe(0)
   })
@@ -188,11 +191,26 @@ describe("POST /api/auth/send-code", () => {
     expect((await POST(req("20-99999999-1", "198.51.100.8"))).status).toBe(200)
   })
 
-  it("400 si el identificador es muy corto", async () => {
+  it.each([
+    ["muy corto", "ab"],
+    ["un email", "compras@cliente.example"],
+    ["un nombre de empresa", "ACME SRL"],
+    ["pocos dígitos", "12345"],
+  ])("400 sin buscar en Alegra si lo tipeado es %s", async (_caso, identifier) => {
     const POST = await loadRoute()
-    const res = await POST(req("ab"))
+    const res = await POST(req(identifier))
 
     expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe("Ingrese una identificación válida, solo con números.")
+    expect(state.busquedas).toBe(0)
     expect(state.sent).toHaveLength(0)
+  })
+
+  it("el límite por identificador cuenta igual el CUIT con y sin guiones", async () => {
+    const POST = await loadRoute()
+    for (let i = 0; i < 5; i++) {
+      expect((await POST(req(i % 2 ? "20-22222222-2" : "20222222222"))).status).toBe(200)
+    }
+    expect((await POST(req("20.222.222.222"))).status).toBe(429)
   })
 })

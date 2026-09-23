@@ -8,6 +8,7 @@ import {
   ivaPersistible,
   listAllCategories,
   mapItemRow,
+  tipoCuentaDe,
 } from "./alegra";
 
 /**
@@ -154,6 +155,26 @@ describe("BASE_URL", () => {
     await listAllCategories();
     const [url] = fetchMock.mock.calls[0] as unknown as [RequestInfo];
     expect(String(url)).toMatch(/^https:\/\/api\.alegra\.com\/api\/v1\//);
+  });
+});
+
+/**
+ * Cuenta corriente = el contacto tiene plazo de pago o límite de crédito en Alegra
+ * (así lo cargan en la sucursal). Misma regla que el CRM.
+ */
+describe("tipoCuentaDe", () => {
+  it("corriente con plazo de pago o con límite de crédito", () => {
+    expect(tipoCuentaDe({ term: { name: "30 días", days: 30 } })).toBe("corriente");
+    expect(tipoCuentaDe({ term: { days: "15" } })).toBe("corriente");
+    expect(tipoCuentaDe({ creditLimit: 500000 })).toBe("corriente");
+    expect(tipoCuentaDe({ term: { name: "Contado", days: 0 }, creditLimit: "100" })).toBe("corriente");
+  });
+
+  it("contado sin plazo ni límite (o con plazo Contado = 0 días)", () => {
+    expect(tipoCuentaDe({})).toBe("contado");
+    expect(tipoCuentaDe(null)).toBe("contado");
+    expect(tipoCuentaDe({ term: { name: "Contado", days: 0 }, creditLimit: 0 })).toBe("contado");
+    expect(tipoCuentaDe({ term: null, creditLimit: "" })).toBe("contado");
   });
 });
 

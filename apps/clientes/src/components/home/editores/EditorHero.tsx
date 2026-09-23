@@ -1,8 +1,9 @@
 "use client";
 
-import { Field, Input } from "@myd-org/ui";
+import { Button, Field, Input } from "@myd-org/ui";
 import type { HeroContent } from "@/data/home-defaults";
 import { nuevoEnlace } from "@/lib/home-editor";
+import { isStudioImage, STUDIO_IMAGE } from "../hero-lights";
 import { ListaEditable } from "../ListaEditable";
 import { CampoImagen } from "./CampoImagen";
 import { CamposTitulo } from "./CamposTitulo";
@@ -18,6 +19,16 @@ export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
         alt={valor.imagenAlt}
         onAltChange={(imagenAlt) => onChange({ ...valor, imagenAlt })}
       />
+      {/* La foto del estudio es la única que prende las luces interactivas del hero. */}
+      {!isStudioImage(valor.imagen) ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onChange({ ...valor, imagen: STUDIO_IMAGE, imagenAlt: "Estudio con luminarias de Central Led" })}
+        >
+          Usar la foto interactiva del estudio
+        </Button>
+      ) : null}
       <div>
         <p className="mb-2 text-sm font-semibold text-text">Enlaces (CTAs)</p>
         <ListaEditable

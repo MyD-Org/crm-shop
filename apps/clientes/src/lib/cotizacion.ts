@@ -14,6 +14,7 @@
  */
 
 import {
+  esIdAlegra,
   getItem,
   ivaDeItem,
   marcaDeCustomFields,
@@ -87,7 +88,8 @@ export function normalizarLineas(raw: unknown): LineaPedida[] {
   for (const item of raw) {
     const id = String((item as LineaPedida)?.id ?? "").trim();
     const qty = Math.floor(Number((item as LineaPedida)?.qty));
-    if (!id || !Number.isFinite(qty) || qty <= 0) continue;
+    // Solo ids numéricos: el id termina en una ruta de Alegra (ver esIdAlegra).
+    if (!esIdAlegra(id) || !Number.isFinite(qty) || qty <= 0) continue;
     porId.set(id, Math.min((porId.get(id) ?? 0) + qty, QTY_MAX));
   }
 

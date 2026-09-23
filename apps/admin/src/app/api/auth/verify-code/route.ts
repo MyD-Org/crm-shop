@@ -2,7 +2,7 @@ import { cookies } from "next/headers"
 import { getIronSession } from "iron-session"
 import { sessionOptionsForHost, otpSessionOptions } from "@/lib/session"
 import { getTenantConfig } from "@/lib/tenant-context"
-import { getClienteByIdentifier } from "@/lib/erp"
+import { getCliente, getClienteByIdentifier } from "@/lib/erp"
 import type { SessionData, OtpSessionData } from "@/types"
 
 // Intentos de verificación permitidos por código antes de invalidarlo.
@@ -51,7 +51,12 @@ export async function POST(request: Request) {
       return Response.json({ error: "Código incorrecto" }, { status: 400 })
     }
 
-    const clienteData = await getClienteByIdentifier(tenant, otpSession.identifier)
+    // El contacto ya se resolvió al pedir el código: se lee por id (1 request) en vez de
+    // volver a buscarlo por email/CUIT. Las sesiones emitidas antes de este cambio no
+    // traen el id y caen a la búsqueda.
+    const clienteData = otpSession.codigocliente
+      ? await getCliente(tenant, otpSession.codigocliente).catch(() => null)
+      : await getClienteByIdentifier(tenant, otpSession.identifier)
     if (!clienteData) {
       return Response.json({ error: "No encontramos una cuenta asociada. Contáctese con atención al cliente." }, { status: 404 })
     }

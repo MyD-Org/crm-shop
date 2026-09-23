@@ -106,6 +106,8 @@ export interface SessionData {
 
 export interface OtpSessionData {
   identifier?: string
+  /** Id de Alegra del contacto resuelto al pedir el código: verify-code no lo vuelve a buscar. */
+  codigocliente?: string
   otp?: string
   otpExpiry?: number
 }

@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest"
-import { normalizePhone, searchContactsByPhone } from "./alegra"
-import type { TenantConfig } from "./tenants"
+import { esCliente, normalizePhone } from "./alegra"
 
-// Tenant en modo mock: searchContactsByPhone filtra sobre mockContacts sin pegarle a Alegra.
-const tenantMock = { id: "t", alegraMock: true } as unknown as TenantConfig
+// La búsqueda por teléfono vive en el espejo (buscarPorTelefono en lib/contactos.ts, probada
+// en test/integration/contactos-fachada.integration.test.ts). Acá quedan las dos piezas puras
+// que usa: la normalización del número y el filtro de cuentas internas.
 
 describe("normalizePhone", () => {
   it("empareja los formatos en que llega el mismo número", () => {
@@ -34,29 +34,19 @@ describe("normalizePhone", () => {
   })
 })
 
-describe("searchContactsByPhone", () => {
-  it("encuentra el contacto aunque el formato guardado sea distinto al buscado", async () => {
-    // En los mocks está como "+54 223 495-8877"; el bot manda el wa_id sin '+' ni guiones.
-    const found = await searchContactsByPhone(tenantMock, "542234958877")
-    expect(found.map((c) => c.name)).toEqual(["Ferretería El Tornillo"])
+describe("cuentas internas (esCliente)", () => {
+  it("no toma como cliente una cuenta interna o un marcador", () => {
+    // Si "Stock general" tiene cargado el mismo número que un cliente, un match automático
+    // le colgaría el pedido a la cuenta interna.
+    expect(esCliente("Stock general")).toBe(false)
+    expect(esCliente(" STOCK TALLER ")).toBe(false)
+    expect(esCliente("POS")).toBe(false)
+    expect(esCliente("Cliente viejo - NO USAR")).toBe(false)
+    expect(esCliente("")).toBe(false)
   })
 
-  it("no devuelve nada para un número que no está cargado", async () => {
-    expect(await searchContactsByPhone(tenantMock, "5492235550112")).toEqual([])
-  })
-
-  it("no devuelve nada si el teléfono buscado no identifica una línea", async () => {
-    // Sin esta guarda, un teléfono vacío matchearía contra los contactos sin teléfono.
-    expect(await searchContactsByPhone(tenantMock, "")).toEqual([])
-    expect(await searchContactsByPhone(tenantMock, "123")).toEqual([])
-  })
-})
-
-describe("cuentas internas", () => {
-  it("no resuelve una cuenta interna como cliente aunque comparta el teléfono", async () => {
-    // "Stock general" tiene cargado el mismo número que Constructora Delta. Sin el filtro,
-    // el bot le colgaría el pedido a la cuenta interna la mitad de las veces.
-    const found = await searchContactsByPhone(tenantMock, "541147889900")
-    expect(found.map((c) => c.name)).toEqual(["Constructora Delta SA"])
+  it("un cliente común sí", () => {
+    expect(esCliente("Constructora Delta SA")).toBe(true)
+    expect(esCliente("Ferretería El Tornillo")).toBe(true)
   })
 })

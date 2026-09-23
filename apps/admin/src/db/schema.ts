@@ -321,7 +321,7 @@ export const alegraContacts = pgTable(
     alegraStatus: text("alegra_status"),
     /** NO es el estado de Alegra: "visto en la última corrida OK" ('active' | 'inactive'). */
     status: text("status").notNull().default("active"),
-    /** Último que escribió la fila: 'sync' | 'fallback' | 'write_through'. */
+    /** Último que escribió la fila: 'sync' | 'fallback' | 'write_through' | 'webhook'. */
     origen: text("origen").notNull().default("sync"),
     /** El contacto COMPLETO como lo devuelve Alegra. No lo ve el Shop (fuera de la vista). */
     raw: jsonb("raw").$type<Record<string, unknown>>(),

@@ -250,14 +250,14 @@ describe("syncContacts por tramos (DB real, Alegra mockeado)", () => {
     expect(await ultimaCorrida()).toMatchObject({ status: "running" })
   })
 
-  it("pasada abandonada (más de 30 h sin avanzar): se cierra en error y arranca otra desde cero", async () => {
+  it("pasada abandonada (más de 8 días sin avanzar): se cierra en error y arranca otra desde cero", async () => {
     alegraSirve(padronDe(100))
     await sync()
     const [vieja] = await corridas()
-    const hace31h = new Date(Date.now() - 31 * 60 * 60 * 1000)
+    const hace9dias = new Date(Date.now() - 9 * 24 * 60 * 60 * 1000)
     await getDb()
       .update(alegraContactsSyncLog)
-      .set({ startedAt: hace31h, finishedAt: hace31h })
+      .set({ startedAt: hace9dias, finishedAt: hace9dias })
       .where(eq(alegraContactsSyncLog.id, vieja.id))
 
     starts = []
@@ -270,14 +270,14 @@ describe("syncContacts por tramos (DB real, Alegra mockeado)", () => {
     expect(log[1]).toMatchObject({ status: "running", contactsSynced: 90 })
   })
 
-  it("pasada de ayer que no terminó (menos de 30 h): la retoma en vez de reiniciarla", async () => {
+  it("pasada de la semana pasada que no terminó (menos de 8 días): la retoma en vez de reiniciarla", async () => {
     alegraSirve(padronDe(100))
     await sync()
     const [pasada] = await corridas()
-    const ayer = new Date(Date.now() - 23 * 60 * 60 * 1000)
+    const semanaPasada = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     await getDb()
       .update(alegraContactsSyncLog)
-      .set({ startedAt: ayer, finishedAt: ayer })
+      .set({ startedAt: semanaPasada, finishedAt: semanaPasada })
       .where(eq(alegraContactsSyncLog.id, pasada.id))
 
     starts = []

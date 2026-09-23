@@ -284,9 +284,13 @@ Credenciales por tenant (`{PREFIX}_ALEGRA_EMAIL/TOKEN`); sin credenciales corre 
 
 - **Catálogo**: `listAllCategories`, `listAllItems` — sync a cache local
   (`alegra-sync.ts`, cron `/api/cron/alegra-sync`) — y `getItemsLive` (precio/stock al momento).
-- **Contactos (clientes)**: `searchContacts`, `getContact`, `listAllContacts`; para el
-  [espejo](#espejo-de-contactos-de-alegra), las versiones crudas (`*Raw`),
-  `mapRawContactRow` y `paginaDeContactos` (una página por llamada; único que debe recorrer el padrón entero, de a tramos).
+- **Contactos (clientes)**: nadie del CRM los lee de acá directo: se leen del
+  [espejo](#espejo-de-contactos-de-alegra) con `src/lib/contactos.ts`, que usa las versiones
+  crudas (`getContactRaw`, `findContactRawByIdentifier`, `searchContactsRaw`,
+  `createContactRaw`) solo como fallback acotado. `paginaDeContactos` (una página por llamada)
+  es lo único que recorre el padrón entero, de a tramos, y solo desde la sync. Suscripciones de
+  webhooks: `listWebhookSubscriptions` / `createWebhookSubscription` /
+  `deleteWebhookSubscription`.
 - **Cuenta corriente**: `listInvoicesByContact`, `listPaymentsByContact`, `getContactBalance`
   (deuda total / vencido / a vencer, derivado de las facturas abiertas).
 - **Config de venta**: `listPriceLists`, `listPaymentTerms` (`/terms`), `listSellers`,
@@ -302,8 +306,9 @@ login, condiciones), los endpoints `/api/agent/*` y el gestor de cobranza. En mo
 credenciales. Fechas normalizadas a `DD/MM/YYYY`; estados de Alegra mapeados a
 `FacturaEstado`/`PresupuestoEstado`.
 
-- `getCliente`, `getClienteByIdentifier` (login por email/CUIT), `getClientes`,
-  `getFacturas`, `getPagos`, `getPresupuestos`.
+- `getCliente`, `getClienteByIdentifier` (login por CUIT/CUIL/DNI), `getClientes`,
+  `getFacturas`, `getPagos`, `getPresupuestos`. Los **contactos** (cliente, login, lista de
+  clientes, condiciones) salen del espejo de contactos (ver abajo), no de Alegra en vivo.
 - `getCondiciones` — **excepción**: las condiciones comerciales NO están en Alegra,
   se leen de la DB propia (con fallback a mock).
 
@@ -335,7 +340,8 @@ Guarda también el contacto crudo en `raw`.
   columna en vez de recalcularla.
 - `status` NO es el estado de Alegra: es "visto en la última corrida OK" (`active` /
   `inactive`). El estado real de Alegra está en `alegra_status`.
-- `origen`: quién escribió la fila por última vez (`sync`, `fallback`, `write_through`).
+- `origen`: quién escribió la fila por última vez (`sync`, `fallback`, `write_through`,
+  `webhook`).
 
 **Vista `alegra_contacts_shop`** (migración 0031, vive solo en SQL). Es lo único que lee el
 Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre la tabla). Expone 16
@@ -365,15 +371,17 @@ workflow `admin-alegra-contactos-sync`):
   llamar), `contactsSynced` (leídos en este tramo), `totalPasada` (leídos en la pasada),
   `markedInactive` y `requests` (de este tramo). Nunca datos de contactos ni mensajes de
   Alegra.
-- Workflow: una vez por día a las 03:15 UTC (00:15 en Argentina), lejos de las 06:00 y 07:00
-  UTC (catálogos). Llama a la ruta, y cada ~60 s vuelve a llamar con `?tenant=` por cada
+- Workflow: **una vez por semana**, domingo 03:15 UTC (00:15 en Argentina), lejos de las 06:00
+  y 07:00 UTC (catálogos). Entre corridas el espejo lo mantienen los webhooks (ver abajo); la
+  pasada semanal es el control: corrige avisos perdidos y da de baja lo que ya no está. Llama a la ruta, y cada ~60 s vuelve a llamar con `?tenant=` por cada
   tenant con `done: false`, hasta que todos terminen o se cumpla el tope (80 min;
   `timeout-minutes: 90`). Grupo de concurrencia `alegra-cuenta`. Un tenant que falla sale del
   loop, los demás siguen y el job termina en error. Si se llega al tope, deja un aviso y la
-  pasada queda abierta: **la retoma la corrida de la noche siguiente**.
-- Pasada abandonada: si una pasada lleva más de 30 h sin avanzar (`PASADA_VENCE_MS`), se
+  pasada queda abierta: **la retoma la corrida siguiente** (la de la semana próxima, o un
+  disparo a mano antes).
+- Pasada abandonada: si una pasada lleva más de 8 días sin avanzar (`PASADA_VENCE_MS`), se
   cierra con `error = 'pasada_abandonada'` (sin bajas) y se arranca otra desde cero. Es más de
-  24 h a propósito, para que una pasada cortada por el tope se retome y no se reinicie.
+  una semana a propósito, para que una pasada cortada por el tope se retome y no se reinicie.
 - Un error que no es 429 (Alegra 5xx, base) cierra la pasada en `error` sin bajas; la próxima
   arranca desde cero.
 - Bajas soft: **solo al cerrar la pasada entera**. Lo que no se escribió desde el inicio de la
@@ -382,8 +390,9 @@ workflow `admin-alegra-contactos-sync`):
   error `corrida_sospechosa` y no se da de baja nada.
 - Candado por tenant (`pg_try_advisory_xact_lock`) durante el tramo (unos segundos): si otra
   invocación del mismo tenant está en medio de un tramo, se saltea (`skipped`, `done: false`).
-- El espejo puede quedar hasta ~1 día atrás de Alegra. Para reflejar algo ya: disparo a mano
-  del workflow, o el fallback en vivo por id/documento.
+- Con los webhooks activos, el espejo se entera de altas, ediciones y bajas en segundos. Sin
+  ellos (o si un aviso se pierde) puede quedar hasta una semana atrás. Para reflejar algo ya:
+  disparo a mano del workflow, o el fallback en vivo por id/documento.
 
 **Bitácora `alegra_contacts_sync_log`**: una fila por **pasada** y tenant (no por tramo),
 sin columnas propias para el cursor:
@@ -406,11 +415,59 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
   "https://crm.plataforma.example/api/cron/alegra-contactos-sync?tenant=<TENANT_ID>"
 ```
 
-**Si el padrón crece**: por noche entran ~240 páginas (80 min × 3/min ≈ 7200 contactos).
+**Si el padrón crece**: por corrida entran ~240 páginas (80 min × 3/min ≈ 7200 contactos).
 Central LED (~6000) entra con poco margen. Un padrón más grande igual termina: la pasada se
-retoma noche a noche, con el espejo más atrasado y las bajas demoradas hasta que cierre. Si
+retoma en la corrida siguiente (o con un disparo a mano), con las bajas demoradas hasta que
+cierre. Si
 eso molesta, subir el tope del loop y `timeout-minutes`, o `PAGINAS_POR_TRAMO` sabiendo que
 come cupo del portal y del bot.
+
+**Quién lee el espejo** (`src/lib/contactos.ts`, la única puerta del CRM a los contactos). Regla:
+espejo primero; si no hay fila **activa**, una consulta en vivo acotada (nunca el padrón) y
+upsert de lo que trajo (`origen = 'fallback'`). Una fila `inactive` cuenta como "no está".
+
+| Lectura | Quién la usa | Espejo | Sin fila activa |
+|---|---|---|---|
+| `contactoPorId` | portal (`getCliente`, `getCuenta`, `getCondiciones`), verify-code | por `alegra_id` | `GET /contacts/{id}` (1 request); 404 → no existe |
+| `contactoPorDocumento` | login del portal (send-code) | `identification_norm` = dígitos; si hay varios, gana el `client` y luego el id menor | las consultas de siempre por documento (≤ 4 requests, un 429 corta) |
+| `buscarPorTexto` | bot, `GET /api/agent/contacts?q=` | nombre sin tildes (`unaccent ILIKE`) o documento exacto si `q` tiene ≥ 6 dígitos; 20 por nombre | `?query=` (1 request), solo si el espejo no encontró nada |
+| `buscarPorTelefono` | bot, `GET /api/agent/contacts?phone=` | `phones_norm` contiene el teléfono normalizado; sin cuentas internas | **ninguno** (Alegra no filtra por teléfono: sería el padrón) |
+| `clientesActivos` | gestor de cobranza / cron de notificaciones (`getClientes`) | `status` y `alegra_status` activos | **ninguno**: espejo vacío → no notifica y deja `espejo_vacio` en el log |
+| `crearContacto` | bot, `POST /api/agent/contacts` | — | `POST /contacts` (1 request) y write-through al espejo; si la base falla, devuelve el contacto igual |
+
+`tipoCuenta` sale siempre de la columna generada `tipo_cuenta`. Ninguna lectura de usuario
+recorre `/contacts`: solo la sync, con `paginaDeContactos`. Lo vigila
+`src/lib/alegra-exports.test.ts` (falla si vuelve un `listAllContacts`, un `fetchAllPages`
+sobre `/contacts` o un uso de `paginaDeContactos` fuera de la sync).
+
+**Webhooks de Alegra** (`src/lib/alegra-contacts-webhook.ts`, ruta
+`POST /api/webhooks/alegra/contactos/<tenant>/<evento>/<token>`): Alegra avisa altas
+(`new-client`), ediciones (`edit-client`) y bajas (`delete-client`) de contactos, una
+suscripción por evento.
+
+- Auth: `token` = HMAC-SHA256 de `alegra-contactos:<tenant>` con `ALEGRA_WEBHOOK_SECRET`
+  (base64url), comparado en tiempo constante. Sin tabla ni migración: la ruta y el script lo
+  recalculan igual. Rotar el secreto invalida todas las URLs (hay que recrear las
+  suscripciones). Token inválido, evento o tenant desconocido → 404 (mismo 404 para todo).
+- Responde 200 enseguida y aplica el aviso después (`after`): si el cuerpo trae el contacto
+  completo (con `id`, `name`, `type` y `status`), upsert directo (0 requests); si trae solo el
+  id o una forma que no se reconoce, lo lee por id (1 request) y upsert; `delete-client` →
+  baja soft (`status = 'inactive'`) sin request, salvo que el id no sea inequívocamente el del
+  contacto (un `id` suelto en la raíz): ahí se confirma leyéndolo. Si Alegra dice 404, baja.
+- El formato del cuerpo y si Alegra firma los avisos **no están documentados**. La primera vez
+  por (tenant, evento) y por instancia se loguean solo las **claves** del cuerpo (sin valores):
+  `[webhooks/alegra] tenant=… evento=… claves=…`. Cada aviso deja
+  `[webhooks/alegra] tenant=… evento=… accion=… id=… requests=…`. Nunca el cuerpo.
+- Si algo falla (429, base), queda `accion=error` en el log y lo corrige la sync semanal o el
+  fallback por id.
+- Suscripciones: `scripts/alegra-webhooks-contactos.ts` (crear / listar / borrar las tres de
+  un tenant; pide confirmación; cambia la configuración de la cuenta real de Alegra):
+
+```bash
+CRM_DATABASE_URL="<conexión de prod>" ALEGRA_WEBHOOK_SECRET="<el mismo de Vercel>" \
+  npx tsx --env-file-if-exists=.env.local scripts/alegra-webhooks-contactos.ts \
+  --tenant <TENANT_ID> --base-url https://<tenant>.plataforma.example crear
+```
 
 ---
 
@@ -455,11 +512,12 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | POST | `/api/notifications/send` | `CRON_SECRET` | Disparo manual del gestor de cobranza |
 | POST/GET | `/api/cron/notifications` | `CRON_SECRET` | Disparo automático (Vercel Cron) |
 | POST/GET | `/api/cron/alegra-contactos-sync` | `CRON_SECRET` | Sync del espejo de contactos (`?tenant=` opcional, `?trigger=manual`) |
+| POST/GET | `/api/webhooks/alegra/contactos/<tenant>/<evento>/<token>` | token HMAC (`ALEGRA_WEBHOOK_SECRET`) | Avisos de contactos de Alegra → espejo (GET solo verifica la URL) |
 | POST | `/api/ai-token` | sesión | Token de sesión para el chat IA |
 | GET | `/api/agent/invoices` | agent token | Facturas (para el agente) |
 | GET | `/api/agent/payments` | agent token | Pagos (para el agente) |
 | GET | `/api/agent/account-balance` | agent token | Saldo (para el agente) |
-| GET | `/api/agent/contacts` | agent token | Busca clientes en Alegra (`?q=`) |
+| GET | `/api/agent/contacts` | agent token | Busca clientes en el espejo de contactos (`?q=` o `?phone=`) |
 | POST | `/api/agent/quotes` | agent token | Crea una cotización en Alegra |
 | GET | `/api/agent/quotes` | agent token | Cotizaciones de un contacto (`?contact_id=`) |
 | GET | `/api/agent/sales-config` | agent token | Listas de precio, condiciones de pago, vendedores, impuestos, monedas + link del shop |
@@ -493,6 +551,7 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Storage de comprobantes (Cloudflare R2); sin el set completo la feature se apaga |
 | `RECEIPTS_EMAIL_FROM` | Remitente del mail de aviso de comprobantes |
 | `CRON_SECRET` | Protege los endpoints de notificaciones |
+| `ALEGRA_WEBHOOK_SECRET` | Deriva el token de las URLs de webhooks de contactos de Alegra (≥ 32 caracteres; sin él la ruta rechaza todo) |
 | `AI_CHAT_ENABLED` | Activa el chat en dev |
 
 ---

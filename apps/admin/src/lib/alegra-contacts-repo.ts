@@ -9,7 +9,8 @@ import type { FilaContactoAlegra } from "./alegra"
 /** Hoy todo tenant tiene UNA cuenta de Alegra. Todo lector filtra por esta constante. */
 export const CUENTA_ALEGRA_PRINCIPAL = "principal"
 
-export type OrigenContacto = "sync" | "fallback" | "write_through"
+/** Quién escribió la fila por última vez. `webhook` = aviso de Alegra (lib/alegra-contacts-webhook.ts). */
+export type OrigenContacto = "sync" | "fallback" | "write_through" | "webhook"
 export type ContactoEspejoRow = typeof alegraContacts.$inferSelect
 
 const LOTE = 500
@@ -102,6 +103,30 @@ export async function marcarNoVistos(
     )
     .returning({ id: alegraContacts.id })
   return rows.length
+}
+
+/**
+ * Baja soft de UN contacto (Alegra avisó que lo borró): `status='inactive'`, sin tocar el resto
+ * de la fila. Una lectura posterior por id cae al fallback en vivo, que da 404 → null. Si el
+ * contacto no estaba en el espejo no hace nada. Devuelve si marcó una fila.
+ */
+export async function darDeBajaContacto(
+  tenantId: string,
+  alegraId: string,
+  cuenta = CUENTA_ALEGRA_PRINCIPAL,
+): Promise<boolean> {
+  const rows = await getDb()
+    .update(alegraContacts)
+    .set({ status: "inactive", origen: "webhook" })
+    .where(
+      and(
+        eq(alegraContacts.tenantId, tenantId),
+        eq(alegraContacts.alegraAccount, cuenta),
+        eq(alegraContacts.alegraId, alegraId),
+      ),
+    )
+    .returning({ id: alegraContacts.id })
+  return rows.length > 0
 }
 
 /**

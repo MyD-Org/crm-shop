@@ -9,10 +9,12 @@ name: admin · Sync contactos Alegra
 
 on:
   schedule:
-    # Una vez por día, de noche: 03:15 UTC (00:15 en Argentina). Central LED (~200 páginas)
-    # tarda ~70 min, así que termina antes de las 06:00 UTC (catálogo del Shop) y de las
-    # 07:00 UTC (catálogo del CRM), que usan la misma cuenta de Alegra.
-    - cron: "15 3 * * *"
+    # Una vez por SEMANA, la noche del sábado al domingo: domingo 03:15 UTC (domingo 00:15 en
+    # Argentina). Entre corridas el espejo lo mantienen los webhooks de Alegra; esta pasada es
+    # el control (corrige avisos perdidos y da de baja lo que ya no está). Central LED (~200
+    # páginas) tarda ~70 min, así que termina antes de las 06:00 UTC (catálogo del Shop) y de
+    # las 07:00 UTC (catálogo del CRM), que usan la misma cuenta de Alegra.
+    - cron: "15 3 * * 0"
   # A mano desde la pestaña Actions; `tenant` vacío = todos los tenants con Alegra.
   workflow_dispatch:
     inputs:
@@ -44,7 +46,8 @@ jobs:
           # Segundos entre el inicio de una ronda de llamadas y el de la siguiente.
           PAUSA_SEG: "60"
           # Tope del loop, por debajo de timeout-minutes para cerrar con resumen. Lo que no
-          # termine hoy lo retoma la corrida de mañana (la pasada queda abierta con su cursor).
+          # termine hoy lo retoma la corrida siguiente (la pasada queda abierta con su cursor):
+          # la de la semana próxima, o un Run workflow a mano antes.
           TOPE_SEG: "4800"
         run: |
           if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
@@ -114,7 +117,7 @@ jobs:
           # PAUSA_SEG. Un tenant que falla sale del loop; los demás siguen.
           while [ -n "$pendientes" ]; do
             if [ $(( $(date +%s) - inicio )) -ge "$TOPE_SEG" ]; then
-              echo "::warning::Tope de tiempo con pasadas sin terminar ($(echo $pendientes)). La corrida de mañana las retoma."
+              echo "::warning::Tope de tiempo con pasadas sin terminar ($(echo $pendientes)). La próxima corrida las retoma."
               break
             fi
             espera=$(( PAUSA_SEG - ($(date +%s) - ronda) ))

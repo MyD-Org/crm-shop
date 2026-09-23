@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { esAdmin } from "@/lib/auth";
 import { getCatalogo } from "@/lib/catalog";
-import { KEY_OCULTAS, SECCIONES_HOME, erroresSeccion, resolverOcultas, type SeccionHome } from "@/data/home-defaults";
+import { KEY_OCULTAS, SECCIONES_HOME, VISIBILIDADES, erroresSeccion, resolverVisibilidad } from "@/data/home-defaults";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
@@ -26,6 +26,7 @@ export type ResultadoBusquedaProductos =
 
 const SIN_PERMISO = "No tiene permisos para editar la página de inicio.";
 const SECCION_DESCONOCIDA = "La sección indicada no existe.";
+const VISIBILIDAD_DESCONOCIDA = "Indique dónde se muestra la sección.";
 const ERROR_GUARDAR = "No se pudo guardar la sección. Inténtelo de nuevo.";
 const R2_NO_CONFIGURADO = "El almacenamiento de imágenes no está configurado. Avise al administrador.";
 const TAMANO_INVALIDO = "La imagen supera el tamaño permitido (5 MB).";
@@ -86,19 +87,19 @@ export async function restablecerSeccion(seccion: string): Promise<ResultadoGuar
 }
 
 /**
- * Oculta o vuelve a mostrar una sección para los visitantes. No toca el
- * contenido de la sección: la lista vive en su propia fila (`ocultas`), así
- * que "Restablecer valores originales" no la vuelve a mostrar. Nunca lanza.
+ * Define dónde se ve una sección: siempre, solo en desktop, solo en mobile o
+ * nunca. No toca el contenido de la sección: la visibilidad vive en su propia
+ * fila (`ocultas`), así que "Restablecer valores originales" no la cambia.
+ * Nunca lanza.
  */
-export async function cambiarVisibilidadSeccion(seccion: string, visible: boolean): Promise<ResultadoGuardar> {
+export async function cambiarVisibilidadSeccion(seccion: string, visibilidad: string): Promise<ResultadoGuardar> {
   if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO] };
   if (!esSeccionValida(seccion)) return { ok: false, errores: [SECCION_DESCONOCIDA] };
+  if (!(VISIBILIDADES as readonly string[]).includes(visibilidad)) return { ok: false, errores: [VISIBILIDAD_DESCONOCIDA] };
 
   try {
-    const actuales = resolverOcultas(await leerSeccionHome(KEY_OCULTAS));
-    const sinEsta = actuales.filter((s) => s !== seccion);
-    const ocultas = visible ? sinEsta : [...sinEsta, seccion as SeccionHome];
-    const { updatedAt } = await guardarSeccionHome(KEY_OCULTAS, resolverOcultas(ocultas));
+    const mapa = { ...resolverVisibilidad(await leerSeccionHome(KEY_OCULTAS)), [seccion]: visibilidad };
+    const { updatedAt } = await guardarSeccionHome(KEY_OCULTAS, resolverVisibilidad(mapa));
     revalidatePath("/", "layout");
     return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
   } catch (err) {

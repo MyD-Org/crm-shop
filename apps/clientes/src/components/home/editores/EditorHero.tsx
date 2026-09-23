@@ -24,6 +24,8 @@ export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
           items={valor.ctas}
           onChange={(ctas) => onChange({ ...valor, ctas })}
           nuevo={nuevoEnlace}
+          conVisibilidad
+          nombreItem="botón"
           renderItem={(item, onItem) => (
             <div className="flex flex-col gap-3">
               <Field label="Etiqueta" hint="Vacía: el botón no se muestra">
@@ -42,9 +44,11 @@ export function EditorHero({ valor, onChange }: EditorProps<HeroContent>) {
           items={valor.usps}
           onChange={(usps) => onChange({ ...valor, usps })}
           nuevo={() => ({ label: "" })}
+          conVisibilidad
+          nombreItem="ventaja"
           renderItem={(item, onItem) => (
             <Field label="Texto">
-              <Input value={item.label} onChange={(e) => onItem({ label: e.target.value })} />
+              <Input value={item.label} onChange={(e) => onItem({ ...item, label: e.target.value })} />
             </Field>
           )}
         />

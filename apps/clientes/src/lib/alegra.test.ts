@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ivaDeItem, ivaPersistible, listAllCategories, mapItemRow, tipoCuentaDe } from "./alegra";
+import {
+  esIdAlegra,
+  getContacto,
+  getFactura,
+  getItem,
+  ivaDeItem,
+  ivaPersistible,
+  listAllCategories,
+  mapItemRow,
+  tipoCuentaDe,
+} from "./alegra";
 
 /**
  * El IVA que se guarda en el espejo es el que después se muestra como "precio
@@ -165,5 +175,46 @@ describe("tipoCuentaDe", () => {
     expect(tipoCuentaDe(null)).toBe("contado");
     expect(tipoCuentaDe({ term: { name: "Contado", days: 0 }, creditLimit: 0 })).toBe("contado");
     expect(tipoCuentaDe({ term: null, creditLimit: "" })).toBe("contado");
+  });
+});
+
+/**
+ * Los ids llegan del browser y terminan en la ruta de Alegra. `new URL` resuelve
+ * los `..`, así que `getItem("../contacts/123")` pegaba a `/contacts/123`.
+ */
+describe("ids de Alegra en la ruta", () => {
+  beforeEach(() => {
+    vi.stubEnv("ALEGRA_EMAIL", "test@example.com");
+    vi.stubEnv("ALEGRA_TOKEN", "token");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("esIdAlegra acepta solo enteros positivos en string", () => {
+    expect(esIdAlegra("123")).toBe(true);
+    for (const malo of ["", "abc", "../contacts/1", "1/2", "1?x", "-1", "1.5", " 1", 123, null]) {
+      expect(esIdAlegra(malo)).toBe(false);
+    }
+  });
+
+  it.each([
+    ["getItem", getItem],
+    ["getContacto", getContacto],
+    ["getFactura", getFactura],
+  ])("%s rechaza un id no numérico sin llamar a Alegra", async (_n, fn) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fn("../contacts/123")).rejects.toThrow(/invalido/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("getItem arma /items/:id con un id válido", async () => {
+    const fetchMock = vi.fn(async () => respuesta(200, { id: "123" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await getItem("123");
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toMatch(/\/items\/123$/);
   });
 });

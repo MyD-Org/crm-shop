@@ -29,6 +29,8 @@ export function EditorTiles({
           items={valor.items}
           onChange={(items) => onChange({ ...valor, items })}
           nuevo={nuevoTile}
+          conVisibilidad
+          nombreItem="tile"
           renderItem={(item, onItem) => (
             <div className="flex flex-col gap-3">
               <CampoImagen valor={item.imagen} onChange={(imagen) => onItem({ ...item, imagen })} />

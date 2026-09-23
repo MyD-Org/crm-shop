@@ -1,6 +1,7 @@
 import { getCategorias } from "@/lib/catalog"
 import { identidadActual } from "@/lib/auth"
 import { getContenidoHome } from "@/lib/home-datos"
+import { visibilidadDe } from "@/data/home-defaults"
 import { HeaderUI } from "./HeaderUI"
 
 export async function Header() {
@@ -8,8 +9,10 @@ export async function Header() {
   // Badge administrable del nav (config de home, mismo contrato que el resto
   // del contenido). cache() por request: el layout ya la lee para el anuncio,
   // así que acá no suma consultas.
-  const { navBadge: badge, ocultas } = await getContenidoHome()
-  const navBadge = ocultas.includes("navBadge") ? null : badge
+  const { navBadge: badge, visibilidad } = await getContenidoHome()
+  const vBadge = visibilidadDe(visibilidad, "navBadge")
+  const navBadge = vBadge === "nunca" ? null : badge
+  const navBadgeVisibleOn = vBadge === "mobile" || vBadge === "desktop" ? vBadge : undefined
 
   // Las categorias del menu salen del catalogo real. Si la lectura falla, el
   // header se renderiza igual: la navegacion no debe tumbar toda la pagina.
@@ -40,6 +43,7 @@ export async function Header() {
       // algo que la mayoria no necesita, y se busca en "Mi cuenta > Mis datos".
       categorias={categorias}
       navBadge={navBadge}
+      navBadgeVisibleOn={navBadgeVisibleOn}
     />
   )
 }

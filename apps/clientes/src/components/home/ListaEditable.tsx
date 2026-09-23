@@ -2,7 +2,9 @@
 
 import type { ReactNode } from "react";
 import { Button } from "@myd-org/ui";
+import type { SoloEn } from "@/data/home-defaults";
 import { agregarItem, moverItem, quitarItem } from "@/lib/home-editor";
+import { SelectorVisibilidad } from "./editores/SelectorVisibilidad";
 
 function FlechaArribaIcon() {
   return (
@@ -30,6 +32,9 @@ function QuitarIcon() {
  * Lista genérica editable (subir/bajar/quitar/agregar), usada por los
  * editores de sección (`ctas`, `usps`, `marquee.items`, tiles, chips,
  * `servicios.items`, `destacados.imagenes`).
+ *
+ * Con `conVisibilidad` cada ítem lleva su "Mostrar" (siempre / solo desktop /
+ * solo mobile / nunca), guardado en `item.visibilidad`.
  */
 export function ListaEditable<T>({
   items,
@@ -38,6 +43,8 @@ export function ListaEditable<T>({
   nuevo,
   etiquetaAgregar = "Agregar",
   min = 0,
+  conVisibilidad = false,
+  nombreItem = "ítem",
 }: {
   items: readonly T[];
   onChange: (items: T[]) => void;
@@ -45,21 +52,29 @@ export function ListaEditable<T>({
   nuevo: () => T;
   etiquetaAgregar?: string;
   min?: number;
+  /** Sólo para ítems objeto con `visibilidad?: SoloEn`. */
+  conVisibilidad?: boolean;
+  /** Cómo se llama cada ítem en el nombre accesible del selector ("botón 2"). */
+  nombreItem?: string;
 }) {
+  const reemplazar = (i: number, v: T) => {
+    const copia = [...items];
+    copia[i] = v;
+    onChange(copia);
+  };
   return (
     <div className="flex flex-col gap-3">
       {items.map((item, i) => (
         <div key={i} className="flex items-start gap-2 rounded-lg border border-border p-3">
-          <div className="flex-1">
-            {renderItem(
-              item,
-              (v) => {
-                const copia = [...items];
-                copia[i] = v;
-                onChange(copia);
-              },
-              i,
-            )}
+          <div className="flex flex-1 flex-col gap-3">
+            {renderItem(item, (v) => reemplazar(i, v), i)}
+            {conVisibilidad ? (
+              <SelectorVisibilidad
+                ariaLabel={`Dónde se muestra: ${nombreItem} ${i + 1}`}
+                valor={(item as { visibilidad?: SoloEn }).visibilidad}
+                onChange={(visibilidad) => reemplazar(i, { ...item, visibilidad } as T)}
+              />
+            ) : null}
           </div>
           <div className="flex shrink-0 flex-col gap-1">
             <Button

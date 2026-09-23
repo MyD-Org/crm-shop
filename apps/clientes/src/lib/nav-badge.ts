@@ -1,4 +1,4 @@
-import type { SiteNavItem } from "@myd-org/ui";
+import type { SiteNavItem, VisibleOn } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 
 /**
@@ -33,18 +33,19 @@ function categoriaDelItem(item: SiteNavItem): string | null {
  * normalizada (ver `normalizarCategoria`): antes era exacta, así que
  * "Seguridad" no matcheaba con "SEGURIDAD" y el badge se guardaba sin error y
  * no aparecía en ningún lado. Sin coincidencia, o con `navBadge` null, el nav
- * queda exactamente igual.
+ * queda exactamente igual. `visibleOn`: el badge sólo en mobile o en desktop.
  */
 export function conBadgeNav(
   items: SiteNavItem[],
   navBadge: NavBadgeContent | null,
+  visibleOn?: VisibleOn,
 ): SiteNavItem[] {
   if (!navBadge) return items;
   const buscada = normalizarCategoria(navBadge.categoria);
   return items.map((item) => {
     const categoria = categoriaDelItem(item);
     return categoria !== null && normalizarCategoria(categoria) === buscada
-      ? { ...item, badge: navBadge.texto }
+      ? { ...item, badge: navBadge.texto, ...(visibleOn ? { badgeVisibleOn: visibleOn } : {}) }
       : item;
   });
 }

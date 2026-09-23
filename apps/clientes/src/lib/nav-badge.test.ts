@@ -20,6 +20,11 @@ describe("conBadgeNav", () => {
     expect(out.find((i) => i.label === "Iluminación LED")?.badge).toBeUndefined();
   });
 
+  it("con visibleOn el badge lleva en qué tamaño se ve", () => {
+    const out = conBadgeNav(itemsNav(), { categoria: "Tableros", texto: "Nuevo" }, "mobile");
+    expect(out.find((i) => i.label === "Tableros")?.badgeVisibleOn).toBe("mobile");
+  });
+
   it("la categoría con caracteres especiales matchea por href", () => {
     const out = conBadgeNav(itemsNav(), { categoria: "Iluminación LED", texto: "Nuevo" });
     expect(out[0].badge).toBe("Nuevo");

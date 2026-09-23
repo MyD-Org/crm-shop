@@ -299,51 +299,50 @@ describe("cambiarVisibilidadSeccion", () => {
   it("No-admin no puede ocultar", async () => {
     esAdminMock.mockResolvedValue(false);
 
-    const r = await cambiarVisibilidadSeccion("hero", false);
+    const r = await cambiarVisibilidadSeccion("hero", "nunca");
 
     expect(r.ok).toBe(false);
     expect(guardarMock).not.toHaveBeenCalled();
   });
 
   it("rechaza una sección desconocida", async () => {
-    const r = await cambiarVisibilidadSeccion("inexistente", false);
+    const r = await cambiarVisibilidadSeccion("inexistente", "nunca");
 
     expect(r).toEqual({ ok: false, errores: ["La sección indicada no existe."] });
     expect(guardarMock).not.toHaveBeenCalled();
   });
 
-  it("ocultar agrega la sección a la fila `ocultas` sin tocar su contenido", async () => {
-    leerMock.mockResolvedValue(["marquee"]);
+  it("rechaza una visibilidad desconocida", async () => {
+    const r = await cambiarVisibilidadSeccion("hero", "a veces");
 
-    const r = await cambiarVisibilidadSeccion("hero", false);
+    expect(r).toEqual({ ok: false, errores: ["Indique dónde se muestra la sección."] });
+    expect(guardarMock).not.toHaveBeenCalled();
+  });
+
+  it("guarda la visibilidad en la fila `ocultas` sin tocar el contenido de la sección", async () => {
+    leerMock.mockResolvedValue({ marquee: "nunca" });
+
+    const r = await cambiarVisibilidadSeccion("hero", "mobile");
 
     expect(r.ok).toBe(true);
-    expect(guardarMock).toHaveBeenCalledWith("ocultas", ["hero", "marquee"]);
+    expect(guardarMock).toHaveBeenCalledWith("ocultas", { hero: "mobile", marquee: "nunca" });
     expect(guardarMock).not.toHaveBeenCalledWith("hero", expect.anything());
     expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
   });
 
-  it("mostrar la quita de la lista", async () => {
+  it("convierte el formato viejo (array de ocultas) al guardar", async () => {
     leerMock.mockResolvedValue(["hero", "anuncio"]);
 
-    await cambiarVisibilidadSeccion("hero", true);
+    await cambiarVisibilidadSeccion("hero", "siempre");
 
-    expect(guardarMock).toHaveBeenCalledWith("ocultas", ["anuncio"]);
-  });
-
-  it("ocultar dos veces no la repite", async () => {
-    leerMock.mockResolvedValue(["hero"]);
-
-    await cambiarVisibilidadSeccion("hero", false);
-
-    expect(guardarMock).toHaveBeenCalledWith("ocultas", ["hero"]);
+    expect(guardarMock).toHaveBeenCalledWith("ocultas", { anuncio: "nunca", hero: "siempre" });
   });
 
   it("si la DB falla devuelve error sin lanzar", async () => {
     leerMock.mockRejectedValue(new Error("db caída"));
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const r = await cambiarVisibilidadSeccion("hero", false);
+    const r = await cambiarVisibilidadSeccion("hero", "nunca");
 
     expect(r).toEqual({ ok: false, errores: ["No se pudo guardar la sección. Inténtelo de nuevo."] });
   });

@@ -63,6 +63,22 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Fetch generico contra la API de Alegra. Arma el querystring, aplica auth
  * y normaliza el manejo de errores. Ante 429 (rate limit) espera y reintenta.
  */
+/**
+ * ¿Es un id de Alegra válido? Los ids reales son enteros positivos. Todo id que
+ * venga del browser pasa por acá ANTES de armar una ruta: sin esto,
+ * `"../contacts/123"` se resuelve (via `new URL`) a `/contacts/123` y cualquier
+ * logueado lee contactos a traves de `/items/:id`.
+ */
+export function esIdAlegra(id: unknown): id is string {
+  return typeof id === "string" && /^\d+$/.test(id);
+}
+
+/** Segmento de ruta seguro para un id: valida y escapa. Tira si no es un id. */
+function segmentoId(id: string): string {
+  if (!esIdAlegra(id)) throw new Error(`Id de Alegra invalido: ${JSON.stringify(id).slice(0, 40)}`);
+  return encodeURIComponent(id);
+}
+
 async function apiFetch<T>(path: string, params: QueryParams = {}): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
   for (const [key, value] of Object.entries(params)) {
@@ -238,8 +254,8 @@ export function getContactos(params?: QueryParams) {
   return apiFetch<AlegraContact[]>("/contacts", params);
 }
 
-export function getContacto(id: string) {
-  return apiFetch<AlegraContact>(`/contacts/${id}`);
+export async function getContacto(id: string) {
+  return apiFetch<AlegraContact>(`/contacts/${segmentoId(id)}`);
 }
 
 /**
@@ -309,8 +325,8 @@ export function getItems(params?: QueryParams) {
   return apiFetch<AlegraItem[]>("/items", params);
 }
 
-export function getItem(id: string) {
-  return apiFetch<AlegraItem>(`/items/${id}`);
+export async function getItem(id: string) {
+  return apiFetch<AlegraItem>(`/items/${segmentoId(id)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -348,8 +364,8 @@ export function getFacturas(params?: QueryParams) {
   return apiFetch<AlegraInvoice[]>("/invoices", params);
 }
 
-export function getFactura(id: string) {
-  return apiFetch<AlegraInvoice>(`/invoices/${id}`);
+export async function getFactura(id: string) {
+  return apiFetch<AlegraInvoice>(`/invoices/${segmentoId(id)}`);
 }
 
 // ---------------------------------------------------------------------------

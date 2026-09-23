@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Badge, Button, cn } from "@myd-org/ui";
-import type { SeccionHome } from "@/data/home-defaults";
+import { clasesVisibilidad, type SeccionHome, type Visibilidad } from "@/data/home-defaults";
 import { useModoEdicion } from "./ModoEdicion";
 import { DialogoSeccion } from "./DialogoSeccion";
 
@@ -11,43 +11,61 @@ import { DialogoSeccion } from "./DialogoSeccion";
  * (rebanada B1 de home-editable). Con `puedeEditar === false` no agrega
  * ningún markup: costo cero para un visitante sin sesión de admin.
  *
- * Sección `oculta`: el visitante no la ve. El admin tampoco fuera del modo
- * edición (ve la home como la ve un cliente); en modo edición aparece
- * atenuada y marcada, para poder volver a mostrarla desde el Dialog.
+ * `visibilidad`: dónde la ve el visitante. "nunca" no se pinta; "desktop" y
+ * "mobile" se ocultan por CSS en el otro tamaño. El admin fuera del modo
+ * edición la ve igual que un cliente; en modo edición se ve siempre, atenuada
+ * y marcada donde el visitante no la ve, para poder cambiarlo desde el Dialog.
  */
+const ATENUADA: Record<Visibilidad, string> = {
+  siempre: "",
+  desktop: "max-md:opacity-40",
+  mobile: "md:opacity-40",
+  nunca: "opacity-40",
+};
+const MARCA: Record<Visibilidad, string | null> = {
+  siempre: null,
+  desktop: "Solo en desktop",
+  mobile: "Solo en mobile",
+  nunca: "Oculta en la tienda",
+};
+
+function ComoVisitante({ visibilidad, children }: { visibilidad: Visibilidad; children: ReactNode }) {
+  if (visibilidad === "nunca") return null;
+  if (visibilidad === "siempre") return <>{children}</>;
+  // `contents`: el envoltorio no altera el layout de la sección.
+  return <div className={cn("contents", clasesVisibilidad(visibilidad))}>{children}</div>;
+}
 export function SeccionEditable({
   seccion,
   inicial,
   puedeEditar,
-  oculta = false,
+  visibilidad = "siempre",
   className,
   children,
 }: {
   seccion: SeccionHome;
   inicial: unknown;
   puedeEditar: boolean;
-  oculta?: boolean;
+  visibilidad?: Visibilidad;
   className?: string;
   children: ReactNode;
 }) {
   const { activo } = useModoEdicion();
   const [open, setOpen] = useState(false);
 
-  if (!puedeEditar) return oculta ? null : <>{children}</>;
-  if (oculta && !activo) return null;
+  if (!puedeEditar || !activo) return <ComoVisitante visibilidad={visibilidad}>{children}</ComoVisitante>;
+  const marca = MARCA[visibilidad];
 
   return (
     <div data-editor="" className={cn("relative", className)}>
-      {oculta ? <div className="opacity-40">{children}</div> : children}
-      {activo ? (
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
-          {oculta ? <Badge tone="warning">Oculta en la tienda</Badge> : null}
-          <Button size="sm" variant="secondary" aria-label="Editar sección" onClick={() => setOpen(true)}>
-            Editar sección
-          </Button>
-        </div>
-      ) : null}
-      <DialogoSeccion seccion={seccion} inicial={inicial} oculta={oculta} open={open} onOpenChange={setOpen} />
+      {marca ? <div className={ATENUADA[visibilidad]}>{children}</div> : children}
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
+        {marca ? <Badge tone="warning">{marca}</Badge> : null}
+        <Button size="sm" variant="secondary" aria-label="Editar sección" onClick={() => setOpen(true)}>
+          Editar sección
+        </Button>
+      </div>
+      <DialogoSeccion seccion={seccion} inicial={inicial} visibilidad={visibilidad} open={open} onOpenChange={setOpen} />
     </div>
   );
 }

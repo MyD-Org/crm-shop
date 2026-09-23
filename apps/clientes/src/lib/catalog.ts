@@ -24,12 +24,8 @@ import { getDb } from "@/db";
 import { catalogCategories, catalogProducts } from "@/db/schema";
 import { crmCategorias, crmOverlay, type FotoCrm } from "@/db/crm";
 import {
-  getItem,
-  ivaPersistible,
-  marcaDeCustomFields,
+  esIdAlegra,
   precioDeLista,
-  resolverPrecio,
-  type AlegraItem,
   type AlegraPrice,
 } from "./alegra";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
@@ -596,44 +592,21 @@ export async function getPaginaCatalogo(opts?: {
 }
 
 /**
- * Trae un producto puntual EN VIVO desde Alegra. Es la ficha de producto: el
- * precio y el stock que se muestran acá son los que el shop compromete, así que
- * no salen del espejo. Devuelve null si Alegra no lo encuentra.
+ * Producto para la ficha pública, desde el espejo (con el overlay del CRM, igual
+ * que la card del catálogo). Nada de tráfico público toca Alegra: precio y stock
+ * en vivo se validan recién al cotizar y al confirmar el pedido.
+ *
+ * `null` = no existe o no está publicado (404). Si falla la base, TIRA: un error
+ * no puede presentarse como "no existe", o Google saca del índice productos reales.
  */
 export async function getProducto(
   id: string,
   idPriceList?: string
 ): Promise<Product | null> {
-  try {
-    const item = await getItem(id);
-    return mapItemToProduct(item, idPriceList);
-  } catch {
-    return null;
-  }
-}
-
-/** Mapea un item en vivo de Alegra a un `Product` del shop. */
-export function mapItemToProduct(
-  item: AlegraItem,
-  idPriceList?: string
-): Product {
-  const categoria = item.itemCategory as { name?: string } | undefined;
-  const price = resolverPrecio(item, idPriceList);
-  return {
-    id: item.id,
-    // Mismo nombre que la card del catálogo sin overlay (la ficha en vivo no
-    // lee el overlay): el comercial vive en `description`; `name` es el código.
-    name: item.description || item.name,
-    brand: marcaDeCustomFields(item.customFields) || categoria?.name || "",
-    price,
-    ...camposIva(price, ivaPersistible(item)),
-    stock: derivarStock(item.inventory?.availableQuantity, stockSimulado()),
-    stockQty: item.inventory?.availableQuantity ?? undefined,
-    // Como en el espejo: sin reference, el código es `name`.
-    sku: item.reference || item.name || undefined,
-    description: item.description || undefined,
-    category: categoria?.name || undefined,
-  };
+  // Un id que no es de Alegra no es un producto: ni se consulta.
+  if (!esIdAlegra(id)) return null;
+  const productos = await getProductosPorIds([id], { idPriceList, soloActivos: true });
+  return productos.get(id) ?? null;
 }
 
 // ---------------------------------------------------------------------------

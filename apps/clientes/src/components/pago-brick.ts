@@ -11,7 +11,7 @@
  *
  * No se congela con `Object.freeze`: el objeto se lo pasamos a un SDK remoto
  * que podría mutarlo, y un TypeError ahí rompería el checkout incluso con
- * CUOTAS_ENABLED apagado. La inmutabilidad queda a nivel de tipos.
+ * flag `cuotas` apagado. La inmutabilidad queda a nivel de tipos.
  */
 
 export interface CustomizacionBrick {

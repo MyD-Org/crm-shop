@@ -144,13 +144,13 @@ const joinOverlay = () =>
 
 /**
  * Sólo productos publicados en el CRM, detrás del flag
- * `SHOP_CATALOGO_SOLO_VISIBLES` (apagado por defecto). Fail-closed: sin fila
- * de overlay el left join deja `visible` en NULL y el producto queda afuera,
- * así que con el flag prendido y sin curaduría la tienda queda vacía. Se
- * evalúa por consulta (no al cargar el módulo) para respetar el env vigente.
+ * `catalogo-solo-visibles` (Vercel Flags, apagado por defecto). Fail-closed:
+ * sin fila de overlay el left join deja `visible` en NULL y el producto queda
+ * afuera, así que con el flag prendido y sin curaduría la tienda queda vacía.
+ * Se evalúa por consulta para respetar el valor vigente del flag.
  */
-function soloVisiblesSql() {
-  return catalogoSoloVisibles() ? eq(crmOverlay.visible, true) : undefined;
+async function soloVisiblesSql() {
+  return (await catalogoSoloVisibles()) ? eq(crmOverlay.visible, true) : undefined;
 }
 
 /** Columnas del join, en un solo lugar para no repetirlas entre queries. */
@@ -219,7 +219,7 @@ export async function getCatalogo(opts?: {
       and(
         eq(catalogProducts.status, "active"),
         conPrecioSql,
-        soloVisiblesSql(),
+        await soloVisiblesSql(),
         q ? coincideTexto(q) : undefined
       )
     )
@@ -240,7 +240,7 @@ export async function getCatalogo(opts?: {
  *
  * Sin filtro de estado por default: un pedido viejo sigue mostrando el nombre
  * real de un ítem que después se despublicó. `soloActivos` aplica
- * `status = 'active'` y, con el flag `SHOP_CATALOGO_SOLO_VISIBLES`, también
+ * `status = 'active'` y, con el flag `catalogo-solo-visibles`, también
  * `visible` (mismo criterio que la lista pública).
  *
  * Sin `orderBy` (el orden lo decide quien llama: pedidos por línea, favoritos
@@ -262,7 +262,7 @@ export async function getProductosPorIds(
       and(
         inArray(catalogProducts.alegraId, [...alegraIds]),
         opts?.soloActivos ? eq(catalogProducts.status, "active") : undefined,
-        opts?.soloActivos ? soloVisiblesSql() : undefined,
+        opts?.soloActivos ? await soloVisiblesSql() : undefined,
       ),
     );
 
@@ -442,7 +442,7 @@ export function enArbolConConteo(
 }
 
 /** Productos por categoría propia (sólo la directa; `enArbolConConteo` suma hacia arriba). */
-async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>) {
+async function conteoPorCategoriaPropia(where: Awaited<ReturnType<typeof condicionesDe>>) {
   const filas = await getDb()
     .select({ id: crmOverlay.categoriaId, count: sql<number>`count(*)::int` })
     .from(catalogProducts)
@@ -474,12 +474,12 @@ const APLICAR_TODOS: AplicarFiltros = {
  * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
  * faceta excluye su propio grupo (ver `getFacetas`).
  */
-function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
+async function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
   const q = filtros.busqueda?.trim();
   return and(
     eq(catalogProducts.status, "active"),
     conPrecioSql,
-    soloVisiblesSql(),
+    await soloVisiblesSql(),
     q ? coincideTexto(q) : undefined,
     aplicar.categorias && filtros.categorias?.length
       ? filtroCategoriasSql(filtros.categorias)
@@ -536,7 +536,7 @@ export async function getPaginaCatalogo(opts?: {
 }): Promise<PaginaCatalogo> {
   const filtros = opts?.filtros ?? {};
   const porPagina = opts?.porPagina ?? PRODUCTOS_POR_PAGINA;
-  const where = condicionesDe(filtros, APLICAR_TODOS);
+  const where = await condicionesDe(filtros, APLICAR_TODOS);
 
   const [conteo] = await getDb()
     .select({ total: sql<number>`count(*)::int` })
@@ -622,9 +622,9 @@ export interface Facetas {
  * el visitante acaba de elegir y ya no podría volver a abrirlo.
  */
 export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas> {
-  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false });
-  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false });
-  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false });
+  const whereCategorias = await condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false });
+  const whereMarcas = await condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false });
+  const wherePrecio = await condicionesDe(filtros, { ...APLICAR_TODOS, precio: false });
 
   const arbol = await getArbolCategorias();
 
@@ -688,7 +688,7 @@ export const getCategorias = cache(async function getCategorias(): Promise<
   // lo que se publica de verdad (mismo WHERE que la grilla sin filtros).
   const arbol = await getArbolCategorias();
   if (arbol.length) {
-    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS));
+    const conteos = await conteoPorCategoriaPropia(await condicionesDe({}, APLICAR_TODOS));
     return enArbolConConteo(arbol, conteos)
       .filter((c) => c.nivel === 1)
       .map((c) => c.label);

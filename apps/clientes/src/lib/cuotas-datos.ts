@@ -107,6 +107,6 @@ export const getOfertaCuotasParaPedido = cache(
 
 /** Oferta para exhibir: null con el flag apagado. Deduplicada por request. */
 export const getOfertaCuotas = cache(async (): Promise<OfertaCuotas | null> => {
-  if (!cuotasHabilitadas()) return null;
+  if (!(await cuotasHabilitadas())) return null;
   return getOfertaCuotasParaPedido();
 });

@@ -1,22 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { setFlag } from "@/test/flags";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 
+/** Lee el flag `catalogo-solo-visibles` de Vercel Flags (mockeado en src/test/setup-flags.ts). */
 describe("catalogoSoloVisibles", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
+  it("apagado por defecto", async () => {
+    expect(await catalogoSoloVisibles()).toBe(false);
   });
 
-  it("apagado por defecto", () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", undefined as unknown as string);
-    expect(catalogoSoloVisibles()).toBe(false);
-  });
-
-  it("sólo '1' lo enciende", () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
-    expect(catalogoSoloVisibles()).toBe(true);
-    for (const v of ["0", "true", "yes", ""]) {
-      vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", v);
-      expect(catalogoSoloVisibles()).toBe(false);
-    }
+  it("refleja el valor del flag", async () => {
+    setFlag("catalogo-solo-visibles", true);
+    expect(await catalogoSoloVisibles()).toBe(true);
   });
 });

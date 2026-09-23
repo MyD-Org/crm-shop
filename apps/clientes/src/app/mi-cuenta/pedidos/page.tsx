@@ -17,7 +17,7 @@ export default async function PedidosPage() {
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.pedidos));
 
   const pedidos = await listarPedidos({ clerkUserId, clienteCodigo: cliente?.codigocliente });
-  const pagos = pagosHabilitados();
+  const pagos = await pagosHabilitados();
 
   return (
     <section>

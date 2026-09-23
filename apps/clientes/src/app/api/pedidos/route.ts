@@ -66,8 +66,8 @@ interface BodyPedido {
 const CLAVE_VALIDA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** El Brick sólo recibe el máximo con el flag prendido (D13). */
-const cuotasParaCliente = (cuotasMax: number | null) =>
-  cuotasHabilitadas() ? cuotasMax : null;
+const cuotasParaCliente = async (cuotasMax: number | null) =>
+  (await cuotasHabilitadas()) ? cuotasMax : null;
 
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
     });
     if (yaCreado) {
       return NextResponse.json(
-        { ...yaCreado, cuotasMax: cuotasParaCliente(yaCreado.cuotasMax), repetido: true },
+        { ...yaCreado, cuotasMax: await cuotasParaCliente(yaCreado.cuotasMax), repetido: true },
         { status: 200 },
       );
     }
@@ -149,7 +149,7 @@ export async function POST(req: Request) {
   // pantalla: con los pagos apagados un POST directo con "mercadopago" se
   // rechaza igual que cualquier método no disponible, y con los pagos prendidos
   // "a_coordinar" tampoco entra.
-  if (!pagosDisponibles(entregaTipo, pagosHabilitados()).includes(pagoMetodo)) {
+  if (!pagosDisponibles(entregaTipo, await pagosHabilitados()).includes(pagoMetodo)) {
     return NextResponse.json(
       { error: "Ese medio de pago no está disponible para la entrega elegida." },
       { status: 400 },
@@ -295,7 +295,7 @@ export async function POST(req: Request) {
     // checkout trata los dos casos igual —muestra el número— pero la diferencia
     // importa para cualquiera que lea los logs.
     return NextResponse.json(
-      { ...pedido, cuotasMax: cuotasParaCliente(pedido.cuotasMax), cotizacion },
+      { ...pedido, cuotasMax: await cuotasParaCliente(pedido.cuotasMax), cotizacion },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

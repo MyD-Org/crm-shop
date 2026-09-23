@@ -36,6 +36,7 @@ import {
   resumenPedidos,
   type DatosPedido,
 } from "./pedidos";
+import { setFlag } from "@/test/flags";
 
 const DUENO = { clerkUserId: "user_1", clienteCodigo: "C-1" };
 const ID = "00000000-0000-4000-8000-000000000001";
@@ -617,7 +618,7 @@ describe("líneas con el nombre real del espejo, sin N+1", () => {
   });
 
   it("getPedido: tres consultas y la de productos no filtra por visible", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     grabadora = dbGrabadora((c) => {
       if (c.sql.includes('from "shop"."order_items"')) {
         return [filaDe(orderItems, { orderId: ID, alegraItemId: "42" })];

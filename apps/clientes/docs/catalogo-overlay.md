@@ -37,17 +37,16 @@ sigue con las categorías de Alegra.
 | Nombre exhibido | `overlay.nombre` → si está vacío, `description` de Alegra → si también, `name` de Alegra (en esta cuenta es el código). |
 | SKU (`Cód.`) | `code` (reference de Alegra) → si falta, `name` de Alegra. |
 | Fotos (`images`, portada = la primera) | `overlay.fotos`: el CRM guarda la key de R2 y la URL se compone con `R2_SHOP_MEDIA_PUBLIC_URL` (la misma base que usa el CRM). Sólo pasan las `https` de un host listado en `SHOP_MEDIA_HOSTS`. Sin fotos servibles, la card muestra el placeholder. |
-| Visibilidad | `overlay.visible`, **sólo** con `SHOP_CATALOGO_SOLO_VISIBLES=1` (ver abajo). |
+| Visibilidad | `overlay.visible`, **sólo** con el flag `catalogo-solo-visibles` prendido (ver abajo). |
 
 La ficha de producto (`getProducto`) es en vivo contra Alegra y no lee el
 overlay: muestra `description || name` como nombre, igual que la card de un
 producto sin overlay.
 
-## `SHOP_CATALOGO_SOLO_VISIBLES` (apagado por defecto)
+## Flag `catalogo-solo-visibles` (apagado por defecto)
 
-- Sólo el valor `1` lo enciende. Cualquier otro valor, o la variable ausente,
-  lo deja apagado: el catálogo se comporta como antes (sin condición de
-  visibilidad).
+- Vive en Vercel Flags. Apagado (o si Vercel Flags no responde), el catálogo
+  se comporta como antes (sin condición de visibilidad).
 - Encendido, el catálogo, las facetas, la home y el autocompletado exigen
   `catalog_overlay.visible = true`.
 - **Es fail-closed.** `visible` arranca en `false` y un producto sin fila de
@@ -68,13 +67,13 @@ select count(*) from shop.catalog_products where status = 'active';
 El primer número tiene que ser el que el negocio quiere publicar (no cero, y
 coherente con el segundo). Recién ahí:
 
-1. En Vercel (proyecto Shop), cree `SHOP_CATALOGO_SOLO_VISIBLES=1` en el
-   entorno que corresponda.
-2. Redespliegue (las variables se leen al arrancar las funciones).
-3. Humo: `/catalogo` lista productos, la búsqueda del header encuentra alguno
+1. En Vercel Flags (proyecto Shop), prenda `catalogo-solo-visibles` en el
+   entorno que corresponda (`vercel flags enable catalogo-solo-visibles
+   --environment production`). No hace falta redesplegar.
+2. Humo: `/catalogo` lista productos, la búsqueda del header encuentra alguno
    publicado y uno no publicado ya no aparece.
 
-Rollback: borre la variable y redespliegue.
+Rollback: apague el flag (`vercel flags disable ...`).
 
 ## `SHOP_MEDIA_HOSTS`
 

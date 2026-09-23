@@ -35,7 +35,7 @@ export default async function MiCuentaPage() {
       ? listarFavoritos(clerkUserId, { limite: 4, idPriceList: cliente?.idPriceList })
       : [],
   ]);
-  const pagos = pagosHabilitados();
+  const pagos = await pagosHabilitados();
 
   return (
     <div className="flex flex-col gap-8">

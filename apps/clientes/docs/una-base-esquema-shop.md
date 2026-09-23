@@ -55,7 +55,7 @@
      SHOP_TENANT_ID=<TENANT_SLUG>
      ```
      `<TENANT_SLUG>` debe ser un valor existente en `public.tenants.id`.
-   - Deje `PAGOS_ENABLED` sin definir.
+   - El flag `pagos` (Vercel Flags) queda apagado.
 
 **Verificación:** abra el archivo y confirme que no queda ningún
 `POSTGRES_URL*` ni un `DATABASE_URL` apuntando a producción.
@@ -219,12 +219,12 @@ DROP ROLE shop_app;
 
 (no toca `public` ni `drizzle`).
 
-## Nota para el Slice 2 (`PAGOS_ENABLED`)
+## Nota para el Slice 2 (flag `pagos`)
 
 No necesita ningún paso de base de datos. Se despliega con los pagos
-apagados desde el arranque (`PAGOS_ENABLED` sin definir). Para habilitarlos
-más adelante: configure `PAGOS_ENABLED=1` en Vercel y redespliegue. Para
-volver atrás: apague la variable o revierta el PR — los pedidos
+apagados desde el arranque (flag `pagos` apagado). Para habilitarlos
+más adelante: prenda el flag `pagos` en Vercel Flags (sin redeploy). Para
+volver atrás: apague el flag o revierta el PR — los pedidos
 `a_coordinar` que ya se generaron quedan válidos igual.
 
 ## Nota para el Slice 3 (admin "Pedidos")

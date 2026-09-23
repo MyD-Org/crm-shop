@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   // pedido de Mercado Pago creado cuando estaban prendidos. El webhook y la
   // conciliación siguen corriendo: un pago que ya estaba en vuelo se acredita
   // igual. Se corta acá, antes de leer el pedido o de hablar con Mercado Pago.
-  if (!pagosHabilitados()) {
+  if (!(await pagosHabilitados())) {
     return NextResponse.json(
       {
         error:
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
     cuotas: body.cuotas,
     medio,
     cuotasMax: pedido.cuotasMax,
-    habilitado: cuotasHabilitadas(),
+    habilitado: await cuotasHabilitadas(),
   });
   if (!validacion.ok) {
     return NextResponse.json(

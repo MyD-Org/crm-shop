@@ -19,6 +19,7 @@ import {
   MAX_FAVORITOS,
   quitarFavorito,
 } from "./favoritos";
+import { setFlag } from "@/test/flags";
 
 beforeEach(() => {
   grabadora = dbGrabadora();
@@ -132,7 +133,7 @@ describe("listarFavoritos", () => {
   ];
 
   it("dos consultas: ids con límite y productos del espejo sin filtro de visibilidad", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     grabadora = dbGrabadora((c) =>
       c.sql.includes('"shop"."favorites"') ? [["42"], ["7"]] : [fila("7", "B"), fila("42", "A")],
     );

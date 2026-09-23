@@ -2,7 +2,7 @@
  * Precio final con IVA + "precio sin impuestos nacionales" (Ley 27.743 /
  * Res. 4/2025).
  *
- * No depende de CUOTAS_ENABLED. Sin `precioFinal` (producto sin IVA conocido)
+ * No depende del flag `cuotas`. Sin `precioFinal` (producto sin IVA conocido)
  * se muestra el precio como siempre y no se inventa ningún neto.
  *
  * Va sólo en la ficha del producto: en la card del catálogo el precio lo dibuja

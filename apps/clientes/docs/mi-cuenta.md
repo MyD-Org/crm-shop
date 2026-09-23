@@ -69,7 +69,7 @@ bandera. `favoritos` está encendida.
 
 - **Una sola pill** (`src/lib/estado-pedido-pill.ts`): cancelado → pago
   rechazado → pago pendiente → pago confirmado → estado. Con los pagos apagados
-  (`PAGOS_ENABLED` distinto de `1`) un pedido pendiente dice "Pendiente" y no
+  (flag `pagos` apagado) un pedido pendiente dice "Pendiente" y no
   "Pago pendiente": el pago se coordina por fuera.
 - **Seguimiento** (`src/lib/pedido-seguimiento.ts`): proyección de estado ×
   pago × tipo de entrega. Retiro: Pedido recibido → Pago confirmado →

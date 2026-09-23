@@ -4,13 +4,14 @@ import { dbGrabadora, sinLecturaDelArbol } from "@/db/__fixtures__/db-grabadora"
 /**
  * Lectura del overlay del CRM en los listados públicos del espejo: join por
  * `alegra_id` para traer nombre y fotos, y el filtro de visibilidad SÓLO con
- * el flag `SHOP_CATALOGO_SOLO_VISIBLES` encendido (fail-closed).
+ * el flag `catalogo-solo-visibles` encendido (fail-closed).
  */
 
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import { getCatalogo, getCategorias, getFacetas, getPaginaCatalogo } from "./catalog";
+import { setFlag } from "@/test/flags";
 
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
@@ -59,9 +60,8 @@ function exigeVisible(c: { sql: string; params: unknown[] }) {
   expect(c.params[Number(m![1]) - 1]).toBe(true);
 }
 
-describe("SHOP_CATALOGO_SOLO_VISIBLES", () => {
+describe("flag catalogo-solo-visibles", () => {
   it("apagado (default): ninguna consulta filtra por visible", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", undefined as unknown as string);
     await getPaginaCatalogo({});
     await getCatalogo({ limit: 10 });
     await getFacetas({});
@@ -69,27 +69,22 @@ describe("SHOP_CATALOGO_SOLO_VISIBLES", () => {
     for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
   });
 
-  it("con un valor distinto de '1' sigue apagado", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "true");
-    await getPaginaCatalogo({});
-    for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
-  });
 
   it("encendido: conteo y página exigen visible = true", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     await getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] } });
     expect(grabadora.consultas).toHaveLength(2);
     for (const c of grabadora.consultas) exigeVisible(c);
   });
 
   it("encendido: getCatalogo (home y autocompletado) exige visible = true", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     await getCatalogo({ busqueda: "led", limit: 10 });
     exigeVisible(grabadora.consultas[0]);
   });
 
   it("encendido: las tres facetas exigen visible = true", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     await getFacetas({ marcas: ["GENROD"] });
     const consultas = sinLecturaDelArbol(grabadora.consultas);
     expect(consultas).toHaveLength(3);
@@ -97,7 +92,7 @@ describe("SHOP_CATALOGO_SOLO_VISIBLES", () => {
   });
 
   it("encendido: el predicado de precio positivo se mantiene", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     await getPaginaCatalogo({});
     for (const c of grabadora.consultas) {
       expect(c.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
@@ -105,7 +100,7 @@ describe("SHOP_CATALOGO_SOLO_VISIBLES", () => {
   });
 
   it("encendido: getCategorias sigue sin tocar el overlay", async () => {
-    vi.stubEnv("SHOP_CATALOGO_SOLO_VISIBLES", "1");
+    setFlag("catalogo-solo-visibles", true);
     await getCategorias();
     for (const c of grabadora.consultas) expect(c.sql).not.toContain("catalog_overlay");
   });

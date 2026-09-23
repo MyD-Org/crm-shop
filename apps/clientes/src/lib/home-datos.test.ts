@@ -17,4 +17,11 @@ describe("combinarContenidoHome (lib)", () => {
     expect(out.anuncio).toEqual(DEFAULTS_HOME.anuncio);
     expect(out.destacados).toEqual(DEFAULTS_HOME.destacados);
   });
+
+  it("ocultas: por defecto ninguna; de la DB sólo keys conocidas", () => {
+    expect(combinarContenidoHome([]).ocultas).toEqual([]);
+    const out = combinarContenidoHome([{ key: "ocultas", payload: ["whatsapp", "cualquiera", "hero", "hero"] }]);
+    expect(out.ocultas).toEqual(["hero", "whatsapp"]);
+    expect(combinarContenidoHome([{ key: "ocultas", payload: { malo: 1 } }]).ocultas).toEqual([]);
+  });
 });

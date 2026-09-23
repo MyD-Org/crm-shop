@@ -69,7 +69,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Anuncio global: contenido administrable del CRM (mismo contrato que la home).
-  const { anuncio } = await getContenidoHome();
+  const { anuncio, ocultas } = await getContenidoHome();
   // Favoritos se guardan por usuario de Clerk: quien entra sólo con la cookie
   // del CRM no tiene dónde guardarlos y no ve el corazón. `identidadActual`
   // está en `cache()`: el Header la resuelve en el mismo request.
@@ -99,10 +99,14 @@ export default async function RootLayout({
         {/* ClerkProvider DENTRO de <body>: envolver <html> fuerza render dinámico de todo el árbol */}
         <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
           <Providers favoritosBloqueados={favoritosBloqueados}>
-            {/* Anuncio global (contenido administrable): arriba de todo, sobre el header */}
-            <div className="bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary">
-              {anuncio.texto}
-            </div>
+            {/* Anuncio global (contenido administrable): arriba de todo, sobre el header.
+                Oculto desde el editor ⇒ no se muestra a nadie (se vuelve a
+                mostrar desde "Anuncio" en la barra de edición). */}
+            {ocultas.includes("anuncio") ? null : (
+              <div className="bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary">
+                {anuncio.texto}
+              </div>
+            )}
             <Header />
             {children}
             <SiteFooter />

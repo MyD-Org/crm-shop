@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { esAdminMock, guardarMock, borrarMock, revalidateMock, r2Mock, getCatalogoMock } = vi.hoisted(() => ({
+const { esAdminMock, guardarMock, borrarMock, leerMock, revalidateMock, r2Mock, getCatalogoMock } = vi.hoisted(() => ({
   esAdminMock: vi.fn(),
   guardarMock: vi.fn(),
   borrarMock: vi.fn(),
+  leerMock: vi.fn(),
   revalidateMock: vi.fn(),
   r2Mock: vi.fn(),
   getCatalogoMock: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/home-guardar", () => ({
   guardarSeccionHome: guardarMock,
   borrarSeccionHome: borrarMock,
+  leerSeccionHome: leerMock,
 }));
 
 vi.mock("next/cache", () => ({
@@ -36,7 +38,13 @@ vi.mock("@/lib/catalog", () => ({
   getCatalogo: getCatalogoMock,
 }));
 
-import { buscarProductosHome, firmarSubidaImagenHome, guardarSeccion, restablecerSeccion } from "./home-acciones";
+import {
+  buscarProductosHome,
+  cambiarVisibilidadSeccion,
+  firmarSubidaImagenHome,
+  guardarSeccion,
+  restablecerSeccion,
+} from "./home-acciones";
 
 describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
   beforeEach(() => {
@@ -277,5 +285,66 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
 
       expect(r).toEqual({ ok: false, errores: ["No se pudo buscar productos. Inténtelo de nuevo."] });
     });
+  });
+});
+
+describe("cambiarVisibilidadSeccion", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+    guardarMock.mockResolvedValue({ updatedAt: new Date("2026-09-22T00:00:00Z") });
+    leerMock.mockResolvedValue(undefined);
+  });
+
+  it("No-admin no puede ocultar", async () => {
+    esAdminMock.mockResolvedValue(false);
+
+    const r = await cambiarVisibilidadSeccion("hero", false);
+
+    expect(r.ok).toBe(false);
+    expect(guardarMock).not.toHaveBeenCalled();
+  });
+
+  it("rechaza una sección desconocida", async () => {
+    const r = await cambiarVisibilidadSeccion("inexistente", false);
+
+    expect(r).toEqual({ ok: false, errores: ["La sección indicada no existe."] });
+    expect(guardarMock).not.toHaveBeenCalled();
+  });
+
+  it("ocultar agrega la sección a la fila `ocultas` sin tocar su contenido", async () => {
+    leerMock.mockResolvedValue(["marquee"]);
+
+    const r = await cambiarVisibilidadSeccion("hero", false);
+
+    expect(r.ok).toBe(true);
+    expect(guardarMock).toHaveBeenCalledWith("ocultas", ["hero", "marquee"]);
+    expect(guardarMock).not.toHaveBeenCalledWith("hero", expect.anything());
+    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+  });
+
+  it("mostrar la quita de la lista", async () => {
+    leerMock.mockResolvedValue(["hero", "anuncio"]);
+
+    await cambiarVisibilidadSeccion("hero", true);
+
+    expect(guardarMock).toHaveBeenCalledWith("ocultas", ["anuncio"]);
+  });
+
+  it("ocultar dos veces no la repite", async () => {
+    leerMock.mockResolvedValue(["hero"]);
+
+    await cambiarVisibilidadSeccion("hero", false);
+
+    expect(guardarMock).toHaveBeenCalledWith("ocultas", ["hero"]);
+  });
+
+  it("si la DB falla devuelve error sin lanzar", async () => {
+    leerMock.mockRejectedValue(new Error("db caída"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const r = await cambiarVisibilidadSeccion("hero", false);
+
+    expect(r).toEqual({ ok: false, errores: ["No se pudo guardar la sección. Inténtelo de nuevo."] });
   });
 });

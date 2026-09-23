@@ -18,7 +18,7 @@ import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
-import type { HomeContent, TileContent } from "@/data/home-defaults";
+import type { HomeContent, SeccionHome, TileContent } from "@/data/home-defaults";
 import { SeccionEditable } from "@/components/home/SeccionEditable";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
@@ -145,13 +145,14 @@ export function HomeClient({
 }) {
   const { hero, marquee, ambientes, destacados: secDestacados, bannerDeco, decoGrid, servicios, whatsapp } = contenido;
   const imagenesDestacados = secDestacados.imagenes ?? [];
+  const oculta = (s: SeccionHome) => contenido.ocultas.includes(s);
 
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
-            <SeccionEditable seccion="hero" inicial={hero} puedeEditar={puedeEditar}>
+            <SeccionEditable seccion="hero" inicial={hero} puedeEditar={puedeEditar} oculta={oculta("hero")}>
               <Hero
                 className="[&_em]:not-italic [&_h1]:font-bold [&_a:first-of-type]:bg-accent [&_a:first-of-type:hover]:bg-primary"
                 eyebrow={hero.eyebrow}
@@ -171,7 +172,7 @@ export function HomeClient({
         </div>
       </div>
 
-      <SeccionEditable seccion="marquee" inicial={marquee} puedeEditar={puedeEditar}>
+      <SeccionEditable seccion="marquee" inicial={marquee} puedeEditar={puedeEditar} oculta={oculta("marquee")}>
         <Marquee
           items={marquee.items}
           className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
@@ -181,7 +182,7 @@ export function HomeClient({
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         {/* Ambientes */}
         <Reveal>
-          <SeccionEditable seccion="ambientes" inicial={ambientes} puedeEditar={puedeEditar}>
+          <SeccionEditable seccion="ambientes" inicial={ambientes} puedeEditar={puedeEditar} oculta={oculta("ambientes")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
               {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
@@ -193,7 +194,7 @@ export function HomeClient({
 
         {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
         <Reveal>
-          <SeccionEditable seccion="destacados" inicial={secDestacados} puedeEditar={puedeEditar}>
+          <SeccionEditable seccion="destacados" inicial={secDestacados} puedeEditar={puedeEditar} oculta={oculta("destacados")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
               <ProductosCarrusel label={`${secDestacados.titulo} ${secDestacados.acento ?? ""}`.trim()}>
@@ -247,7 +248,7 @@ export function HomeClient({
 
         {/* Banner decorativo */}
         <Reveal>
-          <SeccionEditable seccion="bannerDeco" inicial={bannerDeco} puedeEditar={puedeEditar}>
+          <SeccionEditable seccion="bannerDeco" inicial={bannerDeco} puedeEditar={puedeEditar} oculta={oculta("bannerDeco")}>
             <PromoBanner
               className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
               eyebrow={bannerDeco.eyebrow}
@@ -262,7 +263,7 @@ export function HomeClient({
 
         {/* Deco grid */}
         <Reveal>
-          <SeccionEditable seccion="decoGrid" inicial={decoGrid} puedeEditar={puedeEditar}>
+          <SeccionEditable seccion="decoGrid" inicial={decoGrid} puedeEditar={puedeEditar} oculta={oculta("decoGrid")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
               {/* Mobile: apiladas, se despegan al scrollear. Desde lg, la grilla. */}
@@ -274,7 +275,7 @@ export function HomeClient({
 
         {/* Servicios */}
         <Reveal>
-          <SeccionEditable seccion="servicios" inicial={servicios} puedeEditar={puedeEditar}>
+          <SeccionEditable seccion="servicios" inicial={servicios} puedeEditar={puedeEditar} oculta={oculta("servicios")}>
             <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
               {servicios.items.map((s, i) => {
                 const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
@@ -285,7 +286,7 @@ export function HomeClient({
         </Reveal>
 
         {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
-        <SeccionEditable seccion="whatsapp" inicial={whatsapp} puedeEditar={puedeEditar}>
+        <SeccionEditable seccion="whatsapp" inicial={whatsapp} puedeEditar={puedeEditar} oculta={oculta("whatsapp")}>
           <div className="pb-[clamp(56px,7vw,96px)]">
             <CtaBanner
               icon={<ChatIcon />}

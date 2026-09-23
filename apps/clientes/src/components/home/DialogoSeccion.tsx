@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Alert, Button, Dialog, useToast } from "@myd-org/ui";
 import type { SeccionHome } from "@/data/home-defaults";
-import { guardarSeccion, restablecerSeccion } from "@/lib/home-acciones";
+import { cambiarVisibilidadSeccion, guardarSeccion, restablecerSeccion } from "@/lib/home-acciones";
 import { normalizarPayload, TITULOS_SECCION } from "@/lib/home-editor";
 import { EDITORES } from "./editores";
 
@@ -12,15 +12,20 @@ import { EDITORES } from "./editores";
  * guarda con la server action `guardarSeccion` y ofrece "Restablecer valores
  * originales". El refresco visual lo hace `revalidatePath` dentro de la
  * action (D3): este componente NUNCA llama `router.refresh()`.
+ *
+ * "Ocultar sección" / "Mostrar sección" se aplica al instante, aparte del
+ * borrador: no guarda los cambios de contenido que estén sin guardar.
  */
 export function DialogoSeccion({
   seccion,
   inicial,
+  oculta,
   open,
   onOpenChange,
 }: {
   seccion: SeccionHome;
   inicial: unknown;
+  oculta: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -68,6 +73,18 @@ export function DialogoSeccion({
     });
   }
 
+  function cambiarVisibilidad() {
+    startTransition(async () => {
+      const r = await cambiarVisibilidadSeccion(seccion, oculta);
+      if (!r.ok) {
+        setErrores(r.errores);
+        return;
+      }
+      toast({ title: oculta ? "La sección vuelve a mostrarse" : "Sección oculta en la tienda", tone: "success" });
+      onOpenChange(false);
+    });
+  }
+
   return (
     <Dialog
       open={open}
@@ -76,6 +93,9 @@ export function DialogoSeccion({
       size="lg"
       footer={
         <>
+          <Button type="button" variant="outline" onClick={cambiarVisibilidad} disabled={pending}>
+            {oculta ? "Mostrar sección" : "Ocultar sección"}
+          </Button>
           <Button type="button" variant="outline" onClick={restablecer} disabled={pending}>
             Restablecer valores originales
           </Button>
@@ -89,6 +109,11 @@ export function DialogoSeccion({
       }
     >
       <div className="flex flex-col gap-4">
+        {oculta ? (
+          <Alert tone="warning" title="Sección oculta">
+            Los visitantes de la tienda no ven esta sección. Puede editarla igual y mostrarla cuando quiera.
+          </Alert>
+        ) : null}
         {errores.length > 0 ? (
           <Alert tone="danger" title="No se pudo guardar">
             <ul className="list-disc pl-5">

@@ -88,6 +88,10 @@ export type HomeContent = {
   /** null = la categoría del nav no lleva badge. */
   navBadge: NavBadgeContent | null;
   whatsapp: WhatsappContent;
+  /** Secciones que el admin ocultó desde el editor: no se muestran a los
+   *  visitantes. Se guarda en su propia fila de home_content (`ocultas`),
+   *  así ocultar no pisa el contenido de la sección. */
+  ocultas: SeccionHome[];
 };
 
 export const SECCIONES_HOME = [
@@ -204,6 +208,7 @@ export const DEFAULTS_HOME: HomeContent = {
     texto: "Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.",
     href: "https://wa.me/5492235903025",
   },
+  ocultas: [],
 };
 
 // ---------------------------------------------------------------------------
@@ -370,6 +375,15 @@ export function resolverSeccion(key: string, payload: unknown): unknown {
   return erroresSeccion(key, payload).length === 0 ? payload : null;
 }
 
+/** Key de home_content con la lista de secciones ocultas. */
+export const KEY_OCULTAS = "ocultas";
+
+/** Lista de secciones ocultas saneada: sólo keys conocidas, sin repetir. */
+export function resolverOcultas(payload: unknown): SeccionHome[] {
+  if (!Array.isArray(payload)) return [];
+  return SECCIONES_HOME.filter((s) => payload.includes(s));
+}
+
 /** Mergea filas de la DB sobre los defaults, sección por sección. */
 export function combinarContenidoHome(filas: { key: string; payload: unknown }[]): HomeContent {
   const porKey = new Map(filas.map((f) => [f.key, f.payload]));
@@ -394,5 +408,6 @@ export function combinarContenidoHome(filas: { key: string; payload: unknown }[]
       resultado.navBadge = null;
     }
   }
+  if (porKey.has(KEY_OCULTAS)) resultado.ocultas = resolverOcultas(porKey.get(KEY_OCULTAS));
   return resultado;
 }

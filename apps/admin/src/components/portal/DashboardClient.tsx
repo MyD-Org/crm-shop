@@ -237,71 +237,71 @@ export function DashboardClient({ cliente, facturas, facturasTotal = facturas.le
           )}
         </div>
 
-        {/* Summary Cards — solo cuenta corriente */}
-        {cliente.tipoCuenta === "corriente" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Deuda total */}
-            <div
-              className="rounded-[var(--radius)] p-5 flex flex-col gap-3"
-              style={{ background: "var(--blue)", color: "white" }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-sm font-medium opacity-80">
-                  Deuda total
-                  <Tooltip white text="Suma de todas las facturas pendientes de pago, incluyendo vencidas y a vencer." />
-                </span>
-              </div>
-              <div className="text-3xl font-bold tracking-tight">{fmt(cliente.deudatotal)}</div>
-              {/* Solo con un límite cargado en Alegra. Antes el límite era 0 fijo y la barra
-                  dividía la deuda por cero: "Disponible" salía negativo para cualquier cliente
-                  que debiera algo. */}
-              {cliente.limitecredito != null && cliente.limitecredito > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex justify-between text-xs opacity-70">
-                    <span>Límite de crédito</span>
-                    <span>{fmt(cliente.limitecredito)}</span>
-                  </div>
-                  <div className="h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }}>
-                    <div
-                      className="h-1.5 rounded-full transition-all"
-                      style={{
-                        background: "rgba(255,255,255,0.85)",
-                        width: `${Math.min(100, (cliente.deudatotal / cliente.limitecredito) * 100).toFixed(1)}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="text-xs opacity-70">
-                    Disponible: {fmt(cliente.limitecredito - cliente.deudatotal)}
-                  </div>
-                </div>
-              )}
+        {/* Deuda para TODOS, no solo cuenta corriente: un cliente de contado también puede
+            tener una factura emitida sin pagar. Lo propio de cuenta corriente (condiciones
+            comerciales, límite de crédito) sigue condicionado. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Deuda total */}
+          <div
+            className="rounded-[var(--radius)] p-5 flex flex-col gap-3"
+            style={{ background: "var(--blue)", color: "white" }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-sm font-medium opacity-80">
+                Deuda total
+                <Tooltip white text="Suma de todas las facturas pendientes de pago, incluyendo vencidas y a vencer." />
+              </span>
             </div>
-
-            {/* Saldo vencido */}
-            <SummaryCard
-              title="Saldo vencido"
-              amount={cliente.saldovencido}
-              amountColor="var(--red)"
-              count={vencidasCount}
-              countLabel="facturas vencidas"
-              rows={topVencidas}
-              onVerMas={() => irAFacturas("vencida")}
-              onRowClick={() => irAFacturas("vencida")}
-            />
-
-            {/* Saldo a vencer */}
-            <SummaryCard
-              title="Saldo a vencer"
-              amount={cliente.saldoavencer}
-              amountColor="var(--amber)"
-              count={pendientesCount}
-              countLabel="facturas pendientes"
-              rows={topPendientes}
-              onVerMas={() => irAFacturas("pendiente")}
-              onRowClick={() => irAFacturas("pendiente")}
-            />
+            <div className="text-3xl font-bold tracking-tight">{fmt(cliente.deudatotal)}</div>
+            {/* Solo con un límite cargado en Alegra. Antes el límite era 0 fijo y la barra
+                dividía la deuda por cero: "Disponible" salía negativo para cualquier cliente
+                que debiera algo. */}
+            {cliente.limitecredito != null && cliente.limitecredito > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between text-xs opacity-70">
+                  <span>Límite de crédito</span>
+                  <span>{fmt(cliente.limitecredito)}</span>
+                </div>
+                <div className="h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.2)" }}>
+                  <div
+                    className="h-1.5 rounded-full transition-all"
+                    style={{
+                      background: "rgba(255,255,255,0.85)",
+                      width: `${Math.min(100, (cliente.deudatotal / cliente.limitecredito) * 100).toFixed(1)}%`,
+                    }}
+                  />
+                </div>
+                <div className="text-xs opacity-70">
+                  Disponible: {fmt(cliente.limitecredito - cliente.deudatotal)}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Saldo vencido */}
+          <SummaryCard
+            title="Saldo vencido"
+            amount={cliente.saldovencido}
+            amountColor="var(--red)"
+            count={vencidasCount}
+            countLabel="facturas vencidas"
+            rows={topVencidas}
+            onVerMas={() => irAFacturas("vencida")}
+            onRowClick={() => irAFacturas("vencida")}
+          />
+
+          {/* Saldo a vencer */}
+          <SummaryCard
+            title="Saldo a vencer"
+            amount={cliente.saldoavencer}
+            amountColor="var(--amber)"
+            count={pendientesCount}
+            countLabel="facturas pendientes"
+            rows={topPendientes}
+            onVerMas={() => irAFacturas("pendiente")}
+            onRowClick={() => irAFacturas("pendiente")}
+          />
+        </div>
 
         {/* Tabs */}
         <div

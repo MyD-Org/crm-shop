@@ -13,6 +13,7 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
+import { GaleriaProducto } from "@/components/GaleriaProducto";
 import type { Product } from "@/data/products";
 
 function CartIcon() {
@@ -20,14 +21,6 @@ function CartIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
       <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-    </svg>
-  );
-}
-
-function LightbulbIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 3.5-2 5.5-2.5 6.5H7.5C7 15.5 5 13.5 5 9a7 7 0 0 1 7-7z" />
     </svg>
   );
 }
@@ -44,11 +37,11 @@ const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> =
 };
 
 /**
- * Ficha de producto. Los datos llegan resueltos desde Alegra via el Server
- * Component `producto/[id]/page.tsx`.
+ * Ficha de producto. Los datos llegan resueltos desde el espejo del catálogo
+ * (con el overlay del CRM) via el Server Component `producto/[id]/page.tsx`.
  *
- * Alegra provee: nombre, marca, SKU, descripcion, precio, stock y categoria.
- * NO provee imagenes, especificaciones, opiniones, variantes ni precios por
+ * Hay: nombre, marca, SKU, descripcion, precio, stock, categoria y las fotos
+ * del overlay. NO hay especificaciones, opiniones, variantes ni precios por
  * volumen: esas secciones se mantienen visibles pero vacias, a la espera de la
  * capa propia del shop (ver docs/arquitectura-integraciones.md). Variantes y
  * precio por cantidad son la excepcion: sin datos no se dibuja nada, porque un
@@ -103,12 +96,7 @@ export function ProductoClient({
         {/* Galería un poco más angosta que la info: los nombres de Alegra son
             largos y necesitan el ancho más que la foto. */}
         <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-          {/* Galeria — Alegra no expone imagenes todavia */}
-          <div className="flex aspect-square gap-3">
-            <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-[24px] bg-elevated">
-              <LightbulbIcon className="h-48 w-48 text-muted/20" />
-            </div>
-          </div>
+          <GaleriaProducto fotos={producto.images} nombre={producto.name} />
 
           {/* Info */}
           <div className="space-y-5">

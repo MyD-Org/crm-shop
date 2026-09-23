@@ -824,43 +824,28 @@ export async function searchContactsRaw(
   return Array.isArray(page) ? page : []
 }
 
-/** Un contacto puntual por id de Alegra. Cualquier error (no solo 404) devuelve null. */
-export async function getContact(config: TenantConfig, alegraId: string): Promise<AlegraContact | null> {
-  if (config.alegraMock) return mockContacts.find((c) => c.alegraId === alegraId) ?? null
-  try {
-    const raw = await getContactRaw(config, alegraId)
-    return raw ? mapRawContact(raw) : null
-  } catch (err) {
-    // Alegra saturado no es "no existe": quien llama decide qué decirle al usuario.
-    if (err instanceof AlegraRateLimitError) throw err
-    return null
-  }
-}
-
 /**
- * Contacto crudo por id, para el espejo. A diferencia de `getContact`, distingue "no existe"
- * (404 → null) de "Alegra falló" (tira): un error no puede leerse como "no está".
+ * Contacto crudo por id (1 request), para el espejo: fallback de `contactoPorId` y avisos de
+ * los webhooks. Distingue "no existe" (404 → null) de "Alegra falló" (tira): un error no
+ * puede leerse como "no está". `reintentos429` acota los reintentos (default: los de siempre).
  */
-export async function getContactRaw(config: TenantConfig, alegraId: string): Promise<Record<string, unknown> | null> {
+export async function getContactRaw(
+  config: TenantConfig,
+  alegraId: string,
+  opts: { reintentos429?: number } = {},
+): Promise<Record<string, unknown> | null> {
   if (config.alegraMock) {
     const c = mockContacts.find((m) => m.alegraId === alegraId)
     return c ? mockContactARaw(c) : null
   }
   try {
-    return (await alegraFetch(config, `/contacts/${encodeURIComponent(alegraId)}`)) as Record<string, unknown>
+    return (await alegraFetch(config, `/contacts/${encodeURIComponent(alegraId)}`, undefined, undefined, {
+      reintentos429: opts.reintentos429,
+    })) as Record<string, unknown>
   } catch (err) {
     if (err instanceof AlegraHttpError && err.status === 404) return null
     throw err
   }
-}
-
-/**
- * Crea un contacto en Alegra (cliente nuevo). Lo usa el agente cuando el cliente da su
- * CUIT y no existe todavía, para poder cotizarle. `name` es lo único obligatorio.
- */
-export async function createContact(config: TenantConfig, input: AlegraContactInput): Promise<AlegraContact> {
-  if (config.alegraMock) return crearEnMock(input)
-  return mapRawContact(await createContactRaw(config, input))
 }
 
 function crearEnMock(input: AlegraContactInput): AlegraContact {
@@ -884,7 +869,11 @@ function crearEnMock(input: AlegraContactInput): AlegraContact {
   return created
 }
 
-/** Como `createContact`, pero devuelve el crudo que respondió Alegra (write-through al espejo). */
+/**
+ * Crea un contacto en Alegra (cliente nuevo) y devuelve el crudo que respondió, para
+ * escribirlo en el espejo (write-through, ver `crearContacto` en lib/contactos.ts). Lo usa el
+ * agente cuando el cliente da su CUIT y no existe todavía. `name` es lo único obligatorio.
+ */
 export async function createContactRaw(config: TenantConfig, input: AlegraContactInput): Promise<Record<string, unknown>> {
   if (config.alegraMock) return mockContactARaw(crearEnMock(input))
   const body: Record<string, unknown> = { name: input.name }
@@ -901,8 +890,10 @@ export async function createContactRaw(config: TenantConfig, input: AlegraContac
 // nombre en esta cuenta es ambiguo de entrada — hay tres "Sergio", dos "Arrow", dos
 // "Roberto" y varios "Carlos".
 //
-// La búsqueda de Alegra (?query=) mira nombre e identificación, NO los teléfonos, así que
-// hay que traer los contactos y filtrar acá.
+// La búsqueda de Alegra (?query=) mira nombre e identificación, NO los teléfonos. Antes eso
+// se resolvía bajando el padrón entero en cada mensaje; ahora el teléfono se busca en el
+// espejo (`buscarPorTelefono` en lib/contactos.ts, columna phones_norm) y acá quedan solo la
+// normalización y el filtro de cuentas internas, que usan el espejo y la sync.
 
 /**
  * Últimos 10 dígitos del teléfono, que en Argentina son área + abonado. El mismo número
@@ -931,36 +922,6 @@ export function esCliente(name: string): boolean {
   if (!n) return false
   if (n.includes("no usar")) return false
   return !CUENTAS_NO_CLIENTE.has(n)
-}
-
-/**
- * Contactos cuyo teléfono coincide con el dado. Devuelve todos los que matchean: si vuelve
- * más de uno, quien llama NO debe elegir — es justamente el caso ambiguo (mismo número
- * cargado en varios contactos, como los dos "Lescano Diego").
- */
-export async function searchContactsByPhone(config: TenantConfig, phone: string): Promise<AlegraContact[]> {
-  const buscado = normalizePhone(phone)
-  if (!buscado) return []
-
-  if (config.alegraMock) {
-    return mockContacts.filter((c) => normalizePhone(c.phone) === buscado && esCliente(c.name))
-  }
-
-  // Alegra guarda hasta tres números por contacto y el que buscamos puede estar en
-  // cualquiera: en esta cuenta hay contactos con el celular en "phonePrimary" y otros en
-  // "mobile".
-  const filas = await fetchAllPages(config, "/contacts", (raw) => ({
-    contact: mapRawContact(raw),
-    phones: [raw.phonePrimary, raw.phoneSecondary, raw.mobile].map(normalizePhone).filter(Boolean),
-  }))
-
-  return filas.filter((f) => f.phones.includes(buscado) && esCliente(f.contact.name)).map((f) => f.contact)
-}
-
-/** Todos los contactos (para una futura sync). Pagina hasta agotar. */
-export async function listAllContacts(config: TenantConfig): Promise<AlegraContact[]> {
-  if (config.alegraMock) return mockContacts
-  return fetchAllPages(config, "/contacts", mapRawContact)
 }
 
 /**
@@ -994,6 +955,48 @@ export async function paginaDeContactos(
 
 /** Tamaño de página de Alegra (topea `limit` en 30). La sync lo usa para detectar la última. */
 export const ALEGRA_PAGE_SIZE = PAGE_SIZE
+
+// ── Webhooks (suscripciones de la cuenta) ──
+//
+// Alegra avisa por POST a una URL cuando pasa un evento de la cuenta. La suscripción es
+// `POST /webhooks/subscriptions { event, url }`. Solo se usan los de contactos
+// (`new-client`, `edit-client`, `delete-client`): los mantiene al día el espejo (ver
+// lib/alegra-contacts-webhook.ts). Crear o borrar una suscripción cambia la configuración de
+// la cuenta REAL del cliente: lo hace una persona con scripts/alegra-webhooks-contactos.ts.
+
+export interface AlegraWebhookSubscription {
+  id: string
+  event: string
+  url: string
+}
+
+function mapRawSubscription(raw: Record<string, unknown>): AlegraWebhookSubscription {
+  return { id: String(raw.id ?? ""), event: String(raw.event ?? ""), url: String(raw.url ?? "") }
+}
+
+export async function listWebhookSubscriptions(config: TenantConfig): Promise<AlegraWebhookSubscription[]> {
+  const res = (await alegraFetch(config, "/webhooks/subscriptions")) as unknown
+  // Según la cuenta viene como lista o envuelto en { data: [...] }.
+  const filas = Array.isArray(res) ? res : Array.isArray((res as { data?: unknown })?.data) ? (res as { data: unknown[] }).data : []
+  return (filas as Record<string, unknown>[]).map(mapRawSubscription)
+}
+
+export async function createWebhookSubscription(
+  config: TenantConfig,
+  event: string,
+  url: string,
+): Promise<AlegraWebhookSubscription> {
+  const raw = (await alegraFetch(config, "/webhooks/subscriptions", undefined, {
+    method: "POST",
+    body: { event, url },
+  })) as Record<string, unknown> | null
+  const sub = (raw as { subscription?: unknown } | null)?.subscription ?? raw
+  return mapRawSubscription((sub ?? {}) as Record<string, unknown>)
+}
+
+export async function deleteWebhookSubscription(config: TenantConfig, id: string): Promise<void> {
+  await alegraFetch(config, `/webhooks/subscriptions/${encodeURIComponent(id)}`, undefined, { method: "DELETE" })
+}
 
 // ── Configuración de venta: listas de precio, formas de pago, vendedores, impuestos, monedas ──
 

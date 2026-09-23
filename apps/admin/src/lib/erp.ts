@@ -1,10 +1,8 @@
 import type { Cliente, CondicionesComerciales, Factura, FacturaEstado, Pago, Presupuesto, PresupuestoEstado } from "@/types"
 import type { TenantConfig } from "./tenants"
-import type { AlegraContact, AlegraEstimate, AlegraInvoice, AlegraPayment } from "./alegra"
+import type { AlegraEstimate, AlegraInvoice, AlegraPayment } from "./alegra"
 import {
-  getContact,
-  findContactByIdentifier,
-  listAllContacts,
+  AlegraRateLimitError,
   listInvoicesByContact,
   listInvoicesPageByContact,
   type AlegraInvoiceFilters,
@@ -17,6 +15,7 @@ import {
   computeBalance,
   getContactBalance,
 } from "./alegra"
+import { clientesActivos, contactoPorDocumento, contactoPorId, type ContactoEspejo } from "./contactos"
 import { mockCliente, mockCondiciones, mockFacturas, mockPagos, mockPresupuestos } from "./mock-data"
 
 // Capa ERP del portal sobre Alegra. Antes esto era lib/flexxus.ts: Alegra reemplazó a Flexxus
@@ -98,28 +97,17 @@ function mapEstimate(e: AlegraEstimate, hoy: Date): Presupuesto {
   }
 }
 
-/**
- * Cuenta corriente o contado, deducido del contacto: Alegra no tiene un campo propio.
- * En la sucursal, a un cliente de cuenta corriente le cargan un plazo de pago y/o un
- * límite de crédito; sin ninguno de los dos, es contado. Misma regla que la tienda
- * (`tipoCuentaDe` en apps/clientes/src/lib/alegra.ts).
- *
- * Decide qué ve el portal: condiciones comerciales y tarjetas de deuda/límite solo
- * para cuenta corriente. Antes estaba fijo en "corriente" para todos.
- */
-export function tipoCuentaDeContacto(
-  c: Pick<AlegraContact, "paymentTermDays" | "creditLimit">,
-): "corriente" | "contado" {
-  return (c.paymentTermDays ?? 0) > 0 || (c.creditLimit ?? 0) > 0 ? "corriente" : "contado"
-}
-
-function mapContactToCliente(c: AlegraContact, balance?: { total: number; overdue: number; toFallDue: number }): Cliente {
+// Los contactos salen del espejo (lib/contactos.ts), no de Alegra en vivo: `/contacts` admite
+// ~5 requests por minuto por cuenta. `tipoCuenta` viene de la columna generada `tipo_cuenta`
+// (regla canónica: plazo de pago > 0 o límite de crédito > 0 = cuenta corriente); acá no se
+// recalcula.
+function mapContactToCliente(c: ContactoEspejo, balance?: { total: number; overdue: number; toFallDue: number }): Cliente {
   return {
     codigocliente: c.alegraId,
     razonsocial: c.name,
     cuit: c.identification ?? "",
     email: c.email ?? undefined,
-    tipoCuenta: tipoCuentaDeContacto(c),
+    tipoCuenta: c.tipoCuenta,
     // Alegra SÍ lo expone (`creditLimit` del contacto). El comentario que había acá decía
     // lo contrario y por eso se hardcodeaba en 0.
     limitecredito: c.creditLimit,
@@ -135,7 +123,7 @@ function mapContactToCliente(c: AlegraContact, balance?: { total: number; overdu
 export async function getCliente(config: TenantConfig, codigocliente: string): Promise<Cliente> {
   if (config.alegraMock) return mockCliente
   const [contact, balance] = await Promise.all([
-    getContact(config, codigocliente),
+    contactoPorId(config, codigocliente),
     getContactBalance(config, codigocliente),
   ])
   if (!contact) throw new Error(`Contacto ${codigocliente} no encontrado en Alegra`)
@@ -145,7 +133,7 @@ export async function getCliente(config: TenantConfig, codigocliente: string): P
 /** Resuelve el cliente por CUIT, CUIL o DNI, ya normalizado a dígitos (login OTP del portal). */
 export async function getClienteByIdentifier(config: TenantConfig, identifier: string): Promise<Cliente | null> {
   if (config.alegraMock) return mockCliente
-  const contact = await findContactByIdentifier(config, identifier)
+  const contact = await contactoPorDocumento(config, identifier)
   if (!contact) return null
   const balance = await getContactBalance(config, contact.alegraId)
   return mapContactToCliente(contact, balance)
@@ -169,7 +157,7 @@ export async function getCuenta(config: TenantConfig, codigocliente: string): Pr
   }
   const hoy = today()
   const [contact, abiertas] = await Promise.all([
-    getContact(config, codigocliente),
+    contactoPorId(config, codigocliente),
     listOpenInvoicesByContact(config, codigocliente),
   ])
   if (!contact) throw new Error(`Contacto ${codigocliente} no encontrado en Alegra`)
@@ -182,12 +170,16 @@ export async function getCuenta(config: TenantConfig, codigocliente: string): Pr
   }
 }
 
-/** Todos los clientes del tenant — usado por el gestor de cobranza. */
+/**
+ * Todos los clientes activos del tenant — usado por el gestor de cobranza. Salen del espejo:
+ * antes recorría el padrón entero de Alegra (~200 requests para Central LED) contra un
+ * `/contacts` que admite ~5 por minuto. Espejo vacío → lista vacía (y un aviso en el log),
+ * nunca un recorrido en vivo.
+ */
 export async function getClientes(config: TenantConfig): Promise<Cliente[]> {
   if (config.alegraMock) return [mockCliente]
-  const contacts = await listAllContacts(config)
   // Sin saldo por contacto acá (sería N+1 de facturas): la cobranza recorre las facturas igual.
-  return contacts.filter((c) => c.status === "active").map((c) => mapContactToCliente(c))
+  return (await clientesActivos(config)).map((c) => mapContactToCliente(c))
 }
 
 /** Tamaño de página de las facturas del portal. 30 es el máximo real de Alegra: pedir más
@@ -295,7 +287,11 @@ export async function getCondiciones(config: TenantConfig, codigocliente: string
   if (config.alegraMock) return mockCondiciones
 
   const [contact, propias] = await Promise.all([
-    getContact(config, codigocliente),
+    // Como antes con getContact: si Alegra falla (salvo 429), se muestra lo de la tabla propia.
+    contactoPorId(config, codigocliente).catch((err) => {
+      if (err instanceof AlegraRateLimitError) throw err
+      return null
+    }),
     getCondicionesPropias(config, codigocliente),
   ])
 

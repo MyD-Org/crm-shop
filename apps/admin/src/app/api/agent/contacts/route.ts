@@ -1,11 +1,13 @@
 import { authAgentTenantRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
-import { searchContacts, searchContactsByPhone, createContact } from "@/lib/alegra"
+import { buscarPorTelefono, buscarPorTexto, crearContacto } from "@/lib/contactos"
 
 // GET /api/agent/contacts?q=san+martin   → por nombre o CUIT/identificación
 // GET /api/agent/contacts?phone=549223...  → por teléfono
 //
-// Busca clientes en Alegra. Lo usa la tool del agente para resolver a qué contacto
+// Busca clientes de Alegra en el ESPEJO (tabla alegra_contacts, ver lib/contactos.ts): por
+// teléfono sin ninguna request a Alegra; por texto, 1 request solo si el espejo no tiene nada.
+// Lo usa la tool del agente para resolver a qué contacto
 // cotizarle antes de crear la cotización (POST /api/agent/quotes).
 //
 // La variante por teléfono es la que usa el bot de WhatsApp para saber quién le escribe
@@ -15,7 +17,7 @@ import { searchContacts, searchContactsByPhone, createContact } from "@/lib/aleg
 //
 // POST /api/agent/contacts
 //   body: { name, identification?, email?, phone? }
-//   Crea un cliente nuevo en Alegra cuando el que da su CUIT no existe todavía. Devuelve
+//   Crea un cliente nuevo en Alegra (y lo escribe en el espejo en el momento) cuando el que da su CUIT no existe todavía. Devuelve
 //   el contacto (con su price_list_id / payment_term_id, si Alegra los asignó por defecto).
 export async function GET(req: Request) {
   try {
@@ -32,7 +34,7 @@ export async function GET(req: Request) {
     if (!q && !phone) return Response.json({ error: "q o phone es requerido" }, { status: 400 })
 
     // phone tiene prioridad: es el dato confiable cuando viene de un canal verificado.
-    const contacts = phone ? await searchContactsByPhone(tenant, phone) : await searchContacts(tenant, q)
+    const contacts = phone ? await buscarPorTelefono(tenant, phone) : await buscarPorTexto(tenant, q)
     const criterio = phone ? `phone="${phone}"` : `q="${q}"`
     console.log(`[agent/contacts] tenant=${tenant.id} cliente=${auth.codigocliente} ${criterio} → ${contacts.length}`)
 
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
     const name = typeof body?.name === "string" ? body.name.trim() : ""
     if (!name) return Response.json({ error: "name es requerido" }, { status: 400 })
 
-    const contact = await createContact(tenant, {
+    const contact = await crearContacto(tenant, {
       name,
       ...(typeof body?.identification === "string" && body.identification.trim()
         ? { identification: body.identification.trim() }

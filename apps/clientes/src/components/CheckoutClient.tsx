@@ -128,6 +128,11 @@ interface Props {
    * vuelve a controlar al crear el pedido.
    */
   admiteEnvio: boolean;
+  /**
+   * Flag de envío (src/lib/envio-flag.ts) resuelto en el server. Apagado: sólo
+   * se ofrece el retiro / entrega a coordinar, sin importar `admiteEnvio`.
+   */
+  envioHabilitado: boolean;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
   /**
@@ -151,6 +156,7 @@ export function CheckoutClient({
   emailCliente,
   facturacionCompleta,
   admiteEnvio,
+  envioHabilitado,
   oferta = null,
   pagosHabilitados,
   direccionesGuardadas = [],
@@ -565,7 +571,7 @@ export function CheckoutClient({
                 title="Retiro en local / a coordinar"
                 description="Retirás en el local o coordinamos la entrega con vos"
               />
-              {admiteEnvio && (
+              {envioHabilitado && admiteEnvio && (
                 <RadioCard
                   selected={entrega === "envio"}
                   onClick={() => setEntrega("envio")}
@@ -574,7 +580,7 @@ export function CheckoutClient({
                 />
               )}
             </div>
-            {!admiteEnvio && (
+            {envioHabilitado && !admiteEnvio && (
               <p className="mt-3 text-sm text-muted">
                 El envío a domicilio solo está disponible para compradores de Argentina.
               </p>

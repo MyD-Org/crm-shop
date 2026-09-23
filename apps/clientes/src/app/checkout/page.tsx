@@ -6,6 +6,7 @@ import { admiteEnvio } from "@/lib/facturacion";
 import { getPerfilFacturacion, perfilCompleto } from "@/lib/facturacion-db";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { pagosHabilitados } from "@/lib/pagos-flag";
+import { envioHabilitado } from "@/lib/envio-flag";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 
@@ -42,7 +43,7 @@ export default async function CheckoutPage() {
   // El flag de pagos se lee acá, en el server, y al checkout le llega como
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
-  const pagos = await pagosHabilitados();
+  const [pagos, envio] = await Promise.all([pagosHabilitados(), envioHabilitado()]);
   const [perfil, oferta, direcciones] = await Promise.all([
     clerkUserId ? getPerfilFacturacion(clerkUserId) : null,
     pagos ? getOfertaCuotas() : null,
@@ -62,6 +63,7 @@ export default async function CheckoutPage() {
         admiteEnvio={admiteEnvio(perfil?.pais)}
         oferta={oferta}
         pagosHabilitados={pagos}
+        envioHabilitado={envio}
         direccionesGuardadas={direcciones}
       />
     </>

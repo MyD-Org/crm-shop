@@ -9,6 +9,7 @@ import {
 } from "@/lib/envio";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { admiteEnvio, domicilioEnLinea } from "@/lib/facturacion";
+import { envioHabilitado } from "@/lib/envio-flag";
 import {
   getPerfilFacturacion,
   guardarTelefonoSiFalta,
@@ -137,6 +138,18 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Faltan el nombre y el teléfono de contacto." },
       { status: 400 },
+    );
+  }
+  // Con el flag `envio` apagado el checkout no ofrece el envío; esto cubre el
+  // POST directo (y un checkout abierto antes de apagarlo).
+  if (entregaTipo === "envio" && !(await envioHabilitado())) {
+    return NextResponse.json(
+      {
+        error:
+          "El envío a domicilio no está disponible por el momento. Seleccione retiro en el local o entrega a coordinar.",
+        motivo: "envio_no_disponible",
+      },
+      { status: 409 },
     );
   }
   if (entregaTipo === "envio" && (!entregaCiudad || !entregaDireccion)) {

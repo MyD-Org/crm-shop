@@ -59,6 +59,7 @@ sirven apagados.
 | `pagos` | El checkout muestra "Forma de pago" (transferencia, Mercado Pago, efectivo). Apagado: sólo "a coordinar", sin cobros. |
 | `cuotas` | Muestra cuotas y aplica el límite de cuotas en el pago. Apagado: checkout sin cuotas, clamp 1..24. |
 | `catalogo-solo-visibles` | Sólo productos publicados (`visible`) en el overlay del CRM. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
+| `envio` | El checkout ofrece envío a domicilio (ciudades y mínimo de `src/lib/envio.ts`) y Mi cuenta lo anuncia. Apagado: sólo retiro / entrega a coordinar; `POST /api/pedidos` rechaza el envío. |
 
 Los flags nuevos van en Vercel Flags, no como variable `=1`.
 

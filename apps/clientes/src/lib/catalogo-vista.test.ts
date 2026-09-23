@@ -123,7 +123,7 @@ describe("textoUnidadesDisponibles", () => {
     expect(textoUnidadesDisponibles({ stock: "low", stockQty: 1 })).toBe("1 disponible");
   });
 
-  it("disponible con cantidad cero o negativa (simulación de stock) no muestra la cantidad", () => {
+  it("disponible con cantidad cero o negativa no muestra la cantidad", () => {
     expect(textoUnidadesDisponibles({ stock: "in", stockQty: 0 })).toBeUndefined();
     expect(textoUnidadesDisponibles({ stock: "in", stockQty: -5 })).toBeUndefined();
   });

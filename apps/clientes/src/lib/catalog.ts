@@ -34,7 +34,6 @@ import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
-import { stockSimulado } from "./stock-simulado";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -45,23 +44,9 @@ const STOCK_BAJO = 5;
  * - null/undefined (servicio / no inventariable) → siempre disponible.
  * - >= STOCK_BAJO = "in", >0 = "low", 0 = "out".
  */
-export function derivarStock(
-  qty: number | null | undefined,
-  /** Ver `stockSimulado()`. Parámetro y no lectura del entorno, para poder
-   *  testear las dos ramas sin ensuciar `process.env`. */
-  simular = false,
-): ProductStock {
+export function derivarStock(qty: number | null | undefined): ProductStock {
   if (qty == null) return "in";
-  /**
-   * Con la simulación activa, "sin stock" pasa a "disponible".
-   *
-   * Hace falta ACÁ además de en la cotización: el botón "agregar al carrito"
-   * está deshabilitado cuando el estado es "out"
-   * (CatalogoClient.tsx y ProductoClient.tsx), así que simular solo del lado
-   * del cotizador dejaba la tienda igual de intransitable — no se podía meter
-   * un producto en el carrito para llegar a cotizarlo.
-   */
-  if (qty <= 0) return simular ? "in" : "out";
+  if (qty <= 0) return "out";
   if (qty < STOCK_BAJO) return "low";
   return "in";
 }
@@ -109,7 +94,6 @@ export function mapFilaToProduct(
   baseMedios: string | null = basePublicaMedios(),
 ): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
-  const simular = stockSimulado();
   const price = precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList);
   return {
     id: fila.alegraId,
@@ -122,7 +106,7 @@ export function mapFilaToProduct(
     name: fila.overlayNombre || fila.description || fila.name,
     price,
     ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
-    stock: derivarStock(qty, simular),
+    stock: derivarStock(qty),
     stockQty: qty ?? undefined,
     // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
     // código (y es con lo que el CRM elige destacados, ver destacados.ts).
@@ -489,10 +473,6 @@ const APLICAR_TODOS: AplicarFiltros = {
  *
  * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
  * faceta excluye su propio grupo (ver `getFacetas`).
- *
- * El filtro de stock se OMITE mientras la simulación de disponibilidad está
- * activa (`stockSimulado()`): con ella todo se muestra "disponible", y filtrar
- * por `stock > 0` escondería productos que la card dice que están.
  */
 function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
   const q = filtros.busqueda?.trim();
@@ -513,9 +493,7 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
     aplicar.precio && filtros.precioMax != null
       ? sql`${precioExhibidoSql} <= ${filtros.precioMax}`
       : undefined,
-    aplicar.stock && filtros.soloStock && !stockSimulado()
-      ? conStockSql
-      : undefined,
+    aplicar.stock && filtros.soloStock ? conStockSql : undefined,
   );
 }
 

@@ -270,9 +270,6 @@ export function hrefCanonico(estado: EstadoCatalogo): string {
  * Filtros que la page le pasa a la consulta (`getPaginaCatalogo` /
  * `getFacetas`). Vive acá, puro, para que el default de "Solo con stock"
  * llegue al SQL con test: sin parámetros, `soloStock` es `true`.
- *
- * Mientras la simulación de stock esté activa (`stockSimulado()`), la
- * consulta omite el predicado igual: este default no tiene efecto visible.
  */
 export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosCatalogo {
   return {

@@ -6,7 +6,7 @@
  * la ruta de pago vuelve al clamp 1..24. Precio final con IVA y neto NO dependen
  * de este flag. Cron, ping y congelado del plan en el pedido siguen corriendo.
  *
- * Explícito a propósito (estilo src/lib/stock-simulado.ts): sólo "1" enciende.
+ * Explícito a propósito (estilo src/lib/pagos-flag.ts): sólo "1" enciende.
  */
 export function cuotasHabilitadas(): boolean {
   return process.env.CUOTAS_ENABLED === "1";

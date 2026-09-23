@@ -289,6 +289,24 @@ export function esperaDeReintento(
   return Math.round(base * (1 + random() * 0.5))
 }
 
+/**
+ * ¿Es un límite de requests disfrazado? `/contacts` tiene un tope propio (~5 requests por
+ * minuto, probado 2026-09-23 contra la cuenta real; `/items` no lo tiene) y cuando se pasa NO
+ * responde 429: responde **400** con el 429 en el body, `{"code":429,"message":"Too many
+ * requests",...}`. Tomarlo como un 400 común hacía que el login del portal probara el filtro
+ * siguiente y le dijera al cliente "No encontramos una cuenta" con Alegra saturado, y que la
+ * sync de contactos cortara en la 6ª página.
+ */
+export function esLimiteDisfrazado(status: number, body: string): boolean {
+  if (status !== 400 || !body) return false
+  try {
+    const j = JSON.parse(body) as { code?: unknown }
+    return Number(j?.code) === 429
+  } catch {
+    return false
+  }
+}
+
 async function alegraFetch(
   config: TenantConfig,
   path: string,
@@ -314,8 +332,10 @@ async function alegraFetch(
       cache: "no-store",
     })
 
-    if (res.status === 429) {
-      const detail = await res.text().catch(() => "")
+    // El 400 se lee acá para poder distinguir el límite disfrazado (ver esLimiteDisfrazado).
+    const detail400 = res.status === 400 ? await res.text().catch(() => "") : null
+    if (res.status === 429 || (detail400 !== null && esLimiteDisfrazado(400, detail400))) {
+      const detail = detail400 ?? (await res.text().catch(() => ""))
       if (attempt < RATE_LIMIT_RETRIES) {
         await sleep(esperaDeReintento(attempt, res.headers.get("retry-after")))
         continue
@@ -325,7 +345,7 @@ async function alegraFetch(
 
     if (!res.ok) {
       // Alegra devuelve el motivo en el body (ej. validación de la cotización) — lo sumamos al error.
-      const detail = await res.text().catch(() => "")
+      const detail = detail400 ?? (await res.text().catch(() => ""))
       throw new AlegraHttpError(res.status, path, detail)
     }
     if (res.status === 204) return null
@@ -801,7 +821,9 @@ export async function getContact(config: TenantConfig, alegraId: string): Promis
   try {
     const raw = await getContactRaw(config, alegraId)
     return raw ? mapRawContact(raw) : null
-  } catch {
+  } catch (err) {
+    // Alegra saturado no es "no existe": quien llama decide qué decirle al usuario.
+    if (err instanceof AlegraRateLimitError) throw err
     return null
   }
 }

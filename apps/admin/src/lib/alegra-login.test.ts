@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { AlegraRateLimitError, findContactByIdentifier, findContactRawByIdentifier, variantesDocumento } from "./alegra"
+import { AlegraRateLimitError, esLimiteDisfrazado, findContactByIdentifier, findContactRawByIdentifier, variantesDocumento } from "./alegra"
 import type { TenantConfig } from "./tenants"
 
 // Login del portal: resolver el contacto por CUIT/DNI sin bajar el padrón entero.
@@ -106,5 +106,53 @@ describe("findContactRawByIdentifier", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+/**
+ * `/contacts` avisa el límite con un 400 que trae el 429 en el body. Antes el login lo
+ * tomaba como "este filtro no sirvió", probaba el siguiente y respondía "no encontramos
+ * una cuenta" con Alegra saturado.
+ */
+describe("límite de Alegra disfrazado de 400", () => {
+  const limite = () =>
+    new Response(JSON.stringify({ code: 429, message: "Too many requests" }), { status: 400 })
+
+  it("esLimiteDisfrazado distingue el 400 con code 429 de un 400 común", () => {
+    expect(esLimiteDisfrazado(400, '{"code":429,"message":"Too many requests"}')).toBe(true)
+    expect(esLimiteDisfrazado(400, '{"code":1001,"message":"parámetro inválido"}')).toBe(false)
+    expect(esLimiteDisfrazado(400, "no es json")).toBe(false)
+    expect(esLimiteDisfrazado(500, '{"code":429}')).toBe(false)
+  })
+
+  it("reintenta y encuentra el contacto cuando el límite se libera", async () => {
+    vi.useFakeTimers()
+    let n = 0
+    fetchMock.mockImplementation(async () =>
+      n++ === 0 ? limite() : new Response(JSON.stringify([contacto({ identification: "20123456789" })]), { status: 200 }),
+    )
+    const p = findContactByIdentifier(tenant, "20123456789")
+    await vi.runAllTimersAsync()
+    expect((await p)?.alegraId).toBe("42")
+    vi.useRealTimers()
+  })
+
+  it("si el límite persiste tira AlegraRateLimitError, nunca 'no encontrado'", async () => {
+    vi.useFakeTimers()
+    fetchMock.mockImplementation(async () => limite())
+    const p = findContactByIdentifier(tenant, "20123456789")
+    const esperado = expect(p).rejects.toBeInstanceOf(AlegraRateLimitError)
+    await vi.runAllTimersAsync()
+    await esperado
+    vi.useRealTimers()
+  })
+
+  it("un 400 común de un filtro sigue pasando al filtro siguiente", async () => {
+    alegra((p) =>
+      p.get("identification") === "20123456789"
+        ? new Response(JSON.stringify({ code: 1001, message: "inválido" }), { status: 400 })
+        : [contacto({ identification: "20123456789" })],
+    )
+    expect((await findContactByIdentifier(tenant, "20123456789"))?.alegraId).toBe("42")
   })
 })

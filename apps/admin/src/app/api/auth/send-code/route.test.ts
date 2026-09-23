@@ -201,7 +201,7 @@ describe("POST /api/auth/send-code", () => {
     const res = await POST(req(identifier))
 
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toBe("Ingrese un CUIT o DNI válido, solo con números.")
+    expect((await res.json()).error).toBe("Ingrese un CUIT, CUIL o DNI válido, solo con números.")
     expect(state.busquedas).toBe(0)
     expect(state.sent).toHaveLength(0)
   })

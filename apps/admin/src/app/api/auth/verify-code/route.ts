@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     session.codigocliente = clienteData.codigocliente
     session.razonsocial = clienteData.razonsocial
     session.cuit = clienteData.cuit
-    // El email del contacto en Alegra, no lo tipeado (que es el CUIT o DNI). Lo leen los
+    // El email del contacto en Alegra, no lo tipeado (que es el CUIT, CUIL o DNI). Lo leen los
     // comprobantes del portal y la tienda como email del cliente.
     session.email = clienteData.email
     session.tipoCuenta = clienteData.tipoCuenta

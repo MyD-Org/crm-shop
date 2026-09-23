@@ -1013,7 +1013,7 @@ export async function getDocumentPdf(
   }
 }
 
-// ── Búsqueda de contacto por documento del portal (CUIT o DNI) ───────────────
+// ── Búsqueda de contacto por documento del portal (CUIT, CUIL o DNI) ─────────
 // El `query` de /contacts de Alegra matchea por nombre (un email exacto de un contacto
 // existente devolvía []). Los filtros `email=` e `identification=` sí filtran: con un
 // valor inexistente devuelven [] en vez de la primera página (probado contra la cuenta
@@ -1055,7 +1055,7 @@ async function contactosFiltrados(
 }
 
 /**
- * Contacto por CUIT o DNI exacto, para el login del portal. `documento` llega ya
+ * Contacto por CUIT, CUIL o DNI exacto, para el login del portal. `documento` llega ya
  * normalizado a dígitos (ver `normalizarDocumento`).
  *
  * Usa el filtro `identification=` con las formas en que puede estar cargado y `query=`

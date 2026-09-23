@@ -22,7 +22,7 @@ export default function LoginPage({ logoSrc, tenantName, tenantSubtitle }: Login
   const [step, setStep] = useState<Step>("identify")
   const [identifier, setIdentifier] = useState("")
   // Email (enmascarado) al que el server mandó el código: el contacto de Alegra, que
-  // no es lo que se tipeó (se entra con CUIT o DNI).
+  // no es lo que se tipeó (se entra con CUIT, CUIL o DNI).
   const [sentTo, setSentTo] = useState("")
   const [otp, setOtp] = useState(["", "", "", "", "", ""])
   const [loading, setLoading] = useState(false)
@@ -304,11 +304,11 @@ function IdentifyStep({
           Bienvenido
         </h1>
         <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
-          Ingrese su CUIT o DNI para acceder a su cuenta
+          Ingrese su CUIT, CUIL o DNI para acceder a su cuenta
         </p>
       </div>
 
-      <Field label="CUIT o DNI" error={error || undefined}>
+      <Field label="CUIT, CUIL o DNI" error={error || undefined}>
         <Input
           id="identifier"
           type="text"

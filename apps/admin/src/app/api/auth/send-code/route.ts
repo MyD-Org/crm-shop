@@ -10,7 +10,7 @@ import { sendEmail, maskEmail } from "@/lib/email"
 import { buildOtpEmail } from "@/lib/otp-email"
 import type { OtpSessionData } from "@/types"
 
-// Código de acceso al portal del cliente. Se entra SOLO con CUIT o DNI: se resuelve
+// Código de acceso al portal del cliente. Se entra SOLO con CUIT, CUIL o DNI: se resuelve
 // contra Alegra y el código se manda SIEMPRE al email que el contacto tiene cargado
 // ahí. El mail del ERP es el dato autoritativo; sin mail cargado no hay acceso hasta
 // que la sucursal lo cargue.
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     const identifier = typeof raw === "string" ? normalizarDocumento(raw) : null
     if (!identifier) {
       return Response.json(
-        { error: "Ingrese un CUIT o DNI válido, solo con números." },
+        { error: "Ingrese un CUIT, CUIL o DNI válido, solo con números." },
         { status: 400 },
       )
     }
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error:
-            "No encontramos una cuenta con ese CUIT o DNI. Verifique el número o comuníquese con la sucursal.",
+            "No encontramos una cuenta con ese CUIT, CUIL o DNI. Verifique el número o comuníquese con la sucursal.",
         },
         { status: 404 },
       )

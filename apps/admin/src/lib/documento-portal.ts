@@ -1,5 +1,5 @@
 /**
- * El portal se entra SOLO con CUIT o DNI: es lo que el cliente siempre tiene a mano y
+ * El portal se entra SOLO con CUIT, CUIL o DNI: es lo que el cliente siempre tiene a mano y
  * lo que identifica la cuenta en Alegra sin ambigüedad (un email puede estar repetido
  * o no estar cargado).
  *

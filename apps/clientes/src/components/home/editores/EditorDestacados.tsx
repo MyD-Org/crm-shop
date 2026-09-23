@@ -1,9 +1,10 @@
 "use client";
 
-import { Field, Input, Textarea } from "@myd-org/ui";
+import { Field, Input } from "@myd-org/ui";
 import { DEFAULTS_HOME, type DestacadosContent } from "@/data/home-defaults";
 import { ListaEditable } from "../ListaEditable";
 import { CampoImagen } from "./CampoImagen";
+import { CamposTitulo } from "./CamposTitulo";
 import { SelectorSkusDestacados } from "./SelectorSkusDestacados";
 import type { EditorProps } from "./index";
 
@@ -14,17 +15,9 @@ import type { EditorProps } from "./index";
 export function EditorDestacados({ valor, onChange }: EditorProps<DestacadosContent>) {
   return (
     <div className="flex flex-col gap-4">
-      <Field label="Título">
-        <Input value={valor.titulo} onChange={(e) => onChange({ ...valor, titulo: e.target.value })} />
-      </Field>
-      <Field label="Acento" hint="Opcional: la parte del título en color acento">
-        <Input value={valor.acento ?? ""} onChange={(e) => onChange({ ...valor, acento: e.target.value })} />
-      </Field>
-      <Field label="Bajada" hint="Opcional">
-        <Textarea value={valor.bajada ?? ""} onChange={(e) => onChange({ ...valor, bajada: e.target.value })} />
-      </Field>
-      <Field label="Enlace de 'Ver todos'" hint="Ruta interna (por ejemplo /catalogo) o URL https">
-        <Input value={valor.linkTodos} onChange={(e) => onChange({ ...valor, linkTodos: e.target.value })} />
+      <CamposTitulo valor={valor} onChange={onChange} />
+      <Field label="Enlace de 'Ver todos'" hint="Ruta interna (por ejemplo /catalogo) o URL https. Vacío: no se muestra.">
+        <Input value={valor.linkTodos ?? ""} onChange={(e) => onChange({ ...valor, linkTodos: e.target.value })} />
       </Field>
       <Field label="Cantidad" hint="Entre 1 y 24 productos">
         <Input

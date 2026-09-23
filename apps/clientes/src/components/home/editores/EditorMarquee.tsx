@@ -11,7 +11,6 @@ export function EditorMarquee({ valor, onChange }: EditorProps<MarqueeContent>) 
       items={valor.items}
       onChange={(items) => onChange({ items })}
       nuevo={() => ""}
-      min={1}
       renderItem={(item, onItem) => <Input value={item} onChange={(e) => onItem(e.target.value)} />}
     />
   );

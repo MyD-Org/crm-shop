@@ -12,14 +12,13 @@ export function EditorServicios({ valor, onChange }: EditorProps<ServiciosConten
       items={valor.items}
       onChange={(items) => onChange({ items })}
       nuevo={nuevoServicio}
-      min={1}
       renderItem={(item, onItem) => (
         <div className="flex flex-col gap-3">
           <Field label="Título">
-            <Input value={item.titulo} onChange={(e) => onItem({ ...item, titulo: e.target.value })} />
+            <Input value={item.titulo ?? ""} onChange={(e) => onItem({ ...item, titulo: e.target.value })} />
           </Field>
           <Field label="Texto">
-            <Input value={item.texto} onChange={(e) => onItem({ ...item, texto: e.target.value })} />
+            <Input value={item.texto ?? ""} onChange={(e) => onItem({ ...item, texto: e.target.value })} />
           </Field>
         </div>
       )}

@@ -6,6 +6,9 @@ import {
   combinarContenidoHome,
   esHref,
   esImagen,
+  migrarAcento,
+  sinCamposOcultos,
+  sinMarcasDeAcento,
   motivoImagenInvalida,
 } from "./home-defaults";
 
@@ -289,5 +292,80 @@ describe("esImagen / motivoImagenInvalida (home-editable C)", () => {
     expect(
       erroresSeccion("hero", { ...DEFAULTS_HOME.hero, imagen: "https://media.plataforma.example/h.webp" }),
     ).toEqual([]);
+  });
+});
+
+describe("títulos con acento en cualquier posición y versión mobile", () => {
+  const sin = (o: object, ...campos: string[]) =>
+    Object.fromEntries(Object.entries(o).filter(([k]) => !campos.includes(k)));
+
+  it("eyebrow y bajada son opcionales en hero, bannerDeco y tiles", () => {
+    expect(erroresSeccion("hero", sin(DEFAULTS_HOME.hero, "eyebrow", "bajada"))).toEqual([]);
+    expect(erroresSeccion("bannerDeco", sin(DEFAULTS_HOME.bannerDeco, "eyebrow", "bajada"))).toEqual([]);
+    const items = DEFAULTS_HOME.ambientes.items.map((t) => sin(t, "eyebrow"));
+    expect(erroresSeccion("ambientes", { ...DEFAULTS_HOME.ambientes, items })).toEqual([]);
+  });
+
+  it("todos los textos son opcionales: basta con los datos que no son texto", () => {
+    expect(erroresSeccion("anuncio", {})).toEqual([]);
+    expect(erroresSeccion("hero", { imagen: "/images/hero.webp", ctas: [], usps: [] })).toEqual([]);
+    expect(erroresSeccion("ambientes", { items: [{ imagen: "/images/a.webp", href: "/catalogo" }] })).toEqual([]);
+    expect(erroresSeccion("destacados", { cantidad: 4 })).toEqual([]);
+    expect(erroresSeccion("bannerDeco", { imagen: "/images/b.webp" })).toEqual([]);
+    expect(erroresSeccion("decoGrid", { items: [], chips: [] })).toEqual([]);
+    expect(erroresSeccion("servicios", { items: [{}] })).toEqual([]);
+    expect(erroresSeccion("marquee", { items: [] })).toEqual([]);
+    expect(erroresSeccion("whatsapp", { href: "/contacto" })).toEqual([]);
+  });
+
+  it("un texto vacío sin normalizar se rechaza (el editor lo omite antes de guardar)", () => {
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, titulo: "" })).toContain("titulo debe ser un texto no vacío");
+  });
+
+  it("imagen y destino de los enlaces siguen siendo obligatorios", () => {
+    expect(erroresSeccion("bannerDeco", { imagen: "" }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("whatsapp", {}).length).toBeGreaterThan(0);
+    expect(erroresSeccion("destacados", { linkTodos: "javascript:alert(1)", cantidad: 4 }).length).toBeGreaterThan(0);
+  });
+
+  it("acepta título y bajada de mobile, y los rechaza vacíos", () => {
+    const hero = { ...DEFAULTS_HOME.hero, tituloMobile: "Todo para *su obra*", bajadaMobile: "Corta" };
+    expect(erroresSeccion("hero", hero)).toEqual([]);
+    expect(erroresSeccion("decoGrid", { ...DEFAULTS_HOME.decoGrid, tituloMobile: " " })).toContain(
+      "tituloMobile debe ser un texto no vacío",
+    );
+  });
+
+  it("sinMarcasDeAcento deja el texto plano", () => {
+    expect(sinMarcasDeAcento("Los más *vendidos*")).toBe("Los más vendidos");
+    expect(sinMarcasDeAcento("Precio *especial")).toBe("Precio *especial");
+  });
+
+  it("migrarAcento pasa el acento viejo al final del título con marcas", () => {
+    expect(migrarAcento({ titulo: "Los más ", acento: "vendidos", linkTodos: "/" })).toEqual({
+      titulo: "Los más *vendidos*",
+      linkTodos: "/",
+    });
+    expect(migrarAcento({ titulo: "Sin acento", acento: "" })).toEqual({ titulo: "Sin acento" });
+    const nuevo = { titulo: "Todo lo que *su proyecto* necesita" };
+    expect(migrarAcento(nuevo)).toBe(nuevo);
+  });
+
+  it("combinarContenidoHome convierte las filas guardadas con el formato viejo", () => {
+    const viejo = { ...DEFAULTS_HOME.bannerDeco, titulo: "Ambientá tus noches con", acento: "luz cálida" };
+    const r = combinarContenidoHome([{ key: "bannerDeco", payload: viejo }]);
+    expect(r.bannerDeco.titulo).toBe("Ambientá tus noches con *luz cálida*");
+    expect("acento" in r.bannerDeco).toBe(false);
+  });
+
+  it("camposOcultos: valida los nombres y sinCamposOcultos saca el campo y su versión mobile", () => {
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, camposOcultos: ["eyebrow", "titulo"] })).toEqual([]);
+    expect(erroresSeccion("hero", { ...DEFAULTS_HOME.hero, camposOcultos: ["imagen"] }).length).toBeGreaterThan(0);
+    const hero = { ...DEFAULTS_HOME.hero, tituloMobile: "Corto", camposOcultos: ["titulo" as const] };
+    const visible = sinCamposOcultos(hero);
+    expect(visible.titulo).toBeUndefined();
+    expect(visible.tituloMobile).toBeUndefined();
+    expect(visible.bajada).toBe(DEFAULTS_HOME.hero.bajada);
+    expect(hero.titulo).toBe(DEFAULTS_HOME.hero.titulo); // no muta
   });
 });

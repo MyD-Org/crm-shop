@@ -13,11 +13,12 @@
 6. [Notificaciones](#notificaciones)
 7. [Chat de soporte con IA](#chat-de-soporte-con-ia)
 8. [Integración con Alegra (ERP)](#integración-con-alegra-erp)
-9. [Base de datos](#base-de-datos)
-10. [Feature flags](#feature-flags)
-11. [Referencia de endpoints](#referencia-de-endpoints)
-12. [Variables de entorno](#variables-de-entorno)
-13. [Comandos](#comandos)
+9. [Espejo de contactos de Alegra](#espejo-de-contactos-de-alegra)
+10. [Base de datos](#base-de-datos)
+11. [Feature flags](#feature-flags)
+12. [Referencia de endpoints](#referencia-de-endpoints)
+13. [Variables de entorno](#variables-de-entorno)
+14. [Comandos](#comandos)
 
 ---
 
@@ -283,7 +284,9 @@ Credenciales por tenant (`{PREFIX}_ALEGRA_EMAIL/TOKEN`); sin credenciales corre 
 
 - **Catálogo**: `listAllCategories`, `listAllItems` — sync a cache local
   (`alegra-sync.ts`, cron `/api/cron/alegra-sync`) — y `getItemsLive` (precio/stock al momento).
-- **Contactos (clientes)**: `searchContacts`, `getContact`, `listAllContacts`.
+- **Contactos (clientes)**: `searchContacts`, `getContact`, `listAllContacts`; para el
+  [espejo](#espejo-de-contactos-de-alegra), las versiones crudas (`*Raw`),
+  `mapRawContactRow` y `listAllContactsPausado` (único que debe bajar el padrón entero).
 - **Cuenta corriente**: `listInvoicesByContact`, `listPaymentsByContact`, `getContactBalance`
   (deuda total / vencido / a vencer, derivado de las facturas abiertas).
 - **Config de venta**: `listPriceLists`, `listPaymentTerms` (`/terms`), `listSellers`,
@@ -314,6 +317,75 @@ credenciales. Fechas normalizadas a `DD/MM/YYYY`; estados de Alegra mapeados a
 
 ---
 
+## Espejo de contactos de Alegra
+
+Copia del padrón de contactos de cada cuenta de Alegra en la base del CRM, para que nada
+tenga que bajar el padrón en vivo (buscar por teléfono o listar clientes costaba ~200
+requests contra una cuota de 150 req/min que comparten el CRM, el bot y el checkout del Shop).
+
+**Tabla `alegra_contacts`** (migración 0030). Una fila por
+`(tenant_id, alegra_account, alegra_id)`; `alegra_account` es `'principal'` mientras cada
+tenant tenga una sola cuenta de Alegra, y todo lector filtra por esa constante
+(`CUENTA_ALEGRA_PRINCIPAL`). Columnas normalizadas para buscar: `identification_norm` (solo
+dígitos), `emails_norm` y `phones_norm` (arrays con índice GIN), `types` (`client`/`provider`).
+Guarda también el contacto crudo en `raw`.
+
+- `tipo_cuenta` es una **columna generada**: `'corriente'` si el plazo tiene días > 0 o hay
+  límite de crédito > 0, si no `'contado'`. Es la regla canónica; los lectores leen la
+  columna en vez de recalcularla.
+- `status` NO es el estado de Alegra: es "visto en la última corrida OK" (`active` /
+  `inactive`). El estado real de Alegra está en `alegra_status`.
+- `origen`: quién escribió la fila por última vez (`sync`, `fallback`, `write_through`).
+
+**Vista `alegra_contacts_shop`** (migración 0031, vive solo en SQL). Es lo único que lee el
+Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre la tabla). Expone 16
+columnas: sin `raw`, sin teléfonos, sin vendedor ni límite de crédito. Si se cambia o borra
+una columna expuesta, la vista se recrea **en la misma migración**. El GRANT de la migración
+es condicional: si el rol `shop_app` se creó después de migrar, correr como owner:
+
+```sql
+GRANT USAGE ON SCHEMA public TO shop_app;
+GRANT SELECT ON public.alegra_contacts_shop TO shop_app;
+```
+
+**Sync** (`src/lib/alegra-contacts-sync.ts`, ruta `/api/cron/alegra-contactos-sync`,
+workflow `admin-alegra-contactos-sync`):
+
+- Frecuencia: 4 veces por día (02:15, 08:15, 14:15 y 20:15 UTC), en el grupo de
+  concurrencia `alegra-cuenta` junto con las syncs de catálogo. El espejo puede quedar hasta
+  ~6 h atrás de Alegra.
+- Completa y pausada: páginas de 30 de a una, 700 ms entre inicios de request (≈85 req/min).
+  ~6000 contactos ≈ 200 requests ≈ 2,5 min.
+- Presupuesto: la ruta tiene `maxDuration = 300` y un deadline compartido de 270 s. El tenant
+  que se queda sin tiempo termina en `sin_tiempo` sin marcar bajas; los tenants se recorren
+  por su última corrida OK más vieja primero.
+- Bajas soft: al terminar OK, lo que no se vio pasa a `inactive`, **solo si** la corrida vio
+  al menos el 80 % de los activos previos; si no, la corrida queda en error
+  `corrida_sospechosa` y no se da de baja nada.
+- Candado por tenant (`pg_try_advisory_xact_lock`): si otra corrida del mismo tenant está
+  viva, se saltea (`skipped`).
+
+**Bitácora `alegra_contacts_sync_log`**: una fila por corrida y tenant con `status`
+(`running`/`ok`/`error`/`skipped`), `contacts_synced`, `marked_inactive`, `requests` (cuota
+consumida, reintentos incluidos) y `error` (motivo técnico: `sin_tiempo`, `alegra_429`,
+`alegra_http_<status>`, `corrida_sospechosa`, `corrida_en_curso`, `sin_credenciales`,
+`db_<código>`, `error_interno`). Nunca guarda nombres, emails ni documentos.
+
+**Disparo a mano**: Actions → *admin · Sync contactos Alegra* → *Run workflow*, con `tenant`
+vacío (todos) o un id de tenant. Equivale a:
+
+```bash
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  "https://crm.plataforma.example/api/cron/alegra-contactos-sync?tenant=<TENANT_ID>"
+```
+
+**Salida de emergencia**: si un padrón supera ~15.000 contactos (≈500 requests) no entra en
+los 270 s. Pasar esa sync al patrón runner de `clientes-catalogo-sync.yml` (el script corre en
+GitHub Actions, sin el techo de la función) o disparar una invocación por tenant con
+`?tenant=`.
+
+---
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
@@ -325,6 +397,8 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | `notification_rules` | Reglas de notificación por tenant (días antes/después, canales) |
 | `notification_log` | Historial de notificaciones; dedup por unique index; columna `read_at` |
 | `payment_receipts` | Comprobantes de pago informados desde el portal: metadatos, máquina de estados y resultado del mail (el archivo vive en R2) |
+| `alegra_contacts` | Espejo de contactos de Alegra (ver [Espejo de contactos](#espejo-de-contactos-de-alegra)); el Shop lee la vista `alegra_contacts_shop` |
+| `alegra_contacts_sync_log` | Bitácora de la sync de contactos (estado, conteos, requests) |
 
 - **`src/db/index.ts`** — singleton de conexión (`prepare: false` para Neon/pgbouncer).
 - **`src/db/migrate.ts`** — aplica migraciones de `drizzle/`.
@@ -352,6 +426,7 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | PATCH | `/api/notifications/log` | sesión | Marca leídas (`ids` o `all`) |
 | POST | `/api/notifications/send` | `CRON_SECRET` | Disparo manual del gestor de cobranza |
 | POST/GET | `/api/cron/notifications` | `CRON_SECRET` | Disparo automático (Vercel Cron) |
+| POST/GET | `/api/cron/alegra-contactos-sync` | `CRON_SECRET` | Sync del espejo de contactos (`?tenant=` opcional, `?trigger=manual`) |
 | POST | `/api/ai-token` | sesión | Token de sesión para el chat IA |
 | GET | `/api/agent/invoices` | agent token | Facturas (para el agente) |
 | GET | `/api/agent/payments` | agent token | Pagos (para el agente) |

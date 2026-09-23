@@ -231,6 +231,21 @@ export class AlegraRateLimitError extends Error {
   }
 }
 
+/**
+ * Alegra contestó un status de error que no es 429. `status` permite distinguir un 404
+ * ("no existe") de una caída sin parsear el mensaje, que queda igual que antes.
+ */
+export class AlegraHttpError extends Error {
+  constructor(
+    readonly status: number,
+    path: string,
+    detail: string,
+  ) {
+    super(`Alegra error ${status} en ${path}${detail ? `: ${detail.slice(0, 300)}` : ""}`)
+    this.name = "AlegraHttpError"
+  }
+}
+
 // Alegra limita por requests/minuto y devuelve 429 sin avisar de antemano. Los listados
 // que paginan en paralelo (PAGE_CONCURRENCY) lo tocan fácil, y antes un solo 429 en
 // cualquier página tiraba toda la operación. Se reintenta esa request sola, con espera
@@ -279,11 +294,15 @@ async function alegraFetch(
   path: string,
   params?: Record<string, string>,
   init?: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: unknown },
+  // Se llama antes de CADA request HTTP, reintentos por 429 incluidos: es lo que se lleva
+  // la cuota. Lo usa la sync de contactos para registrar su presupuesto.
+  onRequest?: () => void,
 ) {
   const url = new URL(`${ALEGRA_BASE}${path}`)
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
 
   for (let attempt = 0; ; attempt++) {
+    onRequest?.()
     const res = await fetch(url.toString(), {
       method: init?.method ?? "GET",
       headers: {
@@ -307,7 +326,7 @@ async function alegraFetch(
     if (!res.ok) {
       // Alegra devuelve el motivo en el body (ej. validación de la cotización) — lo sumamos al error.
       const detail = await res.text().catch(() => "")
-      throw new Error(`Alegra error ${res.status} en ${path}${detail ? `: ${detail.slice(0, 300)}` : ""}`)
+      throw new AlegraHttpError(res.status, path, detail)
     }
     if (res.status === 204) return null
     return res.json()
@@ -455,6 +474,141 @@ function mapRawContact(raw: Record<string, unknown>): AlegraContact {
     priceListName: priceList?.name ? String(priceList.name) : null,
     sellerName: seller?.name ? String(seller.name) : null,
     creditLimit: raw.creditLimit != null && raw.creditLimit !== "" ? Number(raw.creditLimit) : null,
+  }
+}
+
+// ── Fila del espejo de contactos (tabla alegra_contacts) ──
+//
+// La arma el cliente HTTP a partir del contacto crudo; la escribe lib/alegra-contacts-repo.ts.
+// Faltan a propósito las columnas que pone la base o quien escribe: id, tenant_id,
+// alegra_account, status, origen, synced_at y tipo_cuenta (generada).
+
+export interface FilaContactoAlegra {
+  alegraId: string
+  name: string
+  identification: string | null
+  /** Solo dígitos; null si no queda ninguno. */
+  identificationNorm: string | null
+  email: string | null
+  emailsNorm: string[]
+  phonePrimary: string | null
+  phoneSecondary: string | null
+  mobile: string | null
+  phonesNorm: string[]
+  types: string[]
+  priceListId: string | null
+  priceListName: string | null
+  priceListStatus: string | null
+  sellerId: string | null
+  sellerName: string | null
+  paymentTermId: string | null
+  paymentTermName: string | null
+  paymentTermDays: number | null
+  /** numeric(16,2): string, como lo maneja drizzle. null = no cargado. */
+  creditLimit: string | null
+  alegraStatus: string | null
+  raw: Record<string, unknown>
+}
+
+/** Texto no vacío o null. Números se aceptan (Alegra a veces manda ids numéricos). */
+function textoONull(v: unknown): string | null {
+  if (typeof v === "number" && Number.isFinite(v)) return String(v)
+  if (typeof v !== "string") return null
+  const t = v.trim()
+  return t ? t : null
+}
+
+function objeto(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+}
+
+/**
+ * Contacto crudo de Alegra → fila del espejo. Tolera las formas raras que devuelve la API:
+ * identification como string u objeto `{ number }`, email como string, objeto o null,
+ * `term.days` como string ("30", "") y `creditLimit` vacío.
+ */
+export function mapRawContactRow(raw: Record<string, unknown>): FilaContactoAlegra {
+  const ident = raw.identification
+  const identification =
+    typeof ident === "string" || typeof ident === "number"
+      ? textoONull(ident)
+      : textoONull(objeto(ident)?.number)
+  const identificationNorm = (identification ?? "").replace(/\D/g, "") || null
+
+  // Un email que no es string (objeto, null) no se interpreta: queda en `raw`.
+  const email = typeof raw.email === "string" ? textoONull(raw.email) : null
+  const emailsNorm = [
+    ...new Set(
+      (email ?? "")
+        .toLowerCase()
+        .split(/[,; ]+/)
+        .map((e) => e.trim())
+        .filter(Boolean),
+    ),
+  ]
+
+  const phonePrimary = textoONull(raw.phonePrimary)
+  const phoneSecondary = textoONull(raw.phoneSecondary)
+  const mobile = textoONull(raw.mobile)
+  const phonesNorm = [...new Set([phonePrimary, phoneSecondary, mobile].map(normalizePhone).filter(Boolean))]
+
+  const tipo = raw.type
+  const types = (Array.isArray(tipo) ? tipo : [tipo]).filter((t): t is string => typeof t === "string" && t !== "")
+
+  const priceList = objeto(raw.priceList)
+  const seller = objeto(raw.seller)
+  const term = objeto(raw.term)
+
+  const dias = term?.days
+  const diasNum = dias == null || dias === "" ? NaN : Number(dias)
+  const limite = raw.creditLimit
+  const limiteNum = limite == null || limite === "" ? NaN : Number(limite)
+
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    identification,
+    identificationNorm,
+    email,
+    emailsNorm,
+    phonePrimary,
+    phoneSecondary,
+    mobile,
+    phonesNorm,
+    types,
+    priceListId: textoONull(priceList?.id),
+    priceListName: textoONull(priceList?.name),
+    priceListStatus: textoONull(priceList?.status),
+    sellerId: textoONull(seller?.id),
+    sellerName: textoONull(seller?.name),
+    paymentTermId: textoONull(term?.id),
+    paymentTermName: textoONull(term?.name),
+    paymentTermDays: Number.isFinite(diasNum) ? Math.trunc(diasNum) : null,
+    creditLimit: Number.isFinite(limiteNum) ? String(limiteNum) : null,
+    alegraStatus: textoONull(raw.status),
+    raw,
+  }
+}
+
+/**
+ * Contacto del mock (ya normalizado) con la forma cruda de la API. Solo para modo
+ * `alegraMock`: las funciones *Raw y la sync de contactos esperan el crudo.
+ */
+function mockContactARaw(c: AlegraContact): Record<string, unknown> {
+  return {
+    id: c.alegraId,
+    name: c.name,
+    identification: c.identification,
+    email: c.email,
+    phonePrimary: c.phone,
+    type: ["client"],
+    priceList: c.priceListId ? { id: c.priceListId, name: c.priceListName, status: "active" } : null,
+    seller: c.sellerId ? { id: c.sellerId, name: c.sellerName } : null,
+    term: c.paymentTermId
+      ? { id: c.paymentTermId, name: c.paymentTermName, days: c.paymentTermDays != null ? String(c.paymentTermDays) : "" }
+      : null,
+    creditLimit: c.creditLimit,
+    status: c.status,
   }
 }
 
@@ -609,34 +763,63 @@ export async function getItemsLive(config: TenantConfig, alegraIds: string[]): P
 
 /** Busca contactos por nombre/identificación. `query` usa la búsqueda global de Alegra. */
 export async function searchContacts(config: TenantConfig, query: string, limit = 20): Promise<AlegraContact[]> {
-  if (config.alegraMock) {
-    // Sin tildes para que "san martin" encuentre "San Martín" (la API real resuelve esto server-side)
-    const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    const q = fold(query)
-    return mockContacts
-      .filter(
-        (c) =>
-          fold(c.name).includes(q) ||
-          (c.identification ?? "").includes(query) ||
-          (c.email ?? "").toLowerCase() === query.toLowerCase(),
-      )
-      .slice(0, limit)
-  }
+  if (config.alegraMock) return buscarEnMock(query, limit)
+  return (await searchContactsRaw(config, query, limit)).map(mapRawContact)
+}
+
+function buscarEnMock(query: string, limit: number): AlegraContact[] {
+  // Sin tildes para que "san martin" encuentre "San Martín" (la API real resuelve esto server-side)
+  const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  const q = fold(query)
+  return mockContacts
+    .filter(
+      (c) =>
+        fold(c.name).includes(q) ||
+        (c.identification ?? "").includes(query) ||
+        (c.email ?? "").toLowerCase() === query.toLowerCase(),
+    )
+    .slice(0, limit)
+}
+
+/** Como `searchContacts`, pero devuelve el crudo de Alegra (para el espejo). 1 request. */
+export async function searchContactsRaw(
+  config: TenantConfig,
+  query: string,
+  limit = 20,
+): Promise<Record<string, unknown>[]> {
+  if (config.alegraMock) return buscarEnMock(query, limit).map(mockContactARaw)
   const page = (await alegraFetch(config, "/contacts", {
     query,
     limit: String(Math.min(limit, PAGE_SIZE)),
   })) as Record<string, unknown>[]
-  return Array.isArray(page) ? page.map(mapRawContact) : []
+  return Array.isArray(page) ? page : []
 }
 
-/** Un contacto puntual por id de Alegra. */
+/** Un contacto puntual por id de Alegra. Cualquier error (no solo 404) devuelve null. */
 export async function getContact(config: TenantConfig, alegraId: string): Promise<AlegraContact | null> {
   if (config.alegraMock) return mockContacts.find((c) => c.alegraId === alegraId) ?? null
   try {
-    const raw = (await alegraFetch(config, `/contacts/${alegraId}`)) as Record<string, unknown>
-    return mapRawContact(raw)
+    const raw = await getContactRaw(config, alegraId)
+    return raw ? mapRawContact(raw) : null
   } catch {
     return null
+  }
+}
+
+/**
+ * Contacto crudo por id, para el espejo. A diferencia de `getContact`, distingue "no existe"
+ * (404 → null) de "Alegra falló" (tira): un error no puede leerse como "no está".
+ */
+export async function getContactRaw(config: TenantConfig, alegraId: string): Promise<Record<string, unknown> | null> {
+  if (config.alegraMock) {
+    const c = mockContacts.find((m) => m.alegraId === alegraId)
+    return c ? mockContactARaw(c) : null
+  }
+  try {
+    return (await alegraFetch(config, `/contacts/${encodeURIComponent(alegraId)}`)) as Record<string, unknown>
+  } catch (err) {
+    if (err instanceof AlegraHttpError && err.status === 404) return null
+    throw err
   }
 }
 
@@ -645,32 +828,39 @@ export async function getContact(config: TenantConfig, alegraId: string): Promis
  * CUIT y no existe todavía, para poder cotizarle. `name` es lo único obligatorio.
  */
 export async function createContact(config: TenantConfig, input: AlegraContactInput): Promise<AlegraContact> {
-  if (config.alegraMock) {
-    const created: AlegraContact = {
-      alegraId: String(Date.now()),
-      name: input.name,
-      identification: input.identification ?? null,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      priceListId: null,
-      sellerId: null,
-      paymentTermId: null,
-      status: "active",
-      paymentTermName: null,
-      paymentTermDays: null,
-      priceListName: null,
-      sellerName: null,
-      creditLimit: null,
-    }
-    mockContacts.push(created)
-    return created
+  if (config.alegraMock) return crearEnMock(input)
+  return mapRawContact(await createContactRaw(config, input))
+}
+
+function crearEnMock(input: AlegraContactInput): AlegraContact {
+  const created: AlegraContact = {
+    alegraId: String(Date.now()),
+    name: input.name,
+    identification: input.identification ?? null,
+    email: input.email ?? null,
+    phone: input.phone ?? null,
+    priceListId: null,
+    sellerId: null,
+    paymentTermId: null,
+    status: "active",
+    paymentTermName: null,
+    paymentTermDays: null,
+    priceListName: null,
+    sellerName: null,
+    creditLimit: null,
   }
+  mockContacts.push(created)
+  return created
+}
+
+/** Como `createContact`, pero devuelve el crudo que respondió Alegra (write-through al espejo). */
+export async function createContactRaw(config: TenantConfig, input: AlegraContactInput): Promise<Record<string, unknown>> {
+  if (config.alegraMock) return mockContactARaw(crearEnMock(input))
   const body: Record<string, unknown> = { name: input.name }
   if (input.identification) body.identification = input.identification
   if (input.email) body.email = input.email
   if (input.phone) body.phone = input.phone
-  const raw = (await alegraFetch(config, "/contacts", undefined, { method: "POST", body })) as Record<string, unknown>
-  return mapRawContact(raw)
+  return (await alegraFetch(config, "/contacts", undefined, { method: "POST", body })) as Record<string, unknown>
 }
 
 // ── Identificación por teléfono ──
@@ -705,7 +895,7 @@ export function normalizePhone(raw: unknown): string {
 // dispara una persona y no conviene ocultarle resultados.
 const CUENTAS_NO_CLIENTE = new Set(["no usar", "stock taller", "stock general", "pos", "general", "empresa", "hotel"])
 
-function esCliente(name: string): boolean {
+export function esCliente(name: string): boolean {
   const n = name.trim().toLowerCase()
   if (!n) return false
   if (n.includes("no usar")) return false
@@ -740,6 +930,53 @@ export async function searchContactsByPhone(config: TenantConfig, phone: string)
 export async function listAllContacts(config: TenantConfig): Promise<AlegraContact[]> {
   if (config.alegraMock) return mockContacts
   return fetchAllPages(config, "/contacts", mapRawContact)
+}
+
+/** La sync pasó su presupuesto de tiempo. Quien la llama NO debe marcar bajas. */
+export class SinTiempoError extends Error {
+  constructor() {
+    super("sin_tiempo")
+    this.name = "SinTiempoError"
+  }
+}
+
+/**
+ * Todo el padrón de contactos, CRUDO, para la sync del espejo (lib/alegra-contacts-sync.ts).
+ * Es el ÚNICO lugar que debe bajar el padrón completo.
+ *
+ * A diferencia de `fetchAllPages`, pide las páginas de a una y deja `intervaloMs` entre el
+ * INICIO de una request y el de la siguiente: 700 ms ≈ 85 req/min, y quedan ≥65 req/min de la
+ * cuota de 150 para el bot, el portal y el checkout, que comparten la cuenta. El 429 lo sigue
+ * absorbiendo `alegraFetch` (reintento con espera).
+ *
+ * `deadline` (epoch ms): si se pasa antes de pedir una página, tira `SinTiempoError`.
+ * `onRequest`: se llama por cada request HTTP, reintentos incluidos.
+ */
+export async function listAllContactsPausado(
+  config: TenantConfig,
+  opts: { intervaloMs?: number; deadline?: number; onRequest?: () => void } = {},
+): Promise<Record<string, unknown>[]> {
+  if (config.alegraMock) return mockContacts.map(mockContactARaw)
+
+  const intervaloMs = opts.intervaloMs ?? 700
+  const out: Record<string, unknown>[] = []
+  for (let start = 0; ; start += PAGE_SIZE) {
+    if (opts.deadline != null && Date.now() > opts.deadline) throw new SinTiempoError()
+    const inicio = Date.now()
+    const page = (await alegraFetch(
+      config,
+      "/contacts",
+      { start: String(start), limit: String(PAGE_SIZE) },
+      undefined,
+      opts.onRequest,
+    )) as Record<string, unknown>[]
+    if (!Array.isArray(page) || page.length === 0) break
+    out.push(...page)
+    if (page.length < PAGE_SIZE) break
+    const espera = intervaloMs - (Date.now() - inicio)
+    if (espera > 0) await sleep(espera)
+  }
+  return out
 }
 
 // ── Configuración de venta: listas de precio, formas de pago, vendedores, impuestos, monedas ──
@@ -1043,15 +1280,15 @@ export function variantesDocumento(tipeado: string): string[] {
   return [...new Set(variantes.filter(Boolean))]
 }
 
-async function contactosFiltrados(
+async function contactosFiltradosRaw(
   config: TenantConfig,
   params: Record<string, string>,
-): Promise<AlegraContact[]> {
+): Promise<Record<string, unknown>[]> {
   const page = (await alegraFetch(config, "/contacts", {
     ...params,
     limit: String(PAGE_SIZE),
   })) as Record<string, unknown>[]
-  return Array.isArray(page) ? page.map(mapRawContact) : []
+  return Array.isArray(page) ? page : []
 }
 
 /**
@@ -1066,24 +1303,42 @@ export async function findContactByIdentifier(
   config: TenantConfig,
   documento: string,
 ): Promise<AlegraContact | null> {
+  if (config.alegraMock) {
+    if (!normalizeIdentification(documento)) return null
+    const [match] = await searchContacts(config, documento, 1)
+    return match ?? null
+  }
+  const raw = await findContactRawByIdentifier(config, documento)
+  return raw ? mapRawContact(raw) : null
+}
+
+/**
+ * Como `findContactByIdentifier`, pero devuelve el crudo (fallback en vivo del espejo).
+ * Mismas consultas: peor caso 4 requests, y un 429 corta.
+ */
+export async function findContactRawByIdentifier(
+  config: TenantConfig,
+  documento: string,
+): Promise<Record<string, unknown> | null> {
   const digitos = normalizeIdentification(documento)
   if (!digitos) return null
 
   if (config.alegraMock) {
-    const [match] = await searchContacts(config, documento, 1)
-    return match ?? null
+    const [match] = buscarEnMock(documento, 1)
+    return match ? mockContactARaw(match) : null
   }
 
-  const esExacto = (c: AlegraContact) => normalizeIdentification(c.identification) === digitos
+  const esExacto = (raw: Record<string, unknown>) =>
+    normalizeIdentification(mapRawContact(raw).identification) === digitos
   const intentos: Record<string, string>[] = [
     ...variantesDocumento(documento).map((v) => ({ identification: v })),
     { query: digitos },
   ]
 
   for (const params of intentos) {
-    let candidatos: AlegraContact[]
+    let candidatos: Record<string, unknown>[]
     try {
-      candidatos = await contactosFiltrados(config, params)
+      candidatos = await contactosFiltradosRaw(config, params)
     } catch (err) {
       // Un 429 corta acá: seguir probando solo gasta más cuota. Cualquier otro error
       // de un filtro no decide nada; se prueba el siguiente.

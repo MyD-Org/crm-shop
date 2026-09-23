@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { findContactByIdentifier, variantesDocumento } from "./alegra"
+import { AlegraRateLimitError, findContactByIdentifier, findContactRawByIdentifier, variantesDocumento } from "./alegra"
 import type { TenantConfig } from "./tenants"
 
 // Login del portal: resolver el contacto por CUIT/DNI sin bajar el padrón entero.
@@ -82,5 +82,29 @@ describe("findContactByIdentifier", () => {
     alegra(() => [])
     expect(await findContactByIdentifier(tenant, "12345678")).toBeNull()
     expect(params()).toEqual(["identification=12345678", "query=12345678"])
+  })
+})
+
+describe("findContactRawByIdentifier", () => {
+  it("CUIT cargado con guiones: devuelve el crudo de Alegra, sin mapear", async () => {
+    const raw = contacto({ identification: "20-12345678-9", term: { id: 3, days: "30" } })
+    alegra((p) => (p.get("identification") === "20-12345678-9" ? [raw] : []))
+    expect(await findContactRawByIdentifier(tenant, "20123456789")).toEqual(raw)
+    expect(params()).toEqual(["identification=20123456789", "identification=20-12345678-9"])
+  })
+
+  it("un 429 corta: no prueba las variantes que faltan", async () => {
+    vi.useFakeTimers()
+    try {
+      alegra(() => new Response("rate limit", { status: 429 }))
+      const p = findContactRawByIdentifier(tenant, "20123456789")
+      const esperado = expect(p).rejects.toBeInstanceOf(AlegraRateLimitError)
+      await vi.runAllTimersAsync()
+      await esperado
+      // Todas las llamadas son reintentos de la PRIMERA variante.
+      expect(new Set(params())).toEqual(new Set(["identification=20123456789"]))
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

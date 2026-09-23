@@ -15,14 +15,13 @@ export function proximity(x: number, y: number, light: typeof HERO_LIGHTS[number
 
 /** Horizontal anchor of the mobile cover crop; must match object-position in the CSS module. */
 export const COVER_X = .88;
-/** Viewports that use the mobile cover layout (the CSS module's mobile media query). */
+/** Viewports where the photo covers the card (the CSS module's mobile media query). */
 export const COVER_QUERY = "(max-width: 767px)";
 
 /**
  * Where the 1536 × 1024 source lands inside the hero. Desktop matches
  * object-fit: contain; object-position: right center. Mobile matches
- * object-fit: cover; object-position: 88% bottom, inside a 10:9 box at the
- * bottom of the card (height-bound, so top is 0).
+ * object-fit: cover; object-position: 88% center.
  */
 export function sceneRect(width: number, height: number, cover = false) {
   const scale = cover ? Math.max(width / 1536, height / 1024) : Math.min(width / 1536, height / 1024);

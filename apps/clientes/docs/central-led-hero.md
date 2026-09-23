@@ -11,7 +11,7 @@ Use case: product-mockup. Asset: premium photorealistic lighting showroom websit
 
 The existing DS Hero still receives imageSrc. Its text, headings, CTAs, USP icons and editor remain unchanged.
 Only the default neutral image is upgraded; custom editorial images retain their existing behavior.
-On desktop the overlay and image use the same contain/right-center geometry. On mobile the photo stays the card background but is anchored to the bottom in a 10:9 box (cover, crop at 88% = COVER_X), with its top edge faded into the ceiling tone that fills the card above; the text sits at the top over the plain wall and the lamps show below it. The overlay follows the same box.
+On desktop the overlay and image use the same contain/right-center geometry. On mobile the photo is the full-card background like any hero image: cover anchored at 88% horizontally (COVER_X), and the overlay follows the same crop.
 Measured emitting surfaces: neon ellipse (996,346), radii (118,117); bulb (1006,672), radii (46,45); spot (1188,146), rotated -33°; pendant (1385,410), radii (98,6); linear rectangle (1087,527), 355 × 11.
 
 Mouse uses independent smooth distance falloff and 300ms opacity transitions.

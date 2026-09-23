@@ -100,11 +100,11 @@ export default async function RootLayout({
         <ClerkProvider localization={esAR} appearance={aparienciaClerk}>
           <Providers favoritosBloqueados={favoritosBloqueados}>
             {/* Anuncio global (contenido administrable): arriba de todo, sobre el header.
-                Oculto desde el editor ⇒ no se muestra a nadie (se vuelve a
+                Oculto desde el editor o sin texto ⇒ no se muestra a nadie (se vuelve a
                 mostrar desde "Anuncio" en la barra de edición).
                 En mobile (< md) no se muestra: el texto ocupa varias filas.
                 Queda así hasta que el anuncio sea un carrusel de mensajes. */}
-            {ocultas.includes("anuncio") ? null : (
+            {ocultas.includes("anuncio") || !anuncio.texto ? null : (
               <div className="hidden bg-primary px-4 py-2.5 text-center text-[12.5px] font-semibold tracking-wide text-on-primary md:block">
                 {anuncio.texto}
               </div>

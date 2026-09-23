@@ -34,7 +34,7 @@ export function nuevoEnlace(): Enlace {
  *  valide aunque todavía no exista un editor de imágenes (ese llega en la
  *  rebanada C). */
 export function nuevoTile(): TileContent {
-  return { eyebrow: "", titulo: "", imagen: DEFAULTS_HOME.ambientes.items[0].imagen, href: "/catalogo" };
+  return { titulo: "", imagen: DEFAULTS_HOME.ambientes.items[0].imagen, href: "/catalogo" };
 }
 
 export function nuevoServicio(): { titulo: string; texto: string } {
@@ -55,13 +55,37 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
   whatsapp: "Contacto por WhatsApp",
 };
 
-const OPCIONALES: Partial<Record<SeccionHome, readonly string[]>> = {
-  hero: ["acento", "imagenAlt"],
-  ambientes: ["acento", "bajada"],
-  destacados: ["acento", "bajada"],
-  bannerDeco: ["acento"],
-  decoGrid: ["acento"],
-};
+/**
+ * Marca (o desmarca) como acento el tramo `[desde, hasta)` de `texto`,
+ * envolviéndolo en `*…*`. Si el tramo ya está entre marcas, las quita.
+ * Devuelve el texto nuevo y la selección que queda sobre el mismo tramo, o
+ * `null` si no hay nada seleccionado.
+ */
+export function alternarAcento(
+  texto: string,
+  desde: number,
+  hasta: number,
+): { texto: string; desde: number; hasta: number } | null {
+  // El doble clic suele seleccionar también el espacio de al lado.
+  while (desde < hasta && texto[desde] === " ") desde++;
+  while (hasta > desde && texto[hasta - 1] === " ") hasta--;
+  if (desde >= hasta) return null;
+
+  const sel = texto.slice(desde, hasta);
+  if (texto[desde - 1] === "*" && texto[hasta] === "*") {
+    return { texto: texto.slice(0, desde - 1) + sel + texto.slice(hasta + 1), desde: desde - 1, hasta: hasta - 1 };
+  }
+  if (sel.length > 2 && sel.startsWith("*") && sel.endsWith("*")) {
+    const interior = sel.slice(1, -1);
+    return { texto: texto.slice(0, desde) + interior + texto.slice(hasta), desde, hasta: desde + interior.length };
+  }
+  const limpio = sel.replaceAll("*", "");
+  return {
+    texto: `${texto.slice(0, desde)}*${limpio}*${texto.slice(hasta)}`,
+    desde: desde + 1,
+    hasta: desde + 1 + limpio.length,
+  };
+}
 
 function trimProfundo(v: unknown): unknown {
   if (typeof v === "string") return v.trim();
@@ -72,19 +96,34 @@ function trimProfundo(v: unknown): unknown {
   return v;
 }
 
+/** Quita (recursivo, en objetos) los campos de texto que quedaron vacíos: un
+ *  texto vacío significa "no mostrar", y en el contrato eso es ausente. */
+function sinVacios(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sinVacios);
+  if (v && typeof v === "object") {
+    return Object.fromEntries(
+      Object.entries(v)
+        .filter(([, val]) => val !== "")
+        .map(([k, val]) => [k, sinVacios(val)]),
+    );
+  }
+  return v;
+}
+
+const sinEtiqueta = (e: unknown) => !esTextoNoVacio((e as { label?: unknown })?.label);
+
 /**
  * Normaliza (sin validar) el borrador de una sección antes de mandarlo a la
- * server action: recorta espacios, convierte a `undefined` los opcionales
- * vacíos, castea `cantidad` a número y descarta ítems de lista vacíos. No
- * valida: eso lo hace `erroresSeccion` en el servidor (D5).
+ * server action: recorta espacios y descarta todo texto vacío (lo que el
+ * admin deja vacío no se muestra), los enlaces sin etiqueta y los ítems de
+ * lista vacíos; castea `cantidad` a número. No valida: eso lo hace
+ * `erroresSeccion` en el servidor (D5).
  */
 export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unknown {
   if (borrador === null || borrador === undefined) return borrador;
-  const o = trimProfundo(borrador) as Record<string, unknown>;
-
-  for (const campo of OPCIONALES[seccion] ?? []) {
-    if (o[campo] === "") delete o[campo];
-  }
+  // Las listas de textos sueltos (marquee, skus, imagenes) se filtran abajo:
+  // sinVacios solo toca campos de objetos.
+  const o = sinVacios(trimProfundo(borrador)) as Record<string, unknown>;
 
   if (seccion === "destacados") {
     const cantidad = o.cantidad;
@@ -100,15 +139,22 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
   }
 
   if (seccion === "marquee" && Array.isArray(o.items)) {
-    o.items = (o.items as string[]).filter((s) => typeof s === "string" && s.trim().length > 0);
+    o.items = (o.items as string[]).filter(esTextoNoVacio);
   }
 
-  if (seccion === "hero" && Array.isArray(o.usps)) {
-    o.usps = (o.usps as { label?: string }[]).filter((u) => esTextoNoVacio(u?.label));
+  if (seccion === "hero") {
+    if (Array.isArray(o.usps)) o.usps = (o.usps as { label?: string }[]).filter((u) => esTextoNoVacio(u?.label));
+    if (Array.isArray(o.ctas)) o.ctas = (o.ctas as unknown[]).filter((e) => !sinEtiqueta(e));
   }
+
+  if (seccion === "bannerDeco" && o.cta !== undefined && sinEtiqueta(o.cta)) delete o.cta;
 
   if ((seccion === "ambientes" || seccion === "decoGrid") && Array.isArray(o.chips)) {
-    o.chips = (o.chips as { label?: string }[]).filter((c) => esTextoNoVacio(c?.label));
+    o.chips = (o.chips as unknown[]).filter((c) => !sinEtiqueta(c));
+  }
+
+  if (seccion === "servicios" && Array.isArray(o.items)) {
+    o.items = (o.items as Record<string, unknown>[]).filter((s) => Object.keys(s ?? {}).length > 0);
   }
 
   return o;

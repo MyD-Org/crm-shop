@@ -14,11 +14,25 @@ import { hostsDeMedios } from "../lib/catalogo-medios";
 
 export type Enlace = { label: string; href: string };
 
-export type HeroContent = {
-  eyebrow: string;
-  titulo: string;
+/**
+ * Título y bajada de una sección. El título marca su acento con `*así*`, en
+ * cualquier posición ("Todo lo que *su proyecto* necesita"). Las versiones
+ * `…Mobile` son opcionales: vacías ⇒ en mobile se usa la de desktop.
+ *
+ * `acento` es el formato viejo (acento siempre al final): las filas guardadas
+ * así se convierten al leerlas (ver `migrarAcento`) y el editor ya no lo usa.
+ */
+export type TextosSeccion = {
+  titulo?: string;
+  tituloMobile?: string;
+  /** @deprecated Formato viejo; use `*acento*` dentro de `titulo`. */
   acento?: string;
-  bajada: string;
+  bajada?: string;
+  bajadaMobile?: string;
+};
+
+export type HeroContent = TextosSeccion & {
+  eyebrow?: string;
   imagen: string;
   imagenAlt: string;
   ctas: Enlace[];
@@ -28,25 +42,19 @@ export type HeroContent = {
 export type MarqueeContent = { items: string[] };
 
 export type TileContent = {
-  eyebrow: string;
-  titulo: string;
+  eyebrow?: string;
+  titulo?: string;
   imagen: string;
   href: string;
 };
 
-export type SeccionTilesContent = {
-  titulo: string;
-  acento?: string;
-  bajada?: string;
-  linkTodos: string;
+export type SeccionTilesContent = TextosSeccion & {
+  linkTodos?: string;
   items: TileContent[];
 };
 
-export type DestacadosContent = {
-  titulo: string;
-  acento?: string;
-  bajada?: string;
-  linkTodos: string;
+export type DestacadosContent = TextosSeccion & {
+  linkTodos?: string;
   cantidad: number;
   /** Productos elegidos (SKUs de Alegra), en orden. El resto se completa con Iluminación. */
   skus?: string[];
@@ -55,29 +63,24 @@ export type DestacadosContent = {
   imagenes?: string[];
 };
 
-export type BannerDecoContent = {
-  eyebrow: string;
-  titulo: string;
-  acento?: string;
-  bajada: string;
-  cta: Enlace;
+export type BannerDecoContent = TextosSeccion & {
+  eyebrow?: string;
+  cta?: Enlace;
   imagen: string;
 };
 
-export type DecoGridContent = {
-  titulo: string;
-  acento?: string;
-  linkTodos: string;
+export type DecoGridContent = TextosSeccion & {
+  linkTodos?: string;
   items: TileContent[];
   chips: Enlace[];
 };
 
-export type ServiciosContent = { items: { titulo: string; texto: string }[] };
+export type ServiciosContent = { items: { titulo?: string; texto?: string }[] };
 export type NavBadgeContent = { categoria: string; texto: string };
-export type WhatsappContent = { titulo: string; texto: string; href: string };
+export type WhatsappContent = { titulo?: string; texto?: string; href: string };
 
 export type HomeContent = {
-  anuncio: { texto: string };
+  anuncio: { texto?: string };
   hero: HeroContent;
   marquee: MarqueeContent;
   ambientes: SeccionTilesContent;
@@ -117,8 +120,7 @@ export const DEFAULTS_HOME: HomeContent = {
   },
   hero: {
     eyebrow: "Iluminación LED · Ingresos 2026",
-    titulo: "Todo para iluminar",
-    acento: "tu casa y tu obra",
+    titulo: "Todo para iluminar *tu casa y tu obra*",
     bajada:
       "Lámparas, colgantes, guirnaldas y artefactos LED de marcas líderes. Fichas técnicas claras, stock real de depósito y precios para profesionales y particulares.",
     imagen: "/images/hero-neutral.webp",
@@ -142,8 +144,7 @@ export const DEFAULTS_HOME: HomeContent = {
     ],
   },
   ambientes: {
-    titulo: "Comprá por",
-    acento: "ambiente",
+    titulo: "Comprá por *ambiente*",
     bajada: "Interior, exterior, cálida o fría: cada ambiente pide su artefacto y su temperatura de color.",
     linkTodos: "/catalogo",
     items: [
@@ -153,8 +154,7 @@ export const DEFAULTS_HOME: HomeContent = {
     ],
   },
   destacados: {
-    titulo: "Los más",
-    acento: "vendidos",
+    titulo: "Los más *vendidos*",
     bajada: "Rotación real del local y la web: especificaciones completas, stock confirmado y hasta 6 cuotas.",
     linkTodos: "/catalogo",
     cantidad: 4,
@@ -170,15 +170,13 @@ export const DEFAULTS_HOME: HomeContent = {
   },
   bannerDeco: {
     eyebrow: "Línea decorativa · Nuevo",
-    titulo: "Ambientá tus noches con",
-    acento: "luz cálida",
+    titulo: "Ambientá tus noches con *luz cálida*",
     bajada: "Guirnaldas IP44, neones flex 12V, veladores y colgantes: línea deco con specs de instalación serias.",
     cta: { label: "Descubrir la línea →", href: CATALOGO_ILUMINACION },
     imagen: "/images/deco-guirnalda.webp",
   },
   decoGrid: {
-    titulo: "Decorativa para",
-    acento: "cada rincón",
+    titulo: "Decorativa para *cada rincón*",
     linkTodos: "/catalogo",
     items: [
       { eyebrow: "Exterior", titulo: "Guirnaldas", imagen: "/images/deco-guirnalda.webp", href: CATALOGO_ILUMINACION },
@@ -217,6 +215,11 @@ export const DEFAULTS_HOME: HomeContent = {
 
 function esTexto(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
+}
+
+/** Ausente o texto no vacío (los opcionales vacíos se descartan antes de guardar). */
+function esTextoOpcional(v: unknown): boolean {
+  return v === undefined || esTexto(v);
 }
 
 /**
@@ -265,7 +268,14 @@ export function esImagen(v: unknown, hosts: readonly string[]): v is string {
 
 function esTile(v: unknown, hosts: readonly string[]): v is TileContent {
   const o = v as TileContent;
-  return !!v && typeof v === "object" && esTexto(o.eyebrow) && esTexto(o.titulo) && esImagen(o.imagen, hosts) && esHref(o.href);
+  return (
+    !!v &&
+    typeof v === "object" &&
+    esTextoOpcional(o.eyebrow) &&
+    esTextoOpcional(o.titulo) &&
+    esImagen(o.imagen, hosts) &&
+    esHref(o.href)
+  );
 }
 
 /** Devuelve la lista de problemas del payload para la sección ([] = válido). */
@@ -294,44 +304,47 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
     if (m === "host") errores.push(`${campo}: el host de la imagen no está habilitado (SHOP_MEDIA_HOSTS).`);
     else if (m === "formato") errores.push(`${campo} debe ser una ruta local (/images/...) o una URL https de un host habilitado.`);
   };
+  /** Título, acento viejo, título mobile y bajadas: todos opcionales. */
+  const textosTitulo = () => {
+    for (const campo of ["titulo", "tituloMobile", "acento", "bajada", "bajadaMobile"]) texto(campo, true);
+  };
+  const linkOpcional = (campo: string) => {
+    if (o[campo] !== undefined && !esHref(o[campo])) errores.push(`${campo} debe ser una ruta interna (/) o una URL https`);
+  };
+  const lista = (campo: string, esItem: (v: unknown) => boolean, forma: string) => {
+    if (!Array.isArray(o[campo]) || !(o[campo] as unknown[]).every(esItem)) errores.push(`${campo} debe ser un array de ${forma}`);
+  };
 
+  // Los textos son todos opcionales: lo que el admin deja vacío no se
+  // muestra. Solo son obligatorios los datos sin los que la sección no se
+  // puede dibujar (imágenes, destino de los enlaces, cantidad).
   switch (key) {
     case "anuncio":
-      texto("texto");
+      texto("texto", true);
       break;
     case "hero": {
-      texto("eyebrow");
-      texto("titulo");
-      texto("acento", true);
-      texto("bajada");
+      texto("eyebrow", true);
+      textosTitulo();
       imagen("imagen", o.imagen);
       texto("imagenAlt", true);
-      if (!Array.isArray(o.ctas) || !o.ctas.every(esEnlace)) errores.push("ctas debe ser un array de { label, href }");
-      if (!Array.isArray(o.usps) || o.usps.length === 0 || !(o.usps as { label?: unknown }[]).every((u) => esTexto(u?.label)))
-        errores.push("usps debe ser un array no vacío de { label }");
+      lista("ctas", esEnlace, "{ label, href }");
+      lista("usps", (u) => esTextoOpcional((u as { label?: unknown })?.label), "{ label }");
       break;
     }
     case "marquee":
-      if (!Array.isArray(o.items) || o.items.length === 0 || !(o.items as unknown[]).every(esTexto))
-        errores.push("items debe ser un array no vacío de textos");
+      lista("items", esTexto, "textos");
       break;
     case "ambientes":
     case "decoGrid": {
-      texto("titulo");
-      texto("acento", true);
-      if (key === "ambientes") texto("bajada", true);
-      if (!esHref(o.linkTodos)) errores.push("linkTodos debe ser una ruta interna (/) o una URL https");
-      if (!Array.isArray(o.items) || o.items.length === 0 || !o.items.every((t) => esTile(t, hosts)))
-        errores.push("items debe ser un array no vacío de tiles { eyebrow, titulo, imagen, href }");
-      if (key === "decoGrid" && (!Array.isArray(o.chips) || !o.chips.every(esEnlace)))
-        errores.push("chips debe ser un array de { label, href }");
+      textosTitulo();
+      linkOpcional("linkTodos");
+      lista("items", (t) => esTile(t, hosts), "tiles { eyebrow?, titulo?, imagen, href }");
+      if (key === "decoGrid") lista("chips", esEnlace, "{ label, href }");
       break;
     }
     case "destacados": {
-      texto("titulo");
-      texto("acento", true);
-      texto("bajada", true);
-      if (!esHref(o.linkTodos)) errores.push("linkTodos debe ser una ruta interna (/) o una URL https");
+      textosTitulo();
+      linkOpcional("linkTodos");
       if (typeof o.cantidad !== "number" || o.cantidad < 1 || o.cantidad > 24)
         errores.push("cantidad debe ser un número entre 1 y 24");
       if (o.skus !== undefined &&
@@ -347,26 +360,51 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       break;
     }
     case "bannerDeco": {
-      texto("eyebrow");
-      texto("titulo");
-      texto("acento", true);
-      texto("bajada");
+      texto("eyebrow", true);
+      textosTitulo();
       imagen("imagen", o.imagen);
-      if (!esEnlace(o.cta)) errores.push("cta debe ser { label, href }");
+      if (o.cta !== undefined && !esEnlace(o.cta)) errores.push("cta debe ser { label, href }");
       break;
     }
     case "servicios":
-      if (!Array.isArray(o.items) || o.items.length === 0 ||
-          !(o.items as { titulo?: unknown; texto?: unknown }[]).every((s) => esTexto(s?.titulo) && esTexto(s?.texto)))
-        errores.push("items debe ser un array no vacío de { titulo, texto }");
+      lista(
+        "items",
+        (v) => {
+          const it = v as { titulo?: unknown; texto?: unknown };
+          return !!v && typeof v === "object" && esTextoOpcional(it.titulo) && esTextoOpcional(it.texto);
+        },
+        "{ titulo?, texto? }",
+      );
       break;
     case "whatsapp":
-      texto("titulo");
-      texto("texto");
+      texto("titulo", true);
+      texto("texto", true);
       if (!esHref(o.href)) errores.push("href debe ser una ruta interna (/) o una URL https");
       break;
   }
   return errores;
+}
+
+/**
+ * El título sin las marcas `*acento*` (para aria-label). Local y no el
+ * `stripAccent` del DS: el bundle del DS es "use client" y no se puede llamar
+ * desde un Server Component.
+ */
+export function sinMarcasDeAcento(texto: string): string {
+  return texto.replace(/\*([^*]+)\*/g, "$1");
+}
+
+/**
+ * Pasa el formato viejo `{ titulo, acento }` (acento siempre al final) al
+ * nuevo `{ titulo: "… *acento*" }`. Idempotente: sin `acento`, no toca nada.
+ */
+export function migrarAcento<T>(payload: T): T {
+  if (!payload || typeof payload !== "object") return payload;
+  const { acento, ...resto } = payload as Record<string, unknown>;
+  if (acento === undefined) return payload;
+  if (typeof acento !== "string" || acento.trim() === "") return resto as T;
+  const titulo = typeof resto.titulo === "string" ? resto.titulo.trim() : "";
+  return { ...resto, titulo: `${titulo} *${acento.trim()}*`.trim() } as T;
 }
 
 /** Payload usable para la sección, o null si hay que quedarse con el default. */
@@ -403,7 +441,7 @@ export function combinarContenidoHome(filas: { key: string; payload: unknown }[]
               ...(payload as Record<string, unknown>),
             }
           : payload;
-      Object.assign(resultado, { [key]: seccion });
+      Object.assign(resultado, { [key]: migrarAcento(seccion) });
     } else if (key === "navBadge") {
       resultado.navBadge = null;
     }

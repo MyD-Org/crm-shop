@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import {
+  AccentText,
   Badge,
   CtaBanner,
   Hero,
@@ -18,7 +19,7 @@ import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
-import type { HomeContent, SeccionHome, TileContent } from "@/data/home-defaults";
+import { sinMarcasDeAcento, type HomeContent, type SeccionHome, type TextosSeccion, type TileContent } from "@/data/home-defaults";
 import { SeccionEditable } from "@/components/home/SeccionEditable";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
@@ -84,26 +85,22 @@ function aTilesDS(items: TileContent[]) {
   }));
 }
 
-function TituloSeccion({
-  titulo,
-  acento,
-  bajada,
-  linkTodos,
-}: {
-  titulo: string;
-  acento?: string;
-  bajada?: string;
-  linkTodos?: string;
-}) {
+function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos?: string }) {
+  const { titulo, tituloMobile, bajada, bajadaMobile } = textos;
+  const hayTitulo = !!(titulo || tituloMobile);
+  if (!hayTitulo && !bajada && !bajadaMobile && !linkTodos) return null;
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-6 max-md:flex-col max-md:items-start">
       <div>
-        <h2 className="font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text">
-          {titulo}
-          {acento ? <em className="not-italic text-accent"> {acento}</em> : null}
-        </h2>
-        {bajada ? (
-          <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted">{bajada}</p>
+        {hayTitulo ? (
+          <h2 className="font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text">
+            <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName="not-italic text-accent" />
+          </h2>
+        ) : null}
+        {bajada || bajadaMobile ? (
+          <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted">
+            <AccentText text={bajada ?? ""} mobileText={bajadaMobile} />
+          </p>
         ) : null}
       </div>
       {linkTodos ? (
@@ -157,8 +154,9 @@ export function HomeClient({
                 className="[&_em]:not-italic [&_h1]:font-bold [&_a:first-of-type]:bg-accent [&_a:first-of-type:hover]:bg-primary"
                 eyebrow={hero.eyebrow}
                 title={hero.titulo}
-                accent={hero.acento}
+                titleMobile={hero.tituloMobile}
                 lead={hero.bajada}
+                leadMobile={hero.bajadaMobile}
                 imageSrc={hero.imagen}
                 imageAlt={hero.imagenAlt}
                 ctas={hero.ctas}
@@ -184,7 +182,7 @@ export function HomeClient({
         <Reveal>
           <SeccionEditable seccion="ambientes" inicial={ambientes} puedeEditar={puedeEditar} oculta={oculta("ambientes")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
-              <TituloSeccion titulo={ambientes.titulo} acento={ambientes.acento} bajada={ambientes.bajada} linkTodos={ambientes.linkTodos} />
+              <TituloSeccion textos={ambientes} linkTodos={ambientes.linkTodos} />
               {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
                   min-h menores; la variante "mosaic" debería llevarla (DS gap). */}
               <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(ambientes.items)} />
@@ -196,8 +194,8 @@ export function HomeClient({
         <Reveal>
           <SeccionEditable seccion="destacados" inicial={secDestacados} puedeEditar={puedeEditar} oculta={oculta("destacados")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
-              <TituloSeccion titulo={secDestacados.titulo} acento={secDestacados.acento} bajada={secDestacados.bajada} linkTodos={secDestacados.linkTodos} />
-              <ProductosCarrusel label={`${secDestacados.titulo} ${secDestacados.acento ?? ""}`.trim()}>
+              <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
+              <ProductosCarrusel label={sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados"}>
               {destacados.map((p, i) => {
                 const imagen = imagenesDestacados[i];
                 return (
@@ -253,8 +251,9 @@ export function HomeClient({
               className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
               eyebrow={bannerDeco.eyebrow}
               title={bannerDeco.titulo}
-              accent={bannerDeco.acento}
+              titleMobile={bannerDeco.tituloMobile}
               lead={bannerDeco.bajada}
+              leadMobile={bannerDeco.bajadaMobile}
               cta={bannerDeco.cta}
               imageSrc={bannerDeco.imagen}
             />
@@ -265,7 +264,7 @@ export function HomeClient({
         <Reveal>
           <SeccionEditable seccion="decoGrid" inicial={decoGrid} puedeEditar={puedeEditar} oculta={oculta("decoGrid")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
-              <TituloSeccion titulo={decoGrid.titulo} acento={decoGrid.acento} linkTodos={decoGrid.linkTodos} />
+              <TituloSeccion textos={decoGrid} linkTodos={decoGrid.linkTodos} />
               {/* Mobile: apiladas, se despegan al scrollear. Desde lg, la grilla. */}
               <RoomTiles variant="stack" items={aTilesDS(decoGrid.items)} className="lg:hidden" />
               <RoomTiles variant="grid" items={aTilesDS(decoGrid.items)} className="hidden lg:grid" />
@@ -279,7 +278,7 @@ export function HomeClient({
             <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
               {servicios.items.map((s, i) => {
                 const Icon = ICONOS_SERVICIO[i % ICONOS_SERVICIO.length];
-                return <ServiceCard key={s.titulo} icon={<Icon />} title={s.titulo} text={s.texto} />;
+                return <ServiceCard key={`${i}-${s.titulo ?? ""}`} icon={<Icon />} title={s.titulo} text={s.texto} />;
               })}
             </section>
           </SeccionEditable>

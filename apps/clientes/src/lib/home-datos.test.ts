@@ -11,7 +11,7 @@ describe("combinarContenidoHome (lib)", () => {
     const hero = { ...DEFAULTS_HOME.hero, titulo: "Título del CRM" };
     const out = combinarContenidoHome([
       { key: "hero", payload: hero },
-      { key: "anuncio", payload: { malo: 1 } },
+      { key: "anuncio", payload: { texto: 42 } },
     ]);
     expect(out.hero.titulo).toBe("Título del CRM");
     expect(out.anuncio).toEqual(DEFAULTS_HOME.anuncio);

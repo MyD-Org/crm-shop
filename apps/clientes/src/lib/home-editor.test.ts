@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULTS_HOME, SECCIONES_HOME, erroresSeccion } from "@/data/home-defaults";
 import {
   agregarItem,
+  alternarAcento,
   moverItem,
   normalizarPayload,
   nuevoEnlace,
@@ -149,5 +150,88 @@ describe("normalizarPayload", () => {
 describe("TITULOS_SECCION", () => {
   it("cubre todas las SECCIONES_HOME", () => {
     expect(Object.keys(TITULOS_SECCION).sort()).toEqual([...SECCIONES_HOME].sort());
+  });
+});
+
+describe("alternarAcento", () => {
+  const texto = "Todo lo que su proyecto necesita";
+  const desde = texto.indexOf("su proyecto");
+  const hasta = desde + "su proyecto".length;
+
+  it("envuelve la selección en marcas y la deja seleccionada", () => {
+    const r = alternarAcento(texto, desde, hasta);
+    expect(r?.texto).toBe("Todo lo que *su proyecto* necesita");
+    expect(r?.texto.slice(r.desde, r.hasta)).toBe("su proyecto");
+  });
+
+  it("si el tramo ya está marcado, quita las marcas", () => {
+    const marcado = "Todo lo que *su proyecto* necesita";
+    const d = marcado.indexOf("su proyecto");
+    const r = alternarAcento(marcado, d, d + "su proyecto".length);
+    expect(r?.texto).toBe(texto);
+    expect(r?.texto.slice(r.desde, r.hasta)).toBe("su proyecto");
+  });
+
+  it("también desmarca si la selección incluye los asteriscos", () => {
+    const marcado = "Los más *vendidos*";
+    const r = alternarAcento(marcado, marcado.indexOf("*"), marcado.length);
+    expect(r?.texto).toBe("Los más vendidos");
+  });
+
+  it("ignora los espacios de los bordes (doble clic)", () => {
+    const r = alternarAcento(texto, desde - 1, hasta + 1);
+    expect(r?.texto).toBe("Todo lo que *su proyecto* necesita");
+  });
+
+  it("sin selección devuelve null", () => {
+    expect(alternarAcento(texto, 4, 4)).toBeNull();
+    expect(alternarAcento(texto, 4, 5)).toBeNull(); // solo un espacio
+  });
+});
+
+describe("normalizarPayload: textos opcionales", () => {
+  it("eyebrow, título y bajada de mobile vacíos se omiten", () => {
+    const r = normalizarPayload("hero", {
+      ...DEFAULTS_HOME.hero,
+      eyebrow: "",
+      tituloMobile: " ",
+      bajadaMobile: "",
+    }) as Record<string, unknown>;
+    expect("eyebrow" in r).toBe(false);
+    expect("tituloMobile" in r).toBe(false);
+    expect("bajadaMobile" in r).toBe(false);
+    expect(erroresSeccion("hero", r)).toEqual([]);
+  });
+
+  it("el eyebrow vacío de un tile se omite y el tile valida", () => {
+    const items = [{ ...nuevoTile(), titulo: "Cocina" }];
+    const r = normalizarPayload("decoGrid", { ...DEFAULTS_HOME.decoGrid, items }) as { items: Record<string, unknown>[] };
+    expect("eyebrow" in r.items[0]).toBe(false);
+    expect(erroresSeccion("decoGrid", r)).toEqual([]);
+  });
+
+  it("una sección con todos los textos vacíos se normaliza a algo válido", () => {
+    const vacios = (o: object): object =>
+      Object.fromEntries(
+        Object.entries(o).map(([k, v]) => [k, typeof v === "string" && k !== "imagen" && k !== "href" ? "" : v]),
+      );
+    const hero = normalizarPayload("hero", {
+      ...vacios(DEFAULTS_HOME.hero),
+      ctas: [{ label: "", href: "/catalogo" }],
+      usps: [{ label: "" }],
+    });
+    expect(erroresSeccion("hero", hero)).toEqual([]);
+    const banner = normalizarPayload("bannerDeco", {
+      ...vacios(DEFAULTS_HOME.bannerDeco),
+      cta: { label: "", href: "/catalogo" },
+    }) as Record<string, unknown>;
+    expect("cta" in banner).toBe(false);
+    expect(erroresSeccion("bannerDeco", banner)).toEqual([]);
+    const servicios = normalizarPayload("servicios", { items: [{ titulo: "", texto: "" }, { titulo: "Envío" }] });
+    expect(servicios).toEqual({ items: [{ titulo: "Envío" }] });
+    for (const s of ["ambientes", "destacados", "decoGrid", "whatsapp", "anuncio"] as const) {
+      const r = normalizarPayload(s, vacios(DEFAULTS_HOME[s]));
+      expect(erroresSeccion(s, r), s).toEqual([]);
+    }
   });
 });

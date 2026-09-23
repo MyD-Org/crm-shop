@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Show, SignInButton } from "@clerk/nextjs";
+import { SignInButton, useAuth } from "@clerk/nextjs";
 import { SiteHeader, type VisibleOn } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
@@ -57,6 +57,12 @@ export function HeaderUI({
 
   // Cuál de las dos instancias del carrito está a la vista (ver compactActions).
   const [compacto, setCompacto] = useState(false);
+  // Sin <Show> de Clerk: mientras cierra sesión deja la sesión "en
+  // transición" (isLoaded=false) hasta terminar de navegar a la home, y <Show>
+  // no renderiza ninguna de las dos ramas: el "Ingresá" desaparecía unos
+  // segundos. Sin usuario confirmado ⇒ se ofrece ingresar. Al cargar la página
+  // no parpadea: el ClerkProvider de Next trae la sesión resuelta del servidor.
+  const { userId } = useAuth();
 
   return (
     // `site-header` en el wrapper y no en <SiteHeader>: el DS pone className
@@ -79,12 +85,12 @@ export function HeaderUI({
         nav={nav}
         actions={
           <>
-            <Show when="signed-out">
-              {/*
+            {!userId ? (
+              /*
                 `mode="modal"` en vez de navegar a /ingresar: el cliente puede
                 estar a mitad del carrito, y sacarlo de la pagina para loguearse
                 es donde se pierden las compras.
-              */}
+              */
               <SignInButton
                 mode="modal"
                 fallbackRedirectUrl={destinoSeguro(pathname)}
@@ -95,16 +101,14 @@ export function HeaderUI({
                   Ingresá
                 </button>
               </SignInButton>
-            </Show>
-
-            <Show when="signed-in">
-              {/*
+            ) : (
+              /*
                 Un solo avatar con menú propio (Mis pedidos / Mis datos /
                 Seguridad / Cerrar sesión). Los datos y la seguridad siguen
                 siendo el panel de Clerk: ver src/components/MenuUsuario.tsx.
-              */}
+              */
               <MenuUsuario nombre={nombre} />
-            </Show>
+            )}
 
             <CartPreview autoAbrir={!compacto} />
           </>

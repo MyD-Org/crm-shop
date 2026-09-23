@@ -74,7 +74,7 @@ Migración **aditiva**, sin romper pedidos existentes. Sobre `orders`:
 | Columna | Tipo | Para qué |
 |---|---|---|
 | `pago_proveedor` | `text` null | `'mercadopago'`, etc. Null en los pedidos viejos. |
-| `pago_referencia` | `text` null | ID del pago en el proveedor. **Índice único** → idempotencia del webhook. |
+| `pago_referencia` | `text` null | ID del pago que decide el estado del pedido (resumen; cada intento vive en `pago_intentos`). **Índice único.** |
 | `pago_medio` | `text` null | `'tarjeta'` \| `'cuenta_mp'`. Para reportes. |
 | `pago_detalle` | `text` null | `status_detail` crudo. Para poder debuggear rechazos reales. |
 | `pago_actualizado_en` | `timestamptz` null | Cuándo lo movió el webhook. |
@@ -82,6 +82,21 @@ Migración **aditiva**, sin romper pedidos existentes. Sobre `orders`:
 `pago_estado` ya existe y sus tres valores (`pendiente` / `pagado` / `fallido`,
 en `src/data/orders.ts`) alcanzan. No se agregan estados: la riqueza va en
 `pago_detalle`.
+
+### Intentos de cobro (`pago_intentos`)
+
+Un pedido puede tener varios intentos: el comprador reintenta con otra tarjeta,
+abandona un 3DS, etc. Cada intento es una fila de `shop.pago_intentos`
+(migración `0005`), con su referencia, su estado y su detalle. Las columnas
+`pago_*` de `orders` quedan como **resumen** (las lee el CRM) y las recalcula
+`registrarCobro` a partir de todos los intentos: con uno cobrado el pedido está
+`pagado`; si no, con uno abierto sigue `pendiente`; si todos se cayeron,
+`fallido`.
+
+Antes había una sola referencia por pedido y cada intento pisaba la anterior.
+Si el primer pago quedaba pendiente, el comprador reintentaba y después se
+aprobaba el primero, el webhook ya no lo reconocía: plata cobrada sin
+registrar, o un pedido cobrado dos veces.
 
 `PagoMetodo` en `src/lib/envio.ts` suma `'mercadopago'`, con su label y su
 lugar en `pagosDisponibles()` (disponible tanto en retiro como en envío).
@@ -97,10 +112,18 @@ lugar en `pagosDisponibles()` (disponible tanto en retiro como en envío).
 4. `POST /api/pagos/mercadopago` con `{ pedidoId, token, cuotas, metodo }`.
    El servidor:
    - verifica que el pedido sea de quien está autenticado (Clerk);
-   - verifica que siga en `pendiente` (evita doble cobro);
+   - verifica que no esté pagado, que el pedido siga en `estado = 'pendiente'`
+     y que no tenga más de 24 h (`VENTANA_PAGO_MS`): uno cancelado, tomado por
+     un operador o viejo no se cobra (409 `pedido_no_cobrable`);
+   - **reserva un intento** (`reservarIntento`, con lock sobre el pedido). Si
+     hay otro abierto, intenta cancelarlo en MP; si no se puede, responde 409
+     `pago_en_curso` y no crea un segundo pago. Una reserva sin referencia de
+     más de 2 min se da por abandonada;
    - llama a MP con **el monto del pedido en la DB**;
    - manda header de idempotencia (ver §9).
-5. Se persiste `pago_referencia` y se responde con el estado traducido.
+5. Se persiste el resultado en el intento reservado y se responde con el
+   estado traducido. Si MP rechazó el request (4xx) la reserva se cierra; con
+   un timeout o un 5xx queda abierta, porque el pago pudo haberse creado igual.
 6. El webhook confirma o corrige más tarde.
 
 ## 6. Flujo con dinero en cuenta — la salvedad
@@ -209,9 +232,14 @@ dos: cambia solo el diccionario de entrada.
   información por tiempo de respuesta.
 - **Re-consultar el pago por API.** El payload solo se usa para saber *qué* ID
   mirar.
+- **Encontrar el pedido aunque la referencia no esté en la base.** Se busca en
+  `pago_intentos`, después en `orders.pago_referencia` y, si no aparece, por el
+  `external_reference` que informa MP (es el id del pedido). Un 404 de MP es un
+  id que no existe: 200 e ignorado. Cualquier otro error, 500 para que MP
+  reintente.
 - **Idempotente.** MP reintenta y puede mandar el mismo evento varias veces. El
-  índice único sobre `pago_referencia` más un update condicionado por estado
-  hacen que el segundo evento no rompa nada.
+  índice único sobre `(proveedor, referencia)` de `pago_intentos` más la
+  transición por intento hacen que el segundo evento no rompa nada.
 - **Responder 200 rápido.** Si tardamos, MP reintenta y se acumulan eventos.
 - **Nunca bajar de `pagado` a `pendiente`.** Los eventos pueden llegar
   desordenados. La transición es una máquina de estados explícita, no un

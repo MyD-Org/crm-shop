@@ -7,9 +7,9 @@
  */
 
 import { cache } from "react";
-import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { orderItems, orders } from "@/db/schema";
+import { orderItems, orders, pagoIntentos } from "@/db/schema";
 import {
   ESTADOS_EN_CURSO,
   type EntregaTipoPedido,
@@ -429,6 +429,36 @@ export interface PedidoParaPago {
   facturacionNroDoc: string | null;
   /** Congelado al crear el pedido. null = legacy / sin oferta leíble. */
   cuotasMax: number | null;
+  /** Estado del pedido (no del pago): sólo se cobra uno `pendiente`. */
+  estado: OrderEstado;
+  creadoEn: Date;
+}
+
+/**
+ * Cuánto tiempo después de creado se puede cobrar un pedido online. Es la misma
+ * ventana en la que el checkout lo retoma (`pedidoPendienteMasReciente`): pasado
+ * eso el comprador lo ve en "Mis pedidos" para pagarlo por otra vía, y cobrarlo
+ * igual sería cobrar un total congelado hace días.
+ */
+export const VENTANA_PAGO_MS = 24 * 60 * 60_000;
+
+/**
+ * Por qué NO se puede cobrar un pedido, o null si se puede.
+ *
+ * Sin esto se podía pagar un pedido cancelado (por el cliente o por un
+ * operador), o uno de hace semanas con precios viejos: la ruta solo miraba
+ * dueño, método y "ya pagado".
+ */
+export function motivoNoCobrable(
+  pedido: Pick<PedidoParaPago, "estado" | "creadoEn">,
+  ahora = Date.now(),
+): "cancelado" | "en_curso" | "vencido" | null {
+  if (pedido.estado === "cancelado") return "cancelado";
+  // Confirmado, en preparación, etc.: un operador ya lo está manejando y el
+  // pago se coordina con él.
+  if (pedido.estado !== "pendiente") return "en_curso";
+  if (ahora - pedido.creadoEn.getTime() > VENTANA_PAGO_MS) return "vencido";
+  return null;
 }
 
 /**
@@ -460,6 +490,8 @@ export async function getPedidoParaPago(
     facturacionTipoDoc: fila.facturacionTipoDoc,
     facturacionNroDoc: fila.facturacionNroDoc,
     cuotasMax: fila.cuotasMax,
+    estado: fila.estado as OrderEstado,
+    creadoEn: fila.createdAt,
   };
 }
 
@@ -515,11 +547,117 @@ export function transicionPermitida(
   return true;
 }
 
+/** Filtro de tenant para `pago_intentos`, igual que `esDeEsteTenant` para `orders`. */
+function intentoDeEsteTenant() {
+  return eq(pagoIntentos.tenantId, shopTenantId());
+}
+
+type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
+
+interface FilaIntento {
+  id: string;
+  referencia: string | null;
+  estado: PagoEstado;
+}
+
+const columnasIntento = {
+  id: pagoIntentos.id,
+  referencia: pagoIntentos.referencia,
+  estado: pagoIntentos.estado,
+};
+
 /**
- * Guarda el resultado de un cobro sobre el pedido.
+ * La fila de `pago_intentos` que corresponde a este cobro. En orden:
  *
- * Idempotente por dos vías: el índice único parcial sobre `pago_referencia`, y
- * el chequeo de transición. Reprocesar el mismo evento no cambia nada.
+ * 1. La que ya tiene esta referencia (evento repetido, o el webhook que llegó
+ *    antes que la respuesta de la ruta). Si además la ruta traía una reserva
+ *    propia, esa reserva sobra y se borra: el pago ya quedó anotado.
+ * 2. La reserva abierta del pedido (sin referencia todavía): la de la ruta, o
+ *    la que dejó un timeout y ahora reclama el webhook.
+ * 3. Si no hay ninguna, una fila nueva: un pago que el webhook recuperó por
+ *    `external_reference` y que la base no conocía.
+ */
+async function intentoDelCobro(
+  tx: Tx,
+  pedidoId: string,
+  cobro: ResultadoCobro,
+  intentoId?: string,
+): Promise<FilaIntento & { nuevo: boolean }> {
+  if (cobro.referencia) {
+    const [porReferencia] = await tx
+      .select(columnasIntento)
+      .from(pagoIntentos)
+      .where(
+        and(
+          eq(pagoIntentos.proveedor, cobro.proveedor),
+          eq(pagoIntentos.referencia, cobro.referencia),
+          intentoDeEsteTenant(),
+        ),
+      )
+      .limit(1);
+    if (porReferencia) {
+      if (intentoId && intentoId !== porReferencia.id) {
+        await tx
+          .delete(pagoIntentos)
+          .where(and(eq(pagoIntentos.id, intentoId), isNull(pagoIntentos.referencia), intentoDeEsteTenant()));
+      }
+      return { ...porReferencia, estado: porReferencia.estado as PagoEstado, nuevo: false };
+    }
+  }
+
+  const [reserva] = await tx
+    .select(columnasIntento)
+    .from(pagoIntentos)
+    .where(
+      and(
+        eq(pagoIntentos.orderId, pedidoId),
+        intentoId ? eq(pagoIntentos.id, intentoId) : undefined,
+        isNull(pagoIntentos.referencia),
+        eq(pagoIntentos.estado, "pendiente"),
+        intentoDeEsteTenant(),
+      ),
+    )
+    .limit(1);
+  if (reserva) return { ...reserva, estado: reserva.estado as PagoEstado, nuevo: false };
+
+  const [creada] = await tx
+    .insert(pagoIntentos)
+    .values({
+      tenantId: shopTenantId(),
+      orderId: pedidoId,
+      proveedor: cobro.proveedor,
+      referencia: cobro.referencia || null,
+      estado: "pendiente",
+    })
+    .returning(columnasIntento);
+  return { ...creada, estado: creada.estado as PagoEstado, nuevo: true };
+}
+
+/**
+ * Estado del pago del PEDIDO a partir de todos sus intentos.
+ *
+ * - Con un intento cobrado, el pedido está pagado: la plata entró, aunque haya
+ *   otros rechazados o abiertos.
+ * - Sin cobrados, alcanza un intento abierto para que siga pendiente.
+ * - Si todos se cayeron, fallido.
+ */
+export function estadoDelPedido(estados: PagoEstado[]): PagoEstado | null {
+  if (estados.length === 0) return null;
+  if (estados.includes("pagado")) return "pagado";
+  if (estados.includes("pendiente")) return "pendiente";
+  return "fallido";
+}
+
+/**
+ * Guarda el resultado de un cobro: primero en su intento, después el resumen
+ * en el pedido.
+ *
+ * Idempotente por dos vías: el índice único sobre `(proveedor, referencia)` de
+ * `pago_intentos`, y el chequeo de transición por intento. Reprocesar el mismo
+ * evento no cambia nada.
+ *
+ * `intentoId` es la reserva que abrió la ruta de cobro (`reservarIntento`); el
+ * webhook y la reconciliación no la pasan.
  *
  * Devuelve `true` si algo cambió, para poder distinguir en los logs un evento
  * nuevo de un reintento de Mercado Pago.
@@ -527,6 +665,7 @@ export function transicionPermitida(
 export async function registrarCobro(
   pedidoId: string,
   cobro: ResultadoCobro,
+  opciones: { intentoId?: string } = {},
 ): Promise<boolean> {
   return getDb().transaction(async (tx) => {
     /**
@@ -537,6 +676,7 @@ export async function registrarCobro(
      * Las dos leen `pendiente`, las dos consideran válida su transición, y el
      * pedido puede terminar en `pagado` cuando la plata ya se fue. Con el lock,
      * la segunda espera, lee `pagado`, y aplica la reversión como corresponde.
+     * El lock es sobre el PEDIDO, así que también serializa intentos distintos.
      */
     const [fila] = await tx
       .select({ estado: orders.pagoEstado })
@@ -547,26 +687,138 @@ export async function registrarCobro(
 
     if (!fila) return false;
 
+    const intento = await intentoDelCobro(tx, pedidoId, cobro, opciones.intentoId);
+    // Las reglas de transición (eventos desordenados, reversiones) se aplican
+    // por intento: cada pago tiene su propia historia en el proveedor.
+    const cambiaIntento = transicionPermitida(intento.estado, cobro.estado, cobro.reversion);
+    const cuotas = camposCuotasCobro(cobro);
+
+    // El detalle se guarda SIEMPRE, aunque el estado no cambie: es lo que
+    // permite reconciliar y diagnosticar después.
+    await tx
+      .update(pagoIntentos)
+      .set({
+        referencia: cobro.referencia || null,
+        detalle: cobro.detalle,
+        ...(cobro.medio ? { medio: cobro.medio } : {}),
+        ...(cuotas.pagoCuotas !== undefined ? { cuotas: cuotas.pagoCuotas } : {}),
+        ...(cuotas.pagoTotalPagado !== undefined ? { totalPagado: cuotas.pagoTotalPagado } : {}),
+        ...(cambiaIntento ? { estado: cobro.estado } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(pagoIntentos.id, intento.id), intentoDeEsteTenant()));
+
+    const intentos = await tx
+      .select({
+        ...columnasIntento,
+        proveedor: pagoIntentos.proveedor,
+        detalle: pagoIntentos.detalle,
+        medio: pagoIntentos.medio,
+        cuotas: pagoIntentos.cuotas,
+        totalPagado: pagoIntentos.totalPagado,
+      })
+      .from(pagoIntentos)
+      .where(and(eq(pagoIntentos.orderId, pedidoId), intentoDeEsteTenant()))
+      .orderBy(asc(pagoIntentos.createdAt));
+
     const actual = fila.estado as PagoEstado;
-    // La referencia y el detalle se guardan SIEMPRE, aunque el estado no
-    // cambie: son lo que permite reconciliar y diagnosticar después.
+    const nuevo = estadoDelPedido(intentos.map((i) => i.estado as PagoEstado)) ?? actual;
+
+    const cobrados = intentos.filter((i) => i.estado === "pagado");
+    if (cobrados.length > 1) {
+      // Dos pagos aprobados para el mismo pedido: el comprador pagó de más y
+      // hay que devolverle uno. No debería pasar (la ruta no abre un intento
+      // con otro abierto), así que si pasa tiene que hacer ruido.
+      console.error(
+        `[pagos] cobro duplicado pedido=${pedidoId} referencias=${cobrados.map((i) => i.referencia).join(",")}`,
+      );
+    }
+
+    // El resumen del pedido refleja el intento que decide su estado: el cobrado
+    // si lo hay; si no, este mismo cuando coincide, o el último que coincida.
+    const coinciden = intentos.filter((i) => i.estado === nuevo);
+    const decisivo =
+      cobrados[0] ??
+      coinciden.find((i) => i.id === intento.id) ??
+      coinciden[coinciden.length - 1];
+
     await tx
       .update(orders)
       .set({
-        pagoProveedor: cobro.proveedor,
-        pagoReferencia: cobro.referencia,
-        pagoDetalle: cobro.detalle,
-        ...(cobro.medio ? { pagoMedio: cobro.medio } : {}),
-        ...camposCuotasCobro(cobro),
-        ...(transicionPermitida(actual, cobro.estado, cobro.reversion)
-          ? { pagoEstado: cobro.estado }
+        ...(decisivo
+          ? {
+              pagoProveedor: decisivo.proveedor,
+              pagoReferencia: decisivo.referencia,
+              pagoDetalle: decisivo.detalle,
+              ...(decisivo.medio ? { pagoMedio: decisivo.medio } : {}),
+              ...(decisivo.cuotas != null ? { pagoCuotas: decisivo.cuotas } : {}),
+              ...(decisivo.totalPagado != null ? { pagoTotalPagado: decisivo.totalPagado } : {}),
+            }
           : {}),
+        ...(nuevo !== actual ? { pagoEstado: nuevo } : {}),
         pagoActualizadoEn: new Date(),
         updatedAt: new Date(),
       })
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
 
-    return transicionPermitida(actual, cobro.estado, cobro.reversion);
+    return intento.nuevo || cambiaIntento || nuevo !== actual;
+  });
+}
+
+/** Intento abierto de un pedido: reservado (sin referencia) o pendiente en el proveedor. */
+export interface IntentoAbierto {
+  id: string;
+  proveedor: string;
+  referencia: string | null;
+  creadoEn: Date;
+}
+
+/**
+ * Abre un intento de cobro, SOLO si el pedido no tiene otro abierto.
+ *
+ * Con dos pagos abiertos a la vez los dos se pueden aprobar, y el comprador
+ * paga dos veces. El lock sobre la fila del pedido hace que dos requests
+ * simultáneos no puedan pasar los dos el chequeo: el segundo espera y ve la
+ * reserva del primero.
+ */
+export async function reservarIntento(
+  pedidoId: string,
+  proveedor: string,
+  medio: string,
+): Promise<{ intentoId: string } | { abierto: IntentoAbierto } | null> {
+  return getDb().transaction(async (tx) => {
+    const [pedido] = await tx
+      .select({ id: orders.id })
+      .from(orders)
+      .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
+      .limit(1)
+      .for("update");
+    if (!pedido) return null;
+
+    const [abierto] = await tx
+      .select({
+        id: pagoIntentos.id,
+        proveedor: pagoIntentos.proveedor,
+        referencia: pagoIntentos.referencia,
+        creadoEn: pagoIntentos.createdAt,
+      })
+      .from(pagoIntentos)
+      .where(
+        and(
+          eq(pagoIntentos.orderId, pedidoId),
+          eq(pagoIntentos.estado, "pendiente"),
+          intentoDeEsteTenant(),
+        ),
+      )
+      .orderBy(asc(pagoIntentos.createdAt))
+      .limit(1);
+    if (abierto) return { abierto };
+
+    const [creado] = await tx
+      .insert(pagoIntentos)
+      .values({ tenantId: shopTenantId(), orderId: pedidoId, proveedor, medio })
+      .returning({ id: pagoIntentos.id });
+    return { intentoId: creado.id };
   });
 }
 
@@ -578,24 +830,46 @@ export async function registrarCobro(
  * ni un operador ni nosotros podemos saber que hubo un intento ni por qué falló
  * — que es exactamente lo que pasó la primera vez que se probó de verdad.
  *
- * NO toca `pago_estado`: que la llamada fallara no significa que el pago se
- * haya rechazado. Puede no haber existido nunca. Marcarlo `fallido` sería
- * afirmar algo que no sabemos.
+ * NO toca `pago_estado` del pedido: que la llamada fallara no significa que el
+ * pago se haya rechazado. Puede no haber existido nunca. Marcarlo `fallido`
+ * sería afirmar algo que no sabemos.
  *
- * Tampoco toca `pago_referencia`: no hay ninguna.
+ * Con `intentoId`, además cierra esa reserva (si todavía no tiene referencia)
+ * para que no bloquee el próximo intento.
  */
 export async function registrarIntentoFallido(
   pedidoId: string,
   motivo: string,
+  intentoId?: string,
 ): Promise<void> {
+  const detalle = `error_proveedor: ${motivo}`.slice(0, 300);
+  if (intentoId) await descartarReserva(intentoId, detalle);
   await getDb()
     .update(orders)
     .set({
-      pagoDetalle: `error_proveedor: ${motivo}`.slice(0, 300),
+      pagoDetalle: detalle,
       pagoActualizadoEn: new Date(),
       updatedAt: new Date(),
     })
     .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
+}
+
+/**
+ * Cierra una reserva que nunca obtuvo referencia del proveedor. Si ya la tiene
+ * (el webhook la reclamó mientras tanto), no la toca: ahí hay un pago real.
+ */
+export async function descartarReserva(intentoId: string, detalle: string): Promise<void> {
+  await getDb()
+    .update(pagoIntentos)
+    .set({ estado: "fallido", detalle: detalle.slice(0, 300), updatedAt: new Date() })
+    .where(
+      and(
+        eq(pagoIntentos.id, intentoId),
+        isNull(pagoIntentos.referencia),
+        eq(pagoIntentos.estado, "pendiente"),
+        intentoDeEsteTenant(),
+      ),
+    );
 }
 
 /**
@@ -613,7 +887,7 @@ export async function registrarIntentoFallido(
 export async function pedidoPendienteMasReciente(
   dueno: DuenoPedidos,
 ): Promise<{ id: string; numero: string; total: number; cuotasMax: number | null } | null> {
-  const desde = new Date(Date.now() - 24 * 60 * 60_000);
+  const desde = new Date(Date.now() - VENTANA_PAGO_MS);
   const [fila] = await getDb()
     .select({ id: orders.id, numero: orders.numero, total: orders.total, cuotasMax: orders.cuotasMax })
     .from(orders)
@@ -696,22 +970,99 @@ export async function cancelarPedidoPendiente(
   return filas.length > 0;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Encuentra el pedido al que pertenece una referencia del proveedor.
+ * Encuentra el pedido al que pertenece un pago del proveedor.
  *
- * Es lo que usa el webhook: la notificación trae el id del pago, no el del
- * pedido.
+ * Es lo que usan el webhook y la reconciliación: la notificación trae el id del
+ * pago, no el del pedido. Se busca en este orden:
+ *
+ * 1. `pago_intentos`, donde queda cada intento (no solo el último).
+ * 2. `orders.pago_referencia`, por un pedido anterior a la tabla de intentos
+ *    que se le haya escapado al backfill.
+ * 3. `pedidoIdExterno`: el `external_reference` que el propio proveedor dice
+ *    que tiene el pago. Rescata un intento que la base nunca llegó a anotar
+ *    (timeout al crearlo) o que se pisó antes de existir la tabla. Solo pedidos
+ *    de este tenant y cobrados por este proveedor.
  */
-export async function pedidoPorReferencia(
+export async function pedidoDelPago(
+  proveedor: string,
   referencia: string,
+  pedidoIdExterno?: string,
 ): Promise<{ id: string; pagoEstado: PagoEstado } | null> {
-  const [fila] = await getDb()
-    .select({ id: orders.id, estado: orders.pagoEstado })
+  const db = getDb();
+  const columnas = { id: orders.id, estado: orders.pagoEstado };
+  const armar = (f: { id: string; estado: string } | undefined) =>
+    f ? { id: f.id, pagoEstado: f.estado as PagoEstado } : null;
+
+  const [porIntento] = await db
+    .select(columnas)
+    .from(pagoIntentos)
+    .innerJoin(orders, eq(orders.id, pagoIntentos.orderId))
+    .where(
+      and(
+        eq(pagoIntentos.proveedor, proveedor),
+        eq(pagoIntentos.referencia, referencia),
+        intentoDeEsteTenant(),
+        esDeEsteTenant(),
+      ),
+    )
+    .limit(1);
+  if (porIntento) return armar(porIntento);
+
+  const [porPedido] = await db
+    .select(columnas)
     .from(orders)
     .where(and(eq(orders.pagoReferencia, referencia), esDeEsteTenant()))
     .limit(1);
+  if (porPedido) return armar(porPedido);
 
-  return fila ? { id: fila.id, pagoEstado: fila.estado as PagoEstado } : null;
+  if (!pedidoIdExterno || !UUID.test(pedidoIdExterno)) return null;
+  const [porExterno] = await db
+    .select(columnas)
+    .from(orders)
+    .where(
+      and(
+        eq(orders.id, pedidoIdExterno),
+        eq(orders.pagoMetodo, proveedor),
+        esDeEsteTenant(),
+      ),
+    )
+    .limit(1);
+  return armar(porExterno);
+}
+
+/**
+ * Intentos con referencia que siguen abiertos, para que la reconciliación le
+ * pregunte al proveedor cómo terminaron. Ver `lib/pagos/reconciliar.ts`.
+ */
+export async function intentosPendientesDeReconciliar(opciones: {
+  proveedor: string;
+  /** Sin tocar desde antes de esto (el webhook podría estar por llegar). */
+  quietosDesde: Date;
+  /** Creados después de esto. */
+  creadosDesde: Date;
+  limite: number;
+}): Promise<{ orderId: string; referencia: string }[]> {
+  const filas = await getDb()
+    .select({ orderId: pagoIntentos.orderId, referencia: pagoIntentos.referencia })
+    .from(pagoIntentos)
+    .where(
+      and(
+        // La base es compartida con el CRM y acá no hay comprador que acote la
+        // consulta: sin esto, el cron de un Shop reconciliaría pedidos de otro.
+        intentoDeEsteTenant(),
+        eq(pagoIntentos.estado, "pendiente"),
+        eq(pagoIntentos.proveedor, opciones.proveedor),
+        sql`${pagoIntentos.referencia} is not null`,
+        lt(pagoIntentos.updatedAt, opciones.quietosDesde),
+        gte(pagoIntentos.createdAt, opciones.creadosDesde),
+      ),
+    )
+    .orderBy(asc(pagoIntentos.createdAt))
+    .limit(opciones.limite);
+  return filas.filter((f): f is { orderId: string; referencia: string } => f.referencia != null);
 }
 
 /**

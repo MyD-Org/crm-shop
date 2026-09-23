@@ -17,10 +17,11 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import type {
-  DatosPago,
-  EstadoPago,
-  ProveedorPago,
+import {
+  ErrorProveedor,
+  type DatosPago,
+  type EstadoPago,
+  type ProveedorPago,
 } from "./tipos";
 import {
   desafio3DS,
@@ -115,6 +116,7 @@ export function interpretar(pago: RespuestaMercadoPago): EstadoPago {
     // La referencia es el id del PAGO: es lo que MP manda en el webhook y con
     // lo que después se vuelve a consultar.
     referencia: String(pago.id ?? ""),
+    ...(pago.external_reference ? { pedidoId: String(pago.external_reference) } : {}),
     detalle,
     motivo: motivoDeMercadoPago(status, detalle || undefined),
     /**
@@ -183,7 +185,7 @@ async function pedir(
       }
     }
 
-    throw new Error(`Mercado Pago respondió ${res.status}`);
+    throw new ErrorProveedor(`Mercado Pago respondió ${res.status}`, res.status);
   }
 
   return cuerpo;
@@ -254,6 +256,18 @@ export const mercadoPago: ProveedorPago = {
   async consultarPago(referencia: string): Promise<EstadoPago> {
     return interpretar(await pedir(`${API}/${encodeURIComponent(referencia)}`, {
       method: "GET",
+    }));
+  },
+
+  /**
+   * MP solo deja cancelar pagos `pending`, `in_process` o `authorized`. Si el
+   * pago ya se resolvió responde 400: quien llama lo trata como "no se pudo" y
+   * vuelve a consultar.
+   */
+  async cancelarPago(referencia: string): Promise<EstadoPago> {
+    return interpretar(await pedir(`${API}/${encodeURIComponent(referencia)}`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "cancelled" }),
     }));
   },
 

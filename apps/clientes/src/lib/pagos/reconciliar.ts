@@ -7,6 +7,10 @@
  * `pendiente` en nuestra DB para siempre y nadie se enteraría hasta que un
  * cliente reclame.
  *
+ * Recorre INTENTOS (`pago_intentos`), no pedidos: un pedido puede tener un
+ * intento viejo abierto además del último, y si se miraba sólo la referencia
+ * del pedido ese pago nunca se volvía a consultar.
+ *
  * Corre desde un cron. La política es conservadora: se ignoran los pedidos que
  * el webhook podría estar por procesar (menos de 5 minutos sin cambios) y los
  * demasiado viejos (más de 3 días), donde ya no vale seguir preguntando.
@@ -17,12 +21,8 @@
  * caso es dos updates iguales, no un doble cobro.
  */
 
-import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
-import { getDb } from "@/db";
-import { orders } from "@/db/schema";
 import { mercadoPago } from "./mercadopago";
-import { registrarCobro } from "@/lib/pedidos";
-import { shopTenantId } from "@/lib/tenant";
+import { intentosPendientesDeReconciliar, registrarCobro } from "@/lib/pedidos";
 
 /**
  * Antigüedad mínima desde el último toque al pago antes de re-consultar. Menos
@@ -64,34 +64,12 @@ export async function reconciliarPagosPendientes(
   const corteWebhook = new Date(ahora - ESPERA_WEBHOOK_MS);
   const corteAntiguedad = new Date(ahora - VENTANA_MS);
 
-  const candidatos = await getDb()
-    .select({
-      id: orders.id,
-      referencia: orders.pagoReferencia,
-    })
-    .from(orders)
-    .where(
-      and(
-        // La base es compartida con el CRM y acá no hay comprador que acote la
-        // consulta: sin esto, el cron de un Shop reconciliaría pedidos de otro.
-        eq(orders.tenantId, shopTenantId()),
-        eq(orders.pagoEstado, "pendiente"),
-        eq(orders.pagoProveedor, proveedor),
-        isNotNull(orders.pagoReferencia),
-        // El `coalesce` cubre el hueco de las órdenes cuyo webhook nunca llegó
-        // y por eso no tienen `pago_actualizado_en`: en esos casos se cae al
-        // `created_at`, que siempre existe.
-        //
-        // El corte va como ISO string a mano: en un template `sql` raw, el
-        // driver de neon-http NO serializa `Date` — lo pasa crudo y se cae con
-        // ERR_INVALID_ARG_TYPE. Los helpers tipados (`eq`, `gt`) sí saben
-        // convertir, por eso `gt(orders.createdAt, ...)` de abajo va directo.
-        sql`coalesce(${orders.pagoActualizadoEn}, ${orders.createdAt}) < ${corteWebhook.toISOString()}`,
-        gt(orders.createdAt, corteAntiguedad),
-      ),
-    )
-    .orderBy(orders.createdAt)
-    .limit(limite);
+  const candidatos = await intentosPendientesDeReconciliar({
+    proveedor,
+    quietosDesde: corteWebhook,
+    creadosDesde: corteAntiguedad,
+    limite,
+  });
 
   let actualizados = 0;
   let errores = 0;
@@ -103,10 +81,9 @@ export async function reconciliarPagosPendientes(
    * try/catch por item.
    */
   for (const c of candidatos) {
-    if (!c.referencia) continue;
     try {
       const estado = await mercadoPago.consultarPago(c.referencia);
-      const cambio = await registrarCobro(c.id, {
+      const cambio = await registrarCobro(c.orderId, {
         proveedor,
         referencia: c.referencia,
         estado: estado.estado,
@@ -119,7 +96,7 @@ export async function reconciliarPagosPendientes(
     } catch (err) {
       errores++;
       console.error(
-        `[reconciliar] pedido=${c.id} referencia=${c.referencia}:`,
+        `[reconciliar] pedido=${c.orderId} referencia=${c.referencia}:`,
         err,
       );
     }

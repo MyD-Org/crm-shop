@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  alternarCategoria,
   itemsDeFaceta,
   anuncioResultados,
   chipsActivos,
@@ -281,5 +282,40 @@ describe("etiquetaBotonFiltros", () => {
 
   it("sin filtros es sólo \"Filtros\"", () => {
     expect(etiquetaBotonFiltros(0)).toBe("Filtros");
+  });
+});
+
+describe("alternarCategoria", () => {
+  const facetas = [
+    { label: "Electricidad", nivel: 1 },
+    { label: "Iluminación", nivel: 1 },
+    { label: "Focos led", nivel: 2 },
+    { label: "Dicroicas", nivel: 3 },
+    { label: "Paneles", nivel: 2 },
+    { label: "Seguridad", nivel: 1 },
+  ];
+
+  it("tildar una madre saca a sus hijas y nietas, y deja lo de otras ramas", () => {
+    expect(
+      alternarCategoria(facetas, ["Dicroicas", "Paneles", "Seguridad"], "Iluminación", true),
+    ).toEqual(["Seguridad", "Iluminación"]);
+  });
+
+  it("tildar una hoja sólo la agrega", () => {
+    expect(alternarCategoria(facetas, ["Electricidad"], "Paneles", true)).toEqual([
+      "Electricidad",
+      "Paneles",
+    ]);
+  });
+
+  it("destildar la saca", () => {
+    expect(alternarCategoria(facetas, ["Iluminación", "Seguridad"], "Iluminación", false)).toEqual([
+      "Seguridad",
+    ]);
+  });
+
+  it("sin árbol (categorías planas, sin nivel) se comporta como una lista común", () => {
+    const planas = [{ label: "A" }, { label: "B" }];
+    expect(alternarCategoria(planas, ["A"], "B", true)).toEqual(["A", "B"]);
   });
 });

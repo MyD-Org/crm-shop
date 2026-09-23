@@ -8,7 +8,13 @@ import {
   rangoEfectivo,
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
-import { fmtPesos, hayFiltros, itemsDeFaceta, limpiarFiltros } from "@/lib/catalogo-vista";
+import {
+  alternarCategoria,
+  fmtPesos,
+  hayFiltros,
+  itemsDeFaceta,
+  limpiarFiltros,
+} from "@/lib/catalogo-vista";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
@@ -49,8 +55,9 @@ export function CatalogoFiltros({
           count: c.count,
           checked: c.checked,
         }))}
+        // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) =>
-          ir({ categorias: alternar(estado.categorias, valor, tildado) })
+          ir({ categorias: alternarCategoria(facetas.categorias, estado.categorias, valor, tildado) })
         }
         emptyText="Sin categorías para estos filtros"
       />

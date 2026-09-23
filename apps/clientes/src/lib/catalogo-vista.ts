@@ -257,3 +257,27 @@ export function itemsDeFaceta<F extends { label: string; count: number }>(
     ...facetas.map((f) => ({ ...f, checked: tildados.includes(f.label) })),
   ];
 }
+
+/**
+ * Nueva selección de categorías al tildar o destildar `valor`. Tildar una
+ * madre ya filtra por toda su rama (ver `filtroCategoriasSql`), así que sus
+ * hijas tildadas se sacan: quedarían repetidas en la URL y en los chips.
+ * `facetas` va en orden de lectura (cada madre seguida de sus hijas).
+ */
+export function alternarCategoria(
+  facetas: { label: string; nivel?: number }[],
+  seleccion: string[],
+  valor: string,
+  tildado: boolean,
+): string[] {
+  if (!tildado) return seleccion.filter((x) => x !== valor);
+  const i = facetas.findIndex((f) => f.label === valor);
+  const hijas = new Set<string>();
+  if (i >= 0) {
+    const nivel = facetas[i].nivel ?? 1;
+    for (let j = i + 1; j < facetas.length && (facetas[j].nivel ?? 1) > nivel; j++) {
+      hijas.add(facetas[j].label);
+    }
+  }
+  return [...seleccion.filter((x) => x !== valor && !hijas.has(x)), valor];
+}

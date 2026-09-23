@@ -267,6 +267,95 @@ export const catalogSyncLog = pgTable(
   (t) => [index("csl_tenant_started").on(t.tenantId, t.startedAt)],
 )
 
+// ── Espejo de contactos de Alegra (change `espejo-contactos-alegra`) ──────────────────────
+//
+// Copia del padrón de contactos de cada cuenta de Alegra, poblada por una sync completa y
+// pausada (lib/alegra-contacts-sync.ts). Sirve para no bajar el padrón en vivo: antes buscar
+// por teléfono o listar clientes costaba ~200 requests contra una cuota compartida.
+//
+// OJO: el Shop NO lee esta tabla sino la vista `public.alegra_contacts_shop` (migración 0031,
+// vive solo en SQL). Si cambia o se borra una columna expuesta en esa vista, hay que recrear
+// la vista EN LA MISMA MIGRACIÓN.
+export const alegraContacts = pgTable(
+  "alegra_contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    /** Cuenta de Alegra dentro del tenant. Hoy siempre 'principal' (una cuenta por tenant). */
+    alegraAccount: text("alegra_account").notNull().default("principal"),
+    alegraId: text("alegra_id").notNull(),
+    name: text("name").notNull(),
+    /** Crudo (string, u objeto {number} ya aplanado). */
+    identification: text("identification"),
+    /** Solo dígitos; null si queda vacío. */
+    identificationNorm: text("identification_norm"),
+    /** Crudo si es string; objeto/null → null (queda en raw). */
+    email: text("email"),
+    /** lower/trim, partido por [,; ]+: un contacto puede traer varias casillas. */
+    emailsNorm: text("emails_norm").array().notNull().default(sql`'{}'::text[]`),
+    phonePrimary: text("phone_primary"),
+    phoneSecondary: text("phone_secondary"),
+    mobile: text("mobile"),
+    /** normalizePhone() de los tres teléfonos, sin vacíos ni repetidos. */
+    phonesNorm: text("phones_norm").array().notNull().default(sql`'{}'::text[]`),
+    /** raw.type de Alegra ('client' / 'provider'). */
+    types: text("types").array().notNull().default(sql`'{}'::text[]`),
+    priceListId: text("price_list_id"),
+    priceListName: text("price_list_name"),
+    priceListStatus: text("price_list_status"),
+    sellerId: text("seller_id"),
+    sellerName: text("seller_name"),
+    paymentTermId: text("payment_term_id"),
+    paymentTermName: text("payment_term_name"),
+    paymentTermDays: integer("payment_term_days"),
+    creditLimit: numeric("credit_limit", { precision: 16, scale: 2 }),
+    /**
+     * Regla canónica de cuenta corriente, en el dato: todo lector (CRM y Shop) lee esta
+     * columna en vez de recalcularla. Casos cubiertos en
+     * test/integration/alegra-contacts-schema.integration.test.ts.
+     */
+    tipoCuenta: text("tipo_cuenta").generatedAlwaysAs(
+      sql`CASE WHEN coalesce("payment_term_days",0) > 0 OR coalesce("credit_limit",0) > 0 THEN 'corriente' ELSE 'contado' END`,
+    ),
+    /** Estado real del contacto en Alegra. */
+    alegraStatus: text("alegra_status"),
+    /** NO es el estado de Alegra: "visto en la última corrida OK" ('active' | 'inactive'). */
+    status: text("status").notNull().default("active"),
+    /** Último que escribió la fila: 'sync' | 'fallback' | 'write_through'. */
+    origen: text("origen").notNull().default("sync"),
+    /** El contacto COMPLETO como lo devuelve Alegra. No lo ve el Shop (fuera de la vista). */
+    raw: jsonb("raw").$type<Record<string, unknown>>(),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ac_tenant_cuenta_alegra").on(t.tenantId, t.alegraAccount, t.alegraId),
+    index("ac_tenant_ident").on(t.tenantId, t.identificationNorm).where(sql`"identification_norm" IS NOT NULL`),
+    index("ac_emails_gin").using("gin", t.emailsNorm),
+    index("ac_phones_gin").using("gin", t.phonesNorm),
+  ],
+)
+
+// Bitácora de cada corrida de la sync de contactos. `requests` mide el presupuesto de cuota
+// que se llevó cada corrida.
+export const alegraContactsSyncLog = pgTable(
+  "alegra_contacts_sync_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraAccount: text("alegra_account").notNull().default("principal"),
+    trigger: text("trigger").notNull(), // 'cron' | 'manual'
+    status: text("status").notNull().default("running"), // 'running' | 'ok' | 'error' | 'skipped'
+    contactsSynced: integer("contacts_synced").notNull().default(0),
+    markedInactive: integer("marked_inactive").notNull().default(0),
+    requests: integer("requests").notNull().default(0),
+    /** Motivo técnico, NUNCA datos de contactos (nombres, emails, documentos). */
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("acsl_tenant_started").on(t.tenantId, t.startedAt)],
+)
+
 // ── Catálogo comercial del Shop, administrado desde el CRM (change `catalogo-shop`) ────────
 //
 // Alegra manda sobre identidad (alegra_id), stock y precio; todo lo demás se edita acá. Vive

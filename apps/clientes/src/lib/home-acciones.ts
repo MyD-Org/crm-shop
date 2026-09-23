@@ -4,8 +4,8 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { esAdmin } from "@/lib/auth";
 import { getCatalogo } from "@/lib/catalog";
-import { SECCIONES_HOME, erroresSeccion } from "@/data/home-defaults";
-import { borrarSeccionHome, guardarSeccionHome } from "@/lib/home-guardar";
+import { KEY_OCULTAS, SECCIONES_HOME, erroresSeccion, resolverOcultas, type SeccionHome } from "@/data/home-defaults";
+import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
 
@@ -81,6 +81,28 @@ export async function restablecerSeccion(seccion: string): Promise<ResultadoGuar
     return { ok: true, updatedAt: null };
   } catch (err) {
     console.error(`[home-acciones] no se pudo restablecer ${seccion}:`, err);
+    return { ok: false, errores: [ERROR_GUARDAR] };
+  }
+}
+
+/**
+ * Oculta o vuelve a mostrar una sección para los visitantes. No toca el
+ * contenido de la sección: la lista vive en su propia fila (`ocultas`), así
+ * que "Restablecer valores originales" no la vuelve a mostrar. Nunca lanza.
+ */
+export async function cambiarVisibilidadSeccion(seccion: string, visible: boolean): Promise<ResultadoGuardar> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO] };
+  if (!esSeccionValida(seccion)) return { ok: false, errores: [SECCION_DESCONOCIDA] };
+
+  try {
+    const actuales = resolverOcultas(await leerSeccionHome(KEY_OCULTAS));
+    const sinEsta = actuales.filter((s) => s !== seccion);
+    const ocultas = visible ? sinEsta : [...sinEsta, seccion as SeccionHome];
+    const { updatedAt } = await guardarSeccionHome(KEY_OCULTAS, resolverOcultas(ocultas));
+    revalidatePath("/", "layout");
+    return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
+  } catch (err) {
+    console.error(`[home-acciones] no se pudo cambiar la visibilidad de ${seccion}:`, err);
     return { ok: false, errores: [ERROR_GUARDAR] };
   }
 }

@@ -48,7 +48,7 @@ export default async function Home() {
   return (
     <ModoEdicionProvider>
       <HomeClient oferta={oferta} contenido={contenido} destacados={destacados} puedeEditar />
-      <BarraEdicion anuncio={contenido.anuncio} navBadge={contenido.navBadge} />
+      <BarraEdicion anuncio={contenido.anuncio} navBadge={contenido.navBadge} ocultas={contenido.ocultas} />
     </ModoEdicionProvider>
   );
 }

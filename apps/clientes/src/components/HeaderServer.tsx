@@ -8,7 +8,8 @@ export async function Header() {
   // Badge administrable del nav (config de home, mismo contrato que el resto
   // del contenido). cache() por request: el layout ya la lee para el anuncio,
   // así que acá no suma consultas.
-  const { navBadge } = await getContenidoHome()
+  const { navBadge: badge, ocultas } = await getContenidoHome()
+  const navBadge = ocultas.includes("navBadge") ? null : badge
 
   // Las categorias del menu salen del catalogo real. Si la lectura falla, el
   // header se renderiza igual: la navegacion no debe tumbar toda la pagina.

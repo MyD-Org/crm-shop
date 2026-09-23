@@ -33,3 +33,12 @@ export async function guardarSeccionHome(
 export async function borrarSeccionHome(key: string): Promise<void> {
   await getDb().delete(homeContent).where(eq(homeContent.key, key));
 }
+
+/** Payload crudo de una sección, o `undefined` si no tiene fila. */
+export async function leerSeccionHome(key: string): Promise<unknown> {
+  const [fila] = await getDb()
+    .select({ payload: homeContent.payload })
+    .from(homeContent)
+    .where(eq(homeContent.key, key));
+  return fila?.payload;
+}

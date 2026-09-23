@@ -99,7 +99,9 @@ export function ProductoClient({
           <span className="text-text">{producto.name}</span>
         </nav>
 
-        <div className="grid gap-10 lg:grid-cols-2">
+        {/* Galería un poco más angosta que la info: los nombres de Alegra son
+            largos y necesitan el ancho más que la foto. */}
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
           {/* Galeria — Alegra no expone imagenes todavia */}
           <div className="flex aspect-square gap-3">
             <div className="relative flex flex-1 items-center justify-center overflow-hidden rounded-[24px] bg-elevated">
@@ -115,7 +117,9 @@ export function ProductoClient({
                   {producto.brand}
                 </p>
               )}
-              <h1 className="font-display text-4xl font-medium tracking-tight text-text">
+              {/* Tamaño contenido: los nombres vienen de Alegra, largos y en
+                  mayúsculas; a 4xl ocupaban cinco líneas. */}
+              <h1 className="mt-1 font-display text-2xl font-medium leading-tight tracking-tight text-text md:text-[28px]">
                 {producto.name}
               </h1>
               {producto.sku && (

@@ -12,6 +12,7 @@ import { textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import { BotonFavorito } from "@/components/BotonFavorito";
+import { BotonCompartir } from "@/components/BotonCompartir";
 import type { Product } from "@/data/products";
 
 function CartIcon() {
@@ -111,22 +112,27 @@ export function ProductoClient({
 
           {/* Info */}
           <div className="space-y-5">
-            <div>
-              {producto.brand && (
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                  {producto.brand}
-                </p>
-              )}
-              {/* Tamaño contenido: los nombres vienen de Alegra, largos y en
-                  mayúsculas; a 4xl ocupaban cinco líneas. */}
-              <h1 className="mt-1 font-display text-2xl font-medium leading-tight tracking-tight text-text md:text-[28px]">
-                {producto.name}
-              </h1>
-              {producto.sku && (
-                <div className="mt-2">
-                  <span className="text-xs text-muted">SKU {producto.sku}</span>
-                </div>
-              )}
+            {/* Compartir junto al título y no en la fila de compra: en mobile esa
+                fila ya va justa y "Agregar al carrito" se partía en dos líneas. */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {producto.brand && (
+                  <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+                    {producto.brand}
+                  </p>
+                )}
+                {/* Tamaño contenido: los nombres vienen de Alegra, largos y en
+                    mayúsculas; a 4xl ocupaban cinco líneas. */}
+                <h1 className="mt-1 font-display text-2xl font-medium leading-tight tracking-tight text-text md:text-[28px]">
+                  {producto.name}
+                </h1>
+                {producto.sku && (
+                  <div className="mt-2">
+                    <span className="text-xs text-muted">SKU {producto.sku}</span>
+                  </div>
+                )}
+              </div>
+              <BotonCompartir titulo={producto.name} />
             </div>
 
             {/* Card de precio */}

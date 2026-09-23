@@ -8,8 +8,8 @@ describe("destinoMigracion", () => {
   })
 
   it("remota: cualquier otro host, sin exponer la contraseña", () => {
-    const d = destinoMigracion("postgres://owner:secreto@db.plataforma.example/neondb?sslmode=require")
+    const d = destinoMigracion("postgres://owner:s3cr3t-placeholder@db.plataforma.example/neondb?sslmode=require")
     expect(d).toEqual({ host: "db.plataforma.example", base: "neondb", local: false })
-    expect(JSON.stringify(d)).not.toContain("secreto")
+    expect(JSON.stringify(d)).not.toContain("s3cr3t-placeholder")
   })
 })

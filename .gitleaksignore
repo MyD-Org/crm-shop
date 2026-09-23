@@ -3,3 +3,7 @@
 # con usuario y clave genéricos contra localhost, y una frase descriptiva como secreto de sesión.
 04e2c6b349ec6bc2141f71179e1fdf2125752143:apps/clientes/docs/superpowers/plans/2026-06-08-portal-clientes.md:generic-api-key:115
 04e2c6b349ec6bc2141f71179e1fdf2125752143:apps/clientes/docs/superpowers/plans/2026-06-08-portal-clientes.md:postgres-url-con-password:110
+# Clave inventada ("secreto") en una URL de ejemplo de un test de apps/admin (destino de
+# db:migrate). Se reemplazó por la clave de relleno aceptada; el commit quedó en el historial
+# de la rama del PR #75 y no se puede reescribir (sin force push en este remoto).
+423cce19d0528e3ed6e603e38f5e57ad71cd4da3:apps/admin/src/db/migrate-destino.test.ts:postgres-url-con-password:11

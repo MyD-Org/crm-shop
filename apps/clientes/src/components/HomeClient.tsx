@@ -37,6 +37,8 @@ import {
   type TileContent,
 } from "@/data/home-defaults";
 import { SeccionEditable } from "@/components/home/SeccionEditable";
+import { InteractiveHero } from "@/components/home/InteractiveHero";
+import { isStudioImage, STUDIO_IMAGE } from "@/components/home/hero-lights";
 
 /* ── Icons (mismo criterio que el header: SVG inline, sin deps) ─── */
 
@@ -197,6 +199,7 @@ export function HomeClient({
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
             <SeccionEditable seccion="hero" inicial={contenido.hero} puedeEditar={puedeEditar} visibilidad={vis("hero")}>
+              <InteractiveHero enabled={isStudioImage(hero.imagen)}>
               <Hero
                 className="[&_em]:not-italic [&_h1]:font-bold [&_a.rounded-full:first-of-type]:bg-accent [&_a.rounded-full:first-of-type:hover]:bg-primary"
                 eyebrow={hero.eyebrow}
@@ -207,7 +210,7 @@ export function HomeClient({
                 lead={hero.bajada}
                 leadMobile={hero.bajadaMobile}
                 leadVisibleOn={textoVisibleOn(hero, "bajada")}
-                imageSrc={hero.imagen}
+                imageSrc={isStudioImage(hero.imagen) ? STUDIO_IMAGE : hero.imagen}
                 imageAlt={hero.imagenAlt}
                 ctas={sinItemsOcultos(hero.ctas).map((c) => ({
                   label: c.label,
@@ -226,6 +229,7 @@ export function HomeClient({
                   .filter((u) => u.visibilidad !== "nunca")
                   .map(({ visibilidad, ...u }) => ({ ...u, visibleOn: aVisibleOn(visibilidad) }))}
               />
+              </InteractiveHero>
             </SeccionEditable>
           </Reveal>
         </div>

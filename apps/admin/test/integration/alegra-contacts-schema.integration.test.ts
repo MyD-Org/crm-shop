@@ -5,7 +5,7 @@ import { alegraContacts } from "@/db/schema"
 import { seedTenant, truncateAll } from "./helpers"
 
 /**
- * Migraciones 0030 (tabla `alegra_contacts` + bitácora), 0031 y 0032 (vista para el Shop), contra
+ * Migraciones 0030 (tabla `alegra_contacts` + bitácora), 0031, 0032 y 0034 (vista para el Shop), contra
  * Postgres real. El global-setup ya las aplicó vía drizzle migrate.
  *
  * Datos inventados: tenants tenant-a/tenant-b, ids de Alegra de fantasía.
@@ -93,7 +93,7 @@ describe("migración 0030: alegra_contacts (DB real)", () => {
   })
 })
 
-describe("migraciones 0031 + 0032: vista alegra_contacts_shop (DB real)", () => {
+describe("migraciones 0031 + 0032 + 0034: vista alegra_contacts_shop (DB real)", () => {
   const columnasDeLaVista = async () => {
     const r = await getDb().execute(sql`
       SELECT column_name FROM information_schema.columns
@@ -104,8 +104,9 @@ describe("migraciones 0031 + 0032: vista alegra_contacts_shop (DB real)", () => 
   }
 
   // 0031 expuso 16 columnas; 0032 (change portal-al-shop) sumó al final vendedor, plazo y límite
-  // para Condiciones y la barra de límite de crédito de "Mi cuenta" del Shop.
-  it("expone exactamente las 20 columnas del contrato con el Shop", async () => {
+  // para Condiciones y la barra de límite de crédito de "Mi cuenta" del Shop; 0034
+  // (change contacto-fuente-unica) sumó al final las 7 de facturación generadas desde raw.
+  it("expone exactamente las 27 columnas del contrato con el Shop", async () => {
     expect(await columnasDeLaVista()).toEqual([
       "tenant_id",
       "alegra_account",
@@ -127,6 +128,13 @@ describe("migraciones 0031 + 0032: vista alegra_contacts_shop (DB real)", () => 
       "payment_term_name",
       "payment_term_days",
       "credit_limit",
+      "iva_condition",
+      "identification_type",
+      "identification_number",
+      "address_street",
+      "address_city",
+      "address_province",
+      "address_postal_code",
     ])
   })
 
@@ -154,5 +162,86 @@ describe("migraciones 0031 + 0032: vista alegra_contacts_shop (DB real)", () => 
       sql`SELECT alegra_id, tipo_cuenta FROM alegra_contacts_shop WHERE tenant_id = 'tenant-a'`,
     )
     expect(r.map((x) => ({ ...x }))).toEqual([{ alegra_id: "9", tipo_cuenta: "corriente" }])
+  })
+})
+
+/**
+ * Migración 0034 (change `contacto-fuente-unica`): 7 columnas GENERADAS desde `raw` con los
+ * datos de facturación. Vacío, espacios, clave ausente, forma inesperada o raw NULL ⇒ NULL.
+ */
+describe("migración 0034: columnas de facturación generadas desde raw (DB real)", () => {
+  const COLUMNAS = `iva_condition, identification_type, identification_number, address_street,
+                    address_city, address_province, address_postal_code`
+
+  async function generadas(raw: unknown): Promise<Record<string, unknown>> {
+    await truncateAll()
+    await seedTenant("tenant-a")
+    const r = await getDb().execute(sql`
+      INSERT INTO alegra_contacts (tenant_id, alegra_id, name, raw)
+      VALUES ('tenant-a', '1', 'Contacto 1', ${raw === null ? null : JSON.stringify(raw)}::jsonb)
+      RETURNING ${sql.raw(COLUMNAS)}
+    `)
+    return { ...r[0] }
+  }
+
+  const TODO_NULL = {
+    iva_condition: null,
+    identification_type: null,
+    identification_number: null,
+    address_street: null,
+    address_city: null,
+    address_province: null,
+    address_postal_code: null,
+  }
+
+  it("contacto completo: valores tal cual (sin espacios de borde)", async () => {
+    expect(
+      await generadas({
+        id: 1,
+        ivaCondition: "IVA_RESPONSABLE",
+        identificationObject: { type: "CUIT", number: " 20-12345678-9 " },
+        address: { address: "Calle Falsa 123", city: "Ciudad Ejemplo", province: "Córdoba", postalCode: "5000" },
+      }),
+    ).toEqual({
+      iva_condition: "IVA_RESPONSABLE",
+      identification_type: "CUIT",
+      identification_number: "20-12345678-9",
+      address_street: "Calle Falsa 123",
+      address_city: "Ciudad Ejemplo",
+      address_province: "Córdoba",
+      address_postal_code: "5000",
+    })
+  })
+
+  it('"" y espacios → NULL', async () => {
+    expect(
+      await generadas({
+        ivaCondition: "",
+        identificationObject: { type: "  ", number: "" },
+        address: { address: "", city: " ", province: "", postalCode: "   " },
+      }),
+    ).toEqual(TODO_NULL)
+  })
+
+  it("claves ausentes → NULL", async () => {
+    expect(await generadas({ id: 1, name: "x" })).toEqual(TODO_NULL)
+  })
+
+  it("address o identificationObject escalares → NULL (no error)", async () => {
+    expect(await generadas({ address: "Calle suelta 1", identificationObject: "CUIT" })).toEqual(TODO_NULL)
+  })
+
+  it("raw NULL → NULL", async () => {
+    expect(await generadas(null)).toEqual(TODO_NULL)
+  })
+
+  it("un UPDATE de raw recalcula las columnas", async () => {
+    await generadas({ ivaCondition: "" })
+    const r = await getDb().execute(sql`
+      UPDATE alegra_contacts SET raw = '{"ivaCondition":"IVA_EXEMPT","address":{"city":"Otra"}}'::jsonb
+      WHERE tenant_id = 'tenant-a' AND alegra_id = '1'
+      RETURNING iva_condition, address_city
+    `)
+    expect({ ...r[0] }).toEqual({ iva_condition: "IVA_EXEMPT", address_city: "Otra" })
   })
 })

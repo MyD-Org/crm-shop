@@ -345,20 +345,44 @@ Guarda también el contacto crudo en `raw`.
   `inactive`). El estado real de Alegra está en `alegra_status`.
 - `origen`: quién escribió la fila por última vez (`sync`, `fallback`, `write_through`,
   `webhook`).
+- Datos de facturación (migración 0034, change `contacto-fuente-unica`): siete **columnas
+  generadas** desde `raw`, sin backfill ni requests a Alegra: `iva_condition`
+  (`ivaCondition`), `identification_type` / `identification_number` (`identificationObject`),
+  `address_street`, `address_city`, `address_province` y `address_postal_code` (`address`).
+  Vacío, espacios, clave ausente o forma inesperada ⇒ NULL. Se recalculan solas con cada
+  escritura de `raw`. No hay columna de país: Alegra no la manda.
 
-**Vista `alegra_contacts_shop`** (migraciones 0031 y 0032, vive solo en SQL). Es lo único
+**Vista `alegra_contacts_shop`** (migraciones 0031, 0032 y 0034, vive solo en SQL). Es lo único
 del espejo que lee el Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre
-la tabla). Expone 20 columnas: las 16 de 0031 más `seller_name`, `payment_term_name`,
+la tabla). Expone 27 columnas: las 16 de 0031, más `seller_name`, `payment_term_name`,
 `payment_term_days` y `credit_limit` (0032, para Condiciones y la barra de límite de crédito
-de "Mi cuenta" del Shop). Nunca `raw`, teléfonos ni `seller_id`. Si se cambia o borra una
-columna expuesta, la vista se recrea **en la misma migración** (DROP + CREATE + GRANT).
+de "Mi cuenta" del Shop), más las 7 de facturación de 0034 al final. Nunca `raw`, teléfonos
+ni `seller_id`. Si se cambia o borra una columna expuesta, la vista se recrea **en la misma
+migración** (DROP + CREATE + GRANT).
+
+**Función `shop_contacto_write_through(tenant, cuenta, alegra_id, raw jsonb) → text`**
+(0034, vive solo en SQL, `SECURITY DEFINER`). Cuando el Shop completa un dato vacío de un
+contacto en Alegra (PUT), le pasa la respuesta a esta función para que el espejo quede al
+día sin esperar al webhook ni a la sync. Devuelve:
+
+- `'ok'`: actualizó `raw`, `name`, `identification`, `identification_norm` (misma lógica que
+  la sync), `origen = 'write_through'` y `synced_at`; las columnas generadas se recalculan.
+- `'sin_fila'`: no hay fila para ese tenant + cuenta + id. **Nunca inserta**.
+- `'rechazado'`: entrada inválida (id del contacto distinto del pedido, sin nombre, raw que
+  no es objeto) o el contacto nuevo **pisa o borra** un dato de facturación presente
+  (nombre, identificación, tipo y número de documento, condición de IVA, calle, ciudad,
+  provincia, CP). No toca nada: la regla "el Shop sólo completa vacíos" se cumple también en
+  la base.
+
+`EXECUTE` sólo para `shop_app` (PUBLIC revocado); `shop_app` sigue sin UPDATE sobre la tabla.
 
 **Permisos de `shop_app` sobre `public`** (0032, change `portal-al-shop`), mínimos y por
 columna; sin DELETE en ninguna tabla:
 
 | Objeto | Permiso |
 |---|---|
-| `alegra_contacts_shop` | SELECT |
+| `alegra_contacts_shop` | SELECT (27 columnas desde 0034) |
+| `shop_contacto_write_through(text, text, text, jsonb)` | EXECUTE (0034) |
 | `tenants` | SELECT sólo `id, name, whatsapp_number, receipts_email` |
 | `client_commercial_conditions` | SELECT |
 | `notification_log` | SELECT, UPDATE sólo `read_at` |
@@ -366,10 +390,12 @@ columna; sin DELETE en ninguna tabla:
 
 Los GRANTs de las migraciones son condicionales: si el rol `shop_app` se creó después de
 migrar, correr como owner el bloque `DO $$ … $$` del final de
-`drizzle/0032_shop_cuenta_corriente.sql` (incluye el de 0031). La reversa (`REVOKE`) está en
-el encabezado de ese archivo. El test
-`test/integration/shop-cuenta-corriente-grants.integration.test.ts` corre ese mismo bloque y
-verifica cada permiso como `shop_app`.
+`drizzle/0032_shop_cuenta_corriente.sql` (incluye el de 0031) y **después** el del final de
+`drizzle/0034_contacto_fuente_unica.sql` (SELECT de la vista recreada y EXECUTE de la
+función). Las reversas están en el encabezado de cada archivo. Los tests
+`test/integration/shop-cuenta-corriente-grants.integration.test.ts` y
+`test/integration/shop-contacto-write-through.integration.test.ts` corren esos mismos bloques
+y verifican cada permiso como `shop_app`.
 
 **Sync por tramos** (`src/lib/alegra-contacts-sync.ts`, ruta `/api/cron/alegra-contactos-sync`,
 workflow `admin-alegra-contactos-sync`):

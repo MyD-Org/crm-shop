@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { confirmarVinculacion } from "@/lib/vinculacion";
+import { verificarCodigo } from "@/lib/vinculacion";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/vinculacion/confirmar — Body: { codigo }
+ * POST /api/vinculacion/verificar — Body: { codigo }
  *
- * Revalida el código y crea la vinculación, después de que el cliente confirmó
- * la cuenta que le mostró `/verificar`. A partir de acá el cliente ve su
- * lista de precios en el catálogo y el checkout.
+ * Valida el código y devuelve a qué cuenta de cliente corresponde, para que el
+ * cliente la confirme antes de vincular. No vincula ni consume el código.
  */
 export async function POST(req: Request) {
   const { userId } = await auth();
@@ -25,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   const codigo = typeof body.codigo === "string" ? body.codigo.trim() : "";
-  const resultado = await confirmarVinculacion(userId, codigo);
+  const resultado = await verificarCodigo(userId, codigo);
 
   if (!resultado.ok) {
     return NextResponse.json({ error: resultado.detalle }, { status: 400 });

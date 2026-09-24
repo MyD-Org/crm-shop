@@ -92,6 +92,13 @@
       "when": 1790287893738,
       "tag": "0012_stock_reservado",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790289073604,
+      "tag": "0013_pedidos_factura_vinculada",
+      "breakpoints": true
     }
   ]
 }

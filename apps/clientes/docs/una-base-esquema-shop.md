@@ -251,6 +251,7 @@ toda tabla nueva viva en el esquema `shop` (nunca en `public`).
 | `0003_direcciones_envio` | `shop.direcciones_envio` (direcciones de envío de Mi cuenta: tenant, usuario de Clerk, etiqueta, calle, ciudad, provincia, CP, referencias y `predeterminada`), índice por (tenant, usuario) e índice único **parcial** por (tenant, usuario) `WHERE predeterminada` | **Antes** de mergear y desplegar la rebanada de direcciones: el Shop la lee en `/mi-cuenta/direcciones`, en su API y en el checkout (con Clerk). El checkout tolera que falte (lista vacía y lo registra en el log), Mi cuenta no. |
 | `0011_pedidos_facturado` | `orders.facturado_en`, `facturado_por`, `facturado_por_nombre` (marca "facturado en Alegra" que escribe el CRM) + índice parcial `orders_reserva_activa` | **Antes** de mergear la reserva de stock: la vista `0012` usa `facturado_en`. Ver "Reserva de stock". |
 | `0012_stock_reservado` | vista `shop.stock_reservado` (unidades reservadas por tenant e ítem) + `GRANT SELECT` condicional a `shop_app` | **Antes** de mergear y desplegar la reserva: sin la vista fallan el catálogo, la ficha, el carrito y el checkout. |
+| `0013_pedidos_factura_vinculada` | `orders.factura_alegra_id`, `factura_numero`, `factura_fecha`, `factura_total` (factura de Alegra que el CRM vincula al pedido) + CHECK `orders_factura_facturado_check` (factura ⇒ `facturado_en`) | **Antes** de mergear el "Vincular factura" del admin: el CRM selecciona las columnas al leer cualquier pedido y sin ellas cae la sección Pedidos. El Shop no las lee. |
 
 El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
 `MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
@@ -527,10 +528,12 @@ alcanza, deshace todo y la ruta responde el 409 de siempre con la cotización
 nueva. El reintento con la misma clave de idempotencia devuelve el pedido
 original sin revalidar (su reserva ya cuenta).
 
-**Columnas `facturado_*`** (`0011`): las escribe el CRM (botón "Marcar como
-facturado", PR-3b), con los mismos permisos sobre `shop.orders` que ya usa para
-cambiar el estado (los permisos de tabla cubren las columnas nuevas). El Shop
-sólo las lee a través de la vista.
+**Columnas `facturado_*`** (`0011`) **y `factura_*`** (`0013`): las escribe el
+CRM ("Vincular factura" en el detalle del pedido, PR-3b: el operador ingresa el
+número de una factura de Alegra, el CRM la valida y la guarda junto con la marca
+de facturado; "Desvincular" borra las siete columnas). El CRM usa el rol dueño,
+así que no hace falta ningún GRANT. El Shop sólo lee `facturado_en`, a través de
+la vista.
 
 **Permisos:** `shop_app` recibe `SELECT` sobre la vista por los `DEFAULT
 PRIVILEGES` del Paso 1 y, además, por el `GRANT` condicional de la `0012`.

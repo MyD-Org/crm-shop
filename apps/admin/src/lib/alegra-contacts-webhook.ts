@@ -1,8 +1,15 @@
-import { createHmac } from "node:crypto"
 import type { TenantConfig } from "./tenants"
 import { AlegraHttpError, AlegraRateLimitError, getContactRaw, mapRawContactRow } from "./alegra"
 import { darDeBajaContacto, upsertContactos } from "./alegra-contacts-repo"
-import { secureCompare } from "./secure-compare"
+import {
+  clavesDelPayload,
+  idDe,
+  loguearClavesUnaVez as loguearClavesComun,
+  objeto,
+  tokenValido,
+  tokenWebhook,
+  type Obj,
+} from "./alegra-webhook-comun"
 
 // Avisos (webhooks) de Alegra sobre contactos → espejo (tabla alegra_contacts). Con esto el
 // espejo se entera de un alta, una edición o una baja en segundos, gastando 0 o 1 request, y
@@ -29,22 +36,16 @@ export function esEventoContacto(x: string): x is EventoContacto {
   return (EVENTOS_CONTACTOS as readonly string[]).includes(x)
 }
 
-/** Largo mínimo del secreto: uno corto se adivina y abre la escritura del espejo. */
-const SECRETO_MIN = 32
-
 /**
  * Token de la URL de los avisos de un tenant: HMAC-SHA256(ALEGRA_WEBHOOK_SECRET,
  * "alegra-contactos:<tenant>") en hex, 32 caracteres. `null` si el secreto no está configurado o es
- * corto: sin secreto la ruta rechaza todo (falla cerrada).
+ * corto: sin secreto la ruta rechaza todo (falla cerrada). Ver lib/alegra-webhook-comun.ts.
  */
 export function tokenWebhookContactos(
   tenantId: string,
   secreto: string | undefined = process.env.ALEGRA_WEBHOOK_SECRET,
 ): string | null {
-  if (!secreto || secreto.length < SECRETO_MIN) return null
-  // Hex y 32 caracteres (128 bits): Alegra rechaza la URL de la suscripción con "La URL
-  // ingresada no es válida" con el token en base64url (trae "_" y "-"). Probado 2026-09-23.
-  return createHmac("sha256", secreto).update(`alegra-contactos:${tenantId}`).digest("hex").slice(0, 32)
+  return tokenWebhook("alegra-contactos", tenantId, secreto)
 }
 
 export function tokenWebhookValido(
@@ -52,9 +53,7 @@ export function tokenWebhookValido(
   token: string,
   secreto: string | undefined = process.env.ALEGRA_WEBHOOK_SECRET,
 ): boolean {
-  const esperado = tokenWebhookContactos(tenantId, secreto)
-  if (!esperado || !token) return false
-  return secureCompare(token, esperado)
+  return tokenValido("alegra-contactos", tenantId, token, secreto)
 }
 
 /** Ruta pública de los avisos (sin el host). La usan la ruta y el script de suscripciones. */
@@ -63,29 +62,6 @@ export function rutaWebhookContactos(tenantId: string, evento: EventoContacto, t
 }
 
 // ── Lectura defensiva del cuerpo ──
-
-type Obj = Record<string, unknown>
-
-function objeto(v: unknown): Obj | null {
-  if (typeof v === "string") {
-    // Hay integraciones que mandan el objeto como texto JSON dentro del cuerpo.
-    const t = v.trim()
-    if (!t.startsWith("{")) return null
-    try {
-      return objeto(JSON.parse(t))
-    } catch {
-      return null
-    }
-  }
-  return v && typeof v === "object" && !Array.isArray(v) ? (v as Obj) : null
-}
-
-/** Ids de Alegra son numéricos; se acepta algo razonable y nada que pueda romper una URL. */
-function idDe(o: Obj | null): string | null {
-  const v = o?.id
-  const id = typeof v === "number" && Number.isFinite(v) ? String(v) : typeof v === "string" ? v.trim() : ""
-  return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null
-}
 
 /**
  * ¿Es un contacto como el que devuelve `GET /contacts/{id}`? Se exige lo mínimo que distingue
@@ -136,29 +112,11 @@ export function leerAvisoContacto(payload: unknown): AvisoContacto {
   return { id: null, contacto: null, idSeguro: false }
 }
 
-/**
- * Claves del cuerpo SIN valores: las de primer nivel y, para las que son objeto, las de
- * adentro ("message.client"). Sirve para descubrir el formato sin loguear datos personales.
- */
-export function clavesDelPayload(payload: unknown): string[] {
-  const raiz = objeto(payload)
-  if (!raiz) return [Array.isArray(payload) ? "(lista)" : `(${typeof payload})`]
-  const out: string[] = []
-  for (const [k, v] of Object.entries(raiz)) {
-    const hijo = objeto(v)
-    out.push(hijo ? `${k}{${Object.keys(hijo).join(",")}}` : k)
-  }
-  return out
-}
-
-const clavesYaLogueadas = new Set<string>()
+export { clavesDelPayload }
 
 /** Loguea las claves del cuerpo la primera vez por (tenant, evento) en esta instancia. */
 export function loguearClavesUnaVez(tenantId: string, evento: EventoContacto, payload: unknown): void {
-  const k = `${tenantId}:${evento}`
-  if (clavesYaLogueadas.has(k)) return
-  clavesYaLogueadas.add(k)
-  console.log(`[webhooks/alegra] tenant=${tenantId} evento=${evento} claves=${clavesDelPayload(payload).join(" ")}`)
+  loguearClavesComun("[webhooks/alegra]", tenantId, evento, payload)
 }
 
 // ── Aplicar el aviso al espejo ──

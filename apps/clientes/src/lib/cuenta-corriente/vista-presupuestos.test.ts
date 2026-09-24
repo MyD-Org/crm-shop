@@ -27,7 +27,7 @@ describe("filtro de presupuestos (PRE-1)", () => {
 describe("estado de presupuesto", () => {
   it("labels y tonos del DS", () => {
     expect(LABEL_ESTADO_PRESUPUESTO).toEqual({ vigente: "Vigente", vencido: "Vencido", aceptado: "Aceptado" });
-    expect(TONO_ESTADO_PRESUPUESTO).toEqual({ aceptado: "success", vigente: "info", vencido: "neutral" });
+    expect(TONO_ESTADO_PRESUPUESTO).toEqual({ aceptado: "success", vigente: "info", vencido: "danger" });
   });
 });
 

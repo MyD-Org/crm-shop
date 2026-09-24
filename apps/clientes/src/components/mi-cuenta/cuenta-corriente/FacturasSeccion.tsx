@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge, Button, EmptyState, Progress, Table, type TableColumn } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
+import { FACTURAS_CAIDAS } from "@/lib/cuenta-corriente/mensajes";
 import type { Factura } from "@/lib/cuenta-corriente/tipos";
 import {
   LABEL_ESTADO,
@@ -19,12 +20,8 @@ import {
 import { IconoDescarga, IconoOjo } from "../iconos";
 import { CargarMas } from "./CargarMas";
 import { FiltrosFacturas } from "./FiltrosFacturas";
+import { usePaginaApi } from "./usePaginaApi";
 import { WhatsAppFacturas, type ContactoWhatsApp } from "./WhatsAppFacturas";
-
-const ERROR_CARGA = "No pudimos obtener sus facturas. Inténtelo de nuevo en unos minutos.";
-
-/** Clave de una consulta a la API: si no cambió, lo cargado sirve. */
-const claveConsulta = (estado: FiltroEstado, rango: RangoEmision) => queryFacturas(estado, rango);
 
 /**
  * Lista de facturas: primera página del servidor, "Cargar más" y filtros contra
@@ -52,14 +49,17 @@ export function FacturasSeccion({
   onVer: (f: Factura) => void;
 }) {
   const [rango, setRango] = useState<RangoEmision>({});
-  const [items, setItems] = useState<Factura[]>(primeraPagina.facturas);
-  const [total, setTotal] = useState(primeraPagina.total);
-  const [cargada, setCargada] = useState(claveConsulta("todas", {}));
-  const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [seleccion, setSeleccion] = useState<string[]>([]);
-  // Sólo la última consulta pinta: un filtro rápido no puede quedar tapado por una respuesta vieja.
-  const ultima = useRef(0);
+  // Mismo hook que Pagos y Presupuestos: "Cargar más" pide la página siguiente
+  // del filtro CARGADO y sólo la última consulta pinta, incluso si se vuelve al
+  // filtro ya cargado con otra consulta en vuelo.
+  const pagina = usePaginaApi<Factura>({
+    ruta: "/api/mi-cuenta/facturas",
+    campo: "facturas",
+    inicial: { items: primeraPagina.facturas, total: primeraPagina.total },
+    errorCarga: FACTURAS_CAIDAS,
+  });
+  const { items, total } = pagina;
 
   const modoAbiertas = esFiltroDeAbiertas(estado) && abiertas !== null;
   const filas = useMemo(
@@ -67,36 +67,11 @@ export function FacturasSeccion({
     [modoAbiertas, estado, abiertas, rango, items],
   );
 
-  async function pedir(est: FiltroEstado, r: RangoEmision, start: number) {
-    const id = ++ultima.current;
-    setCargando(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/mi-cuenta/facturas${queryFacturas(est, r, start)}`, { cache: "no-store" });
-      const body = (await res.json().catch(() => null)) as { facturas?: Factura[]; total?: number; error?: string } | null;
-      if (id !== ultima.current) return;
-      if (!res.ok || !body?.facturas) {
-        setError(body?.error ?? ERROR_CARGA);
-        return;
-      }
-      const nuevas = body.facturas;
-      setItems((prev) => (start === 0 ? nuevas : [...prev, ...nuevas]));
-      setTotal(body.total ?? 0);
-      setCargada(claveConsulta(est, r));
-    } catch {
-      if (id === ultima.current) setError(ERROR_CARGA);
-    } finally {
-      if (id === ultima.current) setCargando(false);
-    }
-  }
-
   function aplicar(est: FiltroEstado, r: RangoEmision) {
     setSeleccion([]);
-    setError(null);
     // Pendientes/Vencidas no consultan: se recalculan sobre las abiertas.
     if (esFiltroDeAbiertas(est) && abiertas !== null) return;
-    if (claveConsulta(est, r) === cargada) return;
-    void pedir(est, r, 0);
+    pagina.filtrar(queryFacturas(est, r));
   }
 
   const seleccionadas = filas.filter((f) => seleccion.includes(f.alegraId));
@@ -212,9 +187,9 @@ export function FacturasSeccion({
         <CargarMas
           cantidad={items.length}
           total={total}
-          cargando={cargando}
-          error={error}
-          onCargarMas={() => void pedir(estado, rango, items.length)}
+          cargando={pagina.cargando}
+          error={pagina.error}
+          onCargarMas={pagina.cargarMas}
         />
       )}
     </div>

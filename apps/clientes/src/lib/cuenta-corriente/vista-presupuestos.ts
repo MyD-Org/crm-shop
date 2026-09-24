@@ -29,11 +29,15 @@ export const LABEL_ESTADO_PRESUPUESTO: Record<PresupuestoEstado, string> = {
   aceptado: "Aceptado",
 };
 
-/** Tono del `Badge`: vencido en neutral, es un presupuesto que caducó, no una deuda. */
-export const TONO_ESTADO_PRESUPUESTO: Record<PresupuestoEstado, "success" | "info" | "neutral"> = {
+/**
+ * Tono del `Badge`, como el `PresupuestoBadge` del portal: vencido en rojo,
+ * aceptado en verde. Vigente va en `info`: el portal lo pinta con el primario
+ * suave y el `Badge` del DS no tiene tono primario.
+ */
+export const TONO_ESTADO_PRESUPUESTO: Record<PresupuestoEstado, "success" | "info" | "danger"> = {
   aceptado: "success",
   vigente: "info",
-  vencido: "neutral",
+  vencido: "danger",
 };
 
 /** Query de `GET /api/mi-cuenta/presupuestos` para un filtro y una página. */

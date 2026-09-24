@@ -981,6 +981,14 @@ export async function listWebhookSubscriptions(config: TenantConfig): Promise<Al
   return (filas as Record<string, unknown>[]).map(mapRawSubscription)
 }
 
+/**
+ * Alegra rechaza la URL de una suscripción si trae el esquema: responde 400 "La URL ingresada
+ * no debe incluir el http:// o https://" (probado 2026-09-23). Se registra `host/ruta`.
+ */
+export function urlSinEsquema(url: string): string {
+  return url.replace(/^https?:\/\//i, "")
+}
+
 export async function createWebhookSubscription(
   config: TenantConfig,
   event: string,
@@ -988,7 +996,7 @@ export async function createWebhookSubscription(
 ): Promise<AlegraWebhookSubscription> {
   const raw = (await alegraFetch(config, "/webhooks/subscriptions", undefined, {
     method: "POST",
-    body: { event, url },
+    body: { event, url: urlSinEsquema(url) },
   })) as Record<string, unknown> | null
   const sub = (raw as { subscription?: unknown } | null)?.subscription ?? raw
   return mapRawSubscription((sub ?? {}) as Record<string, unknown>)

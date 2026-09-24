@@ -34,7 +34,7 @@ const SECRETO_MIN = 32
 
 /**
  * Token de la URL de los avisos de un tenant: HMAC-SHA256(ALEGRA_WEBHOOK_SECRET,
- * "alegra-contactos:<tenant>") en base64url. `null` si el secreto no está configurado o es
+ * "alegra-contactos:<tenant>") en hex, 32 caracteres. `null` si el secreto no está configurado o es
  * corto: sin secreto la ruta rechaza todo (falla cerrada).
  */
 export function tokenWebhookContactos(
@@ -42,7 +42,9 @@ export function tokenWebhookContactos(
   secreto: string | undefined = process.env.ALEGRA_WEBHOOK_SECRET,
 ): string | null {
   if (!secreto || secreto.length < SECRETO_MIN) return null
-  return createHmac("sha256", secreto).update(`alegra-contactos:${tenantId}`).digest("base64url")
+  // Hex y 32 caracteres (128 bits): Alegra rechaza la URL de la suscripción con "La URL
+  // ingresada no es válida" con el token en base64url (trae "_" y "-"). Probado 2026-09-23.
+  return createHmac("sha256", secreto).update(`alegra-contactos:${tenantId}`).digest("hex").slice(0, 32)
 }
 
 export function tokenWebhookValido(

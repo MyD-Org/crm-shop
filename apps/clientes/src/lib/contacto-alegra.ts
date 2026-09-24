@@ -643,13 +643,12 @@ export function validarComplemento(
 // ---------------------------------------------------------------------------
 
 /**
- * ¿Se escribe "CUIL" en `identificationObject.type`? No está verificado contra
- * la cuenta real que Alegra lo acepte en el PUT (hoy no hay ningún contacto con
- * CUIL). Si lo rechaza, el PUT falla y el guardado cae al respaldo (la compra
- * sigue); en ese caso pasar esto a `false`: la CUIL se usa sólo para validar en
- * el Shop y el tipo queda vacío en Alegra, como estaba.
+ * ¿Se escribe "CUIL" en `identificationObject.type`? No: Alegra no tiene ese
+ * tipo (ofrece CUIT, CDI, CI Extranjera, Pasaporte, DNI y Otro; confirmado en
+ * la cuenta real, 2026-09-24). Una CUIL deducida se usa sólo para validar en el
+ * Shop y el tipo queda vacío en Alegra, como estaba.
  */
-export const ESCRIBIR_CUIL_EN_ALEGRA = true;
+export const ESCRIBIR_CUIL_EN_ALEGRA = false;
 
 export interface CuerpoPutContacto {
   name: string;

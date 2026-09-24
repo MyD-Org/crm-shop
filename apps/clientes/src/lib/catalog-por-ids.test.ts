@@ -24,6 +24,9 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+/** Activo según la fuente elegida por fila (ver stock-disponible.ts). */
+const ACTIVO = `then "catalog_products_shop"."activo" else "shop"."catalog_products"."status" = 'active' end`;
+
 const JOIN_OVERLAY =
   /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "shop"\."catalog_products"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;
 
@@ -49,12 +52,10 @@ describe("getProductosPorIds", () => {
     expect(sql).not.toContain('"visible"');
   });
 
-  it("con soloActivos exige status = 'active'", async () => {
+  it("con soloActivos exige estar activo (en la fuente más fresca, CRM o Shop)", async () => {
     await getProductosPorIds(["42"], { soloActivos: true });
-    const { sql, params } = grabadora.consultas[0];
-    const m = sql.match(/"catalog_products"\."status" = \$(\d+)/);
-    expect(m, sql).not.toBeNull();
-    expect(params[Number(m![1]) - 1]).toBe("active");
+    const { sql } = grabadora.consultas[0];
+    expect(sql).toContain(ACTIVO);
     expect(sql).not.toContain('"visible"');
   });
 
@@ -113,7 +114,7 @@ describe("getProducto (ficha)", () => {
     const p = await getProducto("42");
     expect(p).toBeNull();
     expect(grabadora.consultas).toHaveLength(1);
-    expect(grabadora.consultas[0].sql).toMatch(/"catalog_products"\."status" = \$\d+/);
+    expect(grabadora.consultas[0].sql).toContain(ACTIVO);
   });
 
   it("id no numérico: null sin consultar", async () => {

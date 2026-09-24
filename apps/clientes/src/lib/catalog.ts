@@ -8,6 +8,9 @@
  *   por request y el catálogo tiene ~2800: no se puede paginar en vivo.
  * - Ficha, carrito, checkout y pedido → también el espejo: valen los precios
  *   que publica la tienda (ver src/lib/cotizacion.ts).
+ * - Stock, precios y estado: por fila, del espejo del Shop o de la vista del
+ *   CRM, el que se leyó de Alegra más tarde (ver src/lib/stock-disponible.ts).
+ *   Toda consulta sobre `catalogProducts` joinea `crmStock` para eso.
  *
  * SOLO servidor: usa la DB y el cliente de Alegra. Consumir desde Server
  * Components o API routes, nunca desde el browser.
@@ -21,12 +24,9 @@ import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
 import { catalogCategories, catalogProducts } from "@/db/schema";
-import { crmCategorias, crmOverlay, type FotoCrm } from "@/db/crm";
-import {
-  esIdAlegra,
-  precioDeLista,
-  type AlegraPrice,
-} from "./alegra";
+import { crmCategorias, crmOverlay, crmStock, type FotoCrm } from "@/db/crm";
+import { esIdAlegra, mapPrecios, precioDeLista } from "./alegra";
+import { activoSql, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
@@ -61,6 +61,7 @@ interface FilaCatalogo {
   code: string | null;
   description: string | null;
   brand: string | null;
+  /** Del espejo del Shop o crudos del CRM: se normalizan con `mapPrecios`. */
   prices: unknown;
   stock: string | null;
   /** numeric de Postgres: llega como string. null = sin IVA conocido. */
@@ -93,7 +94,7 @@ export function mapFilaToProduct(
   baseMedios: string | null = basePublicaMedios(),
 ): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
-  const price = precioDeLista(fila.prices as AlegraPrice[] | undefined, idPriceList);
+  const price = precioDeLista(mapPrecios(fila.prices), idPriceList);
   return {
     id: fila.alegraId,
     // La marca sale del customField de Alegra; si no está cargado, cae al
@@ -152,15 +153,18 @@ async function soloVisiblesSql() {
   return (await catalogoSoloVisibles()) ? eq(crmOverlay.visible, true) : undefined;
 }
 
-/** Columnas del join, en un solo lugar para no repetirlas entre queries. */
+/**
+ * Columnas del join, en un solo lugar para no repetirlas entre queries. Precios
+ * y stock de la fuente más fresca (exigen el join a `crmStock`).
+ */
 const COLUMNAS_CATALOGO = {
   alegraId: catalogProducts.alegraId,
   name: catalogProducts.name,
   code: catalogProducts.code,
   description: catalogProducts.description,
   brand: catalogProducts.brand,
-  prices: catalogProducts.prices,
-  stock: catalogProducts.stock,
+  prices: preciosSql,
+  stock: stockSql,
   ivaPorcentaje: catalogProducts.ivaPorcentaje,
   categoryName: catalogCategories.name,
   overlayNombre: crmOverlay.nombre,
@@ -214,9 +218,10 @@ export async function getCatalogo(opts?: {
     .from(catalogProducts)
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmStock, joinStockCrm())
     .where(
       and(
-        eq(catalogProducts.status, "active"),
+        activoSql,
         conPrecioSql,
         await soloVisiblesSql(),
         q ? coincideTexto(q) : undefined
@@ -257,10 +262,11 @@ export async function getProductosPorIds(
     .from(catalogProducts)
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmStock, joinStockCrm())
     .where(
       and(
         inArray(catalogProducts.alegraId, [...alegraIds]),
-        opts?.soloActivos ? eq(catalogProducts.status, "active") : undefined,
+        opts?.soloActivos ? activoSql : undefined,
         opts?.soloActivos ? await soloVisiblesSql() : undefined,
       ),
     );
@@ -310,17 +316,18 @@ const marcaSql = sql<string>`coalesce(nullif(${catalogProducts.brand}, ''), ${ca
  * Precio de lista principal, extraído del jsonb `prices`. Equivalente en SQL de
  * `precioDeLista` sin lista de cliente: el que tiene `main`, si no el primero.
  * El guard de `jsonb_typeof` evita que `jsonb_array_elements` explote si algún
- * ítem quedó con un `prices` que no es array.
+ * ítem quedó con un `prices` que no es array. Sirve igual para los precios
+ * crudos del CRM: `price` y `main` se llaman igual.
  */
 const precioSql = sql<string>`coalesce(
-  case when jsonb_typeof(${catalogProducts.prices}) = 'array' then (
+  case when jsonb_typeof(${preciosSql}) = 'array' then (
     select (elem->>'price')::numeric
-    from jsonb_array_elements(${catalogProducts.prices}) elem
+    from jsonb_array_elements(${preciosSql}) elem
     where (elem->>'main')::boolean
     limit 1
   ) end,
-  case when jsonb_typeof(${catalogProducts.prices}) = 'array'
-    then (${catalogProducts.prices}->0->>'price')::numeric end,
+  case when jsonb_typeof(${preciosSql}) = 'array'
+    then (${preciosSql}->0->>'price')::numeric end,
   0
 )`;
 
@@ -347,7 +354,7 @@ const conPrecioSql = sql`${precioSql} > 0`;
  * "Solo con stock", en SQL. Replica `derivarStock`: null = no inventariable
  * = disponible; `<= 0` = sin stock.
  */
-const conStockSql = sql`(${catalogProducts.stock} is null or ${catalogProducts.stock} > 0)`;
+const conStockSql = sql`(${stockSql} is null or ${stockSql} > 0)`;
 
 /**
  * ¿El tenant ya armó su árbol de categorías en el CRM? Mientras no tenga
@@ -447,6 +454,7 @@ async function conteoPorCategoriaPropia(where: Awaited<ReturnType<typeof condici
     .from(catalogProducts)
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmStock, joinStockCrm())
     .where(and(where, sql`${crmOverlay.categoriaId} is not null`))
     .groupBy(crmOverlay.categoriaId);
   return new Map(filas.map((f) => [f.id as string, Number(f.count)]));
@@ -476,7 +484,7 @@ const APLICAR_TODOS: AplicarFiltros = {
 async function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
   const q = filtros.busqueda?.trim();
   return and(
-    eq(catalogProducts.status, "active"),
+    activoSql,
     conPrecioSql,
     await soloVisiblesSql(),
     q ? coincideTexto(q) : undefined,
@@ -542,6 +550,7 @@ export async function getPaginaCatalogo(opts?: {
     .from(catalogProducts)
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(crmStock, joinStockCrm())
     .where(where);
 
   const total = conteo?.total ?? 0;
@@ -554,6 +563,7 @@ export async function getPaginaCatalogo(opts?: {
         .from(catalogProducts)
         .leftJoin(catalogCategories, JOIN_CATEGORIAS)
         .leftJoin(crmOverlay, joinOverlay())
+        .leftJoin(crmStock, joinStockCrm())
         .where(where)
         .orderBy(...ordenDe(opts?.orden ?? ORDEN_DEFAULT))
         .limit(porPagina)
@@ -638,6 +648,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
       .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(crmStock, joinStockCrm())
       .where(and(whereCategorias, sql`nullif(${catalogCategories.name}, '') is not null`))
       .groupBy(catalogCategories.name)
       .orderBy(sql`count(*) desc`, asc(catalogCategories.name)),
@@ -646,6 +657,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
       .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(crmStock, joinStockCrm())
       .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
       .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
@@ -659,6 +671,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .from(catalogProducts)
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
       .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(crmStock, joinStockCrm())
       .where(wherePrecio),
   ]);
 
@@ -696,14 +709,9 @@ export const getCategorias = cache(async function getCategorias(): Promise<
   const filas = await getDb()
     .selectDistinct({ name: catalogCategories.name })
     .from(catalogCategories)
-    .innerJoin(
-      catalogProducts,
-      and(
-        eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId),
-        eq(catalogProducts.status, "active")
-      )
-    )
-    .where(eq(catalogCategories.status, "active"))
+    .innerJoin(catalogProducts, eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId))
+    .leftJoin(crmStock, joinStockCrm())
+    .where(and(eq(catalogCategories.status, "active"), activoSql))
     .orderBy(asc(catalogCategories.name));
 
   return filas.map((f) => f.name).filter(Boolean);

@@ -32,7 +32,8 @@ afterEach(() => {
  */
 const PRECIO_MINIMO = /\/ 100\) >= \$\d+/g;
 const PRECIO_MAXIMO = /\/ 100\) <= \$\d+/g;
-const STOCK = /"stock" is null or .*"stock" > 0/;
+// Stock de la fuente elegida por fila (CRM o espejo del Shop, ver stock-disponible.ts).
+const STOCK = /"catalog_products"\."stock" end\) is null or \(case when .*"catalog_products"\."stock" end\) > 0/;
 const cuenta = (sql: string, re: RegExp) => sql.match(re)?.length ?? 0;
 
 /** Separa las tres consultas de `getFacetas` por lo que agrupan/calculan. */

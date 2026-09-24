@@ -352,12 +352,13 @@ Guarda también el contacto crudo en `raw`.
   Vacío, espacios, clave ausente o forma inesperada ⇒ NULL. Se recalculan solas con cada
   escritura de `raw`. No hay columna de país: Alegra no la manda.
 
-**Vista `alegra_contacts_shop`** (migraciones 0031, 0032 y 0034, vive solo en SQL). Es lo único
-del espejo que lee el Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre
-la tabla). Expone 27 columnas: las 16 de 0031, más `seller_name`, `payment_term_name`,
+**Vista `alegra_contacts_shop`** (migraciones 0031, 0032, 0034 y 0036, vive solo en SQL). Es lo
+único del espejo que lee el Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada
+sobre la tabla). Expone 30 columnas: las 16 de 0031, más `seller_name`, `payment_term_name`,
 `payment_term_days` y `credit_limit` (0032, para Condiciones y la barra de límite de crédito
-de "Mi cuenta" del Shop), más las 7 de facturación de 0034 al final. Nunca `raw`, teléfonos
-ni `seller_id`. Si se cambia o borra una columna expuesta, la vista se recrea **en la misma
+de "Mi cuenta" del Shop), más las 7 de facturación de 0034, más `phone_primary`,
+`phone_secondary` y `mobile` (0036, para que el checkout no pida un teléfono que el espejo ya
+tiene) al final. Nunca `raw`, `phones_norm` ni `seller_id`. Si se cambia o borra una columna expuesta, la vista se recrea **en la misma
 migración** (DROP + CREATE + GRANT).
 
 **Función `shop_contacto_write_through(tenant, cuenta, alegra_id, raw jsonb) → text`**
@@ -381,7 +382,7 @@ columna; sin DELETE en ninguna tabla:
 
 | Objeto | Permiso |
 |---|---|
-| `alegra_contacts_shop` | SELECT (27 columnas desde 0034) |
+| `alegra_contacts_shop` | SELECT (30 columnas desde 0036) |
 | `shop_contacto_write_through(text, text, text, jsonb)` | EXECUTE (0034) |
 | `catalog_products_shop` | SELECT (0035, ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) |
 | `tenants` | SELECT sólo `id, name, whatsapp_number, receipts_email` |
@@ -393,9 +394,12 @@ Los GRANTs de las migraciones son condicionales: si el rol `shop_app` se creó d
 migrar, correr como owner el bloque `DO $$ … $$` del final de
 `drizzle/0032_shop_cuenta_corriente.sql` (incluye el de 0031) y **después** el del final de
 `drizzle/0034_contacto_fuente_unica.sql` (SELECT de la vista recreada y EXECUTE de la
-función). Las reversas están en el encabezado de cada archivo. Los tests
-`test/integration/shop-cuenta-corriente-grants.integration.test.ts` y
-`test/integration/shop-contacto-write-through.integration.test.ts` corren esos mismos bloques
+función), el de `drizzle/0035_catalog_products_shop.sql` y el de
+`drizzle/0036_alegra_contacts_shop_telefonos.sql` (SELECT de la vista recreada con teléfonos).
+Las reversas están en el encabezado de cada archivo. Los tests
+`test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
+`test/integration/shop-contacto-write-through.integration.test.ts` y
+`test/integration/shop-contactos-telefonos.integration.test.ts` corren esos mismos bloques
 y verifican cada permiso como `shop_app`.
 
 **Sync por tramos** (`src/lib/alegra-contacts-sync.ts`, ruta `/api/cron/alegra-contactos-sync`,

@@ -163,7 +163,9 @@ body {
   --color-accent: #1e5aa8;
   --color-accent-strong: #1e5aa8;
   --color-accent-soft: #e9f1fa;
-  --color-highlight: #e8a13d;
+  /* El DS pinta con highlight lo que va sobre oscuro (ícono del CTA, hover del
+     footer, eyebrows): el azul de marca aclarado, no el ámbar del tema cálido. */
+  --color-highlight: #5b8fd6;
   --color-marca-sobre-oscuro: #5b8fd6; /* acento #1e5aa8 aclarado: 4,6:1 sobre el footer */
   --color-info: #1e5aa8;
   --color-info-soft: #e9f1fa;

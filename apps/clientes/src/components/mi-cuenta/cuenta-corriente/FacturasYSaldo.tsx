@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import { Alert } from "@myd-org/ui";
 import type { Cuenta, Factura } from "@/lib/cuenta-corriente/tipos";
 import type { DeepLinkFactura, DocumentoAbierto, FiltroEstado } from "@/lib/cuenta-corriente/vista-facturas";
-import { SeccionTitulo } from "../SeccionTitulo";
 import { AvisoSeccionCaida } from "./AvisoSeccionCaida";
 import { FacturasSeccion } from "./FacturasSeccion";
 import { SaldoTarjetas } from "./SaldoTarjetas";
@@ -44,8 +43,7 @@ export function FacturasYSaldo({
     <div className="flex flex-col gap-8">
       {deepLink && "noEncontrada" in deepLink && <Alert tone="warning">No encontramos la factura.</Alert>}
 
-      <section aria-labelledby="saldo-titulo">
-        <SeccionTitulo id="saldo-titulo" titulo="Saldo" />
+      <section aria-label="Saldo">
         {cuenta ? (
           <SaldoTarjetas cuenta={cuenta} mostrarLimite={mostrarLimite} onVerFacturas={verFacturas} />
         ) : (
@@ -53,8 +51,7 @@ export function FacturasYSaldo({
         )}
       </section>
 
-      <section ref={lista} aria-labelledby="facturas-titulo" className="scroll-mt-24">
-        <SeccionTitulo id="facturas-titulo" titulo="Facturas" />
+      <section ref={lista} aria-label="Facturas" className="scroll-mt-24">
         {primeraPagina ? (
           <FacturasSeccion
             primeraPagina={primeraPagina}

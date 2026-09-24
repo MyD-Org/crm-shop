@@ -48,6 +48,11 @@ describe("marca del footer", () => {
     },
   );
 
+  it("tema azul: highlight es el mismo azul de marca sobre oscuro, sin ámbar", () => {
+    const b = bloque('[data-theme="calido-azul"]');
+    expect(token(b, "color-highlight")).toBe(token(b, "color-marca-sobre-oscuro"));
+  });
+
   it("el footer pinta su marca con ese token, sin itálica, como el header", () => {
     expect(footer).toContain('className="site-footer"');
     expect(css).toMatch(

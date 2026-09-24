@@ -67,14 +67,9 @@ export function AvisosLista({ avisos: iniciales, esCuentaCorriente }: { avisos: 
   }
 
   return (
-    <section aria-labelledby="avisos-titulo" className="flex flex-col gap-4">
+    <section aria-label="Avisos" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 id="avisos-titulo" className="font-display text-xl font-medium tracking-tight text-text">
-            Avisos
-          </h2>
-          <p className="text-sm text-muted">{noLeidos > 0 ? textoNoLeidos(noLeidos) : "Leyó todos sus avisos."}</p>
-        </div>
+        <p className="text-sm text-muted">{noLeidos > 0 ? textoNoLeidos(noLeidos) : "Leyó todos sus avisos."}</p>
         {noLeidos > 0 && (
           <Button variant="outline" size="sm" loading={marcando} onClick={() => void marcarTodos()}>
             Marcar todos como leídos

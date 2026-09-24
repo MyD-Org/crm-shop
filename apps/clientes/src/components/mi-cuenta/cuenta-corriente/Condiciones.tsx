@@ -51,16 +51,11 @@ export function Condiciones({
   const { vendedor, transporte, descuentos } = condiciones;
 
   return (
-    <section aria-labelledby="condiciones-titulo" className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h2 id="condiciones-titulo" className="font-display text-xl font-medium tracking-tight text-text">
-          Condiciones comerciales
-        </h2>
-        <p className="text-sm text-muted">
-          {razonsocial}
-          {cuit ? ` · ${documentoEnLinea(cuit)}` : ""}
-        </p>
-      </div>
+    <section aria-label="Condiciones comerciales" className="flex flex-col gap-6">
+      <p className="text-sm text-muted">
+        {razonsocial}
+        {cuit ? ` · ${documentoEnLinea(cuit)}` : ""}
+      </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card title="Condición de pago y crédito">

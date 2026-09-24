@@ -3,7 +3,6 @@
 import { Alert } from "@myd-org/ui";
 import type { ComprobanteCliente } from "@/lib/comprobantes/repo";
 import { HISTORIAL_CAIDO } from "@/lib/comprobantes/mensajes";
-import { SeccionTitulo } from "../SeccionTitulo";
 import { InformarPago } from "./InformarPago";
 import { MisComprobantes } from "./MisComprobantes";
 import { usePaginaApi } from "./usePaginaApi";
@@ -37,8 +36,7 @@ export function ComprobantesPagos({
         <Alert tone="warning">{HISTORIAL_CAIDO}</Alert>
       ) : (
         (pagina.total > 0 || pagina.error) && (
-          <section aria-labelledby="mis-comprobantes">
-            <SeccionTitulo id="mis-comprobantes" titulo="Mis comprobantes" />
+          <section aria-label="Mis comprobantes">
             <MisComprobantes
               items={pagina.items}
               total={pagina.total}

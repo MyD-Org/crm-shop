@@ -788,6 +788,31 @@ export async function getItemsLive(config: TenantConfig, alegraIds: string[]): P
   return results.filter((x): x is AlegraProduct => x !== null)
 }
 
+/**
+ * UN ítem por id (1 request, más reintentos por 429), para el espejo: lo usa el drenador de
+ * avisos de stock (lib/alegra-stock-cola.ts). A diferencia de `getItemsLive`, que se traga todo
+ * error, distingue "no existe" (404 → null) de "Alegra nos frena" (AlegraRateLimitError) y de
+ * "Alegra falló" (AlegraHttpError): un error no puede leerse como "lo borraron".
+ * `onRequest` se llama por cada request HTTP, reintentos incluidos.
+ */
+export async function getItemParaEspejo(
+  config: TenantConfig,
+  alegraId: string,
+  opts: { reintentos429?: number; onRequest?: () => void } = {},
+): Promise<AlegraProduct | null> {
+  if (config.alegraMock) return getMockItemLive(alegraId)
+  try {
+    const raw = (await alegraFetch(config, `/items/${encodeURIComponent(alegraId)}`, undefined, undefined, {
+      reintentos429: opts.reintentos429,
+      onRequest: opts.onRequest,
+    })) as Record<string, unknown>
+    return mapRawItem(raw)
+  } catch (err) {
+    if (err instanceof AlegraHttpError && err.status === 404) return null
+    throw err
+  }
+}
+
 // ── Contactos (clientes de Alegra) ──
 
 /** Busca contactos por nombre/identificación. `query` usa la búsqueda global de Alegra. */
@@ -959,10 +984,29 @@ export const ALEGRA_PAGE_SIZE = PAGE_SIZE
 // ── Webhooks (suscripciones de la cuenta) ──
 //
 // Alegra avisa por POST a una URL cuando pasa un evento de la cuenta. La suscripción es
-// `POST /webhooks/subscriptions { event, url }`. Solo se usan los de contactos
-// (`new-client`, `edit-client`, `delete-client`): los mantiene al día el espejo (ver
-// lib/alegra-contacts-webhook.ts). Crear o borrar una suscripción cambia la configuración de
-// la cuenta REAL del cliente: lo hace una persona con scripts/alegra-webhooks-contactos.ts.
+// `POST /webhooks/subscriptions { event, url }`. Se usan dos juegos:
+// - contactos (`new-client`, `edit-client`, `delete-client`): mantienen al día el espejo de
+//   contactos (lib/alegra-contacts-webhook.ts, scripts/alegra-webhooks-contactos.ts);
+// - stock (`EVENTOS_STOCK`: facturas, compras e ítems): disparan la re-lectura de los ítems
+//   tocados (lib/alegra-stock-webhook.ts, scripts/alegra-webhooks-stock.ts).
+// Crear o borrar una suscripción cambia la configuración de la cuenta REAL del cliente: lo hace
+// una persona con esos scripts.
+
+/**
+ * Eventos de stock. El aviso NO trae el stock que vale (una factura no dispara edit-item):
+ * sólo dice qué ítems re-leer. `edit-bill` se aceptó al suscribir (201) el 2026-09-24.
+ */
+export const EVENTOS_STOCK = [
+  "new-invoice",
+  "edit-invoice",
+  "delete-invoice",
+  "new-bill",
+  "edit-bill",
+  "delete-bill",
+  "new-item",
+  "edit-item",
+  "delete-item",
+] as const
 
 export interface AlegraWebhookSubscription {
   id: string

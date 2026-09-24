@@ -14,11 +14,12 @@
 7. [Chat de soporte con IA](#chat-de-soporte-con-ia)
 8. [Integración con Alegra (ERP)](#integración-con-alegra-erp)
 9. [Espejo de contactos de Alegra](#espejo-de-contactos-de-alegra)
-10. [Base de datos](#base-de-datos)
-11. [Feature flags](#feature-flags)
-12. [Referencia de endpoints](#referencia-de-endpoints)
-13. [Variables de entorno](#variables-de-entorno)
-14. [Comandos](#comandos)
+10. [Stock casi en tiempo real (webhooks de Alegra)](#stock-casi-en-tiempo-real-webhooks-de-alegra)
+11. [Base de datos](#base-de-datos)
+12. [Feature flags](#feature-flags)
+13. [Referencia de endpoints](#referencia-de-endpoints)
+14. [Variables de entorno](#variables-de-entorno)
+15. [Comandos](#comandos)
 
 ---
 
@@ -284,6 +285,8 @@ Credenciales por tenant (`{PREFIX}_ALEGRA_EMAIL/TOKEN`); sin credenciales corre 
 
 - **Catálogo**: `listAllCategories`, `listAllItems` — sync a cache local
   (`alegra-sync.ts`, cron `/api/cron/alegra-sync`) — y `getItemsLive` (precio/stock al momento).
+  `getItemParaEspejo` lee UN ítem para el espejo distinguiendo 404 / 429 / error (lo usan los
+  [avisos de stock](#stock-casi-en-tiempo-real-webhooks-de-alegra)).
 - **Contactos (clientes)**: nadie del CRM los lee de acá directo: se leen del
   [espejo](#espejo-de-contactos-de-alegra) con `src/lib/contactos.ts`, que usa las versiones
   crudas (`getContactRaw`, `findContactRawByIdentifier`, `searchContactsRaw`,
@@ -485,6 +488,96 @@ CRM_DATABASE_URL="<conexión de prod>" ALEGRA_WEBHOOK_SECRET="<el mismo de Verce
 
 ---
 
+## Stock casi en tiempo real (webhooks de Alegra)
+
+El espejo de productos (`catalog_products`) se entera de una venta, una compra o una edición de
+ítem en Alegra en minutos, sin esperar la sync diaria. Change `webhooks-stock-alegra`.
+
+**El aviso es sólo un disparador.** Alegra avisa por POST (`{"subject","message":{"invoice"|
+"bill"|"item":{…}}}`, sin firma) y del aviso se toman únicamente los **ids de los ítems**
+tocados. El stock se re-lee con `GET /items/{id}` y se guarda el valor **absoluto** (total de
+todos los depósitos): nunca se suman ni restan cantidades del aviso.
+
+**Eventos** (`EVENTOS_STOCK`, 9 suscripciones por tenant): `new-invoice`, `edit-invoice`,
+`delete-invoice`, `new-bill`, `edit-bill`, `delete-bill`, `new-item`, `edit-item`,
+`delete-item`. Movimientos que **no avisan** (ajustes de inventario, traslados, remitos, notas
+de crédito): los corrige la sync diaria, que sigue siendo obligatoria.
+
+**Ruta** `POST /api/webhooks/alegra/stock/<tenant>/<evento>/<token>`
+(`src/lib/alegra-stock-webhook.ts`):
+
+- Auth: `token` = HMAC-SHA256 de `alegra-stock:<tenant>` con `ALEGRA_WEBHOOK_SECRET` (hex, 32
+  caracteres; distinto del de contactos: uno no abre la ruta del otro). Token inválido, evento
+  o tenant desconocido → el mismo 404.
+- **Antes de responder** registra el aviso en una transacción: índice documento→ítems, cola
+  de re-lectura y contador del día. Si la base falla → 500. El POST de verificación `{}` que
+  manda Alegra al crear la suscripción → 200 sin tocar nada.
+- Reglas: una factura en borrador (`draft`) no encola (sólo actualiza el índice); anulada
+  (`void`) sí; `edit-*` re-lee la unión de los ítems que el documento tenía y los que tiene
+  ahora; `delete-invoice` llega con `items: []` y usa el índice (sin índice →
+  `accion=sin_indice`, lo corrige la sync diaria); los avisos de ítems encolan ese id.
+- **Después** (`after`): espera 5 s para juntar ráfagas y drena la cola del tenant (hasta 45 s).
+- Log por aviso: `[alegra-stock] tenant=… evento=… doc=… accion=… items=… encolados=…`. Nunca
+  el cuerpo (las facturas traen datos de clientes), montos ni el token.
+
+**Cola y drenador** (`src/lib/alegra-stock-cola.ts`):
+
+- `alegra_item_refresh`: una fila por (tenant, ítem). Cinco avisos del mismo ítem = una
+  lectura. Re-encolar actualiza `pedido_at` y resetea `intentos`.
+- Un solo drenador por tenant a la vez (lease en `alegra_stock_drenaje`, se libera solo a los
+  90 s si la función muere). Ritmo fijo: **1 request por segundo** (≤ 60/min de los 150/min
+  que la cuenta comparte con la sync, el portal y el bot).
+- 404 → el producto queda `status='inactive'` (la fila no se borra). 429 → corta y deja todo
+  en la cola. Otro error → `ultimo_error` (`alegra_http_500`, `db_…`) y se reintenta en el
+  próximo drenaje; a los 5 intentos se descarta (`accion=descartado`) y lo corrige la sync.
+- Frescura por fila: `catalog_products.alegra_leido_at` (cuándo se le pidió el dato a
+  Alegra) y `leido_por` (`sync` | `webhook`). La lectura más nueva gana: la sync de la mañana
+  no pisa lo que un aviso leyó después, ni un aviso viejo pisa la sync
+  (`src/lib/catalog-products-repo.ts`).
+- Log: `[alegra-stock/drenar] tenant=… leidos=… inactivos=… errores=… requests=… pendientes=… corte=… ms=…`.
+
+**Cron de red** `GET|POST /api/cron/alegra-stock-drenar` (Bearer `CRON_SECRET`, `?tenant=`
+opcional; workflow `admin-alegra-stock-drenar`, **cada 15 min**, grupo de concurrencia propio):
+drena lo que quedó (hasta 270 s), purga la cola de más de 48 h y el índice de más de 400 días,
+y devuelve por tenant `{ok, leidos, inactivos, errores, requests, pendientes, corte,
+ultimoAvisoMin}`. Si un tenant lleva más de un día sin avisos, el workflow deja un
+`::warning::` (Alegra puede desactivar suscripciones sin avisar).
+
+**Prender** (por tenant; cambia la configuración de la cuenta REAL de Alegra, pide "SI"):
+
+```bash
+CRM_DATABASE_URL="<conexión de prod>" ALEGRA_WEBHOOK_SECRET="<el mismo de Vercel>" \
+  npx tsx --env-file-if-exists=.env.local scripts/alegra-webhooks-stock.ts \
+  --tenant <TENANT_ID> --base-url https://empresa.plataforma.example crear
+```
+
+`listar` muestra las suscripciones (token enmascarado) y marca las desactualizadas; re-correr
+`crear` no duplica; si Alegra rechaza un evento, lo informa y sigue con el resto.
+
+**Apagar**: `… scripts/alegra-webhooks-stock.ts --tenant <TENANT_ID> borrar` (sólo borra las de
+stock, nunca las de contactos) y deshabilitar el workflow *admin · Drenar cola de stock
+Alegra*. El espejo vuelve a depender de la sync diaria. Con la cola vacía, ruta y cron son
+inertes.
+
+**Rotar `ALEGRA_WEBHOOK_SECRET`** invalida las URLs de contactos **y** de stock: cambiar el
+secreto en Vercel, redeploy, y correr `crear` de los dos scripts (detectan las URLs viejas;
+bórrelas con `borrar` antes).
+
+**Consultas de guardia** (solo lectura):
+
+```sql
+-- Backlog de la cola por tenant
+SELECT tenant_id, count(*), min(pedido_at), max(intentos) FROM alegra_item_refresh GROUP BY 1;
+-- Avisos recibidos hoy (hora de Buenos Aires)
+SELECT tenant_id, evento, cantidad, ultimo_at FROM alegra_webhook_avisos
+WHERE dia = (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date ORDER BY 1, 2;
+-- Productos re-leídos por aviso en la última hora
+SELECT tenant_id, count(*) FROM catalog_products
+WHERE leido_por = 'webhook' AND alegra_leido_at > now() - interval '1 hour' GROUP BY 1;
+```
+
+---
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
@@ -498,6 +591,10 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | `payment_receipts` | Comprobantes de pago informados desde el portal: metadatos, máquina de estados y resultado del mail (el archivo vive en R2) |
 | `alegra_contacts` | Espejo de contactos de Alegra (ver [Espejo de contactos](#espejo-de-contactos-de-alegra)); el Shop lee la vista `alegra_contacts_shop` |
 | `alegra_contacts_sync_log` | Bitácora de la sync de contactos (estado, conteos, requests) |
+| `alegra_item_refresh` | Cola de ítems a re-leer de Alegra por avisos de stock (ver [Stock casi en tiempo real](#stock-casi-en-tiempo-real-webhooks-de-alegra)) |
+| `alegra_documento_items` | Índice factura/compra → ids de ítems del último aviso (sin datos del documento) |
+| `alegra_stock_drenaje` | Lease del drenador de stock por tenant y último drenaje |
+| `alegra_webhook_avisos` | Avisos de stock recibidos por tenant, día y evento |
 
 - **`src/db/index.ts`** — singleton de conexión (`prepare: false` para Neon/pgbouncer).
 - **`src/db/migrate.ts`** — aplica migraciones de `drizzle/`.
@@ -527,6 +624,8 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | POST/GET | `/api/cron/notifications` | `CRON_SECRET` | Disparo automático (Vercel Cron) |
 | POST/GET | `/api/cron/alegra-contactos-sync` | `CRON_SECRET` | Sync del espejo de contactos (`?tenant=` opcional, `?trigger=manual`) |
 | POST/GET | `/api/webhooks/alegra/contactos/<tenant>/<evento>/<token>` | token HMAC (`ALEGRA_WEBHOOK_SECRET`) | Avisos de contactos de Alegra → espejo (GET solo verifica la URL) |
+| POST/GET | `/api/cron/alegra-stock-drenar` | `CRON_SECRET` | Drena la cola de re-lectura de stock (`?tenant=` opcional) |
+| POST/GET | `/api/webhooks/alegra/stock/<tenant>/<evento>/<token>` | token HMAC (`ALEGRA_WEBHOOK_SECRET`) | Avisos de facturas, compras e ítems → cola de re-lectura (GET solo verifica la URL) |
 | POST | `/api/ai-token` | sesión | Token de sesión para el chat IA |
 | GET | `/api/agent/invoices` | agent token | Facturas (para el agente) |
 | GET | `/api/agent/payments` | agent token | Pagos (para el agente) |
@@ -565,7 +664,7 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Storage de comprobantes (Cloudflare R2); sin el set completo la feature se apaga |
 | `RECEIPTS_EMAIL_FROM` | Remitente del mail de aviso de comprobantes |
 | `CRON_SECRET` | Protege los endpoints de notificaciones |
-| `ALEGRA_WEBHOOK_SECRET` | Deriva el token de las URLs de webhooks de contactos de Alegra (≥ 32 caracteres; sin él la ruta rechaza todo) |
+| `ALEGRA_WEBHOOK_SECRET` | Deriva el token de las URLs de webhooks de contactos y de stock de Alegra (≥ 32 caracteres; sin él las rutas rechazan todo) |
 | `AI_CHAT_ENABLED` | Activa el chat en dev |
 
 ---

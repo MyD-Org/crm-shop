@@ -6,6 +6,7 @@ import {
   procesarAvisoContacto,
   tokenWebhookValido,
 } from "@/lib/alegra-contacts-webhook"
+import { leerCuerpo } from "@/lib/alegra-webhook-comun"
 
 // POST /api/webhooks/alegra/contactos/<tenant>/<evento>/<token>
 //
@@ -23,17 +24,6 @@ import {
 export const maxDuration = 60
 
 type Params = { tenant: string; evento: string; token: string }
-
-/** Cuerpo como JSON; si no lo es, como formulario (no se sabe cómo lo manda Alegra). */
-async function leerCuerpo(req: Request): Promise<unknown> {
-  const texto = await req.text().catch(() => "")
-  if (!texto.trim()) return null
-  try {
-    return JSON.parse(texto)
-  } catch {
-    return Object.fromEntries(new URLSearchParams(texto))
-  }
-}
 
 async function autorizado(p: Params) {
   if (!esEventoContacto(p.evento)) return null

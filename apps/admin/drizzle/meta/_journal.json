@@ -232,6 +232,13 @@
       "when": 1790215916164,
       "tag": "0032_shop_cuenta_corriente",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790278823349,
+      "tag": "0033_alegra_webhooks_stock",
+      "breakpoints": true
     }
   ]
 }

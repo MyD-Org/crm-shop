@@ -3,6 +3,7 @@ import { getDb } from "@/db"
 import { catalogCategories, catalogProducts, catalogSyncLog } from "@/db/schema"
 import type { TenantConfig } from "./tenants"
 import { listAllCategories, listAllItems } from "./alegra"
+import { upsertProductos } from "./catalog-products-repo"
 
 // Sincroniza el catálogo de Alegra a la cache local (upsert por alegraId). Lo que no se ve en la
 // corrida se marca 'inactive' (stale), solo si el run completó OK. Deja bitácora en catalog_sync_log.
@@ -59,51 +60,11 @@ export async function syncCatalog(config: TenantConfig, trigger: "cron" | "manua
     }
 
     // ── Productos ──
+    // `leidoAt = runStart`: cota inferior de cuándo se leyó cada página. Un webhook que re-leyó
+    // un ítem después del arranque tiene un dato más fresco y la sync no lo pisa (ver
+    // lib/catalog-products-repo.ts).
     const items = await listAllItems(config)
-    for (const batch of chunk(items, CHUNK)) {
-      await db
-        .insert(catalogProducts)
-        .values(
-          batch.map((it) => ({
-            tenantId: config.id,
-            alegraId: it.alegraId,
-            code: it.code,
-            name: it.name,
-            description: it.description,
-            categoryAlegraId: it.categoryAlegraId,
-            prices: it.prices,
-            stock: it.stock != null ? String(it.stock) : null,
-            // `status` es "visto en esta corrida", NO el estado de Alegra: el de Alegra va a
-            // `alegraStatus`. Antes eran la misma columna y ésta lo pisaba, así que el estado
-            // real se perdía y el filtro del bot (`status = 'active'`) no filtraba nada.
-            status: "active",
-            alegraStatus: it.status,
-            brand: it.brand,
-            ivaPorcentaje: it.ivaPorcentaje != null ? String(it.ivaPorcentaje) : null,
-            raw: it.raw,
-            images: it.images,
-            syncedAt: new Date(),
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [catalogProducts.tenantId, catalogProducts.alegraId],
-          set: {
-            code: sql`excluded.code`,
-            name: sql`excluded.name`,
-            description: sql`excluded.description`,
-            categoryAlegraId: sql`excluded.category_alegra_id`,
-            prices: sql`excluded.prices`,
-            stock: sql`excluded.stock`,
-            status: sql`excluded.status`,
-            alegraStatus: sql`excluded.alegra_status`,
-            brand: sql`excluded.brand`,
-            ivaPorcentaje: sql`excluded.iva_porcentaje`,
-            raw: sql`excluded.raw`,
-            images: sql`excluded.images`,
-            syncedAt: sql`excluded.synced_at`,
-          },
-        })
-    }
+    await upsertProductos(config.id, items, { leidoAt: runStart, leidoPor: "sync" })
 
     // ── Empujar al Shop los que dejaron de ser vendibles ──
     //

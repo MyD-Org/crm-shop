@@ -300,11 +300,73 @@ GRANT SELECT ON public.shop_categories, public.catalog_overlay TO shop_app;
 ```sql
 SELECT count(*) FROM public.shop_categories;   -- responde (no permission denied)
 SELECT count(*) FROM public.catalog_overlay;   -- responde
-SELECT 1 FROM public.tenants LIMIT 1;          -- sigue fallando (permission denied)
+SELECT alegra_token FROM public.tenants LIMIT 1;  -- sigue fallando (permission denied)
 ```
+
+(Con la migración 0032 del CRM, `shop_app` puede leer CUATRO columnas de
+`public.tenants`; ver la sección siguiente. Las credenciales siguen vedadas.)
 
 Sin este paso, el catálogo, las facetas y el menú fallan con
 `permission denied for table catalog_overlay`.
+
+## Cuenta corriente: lectura/escritura en public
+
+La cuenta corriente del cliente de la tienda (Facturas y saldo, Pagos,
+Presupuestos, Condiciones, Avisos, Informar pago) vive en Mi cuenta del Shop
+(change `portal-al-shop`). Lee y escribe tablas del CRM en `public`, con
+permisos mínimos y por columna. **Todos** los concede la migración
+`apps/admin/drizzle/0032_shop_cuenta_corriente.sql` (dueño del DDL: el CRM),
+dentro de un bloque que sólo corre si el rol `shop_app` existe.
+
+| Objeto | Permiso | Para qué | Reversa |
+|---|---|---|---|
+| esquema `public` | `USAGE` | llegar a las tablas | (se comparte con el catálogo: no revocar) |
+| vista `alegra_contacts_shop` (20 columnas) | `SELECT` | razón social, CUIT, tipo de cuenta, plazo, vendedor, límite | `REVOKE SELECT ON public.alegra_contacts_shop FROM shop_app;` |
+| `tenants` (`id`, `name`, `whatsapp_number`, `receipts_email`) | `SELECT` por columna | WhatsApp de la empresa y mail de comprobantes | `REVOKE SELECT ON public.tenants FROM shop_app;` |
+| `client_commercial_conditions` | `SELECT` | descuentos, transporte, contacto del vendedor | `REVOKE SELECT ON public.client_commercial_conditions FROM shop_app;` |
+| `notification_log` | `SELECT`, `UPDATE (read_at)` | avisos y "marcar como leído" | `REVOKE SELECT, UPDATE ON public.notification_log FROM shop_app;` |
+| `payment_receipts` | `SELECT`, `INSERT` | informar pago, Mis comprobantes | `REVOKE SELECT, INSERT ON public.payment_receipts FROM shop_app;` |
+| `payment_receipts` | `UPDATE (status, processing_started_at, reject_reason, file_key, file_mime, file_size, file_sha256, converted_from, email_status, email_error, email_sent_at, email_attempts, email_last_attempt_at, submitted_at, updated_at)` | confirmar/rechazar el comprobante y registrar el mail | `REVOKE UPDATE ON public.payment_receipts FROM shop_app;` |
+
+Nunca: `DELETE` en ninguna tabla de `public`; `UPDATE` de `loaded_*`,
+`alegra_payment_*`, `declared_*`, `amount` ni `codigocliente`; `SELECT` de
+la tabla `alegra_contacts` (tiene `raw` y teléfonos) ni de otras columnas de
+`tenants` (credenciales de Alegra y de la ai-api).
+
+Lo que el Shop declara de estas tablas está en `src/db/crm.ts` y el contrato
+de columnas en `src/db/__fixtures__/crm-contrato.json`
+(`src/db/crm-contrato.test.ts`).
+
+**Orden de despliegue:** la 0032 se aplica a mano contra la base de producción
+(`npm run db:migrate` en `apps/admin`, confirmando antes la URL) **antes** de
+mergear cualquier código del Shop que lea estas tablas: el Shop declara la
+vista con 20 columnas, y sin la 0032 toda consulta a la vista falla.
+
+**Si `shop_app` se crea después de la 0032** (rama nueva, base recreada), el
+bloque condicional no concedió nada: córralo a mano como `<OWNER_ROLE>`,
+copiándolo del final de `0032_shop_cuenta_corriente.sql` (el `DO $$ … $$`).
+
+**Verificación**, conectado como `shop_app` a la base del runtime del Shop:
+
+```sql
+SELECT tipo_cuenta, seller_name, payment_term_name, payment_term_days, credit_limit
+  FROM public.alegra_contacts_shop LIMIT 1;                     -- responde
+SELECT raw FROM public.alegra_contacts LIMIT 1;                 -- permission denied
+SELECT name, whatsapp_number, receipts_email FROM public.tenants LIMIT 1;  -- responde
+SELECT * FROM public.tenants LIMIT 1;                           -- permission denied
+SELECT alegra_token FROM public.tenants LIMIT 1;                -- permission denied
+SELECT count(*) FROM public.client_commercial_conditions;       -- responde
+SELECT count(*) FROM public.notification_log;                   -- responde
+BEGIN; UPDATE public.notification_log SET read_at = read_at WHERE false; ROLLBACK;  -- responde
+BEGIN; UPDATE public.notification_log SET status = status WHERE false; ROLLBACK;    -- permission denied
+BEGIN; DELETE FROM public.payment_receipts WHERE false; ROLLBACK;                   -- permission denied
+BEGIN; UPDATE public.payment_receipts SET amount = amount WHERE false; ROLLBACK;    -- permission denied
+```
+
+**Rollback completo:** revertir primero el código del Shop que usa estas
+tablas; después, los `REVOKE` de la tabla (también están en el encabezado de
+la 0032). Volver la vista a 16 columnas es una migración nueva del CRM
+(`DROP VIEW` + `CREATE VIEW` + `GRANT`), nunca editar la 0032.
 
 ## Nota sobre el ambiente local de tests (`crm_test`)
 

@@ -15,7 +15,7 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 | `/mi-cuenta` | Resumen: tarjetas "Pedidos en curso", "Productos en el carrito" y (con Clerk) "Favoritos guardados"; los últimos 3 pedidos y (con Clerk) los 4 favoritos más recientes, cada uno con "Ver todos". Ninguna llamada a Alegra. |
 | `/mi-cuenta/pedidos` | Todos los pedidos (los 50 más recientes). |
 | `/mi-cuenta/pedidos/[id]` | Detalle: seguimiento, entrega, pago, productos y totales. Un id ajeno o que no es uuid da 404 (nunca 403). |
-| `/mi-cuenta/datos` | Datos personales (nombre y correo de Clerk, en lectura; "Editar mi cuenta" abre el panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente y, sólo con cuenta corriente, el portal del CRM. |
+| `/mi-cuenta/datos` | Datos personales (nombre y correo de Clerk, en lectura; "Editar mi cuenta" abre el panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente. Sin enlace al portal del CRM (ver [Cuenta corriente](#cuenta-corriente)). |
 | `/mi-cuenta/direcciones` | Direcciones y envíos: direcciones de envío guardadas (con Clerk; alta y edición en la misma sección, ver [Direcciones de envío](#direcciones-de-envío)), envío a domicilio y retiro derivados de `src/lib/envio.ts` y un aviso. El domicilio fiscal ya no está acá: vive en Mis datos. |
 | `/mi-cuenta/envios` | Redirige (308) a `/mi-cuenta/direcciones`: Envíos y retiro se unió a Direcciones. |
 | `/mi-cuenta/favoritos` | Favoritos del usuario de Clerk en cards compactas (ver [Favoritos](#favoritos)). |
@@ -25,7 +25,7 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 (`openUserProfile` y `signOut` de Clerk). `/mi-cuenta/seguridad` da 404.
 
 Facturas (`/mi-cuenta/facturas`) todavía no existe: da 404 y no aparece en la
-navegación.
+navegación. Llega con la cuenta corriente (ver [Cuenta corriente](#cuenta-corriente)).
 
 ### Breadcrumb
 
@@ -59,11 +59,58 @@ marca la activa.
 | Anónimo | Ninguna: redirect al ingreso. |
 | Cookie heredada del CRM, sin Clerk | Pedidos, Direcciones y envíos (+ Facturas cuando exista). `/datos` pide iniciar sesión; en `/direcciones` se invita a iniciar sesión para guardar direcciones y se ven las reglas de envío. El checkout no cambia. |
 | Clerk sin cuenta vinculada | Pedidos, Favoritos, Direcciones y envíos, Mis datos, Seguridad, Cerrar sesión. |
-| Clerk con cuenta vinculada | Igual, con facturación bloqueada y, si es cuenta corriente, el portal. |
+| Clerk con cuenta vinculada | Igual, con facturación bloqueada (y la cuenta corriente cuando se publique). |
 
 `CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas }`) enciende cada sección
 cuando su rebanada la publica: navegación y menú del header leen la misma
 bandera. `favoritos` está encendida.
+
+## Cuenta corriente
+
+La cuenta corriente del cliente de la tienda se muda del portal del CRM a Mi
+cuenta (change `portal-al-shop`). El Shop **no enlaza nunca** al portal del
+CRM: ese portal queda para las empresas sin tienda. La cookie heredada del
+portal (`portal-session`, `origen: "cookie_crm"`) se sigue leyendo: un cliente
+con sesión viva del portal ve su cuenta corriente sin Clerk.
+
+Se publica por rebanadas, cada una con su bandera en
+`CAPACIDADES_DESPLIEGUE`. Hoy está sólo la base (sin UI visible):
+
+- Datos: `src/db/crm.ts` declara la vista del espejo de contactos
+  (`public.alegra_contacts_shop`), `tenants` (4 columnas),
+  `client_commercial_conditions`, `notification_log` y `payment_receipts`;
+  permisos en [una-base-esquema-shop.md](una-base-esquema-shop.md#cuenta-corriente-lecturaescritura-en-public).
+- Contacto: `src/lib/contactos-espejo.ts` (`contactoPorId`, espejo primero y
+  una consulta en vivo de respaldo).
+- Lógica pura en `src/lib/cuenta-corriente/`: lecturas de Alegra
+  (`alegra-cc.ts`), mapeos y saldo (`erp-cc.ts`), guard de las API
+  (`guard.ts`), datos del tenant (`tenant-cc.ts`) y mensajes de WhatsApp
+  (`whatsapp.ts`). Portados de `apps/admin/src/lib/{alegra,erp,whatsapp}.ts`.
+
+### Menú agrupado (a publicar)
+
+| Grupo | Secciones |
+|---|---|
+| Compras online | Pedidos, Favoritos (sólo compras de la tienda) |
+| Facturación | Facturas y saldo, Pagos, Presupuestos, Condiciones, Avisos (con badge de no leídos) |
+| Mi perfil | Mis datos, Direcciones y envíos, Seguridad |
+
+"Cerrar sesión" va aparte, al final. En mobile (fila horizontal) los grupos se
+ven como separadores. La entrada del menú del header es "Facturación"
+(→ `/mi-cuenta/facturas`); "Cuenta corriente" no se usa como título: lo ven
+también clientes de contado.
+
+### Quién ve qué
+
+| Qué | Quién |
+|---|---|
+| Facturas y saldo, Pagos, Presupuestos, Avisos, Informar pago | Todo cliente vinculado (contado incluido). Sin vínculo, "Facturas y saldo" ofrece vincular. |
+| Condiciones | Sólo cuenta corriente según el espejo (`alegra_contacts_shop.tipo_cuenta = 'corriente'`). Contado: sin entrada en el menú y `/mi-cuenta/condiciones` da 404. |
+| Barra de límite de crédito / disponible | Sólo cuenta corriente con límite > 0. |
+
+`tipo_cuenta` se lee del espejo (columna generada del CRM: plazo mayor a 0 o
+límite mayor a 0); el Shop no la recalcula ni usa el `tipo_cuenta` guardado
+en `client_links`.
 
 ## Estado y seguimiento del pedido
 

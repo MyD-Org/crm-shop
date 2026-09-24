@@ -29,7 +29,7 @@ function authHeader(): string {
   return `Basic ${encoded}`;
 }
 
-type QueryParams = Record<string, string | number | undefined>;
+export type QueryParams = Record<string, string | number | undefined>;
 
 /** Alegra topea `limit` en 30 por página. No es configurable. */
 const PAGE_SIZE = 30;
@@ -79,7 +79,13 @@ function segmentoId(id: string): string {
   return encodeURIComponent(id);
 }
 
-async function apiFetch<T>(path: string, params: QueryParams = {}): Promise<T> {
+/**
+ * Exportado para `lib/cuenta-corriente/alegra-cc.ts` (facturas, pagos,
+ * presupuestos y PDF del cliente): mismos reintentos ante 429 y mismo manejo de
+ * errores que el resto del Shop. Un error de Alegra se lanza como
+ * `Error("Alegra <status> en <path>: …")`.
+ */
+export async function apiFetch<T>(path: string, params: QueryParams = {}): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) url.searchParams.set(key, String(value));

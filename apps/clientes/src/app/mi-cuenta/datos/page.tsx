@@ -42,7 +42,6 @@ export default async function DatosPage() {
         // del CRM: sin cliente, compra a lista general y se le ofrece vincular.
         razonSocialVinculada={cliente ? (cliente.razonsocial ?? cliente.codigocliente) : undefined}
         cuit={cliente?.cuit}
-        esCuentaCorriente={cliente?.tipoCuenta === "corriente"}
       />
     </section>
   );

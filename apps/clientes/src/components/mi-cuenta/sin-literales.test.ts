@@ -143,7 +143,7 @@ describe("guarda de Mi cuenta: la guarda misma", () => {
     expect(estilo('<svg strokeWidth="1.6" viewBox="0 0 24 24" width="20">')).toEqual([]);
     expect(estilo('className="data-[state=open]:bg-elevated"')).toEqual([]);
     expect(estilo("// antes: text-[15px] y text-white")).toEqual([]);
-    expect(estilo('const u = "https://crm.cliente.example/portal";')).toEqual([]);
+    expect(estilo('const u = "https://crm.cliente.example/admin";')).toEqual([]);
   });
 
   it("registro: atrapa voseo y tuteo en el texto, no en comentarios", () => {

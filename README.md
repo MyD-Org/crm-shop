@@ -4,11 +4,15 @@ Monorepo con dos aplicaciones Next.js independientes:
 
 | Carpeta | Qué es |
 |---|---|
-| `apps/admin` | CRM: backoffice, portal de clientes y API para agentes |
+| `apps/admin` | CRM: backoffice, portal de clientes (empresas sin tienda) y API para agentes |
 | `apps/clientes` | Shop: tienda online |
 | `packages/` | Reservado para código compartido (todavía vacío) |
 
 No hay `package.json` ni lockfile en la raíz: cada app se instala y se corre **parada en su carpeta**.
+
+Las dos apps comparten **una** base Postgres: el esquema `public` es del CRM (sus migraciones viven en `apps/admin/drizzle`) y el esquema `shop` es del Shop (`apps/clientes/drizzle`). El Shop lee y escribe en `public` sólo lo que le concede una migración del CRM, con permisos mínimos por tabla o por columna (ver `apps/clientes/docs/una-base-esquema-shop.md`).
+
+El portal de clientes del CRM queda para las empresas sin tienda. La cuenta corriente del cliente de la tienda (facturas, saldo, pagos, presupuestos, condiciones, avisos) vive en **Mi cuenta** del Shop, que no enlaza al portal.
 
     cd apps/admin && npm ci && npm run dev
     cd apps/clientes && npm ci && npm run dev
@@ -45,7 +49,7 @@ Los dominios reales no se escriben en el repo: en código, tests y docs se usan 
 
 **Variables que exige el código y no están en el repo**
 
-- `apps/clientes`: `NEXT_PUBLIC_CRM_URL` y `GEOCODE_CONTACT_EMAIL`.
+- `apps/clientes`: `GEOCODE_CONTACT_EMAIL`.
 - `apps/admin`: `R2_ALLOWED_ORIGIN`, solo al correr a mano `scripts/r2-setup.ts`.
 
 ## Si el repo pasa a privado

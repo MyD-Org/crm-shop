@@ -8,7 +8,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 - `apps/admin` = CRM (backoffice + portal + `/api/agent/*`). `apps/clientes` = Shop.
 - **No hay workspaces**: cada app tiene su `package.json`, su `package-lock.json` y su `node_modules`. Todos los comandos (`npm ci`, `npm run dev`, tests, `db:*`) se corren **parados en la carpeta de la app**. No crear `package.json` ni lockfile en la raíz.
-- Cada app tiene su propia base de datos y su propio proyecto de Vercel (Root Directory = carpeta de la app).
+- Cada app tiene su propio proyecto de Vercel (Root Directory = carpeta de la app). Comparten **una** base Postgres: el CRM es dueño del esquema `public` (y de sus migraciones, en `apps/admin/drizzle`); el Shop, del esquema `shop` (`apps/clientes/drizzle`). El Shop lee/escribe tablas de `public` sólo con los permisos mínimos que concede una migración del CRM, y las declara en `apps/clientes/src/db/crm.ts` (contrato de columnas en `apps/clientes/src/db/__fixtures__/crm-contrato.json`).
+- La cuenta corriente del cliente de la tienda vive en **Mi cuenta** del Shop. El portal de clientes del CRM (`/portal`) queda para las empresas sin tienda: el Shop no lo enlaza.
 - Un cambio no debería tocar las dos apps salvo que sea un contrato entre ellas.
 - **Repo público**: nada de secretos, planillas, datos reales ni URLs de producción. Nunca `git add -A`; agregar rutas explícitas. `.github/scripts/repo-guard.sh tree` debe pasar.
 - Workflows en `.github/workflows/` con prefijo `admin-` / `clientes-`; los secrets llevan prefijo `ADMIN_` / `CLIENTES_`.

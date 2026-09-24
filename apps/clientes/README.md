@@ -186,6 +186,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Deploy
 
-Esta app vive en `apps/clientes` del monorepo `crm-shop`. En su proyecto de Vercel, **Root Directory = `apps/clientes`**; Install y Build Command quedan en sus valores por defecto. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta. Los workflows programados están en `.github/workflows/clientes-*.yml` de la raíz y usan secrets con prefijo `CLIENTES_`. La variable `NEXT_PUBLIC_CRM_URL` es obligatoria en Production y Preview.
+Esta app vive en `apps/clientes` del monorepo `crm-shop`. En su proyecto de Vercel, **Root Directory = `apps/clientes`**; Install y Build Command quedan en sus valores por defecto. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta. Los workflows programados están en `.github/workflows/clientes-*.yml` de la raíz y usan secrets con prefijo `CLIENTES_`.
 
 Instrucciones para agentes: `AGENTS.md` de esta carpeta y el de la raíz del repo.

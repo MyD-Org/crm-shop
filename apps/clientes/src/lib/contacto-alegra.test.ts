@@ -393,18 +393,24 @@ describe("armarPutSoloVacios (D-7)", () => {
     expect(body).not.toHaveProperty("address");
   });
 
-  it("tipo vacío en Alegra: se escribe el deducido (llena un vacío) con el número del espejo", () => {
+  it("tipo vacío en Alegra y CUIL deducida: el tipo sigue vacío (Alegra no tiene CUIL), con el número del espejo", () => {
     const base = fila({ ...doc("20-12345678-6"), ivaCondition: "FINAL_CONSUMER", addressStreet: null });
     const r = validarComplemento(leerContacto(base), { domicilioCalle: "Nueva 1" });
     if (!r.ok) throw new Error("debería validar");
     expect(armarPutSoloVacios(base, r.datos, r.complemento).identificationObject).toEqual({
-      type: "CUIL",
+      type: "",
       number: "20-12345678-6",
     });
-    // Si Alegra no aceptara CUIL: no se escribe el tipo (queda vacío, como estaba).
-    expect(
-      armarPutSoloVacios(base, r.datos, r.complemento, { escribirCuil: false }).identificationObject,
-    ).toEqual({ type: "", number: "20-12345678-6" });
+  });
+
+  it("tipo vacío en Alegra y CUIT deducido: se escribe CUIT (llena un vacío)", () => {
+    const base = fila({ ...doc("30-71234567-1"), ivaCondition: "FINAL_CONSUMER", addressStreet: null });
+    const r = validarComplemento(leerContacto(base), { domicilioCalle: "Nueva 1" });
+    if (!r.ok) throw new Error("debería validar");
+    expect(armarPutSoloVacios(base, r.datos, r.complemento).identificationObject).toEqual({
+      type: "CUIT",
+      number: "30-71234567-1",
+    });
   });
 
   it("documento vacío: tipo y número del complemento", () => {

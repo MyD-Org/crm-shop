@@ -104,12 +104,12 @@ export type IdSeccion =
 export type IdGrupo = "compras" | "facturacion" | "perfil";
 
 /**
- * Títulos de los grupos. "Facturación" y no "Cuenta corriente": el grupo lo ven
+ * Títulos de los grupos. "Facturas" (es para verlas, no para facturar) y no "Cuenta corriente": el grupo lo ven
  * también los clientes de contado.
  */
 export const GRUPOS_MI_CUENTA: readonly { id: IdGrupo; label: string }[] = [
   { id: "compras", label: "Compras online" },
-  { id: "facturacion", label: "Facturación" },
+  { id: "facturacion", label: "Facturas" },
   { id: "perfil", label: "Mi perfil" },
 ];
 

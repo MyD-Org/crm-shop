@@ -42,7 +42,7 @@ export interface EntradaMenu {
 /**
  * Entradas del menú, en el orden de la navegación de Mi cuenta. Favoritos y
  * Facturación aparecen sólo cuando el despliegue ya publica su sección.
- * "Facturación" y nunca "Cuenta corriente": la ven también los clientes de
+ * "Facturas" y nunca "Cuenta corriente": la ven también los clientes de
  * contado (y quien no vinculó, que ahí encuentra cómo hacerlo). Los
  * separadores los agrega el componente.
  */
@@ -52,7 +52,7 @@ export function entradasMenu(
   return [
     { id: "pedidos", label: "Mis pedidos" },
     ...(despliegue.favoritos ? [{ id: "favoritos", label: "Favoritos" } as const] : []),
-    ...(despliegue.facturas ? [{ id: "facturacion", label: "Facturación" } as const] : []),
+    ...(despliegue.facturas ? [{ id: "facturacion", label: "Facturas" } as const] : []),
     { id: "datos", label: "Mis datos" },
     { id: "seguridad", label: "Seguridad" },
     { id: "salir", label: "Cerrar sesión", tone: "danger" },

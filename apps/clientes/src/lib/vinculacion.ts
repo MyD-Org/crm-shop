@@ -119,7 +119,7 @@ function snapshotDelContacto(c: ContactoVinculable | null) {
  * de usuario, lo resuelve la sucursal revocando el vínculo anterior.
  */
 export const MENSAJE_VINCULADA_A_OTRO =
-  "Esta cuenta ya está vinculada a otro usuario de la tienda. Comuníquese con la sucursal.";
+  "Esta cuenta ya está vinculada a otro usuario de la tienda. Si no recuerda con qué email la vinculó, comuníquese con la sucursal.";
 
 /**
  * ¿El contacto ya tiene un vínculo activo de OTRO usuario? Solo base: no gasta
@@ -812,7 +812,8 @@ export function observacionesConEmail(
  * vincula por OTP es justamente quien entra con un mail que la sucursal no
  * conoce: sin esto, cuando llama o aparece un pedido con ese mail, nadie en la
  * sucursal sabe de qué cliente es. El alcance es mínimo a propósito:
- *  - SOLO el campo `observations`, agregando una línea al final y conservando
+ *  - SOLO cambia `observations` (Alegra exige reenviar nombre, condición de
+ *    IVA y documento, que van sin tocar), agregando una línea al final y conservando
  *    el texto que ya había (se lee en vivo justo antes, no del espejo).
  *  - NO se toca `email`: de ahí sale a dónde van las facturas y los códigos
  *    de vinculación; cambiarlo desde la tienda sería otorgar acceso.
@@ -831,8 +832,8 @@ export async function registrarEmailAlternativo(
   try {
     const contacto = await getContacto(alegraContactId);
     const nuevas = observacionesConEmail(contacto?.observations, contacto?.email, email, fecha);
-    if (nuevas === null) return;
-    await actualizarObservacionesContacto(alegraContactId, nuevas);
+    if (nuevas === null || !contacto) return;
+    await actualizarObservacionesContacto({ ...contacto, id: alegraContactId }, nuevas);
   } catch (err) {
     // El mensaje de apiFetch trae el body de Alegra: solo se loguea el status.
     const estado =

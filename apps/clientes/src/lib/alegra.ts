@@ -275,8 +275,14 @@ export async function getContacto(id: string) {
 }
 
 /**
- * Reemplaza las observaciones de un contacto (PUT /contacts/{id} con SOLO ese
- * campo; Alegra no toca lo que no viene en el body).
+ * Reemplaza las observaciones de un contacto (PUT /contacts/{id}).
+ *
+ * Alegra no acepta un PUT con solo `observations`: exige también `name`,
+ * `ivaCondition` e `identificationObject` ("El nombre del contacto es
+ * obligatorio", "La condición de IVA es un campo obligatorio"). Se reenvían
+ * TAL CUAL vienen del GET recién hecho, así que no cambian; lo que no viene en
+ * el body Alegra no lo toca (verificado 2026-09-24 contra la cuenta real: el
+ * único campo que cambió fue `observations`).
  *
  * Es la ÚNICA escritura del Shop sobre un contacto de Alegra. Ver
  * `registrarEmailAlternativo` en vinculacion.ts para el porqué.
@@ -285,10 +291,13 @@ export async function getContacto(id: string) {
  * `{"code":429}` en el body (no un 429), así que ese caso NO se reintenta y
  * llega como error. Quien llama tiene que fallar en silencio.
  */
-export async function actualizarObservacionesContacto(id: string, observations: string) {
-  return apiFetch<AlegraContact>(`/contacts/${segmentoId(id)}`, {}, {
+export async function actualizarObservacionesContacto(contacto: AlegraContact, observations: string) {
+  const body: Record<string, unknown> = { name: contacto.name, observations };
+  if (contacto.ivaCondition != null) body.ivaCondition = contacto.ivaCondition;
+  if (contacto.identificationObject != null) body.identificationObject = contacto.identificationObject;
+  return apiFetch<AlegraContact>(`/contacts/${segmentoId(contacto.id)}`, {}, {
     method: "PUT",
-    body: { observations },
+    body,
   });
 }
 

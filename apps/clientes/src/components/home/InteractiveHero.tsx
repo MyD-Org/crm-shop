@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_QUERY, HERO_LIGHTS, proximity, sceneRect } from "./hero-lights";
+import { COVER_HIDDEN_LIGHTS, COVER_QUERY, HERO_LIGHTS, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
 const INTRO_STEP_MS = 1400;
 const INTRO_FADE_MS = 900;
+/** Intro order: linear, ring, spot, pendant, table lamp (indices into HERO_LIGHTS). */
+const INTRO_SEQUENCE = [4, 0, 2, 3, 1];
+/** While the hero is on screen, every this many px of scroll lights the next lamp, held this long after scrolling stops. */
+const SCROLL_STEP_PX = 90;
+const SCROLL_HOLD_MS = 700;
 
 /** Keeps the DS Hero and its content intact. Only the background is enhanced. */
 export function InteractiveHero({ children, enabled }: { children: ReactNode; enabled: boolean }) {
@@ -17,6 +22,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   const stopIntro = useRef<() => void>(() => {});
   const [pressed, setPressed] = useState<number[]>([]);
   const [rect, setRect] = useState<ReturnType<typeof sceneRect> | null>(null);
+  const [covered, setCovered] = useState(false);
   const uid = useId().replaceAll(":", "");
 
   useEffect(() => {
@@ -39,19 +45,47 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       paint([]);
     };
     stopIntro.current = stop;
-    const resize = new ResizeObserver(() => setRect(sceneRect(surface.clientWidth, surface.clientHeight, cover.matches)));
+    // Lights this viewport's photo actually shows (the mobile one has no ring).
+    const shown = (index: number) => !cover.matches || !COVER_HIDDEN_LIGHTS.has(HERO_LIGHTS[index].id);
+    const resize = new ResizeObserver(() => {
+      setRect(sceneRect(surface.clientWidth, surface.clientHeight, cover.matches));
+      setCovered(cover.matches);
+    });
     resize.observe(surface);
+    let visible = false;
     const observer = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
       if (!entry.isIntersecting || entry.intersectionRatio < .35 || started || interrupted || motion.matches) return;
       started = true;
       host.dataset.intro = "";
-      [4, 2, 3].forEach((index, step) => {
+      const sequence = INTRO_SEQUENCE.filter(shown);
+      sequence.forEach((index, step) => {
         timers.push(setTimeout(() => paint(HERO_LIGHTS.map((_, i) => i === index ? .85 : 0)), step * INTRO_STEP_MS));
       });
-      timers.push(setTimeout(() => paint([]), 3 * INTRO_STEP_MS));
-      timers.push(setTimeout(() => { delete host.dataset.intro; }, 3 * INTRO_STEP_MS + INTRO_FADE_MS));
+      timers.push(setTimeout(() => paint([]), sequence.length * INTRO_STEP_MS));
+      timers.push(setTimeout(() => { delete host.dataset.intro; }, sequence.length * INTRO_STEP_MS + INTRO_FADE_MS));
     }, { threshold: .35 });
     observer.observe(surface);
+    // Scrolling lights one lamp at a time, never the same one twice in a row;
+    // each lamp comes up once before any repeats.
+    let lastY = scrollY;
+    let lastLight = -1;
+    let bag: number[] = [];
+    let scrollTimer: ReturnType<typeof setTimeout> | undefined;
+    const scroll = () => {
+      if (!visible || motion.matches || "intro" in host.dataset) { lastY = scrollY; return; }
+      if (Math.abs(scrollY - lastY) < SCROLL_STEP_PX) return;
+      lastY = scrollY;
+      if (!bag.length) {
+        bag = HERO_LIGHTS.map((_, i) => i).filter(shown).sort(() => Math.random() - .5);
+        if (bag[0] === lastLight) bag.push(bag.shift()!);
+      }
+      lastLight = bag.shift()!;
+      paint(HERO_LIGHTS.map((_, i) => i === lastLight ? .85 : 0));
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => paint([]), SCROLL_HOLD_MS);
+    };
+    addEventListener("scroll", scroll, { passive: true });
     const move = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
       stop();
@@ -73,6 +107,8 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     motion.addEventListener("change", stop);
     return () => {
       stop(); cancelAnimationFrame(frame); resize.disconnect(); observer.disconnect();
+      clearTimeout(scrollTimer);
+      removeEventListener("scroll", scroll);
       host.removeEventListener("pointermove", move);
       host.removeEventListener("pointerdown", stop);
       host.removeEventListener("keydown", stop);
@@ -93,6 +129,11 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   return <div ref={root} className={styles.root} data-interactive-hero="">
     {children}
     <div ref={scene} className={styles.scene}>
+      {/* Phones get the photo without the ring; elsewhere the source never matches and nothing loads. */}
+      <picture className={styles.mobilePhoto}>
+        <source media={COVER_QUERY} srcSet={STUDIO_IMAGE_MOBILE} />
+        <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
+      </picture>
       {rect && <>
         <svg aria-hidden="true" className={styles.art} viewBox="0 0 1536 1024" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}>
           <defs>
@@ -106,9 +147,9 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <ellipse cx="996" cy="346" rx="118" ry="117" fill="none" stroke="#fff6e1" strokeWidth="7"/>
             </>}
             {i === 1 && <>
-              <ellipse cx="1006" cy="672" rx="105" ry="110" fill={`url(#${uid}-glow)`}/>
-              <ellipse cx="1006" cy="672" rx="46" ry="45" fill="#fff1cc"/>
-              <ellipse cx="1006" cy="787" rx="125" ry="24" fill={`url(#${uid}-glow)`}/>
+              <ellipse cx="1221" cy="672" rx="105" ry="110" fill={`url(#${uid}-glow)`}/>
+              <ellipse cx="1221" cy="672" rx="46" ry="45" fill="#fff1cc"/>
+              <ellipse cx="1221" cy="787" rx="125" ry="24" fill={`url(#${uid}-glow)`}/>
             </>}
             {i === 2 && <>
               <path d="M1176 148 L1200 138 L1400 520 Q1280 590 1170 530 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
@@ -127,7 +168,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
             </>}
           </g>)}
         </svg>
-        {HERO_LIGHTS.map((light, i) => <button key={light.id} type="button" className={styles.target}
+        {HERO_LIGHTS.map((light, i) => covered && COVER_HIDDEN_LIGHTS.has(light.id) ? null : <button key={light.id} type="button" className={styles.target}
           aria-label={light.label} aria-pressed={pressed.includes(i)} onClick={() => toggle(i)}
           style={{ left: rect.left + light.x * rect.scale, top: rect.top + light.y * rect.scale,
             width: (i === 0 ? 220 : i === 4 ? 355 : 96) * rect.scale, height: (i === 0 ? 220 : 96) * rect.scale }} />)}

@@ -3,10 +3,15 @@
    controls 0, content 1. The content box cannot swallow empty scene space. */
 .root > section { isolation: auto; }
 .root > section > div:last-child { z-index: 1; pointer-events: none; }
-.root > section > div:last-child > * { pointer-events: auto; }
+/* Only links and buttons take clicks: plain text (the lead sits over the linear
+   light on mobile) lets taps through to the light controls underneath. */
+.root > section > div:last-child :is(a, button) { pointer-events: auto; }
 .root > section > div:not(:last-child) { pointer-events: none; }
 .root > section > img { object-fit: contain; object-position: right center; background: #e4dfd5; }
 .scene { position: absolute; inset: 0; overflow: clip; border-radius: 28px; pointer-events: none; }
+/* Same layer as the DS image (-20) but later in the DOM, so it covers it on mobile. */
+.mobilePhoto { display: none; }
+.mobilePhoto img { position: absolute; inset: 0; z-index: -20; width: 100%; height: 100%; object-fit: cover; object-position: 88% center; }
 .art { position: absolute; overflow: visible; z-index: -15; }
 .light { transition: opacity 300ms ease-out; mix-blend-mode: screen; }
 .target { position: absolute; z-index: 0; min-width: 48px; min-height: 48px; transform: translate(-50%, -50%); border: 0; border-radius: 50%; background: transparent; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
@@ -15,12 +20,18 @@
    3:2, so cover (not contain, which would leave grey bands) anchored at
    COVER_X in hero-lights.ts to keep most of the lamps in frame. */
 @media (max-width: 767px) {
+  .mobilePhoto { display: block; }
   .root > section > img { object-fit: cover; object-position: 88% center; background: none; }
   /* The DS veils are made for a photo beside the text; on mobile the text column
-     spans the card and together they wash the scene out. One lighter veil keeps
-     the text readable and the lamps visible. */
-  .root > section > div:not(:last-child) { background: linear-gradient(to bottom, rgba(247, 242, 234, .45) 0%, rgba(247, 242, 234, .36) 75%, transparent 100%); }
+     spans the card and together they wash the scene out. One lighter veil, denser
+     on the text side, keeps the text readable and the lamps on the right visible. */
+  .root > section > div:not(:last-child) { background: linear-gradient(to right, rgba(247, 242, 234, .62) 0%, rgba(247, 242, 234, .4) 55%, rgba(247, 242, 234, .15) 100%); }
   .root > section > div:last-child::before { background: none; }
+  /* Over the photo the muted lead and contact line get lost: same ink as the title. */
+  .root > section > div:last-child > p,
+  .root > section > div:last-child > div:last-child { color: var(--color-text); }
+  /* Centred, the lead lands on the linear light; top-aligned it sits above it. */
+  .root > section > div:last-child { justify-content: flex-start; }
 }
 /* Slower cross-fade for the first-view intro (INTRO_FADE_MS in InteractiveHero). */
 .root[data-intro] .light { transition-duration: 900ms; transition-timing-function: ease-in-out; }

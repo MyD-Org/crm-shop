@@ -16,7 +16,7 @@ afterEach(() => vi.restoreAllMocks())
 describe("token de la URL", () => {
   it("es estable por tenant y distinto entre tenants", () => {
     const a = tokenWebhookContactos("tenant-a", SECRETO)
-    expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(a).toMatch(/^[0-9a-f]{32}$/)
     expect(tokenWebhookContactos("tenant-a", SECRETO)).toBe(a)
     expect(tokenWebhookContactos("tenant-b", SECRETO)).not.toBe(a)
     expect(tokenWebhookContactos("tenant-a", "t".repeat(40))).not.toBe(a)

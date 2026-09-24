@@ -7,10 +7,20 @@
  *   3. Geo-IP: Misiones (AR + región ISO "N") → "calido-azul" (azul de marca
  *      local); resto → "calido". Los headers los inyecta Vercel
  *      (x-vercel-ip-*); fuera de Vercel no vienen y el default es "calido".
+ *
+ * Hoy la geo-IP está APAGADA (GEO_IP_ACTIVO = false): todos ven el azul y la
+ * cookie guardada no se consulta (las que dejó la geo decían "calido"). El
+ * `?tema=` sigue funcionando para el request que lo trae. Para volver a
+ * filtrar por IP, pasar el flag a true: el resto del código queda intacto.
  */
+
+export const GEO_IP_ACTIVO = false;
 
 export type Tema = "calido" | "calido-azul";
 export type DecisionTema = Tema | "auto";
+
+/** Tema de todos mientras la geo-IP está apagada. */
+export const TEMA_POR_DEFECTO: Tema = "calido-azul";
 
 export function resolverTema(input: {
   /** searchParams.get("tema") */
@@ -19,11 +29,15 @@ export function resolverTema(input: {
   cookie: string | null | undefined;
   pais: string | null;
   region: string | null;
+  /** Solo para tests: por defecto usa GEO_IP_ACTIVO. */
+  geoActiva?: boolean;
 }): DecisionTema {
   const q = (input.consulta ?? "").trim().toLowerCase();
   if (q === "azul") return "calido-azul";
   if (q === "calido") return "calido";
   if (q === "auto") return "auto";
+
+  if (!(input.geoActiva ?? GEO_IP_ACTIVO)) return TEMA_POR_DEFECTO;
 
   const guardado = (input.cookie ?? "").trim();
   if (guardado === "calido" || guardado === "calido-azul") return guardado;

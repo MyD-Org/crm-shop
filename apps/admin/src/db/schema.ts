@@ -351,9 +351,10 @@ export const alegraWebhookAvisos = pgTable(
 // pausada (lib/alegra-contacts-sync.ts). Sirve para no bajar el padrón en vivo: antes buscar
 // por teléfono o listar clientes costaba ~200 requests contra una cuota compartida.
 //
-// OJO: el Shop NO lee esta tabla sino la vista `public.alegra_contacts_shop` (migraciones 0031/0032,
-// vive solo en SQL). Si cambia o se borra una columna expuesta en esa vista, hay que recrear
-// la vista EN LA MISMA MIGRACIÓN.
+// OJO: el Shop NO lee esta tabla sino la vista `public.alegra_contacts_shop` (migraciones
+// 0031/0032/0034, vive solo en SQL), y la actualiza sólo vía la función SECURITY DEFINER
+// `public.shop_contacto_write_through` (0034, también sólo en SQL). Si cambia o se borra una
+// columna expuesta en esa vista, hay que recrear la vista EN LA MISMA MIGRACIÓN.
 export const alegraContacts = pgTable(
   "alegra_contacts",
   {
@@ -394,6 +395,22 @@ export const alegraContacts = pgTable(
      */
     tipoCuenta: text("tipo_cuenta").generatedAlwaysAs(
       sql`CASE WHEN coalesce("payment_term_days",0) > 0 OR coalesce("credit_limit",0) > 0 THEN 'corriente' ELSE 'contado' END`,
+    ),
+    // Datos de facturación derivados de `raw` (0034, change `contacto-fuente-unica`). Vacío,
+    // espacios, clave ausente o forma inesperada ⇒ NULL. Expresiones IDÉNTICAS al .sql;
+    // casos en test/integration/alegra-contacts-schema.integration.test.ts.
+    ivaCondition: text("iva_condition").generatedAlwaysAs(sql`NULLIF(btrim("raw"->>'ivaCondition'), '')`),
+    identificationType: text("identification_type").generatedAlwaysAs(
+      sql`NULLIF(btrim("raw"->'identificationObject'->>'type'), '')`,
+    ),
+    identificationNumber: text("identification_number").generatedAlwaysAs(
+      sql`NULLIF(btrim("raw"->'identificationObject'->>'number'), '')`,
+    ),
+    addressStreet: text("address_street").generatedAlwaysAs(sql`NULLIF(btrim("raw"->'address'->>'address'), '')`),
+    addressCity: text("address_city").generatedAlwaysAs(sql`NULLIF(btrim("raw"->'address'->>'city'), '')`),
+    addressProvince: text("address_province").generatedAlwaysAs(sql`NULLIF(btrim("raw"->'address'->>'province'), '')`),
+    addressPostalCode: text("address_postal_code").generatedAlwaysAs(
+      sql`NULLIF(btrim("raw"->'address'->>'postalCode'), '')`,
     ),
     /** Estado real del contacto en Alegra. */
     alegraStatus: text("alegra_status"),

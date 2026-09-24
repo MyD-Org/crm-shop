@@ -4,6 +4,7 @@ import {
   FILTRO_TODOS,
   MENSAJE_ERROR_GENERICO,
   interpretarRespuestaCambio,
+  interpretarRespuestaFactura,
   motivoValido,
   opcionesDeDestino,
   opcionesDeFiltro,
@@ -154,5 +155,35 @@ describe("interpretarRespuestaCambio", () => {
 
   it("el genérico es el del spec, con tilde", () => {
     expect(MENSAJE_ERROR_GENERICO).toBe("No se pudo actualizar el pedido. Inténtelo nuevamente.")
+  })
+})
+
+describe("interpretarRespuestaFactura (vincular / desvincular / buscar)", () => {
+  const detalle = { id: "p1", estado: "confirmado" }
+
+  it("2xx con cuerpo válido → ok", () => {
+    expect(interpretarRespuestaFactura(200, detalle, (b) => typeof (b as { id?: unknown }).id === "string")).toEqual({
+      tipo: "ok",
+      valor: detalle,
+    })
+  })
+
+  it("2xx con cuerpo que no valida → error genérico", () => {
+    expect(interpretarRespuestaFactura(200, {}, () => false)).toEqual({ tipo: "error", mensaje: MENSAJE_ERROR_GENERICO })
+  })
+
+  it("409 → conflicto con el mensaje del servidor", () => {
+    expect(interpretarRespuestaFactura(409, { error: "Otro." }, () => true)).toEqual({ tipo: "conflicto", mensaje: "Otro." })
+  })
+
+  it("422, 502 y 503 muestran el mensaje del servidor (vienen redactados)", () => {
+    for (const status of [422, 502, 503]) {
+      expect(interpretarRespuestaFactura(status, { error: "Mensaje." }, () => true)).toEqual({ tipo: "error", mensaje: "Mensaje." })
+    }
+  })
+
+  it("500 o sin respuesta → genérico", () => {
+    expect(interpretarRespuestaFactura(500, { error: "stack" }, () => true)).toEqual({ tipo: "error", mensaje: MENSAJE_ERROR_GENERICO })
+    expect(interpretarRespuestaFactura(null, null, () => true)).toEqual({ tipo: "error", mensaje: MENSAJE_ERROR_GENERICO })
   })
 })

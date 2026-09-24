@@ -40,6 +40,12 @@ export function fmtFechaPedido(iso: string | null): string {
   return `${parte.day}/${parte.month}/${parte.year}, ${parte.hour}:${parte.minute}`
 }
 
+/** Fecha sin hora de Alegra ("2026-09-20") → "20/09/2026". Sin Date: no hay zona que corra el día. */
+export function fmtFechaDia(ymd: string | null): string {
+  const m = ymd?.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "—"
+}
+
 const CANTIDAD = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 })
 
 /** Cantidad de un ítem (`numeric(14,3)`): 3 → "3", 1.5 → "1,5". */

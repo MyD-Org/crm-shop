@@ -13,6 +13,7 @@ import {
   mockDeleteEstimate,
   mockListEstimates,
   mockInvoicesByContact,
+  mockAllInvoices,
   mockPaymentsByContact,
 } from "./mock-alegra"
 
@@ -1266,6 +1267,117 @@ export async function attachFileToPayment(
   }
   const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null
   return raw && typeof raw.url === "string" ? raw.url : null
+}
+
+// ── Factura para vincular a un pedido del Shop ("Vincular factura" del admin) ──────────
+// El operador hizo la factura en Alegra por fuera y la vincula al pedido para liberar la
+// reserva de stock. Se lee UNA factura (por id o por número) con pocos reintentos por 429: es
+// una acción interactiva, no puede quedarse esperando 30 s al cupo, y comparte la cuota con la
+// sync, el portal y el bot.
+
+export interface AlegraFacturaResumen {
+  alegraId: string
+  /** Número legible tal como lo muestra Alegra (ej. "00201-00007040"), o null. */
+  numero: string | null
+  /** Emisión, YYYY-MM-DD. */
+  fecha: string
+  total: number
+  /** open | closed | draft | void */
+  estado: string
+  clienteAlegraId: string | null
+  clienteNombre: string | null
+}
+
+const REINTENTOS_429_INTERACTIVO = 1
+
+function mapRawFacturaResumen(raw: Record<string, unknown>): AlegraFacturaResumen {
+  const client = (raw.client ?? {}) as Record<string, unknown>
+  const numberTemplate = raw.numberTemplate as { fullNumber?: unknown; formattedNumber?: unknown } | undefined
+  const fullNumber = numberTemplate?.fullNumber ?? numberTemplate?.formattedNumber ?? raw.number
+  return {
+    alegraId: String(raw.id),
+    numero: fullNumber != null && String(fullNumber).trim() ? String(fullNumber) : null,
+    fecha: String(raw.date ?? ""),
+    total: Number(raw.total ?? 0),
+    estado: String(raw.status ?? ""),
+    clienteAlegraId: client.id != null ? String(client.id) : null,
+    clienteNombre: client.name != null && String(client.name).trim() ? String(client.name) : null,
+  }
+}
+
+function resumenDeMock(inv: AlegraInvoice): AlegraFacturaResumen {
+  return {
+    alegraId: inv.alegraId,
+    numero: inv.number,
+    fecha: inv.date,
+    total: inv.total,
+    estado: inv.status,
+    clienteAlegraId: inv.clientAlegraId || null,
+    clienteNombre: null,
+  }
+}
+
+/**
+ * Una factura por id. 404 → null; 429 → AlegraRateLimitError; otro error → AlegraHttpError.
+ * Un id que no son sólo dígitos no se consulta (nunca se arma un path con lo que tipeó el
+ * operador).
+ */
+export async function getFacturaPorId(
+  config: TenantConfig,
+  alegraId: string,
+  opts: { reintentos429?: number } = {},
+): Promise<AlegraFacturaResumen | null> {
+  if (config.alegraMock) {
+    const inv = mockAllInvoices().find((i) => i.alegraId === alegraId)
+    return inv ? resumenDeMock(inv) : null
+  }
+  if (!/^\d+$/.test(alegraId)) return null
+  try {
+    const raw = (await alegraFetch(config, `/invoices/${alegraId}`, undefined, undefined, {
+      reintentos429: opts.reintentos429 ?? REINTENTOS_429_INTERACTIVO,
+    })) as Record<string, unknown> | null
+    if (!raw || raw.id == null) return null
+    return mapRawFacturaResumen(raw)
+  } catch (err) {
+    if (err instanceof AlegraHttpError && err.status === 404) return null
+    throw err
+  }
+}
+
+/**
+ * Facturas candidatas para un número tipeado: UNA página (30) de `/invoices` con el filtro
+ * `numberTemplate_fullNumber`, de la más reciente a la más vieja, opcionalmente del cliente.
+ *
+ * NO confía en el filtro: el listado de facturas ignora en silencio los filtros que no conoce
+ * (probado con `number` y `query`, ver "Facturas paginadas"), y en ese caso devuelve las 30
+ * más recientes. Quien llama se queda sólo con las que coinciden con lo tipeado
+ * (`numeroFacturaCoincide`, lib/factura-vincular.ts).
+ */
+export async function buscarFacturasPorNumero(
+  config: TenantConfig,
+  numero: string,
+  opts: { clientId?: string; reintentos429?: number } = {},
+): Promise<AlegraFacturaResumen[]> {
+  if (config.alegraMock) {
+    return mockAllInvoices()
+      .filter((i) => !opts.clientId || i.clientAlegraId === opts.clientId)
+      .map(resumenDeMock)
+  }
+  const page = await alegraFetch(
+    config,
+    "/invoices",
+    {
+      numberTemplate_fullNumber: numero,
+      ...(opts.clientId ? { client_id: opts.clientId } : {}),
+      order_field: "date",
+      order_direction: "DESC",
+      start: "0",
+      limit: String(PAGE_SIZE),
+    },
+    undefined,
+    { reintentos429: opts.reintentos429 ?? REINTENTOS_429_INTERACTIVO },
+  )
+  return Array.isArray(page) ? (page as Record<string, unknown>[]).map(mapRawFacturaResumen) : []
 }
 
 // ── PDF de documentos (facturas, recibos de pago, cotizaciones) ──────────────

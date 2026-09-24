@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useClerk, useUser } from "@clerk/nextjs";
+import { useCart } from "@/context/CartContext";
+import { cerrarSesion } from "@/lib/cerrar-sesion";
 import { Avatar, DropdownMenu, type DropdownMenuEntry } from "@myd-org/ui";
 import {
   ENTRADAS_MENU,
@@ -98,6 +100,7 @@ const ICONOS: Record<IdEntradaMenu, React.ReactNode> = {
 export function MenuUsuario({ nombre }: { nombre: string | null }) {
   const router = useRouter();
   const clerk = useClerk();
+  const { clear } = useCart();
   const { user } = useUser();
 
   const nombreVisible = nombre ?? user?.fullName ?? null;
@@ -120,7 +123,7 @@ export function MenuUsuario({ nombre }: { nombre: string | null }) {
         clerk.openUserProfile({ __experimental_startPath: RUTA_PANEL_SEGURIDAD });
         break;
       case "salir":
-        void clerk.signOut({ redirectUrl: "/" });
+        void cerrarSesion({ vaciarCarrito: clear, signOut: () => clerk.signOut({ redirectUrl: "/" }) });
         break;
     }
   }

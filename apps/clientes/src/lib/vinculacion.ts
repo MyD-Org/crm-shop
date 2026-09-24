@@ -33,8 +33,14 @@ import {
   esCliente,
   getContacto,
   idPriceListUsable,
-  tipoCuentaDe,
 } from "./alegra";
+import {
+  contactoPorDocumento,
+  contactosPorEmail,
+  vinculableDeAlegra,
+  vinculablePorId,
+  type ContactoVinculable,
+} from "./contactos-espejo";
 import { enmascararEmail, enviarEmail } from "./email";
 import { permitir } from "./rate-limit";
 
@@ -94,6 +100,30 @@ function normalizarCuit(raw: string): string {
   return raw.replace(/\D/g, "");
 }
 
+/** Lo que se congela en `client_links` al vincular, venga del espejo o de Alegra. */
+function snapshotDelContacto(c: ContactoVinculable | null) {
+  return {
+    razonSocial: c?.name ?? null,
+    cuit: c?.identification ?? null,
+    idPriceList: idPriceListUsable(c) ?? null,
+    tipoCuenta: c?.tipoCuenta ?? "contado",
+  };
+}
+
+/**
+ * Una lectura del espejo que falla (permiso, base caída) no puede cortar la
+ * vinculación: se trata como "no está" y sigue el respaldo en vivo de siempre.
+ */
+async function delEspejoOVacio<T>(lectura: () => Promise<T>, vacio: T, que: string): Promise<T> {
+  try {
+    return await lectura();
+  } catch (err) {
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`[vinculacion] el espejo de contactos falló al buscar por ${que} (${codigo ?? "sin código"})`);
+    return vacio;
+  }
+}
+
 /**
  * Vinculación automática por email verificado. Es el camino NORMAL; el OTP es
  * el plan B.
@@ -138,19 +168,29 @@ export async function intentarVinculacionPorEmail(
     .limit(1);
   if (existente) return null;
 
-  let contactos;
-  try {
-    contactos = await buscarContactosPorEmail(email);
-  } catch (err) {
-    // Alegra caído: NO se registra "sin coincidencia", porque no buscamos de
-    // verdad. Se reintenta en la próxima visita.
-    console.error("[vinculacion] Alegra falló al buscar por email:", err);
-    return null;
-  }
+  // Espejo primero (0 requests). Ya viene filtrado a clientes: en esta cuenta la
+  // enorme mayoría de los contactos son proveedores, y vincular a un proveedor
+  // sería un disparate.
+  let clientes: ContactoVinculable[] = await delEspejoOVacio(
+    () => contactosPorEmail(email),
+    [],
+    "email",
+  );
 
-  // Solo clientes: en esta cuenta la enorme mayoría de los contactos son
-  // proveedores, y vincular a un proveedor sería un disparate.
-  const clientes = contactos.filter(esCliente);
+  // Sin match en el espejo: UNA consulta en vivo antes de grabar
+  // "sin coincidencia", que queda para siempre. El espejo puede estar atrasado
+  // (contacto recién cargado que la sync todavía no vio).
+  if (clientes.length === 0) {
+    try {
+      const enVivo = await buscarContactosPorEmail(email);
+      clientes = enVivo.filter(esCliente).map(vinculableDeAlegra);
+    } catch (err) {
+      // Alegra caído: NO se registra "sin coincidencia", porque no buscamos de
+      // verdad. Se reintenta en la próxima visita.
+      console.error("[vinculacion] Alegra falló al buscar por email:", err);
+      return null;
+    }
+  }
 
   // Dos contactos con la misma casilla: ambiguo. Elegir uno sería vincular a la
   // empresa equivocada la mitad de las veces. Va por OTP, donde el cliente dice
@@ -186,10 +226,7 @@ export async function intentarVinculacionPorEmail(
     .values({
       clerkUserId,
       alegraContactId: String(contacto.id),
-      razonSocial: contacto.name ?? null,
-      cuit: contacto.identification ?? null,
-      idPriceList: idPriceListUsable(contacto) ?? null,
-      tipoCuenta: tipoCuentaDe(contacto),
+      ...snapshotDelContacto(contacto),
       estado: "activa",
       metodo: "email_verificado",
     })
@@ -303,20 +340,27 @@ export async function solicitarVinculacion(
     };
   }
 
-  // --- Buscar el contacto en Alegra ---
-  let contacto;
-  try {
-    contacto = await buscarContactoPorIdentificacion(documento);
-  } catch (err) {
+  // --- Buscar el contacto: espejo (0 requests); sin fila, Alegra en vivo ---
+  let contacto: ContactoVinculable | null = await delEspejoOVacio(
+    () => contactoPorDocumento(documento),
+    null,
+    "documento",
+  );
+  if (!contacto) {
+    try {
+      const enVivo = await buscarContactoPorIdentificacion(documento);
+      contacto = enVivo ? vinculableDeAlegra(enVivo) : null;
+    } catch (err) {
     // Alegra caído no depende del CUIT consultado: falla igual para todos, así
     // que decirlo no filtra nada y evita que el cliente espere un mail que no
     // se generó nunca.
-    console.error("[vinculacion] Alegra falló al buscar el contacto:", err);
-    return {
-      ok: false,
-      motivo: "servicio_caido",
-      detalle: "No pudimos verificar el documento en este momento. Inténtelo de nuevo en unos minutos.",
-    };
+      console.error("[vinculacion] Alegra falló al buscar el contacto:", err);
+      return {
+        ok: false,
+        motivo: "servicio_caido",
+        detalle: "No pudimos verificar el documento en este momento. Inténtelo de nuevo en unos minutos.",
+      };
+    }
   }
 
   // A partir de acá, todo camino devuelve `uniforme`: cualquier diferencia
@@ -388,6 +432,8 @@ export type ResultadoConfirmacion =
  *
  * Los datos del contacto se releen de Alegra en este momento (no se confían del
  * paso 1): entre pedir el código y confirmarlo pudo cambiar la lista de precios.
+ * Si Alegra no responde, alcanza con la fila del espejo: el código ya probó que
+ * la persona controla la casilla del contacto.
  */
 export async function confirmarVinculacion(
   clerkUserId: string,
@@ -458,12 +504,16 @@ export async function confirmarVinculacion(
   }
 
   // --- Código válido: releer el contacto y crear la vinculación ---
-  let contacto;
+  let contacto: ContactoVinculable | null;
   try {
-    contacto = await getContacto(otp.alegraContactId);
+    const enVivo = await getContacto(otp.alegraContactId);
+    contacto = enVivo ? vinculableDeAlegra(enVivo) : null;
   } catch (err) {
     console.error("[vinculacion] no se pudo releer el contacto:", err);
-    return { ok: false, detalle: "No pudimos completar la vinculación. Inténtelo de nuevo en unos minutos." };
+    contacto = await delEspejoOVacio(() => vinculablePorId(otp.alegraContactId), null, "id");
+    if (!contacto) {
+      return { ok: false, detalle: "No pudimos completar la vinculación. Inténtelo de nuevo en unos minutos." };
+    }
   }
 
   const vinculado = await db.transaction(async (tx) => {
@@ -483,10 +533,7 @@ export async function confirmarVinculacion(
       .values({
         clerkUserId,
         alegraContactId: otp.alegraContactId,
-        razonSocial: contacto?.name ?? null,
-        cuit: contacto?.identification ?? null,
-        idPriceList: idPriceListUsable(contacto) ?? null,
-        tipoCuenta: tipoCuentaDe(contacto),
+        ...snapshotDelContacto(contacto),
         metodo: "otp_email",
       })
       .onConflictDoNothing()
@@ -505,6 +552,6 @@ export async function confirmarVinculacion(
   return {
     ok: true,
     alegraContactId: otp.alegraContactId,
-    razonSocial: contacto?.name,
+    razonSocial: contacto?.name ?? undefined,
   };
 }

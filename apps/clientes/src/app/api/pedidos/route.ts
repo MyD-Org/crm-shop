@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual, idPriceListSnapshot } from "@/lib/auth";
+import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import {
   evaluarEnvio,
@@ -210,7 +210,7 @@ export async function POST(req: Request) {
   try {
     // Sin cuenta corriente vinculada no hay lista propia: cotiza a la principal.
     const idPriceList = cliente
-      ? await idPriceListSnapshot(cliente.codigocliente)
+      ? await idPriceListCliente(cliente.codigocliente)
       : undefined;
     const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo });
 

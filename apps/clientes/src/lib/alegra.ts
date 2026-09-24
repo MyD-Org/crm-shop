@@ -221,8 +221,12 @@ export interface AlegraContact {
 /**
  * Cuenta corriente o contado, deducido del contacto: Alegra no tiene un campo propio.
  * En la sucursal, a un cliente de cuenta corriente le cargan un plazo de pago y/o un
- * límite de crédito; sin ninguno de los dos, es contado. Misma regla que el CRM
- * (`tipoCuentaDeContacto` en apps/admin/src/lib/erp.ts).
+ * límite de crédito; sin ninguno de los dos, es contado.
+ *
+ * La regla CANÓNICA es la columna generada `tipo_cuenta` del espejo de contactos
+ * (apps/admin/drizzle/0030_alegra_contacts.sql), y es la que el Shop lee de la
+ * vista. Esta función es SÓLO para contactos leídos en vivo de Alegra (respaldo
+ * cuando el espejo no tiene la fila); su test copia la tabla de casos del CRM.
  */
 export function tipoCuentaDe(
   contacto: Pick<AlegraContact, "term" | "creditLimit"> | null | undefined,

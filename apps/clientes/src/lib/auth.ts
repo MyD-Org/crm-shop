@@ -20,6 +20,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clientLinks } from "@/db/schema";
 import { intentarVinculacionPorEmail } from "./vinculacion";
+import { comercialEspejo } from "./contactos-espejo";
 import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
 import { sessionOptions, type SessionData } from "./session";
@@ -79,6 +80,21 @@ async function vinculacionDe(clerkUserId: string) {
     )
     .limit(1);
   return fila ?? null;
+}
+
+/**
+ * Tipo de cuenta y lista de precios según el espejo de contactos del CRM, o
+ * `null` si no hay fila activa o la vista no responde (en ese caso manda el
+ * snapshot de `client_links`). 1 query, 0 requests a Alegra.
+ */
+async function comercialDelEspejo(alegraId: string) {
+  try {
+    return await comercialEspejo(alegraId);
+  } catch (err) {
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`[auth] el espejo de contactos no respondió (${codigo ?? "sin código"}): se usa el snapshot`);
+    return null;
+  }
 }
 
 /**
@@ -164,6 +180,9 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
 
   const link = await resolverVinculacion(userId, emailVerificado);
   if (link) {
+    // El espejo gana sobre el snapshot de la vinculación: la lista o el plazo
+    // pudieron cambiar en Alegra después de vincular. Sin fila, el snapshot.
+    const espejo = await comercialDelEspejo(link.alegraContactId);
     return {
       clerkUserId: userId,
       email,
@@ -178,8 +197,9 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
         razonsocial: link.razonSocial ?? undefined,
         cuit: link.cuit ?? undefined,
         email: email ?? undefined,
-        tipoCuenta: (link.tipoCuenta as "corriente" | "contado") ?? undefined,
-        idPriceList: link.idPriceList ?? undefined,
+        tipoCuenta:
+          espejo?.tipoCuenta ?? (link.tipoCuenta as "corriente" | "contado" | null) ?? undefined,
+        idPriceList: espejo ? espejo.idPriceList : (link.idPriceList ?? undefined),
         origen: "vinculacion",
       },
       esAdmin: esRolAdmin(user?.publicMetadata),
@@ -265,13 +285,24 @@ export async function claveSolicitante(): Promise<string | null> {
 }
 
 /**
- * Lista de precios del cliente, del snapshot de `client_links`, sin tocar
- * Alegra. La usan el carrito y la confirmación del pedido, así que el cliente
- * paga lo que vio. Sin vínculo activo → undefined = lista principal.
+ * Lista de precios del cliente, SIN tocar Alegra (0 requests). La usan el
+ * carrito y la confirmación del pedido, así que el cliente paga lo que vio.
+ *
+ * 1. Espejo de contactos del CRM: la lista asignada hoy, si es usable (una
+ *    lista dada de baja ⇒ `undefined` = principal, ver `idPriceListUsable`).
+ * 2. Sin fila en el espejo (o la vista no responde): el snapshot de
+ *    `client_links` que se congeló al vincular.
+ * 3. Sin nada → `undefined` = lista principal.
+ *
+ * No hay control en vivo al confirmar: la tienda respeta sus propios precios
+ * (decisión 2026-09-23).
  */
-export async function idPriceListSnapshot(
+export async function idPriceListCliente(
   codigocliente: string,
 ): Promise<string | undefined> {
+  const espejo = await comercialDelEspejo(codigocliente);
+  if (espejo) return espejo.idPriceList;
+
   const [fila] = await getDb()
     .select({ idPriceList: clientLinks.idPriceList })
     .from(clientLinks)

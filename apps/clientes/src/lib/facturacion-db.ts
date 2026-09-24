@@ -146,10 +146,10 @@ export function perfilCompleto(perfil: PerfilFacturacion | null): boolean {
     Object.keys(
       validarFacturacion({
         pais: perfil.pais as Pais,
-        tipoDoc: perfil.tipoDoc as TipoDoc,
-        nroDoc: perfil.nroDoc,
-        razonSocial: perfil.razonSocial,
-        condicionIva: perfil.condicionIva as CondicionIva,
+        tipoDoc: (perfil.tipoDoc ?? undefined) as TipoDoc | undefined,
+        nroDoc: perfil.nroDoc ?? undefined,
+        razonSocial: perfil.razonSocial ?? undefined,
+        condicionIva: (perfil.condicionIva ?? undefined) as CondicionIva | undefined,
         domicilioCalle: perfil.domicilioCalle ?? undefined,
         domicilioCiudad: perfil.domicilioCiudad ?? undefined,
       }),

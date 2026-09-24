@@ -374,7 +374,7 @@ describe("confirmarVinculacion", () => {
         email: "compras@cliente.example",
         observations: "Paga con cheque.",
         // Alegra exige reenviar estos dos en el PUT: tienen que viajar sin tocar.
-        ivaCondition: "RESPONSABLE_INSCRIPTO",
+        ivaCondition: "IVA_RESPONSABLE",
         identificationObject: { type: "CUIT", number: "20123456789" },
       });
       const r = await confirmarVinculacion(u, "123456", " Otro@Cliente.example ");
@@ -387,7 +387,7 @@ describe("confirmarVinculacion", () => {
       expect(contacto).toMatchObject({
         id: "42",
         name: "En Vivo SA",
-        ivaCondition: "RESPONSABLE_INSCRIPTO",
+        ivaCondition: "IVA_RESPONSABLE",
         identificationObject: { type: "CUIT", number: "20123456789" },
       });
       expect(obs).toMatch(

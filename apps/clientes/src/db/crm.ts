@@ -116,6 +116,15 @@ export const crmContactos = publico
     paymentTermName: text("payment_term_name"),
     paymentTermDays: integer("payment_term_days"),
     creditLimit: numeric("credit_limit", { precision: 16, scale: 2 }),
+    // 0034 (change `contacto-fuente-unica`): datos de facturación, columnas
+    // GENERADAS desde `raw` en el CRM. Vacío o ausente en Alegra ⇒ NULL.
+    ivaCondition: text("iva_condition"),
+    identificationType: text("identification_type"),
+    identificationNumber: text("identification_number"),
+    addressStreet: text("address_street"),
+    addressCity: text("address_city"),
+    addressProvince: text("address_province"),
+    addressPostalCode: text("address_postal_code"),
   })
   .existing();
 
@@ -143,6 +152,23 @@ export const crmStock = publico
     alegraLeidoAt: timestamp("alegra_leido_at", { withTimezone: true }),
   })
   .existing();
+
+/**
+ * Función del CRM que deja el espejo al día después de un PUT del Shop a
+ * Alegra (migración 0034 de apps/admin): `SECURITY DEFINER`, EXECUTE sólo para
+ * `shop_app`. Recibe el contacto COMPLETO que devolvió Alegra y:
+ *  - actualiza sólo una fila existente de (tenant, cuenta, id): nunca inserta;
+ *  - sólo acepta llenar vacíos (nombre, documento, condición y domicilio no se
+ *    pueden pisar ni borrar: D1 también en la base);
+ *  - responde `'ok' | 'sin_fila' | 'rechazado'`.
+ *
+ * No entra al fixture de contrato (el test compara tablas/vistas): la firma la
+ * cubre el test de integración del CRM. El jsonb se pasa como TEXTO y se castea
+ * (`::text::jsonb`): postgres.js vuelve a serializar un string que va directo
+ * a un parámetro `jsonb` y la función lo rechaza por no ser un objeto.
+ */
+export const FN_WRITE_THROUGH =
+  "public.shop_contacto_write_through(text, text, text, jsonb)" as const;
 
 /**
  * Datos públicos del tenant (`public.tenants`). El GRANT es POR COLUMNA: el

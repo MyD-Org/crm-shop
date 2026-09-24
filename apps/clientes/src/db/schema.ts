@@ -189,14 +189,22 @@ export const billingProfiles = shop.table(
      * fiscal NO depende de esto.
      */
     pais: text("pais").notNull().default("AR"),
-    /** AR: 'CUIT' | 'DNI'. BR: 'CNPJ' | 'CPF'. PY: 'RUC' | 'CI'. */
-    tipoDoc: text("tipo_doc").notNull(),
+    /**
+     * AR: 'CUIT' | 'DNI' (| 'CUIL', deducido del espejo). BR: 'CNPJ' | 'CPF'.
+     * PY: 'RUC' | 'CI'.
+     *
+     * Documento, razón social y condición admiten NULL desde la 0009: un
+     * comprador vinculado a Alegra (cuyos datos de facturación salen del espejo
+     * del CRM) puede tener una fila "sólo teléfono". Una fila así nunca cuenta
+     * como perfil completo (`perfilCompleto`).
+     */
+    tipoDoc: text("tipo_doc"),
     /** Sin guiones ni puntos: se normaliza al guardar. Solo el CNPJ trae letras. */
-    nroDoc: text("nro_doc").notNull(),
+    nroDoc: text("nro_doc"),
     /** Razón social, o nombre y apellido si es consumidor final. */
-    razonSocial: text("razon_social").notNull(),
-    /** 'consumidor_final' | 'monotributo' | 'responsable_inscripto'. */
-    condicionIva: text("condicion_iva").notNull(),
+    razonSocial: text("razon_social"),
+    /** 'consumidor_final' | 'monotributo' | 'responsable_inscripto' | 'exento'. */
+    condicionIva: text("condicion_iva"),
 
     // --- Domicilio fiscal (el de la factura, no el de entrega) ---
     domicilioCalle: text("domicilio_calle"),

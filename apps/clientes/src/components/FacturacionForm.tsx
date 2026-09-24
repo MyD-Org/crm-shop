@@ -32,10 +32,11 @@ import {
 
 export interface PerfilFacturacionUI {
   pais?: string | null;
-  tipoDoc: string;
-  nroDoc: string;
-  razonSocial: string;
-  condicionIva: string;
+  /** Null en una fila "sólo teléfono" (vinculado sin perfil, migración 0009). */
+  tipoDoc: string | null;
+  nroDoc: string | null;
+  razonSocial: string | null;
+  condicionIva: string | null;
   domicilioCalle?: string | null;
   domicilioCiudad?: string | null;
   domicilioProvincia?: string | null;
@@ -57,6 +58,7 @@ const PAIS_OPTIONS = (Object.keys(PAIS_LABEL) as Pais[]).map((p) => ({
 /** Ejemplo de cada documento, con la puntuación con la que la gente lo escribe. */
 const PLACEHOLDER_DOC: Record<TipoDoc, string> = {
   CUIT: "30-71234567-8",
+  CUIL: "20-12345678-6",
   DNI: "27123456",
   CPF: "123.456.789-09",
   CNPJ: "12.345.678/0001-95",

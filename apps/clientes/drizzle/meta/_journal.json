@@ -64,6 +64,13 @@
       "when": 1790276221276,
       "tag": "0008_carrito_por_usuario",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790281632643,
+      "tag": "0009_perfil_solo_telefono",
+      "breakpoints": true
     }
   ]
 }

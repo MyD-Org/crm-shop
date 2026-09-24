@@ -273,7 +273,7 @@ export async function POST(req: Request) {
         entregaDireccion: entregaDireccion || undefined,
         pagoMetodo,
         notas: texto(body.notas, 500) || undefined,
-        facturacion: perfil
+        facturacion: perfil?.tipoDoc && perfil.nroDoc && perfil.razonSocial && perfil.condicionIva
           ? {
               tipoDoc: perfil.tipoDoc,
               nroDoc: perfil.nroDoc,

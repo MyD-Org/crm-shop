@@ -126,6 +126,22 @@ describe("baseline del esquema shop (estático)", () => {
     expect(sql).not.toContain("REFERENCES");
   });
 
+  it("0008 crea shop.carts con unique por tenant/usuario y version >= 0", () => {
+    const sql = readFileSync(`${DRIZZLE_DIR}/0008_carrito_por_usuario.sql`, "utf8");
+    expect(sql).toContain('CREATE TABLE "shop"."carts"');
+    expect(sql).toContain('"tenant_id" text NOT NULL');
+    expect(sql).toContain('"clerk_user_id" text NOT NULL');
+    expect(sql).toContain(`"items" jsonb DEFAULT '[]'::jsonb NOT NULL`);
+    expect(sql).toContain('"version" integer DEFAULT 0 NOT NULL');
+    expect(sql).toContain('"updated_at" timestamp with time zone DEFAULT now() NOT NULL');
+    expect(sql).toMatch(/CONSTRAINT "carts_version_check" CHECK \("shop"\."carts"\."version" >= 0\)/);
+    // UNA fila por (tenant, usuario): de esto dependen el primer guardado y el merge.
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX "cart_tenant_usuario" ON "shop"\."carts" USING btree \("tenant_id","clerk_user_id"\)/,
+    );
+    expect(sql).not.toContain("REFERENCES");
+  });
+
   it("0001 agrega el teléfono de contacto al perfil de facturación", () => {
     const sql = readFileSync(`${DRIZZLE_DIR}/0001_telefono_contacto.sql`, "utf8");
     expect(sql).toContain(

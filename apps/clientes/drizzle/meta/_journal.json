@@ -57,6 +57,13 @@
       "when": 1790267953260,
       "tag": "0007_vinculo_unico_por_contacto",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790276221276,
+      "tag": "0008_carrito_por_usuario",
+      "breakpoints": true
     }
   ]
 }

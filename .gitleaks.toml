@@ -44,12 +44,9 @@ id = "vercel-ids"
 description = "IDs de team o proyecto de Vercel"
 regex = '''(team|prj)_[A-Za-z0-9]{20,}'''
 
-[[allowlists]]
-description = "Lockfiles y tarball vendorizado"
+[allowlist]
+description = "Lockfiles, tarball vendorizado y la clave inventada de los tests del token del agente"
 paths = ['''package-lock\.json$''', '''apps/admin/vendor/.*\.tgz$''']
-
-# Clave de mentira de los tests de firma del token del agente (apps/clientes). Es literal a
-# propósito: solo este texto exacto queda exceptuado; cualquier otro valor sigue saltando.
-[[allowlists]]
-description = "Secreto de relleno de los tests del token del agente"
+# Literal a propósito: es la constante SECRETO de agent-token.test.ts y ai-token/route.test.ts.
+# Una clave real nunca es este texto; cualquier otro valor en esos archivos sigue saltando.
 regexes = ['''^secreto-de-prueba-de-al-menos-32-caracteres$''']

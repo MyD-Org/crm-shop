@@ -273,7 +273,7 @@ export const catalogSyncLog = pgTable(
 // pausada (lib/alegra-contacts-sync.ts). Sirve para no bajar el padrón en vivo: antes buscar
 // por teléfono o listar clientes costaba ~200 requests contra una cuota compartida.
 //
-// OJO: el Shop NO lee esta tabla sino la vista `public.alegra_contacts_shop` (migración 0031,
+// OJO: el Shop NO lee esta tabla sino la vista `public.alegra_contacts_shop` (migraciones 0031/0032,
 // vive solo en SQL). Si cambia o se borra una columna expuesta en esa vista, hay que recrear
 // la vista EN LA MISMA MIGRACIÓN.
 export const alegraContacts = pgTable(

@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button, Card, Field, Input } from "@myd-org/ui";
+import { documentoEnLinea } from "@/lib/facturacion";
+import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 
-type Paso = "documento" | "codigo" | "listo";
+type Paso = "documento" | "codigo" | "confirmar";
 
 /** Título y bajada de la card: todo el flujo vive en una sola card. */
 const TITULO = "Vincule su cuenta de cliente";
@@ -24,13 +25,15 @@ export function VincularClient({
   const [paso, setPaso] = useState<Paso>("documento");
   const [documento, setDocumento] = useState(documentoSugerido);
   const [codigo, setCodigo] = useState("");
-  const [razonSocial, setRazonSocial] = useState("");
+  const [cuenta, setCuenta] = useState<{ razonSocial?: string; documento?: string } | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
   async function solicitar() {
     setCargando(true);
     setError(null);
+    setAviso(null);
     try {
       const res = await fetch("/api/vinculacion/solicitar", {
         method: "POST",
@@ -50,6 +53,30 @@ export function VincularClient({
     }
   }
 
+  /** Valida el código y muestra a qué cuenta se va a vincular, sin vincular todavía. */
+  async function verificar() {
+    setCargando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/vinculacion/verificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigo }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "No pudimos validar el código.");
+        return;
+      }
+      setCuenta({ razonSocial: json.razonSocial, documento: json.documento });
+      setPaso("confirmar");
+    } catch {
+      setError("No pudimos conectarnos. Revise su conexión.");
+    } finally {
+      setCargando(false);
+    }
+  }
+
   async function confirmar() {
     setCargando(true);
     setError(null);
@@ -61,57 +88,67 @@ export function VincularClient({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json?.error ?? "No pudimos validar el código.");
+        setError(json?.error ?? "No pudimos vincular su cuenta.");
+        setCargando(false);
         return;
       }
-      setRazonSocial(json.razonSocial ?? "");
-      setPaso("listo");
-      // Refresca los Server Components: el header y los precios pasan a
-      // resolverse con la lista del cliente recién vinculado.
+      // Directo a donde tiene sentido seguir (el checkout si venía de ahí; si
+      // no, sus facturas) y refresco de los Server Components: el header y los
+      // precios pasan a resolverse con la lista del cliente recién vinculado.
+      router.replace(volver ?? RUTAS_MI_CUENTA.facturas);
       router.refresh();
     } catch {
       setError("No pudimos conectarnos. Revise su conexión.");
-    } finally {
       setCargando(false);
     }
   }
 
-  if (paso === "listo") {
-    return (
-      <Card title="¡Cuenta vinculada!">
-        <p className="text-sm text-muted">
-          {razonSocial ? (
-            <>
-              Su usuario quedó asociado a{" "}
-              <span className="font-medium text-text">{razonSocial}</span>.{" "}
-            </>
-          ) : null}
-          Desde ahora verá sus precios y su cuenta corriente.
-        </p>
-        <div className="mt-5 flex gap-3">
-          {volver === "/checkout" ? (
-            <Link href="/checkout">
-              <Button>Volver a su pedido</Button>
-            </Link>
-          ) : (
-            <Link href={volver ?? "/catalogo"}>
-              <Button>{volver ? "Continuar" : "Ver catálogo"}</Button>
-            </Link>
-          )}
-          <Link href="/mi-cuenta">
-            <Button variant="secondary">Mi cuenta</Button>
-          </Link>
-        </div>
-      </Card>
-    );
+  /** La cuenta no es la suya: se anula el código y no se vincula nada. */
+  async function cancelar() {
+    setCargando(true);
+    setError(null);
+    try {
+      await fetch("/api/vinculacion/cancelar", { method: "POST" });
+    } catch {
+      // Aunque falle, el código vence solo en 10 minutos y no se vinculó nada.
+    }
+    setCodigo("");
+    setCuenta(null);
+    setPaso("documento");
+    setAviso("No vinculamos ninguna cuenta. Si el documento es suyo pero los datos no coinciden, escríbanos.");
+    setCargando(false);
   }
 
   const errorBox = error && (
     <p className="mt-4 rounded-lg bg-danger/5 p-3 text-sm text-danger">{error}</p>
   );
 
+  if (paso === "confirmar") {
+    return (
+      <Card title="¿Es su cuenta?" description="Confirme que es su cuenta de cliente antes de vincularla.">
+        <p className="text-sm text-muted">
+          Encontramos la cuenta de{" "}
+          <span className="font-medium text-text">{cuenta?.razonSocial ?? "cliente"}</span>
+          {cuenta?.documento ? ` (${documentoEnLinea(cuenta.documento)})` : ""}.
+        </p>
+
+        {errorBox}
+
+        <div className="mt-5 flex items-center gap-4">
+          <Button onClick={confirmar} disabled={cargando}>
+            {cargando ? "Vinculando…" : "Sí, vincular"}
+          </Button>
+          <Button variant="secondary" onClick={cancelar} disabled={cargando}>
+            No es mi cuenta
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card title={TITULO} description={BAJADA}>
+      {aviso && <p className="mb-4 rounded-lg bg-elevated p-3 text-sm text-text">{aviso}</p>}
       {paso === "documento" ? (
         <>
           {/*
@@ -163,7 +200,7 @@ export function VincularClient({
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && codigo.length === 6 && !cargando) confirmar();
+                  if (e.key === "Enter" && codigo.length === 6 && !cargando) verificar();
                 }}
                 placeholder="000000"
                 inputMode="numeric"
@@ -176,8 +213,8 @@ export function VincularClient({
           {errorBox}
 
           <div className="mt-5 flex items-center gap-4">
-            <Button onClick={confirmar} disabled={codigo.length !== 6 || cargando}>
-              {cargando ? "Validando…" : "Vincular cuenta"}
+            <Button onClick={verificar} disabled={codigo.length !== 6 || cargando}>
+              {cargando ? "Validando…" : "Continuar"}
             </Button>
             <Button
               variant="link"

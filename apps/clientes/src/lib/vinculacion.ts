@@ -427,19 +427,24 @@ export type ResultadoConfirmacion =
   | { ok: true; alegraContactId: string; razonSocial?: string }
   | { ok: false; detalle: string };
 
+export type ResultadoVerificacion =
+  | { ok: true; razonSocial?: string; documento?: string }
+  | { ok: false; detalle: string };
+
+type Otp = typeof linkOtps.$inferSelect;
+
 /**
- * Paso 2: el cliente escribe el código y, si coincide, se crea la vinculación.
- *
- * Los datos del contacto se releen de Alegra en este momento (no se confían del
- * paso 1): entre pedir el código y confirmarlo pudo cambiar la lista de precios.
- * Si Alegra no responde, alcanza con la fila del espejo: el código ya probó que
- * la persona controla la casilla del contacto.
+ * Valida el código contra el OTP pendiente más reciente del usuario, sin
+ * consumirlo. Cada llamada gasta un intento, también las correctas: por eso
+ * confirmar (que viene después de verificar) tiene un intento más de techo, así
+ * quien acertó en el último intento puede confirmar igual.
  */
-export async function confirmarVinculacion(
+async function validarCodigo(
+  db: ReturnType<typeof getDb>,
   clerkUserId: string,
   codigo: string,
-): Promise<ResultadoConfirmacion> {
-  const db = getDb();
+  techo: number = MAX_INTENTOS,
+): Promise<{ ok: true; otp: Otp } | { ok: false; detalle: string }> {
   const limpio = codigo.replace(/\D/g, "");
 
   if (limpio.length !== 6) {
@@ -482,7 +487,7 @@ export async function confirmarVinculacion(
     .where(
       and(
         eq(linkOtps.id, otp.id),
-        lt(linkOtps.intentos, MAX_INTENTOS),
+        lt(linkOtps.intentos, techo),
         isNull(linkOtps.consumedAt),
       ),
     )
@@ -493,7 +498,7 @@ export async function confirmarVinculacion(
   }
 
   if (!hashesIguales(otp.codeHash, hashCodigo(clerkUserId, limpio))) {
-    const restantes = MAX_INTENTOS - intento.intentos;
+    const restantes = techo - intento.intentos;
     return {
       ok: false,
       detalle:
@@ -503,17 +508,75 @@ export async function confirmarVinculacion(
     };
   }
 
-  // --- Código válido: releer el contacto y crear la vinculación ---
-  let contacto: ContactoVinculable | null;
+  return { ok: true, otp };
+}
+
+/**
+ * El contacto del OTP, releído de Alegra (entre pedir el código y usarlo pudo
+ * cambiar la lista de precios). Si Alegra no responde, alcanza con la fila del
+ * espejo: el código ya probó que la persona controla la casilla del contacto.
+ * `null` = ni Alegra ni el espejo: pedir que reintente.
+ */
+async function releerContacto(alegraContactId: string): Promise<ContactoVinculable | null> {
   try {
-    const enVivo = await getContacto(otp.alegraContactId);
-    contacto = enVivo ? vinculableDeAlegra(enVivo) : null;
+    const enVivo = await getContacto(alegraContactId);
+    return enVivo ? vinculableDeAlegra(enVivo) : null;
   } catch (err) {
     console.error("[vinculacion] no se pudo releer el contacto:", err);
-    contacto = await delEspejoOVacio(() => vinculablePorId(otp.alegraContactId), null, "id");
-    if (!contacto) {
-      return { ok: false, detalle: "No pudimos completar la vinculación. Inténtelo de nuevo en unos minutos." };
-    }
+    return delEspejoOVacio(() => vinculablePorId(alegraContactId), null, "id");
+  }
+}
+
+/**
+ * Paso 2: el código es correcto y se le muestra al cliente a qué cuenta se va a
+ * vincular, para que la confirme o cancele. NO vincula ni consume el código.
+ *
+ * Recién acá se revela la razón social: quien llega tiene el código enviado al
+ * email registrado, la misma prueba que hace falta para vincular.
+ */
+export async function verificarCodigo(clerkUserId: string, codigo: string): Promise<ResultadoVerificacion> {
+  const valido = await validarCodigo(getDb(), clerkUserId, codigo);
+  if (!valido.ok) return valido;
+
+  const contacto = await releerContacto(valido.otp.alegraContactId);
+  if (!contacto) {
+    return { ok: false, detalle: "No pudimos validar el código. Inténtelo de nuevo en unos minutos." };
+  }
+  return {
+    ok: true,
+    razonSocial: contacto.name ?? undefined,
+    documento: contacto.identification ?? undefined,
+  };
+}
+
+/**
+ * El cliente dijo que la cuenta no es la suya: se consumen sus códigos
+ * pendientes, así ninguno sirve para vincular después.
+ */
+export async function cancelarVinculacion(clerkUserId: string): Promise<void> {
+  await getDb()
+    .update(linkOtps)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(linkOtps.clerkUserId, clerkUserId), isNull(linkOtps.consumedAt)));
+}
+
+/**
+ * Paso 3: el cliente confirmó la cuenta; se revalida el código y se crea la
+ * vinculación con los datos releídos (ver `releerContacto`).
+ */
+export async function confirmarVinculacion(
+  clerkUserId: string,
+  codigo: string,
+): Promise<ResultadoConfirmacion> {
+  const db = getDb();
+  const valido = await validarCodigo(db, clerkUserId, codigo, MAX_INTENTOS + 1);
+  if (!valido.ok) return valido;
+  const { otp } = valido;
+
+  // --- Código válido: releer el contacto y crear la vinculación ---
+  const contacto = await releerContacto(otp.alegraContactId);
+  if (!contacto) {
+    return { ok: false, detalle: "No pudimos completar la vinculación. Inténtelo de nuevo en unos minutos." };
   }
 
   const vinculado = await db.transaction(async (tx) => {

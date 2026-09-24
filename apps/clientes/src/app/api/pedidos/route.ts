@@ -11,7 +11,7 @@ import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { admiteEnvio } from "@/lib/facturacion";
 import { envioHabilitado } from "@/lib/envio-flag";
 import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
-import { congelarFacturacion, validarComplemento } from "@/lib/contacto-alegra";
+import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
 import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
 import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
 import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
@@ -138,7 +138,9 @@ export async function POST(req: Request) {
     }
   }
 
-  if (!contactoNombre || !contactoTelefono) {
+  // Al vinculado el teléfono le puede llegar del espejo de Alegra (se decide
+  // más abajo, con la lectura única): acá sólo se exige a quien no lo tiene.
+  if (!contactoNombre || (!contactoTelefono && !cliente)) {
     return NextResponse.json(
       { error: "Faltan el nombre y el teléfono de contacto." },
       { status: 400 },
@@ -223,6 +225,16 @@ export async function POST(req: Request) {
     }
   }
 
+  // Teléfono del pedido: el tipeado; si no vino, el de Alegra (el checkout
+  // lo precarga y el espejo es la fuente: no hace falta volver a tipearlo).
+  const telefonoPedido = contactoTelefono || dc.telefonoAlegra || "";
+  if (!telefonoPedido) {
+    return NextResponse.json(
+      { error: "Faltan el nombre y el teléfono de contacto." },
+      { status: 400 },
+    );
+  }
+
   // Solo se envía dentro de Argentina. El checkout ya no le ofrece el envío a
   // un comprador con documento de otro país; esto cubre el POST directo.
   if (entregaTipo === "envio" && !admiteEnvio(datosFactura.pais)) {
@@ -296,7 +308,7 @@ export async function POST(req: Request) {
       },
       {
         contactoNombre,
-        contactoTelefono,
+        contactoTelefono: telefonoPedido,
         entregaTipo,
         entregaCiudad: entregaCiudad || undefined,
         entregaDireccion: entregaDireccion || undefined,
@@ -327,18 +339,27 @@ export async function POST(req: Request) {
       );
     }
 
-    // Algo de la facturación quedó sólo en el perfil (un PUT a Alegra que
-    // falló): se reintenta subirlo, sin demorar la respuesta.
-    if (dc.fuente === "mixto" && dc.alegraId && !pedido.repetido) {
+    // Sin demorar la respuesta, UNA subida a Alegra que junta:
+    // - lo de facturación que quedó sólo en el perfil (un PUT que falló);
+    // - el teléfono tipeado, si Alegra no tiene ninguno (sólo completar
+    //   vacíos: la subida lo vuelve a mirar contra el contacto fresco).
+    const mixto = dc.fuente === "mixto";
+    const subirTelefono = Boolean(dc.interno && !dc.telefonoAlegra && telefonoParaAlegra(contactoTelefono));
+    if ((mixto || subirTelefono) && dc.alegraId && !pedido.repetido) {
       const alegraId = dc.alegraId;
-      after(() => sincronizarContactoConPerfil(alegraId, { clerkUserId }));
+      after(() =>
+        sincronizarContactoConPerfil(alegraId, {
+          clerkUserId,
+          ...(subirTelefono ? { telefono: contactoTelefono } : {}),
+        }),
+      );
     }
 
     // El perfil aprende el teléfono del primer pedido, para no pedirlo en la
     // próxima compra (sin perfil, crea la fila "sólo teléfono"). Va DESPUÉS de
     // crear el pedido y nunca lo hace fallar: el pedido ya existe y es lo que
     // importa; el teléfono es una comodidad.
-    if (clerkUserId && !dc.perfil?.telefono && !pedido.repetido) {
+    if (clerkUserId && contactoTelefono && !dc.perfil?.telefono && !dc.telefonoAlegra && !pedido.repetido) {
       try {
         await guardarTelefonoSiFalta(clerkUserId, contactoTelefono);
       } catch (err) {

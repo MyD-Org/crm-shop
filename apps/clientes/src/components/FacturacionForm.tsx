@@ -20,6 +20,7 @@ import {
   type TipoDoc,
 } from "@/lib/facturacion";
 import { PROVINCIAS_AR, provinciaCanonica } from "@/lib/provincias";
+import { telefonosParaMostrar, type TelefonosContacto } from "@/lib/contacto-alegra";
 
 const OPCIONES_PROVINCIA = PROVINCIAS_AR.map((p) => ({ label: p, value: p }));
 
@@ -117,6 +118,7 @@ export function FacturacionForm({
   perfil,
   nombreSugerido,
   bloqueado,
+  telefonosCuenta,
   onGuardado,
 }: {
   perfil: PerfilFacturacionUI | null;
@@ -124,6 +126,12 @@ export function FacturacionForm({
   nombreSugerido?: string;
   /** Vinculado a Alegra: los datos los manda el sistema, no el cliente. */
   bloqueado?: boolean;
+  /**
+   * Vinculado: los teléfonos de su contacto en Alegra (espejo). Con alguno
+   * cargado se muestran en lectura, como el resto; sin ninguno, se ofrece el
+   * editor del teléfono de contacto de siempre.
+   */
+  telefonosCuenta?: TelefonosContacto | null;
   onGuardado?: () => void;
 }) {
   const [form, setForm] = useState<DatosFacturacion>(desdePerfil(perfil, nombreSugerido));
@@ -222,6 +230,7 @@ export function FacturacionForm({
   }
 
   if (bloqueado) {
+    const telefonosDeCuenta = telefonosParaMostrar(telefonosCuenta);
     return (
       <div className="flex flex-col gap-6">
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -240,13 +249,17 @@ export function FacturacionForm({
           />
         )}
         <Dato label="Domicilio fiscal" value={domicilioEnLinea(form) || "—"} />
+        {telefonosDeCuenta.map((t) => (
+          <Dato key={t.label} label={t.label} value={t.valor} />
+        ))}
       </dl>
       {/*
-        El teléfono es lo único editable con la cuenta vinculada: la razón
-        social y el CUIT los manda Alegra, pero a quién llamar por un pedido
-        lo decide el cliente. Sin perfil guardado no hay fila donde ponerlo.
+        Con teléfonos en Alegra, también vienen de su cuenta (se precargan en
+        el checkout, donde puede cambiarlos para una compra). Sin ninguno, el
+        teléfono de contacto es editable: la razón social y el CUIT los manda
+        Alegra, pero a quién llamar por un pedido lo decide el cliente.
       */}
-      {perfil && (
+      {perfil && telefonosDeCuenta.length === 0 && (
         <TelefonoContactoForm
           inicial={form.telefono ?? ""}
           onGuardado={onGuardado}

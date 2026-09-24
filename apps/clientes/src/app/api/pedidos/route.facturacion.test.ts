@@ -223,7 +223,8 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
     expect(sincronizar).not.toHaveBeenCalled();
     expect(tareasAfter).toHaveLength(1);
     await tareasAfter[0]();
-    expect(sincronizar).toHaveBeenCalledWith("42", { clerkUserId: "user_1" });
+    // Una sola subida: lo del perfil y, como Alegra no tiene teléfono, el tipeado.
+    expect(sincronizar).toHaveBeenCalledWith("42", { clerkUserId: "user_1", telefono: "+54 376 4000000" });
   });
 
   it("Alegra no disponible y sin perfil que sirva ⇒ 409 facturacion_no_disponible, en usted", async () => {
@@ -235,5 +236,91 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
       error: "No pudimos obtener sus datos de facturación. Inténtelo de nuevo en unos minutos.",
       motivo: "facturacion_no_disponible",
     });
+  });
+});
+
+describe("POST /api/pedidos — teléfono desde el espejo (0036 del CRM)", () => {
+  beforeEach(() => {
+    identidad = vinculado;
+    espejo = null;
+    perfil = null;
+    getContacto.mockReset();
+    crearPedido.mockReset();
+    crearPedido.mockResolvedValue({ id: "p-1", repetido: false, cuotasMax: null });
+    guardarTelefonoSiFalta.mockReset();
+    sincronizar.mockReset();
+    tareasAfter = [];
+  });
+
+  it("vinculado con celular en Alegra y sin teléfono tipeado ⇒ 201 con el celular, sin subir nada", async () => {
+    espejo = fila({ mobile: "11 5000-0000", phonePrimary: "011 4000-0000" });
+    const r = await post({ contactoTelefono: "" });
+    expect(r.status).toBe(201);
+    expect(datosDelPedido().contactoTelefono).toBe("11 5000-0000");
+    expect(tareasAfter).toHaveLength(0);
+    expect(guardarTelefonoSiFalta).not.toHaveBeenCalled();
+  });
+
+  it("sin celular usa el principal y después el secundario", async () => {
+    espejo = fila({ phoneSecondary: "011 4000-0001" });
+    await post({ contactoTelefono: "" });
+    expect(datosDelPedido().contactoTelefono).toBe("011 4000-0001");
+  });
+
+  it("vinculado con teléfono en Alegra que tipea otro ⇒ va el tipeado al pedido, Alegra no se toca", async () => {
+    espejo = fila({ phonePrimary: "011 4000-0000" });
+    const r = await post({ contactoTelefono: "+54 376 4111111" });
+    expect(r.status).toBe(201);
+    expect(datosDelPedido().contactoTelefono).toBe("+54 376 4111111");
+    expect(tareasAfter).toHaveLength(0);
+  });
+
+  it("vinculado sin teléfono en Alegra ⇒ lo tipeado va al pedido y se sube a Alegra en after()", async () => {
+    espejo = fila();
+    const r = await post();
+    expect(r.status).toBe(201);
+    expect(datosDelPedido().contactoTelefono).toBe("+54 376 4000000");
+    expect(tareasAfter).toHaveLength(1);
+    await tareasAfter[0]();
+    expect(sincronizar).toHaveBeenCalledWith("42", { clerkUserId: "user_1", telefono: "+54 376 4000000" });
+    // Con Clerk el perfil lo aprende también (se precarga mientras el espejo se pone al día).
+    expect(guardarTelefonoSiFalta).toHaveBeenCalledWith("user_1", "+54 376 4000000");
+  });
+
+  it("sólo cookie del CRM sin teléfono en Alegra ⇒ también se sube (sin perfil)", async () => {
+    identidad = soloCookie;
+    espejo = fila();
+    await post();
+    await tareasAfter[0]();
+    expect(sincronizar).toHaveBeenCalledWith("42", { clerkUserId: null, telefono: "+54 376 4000000" });
+    expect(guardarTelefonoSiFalta).not.toHaveBeenCalled();
+  });
+
+  it("un teléfono que no parece teléfono queda sólo en el pedido", async () => {
+    espejo = fila();
+    await post({ contactoTelefono: "llamar" });
+    expect(datosDelPedido().contactoTelefono).toBe("llamar");
+    expect(tareasAfter).toHaveLength(0);
+  });
+
+  it("vinculado sin teléfono en ningún lado y sin tipear ⇒ 400 en usted", async () => {
+    espejo = fila();
+    const r = await post({ contactoTelefono: "" });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: "Faltan el nombre y el teléfono de contacto." });
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("no vinculado sin teléfono ⇒ 400 antes de leer la facturación", async () => {
+    identidad = { clerkUserId: "user_1", cliente: null };
+    const r = await post({ contactoTelefono: "" });
+    expect(r.status).toBe(400);
+  });
+
+  it("pedido repetido (misma clave) ⇒ no se sube nada", async () => {
+    espejo = fila();
+    crearPedido.mockResolvedValue({ id: "p-1", repetido: true, cuotasMax: null });
+    await post();
+    expect(tareasAfter).toHaveLength(0);
   });
 });

@@ -4,6 +4,7 @@ import { CheckoutClient } from "@/components/CheckoutClient";
 import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
+import { telefonoDelCheckout } from "@/lib/contacto-alegra";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { envioHabilitado } from "@/lib/envio-flag";
@@ -75,7 +76,10 @@ export default async function CheckoutPage() {
         nombreSugerido={
           dc.datos.razonSocial ?? cliente?.razonsocial ?? nombre ?? ""
         }
-        telefonoSugerido={perfil?.telefono ?? ""}
+        // Vinculado: el de Alegra (no se vuelve a pedir); si no hay, el del perfil.
+        telefonoSugerido={
+          telefonoDelCheckout({ telefonoAlegra: dc.telefonoAlegra, telefonoPerfil: perfil?.telefono }).inicial
+        }
         emailCliente={cliente?.email ?? email}
         facturacion={paraElCliente(dc)}
         perfilFacturacion={perfilUI}

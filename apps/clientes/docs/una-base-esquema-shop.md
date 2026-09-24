@@ -510,6 +510,7 @@ Mis datos. El no vinculado sigue con `shop.billing_profiles`.
 |---|---|---|
 | 7 columnas de facturación en la vista (27 en total) | migración **0034** del CRM | `iva_condition`, `identification_type/number`, `address_street/city/province/postal_code`, generadas desde `raw` (vacío ⇒ NULL) |
 | `public.shop_contacto_write_through(text, text, text, jsonb)` | 0034 del CRM, `SECURITY DEFINER` | después de un PUT del Shop a Alegra deja la fila del espejo al día; sólo llena vacíos (D1 también en la base); `'ok' \| 'sin_fila' \| 'rechazado'` |
+| 3 teléfonos en la vista (30 en total): `phone_primary`, `phone_secondary`, `mobile` | migración **0036** del CRM | el checkout precarga el de Alegra (celular > principal > secundario) y no lo vuelve a pedir; Mis datos los muestra en lectura |
 | fila "sólo teléfono" en `shop.billing_profiles` | migración **0009** del Shop | documento, razón social y condición admiten NULL: el vinculado guarda su teléfono aunque no tenga perfil |
 
 **Permisos de `shop_app`:** `SELECT` sobre la vista y `EXECUTE` sobre la
@@ -523,6 +524,15 @@ si Alegra falla (tope de `/contacts` como 400 `{"code":429}`, timeout de 8 s)
 la compra sigue: lo cargado va al perfil (Clerk) o con el pedido (cookie),
 marcado para revisión. La provincia es opcional y se elige de la lista oficial
 (`src/lib/provincias.ts`, 24 jurisdicciones con el nombre que usa Alegra).
+
+**Teléfono del vinculado:** sale del espejo (0036 del CRM). Si Alegra no tiene
+ninguno, se pide en el checkout como siempre; lo tipeado va al pedido, al
+perfil (con Clerk) y, en `after()`, a Alegra como `phonePrimary` SÓLO si el
+contacto fresco (GET en vivo) sigue sin ningún teléfono. La función
+`shop_contacto_write_through` no mira teléfonos: esa guarda la hace el Shop, y
+las columnas de teléfono del espejo se ponen al día con el webhook o la sync.
+**Orden de despliegue:** este código selecciona las columnas de la 0036; la
+0036 tiene que estar aplicada en prod ANTES de mergear el PR del Shop.
 
 **Tipo CUIL:** cuando Alegra no tiene tipo de documento, un consumidor final
 con 11 dígitos que empiezan en 20/23/24/27 se deduce CUIL. No está verificado

@@ -15,6 +15,7 @@ import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFactu
 import type { PerfilFacturacionUI } from "@/components/FacturacionForm";
 import {
   estadoFacturacionCheckout,
+  hayTelefonoParaPedido,
   type CampoFacturacion,
   type Complemento,
 } from "@/lib/contacto-alegra";
@@ -126,7 +127,11 @@ const AVISO_PAGO_A_COORDINAR =
 
 interface Props {
   nombreSugerido: string;
-  /** Teléfono guardado en Mis datos. Vacío = se pide acá y el perfil lo aprende. */
+  /**
+   * Teléfono precargado: el de Alegra del vinculado (`facturacion.telefonoAlegra`,
+   * no hace falta tipearlo) o el guardado en Mis datos. Vacío = se pide acá; el
+   * perfil lo aprende y, si Alegra no tiene ninguno, se sube a Alegra.
+   */
   telefonoSugerido?: string;
   emailCliente?: string;
   /**
@@ -319,7 +324,7 @@ export function CheckoutClient({
   const envioDisponible = cotizacion?.envio.disponible ?? false;
   const datosCompletos =
     nombre.trim() !== "" &&
-    telefono.trim() !== "" &&
+    hayTelefonoParaPedido(telefono, facturacion.telefonoAlegra) &&
     (entrega === "retiro" || (ciudadEntrega !== "" && direccionEntrega.trim() !== ""));
 
   const puedeConfirmar =
@@ -644,7 +649,14 @@ export function CheckoutClient({
                   onChange={(e) => setNombre(e.target.value)}
                 />
               </Field>
-              <Field label="Teléfono">
+              <Field
+                label="Teléfono"
+                hint={
+                  facturacion.telefonoAlegra
+                    ? "Es el de su cuenta. Puede cambiarlo sólo para esta compra."
+                    : undefined
+                }
+              >
                 <Input
                   type="tel"
                   placeholder="+54 376 4000000"

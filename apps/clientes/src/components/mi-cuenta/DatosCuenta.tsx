@@ -69,7 +69,8 @@ export function DatosCuenta({
   const preguntando = estado === "preguntar" && !primeraCompra;
   const [completando, setCompletando] = useState(false);
 
-  // Vinculado: lo que se muestra sale del espejo; el teléfono, del perfil.
+  // Vinculado: lo que se muestra sale del espejo; el teléfono también (y si
+  // Alegra no tiene ninguno, el del perfil, editable).
   const fv = vinculado ? facturacionVinculada : undefined;
   const perfilMostrado: PerfilFacturacionUI | null = fv
     ? {
@@ -82,7 +83,7 @@ export function DatosCuenta({
         domicilioCiudad: fv.datos.domicilioCiudad ?? null,
         domicilioProvincia: fv.datos.domicilioProvincia ?? null,
         domicilioCp: fv.datos.domicilioCp ?? null,
-        telefono: perfilFacturacion?.telefono ?? null,
+        telefono: fv.telefonoAlegra ?? perfilFacturacion?.telefono ?? null,
       }
     : perfilFacturacion;
   const deSuCuenta = fv ? ["espejo", "mixto", "vivo"].includes(fv.fuente) : false;
@@ -136,6 +137,7 @@ export function DatosCuenta({
             // Vinculado: la razón social la manda el sistema, no se sugiere nada.
             nombreSugerido={vinculado ? undefined : nombre}
             bloqueado={vinculado}
+            telefonosCuenta={fv?.telefonos ?? null}
             onGuardado={() => router.refresh()}
           />
         </Card>

@@ -52,7 +52,7 @@ const getContacto = vi.fn();
 const actualizarObservacionesContacto = vi.fn();
 vi.mock("./alegra", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./alegra")>()),
-  actualizarObservacionesContacto: (id: string, obs: string) => actualizarObservacionesContacto(id, obs),
+  actualizarObservacionesContacto: (c: { id: string }, obs: string) => actualizarObservacionesContacto(c, obs),
   buscarContactosPorEmail: (e: string) => buscarContactosPorEmail(e),
   buscarContactoPorIdentificacion: (d: string) => buscarContactoPorIdentificacion(d),
   getContacto: (id: string) => getContacto(id),
@@ -373,6 +373,9 @@ describe("confirmarVinculacion", () => {
         name: "En Vivo SA",
         email: "compras@cliente.example",
         observations: "Paga con cheque.",
+        // Alegra exige reenviar estos dos en el PUT: tienen que viajar sin tocar.
+        ivaCondition: "RESPONSABLE_INSCRIPTO",
+        identificationObject: { type: "CUIT", number: "20123456789" },
       });
       const r = await confirmarVinculacion(u, "123456", " Otro@Cliente.example ");
       expect(r).toMatchObject({ ok: true, alegraContactId: "42" });
@@ -380,8 +383,13 @@ describe("confirmarVinculacion", () => {
       expect(actualizarObservacionesContacto).not.toHaveBeenCalled();
       await correrAfter();
       expect(actualizarObservacionesContacto).toHaveBeenCalledTimes(1);
-      const [id, obs] = actualizarObservacionesContacto.mock.calls[0];
-      expect(id).toBe("42");
+      const [contacto, obs] = actualizarObservacionesContacto.mock.calls[0];
+      expect(contacto).toMatchObject({
+        id: "42",
+        name: "En Vivo SA",
+        ivaCondition: "RESPONSABLE_INSCRIPTO",
+        identificationObject: { type: "CUIT", number: "20123456789" },
+      });
       expect(obs).toMatch(
         /^Paga con cheque\.\nTienda online: también usa otro@cliente\.example \(vinculado el \d{2}\/\d{2}\/\d{4}\)$/,
       );

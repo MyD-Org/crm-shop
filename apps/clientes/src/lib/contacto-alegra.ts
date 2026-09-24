@@ -627,12 +627,23 @@ export interface FacturacionCongelada {
  * mapea, el valor crudo de Alegra) y el documento sólo con dígitos, como el
  * perfil. null si falta algo esencial.
  */
-export function congelarFacturacion(datos: Partial<DatosContacto> & { pais?: string }): FacturacionCongelada | null {
+export function congelarFacturacion(datos: {
+  tipoDoc?: string;
+  nroDoc?: string;
+  razonSocial?: string;
+  condicionIva?: string;
+  condicionIvaAlegra?: string | null;
+  domicilioCalle?: string;
+  domicilioCiudad?: string;
+  domicilioProvincia?: string;
+  domicilioCp?: string;
+}): FacturacionCongelada | null {
   const condicion = datos.condicionIva ?? datos.condicionIvaAlegra ?? null;
   if (!datos.tipoDoc || !datos.nroDoc || !datos.razonSocial || !condicion) return null;
   return {
     tipoDoc: datos.tipoDoc,
-    nroDoc: soloDigitos(datos.nroDoc) || datos.nroDoc,
+    // Como en el perfil: sin guiones ni puntos (el CNPJ conserva sus letras).
+    nroDoc: normalizarDoc(datos.tipoDoc as TipoDoc, datos.nroDoc) || datos.nroDoc,
     razonSocial: datos.razonSocial,
     condicionIva: condicion,
     domicilio: domicilioEnLinea(datos) || undefined,

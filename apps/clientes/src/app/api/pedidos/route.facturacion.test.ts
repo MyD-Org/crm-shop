@@ -1,0 +1,239 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ContactoFacturacion } from "@/lib/contacto-alegra";
+
+/**
+ * POST /api/pedidos con la lectura única de facturación (Dominio 4 de
+ * `contacto-fuente-unica`). La lectura (`datosDelContacto`) y las reglas de D1
+ * son las reales; se mockean la identidad, el espejo, Alegra, el perfil, la
+ * cotización y la persistencia del pedido. Datos inventados.
+ */
+
+let identidad: { clerkUserId: string | null; cliente: Record<string, unknown> | null; email?: string } = {
+  clerkUserId: "user_1",
+  cliente: null,
+};
+vi.mock("@/lib/auth", () => ({
+  identidadActual: async () => identidad,
+  idPriceListCliente: async () => undefined,
+}));
+vi.mock("@/lib/cotizacion", async (orig) => ({
+  ...(await orig<typeof import("@/lib/cotizacion")>()),
+  cotizar: async () => ({ lineas: [{ id: "1", qty: 1 }], hayProblemas: false, subtotal: 1000, iva: 210, costoEnvio: 0, total: 1210 }),
+}));
+const crearPedido = vi.fn();
+vi.mock("@/lib/pedidos", () => ({
+  crearPedido: (...a: unknown[]) => crearPedido(...a),
+  getPedidoPorClave: async () => null,
+  listarPedidos: async () => [],
+}));
+vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => false }));
+vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => false }));
+
+let espejo: ContactoFacturacion | null = null;
+vi.mock("@/lib/contactos-espejo", () => ({
+  CUENTA_ALEGRA_PRINCIPAL: "principal",
+  facturacionEspejo: async () => espejo,
+}));
+const getContacto = vi.fn();
+vi.mock("@/lib/alegra", async (orig) => ({
+  ...(await orig<typeof import("@/lib/alegra")>()),
+  getContacto: (id: string) => getContacto(id),
+  actualizarContacto: vi.fn(),
+  actualizarObservacionesContacto: vi.fn(),
+}));
+
+let perfil: Record<string, unknown> | null = null;
+const guardarTelefonoSiFalta = vi.fn();
+vi.mock("@/lib/facturacion-db", async (orig) => ({
+  perfilCompleto: (await orig<typeof import("@/lib/facturacion-db")>()).perfilCompleto,
+  getPerfilFacturacion: async () => perfil,
+  guardarTelefonoSiFalta: (...a: unknown[]) => guardarTelefonoSiFalta(...a),
+  upsertRespaldoVinculado: vi.fn(),
+}));
+
+const sincronizar = vi.fn();
+vi.mock("@/lib/contacto-write-through", () => ({
+  sincronizarContactoConPerfil: (...a: unknown[]) => sincronizar(...a),
+}));
+let tareasAfter: Array<() => unknown> = [];
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: (fn: () => unknown) => {
+    tareasAfter.push(fn);
+  },
+}));
+
+import { POST } from "./route";
+
+function fila(over: Partial<ContactoFacturacion> = {}): ContactoFacturacion {
+  return {
+    alegraId: "42",
+    name: "ACME SRL",
+    identification: "30-71234567-1",
+    identificationNorm: "30712345671",
+    identificationType: "CUIT",
+    identificationNumber: "30-71234567-1",
+    ivaCondition: "IVA_RESPONSABLE",
+    addressStreet: "Calle Falsa 123",
+    addressCity: "Posadas",
+    addressProvince: null,
+    addressPostalCode: null,
+    ...over,
+  };
+}
+
+const PERFIL = {
+  pais: "AR",
+  tipoDoc: "DNI",
+  nroDoc: "12345678",
+  razonSocial: "Ana Pérez",
+  condicionIva: "consumidor_final",
+  domicilioCalle: "Calle 1",
+  domicilioCiudad: "Posadas",
+  domicilioProvincia: null,
+  domicilioCp: null,
+  telefono: null,
+  coincideConAlegra: null,
+};
+
+const vinculado = { clerkUserId: "user_1", cliente: { codigocliente: "42", cuit: "30-71234567-1", origen: "vinculacion" } };
+const soloCookie = { clerkUserId: null, cliente: { codigocliente: "42", origen: "cookie_crm" } };
+
+const post = (extra: Record<string, unknown> = {}) =>
+  POST(
+    new Request("http://localhost/api/pedidos", {
+      method: "POST",
+      body: JSON.stringify({
+        items: [{ id: "1", qty: 1 }],
+        contactoNombre: "Ana",
+        contactoTelefono: "+54 376 4000000",
+        entregaTipo: "retiro",
+        pagoMetodo: "a_coordinar",
+        ...extra,
+      }),
+    }),
+  );
+
+const datosDelPedido = () => crearPedido.mock.calls[0][1];
+
+beforeEach(() => {
+  identidad = vinculado;
+  espejo = fila();
+  perfil = null;
+  tareasAfter = [];
+  sincronizar.mockReset();
+  getContacto.mockReset().mockResolvedValue(null);
+  guardarTelefonoSiFalta.mockReset().mockResolvedValue(undefined);
+  crearPedido.mockReset().mockResolvedValue({ id: "p1", numero: "PED-1", repetido: false, cuotasMax: null });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+describe("POST /api/pedidos — facturación desde la lectura única", () => {
+  it("vinculado SIN perfil y espejo completo ⇒ 201 con la facturación del espejo (antes: 409)", async () => {
+    const r = await post();
+    expect(r.status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({
+      facturacion: {
+        tipoDoc: "CUIT",
+        nroDoc: "30712345671",
+        razonSocial: "ACME SRL",
+        condicionIva: "responsable_inscripto",
+        domicilio: "Calle Falsa 123, Posadas",
+      },
+      requiereRevision: false,
+    });
+    // Sin perfil igual aprende el teléfono (fila sólo teléfono).
+    expect(guardarTelefonoSiFalta).toHaveBeenCalledWith("user_1", "+54 376 4000000");
+  });
+
+  it("espejo incompleto ⇒ 409 facturacion_incompleta con los faltantes, en usted", async () => {
+    espejo = fila({ addressStreet: null });
+    const r = await post();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({
+      error: "Cargue sus datos de facturación para continuar.",
+      motivo: "facturacion_incompleta",
+      faltantes: ["domicilioCalle"],
+    });
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("cookie del CRM sin Clerk, espejo completo ⇒ 201 (D4)", async () => {
+    identidad = soloCookie;
+    expect((await post()).status).toBe(201);
+    expect(guardarTelefonoSiFalta).not.toHaveBeenCalled();
+  });
+
+  it("cookie + complemento (el PUT a Alegra falló) ⇒ 201, para revisión, con la calle en el domicilio", async () => {
+    identidad = soloCookie;
+    espejo = fila({ addressStreet: null });
+    const r = await post({ complementoFacturacion: { domicilioCalle: "Nueva 1" } });
+    expect(r.status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({
+      facturacion: { domicilio: "Nueva 1, Posadas" },
+      requiereRevision: true,
+    });
+  });
+
+  it("complemento que intenta pisar un dato de Alegra ⇒ 409, sin pedido", async () => {
+    identidad = soloCookie;
+    espejo = fila({ addressStreet: null });
+    const r = await post({ complementoFacturacion: { domicilioCalle: "Nueva 1", razonSocial: "Otra SRL" } });
+    expect(r.status).toBe(409);
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("exento se congela tal cual", async () => {
+    espejo = fila({ ivaCondition: "IVA_EXEMPT" });
+    await post();
+    expect(datosDelPedido().facturacion.condicionIva).toBe("exento");
+  });
+
+  it("RI con 12 dígitos y RI con DNI ⇒ 201 y para revisión (no bloquea)", async () => {
+    espejo = fila({ identificationType: null, identificationNumber: "201234567861", identification: "201234567861", identificationNorm: "201234567861" });
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido().requiereRevision).toBe(true);
+
+    crearPedido.mockClear();
+    espejo = fila({ identificationType: "DNI", identificationNumber: "12345678", identification: "12345678", identificationNorm: "12345678" });
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: true, facturacion: { tipoDoc: "DNI", nroDoc: "12345678" } });
+    expect(vi.mocked(console.warn).mock.calls.join(" ")).toContain("pedido p1 para revisión: documento_incompatible");
+  });
+
+  it("no vinculado sin perfil ⇒ 409; con perfil ⇒ como siempre", async () => {
+    identidad = { clerkUserId: "user_1", cliente: null };
+    expect((await post()).status).toBe(409);
+
+    perfil = { ...PERFIL, coincideConAlegra: "77" };
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({
+      facturacion: { tipoDoc: "DNI", nroDoc: "12345678", razonSocial: "Ana Pérez", condicionIva: "consumidor_final" },
+      // coincide con un contacto de Alegra y no vinculó: revisión, como siempre.
+      requiereRevision: true,
+    });
+  });
+
+  it("mixto (algo quedó en el perfil) ⇒ se programa la subida en after(), sin esperarla", async () => {
+    espejo = fila({ addressStreet: null });
+    perfil = { ...PERFIL, tipoDoc: "CUIT", nroDoc: "30712345671", domicilioCalle: "Av. Siempreviva 742" };
+    const r = await post();
+    expect(r.status).toBe(201);
+    expect(sincronizar).not.toHaveBeenCalled();
+    expect(tareasAfter).toHaveLength(1);
+    await tareasAfter[0]();
+    expect(sincronizar).toHaveBeenCalledWith("42", { clerkUserId: "user_1" });
+  });
+
+  it("Alegra no disponible y sin perfil que sirva ⇒ 409 facturacion_no_disponible, en usted", async () => {
+    espejo = null;
+    getContacto.mockRejectedValue(new Error("Alegra 503 en /contacts/42: caído"));
+    const r = await post();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({
+      error: "No pudimos obtener sus datos de facturación. Inténtelo de nuevo en unos minutos.",
+      motivo: "facturacion_no_disponible",
+    });
+  });
+});

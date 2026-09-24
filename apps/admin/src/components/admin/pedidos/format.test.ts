@@ -89,7 +89,10 @@ describe("etiquetas", () => {
   it("condición de IVA", () => {
     expect(condicionIvaLabel("responsable_inscripto")).toBe("Responsable inscripto")
     expect(condicionIvaLabel("consumidor_final")).toBe("Consumidor final")
-    expect(condicionIvaLabel("exento")).toBe("exento")
+    expect(condicionIvaLabel("monotributo")).toBe("Monotributo")
+    expect(condicionIvaLabel("exento")).toBe("Exento")
+    // Un valor que el Shop congeló tal cual de Alegra (no mapeado) se muestra sin traducir.
+    expect(condicionIvaLabel("OTRO_VALOR")).toBe("OTRO_VALOR")
     expect(condicionIvaLabel(null)).toBe("—")
   })
 })

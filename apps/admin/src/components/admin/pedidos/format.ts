@@ -103,6 +103,7 @@ const CONDICION_IVA_LABEL: Record<string, string> = {
   consumidor_final: "Consumidor final",
   monotributo: "Monotributo",
   responsable_inscripto: "Responsable inscripto",
+  exento: "Exento",
 }
 
 export function condicionIvaLabel(condicion: string | null): string {

@@ -21,6 +21,7 @@ import {
 } from "@/data/orders";
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
+import { vaciarCarritoTx } from "./carrito-db";
 import type { Cotizacion } from "./cotizacion";
 import type { PlanPedido } from "./pagos/cuotas-tipos";
 import {
@@ -85,9 +86,14 @@ export interface DatosPedido {
  * un pedido corto que uno con una línea de total 0 que nadie va a poder cobrar.
  *
  * Es IDEMPOTENTE cuando viene `idempotencyKey`: el segundo intento con la misma
- * clave devuelve el pedido original con `repetido: true`, sin escribir nada. La
- * decisión la toma Postgres con un índice único parcial, no un `select` previo
- * — dos requests simultáneos pasarían los dos por ese select.
+ * clave devuelve el pedido original con `repetido: true`, sin escribir nada (ni
+ * siquiera vacía el carrito del servidor). La decisión la toma Postgres con un
+ * índice único parcial, no un `select` previo — dos requests simultáneos
+ * pasarían los dos por ese select.
+ *
+ * Un pedido nuevo de un usuario de Clerk vacía su carrito del servidor
+ * (`shop.carts`) dentro de la misma transacción. Los ítems del pedido salen de
+ * `cotizacion` (el body del request), nunca de ese carrito.
  */
 export async function crearPedido(
   cliente: DatosCliente,
@@ -194,6 +200,13 @@ export async function crearPedido(
         total: String(l.total),
       })),
     );
+
+    // El carrito del servidor se vacía en la MISMA transacción: si el pedido no
+    // se crea, el carrito queda como estaba. Sólo en esta rama (pedido nuevo):
+    // el reintento idempotente de arriba ya volvió sin tocarlo, así que no vacía
+    // un carrito que el usuario haya llenado después. Sin Clerk (cookie del
+    // CRM) no hay carrito del servidor.
+    if (cliente.clerkUserId) await vaciarCarritoTx(tx, cliente.clerkUserId);
 
     return {
       id: pedido.id,

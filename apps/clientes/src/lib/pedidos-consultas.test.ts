@@ -217,6 +217,56 @@ describe("crearPedido", () => {
   });
 });
 
+describe("crearPedido vacía el carrito del servidor", () => {
+  const nuevo = (c: ConsultaGrabada) =>
+    c.sql.startsWith('insert into "shop"."orders"') ? [[ID, 1000, null]] : [];
+  const vaciados = () =>
+    grabadora.consultas.filter((c) => c.sql.startsWith('update "shop"."carts"'));
+
+  it("pedido nuevo con Clerk: vacía su carrito en la misma transacción, después de las líneas", async () => {
+    grabadora = dbGrabadora(nuevo);
+    await crearPedido({ clerkUserId: "user_1" }, datos, cotizacion);
+
+    const tablas = grabadora.consultas.map((c) => c.sql.split(" ").slice(0, 3).join(" "));
+    expect(tablas).toEqual([
+      'insert into "shop"."orders"',
+      'insert into "shop"."order_items"',
+      'update "shop"."carts" set',
+    ]);
+    const [u] = vaciados();
+    expect(u.params).toContain("[]");
+    expect(u.sql).toMatch(/"version" = "shop"\."carts"\."version" \+ 1/);
+    const param = (col: string) =>
+      u.params[Number(u.sql.match(new RegExp(`"carts"\\."${col}" = \\$(\\d+)`))![1]) - 1];
+    expect(param("tenant_id")).toBe("tenant-a");
+    expect(param("clerk_user_id")).toBe("user_1");
+  });
+
+  it("reintento idempotente (la clave ya existía): NO toca el carrito", async () => {
+    grabadora = dbGrabadora((c) =>
+      c.sql.startsWith("select") && c.sql.includes('"shop"."orders"') ? [[ID, 1000, null]] : [],
+    );
+    const r = await crearPedido({ clerkUserId: "user_1" }, datos, cotizacion);
+    expect(r.repetido).toBe(true);
+    expect(vaciados()).toEqual([]);
+  });
+
+  it("cookie del CRM sin Clerk: no hay carrito del servidor que vaciar", async () => {
+    grabadora = dbGrabadora(nuevo);
+    await crearPedido({ clerkUserId: null }, datos, cotizacion);
+    expect(vaciados()).toEqual([]);
+  });
+
+  it("si fallan las líneas, el carrito no se toca", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.startsWith('insert into "shop"."order_items"')) throw new Error("falla");
+      return nuevo(c);
+    });
+    await expect(crearPedido({ clerkUserId: "user_1" }, datos, cotizacion)).rejects.toThrow();
+    expect(vaciados()).toEqual([]);
+  });
+});
+
 describe("escrituras del flujo de pago", () => {
   const cobro = {
     proveedor: "mercadopago",

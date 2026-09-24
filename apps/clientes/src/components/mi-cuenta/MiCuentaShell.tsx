@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useClerk } from "@clerk/nextjs";
-import { useCart } from "@/context/CartContext";
+import { prepararCierreDeSesion } from "@/context/CartContext";
 import { cerrarSesion } from "@/lib/cerrar-sesion";
 import { Card, SectionNav, type SectionNavGroup, type SectionNavItem } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
@@ -41,7 +41,6 @@ export function MiCuentaShell({
   children: ReactNode;
 }) {
   const clerk = useClerk();
-  const { clear } = useCart();
   const activa = seccionActiva(usePathname() ?? "");
 
   const aItem = (e: SeccionMiCuenta): SectionNavItem => ({
@@ -56,7 +55,7 @@ export function MiCuentaShell({
       e.id === "seguridad"
         ? () => clerk.openUserProfile({ __experimental_startPath: RUTA_PANEL_SEGURIDAD })
         : e.id === "salir"
-          ? () => void cerrarSesion({ vaciarCarrito: clear, signOut: () => clerk.signOut({ redirectUrl: "/" }) })
+          ? () => void cerrarSesion({ vaciarCarrito: prepararCierreDeSesion, signOut: () => clerk.signOut({ redirectUrl: "/" }) })
           : undefined,
   });
   const { grupos, sueltas } = agruparSecciones(entradas);

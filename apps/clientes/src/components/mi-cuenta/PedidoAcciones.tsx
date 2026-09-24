@@ -25,14 +25,18 @@ export function PedidoAcciones({
   facturaId?: string;
   mostrarDetalle?: boolean;
 }) {
-  const { addItem } = useCart();
+  const { addItems } = useCart();
   const { toast } = useToast();
   const router = useRouter();
 
   function volverAComprar() {
-    for (const item of items) {
-      addItem({ id: item.id, name: item.nombreVisible, brand: item.brand, price: item.price }, item.qty);
-    }
+    // Una sola actualización del carrito: con sesión, un solo guardado.
+    addItems(
+      items.map((item) => ({
+        item: { id: item.id, name: item.nombreVisible, brand: item.brand, price: item.price },
+        qty: item.qty,
+      })),
+    );
     toast({
       title: "Productos agregados al carrito",
       description: "Confirmamos precio y stock actuales en el carrito.",

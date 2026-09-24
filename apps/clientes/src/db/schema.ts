@@ -686,3 +686,34 @@ export const direccionesEnvio = shop.table(
       .where(sql`${t.predeterminada}`),
   ],
 );
+
+/**
+ * Carrito del usuario de Clerk (migración `0008`), para que lo siga entre
+ * dispositivos.
+ *
+ * - UNA fila por (tenant, usuario): el unique la garantiza y hace posible el
+ *   `on conflict do nothing` del primer guardado y del merge.
+ * - `items` guarda sólo `{ id, qty }` (id de Alegra y cantidad) en el orden del
+ *   carrito: nombre, marca y precio envejecen, se toman del espejo al leer
+ *   (`src/lib/carrito-db.ts`). Sin FK a `catalog_products`, como `favorites`.
+ * - `version` es monotónica: cada escritura la sube en 1 y el PUT sólo aplica
+ *   si el cliente trae la vigente (concurrencia optimista entre dispositivos).
+ *   Crear un pedido VACÍA la fila (items `[]`, version + 1) en vez de borrarla,
+ *   para que un dispositivo con una versión vieja reciba conflicto.
+ * - Un visitante con la cookie del CRM sin Clerk no tiene carrito en la base.
+ */
+export const carts = shop.table(
+  "carts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    clerkUserId: text("clerk_user_id").notNull(),
+    items: jsonb("items").$type<{ id: string; qty: number }[]>().notNull().default([]),
+    version: integer("version").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("cart_tenant_usuario").on(t.tenantId, t.clerkUserId),
+    check("carts_version_check", sql`${t.version} >= 0`),
+  ],
+);

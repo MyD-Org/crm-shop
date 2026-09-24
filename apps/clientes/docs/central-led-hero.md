@@ -26,3 +26,12 @@ Chrome headless tested the real InteractiveHero and installed DS Hero together i
 Passed: source-image/SVG alignment at all three widths; CTA hit testing; exact content subtree HTML comparison with the unwrapped DS Hero; keyboard Space/Enter and focus outline; independent touch toggles; reduced-motion transitions disabled; mouse proximity independence; mobile intro waits for scene visibility and cancels on interaction. TypeScript, scoped ESLint and three geometry tests also pass after the review fixes.
 
 Review fixes: remove the DS section's isolated stacking context only inside this wrapper, place art at -15 between image -20 and veil -10, keep text/CTAs at 1 and hotspot controls at 0, and observe the scene surface at 35% intersection. The unrelated EscenaLuces implementation remains on disk but is not mounted by HomeClient.
+
+## Cambio 2026-09-24: sin neón, tira bajo la mesada y spot hacia la pared libre
+
+La foto base pasa a ser `studio-bell-bamboo-v3.webp`, igual en escritorio y en celular: el mismo estudio sin el aro de neón ni la barra lineal de la pared, y con un spot de riel (foto de producto, fondo transparente) montado en el techo donde estaba el anterior, apuntando abajo a la izquierda, hacia la pared libre. El spot original se borró reconstruyendo el revoque y el borde del techo con pared limpia de la misma altura.
+
+- **Neón:** se saca. Quedan cuatro luces: tira, spot, colgante y lámpara de mesa.
+- **Luz lineal:** la barra de la pared desaparece; en todos los tamaños es la tira oculta bajo la mesada (`SHELF_STRIP`), que antes era solo de celular.
+- **Spot:** el haz sale del lente del spot nuevo, en (1126, 146), inclinado unos 30° hacia la izquierda.
+- Las fotos guardadas en la home con el nombre anterior (`studio-bell-bamboo-v2.webp`) siguen reconocidas y se muestran con la nueva.

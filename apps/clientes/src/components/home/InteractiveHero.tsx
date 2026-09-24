@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_HIDDEN_LIGHTS, COVER_QUERY, COVER_SHELF_STRIP, HERO_LIGHTS, STUDIO_IMAGE_MOBILE, lightAt, proximity, sceneRect } from "./hero-lights";
+import { COVER_QUERY, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
 const INTRO_STEP_MS = 1400;
 const INTRO_FADE_MS = 900;
-/** Intro order: linear, ring, spot, pendant, table lamp (indices into HERO_LIGHTS). */
-const INTRO_SEQUENCE = [4, 0, 2, 3, 1];
+/** Intro order: shelf strip, spot, pendant, table lamp. */
+const INTRO_SEQUENCE = ["linear", "spot", "pendant", "bulb"].map(id => HERO_LIGHTS.findIndex(light => light.id === id));
 /** While the hero is on screen, every this many px of scroll lights the next lamp, held this long after scrolling stops. */
 const SCROLL_STEP_PX = 90;
 const SCROLL_HOLD_MS = 700;
@@ -22,7 +22,6 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   const stopIntro = useRef<() => void>(() => {});
   const [pressed, setPressed] = useState<number[]>([]);
   const [rect, setRect] = useState<ReturnType<typeof sceneRect> | null>(null);
-  const [covered, setCovered] = useState(false);
   const uid = useId().replaceAll(":", "");
 
   useEffect(() => {
@@ -45,11 +44,8 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       paint([]);
     };
     stopIntro.current = stop;
-    // Lights this viewport's photo actually shows (the mobile one has no ring).
-    const shown = (index: number) => !cover.matches || !COVER_HIDDEN_LIGHTS.has(HERO_LIGHTS[index].id);
     const resize = new ResizeObserver(() => {
       setRect(sceneRect(surface.clientWidth, surface.clientHeight, cover.matches));
-      setCovered(cover.matches);
     });
     resize.observe(surface);
     let visible = false;
@@ -58,7 +54,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       if (!entry.isIntersecting || entry.intersectionRatio < .35 || started || interrupted || motion.matches) return;
       started = true;
       host.dataset.intro = "";
-      const sequence = INTRO_SEQUENCE.filter(shown);
+      const sequence = INTRO_SEQUENCE;
       sequence.forEach((index, step) => {
         timers.push(setTimeout(() => paint(HERO_LIGHTS.map((_, i) => i === index ? .85 : 0)), step * INTRO_STEP_MS));
       });
@@ -77,7 +73,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       if (Math.abs(scrollY - lastY) < SCROLL_STEP_PX) return;
       lastY = scrollY;
       if (!bag.length) {
-        bag = HERO_LIGHTS.map((_, i) => i).filter(shown).sort(() => Math.random() - .5);
+        bag = HERO_LIGHTS.map((_, i) => i).sort(() => Math.random() - .5);
         if (bag[0] === lastLight) bag.push(bag.shift()!);
       }
       lastLight = bag.shift()!;
@@ -96,7 +92,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
         if (!fit.scale) return;
         const x = (event.clientX - bounds.left - fit.left) / fit.scale;
         const y = (event.clientY - bounds.top - fit.top) / fit.scale;
-        paint(HERO_LIGHTS.map(light => proximity(x, y, lightAt(light, cover.matches))));
+        paint(HERO_LIGHTS.map(light => proximity(x, y, light)));
       });
     };
     const leave = () => { cancelAnimationFrame(frame); paint([]); };
@@ -129,7 +125,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   return <div ref={root} className={styles.root} data-interactive-hero="">
     {children}
     <div ref={scene} className={styles.scene}>
-      {/* Phones get the photo without the ring; elsewhere the source never matches and nothing loads. */}
+      {/* Phones get their own source; elsewhere it never matches and nothing loads. */}
       <picture className={styles.mobilePhoto}>
         <source media={COVER_QUERY} srcSet={STUDIO_IMAGE_MOBILE} />
         <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
@@ -146,11 +142,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
             <radialGradient id={`${uid}-interior`}><stop stopColor="#fff4ce" stopOpacity=".95"/><stop offset=".25" stopColor="#ffe0a0" stopOpacity=".65"/><stop offset="1" stopColor="#ffcb7a" stopOpacity="0"/></radialGradient>
           </defs>
           {HERO_LIGHTS.map((light, i) => <g key={light.id} ref={el => { layers.current[i] = el; }} className={styles.light} style={{ opacity: 0 }} data-light={light.id}>
-            {i === 0 && <>
-              <ellipse cx="996" cy="346" rx="118" ry="117" fill="none" stroke="#ffe7c2" strokeWidth="32" filter={`url(#${uid}-blur)`}/>
-              <ellipse cx="996" cy="346" rx="118" ry="117" fill="none" stroke="#fff6e1" strokeWidth="7"/>
-            </>}
-            {i === 1 && <>
+            {light.id === "bulb" && <>
               {/* BELL-N is opaque above its lower rim: emission only below the shade. */}
               <g clipPath={`url(#${uid}-belowShade)`}>
                 <path d="M1168 661 L1274 661 L1315 777 Q1221 803 1127 777 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-soft)`}/>
@@ -159,12 +151,13 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <ellipse cx="1221" cy="781" rx="96" ry="19" fill={`url(#${uid}-glow)`}/>
               <path d="M1223 666 L1223 771" stroke="#ffe7bc" strokeWidth="1.3" opacity=".4"/>
             </>}
-            {i === 2 && <>
-              <path d="M1176 148 L1200 138 L1400 520 Q1280 590 1170 530 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
-              <ellipse cx="1188" cy="146" rx="16" ry="8" transform="rotate(-33 1188 146)" fill="#fff5dc"/>
-              <ellipse cx="1280" cy="510" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
+            {light.id === "spot" && <>
+              {/* Track spot aimed down and to the left (~30°), at the free wall; lens at (1126, 146). */}
+              <path d="M1136 152 L1116 140 L830 520 Q930 592 1034 540 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
+              <ellipse cx="1126" cy="146" rx="12" ry="7" transform="rotate(30 1126 146)" fill="#fff5dc"/>
+              <ellipse cx="930" cy="512" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
             </>}
-            {i === 3 && <>
+            {light.id === "pendant" && <>
               {/* Translucent inner glow preserves the photographic bamboo weave. */}
               <ellipse cx="1385" cy="359" rx="144" ry="118" fill={`url(#${uid}-interior)`} opacity=".3"/>
               <g clipPath={`url(#${uid}-basket)`}>
@@ -173,23 +166,18 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <path d="M1320 423 L1450 423 L1536 780 L1234 780 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
               <ellipse cx="1385" cy="786" rx="146" ry="25" fill={`url(#${uid}-glow)`}/>
             </>}
-            {i === 4 && !covered && <>
-              <rect x="1087" y="524" width="355" height="17" rx="3" fill="#ffe4ac" filter={`url(#${uid}-blur)`}/>
-              <rect x="1087" y="527" width="355" height="11" fill="#fff5dc"/>
-              <ellipse cx="1265" cy="560" rx="210" ry="68" fill={`url(#${uid}-glow)`}/>
-            </>}
-            {i === 4 && covered && <>
-              {/* Mobile: no fixture in the photo, just a hidden strip lighting the shelf's underside edge to edge. */}
-              <rect x={COVER_SHELF_STRIP.x} y={COVER_SHELF_STRIP.y - 3} width={COVER_SHELF_STRIP.width} height="10" fill="#ffe4ac" filter={`url(#${uid}-soft)`}/>
-              <rect x={COVER_SHELF_STRIP.x + 4} y={COVER_SHELF_STRIP.y} width={COVER_SHELF_STRIP.width - 4} height="3" fill="#fff5dc"/>
-              <rect x={COVER_SHELF_STRIP.x} y={COVER_SHELF_STRIP.y + 2} width={COVER_SHELF_STRIP.width} height="96" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-soft)`}/>
+            {light.id === "linear" && <>
+              {/* No fixture in the photo: a hidden strip lights the shelf's underside edge to edge. */}
+              <rect x={SHELF_STRIP.x} y={SHELF_STRIP.y - 3} width={SHELF_STRIP.width} height="10" fill="#ffe4ac" filter={`url(#${uid}-soft)`}/>
+              <rect x={SHELF_STRIP.x + 4} y={SHELF_STRIP.y} width={SHELF_STRIP.width - 4} height="3" fill="#fff5dc"/>
+              <rect x={SHELF_STRIP.x} y={SHELF_STRIP.y + 2} width={SHELF_STRIP.width} height="96" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-soft)`}/>
             </>}
           </g>)}
         </svg>
-        {HERO_LIGHTS.map((light, i) => covered && COVER_HIDDEN_LIGHTS.has(light.id) ? null : <button key={light.id} type="button" className={styles.target}
+        {HERO_LIGHTS.map((light, i) => <button key={light.id} type="button" className={styles.target}
           aria-label={light.label} aria-pressed={pressed.includes(i)} onClick={() => toggle(i)}
-          style={{ left: rect.left + lightAt(light, covered).x * rect.scale, top: rect.top + lightAt(light, covered).y * rect.scale,
-            width: (i === 0 ? 220 : i === 4 ? (covered ? COVER_SHELF_STRIP.width : 355) : 96) * rect.scale, height: (i === 0 ? 220 : 96) * rect.scale }} />)}
+          style={{ left: rect.left + light.x * rect.scale, top: rect.top + light.y * rect.scale,
+            width: (light.id === "linear" ? SHELF_STRIP.width : 96) * rect.scale, height: 96 * rect.scale }} />)}
       </>}
     </div>
   </div>;

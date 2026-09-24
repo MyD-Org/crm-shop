@@ -30,8 +30,12 @@
   /* Over the photo the muted lead and contact line get lost: same ink as the title. */
   .root > section > div:last-child > p,
   .root > section > div:last-child > div:last-child { color: var(--color-text); }
-  /* Centred, the lead lands on the linear light; top-aligned it sits above it. */
-  .root > section > div:last-child { justify-content: flex-start; }
+  /* Centred and nudged up (80px extra bottom padding = 40px up): on common phones
+     the title clears the spot, the lead the pendant and the CTAs the table lamp. */
+  .root > section > div:last-child { justify-content: center; padding-bottom: calc(clamp(28px, 5vw, 72px) + 80px); }
+  /* The contact line sits on the shelf's light stone front (y ≈ 787–884 of 1024 in the photo, placed at 860;
+     the cover crop scales by height, so it is the same % of the card on every phone). */
+  .root > section > div:last-child > div:last-child { position: absolute; left: clamp(28px, 5vw, 72px); top: calc(860 / 1024 * 100% - 10px); margin: 0; }
 }
 /* Slower cross-fade for the first-view intro (INTRO_FADE_MS in InteractiveHero). */
 .root[data-intro] .light { transition-duration: 900ms; transition-timing-function: ease-in-out; }

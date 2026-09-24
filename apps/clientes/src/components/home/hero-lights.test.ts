@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COVER_X, HERO_LIGHTS, isStudioImage, lightAt, proximity, sceneRect } from "./hero-lights";
+import { COVER_X, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE, isStudioImage, proximity, sceneRect } from "./hero-lights";
 
 describe("studio lighting geometry", () => {
   it("keeps the entire source aligned with contain at desktop and touch sizes", () => {
@@ -26,11 +26,11 @@ describe("studio lighting geometry", () => {
       expect(rect.top * 2 + rect.height).toBeCloseTo(height);
     }
   });
-  it("moves the linear light to the under-shelf strip only in the mobile photo", () => {
+  it("puts the linear light on the under-shelf strip at every size", () => {
     const linear = HERO_LIGHTS.find(light => light.id === "linear")!;
-    expect(lightAt(linear, false)).toBe(linear);
-    expect(lightAt(linear, true)).toMatchObject({ x: 1161, y: 890 });
-    expect(lightAt(HERO_LIGHTS[1], true)).toBe(HERO_LIGHTS[1]);
+    expect(linear).toMatchObject({ x: SHELF_STRIP.x + 375, y: 890 });
+    expect(linear.x).toBeGreaterThan(SHELF_STRIP.x);
+    expect(linear.x).toBeLessThan(SHELF_STRIP.x + SHELF_STRIP.width);
   });
   it("uses independent continuous falloff, with exact off outside the radius", () => {
     const light = HERO_LIGHTS[1];
@@ -43,6 +43,7 @@ describe("studio lighting geometry", () => {
     expect(isStudioImage("/images/hero-neutral.webp")).toBe(true);
     expect(isStudioImage("/images/central-led/studio-off.webp")).toBe(true);
     expect(isStudioImage("/images/central-led/studio-bell-bamboo-v2.webp")).toBe(true);
+    expect(isStudioImage(STUDIO_IMAGE)).toBe(true);
     expect(isStudioImage("/images/custom.webp")).toBe(false);
   });
 });

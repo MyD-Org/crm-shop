@@ -242,10 +242,15 @@ async function getCondicionesPropias(codigocliente: string): Promise<Condiciones
  * Condiciones comerciales: lo que Alegra tiene en la ficha (espejo) manda; la
  * tabla propia aporta descuentos, transporte y teléfono/email del vendedor.
  * Nunca datos de ejemplo. Sólo se muestra a cuenta corriente (lo decide la UI).
+ * `contacto`: el que ya leyó quien llama (la página de Condiciones lo necesita
+ * para decidir si la muestra); sin él se lee acá.
  */
-export async function getCondiciones(codigocliente: string): Promise<CondicionesComerciales> {
+export async function getCondiciones(
+  codigocliente: string,
+  contactoLeido?: ContactoEspejo | null,
+): Promise<CondicionesComerciales> {
   const [contacto, propias] = await Promise.all([
-    contactoPorId(codigocliente),
+    contactoLeido === undefined ? contactoPorId(codigocliente) : contactoLeido,
     getCondicionesPropias(codigocliente),
   ]);
   const vendedorNombre = contacto?.vendedor ?? propias?.vendedor?.nombre ?? null;

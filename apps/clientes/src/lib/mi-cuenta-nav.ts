@@ -54,8 +54,8 @@ export const CAPACIDADES_DESPLIEGUE: Readonly<CapacidadesDespliegue> = {
   direcciones: true,
   pagos: true,
   presupuestos: true,
-  condiciones: false,
-  avisos: false,
+  condiciones: true,
+  avisos: true,
 };
 
 /** Lo que la identidad habilita. */

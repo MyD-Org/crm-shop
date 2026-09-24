@@ -17,3 +17,7 @@ export function motivoAlegra(err: unknown): string {
   const estado = err instanceof Error ? /Alegra (\d{3})/.exec(err.message)?.[1] : undefined;
   return estado ?? "sin respuesta";
 }
+
+export const AVISOS_CAIDOS = "No pudimos obtener sus avisos. Inténtelo de nuevo en unos minutos.";
+export const AVISOS_NO_MARCADOS = "No pudimos marcar sus avisos como leídos. Inténtelo de nuevo en unos minutos.";
+export const AVISOS_INVALIDOS = "Indique los avisos a marcar como leídos.";

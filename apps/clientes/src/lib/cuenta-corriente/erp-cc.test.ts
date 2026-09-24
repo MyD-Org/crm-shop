@@ -24,7 +24,13 @@ vi.mock("./alegra-cc", async (importOriginal) => ({
   listInvoicesPageByContact: async () => ({ items: state.items, total: state.total }),
   listOpenInvoicesByContact: async () => state.abiertas,
 }));
-vi.mock("../contactos-espejo", () => ({ contactoPorId: async () => state.contacto }));
+const contactoPorId = vi.hoisted(() => vi.fn());
+vi.mock("../contactos-espejo", () => ({
+  contactoPorId: (...a: unknown[]) => {
+    contactoPorId(...a);
+    return Promise.resolve(state.contacto);
+  },
+}));
 
 import {
   ContactoNoEncontradoError,
@@ -262,6 +268,14 @@ describe("getCondiciones (CON-1)", () => {
     expect(c.vendedor).toEqual({ nombre: "Vendedor Uno", telefono: "1100000000", email: "ventas@cliente.example" });
     expect(c.descuentos).toEqual([{ concepto: "Iluminación", porcentaje: 10 }]);
     expect(c.transporte).toEqual({ modalidad: "Expreso", observaciones: "" });
+  });
+
+  it("con el contacto ya leído por la página: no vuelve a leer el espejo", async () => {
+    contactoPorId.mockClear();
+    grabadora = dbGrabadora(() => []);
+    const c = await getCondiciones("42", { ...CONTACTO, plazoNombre: "60 días", plazoDias: 60 });
+    expect(contactoPorId).not.toHaveBeenCalled();
+    expect(c.condicionPago).toBe("60 días");
   });
 
   it("sin nada en ninguna fuente: todo vacío, sin datos de ejemplo", async () => {

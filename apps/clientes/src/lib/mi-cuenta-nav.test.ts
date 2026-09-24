@@ -122,14 +122,14 @@ describe("seccionesVisibles", () => {
     expect(ids(seccionesVisibles(cap(false, false), TODO))).toEqual(["pedidos", "facturas", "direcciones"]);
   });
 
-  it("por default usa el despliegue actual: facturas, pagos y presupuestos; Condiciones y Avisos todavía no", () => {
+  it("por default usa el despliegue actual: toda Facturación (rebanada 4: Condiciones y Avisos)", () => {
     expect(CAPACIDADES_DESPLIEGUE).toMatchObject({
       favoritos: true,
       facturas: true,
       pagos: true,
       presupuestos: true,
-      condiciones: false,
-      avisos: false,
+      condiciones: true,
+      avisos: true,
     });
     expect(seccionesVisibles(cap(true, true))).toEqual(seccionesVisibles(cap(true, true), CAPACIDADES_DESPLIEGUE));
     expect(ids(seccionesVisibles(cap(true, false)))).toContain("favoritos");
@@ -193,6 +193,38 @@ describe("seccionDesplegada", () => {
     expect(seccionDesplegada("pagos", REBANADA_2)).toBe(true);
     expect(seccionDesplegada("presupuestos", REBANADA_2)).toBe(true);
     expect(seccionDesplegada("condiciones", REBANADA_2)).toBe(false);
+    expect(seccionDesplegada("condiciones")).toBe(true);
+    expect(seccionDesplegada("avisos")).toBe(true);
+  });
+});
+
+describe("rebanada 4 (Condiciones y Avisos) con el despliegue actual", () => {
+  it("contado vinculado: Avisos sí, Condiciones no (sin entrada en el menú)", () => {
+    const s = ids(seccionesVisibles(cap(true, true, false)));
+    expect(s).toContain("avisos");
+    expect(s).not.toContain("condiciones");
+  });
+
+  it("cuenta corriente vinculada: Condiciones antes de Avisos, al final de Facturación", () => {
+    const s = ids(seccionesVisibles(cap(true, true, true)));
+    expect(s.filter((id) => ["facturas", "pagos", "presupuestos", "condiciones", "avisos"].includes(id))).toEqual([
+      "facturas",
+      "pagos",
+      "presupuestos",
+      "condiciones",
+      "avisos",
+    ]);
+  });
+
+  it("sin vínculo: ni Condiciones ni Avisos, aunque el espejo dijera corriente", () => {
+    const s = ids(seccionesVisibles(capacidadesDe({ clerkUserId: "u", cliente: null }, true)));
+    expect(s).not.toContain("condiciones");
+    expect(s).not.toContain("avisos");
+  });
+
+  it("badge de avisos sin leer en la entrada Avisos", () => {
+    const avisos = seccionesVisibles(cap(true, true), undefined, { avisos: 2 }).find((x) => x.id === "avisos");
+    expect(avisos).toMatchObject({ grupo: "facturacion", badge: 2 });
   });
 });
 

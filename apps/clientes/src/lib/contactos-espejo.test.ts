@@ -15,7 +15,7 @@ vi.mock("./alegra", async (importOriginal) => ({
   getContacto: (id: string) => getContacto(id),
 }));
 
-import { contactoPorId } from "./contactos-espejo";
+import { contactoPorId, tipoCuentaEspejo } from "./contactos-espejo";
 
 /** Fila de la vista en el orden del select de `delEspejo`. */
 const FILA = ["42", "Cliente Uno SA", "20-12345678-9", "compras@cliente.example", "corriente", "Mayorista", "Vendedor Uno", "30 días", 30, "1000000.00"];
@@ -100,5 +100,32 @@ describe("contactoPorId", () => {
     expect(await contactoPorId("../x")).toBeNull();
     expect(grabadora.consultas).toHaveLength(0);
     expect(getContacto).not.toHaveBeenCalled();
+  });
+});
+
+describe("tipoCuentaEspejo (layout de Mi cuenta)", () => {
+  it("lee sólo tipo_cuenta de la vista, con los mismos filtros", async () => {
+    grabadora = dbGrabadora(() => [["corriente"]]);
+    expect(await tipoCuentaEspejo("42")).toBe("corriente");
+    const [consulta] = grabadora.consultas;
+    expect(consulta.sql).toMatch(/^select "tipo_cuenta" from "public"\."alegra_contacts_shop"/);
+    expect(consulta.params).toEqual(expect.arrayContaining(["tenant-test", "principal", "42", "active"]));
+  });
+
+  it("contado o nulo en el espejo ⇒ contado", async () => {
+    grabadora = dbGrabadora(() => [[null]]);
+    expect(await tipoCuentaEspejo("42")).toBe("contado");
+  });
+
+  it("sin fila: null y NUNCA consulta Alegra en vivo", async () => {
+    grabadora = dbGrabadora(() => []);
+    expect(await tipoCuentaEspejo("7")).toBeNull();
+    expect(getContacto).not.toHaveBeenCalled();
+  });
+
+  it("id inválido: null sin consultar", async () => {
+    grabadora = dbGrabadora(() => [["corriente"]]);
+    expect(await tipoCuentaEspejo("../x")).toBeNull();
+    expect(grabadora.consultas).toHaveLength(0);
   });
 });

@@ -12,7 +12,7 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 
 | Ruta | Qué muestra |
 |---|---|
-| `/mi-cuenta` | Resumen: tarjetas "Pedidos en curso", "Productos en el carrito" y (con Clerk) "Favoritos guardados"; los últimos 3 pedidos y (con Clerk) los 4 favoritos más recientes, cada uno con "Ver todos". Ninguna llamada a Alegra. |
+| `/mi-cuenta` | Resumen: con avisos sin leer, un aviso "Tiene N avisos sin leer." → Avisos; tarjetas "Pedidos en curso", "Productos en el carrito" y (con Clerk) "Favoritos guardados"; los últimos 3 pedidos y (con Clerk) los 4 favoritos más recientes, cada uno con "Ver todos". Ninguna llamada a Alegra. |
 | `/mi-cuenta/pedidos` | Todos los pedidos (los 50 más recientes). |
 | `/mi-cuenta/pedidos/[id]` | Detalle: seguimiento, entrega, pago, productos y totales. Un id ajeno o que no es uuid da 404 (nunca 403). |
 | `/mi-cuenta/datos` | Datos personales (nombre y correo de Clerk, en lectura; "Editar mi cuenta" abre el panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente. Sin enlace al portal del CRM (ver [Cuenta corriente](#cuenta-corriente)). |
@@ -22,13 +22,12 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 | `/mi-cuenta/facturas` | Facturas y saldo (ver [Cuenta corriente](#cuenta-corriente)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
 | `/mi-cuenta/pagos` | Pagos recibidos, detalle con imputaciones y PDF (ver [Pagos](#pagos-mi-cuentapagos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
 | `/mi-cuenta/presupuestos` | Presupuestos con filtros y PDF (ver [Presupuestos](#presupuestos-mi-cuentapresupuestos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
+| `/mi-cuenta/condiciones` | Condiciones comerciales, SÓLO cuenta corriente (ver [Condiciones](#condiciones-mi-cuentacondiciones)). Contado o sin vínculo: 404. |
+| `/mi-cuenta/avisos` | Avisos de vencimiento (ver [Avisos](#avisos-mi-cuentaavisos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
 | `/mi-cuenta/vincular` | Vinculación con la cuenta de cliente de Alegra (`VincularClient`). |
 
 "Seguridad" y "Cerrar sesión" no son rutas: son acciones de la navegación
 (`openUserProfile` y `signOut` de Clerk). `/mi-cuenta/seguridad` da 404.
-
-Condiciones y Avisos todavía no existen: dan 404 y no aparecen en la
-navegación hasta que su rebanada prenda la capacidad.
 
 ### Breadcrumb
 
@@ -67,8 +66,15 @@ marca la activa.
 `CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas, direcciones, pagos,
 presupuestos, condiciones, avisos }`) enciende cada sección cuando su rebanada
 la publica: navegación, menú del header y la ruta (`seccionDesplegada`, 404 si
-está apagada) leen la misma bandera. Encendidas: `favoritos`, `facturas`,
-`pagos` y `presupuestos`.
+está apagada) leen la misma bandera. Encendidas todas: `favoritos`,
+`facturas`, `pagos`, `presupuestos`, `condiciones` y `avisos` (`direcciones`
+además depende del flag `envio`).
+
+El layout de Mi cuenta corre en cada página: con vínculo hace dos consultas a
+la base y ninguna a Alegra — `tipoCuentaEspejo` (sólo el espejo, SIN el
+respaldo en vivo de `contactoPorId`: una navegación no puede gastar cuota de
+`/contacts`) para la entrada Condiciones, y `contarNoLeidos` para el badge de
+Avisos. Si alguna falla, el menú se arma igual (sin Condiciones, sin badge).
 
 ## Cuenta corriente
 
@@ -155,6 +161,30 @@ no carguen.
   resueltos en Alegra (aceptado = facturado). Vigente y vencido son los dos
   "sin aceptar" y se ven en el estado de cada fila.
 - PDF en el visor (o descarga); selección → WhatsApp "Avanzar" / "Consultar".
+
+### Condiciones (`/mi-cuenta/condiciones`)
+
+- Sólo cuenta corriente: la página lee el contacto (`contactoPorId`: espejo y,
+  si falta, una consulta en vivo) y da 404 si es contado. Sin contacto ⇒ aviso
+  "No pudimos obtener sus condiciones comerciales".
+- Como el portal: condición de pago (+ plazo si el nombre no lo dice), límite
+  de crédito del espejo (con enlace a Facturas y saldo, donde están la deuda y
+  el disponible: esta página no llama a Alegra), lista de precios y descuentos,
+  vendedor (teléfono/email de `client_commercial_conditions`) y transporte. Lo
+  que falta dice "Sin datos"; descuentos y transporte vacíos no se muestran.
+
+### Avisos (`/mi-cuenta/avisos`)
+
+- Lee `public.notification_log` del tenant y del cliente (`status = 'sent'`,
+  tipos `before_due_N`, `after_due_N`, `conditions_changed`); el envío sigue
+  en el CRM. Una fila por canal del mismo `(factura, tipo)` = UN aviso; el
+  contador cuenta avisos, no filas.
+- Abrir un aviso lo marca como leído (`PATCH /api/mi-cuenta/avisos {ids}`,
+  sólo `read_at`; ids ajenos se ignoran con 200) y lleva a
+  `/mi-cuenta/facturas?factura=<n>&alegra=<id>`; `conditions_changed` va a
+  Condiciones si es cuenta corriente y, si no, a Facturas y saldo. Nunca al
+  portal. "Marcar todos como leídos" = PATCH sin ids. Después se refresca la
+  ruta para que el badge del menú quede al día (sin polling).
 
 ### Menú agrupado
 

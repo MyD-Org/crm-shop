@@ -132,3 +132,28 @@ export async function contactoPorId(alegraId: string): Promise<ContactoEspejo | 
     return null;
   }
 }
+
+/**
+ * Sólo el tipo de cuenta, SÓLO del espejo (1 query a la vista, nunca Alegra en
+ * vivo): lo usa el layout de Mi cuenta en cada página para decidir la entrada
+ * Condiciones, y un respaldo en vivo por navegación gastaría la cuota de
+ * `/contacts`. Sin fila activa ⇒ `null` (el menú no muestra Condiciones; la
+ * página, que sí puede consultar en vivo, decide por su cuenta).
+ */
+export async function tipoCuentaEspejo(alegraId: string): Promise<ContactoEspejo["tipoCuenta"] | null> {
+  if (!esIdAlegra(alegraId)) return null;
+  const [fila] = await getDb()
+    .select({ tipoCuenta: crmContactos.tipoCuenta })
+    .from(crmContactos)
+    .where(
+      and(
+        eq(crmContactos.tenantId, shopTenantId()),
+        eq(crmContactos.alegraAccount, CUENTA_ALEGRA_PRINCIPAL),
+        eq(crmContactos.alegraId, alegraId),
+        eq(crmContactos.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (!fila) return null;
+  return fila.tipoCuenta === "corriente" ? "corriente" : "contado";
+}

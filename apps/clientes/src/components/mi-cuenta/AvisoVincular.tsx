@@ -14,11 +14,11 @@ import { BotonEnlace } from "./BotonEnlace";
  */
 export function AvisoVincular({ volver, enCheckout = false }: { volver?: string; enCheckout?: boolean }) {
   return (
-    <Alert tone={enCheckout ? "warning" : "success"} title="Parece que ya es cliente del local">
+    <Alert tone={enCheckout ? "warning" : "success"} title="Parece que ya es cliente de Central LED">
       <p>
         {enCheckout
-          ? "Su documento está registrado en el local. Vincule su cuenta antes de confirmar para comprar con sus precios."
-          : "Su documento está registrado en el local. Vincule su cuenta para ver sus facturas y sus compras."}
+          ? "Su documento está registrado en Central LED. Vincule su cuenta antes de confirmar para que esta compra quede en su cuenta de cliente."
+          : "Su documento está registrado en Central LED. Vincule su cuenta para ver sus facturas y sus compras."}
       </p>
       <div className="mt-3">
         <BotonEnlace size="sm" href={rutaVincular(volver)}>

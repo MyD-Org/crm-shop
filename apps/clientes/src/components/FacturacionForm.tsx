@@ -202,14 +202,14 @@ export function FacturacionForm({
       const json = await res.json();
       if (!res.ok) {
         setErrores(json?.errores ?? {});
-        setErrorGeneral(json?.error ?? "No pudimos guardar tus datos.");
+        setErrorGeneral(json?.error ?? "No pudimos guardar sus datos.");
         return;
       }
       setExito(true);
       setTimeout(() => setExito(false), 3000);
       onGuardado?.();
     } catch {
-      setErrorGeneral("No pudimos conectarnos. Revisá tu conexión.");
+      setErrorGeneral("No pudimos conectarnos. Revise su conexión.");
     } finally {
       setGuardando(false);
     }
@@ -395,7 +395,7 @@ export function FacturacionForm({
                 setDireccionResuelta(true);
               }}
               suspendido={modoManual}
-              placeholder="Escribí la calle y el número…"
+              placeholder="Escriba la calle y el número…"
               error={errores.domicilioCalle}
             />
 

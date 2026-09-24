@@ -317,15 +317,15 @@ export function validarFacturacion(
   // le pregunta, y el servidor la guarda como consumidor final.
   const condicion = datos.condicionIva;
   if (esArgentina && (!condicion || !(condicion in CONDICION_IVA_LABEL))) {
-    errores.condicionIva = "Elegí tu condición frente al IVA.";
+    errores.condicionIva = "Elija su condición frente al IVA.";
   }
 
   if (!datos.razonSocial?.trim()) {
     errores.razonSocial = !esArgentina
       ? "Ingrese el nombre y apellido o la razón social."
       : condicion === "consumidor_final"
-        ? "Ingresá tu nombre y apellido."
-        : "Ingresá la razón social.";
+        ? "Ingrese su nombre y apellido."
+        : "Ingrese la razón social.";
   }
 
   const tipoDoc = datos.tipoDoc;
@@ -360,7 +360,7 @@ export function validarFacturacion(
     tipoDoc && tiposDelPais.includes(tipoDoc) ? tipoDoc : tiposDelPais[0];
   const nro = normalizarDoc(tipoParaValidar, datos.nroDoc ?? "");
   if (!nro) {
-    errores.nroDoc = "Ingresá tu número de documento.";
+    errores.nroDoc = "Ingrese su número de documento.";
   } else if (!VALIDADOR_DOC[tipoParaValidar](nro)) {
     errores.nroDoc =
       tipoParaValidar === "DNI"
@@ -377,10 +377,10 @@ export function validarFacturacion(
   // acá es lo normal. Pedirlo siempre evita tener que salir a buscar el dato
   // justo cuando hay que emitir el comprobante.
   if (!datos.domicilioCalle?.trim()) {
-    errores.domicilioCalle = "Ingresá el domicilio fiscal.";
+    errores.domicilioCalle = "Ingrese el domicilio fiscal.";
   }
   if (!datos.domicilioCiudad?.trim()) {
-    errores.domicilioCiudad = "Ingresá la ciudad.";
+    errores.domicilioCiudad = "Ingrese la ciudad.";
   }
 
   // El teléfono no frena el guardado del perfil (el checkout lo pide igual),

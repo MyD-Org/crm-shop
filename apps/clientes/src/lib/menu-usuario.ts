@@ -19,13 +19,19 @@ export const HREF_MIS_DATOS = RUTAS_MI_CUENTA.datos;
 export const HREF_FAVORITOS = RUTAS_MI_CUENTA.favoritos;
 
 /**
+ * "Facturación" lleva a "Facturas y saldo": desde que el portal del CRM dejó de
+ * enlazarse, el Shop es la única puerta a la cuenta corriente del cliente.
+ */
+export const HREF_FACTURACION = RUTAS_MI_CUENTA.facturas;
+
+/**
  * Ruta inicial de la pestaña de Seguridad dentro del panel de Clerk
  * (`__experimental_startPath` de `openUserProfile`). Es lo único que sigue
  * siendo de Clerk: contraseña, correo, verificación en dos pasos y sesiones.
  */
 export const RUTA_PANEL_SEGURIDAD = "/security";
 
-export type IdEntradaMenu = "pedidos" | "favoritos" | "datos" | "seguridad" | "salir";
+export type IdEntradaMenu = "pedidos" | "favoritos" | "facturacion" | "datos" | "seguridad" | "salir";
 
 export interface EntradaMenu {
   id: IdEntradaMenu;
@@ -34,9 +40,11 @@ export interface EntradaMenu {
 }
 
 /**
- * Entradas del menú, en el orden de la navegación de Mi cuenta. Favoritos
- * aparece sólo cuando el despliegue ya publica la sección; Facturas no entra
- * nunca al header. Los separadores los agrega el componente.
+ * Entradas del menú, en el orden de la navegación de Mi cuenta. Favoritos y
+ * Facturación aparecen sólo cuando el despliegue ya publica su sección.
+ * "Facturación" y nunca "Cuenta corriente": la ven también los clientes de
+ * contado (y quien no vinculó, que ahí encuentra cómo hacerlo). Los
+ * separadores los agrega el componente.
  */
 export function entradasMenu(
   despliegue: CapacidadesDespliegue = CAPACIDADES_DESPLIEGUE,
@@ -44,6 +52,7 @@ export function entradasMenu(
   return [
     { id: "pedidos", label: "Mis pedidos" },
     ...(despliegue.favoritos ? [{ id: "favoritos", label: "Favoritos" } as const] : []),
+    ...(despliegue.facturas ? [{ id: "facturacion", label: "Facturación" } as const] : []),
     { id: "datos", label: "Mis datos" },
     { id: "seguridad", label: "Seguridad" },
     { id: "salir", label: "Cerrar sesión", tone: "danger" },

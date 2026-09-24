@@ -19,13 +19,14 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 | `/mi-cuenta/direcciones` | Direcciones y envíos: direcciones de envío guardadas (con Clerk; alta y edición en la misma sección, ver [Direcciones de envío](#direcciones-de-envío)), envío a domicilio y retiro derivados de `src/lib/envio.ts` y un aviso. El domicilio fiscal ya no está acá: vive en Mis datos. |
 | `/mi-cuenta/envios` | Redirige (308) a `/mi-cuenta/direcciones`: Envíos y retiro se unió a Direcciones. |
 | `/mi-cuenta/favoritos` | Favoritos del usuario de Clerk en cards compactas (ver [Favoritos](#favoritos)). |
+| `/mi-cuenta/facturas` | Facturas y saldo (ver [Cuenta corriente](#cuenta-corriente)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
 | `/mi-cuenta/vincular` | Vinculación con la cuenta de cliente de Alegra (`VincularClient`). |
 
 "Seguridad" y "Cerrar sesión" no son rutas: son acciones de la navegación
 (`openUserProfile` y `signOut` de Clerk). `/mi-cuenta/seguridad` da 404.
 
-Facturas (`/mi-cuenta/facturas`) todavía no existe: da 404 y no aparece en la
-navegación. Llega con la cuenta corriente (ver [Cuenta corriente](#cuenta-corriente)).
+Pagos, Presupuestos, Condiciones y Avisos todavía no existen: dan 404 y no
+aparecen en la navegación hasta que su rebanada prenda la capacidad.
 
 ### Breadcrumb
 
@@ -57,13 +58,14 @@ marca la activa.
 | Identidad | Secciones |
 |---|---|
 | Anónimo | Ninguna: redirect al ingreso. |
-| Cookie heredada del CRM, sin Clerk | Pedidos, Direcciones y envíos (+ Facturas cuando exista). `/datos` pide iniciar sesión; en `/direcciones` se invita a iniciar sesión para guardar direcciones y se ven las reglas de envío. El checkout no cambia. |
-| Clerk sin cuenta vinculada | Pedidos, Favoritos, Direcciones y envíos, Mis datos, Seguridad, Cerrar sesión. |
-| Clerk con cuenta vinculada | Igual, con facturación bloqueada (y la cuenta corriente cuando se publique). |
+| Cookie heredada del CRM, sin Clerk | Pedidos, Facturas y saldo, Direcciones y envíos. `/datos` pide iniciar sesión; en `/direcciones` se invita a iniciar sesión para guardar direcciones y se ven las reglas de envío. El checkout no cambia. |
+| Clerk sin cuenta vinculada | Pedidos, Favoritos, Facturas y saldo (ofrece vincular), Mis datos, Direcciones y envíos, Seguridad, Cerrar sesión. |
+| Clerk con cuenta vinculada | Igual, con facturación bloqueada y la cuenta corriente. |
 
-`CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas }`) enciende cada sección
-cuando su rebanada la publica: navegación y menú del header leen la misma
-bandera. `favoritos` está encendida.
+`CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas, direcciones, pagos,
+presupuestos, condiciones, avisos }`) enciende cada sección cuando su rebanada
+la publica: navegación, menú del header y la ruta (`seccionDesplegada`, 404 si
+está apagada) leen la misma bandera. Encendidas: `favoritos` y `facturas`.
 
 ## Cuenta corriente
 
@@ -74,7 +76,7 @@ portal (`portal-session`, `origen: "cookie_crm"`) se sigue leyendo: un cliente
 con sesión viva del portal ve su cuenta corriente sin Clerk.
 
 Se publica por rebanadas, cada una con su bandera en
-`CAPACIDADES_DESPLIEGUE`. Hoy está sólo la base (sin UI visible):
+`CAPACIDADES_DESPLIEGUE`. Base:
 
 - Datos: `src/db/crm.ts` declara la vista del espejo de contactos
   (`public.alegra_contacts_shop`), `tenants` (4 columnas),
@@ -87,7 +89,26 @@ Se publica por rebanadas, cada una con su bandera en
   (`guard.ts`), datos del tenant (`tenant-cc.ts`) y mensajes de WhatsApp
   (`whatsapp.ts`). Portados de `apps/admin/src/lib/{alegra,erp,whatsapp}.ts`.
 
-### Menú agrupado (a publicar)
+### Facturas y saldo (`/mi-cuenta/facturas`)
+
+- Saldo arriba: Deuda total (con límite y disponible sólo si corresponde),
+  Saldo vencido y Saldo a vencer, cada una con sus 2 facturas más urgentes.
+  Tocar una o "Ver todas" filtra la lista. Sale de TODAS las abiertas.
+- Lista de a 30, primera página del servidor; "Cargar más" y los filtros van a
+  `GET /api/mi-cuenta/facturas?start&estado&desde&hasta`. Pendientes y
+  Vencidas salen de las abiertas completas sin pedir nada, igual que el
+  portal (Alegra no filtra por vencimiento).
+- PDF en el visor del DS (`DocumentViewer`) dentro de la página, servido por
+  `GET /api/mi-cuenta/documentos/[kind]/[id]` (proxy con control de
+  pertenencia; `?download=1` descarga).
+- Deep link `?factura=<n>&alegra=<id>` (avisos): el servidor valida la
+  pertenencia y abre el visor; ajeno o inexistente muestra "No encontramos la
+  factura.".
+- Selección de facturas → WhatsApp a la empresa ("Pagar" / "Consultar"),
+  oculto si el tenant no tiene número.
+- Cada bloque caído (saldo, facturas) muestra su aviso; el resto sigue.
+
+### Menú agrupado
 
 | Grupo | Secciones |
 |---|---|

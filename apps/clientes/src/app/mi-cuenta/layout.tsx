@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MiCuentaShell } from "@/components/mi-cuenta/MiCuentaShell";
 import { identidadActual } from "@/lib/auth";
+import { contactoPorId } from "@/lib/contactos-espejo";
 import { CAPACIDADES_DESPLIEGUE, capacidadesDe, seccionesVisibles } from "@/lib/mi-cuenta-nav";
 import { envioHabilitado } from "@/lib/envio-flag";
 
@@ -26,11 +27,17 @@ export default async function MiCuentaLayout({
   if (!identidad.clerkUserId && !identidad.cliente) return <>{children}</>;
   // Sin envío a domicilio, "Direcciones y envíos" no tiene nada que ofrecer.
   const despliegue = { ...CAPACIDADES_DESPLIEGUE, direcciones: await envioHabilitado() };
+  // Cuenta corriente sólo decide la entrada Condiciones: el espejo se consulta
+  // (1 query a la vista) sólo si esa sección está desplegada y hay vínculo.
+  const codigo = identidad.cliente?.codigocliente;
+  const esCuentaCorriente =
+    despliegue.condiciones && codigo ? (await contactoPorId(codigo))?.tipoCuenta === "corriente" : false;
 
   return (
     <MiCuentaShell
       nombrePila={identidad.nombrePila}
-      entradas={seccionesVisibles(capacidadesDe(identidad), despliegue)}
+      entradas={seccionesVisibles(capacidadesDe(identidad, esCuentaCorriente), despliegue)}
+      despliegue={despliegue}
       migas={migas}
     >
       {children}

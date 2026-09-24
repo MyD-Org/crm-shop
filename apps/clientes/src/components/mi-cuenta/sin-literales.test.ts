@@ -17,7 +17,8 @@ import { describe, expect, it } from "vitest";
  * voseo ni tuteo en el texto) y un único `<h1>`, el del shell. Unificar las
  * dos guardas en una sola es un chore aparte.
  *
- * Alcance (NHM-3): `src/components/mi-cuenta/**`, `src/app/mi-cuenta/**`,
+ * Alcance (NHM-3): `src/components/mi-cuenta/**` (incluida la cuenta
+ * corriente, `cuenta-corriente/**`), `src/app/mi-cuenta/**`,
  * `src/components/BotonFavorito.tsx` (rebanada de favoritos) y
  * `src/components/SelectorDireccionEnvio.tsx` (direcciones guardadas en el
  * checkout; el resto del checkout sigue afuera).
@@ -170,6 +171,24 @@ describe("guarda de Mi cuenta: archivos del módulo", () => {
     expect(lista).toContain(join("components", "mi-cuenta", "DireccionForm.tsx"));
     expect(lista).toContain(join("components", "mi-cuenta", "DatosPersonalesCard.tsx"));
     expect(lista).toContain(join("components", "SelectorDireccionEnvio.tsx"));
+  });
+
+  it("incluye la cuenta corriente (portal-al-shop): componentes y página de Facturas y saldo", () => {
+    const lista = archivos().map((a) => relative(SRC, a));
+    const cc = join("components", "mi-cuenta", "cuenta-corriente");
+    for (const nombre of [
+      "FacturasYSaldo.tsx",
+      "SaldoTarjetas.tsx",
+      "FacturasSeccion.tsx",
+      "FiltrosFacturas.tsx",
+      "CargarMas.tsx",
+      "VisorDocumento.tsx",
+      "WhatsAppFacturas.tsx",
+      "AvisoSeccionCaida.tsx",
+    ]) {
+      expect(lista).toContain(join(cc, nombre));
+    }
+    expect(lista).toContain(join("app", "mi-cuenta", "facturas", "page.tsx"));
   });
 
   for (const regla of REGLAS) {

@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_HIDDEN_LIGHTS, COVER_QUERY, HERO_LIGHTS, NEON_PATH, SHELF_STRIP, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
+import { COVER_QUERY, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
 const INTRO_STEP_MS = 1400;
 const INTRO_FADE_MS = 900;
-/** Intro order: shelf strip, neon, spot, pendant, table lamp (indices into HERO_LIGHTS). */
-const INTRO_SEQUENCE = [4, 0, 2, 3, 1];
+/** Intro order: shelf strip, spot, pendant, table lamp. */
+const INTRO_SEQUENCE = ["linear", "spot", "pendant", "bulb"].map(id => HERO_LIGHTS.findIndex(light => light.id === id));
 /** While the hero is on screen, every this many px of scroll lights the next lamp, held this long after scrolling stops. */
 const SCROLL_STEP_PX = 90;
 const SCROLL_HOLD_MS = 700;
@@ -22,7 +22,6 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   const stopIntro = useRef<() => void>(() => {});
   const [pressed, setPressed] = useState<number[]>([]);
   const [rect, setRect] = useState<ReturnType<typeof sceneRect> | null>(null);
-  const [covered, setCovered] = useState(false);
   const uid = useId().replaceAll(":", "");
 
   useEffect(() => {
@@ -45,11 +44,8 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       paint([]);
     };
     stopIntro.current = stop;
-    // Lights this viewport shows (phones leave the neon out).
-    const shown = (index: number) => !cover.matches || !COVER_HIDDEN_LIGHTS.has(HERO_LIGHTS[index].id);
     const resize = new ResizeObserver(() => {
       setRect(sceneRect(surface.clientWidth, surface.clientHeight, cover.matches));
-      setCovered(cover.matches);
     });
     resize.observe(surface);
     let visible = false;
@@ -58,7 +54,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       if (!entry.isIntersecting || entry.intersectionRatio < .35 || started || interrupted || motion.matches) return;
       started = true;
       host.dataset.intro = "";
-      const sequence = INTRO_SEQUENCE.filter(shown);
+      const sequence = INTRO_SEQUENCE;
       sequence.forEach((index, step) => {
         timers.push(setTimeout(() => paint(HERO_LIGHTS.map((_, i) => i === index ? .85 : 0)), step * INTRO_STEP_MS));
       });
@@ -77,7 +73,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       if (Math.abs(scrollY - lastY) < SCROLL_STEP_PX) return;
       lastY = scrollY;
       if (!bag.length) {
-        bag = HERO_LIGHTS.map((_, i) => i).filter(shown).sort(() => Math.random() - .5);
+        bag = HERO_LIGHTS.map((_, i) => i).sort(() => Math.random() - .5);
         if (bag[0] === lastLight) bag.push(bag.shift()!);
       }
       lastLight = bag.shift()!;
@@ -145,19 +141,8 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
             <clipPath id={`${uid}-basket`}><path d="M1370 234 Q1360 278 1311 300 Q1263 322 1271 366 Q1278 401 1311 417 Q1385 437 1462 417 Q1496 402 1500 365 Q1507 323 1465 300 Q1416 277 1403 234 Z"/></clipPath>
             <radialGradient id={`${uid}-interior`}><stop stopColor="#fff4ce" stopOpacity=".95"/><stop offset=".25" stopColor="#ffe0a0" stopOpacity=".65"/><stop offset="1" stopColor="#ffcb7a" stopOpacity="0"/></radialGradient>
           </defs>
-          {!covered && <g data-neon-tube="">
-            {/* The neon tube itself, unlit: a soft contact shadow on the plaster, the silicone body and a highlight. */}
-            <path d={NEON_PATH} transform="translate(3 7)" fill="none" stroke="#5a5048" strokeOpacity=".22" strokeWidth="14" strokeLinecap="round" filter={`url(#${uid}-soft)`}/>
-            <path d={NEON_PATH} fill="none" stroke="#e7e1d8" strokeWidth="13" strokeLinecap="round"/>
-            <path d={NEON_PATH} transform="translate(-1 -2)" fill="none" stroke="#fbf8f2" strokeWidth="4" strokeLinecap="round" opacity=".85"/>
-          </g>}
           {HERO_LIGHTS.map((light, i) => <g key={light.id} ref={el => { layers.current[i] = el; }} className={styles.light} style={{ opacity: 0 }} data-light={light.id}>
-            {i === 0 && <>
-              <path d={NEON_PATH} fill="none" stroke="#ffe7c2" strokeWidth="38" strokeLinecap="round" filter={`url(#${uid}-blur)`}/>
-              <path d={NEON_PATH} fill="none" stroke="#fff3d6" strokeWidth="13" strokeLinecap="round"/>
-              <path d={NEON_PATH} fill="none" stroke="#fffaf0" strokeWidth="5" strokeLinecap="round"/>
-            </>}
-            {i === 1 && <>
+            {light.id === "bulb" && <>
               {/* BELL-N is opaque above its lower rim: emission only below the shade. */}
               <g clipPath={`url(#${uid}-belowShade)`}>
                 <path d="M1168 661 L1274 661 L1315 777 Q1221 803 1127 777 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-soft)`}/>
@@ -166,12 +151,13 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <ellipse cx="1221" cy="781" rx="96" ry="19" fill={`url(#${uid}-glow)`}/>
               <path d="M1223 666 L1223 771" stroke="#ffe7bc" strokeWidth="1.3" opacity=".4"/>
             </>}
-            {i === 2 && <>
-              <path d="M1176 148 L1200 138 L1400 520 Q1280 590 1170 530 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
-              <ellipse cx="1188" cy="146" rx="16" ry="8" transform="rotate(-33 1188 146)" fill="#fff5dc"/>
-              <ellipse cx="1280" cy="510" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
+            {light.id === "spot" && <>
+              {/* Aimed down and to the left, at the free wall (mirrored on its mount, x = 1163). */}
+              <path d="M1150 148 L1126 138 L926 520 Q1046 590 1156 530 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
+              <ellipse cx="1138" cy="146" rx="16" ry="8" transform="rotate(33 1138 146)" fill="#fff5dc"/>
+              <ellipse cx="1046" cy="510" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
             </>}
-            {i === 3 && <>
+            {light.id === "pendant" && <>
               {/* Translucent inner glow preserves the photographic bamboo weave. */}
               <ellipse cx="1385" cy="359" rx="144" ry="118" fill={`url(#${uid}-interior)`} opacity=".3"/>
               <g clipPath={`url(#${uid}-basket)`}>
@@ -180,7 +166,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <path d="M1320 423 L1450 423 L1536 780 L1234 780 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
               <ellipse cx="1385" cy="786" rx="146" ry="25" fill={`url(#${uid}-glow)`}/>
             </>}
-            {i === 4 && <>
+            {light.id === "linear" && <>
               {/* No fixture in the photo: a hidden strip lights the shelf's underside edge to edge. */}
               <rect x={SHELF_STRIP.x} y={SHELF_STRIP.y - 3} width={SHELF_STRIP.width} height="10" fill="#ffe4ac" filter={`url(#${uid}-soft)`}/>
               <rect x={SHELF_STRIP.x + 4} y={SHELF_STRIP.y} width={SHELF_STRIP.width - 4} height="3" fill="#fff5dc"/>
@@ -188,10 +174,10 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
             </>}
           </g>)}
         </svg>
-        {HERO_LIGHTS.map((light, i) => covered && COVER_HIDDEN_LIGHTS.has(light.id) ? null : <button key={light.id} type="button" className={styles.target}
+        {HERO_LIGHTS.map((light, i) => <button key={light.id} type="button" className={styles.target}
           aria-label={light.label} aria-pressed={pressed.includes(i)} onClick={() => toggle(i)}
           style={{ left: rect.left + light.x * rect.scale, top: rect.top + light.y * rect.scale,
-            width: (i === 0 ? 420 : i === 4 ? SHELF_STRIP.width : 96) * rect.scale, height: (i === 0 ? 280 : 96) * rect.scale }} />)}
+            width: (light.id === "linear" ? SHELF_STRIP.width : 96) * rect.scale, height: 96 * rect.scale }} />)}
       </>}
     </div>
   </div>;

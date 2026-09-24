@@ -27,10 +27,11 @@ Passed: source-image/SVG alignment at all three widths; CTA hit testing; exact c
 
 Review fixes: remove the DS section's isolated stacking context only inside this wrapper, place art at -15 between image -20 and veil -10, keep text/CTAs at 1 and hotspot controls at 0, and observe the scene surface at 35% intersection. The unrelated EscenaLuces implementation remains on disk but is not mounted by HomeClient.
 
-## Cambio 2026-09-24: neón flexible y tira bajo la mesada en todos los tamaños
+## Cambio 2026-09-24: sin neón, tira bajo la mesada y spot hacia la pared libre
 
-La foto base pasa a ser `studio-bell-bamboo-v3.webp`: el mismo estudio sin el aro de neón ni la barra lineal de la pared, igual en escritorio y en celular.
+La foto base pasa a ser `studio-bell-bamboo-v3.webp`, igual en escritorio y en celular: el mismo estudio sin el aro de neón ni la barra lineal de la pared, y con el spot espejado sobre su montaje (x = 1163) para que apunte abajo a la izquierda, hacia la pared libre.
 
-- **Neón:** ya no es un aro perfecto. Es un tubo de neón flexible de forma libre (`NEON_PATH` en `hero-lights.ts`), dibujado en el SVG: apagado se ve el tubo de silicona con su sombra sobre el revoque; encendido, brillo blanco cálido sobre el mismo trazo. En celular sigue sin mostrarse (`COVER_HIDDEN_LIGHTS`).
+- **Neón:** se saca. Quedan cuatro luces: tira, spot, colgante y lámpara de mesa.
 - **Luz lineal:** la barra de la pared desaparece; en todos los tamaños es la tira oculta bajo la mesada (`SHELF_STRIP`), que antes era solo de celular.
+- **Spot:** el haz, el brillo del lente y el botón se espejan con la foto.
 - Las fotos guardadas en la home con el nombre anterior (`studio-bell-bamboo-v2.webp`) siguen reconocidas y se muestran con la nueva.

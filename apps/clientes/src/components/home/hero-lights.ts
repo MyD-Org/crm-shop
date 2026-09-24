@@ -1,8 +1,7 @@
 /** Coordinates measured on studio-off (1536 × 1024), shared by SVG and controls. */
 export const HERO_LIGHTS = [
-  { id: "neon", label: "Neón flexible", x: 1044, y: 370, radius: 210 },
   { id: "bulb", label: "Lámpara de mesa BELL-N", x: 1221, y: 660, radius: 140 },
-  { id: "spot", label: "Spot", x: 1188, y: 146, radius: 150 },
+  { id: "spot", label: "Spot", x: 1138, y: 146, radius: 150 },
   { id: "pendant", label: "Colgante de bambú", x: 1385, y: 357, radius: 180 },
   { id: "linear", label: "Tira LED bajo la mesada", x: 1161, y: 890, radius: 210 },
 ] as const;
@@ -32,22 +31,15 @@ export function sceneRect(width: number, height: number, cover = false) {
 }
 
 /**
- * The studio with no wall fixtures: the neon is drawn over it as a free-form tube
- * (NEON_PATH) and the linear light is a hidden strip under the shelf (SHELF_STRIP),
- * the same at every size.
+ * The studio with no wall fixtures: the linear light is a hidden strip under the
+ * shelf (SHELF_STRIP), the same at every size. The spot is mirrored on its mount
+ * (x = 1163) so it aims at the free wall.
  */
 export const STUDIO_IMAGE = "/images/central-led/studio-bell-bamboo-v3.webp";
 /** Phones get the same photo; kept separate so the mobile source can change on its own. */
 export const STUDIO_IMAGE_MOBILE = STUDIO_IMAGE;
-/** Lights left out on phones (the neon fights the title there): no tube, glow, control, intro or scroll. */
-export const COVER_HIDDEN_LIGHTS: ReadonlySet<string> = new Set(["neon"]);
 /** The under-shelf strip, in source px. */
 export const SHELF_STRIP = { x: 786, y: 884, width: 750 } as const;
-/**
- * Flexible neon tube on the wall, in source px: it comes in from the left with a soft
- * wave, loops back over itself and falls away to the right, like a coil of neon flex.
- */
-export const NEON_PATH = "M836 402 C880 372 930 420 990 426 C1080 436 1160 400 1160 330 C1160 262 1080 236 1010 246 C930 258 900 318 948 360 C1000 404 1110 420 1180 440 C1220 452 1244 470 1252 494";
 /** Studio photos the home may have stored; any of them renders as STUDIO_IMAGE. */
 const STUDIO_IMAGES: ReadonlySet<string> = new Set([
   "/images/hero-neutral.webp",

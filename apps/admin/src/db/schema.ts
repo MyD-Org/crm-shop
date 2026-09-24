@@ -242,6 +242,14 @@ export const catalogProducts = pgTable(
     raw: jsonb("raw").$type<Record<string, unknown>>(),
     images: jsonb("images").notNull().default([]),
     syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Momento en que se le PIDIÓ a Alegra el dato de esta fila (la sync pasa su inicio; el
+     * webhook, el instante previo a su GET). El upsert sólo pisa las columnas de Alegra si su
+     * lectura es igual o más nueva (lib/catalog-products-repo.ts). NULL = −∞ (filas viejas).
+     */
+    alegraLeidoAt: timestamp("alegra_leido_at", { withTimezone: true }),
+    /** Quién hizo esa lectura: 'sync' | 'webhook'. */
+    leidoPor: text("leido_por"),
   },
   (t) => [
     uniqueIndex("cp_tenant_alegra").on(t.tenantId, t.alegraId),
@@ -265,6 +273,76 @@ export const catalogSyncLog = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [index("csl_tenant_started").on(t.tenantId, t.startedAt)],
+)
+
+// ── Stock casi en tiempo real: avisos de Alegra (change `webhooks-stock-alegra`) ───────────
+//
+// Un aviso de factura/compra/ítem NO trae el stock que vale: es sólo un disparador. La ruta
+// encola los ids de ítems (dedupe por PK) y un drenador único por tenant los re-lee con
+// GET /items/{id} a ritmo fijo (lib/alegra-stock-cola.ts). Ninguna tabla guarda datos del
+// documento (cliente, proveedor, montos): sólo ids.
+
+// Cola de ítems a re-leer. Re-encolar uno pendiente actualiza `pedido_at` y resetea intentos.
+export const alegraItemRefresh = pgTable(
+  "alegra_item_refresh",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraId: text("alegra_id").notNull(),
+    /** Último aviso que lo pidió. */
+    pedidoAt: timestamp("pedido_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Evento que lo encoló (el último). */
+    motivo: text("motivo").notNull(),
+    intentos: integer("intentos").notNull().default(0),
+    /** Lease de la fila: mientras no venza, otro drenador no la toma. */
+    tomadoHasta: timestamp("tomado_hasta", { withTimezone: true }),
+    /** Motivo corto (`alegra_http_500`, `db_XXXXX`), nunca el mensaje de Alegra. */
+    ultimoError: text("ultimo_error"),
+  },
+  (t) => [
+    primaryKey({ name: "air_pk", columns: [t.tenantId, t.alegraId] }),
+    index("air_tenant_pedido").on(t.tenantId, t.pedidoAt),
+  ],
+)
+
+// Índice documento→ítems: qué ítems tenía cada factura/compra según el último aviso. Cubre el
+// `delete-invoice` (llega con items vacío) y los ítems que una edición quitó.
+export const alegraDocumentoItems = pgTable(
+  "alegra_documento_items",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    tipo: text("tipo").notNull(), // 'invoice' | 'bill'
+    alegraDocId: text("alegra_doc_id").notNull(),
+    itemIds: text("item_ids").array().notNull().default(sql`'{}'::text[]`),
+    /** status (invoice) / state (bill) del último aviso. */
+    estado: text("estado"),
+    actualizadoAt: timestamp("actualizado_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: "adi_pk", columns: [t.tenantId, t.tipo, t.alegraDocId] })],
+)
+
+// Lease por tenant: un solo drenador a la vez (sin locks de sesión: el pooler de Neon va en
+// modo transacción). Se auto-libera si la función muere.
+export const alegraStockDrenaje = pgTable("alegra_stock_drenaje", {
+  tenantId: text("tenant_id")
+    .primaryKey()
+    .references(() => tenants.id),
+  ocupadoHasta: timestamp("ocupado_hasta", { withTimezone: true }),
+  ultimoDrenajeAt: timestamp("ultimo_drenaje_at", { withTimezone: true }),
+})
+
+// Avisos recibidos por tenant, día y evento: para detectar que dejaron de llegar (Alegra puede
+// desactivar una suscripción sin avisar).
+export const alegraWebhookAvisos = pgTable(
+  "alegra_webhook_avisos",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    /** Fecha en America/Argentina/Buenos_Aires. */
+    dia: date("dia").notNull(),
+    evento: text("evento").notNull(),
+    cantidad: integer("cantidad").notNull().default(0),
+    ultimoAt: timestamp("ultimo_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: "awa_pk", columns: [t.tenantId, t.dia, t.evento] })],
 )
 
 // ── Espejo de contactos de Alegra (change `espejo-contactos-alegra`) ──────────────────────

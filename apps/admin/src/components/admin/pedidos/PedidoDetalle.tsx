@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
-import { Badge, Card, Table, type TableColumn, useToast } from "@myd-org/ui"
+import { Alert, Badge, Card, Table, type TableColumn, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
 import { CambiarEstadoControl } from "./CambiarEstadoControl"
@@ -131,7 +131,7 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
           </h1>
           <Badge tone={tonoEstado(pedido.estado)}>{ESTADO_PEDIDO_LABEL[pedido.estado]}</Badge>
           {pedido.requiereRevision && (
-            <span title="Los datos de facturación de este pedido requieren revisión.">
+            <span title="El documento ya es de un cliente de Alegra que no vinculó su cuenta: revíselo antes de facturar.">
               <Badge tone="warning">Revisar</Badge>
             </span>
           )}
@@ -148,6 +148,17 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
           </p>
         )}
       </div>
+
+      {pedido.requiereRevision && (
+        <Alert tone="warning" title="Revise el cliente antes de facturar">
+          {/* Lo marca el Shop: el documento de facturación coincide con un contacto de
+              Alegra, pero el comprador no vinculó su cuenta (compró a precio de lista). */}
+          El documento {documento || "de facturación"} ya está registrado en Alegra, pero el
+          comprador no vinculó su cuenta y compró a precio de lista. Facture a ese contacto
+          existente en lugar de crear uno nuevo, y verifique si corresponde aplicarle su lista
+          de precios.
+        </Alert>
+      )}
 
       <Seccion titulo="Estado del pedido">
         <CambiarEstadoControl

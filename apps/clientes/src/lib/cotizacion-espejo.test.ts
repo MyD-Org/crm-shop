@@ -49,6 +49,11 @@ describe("cotizar", () => {
     expect(getItem).not.toHaveBeenCalled();
     expect(grabadora.consultas).toHaveLength(1);
     expect(grabadora.consultas[0].sql).toContain('"shop"."catalog_products"');
+    // El stock que se cotiza es el disponible: descuenta lo reservado por otros pedidos.
+    expect(grabadora.consultas[0].sql).toMatch(
+      /left join "shop"\."stock_reservado" on \("stock_reservado"\."alegra_item_id" = "shop"\."catalog_products"\."alegra_id" and "stock_reservado"\."tenant_id" = \$\d+\)/,
+    );
+    expect(grabadora.consultas[0].sql).toContain('coalesce("stock_reservado"."qty", 0)');
 
     expect(c.lineas[0]).toMatchObject({ id: "10", code: "R10", brand: "Marca X", precioUnitario: 1000, subtotal: 2000, iva: 420, stockDisponible: 5 });
     // Sin marca cae a la categoría; stock null = no inventariable.

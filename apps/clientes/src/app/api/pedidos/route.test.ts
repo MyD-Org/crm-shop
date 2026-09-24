@@ -12,32 +12,36 @@ const guardarTelefonoSiFalta = vi.fn();
 let flag = true;
 let pais = "AR";
 let telefonoPerfil: string | null = null;
+let perfilCompletoMock = true;
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
   idPriceListCliente: async () => undefined,
 }));
+const COTIZACION_OK = {
+  lineas: [{ id: "1", qty: 1 }],
+  hayProblemas: false,
+  subtotal: 165289.26,
+  iva: 34710.74,
+  costoEnvio: 0,
+  total: 200000,
+};
+const cotizar = vi.fn();
+const getPedidoPorClave = vi.fn();
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),
-  cotizar: async () => ({
-    lineas: [{ id: "1", qty: 1 }],
-    hayProblemas: false,
-    subtotal: 165289.26,
-    iva: 34710.74,
-    costoEnvio: 0,
-    total: 200000,
-  }),
+  cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pedidos", () => ({
   crearPedido: (...a: unknown[]) => crearPedido(...a),
-  getPedidoPorClave: async () => null,
+  getPedidoPorClave: (...a: unknown[]) => getPedidoPorClave(...a),
   listarPedidos: async () => [],
 }));
 vi.mock("@/lib/facturacion-db", () => ({
   getPerfilFacturacion: async () => ({
     pais, tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF", telefono: telefonoPerfil,
   }),
-  perfilCompleto: () => true,
+  perfilCompleto: () => perfilCompletoMock,
   guardarTelefonoSiFalta: (...a: unknown[]) => guardarTelefonoSiFalta(...a),
 }));
 // `@/lib/facturacion` es la real (`admiteEnvio` incluida): mockearla sería testear el mock.
@@ -49,6 +53,7 @@ vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
 vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
 
 import { POST } from "./route";
+import { StockInsuficienteError } from "@/lib/stock-disponible";
 import { setFlag } from "@/test/flags";
 
 const ofertaCon6Desde150k: OfertaCuotas = {
@@ -86,6 +91,7 @@ beforeEach(() => {
   flag = true;
   pais = "AR";
   telefonoPerfil = null;
+  perfilCompletoMock = true;
   guardarTelefonoSiFalta.mockReset();
   guardarTelefonoSiFalta.mockResolvedValue(undefined);
   crearPedido.mockReset();
@@ -93,6 +99,10 @@ beforeEach(() => {
     id: "p1", numero: "PED-1", repetido: false, cuotasMax: plan?.cuotasMax ?? null,
   }));
   getOferta.mockReset();
+  cotizar.mockReset();
+  cotizar.mockResolvedValue(COTIZACION_OK);
+  getPedidoPorClave.mockReset();
+  getPedidoPorClave.mockResolvedValue(null);
 });
 
 describe("POST /api/pedidos — plan de cuotas congelado", () => {
@@ -198,3 +208,71 @@ describe("POST /api/pedidos — el perfil aprende el teléfono", () => {
   });
 });
 
+
+describe("POST /api/pedidos — sin stock suficiente al confirmar", () => {
+  const CLAVE = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const SIN_STOCK = {
+    ...COTIZACION_OK,
+    lineas: [{ id: "1", qty: 1, stockDisponible: 0, problema: "sin_stock", detalle: "Sin stock." }],
+    hayProblemas: true,
+  };
+
+  it("otro checkout se llevó la última unidad: re-cotiza y responde el 409 con la cotización nueva", async () => {
+    crearPedido.mockRejectedValue(new StockInsuficienteError(["1"]));
+    cotizar.mockResolvedValueOnce(COTIZACION_OK).mockResolvedValueOnce(SIN_STOCK);
+    const r = await post();
+    expect(r.status).toBe(409);
+    expect(cotizar).toHaveBeenCalledTimes(2);
+    expect(await r.json()).toEqual({
+      error: "Algunos productos cambiaron. Revise el detalle antes de confirmar.",
+      cotizacion: SIN_STOCK,
+    });
+  });
+
+  it("si la re-cotización también falla, es el 500 de siempre (en usted)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    crearPedido.mockRejectedValue(new StockInsuficienteError(["1"]));
+    cotizar.mockResolvedValueOnce(COTIZACION_OK).mockRejectedValueOnce(new Error("db"));
+    const r = await post();
+    expect(r.status).toBe(500);
+    expect((await r.json()).error).toBe("No pudimos registrar el pedido. Inténtelo de nuevo en un momento.");
+  });
+
+  it("reintento cuyo primer intento se creó mientras se cotizaba: devuelve el pedido, no un 409 por su propia reserva", async () => {
+    cotizar.mockResolvedValue(SIN_STOCK);
+    getPedidoPorClave
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "p0", numero: "PED-0", cuotasMax: null });
+    const r = await post({ idempotencyKey: CLAVE });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ id: "p0", numero: "PED-0", repetido: true });
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("sin clave, un problema de stock es el 409 de siempre sin buscar pedidos", async () => {
+    cotizar.mockResolvedValue(SIN_STOCK);
+    const r = await post();
+    expect(r.status).toBe(409);
+    expect(getPedidoPorClave).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/pedidos — textos en usted", () => {
+  it("faltan los datos de facturación", async () => {
+    perfilCompletoMock = false;
+    const r = await post();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({
+      error: "Cargue sus datos de facturación para continuar.",
+      motivo: "facturacion_incompleta",
+    });
+  });
+
+  it("error inesperado", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    crearPedido.mockRejectedValue(new Error("db"));
+    const r = await post();
+    expect(r.status).toBe(500);
+    expect((await r.json()).error).toBe("No pudimos registrar el pedido. Inténtelo de nuevo en un momento.");
+  });
+});

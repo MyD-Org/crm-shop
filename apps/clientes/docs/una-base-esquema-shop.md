@@ -249,6 +249,8 @@ toda tabla nueva viva en el esquema `shop` (nunca en `public`).
 | `0001_telefono_contacto` | `billing_profiles.telefono` (teléfono de contacto que el checkout precarga) | **Antes** de desplegar el código que la usa: el Shop selecciona la columna al leer el perfil y sin ella cae el checkout y Mis datos. |
 | `0002_favoritos` | `shop.favorites` (favoritos de Mi cuenta: tenant, usuario de Clerk e ítem, con unique por los tres) | **Antes** de mergear y desplegar la rebanada de favoritos: el Shop la lee en el resumen de Mi cuenta, en `/mi-cuenta/favoritos` y en la API del corazón (catálogo, home y ficha). |
 | `0003_direcciones_envio` | `shop.direcciones_envio` (direcciones de envío de Mi cuenta: tenant, usuario de Clerk, etiqueta, calle, ciudad, provincia, CP, referencias y `predeterminada`), índice por (tenant, usuario) e índice único **parcial** por (tenant, usuario) `WHERE predeterminada` | **Antes** de mergear y desplegar la rebanada de direcciones: el Shop la lee en `/mi-cuenta/direcciones`, en su API y en el checkout (con Clerk). El checkout tolera que falte (lista vacía y lo registra en el log), Mi cuenta no. |
+| `0011_pedidos_facturado` | `orders.facturado_en`, `facturado_por`, `facturado_por_nombre` (marca "facturado en Alegra" que escribe el CRM) + índice parcial `orders_reserva_activa` | **Antes** de mergear la reserva de stock: la vista `0012` usa `facturado_en`. Ver "Reserva de stock". |
+| `0012_stock_reservado` | vista `shop.stock_reservado` (unidades reservadas por tenant e ítem) + `GRANT SELECT` condicional a `shop_app` | **Antes** de mergear y desplegar la reserva: sin la vista fallan el catálogo, la ficha, el carrito y el checkout. |
 
 El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
 `MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
@@ -497,6 +499,57 @@ cuántas de ésas se muestran u ocultan distinto que con el espejo del Shop solo
 
 **Rollback:** revertir el PR; el Shop vuelve a leer sólo `shop.catalog_products`.
 Recién después, si se quiere, la reversa de la 0035 (ver su encabezado).
+
+## Reserva de stock
+
+Change `webhooks-stock-alegra`, PR-3a. Un pedido del Shop aparta sus unidades
+desde que se crea: lo que el Shop muestra y valida (catálogo, "solo con stock",
+ficha y tope de cantidad, carrito/cotización y `POST /api/pedidos`) es el
+**disponible** = `max(0, stock − reservado)`, calculado al leer
+(`src/lib/stock-disponible.ts`). El stock del espejo nunca se modifica.
+
+`reservado` sale de la vista `shop.stock_reservado` (migración `0012`): suma de
+`qty` de las líneas de los pedidos del mismo tenant que cumplen **todo**:
+
+- `facturado_en IS NULL` (no marcados como facturados desde el CRM), y
+- estado `confirmado`, `preparacion` o `en_camino`, **o** `pendiente` creado
+  hace menos de 24 h (la misma ventana que `VENTANA_PAGO_MS`; un test las ata)
+  o ya pagado online.
+
+Liberan la reserva, sin escribir nada: cancelar, entregar, marcar facturado y
+que un pendiente sin pagar pase las 24 h. Los pedidos del bot o del mostrador
+no pasan por acá (los refleja Alegra).
+
+**Sin sobreventa:** `crearPedido` toma `pg_advisory_xact_lock` por ítem (claves
+ordenadas en un solo statement: sin deadlocks entre carritos cruzados) y relee
+el disponible dentro de la transacción antes de escribir las líneas. Si no
+alcanza, deshace todo y la ruta responde el 409 de siempre con la cotización
+nueva. El reintento con la misma clave de idempotencia devuelve el pedido
+original sin revalidar (su reserva ya cuenta).
+
+**Columnas `facturado_*`** (`0011`): las escribe el CRM (botón "Marcar como
+facturado", PR-3b), con los mismos permisos sobre `shop.orders` que ya usa para
+cambiar el estado (los permisos de tabla cubren las columnas nuevas). El Shop
+sólo las lee a través de la vista.
+
+**Permisos:** `shop_app` recibe `SELECT` sobre la vista por los `DEFAULT
+PRIVILEGES` del Paso 1 y, además, por el `GRANT` condicional de la `0012`.
+Verificación, como `shop_app`, contra la base del **runtime** (`DATABASE_URL`):
+
+```sql
+SELECT * FROM shop.stock_reservado LIMIT 1;   -- responde (0 o más filas)
+```
+
+Si da `permission denied` (42501), correr como `<OWNER_ROLE>`:
+
+```sql
+GRANT SELECT ON shop.stock_reservado TO shop_app;
+```
+
+**Rollback:** revertir el PR (el Shop vuelve a mostrar el stock sin descontar).
+Recién después, si se quiere, `DROP VIEW "shop"."stock_reservado";` en una
+migración nueva (ver el encabezado de la `0012`). Las columnas `facturado_*`
+quedan: el CRM las usa.
 
 ## Facturación del vinculado desde el espejo (write-through)
 

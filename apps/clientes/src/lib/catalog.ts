@@ -10,7 +10,9 @@
  *   que publica la tienda (ver src/lib/cotizacion.ts).
  * - Stock, precios y estado: por fila, del espejo del Shop o de la vista del
  *   CRM, el que se leyó de Alegra más tarde (ver src/lib/stock-disponible.ts).
- *   Toda consulta sobre `catalogProducts` joinea `crmStock` para eso.
+ *   El stock es el DISPONIBLE: se le resta lo reservado por pedidos vivos del
+ *   Shop. Toda consulta sobre `catalogProducts` joinea `crmStock` y
+ *   `stockReservado` para eso.
  *
  * SOLO servidor: usa la DB y el cliente de Alegra. Consumir desde Server
  * Components o API routes, nunca desde el browser.
@@ -23,10 +25,10 @@ import { cache } from "react";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
-import { catalogCategories, catalogProducts } from "@/db/schema";
+import { catalogCategories, catalogProducts, stockReservado } from "@/db/schema";
 import { crmCategorias, crmOverlay, crmStock, type FotoCrm } from "@/db/crm";
 import { esIdAlegra, mapPrecios, precioDeLista } from "./alegra";
-import { activoSql, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
+import { activoSql, joinReserva, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
@@ -145,7 +147,8 @@ async function soloVisiblesSql() {
 
 /**
  * Columnas del join, en un solo lugar para no repetirlas entre queries. Precios
- * y stock de la fuente más fresca (exigen el join a `crmStock`).
+ * y stock de la fuente más fresca; el stock, menos lo reservado (exigen los
+ * joins a `crmStock` y `stockReservado`).
  */
 const COLUMNAS_CATALOGO = {
   alegraId: catalogProducts.alegraId,
@@ -209,6 +212,7 @@ export async function getCatalogo(opts?: {
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
     .leftJoin(crmStock, joinStockCrm())
+    .leftJoin(stockReservado, joinReserva())
     .where(
       and(
         activoSql,
@@ -253,6 +257,7 @@ export async function getProductosPorIds(
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
     .leftJoin(crmStock, joinStockCrm())
+    .leftJoin(stockReservado, joinReserva())
     .where(
       and(
         inArray(catalogProducts.alegraId, [...alegraIds]),
@@ -445,6 +450,7 @@ async function conteoPorCategoriaPropia(where: Awaited<ReturnType<typeof condici
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
     .leftJoin(crmStock, joinStockCrm())
+    .leftJoin(stockReservado, joinReserva())
     .where(and(where, sql`${crmOverlay.categoriaId} is not null`))
     .groupBy(crmOverlay.categoriaId);
   return new Map(filas.map((f) => [f.id as string, Number(f.count)]));
@@ -541,6 +547,7 @@ export async function getPaginaCatalogo(opts?: {
     .leftJoin(catalogCategories, JOIN_CATEGORIAS)
     .leftJoin(crmOverlay, joinOverlay())
     .leftJoin(crmStock, joinStockCrm())
+    .leftJoin(stockReservado, joinReserva())
     .where(where);
 
   const total = conteo?.total ?? 0;
@@ -554,6 +561,7 @@ export async function getPaginaCatalogo(opts?: {
         .leftJoin(catalogCategories, JOIN_CATEGORIAS)
         .leftJoin(crmOverlay, joinOverlay())
         .leftJoin(crmStock, joinStockCrm())
+        .leftJoin(stockReservado, joinReserva())
         .where(where)
         .orderBy(...ordenDe(opts?.orden ?? ORDEN_DEFAULT))
         .limit(porPagina)
@@ -639,6 +647,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
       .leftJoin(crmOverlay, joinOverlay())
       .leftJoin(crmStock, joinStockCrm())
+      .leftJoin(stockReservado, joinReserva())
       .where(and(whereCategorias, sql`nullif(${catalogCategories.name}, '') is not null`))
       .groupBy(catalogCategories.name)
       .orderBy(sql`count(*) desc`, asc(catalogCategories.name)),
@@ -648,6 +657,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
       .leftJoin(crmOverlay, joinOverlay())
       .leftJoin(crmStock, joinStockCrm())
+      .leftJoin(stockReservado, joinReserva())
       .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
       .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
@@ -662,6 +672,7 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       .leftJoin(catalogCategories, JOIN_CATEGORIAS)
       .leftJoin(crmOverlay, joinOverlay())
       .leftJoin(crmStock, joinStockCrm())
+      .leftJoin(stockReservado, joinReserva())
       .where(wherePrecio),
   ]);
 
@@ -701,6 +712,7 @@ export const getCategorias = cache(async function getCategorias(): Promise<
     .from(catalogCategories)
     .innerJoin(catalogProducts, eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId))
     .leftJoin(crmStock, joinStockCrm())
+    .leftJoin(stockReservado, joinReserva())
     .where(and(eq(catalogCategories.status, "active"), activoSql))
     .orderBy(asc(catalogCategories.name));
 

@@ -33,6 +33,7 @@ import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
+import { joinOverlay, nombreExhibido } from "./nombre-exhibido";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -100,10 +101,7 @@ export function mapFilaToProduct(
     // La marca sale del customField de Alegra; si no está cargado, cae al
     // nombre de la categoría (mismo criterio que la ficha en vivo).
     brand: fila.brand || fila.categoryName || "",
-    // Nombre exhibido: el curado en el CRM; si no, la descripción de Alegra
-    // (en esta cuenta el nombre comercial vive ahí); si no, `name`, que en
-    // esta cuenta es el código. `||` y no `??`: un texto vacío no pisa.
-    name: fila.overlayNombre || fila.description || fila.name,
+    name: nombreExhibido(fila),
     price,
     ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
     stock: derivarStock(qty),
@@ -133,14 +131,6 @@ const JOIN_CATEGORIAS = eq(
   catalogCategories.alegraId
 );
 
-/**
- * Join al overlay del CRM (esparso: left join, la mayoría de los productos no
- * tiene fila). La tabla es de todos los tenants del CRM: el tenant va en el
- * join, no en el WHERE, para no convertirlo en un inner join. Función y no
- * constante: el tenant se lee del entorno en cada consulta.
- */
-const joinOverlay = () =>
-  and(eq(crmOverlay.alegraId, catalogProducts.alegraId), eq(crmOverlay.tenantId, shopTenantId()));
 
 /**
  * Sólo productos publicados en el CRM, detrás del flag

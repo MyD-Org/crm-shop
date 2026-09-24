@@ -12,6 +12,8 @@ const INTRO_SEQUENCE = ["linear", "spot", "pendant", "bulb"].map(id => HERO_LIGH
 /** While the hero is on screen, every this many px of scroll lights the next lamp, held this long after scrolling stops. */
 const SCROLL_STEP_PX = 90;
 const SCROLL_HOLD_MS = 700;
+/** A lamp lit by scrolling stays on at least this long before the next one can take over. */
+const SCROLL_MIN_ON_MS = 900;
 
 /** Keeps the DS Hero and its content intact. Only the background is enhanced. */
 export function InteractiveHero({ children, enabled }: { children: ReactNode; enabled: boolean }) {
@@ -63,23 +65,31 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     }, { threshold: .35 });
     observer.observe(surface);
     // Scrolling lights one lamp at a time, never the same one twice in a row;
-    // each lamp comes up once before any repeats.
+    // each lamp comes up once before any repeats. A lamp stays on at least
+    // SCROLL_MIN_ON_MS: scrolling sooner only keeps it on, so a fast flick on a
+    // phone doesn't run through every lamp in a burst of on/off flashes.
     let lastY = scrollY;
     let lastLight = -1;
     let bag: number[] = [];
     let scrollTimer: ReturnType<typeof setTimeout> | undefined;
+    let litAt = -Infinity;
+    const hold = () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => { litAt = -Infinity; paint([]); }, SCROLL_HOLD_MS);
+    };
     const scroll = () => {
       if (!visible || motion.matches || "intro" in host.dataset) { lastY = scrollY; return; }
       if (Math.abs(scrollY - lastY) < SCROLL_STEP_PX) return;
       lastY = scrollY;
+      if (performance.now() - litAt < SCROLL_MIN_ON_MS) { hold(); return; }
       if (!bag.length) {
         bag = HERO_LIGHTS.map((_, i) => i).sort(() => Math.random() - .5);
         if (bag[0] === lastLight) bag.push(bag.shift()!);
       }
       lastLight = bag.shift()!;
+      litAt = performance.now();
       paint(HERO_LIGHTS.map((_, i) => i === lastLight ? .85 : 0));
-      clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(() => paint([]), SCROLL_HOLD_MS);
+      hold();
     };
     addEventListener("scroll", scroll, { passive: true });
     const move = (event: PointerEvent) => {

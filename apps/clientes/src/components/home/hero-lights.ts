@@ -7,7 +7,9 @@ export const HERO_LIGHTS = [
   { id: "linear", label: "Luminaria lineal", x: 1265, y: 533, radius: 210 },
 ] as const;
 
-export function proximity(x: number, y: number, light: typeof HERO_LIGHTS[number]) {
+type Light = { readonly id: string; readonly x: number; readonly y: number; readonly radius: number };
+
+export function proximity(x: number, y: number, light: Light) {
   const distance = Math.hypot(x - light.x, y - light.y);
   const t = Math.max(0, 1 - distance / light.radius);
   return t * t * (3 - 2 * t);
@@ -34,6 +36,18 @@ export const STUDIO_IMAGE = "/images/central-led/studio-bell-bamboo-v2.webp";
 export const STUDIO_IMAGE_MOBILE = "/images/central-led/studio-bell-bamboo-v2-mobile.webp";
 /** Lights missing from the mobile photo: no glow, no control, left out of the intro and scroll. */
 export const COVER_HIDDEN_LIGHTS: ReadonlySet<string> = new Set(["neon"]);
+/**
+ * Lights that sit elsewhere in the mobile photo, in source px. The linear bar is gone
+ * from its wall there; its light is a hidden strip under the shelf (x 786-1536, y 884).
+ */
+export const COVER_LIGHT_SHIFT: Readonly<Record<string, { dx: number; dy: number }>> = { linear: { dx: -104, dy: 357 } };
+/** The under-shelf strip of the mobile photo, in source px. */
+export const COVER_SHELF_STRIP = { x: 786, y: 884, width: 750 } as const;
+/** Where a light is in the photo this viewport shows. */
+export function lightAt<T extends Light>(light: T, cover: boolean): T {
+  const shift = cover ? COVER_LIGHT_SHIFT[light.id] : undefined;
+  return shift ? { ...light, x: light.x + shift.dx, y: light.y + shift.dy } : light;
+}
 export function isStudioImage(src: string) {
   return src === "/images/hero-neutral.webp" || src === "/images/central-led/studio-off.webp" || src === STUDIO_IMAGE;
 }

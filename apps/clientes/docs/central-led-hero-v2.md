@@ -17,3 +17,7 @@ EDIT the first image, a 1536x1024 photorealistic studio hero. Keep exact camera,
 ## Mobile edit prompt
 
 Edit this exact 1536x1024 studio photograph for its mobile variant. Remove ONLY the large unlit white circular neon ring and its two black brackets from the wall at center (996,346). Reconstruct seamless natural beige plaster behind the removed ring. Keep EVERYTHING ELSE pixel aligned and unchanged: BELL-N black table lamp at x1221 y660-782, bamboo pendant x1385 y214-425, spotlight, linear light bar, shelf, tools, vase, bowl, textures, shadows, left empty space, camera, scale, crop and color. ALL lamps remain OFF, no glow, no lighting emission. Do not move any object. Output same 1536x1024 dimensions.
+
+## Mobile: linear light under the shelf
+
+In the mobile variant only, the linear wall bar sat right behind the lead paragraph. It was removed from the wall (plaster rebuilt from a smooth fit of the surrounding wall plus its own grain, leaves masked out) and no fixture replaces it. On mobile its light is drawn as a hidden LED strip along the shelf's underside, edge to edge (`COVER_SHELF_STRIP`: x 786-1536, y 884), and `COVER_LIGHT_SHIFT` moves its control there; desktop is unchanged.

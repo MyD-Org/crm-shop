@@ -19,11 +19,14 @@ import {
   contactoDeAlegra,
   leerContacto,
   mezclarConPerfil,
+  telefonoPreferido,
+  telefonosDelContacto,
   type CampoFacturacion,
   type ContactoFacturacion,
   type FuenteFacturacion,
   type LecturaContacto,
   type MotivoRevision,
+  type TelefonosContacto,
 } from "./contacto-alegra";
 import { facturacionEspejo } from "./contactos-espejo";
 import { soloDigitos, validarFacturacion, type CondicionIva, type Pais, type TipoDoc } from "./facturacion";
@@ -56,6 +59,17 @@ export interface DatosDelContacto {
   motivoRevision: MotivoRevision | null;
   /** El tipo de documento no está en Alegra: lo dedujo el Shop (el modal lo necesita para validar). */
   tipoDocDeducido: boolean;
+  /**
+   * Vinculado: los teléfonos del contacto en el espejo (o en vivo). `null` si
+   * no es vinculado o no se pudo leer Alegra.
+   */
+  telefonos: TelefonosContacto | null;
+  /**
+   * El teléfono de Alegra para el pedido (celular > principal > secundario).
+   * Presente ⇒ el checkout lo precarga y no hace falta tipearlo; `null` ⇒ se
+   * pide como siempre y lo tipeado se sube a Alegra si allá sigue vacío.
+   */
+  telefonoAlegra: string | null;
   /** Fila del perfil (Clerk). Da el teléfono y `coincideConAlegra`. */
   perfil: PerfilFacturacion | null;
   /**
@@ -164,6 +178,8 @@ export async function datosDelContacto(identidad: IdentidadFacturacion): Promise
       completo: faltantes.length === 0,
       motivoRevision: null,
       tipoDocDeducido: false,
+      telefonos: null,
+      telefonoAlegra: null,
       perfil,
       interno: null,
     };
@@ -189,6 +205,8 @@ export async function datosDelContacto(identidad: IdentidadFacturacion): Promise
       completo: sirvePerfil,
       motivoRevision: null,
       tipoDocDeducido: false,
+      telefonos: null,
+      telefonoAlegra: null,
       perfil,
       interno: null,
     };
@@ -212,6 +230,8 @@ export async function datosDelContacto(identidad: IdentidadFacturacion): Promise
     completo: mezclada.completo,
     motivoRevision: mezclada.motivoRevision,
     tipoDocDeducido: mezclada.tipoDocDeducido,
+    telefonos: telefonosDelContacto(contacto.base),
+    telefonoAlegra: telefonoPreferido(contacto.base),
     perfil,
     interno: { base: contacto.base, lectura: mezclada },
   };

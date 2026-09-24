@@ -212,6 +212,8 @@ export interface AlegraContact {
   identification?: string; // CUIT / DNI
   email?: string;
   phonePrimary?: string;
+  phoneSecondary?: string;
+  mobile?: string;
   /**
    * Lista de precios asignada al cliente, si tiene una. `status` importa: en la
    * cuenta real hay contactos apuntando a listas dadas de baja (una se llama
@@ -299,7 +301,16 @@ export async function getContacto(id: string) {
  * llega como error. Quien llama tiene que fallar en silencio.
  */
 export async function actualizarObservacionesContacto(contacto: AlegraContact, observations: string) {
-  const body: Record<string, unknown> = { name: contacto.name, observations };
+  return actualizarContactoTalCual(contacto, { observations });
+}
+
+/**
+ * PUT que reenvía `name`, `ivaCondition` e `identificationObject` TAL CUAL
+ * vinieron del GET (obligatorios para Alegra, no cambian) más `extra`
+ * (observaciones, un teléfono que estaba vacío). Mismos cuidados que arriba.
+ */
+export async function actualizarContactoTalCual(contacto: AlegraContact, extra: Record<string, unknown>) {
+  const body: Record<string, unknown> = { name: contacto.name, ...extra };
   if (contacto.ivaCondition != null) body.ivaCondition = contacto.ivaCondition;
   if (contacto.identificationObject != null) body.identificationObject = contacto.identificationObject;
   return actualizarContacto(contacto.id, body);

@@ -44,7 +44,10 @@
     "address_street": "text",
     "address_city": "text",
     "address_province": "text",
-    "address_postal_code": "text"
+    "address_postal_code": "text",
+    "phone_primary": "text",
+    "phone_secondary": "text",
+    "mobile": "text"
   },
   "public.tenants": {
     "id": "text",

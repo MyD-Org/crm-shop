@@ -60,9 +60,16 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
 
   it("la vista del espejo no expone datos sensibles", () => {
     const vista = esperado["public.alegra_contacts_shop"];
-    for (const prohibida of ["raw", "phone_primary", "phone_secondary", "mobile", "phones_norm", "seller_id"]) {
+    for (const prohibida of ["raw", "phones_norm", "seller_id"]) {
       expect(vista[prohibida], prohibida).toBeUndefined();
     }
+  });
+
+  it("la vista del espejo trae los teléfonos del contacto (0036 del CRM)", () => {
+    const vista = esperado["public.alegra_contacts_shop"];
+    expect(vista.phone_primary).toBe("text");
+    expect(vista.phone_secondary).toBe("text");
+    expect(vista.mobile).toBe("text");
   });
 
   it("la vista de catálogo sólo trae stock, precio y estado", () => {

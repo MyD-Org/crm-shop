@@ -19,12 +19,20 @@
  */
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { actualizarContacto, actualizarObservacionesContacto, getContacto, type AlegraContact } from "./alegra";
+import {
+  actualizarContacto,
+  actualizarContactoTalCual,
+  actualizarObservacionesContacto,
+  getContacto,
+  type AlegraContact,
+} from "./alegra";
 import {
   armarPutSoloVacios,
   contactoDeAlegra,
   leerContacto,
   mezclarConPerfil,
+  telefonoParaAlegra,
+  telefonoPreferido,
   type Complemento,
   type ContactoFacturacion,
   type DatosContacto,
@@ -110,21 +118,34 @@ export async function completarEnAlegra({
 }
 
 /**
- * Subida en segundo plano (D-11), para `after()`: al confirmar una vinculación
- * y tras un pedido "mixto" (algo quedó en el perfil porque el PUT falló).
+ * Subida en segundo plano (D-11), para `after()`: al confirmar una vinculación,
+ * tras un pedido "mixto" (algo quedó en el perfil porque el PUT falló) y tras
+ * un pedido cuyo teléfono no está en Alegra.
  *
  * 1 GET en vivo (el documento fresco, no el del espejo) y, como mucho, UN PUT
- * que junta el email alternativo en las observaciones y los vacíos de Alegra
- * que el perfil tiene con el mismo documento (D2). Nada que aportar ⇒ sin PUT.
- * Si algo falla, se registra y listo: nunca lanza.
+ * que junta el email alternativo en las observaciones, los vacíos de Alegra
+ * que el perfil tiene con el mismo documento (D2) y el `telefono` tipeado en
+ * el checkout — éste SÓLO si el contacto fresco no tiene ningún teléfono
+ * (celular, principal ni secundario): "sólo completar vacíos" también para el
+ * teléfono, que la función del espejo no controla. Va a `phonePrimary`.
+ * Nada que aportar ⇒ sin PUT. Si algo falla, se registra y listo: nunca lanza.
  */
 export async function sincronizarContactoConPerfil(
   alegraId: string,
-  { clerkUserId, emailAlternativo, fecha = new Date() }: { clerkUserId: string | null; emailAlternativo?: string; fecha?: Date },
+  {
+    clerkUserId,
+    emailAlternativo,
+    telefono,
+    fecha = new Date(),
+  }: { clerkUserId: string | null; emailAlternativo?: string; telefono?: string | null; fecha?: Date },
 ): Promise<void> {
   try {
     const crudo = await getContacto(alegraId);
     if (!crudo) return;
+
+    // Contra el contacto FRESCO: el espejo puede estar atrasado unos minutos.
+    const telefonoNuevo =
+      telefonoParaAlegra(telefono) && !telefonoPreferido(contactoDeAlegra(crudo)) ? telefonoParaAlegra(telefono) : null;
 
     const observaciones = emailAlternativo
       ? observacionesConEmail(crudo.observations, crudo.email, emailAlternativo, fecha)
@@ -148,19 +169,23 @@ export async function sincronizarContactoConPerfil(
     }
     const hayComplemento = Object.keys(complemento).length > 0;
 
-    if (!observaciones && !hayComplemento) return;
+    if (!observaciones && !hayComplemento && !telefonoNuevo) return;
 
+    const extra = {
+      ...(observaciones ? { observations: observaciones } : {}),
+      ...(telefonoNuevo ? { phonePrimary: telefonoNuevo } : {}),
+    };
     let respuesta: AlegraContact;
-    if (!hayComplemento) {
+    if (!hayComplemento && !telefonoNuevo) {
       // Sólo observaciones: el PUT de siempre, que reenvía nombre, condición y
       // documento tal cual vinieron (nunca un PUT sólo para escribir el tipo).
       respuesta = await actualizarObservacionesContacto({ ...crudo, id: alegraId }, observaciones!);
+    } else if (!hayComplemento) {
+      // Teléfono (y quizá observaciones): lo mismo, tal cual + lo vacío.
+      respuesta = await actualizarContactoTalCual({ ...crudo, id: alegraId }, extra);
     } else {
       const cuerpo = armarPutSoloVacios(base, lectura.datos, complemento);
-      respuesta = await actualizarContacto(alegraId, {
-        ...cuerpo,
-        ...(observaciones ? { observations: observaciones } : {}),
-      });
+      respuesta = await actualizarContacto(alegraId, { ...cuerpo, ...extra });
     }
     // Las observaciones solas no tocan columnas del espejo; igual se pasa la
     // respuesta: la función deja `raw` al día y es idempotente.

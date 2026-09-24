@@ -345,6 +345,10 @@ export async function facturacionEspejo(alegraId: string): Promise<ContactoFactu
       addressCity: crmContactos.addressCity,
       addressProvince: crmContactos.addressProvince,
       addressPostalCode: crmContactos.addressPostalCode,
+      // 0036 del CRM: el checkout no vuelve a pedir un teléfono que ya está.
+      phonePrimary: crmContactos.phonePrimary,
+      phoneSecondary: crmContactos.phoneSecondary,
+      mobile: crmContactos.mobile,
     })
     .from(crmContactos)
     .where(and(activasDelShop(), eq(crmContactos.alegraId, alegraId)))

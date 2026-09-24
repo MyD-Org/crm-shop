@@ -20,10 +20,12 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 const actualizarContacto = vi.fn();
 const actualizarObservacionesContacto = vi.fn();
+const actualizarContactoTalCual = vi.fn();
 const getContacto = vi.fn();
 vi.mock("./alegra", () => ({
   actualizarContacto: (...a: unknown[]) => actualizarContacto(...a),
   actualizarObservacionesContacto: (...a: unknown[]) => actualizarObservacionesContacto(...a),
+  actualizarContactoTalCual: (...a: unknown[]) => actualizarContactoTalCual(...a),
   getContacto: (id: string) => getContacto(id),
 }));
 const upsertRespaldoVinculado = vi.fn();
@@ -72,6 +74,9 @@ beforeEach(() => {
   perfil = null;
   actualizarContacto.mockReset().mockImplementation(async (id: string, body: object) => ({ id, ...body }));
   actualizarObservacionesContacto.mockReset().mockResolvedValue({ id: "42" });
+  actualizarContactoTalCual
+    .mockReset()
+    .mockImplementation(async (c: { id: string; name: string }, extra: object) => ({ id: c.id, name: c.name, ...extra }));
   getContacto.mockReset().mockResolvedValue(CONTACTO_ALEGRA);
   upsertRespaldoVinculado.mockReset().mockResolvedValue({});
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -197,5 +202,68 @@ describe("sincronizarContactoConPerfil (vinculación y pedido mixto)", () => {
     actualizarContacto.mockRejectedValue(new Error('Alegra 400 en /contacts/42: {"code":429}'));
     await expect(sincronizarContactoConPerfil("42", { clerkUserId: "user_1" })).resolves.toBeUndefined();
     expect(vi.mocked(console.error).mock.calls.join(" ")).toContain("contacto 42");
+  });
+});
+
+describe("sincronizarContactoConPerfil con el teléfono del pedido (sólo completar vacíos)", () => {
+  it("Alegra sin ningún teléfono ⇒ UN PUT tal cual + phonePrimary, y write-through con la respuesta", async () => {
+    await sincronizarContactoConPerfil("42", { clerkUserId: null, telefono: "  +54 376 4000000 " });
+    expect(actualizarContactoTalCual).toHaveBeenCalledTimes(1);
+    const [contacto, extra] = actualizarContactoTalCual.mock.calls[0];
+    expect(contacto).toMatchObject({ id: "42", name: "ACME SRL", ivaCondition: "IVA_RESPONSABLE" });
+    expect(extra).toEqual({ phonePrimary: "+54 376 4000000" });
+    expect(actualizarContacto).not.toHaveBeenCalled();
+    expect(actualizarObservacionesContacto).not.toHaveBeenCalled();
+    expect(llamadasFuncion()).toHaveLength(1);
+  });
+
+  it.each([
+    ["celular", { mobile: "11 5000-0000" }],
+    ["principal", { phonePrimary: "011 4000-0000" }],
+    ["secundario", { phoneSecondary: "011 4000-0001" }],
+  ])("el contacto FRESCO ya tiene %s (el espejo estaba atrasado) ⇒ no se escribe nada", async (_, tel) => {
+    getContacto.mockResolvedValue({ ...CONTACTO_ALEGRA, ...tel });
+    await sincronizarContactoConPerfil("42", { clerkUserId: null, telefono: "+54 376 4000000" });
+    expect(actualizarContactoTalCual).not.toHaveBeenCalled();
+    expect(actualizarContacto).not.toHaveBeenCalled();
+    expect(actualizarObservacionesContacto).not.toHaveBeenCalled();
+  });
+
+  it("teléfono inválido ⇒ no se escribe", async () => {
+    await sincronizarContactoConPerfil("42", { clerkUserId: null, telefono: "123" });
+    expect(actualizarContactoTalCual).not.toHaveBeenCalled();
+  });
+
+  it("teléfono + email alternativo ⇒ el mismo PUT lleva los dos", async () => {
+    await sincronizarContactoConPerfil("42", {
+      clerkUserId: null,
+      telefono: "+54 376 4000000",
+      emailAlternativo: "otro@cliente.example",
+    });
+    expect(actualizarContactoTalCual).toHaveBeenCalledTimes(1);
+    const extra = actualizarContactoTalCual.mock.calls[0][1];
+    expect(extra.phonePrimary).toBe("+54 376 4000000");
+    expect(extra.observations).toMatch(/Tienda online: también usa otro@cliente\.example/);
+  });
+
+  it("teléfono + vacíos del perfil (mismo documento) ⇒ UN PUT sólo-vacíos con phonePrimary", async () => {
+    perfil = {
+      pais: "AR",
+      tipoDoc: "CUIT",
+      nroDoc: "30712345671",
+      razonSocial: "ACME SRL",
+      condicionIva: "responsable_inscripto",
+      domicilioCalle: "Av. Siempreviva 742",
+      domicilioCiudad: "Posadas",
+      domicilioProvincia: null,
+      domicilioCp: null,
+    };
+    await sincronizarContactoConPerfil("42", { clerkUserId: "user_1", telefono: "+54 376 4000000" });
+    expect(actualizarContacto).toHaveBeenCalledTimes(1);
+    expect(actualizarContacto.mock.calls[0][1]).toMatchObject({
+      address: { address: "Av. Siempreviva 742", city: "Posadas" },
+      phonePrimary: "+54 376 4000000",
+    });
+    expect(actualizarContactoTalCual).not.toHaveBeenCalled();
   });
 });

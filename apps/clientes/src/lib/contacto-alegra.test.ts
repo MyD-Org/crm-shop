@@ -5,6 +5,12 @@ import {
   condicionDeAlegra,
   congelarFacturacion,
   contactoDeAlegra,
+  hayTelefonoParaPedido,
+  telefonoDelCheckout,
+  telefonoParaAlegra,
+  telefonosParaMostrar,
+  telefonoPreferido,
+  telefonosDelContacto,
   deducirTipoDoc,
   estadoFacturacionCheckout,
   leerContacto,
@@ -214,7 +220,7 @@ describe("faltantes y bloqueados del domicilio", () => {
       ivaCondition: "IVA_RESPONSABLE",
       address: { address: "Calle Falsa 123", city: "Posadas", province: "  ", postalCode: "" },
     });
-    expect(vivo).toEqual(fila());
+    expect(vivo).toEqual({ ...fila(), phonePrimary: null, phoneSecondary: null, mobile: null });
     expect(contactoDeAlegra({ id: "7", name: "X", address: "texto suelto" })).toMatchObject({
       alegraId: "7",
       addressStreet: null,
@@ -460,5 +466,77 @@ describe("congelado del pedido y estado del checkout", () => {
       puedeConfirmar: false,
       aviso: "no_disponible",
     });
+  });
+});
+
+describe("teléfono del contacto (0036 del CRM)", () => {
+  it("contactoDeAlegra lee los tres teléfonos; vacío o espacios ⇒ null", () => {
+    expect(
+      contactoDeAlegra({ id: "7", name: "X", phonePrimary: " 011 4000-0000 ", phoneSecondary: "  ", mobile: "" }),
+    ).toMatchObject({ phonePrimary: "011 4000-0000", phoneSecondary: null, mobile: null });
+  });
+
+  it("preferido: celular > principal > secundario; ninguno ⇒ null", () => {
+    expect(telefonoPreferido({ mobile: "11 5000-0000", phonePrimary: "011 4000-0000", phoneSecondary: "x" })).toBe(
+      "11 5000-0000",
+    );
+    expect(telefonoPreferido({ mobile: " ", phonePrimary: "011 4000-0000", phoneSecondary: "x" })).toBe("011 4000-0000");
+    expect(telefonoPreferido({ mobile: null, phonePrimary: null, phoneSecondary: "011 4000-0001" })).toBe(
+      "011 4000-0001",
+    );
+    expect(telefonoPreferido({})).toBeNull();
+  });
+
+  it("telefonosDelContacto normaliza ausentes a null", () => {
+    expect(telefonosDelContacto({ phonePrimary: "011 4000-0000" })).toEqual({
+      mobile: null,
+      phonePrimary: "011 4000-0000",
+      phoneSecondary: null,
+    });
+  });
+
+  it("telefonoParaAlegra: recorta y exige 8 a 15 dígitos", () => {
+    expect(telefonoParaAlegra("  +54 376 4000000  ")).toBe("+54 376 4000000");
+    expect(telefonoParaAlegra("123")).toBeNull();
+    expect(telefonoParaAlegra("llamar a la tarde")).toBeNull();
+    expect(telefonoParaAlegra("")).toBeNull();
+    expect(telefonoParaAlegra(null)).toBeNull();
+  });
+});
+
+describe("teléfono en el checkout", () => {
+  it("vinculado con teléfono en Alegra: se precarga y es de su cuenta", () => {
+    expect(telefonoDelCheckout({ telefonoAlegra: "11 5000-0000", telefonoPerfil: "3764000000" })).toEqual({
+      inicial: "11 5000-0000",
+      deSuCuenta: true,
+    });
+  });
+
+  it("sin teléfono en Alegra: el del perfil (como siempre), o vacío", () => {
+    expect(telefonoDelCheckout({ telefonoAlegra: null, telefonoPerfil: "3764000000" })).toEqual({
+      inicial: "3764000000",
+      deSuCuenta: false,
+    });
+    expect(telefonoDelCheckout({ telefonoAlegra: " ", telefonoPerfil: null })).toEqual({ inicial: "", deSuCuenta: false });
+  });
+
+  it("confirmar: alcanza con el de Alegra aunque el campo quede vacío", () => {
+    expect(hayTelefonoParaPedido("", "11 5000-0000")).toBe(true);
+    expect(hayTelefonoParaPedido("  ", null)).toBe(false);
+    expect(hayTelefonoParaPedido("3764000000", null)).toBe(true);
+  });
+});
+
+describe("teléfonos de Alegra en Mis datos", () => {
+  it("sólo los cargados, en orden de uso, con etiqueta", () => {
+    expect(telefonosParaMostrar({ mobile: "11 5000-0000", phonePrimary: null, phoneSecondary: "011 4000-0001" })).toEqual([
+      { label: "Celular", valor: "11 5000-0000" },
+      { label: "Teléfono alternativo", valor: "011 4000-0001" },
+    ]);
+  });
+
+  it("ninguno o null ⇒ lista vacía (se muestra el editor de siempre)", () => {
+    expect(telefonosParaMostrar({ mobile: null, phonePrimary: " ", phoneSecondary: null })).toEqual([]);
+    expect(telefonosParaMostrar(null)).toEqual([]);
   });
 });

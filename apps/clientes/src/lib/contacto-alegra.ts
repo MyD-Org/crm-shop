@@ -25,6 +25,7 @@ import {
   exigeCuit,
   normalizarDoc,
   soloDigitos,
+  telefonoValido,
   type CondicionIva,
   type TipoDoc,
 } from "./facturacion";
@@ -84,6 +85,14 @@ export interface ContactoFacturacion {
   addressCity: string | null;
   addressProvince: string | null;
   addressPostalCode: string | null;
+  /**
+   * Teléfonos del contacto (vista 0036 del CRM / GET en vivo), tal cual los
+   * cargó la sucursal. Opcionales: no son de facturación y hay quien arma un
+   * contacto sin ellos (tests, contacto vacío) ⇒ ausente = vacío.
+   */
+  phonePrimary?: string | null;
+  phoneSecondary?: string | null;
+  mobile?: string | null;
 }
 
 /** Datos de facturación leídos (parciales: lo que falta no está). */
@@ -183,7 +192,89 @@ export function contactoDeAlegra(c: Record<string, unknown>): ContactoFacturacio
     addressCity: textoONull(address?.city),
     addressProvince: textoONull(address?.province),
     addressPostalCode: textoONull(address?.postalCode),
+    phonePrimary: textoONull(c.phonePrimary),
+    phoneSecondary: textoONull(c.phoneSecondary),
+    mobile: textoONull(c.mobile),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Teléfono (el espejo es la fuente: el Shop no pide lo que ya está)
+// ---------------------------------------------------------------------------
+
+/** Los teléfonos del contacto en Alegra; vacío o espacios ⇒ null. */
+export interface TelefonosContacto {
+  mobile: string | null;
+  phonePrimary: string | null;
+  phoneSecondary: string | null;
+}
+
+export function telefonosDelContacto(
+  c: Pick<ContactoFacturacion, "mobile" | "phonePrimary" | "phoneSecondary">,
+): TelefonosContacto {
+  return {
+    mobile: textoONull(c.mobile),
+    phonePrimary: textoONull(c.phonePrimary),
+    phoneSecondary: textoONull(c.phoneSecondary),
+  };
+}
+
+/**
+ * El teléfono para contactar al comprador por un pedido: celular, si no el
+ * principal, si no el secundario. `null` = Alegra no tiene ninguno (se pide en
+ * el checkout, y lo que se tipea se sube a Alegra).
+ */
+export function telefonoPreferido(
+  c: Pick<ContactoFacturacion, "mobile" | "phonePrimary" | "phoneSecondary">,
+): string | null {
+  const t = telefonosDelContacto(c);
+  return t.mobile ?? t.phonePrimary ?? t.phoneSecondary;
+}
+
+/**
+ * El teléfono tipeado, listo para subir a Alegra (recortado), o `null` si no
+ * parece un teléfono (mismas reglas que Mis datos: 8 a 15 dígitos). Un valor
+ * dudoso no se escribe en la fuente de verdad: queda sólo en el pedido.
+ */
+export function telefonoParaAlegra(tipeado: string | null | undefined): string | null {
+  const t = (tipeado ?? "").trim().slice(0, 40);
+  return t && telefonoValido(t) ? t : null;
+}
+
+/**
+ * Teléfono del checkout: precargado con el de Alegra (vinculado) o, si no hay,
+ * con el del perfil. `deSuCuenta` ⇒ no hace falta tipearlo: si el campo queda
+ * vacío, el servidor usa el de Alegra.
+ */
+export function telefonoDelCheckout({
+  telefonoAlegra,
+  telefonoPerfil,
+}: {
+  telefonoAlegra: string | null | undefined;
+  telefonoPerfil: string | null | undefined;
+}): { inicial: string; deSuCuenta: boolean } {
+  const alegra = textoONull(telefonoAlegra);
+  if (alegra) return { inicial: alegra, deSuCuenta: true };
+  return { inicial: textoONull(telefonoPerfil) ?? "", deSuCuenta: false };
+}
+
+/**
+ * Los teléfonos de Alegra para mostrar en Mis datos (sólo los cargados, en el
+ * orden en que se usan para un pedido). Vacío ⇒ Alegra no tiene ninguno.
+ */
+export function telefonosParaMostrar(t: TelefonosContacto | null | undefined): { label: string; valor: string }[] {
+  if (!t) return [];
+  const filas: { label: string; valor: string | null }[] = [
+    { label: "Celular", valor: textoONull(t.mobile) },
+    { label: "Teléfono", valor: textoONull(t.phonePrimary) },
+    { label: "Teléfono alternativo", valor: textoONull(t.phoneSecondary) },
+  ];
+  return filas.filter((f): f is { label: string; valor: string } => f.valor !== null);
+}
+
+/** ¿El checkout tiene un teléfono para el pedido? El tipeado o el de Alegra. */
+export function hayTelefonoParaPedido(tipeado: string, telefonoAlegra: string | null | undefined): boolean {
+  return tipeado.trim() !== "" || Boolean(textoONull(telefonoAlegra));
 }
 
 // ---------------------------------------------------------------------------

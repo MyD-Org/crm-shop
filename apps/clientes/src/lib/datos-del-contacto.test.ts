@@ -181,3 +181,43 @@ describe("datosDelContacto — no vinculado", () => {
     expect((await datosDelContacto(noVinculado)).faltantes).toEqual(["domicilioCalle"]);
   });
 });
+
+describe("datosDelContacto — teléfono desde el espejo (0036 del CRM)", () => {
+  it("vinculado: teléfonos del espejo y el preferido (celular > principal > secundario)", async () => {
+    facturacionEspejo.mockResolvedValue(fila({ phonePrimary: "011 4000-0000", mobile: "11 5000-0000" }));
+    const dc = await datosDelContacto(vinculado());
+    expect(dc.telefonos).toEqual({ mobile: "11 5000-0000", phonePrimary: "011 4000-0000", phoneSecondary: null });
+    expect(dc.telefonoAlegra).toBe("11 5000-0000");
+    // Va al navegador (es el teléfono del propio comprador).
+    expect(paraElCliente(dc).telefonoAlegra).toBe("11 5000-0000");
+  });
+
+  it("vinculado sin teléfonos en el espejo: null (se pide en el checkout), aunque el perfil tenga uno", async () => {
+    perfil = PERFIL_COMPLETO;
+    const dc = await datosDelContacto(vinculado());
+    expect(dc.telefonoAlegra).toBeNull();
+    expect(dc.perfil?.telefono).toBe("3764000000");
+  });
+
+  it("vinculado leído en vivo: mismo mapeo de teléfonos", async () => {
+    facturacionEspejo.mockResolvedValue(null);
+    getContacto.mockResolvedValue({ id: "42", name: "ACME SRL", phoneSecondary: "011 4000-0001" });
+    const dc = await datosDelContacto(vinculado());
+    expect(dc.fuente).toBe("vivo");
+    expect(dc.telefonoAlegra).toBe("011 4000-0001");
+  });
+
+  it("no vinculado: nunca teléfono de Alegra (sigue el del perfil)", async () => {
+    perfil = PERFIL_COMPLETO;
+    const dc = await datosDelContacto({ clerkUserId: "user_1", cliente: null });
+    expect(dc.telefonos).toBeNull();
+    expect(dc.telefonoAlegra).toBeNull();
+  });
+
+  it("Alegra no disponible: sin teléfono de Alegra", async () => {
+    facturacionEspejo.mockResolvedValue(null);
+    getContacto.mockRejectedValue(new Error("Alegra 503 en /contacts/42"));
+    const dc = await datosDelContacto(vinculado());
+    expect(dc.telefonoAlegra).toBeNull();
+  });
+});

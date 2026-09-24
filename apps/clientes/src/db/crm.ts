@@ -86,8 +86,9 @@ export const crmOverlay = publico.table("catalog_overlay", {
 
 /**
  * Espejo de contactos de Alegra, visto por el Shop (`public.alegra_contacts_shop`,
- * migraciones 0031 y 0032 de apps/admin). Es una VISTA: `.existing()` para que
- * drizzle-kit nunca intente crearla. No expone `raw`, teléfonos ni `seller_id`.
+ * migraciones 0031, 0032, 0034 y 0036 de apps/admin). Es una VISTA: `.existing()`
+ * para que drizzle-kit nunca intente crearla. No expone `raw`, `phones_norm` ni
+ * `seller_id`.
  *
  * `tipo_cuenta` es la columna generada del CRM (plazo > 0 o límite > 0 ⇒
  * `corriente`): el Shop la LEE, no la recalcula. `status` NO es el estado de
@@ -125,6 +126,12 @@ export const crmContactos = publico
     addressCity: text("address_city"),
     addressProvince: text("address_province"),
     addressPostalCode: text("address_postal_code"),
+    // 0036: teléfonos tal cual los guarda la sync (texto de Alegra, sin
+    // normalizar). El checkout no vuelve a pedir un teléfono que ya está acá.
+    // Requieren la 0036 aplicada en la base: sin ella, la vista no los tiene.
+    phonePrimary: text("phone_primary"),
+    phoneSecondary: text("phone_secondary"),
+    mobile: text("mobile"),
   })
   .existing();
 

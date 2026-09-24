@@ -96,7 +96,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
         if (!fit.scale) return;
         const x = (event.clientX - bounds.left - fit.left) / fit.scale;
         const y = (event.clientY - bounds.top - fit.top) / fit.scale;
-        paint(HERO_LIGHTS.map(light => proximity(x, y, lightAt(light, cover.matches))));
+        paint(HERO_LIGHTS.map((light, i) => shown(i) ? proximity(x, y, lightAt(light, cover.matches)) : 0));
       });
     };
     const leave = () => { cancelAnimationFrame(frame); paint([]); };
@@ -145,7 +145,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
             <clipPath id={`${uid}-basket`}><path d="M1370 234 Q1360 278 1311 300 Q1263 322 1271 366 Q1278 401 1311 417 Q1385 437 1462 417 Q1496 402 1500 365 Q1507 323 1465 300 Q1416 277 1403 234 Z"/></clipPath>
             <radialGradient id={`${uid}-interior`}><stop stopColor="#fff4ce" stopOpacity=".95"/><stop offset=".25" stopColor="#ffe0a0" stopOpacity=".65"/><stop offset="1" stopColor="#ffcb7a" stopOpacity="0"/></radialGradient>
           </defs>
-          {HERO_LIGHTS.map((light, i) => <g key={light.id} ref={el => { layers.current[i] = el; }} className={styles.light} style={{ opacity: 0 }} data-light={light.id}>
+          {HERO_LIGHTS.map((light, i) => covered && COVER_HIDDEN_LIGHTS.has(light.id) ? null : <g key={light.id} ref={el => { layers.current[i] = el; }} className={styles.light} style={{ opacity: 0 }} data-light={light.id}>
             {i === 0 && <>
               <ellipse cx="996" cy="346" rx="118" ry="117" fill="none" stroke="#ffe7c2" strokeWidth="32" filter={`url(#${uid}-blur)`}/>
               <ellipse cx="996" cy="346" rx="118" ry="117" fill="none" stroke="#fff6e1" strokeWidth="7"/>

@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Button, Field, Input, Select } from "@myd-org/ui";
+import { Button, Field, Input, Select, Spinner } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
+import { COPY_CARRITO } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
 import { AvisoVincular } from "@/components/mi-cuenta/AvisoVincular";
@@ -169,7 +170,7 @@ export function CheckoutClient({
   direccionesGuardadas = [],
   sugerirVincular = false,
 }: Props) {
-  const { items, clear, ready } = useCart();
+  const { items, vaciarTrasPedido, ready } = useCart();
 
   const [pago, setPago] = useState<PagoMetodo>("transferencia");
   const [entrega, setEntrega] = useState<EntregaTipo>("retiro");
@@ -211,11 +212,18 @@ export function CheckoutClient({
   const [cancelando, setCancelando] = useState(false);
   const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   /**
+   * Mientras se busca un pedido pendiente para retomar. Como el carrito se
+   * vacía al crear el pedido (también con Mercado Pago impago), quien vuelve a
+   * pagar llega con el carrito vacío: sin esta espera vería "carrito vacío"
+   * un instante antes de la pantalla de pago.
+   */
+  const [buscandoPendiente, setBuscandoPendiente] = useState(pagosHabilitados);
+  /**
    * Al montar, se chequea si hay un pedido pendiente reciente de este comprador
    * (ver `pedidoPendienteMasReciente` en pedidos.ts). Sin este atajo, quien
    * vuelve al checkout después de abandonar el pago crearía un pedido-fantasma
-   * nuevo. Solo se dispara una vez y no bloquea el render — mientras carga se
-   * ve el checkout normal.
+   * nuevo. Solo se dispara una vez; mientras carga, el checkout con productos
+   * se ve normal y el carrito vacío espera (ver `buscandoPendiente`).
    */
   useEffect(() => {
     // Sin cobros no hay nada que retomar: el rescate fuerza el método a Mercado
@@ -237,6 +245,9 @@ export function CheckoutClient({
       .catch(() => {
         // Silencioso: fallar en la detección solo lleva al flujo normal, no
         // rompe nada.
+      })
+      .finally(() => {
+        if (!cancelado) setBuscandoPendiente(false);
       });
     return () => {
       cancelado = true;
@@ -336,26 +347,20 @@ export function CheckoutClient({
         return;
       }
 
-      // El carrito NO se vacía acá — se vacía recién cuando el pago se
-      // confirma (ver `onPagado` más abajo). Motivo: si el pago con MP falla o
-      // el comprador cierra la ventana antes de completar, quiere volver y ver
-      // sus productos, no un carrito vacío. Para el reintento no hay riesgo de
-      // duplicar el pedido: el `useEffect` de arriba detecta el pendiente y lo
-      // reutiliza.
-      //
-      // Para métodos offline (transferencia / efectivo / cuenta corriente) el
-      // "pago" es una promesa: no hay confirmación online. Ahí el carrito sí
-      // se vacía inmediatamente porque el pedido ya está en la mesa del
-      // operador. La rama del render inferior se encarga de ese caso.
+      // El pedido ya existe: el carrito se vacía para TODOS los medios de
+      // pago, también Mercado Pago impago. Con sesión de Clerk el servidor ya
+      // vació el suyo en la misma transacción que creó el pedido
+      // (`crearPedido`); acá sólo se limpia el local. Un pedido de Mercado Pago
+      // sin pagar se retoma desde Mis pedidos o volviendo al checkout (el
+      // `useEffect` de arriba lo rescata), sin duplicarlo. Cancelarlo NO
+      // vuelve a llenar el carrito (decisión 2026-09-24).
       setConfirmado({
         numero: json.numero,
         id: json.id,
         total: json.cotizacion?.total ?? cotizacion?.total ?? 0,
         cuotasMax: typeof json.cuotasMax === "number" ? json.cuotasMax : null,
       });
-      if (pagoElegido !== "mercadopago") {
-        clear();
-      }
+      vaciarTrasPedido();
     } catch {
       setErrorEnvio("No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.");
     } finally {
@@ -366,9 +371,9 @@ export function CheckoutClient({
   // ------------------------------------------------------- pedido creado, a pagar
   //
   // El pedido YA existe cuando se llega acá (recién creado o rescatado por el
-  // useEffect que busca pendientes). El carrito sigue con productos hasta que
-  // el pago se confirma: si el cobro falla o el comprador se va, al volver ve
-  // sus items y el pendiente se reutiliza en vez de crear uno nuevo.
+  // useEffect que busca pendientes) y el carrito ya está vacío: esta pantalla
+  // no depende de `items`. Si el cobro falla o el comprador se va, el
+  // pendiente se reutiliza en vez de crear uno nuevo.
   async function cancelarYVolver() {
     if (!confirmado) return;
     setCancelando(true);
@@ -424,15 +429,11 @@ export function CheckoutClient({
           monto={confirmado.total}
           emailComprador={emailCliente}
           maxCuotas={confirmado.cuotasMax ?? undefined}
-          onPagado={() => {
-            setPagado(true);
-            // El carrito se vacía RECIÉN acá: el pedido está pago, la compra
-            // ya se completó, no hay razón para seguir mostrando los items.
-            clear();
-          }}
+          onPagado={() => setPagado(true)}
         />
 
         <div className="flex flex-col items-center gap-2">
+          <p className="text-center text-sm text-muted">{COPY_CARRITO.pagoPendiente}</p>
           <Link href="/mi-cuenta" className="text-sm text-muted underline">
             Prefiero pagarlo después
           </Link>
@@ -501,6 +502,15 @@ export function CheckoutClient({
             </Link>
           </div>
         </div>
+      </main>
+    );
+  }
+
+  // ------------------------------------------ buscando un pedido para retomar
+  if (ready && items.length === 0 && buscandoPendiente) {
+    return (
+      <main className="mx-auto flex max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
+        <Spinner label="Buscando su pedido" />
       </main>
     );
   }

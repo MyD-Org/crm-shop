@@ -44,6 +44,7 @@ import {
   type ContactoVinculable,
 } from "./contactos-espejo";
 import { enmascararEmail, enviarEmail } from "./email";
+import { armarMailCodigoVinculacion, urlLogoMail } from "./vinculacion-mail";
 import { permitir } from "./rate-limit";
 
 /** Ventana de validez del código. */
@@ -484,21 +485,12 @@ export async function solicitarVinculacion(
 
   const envio = await enviarEmail({
     to: email,
-    subject: `${codigo} es tu código para vincular tu cuenta`,
-    text: `Tu código para vincular tu cuenta en la tienda de Central LED es ${codigo}. Vence en ${VIGENCIA_MIN} minutos.\n\nSi no pediste esto, ignorá este mensaje: nadie puede acceder a tu cuenta sin este código.`,
-    html: `
-      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px">
-        <p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#64748b;margin:0 0 24px">Central LED</p>
-        <h1 style="font-size:20px;margin:0 0 12px;color:#0f172a">Vinculá tu cuenta</h1>
-        <p style="font-size:14px;line-height:1.6;color:#475569;margin:0 0 24px">
-          Usá este código para asociar tu cuenta corriente a tu usuario de la tienda.
-        </p>
-        <p style="font-size:34px;font-weight:800;letter-spacing:.18em;color:#0f172a;margin:0 0 24px">${codigo}</p>
-        <p style="font-size:13px;color:#64748b;margin:0 0 8px">Vence en ${VIGENCIA_MIN} minutos.</p>
-        <p style="font-size:13px;color:#64748b;margin:0">
-          Si no pediste esto, ignorá este mensaje: nadie puede acceder a tu cuenta sin este código.
-        </p>
-      </div>`,
+    ...armarMailCodigoVinculacion({
+      codigo,
+      vigenciaMin: VIGENCIA_MIN,
+      tienda: "Central LED",
+      logoUrl: urlLogoMail(),
+    }),
   });
 
   // Un fallo de envío solo puede ocurrir cuando el contacto EXISTE y tiene

@@ -18,8 +18,9 @@ export const dynamic = "force-dynamic";
  * "Facturas y saldo": el saldo (deuda, vencido, a vencer) y la lista de
  * facturas del cliente vinculado, con el PDF en un visor dentro de la página.
  * La primera página viene del servidor; "Cargar más" y los filtros van a
- * `/api/mi-cuenta/facturas`. Todo vinculado la ve, contado incluido (el límite
- * de crédito, sólo cuenta corriente con límite cargado).
+ * `/api/mi-cuenta/facturas`. Todo vinculado la ve, contado incluido; pero a
+ * contado el bloque Saldo sólo se le muestra si tiene facturas impagas (el
+ * límite de crédito, sólo cuenta corriente con límite cargado).
  */
 export default async function FacturasPage({
   searchParams,
@@ -70,9 +71,16 @@ export default async function FacturasPage({
     cuit: cuenta?.cliente.cuit ?? cliente.cuit,
   });
 
+  // Contado: el bloque Saldo sólo aparece si debe algo. Si el saldo no se pudo
+  // traer, se decide con el tipo de cuenta de la identidad.
+  const mostrarSaldo = cuenta
+    ? cuenta.cliente.tipoCuenta === "corriente" || cuenta.cliente.deudatotal > 0 || cuenta.abiertas.length > 0
+    : cliente.tipoCuenta === "corriente";
+
   return (
     <FacturasYSaldo
       cuenta={cuenta}
+      mostrarSaldo={mostrarSaldo}
       mostrarLimite={cuenta ? muestraLimite(cuenta.cliente) : false}
       primeraPagina={pagina}
       whatsapp={whatsapp}

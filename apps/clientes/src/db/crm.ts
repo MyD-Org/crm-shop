@@ -86,8 +86,9 @@ export const crmOverlay = publico.table("catalog_overlay", {
 
 /**
  * Espejo de contactos de Alegra, visto por el Shop (`public.alegra_contacts_shop`,
- * migraciones 0031 y 0032 de apps/admin). Es una VISTA: `.existing()` para que
- * drizzle-kit nunca intente crearla. No expone `raw`, teléfonos ni `seller_id`.
+ * migraciones 0031, 0032, 0034 y 0036 de apps/admin). Es una VISTA: `.existing()`
+ * para que drizzle-kit nunca intente crearla. No expone `raw`, `phones_norm` ni
+ * `seller_id`.
  *
  * `tipo_cuenta` es la columna generada del CRM (plazo > 0 o límite > 0 ⇒
  * `corriente`): el Shop la LEE, no la recalcula. `status` NO es el estado de
@@ -116,6 +117,21 @@ export const crmContactos = publico
     paymentTermName: text("payment_term_name"),
     paymentTermDays: integer("payment_term_days"),
     creditLimit: numeric("credit_limit", { precision: 16, scale: 2 }),
+    // 0034 (change `contacto-fuente-unica`): datos de facturación, columnas
+    // GENERADAS desde `raw` en el CRM. Vacío o ausente en Alegra ⇒ NULL.
+    ivaCondition: text("iva_condition"),
+    identificationType: text("identification_type"),
+    identificationNumber: text("identification_number"),
+    addressStreet: text("address_street"),
+    addressCity: text("address_city"),
+    addressProvince: text("address_province"),
+    addressPostalCode: text("address_postal_code"),
+    // 0036: teléfonos tal cual los guarda la sync (texto de Alegra, sin
+    // normalizar). El checkout no vuelve a pedir un teléfono que ya está acá.
+    // Requieren la 0036 aplicada en la base: sin ella, la vista no los tiene.
+    phonePrimary: text("phone_primary"),
+    phoneSecondary: text("phone_secondary"),
+    mobile: text("mobile"),
   })
   .existing();
 
@@ -143,6 +159,23 @@ export const crmStock = publico
     alegraLeidoAt: timestamp("alegra_leido_at", { withTimezone: true }),
   })
   .existing();
+
+/**
+ * Función del CRM que deja el espejo al día después de un PUT del Shop a
+ * Alegra (migración 0034 de apps/admin): `SECURITY DEFINER`, EXECUTE sólo para
+ * `shop_app`. Recibe el contacto COMPLETO que devolvió Alegra y:
+ *  - actualiza sólo una fila existente de (tenant, cuenta, id): nunca inserta;
+ *  - sólo acepta llenar vacíos (nombre, documento, condición y domicilio no se
+ *    pueden pisar ni borrar: D1 también en la base);
+ *  - responde `'ok' | 'sin_fila' | 'rechazado'`.
+ *
+ * No entra al fixture de contrato (el test compara tablas/vistas): la firma la
+ * cubre el test de integración del CRM. El jsonb se pasa como TEXTO y se castea
+ * (`::text::jsonb`): postgres.js vuelve a serializar un string que va directo
+ * a un parámetro `jsonb` y la función lo rechaza por no ser un objeto.
+ */
+export const FN_WRITE_THROUGH =
+  "public.shop_contacto_write_through(text, text, text, jsonb)" as const;
 
 /**
  * Datos públicos del tenant (`public.tenants`). El GRANT es POR COLUMNA: el

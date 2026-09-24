@@ -58,6 +58,10 @@ export const shopOrders = shop.table("orders", {
   facturacionCondicionIva: text("facturacion_condicion_iva"),
   facturacionDomicilio: text("facturacion_domicilio"),
   requiereRevision: boolean("requiere_revision").notNull().default(false),
+  // Por qué (migración 0010 del Shop): 'documento_incompatible' | 'condicion_iva_desconocida' |
+  // 'facturacion_en_pedido' | 'otra_lista_precios'. NULL en pedidos anteriores. Sin CHECK: un
+  // valor que el CRM no conoce se muestra con el texto genérico. Requiere la 0010 aplicada.
+  motivoRevision: text("motivo_revision"),
 
   // --- Pago (el CRM sólo lo muestra; no lo modifica) ---
   pagoMetodo: text("pago_metodo").notNull(),

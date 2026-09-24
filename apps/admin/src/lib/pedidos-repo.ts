@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm"
 import { getDb } from "@/db"
+import { alegraContacts } from "@/db/schema"
 import { shopOrders, shopOrderItems, type ShopOrderItemRow, type ShopOrderRow } from "@/db/shop-schema"
+import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
 
 // Acceso a los pedidos del Shop (`shop.orders` / `shop.order_items`) desde el CRM.
@@ -70,6 +72,47 @@ async function itemsDe(orderId: string): Promise<PedidoItemRow[]> {
 }
 
 /**
+ * Nombre de la lista de precios del contacto de Alegra con ese documento (sólo espejo, 0
+ * requests; mismo desempate que el Shop: cliente primero, id numérico menor). Sólo para el
+ * texto de `otra_lista_precios`; `null` si no hay fila o la lista no tiene nombre.
+ */
+export async function listaPreciosPorDocumento(tenantId: string, nroDoc: string | null): Promise<string | null> {
+  const doc = (nroDoc ?? "").replace(/\D/g, "")
+  if (!doc) return null
+  const [fila] = await getDb()
+    .select({ priceListName: alegraContacts.priceListName })
+    .from(alegraContacts)
+    .where(
+      and(
+        eq(alegraContacts.tenantId, tenantId),
+        eq(alegraContacts.alegraAccount, CUENTA_ALEGRA_PRINCIPAL),
+        eq(alegraContacts.status, "active"),
+        eq(alegraContacts.identificationNorm, doc),
+      ),
+    )
+    .orderBy(
+      sql`('client' = ANY(${alegraContacts.types})) DESC`,
+      sql`CASE WHEN ${alegraContacts.alegraId} ~ '^[0-9]+$' THEN ${alegraContacts.alegraId}::numeric END ASC NULLS LAST`,
+      asc(alegraContacts.alegraId),
+    )
+    .limit(1)
+  return fila?.priceListName?.trim() || null
+}
+
+/** Lo que el detalle suma a la fila: la lista del contacto, sólo si el motivo la nombra. */
+async function listaParaRevision(tenantId: string, pedido: PedidoRow): Promise<string | null> {
+  if (pedido.motivoRevision !== "otra_lista_precios") return null
+  try {
+    return await listaPreciosPorDocumento(tenantId, pedido.facturacionNroDoc)
+  } catch (err) {
+    // Es un adorno del texto: sin la lista, el aviso sale igual ("con otra lista de precios").
+    const codigo = (err as { code?: unknown })?.code
+    console.error(`[pedidos] no se pudo leer la lista del contacto (${codigo ?? "sin código"})`)
+    return null
+  }
+}
+
+/**
  * Detalle. `null` = no existe, es de OTRO tenant, o el id no es un uuid: la ruta traduce los
  * tres al mismo 404. El formato se valida ANTES de consultar porque Postgres contesta un id
  * malformado con el error 22P02, que terminaría en un 500.
@@ -77,7 +120,7 @@ async function itemsDe(orderId: string): Promise<PedidoItemRow[]> {
 export async function getPedido(
   tenantId: string,
   id: string,
-): Promise<{ pedido: PedidoRow; items: PedidoItemRow[] } | null> {
+): Promise<{ pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null } | null> {
   if (!UUID_RE.test(id)) return null
   const [pedido] = await getDb()
     .select()
@@ -85,7 +128,8 @@ export async function getPedido(
     .where(and(eq(shopOrders.tenantId, tenantId), eq(shopOrders.id, id)))
   if (!pedido) return null
   // Los ítems se piden DESPUÉS de confirmar que el pedido es de este tenant.
-  return { pedido, items: await itemsDe(pedido.id) }
+  const [items, listaPrecios] = await Promise.all([itemsDe(pedido.id), listaParaRevision(tenantId, pedido)])
+  return { pedido, items, listaPrecios }
 }
 
 export interface CambiarEstadoInput {
@@ -100,7 +144,7 @@ export interface CambiarEstadoInput {
 }
 
 export type CambiarEstadoResult =
-  | { kind: "ok"; pedido: PedidoRow; items: PedidoItemRow[] }
+  | { kind: "ok"; pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null }
   | { kind: "not_found" }
   | { kind: "conflict"; actual: EstadoPedido }
 
@@ -140,7 +184,13 @@ export async function cambiarEstado(
     .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), eq(shopOrders.estado, input.esperado)))
     .returning()
 
-  if (actualizado) return { kind: "ok", pedido: actualizado, items: await itemsDe(actualizado.id) }
+  if (actualizado) {
+    const [items, listaPrecios] = await Promise.all([
+      itemsDe(actualizado.id),
+      listaParaRevision(tenantId, actualizado),
+    ])
+    return { kind: "ok", pedido: actualizado, items, listaPrecios }
+  }
 
   // 0 filas: o no existe / es de otro tenant, o alguien lo movió primero. Se distingue con un
   // SELECT que TAMBIÉN filtra por tenant: un pedido ajeno nunca llega a ser "conflict".
@@ -181,6 +231,11 @@ export interface PedidoListaDto {
   pagoEstado: string
   total: number
   requiereRevision: boolean
+  /**
+   * Por qué (lo escribe el Shop, 0010). Texto crudo: `revisionInfo` (format.ts) arma el aviso y
+   * un valor desconocido o NULL (pedido anterior) cae al texto genérico.
+   */
+  motivoRevision: string | null
   /** Pago a revisar (lo marca el Shop): cobrado dos veces, o cobrado estando cancelado. */
   pagoRevision: PagoRevision | null
 }
@@ -221,6 +276,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   estadoActualizadoPor: string | null
   estadoActualizadoPorNombre: string | null
   actualizadoEn: string
+  /** Lista de precios del contacto de Alegra con ese documento; sólo con `otra_lista_precios`. */
+  revisionListaPrecios: string | null
   items: PedidoItemDto[]
 }
 
@@ -239,6 +296,7 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
     pagoEstado: row.pagoEstado,
     total: num(row.total),
     requiereRevision: row.requiereRevision,
+    motivoRevision: row.motivoRevision,
     pagoRevision: esPagoRevision(row.pagoRevision) ? row.pagoRevision : null,
   }
 }
@@ -259,7 +317,11 @@ function toItemDto(item: PedidoItemRow): PedidoItemDto {
   }
 }
 
-export function toPedidoDetalleDto(row: PedidoRow, items: PedidoItemRow[]): PedidoDetalleDto {
+export function toPedidoDetalleDto(
+  row: PedidoRow,
+  items: PedidoItemRow[],
+  listaPrecios: string | null = null,
+): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
     cliente: {
@@ -286,6 +348,7 @@ export function toPedidoDetalleDto(row: PedidoRow, items: PedidoItemRow[]): Pedi
     estadoActualizadoPor: row.estadoActualizadoPor,
     estadoActualizadoPorNombre: row.estadoActualizadoPorNombre,
     actualizadoEn: row.updatedAt.toISOString(),
+    revisionListaPrecios: listaPrecios,
     items: items.map(toItemDto),
   }
 }

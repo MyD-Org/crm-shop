@@ -13,6 +13,8 @@
  * `facturacion-db.ts`.
  */
 
+import { provinciaCanonica } from "./provincias";
+
 /** País del documento. Define qué documentos se ofrecen y cómo se validan. */
 export type Pais = "AR" | "BR" | "PY";
 
@@ -24,15 +26,21 @@ export const PAIS_LABEL: Record<Pais, string> = {
 
 export const PAIS_DEFAULT: Pais = "AR";
 
-export type TipoDoc = "CUIT" | "DNI" | "CPF" | "CNPJ" | "CI" | "RUC";
+export type TipoDoc = "CUIT" | "CUIL" | "DNI" | "CPF" | "CNPJ" | "CI" | "RUC";
 
 /**
- * Rótulo visible del tipo de documento. El valor guardado sigue siendo "CUIT":
- * CUIT y CUIL comparten formato y dígito verificador, y MercadoPago y los
- * pedidos leen ese valor tal cual.
+ * Rótulo visible del tipo de documento. En el formulario del no vinculado el
+ * valor guardado sigue siendo "CUIT" también para una CUIL: comparten formato y
+ * dígito verificador, y MercadoPago y los pedidos leen ese valor tal cual.
+ *
+ * "CUIL" existe para el comprador vinculado a Alegra (change
+ * `contacto-fuente-unica`): cuando el contacto no tiene tipo de documento, un
+ * consumidor final con 11 dígitos que empiezan en 20/23/24/27 se deduce CUIL
+ * (ver `deducirTipoDoc` en contacto-alegra.ts). No se ofrece en el formulario.
  */
 export const TIPO_DOC_LABEL: Record<TipoDoc, string> = {
   CUIT: "CUIT / CUIL",
+  CUIL: "CUIL",
   DNI: "DNI",
   CPF: "CPF",
   CNPJ: "CNPJ",
@@ -63,19 +71,26 @@ export function admiteEnvio(pais: string | null | undefined): boolean {
 export type CondicionIva =
   | "consumidor_final"
   | "monotributo"
-  | "responsable_inscripto";
+  | "responsable_inscripto"
+  | "exento";
 
 export const CONDICION_IVA_LABEL: Record<CondicionIva, string> = {
   consumidor_final: "Consumidor final",
   monotributo: "Monotributo",
   responsable_inscripto: "Responsable inscripto",
+  exento: "Exento",
 };
 
 /**
- * Condiciones que exigen CUIT. Un monotributista o un responsable inscripto no
- * pueden facturar con DNI: AFIP necesita la CUIT para el comprobante.
+ * Condiciones que exigen CUIT. Un monotributista, un responsable inscripto o un
+ * exento no pueden facturar con DNI: AFIP necesita la CUIT para el comprobante.
  */
-const EXIGEN_CUIT: CondicionIva[] = ["monotributo", "responsable_inscripto"];
+const EXIGEN_CUIT: CondicionIva[] = ["monotributo", "responsable_inscripto", "exento"];
+
+/** ¿Esta condición frente al IVA exige CUIT? Un valor desconocido no. */
+export function exigeCuit(condicion: string | null | undefined): boolean {
+  return EXIGEN_CUIT.includes(condicion as CondicionIva);
+}
 
 export interface DatosFacturacion {
   pais: Pais;
@@ -215,6 +230,7 @@ export function rucParaguayValido(raw: string): boolean {
 
 const VALIDADOR_DOC: Record<TipoDoc, (raw: string) => boolean> = {
   CUIT: cuitValido,
+  CUIL: cuitValido,
   DNI: dniValido,
   CPF: cpfValido,
   CNPJ: cnpjValido,
@@ -230,9 +246,9 @@ export function normalizarDoc(tipoDoc: TipoDoc, raw: string): string {
   return tipoDoc === "CNPJ" ? soloAlfanumerico(raw) : soloDigitos(raw);
 }
 
-/** Formatea el documento para mostrar. Hoy solo el CUIT tiene formato propio. */
+/** Formatea el documento para mostrar. Hoy solo el CUIT (y la CUIL) tienen formato propio. */
 export function formatearDoc(tipoDoc: TipoDoc, raw: string): string {
-  return tipoDoc === "CUIT" ? formatearCuit(raw) : raw;
+  return tipoDoc === "CUIT" || tipoDoc === "CUIL" ? formatearCuit(raw) : raw;
 }
 
 /**
@@ -244,6 +260,7 @@ export function formatearDoc(tipoDoc: TipoDoc, raw: string): string {
  */
 const MASCARA_DOC: Partial<Record<TipoDoc, { grupos: number[]; separadores: string[] }>> = {
   CUIT: { grupos: [2, 8, 1], separadores: ["-", "-"] },
+  CUIL: { grupos: [2, 8, 1], separadores: ["-", "-"] },
   CPF: { grupos: [3, 3, 3, 2], separadores: [".", ".", "-"] },
   CNPJ: { grupos: [2, 3, 3, 4, 2], separadores: [".", ".", "/", "-"] },
 };
@@ -329,7 +346,11 @@ export function validarFacturacion(
   }
 
   const tipoDoc = datos.tipoDoc;
-  const tiposDelPais = TIPOS_DOC_POR_PAIS[pais] ?? TIPOS_DOC_POR_PAIS[PAIS_DEFAULT];
+  // La CUIL no se ofrece en el formulario pero es argentina (ver TIPO_DOC_LABEL).
+  const tiposDelPais = [
+    ...(TIPOS_DOC_POR_PAIS[pais] ?? TIPOS_DOC_POR_PAIS[PAIS_DEFAULT]),
+    ...(esArgentina ? (["CUIL"] as TipoDoc[]) : []),
+  ];
 
   if (tipoDoc && !tiposDelPais.includes(tipoDoc)) {
     errores.tipoDoc = "Ese documento no corresponde al país elegido.";
@@ -339,7 +360,7 @@ export function validarFacturacion(
     EXIGEN_CUIT.includes(condicion) &&
     tipoDoc !== "CUIT"
   ) {
-    errores.tipoDoc = `Con ${CONDICION_IVA_LABEL[condicion].toLowerCase()} hace falta CUIT.`;
+    errores.tipoDoc = `La condición ${CONDICION_IVA_LABEL[condicion]} exige CUIT.`;
   }
 
   /**
@@ -381,6 +402,12 @@ export function validarFacturacion(
   }
   if (!datos.domicilioCiudad?.trim()) {
     errores.domicilioCiudad = "Ingrese la ciudad.";
+  }
+  // La provincia es opcional, pero en Argentina tiene que ser una de la lista
+  // (se elige de un desplegable; "CABA" y otros alias valen, ver provincias.ts).
+  const provincia = datos.domicilioProvincia?.trim();
+  if (esArgentina && provincia && !provinciaCanonica(provincia)) {
+    errores.domicilioProvincia = "Seleccione una provincia de la lista.";
   }
 
   // El teléfono no frena el guardado del perfil (el checkout lo pide igual),

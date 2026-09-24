@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import {
@@ -8,18 +8,20 @@ import {
   type PagoMetodo,
 } from "@/lib/envio";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
-import { admiteEnvio, domicilioEnLinea } from "@/lib/facturacion";
+import { admiteEnvio } from "@/lib/facturacion";
 import { envioHabilitado } from "@/lib/envio-flag";
-import {
-  getPerfilFacturacion,
-  guardarTelefonoSiFalta,
-  perfilCompleto,
-} from "@/lib/facturacion-db";
+import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
+import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
+import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
+import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
 import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
+import { idPriceListUsable } from "@/lib/alegra";
+import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
+import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +58,12 @@ interface BodyPedido {
   pagoMetodo?: unknown;
   notas?: unknown;
   idempotencyKey?: unknown;
+  /**
+   * Datos de facturación que el comprador vinculado cargó en el modal y no se
+   * pudieron escribir en Alegra (sólo cookie del CRM: no hay perfil donde
+   * guardarlos). Se revalidan acá y el pedido queda para revisión.
+   */
+  complementoFacturacion?: unknown;
 }
 
 /**
@@ -69,6 +77,31 @@ const CLAVE_VALIDA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 /** El Brick sólo recibe el máximo con el flag prendido (D13). */
 const cuotasParaCliente = async (cuotasMax: number | null) =>
   (await cuotasHabilitadas()) ? cuotasMax : null;
+
+/**
+ * Comprador NO vinculado cuyo documento ya es de un contacto de Alegra (lo
+ * anotó el perfil al guardarse, `coincideConAlegra`): la lista de precios
+ * usable de ese contacto y la general, para ver si compró a otra lista que la
+ * suya. Sólo espejo. Sin contacto, o si el espejo no responde ⇒ `null` (comprar
+ * a precio de lista está bien: no se marca por eso).
+ */
+async function listaDelContactoCoincidente(
+  alegraId: string | null | undefined,
+): Promise<Pick<EntradaMotivo, "listaContacto" | "idListaGeneral">> {
+  const sinDatos = { listaContacto: null, idListaGeneral: null };
+  if (!alegraId) return sinDatos;
+  try {
+    const c = await vinculablePorId(alegraId);
+    if (!c) return sinDatos;
+    const id = idPriceListUsable(c);
+    // Sin lista propia usable no hace falta saber cuál es la general.
+    return { listaContacto: { id }, idListaGeneral: id ? await idListaGeneral() : null };
+  } catch (err) {
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`[/api/pedidos] no se pudo leer el contacto coincidente (${codigo ?? "sin código"})`);
+    return sinDatos;
+  }
+}
 
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -133,7 +166,9 @@ export async function POST(req: Request) {
     }
   }
 
-  if (!contactoNombre || !contactoTelefono) {
+  // Al vinculado el teléfono le puede llegar del espejo de Alegra (se decide
+  // más abajo, con la lectura única): acá sólo se exige a quien no lo tiene.
+  if (!contactoNombre || (!contactoTelefono && !cliente)) {
     return NextResponse.json(
       { error: "Faltan el nombre y el teléfono de contacto." },
       { status: 400 },
@@ -182,21 +217,55 @@ export async function POST(req: Request) {
   // --- Facturación ---
   // Sin datos fiscales no se puede emitir el comprobante, así que no se acepta
   // el pedido: es preferible frenarlo acá que registrar una venta que después
-  // nadie puede facturar.
-  const perfil = clerkUserId ? await getPerfilFacturacion(clerkUserId) : null;
-  if (!perfilCompleto(perfil)) {
+  // nadie puede facturar. La MISMA lectura que el checkout y Mis datos
+  // (`datosDelContacto`): vinculado ⇒ espejo de Alegra; no vinculado ⇒ perfil.
+  const dc = await datosDelContacto({ clerkUserId, cliente });
+  let datosFactura: DatosLeidos = dc.datos;
+  let complementoUsado = false;
+  if (!dc.completo) {
+    const entrada = body.complementoFacturacion;
+    if (dc.interno && entrada && typeof entrada === "object" && !Array.isArray(entrada)) {
+      // Sólo claves que faltan y con las mismas reglas que el modal (D1).
+      const r = validarComplemento(dc.interno.lectura, entrada as Record<string, unknown>);
+      if (r.ok) {
+        datosFactura = r.datos;
+        complementoUsado = true;
+      }
+    }
+    if (!complementoUsado) {
+      if (dc.fuente === "no_disponible") {
+        return NextResponse.json(
+          {
+            error: "No pudimos obtener sus datos de facturación. Inténtelo de nuevo en unos minutos.",
+            motivo: "facturacion_no_disponible",
+          },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json(
+        {
+          error: "Cargue sus datos de facturación para continuar.",
+          motivo: "facturacion_incompleta",
+          faltantes: dc.faltantes,
+        },
+        { status: 409 },
+      );
+    }
+  }
+
+  // Teléfono del pedido: el tipeado; si no vino, el de Alegra (el checkout
+  // lo precarga y el espejo es la fuente: no hace falta volver a tipearlo).
+  const telefonoPedido = contactoTelefono || dc.telefonoAlegra || "";
+  if (!telefonoPedido) {
     return NextResponse.json(
-      {
-        error: "Antes de comprar necesitamos tus datos de facturación.",
-        motivo: "facturacion_incompleta",
-      },
-      { status: 409 },
+      { error: "Faltan el nombre y el teléfono de contacto." },
+      { status: 400 },
     );
   }
 
   // Solo se envía dentro de Argentina. El checkout ya no le ofrece el envío a
   // un comprador con documento de otro país; esto cubre el POST directo.
-  if (entregaTipo === "envio" && !admiteEnvio(perfil?.pais)) {
+  if (entregaTipo === "envio" && !admiteEnvio(datosFactura.pais)) {
     return NextResponse.json(
       {
         error:
@@ -247,6 +316,18 @@ export async function POST(req: Request) {
     }
     const plan = planParaPedido(pagoMetodo, cotizacion.total, oferta);
 
+    // Para revisión de un operador antes de facturar, con el motivo más
+    // importante (ver motivo-revision.ts). Comprar a la lista general NO es un
+    // motivo: sólo si el documento es de un contacto con OTRA lista.
+    const motivoRevision = motivoRevisionPedido({
+      motivoContacto: dc.motivoRevision,
+      complementoUsado,
+      vinculado: Boolean(cliente),
+      ...(cliente
+        ? { listaContacto: null, idListaGeneral: null }
+        : await listaDelContactoCoincidente(dc.perfil?.coincideConAlegra)),
+    });
+
     const pedido = await crearPedido(
       {
         clerkUserId,
@@ -267,35 +348,49 @@ export async function POST(req: Request) {
       },
       {
         contactoNombre,
-        contactoTelefono,
+        contactoTelefono: telefonoPedido,
         entregaTipo,
         entregaCiudad: entregaCiudad || undefined,
         entregaDireccion: entregaDireccion || undefined,
         pagoMetodo,
         notas: texto(body.notas, 500) || undefined,
-        facturacion: perfil
-          ? {
-              tipoDoc: perfil.tipoDoc,
-              nroDoc: perfil.nroDoc,
-              razonSocial: perfil.razonSocial,
-              condicionIva: perfil.condicionIva,
-              domicilio: domicilioEnLinea(perfil) || undefined,
-            }
-          : undefined,
-        // El documento coincide con un contacto de Alegra que este usuario NO
-        // vinculó: un operador debe revisarlo antes de facturar, para no crear
-        // un cliente duplicado con el mismo CUIT.
-        requiereRevision: Boolean(perfil?.coincideConAlegra) && !cliente,
+        // Congelado desde la lectura única: la condición real (exento, o el
+        // valor de Alegra si no mapea) y el documento tal como está.
+        facturacion: congelarFacturacion(datosFactura) ?? undefined,
+        requiereRevision: motivoRevision !== null,
+        motivoRevision,
         idempotencyKey: idempotencyKey || undefined,
       },
       cotizacion,
       plan,
     );
 
+    if (!pedido.repetido && motivoRevision) {
+      // Sin datos: el id del pedido y el motivo.
+      console.warn(`[/api/pedidos] pedido ${pedido.id} para revisión: ${motivoRevision}`);
+    }
+
+    // Sin demorar la respuesta, UNA subida a Alegra que junta:
+    // - lo de facturación que quedó sólo en el perfil (un PUT que falló);
+    // - el teléfono tipeado, si Alegra no tiene ninguno (sólo completar
+    //   vacíos: la subida lo vuelve a mirar contra el contacto fresco).
+    const mixto = dc.fuente === "mixto";
+    const subirTelefono = Boolean(dc.interno && !dc.telefonoAlegra && telefonoParaAlegra(contactoTelefono));
+    if ((mixto || subirTelefono) && dc.alegraId && !pedido.repetido) {
+      const alegraId = dc.alegraId;
+      after(() =>
+        sincronizarContactoConPerfil(alegraId, {
+          clerkUserId,
+          ...(subirTelefono ? { telefono: contactoTelefono } : {}),
+        }),
+      );
+    }
+
     // El perfil aprende el teléfono del primer pedido, para no pedirlo en la
-    // próxima compra. Va DESPUÉS de crear el pedido y nunca lo hace fallar: el
-    // pedido ya existe y es lo que importa; el teléfono es una comodidad.
-    if (clerkUserId && perfil && !perfil.telefono && !pedido.repetido) {
+    // próxima compra (sin perfil, crea la fila "sólo teléfono"). Va DESPUÉS de
+    // crear el pedido y nunca lo hace fallar: el pedido ya existe y es lo que
+    // importa; el teléfono es una comodidad.
+    if (clerkUserId && contactoTelefono && !dc.perfil?.telefono && !dc.telefonoAlegra && !pedido.repetido) {
       try {
         await guardarTelefonoSiFalta(clerkUserId, contactoTelefono);
       } catch (err) {
@@ -313,7 +408,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[/api/pedidos] POST error:", err);
     return NextResponse.json(
-      { error: "No pudimos registrar el pedido. Probá de nuevo en un momento." },
+      { error: "No pudimos registrar el pedido. Inténtelo de nuevo en un momento." },
       { status: 500 },
     );
   }

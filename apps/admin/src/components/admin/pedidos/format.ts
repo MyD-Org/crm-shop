@@ -133,3 +133,79 @@ export const PAGO_REVISION_INFO: Record<PagoRevision, { label: string; detalle: 
     detalle: "Se aprobó un pago de este pedido cancelado. Devuelva el pago en Mercado Pago o reactive el pedido.",
   },
 }
+
+/** Título por motivo de revisión (`motivo_revision` del Shop, 0010). */
+const TITULO_REVISION: Record<string, string> = {
+  documento_incompatible: "Documento incompatible con la condición de IVA",
+  condicion_iva_desconocida: "Condición de IVA no reconocida",
+  facturacion_en_pedido: "Datos de facturación sólo en el pedido",
+  otra_lista_precios: "Cliente con otra lista de precios",
+}
+const TITULO_REVISION_GENERICO = "Revise el cliente antes de facturar"
+
+/** Título del aviso (y tooltip del badge "Revisar"). NULL o desconocido ⇒ el genérico. */
+export function tituloRevision(motivo: string | null): string {
+  return motivo && Object.hasOwn(TITULO_REVISION, motivo) ? TITULO_REVISION[motivo] : TITULO_REVISION_GENERICO
+}
+
+/** Lo que el aviso de revisión necesita del pedido. */
+export interface DatosRevision {
+  motivo: string | null
+  condicionIva: string | null
+  tipoDoc: string | null
+  nroDoc: string | null
+  /** Lista de precios del contacto de Alegra (sólo `otra_lista_precios`). */
+  listaPrecios: string | null
+}
+
+/**
+ * Título y texto del aviso de un pedido que requiere revisión, según el motivo que guardó el
+ * Shop (`motivo_revision`, 0010). Un motivo NULL (pedido anterior a la 0010) o desconocido
+ * muestra el texto genérico de siempre.
+ */
+export function revisionInfo(d: DatosRevision): { titulo: string; detalle: string } {
+  const documento = [d.tipoDoc, d.nroDoc].filter(Boolean).join(" ")
+  const titulo = tituloRevision(d.motivo)
+  switch (d.motivo) {
+    case "documento_incompatible":
+      return {
+        titulo,
+        detalle:
+          `La condición de IVA ${d.condicionIva ? condicionIvaLabel(d.condicionIva) : "del contacto"} requiere CUIT ` +
+          `y el contacto tiene ${documento || "un documento que no es CUIT"} en Alegra. ` +
+          "Corrija el documento en Alegra antes de facturar.",
+      }
+    case "condicion_iva_desconocida":
+      return {
+        titulo,
+        detalle:
+          "La condición de IVA del contacto en Alegra no es una de las que maneja la tienda. " +
+          "Revísela antes de facturar.",
+      }
+    case "facturacion_en_pedido":
+      return {
+        titulo,
+        detalle:
+          "Los datos de facturación que cargó el comprador no llegaron a Alegra (se guardaron sólo " +
+          "en el pedido). Cárguelos en el contacto antes de facturar.",
+      }
+    case "otra_lista_precios":
+      return {
+        titulo,
+        detalle:
+          `El documento ${documento || "de facturación"} ya está registrado en Alegra ` +
+          `${d.listaPrecios ? `con la lista de precios ${d.listaPrecios}` : "con otra lista de precios"}, ` +
+          "pero el comprador compró a la lista general. Facture a ese contacto existente en lugar " +
+          "de crear uno nuevo, y verifique si corresponde aplicarle su lista.",
+      }
+    default:
+      return {
+        titulo,
+        detalle:
+          `El documento ${documento || "de facturación"} ya está registrado en Alegra, pero el ` +
+          "comprador no vinculó su cuenta y compró a precio de lista. Facture a ese contacto " +
+          "existente en lugar de crear uno nuevo, y verifique si corresponde aplicarle su lista " +
+          "de precios.",
+      }
+  }
+}

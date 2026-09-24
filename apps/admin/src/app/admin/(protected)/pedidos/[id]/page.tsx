@@ -19,7 +19,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="p-4 md:p-6">
-      <PedidoDetalle initial={toPedidoDetalleDto(encontrado.pedido, encontrado.items)} />
+      <PedidoDetalle initial={toPedidoDetalleDto(encontrado.pedido, encontrado.items, encontrado.listaPrecios)} />
     </div>
   )
 }

@@ -498,6 +498,76 @@ cuántas de ésas se muestran u ocultan distinto que con el espejo del Shop solo
 **Rollback:** revertir el PR; el Shop vuelve a leer sólo `shop.catalog_products`.
 Recién después, si se quiere, la reversa de la 0035 (ver su encabezado).
 
+## Facturación del vinculado desde el espejo (write-through)
+
+Change `contacto-fuente-unica`. Para el comprador **vinculado** (Clerk con
+vínculo o cookie del CRM) los datos de facturación salen del espejo de
+contactos, no del perfil: `src/lib/datos-del-contacto.ts` es la lectura única
+que usan el checkout, `POST /api/pedidos`, `PUT /api/mi-cuenta/facturacion` y
+Mis datos. El no vinculado sigue con `shop.billing_profiles`.
+
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| 7 columnas de facturación en la vista (27 en total) | migración **0034** del CRM | `iva_condition`, `identification_type/number`, `address_street/city/province/postal_code`, generadas desde `raw` (vacío ⇒ NULL) |
+| `public.shop_contacto_write_through(text, text, text, jsonb)` | 0034 del CRM, `SECURITY DEFINER` | después de un PUT del Shop a Alegra deja la fila del espejo al día; sólo llena vacíos (D1 también en la base); `'ok' \| 'sin_fila' \| 'rechazado'` |
+| 3 teléfonos en la vista (30 en total): `phone_primary`, `phone_secondary`, `mobile` | migración **0036** del CRM | el checkout precarga el de Alegra (celular > principal > secundario) y no lo vuelve a pedir; Mis datos los muestra en lectura |
+| fila "sólo teléfono" en `shop.billing_profiles` | migración **0009** del Shop | documento, razón social y condición admiten NULL: el vinculado guarda su teléfono aunque no tenga perfil |
+| `shop.orders.motivo_revision` | migración **0010** del Shop | por qué el pedido requiere revisión (el más importante): `documento_incompatible` > `condicion_iva_desconocida` > `facturacion_en_pedido` > `otra_lista_precios`; el admin del CRM muestra un texto por motivo |
+
+**Permisos de `shop_app`:** `SELECT` sobre la vista y `EXECUTE` sobre la
+función, los concede el bloque `DO $$ … $$` del final de la 0034 del CRM
+(correrlo de nuevo si `shop_app` se crea después). Sigue sin `UPDATE` sobre
+`public.alegra_contacts`.
+
+**Reglas:** el Shop sólo completa campos VACÍOS en Alegra (nunca cambia un
+valor presente); el perfil complementa al espejo sólo con el mismo documento;
+si Alegra falla (tope de `/contacts` como 400 `{"code":429}`, timeout de 8 s)
+la compra sigue: lo cargado va al perfil (Clerk) o con el pedido (cookie),
+marcado para revisión. La provincia es opcional y se elige de la lista oficial
+(`src/lib/provincias.ts`, 24 jurisdicciones con el nombre que usa Alegra).
+
+**Teléfono del vinculado:** sale del espejo (0036 del CRM). Si Alegra no tiene
+ninguno, se pide en el checkout como siempre; lo tipeado va al pedido, al
+perfil (con Clerk) y, en `after()`, a Alegra como `phonePrimary` SÓLO si el
+contacto fresco (GET en vivo) sigue sin ningún teléfono. La función
+`shop_contacto_write_through` no mira teléfonos: esa guarda la hace el Shop, y
+las columnas de teléfono del espejo se ponen al día con el webhook o la sync.
+**Orden de despliegue:** este código selecciona las columnas de la 0036; la
+0036 tiene que estar aplicada en prod ANTES de mergear el PR del Shop.
+
+**Motivo de revisión (0010):** `src/lib/motivo-revision.ts` decide. Comprar a
+la lista general NO es motivo: un no vinculado cuyo documento es de un
+contacto de Alegra se marca (`otra_lista_precios`) sólo si ese contacto tiene
+una lista usable distinta de la general (la `main` de los precios del espejo
+de productos). Sin CHECK en la base. Pedidos anteriores: `motivo_revision`
+NULL y el CRM muestra el texto genérico. **Orden:** el CRM y el Shop
+seleccionan la columna; la 0010 va aplicada en prod ANTES del merge.
+
+**Tipo CUIL:** cuando Alegra no tiene tipo de documento, un consumidor final
+con 11 dígitos que empiezan en 20/23/24/27 se deduce CUIL. No está verificado
+que Alegra acepte `"CUIL"` en el PUT: si lo rechaza, pasar
+`ESCRIBIR_CUIL_EN_ALEGRA` a `false` en `src/lib/contacto-alegra.ts`.
+
+**Verificación después de aplicar la 0009** (como `<OWNER_ROLE>`, sólo conteos):
+
+```sql
+SELECT column_name, is_nullable FROM information_schema.columns
+WHERE table_schema = 'shop' AND table_name = 'billing_profiles'
+  AND column_name IN ('tipo_doc', 'nro_doc', 'razon_social', 'condicion_iva');  -- las 4 en YES
+```
+
+**Verificación después de aplicar la 0010** (como `<OWNER_ROLE>`, sólo agregados):
+
+```sql
+SELECT count(*) FROM shop.__drizzle_migrations;                          -- 11
+SELECT count(*) FROM information_schema.columns
+WHERE table_schema = 'shop' AND table_name = 'orders' AND column_name = 'motivo_revision';  -- 1
+SELECT has_column_privilege('shop_app', 'shop.orders', 'motivo_revision', 'SELECT');         -- true
+```
+
+**Rollback:** revertir el PR del Shop primero (la 0009 y la 0010 pueden
+quedar: afloja NOT NULL / columna nullable). Las reversas están en sus cabeceras.
+
 ## Nota sobre el ambiente local de tests (`crm_test`)
 
 Si en algún momento se regenera el baseline (`drizzle/0000_baseline.sql`)

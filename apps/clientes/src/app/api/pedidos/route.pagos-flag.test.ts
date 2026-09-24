@@ -36,11 +36,7 @@ vi.mock("@/lib/facturacion-db", () => ({
   getPerfilFacturacion: async () => ({ pais: "AR", tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF" }),
   perfilCompleto: () => true,
 }));
-vi.mock("@/lib/facturacion", async (original) => ({
-  // `admiteEnvio` es la regla real: mockearla sería testear el mock.
-  admiteEnvio: (await original<typeof import("@/lib/facturacion")>()).admiteEnvio,
-  domicilioEnLinea: () => "",
-}));
+// `@/lib/facturacion` es la real (`admiteEnvio` incluida): mockearla sería testear el mock.
 vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: () => getOferta() }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
 vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => pagos }));

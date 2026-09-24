@@ -20,6 +20,7 @@ import {
   contactoPorDocumento,
   contactoPorId,
   contactosPorEmail,
+  idListaGeneral,
   tipoCuentaEspejo,
   vinculablePorId,
 } from "./contactos-espejo";
@@ -231,5 +232,25 @@ describe("vinculablePorId y comercialEspejo", () => {
     expect(await comercialEspejo("42")).toEqual({ tipoCuenta: "corriente", idPriceList: undefined });
     grabadora = dbGrabadora(() => []);
     expect(await comercialEspejo("42")).toBeNull();
+  });
+});
+
+describe("idListaGeneral (motivo otra_lista_precios)", () => {
+  it("la lista `main` de un ítem activo del espejo de productos, del tenant", async () => {
+    grabadora = dbGrabadora(() => [[[{ idPriceList: 5, price: 90, main: false }, { idPriceList: 1, price: 100, main: true }]]]);
+    expect(await idListaGeneral()).toBe("1");
+    const [consulta] = grabadora.consultas;
+    expect(consulta.sql).toMatch(/from "public"\."catalog_products_shop"/);
+    expect(consulta.sql).toContain('@> \'[{"main": true}]\'::jsonb');
+    expect(consulta.params).toEqual(expect.arrayContaining(["tenant-test", true]));
+  });
+
+  it("sin ítems o la vista falla ⇒ null, sin tirar", async () => {
+    grabadora = dbGrabadora(() => []);
+    expect(await idListaGeneral()).toBeNull();
+    grabadora = dbGrabadora(() => {
+      throw Object.assign(new Error("x"), { code: "42501" });
+    });
+    expect(await idListaGeneral()).toBeNull();
   });
 });

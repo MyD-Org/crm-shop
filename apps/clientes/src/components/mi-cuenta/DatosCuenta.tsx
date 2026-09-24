@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card } from "@myd-org/ui";
+import { Button, Card } from "@myd-org/ui";
 import { FacturacionForm, type PerfilFacturacionUI } from "@/components/FacturacionForm";
+import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFacturacionDialog";
+import type { DatosDelContactoPublico } from "@/lib/datos-del-contacto";
 import { estadoMisDatos, tienePerfilFacturacion } from "@/lib/mis-datos";
 import { AvisoVincular } from "./AvisoVincular";
 import { CuentaClienteCard } from "./CuentaClienteCard";
@@ -28,6 +30,7 @@ export function DatosCuenta({
   perfilFacturacion,
   razonSocialVinculada,
   cuit,
+  facturacionVinculada,
 }: {
   nombre?: string;
   email?: string;
@@ -35,6 +38,12 @@ export function DatosCuenta({
   /** undefined = todavía no vinculó ninguna cuenta. */
   razonSocialVinculada?: string;
   cuit?: string;
+  /**
+   * Vinculado: los datos de facturación de la lectura única (espejo de Alegra,
+   * o mezclado con su perfil del mismo documento). Se muestran en lugar del
+   * perfil, que un vinculado puede no tener (#499).
+   */
+  facturacionVinculada?: DatosDelContactoPublico;
 }) {
   const router = useRouter();
   const vinculado = Boolean(razonSocialVinculada);
@@ -58,6 +67,38 @@ export function DatosCuenta({
   }, [primeraCompra]);
 
   const preguntando = estado === "preguntar" && !primeraCompra;
+  const [completando, setCompletando] = useState(false);
+
+  // Vinculado: lo que se muestra sale del espejo; el teléfono también (y si
+  // Alegra no tiene ninguno, el del perfil, editable).
+  const fv = vinculado ? facturacionVinculada : undefined;
+  const perfilMostrado: PerfilFacturacionUI | null = fv
+    ? {
+        pais: fv.datos.pais,
+        tipoDoc: fv.datos.tipoDoc ?? null,
+        nroDoc: fv.datos.nroDoc ?? null,
+        razonSocial: fv.datos.razonSocial ?? null,
+        condicionIva: fv.datos.condicionIva ?? fv.datos.condicionIvaAlegra ?? null,
+        domicilioCalle: fv.datos.domicilioCalle ?? null,
+        domicilioCiudad: fv.datos.domicilioCiudad ?? null,
+        domicilioProvincia: fv.datos.domicilioProvincia ?? null,
+        domicilioCp: fv.datos.domicilioCp ?? null,
+        telefono: fv.telefonoAlegra ?? perfilFacturacion?.telefono ?? null,
+      }
+    : perfilFacturacion;
+  const deSuCuenta = fv ? ["espejo", "mixto", "vivo"].includes(fv.fuente) : false;
+  const puedeCompletar = Boolean(fv && fv.faltantes.length > 0 && fv.fuente !== "no_disponible");
+
+  function descripcionFacturacion(): string {
+    if (!vinculado) return "Los necesitamos para emitirle la factura de sus compras.";
+    if (fv?.fuente === "no_disponible") {
+      return "No pudimos obtener sus datos de facturación. Inténtelo de nuevo en unos minutos.";
+    }
+    if (deSuCuenta || !fv) {
+      return "Estos datos provienen de su cuenta en nuestro sistema. Si algo no es correcto, escríbanos y lo corregimos.";
+    }
+    return "Los necesitamos para emitirle la factura de sus compras.";
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -72,17 +113,31 @@ export function DatosCuenta({
           // Destino del foco al responder "No": enfocable sólo por código.
           tabIndex={-1}
           title="Datos de facturación"
-          description={
-            vinculado
-              ? "Estos datos provienen de su cuenta en nuestro sistema. Si algo no es correcto, escríbanos y lo corregimos."
-              : "Los necesitamos para emitirle la factura de sus compras."
-          }
+          description={descripcionFacturacion()}
         >
+          {puedeCompletar && fv && (
+            <div className="mb-4 flex flex-col items-start gap-2">
+              <p className="text-sm text-muted">Faltan datos para emitirle la factura.</p>
+              <Button size="sm" aria-haspopup="dialog" onClick={() => setCompletando(true)}>
+                Completar datos
+              </Button>
+              <CompletarFacturacionDialog
+                abierto={completando}
+                onOpenChange={setCompletando}
+                facturacion={fv}
+                perfil={null}
+                descripcion="Los necesitamos para emitirle la factura de sus compras. Se cargan una sola vez."
+              />
+            </div>
+          )}
           <FacturacionForm
-            perfil={perfilFacturacion}
+            // Remonta con los datos nuevos tras completar (router.refresh).
+            key={vinculado ? JSON.stringify(perfilMostrado) : "perfil"}
+            perfil={perfilMostrado}
             // Vinculado: la razón social la manda el sistema, no se sugiere nada.
             nombreSugerido={vinculado ? undefined : nombre}
             bloqueado={vinculado}
+            telefonosCuenta={fv?.telefonos ?? null}
             onGuardado={() => router.refresh()}
           />
         </Card>

@@ -13,6 +13,7 @@ import {
   fmtFechaPedido,
   fmtMoneda,
   pagoMetodoLabel,
+  tituloRevision,
   tonoEstado,
 } from "./format"
 import { FILTRO_TODOS, opcionesDeFiltro, queryDeLista, textoRango, type FiltroEstado } from "./logica"
@@ -141,7 +142,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
         <div className="flex flex-wrap items-center gap-1">
           <Badge tone={tonoEstado(p.estado)}>{ESTADO_PEDIDO_LABEL[p.estado]}</Badge>
           {p.requiereRevision && (
-            <span title="El documento ya es de un cliente de Alegra que no vinculó su cuenta: revíselo antes de facturar.">
+            <span title={tituloRevision(p.motivoRevision)}>
               <Badge tone="warning">Revisar</Badge>
             </span>
           )}

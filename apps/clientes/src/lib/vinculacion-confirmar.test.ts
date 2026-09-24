@@ -75,7 +75,7 @@ const db: any = {
 };
 
 vi.mock("@/db", () => ({ getDb: () => db }));
-vi.mock("@/db/schema", () => ({ clientLinks: {}, linkOtps: {} }));
+vi.mock("@/db/schema", () => ({ billingProfiles: {}, clientLinks: {}, linkOtps: {} }));
 const getContacto = vi.fn();
 vi.mock("./alegra", () => ({
   actualizarObservacionesContacto: vi.fn(),

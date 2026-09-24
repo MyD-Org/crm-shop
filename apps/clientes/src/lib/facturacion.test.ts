@@ -14,6 +14,10 @@ import {
   telefonoValido,
   validarFacturacion,
   domicilioEnLinea,
+  exigeCuit,
+  formatearDoc,
+  CONDICION_IVA_LABEL,
+  TIPO_DOC_LABEL,
 } from "./facturacion";
 
 /**
@@ -432,5 +436,64 @@ describe("documentoEnLinea", () => {
   it("rotula CUIT sólo con 11 dígitos", () => {
     expect(documentoEnLinea("33693450239")).toBe("CUIT 33-69345023-9");
     expect(documentoEnLinea("39282165")).toBe("documento 39282165");
+  });
+});
+
+describe("contacto-fuente-unica: exento, CUIL y provincia", () => {
+  const completo = {
+    razonSocial: "ACME SRL",
+    domicilioCalle: "Av. Victoria Aguirre 500",
+    domicilioCiudad: "Puerto Iguazú",
+  };
+
+  it("acepta exento con CUIT válido y lo rotula 'Exento'", () => {
+    expect(CONDICION_IVA_LABEL.exento).toBe("Exento");
+    expect(
+      validarFacturacion({ ...completo, condicionIva: "exento", tipoDoc: "CUIT", nroDoc: "33-69345023-9" }),
+    ).toEqual({});
+  });
+
+  it("exento con DNI: error en usted que dice que la condición exige CUIT", () => {
+    const errores = validarFacturacion({
+      ...completo,
+      condicionIva: "exento",
+      tipoDoc: "DNI",
+      nroDoc: "12345678",
+    });
+    expect(errores.tipoDoc).toMatch(/exige CUIT/);
+    expect(exigeCuit("exento")).toBe(true);
+    expect(exigeCuit("consumidor_final")).toBe(false);
+  });
+
+  it("CUIL: se valida como un CUIT (11 dígitos y módulo 11) y sirve a consumidor final", () => {
+    expect(
+      validarFacturacion({ ...completo, condicionIva: "consumidor_final", tipoDoc: "CUIL", nroDoc: "20-12345678-6" }),
+    ).toEqual({});
+    expect(
+      validarFacturacion({ ...completo, condicionIva: "consumidor_final", tipoDoc: "CUIL", nroDoc: "20-12345678-5" })
+        .nroDoc,
+    ).toBeTruthy();
+    expect(TIPO_DOC_LABEL.CUIL).toBe("CUIL");
+    expect(formatearDoc("CUIL", "20123456786")).toBe("20-12345678-6");
+  });
+
+  it("CUIL no alcanza para una condición que exige CUIT", () => {
+    const errores = validarFacturacion({
+      ...completo,
+      condicionIva: "responsable_inscripto",
+      tipoDoc: "CUIL",
+      nroDoc: "20-12345678-6",
+    });
+    expect(errores.tipoDoc).toMatch(/exige CUIT/);
+  });
+
+  it("provincia: vacía está bien; fuera de la lista, error en usted", () => {
+    const base = { ...completo, condicionIva: "consumidor_final" as const, tipoDoc: "DNI" as const, nroDoc: "12345678" };
+    expect(validarFacturacion({ ...base, domicilioProvincia: "" })).toEqual({});
+    expect(validarFacturacion({ ...base, domicilioProvincia: "Misiones" })).toEqual({});
+    expect(validarFacturacion({ ...base, domicilioProvincia: "CABA" })).toEqual({});
+    expect(validarFacturacion({ ...base, domicilioProvincia: "Narnia" }).domicilioProvincia).toBe(
+      "Seleccione una provincia de la lista.",
+    );
   });
 });

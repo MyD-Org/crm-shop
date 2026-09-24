@@ -10,7 +10,7 @@ type Paso = "documento" | "codigo" | "confirmar";
 
 /** Título y bajada de la card: todo el flujo vive en una sola card. */
 const TITULO = "Vincule su cuenta de cliente";
-const BAJADA = "Vea sus precios y su cuenta corriente. Si no es cliente, puede comprar a precio de lista.";
+const BAJADA = "Vea sus facturas y sus compras en Central LED.";
 
 export function VincularClient({
   volver,

@@ -18,7 +18,7 @@ export function AvisoVincular({ volver, enCheckout = false }: { volver?: string;
       <p>
         {enCheckout
           ? "Su documento está registrado en el local. Vincule su cuenta antes de confirmar para comprar con sus precios."
-          : "Su documento está registrado en el local. Vincule su cuenta para ver sus precios y sus facturas."}
+          : "Su documento está registrado en el local. Vincule su cuenta para ver sus facturas y sus compras."}
       </p>
       <div className="mt-3">
         <BotonEnlace size="sm" href={rutaVincular(volver)}>

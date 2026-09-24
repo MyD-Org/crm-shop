@@ -1,44 +1,23 @@
 import { Badge, Card } from "@myd-org/ui";
 import { documentoEnLinea } from "@/lib/facturacion";
-import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
-import { BotonEnlace } from "./BotonEnlace";
 
 /**
- * Estado de la vinculación con la cuenta de cliente de Alegra.
+ * Cuenta de cliente vinculada (Mis datos, estado `vinculado`).
  *
  * "Cuenta de cliente" y no "cuenta corriente" a propósito: en Alegra también
- * hay clientes de CONTADO, con historial, facturas y su lista de precios.
+ * hay clientes de CONTADO, con historial y facturas.
  *
- * Con el documento ya registrado en Alegra no se usa esta card sino
- * `AvisoVincular`, arriba de todo.
+ * Sin vincular no se usa esta card: Mis datos pregunta si ya es cliente
+ * (`PreguntaCliente`), muestra `AvisoVincular` o un enlace discreto
+ * (`SugerirVincular`), según `estadoMisDatos`.
  */
-export function CuentaClienteCard({
-  razonSocialVinculada,
-  cuit,
-}: {
-  razonSocialVinculada?: string;
-  cuit?: string;
-}) {
-  if (razonSocialVinculada) {
-    return (
-      <Card title="Su cuenta de cliente" action={<Badge tone="success">Vinculada</Badge>}>
-        <p className="text-sm text-muted">
-          Su usuario está vinculado a <span className="font-medium text-text">{razonSocialVinculada}</span>
-          {cuit ? ` (${documentoEnLinea(cuit)})` : ""}. Está viendo su lista de precios.
-        </p>
-      </Card>
-    );
-  }
-
+export function CuentaClienteCard({ razonSocialVinculada, cuit }: { razonSocialVinculada: string; cuit?: string }) {
   return (
-    <Card title="¿Ya es cliente del local?">
+    <Card title="Su cuenta de cliente" action={<Badge tone="success">Vinculada</Badge>}>
       <p className="text-sm text-muted">
-        Está comprando a precio de lista general. Si ya compra en el local, vincule su cuenta
-        para ver sus precios, sus facturas y —si tiene cuenta corriente— su saldo.
+        Su usuario está vinculado a <span className="font-medium text-text">{razonSocialVinculada}</span>
+        {cuit ? ` (${documentoEnLinea(cuit)})` : ""}.
       </p>
-      <div className="mt-4">
-        <BotonEnlace href={RUTAS_MI_CUENTA.vincular}>Ya soy cliente del local</BotonEnlace>
-      </div>
     </Card>
   );
 }

@@ -16,6 +16,7 @@ import {
   fmtMoneda,
   pagoEstadoLabel,
   pagoMetodoLabel,
+  revisionInfo,
   textoUltimoCambio,
   tonoEstado,
 } from "./format"
@@ -66,6 +67,15 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
   const ultimoCambio = textoUltimoCambio(pedido.estadoActualizadoPorNombre, pedido.estadoActualizadoEn)
   const documento = [pedido.facturacion.tipoDoc, pedido.facturacion.nroDoc].filter(Boolean).join(" ")
   const esEnvio = pedido.entrega.tipo === "envio"
+  const revision = pedido.requiereRevision
+    ? revisionInfo({
+        motivo: pedido.motivoRevision,
+        condicionIva: pedido.facturacion.condicionIva,
+        tipoDoc: pedido.facturacion.tipoDoc,
+        nroDoc: pedido.facturacion.nroDoc,
+        listaPrecios: pedido.revisionListaPrecios,
+      })
+    : null
 
   const columns: TableColumn<PedidoItemDto>[] = [
     {
@@ -130,8 +140,8 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
             Pedido {pedido.numero}
           </h1>
           <Badge tone={tonoEstado(pedido.estado)}>{ESTADO_PEDIDO_LABEL[pedido.estado]}</Badge>
-          {pedido.requiereRevision && (
-            <span title="El documento ya es de un cliente de Alegra que no vinculó su cuenta: revíselo antes de facturar.">
+          {revision && (
+            <span title={revision.titulo}>
               <Badge tone="warning">Revisar</Badge>
             </span>
           )}
@@ -149,14 +159,10 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
         )}
       </div>
 
-      {pedido.requiereRevision && (
-        <Alert tone="warning" title="Revise el cliente antes de facturar">
-          {/* Lo marca el Shop: el documento de facturación coincide con un contacto de
-              Alegra, pero el comprador no vinculó su cuenta (compró a precio de lista). */}
-          El documento {documento || "de facturación"} ya está registrado en Alegra, pero el
-          comprador no vinculó su cuenta y compró a precio de lista. Facture a ese contacto
-          existente en lugar de crear uno nuevo, y verifique si corresponde aplicarle su lista
-          de precios.
+      {revision && (
+        <Alert tone="warning" title={revision.titulo}>
+          {/* Lo marca el Shop con el motivo más importante (`motivo_revision`). */}
+          {revision.detalle}
         </Alert>
       )}
 

@@ -18,7 +18,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { catalogCategories, catalogProducts, stockReservado } from "@/db/schema";
-import { crmStock } from "@/db/crm";
+import { crmOverlay, crmStock } from "@/db/crm";
 import {
   esIdAlegra,
   ivaDeItem,
@@ -28,6 +28,7 @@ import {
   type AlegraItem,
 } from "./alegra";
 import { estadoSql, joinReserva, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
+import { joinOverlay, nombreExhibidoSql } from "./nombre-exhibido";
 import { costoEnvio, type EntregaTipo } from "./envio";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
 
@@ -226,7 +227,8 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
   const filas: FilaEspejo[] = await getDb()
     .select({
       alegraId: catalogProducts.alegraId,
-      name: catalogProducts.name,
+      // El mismo nombre que el catálogo y el carrito (ver nombre-exhibido.ts).
+      name: nombreExhibidoSql,
       code: catalogProducts.code,
       brand: catalogProducts.brand,
       prices: preciosSql,
@@ -242,6 +244,7 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
     )
     .leftJoin(crmStock, joinStockCrm())
     .leftJoin(stockReservado, joinReserva())
+    .leftJoin(crmOverlay, joinOverlay())
     .where(inArray(catalogProducts.alegraId, ids));
   return new Map(filas.map((f) => [f.alegraId, itemDesdeEspejo(f)]));
 }

@@ -1,5 +1,5 @@
 {
-  "id": "7f9e342d-86f0-439f-b93a-de1f20e19629",
+  "id": "8d51b650-49fd-402f-8079-ff943ede5833",
   "prevId": "26ed8af8-9d2c-4470-92b5-3e60ff5b1b16",
   "version": "7",
   "dialect": "postgresql",
@@ -32,25 +32,25 @@
           "name": "tipo_doc",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "nro_doc": {
           "name": "nro_doc",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "razon_social": {
           "name": "razon_social",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "condicion_iva": {
           "name": "condicion_iva",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "domicilio_calle": {
           "name": "domicilio_calle",
@@ -1446,24 +1446,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "facturado_en": {
-          "name": "facturado_en",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "facturado_por": {
-          "name": "facturado_por",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "facturado_por_nombre": {
-          "name": "facturado_por_nombre",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1601,28 +1583,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "orders_reserva_activa": {
-          "name": "orders_reserva_activa",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"shop\".\"orders\".\"facturado_en\" is null and \"shop\".\"orders\".\"estado\" in ('pendiente','confirmado','preparacion','en_camino')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1952,34 +1912,7 @@
   "sequences": {},
   "roles": {},
   "policies": {},
-  "views": {
-    "shop.stock_reservado": {
-      "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "alegra_item_id": {
-          "name": "alegra_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "qty": {
-          "name": "qty",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "name": "stock_reservado",
-      "schema": "shop",
-      "isExisting": true,
-      "materialized": false
-    }
-  },
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

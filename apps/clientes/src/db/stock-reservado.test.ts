@@ -6,7 +6,7 @@ import { VENTANA_PAGO_MS } from "@/lib/pedidos";
 import { stockReservado } from "./schema";
 
 /**
- * Guarda ESTÁTICA de la vista `shop.stock_reservado` (migración 0010).
+ * Guarda ESTÁTICA de la vista `shop.stock_reservado` (migración 0012).
  *
  * La vista vive sólo en SQL: drizzle-kit no la genera ni la compara. Este test
  * lee el .sql como texto y fija las reglas de negocio que no pueden derivar sin
@@ -16,7 +16,7 @@ import { stockReservado } from "./schema";
  */
 
 const SQL = readFileSync(
-  fileURLToPath(new URL("../../drizzle/0010_stock_reservado.sql", import.meta.url)),
+  fileURLToPath(new URL("../../drizzle/0012_stock_reservado.sql", import.meta.url)),
   "utf8",
 );
 /** Sin comentarios: lo que Postgres ejecuta. */
@@ -24,7 +24,7 @@ const CODIGO = SQL.split("\n")
   .filter((l) => !l.trimStart().startsWith("--"))
   .join("\n");
 
-describe("shop.stock_reservado (0010)", () => {
+describe("shop.stock_reservado (0012)", () => {
   it("la ventana del pendiente es la misma que VENTANA_PAGO_MS", () => {
     const m = CODIGO.match(/interval '(\d+) hours'/);
     expect(m, "la vista tiene que vencer el pendiente por horas").not.toBeNull();

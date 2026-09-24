@@ -88,7 +88,7 @@ function segmentoId(id: string): string {
 export async function apiFetch<T>(
   path: string,
   params: QueryParams = {},
-  init: { method?: "GET" | "PUT"; body?: unknown } = {},
+  init: { method?: "GET" | "PUT"; body?: unknown; signal?: AbortSignal } = {},
 ): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
   for (const [key, value] of Object.entries(params)) {
@@ -107,6 +107,7 @@ export async function apiFetch<T>(
       },
       // Datos de gestion: no cachear a nivel fetch, lo maneja cada caller.
       cache: "no-store",
+      signal: init.signal,
     });
     if (res.status !== 429 || intento >= MAX_RETRIES_429) break;
     await res.body?.cancel();
@@ -211,6 +212,8 @@ export interface AlegraContact {
   identification?: string; // CUIT / DNI
   email?: string;
   phonePrimary?: string;
+  phoneSecondary?: string;
+  mobile?: string;
   /**
    * Lista de precios asignada al cliente, si tiene una. `status` importa: en la
    * cuenta real hay contactos apuntando a listas dadas de baja (una se llama
@@ -221,6 +224,12 @@ export interface AlegraContact {
   term?: { id?: string; name?: string; days?: number | string | null } | null;
   /** Límite de crédito cargado en Alegra. */
   creditLimit?: number | string | null;
+  /** "FINAL_CONSUMER" | "IVA_RESPONSABLE" | "UNIQUE_TRIBUTE_RESPONSABLE" | "IVA_EXEMPT" | "". */
+  ivaCondition?: string | null;
+  /** Tipo ("CUIT" | "DNI" | "") y número del documento. */
+  identificationObject?: { type?: string | null; number?: string | null } | null;
+  /** Domicilio. En la cuenta real no trae `country`. */
+  address?: { address?: string; city?: string; province?: string; postalCode?: string } | null;
   [key: string]: unknown;
 }
 
@@ -292,12 +301,43 @@ export async function getContacto(id: string) {
  * llega como error. Quien llama tiene que fallar en silencio.
  */
 export async function actualizarObservacionesContacto(contacto: AlegraContact, observations: string) {
-  const body: Record<string, unknown> = { name: contacto.name, observations };
+  return actualizarContactoTalCual(contacto, { observations });
+}
+
+/**
+ * PUT que reenvía `name`, `ivaCondition` e `identificationObject` TAL CUAL
+ * vinieron del GET (obligatorios para Alegra, no cambian) más `extra`
+ * (observaciones, un teléfono que estaba vacío). Mismos cuidados que arriba.
+ */
+export async function actualizarContactoTalCual(contacto: AlegraContact, extra: Record<string, unknown>) {
+  const body: Record<string, unknown> = { name: contacto.name, ...extra };
   if (contacto.ivaCondition != null) body.ivaCondition = contacto.ivaCondition;
   if (contacto.identificationObject != null) body.identificationObject = contacto.identificationObject;
-  return apiFetch<AlegraContact>(`/contacts/${segmentoId(contacto.id)}`, {}, {
+  return actualizarContacto(contacto.id, body);
+}
+
+/** Cuánto se espera un PUT a /contacts antes de darlo por fallido (R8). */
+export const TIMEOUT_PUT_CONTACTO_MS = 8_000;
+
+/**
+ * PUT /contacts/{id} genérico, con timeout. Devuelve el contacto COMPLETO que
+ * responde Alegra (es lo que se pasa al write-through del espejo).
+ *
+ * Sólo lo usan `actualizarObservacionesContacto` y el completado "sólo vacíos"
+ * de `contacto-write-through.ts`: quien arma el cuerpo es responsable de
+ * reenviar `name`, `ivaCondition` e `identificationObject` sin cambiarlos (D1).
+ * Mismos cuidados que arriba: el tope de /contacts llega como 400 `{"code":429}`
+ * y un timeout aborta con error; quien llama cae a su respaldo.
+ */
+export async function actualizarContacto(
+  id: string,
+  body: Record<string, unknown>,
+  { timeoutMs = TIMEOUT_PUT_CONTACTO_MS }: { timeoutMs?: number } = {},
+) {
+  return apiFetch<AlegraContact>(`/contacts/${segmentoId(id)}`, {}, {
     method: "PUT",
     body,
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 

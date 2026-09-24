@@ -3,7 +3,7 @@ import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { DatosCuenta } from "@/components/mi-cuenta/DatosCuenta";
 import { identidadActual } from "@/lib/auth";
-import { getPerfilFacturacion } from "@/lib/facturacion-db";
+import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 
@@ -29,7 +29,10 @@ export default async function DatosPage() {
     );
   }
 
-  const perfil = await getPerfilFacturacion(clerkUserId);
+  // La misma lectura que el checkout y los pedidos: vinculado ⇒ espejo de
+  // Alegra (con el perfil del mismo documento), no vinculado ⇒ su perfil.
+  const dc = await datosDelContacto({ clerkUserId, cliente });
+  const perfil = dc.perfil;
 
   return (
     <section>
@@ -42,6 +45,7 @@ export default async function DatosPage() {
         // del CRM: sin cliente, compra a lista general y se le ofrece vincular.
         razonSocialVinculada={cliente ? (cliente.razonsocial ?? cliente.codigocliente) : undefined}
         cuit={cliente?.cuit}
+        facturacionVinculada={cliente ? paraElCliente(dc) : undefined}
       />
     </section>
   );

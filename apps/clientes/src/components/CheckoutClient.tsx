@@ -11,7 +11,15 @@ import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
 import { AvisoVincular } from "@/components/mi-cuenta/AvisoVincular";
 import { eleccionInicial, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import { fmtPrecio } from "@/lib/format";
-import { HREF_MIS_DATOS } from "@/lib/menu-usuario";
+import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFacturacionDialog";
+import type { PerfilFacturacionUI } from "@/components/FacturacionForm";
+import {
+  estadoFacturacionCheckout,
+  hayTelefonoParaPedido,
+  type CampoFacturacion,
+  type Complemento,
+} from "@/lib/contacto-alegra";
+import type { DatosDelContactoPublico } from "@/lib/datos-del-contacto";
 import { CuotasResumen } from "@/components/CuotasResumen";
 import { resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
@@ -119,11 +127,21 @@ const AVISO_PAGO_A_COORDINAR =
 
 interface Props {
   nombreSugerido: string;
-  /** Teléfono guardado en Mis datos. Vacío = se pide acá y el perfil lo aprende. */
+  /**
+   * Teléfono precargado: el de Alegra del vinculado (`facturacion.telefonoAlegra`,
+   * no hace falta tipearlo) o el guardado en Mis datos. Vacío = se pide acá; el
+   * perfil lo aprende y, si Alegra no tiene ninguno, se sube a Alegra.
+   */
   telefonoSugerido?: string;
   emailCliente?: string;
-  /** El perfil fiscal está completo: sin esto no se puede emitir la factura. */
-  facturacionCompleta: boolean;
+  /**
+   * Datos de facturación de la lectura única (`datosDelContacto`): vinculado ⇒
+   * espejo de Alegra; no vinculado ⇒ perfil. Sin `completo` no se puede
+   * emitir la factura: se ofrece cargar lo que falta en un modal.
+   */
+  facturacion: DatosDelContactoPublico;
+  /** Perfil del no vinculado, para precargar el formulario del modal. */
+  perfilFacturacion?: PerfilFacturacionUI | null;
   /**
    * El comprador factura con documento argentino. Solo se envía dentro de
    * Argentina: al resto se le ofrece únicamente el retiro. El servidor lo
@@ -162,7 +180,8 @@ export function CheckoutClient({
   nombreSugerido,
   telefonoSugerido = "",
   emailCliente,
-  facturacionCompleta,
+  facturacion,
+  perfilFacturacion = null,
   admiteEnvio,
   envioHabilitado,
   oferta = null,
@@ -193,6 +212,22 @@ export function CheckoutClient({
   const [nombre, setNombre] = useState(nombreSugerido);
   const [telefono, setTelefono] = useState(telefonoSugerido);
   const [notas, setNotas] = useState("");
+
+  // Facturación: el modal de datos que faltan y, si Alegra no respondió al
+  // guardarlos (sólo cookie del CRM), lo cargado viaja con el pedido.
+  const [modalFacturacion, setModalFacturacion] = useState(false);
+  const [complementoFacturacion, setComplementoFacturacion] = useState<Complemento | null>(null);
+  // Faltantes que devolvió un 409 del servidor (más frescos que los de la página).
+  const [faltantes409, setFaltantes409] = useState<CampoFacturacion[] | null>(null);
+  const facturacionVista = faltantes409
+    ? { ...facturacion, completo: false, faltantes: faltantes409 }
+    : facturacion;
+  const estadoFacturacion = estadoFacturacionCheckout({
+    completo: facturacionVista.completo,
+    fuente: facturacionVista.fuente,
+    complemento: complementoFacturacion,
+  });
+  const facturacionCompleta = estadoFacturacion.puedeConfirmar;
 
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
@@ -289,7 +324,7 @@ export function CheckoutClient({
   const envioDisponible = cotizacion?.envio.disponible ?? false;
   const datosCompletos =
     nombre.trim() !== "" &&
-    telefono.trim() !== "" &&
+    hayTelefonoParaPedido(telefono, facturacion.telefonoAlegra) &&
     (entrega === "retiro" || (ciudadEntrega !== "" && direccionEntrega.trim() !== ""));
 
   const puedeConfirmar =
@@ -330,15 +365,29 @@ export function CheckoutClient({
           entregaDireccion: entrega === "envio" ? direccionEntrega : undefined,
           pagoMetodo: pagoElegido,
           notas,
+          complementoFacturacion: complementoFacturacion ?? undefined,
         }),
       });
 
       const json = await res.json();
 
+      if (res.status === 409 && json?.motivo === "facturacion_incompleta") {
+        // Faltan datos de facturación (p. ej. cambiaron en Alegra): se abre el
+        // modal con lo que falta, sin recotizar.
+        setErrorEnvio(json.error ?? "Cargue sus datos de facturación para continuar.");
+        setComplementoFacturacion(null);
+        setFaltantes409(Array.isArray(json.faltantes) ? json.faltantes : facturacion.faltantes);
+        setModalFacturacion(true);
+        return;
+      }
+      if (res.status === 409 && json?.motivo === "facturacion_no_disponible") {
+        setErrorEnvio(json.error);
+        return;
+      }
       if (res.status === 409) {
         // El servidor recotizó y algo cambió. Se refresca la vista para que el
         // cliente vea QUÉ cambió en vez de un error suelto.
-        setErrorEnvio(json?.error ?? "El pedido cambió. Revisalo.");
+        setErrorEnvio(json?.error ?? "El pedido cambió. Revíselo.");
         recotizar();
         return;
       }
@@ -545,23 +594,48 @@ export function CheckoutClient({
         </div>
       )}
 
-      {!facturacionCompleta && (
+      {estadoFacturacion.aviso === "faltan_datos" && (
         <div className="mb-6 rounded-xl border border-warning/40 bg-warning/5 p-4">
           <p className="text-sm font-semibold text-text">
-            Falta cargar tus datos de facturación
+            Faltan sus datos de facturación
           </p>
           <p className="mt-1 text-sm text-muted">
-            Los necesitamos para emitirte la factura de esta compra. Se cargan
+            Los necesitamos para emitirle la factura de esta compra. Se cargan
             una sola vez.
           </p>
-          <Link
-            href={HREF_MIS_DATOS}
-            className="mt-3 inline-block text-sm font-semibold text-primary hover:underline"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-3"
+            aria-haspopup="dialog"
+            onClick={() => setModalFacturacion(true)}
           >
             Cargar mis datos →
-          </Link>
+          </Button>
         </div>
       )}
+      {estadoFacturacion.aviso === "no_disponible" && (
+        <div className="mb-6 rounded-xl border border-warning/40 bg-warning/5 p-4">
+          <p className="text-sm text-text">
+            No pudimos obtener sus datos de facturación. Inténtelo de nuevo en unos minutos.
+          </p>
+        </div>
+      )}
+      <CompletarFacturacionDialog
+        abierto={modalFacturacion}
+        onOpenChange={(abrir) => {
+          setModalFacturacion(abrir);
+          // Guardado (o cerrado): la página se relee con los datos nuevos.
+          if (!abrir) setFaltantes409(null);
+        }}
+        facturacion={facturacionVista}
+        perfil={perfilFacturacion}
+        nombreSugerido={nombreSugerido}
+        onEnPedido={(c) => {
+          setComplementoFacturacion(c);
+          setErrorEnvio(null);
+        }}
+      />
 
       <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
         {/* ------------------------------------------------------ formulario */}
@@ -575,7 +649,14 @@ export function CheckoutClient({
                   onChange={(e) => setNombre(e.target.value)}
                 />
               </Field>
-              <Field label="Teléfono">
+              <Field
+                label="Teléfono"
+                hint={
+                  facturacion.telefonoAlegra
+                    ? "Es el de su cuenta. Puede cambiarlo sólo para esta compra."
+                    : undefined
+                }
+              >
                 <Input
                   type="tel"
                   placeholder="+54 376 4000000"
@@ -779,13 +860,13 @@ export function CheckoutClient({
           {!puedeConfirmar && !enviando && (
             <p className="mt-2 text-center text-xs text-muted">
               {!facturacionCompleta
-                ? "Cargá tus datos de facturación para continuar."
+                ? "Cargue sus datos de facturación para continuar."
                 : cotizacion?.hayProblemas
-                  ? "Revisá los productos marcados en rojo."
+                  ? "Revise los productos marcados en rojo."
                   : !datosCompletos
-                    ? "Completá todos los campos para continuar."
+                    ? "Complete todos los campos para continuar."
                     : entrega === "envio" && !envioDisponible
-                      ? "Revisá la opción de envío."
+                      ? "Revise la opción de envío."
                       : "Confirmando precios y stock…"}
             </p>
           )}

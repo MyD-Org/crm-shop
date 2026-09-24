@@ -8,8 +8,11 @@ import {
   fmtMoneda,
   pagoEstadoLabel,
   pagoMetodoLabel,
+  revisionInfo,
   textoUltimoCambio,
+  tituloRevision,
   tonoEstado,
+  type DatosRevision,
 } from "./format"
 
 // Intl separa el símbolo del número con un espacio duro (U+00A0): se normaliza para comparar.
@@ -110,5 +113,94 @@ describe("textoUltimoCambio", () => {
 
   it("sin fecha no hay nada que mostrar", () => {
     expect(textoUltimoCambio("Ana", null)).toBeNull()
+  })
+})
+
+describe("revisionInfo (motivo_revision del Shop, 0010)", () => {
+  const base: DatosRevision = {
+    motivo: null,
+    condicionIva: "monotributo",
+    tipoDoc: "DNI",
+    nroDoc: "12345678",
+    listaPrecios: null,
+  }
+
+  it("documento_incompatible: condición, tipo y número del pedido (caso vinculado monotributo con DNI)", () => {
+    const r = revisionInfo({ ...base, motivo: "documento_incompatible" })
+    expect(r.titulo).toBe("Documento incompatible con la condición de IVA")
+    expect(r.detalle).toBe(
+      "La condición de IVA Monotributo requiere CUIT y el contacto tiene DNI 12345678 en Alegra. " +
+        "Corrija el documento en Alegra antes de facturar.",
+    )
+    // No habla de "no vinculó su cuenta": el comprador SÍ vinculó.
+    expect(r.detalle).not.toMatch(/vincul/)
+  })
+
+  it("condicion_iva_desconocida", () => {
+    expect(revisionInfo({ ...base, motivo: "condicion_iva_desconocida" }).detalle).toBe(
+      "La condición de IVA del contacto en Alegra no es una de las que maneja la tienda. Revísela antes de facturar.",
+    )
+  })
+
+  it("facturacion_en_pedido", () => {
+    expect(revisionInfo({ ...base, motivo: "facturacion_en_pedido" }).detalle).toBe(
+      "Los datos de facturación que cargó el comprador no llegaron a Alegra (se guardaron sólo en el pedido). " +
+        "Cárguelos en el contacto antes de facturar.",
+    )
+  })
+
+  it("otra_lista_precios: con la lista del contacto y el aviso de no duplicar", () => {
+    const r = revisionInfo({
+      ...base,
+      motivo: "otra_lista_precios",
+      condicionIva: "consumidor_final",
+      listaPrecios: "Mayorista",
+    })
+    expect(r.titulo).toBe("Cliente con otra lista de precios")
+    expect(r.detalle).toBe(
+      "El documento DNI 12345678 ya está registrado en Alegra con la lista de precios Mayorista, pero el " +
+        "comprador compró a la lista general. Facture a ese contacto existente en lugar de crear uno nuevo, " +
+        "y verifique si corresponde aplicarle su lista.",
+    )
+  })
+
+  it("otra_lista_precios sin nombre de lista ⇒ 'con otra lista de precios'", () => {
+    expect(revisionInfo({ ...base, motivo: "otra_lista_precios" }).detalle).toContain(
+      "ya está registrado en Alegra con otra lista de precios, pero",
+    )
+  })
+
+  it("pedido anterior a la 0010 (motivo NULL) o motivo desconocido ⇒ el texto genérico de siempre", () => {
+    for (const motivo of [null, "algo_nuevo"]) {
+      const r = revisionInfo({ ...base, motivo })
+      expect(r.titulo).toBe("Revise el cliente antes de facturar")
+      expect(r.detalle).toBe(
+        "El documento DNI 12345678 ya está registrado en Alegra, pero el comprador no vinculó su cuenta y " +
+          "compró a precio de lista. Facture a ese contacto existente en lugar de crear uno nuevo, y verifique " +
+          "si corresponde aplicarle su lista de precios.",
+      )
+    }
+  })
+
+  it("sin documento en el pedido no deja huecos", () => {
+    const sinDoc = { ...base, tipoDoc: null, nroDoc: null }
+    expect(revisionInfo({ ...sinDoc, motivo: "documento_incompatible" }).detalle).toContain(
+      "el contacto tiene un documento que no es CUIT en Alegra",
+    )
+    expect(revisionInfo({ ...sinDoc, motivo: null }).detalle).toMatch(/^El documento de facturación ya está/)
+  })
+
+  it("en usted: nada de voseo ni tuteo", () => {
+    const motivos = [null, "documento_incompatible", "condicion_iva_desconocida", "facturacion_en_pedido", "otra_lista_precios"]
+    for (const motivo of motivos) {
+      const { titulo, detalle } = revisionInfo({ ...base, motivo })
+      expect(`${titulo} ${detalle}`).not.toMatch(/\b(tu|tus|te|vos|revisá|cargá|corregí)\b/i)
+    }
+  })
+
+  it("tituloRevision (tooltip del listado) coincide con el del aviso", () => {
+    expect(tituloRevision("otra_lista_precios")).toBe("Cliente con otra lista de precios")
+    expect(tituloRevision(null)).toBe("Revise el cliente antes de facturar")
+    expect(tituloRevision("toString")).toBe("Revise el cliente antes de facturar")
   })
 })

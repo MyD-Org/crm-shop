@@ -99,18 +99,22 @@ export async function guardarPerfilFacturacion(
  * Cambia SOLO el teléfono de contacto. Existe para el perfil vinculado a
  * Alegra, que se muestra en solo lectura: la razón social y el CUIT los manda
  * el sistema, pero el teléfono al que llamar por un pedido sigue siendo del
- * cliente. Devuelve null si el usuario todavía no tiene perfil.
+ * cliente.
+ *
+ * Sin perfil crea una fila "sólo teléfono" (migración 0009): el vinculado
+ * factura con los datos del espejo y no tiene por qué tener perfil (#499).
  */
 export async function actualizarTelefono(
   clerkUserId: string,
   telefono: string,
-): Promise<PerfilFacturacion | null> {
+): Promise<PerfilFacturacion> {
+  const valor = { telefono: telefono.trim() || null, updatedAt: new Date() };
   const [fila] = await getDb()
-    .update(billingProfiles)
-    .set({ telefono: telefono.trim() || null, updatedAt: new Date() })
-    .where(eq(billingProfiles.clerkUserId, clerkUserId))
+    .insert(billingProfiles)
+    .values({ clerkUserId, ...valor })
+    .onConflictDoUpdate({ target: billingProfiles.clerkUserId, set: valor })
     .returning();
-  return fila ?? null;
+  return fila;
 }
 
 /**
@@ -128,6 +132,13 @@ export async function guardarTelefonoSiFalta(
 ): Promise<void> {
   const limpio = telefono.trim();
   if (!telefonoValido(limpio)) return;
+  // Sin perfil (vinculado que factura con el espejo): fila "sólo teléfono".
+  const creada = await getDb()
+    .insert(billingProfiles)
+    .values({ clerkUserId, telefono: limpio })
+    .onConflictDoNothing({ target: billingProfiles.clerkUserId })
+    .returning({ id: billingProfiles.id });
+  if (creada.length > 0) return;
   await getDb()
     .update(billingProfiles)
     .set({ telefono: limpio, updatedAt: new Date() })
@@ -139,6 +150,68 @@ export async function guardarTelefonoSiFalta(
     );
 }
 
+/**
+ * Respaldo del comprador vinculado (con Clerk) cuando el PUT a Alegra falla
+ * (D-8): se guarda en el perfil lo que tipeó, con el documento y la razón
+ * social DEL ESPEJO, así la próxima lectura lo mezcla por D2 (mismo documento).
+ * Los demás datos del espejo no se copian: se siguen leyendo de ahí.
+ *
+ * Si el perfil tenía el mismo documento, sólo se completan esos campos (el
+ * teléfono y lo demás quedan). Si tenía otro documento, se reemplaza: ya era
+ * ignorado por D2.
+ */
+export async function upsertRespaldoVinculado(
+  clerkUserId: string,
+  {
+    tipoDoc,
+    nroDoc,
+    razonSocial,
+    complemento,
+  }: {
+    tipoDoc: string;
+    nroDoc: string;
+    razonSocial: string | null;
+    complemento: Partial<
+      Record<
+        "razonSocial" | "condicionIva" | "domicilioCalle" | "domicilioCiudad" | "domicilioProvincia" | "domicilioCp",
+        string
+      >
+    >;
+  },
+): Promise<PerfilFacturacion> {
+  const nro = normalizarDoc(tipoDoc as TipoDoc, nroDoc);
+  const actual = await getPerfilFacturacion(clerkUserId);
+  const mismoDoc =
+    actual?.nroDoc != null && normalizarDoc((actual.tipoDoc ?? tipoDoc) as TipoDoc, actual.nroDoc) === nro;
+  const tipeado = Object.fromEntries(
+    Object.entries(complemento).filter(([, v]) => typeof v === "string" && v.trim() !== ""),
+  );
+  const base = {
+    pais: "AR",
+    tipoDoc,
+    nroDoc: nro,
+    razonSocial: razonSocial ?? complemento.razonSocial ?? null,
+    updatedAt: new Date(),
+  };
+  const valores = mismoDoc
+    ? { ...base, ...tipeado }
+    : {
+        ...base,
+        condicionIva: complemento.condicionIva ?? null,
+        domicilioCalle: complemento.domicilioCalle ?? null,
+        domicilioCiudad: complemento.domicilioCiudad ?? null,
+        domicilioProvincia: complemento.domicilioProvincia ?? null,
+        domicilioCp: complemento.domicilioCp ?? null,
+        coincideConAlegra: null,
+      };
+  const [fila] = await getDb()
+    .insert(billingProfiles)
+    .values({ clerkUserId, ...valores })
+    .onConflictDoUpdate({ target: billingProfiles.clerkUserId, set: valores })
+    .returning();
+  return fila;
+}
+
 /** ¿Está completo como para poder facturar? */
 export function perfilCompleto(perfil: PerfilFacturacion | null): boolean {
   if (!perfil) return false;
@@ -146,10 +219,10 @@ export function perfilCompleto(perfil: PerfilFacturacion | null): boolean {
     Object.keys(
       validarFacturacion({
         pais: perfil.pais as Pais,
-        tipoDoc: perfil.tipoDoc as TipoDoc,
-        nroDoc: perfil.nroDoc,
-        razonSocial: perfil.razonSocial,
-        condicionIva: perfil.condicionIva as CondicionIva,
+        tipoDoc: (perfil.tipoDoc ?? undefined) as TipoDoc | undefined,
+        nroDoc: perfil.nroDoc ?? undefined,
+        razonSocial: perfil.razonSocial ?? undefined,
+        condicionIva: (perfil.condicionIva ?? undefined) as CondicionIva | undefined,
         domicilioCalle: perfil.domicilioCalle ?? undefined,
         domicilioCiudad: perfil.domicilioCiudad ?? undefined,
       }),

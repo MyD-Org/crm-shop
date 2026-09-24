@@ -189,14 +189,22 @@ export const billingProfiles = shop.table(
      * fiscal NO depende de esto.
      */
     pais: text("pais").notNull().default("AR"),
-    /** AR: 'CUIT' | 'DNI'. BR: 'CNPJ' | 'CPF'. PY: 'RUC' | 'CI'. */
-    tipoDoc: text("tipo_doc").notNull(),
+    /**
+     * AR: 'CUIT' | 'DNI' (| 'CUIL', deducido del espejo). BR: 'CNPJ' | 'CPF'.
+     * PY: 'RUC' | 'CI'.
+     *
+     * Documento, razón social y condición admiten NULL desde la 0009: un
+     * comprador vinculado a Alegra (cuyos datos de facturación salen del espejo
+     * del CRM) puede tener una fila "sólo teléfono". Una fila así nunca cuenta
+     * como perfil completo (`perfilCompleto`).
+     */
+    tipoDoc: text("tipo_doc"),
     /** Sin guiones ni puntos: se normaliza al guardar. Solo el CNPJ trae letras. */
-    nroDoc: text("nro_doc").notNull(),
+    nroDoc: text("nro_doc"),
     /** Razón social, o nombre y apellido si es consumidor final. */
-    razonSocial: text("razon_social").notNull(),
-    /** 'consumidor_final' | 'monotributo' | 'responsable_inscripto'. */
-    condicionIva: text("condicion_iva").notNull(),
+    razonSocial: text("razon_social"),
+    /** 'consumidor_final' | 'monotributo' | 'responsable_inscripto' | 'exento'. */
+    condicionIva: text("condicion_iva"),
 
     // --- Domicilio fiscal (el de la factura, no el de entrega) ---
     domicilioCalle: text("domicilio_calle"),
@@ -334,11 +342,18 @@ export const orders = shop.table(
     facturacionCondicionIva: text("facturacion_condicion_iva"),
     facturacionDomicilio: text("facturacion_domicilio"),
     /**
-     * El documento de facturación coincide con un contacto de Alegra que el
-     * comprador NO tiene vinculado. Un operador debe revisar antes de facturar,
-     * para no terminar con dos clientes duplicados para el mismo CUIT.
+     * Un operador debe revisar el pedido antes de facturar. El porqué va en
+     * `motivoRevision`.
      */
     requiereRevision: boolean("requiere_revision").notNull().default(false),
+    /**
+     * Por qué requiere revisión (0010): 'documento_incompatible' |
+     * 'condicion_iva_desconocida' | 'facturacion_en_pedido' |
+     * 'otra_lista_precios' (ver `src/lib/motivo-revision.ts`). Sin CHECK a
+     * propósito: sumar un motivo no pide migración. NULL en pedidos anteriores
+     * a la 0010 y en los que no requieren revisión. Lo lee el CRM.
+     */
+    motivoRevision: text("motivo_revision"),
 
     // --- Pago ---
     pagoMetodo: text("pago_metodo").notNull(), // 'transferencia' | 'efectivo' | 'cuenta_corriente' | 'mercadopago'
@@ -440,7 +455,7 @@ export const orders = shop.table(
      */
     pagoRevision: text("pago_revision"),
 
-    // --- Facturado en Alegra (migración 0009) ---
+    // --- Facturado en Alegra (migración 0011) ---
     /**
      * Cuándo un operador del CRM marcó el pedido como ya facturado en Alegra, y
      * quién. Independiente de `estado`: un pedido `en_camino` puede estar
@@ -533,7 +548,7 @@ export const orderItems = shop.table(
 );
 
 /**
- * Unidades reservadas por ítem (vista `shop.stock_reservado`, migración 0010).
+ * Unidades reservadas por ítem (vista `shop.stock_reservado`, migración 0012).
  *
  * Suma de `qty` de las líneas de los pedidos del Shop que todavía apartan
  * stock: no facturados y en `confirmado`, `preparacion` o `en_camino`, o
@@ -543,7 +558,7 @@ export const orderItems = shop.table(
  * leer. El disponible que ve y valida el Shop es `stock − qty` (ver
  * `src/lib/stock-disponible.ts`); el espejo del stock nunca se toca.
  *
- * `.existing()`: la vista la crea la migración 0010 a mano (drizzle-kit no la
+ * `.existing()`: la vista la crea la migración 0012 a mano (drizzle-kit no la
  * genera ni la compara).
  */
 export const stockReservado = shop

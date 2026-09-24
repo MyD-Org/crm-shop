@@ -17,6 +17,10 @@
  * `orders_estado_check`). Un retiro se ve "Preparando" hasta que el local lo
  * marca entregado. Cuando el follow-up `pedidos-listo-retiro` agregue el
  * estado, se inserta el paso en `PASOS` y el componente no cambia.
+ *
+ * Con los pagos apagados (`pagosHabilitados: false`, ver pagos-flag.ts) ningún
+ * pedido se paga en el Shop: el segundo paso dice "Pedido confirmado" y se da
+ * por hecho sólo cuando el operador confirma (misma regla que la pill).
  */
 import type { StepState } from "@myd-org/ui";
 import type { EntregaTipoPedido, Order, OrderEstado } from "@/data/orders";
@@ -55,12 +59,12 @@ const DESDE_CONFIRMADO: readonly OrderEstado[] = ["confirmado", "preparacion", "
 const DESDE_PREPARACION: readonly OrderEstado[] = ["preparacion", "en_camino", "entregado"];
 const DESDE_EN_CAMINO: readonly OrderEstado[] = ["en_camino", "entregado"];
 
-function hecho(paso: IdPasoSeguimiento, o: Pedido): boolean {
+function hecho(paso: IdPasoSeguimiento, o: Pedido, pagosHabilitados: boolean): boolean {
   switch (paso) {
     case "recibido":
       return true;
     case "pago":
-      return o.pagoEstado === "pagado" || DESDE_CONFIRMADO.includes(o.estado);
+      return (pagosHabilitados && o.pagoEstado === "pagado") || DESDE_CONFIRMADO.includes(o.estado);
     case "preparando":
       return DESDE_PREPARACION.includes(o.estado);
     case "en_camino":
@@ -71,17 +75,21 @@ function hecho(paso: IdPasoSeguimiento, o: Pedido): boolean {
   }
 }
 
-export function seguimientoPedido(o: Pedido): PasoSeguimiento[] | null {
+export function seguimientoPedido(
+  o: Pedido,
+  { pagosHabilitados = true }: { pagosHabilitados?: boolean } = {},
+): PasoSeguimiento[] | null {
   if (o.estado === "cancelado") return null;
 
   let actualAsignado = false;
   return PASOS[o.entregaTipo].map((id) => {
     let state: StepState;
-    if (hecho(id, o)) state = "done";
+    if (hecho(id, o, pagosHabilitados)) state = "done";
     else if (!actualAsignado) {
       state = "current";
       actualAsignado = true;
     } else state = "pending";
-    return { id, label: LABEL[id], state };
+    const label = id === "pago" && !pagosHabilitados ? "Pedido confirmado" : LABEL[id];
+    return { id, label, state };
   });
 }

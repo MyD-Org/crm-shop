@@ -203,6 +203,24 @@ describe("crearPedido", () => {
     expect(valores.estado).toBe("default");
   });
 
+  it("persiste requiere_revision y motivo_revision (0010); sin revisión, false y NULL", async () => {
+    grabadora = dbGrabadora(nuevoConStock());
+    await crearPedido(
+      { clerkUserId: "user_1" },
+      { ...datos, requiereRevision: true, motivoRevision: "otra_lista_precios" },
+      cotizacion,
+    );
+    const conMotivo = valoresInsertados(grabadora.consultas[0]);
+    expect(conMotivo.requiere_revision).toBe(true);
+    expect(conMotivo.motivo_revision).toBe("otra_lista_precios");
+
+    grabadora = dbGrabadora(nuevoConStock());
+    await crearPedido({ clerkUserId: "user_1" }, datos, cotizacion);
+    const sinMotivo = valoresInsertados(grabadora.consultas[0]);
+    expect(sinMotivo.requiere_revision).toBe(false);
+    expect(sinMotivo.motivo_revision).toBeNull();
+  });
+
   it("el re-select del reintento idempotente también filtra por tenant", async () => {
     // El insert no devuelve fila (chocó la clave) y el select tampoco encuentra
     // nada: así se llega al re-select sin fabricar un pedido.

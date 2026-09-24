@@ -15,7 +15,7 @@
  * saliendo del espejo del Shop (el CRM calcula el IVA con otra regla).
  *
  * Al stock de la fuente elegida se le resta lo que tienen apartado los pedidos
- * vivos del Shop (vista `shop.stock_reservado`, migración 0010): lo que se
+ * vivos del Shop (vista `shop.stock_reservado`, migración 0012): lo que se
  * muestra y se valida es el DISPONIBLE, `max(0, stock − reservado)`, calculado
  * al leer. El espejo nunca se toca: una re-lectura de Alegra no borra una
  * reserva, y cancelar, entregar, marcar facturado o dejar vencer un pendiente

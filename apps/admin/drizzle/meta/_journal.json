@@ -253,6 +253,13 @@
       "when": 1790282456160,
       "tag": "0035_catalog_products_shop",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790285796977,
+      "tag": "0036_alegra_contacts_shop_telefonos",
+      "breakpoints": true
     }
   ]
 }

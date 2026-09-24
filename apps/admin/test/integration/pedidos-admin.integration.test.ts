@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { eq, sql } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
-import { adminUsers } from "@/db/schema"
+import { adminUsers, alegraContacts } from "@/db/schema"
 import { shopOrders, shopOrderItems, type ShopOrderRow } from "@/db/shop-schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import {
@@ -208,6 +208,7 @@ describe("admin: pedidos del Shop", () => {
         createdAt: new Date("2026-01-03T10:00:00Z"),
         entregaTipo: "envio",
         requiereRevision: true,
+        motivoRevision: "documento_incompatible",
         clienteRazonSocial: "Cliente Ejemplo SA",
         total: "2500.50",
       })
@@ -230,6 +231,7 @@ describe("admin: pedidos del Shop", () => {
         pagoEstado: "pendiente",
         total: 2500.5,
         requiereRevision: true,
+        motivoRevision: "documento_incompatible",
         pagoRevision: null,
       })
       // El motivo interno y los datos de contacto finos no viajan en el listado.
@@ -380,6 +382,33 @@ describe("admin: pedidos del Shop", () => {
       const pedido = await seedEn("cancelado")
       const body = await (await detail(pedido.id)).json()
       expect(body.cancelacionMotivo).toBe("Motivo original")
+    })
+
+    it("motivo de revisión (0010 del Shop): otra_lista_precios trae la lista del contacto del MISMO tenant", async () => {
+      const doc = "20111111112"
+      await getDb()
+        .insert(alegraContacts)
+        .values([
+          { tenantId: TENANT_A, alegraId: "501", name: "Contacto A", identificationNorm: doc, types: ["client"], priceListName: "Mayorista" },
+          // Mismo documento en otro tenant: no se mira.
+          { tenantId: TENANT_B, alegraId: "502", name: "Contacto B", identificationNorm: doc, types: ["client"], priceListName: "Lista ajena" },
+        ])
+      const pedido = await seedShopOrder(TENANT_A, {
+        requiereRevision: true,
+        motivoRevision: "otra_lista_precios",
+        facturacionTipoDoc: "CUIL",
+        facturacionNroDoc: doc,
+      })
+      const body = await (await detail(pedido.id)).json()
+      expect(body).toMatchObject({
+        requiereRevision: true,
+        motivoRevision: "otra_lista_precios",
+        revisionListaPrecios: "Mayorista",
+      })
+
+      // Otro motivo, o un pedido anterior a la 0010: no se consulta la lista.
+      const viejo = await seedShopOrder(TENANT_A, { requiereRevision: true, facturacionNroDoc: doc })
+      expect(await (await detail(viejo.id)).json()).toMatchObject({ motivoRevision: null, revisionListaPrecios: null })
     })
 
     it("el pago a revisar que marcó el Shop llega al detalle; sin marca, null", async () => {

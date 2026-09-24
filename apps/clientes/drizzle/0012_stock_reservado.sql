@@ -13,7 +13,7 @@
 -- No reservan: `cancelado`, `entregado`, facturados, pendientes vencidos sin pagar.
 --
 -- Drift que vive SOLO en SQL: la vista está en src/db/schema.ts como `.existing()` (drizzle-kit
--- no la genera ni la compara); el snapshot 0010 es igual al 0009. Si cambia o se borra alguna de
+-- no la genera ni la compara); el snapshot 0012 es igual al 0011. Si cambia o se borra alguna de
 -- las columnas que usa (orders: id, tenant_id, estado, created_at, pago_estado, facturado_en;
 -- order_items: order_id, alegra_item_id, qty), recrear la vista en la MISMA migración
 -- (DROP VIEW + CREATE VIEW + GRANT).

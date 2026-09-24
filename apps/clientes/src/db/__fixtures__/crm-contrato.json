@@ -37,7 +37,17 @@
     "seller_name": "text",
     "payment_term_name": "text",
     "payment_term_days": "integer",
-    "credit_limit": "numeric(16, 2)"
+    "credit_limit": "numeric(16, 2)",
+    "iva_condition": "text",
+    "identification_type": "text",
+    "identification_number": "text",
+    "address_street": "text",
+    "address_city": "text",
+    "address_province": "text",
+    "address_postal_code": "text",
+    "phone_primary": "text",
+    "phone_secondary": "text",
+    "mobile": "text"
   },
   "public.tenants": {
     "id": "text",

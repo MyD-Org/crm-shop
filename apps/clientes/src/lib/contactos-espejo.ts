@@ -21,14 +21,16 @@
  */
 import { and, arrayContains, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { crmContactos } from "@/db/crm";
+import { crmContactos, crmStock } from "@/db/crm";
 import {
   esIdAlegra,
   getContacto,
   idPriceListUsable,
+  mapPrecios,
   tipoCuentaDe,
   type AlegraContact,
 } from "./alegra";
+import type { ContactoFacturacion } from "./contacto-alegra";
 import { shopTenantId } from "./tenant";
 
 /** Cuenta de Alegra dentro del tenant. Hoy siempre una (ver `alegra_account` en el CRM). */
@@ -318,4 +320,68 @@ export async function comercialEspejo(
   const c = await vinculablePorId(alegraId);
   if (!c) return null;
   return { tipoCuenta: c.tipoCuenta, idPriceList: idPriceListUsable(c) };
+}
+
+/**
+ * Id de la lista de precios GENERAL (la principal: `main` en los precios de
+ * Alegra), leída de un ítem activo del espejo de productos del CRM. Es la lista
+ * con la que compra quien no vinculó cuenta. `null` = no se pudo saber (sin
+ * ítems o la vista no respondió): quien llama decide qué hacer. 1 query.
+ */
+export async function idListaGeneral(): Promise<string | null> {
+  try {
+    const [fila] = await getDb()
+      .select({ precios: crmStock.preciosAlegra })
+      .from(crmStock)
+      .where(
+        and(
+          eq(crmStock.tenantId, shopTenantId()),
+          eq(crmStock.activo, true),
+          sql`${crmStock.preciosAlegra} @> '[{"main": true}]'::jsonb`,
+        ),
+      )
+      .limit(1);
+    return mapPrecios(fila?.precios).find((p) => p.main)?.idPriceList ?? null;
+  } catch (err) {
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`[contactos] no se pudo leer la lista general (${codigo ?? "sin código"})`);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Facturación (change `contacto-fuente-unica`). Sólo espejo: 0 requests.
+// ---------------------------------------------------------------------------
+
+/**
+ * Datos de facturación del contacto según el espejo (columnas generadas de la
+ * 0034 del CRM), o `null` sin fila activa. El respaldo en vivo lo decide
+ * `datos-del-contacto.ts`. Lanza si la vista no responde.
+ */
+export async function facturacionEspejo(alegraId: string): Promise<ContactoFacturacion | null> {
+  if (!esIdAlegra(alegraId)) return null;
+  const [fila] = await getDb()
+    .select({
+      alegraId: crmContactos.alegraId,
+      name: crmContactos.name,
+      identification: crmContactos.identification,
+      identificationNorm: crmContactos.identificationNorm,
+      identificationType: crmContactos.identificationType,
+      identificationNumber: crmContactos.identificationNumber,
+      ivaCondition: crmContactos.ivaCondition,
+      addressStreet: crmContactos.addressStreet,
+      addressCity: crmContactos.addressCity,
+      addressProvince: crmContactos.addressProvince,
+      addressPostalCode: crmContactos.addressPostalCode,
+      // 0036 del CRM: el checkout no vuelve a pedir un teléfono que ya está.
+      phonePrimary: crmContactos.phonePrimary,
+      phoneSecondary: crmContactos.phoneSecondary,
+      mobile: crmContactos.mobile,
+    })
+    .from(crmContactos)
+    .where(and(activasDelShop(), eq(crmContactos.alegraId, alegraId)))
+    .limit(1);
+  if (!fila) return null;
+  // `name` es NOT NULL en la vista, pero un nombre en blanco cuenta como vacío.
+  return { ...fila, name: textoONull(fila.name) };
 }

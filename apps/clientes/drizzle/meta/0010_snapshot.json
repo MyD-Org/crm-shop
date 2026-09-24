@@ -1,6 +1,6 @@
 {
-  "id": "c78410b0-8ef7-4ea5-8251-b9c57e0e46b5",
-  "prevId": "7f9e342d-86f0-439f-b93a-de1f20e19629",
+  "id": "457a5b72-c64a-49d9-8baa-1d7515c6b761",
+  "prevId": "8d51b650-49fd-402f-8079-ff943ede5833",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -32,25 +32,25 @@
           "name": "tipo_doc",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "nro_doc": {
           "name": "nro_doc",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "razon_social": {
           "name": "razon_social",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "condicion_iva": {
           "name": "condicion_iva",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "domicilio_calle": {
           "name": "domicilio_calle",
@@ -115,9 +115,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "bp_doc": {
           "name": "bp_doc",
@@ -130,9 +130,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -205,9 +205,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -278,9 +278,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "cc_status_name": {
           "name": "cc_status_name",
@@ -299,9 +299,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -404,9 +404,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "cp_code": {
           "name": "cp_code",
@@ -419,9 +419,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "cp_category": {
           "name": "cp_category",
@@ -434,9 +434,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "cp_status_name": {
           "name": "cp_status_name",
@@ -455,9 +455,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -537,9 +537,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -635,10 +635,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"shop\".\"client_links\".\"estado\" = 'activa'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "cl_contacto_activa": {
           "name": "cl_contacto_activa",
@@ -651,10 +651,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"shop\".\"client_links\".\"estado\" = 'activa'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "cl_contacto": {
           "name": "cl_contacto",
@@ -667,9 +667,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -778,9 +778,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "dir_envio_una_predeterminada": {
           "name": "dir_envio_una_predeterminada",
@@ -799,10 +799,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"shop\".\"direcciones_envio\".\"predeterminada\"",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -873,9 +873,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "fav_tenant_usuario_fecha": {
           "name": "fav_tenant_usuario_fecha",
@@ -900,9 +900,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1024,9 +1024,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "lo_expira": {
           "name": "lo_expira",
@@ -1039,9 +1039,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1141,25 +1141,25 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "order_items_order_id_orders_id_fk": {
           "name": "order_items_order_id_orders_id_fk",
           "tableFrom": "order_items",
+          "tableTo": "orders",
+          "schemaTo": "shop",
           "columnsFrom": [
             "order_id"
           ],
-          "tableTo": "orders",
-          "schemaTo": "shop",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1185,15 +1185,15 @@
           "primaryKey": false,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "orders_numero_seq",
+            "schema": "shop",
             "increment": "1",
+            "startWith": "1000",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1000",
             "cache": "1",
-            "cycle": false,
-            "schema": "shop",
-            "type": "always"
+            "cycle": false
           }
         },
         "tenant_id": {
@@ -1304,6 +1304,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "motivo_revision": {
+          "name": "motivo_revision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "pago_metodo": {
           "name": "pago_metodo",
@@ -1446,24 +1452,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "facturado_en": {
-          "name": "facturado_en",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "facturado_por": {
-          "name": "facturado_por",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "facturado_por_nombre": {
-          "name": "facturado_por_nombre",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1491,9 +1479,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "orders_idempotency": {
           "name": "orders_idempotency",
@@ -1506,10 +1494,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"shop\".\"orders\".\"idempotency_key\" is not null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "orders_pago_referencia": {
           "name": "orders_pago_referencia",
@@ -1522,10 +1510,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"shop\".\"orders\".\"pago_referencia\" is not null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "orders_cliente_fecha": {
           "name": "orders_cliente_fecha",
@@ -1544,9 +1532,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "orders_clerk_fecha": {
           "name": "orders_clerk_fecha",
@@ -1565,9 +1553,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "orders_estado": {
           "name": "orders_estado",
@@ -1580,9 +1568,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "orders_tenant_fecha": {
           "name": "orders_tenant_fecha",
@@ -1601,31 +1589,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
-        },
-        "orders_reserva_activa": {
-          "name": "orders_reserva_activa",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "where": "\"shop\".\"orders\".\"facturado_en\" is null and \"shop\".\"orders\".\"estado\" in ('pendiente','confirmado','preparacion','en_camino')",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1747,10 +1713,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"shop\".\"pago_intentos\".\"referencia\" is not null",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "pago_intentos_order": {
           "name": "pago_intentos_order",
@@ -1763,9 +1729,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "pago_intentos_tenant_estado": {
           "name": "pago_intentos_tenant_estado",
@@ -1784,25 +1750,25 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "pago_intentos_order_id_orders_id_fk": {
           "name": "pago_intentos_order_id_orders_id_fk",
           "tableFrom": "pago_intentos",
+          "tableTo": "orders",
+          "schemaTo": "shop",
           "columnsFrom": [
             "order_id"
           ],
-          "tableTo": "orders",
-          "schemaTo": "shop",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1932,9 +1898,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1949,37 +1915,10 @@
   "schemas": {
     "shop": "shop"
   },
-  "views": {
-    "shop.stock_reservado": {
-      "name": "stock_reservado",
-      "schema": "shop",
-      "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "alegra_item_id": {
-          "name": "alegra_item_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "qty": {
-          "name": "qty",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "materialized": false,
-      "isExisting": true
-    }
-  },
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

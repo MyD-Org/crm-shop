@@ -93,7 +93,7 @@ describe("migración 0030: alegra_contacts (DB real)", () => {
   })
 })
 
-describe("migraciones 0031 + 0032 + 0034: vista alegra_contacts_shop (DB real)", () => {
+describe("migraciones 0031 + 0032 + 0034 + 0036: vista alegra_contacts_shop (DB real)", () => {
   const columnasDeLaVista = async () => {
     const r = await getDb().execute(sql`
       SELECT column_name FROM information_schema.columns
@@ -105,8 +105,9 @@ describe("migraciones 0031 + 0032 + 0034: vista alegra_contacts_shop (DB real)",
 
   // 0031 expuso 16 columnas; 0032 (change portal-al-shop) sumó al final vendedor, plazo y límite
   // para Condiciones y la barra de límite de crédito de "Mi cuenta" del Shop; 0034
-  // (change contacto-fuente-unica) sumó al final las 7 de facturación generadas desde raw.
-  it("expone exactamente las 27 columnas del contrato con el Shop", async () => {
+  // (change contacto-fuente-unica) sumó al final las 7 de facturación generadas desde raw; 0036
+  // sumó al final los 3 teléfonos (el Shop no vuelve a pedir lo que el espejo ya tiene).
+  it("expone exactamente las 30 columnas del contrato con el Shop", async () => {
     expect(await columnasDeLaVista()).toEqual([
       "tenant_id",
       "alegra_account",
@@ -135,17 +136,17 @@ describe("migraciones 0031 + 0032 + 0034: vista alegra_contacts_shop (DB real)",
       "address_city",
       "address_province",
       "address_postal_code",
+      "phone_primary",
+      "phone_secondary",
+      "mobile",
     ])
   })
 
-  it("no expone el crudo, teléfonos ni ids internos de vendedor/plazo", async () => {
+  it("no expone el crudo, los teléfonos normalizados ni ids internos de vendedor/plazo", async () => {
     const cols = await columnasDeLaVista()
     for (const oculta of [
       "raw",
       "phones_norm",
-      "phone_primary",
-      "phone_secondary",
-      "mobile",
       "seller_id",
       "payment_term_id",
       "origen",

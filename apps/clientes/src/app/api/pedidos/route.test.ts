@@ -44,11 +44,7 @@ vi.mock("@/lib/facturacion-db", () => ({
   perfilCompleto: () => perfilCompletoMock,
   guardarTelefonoSiFalta: (...a: unknown[]) => guardarTelefonoSiFalta(...a),
 }));
-vi.mock("@/lib/facturacion", async (original) => ({
-  // `admiteEnvio` es la regla real: mockearla sería testear el mock.
-  admiteEnvio: (await original<typeof import("@/lib/facturacion")>()).admiteEnvio,
-  domicilioEnLinea: () => "",
-}));
+// `@/lib/facturacion` es la real (`admiteEnvio` incluida): mockearla sería testear el mock.
 vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: () => getOferta() }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
 // Estos tests son del flujo CON cobros: corren con los pagos prendidos, que es
@@ -267,7 +263,7 @@ describe("POST /api/pedidos — textos en usted", () => {
     const r = await post();
     expect(r.status).toBe(409);
     expect(await r.json()).toMatchObject({
-      error: "Antes de comprar necesitamos sus datos de facturación.",
+      error: "Cargue sus datos de facturación para continuar.",
       motivo: "facturacion_incompleta",
     });
   });

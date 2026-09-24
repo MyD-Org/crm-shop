@@ -32,7 +32,7 @@ export default async function VincularPage({
   // Si su documento de facturación ya coincide con un cliente, se precarga: es
   // el que casi seguro va a escribir. Igual se valida con el código por email.
   const perfil = await getPerfilFacturacion(clerkUserId);
-  const documentoSugerido = perfil?.coincideConAlegra ? perfil.nroDoc : undefined;
+  const documentoSugerido = perfil?.coincideConAlegra ? (perfil.nroDoc ?? undefined) : undefined;
 
   return (
     <section className="flex max-w-2xl flex-col gap-4">

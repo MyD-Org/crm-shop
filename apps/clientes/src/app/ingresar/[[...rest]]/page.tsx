@@ -15,9 +15,9 @@ export default function IngresarPage() {
     <>
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-6 px-4 py-16">
         <div className="text-center">
-          <h1 className="text-2xl font-extrabold text-text">Ingresá a tu cuenta</h1>
+          <h1 className="text-2xl font-extrabold text-text">Ingrese a su cuenta</h1>
           <p className="mt-2 text-sm text-muted">
-            Para ver tus precios, tu cuenta corriente y tus pedidos.
+            Para ver sus pedidos, sus facturas y sus compras.
           </p>
         </div>
         {/*

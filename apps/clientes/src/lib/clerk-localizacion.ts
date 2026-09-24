@@ -1,11 +1,11 @@
 import { esES } from "@clerk/localizations";
 
 /**
- * Castellano rioplatense para los componentes de Clerk.
+ * Textos de los componentes de Clerk en el registro del sitio: español formal
+ * de usted (ver "Registro de textos de UI" en CLAUDE.md).
  *
- * `esES` es español peninsular: tutea con "tú" y trata de usted ("Regístrese",
- * "Ingrese su dirección"). En una tienda de Puerto Iguazú suena importado, y el
- * resto del sitio ya vosea. Clerk no tiene es-AR, así que se pisan solo las
+ * `esES` ya trata de usted en casi todo, pero mezcla "tú" en algunas cadenas y
+ * usa giros peninsulares. Clerk no tiene es-AR, así que se pisan solo las
  * cadenas que se ven en los flujos que usamos — el resto queda en esES.
  *
  * Sin anotación de tipo a propósito: `@clerk/types` está deprecado en Core 3 y
@@ -16,8 +16,8 @@ export const esAR = {
   ...esES,
 
   formFieldLabel__emailAddress: "Correo electrónico",
-  formFieldInputPlaceholder__emailAddress: "Ingresá tu correo electrónico",
-  formFieldInputPlaceholder__password: "Ingresá tu contraseña",
+  formFieldInputPlaceholder__emailAddress: "Ingrese su correo electrónico",
+  formFieldInputPlaceholder__password: "Ingrese su contraseña",
   formFieldLabel__firstName: "Nombre",
   formFieldLabel__lastName: "Apellido",
 
@@ -25,10 +25,10 @@ export const esAR = {
     ...esES.signIn,
     start: {
       ...esES.signIn?.start,
-      title: "Ingresá",
+      title: "Ingresar",
       subtitle: "para continuar a {{applicationName}}",
-      actionText: "¿No tenés cuenta?",
-      actionLink: "Registrate",
+      actionText: "¿No tiene cuenta?",
+      actionLink: "Regístrese",
     },
     password: {
       ...esES.signIn?.password,
@@ -40,10 +40,10 @@ export const esAR = {
     ...esES.signUp,
     start: {
       ...esES.signUp?.start,
-      title: "Creá tu cuenta",
+      title: "Cree su cuenta",
       subtitle: "para continuar a {{applicationName}}",
-      actionText: "¿Ya tenés cuenta?",
-      actionLink: "Ingresá",
+      actionText: "¿Ya tiene cuenta?",
+      actionLink: "Ingrese",
     },
   },
 

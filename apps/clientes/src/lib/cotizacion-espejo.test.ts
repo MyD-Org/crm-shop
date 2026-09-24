@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 
 /**
@@ -26,9 +26,14 @@ const precios = [
 ];
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   getItem.mockReset();
   filas = [];
   grabadora = dbGrabadora(() => filas);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("cotizar", () => {
@@ -74,5 +79,39 @@ describe("cotizar", () => {
     expect(c.lineas.map((l) => l.problema)).toEqual(["no_encontrado", "inactivo", "stock_insuficiente"]);
     expect(c.hayProblemas).toBe(true);
     expect(c.total).toBe(0);
+  });
+
+  it("stock, precios y estado salen de la fuente más fresca (vista del CRM o espejo del Shop)", async () => {
+    filas = [["10", "COD-10", null, null, precios, "8", "21", "active", null]];
+    await cotizar([{ id: "10", qty: 1 }]);
+    const [{ sql, params }] = grabadora.consultas;
+    const join = sql.match(
+      /left join "public"\."catalog_products_shop" on \("catalog_products_shop"\."alegra_id" = "shop"\."catalog_products"\."alegra_id" and "catalog_products_shop"\."tenant_id" = \$(\d+)\)/,
+    );
+    expect(join, sql).not.toBeNull();
+    expect(params[Number(join![1]) - 1]).toBe("tenant-test");
+    expect(sql).toContain('then "catalog_products_shop"."stock" else "shop"."catalog_products"."stock" end');
+    expect(sql).toContain('then "catalog_products_shop"."precios_alegra" else "shop"."catalog_products"."prices" end');
+    expect(sql).toContain('then "catalog_products_shop"."activo" else "shop"."catalog_products"."status" = \'active\' end');
+    // Nombre, marca e IVA siguen siendo del espejo del Shop.
+    expect(sql).toContain('"shop"."catalog_products"."iva_porcentaje"');
+  });
+
+  it("precios crudos de Alegra (los del CRM) resuelven la lista del cliente y la principal", async () => {
+    const crudos = [
+      { idPriceList: 1, name: "General", price: "1000", main: true },
+      { idPriceList: 7, name: "Mayorista", price: 800 },
+    ];
+    filas = [["10", "COD-10", null, null, crudos, "8", "21", "active", null]];
+    const [principal] = (await cotizar([{ id: "10", qty: 1 }])).lineas;
+    const [mayorista] = (await cotizar([{ id: "10", qty: 1 }], { idPriceList: "7" })).lineas;
+    expect(principal).toMatchObject({ precioUnitario: 1000, stockDisponible: 8 });
+    expect(mayorista.precioUnitario).toBe(800);
+  });
+
+  it("estado inactivo del CRM → la línea sale como inactiva", async () => {
+    filas = [["10", "COD-10", null, null, precios, "8", "21", "inactive", null]];
+    const [linea] = (await cotizar([{ id: "10", qty: 1 }])).lineas;
+    expect(linea.problema).toBe("inactivo");
   });
 });

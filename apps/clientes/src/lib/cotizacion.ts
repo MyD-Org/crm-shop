@@ -5,8 +5,9 @@
  * navegador manda `{ id, qty }` y nada más: si el precio viaja desde el
  * cliente, el precio se edita desde el cliente.
  *
- * Fuente: el espejo del catálogo (`catalog_products`). Los precios que valen
- * son los que publica la tienda: el carrito, el checkout y el pedido usan el
+ * Fuente: el espejo del catálogo (`catalog_products`), con stock, precios y
+ * estado de la fuente más fresca entre ese espejo y la vista del CRM (ver
+ * `stock-disponible.ts`). Los precios que valen son los que publica la tienda: el carrito, el checkout y el pedido usan el
  * mismo número, en una sola consulta y sin llamadas a Alegra (decisión
  * 2026-09-23). Antes era una llamada a Alegra por línea en cada cambio de
  * cantidad: lento, y un riesgo para el rate limit de la cuenta.
@@ -17,14 +18,16 @@
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { catalogCategories, catalogProducts } from "@/db/schema";
+import { crmStock } from "@/db/crm";
 import {
   esIdAlegra,
   ivaDeItem,
+  mapPrecios,
   marcaDeCustomFields,
   resolverPrecio,
   type AlegraItem,
-  type AlegraPrice,
 } from "./alegra";
+import { estadoSql, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
 import { costoEnvio, type EntregaTipo } from "./envio";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
 
@@ -188,6 +191,8 @@ export interface FilaEspejo {
  *
  * - IVA null en el espejo → sin `tax`, y `ivaDeItem` cae a `IVA_DEFAULT`.
  * - Stock null → ítem no inventariable (siempre disponible).
+ * - Precios: pasan por `mapPrecios` porque pueden venir crudos del CRM (ids
+ *   numéricos); sobre los del espejo del Shop no cambia nada.
  */
 export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
   return {
@@ -195,7 +200,7 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
     name: fila.name,
     reference: fila.code ?? undefined,
     status: fila.status === "active" ? "active" : "inactive",
-    price: Array.isArray(fila.prices) ? (fila.prices as AlegraPrice[]) : [],
+    price: mapPrecios(fila.prices),
     tax:
       fila.ivaPorcentaje != null
         ? [{ percentage: Number(fila.ivaPorcentaje) }]
@@ -207,7 +212,13 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
   };
 }
 
-/** Una consulta para todas las líneas. Si la base falla, tira: no hay total. */
+/**
+ * Una consulta para todas las líneas. Si la base falla, tira: no hay total.
+ *
+ * Stock, precios y estado salen de la misma elección por fila (CRM o Shop) que
+ * usan el catálogo y la ficha: lo que el visitante vio es lo que se cotiza, y
+ * `POST /api/pedidos` valida y calcula con esta misma cotización.
+ */
 async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
   if (ids.length === 0) return new Map();
   const filas: FilaEspejo[] = await getDb()
@@ -216,10 +227,10 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
       name: catalogProducts.name,
       code: catalogProducts.code,
       brand: catalogProducts.brand,
-      prices: catalogProducts.prices,
-      stock: catalogProducts.stock,
+      prices: preciosSql,
+      stock: stockSql,
       ivaPorcentaje: catalogProducts.ivaPorcentaje,
-      status: catalogProducts.status,
+      status: estadoSql,
       categoryName: catalogCategories.name,
     })
     .from(catalogProducts)
@@ -227,6 +238,7 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
       catalogCategories,
       eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId),
     )
+    .leftJoin(crmStock, joinStockCrm())
     .where(inArray(catalogProducts.alegraId, ids));
   return new Map(filas.map((f) => [f.alegraId, itemDesdeEspejo(f)]));
 }

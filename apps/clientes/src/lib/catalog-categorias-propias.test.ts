@@ -126,7 +126,7 @@ describe("menú (getCategorias)", () => {
     grabadora = conArbol();
     await getCategorias();
     const conteo = grabadora.consultas.find(esConteoPorCategoria);
-    expect(conteo?.sql).toContain('"shop"."catalog_products"."status" = $');
+    expect(conteo?.sql).toContain(`then "catalog_products_shop"."activo" else "shop"."catalog_products"."status" = 'active' end`);
     expect(conteo?.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
   });
 });

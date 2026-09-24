@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState, useSyncExternalStore } from "react";
+import { QTY_MAX, type CartItem } from "@/lib/carrito-cliente";
 
 /**
  * Carrito del cliente, persistido en localStorage.
@@ -17,19 +18,9 @@ import { createContext, useCallback, useContext, useState, useSyncExternalStore 
  * render del cliente, y encima dos pestañas abiertas se pisan el carrito.
  */
 
-export interface CartItem {
-  id: string;
-  name: string;
-  brand: string;
-  variant?: string;
-  /** Referencial, para mostrar mientras llega la cotización real. */
-  price: number;
-  qty: number;
-}
+export type { CartItem };
 
 const STORAGE_KEY = "centralled.carrito.v1";
-/** Tope duro de unidades por línea. Coincide con QTY_MAX del servidor. */
-const QTY_MAX = 9_999;
 
 /** Constante estable: devolver `[]` nuevo en cada snapshot es un loop infinito. */
 const VACIO: CartItem[] = [];

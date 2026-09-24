@@ -26,6 +26,7 @@ import {
   type AlegraPrice,
 } from "./alegra";
 import { costoEnvio, type EntregaTipo } from "./envio";
+import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
 
 /** Lo único que el cliente tiene derecho a elegir. */
 export interface LineaPedida {
@@ -69,10 +70,10 @@ export interface Cotizacion {
   hayProblemas: boolean;
 }
 
-/** Máximo de unidades por línea. Freno a un `qty` absurdo o negativo. */
-const QTY_MAX = 9_999;
-/** Techo de líneas por pedido. */
-export const MAX_LINEAS = 60;
+// Máximo de unidades por línea y techo de líneas por pedido: los mismos del
+// carrito, definidos en el módulo puro (este importa la base). MAX_LINEAS se
+// re-exporta porque lo importan las rutas de pedidos y de cotizar.
+export { MAX_LINEAS };
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 

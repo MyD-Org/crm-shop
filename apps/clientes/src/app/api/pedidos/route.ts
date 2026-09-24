@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
-import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
+import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
 import {
   evaluarEnvio,
   pagosDisponibles,
@@ -8,6 +8,7 @@ import {
   type PagoMetodo,
 } from "@/lib/envio";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
+import { StockInsuficienteError } from "@/lib/stock-disponible";
 import { admiteEnvio, domicilioEnLinea } from "@/lib/facturacion";
 import { envioHabilitado } from "@/lib/envio-flag";
 import {
@@ -70,6 +71,16 @@ const CLAVE_VALIDA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const cuotasParaCliente = async (cuotasMax: number | null) =>
   (await cuotasHabilitadas()) ? cuotasMax : null;
 
+/** 409 con la cotización para que el checkout marque qué línea cambió. */
+const productosCambiaron = (cotizacion: Cotizacion) =>
+  NextResponse.json(
+    {
+      error: "Algunos productos cambiaron. Revise el detalle antes de confirmar.",
+      cotizacion,
+    },
+    { status: 409 },
+  );
+
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 
@@ -120,18 +131,21 @@ export async function POST(req: Request) {
    * No es la garantía contra duplicados: eso lo hace el índice único dentro de
    * `crearPedido`. Dos requests simultáneos pasarían los dos por este chequeo.
    */
-  if (idempotencyKey) {
+  const pedidoYaCreado = async () => {
+    if (!idempotencyKey) return null;
     const yaCreado = await getPedidoPorClave(idempotencyKey, {
       clerkUserId,
       clienteCodigo: cliente?.codigocliente,
     });
-    if (yaCreado) {
-      return NextResponse.json(
-        { ...yaCreado, cuotasMax: await cuotasParaCliente(yaCreado.cuotasMax), repetido: true },
-        { status: 200 },
-      );
-    }
-  }
+    return yaCreado
+      ? NextResponse.json(
+          { ...yaCreado, cuotasMax: await cuotasParaCliente(yaCreado.cuotasMax), repetido: true },
+          { status: 200 },
+        )
+      : null;
+  };
+  const yaCreado = await pedidoYaCreado();
+  if (yaCreado) return yaCreado;
 
   if (!contactoNombre || !contactoTelefono) {
     return NextResponse.json(
@@ -187,7 +201,7 @@ export async function POST(req: Request) {
   if (!perfilCompleto(perfil)) {
     return NextResponse.json(
       {
-        error: "Antes de comprar necesitamos tus datos de facturación.",
+        error: "Antes de comprar necesitamos sus datos de facturación.",
         motivo: "facturacion_incompleta",
       },
       { status: 409 },
@@ -217,13 +231,12 @@ export async function POST(req: Request) {
     // Nada se persiste si hay una sola línea con problema: se devuelve la
     // cotización entera para que el checkout marque exactamente cuál falla.
     if (cotizacion.hayProblemas) {
-      return NextResponse.json(
-        {
-          error: "Algunos productos cambiaron. Revise el detalle antes de confirmar.",
-          cotizacion,
-        },
-        { status: 409 },
-      );
+      // Un reintento cuyo primer intento se terminó de crear DESPUÉS del atajo
+      // de arriba ve la reserva de ese mismo pedido y cotiza sin stock: si la
+      // clave ya tiene pedido, es ése y no un 409.
+      const creadoEnElMedio = await pedidoYaCreado();
+      if (creadoEnElMedio) return creadoEnElMedio;
+      return productosCambiaron(cotizacion);
     }
 
     const envio = evaluarEnvio(cotizacion.subtotal, entregaCiudad);
@@ -247,50 +260,59 @@ export async function POST(req: Request) {
     }
     const plan = planParaPedido(pagoMetodo, cotizacion.total, oferta);
 
-    const pedido = await crearPedido(
-      {
-        clerkUserId,
-        codigo: cliente?.codigocliente,
-        razonSocial: cliente?.razonsocial,
-        cuit: cliente?.cuit,
-        /**
-         * El email del contacto de Alegra, y si no hay, el de la cuenta con la
-         * que entró.
-         *
-         * Antes era solo el de Alegra, así que quien NO vinculó cuenta corriente
-         * —o sea casi todo el mundo— quedaba con `cliente_email` en null. Eso
-         * después rompe el cobro: Mercado Pago exige `payer.email` y responde
-         * "Params Error" sin decir cuál falta.
-         */
-        email: cliente?.email ?? email,
-        idPriceList,
-      },
-      {
-        contactoNombre,
-        contactoTelefono,
-        entregaTipo,
-        entregaCiudad: entregaCiudad || undefined,
-        entregaDireccion: entregaDireccion || undefined,
-        pagoMetodo,
-        notas: texto(body.notas, 500) || undefined,
-        facturacion: perfil
-          ? {
-              tipoDoc: perfil.tipoDoc,
-              nroDoc: perfil.nroDoc,
-              razonSocial: perfil.razonSocial,
-              condicionIva: perfil.condicionIva,
-              domicilio: domicilioEnLinea(perfil) || undefined,
-            }
-          : undefined,
-        // El documento coincide con un contacto de Alegra que este usuario NO
-        // vinculó: un operador debe revisarlo antes de facturar, para no crear
-        // un cliente duplicado con el mismo CUIT.
-        requiereRevision: Boolean(perfil?.coincideConAlegra) && !cliente,
-        idempotencyKey: idempotencyKey || undefined,
-      },
-      cotizacion,
-      plan,
-    );
+    let pedido: Awaited<ReturnType<typeof crearPedido>>;
+    try {
+      pedido = await crearPedido(
+        {
+          clerkUserId,
+          codigo: cliente?.codigocliente,
+          razonSocial: cliente?.razonsocial,
+          cuit: cliente?.cuit,
+          /**
+           * El email del contacto de Alegra, y si no hay, el de la cuenta con la
+           * que entró.
+           *
+           * Antes era solo el de Alegra, así que quien NO vinculó cuenta corriente
+           * —o sea casi todo el mundo— quedaba con `cliente_email` en null. Eso
+           * después rompe el cobro: Mercado Pago exige `payer.email` y responde
+           * "Params Error" sin decir cuál falta.
+           */
+          email: cliente?.email ?? email,
+          idPriceList,
+        },
+        {
+          contactoNombre,
+          contactoTelefono,
+          entregaTipo,
+          entregaCiudad: entregaCiudad || undefined,
+          entregaDireccion: entregaDireccion || undefined,
+          pagoMetodo,
+          notas: texto(body.notas, 500) || undefined,
+          facturacion: perfil
+            ? {
+                tipoDoc: perfil.tipoDoc,
+                nroDoc: perfil.nroDoc,
+                razonSocial: perfil.razonSocial,
+                condicionIva: perfil.condicionIva,
+                domicilio: domicilioEnLinea(perfil) || undefined,
+              }
+            : undefined,
+          // El documento coincide con un contacto de Alegra que este usuario NO
+          // vinculó: un operador debe revisarlo antes de facturar, para no crear
+          // un cliente duplicado con el mismo CUIT.
+          requiereRevision: Boolean(perfil?.coincideConAlegra) && !cliente,
+          idempotencyKey: idempotencyKey || undefined,
+        },
+        cotizacion,
+        plan,
+      );
+    } catch (err) {
+      if (!(err instanceof StockInsuficienteError)) throw err;
+      // Otro checkout se llevó las unidades entre la cotización y el pedido (la
+      // transacción ya se deshizo). Se re-cotiza, que ya descuenta su reserva,
+      // para que el checkout marque qué línea no alcanza.
+      return productosCambiaron(await cotizar(lineas, { idPriceList, entregaTipo }));
+    }
 
     // El perfil aprende el teléfono del primer pedido, para no pedirlo en la
     // próxima compra. Va DESPUÉS de crear el pedido y nunca lo hace fallar: el
@@ -313,7 +335,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[/api/pedidos] POST error:", err);
     return NextResponse.json(
-      { error: "No pudimos registrar el pedido. Probá de nuevo en un momento." },
+      { error: "No pudimos registrar el pedido. Inténtelo de nuevo en un momento." },
       { status: 500 },
     );
   }

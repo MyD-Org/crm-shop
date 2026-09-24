@@ -36,6 +36,7 @@ import {
   resumenPedidos,
   type DatosPedido,
 } from "./pedidos";
+import { StockInsuficienteError } from "./stock-disponible";
 import { setFlag } from "@/test/flags";
 
 const DUENO = { clerkUserId: "user_1", clienteCodigo: "C-1" };
@@ -164,11 +165,19 @@ describe("el motivo interno de cancelación no llega al cliente", () => {
   });
 });
 
+/** Filas de la relectura del disponible dentro de `crearPedido`. */
+const esRelecturaStock = (c: ConsultaGrabada) =>
+  c.sql.startsWith("select") && c.sql.includes('"shop"."stock_reservado"');
+/** Pedido nuevo (el insert devuelve fila) y disponible de sobra para el ítem 7. */
+const nuevoConStock = (disponible: string | null = "10") => (c: ConsultaGrabada) => {
+  if (c.sql.startsWith('insert into "shop"."orders"')) return [[ID, 1000, null]];
+  if (esRelecturaStock(c)) return [["7", disponible]];
+  return [];
+};
+
 describe("crearPedido", () => {
   it("sella tenant_id desde el entorno, no desde los datos recibidos", async () => {
-    grabadora = dbGrabadora((c) =>
-      c.sql.startsWith('insert into "shop"."orders"') ? [[ID, 1000, null]] : [],
-    );
+    grabadora = dbGrabadora(nuevoConStock());
     // Un body malicioso podría traer `tenantId`: aunque llegara hasta acá, no
     // tiene que influir en lo que se guarda.
     const conTenantAjeno = { ...datos, tenantId: "tenant-b" } as DatosPedido;
@@ -182,9 +191,7 @@ describe("crearPedido", () => {
   });
 
   it("un pedido nuevo nace sin auditoría ni motivo de cancelación", async () => {
-    grabadora = dbGrabadora((c) =>
-      c.sql.startsWith('insert into "shop"."orders"') ? [[ID, 1000, null]] : [],
-    );
+    grabadora = dbGrabadora(nuevoConStock());
     await crearPedido({ clerkUserId: "user_1" }, datos, cotizacion);
 
     const valores = valoresInsertados(grabadora.consultas[0]);
@@ -218,8 +225,7 @@ describe("crearPedido", () => {
 });
 
 describe("crearPedido vacía el carrito del servidor", () => {
-  const nuevo = (c: ConsultaGrabada) =>
-    c.sql.startsWith('insert into "shop"."orders"') ? [[ID, 1000, null]] : [];
+  const nuevo = nuevoConStock();
   const vaciados = () =>
     grabadora.consultas.filter((c) => c.sql.startsWith('update "shop"."carts"'));
 
@@ -230,6 +236,8 @@ describe("crearPedido vacía el carrito del servidor", () => {
     const tablas = grabadora.consultas.map((c) => c.sql.split(" ").slice(0, 3).join(" "));
     expect(tablas).toEqual([
       'insert into "shop"."orders"',
+      "select pg_advisory_xact_lock(k) from",
+      'select "shop"."catalog_products"."alegra_id", (case',
       'insert into "shop"."order_items"',
       'update "shop"."carts" set',
     ]);
@@ -264,6 +272,103 @@ describe("crearPedido vacía el carrito del servidor", () => {
     });
     await expect(crearPedido({ clerkUserId: "user_1" }, datos, cotizacion)).rejects.toThrow();
     expect(vaciados()).toEqual([]);
+  });
+});
+
+describe("crearPedido no vende más de lo disponible", () => {
+  /** Dos líneas, en orden inverso al de los ids, para ver que los locks se ordenan. */
+  const dosLineas = {
+    ...cotizacion,
+    lineas: [
+      { ...cotizacion.lineas[0], id: "9", qty: 1 },
+      { ...cotizacion.lineas[0], id: "10", qty: 3 },
+    ],
+  } as unknown as Cotizacion;
+  const locks = () => grabadora.consultas.filter((c) => c.sql.startsWith("select pg_advisory_xact_lock"));
+  const lineasEscritas = () =>
+    grabadora.consultas.filter((c) => c.sql.startsWith('insert into "shop"."order_items"'));
+
+  it("toma un lock de transacción por ítem, con el tenant, ordenado por clave, antes de releer", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.startsWith('insert into "shop"."orders"')) return [[ID, 1000, null]];
+      if (esRelecturaStock(c)) return [["9", "1"], ["10", "3"]];
+      return [];
+    });
+    await crearPedido({ clerkUserId: "user_1" }, datos, dosLineas);
+
+    expect(locks()).toHaveLength(1);
+    const [l] = locks();
+    // Un solo statement: claves distintas, ordenadas, y el lock se evalúa
+    // DESPUÉS del sort (Postgres posterga las funciones volátiles de la salida).
+    expect(l.sql).toMatch(
+      /^select pg_advisory_xact_lock\(k\) from \(select distinct hashtextextended\('shop-stock:' \|\| \$1 \|\| ':' \|\| t\.id, 0\) as k from unnest\(array\[\$2, \$3\]::text\[\]\) as t\(id\)\) as claves order by k$/,
+    );
+    expect(l.params).toEqual(["tenant-a", "10", "9"]);
+
+    // Orden: pedido → locks → relectura → líneas.
+    const i = (c: ConsultaGrabada) => grabadora.consultas.indexOf(c);
+    const relectura = grabadora.consultas.find(esRelecturaStock)!;
+    expect(i(l)).toBeLessThan(i(relectura));
+    expect(i(relectura)).toBeLessThan(i(lineasEscritas()[0]));
+  });
+
+  it("si otro checkout se llevó las unidades: StockInsuficienteError y no escribe líneas", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.startsWith('insert into "shop"."orders"')) return [[ID, 1000, null]];
+      if (esRelecturaStock(c)) return [["9", "1"], ["10", "2"]];
+      return [];
+    });
+    const err = await crearPedido({ clerkUserId: "user_1" }, datos, dosLineas).catch((e) => e);
+    expect(err).toBeInstanceOf(StockInsuficienteError);
+    expect((err as StockInsuficienteError).ids).toEqual(["10"]);
+    expect(lineasEscritas()).toEqual([]);
+    expect(grabadora.consultas.some((c) => c.sql.startsWith('update "shop"."carts"'))).toBe(false);
+  });
+
+  it("un ítem que ya no está en el espejo cuenta como sin stock", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.startsWith('insert into "shop"."orders"')) return [[ID, 1000, null]];
+      if (esRelecturaStock(c)) return [["10", "5"]];
+      return [];
+    });
+    const err = await crearPedido({ clerkUserId: "user_1" }, datos, dosLineas).catch((e) => e);
+    expect((err as StockInsuficienteError).ids).toEqual(["9"]);
+  });
+
+  it("disponible null (no inventariable) no limita", async () => {
+    grabadora = dbGrabadora(nuevoConStock(null));
+    const r = await crearPedido({ clerkUserId: "user_1" }, datos, cotizacion);
+    expect(r.repetido).toBe(false);
+    expect(lineasEscritas()).toHaveLength(1);
+  });
+
+  it("disponible justo igual a lo pedido alcanza", async () => {
+    grabadora = dbGrabadora(nuevoConStock("2"));
+    await crearPedido({ clerkUserId: "user_1" }, datos, cotizacion);
+    expect(lineasEscritas()).toHaveLength(1);
+  });
+
+  it("la misma línea repetida suma sus cantidades", async () => {
+    const repetida = {
+      ...cotizacion,
+      lineas: [cotizacion.lineas[0], cotizacion.lineas[0]],
+    } as unknown as Cotizacion;
+    grabadora = dbGrabadora(nuevoConStock("3"));
+    await expect(crearPedido({ clerkUserId: "user_1" }, datos, repetida)).rejects.toBeInstanceOf(
+      StockInsuficienteError,
+    );
+    const [l] = locks();
+    expect(l.params).toEqual(["tenant-a", "7"]);
+  });
+
+  it("reintento idempotente: devuelve el pedido original sin locks ni relectura (su reserva ya cuenta)", async () => {
+    grabadora = dbGrabadora((c) =>
+      c.sql.startsWith("select") && c.sql.includes('"shop"."orders"') ? [[ID, 1000, null]] : [],
+    );
+    const r = await crearPedido({ clerkUserId: "user_1" }, datos, cotizacion);
+    expect(r).toMatchObject({ id: ID, repetido: true });
+    expect(locks()).toEqual([]);
+    expect(grabadora.consultas.some(esRelecturaStock)).toBe(false);
   });
 });
 

@@ -22,6 +22,7 @@ import {
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
 import { vaciarCarritoTx } from "./carrito-db";
+import { disponiblesEnTx, StockInsuficienteError } from "./stock-disponible";
 import type { Cotizacion } from "./cotizacion";
 import type { PlanPedido } from "./pagos/cuotas-tipos";
 import {
@@ -94,6 +95,14 @@ export interface DatosPedido {
  * Un pedido nuevo de un usuario de Clerk vacía su carrito del servidor
  * (`shop.carts`) dentro de la misma transacción. Los ítems del pedido salen de
  * `cotizacion` (el body del request), nunca de ese carrito.
+ *
+ * GUARDA DE SOBREVENTA: la cotización se leyó antes de la transacción, y otro
+ * checkout pudo llevarse las unidades en el medio. Por eso un pedido NUEVO, antes
+ * de escribir sus líneas, toma un lock de transacción por ítem y relee el
+ * disponible (stock − reservado) con la misma expresión que el catálogo. Si no
+ * alcanza, tira `StockInsuficienteError` y la transacción se deshace entera. Ver
+ * `bloquearItems`. El reintento idempotente no se revalida: sus líneas ya están
+ * escritas y su reserva ya cuenta.
  */
 export async function crearPedido(
   cliente: DatosCliente,
@@ -185,6 +194,20 @@ export async function crearPedido(
       };
     }
 
+    // Pedido nuevo: todavía sin líneas, así que no se cuenta a sí mismo en la
+    // reserva que se relee acá.
+    const pedidasPorItem = new Map<string, number>();
+    for (const l of lineas) pedidasPorItem.set(l.id, (pedidasPorItem.get(l.id) ?? 0) + l.qty);
+    const ids = [...pedidasPorItem.keys()].sort();
+    await bloquearItems(tx, ids);
+    const disponibles = await disponiblesEnTx(tx, ids);
+    const faltan = ids.filter((id) => {
+      if (!disponibles.has(id)) return true; // ya no está en el espejo
+      const disponible = disponibles.get(id);
+      return disponible != null && disponible < pedidasPorItem.get(id)!;
+    });
+    if (faltan.length > 0) throw new StockInsuficienteError(faltan);
+
     await tx.insert(orderItems).values(
       lineas.map((l) => ({
         orderId: pedido.id,
@@ -215,6 +238,32 @@ export async function crearPedido(
       cuotasMax: pedido.cuotasMax,
     };
   });
+}
+
+/**
+ * Serializa, por ítem, los checkouts que compiten por el mismo stock.
+ *
+ * `pg_advisory_xact_lock` y no uno de sesión: la conexión pasa por el pooler de
+ * Neon en modo transacción, donde un lock de sesión puede quedar en otra
+ * conexión. El de transacción se suelta solo con el commit o el rollback. En
+ * READ COMMITTED, la relectura que sigue ve lo que commiteó el checkout que tuvo
+ * el lock antes: su pedido ya está reservando.
+ *
+ * Un solo statement con las claves ORDENADAS: dos carritos con los mismos ítems
+ * en distinto orden piden los locks en el mismo orden y no se bloquean entre sí.
+ * Se ordena por la clave (y no por el id) para que una colisión del hash tampoco
+ * invierta el orden. Postgres evalúa las funciones volátiles de la salida
+ * después del `order by`, así que los locks se toman en ese orden.
+ */
+async function bloquearItems(tx: Pick<ReturnType<typeof getDb>, "execute">, ids: string[]) {
+  if (ids.length === 0) return;
+  const lista = sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(k) from (select distinct hashtextextended('shop-stock:' || ${shopTenantId()} || ':' || t.id, 0) as k from unnest(array[${lista}]::text[]) as t(id)) as claves order by k`,
+  );
 }
 
 /**

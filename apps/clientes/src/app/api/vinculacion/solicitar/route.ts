@@ -41,7 +41,9 @@ export async function POST(req: Request) {
         ? 429
         : resultado.motivo === "servicio_caido"
           ? 503
-          : 400;
+          : resultado.motivo === "vinculada_a_otro"
+            ? 409
+            : 400;
     return NextResponse.json(
       { error: resultado.detalle, motivo: resultado.motivo },
       { status },

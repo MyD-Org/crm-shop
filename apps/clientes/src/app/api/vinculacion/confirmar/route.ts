@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { confirmarVinculacion } from "@/lib/vinculacion";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,15 @@ export async function POST(req: Request) {
   }
 
   const codigo = typeof body.codigo === "string" ? body.codigo.trim() : "";
-  const resultado = await confirmarVinculacion(userId, codigo);
+  // Solo un email VERIFICADO se anota en las observaciones del contacto de
+  // Alegra (ver `registrarEmailAlternativo`): uno sin verificar no prueba que
+  // esta persona lo use.
+  const user = await currentUser();
+  const primario = user?.primaryEmailAddress;
+  const emailVerificado =
+    primario?.verification?.status === "verified" ? primario.emailAddress : undefined;
+
+  const resultado = await confirmarVinculacion(userId, codigo, emailVerificado);
 
   if (!resultado.ok) {
     return NextResponse.json({ error: resultado.detalle }, { status: 400 });

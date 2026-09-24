@@ -85,7 +85,11 @@ function segmentoId(id: string): string {
  * errores que el resto del Shop. Un error de Alegra se lanza como
  * `Error("Alegra <status> en <path>: …")`.
  */
-export async function apiFetch<T>(path: string, params: QueryParams = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  params: QueryParams = {},
+  init: { method?: "GET" | "PUT"; body?: unknown } = {},
+): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`);
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) url.searchParams.set(key, String(value));
@@ -94,6 +98,8 @@ export async function apiFetch<T>(path: string, params: QueryParams = {}): Promi
   let res: Response;
   for (let intento = 0; ; intento++) {
     res = await fetch(url, {
+      method: init.method ?? "GET",
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
       headers: {
         Authorization: authHeader(),
         Accept: "application/json",
@@ -266,6 +272,24 @@ export function getContactos(params?: QueryParams) {
 
 export async function getContacto(id: string) {
   return apiFetch<AlegraContact>(`/contacts/${segmentoId(id)}`);
+}
+
+/**
+ * Reemplaza las observaciones de un contacto (PUT /contacts/{id} con SOLO ese
+ * campo; Alegra no toca lo que no viene en el body).
+ *
+ * Es la ÚNICA escritura del Shop sobre un contacto de Alegra. Ver
+ * `registrarEmailAlternativo` en vinculacion.ts para el porqué.
+ *
+ * Ojo: `/contacts` tiene un tope propio y al pasarse responde 400 con
+ * `{"code":429}` en el body (no un 429), así que ese caso NO se reintenta y
+ * llega como error. Quien llama tiene que fallar en silencio.
+ */
+export async function actualizarObservacionesContacto(id: string, observations: string) {
+  return apiFetch<AlegraContact>(`/contacts/${segmentoId(id)}`, {}, {
+    method: "PUT",
+    body: { observations },
+  });
 }
 
 /** Solo dígitos: "20-12345678-9" y "20.123.456.789" son el mismo documento. */

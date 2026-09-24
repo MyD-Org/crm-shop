@@ -24,10 +24,12 @@
  */
 
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, ne, sql } from "drizzle-orm";
+import { after } from "next/server";
 import { getDb } from "@/db";
 import { clientLinks, linkOtps } from "@/db/schema";
 import {
+  actualizarObservacionesContacto,
   buscarContactoPorIdentificacion,
   buscarContactosPorEmail,
   esCliente,
@@ -108,6 +110,56 @@ function snapshotDelContacto(c: ContactoVinculable | null) {
     idPriceList: idPriceListUsable(c) ?? null,
     tipoCuenta: c?.tipoCuenta ?? "contado",
   };
+}
+
+/**
+ * Un cliente de Alegra se vincula a UN solo usuario de la tienda (decisión de
+ * negocio): la cuenta corriente, la lista de precios y el historial de una
+ * empresa no se reparten entre varias cuentas de acceso. Si hace falta cambiar
+ * de usuario, lo resuelve la sucursal revocando el vínculo anterior.
+ */
+export const MENSAJE_VINCULADA_A_OTRO =
+  "Esta cuenta ya está vinculada a otro usuario de la tienda. Comuníquese con la sucursal.";
+
+/**
+ * ¿El contacto ya tiene un vínculo activo de OTRO usuario? Solo base: no gasta
+ * requests de Alegra.
+ */
+async function vinculadoAOtroUsuario(
+  db: ReturnType<typeof getDb>,
+  alegraContactId: string,
+  clerkUserId: string,
+): Promise<boolean> {
+  const [otro] = await db
+    .select({ id: clientLinks.id })
+    .from(clientLinks)
+    .where(
+      and(
+        eq(clientLinks.alegraContactId, alegraContactId),
+        eq(clientLinks.estado, "activa"),
+        ne(clientLinks.clerkUserId, clerkUserId),
+      ),
+    )
+    .limit(1);
+  return Boolean(otro);
+}
+
+/**
+ * Los inserts de vínculos activos apuntan el `on conflict` SOLO al índice del
+ * usuario (`cl_user_activa`): la carrera del mismo usuario consigo mismo es
+ * inocua y se absorbe. El índice del contacto (`cl_contacto_activa`) queda
+ * afuera a propósito, así un segundo usuario que gana la carrera al chequeo
+ * explota con 23505 y se le explica, en vez de quedar "vinculado" en silencio.
+ */
+const conflictoDelUsuario = {
+  target: clientLinks.clerkUserId,
+  where: sql`"estado" = 'activa'`,
+};
+
+/** ¿Es la violación de unicidad de Postgres? drizzle la envuelve en `cause`. */
+function esViolacionUnica(err: unknown): boolean {
+  const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
+  return e?.code === "23505" || e?.cause?.code === "23505";
 }
 
 /**
@@ -209,6 +261,15 @@ export async function intentarVinculacionPorEmail(
   }
 
   const contacto = clientes[0];
+
+  // El contacto ya es de otro usuario: no se vincula, y tampoco se graba
+  // `sin_coincidencia` — esa marca es para siempre y esto puede cambiar (la
+  // sucursal revoca el otro vínculo). Se vuelve a mirar en la próxima visita,
+  // contra el espejo casi siempre (0 requests).
+  if (await vinculadoAOtroUsuario(db, String(contacto.id), clerkUserId)) {
+    return null;
+  }
+
   /**
    * El chequeo de `existente` de arriba y este insert NO son atómicos, y
    * `identidadActual()` corre en el layout, en la página y en las rutas de API
@@ -220,17 +281,25 @@ export async function intentarVinculacionPorEmail(
    * Que gane cualquiera de las dos es indistinto: insertan lo mismo. Quien
    * llama relee el vínculo (`resolverVinculacion`), así que el perdedor de la
    * carrera igual devuelve la fila correcta.
+   *
+   * Si la carrera la perdió contra OTRO usuario que tomó el mismo contacto,
+   * tira `cl_contacto_activa`: mismo trato que el chequeo de arriba.
    */
-  await db
-    .insert(clientLinks)
-    .values({
-      clerkUserId,
-      alegraContactId: String(contacto.id),
-      ...snapshotDelContacto(contacto),
-      estado: "activa",
-      metodo: "email_verificado",
-    })
-    .onConflictDoNothing();
+  try {
+    await db
+      .insert(clientLinks)
+      .values({
+        clerkUserId,
+        alegraContactId: String(contacto.id),
+        ...snapshotDelContacto(contacto),
+        estado: "activa",
+        metodo: "email_verificado",
+      })
+      .onConflictDoNothing(conflictoDelUsuario);
+  } catch (err) {
+    if (esViolacionUnica(err)) return null;
+    throw err;
+  }
 
   return { alegraContactId: String(contacto.id), razonSocial: contacto.name };
 }
@@ -239,7 +308,12 @@ export type ResultadoSolicitud =
   | { ok: true; expiraEn: number }
   | {
       ok: false;
-      motivo: "formato" | "ya_vinculada" | "rate_limit" | "servicio_caido";
+      motivo:
+        | "formato"
+        | "ya_vinculada"
+        | "vinculada_a_otro"
+        | "rate_limit"
+        | "servicio_caido";
       detalle: string;
     };
 
@@ -269,6 +343,8 @@ export type ResultadoSolicitud =
  *  - `formato`: el CUIT está mal escrito. Es sintaxis, no existencia.
  *  - `ya_vinculada` y `rate_limit`: hablan de la cuenta de QUIEN PREGUNTA.
  *  - `servicio_caido`: Alegra no responde. Pasa igual para cualquier CUIT.
+ *
+ * Y una excepción aceptada a sabiendas: `vinculada_a_otro` (ver más abajo).
  *
  * Queda un canal residual por tiempo de respuesta: encontrar el contacto y
  * mandar el mail tarda más que no encontrarlo. Cerrarlo del todo pide responder
@@ -366,6 +442,20 @@ export async function solicitarVinculacion(
   // A partir de acá, todo camino devuelve `uniforme`: cualquier diferencia
   // visible sería exactamente el dato que permite enumerar la cartera.
   if (!contacto) return uniforme;
+
+  /**
+   * Contacto ya vinculado a OTRO usuario: no se manda código (no serviría para
+   * vincular) y se le dice por qué.
+   *
+   * Es una EXCEPCIÓN consciente a la respuesta uniforme: confirma que ese
+   * documento es cliente y que ya usa la tienda. Se aceptó porque sin el aviso
+   * el dueño legítimo que cambió de usuario queda esperando un mail que no
+   * sirve; lo acota el límite de sondeos de arriba, y no revela ni el email ni
+   * la razón social.
+   */
+  if (await vinculadoAOtroUsuario(db, String(contacto.id), clerkUserId)) {
+    return { ok: false, motivo: "vinculada_a_otro", detalle: MENSAJE_VINCULADA_A_OTRO };
+  }
 
   const email = contacto.email?.trim();
   // Caso frecuente en esta cuenta de Alegra: contactos viejos sin email. No hay
@@ -567,6 +657,12 @@ export async function cancelarVinculacion(clerkUserId: string): Promise<void> {
 export async function confirmarVinculacion(
   clerkUserId: string,
   codigo: string,
+  /**
+   * Email VERIFICADO del usuario en Clerk (o nada). Si no es uno de los del
+   * contacto, se anota en sus observaciones de Alegra; ver
+   * `registrarEmailAlternativo`.
+   */
+  emailUsuario?: string,
 ): Promise<ResultadoConfirmacion> {
   const db = getDb();
   const valido = await validarCodigo(db, clerkUserId, codigo, MAX_INTENTOS + 1);
@@ -579,31 +675,46 @@ export async function confirmarVinculacion(
     return { ok: false, detalle: "No pudimos completar la vinculación. Inténtelo de nuevo en unos minutos." };
   }
 
-  const vinculado = await db.transaction(async (tx) => {
-    // El código se consume dentro de la transacción: si la vinculación falla,
-    // el código sigue vivo y el cliente no tiene que pedir otro.
-    await tx
-      .update(linkOtps)
-      .set({ consumedAt: new Date() })
-      .where(eq(linkOtps.id, otp.id));
+  // Entre pedir el código y confirmarlo, otro usuario pudo vincular el mismo
+  // contacto. El índice `cl_contacto_activa` lo impide igual; esto es para
+  // explicarlo sin gastar el código.
+  if (await vinculadoAOtroUsuario(db, otp.alegraContactId, clerkUserId)) {
+    return { ok: false, detalle: MENSAJE_VINCULADA_A_OTRO };
+  }
 
-    // `solicitarVinculacion` ya rechaza a quien tiene un vínculo activo, pero
-    // entre pedir el código y confirmarlo pudo crearse uno (el match automático
-    // por email, por ejemplo). Sin esto, el índice único parcial tira y el
-    // cliente ve un 500 en vez de enterarse de que ya está vinculado.
-    const filas = await tx
-      .insert(clientLinks)
-      .values({
-        clerkUserId,
-        alegraContactId: otp.alegraContactId,
-        ...snapshotDelContacto(contacto),
-        metodo: "otp_email",
-      })
-      .onConflictDoNothing()
-      .returning({ id: clientLinks.id });
+  let vinculado: boolean;
+  try {
+    vinculado = await db.transaction(async (tx) => {
+      // El código se consume dentro de la transacción: si la vinculación falla,
+      // el código sigue vivo y el cliente no tiene que pedir otro.
+      await tx
+        .update(linkOtps)
+        .set({ consumedAt: new Date() })
+        .where(eq(linkOtps.id, otp.id));
 
-    return filas.length > 0;
-  });
+      // `solicitarVinculacion` ya rechaza a quien tiene un vínculo activo, pero
+      // entre pedir el código y confirmarlo pudo crearse uno (el match automático
+      // por email, por ejemplo). Sin esto, el índice único parcial tira y el
+      // cliente ve un 500 en vez de enterarse de que ya está vinculado.
+      const filas = await tx
+        .insert(clientLinks)
+        .values({
+          clerkUserId,
+          alegraContactId: otp.alegraContactId,
+          ...snapshotDelContacto(contacto),
+          metodo: "otp_email",
+        })
+        .onConflictDoNothing(conflictoDelUsuario)
+        .returning({ id: clientLinks.id });
+
+      return filas.length > 0;
+    });
+  } catch (err) {
+    // Otro usuario ganó la carrera al chequeo de arriba (`cl_contacto_activa`).
+    // La transacción se deshizo, así que el código tampoco quedó consumido.
+    if (esViolacionUnica(err)) return { ok: false, detalle: MENSAJE_VINCULADA_A_OTRO };
+    throw err;
+  }
 
   if (!vinculado) {
     return {
@@ -612,9 +723,122 @@ export async function confirmarVinculacion(
     };
   }
 
+  const email = normalizarEmail(emailUsuario);
+  // Si ya es uno de los emails del contacto (según lo recién leído), no hay nada
+  // que anotar y no se gasta una request más a /contacts, que tiene tope propio.
+  if (email && !emailsDelContacto(contacto.email).includes(email)) {
+    const alegraContactId = otp.alegraContactId;
+    after(() => registrarEmailAlternativo(alegraContactId, email));
+  }
+
   return {
     ok: true,
     alegraContactId: otp.alegraContactId,
     razonSocial: contacto?.name ?? undefined,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Email alternativo en las observaciones del contacto de Alegra
+// ---------------------------------------------------------------------------
+
+const ZONA_AR = "America/Argentina/Buenos_Aires";
+
+function normalizarEmail(email: string | null | undefined): string {
+  return (email ?? "").trim().toLowerCase();
+}
+
+/**
+ * Los emails de un contacto de Alegra, normalizados. El campo es un texto libre
+ * y en la cuenta hay contactos con varios separados por coma, punto y coma o
+ * espacio: mismo criterio que `emails_norm` del espejo del CRM.
+ */
+export function emailsDelContacto(email: unknown): string[] {
+  if (typeof email !== "string") return [];
+  return [
+    ...new Set(
+      email
+        .toLowerCase()
+        .split(/[,; ]+/)
+        .map((e) => e.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+/** DD/MM/AAAA en hora de Argentina (a las 22 h de Buenos Aires ya es otro día en UTC). */
+export function fechaArgentina(fecha: Date): string {
+  const partes = new Intl.DateTimeFormat("en-GB", {
+    timeZone: ZONA_AR,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(fecha);
+  const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
+  return `${parte("day")}/${parte("month")}/${parte("year")}`;
+}
+
+/** La línea que se agrega a las observaciones. */
+export function lineaEmailAlternativo(email: string, fecha: Date): string {
+  return `Tienda online: también usa ${email} (vinculado el ${fechaArgentina(fecha)})`;
+}
+
+/**
+ * Las observaciones con la línea agregada al final, o `null` si no hay nada que
+ * hacer: el email ya es del contacto, o ya figura en las observaciones (se
+ * vinculó antes, o lo anotó a mano la sucursal). Eso lo hace idempotente.
+ */
+export function observacionesConEmail(
+  observaciones: unknown,
+  emailsContacto: unknown,
+  email: string,
+  fecha: Date,
+): string | null {
+  const norm = normalizarEmail(email);
+  if (!norm || emailsDelContacto(emailsContacto).includes(norm)) return null;
+  const actuales = typeof observaciones === "string" ? observaciones : "";
+  if (actuales.toLowerCase().includes(norm)) return null;
+  const linea = lineaEmailAlternativo(norm, fecha);
+  return actuales.trim() ? `${actuales.trimEnd()}\n${linea}` : linea;
+}
+
+/**
+ * Anota en las observaciones del contacto de Alegra el email con el que el
+ * cliente usa la tienda, cuando no es ninguno de los que tiene cargados.
+ *
+ * ── PRIMERA ESCRITURA DEL SHOP SOBRE UN CONTACTO DE ALEGRA ──────────────────
+ *
+ * Hasta acá el Shop solo LEÍA contactos. Se decidió escribir porque el que
+ * vincula por OTP es justamente quien entra con un mail que la sucursal no
+ * conoce: sin esto, cuando llama o aparece un pedido con ese mail, nadie en la
+ * sucursal sabe de qué cliente es. El alcance es mínimo a propósito:
+ *  - SOLO el campo `observations`, agregando una línea al final y conservando
+ *    el texto que ya había (se lee en vivo justo antes, no del espejo).
+ *  - NO se toca `email`: de ahí sale a dónde van las facturas y los códigos
+ *    de vinculación; cambiarlo desde la tienda sería otorgar acceso.
+ *  - Idempotente: si el email ya figura, no se escribe.
+ *  - Corre en `after()`: la vinculación ya está hecha y no espera a Alegra. Si
+ *    falla (incluido el 400 con `{"code":429}` de /contacts), se loguea y listo;
+ *    no hay reintento, es un dato de cortesía para la sucursal.
+ *
+ * El log lleva solo el id del contacto: nada del email ni de las observaciones.
+ */
+export async function registrarEmailAlternativo(
+  alegraContactId: string,
+  email: string,
+  fecha: Date = new Date(),
+): Promise<void> {
+  try {
+    const contacto = await getContacto(alegraContactId);
+    const nuevas = observacionesConEmail(contacto?.observations, contacto?.email, email, fecha);
+    if (nuevas === null) return;
+    await actualizarObservacionesContacto(alegraContactId, nuevas);
+  } catch (err) {
+    // El mensaje de apiFetch trae el body de Alegra: solo se loguea el status.
+    const estado =
+      err instanceof Error ? (err.message.match(/^Alegra (\d+)/)?.[1] ?? "sin status") : "sin status";
+    console.error(
+      `[vinculacion] no se pudo anotar el email alternativo en el contacto ${alegraContactId} (Alegra ${estado})`,
+    );
+  }
 }

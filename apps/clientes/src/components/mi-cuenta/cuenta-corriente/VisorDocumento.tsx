@@ -18,6 +18,7 @@ export function VisorDocumento({ doc, onClose }: { doc: DocumentoAbierto | null;
       title={doc?.titulo ?? ""}
       src={doc ? urlDocumento(doc.kind, doc.alegraId) : ""}
       downloadHref={doc ? urlDocumento(doc.kind, doc.alegraId, true) : ""}
+      hint={null}
     />
   );
 }

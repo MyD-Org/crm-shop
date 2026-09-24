@@ -8,8 +8,9 @@ import { enlaceExterno } from "./WhatsAppFacturas";
 
 /**
  * Barra de la selección de pagos: "Consultar" arma el mensaje a la empresa con
- * razón social, CUIT y cada pago (número, fecha, medio y monto). Sin WhatsApp
- * cargado no se renderiza (PAG-3).
+ * razón social, CUIT y cada pago (número, fecha, medio y monto; un pago
+ * informado va con su rótulo en lugar del número). Sin WhatsApp cargado no se
+ * renderiza (PAG-3).
  */
 export function WhatsAppPagos({
   contacto,
@@ -17,7 +18,7 @@ export function WhatsAppPagos({
   onLimpiar,
 }: {
   contacto: ContactoWhatsApp;
-  seleccionados: Pago[];
+  seleccionados: Pick<Pago, "id" | "fecha" | "medio" | "monto">[];
   onLimpiar: () => void;
 }) {
   const consultar = enlaceWhatsApp(contacto.numero, mensajePagos(contacto.datos, seleccionados));

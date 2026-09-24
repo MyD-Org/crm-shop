@@ -20,10 +20,11 @@ import { shopTenantId } from "@/lib/tenant";
 export const dynamic = "force-dynamic";
 
 /**
- * Pagos: los recibos de pago del cliente vinculado (de a 10, con "Cargar más"),
- * el detalle con las facturas imputadas y el PDF en un visor dentro de la
- * página, más "Informar pago" y "Mis comprobantes" cuando el almacenamiento de
- * comprobantes está configurado (CMP-5). Todo vinculado la ve, contado incluido.
+ * Pagos: una sola tabla con los recibos del cliente vinculado (de a 10, con
+ * "Cargar más") y, arriba, los pagos que informó y siguen en revisión; el
+ * detalle con las facturas imputadas y el PDF en un visor dentro de la página.
+ * "Informar pago" sólo con el almacenamiento de comprobantes configurado
+ * (CMP-5). Todo vinculado la ve, contado incluido.
  */
 export default async function PagosPage() {
   if (!seccionDesplegada("pagos")) notFound();
@@ -58,10 +59,13 @@ export default async function PagosPage() {
     if (r.status === "rejected") console.error(`mi-cuenta/pagos: ${bloque} caído (${motivoAlegra(r.reason)})`);
   }
 
+  // Los más recientes (primera página): los que están en revisión van en la
+  // tabla y todos sirven de aviso anti-duplicados en "Informar pago". Si el
+  // historial no se pudo leer, el botón se ofrece igual.
+  const informados =
+    comprobantesR.status === "fulfilled" && comprobantesR.value ? comprobantesR.value.comprobantes : [];
   // Informar pago no depende de Alegra: se ofrece aunque los pagos no carguen.
-  const bloqueComprobantes = comprobantes && (
-    <ComprobantesPagos primeraPagina={comprobantesR.status === "fulfilled" ? comprobantesR.value : null} />
-  );
+  const bloqueComprobantes = comprobantes && <ComprobantesPagos ultimos={informados} />;
   if (paginaR.status === "rejected") {
     return (
       <div className="flex flex-col gap-8">
@@ -81,7 +85,7 @@ export default async function PagosPage() {
   return (
     <div className="flex flex-col gap-8">
       {bloqueComprobantes}
-      <PagosSeccion primeraPagina={paginaR.value} whatsapp={whatsapp} />
+      <PagosSeccion primeraPagina={paginaR.value} informados={informados} whatsapp={whatsapp} />
     </div>
   );
 }

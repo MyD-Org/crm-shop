@@ -76,7 +76,7 @@ export function InformarPago({
   ultimos,
   onInformado,
 }: {
-  /** Primera página de "Mis comprobantes": los últimos enviados, para no duplicar. */
+  /** Los últimos comprobantes enviados, para no duplicar. */
   ultimos: ComprobanteCliente[];
   /** Se llama tras un comprobante recibido (para refrescar la lista). */
   onInformado: () => void;

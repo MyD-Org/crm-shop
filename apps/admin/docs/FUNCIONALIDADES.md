@@ -343,16 +343,30 @@ Guarda también el contacto crudo en `raw`.
 - `origen`: quién escribió la fila por última vez (`sync`, `fallback`, `write_through`,
   `webhook`).
 
-**Vista `alegra_contacts_shop`** (migración 0031, vive solo en SQL). Es lo único que lee el
-Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre la tabla). Expone 16
-columnas: sin `raw`, sin teléfonos, sin vendedor ni límite de crédito. Si se cambia o borra
-una columna expuesta, la vista se recrea **en la misma migración**. El GRANT de la migración
-es condicional: si el rol `shop_app` se creó después de migrar, correr como owner:
+**Vista `alegra_contacts_shop`** (migraciones 0031 y 0032, vive solo en SQL). Es lo único
+del espejo que lee el Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre
+la tabla). Expone 20 columnas: las 16 de 0031 más `seller_name`, `payment_term_name`,
+`payment_term_days` y `credit_limit` (0032, para Condiciones y la barra de límite de crédito
+de "Mi cuenta" del Shop). Nunca `raw`, teléfonos ni `seller_id`. Si se cambia o borra una
+columna expuesta, la vista se recrea **en la misma migración** (DROP + CREATE + GRANT).
 
-```sql
-GRANT USAGE ON SCHEMA public TO shop_app;
-GRANT SELECT ON public.alegra_contacts_shop TO shop_app;
-```
+**Permisos de `shop_app` sobre `public`** (0032, change `portal-al-shop`), mínimos y por
+columna; sin DELETE en ninguna tabla:
+
+| Objeto | Permiso |
+|---|---|
+| `alegra_contacts_shop` | SELECT |
+| `tenants` | SELECT sólo `id, name, whatsapp_number, receipts_email` |
+| `client_commercial_conditions` | SELECT |
+| `notification_log` | SELECT, UPDATE sólo `read_at` |
+| `payment_receipts` | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` |
+
+Los GRANTs de las migraciones son condicionales: si el rol `shop_app` se creó después de
+migrar, correr como owner el bloque `DO $$ … $$` del final de
+`drizzle/0032_shop_cuenta_corriente.sql` (incluye el de 0031). La reversa (`REVOKE`) está en
+el encabezado de ese archivo. El test
+`test/integration/shop-cuenta-corriente-grants.integration.test.ts` corre ese mismo bloque y
+verifica cada permiso como `shop_app`.
 
 **Sync por tramos** (`src/lib/alegra-contacts-sync.ts`, ruta `/api/cron/alegra-contactos-sync`,
 workflow `admin-alegra-contactos-sync`):

@@ -5,7 +5,7 @@ import { alegraContacts } from "@/db/schema"
 import { seedTenant, truncateAll } from "./helpers"
 
 /**
- * Migraciones 0030 (tabla `alegra_contacts` + bitácora) y 0031 (vista para el Shop), contra
+ * Migraciones 0030 (tabla `alegra_contacts` + bitácora), 0031 y 0032 (vista para el Shop), contra
  * Postgres real. El global-setup ya las aplicó vía drizzle migrate.
  *
  * Datos inventados: tenants tenant-a/tenant-b, ids de Alegra de fantasía.
@@ -93,7 +93,7 @@ describe("migración 0030: alegra_contacts (DB real)", () => {
   })
 })
 
-describe("migración 0031: vista alegra_contacts_shop (DB real)", () => {
+describe("migraciones 0031 + 0032: vista alegra_contacts_shop (DB real)", () => {
   const columnasDeLaVista = async () => {
     const r = await getDb().execute(sql`
       SELECT column_name FROM information_schema.columns
@@ -103,7 +103,9 @@ describe("migración 0031: vista alegra_contacts_shop (DB real)", () => {
     return r.map((x) => x.column_name as string)
   }
 
-  it("expone exactamente las 16 columnas del contrato con el Shop", async () => {
+  // 0031 expuso 16 columnas; 0032 (change portal-al-shop) sumó al final vendedor, plazo y límite
+  // para Condiciones y la barra de límite de crédito de "Mi cuenta" del Shop.
+  it("expone exactamente las 20 columnas del contrato con el Shop", async () => {
     expect(await columnasDeLaVista()).toEqual([
       "tenant_id",
       "alegra_account",
@@ -121,10 +123,14 @@ describe("migración 0031: vista alegra_contacts_shop (DB real)", () => {
       "alegra_status",
       "status",
       "synced_at",
+      "seller_name",
+      "payment_term_name",
+      "payment_term_days",
+      "credit_limit",
     ])
   })
 
-  it("no expone el crudo, teléfonos, vendedor ni límite de crédito", async () => {
+  it("no expone el crudo, teléfonos ni ids internos de vendedor/plazo", async () => {
     const cols = await columnasDeLaVista()
     for (const oculta of [
       "raw",
@@ -133,8 +139,8 @@ describe("migración 0031: vista alegra_contacts_shop (DB real)", () => {
       "phone_secondary",
       "mobile",
       "seller_id",
-      "seller_name",
-      "credit_limit",
+      "payment_term_id",
+      "origen",
     ]) {
       expect(cols).not.toContain(oculta)
     }

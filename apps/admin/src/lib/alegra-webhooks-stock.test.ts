@@ -6,7 +6,7 @@ import { enmascararUrlStock, esSuscripcionStock, planSuscripcionesStock, rutaWeb
 // no habla con Alegra. URLs de ejemplo con dominios reservados.
 
 const BASE = "https://crm.plataforma.example"
-const TOKEN = "0123456789abcdef0123456789abcdef"
+const TOKEN = "a".repeat(32)
 const url = (event: (typeof EVENTOS_STOCK)[number], token = TOKEN, base = BASE) => `${base}${rutaWebhookStock("tenant-a", event, token)}`
 const sinEsquema = (u: string) => u.replace(/^https:\/\//, "")
 
@@ -60,7 +60,7 @@ describe("esSuscripcionStock (lo único que `borrar` toca)", () => {
 describe("enmascararUrlStock", () => {
   it("tapa el token", () => {
     const m = enmascararUrlStock(url("new-bill"))
-    expect(m).toBe("https://crm.plataforma.example/api/webhooks/alegra/stock/tenant-a/new-bill/0123…")
+    expect(m).toBe("https://crm.plataforma.example/api/webhooks/alegra/stock/tenant-a/new-bill/aaaa…")
     expect(m).not.toContain(TOKEN)
   })
 })

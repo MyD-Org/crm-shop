@@ -7,3 +7,6 @@
 # db:migrate). Se reemplazó por la clave de relleno aceptada; el commit quedó en el historial
 # de la rama del PR #75 y no se puede reescribir (sin force push en este remoto).
 423cce19d0528e3ed6e603e38f5e57ad71cd4da3:apps/admin/src/db/migrate-destino.test.ts:postgres-url-con-password:11
+# Token de relleno ("0123456789abcdef" x2) en el test del plan de suscripciones de stock (PR #112).
+# Se reemplazó por "a".repeat(32); el commit quedó en el historial de la rama y no se reescribe.
+b373a8e525a3f62cfd94327ed0e02f7f39cfe06c:apps/admin/src/lib/alegra-webhooks-stock.test.ts:generic-api-key:9

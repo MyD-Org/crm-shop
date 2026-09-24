@@ -14,13 +14,21 @@
  * UNA consulta en vivo por id, con el mismo mapeo. Si también falla, `null` y la
  * sección que lo pidió muestra su aviso de "no pudimos obtener…".
  *
- * Rebanada 3 de `espejo-contactos-alegra` (búsqueda por email/documento para la
- * vinculación) todavía no está: cuando llegue, suma sus lecturas en este módulo.
+ * La vinculación (email y documento) y la lista de precios del cliente también
+ * leen de acá (rebanada 3 de `espejo-contactos-alegra`): ver `contactosPorEmail`,
+ * `contactoPorDocumento` y `vinculablePorId`. Esas tres NO salen a Alegra: el
+ * respaldo en vivo, cuando corresponde, lo decide quien llama.
  */
-import { and, eq } from "drizzle-orm";
+import { and, arrayContains, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmContactos } from "@/db/crm";
-import { esIdAlegra, getContacto, tipoCuentaDe } from "./alegra";
+import {
+  esIdAlegra,
+  getContacto,
+  idPriceListUsable,
+  tipoCuentaDe,
+  type AlegraContact,
+} from "./alegra";
 import { shopTenantId } from "./tenant";
 
 /** Cuenta de Alegra dentro del tenant. Hoy siempre una (ver `alegra_account` en el CRM). */
@@ -156,4 +164,158 @@ export async function tipoCuentaEspejo(alegraId: string): Promise<ContactoEspejo
     .limit(1);
   if (!fila) return null;
   return fila.tipoCuenta === "corriente" ? "corriente" : "contado";
+}
+
+// ---------------------------------------------------------------------------
+// Vinculación y lista de precios (rebanada 3). Sólo espejo: 0 requests.
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que la vinculación y la cotización necesitan de un contacto, venga del
+ * espejo o de Alegra en vivo. `tipoCuenta` del espejo es la columna generada del
+ * CRM; de un contacto en vivo, `tipoCuentaDe`.
+ */
+export interface ContactoVinculable {
+  id: string;
+  name: string;
+  identification: string | null;
+  email: string | null;
+  priceList: { id: string; name: string; status?: string } | null;
+  tipoCuenta: "corriente" | "contado";
+  types: string[];
+}
+
+/** Filas activas del tenant del Shop en la cuenta principal. */
+function activasDelShop() {
+  return and(
+    eq(crmContactos.tenantId, shopTenantId()),
+    eq(crmContactos.alegraAccount, CUENTA_ALEGRA_PRINCIPAL),
+    eq(crmContactos.status, "active"),
+  );
+}
+
+const columnasVinculables = {
+  alegraId: crmContactos.alegraId,
+  name: crmContactos.name,
+  identification: crmContactos.identification,
+  email: crmContactos.email,
+  types: crmContactos.types,
+  priceListId: crmContactos.priceListId,
+  priceListName: crmContactos.priceListName,
+  priceListStatus: crmContactos.priceListStatus,
+  tipoCuenta: crmContactos.tipoCuenta,
+};
+
+type FilaVinculable = {
+  alegraId: string;
+  name: string;
+  identification: string | null;
+  email: string | null;
+  types: string[] | null;
+  priceListId: string | null;
+  priceListName: string | null;
+  priceListStatus: string | null;
+  tipoCuenta: "corriente" | "contado" | null;
+};
+
+function aVinculable(f: FilaVinculable): ContactoVinculable {
+  return {
+    id: f.alegraId,
+    name: f.name,
+    identification: f.identification,
+    email: f.email,
+    priceList: f.priceListId
+      ? {
+          id: f.priceListId,
+          name: f.priceListName ?? "",
+          ...(f.priceListStatus ? { status: f.priceListStatus } : {}),
+        }
+      : null,
+    tipoCuenta: f.tipoCuenta === "corriente" ? "corriente" : "contado",
+    types: f.types ?? [],
+  };
+}
+
+/** Un contacto leído EN VIVO de Alegra, en la misma forma que una fila del espejo. */
+export function vinculableDeAlegra(c: AlegraContact): ContactoVinculable {
+  return {
+    id: String(c.id),
+    name: c.name,
+    identification: textoONull(c.identification),
+    email: textoONull(c.email),
+    priceList: c.priceList?.id ? { ...c.priceList, id: String(c.priceList.id) } : null,
+    tipoCuenta: tipoCuentaDe(c),
+    types: Array.isArray(c.type) ? (c.type as string[]) : [],
+  };
+}
+
+/**
+ * Clientes (`'client' = ANY(types)`) cuya casilla es `email`, comparando contra
+ * `emails_norm` (minúsculas, sin espacios, un email por elemento). Sólo espejo.
+ * Devuelve todos los que matchean (hasta 5): si hay más de uno, quien llama
+ * decide que es ambiguo.
+ */
+export async function contactosPorEmail(email: string): Promise<ContactoVinculable[]> {
+  const norm = email.trim().toLowerCase();
+  if (!norm) return [];
+  const filas = await getDb()
+    .select(columnasVinculables)
+    .from(crmContactos)
+    .where(
+      and(
+        activasDelShop(),
+        arrayContains(crmContactos.emailsNorm, [norm]),
+        arrayContains(crmContactos.types, ["client"]),
+      ),
+    )
+    .orderBy(asc(crmContactos.alegraId))
+    .limit(5);
+  return filas.map(aVinculable);
+}
+
+/**
+ * Contacto por documento (CUIT/CUIL/DNI), comparando SÓLO dígitos contra
+ * `identification_norm`: "20-12345678-9" y "20123456789" son el mismo. Con más
+ * de una fila gana el cliente y después el id numérico menor, siempre el mismo
+ * (mismo criterio que el CRM). Sólo espejo.
+ */
+export async function contactoPorDocumento(documento: string): Promise<ContactoVinculable | null> {
+  const digitos = documento.replace(/\D/g, "");
+  if (!digitos) return null;
+  const [fila] = await getDb()
+    .select(columnasVinculables)
+    .from(crmContactos)
+    .where(and(activasDelShop(), eq(crmContactos.identificationNorm, digitos)))
+    .orderBy(
+      sql`('client' = ANY(${crmContactos.types})) DESC`,
+      sql`CASE WHEN ${crmContactos.alegraId} ~ '^[0-9]+$' THEN ${crmContactos.alegraId}::numeric END ASC NULLS LAST`,
+      asc(crmContactos.alegraId),
+    )
+    .limit(1);
+  return fila ? aVinculable(fila) : null;
+}
+
+/** Contacto por id de Alegra, SÓLO del espejo (sin respaldo en vivo). */
+export async function vinculablePorId(alegraId: string): Promise<ContactoVinculable | null> {
+  if (!esIdAlegra(alegraId)) return null;
+  const [fila] = await getDb()
+    .select(columnasVinculables)
+    .from(crmContactos)
+    .where(and(activasDelShop(), eq(crmContactos.alegraId, alegraId)))
+    .limit(1);
+  return fila ? aVinculable(fila) : null;
+}
+
+/**
+ * Datos comerciales del cliente según el espejo: tipo de cuenta y lista de
+ * precios USABLE (una lista dada de baja ⇒ `undefined` = principal). `null` =
+ * sin fila activa: quien llama cae al snapshot de `client_links`. 1 query, 0
+ * requests a Alegra.
+ */
+export async function comercialEspejo(
+  alegraId: string,
+): Promise<{ tipoCuenta: "corriente" | "contado"; idPriceList: string | undefined } | null> {
+  const c = await vinculablePorId(alegraId);
+  if (!c) return null;
+  return { tipoCuenta: c.tipoCuenta, idPriceList: idPriceListUsable(c) };
 }

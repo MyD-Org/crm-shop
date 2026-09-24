@@ -8,7 +8,7 @@
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { getDb } from "@/db";
 import { billingProfiles } from "@/db/schema";
-import { buscarContactoPorIdentificacion } from "./alegra";
+import { contactoPorDocumento } from "./contactos-espejo";
 import {
   normalizarDoc,
   telefonoValido,
@@ -39,15 +39,20 @@ export async function getPerfilFacturacion(
  * aviso "parece que ya sos cliente" y la marca de revisión del pedido. Vincular
  * por coincidencia de número sería regalar la cuenta a quien escriba el CUIT.
  *
- * Falla en silencio a null: que Alegra esté caído no puede impedir que alguien
- * guarde sus datos de facturación.
+ * Se consulta SÓLO el espejo de contactos del CRM (0 requests a Alegra, sin
+ * respaldo en vivo): es un aviso, y un contacto recién cargado que la sync
+ * todavía no vio no justifica gastar la cuota de `/contacts` en cada guardado.
+ *
+ * Falla en silencio a null: que el espejo no responda no puede impedir que
+ * alguien guarde sus datos de facturación.
  */
 async function contactoExistenteEnAlegra(nroDoc: string): Promise<string | null> {
   try {
-    const contacto = await buscarContactoPorIdentificacion(nroDoc);
-    return contacto?.id != null ? String(contacto.id) : null;
+    const contacto = await contactoPorDocumento(nroDoc);
+    return contacto?.id ?? null;
   } catch (err) {
-    console.error("[facturacion] no se pudo consultar Alegra:", err);
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`[facturacion] no se pudo consultar el espejo de contactos (${codigo ?? "sin código"})`);
     return null;
   }
 }

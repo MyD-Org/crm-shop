@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_HIDDEN_LIGHTS, COVER_QUERY, HERO_LIGHTS, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
+import { COVER_HIDDEN_LIGHTS, COVER_QUERY, COVER_SHELF_STRIP, HERO_LIGHTS, STUDIO_IMAGE_MOBILE, lightAt, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
@@ -96,7 +96,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
         if (!fit.scale) return;
         const x = (event.clientX - bounds.left - fit.left) / fit.scale;
         const y = (event.clientY - bounds.top - fit.top) / fit.scale;
-        paint(HERO_LIGHTS.map(light => proximity(x, y, light)));
+        paint(HERO_LIGHTS.map(light => proximity(x, y, lightAt(light, cover.matches))));
       });
     };
     const leave = () => { cancelAnimationFrame(frame); paint([]); };
@@ -173,17 +173,23 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <path d="M1320 423 L1450 423 L1536 780 L1234 780 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
               <ellipse cx="1385" cy="786" rx="146" ry="25" fill={`url(#${uid}-glow)`}/>
             </>}
-            {i === 4 && <>
+            {i === 4 && !covered && <>
               <rect x="1087" y="524" width="355" height="17" rx="3" fill="#ffe4ac" filter={`url(#${uid}-blur)`}/>
               <rect x="1087" y="527" width="355" height="11" fill="#fff5dc"/>
               <ellipse cx="1265" cy="560" rx="210" ry="68" fill={`url(#${uid}-glow)`}/>
+            </>}
+            {i === 4 && covered && <>
+              {/* Mobile: no fixture in the photo, just a hidden strip lighting the shelf's underside edge to edge. */}
+              <rect x={COVER_SHELF_STRIP.x} y={COVER_SHELF_STRIP.y - 3} width={COVER_SHELF_STRIP.width} height="10" fill="#ffe4ac" filter={`url(#${uid}-soft)`}/>
+              <rect x={COVER_SHELF_STRIP.x + 4} y={COVER_SHELF_STRIP.y} width={COVER_SHELF_STRIP.width - 4} height="3" fill="#fff5dc"/>
+              <rect x={COVER_SHELF_STRIP.x} y={COVER_SHELF_STRIP.y + 2} width={COVER_SHELF_STRIP.width} height="96" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-soft)`}/>
             </>}
           </g>)}
         </svg>
         {HERO_LIGHTS.map((light, i) => covered && COVER_HIDDEN_LIGHTS.has(light.id) ? null : <button key={light.id} type="button" className={styles.target}
           aria-label={light.label} aria-pressed={pressed.includes(i)} onClick={() => toggle(i)}
-          style={{ left: rect.left + light.x * rect.scale, top: rect.top + light.y * rect.scale,
-            width: (i === 0 ? 220 : i === 4 ? 355 : 96) * rect.scale, height: (i === 0 ? 220 : 96) * rect.scale }} />)}
+          style={{ left: rect.left + lightAt(light, covered).x * rect.scale, top: rect.top + lightAt(light, covered).y * rect.scale,
+            width: (i === 0 ? 220 : i === 4 ? (covered ? COVER_SHELF_STRIP.width : 355) : 96) * rect.scale, height: (i === 0 ? 220 : 96) * rect.scale }} />)}
       </>}
     </div>
   </div>;

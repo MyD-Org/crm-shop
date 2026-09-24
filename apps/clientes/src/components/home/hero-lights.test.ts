@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COVER_X, HERO_LIGHTS, isStudioImage, proximity, sceneRect } from "./hero-lights";
+import { COVER_X, HERO_LIGHTS, isStudioImage, lightAt, proximity, sceneRect } from "./hero-lights";
 
 describe("studio lighting geometry", () => {
   it("keeps the entire source aligned with contain at desktop and touch sizes", () => {
@@ -25,6 +25,12 @@ describe("studio lighting geometry", () => {
       expect(rect.left).toBeCloseTo((width - rect.width) * COVER_X);
       expect(rect.top * 2 + rect.height).toBeCloseTo(height);
     }
+  });
+  it("moves the linear light to the under-shelf strip only in the mobile photo", () => {
+    const linear = HERO_LIGHTS.find(light => light.id === "linear")!;
+    expect(lightAt(linear, false)).toBe(linear);
+    expect(lightAt(linear, true)).toMatchObject({ x: 1161, y: 890 });
+    expect(lightAt(HERO_LIGHTS[1], true)).toBe(HERO_LIGHTS[1]);
   });
   it("uses independent continuous falloff, with exact off outside the radius", () => {
     const light = HERO_LIGHTS[1];

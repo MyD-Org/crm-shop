@@ -16,6 +16,7 @@ vi.mock("drizzle-orm", () => ({
   gte: () => ({}),
   isNull: () => ({}),
   lt: (_c: unknown, techo: number) => ({ techo }),
+  ne: () => ({}),
   sql: () => ({}),
 }));
 
@@ -36,6 +37,8 @@ const db: any = {
   select: () => ({
     from: () => ({
       where: () => ({
+        // Chequeo de "vinculado a otro usuario": acá nunca lo está.
+        limit: async () => [],
         orderBy: () => ({
           limit: async () => (estado.otp && !estado.otp.consumedAt ? [estado.otp] : []),
         }),
@@ -75,6 +78,7 @@ vi.mock("@/db", () => ({ getDb: () => db }));
 vi.mock("@/db/schema", () => ({ clientLinks: {}, linkOtps: {} }));
 const getContacto = vi.fn();
 vi.mock("./alegra", () => ({
+  actualizarObservacionesContacto: vi.fn(),
   buscarContactoPorIdentificacion: vi.fn(),
   buscarContactosPorEmail: vi.fn(),
   esCliente: vi.fn(),

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "cl_contacto_activa" ON "shop"."client_links" USING btree ("alegra_contact_id") WHERE "shop"."client_links"."estado" = 'activa';

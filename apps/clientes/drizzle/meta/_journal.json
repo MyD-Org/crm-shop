@@ -50,6 +50,13 @@
       "when": 1790185879883,
       "tag": "0006_pago_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790267953260,
+      "tag": "0007_vinculo_unico_por_contacto",
+      "breakpoints": true
     }
   ]
 }

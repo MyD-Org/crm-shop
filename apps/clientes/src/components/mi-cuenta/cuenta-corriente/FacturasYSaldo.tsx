@@ -11,12 +11,13 @@ import { VisorDocumento } from "./VisorDocumento";
 import type { ContactoWhatsApp } from "./WhatsAppFacturas";
 
 /**
- * "Facturas y saldo": tarjetas de saldo arriba, lista de facturas abajo y el
+ * "Facturas y saldo": tarjetas de saldo arriba (si `mostrarSaldo`), lista de facturas abajo y el
  * visor del PDF en un diálogo dentro de la página. Cada bloque que no se pudo
  * traer muestra su aviso y el otro sigue andando.
  */
 export function FacturasYSaldo({
   cuenta,
+  mostrarSaldo,
   mostrarLimite,
   primeraPagina,
   whatsapp,
@@ -24,6 +25,8 @@ export function FacturasYSaldo({
 }: {
   /** `null` = el saldo no se pudo traer. */
   cuenta: Cuenta | null;
+  /** `false` = cliente de contado sin deuda: el bloque Saldo no se muestra. */
+  mostrarSaldo: boolean;
   mostrarLimite: boolean;
   /** `null` = las facturas no se pudieron traer. */
   primeraPagina: { facturas: Factura[]; total: number } | null;
@@ -43,13 +46,15 @@ export function FacturasYSaldo({
     <div className="flex flex-col gap-8">
       {deepLink && "noEncontrada" in deepLink && <Alert tone="warning">No encontramos la factura.</Alert>}
 
-      <section aria-label="Saldo">
-        {cuenta ? (
-          <SaldoTarjetas cuenta={cuenta} mostrarLimite={mostrarLimite} onVerFacturas={verFacturas} />
-        ) : (
-          <AvisoSeccionCaida que="su saldo" />
-        )}
-      </section>
+      {mostrarSaldo && (
+        <section aria-label="Saldo">
+          {cuenta ? (
+            <SaldoTarjetas cuenta={cuenta} mostrarLimite={mostrarLimite} onVerFacturas={verFacturas} />
+          ) : (
+            <AvisoSeccionCaida que="su saldo" />
+          )}
+        </section>
+      )}
 
       <section ref={lista} aria-label="Facturas" className="scroll-mt-24">
         {primeraPagina ? (

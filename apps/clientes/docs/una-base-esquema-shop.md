@@ -435,6 +435,69 @@ snapshot útil para cuando la vista no responda.
 `GRANT` pueden quedar (los usa también Mi cuenta). Sólo si se revierte además
 la cuenta corriente: `REVOKE SELECT ON public.alegra_contacts_shop FROM shop_app;`.
 
+## Stock y precio desde el espejo del CRM
+
+Change `webhooks-stock-alegra`, rebanada 4. El CRM mantiene su espejo de
+productos (`public.catalog_products`) con la sync diaria y, además, con los
+webhooks de stock de Alegra: una factura o una compra re-leen sus ítems en
+minutos. El Shop lee de ahí stock, precios y estado por la vista angosta
+`public.catalog_products_shop` (migración 0035 del CRM; declarada en
+`src/db/crm.ts` como `crmStock`):
+
+| Columna | Qué es |
+|---|---|
+| `tenant_id`, `alegra_id` | clave; el Shop filtra por `SHOP_TENANT_ID` en el join |
+| `stock` | inventario total del ítem (null = no inventariable) |
+| `precios_alegra` | `raw->'price'` tal cual lo manda Alegra; el Shop lo normaliza con `mapPrecios` (misma forma que su espejo, con `main`) |
+| `activo` | visto en la última sync del CRM y no inactivo en Alegra |
+| `alegra_leido_at` | cuándo se le pidió el dato a Alegra (null = todavía no pasó una sync ni un webhook) |
+
+**Regla: por fila, la leída más tarde gana** (`src/lib/stock-disponible.ts`).
+Si `alegra_leido_at` del CRM es posterior al `synced_at` de
+`shop.catalog_products`, stock, precios y estado salen del CRM; si no (o si el
+CRM no tiene la fila), del espejo del Shop. Aplica igual al catálogo, las
+facetas, el menú, la ficha, el carrito y `POST /api/pedidos` (que valida y
+calcula con una sola cotización). Nombre, descripción, marca, categoría e IVA
+siguen saliendo del espejo del Shop, y la sync diaria del Shop sigue corriendo:
+es el respaldo de las filas que el CRM no tiene más frescas.
+
+**Permisos:** `SELECT` sobre la vista, que concede la 0035 si `shop_app` ya
+existía. A diferencia de la vista de contactos, **no hay plan B**: sin permiso
+fallan el catálogo, la ficha y la cotización. Verificación, como `shop_app`,
+contra la base del **runtime** (`DATABASE_URL`):
+
+```sql
+SELECT count(*) FROM public.catalog_products_shop;    -- responde
+SELECT 1 FROM public.catalog_products LIMIT 1;        -- falla (permission denied)
+```
+
+Si la primera da `permission denied` (42501), correr como `<OWNER_ROLE>`:
+
+```sql
+GRANT USAGE ON SCHEMA public TO shop_app;
+GRANT SELECT ON public.catalog_products_shop TO shop_app;
+```
+
+**Comparación entre espejos** (como `<OWNER_ROLE>`, `<TENANT_SLUG>` = el valor
+de `SHOP_TENANT_ID`, no escribirlo en el repo). Sólo ids y conteos:
+
+```sql
+SELECT count(*) FILTER (WHERE c.alegra_id IS NULL)                          AS sin_fila_crm,
+       count(*) FILTER (WHERE c.stock IS DISTINCT FROM cp.stock)            AS stock_distinto,
+       count(*) FILTER (WHERE c.alegra_leido_at > cp.synced_at)             AS crm_mas_fresco,
+       count(*) FILTER (WHERE c.alegra_leido_at > cp.synced_at
+                          AND c.activo IS DISTINCT FROM (cp.status = 'active')) AS cambia_estado
+FROM shop.catalog_products cp
+LEFT JOIN public.catalog_products_shop c
+  ON c.alegra_id = cp.alegra_id AND c.tenant_id = '<TENANT_SLUG>';
+```
+
+`crm_mas_fresco` es cuántas filas toman hoy el dato del CRM; `cambia_estado`,
+cuántas de ésas se muestran u ocultan distinto que con el espejo del Shop solo.
+
+**Rollback:** revertir el PR; el Shop vuelve a leer sólo `shop.catalog_products`.
+Recién después, si se quiere, la reversa de la 0035 (ver su encabezado).
+
 ## Nota sobre el ambiente local de tests (`crm_test`)
 
 Si en algún momento se regenera el baseline (`drizzle/0000_baseline.sql`)

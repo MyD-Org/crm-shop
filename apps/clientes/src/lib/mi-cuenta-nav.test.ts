@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   CAPACIDADES_DESPLIEGUE,
   bajadaMiCuenta,
+  rutaVincular,
+  volverSeguro,
   RUTAS_MI_CUENTA,
   capacidadesDe,
   hrefPedido,
@@ -202,19 +204,42 @@ describe("registro", () => {
 });
 
 describe("bajadaMiCuenta", () => {
-  it("sin facturas desplegadas no las promete", () => {
+  it("sin facturas ni favoritos desplegados no los promete", () => {
     const texto = bajadaMiCuenta({ favoritos: false, facturas: false, direcciones: true });
-    expect(texto).toBe("Revise el estado de sus pedidos y repita compras con un clic.");
-    expect(texto).not.toMatch(/factura/i);
+    expect(texto).toBe("Siga sus pedidos y administre sus direcciones y datos.");
+    expect(texto).not.toMatch(/factura|favorito/i);
   });
 
-  it("con facturas desplegadas las menciona", () => {
-    expect(bajadaMiCuenta({ favoritos: false, facturas: true, direcciones: true })).toBe(
-      "Revise el estado de sus pedidos, descargue facturas y repita compras con un clic.",
+  it("sin direcciones no las menciona", () => {
+    expect(bajadaMiCuenta({ favoritos: false, facturas: false, direcciones: false })).toBe(
+      "Siga sus pedidos y administre sus datos.",
+    );
+  });
+
+  it("con todo desplegado menciona facturas y favoritos", () => {
+    expect(bajadaMiCuenta({ favoritos: true, facturas: true, direcciones: true })).toBe(
+      "Siga sus pedidos, descargue facturas, guarde sus favoritos y administre sus direcciones y datos.",
     );
   });
 
   it("por defecto usa lo desplegado hoy", () => {
     expect(bajadaMiCuenta()).toBe(bajadaMiCuenta(CAPACIDADES_DESPLIEGUE));
+  });
+});
+
+describe("volverSeguro / rutaVincular", () => {
+  it("acepta sólo rutas internas", () => {
+    expect(volverSeguro("/checkout")).toBe("/checkout");
+    expect(volverSeguro(["/mi-cuenta"])).toBe("/mi-cuenta");
+    expect(volverSeguro("//otro.example")).toBeUndefined();
+    expect(volverSeguro("https://otro.example")).toBeUndefined();
+    expect(volverSeguro("/\\otro.example")).toBeUndefined();
+    expect(volverSeguro(undefined)).toBeUndefined();
+  });
+
+  it("arma el enlace con o sin vuelta", () => {
+    expect(rutaVincular()).toBe("/mi-cuenta/vincular");
+    expect(rutaVincular("/checkout")).toBe("/mi-cuenta/vincular?volver=%2Fcheckout");
+    expect(rutaVincular("//otro.example")).toBe("/mi-cuenta/vincular");
   });
 });

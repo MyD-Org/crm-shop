@@ -410,3 +410,13 @@ export function domicilioEnLinea(d: {
     .filter(Boolean)
     .join(", ");
 }
+
+/**
+ * Documento de un contacto de Alegra para mostrar: "CUIT 20-12345678-9" si
+ * tiene 11 dígitos, si no "documento 39282165" (Alegra no dice el tipo y un DNI
+ * rotulado como CUIT confunde).
+ */
+export function documentoEnLinea(raw: string): string {
+  const digitos = soloDigitos(raw);
+  return digitos.length === 11 ? `CUIT ${formatearCuit(digitos)}` : `documento ${raw.trim()}`;
+}

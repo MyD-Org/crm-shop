@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FavoritosLista } from "@/components/mi-cuenta/FavoritosLista";
-import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { listarFavoritos } from "@/lib/favoritos";
@@ -24,7 +23,6 @@ export default async function FavoritosPage() {
   if (!clerkUserId) {
     return (
       <section>
-        <SeccionTitulo titulo="Favoritos" />
         <EmptyState
           title="Inicie sesión con su usuario para guardar favoritos."
           action={
@@ -42,7 +40,6 @@ export default async function FavoritosPage() {
 
   return (
     <section>
-      <SeccionTitulo titulo="Favoritos" />
       {productos.length === 0 ? (
         <EmptyState
           title="Todavía no guardó favoritos."

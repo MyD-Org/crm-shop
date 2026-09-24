@@ -89,7 +89,7 @@ function hashesIguales(a: string, b: string): boolean {
   return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
 }
 
-/** Deja solo los dígitos del CUIT: la gente lo escribe con guiones y puntos. */
+/** Deja solo los dígitos del documento: la gente lo escribe con guiones y puntos. */
 function normalizarCuit(raw: string): string {
   return raw.replace(/\D/g, "");
 }
@@ -244,6 +244,7 @@ export async function solicitarVinculacion(
 ): Promise<ResultadoSolicitud> {
   const db = getDb();
   const cuit = normalizarCuit(cuitRaw);
+  const documento = cuitRaw.trim();
 
   /** La única respuesta para todo camino que dependa de la existencia del CUIT. */
   const uniforme = { ok: true, expiraEn: VIGENCIA_MIN } as const;
@@ -263,12 +264,13 @@ export async function solicitarVinculacion(
     return {
       ok: false,
       motivo: "rate_limit",
-      detalle: `Hiciste demasiadas consultas. Esperá ${VENTANA_RATE_LIMIT_MIN} minutos e intentá de nuevo.`,
+      detalle: `Hizo demasiadas consultas. Espere ${VENTANA_RATE_LIMIT_MIN} minutos e inténtelo de nuevo.`,
     };
   }
 
-  if (cuit.length < 8) {
-    return { ok: false, motivo: "formato", detalle: "Ingresá un CUIT válido." };
+  // 6 dígitos = piso de un DNI o una cédula; menos que eso no es un documento.
+  if (cuit.length < 6) {
+    return { ok: false, motivo: "formato", detalle: "Ingrese un documento válido." };
   }
 
   // --- Rate limit de ENVÍOS: evita usar la casilla de un cliente como buzón ---
@@ -282,7 +284,7 @@ export async function solicitarVinculacion(
     return {
       ok: false,
       motivo: "rate_limit",
-      detalle: `Pediste demasiados códigos. Esperá ${VENTANA_RATE_LIMIT_MIN} minutos e intentá de nuevo.`,
+      detalle: `Pidió demasiados códigos. Espere ${VENTANA_RATE_LIMIT_MIN} minutos e inténtelo de nuevo.`,
     };
   }
 
@@ -297,14 +299,14 @@ export async function solicitarVinculacion(
     return {
       ok: false,
       motivo: "ya_vinculada",
-      detalle: "Tu cuenta ya está vinculada. Si necesitás cambiarla, escribinos.",
+      detalle: "Su cuenta ya está vinculada. Si necesita cambiarla, escríbanos.",
     };
   }
 
   // --- Buscar el contacto en Alegra ---
   let contacto;
   try {
-    contacto = await buscarContactoPorIdentificacion(cuit);
+    contacto = await buscarContactoPorIdentificacion(documento);
   } catch (err) {
     // Alegra caído no depende del CUIT consultado: falla igual para todos, así
     // que decirlo no filtra nada y evita que el cliente espere un mail que no
@@ -313,7 +315,7 @@ export async function solicitarVinculacion(
     return {
       ok: false,
       motivo: "servicio_caido",
-      detalle: "No pudimos verificar el CUIT en este momento. Probá de nuevo en unos minutos.",
+      detalle: "No pudimos verificar el documento en este momento. Inténtelo de nuevo en unos minutos.",
     };
   }
 
@@ -408,11 +410,11 @@ export async function confirmarVinculacion(
     .limit(1);
 
   if (!otp) {
-    return { ok: false, detalle: "No hay ningún código pendiente. Pedí uno nuevo." };
+    return { ok: false, detalle: "No hay ningún código pendiente. Pida uno nuevo." };
   }
 
   if (otp.expiresAt.getTime() < Date.now()) {
-    return { ok: false, detalle: "El código venció. Pedí uno nuevo." };
+    return { ok: false, detalle: "El código venció. Pida uno nuevo." };
   }
 
   /**
@@ -441,7 +443,7 @@ export async function confirmarVinculacion(
     .returning({ intentos: linkOtps.intentos });
 
   if (!intento) {
-    return { ok: false, detalle: "Demasiados intentos fallidos. Pedí un código nuevo." };
+    return { ok: false, detalle: "Demasiados intentos fallidos. Pida un código nuevo." };
   }
 
   if (!hashesIguales(otp.codeHash, hashCodigo(clerkUserId, limpio))) {
@@ -450,8 +452,8 @@ export async function confirmarVinculacion(
       ok: false,
       detalle:
         restantes > 0
-          ? `Código incorrecto. Te quedan ${restantes} intentos.`
-          : "Código incorrecto. Pedí un código nuevo.",
+          ? `Código incorrecto. Le quedan ${restantes} intentos.`
+          : "Código incorrecto. Pida un código nuevo.",
     };
   }
 
@@ -461,7 +463,7 @@ export async function confirmarVinculacion(
     contacto = await getContacto(otp.alegraContactId);
   } catch (err) {
     console.error("[vinculacion] no se pudo releer el contacto:", err);
-    return { ok: false, detalle: "No pudimos completar la vinculación. Probá de nuevo en unos minutos." };
+    return { ok: false, detalle: "No pudimos completar la vinculación. Inténtelo de nuevo en unos minutos." };
   }
 
   const vinculado = await db.transaction(async (tx) => {
@@ -496,7 +498,7 @@ export async function confirmarVinculacion(
   if (!vinculado) {
     return {
       ok: false,
-      detalle: "Tu cuenta ya está vinculada. Si necesitás cambiarla, escribinos.",
+      detalle: "Su cuenta ya está vinculada. Si necesita cambiarla, escríbanos.",
     };
   }
 

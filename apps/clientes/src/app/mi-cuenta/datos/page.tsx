@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { DatosCuenta } from "@/components/mi-cuenta/DatosCuenta";
-import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
 import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { rutaIngreso } from "@/lib/ingreso";
@@ -22,7 +21,6 @@ export default async function DatosPage() {
   if (!clerkUserId) {
     return (
       <section>
-        <SeccionTitulo titulo="Mis datos" />
         <EmptyState
           title="Inicie sesión con su usuario para administrar sus datos."
           action={<BotonEnlace href={rutaIngreso(RUTAS_MI_CUENTA.datos)}>Iniciar sesión</BotonEnlace>}
@@ -35,7 +33,6 @@ export default async function DatosPage() {
 
   return (
     <section>
-      <SeccionTitulo titulo="Mis datos" />
       <DatosCuenta
         nombre={nombre}
         // Datos personales = los de Clerk (el correo con el que ingresa).

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { Alert, Card, EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { DireccionesEnvio } from "@/components/mi-cuenta/DireccionesEnvio";
-import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
 import { direccionDesdeFacturacion } from "@/lib/direccion-envio";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
@@ -36,7 +35,6 @@ export default async function DireccionesPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <SeccionTitulo titulo="Direcciones y envíos" />
       {clerkUserId ? (
         <DireccionesEnvio
           iniciales={direcciones}

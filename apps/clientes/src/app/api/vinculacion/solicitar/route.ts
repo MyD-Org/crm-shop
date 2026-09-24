@@ -5,9 +5,10 @@ import { solicitarVinculacion } from "@/lib/vinculacion";
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/vinculacion/solicitar — Body: { cuit }
+ * POST /api/vinculacion/solicitar — Body: { documento } (acepta `cuit` por compatibilidad)
  *
- * Manda un código al email que ya está cargado en Alegra para ese CUIT.
+ * Manda un código al email que ya está cargado en Alegra para ese documento
+ * (CUIT, DNI, CPF, CNPJ, CI o RUC).
  * Exige sesión de Clerk: la vinculación siempre se ata a una cuenta concreta.
  */
 export async function POST(req: Request) {
@@ -16,19 +17,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  let body: { cuit?: unknown };
+  let body: { documento?: unknown; cuit?: unknown };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
 
-  const cuit = typeof body.cuit === "string" ? body.cuit.trim().slice(0, 20) : "";
-  if (!cuit) {
-    return NextResponse.json({ error: "Falta el CUIT." }, { status: 400 });
+  const raw = body.documento ?? body.cuit;
+  const documento = typeof raw === "string" ? raw.trim().slice(0, 20) : "";
+  if (!documento) {
+    return NextResponse.json({ error: "Falta el documento." }, { status: 400 });
   }
 
-  const resultado = await solicitarVinculacion(userId, cuit);
+  const resultado = await solicitarVinculacion(userId, documento);
 
   if (!resultado.ok) {
     // Ninguno de estos motivos depende de si el CUIT consultado existe —ver el

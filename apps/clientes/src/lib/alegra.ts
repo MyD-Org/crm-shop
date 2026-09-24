@@ -258,15 +258,45 @@ export async function getContacto(id: string) {
   return apiFetch<AlegraContact>(`/contacts/${segmentoId(id)}`);
 }
 
+/** Solo dígitos: "20-12345678-9" y "20.123.456.789" son el mismo documento. */
+function digitosDoc(value: string | null | undefined): string {
+  return (value ?? "").replace(/\D/g, "");
+}
+
 /**
- * Busca un cliente por su CUIT/identificacion. Alegra filtra contactos por el
- * parametro `identification`; devolvemos el primero o null.
+ * Formas en que puede estar cargado un documento en Alegra (CUIT, DNI, CPF,
+ * CNPJ, CI o RUC), sin repetir: tal cual se tipeó, solo dígitos y, si tiene 11
+ * dígitos, como CUIT con guiones. `identification=` compara el texto, así que no
+ * se sabe cuál guarda cada contacto. Mismo criterio que el login del portal del
+ * CRM (apps/admin, `variantesDocumento`).
+ */
+export function variantesDocumento(tipeado: string): string[] {
+  const digitos = digitosDoc(tipeado);
+  const variantes = [tipeado.trim(), digitos];
+  if (digitos.length === 11) {
+    variantes.push(`${digitos.slice(0, 2)}-${digitos.slice(2, 10)}-${digitos.slice(10)}`);
+  }
+  return [...new Set(variantes.filter(Boolean))];
+}
+
+/**
+ * Busca un cliente por su documento (cualquier tipo). Prueba cada variante con
+ * el filtro `identification` de Alegra y exige match exacto por dígitos: que un
+ * contacto venga en la lista no alcanza. Peor caso: 3 requests.
  */
 export async function buscarContactoPorIdentificacion(
   identification: string
 ): Promise<AlegraContact | null> {
-  const results = await getContactos({ identification, limit: 1 });
-  return results?.[0] ?? null;
+  const buscado = digitosDoc(identification);
+  if (!buscado) return null;
+  for (const variante of variantesDocumento(identification)) {
+    const results = await getContactos({ identification: variante, limit: 5 });
+    const match = (Array.isArray(results) ? results : []).find(
+      (c) => digitosDoc(c.identification) === buscado
+    );
+    if (match) return match;
+  }
+  return null;
 }
 
 /**

@@ -156,8 +156,13 @@ async function main() {
     }
   }
   if (rechazadas.length > 0) {
-    console.error(`\nNo se crearon: ${rechazadas.join(", ")}. El resto quedó creado.`)
+    const creadas = plan.faltan.length - rechazadas.length
+    console.error(
+      `\nNo se crearon: ${rechazadas.join(", ")}.` +
+        (creadas > 0 ? ` Las otras ${creadas} quedaron creadas.` : " No se creó ninguna: revise --base-url."),
+    )
     process.exitCode = 1
+    if (creadas === 0) return
   }
   console.log("\nListo. Haga una factura de prueba en Alegra y busque en los logs de Vercel `[alegra-stock]`.")
 }

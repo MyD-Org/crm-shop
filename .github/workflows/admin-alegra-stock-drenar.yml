@@ -1,0 +1,81 @@
+# Red de los avisos de stock de Alegra (webhooks de facturas, compras e ítems del CRM).
+# Llama a /api/cron/alegra-stock-drenar con CRON_SECRET cada 15 minutos: re-lee los ítems que
+# los avisos dejaron en la cola y no se alcanzaron a leer (tope por invocación, 429, función
+# que murió), purga lo viejo y avisa si hace más de un día que no llega ningún aviso (Alegra
+# puede desactivar una suscripción sin decir nada).
+# Con la cola vacía no gasta requests a Alegra.
+# Ver apps/admin/docs/FUNCIONALIDADES.md, "Stock casi en tiempo real (webhooks de Alegra)".
+
+name: admin · Drenar cola de stock Alegra
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  # A mano desde la pestaña Actions; `tenant` vacío = todos los tenants con cola o avisos.
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: "Id de un tenant puntual (vacío = todos)"
+        required: false
+        default: ""
+
+permissions: {}
+
+# Grupo PROPIO, no `alegra-cuenta`: GitHub deja un solo pendiente por grupo, y un cron de 15
+# minutos en ese grupo reemplazaría el pendiente de la sync diaria. Convive con la sync gracias
+# al ritmo del drenador (≤ 60 requests/min) y a que corta ante un 429.
+concurrency:
+  group: admin-alegra-stock-drenar
+  cancel-in-progress: false
+
+jobs:
+  drenar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Drenar la cola de re-lectura de stock
+        env:
+          BASE_URL: ${{ secrets.ADMIN_BASE_URL }}
+          CRON_SECRET: ${{ secrets.ADMIN_CRON_SECRET }}
+          # Por env y no interpolado en el script: el input lo escribe una persona.
+          TENANT: ${{ github.event.inputs.tenant }}
+          # Minutos sin avisos a partir de los cuales se advierte (un día).
+          SIN_AVISOS_MIN: "1440"
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Faltan los secrets ADMIN_BASE_URL o ADMIN_CRON_SECRET del repo." >&2
+            exit 1
+          fi
+
+          query=""
+          if [ -n "$TENANT" ]; then query="?tenant=$(jq -rn --arg t "$TENANT" '$t|@uri')"; fi
+
+          # --max-time 320 > maxDuration=300 de la ruta: si Vercel corta, queremos ver su error,
+          # no un timeout de curl.
+          http_code=$(curl -sS -o response.json -w '%{http_code}' \
+            --max-time 320 \
+            -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/alegra-stock-drenar$query" || true)
+          echo "HTTP $http_code"
+
+          # Una respuesta 200 que no es el JSON de la ruta (p. ej. una página HTML de por medio)
+          # no puede pasar por "nada pendiente".
+          if [ "$http_code" != "200" ] || ! jq -e '.tenants | type == "array"' response.json > /dev/null 2>&1; then
+            echo "::error::El drenaje falló (HTTP $http_code o respuesta que no es la de la ruta)."
+            exit 1
+          fi
+
+          # Resumen para logs públicos: identificador de tenant, estado y conteos. Nunca el
+          # campo "error" ni datos de Alegra.
+          jq -c '.tenants[] | {tenant, ok, leidos, inactivos, errores, requests, pendientes, corte, ultimoAvisoMin}' response.json
+
+          for t in $(jq -r --argjson lim "$SIN_AVISOS_MIN" '.tenants[] | select(.ultimoAvisoMin != null and .ultimoAvisoMin > $lim) | .tenant' response.json); do
+            echo "::warning::El tenant $t no recibe avisos de stock de Alegra hace más de un día. Revise las suscripciones (scripts/alegra-webhooks-stock.ts listar)."
+          done
+
+          fallidos=$(jq -r '[.tenants[] | select(.ok == false) | .tenant] | join(" ")' response.json)
+          if [ -n "$fallidos" ]; then
+            echo "::error::Fallaron: $fallidos. Ver los logs de Vercel ([alegra-stock/drenar])."
+            exit 1
+          fi

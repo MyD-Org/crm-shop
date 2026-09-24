@@ -178,3 +178,56 @@ export async function registrarAviso(
     return { ...base, accion: "encolado", encolados: await encolar(tx, tenantId, union, evento) }
   })
 }
+
+// ── Suscripciones (las usa scripts/alegra-webhooks-stock.ts) ──
+
+export interface SuscripcionAlegra {
+  id: string
+  event: string
+  url: string
+}
+
+/** Ruta de stock de ESTE tenant (no las de contactos ni las de otro tenant). */
+export function esSuscripcionStock(tenantId: string, s: SuscripcionAlegra): boolean {
+  return (
+    (EVENTOS_STOCK as readonly string[]).includes(s.event) &&
+    s.url.includes(`/api/webhooks/alegra/stock/${encodeURIComponent(tenantId)}/`)
+  )
+}
+
+/** Alegra guarda la URL sin esquema: se compara sin él. */
+const mismaUrl = (a: string, b: string) => a.replace(/^https?:\/\//i, "") === b.replace(/^https?:\/\//i, "")
+
+export interface PlanSuscripciones {
+  /** Eventos cuya suscripción vigente ya existe. */
+  vigentes: EventoStock[]
+  /** Las que hay que crear. */
+  faltan: { event: EventoStock; url: string }[]
+  /** Suscripciones de stock del tenant con OTRA url (otro host o secreto viejo). */
+  viejas: SuscripcionAlegra[]
+}
+
+/**
+ * Qué falta crear y qué quedó desactualizado, a partir de las suscripciones actuales de la
+ * cuenta. Re-ejecutar con todo al día no crea nada.
+ */
+export function planSuscripcionesStock(
+  tenantId: string,
+  baseUrl: string,
+  token: string,
+  actuales: SuscripcionAlegra[],
+): PlanSuscripciones {
+  const nuestras = actuales.filter((s) => esSuscripcionStock(tenantId, s))
+  const plan = EVENTOS_STOCK.map((event) => ({ event, url: `${baseUrl}${rutaWebhookStock(tenantId, event, token)}` }))
+  const existe = (p: { event: string; url: string }) => nuestras.some((s) => s.event === p.event && mismaUrl(s.url, p.url))
+  return {
+    vigentes: plan.filter(existe).map((p) => p.event),
+    faltan: plan.filter((p) => !existe(p)),
+    viejas: nuestras.filter((s) => !plan.some((p) => p.event === s.event && mismaUrl(s.url, p.url))),
+  }
+}
+
+/** La URL con el token tapado: alcanza para reconocerla sin filtrar el secreto. */
+export function enmascararUrlStock(url: string): string {
+  return url.replace(/(\/api\/webhooks\/alegra\/stock\/[^/]+\/[^/]+\/)([^/?#]+)/, (_, pre: string, tok: string) => `${pre}${tok.slice(0, 4)}…`)
+}

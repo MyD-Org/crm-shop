@@ -65,6 +65,13 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     }
   });
 
+  it("la vista de catálogo sólo trae stock, precio y estado", () => {
+    const vista = esperado["public.catalog_products_shop"];
+    for (const prohibida of ["raw", "name", "description", "images", "prices"]) {
+      expect(vista[prohibida], prohibida).toBeUndefined();
+    }
+  });
+
   it("de tenants sólo se declaran las columnas del GRANT", () => {
     expect(Object.keys(esperado["public.tenants"]).sort()).toEqual(
       ["id", "name", "receipts_email", "whatsapp_number"],

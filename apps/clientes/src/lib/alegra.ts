@@ -485,16 +485,25 @@ export function marcaDeCustomFields(customFields: unknown): string | null {
   return valor ? String(valor) : null;
 }
 
-export function mapItemRow(raw: Record<string, unknown>): ItemSyncRow {
-  const priceRaw = Array.isArray(raw.price)
-    ? (raw.price as Record<string, unknown>[])
-    : [];
-  const prices: AlegraPrice[] = priceRaw.map((p) => ({
-    idPriceList: p.idPriceList != null ? String(p.idPriceList) : undefined,
-    name: p.name != null ? String(p.name) : undefined,
-    price: Number(p.price ?? 0),
-    main: Boolean(p.main),
+/**
+ * `price` de un ítem de Alegra → la forma que guarda el espejo del Shop
+ * (`[{ idPriceList, name, price, main }]`, ids como string). La usan la sync
+ * del Shop y la lectura de los precios del CRM, que llegan crudos
+ * (`precios_alegra`). Idempotente: aplicada sobre precios ya normalizados
+ * devuelve lo mismo.
+ */
+export function mapPrecios(raw: unknown): AlegraPrice[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Record<string, unknown>[]).map((p) => ({
+    idPriceList: p?.idPriceList != null ? String(p.idPriceList) : undefined,
+    name: p?.name != null ? String(p.name) : undefined,
+    price: Number(p?.price ?? 0),
+    main: Boolean(p?.main),
   }));
+}
+
+export function mapItemRow(raw: Record<string, unknown>): ItemSyncRow {
+  const prices = mapPrecios(raw.price);
 
   const cat = raw.itemCategory as { id?: unknown } | undefined;
   const inv = raw.inventory as { availableQuantity?: unknown } | undefined;

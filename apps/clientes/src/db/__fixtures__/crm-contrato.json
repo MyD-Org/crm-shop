@@ -102,5 +102,13 @@
     "created_at": "timestamp with time zone",
     "submitted_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
+  },
+  "public.catalog_products_shop": {
+    "tenant_id": "text",
+    "alegra_id": "text",
+    "stock": "numeric",
+    "precios_alegra": "jsonb",
+    "activo": "boolean",
+    "alegra_leido_at": "timestamp with time zone"
   }
 }

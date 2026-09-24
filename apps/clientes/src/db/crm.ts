@@ -12,7 +12,8 @@
  * los tenants del CRM.
  *
  * Permisos: el rol de runtime del Shop (`shop_app`) necesita `SELECT` sobre
- * las tablas del catálogo; los de cuenta corriente (vista del espejo de
+ * las tablas del catálogo; el de la vista de stock lo concede la migración 0035
+ * de apps/admin; los de cuenta corriente (vista del espejo de
  * contactos, `tenants` por columna, condiciones, avisos y comprobantes) los
  * concede la migración 0032 de apps/admin (ver docs/una-base-esquema-shop.md,
  * "Cuenta corriente: lectura/escritura en public").
@@ -115,6 +116,31 @@ export const crmContactos = publico
     paymentTermName: text("payment_term_name"),
     paymentTermDays: integer("payment_term_days"),
     creditLimit: numeric("credit_limit", { precision: 16, scale: 2 }),
+  })
+  .existing();
+
+/**
+ * Stock, precios y estado de cada ítem según el espejo de productos del CRM
+ * (`public.catalog_products_shop`, migración 0035 de apps/admin). Es una VISTA
+ * angosta: el CRM la mantiene al día con la sync diaria y con los webhooks de
+ * stock de Alegra, así que suele estar más fresca que `shop.catalog_products`.
+ * `shop_app` tiene SELECT sobre la vista y nada sobre la tabla.
+ *
+ * - `preciosAlegra` es `raw->'price'` TAL CUAL lo manda Alegra (ids numéricos,
+ *   `main` incluido): se normaliza con `mapPrecios` antes de resolver una lista.
+ * - `activo` = visto en la última sync del CRM y no inactivo en Alegra.
+ * - `alegraLeidoAt` = cuándo se le pidió el dato a Alegra; null en filas que
+ *   todavía no pasaron por una sync o un webhook. Decide qué fuente gana (ver
+ *   `src/lib/stock-disponible.ts`).
+ */
+export const crmStock = publico
+  .view("catalog_products_shop", {
+    tenantId: text("tenant_id").notNull(),
+    alegraId: text("alegra_id").notNull(),
+    stock: numeric("stock"),
+    preciosAlegra: jsonb("precios_alegra").notNull(),
+    activo: boolean("activo").notNull(),
+    alegraLeidoAt: timestamp("alegra_leido_at", { withTimezone: true }),
   })
   .existing();
 

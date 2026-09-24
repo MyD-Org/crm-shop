@@ -8,6 +8,8 @@ import {
   ivaPersistible,
   listAllCategories,
   mapItemRow,
+  mapPrecios,
+  precioDeLista,
   tipoCuentaDe,
 } from "./alegra";
 
@@ -62,6 +64,45 @@ describe("mapItemRow", () => {
 
   it("ivaPorcentaje null si el ítem no tiene tax", () => {
     expect(mapItemRow(base).ivaPorcentaje).toBeNull();
+  });
+});
+
+/**
+ * Los precios que el CRM le pasa al Shop (`precios_alegra` de la vista
+ * `catalog_products_shop`) son el `price` crudo de Alegra: ids numéricos y
+ * `main` tal cual. `mapPrecios` los deja con la forma del espejo del Shop, y
+ * aplicarlo sobre precios que ya tienen esa forma no los cambia.
+ */
+describe("mapPrecios", () => {
+  const crudo = [
+    { idPriceList: 1, name: "General", price: "1000.5", main: true, currency: { code: "ARS" } },
+    { idPriceList: 7, name: "Mayorista", price: 800 },
+  ];
+
+  it("normaliza el price crudo de Alegra a la forma del espejo", () => {
+    expect(mapPrecios(crudo)).toEqual([
+      { idPriceList: "1", name: "General", price: 1000.5, main: true },
+      { idPriceList: "7", name: "Mayorista", price: 800, main: false },
+    ]);
+  });
+
+  it("con la lista del cliente o la principal, igual que el espejo del Shop", () => {
+    expect(precioDeLista(mapPrecios(crudo), "7")).toBe(800);
+    expect(precioDeLista(mapPrecios(crudo))).toBe(1000.5);
+  });
+
+  it("es idempotente: precios ya normalizados salen iguales", () => {
+    const normalizados = mapPrecios(crudo);
+    expect(mapPrecios(normalizados)).toEqual(normalizados);
+  });
+
+  it("algo que no es un array → sin precios", () => {
+    expect(mapPrecios(null)).toEqual([]);
+    expect(mapPrecios({ price: 1 })).toEqual([]);
+  });
+
+  it("mapItemRow usa el mismo mapeo", () => {
+    expect(mapItemRow({ id: 7, name: "X", price: crudo }).prices).toEqual(mapPrecios(crudo));
   });
 });
 

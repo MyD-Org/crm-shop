@@ -225,6 +225,13 @@
       "when": 1790187491044,
       "tag": "0031_alegra_contacts_shop",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790215916164,
+      "tag": "0032_shop_cuenta_corriente",
+      "breakpoints": true
     }
   ]
 }

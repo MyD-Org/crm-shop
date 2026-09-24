@@ -34,6 +34,20 @@ const { r2Holder, FAKE_R2_CONFIG } = vi.hoisted(() => ({
   },
 }))
 
+// Interruptor para simular que la limpieza lazy del listado falla (PR-4a): el resto del
+// módulo es el real.
+const cleanupHolder = vi.hoisted(() => ({ falla: false }))
+vi.mock("@/lib/payment-receipts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/payment-receipts")>()
+  return {
+    ...actual,
+    cleanupStale: async (tenantId: string, now: Date) => {
+      if (cleanupHolder.falla) throw new Error("limpieza caída (simulada)")
+      return actual.cleanupStale(tenantId, now)
+    },
+  }
+})
+
 vi.mock("next/headers", () => ({
   cookies: async () => ({}),
   headers: async () => new Headers({ "x-tenant-id": "tenant-a" }),
@@ -117,6 +131,7 @@ let adminB: string
 describe("admin: comprobantes de pago", () => {
   beforeEach(async () => {
     vi.clearAllMocks()
+    cleanupHolder.falla = false
     await truncateAll()
     await seedTenant(TENANT_A, { receiptsEmail: "pagos@example.com" })
     await seedTenant(TENANT_B, { receiptsEmail: "pagos-b@example.com" })
@@ -313,6 +328,74 @@ describe("admin: comprobantes de pago", () => {
         expect(res.status).toBe(404)
         expect(await res.json()).toEqual(NOT_FOUND_BODY)
       }
+    })
+  })
+
+  describe("limpieza lazy en el listado (POR-2, PR-4a)", () => {
+    const DIA = 24 * 60 * 60 * 1000
+    const sinArchivo = {
+      submittedAt: null,
+      fileKey: null,
+      fileMime: null,
+      fileSize: null,
+      fileSha256: null,
+    }
+
+    it("el GET borra los uploading vencidos (>24 h) y los rejected viejos (>30 d) del tenant, y lista igual", async () => {
+      const ahora = Date.now()
+      const pend = await seedReceipt(TENANT_A, "CLI-A")
+      const uploadingViejo = await seedReceipt(TENANT_A, "CLI-A", {
+        ...sinArchivo,
+        status: "uploading",
+        createdAt: new Date(ahora - 2 * DIA),
+      })
+      const uploadingReciente = await seedReceipt(TENANT_A, "CLI-A", {
+        ...sinArchivo,
+        status: "uploading",
+        createdAt: new Date(ahora - 60 * 60 * 1000),
+      })
+      const rejectedViejo = await seedReceipt(TENANT_A, "CLI-A", {
+        ...sinArchivo,
+        status: "rejected",
+        rejectReason: "file_too_large",
+        createdAt: new Date(ahora - 31 * DIA),
+      })
+      const deOtroTenant = await seedReceipt(TENANT_B, "CLI-B", {
+        ...sinArchivo,
+        status: "uploading",
+        createdAt: new Date(ahora - 2 * DIA),
+      })
+
+      const res = await listRoute(adminReq("/api/admin/comprobantes"))
+      expect(res.status).toBe(200)
+      const lista = await res.json()
+      expect(lista.items.map((i: { id: string }) => i.id)).toEqual([pend.id])
+
+      const ids = (await getDb().select({ id: paymentReceipts.id }).from(paymentReceipts)).map((r) => r.id)
+      expect(ids).not.toContain(uploadingViejo.id)
+      expect(ids).not.toContain(rejectedViejo.id)
+      expect(ids).toContain(uploadingReciente.id)
+      expect(ids).toContain(pend.id)
+      // Sólo limpia el tenant del guard.
+      expect(ids).toContain(deOtroTenant.id)
+    })
+
+    it("si la limpieza falla, el listado responde 200 igual y no borra nada", async () => {
+      cleanupHolder.falla = true
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+      const pend = await seedReceipt(TENANT_A, "CLI-A")
+      const uploadingViejo = await seedReceipt(TENANT_A, "CLI-A", {
+        ...sinArchivo,
+        status: "uploading",
+        createdAt: new Date(Date.now() - 2 * DIA),
+      })
+
+      const res = await listRoute(adminReq("/api/admin/comprobantes"))
+      expect(res.status).toBe(200)
+      expect((await res.json()).items.map((i: { id: string }) => i.id)).toEqual([pend.id])
+      expect((await rowById(uploadingViejo.id)).status).toBe("uploading")
+      expect(errorSpy).toHaveBeenCalled()
+      errorSpy.mockRestore()
     })
   })
 

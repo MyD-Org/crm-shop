@@ -73,6 +73,12 @@ describe("resolverFactura", () => {
     expect(d.porId).not.toHaveBeenCalled()
   })
 
+  it("número abreviado (sin ceros): se consulta con el formato de Alegra, que no los completa", async () => {
+    const d = deps([[f()]])
+    expect(await resolverFactura("201-7040", null, d)).toEqual({ kind: "ok", factura: f() })
+    expect(d.porNumero).toHaveBeenCalledWith("00201-00007040", {})
+  })
+
   it("filtro ignorado por Alegra: no se toma una factura que no coincide", async () => {
     const d = deps([[f({ alegraId: "1", numero: "00201-00000001" })]])
     expect(await resolverFactura("00201-00007040", null, d)).toEqual({ kind: "no_encontrada" })

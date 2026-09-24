@@ -60,6 +60,16 @@ export type ResolverFacturaResult =
   | { kind: "no_encontrada" }
   | { kind: "ambigua" }
 
+/**
+ * Lo tipeado, en el formato con el que filtra Alegra. `numberTemplate_fullNumber` no completa
+ * ceros (probado 2026-09-24: "201-7040" → 0 resultados, "00201-00007040" → 1; la parte final
+ * sola, "7040", sí matchea): "punto-número" se rellena a 5 y 8 dígitos. Lo demás va tal cual.
+ */
+export function numeroParaConsulta(tipeado: string): string {
+  const m = /^(\d{1,5})\s*-\s*(\d{1,8})$/.exec(tipeado.trim())
+  return m ? `${m[1].padStart(5, "0")}-${m[2].padStart(8, "0")}` : tipeado.trim()
+}
+
 function unicasPorId(lista: AlegraFacturaResumen[]): AlegraFacturaResumen[] {
   const vistas = new Map<string, AlegraFacturaResumen>()
   for (const x of lista) if (!vistas.has(x.alegraId)) vistas.set(x.alegraId, x)
@@ -83,10 +93,11 @@ export async function resolverFactura(
   const t = tipeado.trim()
   if (!/[0-9A-Za-z]/.test(t)) return { kind: "no_encontrada" }
 
-  let candidatas = unicasPorId((await deps.porNumero(t, {})).filter((x) => numeroFacturaCoincide(x.numero, t)))
+  const consulta = numeroParaConsulta(t)
+  let candidatas = unicasPorId((await deps.porNumero(consulta, {})).filter((x) => numeroFacturaCoincide(x.numero, t)))
   if (candidatas.length === 0 && clienteCodigo) {
     candidatas = unicasPorId(
-      (await deps.porNumero(t, { clientId: clienteCodigo })).filter((x) => numeroFacturaCoincide(x.numero, t)),
+      (await deps.porNumero(consulta, { clientId: clienteCodigo })).filter((x) => numeroFacturaCoincide(x.numero, t)),
     )
   }
   if (candidatas.length > 1 && clienteCodigo) {

@@ -1348,9 +1348,12 @@ export async function getFacturaPorId(
  * Facturas candidatas para un número tipeado: UNA página (30) de `/invoices` con el filtro
  * `numberTemplate_fullNumber`, de la más reciente a la más vieja, opcionalmente del cliente.
  *
- * NO confía en el filtro: el listado de facturas ignora en silencio los filtros que no conoce
- * (probado con `number` y `query`, ver "Facturas paginadas"), y en ese caso devuelve las 30
- * más recientes. Quien llama se queda sólo con las que coinciden con lo tipeado
+ * Probado contra Alegra el 2026-09-24: el filtro funciona con el número completo
+ * ("00201-00007040" → esa sola) y con la parte final ("7040" → las de todas las numeraciones
+ * que terminan así); no completa ceros ("201-7040" → ninguna: lo normaliza
+ * `numeroParaConsulta`). Igual NO se confía en él: el listado ignora en silencio los filtros
+ * que no conoce (`number`, `query`, ver "Facturas paginadas") y ahí devuelve las 30 más
+ * recientes. Quien llama se queda sólo con las que coinciden con lo tipeado
  * (`numeroFacturaCoincide`, lib/factura-vincular.ts).
  */
 export async function buscarFacturasPorNumero(

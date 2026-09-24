@@ -93,8 +93,21 @@ describe("cotizar", () => {
     expect(sql).toContain('then "catalog_products_shop"."stock" else "shop"."catalog_products"."stock" end');
     expect(sql).toContain('then "catalog_products_shop"."precios_alegra" else "shop"."catalog_products"."prices" end');
     expect(sql).toContain('then "catalog_products_shop"."activo" else "shop"."catalog_products"."status" = \'active\' end');
-    // Nombre, marca e IVA siguen siendo del espejo del Shop.
+    // Marca e IVA siguen siendo del espejo del Shop.
     expect(sql).toContain('"shop"."catalog_products"."iva_porcentaje"');
+  });
+
+  it("el nombre de la línea es el mismo que muestra el catálogo (overlay → descripción → name)", async () => {
+    filas = [["10", "Abrazadera", null, null, precios, "8", "21", "active", null]];
+    const c = await cotizar([{ id: "10", qty: 1 }]);
+    const [{ sql, params }] = grabadora.consultas;
+    expect(sql).toContain(
+      'coalesce(nullif("public"."catalog_overlay"."nombre", \'\'), nullif("shop"."catalog_products"."description", \'\'), "shop"."catalog_products"."name")',
+    );
+    const join = sql.match(/left join "public"\."catalog_overlay" on \(.*?"public"\."catalog_overlay"\."tenant_id" = \$(\d+)\)/);
+    expect(join, sql).not.toBeNull();
+    expect(params[Number(join![1]) - 1]).toBe("tenant-test");
+    expect(c.lineas[0].name).toBe("Abrazadera");
   });
 
   it("precios crudos de Alegra (los del CRM) resuelven la lista del cliente y la principal", async () => {

@@ -35,7 +35,9 @@ export async function GET(req: Request) {
 
     // phone tiene prioridad: es el dato confiable cuando viene de un canal verificado.
     const contacts = phone ? await buscarPorTelefono(tenant, phone) : await buscarPorTexto(tenant, q)
-    const criterio = phone ? `phone="${phone}"` : `q="${q}"`
+    // Ni el teléfono ni el texto van al log (son datos del cliente y quedan en Vercel): alcanza
+    // con el tipo de búsqueda y, para el teléfono, los últimos 2 dígitos.
+    const criterio = phone ? `tipo=telefono fin=${phone.replace(/\D/g, "").slice(-2)}` : `tipo=texto largo=${q.length}`
     console.log(`[agent/contacts] tenant=${tenant.id} cliente=${auth.codigocliente} ${criterio} → ${contacts.length}`)
 
     return Response.json({

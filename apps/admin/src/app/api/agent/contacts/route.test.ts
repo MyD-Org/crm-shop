@@ -117,3 +117,38 @@ describe("POST /api/agent/contacts", () => {
     expect(state.llamadas).toEqual(["crear"])
   })
 })
+
+describe("logs de /api/agent/contacts", () => {
+  /** Todo lo que la ruta mandó a console, en un solo string. */
+  const logueado = () =>
+    (["log", "warn", "error", "info"] as const)
+      .flatMap((m) => vi.mocked(console[m]).mock?.calls ?? [])
+      .map((args) => args.map(String).join(" "))
+      .join("\n")
+
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.spyOn(console, "info").mockImplementation(() => {})
+  })
+
+  it("?phone= no loguea el teléfono, solo tipo, últimos 2 dígitos y cantidad", async () => {
+    state.porTelefono = [contacto]
+    await GET(conAuth("https://t1.plataforma.example/api/agent/contacts?phone=%2B54%209%2011%205555-0001"))
+    const log = logueado()
+    expect(log).not.toContain("5555")
+    expect(log).not.toContain("5491155550001")
+    expect(log).not.toContain("+54 9 11 5555-0001")
+    expect(log).toContain("tipo=telefono fin=01")
+    expect(log).toContain("tenant=t1")
+    expect(log).toContain("→ 1")
+  })
+
+  it("?q= no loguea el texto buscado", async () => {
+    await GET(conAuth("https://t1.plataforma.example/api/agent/contacts?q=Juana%20Ejemplo%2020-12345678-9"))
+    const log = logueado()
+    expect(log).not.toContain("Juana")
+    expect(log).not.toContain("12345678")
+    expect(log).toContain("tipo=texto")
+    expect(log).toContain("→ 0")
+  })
+})

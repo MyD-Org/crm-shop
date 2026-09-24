@@ -1,23 +1,20 @@
 import { NextResponse } from "next/server";
-import { identidadActual, idPriceListDe } from "@/lib/auth";
+import { identidadActual, idPriceListSnapshot } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { permitir } from "@/lib/rate-limit";
 
-// Precio y stock en vivo desde Alegra: nunca cacheable.
+// Depende del usuario y del espejo del momento: nunca cacheable.
 export const dynamic = "force-dynamic";
 
 /**
  * Techo por usuario.
  *
- * Esta ruta es un amplificador: un request se abre en hasta MAX_LINEAS (60)
- * llamadas a Alegra. Sin límite, un solo usuario logueado agota la cuota de la
- * API y se lleva puestos el catálogo y el checkout para todos.
- *
+ * Esta ruta ya no toca Alegra (cotiza desde el espejo), pero cada request es
+ * una consulta a la base: el techo evita que un cliente en loop la martille.
  * 20 por minuto es holgado para el uso real —el carrito recotiza al cambiar
- * cantidades, con debounce— y deja el peor caso en 1.200 llamadas por minuto
- * por usuario en vez de ilimitadas.
+ * cantidades, con debounce—.
  */
 const MAX_POR_MINUTO = 20;
 
@@ -25,9 +22,10 @@ const MAX_POR_MINUTO = 20;
  * POST /api/carrito/cotizar
  * Body: { items: [{ id, qty }], entregaTipo?, ciudad? }
  *
- * Devuelve los totales que el shop compromete. Es la única fuente de verdad del
- * precio: el carrito y el checkout muestran lo que devuelve esta ruta, no lo que
- * tienen en memoria. Ver src/lib/cotizacion.ts.
+ * Totales del carrito leídos del espejo (`catalog_products` + lista de precios
+ * del snapshot de `client_links`), sin llamadas a Alegra. El carrito y el
+ * checkout muestran lo que devuelve esta ruta, no lo que tienen en memoria, y
+ * `POST /api/pedidos` registra el mismo número. Ver src/lib/cotizacion.ts.
  */
 export async function POST(req: Request) {
   const { clerkUserId, cliente } = await identidadActual();
@@ -77,7 +75,7 @@ export async function POST(req: Request) {
 
   try {
     const idPriceList = cliente
-      ? await idPriceListDe(cliente.codigocliente)
+      ? await idPriceListSnapshot(cliente.codigocliente)
       : undefined;
     const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo });
 

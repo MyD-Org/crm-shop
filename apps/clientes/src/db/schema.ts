@@ -36,9 +36,8 @@ export const shop = pgSchema("shop");
  * topea las consultas en 30 items por request y el catálogo tiene ~2800:
  * paginarlo en vivo en cada visita al catálogo es inviable.
  *
- * Regla (misma que el CRM): la cache se usa para LISTAR y BUSCAR; el precio y
- * el stock que el shop COMPROMETE (ficha de producto, checkout) se confirman en
- * vivo contra Alegra. Ver docs/arquitectura-integraciones.md.
+ * Se usa para LISTAR, BUSCAR y cotizar: el carrito, el checkout y el pedido
+ * usan los precios que publica la tienda (ver src/lib/cotizacion.ts).
  */
 
 export const catalogCategories = shop.table(

@@ -19,7 +19,6 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { clientLinks } from "@/db/schema";
-import { getContacto, idPriceListUsable } from "./alegra";
 import { intentarVinculacionPorEmail } from "./vinculacion";
 import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
@@ -266,29 +265,13 @@ export async function claveSolicitante(): Promise<string | null> {
 }
 
 /**
- * Lista de precios del cliente en Alegra.
- *
- * Se re-lee de Alegra en vez de confiar en el snapshot de `client_links`: la
- * lista asignada la cambia un operador en Alegra, y cotizarle a alguien con una
- * lista vieja es cobrarle mal. Si Alegra no responde, cae al snapshot y después
- * a la lista principal — que esté lento no puede impedir comprar.
+ * Lista de precios del cliente, del snapshot de `client_links`, sin tocar
+ * Alegra. La usan el carrito y la confirmación del pedido, así que el cliente
+ * paga lo que vio. Sin vínculo activo → undefined = lista principal.
  */
-export async function idPriceListDe(
+export async function idPriceListSnapshot(
   codigocliente: string,
 ): Promise<string | undefined> {
-  try {
-    const contacto = await getContacto(codigocliente);
-    // Alegra respondió: su palabra es la final. Si el contacto no tiene lista, o
-    // la que tiene está dada de baja, se devuelve `undefined` y se cotiza con la
-    // lista principal. NO se cae al snapshot: el snapshot es más viejo, así que
-    // usarlo acá sería resucitar justamente la lista que Alegra dio de baja.
-    return idPriceListUsable(contacto);
-  } catch (err) {
-    console.error(`[auth] no se pudo leer la lista de precios de ${codigocliente}:`, err);
-  }
-
-  // Solo se llega acá si Alegra NO respondió. Ahí sí el snapshot es mejor que
-  // nada: es la última lista que le conocimos al cliente.
   const [fila] = await getDb()
     .select({ idPriceList: clientLinks.idPriceList })
     .from(clientLinks)

@@ -10,6 +10,8 @@ import { getContenidoHome } from "@/lib/home-datos";
 import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
 import { identidadActual } from "@/lib/auth";
 import { HEADER_TEMA, TEMA_COOKIE } from "@/lib/tema-ip";
+import { propsChatIa } from "@/lib/chat-ia";
+import { ChatIa } from "@/components/chat/ChatIa";
 import "./globals.css";
 
 // Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
@@ -76,6 +78,10 @@ export default async function RootLayout({
   // del CRM no tiene dónde guardarlos y no ve el corazón. `identidadActual`
   // está en `cache()`: el Header la resuelve en el mismo request.
   const identidad = await identidadActual();
+  // Chat con el agente (flag `chat-ia`, apagado por defecto): sin flag o sin
+  // config de ai-api es null y no se monta nada. Detrás del gate "Próximamente"
+  // tampoco aparece: el proxy responde el gate antes de llegar a este layout.
+  const chat = await propsChatIa();
   const favoritosBloqueados = !identidad.clerkUserId && !!identidad.cliente;
   // Tema por geo-IP (guía §5): el proxy decide en la primera visita
   // (Misiones → azul de marca) y `?tema=` la puede forzar. El header
@@ -112,6 +118,7 @@ export default async function RootLayout({
             <Header />
             {children}
             <SiteFooter />
+            {chat ? <ChatIa {...chat} /> : null}
           </Providers>
         </ClerkProvider>
       </body>

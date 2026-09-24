@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { hostsDeMedios } from "./src/lib/catalogo-medios";
 import { REDIRECTS_MI_CUENTA } from "./src/lib/mi-cuenta-redirects";
+import { normalizarUrlAiApi } from "./src/lib/ai-api-config";
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -28,6 +29,13 @@ const nextConfig: NextConfig = {
   // URLs viejas de Mi cuenta (pestañas y detalle en singular) a las rutas por
   // sección. Se resuelven antes que el filesystem: no se renderiza nada.
   redirects: async () => [...REDIRECTS_MI_CUENTA],
+  // Chat con el agente: el widget habla con ai-api por el mismo origen (sin
+  // CORS). Sólo existe si AI_API_URL está definida; que el chat se muestre lo
+  // decide el flag `chat-ia` (src/lib/chat-ia-flag.ts), no esta regla.
+  rewrites: async () => {
+    const aiApi = normalizarUrlAiApi(process.env.AI_API_URL);
+    return aiApi ? [{ source: "/ai-api/:path*", destination: `${aiApi}/:path*` }] : [];
+  },
 };
 
 export default nextConfig;

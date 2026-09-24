@@ -8,7 +8,7 @@ import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { formatRubro } from "@/lib/formato-rubro";
-import { textoUnidadesDisponibles } from "@/lib/catalogo-vista";
+import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import { BotonFavorito } from "@/components/BotonFavorito";
@@ -158,7 +158,7 @@ export function ProductoClient({
 
             {/* Cantidad + agregar */}
             <div className="flex items-center gap-3">
-              <QuantityStepper value={qty} onValueChange={setQty} min={1} max={999} />
+              <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} />
               <Button
                 onClick={() => addItem(producto, qty)}
                 disabled={agotado || sinPrecio}

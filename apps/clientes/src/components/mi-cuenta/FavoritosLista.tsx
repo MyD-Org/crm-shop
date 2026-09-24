@@ -8,7 +8,7 @@ import { CuotasCard } from "@/components/CuotasCard";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
-import { etiquetaStock } from "@/lib/catalogo-vista";
+import { etiquetaStock, maxCantidad } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -77,6 +77,7 @@ export function FavoritosLista({
           action={
             <AddToCartButton
               disabled={p.stock === "out"}
+              max={maxCantidad(p)}
               product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
             />
           }

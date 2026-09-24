@@ -114,6 +114,17 @@ export function textoUnidadesDisponibles(
   return `${miles.format(n)} ${n === 1 ? "disponible" : "disponibles"}`;
 }
 
+/** Tope de los selectores de cantidad cuando no se conoce el stock. */
+export const CANTIDAD_MAXIMA = 999;
+
+/**
+ * Cuántas unidades deja elegir el selector de cantidad: las disponibles si se
+ * conocen; si no (ítem no inventariable), el tope general.
+ */
+export function maxCantidad(p: Pick<Product, "stock" | "stockQty">): number {
+  return unidadesPositivas(p) ?? CANTIDAD_MAXIMA;
+}
+
 /** Un chip de filtro activo y el cambio de estado que lo quita. */
 export interface ChipFiltro {
   /** Única entre los chips: sirve de `key`. */

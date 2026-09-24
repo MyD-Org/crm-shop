@@ -104,17 +104,42 @@ describe("registrarAviso", () => {
   })
 
   it("borrador: no encola, pero el índice queda al día; al abrirse encola la unión", async () => {
-    const r = await registrarAviso(A, "edit-invoice", factura("11", "draft", [5]))
+    const r = await registrarAviso(A, "new-invoice", factura("11", "draft", [5]))
     expect(r.accion).toBe("borrador")
     expect(await cola()).toEqual([])
     expect(await indice("invoice", "11")).toEqual(["5"])
+
+    const editado = await registrarAviso(A, "edit-invoice", factura("11", "draft", [5, 6]))
+    expect(editado.accion).toBe("borrador")
+    expect(await cola()).toEqual([])
 
     await registrarAviso(A, "edit-invoice", factura("11", "open", [5, 6]))
     expect(await cola()).toEqual(["5", "6"])
   })
 
+  it("abierta que pasa a borrador: encola sus ítems (Alegra devuelve el stock)", async () => {
+    await registrarAviso(A, "new-invoice", factura("12", "open", [5, 7]))
+    await vaciarCola()
+    const r = await registrarAviso(A, "edit-invoice", factura("12", "draft", [5, 7]))
+    expect(r.accion).toBe("encolado")
+    expect(await cola()).toEqual(["5", "7"])
+    expect(await indice("invoice", "12")).toEqual(["5", "7"])
+
+    // Ya es borrador: borrarla no devuelve nada.
+    await vaciarCola()
+    const borrado = await registrarAviso(A, "delete-invoice", factura("12", "draft", []))
+    expect(borrado.accion).toBe("borrador")
+    expect(await cola()).toEqual([])
+  })
+
+  it("edición a borrador de un documento sin historial: encola (pudo estar abierto)", async () => {
+    const r = await registrarAviso(A, "edit-invoice", factura("13", "draft", [5]))
+    expect(r.accion).toBe("encolado")
+    expect(await cola()).toEqual(["5"])
+  })
+
   it("borrar un borrador no encola nada", async () => {
-    await registrarAviso(A, "edit-invoice", factura("11", "draft", [5]))
+    await registrarAviso(A, "new-invoice", factura("11", "draft", [5]))
     const r = await registrarAviso(A, "delete-invoice", factura("11", "draft", []))
     expect(r.accion).toBe("borrador")
     expect(await cola()).toEqual([])

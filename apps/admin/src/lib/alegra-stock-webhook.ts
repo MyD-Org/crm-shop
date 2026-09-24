@@ -173,8 +173,13 @@ export async function registrarAviso(
         target: [alegraDocumentoItems.tenantId, alegraDocumentoItems.tipo, alegraDocumentoItems.alegraDocId],
         set: { itemIds: sql`excluded.item_ids`, estado: sql`excluded.estado`, actualizadoAt: sql`now()` },
       })
-    // Un borrador no mueve stock. Anulada (void) o un `state` desconocido: se re-lee (es inocuo).
-    if (esBorrador(aviso.estado)) return { ...base, accion: "borrador", encolados: 0 }
+    // Un borrador no mueve stock: se ignora si nace así o si ya lo era. Pasar una abierta a
+    // borrador SÍ devuelve el stock (visto en prod el 2026-09-24), y sin historial no se sabe
+    // si estaba abierta: en esos casos se re-lee. Anulada (void) o un `state` desconocido: se
+    // re-lee (es inocuo).
+    if (esBorrador(aviso.estado) && (evento.startsWith("new-") || (previo && esBorrador(previo.estado)))) {
+      return { ...base, accion: "borrador", encolados: 0 }
+    }
     return { ...base, accion: "encolado", encolados: await encolar(tx, tenantId, union, evento) }
   })
 }

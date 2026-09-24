@@ -37,6 +37,8 @@ const NADA: CapacidadesDespliegue = {
 };
 /** Rebanada 1 de portal-al-shop: sólo "Facturas y saldo" de Facturación. */
 const REBANADA_1: CapacidadesDespliegue = { ...NADA, favoritos: true, facturas: true };
+/** Rebanada 2 de portal-al-shop: suma Pagos y Presupuestos. */
+const REBANADA_2: CapacidadesDespliegue = { ...REBANADA_1, pagos: true, presupuestos: true };
 const ids = (s: { id: string }[]) => s.map((x) => x.id);
 const cap = (clerk: boolean, vinculado: boolean, esCuentaCorriente = false) => ({ clerk, vinculado, esCuentaCorriente });
 
@@ -78,6 +80,22 @@ describe("seccionesVisibles", () => {
     for (const id of ["pagos", "presupuestos", "condiciones", "avisos"]) expect(s).not.toContain(id);
   });
 
+  it("rebanada 2 desplegada: Facturas y saldo, Pagos y Presupuestos, en ese orden; Condiciones y Avisos no", () => {
+    const s = ids(seccionesVisibles(cap(true, true, true), REBANADA_2));
+    expect(s.filter((id) => ["facturas", "pagos", "presupuestos", "condiciones", "avisos"].includes(id))).toEqual([
+      "facturas",
+      "pagos",
+      "presupuestos",
+    ]);
+  });
+
+  it("rebanada 2 sin vínculo: Pagos y Presupuestos no aparecen", () => {
+    const s = ids(seccionesVisibles(cap(true, false), REBANADA_2));
+    expect(s).toContain("facturas");
+    expect(s).not.toContain("pagos");
+    expect(s).not.toContain("presupuestos");
+  });
+
   it("contado: todo Facturación menos Condiciones", () => {
     const s = ids(seccionesVisibles(cap(true, true, false), TODO));
     expect(s).toEqual(expect.arrayContaining(["facturas", "pagos", "presupuestos", "avisos"]));
@@ -104,12 +122,12 @@ describe("seccionesVisibles", () => {
     expect(ids(seccionesVisibles(cap(false, false), TODO))).toEqual(["pedidos", "facturas", "direcciones"]);
   });
 
-  it("por default usa el despliegue actual: favoritos y facturas, nada más de Facturación", () => {
+  it("por default usa el despliegue actual: facturas, pagos y presupuestos; Condiciones y Avisos todavía no", () => {
     expect(CAPACIDADES_DESPLIEGUE).toMatchObject({
       favoritos: true,
       facturas: true,
-      pagos: false,
-      presupuestos: false,
+      pagos: true,
+      presupuestos: true,
       condiciones: false,
       avisos: false,
     });
@@ -172,6 +190,9 @@ describe("seccionDesplegada", () => {
       expect(seccionDesplegada(s, REBANADA_1)).toBe(false);
       expect(seccionDesplegada(s, TODO)).toBe(true);
     }
+    expect(seccionDesplegada("pagos", REBANADA_2)).toBe(true);
+    expect(seccionDesplegada("presupuestos", REBANADA_2)).toBe(true);
+    expect(seccionDesplegada("condiciones", REBANADA_2)).toBe(false);
   });
 });
 

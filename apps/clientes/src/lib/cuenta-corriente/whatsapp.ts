@@ -26,6 +26,26 @@ export interface DatosMensaje {
   cuit: string;
 }
 
+/** WhatsApp de la empresa y quién escribe: lo que necesitan las barras de selección. */
+export interface ContactoWhatsApp {
+  /** Número de la empresa, sólo dígitos. */
+  numero: string;
+  datos: DatosMensaje;
+}
+
+/**
+ * Contacto para los mensajes, o `null` si no se ofrece WhatsApp: sin número de
+ * la empresa (WA-1) o sin razón social con qué identificar al cliente.
+ */
+export function contactoWhatsApp(
+  tenant: { nombre: string; whatsapp: string | null } | null,
+  cliente: { razonsocial?: string | null; cuit?: string | null },
+): ContactoWhatsApp | null {
+  const razonsocial = cliente.razonsocial ?? "";
+  if (!tenant?.whatsapp || !razonsocial) return null;
+  return { numero: tenant.whatsapp, datos: { empresa: tenant.nombre, razonsocial, cuit: cliente.cuit ?? "" } };
+}
+
 /** `https://wa.me/<número>?text=…`, o `null` si la empresa no tiene WhatsApp cargado. */
 export function enlaceWhatsApp(numero: string | null | undefined, mensaje: string): string | null {
   const digitos = (numero ?? "").replace(/\D/g, "");

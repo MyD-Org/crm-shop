@@ -5,6 +5,8 @@
  */
 export const ALEGRA_OCUPADO = "El sistema de facturación está ocupado. Inténtelo de nuevo en unos minutos.";
 export const FACTURAS_CAIDAS = "No pudimos obtener sus facturas. Inténtelo de nuevo en unos minutos.";
+export const PAGOS_CAIDOS = "No pudimos obtener sus pagos. Inténtelo de nuevo en unos minutos.";
+export const PRESUPUESTOS_CAIDOS = "No pudimos obtener sus presupuestos. Inténtelo de nuevo en unos minutos.";
 
 export const DOCUMENTO_INVALIDO = "Indique el documento.";
 export const DOCUMENTO_NO_ENCONTRADO = "No encontramos el documento.";

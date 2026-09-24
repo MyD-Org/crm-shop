@@ -1,0 +1,63 @@
+import { notFound, redirect } from "next/navigation";
+import { EmptyState } from "@myd-org/ui";
+import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
+import { AvisoSeccionCaida } from "@/components/mi-cuenta/cuenta-corriente/AvisoSeccionCaida";
+import { PresupuestosSeccion } from "@/components/mi-cuenta/cuenta-corriente/PresupuestosSeccion";
+import { identidadActual } from "@/lib/auth";
+import { contactoPorId } from "@/lib/contactos-espejo";
+import { getPresupuestosPage } from "@/lib/cuenta-corriente/erp-cc";
+import { motivoAlegra } from "@/lib/cuenta-corriente/mensajes";
+import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
+import { contactoWhatsApp } from "@/lib/cuenta-corriente/whatsapp";
+import { rutaIngreso } from "@/lib/ingreso";
+import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
+
+// Datos de UN cliente, leídos en vivo de Alegra: nunca prerenderizar ni cachear.
+export const dynamic = "force-dynamic";
+
+/**
+ * Presupuestos: la lista del cliente vinculado (de a 30, con "Cargar más"),
+ * filtros Todos / Aceptados / Sin aceptar y fecha de emisión resueltos en
+ * Alegra, WhatsApp para avanzar o consultar y el PDF en un visor dentro de la
+ * página. Todo vinculado la ve, contado incluido.
+ */
+export default async function PresupuestosPage() {
+  if (!seccionDesplegada("presupuestos")) notFound();
+  const { clerkUserId, cliente } = await identidadActual();
+  if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.presupuestos));
+
+  // Sin vínculo no se llama a Alegra ni se lee `public`: se ofrece vincular.
+  if (!cliente) {
+    return (
+      <EmptyState
+        title="Vincule su cuenta de cliente para ver su cuenta corriente."
+        action={<BotonEnlace href={rutaVincular(RUTAS_MI_CUENTA.presupuestos)}>Vincular mi cuenta</BotonEnlace>}
+      />
+    );
+  }
+
+  const codigo = cliente.codigocliente;
+  const [paginaR, tenantR, contactoR] = await Promise.allSettled([
+    getPresupuestosPage(codigo),
+    datosTenant(),
+    contactoPorId(codigo),
+  ]);
+  for (const [bloque, r] of [
+    ["presupuestos", paginaR],
+    ["tenant", tenantR],
+    ["contacto", contactoR],
+  ] as const) {
+    // Sólo el motivo técnico: nunca el cuerpo de Alegra ni datos del contacto.
+    if (r.status === "rejected") console.error(`mi-cuenta/presupuestos: ${bloque} caído (${motivoAlegra(r.reason)})`);
+  }
+  if (paginaR.status === "rejected") return <AvisoSeccionCaida que="sus presupuestos" />;
+
+  // Razón social y CUIT del espejo si se pudo leer; si no, los de la identidad.
+  const contacto = contactoR.status === "fulfilled" ? contactoR.value : null;
+  const whatsapp = contactoWhatsApp(tenantR.status === "fulfilled" ? tenantR.value : null, {
+    razonsocial: contacto?.nombre ?? cliente.razonsocial,
+    cuit: contacto?.identificacion ?? cliente.cuit,
+  });
+
+  return <PresupuestosSeccion primeraPagina={paginaR.value} whatsapp={whatsapp} />;
+}

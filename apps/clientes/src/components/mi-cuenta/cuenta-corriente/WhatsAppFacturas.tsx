@@ -2,18 +2,14 @@
 
 import { Button, SelectionBar, type RenderLink } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
-import { enlaceWhatsApp, mensajeFacturas, type DatosMensaje } from "@/lib/cuenta-corriente/whatsapp";
+import { enlaceWhatsApp, mensajeFacturas, type ContactoWhatsApp } from "@/lib/cuenta-corriente/whatsapp";
 import { saldoDe } from "@/lib/cuenta-corriente/vista-facturas";
 import type { Factura } from "@/lib/cuenta-corriente/tipos";
 
-export interface ContactoWhatsApp {
-  /** Número de la empresa, sólo dígitos. */
-  numero: string;
-  datos: DatosMensaje;
-}
+export type { ContactoWhatsApp };
 
 /** WhatsApp se abre en otra pestaña (o la app): el cliente no pierde la lista. */
-const enlaceExterno: RenderLink = (props) => <a {...props} target="_blank" rel="noopener noreferrer" />;
+export const enlaceExterno: RenderLink = (props) => <a {...props} target="_blank" rel="noopener noreferrer" />;
 
 /**
  * Barra de la selección de facturas: "Pagar" o "Consultar" arma el mensaje a

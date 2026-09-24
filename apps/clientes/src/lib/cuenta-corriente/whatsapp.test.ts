@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enlaceWhatsApp, mensajeFacturas, mensajePagos, mensajePresupuestos } from "./whatsapp";
+import { contactoWhatsApp, enlaceWhatsApp, mensajeFacturas, mensajePagos, mensajePresupuestos } from "./whatsapp";
 
 const DATOS = { empresa: "Empresa Demo", razonsocial: "Cliente Uno SA", cuit: "20-12345678-9" };
 
@@ -52,5 +52,22 @@ describe("mensajes", () => {
     ].join("\n");
     expect(todos).not.toMatch(/\b(tu|tus|te|vos)\b/i);
     expect(todos).not.toMatch(/\b\w+á\b(?! )/);
+  });
+});
+
+describe("contactoWhatsApp (WA-1)", () => {
+  const tenant = { nombre: "Empresa Demo", whatsapp: "5491100000000" };
+
+  it("sin número de la empresa o sin razón social: null (no hay botones)", () => {
+    expect(contactoWhatsApp(null, { razonsocial: "Cliente Uno SA" })).toBeNull();
+    expect(contactoWhatsApp({ ...tenant, whatsapp: null }, { razonsocial: "Cliente Uno SA" })).toBeNull();
+    expect(contactoWhatsApp(tenant, { razonsocial: "" })).toBeNull();
+  });
+
+  it("con los dos: número y datos del mensaje", () => {
+    expect(contactoWhatsApp(tenant, { razonsocial: "Cliente Uno SA", cuit: null })).toEqual({
+      numero: "5491100000000",
+      datos: { empresa: "Empresa Demo", razonsocial: "Cliente Uno SA", cuit: "" },
+    });
   });
 });

@@ -4,7 +4,7 @@
  *
  * El id del contacto NO es un parámetro: sale siempre de la identidad.
  */
-import type { AlegraInvoiceFilters } from "./alegra-cc";
+import type { AlegraEstimateFilters, AlegraInvoiceFilters } from "./alegra-cc";
 import type { FacturaEstado } from "./tipos";
 
 export const RANGO_INVALIDO = "Revise el rango de fechas.";
@@ -65,6 +65,51 @@ export function paramsFacturas(params: URLSearchParams): ParamsFacturas {
     start: startSeguro(params.get("start")),
     filtros: {
       ...(esEstadoFactura(estado) ? { status: ESTADO_A_STATUS[estado] } : {}),
+      ...(rango.desde ? { dateFrom: rango.desde } : {}),
+      ...(rango.hasta ? { dateTo: rango.hasta } : {}),
+    },
+  };
+}
+
+/**
+ * Parámetros de `GET /api/mi-cuenta/pagos`: sólo `start`. Alegra IGNORA los
+ * filtros de fecha en pagos (probado en el portal): ofrecerlos recortaría sólo
+ * lo cargado, así que no existen.
+ */
+export function paramsPagos(params: URLSearchParams): { start: number } {
+  return { start: startSeguro(params.get("start")) };
+}
+
+/**
+ * Filtros de presupuestos contra los de Alegra (igual que el portal del CRM,
+ * apps/admin/src/app/api/portal/presupuestos/route.ts): aceptado = facturado
+ * (`billed`). "Vigente" y "vencido" no se filtran por separado: los dos son
+ * `unbilled` y los separa el vencimiento, que Alegra no filtra.
+ */
+const FILTRO_PRESUPUESTO_A_STATUS = {
+  aceptado: "billed",
+  sin_aceptar: "unbilled",
+} as const satisfies Record<string, NonNullable<AlegraEstimateFilters["status"]>>;
+
+export type EstadoFiltroPresupuesto = keyof typeof FILTRO_PRESUPUESTO_A_STATUS;
+
+export function esEstadoFiltroPresupuesto(v: unknown): v is EstadoFiltroPresupuesto {
+  return typeof v === "string" && Object.prototype.hasOwnProperty.call(FILTRO_PRESUPUESTO_A_STATUS, v);
+}
+
+export type ParamsPresupuestos =
+  | { start: number; filtros: AlegraEstimateFilters; error?: undefined }
+  | { error: string };
+
+/** Parámetros de `GET /api/mi-cuenta/presupuestos`. Estado desconocido ⇒ todos. */
+export function paramsPresupuestos(params: URLSearchParams): ParamsPresupuestos {
+  const rango = rangoFechas(params);
+  if (rango.error !== undefined) return { error: rango.error };
+  const estado = params.get("estado");
+  return {
+    start: startSeguro(params.get("start")),
+    filtros: {
+      ...(esEstadoFiltroPresupuesto(estado) ? { status: FILTRO_PRESUPUESTO_A_STATUS[estado] } : {}),
       ...(rango.desde ? { dateFrom: rango.desde } : {}),
       ...(rango.hasta ? { dateTo: rango.hasta } : {}),
     },

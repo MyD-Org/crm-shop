@@ -32,6 +32,8 @@ import {
   getCondiciones,
   getCuenta,
   getFacturasPage,
+  mapEstimate,
+  mapPayment,
   muestraLimite,
   presupuestoEstado,
 } from "./erp-cc";
@@ -101,6 +103,50 @@ describe("presupuestoEstado", () => {
     [{ status: "unbilled", dueDate: null }, "vigente"],
   ])("%o ⇒ %s", (e, esperado) => {
     expect(presupuestoEstado(e, HOY)).toBe(esperado);
+  });
+});
+
+describe("mapPayment (PAG-2: imputaciones)", () => {
+  it("pago de 300 imputado 200 a F1 y 100 a F2", () => {
+    const p = mapPayment({
+      alegraId: "55",
+      number: "RC-0001",
+      date: "2026-09-10",
+      amount: 300,
+      method: "Transferencia",
+      invoices: [
+        { invoiceAlegraId: "1", invoiceNumber: "F1", amount: 200 },
+        { invoiceAlegraId: "2", invoiceNumber: null, amount: 100 },
+      ],
+    });
+    expect(p).toEqual({
+      id: "RC-0001",
+      alegraId: "55",
+      fecha: "10/09/2026",
+      medio: "Transferencia",
+      monto: 300,
+      // Sin número legible, el id de Alegra (igual que el portal).
+      facturas: [
+        { factura: "F1", imputado: 200 },
+        { factura: "2", imputado: 100 },
+      ],
+    });
+  });
+
+  it("sin número: el id de Alegra", () => {
+    const p = mapPayment({ alegraId: "56", number: null, date: "2026-09-11", amount: 1, method: "", invoices: [] });
+    expect(p.id).toBe("56");
+    expect(p.facturas).toEqual([]);
+  });
+});
+
+describe("mapEstimate", () => {
+  it("fechas en DD/MM/YYYY y estado según hoy", () => {
+    const e = mapEstimate(
+      { alegraId: "7", number: "P-7", date: "2026-08-01", dueDate: "2026-09-01", clientAlegraId: "42", status: "unbilled", total: 900 },
+      HOY,
+    );
+    expect(e).toEqual({ id: "P-7", alegraId: "7", fecha: "01/08/2026", validoHasta: "01/09/2026", total: 900, estado: "vencido" });
   });
 });
 

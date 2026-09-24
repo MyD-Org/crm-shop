@@ -2,12 +2,12 @@ import { notFound, redirect } from "next/navigation";
 import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FacturasYSaldo } from "@/components/mi-cuenta/cuenta-corriente/FacturasYSaldo";
-import type { ContactoWhatsApp } from "@/components/mi-cuenta/cuenta-corriente/WhatsAppFacturas";
 import { identidadActual } from "@/lib/auth";
 import { resolverDeepLink } from "@/lib/cuenta-corriente/deep-link";
 import { getCuenta, getFacturasPage, muestraLimite } from "@/lib/cuenta-corriente/erp-cc";
 import { motivoAlegra } from "@/lib/cuenta-corriente/mensajes";
 import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
+import { contactoWhatsApp } from "@/lib/cuenta-corriente/whatsapp";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 
@@ -65,14 +65,10 @@ export default async function FacturasPage({
 
   // El mensaje de WhatsApp identifica al cliente por razón social y CUIT: del
   // espejo si se pudo leer, si no de la identidad. Sin número de la empresa no hay botones.
-  const razonsocial = cuenta?.cliente.razonsocial ?? cliente.razonsocial ?? "";
-  const whatsapp: ContactoWhatsApp | null =
-    tenant?.whatsapp && razonsocial
-      ? {
-          numero: tenant.whatsapp,
-          datos: { empresa: tenant.nombre, razonsocial, cuit: cuenta?.cliente.cuit ?? cliente.cuit ?? "" },
-        }
-      : null;
+  const whatsapp = contactoWhatsApp(tenant, {
+    razonsocial: cuenta?.cliente.razonsocial ?? cliente.razonsocial,
+    cuit: cuenta?.cliente.cuit ?? cliente.cuit,
+  });
 
   return (
     <FacturasYSaldo

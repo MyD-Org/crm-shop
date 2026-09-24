@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { esFechaIso, paramsFacturas, RANGO_INVALIDO, startSeguro } from "./filtros";
+import {
+  esFechaIso,
+  paramsFacturas,
+  paramsPagos,
+  paramsPresupuestos,
+  RANGO_INVALIDO,
+  startSeguro,
+} from "./filtros";
 
 const p = (q: string) => paramsFacturas(new URLSearchParams(q));
 
@@ -54,5 +61,32 @@ describe("paramsFacturas", () => {
 
   it("un client_id en el query no llega a los filtros (ACC-3)", () => {
     expect(p("client_id=99")).toEqual({ start: 0, filtros: {} });
+  });
+});
+
+describe("paramsPagos (PAG-1: sin filtros de fecha)", () => {
+  it("sólo start; lo demás se ignora", () => {
+    expect(paramsPagos(new URLSearchParams("start=10&desde=2026-01-01&client_id=9"))).toEqual({ start: 10 });
+    expect(paramsPagos(new URLSearchParams("start=-3"))).toEqual({ start: 0 });
+  });
+});
+
+describe("paramsPresupuestos (PRE-1)", () => {
+  const pp = (q: string) => paramsPresupuestos(new URLSearchParams(q));
+
+  it("Aceptados = billed, Sin aceptar = unbilled, desconocido = todos", () => {
+    expect(pp("estado=aceptado")).toEqual({ start: 0, filtros: { status: "billed" } });
+    expect(pp("estado=sin_aceptar&start=30")).toEqual({ start: 30, filtros: { status: "unbilled" } });
+    expect(pp("estado=vigente")).toEqual({ start: 0, filtros: {} });
+    expect(pp("estado=__proto__")).toEqual({ start: 0, filtros: {} });
+  });
+
+  it("rango de emisión; inválido o invertido ⇒ error en usted", () => {
+    expect(pp("desde=2026-01-01&hasta=2026-01-31")).toEqual({
+      start: 0,
+      filtros: { dateFrom: "2026-01-01", dateTo: "2026-01-31" },
+    });
+    expect(pp("desde=2026-02-01&hasta=2026-01-01")).toEqual({ error: RANGO_INVALIDO });
+    expect(pp("hasta=31/01/2026")).toEqual({ error: RANGO_INVALIDO });
   });
 });

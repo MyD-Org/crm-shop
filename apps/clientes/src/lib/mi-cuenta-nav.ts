@@ -52,8 +52,8 @@ export const CAPACIDADES_DESPLIEGUE: Readonly<CapacidadesDespliegue> = {
   favoritos: true,
   facturas: true,
   direcciones: true,
-  pagos: false,
-  presupuestos: false,
+  pagos: true,
+  presupuestos: true,
   condiciones: false,
   avisos: false,
 };

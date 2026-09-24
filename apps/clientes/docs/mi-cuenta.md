@@ -20,13 +20,15 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 | `/mi-cuenta/envios` | Redirige (308) a `/mi-cuenta/direcciones`: Envíos y retiro se unió a Direcciones. |
 | `/mi-cuenta/favoritos` | Favoritos del usuario de Clerk en cards compactas (ver [Favoritos](#favoritos)). |
 | `/mi-cuenta/facturas` | Facturas y saldo (ver [Cuenta corriente](#cuenta-corriente)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
+| `/mi-cuenta/pagos` | Pagos recibidos, detalle con imputaciones y PDF (ver [Pagos](#pagos-mi-cuentapagos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
+| `/mi-cuenta/presupuestos` | Presupuestos con filtros y PDF (ver [Presupuestos](#presupuestos-mi-cuentapresupuestos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
 | `/mi-cuenta/vincular` | Vinculación con la cuenta de cliente de Alegra (`VincularClient`). |
 
 "Seguridad" y "Cerrar sesión" no son rutas: son acciones de la navegación
 (`openUserProfile` y `signOut` de Clerk). `/mi-cuenta/seguridad` da 404.
 
-Pagos, Presupuestos, Condiciones y Avisos todavía no existen: dan 404 y no
-aparecen en la navegación hasta que su rebanada prenda la capacidad.
+Condiciones y Avisos todavía no existen: dan 404 y no aparecen en la
+navegación hasta que su rebanada prenda la capacidad.
 
 ### Breadcrumb
 
@@ -65,7 +67,8 @@ marca la activa.
 `CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas, direcciones, pagos,
 presupuestos, condiciones, avisos }`) enciende cada sección cuando su rebanada
 la publica: navegación, menú del header y la ruta (`seccionDesplegada`, 404 si
-está apagada) leen la misma bandera. Encendidas: `favoritos` y `facturas`.
+está apagada) leen la misma bandera. Encendidas: `favoritos`, `facturas`,
+`pagos` y `presupuestos`.
 
 ## Cuenta corriente
 
@@ -107,6 +110,24 @@ Se publica por rebanadas, cada una con su bandera en
 - Selección de facturas → WhatsApp a la empresa ("Pagar" / "Consultar"),
   oculto si el tenant no tiene número.
 - Cada bloque caído (saldo, facturas) muestra su aviso; el resto sigue.
+
+### Pagos (`/mi-cuenta/pagos`)
+
+- Recibos de pago (type=in) de a 10, primera página del servidor; "Cargar más"
+  va a `GET /api/mi-cuenta/pagos?start`. Sin filtros: Alegra ignora las fechas
+  en pagos.
+- Cada pago: detalle en un diálogo con las facturas imputadas y su monto, y el
+  PDF del recibo en el visor (o descarga).
+- Selección → WhatsApp "Consultar", oculto si el tenant no tiene número.
+- Alegra caída: aviso "No pudimos obtener sus pagos…"; el resto de Mi cuenta sigue.
+
+### Presupuestos (`/mi-cuenta/presupuestos`)
+
+- De a 30, primera página del servidor; "Cargar más" y los filtros van a
+  `GET /api/mi-cuenta/presupuestos?start&estado(aceptado|sin_aceptar)&desde&hasta`,
+  resueltos en Alegra (aceptado = facturado). Vigente y vencido son los dos
+  "sin aceptar" y se ven en el estado de cada fila.
+- PDF en el visor (o descarga); selección → WhatsApp "Avanzar" / "Consultar".
 
 ### Menú agrupado
 

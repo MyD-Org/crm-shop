@@ -193,7 +193,6 @@ describe("guarda de Mi cuenta: archivos del módulo", () => {
       "WhatsAppPresupuestos.tsx",
       "ComprobantesPagos.tsx",
       "InformarPago.tsx",
-      "MisComprobantes.tsx",
       "Condiciones.tsx",
       "AvisosLista.tsx",
     ]) {

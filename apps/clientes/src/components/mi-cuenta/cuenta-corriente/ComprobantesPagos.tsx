@@ -1,52 +1,21 @@
 "use client";
 
-import { Alert } from "@myd-org/ui";
+import { useRouter } from "next/navigation";
 import type { ComprobanteCliente } from "@/lib/comprobantes/repo";
-import { HISTORIAL_CAIDO } from "@/lib/comprobantes/mensajes";
 import { InformarPago } from "./InformarPago";
-import { MisComprobantes } from "./MisComprobantes";
-import { usePaginaApi } from "./usePaginaApi";
 
 /**
- * Bloque de comprobantes de Mi cuenta → Pagos: el botón "Informar pago" y,
- * si ya informó alguno, "Mis comprobantes" con "Cargar más". Sólo se monta con
- * el almacenamiento de comprobantes configurado (CMP-5).
+ * Encabezado de Mi cuenta → Pagos: "Informar pago". Los informados en revisión
+ * se ven en la misma tabla de pagos; al informar uno se refresca la página para
+ * que aparezca ahí. Sólo se monta con el almacenamiento de comprobantes
+ * configurado (CMP-5).
  */
-export function ComprobantesPagos({
-  primeraPagina,
-}: {
-  /** `null` = no se pudo leer el historial: el botón se ofrece igual. */
-  primeraPagina: { comprobantes: ComprobanteCliente[]; total: number } | null;
-}) {
-  const pagina = usePaginaApi<ComprobanteCliente>({
-    ruta: "/api/mi-cuenta/comprobantes",
-    campo: "comprobantes",
-    inicial: { items: primeraPagina?.comprobantes ?? [], total: primeraPagina?.total ?? 0 },
-    errorCarga: HISTORIAL_CAIDO,
-  });
-
+export function ComprobantesPagos({ ultimos }: { ultimos: ComprobanteCliente[] }) {
+  const router = useRouter();
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">¿Hizo un pago? Infórmelo con su comprobante y lo registraremos.</p>
-        <InformarPago ultimos={pagina.items} onInformado={pagina.recargar} />
-      </div>
-
-      {primeraPagina === null && pagina.items.length === 0 ? (
-        <Alert tone="warning">{HISTORIAL_CAIDO}</Alert>
-      ) : (
-        (pagina.total > 0 || pagina.error) && (
-          <section aria-label="Mis comprobantes">
-            <MisComprobantes
-              items={pagina.items}
-              total={pagina.total}
-              cargando={pagina.cargando}
-              error={pagina.error}
-              onCargarMas={pagina.cargarMas}
-            />
-          </section>
-        )
-      )}
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-muted">¿Hizo un pago? Infórmelo con su comprobante y lo registraremos.</p>
+      <InformarPago ultimos={ultimos} onInformado={() => router.refresh()} />
     </div>
   );
 }

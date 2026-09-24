@@ -383,6 +383,7 @@ columna; sin DELETE en ninguna tabla:
 |---|---|
 | `alegra_contacts_shop` | SELECT (27 columnas desde 0034) |
 | `shop_contacto_write_through(text, text, text, jsonb)` | EXECUTE (0034) |
+| `catalog_products_shop` | SELECT (0035, ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) |
 | `tenants` | SELECT sólo `id, name, whatsapp_number, receipts_email` |
 | `client_commercial_conditions` | SELECT |
 | `notification_log` | SELECT, UPDATE sólo `read_at` |
@@ -600,6 +601,39 @@ WHERE dia = (now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date ORDER BY
 -- Productos re-leídos por aviso en la última hora
 SELECT tenant_id, count(*) FROM catalog_products
 WHERE leido_por = 'webhook' AND alegra_leido_at > now() - interval '1 hour' GROUP BY 1;
+```
+
+### Vista de catálogo para el Shop
+
+**Vista `catalog_products_shop`** (migración 0035, vive solo en SQL). Es lo único del espejo de
+productos que lee el Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre la
+tabla `catalog_products`). Sirve para que el Shop muestre y valide stock, precio y estado con
+el dato que el CRM mantiene al día (sync diaria + webhooks). Seis columnas:
+
+| Columna | De dónde sale |
+|---|---|
+| `tenant_id`, `alegra_id` | igual que en la tabla |
+| `stock` | `stock` (total de todos los depósitos; NULL = no inventariable) |
+| `precios_alegra` | `raw->'price'` tal cual lo manda Alegra (`[]` si no hay). No se usa `prices` porque no trae la lista principal; el Shop lo mapea con su propio mapper |
+| `activo` | `status = 'active'` (visto en la última sync) **y** `alegra_status` distinto de `'inactive'` |
+| `alegra_leido_at` | cuándo se le pidió el dato a Alegra; el Shop lo compara con su propia sync y usa el más nuevo |
+
+Nunca `raw` completo, nombres, descripciones ni imágenes. Si se cambia o borra en la tabla una
+de las columnas que usa la vista, se recrea **en la misma migración** (DROP + CREATE + GRANT).
+
+El GRANT es condicional: si el rol `shop_app` se creó después de migrar, correr como owner el
+bloque `DO $$ … $$` del final de `drizzle/0035_catalog_products_shop.sql`. La reversa está en
+el encabezado del archivo. El test
+`test/integration/catalog-products-shop-grants.integration.test.ts` corre ese mismo bloque y
+verifica como `shop_app` que la vista se lee y que la tabla y las escrituras quedan cerradas.
+
+Verificación en prod (como `shop_app`, en la base que usa el Shop):
+
+```sql
+SET ROLE shop_app;
+SELECT count(*) FROM public.catalog_products_shop;  -- debe funcionar
+SELECT 1 FROM public.catalog_products LIMIT 1;      -- debe fallar: permission denied
+RESET ROLE;
 ```
 
 ---

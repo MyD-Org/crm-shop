@@ -14,6 +14,8 @@ import {
   limpiarFiltros,
   migas,
   textoUnidadesDisponibles,
+  maxCantidad,
+  CANTIDAD_MAXIMA,
   tituloCatalogo,
 } from "./catalogo-vista";
 import type { EstadoCatalogo } from "./catalogo-url";
@@ -131,6 +133,17 @@ describe("textoUnidadesDisponibles", () => {
   it("sin stock o sin cantidad conocida no muestra nada", () => {
     expect(textoUnidadesDisponibles({ stock: "out", stockQty: 0 })).toBeUndefined();
     expect(textoUnidadesDisponibles({ stock: "in" })).toBeUndefined();
+  });
+});
+
+describe("maxCantidad", () => {
+  it("con cantidad conocida, no deja pasar de las disponibles", () => {
+    expect(maxCantidad({ stock: "low", stockQty: 1 })).toBe(1);
+    expect(maxCantidad({ stock: "in", stockQty: 40 })).toBe(40);
+  });
+
+  it("sin cantidad (no inventariable) usa el tope general", () => {
+    expect(maxCantidad({ stock: "in" })).toBe(CANTIDAD_MAXIMA);
   });
 });
 

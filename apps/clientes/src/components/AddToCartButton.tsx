@@ -4,9 +4,12 @@ import { useState, type MouseEvent } from "react";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import { PlusIcon } from "@/components/catalogo/iconos";
 import { useCart, type CartItem } from "@/context/CartContext";
+import { CANTIDAD_MAXIMA } from "@/lib/catalogo-vista";
 
 interface AddToCartButtonProps {
   disabled?: boolean;
+  /** Unidades disponibles: el stepper no deja pasar de acá. */
+  max?: number;
   product?: Omit<CartItem, "qty">;
 }
 
@@ -22,7 +25,7 @@ function sinNavegar(e: MouseEvent) {
 }
 
 /** "+" redondo para agregar; con el producto en el carrito, el stepper del DS. */
-export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
+export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: AddToCartButtonProps) {
   const { items, addItem, removeItem, updateQty } = useCart();
 
   // Sin precio no hay venta posible: mismo criterio que el filtro de los
@@ -72,8 +75,9 @@ export function AddToCartButton({ disabled, product }: AddToCartButtonProps) {
       <QuantityStepper
         value={qty}
         min={0}
-        // Sin stock o sin precio no se suma más, pero se puede bajar.
-        max={deshabilitado ? qty : 999}
+        // Sin stock o sin precio no se suma más, pero se puede bajar. Si ya
+        // había más que las disponibles, tampoco se suma, pero se deja bajar.
+        max={deshabilitado ? qty : Math.max(max, qty)}
         onValueChange={(n) => (n <= 0 ? removeItem(product.id) : updateQty(product.id, n))}
         decrementLabel="Quitar uno"
         incrementLabel="Agregar uno más"

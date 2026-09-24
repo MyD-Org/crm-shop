@@ -29,6 +29,7 @@ import {
   tipoCuentaDe,
   type AlegraContact,
 } from "./alegra";
+import type { ContactoFacturacion } from "./contacto-alegra";
 import { shopTenantId } from "./tenant";
 
 /** Cuenta de Alegra dentro del tenant. Hoy siempre una (ver `alegra_account` en el CRM). */
@@ -318,4 +319,37 @@ export async function comercialEspejo(
   const c = await vinculablePorId(alegraId);
   if (!c) return null;
   return { tipoCuenta: c.tipoCuenta, idPriceList: idPriceListUsable(c) };
+}
+
+// ---------------------------------------------------------------------------
+// Facturación (change `contacto-fuente-unica`). Sólo espejo: 0 requests.
+// ---------------------------------------------------------------------------
+
+/**
+ * Datos de facturación del contacto según el espejo (columnas generadas de la
+ * 0034 del CRM), o `null` sin fila activa. El respaldo en vivo lo decide
+ * `datos-del-contacto.ts`. Lanza si la vista no responde.
+ */
+export async function facturacionEspejo(alegraId: string): Promise<ContactoFacturacion | null> {
+  if (!esIdAlegra(alegraId)) return null;
+  const [fila] = await getDb()
+    .select({
+      alegraId: crmContactos.alegraId,
+      name: crmContactos.name,
+      identification: crmContactos.identification,
+      identificationNorm: crmContactos.identificationNorm,
+      identificationType: crmContactos.identificationType,
+      identificationNumber: crmContactos.identificationNumber,
+      ivaCondition: crmContactos.ivaCondition,
+      addressStreet: crmContactos.addressStreet,
+      addressCity: crmContactos.addressCity,
+      addressProvince: crmContactos.addressProvince,
+      addressPostalCode: crmContactos.addressPostalCode,
+    })
+    .from(crmContactos)
+    .where(and(activasDelShop(), eq(crmContactos.alegraId, alegraId)))
+    .limit(1);
+  if (!fila) return null;
+  // `name` es NOT NULL en la vista, pero un nombre en blanco cuenta como vacío.
+  return { ...fila, name: textoONull(fila.name) };
 }

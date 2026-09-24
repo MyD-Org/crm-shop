@@ -37,13 +37,20 @@ import {
   idPriceListUsable,
 } from "./alegra";
 import {
+  emailsDelContacto,
+  normalizarEmail,
+  observacionesConEmail,
+} from "./observaciones-contacto";
+import {
   contactoPorDocumento,
   contactosPorEmail,
   vinculableDeAlegra,
   vinculablePorId,
   type ContactoVinculable,
 } from "./contactos-espejo";
+import { sincronizarContactoConPerfil } from "./contacto-write-through";
 import { enmascararEmail, enviarEmail } from "./email";
+import { getPerfilFacturacion } from "./facturacion-db";
 import { armarMailCodigoVinculacion, urlLogoMail } from "./vinculacion-mail";
 import { permitir } from "./rate-limit";
 
@@ -642,6 +649,19 @@ export async function cancelarVinculacion(clerkUserId: string): Promise<void> {
     .where(and(eq(linkOtps.clerkUserId, clerkUserId), isNull(linkOtps.consumedAt)));
 }
 
+/** ¿El perfil de facturación del usuario tiene este documento? (D2, sólo dígitos). */
+async function perfilConDocumento(clerkUserId: string, documento: string | null): Promise<boolean> {
+  const digitos = (documento ?? "").replace(/\D/g, "");
+  if (!digitos) return false;
+  try {
+    const perfil = await getPerfilFacturacion(clerkUserId);
+    return (perfil?.nroDoc ?? "").replace(/\D/g, "") === digitos;
+  } catch {
+    // Sin perfil legible no hay nada que subir: la vinculación sigue.
+    return false;
+  }
+}
+
 /**
  * Paso 3: el cliente confirmó la cuenta; se revalida el código y se crea la
  * vinculación con los datos releídos (ver `releerContacto`).
@@ -718,9 +738,15 @@ export async function confirmarVinculacion(
   const email = normalizarEmail(emailUsuario);
   // Si ya es uno de los emails del contacto (según lo recién leído), no hay nada
   // que anotar y no se gasta una request más a /contacts, que tiene tope propio.
-  if (email && !emailsDelContacto(contacto.email).includes(email)) {
+  const emailAlternativo = email && !emailsDelContacto(contacto.email).includes(email) ? email : undefined;
+  // D5 (change `contacto-fuente-unica`): si su perfil tiene el MISMO documento
+  // que el contacto, lo que el perfil tenga y Alegra no, se sube (sólo vacíos).
+  const perfilConMismoDoc = await perfilConDocumento(clerkUserId, contacto.identification);
+  if (emailAlternativo || perfilConMismoDoc) {
     const alegraContactId = otp.alegraContactId;
-    after(() => registrarEmailAlternativo(alegraContactId, email));
+    // En segundo plano: la vinculación no espera a Alegra. Un solo PUT como
+    // mucho, con las observaciones y los vacíos juntos.
+    after(() => sincronizarContactoConPerfil(alegraContactId, { clerkUserId, emailAlternativo }));
   }
 
   return {
@@ -734,65 +760,13 @@ export async function confirmarVinculacion(
 // Email alternativo en las observaciones del contacto de Alegra
 // ---------------------------------------------------------------------------
 
-const ZONA_AR = "America/Argentina/Buenos_Aires";
-
-function normalizarEmail(email: string | null | undefined): string {
-  return (email ?? "").trim().toLowerCase();
-}
-
-/**
- * Los emails de un contacto de Alegra, normalizados. El campo es un texto libre
- * y en la cuenta hay contactos con varios separados por coma, punto y coma o
- * espacio: mismo criterio que `emails_norm` del espejo del CRM.
- */
-export function emailsDelContacto(email: unknown): string[] {
-  if (typeof email !== "string") return [];
-  return [
-    ...new Set(
-      email
-        .toLowerCase()
-        .split(/[,; ]+/)
-        .map((e) => e.trim())
-        .filter(Boolean),
-    ),
-  ];
-}
-
-/** DD/MM/AAAA en hora de Argentina (a las 22 h de Buenos Aires ya es otro día en UTC). */
-export function fechaArgentina(fecha: Date): string {
-  const partes = new Intl.DateTimeFormat("en-GB", {
-    timeZone: ZONA_AR,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).formatToParts(fecha);
-  const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
-  return `${parte("day")}/${parte("month")}/${parte("year")}`;
-}
-
-/** La línea que se agrega a las observaciones. */
-export function lineaEmailAlternativo(email: string, fecha: Date): string {
-  return `Tienda online: también usa ${email} (vinculado el ${fechaArgentina(fecha)})`;
-}
-
-/**
- * Las observaciones con la línea agregada al final, o `null` si no hay nada que
- * hacer: el email ya es del contacto, o ya figura en las observaciones (se
- * vinculó antes, o lo anotó a mano la sucursal). Eso lo hace idempotente.
- */
-export function observacionesConEmail(
-  observaciones: unknown,
-  emailsContacto: unknown,
-  email: string,
-  fecha: Date,
-): string | null {
-  const norm = normalizarEmail(email);
-  if (!norm || emailsDelContacto(emailsContacto).includes(norm)) return null;
-  const actuales = typeof observaciones === "string" ? observaciones : "";
-  if (actuales.toLowerCase().includes(norm)) return null;
-  const linea = lineaEmailAlternativo(norm, fecha);
-  return actuales.trim() ? `${actuales.trimEnd()}\n${linea}` : linea;
-}
+// La lógica pura vive en observaciones-contacto.ts; se reexporta por compatibilidad.
+export {
+  emailsDelContacto,
+  fechaArgentina,
+  lineaEmailAlternativo,
+  observacionesConEmail,
+} from "./observaciones-contacto";
 
 /**
  * Anota en las observaciones del contacto de Alegra el email con el que el

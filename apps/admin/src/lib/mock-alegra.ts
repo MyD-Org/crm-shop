@@ -166,6 +166,11 @@ export function mockInvoicesByContact(contactAlegraId: string): AlegraInvoice[] 
   return mockInvoices.filter((i) => i.clientAlegraId === contactAlegraId)
 }
 
+/** Todas las facturas de las fixtures (para "Vincular factura" en modo mock). */
+export function mockAllInvoices(): AlegraInvoice[] {
+  return mockInvoices
+}
+
 export function mockPaymentsByContact(contactAlegraId: string): AlegraPayment[] {
   // Un pago pertenece al contacto si alguna factura imputada es suya.
   const contactInvoiceIds = new Set(mockInvoicesByContact(contactAlegraId).map((i) => i.alegraId))

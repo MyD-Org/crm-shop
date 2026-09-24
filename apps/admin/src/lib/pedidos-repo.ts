@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm"
 import { getDb } from "@/db"
 import { alegraContacts } from "@/db/schema"
 import { shopOrders, shopOrderItems, type ShopOrderItemRow, type ShopOrderRow } from "@/db/shop-schema"
@@ -13,8 +13,9 @@ import type { EstadoPedido } from "@/lib/pedidos-transiciones"
 //    el guard (host verificado), nunca el request.
 //  - Sólo core builder (`db.select().from(shopOrders)`), nunca `db.query.*`: estas tablas no
 //    están en el `schema` del cliente a propósito (ver el encabezado de shop-schema.ts).
-//  - Lo ÚNICO que el CRM escribe de un pedido es el estado, el motivo de cancelación y la
-//    auditoría del cambio. Totales, pago, snapshot del cliente e ítems son del Shop.
+//  - Lo ÚNICO que el CRM escribe de un pedido es el estado, el motivo de cancelación, la
+//    factura vinculada con su marca de facturado (`factura_*` + `facturado_*`) y la auditoría
+//    de esos cambios. Totales, pago, snapshot del cliente e ítems son del Shop.
 
 export const PEDIDOS_DEFAULT_LIMIT = 25
 export const PEDIDOS_MAX_LIMIT = 50
@@ -202,6 +203,144 @@ export async function cambiarEstado(
   return { kind: "conflict", actual: existente.estado as EstadoPedido }
 }
 
+// ───────────────────────── Factura vinculada ─────────────────────────
+
+/** Lo que se guarda de la factura de Alegra al vincularla (copia de ese momento). */
+export interface FacturaParaVincular {
+  alegraId: string
+  numero: string | null
+  /** Emisión, YYYY-MM-DD. */
+  fecha: string
+  total: number
+}
+
+export type FacturaResult =
+  | { kind: "ok"; pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null }
+  | { kind: "not_found" }
+  | { kind: "cancelado" }
+  /** El pedido ya tiene OTRA factura (vincular) o no la que el operador tenía en pantalla (desvincular). */
+  | { kind: "conflict" }
+
+async function okConItems(tenantId: string, pedido: PedidoRow): Promise<FacturaResult> {
+  const [items, listaPrecios] = await Promise.all([itemsDe(pedido.id), listaParaRevision(tenantId, pedido)])
+  return { kind: "ok", pedido, items, listaPrecios }
+}
+
+/**
+ * Vincula una factura de Alegra (ya leída y validada por la ruta) y marca el pedido como
+ * facturado: `facturado_en` deja de ser NULL y el pedido sale de `shop.stock_reservado`, o sea
+ * que libera su reserva. NO cambia el estado.
+ *
+ * UN UPDATE condicional (`WHERE id AND tenant AND estado <> 'cancelado' AND sin factura`),
+ * igual que `cambiarEstado`: dos operadores a la vez → uno solo gana. Si no afectó filas, un
+ * SELECT (también por tenant) distingue: no existe/ajeno, cancelado, ya tenía ESA factura
+ * (idempotente → ok, sin tocar la fecha original) u otra (conflict).
+ */
+export async function vincularFactura(
+  tenantId: string,
+  id: string,
+  input: { factura: FacturaParaVincular; actor: { id: string; name: string }; now: Date },
+): Promise<FacturaResult> {
+  if (!UUID_RE.test(id)) return { kind: "not_found" }
+  const { factura, actor, now } = input
+
+  const [actualizado] = await getDb()
+    .update(shopOrders)
+    .set({
+      facturaAlegraId: factura.alegraId,
+      facturaNumero: factura.numero,
+      facturaFecha: factura.fecha || null,
+      facturaTotal: factura.total.toFixed(2),
+      facturadoEn: now,
+      facturadoPor: actor.id,
+      facturadoPorNombre: actor.name,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(shopOrders.id, id),
+        eq(shopOrders.tenantId, tenantId),
+        ne(shopOrders.estado, "cancelado"),
+        isNull(shopOrders.facturaAlegraId),
+      ),
+    )
+    .returning()
+  if (actualizado) return okConItems(tenantId, actualizado)
+
+  const [existente] = await getDb()
+    .select()
+    .from(shopOrders)
+    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
+  if (!existente) return { kind: "not_found" }
+  if (existente.facturaAlegraId === factura.alegraId) return okConItems(tenantId, existente)
+  if (existente.facturaAlegraId) return { kind: "conflict" }
+  return { kind: "cancelado" }
+}
+
+/**
+ * Desvincula la factura y quita la marca de facturado (las siete columnas juntas). Si el
+ * pedido sigue vivo, vuelve a reservar stock. Idempotente: sin factura → ok sin cambios.
+ * `esperada` = la factura que el operador tenía en pantalla: si ahora hay otra → conflict.
+ */
+export async function desvincularFactura(
+  tenantId: string,
+  id: string,
+  input: { esperada: string | null; now: Date },
+): Promise<FacturaResult> {
+  if (!UUID_RE.test(id)) return { kind: "not_found" }
+  const conditions: SQL[] = [eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), isNotNull(shopOrders.facturaAlegraId)]
+  if (input.esperada) conditions.push(eq(shopOrders.facturaAlegraId, input.esperada))
+
+  const [actualizado] = await getDb()
+    .update(shopOrders)
+    .set({
+      facturaAlegraId: null,
+      facturaNumero: null,
+      facturaFecha: null,
+      facturaTotal: null,
+      facturadoEn: null,
+      facturadoPor: null,
+      facturadoPorNombre: null,
+      updatedAt: input.now,
+    })
+    .where(and(...conditions))
+    .returning()
+  if (actualizado) return okConItems(tenantId, actualizado)
+
+  const [existente] = await getDb()
+    .select()
+    .from(shopOrders)
+    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
+  if (!existente) return { kind: "not_found" }
+  if (existente.facturaAlegraId) return { kind: "conflict" }
+  return okConItems(tenantId, existente)
+}
+
+/** Otros pedidos del MISMO tenant que ya tienen esa factura (aviso en la confirmación). */
+export async function pedidosConFactura(tenantId: string, alegraId: string, excepto: string): Promise<string[]> {
+  const filas = await getDb()
+    .select({ numero: shopOrders.numero })
+    .from(shopOrders)
+    .where(
+      and(eq(shopOrders.tenantId, tenantId), eq(shopOrders.facturaAlegraId, alegraId), ne(shopOrders.id, excepto)),
+    )
+    .orderBy(asc(shopOrders.numero))
+  return filas.map((f) => formatearNumeroPedido(f.numero))
+}
+
+/**
+ * ¿Este pedido está reservando stock ahora? Mismo criterio que la vista `shop.stock_reservado`
+ * (migración 0012 del Shop); lo fija contra la vista `stock-reservado.integration.test.ts`.
+ */
+const ESTADOS_QUE_RESERVAN = ["confirmado", "preparacion", "en_camino"]
+export const VENTANA_PENDIENTE_MS = 24 * 60 * 60_000
+export function reservaStock(row: PedidoRow, now: Date = new Date()): boolean {
+  if (row.facturadoEn) return false
+  if (ESTADOS_QUE_RESERVAN.includes(row.estado)) return true
+  if (row.estado !== "pendiente") return false
+  return row.pagoEstado === "pagado" || now.getTime() - row.createdAt.getTime() < VENTANA_PENDIENTE_MS
+}
+
 // ───────────────────────────── DTOs ─────────────────────────────
 
 /** `numeric` de Postgres llega como string. */
@@ -278,6 +417,12 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   actualizadoEn: string
   /** Lista de precios del contacto de Alegra con ese documento; sólo con `otra_lista_precios`. */
   revisionListaPrecios: string | null
+  /** Factura de Alegra vinculada (copia de cuando se vinculó), o null. */
+  factura: { alegraId: string; numero: string | null; fecha: string | null; total: number | null } | null
+  facturadoEn: string | null
+  facturadoPorNombre: string | null
+  /** Si el pedido está apartando stock en este momento (ver `reservaStock`). */
+  reservaStock: boolean
   items: PedidoItemDto[]
 }
 
@@ -349,6 +494,17 @@ export function toPedidoDetalleDto(
     estadoActualizadoPorNombre: row.estadoActualizadoPorNombre,
     actualizadoEn: row.updatedAt.toISOString(),
     revisionListaPrecios: listaPrecios,
+    factura: row.facturaAlegraId
+      ? {
+          alegraId: row.facturaAlegraId,
+          numero: row.facturaNumero,
+          fecha: row.facturaFecha,
+          total: row.facturaTotal == null ? null : num(row.facturaTotal),
+        }
+      : null,
+    facturadoEn: iso(row.facturadoEn),
+    facturadoPorNombre: row.facturadoPorNombre,
+    reservaStock: reservaStock(row),
     items: items.map(toItemDto),
   }
 }

@@ -1,4 +1,4 @@
-import { boolean, integer, numeric, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { boolean, date, integer, numeric, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // PROHIBIDO importar o re-exportar este archivo desde `src/db/schema.ts`.
@@ -77,6 +77,20 @@ export const shopOrders = shop.table("orders", {
   // `admin_users.id`. Sin FK: es otro esquema y el dueño del DDL es el Shop.
   estadoActualizadoPor: uuid("estado_actualizado_por"),
   estadoActualizadoPorNombre: text("estado_actualizado_por_nombre"),
+
+  // --- Facturado en Alegra (0011 del Shop) + factura vinculada (0013 del Shop) ---
+  // Las escribe SÓLO el CRM, las siete juntas: "Vincular factura" completa todas y
+  // "Desvincular" las vacía (CHECK `orders_factura_facturado_check`: factura ⇒ facturado).
+  // `facturado_en` no nulo saca al pedido de `shop.stock_reservado` (libera la reserva).
+  facturadoEn: timestamp("facturado_en", { withTimezone: true }),
+  // `admin_users.id`. Sin FK, como `estado_actualizado_por`.
+  facturadoPor: uuid("facturado_por"),
+  facturadoPorNombre: text("facturado_por_nombre"),
+  facturaAlegraId: text("factura_alegra_id"),
+  // Copia de lo que Alegra devolvió al vincular (número legible, fecha de emisión, total).
+  facturaNumero: text("factura_numero"),
+  facturaFecha: date("factura_fecha", { mode: "string" }),
+  facturaTotal: numeric("factura_total", { precision: 14, scale: 2 }),
 
   // --- Totales congelados ---
   subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),

@@ -15,11 +15,12 @@
 8. [Integración con Alegra (ERP)](#integración-con-alegra-erp)
 9. [Espejo de contactos de Alegra](#espejo-de-contactos-de-alegra)
 10. [Stock casi en tiempo real (webhooks de Alegra)](#stock-casi-en-tiempo-real-webhooks-de-alegra)
-11. [Base de datos](#base-de-datos)
-12. [Feature flags](#feature-flags)
-13. [Referencia de endpoints](#referencia-de-endpoints)
-14. [Variables de entorno](#variables-de-entorno)
-15. [Comandos](#comandos)
+11. [Pedidos del Shop: vincular factura](#pedidos-del-shop-vincular-factura)
+12. [Base de datos](#base-de-datos)
+13. [Feature flags](#feature-flags)
+14. [Referencia de endpoints](#referencia-de-endpoints)
+15. [Variables de entorno](#variables-de-entorno)
+16. [Comandos](#comandos)
 
 ---
 
@@ -642,6 +643,40 @@ RESET ROLE;
 
 ---
 
+## Pedidos del Shop: vincular factura
+
+Change `webhooks-stock-alegra`, PR-3b. El operador factura en Alegra por fuera y, en el
+detalle del pedido (**Pedidos → pedido → "Factura de Alegra"**), ingresa el número tal como
+lo muestra Alegra (`00201-00007040`; también sirve sin ceros, sin guiones, sólo la parte final
+o el id de Alegra). El CRM la busca y muestra número, fecha, total y cliente; recién al
+confirmar **Vincular** la guarda en el pedido y lo marca facturado, lo que **libera la reserva
+de stock** (`shop.stock_reservado` excluye los pedidos con `facturado_en`). **Desvincular**
+deshace las dos cosas; si el pedido sigue activo, vuelve a reservar. Ninguna de las dos cambia
+el estado del pedido ni avisa al cliente, y la factura en Alegra no se toca.
+
+- **Validaciones** (`src/lib/factura-vincular.ts`): la factura tiene que existir y no estar en
+  borrador ni anulada. Si el pedido tiene contacto de Alegra (`cliente_codigo`), la factura
+  tiene que ser de ese contacto; si es consumidor final, se muestra el nombre del cliente de la
+  factura para que el operador confirme. Si la factura ya está vinculada a otro pedido del
+  tenant, se avisa (se permite: una factura puede cubrir dos pedidos). Al vincular, el servidor
+  vuelve a leer la factura de Alegra (no confía en la búsqueda previa).
+- **Búsqueda en Alegra** (`buscarFacturasPorNumero` / `getFacturaPorId` en `lib/alegra.ts`):
+  como mucho 3 requests, con UN reintento por 429 (acción interactiva). Usa el filtro
+  `numberTemplate_fullNumber` pero no confía en él: se queda sólo con las facturas cuyo número
+  coincide con lo tipeado (si Alegra ignorara el filtro, devuelve las 30 más recientes). Si no
+  encuentra y el pedido tiene contacto, prueba entre las 30 más recientes de ese contacto; si lo
+  tipeado son sólo dígitos, prueba como id.
+- **Datos** (`shop.orders`, migraciones 0011 y 0013 **del Shop**): `factura_alegra_id`,
+  `factura_numero`, `factura_fecha`, `factura_total` (copia de ese momento) +
+  `facturado_en/_por/_por_nombre`. Se escriben y se borran juntas; un CHECK
+  (`orders_factura_facturado_check`) exige facturado si hay factura. El CRM escribe con el rol
+  dueño, así que no hace falta ningún GRANT.
+- **Auth**: `requireOperatorPlus` (igual que el cambio de estado); 404 uniforme para pedido
+  ajeno/inexistente. Logs `shop_order_factura_vinculada` / `_desvinculada` sin datos del
+  cliente.
+
+---
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
@@ -707,6 +742,8 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | GET | `/api/admin/comprobantes/{id}/load-context` | admin | Facturas abiertas del cliente + cuentas bancarias, para "Cargar en Alegra" |
 | POST | `/api/admin/comprobantes/{id}/load-to-alegra` | admin | Crea el pago en Alegra (imputado a facturas elegidas), adjunta el comprobante y marca la fila |
 | GET/PUT | `/api/admin/settings/receipts` | admin | Casilla de avisos de comprobantes del tenant |
+| GET | `/api/admin/pedidos/{id}/factura?numero=` | operator+ | Busca y valida la factura en Alegra para el pedido, sin guardar |
+| POST/DELETE | `/api/admin/pedidos/{id}/factura` | operator+ | Vincula (`{alegraId}`, marca facturado) / desvincula (`?alegraId=` esperado) |
 | GET | `/api/admin/pending-counts` | sesión (cualquier rol) | Contadores de novedades para los badges del sidebar: inbox (activas con `awaiting_reply`) y comprobantes pending (admin+, null para operadores); filtra por `?since=`/`sinceInbox`/`sinceComprobantes` |
 
 ---

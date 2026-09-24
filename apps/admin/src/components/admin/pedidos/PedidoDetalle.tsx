@@ -7,6 +7,7 @@ import { Alert, Badge, Card, Table, type TableColumn, useToast } from "@myd-org/
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
 import { CambiarEstadoControl } from "./CambiarEstadoControl"
+import { VincularFacturaControl } from "./VincularFacturaControl"
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
@@ -140,6 +141,7 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
             Pedido {pedido.numero}
           </h1>
           <Badge tone={tonoEstado(pedido.estado)}>{ESTADO_PEDIDO_LABEL[pedido.estado]}</Badge>
+          {pedido.factura && <Badge tone="success">Facturado</Badge>}
           {revision && (
             <span title={revision.titulo}>
               <Badge tone="warning">Revisar</Badge>
@@ -170,6 +172,14 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
         <CambiarEstadoControl
           pedidoId={pedido.id}
           estado={pedido.estado}
+          onChanged={setPedido}
+          onConflicto={() => void recargar(true)}
+        />
+      </Seccion>
+
+      <Seccion titulo="Factura de Alegra">
+        <VincularFacturaControl
+          pedido={pedido}
           onChanged={setPedido}
           onConflicto={() => void recargar(true)}
         />

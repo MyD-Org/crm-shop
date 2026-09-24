@@ -5,6 +5,7 @@ import {
   text,
   jsonb,
   timestamp,
+  date,
   integer,
   numeric,
   boolean,
@@ -468,6 +469,19 @@ export const orders = shop.table(
     facturadoEn: timestamp("facturado_en", { withTimezone: true }),
     facturadoPor: uuid("facturado_por"),
     facturadoPorNombre: text("facturado_por_nombre"),
+    // --- Factura de Alegra vinculada (migración 0013) ---
+    /**
+     * La factura de Alegra que un operador del CRM vinculó al pedido ("Vincular
+     * factura": la hizo por fuera y la busca por número). Al vincularla el CRM
+     * también completa `facturado*` (libera la reserva); al desvincularla borra
+     * las siete columnas juntas. Número, fecha y total son una copia de lo que
+     * Alegra devolvió en ese momento, para mostrarla sin volver a consultarla.
+     * Las escribe SÓLO el CRM; el Shop hoy no las lee.
+     */
+    facturaAlegraId: text("factura_alegra_id"),
+    facturaNumero: text("factura_numero"),
+    facturaFecha: date("factura_fecha", { mode: "string" }),
+    facturaTotal: numeric("factura_total", { precision: 14, scale: 2 }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -514,6 +528,12 @@ export const orders = shop.table(
     check(
       "orders_cancelacion_motivo_check",
       sql`${t.estado} <> 'cancelado' or ${t.cancelacionMotivo} is not null`,
+    ),
+    // Factura vinculada ⇒ facturado (0013). Vincular y desvincular escriben las
+    // columnas juntas en un mismo UPDATE; esto es la última red.
+    check(
+      "orders_factura_facturado_check",
+      sql`${t.facturaAlegraId} is null or ${t.facturadoEn} is not null`,
     ),
   ],
 );

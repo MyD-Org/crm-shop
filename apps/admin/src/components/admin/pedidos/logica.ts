@@ -100,3 +100,32 @@ export function interpretarRespuestaCambio<T extends { id: string; estado: strin
   }
   return { tipo: "error", mensaje: MENSAJE_ERROR_GENERICO }
 }
+
+export type ResultadoFactura<T> =
+  | { tipo: "ok"; valor: T }
+  | { tipo: "conflicto"; mensaje: string }
+  | { tipo: "error"; mensaje: string }
+
+/** 5xx que la ruta de factura redacta para mostrar: Alegra falló (502) o nos frena (503). */
+const FACTURA_5XX_CON_MENSAJE = new Set([502, 503])
+
+/**
+ * Respuesta de `/api/admin/pedidos/[id]/factura` (GET buscar, POST vincular, DELETE
+ * desvincular). Como `interpretarRespuestaCambio`, pero 502/503 también traen un mensaje
+ * pensado para el operador ("Alegra no respondió bien…"). `esValido` chequea la forma del 2xx.
+ */
+export function interpretarRespuestaFactura<T>(
+  status: number | null,
+  body: unknown,
+  esValido: (body: unknown) => boolean,
+): ResultadoFactura<T> {
+  if (status !== null && status >= 200 && status < 300) {
+    if (body !== null && typeof body === "object" && esValido(body)) return { tipo: "ok", valor: body as T }
+    return { tipo: "error", mensaje: MENSAJE_ERROR_GENERICO }
+  }
+  if (status === 409) return { tipo: "conflicto", mensaje: errorDelServidor(body) ?? MENSAJE_ERROR_GENERICO }
+  if (status !== null && ((status >= 400 && status < 500) || FACTURA_5XX_CON_MENSAJE.has(status))) {
+    return { tipo: "error", mensaje: errorDelServidor(body) ?? MENSAJE_ERROR_GENERICO }
+  }
+  return { tipo: "error", mensaje: MENSAJE_ERROR_GENERICO }
+}

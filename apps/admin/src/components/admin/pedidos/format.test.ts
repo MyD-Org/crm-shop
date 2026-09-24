@@ -4,6 +4,7 @@ import {
   condicionIvaLabel,
   entregaLabel,
   fmtCantidad,
+  fmtFechaDia,
   fmtFechaPedido,
   fmtMoneda,
   pagoEstadoLabel,
@@ -202,5 +203,18 @@ describe("revisionInfo (motivo_revision del Shop, 0010)", () => {
     expect(tituloRevision("otra_lista_precios")).toBe("Cliente con otra lista de precios")
     expect(tituloRevision(null)).toBe("Revise el cliente antes de facturar")
     expect(tituloRevision("toString")).toBe("Revise el cliente antes de facturar")
+  })
+})
+
+describe("fmtFechaDia", () => {
+  it("YYYY-MM-DD → DD/MM/YYYY sin pasar por zonas horarias", () => {
+    expect(fmtFechaDia("2026-09-20")).toBe("20/09/2026")
+    expect(fmtFechaDia("2026-01-01")).toBe("01/01/2026")
+  })
+
+  it("vacío o inválido → raya", () => {
+    expect(fmtFechaDia(null)).toBe("—")
+    expect(fmtFechaDia("")).toBe("—")
+    expect(fmtFechaDia("20/09/2026")).toBe("—")
   })
 })

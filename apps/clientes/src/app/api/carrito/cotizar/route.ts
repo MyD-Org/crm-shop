@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual, idPriceListSnapshot } from "@/lib/auth";
+import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
 import { pagosHabilitados } from "@/lib/pagos-flag";
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
 
   try {
     const idPriceList = cliente
-      ? await idPriceListSnapshot(cliente.codigocliente)
+      ? await idPriceListCliente(cliente.codigocliente)
       : undefined;
     const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo });
 

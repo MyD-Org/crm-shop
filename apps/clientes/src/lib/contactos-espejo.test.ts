@@ -15,7 +15,14 @@ vi.mock("./alegra", async (importOriginal) => ({
   getContacto: (id: string) => getContacto(id),
 }));
 
-import { contactoPorId, tipoCuentaEspejo } from "./contactos-espejo";
+import {
+  comercialEspejo,
+  contactoPorDocumento,
+  contactoPorId,
+  contactosPorEmail,
+  tipoCuentaEspejo,
+  vinculablePorId,
+} from "./contactos-espejo";
 
 /** Fila de la vista en el orden del select de `delEspejo`. */
 const FILA = ["42", "Cliente Uno SA", "20-12345678-9", "compras@cliente.example", "corriente", "Mayorista", "Vendedor Uno", "30 días", 30, "1000000.00"];
@@ -127,5 +134,102 @@ describe("tipoCuentaEspejo (layout de Mi cuenta)", () => {
     grabadora = dbGrabadora(() => [["corriente"]]);
     expect(await tipoCuentaEspejo("../x")).toBeNull();
     expect(grabadora.consultas).toHaveLength(0);
+  });
+});
+
+/**
+ * Lecturas de la vinculación y de la lista de precios (rebanada 3): SÓLO espejo,
+ * nunca Alegra. Fila en el orden de `columnasVinculables`: alegraId, name,
+ * identification, email, types, priceListId, priceListName, priceListStatus,
+ * tipoCuenta. Datos inventados.
+ */
+const VINCULABLE: unknown[] = ["42", "Cliente Uno SA", "20-12345678-9", "compras@cliente.example", ["client"], "7", "Mayorista", "active", "corriente"];
+
+describe("contactosPorEmail", () => {
+  it("normaliza el email (mayúsculas y espacios) y filtra tenant, cuenta, activa y clientes", async () => {
+    grabadora = dbGrabadora(() => [VINCULABLE]);
+    const r = await contactosPorEmail("  Compras@Cliente.EXAMPLE ");
+    const [consulta] = grabadora.consultas;
+    expect(consulta.sql).toContain('from "public"."alegra_contacts_shop"');
+    expect(consulta.sql).toMatch(/"emails_norm" @> \$\d/);
+    expect(consulta.sql).toMatch(/"types" @> \$\d/);
+    expect(consulta.params).toEqual(
+      // drizzle serializa el array como literal de Postgres.
+      expect.arrayContaining(["tenant-test", "principal", "active", '{"compras@cliente.example"}', '{"client"}']),
+    );
+    expect(r).toEqual([
+      {
+        id: "42",
+        name: "Cliente Uno SA",
+        identification: "20-12345678-9",
+        email: "compras@cliente.example",
+        types: ["client"],
+        priceList: { id: "7", name: "Mayorista", status: "active" },
+        tipoCuenta: "corriente",
+      },
+    ]);
+    expect(getContacto).not.toHaveBeenCalled();
+  });
+
+  it("email vacío: no consulta", async () => {
+    grabadora = dbGrabadora(() => [VINCULABLE]);
+    expect(await contactosPorEmail("  ")).toEqual([]);
+    expect(grabadora.consultas).toHaveLength(0);
+  });
+});
+
+describe("contactoPorDocumento", () => {
+  it("compara sólo dígitos contra identification_norm", async () => {
+    grabadora = dbGrabadora(() => [VINCULABLE]);
+    const c = await contactoPorDocumento("20-12345678-9");
+    const [consulta] = grabadora.consultas;
+    expect(consulta.sql).toMatch(/"identification_norm" = \$\d/);
+    expect(consulta.params).toContain("20123456789");
+    expect(consulta.params).not.toContain("20-12345678-9");
+    expect(c?.id).toBe("42");
+  });
+
+  it("desempate determinístico: primero clientes, después id numérico menor", async () => {
+    grabadora = dbGrabadora(() => [VINCULABLE]);
+    await contactoPorDocumento("20123456789");
+    const [consulta] = grabadora.consultas;
+    expect(consulta.sql).toMatch(/order by \('client' = ANY\("alegra_contacts_shop"\."types"\)\) DESC, CASE WHEN .*::numeric END ASC NULLS LAST, .*"alegra_id" asc limit/);
+  });
+
+  it("sin fila: null; sin dígitos: no consulta", async () => {
+    grabadora = dbGrabadora(() => []);
+    expect(await contactoPorDocumento("20123456789")).toBeNull();
+    expect(await contactoPorDocumento("--")).toBeNull();
+    expect(grabadora.consultas).toHaveLength(1);
+  });
+});
+
+describe("vinculablePorId y comercialEspejo", () => {
+  it("vinculablePorId lee sólo el espejo, sin respaldo en vivo", async () => {
+    grabadora = dbGrabadora(() => []);
+    expect(await vinculablePorId("42")).toBeNull();
+    expect(getContacto).not.toHaveBeenCalled();
+  });
+
+  it("comercialEspejo: lista activa ⇒ su id; tipo de la columna", async () => {
+    grabadora = dbGrabadora(() => [VINCULABLE]);
+    expect(await comercialEspejo("42")).toEqual({ tipoCuenta: "corriente", idPriceList: "7" });
+  });
+
+  it("comercialEspejo: lista dada de baja ⇒ principal (undefined)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fila = [...VINCULABLE];
+    fila[7] = "inactive";
+    grabadora = dbGrabadora(() => [fila]);
+    expect(await comercialEspejo("42")).toEqual({ tipoCuenta: "corriente", idPriceList: undefined });
+  });
+
+  it("comercialEspejo: sin lista ⇒ principal; sin fila ⇒ null", async () => {
+    const fila = [...VINCULABLE];
+    fila[5] = null;
+    grabadora = dbGrabadora(() => [fila]);
+    expect(await comercialEspejo("42")).toEqual({ tipoCuenta: "corriente", idPriceList: undefined });
+    grabadora = dbGrabadora(() => []);
+    expect(await comercialEspejo("42")).toBeNull();
   });
 });

@@ -176,6 +176,30 @@ describe("tipoCuentaDe", () => {
     expect(tipoCuentaDe({ term: { name: "Contado", days: 0 }, creditLimit: 0 })).toBe("contado");
     expect(tipoCuentaDe({ term: null, creditLimit: "" })).toBe("contado");
   });
+
+  /**
+   * COPIA LITERAL de `CASOS_TIPO_CUENTA` en
+   * apps/admin/test/integration/alegra-contacts-schema.integration.test.ts: la
+   * regla canónica es la columna generada `tipo_cuenta` (0030) y esta función,
+   * que sólo se usa para contactos leídos en vivo, tiene que dar lo mismo. Si
+   * cambia allá, se cambia acá en el mismo PR.
+   */
+  const CASOS_TIPO_CUENTA: Array<{
+    caso: string;
+    paymentTermDays: number | null;
+    creditLimit: string | null;
+    esperado: "corriente" | "contado";
+  }> = [
+    { caso: "días 0 y sin límite", paymentTermDays: 0, creditLimit: null, esperado: "contado" },
+    { caso: "sin días y sin límite", paymentTermDays: null, creditLimit: null, esperado: "contado" },
+    { caso: "días 15", paymentTermDays: 15, creditLimit: null, esperado: "corriente" },
+    { caso: "días 0 y límite 50000", paymentTermDays: 0, creditLimit: "50000", esperado: "corriente" },
+    { caso: "sin días y límite 0", paymentTermDays: null, creditLimit: "0", esperado: "contado" },
+  ];
+
+  it.each(CASOS_TIPO_CUENTA)("misma regla que la columna del CRM: $caso → $esperado", (c) => {
+    expect(tipoCuentaDe({ term: { days: c.paymentTermDays }, creditLimit: c.creditLimit })).toBe(c.esperado);
+  });
 });
 
 /**

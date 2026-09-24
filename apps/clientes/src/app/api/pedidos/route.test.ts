@@ -15,7 +15,7 @@ let telefonoPerfil: string | null = null;
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
-  idPriceListSnapshot: async () => undefined,
+  idPriceListCliente: async () => undefined,
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),

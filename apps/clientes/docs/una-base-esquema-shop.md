@@ -368,6 +368,73 @@ tablas; después, los `REVOKE` de la tabla (también están en el encabezado de
 la 0032). Volver la vista a 16 columnas es una migración nueva del CRM
 (`DROP VIEW` + `CREATE VIEW` + `GRANT`), nunca editar la 0032.
 
+## Lectura directa de contactos del CRM
+
+Change `espejo-contactos-alegra`, rebanada 3. La vinculación de la cuenta, el
+perfil de facturación, el tipo de cuenta y la lista de precios del cliente
+leen el **espejo de contactos** del CRM por la vista
+`public.alegra_contacts_shop` (la misma de la sección anterior), en vez de
+consultar `/contacts` de Alegra en vivo. `/contacts` admite ~5 requests por
+minuto por cuenta y lo comparten el CRM, el bot y el Shop.
+
+| Lectura (`src/lib/contactos-espejo.ts`) | Filtro en la vista | Sin fila activa |
+|---|---|---|
+| `contactosPorEmail` (vinculación automática) | `emails_norm @> [email]` y `types @> ['client']` | 1 búsqueda en vivo `email=` antes de grabar `sin_coincidencia` |
+| `contactoPorDocumento` (vinculación por OTP) | `identification_norm = dígitos`; desempate: cliente, id numérico menor | 1 búsqueda en vivo por documento (la de siempre) |
+| `contactoPorDocumento` (perfil de facturación) | ídem | ninguno: `coincide_con_alegra = null` |
+| `vinculablePorId` (confirmar el OTP) | `alegra_id` | sólo se usa si Alegra en vivo falla |
+| `comercialEspejo` (tipo de cuenta y lista del cliente) | `alegra_id` | snapshot de `shop.client_links` |
+
+Todas filtran `tenant_id = SHOP_TENANT_ID`, `alegra_account = 'principal'` y
+`status = 'active'`. La lista de precios que usan el carrito y el pedido sale
+del espejo (si la lista está dada de baja, la principal); sin fila, del
+snapshot del vínculo; sin nada, la principal. 0 requests a Alegra, y sin
+control en vivo al confirmar: la tienda respeta sus propios precios.
+
+**Permisos:** los mismos de la sección anterior (`SELECT` sobre la vista, que
+conceden las migraciones 0031/0032 del CRM si `shop_app` ya existía). Nada nuevo.
+
+**Verificación antes de mergear** (M3.1), conectado como `shop_app` a la base a
+la que apunta el **runtime** del Shop (`DATABASE_URL`, no
+`MIGRATE_DATABASE_URL`: pueden ser ramas distintas de Neon):
+
+```sql
+SELECT count(*) FROM public.alegra_contacts_shop;   -- responde, con el conteo de la sync
+```
+
+Si da `permission denied` (42501), correr como `<OWNER_ROLE>`:
+
+```sql
+GRANT USAGE ON SCHEMA public TO shop_app;
+GRANT SELECT ON public.alegra_contacts_shop TO shop_app;
+```
+
+Si la vista no responde en runtime, nada se cae: la vinculación vuelve a la
+búsqueda en vivo, el perfil de facturación guarda `coincide_con_alegra = null`
+y el tipo de cuenta y la lista salen del snapshot del vínculo (queda un
+`console.error` con el código de Postgres, nunca datos del contacto).
+
+**Backfill después del deploy** (M3.4), como `<OWNER_ROLE>`, con
+`<TENANT_SLUG>` = el valor de `SHOP_TENANT_ID` (no escribirlo en el repo):
+
+```sql
+UPDATE shop.client_links cl SET tipo_cuenta = ac.tipo_cuenta
+FROM public.alegra_contacts ac
+WHERE cl.tipo_cuenta IS NULL AND cl.estado = 'activa'
+  AND ac.tenant_id = '<TENANT_SLUG>' AND ac.alegra_account = 'principal'
+  AND ac.alegra_id = cl.alegra_contact_id;
+
+-- Los que siguen sin tipo (sin fila en el espejo):
+SELECT count(*) FROM shop.client_links WHERE estado = 'activa' AND tipo_cuenta IS NULL;
+```
+
+No es imprescindible (el Shop ya prefiere el espejo al snapshot), pero deja el
+snapshot útil para cuando la vista no responda.
+
+**Rollback:** revertir el PR; el Shop vuelve a buscar en vivo. La vista y su
+`GRANT` pueden quedar (los usa también Mi cuenta). Sólo si se revierte además
+la cuenta corriente: `REVOKE SELECT ON public.alegra_contacts_shop FROM shop_app;`.
+
 ## Nota sobre el ambiente local de tests (`crm_test`)
 
 Si en algún momento se regenera el baseline (`drizzle/0000_baseline.sql`)

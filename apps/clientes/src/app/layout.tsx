@@ -9,7 +9,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { getContenidoHome } from "@/lib/home-datos";
 import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
 import { identidadActual } from "@/lib/auth";
-import { HEADER_TEMA, TEMA_COOKIE } from "@/lib/tema-ip";
+import { GEO_IP_ACTIVO, HEADER_TEMA, TEMA_COOKIE, TEMA_POR_DEFECTO } from "@/lib/tema-ip";
 import { propsChatIa } from "@/lib/chat-ia";
 import { ChatIa } from "@/components/chat/ChatIa";
 import "./globals.css";
@@ -83,7 +83,7 @@ export default async function RootLayout({
   // tampoco aparece: el proxy responde el gate antes de llegar a este layout.
   const chat = await propsChatIa();
   const favoritosBloqueados = !identidad.clerkUserId && !!identidad.cliente;
-  // Tema por geo-IP (guía §5): el proxy decide en la primera visita
+  // Tema por geo-IP (guía §5; hoy apagada → todos azul, ver tema-ip.ts): el proxy decide en la primera visita
   // (Misiones → azul de marca) y `?tema=` la puede forzar. El header
   // x-centralled-tema trae la decisión de ESTE request y manda sobre la
   // cookie, que recién se actualiza en la response: sin él, forzar el tema
@@ -93,9 +93,11 @@ export default async function RootLayout({
   const tema =
     headerTema === "calido" || headerTema === "calido-azul"
       ? headerTema
-      : cookieTema === "calido-azul"
-        ? "calido-azul"
-        : "calido";
+      : !GEO_IP_ACTIVO
+        ? TEMA_POR_DEFECTO
+        : cookieTema === "calido-azul"
+          ? "calido-azul"
+          : "calido";
 
   return (
     <html

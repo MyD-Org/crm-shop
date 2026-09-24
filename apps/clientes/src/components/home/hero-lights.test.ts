@@ -35,6 +35,8 @@ describe("studio lighting geometry", () => {
   });
   it("preserves custom editorial images without unrelated lighting overlays", () => {
     expect(isStudioImage("/images/hero-neutral.webp")).toBe(true);
+    expect(isStudioImage("/images/central-led/studio-off.webp")).toBe(true);
+    expect(isStudioImage("/images/central-led/studio-bell-bamboo-v2.webp")).toBe(true);
     expect(isStudioImage("/images/custom.webp")).toBe(false);
   });
 });

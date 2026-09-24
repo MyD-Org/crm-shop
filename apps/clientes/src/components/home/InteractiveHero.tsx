@@ -138,8 +138,12 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
         <svg aria-hidden="true" className={styles.art} viewBox="0 0 1536 1024" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}>
           <defs>
             <filter id={`${uid}-blur`} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="18" /></filter>
+            <filter id={`${uid}-soft`} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" /></filter>
+            <clipPath id={`${uid}-belowShade`}><rect x="1100" y="662" width="245" height="148"/></clipPath>
             <radialGradient id={`${uid}-glow`}><stop stopColor="#ffe4b0" stopOpacity=".8" /><stop offset="1" stopColor="#ffe4b0" stopOpacity="0" /></radialGradient>
             <linearGradient id={`${uid}-beam`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#ffe5b4" stopOpacity=".5"/><stop offset="1" stopColor="#ffe5b4" stopOpacity="0"/></linearGradient>
+            <clipPath id={`${uid}-basket`}><path d="M1370 234 Q1360 278 1311 300 Q1263 322 1271 366 Q1278 401 1311 417 Q1385 437 1462 417 Q1496 402 1500 365 Q1507 323 1465 300 Q1416 277 1403 234 Z"/></clipPath>
+            <radialGradient id={`${uid}-interior`}><stop stopColor="#fff4ce" stopOpacity=".95"/><stop offset=".25" stopColor="#ffe0a0" stopOpacity=".65"/><stop offset="1" stopColor="#ffcb7a" stopOpacity="0"/></radialGradient>
           </defs>
           {HERO_LIGHTS.map((light, i) => <g key={light.id} ref={el => { layers.current[i] = el; }} className={styles.light} style={{ opacity: 0 }} data-light={light.id}>
             {i === 0 && <>
@@ -147,9 +151,13 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <ellipse cx="996" cy="346" rx="118" ry="117" fill="none" stroke="#fff6e1" strokeWidth="7"/>
             </>}
             {i === 1 && <>
-              <ellipse cx="1221" cy="672" rx="105" ry="110" fill={`url(#${uid}-glow)`}/>
-              <ellipse cx="1221" cy="672" rx="46" ry="45" fill="#fff1cc"/>
-              <ellipse cx="1221" cy="787" rx="125" ry="24" fill={`url(#${uid}-glow)`}/>
+              {/* BELL-N is opaque above its lower rim: emission only below the shade. */}
+              <g clipPath={`url(#${uid}-belowShade)`}>
+                <path d="M1168 661 L1274 661 L1315 777 Q1221 803 1127 777 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-soft)`}/>
+              </g>
+              <ellipse cx="1221" cy="660" rx="52" ry="2.4" fill="#fff2d1"/>
+              <ellipse cx="1221" cy="781" rx="96" ry="19" fill={`url(#${uid}-glow)`}/>
+              <path d="M1223 666 L1223 771" stroke="#ffe7bc" strokeWidth="1.3" opacity=".4"/>
             </>}
             {i === 2 && <>
               <path d="M1176 148 L1200 138 L1400 520 Q1280 590 1170 530 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
@@ -157,9 +165,13 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <ellipse cx="1280" cy="510" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
             </>}
             {i === 3 && <>
-              <path d="M1292 411 L1478 411 L1536 780 L1190 780 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
-              <ellipse cx="1385" cy="410" rx="98" ry="6" fill="#fff0ca"/>
-              <ellipse cx="1385" cy="786" rx="146" ry="28" fill={`url(#${uid}-glow)`}/>
+              {/* Translucent inner glow preserves the photographic bamboo weave. */}
+              <ellipse cx="1385" cy="359" rx="144" ry="118" fill={`url(#${uid}-interior)`} opacity=".3"/>
+              <g clipPath={`url(#${uid}-basket)`}>
+                <ellipse cx="1385" cy="359" rx="104" ry="78" fill={`url(#${uid}-interior)`}/>
+              </g>
+              <path d="M1320 423 L1450 423 L1536 780 L1234 780 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
+              <ellipse cx="1385" cy="786" rx="146" ry="25" fill={`url(#${uid}-glow)`}/>
             </>}
             {i === 4 && <>
               <rect x="1087" y="524" width="355" height="17" rx="3" fill="#ffe4ac" filter={`url(#${uid}-blur)`}/>

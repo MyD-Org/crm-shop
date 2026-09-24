@@ -2,12 +2,16 @@ import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { requireAdminPlus } from "@/lib/admin-route-guard"
-import { listAdmin, toAdminDto } from "@/lib/payment-receipts"
+import { cleanupStale, listAdmin, toAdminDto } from "@/lib/payment-receipts"
 import { r2Config } from "@/lib/r2"
 
 // GET /api/admin/comprobantes — listado del backoffice. Solo ve `pending`/`loaded`
 // (uploading/processing/rejected son invisibles: ni siquiera el count los incluye).
 // NUNCA devuelve URLs firmadas ni file_key/sha256: el archivo se ve por /[id]/file (302).
+//
+// Limpieza lazy: antes de listar borra los `uploading` vencidos y los `rejected` viejos del
+// tenant. Vivía sólo en el init del portal; cuando el portal se muda al Shop, el Shop no
+// tiene DELETE sobre payment_receipts (0032), así que el backoffice queda como el que limpia.
 
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
@@ -40,6 +44,12 @@ export async function GET(req: Request) {
   }
 
   const now = new Date()
+  try {
+    await cleanupStale(guard.tenantId, now)
+  } catch (err) {
+    // La limpieza es de mantenimiento: si falla, el listado igual responde.
+    console.error("[comprobantes] cleanupStale falló", err instanceof Error ? err.message : "error desconocido")
+  }
   const { items, total } = await listAdmin(
     guard.tenantId,
     { status, email: email ?? undefined, start, limit },

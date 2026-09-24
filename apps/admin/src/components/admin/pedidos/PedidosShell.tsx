@@ -141,7 +141,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
         <div className="flex flex-wrap items-center gap-1">
           <Badge tone={tonoEstado(p.estado)}>{ESTADO_PEDIDO_LABEL[p.estado]}</Badge>
           {p.requiereRevision && (
-            <span title="El documento ya es de un cliente de Alegra que no vinculó su cuenta: revíselo antes de facturar.">
+            <span title="Los datos de facturación de este pedido requieren revisión.">
               <Badge tone="warning">Revisar</Badge>
             </span>
           )}

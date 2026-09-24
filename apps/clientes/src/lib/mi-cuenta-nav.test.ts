@@ -10,12 +10,19 @@ import {
   seccionesVisibles,
 } from "./mi-cuenta-nav";
 
-const TODO = { favoritos: true, facturas: true };
-const NADA = { favoritos: false, facturas: false };
+const TODO = { favoritos: true, facturas: true, direcciones: true };
+// Direcciones depende del flag `envio`, no de una rebanada: acá queda prendida.
+const NADA = { favoritos: false, facturas: false, direcciones: true };
 const ids = (s: { id: string }[]) => s.map((x) => x.id);
 
 /** Navegación de Mi cuenta: secciones por identidad y despliegue (NAV-2, NAV-3). */
 describe("seccionesVisibles", () => {
+  it("con el flag envio apagado, Direcciones y envíos no figura", () => {
+    const s = seccionesVisibles({ clerk: true, vinculado: true }, { ...TODO, direcciones: false });
+    expect(ids(s)).not.toContain("direcciones");
+    expect(ids(s)).toContain("pedidos");
+  });
+
   it("Clerk vinculado con todo desplegado: 7 entradas: Direcciones y envíos van juntas", () => {
     const s = seccionesVisibles({ clerk: true, vinculado: true }, TODO);
     expect(ids(s)).toEqual([
@@ -196,13 +203,13 @@ describe("registro", () => {
 
 describe("bajadaMiCuenta", () => {
   it("sin facturas desplegadas no las promete", () => {
-    const texto = bajadaMiCuenta({ favoritos: false, facturas: false });
+    const texto = bajadaMiCuenta({ favoritos: false, facturas: false, direcciones: true });
     expect(texto).toBe("Revise el estado de sus pedidos y repita compras con un clic.");
     expect(texto).not.toMatch(/factura/i);
   });
 
   it("con facturas desplegadas las menciona", () => {
-    expect(bajadaMiCuenta({ favoritos: false, facturas: true })).toBe(
+    expect(bajadaMiCuenta({ favoritos: false, facturas: true, direcciones: true })).toBe(
       "Revise el estado de sus pedidos, descargue facturas y repita compras con un clic.",
     );
   });

@@ -44,7 +44,7 @@ describe("menu del usuario", () => {
 
 describe("Favoritos en el menú, detrás de la capacidad de despliegue", () => {
   it("apagada: el menú no ofrece Favoritos", () => {
-    expect(entradasMenu({ favoritos: false, facturas: false }).map((e) => e.id)).toEqual([
+    expect(entradasMenu({ favoritos: false, facturas: false, direcciones: true }).map((e) => e.id)).toEqual([
       "pedidos",
       "datos",
       "seguridad",
@@ -53,18 +53,18 @@ describe("Favoritos en el menú, detrás de la capacidad de despliegue", () => {
   });
 
   it("el menú del despliegue actual es el de la capacidad encendida", () => {
-    expect(ENTRADAS_MENU).toEqual(entradasMenu({ favoritos: true, facturas: false }));
+    expect(ENTRADAS_MENU).toEqual(entradasMenu({ favoritos: true, facturas: false, direcciones: true }));
   });
 
   it("encendida: Favoritos va entre Mis pedidos y Mis datos, como en la navegación", () => {
-    const entradas = entradasMenu({ favoritos: true, facturas: true });
+    const entradas = entradasMenu({ favoritos: true, facturas: true, direcciones: true });
     expect(entradas.map((e) => e.id)).toEqual(["pedidos", "favoritos", "datos", "seguridad", "salir"]);
     expect(entradas.filter((e) => e.tone === "danger").map((e) => e.id)).toEqual(["salir"]);
     expect(entradas.find((e) => e.id === "favoritos")?.label).toBe("Favoritos");
   });
 
   it("Facturas nunca entra al menú del header", () => {
-    expect(entradasMenu({ favoritos: true, facturas: true }).map((e) => e.id)).not.toContain("facturas");
+    expect(entradasMenu({ favoritos: true, facturas: true, direcciones: true }).map((e) => e.id)).not.toContain("facturas");
   });
 
   it("Favoritos lleva a su sección; Mis pedidos sigue en el resumen", () => {

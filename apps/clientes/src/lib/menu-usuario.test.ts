@@ -81,7 +81,7 @@ describe("Favoritos en el menú, detrás de la capacidad de despliegue", () => {
     expect(entradasMenu(D({ favoritos: true })).map((e) => e.id)).not.toContain("facturacion");
     const entradas = entradasMenu(D({ favoritos: true, facturas: true }));
     expect(entradas.map((e) => e.id)).toEqual(["pedidos", "favoritos", "facturacion", "datos", "seguridad", "salir"]);
-    expect(entradas.find((e) => e.id === "facturacion")?.label).toBe("Facturación");
+    expect(entradas.find((e) => e.id === "facturacion")?.label).toBe("Facturas");
     expect(entradas.map((e) => e.label)).not.toContain("Cuenta corriente");
     expect(HREF_FACTURACION).toBe("/mi-cuenta/facturas");
   });

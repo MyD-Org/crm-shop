@@ -268,7 +268,7 @@ describe("solicitarVinculacion", () => {
     const r = await solicitarVinculacion(nuevoUsuario(), "20123456789");
     expect(r).toEqual({ ok: false, motivo: "vinculada_a_otro", detalle: MENSAJE_VINCULADA_A_OTRO });
     expect(MENSAJE_VINCULADA_A_OTRO).toBe(
-      "Esta cuenta ya está vinculada a otro usuario de la tienda. Comuníquese con la sucursal.",
+      "Esta cuenta ya está vinculada a otro usuario de la tienda. Si no recuerda con qué email la vinculó, comuníquese con la sucursal.",
     );
     expect(insertsEn("link_otps")).toHaveLength(0);
     expect(enviarEmail).not.toHaveBeenCalled();

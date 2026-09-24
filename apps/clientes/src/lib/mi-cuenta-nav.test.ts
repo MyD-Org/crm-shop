@@ -167,7 +167,7 @@ describe("agruparSecciones", () => {
     const { grupos, sueltas } = agruparSecciones(seccionesVisibles(cap(true, true, true), TODO));
     expect(grupos.map((g) => [g.label, ids(g.items)])).toEqual([
       ["Compras online", ["pedidos", "favoritos"]],
-      ["Facturación", ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]],
+      ["Facturas", ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]],
       ["Mi perfil", ["datos", "direcciones", "seguridad"]],
     ]);
     expect(ids(sueltas)).toEqual(["salir"]);

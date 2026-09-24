@@ -119,7 +119,7 @@ function snapshotDelContacto(c: ContactoVinculable | null) {
  * de usuario, lo resuelve la sucursal revocando el vínculo anterior.
  */
 export const MENSAJE_VINCULADA_A_OTRO =
-  "Esta cuenta ya está vinculada a otro usuario de la tienda. Comuníquese con la sucursal.";
+  "Esta cuenta ya está vinculada a otro usuario de la tienda. Si no recuerda con qué email la vinculó, comuníquese con la sucursal.";
 
 /**
  * ¿El contacto ya tiene un vínculo activo de OTRO usuario? Solo base: no gasta

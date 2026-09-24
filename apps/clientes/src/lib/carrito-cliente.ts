@@ -231,8 +231,9 @@ export function aLineas(items: readonly LineaCarrito[]): LineaCarrito[] {
 /**
  * Valida item por item: el storage es editable por el usuario y sobrevive a
  * deploys, así que puede tener la forma de una versión anterior del carrito.
+ * También se usa con las respuestas de /api/carrito. null si no es un array.
  */
-function parsearItems(parsed: unknown): CartItem[] | null {
+export function parsearItems(parsed: unknown): CartItem[] | null {
   if (!Array.isArray(parsed)) return null;
   return parsed.flatMap((i): CartItem[] => {
     const item = i as Partial<CartItem> | null;

@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto"
+import { AlegraHttpError, AlegraRateLimitError } from "./alegra"
 import { secureCompare } from "./secure-compare"
 
 // Piezas comunes de los receptores de avisos (webhooks) de Alegra: contactos
@@ -136,4 +137,13 @@ export function loguearClavesUnaVez(prefijo: string, tenantId: string, evento: s
   if (clavesYaLogueadas.has(k)) return
   clavesYaLogueadas.add(k)
   console.log(`${prefijo} tenant=${tenantId} evento=${evento} claves=${clavesDelPayload(payload).join(" ")}`)
+}
+
+/** Motivo técnico corto de un error, para logs y la cola: tipo/status, nunca el mensaje de Alegra. */
+export function motivoError(err: unknown): string {
+  if (err instanceof AlegraRateLimitError) return "alegra_429"
+  if (err instanceof AlegraHttpError) return `alegra_http_${err.status}`
+  const code = (err as { code?: unknown } | null)?.code
+  if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return `db_${code}`
+  return "error_interno"
 }

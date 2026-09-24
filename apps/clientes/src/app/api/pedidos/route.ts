@@ -19,6 +19,9 @@ import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
+import { idPriceListUsable } from "@/lib/alegra";
+import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
+import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +77,31 @@ const CLAVE_VALIDA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 /** El Brick sólo recibe el máximo con el flag prendido (D13). */
 const cuotasParaCliente = async (cuotasMax: number | null) =>
   (await cuotasHabilitadas()) ? cuotasMax : null;
+
+/**
+ * Comprador NO vinculado cuyo documento ya es de un contacto de Alegra (lo
+ * anotó el perfil al guardarse, `coincideConAlegra`): la lista de precios
+ * usable de ese contacto y la general, para ver si compró a otra lista que la
+ * suya. Sólo espejo. Sin contacto, o si el espejo no responde ⇒ `null` (comprar
+ * a precio de lista está bien: no se marca por eso).
+ */
+async function listaDelContactoCoincidente(
+  alegraId: string | null | undefined,
+): Promise<Pick<EntradaMotivo, "listaContacto" | "idListaGeneral">> {
+  const sinDatos = { listaContacto: null, idListaGeneral: null };
+  if (!alegraId) return sinDatos;
+  try {
+    const c = await vinculablePorId(alegraId);
+    if (!c) return sinDatos;
+    const id = idPriceListUsable(c);
+    // Sin lista propia usable no hace falta saber cuál es la general.
+    return { listaContacto: { id }, idListaGeneral: id ? await idListaGeneral() : null };
+  } catch (err) {
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`[/api/pedidos] no se pudo leer el contacto coincidente (${codigo ?? "sin código"})`);
+    return sinDatos;
+  }
+}
 
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -288,6 +316,18 @@ export async function POST(req: Request) {
     }
     const plan = planParaPedido(pagoMetodo, cotizacion.total, oferta);
 
+    // Para revisión de un operador antes de facturar, con el motivo más
+    // importante (ver motivo-revision.ts). Comprar a la lista general NO es un
+    // motivo: sólo si el documento es de un contacto con OTRA lista.
+    const motivoRevision = motivoRevisionPedido({
+      motivoContacto: dc.motivoRevision,
+      complementoUsado,
+      vinculado: Boolean(cliente),
+      ...(cliente
+        ? { listaContacto: null, idListaGeneral: null }
+        : await listaDelContactoCoincidente(dc.perfil?.coincideConAlegra)),
+    });
+
     const pedido = await crearPedido(
       {
         clerkUserId,
@@ -317,26 +357,17 @@ export async function POST(req: Request) {
         // Congelado desde la lectura única: la condición real (exento, o el
         // valor de Alegra si no mapea) y el documento tal como está.
         facturacion: congelarFacturacion(datosFactura) ?? undefined,
-        // Para revisión de un operador antes de facturar:
-        // - el documento coincide con un contacto de Alegra que este usuario NO
-        //   vinculó (no crear un cliente duplicado con el mismo CUIT);
-        // - lo cargado en el checkout no llegó a Alegra (va sólo en el pedido);
-        // - lo de Alegra no cuadra (documento incompatible, condición desconocida).
-        requiereRevision:
-          (Boolean(dc.perfil?.coincideConAlegra) && !cliente) ||
-          complementoUsado ||
-          dc.motivoRevision !== null,
+        requiereRevision: motivoRevision !== null,
+        motivoRevision,
         idempotencyKey: idempotencyKey || undefined,
       },
       cotizacion,
       plan,
     );
 
-    if (!pedido.repetido && (complementoUsado || dc.motivoRevision)) {
+    if (!pedido.repetido && motivoRevision) {
       // Sin datos: el id del pedido y el motivo.
-      console.warn(
-        `[/api/pedidos] pedido ${pedido.id} para revisión: ${dc.motivoRevision ?? "facturacion_en_pedido"}`,
-      );
+      console.warn(`[/api/pedidos] pedido ${pedido.id} para revisión: ${motivoRevision}`);
     }
 
     // Sin demorar la respuesta, UNA subida a Alegra que junta:

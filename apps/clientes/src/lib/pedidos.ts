@@ -23,6 +23,7 @@ import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
 import { vaciarCarritoTx } from "./carrito-db";
 import type { Cotizacion } from "./cotizacion";
+import type { MotivoRevisionPedido } from "./motivo-revision";
 import type { PlanPedido } from "./pagos/cuotas-tipos";
 import {
   ENTREGA_LABEL,
@@ -69,8 +70,10 @@ export interface DatosPedido {
     condicionIva: string;
     domicilio?: string;
   };
-  /** El documento coincide con un contacto de Alegra sin vincular. */
+  /** Un operador tiene que revisar el pedido antes de facturar. */
   requiereRevision?: boolean;
+  /** Por qué (el más importante; ver `motivo-revision.ts`). */
+  motivoRevision?: MotivoRevisionPedido | null;
   /**
    * Clave del intento de compra, generada por el checkout. Reintentar el mismo
    * intento devuelve el pedido que ya existe en vez de crear otro.
@@ -139,6 +142,7 @@ export async function crearPedido(
         facturacionCondicionIva: datos.facturacion?.condicionIva ?? null,
         facturacionDomicilio: datos.facturacion?.domicilio ?? null,
         requiereRevision: datos.requiereRevision ?? false,
+        motivoRevision: datos.motivoRevision ?? null,
         subtotal: String(cotizacion.subtotal),
         iva: String(cotizacion.iva),
         costoEnvio: String(cotizacion.costoEnvio),

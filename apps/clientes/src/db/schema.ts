@@ -342,11 +342,18 @@ export const orders = shop.table(
     facturacionCondicionIva: text("facturacion_condicion_iva"),
     facturacionDomicilio: text("facturacion_domicilio"),
     /**
-     * El documento de facturación coincide con un contacto de Alegra que el
-     * comprador NO tiene vinculado. Un operador debe revisar antes de facturar,
-     * para no terminar con dos clientes duplicados para el mismo CUIT.
+     * Un operador debe revisar el pedido antes de facturar. El porqué va en
+     * `motivoRevision`.
      */
     requiereRevision: boolean("requiere_revision").notNull().default(false),
+    /**
+     * Por qué requiere revisión (0010): 'documento_incompatible' |
+     * 'condicion_iva_desconocida' | 'facturacion_en_pedido' |
+     * 'otra_lista_precios' (ver `src/lib/motivo-revision.ts`). Sin CHECK a
+     * propósito: sumar un motivo no pide migración. NULL en pedidos anteriores
+     * a la 0010 y en los que no requieren revisión. Lo lee el CRM.
+     */
+    motivoRevision: text("motivo_revision"),
 
     // --- Pago ---
     pagoMetodo: text("pago_metodo").notNull(), // 'transferencia' | 'efectivo' | 'cuenta_corriente' | 'mercadopago'

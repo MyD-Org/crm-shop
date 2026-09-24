@@ -30,9 +30,15 @@ vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => false }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => false }));
 
 let espejo: ContactoFacturacion | null = null;
+/** Contacto de Alegra con el documento del perfil (no vinculado), por id. */
+let coincidente: { id: string; priceList: { id: string; name: string; status?: string } | null } | null = null;
+let listaGeneral: string | null = "1";
+const vinculablePorId = vi.fn();
 vi.mock("@/lib/contactos-espejo", () => ({
   CUENTA_ALEGRA_PRINCIPAL: "principal",
   facturacionEspejo: async () => espejo,
+  vinculablePorId: (id: string) => vinculablePorId(id),
+  idListaGeneral: async () => listaGeneral,
 }));
 const getContacto = vi.fn();
 vi.mock("@/lib/alegra", async (orig) => ({
@@ -120,6 +126,9 @@ beforeEach(() => {
   identidad = vinculado;
   espejo = fila();
   perfil = null;
+  coincidente = null;
+  listaGeneral = "1";
+  vinculablePorId.mockReset().mockImplementation(async () => coincidente);
   tareasAfter = [];
   sincronizar.mockReset();
   getContacto.mockReset().mockResolvedValue(null);
@@ -173,6 +182,7 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
     expect(datosDelPedido()).toMatchObject({
       facturacion: { domicilio: "Nueva 1, Posadas" },
       requiereRevision: true,
+      motivoRevision: "facturacion_en_pedido",
     });
   });
 
@@ -198,7 +208,11 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
     crearPedido.mockClear();
     espejo = fila({ identificationType: "DNI", identificationNumber: "12345678", identification: "12345678", identificationNorm: "12345678" });
     expect((await post()).status).toBe(201);
-    expect(datosDelPedido()).toMatchObject({ requiereRevision: true, facturacion: { tipoDoc: "DNI", nroDoc: "12345678" } });
+    expect(datosDelPedido()).toMatchObject({
+      requiereRevision: true,
+      motivoRevision: "documento_incompatible",
+      facturacion: { tipoDoc: "DNI", nroDoc: "12345678" },
+    });
     expect(vi.mocked(console.warn).mock.calls.join(" ")).toContain("pedido p1 para revisión: documento_incompatible");
   });
 
@@ -207,12 +221,71 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
     expect((await post()).status).toBe(409);
 
     perfil = { ...PERFIL, coincideConAlegra: "77" };
+    coincidente = { id: "77", priceList: null };
     expect((await post()).status).toBe(201);
     expect(datosDelPedido()).toMatchObject({
       facturacion: { tipoDoc: "DNI", nroDoc: "12345678", razonSocial: "Ana Pérez", condicionIva: "consumidor_final" },
-      // coincide con un contacto de Alegra y no vinculó: revisión, como siempre.
-      requiereRevision: true,
+      // Coincide con un contacto de Alegra sin lista propia: comprar a la
+      // general está bien, no hay nada que revisar.
+      requiereRevision: false,
+      motivoRevision: null,
     });
+    expect(vinculablePorId).toHaveBeenCalledWith("77");
+  });
+
+  it("vinculado monotributo con DNI (caso 2026-09-24) ⇒ documento_incompatible persistido y logueado sin datos", async () => {
+    espejo = fila({
+      ivaCondition: "UNIQUE_TRIBUTE_RESPONSABLE",
+      identificationType: "DNI",
+      identificationNumber: "12345678",
+      identification: "12345678",
+      identificationNorm: "12345678",
+    });
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: true, motivoRevision: "documento_incompatible" });
+    // Vinculado: la regla de la lista no se consulta.
+    expect(vinculablePorId).not.toHaveBeenCalled();
+    const log = vi.mocked(console.warn).mock.calls.join(" ");
+    expect(log).toContain("pedido p1 para revisión: documento_incompatible");
+    expect(log).not.toContain("12345678");
+  });
+
+  it("vinculado completo ⇒ sin revisión (requiereRevision false, motivo null)", async () => {
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: false, motivoRevision: null });
+  });
+
+  it("no vinculado: contacto coincidente con la MISMA lista que la general ⇒ sin revisión", async () => {
+    identidad = { clerkUserId: "user_1", cliente: null };
+    perfil = { ...PERFIL, coincideConAlegra: "77" };
+    coincidente = { id: "77", priceList: { id: "1", name: "General", status: "active" } };
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: false, motivoRevision: null });
+  });
+
+  it("no vinculado: contacto coincidente con OTRA lista ⇒ otra_lista_precios", async () => {
+    identidad = { clerkUserId: "user_1", cliente: null };
+    perfil = { ...PERFIL, coincideConAlegra: "77" };
+    coincidente = { id: "77", priceList: { id: "5", name: "Mayorista", status: "active" } };
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: true, motivoRevision: "otra_lista_precios" });
+    expect(vi.mocked(console.warn).mock.calls.join(" ")).toContain("pedido p1 para revisión: otra_lista_precios");
+  });
+
+  it("no vinculado: la lista del contacto está dada de baja ⇒ cuenta como la general, sin revisión", async () => {
+    identidad = { clerkUserId: "user_1", cliente: null };
+    perfil = { ...PERFIL, coincideConAlegra: "77" };
+    coincidente = { id: "77", priceList: { id: "5", name: "NO USAR", status: "inactive" } };
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: false, motivoRevision: null });
+  });
+
+  it("no vinculado: el espejo no responde ⇒ el pedido sale igual, sin revisión", async () => {
+    identidad = { clerkUserId: "user_1", cliente: null };
+    perfil = { ...PERFIL, coincideConAlegra: "77" };
+    vinculablePorId.mockRejectedValue(Object.assign(new Error("x"), { code: "57P01" }));
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: false, motivoRevision: null });
   });
 
   it("mixto (algo quedó en el perfil) ⇒ se programa la subida en after(), sin esperarla", async () => {

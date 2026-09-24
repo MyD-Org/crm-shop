@@ -21,11 +21,12 @@
  */
 import { and, arrayContains, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { crmContactos } from "@/db/crm";
+import { crmContactos, crmStock } from "@/db/crm";
 import {
   esIdAlegra,
   getContacto,
   idPriceListUsable,
+  mapPrecios,
   tipoCuentaDe,
   type AlegraContact,
 } from "./alegra";
@@ -319,6 +320,33 @@ export async function comercialEspejo(
   const c = await vinculablePorId(alegraId);
   if (!c) return null;
   return { tipoCuenta: c.tipoCuenta, idPriceList: idPriceListUsable(c) };
+}
+
+/**
+ * Id de la lista de precios GENERAL (la principal: `main` en los precios de
+ * Alegra), leída de un ítem activo del espejo de productos del CRM. Es la lista
+ * con la que compra quien no vinculó cuenta. `null` = no se pudo saber (sin
+ * ítems o la vista no respondió): quien llama decide qué hacer. 1 query.
+ */
+export async function idListaGeneral(): Promise<string | null> {
+  try {
+    const [fila] = await getDb()
+      .select({ precios: crmStock.preciosAlegra })
+      .from(crmStock)
+      .where(
+        and(
+          eq(crmStock.tenantId, shopTenantId()),
+          eq(crmStock.activo, true),
+          sql`${crmStock.preciosAlegra} @> '[{"main": true}]'::jsonb`,
+        ),
+      )
+      .limit(1);
+    return mapPrecios(fila?.precios).find((p) => p.main)?.idPriceList ?? null;
+  } catch (err) {
+    const codigo = (err as { code?: unknown })?.code;
+    console.error(`[contactos] no se pudo leer la lista general (${codigo ?? "sin código"})`);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------

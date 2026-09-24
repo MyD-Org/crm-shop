@@ -512,6 +512,7 @@ Mis datos. El no vinculado sigue con `shop.billing_profiles`.
 | `public.shop_contacto_write_through(text, text, text, jsonb)` | 0034 del CRM, `SECURITY DEFINER` | después de un PUT del Shop a Alegra deja la fila del espejo al día; sólo llena vacíos (D1 también en la base); `'ok' \| 'sin_fila' \| 'rechazado'` |
 | 3 teléfonos en la vista (30 en total): `phone_primary`, `phone_secondary`, `mobile` | migración **0036** del CRM | el checkout precarga el de Alegra (celular > principal > secundario) y no lo vuelve a pedir; Mis datos los muestra en lectura |
 | fila "sólo teléfono" en `shop.billing_profiles` | migración **0009** del Shop | documento, razón social y condición admiten NULL: el vinculado guarda su teléfono aunque no tenga perfil |
+| `shop.orders.motivo_revision` | migración **0010** del Shop | por qué el pedido requiere revisión (el más importante): `documento_incompatible` > `condicion_iva_desconocida` > `facturacion_en_pedido` > `otra_lista_precios`; el admin del CRM muestra un texto por motivo |
 
 **Permisos de `shop_app`:** `SELECT` sobre la vista y `EXECUTE` sobre la
 función, los concede el bloque `DO $$ … $$` del final de la 0034 del CRM
@@ -534,6 +535,14 @@ las columnas de teléfono del espejo se ponen al día con el webhook o la sync.
 **Orden de despliegue:** este código selecciona las columnas de la 0036; la
 0036 tiene que estar aplicada en prod ANTES de mergear el PR del Shop.
 
+**Motivo de revisión (0010):** `src/lib/motivo-revision.ts` decide. Comprar a
+la lista general NO es motivo: un no vinculado cuyo documento es de un
+contacto de Alegra se marca (`otra_lista_precios`) sólo si ese contacto tiene
+una lista usable distinta de la general (la `main` de los precios del espejo
+de productos). Sin CHECK en la base. Pedidos anteriores: `motivo_revision`
+NULL y el CRM muestra el texto genérico. **Orden:** el CRM y el Shop
+seleccionan la columna; la 0010 va aplicada en prod ANTES del merge.
+
 **Tipo CUIL:** cuando Alegra no tiene tipo de documento, un consumidor final
 con 11 dígitos que empiezan en 20/23/24/27 se deduce CUIL. No está verificado
 que Alegra acepte `"CUIL"` en el PUT: si lo rechaza, pasar
@@ -547,8 +556,17 @@ WHERE table_schema = 'shop' AND table_name = 'billing_profiles'
   AND column_name IN ('tipo_doc', 'nro_doc', 'razon_social', 'condicion_iva');  -- las 4 en YES
 ```
 
-**Rollback:** revertir el PR del Shop primero (la 0009 puede quedar: sólo
-afloja NOT NULL). La reversa de la 0009 está en su cabecera.
+**Verificación después de aplicar la 0010** (como `<OWNER_ROLE>`, sólo agregados):
+
+```sql
+SELECT count(*) FROM shop.__drizzle_migrations;                          -- 11
+SELECT count(*) FROM information_schema.columns
+WHERE table_schema = 'shop' AND table_name = 'orders' AND column_name = 'motivo_revision';  -- 1
+SELECT has_column_privilege('shop_app', 'shop.orders', 'motivo_revision', 'SELECT');         -- true
+```
+
+**Rollback:** revertir el PR del Shop primero (la 0009 y la 0010 pueden
+quedar: afloja NOT NULL / columna nullable). Las reversas están en sus cabeceras.
 
 ## Nota sobre el ambiente local de tests (`crm_test`)
 

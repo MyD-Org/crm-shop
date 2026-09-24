@@ -508,7 +508,7 @@ export function CheckoutClient({
   // ---------------------------------------------------------- carrito vacío
   if (ready && items.length === 0) {
     return (
-      <main className="mx-auto flex max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
+      <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
         <p className="text-2xl font-bold text-text">Tu carrito está vacío</p>
         <Link href="/catalogo">
           <Button>Ver catálogo</Button>
@@ -518,7 +518,7 @@ export function CheckoutClient({
   }
 
   return (
-    <main className="mx-auto max-w-contenido flex-1 px-4 py-8">
+    <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
       <nav className="mb-6 text-sm text-muted">
         <Link href="/carrito" className="hover:text-primary">Carrito</Link>
         {" / "}

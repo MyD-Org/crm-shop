@@ -58,7 +58,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
   if (!ready) {
     return (
       <>
-        <main className="mx-auto flex max-w-contenido flex-1 items-center justify-center px-4 py-20">
+        <main className="mx-auto flex w-full max-w-contenido flex-1 items-center justify-center px-4 py-20">
           <p className="text-sm text-muted">Cargando tu carrito…</p>
         </main>
       </>
@@ -68,7 +68,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
   if (items.length === 0) {
     return (
       <>
-        <main className="mx-auto flex max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
+        <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
           <p className="text-2xl font-bold text-text">Tu carrito está vacío</p>
           <Link href="/catalogo">
             <Button>Ver catálogo</Button>
@@ -102,7 +102,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
 
   return (
     <>
-      <main className="mx-auto max-w-contenido flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
         <h1 className="mb-6 font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
           Tu carrito
         </h1>
@@ -128,7 +128,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
           </div>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
           {/* Items */}
           <div className="space-y-4">
             {items.map((item) => {
@@ -139,19 +139,19 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
               return (
                 <div
                   key={item.id}
-                  className={`flex gap-4 rounded-[20px] border bg-surface p-4 ${
+                  className={`flex flex-wrap gap-4 rounded-[20px] border bg-surface p-4 sm:flex-nowrap ${
                     linea?.problema ? "border-danger/40" : "border-border/50"
                   }`}
                 >
-                  <Link href={`/producto/${item.id}`} className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg bg-elevated transition-opacity hover:opacity-80">
-                    <LightbulbIcon className="h-12 w-12 text-muted/30" />
+                  <Link href={`/producto/${item.id}`} className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-elevated sm:h-24 sm:w-24 transition-opacity hover:opacity-80">
+                    <LightbulbIcon className="h-8 w-8 text-muted/30 sm:h-12 sm:w-12" />
                   </Link>
 
-                  <div className="flex flex-1 flex-col gap-1">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                       {linea?.brand || item.brand}
                     </p>
-                    <Link href={`/producto/${item.id}`} className="text-sm font-semibold text-text transition-colors hover:text-primary">
+                    <Link href={`/producto/${item.id}`} className="break-words text-sm font-semibold text-text transition-colors hover:text-primary">
                       {linea && !linea.problema ? linea.name : item.name}
                     </Link>
                     {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
@@ -168,7 +168,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
                     )}
                   </div>
 
-                  <div className="flex flex-col items-end justify-between gap-2">
+                  <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:flex-col sm:items-end">
                     <button
                       onClick={() => remove(item.id)}
                       className="text-muted transition-colors hover:text-danger"

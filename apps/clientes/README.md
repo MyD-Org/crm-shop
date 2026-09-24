@@ -45,6 +45,12 @@ Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
 | `R2_SHOP_MEDIA_SECRET_ACCESS_KEY` | Secreto de la llave anterior. Mismo par que el CRM. |
 | `R2_SHOP_MEDIA_BUCKET` | Bucket público (`shop-media`). Mismo par que el CRM. |
 | `R2_SHOP_MEDIA_PUBLIC_URL` | Base pública desde donde se sirven las imágenes (sin barra final; ejemplo `https://media.plataforma.example`). Mismo par que el CRM. |
+| `R2_RECEIPTS_ACCESS_KEY_ID` / `R2_RECEIPTS_SECRET_ACCESS_KEY` / `R2_RECEIPTS_BUCKET` | Bucket PRIVADO de comprobantes de pago (el mismo que usa el backoffice del CRM). Sin las tres, "Informar pago" no aparece. Conviene un token de R2 acotado a ese bucket. `R2_RECEIPTS_ACCOUNT_ID` sólo si la cuenta difiere de `R2_ACCOUNT_ID`. El bucket necesita CORS con el origen del Shop (PUT y HEAD). |
+| `RECEIPTS_EMAIL_FROM` | Remitente del aviso de comprobantes (dirección de un dominio verificado en Resend). Sin ella se usa `EMAIL_FROM`. |
+| `CRM_ADMIN_URL` | Base del admin del CRM (ej. `https://crm.plataforma.example`) para el botón "Ver en el backoffice" del aviso de comprobantes. Sin ella el mail sale sin botón. Server-only. |
+| `AI_API_URL` | Base de ai-api (ej. `https://ai.plataforma.example`, sin barra final) para el chat. Alimenta el rewrite `/ai-api/*` (se lee en el build: un cambio requiere redesplegar) y `POST /api/ai-token`. |
+| `AI_API_KEY` | API key del tenant en ai-api (secreto, server-only). La usa `POST /api/ai-token` para abrir sesiones. |
+| `AI_AGENT_ID` | Agente de ai-api con el que chatea el widget (no es secreto). Sin cualquiera de las tres `AI_*`, no hay chat aunque el flag `chat-ia` esté prendido. El `crm_token` de los clientes vinculados se firma con `SESSION_SECRET` (el mismo del CRM). |
 
 ### Flags (Vercel Flags, sin redeploy)
 
@@ -60,6 +66,7 @@ sirven apagados.
 | `cuotas` | Muestra cuotas y aplica el límite de cuotas en el pago. Apagado: checkout sin cuotas, clamp 1..24. |
 | `catalogo-solo-visibles` | Sólo productos publicados (`visible`) en el overlay del CRM. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
 | `envio` | El checkout ofrece envío a domicilio (ciudades y mínimo de `src/lib/envio.ts`) y Mi cuenta lo anuncia. Apagado: sólo retiro / entrega a coordinar; `POST /api/pedidos` rechaza el envío. |
+| `chat-ia` | Burbuja del chat con el agente en todas las páginas (requiere las envs `AI_*`). Cliente vinculado: el agente puede consultar su cuenta (`crm_token`). Sin vínculo o anónimo: visitante sin datos de cuenta, sólo preventa. Apagado: no hay widget y `POST /api/ai-token` responde 404. Ver `src/lib/chat-ia-flag.ts`. |
 
 Los flags nuevos van en Vercel Flags, no como variable `=1`.
 
@@ -186,6 +193,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Deploy
 
-Esta app vive en `apps/clientes` del monorepo `crm-shop`. En su proyecto de Vercel, **Root Directory = `apps/clientes`**; Install y Build Command quedan en sus valores por defecto. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta. Los workflows programados están en `.github/workflows/clientes-*.yml` de la raíz y usan secrets con prefijo `CLIENTES_`. La variable `NEXT_PUBLIC_CRM_URL` es obligatoria en Production y Preview.
+Esta app vive en `apps/clientes` del monorepo `crm-shop`. En su proyecto de Vercel, **Root Directory = `apps/clientes`**; Install y Build Command quedan en sus valores por defecto. El Ignored Build Step evita redeploys cuando el cambio no toca esta carpeta. Los workflows programados están en `.github/workflows/clientes-*.yml` de la raíz y usan secrets con prefijo `CLIENTES_`.
 
 Instrucciones para agentes: `AGENTS.md` de esta carpeta y el de la raíz del repo.

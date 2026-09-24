@@ -6,7 +6,7 @@ import { vercelAdapter } from "@flags-sdk/vercel";
  * `vercel flags enable|disable <key> --environment production`) sin redeploy.
  *
  * Se evalúan sólo en el server. `defaultValue: false` es lo que se sirve si
- * Vercel Flags no responde o el flag se archiva: los tres fallan hacia apagado.
+ * Vercel Flags no responde o el flag se archiva: todos fallan hacia apagado.
  *
  * Nadie los llama directo: cada uno tiene su módulo en src/lib/*-flag.ts con la
  * explicación de qué cambia prendido/apagado, y los tests mockean ese módulo.
@@ -37,6 +37,13 @@ export const catalogoSoloVisiblesFlag = flag<boolean>({
 export const envioFlag = flag<boolean>({
   key: "envio",
   description: "Envío a domicilio en el checkout (apagado: solo retiro / a coordinar)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
+export const chatIaFlag = flag<boolean>({
+  key: "chat-ia",
+  description: "Burbuja del chat con el agente en todas las páginas del Shop",
   defaultValue: false,
   adapter: vercelAdapter,
 });

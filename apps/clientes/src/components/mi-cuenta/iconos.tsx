@@ -130,6 +130,69 @@ export function IconoDescarga({ size = 16 }: { size?: number }) {
   );
 }
 
+/** Pagos recibidos: billete. */
+export function IconoPago({ size }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 10v4M18 10v4" />
+    </Svg>
+  );
+}
+
+/** Presupuestos: portapapeles con lista. */
+export function IconoPresupuesto({ size }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <rect x="5" y="4" width="14" height="17" rx="2" />
+      <path d="M9 4V3h6v1" />
+      <path d="M9 10h6M9 14h6M9 18h3" />
+    </Svg>
+  );
+}
+
+/** Condiciones comerciales: apretón de manos simplificado (acuerdo). */
+export function IconoCondiciones({ size }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <path d="M3 7h5l4 3 4-3h5" />
+      <path d="M3 7v8h3l5 4 5-4h5V7" />
+      <path d="m9 13 2 2 2-2" />
+    </Svg>
+  );
+}
+
+/** Avisos: campana. */
+export function IconoCampana({ size }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </Svg>
+  );
+}
+
+/** Ver un documento: ojo. */
+export function IconoSubir({ size = 16 }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m17 8-5-5-5 5" />
+      <path d="M12 3v12" />
+    </Svg>
+  );
+}
+
+export function IconoOjo({ size = 16 }: { size?: number }) {
+  return (
+    <Svg size={size}>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </Svg>
+  );
+}
+
 /** Placeholder de la miniatura de una línea sin foto. */
 export function IconoLampara({ size = 22 }: { size?: number }) {
   return (
@@ -145,6 +208,10 @@ export function IconoLampara({ size = 22 }: { size?: number }) {
 export const ICONOS_SECCION: Record<IdSeccion, ReactNode> = {
   pedidos: <IconoPedidos />,
   facturas: <IconoFactura />,
+  pagos: <IconoPago />,
+  presupuestos: <IconoPresupuesto />,
+  condiciones: <IconoCondiciones />,
+  avisos: <IconoCampana />,
   favoritos: <IconoCorazon />,
   direcciones: <IconoPin />,
   datos: <IconoPersona />,

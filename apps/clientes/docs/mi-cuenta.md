@@ -12,20 +12,22 @@ dinámica (`force-dynamic`) y, sin identidad, redirige a
 
 | Ruta | Qué muestra |
 |---|---|
-| `/mi-cuenta` | Resumen: tarjetas "Pedidos en curso", "Productos en el carrito" y (con Clerk) "Favoritos guardados"; los últimos 3 pedidos y (con Clerk) los 4 favoritos más recientes, cada uno con "Ver todos". Ninguna llamada a Alegra. |
+| `/mi-cuenta` | Resumen: con avisos sin leer, un aviso "Tiene N avisos sin leer." → Avisos; tarjetas "Pedidos en curso", "Productos en el carrito" y (con Clerk) "Favoritos guardados"; los últimos 3 pedidos y (con Clerk) los 4 favoritos más recientes, cada uno con "Ver todos". Ninguna llamada a Alegra. |
 | `/mi-cuenta/pedidos` | Todos los pedidos (los 50 más recientes). |
 | `/mi-cuenta/pedidos/[id]` | Detalle: seguimiento, entrega, pago, productos y totales. Un id ajeno o que no es uuid da 404 (nunca 403). |
-| `/mi-cuenta/datos` | Datos personales (nombre y correo de Clerk, en lectura; "Editar mi cuenta" abre el panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente y, sólo con cuenta corriente, el portal del CRM. |
+| `/mi-cuenta/datos` | Datos personales (nombre y correo de Clerk, en lectura; "Editar mi cuenta" abre el panel de Clerk), datos de facturación (`FacturacionForm`, bloqueado si la cuenta está vinculada), cuenta de cliente. Sin enlace al portal del CRM (ver [Cuenta corriente](#cuenta-corriente)). |
 | `/mi-cuenta/direcciones` | Direcciones y envíos: direcciones de envío guardadas (con Clerk; alta y edición en la misma sección, ver [Direcciones de envío](#direcciones-de-envío)), envío a domicilio y retiro derivados de `src/lib/envio.ts` y un aviso. El domicilio fiscal ya no está acá: vive en Mis datos. |
 | `/mi-cuenta/envios` | Redirige (308) a `/mi-cuenta/direcciones`: Envíos y retiro se unió a Direcciones. |
 | `/mi-cuenta/favoritos` | Favoritos del usuario de Clerk en cards compactas (ver [Favoritos](#favoritos)). |
+| `/mi-cuenta/facturas` | Facturas y saldo (ver [Cuenta corriente](#cuenta-corriente)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
+| `/mi-cuenta/pagos` | Pagos recibidos, detalle con imputaciones y PDF (ver [Pagos](#pagos-mi-cuentapagos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
+| `/mi-cuenta/presupuestos` | Presupuestos con filtros y PDF (ver [Presupuestos](#presupuestos-mi-cuentapresupuestos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
+| `/mi-cuenta/condiciones` | Condiciones comerciales, SÓLO cuenta corriente (ver [Condiciones](#condiciones-mi-cuentacondiciones)). Contado o sin vínculo: 404. |
+| `/mi-cuenta/avisos` | Avisos de vencimiento (ver [Avisos](#avisos-mi-cuentaavisos)). Sin vínculo: estado vacío con "Vincular mi cuenta". |
 | `/mi-cuenta/vincular` | Vinculación con la cuenta de cliente de Alegra (`VincularClient`). |
 
 "Seguridad" y "Cerrar sesión" no son rutas: son acciones de la navegación
 (`openUserProfile` y `signOut` de Clerk). `/mi-cuenta/seguridad` da 404.
-
-Facturas (`/mi-cuenta/facturas`) todavía no existe: da 404 y no aparece en la
-navegación.
 
 ### Breadcrumb
 
@@ -57,13 +59,157 @@ marca la activa.
 | Identidad | Secciones |
 |---|---|
 | Anónimo | Ninguna: redirect al ingreso. |
-| Cookie heredada del CRM, sin Clerk | Pedidos, Direcciones y envíos (+ Facturas cuando exista). `/datos` pide iniciar sesión; en `/direcciones` se invita a iniciar sesión para guardar direcciones y se ven las reglas de envío. El checkout no cambia. |
-| Clerk sin cuenta vinculada | Pedidos, Favoritos, Direcciones y envíos, Mis datos, Seguridad, Cerrar sesión. |
-| Clerk con cuenta vinculada | Igual, con facturación bloqueada y, si es cuenta corriente, el portal. |
+| Cookie heredada del CRM, sin Clerk | Pedidos, Facturas y saldo, Direcciones y envíos. `/datos` pide iniciar sesión; en `/direcciones` se invita a iniciar sesión para guardar direcciones y se ven las reglas de envío. El checkout no cambia. |
+| Clerk sin cuenta vinculada | Pedidos, Favoritos, Facturas y saldo (ofrece vincular), Mis datos, Direcciones y envíos, Seguridad, Cerrar sesión. |
+| Clerk con cuenta vinculada | Igual, con facturación bloqueada y la cuenta corriente. |
 
-`CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas }`) enciende cada sección
-cuando su rebanada la publica: navegación y menú del header leen la misma
-bandera. `favoritos` está encendida.
+`CAPACIDADES_DESPLIEGUE` (`{ favoritos, facturas, direcciones, pagos,
+presupuestos, condiciones, avisos }`) enciende cada sección cuando su rebanada
+la publica: navegación, menú del header y la ruta (`seccionDesplegada`, 404 si
+está apagada) leen la misma bandera. Encendidas todas: `favoritos`,
+`facturas`, `pagos`, `presupuestos`, `condiciones` y `avisos` (`direcciones`
+además depende del flag `envio`).
+
+El layout de Mi cuenta corre en cada página: con vínculo hace dos consultas a
+la base y ninguna a Alegra — `tipoCuentaEspejo` (sólo el espejo, SIN el
+respaldo en vivo de `contactoPorId`: una navegación no puede gastar cuota de
+`/contacts`) para la entrada Condiciones, y `contarNoLeidos` para el badge de
+Avisos. Si alguna falla, el menú se arma igual (sin Condiciones, sin badge).
+
+## Cuenta corriente
+
+La cuenta corriente del cliente de la tienda se muda del portal del CRM a Mi
+cuenta (change `portal-al-shop`). El Shop **no enlaza nunca** al portal del
+CRM: ese portal queda para las empresas sin tienda. La cookie heredada del
+portal (`portal-session`, `origen: "cookie_crm"`) se sigue leyendo: un cliente
+con sesión viva del portal ve su cuenta corriente sin Clerk.
+
+Se publica por rebanadas, cada una con su bandera en
+`CAPACIDADES_DESPLIEGUE`. Base:
+
+- Datos: `src/db/crm.ts` declara la vista del espejo de contactos
+  (`public.alegra_contacts_shop`), `tenants` (4 columnas),
+  `client_commercial_conditions`, `notification_log` y `payment_receipts`;
+  permisos en [una-base-esquema-shop.md](una-base-esquema-shop.md#cuenta-corriente-lecturaescritura-en-public).
+- Contacto: `src/lib/contactos-espejo.ts` (`contactoPorId`, espejo primero y
+  una consulta en vivo de respaldo).
+- Lógica pura en `src/lib/cuenta-corriente/`: lecturas de Alegra
+  (`alegra-cc.ts`), mapeos y saldo (`erp-cc.ts`), guard de las API
+  (`guard.ts`), datos del tenant (`tenant-cc.ts`) y mensajes de WhatsApp
+  (`whatsapp.ts`). Portados de `apps/admin/src/lib/{alegra,erp,whatsapp}.ts`.
+
+### Facturas y saldo (`/mi-cuenta/facturas`)
+
+- Saldo arriba: Deuda total (con límite y disponible sólo si corresponde),
+  Saldo vencido y Saldo a vencer, cada una con sus 2 facturas más urgentes.
+  Tocar una o "Ver todas" filtra la lista. Sale de TODAS las abiertas.
+- Lista de a 30, primera página del servidor; "Cargar más" y los filtros van a
+  `GET /api/mi-cuenta/facturas?start&estado&desde&hasta`. Pendientes y
+  Vencidas salen de las abiertas completas sin pedir nada, igual que el
+  portal (Alegra no filtra por vencimiento).
+- PDF en el visor del DS (`DocumentViewer`) dentro de la página, servido por
+  `GET /api/mi-cuenta/documentos/[kind]/[id]` (proxy con control de
+  pertenencia; `?download=1` descarga).
+- Deep link `?factura=<n>&alegra=<id>` (avisos): el servidor valida la
+  pertenencia y abre el visor; ajeno o inexistente muestra "No encontramos la
+  factura.".
+- Selección de facturas → WhatsApp a la empresa ("Pagar" / "Consultar"),
+  oculto si el tenant no tiene número.
+- Cada bloque caído (saldo, facturas) muestra su aviso; el resto sigue.
+
+### Pagos (`/mi-cuenta/pagos`)
+
+- Recibos de pago (type=in) de a 10, primera página del servidor; "Cargar más"
+  va a `GET /api/mi-cuenta/pagos?start`. Sin filtros: Alegra ignora las fechas
+  en pagos.
+- Cada pago: detalle en un diálogo con las facturas imputadas y su monto, y el
+  PDF del recibo en el visor (o descarga).
+- Selección → WhatsApp "Consultar", oculto si el tenant no tiene número.
+- Alegra caída: aviso "No pudimos obtener sus pagos…"; el resto de Mi cuenta sigue.
+
+#### Informar pago y Mis comprobantes
+
+Sólo con el bucket de comprobantes configurado (`R2_RECEIPTS_*`); sin él no hay
+botón y la API responde 503. No depende de Alegra: se ofrece aunque los pagos
+no carguen.
+
+- "Informar pago" abre un diálogo (monto, fecha, medio, notas, archivo PDF o
+  imagen de hasta 20 MB, HEIC incluido). `POST /api/mi-cuenta/comprobantes`
+  valida, aplica los topes (10 por hora en memoria, 20 por día contados en la
+  base), crea la fila `uploading` en `public.payment_receipts` con los datos de
+  la identidad y devuelve una URL PUT firmada: el navegador sube DIRECTO a R2
+  (CORS del bucket con el origen del Shop). Después
+  `POST /api/mi-cuenta/comprobantes/[id]/confirm` (nodejs, 60 s) verifica por
+  magic bytes, convierte HEIC a JPEG (sharp + heic-decode), publica en
+  `receipts/…` y deja la fila `pending`.
+- Mismo bucket, mismas keys y mismos estados que el portal del CRM: el
+  backoffice (`/admin/comprobantes`) no distingue de dónde vino. El Shop no
+  borra nada (sin DELETE): los `uploading` huérfanos y los `rejected` viejos
+  los limpia el listado del backoffice.
+- Mail al `receipts_email` del tenant con el archivo adjunto (≤10 MB) y el
+  botón "Ver en el backoffice" = `CRM_ADMIN_URL/admin/comprobantes?id=…`
+  (nunca el host del Shop; sin `CRM_ADMIN_URL`, sin botón). Remitente
+  `RECEIPTS_EMAIL_FROM` (o `EMAIL_FROM`). Sin destino ⇒ `email_status=skipped`.
+- "Mis comprobantes": los `pending` ("En revisión") y `loaded` ("Registrado",
+  con el número de recibo de Alegra si lo hay), de a 10 con "Cargar más"
+  (`GET /api/mi-cuenta/comprobantes?start`). Los estados internos no se ven.
+
+### Presupuestos (`/mi-cuenta/presupuestos`)
+
+- De a 30, primera página del servidor; "Cargar más" y los filtros van a
+  `GET /api/mi-cuenta/presupuestos?start&estado(aceptado|sin_aceptar)&desde&hasta`,
+  resueltos en Alegra (aceptado = facturado). Vigente y vencido son los dos
+  "sin aceptar" y se ven en el estado de cada fila.
+- PDF en el visor (o descarga); selección → WhatsApp "Avanzar" / "Consultar".
+
+### Condiciones (`/mi-cuenta/condiciones`)
+
+- Sólo cuenta corriente: la página lee el contacto (`contactoPorId`: espejo y,
+  si falta, una consulta en vivo) y da 404 si es contado. Sin contacto ⇒ aviso
+  "No pudimos obtener sus condiciones comerciales".
+- Como el portal: condición de pago (+ plazo si el nombre no lo dice), límite
+  de crédito del espejo (con enlace a Facturas y saldo, donde están la deuda y
+  el disponible: esta página no llama a Alegra), lista de precios y descuentos,
+  vendedor (teléfono/email de `client_commercial_conditions`) y transporte. Lo
+  que falta dice "Sin datos"; descuentos y transporte vacíos no se muestran.
+
+### Avisos (`/mi-cuenta/avisos`)
+
+- Lee `public.notification_log` del tenant y del cliente (`status = 'sent'`,
+  tipos `before_due_N`, `after_due_N`, `conditions_changed`); el envío sigue
+  en el CRM. Una fila por canal del mismo `(factura, tipo)` = UN aviso; el
+  contador cuenta avisos, no filas.
+- Abrir un aviso lo marca como leído (`PATCH /api/mi-cuenta/avisos {ids}`,
+  sólo `read_at`; ids ajenos se ignoran con 200) y lleva a
+  `/mi-cuenta/facturas?factura=<n>&alegra=<id>`; `conditions_changed` va a
+  Condiciones si es cuenta corriente y, si no, a Facturas y saldo. Nunca al
+  portal. "Marcar todos como leídos" = PATCH sin ids. Después se refresca la
+  ruta para que el badge del menú quede al día (sin polling).
+
+### Menú agrupado
+
+| Grupo | Secciones |
+|---|---|
+| Compras online | Pedidos, Favoritos (sólo compras de la tienda) |
+| Facturación | Facturas y saldo, Pagos, Presupuestos, Condiciones, Avisos (con badge de no leídos) |
+| Mi perfil | Mis datos, Direcciones y envíos, Seguridad |
+
+"Cerrar sesión" va aparte, al final. En mobile (fila horizontal) los grupos se
+ven como separadores. La entrada del menú del header es "Facturación"
+(→ `/mi-cuenta/facturas`); "Cuenta corriente" no se usa como título: lo ven
+también clientes de contado.
+
+### Quién ve qué
+
+| Qué | Quién |
+|---|---|
+| Facturas y saldo, Pagos, Presupuestos, Avisos, Informar pago | Todo cliente vinculado (contado incluido). Sin vínculo, "Facturas y saldo" ofrece vincular. |
+| Condiciones | Sólo cuenta corriente según el espejo (`alegra_contacts_shop.tipo_cuenta = 'corriente'`). Contado: sin entrada en el menú y `/mi-cuenta/condiciones` da 404. |
+| Barra de límite de crédito / disponible | Sólo cuenta corriente con límite > 0. |
+
+`tipo_cuenta` se lee del espejo (columna generada del CRM: plazo mayor a 0 o
+límite mayor a 0); el Shop no la recalcula ni usa el `tipo_cuenta` guardado
+en `client_links`.
 
 ## Estado y seguimiento del pedido
 

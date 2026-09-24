@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { MiCuentaShell } from "@/components/mi-cuenta/MiCuentaShell";
 import { identidadActual } from "@/lib/auth";
+import { tipoCuentaEspejo } from "@/lib/contactos-espejo";
+import { contarNoLeidos } from "@/lib/cuenta-corriente/avisos";
 import { CAPACIDADES_DESPLIEGUE, capacidadesDe, seccionesVisibles } from "@/lib/mi-cuenta-nav";
 import { envioHabilitado } from "@/lib/envio-flag";
 
@@ -26,11 +28,32 @@ export default async function MiCuentaLayout({
   if (!identidad.clerkUserId && !identidad.cliente) return <>{children}</>;
   // Sin envío a domicilio, "Direcciones y envíos" no tiene nada que ofrecer.
   const despliegue = { ...CAPACIDADES_DESPLIEGUE, direcciones: await envioHabilitado() };
+  // Con vínculo, dos consultas a la base y NINGUNA a Alegra (esto corre en cada
+  // página de Mi cuenta): el tipo de cuenta del espejo decide la entrada
+  // Condiciones (sin fila, no se ofrece; la página decide por su cuenta) y el
+  // contador de avisos sin leer va como badge de Avisos. Si fallan, el menú se
+  // arma igual, sin Condiciones y sin badge.
+  const codigo = identidad.cliente?.codigocliente;
+  const [tipoR, noLeidosR] = await Promise.allSettled([
+    despliegue.condiciones && codigo ? tipoCuentaEspejo(codigo) : null,
+    despliegue.avisos && codigo ? contarNoLeidos(codigo) : 0,
+  ]);
+  for (const [bloque, r] of [
+    ["tipo de cuenta", tipoR],
+    ["avisos sin leer", noLeidosR],
+  ] as const) {
+    if (r.status === "rejected") {
+      console.error(`mi-cuenta/layout: ${bloque} caído (${r.reason instanceof Error ? r.reason.name : "desconocido"})`);
+    }
+  }
+  const esCuentaCorriente = tipoR.status === "fulfilled" && tipoR.value === "corriente";
+  const noLeidos = noLeidosR.status === "fulfilled" ? noLeidosR.value : 0;
 
   return (
     <MiCuentaShell
       nombrePila={identidad.nombrePila}
-      entradas={seccionesVisibles(capacidadesDe(identidad), despliegue)}
+      entradas={seccionesVisibles(capacidadesDe(identidad, esCuentaCorriente), despliegue, { avisos: noLeidos })}
+      despliegue={despliegue}
       migas={migas}
     >
       {children}

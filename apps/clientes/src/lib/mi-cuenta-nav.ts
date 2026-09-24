@@ -13,6 +13,10 @@ export const RUTAS_MI_CUENTA = {
   resumen: "/mi-cuenta",
   pedidos: "/mi-cuenta/pedidos",
   facturas: "/mi-cuenta/facturas",
+  pagos: "/mi-cuenta/pagos",
+  presupuestos: "/mi-cuenta/presupuestos",
+  condiciones: "/mi-cuenta/condiciones",
+  avisos: "/mi-cuenta/avisos",
   favoritos: "/mi-cuenta/favoritos",
   direcciones: "/mi-cuenta/direcciones",
   datos: "/mi-cuenta/datos",
@@ -27,20 +31,31 @@ export const hrefPedido = (id: string) => `${RUTAS_MI_CUENTA.pedidos}/${id}`;
 
 /**
  * Qué secciones ya existen en este despliegue. Cada rebanada que publica una
- * ruta prende su capacidad (favoritos → D, facturas → E); mientras esté en
- * false, la entrada no aparece ni en la navegación ni en el menú del header.
+ * ruta prende su capacidad (favoritos → D; facturas, pagos, presupuestos,
+ * condiciones y avisos → portal-al-shop); mientras esté en false, la entrada
+ * no aparece ni en la navegación ni en el menú del header, y la ruta da 404.
  */
 export interface CapacidadesDespliegue {
   favoritos: boolean;
+  /** "Facturas y saldo" (portal-al-shop, rebanada 1). */
   facturas: boolean;
   /** Direcciones y envíos: sólo con el flag `envio` prendido (src/lib/envio-flag.ts). */
   direcciones: boolean;
+  pagos: boolean;
+  presupuestos: boolean;
+  /** Condiciones comerciales: además, sólo cuenta corriente (`Capacidades.esCuentaCorriente`). */
+  condiciones: boolean;
+  avisos: boolean;
 }
 
 export const CAPACIDADES_DESPLIEGUE: Readonly<CapacidadesDespliegue> = {
   favoritos: true,
-  facturas: false,
+  facturas: true,
   direcciones: true,
+  pagos: true,
+  presupuestos: true,
+  condiciones: true,
+  avisos: true,
 };
 
 /** Lo que la identidad habilita. */
@@ -49,6 +64,12 @@ export interface Capacidades {
   clerk: boolean;
   /** Hay cuenta de cliente (contacto de Alegra) vinculada o heredada del CRM. */
   vinculado: boolean;
+  /**
+   * El contacto es cuenta corriente según el espejo del CRM (`tipo_cuenta`,
+   * plazo > 0 o límite > 0). Sólo decide Condiciones: el resto de Facturación
+   * lo ve todo vinculado, contado incluido.
+   */
+  esCuentaCorriente: boolean;
 }
 
 /** Forma mínima de `Identidad` (auth.ts), sin importarla: este módulo es puro. */
@@ -57,18 +78,40 @@ interface IdentidadMinima {
   cliente: { codigocliente?: string } | null;
 }
 
-export function capacidadesDe(i: IdentidadMinima): Capacidades {
-  return { clerk: !!i.clerkUserId, vinculado: !!i.cliente?.codigocliente };
+/**
+ * `esCuentaCorriente` lo calcula quien llama con el espejo (`contactoPorId`):
+ * este módulo es puro. Sin vínculo nunca es cuenta corriente.
+ */
+export function capacidadesDe(i: IdentidadMinima, esCuentaCorriente = false): Capacidades {
+  const vinculado = !!i.cliente?.codigocliente;
+  return { clerk: !!i.clerkUserId, vinculado, esCuentaCorriente: vinculado && esCuentaCorriente };
 }
 
 export type IdSeccion =
   | "pedidos"
   | "facturas"
+  | "pagos"
+  | "presupuestos"
+  | "condiciones"
+  | "avisos"
   | "favoritos"
   | "direcciones"
   | "datos"
   | "seguridad"
   | "salir";
+
+/** Grupos del menú (decisión "menú agrupado"). Cerrar sesión va suelto, al final. */
+export type IdGrupo = "compras" | "facturacion" | "perfil";
+
+/**
+ * Títulos de los grupos. "Facturación" y no "Cuenta corriente": el grupo lo ven
+ * también los clientes de contado.
+ */
+export const GRUPOS_MI_CUENTA: readonly { id: IdGrupo; label: string }[] = [
+  { id: "compras", label: "Compras online" },
+  { id: "facturacion", label: "Facturación" },
+  { id: "perfil", label: "Mi perfil" },
+];
 
 export interface SeccionMiCuenta {
   id: IdSeccion;
@@ -76,6 +119,10 @@ export interface SeccionMiCuenta {
   /** Sin href = acción del shell (Seguridad abre Clerk, Cerrar sesión). */
   href?: string;
   tone?: "danger";
+  /** Sin grupo = ítem suelto después de los grupos (Cerrar sesión). */
+  grupo?: IdGrupo;
+  /** Contador (avisos sin leer). Ausente o 0 = sin badge. */
+  badge?: number;
 }
 
 interface DefinicionSeccion extends SeccionMiCuenta {
@@ -83,42 +130,108 @@ interface DefinicionSeccion extends SeccionMiCuenta {
 }
 
 /**
- * En el orden del mockup, con Direcciones y Envíos y retiro unidas en una
- * sola sección. Cookie del CRM sin Clerk: Pedidos, Facturas, Direcciones y
- * envíos (la página muestra las reglas de envío; el domicilio fiscal sólo con
- * Clerk).
+ * En el orden del menú agrupado: Compras online (Pedidos, Favoritos) ·
+ * Facturación (Facturas y saldo, Pagos, Presupuestos, Condiciones, Avisos) ·
+ * Mi perfil (Mis datos, Direcciones y envíos, Seguridad) · Cerrar sesión.
+ * Cookie del CRM sin Clerk: Pedidos, Facturación y Direcciones y envíos (la
+ * página muestra las reglas de envío; el domicilio fiscal sólo con Clerk).
  */
 const SECCIONES: readonly DefinicionSeccion[] = [
-  { id: "pedidos", label: "Pedidos", href: RUTAS_MI_CUENTA.pedidos, visible: () => true },
-  // Sin vínculo también se ve: la página ofrece vincular la cuenta.
-  { id: "facturas", label: "Facturas", href: RUTAS_MI_CUENTA.facturas, visible: (_, d) => d.facturas },
+  { id: "pedidos", label: "Pedidos", grupo: "compras", href: RUTAS_MI_CUENTA.pedidos, visible: () => true },
   {
     id: "favoritos",
     label: "Favoritos",
+    grupo: "compras",
     href: RUTAS_MI_CUENTA.favoritos,
     visible: (c, d) => c.clerk && d.favoritos,
   },
+  // Sin vínculo también se ve: la página ofrece vincular la cuenta.
+  {
+    id: "facturas",
+    label: "Facturas y saldo",
+    grupo: "facturacion",
+    href: RUTAS_MI_CUENTA.facturas,
+    visible: (_, d) => d.facturas,
+  },
+  {
+    id: "pagos",
+    label: "Pagos",
+    grupo: "facturacion",
+    href: RUTAS_MI_CUENTA.pagos,
+    visible: (c, d) => c.vinculado && d.pagos,
+  },
+  {
+    id: "presupuestos",
+    label: "Presupuestos",
+    grupo: "facturacion",
+    href: RUTAS_MI_CUENTA.presupuestos,
+    visible: (c, d) => c.vinculado && d.presupuestos,
+  },
+  {
+    id: "condiciones",
+    label: "Condiciones",
+    grupo: "facturacion",
+    href: RUTAS_MI_CUENTA.condiciones,
+    visible: (c, d) => c.vinculado && c.esCuentaCorriente && d.condiciones,
+  },
+  {
+    id: "avisos",
+    label: "Avisos",
+    grupo: "facturacion",
+    href: RUTAS_MI_CUENTA.avisos,
+    visible: (c, d) => c.vinculado && d.avisos,
+  },
+  { id: "datos", label: "Mis datos", grupo: "perfil", href: RUTAS_MI_CUENTA.datos, visible: (c) => c.clerk },
   {
     id: "direcciones",
     label: "Direcciones y envíos",
+    grupo: "perfil",
     href: RUTAS_MI_CUENTA.direcciones,
     visible: (_, d) => d.direcciones,
   },
-  { id: "datos", label: "Mis datos", href: RUTAS_MI_CUENTA.datos, visible: (c) => c.clerk },
-  { id: "seguridad", label: "Seguridad", visible: (c) => c.clerk },
+  { id: "seguridad", label: "Seguridad", grupo: "perfil", visible: (c) => c.clerk },
   { id: "salir", label: "Cerrar sesión", tone: "danger", visible: (c) => c.clerk },
 ];
 
+/**
+ * Secciones visibles, en orden. `badges`: contadores por sección (hoy sólo
+ * Avisos); un 0 no se pasa.
+ */
 export function seccionesVisibles(
   c: Capacidades,
   despliegue: CapacidadesDespliegue = CAPACIDADES_DESPLIEGUE,
+  badges: Partial<Record<IdSeccion, number>> = {},
 ): SeccionMiCuenta[] {
   return SECCIONES.filter((s) => s.visible(c, despliegue)).map((s) => ({
     id: s.id,
     label: s.label,
     ...(s.href ? { href: s.href } : {}),
     ...(s.tone ? { tone: s.tone } : {}),
+    ...(s.grupo ? { grupo: s.grupo } : {}),
+    ...(badges[s.id] ? { badge: badges[s.id] } : {}),
   }));
+}
+
+export interface GrupoSecciones<T> {
+  id: IdGrupo;
+  label: string;
+  items: T[];
+}
+
+/**
+ * Reparte las secciones (ya filtradas) en los grupos del menú, en su orden, y
+ * deja aparte las sueltas (Cerrar sesión). Un grupo sin secciones no figura.
+ * Genérica para que el shell pueda agrupar sus ítems ya armados.
+ */
+export function agruparSecciones<T extends Pick<SeccionMiCuenta, "grupo">>(
+  secciones: readonly T[],
+): { grupos: GrupoSecciones<T>[]; sueltas: T[] } {
+  const grupos = GRUPOS_MI_CUENTA.map((g) => ({
+    id: g.id,
+    label: g.label,
+    items: secciones.filter((s) => s.grupo === g.id),
+  })).filter((g) => g.items.length > 0);
+  return { grupos, sueltas: secciones.filter((s) => !s.grupo) };
 }
 
 /** Segmento de Mi cuenta de un pathname ("" = resumen), sin query ni barra final. */
@@ -134,6 +247,10 @@ export function seccionActiva(pathname: string): IdSeccion {
   const { seccion } = segmento(pathname);
   switch (seccion) {
     case "facturas":
+    case "pagos":
+    case "presupuestos":
+    case "condiciones":
+    case "avisos":
     case "favoritos":
     case "direcciones":
     case "datos":
@@ -154,7 +271,11 @@ export interface Miga {
 
 const LABEL_SECCION: Record<string, string> = {
   pedidos: "Pedidos",
-  facturas: "Facturas",
+  facturas: "Facturas y saldo",
+  pagos: "Pagos",
+  presupuestos: "Presupuestos",
+  condiciones: "Condiciones",
+  avisos: "Avisos",
   favoritos: "Favoritos",
   direcciones: "Direcciones y envíos",
   datos: "Mis datos",
@@ -198,7 +319,7 @@ export function bajadaMiCuenta(
 ): string {
   const acciones = [
     "Siga sus pedidos",
-    despliegue.facturas && "descargue facturas",
+    despliegue.facturas && "consulte sus facturas y su saldo",
     despliegue.favoritos && "guarde sus favoritos",
   ].filter(Boolean);
   const datos = despliegue.direcciones ? "sus direcciones y datos" : "sus datos";
@@ -223,4 +344,18 @@ export function rutaVincular(volver?: string): string {
   return destino
     ? `${RUTAS_MI_CUENTA.vincular}?volver=${encodeURIComponent(destino)}`
     : RUTAS_MI_CUENTA.vincular;
+}
+
+/** Secciones de Facturación que tienen ruta propia y se prenden por despliegue. */
+export type SeccionFacturacion = "facturas" | "pagos" | "presupuestos" | "condiciones" | "avisos";
+
+/**
+ * ¿La ruta de esta sección existe en este despliegue? Si no, la página responde
+ * `notFound()`: una URL puesta a mano no puede adelantarse a la rebanada.
+ */
+export function seccionDesplegada(
+  seccion: SeccionFacturacion,
+  despliegue: CapacidadesDespliegue = CAPACIDADES_DESPLIEGUE,
+): boolean {
+  return despliegue[seccion];
 }

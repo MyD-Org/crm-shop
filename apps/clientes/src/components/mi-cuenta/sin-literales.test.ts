@@ -17,7 +17,8 @@ import { describe, expect, it } from "vitest";
  * voseo ni tuteo en el texto) y un único `<h1>`, el del shell. Unificar las
  * dos guardas en una sola es un chore aparte.
  *
- * Alcance (NHM-3): `src/components/mi-cuenta/**`, `src/app/mi-cuenta/**`,
+ * Alcance (NHM-3): `src/components/mi-cuenta/**` (incluida la cuenta
+ * corriente, `cuenta-corriente/**`), `src/app/mi-cuenta/**`,
  * `src/components/BotonFavorito.tsx` (rebanada de favoritos) y
  * `src/components/SelectorDireccionEnvio.tsx` (direcciones guardadas en el
  * checkout; el resto del checkout sigue afuera).
@@ -143,7 +144,7 @@ describe("guarda de Mi cuenta: la guarda misma", () => {
     expect(estilo('<svg strokeWidth="1.6" viewBox="0 0 24 24" width="20">')).toEqual([]);
     expect(estilo('className="data-[state=open]:bg-elevated"')).toEqual([]);
     expect(estilo("// antes: text-[15px] y text-white")).toEqual([]);
-    expect(estilo('const u = "https://crm.cliente.example/portal";')).toEqual([]);
+    expect(estilo('const u = "https://crm.cliente.example/admin";')).toEqual([]);
   });
 
   it("registro: atrapa voseo y tuteo en el texto, no en comentarios", () => {
@@ -170,6 +171,37 @@ describe("guarda de Mi cuenta: archivos del módulo", () => {
     expect(lista).toContain(join("components", "mi-cuenta", "DireccionForm.tsx"));
     expect(lista).toContain(join("components", "mi-cuenta", "DatosPersonalesCard.tsx"));
     expect(lista).toContain(join("components", "SelectorDireccionEnvio.tsx"));
+  });
+
+  it("incluye la cuenta corriente (portal-al-shop): componentes y páginas de Facturas y saldo, Pagos (con Informar pago), Presupuestos, Condiciones y Avisos", () => {
+    const lista = archivos().map((a) => relative(SRC, a));
+    const cc = join("components", "mi-cuenta", "cuenta-corriente");
+    for (const nombre of [
+      "FacturasYSaldo.tsx",
+      "SaldoTarjetas.tsx",
+      "FacturasSeccion.tsx",
+      "FiltrosFacturas.tsx",
+      "CargarMas.tsx",
+      "VisorDocumento.tsx",
+      "WhatsAppFacturas.tsx",
+      "AvisoSeccionCaida.tsx",
+      "PagosSeccion.tsx",
+      "PagoDetalle.tsx",
+      "WhatsAppPagos.tsx",
+      "PresupuestosSeccion.tsx",
+      "FiltrosPresupuestos.tsx",
+      "WhatsAppPresupuestos.tsx",
+      "ComprobantesPagos.tsx",
+      "InformarPago.tsx",
+      "MisComprobantes.tsx",
+      "Condiciones.tsx",
+      "AvisosLista.tsx",
+    ]) {
+      expect(lista).toContain(join(cc, nombre));
+    }
+    for (const seccion of ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]) {
+      expect(lista).toContain(join("app", "mi-cuenta", seccion, "page.tsx"));
+    }
   });
 
   for (const regla of REGLAS) {

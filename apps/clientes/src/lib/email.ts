@@ -20,20 +20,32 @@ export interface EmailEnviado {
   ok: boolean;
   id?: string;
   error?: string;
+  /** true = no salió porque falta `RESEND_API_KEY` (no es una falla del envío). */
+  noConfigurado?: boolean;
 }
 
-export async function enviarEmail(opts: {
+export interface OpcionesEmail {
   to: string;
   subject: string;
   html: string;
   text: string;
-}): Promise<EmailEnviado> {
+  /** Default `EMAIL_FROM`. El aviso de comprobantes pasa el suyo. */
+  from?: string;
+  replyTo?: string;
+  attachments?: { filename: string; content: Uint8Array; contentType: string }[];
+  /** Tags de Resend: sólo [A-Za-z0-9_-]. */
+  tags?: { name: string; value: string }[];
+  /** Clave de deduplicación del lado de Resend (header `Idempotency-Key`). */
+  idempotencyKey?: string;
+}
+
+export async function enviarEmail(opts: OpcionesEmail): Promise<EmailEnviado> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     // No se tira: quien llama decide si esto es fatal. Un mail de aviso que no
     // sale no debería tumbar un pedido que ya se registró.
     console.error("[email] falta RESEND_API_KEY: no se envió nada");
-    return { ok: false, error: "Email no configurado" };
+    return { ok: false, error: "Email no configurado", noConfigurado: true };
   }
 
   try {
@@ -42,13 +54,25 @@ export async function enviarEmail(opts: {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        ...(opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : {}),
       },
       body: JSON.stringify({
-        from: remitente(),
+        from: opts.from ?? remitente(),
         to: [opts.to],
         subject: opts.subject,
         html: opts.html,
         text: opts.text,
+        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        ...(opts.attachments
+          ? {
+              attachments: opts.attachments.map((a) => ({
+                filename: a.filename,
+                content: Buffer.from(a.content).toString("base64"),
+                content_type: a.contentType,
+              })),
+            }
+          : {}),
+        ...(opts.tags ? { tags: opts.tags } : {}),
       }),
     });
 

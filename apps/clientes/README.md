@@ -45,6 +45,9 @@ Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
 | `R2_SHOP_MEDIA_SECRET_ACCESS_KEY` | Secreto de la llave anterior. Mismo par que el CRM. |
 | `R2_SHOP_MEDIA_BUCKET` | Bucket público (`shop-media`). Mismo par que el CRM. |
 | `R2_SHOP_MEDIA_PUBLIC_URL` | Base pública desde donde se sirven las imágenes (sin barra final; ejemplo `https://media.plataforma.example`). Mismo par que el CRM. |
+| `R2_RECEIPTS_ACCESS_KEY_ID` / `R2_RECEIPTS_SECRET_ACCESS_KEY` / `R2_RECEIPTS_BUCKET` | Bucket PRIVADO de comprobantes de pago (el mismo que usa el backoffice del CRM). Sin las tres, "Informar pago" no aparece. Conviene un token de R2 acotado a ese bucket. `R2_RECEIPTS_ACCOUNT_ID` sólo si la cuenta difiere de `R2_ACCOUNT_ID`. El bucket necesita CORS con el origen del Shop (PUT y HEAD). |
+| `RECEIPTS_EMAIL_FROM` | Remitente del aviso de comprobantes (dirección de un dominio verificado en Resend). Sin ella se usa `EMAIL_FROM`. |
+| `CRM_ADMIN_URL` | Base del admin del CRM (ej. `https://crm.plataforma.example`) para el botón "Ver en el backoffice" del aviso de comprobantes. Sin ella el mail sale sin botón. Server-only. |
 
 ### Flags (Vercel Flags, sin redeploy)
 

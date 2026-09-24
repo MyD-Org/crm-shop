@@ -69,6 +69,8 @@ export function usePaginaApi<T>({
     error,
     /** Siguiente página del filtro cargado. */
     cargarMas: () => void pedir(cargada, items.length),
+    /** Vuelve a pedir la primera página del filtro cargado (p. ej. tras informar un pago). */
+    recargar: () => void pedir(cargada, 0),
     /** Aplica un filtro (su query sin `start`); si es el ya cargado no pide nada. */
     filtrar: (query: string) => {
       const q = query.replace(/^\?/, "");

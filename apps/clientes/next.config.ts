@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
     // Lo desactivamos hasta que sea estable.
     turbopackFileSystemCacheForDev: false,
   },
+  // Comprobantes de pago: HEIC/HEIF → JPEG con heic-decode (WASM de
+  // libheif-js) y sharp (binario nativo). Se cargan desde node_modules en
+  // runtime en vez de empaquetarse (sharp ya está en la lista automática de
+  // Next; se nombra igual para que quede explícito).
+  serverExternalPackages: ["sharp", "heic-decode", "libheif-js"],
   images: {
     // Fotos del overlay del CRM: sólo los hosts de SHOP_MEDIA_HOSTS (separados
     // por coma). Sin la variable la lista queda vacía y las cards muestran el

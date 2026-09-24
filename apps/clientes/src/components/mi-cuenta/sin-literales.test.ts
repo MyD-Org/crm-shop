@@ -173,7 +173,7 @@ describe("guarda de Mi cuenta: archivos del módulo", () => {
     expect(lista).toContain(join("components", "SelectorDireccionEnvio.tsx"));
   });
 
-  it("incluye la cuenta corriente (portal-al-shop): componentes y páginas de Facturas y saldo, Pagos y Presupuestos", () => {
+  it("incluye la cuenta corriente (portal-al-shop): componentes y páginas de Facturas y saldo, Pagos (con Informar pago) y Presupuestos", () => {
     const lista = archivos().map((a) => relative(SRC, a));
     const cc = join("components", "mi-cuenta", "cuenta-corriente");
     for (const nombre of [
@@ -191,6 +191,9 @@ describe("guarda de Mi cuenta: archivos del módulo", () => {
       "PresupuestosSeccion.tsx",
       "FiltrosPresupuestos.tsx",
       "WhatsAppPresupuestos.tsx",
+      "ComprobantesPagos.tsx",
+      "InformarPago.tsx",
+      "MisComprobantes.tsx",
     ]) {
       expect(lista).toContain(join(cc, nombre));
     }

@@ -121,6 +121,33 @@ Se publica por rebanadas, cada una con su bandera en
 - Selección → WhatsApp "Consultar", oculto si el tenant no tiene número.
 - Alegra caída: aviso "No pudimos obtener sus pagos…"; el resto de Mi cuenta sigue.
 
+#### Informar pago y Mis comprobantes
+
+Sólo con el bucket de comprobantes configurado (`R2_RECEIPTS_*`); sin él no hay
+botón y la API responde 503. No depende de Alegra: se ofrece aunque los pagos
+no carguen.
+
+- "Informar pago" abre un diálogo (monto, fecha, medio, notas, archivo PDF o
+  imagen de hasta 20 MB, HEIC incluido). `POST /api/mi-cuenta/comprobantes`
+  valida, aplica los topes (10 por hora en memoria, 20 por día contados en la
+  base), crea la fila `uploading` en `public.payment_receipts` con los datos de
+  la identidad y devuelve una URL PUT firmada: el navegador sube DIRECTO a R2
+  (CORS del bucket con el origen del Shop). Después
+  `POST /api/mi-cuenta/comprobantes/[id]/confirm` (nodejs, 60 s) verifica por
+  magic bytes, convierte HEIC a JPEG (sharp + heic-decode), publica en
+  `receipts/…` y deja la fila `pending`.
+- Mismo bucket, mismas keys y mismos estados que el portal del CRM: el
+  backoffice (`/admin/comprobantes`) no distingue de dónde vino. El Shop no
+  borra nada (sin DELETE): los `uploading` huérfanos y los `rejected` viejos
+  los limpia el listado del backoffice.
+- Mail al `receipts_email` del tenant con el archivo adjunto (≤10 MB) y el
+  botón "Ver en el backoffice" = `CRM_ADMIN_URL/admin/comprobantes?id=…`
+  (nunca el host del Shop; sin `CRM_ADMIN_URL`, sin botón). Remitente
+  `RECEIPTS_EMAIL_FROM` (o `EMAIL_FROM`). Sin destino ⇒ `email_status=skipped`.
+- "Mis comprobantes": los `pending` ("En revisión") y `loaded` ("Registrado",
+  con el número de recibo de Alegra si lo hay), de a 10 con "Cargar más"
+  (`GET /api/mi-cuenta/comprobantes?start`). Los estados internos no se ven.
+
 ### Presupuestos (`/mi-cuenta/presupuestos`)
 
 - De a 30, primera página del servidor; "Cargar más" y los filtros van a

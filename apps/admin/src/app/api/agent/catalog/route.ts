@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url)
     const q = url.searchParams.get("q")?.trim() ?? ""
 
-    console.log(`[agent/catalog] tenant=${tenant.id} cliente=${auth.codigocliente} q="${q}"`)
+    console.log(`[agent/catalog] tenant=${tenant.id} cliente=${auth.codigocliente} largo_q=${q.length}`)
 
     if (!q) return Response.json({ error: "q es requerido" }, { status: 400 })
 

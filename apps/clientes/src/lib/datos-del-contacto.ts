@@ -54,6 +54,8 @@ export interface DatosDelContacto {
   /** faltantes vacío y fuente disponible. */
   completo: boolean;
   motivoRevision: MotivoRevision | null;
+  /** El tipo de documento no está en Alegra: lo dedujo el Shop (el modal lo necesita para validar). */
+  tipoDocDeducido: boolean;
   /** Fila del perfil (Clerk). Da el teléfono y `coincideConAlegra`. */
   perfil: PerfilFacturacion | null;
   /**
@@ -161,6 +163,7 @@ export async function datosDelContacto(identidad: IdentidadFacturacion): Promise
       faltantes,
       completo: faltantes.length === 0,
       motivoRevision: null,
+      tipoDocDeducido: false,
       perfil,
       interno: null,
     };
@@ -185,6 +188,7 @@ export async function datosDelContacto(identidad: IdentidadFacturacion): Promise
       faltantes: sirvePerfil ? [] : [...REQUERIDOS],
       completo: sirvePerfil,
       motivoRevision: null,
+      tipoDocDeducido: false,
       perfil,
       interno: null,
     };
@@ -207,6 +211,7 @@ export async function datosDelContacto(identidad: IdentidadFacturacion): Promise
     faltantes: mezclada.faltantes,
     completo: mezclada.completo,
     motivoRevision: mezclada.motivoRevision,
+    tipoDocDeducido: mezclada.tipoDocDeducido,
     perfil,
     interno: { base: contacto.base, lectura: mezclada },
   };

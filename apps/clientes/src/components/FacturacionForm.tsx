@@ -9,6 +9,7 @@ import {
   PAIS_LABEL,
   TIPO_DOC_LABEL,
   TIPOS_DOC_POR_PAIS,
+  domicilioEnLinea,
   formatearDoc,
   formatearDocAlEscribir,
   telefonoValido,
@@ -18,6 +19,9 @@ import {
   type Pais,
   type TipoDoc,
 } from "@/lib/facturacion";
+import { PROVINCIAS_AR, provinciaCanonica } from "@/lib/provincias";
+
+const OPCIONES_PROVINCIA = PROVINCIAS_AR.map((p) => ({ label: p, value: p }));
 
 /**
  * Datos de facturación del comprador.
@@ -224,16 +228,18 @@ export function FacturacionForm({
         <Dato label="Razón social" value={form.razonSocial || "—"} />
         <Dato
           label={TIPO_DOC_LABEL[form.tipoDoc] ?? form.tipoDoc}
-          value={formatearDoc(form.tipoDoc, form.nroDoc) || "—"}
+          // El número tal como está en la cuenta (sin la máscara del formulario,
+          // que recortaría un documento de largo inesperado).
+          value={formatearDoc(form.tipoDoc, perfil?.nroDoc ?? form.nroDoc) || "—"}
         />
         <Dato label="País" value={PAIS_LABEL[form.pais] ?? "—"} />
         {esArgentina && (
           <Dato
             label="Condición IVA"
-            value={CONDICION_IVA_LABEL[form.condicionIva] ?? "—"}
+            value={CONDICION_IVA_LABEL[form.condicionIva] ?? (perfil?.condicionIva || "—")}
           />
         )}
-        <Dato label="Domicilio fiscal" value={form.domicilioCalle || "—"} />
+        <Dato label="Domicilio fiscal" value={domicilioEnLinea(form) || "—"} />
       </dl>
       {/*
         El teléfono es lo único editable con la cuenta vinculada: la razón
@@ -383,7 +389,10 @@ export function FacturacionForm({
                   // Solo se pisa lo que la sugerencia realmente trae: si viene
                   // sin CP, se conserva el que el usuario ya había escrito.
                   domicilioCiudad: s.ciudad || f.domicilioCiudad,
-                  domicilioProvincia: s.provincia || f.domicilioProvincia,
+                  // En Argentina, con el nombre de la lista (el desplegable).
+                  domicilioProvincia:
+                    (f.pais === "AR" ? provinciaCanonica(s.provincia) : s.provincia) ||
+                    f.domicilioProvincia,
                   domicilioCp: s.cp || f.domicilioCp,
                 }));
                 // Elegir una sugerencia vuelve al modo automático: si antes
@@ -430,12 +439,22 @@ export function FacturacionForm({
                     placeholder="Puerto Iguazú"
                   />
                 </Field>
-                <Field label="Provincia">
-                  <Input
-                    value={form.domicilioProvincia ?? ""}
-                    onChange={(e) => set("domicilioProvincia", e.target.value)}
-                    placeholder="Misiones"
-                  />
+                <Field label="Provincia" error={errores.domicilioProvincia}>
+                  {esArgentina ? (
+                    <Select
+                      options={OPCIONES_PROVINCIA}
+                      value={provinciaCanonica(form.domicilioProvincia) ?? ""}
+                      onValueChange={(v) => set("domicilioProvincia", v)}
+                      placeholder="Seleccione la provincia"
+                      className={SELECT_CLASS}
+                    />
+                  ) : (
+                    <Input
+                      value={form.domicilioProvincia ?? ""}
+                      onChange={(e) => set("domicilioProvincia", e.target.value)}
+                      placeholder="Misiones"
+                    />
+                  )}
                 </Field>
                 <Field label="Código postal">
                   <Input

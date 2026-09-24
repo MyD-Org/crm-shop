@@ -33,6 +33,10 @@
   /* Centred and nudged up (80px extra bottom padding = 40px up): on common phones
      the title clears the spot, the lead the pendant and the CTAs the table lamp. */
   .root > section > div:last-child { justify-content: center; padding-bottom: calc(clamp(28px, 5vw, 72px) + 80px); }
+  /* The photo is cropped by height and anchored right, so the pendant always hugs the right edge while
+     the title's line breaks depend on the phone's width: on wide phones (~430px) "proyecto necesita"
+     fit on one line and ran into the pendant. Capped in em so it tracks the title's own size. */
+  .root > section > div:last-child > h1 { max-width: 7em; }
   /* The contact line sits on the shelf's light stone front (y ≈ 787–884 of 1024 in the photo, placed at 860;
      the cover crop scales by height, so it is the same % of the card on every phone). */
   .root > section > div:last-child > div:last-child { position: absolute; left: clamp(28px, 5vw, 72px); top: calc(860 / 1024 * 100% - 10px); margin: 0; }

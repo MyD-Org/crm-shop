@@ -26,11 +26,13 @@ export const dynamic = "force-dynamic";
 export default async function DireccionesPage() {
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.direcciones));
+  // Con el flag `envio` apagado la sección no figura en la navegación: un link
+  // viejo o guardado vuelve a Pedidos.
+  if (!(await envioHabilitado())) redirect(RUTAS_MI_CUENTA.pedidos);
 
   const [direcciones, perfil] = clerkUserId
     ? await Promise.all([listarDirecciones(clerkUserId), getPerfilFacturacion(clerkUserId)])
     : [[], null];
-  const envio = await envioHabilitado();
 
   return (
     <section className="flex flex-col gap-4">
@@ -49,11 +51,9 @@ export default async function DireccionesPage() {
         />
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        {envio && (
-          <Card title={ENTREGA_LABEL.envio}>
-            <p className="text-sm text-muted">{textoEnvio(CIUDADES_ENVIO, MINIMO_ENVIO)}</p>
-          </Card>
-        )}
+        <Card title={ENTREGA_LABEL.envio}>
+          <p className="text-sm text-muted">{textoEnvio(CIUDADES_ENVIO, MINIMO_ENVIO)}</p>
+        </Card>
         <Card title="Retiro en local">
           <p className="text-sm text-muted">{ENTREGA_LABEL.retiro}</p>
         </Card>

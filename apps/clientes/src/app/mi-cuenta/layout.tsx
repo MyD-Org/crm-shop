@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { MiCuentaShell } from "@/components/mi-cuenta/MiCuentaShell";
 import { identidadActual } from "@/lib/auth";
-import { capacidadesDe, seccionesVisibles } from "@/lib/mi-cuenta-nav";
+import { CAPACIDADES_DESPLIEGUE, capacidadesDe, seccionesVisibles } from "@/lib/mi-cuenta-nav";
+import { envioHabilitado } from "@/lib/envio-flag";
 
 /**
  * Shell de Mi cuenta: saludo, breadcrumb (slot `@migas`) y navegación por
@@ -23,11 +24,13 @@ export default async function MiCuentaLayout({
 }) {
   const identidad = await identidadActual();
   if (!identidad.clerkUserId && !identidad.cliente) return <>{children}</>;
+  // Sin envío a domicilio, "Direcciones y envíos" no tiene nada que ofrecer.
+  const despliegue = { ...CAPACIDADES_DESPLIEGUE, direcciones: await envioHabilitado() };
 
   return (
     <MiCuentaShell
       nombrePila={identidad.nombrePila}
-      entradas={seccionesVisibles(capacidadesDe(identidad))}
+      entradas={seccionesVisibles(capacidadesDe(identidad), despliegue)}
       migas={migas}
     >
       {children}

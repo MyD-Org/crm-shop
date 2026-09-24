@@ -1,4 +1,5 @@
 import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
+import { envioHabilitado } from "@/lib/envio-flag";
 
 /**
  * Footer global del layout. Textos del diseño aprobado; links a rutas reales
@@ -6,8 +7,10 @@ import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
  * sobre oscuro y sin itálica (regla `.site-footer em` en globals.css), igual
  * que el header.
  */
-export function SiteFooter() {
+export async function SiteFooter() {
   const anio = new Date().getFullYear();
+  // "Envíos y pagos" sólo con el flag `envio` prendido.
+  const envio = await envioHabilitado();
   return (
     <SiteFooterDS
       className="site-footer"
@@ -36,7 +39,7 @@ export function SiteFooter() {
           title: "Contacto",
           links: [
             { label: "WhatsApp", href: "https://wa.me/5492235903025" },
-            { label: "Envíos y pagos", href: "/carrito" },
+            ...(envio ? [{ label: "Envíos y pagos", href: "/carrito" }] : []),
             {
               label: "Ubicación",
               href: "https://www.google.com/maps/search/?api=1&query=Av.+Rep%C3%BAblica+Argentina%2C+Puerto+Iguaz%C3%BA%2C+Misiones",

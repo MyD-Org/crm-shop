@@ -33,11 +33,14 @@ export const hrefPedido = (id: string) => `${RUTAS_MI_CUENTA.pedidos}/${id}`;
 export interface CapacidadesDespliegue {
   favoritos: boolean;
   facturas: boolean;
+  /** Direcciones y envíos: sólo con el flag `envio` prendido (src/lib/envio-flag.ts). */
+  direcciones: boolean;
 }
 
 export const CAPACIDADES_DESPLIEGUE: Readonly<CapacidadesDespliegue> = {
   favoritos: true,
   facturas: false,
+  direcciones: true,
 };
 
 /** Lo que la identidad habilita. */
@@ -99,7 +102,7 @@ const SECCIONES: readonly DefinicionSeccion[] = [
     id: "direcciones",
     label: "Direcciones y envíos",
     href: RUTAS_MI_CUENTA.direcciones,
-    visible: () => true,
+    visible: (_, d) => d.direcciones,
   },
   { id: "datos", label: "Mis datos", href: RUTAS_MI_CUENTA.datos, visible: (c) => c.clerk },
   { id: "seguridad", label: "Seguridad", visible: (c) => c.clerk },

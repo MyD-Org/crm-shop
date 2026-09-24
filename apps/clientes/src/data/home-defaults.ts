@@ -149,7 +149,7 @@ const CATALOGO_ILUMINACION = "/catalogo?categoria=ILUMINACION";
 
 export const DEFAULTS_HOME: HomeContent = {
   anuncio: {
-    texto: "Envío gratis en compras desde $100.000 · 6 cuotas sin interés · Retiro en local sin cargo",
+    texto: "Retiro en local sin cargo · Stock en tiempo real · Asesoramiento por WhatsApp",
   },
   hero: {
     eyebrow: "Iluminación LED · Ingresos 2026",
@@ -163,7 +163,7 @@ export const DEFAULTS_HOME: HomeContent = {
       { label: "Línea decorativa", href: CATALOGO_ILUMINACION },
     ],
     usps: [
-      { label: "Envíos a todo el país" },
+      { label: "Retiro en local sin cargo" },
       { label: "Stock en tiempo real" },
       { label: "Asesoramiento por WhatsApp" },
     ],
@@ -188,7 +188,7 @@ export const DEFAULTS_HOME: HomeContent = {
   },
   destacados: {
     titulo: "Los más *vendidos*",
-    bajada: "Rotación real del local y la web: especificaciones completas, stock confirmado y hasta 6 cuotas.",
+    bajada: "Rotación real del local y la web: especificaciones completas y stock confirmado.",
     linkTodos: "/catalogo",
     cantidad: 4,
     // Productos reales del catálogo (los del diseño aprobado que existen en
@@ -227,16 +227,16 @@ export const DEFAULTS_HOME: HomeContent = {
   },
   servicios: {
     items: [
-      { titulo: "Envío gratis", texto: "En compras desde $100.000 a todo el país." },
+      { titulo: "Retiro en local", texto: "Sin cargo. Coordinamos con usted día y horario." },
       { titulo: "Stock real", texto: "Disponibilidad online sincronizada con nuestro depósito." },
-      { titulo: "6 cuotas sin interés", texto: "Y precios especiales por transferencia." },
-      { titulo: "Asesoramiento técnico", texto: "Te ayudamos por WhatsApp con potencias, térmicas e instalación." },
+      { titulo: "Pedido sin pago online", texto: "Arme su pedido y un asesor lo contacta para coordinar el pago." },
+      { titulo: "Asesoramiento personalizado", texto: "Lo ayudamos por WhatsApp a elegir el producto correcto y a armar su pedido." },
     ],
   },
   navBadge: { categoria: "ILUMINACION", texto: "Nuevo" },
   whatsapp: {
-    titulo: "¿Necesitás asesoramiento técnico?",
-    texto: "Escribinos por WhatsApp y te ayudamos a elegir el producto correcto.",
+    titulo: "¿Necesita asesoramiento?",
+    texto: "Escríbanos por WhatsApp y lo ayudamos a elegir el producto correcto.",
     href: "https://wa.me/5492235903025",
   },
   // El anuncio en mobile ocupa varias filas: arranca solo en desktop hasta que

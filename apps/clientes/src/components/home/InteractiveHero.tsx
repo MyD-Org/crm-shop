@@ -4,6 +4,10 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { COVER_QUERY, HERO_LIGHTS, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
+/** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
+const INTRO_STEP_MS = 1400;
+const INTRO_FADE_MS = 900;
+
 /** Keeps the DS Hero and its content intact. Only the background is enhanced. */
 export function InteractiveHero({ children, enabled }: { children: ReactNode; enabled: boolean }) {
   const root = useRef<HTMLDivElement>(null);
@@ -31,6 +35,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     const stop = () => {
       interrupted = true;
       timers.forEach(clearTimeout);
+      delete host.dataset.intro;
       paint([]);
     };
     stopIntro.current = stop;
@@ -39,10 +44,12 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting || entry.intersectionRatio < .35 || started || interrupted || motion.matches) return;
       started = true;
+      host.dataset.intro = "";
       [4, 2, 3].forEach((index, step) => {
-        timers.push(setTimeout(() => paint(HERO_LIGHTS.map((_, i) => i === index ? .85 : 0)), step * 440));
+        timers.push(setTimeout(() => paint(HERO_LIGHTS.map((_, i) => i === index ? .85 : 0)), step * INTRO_STEP_MS));
       });
-      timers.push(setTimeout(() => paint([]), 1500));
+      timers.push(setTimeout(() => paint([]), 3 * INTRO_STEP_MS));
+      timers.push(setTimeout(() => { delete host.dataset.intro; }, 3 * INTRO_STEP_MS + INTRO_FADE_MS));
     }, { threshold: .35 });
     observer.observe(surface);
     const move = (event: PointerEvent) => {

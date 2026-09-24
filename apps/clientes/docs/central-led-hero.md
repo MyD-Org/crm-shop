@@ -16,7 +16,7 @@ Measured emitting surfaces: neon ellipse (996,346), radii (118,117); bulb (1006,
 
 Mouse uses independent smooth distance falloff and 300ms opacity transitions.
 Touch and keyboard buttons toggle independently with aria-pressed and visible keyboard focus.
-The visible intro runs linear → spot → pendant once per mount, cancels on interaction, and is disabled for reduced motion.
+The visible intro runs linear → spot → pendant once per mount, 1.4 s per lamp with a 900 ms fade, cancels on interaction, and is disabled for reduced motion.
 No new dependencies, DS modifications, production configuration or deployment.
 
 ## Verification

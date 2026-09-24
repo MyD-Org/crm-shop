@@ -188,13 +188,39 @@ export function migasMiCuenta(pathname: string): Miga[] {
 }
 
 /**
- * Bajada del saludo de Mi cuenta. Sólo menciona las facturas cuando su
- * sección está desplegada: no se promete algo que el visitante no encuentra.
+ * Bajada del saludo de Mi cuenta. Queda fija en todas las secciones, así que
+ * resume todo lo que se puede hacer, no sólo los pedidos. Facturas y favoritos
+ * se mencionan sólo cuando su sección está desplegada: no se promete algo que el
+ * visitante no encuentra.
  */
 export function bajadaMiCuenta(
   despliegue: CapacidadesDespliegue = CAPACIDADES_DESPLIEGUE,
 ): string {
-  return despliegue.facturas
-    ? "Revise el estado de sus pedidos, descargue facturas y repita compras con un clic."
-    : "Revise el estado de sus pedidos y repita compras con un clic.";
+  const acciones = [
+    "Siga sus pedidos",
+    despliegue.facturas && "descargue facturas",
+    despliegue.favoritos && "guarde sus favoritos",
+  ].filter(Boolean);
+  const datos = despliegue.direcciones ? "sus direcciones y datos" : "sus datos";
+  return `${acciones.join(", ")} y administre ${datos}.`;
+}
+
+/**
+ * `?volver=` de la página de vincular: solo rutas internas ("/checkout"), nunca
+ * "//otro-sitio.example" ni una URL absoluta (sería un redirect abierto).
+ */
+export function volverSeguro(raw: string | string[] | undefined): string | undefined {
+  const valor = Array.isArray(raw) ? raw[0] : raw;
+  if (!valor || !valor.startsWith("/") || valor.startsWith("//") || valor.includes("\\")) {
+    return undefined;
+  }
+  return valor;
+}
+
+/** Enlace a vincular la cuenta, opcionalmente volviendo a donde estaba. */
+export function rutaVincular(volver?: string): string {
+  const destino = volverSeguro(volver);
+  return destino
+    ? `${RUTAS_MI_CUENTA.vincular}?volver=${encodeURIComponent(destino)}`
+    : RUTAS_MI_CUENTA.vincular;
 }

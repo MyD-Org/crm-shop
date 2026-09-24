@@ -8,6 +8,7 @@ import {
   normalizarDoc,
   rucParaguayValido,
   cuitValido,
+  documentoEnLinea,
   dniValido,
   formatearCuit,
   telefonoValido,
@@ -424,5 +425,12 @@ describe("domicilioEnLinea", () => {
 
   it("devuelve vacío cuando no hay nada", () => {
     expect(domicilioEnLinea({})).toBe("");
+  });
+});
+
+describe("documentoEnLinea", () => {
+  it("rotula CUIT sólo con 11 dígitos", () => {
+    expect(documentoEnLinea("33693450239")).toBe("CUIT 33-69345023-9");
+    expect(documentoEnLinea("39282165")).toBe("documento 39282165");
   });
 });

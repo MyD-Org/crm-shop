@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { PedidoCard } from "@/components/mi-cuenta/PedidoCard";
-import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
@@ -21,7 +20,6 @@ export default async function PedidosPage() {
 
   return (
     <section>
-      <SeccionTitulo titulo="Pedidos" />
       {pedidos.length === 0 ? (
         <EmptyState
           title="Todavía no realizó pedidos."

@@ -65,6 +65,9 @@ export default async function CheckoutPage() {
         pagosHabilitados={pagos}
         envioHabilitado={envio}
         direccionesGuardadas={direcciones}
+        // Su documento ya es de un cliente de Alegra y no vinculó: se le
+        // recomienda vincular ANTES de pagar a precio de lista.
+        sugerirVincular={Boolean(perfil?.coincideConAlegra) && !cliente}
       />
     </>
   );

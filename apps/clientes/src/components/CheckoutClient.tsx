@@ -7,6 +7,7 @@ import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
+import { AvisoVincular } from "@/components/mi-cuenta/AvisoVincular";
 import { eleccionInicial, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import { fmtPrecio } from "@/lib/format";
 import { HREF_MIS_DATOS } from "@/lib/menu-usuario";
@@ -148,6 +149,12 @@ interface Props {
    * llegan acá y la cookie del CRM sin Clerk no guarda direcciones.
    */
   direccionesGuardadas?: DireccionEnvio[];
+  /**
+   * El documento de facturación ya es de un cliente de Alegra y la cuenta no
+   * está vinculada: se recomienda vincular antes de confirmar. Si confirma
+   * igual, el pedido sale con `requiereRevision`.
+   */
+  sugerirVincular?: boolean;
 }
 
 export function CheckoutClient({
@@ -160,6 +167,7 @@ export function CheckoutClient({
   oferta = null,
   pagosHabilitados,
   direccionesGuardadas = [],
+  sugerirVincular = false,
 }: Props) {
   const { items, clear, ready } = useCart();
 
@@ -520,6 +528,12 @@ export function CheckoutClient({
       <h1 className="mb-6 font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
         Finalizar pedido
       </h1>
+
+      {sugerirVincular && (
+        <div className="mb-6">
+          <AvisoVincular volver="/checkout" enCheckout />
+        </div>
+      )}
 
       {!facturacionCompleta && (
         <div className="mb-6 rounded-xl border border-warning/40 bg-warning/5 p-4">

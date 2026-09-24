@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Button, Card, type RenderLink } from "@myd-org/ui";
 import { FacturacionForm, type PerfilFacturacionUI } from "@/components/FacturacionForm";
+import { AvisoVincular } from "./AvisoVincular";
 import { CuentaClienteCard } from "./CuentaClienteCard";
 import { DatosPersonalesCard } from "./DatosPersonalesCard";
 
@@ -35,9 +36,14 @@ export function DatosCuenta({
 }) {
   const router = useRouter();
   const vinculado = Boolean(razonSocialVinculada);
+  // Su documento ya es de un cliente de Alegra: el aviso va arriba de todo en
+  // vez de la card genérica del final.
+  const sugerirVincular = !vinculado && Boolean(perfilFacturacion?.coincideConAlegra);
 
   return (
     <div className="flex flex-col gap-4">
+      {sugerirVincular && <AvisoVincular />}
+
       <DatosPersonalesCard nombre={nombre} email={email} />
 
       <Card
@@ -57,11 +63,9 @@ export function DatosCuenta({
         />
       </Card>
 
-      <CuentaClienteCard
-        razonSocialVinculada={razonSocialVinculada}
-        cuit={cuit}
-        coincideConAlegra={Boolean(perfilFacturacion?.coincideConAlegra)}
-      />
+      {!sugerirVincular && (
+        <CuentaClienteCard razonSocialVinculada={razonSocialVinculada} cuit={cuit} />
+      )}
 
       {esCuentaCorriente && (
         <div>

@@ -1,11 +1,13 @@
 import { redirect } from "next/navigation";
 import { EmptyState } from "@myd-org/ui";
+import { AvisoVincular } from "@/components/mi-cuenta/AvisoVincular";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FavoritosResumen } from "@/components/mi-cuenta/FavoritosResumen";
 import { PedidoCard } from "@/components/mi-cuenta/PedidoCard";
 import { ResumenActividad } from "@/components/mi-cuenta/ResumenActividad";
 import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
 import { identidadActual } from "@/lib/auth";
+import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { listarFavoritos } from "@/lib/favoritos";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CAPACIDADES_DESPLIEGUE, RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
@@ -28,17 +30,22 @@ export default async function MiCuentaPage() {
   const dueno = { clerkUserId, clienteCodigo: cliente?.codigocliente };
   // Favoritos se guardan por usuario de Clerk: la cookie del CRM no los tiene.
   const conFavoritos = CAPACIDADES_DESPLIEGUE.favoritos && !!clerkUserId;
-  const [pedidos, resumen, favoritos] = await Promise.all([
+  const [pedidos, resumen, favoritos, perfil] = await Promise.all([
     listarPedidos(dueno, 3),
     resumenPedidos(dueno),
     conFavoritos && clerkUserId
       ? listarFavoritos(clerkUserId, { limite: 4, idPriceList: cliente?.idPriceList })
       : [],
+    // Sólo hace falta para el aviso de vincular: sin cliente vinculado.
+    clerkUserId && !cliente ? getPerfilFacturacion(clerkUserId) : null,
   ]);
+  const sugerirVincular = Boolean(perfil?.coincideConAlegra) && !cliente;
   const pagos = await pagosHabilitados();
 
   return (
     <div className="flex flex-col gap-8">
+      {sugerirVincular && <AvisoVincular />}
+
       <ResumenActividad enCurso={resumen.enCurso} mostrarFavoritos={conFavoritos} />
 
       <section aria-labelledby="pedidos-recientes">

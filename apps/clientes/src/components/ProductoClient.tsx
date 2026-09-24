@@ -74,7 +74,7 @@ export function ProductoClient({
 
   return (
     <>
-      <main className="mx-auto max-w-contenido flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
         {/* Breadcrumb */}
         <nav className="mb-6 text-sm text-muted">
           <Link href="/" className="text-muted transition-colors hover:text-accent">Inicio</Link>

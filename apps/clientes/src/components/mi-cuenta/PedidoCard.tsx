@@ -15,7 +15,7 @@ import { PedidoLinea } from "./PedidoLinea";
  */
 export function PedidoCard({ pedido, pagosHabilitados }: { pedido: Order; pagosHabilitados: boolean }) {
   const pill = estadoPedidoPill(pedido, { pagosHabilitados });
-  const pasos = seguimientoPedido(pedido);
+  const pasos = seguimientoPedido(pedido, { pagosHabilitados });
   const unidades = unidadesPedido(pedido.items);
 
   return (

@@ -23,7 +23,7 @@ function Fila({ label, valor, fuerte = false }: { label: string; valor: string; 
  */
 export function PedidoDetalle({ pedido, pagosHabilitados }: { pedido: Order; pagosHabilitados: boolean }) {
   const pill = estadoPedidoPill(pedido, { pagosHabilitados });
-  const pasos = seguimientoPedido(pedido);
+  const pasos = seguimientoPedido(pedido, { pagosHabilitados });
   // Con los pagos apagados "Pago pendiente" no se muestra: se coordina por fuera.
   const verEstadoPago = !ocultarEstadoPago(pedido.pagoEstado, pagosHabilitados);
 

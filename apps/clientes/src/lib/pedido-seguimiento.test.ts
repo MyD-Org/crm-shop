@@ -128,4 +128,44 @@ describe("seguimientoPedido", () => {
       "Entregado",
     ]);
   });
+
+  describe("con los pagos apagados", () => {
+    const sinPagos = (entregaTipo: EntregaTipoPedido, estado: OrderEstado, pagoEstado: PagoEstado) =>
+      seguimientoPedido({ entregaTipo, estado, pagoEstado }, { pagosHabilitados: false });
+
+    it("el segundo paso dice 'Pedido confirmado' en lugar de 'Pago confirmado'", () => {
+      expect(sinPagos("retiro", "pendiente", "pendiente")!.map((p) => p.label)).toEqual([
+        "Pedido recibido",
+        "Pedido confirmado",
+        "Preparando",
+        "Retirado",
+      ]);
+    });
+
+    it("recién recibido: la confirmación en curso", () => {
+      expect(sinPagos("retiro", "pendiente", "pendiente")!.map((p) => `${p.id}:${p.state}`)).toEqual([
+        "recibido:done",
+        "pago:current",
+        "preparando:pending",
+        "retirado:pending",
+      ]);
+    });
+
+    it("un pago_estado 'pagado' no da el paso por hecho: sólo la confirmación del operador", () => {
+      expect(sinPagos("envio", "pendiente", "pagado")!.find((p) => p.id === "pago")!.state).toBe("current");
+      expect(sinPagos("envio", "confirmado", "pendiente")!.find((p) => p.id === "pago")!.state).toBe("done");
+    });
+
+    it("sin la opción se comporta como hasta ahora (pagos habilitados)", () => {
+      for (const e of ENTREGAS) {
+        for (const estado of ESTADOS) {
+          for (const pago of PAGOS) {
+            expect(seguimientoPedido({ entregaTipo: e, estado, pagoEstado: pago })).toEqual(
+              seguimientoPedido({ entregaTipo: e, estado, pagoEstado: pago }, { pagosHabilitados: true }),
+            );
+          }
+        }
+      }
+    });
+  });
 });

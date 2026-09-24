@@ -1,10 +1,10 @@
 /** Coordinates measured on studio-off (1536 × 1024), shared by SVG and controls. */
 export const HERO_LIGHTS = [
-  { id: "neon", label: "Neón circular", x: 996, y: 346, radius: 180 },
+  { id: "neon", label: "Neón flexible", x: 1044, y: 370, radius: 210 },
   { id: "bulb", label: "Lámpara de mesa BELL-N", x: 1221, y: 660, radius: 140 },
   { id: "spot", label: "Spot", x: 1188, y: 146, radius: 150 },
   { id: "pendant", label: "Colgante de bambú", x: 1385, y: 357, radius: 180 },
-  { id: "linear", label: "Luminaria lineal", x: 1265, y: 533, radius: 210 },
+  { id: "linear", label: "Tira LED bajo la mesada", x: 1161, y: 890, radius: 210 },
 ] as const;
 
 type Light = { readonly id: string; readonly x: number; readonly y: number; readonly radius: number };
@@ -31,23 +31,30 @@ export function sceneRect(width: number, height: number, cover = false) {
     left: (width - 1536 * scale) * (cover ? COVER_X : 1), top: (height - 1024 * scale) / 2 };
 }
 
-export const STUDIO_IMAGE = "/images/central-led/studio-bell-bamboo-v2.webp";
-/** Mobile crop of the same studio without the neon ring, which fights the title on a phone. */
-export const STUDIO_IMAGE_MOBILE = "/images/central-led/studio-bell-bamboo-v2-mobile.webp";
-/** Lights missing from the mobile photo: no glow, no control, left out of the intro and scroll. */
-export const COVER_HIDDEN_LIGHTS: ReadonlySet<string> = new Set(["neon"]);
 /**
- * Lights that sit elsewhere in the mobile photo, in source px. The linear bar is gone
- * from its wall there; its light is a hidden strip under the shelf (x 786-1536, y 884).
+ * The studio with no wall fixtures: the neon is drawn over it as a free-form tube
+ * (NEON_PATH) and the linear light is a hidden strip under the shelf (SHELF_STRIP),
+ * the same at every size.
  */
-export const COVER_LIGHT_SHIFT: Readonly<Record<string, { dx: number; dy: number }>> = { linear: { dx: -104, dy: 357 } };
-/** The under-shelf strip of the mobile photo, in source px. */
-export const COVER_SHELF_STRIP = { x: 786, y: 884, width: 750 } as const;
-/** Where a light is in the photo this viewport shows. */
-export function lightAt<T extends Light>(light: T, cover: boolean): T {
-  const shift = cover ? COVER_LIGHT_SHIFT[light.id] : undefined;
-  return shift ? { ...light, x: light.x + shift.dx, y: light.y + shift.dy } : light;
-}
+export const STUDIO_IMAGE = "/images/central-led/studio-bell-bamboo-v3.webp";
+/** Phones get the same photo; kept separate so the mobile source can change on its own. */
+export const STUDIO_IMAGE_MOBILE = STUDIO_IMAGE;
+/** Lights left out on phones (the neon fights the title there): no tube, glow, control, intro or scroll. */
+export const COVER_HIDDEN_LIGHTS: ReadonlySet<string> = new Set(["neon"]);
+/** The under-shelf strip, in source px. */
+export const SHELF_STRIP = { x: 786, y: 884, width: 750 } as const;
+/**
+ * Flexible neon tube on the wall, in source px: it comes in from the left with a soft
+ * wave, loops back over itself and falls away to the right, like a coil of neon flex.
+ */
+export const NEON_PATH = "M836 402 C880 372 930 420 990 426 C1080 436 1160 400 1160 330 C1160 262 1080 236 1010 246 C930 258 900 318 948 360 C1000 404 1110 420 1180 440 C1220 452 1244 470 1252 494";
+/** Studio photos the home may have stored; any of them renders as STUDIO_IMAGE. */
+const STUDIO_IMAGES: ReadonlySet<string> = new Set([
+  "/images/hero-neutral.webp",
+  "/images/central-led/studio-off.webp",
+  "/images/central-led/studio-bell-bamboo-v2.webp",
+  STUDIO_IMAGE,
+]);
 export function isStudioImage(src: string) {
-  return src === "/images/hero-neutral.webp" || src === "/images/central-led/studio-off.webp" || src === STUDIO_IMAGE;
+  return STUDIO_IMAGES.has(src);
 }

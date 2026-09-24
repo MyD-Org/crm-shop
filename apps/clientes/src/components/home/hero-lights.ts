@@ -1,7 +1,7 @@
 /** Coordinates measured on studio-off (1536 × 1024), shared by SVG and controls. */
 export const HERO_LIGHTS = [
   { id: "bulb", label: "Lámpara de mesa BELL-N", x: 1221, y: 660, radius: 140 },
-  { id: "spot", label: "Spot", x: 1138, y: 146, radius: 150 },
+  { id: "spot", label: "Spot", x: 1126, y: 120, radius: 150 },
   { id: "pendant", label: "Colgante de bambú", x: 1385, y: 357, radius: 180 },
   { id: "linear", label: "Tira LED bajo la mesada", x: 1161, y: 890, radius: 210 },
 ] as const;
@@ -32,8 +32,8 @@ export function sceneRect(width: number, height: number, cover = false) {
 
 /**
  * The studio with no wall fixtures: the linear light is a hidden strip under the
- * shelf (SHELF_STRIP), the same at every size. The spot is mirrored on its mount
- * (x = 1163) so it aims at the free wall.
+ * shelf (SHELF_STRIP), the same at every size. The ceiling spot is a track spot
+ * (product photo) mounted where the old one was, aimed down-left at the free wall.
  */
 export const STUDIO_IMAGE = "/images/central-led/studio-bell-bamboo-v3.webp";
 /** Phones get the same photo; kept separate so the mobile source can change on its own. */

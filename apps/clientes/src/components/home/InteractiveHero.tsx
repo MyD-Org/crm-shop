@@ -152,10 +152,10 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <path d="M1223 666 L1223 771" stroke="#ffe7bc" strokeWidth="1.3" opacity=".4"/>
             </>}
             {light.id === "spot" && <>
-              {/* Aimed down and to the left, at the free wall (mirrored on its mount, x = 1163). */}
-              <path d="M1150 148 L1126 138 L926 520 Q1046 590 1156 530 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
-              <ellipse cx="1138" cy="146" rx="16" ry="8" transform="rotate(33 1138 146)" fill="#fff5dc"/>
-              <ellipse cx="1046" cy="510" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
+              {/* Track spot aimed down and to the left (~30°), at the free wall; lens at (1126, 146). */}
+              <path d="M1136 152 L1116 140 L830 520 Q930 592 1034 540 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
+              <ellipse cx="1126" cy="146" rx="12" ry="7" transform="rotate(30 1126 146)" fill="#fff5dc"/>
+              <ellipse cx="930" cy="512" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
             </>}
             {light.id === "pendant" && <>
               {/* Translucent inner glow preserves the photographic bamboo weave. */}

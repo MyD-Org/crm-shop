@@ -29,9 +29,9 @@ Review fixes: remove the DS section's isolated stacking context only inside this
 
 ## Cambio 2026-09-24: sin neón, tira bajo la mesada y spot hacia la pared libre
 
-La foto base pasa a ser `studio-bell-bamboo-v3.webp`, igual en escritorio y en celular: el mismo estudio sin el aro de neón ni la barra lineal de la pared, y con el spot espejado sobre su montaje (x = 1163) para que apunte abajo a la izquierda, hacia la pared libre.
+La foto base pasa a ser `studio-bell-bamboo-v3.webp`, igual en escritorio y en celular: el mismo estudio sin el aro de neón ni la barra lineal de la pared, y con un spot de riel (foto de producto, fondo transparente) montado en el techo donde estaba el anterior, apuntando abajo a la izquierda, hacia la pared libre. El spot original se borró reconstruyendo el revoque y el borde del techo con pared limpia de la misma altura.
 
 - **Neón:** se saca. Quedan cuatro luces: tira, spot, colgante y lámpara de mesa.
 - **Luz lineal:** la barra de la pared desaparece; en todos los tamaños es la tira oculta bajo la mesada (`SHELF_STRIP`), que antes era solo de celular.
-- **Spot:** el haz, el brillo del lente y el botón se espejan con la foto.
+- **Spot:** el haz sale del lente del spot nuevo, en (1126, 146), inclinado unos 30° hacia la izquierda.
 - Las fotos guardadas en la home con el nombre anterior (`studio-bell-bamboo-v2.webp`) siguen reconocidas y se muestran con la nueva.

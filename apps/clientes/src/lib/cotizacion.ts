@@ -6,8 +6,8 @@
  * cliente, el precio se edita desde el cliente.
  *
  * Fuente: el espejo del catálogo (`catalog_products`), con stock, precios y
- * estado de la fuente más fresca entre ese espejo y la vista del CRM (ver
- * `stock-disponible.ts`). Los precios que valen son los que publica la tienda: el carrito, el checkout y el pedido usan el
+ * estado de la fuente más fresca entre ese espejo y la vista del CRM, y el stock
+ * menos lo reservado por los pedidos vivos del Shop (ver `stock-disponible.ts`). Los precios que valen son los que publica la tienda: el carrito, el checkout y el pedido usan el
  * mismo número, en una sola consulta y sin llamadas a Alegra (decisión
  * 2026-09-23). Antes era una llamada a Alegra por línea en cada cambio de
  * cantidad: lento, y un riesgo para el rate limit de la cuenta.
@@ -17,7 +17,7 @@
 
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { catalogCategories, catalogProducts } from "@/db/schema";
+import { catalogCategories, catalogProducts, stockReservado } from "@/db/schema";
 import { crmStock } from "@/db/crm";
 import {
   esIdAlegra,
@@ -27,7 +27,7 @@ import {
   resolverPrecio,
   type AlegraItem,
 } from "./alegra";
-import { estadoSql, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
+import { estadoSql, joinReserva, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
 import { costoEnvio, type EntregaTipo } from "./envio";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
 
@@ -216,8 +216,10 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
  * Una consulta para todas las líneas. Si la base falla, tira: no hay total.
  *
  * Stock, precios y estado salen de la misma elección por fila (CRM o Shop) que
- * usan el catálogo y la ficha: lo que el visitante vio es lo que se cotiza, y
- * `POST /api/pedidos` valida y calcula con esta misma cotización.
+ * usan el catálogo y la ficha, con la reserva ya descontada: lo que el
+ * visitante vio es lo que se cotiza, y `POST /api/pedidos` valida y calcula con
+ * esta misma cotización (y revalida el disponible dentro de la transacción del
+ * pedido, ver `crearPedido`).
  */
 async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
   if (ids.length === 0) return new Map();
@@ -239,6 +241,7 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
       eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId),
     )
     .leftJoin(crmStock, joinStockCrm())
+    .leftJoin(stockReservado, joinReserva())
     .where(inArray(catalogProducts.alegraId, ids));
   return new Map(filas.map((f) => [f.alegraId, itemDesdeEspejo(f)]));
 }

@@ -64,6 +64,20 @@
       "when": 1790276221276,
       "tag": "0008_carrito_por_usuario",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790285049956,
+      "tag": "0009_pedidos_facturado",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790285056399,
+      "tag": "0010_stock_reservado",
+      "breakpoints": true
     }
   ]
 }

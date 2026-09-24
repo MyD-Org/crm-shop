@@ -44,15 +44,24 @@ const ACTIVO = `then "catalog_products_shop"."activo" else "shop"."catalog_produ
 const STOCK = 'then "catalog_products_shop"."stock" else "shop"."catalog_products"."stock" end';
 const PRECIOS = 'then "catalog_products_shop"."precios_alegra" else "shop"."catalog_products"."prices" end';
 
-/** Joinea la vista con el tenant del Shop y no filtra `status` por fuera de la elección. */
+const JOIN_RESERVA =
+  /left join "shop"\."stock_reservado" on \("stock_reservado"\."alegra_item_id" = "shop"\."catalog_products"\."alegra_id" and "stock_reservado"\."tenant_id" = \$(\d+)\)/;
+
+/**
+ * Joinea la vista del CRM y la reserva, las dos con el tenant del Shop, y no
+ * filtra `status` por fuera de la elección.
+ */
 function exigeFuenteCrm(c: { sql: string; params: unknown[] }) {
   const m = c.sql.match(JOIN_CRM);
   expect(m, c.sql).not.toBeNull();
   expect(c.params[Number(m![1]) - 1]).toBe("tenant-test");
+  const r = c.sql.match(JOIN_RESERVA);
+  expect(r, c.sql).not.toBeNull();
+  expect(c.params[Number(r![1]) - 1]).toBe("tenant-test");
   expect(c.sql).not.toMatch(/"shop"\."catalog_products"\."status" = \$\d+/);
 }
 
-describe("el catálogo lee stock, precio y estado de la fuente más fresca", () => {
+describe("el catálogo lee stock, precio y estado de la fuente más fresca, menos la reserva", () => {
   it("página del catálogo: conteo y filas", async () => {
     await getPaginaCatalogo({ filtros: { soloStock: true, precioMin: 10 }, orden: "precio-asc" });
     const [conteo, pagina] = grabadora.consultas;
@@ -61,6 +70,8 @@ describe("el catálogo lee stock, precio y estado de la fuente más fresca", () 
       expect(c.sql).toContain(ACTIVO);
       // "solo con stock" y el precio (filtro, orden y "con precio") pasan por la elección.
       expect(c.sql).toContain(STOCK);
+      // ...y "solo con stock" mira el disponible (stock − reservado).
+      expect(c.sql).toContain('coalesce("stock_reservado"."qty", 0)');
       expect(c.sql).toContain(PRECIOS);
     }
     expect(pagina.sql).toContain(USAR_CRM);

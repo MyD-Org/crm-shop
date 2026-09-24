@@ -440,6 +440,20 @@ export const orders = shop.table(
      */
     pagoRevision: text("pago_revision"),
 
+    // --- Facturado en Alegra (migración 0009) ---
+    /**
+     * Cuándo un operador del CRM marcó el pedido como ya facturado en Alegra, y
+     * quién. Independiente de `estado`: un pedido `en_camino` puede estar
+     * facturado o no. Lo escribe el CRM ("Marcar como facturado"); el Shop sólo
+     * lo lee a través de `shop.stock_reservado`: un pedido facturado deja de
+     * reservar stock, porque desde ese momento la factura ya lo descontó en
+     * Alegra. Mismo patrón de auditoría que `estadoActualizado*` (sin FK: el
+     * operador vive en `public`).
+     */
+    facturadoEn: timestamp("facturado_en", { withTimezone: true }),
+    facturadoPor: uuid("facturado_por"),
+    facturadoPorNombre: text("facturado_por_nombre"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -463,6 +477,14 @@ export const orders = shop.table(
     index("orders_estado").on(t.estado),
     // El listado de pedidos del CRM: siempre por tenant, del más nuevo al más viejo.
     index("orders_tenant_fecha").on(t.tenantId, t.createdAt),
+    // Los pedidos que pueden estar reservando stock (ver `stockReservado`): la
+    // vista los filtra con este mismo predicado, así que Postgres recorre sólo
+    // los vivos y no el histórico entero.
+    index("orders_reserva_activa")
+      .on(t.tenantId, t.createdAt)
+      .where(
+        sql`${t.facturadoEn} is null and ${t.estado} in ('pendiente','confirmado','preparacion','en_camino')`,
+      ),
     // Los 6 valores de `OrderEstado` (src/data/orders.ts). En la base y no solo
     // en el tipo porque ahora escriben dos apps sobre la misma tabla.
     check(
@@ -509,6 +531,28 @@ export const orderItems = shop.table(
   },
   (t) => [index("order_items_order").on(t.orderId)],
 );
+
+/**
+ * Unidades reservadas por ítem (vista `shop.stock_reservado`, migración 0010).
+ *
+ * Suma de `qty` de las líneas de los pedidos del Shop que todavía apartan
+ * stock: no facturados y en `confirmado`, `preparacion` o `en_camino`, o
+ * `pendiente` con menos de 24 h desde su creación (la misma ventana que
+ * `VENTANA_PAGO_MS`) o ya pagado online. Cancelar, entregar, marcar facturado o
+ * dejar vencer un pendiente libera la reserva sin escribir nada: se calcula al
+ * leer. El disponible que ve y valida el Shop es `stock − qty` (ver
+ * `src/lib/stock-disponible.ts`); el espejo del stock nunca se toca.
+ *
+ * `.existing()`: la vista la crea la migración 0010 a mano (drizzle-kit no la
+ * genera ni la compara).
+ */
+export const stockReservado = shop
+  .view("stock_reservado", {
+    tenantId: text("tenant_id").notNull(),
+    alegraItemId: text("alegra_item_id").notNull(),
+    qty: numeric("qty").notNull(),
+  })
+  .existing();
 
 /**
  * Un intento de cobro por fila. Un pedido puede tener varios: el comprador

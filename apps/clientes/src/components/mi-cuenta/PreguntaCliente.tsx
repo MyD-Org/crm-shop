@@ -13,7 +13,7 @@ export function PreguntaCliente({ onPrimeraCompra }: { onPrimeraCompra: () => vo
   return (
     <Card title="¿Ya es cliente de Central LED?">
       <p className="text-sm text-muted">
-        Si ya compró en nuestro local, vincule su cuenta para ver sus facturas y sus compras.
+        Si ya compró en nuestro local, vincule su cuenta para comprar con sus precios y condiciones de cliente.
       </p>
       <div className="mt-4 flex flex-wrap gap-3">
         <BotonEnlace href={RUTAS_MI_CUENTA.vincular}>Sí, vincular mi cuenta</BotonEnlace>

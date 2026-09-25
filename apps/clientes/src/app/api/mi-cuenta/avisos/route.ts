@@ -1,5 +1,5 @@
 import { contarNoLeidos, listarAvisos, marcarLeidos } from "@/lib/cuenta-corriente/avisos";
-import { jsonNoStore, requerirCliente } from "@/lib/cuenta-corriente/guard";
+import { jsonNoStore, requerirCuentaCorriente } from "@/lib/cuenta-corriente/guard";
 import { AVISOS_CAIDOS, AVISOS_INVALIDOS, AVISOS_NO_MARCADOS } from "@/lib/cuenta-corriente/mensajes";
 
 /**
@@ -12,7 +12,7 @@ import { AVISOS_CAIDOS, AVISOS_INVALIDOS, AVISOS_NO_MARCADOS } from "@/lib/cuent
  * sale de la identidad, nunca del body.
  */
 export async function GET() {
-  const guard = await requerirCliente();
+  const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
   const codigo = guard.cliente.codigocliente;
   try {
@@ -34,7 +34,7 @@ function idsDelCuerpo(body: unknown): string[] | undefined | null {
 }
 
 export async function PATCH(request: Request) {
-  const guard = await requerirCliente();
+  const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
   const codigo = guard.cliente.codigocliente;
 

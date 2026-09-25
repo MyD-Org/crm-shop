@@ -9,12 +9,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const identidad = vi.fn();
+/** Cuenta corriente por defecto; `mockResolvedValueOnce(false)` = contado o sin fila en el espejo. */
+const acceso = vi.fn(async () => true);
 const getR2 = vi.fn();
 const confirmar = vi.fn();
 const avisar = vi.fn();
 const datosTenant = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
+vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/r2", () => ({ getComprobantesR2: () => getR2() }));
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-a" }));
 vi.mock("@/lib/cuenta-corriente/tenant-cc", () => ({ datosTenant: () => datosTenant() }));
@@ -49,9 +52,12 @@ describe("POST /api/mi-cuenta/comprobantes/[id]/confirm", () => {
     expect(maxDuration).toBe(60);
   });
 
-  it("anónimo 401 / sin R2 503, sin confirmar", async () => {
+  it("anónimo 401 / contado 404 / sin R2 503, sin confirmar", async () => {
     identidad.mockResolvedValue({ clerkUserId: null, cliente: null });
     expect((await pedir()).status).toBe(401);
+    acceso.mockResolvedValueOnce(false);
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
+    expect((await pedir()).status).toBe(404);
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
     getR2.mockReturnValue(null);
     expect((await pedir()).status).toBe(503);

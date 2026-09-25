@@ -7,8 +7,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const identidad = vi.fn();
+/** Cuenta corriente por defecto; `mockResolvedValueOnce(false)` = contado o sin fila en el espejo. */
+const acceso = vi.fn(async () => true);
 const getPagosPage = vi.fn();
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
+vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/cuenta-corriente/erp-cc", () => ({
   PAGOS_PAGE_SIZE: 10,
   getPagosPage: (...a: unknown[]) => getPagosPage(...a),
@@ -37,11 +40,14 @@ describe("GET /api/mi-cuenta/pagos", () => {
     expect(getPagosPage).not.toHaveBeenCalled();
   });
 
-  it("sin vínculo: 403", async () => {
+  it("sin vínculo o de contado: 404 sin llamar a Alegra", async () => {
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
     const res = await pedir();
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "Vincule su cuenta de cliente para ver sus documentos." });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Esta sección no está disponible para su cuenta." });
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
+    acceso.mockResolvedValueOnce(false);
+    expect((await pedir()).status).toBe(404);
     expect(getPagosPage).not.toHaveBeenCalled();
   });
 

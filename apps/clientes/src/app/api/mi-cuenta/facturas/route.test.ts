@@ -7,8 +7,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const identidad = vi.fn();
+/** Cuenta corriente por defecto; `mockResolvedValueOnce(false)` = contado o sin fila en el espejo. */
+const acceso = vi.fn(async () => true);
 const getFacturasPage = vi.fn();
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
+vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/cuenta-corriente/erp-cc", () => ({
   FACTURAS_PAGE_SIZE: 30,
   getFacturasPage: (...a: unknown[]) => getFacturasPage(...a),
@@ -37,9 +40,12 @@ describe("GET /api/mi-cuenta/facturas", () => {
     expect(getFacturasPage).not.toHaveBeenCalled();
   });
 
-  it("sin vínculo: 403", async () => {
+  it("sin vínculo o de contado: 404 sin llamar a Alegra", async () => {
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
-    expect((await pedir()).status).toBe(403);
+    expect((await pedir()).status).toBe(404);
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
+    acceso.mockResolvedValueOnce(false);
+    expect((await pedir()).status).toBe(404);
     expect(getFacturasPage).not.toHaveBeenCalled();
   });
 

@@ -6,6 +6,7 @@ import { FavoritosResumen } from "@/components/mi-cuenta/FavoritosResumen";
 import { PedidoCard } from "@/components/mi-cuenta/PedidoCard";
 import { ResumenActividad } from "@/components/mi-cuenta/ResumenActividad";
 import { SeccionTitulo } from "@/components/mi-cuenta/SeccionTitulo";
+import { accesoFacturacion } from "@/lib/acceso-facturacion";
 import { identidadActual } from "@/lib/auth";
 import { contarNoLeidos } from "@/lib/cuenta-corriente/avisos";
 import { textoNoLeidos } from "@/lib/cuenta-corriente/vista-avisos";
@@ -19,8 +20,8 @@ import { listarPedidos, resumenPedidos } from "@/lib/pedidos";
 /**
  * Resumen de Mi cuenta: tarjetas de actividad, los últimos tres pedidos y,
  * con Clerk, los cuatro favoritos más recientes.
- * Con avisos de vencimiento sin leer, un aviso arriba que lleva a Avisos (el
- * mismo contador del menú: una consulta por request, compartida con el layout).
+ * Sólo a cuenta corriente, con avisos de vencimiento sin leer, un aviso arriba
+ * que lleva a Avisos (mismo contador y mismo acceso que el menú del layout).
  * Ninguna llamada a Alegra: todo sale de la base. El `?tab=datos`
  * viejo lo resuelve un redirect de next.config.ts antes de llegar acá.
  */
@@ -31,7 +32,8 @@ export default async function MiCuentaPage() {
   const dueno = { clerkUserId, clienteCodigo: cliente?.codigocliente };
   // Favoritos se guardan por usuario de Clerk: la cookie del CRM no los tiene.
   const conFavoritos = CAPACIDADES_DESPLIEGUE.favoritos && !!clerkUserId;
-  const conAvisos = CAPACIDADES_DESPLIEGUE.avisos && !!cliente;
+  // Avisos es de Facturación: sólo cuenta corriente (lectura compartida con el layout).
+  const conAvisos = CAPACIDADES_DESPLIEGUE.avisos && !!cliente && (await accesoFacturacion());
   const [pedidos, resumen, favoritos, perfil, noLeidos] = await Promise.all([
     listarPedidos(dueno, 3),
     resumenPedidos(dueno),

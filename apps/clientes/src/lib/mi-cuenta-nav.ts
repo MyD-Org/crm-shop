@@ -34,6 +34,8 @@ export const hrefPedido = (id: string) => `${RUTAS_MI_CUENTA.pedidos}/${id}`;
  * ruta prende su capacidad (favoritos → D; facturas, pagos, presupuestos,
  * condiciones y avisos → portal-al-shop); mientras esté en false, la entrada
  * no aparece ni en la navegación ni en el menú del header, y la ruta da 404.
+ * Las de Facturación, además, sólo para cuenta corriente
+ * (`Capacidades.esCuentaCorriente`).
  */
 export interface CapacidadesDespliegue {
   favoritos: boolean;
@@ -43,7 +45,6 @@ export interface CapacidadesDespliegue {
   direcciones: boolean;
   pagos: boolean;
   presupuestos: boolean;
-  /** Condiciones comerciales: además, sólo cuenta corriente (`Capacidades.esCuentaCorriente`). */
   condiciones: boolean;
   avisos: boolean;
 }
@@ -66,8 +67,8 @@ export interface Capacidades {
   vinculado: boolean;
   /**
    * El contacto es cuenta corriente según el espejo del CRM (`tipo_cuenta`,
-   * plazo > 0 o límite > 0). Sólo decide Condiciones: el resto de Facturación
-   * lo ve todo vinculado, contado incluido.
+   * plazo > 0 o límite > 0). Decide todo el grupo Facturación: sin vínculo o
+   * de contado no se ve (el vínculo sigue valiendo para la lista de precios).
    */
   esCuentaCorriente: boolean;
 }
@@ -104,8 +105,8 @@ export type IdSeccion =
 export type IdGrupo = "compras" | "facturacion" | "perfil";
 
 /**
- * Títulos de los grupos. "Facturas" (es para verlas, no para facturar) y no "Cuenta corriente": el grupo lo ven
- * también los clientes de contado.
+ * Títulos de los grupos. "Facturas" (es para verlas, no para facturar): el grupo
+ * es sólo de cuenta corriente, pero el cliente lo busca por lo que contiene.
  */
 export const GRUPOS_MI_CUENTA: readonly { id: IdGrupo; label: string }[] = [
   { id: "compras", label: "Compras online" },
@@ -133,8 +134,9 @@ interface DefinicionSeccion extends SeccionMiCuenta {
  * En el orden del menú agrupado: Compras online (Pedidos, Favoritos) ·
  * Facturación (Facturas y saldo, Pagos, Presupuestos, Condiciones, Avisos) ·
  * Mi perfil (Mis datos, Direcciones y envíos, Seguridad) · Cerrar sesión.
- * Cookie del CRM sin Clerk: Pedidos, Facturación y Direcciones y envíos (la
- * página muestra las reglas de envío; el domicilio fiscal sólo con Clerk).
+ * Facturación, sólo cuenta corriente. Cookie del CRM sin Clerk: Pedidos,
+ * Facturación (si es cuenta corriente) y Direcciones y envíos (la página
+ * muestra las reglas de envío; el domicilio fiscal sólo con Clerk).
  */
 const SECCIONES: readonly DefinicionSeccion[] = [
   { id: "pedidos", label: "Pedidos", grupo: "compras", href: RUTAS_MI_CUENTA.pedidos, visible: () => true },
@@ -145,41 +147,41 @@ const SECCIONES: readonly DefinicionSeccion[] = [
     href: RUTAS_MI_CUENTA.favoritos,
     visible: (c, d) => c.clerk && d.favoritos,
   },
-  // Sin vínculo también se ve: la página ofrece vincular la cuenta.
+  // Facturación: sólo cuenta corriente (`esCuentaCorriente` ya implica vínculo).
   {
     id: "facturas",
     label: "Facturas y saldo",
     grupo: "facturacion",
     href: RUTAS_MI_CUENTA.facturas,
-    visible: (_, d) => d.facturas,
+    visible: (c, d) => c.esCuentaCorriente && d.facturas,
   },
   {
     id: "pagos",
     label: "Pagos",
     grupo: "facturacion",
     href: RUTAS_MI_CUENTA.pagos,
-    visible: (c, d) => c.vinculado && d.pagos,
+    visible: (c, d) => c.esCuentaCorriente && d.pagos,
   },
   {
     id: "presupuestos",
     label: "Presupuestos",
     grupo: "facturacion",
     href: RUTAS_MI_CUENTA.presupuestos,
-    visible: (c, d) => c.vinculado && d.presupuestos,
+    visible: (c, d) => c.esCuentaCorriente && d.presupuestos,
   },
   {
     id: "condiciones",
     label: "Condiciones",
     grupo: "facturacion",
     href: RUTAS_MI_CUENTA.condiciones,
-    visible: (c, d) => c.vinculado && c.esCuentaCorriente && d.condiciones,
+    visible: (c, d) => c.esCuentaCorriente && d.condiciones,
   },
   {
     id: "avisos",
     label: "Avisos",
     grupo: "facturacion",
     href: RUTAS_MI_CUENTA.avisos,
-    visible: (c, d) => c.vinculado && d.avisos,
+    visible: (c, d) => c.esCuentaCorriente && d.avisos,
   },
   { id: "datos", label: "Mis datos", grupo: "perfil", href: RUTAS_MI_CUENTA.datos, visible: (c) => c.clerk },
   {
@@ -311,15 +313,16 @@ export function migasMiCuenta(pathname: string): Miga[] {
 /**
  * Bajada del saludo de Mi cuenta. Queda fija en todas las secciones, así que
  * resume todo lo que se puede hacer, no sólo los pedidos. Facturas y favoritos
- * se mencionan sólo cuando su sección está desplegada: no se promete algo que el
- * visitante no encuentra.
+ * se mencionan sólo cuando su sección está desplegada, y facturas además sólo a
+ * cuenta corriente: no se promete algo que el visitante no encuentra.
  */
 export function bajadaMiCuenta(
   despliegue: CapacidadesDespliegue = CAPACIDADES_DESPLIEGUE,
+  esCuentaCorriente = false,
 ): string {
   const acciones = [
     "Siga sus pedidos",
-    despliegue.facturas && "consulte sus facturas y su saldo",
+    esCuentaCorriente && despliegue.facturas && "consulte sus facturas y su saldo",
     despliegue.favoritos && "guarde sus favoritos",
   ].filter(Boolean);
   const datos = despliegue.direcciones ? "sus direcciones y datos" : "sus datos";

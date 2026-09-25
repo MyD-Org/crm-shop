@@ -31,12 +31,15 @@ export function MiCuentaShell({
   nombrePila,
   entradas,
   despliegue,
+  esCuentaCorriente,
   migas,
   children,
 }: {
   nombrePila: string | null;
   entradas: SeccionMiCuenta[];
   despliegue: CapacidadesDespliegue;
+  /** Decide si la bajada promete facturas (Facturación es sólo cuenta corriente). */
+  esCuentaCorriente: boolean;
   migas: ReactNode;
   children: ReactNode;
 }) {
@@ -67,7 +70,7 @@ export function MiCuentaShell({
       <h1 className="mt-4 font-display text-3xl font-medium tracking-tight text-text md:text-4xl">
         Hola, {nombrePila ?? "cliente"}
       </h1>
-      <p className="mt-1 text-sm text-muted">{bajadaMiCuenta(despliegue)}</p>
+      <p className="mt-1 text-sm text-muted">{bajadaMiCuenta(despliegue, esCuentaCorriente)}</p>
       <div className="mt-8 flex flex-col gap-6 md:flex-row">
         {/* Desde md la navegación queda a la vista al scrollear, debajo de la
             barra compacta del header (mismo top que los filtros del catálogo). */}

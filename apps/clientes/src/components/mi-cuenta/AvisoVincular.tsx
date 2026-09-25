@@ -18,7 +18,7 @@ export function AvisoVincular({ volver, enCheckout = false }: { volver?: string;
       <p>
         {enCheckout
           ? "Su documento está registrado en Central LED. Vincule su cuenta antes de confirmar para que esta compra quede en su cuenta de cliente."
-          : "Su documento está registrado en Central LED. Vincule su cuenta para ver sus facturas y sus compras."}
+          : "Su documento está registrado en Central LED. Vincule su cuenta para comprar con sus precios y condiciones de cliente."}
       </p>
       <div className="mt-3">
         <BotonEnlace size="sm" href={rutaVincular(volver)}>

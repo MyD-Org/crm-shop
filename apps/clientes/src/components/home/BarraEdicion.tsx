@@ -10,7 +10,9 @@ import {
   type NavBadgeContent,
   type Visibilidad,
 } from "@/data/home-defaults";
+import type { DatosFooter } from "@/data/footer";
 import { DialogoDatosLegales } from "@/components/legales/DialogoDatosLegales";
+import { DialogoFooter } from "@/components/footer/DialogoFooter";
 import { useModoEdicion } from "./ModoEdicion";
 import { DialogoSeccion } from "./DialogoSeccion";
 
@@ -20,7 +22,8 @@ import { DialogoSeccion } from "./DialogoSeccion";
  * dos secciones (no viven en `HomeClient.tsx`, así que no pasan por
  * `SeccionEditable`). Si están restringidas, el botón lo avisa: no hay otro
  * lugar donde se vea. "Datos legales" abre el editor de la fila `legal`
- * (footer y páginas legales).
+ * (footer y páginas legales). "Footer" abre el editor de la fila `footer`
+ * (descripción, Contacto y barra inferior).
  */
 const SUFIJO: Record<Visibilidad, string> = {
   siempre: "",
@@ -33,16 +36,19 @@ export function BarraEdicion({
   navBadge,
   visibilidad,
   legal,
+  footer,
 }: {
   anuncio: HomeContent["anuncio"];
   navBadge: NavBadgeContent | null;
   visibilidad: MapaVisibilidad;
   legal: DatosLegales;
+  footer: DatosFooter;
 }) {
   const { activo, setActivo } = useModoEdicion();
   const [abrirAnuncio, setAbrirAnuncio] = useState(false);
   const [abrirNavBadge, setAbrirNavBadge] = useState(false);
   const [abrirLegal, setAbrirLegal] = useState(false);
+  const [abrirFooter, setAbrirFooter] = useState(false);
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
   const vNavBadge = visibilidadDe(visibilidad, "navBadge");
 
@@ -61,9 +67,13 @@ export function BarraEdicion({
       <Button variant="outline" size="sm" onClick={() => setAbrirLegal(true)}>
         Datos legales
       </Button>
+      <Button variant="outline" size="sm" onClick={() => setAbrirFooter(true)}>
+        Footer
+      </Button>
       <DialogoSeccion seccion="anuncio" inicial={anuncio} visibilidad={vAnuncio} open={abrirAnuncio} onOpenChange={setAbrirAnuncio} />
       <DialogoSeccion seccion="navBadge" inicial={navBadge} visibilidad={vNavBadge} open={abrirNavBadge} onOpenChange={setAbrirNavBadge} />
       <DialogoDatosLegales inicial={legal} open={abrirLegal} onOpenChange={setAbrirLegal} />
+      <DialogoFooter inicial={footer} open={abrirFooter} onOpenChange={setAbrirFooter} />
     </div>
   );
 }

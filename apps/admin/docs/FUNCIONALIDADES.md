@@ -412,30 +412,41 @@ día sin esperar al webhook ni a la sync. Devuelve:
 
 `EXECUTE` sólo para `shop_app` (PUBLIC revocado); `shop_app` sigue sin UPDATE sobre la tabla.
 
-**Permisos de `shop_app` sobre `public`** (0032, change `portal-al-shop`), mínimos y por
-columna; sin DELETE en ninguna tabla:
+**Permisos de `shop_app` sobre `public`** (0031–0038), mínimos y por columna; sin DELETE en
+ninguna tabla. Es TODO lo que el Shop lee o escribe de `public` (lo declara
+`apps/clientes/src/db/crm.ts` y lo congela `apps/clientes/src/db/__fixtures__/crm-contrato.json`);
+cualquier otro objeto de `public` le da 42501:
 
-| Objeto | Permiso |
-|---|---|
-| `alegra_contacts_shop` | SELECT (30 columnas desde 0036) |
-| `shop_contacto_write_through(text, text, text, jsonb)` | EXECUTE (0034) |
-| `catalog_products_shop`, `catalog_categories_shop` | SELECT (0035/0037, ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) |
-| `tenants` | SELECT sólo `id, name, whatsapp_number, receipts_email` |
-| `client_commercial_conditions` | SELECT |
-| `notification_log` | SELECT, UPDATE sólo `read_at` |
-| `payment_receipts` | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` |
+| Objeto | Tipo | Permiso | Migración |
+|---|---|---|---|
+| esquema `public` | esquema | USAGE | 0031 (repetido en cada bloque) |
+| `alegra_contacts_shop` | vista del espejo de contactos | SELECT (30 columnas desde 0036; sin `raw`, `phones_norm` ni `seller_id`) | 0031, re-concedido en 0032/0034/0036 al recrear la vista |
+| `shop_contacto_write_through(text, text, text, jsonb)` | función `SECURITY DEFINER` | EXECUTE (PUBLIC revocado) | 0034 |
+| `catalog_products_shop` | vista del espejo de productos | SELECT (12 columnas; ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) | 0035, re-concedido en 0037 |
+| `catalog_categories_shop` | vista del espejo de categorías de Alegra | SELECT (5 columnas) | 0037 |
+| `catalog_overlay` | tabla (overlay comercial por producto) | SELECT | 0038 (en prod estaba dado a mano) |
+| `shop_categories` | tabla (árbol de categorías de la tienda) | SELECT | 0038 (en prod estaba dado a mano) |
+| `tenants` | tabla | SELECT sólo `id, name, whatsapp_number, receipts_email` | 0032 |
+| `client_commercial_conditions` | tabla | SELECT | 0032 |
+| `notification_log` | tabla | SELECT, UPDATE sólo `read_at` | 0032 |
+| `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
+
+Sin permiso, a propósito: las tablas base `catalog_products`, `catalog_categories` y
+`alegra_contacts` (el Shop las ve sólo por sus vistas) y la función `alegra_suma_impuestos`.
 
 Los GRANTs de las migraciones son condicionales: si el rol `shop_app` se creó después de
-migrar, correr como owner el bloque `DO $$ … $$` del final de
-`drizzle/0032_shop_cuenta_corriente.sql` (incluye el de 0031) y **después** el del final de
+migrar, correr como owner, en orden, el bloque `DO $$ … $$` del final de
+`drizzle/0032_shop_cuenta_corriente.sql` (incluye el de 0031), el de
 `drizzle/0034_contacto_fuente_unica.sql` (SELECT de la vista recreada y EXECUTE de la
 función), el de `drizzle/0035_catalog_products_shop.sql`, el de
-`drizzle/0036_alegra_contacts_shop_telefonos.sql` (SELECT de la vista recreada con teléfonos) y
-el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo).
-Las reversas están en el encabezado de cada archivo. Los tests
+`drizzle/0036_alegra_contacts_shop_telefonos.sql` (SELECT de la vista recreada con teléfonos),
+el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y el de
+`drizzle/0038_grants_overlay_shop.sql` (overlay y categorías de la tienda). Todos son
+idempotentes. Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
-`test/integration/shop-contacto-write-through.integration.test.ts` y
-`test/integration/shop-contactos-telefonos.integration.test.ts` corren esos mismos bloques
+`test/integration/shop-contacto-write-through.integration.test.ts`,
+`test/integration/shop-contactos-telefonos.integration.test.ts` y
+`test/integration/catalog-products-shop-grants.integration.test.ts` corren esos mismos bloques
 y verifican cada permiso como `shop_app`.
 
 **Sync por tramos** (`src/lib/alegra-contacts-sync.ts`, ruta `/api/cron/alegra-contactos-sync`,

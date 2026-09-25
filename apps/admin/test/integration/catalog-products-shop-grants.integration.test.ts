@@ -17,11 +17,15 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
  * total) y aparece `catalog_categories_shop` (5). Su bloque de GRANTs concede las dos vistas y
  * nada sobre las tablas; se corre después del de 0035, igual que en una base migrada.
  *
+ * Migración 0038: registra el SELECT de `shop_app` sobre las TABLAS del overlay
+ * (`catalog_overlay` y `shop_categories`), que en prod se había dado a mano. Sólo lectura.
+ *
  * Datos inventados: tenant `tenant-cps`, ítems de fantasía, dominio `.example`.
  */
 
 const MIGRACION = fileURLToPath(new URL("../../drizzle/0035_catalog_products_shop.sql", import.meta.url))
 const MIGRACION_0037 = fileURLToPath(new URL("../../drizzle/0037_catalogo_shop_desde_crm.sql", import.meta.url))
+const MIGRACION_0038 = fileURLToPath(new URL("../../drizzle/0038_grants_overlay_shop.sql", import.meta.url))
 
 /** El bloque de GRANTs tal cual está en la migración (último statement). */
 function bloqueDeGrants(archivo = MIGRACION): string {
@@ -61,12 +65,14 @@ async function comoShopApp(stmt: string): Promise<Resultado> {
 const SIN_PERMISO = { ok: false, code: "42501" }
 
 async function limpiar() {
+  await sql`DELETE FROM catalog_overlay WHERE tenant_id = 'tenant-cps'`
+  await sql`DELETE FROM shop_categories WHERE tenant_id = 'tenant-cps'`
   await sql`DELETE FROM catalog_products WHERE tenant_id = 'tenant-cps'`
   await sql`DELETE FROM catalog_categories WHERE tenant_id = 'tenant-cps'`
   await sql`DELETE FROM tenants WHERE id = 'tenant-cps'`
 }
 
-describe("migración 0035: vista catalog_products_shop para shop_app (DB real)", () => {
+describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB real)", () => {
   beforeAll(async () => {
     assertLocalTestDb(TEST_DATABASE_URL)
     sql = postgres(TEST_DATABASE_URL, { max: 1, onnotice: () => {} })
@@ -76,11 +82,13 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
       // Sin el rol, el bloque condicional no concede nada y no falla (como en crm_test al migrar).
       await sql.unsafe(bloqueDeGrants())
       await sql.unsafe(bloqueDeGrants(MIGRACION_0037))
+      await sql.unsafe(bloqueDeGrants(MIGRACION_0038))
       await sql.unsafe("CREATE ROLE shop_app NOLOGIN")
       rolCreadoAca = true
     }
     await sql.unsafe(bloqueDeGrants())
     await sql.unsafe(bloqueDeGrants(MIGRACION_0037))
+    await sql.unsafe(bloqueDeGrants(MIGRACION_0038))
 
     await limpiar()
     await sql`
@@ -102,6 +110,16 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
       INSERT INTO catalog_categories (tenant_id, alegra_id, name, parent_alegra_id, status)
       VALUES ('tenant-cps', 'c1', 'Categoría raíz', NULL, 'active'),
              ('tenant-cps', 'c2', 'Categoría dada de baja', 'c1', 'inactive')
+    `
+    const [cat] = await sql`
+      INSERT INTO shop_categories (tenant_id, nombre, slug)
+      VALUES ('tenant-cps', 'Lámparas', 'lamparas')
+      RETURNING id
+    `
+    await sql`
+      INSERT INTO catalog_overlay (tenant_id, alegra_id, visible, nombre, categoria_id)
+      VALUES ('tenant-cps', '1', true, 'Ítem publicado', ${cat.id}),
+             ('tenant-cps', '2', false, NULL, NULL)
     `
   })
 
@@ -201,6 +219,31 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
     ).toEqual({ ok: true, filas: 2 })
   })
 
+  it("0038: shop_app lee el overlay y las categorías de la tienda (las columnas de crm.ts)", async () => {
+    expect(
+      await comoShopApp(
+        "SELECT id, tenant_id, alegra_id, visible, nombre, categoria_id, fotos FROM public.catalog_overlay WHERE tenant_id = 'tenant-cps'",
+      ),
+    ).toEqual({ ok: true, filas: 2 })
+    expect(
+      await comoShopApp(
+        "SELECT id, tenant_id, parent_id, nombre, orden, nivel, activa FROM public.shop_categories WHERE tenant_id = 'tenant-cps'",
+      ),
+    ).toEqual({ ok: true, filas: 1 })
+  })
+
+  it.each([
+    "UPDATE public.catalog_overlay SET visible = true WHERE tenant_id = 'tenant-cps'",
+    "INSERT INTO public.catalog_overlay (tenant_id, alegra_id) VALUES ('tenant-cps', '9')",
+    "DELETE FROM public.catalog_overlay WHERE tenant_id = 'tenant-cps'",
+    "UPDATE public.shop_categories SET nombre = 'x' WHERE tenant_id = 'tenant-cps'",
+    "INSERT INTO public.shop_categories (tenant_id, nombre, slug) VALUES ('tenant-cps', 'x', 'x')",
+    "DELETE FROM public.shop_categories WHERE tenant_id = 'tenant-cps'",
+    "TRUNCATE public.catalog_overlay",
+  ])("0038: el overlay es de sólo lectura para shop_app: %s → sin permiso", async (stmt) => {
+    expect(await comoShopApp(stmt)).toEqual(SIN_PERMISO)
+  })
+
   it.each([
     "SELECT 1 FROM public.catalog_products LIMIT 1",
     "SELECT raw FROM public.catalog_products",
@@ -222,5 +265,6 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
   it("los bloques de GRANTs son idempotentes (se pueden correr a mano otra vez)", async () => {
     await expect(sql.unsafe(bloqueDeGrants())).resolves.toBeDefined()
     await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0037))).resolves.toBeDefined()
+    await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0038))).resolves.toBeDefined()
   })
 })

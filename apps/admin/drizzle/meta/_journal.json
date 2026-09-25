@@ -267,6 +267,13 @@
       "when": 1790296012849,
       "tag": "0037_catalogo_shop_desde_crm",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790296072849,
+      "tag": "0038_grants_overlay_shop",
+      "breakpoints": true
     }
   ]
 }

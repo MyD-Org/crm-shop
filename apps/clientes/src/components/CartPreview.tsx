@@ -132,7 +132,7 @@ export function CartPreview({
 
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-            <p className="text-sm font-medium text-text">Tu carrito esta vacio</p>
+            <p className="text-sm font-medium text-text">El carrito está vacío</p>
             <Link href="/catalogo" className="text-xs font-semibold text-primary hover:underline">
               Ver catalogo
             </Link>

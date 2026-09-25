@@ -69,7 +69,7 @@ export function CarritoClient({
     return (
       <>
         <main className="mx-auto flex w-full max-w-contenido flex-1 items-center justify-center px-4 py-20">
-          <p className="text-sm text-muted">Cargando tu carrito…</p>
+          <p className="text-sm text-muted">Cargando el carrito…</p>
         </main>
       </>
     );
@@ -79,7 +79,7 @@ export function CarritoClient({
     return (
       <>
         <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
-          <p className="text-2xl font-bold text-text">Tu carrito está vacío</p>
+          <p className="text-2xl font-bold text-text">El carrito está vacío</p>
           <Link href="/catalogo">
             <Button>Ver catálogo</Button>
           </Link>
@@ -119,7 +119,7 @@ export function CarritoClient({
     <>
       <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
         <h1 className="mb-6 font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
-          Tu carrito
+          Carrito
         </h1>
 
         {(!conSesion || estado === "no_auth") && (
@@ -260,7 +260,7 @@ export function CarritoClient({
 
             {cotizacion?.hayProblemas && (
               <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">
-                Revisá los productos marcados antes de continuar.
+                Revise los productos marcados antes de continuar.
               </p>
             )}
 

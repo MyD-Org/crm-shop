@@ -247,7 +247,7 @@ export function PagoMercadoPago({
   if (faltaKey) {
     return (
       <p className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
-        El pago con tarjeta no está configurado. Elegí transferencia o escribinos.
+        El pago con tarjeta no está configurado. Elija transferencia o escríbanos.
       </p>
     );
   }

@@ -713,7 +713,7 @@ export function CheckoutClient({
   if (ready && items.length === 0) {
     return (
       <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
-        <p className="text-2xl font-bold text-text">Tu carrito está vacío</p>
+        <p className="text-2xl font-bold text-text">El carrito está vacío</p>
         <Link href="/catalogo">
           <Button>Ver catálogo</Button>
         </Link>
@@ -1030,7 +1030,7 @@ export function CheckoutClient({
             </div>
             {entrega === "envio" && (
               <p className="mt-3 text-xs text-muted">
-                El pago en efectivo solo está disponible si retirás por el local.
+                El pago en efectivo solo está disponible si retira por el local.
               </p>
             )}
           </section>

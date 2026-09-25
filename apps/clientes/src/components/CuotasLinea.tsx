@@ -30,7 +30,7 @@ export function CuotasLinea({
   if (!opcion) return null;
   const color = opcion.sinInteres
     ? tono === "oscuro"
-      ? "text-[#7ee2a8]"
+      ? "text-success-sobre-oscuro"
       : "text-success"
     : tono === "oscuro"
       ? "text-white"

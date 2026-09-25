@@ -25,7 +25,7 @@
    ignora overscroll-behavior en el documento y rebota igual, así que además
    el lienzo (fondo de <html>, lo que se ve en el rebote) va con el color del
    footer; el fondo claro lo pinta <body>, que cubre todo el contenido.
-   `html[data-theme]` le gana a `[data-theme="calido"] { background }`. */
+   `html[data-theme]` le gana al `background` del bloque del tema cálido. */
 html,
 html[data-theme] {
   overscroll-behavior-y: none;

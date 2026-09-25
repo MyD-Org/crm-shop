@@ -8,6 +8,7 @@ import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
 import { CuotasResumen } from "@/components/CuotasResumen";
 import { baseCarrito, resumenCuotas } from "@/lib/cuotas-exhibicion";
+import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 
 function LightbulbIcon({ className }: { className?: string }) {
@@ -42,16 +43,25 @@ function AlertIcon() {
  * Carrito. `oferta` llega resuelta desde el Server Component `carrito/page.tsx`
  * (null = sin cuotas). Las cuotas se recalculan en el cliente con cada cambio
  * de cantidad, sin roundtrip.
+ *
+ * Sin sesión también se cotiza (lista L1, ver /api/carrito/cotizar): el aviso
+ * de iniciar sesión depende de `conSesion`, no de la cotización.
  */
-export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
+export function CarritoClient({
+  oferta,
+  conSesion,
+}: {
+  oferta: OfertaCuotas | null;
+  conSesion: boolean;
+}) {
   const { items, updateQty, removeItem: remove, ready } = useCart();
   // El carrito siempre cotiza como "retiro": la entrega se elige en el checkout.
   const { cotizacion, estado, error, recotizar, ultimasLineas } = useCotizacion({
     entregaTipo: "retiro",
   });
 
-  // Mientras no llegó la cotización se muestra el precio guardado en el
-  // carrito, marcado como estimado. Nunca se presenta como el precio final.
+  // Los precios de cada línea salen de la cotización, con IVA como en la ficha
+  // (ver precioLineaCarrito): el neto guardado en el carrito no se muestra.
   const lineaDe = (id: string) => cotizacion?.lineas.find((l) => l.id === id);
   const confirmado = estado === "ok" && cotizacion;
 
@@ -78,9 +88,14 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
     );
   }
 
-  const subtotal = confirmado ? cotizacion.subtotal : items.reduce((a, i) => a + i.price * i.qty, 0);
-  const iva = confirmado ? cotizacion.iva : null;
-  const total = confirmado ? cotizacion.total : null;
+  // Mientras recotiza, el resumen se estima al instante con los unitarios ya
+  // cotizados (ver totalesEstimados) y la cotización lo confirma al llegar.
+  // Sin nada con qué estimar (primera carga, producto recién agregado), null:
+  // "Calculando…", nunca el neto guardado en el carrito como si fuera el total.
+  const estimados = confirmado ? null : totalesEstimados(items, ultimasLineas);
+  const subtotal = confirmado ? cotizacion.subtotal : (estimados?.subtotal ?? null);
+  const iva = confirmado ? cotizacion.iva : (estimados?.iva ?? null);
+  const total = confirmado ? cotizacion.total : (estimados?.total ?? null);
 
   /**
    * Unidades que efectivamente suman al subtotal.
@@ -92,7 +107,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
   // Base de cuotas = total con IVA. Confirmado → el de la cotización; mientras
   // recotiza → estimado con los precios/IVA ya conocidos y las cantidades nuevas.
   const resumen = resumenCuotas(
-    baseCarrito({ items, totalConfirmado: total, ultimasLineas }),
+    baseCarrito({ items, totalConfirmado: confirmado ? cotizacion.total : null, ultimasLineas }),
     oferta,
   );
 
@@ -107,7 +122,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
           Tu carrito
         </h1>
 
-        {estado === "no_auth" && (
+        {(!conSesion || estado === "no_auth") && (
           <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
             <p className="text-muted">
               Inicie sesión para completar su compra.{" "}
@@ -132,8 +147,11 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
           <div className="space-y-4">
             {items.map((item) => {
               const linea = lineaDe(item.id);
-              const precio = linea && !linea.problema ? linea.precioUnitario : item.price;
-              const totalLinea = linea && !linea.problema ? linea.total : item.price * item.qty;
+              const precio = precioLineaCarrito(
+                item.qty,
+                linea,
+                ultimasLineas?.find((l) => l.id === item.id),
+              );
 
               return (
                 <div
@@ -154,10 +172,16 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
                       {linea && !linea.problema ? linea.name : item.name}
                     </Link>
                     {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
-                    <p className="text-sm font-bold text-primary">
-                      {fmtPrecio(precio)} c/u
-                      {!confirmado && <span className="ml-1 text-xs font-normal text-muted">(estimado)</span>}
-                    </p>
+                    {precio ? (
+                      <div>
+                        <p className="text-sm font-bold text-primary">{fmtPrecio(precio.unitario)} c/u</p>
+                        <p className="text-xs text-muted">
+                          precio sin impuestos nacionales {fmtPrecio(precio.neto)}
+                        </p>
+                      </div>
+                    ) : (
+                      estado === "cargando" && <p className="text-sm text-muted">Calculando…</p>
+                    )}
 
                     {linea?.problema && (
                       <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-danger">
@@ -182,7 +206,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
                         min={1}
                         max={linea?.stockDisponible ?? 999}
                       />
-                      <p className="text-sm font-bold text-text">{fmtPrecio(totalLinea)}</p>
+                      {precio && <p className="text-sm font-bold text-text">{fmtPrecio(precio.total)}</p>}
                     </div>
                   </div>
                 </div>
@@ -206,7 +230,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
                   Subtotal ({unidadesCotizadas}{" "}
                   {unidadesCotizadas === 1 ? "producto" : "productos"})
                 </span>
-                <span className="font-medium text-text">{fmtPrecio(subtotal)}</span>
+                <span className="font-medium text-text">{subtotal === null ? "—" : fmtPrecio(subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">IVA</span>
@@ -227,7 +251,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
                   )}
                 </span>
               </div>
-              {total !== null && (
+              {total !== null && subtotal !== null && (
                 <p className="text-xs text-muted">Precio sin impuestos {fmtPrecio(subtotal)}</p>
               )}
             </div>

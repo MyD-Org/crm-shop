@@ -422,6 +422,14 @@ describe("visibilidad de ítems", () => {
     expect(erroresSeccion("marquee", { items: [{ texto: "" }] }).length).toBeGreaterThan(0);
   });
 
+  it("la cinta acepta logos con ruta local o de un host habilitado", () => {
+    expect(erroresSeccion("marquee", DEFAULTS_HOME.marquee, [])).toEqual([]);
+    expect(erroresSeccion("marquee", { items: [{ texto: "Acme", logo: "/images/marcas/acme.webp" }, "B"] }, [])).toEqual([]);
+    expect(erroresSeccion("marquee", { items: [{ texto: "Acme", logo: "https://media.plataforma.example/a.webp" }] }, ["media.plataforma.example"])).toEqual([]);
+    expect(erroresSeccion("marquee", { items: [{ texto: "Acme", logo: "https://otro.example/a.webp" }] }, ["media.plataforma.example"]).length).toBeGreaterThan(0);
+    expect(erroresSeccion("marquee", { items: [{ texto: "", logo: "/images/marcas/acme.webp" }] }, []).length).toBeGreaterThan(0);
+  });
+
   it("la cinta guardada como textos sueltos se lee como { texto }", () => {
     const out = combinarContenidoHome([{ key: "marquee", payload: { items: ["Uno", "Dos"] } }]);
     expect(out.marquee.items).toEqual([{ texto: "Uno" }, { texto: "Dos" }]);

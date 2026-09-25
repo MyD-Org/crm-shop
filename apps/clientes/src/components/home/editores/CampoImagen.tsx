@@ -19,12 +19,17 @@ export function CampoImagen({
   alt,
   onAltChange,
   label = "Imagen",
+  hint = "JPG, PNG, WEBP o AVIF de hasta 25 MB.",
+  contener = false,
 }: {
   valor: string;
   onChange: (url: string) => void;
   alt?: string;
   onAltChange?: (alt: string) => void;
   label?: string;
+  hint?: string;
+  /** Previa entera (object-contain) en vez de recortada: para logos. */
+  contener?: boolean;
 }) {
   const [previa, setPrevia] = useState<string | null>(null);
   const [subiendo, setSubiendo] = useState(false);
@@ -69,8 +74,16 @@ export function CampoImagen({
     <div className="flex flex-col gap-3">
       <Field label={label}>
         <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element -- previa local (blob:) o URL recién subida; next/image no aplica */}
-          <img src={previa ?? valor} alt="" className="h-16 w-24 shrink-0 rounded-md object-cover" />
+          {previa || valor ? (
+            // eslint-disable-next-line @next/next/no-img-element -- previa local (blob:) o URL recién subida; next/image no aplica
+            <img
+              src={previa ?? valor}
+              alt=""
+              className={`h-16 w-24 shrink-0 rounded-md ${contener ? "object-contain" : "object-cover"}`}
+            />
+          ) : (
+            <div className="h-16 w-24 shrink-0 rounded-md border border-dashed border-border" />
+          )}
           <FileDropZone
             size="sm"
             className="min-w-0 flex-1"
@@ -80,7 +93,7 @@ export function CampoImagen({
             title="Cambiar imagen"
             orLabel=""
             browseLabel="Arrastre o seleccione un archivo"
-            hint="JPG, PNG, WEBP o AVIF de hasta 25 MB."
+            hint={hint}
           />
           {subiendo ? <Spinner /> : null}
         </div>

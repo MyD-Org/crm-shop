@@ -240,7 +240,7 @@ export function HomeClient({
         <PorTamano items={marquee.items}>
           {(items) => (
             <Marquee
-              items={items.map((it) => it.texto)}
+              items={items.map((it) => (it.logo ? { src: it.logo, alt: it.texto } : it.texto))}
               className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
             />
           )}

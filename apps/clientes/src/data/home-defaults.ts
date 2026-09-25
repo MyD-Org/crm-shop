@@ -55,7 +55,8 @@ export type HeroContent = TextosSeccion & {
   usps: { label: string; visibilidad?: SoloEn }[];
 };
 
-export type ItemMarquee = { texto: string; visibilidad?: SoloEn };
+/** Con `logo` el ítem se muestra como imagen y `texto` es el nombre de la marca (alt). */
+export type ItemMarquee = { texto: string; logo?: string; visibilidad?: SoloEn };
 /** Las filas viejas guardan los ítems como textos sueltos: se convierten al leer. */
 export type MarqueeContent = { items: ItemMarquee[] };
 
@@ -174,10 +175,13 @@ export const DEFAULTS_HOME: HomeContent = {
   },
   marquee: {
     items: [
-      { texto: "Más de 5.000 productos" },
-      { texto: "Despacho en 24 h" },
-      { texto: "Precios mayoristas" },
-      { texto: "Puerto Iguazú, Misiones" },
+      { texto: "Weidmüller", logo: "/images/marcas/weidmuller.webp" },
+      { texto: "Uniview", logo: "/images/marcas/uniview.webp" },
+      { texto: "Powerswitch", logo: "/images/marcas/powerswitch.webp" },
+      { texto: "Macroled", logo: "/images/marcas/macroled.webp" },
+      { texto: "CHINT", logo: "/images/marcas/chint.webp" },
+      { texto: "Jadever", logo: "/images/marcas/jadever.webp" },
+      { texto: "Inteck", logo: "/images/marcas/inteck.webp" },
     ],
   },
   ambientes: {
@@ -396,11 +400,17 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       break;
     }
     case "marquee":
-      // Textos sueltos (formato viejo) o { texto, visibilidad? }.
+      // Textos sueltos (formato viejo) o { texto, logo?, visibilidad? }.
       lista(
         "items",
-        (v) => esTexto(v) || (!!v && typeof v === "object" && esTexto((v as ItemMarquee).texto) && esSoloEnOpcional((v as ItemMarquee).visibilidad)),
-        "{ texto, visibilidad? }",
+        (v) =>
+          esTexto(v) ||
+          (!!v &&
+            typeof v === "object" &&
+            esTexto((v as ItemMarquee).texto) &&
+            ((v as ItemMarquee).logo === undefined || esImagen((v as ItemMarquee).logo, hosts)) &&
+            esSoloEnOpcional((v as ItemMarquee).visibilidad)),
+        "{ texto, logo?, visibilidad? }",
       );
       break;
     case "ambientes":

@@ -38,7 +38,9 @@ export function PedidoCard({ pedido, pagosHabilitados }: { pedido: Order; pagosH
 
       <Divider className="my-4" />
 
-      <ul className="grid gap-3 md:grid-cols-2">
+      {/* grid-cols-1 explícito: la columna implícita crece con el nombre más
+          largo y el truncate de la línea no corta (la página se corría de costado). */}
+      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {pedido.items.map((item) => (
           <PedidoLinea key={item.id} item={item} />
         ))}

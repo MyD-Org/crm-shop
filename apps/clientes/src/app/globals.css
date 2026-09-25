@@ -198,43 +198,13 @@ body {
   --shadow-2: 0 24px 44px -22px rgba(22, 40, 63, 0.28);
 }
 
-/* Manija de la hoja de filtros (mobile): avisa que se puede arrastrar hacia
-   abajo para cerrarla (ver useArrastrarParaCerrar). La hoja del DS es un flex
-   en columna, así que el ::before queda arriba de todo, sobre el encabezado. */
-.hoja-arrastrable::before {
-  content: "";
-  flex: none;
-  align-self: center;
-  width: 2.5rem;
-  height: 0.3rem;
-  margin-top: 0.5rem;
-  border-radius: 9999px;
-  background: var(--color-border-strong);
-}
-
-/* Categorías en la hoja de filtros (mobile): el chevron que despliega las
-   subcategorías del FacetGroup del DS mide 20 px y es lo único que se toca a
-   la derecha de cada fila. Acá pasa a 40 px, y todas las filas a 40 px de
-   alto para que queden parejas y el checkbox también sea fácil de tocar. El
-   hueco de las filas sin hijas crece igual, para que los conteos sigan en
-   columna. */
-.facetas-tactiles li {
-  min-height: 2.5rem;
-}
-.facetas-tactiles li > button[aria-expanded],
-.facetas-tactiles li > span[aria-hidden="true"] {
-  width: 2.5rem;
-}
-.facetas-tactiles li > button[aria-expanded] {
-  height: 2.5rem;
-}
-
 /* Campos de texto a 16 px en pantallas táctiles: Safari de iOS (y cualquier
    navegador en iPhone/iPad) hace zoom al enfocar un campo con letra de menos
-   de 16 px, y los del DS, el buscador, el checkout y los de Clerk usan 14 px.
-   Una sola regla para todos, también los que se sumen; en desktop (puntero
-   fino) quedan como están. `!important` porque Clerk inyecta sus estilos con
-   clases propias, más específicas que un selector de elemento. */
+   de 16 px. Los del DS ya lo traen desde 0.27.0; esta regla cubre los que no
+   son del DS: el buscador del header, el textarea del checkout, los de Clerk
+   y los que se sumen. En desktop (puntero fino) quedan como están.
+   `!important` porque Clerk inyecta sus estilos con clases propias, más
+   específicas que un selector de elemento. */
 @media (pointer: coarse) {
   input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"], [type="color"], [type="hidden"]),
   textarea,

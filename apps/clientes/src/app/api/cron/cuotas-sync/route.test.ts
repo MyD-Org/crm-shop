@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const syncCuotas = vi.fn();
 vi.mock("@/lib/cuotas-sync", () => ({ syncCuotas: (...a: unknown[]) => syncCuotas(...a) }));
+const revalidateTag = vi.fn();
+vi.mock("next/cache", () => ({ revalidateTag: (...a: unknown[]) => revalidateTag(...a) }));
 
 import { GET } from "./route";
 
@@ -11,6 +13,7 @@ const req = (auth?: string) =>
 describe("GET /api/cron/cuotas-sync", () => {
   beforeEach(() => {
     syncCuotas.mockReset();
+    revalidateTag.mockReset();
     process.env.CRON_SECRET = "cron-123";
   });
 
@@ -18,6 +21,14 @@ describe("GET /api/cron/cuotas-sync", () => {
     expect((await GET(req())).status).toBe(401);
     expect((await GET(req("Bearer otro"))).status).toBe(401);
     expect(syncCuotas).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it("después de correr vence la oferta cacheada (tag cuotas, expire 0), aun con una fuente caída", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    syncCuotas.mockResolvedValue({ ok: false, config: { ok: false, error: "x" }, planes: { ok: true, medios: [] } });
+    await GET(req("Bearer cron-123"));
+    expect(revalidateTag).toHaveBeenCalledWith("cuotas", { expire: 0 });
   });
 
   it("200 con la corrida completa", async () => {

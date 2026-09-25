@@ -97,20 +97,21 @@ async function conGuarda(fn: () => Promise<unknown>, minimo = 1) {
 
 describe("toda consulta del catálogo filtra por el tenant del Shop", () => {
   it("getCatalogo (con y sin búsqueda)", async () => {
-    await conGuarda(() => getCatalogo({ limit: 5 }));
-    await conGuarda(() => getCatalogo({ busqueda: "lampara" }));
+    await conGuarda(() => getCatalogo({ soloVisibles: false, limit: 5 }));
+    await conGuarda(() => getCatalogo({ soloVisibles: false, busqueda: "lampara" }));
   });
 
   it("getProductosPorIds y getProducto", async () => {
     await conGuarda(() => getProductosPorIds(["5", "7"]));
     await conGuarda(() => getProductosPorIds(["5"], { soloActivos: true }));
-    await conGuarda(() => getProducto("5"));
+    await conGuarda(() => getProducto("5", { soloVisibles: false }));
   });
 
   it("getPaginaCatalogo: conteo y filas", async () => {
     await conGuarda(
       () =>
         getPaginaCatalogo({
+          soloVisibles: false,
           filtros: { busqueda: "x", categorias: ["A"], marcas: ["M"], precioMin: 1, precioMax: 9, soloStock: true },
           orden: "precio-desc",
         }),
@@ -119,15 +120,15 @@ describe("toda consulta del catálogo filtra por el tenant del Shop", () => {
   });
 
   it("getFacetas sin árbol propio (categorías de Alegra) y con árbol", async () => {
-    await conGuarda(() => getFacetas({ marcas: ["M"] }), 3);
+    await conGuarda(() => getFacetas({ marcas: ["M"] }, false), 3);
     arbol = [["c1", null, "ILUMINACION", 1]];
-    await conGuarda(() => getFacetas({ categorias: ["ILUMINACION"] }), 3);
+    await conGuarda(() => getFacetas({ categorias: ["ILUMINACION"] }, false), 3);
   });
 
   it("getCategorias sin árbol propio y con árbol", async () => {
-    await conGuarda(() => getCategorias(), 1);
+    await conGuarda(() => getCategorias(false), 1);
     arbol = [["c1", null, "ILUMINACION", 1]];
-    await conGuarda(() => getCategorias(), 1);
+    await conGuarda(() => getCategorias(false), 1);
   });
 
   it("cotizar (leerEspejo)", async () => {

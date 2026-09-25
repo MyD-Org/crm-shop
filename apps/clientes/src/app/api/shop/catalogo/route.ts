@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCatalogo } from "@/lib/catalog";
+import { flagsPublicos } from "@/lib/flags-publicos";
 
 /**
  * Tope de resultados. Ya no es el límite de Alegra (el espejo local no lo
@@ -24,7 +25,9 @@ export async function GET(req: NextRequest) {
   );
 
   try {
-    const productos = await getCatalogo({ busqueda: q, limit });
+    // Sin caché a propósito: cada texto buscado sería una entrada nueva.
+    const { soloVisibles } = await flagsPublicos();
+    const productos = await getCatalogo({ busqueda: q, limit, soloVisibles });
     return NextResponse.json(productos);
   } catch (err) {
     console.error("[/api/shop/catalogo] error:", err);

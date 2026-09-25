@@ -1,15 +1,25 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getProducto } from "@/lib/catalog";
+import { productoPublico } from "@/lib/catalogo-publico";
+import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
 type Props = { params: Promise<{ id: string }> };
 
-/** Una sola consulta por request: la comparten la metadata y la página. */
-const productoDe = cache((id: string) => getProducto(id));
+/**
+ * Una sola lectura por request: la comparten la metadata y la página. Sale de
+ * la caché compartida del catálogo (tag `catalogo`); el flag
+ * `catalogo-solo-visibles` se evalúa acá, por request, y viaja en la clave.
+ * El precio y el stock que se cobran NO salen de acá: el carrito y el pedido
+ * cotizan del espejo en vivo.
+ */
+const productoDe = cache(async (id: string) => {
+  const { soloVisibles } = await flagsPublicos();
+  return productoPublico(id, soloVisibles);
+});
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

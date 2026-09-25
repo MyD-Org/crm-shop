@@ -67,7 +67,7 @@ function exigeFuenteCrm(c: { sql: string; params: unknown[] }) {
 
 describe("el catálogo lee del CRM, menos la reserva", () => {
   it("página del catálogo: conteo y filas", async () => {
-    await getPaginaCatalogo({ filtros: { soloStock: true, precioMin: 10 }, orden: "precio-asc" });
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { soloStock: true, precioMin: 10 }, orden: "precio-asc" });
     const [conteo, pagina] = grabadora.consultas;
     for (const c of [conteo, pagina]) {
       exigeFuenteCrm(c);
@@ -81,13 +81,13 @@ describe("el catálogo lee del CRM, menos la reserva", () => {
   });
 
   it("getCatalogo (home y autocompletado)", async () => {
-    await getCatalogo({ limit: 10 });
+    await getCatalogo({ soloVisibles: false, limit: 10 });
     exigeFuenteCrm(grabadora.consultas[0]);
     expect(grabadora.consultas[0].sql).toContain(ACTIVO);
   });
 
   it("ficha: getProducto y getProductosPorIds", async () => {
-    await getProducto("5");
+    await getProducto("5", { soloVisibles: false });
     exigeFuenteCrm(grabadora.consultas[0]);
     expect(grabadora.consultas[0].sql).toContain(`where ("catalog_products_shop"."tenant_id" = $`);
     expect(grabadora.consultas[0].sql).toContain(`and ${ACTIVO}`);
@@ -101,7 +101,7 @@ describe("el catálogo lee del CRM, menos la reserva", () => {
   });
 
   it("facetas con categorías de Alegra: agrupan por el nombre de la vista de categorías", async () => {
-    await getFacetas({});
+    await getFacetas({}, false);
     const consultas = sinLecturaDelArbol(grabadora.consultas);
     expect(consultas).toHaveLength(3);
     for (const c of consultas) {
@@ -119,13 +119,13 @@ describe("el catálogo lee del CRM, menos la reserva", () => {
 
   it("facetas y menú con árbol propio", async () => {
     arbol = [["c1", null, "ILUMINACION", 1]];
-    await getFacetas({});
-    await getCategorias();
+    await getFacetas({}, false);
+    await getCategorias(false);
     for (const c of sinLecturaDelArbol(grabadora.consultas)) exigeFuenteCrm(c);
   });
 
   it("menú con categorías de Alegra: activas, del tenant, con productos activos del mismo tenant", async () => {
-    await getCategorias();
+    await getCategorias(false);
     const [c] = sinLecturaDelArbol(grabadora.consultas);
     expect(c.sql).toMatch(
       /from "public"\."catalog_categories_shop" inner join "public"\."catalog_products_shop" on \("catalog_products_shop"\."category_alegra_id" = "catalog_categories_shop"\."alegra_id" and "catalog_products_shop"\."tenant_id" = "catalog_categories_shop"\."tenant_id"\)/,

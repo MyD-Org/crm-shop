@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
+import { TAG_CUOTAS } from "@/lib/cache-tags";
 import { syncConfigCRM } from "@/lib/cuotas-sync";
 import { bearerMatches } from "@/lib/secure-compare";
 
@@ -13,6 +15,9 @@ export const maxDuration = 30;
  *
  * 401 secreto inválido · 200 { ok, fetchedAt } · 502 CRM caído o payload
  * inválido (la caché anterior queda intacta).
+ *
+ * Con la config nueva guardada, vence la oferta cacheada (tag `cuotas`, ver
+ * src/lib/cuotas-datos.ts): la próxima vista ya muestra los escalones nuevos.
  */
 export async function POST(req: Request) {
   if (!bearerMatches(req.headers.get("authorization"), process.env.SHOP_CRM_SECRET)) {
@@ -23,5 +28,6 @@ export async function POST(req: Request) {
   if (!r.ok) {
     return NextResponse.json({ ok: false, error: r.error }, { status: 502 });
   }
+  revalidateTag(TAG_CUOTAS, { expire: 0 });
   return NextResponse.json({ ok: true, fetchedAt: r.fetchedAt });
 }

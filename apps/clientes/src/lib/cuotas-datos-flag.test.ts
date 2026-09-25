@@ -11,6 +11,9 @@ const leerPlanes = vi.fn();
 
 vi.mock("./cuotas-repo", () => ({ repoCuotasDrizzle: { leerConfig, leerPlanes } }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
+// La oferta para exhibir sale de un scope `'use cache: remote'`: fuera de Next,
+// cacheTag/cacheLife tiran, así que se reemplazan por no-ops.
+vi.mock("next/cache", () => ({ cacheTag: vi.fn(), cacheLife: vi.fn() }));
 
 afterEach(() => {
   vi.unstubAllEnvs();

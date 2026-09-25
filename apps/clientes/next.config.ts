@@ -8,7 +8,9 @@ const nextConfig: NextConfig = {
   // del visitante (identidad, favoritos, carrito, chat, flags) se resuelve
   // dentro de <Suspense>; el contenido de la home (home_content) sale de
   // `'use cache'` con el tag `home` (src/lib/cache-tags.ts) y se invalida con
-  // `updateTag` desde el editor. Ver src/lib/home-datos.ts.
+  // `updateTag` desde el editor. Ver src/lib/home-datos.ts. Los datos públicos
+  // del catálogo y la oferta de cuotas que leen los huecos salen de
+  // `'use cache: remote'` (src/lib/catalogo-publico.ts, src/lib/cuotas-datos.ts).
   cacheComponents: true,
   cacheLife: {
     // Contenido de la home: sólo cambia por el editor (updateTag), así que la
@@ -19,6 +21,14 @@ const nextConfig: NextConfig = {
     // fuera del prerender (hueco dinámico) y el shell que la lee sin Suspense
     // (anuncio, footer) rompería el build o la revalidación si la base falla.
     degradado: { stale: 30, revalidate: 60, expire: 300 },
+    // Catálogo (listado, facetas, ficha, nav y destacados): lo renueva el
+    // aviso del CRM al terminar la sync o un drenaje de stock con cambios
+    // (revalidateTag del tag `catalogo`). expire 900 = TTL de seguridad de
+    // 15 minutos por si ese aviso se pierde; revalidate 600 lo refresca en
+    // segundo plano con tráfico.
+    catalogo: { stale: 60, revalidate: 600, expire: 900 },
+    // Oferta de cuotas: la renuevan el ping del CRM y el cron (tag `cuotas`).
+    cuotas: { stale: 300, revalidate: 900, expire: 3600 },
   },
   experimental: {
     // El caché de filesystem de Turbopack (beta, on por defecto en Next 16.1+)

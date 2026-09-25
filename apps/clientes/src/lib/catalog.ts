@@ -39,7 +39,6 @@ import { esIdAlegra, mapPrecios, precioDeLista } from "./alegra";
 import { activoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
-import { catalogoSoloVisibles } from "./catalogo-flag";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
@@ -142,10 +141,13 @@ function urlsDeFotos(fotos: FotoCrm[] | null, base: string | null) {
  * `catalogo-solo-visibles` (Vercel Flags, apagado por defecto). Fail-closed:
  * sin fila de overlay el left join deja `visible` en NULL y el producto queda
  * afuera, así que con el flag prendido y sin curaduría la tienda queda vacía.
- * Se evalúa por consulta para respetar el valor vigente del flag.
+ *
+ * El valor del flag lo pasa quien llama (`flagsPublicos()`, por request): esta
+ * capa no evalúa flags, así se puede leer desde un scope cacheado y el valor
+ * queda en la clave de la caché (ver src/lib/catalogo-publico.ts).
  */
-async function soloVisiblesSql() {
-  return (await catalogoSoloVisibles()) ? eq(crmOverlay.visible, true) : undefined;
+function soloVisiblesSql(soloVisibles: boolean) {
+  return soloVisibles ? eq(crmOverlay.visible, true) : undefined;
 }
 
 /**
@@ -201,13 +203,15 @@ function coincideTexto(q: string) {
  * facetas del catálogo solo son correctas si se calculan sobre todo el conjunto.
  * `idPriceList` aplica la lista de precios del cliente logueado si tiene una.
  */
-export async function getCatalogo(opts?: {
+export async function getCatalogo(opts: {
+  /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
+  soloVisibles: boolean;
   idPriceList?: string;
   limit?: number;
   offset?: number;
   busqueda?: string;
 }): Promise<Product[]> {
-  const q = opts?.busqueda?.trim();
+  const q = opts.busqueda?.trim();
 
   let query = getDb()
     .select(COLUMNAS_CATALOGO)
@@ -220,18 +224,18 @@ export async function getCatalogo(opts?: {
         enTenantCatalogo(),
         activoSql,
         conPrecioSql,
-        await soloVisiblesSql(),
+        soloVisiblesSql(opts.soloVisibles),
         q ? coincideTexto(q) : undefined
       )
     )
     .orderBy(asc(crmCatalogo.name))
     .$dynamic();
 
-  if (opts?.limit != null) query = query.limit(opts.limit);
-  if (opts?.offset != null) query = query.offset(opts.offset);
+  if (opts.limit != null) query = query.limit(opts.limit);
+  if (opts.offset != null) query = query.offset(opts.offset);
 
   const filas = await query;
-  return filas.map((f) => mapFilaToProduct(f, opts?.idPriceList));
+  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList));
 }
 
 /**
@@ -241,8 +245,9 @@ export async function getCatalogo(opts?: {
  *
  * Sin filtro de estado por default: un pedido viejo sigue mostrando el nombre
  * real de un ítem que después se despublicó. `soloActivos` aplica
- * `activo` y, con el flag `catalogo-solo-visibles`, también
- * `visible` (mismo criterio que la lista pública).
+ * `activo` y, con `soloVisibles` (el flag `catalogo-solo-visibles`), también
+ * `visible` (mismo criterio que la lista pública). `soloVisibles` sin
+ * `soloActivos` no filtra nada.
  *
  * Sin `orderBy` (el orden lo decide quien llama: pedidos por línea, favoritos
  * por fecha) y sin `limit` (los ids ya vienen acotados por quien llama). Un id
@@ -250,7 +255,7 @@ export async function getCatalogo(opts?: {
  */
 export async function getProductosPorIds(
   alegraIds: readonly string[],
-  opts?: { idPriceList?: string; soloActivos?: boolean },
+  opts?: { idPriceList?: string; soloActivos?: boolean; soloVisibles?: boolean },
 ): Promise<Map<string, Product>> {
   if (alegraIds.length === 0) return new Map();
 
@@ -265,7 +270,7 @@ export async function getProductosPorIds(
         enTenantCatalogo(),
         inArray(crmCatalogo.alegraId, [...alegraIds]),
         opts?.soloActivos ? activoSql : undefined,
-        opts?.soloActivos ? await soloVisiblesSql() : undefined,
+        opts?.soloActivos ? soloVisiblesSql(opts.soloVisibles ?? false) : undefined,
       ),
     );
 
@@ -446,7 +451,7 @@ export function enArbolConConteo(
 }
 
 /** Productos por categoría propia (sólo la directa; `enArbolConConteo` suma hacia arriba). */
-async function conteoPorCategoriaPropia(where: Awaited<ReturnType<typeof condicionesDe>>) {
+async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>) {
   const filas = await getDb()
     .select({ id: crmOverlay.categoriaId, count: sql<number>`count(*)::int` })
     .from(crmCatalogo)
@@ -479,13 +484,13 @@ const APLICAR_TODOS: AplicarFiltros = {
  * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
  * faceta excluye su propio grupo (ver `getFacetas`).
  */
-async function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
+function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros, soloVisibles: boolean) {
   const q = filtros.busqueda?.trim();
   return and(
     enTenantCatalogo(),
     activoSql,
     conPrecioSql,
-    await soloVisiblesSql(),
+    soloVisiblesSql(soloVisibles),
     q ? coincideTexto(q) : undefined,
     aplicar.categorias && filtros.categorias?.length
       ? filtroCategoriasSql(filtros.categorias)
@@ -532,7 +537,9 @@ export function acotarPagina(pagina: number, paginas: number): number {
  * request). Filtrar u ordenar después de paginar daría resultados incompletos,
  * así que las tres cosas se hacen acá, en la misma query.
  */
-export async function getPaginaCatalogo(opts?: {
+export async function getPaginaCatalogo(opts: {
+  /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
+  soloVisibles: boolean;
   filtros?: FiltrosCatalogo;
   orden?: OrdenCatalogo;
   /** 1-based. Si se pasa de largo, se devuelve la última página. */
@@ -540,9 +547,9 @@ export async function getPaginaCatalogo(opts?: {
   porPagina?: number;
   idPriceList?: string;
 }): Promise<PaginaCatalogo> {
-  const filtros = opts?.filtros ?? {};
-  const porPagina = opts?.porPagina ?? PRODUCTOS_POR_PAGINA;
-  const where = await condicionesDe(filtros, APLICAR_TODOS);
+  const filtros = opts.filtros ?? {};
+  const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
+  const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles);
 
   const [conteo] = await getDb()
     .select({ total: sql<number>`count(*)::int` })
@@ -554,7 +561,7 @@ export async function getPaginaCatalogo(opts?: {
 
   const total = conteo?.total ?? 0;
   const paginas = Math.max(Math.ceil(total / porPagina), 1);
-  const pagina = acotarPagina(opts?.pagina ?? 1, paginas);
+  const pagina = acotarPagina(opts.pagina ?? 1, paginas);
 
   const filas = total
     ? await getDb()
@@ -564,13 +571,13 @@ export async function getPaginaCatalogo(opts?: {
         .leftJoin(crmOverlay, joinOverlay())
         .leftJoin(stockReservado, joinReserva())
         .where(where)
-        .orderBy(...ordenDe(opts?.orden ?? ORDEN_DEFAULT))
+        .orderBy(...ordenDe(opts.orden ?? ORDEN_DEFAULT))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];
 
   return {
-    productos: filas.map((f) => mapFilaToProduct(f, opts?.idPriceList)),
+    productos: filas.map((f) => mapFilaToProduct(f, opts.idPriceList)),
     total,
     pagina,
     paginas,
@@ -587,11 +594,19 @@ export async function getPaginaCatalogo(opts?: {
  */
 export async function getProducto(
   id: string,
-  idPriceList?: string
+  opts: {
+    /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
+    soloVisibles: boolean;
+    idPriceList?: string;
+  },
 ): Promise<Product | null> {
   // Un id que no es de Alegra no es un producto: ni se consulta.
   if (!esIdAlegra(id)) return null;
-  const productos = await getProductosPorIds([id], { idPriceList, soloActivos: true });
+  const productos = await getProductosPorIds([id], {
+    idPriceList: opts.idPriceList,
+    soloActivos: true,
+    soloVisibles: opts.soloVisibles,
+  });
   return productos.get(id) ?? null;
 }
 
@@ -629,10 +644,14 @@ export interface Facetas {
  * sin el rango vigente: si no, los límites del slider se achicarían a lo que
  * el visitante acaba de elegir y ya no podría volver a abrirlo.
  */
-export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas> {
-  const whereCategorias = await condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false });
-  const whereMarcas = await condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false });
-  const wherePrecio = await condicionesDe(filtros, { ...APLICAR_TODOS, precio: false });
+export async function getFacetas(
+  filtros: FiltrosCatalogo,
+  /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
+  soloVisibles: boolean,
+): Promise<Facetas> {
+  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles);
+  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles);
+  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles);
 
   const arbol = await getArbolCategorias();
 
@@ -691,15 +710,16 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
  * categoría vacía en el menú es un callejón sin salida.
  *
  * Envuelto en `cache` de React para consultarla una sola vez por request.
+ * `soloVisibles`: flag `catalogo-solo-visibles` (ver `soloVisiblesSql`).
  */
-export const getCategorias = cache(async function getCategorias(): Promise<
-  string[]
-> {
+export const getCategorias = cache(async function getCategorias(
+  soloVisibles: boolean,
+): Promise<string[]> {
   // Con árbol propio el menú muestra sus raíces, en el orden del CRM, contando
   // lo que se publica de verdad (mismo WHERE que la grilla sin filtros).
   const arbol = await getArbolCategorias();
   if (arbol.length) {
-    const conteos = await conteoPorCategoriaPropia(await condicionesDe({}, APLICAR_TODOS));
+    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles));
     return enArbolConConteo(arbol, conteos)
       .filter((c) => c.nivel === 1)
       .map((c) => c.label);

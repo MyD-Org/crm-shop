@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+import { TAG_CATALOGO } from "@/lib/cache-tags";
 import { bearerMatches } from "@/lib/secure-compare";
 
 /**
- * Aviso del CRM de que algo del catálogo cambió.
+ * Aviso del CRM de que algo del catálogo cambió: al guardar overlay o
+ * categorías, al terminar la sync de Alegra y al drenar webhooks de stock con
+ * cambios (contrato `crm-shop-base/v1` en MyD-Org/platform).
  *
- * Ya no copia nada: la tienda lee el catálogo comercial (categorías, nombres,
- * fotos, visibilidad) directo de las tablas del CRM, en la misma base. Lo único
- * que queda por hacer es descartar lo que Next tenga renderizado en caché, para
- * que el cambio se vea en la próxima visita y no cuando venza.
+ * No copia nada: la tienda lee el catálogo directo de las vistas del CRM, en
+ * la misma base. Lo único que hace es vencer las cachés de datos del catálogo
+ * (tag `catalogo`: listado, facetas, ficha, nav y destacados, ver
+ * src/lib/catalogo-publico.ts) con `{ expire: 0 }`: la próxima visita lee la
+ * base, no la copia vieja. Si este aviso se pierde, el perfil `catalogo`
+ * vence solo a los 15 minutos.
  *
  * SIN payload a propósito y autenticado con SHOP_CRM_SECRET, la llave propia
  * del Shop.
@@ -22,6 +27,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  revalidatePath("/", "layout");
+  revalidateTag(TAG_CATALOGO, { expire: 0 });
   return NextResponse.json({ ok: true });
 }

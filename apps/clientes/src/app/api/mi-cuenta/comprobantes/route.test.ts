@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * API de comprobantes de Mi cuenta (CMP-1/2/4/5): 503 sin R2, 400 con
@@ -24,10 +24,12 @@ vi.mock("@/lib/comprobantes/repo", () => ({
   listarDelCliente: (...a: unknown[]) => listarDelCliente(...a),
 }));
 
+import { arYmd } from "@/lib/comprobantes/validacion";
 import { GET, POST } from "./route";
 
 const ID = "11111111-2222-4333-8444-555555555555";
-const hoy = () => new Date().toISOString().slice(0, 10);
+// "Hoy" del negocio (Argentina), no el de UTC: desde las 21:00 AR el día UTC ya es mañana.
+const hoy = () => arYmd(new Date());
 
 function body(overrides: Record<string, unknown> = {}) {
   return {
@@ -133,6 +135,32 @@ describe("POST /api/mi-cuenta/comprobantes (init)", () => {
       contentType: "application/pdf",
       contentLength: 1_000_000,
       ttlSeconds: 600,
+    });
+  });
+
+  describe("reloj fijo a las 23:30 de Argentina (02:30 UTC del día siguiente)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-09-25T02:30:00.000Z"));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("el pago de hoy en Argentina se acepta aunque en UTC ya sea mañana", async () => {
+      vinculado();
+      expect(hoy()).toBe("2026-09-24");
+      const res = await post(body({ paidOn: "2026-09-24" }));
+      expect(res.status).toBe(201);
+      expect(crearSubiendo.mock.calls[0]?.[1]).toMatchObject({ paidOn: "2026-09-24" });
+    });
+
+    it("el día UTC (mañana en Argentina) se rechaza como fecha futura", async () => {
+      vinculado();
+      const res = await post(body({ paidOn: "2026-09-25" }));
+      expect(res.status).toBe(400);
+      expect(Object.keys((await res.json()).fields)).toEqual(["paidOn"]);
+      expect(crearSubiendo).not.toHaveBeenCalled();
     });
   });
 

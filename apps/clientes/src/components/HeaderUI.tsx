@@ -10,6 +10,7 @@ import { destinoSeguro } from "@/lib/ingreso";
 import { MAX_CATEGORIAS_NAV, conBadgeNav } from "@/lib/nav-badge";
 import { formatRubro } from "@/lib/formato-rubro";
 import { CartPreview } from "./CartPreview";
+import { linkNext } from "./catalogo/link-next";
 import { MenuUsuario } from "./MenuUsuario";
 
 function UserIcon() {
@@ -83,6 +84,8 @@ export function HeaderUI({
         brandSub="Iluminación · Electricidad"
         search={<SearchAutocomplete />}
         nav={nav}
+        // Marca y nav con next/link: con `<a>` cada clic recargaba la página.
+        renderLink={linkNext}
         actions={
           <>
             {!userId ? (

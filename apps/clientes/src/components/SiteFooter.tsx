@@ -1,5 +1,6 @@
 import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
 import { envioHabilitado } from "@/lib/envio-flag";
+import { linkNext } from "@/components/catalogo/link-next";
 
 /**
  * Footer global del layout. Textos del diseño aprobado; links a rutas reales. "Led" con el color de marca del tema
@@ -13,6 +14,7 @@ export async function SiteFooter() {
   return (
     <SiteFooterDS
       className="site-footer"
+      renderLink={linkNext}
       brandName="Central"
       brandAccent="Led"
       description="Casa de electricidad e iluminación en Puerto Iguazú, Misiones. Del disyuntor al velador: el local de siempre, ahora también online."

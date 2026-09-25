@@ -246,12 +246,22 @@ toda tabla nueva viva en el esquema `shop` (nunca en `public`).
 
 | Migración | Qué hace | Cuándo aplicarla |
 |---|---|---|
+| `0000_baseline` | Esquema `shop` completo al pasar a una base (pedidos, líneas, perfiles de facturación, vínculos, copia del catálogo, `shop.immutable_unaccent`) | Ya aplicada en producción (Paso 3). En una base nueva, primera de todas; nunca se regenera. |
 | `0001_telefono_contacto` | `billing_profiles.telefono` (teléfono de contacto que el checkout precarga) | **Antes** de desplegar el código que la usa: el Shop selecciona la columna al leer el perfil y sin ella cae el checkout y Mis datos. |
 | `0002_favoritos` | `shop.favorites` (favoritos de Mi cuenta: tenant, usuario de Clerk e ítem, con unique por los tres) | **Antes** de mergear y desplegar la rebanada de favoritos: el Shop la lee en el resumen de Mi cuenta, en `/mi-cuenta/favoritos` y en la API del corazón (catálogo, home y ficha). |
 | `0003_direcciones_envio` | `shop.direcciones_envio` (direcciones de envío de Mi cuenta: tenant, usuario de Clerk, etiqueta, calle, ciudad, provincia, CP, referencias y `predeterminada`), índice por (tenant, usuario) e índice único **parcial** por (tenant, usuario) `WHERE predeterminada` | **Antes** de mergear y desplegar la rebanada de direcciones: el Shop la lee en `/mi-cuenta/direcciones`, en su API y en el checkout (con Clerk). El checkout tolera que falte (lista vacía y lo registra en el log), Mi cuenta no. |
+| `0004_borrar_copia_catalogo` | `DROP` de la copia vieja del catálogo comercial en `shop` (`catalog_overlay`, `shop_categories`, `shop_tags`, `catalogo_sync_state`): el Shop pasa a leer overlay y categorías de `public` | **Después** de desplegar el código que lee `public.catalog_overlay` y `public.shop_categories`, y con el `GRANT` de "Lectura directa del catálogo del CRM" ya dado (hoy lo registra la 0038 del CRM). |
+| `0005_pago_intentos` | `shop.pago_intentos` (un intento de cobro por fila: proveedor, referencia, estado, medio, cuotas, total) + índices y backfill desde `orders.pago_*` | **Antes** de mergear el cambio de pagos (#69): el webhook y la reconciliación buscan el intento en la tabla nueva. Ver [`pagos-mercadopago.md`](./pagos-mercadopago.md). |
+| `0006_pago_revision` | `orders.pago_revision` + CHECK (`cobro_duplicado` \| `pagado_cancelado`): pago que un operador tiene que revisar | **Antes** de mergear el mismo cambio de pagos (#69): el Shop y la sección Pedidos del CRM leen la columna. |
+| `0007_vinculo_unico_por_contacto` | índice único parcial `cl_contacto_activa` en `client_links(alegra_contact_id) WHERE estado = 'activa'` (un solo usuario por cliente de Alegra) | Histórica: la revierte la `0014`. En una base nueva se aplica en orden, sin efecto neto. |
+| `0008_carrito_por_usuario` | `shop.carts` (carrito en servidor por tenant y usuario de Clerk: `items` jsonb, `version`) + índice único (tenant, usuario) | **Antes** de mergear el carrito por usuario (#113): la API del carrito la lee y escribe. |
+| `0009_perfil_solo_telefono` | `billing_profiles.tipo_doc`, `nro_doc`, `razon_social`, `condicion_iva` pasan a nullable (perfil "sólo teléfono" del vinculado) | **Antes** del merge de `contacto-fuente-unica`: compatible hacia atrás (el código anterior nunca crea filas así). |
+| `0010_motivo_revision` | `orders.motivo_revision` (texto libre, sin CHECK: por qué un pedido requiere revisión) | **Antes** del merge: el listado de pedidos del CRM selecciona la columna y sin ella falla. |
 | `0011_pedidos_facturado` | `orders.facturado_en`, `facturado_por`, `facturado_por_nombre` (marca "facturado en Alegra" que escribe el CRM) + índice parcial `orders_reserva_activa` | **Antes** de mergear la reserva de stock: la vista `0012` usa `facturado_en`. Ver "Reserva de stock". |
 | `0012_stock_reservado` | vista `shop.stock_reservado` (unidades reservadas por tenant e ítem) + `GRANT SELECT` condicional a `shop_app` | **Antes** de mergear y desplegar la reserva: sin la vista fallan el catálogo, la ficha, el carrito y el checkout. |
 | `0013_pedidos_factura_vinculada` | `orders.factura_alegra_id`, `factura_numero`, `factura_fecha`, `factura_total` (factura de Alegra que el CRM vincula al pedido) + CHECK `orders_factura_facturado_check` (factura ⇒ `facturado_en`) | **Antes** de mergear el "Vincular factura" del admin: el CRM selecciona las columnas al leer cualquier pedido y sin ellas cae la sección Pedidos. El Shop no las lee. |
+| `0014_vinculos_varios_usuarios` | `DROP INDEX cl_contacto_activa` (de la `0007`): varios usuarios de la tienda por cliente de Alegra | **Antes** de mergear #129: con el índice, el segundo vínculo del mismo cliente falla con 23505. |
+| `0015_drop_catalogo_shop` | `DROP` de la copia propia del catálogo (`shop.catalog_products`, `catalog_categories`, `catalog_sync_log`); no toca `shop.immutable_unaccent` | **Después** de desplegar el Shop que lee todo el catálogo de las vistas del CRM (0035/0037) y de retirar la sync propia. Irreversible sin datos; ver "Catálogo desde el CRM". |
 
 El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
 `MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
@@ -290,6 +300,11 @@ las tablas del CRM, sin copia. Como el Paso 1 le quita a `shop_app` todo
 permiso sobre `public`, hay que dárselo explícito, sólo de lectura y sólo
 sobre esas dos tablas.
 
+Desde la migración `0038_grants_overlay_shop` del CRM este permiso queda
+registrado (bloque condicional, idempotente; en producción ya estaba dado a
+mano y la 0038 es un no-op). El bloque de abajo hace falta sólo si `shop_app`
+se crea **después** de migrar (rama nueva, base recreada).
+
 **Dónde:** editor SQL de Neon, en la base de producción (y en cada rama donde
 corra el Shop), como `<OWNER_ROLE>`.
 
@@ -324,7 +339,7 @@ dentro de un bloque que sólo corre si el rol `shop_app` existe.
 | Objeto | Permiso | Para qué | Reversa |
 |---|---|---|---|
 | esquema `public` | `USAGE` | llegar a las tablas | (se comparte con el catálogo: no revocar) |
-| vista `alegra_contacts_shop` (20 columnas) | `SELECT` | razón social, CUIT, tipo de cuenta, plazo, vendedor, límite | `REVOKE SELECT ON public.alegra_contacts_shop FROM shop_app;` |
+| vista `alegra_contacts_shop` (30 columnas: 20 con la 0032, 27 con la 0034, 30 con la 0036) | `SELECT` | razón social, CUIT, tipo de cuenta, plazo, vendedor, límite | `REVOKE SELECT ON public.alegra_contacts_shop FROM shop_app;` |
 | `tenants` (`id`, `name`, `whatsapp_number`, `receipts_email`) | `SELECT` por columna | WhatsApp de la empresa y mail de comprobantes | `REVOKE SELECT ON public.tenants FROM shop_app;` |
 | `client_commercial_conditions` | `SELECT` | descuentos, transporte, contacto del vendedor | `REVOKE SELECT ON public.client_commercial_conditions FROM shop_app;` |
 | `notification_log` | `SELECT`, `UPDATE (read_at)` | avisos y "marcar como leído" | `REVOKE SELECT, UPDATE ON public.notification_log FROM shop_app;` |
@@ -343,7 +358,7 @@ de columnas en `src/db/__fixtures__/crm-contrato.json`
 **Orden de despliegue:** la 0032 se aplica a mano contra la base de producción
 (`npm run db:migrate` en `apps/admin`, confirmando antes la URL) **antes** de
 mergear cualquier código del Shop que lea estas tablas: el Shop declara la
-vista con 20 columnas, y sin la 0032 toda consulta a la vista falla.
+vista con 30 columnas, y sin la 0032, la 0034 y la 0036 toda consulta a la vista falla.
 
 **Si `shop_app` se crea después de la 0032** (rama nueva, base recreada), el
 bloque condicional no concedió nada: córralo a mano como `<OWNER_ROLE>`,

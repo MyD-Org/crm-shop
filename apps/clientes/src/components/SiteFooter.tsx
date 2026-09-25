@@ -2,8 +2,7 @@ import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
 import { envioHabilitado } from "@/lib/envio-flag";
 
 /**
- * Footer global del layout. Textos del diseño aprobado; links a rutas reales
- * (categorías canónicas del catálogo). "Led" con el color de marca del tema
+ * Footer global del layout. Textos del diseño aprobado; links a rutas reales. "Led" con el color de marca del tema
  * sobre oscuro y sin itálica (regla `.site-footer em` en globals.css), igual
  * que el header.
  */
@@ -19,19 +18,9 @@ export async function SiteFooter() {
       description="Casa de electricidad e iluminación en Puerto Iguazú, Misiones. Del disyuntor al velador: el local de siempre, ahora también online."
       columns={[
         {
-          title: "Rubros",
-          links: [
-            { label: "Iluminación LED", href: "/catalogo?categoria=ILUMINACION" },
-            { label: "Línea decorativa", href: "/catalogo?categoria=ILUMINACION" },
-            { label: "Electricidad", href: "/catalogo?categoria=ELECTRICIDAD" },
-            { label: "Automatización", href: "/catalogo?categoria=ELECTRICIDAD" },
-          ],
-        },
-        {
           title: "Mi cuenta",
           links: [
             { label: "Mis pedidos", href: "/mi-cuenta" },
-            { label: "Cuenta corriente", href: "/mi-cuenta/vincular" },
             { label: "Facturas", href: "/mi-cuenta" },
           ],
         },

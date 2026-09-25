@@ -92,7 +92,7 @@ describe("filtro por categoría", () => {
     await getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] } });
     for (const { sql } of grabadora.consultas) {
       expect(sql).toMatch(/not exists \(select 1 from "public"\."shop_categories" where activa and tenant_id = \$\d+\)/);
-      expect(sql).toContain('"shop"."catalog_categories"."name" in');
+      expect(sql).toContain('"catalog_categories_shop"."name" in');
     }
   });
 });
@@ -106,12 +106,12 @@ describe("facetas de categorías", () => {
       { label: "Focos led", count: 2, nivel: 2 },
       { label: "ELECTRICIDAD", count: 4, nivel: 1 },
     ]);
-    expect(grabadora.consultas.some((c) => c.sql.includes('group by "shop"."catalog_categories"."name"'))).toBe(false);
+    expect(grabadora.consultas.some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(false);
   });
 
   it("sin árbol, siguen agrupando por la categoría de Alegra", async () => {
     await getFacetas({});
-    expect(grabadora.consultas.some((c) => c.sql.includes('group by "shop"."catalog_categories"."name"'))).toBe(true);
+    expect(grabadora.consultas.some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(true);
     expect(grabadora.consultas.some(esConteoPorCategoria)).toBe(false);
   });
 });
@@ -126,7 +126,19 @@ describe("menú (getCategorias)", () => {
     grabadora = conArbol();
     await getCategorias();
     const conteo = grabadora.consultas.find(esConteoPorCategoria);
-    expect(conteo?.sql).toContain(`then "catalog_products_shop"."activo" else "shop"."catalog_products"."status" = 'active' end`);
+    expect(conteo?.sql).toContain('and "catalog_products_shop"."activo" and');
     expect(conteo?.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
+  });
+});
+
+describe("menú sin árbol (categorías de Alegra de la vista del CRM)", () => {
+  it("una categoría con activo = false no se lista: se filtra en la consulta", async () => {
+    await getCategorias();
+    const c = grabadora.consultas.find((q) => q.sql.includes('from "public"."catalog_categories_shop"'));
+    const m = c?.sql.match(/"catalog_categories_shop"\."activo" = \$(\d+)/);
+    expect(m, c?.sql).not.toBeNull();
+    expect(c!.params[Number(m![1]) - 1]).toBe(true);
+    // ...y sólo si tiene algún producto activo del mismo tenant.
+    expect(c!.sql).toContain('and "catalog_products_shop"."activo")');
   });
 });

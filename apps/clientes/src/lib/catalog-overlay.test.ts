@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 const JOIN_OVERLAY =
-  /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "shop"\."catalog_products"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;
+  /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "catalog_products_shop"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;
 
 describe("join al overlay", () => {
   it("la página del catálogo trae nombre y fotos del overlay", async () => {

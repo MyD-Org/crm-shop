@@ -12,8 +12,9 @@
  * los tenants del CRM.
  *
  * Permisos: el rol de runtime del Shop (`shop_app`) necesita `SELECT` sobre
- * las tablas del catálogo; el de la vista de stock lo concede la migración 0035
- * de apps/admin; los de cuenta corriente (vista del espejo de
+ * las tablas del catálogo; el de las vistas del catálogo de Alegra
+ * (`catalog_products_shop` y `catalog_categories_shop`) lo conceden las
+ * migraciones 0035 y 0037 de apps/admin; los de cuenta corriente (vista del espejo de
  * contactos, `tenants` por columna, condiciones, avisos y comprobantes) los
  * concede la migración 0032 de apps/admin (ver docs/una-base-esquema-shop.md,
  * "Cuenta corriente: lectura/escritura en public").
@@ -38,8 +39,8 @@ import {
 /**
  * `public`, CALIFICADO. Con `pgTable` drizzle escribe el nombre pelado
  * (`"catalog_overlay"`) y lo resuelve el `search_path`, que para `shop_app` es
- * `shop, public`: como el esquema `shop` tiene tablas homónimas (la copia vieja
- * del catálogo), la consulta leería ésas y no las del CRM. `pgSchema("public")`
+ * `shop, public`: si el esquema `shop` tuviera una tabla homónima (como la
+ * copia vieja del catálogo), la consulta leería ésa y no la del CRM. `pgSchema("public")`
  * está vedado por drizzle para que nadie genere migraciones sobre `public`;
  * instanciar la clase lo saltea, y acá es seguro porque este archivo no lo mira
  * drizzle-kit.
@@ -136,20 +137,24 @@ export const crmContactos = publico
   .existing();
 
 /**
- * Stock, precios y estado de cada ítem según el espejo de productos del CRM
- * (`public.catalog_products_shop`, migración 0035 de apps/admin). Es una VISTA
- * angosta: el CRM la mantiene al día con la sync diaria y con los webhooks de
- * stock de Alegra, así que suele estar más fresca que `shop.catalog_products`.
- * `shop_app` tiene SELECT sobre la vista y nada sobre la tabla.
+ * Catálogo de productos del CRM (`public.catalog_products_shop`, migraciones
+ * 0035 y 0037 de apps/admin). Es la ÚNICA fuente del catálogo del Shop: el CRM
+ * la mantiene al día con su sync diaria y con los webhooks de Alegra (un cambio
+ * de nombre, stock o precio llega en minutos). Es una VISTA de todos los
+ * tenants: toda consulta que la tenga de base filtra por
+ * `tenant_id = shopTenantId()` en el WHERE (`enTenantCatalogo`, ver
+ * `src/lib/catalogo-fuente.ts`). `shop_app` tiene SELECT sobre la vista y nada
+ * sobre la tabla (no ve `raw`).
  *
  * - `preciosAlegra` es `raw->'price'` TAL CUAL lo manda Alegra (ids numéricos,
  *   `main` incluido): se normaliza con `mapPrecios` antes de resolver una lista.
  * - `activo` = visto en la última sync del CRM y no inactivo en Alegra.
- * - `alegraLeidoAt` = cuándo se le pidió el dato a Alegra; null en filas que
- *   todavía no pasaron por una sync o un webhook. Decide qué fuente gana (ver
- *   `src/lib/stock-disponible.ts`).
+ * - `alegraLeidoAt` = cuándo se le pidió el dato a Alegra (frescura).
+ * - `brand` sigue la regla del CRM (customField llamado "marca"/"brand").
+ * - `ivaPorcentaje` es la SUMA de los impuestos del ítem en Alegra (regla única
+ *   del CRM, `alegra_suma_impuestos`); null = sin impuestos numéricos.
  */
-export const crmStock = publico
+export const crmCatalogo = publico
   .view("catalog_products_shop", {
     tenantId: text("tenant_id").notNull(),
     alegraId: text("alegra_id").notNull(),
@@ -157,6 +162,30 @@ export const crmStock = publico
     preciosAlegra: jsonb("precios_alegra").notNull(),
     activo: boolean("activo").notNull(),
     alegraLeidoAt: timestamp("alegra_leido_at", { withTimezone: true }),
+    // 0037: el producto entero, para que el Shop no necesite copia propia.
+    name: text("name").notNull(),
+    description: text("description"),
+    code: text("code"),
+    brand: text("brand"),
+    categoryAlegraId: text("category_alegra_id"),
+    ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }),
+  })
+  .existing();
+
+/**
+ * Categorías de Alegra según el CRM (`public.catalog_categories_shop`,
+ * migración 0037 de apps/admin). No confundir con `crmCategorias`, que es el
+ * árbol PROPIO de la tienda (`shop_categories`). Vista de todos los tenants: el
+ * join producto → categoría lleva el tenant EN el ON (`joinCategoriasAlegra`).
+ * `activo` = vista en la última sync del CRM.
+ */
+export const crmCategoriasAlegra = publico
+  .view("catalog_categories_shop", {
+    tenantId: text("tenant_id").notNull(),
+    alegraId: text("alegra_id").notNull(),
+    name: text("name").notNull(),
+    parentAlegraId: text("parent_alegra_id"),
+    activo: boolean("activo").notNull(),
   })
   .existing();
 

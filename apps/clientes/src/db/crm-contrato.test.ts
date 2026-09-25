@@ -72,11 +72,35 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     expect(vista.mobile).toBe("text");
   });
 
-  it("la vista de catálogo sólo trae stock, precio y estado", () => {
+  it("la vista de catálogo trae el producto entero (0037) pero nunca `raw`", () => {
     const vista = esperado["public.catalog_products_shop"];
-    for (const prohibida of ["raw", "name", "description", "images", "prices"]) {
+    expect(Object.keys(vista)).toEqual([
+      "tenant_id",
+      "alegra_id",
+      "stock",
+      "precios_alegra",
+      "activo",
+      "alegra_leido_at",
+      "name",
+      "description",
+      "code",
+      "brand",
+      "category_alegra_id",
+      "iva_porcentaje",
+    ]);
+    for (const prohibida of ["raw", "images", "prices", "status", "alegra_status"]) {
       expect(vista[prohibida], prohibida).toBeUndefined();
     }
+  });
+
+  it("la vista de categorías de Alegra trae sólo lo que usa el catálogo", () => {
+    expect(Object.keys(esperado["public.catalog_categories_shop"])).toEqual([
+      "tenant_id",
+      "alegra_id",
+      "name",
+      "parent_alegra_id",
+      "activo",
+    ]);
   });
 
   it("de tenants sólo se declaran las columnas del GRANT", () => {

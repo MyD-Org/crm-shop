@@ -3,7 +3,9 @@
 > Decisión de arquitectura. Define de dónde sale cada dato y quién es dueño de
 > cada concepto. Leer antes de conectar el shop con cualquier sistema externo.
 
-_Última actualización: 2026-07-29_
+_Última actualización: 2026-09-24 (catálogo desde las vistas del CRM). Las
+secciones sobre bases separadas son anteriores a la decisión de 2026-09-20
+(monorepo y una sola base; ver el `AGENTS.md` de la raíz)._
 
 ## Los tres sistemas
 
@@ -34,7 +36,7 @@ dueño del concepto**.
 
 | Dato | Dueño del concepto | Ruta desde el Shop |
 |---|---|---|
-| Catálogo, precios, stock | Alegra (dato crudo) | **Directo a Alegra**, con espejo local para listar (ver abajo) |
+| Catálogo, precios, stock | Alegra (dato crudo), espejado por el CRM | **Vistas del CRM** en la base compartida (ver "Catálogo: el Shop lo lee del CRM") |
 | Facturas / PDF | Alegra (documento) | **Directo a Alegra** (o Portal) |
 | Saldo, deudas, límite de crédito, "¿puede comprar a cuenta?" | **CRM** (relación con el cliente) | **Se pregunta al CRM** |
 
@@ -49,55 +51,59 @@ crudos. **El Shop nunca calcula nada financiero.**
 ```
                 ALEGRA  (productos · precios · stock · facturas)
                /       \
-   estado de  /         \  catálogo / stock
-   cuenta +  /           \  (directo)
-   crédito  ▼             ▼
-        ┌────────┐   ask   ┌────────┐
-        │  CRM   │◄────────│  SHOP  │
-        └────────┘         └────────┘
+  catálogo,  /         \  contactos /
+  stock,    /           \  facturas
+  cuenta   ▼             ▼  (directo)
+        ┌────────┐  vistas del catálogo   ┌────────┐
+        │  CRM   │───────────────────────►│  SHOP  │
+        └────────┘◄───────────────────────└────────┘
+                          ask
 ```
 
-## Espejo local del catálogo (cache para listar, vivo para comprometer)
+## Catálogo: el Shop lo lee del CRM (una copia, un cron)
 
-**Decisión (2026-07-29).** El Shop mantiene una **copia local del catálogo de
-Alegra** en su propio Postgres (`catalog_products`, `catalog_categories`,
-`catalog_sync_log`), refrescada por una **corrida diaria**
-(`scripts/sync-catalogo.ts` → `src/lib/catalog-sync.ts`).
+**Decisión vigente (2026-09-24, change `catalogo-shop-desde-crm`).** El Shop
+**no tiene copia propia del catálogo**. Lee TODO el producto (nombre,
+descripción, código, marca, categoría de Alegra, IVA, precios, stock y estado)
+de dos vistas del CRM en la base compartida:
 
-**Dónde corre (actualizado 2026-09-17).** En GitHub Actions
-(`.github/workflows/catalogo-sync.yml`), no en Vercel Cron. El workflow ejecuta
-la sync dentro del runner en vez de pegarle a un endpoint: el catálogo pasó de
-~2800 a ~5959 ítems y, con la paginación de a 30 de Alegra y sus 429, la corrida
-(~3 min) ya no entra en los 300 s que topea una función en el plan Hobby.
-`/api/cron/catalog-sync` sigue existiendo para disparos manuales.
+- `public.catalog_products_shop` → `crmCatalogo` en `src/db/crm.ts`;
+- `public.catalog_categories_shop` → `crmCategoriasAlegra`.
 
-**Por qué.** Alegra topea las consultas en **30 ítems por request** y el catálogo
-tiene **~5959**. Leerlo en vivo obligaba a mostrar solo los primeros 30, y
-paginarlo entero dentro del request de un usuario no entra en el timeout de la
-función (el CRM ya se comió ese 504 con este mismo catálogo).
+Las mantiene el CRM con **su** sync diaria (GitHub Actions,
+`admin-alegra-sync`) y con los webhooks de Alegra: un cambio de nombre, stock o
+precio llega a la tienda en minutos. Hay **una** sync por cuenta de Alegra.
 
-**La regla, y es la parte que importa:**
+Reglas del lado del Shop:
 
-> El espejo se usa para **LISTAR y BUSCAR**. El precio y el stock que el Shop
-> **le compromete** al cliente (ficha de producto, checkout) se leen **EN VIVO**
-> contra Alegra.
+- Las vistas son de todos los tenants. Toda consulta del catálogo tiene de base
+  `crmCatalogo` con `tenant_id = SHOP_TENANT_ID` en el WHERE
+  (`enTenantCatalogo`), y el join a categorías lleva el tenant en el ON
+  (`joinCategoriasAlegra`), ver `src/lib/catalogo-fuente.ts`. Lo exige
+  `src/lib/catalogo-tenant.test.ts`.
+- IVA = `iva_porcentaje` de la vista: la SUMA de los impuestos del ítem en
+  Alegra (regla única del CRM). Precios = `precios_alegra` crudos, normalizados
+  con `mapPrecios`. Marca = `brand` (regla del CRM) o, si viene vacía, el nombre
+  de la categoría de Alegra.
+- El stock que se muestra y se valida es el disponible: el de la vista menos lo
+  reservado por pedidos vivos del Shop (`shop.stock_reservado`).
+- Ficha, carrito, checkout y pedido usan la misma vista: valen los precios que
+  publica la tienda, sin llamadas a Alegra en el request (decisión 2026-09-23).
+- `shop_app` sólo tiene `SELECT` sobre las vistas (no ve `raw` ni costos). El
+  contrato de columnas está en `src/db/__fixtures__/crm-contrato.json`.
 
-Un número que el shop promete nunca sale de una cache de hasta 24 h. Es el mismo
-criterio que el ADR de catálogo del CRM.
+**Transición.** La sync propia del Shop (`scripts/sync-catalogo.ts`,
+`src/lib/catalog-sync.ts`, workflow `clientes-catalogo-sync`) y sus tablas
+(`catalog_products`, `catalog_categories`, `catalog_sync_log` del esquema `shop`)
+quedan **inertes**: nadie las lee. Se retiran en dos pasos (primero la sync,
+después el DROP con la migración 0014 del Shop). Mientras existan, revertir este
+cambio devuelve el Shop a su copia sin pasos extra.
 
-**Por qué el Shop sincroniza contra Alegra y no consume el espejo del CRM.** El
-CRM ya tiene su propio `catalog_products`, así que copiar el catálogo dos veces
-es duplicación real y conocida. Se eligió igual, por tres razones:
-
-1. El Shop **va a tener DB de todos modos** (marketing, escalas por cantidad,
-   carrito, OTP): el costo marginal es el módulo de sync, no la infraestructura.
-2. `/catalogo` es la página más visitada del Shop. Colgarla del uptime del CRM
-   es acoplar la vidriera al backoffice.
-3. Mantiene la regla de este documento: **cada sistema con su DB, Alegra como
-   system of record**. El CRM no pasa a ser dueño del catálogo del Shop.
-
-El costo aceptado es **drift**: los dos espejos pueden diferir por minutos u
-horas. Es tolerable precisamente porque ningún número comprometido sale de ahí.
+**Historial.** Del 2026-07-29 al 2026-09-24 el Shop mantuvo su propia copia del
+catálogo, sincronizada contra Alegra, para no colgar la vidriera del CRM. Se
+dejó de lado al pasar las dos apps a una sola base (decisión 2026-09-20): con el
+CRM en la misma base, la copia sólo agregaba drift, un segundo cron contra la
+misma cuenta de Alegra y dos reglas distintas de IVA y marca.
 
 ## Contrato: estado de cuenta del cliente
 
@@ -124,8 +130,8 @@ del CRM; no bloquea al Shop).
 1. **`src/lib/alegra.ts` integra Alegra solo para catálogo / precios / stock /
    facturas.** No arma saldos ni cuenta corriente.
    - `listAllItems()` / `listAllCategories()` paginan **todo** el catálogo: son
-     caras y **solo se llaman desde la sync**, nunca desde el request de un
-     usuario.
+     caras y **solo se llaman desde la sync del Shop**, que ya no alimenta la
+     tienda (ver "Catálogo: el Shop lo lee del CRM") y se retira.
 2. **No hay helper de cuenta corriente en el Shop.** Lo financiero es un endpoint
    del CRM que se consume si/cuando el checkout valide crédito.
 3. **Escalas de precio por cantidad**: Alegra no las soporta nativamente. Si el

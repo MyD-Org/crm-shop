@@ -144,7 +144,7 @@ describe("listarFavoritos", () => {
     const m = ids.sql.match(/ limit \$(\d+)/);
     expect(m, ids.sql).not.toBeNull();
     expect(ids.params[Number(m![1]) - 1]).toBe(4);
-    expect(productos.sql).toContain('"shop"."catalog_products"');
+    expect(productos.sql).toContain('from "public"."catalog_products_shop"');
     expect(productos.sql).not.toContain('"visible"');
   });
 

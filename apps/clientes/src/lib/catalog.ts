@@ -3,15 +3,23 @@
  * renderiza (ver src/data/products.ts y el ProductCard del DS).
  *
  * De dónde sale cada cosa (ver docs/arquitectura-integraciones.md):
- * - LISTAR y BUSCAR → espejo local en Postgres (`catalog_products`), que
- *   refresca el cron diario `/api/cron/catalog-sync`. Alegra topea en 30 items
- *   por request y el catálogo tiene ~2800: no se puede paginar en vivo.
- * - Ficha, carrito, checkout y pedido → también el espejo: valen los precios
- *   que publica la tienda (ver src/lib/cotizacion.ts).
- * - Stock, precios y estado: por fila, del espejo del Shop o de la vista del
- *   CRM, el que se leyó de Alegra más tarde (ver src/lib/stock-disponible.ts).
- *   El stock es el DISPONIBLE: se le resta lo reservado por pedidos vivos del
- *   Shop. Toda consulta sobre `catalogProducts` joinea `crmStock` y
+ * - TODO el producto (nombre, descripción, código, marca, categoría de Alegra,
+ *   IVA, precios, stock y estado) → las vistas del CRM
+ *   `public.catalog_products_shop` (`crmCatalogo`) y
+ *   `public.catalog_categories_shop` (`crmCategoriasAlegra`). Las mantienen la
+ *   sync diaria del CRM y los webhooks de Alegra. El Shop no tiene copia propia
+ *   ni sync del catálogo. Alegra topea en 30 items por request y el catálogo
+ *   tiene miles: no se puede paginar en vivo.
+ * - Las vistas son de TODOS los tenants: toda consulta tiene de base
+ *   `crmCatalogo` con `enTenantCatalogo()` en el WHERE, y el join a las
+ *   categorías de Alegra lleva el tenant en el ON (ver catalogo-fuente.ts y la
+ *   guarda catalogo-tenant.test.ts).
+ * - Ficha, carrito, checkout y pedido → la misma vista: valen los precios que
+ *   publica la tienda (ver src/lib/cotizacion.ts).
+ * - Curaduría (nombre, fotos, visibilidad, categoría propia) → overlay y árbol
+ *   del CRM (`catalog_overlay`, `shop_categories`).
+ * - El stock es el DISPONIBLE: se le resta lo reservado por pedidos vivos del
+ *   Shop (ver src/lib/stock-disponible.ts). Toda consulta joinea
  *   `stockReservado` para eso.
  *
  * SOLO servidor: usa la DB y el cliente de Alegra. Consumir desde Server
@@ -25,10 +33,11 @@ import { cache } from "react";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
-import { catalogCategories, catalogProducts, stockReservado } from "@/db/schema";
-import { crmCategorias, crmOverlay, crmStock, type FotoCrm } from "@/db/crm";
+import { stockReservado } from "@/db/schema";
+import { crmCatalogo, crmCategorias, crmCategoriasAlegra, crmOverlay, type FotoCrm } from "@/db/crm";
 import { esIdAlegra, mapPrecios, precioDeLista } from "./alegra";
-import { activoSql, joinReserva, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
+import { activoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
+import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
@@ -54,7 +63,7 @@ export function derivarStock(qty: number | null | undefined): ProductStock {
 }
 
 // ---------------------------------------------------------------------------
-// Lectura desde el espejo local
+// Lectura desde el catálogo del CRM
 // ---------------------------------------------------------------------------
 
 /** Fila del join productos × categorías × overlay, tal como la devuelve la query. */
@@ -64,7 +73,7 @@ interface FilaCatalogo {
   code: string | null;
   description: string | null;
   brand: string | null;
-  /** Del espejo del Shop o crudos del CRM: se normalizan con `mapPrecios`. */
+  /** Crudos de Alegra (vista del CRM): se normalizan con `mapPrecios`. */
   prices: unknown;
   stock: string | null;
   /** numeric de Postgres: llega como string. null = sin IVA conocido. */
@@ -127,12 +136,6 @@ function urlsDeFotos(fotos: FotoCrm[] | null, base: string | null) {
   return fotos.map((f) => ({ url: `${base}/${f.key}`, w: f.w, ...(f.alt !== undefined ? { alt: f.alt } : {}) }));
 }
 
-/** Condición del join productos × categorías, compartida por todas las queries. */
-const JOIN_CATEGORIAS = eq(
-  catalogProducts.categoryAlegraId,
-  catalogCategories.alegraId
-);
-
 
 /**
  * Sólo productos publicados en el CRM, detrás del flag
@@ -146,20 +149,19 @@ async function soloVisiblesSql() {
 }
 
 /**
- * Columnas del join, en un solo lugar para no repetirlas entre queries. Precios
- * y stock de la fuente más fresca; el stock, menos lo reservado (exigen los
- * joins a `crmStock` y `stockReservado`).
+ * Columnas del join, en un solo lugar para no repetirlas entre queries. El
+ * stock, menos lo reservado (exige el join a `stockReservado`).
  */
 const COLUMNAS_CATALOGO = {
-  alegraId: catalogProducts.alegraId,
-  name: catalogProducts.name,
-  code: catalogProducts.code,
-  description: catalogProducts.description,
-  brand: catalogProducts.brand,
+  alegraId: crmCatalogo.alegraId,
+  name: crmCatalogo.name,
+  code: crmCatalogo.code,
+  description: crmCatalogo.description,
+  brand: crmCatalogo.brand,
   prices: preciosSql,
   stock: stockSql,
-  ivaPorcentaje: catalogProducts.ivaPorcentaje,
-  categoryName: catalogCategories.name,
+  ivaPorcentaje: crmCatalogo.ivaPorcentaje,
+  categoryName: crmCategoriasAlegra.name,
   overlayNombre: crmOverlay.nombre,
   overlayFotos: crmOverlay.fotos,
 };
@@ -174,7 +176,8 @@ const COLUMNAS_CATALOGO = {
  * La función se llama CALIFICADA con su esquema: vive en `shop`, y que se
  * resuelva sin calificar dependería del `search_path` de la conexión, que por
  * el pooler no está garantizado. Es el único objeto SQL que este código nombra
- * a mano; las tablas las califica drizzle desde `pgSchema("shop")`.
+ * a mano; las vistas del CRM las califica drizzle desde `crm.ts`, y las
+ * columnas quedan calificadas con el nombre de la vista.
  *
  * Busca en el nombre, en el código y en la descripción — en esta cuenta de
  * Alegra el nombre comercial vive en `description`, así que sin ese tercer
@@ -185,14 +188,14 @@ function coincideTexto(q: string) {
   const norm = (col: unknown) =>
     sql`"shop".immutable_unaccent(lower(${col})) LIKE "shop".immutable_unaccent(lower(${patron}))`;
   return or(
-    norm(catalogProducts.name),
-    norm(catalogProducts.code),
-    norm(catalogProducts.description)
+    norm(crmCatalogo.name),
+    norm(crmCatalogo.code),
+    norm(crmCatalogo.description)
   );
 }
 
 /**
- * Trae el catálogo desde el espejo local. Solo productos activos.
+ * Trae el catálogo del tenant desde la vista del CRM. Solo productos activos.
  *
  * Sin `limit` devuelve el catálogo completo: es una sola query indexada, y las
  * facetas del catálogo solo son correctas si se calculan sobre todo el conjunto.
@@ -208,20 +211,20 @@ export async function getCatalogo(opts?: {
 
   let query = getDb()
     .select(COLUMNAS_CATALOGO)
-    .from(catalogProducts)
-    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(crmStock, joinStockCrm())
     .leftJoin(stockReservado, joinReserva())
     .where(
       and(
+        enTenantCatalogo(),
         activoSql,
         conPrecioSql,
         await soloVisiblesSql(),
         q ? coincideTexto(q) : undefined
       )
     )
-    .orderBy(asc(catalogProducts.name))
+    .orderBy(asc(crmCatalogo.name))
     .$dynamic();
 
   if (opts?.limit != null) query = query.limit(opts.limit);
@@ -232,18 +235,18 @@ export async function getCatalogo(opts?: {
 }
 
 /**
- * Productos del espejo por id de Alegra, para las líneas de pedido de Mi
+ * Productos del catálogo por id de Alegra, para las líneas de pedido de Mi
  * cuenta (y favoritos). Una sola consulta por llamada: quien tiene N líneas
  * junta los ids y llama una vez, nunca una por línea.
  *
  * Sin filtro de estado por default: un pedido viejo sigue mostrando el nombre
  * real de un ítem que después se despublicó. `soloActivos` aplica
- * `status = 'active'` y, con el flag `catalogo-solo-visibles`, también
+ * `activo` y, con el flag `catalogo-solo-visibles`, también
  * `visible` (mismo criterio que la lista pública).
  *
  * Sin `orderBy` (el orden lo decide quien llama: pedidos por línea, favoritos
  * por fecha) y sin `limit` (los ids ya vienen acotados por quien llama). Un id
- * que el espejo no tiene simplemente no aparece en el `Map`.
+ * que la vista no tiene (para este tenant) simplemente no aparece en el `Map`.
  */
 export async function getProductosPorIds(
   alegraIds: readonly string[],
@@ -253,14 +256,14 @@ export async function getProductosPorIds(
 
   const filas = await getDb()
     .select(COLUMNAS_CATALOGO)
-    .from(catalogProducts)
-    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(crmStock, joinStockCrm())
     .leftJoin(stockReservado, joinReserva())
     .where(
       and(
-        inArray(catalogProducts.alegraId, [...alegraIds]),
+        enTenantCatalogo(),
+        inArray(crmCatalogo.alegraId, [...alegraIds]),
         opts?.soloActivos ? activoSql : undefined,
         opts?.soloActivos ? await soloVisiblesSql() : undefined,
       ),
@@ -305,14 +308,14 @@ export interface PaginaCatalogo {
  * `mapFilaToProduct`: si el customField de Alegra vino vacío, la marca que se
  * exhibe (y por la que se filtra) es el nombre de la categoría.
  */
-const marcaSql = sql<string>`coalesce(nullif(${catalogProducts.brand}, ''), ${catalogCategories.name})`;
+const marcaSql = sql<string>`coalesce(nullif(${crmCatalogo.brand}, ''), ${crmCategoriasAlegra.name})`;
 
 /**
  * Precio de lista principal, extraído del jsonb `prices`. Equivalente en SQL de
  * `precioDeLista` sin lista de cliente: el que tiene `main`, si no el primero.
  * El guard de `jsonb_typeof` evita que `jsonb_array_elements` explote si algún
- * ítem quedó con un `prices` que no es array. Sirve igual para los precios
- * crudos del CRM: `price` y `main` se llaman igual.
+ * ítem quedó con precios que no son un array. Son los precios crudos de
+ * Alegra (`precios_alegra` de la vista): `price` y `main` tal cual.
  */
 const precioSql = sql<string>`coalesce(
   case when jsonb_typeof(${preciosSql}) = 'array' then (
@@ -335,7 +338,7 @@ const precioSql = sql<string>`coalesce(
  * sobre el valor sin redondear es indistinguible para el visitante. El número
  * que se muestra sigue saliendo de `mapFilaToProduct`.
  */
-const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${catalogProducts.ivaPorcentaje}, 0) / 100)`;
+const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${crmCatalogo.ivaPorcentaje}, 0) / 100)`;
 
 /**
  * Sólo productos con precio. Un ítem sin precio en Alegra resuelve a 0 en
@@ -382,7 +385,7 @@ function filtroCategoriasSql(nombres: string[]) {
     select id from arbol
   )`;
   return sql`((${hayArbolSql()} and ${crmOverlay.categoriaId} in ${subarbol})
-    or (not ${hayArbolSql()} and ${inArray(catalogCategories.name, nombres)}))`;
+    or (not ${hayArbolSql()} and ${inArray(crmCategoriasAlegra.name, nombres)}))`;
 }
 
 /** Categoría propia activa, tal como la necesitan el menú y las facetas. */
@@ -446,10 +449,9 @@ export function enArbolConConteo(
 async function conteoPorCategoriaPropia(where: Awaited<ReturnType<typeof condicionesDe>>) {
   const filas = await getDb()
     .select({ id: crmOverlay.categoriaId, count: sql<number>`count(*)::int` })
-    .from(catalogProducts)
-    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(crmStock, joinStockCrm())
     .leftJoin(stockReservado, joinReserva())
     .where(and(where, sql`${crmOverlay.categoriaId} is not null`))
     .groupBy(crmOverlay.categoriaId);
@@ -480,6 +482,7 @@ const APLICAR_TODOS: AplicarFiltros = {
 async function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) {
   const q = filtros.busqueda?.trim();
   return and(
+    enTenantCatalogo(),
     activoSql,
     conPrecioSql,
     await soloVisiblesSql(),
@@ -508,11 +511,11 @@ async function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros) 
 function ordenDe(orden: OrdenCatalogo) {
   switch (orden) {
     case "precio-asc":
-      return [sql`${precioExhibidoSql} asc`, asc(catalogProducts.name)];
+      return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];
     case "precio-desc":
-      return [sql`${precioExhibidoSql} desc`, asc(catalogProducts.name)];
+      return [sql`${precioExhibidoSql} desc`, asc(crmCatalogo.name)];
     default:
-      return [asc(catalogProducts.name)];
+      return [asc(crmCatalogo.name)];
   }
 }
 
@@ -543,10 +546,9 @@ export async function getPaginaCatalogo(opts?: {
 
   const [conteo] = await getDb()
     .select({ total: sql<number>`count(*)::int` })
-    .from(catalogProducts)
-    .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(crmStock, joinStockCrm())
     .leftJoin(stockReservado, joinReserva())
     .where(where);
 
@@ -557,10 +559,9 @@ export async function getPaginaCatalogo(opts?: {
   const filas = total
     ? await getDb()
         .select(COLUMNAS_CATALOGO)
-        .from(catalogProducts)
-        .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+        .from(crmCatalogo)
+        .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay())
-        .leftJoin(crmStock, joinStockCrm())
         .leftJoin(stockReservado, joinReserva())
         .where(where)
         .orderBy(...ordenDe(opts?.orden ?? ORDEN_DEFAULT))
@@ -577,7 +578,7 @@ export async function getPaginaCatalogo(opts?: {
 }
 
 /**
- * Producto para la ficha pública, desde el espejo (con el overlay del CRM, igual
+ * Producto para la ficha pública, desde la vista del CRM (con el overlay, igual
  * que la card del catálogo). Nada de tráfico público toca Alegra: precio y stock
  * en vivo se validan recién al cotizar y al confirmar el pedido.
  *
@@ -640,23 +641,21 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
       ? conteoPorCategoriaPropia(whereCategorias).then((c) => enArbolConConteo(arbol, c))
       : getDb()
       .select({
-        label: sql<string>`${catalogCategories.name}`,
+        label: sql<string>`${crmCategoriasAlegra.name}`,
         count: sql<number>`count(*)::int`,
       })
-      .from(catalogProducts)
-      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .from(crmCatalogo)
+      .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
       .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(crmStock, joinStockCrm())
       .leftJoin(stockReservado, joinReserva())
-      .where(and(whereCategorias, sql`nullif(${catalogCategories.name}, '') is not null`))
-      .groupBy(catalogCategories.name)
-      .orderBy(sql`count(*) desc`, asc(catalogCategories.name)),
+      .where(and(whereCategorias, sql`nullif(${crmCategoriasAlegra.name}, '') is not null`))
+      .groupBy(crmCategoriasAlegra.name)
+      .orderBy(sql`count(*) desc`, asc(crmCategoriasAlegra.name)),
     getDb()
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
-      .from(catalogProducts)
-      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .from(crmCatalogo)
+      .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
       .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(crmStock, joinStockCrm())
       .leftJoin(stockReservado, joinReserva())
       .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
@@ -668,10 +667,9 @@ export async function getFacetas(filtros: FiltrosCatalogo = {}): Promise<Facetas
         min: sql<number | null>`floor(min(${precioExhibidoSql}))::int`,
         max: sql<number | null>`ceil(max(${precioExhibidoSql}))::int`,
       })
-      .from(catalogProducts)
-      .leftJoin(catalogCategories, JOIN_CATEGORIAS)
+      .from(crmCatalogo)
+      .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
       .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(crmStock, joinStockCrm())
       .leftJoin(stockReservado, joinReserva())
       .where(wherePrecio),
   ]);
@@ -707,22 +705,29 @@ export const getCategorias = cache(async function getCategorias(): Promise<
       .map((c) => c.label);
   }
 
+  // Sin árbol: categorías de Alegra activas con al menos un producto activo del
+  // tenant. Las dos vistas son de todos los tenants: el tenant va en el ON (el
+  // producto y su categoría, del mismo tenant) y en el WHERE de las dos.
+  const tenant = shopTenantId();
   const filas = await getDb()
-    .selectDistinct({ name: catalogCategories.name })
-    .from(catalogCategories)
-    .innerJoin(catalogProducts, eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId))
-    .leftJoin(crmStock, joinStockCrm())
-    .leftJoin(stockReservado, joinReserva())
-    .where(and(eq(catalogCategories.status, "active"), activoSql))
-    .orderBy(asc(catalogCategories.name));
+    .selectDistinct({ name: crmCategoriasAlegra.name })
+    .from(crmCategoriasAlegra)
+    .innerJoin(
+      crmCatalogo,
+      and(
+        eq(crmCatalogo.categoryAlegraId, crmCategoriasAlegra.alegraId),
+        eq(crmCatalogo.tenantId, crmCategoriasAlegra.tenantId),
+      ),
+    )
+    .where(
+      and(
+        eq(crmCategoriasAlegra.tenantId, tenant),
+        eq(crmCatalogo.tenantId, tenant),
+        eq(crmCategoriasAlegra.activo, true),
+        activoSql,
+      ),
+    )
+    .orderBy(asc(crmCategoriasAlegra.name));
 
   return filas.map((f) => f.name).filter(Boolean);
 });
-
-/** Fecha de la última sync exitosa, para mostrar frescura del catálogo. */
-export async function ultimaSincronizacion(): Promise<Date | null> {
-  const [fila] = await getDb()
-    .select({ max: sql<Date | null>`max(synced_at)` })
-    .from(catalogProducts);
-  return fila?.max ?? null;
-}

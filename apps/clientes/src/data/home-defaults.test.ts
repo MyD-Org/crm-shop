@@ -17,6 +17,12 @@ import {
   sinMarcasDeAcento,
   motivoImagenInvalida,
   type HeroContent,
+  DEFAULTS_LEGAL,
+  KEY_LEGAL,
+  MAX_LEGAL,
+  normalizarUrlDataFiscal,
+  resolverDatosLegales,
+  validarDatosLegales,
 } from "./home-defaults";
 
 const HOSTS = ["media.plataforma.example"];
@@ -445,5 +451,81 @@ describe("visibilidad de ítems", () => {
     expect(difierePorTamano([{ id: 1 }, { id: 3, visibilidad: "nunca" as const }])).toBe(false);
     expect(aVisibleOn("nunca")).toBeUndefined();
     expect(aVisibleOn("desktop")).toBe("desktop");
+  });
+});
+
+describe("datos legales (paginas-legales-shop)", () => {
+  it("CUIT con dígito verificador inválido → error que menciona el CUIT", () => {
+    const r = validarDatosLegales({ cuit: "20-12345678-0" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errores.some((e) => e.includes("CUIT"))).toBe(true);
+  });
+
+  it("CUIT válido sin guiones → se guarda formateado", () => {
+    expect(validarDatosLegales({ cuit: " 20123456786 " })).toEqual({ ok: true, datos: { cuit: "20-12345678-6" } });
+  });
+
+  it("email inválido → error; con mayúsculas y espacios → trim + minúsculas", () => {
+    const malo = validarDatosLegales({ email: "no-es-un-email" });
+    expect(malo.ok).toBe(false);
+    if (!malo.ok) expect(malo.errores).toEqual(["Indique un correo electrónico válido."]);
+    expect(validarDatosLegales({ email: "  Legales@Cliente.Example " })).toEqual({
+      ok: true,
+      datos: { email: "legales@cliente.example" },
+    });
+  });
+
+  it("URL del QR: http se normaliza a https", () => {
+    expect(validarDatosLegales({ dataFiscalUrl: "http://qr.afip.gob.ar/?qr=ABC" })).toEqual({
+      ok: true,
+      datos: { dataFiscalUrl: "https://qr.afip.gob.ar/?qr=ABC" },
+    });
+  });
+
+  it.each([
+    "https://qr.afip.gob.ar.example/?qr=ABC",
+    "https://qr.afip.gob.ar/",
+    "https://qr.afip.gob.ar/?qr=",
+    "javascript:alert(1)",
+    "https://qr.afip.gob.ar:8443/?qr=ABC",
+    "no es una url",
+  ])("URL del QR rechazada: %s", (url) => {
+    expect(normalizarUrlDataFiscal(url)).toBeNull();
+    const r = validarDatosLegales({ dataFiscalUrl: url });
+    expect(r).toEqual({ ok: false, errores: ["Pegue el enlace del QR que le entrega ARCA (qr.afip.gob.ar)."] });
+  });
+
+  it("todo vacío → ok sin datos (sirve para borrar)", () => {
+    expect(
+      validarDatosLegales({ razonSocial: " ", cuit: "", domicilio: "", email: "", dataFiscalUrl: "" }),
+    ).toEqual({ ok: true, datos: {} });
+    expect(validarDatosLegales({})).toEqual({ ok: true, datos: {} });
+  });
+
+  it("largos por encima del tope → error con el máximo", () => {
+    const r = validarDatosLegales({ razonSocial: "x".repeat(MAX_LEGAL.razonSocial + 1) });
+    expect(r).toEqual({ ok: false, errores: [`El campo Razón social supera los ${MAX_LEGAL.razonSocial} caracteres.`] });
+  });
+
+  it("payload que no es objeto → mensaje genérico", () => {
+    for (const p of [null, 42, "hola", ["a"]]) {
+      expect(validarDatosLegales(p)).toEqual({ ok: false, errores: ["Los datos enviados no son válidos."] });
+    }
+  });
+
+  it("resolverDatosLegales descarta lo que no es string y recorta", () => {
+    expect(resolverDatosLegales(null)).toEqual({});
+    expect(resolverDatosLegales(123)).toEqual({});
+    expect(resolverDatosLegales({ cuit: 5, razonSocial: "  Comercio Ejemplo SA ", email: "" })).toEqual({
+      razonSocial: "Comercio Ejemplo SA",
+    });
+    expect(DEFAULTS_LEGAL).toEqual({});
+    expect(KEY_LEGAL).toBe("legal");
+  });
+
+  it("la fila legal no altera la home", () => {
+    const legal = { key: KEY_LEGAL, payload: { razonSocial: "Comercio Ejemplo SA", cuit: "20-12345678-6" } };
+    expect(combinarContenidoHome([legal])).toEqual(combinarContenidoHome([]));
+    expect((SECCIONES_HOME as readonly string[]).includes(KEY_LEGAL)).toBe(false);
   });
 });

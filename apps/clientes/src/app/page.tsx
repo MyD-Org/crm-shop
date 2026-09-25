@@ -3,7 +3,7 @@ import { HomeClient } from "@/components/HomeClient";
 import { esAdmin } from "@/lib/auth";
 import { BarraEdicion } from "@/components/home/BarraEdicion";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
-import { getContenidoHome } from "@/lib/home-datos";
+import { getContenidoHome, getDatosLegales } from "@/lib/home-datos";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { getCatalogo, getPaginaCatalogo } from "@/lib/catalog";
 import { elegirDestacados } from "@/lib/destacados";
@@ -45,10 +45,16 @@ export default async function Home() {
     return <HomeClient oferta={oferta} contenido={contenido} destacados={destacados} puedeEditar={false} />;
   }
 
+  const legal = await getDatosLegales();
   return (
     <ModoEdicionProvider>
       <HomeClient oferta={oferta} contenido={contenido} destacados={destacados} puedeEditar />
-      <BarraEdicion anuncio={contenido.anuncio} navBadge={contenido.navBadge} visibilidad={contenido.visibilidad} />
+      <BarraEdicion
+        anuncio={contenido.anuncio}
+        navBadge={contenido.navBadge}
+        visibilidad={contenido.visibilidad}
+        legal={legal}
+      />
     </ModoEdicionProvider>
   );
 }

@@ -18,7 +18,7 @@
     "@flags-sdk/vercel": "^1.4.9",
     "@mercadopago/sdk-react": "^1.0.7",
     "@myd-org/ai-widget": "file:vendor/myd-org-ai-widget-0.1.12.tgz",
-    "@myd-org/ui": "^0.28.0",
+    "@myd-org/ui": "^0.29.0",
     "@radix-ui/react-dialog": "^1.1.17",
     "@radix-ui/react-dropdown-menu": "^2.1.18",
     "@radix-ui/react-select": "^2.3.1",

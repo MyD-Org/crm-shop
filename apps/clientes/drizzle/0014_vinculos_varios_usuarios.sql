@@ -1,0 +1,1 @@
+DROP INDEX "shop"."cl_contacto_activa";

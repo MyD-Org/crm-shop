@@ -24,7 +24,7 @@
  */
 
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gte, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { after } from "next/server";
 import { getDb } from "@/db";
 import { clientLinks, linkOtps } from "@/db/schema";
@@ -121,54 +121,21 @@ function snapshotDelContacto(c: ContactoVinculable | null) {
 }
 
 /**
- * Un cliente de Alegra se vincula a UN solo usuario de la tienda (decisión de
- * negocio): la cuenta corriente, la lista de precios y el historial de una
- * empresa no se reparten entre varias cuentas de acceso. Si hace falta cambiar
- * de usuario, lo resuelve la sucursal revocando el vínculo anterior.
+ * Un cliente de Alegra puede tener VARIOS usuarios de la tienda (la misma
+ * persona con dos emails, o varias personas de una empresa). Cada vínculo nuevo
+ * pasa por el código al email de Alegra, que es lo que prueba que la cuenta es
+ * suya; un usuario, en cambio, tiene una sola vinculación activa.
  */
-export const MENSAJE_VINCULADA_A_OTRO =
-  "Esta cuenta ya está vinculada a otro usuario de la tienda. Si no recuerda con qué email la vinculó, comuníquese con la sucursal.";
 
 /**
- * ¿El contacto ya tiene un vínculo activo de OTRO usuario? Solo base: no gasta
- * requests de Alegra.
- */
-async function vinculadoAOtroUsuario(
-  db: ReturnType<typeof getDb>,
-  alegraContactId: string,
-  clerkUserId: string,
-): Promise<boolean> {
-  const [otro] = await db
-    .select({ id: clientLinks.id })
-    .from(clientLinks)
-    .where(
-      and(
-        eq(clientLinks.alegraContactId, alegraContactId),
-        eq(clientLinks.estado, "activa"),
-        ne(clientLinks.clerkUserId, clerkUserId),
-      ),
-    )
-    .limit(1);
-  return Boolean(otro);
-}
-
-/**
- * Los inserts de vínculos activos apuntan el `on conflict` SOLO al índice del
+ * Los inserts de vínculos activos apuntan el `on conflict` al índice del
  * usuario (`cl_user_activa`): la carrera del mismo usuario consigo mismo es
- * inocua y se absorbe. El índice del contacto (`cl_contacto_activa`) queda
- * afuera a propósito, así un segundo usuario que gana la carrera al chequeo
- * explota con 23505 y se le explica, en vez de quedar "vinculado" en silencio.
+ * inocua y se absorbe.
  */
 const conflictoDelUsuario = {
   target: clientLinks.clerkUserId,
   where: sql`"estado" = 'activa'`,
 };
-
-/** ¿Es la violación de unicidad de Postgres? drizzle la envuelve en `cause`. */
-function esViolacionUnica(err: unknown): boolean {
-  const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
-  return e?.code === "23505" || e?.cause?.code === "23505";
-}
 
 /**
  * Una lectura del espejo que falla (permiso, base caída) no puede cortar la
@@ -270,14 +237,6 @@ export async function intentarVinculacionPorEmail(
 
   const contacto = clientes[0];
 
-  // El contacto ya es de otro usuario: no se vincula, y tampoco se graba
-  // `sin_coincidencia` — esa marca es para siempre y esto puede cambiar (la
-  // sucursal revoca el otro vínculo). Se vuelve a mirar en la próxima visita,
-  // contra el espejo casi siempre (0 requests).
-  if (await vinculadoAOtroUsuario(db, String(contacto.id), clerkUserId)) {
-    return null;
-  }
-
   /**
    * El chequeo de `existente` de arriba y este insert NO son atómicos, y
    * `identidadActual()` corre en el layout, en la página y en las rutas de API
@@ -289,12 +248,8 @@ export async function intentarVinculacionPorEmail(
    * Que gane cualquiera de las dos es indistinto: insertan lo mismo. Quien
    * llama relee el vínculo (`resolverVinculacion`), así que el perdedor de la
    * carrera igual devuelve la fila correcta.
-   *
-   * Si la carrera la perdió contra OTRO usuario que tomó el mismo contacto,
-   * tira `cl_contacto_activa`: mismo trato que el chequeo de arriba.
    */
-  try {
-    await db
+  await db
       .insert(clientLinks)
       .values({
         clerkUserId,
@@ -304,10 +259,6 @@ export async function intentarVinculacionPorEmail(
         metodo: "email_verificado",
       })
       .onConflictDoNothing(conflictoDelUsuario);
-  } catch (err) {
-    if (esViolacionUnica(err)) return null;
-    throw err;
-  }
 
   return { alegraContactId: String(contacto.id), razonSocial: contacto.name };
 }
@@ -319,7 +270,6 @@ export type ResultadoSolicitud =
       motivo:
         | "formato"
         | "ya_vinculada"
-        | "vinculada_a_otro"
         | "rate_limit"
         | "servicio_caido";
       detalle: string;
@@ -351,8 +301,6 @@ export type ResultadoSolicitud =
  *  - `formato`: el CUIT está mal escrito. Es sintaxis, no existencia.
  *  - `ya_vinculada` y `rate_limit`: hablan de la cuenta de QUIEN PREGUNTA.
  *  - `servicio_caido`: Alegra no responde. Pasa igual para cualquier CUIT.
- *
- * Y una excepción aceptada a sabiendas: `vinculada_a_otro` (ver más abajo).
  *
  * Queda un canal residual por tiempo de respuesta: encontrar el contacto y
  * mandar el mail tarda más que no encontrarlo. Cerrarlo del todo pide responder
@@ -450,20 +398,6 @@ export async function solicitarVinculacion(
   // A partir de acá, todo camino devuelve `uniforme`: cualquier diferencia
   // visible sería exactamente el dato que permite enumerar la cartera.
   if (!contacto) return uniforme;
-
-  /**
-   * Contacto ya vinculado a OTRO usuario: no se manda código (no serviría para
-   * vincular) y se le dice por qué.
-   *
-   * Es una EXCEPCIÓN consciente a la respuesta uniforme: confirma que ese
-   * documento es cliente y que ya usa la tienda. Se aceptó porque sin el aviso
-   * el dueño legítimo que cambió de usuario queda esperando un mail que no
-   * sirve; lo acota el límite de sondeos de arriba, y no revela ni el email ni
-   * la razón social.
-   */
-  if (await vinculadoAOtroUsuario(db, String(contacto.id), clerkUserId)) {
-    return { ok: false, motivo: "vinculada_a_otro", detalle: MENSAJE_VINCULADA_A_OTRO };
-  }
 
   const email = contacto.email?.trim();
   // Caso frecuente en esta cuenta de Alegra: contactos viejos sin email. No hay
@@ -687,46 +621,31 @@ export async function confirmarVinculacion(
     return { ok: false, detalle: "No pudimos completar la vinculación. Inténtelo de nuevo en unos minutos." };
   }
 
-  // Entre pedir el código y confirmarlo, otro usuario pudo vincular el mismo
-  // contacto. El índice `cl_contacto_activa` lo impide igual; esto es para
-  // explicarlo sin gastar el código.
-  if (await vinculadoAOtroUsuario(db, otp.alegraContactId, clerkUserId)) {
-    return { ok: false, detalle: MENSAJE_VINCULADA_A_OTRO };
-  }
+  const vinculado = await db.transaction(async (tx) => {
+    // El código se consume dentro de la transacción: si la vinculación falla,
+    // el código sigue vivo y el cliente no tiene que pedir otro.
+    await tx
+      .update(linkOtps)
+      .set({ consumedAt: new Date() })
+      .where(eq(linkOtps.id, otp.id));
 
-  let vinculado: boolean;
-  try {
-    vinculado = await db.transaction(async (tx) => {
-      // El código se consume dentro de la transacción: si la vinculación falla,
-      // el código sigue vivo y el cliente no tiene que pedir otro.
-      await tx
-        .update(linkOtps)
-        .set({ consumedAt: new Date() })
-        .where(eq(linkOtps.id, otp.id));
+    // `solicitarVinculacion` ya rechaza a quien tiene un vínculo activo, pero
+    // entre pedir el código y confirmarlo pudo crearse uno (el match automático
+    // por email, por ejemplo). Sin esto, el índice único parcial tira y el
+    // cliente ve un 500 en vez de enterarse de que ya está vinculado.
+    const filas = await tx
+      .insert(clientLinks)
+      .values({
+        clerkUserId,
+        alegraContactId: otp.alegraContactId,
+        ...snapshotDelContacto(contacto),
+        metodo: "otp_email",
+      })
+      .onConflictDoNothing(conflictoDelUsuario)
+      .returning({ id: clientLinks.id });
 
-      // `solicitarVinculacion` ya rechaza a quien tiene un vínculo activo, pero
-      // entre pedir el código y confirmarlo pudo crearse uno (el match automático
-      // por email, por ejemplo). Sin esto, el índice único parcial tira y el
-      // cliente ve un 500 en vez de enterarse de que ya está vinculado.
-      const filas = await tx
-        .insert(clientLinks)
-        .values({
-          clerkUserId,
-          alegraContactId: otp.alegraContactId,
-          ...snapshotDelContacto(contacto),
-          metodo: "otp_email",
-        })
-        .onConflictDoNothing(conflictoDelUsuario)
-        .returning({ id: clientLinks.id });
-
-      return filas.length > 0;
-    });
-  } catch (err) {
-    // Otro usuario ganó la carrera al chequeo de arriba (`cl_contacto_activa`).
-    // La transacción se deshizo, así que el código tampoco quedó consumido.
-    if (esViolacionUnica(err)) return { ok: false, detalle: MENSAJE_VINCULADA_A_OTRO };
-    throw err;
-  }
+    return filas.length > 0;
+  });
 
   if (!vinculado) {
     return {

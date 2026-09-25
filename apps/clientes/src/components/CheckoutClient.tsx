@@ -9,7 +9,7 @@ import { useCotizacion } from "@/hooks/useCotizacion";
 import { COPY_CARRITO } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
-import { AvisoVincular } from "@/components/mi-cuenta/AvisoVincular";
+import { VincularClient } from "@/components/VincularClient";
 import { eleccionInicial, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import { fmtPrecio } from "@/lib/format";
 import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFacturacionDialog";
@@ -337,6 +337,7 @@ export function CheckoutClient({
   // Pasos del checkout: Sus datos (facturación o contacto) → Entrega (con el
   // domicilio fiscal si se está cargando) → Pago.
   const [pasoActual, setPasoActual] = useState<PasoCheckout>("datos");
+  const [vinculando, setVinculando] = useState(false);
   const [errorPaso, setErrorPaso] = useState<string | null>(null);
   const refPasos = useRef<HTMLDivElement>(null);
   function irAPaso(p: PasoCheckout) {
@@ -825,11 +826,6 @@ export function CheckoutClient({
         Finalizar pedido
       </h1>
 
-      {sugerirVincular && (
-        <div className="mb-6">
-          <AvisoVincular volver="/checkout" enCheckout />
-        </div>
-      )}
 
       {estadoFacturacion.aviso === "faltan_datos" && !seccionFacturacion && (
         <div className="mb-6 rounded-xl border border-warning/40 bg-warning/5 p-4">
@@ -891,6 +887,40 @@ export function CheckoutClient({
               stateLabels={{ done: "completo", current: "paso actual", pending: "pendiente" }}
             />
           </div>
+
+          {/*
+            Su documento ya es de un cliente de Alegra y no vinculó: se vincula
+            acá mismo (código al email de Alegra), sin salir del checkout. Al
+            terminar, la página se relee ya vinculada (precios y datos de su
+            cuenta).
+          */}
+          {sugerirVincular && pasoActual === "datos" && (
+            <section className="rounded-[20px] border border-warning/40 bg-warning/5 p-5">
+              <p className="font-semibold text-text">Su documento figura como cliente de Central LED</p>
+              {vinculando ? (
+                <div className="mt-3">
+                  <VincularClient
+                    embebido
+                    documentoSugerido={perfilFacturacion?.nroDoc ?? ""}
+                    onVinculado={() => {
+                      setVinculando(false);
+                      router.refresh();
+                      recotizar();
+                    }}
+                  />
+                </div>
+              ) : (
+                <>
+                  <p className="mt-1 text-sm text-muted">
+                    Vincule su cuenta para que esta compra quede registrada en ella.
+                  </p>
+                  <Button size="sm" className="mt-3" onClick={() => setVinculando(true)}>
+                    Vincular mi cuenta
+                  </Button>
+                </>
+              )}
+            </section>
+          )}
 
           {seccionFacturacion && (pasoActual === "datos" || pasoActual === "entrega") && (
             <section className="rounded-[20px] border border-border/50 bg-surface p-5">

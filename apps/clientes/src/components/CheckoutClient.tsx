@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Button, Field, Input, Select, Spinner } from "@myd-org/ui";
+import { useRouter } from "next/navigation";
+import { Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { COPY_CARRITO } from "@/lib/carrito-cliente";
@@ -12,7 +13,7 @@ import { AvisoVincular } from "@/components/mi-cuenta/AvisoVincular";
 import { eleccionInicial, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import { fmtPrecio } from "@/lib/format";
 import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFacturacionDialog";
-import type { PerfilFacturacionUI } from "@/components/FacturacionForm";
+import { FacturacionForm, type PerfilFacturacionUI } from "@/components/FacturacionForm";
 import {
   estadoFacturacionCheckout,
   hayTelefonoParaPedido,
@@ -25,8 +26,18 @@ import { resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import {
+  CONDICION_IVA_LABEL,
+  TIPO_DOC_LABEL,
+  domicilioEnLinea,
+  formatearDoc,
+  type CondicionIva,
+  type DatosFacturacion,
+  type TipoDoc,
+} from "@/lib/facturacion";
+import {
   CIUDADES_ENVIO,
   PAGO_LABEL,
+  ciudadConEnvio,
   pagosDisponibles,
   type EntregaTipo,
   type PagoMetodo,
@@ -59,6 +70,72 @@ function AlertIcon() {
       <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
       <path d="M12 9v4M12 17h.01" />
     </svg>
+  );
+}
+
+type PasoCheckout = "datos" | "entrega" | "pago";
+
+const PASOS_CHECKOUT: PasoCheckout[] = ["datos", "entrega", "pago"];
+
+/** Facturación ya cargada, en lectura, dentro del paso "Sus datos". */
+function ResumenFacturacion({ datos }: { datos: DatosDelContactoPublico["datos"] }) {
+  const tipoDoc = datos.tipoDoc as TipoDoc | undefined;
+  const filas = [
+    { label: "Nombre o razón social", valor: datos.razonSocial },
+    {
+      label: tipoDoc ? (TIPO_DOC_LABEL[tipoDoc] ?? tipoDoc) : "Documento",
+      valor: tipoDoc && datos.nroDoc ? formatearDoc(tipoDoc, datos.nroDoc) : datos.nroDoc,
+    },
+    {
+      label: "Condición frente al IVA",
+      valor: datos.condicionIva
+        ? (CONDICION_IVA_LABEL[datos.condicionIva as CondicionIva] ?? datos.condicionIva)
+        : undefined,
+    },
+    { label: "Domicilio fiscal", valor: domicilioEnLinea(datos) },
+  ].filter((f) => f.valor);
+
+  return (
+    <div className="mb-6 border-b border-border pb-6">
+      <h2 className="mb-4 font-display text-2xl font-medium text-text">Datos de facturación</h2>
+      <dl className="grid gap-4 sm:grid-cols-2">
+        {filas.map((f) => (
+          <div key={f.label}>
+            <dt className="text-xs uppercase tracking-wide text-muted">{f.label}</dt>
+            <dd className="mt-0.5 text-sm font-medium text-text">{f.valor}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/** Volver / Continuar al pie de cada paso del checkout. */
+function NavPaso({
+  error,
+  onVolver,
+  onContinuar,
+}: {
+  error?: string | null;
+  onVolver?: () => void;
+  onContinuar?: () => void;
+}) {
+  return (
+    <div className="mt-5">
+      {error && <p className="mb-3 text-sm text-danger">{error}</p>}
+      <div className="flex items-center gap-3">
+        {onVolver && (
+          <Button variant="ghost" onClick={onVolver}>
+            Volver
+          </Button>
+        )}
+        {onContinuar && (
+          <Button className="ml-auto" onClick={onContinuar}>
+            Continuar
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -204,8 +281,8 @@ export function CheckoutClient({
   // sigue decidiéndose en `evaluarEnvio` (src/lib/envio.ts): una guardada fuera
   // de zona llega con su ciudad y se rechaza igual que hoy.
   const {
-    ciudad: ciudadEntrega,
-    direccion: direccionEntrega,
+    ciudad: ciudadElegida,
+    direccion: direccionElegida,
     guardada,
     fueraDeZona: guardadaFueraDeZona,
   } = entregaElegida(direccionesGuardadas, eleccionDireccion, { ciudad, direccion });
@@ -228,6 +305,45 @@ export function CheckoutClient({
     complemento: complementoFacturacion,
   });
   const facturacionCompleta = estadoFacturacion.puedeConfirmar;
+  // Sin cuenta de Alegra, los datos de facturación son el primer paso del
+  // checkout: siempre el mismo formulario, precargado si ya los tiene y vacío
+  // si no. Al vinculado se los da Alegra: resumen en lectura (+ modal para los
+  // que falten).
+  const seccionFacturacion = !facturacion.vinculado;
+  const router = useRouter();
+
+  // Envío al domicilio fiscal: con el flag de envío, sin direcciones guardadas
+  // y con el domicilio fiscal dentro de la zona, se ofrece por defecto y se
+  // pregunta si va a otra dirección. El domicilio es el que se está cargando
+  // (primera vez) o el de la facturación ya cargada.
+  const [fiscalEnCurso, setFiscalEnCurso] = useState<DatosFacturacion | null>(null);
+  const fiscalCalle = (
+    seccionFacturacion ? fiscalEnCurso?.domicilioCalle : facturacion.datos.domicilioCalle
+  )?.trim();
+  const fiscalCiudad = ciudadConEnvio(
+    seccionFacturacion ? fiscalEnCurso?.domicilioCiudad : facturacion.datos.domicilioCiudad,
+  );
+  const ofrecerFiscal =
+    envioHabilitado &&
+    admiteEnvio &&
+    direccionesGuardadas.length === 0 &&
+    !!fiscalCalle &&
+    !!fiscalCiudad;
+  const [aOtraDireccion, setAOtraDireccion] = useState(false);
+  const usarFiscal = entrega === "envio" && ofrecerFiscal && !aOtraDireccion;
+  const ciudadEntrega = usarFiscal && fiscalCiudad ? fiscalCiudad : ciudadElegida;
+  const direccionEntrega = usarFiscal && fiscalCalle ? fiscalCalle : direccionElegida;
+
+  // Pasos del checkout: Sus datos (facturación o contacto) → Entrega (con el
+  // domicilio fiscal si se está cargando) → Pago.
+  const [pasoActual, setPasoActual] = useState<PasoCheckout>("datos");
+  const [errorPaso, setErrorPaso] = useState<string | null>(null);
+  const refPasos = useRef<HTMLDivElement>(null);
+  function irAPaso(p: PasoCheckout) {
+    setErrorPaso(null);
+    setPasoActual(p);
+    refPasos.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
@@ -322,10 +438,36 @@ export function CheckoutClient({
   const pagoElegido: PagoMetodo = metodosPago.includes(pago) ? pago : metodosPago[0];
 
   const envioDisponible = cotizacion?.envio.disponible ?? false;
-  const datosCompletos =
-    nombre.trim() !== "" &&
-    hayTelefonoParaPedido(telefono, facturacion.telefonoAlegra) &&
-    (entrega === "retiro" || (ciudadEntrega !== "" && direccionEntrega.trim() !== ""));
+  const contactoCompleto =
+    nombre.trim() !== "" && hayTelefonoParaPedido(telefono, facturacion.telefonoAlegra);
+  const entregaCompleta =
+    entrega === "retiro" || (ciudadEntrega !== "" && direccionEntrega.trim() !== "");
+  const datosCompletos = contactoCompleto && entregaCompleta;
+
+  function continuarDesdeContacto() {
+    if (!contactoCompleto) {
+      setErrorPaso("Ingrese su nombre y un teléfono para continuar.");
+      return;
+    }
+    irAPaso("entrega");
+  }
+
+  function validarEntrega(): boolean {
+    if (!entregaCompleta) {
+      setErrorPaso("Indique la ciudad y la dirección de entrega.");
+      return false;
+    }
+    if (entrega === "envio" && cotizacion && !envioDisponible) {
+      setErrorPaso("Revise la opción de envío.");
+      return false;
+    }
+    setErrorPaso(null);
+    return true;
+  }
+
+  function continuarDesdeEntrega() {
+    if (validarEntrega()) irAPaso("pago");
+  }
 
   const puedeConfirmar =
     estado === "ok" &&
@@ -335,6 +477,7 @@ export function CheckoutClient({
     datosCompletos &&
     facturacionCompleta &&
     (entrega === "retiro" || envioDisponible) &&
+    pasoActual === "pago" &&
     !enviando;
 
   async function confirmar() {
@@ -377,7 +520,8 @@ export function CheckoutClient({
         setErrorEnvio(json.error ?? "Cargue sus datos de facturación para continuar.");
         setComplementoFacturacion(null);
         setFaltantes409(Array.isArray(json.faltantes) ? json.faltantes : facturacion.faltantes);
-        setModalFacturacion(true);
+        if (facturacion.vinculado) setModalFacturacion(true);
+        else irAPaso("datos");
         return;
       }
       if (res.status === 409 && json?.motivo === "facturacion_no_disponible") {
@@ -576,6 +720,99 @@ export function CheckoutClient({
     );
   }
 
+  const etiquetaPaso: Record<PasoCheckout, string> = {
+    datos: "Sus datos",
+    entrega: seccionFacturacion ? "Domicilio y entrega" : "Entrega",
+    pago: "Pago",
+  };
+
+  /** Opciones de entrega: en su sección o dentro del paso del domicilio fiscal. */
+  const bloqueEntrega = (
+    <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <RadioCard
+                selected={entrega === "retiro"}
+                onClick={() => setEntrega("retiro")}
+                title="Retiro en local / a coordinar"
+                description="Retirás en el local o coordinamos la entrega con vos"
+              />
+              {envioHabilitado && admiteEnvio && (
+                <RadioCard
+                  selected={entrega === "envio"}
+                  onClick={() => setEntrega("envio")}
+                  title="Envío a domicilio"
+                  description={`Sin cargo a ${CIUDADES_ENVIO.join(" y ")}`}
+                />
+              )}
+            </div>
+            {envioHabilitado && !admiteEnvio && (
+              <p className="mt-3 text-sm text-muted">
+                El envío a domicilio solo está disponible para compradores de Argentina.
+              </p>
+            )}
+
+            {entrega === "envio" && (
+              <>
+                {ofrecerFiscal && (
+                  <div className="mt-4 rounded-lg bg-bg p-3 text-sm">
+                    {!aOtraDireccion && (
+                      <p className="mb-2 text-text">
+                        Se envía a su domicilio fiscal: {fiscalCalle}, {fiscalCiudad}.
+                      </p>
+                    )}
+                    <label className="flex items-center gap-2 text-text">
+                      <Checkbox
+                        checked={aOtraDireccion}
+                        onCheckedChange={(c) => setAOtraDireccion(c)}
+                      />
+                      La dirección de envío es distinta de la de facturación
+                    </label>
+                  </div>
+                )}
+                {!usarFiscal && direccionesGuardadas.length > 0 && (
+                  <SelectorDireccionEnvio
+                    direcciones={direccionesGuardadas}
+                    valor={eleccionDireccion}
+                    onCambiar={setEleccionDireccion}
+                  />
+                )}
+                {!guardada && !usarFiscal && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <Field label="Ciudad">
+                    <Select
+                      options={CIUDADES_ENVIO.map((c) => ({ label: c, value: c }))}
+                      // Siempre controlado: con `undefined` al principio React avisa que el
+                      // Select pasa de no controlado a controlado al elegir. Radix muestra
+                      // el placeholder igual con "" (lo que no admite "" son las opciones).
+                      value={ciudad}
+                      onValueChange={setCiudad}
+                      placeholder="Seleccionar ciudad"
+                      className="border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0"
+                    />
+                  </Field>
+                  <Field label="Dirección">
+                    <Input
+                      placeholder="Av. San Martín 1234"
+                      value={direccion}
+                      onChange={(e) => setDireccion(e.target.value)}
+                    />
+                  </Field>
+                </div>
+                )}
+
+                {/* Con una guardada fuera de zona ya se ve el aviso del selector. */}
+                {cotizacion && !envioDisponible && cotizacion.envio.motivo && !guardadaFueraDeZona && (
+                  <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">
+                    <span className="mt-px text-warning"><AlertIcon /></span>
+                    {cotizacion.envio.motivo}
+                  </p>
+                )}
+              </>
+            )}
+      {errorPaso && <p className="mt-4 text-sm text-danger">{errorPaso}</p>}
+    </>
+  );
+
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
       <nav className="mb-6 text-sm text-muted">
@@ -594,7 +831,7 @@ export function CheckoutClient({
         </div>
       )}
 
-      {estadoFacturacion.aviso === "faltan_datos" && (
+      {estadoFacturacion.aviso === "faltan_datos" && !seccionFacturacion && (
         <div className="mb-6 rounded-xl border border-warning/40 bg-warning/5 p-4">
           <p className="text-sm font-semibold text-text">
             Faltan sus datos de facturación
@@ -639,8 +876,66 @@ export function CheckoutClient({
 
       <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
         {/* ------------------------------------------------------ formulario */}
-        <div className="space-y-8">
+        <div className="space-y-6">
+          <div ref={refPasos} className="scroll-mt-24 px-1">
+            <Stepper
+              ariaLabel="Pasos del pedido"
+              size="sm"
+              steps={PASOS_CHECKOUT.map((p, i) => {
+                const actual = PASOS_CHECKOUT.indexOf(pasoActual);
+                return {
+                  label: etiquetaPaso[p],
+                  state: i < actual ? "done" : i === actual ? "current" : "pending",
+                };
+              })}
+              stateLabels={{ done: "completo", current: "paso actual", pending: "pendiente" }}
+            />
+          </div>
+
+          {seccionFacturacion && (pasoActual === "datos" || pasoActual === "entrega") && (
+            <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+              <h2 className="font-display text-2xl font-medium text-text">
+                {pasoActual === "datos" ? "Datos de facturación" : "Domicilio y entrega"}
+              </h2>
+              <p className="mb-5 mt-1 text-sm text-muted">
+                {pasoActual === "entrega"
+                  ? "El domicilio fiscal va en la factura."
+                  : facturacion.completo
+                    ? "Revise que sus datos estén correctos."
+                    : "Los necesitamos para emitirle la factura. Se cargan una sola vez."}
+              </p>
+              <FacturacionForm
+                pasos
+                pasoInicial={pasoActual === "entrega" ? 1 : 0}
+                perfil={perfilFacturacion}
+                nombreSugerido={nombreSugerido}
+                onPaso={(i) => irAPaso(i === 0 ? "datos" : "entrega")}
+                onCambio={setFiscalEnCurso}
+                extraDomicilio={
+                  <div className="mt-2 border-t border-border pt-5">
+                    <h3 className="mb-3 text-base font-semibold text-text">Entrega</h3>
+                    {bloqueEntrega}
+                  </div>
+                }
+                antesDeGuardar={validarEntrega}
+                onGuardado={(d) => {
+                  // Lo cargado acá precarga los datos de contacto del pedido.
+                  if (d.condicionIva === "consumidor_final") setNombre(d.razonSocial);
+                  if (d.telefono) setTelefono(d.telefono);
+                  setFaltantes409(null);
+                  setErrorEnvio(null);
+                  irAPaso("pago");
+                  router.refresh();
+                }}
+              />
+            </section>
+          )}
+
+          {/* Con la sección de facturación, nombre y teléfono se piden ahí. */}
+          {!seccionFacturacion && pasoActual === "datos" && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            {/* Vinculado: los datos vienen de Alegra y no se editan desde la tienda. */}
+            {facturacionCompleta && <ResumenFacturacion datos={facturacion.datos} />}
             <h2 className="mb-4 font-display text-2xl font-medium text-text">Datos de contacto</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Nombre y apellido">
@@ -665,76 +960,23 @@ export function CheckoutClient({
                 />
               </Field>
             </div>
+            <NavPaso error={errorPaso} onContinuar={continuarDesdeContacto} />
           </section>
+          )}
 
+          {!seccionFacturacion && pasoActual === "entrega" && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
             <h2 className="mb-4 font-display text-2xl font-medium text-text">Entrega</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <RadioCard
-                selected={entrega === "retiro"}
-                onClick={() => setEntrega("retiro")}
-                title="Retiro en local / a coordinar"
-                description="Retirás en el local o coordinamos la entrega con vos"
-              />
-              {envioHabilitado && admiteEnvio && (
-                <RadioCard
-                  selected={entrega === "envio"}
-                  onClick={() => setEntrega("envio")}
-                  title="Envío a domicilio"
-                  description={`Sin cargo a ${CIUDADES_ENVIO.join(" y ")}`}
-                />
-              )}
-            </div>
-            {envioHabilitado && !admiteEnvio && (
-              <p className="mt-3 text-sm text-muted">
-                El envío a domicilio solo está disponible para compradores de Argentina.
-              </p>
-            )}
-
-            {entrega === "envio" && (
-              <>
-                {direccionesGuardadas.length > 0 && (
-                  <SelectorDireccionEnvio
-                    direcciones={direccionesGuardadas}
-                    valor={eleccionDireccion}
-                    onCambiar={setEleccionDireccion}
-                  />
-                )}
-                {!guardada && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Field label="Ciudad">
-                    <Select
-                      options={CIUDADES_ENVIO.map((c) => ({ label: c, value: c }))}
-                      // Siempre controlado: con `undefined` al principio React avisa que el
-                      // Select pasa de no controlado a controlado al elegir. Radix muestra
-                      // el placeholder igual con "" (lo que no admite "" son las opciones).
-                      value={ciudad}
-                      onValueChange={setCiudad}
-                      placeholder="Seleccionar ciudad"
-                      className="border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0"
-                    />
-                  </Field>
-                  <Field label="Dirección">
-                    <Input
-                      placeholder="Av. San Martín 1234"
-                      value={direccion}
-                      onChange={(e) => setDireccion(e.target.value)}
-                    />
-                  </Field>
-                </div>
-                )}
-
-                {/* Con una guardada fuera de zona ya se ve el aviso del selector. */}
-                {cotizacion && !envioDisponible && cotizacion.envio.motivo && !guardadaFueraDeZona && (
-                  <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">
-                    <span className="mt-px text-warning"><AlertIcon /></span>
-                    {cotizacion.envio.motivo}
-                  </p>
-                )}
-              </>
-            )}
+            {bloqueEntrega}
+            <NavPaso
+              onVolver={() => irAPaso("datos")}
+              onContinuar={continuarDesdeEntrega}
+            />
           </section>
+          )}
 
+          {pasoActual === "pago" && (
+          <>
           {!pagosHabilitados && (
             <section className="rounded-[20px] border border-border/50 bg-surface p-5">
               <h2 className="mb-2 font-display text-2xl font-medium text-text">Pago</h2>
@@ -776,7 +1018,10 @@ export function CheckoutClient({
               placeholder="Horario de entrega, referencia del domicilio, etc."
               className="w-full rounded-sm border-[1.5px] border-border-strong bg-surface px-3 py-2 text-sm text-text outline-none focus-visible:border-primary"
             />
+            <NavPaso onVolver={() => irAPaso("entrega")} />
           </section>
+          </>
+          )}
         </div>
 
         {/* --------------------------------------------------------- resumen */}
@@ -861,6 +1106,8 @@ export function CheckoutClient({
             <p className="mt-2 text-center text-xs text-muted">
               {!facturacionCompleta
                 ? "Cargue sus datos de facturación para continuar."
+                : pasoActual !== "pago"
+                  ? "Complete los pasos para confirmar el pedido."
                 : cotizacion?.hayProblemas
                   ? "Revise los productos marcados en rojo."
                   : !datosCompletos

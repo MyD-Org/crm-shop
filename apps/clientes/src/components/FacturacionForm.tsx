@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Button, Field, Input, Select } from "@myd-org/ui";
+import { useEffect, useState, type ReactNode } from "react";
+import { Button, Field, Input, Select, Stepper } from "@myd-org/ui";
 import { DireccionAutocomplete } from "./DireccionAutocomplete";
 import {
   CONDICION_IVA_LABEL,
@@ -74,6 +74,27 @@ const PLACEHOLDER_DOC: Record<TipoDoc, string> = {
 const SELECT_CLASS =
   "border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0";
 
+/**
+ * Modo por pasos (checkout, primera vez): los mismos campos repartidos en dos
+ * tandas para que no parezca tanto de una. Cada paso valida sólo sus campos con
+ * `validarFacturacion`; el guardado final revalida todo.
+ */
+const PASOS = [
+  {
+    label: "Sus datos",
+    campos: ["pais", "condicionIva", "razonSocial", "telefono", "tipoDoc", "nroDoc"],
+  },
+  {
+    label: "Domicilio",
+    campos: ["domicilioCalle", "domicilioCiudad", "domicilioProvincia", "domicilioCp"],
+  },
+] as const;
+
+/** Primer paso con algún error, o -1. */
+function pasoConError(errores: Record<string, string>): number {
+  return PASOS.findIndex((p) => p.campos.some((c) => errores[c]));
+}
+
 const VACIO: DatosFacturacion = {
   pais: PAIS_DEFAULT,
   // DNI para acompañar el default de abajo: un consumidor final factura con
@@ -120,6 +141,12 @@ export function FacturacionForm({
   bloqueado,
   telefonosCuenta,
   onGuardado,
+  pasos = false,
+  pasoInicial = 0,
+  onPaso,
+  onCambio,
+  extraDomicilio,
+  antesDeGuardar,
 }: {
   perfil: PerfilFacturacionUI | null;
   /** Precarga "Nombre y apellido" cuando todavía no hay perfil guardado. */
@@ -132,7 +159,24 @@ export function FacturacionForm({
    * editor del teléfono de contacto de siempre.
    */
   telefonosCuenta?: TelefonosContacto | null;
-  onGuardado?: () => void;
+  /** Recibe lo guardado: el checkout precarga con eso su nombre y teléfono. */
+  onGuardado?: (datos: DatosFacturacion) => void;
+  /**
+   * Checkout: de a un paso por vez, y el teléfono en el primer paso y
+   * obligatorio (el pedido lo exige). Mientras se ve, el checkout no muestra
+   * su propia sección Datos de contacto.
+   */
+  pasos?: boolean;
+  /** Con qué paso arranca (el checkout vuelve desde Pago directo al domicilio). */
+  pasoInicial?: number;
+  /** Con él, el paso lo muestra quien lo usa (el Stepper del checkout) y no el formulario. */
+  onPaso?: (paso: number) => void;
+  /** Cada cambio del formulario (el checkout usa el domicilio fiscal para el envío). */
+  onCambio?: (datos: DatosFacturacion) => void;
+  /** Se muestra debajo del domicilio, en el último paso (la entrega del checkout). */
+  extraDomicilio?: ReactNode;
+  /** Validación de `extraDomicilio`: false frena el guardado. */
+  antesDeGuardar?: () => boolean;
 }) {
   const [form, setForm] = useState<DatosFacturacion>(desdePerfil(perfil, nombreSugerido));
   /**
@@ -159,6 +203,14 @@ export function FacturacionForm({
   const [guardando, setGuardando] = useState(false);
   const [exito, setExito] = useState(false);
   const [errorGeneral, setErrorGeneral] = useState("");
+  const [paso, setPasoInterno] = useState(pasoInicial);
+  useEffect(() => {
+    onCambio?.(form);
+  }, [form, onCambio]);
+  function setPaso(i: number) {
+    setPasoInterno(i);
+    onPaso?.(i);
+  }
 
   function set<K extends keyof DatosFacturacion>(k: K, v: DatosFacturacion[K]) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -200,10 +252,30 @@ export function FacturacionForm({
     setErrores((e) => ({ ...e, pais: "", tipoDoc: "", nroDoc: "", condicionIva: "" }));
   }
 
+  function siguiente() {
+    const errs = validarFacturacion(form);
+    if (paso === 0 && !form.telefono?.trim()) {
+      errs.telefono = "Ingrese un teléfono, con código de área.";
+    }
+    const delPaso = Object.fromEntries(
+      Object.entries(errs).filter(([k]) => (PASOS[paso].campos as readonly string[]).includes(k)),
+    );
+    setErrores(delPaso);
+    if (Object.keys(delPaso).length === 0) setPaso(paso + 1);
+  }
+
   async function guardar() {
     const errs = validarFacturacion(form);
+    if (pasos && !form.telefono?.trim()) {
+      errs.telefono = "Ingrese un teléfono, con código de área.";
+    }
+    const extraOk = antesDeGuardar?.() ?? true;
     setErrores(errs);
-    if (Object.keys(errs).length > 0) return;
+    if (Object.keys(errs).length > 0 || !extraOk) {
+      const i = pasoConError(errs);
+      if (pasos && i >= 0) setPaso(i);
+      return;
+    }
 
     setGuardando(true);
     setErrorGeneral("");
@@ -217,11 +289,15 @@ export function FacturacionForm({
       if (!res.ok) {
         setErrores(json?.errores ?? {});
         setErrorGeneral(json?.error ?? "No pudimos guardar sus datos.");
+        if (pasos && json?.errores) {
+          const i = pasoConError(json.errores);
+          if (i >= 0) setPaso(i);
+        }
         return;
       }
       setExito(true);
       setTimeout(() => setExito(false), 3000);
-      onGuardado?.();
+      onGuardado?.(form);
     } catch {
       setErrorGeneral("No pudimos conectarnos. Revise su conexión.");
     } finally {
@@ -262,15 +338,31 @@ export function FacturacionForm({
       {perfil && telefonosDeCuenta.length === 0 && (
         <TelefonoContactoForm
           inicial={form.telefono ?? ""}
-          onGuardado={onGuardado}
+          onGuardado={() => onGuardado?.(form)}
         />
       )}
       </div>
     );
   }
 
+  /** Sin modo por pasos se ve todo; con él, sólo el paso actual. */
+  const ver = (i: number) => !pasos || paso === i;
+  const ultimo = PASOS.length - 1;
+
   return (
     <div className="flex flex-col gap-4">
+      {pasos && !onPaso && (
+        <Stepper
+          ariaLabel="Pasos de los datos de facturación"
+          size="sm"
+          steps={PASOS.map((p, i) => ({
+            label: p.label,
+            state: i < paso ? "done" : i === paso ? "current" : "pending",
+          }))}
+          stateLabels={{ done: "completo", current: "paso actual", pending: "pendiente" }}
+          className="mb-2"
+        />
+      )}
       {exito && (
         <div className="rounded-lg bg-success/10 px-4 py-3 text-sm font-medium text-success">
           Datos de facturación guardados.
@@ -283,6 +375,8 @@ export function FacturacionForm({
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {ver(0) && (
+        <>
         <Field label="País" error={errores.pais}>
           <Select
             options={PAIS_OPTIONS}
@@ -321,7 +415,8 @@ export function FacturacionForm({
           }
           error={errores.razonSocial}
           // En Argentina la fila de arriba ya está completa (país + condición).
-          className={esArgentina ? "sm:col-span-2" : undefined}
+          // Por pasos, comparte la fila con el teléfono.
+          className={esArgentina && !pasos ? "sm:col-span-2" : undefined}
         >
           <Input
             value={form.razonSocial}
@@ -335,7 +430,25 @@ export function FacturacionForm({
             }
           />
         </Field>
+        {pasos && (
+          <Field
+            label="Teléfono"
+            hint="Para coordinar el pedido. Queda guardado para las próximas compras."
+            error={errores.telefono}
+          >
+            <Input
+              type="tel"
+              value={form.telefono ?? ""}
+              onChange={(e) => set("telefono", e.target.value)}
+              placeholder="+54 376 4000000"
+            />
+          </Field>
+        )}
+        </>
+        )}
 
+        {ver(0) && (
+        <>
         <Field label="Tipo de documento" error={errores.tipoDoc}>
           <Select
             options={tiposDoc.map((t) => ({ label: TIPO_DOC_LABEL[t], value: t }))}
@@ -360,6 +473,8 @@ export function FacturacionForm({
             inputMode={form.tipoDoc === "CNPJ" ? "text" : "numeric"}
           />
         </Field>
+        </>
+        )}
 
         {/*
           El domicilio se pide SIEMPRE, no solo a quien discrimina IVA.
@@ -378,6 +493,7 @@ export function FacturacionForm({
           Ocupa las dos columnas: el desplegable de sugerencias necesita el
           ancho completo para que las direcciones largas no se corten.
         */}
+        {ver(1) && (
         <div className="sm:col-span-2 flex flex-col gap-4">
             {/*
               Una sola línea al principio; ciudad, provincia y CP aparecen
@@ -479,13 +595,16 @@ export function FacturacionForm({
                 </Field>
               </div>
             )}
+            {pasos && extraDomicilio}
         </div>
+        )}
 
         {/*
           Vive acá y no solo en el checkout para que se pida UNA vez: el
           checkout lo precarga desde el perfil. No es obligatorio para guardar
           los datos fiscales (no frena la factura), pero el pedido sí lo exige.
         */}
+        {!pasos && (
         <Field
           label="Teléfono de contacto"
           hint="Se precarga al finalizar cada pedido."
@@ -498,13 +617,38 @@ export function FacturacionForm({
             placeholder="+54 376 4000000"
           />
         </Field>
+        )}
       </div>
 
+      {pasos ? (
+        <div className="flex items-center gap-3">
+          {paso > 0 && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setErrores({});
+                setPaso(paso - 1);
+              }}
+              disabled={guardando}
+            >
+              Volver
+            </Button>
+          )}
+          {paso < ultimo ? (
+            <Button className="ml-auto" onClick={siguiente}>Continuar</Button>
+          ) : (
+            <Button className="ml-auto" onClick={guardar} disabled={guardando}>
+              {guardando ? "Guardando…" : onPaso ? "Guardar y continuar" : "Guardar datos de facturación"}
+            </Button>
+          )}
+        </div>
+      ) : (
       <div>
         <Button onClick={guardar} disabled={guardando}>
           {guardando ? "Guardando…" : "Guardar datos de facturación"}
         </Button>
       </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { SiteHeader, type VisibleOn } from "@myd-org/ui";
 import type { NavBadgeContent } from "@/data/home-defaults";
 import { SearchAutocomplete } from "./SearchAutocomplete";
 import { destinoSeguro } from "@/lib/ingreso";
+import { useHidratado } from "@/lib/hidratado";
 import { MAX_CATEGORIAS_NAV, conBadgeNav } from "@/lib/nav-badge";
 import { formatRubro } from "@/lib/formato-rubro";
 import { CartPreview } from "./CartPreview";
@@ -109,7 +110,11 @@ function HeaderVista({
   const { isLoaded, userId } = useAuth();
   const [clerkCargo, setClerkCargo] = useState(false);
   if (isLoaded && !clerkCargo) setClerkCargo(true);
-  const conSesion = clerkCargo || isLoaded ? !!userId : cuenta.estado === "resuelta" ? cuenta.conSesion : null;
+  // Mientras se hidrata (el hueco llega cuando Clerk ya pudo cargar) manda lo
+  // del servidor, igual que en su HTML.
+  const hidratado = useHidratado();
+  const conSesion =
+    hidratado && (clerkCargo || isLoaded) ? !!userId : cuenta.estado === "resuelta" ? cuenta.conSesion : null;
   const nombre = cuenta.estado === "resuelta" ? cuenta.nombre : null;
 
   return (

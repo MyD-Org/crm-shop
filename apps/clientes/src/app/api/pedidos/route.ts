@@ -25,6 +25,16 @@ import { idPriceListUsable } from "@/lib/alegra";
 import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
 import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
 import { avisarPedidoRecibido } from "@/lib/pedido-avisos";
+import { permitir } from "@/lib/rate-limit";
+
+/**
+ * Techo de confirmaciones por comprador. Una persona real confirma un pedido,
+ * y como mucho reintenta un par de veces (un 409 porque cambió un precio, un
+ * corte de red): 5 por minuto sobra. Frena a un script creando pedidos en loop
+ * —cada uno reserva stock y dispara un mail—. En memoria del proceso: ver los
+ * límites de `permitir` en src/lib/rate-limit.ts.
+ */
+const MAX_PEDIDOS_POR_MINUTO = 5;
 
 /** GET /api/pedidos — pedidos de quien está logueado. */
 export async function GET() {
@@ -130,6 +140,16 @@ export async function POST(req: Request) {
   const { clerkUserId, cliente, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  // Cuenta también los reintentos con la misma clave: son baratos, pero un
+  // loop que repite la clave tampoco es una persona.
+  const quien = clerkUserId ? `clerk:${clerkUserId}` : `cliente:${cliente!.codigocliente}`;
+  if (!permitir(`pedidos:${quien}`, MAX_PEDIDOS_POR_MINUTO, 60_000)) {
+    return NextResponse.json(
+      { error: "Hizo demasiados intentos de confirmar el pedido. Espere un minuto e inténtelo de nuevo." },
+      { status: 429, headers: { "Retry-After": "60" } },
+    );
   }
 
   let body: BodyPedido;

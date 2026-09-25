@@ -70,7 +70,7 @@ export async function resolverIntentoAbierto(
     reversion: estado.reversion,
     cuotas: estado.cuotasPagadas,
     totalPagado: estado.totalPagado,
-  });
+  }, { avisar: estado.estado !== "fallido" });
 
   if (estado.estado === "pagado") return "pagado";
   if (estado.estado === "fallido") return "libre";

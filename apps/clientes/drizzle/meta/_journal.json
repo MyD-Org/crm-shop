@@ -120,6 +120,13 @@
       "when": 1790343554352,
       "tag": "0016_solicitudes_arrepentimiento",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790376972708,
+      "tag": "0017_pago_registrado_por",
+      "breakpoints": true
     }
   ]
 }

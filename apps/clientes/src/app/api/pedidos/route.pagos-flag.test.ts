@@ -12,6 +12,11 @@ const crearPedido = vi.fn();
 const getOferta = vi.fn();
 let pagos = false;
 
+vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: () => {},
+}));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "ana@cliente.example" }),
   idPriceListCliente: async () => undefined,

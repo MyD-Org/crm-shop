@@ -61,6 +61,8 @@ const sincronizar = vi.fn();
 vi.mock("@/lib/contacto-write-through", () => ({
   sincronizarContactoConPerfil: (...a: unknown[]) => sincronizar(...a),
 }));
+// La última tarea de after() es siempre el mail "Recibimos su pedido" (pedido nuevo).
+vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
 let tareasAfter: Array<() => unknown> = [];
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),
@@ -294,7 +296,7 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
     const r = await post();
     expect(r.status).toBe(201);
     expect(sincronizar).not.toHaveBeenCalled();
-    expect(tareasAfter).toHaveLength(1);
+    expect(tareasAfter).toHaveLength(2);
     await tareasAfter[0]();
     // Una sola subida: lo del perfil y, como Alegra no tiene teléfono, el tipeado.
     expect(sincronizar).toHaveBeenCalledWith("42", { clerkUserId: "user_1", telefono: "+54 376 4000000" });
@@ -330,7 +332,7 @@ describe("POST /api/pedidos — teléfono desde el espejo (0036 del CRM)", () =>
     const r = await post({ contactoTelefono: "" });
     expect(r.status).toBe(201);
     expect(datosDelPedido().contactoTelefono).toBe("11 5000-0000");
-    expect(tareasAfter).toHaveLength(0);
+    expect(tareasAfter).toHaveLength(1);
     expect(guardarTelefonoSiFalta).not.toHaveBeenCalled();
   });
 
@@ -345,7 +347,7 @@ describe("POST /api/pedidos — teléfono desde el espejo (0036 del CRM)", () =>
     const r = await post({ contactoTelefono: "+54 376 4111111" });
     expect(r.status).toBe(201);
     expect(datosDelPedido().contactoTelefono).toBe("+54 376 4111111");
-    expect(tareasAfter).toHaveLength(0);
+    expect(tareasAfter).toHaveLength(1);
   });
 
   it("vinculado sin teléfono en Alegra ⇒ lo tipeado va al pedido y se sube a Alegra en after()", async () => {
@@ -353,7 +355,7 @@ describe("POST /api/pedidos — teléfono desde el espejo (0036 del CRM)", () =>
     const r = await post();
     expect(r.status).toBe(201);
     expect(datosDelPedido().contactoTelefono).toBe("+54 376 4000000");
-    expect(tareasAfter).toHaveLength(1);
+    expect(tareasAfter).toHaveLength(2);
     await tareasAfter[0]();
     expect(sincronizar).toHaveBeenCalledWith("42", { clerkUserId: "user_1", telefono: "+54 376 4000000" });
     // Con Clerk el perfil lo aprende también (se precarga mientras el espejo se pone al día).
@@ -373,7 +375,7 @@ describe("POST /api/pedidos — teléfono desde el espejo (0036 del CRM)", () =>
     espejo = fila();
     await post({ contactoTelefono: "llamar" });
     expect(datosDelPedido().contactoTelefono).toBe("llamar");
-    expect(tareasAfter).toHaveLength(0);
+    expect(tareasAfter).toHaveLength(1);
   });
 
   it("vinculado sin teléfono en ningún lado y sin tipear ⇒ 400 en usted", async () => {

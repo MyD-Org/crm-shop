@@ -3,7 +3,7 @@
 > Decisión de arquitectura. Define de dónde sale cada dato y quién es dueño de
 > cada concepto. Leer antes de conectar el shop con cualquier sistema externo.
 
-_Última actualización: 2026-09-24 (catálogo desde las vistas del CRM). Las
+_Última actualización: 2026-09-25 (retiro de la sync y de las tablas del catálogo del Shop). Las
 secciones sobre bases separadas son anteriores a la decisión de 2026-09-20
 (monorepo y una sola base; ver el `AGENTS.md` de la raíz)._
 
@@ -92,12 +92,10 @@ Reglas del lado del Shop:
 - `shop_app` sólo tiene `SELECT` sobre las vistas (no ve `raw` ni costos). El
   contrato de columnas está en `src/db/__fixtures__/crm-contrato.json`.
 
-**Transición.** La sync propia del Shop (`scripts/sync-catalogo.ts`,
-`src/lib/catalog-sync.ts`, workflow `clientes-catalogo-sync`) y sus tablas
-(`catalog_products`, `catalog_categories`, `catalog_sync_log` del esquema `shop`)
-quedan **inertes**: nadie las lee. Se retiran en dos pasos (primero la sync,
-después el DROP con la migración 0014 del Shop). Mientras existan, revertir este
-cambio devuelve el Shop a su copia sin pasos extra.
+**Retiro de la copia propia.** La sync propia del Shop (script, módulo, ruta de
+cron y workflow de GitHub Actions) se borró, y sus tablas (`catalog_products`, `catalog_categories`, `catalog_sync_log` del esquema
+`shop`) se dropean con la migración 0015 del Shop. Una guarda estática
+(`src/lib/sin-espejo-shop.test.ts`) impide que vuelvan.
 
 **Historial.** Del 2026-07-29 al 2026-09-24 el Shop mantuvo su propia copia del
 catálogo, sincronizada contra Alegra, para no colgar la vidriera del CRM. Se
@@ -129,9 +127,8 @@ del CRM; no bloquea al Shop).
 
 1. **`src/lib/alegra.ts` integra Alegra solo para catálogo / precios / stock /
    facturas.** No arma saldos ni cuenta corriente.
-   - `listAllItems()` / `listAllCategories()` paginan **todo** el catálogo: son
-     caras y **solo se llaman desde la sync del Shop**, que ya no alimenta la
-     tienda (ver "Catálogo: el Shop lo lee del CRM") y se retira.
+   - El Shop ya no pagina el catálogo de Alegra: lo lee de las vistas del CRM
+     (ver "Catálogo: el Shop lo lee del CRM").
 2. **No hay helper de cuenta corriente en el Shop.** Lo financiero es un endpoint
    del CRM que se consume si/cuando el checkout valide crédito.
 3. **Escalas de precio por cantidad**: Alegra no las soporta nativamente. Si el

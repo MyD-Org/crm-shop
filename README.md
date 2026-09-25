@@ -43,7 +43,7 @@ No se toca la configuración global de npm. Cada instalación local usa un userc
 
 **Tareas programadas**
 
-Las dos sincronizaciones contra Alegra (`admin-alegra-sync` y `clientes-catalogo-sync`) comparten el grupo de concurrencia `alegra-cuenta`, porque pegan contra la misma cuenta y el mismo límite de requests. `clientes-pagos-reconciliar` no forma parte de ese grupo. Si ese grupo tiene una corrida pendiente, no se dispara una manual: se espera a que termine. Un traspaso o una reversión de cron se hacen en el mismo paso: deshabilitar en un lado y habilitar en el otro, nunca por separado.
+Las sincronizaciones contra Alegra (`admin-alegra-sync` y `admin-alegra-contactos-sync`) comparten el grupo de concurrencia `alegra-cuenta`, porque pegan contra la misma cuenta y el mismo límite de requests. El catálogo lo sincroniza sólo el CRM: el Shop lo lee de las vistas del CRM. `clientes-pagos-reconciliar` no forma parte de ese grupo. Si ese grupo tiene una corrida pendiente, no se dispara una manual: se espera a que termine. Un traspaso o una reversión de cron se hacen en el mismo paso: deshabilitar en un lado y habilitar en el otro, nunca por separado.
 
 Los dominios reales no se escriben en el repo: en código, tests y docs se usan `cliente.example` y `plataforma.example`; las URLs reales van en variables de entorno o secrets.
 

@@ -7,7 +7,7 @@ name: admin · Sync catálogo Alegra
 on:
   # Programado desde el cutover de admin.
   schedule:
-    # 07:00 UTC = 04:00 en Argentina. NO cambiar: la sync de apps/clientes corre a las 06:00 UTC contra la misma cuenta.
+    # 07:00 UTC = 04:00 en Argentina. Es la única sync del catálogo: el Shop lo lee de las vistas del CRM.
     - cron: "0 7 * * *"
   # Permite dispararlo a mano desde la pestaña Actions. Sin inputs = todos los tenants, como el
   # cron. `aceptar_baja` (con `tenant`) acepta una baja masiva legítima que la guarda frenó
@@ -27,8 +27,8 @@ on:
 
 permissions: {}
 
-# Grupo COMPARTIDO con clientes-catalogo-sync: las dos tareas usan la misma cuenta de Alegra
-# (150 req/min por usuario). Nunca corren en paralelo; la segunda espera.
+# Grupo COMPARTIDO con los otros workflows que usan la cuenta de Alegra (150 req/min por
+# usuario; hoy admin-alegra-contactos-sync). Nunca corren en paralelo; el siguiente espera.
 concurrency:
   group: alegra-cuenta
   cancel-in-progress: false

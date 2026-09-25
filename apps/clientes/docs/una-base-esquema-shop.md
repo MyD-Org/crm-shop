@@ -168,9 +168,9 @@ real.
 
 **Dónde:** Settings → Secrets and variables → Actions, en la raíz del repo.
 
-1. Cree o actualice `CLIENTES_DATABASE_URL` con la URL directa (sin pooler)
-   de `shop_app` de la base nueva.
-2. Borre `CLIENTES_POSTGRES_URL_NON_POOLING` (ya no se usa).
+1. Borre `CLIENTES_POSTGRES_URL_NON_POOLING` (ya no se usa). (Antes este paso
+   también cargaba `CLIENTES_DATABASE_URL` para la sync propia del catálogo;
+   esa sync se retiró y el secret ya no se usa.)
 
 **Verificación:** `CLIENTES_POSTGRES_URL_NON_POOLING` ya no aparece en la
 lista de secrets.
@@ -185,11 +185,10 @@ vieja son incompatibles entre sí, en cualquiera de los dos sentidos.
 
 ## Paso 7 — Después del deploy
 
-**Dónde:** GitHub Actions (workflow `clientes-catalogo-sync`) + Shop en
-producción.
+**Dónde:** admin del CRM + Shop en producción.
 
-1. Dispare el workflow `clientes-catalogo-sync` a mano (`workflow_dispatch`)
-   y confirme que termina en verde.
+1. El catálogo lo pone la sync del CRM (`admin-alegra-sync`): el Shop no tiene
+   sync propia (ver "Catálogo desde el CRM").
 2. Dispare desde el admin la sync de overlay y la de cuotas.
    Qué lee el Shop del overlay y cuándo encender su filtro de visibilidad:
    `docs/catalogo-overlay.md`.
@@ -446,7 +445,9 @@ rebanada 4 leía de acá sólo stock, precios y estado). El CRM mantiene su espe
 de productos (`public.catalog_products`) con la sync diaria y con los webhooks de
 Alegra: una factura, una compra o una edición re-leen sus ítems en minutos. El
 Shop lee **todo** el catálogo de dos vistas (migraciones 0035 y 0037 del CRM;
-declaradas en `src/db/crm.ts`) y ya no usa su copia `shop.catalog_products`:
+declaradas en `src/db/crm.ts`). El esquema `shop` ya no tiene catálogo: la copia
+propia (tablas catalog_products, catalog_categories y catalog_sync_log) y su
+sync se retiraron, y la migración 0015 del Shop dropea las tablas:
 
 `public.catalog_products_shop` (`crmCatalogo`):
 
@@ -470,7 +471,7 @@ Aplica igual al catálogo, las facetas, el menú, la ficha, el carrito, la
 cotización y `POST /api/pedidos` (que revalida el disponible dentro de su
 transacción). La guarda de tenant (`src/lib/catalogo-tenant.test.ts`) y la
 estática (`src/lib/sin-espejo-shop.test.ts`) fallan si una consulta se olvida
-del tenant o vuelve a leer la copia vieja.
+del tenant o si la copia vieja vuelve a aparecer.
 
 **Permisos:** `SELECT` sobre las dos vistas, que conceden la 0035 y la 0037 si
 `shop_app` ya existía. **No hay plan B**: sin permiso fallan el catálogo, la
@@ -492,8 +493,7 @@ GRANT USAGE ON SCHEMA public TO shop_app;
 GRANT SELECT ON public.catalog_products_shop, public.catalog_categories_shop TO shop_app;
 ```
 
-**Dev local.** El Shop ya no puebla su catálogo: `npm run sync:catalogo` llena
-la copia vieja, que nadie lee. Con el CRM y el Shop apuntando a la **misma**
+**Dev local.** El Shop no puebla su catálogo. Con el CRM y el Shop apuntando a la **misma**
 base local (el `DATABASE_URL` de cada app) y el CRM migrado hasta la 0037:
 
 1. `cd apps/admin && npm run dev` (anote el puerto; si el Shop ya usa el 3000,
@@ -507,10 +507,10 @@ base local (el `DATABASE_URL` de cada app) y el CRM migrado hasta la 0037:
    del Shop sea el mismo que sincronizó el CRM y que `shop_app` (si lo usa en
    local) tenga el `GRANT` de arriba.
 
-**Rollback:** revertir el PR mientras la sync del Shop siga viva: el Shop vuelve
-a `shop.catalog_products` con la elección de fuente por fila (las 6 columnas
-que ya leía siguen iguales en la vista). Si la sync del Shop ya se retiró,
-restaurarla y correrla antes de revertir.
+**Rollback:** ya no hay vuelta a la copia propia sin trabajo: con la 0015
+aplicada, volver atrás pide una migración NUEVA que recree las tablas (DDL de
+`0000_baseline.sql`), restaurar la sync borrada (y sus secrets de GitHub),
+correrla, y recién ahí revertir la lectura desde las vistas.
 
 ## Reserva de stock
 

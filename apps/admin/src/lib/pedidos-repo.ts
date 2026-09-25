@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm"
 import { getDb } from "@/db"
 import { alegraContacts } from "@/db/schema"
 import { shopOrders, shopOrderItems, type ShopOrderItemRow, type ShopOrderRow } from "@/db/shop-schema"
@@ -316,6 +316,79 @@ export async function desvincularFactura(
   return okConItems(tenantId, existente)
 }
 
+// ───────────────────────── Pago offline ─────────────────────────
+
+/** Medios que cobra el comercio por fuera de la tienda: el pago lo registra un operador. */
+export const PAGO_METODOS_MANUALES = ["transferencia", "efectivo", "cuenta_corriente", "a_coordinar"] as const
+
+export function esPagoManual(row: Pick<PedidoRow, "pagoMetodo" | "pagoProveedor">): boolean {
+  return (PAGO_METODOS_MANUALES as readonly string[]).includes(row.pagoMetodo) && row.pagoProveedor === null
+}
+
+export type PagoManualResult =
+  | { kind: "ok"; pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null; cambio: boolean }
+  | { kind: "not_found" }
+  /** Pago online: lo mueve sólo el webhook del proveedor. */
+  | { kind: "no_manual" }
+  | { kind: "cancelado" }
+
+/**
+ * Registra (`pagado: true`) o anula (`pagado: false`) el pago de un pedido offline.
+ *
+ * UN UPDATE condicional, como `cambiarEstado`: `WHERE id AND tenant AND medio offline AND
+ * pago_estado = <el opuesto>` (+ no cancelado, sólo al registrar). Si no afectó filas, un
+ * SELECT (también por tenant) distingue: no existe/ajeno, online, cancelado, o ya estaba así
+ * (idempotente → ok con `cambio: false`, para no avisar dos veces al cliente).
+ * Anular se permite con el pedido cancelado: es justo el caso de un pago cargado por error.
+ */
+export async function registrarPagoManual(
+  tenantId: string,
+  id: string,
+  /** `actor` sale del guard (fila fresca de admin_users), nunca del body. */
+  input: { pagado: boolean; actor: { id: string; name: string }; now: Date },
+): Promise<PagoManualResult> {
+  if (!UUID_RE.test(id)) return { kind: "not_found" }
+  const destino = input.pagado ? "pagado" : "pendiente"
+  const origen = input.pagado ? "pendiente" : "pagado"
+
+  const conditions: SQL[] = [
+    eq(shopOrders.id, id),
+    eq(shopOrders.tenantId, tenantId),
+    inArray(shopOrders.pagoMetodo, [...PAGO_METODOS_MANUALES]),
+    isNull(shopOrders.pagoProveedor),
+    eq(shopOrders.pagoEstado, origen),
+  ]
+  if (input.pagado) conditions.push(ne(shopOrders.estado, "cancelado"))
+
+  const [actualizado] = await getDb()
+    .update(shopOrders)
+    .set({
+      pagoEstado: destino,
+      pagoActualizadoEn: input.now,
+      pagoRegistradoPor: input.actor.id,
+      pagoRegistradoPorNombre: input.actor.name,
+      updatedAt: input.now,
+    })
+    .where(and(...conditions))
+    .returning()
+  if (actualizado) {
+    const [items, listaPrecios] = await Promise.all([itemsDe(actualizado.id), listaParaRevision(tenantId, actualizado)])
+    return { kind: "ok", pedido: actualizado, items, listaPrecios, cambio: true }
+  }
+
+  const [existente] = await getDb()
+    .select()
+    .from(shopOrders)
+    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
+  if (!existente) return { kind: "not_found" }
+  if (!esPagoManual(existente)) return { kind: "no_manual" }
+  if (existente.pagoEstado === destino) {
+    const [items, listaPrecios] = await Promise.all([itemsDe(existente.id), listaParaRevision(tenantId, existente)])
+    return { kind: "ok", pedido: existente, items, listaPrecios, cambio: false }
+  }
+  return { kind: "cancelado" }
+}
+
 /** Otros pedidos del MISMO tenant que ya tienen esa factura (aviso en la confirmación). */
 export async function pedidosConFactura(tenantId: string, alegraId: string, excepto: string): Promise<string[]> {
   const filas = await getDb()
@@ -423,6 +496,11 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   facturadoPorNombre: string | null
   /** Si el pedido está apartando stock en este momento (ver `reservaStock`). */
   reservaStock: boolean
+  /** Pago offline: el operador lo registra o lo anula desde el detalle. */
+  pagoManual: boolean
+  pagoActualizadoEn: string | null
+  /** Operador que registró o anuló el último pago offline. */
+  pagoRegistradoPorNombre: string | null
   items: PedidoItemDto[]
 }
 
@@ -505,6 +583,9 @@ export function toPedidoDetalleDto(
     facturadoEn: iso(row.facturadoEn),
     facturadoPorNombre: row.facturadoPorNombre,
     reservaStock: reservaStock(row),
+    pagoManual: esPagoManual(row),
+    pagoActualizadoEn: iso(row.pagoActualizadoEn),
+    pagoRegistradoPorNombre: row.pagoRegistradoPorNombre,
     items: items.map(toItemDto),
   }
 }

@@ -6,6 +6,7 @@ import { AlegraRateLimitError, getItemParaEspejo } from "./alegra"
 import { motivoError } from "./alegra-webhook-comun"
 import type { EventoStock } from "./alegra-stock-webhook"
 import { marcarItemInactivo, upsertProductos } from "./catalog-products-repo"
+import { avisarShop } from "./aviso-shop"
 
 // Cola de ítems a re-leer de Alegra (tabla alegra_item_refresh) y su drenador.
 //
@@ -18,6 +19,9 @@ import { marcarItemInactivo, upsertProductos } from "./catalog-products-repo"
 //   por frescura. Ante un 429 corta y deja todo en la cola: no insiste contra un cupo saturado.
 // - Lo que quede lo barre el cron cada 15 min (/api/cron/alegra-stock-drenar); lo que falle 5
 //   veces se descarta y lo corrige la sync diaria.
+// - Al terminar, si hubo cambios (ítems leídos o dados de baja), avisa al Shop UNA vez por
+//   drenaje para que descarte su caché del catálogo (lib/aviso-shop.ts). Best-effort: un fallo
+//   del aviso no cambia el resultado del drenaje.
 // - Logs: tenant y conteos. Nunca datos de Alegra.
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
@@ -282,6 +286,13 @@ export async function drenarTenant(
   }
 
   r.pendientes = await pendientesDe(tenantId)
+  if (r.leidos + r.inactivos > 0) {
+    try {
+      await avisarShop(tenantId)
+    } catch (err) {
+      console.warn(`[alegra-stock/drenar] tenant=${tenantId} aviso al Shop falló: ${err instanceof Error ? err.name : "error"}`)
+    }
+  }
   console.log(
     `[alegra-stock/drenar] tenant=${tenantId} leidos=${r.leidos} inactivos=${r.inactivos} errores=${r.errores} requests=${r.requests} pendientes=${r.pendientes} corte=${r.corte} ms=${Date.now() - inicio}`,
   )

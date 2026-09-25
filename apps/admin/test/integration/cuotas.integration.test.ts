@@ -301,7 +301,7 @@ describe("cuotas v2: rutas admin e interna", () => {
       expect(caido.json.propagado).toBe(false)
       expect(await getDb().select().from(installmentOptions)).toHaveLength(1)
 
-      fetchMock.mockResolvedValueOnce(new Response("{}", { status: 200 }))
+      fetchMock.mockResolvedValueOnce(Response.json({ ok: true, fetchedAt: "2026-09-25T10:00:00.000Z" }))
       const ok = await crearEscalon({ proveedorId: mp, cuotasMax: 6, montoMinimo: "180000" })
       expect(ok.json.propagado).toBe(true)
       const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit]

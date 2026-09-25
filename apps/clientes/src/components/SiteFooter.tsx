@@ -21,7 +21,6 @@ export async function SiteFooter() {
           title: "Mi cuenta",
           links: [
             { label: "Mis pedidos", href: "/mi-cuenta" },
-            { label: "Cuenta corriente", href: "/mi-cuenta/vincular" },
             { label: "Facturas", href: "/mi-cuenta" },
           ],
         },

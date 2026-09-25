@@ -150,13 +150,9 @@ export const clientLinks = shop.table(
     uniqueIndex("cl_user_activa")
       .on(t.clerkUserId)
       .where(sql`${t.estado} = 'activa'`),
-    // Y un cliente de Alegra, UN solo usuario de la tienda activo: la cuenta
-    // corriente de una empresa no se reparte entre cuentas de acceso. El chequeo
-    // de lib/vinculacion.ts da el mensaje; esto cierra la carrera entre dos
-    // usuarios que confirman a la vez.
-    uniqueIndex("cl_contacto_activa")
-      .on(t.alegraContactId)
-      .where(sql`${t.estado} = 'activa'`),
+    // Un cliente de Alegra sí puede tener varios usuarios activos (la misma
+    // persona con dos emails, varias personas de una empresa): cada uno pasó
+    // por el código al email de Alegra. `cl_contacto_activa` se borró en 0014.
     index("cl_contacto").on(t.alegraContactId),
   ],
 );

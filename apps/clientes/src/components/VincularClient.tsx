@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Field, Input } from "@myd-org/ui";
 import { documentoEnLinea } from "@/lib/facturacion";
@@ -15,11 +15,17 @@ const BAJADA = "Vea sus facturas y sus compras en Central LED.";
 export function VincularClient({
   volver,
   documentoSugerido = "",
+  embebido = false,
+  onVinculado,
 }: {
   /** Ruta interna a la que volver al terminar (ej. "/checkout"). */
   volver?: string;
   /** Documento de facturación que ya coincide con un cliente: se precarga. */
   documentoSugerido?: string;
+  /** Dentro de otra página (el checkout): sin card propia ni título. */
+  embebido?: boolean;
+  /** Vinculada: quien lo usa sigue en su página en vez de navegar a `volver`. */
+  onVinculado?: () => void;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState<Paso>("documento");
@@ -92,6 +98,10 @@ export function VincularClient({
         setCargando(false);
         return;
       }
+      if (onVinculado) {
+        onVinculado();
+        return;
+      }
       // Directo a donde tiene sentido seguir (el checkout si venía de ahí; si
       // no, sus facturas) y refresco de los Server Components: el header y los
       // precios pasan a resolverse con la lista del cliente recién vinculado.
@@ -123,9 +133,24 @@ export function VincularClient({
     <p className="mt-4 rounded-lg bg-danger/5 p-3 text-sm text-danger">{error}</p>
   );
 
+  /** Embebido, sin card: el título va como una línea en negrita. */
+  const contenedor = (titulo: string, bajada: string | null, hijos: ReactNode) =>
+    embebido ? (
+      <div>
+        {bajada && <p className="mb-4 text-sm text-muted">{bajada}</p>}
+        {hijos}
+      </div>
+    ) : (
+      <Card title={titulo} description={bajada ?? undefined}>
+        {hijos}
+      </Card>
+    );
+
   if (paso === "confirmar") {
-    return (
-      <Card title="¿Es su cuenta?" description="Confirme que es su cuenta de cliente antes de vincularla.">
+    return contenedor(
+      "¿Es su cuenta?",
+      "Confirme que es su cuenta de cliente antes de vincularla.",
+      <>
         <p className="text-sm text-muted">
           Encontramos la cuenta de{" "}
           <span className="font-medium text-text">{cuenta?.razonSocial ?? "cliente"}</span>
@@ -142,14 +167,29 @@ export function VincularClient({
             No es mi cuenta
           </Button>
         </div>
-      </Card>
+      </>,
     );
   }
 
-  return (
-    <Card title={TITULO} description={BAJADA}>
+  // Embebido con el documento ya conocido: no se lo vuelve a pedir.
+  const documentoFijo = embebido && Boolean(documentoSugerido);
+
+  return contenedor(
+    TITULO,
+    embebido ? null : BAJADA,
+    <>
       {aviso && <p className="mb-4 rounded-lg bg-elevated p-3 text-sm text-text">{aviso}</p>}
-      {paso === "documento" ? (
+      {paso === "documento" && documentoFijo ? (
+        <>
+          <p className="text-sm text-muted">
+            Le enviaremos un código al email registrado en su cuenta de cliente.
+          </p>
+          {errorBox}
+          <Button className="mt-4" onClick={solicitar} disabled={cargando}>
+            {cargando ? "Enviando…" : "Enviarme el código"}
+          </Button>
+        </>
+      ) : paso === "documento" ? (
         <>
           {/*
             Quien llega hasta acá es porque el match automático por email no
@@ -216,6 +256,7 @@ export function VincularClient({
             <Button onClick={verificar} disabled={codigo.length !== 6 || cargando}>
               {cargando ? "Validando…" : "Continuar"}
             </Button>
+            {!documentoFijo && (
             <Button
               variant="link"
               onClick={() => {
@@ -226,9 +267,10 @@ export function VincularClient({
             >
               Usar otro documento
             </Button>
+            )}
           </div>
         </>
       )}
-    </Card>
+    </>,
   );
 }

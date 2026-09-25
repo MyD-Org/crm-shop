@@ -246,7 +246,9 @@ export const DEFAULTS_HOME: HomeContent = {
   whatsapp: {
     titulo: "¿Necesita asesoramiento?",
     texto: "Escríbanos por WhatsApp y lo ayudamos a elegir el producto correcto.",
-    href: "https://wa.me/5492235903025",
+    // El número real vive en el contenido editable (home_content): acá sólo un
+    // enlace neutro que pasa la validación, sin datos de la tienda (repo público).
+    href: "https://wa.me/",
   },
   // El anuncio en mobile ocupa varias filas: arranca solo en desktop hasta que
   // sea un carrusel de mensajes. El admin lo puede cambiar desde el editor.

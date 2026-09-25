@@ -50,7 +50,9 @@ export type DatosFooter = {
 export const DEFAULTS_FOOTER: DatosFooter = {
   descripcion:
     "Casa de electricidad e iluminación en Puerto Iguazú, Misiones. Del disyuntor al velador: el local de siempre, ahora también online.",
-  whatsapp: "5492235903025",
+  // Vacío = sin link de WhatsApp. El número real se carga en el editor del
+  // footer (home_content): nada de datos de la tienda en el repo público.
+  whatsapp: "",
   locales: [
     {
       nombre: "",

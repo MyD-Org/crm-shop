@@ -16,6 +16,10 @@ const CLASES_TRANSICION = "transition-all duration-700 ease-[cubic-bezier(.2,.7,
  * IntersectionObserver y el usuario no pidió reduced motion, el wrapper se
  * oculta y se revela una única vez al entrar en viewport. Nunca se re-oculta
  * al scrollear para arriba.
+ *
+ * Lo que ya está en pantalla al hidratar NO se toca: ocultarlo para volver a
+ * mostrarlo parpadeaba y ataba la foto del hero (el LCP) a que terminara de
+ * cargar el JS, que en un celular son segundos.
  */
 export function Reveal({ children, className }: { children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -25,6 +29,7 @@ export function Reveal({ children, className }: { children: ReactNode; className
     if (!el) return;
     if (typeof IntersectionObserver === "undefined") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (el.getBoundingClientRect().top < window.innerHeight) return;
 
     // Sin transición todavía: el estado oculto inicial aplica de golpe (si
     // agregáramos ambas juntas, el visible→oculto animaría en vez de snap).

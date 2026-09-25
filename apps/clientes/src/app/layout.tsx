@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     : undefined,
   title: "Central LED — Tienda Online",
   description:
-    "Iluminación LED y materiales eléctricos en Puerto Iguazú, Misiones. Stock en tiempo real.",
+    "Iluminación, materiales eléctricos, herramientas y mucho más en Puerto Iguazú, Misiones. Stock en tiempo real.",
   // Verificación del dominio en Meta: el token es de la cuenta de la tienda y
   // va por entorno (repo público). Sin la variable no se emite el meta.
   ...(process.env.FACEBOOK_DOMAIN_VERIFICATION

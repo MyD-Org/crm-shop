@@ -25,7 +25,13 @@ const responder = (c: ConsultaGrabada) => {
   return [];
 };
 let grabadora = dbGrabadora(responder);
-vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
+let getDbFalla = false;
+vi.mock("@/db", () => ({
+  getDb: () => {
+    if (getDbFalla) throw new Error("DATABASE_URL no configurada");
+    return grabadora.db;
+  },
+}));
 
 const enviarEmail = vi.fn();
 vi.mock("@/lib/email", () => ({ enviarEmail: (...a: unknown[]) => enviarEmail(...a) }));
@@ -78,6 +84,7 @@ beforeEach(() => {
   legal = { email: "legal@cliente.example" };
   tenant = { id: "tenant-a", nombre: "Tienda Ejemplo", whatsapp: null, mailComprobantes: "avisos@cliente.example" };
   ip = `10.0.1.${ipSiguiente++}`;
+  getDbFalla = false;
   enviarEmail.mockReset();
   enviarEmail.mockResolvedValue({ ok: true, id: "re_1" });
   vi.stubEnv("SHOP_TENANT_ID", "tenant-a");
@@ -155,6 +162,7 @@ describe("envío válido", () => {
     expect(aCliente).toMatchObject({
       to: "ana@cliente.example",
       subject: "Recibimos su solicitud de arrepentimiento ARR-000042",
+      replyTo: "legal@cliente.example",
       idempotencyKey: "ARR-000042-cliente",
     });
     expect(aComercio).toMatchObject({
@@ -206,6 +214,7 @@ describe("envío válido", () => {
     const r = await enviarSolicitudArrepentimiento(INICIAL, form());
     expect(r).toMatchObject({ estado: "ok", mailCliente: true });
     expect(enviarEmail).toHaveBeenCalledTimes(1);
+    expect(enviarEmail.mock.calls[0][0]).not.toHaveProperty("replyTo");
     expect(console.warn).toHaveBeenCalled();
     const [cliente, comercio, error] = updates()[0].params;
     expect(cliente).toEqual(expect.any(String));
@@ -236,6 +245,16 @@ describe("fallas de la base", () => {
       mensaje: "No se pudo registrar la solicitud. Inténtelo de nuevo o comuníquese con el comercio.",
       errores: {},
       valores: expect.objectContaining({ nombre: "Ana Pérez", email: "ana@cliente.example" }),
+    });
+    expect(enviarEmail).not.toHaveBeenCalled();
+  });
+
+  it("getDb lanza (sin DATABASE_URL): error en usted, no lanza, sin mails", async () => {
+    getDbFalla = true;
+    const r = await enviarSolicitudArrepentimiento(INICIAL, form());
+    expect(r).toMatchObject({
+      estado: "error",
+      mensaje: "No se pudo registrar la solicitud. Inténtelo de nuevo o comuníquese con el comercio.",
     });
     expect(enviarEmail).not.toHaveBeenCalled();
   });

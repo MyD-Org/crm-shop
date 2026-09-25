@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest"
 import { MOTIVO_MAX } from "@/lib/pedidos-transiciones"
 import {
   FILTRO_TODOS,
+  leerAvisoFactura,
+  mensajeAvisoFactura,
+  separarAvisoFactura,
   MENSAJE_ERROR_GENERICO,
   interpretarRespuestaCambio,
   interpretarRespuestaFactura,
@@ -185,5 +188,32 @@ describe("interpretarRespuestaFactura (vincular / desvincular / buscar)", () => 
   it("500 o sin respuesta → genérico", () => {
     expect(interpretarRespuestaFactura(500, { error: "stack" }, () => true)).toEqual({ tipo: "error", mensaje: MENSAJE_ERROR_GENERICO })
     expect(interpretarRespuestaFactura(null, null, () => true)).toEqual({ tipo: "error", mensaje: MENSAJE_ERROR_GENERICO })
+  })
+})
+
+describe("avisoFactura (mail de la factura)", () => {
+  it("separa el aviso del detalle, sin dejarlo en el pedido", () => {
+    const body = { id: "p1", estado: "confirmado", avisoFactura: { resultado: "enviado", destino: "an***@cliente.example" } }
+    expect(separarAvisoFactura(body)).toEqual({
+      detalle: { id: "p1", estado: "confirmado" },
+      aviso: { resultado: "enviado", destino: "an***@cliente.example" },
+    })
+  })
+
+  it("sin aviso o con otra forma → null", () => {
+    expect(separarAvisoFactura({ id: "p1" }).aviso).toBeNull()
+    expect(leerAvisoFactura({ resultado: "otro" })).toBeNull()
+    expect(leerAvisoFactura("enviado")).toBeNull()
+    expect(leerAvisoFactura({ resultado: "fallo", destino: 3 })).toEqual({ resultado: "fallo", destino: null })
+  })
+
+  it("mensajes para el operador", () => {
+    expect(mensajeAvisoFactura({ resultado: "enviado", destino: "an***@cliente.example" })).toEqual({
+      texto: "Enviamos la factura a an***@cliente.example.",
+      ok: true,
+    })
+    expect(mensajeAvisoFactura({ resultado: "sin_email", destino: null }).ok).toBe(false)
+    expect(mensajeAvisoFactura({ resultado: "sin_pdf", destino: "x" }).texto).toContain("PDF")
+    expect(mensajeAvisoFactura({ resultado: "fallo", destino: "x" }).texto).toBe("No se pudo enviar la factura por mail.")
   })
 })

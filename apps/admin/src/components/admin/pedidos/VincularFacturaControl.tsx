@@ -4,12 +4,19 @@ import { useState } from "react"
 import { Alert, Button, Dialog, Field, Input, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
 import { fmtFechaDia, fmtMoneda, textoUltimoCambio } from "./format"
-import { interpretarRespuestaFactura } from "./logica"
+import {
+  interpretarRespuestaFactura,
+  leerAvisoFactura,
+  mensajeAvisoFactura,
+  separarAvisoFactura,
+  type AvisoFacturaDto,
+} from "./logica"
 
 // "Vincular factura": el operador hizo la factura en Alegra por fuera y la vincula al pedido.
 // Buscar (GET) no guarda nada; recién "Vincular" (POST) la guarda, marca el pedido como
-// facturado y libera la reserva de stock. "Desvincular" (DELETE) lo deshace. Toda validación
-// real es del servidor (vuelve a leer la factura de Alegra al vincular).
+// facturado, libera la reserva de stock y le manda al cliente el mail "Su factura" con el PDF.
+// "Desvincular" (DELETE) lo deshace; "Reenviar factura" vuelve a mandar el mail. Toda
+// validación real es del servidor (vuelve a leer la factura de Alegra al vincular).
 
 interface FacturaEncontrada {
   factura: {
@@ -33,6 +40,7 @@ interface Props {
 
 const esDetalle = (b: unknown) => typeof (b as { id?: unknown }).id === "string"
 const esEncontrada = (b: unknown) => typeof (b as FacturaEncontrada).factura?.alegraId === "string"
+const esReenvio = (b: unknown) => leerAvisoFactura((b as { avisoFactura?: unknown }).avisoFactura) !== null
 
 function Fila({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -50,6 +58,7 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
   const [encontrada, setEncontrada] = useState<FacturaEncontrada | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [confirmarDesvincular, setConfirmarDesvincular] = useState(false)
+  const [reenviando, setReenviando] = useState(false)
 
   const base = `/api/admin/pedidos/${pedido.id}/factura`
 
@@ -86,8 +95,14 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
     if (r.tipo === "ok") {
       setEncontrada(null)
       setNumero("")
-      toast({ title: "La factura quedó vinculada y el pedido figura como facturado.", tone: "success" })
-      onChanged(r.valor)
+      const { detalle, aviso } = separarAvisoFactura(r.valor)
+      const mail = aviso ? mensajeAvisoFactura(aviso) : null
+      toast({
+        title: "La factura quedó vinculada y el pedido figura como facturado.",
+        description: mail?.texto,
+        tone: mail && !mail.ok ? "warning" : "success",
+      })
+      onChanged(detalle)
       return
     }
     toast({ title: r.mensaje, tone: "danger" })
@@ -95,6 +110,21 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
       setEncontrada(null)
       onConflicto()
     }
+  }
+
+  async function reenviar() {
+    setReenviando(true)
+    const { status, body } = await llamar(`${base}/reenviar`, { method: "POST" })
+    setReenviando(false)
+    const r = interpretarRespuestaFactura<{ avisoFactura: AvisoFacturaDto }>(status, body, esReenvio)
+    if (r.tipo === "ok") {
+      const aviso = leerAvisoFactura(r.valor.avisoFactura)
+      const mail = aviso ? mensajeAvisoFactura(aviso) : null
+      toast({ title: mail?.texto ?? "No se pudo enviar la factura por mail.", tone: mail?.ok ? "success" : "danger" })
+      return
+    }
+    toast({ title: r.mensaje, tone: "danger" })
+    if (r.tipo === "conflicto") onConflicto()
   }
 
   async function desvincular() {
@@ -138,8 +168,11 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
           </p>
         )}
         {reserva}
-        <div>
-          <Button variant="ghost" onClick={() => setConfirmarDesvincular(true)} disabled={guardando}>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" loading={reenviando} onClick={() => void reenviar()} disabled={guardando}>
+            Reenviar factura
+          </Button>
+          <Button variant="ghost" onClick={() => setConfirmarDesvincular(true)} disabled={guardando || reenviando}>
             Desvincular
           </Button>
         </div>

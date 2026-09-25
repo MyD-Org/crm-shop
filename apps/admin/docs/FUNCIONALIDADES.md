@@ -728,7 +728,18 @@ o el id de Alegra). El CRM la busca y muestra número, fecha, total y cliente; r
 confirmar **Vincular** la guarda en el pedido y lo marca facturado, lo que **libera la reserva
 de stock** (`shop.stock_reservado` excluye los pedidos con `facturado_en`). **Desvincular**
 deshace las dos cosas; si el pedido sigue activo, vuelve a reservar. Ninguna de las dos cambia
-el estado del pedido ni avisa al cliente, y la factura en Alegra no se toca.
+el estado del pedido, y la factura en Alegra no se toca.
+
+- **Mail "Su factura"** (`src/lib/pedido-factura-aviso.ts` + `pedido-factura-email.ts`): al
+  vincular una factura nueva, el servidor le pide el PDF a Alegra (`getDocumentPdf`), lo baja
+  (timeout 20 s, tope 10 MB, tiene que empezar con `%PDF-`) y se lo manda al email del pedido
+  como adjunto `Factura-{número}.pdf`. La URL firmada de Alegra nunca se guarda ni va en el mail.
+  Sin PDF o sin email no se manda nada; el vínculo queda igual. Se hace después de persistir
+  y nunca tira; la respuesta del POST trae `avisoFactura: { resultado, destino }` (destino
+  enmascarado) y el detalle lo muestra. Clave de idempotencia `pedido-factura/{pedido}/{factura}`:
+  repetir el POST con la misma factura no reenvía. **Reenviar factura**
+  (`POST …/factura/reenviar`) lo vuelve a mandar a pedido del operador. Para el cliente común
+  de la tienda es la única vía para recibir la factura.
 
 - **Validaciones** (`src/lib/factura-vincular.ts`): la factura tiene que existir y no estar en
   borrador ni anulada. Si el pedido tiene contacto de Alegra (`cliente_codigo`), la factura

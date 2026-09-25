@@ -285,7 +285,8 @@ Credenciales por tenant (`{PREFIX}_ALEGRA_EMAIL/TOKEN`); sin credenciales corre 
 **mock** (`mock-alegra.ts`). El mock se apaga solo al setear el token.
 
 - **Catálogo**: `listAllCategories`, `listAllItems` — sync a cache local
-  (`alegra-sync.ts`, cron `/api/cron/alegra-sync`) — y `getItemsLive` (precio/stock al momento).
+  (`alegra-sync.ts`, cron `/api/cron/alegra-sync`, con [guarda](#sync-incompleta)) — y
+  `getItemsLive` (precio/stock al momento).
   `getItemParaEspejo` lee UN ítem para el espejo distinguiendo 404 / 429 / error (lo usan los
   [avisos de stock](#stock-casi-en-tiempo-real-webhooks-de-alegra)).
 - **Contactos (clientes)**: nadie del CRM los lee de acá directo: se leen del
@@ -323,6 +324,39 @@ credenciales. Fechas normalizadas a `DD/MM/YYYY`; estados de Alegra mapeados a
 > **Límite de crédito**: Alegra no expone un límite de crédito por contacto, así que hoy
 > `Cliente.limitecredito` es 0 (la barra de uso de crédito del portal no muestra tope).
 > A resolver desde la DB propia si se necesita.
+
+### Sync incompleta
+
+La sync del catálogo (`syncCatalog`, `src/lib/alegra-sync.ts`) es la única fuente del catálogo
+del Shop, así que tiene una **guarda** (`src/lib/alegra-sync-guarda.ts`): si una corrida lee
+sensiblemente menos que la **última corrida `ok` del mismo tenant**, se asume que Alegra la
+cortó a mitad y no se da de baja nada.
+
+- Es **parcial** si lee 0 ítems (siempre), o si cae más de `max(10, 5 %)` respecto de la base
+  (con 11 795 ítems, más de 590 menos). Las categorías se evalúan aparte: 0 categorías cuando
+  la base tenía alguna, o la misma caída. Las corridas `parcial` y `error` nunca son base.
+- En una corrida parcial se upsertea lo leído (el dato es bueno), pero **no** se marca stale (lo
+  no visto sigue `active`) ni se empuja el overlay. Si sólo las categorías vinieron mal, el
+  stale de productos sí corre, y viceversa.
+- Queda en `catalog_sync_log` con `status = 'parcial'` y el motivo (sólo números) en `error`,
+  p. ej. `items 5400 < base 11795 (umbral 95 %)`, más un `console.warn` `[alegra-sync] …
+  corrida=parcial …`. El workflow `admin-alegra-sync` falla (y GitHub avisa por mail) y el
+  admin muestra "incompleta: no se dieron de baja productos". El indicador de frescura
+  (`ultimaSyncAlegra`) sigue contando sólo las `ok`.
+
+Consulta de guardia:
+
+```sql
+SELECT tenant_id, status, items_synced, categories_synced, error, started_at
+FROM catalog_sync_log ORDER BY started_at DESC LIMIT 10;
+```
+
+**Aceptar una baja masiva legítima** (se borraron muchos ítems en Alegra de verdad): GitHub →
+Actions → *admin · Sync catálogo Alegra* → **Run workflow**, con `tenant` = el id del tenant y
+`aceptar_baja` tildado. Llama a `/api/cron/alegra-sync?tenant=<id>&aceptar_baja=1`: esa corrida
+no aplica la guarda y da de baja lo no visto. `aceptar_baja` sin `tenant` da 400; un tenant
+inexistente o sin Alegra, 404. El botón del admin nunca acepta bajas: si da parcial, hay que
+reintentar más tarde o pasar por Actions.
 
 ---
 
@@ -752,6 +786,7 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | PATCH | `/api/notifications/log` | sesión | Marca leídas (`ids` o `all`) |
 | POST | `/api/notifications/send` | `CRON_SECRET` | Disparo manual del gestor de cobranza |
 | POST/GET | `/api/cron/notifications` | `CRON_SECRET` | Disparo automático (Vercel Cron) |
+| POST/GET | `/api/cron/alegra-sync` | `CRON_SECRET` | Sync del catálogo (`?tenant=` opcional; `?aceptar_baja=1` sólo con tenant, ver [Sync incompleta](#sync-incompleta)) |
 | POST/GET | `/api/cron/alegra-contactos-sync` | `CRON_SECRET` | Sync del espejo de contactos (`?tenant=` opcional, `?trigger=manual`) |
 | POST/GET | `/api/webhooks/alegra/contactos/<tenant>/<evento>/<token>` | token HMAC (`ALEGRA_WEBHOOK_SECRET`) | Avisos de contactos de Alegra → espejo (GET solo verifica la URL) |
 | POST/GET | `/api/cron/alegra-stock-drenar` | `CRON_SECRET` | Drena la cola de re-lectura de stock (`?tenant=` opcional) |

@@ -273,7 +273,7 @@ export const catalogSyncLog = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: text("tenant_id").notNull().references(() => tenants.id),
     trigger: text("trigger").notNull(), // 'cron' | 'manual'
-    status: text("status").notNull().default("running"), // 'running' | 'ok' | 'error'
+    status: text("status").notNull().default("running"), // 'running' | 'ok' | 'parcial' (guarda, lib/alegra-sync-guarda.ts) | 'error'
     itemsSynced: integer("items_synced").notNull().default(0),
     categoriesSynced: integer("categories_synced").notNull().default(0),
     error: text("error"),

@@ -197,3 +197,17 @@ body {
   --shadow-1: 0 4px 12px rgba(22, 40, 63, 0.08);
   --shadow-2: 0 24px 44px -22px rgba(22, 40, 63, 0.28);
 }
+
+/* Manija de la hoja de filtros (mobile): avisa que se puede arrastrar hacia
+   abajo para cerrarla (ver useArrastrarParaCerrar). La hoja del DS es un flex
+   en columna, así que el ::before queda arriba de todo, sobre el encabezado. */
+.hoja-arrastrable::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 2.5rem;
+  height: 0.3rem;
+  margin-top: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-border-strong);
+}

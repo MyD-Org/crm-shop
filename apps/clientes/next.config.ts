@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { hostsDeMedios } from "./src/lib/catalogo-medios";
 import { REDIRECTS_MI_CUENTA } from "./src/lib/mi-cuenta-redirects";
 import { normalizarUrlAiApi } from "./src/lib/ai-api-config";
+import { headersDeSeguridad } from "./src/lib/headers-seguridad";
 
 const nextConfig: NextConfig = {
   // Shell estático + huecos por request (Partial Prerendering). Lo que depende
@@ -73,6 +74,11 @@ const nextConfig: NextConfig = {
   // URLs viejas de Mi cuenta (pestañas y detalle en singular) a las rutas por
   // sección. Se resuelven antes que el filesystem: no se renderiza nada.
   redirects: async () => [...REDIRECTS_MI_CUENTA],
+  // Headers de seguridad en todas las respuestas. La CSP va en Report-Only:
+  // el paso a enforcing se hace después de mirar los reportes (ver
+  // src/lib/headers-seguridad.ts). Se evalúa en build: cambiar las variables
+  // que la alimentan exige redeploy.
+  headers: async () => [{ source: "/:path*", headers: headersDeSeguridad() }],
   // Chat con el agente: el widget habla con ai-api por el mismo origen (sin
   // CORS). Sólo existe si AI_API_URL está definida; que el chat se muestre lo
   // decide el flag `chat-ia` (src/lib/chat-ia-flag.ts), no esta regla.

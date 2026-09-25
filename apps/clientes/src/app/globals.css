@@ -20,6 +20,12 @@
   --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Sin rebote al final de la página: en el celular el scroll seguía de largo
+   después del footer y mostraba el fondo claro debajo. */
+html {
+  overscroll-behavior-y: none;
+}
+
 body {
   background: var(--color-bg);
   color: var(--color-text);

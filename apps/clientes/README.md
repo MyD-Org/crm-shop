@@ -26,16 +26,17 @@ registry=https://registry.npmjs.org/
 
 ## Base de datos
 
-El shop tiene **su propio Postgres** (separado del CRM — ver
-`docs/arquitectura-integraciones.md`). Hoy guarda el espejo del catálogo de
-Alegra, que refresca la sync diaria (GitHub Actions, ver más abajo).
+El Shop usa el esquema `shop` de la misma base Postgres del CRM (ver
+`docs/una-base-esquema-shop.md`). El catálogo NO vive acá: el Shop lo lee
+de las vistas del CRM (`public.catalog_products_shop` y
+`public.catalog_categories_shop`), que llena la sync del CRM.
 
 | Variable | Para qué |
 |---|---|
 | `DATABASE_URL` | Conexión de la app en tiempo de ejecución. Pooled, rol `shop_app`. Es la única variable que lee el runtime. |
 | `MIGRATE_DATABASE_URL` | Solo para `npm run db:migrate`. Conexión directa (sin pooler), rol dueño del esquema `shop`. El runtime nunca la usa. |
 | `SHOP_TENANT_ID` | Obligatoria: el Shop no arranca sin ella (falla en `src/instrumentation.ts`, salvo durante `next build`). Tiene que ser un valor de `public.tenants.id` del CRM. |
-| `CRON_SECRET` | Protege `/api/cron/catalog-sync` y `/api/cron/cuotas-sync`. Sin esta variable el endpoint rechaza todo. |
+| `CRON_SECRET` | Protege `/api/cron/cuotas-sync` y `/api/cron/pagos-reconciliar`. Sin esta variable el endpoint rechaza todo. |
 | `ALEGRA_EMAIL` / `ALEGRA_TOKEN` | Auth Basic contra la API de Alegra. `ALEGRA_BASE_URL` es opcional (default: producción). |
 | `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v2: escalones por proveedor). |
 | `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
@@ -106,18 +107,10 @@ npm run db:generate   # genera SQL en drizzle/ a partir de src/db/schema.ts (no 
 npm run db:migrate    # las aplica usando MIGRATE_DATABASE_URL (rol dueño, conexión directa)
 ```
 
-Sync del catálogo (primera carga, o para correrla a mano):
-
-```bash
-npm run sync:catalogo
-```
-
-Corre el proceso completo contra la base de `DATABASE_URL`. Existe también la
-ruta HTTP, cómoda en dev pero limitada por el timeout de la función:
-
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/catalog-sync
-```
+Catálogo en dev local: el Shop no tiene sync propia. Lo puebla la sync del CRM
+local contra la misma base (botón del admin, o
+`curl -H "Authorization: Bearer $CRON_SECRET" localhost:<puerto>/api/cron/alegra-sync`
+desde `apps/admin`). Ver `docs/una-base-esquema-shop.md`, "Catálogo desde el CRM".
 
 Sync de cuotas (planes de Mercado Pago + config del CRM; cada fuente conserva
 su última copia buena si falla):
@@ -126,33 +119,22 @@ su última copia buena si falla):
 curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/cuotas-sync
 ```
 
-Tarda un rato: recorre ~5959 ítems paginando de a 30 (~3 min). Cada corrida deja
-registro en `catalog_sync_log` (`status`, `items_synced`, `error`).
-
 ## Tareas programadas
 
 | Tarea | Dónde corre | Cuándo |
 |---|---|---|
-| Sync del catálogo | GitHub Actions — `.github/workflows/catalogo-sync.yml` | 06:00 UTC, diaria |
 | Sync de cuotas | Vercel Cron — `vercel.json` → `/api/cron/cuotas-sync` | 12:00 UTC, diaria |
-| Reconciliar pagos MP | GitHub Actions — `.github/workflows/pagos-reconciliar.yml` | cada 15 min |
+| Reconciliar pagos MP | GitHub Actions — `.github/workflows/clientes-pagos-reconciliar.yml` | cada 15 min |
 
-La sync del catálogo se mudó de Vercel Cron a Actions porque dejó de entrar en
-los 300 s que topea una función en el plan Hobby: el catálogo creció a ~5959
-ítems y Alegra pagina de a 30 y responde 429 si se lo apura. El workflow no
-llama al endpoint — **ejecuta la sync adentro del runner**, que no tiene ese
-límite.
+El catálogo no tiene tarea propia: lo sincroniza el CRM (`admin-alegra-sync`).
 
 Secrets que hay que tener cargados en el repo (Settings → Secrets and variables
 → Actions):
 
 | Secret | Para qué |
 |---|---|
-| `ALEGRA_EMAIL` | Sync del catálogo: auth contra Alegra. |
-| `ALEGRA_TOKEN` | Sync del catálogo: auth contra Alegra. |
-| `DATABASE_URL` | Sync del catálogo: conexión directa a Neon (sin pooler), rol `shop_app`. |
-| `ALEGRA_BASE_URL` | Opcional. Solo para apuntar a otro host de Alegra. |
-| `CRON_SECRET` | Reconciliación de pagos: Bearer del endpoint. Mismo valor que en Vercel Production. |
+| `CLIENTES_BASE_URL` | Reconciliación de pagos: URL del Shop a la que pega el workflow. |
+| `CLIENTES_CRON_SECRET` | Reconciliación de pagos: Bearer del endpoint. Mismo valor que `CRON_SECRET` en Vercel Production. |
 
 ## Getting Started
 

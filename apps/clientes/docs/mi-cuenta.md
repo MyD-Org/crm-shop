@@ -238,8 +238,8 @@ iniciar sesión.
 **Tabla** `shop.favorites` (migración `0002_favoritos`): `tenant_id`,
 `clerk_user_id`, `alegra_item_id`, `created_at`. Unique por
 (tenant, usuario, ítem), que hace idempotente el alta, e índice por
-(tenant, usuario, fecha) para el "más nuevo primero". Sin FK a
-`catalog_products` (el espejo lo reescribe la sync) ni a `public`. Aplicarla a
+(tenant, usuario, fecha) para el "más nuevo primero". Sin FK al
+catálogo (vive en el CRM y un ítem puede desaparecer) ni a `public`. Aplicarla a
 mano en producción **antes** de desplegar: ver el runbook en
 [`una-base-esquema-shop.md`](./una-base-esquema-shop.md#migraciones-posteriores-a-la-baseline).
 

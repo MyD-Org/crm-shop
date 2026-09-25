@@ -60,8 +60,8 @@ del CRM los productos que se quieren vender. Antes de encenderlo, compare en la
 base del entorno (parado en una consola SQL con permisos de lectura):
 
 ```sql
-select count(*) from shop.catalog_overlay where visible;
-select count(*) from shop.catalog_products where status = 'active';
+select count(*) from public.catalog_overlay where tenant_id = '<TENANT_SLUG>' and visible;
+select count(*) from public.catalog_products_shop where tenant_id = '<TENANT_SLUG>' and activo;
 ```
 
 El primer número tiene que ser el que el negocio quiere publicar (no cero, y

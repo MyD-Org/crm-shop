@@ -10,9 +10,9 @@
  * Docs: https://developer.alegra.com/reference
  */
 
-// `|| ` y no `?? `: en GitHub Actions un secret que no existe llega como STRING
-// VACÍO, no como undefined, y con `??` el default no entraba — la sync fallaba con
-// "Invalid URL" (corrida 35282628485, 17/09/2026).
+// `|| ` y no `?? `: una variable definida pero vacía (p. ej. un secret inexistente
+// en GitHub Actions) llega como STRING VACÍO, no como undefined, y con `??` el
+// default no entraba: fallaba con "Invalid URL".
 const BASE_URL =
   process.env.ALEGRA_BASE_URL?.trim() || "https://api.alegra.com/api/v1";
 
@@ -30,18 +30,6 @@ function authHeader(): string {
 }
 
 export type QueryParams = Record<string, string | number | undefined>;
-
-/** Alegra topea `limit` en 30 por página. No es configurable. */
-const PAGE_SIZE = 30;
-
-/**
- * Páginas que se piden en paralelo por tanda. Con ~5959 items, pedir de a una
- * (await secuencial) son ~199 round-trips y no termina nunca. Con 8 Alegra
- * empezó a responder 429 (13/09/2026) y la sync diaria fallaba entera: 4 es el
- * equilibrio. La corrida entera tarda ~3 min, que es justamente por lo que la
- * sync se mudó a GitHub Actions (no hay techo de 300 s ahí).
- */
-const PAGE_CONCURRENCY = 4;
 
 /** Reintentos ante 429 antes de rendirse. Backoff 1-2-4-8-16 s ≈ 31 s peor caso. */
 const MAX_RETRIES_429 = 5;
@@ -120,51 +108,6 @@ export async function apiFetch<T>(
   }
 
   return res.json() as Promise<T>;
-}
-
-/**
- * Recorre un endpoint paginado de Alegra (start/limit) hasta agotarlo.
- * Corta cuando una página vuelve vacía o incompleta (< PAGE_SIZE).
- */
-async function fetchAllPages<T>(
-  path: string,
-  map: (raw: Record<string, unknown>) => T,
-  extraParams: QueryParams = {}
-): Promise<T[]> {
-  const out: T[] = [];
-  let start = 0;
-  let done = false;
-
-  while (!done) {
-    const starts = Array.from(
-      { length: PAGE_CONCURRENCY },
-      (_, i) => start + i * PAGE_SIZE
-    );
-    const pages = await Promise.all(
-      starts.map((s) =>
-        apiFetch<Record<string, unknown>[]>(path, {
-          ...extraParams,
-          start: s,
-          limit: PAGE_SIZE,
-        })
-      )
-    );
-
-    for (const page of pages) {
-      if (!Array.isArray(page) || page.length === 0) {
-        done = true;
-        break;
-      }
-      for (const row of page) out.push(map(row));
-      if (page.length < PAGE_SIZE) {
-        done = true;
-        break;
-      }
-    }
-    start += PAGE_CONCURRENCY * PAGE_SIZE;
-  }
-
-  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -433,11 +376,6 @@ export function idPriceListUsable(
 // Items (productos)
 // ---------------------------------------------------------------------------
 
-/** Catalogo. Params utiles: start, limit, order_field, name, status. */
-export function getItems(params?: QueryParams) {
-  return apiFetch<AlegraItem[]>("/items", params);
-}
-
 export async function getItem(id: string) {
   return apiFetch<AlegraItem>(`/items/${segmentoId(id)}`);
 }
@@ -445,25 +383,6 @@ export async function getItem(id: string) {
 // ---------------------------------------------------------------------------
 // Listas de precios
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Categorias de items
-// ---------------------------------------------------------------------------
-
-export interface AlegraItemCategory {
-  id: string;
-  name: string;
-  status?: string;
-  [key: string]: unknown;
-}
-
-/**
- * Categorias del catalogo. Endpoint propio: evita tener que escanear los ~2800
- * items para saber que categorias existen (Alegra topea en 30 items/request).
- */
-export function getItemCategories(params?: QueryParams) {
-  return apiFetch<AlegraItemCategory[]>("/item-categories", params);
-}
 
 export function getListasPrecios(params?: QueryParams) {
   return apiFetch<AlegraPriceList[]>("/price-lists", params);
@@ -482,34 +401,8 @@ export async function getFactura(id: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Catalogo completo — solo para la sync (src/lib/catalog-sync.ts)
-//
-// Estas funciones recorren TODO el catalogo (~2800 items) paginando. Son caras:
-// no llamarlas desde el request de un usuario, solo desde el cron de sync.
+// Mapeo de ítems (cotización en vivo y lectura de la vista del CRM)
 // ---------------------------------------------------------------------------
-
-/** Fila normalizada de item, lista para escribir en catalog_products. */
-export interface ItemSyncRow {
-  alegraId: string;
-  code: string | null;
-  name: string;
-  description: string | null;
-  categoryAlegraId: string | null;
-  brand: string | null;
-  prices: AlegraPrice[];
-  stock: number | null;
-  status: string;
-  /** Alícuota de IVA del ítem. null = Alegra no mandó `tax` (ver `ivaPersistible`). */
-  ivaPorcentaje: number | null;
-}
-
-/** Fila normalizada de categoria, lista para escribir en catalog_categories. */
-export interface CategorySyncRow {
-  alegraId: string;
-  name: string;
-  parentAlegraId: string | null;
-  status: string;
-}
 
 /**
  * Extrae la marca de los customFields de un item. Alegra no tiene campo "marca"
@@ -526,11 +419,10 @@ export function marcaDeCustomFields(customFields: unknown): string | null {
 }
 
 /**
- * `price` de un ítem de Alegra → la forma que guarda el espejo del Shop
- * (`[{ idPriceList, name, price, main }]`, ids como string). La usan la sync
- * del Shop y la lectura de los precios del CRM, que llegan crudos
- * (`precios_alegra`). Idempotente: aplicada sobre precios ya normalizados
- * devuelve lo mismo.
+ * `price` de un ítem de Alegra → la forma que usa el Shop
+ * (`[{ idPriceList, name, price, main }]`, ids como string). La usa la lectura
+ * de los precios del CRM, que llegan crudos (`precios_alegra` de la vista).
+ * Idempotente: aplicada sobre precios ya normalizados devuelve lo mismo.
  */
 export function mapPrecios(raw: unknown): AlegraPrice[] {
   if (!Array.isArray(raw)) return [];
@@ -540,57 +432,6 @@ export function mapPrecios(raw: unknown): AlegraPrice[] {
     price: Number(p?.price ?? 0),
     main: Boolean(p?.main),
   }));
-}
-
-export function mapItemRow(raw: Record<string, unknown>): ItemSyncRow {
-  const prices = mapPrecios(raw.price);
-
-  const cat = raw.itemCategory as { id?: unknown } | undefined;
-  const inv = raw.inventory as { availableQuantity?: unknown } | undefined;
-  // `reference` viene como string o como { reference } segun el item.
-  const ref = raw.reference as { reference?: unknown } | string | undefined;
-  const code =
-    typeof ref === "string"
-      ? ref
-      : ref?.reference != null
-        ? String(ref.reference)
-        : null;
-
-  return {
-    alegraId: String(raw.id),
-    code: code || null,
-    name: String(raw.name ?? ""),
-    description: raw.description ? String(raw.description) : null,
-    categoryAlegraId: cat?.id != null ? String(cat.id) : null,
-    brand: marcaDeCustomFields(raw.customFields),
-    prices,
-    stock: inv?.availableQuantity != null ? Number(inv.availableQuantity) : null,
-    status: String(raw.status ?? "active"),
-    ivaPorcentaje: ivaPersistible({ tax: raw.tax as AlegraTax[] | undefined }),
-  };
-}
-
-function mapCategoryRow(raw: Record<string, unknown>): CategorySyncRow {
-  const parent = raw.parent as { id?: unknown } | undefined;
-  return {
-    alegraId: String(raw.id),
-    name: String(raw.name ?? ""),
-    parentAlegraId: parent?.id != null ? String(parent.id) : null,
-    status: String(raw.status ?? "active"),
-  };
-}
-
-/** Todos los items del catalogo. Orden estable por id para paginar sin saltos. */
-export function listAllItems(): Promise<ItemSyncRow[]> {
-  return fetchAllPages("/items", mapItemRow, {
-    order_field: "id",
-    order_direction: "ASC",
-  });
-}
-
-/** Todas las categorias de items. */
-export function listAllCategories(): Promise<CategorySyncRow[]> {
-  return fetchAllPages("/item-categories", mapCategoryRow);
 }
 
 // ---------------------------------------------------------------------------
@@ -631,29 +472,8 @@ export function ivaDeItem(item: Pick<AlegraItem, "tax">): number {
 }
 
 /**
- * Alícuota de IVA para GUARDAR y EXHIBIR (espejo del catálogo y ficha).
- *
- * Misma suma que `ivaDeItem`, con una diferencia a propósito: sin `tax` devuelve
- * null en vez de `IVA_DEFAULT`. En la cotización el default es una red de
- * seguridad (se corrige al facturar); en la exhibición sería publicar un precio
- * final inventado. null = mostrar el precio como hasta ahora, sin neto.
- */
-export function ivaPersistible(item: Pick<AlegraItem, "tax">): number | null {
-  if (!Array.isArray(item.tax) || item.tax.length === 0) return null;
-  let total = 0;
-  let alguno = false;
-  for (const t of item.tax) {
-    const pct = Number(t?.percentage);
-    if (t?.percentage == null || t.percentage === "" || !Number.isFinite(pct)) continue;
-    total += pct;
-    alguno = true;
-  }
-  return alguno ? total : null;
-}
-
-/**
- * Misma resolución de precio, pero sobre un array de precios suelto — es la
- * forma en que el espejo local guarda `catalog_products.prices`.
+ * Misma resolución de precio, pero sobre un array de precios suelto — la forma
+ * que devuelve `mapPrecios` sobre los precios de la vista del CRM.
  */
 export function precioDeLista(
   prices: AlegraPrice[] | undefined,

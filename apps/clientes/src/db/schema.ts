@@ -29,72 +29,12 @@ import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
  */
 export const shop = pgSchema("shop");
 
-/**
- * Espejo local del catálogo de Alegra.
- *
- * Alegra sigue siendo el system of record: acá vive una copia de solo lectura
- * que refresca la sync diaria (src/lib/catalog-sync.ts). Existe porque Alegra
- * topea las consultas en 30 items por request y el catálogo tiene ~2800:
- * paginarlo en vivo en cada visita al catálogo es inviable.
- *
- * Se usa para LISTAR, BUSCAR y cotizar: el carrito, el checkout y el pedido
- * usan los precios que publica la tienda (ver src/lib/cotizacion.ts).
+/*
+ * El catálogo NO vive en este esquema: el Shop lo lee de las vistas del CRM
+ * (`public.catalog_products_shop` / `public.catalog_categories_shop`, ver
+ * src/db/crm.ts). Las tablas del espejo propio (catalog_products,
+ * catalog_categories y catalog_sync_log de este esquema) se dropearon en 0015.
  */
-
-export const catalogCategories = shop.table(
-  "catalog_categories",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    alegraId: text("alegra_id").notNull(),
-    name: text("name").notNull(),
-    parentAlegraId: text("parent_alegra_id"),
-    // 'active' | 'inactive'. Inactive = no apareció en la última sync (baja
-    // lógica: nunca borramos, para no romper referencias históricas).
-    status: text("status").notNull().default("active"),
-    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("cc_alegra_id").on(t.alegraId),
-    index("cc_status_name").on(t.status, t.name),
-  ],
-);
-
-export const catalogProducts = shop.table(
-  "catalog_products",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    alegraId: text("alegra_id").notNull(),
-    /** `reference` en Alegra — el SKU que muestra el shop. Puede faltar. */
-    code: text("code"),
-    name: text("name").notNull(),
-    description: text("description"),
-    categoryAlegraId: text("category_alegra_id"),
-    /**
-     * Marca. Alegra no tiene campo nativo: sale de un customField del ítem. Si
-     * viene vacío, la capa de lectura cae al nombre de la categoría.
-     */
-    brand: text("brand"),
-    /** Todas las listas de precio del ítem: [{ idPriceList, name, price, main }]. */
-    prices: jsonb("prices").notNull().default([]),
-    /** Snapshot de inventario. null = ítem no inventariable (siempre disponible). */
-    stock: numeric("stock"),
-    /**
-     * Alícuota de IVA del ítem (21.00, 10.50, 0.00…), para exhibir precio final
-     * y "precio sin impuestos nacionales". null = Alegra no mandó `tax` o el
-     * producto todavía no pasó por una sync: se muestra el precio como antes.
-     * Nunca se completa con el default de la cotización (ver `ivaPersistible`).
-     */
-    ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }),
-    status: text("status").notNull().default("active"),
-    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("cp_alegra_id").on(t.alegraId),
-    index("cp_code").on(t.code),
-    index("cp_category").on(t.categoryAlegraId),
-    index("cp_status_name").on(t.status, t.name),
-  ],
-);
 
 /**
  * Vinculación entre una cuenta de acceso (Clerk) y un cliente de Alegra.
@@ -535,7 +475,7 @@ export const orders = shop.table(
 );
 
 /**
- * Líneas del pedido. Snapshot puro: no hay FK viva a `catalog_products` a
+ * Líneas del pedido. Snapshot puro: no hay FK viva al catálogo a
  * propósito — se guarda el `alegraItemId` como referencia informativa, pero el
  * nombre y el precio que se muestran salen de acá, no de un join.
  */
@@ -636,22 +576,6 @@ export const pagoIntentos = shop.table(
   ],
 );
 
-/** Bitácora de cada corrida de sync: observabilidad y "última sincronización". */
-export const catalogSyncLog = shop.table(
-  "catalog_sync_log",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    trigger: text("trigger").notNull(), // 'cron' | 'manual'
-    status: text("status").notNull().default("running"), // 'running' | 'ok' | 'error'
-    itemsSynced: integer("items_synced").notNull().default(0),
-    categoriesSynced: integer("categories_synced").notNull().default(0),
-    error: text("error"),
-    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
-    finishedAt: timestamp("finished_at", { withTimezone: true }),
-  },
-  (t) => [index("csl_started").on(t.startedAt)],
-);
-
 /**
  * Última copia BUENA de los planes de cuotas de un proveedor para un medio
  * (tasas reales, CFT, TEA). Se reemplaza sólo si la respuesta es válida: un
@@ -703,7 +627,7 @@ export const homeContent = shop.table("home_content", {
  *   entorno (`shopTenantId()`, ver src/lib/favoritos.ts).
  * - El ancla es `clerk_user_id`, como en `billing_profiles`: un visitante con la
  *   cookie del CRM y sin Clerk no tiene dónde guardar favoritos.
- * - Sin FK a `catalog_products`: el espejo lo reescribe la sync y un ítem puede
+ * - Sin FK al catálogo (vive en el CRM, `catalog_products_shop`): un ítem puede
  *   desaparecer; el favorito queda y la lista simplemente lo omite.
  * - El unique por (tenant, usuario, ítem) hace idempotente el alta
  *   (`on conflict do nothing`); el índice por fecha sirve al "más nuevo primero".
@@ -770,7 +694,7 @@ export const direccionesEnvio = shop.table(
  *   `on conflict do nothing` del primer guardado y del merge.
  * - `items` guarda sólo `{ id, qty }` (id de Alegra y cantidad) en el orden del
  *   carrito: nombre, marca y precio envejecen, se toman del espejo al leer
- *   (`src/lib/carrito-db.ts`). Sin FK a `catalog_products`, como `favorites`.
+ *   (`src/lib/carrito-db.ts`). Sin FK al catálogo, como `favorites`.
  * - `version` es monotónica: cada escritura la sube en 1 y el PUT sólo aplica
  *   si el cliente trae la vigente (concurrencia optimista entre dispositivos).
  *   Crear un pedido VACÍA la fila (items `[]`, version + 1) en vez de borrarla,

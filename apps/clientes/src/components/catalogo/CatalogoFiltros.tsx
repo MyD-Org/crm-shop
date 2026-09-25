@@ -60,8 +60,6 @@ export function CatalogoFiltros({
           ir({ categorias: alternarCategoria(facetas.categorias, estado.categorias, valor, tildado) })
         }
         emptyText="Sin categorías para estos filtros"
-        // En la hoja de mobile, filas y chevron a tamaño de dedo (globals.css).
-        className={dentroDeSheet ? "facetas-tactiles" : undefined}
       />
       <Divider />
       <FacetGroup

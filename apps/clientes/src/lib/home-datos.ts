@@ -9,7 +9,8 @@ import {
   type DatosLegales,
   type HomeContent,
 } from "@/data/home-defaults";
-import { leerSeccionHome } from "@/lib/home-guardar";
+import { DEFAULTS_FOOTER, KEY_FOOTER, resolverDatosFooter, type DatosFooter } from "@/data/footer";
+import { leerSeccionesHome } from "@/lib/home-guardar";
 
 export function combinarContenidoHome(filas: { key: string; payload: unknown }[]): HomeContent {
   return combinar(filas);
@@ -33,15 +34,34 @@ export const getContenidoHome = cache(async (): Promise<HomeContent> => {
 });
 
 /**
+ * Filas `legal` y `footer` de home_content, en una sola consulta por request:
+ * las leen el footer (todas las páginas) y las páginas legales.
+ */
+const getFilasFooter = cache(() => leerSeccionesHome([KEY_LEGAL, KEY_FOOTER]));
+
+/**
  * Datos legales del comercio (fila `legal` de home_content) para este request.
  * Los leen el footer y las páginas legales: si la DB falla, vacíos, y las
  * páginas omiten la identificación en vez de romperse.
  */
 export const getDatosLegales = cache(async (): Promise<DatosLegales> => {
   try {
-    return resolverDatosLegales(await leerSeccionHome(KEY_LEGAL));
+    return resolverDatosLegales((await getFilasFooter()).get(KEY_LEGAL));
   } catch (err) {
     console.error("[legales] home_content no disponible:", err);
     return DEFAULTS_LEGAL;
+  }
+});
+
+/**
+ * Contenido editable del footer (fila `footer`) para este request. Sin fila o
+ * si la DB falla, los defaults: el footer de siempre.
+ */
+export const getDatosFooter = cache(async (): Promise<DatosFooter> => {
+  try {
+    return resolverDatosFooter((await getFilasFooter()).get(KEY_FOOTER));
+  } catch (err) {
+    console.error("[footer] home_content no disponible:", err);
+    return DEFAULTS_FOOTER;
   }
 });

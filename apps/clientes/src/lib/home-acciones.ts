@@ -15,6 +15,7 @@ import {
   validarDatosLegales,
   type SeccionHome,
 } from "@/data/home-defaults";
+import { KEY_FOOTER, validarDatosFooter } from "@/data/footer";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
@@ -48,6 +49,8 @@ const SIN_PERMISO_SECCION = "No tiene permisos para editar esta sección.";
 const ERROR_LEER = "No se pudo cargar la sección. Inténtelo de nuevo.";
 const SIN_PERMISO_LEGAL = "No tiene permisos para editar los datos legales.";
 const ERROR_GUARDAR_LEGAL = "No se pudieron guardar los datos legales. Inténtelo de nuevo.";
+const SIN_PERMISO_FOOTER = "No tiene permisos para editar el pie de página.";
+const ERROR_GUARDAR_FOOTER = "No se pudo guardar el pie de página. Inténtelo de nuevo.";
 
 const ANCHO_HOME = 1600;
 const TTL_FIRMA_S = 600;
@@ -163,6 +166,41 @@ export async function guardarDatosLegales(payload: unknown): Promise<ResultadoGu
   } catch (err) {
     console.error("[home-acciones] no se pudieron guardar los datos legales:", err);
     return { ok: false, errores: [ERROR_GUARDAR_LEGAL] };
+  }
+}
+
+/**
+ * Guarda el contenido editable del footer (descripción, Contacto y barra
+ * inferior) en la fila `footer` de home_content. Revalida el layout entero:
+ * el footer está en todas las páginas. Nunca lanza.
+ */
+export async function guardarFooter(payload: unknown): Promise<ResultadoGuardar> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO_FOOTER] };
+
+  const validado = validarDatosFooter(payload);
+  if (!validado.ok) return validado;
+
+  try {
+    const { updatedAt } = await guardarSeccionHome(KEY_FOOTER, validado.datos);
+    revalidatePath("/", "layout");
+    return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
+  } catch (err) {
+    console.error("[home-acciones] no se pudo guardar el footer:", err);
+    return { ok: false, errores: [ERROR_GUARDAR_FOOTER] };
+  }
+}
+
+/** Borra la fila `footer`: vuelve el footer de código. Nunca lanza. */
+export async function restablecerFooter(): Promise<ResultadoGuardar> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO_FOOTER] };
+
+  try {
+    await borrarSeccionHome(KEY_FOOTER);
+    revalidatePath("/", "layout");
+    return { ok: true, updatedAt: null };
+  } catch (err) {
+    console.error("[home-acciones] no se pudo restablecer el footer:", err);
+    return { ok: false, errores: [ERROR_GUARDAR_FOOTER] };
   }
 }
 

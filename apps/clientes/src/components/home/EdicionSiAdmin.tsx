@@ -1,5 +1,6 @@
-import type { DatosLegales, MapaVisibilidad } from "@/data/home-defaults";
+import type { MapaVisibilidad } from "@/data/home-defaults";
 import { esAdmin } from "@/lib/auth";
+import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { BarraEdicion } from "./BarraEdicion";
 import { HabilitarEdicion } from "./HabilitarEdicion";
 
@@ -8,21 +9,21 @@ import { HabilitarEdicion } from "./HabilitarEdicion";
  * `<Suspense fallback={null}>`: la home se arma sin esperar a `esAdmin()` y
  * al visitante no le llega nada del editor (ni barra ni datos). Los datos de
  * cada sección los pide el Dialog al abrirse (`leerSeccionParaEditar`); acá
- * solo viaja lo que la barra muestra, y lo pasa el padre (no se relee
- * home_content dentro del hueco).
+ * solo viaja lo que la barra muestra. Datos legales y footer los pide el hueco
+ * sólo para el admin: el footer del layout ya los leyó en este request (React
+ * `cache`), así que no suman consultas.
  */
 export async function EdicionSiAdmin({
   visibilidad,
-  legal,
 }: {
   visibilidad: MapaVisibilidad;
-  legal: DatosLegales;
 }) {
   if (!(await esAdmin())) return null;
+  const [legal, footer] = await Promise.all([getDatosLegales(), getDatosFooter()]);
   return (
     <>
       <HabilitarEdicion />
-      <BarraEdicion visibilidad={visibilidad} legal={legal} />
+      <BarraEdicion visibilidad={visibilidad} legal={legal} footer={footer} />
     </>
   );
 }

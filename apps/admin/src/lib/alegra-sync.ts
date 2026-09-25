@@ -5,6 +5,7 @@ import type { TenantConfig } from "./tenants"
 import { listAllCategories, listAllItems } from "./alegra"
 import { upsertProductos } from "./catalog-products-repo"
 import { baseDeCorrida, evaluarCorrida } from "./alegra-sync-guarda"
+import { avisarShop } from "./aviso-shop"
 
 // Sincroniza el catálogo de Alegra a la cache local (upsert por alegraId). Lo que no se ve en la
 // corrida se marca 'inactive' (stale), solo si el run completó OK. Deja bitácora en catalog_sync_log.
@@ -15,6 +16,10 @@ import { baseDeCorrida, evaluarCorrida } from "./alegra-sync-guarda"
 // empuja el overlay ni marca stale, y queda 'parcial' en catalog_sync_log (con el motivo). Para
 // aceptar una baja masiva legítima: `opts.aceptarBaja` (sólo desde el workflow, con tenant).
 // Estados del log: 'running' | 'ok' | 'parcial' | 'error'.
+//
+// Al terminar bien (también 'parcial': lo leído ya se upserteó) avisa al Shop para que descarte
+// su caché del catálogo (lib/aviso-shop.ts). El aviso es best-effort: si el Shop no responde, la
+// sync ya quedó y su resultado no cambia.
 
 const CHUNK = 500
 
@@ -143,6 +148,13 @@ export async function syncCatalog(
         finishedAt: new Date(),
       })
       .where(eq(catalogSyncLog.id, log.id))
+
+    // Dentro del try pero blindado: un fallo acá no puede convertir una sync OK en 'error'.
+    try {
+      await avisarShop(config.id)
+    } catch (err) {
+      console.warn(`[alegra-sync] tenant=${config.id} aviso al Shop falló: ${err instanceof Error ? err.name : "error"}`)
+    }
 
     return guarda.parcial
       ? { ok: true, parcial: true, motivo: guarda.motivo ?? undefined, itemsSynced: items.length, categoriesSynced: categories.length }

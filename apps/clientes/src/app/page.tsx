@@ -3,7 +3,7 @@ import type { Product } from "@/data/products";
 import { HomeClient } from "@/components/HomeClient";
 import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
-import { getContenidoHome, getDatosLegales } from "@/lib/home-datos";
+import { getContenidoHome } from "@/lib/home-datos";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { getCatalogo, getPaginaCatalogo } from "@/lib/catalog";
 import { elegirDestacados } from "@/lib/destacados";
@@ -28,9 +28,7 @@ import { elegirDestacados } from "@/lib/destacados";
  * congelan en el build.
  */
 export default async function Home() {
-  // `getDatosLegales` ya lo pide el footer en este mismo request (React
-  // `cache`): acá no suma consultas, solo se lo pasa a la barra del admin.
-  const [contenido, legal] = await Promise.all([getContenidoHome(), getDatosLegales()]);
+  const contenido = await getContenidoHome();
   const { cantidad, skus = [] } = contenido.destacados;
 
   // Si el catálogo falla, la home degrada a destacados vacíos (la sección ya
@@ -52,7 +50,7 @@ export default async function Home() {
     <ModoEdicionProvider>
       <HomeClient oferta={oferta} contenido={contenido} destacados={destacados} />
       <Suspense fallback={null}>
-        <EdicionSiAdmin visibilidad={contenido.visibilidad} legal={legal} />
+        <EdicionSiAdmin visibilidad={contenido.visibilidad} />
       </Suspense>
     </ModoEdicionProvider>
   );

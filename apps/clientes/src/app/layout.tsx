@@ -16,9 +16,13 @@ import "./globals.css";
 
 // Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
 // consume como var(--font-nunito) / var(--font-sora) desde globals.css.
+// Nunito sólo en normal: ningún texto de la tienda la usa en itálica (los <em>
+// del DS van en font-display o con not-italic), y la itálica era una tercera
+// fuente precargada en todas las páginas. Si algún texto en Nunito pasa a
+// necesitarla, volver a pedir style: ["normal", "italic"] (sin ella el
+// navegador la simula inclinando la normal).
 const nunito = Nunito_Sans({
   subsets: ["latin"],
-  style: ["normal", "italic"],
   variable: "--font-nunito",
 });
 

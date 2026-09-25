@@ -6,8 +6,9 @@ import { REGISTRO, infracciones } from "@/test/registro-usted";
 
 /**
  * Guarda de registro formal de usted para las páginas legales, su editor, el
- * footer y (cuando existan) el Botón de arrepentimiento. Entran también los
- * `.ts`: los textos legales viven en los armadores de `src/lib/legales`.
+ * footer y su editor (`components/footer`, `data/footer.ts`) y el Botón de
+ * arrepentimiento. Entran también los `.ts`: los textos legales viven en los
+ * armadores de `src/lib/legales`.
  * Las rutas que todavía no existen se saltean.
  */
 
@@ -21,6 +22,8 @@ const RUTAS = [
   "components/legales",
   "lib/legales",
   "components/SiteFooter.tsx",
+  "components/footer",
+  "data/footer.ts",
 ].map((r) => join(SRC, r));
 
 const esFuente = (nombre: string) => /\.tsx?$/.test(nombre) && !/\.test\.tsx?$/.test(nombre);
@@ -44,6 +47,8 @@ describe("guarda de páginas legales: registro formal de usted", () => {
     const archivos = [...RUTAS.flatMap(fuentes), ...archivosArrepentimiento()];
     expect(archivos.some((a) => a.includes(join("lib", "legales")))).toBe(true);
     expect(archivos.some((a) => a.includes(join("components", "legales")))).toBe(true);
+    expect(archivos.some((a) => a.includes(join("components", "footer")))).toBe(true);
+    expect(archivos.some((a) => a.endsWith(join("data", "footer.ts")))).toBe(true);
   });
 
   it("atrapa voseo en un armador de texto", () => {

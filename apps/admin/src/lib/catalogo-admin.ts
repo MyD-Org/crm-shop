@@ -1,13 +1,11 @@
 import {
   esUuid,
-  registrarAvisoShop,
   LIMITE_LISTADO_DEFAULT,
   LIMITE_LISTADO_MAX,
   type FiltrosAdmin,
   type OrdenListado,
   type Seleccion,
 } from "@/lib/catalogo-overlay-repo"
-import { pingShopRevalidarCatalogo } from "@/lib/shop-revalidar"
 import type { FotoOverlay } from "@/db/schema"
 import { basePublicaFotos } from "./shop-media"
 
@@ -29,24 +27,8 @@ export const duplicadoResponse = (error: string, campo: string): Response =>
 export const conflictoResponse = (error: string, code: string): Response =>
   Response.json({ error, code }, { status: 409, headers: NO_STORE })
 
-/**
- * Aviso al Shop DESPUÉS de persistir. Nunca tira y nunca bloquea el guardado: el Shop lee estas
- * tablas directo, así que el cambio ya está a la vista; el aviso sólo le hace descartar lo que
- * tenga renderizado en caché. De paso registra la frescura que el
- * panel muestra (decisión D1: el CRM informa su propio último aviso entregado, no le pregunta
- * al Shop cuándo sincronizó).
- */
-export async function avisarShop(tenantId: string): Promise<{ propagado: boolean }> {
-  const { propagado } = await pingShopRevalidarCatalogo()
-  try {
-    await registrarAvisoShop(tenantId, propagado)
-  } catch (err) {
-    // La frescura es informativa: que no se pueda registrar no puede tumbar un guardado que ya
-    // se persistió.
-    console.warn(`[catalogo] no se pudo registrar el aviso al Shop: ${err instanceof Error ? err.name : "error"}`)
-  }
-  return { propagado }
-}
+// El aviso al Shop vive en lib/aviso-shop.ts (lo usan también la sync y el drenaje de stock).
+export { avisarShop } from "@/lib/aviso-shop"
 
 export interface QueryListado {
   filtros: FiltrosAdmin

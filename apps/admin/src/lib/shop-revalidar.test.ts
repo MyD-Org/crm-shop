@@ -42,6 +42,27 @@ describe("pingShopRevalidarCuotas", () => {
     await expect(pingShopRevalidarCuotas()).resolves.toEqual({ propagado: false })
   })
 
+  // La cortina "Próximamente" del Shop (o cualquier intermediario) contesta 200 con HTML: eso NO
+  // es un aviso entregado.
+  it("200 con HTML (cortina del gate) → no propagado y lo avisa en el log", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    fetchMock.mockResolvedValue(
+      new Response("<!doctype html><title>Próximamente</title>", { status: 200, headers: { "content-type": "text/html" } }),
+    )
+    await expect(pingShopRevalidarCuotas()).resolves.toEqual({ propagado: false })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("no es el JSON esperado"))
+  })
+
+  it("200 con JSON sin ok:true → no propagado", async () => {
+    fetchMock.mockResolvedValue(Response.json({ ok: false }))
+    await expect(pingShopRevalidarCuotas()).resolves.toEqual({ propagado: false })
+  })
+
+  it("200 con { ok: true, fetchedAt } (respuesta de cuotas) → propagado", async () => {
+    fetchMock.mockResolvedValue(Response.json({ ok: true, fetchedAt: "2026-09-25T10:00:00.000Z" }))
+    await expect(pingShopRevalidarCuotas()).resolves.toEqual({ propagado: true })
+  })
+
   it("timeout de 5 s → no propagado", async () => {
     expect(PING_TIMEOUT_MS).toBe(5000)
     vi.useFakeTimers()
@@ -94,6 +115,11 @@ describe("pingShopRevalidarCatalogo", () => {
     fetchMock.mockResolvedValue(new Response("bad gateway", { status: 502 }))
     await expect(pingShopRevalidarCatalogo()).resolves.toEqual({ propagado: false })
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("[catalogo]"))
+  })
+
+  it("200 con HTML (cortina del gate) → no propagado", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>Próximamente</html>", { status: 200, headers: { "content-type": "text/html" } }))
+    await expect(pingShopRevalidarCatalogo()).resolves.toEqual({ propagado: false })
   })
 
   it("sin configuración del Shop → no-op (no llama a fetch)", async () => {

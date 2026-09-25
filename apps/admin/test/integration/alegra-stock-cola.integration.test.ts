@@ -13,6 +13,10 @@ import { seedTenant, truncateAll } from "./helpers"
 // MOCKEADO (fetch stubeado: nada sale a la red). El ritmo se prueba con un reloj falso: sólo
 // se falsea `Date` y `dormir` lo adelanta. Datos inventados.
 
+// El aviso al Shop se mockea: acá sólo importa CUÁNDO se dispara y que su fallo no cambie nada.
+const { avisarShopMock } = vi.hoisted(() => ({ avisarShopMock: vi.fn() }))
+vi.mock("@/lib/aviso-shop", () => ({ avisarShop: avisarShopMock }))
+
 const A = "tenant-a"
 const config = { id: A, alegraMock: false, alegraEmail: "api@plataforma.example", alegraToken: "token-de-prueba" } as unknown as TenantConfig
 
@@ -61,6 +65,8 @@ beforeEach(async () => {
   await truncateAll()
   await seedTenant(A)
   fetchMock.mockReset()
+  avisarShopMock.mockReset()
+  avisarShopMock.mockResolvedValue({ propagado: true })
   vi.stubGlobal("fetch", fetchMock)
   vi.spyOn(console, "log").mockImplementation(() => {})
   vi.spyOn(console, "warn").mockImplementation(() => {})
@@ -208,6 +214,49 @@ describe("drenarTenant", () => {
     const r2 = await drenarTenant(config, { deadline: Date.now() + 1_000_000, dormir })
     expect(r2).toMatchObject({ leidos: 140, pendientes: 0, corte: "vacia" })
     for (const id of ids) expect(pedidosDe(id)).toBe(1)
+  })
+})
+
+describe("drenarTenant: aviso al Shop", () => {
+  it("con ítems leídos → avisa UNA vez por drenaje, con el tenant", async () => {
+    await encolarIds(["1", "2", "3"])
+    alegraTiene({ "1": 1, "2": 2, "3": 3 })
+    const r = await drenarTenant(config, { deadline: Date.now() + 30_000, ritmoMs: 0 })
+    expect(r.leidos).toBe(3)
+    expect(avisarShopMock).toHaveBeenCalledTimes(1)
+    expect(avisarShopMock).toHaveBeenCalledWith(A)
+  })
+
+  it("sólo inactivos (404) → también es un cambio: avisa", async () => {
+    await encolarIds(["9"])
+    alegraTiene({})
+    const r = await drenarTenant(config, { deadline: Date.now() + 30_000, ritmoMs: 0 })
+    expect(r).toMatchObject({ leidos: 0, inactivos: 1 })
+    expect(avisarShopMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("cola vacía → no avisa", async () => {
+    const r = await drenarTenant(config, { deadline: Date.now() + 30_000, ritmoMs: 0 })
+    expect(r).toMatchObject({ leidos: 0, inactivos: 0, corte: "vacia" })
+    expect(avisarShopMock).not.toHaveBeenCalled()
+  })
+
+  it("sólo errores (500) → sin cambios, no avisa", async () => {
+    await encolarIds(["1"])
+    fetchMock.mockImplementation(async () => new Response("", { status: 500 }))
+    const r = await drenarTenant(config, { deadline: Date.now() + 30_000, ritmoMs: 0 })
+    expect(r).toMatchObject({ leidos: 0, inactivos: 0 })
+    expect(avisarShopMock).not.toHaveBeenCalled()
+  })
+
+  it("el aviso tira → el drenaje no se entera: mismo resultado, sin excepción", async () => {
+    avisarShopMock.mockRejectedValue(new Error("shop caído"))
+    await encolarIds(["1"])
+    alegraTiene({ "1": 4 })
+    const r = await drenarTenant(config, { deadline: Date.now() + 30_000, ritmoMs: 0 })
+    expect(r).toMatchObject({ leidos: 1, inactivos: 0, errores: 0, pendientes: 0, corte: "vacia" })
+    expect((await producto("1")).stock).toBe("4")
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(`[alegra-stock/drenar] tenant=${A} aviso al Shop falló`))
   })
 })
 

@@ -6,7 +6,8 @@ import { URL_DEFENSA_CONSUMIDOR, identificacionComercio, type Bloque } from "./c
 import { bloquesTerminos } from "./terminos";
 import { bloquesPrivacidad } from "./privacidad";
 import { bloquesEnviosYPagos } from "./envios-y-pagos";
-import { columnasFooter } from "./footer";
+import { columnasFooter, linksContacto } from "./footer";
+import { DEFAULTS_FOOTER } from "@/data/footer";
 import { bloquesArrepentimiento } from "./arrepentimiento";
 
 /** Todo el texto visible de una lista de bloques, en un solo string. */
@@ -183,5 +184,47 @@ describe("botón de arrepentimiento", () => {
     const t = texto(bloquesArrepentimiento(COMPLETOS));
     expect(t).toContain("Razón social: Comercio Ejemplo SA");
     expect(t).toContain("legales@cliente.example");
+  });
+});
+
+describe("columna Contacto editable", () => {
+  it("sin datos del editor = los defaults de siempre", () => {
+    expect(columnasFooter({ arrepentimiento: true })).toEqual(
+      columnasFooter({ arrepentimiento: true, footer: DEFAULTS_FOOTER }),
+    );
+    expect(linksContacto(DEFAULTS_FOOTER).map((l) => l.href)).toEqual([
+      `https://wa.me/${DEFAULTS_FOOTER.whatsapp}`,
+      DEFAULTS_FOOTER.locales[0].mapsUrl,
+    ]);
+  });
+
+  it("dos locales y enlaces extra: externos en otra pestaña, internos por renderLink", () => {
+    const links = linksContacto({
+      ...DEFAULTS_FOOTER,
+      whatsapp: "5491112345678",
+      locales: [
+        { nombre: "Local centro", direccion: "Calle Falsa 123", mapsUrl: "", horario: "" },
+        { nombre: "Local 2", direccion: "Calle Ejemplo 456", mapsUrl: "https://maps.cliente.example/2", horario: "Lun a Vie" },
+      ],
+      enlaces: [
+        { label: "Instagram", href: "https://red.cliente.example/tienda" },
+        { label: "Preguntas", href: "/preguntas" },
+      ],
+    });
+    expect(links).toEqual([
+      { label: "WhatsApp", href: "https://wa.me/5491112345678" },
+      { label: "Local centro: Calle Falsa 123", href: "https://www.google.com/maps/search/?api=1&query=Calle%20Falsa%20123" },
+      { label: "Local 2: Calle Ejemplo 456 · Lun a Vie", href: "https://maps.cliente.example/2" },
+      { label: "Instagram", href: "https://red.cliente.example/tienda", external: true },
+      { label: "Preguntas", href: "/preguntas" },
+    ]);
+  });
+
+  it("sin WhatsApp, locales ni enlaces: no hay columna Contacto, Legales sigue", () => {
+    const columnas = columnasFooter({
+      arrepentimiento: false,
+      footer: { ...DEFAULTS_FOOTER, whatsapp: "", locales: [], enlaces: [] },
+    });
+    expect(columnas.map((c) => c.title)).toEqual(["Mi cuenta", "Legales"]);
   });
 });

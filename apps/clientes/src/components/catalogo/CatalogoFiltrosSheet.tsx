@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Badge, Button, Dialog, Divider, Select } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import { cambiarBorrador, hrefAlAplicar, limpiarBorrador } from "@/lib/catalogo-borrador";
 import type { EstadoCatalogo, OrdenCatalogo } from "@/lib/catalogo-url";
 import { ORDENES, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
 import { CatalogoFiltros } from "./CatalogoFiltros";
+import { useArrastrarParaCerrar } from "./useArrastrarParaCerrar";
 
 /**
  * Filtros en mobile (debajo de `lg`): botón "Filtros (n)" que abre una hoja
@@ -21,7 +22,8 @@ import { CatalogoFiltros } from "./CatalogoFiltros";
  * vigente.
  *
  * El foco queda atrapado en la hoja y vuelve a este botón al cerrar (lo
- * resuelve el `Dialog` del DS).
+ * resuelve el `Dialog` del DS). En el celular también se cierra arrastrándola
+ * hacia abajo (ver useArrastrarParaCerrar), igual que con la X.
  */
 export function CatalogoFiltrosSheet({
   facetas,
@@ -37,6 +39,9 @@ export function CatalogoFiltrosSheet({
   const [abierto, setAbierto] = useState(false);
   const [borrador, setBorrador] = useState(estado);
   const activos = contarFiltrosActivos(estado);
+  const [ancla, setAncla] = useState<HTMLDivElement | null>(null);
+  const cerrar = useCallback(() => setAbierto(false), []);
+  useArrastrarParaCerrar(ancla, cerrar);
 
   const abrir = () => {
     setBorrador(estado);
@@ -66,6 +71,7 @@ export function CatalogoFiltrosSheet({
         open={abierto}
         onOpenChange={setAbierto}
         placement="sheet"
+        className="hoja-arrastrable"
         title="Filtros y orden"
         description="Los cambios se aplican al pulsar «Aplicar»."
         footer={
@@ -79,7 +85,7 @@ export function CatalogoFiltrosSheet({
           </>
         }
       >
-        <div className="flex flex-col gap-5">
+        <div ref={setAncla} className="flex flex-col gap-5">
           {/* El orden vive acá y no afuera: en un teléfono no hay lugar para
               tenerlo al lado de la vista, y cambia los resultados igual que un
               filtro, así que entra en la misma tanda de "Aplicar". No suma al

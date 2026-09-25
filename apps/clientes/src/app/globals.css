@@ -20,15 +20,14 @@
   --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* Sin rebote al final de la página: en el celular el scroll seguía de largo
-   después del footer y mostraba el fondo claro debajo. Safari de iPhone
-   ignora overscroll-behavior en el documento y rebota igual, así que además
-   el lienzo (fondo de <html>, lo que se ve en el rebote) va con el color del
-   footer; el fondo claro lo pinta <body>, que cubre todo el contenido.
+/* Rebote al final de la página: en el celular el scroll seguía de largo
+   después del footer y mostraba el fondo claro debajo. El rebote se deja
+   (sacarlo con overscroll-behavior también saca el "tirar para actualizar"),
+   pero el lienzo (fondo de <html>, lo que se ve en el rebote) va con el color
+   del footer; el fondo claro lo pinta <body>, que cubre todo el contenido.
    `html[data-theme]` le gana al `background` del bloque del tema cálido. */
 html,
 html[data-theme] {
-  overscroll-behavior-y: none;
   background: var(--color-surface-dark);
 }
 
@@ -197,4 +196,18 @@ body {
   --font-display: var(--font-sora), system-ui, sans-serif;
   --shadow-1: 0 4px 12px rgba(22, 40, 63, 0.08);
   --shadow-2: 0 24px 44px -22px rgba(22, 40, 63, 0.28);
+}
+
+/* Manija de la hoja de filtros (mobile): avisa que se puede arrastrar hacia
+   abajo para cerrarla (ver useArrastrarParaCerrar). La hoja del DS es un flex
+   en columna, así que el ::before queda arriba de todo, sobre el encabezado. */
+.hoja-arrastrable::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 2.5rem;
+  height: 0.3rem;
+  margin-top: 0.5rem;
+  border-radius: 9999px;
+  background: var(--color-border-strong);
 }

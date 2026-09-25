@@ -236,10 +236,18 @@ export const catalogProducts = pgTable(
     alegraStatus: text("alegra_status"),
     /** No es nativa de Alegra: sale de customFields. La vidriera filtra por acá. */
     brand: text("brand"),
-    /** Para el precio final con IVA. El espejo del Shop ya lo tiene; éste lo necesita para dárselo. */
+    /**
+     * Para el precio final con IVA. SUMA de raw.tax (alegra-impuestos.ts = alegra_suma_impuestos,
+     * 0037): la escribe el mapper de la sync y del webhook; no es generada a propósito.
+     */
     ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }),
     /** El ítem COMPLETO como lo devuelve Alegra. Nada se descarta. ~2,5 KB por ítem. */
     raw: jsonb("raw").$type<Record<string, unknown>>(),
+    /**
+     * Precios crudos de Alegra (raw->'price'), generada STORED (0037) para que la vista
+     * catalog_products_shop no destoastee `raw` en cada lectura del Shop. raw NULL → [].
+     */
+    preciosAlegra: jsonb("precios_alegra").generatedAlwaysAs(sql`coalesce("raw"->'price', '[]'::jsonb)`),
     images: jsonb("images").notNull().default([]),
     syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
     /**

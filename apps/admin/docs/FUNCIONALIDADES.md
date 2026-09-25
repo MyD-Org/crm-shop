@@ -385,7 +385,7 @@ columna; sin DELETE en ninguna tabla:
 |---|---|
 | `alegra_contacts_shop` | SELECT (30 columnas desde 0036) |
 | `shop_contacto_write_through(text, text, text, jsonb)` | EXECUTE (0034) |
-| `catalog_products_shop` | SELECT (0035, ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) |
+| `catalog_products_shop`, `catalog_categories_shop` | SELECT (0035/0037, ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) |
 | `tenants` | SELECT sólo `id, name, whatsapp_number, receipts_email` |
 | `client_commercial_conditions` | SELECT |
 | `notification_log` | SELECT, UPDATE sólo `read_at` |
@@ -395,8 +395,9 @@ Los GRANTs de las migraciones son condicionales: si el rol `shop_app` se creó d
 migrar, correr como owner el bloque `DO $$ … $$` del final de
 `drizzle/0032_shop_cuenta_corriente.sql` (incluye el de 0031) y **después** el del final de
 `drizzle/0034_contacto_fuente_unica.sql` (SELECT de la vista recreada y EXECUTE de la
-función), el de `drizzle/0035_catalog_products_shop.sql` y el de
-`drizzle/0036_alegra_contacts_shop_telefonos.sql` (SELECT de la vista recreada con teléfonos).
+función), el de `drizzle/0035_catalog_products_shop.sql`, el de
+`drizzle/0036_alegra_contacts_shop_telefonos.sql` (SELECT de la vista recreada con teléfonos) y
+el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo).
 Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
 `test/integration/shop-contacto-write-through.integration.test.ts` y
@@ -610,34 +611,64 @@ WHERE leido_por = 'webhook' AND alegra_leido_at > now() - interval '1 hour' GROU
 
 ### Vista de catálogo para el Shop
 
-**Vista `catalog_products_shop`** (migración 0035, vive solo en SQL). Es lo único del espejo de
-productos que lee el Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada sobre la
-tabla `catalog_products`). Sirve para que el Shop muestre y valide stock, precio y estado con
-el dato que el CRM mantiene al día (sync diaria + webhooks). Seis columnas:
+**Vistas `catalog_products_shop` y `catalog_categories_shop`** (migraciones 0035 y 0037, viven
+solo en SQL). Son lo único del espejo de Alegra que lee el Shop, con el rol `shop_app`
+(`GRANT SELECT` sobre las vistas, nada sobre las tablas `catalog_products` ni
+`catalog_categories`). Con ellas el Shop muestra el producto entero (nombre, descripción,
+código, marca, categoría, IVA, stock, precio y estado) con el dato que el CRM mantiene al día
+(sync diaria + webhooks). `catalog_products_shop` tiene doce columnas, en este orden (las seis de
+0035 primero; 0037 sumó las otras seis al final):
 
 | Columna | De dónde sale |
 |---|---|
 | `tenant_id`, `alegra_id` | igual que en la tabla |
 | `stock` | `stock` (total de todos los depósitos; NULL = no inventariable) |
-| `precios_alegra` | `raw->'price'` tal cual lo manda Alegra (`[]` si no hay). No se usa `prices` porque no trae la lista principal; el Shop lo mapea con su propio mapper |
+| `precios_alegra` | columna generada de la tabla: `raw->'price'` tal cual lo manda Alegra (`[]` si no hay). No se usa `prices` porque no trae la lista principal; el Shop lo mapea con su propio mapper |
 | `activo` | `status = 'active'` (visto en la última sync) **y** `alegra_status` distinto de `'inactive'` |
-| `alegra_leido_at` | cuándo se le pidió el dato a Alegra; el Shop lo compara con su propia sync y usa el más nuevo |
+| `alegra_leido_at` | cuándo se le pidió el dato a Alegra |
+| `name`, `description`, `brand`, `category_alegra_id` | igual que en la tabla (la marca sale de los customFields) |
+| `code` | referencia de Alegra: string tal cual, u objeto `{ reference }` → su valor; cualquier otra forma o un vacío → NULL |
+| `iva_porcentaje` | **suma** de los impuestos del ítem (ver abajo) |
 
-Nunca `raw` completo, nombres, descripciones ni imágenes. Si se cambia o borra en la tabla una
-de las columnas que usa la vista, se recrea **en la misma migración** (DROP + CREATE + GRANT).
+`catalog_categories_shop`: `tenant_id, alegra_id, name, parent_alegra_id, activo`
+(`activo = status = 'active'`; la sync marca `inactive` lo que no vino).
 
-El GRANT es condicional: si el rol `shop_app` se creó después de migrar, correr como owner el
-bloque `DO $$ … $$` del final de `drizzle/0035_catalog_products_shop.sql`. La reversa está en
-el encabezado del archivo. El test
-`test/integration/catalog-products-shop-grants.integration.test.ts` corre ese mismo bloque y
-verifica como `shop_app` que la vista se lee y que la tabla y las escrituras quedan cerradas.
+Nunca `raw` completo ni imágenes. Si se cambia o borra en la tabla una de las columnas que usa
+una vista, se recrea **en la misma migración** (DROP + CREATE + GRANT). Sólo se agregan columnas
+al final (`CREATE OR REPLACE VIEW`): así el Shop que ya está en prod sigue andando.
+
+**Regla de impuestos (IVA = suma).** `iva_porcentaje` es la SUMA de `percentage` de todos los
+elementos de `raw.tax`, sin mirar qué impuesto es. Cuenta un número JSON o un string decimal
+simple (sin exponentes; se quitan sólo espacios de los extremos); lo demás se ignora. Sin
+elementos que cuenten → NULL; `[{percentage: 0}]` → 0 (exento). La escriben la sync y el
+drenador de webhooks con `sumaImpuestos` (`src/lib/alegra-impuestos.ts`); su espejo SQL es
+`public.alegra_suma_impuestos(jsonb)` (0037, sin permiso para PUBLIC ni `shop_app`), que usó el
+backfill de 0037. Los ata el vector `src/lib/__fixtures__/impuestos-alegra.json`. Consulta de
+salud (tiene que dar 0; si no, re-correr el UPDATE marcado `backfill-iva` de 0037):
+
+```sql
+SELECT count(*) FROM catalog_products
+WHERE raw IS NOT NULL
+  AND iva_porcentaje IS DISTINCT FROM alegra_suma_impuestos(raw->'tax')::numeric(5,2);
+```
+
+Los GRANTs son condicionales: si el rol `shop_app` se creó después de migrar, correr como owner
+el bloque `DO $$ … $$` del final de `drizzle/0035_catalog_products_shop.sql` y **después** el de
+`drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas). Las reversas están en el encabezado
+de cada archivo. El test `test/integration/catalog-products-shop-grants.integration.test.ts`
+corre esos mismos bloques y verifica como `shop_app` que las vistas se leen (columnas exactas y
+en orden) y que las tablas y las escrituras quedan cerradas;
+`test/integration/catalogo-shop-0037.integration.test.ts` cubre la regla de impuestos (TS = SQL
+= persistido), el backfill y la columna generada.
 
 Verificación en prod (como `shop_app`, en la base que usa el Shop):
 
 ```sql
 SET ROLE shop_app;
-SELECT count(*) FROM public.catalog_products_shop;  -- debe funcionar
-SELECT 1 FROM public.catalog_products LIMIT 1;      -- debe fallar: permission denied
+SELECT count(*) FROM public.catalog_products_shop;    -- debe funcionar
+SELECT count(*) FROM public.catalog_categories_shop;  -- debe funcionar
+SELECT 1 FROM public.catalog_products LIMIT 1;        -- debe fallar: permission denied
+SELECT 1 FROM public.catalog_categories LIMIT 1;      -- debe fallar: permission denied
 RESET ROLE;
 ```
 

@@ -13,16 +13,21 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
  * global-setup migra; este test crea el rol (NOLOGIN, sólo en el Postgres LOCAL), corre el MISMO
  * bloque de GRANTs leído del .sql y verifica como `shop_app`. Si creó el rol, lo borra al final.
  *
+ * Migración 0037 (change `catalogo-shop-desde-crm`): la vista suma 6 columnas AL FINAL (12 en
+ * total) y aparece `catalog_categories_shop` (5). Su bloque de GRANTs concede las dos vistas y
+ * nada sobre las tablas; se corre después del de 0035, igual que en una base migrada.
+ *
  * Datos inventados: tenant `tenant-cps`, ítems de fantasía, dominio `.example`.
  */
 
 const MIGRACION = fileURLToPath(new URL("../../drizzle/0035_catalog_products_shop.sql", import.meta.url))
+const MIGRACION_0037 = fileURLToPath(new URL("../../drizzle/0037_catalogo_shop_desde_crm.sql", import.meta.url))
 
 /** El bloque de GRANTs tal cual está en la migración (último statement). */
-function bloqueDeGrants(): string {
-  const partes = readFileSync(MIGRACION, "utf8").split("--> statement-breakpoint")
+function bloqueDeGrants(archivo = MIGRACION): string {
+  const partes = readFileSync(archivo, "utf8").split("--> statement-breakpoint")
   const bloque = partes[partes.length - 1]
-  if (!/DO \$\$/.test(bloque)) throw new Error("0035: no encontré el bloque DO $$ de los GRANTs")
+  if (!/DO \$\$/.test(bloque)) throw new Error(`${archivo}: no encontré el bloque DO $$ de los GRANTs`)
   return bloque
 }
 
@@ -57,6 +62,7 @@ const SIN_PERMISO = { ok: false, code: "42501" }
 
 async function limpiar() {
   await sql`DELETE FROM catalog_products WHERE tenant_id = 'tenant-cps'`
+  await sql`DELETE FROM catalog_categories WHERE tenant_id = 'tenant-cps'`
   await sql`DELETE FROM tenants WHERE id = 'tenant-cps'`
 }
 
@@ -69,10 +75,12 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
     if (existe.length === 0) {
       // Sin el rol, el bloque condicional no concede nada y no falla (como en crm_test al migrar).
       await sql.unsafe(bloqueDeGrants())
+      await sql.unsafe(bloqueDeGrants(MIGRACION_0037))
       await sql.unsafe("CREATE ROLE shop_app NOLOGIN")
       rolCreadoAca = true
     }
     await sql.unsafe(bloqueDeGrants())
+    await sql.unsafe(bloqueDeGrants(MIGRACION_0037))
 
     await limpiar()
     await sql`
@@ -90,6 +98,11 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
         ('tenant-cps', '3', 'Ítem que no vino en la sync', 5, 'inactive', 'active', '{}'::jsonb, NULL, NULL),
         ('tenant-cps', '4', 'Ítem inactivo en Alegra', 5, 'active', 'inactive', '{}'::jsonb, NULL, NULL)
     `
+    await sql`
+      INSERT INTO catalog_categories (tenant_id, alegra_id, name, parent_alegra_id, status)
+      VALUES ('tenant-cps', 'c1', 'Categoría raíz', NULL, 'active'),
+             ('tenant-cps', 'c2', 'Categoría dada de baja', 'c1', 'inactive')
+    `
   })
 
   afterAll(async () => {
@@ -103,7 +116,7 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
     await sql.end()
   })
 
-  it("la vista tiene exactamente las 6 columnas del contrato (sin raw ni nombres)", async () => {
+  it("la vista tiene exactamente las 12 columnas del contrato, en orden (sin raw ni imágenes)", async () => {
     const cols = await sql`
       SELECT column_name, data_type FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'catalog_products_shop'
@@ -116,6 +129,27 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
       ["precios_alegra", "jsonb"],
       ["activo", "boolean"],
       ["alegra_leido_at", "timestamp with time zone"],
+      ["name", "text"],
+      ["description", "text"],
+      ["code", "text"],
+      ["brand", "text"],
+      ["category_alegra_id", "text"],
+      ["iva_porcentaje", "numeric"],
+    ])
+  })
+
+  it("catalog_categories_shop tiene exactamente 5 columnas, en orden", async () => {
+    const cols = await sql`
+      SELECT column_name, data_type FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'catalog_categories_shop'
+      ORDER BY ordinal_position
+    `
+    expect(cols.map((c) => [c.column_name, c.data_type])).toEqual([
+      ["tenant_id", "text"],
+      ["alegra_id", "text"],
+      ["name", "text"],
+      ["parent_alegra_id", "text"],
+      ["activo", "boolean"],
     ])
   })
 
@@ -154,10 +188,25 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
     ).toEqual({ ok: true, filas: 4 })
   })
 
+  it("shop_app lee las columnas nuevas y la vista de categorías", async () => {
+    expect(
+      await comoShopApp(
+        "SELECT name, description, code, brand, category_alegra_id, iva_porcentaje FROM public.catalog_products_shop WHERE tenant_id = 'tenant-cps'",
+      ),
+    ).toEqual({ ok: true, filas: 4 })
+    expect(
+      await comoShopApp(
+        "SELECT tenant_id, alegra_id, name, parent_alegra_id, activo FROM public.catalog_categories_shop WHERE tenant_id = 'tenant-cps'",
+      ),
+    ).toEqual({ ok: true, filas: 2 })
+  })
+
   it.each([
     "SELECT 1 FROM public.catalog_products LIMIT 1",
     "SELECT raw FROM public.catalog_products",
     "UPDATE public.catalog_products SET stock = 0",
+    "SELECT 1 FROM public.catalog_categories LIMIT 1",
+    "UPDATE public.catalog_categories SET name = 'x'",
   ])("tabla base cerrada: %s → sin permiso", async (stmt) => {
     expect(await comoShopApp(stmt)).toEqual(SIN_PERMISO)
   })
@@ -170,7 +219,8 @@ describe("migración 0035: vista catalog_products_shop para shop_app (DB real)",
     expect(await comoShopApp(stmt)).toEqual(SIN_PERMISO)
   })
 
-  it("el bloque de GRANTs es idempotente (se puede correr a mano otra vez)", async () => {
+  it("los bloques de GRANTs son idempotentes (se pueden correr a mano otra vez)", async () => {
     await expect(sql.unsafe(bloqueDeGrants())).resolves.toBeDefined()
+    await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0037))).resolves.toBeDefined()
   })
 })

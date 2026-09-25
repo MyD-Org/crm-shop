@@ -12,8 +12,15 @@ import { seedTenant, truncateAll } from "./helpers"
 vi.mock("@/lib/alegra", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/alegra")>()),
   listAllCategories: async () => categoriasDeAlegra,
-  listAllItems: async () => itemsDeAlegra,
+  listAllItems: async () => {
+    if (fallaAlegra) throw new Error("alegra caída")
+    return itemsDeAlegra
+  },
 }))
+
+// El aviso al Shop se mockea: acá sólo importa CUÁNDO se dispara y que su fallo no cambie nada.
+const { avisarShopMock } = vi.hoisted(() => ({ avisarShopMock: vi.fn() }))
+vi.mock("@/lib/aviso-shop", () => ({ avisarShop: avisarShopMock }))
 
 const { syncCatalog } = await import("@/lib/alegra-sync")
 
@@ -23,6 +30,7 @@ const cfg = (id: string) => ({ id }) as Parameters<typeof syncCatalog>[0]
 
 let categoriasDeAlegra: AlegraCategory[] = []
 let itemsDeAlegra: AlegraProduct[] = []
+let fallaAlegra = false
 
 const VIEJO = "2026-01-01T00:00:00Z"
 const OVERLAY_VIEJO = new Date(VIEJO).toISOString()
@@ -96,6 +104,9 @@ beforeEach(async () => {
   await seedTenant(B)
   categoriasDeAlegra = categorias(3)
   itemsDeAlegra = []
+  fallaAlegra = false
+  avisarShopMock.mockReset()
+  avisarShopMock.mockResolvedValue({ propagado: true })
   vi.spyOn(console, "warn").mockImplementation(() => {})
   vi.spyOn(console, "info").mockImplementation(() => {})
 })
@@ -178,4 +189,41 @@ it("categorías 0 con ítems normales → stale de productos sí, de categorías
   expect(await inactivos(A)).toBe(1)
   expect(await categoriasInactivas(A)).toBe(0)
   expect((await ultimoLog(A)).status).toBe("parcial")
+})
+
+describe("aviso al Shop al terminar la sync", () => {
+  it("sync OK → avisa una vez, con el tenant de la corrida", async () => {
+    await seedLog(A, "ok", 10, 3, "2026-09-20T07:00:00Z")
+    itemsDeAlegra = items(10)
+    const r = await syncCatalog(cfg(A), "cron")
+    expect(r).toEqual({ ok: true, itemsSynced: 10, categoriesSynced: 3 })
+    expect(avisarShopMock).toHaveBeenCalledTimes(1)
+    expect(avisarShopMock).toHaveBeenCalledWith(A)
+  })
+
+  it("sync parcial → avisa igual: lo leído ya se upserteó (precios y stock nuevos)", async () => {
+    await seedLog(A, "ok", 100, 3, "2026-09-20T07:00:00Z")
+    itemsDeAlegra = items(50)
+    const r = await syncCatalog(cfg(A), "manual")
+    expect(r).toMatchObject({ ok: true, parcial: true })
+    expect(avisarShopMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("sync con error → no avisa", async () => {
+    fallaAlegra = true
+    const r = await syncCatalog(cfg(A), "cron")
+    expect(r).toMatchObject({ ok: false, error: "alegra caída" })
+    expect(avisarShopMock).not.toHaveBeenCalled()
+    expect((await ultimoLog(A)).status).toBe("error")
+  })
+
+  it("el aviso tira → la sync no se entera: mismo resultado y log ok", async () => {
+    avisarShopMock.mockRejectedValue(new Error("shop caído"))
+    await seedLog(A, "ok", 10, 3, "2026-09-20T07:00:00Z")
+    itemsDeAlegra = items(10)
+    const r = await syncCatalog(cfg(A), "cron")
+    expect(r).toEqual({ ok: true, itemsSynced: 10, categoriesSynced: 3 })
+    expect((await ultimoLog(A)).status).toBe("ok")
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(`[alegra-sync] tenant=${A} aviso al Shop falló`))
+  })
 })

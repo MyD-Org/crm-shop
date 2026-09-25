@@ -104,7 +104,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[/api/carrito/cotizar] error:", err);
     return NextResponse.json(
-      { error: "No pudimos calcular el total. Probá de nuevo en un momento." },
+      { error: "No pudimos calcular el total. Inténtelo de nuevo en un momento." },
       { status: 502 },
     );
   }

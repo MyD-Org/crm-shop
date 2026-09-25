@@ -32,6 +32,23 @@ describe("studio lighting geometry", () => {
     expect(linear.x).toBeGreaterThan(SHELF_STRIP.x);
     expect(linear.x).toBeLessThan(SHELF_STRIP.x + SHELF_STRIP.width);
   });
+  it("gives every lamp a tap area around the whole fixture, without overlaps", () => {
+    for (const light of HERO_LIGHTS) {
+      const { hit } = light;
+      expect(light.x).toBeGreaterThanOrEqual(hit.x);
+      expect(light.x).toBeLessThanOrEqual(hit.x + hit.width);
+      expect(light.y).toBeGreaterThanOrEqual(hit.y);
+      expect(light.y).toBeLessThanOrEqual(hit.y + hit.height);
+      expect(hit.x + hit.width).toBeLessThanOrEqual(1536);
+      expect(hit.width).toBeGreaterThanOrEqual(200);
+    }
+    for (const a of HERO_LIGHTS) for (const b of HERO_LIGHTS) {
+      if (a === b) continue;
+      const apart = a.hit.x + a.hit.width <= b.hit.x || b.hit.x + b.hit.width <= a.hit.x
+        || a.hit.y + a.hit.height <= b.hit.y || b.hit.y + b.hit.height <= a.hit.y;
+      expect(apart, `${a.id} / ${b.id}`).toBe(true);
+    }
+  });
   it("uses independent continuous falloff, with exact off outside the radius", () => {
     const light = HERO_LIGHTS[1];
     expect(proximity(light.x, light.y, light)).toBe(1);

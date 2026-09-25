@@ -17,10 +17,10 @@ import { CuotasCard } from "@/components/CuotasCard";
 import { Reveal } from "@/components/Reveal";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { linkNext } from "@/components/catalogo/link-next";
+import { imagenNext } from "@/components/catalogo/imagen-next";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
-import { preload } from "react-dom";
 import type { ReactNode } from "react";
 import {
   aVisibleOn,
@@ -198,10 +198,10 @@ export function HomeClient({
   const imagenesDestacados = secDestacados.imagenes ?? [];
   const vis = (s: SeccionHome) => visibilidadDe(contenido.visibilidad, s);
 
-  // La foto del hero es el LCP de la home: se pide con prioridad desde el
-  // <head> en vez de esperar a que el navegador encuentre el <img> del DS.
+  // La foto del hero es el LCP de la home: el Hero del DS la pide con
+  // `priority` e `imagenNext` la precarga desde el <head> (una sola vez, ya
+  // con srcset/sizes del optimizador).
   const imagenHero = isStudioImage(hero.imagen) ? STUDIO_IMAGE : hero.imagen;
-  if (imagenHero && vis("hero") !== "nunca") preload(imagenHero, { as: "image", fetchPriority: "high" });
 
   return (
     <main className="flex-1">
@@ -222,6 +222,8 @@ export function HomeClient({
                 leadVisibleOn={textoVisibleOn(hero, "bajada")}
                 imageSrc={imagenHero}
                 imageAlt={hero.imagenAlt}
+                renderImage={imagenNext}
+                renderLink={linkNext}
                 ctas={sinItemsOcultos(hero.ctas).map((c) => ({
                   label: c.label,
                   href: c.href,
@@ -250,6 +252,7 @@ export function HomeClient({
           {(items) => (
             <Marquee
               items={items.map((it) => (it.logo ? { src: it.logo, alt: it.texto } : it.texto))}
+              renderImage={imagenNext}
               className="mt-[clamp(28px,4vw,48px)] [&_span]:font-semibold [&_span]:not-italic"
             />
           )}
@@ -265,7 +268,7 @@ export function HomeClient({
               {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
                   min-h menores; la variante "mosaic" debería llevarla (DS gap). */}
               <PorTamano items={ambientes.items}>
-                {(items) => <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(items)} />}
+                {(items) => <RoomTiles className="[&>a]:min-h-[300px]" items={aTilesDS(items)} renderImage={imagenNext} renderLink={linkNext} />}
               </PorTamano>
             </section>
           </SeccionEditable>
@@ -345,6 +348,7 @@ export function HomeClient({
               }
               imageSrc={bannerDeco.imagen}
               renderLink={linkNext}
+              renderImage={imagenNext}
             />
           </SeccionEditable>
         </Reveal>
@@ -358,8 +362,8 @@ export function HomeClient({
               <PorTamano items={decoGrid.items}>
                 {(items) => (
                   <>
-                    <RoomTiles variant="stack" items={aTilesDS(items)} className="lg:hidden" />
-                    <RoomTiles variant="grid" items={aTilesDS(items)} className="hidden lg:grid" />
+                    <RoomTiles variant="stack" items={aTilesDS(items)} className="lg:hidden" renderImage={imagenNext} renderLink={linkNext} />
+                    <RoomTiles variant="grid" items={aTilesDS(items)} className="hidden lg:grid" renderImage={imagenNext} renderLink={linkNext} />
                   </>
                 )}
               </PorTamano>

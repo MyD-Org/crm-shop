@@ -9,7 +9,7 @@ import { permitir } from "@/lib/rate-limit";
 export const dynamic = "force-dynamic";
 
 /**
- * Techo por usuario.
+ * Techo por usuario (al visitante sin sesión no se lo limita).
  *
  * Esta ruta ya no toca Alegra (cotiza desde el espejo), pero cada request es
  * una consulta a la base: el techo evita que un cliente en loop la martille.
@@ -17,17 +17,6 @@ export const dynamic = "force-dynamic";
  * cantidades, con debounce—.
  */
 const MAX_POR_MINUTO = 20;
-
-/**
- * Techo por IP para visitantes sin sesión. Más alto que el de usuario porque
- * una IP puede ser compartida (red de la operadora, wifi de un local).
- */
-const MAX_POR_MINUTO_VISITANTE = 60;
-
-/** Primera IP de `x-forwarded-for` (la pone Vercel), o null. */
-function ipDe(req: Request): string | null {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
-}
 
 /**
  * POST /api/carrito/cotizar
@@ -46,11 +35,9 @@ function ipDe(req: Request): string | null {
 export async function POST(req: Request) {
   const { clerkUserId, cliente } = await identidadActual();
 
+  // El techo es por usuario; al visitante sin sesión no se lo limita.
   const quien = clerkUserId ?? cliente?.codigocliente;
-  const permitido = quien
-    ? permitir(`cotizar:${quien}`, MAX_POR_MINUTO, 60_000)
-    : permitir(`cotizar:ip:${ipDe(req) ?? "desconocida"}`, MAX_POR_MINUTO_VISITANTE, 60_000);
-  if (!permitido) {
+  if (quien && !permitir(`cotizar:${quien}`, MAX_POR_MINUTO, 60_000)) {
     return NextResponse.json(
       { error: "Estás recalculando muy seguido. Esperá unos segundos." },
       { status: 429 },

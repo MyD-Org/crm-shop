@@ -21,10 +21,10 @@ vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: async () => false }));
 
 import { POST } from "./route";
 
-function pedido(ip = "203.0.113.7") {
+function pedido() {
   return new Request("https://tienda.example/api/carrito/cotizar", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-forwarded-for": ip },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ items: [{ id: "1", qty: 2 }] }),
   });
 }
@@ -46,7 +46,7 @@ beforeEach(() => {
 
 describe("POST /api/carrito/cotizar", () => {
   it("sin sesión cotiza con la lista principal (sin idPriceList)", async () => {
-    const r = await POST(pedido("203.0.113.1"));
+    const r = await POST(pedido());
     expect(r.status).toBe(200);
     expect((await r.json()).total).toBe(1210);
     expect(cotizar).toHaveBeenCalledWith([{ id: "1", qty: 2 }], {
@@ -58,17 +58,14 @@ describe("POST /api/carrito/cotizar", () => {
 
   it("con cliente vinculado cotiza con su lista", async () => {
     identidad = { clerkUserId: "user_1", cliente: { codigocliente: "C1" } };
-    await POST(pedido("203.0.113.2"));
+    await POST(pedido());
     expect(cotizar).toHaveBeenCalledWith(expect.any(Array), {
       idPriceList: "7",
       entregaTipo: "retiro",
     });
   });
 
-  it("sin sesión el techo es por IP", async () => {
-    for (let i = 0; i < 60; i++) expect((await POST(pedido("203.0.113.3"))).status).toBe(200);
-    expect((await POST(pedido("203.0.113.3"))).status).toBe(429);
-    // Otra IP no comparte el techo.
-    expect((await POST(pedido("203.0.113.4"))).status).toBe(200);
+  it("sin sesión no hay techo", async () => {
+    for (let i = 0; i < 100; i++) expect((await POST(pedido())).status).toBe(200);
   });
 });

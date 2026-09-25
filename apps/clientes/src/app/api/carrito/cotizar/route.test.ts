@@ -21,10 +21,10 @@ vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: async () => false }));
 
 import { POST } from "./route";
 
-function pedido() {
+function pedido(ip = "203.0.113.7") {
   return new Request("https://tienda.example/api/carrito/cotizar", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-forwarded-for": ip },
     body: JSON.stringify({ items: [{ id: "1", qty: 2 }] }),
   });
 }
@@ -65,7 +65,10 @@ describe("POST /api/carrito/cotizar", () => {
     });
   });
 
-  it("sin sesión no hay techo", async () => {
-    for (let i = 0; i < 100; i++) expect((await POST(pedido())).status).toBe(200);
+  it("sin sesión el techo es por IP (frena bots)", async () => {
+    for (let i = 0; i < 60; i++) expect((await POST(pedido("203.0.113.3"))).status).toBe(200);
+    expect((await POST(pedido("203.0.113.3"))).status).toBe(429);
+    // Otra IP no comparte el techo.
+    expect((await POST(pedido("203.0.113.4"))).status).toBe(200);
   });
 });

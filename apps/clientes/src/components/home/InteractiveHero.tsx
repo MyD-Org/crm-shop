@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_QUERY, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
+import { COVER_QUERY, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
@@ -14,6 +14,9 @@ const SCROLL_STEP_PX = 90;
 const SCROLL_HOLD_MS = 700;
 /** A lamp lit by scrolling stays on at least this long before the next one can take over. */
 const SCROLL_MIN_ON_MS = 900;
+
+/** La foto de celular es otra que la del DS: recién ahí hace falta el <picture> propio. */
+const HAS_MOBILE_PHOTO = (STUDIO_IMAGE_MOBILE as string) !== STUDIO_IMAGE;
 
 /** Keeps the DS Hero and its content intact. Only the background is enhanced. */
 export function InteractiveHero({ children, enabled }: { children: ReactNode; enabled: boolean }) {
@@ -135,11 +138,13 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   return <div ref={root} className={styles.root} data-interactive-hero="">
     {children}
     <div ref={scene} className={styles.scene}>
-      {/* Phones get their own source; elsewhere it never matches and nothing loads. */}
-      <picture className={styles.mobilePhoto}>
+      {/* Phones get their own source; elsewhere it never matches and nothing loads.
+          Solo si la foto de celular es otra: si es la misma, el <img> del DS
+          (next/image, ya con su variante por ancho) la cubre y así no se baja dos veces. */}
+      {HAS_MOBILE_PHOTO && <picture className={styles.mobilePhoto}>
         <source media={COVER_QUERY} srcSet={STUDIO_IMAGE_MOBILE} />
         <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" />
-      </picture>
+      </picture>}
       {rect && <>
         <svg aria-hidden="true" className={styles.art} viewBox="0 0 1536 1024" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}>
           <defs>

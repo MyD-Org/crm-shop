@@ -39,6 +39,11 @@ const nextConfig: NextConfig = {
       pathname: "/**",
     })),
   },
+  // La misma lista de hosts, inlineada en el bundle del cliente para
+  // `imagenNext` (src/components/catalogo/imagen-next.tsx): decide si una URL
+  // va por el optimizador o por un <img> común. Se evalúa en build, igual que
+  // remotePatterns: cambiar SHOP_MEDIA_HOSTS exige redeploy.
+  env: { HOSTS_IMAGENES: hostsDeMedios().join(",") },
   // URLs viejas de Mi cuenta (pestañas y detalle en singular) a las rutas por
   // sección. Se resuelven antes que el filesystem: no se renderiza nada.
   redirects: async () => [...REDIRECTS_MI_CUENTA],

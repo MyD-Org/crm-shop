@@ -42,6 +42,7 @@ import {
   buscarProductosHome,
   cambiarVisibilidadSeccion,
   firmarSubidaImagenHome,
+  guardarDatosLegales,
   guardarSeccion,
   restablecerSeccion,
 } from "./home-acciones";
@@ -345,5 +346,53 @@ describe("cambiarVisibilidadSeccion", () => {
     const r = await cambiarVisibilidadSeccion("hero", "nunca");
 
     expect(r).toEqual({ ok: false, errores: ["No se pudo guardar la sección. Inténtelo de nuevo."] });
+  });
+});
+
+describe("guardarDatosLegales", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+    guardarMock.mockResolvedValue({ updatedAt: new Date("2026-09-25T00:00:00Z") });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it("no admin: no escribe ni revalida", async () => {
+    esAdminMock.mockResolvedValue(false);
+    const r = await guardarDatosLegales({ razonSocial: "Comercio Ejemplo SA" });
+    expect(r).toEqual({ ok: false, errores: ["No tiene permisos para editar los datos legales."] });
+    expect(guardarMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
+  });
+
+  it("admin + válido: guarda normalizado en la key legal y revalida el layout", async () => {
+    const r = await guardarDatosLegales({
+      razonSocial: " Comercio Ejemplo SA ",
+      cuit: "20123456786",
+      email: "Legales@Cliente.Example",
+      dataFiscalUrl: "http://qr.afip.gob.ar/?qr=EJEMPLO",
+    });
+    expect(r.ok).toBe(true);
+    expect(guardarMock).toHaveBeenCalledWith("legal", {
+      razonSocial: "Comercio Ejemplo SA",
+      cuit: "20-12345678-6",
+      email: "legales@cliente.example",
+      dataFiscalUrl: "https://qr.afip.gob.ar/?qr=EJEMPLO",
+    });
+    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+  });
+
+  it("admin + inválido: devuelve errores sin escribir", async () => {
+    const r = await guardarDatosLegales({ cuit: "20-12345678-0" });
+    expect(r).toEqual({ ok: false, errores: ["Indique un CUIT válido (11 dígitos)."] });
+    expect(guardarMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
+  });
+
+  it("el upsert falla: error en usted, sin lanzar", async () => {
+    guardarMock.mockRejectedValue(new Error("db caída"));
+    const r = await guardarDatosLegales({ razonSocial: "Comercio Ejemplo SA" });
+    expect(r).toEqual({ ok: false, errores: ["No se pudieron guardar los datos legales. Inténtelo de nuevo."] });
+    expect(revalidateMock).not.toHaveBeenCalled();
   });
 });

@@ -3,8 +3,13 @@ import { getDb } from "@/db";
 import { homeContent } from "@/db/schema";
 import {
   combinarContenidoHome as combinar,
+  DEFAULTS_LEGAL,
+  KEY_LEGAL,
+  resolverDatosLegales,
+  type DatosLegales,
   type HomeContent,
 } from "@/data/home-defaults";
+import { leerSeccionHome } from "@/lib/home-guardar";
 
 export function combinarContenidoHome(filas: { key: string; payload: unknown }[]): HomeContent {
   return combinar(filas);
@@ -24,5 +29,19 @@ export const getContenidoHome = cache(async (): Promise<HomeContent> => {
     console.error("[home] home_content no disponible, uso defaults:", err);
     const { DEFAULTS_HOME } = await import("@/data/home-defaults");
     return DEFAULTS_HOME;
+  }
+});
+
+/**
+ * Datos legales del comercio (fila `legal` de home_content) para este request.
+ * Los leen el footer y las páginas legales: si la DB falla, vacíos, y las
+ * páginas omiten la identificación en vez de romperse.
+ */
+export const getDatosLegales = cache(async (): Promise<DatosLegales> => {
+  try {
+    return resolverDatosLegales(await leerSeccionHome(KEY_LEGAL));
+  } catch (err) {
+    console.error("[legales] home_content no disponible:", err);
+    return DEFAULTS_LEGAL;
   }
 });

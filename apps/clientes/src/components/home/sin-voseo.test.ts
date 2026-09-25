@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { REGISTRO, infracciones } from "@/test/registro-usted";
 
 /**
  * Guarda estática de registro formal de usted (CLAUDE.md raíz) para
@@ -13,25 +14,6 @@ import { describe, expect, it } from "vitest";
 
 const SRC = fileURLToPath(new URL("../..", import.meta.url));
 const CARPETA = join(SRC, "components", "home");
-
-const REGISTRO =
-  /\b(?:tu|tus|te|vos|sos|probá|revisá|ingresá|vinculá|elegí|escribinos|podés|tenés|dale|ojo|che)\b/i;
-
-function limpiar(texto: string): string {
-  return texto
-    .replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " "))
-    .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
-}
-
-function infracciones(texto: string, patron: RegExp): string[] {
-  const limpio = limpiar(texto);
-  const lineas = limpio.split("\n");
-  const numeros = new Set<number>();
-  for (const m of limpio.matchAll(new RegExp(patron.source, patron.flags.replace("g", "") + "g"))) {
-    numeros.add(limpio.slice(0, m.index).split("\n").length);
-  }
-  return [...numeros].sort((a, b) => a - b).map((n) => `${n}: ${lineas[n - 1].trim()}`);
-}
 
 function tsxRecursivos(dir: string): string[] {
   if (!existsSync(dir)) return [];

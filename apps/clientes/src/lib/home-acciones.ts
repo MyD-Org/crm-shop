@@ -4,7 +4,15 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { esAdmin } from "@/lib/auth";
 import { getCatalogo } from "@/lib/catalog";
-import { KEY_OCULTAS, SECCIONES_HOME, VISIBILIDADES, erroresSeccion, resolverVisibilidad } from "@/data/home-defaults";
+import {
+  KEY_LEGAL,
+  KEY_OCULTAS,
+  SECCIONES_HOME,
+  VISIBILIDADES,
+  erroresSeccion,
+  resolverVisibilidad,
+  validarDatosLegales,
+} from "@/data/home-defaults";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
 import { shopTenantId } from "@/lib/tenant";
@@ -32,6 +40,8 @@ const R2_NO_CONFIGURADO = "El almacenamiento de imágenes no está configurado. 
 const TAMANO_INVALIDO = "La imagen supera el tamaño permitido (5 MB).";
 const ERROR_FIRMA = "No se pudo preparar la subida. Inténtelo de nuevo.";
 const ERROR_BUSQUEDA = "No se pudo buscar productos. Inténtelo de nuevo.";
+const SIN_PERMISO_LEGAL = "No tiene permisos para editar los datos legales.";
+const ERROR_GUARDAR_LEGAL = "No se pudieron guardar los datos legales. Inténtelo de nuevo.";
 
 const ANCHO_HOME = 1600;
 const TTL_FIRMA_S = 600;
@@ -105,6 +115,27 @@ export async function cambiarVisibilidadSeccion(seccion: string, visibilidad: st
   } catch (err) {
     console.error(`[home-acciones] no se pudo cambiar la visibilidad de ${seccion}:`, err);
     return { ok: false, errores: [ERROR_GUARDAR] };
+  }
+}
+
+/**
+ * Guarda los datos legales del comercio (razón social, CUIT, domicilio, correo
+ * y enlace del QR de Data Fiscal) en la fila `legal` de home_content. Revalida
+ * el layout entero: el footer los muestra en todas las páginas. Nunca lanza.
+ */
+export async function guardarDatosLegales(payload: unknown): Promise<ResultadoGuardar> {
+  if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO_LEGAL] };
+
+  const validado = validarDatosLegales(payload);
+  if (!validado.ok) return validado;
+
+  try {
+    const { updatedAt } = await guardarSeccionHome(KEY_LEGAL, validado.datos);
+    revalidatePath("/", "layout");
+    return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
+  } catch (err) {
+    console.error("[home-acciones] no se pudieron guardar los datos legales:", err);
+    return { ok: false, errores: [ERROR_GUARDAR_LEGAL] };
   }
 }
 

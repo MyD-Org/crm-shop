@@ -1,5 +1,6 @@
 import type { VisibleOn } from "@myd-org/ui";
 import { hostsDeMedios } from "../lib/catalogo-medios";
+import { cuitValido, formatearCuit } from "../lib/facturacion";
 
 /**
  * Contenido por defecto de la home, editable desde la home por un usuario
@@ -568,6 +569,107 @@ export function resolverSeccion(key: string, payload: unknown): unknown {
 /** Key de home_content con la visibilidad de las secciones. Se llama así
  *  porque antes guardaba sólo la lista de secciones ocultas. */
 export const KEY_OCULTAS = "ocultas";
+
+/**
+ * Datos legales del comercio (páginas legales + footer). Viven en home_content
+ * bajo su propia key, pero NO son una sección de la home: no están en
+ * `SECCIONES_HOME` ni en la visibilidad, y `combinarContenidoHome` los ignora.
+ * Defaults vacíos a propósito: ningún dato del comercio vive en el código.
+ */
+export const KEY_LEGAL = "legal";
+
+export type DatosLegales = {
+  razonSocial?: string;
+  cuit?: string;
+  domicilio?: string;
+  email?: string;
+  dataFiscalUrl?: string;
+};
+
+export const DEFAULTS_LEGAL: DatosLegales = {};
+
+export const MAX_LEGAL = { razonSocial: 200, cuit: 13, domicilio: 300, email: 254, dataFiscalUrl: 500 } as const;
+
+const CAMPOS_LEGALES = ["razonSocial", "cuit", "domicilio", "email", "dataFiscalUrl"] as const;
+
+const ETIQUETA_LEGAL: Record<(typeof CAMPOS_LEGALES)[number], string> = {
+  razonSocial: "Razón social",
+  cuit: "CUIT",
+  domicilio: "Domicilio",
+  email: "Correo electrónico",
+  dataFiscalUrl: "Enlace del QR de Data Fiscal",
+};
+
+/** Mismo criterio que el resto del Shop (ver `looksLikeEmail` en comprobantes/mail.ts). */
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Lectura tolerante de la fila (jsonb desconocido): solo strings, recortados; vacío = ausente. */
+export function resolverDatosLegales(raw: unknown): DatosLegales {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const o = raw as Record<string, unknown>;
+  const datos: DatosLegales = {};
+  for (const campo of CAMPOS_LEGALES) {
+    const v = o[campo];
+    if (typeof v === "string" && v.trim()) datos[campo] = v.trim();
+  }
+  return datos;
+}
+
+/**
+ * Enlace del QR de Data Fiscal normalizado a https, o null. Solo el host
+ * exacto de ARCA (sin puerto) y con `qr` no vacío: el link se muestra en el
+ * footer de todas las páginas, no puede apuntar a cualquier lado.
+ */
+export function normalizarUrlDataFiscal(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  if (url.hostname !== "qr.afip.gob.ar" || url.port !== "") return null;
+  if (!url.searchParams.get("qr")?.trim()) return null;
+  url.protocol = "https:";
+  return url.toString();
+}
+
+/** Valida y normaliza lo que manda el editor. Errores en usted, sin lanzar. */
+export function validarDatosLegales(
+  payload: unknown,
+): { ok: true; datos: DatosLegales } | { ok: false; errores: string[] } {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false, errores: ["Los datos enviados no son válidos."] };
+  }
+  const crudos = resolverDatosLegales(payload);
+  const errores: string[] = [];
+  const datos: DatosLegales = {};
+
+  for (const campo of CAMPOS_LEGALES) {
+    const valor = crudos[campo];
+    if (valor === undefined) continue;
+    if (valor.length > MAX_LEGAL[campo]) {
+      errores.push(`El campo ${ETIQUETA_LEGAL[campo]} supera los ${MAX_LEGAL[campo]} caracteres.`);
+      continue;
+    }
+    if (campo === "cuit") {
+      if (!cuitValido(valor)) errores.push("Indique un CUIT válido (11 dígitos).");
+      else datos.cuit = formatearCuit(valor);
+    } else if (campo === "email") {
+      const email = valor.toLowerCase();
+      if (!EMAIL_RE.test(email)) errores.push("Indique un correo electrónico válido.");
+      else datos.email = email;
+    } else if (campo === "dataFiscalUrl") {
+      const url = normalizarUrlDataFiscal(valor);
+      if (!url) errores.push("Pegue el enlace del QR que le entrega ARCA (qr.afip.gob.ar).");
+      else datos.dataFiscalUrl = url;
+    } else {
+      datos[campo] = valor;
+    }
+  }
+
+  return errores.length > 0 ? { ok: false, errores } : { ok: true, datos };
+}
 
 /**
  * Visibilidad por sección saneada: sólo keys y valores conocidos. Acepta el

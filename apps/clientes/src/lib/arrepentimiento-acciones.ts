@@ -86,9 +86,10 @@ export async function enviarSolicitudArrepentimiento(
     return error(ERROR_DEMASIADAS, valores);
   }
 
-  const db = getDb();
+  let db: ReturnType<typeof getDb>;
   let solicitud: { id: string; numero: number };
   try {
+    db = getDb();
     const tenantId = shopTenantId();
     const desde = new Date(Date.now() - VENTANA_EMAIL_MS);
     if ((await contarRecientesPorEmail(db, tenantId, valores.email, desde)) >= MAX_POR_EMAIL) {
@@ -143,7 +144,14 @@ export async function enviarSolicitudArrepentimiento(
 
   const [rCliente, rComercio] = await Promise.all([
     intentar(() =>
-      enviarEmail({ to: valores.email, ...mailCliente, tags, idempotencyKey: `${codigo}-cliente` }),
+      enviarEmail({
+        to: valores.email,
+        ...mailCliente,
+        // El pie invita a responder: que la respuesta llegue al comercio.
+        ...(destinoComercio ? { replyTo: destinoComercio } : {}),
+        tags,
+        idempotencyKey: `${codigo}-cliente`,
+      }),
     ),
     destinoComercio
       ? intentar(() =>

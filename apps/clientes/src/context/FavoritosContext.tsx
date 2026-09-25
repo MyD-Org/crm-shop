@@ -5,12 +5,12 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import { usePathname } from "next/navigation";
 import { useAuth, useClerk } from "@clerk/nextjs";
 import { useToast } from "@myd-org/ui";
 import { destinoSeguro } from "@/lib/ingreso";
@@ -48,17 +48,16 @@ interface FavoritosValue {
 
 const FavoritosContext = createContext<FavoritosValue | null>(null);
 
-export function FavoritosProvider({
-  favoritosBloqueados,
-  children,
-}: {
-  /** La identidad es la cookie del CRM sin Clerk: no hay dónde guardar. */
-  favoritosBloqueados: boolean;
-  children: ReactNode;
-}) {
+/** Setter del bloqueo: lo usa `BloquearFavoritos` (ver abajo). */
+const BloqueoContext = createContext<(bloqueados: boolean) => void>(() => {});
+
+export function FavoritosProvider({ children }: { children: ReactNode }) {
+  // La identidad es la cookie del CRM sin Clerk: no hay dónde guardar. Arranca
+  // en false (el shell es el mismo para todos) y lo prende `BloquearFavoritos`,
+  // que monta el hueco `BloqueoFavoritos` del layout sólo en ese caso.
+  const [favoritosBloqueados, setFavoritosBloqueados] = useState(false);
   const { isLoaded, isSignedIn, userId } = useAuth();
   const clerk = useClerk();
-  const pathname = usePathname();
   const { toast } = useToast();
 
   // Ids cargados, atados al usuario al que pertenecen: si cambia la sesión, el
@@ -93,10 +92,13 @@ export function FavoritosProvider({
   const ready = usuario ? cargado?.usuario === usuario : isLoaded;
   const disponible = calcularDisponible({ isSignedIn, favoritosBloqueados });
 
+  // La ruta se lee del navegador al abrir (sólo pasa con un clic): con
+  // `usePathname` este provider, que envuelve todo el layout, suspendería el
+  // prerender de las rutas con parámetros (ficha, pedido).
   const abrirIngreso = useCallback(() => {
-    const destino = destinoSeguro(pathname);
+    const destino = destinoSeguro(window.location.pathname);
     clerk.openSignIn({ fallbackRedirectUrl: destino, signUpFallbackRedirectUrl: destino });
-  }, [clerk, pathname]);
+  }, [clerk]);
 
   /** Aplica un cambio sobre los ids del usuario vigente (y sólo de él). */
   const actualizar = useCallback(
@@ -162,7 +164,24 @@ export function FavoritosProvider({
     [ready, disponible, ids, toggle],
   );
 
-  return <FavoritosContext.Provider value={value}>{children}</FavoritosContext.Provider>;
+  return (
+    <BloqueoContext.Provider value={setFavoritosBloqueados}>
+      <FavoritosContext.Provider value={value}>{children}</FavoritosContext.Provider>
+    </BloqueoContext.Provider>
+  );
+}
+
+/**
+ * Marca los favoritos como bloqueados mientras está montado (cookie del CRM
+ * sin Clerk). Sólo lo renderiza el hueco server `BloqueoFavoritos`.
+ */
+export function BloquearFavoritos() {
+  const setBloqueados = useContext(BloqueoContext);
+  useLayoutEffect(() => {
+    setBloqueados(true);
+    return () => setBloqueados(false);
+  }, [setBloqueados]);
+  return null;
 }
 
 export function useFavoritos() {

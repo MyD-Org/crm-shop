@@ -7,6 +7,7 @@ import { cambiarBorrador, hrefAlAplicar, limpiarBorrador } from "@/lib/catalogo-
 import type { EstadoCatalogo, OrdenCatalogo } from "@/lib/catalogo-url";
 import { ORDENES, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
 import { CatalogoFiltros } from "./CatalogoFiltros";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
  * Filtros en mobile (debajo de `lg`): botón "Filtros (n)" que abre una hoja
@@ -37,6 +38,9 @@ export function CatalogoFiltrosSheet({
 }) {
   const [abierto, setAbierto] = useState(false);
   const [borrador, setBorrador] = useState(estado);
+  // Al salir del catálogo la hoja se cierra (y el borrador se descarta, igual
+  // que con la X): al volver, los filtros son los de la URL.
+  useAlOcultar(() => setAbierto(false));
   const activos = contarFiltrosActivos(estado);
 
   const abrir = () => {

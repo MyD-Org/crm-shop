@@ -21,6 +21,7 @@ import {
   type RespuestaDirecciones,
 } from "@/lib/direcciones-envio-cliente";
 import { DireccionForm } from "./DireccionForm";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 const API = "/api/mi-cuenta/direcciones";
 const NUEVA = "nueva";
@@ -67,6 +68,15 @@ export function DireccionesEnvio({
   const [errorLista, setErrorLista] = useState<string | null>(null);
   const [ocupada, setOcupada] = useState<string | null>(null);
   const [aBorrar, setABorrar] = useState<DireccionEnvio | null>(null);
+  // Al salir de la página: formulario y confirmación cerrados, sin errores
+  // viejos. La lista queda (es la del servidor tras el último cambio).
+  useAlOcultar(() => {
+    setEditando(null);
+    setABorrar(null);
+    setError(null);
+    setErrores({});
+    setErrorLista(null);
+  });
 
   const lleno = direcciones.length >= MAX_DIRECCIONES;
 

@@ -24,8 +24,6 @@ import { idPriceListUsable } from "@/lib/alegra";
 import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
 import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
 
-export const dynamic = "force-dynamic";
-
 /** GET /api/pedidos — pedidos de quien está logueado. */
 export async function GET() {
   const { clerkUserId, cliente } = await identidadActual();

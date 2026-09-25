@@ -9,7 +9,7 @@ import { guardarDatosLegales } from "@/lib/home-acciones";
  * Editor de los datos legales del comercio (fila `legal` de home_content).
  * Se abre desde la barra de edición de la home y desde cada página legal,
  * solo para admins. Sin "Mostrar en": estos datos no son una sección de la
- * home. El refresco lo hace `revalidatePath` dentro de la acción.
+ * home. El refresco lo hace `updateTag(TAG_HOME)` dentro de la acción.
  */
 type Campo = keyof DatosLegales;
 

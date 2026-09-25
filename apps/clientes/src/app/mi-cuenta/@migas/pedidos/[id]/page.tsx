@@ -4,8 +4,6 @@ import { hrefPedido, migasMiCuenta } from "@/lib/mi-cuenta-nav";
 import { getPedido } from "@/lib/pedidos";
 import { esIdPedido } from "@/lib/pedido-vista";
 
-export const dynamic = "force-dynamic";
-
 /**
  * Migas del detalle: Inicio / Mi cuenta / Pedidos / PED-…. El número sale del
  * mismo `getPedido` (en `cache()`) que usa la página: una sola consulta. Sin

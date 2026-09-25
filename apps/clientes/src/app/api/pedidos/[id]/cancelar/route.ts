@@ -4,8 +4,6 @@ import { cancelarPedidoPendiente, intentoAbiertoDelPedido } from "@/lib/pedidos"
 import { proveedorPago } from "@/lib/pagos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 
-export const dynamic = "force-dynamic";
-
 /**
  * POST /api/pedidos/:id/cancelar — cancela un pedido pendiente propio.
  *

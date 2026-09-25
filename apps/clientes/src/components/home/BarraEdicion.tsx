@@ -8,6 +8,7 @@ import { DialogoDatosLegales } from "@/components/legales/DialogoDatosLegales";
 import { DialogoFooter } from "@/components/footer/DialogoFooter";
 import { useModoEdicion } from "./ModoEdicion";
 import { DialogoSeccion } from "./DialogoSeccion";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
  * Barra fija de modo edición, solo se monta para admins (hueco
@@ -38,6 +39,13 @@ export function BarraEdicion({
   const [abrirNavBadge, setAbrirNavBadge] = useState(false);
   const [abrirLegal, setAbrirLegal] = useState(false);
   const [abrirFooter, setAbrirFooter] = useState(false);
+  // Al salir de la home los editores se cierran: al volver no reaparecen abiertos.
+  useAlOcultar(() => {
+    setAbrirAnuncio(false);
+    setAbrirNavBadge(false);
+    setAbrirLegal(false);
+    setAbrirFooter(false);
+  });
   const vAnuncio = visibilidadDe(visibilidad, "anuncio");
   const vNavBadge = visibilidadDe(visibilidad, "navBadge");
 

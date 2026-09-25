@@ -1,12 +1,10 @@
 import { Suspense } from "react";
-import type { Product } from "@/data/products";
 import { HomeClient } from "@/components/HomeClient";
+import { DestacadosHome, DestacadosHomeSkeleton } from "@/components/home/DestacadosHome";
 import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
-import { getOfertaCuotas } from "@/lib/cuotas-datos";
-import { getCatalogo, getPaginaCatalogo } from "@/lib/catalog";
-import { elegirDestacados } from "@/lib/destacados";
+import { sinCamposOcultos, sinMarcasDeAcento } from "@/data/home-defaults";
 
 /**
  * Home: contenido administrable desde la home por un admin (server actions en
@@ -14,41 +12,36 @@ import { elegirDestacados } from "@/lib/destacados";
  * destacados reales del catálogo con precio y cuotas vigentes. El anuncio,
  * header y footer los provee el layout raíz.
  *
- * Destacados: los SKUs curados desde el editor se resuelven primero; el resto
- * se completa con Iluminación (héroes temáticos de la tienda), nunca
- * hardcodeados.
+ * Shell estático (Cache Components): el contenido sale de `getContenidoHome`
+ * (`'use cache'`, tag `home`). Lo que es por request va en huecos: los
+ * destacados (catálogo, cuotas y sus flags) y el editor.
  *
  * Editor: la página es la misma para todos. No calcula `esAdmin()`: eso lo
  * resuelve el hueco `EdicionSiAdmin` (dentro de `<Suspense fallback={null}>`),
  * que para un admin prende el modo edición y monta la barra. Los datos de cada
  * sección los pide el Dialog al abrirse (`leerSeccionParaEditar`).
- *
- * Sin `force-dynamic` a propósito: el layout raíz lee cookies (tema) y eso
- * fuerza render dinámico de todo el árbol, así precio/contenido nunca se
- * congelan en el build.
  */
 export default async function Home() {
   const contenido = await getContenidoHome();
   const { cantidad, skus = [] } = contenido.destacados;
-
-  // Si el catálogo falla, la home degrada a destacados vacíos (la sección ya
-  // renderiza la grilla vacía) en vez de tumbar la página entera.
-  const [oferta, iluminacion, general] = await Promise.all([
-    getOfertaCuotas(),
-    getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] }, pagina: 1 }).catch(
-      (): { productos: Product[] } => ({ productos: [] }),
-    ),
-    // Respaldo para SKUs curados que no sean de Iluminación.
-    skus.length ? getCatalogo({ limit: 300 }).catch((): Product[] => []) : Promise.resolve([]),
-  ]);
-
-  const vistos = new Set(iluminacion.productos.map((p) => p.id));
-  const pool = [...iluminacion.productos, ...general.filter((p) => !vistos.has(p.id))];
-  const destacados = elegirDestacados(pool, skus, cantidad);
+  const secDestacados = sinCamposOcultos(contenido.destacados);
+  const label = sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados";
 
   return (
     <ModoEdicionProvider>
-      <HomeClient oferta={oferta} contenido={contenido} destacados={destacados} />
+      <HomeClient
+        contenido={contenido}
+        destacados={
+          <Suspense fallback={<DestacadosHomeSkeleton label={label} cantidad={cantidad} />}>
+            <DestacadosHome
+              label={label}
+              cantidad={cantidad}
+              skus={skus}
+              imagenes={secDestacados.imagenes ?? []}
+            />
+          </Suspense>
+        }
+      />
       <Suspense fallback={null}>
         <EdicionSiAdmin visibilidad={contenido.visibilidad} />
       </Suspense>

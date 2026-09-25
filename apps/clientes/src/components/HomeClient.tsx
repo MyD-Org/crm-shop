@@ -1,26 +1,16 @@
 import Link from "next/link";
-import Image from "next/image";
 import {
   AccentText,
-  Badge,
   CtaBanner,
   Hero,
   Marquee,
-  ProductCard,
   PromoBanner,
   RoomTiles,
   ServiceCard,
 } from "@myd-org/ui";
-import { AddToCartButton } from "@/components/AddToCartButton";
-import { BotonFavorito } from "@/components/BotonFavorito";
-import { CuotasCard } from "@/components/CuotasCard";
 import { Reveal } from "@/components/Reveal";
-import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { linkNext } from "@/components/catalogo/link-next";
 import { imagenNext } from "@/components/catalogo/imagen-next";
-import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
-import type { Product } from "@/data/products";
 import type { ReactNode } from "react";
 import {
   aVisibleOn,
@@ -29,7 +19,6 @@ import {
   itemsEn,
   sinCamposOcultos,
   sinItemsOcultos,
-  sinMarcasDeAcento,
   textoVisibleOn,
   visibilidadDe,
   type HomeContent,
@@ -82,16 +71,6 @@ function ChatIcon() {
     </svg>
   );
 }
-function LightbulbIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 18h6" />
-      <path d="M10 22h4" />
-      <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14" />
-    </svg>
-  );
-}
-
 const ICONOS_USP = [TruckIcon, CheckIcon, WhatsAppIcon];
 const ICONOS_SERVICIO = [TruckIcon, CheckIcon, CreditCardIcon, ChatIcon];
 
@@ -160,9 +139,9 @@ function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos
 }
 
 /**
- * Home sobre el design system. Server component: recibe oferta, contenido
- * (DB mergeada con defaults del diseño aprobado) y destacados reales del
- * catálogo, resueltos en app/page.tsx.
+ * Home sobre el design system. Server component: recibe el contenido (DB
+ * mergeada con defaults del diseño aprobado, cacheado en el shell) y el hueco
+ * de los destacados reales del catálogo, armados en app/page.tsx.
  *
  * Las correcciones tipográficas entre corchetes ([&_em]:not-italic,
  * [&_h1]:font-bold, tono del primer CTA) alinean el DS al diseño aprobado
@@ -172,13 +151,15 @@ function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos
  * del display, emStyle) estas utilidades se van.
  */
 export function HomeClient({
-  oferta,
   contenido,
   destacados,
 }: {
-  oferta: OfertaCuotas | null;
   contenido: HomeContent;
-  destacados: Product[];
+  /**
+   * Carrusel de productos destacados: hueco por request con su `<Suspense>`
+   * (precio, stock, cuotas y flags). Lo arma app/page.tsx.
+   */
+  destacados: ReactNode;
 }) {
   const { marquee, servicios } = contenido;
   // Los textos apagados con "Mostrar" no se pintan. El editor no depende de
@@ -190,7 +171,6 @@ export function HomeClient({
   const bannerDeco = sinCamposOcultos(contenido.bannerDeco);
   const decoGrid = sinCamposOcultos(contenido.decoGrid);
   const whatsapp = sinCamposOcultos(contenido.whatsapp);
-  const imagenesDestacados = secDestacados.imagenes ?? [];
   const vis = (s: SeccionHome) => visibilidadDe(contenido.visibilidad, s);
 
   // La foto del hero es el LCP de la home: el Hero del DS la pide con
@@ -274,51 +254,7 @@ export function HomeClient({
           <SeccionEditable seccion="destacados" visibilidad={vis("destacados")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
-              <ProductosCarrusel label={sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados"}>
-              {destacados.map((p, i) => {
-                const imagen = imagenesDestacados[i];
-                return (
-                  <Link
-                    key={p.id}
-                    href={`/producto/${p.id}`}
-                    className="block transition-transform duration-300 hover:-translate-y-1"
-                  >
-                    <ProductCard
-                      variant="editorial"
-                      className="h-full overflow-hidden"
-                      name={p.name}
-                      brand={p.brand}
-                      price={p.precioFinal ?? p.price}
-                      oldPrice={p.oldPrice}
-                      badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
-                      // La card entera es un <Link>: el corazón corta la navegación.
-                      cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
-                      image={
-                        imagen ? (
-                          <Image
-                            src={imagen}
-                            alt={p.name}
-                            fill
-                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <LightbulbIcon className="h-20 w-20 text-muted/30" />
-                        )
-                      }
-                      priceNote={p.sku ? `Cód. ${p.sku}` : undefined}
-                      actionPlacement="below"
-                      action={
-                        <AddToCartButton
-                          product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
-                        />
-                      }
-                      installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
-                    />
-                  </Link>
-                );
-              })}
-              </ProductosCarrusel>
+              {destacados}
             </section>
           </SeccionEditable>
         </Reveal>

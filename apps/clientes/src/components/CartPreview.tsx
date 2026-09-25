@@ -2,7 +2,6 @@
 
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio } from "@/lib/format";
@@ -33,9 +32,16 @@ const fmt = fmtPrecio;
 
 export function CartPreview({
   autoAbrir = true,
+  pathname = null,
 }: {
   /** Hay dos instancias (header completo y barra compacta): solo la visible se abre sola al agregar. */
   autoAbrir?: boolean;
+  /**
+   * Ruta actual, la pasa el header. No se lee con `usePathname` acá: en el
+   * shell estático de una ruta con parámetros (ficha, pedido) ese hook
+   * suspende, y el header se pinta sin ruta (null) hasta que llega el hueco.
+   */
+  pathname?: string | null;
 } = {}) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,7 +74,6 @@ export function CartPreview({
    * Al navegar se cierra: el header no se desmonta entre páginas, así que sin
    * esto el preview seguía abierto en /carrito o en el checkout.
    */
-  const pathname = usePathname();
   const [pathAnterior, setPathAnterior] = useState(pathname);
   if (pathname !== pathAnterior) {
     setPathAnterior(pathname);

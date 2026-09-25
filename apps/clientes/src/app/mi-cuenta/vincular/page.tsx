@@ -5,8 +5,6 @@ import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA, volverSeguro } from "@/lib/mi-cuenta-nav";
 
-export const dynamic = "force-dynamic";
-
 /**
  * Vincular la cuenta de cliente. Vive dentro del shell de Mi cuenta (breadcrumb
  * y título los pone el shell). Todo va dentro de una sola card, como Mis datos:

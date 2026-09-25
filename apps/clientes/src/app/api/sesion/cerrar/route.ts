@@ -3,8 +3,6 @@ import { cookies } from "next/headers";
 import { getIronSession } from "iron-session";
 import { sessionOptions, type SessionData } from "@/lib/session";
 
-export const dynamic = "force-dynamic";
-
 /**
  * POST /api/sesion/cerrar
  *

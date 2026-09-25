@@ -4,18 +4,13 @@ import { ToastProvider } from "@myd-org/ui";
 import { CartProvider } from "@/context/CartContext";
 import { FavoritosProvider } from "@/context/FavoritosContext";
 
-export function Providers({
-  favoritosBloqueados,
-  children,
-}: {
-  /** Cookie del CRM sin Clerk: sin corazón de favoritos (ver src/app/layout.tsx). */
-  favoritosBloqueados: boolean;
-  children: React.ReactNode;
-}) {
+export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
       <CartProvider>
-        <FavoritosProvider favoritosBloqueados={favoritosBloqueados}>
+        {/* El bloqueo de favoritos (cookie del CRM sin Clerk) lo prende el hueco
+            `BloqueoFavoritos` del layout: el shell no sabe quién mira. */}
+        <FavoritosProvider>
           {children}
         </FavoritosProvider>
       </CartProvider>

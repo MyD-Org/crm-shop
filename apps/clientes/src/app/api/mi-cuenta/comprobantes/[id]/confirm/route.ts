@@ -16,10 +16,11 @@ import { shopTenantId } from "@/lib/tenant";
  *
  * Portado de apps/admin/src/app/api/portal/comprobantes/[id]/confirm/route.ts.
  * El link del mail al backoffice sale de `CRM_ADMIN_URL`, nunca del request.
+ *
+ * Corre en Node.js (sharp, heic-decode): es el runtime por defecto y el único
+ * que admite Cache Components, así que no hace falta declararlo.
  */
-export const runtime = "nodejs";
 export const maxDuration = 60;
-export const dynamic = "force-dynamic";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const guard = await requerirCliente();

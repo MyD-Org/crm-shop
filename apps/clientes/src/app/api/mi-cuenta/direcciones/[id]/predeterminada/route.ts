@@ -2,8 +2,6 @@ import { esIdDireccion } from "@/lib/direcciones-envio";
 import { listarDirecciones, marcarPredeterminada } from "@/lib/direcciones-envio-db";
 import { json, noEncontrada, solicitante, type ContextoId } from "@/lib/direcciones-envio-api";
 
-export const dynamic = "force-dynamic";
-
 /** POST sin cuerpo: deja esta dirección como la predeterminada → `{ direcciones }`. */
 export async function POST(_req: Request, ctx: ContextoId) {
   const s = await solicitante();

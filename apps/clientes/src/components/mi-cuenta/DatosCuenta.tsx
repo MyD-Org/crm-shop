@@ -7,6 +7,7 @@ import { FacturacionForm, type PerfilFacturacionUI } from "@/components/Facturac
 import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFacturacionDialog";
 import type { DatosDelContactoPublico } from "@/lib/datos-del-contacto";
 import { estadoMisDatos, tienePerfilFacturacion } from "@/lib/mis-datos";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { AvisoVincular } from "./AvisoVincular";
 import { CuentaClienteCard } from "./CuentaClienteCard";
 import { DatosPersonalesCard } from "./DatosPersonalesCard";
@@ -68,6 +69,8 @@ export function DatosCuenta({
 
   const preguntando = estado === "preguntar" && !primeraCompra;
   const [completando, setCompletando] = useState(false);
+  // Al salir de Mis datos el diálogo se cierra: al volver no reaparece abierto.
+  useAlOcultar(() => setCompletando(false));
 
   // Vinculado: lo que se muestra sale del espejo; el teléfono también (y si
   // Alegra no tiene ninguno, el del perfil, editable).

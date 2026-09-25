@@ -4,8 +4,6 @@ import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { pedidoPendienteMasReciente } from "@/lib/pedidos";
 
-export const dynamic = "force-dynamic";
-
 /**
  * GET /api/pedidos/pendiente — pedido pendiente de pago más reciente del user.
  *

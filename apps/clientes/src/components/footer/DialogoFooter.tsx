@@ -16,7 +16,7 @@ import { guardarFooter, restablecerFooter } from "@/lib/home-acciones";
  * columna "Contacto" (WhatsApp, locales y enlaces extra) y textos de la barra
  * inferior. Se abre desde la barra de edición de la home y desde el botón
  * "Editar footer" que ven los admins arriba del footer. "Mi cuenta" y
- * "Legales" no se editan. El refresco lo hace `revalidatePath` en la acción.
+ * "Legales" no se editan. El refresco lo hace `updateTag(TAG_HOME)` en la acción.
  *
  * Con un solo local el editor no muestra títulos ni "Quitar": son los campos
  * y listo. "Agregar local" suma el segundo.

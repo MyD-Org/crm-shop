@@ -1,9 +1,6 @@
 import { crearDireccion, DireccionesLlenasError, listarDirecciones } from "@/lib/direcciones-envio-db";
 import { datosDelCuerpo, direccionesLlenas, json, solicitante } from "@/lib/direcciones-envio-api";
 
-// Datos por usuario: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /** GET → `{ direcciones }`: la predeterminada primero, después la más nueva. */
 export async function GET() {
   const s = await solicitante();

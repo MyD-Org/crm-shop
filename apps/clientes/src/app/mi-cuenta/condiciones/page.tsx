@@ -9,9 +9,6 @@ import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 
-// Datos de UN cliente: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /**
  * Condiciones comerciales: SÓLO cuenta corriente (según el espejo del CRM, como
  * el portal). Contado o sin vínculo ⇒ 404: la sección no existe para ellos y el

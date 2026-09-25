@@ -1,8 +1,9 @@
+import { Suspense } from "react";
+import { cacheLife } from "next/cache";
 import { SiteFooter as SiteFooterDS } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
-import { BotonEditarFooter } from "@/components/footer/BotonEditarFooter";
+import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterSiAdmin";
 import { textoBarra } from "@/data/footer";
-import { identidadActual } from "@/lib/auth";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { columnasFooter } from "@/lib/legales/footer";
 
@@ -17,19 +18,19 @@ import { columnasFooter } from "@/lib/legales/footer";
  * su enlace en "Datos legales". Las filas `legal` y `footer` se leen juntas,
  * en una sola consulta por request.
  *
- * Admin: botón "Editar footer" arriba del footer. `identidadActual` ya la
- * resolvió el layout (está en `cache()`), así que no cuesta otra ida a Clerk.
+ * Va en el shell estático (Cache Components): los datos salen de
+ * `'use cache'` y el año también, así no hace falta un request para pintarlo.
+ *
+ * Admin: botón "Editar footer" arriba del footer, en un hueco aparte
+ * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
-  const anio = new Date().getFullYear();
-  const [legal, footer, identidad] = await Promise.all([getDatosLegales(), getDatosFooter(), identidadActual()]);
+  const [anio, legal, footer] = await Promise.all([anioActual(), getDatosLegales(), getDatosFooter()]);
   return (
     <>
-      {identidad.esAdmin ? (
-        <div data-editor="" className="mx-auto flex w-full max-w-[1280px] justify-end px-4 pt-6">
-          <BotonEditarFooter inicial={footer} />
-        </div>
-      ) : null}
+      <Suspense fallback={null}>
+        <BotonEditarFooterSiAdmin inicial={footer} />
+      </Suspense>
       <SiteFooterDS
         className="site-footer"
         renderLink={linkNext}
@@ -51,4 +52,14 @@ export async function SiteFooter() {
       />
     </>
   );
+}
+
+/**
+ * Año de la barra inferior. `new Date()` en el prerender tiene que vivir en un
+ * scope cacheado (si no, el build lo rechaza): se recalcula una vez por día.
+ */
+async function anioActual(): Promise<number> {
+  "use cache";
+  cacheLife("days");
+  return new Date().getFullYear();
 }

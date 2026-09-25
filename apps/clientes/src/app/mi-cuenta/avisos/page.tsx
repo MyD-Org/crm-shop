@@ -9,9 +9,6 @@ import { listarAvisos } from "@/lib/cuenta-corriente/avisos";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 
-// Avisos de UN cliente, con su estado de lectura: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /**
  * Avisos: los avisos de vencimiento que el CRM le envió al cliente (ex campana
  * del portal). Sólo la base: ninguna llamada a Alegra. Todo vinculado la ve,

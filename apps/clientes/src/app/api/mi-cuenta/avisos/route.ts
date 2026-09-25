@@ -11,8 +11,6 @@ import { AVISOS_CAIDOS, AVISOS_INVALIDOS, AVISOS_NO_MARCADOS } from "@/lib/cuent
  * Portado de apps/admin/src/app/api/notifications/log/route.ts. El cliente
  * sale de la identidad, nunca del body.
  */
-export const dynamic = "force-dynamic";
-
 export async function GET() {
   const guard = await requerirCliente();
   if (guard.error) return guard.error;

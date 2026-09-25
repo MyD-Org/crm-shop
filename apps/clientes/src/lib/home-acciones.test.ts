@@ -21,7 +21,7 @@ vi.mock("@/lib/home-guardar", () => ({
 }));
 
 vi.mock("next/cache", () => ({
-  revalidatePath: revalidateMock,
+  updateTag: revalidateMock,
 }));
 
 vi.mock("@/lib/shop-media", () => ({
@@ -147,14 +147,14 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
     await guardarSeccion("anuncio", { texto: "x" });
 
     expect(revalidateMock).toHaveBeenCalledTimes(1);
-    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+    expect(revalidateMock).toHaveBeenCalledWith("home");
   });
 
   it("Restablecer exitoso revalida", async () => {
     await restablecerSeccion("hero");
 
     expect(revalidateMock).toHaveBeenCalledTimes(1);
-    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+    expect(revalidateMock).toHaveBeenCalledWith("home");
   });
 
   it("Validación fallida no revalida", async () => {
@@ -333,7 +333,7 @@ describe("cambiarVisibilidadSeccion", () => {
     expect(r.ok).toBe(true);
     expect(guardarMock).toHaveBeenCalledWith("ocultas", { hero: "mobile", marquee: "nunca" });
     expect(guardarMock).not.toHaveBeenCalledWith("hero", expect.anything());
-    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+    expect(revalidateMock).toHaveBeenCalledWith("home");
   });
 
   it("convierte el formato viejo (array de ocultas) al guardar", async () => {
@@ -384,7 +384,7 @@ describe("guardarDatosLegales", () => {
       email: "legales@cliente.example",
       dataFiscalUrl: "https://qr.afip.gob.ar/?qr=EJEMPLO",
     });
-    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+    expect(revalidateMock).toHaveBeenCalledWith("home");
   });
 
   it("admin + inválido: devuelve errores sin escribir", async () => {
@@ -437,7 +437,7 @@ describe("guardarFooter / restablecerFooter", () => {
       descripcion: "Descripción",
       whatsapp: "5491112345678",
     });
-    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+    expect(revalidateMock).toHaveBeenCalledWith("home");
   });
 
   it("admin + inválido: errores sin escribir", async () => {
@@ -458,7 +458,7 @@ describe("guardarFooter / restablecerFooter", () => {
   it("restablecer borra la fila footer y revalida", async () => {
     expect(await restablecerFooter()).toEqual({ ok: true, updatedAt: null });
     expect(borrarMock).toHaveBeenCalledWith("footer");
-    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+    expect(revalidateMock).toHaveBeenCalledWith("home");
   });
 });
 

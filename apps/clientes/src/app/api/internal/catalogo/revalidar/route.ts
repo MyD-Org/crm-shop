@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { bearerMatches } from "@/lib/secure-compare";
 
-export const dynamic = "force-dynamic";
-
 /**
  * Aviso del CRM de que algo del catálogo cambió.
  *

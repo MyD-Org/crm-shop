@@ -22,22 +22,60 @@ function UserIcon() {
   );
 }
 
-export function HeaderUI({
-  nombre,
-  categorias,
-  navBadge = null,
-  navBadgeVisibleOn,
-}: {
-  /** Razon social del cliente, o el nombre de la cuenta. null = anonimo. */
-  nombre: string | null;
-  /** Categorias reales del catalogo, resueltas en HeaderServer. */
-  categorias: string[];
+/**
+ * Quién mira, según el servidor. `pendiente` = el shell estático, antes de que
+ * el hueco del header resuelva la identidad (ver HeaderServer.tsx).
+ */
+export type CuentaHeader =
+  | { estado: "pendiente" }
+  | {
+      estado: "resuelta";
+      /** Razon social del cliente, o el nombre de la cuenta. null = anonimo. */
+      nombre: string | null;
+      /** Hay sesión de Clerk (la cookie del CRM sola no cuenta: no tiene menú). */
+      conSesion: boolean;
+    };
+
+/** Alto de la barra de categorías del DS (52px + borde). */
+const RESERVA_NAV = "h-[53px]";
+
+interface PropsHeader {
+  cuenta: CuentaHeader;
+  /** Categorias reales del catalogo, resueltas en HeaderServer. null = cargando. */
+  categorias: string[] | null;
   /** Badge administrable del nav: se pega al item de `categoria`. */
   navBadge?: NavBadgeContent | null;
   /** El badge sólo en mobile o en desktop (visibilidad del editor). */
   navBadgeVisibleOn?: VisibleOn;
-}) {
-  const pathname = usePathname();
+}
+
+/** Header con la ruta actual (nav de la home, cierre del preview del carrito). */
+export function HeaderUI(props: PropsHeader) {
+  return <HeaderVista {...props} pathname={usePathname()} />;
+}
+
+/**
+ * El mismo header sin leer la ruta. `usePathname` suspende en el prerender de
+ * una ruta con parámetros (ficha, pedido, ingreso): para esas, el shell
+ * estático usa esta versión (sin nav, que sólo va en la home) hasta que llega
+ * el hueco del header. Ver HeaderServer.tsx.
+ */
+export function HeaderSinRuta(props: PropsHeader) {
+  return <HeaderVista {...props} pathname={null} />;
+}
+
+/** Destino tras ingresar: la ruta actual (sin ruta todavía, la del navegador). */
+function destinoIngreso(pathname: string | null) {
+  return destinoSeguro(pathname ?? (typeof window === "undefined" ? "/" : window.location.pathname));
+}
+
+function HeaderVista({
+  cuenta,
+  categorias,
+  navBadge = null,
+  navBadgeVisibleOn,
+  pathname,
+}: PropsHeader & { pathname: string | null }) {
 
   // La barra de categorías va SÓLO en la home. En /catalogo el panel de
   // filtros hace ese trabajo y mejor —es exhaustivo y dice cuántos productos
@@ -45,7 +83,7 @@ export function HeaderUI({
   // resto del sitio (ficha, carrito, Mi cuenta) no aporta y suma 52px de alto
   // en todas las páginas.
   const nav =
-    pathname === "/"
+    pathname === "/" && categorias
       ? conBadgeNav(
           categorias.slice(0, MAX_CATEGORIAS_NAV).map((cat) => ({
             label: formatRubro(cat),
@@ -61,9 +99,18 @@ export function HeaderUI({
   // Sin <Show> de Clerk: mientras cierra sesión deja la sesión "en
   // transición" (isLoaded=false) hasta terminar de navegar a la home, y <Show>
   // no renderiza ninguna de las dos ramas: el "Ingresá" desaparecía unos
-  // segundos. Sin usuario confirmado ⇒ se ofrece ingresar. Al cargar la página
-  // no parpadea: el ClerkProvider de Next trae la sesión resuelta del servidor.
-  const { userId } = useAuth();
+  // segundos. Una vez que Clerk cargó, sin usuario confirmado ⇒ se ofrece
+  // ingresar.
+  //
+  // Antes de que Clerk cargue, `userId` es undefined también para quien tiene
+  // sesión (el ClerkProvider no trae estado inicial: el shell es estático).
+  // Ahí manda lo que resolvió el servidor, y si todavía no llegó, un lugar
+  // neutro: a alguien con sesión nunca se le muestra "Ingresá".
+  const { isLoaded, userId } = useAuth();
+  const [clerkCargo, setClerkCargo] = useState(false);
+  if (isLoaded && !clerkCargo) setClerkCargo(true);
+  const conSesion = clerkCargo || isLoaded ? !!userId : cuenta.estado === "resuelta" ? cuenta.conSesion : null;
+  const nombre = cuenta.estado === "resuelta" ? cuenta.nombre : null;
 
   return (
     // `site-header` en el wrapper y no en <SiteHeader>: el DS pone className
@@ -78,7 +125,7 @@ export function HeaderUI({
         onCompactChange={setCompacto}
         // El preview del carrito se abre solo al agregar: con dos instancias
         // montadas, sólo la que está a la vista debe abrirse.
-        compactActions={<CartPreview autoAbrir={compacto} />}
+        compactActions={<CartPreview autoAbrir={compacto} pathname={pathname} />}
         brandName="Central"
         brandAccent="Led"
         brandSub="Iluminación · Electricidad"
@@ -88,7 +135,14 @@ export function HeaderUI({
         renderLink={linkNext}
         actions={
           <>
-            {!userId ? (
+            {conSesion === null ? (
+              // Identidad sin resolver: mismo lugar que "Ingresá" (el texto
+              // invisible reserva el ancho), sin acción ni lectura.
+              <span aria-hidden className="flex items-center gap-2 text-[13.5px] font-bold text-muted">
+                <UserIcon />
+                <span className="invisible">Ingresá</span>
+              </span>
+            ) : !conSesion ? (
               /*
                 `mode="modal"` en vez de navegar a /ingresar: el cliente puede
                 estar a mitad del carrito, y sacarlo de la pagina para loguearse
@@ -96,8 +150,8 @@ export function HeaderUI({
               */
               <SignInButton
                 mode="modal"
-                fallbackRedirectUrl={destinoSeguro(pathname)}
-                signUpFallbackRedirectUrl={destinoSeguro(pathname)}
+                fallbackRedirectUrl={destinoIngreso(pathname)}
+                signUpFallbackRedirectUrl={destinoIngreso(pathname)}
               >
                 <button className="flex items-center gap-2 text-[13.5px] font-bold text-text transition-colors hover:text-accent">
                   <UserIcon />
@@ -113,10 +167,13 @@ export function HeaderUI({
               <MenuUsuario nombre={nombre} />
             )}
 
-            <CartPreview autoAbrir={!compacto} />
+            <CartPreview autoAbrir={!compacto} pathname={pathname} />
           </>
         }
       />
+      {/* Categorías todavía en camino: se reserva el alto de la barra para que
+          la home no salte cuando llegan. */}
+      {pathname === "/" && categorias === null ? <div aria-hidden className={RESERVA_NAV} /> : null}
     </div>
   );
 }

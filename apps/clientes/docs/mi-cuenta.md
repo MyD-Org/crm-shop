@@ -6,9 +6,10 @@ organizada por secciones sobre el design system (`@myd-org/ui` ≥ 0.13).
 ## Rutas
 
 Todas cuelgan de `src/app/mi-cuenta/layout.tsx`, que pinta el shell
-(`MiCuentaShell`: breadcrumb, saludo y navegación de secciones). Cada página es
-dinámica (`force-dynamic`) y, sin identidad, redirige a
-`/ingresar?redirect_url=<su ruta exacta>`.
+(`MiCuentaShell`: breadcrumb, saludo y navegación de secciones). Cada página se
+resuelve por request (con Cache Components, como hueco dentro del `<Suspense>`
+del layout raíz: el shell estático trae header y footer) y, sin identidad,
+redirige a `/ingresar?redirect_url=<su ruta exacta>`.
 
 | Ruta | Qué muestra |
 |---|---|

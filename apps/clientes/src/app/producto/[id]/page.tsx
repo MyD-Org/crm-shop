@@ -6,9 +6,6 @@ import { metadataProducto } from "@/lib/producto-metadata";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
-// Lee el producto del espejo en cada request (stock y overlay cambian con la sync).
-export const dynamic = "force-dynamic";
-
 type Props = { params: Promise<{ id: string }> };
 
 /** Una sola consulta por request: la comparten la metadata y la página. */

@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { solicitarVinculacion } from "@/lib/vinculacion";
 
-export const dynamic = "force-dynamic";
-
 /**
  * POST /api/vinculacion/solicitar — Body: { documento } (acepta `cuit` por compatibilidad)
  *

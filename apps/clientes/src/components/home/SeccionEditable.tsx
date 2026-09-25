@@ -5,6 +5,7 @@ import { Badge, Button, cn } from "@myd-org/ui";
 import { clasesVisibilidad, type SeccionHome, type Visibilidad } from "@/data/home-defaults";
 import { useModoEdicion } from "./ModoEdicion";
 import { DialogoSeccion } from "./DialogoSeccion";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
  * Envuelve una sección de `HomeClient.tsx` con el botón "Editar sección"
@@ -50,6 +51,8 @@ export function SeccionEditable({
 }) {
   const { puedeEditar, activo } = useModoEdicion();
   const [open, setOpen] = useState(false);
+  // Al salir de la home el editor se cierra: al volver no reaparece abierto.
+  useAlOcultar(() => setOpen(false));
 
   if (!puedeEditar || !activo) return <ComoVisitante visibilidad={visibilidad}>{children}</ComoVisitante>;
   const marca = MARCA[visibilidad];

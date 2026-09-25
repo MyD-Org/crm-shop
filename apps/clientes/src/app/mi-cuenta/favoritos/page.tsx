@@ -8,9 +8,6 @@ import { listarFavoritos } from "@/lib/favoritos";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 
-// Favoritos del usuario: nunca prerenderizar.
-export const dynamic = "force-dynamic";
-
 /**
  * Todos los favoritos del usuario (hasta el tope), del más nuevo al más viejo,
  * con el precio de su lista. Se guardan por usuario de Clerk: con la cookie del

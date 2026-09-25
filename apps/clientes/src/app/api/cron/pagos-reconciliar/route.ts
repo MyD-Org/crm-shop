@@ -5,7 +5,6 @@ import { bearerMatches } from "@/lib/secure-compare";
 // Cada consulta a MP es un round-trip HTTP; el default puede quedar corto si
 // hay una decena de pendientes atrasados.
 export const maxDuration = 120;
-export const dynamic = "force-dynamic";
 
 /**
  * Barre pedidos con pago pendiente para el caso en que el webhook nunca haya

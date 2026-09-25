@@ -5,9 +5,6 @@ import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { permitir } from "@/lib/rate-limit";
 
-// Depende del usuario y del espejo del momento: nunca cacheable.
-export const dynamic = "force-dynamic";
-
 /**
  * Techo por usuario.
  *

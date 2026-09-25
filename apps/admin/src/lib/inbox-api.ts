@@ -66,6 +66,12 @@ export interface InboxMessage {
 export interface InboxContact {
   end_user_id: string
   current_conversation_id: string | null
+  // Número del negocio por el que escribió el contacto. Un tenant puede tener varios y cada
+  // uno es un hilo aparte (ventana de 24h, modo, conversación): la lista trae una fila por
+  // número y el chat se abre con ?cuenta= para responder por el mismo. Opcionales mientras
+  // ai-api no los devuelva.
+  channel_account_id?: string | null
+  business_phone?: string | null
   channel: string
   contact: string
   phone: string | null
@@ -104,6 +110,17 @@ export interface ContactMessage extends InboxMessage {
   // cuando el id pasa de temp a real. Sin esto, cambiar id → cambia key → React desmonta y remonta
   // el nodo → se ve un flicker/scroll en el momento del "enviando → enviado".
   client_key?: string
+}
+
+// Ruta del chat de un contacto en el número por el que escribió.
+export function contactThreadHref(c: Pick<InboxContact, "end_user_id" | "channel_account_id">): string {
+  const base = `/admin/inbox/c/${c.end_user_id}`
+  return c.channel_account_id ? `${base}?cuenta=${c.channel_account_id}` : base
+}
+
+// Key de React de una fila de contacto: el mismo contacto aparece una vez por número.
+export function contactRowKey(c: Pick<InboxContact, "end_user_id" | "channel_account_id">): string {
+  return `${c.end_user_id}:${c.channel_account_id ?? ""}`
 }
 
 export interface ContactMessagesPage {
@@ -168,8 +185,10 @@ export async function getContact(
   aiApiUrl: string,
   aiTenantId: string,
   endUserId: string,
+  channelAccountId?: string | null,
 ): Promise<InboxContact> {
-  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${endUserId}`)
+  const qs = channelAccountId ? `?account=${encodeURIComponent(channelAccountId)}` : ""
+  const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/contacts/${endUserId}${qs}`)
   if (!res.ok) throw new Error(`ai-api error ${res.status}`)
   return res.json()
 }

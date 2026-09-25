@@ -1,9 +1,11 @@
 "use client"
 
 import { Dialog, Button } from "@myd-org/ui"
+import { contactRowKey } from "@/lib/inbox-api"
 
 export interface PendingContact {
   end_user_id: string
+  channel_account_id?: string | null
   contact: string
   last_inbound_at: string | null
 }
@@ -41,7 +43,7 @@ export function PendingRepliesDialog({ open, action, contacts, onCancel, onConfi
       <ul className="flex flex-col gap-2">
         {contacts.map((c) => (
           <li
-            key={c.end_user_id}
+            key={contactRowKey(c)}
             className="flex items-center justify-between gap-3 rounded-[var(--radius)] border border-border px-3 py-2"
           >
             <span className="truncate text-sm font-medium text-text">{c.contact}</span>

@@ -43,7 +43,9 @@ import {
   cambiarVisibilidadSeccion,
   firmarSubidaImagenHome,
   guardarDatosLegales,
+  guardarFooter,
   guardarSeccion,
+  restablecerFooter,
   restablecerSeccion,
 } from "./home-acciones";
 
@@ -394,5 +396,65 @@ describe("guardarDatosLegales", () => {
     const r = await guardarDatosLegales({ razonSocial: "Comercio Ejemplo SA" });
     expect(r).toEqual({ ok: false, errores: ["No se pudieron guardar los datos legales. Inténtelo de nuevo."] });
     expect(revalidateMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("guardarFooter / restablecerFooter", () => {
+  const FOOTER = {
+    descripcion: " Descripción ",
+    whatsapp: "+54 9 11 1234-5678",
+    locales: [{ nombre: "", direccion: "Calle Falsa 123", mapsUrl: "", horario: "" }],
+    enlaces: [],
+    barraIzquierda: "© {anio} Comercio",
+    barraDerecha: "",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+    guardarMock.mockResolvedValue({ updatedAt: new Date("2026-09-25T00:00:00Z") });
+    borrarMock.mockResolvedValue(undefined);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it("no admin: no escribe, no borra ni revalida", async () => {
+    esAdminMock.mockResolvedValue(false);
+    expect(await guardarFooter(FOOTER)).toEqual({ ok: false, errores: ["No tiene permisos para editar el pie de página."] });
+    expect(await restablecerFooter()).toEqual({ ok: false, errores: ["No tiene permisos para editar el pie de página."] });
+    expect(guardarMock).not.toHaveBeenCalled();
+    expect(borrarMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
+  });
+
+  it("admin + válido: guarda normalizado en la key footer y revalida el layout", async () => {
+    const r = await guardarFooter(FOOTER);
+    expect(r.ok).toBe(true);
+    expect(guardarMock).toHaveBeenCalledWith("footer", {
+      ...FOOTER,
+      descripcion: "Descripción",
+      whatsapp: "5491112345678",
+    });
+    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+  });
+
+  it("admin + inválido: errores sin escribir", async () => {
+    const r = await guardarFooter({ ...FOOTER, descripcion: "" });
+    expect(r).toEqual({ ok: false, errores: ["Ingrese la descripción del pie de página."] });
+    expect(guardarMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
+  });
+
+  it("DB falla: mensaje genérico en usted", async () => {
+    guardarMock.mockRejectedValue(new Error("sin conexión"));
+    expect(await guardarFooter(FOOTER)).toEqual({
+      ok: false,
+      errores: ["No se pudo guardar el pie de página. Inténtelo de nuevo."],
+    });
+  });
+
+  it("restablecer borra la fila footer y revalida", async () => {
+    expect(await restablecerFooter()).toEqual({ ok: true, updatedAt: null });
+    expect(borrarMock).toHaveBeenCalledWith("footer");
+    expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
   });
 });

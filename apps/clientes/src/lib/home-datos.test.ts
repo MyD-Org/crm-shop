@@ -32,3 +32,9 @@ describe("combinarContenidoHome (lib)", () => {
     expect(out.visibilidad).toEqual({ anuncio: "desktop", hero: "nunca", whatsapp: "nunca" });
   });
 });
+
+describe("combinarContenidoHome ignora la fila footer", () => {
+  it("no es una sección de la home", () => {
+    expect(combinarContenidoHome([{ key: "footer", payload: { descripcion: "Otra" } }])).toEqual(DEFAULTS_HOME);
+  });
+});

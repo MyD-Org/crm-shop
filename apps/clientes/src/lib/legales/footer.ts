@@ -2,11 +2,29 @@
  * Columnas del footer global (`src/components/SiteFooter.tsx`), puras para
  * testear orden y hrefs sin DOM. "Envíos y pagos" vive en Legales y se
  * muestra siempre (no depende del flag `envio`).
+ *
+ * "Contacto" sale de la fila `footer` (editable desde la tienda, ver
+ * `src/data/footer.ts`); "Mi cuenta" y "Legales" son fijas. Si Contacto queda
+ * sin links, la columna no se muestra.
  */
-import type { SiteFooterColumn } from "@myd-org/ui";
+import type { SiteFooterColumn, SiteFooterLink } from "@myd-org/ui";
+import { DEFAULTS_FOOTER, hrefWhatsapp, linkLocal, type DatosFooter } from "@/data/footer";
 import { URL_DEFENSA_CONSUMIDOR } from "./comun";
 
-export function columnasFooter(ctx: { arrepentimiento: boolean }): SiteFooterColumn[] {
+/** Links de la columna "Contacto". Los extra externos abren en otra pestaña. */
+export function linksContacto(footer: DatosFooter): SiteFooterLink[] {
+  return [
+    ...(footer.whatsapp ? [{ label: "WhatsApp", href: hrefWhatsapp(footer.whatsapp) }] : []),
+    ...footer.locales.flatMap((l) => {
+      const link = linkLocal(l);
+      return link ? [link] : [];
+    }),
+    ...footer.enlaces.map((e) => (e.href.startsWith("/") ? { ...e } : { ...e, external: true })),
+  ];
+}
+
+export function columnasFooter(ctx: { arrepentimiento: boolean; footer?: DatosFooter }): SiteFooterColumn[] {
+  const contacto = linksContacto(ctx.footer ?? DEFAULTS_FOOTER);
   return [
     {
       title: "Mi cuenta",
@@ -15,16 +33,7 @@ export function columnasFooter(ctx: { arrepentimiento: boolean }): SiteFooterCol
         { label: "Facturas", href: "/mi-cuenta" },
       ],
     },
-    {
-      title: "Contacto",
-      links: [
-        { label: "WhatsApp", href: "https://wa.me/5492235903025" },
-        {
-          label: "Ubicación",
-          href: "https://www.google.com/maps/search/?api=1&query=Av.+Rep%C3%BAblica+Argentina%2C+Puerto+Iguaz%C3%BA%2C+Misiones",
-        },
-      ],
-    },
+    ...(contacto.length ? [{ title: "Contacto", links: contacto }] : []),
     {
       title: "Legales",
       links: [

@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { confirmarVinculacion } from "@/lib/vinculacion";
 
-export const dynamic = "force-dynamic";
-
 /**
  * POST /api/vinculacion/confirmar — Body: { codigo }
  *

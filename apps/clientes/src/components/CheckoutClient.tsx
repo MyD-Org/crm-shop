@@ -42,6 +42,7 @@ import {
   type EntregaTipo,
   type PagoMetodo,
 } from "@/lib/envio";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -419,6 +420,25 @@ export function CheckoutClient({
    * Se genera acá y no en el render para no llamar a `crypto` durante el SSR.
    */
   const claveIntento = useRef<string | null>(null);
+
+  /**
+   * Al salir del checkout con un pedido ya creado, se vuelve al estado del
+   * primer render: sin esto, `<Activity>` (Cache Components) mostraría la
+   * confirmación vieja al volver. Un pedido de Mercado Pago sin pagar lo
+   * rescata de nuevo el efecto de `/api/pedidos/pendiente`, que corre otra vez
+   * al volver a mostrarse. Un formulario a medio llenar se conserva.
+   */
+  useAlOcultar(() => {
+    setModalFacturacion(false);
+    if (!confirmado) return;
+    setConfirmado(null);
+    setPagado(false);
+    setErrorCancelar(null);
+    setErrorEnvio(null);
+    setPasoActual("datos");
+    setBuscandoPendiente(pagosHabilitados);
+    claveIntento.current = null;
+  });
 
   const { cotizacion, estado, error, recotizar } = useCotizacion({
     entregaTipo: entrega,

@@ -19,8 +19,6 @@ import {
  * Los errores son JSON `{ error }`: el visor del DS (`DocumentViewer`) los baja
  * con fetch y muestra ese texto en vez del JSON crudo dentro del `<iframe>`.
  */
-export const dynamic = "force-dynamic";
-
 /** Tope del id: los de Alegra son numéricos y cortos; esto corta rutas raras antes de llamar. */
 const ID_DOCUMENTO = /^[0-9]{1,20}$/;
 

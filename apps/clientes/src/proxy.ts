@@ -5,9 +5,9 @@ import { createHash, timingSafeEqual } from "crypto";
 import {
   HEADER_PAIS,
   HEADER_REGION,
-  HEADER_TEMA,
   TEMA_COOKIE,
   UN_ANIO,
+  cookieDeTema,
   resolverTema,
 } from "@/lib/tema-ip";
 
@@ -65,19 +65,9 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
   if (bloqueo) return bloqueo;
 
   // clerk() devuelve undefined cuando no intercepta: seguimos con la respuesta
-  // base para poder inyectarle la cookie (y el header) del tema.
+  // base para poder inyectarle la cookie del tema.
   const res = await clerk(request, event);
-  if (res) return conTema(res, request);
-
-  // Camino normal: además de la cookie (que viaja en la response), pasamos la
-  // decisión como header del REQUEST para que el layout la aplique en ESTE
-  // render — sin eso, `?tema=` recién se vería en el próximo request.
-  const decision = decisionTema(request);
-  const headers = new Headers(request.headers);
-  if (decision === "calido" || decision === "calido-azul") {
-    headers.set(HEADER_TEMA, decision);
-  }
-  return conTema(NextResponse.next({ request: { headers } }), request, decision);
+  return conTema(res ?? NextResponse.next(), request);
 }
 
 function decisionTema(request: NextRequest) {
@@ -90,13 +80,14 @@ function decisionTema(request: NextRequest) {
 }
 
 /**
- * Tema cálido/azul por geo-IP (guía §5): la primera visita decide según la
- * geolocalización (Misiones → azul de marca) y guarda la elección en cookie;
- * `?tema=azul|calido` fuerza y persiste, `?tema=auto` vuelve a la geo.
- * Solo en GETs de páginas: nada de cookies en APIs, assets de public/ ni en
- * el Frontend API de Clerk.
+ * Cookie del tema (guía §5): `?tema=azul|calido` la guarda y `?tema=auto` la
+ * borra. Sin `?tema=` no se toca (ver `cookieDeTema`): el `<html>` sale del
+ * shell estático con el tema por defecto y el `?tema=` de la página lo aplica
+ * un script inline (src/app/layout.tsx), así ninguna vista normal lleva
+ * Set-Cookie. Solo en GETs de páginas: nada de cookies en APIs, assets de
+ * public/ ni en el Frontend API de Clerk.
  */
-function conTema(res: Response, request: NextRequest, decision?: ReturnType<typeof decisionTema>): Response {
+function conTema(res: Response, request: NextRequest): Response {
   const { pathname } = request.nextUrl;
   const esPagina =
     request.method === "GET" &&
@@ -106,23 +97,19 @@ function conTema(res: Response, request: NextRequest, decision?: ReturnType<type
     !/\.[^/]+$/.test(pathname); // assets de public/ (imágenes, robots.txt…)
   if (!esPagina) return res;
 
-  decision ??= decisionTema(request);
-
-  const previa = request.cookies.get(TEMA_COOKIE)?.value;
-  const forzada = request.nextUrl.searchParams.has("tema");
-
-  if (decision === "auto") {
-    if (previa === undefined) return res;
-  } else if (previa === decision && !forzada) {
-    return res;
-  }
+  const cambio = cookieDeTema({
+    forzada: request.nextUrl.searchParams.has("tema"),
+    decision: decisionTema(request),
+    previa: request.cookies.get(TEMA_COOKIE)?.value,
+  });
+  if (cambio.accion === "ninguna") return res;
 
   const next = res instanceof NextResponse ? res : new NextResponse(res.body, res);
-  if (decision === "auto") {
+  if (cambio.accion === "borrar") {
     next.cookies.delete(TEMA_COOKIE);
   } else {
-    next.cookies.set(TEMA_COOKIE, decision, {
-      httpOnly: false, // la lee el layout (server component) para data-theme
+    next.cookies.set(TEMA_COOKIE, cambio.tema, {
+      httpOnly: false, // la podría leer el script del tema si vuelve la geo-IP
       secure: request.nextUrl.protocol === "https:",
       sameSite: "lax",
       path: "/",

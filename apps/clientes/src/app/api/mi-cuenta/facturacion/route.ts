@@ -23,8 +23,6 @@ import {
   guardarPerfilFacturacion,
 } from "@/lib/facturacion-db";
 
-export const dynamic = "force-dynamic";
-
 /** GET /api/mi-cuenta/facturacion — perfil del usuario logueado. */
 export async function GET() {
   const { userId } = await auth();

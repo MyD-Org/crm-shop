@@ -3,7 +3,6 @@ import { syncConfigCRM } from "@/lib/cuotas-sync";
 import { bearerMatches } from "@/lib/secure-compare";
 
 export const maxDuration = 30;
-export const dynamic = "force-dynamic";
 
 /**
  * Ping del CRM tras guardar proveedores o escalones de cuotas (contrato v2).

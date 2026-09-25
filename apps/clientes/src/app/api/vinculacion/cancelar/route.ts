@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { cancelarVinculacion } from "@/lib/vinculacion";
 
-export const dynamic = "force-dynamic";
-
 /**
  * POST /api/vinculacion/cancelar
  *

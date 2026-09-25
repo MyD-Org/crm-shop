@@ -12,8 +12,6 @@ import {
   type ContextoId,
 } from "@/lib/direcciones-envio-api";
 
-export const dynamic = "force-dynamic";
-
 /** PUT: reemplaza los datos de una dirección del usuario → `{ direccion, direcciones }`. */
 export async function PUT(req: Request, ctx: ContextoId) {
   const s = await solicitante();

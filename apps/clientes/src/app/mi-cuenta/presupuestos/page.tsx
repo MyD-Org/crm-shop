@@ -12,9 +12,6 @@ import { contactoWhatsApp } from "@/lib/cuenta-corriente/whatsapp";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 
-// Datos de UN cliente, leídos en vivo de Alegra: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /**
  * Presupuestos: la lista del cliente vinculado (de a 30, con "Cargar más"),
  * filtros Todos / Aceptados / Sin aceptar y fecha de emisión resueltos en

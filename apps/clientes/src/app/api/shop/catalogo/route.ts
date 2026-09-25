@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCatalogo } from "@/lib/catalog";
 
-// Lee el espejo local del catálogo en cada request.
-export const dynamic = "force-dynamic";
-
 /**
  * Tope de resultados. Ya no es el límite de Alegra (el espejo local no lo
  * tiene): es para que el autocomplete y los destacados del home no se traigan

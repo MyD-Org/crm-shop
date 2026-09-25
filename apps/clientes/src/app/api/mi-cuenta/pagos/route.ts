@@ -11,8 +11,6 @@ import { ALEGRA_OCUPADO, PAGOS_CAIDOS, motivoAlegra } from "@/lib/cuenta-corrien
  * Portado de apps/admin/src/app/api/portal/pagos/route.ts. Sin filtros: Alegra
  * ignora las fechas en pagos. El cliente sale de la identidad, nunca del query.
  */
-export const dynamic = "force-dynamic";
-
 export async function GET(request: Request) {
   const guard = await requerirCliente();
   if (guard.error) return guard.error;

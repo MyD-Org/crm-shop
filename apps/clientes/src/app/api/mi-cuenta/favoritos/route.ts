@@ -10,9 +10,6 @@ import {
 import { esIdAlegra } from "@/lib/alegra";
 import { permitir } from "@/lib/rate-limit";
 
-// Datos por usuario: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /** Usos por minuto y por usuario, sumando los tres métodos. */
 const USOS_POR_MINUTO = 60;
 /** Largo máximo del id de Alegra que se acepta (los reales son numéricos cortos). */

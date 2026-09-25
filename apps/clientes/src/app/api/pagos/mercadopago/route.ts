@@ -15,8 +15,6 @@ import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { validarCuotasPago } from "@/lib/pagos/cuotas-validacion";
 
-export const dynamic = "force-dynamic";
-
 /** Intentos de cobro por usuario. Alto para no molestar a quien reintenta bien. */
 const MAX_INTENTOS = 10;
 const VENTANA_MS = 5 * 60_000;

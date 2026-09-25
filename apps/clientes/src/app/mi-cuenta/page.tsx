@@ -16,9 +16,6 @@ import { CAPACIDADES_DESPLIEGUE, RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { listarPedidos, resumenPedidos } from "@/lib/pedidos";
 
-// Los pedidos cambian con cada compra: nunca prerenderizar esta página.
-export const dynamic = "force-dynamic";
-
 /**
  * Resumen de Mi cuenta: tarjetas de actividad, los últimos tres pedidos y,
  * con Clerk, los cuatro favoritos más recientes.

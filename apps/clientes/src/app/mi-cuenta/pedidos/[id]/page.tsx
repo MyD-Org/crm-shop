@@ -7,8 +7,6 @@ import { pagosHabilitados } from "@/lib/pagos-flag";
 import { getPedido } from "@/lib/pedidos";
 import { esIdPedido } from "@/lib/pedido-vista";
 
-export const dynamic = "force-dynamic";
-
 export default async function PedidoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { clerkUserId, cliente } = await identidadActual();

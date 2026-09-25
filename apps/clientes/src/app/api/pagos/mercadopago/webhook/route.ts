@@ -1,9 +1,7 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { ErrorProveedor, type EstadoPago } from "@/lib/pagos";
 import { mercadoPago } from "@/lib/pagos/mercadopago";
 import { pedidoDelPago, registrarCobro } from "@/lib/pedidos";
-
-export const dynamic = "force-dynamic";
 
 /**
  * POST /api/pagos/mercadopago/webhook — confirmación de cobro.
@@ -105,5 +103,7 @@ export async function POST(req: Request) {
  * responde. Sin esto, el panel marca la notificación como fallida.
  */
 export async function GET() {
+  // Por request: sin esto el build podría prerenderizar la respuesta.
+  await connection();
   return NextResponse.json({ ok: true });
 }

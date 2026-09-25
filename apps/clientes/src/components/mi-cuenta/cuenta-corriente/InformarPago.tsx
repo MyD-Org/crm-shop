@@ -37,6 +37,7 @@ import {
 } from "@/lib/comprobantes/vista-comprobantes";
 import type { ComprobanteCliente } from "@/lib/comprobantes/repo";
 import { IconoSubir } from "../iconos";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
  * "Informar pago" (CMP-1): formulario en un `Dialog`. El archivo NO pasa por
@@ -98,6 +99,10 @@ export function InformarPago({
   // el cierre del diálogo aborta la subida en curso.
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const initRef = useRef<InitResponse | null>(null);
+  // Al salir de la página el diálogo se cierra sin abortar: una subida en
+  // curso sigue y, al terminar, limpia el formulario como siempre (`cerrar`).
+  // Un borrador sin enviar se conserva para cuando vuelva a abrirlo.
+  useAlOcultar(() => setAbierto(false));
 
   const ocupado = etapa !== "form";
 

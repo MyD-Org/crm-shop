@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Confirm de un comprobante: guard, 503 sin R2, el cliente de la identidad
- * (un id ajeno responde 404 como uno inexistente), `runtime`/`maxDuration`
- * para sharp y el mail con el tenant del Shop. La máquina de estados se
+ * (un id ajeno responde 404 como uno inexistente), `maxDuration` para sharp
+ * (sin `runtime`: Node.js es el default y Cache Components no admite
+ * declararlo) y el mail con el tenant del Shop. La máquina de estados se
  * prueba en lib/comprobantes/confirmar.test.ts.
  */
 
@@ -21,7 +22,8 @@ vi.mock("@/lib/comprobantes/repo", () => ({}));
 vi.mock("@/lib/comprobantes/mail", () => ({ enviarAvisoComprobante: (...a: unknown[]) => avisar(...a) }));
 vi.mock("@/lib/comprobantes/confirmar", () => ({ confirmarComprobante: (...a: unknown[]) => confirmar(...a) }));
 
-import { POST, maxDuration, runtime } from "./route";
+import * as ruta from "./route";
+import { POST, maxDuration } from "./route";
 
 const ID = "11111111-2222-4333-8444-555555555555";
 const pedir = (id = ID) =>
@@ -42,8 +44,8 @@ beforeEach(() => {
 });
 
 describe("POST /api/mi-cuenta/comprobantes/[id]/confirm", () => {
-  it("nodejs y 60 s (sharp nativo + HEIC)", () => {
-    expect(runtime).toBe("nodejs");
+  it("60 s (sharp nativo + HEIC) y runtime por defecto (Node.js)", () => {
+    expect("runtime" in ruta).toBe(false);
     expect(maxDuration).toBe(60);
   });
 

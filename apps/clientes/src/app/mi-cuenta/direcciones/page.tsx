@@ -12,8 +12,6 @@ import { rutaIngreso } from "@/lib/ingreso";
 import { textoEnvio } from "@/lib/mi-cuenta-copy";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 
-export const dynamic = "force-dynamic";
-
 /**
  * Direcciones y envíos. Con Clerk: las direcciones de envío guardadas (alta y
  * edición acá mismo, `DireccionesEnvio`), con el atajo de copiar el domicilio

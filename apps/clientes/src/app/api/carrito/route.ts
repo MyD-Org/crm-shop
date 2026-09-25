@@ -10,9 +10,6 @@ import {
 import { enriquecer, leerCarrito, mergearCarrito, reemplazarCarrito } from "@/lib/carrito-db";
 import { permitir } from "@/lib/rate-limit";
 
-// Datos por usuario: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /**
  * Usos por minuto y por usuario, sumando los tres métodos. El cliente agrupa
  * las ráfagas (debounce de 600 ms), así que 120 es holgado para el uso real.

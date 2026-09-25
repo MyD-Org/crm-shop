@@ -36,8 +36,6 @@ import { shopTenantId } from "@/lib/tenant";
  * El cliente (código, razón social, CUIT, email) sale SIEMPRE de la identidad:
  * lo que venga en el body se ignora.
  */
-export const dynamic = "force-dynamic";
-
 const HORA_MS = 60 * 60 * 1000;
 
 export async function GET(request: Request) {

@@ -11,9 +11,6 @@ import { contactoWhatsApp } from "@/lib/cuenta-corriente/whatsapp";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 
-// Datos de UN cliente, leídos en vivo de Alegra: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /**
  * "Facturas y saldo": el saldo (deuda, vencido, a vencer) y la lista de
  * facturas del cliente vinculado, con el PDF en un visor dentro de la página.

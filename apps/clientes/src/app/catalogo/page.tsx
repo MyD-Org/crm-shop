@@ -5,16 +5,12 @@ import {
   filtrosDeEstado,
   hrefCanonico,
   leerEstado,
-  type EstadoCatalogo,
   type ParamCrudo,
 } from "@/lib/catalogo-url";
 import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
-
-// Lee el espejo local del catálogo en cada request (lo refresca el cron diario).
-export const dynamic = "force-dynamic";
 
 type Props = {
   searchParams: Promise<{
@@ -52,7 +48,8 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 /**
  * Suspense PARCIAL (sin `loading.tsx`): en la primera carga se ve la silueta
  * del catálogo (`CatalogoSkeleton`) mientras Postgres resuelve; al filtrar,
- * no. La navegación por `searchParams` es una transición y el segmento de la
+ * no. La silueta va en el shell estático (Cache Components), así que no lee
+ * la URL: los `searchParams` se esperan dentro del hueco. La navegación por `searchParams` es una transición y el segmento de la
  * página conserva su identidad (Next 16.2.9, `layout-router.js`: la clave
  * del segmento se arma SIN los search params), así que React deja la grilla
  * vigente —atenuada por `CatalogoClient`— en lugar de volver al fallback.
@@ -61,17 +58,17 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
  * `Suspense` y renderizar `CatalogoResultados` directo (queda sólo el
  * atenuado; se pierde el skeleton de la primera carga).
  */
-export default async function CatalogoPage({ searchParams }: Props) {
-  const estado = leerEstado(await searchParams);
+export default function CatalogoPage({ searchParams }: Props) {
   return (
-    <Suspense fallback={<CatalogoSkeleton estado={estado} />}>
-      <CatalogoResultados estado={estado} />
+    <Suspense fallback={<CatalogoSkeleton />}>
+      <CatalogoResultados searchParams={searchParams} />
     </Suspense>
   );
 }
 
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
-async function CatalogoResultados({ estado }: { estado: EstadoCatalogo }) {
+async function CatalogoResultados({ searchParams }: Props) {
+  const estado = leerEstado(await searchParams);
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).

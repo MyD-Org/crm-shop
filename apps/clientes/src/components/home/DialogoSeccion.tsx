@@ -18,7 +18,7 @@ import { OPCIONES_VISIBILIDAD } from "./editores/SelectorVisibilidad";
  * `leerSeccionParaEditar` (la home no los manda en su payload), monta el
  * editor del registro `EDITORES`, guarda con la server action `guardarSeccion`
  * y ofrece "Restablecer valores originales". El refresco visual lo hace la
- * revalidación de la home dentro de cada action (hoy `revalidatePath`): este
+ * invalidación del tag `home` dentro de cada action (`updateTag`): este
  * componente NUNCA llama `router.refresh()`.
  *
  * "Mostrar en" (siempre / desktop / mobile / nunca) se aplica al instante,

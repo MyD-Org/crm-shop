@@ -1,8 +1,5 @@
-import { NextResponse } from "next/server";
+import { connection, NextResponse } from "next/server";
 import { getCategorias } from "@/lib/catalog";
-
-// Sale del espejo local de categorías (lo refresca el cron diario).
-export const dynamic = "force-dynamic";
 
 /**
  * GET /api/shop/categorias
@@ -10,6 +7,8 @@ export const dynamic = "force-dynamic";
  * Lo consume el home para armar la grilla de categorías.
  */
 export async function GET() {
+  // Por request: sin esto el build podría prerenderizar la respuesta.
+  await connection();
   try {
     const categorias = await getCategorias();
     return NextResponse.json({ categorias });

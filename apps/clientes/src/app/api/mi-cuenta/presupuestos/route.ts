@@ -12,8 +12,6 @@ import { ALEGRA_OCUPADO, PRESUPUESTOS_CAIDOS, motivoAlegra } from "@/lib/cuenta-
  * Portado de apps/admin/src/app/api/portal/presupuestos/route.ts. Los filtros
  * los resuelve Alegra. El cliente sale de la identidad, nunca del query.
  */
-export const dynamic = "force-dynamic";
-
 export async function GET(request: Request) {
   const guard = await requerirCliente();
   if (guard.error) return guard.error;

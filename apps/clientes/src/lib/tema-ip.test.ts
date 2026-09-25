@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolverTema } from "./tema-ip";
+import { TEMA_POR_DEFECTO, cookieDeTema, resolverTema, scriptTema } from "./tema-ip";
 
 describe("resolverTema con geo-IP activa", () => {
   it("sin nada → calido (default del sitio)", () => {
@@ -43,5 +43,45 @@ describe("resolverTema con geo-IP apagada (hoy)", () => {
   it("?tema= sigue mandando en el request que lo trae", () => {
     expect(resolverTema({ consulta: "calido", cookie: null, pais: null, region: null })).toBe("calido");
     expect(resolverTema({ consulta: "auto", cookie: "calido", pais: null, region: null })).toBe("auto");
+  });
+});
+
+describe("cookieDeTema (proxy)", () => {
+  it("sin ?tema= no toca la cookie, aunque la guardada difiera del default", () => {
+    expect(cookieDeTema({ forzada: false, decision: TEMA_POR_DEFECTO, previa: undefined })).toEqual({ accion: "ninguna" });
+    expect(cookieDeTema({ forzada: false, decision: TEMA_POR_DEFECTO, previa: "calido" })).toEqual({ accion: "ninguna" });
+  });
+
+  it("?tema=azul|calido guarda la decisión", () => {
+    expect(cookieDeTema({ forzada: true, decision: "calido", previa: undefined })).toEqual({ accion: "guardar", tema: "calido" });
+    expect(cookieDeTema({ forzada: true, decision: "calido-azul", previa: "calido-azul" })).toEqual({
+      accion: "guardar",
+      tema: "calido-azul",
+    });
+  });
+
+  it("?tema=auto borra la cookie sólo si había una", () => {
+    expect(cookieDeTema({ forzada: true, decision: "auto", previa: "calido" })).toEqual({ accion: "borrar" });
+    expect(cookieDeTema({ forzada: true, decision: "auto", previa: undefined })).toEqual({ accion: "ninguna" });
+  });
+});
+
+describe("scriptTema (head)", () => {
+  function correr(search: string): string | null {
+    let tema: string | null = null;
+    const documento = { documentElement: { setAttribute: (_: string, v: string) => (tema = v) } };
+    new Function("location", "document", scriptTema())({ search }, documento);
+    return tema;
+  }
+
+  it("aplica ?tema=azul y ?tema=calido (sin distinguir mayúsculas)", () => {
+    expect(correr("?tema=azul")).toBe("calido-azul");
+    expect(correr("?tema=Calido&x=1")).toBe("calido");
+  });
+
+  it("sin ?tema=, auto o un valor desconocido deja el tema del shell", () => {
+    expect(correr("")).toBeNull();
+    expect(correr("?tema=auto")).toBeNull();
+    expect(correr("?tema=rojo")).toBeNull();
   });
 });

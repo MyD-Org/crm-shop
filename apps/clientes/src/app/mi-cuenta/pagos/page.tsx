@@ -16,9 +16,6 @@ import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuent
 import { comprobantesR2Config } from "@/lib/r2";
 import { shopTenantId } from "@/lib/tenant";
 
-// Datos de UN cliente, leídos en vivo de Alegra: nunca prerenderizar ni cachear.
-export const dynamic = "force-dynamic";
-
 /**
  * Pagos: una sola tabla con los recibos del cliente vinculado (de a 10, con
  * "Cargar más") y, arriba, los pagos que informó y siguen en revisión; el

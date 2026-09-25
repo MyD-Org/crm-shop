@@ -15,9 +15,6 @@ import { jsonNoStore } from "@/lib/cuenta-corriente/guard";
 import { permitir } from "@/lib/rate-limit";
 import { shopTenantId } from "@/lib/tenant";
 
-// Depende de la sesión de quien pide: nunca cacheable.
-export const dynamic = "force-dynamic";
-
 /**
  * Techo de sesiones por solicitante. Cada token dura 1 h y el widget lo pide al
  * abrirse y al vencer: 10 cada 10 minutos es holgado para uso real y frena a un

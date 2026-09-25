@@ -1,9 +1,13 @@
 "use client";
 
 import { Breadcrumb, Card, ProductCardSkeleton, Skeleton } from "@myd-org/ui";
-import type { EstadoCatalogo } from "@/lib/catalogo-url";
-import { migas, tituloCatalogo } from "@/lib/catalogo-vista";
 import { linkNext } from "./link-next";
+
+/** Las dos primeras migas, comunes a cualquier URL del catálogo. */
+const MIGAS = [
+  { label: "Inicio", href: "/" },
+  { label: "Catálogo", href: "/catalogo" },
+];
 
 /** Cards de relleno: la mitad de una página, alcanza para cubrir la pantalla. */
 const CARDS = 12;
@@ -13,8 +17,9 @@ const LINEAS_FILTRO = 6;
 /**
  * Silueta del catálogo en la PRIMERA carga (fallback del `Suspense` de
  * `catalogo/page.tsx`). Mismo `<main>`, aside y columna que `CatalogoClient`
- * para que el contenido no salte al llegar. Ubicación y título son los
- * reales: sólo dependen de la URL.
+ * para que el contenido no salte al llegar. Va en el shell estático (Cache
+ * Components), igual para cualquier URL: no lee los filtros, así que el
+ * título es una silueta del mismo alto y la grilla, la de siempre.
  *
  * Al filtrar no aparece: la navegación es una transición y React mantiene la
  * grilla vigente (atenuada) en vez de volver al fallback.
@@ -22,8 +27,7 @@ const LINEAS_FILTRO = 6;
  * Es componente cliente sólo porque el `Breadcrumb` recibe `renderLink`
  * (una función): no se puede pasar desde un Server Component.
  */
-export function CatalogoSkeleton({ estado }: { estado: EstadoCatalogo }) {
-  const lista = estado.vista === "lista";
+export function CatalogoSkeleton() {
   return (
     <main className="mx-auto flex w-full max-w-contenido flex-1 gap-6 px-4 py-8" aria-busy>
       <aside className="hidden w-64 shrink-0 lg:block">
@@ -38,26 +42,17 @@ export function CatalogoSkeleton({ estado }: { estado: EstadoCatalogo }) {
 
       <div className="flex min-w-0 flex-1 flex-col gap-6">
         <header className="flex flex-col gap-3">
-          <Breadcrumb items={migas(estado)} renderLink={linkNext} />
+          <Breadcrumb items={MIGAS} renderLink={linkNext} />
           <div className="flex flex-col gap-1">
-            <h1 className="font-display text-3xl font-medium tracking-tight text-text md:text-4xl">
-              {tituloCatalogo(estado)}
-            </h1>
+            {/* Alto de una línea del h1 (text-3xl / md:text-4xl). */}
+            <Skeleton className="my-1 h-7 w-56 md:h-8" />
             <Skeleton className="h-4 w-40" />
           </div>
         </header>
 
-        <div
-          className={
-            lista ? "flex flex-col gap-3" : "grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4"
-          }
-        >
+        <div className="grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: CARDS }, (_, i) => (
-            <ProductCardSkeleton
-              key={i}
-              variant="editorial"
-              layout={lista ? "list" : "grid"}
-            />
+            <ProductCardSkeleton key={i} variant="editorial" layout="grid" />
           ))}
         </div>
 

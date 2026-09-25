@@ -12,8 +12,6 @@ import { ALEGRA_OCUPADO, FACTURAS_CAIDAS, motivoAlegra } from "@/lib/cuenta-corr
  * de la identidad, nunca del query: un `client_id` en la URL se ignora. La
  * página es fija (30); no hay `limit` que pida el historial entero de una.
  */
-export const dynamic = "force-dynamic";
-
 export async function GET(request: Request) {
   const guard = await requerirCliente();
   if (guard.error) return guard.error;

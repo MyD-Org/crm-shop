@@ -4,7 +4,6 @@ import { bearerMatches } from "@/lib/secure-compare";
 
 // Dos fuentes chicas (CRM + /installments por marca): alcanza con 60 s.
 export const maxDuration = 60;
-export const dynamic = "force-dynamic";
 
 /**
  * Sincroniza planes de cuotas del proveedor y config del CRM (contrato v2).

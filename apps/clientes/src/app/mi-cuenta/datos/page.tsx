@@ -7,8 +7,6 @@ import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 
-export const dynamic = "force-dynamic";
-
 /**
  * Mis datos: datos personales (Clerk, en lectura) y de facturación. Con la cookie heredada del CRM y sin sesión de Clerk no hay
  * perfil posible (el perfil se ata al usuario de Clerk): no se muestran

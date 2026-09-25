@@ -8,8 +8,6 @@ import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { listarPedidos } from "@/lib/pedidos";
 
-export const dynamic = "force-dynamic";
-
 /** Todos los pedidos del cliente (los 50 más recientes, como antes). */
 export default async function PedidosPage() {
   const { clerkUserId, cliente } = await identidadActual();

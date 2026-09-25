@@ -4,6 +4,22 @@ import { REDIRECTS_MI_CUENTA } from "./src/lib/mi-cuenta-redirects";
 import { normalizarUrlAiApi } from "./src/lib/ai-api-config";
 
 const nextConfig: NextConfig = {
+  // Shell estático + huecos por request (Partial Prerendering). Lo que depende
+  // del visitante (identidad, favoritos, carrito, chat, flags) se resuelve
+  // dentro de <Suspense>; el contenido de la home (home_content) sale de
+  // `'use cache'` con el tag `home` (src/lib/cache-tags.ts) y se invalida con
+  // `updateTag` desde el editor. Ver src/lib/home-datos.ts.
+  cacheComponents: true,
+  cacheLife: {
+    // Contenido de la home: sólo cambia por el editor (updateTag), así que la
+    // vida es larga; revalidate diario por si algo se escapa.
+    home: { stale: 300, revalidate: 86400, expire: 2592000 },
+    // Rama de error (defaults o vacío): nunca guardar un fallback por horas.
+    // expire no baja de 300: una caché que vence en menos de 5 minutos queda
+    // fuera del prerender (hueco dinámico) y el shell que la lee sin Suspense
+    // (anuncio, footer) rompería el build o la revalidación si la base falla.
+    degradado: { stale: 30, revalidate: 60, expire: 300 },
+  },
   experimental: {
     // El caché de filesystem de Turbopack (beta, on por defecto en Next 16.1+)
     // se corrompe y rompe el dev con errores "SST file" / build-manifest ENOENT.

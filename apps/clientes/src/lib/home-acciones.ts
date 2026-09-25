@@ -1,7 +1,8 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
+import { TAG_HOME } from "@/lib/cache-tags";
 import { esAdmin } from "@/lib/auth";
 import { getCatalogo } from "@/lib/catalog";
 import {
@@ -99,7 +100,7 @@ export async function guardarSeccion(seccion: string, payload: unknown): Promise
 
   try {
     const { updatedAt } = await guardarSeccionHome(seccion, payload);
-    revalidatePath("/", "layout");
+    updateTag(TAG_HOME);
     return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
   } catch (err) {
     console.error(`[home-acciones] no se pudo guardar ${seccion}:`, err);
@@ -118,7 +119,7 @@ export async function restablecerSeccion(seccion: string): Promise<ResultadoGuar
 
   try {
     await borrarSeccionHome(seccion);
-    revalidatePath("/", "layout");
+    updateTag(TAG_HOME);
     return { ok: true, updatedAt: null };
   } catch (err) {
     console.error(`[home-acciones] no se pudo restablecer ${seccion}:`, err);
@@ -140,7 +141,7 @@ export async function cambiarVisibilidadSeccion(seccion: string, visibilidad: st
   try {
     const mapa = { ...resolverVisibilidad(await leerSeccionHome(KEY_OCULTAS)), [seccion]: visibilidad };
     const { updatedAt } = await guardarSeccionHome(KEY_OCULTAS, resolverVisibilidad(mapa));
-    revalidatePath("/", "layout");
+    updateTag(TAG_HOME);
     return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
   } catch (err) {
     console.error(`[home-acciones] no se pudo cambiar la visibilidad de ${seccion}:`, err);
@@ -150,8 +151,8 @@ export async function cambiarVisibilidadSeccion(seccion: string, visibilidad: st
 
 /**
  * Guarda los datos legales del comercio (razón social, CUIT, domicilio, correo
- * y enlace del QR de Data Fiscal) en la fila `legal` de home_content. Revalida
- * el layout entero: el footer los muestra en todas las páginas. Nunca lanza.
+ * y enlace del QR de Data Fiscal) en la fila `legal` de home_content. Invalida
+ * el tag `home`: el footer los muestra en todas las páginas. Nunca lanza.
  */
 export async function guardarDatosLegales(payload: unknown): Promise<ResultadoGuardar> {
   if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO_LEGAL] };
@@ -161,7 +162,7 @@ export async function guardarDatosLegales(payload: unknown): Promise<ResultadoGu
 
   try {
     const { updatedAt } = await guardarSeccionHome(KEY_LEGAL, validado.datos);
-    revalidatePath("/", "layout");
+    updateTag(TAG_HOME);
     return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
   } catch (err) {
     console.error("[home-acciones] no se pudieron guardar los datos legales:", err);
@@ -171,8 +172,8 @@ export async function guardarDatosLegales(payload: unknown): Promise<ResultadoGu
 
 /**
  * Guarda el contenido editable del footer (descripción, Contacto y barra
- * inferior) en la fila `footer` de home_content. Revalida el layout entero:
- * el footer está en todas las páginas. Nunca lanza.
+ * inferior) en la fila `footer` de home_content. Invalida el tag `home`: el
+ * footer está en todas las páginas. Nunca lanza.
  */
 export async function guardarFooter(payload: unknown): Promise<ResultadoGuardar> {
   if (!(await esAdmin())) return { ok: false, errores: [SIN_PERMISO_FOOTER] };
@@ -182,7 +183,7 @@ export async function guardarFooter(payload: unknown): Promise<ResultadoGuardar>
 
   try {
     const { updatedAt } = await guardarSeccionHome(KEY_FOOTER, validado.datos);
-    revalidatePath("/", "layout");
+    updateTag(TAG_HOME);
     return { ok: true, updatedAt: updatedAt?.toISOString() ?? null };
   } catch (err) {
     console.error("[home-acciones] no se pudo guardar el footer:", err);
@@ -196,7 +197,7 @@ export async function restablecerFooter(): Promise<ResultadoGuardar> {
 
   try {
     await borrarSeccionHome(KEY_FOOTER);
-    revalidatePath("/", "layout");
+    updateTag(TAG_HOME);
     return { ok: true, updatedAt: null };
   } catch (err) {
     console.error("[home-acciones] no se pudo restablecer el footer:", err);

@@ -28,9 +28,11 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
 /**
  * Los únicos módulos con scopes cacheados. Todo lo que se sirve a cualquier
  * visitante y nada del visitante: contenido de la home, año del footer, el
- * catálogo público y la oferta de cuotas para exhibir.
+ * catálogo público, la oferta de cuotas para exhibir y los archivos de la
+ * imagen OG del sitio.
  */
 const CON_CACHE = [
+  "app/opengraph-image.tsx",
   "lib/home-datos.ts",
   "components/SiteFooter.tsx",
   "lib/catalogo-publico.ts",

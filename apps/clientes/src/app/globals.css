@@ -11,11 +11,22 @@
   --container-contenido: 1600px;
 }
 
+/* Token propio de la app, redefinido por tema más abajo: no existe en el DS
+   (ver CuotasLinea, tono="oscuro"). `inline` para que la utilidad Tailwind
+   (`text-success-sobre-oscuro`) resuelva contra la CSS var, igual que el DS
+   hace con sus propios --color-*, y valga lo que cada [data-theme] redefina. */
+@theme inline {
+  --color-success-sobre-oscuro: var(--color-success-sobre-oscuro);
+}
+
 /* Fuentes: next/font las carga en el layout (--font-nunito / --font-sora) y
    acá se cablean a los roles del DS para el caso sin data-theme. */
 :root {
   /* Sin data-theme: la marca del footer queda como la pinta el DS. */
   --color-marca-sobre-oscuro: var(--color-highlight);
+  /* Fallback sin data-theme; los temas de abajo lo redefinen con su propio
+     verde sobre --color-surface-dark (ver tema-marca.test.ts). */
+  --color-success-sobre-oscuro: #7ee2a8;
   --font-sans: var(--font-nunito), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
 }
@@ -114,14 +125,26 @@ body {
   --color-surface: #fffdf8; /* --card */
   --color-elevated: #f3e4d3; /* --accent-soft */
   --color-border: rgba(42, 33, 24, 0.1); /* --line */
-  --color-ring: rgba(180, 95, 46, 0.12); /* glow de focus */
+  /* anillo de foco: sólido, mismo tono que --color-accent. El rgba(…,0.12)
+     original quedaba en ~1,2:1 contra bg/surface (casi invisible); el DS
+     sólo lo usa para el ring de focus-visible (Button/Input/Switch/…), sin
+     glow decorativo, así que un sólido con ≥3:1 (WCAG 1.4.11) no pisa nada. */
+  --color-ring: #b45f2e;
   --color-text: #2a2118; /* --ink */
-  --color-muted: #8b7f70; /* --ink-soft */
-  --color-subtle: #a8b0b9; /* placeholder/sku del mockup */
+  /* --ink-soft oscurecido: el original daba 3,14:1 contra --elevated (bajo el
+     4,5:1 de texto chico); mismo tono, más oscuro. Ver contraste-tokens.test.ts. */
+  --color-muted: #70665a;
+  /* el DS usa --color-subtle como texto (hint, subtítulos, separador de
+     breadcrumbs), no sólo decoración: el valor del mockup daba ~1,8-2:1.
+     Mismo tono, oscurecido a ≥4,5:1. */
+  --color-subtle: #5e6874;
   --color-border-strong: rgba(42, 33, 24, 0.26);
   /* primario: espresso (botones, header, píldoras) */
   --color-primary: #241c14; /* --night */
-  --color-primary-hover: #b45f2e; /* hover → --accent */
+  /* hover del botón primario: ya no es --accent tal cual (bg-primary-hover
+     con text-on-primary encima daba 3,75:1, bajo el 4,5:1 de texto); mismo
+     tono, oscurecido a 4,56:1. --color-accent (links, precios) no cambia. */
+  --color-primary-hover: #a05429;
   --color-primary-soft: #f3e4d3;
   --color-on-primary: #f2e8d8; /* --on-night */
   /* acento: terracota (links, tags, precios de cuotas) */
@@ -144,6 +167,10 @@ body {
   --color-danger-soft: #fdecec;
   --color-warning: #b45309;
   --color-warning-soft: #fbf0db;
+  /* --color-success no se lee sobre --color-surface-dark; token propio (no
+     existe en el DS) para "cuotas sin interés" sobre cards oscuras
+     (CuotasLinea, tono="oscuro"): 10:1 sobre el footer. */
+  --color-success-sobre-oscuro: #7ee2a8;
   /* forma y tipografía del mockup */
   --radius-sm: 14px;
   --radius: 20px;
@@ -163,11 +190,16 @@ body {
   --color-surface: #ffffff;
   --color-elevated: #e9f1fa;
   --color-border: rgba(28, 39, 51, 0.1);
-  --color-ring: rgba(30, 90, 168, 0.1);
+  /* anillo de foco: sólido (ver el mismo cambio y su porqué en el tema
+     "calido" más arriba). */
+  --color-ring: #1e5aa8;
   --color-text: #1c2733;
-  --color-muted: #77808a;
-  --color-subtle: #a8b0b9;
+  /* mismo tono, oscurecido a ≥4,5:1 (ver "calido"). */
+  --color-muted: #666e77;
+  --color-subtle: #626d7a;
   --color-primary: #16283f;
+  /* acá sí funciona como texto de botón en hover (5,98:1): no hace falta
+     oscurecerlo como en "calido". */
   --color-primary-hover: #1e5aa8;
   --color-primary-soft: #e9f1fa;
   --color-on-primary: #eaf1f8;
@@ -189,6 +221,9 @@ body {
   --color-danger-soft: #fdecec;
   --color-warning: #b45309;
   --color-warning-soft: #fbf0db;
+  /* token propio (no existe en el DS): ver el mismo en "calido". 9,6:1 sobre
+     el footer de este tema. */
+  --color-success-sobre-oscuro: #7ee2a8;
   --radius-sm: 14px;
   --radius: 20px;
   --radius-lg: 28px;

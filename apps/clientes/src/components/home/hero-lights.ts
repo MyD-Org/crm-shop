@@ -1,10 +1,13 @@
 /** Coordinates measured on studio-off (1536 × 1024), shared by SVG and controls. */
 export const HERO_LIGHTS = [
-  { id: "bulb", label: "Lámpara de mesa BELL-N", x: 1221, y: 660, radius: 140 },
-  { id: "spot", label: "Spot", x: 1126, y: 120, radius: 150 },
-  { id: "pendant", label: "Colgante de bambú", x: 1385, y: 357, radius: 180 },
-  { id: "linear", label: "Tira LED bajo la mesada", x: 1161, y: 890, radius: 210 },
+  { id: "bulb", label: "Lámpara de mesa BELL-N", x: 1221, y: 660, radius: 140, hit: { x: 1115, y: 580, width: 212, height: 230 } },
+  { id: "spot", label: "Spot", x: 1126, y: 120, radius: 150, hit: { x: 1030, y: 10, width: 210, height: 210 } },
+  { id: "pendant", label: "Colgante de bambú", x: 1385, y: 357, radius: 180, hit: { x: 1245, y: 150, width: 291, height: 310 } },
+  { id: "linear", label: "Tira LED bajo la mesada", x: 1161, y: 890, radius: 210, hit: { x: 786, y: 830, width: 750, height: 150 } },
 ] as const;
+
+/** On-screen floor for each tap area, so a small hero never shrinks a lamp below a thumb. */
+export const MIN_TARGET_PX = 64;
 
 type Light = { readonly id: string; readonly x: number; readonly y: number; readonly radius: number };
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { COVER_QUERY, HERO_LIGHTS, SHELF_STRIP, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
+import { COVER_QUERY, HERO_LIGHTS, MIN_TARGET_PX, SHELF_STRIP, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
 /** Each lamp of the first-view intro stays on this long; the fade matches `[data-intro]` in the CSS module. */
@@ -167,9 +167,11 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               <path d="M1223 666 L1223 771" stroke="#ffe7bc" strokeWidth="1.3" opacity=".4"/>
             </>}
             {light.id === "spot" && <>
-              {/* Track spot aimed down and to the left (~30°), at the free wall; lens at (1126, 146). */}
+              {/* Track spot aimed down and to the left (~30°), at the free wall; lens face at (1120, 149). */}
               <path d="M1136 152 L1116 140 L830 520 Q930 592 1034 540 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
-              <ellipse cx="1126" cy="146" rx="12" ry="7" transform="rotate(30 1126 146)" fill="#fff5dc"/>
+              {/* Fills the whole lens face (centre ≈ 1120,149, tilted ~38°), not just the LED chip. */}
+              <ellipse cx="1120" cy="149" rx="24" ry="18" transform="rotate(38 1120 149)" fill={`url(#${uid}-interior)`}/>
+              <ellipse cx="1122" cy="146" rx="18" ry="11" transform="rotate(38 1122 146)" fill="#fff5dc"/>
               <ellipse cx="930" cy="512" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
             </>}
             {light.id === "pendant" && <>
@@ -191,8 +193,10 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
         </svg>
         {HERO_LIGHTS.map((light, i) => <button key={light.id} type="button" className={styles.target}
           aria-label={light.label} aria-pressed={pressed.includes(i)} onClick={() => toggle(i)}
-          style={{ left: rect.left + light.x * rect.scale, top: rect.top + light.y * rect.scale,
-            width: (light.id === "linear" ? SHELF_STRIP.width : 96) * rect.scale, height: 96 * rect.scale }} />)}
+          style={{ left: rect.left + (light.hit.x + light.hit.width / 2) * rect.scale,
+            top: rect.top + (light.hit.y + light.hit.height / 2) * rect.scale,
+            width: Math.max(MIN_TARGET_PX, light.hit.width * rect.scale),
+            height: Math.max(MIN_TARGET_PX, light.hit.height * rect.scale) }} />)}
       </>}
     </div>
   </div>;

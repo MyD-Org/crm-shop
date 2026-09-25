@@ -96,7 +96,7 @@ export interface OpcionCuotas {
   sinInteres: boolean;
 }
 
-/** Próximo escalón ("Te faltan $X para hasta N cuotas"). */
+/** Próximo escalón ("Le faltan $X para hasta N cuotas"). */
 export interface Escalon {
   /** Cantidad efectiva que se habilita (la mayor del snapshot ≤ cuotasMax). */
   cuotas: number;

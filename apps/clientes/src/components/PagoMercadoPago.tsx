@@ -191,7 +191,7 @@ export function PagoMercadoPago({
     } catch {
       setEstado({
         fase: "rechazado",
-        mensaje: "No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.",
+        mensaje: "No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.",
         reintentable: true,
       });
     }
@@ -239,7 +239,7 @@ export function PagoMercadoPago({
     console.error("[brick mp]", error);
     setEstado({
       fase: "rechazado",
-      mensaje: "Hubo un problema con el formulario de pago. Recargá la página.",
+      mensaje: "Hubo un problema con el formulario de pago. Recargue la página.",
       reintentable: false,
     });
   }, []);
@@ -269,8 +269,8 @@ export function PagoMercadoPago({
     return (
       <div className="rounded-xl border border-border bg-surface p-4">
         <p className="mb-3 text-sm text-muted">
-          Tu banco necesita validar esta compra. Completá la verificación acá abajo
-          — tenés unos minutos antes de que venza.
+          Su banco necesita validar esta compra. Complete la verificación aquí abajo
+          — tiene unos minutos antes de que venza.
         </p>
         <StatusScreen
           initialization={{
@@ -290,10 +290,10 @@ export function PagoMercadoPago({
   if (estado.fase === "pendiente") {
     return (
       <div className="rounded-xl border border-border bg-surface p-5">
-        <p className="text-sm font-bold text-text">Estamos confirmando tu pago</p>
+        <p className="text-sm font-bold text-text">Estamos confirmando su pago</p>
         <p className="mt-1 text-sm text-muted">
-          Mercado Pago todavía lo está procesando. Te avisamos apenas se acredite;
-          no hace falta que pagues de nuevo.
+          Mercado Pago todavía lo está procesando. Le avisaremos apenas se acredite;
+          no hace falta que pague de nuevo.
         </p>
       </div>
     );
@@ -337,8 +337,8 @@ export function PagoMercadoPago({
         evita que el comprador crea que perdió el formulario.
       */}
       <p className="mt-3 text-xs text-muted">
-        Si pagás con dinero en cuenta de Mercado Pago, se abrirá una ventana
-        para que inicies sesión.
+        Si paga con dinero en cuenta de Mercado Pago, se abrirá una ventana
+        para que inicie sesión.
       </p>
     </div>
   );

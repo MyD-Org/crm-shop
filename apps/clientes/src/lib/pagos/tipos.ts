@@ -51,27 +51,27 @@ export type MotivoRechazo =
  */
 export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
   datos_invalidos:
-    "Revisá el número, la fecha de vencimiento y el código de seguridad.",
+    "Revise el número, la fecha de vencimiento y el código de seguridad.",
   fondos:
-    "La tarjeta no tiene fondos suficientes para este monto. Probá con otra o pagá por transferencia.",
+    "La tarjeta no tiene fondos suficientes para este monto. Pruebe con otra o pague por transferencia.",
   limite:
-    "El monto supera el límite de tu tarjeta. Probá con otra, en cuotas, o por transferencia.",
+    "El monto supera el límite de su tarjeta. Pruebe con otra, en cuotas, o por transferencia.",
   cuotas_no_disponibles:
-    "Esa cantidad de cuotas no está disponible para tu tarjeta. Elegí otra opción de cuotas.",
+    "Esa cantidad de cuotas no está disponible para su tarjeta. Elija otra opción de cuotas.",
   desafio_vencido:
-    "Se venció el tiempo para validar el pago con tu banco. Volvé a intentar y completá la validación apenas te la pida.",
+    "Se venció el tiempo para validar el pago con su banco. Vuelva a intentarlo y complete la validación apenas se la pida.",
   banco_rechazo:
-    "Tu banco rechazó la operación. Llamalos al número del dorso de la tarjeta y pedí que la habiliten para compras online.",
+    "Su banco rechazó la operación. Llame al número del dorso de la tarjeta y pida que la habiliten para compras online.",
   tarjeta_inhabilitada:
-    "Esta tarjeta está inhabilitada. Llamá a tu banco para activarla o usá otra.",
+    "Esta tarjeta está inhabilitada. Llame a su banco para activarla o use otra.",
   requiere_autorizacion:
-    "Tu banco necesita autorizar este pago. Llamalos al dorso de la tarjeta y volvé a intentar.",
+    "Su banco necesita autorizar este pago. Llame al número del dorso de la tarjeta y vuelva a intentarlo.",
   demasiados_intentos:
-    "Demasiados intentos con esta tarjeta. Esperá unos minutos o usá otra.",
+    "Demasiados intentos con esta tarjeta. Espere unos minutos o use otra.",
   riesgo:
-    "No pudimos procesar el pago. Probá con otro medio o escribinos y lo resolvemos.",
+    "No pudimos procesar el pago. Pruebe con otro medio o escríbanos y lo resolvemos.",
   desconocido:
-    "No pudimos procesar el pago. Probá de nuevo o elegí transferencia.",
+    "No pudimos procesar el pago. Inténtelo de nuevo o elija transferencia.",
 };
 
 /**

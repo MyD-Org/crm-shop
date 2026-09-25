@@ -86,7 +86,7 @@ export function evaluarEnvio(
   if (!CIUDADES_ENVIO.includes(ciudad as (typeof CIUDADES_ENVIO)[number])) {
     return {
       disponible: false,
-      motivo: `Solo hacemos envío propio a ${CIUDADES_ENVIO.join(" y ")}. Para el resto del país elegí "Retiro / a coordinar" y lo gestionamos con vos.`,
+      motivo: `Solo hacemos envío propio a ${CIUDADES_ENVIO.join(" y ")}. Para el resto del país, elija "Retiro en local / a coordinar" y lo gestionamos con usted.`,
     };
   }
   return { disponible: true };

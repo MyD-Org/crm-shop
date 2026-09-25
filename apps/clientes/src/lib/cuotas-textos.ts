@@ -49,9 +49,9 @@ export const TEXTOS_CUOTAS = {
   hasta: (cuotas: number, sinInteres: boolean) =>
     `Hasta ${cuotasDe(cuotas)}${sinInteres ? " sin interés" : ""}`,
 
-  /** "Te faltan $30.000 para hasta 6 cuotas". */
+  /** "Le faltan $30.000 para hasta 6 cuotas". */
   teFaltan: (faltante: number, cuotas: number) =>
-    `Te faltan ${fmtMonto(faltante)} para hasta ${cuotasDe(cuotas)}`,
+    `Le faltan ${fmtMonto(faltante)} para hasta ${cuotasDe(cuotas)}`,
 
   progresoEscalon: "Progreso hacia el próximo plan de cuotas",
   checkoutTitulo: "Cuotas para este pedido",

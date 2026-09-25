@@ -55,6 +55,13 @@ describe("imagenNext", () => {
     expect(out).toContain('sizes="150px"');
     expect(out).toContain('data-logo="Marca"');
     expect(out).toContain('draggable="false"');
+    // La cinta los hace entrar desde el borde: con lazy se veían los separadores solos.
+    expect(out).not.toContain('loading="lazy"');
+  });
+
+  it("logo fuera de la lista de hosts: también carga inmediata", () => {
+    const out = html(imagenNext({ src: "https://otro.example/logo.webp", alt: "", sizes: "150px", fit: "logo" }));
+    expect(out).toContain('loading="eager"');
   });
 
   it("host fuera de la lista: <img> común (next/image daría 400)", () => {

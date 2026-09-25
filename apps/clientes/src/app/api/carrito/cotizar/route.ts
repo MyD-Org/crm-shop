@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     : permitir(`cotizar:ip:${ipDe(req) ?? "desconocida"}`, MAX_POR_MINUTO_VISITANTE, 60_000);
   if (!permitido) {
     return NextResponse.json(
-      { error: "Estás recalculando muy seguido. Esperá unos segundos." },
+      { error: "Está recalculando muy seguido. Espere unos segundos." },
       { status: 429 },
     );
   }

@@ -86,7 +86,7 @@ export async function GET(req: Request) {
 
   if (!permitir(`geocode:${clave}`, MAX_POR_MINUTO, 60_000)) {
     return NextResponse.json(
-      { error: "Demasiadas búsquedas. Esperá un momento." },
+      { error: "Demasiadas búsquedas. Espere un momento." },
       { status: 429 },
     );
   }

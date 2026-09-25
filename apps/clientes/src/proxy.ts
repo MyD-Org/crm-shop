@@ -29,6 +29,8 @@ const RUTAS_PUBLICAS = [
   // gate. Sin esto la cortina responde 200 con HTML, el CRM lo toma por éxito y el aviso se
   // pierde sin que nadie se entere.
   "/api/internal/catalogo/revalidar",
+  // Lo mismo para el aviso de que cambiaron las cuotas (proveedores o escalones).
+  "/api/internal/cuotas/revalidar",
 ];
 
 /**

@@ -1,12 +1,13 @@
 import type { DatosLegales } from "@/data/home-defaults";
 import type { Bloque } from "@/lib/legales/comun";
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { BotonDatosLegales } from "./BotonDatosLegales";
+import { Suspense, type ReactNode } from "react";
+import { BotonDatosLegalesSiAdmin } from "./BotonDatosLegalesSiAdmin";
 
 /**
  * Página legal genérica (server): título + bloques armados en `src/lib/legales`.
- * El botón de edición solo se renderiza para admins (`puedeEditar`): para los
+ * El botón de edición es un hueco aparte (`BotonDatosLegalesSiAdmin`, dentro de
+ * `<Suspense fallback={null}>`): la página no espera a `esAdmin()` y para los
  * visitantes no hay ningún control en el HTML. `children` va debajo de los
  * bloques (el formulario de /arrepentimiento).
  */
@@ -14,20 +15,20 @@ export function PaginaLegal({
   titulo,
   bloques,
   datos,
-  puedeEditar,
   children,
 }: {
   titulo: string;
   bloques: Bloque[];
   datos: DatosLegales;
-  puedeEditar: boolean;
   children?: ReactNode;
 }) {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-3xl font-medium tracking-tight text-text">{titulo}</h1>
-        {puedeEditar ? <BotonDatosLegales inicial={datos} /> : null}
+        <Suspense fallback={null}>
+          <BotonDatosLegalesSiAdmin datos={datos} />
+        </Suspense>
       </div>
       <div className="flex flex-col gap-8">
         {bloques.map((b) => (

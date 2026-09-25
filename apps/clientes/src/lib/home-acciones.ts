@@ -9,9 +9,11 @@ import {
   KEY_OCULTAS,
   SECCIONES_HOME,
   VISIBILIDADES,
+  combinarContenidoHome,
   erroresSeccion,
   resolverVisibilidad,
   validarDatosLegales,
+  type SeccionHome,
 } from "@/data/home-defaults";
 import { borrarSeccionHome, guardarSeccionHome, leerSeccionHome } from "@/lib/home-guardar";
 import { getShopMediaR2, homeImagenKey, urlPublicaHome } from "@/lib/shop-media";
@@ -20,6 +22,8 @@ import { shopTenantId } from "@/lib/tenant";
 export type ResultadoGuardar =
   | { ok: true; updatedAt: string | null }
   | { ok: false; errores: string[] };
+
+export type ResultadoLeerSeccion = { ok: true; valor: unknown } | { ok: false; error: string };
 
 export type ResultadoFirma =
   | { ok: true; key: string; url: string; headers: { "content-type": string }; urlPublica: string }
@@ -40,6 +44,8 @@ const R2_NO_CONFIGURADO = "El almacenamiento de imágenes no está configurado. 
 const TAMANO_INVALIDO = "La imagen supera el tamaño permitido (5 MB).";
 const ERROR_FIRMA = "No se pudo preparar la subida. Inténtelo de nuevo.";
 const ERROR_BUSQUEDA = "No se pudo buscar productos. Inténtelo de nuevo.";
+const SIN_PERMISO_SECCION = "No tiene permisos para editar esta sección.";
+const ERROR_LEER = "No se pudo cargar la sección. Inténtelo de nuevo.";
 const SIN_PERMISO_LEGAL = "No tiene permisos para editar los datos legales.";
 const ERROR_GUARDAR_LEGAL = "No se pudieron guardar los datos legales. Inténtelo de nuevo.";
 
@@ -51,6 +57,27 @@ const LIMITE_BUSQUEDA_PRODUCTOS = 20;
 
 function esSeccionValida(seccion: string): boolean {
   return (SECCIONES_HOME as readonly string[]).includes(seccion);
+}
+
+/**
+ * Datos de UNA sección para el editor, tal como los ve la home (fila de
+ * home_content mergeada con el default, mismo `combinarContenidoHome`). El
+ * Dialog la pide al abrirse: así la home no manda los datos del editor en su
+ * payload ni necesita saber si quien la mira es admin (performance-mobile-shop
+ * 4a). Solo admin. Nunca lanza.
+ */
+export async function leerSeccionParaEditar(seccion: string): Promise<ResultadoLeerSeccion> {
+  if (!(await esAdmin())) return { ok: false, error: SIN_PERMISO_SECCION };
+  if (!esSeccionValida(seccion)) return { ok: false, error: SECCION_DESCONOCIDA };
+
+  try {
+    const payload = await leerSeccionHome(seccion);
+    const filas = payload === undefined ? [] : [{ key: seccion, payload }];
+    return { ok: true, valor: combinarContenidoHome(filas)[seccion as SeccionHome] };
+  } catch (err) {
+    console.error(`[home-acciones] no se pudo leer ${seccion}:`, err);
+    return { ok: false, error: ERROR_LEER };
+  }
 }
 
 /**

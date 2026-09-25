@@ -2,22 +2,15 @@
 
 import { useState } from "react";
 import { Button, Switch } from "@myd-org/ui";
-import {
-  visibilidadDe,
-  type DatosLegales,
-  type HomeContent,
-  type MapaVisibilidad,
-  type NavBadgeContent,
-  type Visibilidad,
-} from "@/data/home-defaults";
+import { visibilidadDe, type DatosLegales, type MapaVisibilidad, type Visibilidad } from "@/data/home-defaults";
 import { DialogoDatosLegales } from "@/components/legales/DialogoDatosLegales";
 import { useModoEdicion } from "./ModoEdicion";
 import { DialogoSeccion } from "./DialogoSeccion";
 
 /**
- * Barra fija de modo edición, solo se monta si `puedeEditar` (ver
- * `src/app/page.tsx`). "Anuncio" y "Badge del menú" abren el Dialog de esas
- * dos secciones (no viven en `HomeClient.tsx`, así que no pasan por
+ * Barra fija de modo edición, solo se monta para admins (hueco
+ * `EdicionSiAdmin`, ver `src/app/page.tsx`). "Anuncio" y "Badge del menú"
+ * abren el Dialog de esas dos secciones (que carga sus datos al abrirse) (no viven en `HomeClient.tsx`, así que no pasan por
  * `SeccionEditable`). Si están restringidas, el botón lo avisa: no hay otro
  * lugar donde se vea. "Datos legales" abre el editor de la fila `legal`
  * (footer y páginas legales).
@@ -29,13 +22,9 @@ const SUFIJO: Record<Visibilidad, string> = {
   nunca: " (oculto)",
 };
 export function BarraEdicion({
-  anuncio,
-  navBadge,
   visibilidad,
   legal,
 }: {
-  anuncio: HomeContent["anuncio"];
-  navBadge: NavBadgeContent | null;
   visibilidad: MapaVisibilidad;
   legal: DatosLegales;
 }) {
@@ -61,8 +50,8 @@ export function BarraEdicion({
       <Button variant="outline" size="sm" onClick={() => setAbrirLegal(true)}>
         Datos legales
       </Button>
-      <DialogoSeccion seccion="anuncio" inicial={anuncio} visibilidad={vAnuncio} open={abrirAnuncio} onOpenChange={setAbrirAnuncio} />
-      <DialogoSeccion seccion="navBadge" inicial={navBadge} visibilidad={vNavBadge} open={abrirNavBadge} onOpenChange={setAbrirNavBadge} />
+      <DialogoSeccion seccion="anuncio" visibilidad={vAnuncio} open={abrirAnuncio} onOpenChange={setAbrirAnuncio} />
+      <DialogoSeccion seccion="navBadge" visibilidad={vNavBadge} open={abrirNavBadge} onOpenChange={setAbrirNavBadge} />
       <DialogoDatosLegales inicial={legal} open={abrirLegal} onOpenChange={setAbrirLegal} />
     </div>
   );

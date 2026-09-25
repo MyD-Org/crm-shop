@@ -24,6 +24,7 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { idPriceListUsable } from "@/lib/alegra";
 import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
 import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
+import { avisarPedidoRecibido } from "@/lib/pedido-avisos";
 
 /** GET /api/pedidos — pedidos de quien está logueado. */
 export async function GET() {
@@ -409,6 +410,13 @@ export async function POST(req: Request) {
           ...(subirTelefono ? { telefono: contactoTelefono } : {}),
         }),
       );
+    }
+
+    // "Recibimos su pedido", sin demorar la respuesta. Un pedido repetido (mismo
+    // idempotencyKey) ya tuvo su mail.
+    if (!pedido.repetido) {
+      const pedidoId = pedido.id;
+      after(() => avisarPedidoRecibido(pedidoId));
     }
 
     // El perfil aprende el teléfono del primer pedido, para no pedirlo en la

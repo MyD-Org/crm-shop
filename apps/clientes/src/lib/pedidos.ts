@@ -32,6 +32,7 @@ import {
   type EntregaTipo,
   type PagoMetodo,
 } from "./envio";
+import { avisarCobro } from "./pedido-avisos";
 import { shopTenantId } from "./tenant";
 
 /** Formato visible del número correlativo. */
@@ -748,8 +749,30 @@ export function revisionDelPago(
 export async function registrarCobro(
   pedidoId: string,
   cobro: ResultadoCobro,
-  opciones: { intentoId?: string } = {},
+  /**
+   * `avisar: false` = sin mail al comprador. Lo usa la cancelación de un intento abierto:
+   * ese "fallido" lo pidió el propio comprador al cambiar de medio, no es un rechazo.
+   */
+  opciones: { intentoId?: string; avisar?: boolean } = {},
 ): Promise<boolean> {
+  const resultado = await registrarCobroTx(pedidoId, cobro, opciones.intentoId);
+  if (resultado.cambioPedido && opciones.avisar !== false) {
+    // Después del commit: el mail nunca ve un estado que después se deshizo.
+    await avisarCobro(pedidoId, {
+      antes: resultado.cambioPedido.antes,
+      despues: resultado.cambioPedido.despues,
+      reversion: Boolean(cobro.reversion),
+      referencia: cobro.referencia,
+    });
+  }
+  return resultado.cambio;
+}
+
+async function registrarCobroTx(
+  pedidoId: string,
+  cobro: ResultadoCobro,
+  intentoId: string | undefined,
+): Promise<{ cambio: boolean; cambioPedido: { antes: PagoEstado; despues: PagoEstado } | null }> {
   return getDb().transaction(async (tx) => {
     /**
      * `for update` no es decorativo: sin el lock, dos notificaciones que llegan
@@ -768,9 +791,9 @@ export async function registrarCobro(
       .limit(1)
       .for("update");
 
-    if (!fila) return false;
+    if (!fila) return { cambio: false, cambioPedido: null };
 
-    const intento = await intentoDelCobro(tx, pedidoId, cobro, opciones.intentoId);
+    const intento = await intentoDelCobro(tx, pedidoId, cobro, intentoId);
     // Las reglas de transición (eventos desordenados, reversiones) se aplican
     // por intento: cada pago tiene su propia historia en el proveedor.
     const cambiaIntento = transicionPermitida(intento.estado, cobro.estado, cobro.reversion);
@@ -846,7 +869,10 @@ export async function registrarCobro(
       })
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
 
-    return intento.nuevo || cambiaIntento || nuevo !== actual;
+    return {
+      cambio: intento.nuevo || cambiaIntento || nuevo !== actual,
+      cambioPedido: nuevo !== actual ? { antes: actual, despues: nuevo } : null,
+    };
   });
 }
 

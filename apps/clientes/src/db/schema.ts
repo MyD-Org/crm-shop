@@ -342,6 +342,14 @@ export const orders = shop.table(
     estadoActualizadoPor: uuid("estado_actualizado_por"),
     estadoActualizadoPorNombre: text("estado_actualizado_por_nombre"),
 
+    /**
+     * Quién registró (o anuló) el último pago OFFLINE desde el CRM: operador y su nombre al
+     * momento, sin FK (mismo patrón que `estadoActualizado*`). NULL en los pagos online, que
+     * mueve el webhook del proveedor, y en los pedidos anteriores a la 0017.
+     */
+    pagoRegistradoPor: uuid("pago_registrado_por"),
+    pagoRegistradoPorNombre: text("pago_registrado_por_nombre"),
+
     // --- Totales congelados ---
     subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
     iva: numeric("iva", { precision: 14, scale: 2 }).notNull(),

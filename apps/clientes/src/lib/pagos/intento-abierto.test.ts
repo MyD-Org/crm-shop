@@ -47,14 +47,19 @@ describe("resolverIntentoAbierto", () => {
   it("pago pendiente que se cancela: queda registrado como fallido y se libera", async () => {
     cancelarPago.mockResolvedValue(estado("fallido"));
     expect(await resolverIntentoAbierto("p1", conReferencia, proveedor, AHORA)).toBe("libre");
-    expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ referencia: "r1", estado: "fallido" }));
+    expect(registrarCobro).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({ referencia: "r1", estado: "fallido" }),
+      // Lo canceló el propio comprador al cambiar de medio: no es un rechazo que avisar.
+      { avisar: false },
+    );
   });
 
   it("no se pudo cancelar porque ya se aprobó: 'pagado', y el cobro queda registrado", async () => {
     cancelarPago.mockRejectedValue(new Error("400"));
     consultarPago.mockResolvedValue(estado("pagado"));
     expect(await resolverIntentoAbierto("p1", conReferencia, proveedor, AHORA)).toBe("pagado");
-    expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ estado: "pagado" }));
+    expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ estado: "pagado" }), { avisar: true });
   });
 
   it("sigue pendiente después de intentar cancelarlo: hay que esperar", async () => {

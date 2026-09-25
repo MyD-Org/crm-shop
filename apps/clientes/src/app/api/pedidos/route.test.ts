@@ -14,6 +14,11 @@ let pais = "AR";
 let telefonoPerfil: string | null = null;
 let perfilCompletoMock = true;
 
+vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: () => {},
+}));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
   idPriceListCliente: async () => undefined,

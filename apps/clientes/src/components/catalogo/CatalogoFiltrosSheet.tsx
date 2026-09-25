@@ -73,7 +73,6 @@ export function CatalogoFiltrosSheet({
         placement="sheet"
         className="hoja-arrastrable"
         title="Filtros y orden"
-        description="Los cambios se aplican al pulsar «Aplicar»."
         footer={
           <>
             <Button variant="ghost" onClick={() => setBorrador(limpiarBorrador(borrador))}>

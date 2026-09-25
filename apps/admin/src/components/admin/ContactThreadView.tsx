@@ -435,6 +435,8 @@ export function ContactThreadView({ contact, initialPage, currentUserId, botEnab
             {contact.phone && contact.phone !== contact.contact
               ? ` · ${contact.phone}`
               : <span style={{ color: "var(--ink-faint)" }}> · sin identificador</span>}
+            {/* Con varios números por empresa, a cuál escribió el cliente: se le responde por ese. */}
+            {contact.business_phone && <span style={{ color: "var(--ink-faint)" }}> · a {contact.business_phone}</span>}
           </p>
         </div>
 

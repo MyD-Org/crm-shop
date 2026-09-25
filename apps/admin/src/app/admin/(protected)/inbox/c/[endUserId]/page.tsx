@@ -13,8 +13,14 @@ import { ContactThreadView } from "@/components/admin/ContactThreadView"
 
 export const dynamic = "force-dynamic"
 
-export default async function ContactThreadPage({ params }: { params: Promise<{ endUserId: string }> }) {
+export default async function ContactThreadPage({ params, searchParams }: {
+  params: Promise<{ endUserId: string }>
+  searchParams: Promise<{ cuenta?: string | string[] }>
+}) {
   const { endUserId } = await params
+  // Número del negocio del hilo (la lista lo manda): la ventana y la respuesta son de ese número.
+  const { cuenta } = await searchParams
+  const channelAccountId = typeof cuenta === "string" ? cuenta : null
   const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
   const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
 
@@ -42,7 +48,7 @@ export default async function ContactThreadPage({ params }: { params: Promise<{ 
   const botStatusP = getBotStatus(tenant.aiApiUrl, tenant.aiTenantId).catch(() => true)
 
   const result = await Promise.all([
-    getContact(tenant.aiApiUrl, tenant.aiTenantId, endUserId),
+    getContact(tenant.aiApiUrl, tenant.aiTenantId, endUserId, channelAccountId),
     getContactMessages(tenant.aiApiUrl, tenant.aiTenantId, endUserId, { limit: 30 }),
   ]).catch(() => null)
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Link from "next/link"
 import { MessageSquare, Clock, Bot, User, MessageCircleWarning, AlertTriangle } from "lucide-react"
 import { Tabs, Badge, EmptyState } from "@myd-org/ui"
-import { channelLabel, type InboxContact } from "@/lib/inbox-api"
+import { channelLabel, contactRowKey, contactThreadHref, type InboxContact } from "@/lib/inbox-api"
 import { previewText } from "@/lib/message-text"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 import { markVisited } from "@/lib/admin-last-visit"
@@ -184,8 +184,8 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled }:
         <div className="flex flex-col gap-2">
           {visible.map((c) => (
             <Link
-              key={c.end_user_id}
-              href={`/admin/inbox/c/${c.end_user_id}`}
+              key={contactRowKey(c)}
+              href={contactThreadHref(c)}
               className="flex items-center gap-3 md:gap-4 px-3 md:px-4 py-3 rounded-[var(--radius)] transition-colors hover:opacity-90 overflow-hidden"
               style={{
                 background: c.awaiting_reply ? "var(--amber-soft)" : "var(--card)",

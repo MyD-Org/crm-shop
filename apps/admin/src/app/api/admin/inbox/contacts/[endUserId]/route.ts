@@ -8,7 +8,7 @@ import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { getContact } from "@/lib/inbox-api"
 import { enrichContact } from "@/lib/inbox-contacts"
 
-export async function GET(_req: Request, { params }: { params: Promise<{ endUserId: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ endUserId: string }> }) {
   const { endUserId } = await params
   const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
   if (!session.userId) return NextResponse.json({ error: "no autorizado" }, { status: 401 })
@@ -20,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ endUser
 
   let contact
   try {
-    contact = await getContact(tenant.aiApiUrl, tenant.aiTenantId, endUserId)
+    contact = await getContact(tenant.aiApiUrl, tenant.aiTenantId, endUserId, new URL(req.url).searchParams.get("cuenta"))
   } catch {
     return NextResponse.json({ error: "contact_not_found" }, { status: 404 })
   }

@@ -173,3 +173,14 @@ export function precioDeLista(prices: unknown): string | null {
   if (valores.length === 0) return null
   return valores[0].toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 })
 }
+
+/**
+ * El stock del último sync, formateado. null si Alegra no mandó dato (el filtro lo cuenta como
+ * "sin stock"). Viaja como string porque la columna es numeric.
+ */
+export function stockDe(stock: string | null): { texto: string; hay: boolean } | null {
+  if (stock === null) return null
+  const n = Number(stock)
+  if (!Number.isFinite(n)) return null
+  return { texto: n.toLocaleString("es-AR", { maximumFractionDigits: 2 }), hay: n > 0 }
+}

@@ -11,6 +11,7 @@ import {
   fmtFechaHora,
   precioDeLista,
   queryDeFiltros,
+  stockDe,
   type CategoriaDto,
   type Filtros,
   type ListadoDto,
@@ -185,6 +186,19 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
       render: (p) => (
         <span style={{ color: "var(--ink-soft)" }}>{precioDeLista(p.prices) ?? "Sin precio"}</span>
       ),
+    },
+    {
+      key: "stock",
+      header: "Stock",
+      align: "right",
+      hideBelow: "sm",
+      className: "tabular-nums text-xs",
+      render: (p) => {
+        const s = stockDe(p.stock)
+        return (
+          <span style={{ color: s?.hay ? "var(--ink-soft)" : "var(--ink-faint)" }}>{s ? s.texto : "Sin dato"}</span>
+        )
+      },
     },
     {
       key: "fotos",

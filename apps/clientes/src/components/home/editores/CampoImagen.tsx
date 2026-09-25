@@ -68,14 +68,19 @@ export function CampoImagen({
   return (
     <div className="flex flex-col gap-3">
       <Field label={label}>
-        <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- previa local (blob:) o URL recién subida; next/image no aplica */}
-          <img src={previa ?? valor} alt="" className="h-32 w-auto rounded-md object-cover" />
+          <img src={previa ?? valor} alt="" className="h-16 w-24 shrink-0 rounded-md object-cover" />
           <FileDropZone
+            size="sm"
+            className="min-w-0 flex-1"
             file={null}
             onChange={subir}
             accept="image/jpeg,image/png,image/webp,image/avif"
-            hint="JPG, PNG, WEBP o AVIF de hasta 25 MB. Se convierte a WEBP de 1600 px."
+            title="Cambiar imagen"
+            orLabel=""
+            browseLabel="Arrastre o seleccione un archivo"
+            hint="JPG, PNG, WEBP o AVIF de hasta 25 MB."
           />
           {subiendo ? <Spinner /> : null}
         </div>

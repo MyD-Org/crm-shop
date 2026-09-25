@@ -100,6 +100,7 @@ function aTilesDS(items: TileContent[]) {
     title: t.titulo,
     imageSrc: t.imagen,
     href: t.href,
+    overlay: t.velo === "suave" ? ("soft" as const) : t.velo === "fuerte" ? ("strong" as const) : undefined,
   }));
 }
 

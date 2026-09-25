@@ -16,6 +16,7 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { Reveal } from "@/components/Reveal";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
+import { linkNext } from "@/components/catalogo/link-next";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
@@ -146,12 +147,12 @@ function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos
         ) : null}
       </div>
       {linkTodos ? (
-        <a
+        <Link
           href={linkTodos}
           className="border-b-[1.5px] border-text pb-[3px] text-[13px] font-extrabold text-text transition-colors hover:border-accent hover:text-accent"
         >
           Ver todos →
-        </a>
+        </Link>
       ) : null}
     </div>
   );
@@ -335,6 +336,7 @@ export function HomeClient({
                   : undefined
               }
               imageSrc={bannerDeco.imagen}
+              renderLink={linkNext}
             />
           </SeccionEditable>
         </Reveal>

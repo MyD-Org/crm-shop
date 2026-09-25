@@ -5,6 +5,10 @@ import Link from "next/link";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio } from "@/lib/format";
+import { useHidratado } from "@/lib/hidratado";
+import type { CartItem } from "@/lib/carrito-cliente";
+
+const SIN_ITEMS: CartItem[] = [];
 
 function CartIcon() {
   return (
@@ -45,7 +49,15 @@ export function CartPreview({
 } = {}) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { items, total, count, aperturaPreview } = useCart();
+  const carrito = useCart();
+  const { aperturaPreview } = carrito;
+  // En el hueco del header (se hidrata después del shell) el contexto ya trae
+  // el carrito del navegador; el HTML del servidor, el vacío. Hasta terminar
+  // de hidratar se repite lo del servidor (ver useHidratado).
+  const hidratado = useHidratado();
+  const items = hidratado ? carrito.items : SIN_ITEMS;
+  const total = hidratado ? carrito.total : 0;
+  const count = hidratado ? carrito.count : 0;
 
   /**
    * Agregar al carrito (desde una card o desde la ficha) abre el preview unos

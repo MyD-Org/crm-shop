@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { prepararCierreDeSesion } from "@/context/CartContext";
 import { cerrarSesion } from "@/lib/cerrar-sesion";
+import { useHidratado } from "@/lib/hidratado";
 import { Avatar, DropdownMenu, type DropdownMenuEntry } from "@myd-org/ui";
 import {
   ENTRADAS_MENU,
@@ -100,7 +101,11 @@ const ICONOS: Record<IdEntradaMenu, React.ReactNode> = {
 export function MenuUsuario({ nombre }: { nombre: string | null }) {
   const router = useRouter();
   const clerk = useClerk();
-  const { user } = useUser();
+  // En el hueco del header Clerk puede haber cargado antes de hidratar: el
+  // avatar y el nombre de Clerk recién después, como en el HTML del servidor.
+  const hidratado = useHidratado();
+  const { user: usuarioClerk } = useUser();
+  const user = hidratado ? usuarioClerk : undefined;
 
   const nombreVisible = nombre ?? user?.fullName ?? null;
 

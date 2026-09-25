@@ -23,7 +23,10 @@ const HOSTS = (process.env.HOSTS_IMAGENES ?? "").split(",").filter(Boolean);
  *   (sólo el hero) se precarga desde el `<head>` con prioridad alta; el resto
  *   queda lazy.
  * - `logo`: ancho y alto nominales para el srcset; el tamaño real lo manda la
- *   clase del DS (`h-7 w-auto max-w-[150px]`).
+ *   clase del DS (`h-7 w-auto max-w-[150px]`). Carga inmediata, no lazy: la
+ *   cinta los hace entrar desde el borde y con lazy cada logo recién se pedía
+ *   al asomar, así que se veían los separadores sin logo hasta que llegaba.
+ *   Son pocas URLs repetidas: se bajan una vez.
  * - Si la URL no es optimizable (host fuera de SHOP_MEDIA_HOSTS, data:, etc.),
  *   `<img>` común: con `next/image` quedaría rota (400).
  *
@@ -37,7 +40,7 @@ export const imagenNext: RenderImage = ({ src, alt, className, sizes, fit, prior
         src={src}
         alt={alt}
         className={className}
-        loading={priority ? "eager" : "lazy"}
+        loading={priority || fit === "logo" ? "eager" : "lazy"}
         decoding="async"
         {...(priority ? { fetchPriority: "high" as const } : {})}
         {...data}
@@ -45,7 +48,7 @@ export const imagenNext: RenderImage = ({ src, alt, className, sizes, fit, prior
     );
   }
   if (fit === "logo") {
-    return <Image src={src} alt={alt} className={className} width={300} height={56} sizes={sizes} draggable={false} {...data} />;
+    return <Image src={src} alt={alt} className={className} width={300} height={56} sizes={sizes} loading="eager" draggable={false} {...data} />;
   }
   return (
     <Image

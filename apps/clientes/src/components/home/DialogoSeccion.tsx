@@ -1,18 +1,25 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
-import { Alert, Button, Dialog, SegmentedControl, useToast } from "@myd-org/ui";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { Alert, Button, Dialog, SegmentedControl, Spinner, useToast } from "@myd-org/ui";
 import type { SeccionHome, Visibilidad } from "@/data/home-defaults";
-import { cambiarVisibilidadSeccion, guardarSeccion, restablecerSeccion } from "@/lib/home-acciones";
+import {
+  cambiarVisibilidadSeccion,
+  guardarSeccion,
+  leerSeccionParaEditar,
+  restablecerSeccion,
+} from "@/lib/home-acciones";
 import { normalizarPayload, TITULOS_SECCION } from "@/lib/home-editor";
 import { EDITORES } from "./editores";
 import { OPCIONES_VISIBILIDAD } from "./editores/SelectorVisibilidad";
 
 /**
- * Dialog genérico por sección: monta el editor del registro `EDITORES`,
- * guarda con la server action `guardarSeccion` y ofrece "Restablecer valores
- * originales". El refresco visual lo hace `revalidatePath` dentro de la
- * action (D3): este componente NUNCA llama `router.refresh()`.
+ * Dialog genérico por sección: al abrirse pide los datos de la sección con
+ * `leerSeccionParaEditar` (la home no los manda en su payload), monta el
+ * editor del registro `EDITORES`, guarda con la server action `guardarSeccion`
+ * y ofrece "Restablecer valores originales". El refresco visual lo hace la
+ * revalidación de la home dentro de cada action (hoy `revalidatePath`): este
+ * componente NUNCA llama `router.refresh()`.
  *
  * "Mostrar en" (siempre / desktop / mobile / nunca) se aplica al instante,
  * aparte del borrador: no guarda los cambios de contenido sin guardar.
@@ -29,20 +36,24 @@ const TOAST_VISIBILIDAD: Record<Visibilidad, string> = {
   mobile: "La sección se muestra solo en mobile",
   nunca: "Sección oculta en la tienda",
 };
+const ERROR_CARGA = "No se pudo cargar la sección. Inténtelo de nuevo.";
+
+type Carga = { estado: "cargando" } | { estado: "lista" } | { estado: "error"; mensaje: string };
+
 export function DialogoSeccion({
   seccion,
-  inicial,
   visibilidad,
   open,
   onOpenChange,
 }: {
   seccion: SeccionHome;
-  inicial: unknown;
   visibilidad: Visibilidad;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [borrador, setBorrador] = useState<unknown>(inicial);
+  const [borrador, setBorrador] = useState<unknown>(undefined);
+  const [carga, setCarga] = useState<Carga>({ estado: "cargando" });
+  const [intento, setIntento] = useState(0);
   const [errores, setErrores] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const { toast } = useToast();
@@ -56,9 +67,39 @@ export function DialogoSeccion({
   if (open !== openAnterior) {
     setOpenAnterior(open);
     if (open) {
-      setBorrador(structuredClone(inicial));
+      setBorrador(undefined);
+      setCarga({ estado: "cargando" });
       setErrores([]);
     }
+  }
+
+  // Datos de la sección, pedidos al abrir (y en cada "Reintentar"). Siempre
+  // frescos: lo último guardado, aunque la home todavía no se haya refrescado.
+  useEffect(() => {
+    if (!open) return;
+    let vigente = true;
+    leerSeccionParaEditar(seccion).then(
+      (r) => {
+        if (!vigente) return;
+        if (r.ok) {
+          setBorrador(r.valor);
+          setCarga({ estado: "lista" });
+        } else {
+          setCarga({ estado: "error", mensaje: r.error });
+        }
+      },
+      () => {
+        if (vigente) setCarga({ estado: "error", mensaje: ERROR_CARGA });
+      },
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [open, seccion, intento]);
+
+  function reintentar() {
+    setCarga({ estado: "cargando" });
+    setIntento((n) => n + 1);
   }
 
   const Editor = EDITORES[seccion];
@@ -115,7 +156,7 @@ export function DialogoSeccion({
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancelar
           </Button>
-          <Button type="button" loading={pending} onClick={guardar}>
+          <Button type="button" loading={pending} disabled={carga.estado !== "lista"} onClick={guardar}>
             Guardar
           </Button>
         </>
@@ -146,7 +187,22 @@ export function DialogoSeccion({
             </ul>
           </Alert>
         ) : null}
-        <Editor valor={borrador} onChange={setBorrador} />
+        {carga.estado === "lista" ? (
+          <Editor valor={borrador} onChange={setBorrador} />
+        ) : carga.estado === "cargando" ? (
+          <div className="flex justify-center py-8">
+            <Spinner label="Cargando la sección" />
+          </div>
+        ) : (
+          <Alert tone="danger" title="No se pudo abrir el editor">
+            <div className="flex flex-col items-start gap-3">
+              <p>{carga.mensaje}</p>
+              <Button type="button" size="sm" variant="outline" onClick={reintentar}>
+                Reintentar
+              </Button>
+            </div>
+          </Alert>
+        )}
       </div>
     </Dialog>
   );

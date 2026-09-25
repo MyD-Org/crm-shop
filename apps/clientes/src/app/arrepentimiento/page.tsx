@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { PaginaLegal } from "@/components/legales/PaginaLegal";
-import { esAdmin } from "@/lib/auth";
 import { getDatosLegales } from "@/lib/home-datos";
 import { bloquesArrepentimiento } from "@/lib/legales/arrepentimiento";
 import { FormArrepentimiento } from "./FormArrepentimiento";
@@ -22,13 +21,12 @@ export default async function ArrepentimientoPage() {
   // rechazaría todos los envíos (más de 24 h).
   await connection();
   const iniciado = marcaDeTiempo();
-  const [datos, puedeEditar] = await Promise.all([getDatosLegales(), esAdmin()]);
+  const datos = await getDatosLegales();
   return (
     <PaginaLegal
       titulo="Botón de arrepentimiento"
       bloques={bloquesArrepentimiento(datos)}
       datos={datos}
-      puedeEditar={puedeEditar}
     >
       <section className="flex flex-col gap-4">
         <h2 className="font-display text-xl font-medium tracking-tight text-text">Solicitar la revocación</h2>

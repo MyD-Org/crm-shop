@@ -45,9 +45,12 @@ import {
   guardarDatosLegales,
   guardarFooter,
   guardarSeccion,
+  leerSeccionParaEditar,
   restablecerFooter,
   restablecerSeccion,
 } from "./home-acciones";
+import { DEFAULTS_HOME } from "@/data/home-defaults";
+import { REGISTRO, infracciones } from "@/test/registro-usted";
 
 describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
   beforeEach(() => {
@@ -456,5 +459,81 @@ describe("guardarFooter / restablecerFooter", () => {
     expect(await restablecerFooter()).toEqual({ ok: true, updatedAt: null });
     expect(borrarMock).toHaveBeenCalledWith("footer");
     expect(revalidateMock).toHaveBeenCalledWith("/", "layout");
+  });
+});
+
+describe("leerSeccionParaEditar (performance-mobile-shop 4a)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    esAdminMock.mockResolvedValue(true);
+  });
+
+  it("no admin: error en usted y no lee la DB", async () => {
+    esAdminMock.mockResolvedValue(false);
+
+    const r = await leerSeccionParaEditar("hero");
+
+    expect(r).toEqual({ ok: false, error: "No tiene permisos para editar esta sección." });
+    expect(leerMock).not.toHaveBeenCalled();
+  });
+
+  it("sección desconocida: no lee la DB", async () => {
+    const r = await leerSeccionParaEditar("legal");
+
+    expect(r).toEqual({ ok: false, error: "La sección indicada no existe." });
+    expect(leerMock).not.toHaveBeenCalled();
+  });
+
+  it("admin sin fila guardada: devuelve el default de la sección", async () => {
+    leerMock.mockResolvedValue(undefined);
+
+    const r = await leerSeccionParaEditar("servicios");
+
+    expect(leerMock).toHaveBeenCalledWith("servicios");
+    expect(r).toEqual({ ok: true, valor: DEFAULTS_HOME.servicios });
+  });
+
+  it("admin con fila: devuelve la fila tal como la ve la home (mergeada como en combinarContenidoHome)", async () => {
+    const guardado = { ...DEFAULTS_HOME.anuncio, texto: "Envíos a todo el país" };
+    leerMock.mockResolvedValue(guardado);
+
+    const r = await leerSeccionParaEditar("anuncio");
+
+    expect(r).toEqual({ ok: true, valor: expect.objectContaining({ texto: "Envíos a todo el país" }) });
+  });
+
+  it("destacados viejos sin skus/imagenes heredan los del default", async () => {
+    const viejo: Record<string, unknown> = { ...DEFAULTS_HOME.destacados };
+    delete viejo.skus;
+    delete viejo.imagenes;
+    leerMock.mockResolvedValue(viejo);
+
+    const r = await leerSeccionParaEditar("destacados");
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.valor).toMatchObject({ skus: DEFAULTS_HOME.destacados.skus, imagenes: DEFAULTS_HOME.destacados.imagenes });
+    }
+  });
+
+  it("navBadge apagado (jsonb null) se edita como null, no como el default", async () => {
+    leerMock.mockResolvedValue(null);
+
+    expect(await leerSeccionParaEditar("navBadge")).toEqual({ ok: true, valor: null });
+  });
+
+  it("la DB falla: error en usted, sin lanzar", async () => {
+    leerMock.mockRejectedValue(new Error("db caída"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const r = await leerSeccionParaEditar("hero");
+
+    expect(r).toEqual({ ok: false, error: "No se pudo cargar la sección. Inténtelo de nuevo." });
+  });
+
+  it("los mensajes nuevos respetan el registro de usted", () => {
+    for (const texto of ["No tiene permisos para editar esta sección.", "No se pudo cargar la sección. Inténtelo de nuevo."]) {
+      expect(infracciones(`<p>${texto}</p>`, REGISTRO)).toEqual([]);
+    }
   });
 });

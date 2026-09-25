@@ -8,8 +8,10 @@ import { DialogoSeccion } from "./DialogoSeccion";
 
 /**
  * Envuelve una sección de `HomeClient.tsx` con el botón "Editar sección"
- * (rebanada B1 de home-editable). Con `puedeEditar === false` no agrega
- * ningún markup: costo cero para un visitante sin sesión de admin.
+ * (rebanada B1 de home-editable). `puedeEditar` sale del contexto
+ * (`ModoEdicion`), que solo prende el hueco `EdicionSiAdmin`: para un
+ * visitante no agrega ningún markup ni datos del editor (el Dialog los pide
+ * al abrirse).
  *
  * `visibilidad`: dónde la ve el visitante. "nunca" no se pinta; "desktop" y
  * "mobile" se ocultan por CSS en el otro tamaño. El admin fuera del modo
@@ -37,22 +39,16 @@ function ComoVisitante({ visibilidad, children }: { visibilidad: Visibilidad; ch
 }
 export function SeccionEditable({
   seccion,
-  inicial,
-  puedeEditar,
   visibilidad = "siempre",
   className,
   children,
 }: {
   seccion: SeccionHome;
-  /** Datos del editor. Sólo hacen falta con `puedeEditar`: para el visitante
-   *  HomeClient pasa `undefined` y no viajan en el payload de la home. */
-  inicial?: unknown;
-  puedeEditar: boolean;
   visibilidad?: Visibilidad;
   className?: string;
   children: ReactNode;
 }) {
-  const { activo } = useModoEdicion();
+  const { puedeEditar, activo } = useModoEdicion();
   const [open, setOpen] = useState(false);
 
   if (!puedeEditar || !activo) return <ComoVisitante visibilidad={visibilidad}>{children}</ComoVisitante>;
@@ -67,7 +63,7 @@ export function SeccionEditable({
           Editar sección
         </Button>
       </div>
-      <DialogoSeccion seccion={seccion} inicial={inicial} visibilidad={visibilidad} open={open} onOpenChange={setOpen} />
+      <DialogoSeccion seccion={seccion} visibilidad={visibilidad} open={open} onOpenChange={setOpen} />
     </div>
   );
 }

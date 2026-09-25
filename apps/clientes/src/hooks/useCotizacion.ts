@@ -140,7 +140,7 @@ export function useCotizacion(opts: {
           ...etiqueta,
           data: null,
           noAuth: false,
-          error: "No pudimos conectarnos. Revisá tu conexión.",
+          error: "No pudimos conectarnos. Revise su conexión.",
         });
       }
     }, yaCotizo.current ? ESPERA_MS : 0);

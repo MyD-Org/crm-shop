@@ -209,7 +209,7 @@ export function maxCuotas(opciones: OpcionCuotas[]): number {
 }
 
 /**
- * Próximo escalón ("Te faltan $X para hasta N cuotas").
+ * Próximo escalón ("Le faltan $X para hasta N cuotas").
  *
  * Por proveedor: escalones con monto mínimo mayor a la base que habiliten una
  * cantidad del snapshot mayor a la que ya se ofrece. Se informa esa cantidad

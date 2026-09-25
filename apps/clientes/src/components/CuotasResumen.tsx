@@ -3,7 +3,7 @@ import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { ResumenCuotas } from "@/lib/cuotas-exhibicion";
 
 /**
- * Bloque de cuotas del carrito ("Hasta N cuotas…" + "Te faltan $X…" con barra)
+ * Bloque de cuotas del carrito ("Hasta N cuotas…" + "Le faltan $X…" con barra)
  * y del checkout (plan del pedido, sin escalón). null → nada.
  */
 export function CuotasResumen({

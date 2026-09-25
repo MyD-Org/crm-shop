@@ -58,7 +58,7 @@ describe("POST /api/pagos/mercadopago — cuotas", () => {
     const r = await pagar({ cuotas: 12, metodoPagoId: "visa" });
     expect(r.status).toBe(422);
     expect(await r.json()).toEqual({
-      error: "Esa cantidad de cuotas no está disponible para tu tarjeta. Elegí otra opción de cuotas.",
+      error: "Esa cantidad de cuotas no está disponible para su tarjeta. Elija otra opción de cuotas.",
       motivo: "cuotas_no_disponibles",
     });
     expect(crearPago).toHaveBeenCalledTimes(0);

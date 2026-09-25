@@ -143,7 +143,7 @@ describe("CuotasResumen (carrito)", () => {
     const html = renderToStaticMarkup(createElement(CuotasResumen, { resumen: resumenCuotas(120000, o) }));
     const t = texto(html);
     expect(t).toContain("Hasta 3 cuotas sin interés");
-    expect(t).toContain("Te faltan $30.000,00 para hasta 6 cuotas");
+    expect(t).toContain("Le faltan $30.000,00 para hasta 6 cuotas");
     expect(html).toContain('role="progressbar"');
     expect(html).toContain('aria-valuenow="80"');
     expect(html).toContain("width:80%");

@@ -56,8 +56,8 @@ describe("textos", () => {
   it("carrito: hasta N y te faltan para hasta N", () => {
     expect(TEXTOS_CUOTAS.hasta(6, true)).toBe("Hasta 6 cuotas sin interés");
     expect(TEXTOS_CUOTAS.hasta(12, false)).toBe("Hasta 12 cuotas");
-    expect(TEXTOS_CUOTAS.teFaltan(30000, 6)).toBe("Te faltan $30.000,00 para hasta 6 cuotas");
-    expect(TEXTOS_CUOTAS.teFaltan(30000.01, 12)).toBe("Te faltan $30.000,01 para hasta 12 cuotas");
+    expect(TEXTOS_CUOTAS.teFaltan(30000, 6)).toBe("Le faltan $30.000,00 para hasta 6 cuotas");
+    expect(TEXTOS_CUOTAS.teFaltan(30000.01, 12)).toBe("Le faltan $30.000,01 para hasta 12 cuotas");
   });
 
   it("título del bloque del modal por proveedor", () => {
@@ -94,7 +94,7 @@ describe("resumenCuotas (carrito / checkout)", () => {
     const r = resumenCuotas(120000, o)!;
     expect(r.titulo).toBe("Hasta 3 cuotas sin interés");
     expect(r.escalon).toEqual({
-      texto: "Te faltan $30.000,00 para hasta 6 cuotas",
+      texto: "Le faltan $30.000,00 para hasta 6 cuotas",
       progresoPct: 80,
       faltante: 30000,
       montoMinimo: 150000,
@@ -125,7 +125,7 @@ describe("resumenCuotas (carrito / checkout)", () => {
     const soloAlto = oferta(esc([6, 150000]), [op({ cuotas: 6 })]);
     const r = resumenCuotas(50000, soloAlto)!;
     expect(r.titulo).toBeNull();
-    expect(r.escalon?.texto).toBe("Te faltan $100.000,00 para hasta 6 cuotas");
+    expect(r.escalon?.texto).toBe("Le faltan $100.000,00 para hasta 6 cuotas");
     expect(r.escalon?.progresoPct).toBe(33);
   });
 

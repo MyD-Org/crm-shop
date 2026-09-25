@@ -185,10 +185,10 @@ function RadioCard({
  * pagaba después. Con un Record, agregar un medio sin su texto no compila.
  */
 const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
-  transferencia: "Te pasamos el CBU al confirmar el pedido",
-  efectivo: "Pagás al momento del retiro",
-  cuenta_corriente: "Se carga a tu cuenta corriente",
-  mercadopago: "Pagás ahora con tarjeta, en cuotas si querés",
+  transferencia: "Le enviamos el CBU al confirmar el pedido",
+  efectivo: "Paga al momento del retiro",
+  cuenta_corriente: "Se carga a su cuenta corriente",
+  mercadopago: "Paga ahora con tarjeta, en cuotas si lo desea",
   // Hoy no se llega a mostrar: con los pagos apagados no hay sección "Forma de
   // pago". Está porque el Record exige un texto por método.
   a_coordinar: "Un asesor coordinará el pago con usted después de confirmar su pedido",
@@ -556,7 +556,7 @@ export function CheckoutClient({
       });
       vaciarTrasPedido();
     } catch {
-      setErrorEnvio("No pudimos conectarnos. Revisá tu conexión e intentá de nuevo.");
+      setErrorEnvio("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
     } finally {
       setEnviando(false);
     }
@@ -603,7 +603,7 @@ export function CheckoutClient({
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
         <div className="text-center">
           <h1 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
-            Pagá tu pedido
+            Pague su pedido
           </h1>
           <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
         </div>
@@ -664,7 +664,7 @@ export function CheckoutClient({
           <p className={`mt-3 text-sm text-muted ${ENTRADA_EXITO} delay-[240ms]`}>
             {pagado ? (
               <>
-                Ya cobramos tu pedido. Nos comunicamos con vos para coordinar el{" "}
+                Ya cobramos su pedido. Nos comunicaremos con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"}.
               </>
             ) : !pagosHabilitados ? (
@@ -675,14 +675,14 @@ export function CheckoutClient({
               </>
             ) : (
               <>
-                Nos vamos a comunicar con vos para coordinar el{" "}
+                Nos comunicaremos con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"} y el pago por{" "}
                 {PAGO_LABEL[pagoElegido].toLowerCase()}.
               </>
             )}
             {emailCliente &&
               (pagosHabilitados ? (
-                <> Te mandamos el detalle a {emailCliente}.</>
+                <> Le enviamos el detalle a {emailCliente}.</>
               ) : (
                 <> Le enviamos el detalle a {emailCliente}.</>
               ))}
@@ -713,7 +713,7 @@ export function CheckoutClient({
   if (ready && items.length === 0) {
     return (
       <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20">
-        <p className="text-2xl font-bold text-text">Tu carrito está vacío</p>
+        <p className="text-2xl font-bold text-text">El carrito está vacío</p>
         <Link href="/catalogo">
           <Button>Ver catálogo</Button>
         </Link>
@@ -735,7 +735,7 @@ export function CheckoutClient({
                 selected={entrega === "retiro"}
                 onClick={() => setEntrega("retiro")}
                 title="Retiro en local / a coordinar"
-                description="Retirás en el local o coordinamos la entrega con vos"
+                description="Retira en el local o coordinamos la entrega con usted"
               />
               {envioHabilitado && admiteEnvio && (
                 <RadioCard
@@ -1030,7 +1030,7 @@ export function CheckoutClient({
             </div>
             {entrega === "envio" && (
               <p className="mt-3 text-xs text-muted">
-                El pago en efectivo solo está disponible si retirás por el local.
+                El pago en efectivo solo está disponible si retira por el local.
               </p>
             )}
           </section>
@@ -1150,7 +1150,7 @@ export function CheckoutClient({
 
           <p className="mt-3 text-center text-xs text-muted">
             {pagosHabilitados
-              ? "No se te cobra nada ahora. Coordinamos el pago al confirmar el pedido."
+              ? "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido."
               : "No se le cobrará nada ahora. Un asesor coordinará el pago con usted."}
           </p>
         </div>

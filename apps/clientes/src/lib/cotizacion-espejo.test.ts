@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 
 /**
- * `cotizar`: una sola consulta a `catalog_products` y ninguna llamada a Alegra.
+ * `cotizar`: una sola consulta a la vista del CRM (`catalog_products_shop`) y
+ * ninguna llamada a Alegra.
  */
 
 const getItem = vi.fn();
@@ -48,10 +49,11 @@ describe("cotizar", () => {
 
     expect(getItem).not.toHaveBeenCalled();
     expect(grabadora.consultas).toHaveLength(1);
-    expect(grabadora.consultas[0].sql).toContain('"shop"."catalog_products"');
+    expect(grabadora.consultas[0].sql).toContain('from "public"."catalog_products_shop"');
+    expect(grabadora.consultas[0].sql).not.toContain('"shop"."catalog_products"');
     // El stock que se cotiza es el disponible: descuenta lo reservado por otros pedidos.
     expect(grabadora.consultas[0].sql).toMatch(
-      /left join "shop"\."stock_reservado" on \("stock_reservado"\."alegra_item_id" = "shop"\."catalog_products"\."alegra_id" and "stock_reservado"\."tenant_id" = \$\d+\)/,
+      /left join "shop"\."stock_reservado" on \("stock_reservado"\."alegra_item_id" = "catalog_products_shop"\."alegra_id" and "stock_reservado"\."tenant_id" = \$\d+\)/,
     );
     expect(grabadora.consultas[0].sql).toContain('coalesce("stock_reservado"."qty", 0)');
 
@@ -86,20 +88,31 @@ describe("cotizar", () => {
     expect(c.total).toBe(0);
   });
 
-  it("stock, precios y estado salen de la fuente más fresca (vista del CRM o espejo del Shop)", async () => {
+  it("todo sale de la vista del CRM, del tenant del Shop (stock, precios, estado, marca, categoría e IVA)", async () => {
     filas = [["10", "COD-10", null, null, precios, "8", "21", "active", null]];
     await cotizar([{ id: "10", qty: 1 }]);
     const [{ sql, params }] = grabadora.consultas;
-    const join = sql.match(
-      /left join "public"\."catalog_products_shop" on \("catalog_products_shop"\."alegra_id" = "shop"\."catalog_products"\."alegra_id" and "catalog_products_shop"\."tenant_id" = \$(\d+)\)/,
+    const where = sql.match(
+      /where \("catalog_products_shop"\."tenant_id" = \$(\d+) and "catalog_products_shop"\."alegra_id" in \(\$\d+\)\)/,
     );
-    expect(join, sql).not.toBeNull();
-    expect(params[Number(join![1]) - 1]).toBe("tenant-test");
-    expect(sql).toContain('then "catalog_products_shop"."stock" else "shop"."catalog_products"."stock" end');
-    expect(sql).toContain('then "catalog_products_shop"."precios_alegra" else "shop"."catalog_products"."prices" end');
-    expect(sql).toContain('then "catalog_products_shop"."activo" else "shop"."catalog_products"."status" = \'active\' end');
-    // Marca e IVA siguen siendo del espejo del Shop.
-    expect(sql).toContain('"shop"."catalog_products"."iva_porcentaje"');
+    expect(where, sql).not.toBeNull();
+    expect(params[Number(where![1]) - 1]).toBe("tenant-test");
+    const cat = sql.match(
+      /left join "public"\."catalog_categories_shop" on \("catalog_categories_shop"\."alegra_id" = "catalog_products_shop"\."category_alegra_id" and "catalog_categories_shop"\."tenant_id" = \$(\d+)\)/,
+    );
+    expect(cat, sql).not.toBeNull();
+    expect(params[Number(cat![1]) - 1]).toBe("tenant-test");
+    expect(sql).toContain('"catalog_products_shop"."precios_alegra"');
+    expect(sql).toContain('"catalog_products_shop"."iva_porcentaje"');
+    expect(sql).toContain('"catalog_products_shop"."brand"');
+    expect(sql).not.toContain("alegra_leido_at");
+  });
+
+  it("IVA sumado en la vista (21 + 3 = 24) → el total usa 24 %", async () => {
+    filas = [["10", "COD-10", null, null, precios, "8", "24.00", "active", null]];
+    const c = await cotizar([{ id: "10", qty: 1 }]);
+    expect(c.lineas[0]).toMatchObject({ ivaPorcentaje: 24, subtotal: 1000, iva: 240, total: 1240 });
+    expect(c.total).toBe(1240);
   });
 
   it("el nombre de la línea es el mismo que muestra el catálogo (overlay → descripción → name)", async () => {
@@ -107,7 +120,7 @@ describe("cotizar", () => {
     const c = await cotizar([{ id: "10", qty: 1 }]);
     const [{ sql, params }] = grabadora.consultas;
     expect(sql).toContain(
-      'coalesce(nullif("public"."catalog_overlay"."nombre", \'\'), nullif("shop"."catalog_products"."description", \'\'), "shop"."catalog_products"."name")',
+      'coalesce(nullif("public"."catalog_overlay"."nombre", \'\'), nullif("catalog_products_shop"."description", \'\'), "catalog_products_shop"."name")',
     );
     const join = sql.match(/left join "public"\."catalog_overlay" on \(.*?"public"\."catalog_overlay"\."tenant_id" = \$(\d+)\)/);
     expect(join, sql).not.toBeNull();

@@ -32,8 +32,8 @@ afterEach(() => {
  */
 const PRECIO_MINIMO = /\/ 100\) >= \$\d+/g;
 const PRECIO_MAXIMO = /\/ 100\) <= \$\d+/g;
-// Disponible: stock de la fuente elegida por fila (CRM o espejo del Shop) menos
-// lo reservado por pedidos vivos (ver stock-disponible.ts).
+// Disponible: stock de la vista del CRM menos lo reservado por pedidos vivos
+// (ver stock-disponible.ts).
 const STOCK = /coalesce\("stock_reservado"\."qty", 0\)\) end\) is null or \(case when .*coalesce\("stock_reservado"\."qty", 0\)\) end\) > 0/;
 const cuenta = (sql: string, re: RegExp) => sql.match(re)?.length ?? 0;
 
@@ -45,7 +45,7 @@ function facetas(consultas: ConsultaGrabada[]) {
     return c;
   };
   return {
-    categorias: buscar((s) => s.includes('group by "shop"."catalog_categories"."name"')),
+    categorias: buscar((s) => s.includes('group by "catalog_categories_shop"."name"')),
     marcas: buscar((s) => s.includes("group by coalesce(nullif(")),
     precio: buscar((s) => s.includes("floor(min(")),
   };
@@ -111,8 +111,13 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
     await getFacetas({});
     expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
     const { categorias, marcas, precio } = facetas(grabadora.consultas);
-    expect(categorias.sql).toContain('"shop"."catalog_categories"."name"');
-    expect(marcas.sql).toContain('coalesce(nullif("shop"."catalog_products"."brand"');
+    expect(categorias.sql).toContain('"catalog_categories_shop"."name"');
+    // Sin marca en la vista, cuenta bajo el nombre de su categoría de Alegra
+    // (p. ej. "Iluminación"), con la categoría del mismo tenant.
+    expect(marcas.sql).toContain(
+      'group by coalesce(nullif("catalog_products_shop"."brand", \'\'), "catalog_categories_shop"."name")',
+    );
+    expect(marcas.sql).toMatch(/"catalog_categories_shop"\."tenant_id" = \$\d+\)/);
     expect(precio.sql).toMatch(/floor\(min\([\s\S]*\/ 100\)\)\)::int/);
     expect(precio.sql).toMatch(/ceil\(max\([\s\S]*\/ 100\)\)\)::int/);
   });
@@ -166,13 +171,13 @@ describe("orden por defecto (SQL-5)", () => {
   it("sin orden explícito ordena sólo por nombre", async () => {
     await getPaginaCatalogo({});
     const pagina = grabadora.consultas[1];
-    expect(pagina.sql).toMatch(/order by "shop"\."catalog_products"\."name" asc limit/);
+    expect(pagina.sql).toMatch(/order by "catalog_products_shop"\."name" asc limit/);
   });
 
   it("por precio conserva el desempate por nombre", async () => {
     await getPaginaCatalogo({ orden: "precio-asc" });
     const pagina = grabadora.consultas[1];
-    expect(pagina.sql).toMatch(/\/ 100\) asc, "shop"\."catalog_products"\."name" asc limit/);
+    expect(pagina.sql).toMatch(/\/ 100\) asc, "catalog_products_shop"\."name" asc limit/);
   });
 
   it('ninguna consulta menciona "ventas"', async () => {

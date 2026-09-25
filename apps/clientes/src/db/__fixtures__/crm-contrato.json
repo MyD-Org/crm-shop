@@ -119,6 +119,19 @@
     "stock": "numeric",
     "precios_alegra": "jsonb",
     "activo": "boolean",
-    "alegra_leido_at": "timestamp with time zone"
+    "alegra_leido_at": "timestamp with time zone",
+    "name": "text",
+    "description": "text",
+    "code": "text",
+    "brand": "text",
+    "category_alegra_id": "text",
+    "iva_porcentaje": "numeric(5, 2)"
+  },
+  "public.catalog_categories_shop": {
+    "tenant_id": "text",
+    "alegra_id": "text",
+    "name": "text",
+    "parent_alegra_id": "text",
+    "activo": "boolean"
   }
 }

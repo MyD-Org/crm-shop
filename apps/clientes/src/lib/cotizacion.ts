@@ -5,9 +5,11 @@
  * navegador manda `{ id, qty }` y nada más: si el precio viaja desde el
  * cliente, el precio se edita desde el cliente.
  *
- * Fuente: el espejo del catálogo (`catalog_products`), con stock, precios y
- * estado de la fuente más fresca entre ese espejo y la vista del CRM, y el stock
- * menos lo reservado por los pedidos vivos del Shop (ver `stock-disponible.ts`). Los precios que valen son los que publica la tienda: el carrito, el checkout y el pedido usan el
+ * Fuente: el catálogo del CRM (vista `catalog_products_shop`, filtrada por el
+ * tenant del Shop), con el stock menos lo reservado por los pedidos vivos del
+ * Shop (ver `stock-disponible.ts`). El IVA es el de la vista (la suma de los
+ * impuestos del ítem en Alegra). Los precios que valen son los que publica la
+ * tienda: el carrito, el checkout y el pedido usan el
  * mismo número, en una sola consulta y sin llamadas a Alegra (decisión
  * 2026-09-23). Antes era una llamada a Alegra por línea en cada cambio de
  * cantidad: lento, y un riesgo para el rate limit de la cuenta.
@@ -15,10 +17,10 @@
  * SOLO servidor: usa la DB.
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { catalogCategories, catalogProducts, stockReservado } from "@/db/schema";
-import { crmOverlay, crmStock } from "@/db/crm";
+import { stockReservado } from "@/db/schema";
+import { crmCatalogo, crmCategoriasAlegra, crmOverlay } from "@/db/crm";
 import {
   esIdAlegra,
   ivaDeItem,
@@ -27,7 +29,8 @@ import {
   resolverPrecio,
   type AlegraItem,
 } from "./alegra";
-import { estadoSql, joinReserva, joinStockCrm, preciosSql, stockSql } from "./stock-disponible";
+import { estadoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
+import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { joinOverlay, nombreExhibidoSql } from "./nombre-exhibido";
 import { costoEnvio, type EntregaTipo } from "./envio";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
@@ -173,7 +176,7 @@ export function cotizarItem(
   return linea;
 }
 
-/** Columnas del espejo que hacen falta para cotizar una línea. */
+/** Columnas del espejo del CRM (`catalog_products_shop`) que hacen falta para cotizar una línea. */
 export interface FilaEspejo {
   alegraId: string;
   name: string;
@@ -192,8 +195,8 @@ export interface FilaEspejo {
  *
  * - IVA null en el espejo → sin `tax`, y `ivaDeItem` cae a `IVA_DEFAULT`.
  * - Stock null → ítem no inventariable (siempre disponible).
- * - Precios: pasan por `mapPrecios` porque pueden venir crudos del CRM (ids
- *   numéricos); sobre los del espejo del Shop no cambia nada.
+ * - Precios: pasan por `mapPrecios` porque vienen crudos del CRM (ids
+ *   numéricos).
  */
 export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
   return {
@@ -216,8 +219,8 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
 /**
  * Una consulta para todas las líneas. Si la base falla, tira: no hay total.
  *
- * Stock, precios y estado salen de la misma elección por fila (CRM o Shop) que
- * usan el catálogo y la ficha, con la reserva ya descontada: lo que el
+ * Stock, precios y estado salen de la misma vista del CRM que usan el catálogo
+ * y la ficha, con la reserva ya descontada: lo que el
  * visitante vio es lo que se cotiza, y `POST /api/pedidos` valida y calcula con
  * esta misma cotización (y revalida el disponible dentro de la transacción del
  * pedido, ver `crearPedido`).
@@ -226,26 +229,22 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
   if (ids.length === 0) return new Map();
   const filas: FilaEspejo[] = await getDb()
     .select({
-      alegraId: catalogProducts.alegraId,
+      alegraId: crmCatalogo.alegraId,
       // El mismo nombre que el catálogo y el carrito (ver nombre-exhibido.ts).
       name: nombreExhibidoSql,
-      code: catalogProducts.code,
-      brand: catalogProducts.brand,
+      code: crmCatalogo.code,
+      brand: crmCatalogo.brand,
       prices: preciosSql,
       stock: stockSql,
-      ivaPorcentaje: catalogProducts.ivaPorcentaje,
+      ivaPorcentaje: crmCatalogo.ivaPorcentaje,
       status: estadoSql,
-      categoryName: catalogCategories.name,
+      categoryName: crmCategoriasAlegra.name,
     })
-    .from(catalogProducts)
-    .leftJoin(
-      catalogCategories,
-      eq(catalogProducts.categoryAlegraId, catalogCategories.alegraId),
-    )
-    .leftJoin(crmStock, joinStockCrm())
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(stockReservado, joinReserva())
     .leftJoin(crmOverlay, joinOverlay())
-    .where(inArray(catalogProducts.alegraId, ids));
+    .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, ids)));
   return new Map(filas.map((f) => [f.alegraId, itemDesdeEspejo(f)]));
 }
 

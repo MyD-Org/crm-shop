@@ -32,10 +32,17 @@ describe("búsqueda del catálogo", () => {
     expect(params).toContain("%lampara%");
   });
 
-  it("lee los productos del espejo del Shop, no del homónimo del CRM en public", async () => {
+  it("busca sobre la vista del CRM (nombre, código y descripción), no sobre la copia vieja del Shop", async () => {
+    // "lampara" encuentra "Lámpara colgante": unaccent + lower en los dos lados.
     await getCatalogo({ busqueda: "lampara" });
     const { sql } = grabadora.consultas[0];
-    expect(sql).toContain('"shop"."catalog_products"');
+    expect(sql).toContain('from "public"."catalog_products_shop"');
+    for (const col of ["name", "code", "description"]) {
+      expect(sql).toContain(
+        `"shop".immutable_unaccent(lower("catalog_products_shop"."${col}")) LIKE "shop".immutable_unaccent(lower($`,
+      );
+    }
+    expect(sql).not.toContain('"shop"."catalog_products"');
     expect(sql).not.toContain('"public"."catalog_products"');
     expect(sql).not.toMatch(/from "catalog_products"/);
   });

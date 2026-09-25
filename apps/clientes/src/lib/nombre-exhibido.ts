@@ -7,8 +7,7 @@
  * código. Un texto vacío no pisa (`||` en TS, `nullif` en SQL).
  */
 import { and, eq, sql } from "drizzle-orm";
-import { catalogProducts } from "@/db/schema";
-import { crmOverlay } from "@/db/crm";
+import { crmCatalogo, crmOverlay } from "@/db/crm";
 import { shopTenantId } from "./tenant";
 
 export function nombreExhibido(fila: {
@@ -19,8 +18,11 @@ export function nombreExhibido(fila: {
   return fila.overlayNombre || fila.description || fila.name;
 }
 
-/** `nombreExhibido` en SQL, para consultas que ya traen el overlay (`joinOverlay`). */
-export const nombreExhibidoSql = sql<string>`coalesce(nullif(${crmOverlay.nombre}, ''), nullif(${catalogProducts.description}, ''), ${catalogProducts.name})`;
+/**
+ * `nombreExhibido` en SQL, para consultas con base en la vista del CRM
+ * (`crmCatalogo`) que ya traen el overlay (`joinOverlay`).
+ */
+export const nombreExhibidoSql = sql<string>`coalesce(nullif(${crmOverlay.nombre}, ''), nullif(${crmCatalogo.description}, ''), ${crmCatalogo.name})`;
 
 /**
  * Join al overlay del CRM (puede no tener fila). La tabla es de todos los
@@ -29,4 +31,4 @@ export const nombreExhibidoSql = sql<string>`coalesce(nullif(${crmOverlay.nombre
  * cada consulta.
  */
 export const joinOverlay = () =>
-  and(eq(crmOverlay.alegraId, catalogProducts.alegraId), eq(crmOverlay.tenantId, shopTenantId()));
+  and(eq(crmOverlay.alegraId, crmCatalogo.alegraId), eq(crmOverlay.tenantId, shopTenantId()));

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 
 /**
- * `getProductosPorIds`: productos del espejo por id de Alegra, para las líneas
+ * `getProductosPorIds`: productos del catálogo del CRM por id de Alegra, para las líneas
  * de pedido (y, más adelante, favoritos). Una sola consulta por llamada, con el
  * overlay del CRM joineado, sin orden ni límite. Sin `soloActivos` no filtra
  * por estado ni por visibilidad: un pedido viejo sigue mostrando el nombre de
@@ -24,19 +24,20 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-/** Activo según la fuente elegida por fila (ver stock-disponible.ts). */
-const ACTIVO = `then "catalog_products_shop"."activo" else "shop"."catalog_products"."status" = 'active' end`;
+/** Activo según la vista del CRM (ver stock-disponible.ts). */
+const ACTIVO = 'and "catalog_products_shop"."activo"';
 
 const JOIN_OVERLAY =
-  /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "shop"\."catalog_products"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;
+  /left join "public"\."catalog_overlay" on \("public"\."catalog_overlay"\."alegra_id" = "catalog_products_shop"\."alegra_id" and "public"\."catalog_overlay"\."tenant_id" = \$\d+\)/;
 
 describe("getProductosPorIds", () => {
   it("una consulta con los ids en un IN y el overlay joineado", async () => {
     await getProductosPorIds(["42", "7"]);
     expect(grabadora.consultas).toHaveLength(1);
     const { sql, params } = grabadora.consultas[0];
-    expect(sql).toContain('"shop"."catalog_products"');
-    const m = sql.match(/"catalog_products"\."alegra_id" in \(\$(\d+), \$(\d+)\)/);
+    expect(sql).toContain('from "public"."catalog_products_shop"');
+    expect(sql).not.toContain('"shop"."catalog_products"');
+    const m = sql.match(/"catalog_products_shop"\."alegra_id" in \(\$(\d+), \$(\d+)\)/);
     expect(m, sql).not.toBeNull();
     expect([params[Number(m![1]) - 1], params[Number(m![2]) - 1]]).toEqual(["42", "7"]);
     expect(sql).toMatch(JOIN_OVERLAY);
@@ -52,7 +53,7 @@ describe("getProductosPorIds", () => {
     expect(sql).not.toContain('"visible"');
   });
 
-  it("con soloActivos exige estar activo (en la fuente más fresca, CRM o Shop)", async () => {
+  it("con soloActivos exige estar activo (según la vista del CRM)", async () => {
     await getProductosPorIds(["42"], { soloActivos: true });
     const { sql } = grabadora.consultas[0];
     expect(sql).toContain(ACTIVO);

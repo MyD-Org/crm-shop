@@ -21,7 +21,7 @@
  */
 import { and, arrayContains, asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
-import { crmContactos, crmStock } from "@/db/crm";
+import { crmCatalogo, crmContactos } from "@/db/crm";
 import {
   esIdAlegra,
   getContacto,
@@ -331,13 +331,13 @@ export async function comercialEspejo(
 export async function idListaGeneral(): Promise<string | null> {
   try {
     const [fila] = await getDb()
-      .select({ precios: crmStock.preciosAlegra })
-      .from(crmStock)
+      .select({ precios: crmCatalogo.preciosAlegra })
+      .from(crmCatalogo)
       .where(
         and(
-          eq(crmStock.tenantId, shopTenantId()),
-          eq(crmStock.activo, true),
-          sql`${crmStock.preciosAlegra} @> '[{"main": true}]'::jsonb`,
+          eq(crmCatalogo.tenantId, shopTenantId()),
+          eq(crmCatalogo.activo, true),
+          sql`${crmCatalogo.preciosAlegra} @> '[{"main": true}]'::jsonb`,
         ),
       )
       .limit(1);

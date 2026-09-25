@@ -255,7 +255,7 @@ describe("crearPedido vacía el carrito del servidor", () => {
     expect(tablas).toEqual([
       'insert into "shop"."orders"',
       "select pg_advisory_xact_lock(k) from",
-      'select "shop"."catalog_products"."alegra_id", (case',
+      'select "catalog_products_shop"."alegra_id", (case',
       'insert into "shop"."order_items"',
       'update "shop"."carts" set',
     ]);
@@ -745,9 +745,9 @@ function filaDe(
   });
 }
 
-/** Ids del `in (...)` de la consulta a `catalog_products`, en orden. */
+/** Ids del `in (...)` de la consulta a la vista del catálogo del CRM, en orden. */
 function idsConsultados(c: ConsultaGrabada): unknown[] {
-  const m = c.sql.match(/"catalog_products"\."alegra_id" in \(([^)]*)\)/);
+  const m = c.sql.match(/"catalog_products_shop"\."alegra_id" in \(([^)]*)\)/);
   expect(m, c.sql).not.toBeNull();
   return m![1].split(", ").map((t) => c.params[Number(t.slice(1)) - 1]);
 }
@@ -780,7 +780,7 @@ describe("líneas con el nombre real del espejo, sin N+1", () => {
     esperaTenant(cabeceras);
     expect(cabeceras.sql).toContain('"orders"."clerk_user_id" =');
     expect(detalle.sql).toContain('"shop"."order_items"');
-    expect(productos.sql).toContain('from "shop"."catalog_products"');
+    expect(productos.sql).toContain('from "public"."catalog_products_shop"');
     expect(idsConsultados(productos)).toEqual(["0", "1", "2", "3", "4"]);
   });
 

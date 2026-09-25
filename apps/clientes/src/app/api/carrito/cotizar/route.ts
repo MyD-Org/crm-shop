@@ -22,7 +22,7 @@ const MAX_POR_MINUTO = 20;
  * POST /api/carrito/cotizar
  * Body: { items: [{ id, qty }], entregaTipo?, ciudad? }
  *
- * Totales del carrito leídos del espejo (`catalog_products` + lista de precios
+ * Totales del carrito leídos del catálogo del CRM (vista `catalog_products_shop` + lista de precios
  * del snapshot de `client_links`), sin llamadas a Alegra. El carrito y el
  * checkout muestran lo que devuelve esta ruta, no lo que tienen en memoria, y
  * `POST /api/pedidos` registra el mismo número. Ver src/lib/cotizacion.ts.

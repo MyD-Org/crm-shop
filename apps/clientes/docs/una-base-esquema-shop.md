@@ -112,9 +112,10 @@ SELECT extname, extnamespace::regnamespace FROM pg_extension WHERE extname = 'un
      falla con el mensaje explícito de la variable faltante.
    - Sacar `SHOP_TENANT_ID` y levantar `npm run dev` → el servidor se niega a
      arrancar.
-6. Con la app arriba (`npm run dev`): corra `npm run sync:catalogo`, dispare
-   desde el admin la sync de overlay y de cuotas (apuntando a la rama si es
-   posible), busque en el catálogo con acentos, arme un pedido de prueba y
+6. Con la app arriba (`npm run dev`): pueble el catálogo con la sync del CRM
+   (ver "Catálogo desde el CRM" → "Dev local"), dispare desde el admin la sync
+   de overlay y de cuotas (apuntando a la rama si es posible), busque en el
+   catálogo con acentos, arme un pedido de prueba y
    confirme que la fila queda con `tenant_id=<TENANT_SLUG>` y aparece en "Mis
    compras".
 7. Repita la búsqueda con acentos una vez más después de
@@ -438,68 +439,78 @@ snapshot útil para cuando la vista no responda.
 `GRANT` pueden quedar (los usa también Mi cuenta). Sólo si se revierte además
 la cuenta corriente: `REVOKE SELECT ON public.alegra_contacts_shop FROM shop_app;`.
 
-## Stock y precio desde el espejo del CRM
+## Catálogo desde el CRM
 
-Change `webhooks-stock-alegra`, rebanada 4. El CRM mantiene su espejo de
-productos (`public.catalog_products`) con la sync diaria y, además, con los
-webhooks de stock de Alegra: una factura o una compra re-leen sus ítems en
-minutos. El Shop lee de ahí stock, precios y estado por la vista angosta
-`public.catalog_products_shop` (migración 0035 del CRM; declarada en
-`src/db/crm.ts` como `crmStock`):
+Change `catalogo-shop-desde-crm` (PR-2; antes, `webhooks-stock-alegra`
+rebanada 4 leía de acá sólo stock, precios y estado). El CRM mantiene su espejo
+de productos (`public.catalog_products`) con la sync diaria y con los webhooks de
+Alegra: una factura, una compra o una edición re-leen sus ítems en minutos. El
+Shop lee **todo** el catálogo de dos vistas (migraciones 0035 y 0037 del CRM;
+declaradas en `src/db/crm.ts`) y ya no usa su copia `shop.catalog_products`:
+
+`public.catalog_products_shop` (`crmCatalogo`):
 
 | Columna | Qué es |
 |---|---|
-| `tenant_id`, `alegra_id` | clave; el Shop filtra por `SHOP_TENANT_ID` en el join |
-| `stock` | inventario total del ítem (null = no inventariable) |
-| `precios_alegra` | `raw->'price'` tal cual lo manda Alegra; el Shop lo normaliza con `mapPrecios` (misma forma que su espejo, con `main`) |
+| `tenant_id`, `alegra_id` | clave; el Shop filtra `tenant_id = SHOP_TENANT_ID` en el WHERE de toda consulta |
+| `stock` | inventario total del ítem (null = no inventariable); el Shop le resta la reserva |
+| `precios_alegra` | `raw->'price'` tal cual lo manda Alegra (columna generada en el CRM); el Shop lo normaliza con `mapPrecios` |
 | `activo` | visto en la última sync del CRM y no inactivo en Alegra |
-| `alegra_leido_at` | cuándo se le pidió el dato a Alegra (null = todavía no pasó una sync ni un webhook) |
+| `alegra_leido_at` | cuándo se le pidió el dato a Alegra |
+| `name`, `description`, `code` | nombre (en esta cuenta, el código), nombre comercial y referencia; la búsqueda usa los tres con `shop.immutable_unaccent` |
+| `brand` | marca según la regla del CRM; vacía ⇒ el Shop muestra el nombre de la categoría |
+| `category_alegra_id` | categoría de Alegra (join por `alegra_id` **y** `tenant_id`) |
+| `iva_porcentaje` | SUMA de los impuestos del ítem en Alegra; null ⇒ la cotización usa 21 % |
 
-**Regla: por fila, la leída más tarde gana** (`src/lib/stock-disponible.ts`).
-Si `alegra_leido_at` del CRM es posterior al `synced_at` de
-`shop.catalog_products`, stock, precios y estado salen del CRM; si no (o si el
-CRM no tiene la fila), del espejo del Shop. Aplica igual al catálogo, las
-facetas, el menú, la ficha, el carrito y `POST /api/pedidos` (que valida y
-calcula con una sola cotización). Nombre, descripción, marca, categoría e IVA
-siguen saliendo del espejo del Shop, y la sync diaria del Shop sigue corriendo:
-es el respaldo de las filas que el CRM no tiene más frescas.
+`public.catalog_categories_shop` (`crmCategoriasAlegra`): `tenant_id`,
+`alegra_id`, `name`, `parent_alegra_id`, `activo`. El menú sin árbol propio
+lista sólo las activas con algún producto activo del tenant.
 
-**Permisos:** `SELECT` sobre la vista, que concede la 0035 si `shop_app` ya
-existía. A diferencia de la vista de contactos, **no hay plan B**: sin permiso
-fallan el catálogo, la ficha y la cotización. Verificación, como `shop_app`,
-contra la base del **runtime** (`DATABASE_URL`):
+Aplica igual al catálogo, las facetas, el menú, la ficha, el carrito, la
+cotización y `POST /api/pedidos` (que revalida el disponible dentro de su
+transacción). La guarda de tenant (`src/lib/catalogo-tenant.test.ts`) y la
+estática (`src/lib/sin-espejo-shop.test.ts`) fallan si una consulta se olvida
+del tenant o vuelve a leer la copia vieja.
+
+**Permisos:** `SELECT` sobre las dos vistas, que conceden la 0035 y la 0037 si
+`shop_app` ya existía. **No hay plan B**: sin permiso fallan el catálogo, la
+ficha y la cotización. Verificación, como `shop_app`, contra la base del
+**runtime** (`DATABASE_URL`):
 
 ```sql
 SELECT count(*) FROM public.catalog_products_shop;    -- responde
+SELECT count(*) FROM public.catalog_categories_shop;  -- responde
 SELECT 1 FROM public.catalog_products LIMIT 1;        -- falla (permission denied)
+SELECT 1 FROM public.catalog_categories LIMIT 1;      -- falla (permission denied)
 ```
 
-Si la primera da `permission denied` (42501), correr como `<OWNER_ROLE>`:
+Si alguna de las dos primeras da `permission denied` (42501), correr como
+`<OWNER_ROLE>`:
 
 ```sql
 GRANT USAGE ON SCHEMA public TO shop_app;
-GRANT SELECT ON public.catalog_products_shop TO shop_app;
+GRANT SELECT ON public.catalog_products_shop, public.catalog_categories_shop TO shop_app;
 ```
 
-**Comparación entre espejos** (como `<OWNER_ROLE>`, `<TENANT_SLUG>` = el valor
-de `SHOP_TENANT_ID`, no escribirlo en el repo). Sólo ids y conteos:
+**Dev local.** El Shop ya no puebla su catálogo: `npm run sync:catalogo` llena
+la copia vieja, que nadie lee. Con el CRM y el Shop apuntando a la **misma**
+base local (el `DATABASE_URL` de cada app) y el CRM migrado hasta la 0037:
 
-```sql
-SELECT count(*) FILTER (WHERE c.alegra_id IS NULL)                          AS sin_fila_crm,
-       count(*) FILTER (WHERE c.stock IS DISTINCT FROM cp.stock)            AS stock_distinto,
-       count(*) FILTER (WHERE c.alegra_leido_at > cp.synced_at)             AS crm_mas_fresco,
-       count(*) FILTER (WHERE c.alegra_leido_at > cp.synced_at
-                          AND c.activo IS DISTINCT FROM (cp.status = 'active')) AS cambia_estado
-FROM shop.catalog_products cp
-LEFT JOIN public.catalog_products_shop c
-  ON c.alegra_id = cp.alegra_id AND c.tenant_id = '<TENANT_SLUG>';
-```
+1. `cd apps/admin && npm run dev` (anote el puerto; si el Shop ya usa el 3000,
+   Next toma el siguiente).
+2. Dispare la sync del CRM: el botón "Sincronizar con Alegra" de
+   `/admin/catalogo`, o
+   `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:<puerto>/api/cron/alegra-sync`
+   con el `CRON_SECRET` del `.env` del admin.
+3. El Shop (`cd apps/clientes && npm run dev`) muestra lo que quedó en la vista
+   para su `SHOP_TENANT_ID`. Si el catálogo sale vacío, revise que el tenant
+   del Shop sea el mismo que sincronizó el CRM y que `shop_app` (si lo usa en
+   local) tenga el `GRANT` de arriba.
 
-`crm_mas_fresco` es cuántas filas toman hoy el dato del CRM; `cambia_estado`,
-cuántas de ésas se muestran u ocultan distinto que con el espejo del Shop solo.
-
-**Rollback:** revertir el PR; el Shop vuelve a leer sólo `shop.catalog_products`.
-Recién después, si se quiere, la reversa de la 0035 (ver su encabezado).
+**Rollback:** revertir el PR mientras la sync del Shop siga viva: el Shop vuelve
+a `shop.catalog_products` con la elección de fuente por fila (las 6 columnas
+que ya leía siguen iguales en la vista). Si la sync del Shop ya se retiró,
+restaurarla y correrla antes de revertir.
 
 ## Reserva de stock
 

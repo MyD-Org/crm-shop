@@ -187,6 +187,8 @@ export function HomeClient({
   const { marquee, servicios } = contenido;
   // Los textos apagados con "Mostrar" no se pintan; SeccionEditable recibe
   // la sección completa (`contenido.*`) para que el editor los conserve.
+  // Sólo el admin: al visitante no le viajan los datos del editor en el
+  // payload de la home (`inicial` = undefined).
   const hero = sinCamposOcultos(contenido.hero);
   const ambientes = sinCamposOcultos(contenido.ambientes);
   const secDestacados = sinCamposOcultos(contenido.destacados);
@@ -206,7 +208,7 @@ export function HomeClient({
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         <div className="pt-[clamp(20px,3vw,36px)]">
           <Reveal>
-            <SeccionEditable seccion="hero" inicial={contenido.hero} puedeEditar={puedeEditar} visibilidad={vis("hero")}>
+            <SeccionEditable seccion="hero" inicial={puedeEditar ? contenido.hero : undefined} puedeEditar={puedeEditar} visibilidad={vis("hero")}>
               <InteractiveHero enabled={isStudioImage(hero.imagen)}>
               <Hero
                 className="[&_em]:not-italic [&_h1]:font-bold [&_a.rounded-full:first-of-type]:bg-accent [&_a.rounded-full:first-of-type:hover]:bg-primary"
@@ -243,7 +245,7 @@ export function HomeClient({
         </div>
       </div>
 
-      <SeccionEditable seccion="marquee" inicial={marquee} puedeEditar={puedeEditar} visibilidad={vis("marquee")}>
+      <SeccionEditable seccion="marquee" inicial={puedeEditar ? marquee : undefined} puedeEditar={puedeEditar} visibilidad={vis("marquee")}>
         <PorTamano items={marquee.items}>
           {(items) => (
             <Marquee
@@ -257,7 +259,7 @@ export function HomeClient({
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
         {/* Ambientes */}
         <Reveal>
-          <SeccionEditable seccion="ambientes" inicial={contenido.ambientes} puedeEditar={puedeEditar} visibilidad={vis("ambientes")}>
+          <SeccionEditable seccion="ambientes" inicial={puedeEditar ? contenido.ambientes : undefined} puedeEditar={puedeEditar} visibilidad={vis("ambientes")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={ambientes} linkTodos={ambientes.linkTodos} />
               {/* Tiles a la altura del diseño aprobado (guía §4): el DS usa
@@ -271,7 +273,7 @@ export function HomeClient({
 
         {/* Destacados: productos reales del catálogo (precio y cuotas vivos). */}
         <Reveal>
-          <SeccionEditable seccion="destacados" inicial={contenido.destacados} puedeEditar={puedeEditar} visibilidad={vis("destacados")}>
+          <SeccionEditable seccion="destacados" inicial={puedeEditar ? contenido.destacados : undefined} puedeEditar={puedeEditar} visibilidad={vis("destacados")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={secDestacados} linkTodos={secDestacados.linkTodos} />
               <ProductosCarrusel label={sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados"}>
@@ -325,7 +327,7 @@ export function HomeClient({
 
         {/* Banner decorativo */}
         <Reveal>
-          <SeccionEditable seccion="bannerDeco" inicial={contenido.bannerDeco} puedeEditar={puedeEditar} visibilidad={vis("bannerDeco")}>
+          <SeccionEditable seccion="bannerDeco" inicial={puedeEditar ? contenido.bannerDeco : undefined} puedeEditar={puedeEditar} visibilidad={vis("bannerDeco")}>
             <PromoBanner
               className="mt-[clamp(56px,7vw,96px)] [&_em]:not-italic [&_h2]:font-bold"
               eyebrow={bannerDeco.eyebrow}
@@ -349,7 +351,7 @@ export function HomeClient({
 
         {/* Deco grid */}
         <Reveal>
-          <SeccionEditable seccion="decoGrid" inicial={contenido.decoGrid} puedeEditar={puedeEditar} visibilidad={vis("decoGrid")}>
+          <SeccionEditable seccion="decoGrid" inicial={puedeEditar ? contenido.decoGrid : undefined} puedeEditar={puedeEditar} visibilidad={vis("decoGrid")}>
             <section className="pt-[clamp(56px,7vw,96px)]">
               <TituloSeccion textos={decoGrid} linkTodos={decoGrid.linkTodos} />
               {/* Mobile: apiladas, se despegan al scrollear. Desde lg, la grilla. */}
@@ -367,7 +369,7 @@ export function HomeClient({
 
         {/* Servicios */}
         <Reveal>
-          <SeccionEditable seccion="servicios" inicial={servicios} puedeEditar={puedeEditar} visibilidad={vis("servicios")}>
+          <SeccionEditable seccion="servicios" inicial={puedeEditar ? servicios : undefined} puedeEditar={puedeEditar} visibilidad={vis("servicios")}>
             <section className="grid grid-cols-1 gap-5 py-[clamp(56px,7vw,96px)] sm:grid-cols-2 lg:grid-cols-4">
               {servicios.items.map((s, i) => {
                 if (s.visibilidad === "nunca") return null;
@@ -388,7 +390,7 @@ export function HomeClient({
         </Reveal>
 
         {/* WhatsApp CTA (conversión, se preserva del diseño anterior) */}
-        <SeccionEditable seccion="whatsapp" inicial={contenido.whatsapp} puedeEditar={puedeEditar} visibilidad={vis("whatsapp")}>
+        <SeccionEditable seccion="whatsapp" inicial={puedeEditar ? contenido.whatsapp : undefined} puedeEditar={puedeEditar} visibilidad={vis("whatsapp")}>
           <div className="pb-[clamp(56px,7vw,96px)]">
             <CtaBanner
               icon={<ChatIcon />}

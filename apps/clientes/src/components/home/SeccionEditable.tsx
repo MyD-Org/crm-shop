@@ -44,7 +44,9 @@ export function SeccionEditable({
   children,
 }: {
   seccion: SeccionHome;
-  inicial: unknown;
+  /** Datos del editor. Sólo hacen falta con `puedeEditar`: para el visitante
+   *  HomeClient pasa `undefined` y no viajan en el payload de la home. */
+  inicial?: unknown;
   puedeEditar: boolean;
   visibilidad?: Visibilidad;
   className?: string;

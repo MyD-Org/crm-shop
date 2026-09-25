@@ -16,6 +16,19 @@ const nextConfig: NextConfig = {
   // Next; se nombra igual para que quede explícito).
   serverExternalPackages: ["sharp", "heic-decode", "libheif-js"],
   images: {
+    // Plan Hobby: cada variante (ancho × calidad × formato) que no está en
+    // caché cuenta como una transformación de la cuota mensual. Por eso una
+    // sola calidad y anchos acotados: las fuentes miden 1600 px como máximo,
+    // más ancho sería transformar para nada. `formats` queda en el default
+    // (sólo WebP) y `imageSizes` también.
+    qualities: [75],
+    deviceSizes: [640, 828, 1080, 1280, 1600],
+    // 31 días: las claves de R2 llevan uuid y no cambian de contenido.
+    // Ojo con `public/images`: el optimizador guarda la variante 31 días por
+    // ruta. Si se reemplaza un archivo ahí, cambiarle el nombre (o invalidar
+    // con `vercel cache invalidate --srcimg <ruta>`); si no, se sigue viendo
+    // la versión vieja.
+    minimumCacheTTL: 2678400,
     // Fotos del overlay del CRM: sólo los hosts de SHOP_MEDIA_HOSTS (separados
     // por coma). Sin la variable la lista queda vacía y las cards muestran el
     // placeholder (mapFilaToProduct descarta las fotos de hosts no listados).

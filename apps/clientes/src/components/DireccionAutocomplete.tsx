@@ -34,7 +34,7 @@ export function DireccionAutocomplete({
   onSeleccionar,
   onCargarAMano,
   suspendido,
-  placeholder = "Escribí la calle y el número…",
+  placeholder = "Escriba la calle y el número…",
   error,
 }: {
   label?: string;

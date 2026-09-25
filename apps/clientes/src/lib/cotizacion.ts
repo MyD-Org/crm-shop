@@ -164,7 +164,7 @@ export function cotizarItem(
   } else if (precioUnitario <= 0) {
     // Precio 0 no es "gratis": es un ítem sin precio cargado en la lista.
     linea.problema = "sin_precio";
-    linea.detalle = "Este producto no tiene precio publicado. Consultanos.";
+    linea.detalle = "Este producto no tiene precio publicado. Consúltenos.";
   } else if (stockDisponible !== null && stockDisponible <= 0) {
     linea.problema = "sin_stock";
     linea.detalle = "Sin stock por el momento.";

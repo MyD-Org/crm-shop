@@ -141,11 +141,11 @@ function HeaderVista({
         actions={
           <>
             {conSesion === null ? (
-              // Identidad sin resolver: mismo lugar que "Ingresá" (el texto
+              // Identidad sin resolver: mismo lugar que "Ingresar" (el texto
               // invisible reserva el ancho), sin acción ni lectura.
               <span aria-hidden className="flex items-center gap-2 text-[13.5px] font-bold text-muted">
                 <UserIcon />
-                <span className="invisible">Ingresá</span>
+                <span className="invisible">Ingresar</span>
               </span>
             ) : !conSesion ? (
               /*
@@ -160,7 +160,7 @@ function HeaderVista({
               >
                 <button className="flex items-center gap-2 text-[13.5px] font-bold text-text transition-colors hover:text-accent">
                   <UserIcon />
-                  Ingresá
+                  Ingresar
                 </button>
               </SignInButton>
             ) : (

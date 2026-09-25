@@ -81,7 +81,7 @@ export function evaluarEnvio(
     };
   }
   if (!ciudad) {
-    return { disponible: false, motivo: "Elegí una ciudad." };
+    return { disponible: false, motivo: "Elija una ciudad." };
   }
   if (!CIUDADES_ENVIO.includes(ciudad as (typeof CIUDADES_ENVIO)[number])) {
     return {

@@ -25,14 +25,14 @@ function CartIcon() {
   );
 }
 
-/** Placeholder para las secciones que Alegra todavia no alimenta. */
+/** Placeholder para las secciones que Alegra todavía no alimenta. */
 function SinDatos({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-muted">{children}</p>;
 }
 
 const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> = {
   in: { texto: "En stock", color: "bg-success" },
-  low: { texto: "Ultimas unidades", color: "bg-warning" },
+  low: { texto: "Últimas unidades", color: "bg-warning" },
   out: { texto: "Sin stock", color: "bg-danger" },
 };
 
@@ -40,9 +40,9 @@ const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> =
  * Ficha de producto. Los datos llegan resueltos desde el espejo del catálogo
  * (con el overlay del CRM) via el Server Component `producto/[id]/page.tsx`.
  *
- * Hay: nombre, marca, SKU, descripcion, precio, stock, categoria y las fotos
+ * Hay: nombre, marca, SKU, descripción, precio, stock, categoría y las fotos
  * del overlay. NO hay especificaciones, opiniones, variantes ni precios por
- * volumen: esas secciones se mantienen visibles pero vacias, a la espera de la
+ * volumen: esas secciones se mantienen visibles pero vacías, a la espera de la
  * capa propia del shop (ver docs/arquitectura-integraciones.md). Variantes y
  * precio por cantidad son la excepcion: sin datos no se dibuja nada, porque un
  * bloque que siempre dice "no hay" no le sirve a nadie.
@@ -177,7 +177,7 @@ export function ProductoClient({
           <div className="flex gap-1 border-b border-border">
             {(
               [
-                ["desc", "Descripcion"],
+                ["desc", "Descripción"],
                 ["specs", "Especificaciones"],
                 ["reviews", "Opiniones"],
               ] as const
@@ -203,7 +203,7 @@ export function ProductoClient({
                   {producto.description}
                 </p>
               ) : (
-                <SinDatos>Este producto no tiene descripcion cargada.</SinDatos>
+                <SinDatos>Este producto no tiene descripción cargada.</SinDatos>
               ))}
 
             {activeTab === "specs" && (
@@ -211,7 +211,7 @@ export function ProductoClient({
             )}
 
             {activeTab === "reviews" && (
-              <SinDatos>Todavia no hay opiniones de este producto.</SinDatos>
+              <SinDatos>Todavía no hay opiniones de este producto.</SinDatos>
             )}
           </div>
         </section>

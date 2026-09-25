@@ -37,5 +37,6 @@ export function fmtFecha(iso: string): string {
     day: "2-digit",
     month: "long",
     year: "numeric",
+    timeZone: "America/Argentina/Buenos_Aires",
   });
 }

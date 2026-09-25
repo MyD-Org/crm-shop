@@ -109,9 +109,8 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
 
         {estado === "no_auth" && (
           <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
-            <p className="font-semibold text-text">Ingresá para ver tus precios</p>
-            <p className="mt-1 text-muted">
-              Los precios y el stock son los de tu cuenta.{" "}
+            <p className="text-muted">
+              Inicie sesión para completar su compra.{" "}
               <Link href={rutaIngreso("/carrito")} className="font-semibold text-primary hover:underline">
                 Iniciar sesión
               </Link>

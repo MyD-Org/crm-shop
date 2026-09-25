@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type PointerEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio } from "@/lib/format";
@@ -63,20 +64,38 @@ export function CartPreview({
     };
   }, [aperturaPreview]);
 
-  function handleMouseEnter() {
+  /**
+   * Al navegar se cierra: el header no se desmonta entre páginas, así que sin
+   * esto el preview seguía abierto en /carrito o en el checkout.
+   */
+  const pathname = usePathname();
+  const [pathAnterior, setPathAnterior] = useState(pathname);
+  if (pathname !== pathAnterior) {
+    setPathAnterior(pathname);
+    setOpen(false);
+  }
+
+  /**
+   * El hover abre sólo con mouse. En pantallas táctiles el toque emula un
+   * `mouseenter` sin `mouseleave`, y el preview quedaba abierto hasta tocar
+   * otra cosa.
+   */
+  function handlePointerEnter(e: PointerEvent) {
+    if (e.pointerType !== "mouse") return;
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setOpen(true);
   }
 
-  function handleMouseLeave() {
+  function handlePointerLeave(e: PointerEvent) {
+    if (e.pointerType !== "mouse") return;
     closeTimer.current = setTimeout(() => setOpen(false), 150);
   }
 
   return (
     <div
       className="relative"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
     >
       {/* Trigger: píldora de tinta con label + chip de count (el total vive
           dentro del popover, no en el header). */}
@@ -105,8 +124,8 @@ export function CartPreview({
             ? "visible scale-100 opacity-100 duration-[180ms]"
             : "pointer-events-none invisible scale-[0.96] opacity-0 duration-[120ms]"
         }`}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
       >
         {/* Puntero */}
         <div className="absolute -top-[7px] right-6 h-3 w-3 rotate-45 border-l border-t border-border bg-surface" />

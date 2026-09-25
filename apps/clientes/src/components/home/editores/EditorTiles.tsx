@@ -1,12 +1,18 @@
 "use client";
 
-import { Field, Input } from "@myd-org/ui";
-import type { DecoGridContent, SeccionTilesContent } from "@/data/home-defaults";
+import { Field, Input, SegmentedControl } from "@myd-org/ui";
+import type { DecoGridContent, SeccionTilesContent, VeloTile } from "@/data/home-defaults";
 import { nuevoTile } from "@/lib/home-editor";
 import { ListaEditable } from "../ListaEditable";
 import { CampoImagen } from "./CampoImagen";
 import { CamposTitulo } from "./CamposTitulo";
 import type { EditorProps } from "./index";
+
+const OPCIONES_VELO = [
+  { value: "suave", label: "Suave" },
+  { value: "normal", label: "Normal" },
+  { value: "fuerte", label: "Fuerte" },
+];
 
 /**
  * Editor de tiles compartido por `ambientes` y `decoGrid` (rebanada B2):
@@ -34,6 +40,15 @@ export function EditorTiles({
           renderItem={(item, onItem) => (
             <div className="flex flex-col gap-3">
               <CampoImagen valor={item.imagen} onChange={(imagen) => onItem({ ...item, imagen })} />
+              <Field label="Oscurecer la foto" hint="Suave para fotos oscuras; Fuerte si el texto no se lee sobre una foto clara.">
+                <SegmentedControl
+                  size="sm"
+                  ariaLabel="Cuánto se oscurece la foto"
+                  options={OPCIONES_VELO}
+                  value={item.velo ?? "normal"}
+                  onValueChange={(v) => onItem({ ...item, velo: v === "normal" ? undefined : (v as VeloTile) })}
+                />
+              </Field>
               <Field label="Eyebrow">
                 <Input value={item.eyebrow ?? ""} onChange={(e) => onItem({ ...item, eyebrow: e.target.value })} />
               </Field>

@@ -64,6 +64,18 @@ describe("erroresSeccion", () => {
       }).length,
     ).toBeGreaterThan(0);
   });
+
+  it("tiles: velo acepta suave, fuerte o ausente", () => {
+    const conVelo = (velo: unknown) =>
+      erroresSeccion("decoGrid", {
+        ...DEFAULTS_HOME.decoGrid,
+        items: [{ ...DEFAULTS_HOME.decoGrid.items[0], velo }],
+      });
+    expect(conVelo("suave")).toEqual([]);
+    expect(conVelo("fuerte")).toEqual([]);
+    expect(conVelo(undefined)).toEqual([]);
+    expect(conVelo("oscuro").length).toBeGreaterThan(0);
+  });
 });
 
 describe("combinarContenidoHome", () => {

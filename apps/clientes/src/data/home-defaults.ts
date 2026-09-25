@@ -59,12 +59,16 @@ export type ItemMarquee = { texto: string; visibilidad?: SoloEn };
 /** Las filas viejas guardan los ítems como textos sueltos: se convierten al leer. */
 export type MarqueeContent = { items: ItemMarquee[] };
 
+/** Cuánto se oscurece la foto de un tile para que se lea el texto. Ausente = normal. */
+export type VeloTile = "suave" | "fuerte";
+
 export type TileContent = {
   eyebrow?: string;
   titulo?: string;
   imagen: string;
   href: string;
   visibilidad?: SoloEn;
+  velo?: VeloTile;
 };
 
 export type SeccionTilesContent = TextosSeccion & {
@@ -321,7 +325,8 @@ function esTile(v: unknown, hosts: readonly string[]): v is TileContent {
     esTextoOpcional(o.titulo) &&
     esImagen(o.imagen, hosts) &&
     esHref(o.href) &&
-    esSoloEnOpcional(o.visibilidad)
+    esSoloEnOpcional(o.visibilidad) &&
+    (o.velo === undefined || o.velo === "suave" || o.velo === "fuerte")
   );
 }
 
@@ -402,7 +407,7 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
     case "decoGrid": {
       textosTitulo();
       linkOpcional("linkTodos");
-      lista("items", (t) => esTile(t, hosts), "tiles { eyebrow?, titulo?, imagen, href }");
+      lista("items", (t) => esTile(t, hosts), "tiles { eyebrow?, titulo?, imagen, href, velo? }");
       if (key === "decoGrid") lista("chips", esEnlace, "{ label, href }");
       break;
     }

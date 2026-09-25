@@ -19,6 +19,7 @@ import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
+import { preload } from "react-dom";
 import type { ReactNode } from "react";
 import {
   aVisibleOn,
@@ -194,6 +195,11 @@ export function HomeClient({
   const imagenesDestacados = secDestacados.imagenes ?? [];
   const vis = (s: SeccionHome) => visibilidadDe(contenido.visibilidad, s);
 
+  // La foto del hero es el LCP de la home: se pide con prioridad desde el
+  // <head> en vez de esperar a que el navegador encuentre el <img> del DS.
+  const imagenHero = isStudioImage(hero.imagen) ? STUDIO_IMAGE : hero.imagen;
+  if (imagenHero && vis("hero") !== "nunca") preload(imagenHero, { as: "image", fetchPriority: "high" });
+
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
@@ -211,7 +217,7 @@ export function HomeClient({
                 lead={hero.bajada}
                 leadMobile={hero.bajadaMobile}
                 leadVisibleOn={textoVisibleOn(hero, "bajada")}
-                imageSrc={isStudioImage(hero.imagen) ? STUDIO_IMAGE : hero.imagen}
+                imageSrc={imagenHero}
                 imageAlt={hero.imagenAlt}
                 ctas={sinItemsOcultos(hero.ctas).map((c) => ({
                   label: c.label,

@@ -228,3 +228,17 @@ body {
 .facetas-tactiles li > button[aria-expanded] {
   height: 2.5rem;
 }
+
+/* Campos de texto a 16 px en pantallas táctiles: Safari de iOS (y cualquier
+   navegador en iPhone/iPad) hace zoom al enfocar un campo con letra de menos
+   de 16 px, y los del DS, el buscador, el checkout y los de Clerk usan 14 px.
+   Una sola regla para todos, también los que se sumen; en desktop (puntero
+   fino) quedan como están. `!important` porque Clerk inyecta sus estilos con
+   clases propias, más específicas que un selector de elemento. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="button"], [type="submit"], [type="reset"], [type="image"], [type="color"], [type="hidden"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

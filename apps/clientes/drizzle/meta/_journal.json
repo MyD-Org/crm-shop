@@ -113,6 +113,13 @@
       "when": 1790340735805,
       "tag": "0015_drop_catalogo_shop",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790343554352,
+      "tag": "0016_solicitudes_arrepentimiento",
+      "breakpoints": true
     }
   ]
 }

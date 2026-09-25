@@ -7,6 +7,7 @@ import { bloquesTerminos } from "./terminos";
 import { bloquesPrivacidad } from "./privacidad";
 import { bloquesEnviosYPagos } from "./envios-y-pagos";
 import { columnasFooter } from "./footer";
+import { bloquesArrepentimiento } from "./arrepentimiento";
 
 /** Todo el texto visible de una lista de bloques, en un solo string. */
 function texto(bloques: Bloque[]): string {
@@ -65,6 +66,13 @@ describe("términos y condiciones", () => {
     expect(t).toContain("1116");
     expect(t).toContain("consumidor final");
     expect(t).toContain("/arrepentimiento");
+  });
+
+  it("el Botón de arrepentimiento es un enlace interno, no la ruta como texto", () => {
+    const bloques = bloquesTerminos({}, { cuotas: false });
+    const enlaces = bloques.flatMap((b) => b.enlaces ?? []);
+    expect(enlaces).toContainEqual({ label: "Botón de arrepentimiento", href: "/arrepentimiento" });
+    expect(bloques.flatMap((b) => b.parrafos).join("\n")).not.toContain("/arrepentimiento");
   });
 
   it("CFT solo con cuotas; link a Defensa del Consumidor", () => {
@@ -147,5 +155,33 @@ describe("columnas del footer", () => {
       "/arrepentimiento",
       URL_DEFENSA_CONSUMIDOR,
     ]);
+  });
+});
+
+describe("botón de arrepentimiento", () => {
+  it("solo el mínimo legal: 10 días corridos, sin costo, art. 1116 y consumidor final", () => {
+    const t = texto(bloquesArrepentimiento({}));
+    expect(t).toContain("10 días corridos");
+    expect(t).toContain("art. 34 de la Ley 24.240");
+    expect(t).toContain("1115");
+    expect(t).toMatch(/no tiene costo/);
+    expect(t).toContain("1116");
+    expect(t).toContain("consumidor final");
+    expect(t).not.toMatch(/\b(?!10\b)\d+ días/);
+    expect(t).not.toMatch(/\d+ meses/);
+  });
+
+  it("explica cómo sigue el trámite: código en pantalla, copia por correo y contacto del comercio", () => {
+    const t = texto(bloquesArrepentimiento({}));
+    expect(t).toContain("código");
+    expect(t).toMatch(/copia/);
+    expect(t).toMatch(/se comunicará con usted/);
+  });
+
+  it("identificación del comercio solo con datos", () => {
+    expect(texto(bloquesArrepentimiento({}))).not.toMatch(/CUIT|Razón social|Domicilio/);
+    const t = texto(bloquesArrepentimiento(COMPLETOS));
+    expect(t).toContain("Razón social: Comercio Ejemplo SA");
+    expect(t).toContain("legales@cliente.example");
   });
 });

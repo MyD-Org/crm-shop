@@ -18,6 +18,8 @@
  *    los clientes de contado.
  */
 
+import { escapeHtml } from "./escape-html";
+
 export interface MailCodigoVinculacion {
   subject: string;
   html: string;
@@ -25,15 +27,6 @@ export interface MailCodigoVinculacion {
 }
 
 const FUENTE = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 /** "123456" → "123 456". Otros largos quedan como vienen. */
 function agrupar(codigo: string): string {

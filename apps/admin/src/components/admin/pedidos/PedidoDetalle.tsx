@@ -7,6 +7,7 @@ import { Alert, Badge, Card, Table, type TableColumn, useToast } from "@myd-org/
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
 import { CambiarEstadoControl } from "./CambiarEstadoControl"
+import { RegistrarPagoControl } from "./RegistrarPagoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import {
   PAGO_REVISION_INFO,
@@ -220,7 +221,13 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
           <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Dato label="Medio de pago">{pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
             <Dato label="Estado del pago">{pagoEstadoLabel(pedido.pagoEstado)}</Dato>
+            {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
+              <Dato label={pedido.pagoEstado === "pagado" ? "Pago registrado" : "Pago anulado"}>
+                {textoUltimoCambio(pedido.pagoRegistradoPorNombre, pedido.pagoActualizadoEn)}
+              </Dato>
+            )}
           </dl>
+          <RegistrarPagoControl pedido={pedido} onChanged={setPedido} />
         </Seccion>
       </div>
 

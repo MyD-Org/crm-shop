@@ -1,4 +1,5 @@
 import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
+import { avisarCambioEstadoPedido, logAviso } from "@/lib/pedido-estado-aviso"
 import { cambiarEstado, getPedido, toPedidoDetalleDto } from "@/lib/pedidos-repo"
 import {
   MOTIVO_MAX,
@@ -21,7 +22,8 @@ import {
 //                              leer la base: un par prohibido es 422 aunque esté desactualizado
 //   4. motivo (sólo cancelar)→ 422 reason_required / reason_too_long
 //   5. UPDATE condicional    → 404 (no existe / otro tenant) · 409 conflict · 200
-// Ningún cambio de estado manda mail ni WhatsApp (v0): el cliente lo ve en "Mis compras".
+// Tras un 200 se le manda un mail al cliente si la transición es un avance o una cancelación
+// (pedido-estado-email.ts). Un mail que no sale no cambia la respuesta: el estado ya quedó.
 
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
@@ -113,6 +115,15 @@ export async function PATCH(req: Request, { params }: IdParams) {
       at: now.toISOString(),
     }),
   )
+
+  const aviso = await avisarCambioEstadoPedido({
+    tenantId: guard.tenantId,
+    pedido: result.pedido,
+    desde: estadoEsperado,
+    hacia: estado,
+    now,
+  })
+  logAviso("estado", { tenant: guard.tenantId, orderId: id }, aviso)
 
   return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios), { headers: NO_STORE })
 }

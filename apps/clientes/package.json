@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env.local src/db/migrate.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "medir:js": "tsx scripts/medir-js.ts"
   },
   "dependencies": {
     "@clerk/localizations": "^4.14.2",

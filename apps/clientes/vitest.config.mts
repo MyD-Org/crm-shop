@@ -21,7 +21,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
     // Los flags de Vercel Flags se leen de un estado en memoria (src/test/flags.ts).
     setupFiles: ["src/test/setup-flags.ts"],
   },

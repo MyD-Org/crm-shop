@@ -8,6 +8,7 @@ import {
   type PagoMetodo,
 } from "@/lib/envio";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
+import { marcarStockCambiado } from "@/lib/cache-invalidar";
 import { StockInsuficienteError } from "@/lib/stock-disponible";
 import { admiteEnvio } from "@/lib/facturacion";
 import { envioHabilitado } from "@/lib/envio-flag";
@@ -384,6 +385,10 @@ export async function POST(req: Request) {
       // para que el checkout marque qué línea no alcanza.
       return productosCambiaron(await cotizar(lineas, { idPriceList, entregaTipo }));
     }
+
+    // El pedido reservó stock: el listado cacheado se renueva en la próxima
+    // vista (stale-while-revalidate). Nunca tira.
+    if (!pedido.repetido) marcarStockCambiado("crear un pedido");
 
     if (!pedido.repetido && motivoRevision) {
       // Sin datos: el id del pedido y el motivo.

@@ -8,9 +8,8 @@ import { CuotasCard } from "@/components/CuotasCard";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
-import { getCatalogo, getPaginaCatalogo } from "@/lib/catalog";
-import { elegirDestacados } from "@/lib/destacados";
-import type { Product } from "@/data/products";
+import { destacadosHome } from "@/lib/catalogo-publico";
+import { flagsPublicos } from "@/lib/flags-publicos";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -30,13 +29,16 @@ interface PropsCarrusel {
 }
 
 /**
- * Productos destacados de la home: hueco por request dentro del shell (precio,
- * stock y cuotas vivos; los flags `catalogo-solo-visibles` y `cuotas` se
- * evalúan acá, nunca en el shell). Lo que viene del contenido cacheado de la
- * home (SKUs curados, cantidad, imágenes propias) lo pasa el padre por props.
+ * Productos destacados de la home: hueco por request dentro del shell (los
+ * flags `catalogo-solo-visibles` y `cuotas` se evalúan acá, nunca en el
+ * shell). Lo que viene del contenido cacheado de la home (SKUs curados,
+ * cantidad, imágenes propias) lo pasa el padre por props.
  *
- * Los SKUs curados desde el editor se resuelven primero; el resto se completa
- * con Iluminación (héroes temáticos de la tienda), nunca hardcodeados.
+ * Los productos salen de `destacadosHome` (caché compartida, tag `catalogo`:
+ * se renueva al terminar la sync del CRM o a los 15 minutos) y la oferta de
+ * cuotas de su propia caché. Los SKUs curados desde el editor se resuelven
+ * primero; el resto se completa con Iluminación (héroes temáticos de la
+ * tienda), nunca hardcodeados.
  */
 export async function DestacadosHome({
   label,
@@ -48,23 +50,15 @@ export async function DestacadosHome({
   /** Imágenes propias de la sección, por posición. */
   imagenes: string[];
 }) {
-  // Por request (precio, stock, flags): sin lecturas en el prerender, así los
-  // catch de abajo sólo ven errores reales de la base.
+  // Por request (flags): sin lecturas en el prerender.
   await connection();
-  // Si el catálogo falla, la home degrada a destacados vacíos (la sección ya
-  // renderiza la grilla vacía) en vez de tumbar la página entera.
-  const [oferta, iluminacion, general] = await Promise.all([
+  // Si el catálogo falla, `destacadosHome` degrada a destacados vacíos (la
+  // sección ya renderiza la grilla vacía) en vez de tumbar la página entera.
+  const { soloVisibles } = await flagsPublicos();
+  const [oferta, destacados] = await Promise.all([
     getOfertaCuotas(),
-    getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] }, pagina: 1 }).catch(
-      (): { productos: Product[] } => ({ productos: [] }),
-    ),
-    // Respaldo para SKUs curados que no sean de Iluminación.
-    skus.length ? getCatalogo({ limit: 300 }).catch((): Product[] => []) : Promise.resolve([]),
+    destacadosHome({ skus, cantidad, soloVisibles }),
   ]);
-
-  const vistos = new Set(iluminacion.productos.map((p) => p.id));
-  const pool = [...iluminacion.productos, ...general.filter((p) => !vistos.has(p.id))];
-  const destacados = elegirDestacados(pool, skus, cantidad);
 
   return (
     <ProductosCarrusel label={label}>

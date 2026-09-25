@@ -5,7 +5,7 @@ import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
-import { getOfertaCuotas } from "@/lib/cuotas-datos";
+import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { envioHabilitado } from "@/lib/envio-flag";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
@@ -48,7 +48,7 @@ export default async function CheckoutPage() {
   const [pagos, envio] = await Promise.all([pagosHabilitados(), envioHabilitado()]);
   const [dc, oferta, direcciones] = await Promise.all([
     datosDelContacto({ clerkUserId, cliente }),
-    pagos ? getOfertaCuotas() : null,
+    pagos ? getOfertaCuotasSinCache() : null,
     // Sólo con Clerk: la cookie del CRM sin Clerk no guarda direcciones.
     clerkUserId ? direccionesParaCheckout(clerkUserId) : [],
   ]);

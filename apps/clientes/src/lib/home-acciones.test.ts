@@ -259,7 +259,7 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
 
       const r = await buscarProductosHome("lampara");
 
-      expect(getCatalogoMock).toHaveBeenCalledWith({ busqueda: "lampara", limit: 20 });
+      expect(getCatalogoMock).toHaveBeenCalledWith({ busqueda: "lampara", limit: 20, soloVisibles: false });
       expect(r).toEqual({
         ok: true,
         productos: [

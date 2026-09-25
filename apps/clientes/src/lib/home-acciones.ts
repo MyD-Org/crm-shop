@@ -5,6 +5,7 @@ import { updateTag } from "next/cache";
 import { TAG_HOME } from "@/lib/cache-tags";
 import { esAdmin } from "@/lib/auth";
 import { getCatalogo } from "@/lib/catalog";
+import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   KEY_LEGAL,
   KEY_OCULTAS,
@@ -259,7 +260,10 @@ export async function buscarProductosHome(q: string): Promise<ResultadoBusquedaP
   if (!busqueda) return { ok: true, productos: [] };
 
   try {
-    const productos = await getCatalogo({ busqueda, limit: LIMITE_BUSQUEDA_PRODUCTOS });
+    // Mismo criterio de visibilidad que la home pública: un SKU que el
+    // visitante no vería no sirve como destacado.
+    const { soloVisibles } = await flagsPublicos();
+    const productos = await getCatalogo({ busqueda, limit: LIMITE_BUSQUEDA_PRODUCTOS, soloVisibles });
     return {
       ok: true,
       productos: productos

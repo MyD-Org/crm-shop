@@ -1,7 +1,8 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
 import type { VisibleOn } from "@myd-org/ui"
-import { getCategorias } from "@/lib/catalog"
+import { categoriasNav } from "@/lib/catalogo-publico"
+import { flagsPublicos } from "@/lib/flags-publicos"
 import { identidadActual } from "@/lib/auth"
 import { getContenidoHome } from "@/lib/home-datos"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
@@ -53,12 +54,13 @@ async function HeaderDinamico({
   navBadge: NavBadgeContent | null
   navBadgeVisibleOn?: VisibleOn
 }) {
-  // Las categorias del menu salen del catalogo real. Si la lectura falla, el
-  // header se renderiza igual: la navegacion no debe tumbar toda la pagina.
+  // Las categorias del menu salen del catalogo real, cacheadas y compartidas
+  // (`categoriasNav`, tag `catalogo`). Si la lectura falla, el header se
+  // renderiza igual: la navegacion no debe tumbar toda la pagina.
   //
   // El nav sólo se muestra en la home (lo decide HeaderUI por la ruta), pero
   // la lectura corre en todas las páginas porque este componente vive en el
-  // layout y no sabe dónde está. Es una consulta al espejo local.
+  // layout y no sabe dónde está. Con la caché es una consulta y no toca la base.
   //
   // `connection()` primero: marca el hueco como por request antes de tocar la
   // base o los flags (en el prerender no arranca ninguna lectura, y el catch
@@ -66,10 +68,12 @@ async function HeaderDinamico({
   await connection()
   const [identidad, categorias] = await Promise.all([
     identidadActual(),
-    getCategorias().catch((err: unknown) => {
-      console.error("[Header] no se pudieron cargar las categorias:", err)
-      return [] as string[]
-    }),
+    flagsPublicos()
+      .then(({ soloVisibles }) => categoriasNav(soloVisibles))
+      .catch((err: unknown) => {
+        console.error("[Header] no se pudieron cargar las categorias:", err)
+        return [] as string[]
+      }),
   ])
 
   return (

@@ -13,7 +13,6 @@ let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import { getProducto, getProductosPorIds } from "./catalog";
-import { setFlag } from "@/test/flags";
 
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
@@ -46,8 +45,7 @@ describe("getProductosPorIds", () => {
   });
 
   it("sin soloActivos no filtra por estado ni por visible, aunque el flag esté prendido", async () => {
-    setFlag("catalogo-solo-visibles", true);
-    await getProductosPorIds(["42"]);
+    await getProductosPorIds(["42"], { soloVisibles: true });
     const { sql } = grabadora.consultas[0];
     expect(sql).not.toContain('"status"');
     expect(sql).not.toContain('"visible"');
@@ -61,8 +59,7 @@ describe("getProductosPorIds", () => {
   });
 
   it("con soloActivos y el flag de visibles, también visible = true", async () => {
-    setFlag("catalogo-solo-visibles", true);
-    await getProductosPorIds(["42"], { soloActivos: true });
+    await getProductosPorIds(["42"], { soloActivos: true, soloVisibles: true });
     const { sql, params } = grabadora.consultas[0];
     const m = sql.match(/"catalog_overlay"\."visible" = \$(\d+)/);
     expect(m, sql).not.toBeNull();
@@ -112,14 +109,14 @@ describe("getProductosPorIds", () => {
  */
 describe("getProducto (ficha)", () => {
   it("consulta el espejo con soloActivos y devuelve null si no está", async () => {
-    const p = await getProducto("42");
+    const p = await getProducto("42", { soloVisibles: false });
     expect(p).toBeNull();
     expect(grabadora.consultas).toHaveLength(1);
     expect(grabadora.consultas[0].sql).toContain(ACTIVO);
   });
 
   it("id no numérico: null sin consultar", async () => {
-    expect(await getProducto("../contacts/1")).toBeNull();
+    expect(await getProducto("../contacts/1", { soloVisibles: false })).toBeNull();
     expect(grabadora.consultas).toHaveLength(0);
   });
 
@@ -127,6 +124,6 @@ describe("getProducto (ficha)", () => {
     grabadora = dbGrabadora(() => {
       throw new Error("db caída");
     });
-    await expect(getProducto("42")).rejects.toThrow(/Failed query/);
+    await expect(getProducto("42", { soloVisibles: false })).rejects.toThrow(/Failed query/);
   });
 });

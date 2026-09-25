@@ -3,6 +3,7 @@ import { identidadActual } from "@/lib/auth";
 import { cancelarPedidoPendiente, intentoAbiertoDelPedido } from "@/lib/pedidos";
 import { proveedorPago } from "@/lib/pagos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
+import { marcarStockCambiado } from "@/lib/cache-invalidar";
 
 /**
  * POST /api/pedidos/:id/cancelar — cancela un pedido pendiente propio.
@@ -64,6 +65,9 @@ export async function POST(
     );
   }
 
+  // La cancelación liberó la reserva: el listado cacheado se renueva en la
+  // próxima vista. Nunca tira.
+  marcarStockCambiado("cancelar un pedido");
   return NextResponse.json({ ok: true });
 }
 

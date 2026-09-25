@@ -20,7 +20,7 @@ beforeEach(() => {
 
 describe("búsqueda del catálogo", () => {
   it('llama a "shop".immutable_unaccent, nunca a la función sin calificar', async () => {
-    await getCatalogo({ busqueda: "lampara" });
+    await getCatalogo({ soloVisibles: false, busqueda: "lampara" });
 
     const { sql, params } = grabadora.consultas[0];
     expect(sql).toContain('"shop".immutable_unaccent(');
@@ -34,7 +34,7 @@ describe("búsqueda del catálogo", () => {
 
   it("busca sobre la vista del CRM (nombre, código y descripción), no sobre la copia vieja del Shop", async () => {
     // "lampara" encuentra "Lámpara colgante": unaccent + lower en los dos lados.
-    await getCatalogo({ busqueda: "lampara" });
+    await getCatalogo({ soloVisibles: false, busqueda: "lampara" });
     const { sql } = grabadora.consultas[0];
     expect(sql).toContain('from "public"."catalog_products_shop"');
     for (const col of ["name", "code", "description"]) {

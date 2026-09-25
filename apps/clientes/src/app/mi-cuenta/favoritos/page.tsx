@@ -3,7 +3,7 @@ import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FavoritosLista } from "@/components/mi-cuenta/FavoritosLista";
 import { identidadActual } from "@/lib/auth";
-import { getOfertaCuotas } from "@/lib/cuotas-datos";
+import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { listarFavoritos } from "@/lib/favoritos";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
@@ -32,7 +32,7 @@ export default async function FavoritosPage() {
 
   const [productos, oferta] = await Promise.all([
     listarFavoritos(clerkUserId, { idPriceList: cliente?.idPriceList }),
-    getOfertaCuotas(),
+    getOfertaCuotasSinCache(),
   ]);
 
   return (

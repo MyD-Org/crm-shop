@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const syncConfigCRM = vi.fn();
 vi.mock("@/lib/cuotas-sync", () => ({ syncConfigCRM: (...a: unknown[]) => syncConfigCRM(...a) }));
+const revalidateTag = vi.fn();
+vi.mock("next/cache", () => ({ revalidateTag: (...a: unknown[]) => revalidateTag(...a) }));
 
 import { POST } from "./route";
 
@@ -15,6 +17,7 @@ const req = (auth?: string, body?: unknown) =>
 describe("POST /api/internal/cuotas/revalidar", () => {
   beforeEach(() => {
     syncConfigCRM.mockReset();
+    revalidateTag.mockReset();
     process.env.SHOP_CRM_SECRET = "int-456";
   });
 
@@ -22,6 +25,13 @@ describe("POST /api/internal/cuotas/revalidar", () => {
     expect((await POST(req())).status).toBe(401);
     expect((await POST(req("Bearer nope"))).status).toBe(401);
     expect(syncConfigCRM).not.toHaveBeenCalled();
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it("tras guardar la config vence la oferta cacheada (tag cuotas, expire 0)", async () => {
+    syncConfigCRM.mockResolvedValue({ ok: true, fetchedAt: "2026-09-16T20:00:00.000Z", payload: {} });
+    await POST(req("Bearer int-456"));
+    expect(revalidateTag).toHaveBeenCalledWith("cuotas", { expire: 0 });
   });
 
   it("200 { ok, fetchedAt } tras re-pull del CRM", async () => {

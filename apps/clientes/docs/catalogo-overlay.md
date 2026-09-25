@@ -39,14 +39,23 @@ sigue con las categorías de Alegra.
 | Fotos (`images`, portada = la primera) | `overlay.fotos`: el CRM guarda la key de R2 y la URL se compone con `R2_SHOP_MEDIA_PUBLIC_URL` (la misma base que usa el CRM). Sólo pasan las `https` de un host listado en `SHOP_MEDIA_HOSTS`. Sin fotos servibles, la card muestra el placeholder. |
 | Visibilidad | `overlay.visible`, **sólo** con el flag `catalogo-solo-visibles` prendido (ver abajo). |
 
-La ficha de producto (`getProducto`) es en vivo contra Alegra y no lee el
-overlay: muestra `description || name` como nombre, igual que la card de un
-producto sin overlay.
+La ficha de producto (`getProducto`) sale de la misma vista y del mismo
+overlay que la card del catálogo (nada del tráfico público llama a Alegra).
+
+**Caché.** Listado, facetas, ficha, nav y destacados se leen de una caché
+compartida con el tag `catalogo` (`src/lib/catalogo-publico.ts`). Un cambio en
+el overlay o en las categorías se ve en la visita siguiente porque el CRM
+avisa a `/api/internal/catalogo/revalidar`; si el aviso se pierde, a los 15
+minutos como máximo. Ver "Caché de datos del catálogo y de las cuotas" en
+[`arquitectura-integraciones.md`](./arquitectura-integraciones.md).
 
 ## Flag `catalogo-solo-visibles` (apagado por defecto)
 
 - Vive en Vercel Flags. Apagado (o si Vercel Flags no responde), el catálogo
   se comporta como antes (sin condición de visibilidad).
+- Se evalúa por request y viaja como argumento a las lecturas cacheadas (es
+  parte de la clave): prenderlo o apagarlo se ve en la vista siguiente, sin
+  esperar a que venza la caché.
 - Encendido, el catálogo, las facetas, la home y el autocompletado exigen
   `catalog_overlay.visible = true`.
 - **Es fail-closed.** `visible` arranca en `false` y un producto sin fila de

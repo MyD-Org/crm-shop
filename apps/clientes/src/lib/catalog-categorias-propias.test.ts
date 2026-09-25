@@ -79,7 +79,7 @@ describe("enArbolConConteo", () => {
 
 describe("filtro por categoría", () => {
   it("con árbol, busca en el subárbol de la categoría por la clasificación del CRM", async () => {
-    await getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] } });
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
     for (const { sql, params } of grabadora.consultas) {
       expect(sql).toContain("with recursive arbol");
       expect(sql).toContain('"public"."catalog_overlay"."categoria_id" in');
@@ -89,7 +89,7 @@ describe("filtro por categoría", () => {
   });
 
   it("sin árbol cae a la categoría de Alegra, en la misma consulta", async () => {
-    await getPaginaCatalogo({ filtros: { categorias: ["ILUMINACION"] } });
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
     for (const { sql } of grabadora.consultas) {
       expect(sql).toMatch(/not exists \(select 1 from "public"\."shop_categories" where activa and tenant_id = \$\d+\)/);
       expect(sql).toContain('"catalog_categories_shop"."name" in');
@@ -100,7 +100,7 @@ describe("filtro por categoría", () => {
 describe("facetas de categorías", () => {
   it("con árbol, salen del árbol con los conteos sumados y el nivel", async () => {
     grabadora = conArbol();
-    const { categorias } = await getFacetas({});
+    const { categorias } = await getFacetas({}, false);
     expect(categorias).toEqual([
       { label: "ILUMINACION", count: 5, nivel: 1 },
       { label: "Focos led", count: 2, nivel: 2 },
@@ -110,7 +110,7 @@ describe("facetas de categorías", () => {
   });
 
   it("sin árbol, siguen agrupando por la categoría de Alegra", async () => {
-    await getFacetas({});
+    await getFacetas({}, false);
     expect(grabadora.consultas.some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(true);
     expect(grabadora.consultas.some(esConteoPorCategoria)).toBe(false);
   });
@@ -119,12 +119,12 @@ describe("facetas de categorías", () => {
 describe("menú (getCategorias)", () => {
   it("con árbol, sólo las raíces con productos, en el orden del CRM", async () => {
     grabadora = conArbol();
-    expect(await getCategorias()).toEqual(["ILUMINACION", "ELECTRICIDAD"]);
+    expect(await getCategorias(false)).toEqual(["ILUMINACION", "ELECTRICIDAD"]);
   });
 
   it("con árbol, cuenta con el mismo criterio que la grilla (activos y con precio)", async () => {
     grabadora = conArbol();
-    await getCategorias();
+    await getCategorias(false);
     const conteo = grabadora.consultas.find(esConteoPorCategoria);
     expect(conteo?.sql).toContain('and "catalog_products_shop"."activo" and');
     expect(conteo?.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
@@ -133,7 +133,7 @@ describe("menú (getCategorias)", () => {
 
 describe("menú sin árbol (categorías de Alegra de la vista del CRM)", () => {
   it("una categoría con activo = false no se lista: se filtra en la consulta", async () => {
-    await getCategorias();
+    await getCategorias(false);
     const c = grabadora.consultas.find((q) => q.sql.includes('from "public"."catalog_categories_shop"'));
     const m = c?.sql.match(/"catalog_categories_shop"\."activo" = \$(\d+)/);
     expect(m, c?.sql).not.toBeNull();

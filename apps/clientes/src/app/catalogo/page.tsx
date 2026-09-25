@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getFacetas, getPaginaCatalogo } from "@/lib/catalog";
+import { facetasPublicas, paginaCatalogoPublica } from "@/lib/catalogo-publico";
+import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   filtrosDeEstado,
   hrefCanonico,
@@ -68,7 +69,8 @@ export default function CatalogoPage({ searchParams }: Props) {
 
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
 async function CatalogoResultados({ searchParams }: Props) {
-  const estado = leerEstado(await searchParams);
+  const [params, { soloVisibles }] = await Promise.all([searchParams, flagsPublicos()]);
+  const estado = leerEstado(params);
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).
@@ -76,7 +78,9 @@ async function CatalogoResultados({ searchParams }: Props) {
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
   // resuelven en Postgres: filtrar u ordenar después de paginar daría
-  // resultados incompletos.
+  // resultados incompletos. Página y facetas salen de la caché compartida
+  // (src/lib/catalogo-publico.ts, tag `catalogo`) salvo búsqueda por texto o
+  // rango de precio, que van directo a la base.
   //
   // Las tres lecturas son independientes entre sí:
   // - las facetas cruzan los grupos: las marcas se cuentan dentro de las
@@ -86,8 +90,8 @@ async function CatalogoResultados({ searchParams }: Props) {
   // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
   //   o error) ⇒ el catálogo sale sin cuotas.
   const [pagina, facetas, oferta] = await Promise.all([
-    getPaginaCatalogo({ filtros, orden: estado.orden, pagina: estado.pagina }),
-    getFacetas(filtros),
+    paginaCatalogoPublica({ filtros, orden: estado.orden, pagina: estado.pagina, soloVisibles }),
+    facetasPublicas(filtros, soloVisibles),
     getOfertaCuotas(),
   ]);
 

@@ -42,8 +42,17 @@ function AlertIcon() {
  * Carrito. `oferta` llega resuelta desde el Server Component `carrito/page.tsx`
  * (null = sin cuotas). Las cuotas se recalculan en el cliente con cada cambio
  * de cantidad, sin roundtrip.
+ *
+ * Sin sesión también se cotiza (lista L1, ver /api/carrito/cotizar): el aviso
+ * de iniciar sesión depende de `conSesion`, no de la cotización.
  */
-export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
+export function CarritoClient({
+  oferta,
+  conSesion,
+}: {
+  oferta: OfertaCuotas | null;
+  conSesion: boolean;
+}) {
   const { items, updateQty, removeItem: remove, ready } = useCart();
   // El carrito siempre cotiza como "retiro": la entrega se elige en el checkout.
   const { cotizacion, estado, error, recotizar, ultimasLineas } = useCotizacion({
@@ -51,7 +60,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
   });
 
   // Mientras no llegó la cotización se muestra el precio guardado en el
-  // carrito, marcado como estimado. Nunca se presenta como el precio final.
+  // carrito; el total queda "Calculando…" hasta que llega.
   const lineaDe = (id: string) => cotizacion?.lineas.find((l) => l.id === id);
   const confirmado = estado === "ok" && cotizacion;
 
@@ -107,7 +116,7 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
           Tu carrito
         </h1>
 
-        {estado === "no_auth" && (
+        {(!conSesion || estado === "no_auth") && (
           <div className="mb-6 rounded-[20px] border border-border bg-elevated p-4 text-sm">
             <p className="text-muted">
               Inicie sesión para completar su compra.{" "}
@@ -156,7 +165,6 @@ export function CarritoClient({ oferta }: { oferta: OfertaCuotas | null }) {
                     {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
                     <p className="text-sm font-bold text-primary">
                       {fmtPrecio(precio)} c/u
-                      {!confirmado && <span className="ml-1 text-xs font-normal text-muted">(estimado)</span>}
                     </p>
 
                     {linea?.problema && (

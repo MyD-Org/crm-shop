@@ -19,6 +19,17 @@ export const dynamic = "force-dynamic";
 const MAX_POR_MINUTO = 20;
 
 /**
+ * Techo por IP para visitantes sin sesión. Más alto que el de usuario porque
+ * una IP puede ser compartida (red de la operadora, wifi de un local).
+ */
+const MAX_POR_MINUTO_VISITANTE = 60;
+
+/** Primera IP de `x-forwarded-for` (la pone Vercel), o null. */
+function ipDe(req: Request): string | null {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+}
+
+/**
  * POST /api/carrito/cotizar
  * Body: { items: [{ id, qty }], entregaTipo?, ciudad? }
  *
@@ -26,15 +37,20 @@ const MAX_POR_MINUTO = 20;
  * del snapshot de `client_links`), sin llamadas a Alegra. El carrito y el
  * checkout muestran lo que devuelve esta ruta, no lo que tienen en memoria, y
  * `POST /api/pedidos` registra el mismo número. Ver src/lib/cotizacion.ts.
+ *
+ * Sin sesión también cotiza: con la lista principal (L1), la misma que ve en
+ * el catálogo y la misma que usa un cliente todavía no vinculado. Así el
+ * visitante ve el IVA y el total final antes de iniciar sesión; para comprar
+ * la sesión sigue siendo obligatoria (checkout y `POST /api/pedidos`).
  */
 export async function POST(req: Request) {
   const { clerkUserId, cliente } = await identidadActual();
-  if (!clerkUserId && !cliente) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
 
-  const quien = clerkUserId ?? cliente!.codigocliente;
-  if (!permitir(`cotizar:${quien}`, MAX_POR_MINUTO, 60_000)) {
+  const quien = clerkUserId ?? cliente?.codigocliente;
+  const permitido = quien
+    ? permitir(`cotizar:${quien}`, MAX_POR_MINUTO, 60_000)
+    : permitir(`cotizar:ip:${ipDe(req) ?? "desconocida"}`, MAX_POR_MINUTO_VISITANTE, 60_000);
+  if (!permitido) {
     return NextResponse.json(
       { error: "Estás recalculando muy seguido. Esperá unos segundos." },
       { status: 429 },

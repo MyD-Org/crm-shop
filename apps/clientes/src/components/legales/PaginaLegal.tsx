@@ -1,23 +1,27 @@
 import type { DatosLegales } from "@/data/home-defaults";
 import type { Bloque } from "@/lib/legales/comun";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { BotonDatosLegales } from "./BotonDatosLegales";
 
 /**
  * Página legal genérica (server): título + bloques armados en `src/lib/legales`.
  * El botón de edición solo se renderiza para admins (`puedeEditar`): para los
- * visitantes no hay ningún control en el HTML.
+ * visitantes no hay ningún control en el HTML. `children` va debajo de los
+ * bloques (el formulario de /arrepentimiento).
  */
 export function PaginaLegal({
   titulo,
   bloques,
   datos,
   puedeEditar,
+  children,
 }: {
   titulo: string;
   bloques: Bloque[];
   datos: DatosLegales;
   puedeEditar: boolean;
+  children?: ReactNode;
 }) {
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
@@ -53,6 +57,7 @@ export function PaginaLegal({
             ) : null}
           </section>
         ))}
+        {children}
       </div>
     </main>
   );

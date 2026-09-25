@@ -21,7 +21,7 @@ export async function SiteFooter() {
       brandName="Central"
       brandAccent="Led"
       description="Casa de electricidad e iluminación en Puerto Iguazú, Misiones. Del disyuntor al velador: el local de siempre, ahora también online."
-      columns={columnasFooter({ arrepentimiento: false })}
+      columns={columnasFooter({ arrepentimiento: true })}
       barLeft={`© ${anio} Central Led — Puerto Iguazú, Misiones`}
       barRight="Av. República Argentina · Lun a Sáb"
       barExtra={

@@ -716,3 +716,50 @@ export const carts = shop.table(
     check("carts_version_check", sql`${t.version} >= 0`),
   ],
 );
+
+/**
+ * Solicitudes del Botón de arrepentimiento (`/arrepentimiento`, migración
+ * `0016`). Res. 424/2020: el consumidor revoca la compra desde el sitio y
+ * recibe un código en pantalla (ARR-000001, del `numero`).
+ *
+ * - Datos personales MÍNIMOS: los que tipea la persona. Sin IP ni user agent
+ *   (el anti-spam por IP vive en memoria, `src/lib/rate-limit.ts`).
+ * - El email se guarda ya normalizado (trim + minúsculas, lo hace la app): el
+ *   tope por email del índice `sa_tenant_email_fecha` compara igualdad simple.
+ * - `email_*`: resultado de los avisos (cliente y comercio). Un mail que no sale
+ *   no invalida la solicitud: la fila se guarda antes de enviar.
+ * - Los topes de largo están también en la base (`sa_largos`): el form es
+ *   público, sin sesión.
+ */
+export const solicitudesArrepentimiento = shop.table(
+  "solicitudes_arrepentimiento",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Correlativo del código visible (ARR-000001). Identity, como `orders.numero`. */
+    numero: integer("numero").generatedAlwaysAsIdentity().notNull(),
+    /**
+     * Tenant de la tienda (slug de `public.tenants.id`). Obligatorio y sin
+     * default, por lo mismo que `orders.tenant_id`: un default lo asignaría en
+     * silencio al tenant equivocado.
+     */
+    tenantId: text("tenant_id").notNull(),
+    nombre: text("nombre").notNull(),
+    email: text("email").notNull(),
+    telefono: text("telefono").notNull(),
+    /** Texto libre: la persona puede no tener el número a mano. */
+    pedidoNumero: text("pedido_numero"),
+    motivo: text("motivo"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    emailClienteEnviadoEn: timestamp("email_cliente_enviado_en", { withTimezone: true }),
+    emailComercioEnviadoEn: timestamp("email_comercio_enviado_en", { withTimezone: true }),
+    emailError: text("email_error"),
+  },
+  (t) => [
+    uniqueIndex("sa_numero").on(t.numero),
+    index("sa_tenant_email_fecha").on(t.tenantId, t.email, t.createdAt),
+    check(
+      "sa_largos",
+      sql`char_length(${t.nombre}) <= 120 and char_length(${t.email}) <= 254 and char_length(${t.telefono}) <= 40 and char_length(coalesce(${t.pedidoNumero}, '')) <= 40 and char_length(coalesce(${t.motivo}, '')) <= 1000`,
+    ),
+  ],
+);

@@ -48,8 +48,9 @@ export function bloquesTerminos(d: DatosLegales, ctx: { cuotas: boolean }): Bloq
       parrafos: [
         "Si usted compra como consumidor final, puede revocar la aceptación de la compra dentro de los 10 días corridos contados desde la entrega del producto o desde la celebración del contrato, lo que ocurra último, sin necesidad de indicar el motivo (art. 34 de la Ley 24.240 y arts. 1110 a 1116 del Código Civil y Comercial de la Nación).",
         "El ejercicio de este derecho no tiene costo para usted: los gastos de devolución son a cargo del comercio (art. 34 de la Ley 24.240 y art. 1115 del Código Civil y Comercial de la Nación).",
-        `Para ejercerlo, utilice el Botón de arrepentimiento del sitio (/arrepentimiento) o comuníquese con el comercio ${comoContactar(d)}.`,
+        `Para ejercerlo, utilice el Botón de arrepentimiento del sitio o comuníquese con el comercio ${comoContactar(d)}.`,
       ],
+      enlaces: [{ label: "Botón de arrepentimiento", href: "/arrepentimiento" }],
     },
     {
       titulo: "Excepciones",

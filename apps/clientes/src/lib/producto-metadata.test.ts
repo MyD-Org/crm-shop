@@ -33,8 +33,14 @@ describe("metadataProducto", () => {
     });
   });
 
-  it("sin fotos no manda imagen", () => {
+  it("sin fotos ni base no manda imagen", () => {
     expect(metadataProducto(base, false).openGraph).not.toHaveProperty("images");
+  });
+
+  it("sin fotos y con base usa la imagen general del sitio", () => {
+    expect(metadataProducto(base, true).openGraph).toMatchObject({
+      images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
+    });
   });
 
   it("canonical y og:url solo con base configurada", () => {

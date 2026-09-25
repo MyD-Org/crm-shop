@@ -8,7 +8,14 @@ import type { Product } from "@/data/products";
  *
  * Canonical y `og:url` solo con `NEXT_PUBLIC_SITE_URL` (el `metadataBase` del
  * layout): relativos sin base rompen el build (mismo criterio que /catalogo).
+ *
+ * Sin foto, la imagen general del sitio (src/app/opengraph-image.tsx): el
+ * `openGraph` de la ficha reemplaza entero al del layout, así que si no se la
+ * nombra acá el link se comparte sin imagen. También pide la base.
  */
+/** Ruta de la imagen general del sitio (src/app/opengraph-image.tsx). */
+export const IMAGEN_SITIO = "/opengraph-image";
+
 export function metadataProducto(producto: Product, conBase: boolean): Metadata {
   const ruta = `/producto/${encodeURIComponent(producto.id)}`;
   const partes = [producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
@@ -26,7 +33,9 @@ export function metadataProducto(producto: Product, conBase: boolean): Metadata 
       ...(conBase ? { url: ruta } : {}),
       ...(portada
         ? { images: [{ url: portada.url, width: portada.w, alt: portada.alt || producto.name }] }
-        : {}),
+        : conBase
+          ? { images: [{ url: IMAGEN_SITIO, width: 1200, height: 630, alt: producto.name }] }
+          : {}),
     },
   };
 }

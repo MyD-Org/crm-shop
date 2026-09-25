@@ -176,3 +176,23 @@ export async function destacadosHome(args: {
   const pool = [...iluminacion.productos, ...general.filter((p) => !vistos.has(p.id))];
   return elegirDestacados(pool, skus, cantidad);
 }
+
+/**
+ * Ids de los productos publicados, para el sitemap. Si la base falla, vacío
+ * (el sitemap sale con las páginas fijas) y guardado sólo con el perfil
+ * `degradado`.
+ */
+export async function idsProductosPublicos(soloVisibles: boolean): Promise<string[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  console.info("[cache] ids-productos miss");
+  try {
+    const productos = await getCatalogo({ soloVisibles });
+    cacheLife("catalogo");
+    return productos.map((p) => p.id);
+  } catch (err) {
+    console.error("[catalogo-publico] no se pudieron cargar los productos del sitemap:", err);
+    cacheLife("degradado");
+    return [];
+  }
+}

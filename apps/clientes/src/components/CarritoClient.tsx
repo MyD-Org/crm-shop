@@ -8,6 +8,7 @@ import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
 import { CuotasResumen } from "@/components/CuotasResumen";
 import { baseCarrito, resumenCuotas } from "@/lib/cuotas-exhibicion";
+import { precioLineaCarrito } from "@/lib/carrito-precios";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 
 function LightbulbIcon({ className }: { className?: string }) {
@@ -59,8 +60,8 @@ export function CarritoClient({
     entregaTipo: "retiro",
   });
 
-  // Mientras no llegó la cotización se muestra el precio guardado en el
-  // carrito; el total queda "Calculando…" hasta que llega.
+  // Los precios de cada línea salen de la cotización, con IVA como en la ficha
+  // (ver precioLineaCarrito): el neto guardado en el carrito no se muestra.
   const lineaDe = (id: string) => cotizacion?.lineas.find((l) => l.id === id);
   const confirmado = estado === "ok" && cotizacion;
 
@@ -141,8 +142,11 @@ export function CarritoClient({
           <div className="space-y-4">
             {items.map((item) => {
               const linea = lineaDe(item.id);
-              const precio = linea && !linea.problema ? linea.precioUnitario : item.price;
-              const totalLinea = linea && !linea.problema ? linea.total : item.price * item.qty;
+              const precio = precioLineaCarrito(
+                item.qty,
+                linea,
+                ultimasLineas?.find((l) => l.id === item.id),
+              );
 
               return (
                 <div
@@ -163,9 +167,16 @@ export function CarritoClient({
                       {linea && !linea.problema ? linea.name : item.name}
                     </Link>
                     {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
-                    <p className="text-sm font-bold text-primary">
-                      {fmtPrecio(precio)} c/u
-                    </p>
+                    {precio ? (
+                      <div>
+                        <p className="text-sm font-bold text-primary">{fmtPrecio(precio.unitario)} c/u</p>
+                        <p className="text-xs text-muted">
+                          precio sin impuestos nacionales {fmtPrecio(precio.neto)}
+                        </p>
+                      </div>
+                    ) : (
+                      estado === "cargando" && <p className="text-sm text-muted">Calculando…</p>
+                    )}
 
                     {linea?.problema && (
                       <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-danger">
@@ -190,7 +201,7 @@ export function CarritoClient({
                         min={1}
                         max={linea?.stockDisponible ?? 999}
                       />
-                      <p className="text-sm font-bold text-text">{fmtPrecio(totalLinea)}</p>
+                      {precio && <p className="text-sm font-bold text-text">{fmtPrecio(precio.total)}</p>}
                     </div>
                   </div>
                 </div>

@@ -169,14 +169,24 @@ async function siteGate(request: NextRequest): Promise<Response | null> {
   });
 }
 
+/**
+ * Meta de verificación de dominio de Meta (Facebook) para la cortina: Meta
+ * verifica la raíz, que mientras el sitio no abre sirve este HTML y no el
+ * layout. Mismo token que el layout, por entorno. Sin la variable, nada.
+ */
+function metaVerificacionFacebook() {
+  const token = process.env.FACEBOOK_DOMAIN_VERIFICATION?.trim();
+  if (!token || !/^[a-z0-9]+$/i.test(token)) return "";
+  return `<meta name="facebook-domain-verification" content="${token}" />\n`;
+}
+
 function gateHtml({ error }: { error: boolean }) {
   return `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="facebook-domain-verification" content="rlakqld8a1l4usoqjwmgo4yr1vsoln" />
-<title>Central LED — Próximamente</title>
+${metaVerificacionFacebook()}<title>Central LED — Próximamente</title>
 <style>
   * { box-sizing: border-box; }
   html, body {

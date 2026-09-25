@@ -52,6 +52,8 @@ de las vistas del CRM (`public.catalog_products_shop` y
 | `AI_API_URL` | Base de ai-api (ej. `https://ai.plataforma.example`, sin barra final) para el chat. Alimenta el rewrite `/ai-api/*` (se lee en el build: un cambio requiere redesplegar) y `POST /api/ai-token`. |
 | `AI_API_KEY` | API key del tenant en ai-api (secreto, server-only). La usa `POST /api/ai-token` para abrir sesiones. |
 | `AI_AGENT_ID` | Agente de ai-api con el que chatea el widget (no es secreto). Sin cualquiera de las tres `AI_*`, no hay chat aunque el flag `chat-ia` esté prendido. El `crm_token` de los clientes vinculados se firma con `SESSION_SECRET` (el mismo del CRM). |
+| `FACEBOOK_DOMAIN_VERIFICATION` | Token de verificación de dominio de Meta (el `content` del meta `facebook-domain-verification`). Lo emiten el layout y la cortina de "Próximamente" (`src/proxy.ts`); sin la variable no se emite y Meta da el dominio por no verificado. Se lee en el build (el layout es shell estático): un cambio requiere redesplegar. Solo letras y números. |
+| `CSP_REPORT_URI` | Opcional. Endpoint que recibe los reportes de la CSP (`report-uri`). La CSP está en Report-Only (`src/lib/headers-seguridad.ts`); sin la variable los reportes quedan sólo en la consola del navegador. Se lee en el build. |
 
 ### Flags (Vercel Flags, sin redeploy)
 

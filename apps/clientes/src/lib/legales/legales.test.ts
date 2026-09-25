@@ -144,7 +144,7 @@ describe("columnas del footer", () => {
     expect(todos.filter((l) => l.external).map((l) => l.label)).toEqual(["Defensa del Consumidor"]);
     expect(todos.some((l) => l.href === "/carrito")).toBe(false);
     expect(todos.filter((l) => l.label === "Envíos y pagos").map((l) => l.href)).toEqual(["/envios-y-pagos"]);
-    expect(columnas.find((c) => c.title === "Contacto")?.links.map((l) => l.label)).toEqual(["WhatsApp", "Ubicación"]);
+    expect(columnas.find((c) => c.title === "Contacto")?.links.map((l) => l.label)).toEqual(["Ubicación"]);
   });
 
   it("con arrepentimiento: el botón va antes de Defensa del Consumidor", () => {
@@ -192,8 +192,9 @@ describe("columna Contacto editable", () => {
     expect(columnasFooter({ arrepentimiento: true })).toEqual(
       columnasFooter({ arrepentimiento: true, footer: DEFAULTS_FOOTER }),
     );
+    // El default no trae número de WhatsApp (repo público): el real se carga
+    // en el editor del footer. Sin número, no hay link de WhatsApp.
     expect(linksContacto(DEFAULTS_FOOTER).map((l) => l.href)).toEqual([
-      `https://wa.me/${DEFAULTS_FOOTER.whatsapp}`,
       DEFAULTS_FOOTER.locales[0].mapsUrl,
     ]);
   });

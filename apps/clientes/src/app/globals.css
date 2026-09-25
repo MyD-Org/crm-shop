@@ -21,9 +21,15 @@
 }
 
 /* Sin rebote al final de la página: en el celular el scroll seguía de largo
-   después del footer y mostraba el fondo claro debajo. */
-html {
+   después del footer y mostraba el fondo claro debajo. Safari de iPhone
+   ignora overscroll-behavior en el documento y rebota igual, así que además
+   el lienzo (fondo de <html>, lo que se ve en el rebote) va con el color del
+   footer; el fondo claro lo pinta <body>, que cubre todo el contenido.
+   `html[data-theme]` le gana al `background` del bloque del tema cálido. */
+html,
+html[data-theme] {
   overscroll-behavior-y: none;
+  background: var(--color-surface-dark);
 }
 
 body {

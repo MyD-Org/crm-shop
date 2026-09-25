@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { Alert, EmptyState } from "@myd-org/ui";
-import { AvisoVincular } from "@/components/mi-cuenta/AvisoVincular";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FavoritosResumen } from "@/components/mi-cuenta/FavoritosResumen";
 import { PedidoCard } from "@/components/mi-cuenta/PedidoCard";
@@ -10,7 +9,6 @@ import { accesoFacturacion } from "@/lib/acceso-facturacion";
 import { identidadActual } from "@/lib/auth";
 import { contarNoLeidos } from "@/lib/cuenta-corriente/avisos";
 import { textoNoLeidos } from "@/lib/cuenta-corriente/vista-avisos";
-import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { listarFavoritos } from "@/lib/favoritos";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CAPACIDADES_DESPLIEGUE, RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
@@ -34,24 +32,19 @@ export default async function MiCuentaPage() {
   const conFavoritos = CAPACIDADES_DESPLIEGUE.favoritos && !!clerkUserId;
   // Avisos es de Facturación: sólo cuenta corriente (lectura compartida con el layout).
   const conAvisos = CAPACIDADES_DESPLIEGUE.avisos && !!cliente && (await accesoFacturacion());
-  const [pedidos, resumen, favoritos, perfil, noLeidos] = await Promise.all([
+  const [pedidos, resumen, favoritos, noLeidos] = await Promise.all([
     listarPedidos(dueno, 3),
     resumenPedidos(dueno),
     conFavoritos && clerkUserId
       ? listarFavoritos(clerkUserId, { limite: 4, idPriceList: cliente?.idPriceList })
       : [],
-    // Sólo hace falta para el aviso de vincular: sin cliente vinculado.
-    clerkUserId && !cliente ? getPerfilFacturacion(clerkUserId) : null,
     // Si la lectura falla, el resumen se muestra igual, sin el aviso.
     conAvisos && cliente ? contarNoLeidos(cliente.codigocliente).catch(() => 0) : 0,
   ]);
-  const sugerirVincular = Boolean(perfil?.coincideConAlegra) && !cliente;
   const pagos = await pagosHabilitados();
 
   return (
     <div className="flex flex-col gap-8">
-      {sugerirVincular && <AvisoVincular />}
-
       {noLeidos > 0 && (
         <Alert tone="warning" title={textoNoLeidos(noLeidos)}>
           <p>Consulte los vencimientos de sus facturas y las novedades de su cuenta.</p>

@@ -211,3 +211,20 @@ body {
   border-radius: 9999px;
   background: var(--color-border-strong);
 }
+
+/* Categorías en la hoja de filtros (mobile): el chevron que despliega las
+   subcategorías del FacetGroup del DS mide 20 px y es lo único que se toca a
+   la derecha de cada fila. Acá pasa a 40 px, y todas las filas a 40 px de
+   alto para que queden parejas y el checkbox también sea fácil de tocar. El
+   hueco de las filas sin hijas crece igual, para que los conteos sigan en
+   columna. */
+.facetas-tactiles li {
+  min-height: 2.5rem;
+}
+.facetas-tactiles li > button[aria-expanded],
+.facetas-tactiles li > span[aria-hidden="true"] {
+  width: 2.5rem;
+}
+.facetas-tactiles li > button[aria-expanded] {
+  height: 2.5rem;
+}

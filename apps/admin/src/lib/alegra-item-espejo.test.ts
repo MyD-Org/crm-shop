@@ -84,3 +84,28 @@ describe("EVENTOS_STOCK", () => {
     )
   })
 })
+
+describe("mapRawItem (vía getItemParaEspejo): code e impuestos", () => {
+  async function mapear(extra: Record<string, unknown>) {
+    responde(new Response(JSON.stringify({ ...item, ...extra }), { status: 200 }))
+    return getItemParaEspejo(tenant, "5")
+  }
+
+  it.each([
+    ["string", "ABC", "ABC"],
+    ["objeto con reference", { reference: "ABC" }, "ABC"],
+    ["objeto con reference null", { reference: null }, null],
+    ["string vacío", "", null],
+    ["ausente", undefined, null],
+  ])("code: %s", async (_caso, reference, esperado) => {
+    expect((await mapear({ reference }))?.code).toBe(esperado)
+  })
+
+  it("IVA: dos impuestos se suman", async () => {
+    expect((await mapear({ tax: [{ percentage: 21 }, { percentage: 3 }] }))?.ivaPorcentaje).toBe(24)
+  })
+
+  it("IVA: sin tax → null", async () => {
+    expect((await mapear({}))?.ivaPorcentaje).toBeNull()
+  })
+})

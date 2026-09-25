@@ -1,4 +1,5 @@
 import type { TenantConfig } from "./tenants"
+import { sumaImpuestos } from "./alegra-impuestos"
 import {
   mockCategories,
   mockItems,
@@ -442,11 +443,18 @@ function marcaDeCustomFields(raw: Record<string, unknown>): string | null {
   return null
 }
 
-/** Alícuota de IVA del ítem. Alegra devuelve `tax` como lista; se toma la mayor. */
-function ivaDeItem(raw: Record<string, unknown>): number | null {
-  const taxes = Array.isArray(raw.tax) ? (raw.tax as Record<string, unknown>[]) : []
-  const pcts = taxes.map((t) => Number(t?.percentage)).filter((n) => Number.isFinite(n) && n >= 0)
-  return pcts.length ? Math.max(...pcts) : null
+/**
+ * Código (referencia) del ítem. Alegra lo manda como string o como `{ reference }` según el ítem.
+ * Cualquier otra forma, o un vacío, da null (antes un `{ reference: null }` quedaba "[object Object]").
+ */
+function codigoDeItem(ref: unknown): string | null {
+  const valor =
+    typeof ref === "string"
+      ? ref
+      : ref !== null && typeof ref === "object" && (ref as { reference?: unknown }).reference != null
+        ? String((ref as { reference: unknown }).reference)
+        : null
+  return valor ? valor : null
 }
 
 function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
@@ -461,7 +469,7 @@ function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
   const imgs = Array.isArray(raw.images) ? (raw.images as Record<string, unknown>[]) : []
   return {
     alegraId: String(raw.id),
-    code: raw.reference ? String((raw.reference as { reference?: unknown }).reference ?? raw.reference) : null,
+    code: codigoDeItem(raw.reference),
     name: String(raw.name ?? ""),
     description: raw.description ? String(raw.description) : null,
     categoryAlegraId: cat?.id != null ? String(cat.id) : null,
@@ -470,7 +478,8 @@ function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
     status: String(raw.status ?? "active"),
     images: imgs.map((i) => String(i.url ?? "")).filter(Boolean),
     brand: marcaDeCustomFields(raw),
-    ivaPorcentaje: ivaDeItem(raw),
+    // SUMA de los impuestos (regla única: alegra-impuestos.ts = public.alegra_suma_impuestos).
+    ivaPorcentaje: sumaImpuestos(raw.tax),
     // Se guarda entero: cada vez que hizo falta un campo que el mapper no leía hubo que tocarlo
     // y re-sincronizar. Con el crudo, se resuelve con una query.
     raw,

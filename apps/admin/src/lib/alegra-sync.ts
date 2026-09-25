@@ -4,10 +4,17 @@ import { catalogCategories, catalogProducts, catalogSyncLog } from "@/db/schema"
 import type { TenantConfig } from "./tenants"
 import { listAllCategories, listAllItems } from "./alegra"
 import { upsertProductos } from "./catalog-products-repo"
+import { baseDeCorrida, evaluarCorrida } from "./alegra-sync-guarda"
 
 // Sincroniza el catálogo de Alegra a la cache local (upsert por alegraId). Lo que no se ve en la
 // corrida se marca 'inactive' (stale), solo si el run completó OK. Deja bitácora en catalog_sync_log.
 // Ver ADR catálogo Alegra (cache + live).
+//
+// Guarda (lib/alegra-sync-guarda.ts): el catálogo del Shop sale de acá, así que una corrida que
+// leyó sensiblemente menos que la última OK del tenant (o 0 ítems) upsertea lo leído pero NO
+// empuja el overlay ni marca stale, y queda 'parcial' en catalog_sync_log (con el motivo). Para
+// aceptar una baja masiva legítima: `opts.aceptarBaja` (sólo desde el workflow, con tenant).
+// Estados del log: 'running' | 'ok' | 'parcial' | 'error'.
 
 const CHUNK = 500
 
@@ -19,13 +26,23 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 export interface SyncResult {
   ok: boolean
+  /** La corrida leyó demasiado poco: no se dio de baja nada (ver la guarda). */
+  parcial?: boolean
+  /** Sólo números, p. ej. "items 5400 < base 11795 (umbral 95 %)". */
+  motivo?: string
   itemsSynced: number
   categoriesSynced: number
   error?: string
 }
 
-export async function syncCatalog(config: TenantConfig, trigger: "cron" | "manual"): Promise<SyncResult> {
+export async function syncCatalog(
+  config: TenantConfig,
+  trigger: "cron" | "manual",
+  opts: { aceptarBaja?: boolean } = {},
+): Promise<SyncResult> {
   const db = getDb()
+  // La base se toma ANTES de abrir el log de esta corrida.
+  const base = await baseDeCorrida(config.id)
   const runStart = new Date()
   const [log] = await db
     .insert(catalogSyncLog)
@@ -66,14 +83,23 @@ export async function syncCatalog(config: TenantConfig, trigger: "cron" | "manua
     const items = await listAllItems(config)
     await upsertProductos(config.id, items, { leidoAt: runStart, leidoPor: "sync" })
 
+    const guarda = evaluarCorrida({ items: items.length, categorias: categories.length }, base, opts)
+    if (guarda.parcial) {
+      console.warn(
+        `[alegra-sync] tenant=${config.id} corrida=parcial items=${items.length} base=${base?.items ?? "-"} ` +
+          `categorias=${categories.length} baseCategorias=${base?.categorias ?? "-"} motivo=${guarda.motivo}`,
+      )
+    }
+    if (opts.aceptarBaja) console.info(`[alegra-sync] tenant=${config.id} aceptarBaja=1`)
+
     // ── Empujar al Shop los que dejaron de ser vendibles ──
     //
     // El delta hacia el Shop se mueve por `catalog_overlay.updated_at`, que sólo cambia cuando
     // alguien edita en el panel. Sin esto, un producto que Alegra dio de baja (o que quedó en
     // precio cero) seguiría publicado en la tienda para siempre: su fila del overlay no se tocó,
     // así que el delta nunca lo volvería a mandar. Se le corre la marca de tiempo para que viaje
-    // una vez más, ya como visible:false.
-    await db.execute(sql`
+    // una vez más, ya como visible:false. Con una lectura parcial de productos NO se corre.
+    if (!guarda.parcialItems) await db.execute(sql`
       UPDATE catalog_overlay o
       SET updated_at = now()
       FROM catalog_products p
@@ -93,26 +119,34 @@ export async function syncCatalog(config: TenantConfig, trigger: "cron" | "manua
     `)
 
     // ── Stale: lo no visto en esta corrida queda inactive (no se borra, soft) ──
-    await db
-      .update(catalogProducts)
-      .set({ status: "inactive" })
-      .where(and(eq(catalogProducts.tenantId, config.id), lt(catalogProducts.syncedAt, runStart)))
-    await db
-      .update(catalogCategories)
-      .set({ status: "inactive" })
-      .where(and(eq(catalogCategories.tenantId, config.id), lt(catalogCategories.syncedAt, runStart)))
+    // Cada uno sólo si su lectura no fue parcial.
+    if (!guarda.parcialItems) {
+      await db
+        .update(catalogProducts)
+        .set({ status: "inactive" })
+        .where(and(eq(catalogProducts.tenantId, config.id), lt(catalogProducts.syncedAt, runStart)))
+    }
+    if (!guarda.parcialCategorias) {
+      await db
+        .update(catalogCategories)
+        .set({ status: "inactive" })
+        .where(and(eq(catalogCategories.tenantId, config.id), lt(catalogCategories.syncedAt, runStart)))
+    }
 
     await db
       .update(catalogSyncLog)
       .set({
-        status: "ok",
+        status: guarda.parcial ? "parcial" : "ok",
         itemsSynced: items.length,
         categoriesSynced: categories.length,
+        error: guarda.motivo,
         finishedAt: new Date(),
       })
       .where(eq(catalogSyncLog.id, log.id))
 
-    return { ok: true, itemsSynced: items.length, categoriesSynced: categories.length }
+    return guarda.parcial
+      ? { ok: true, parcial: true, motivo: guarda.motivo ?? undefined, itemsSynced: items.length, categoriesSynced: categories.length }
+      : { ok: true, itemsSynced: items.length, categoriesSynced: categories.length }
   } catch (err) {
     const message = err instanceof Error ? err.message : "sync_failed"
     await db

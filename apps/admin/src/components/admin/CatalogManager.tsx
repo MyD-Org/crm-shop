@@ -91,7 +91,7 @@ export function CatalogManager({ initialLists, initialPaymentConditions }: Props
   // `lastSync` de forma fiable dentro de este árbol JSX.
   const syncStatusLabel =
     lastSync && lastSync.finishedAt
-      ? `Última sincronización: ${new Date(lastSync.finishedAt).toLocaleString("es-AR")} · ${lastSync.itemsSynced} productos · ${lastSync.categoriesSynced} categorías${lastSync.status === "error" ? " · con errores" : ""}`
+      ? `Última sincronización: ${new Date(lastSync.finishedAt).toLocaleString("es-AR")} · ${lastSync.itemsSynced} productos · ${lastSync.categoriesSynced} categorías${lastSync.status === "error" ? " · con errores" : lastSync.status === "parcial" ? " · incompleta: no se dieron de baja productos" : ""}`
       : "Todavía no se sincronizó el catálogo con Alegra."
 
   useEffect(() => {
@@ -106,7 +106,13 @@ export function CatalogManager({ initialLists, initialPaymentConditions }: Props
     try {
       const res = await fetch("/api/admin/catalog/sync", { method: "POST" })
       const data = await res.json()
-      if (res.ok && data.ok) {
+      if (res.ok && data.ok && data.parcial) {
+        toast({
+          title: "Sincronización incompleta",
+          description: "Alegra devolvió menos productos de lo esperado; no se dio de baja ninguno. Inténtelo nuevamente más tarde.",
+          tone: "warning",
+        })
+      } else if (res.ok && data.ok) {
         toast({ title: "Catálogo sincronizado", description: `${data.itemsSynced} productos · ${data.categoriesSynced} categorías`, tone: "success" })
       } else {
         toast({ title: "Error al sincronizar con Alegra", description: data.error, tone: "danger" })

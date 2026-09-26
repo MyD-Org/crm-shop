@@ -68,10 +68,13 @@ export interface Order {
   total: number;
   items: OrderItem[];
   /**
-   * Factura de Alegra del pedido. Hoy siempre undefined: el Shop no guarda el
-   * vínculo pedido → factura (follow-up `pedidos-factura-vinculada`).
+   * Id en Alegra de la factura que un operador del CRM vinculó al pedido
+   * (`orders.factura_alegra_id`, migración 0013). undefined = sin factura
+   * vinculada todavía.
    */
   facturaId?: string;
+  /** Número legible de esa factura ("FV-1-00012876"), para mostrar junto al botón. */
+  facturaNumero?: string;
 }
 
 export interface OrderSummary {

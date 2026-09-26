@@ -69,7 +69,13 @@ export function PedidoDetalle({ pedido, pagosHabilitados }: { pedido: Order; pag
         </dl>
       </Card>
 
-      <PedidoAcciones pedidoId={pedido.id} items={pedido.items} facturaId={pedido.facturaId} mostrarDetalle={false} />
+      <PedidoAcciones
+        pedidoId={pedido.id}
+        items={pedido.items}
+        facturaId={pedido.facturaId}
+        facturaNumero={pedido.facturaNumero}
+        mostrarDetalle={false}
+      />
     </div>
   );
 }

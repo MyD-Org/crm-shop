@@ -12,19 +12,22 @@ import { IconoDescarga, IconoFlecha, IconoRefresh } from "./iconos";
 
 /**
  * Acciones de un pedido: ver el detalle, volver a comprar (suma las mismas
- * cantidades al carrito; el precio y el stock se confirman ahí) y, cuando el
- * pedido tenga factura vinculada, descargarla. Hoy `facturaId` nunca viene
- * (follow-up `pedidos-factura-vinculada`), así que ese botón no se ve.
+ * cantidades al carrito; el precio y el stock se confirman ahí) y, cuando un
+ * operador del CRM vinculó una factura de Alegra al pedido (`facturaId`),
+ * descargarla. La descarga es por pedido (`/api/mi-cuenta/pedidos/[id]/factura/pdf`):
+ * sirve para cualquier dueño del pedido, tenga o no cuenta corriente.
  */
 export function PedidoAcciones({
   pedidoId,
   items,
   facturaId,
+  facturaNumero,
   mostrarDetalle = true,
 }: {
   pedidoId: string;
   items: OrderItem[];
   facturaId?: string;
+  facturaNumero?: string;
   mostrarDetalle?: boolean;
 }) {
   const { addItems } = useCart();
@@ -73,8 +76,8 @@ export function PedidoAcciones({
         <IconoRefresh /> Volver a comprar
       </Button>
       {facturaId && (
-        <Button variant="outline" href={`/api/mi-cuenta/facturas/${facturaId}/pdf`}>
-          <IconoDescarga /> Descargar factura
+        <Button variant="outline" href={`/api/mi-cuenta/pedidos/${pedidoId}/factura/pdf`}>
+          <IconoDescarga /> Descargar factura{facturaNumero ? ` ${facturaNumero}` : ""}
         </Button>
       )}
     </div>

@@ -5,6 +5,7 @@ import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
 import { sinCamposOcultos, sinMarcasDeAcento } from "@/data/home-defaults";
+import { jsonLdSitioHtml } from "@/lib/sitio-jsonld";
 
 /**
  * Home: contenido administrable desde la home por un admin (server actions en
@@ -26,9 +27,12 @@ export default async function Home() {
   const { cantidad, skus = [] } = contenido.destacados;
   const secDestacados = sinCamposOcultos(contenido.destacados);
   const label = sinMarcasDeAcento(secDestacados.titulo ?? "") || "Productos destacados";
+  const jsonLdSitio = jsonLdSitioHtml(process.env.NEXT_PUBLIC_SITE_URL);
 
   return (
     <ModoEdicionProvider>
+      {/* Structured data de la tienda (Organization + WebSite): ver src/lib/sitio-jsonld.ts. */}
+      {jsonLdSitio && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSitio }} />}
       <HomeClient
         contenido={contenido}
         destacados={

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Field, Input, Spinner } from "@myd-org/ui";
 
 /**
@@ -34,6 +34,7 @@ export function DireccionAutocomplete({
   onSeleccionar,
   onCargarAMano,
   suspendido,
+  ayuda,
   placeholder = "Escriba la calle y el número…",
   error,
 }: {
@@ -56,6 +57,11 @@ export function DireccionAutocomplete({
    * desplegable se abre sobre los campos que está completando y se los tapa.
    */
   suspendido?: boolean;
+  /**
+   * Línea chica debajo del campo, con el estilo del hint del DS pero admite un
+   * link (el hint de Field sólo acepta texto). No se muestra si hay error.
+   */
+  ayuda?: ReactNode;
   placeholder?: string;
   error?: string;
 }) {
@@ -174,6 +180,7 @@ export function DireccionAutocomplete({
           aria-autocomplete="list"
         />
       </Field>
+      {ayuda && !error && <div className="mt-1.5 text-xs text-muted">{ayuda}</div>}
 
       {/*
         `pointer-events-none` para que la ruedita no se coma el clic: queda

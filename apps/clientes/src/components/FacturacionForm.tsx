@@ -535,46 +535,45 @@ export function FacturacionForm({
                 setDireccionResuelta(true);
               }}
               suspendido={modoManual}
+              // Vuelta del modo manual, como ayuda pegada al campo y no como un
+              // botón suelto: sin esto `modoManual` nunca volvía a `false` (el
+              // autocompletado suspendido no busca). El reset de lo ya resuelto
+              // vive en DireccionAutocomplete, atado a `suspendido`.
+              ayuda={
+                modoManual ? (
+                  <>
+                    Está cargando la dirección a mano.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setModoManual(false)}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Buscar sugerencias
+                    </button>
+                  </>
+                ) : !direccionResuelta && (form.domicilioCalle ?? "").trim().length > 0 ? (
+                  // Escape a mano. Nominatim no tiene todas las calles
+                  // (probado: "tejedor puerto iguazu" devuelve cero). Un
+                  // autocompletado nunca puede ser la única forma de entrar un
+                  // dato obligatorio.
+                  <>
+                    ¿No aparece su dirección?{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoManual(true);
+                        setDireccionResuelta(true);
+                      }}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Cargarla a mano
+                    </button>
+                  </>
+                ) : undefined
+              }
               placeholder="Escriba la calle y el número…"
               error={errores.domicilioCalle}
             />
-
-            {/*
-              Escape a mano. Nominatim no tiene todas las calles cargadas —
-              probado: "tejedor puerto iguazu" devuelve cero resultados. Sin
-              esta salida, quien vive en una calle que OSM no conoce no puede
-              cargar su domicilio y no puede facturar. Un autocompletado nunca
-              puede ser la única forma de entrar un dato obligatorio.
-            */}
-            {!direccionResuelta && (form.domicilioCalle ?? "").trim().length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setModoManual(true);
-                  setDireccionResuelta(true);
-                }}
-                className="self-start text-sm text-primary hover:underline"
-              >
-                No encuentro mi dirección — cargarla a mano
-              </button>
-            )}
-
-            {/*
-              Vuelta del modo manual: sin esto, `modoManual` nunca volvía a
-              `false` (el autocompletado suspendido no busca, así que elegir
-              una sugerencia —lo único que lo desactivaba— nunca pasaba). El
-              reset de lo ya resuelto vive en `DireccionAutocomplete`, atado a
-              que `suspendido` pase de `true` a `false`.
-            */}
-            {modoManual && (
-              <button
-                type="button"
-                onClick={() => setModoManual(false)}
-                className="self-start text-sm text-primary hover:underline"
-              >
-                Buscar la dirección
-              </button>
-            )}
 
             {direccionResuelta && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

@@ -170,11 +170,12 @@ export function CartPreview({
               <ul className="scroll-fino -mx-1 max-h-72 space-y-3 overflow-y-auto px-1 pr-3">
                 {items.map((item) => (
                   <li key={item.id}>
+                    {/* Fila y miniatura concéntricas: radio de la fila = el de la miniatura (sm) + el padding (p-1), como el ítem de un menú del DS. */}
                     <Link
                       href={`/producto/${item.id}`}
-                      className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-elevated"
+                      className="flex items-center gap-3 rounded-[calc(var(--radius-sm)+0.25rem)] p-1 transition-colors hover:bg-elevated"
                     >
-                      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface text-muted/40">
+                      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border bg-surface text-muted/40">
                         {item.image ? (
                           <Image src={item.image} alt="" fill sizes="40px" className="object-contain p-0.5" />
                         ) : (

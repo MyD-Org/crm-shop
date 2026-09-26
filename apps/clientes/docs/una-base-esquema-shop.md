@@ -263,7 +263,7 @@ toda tabla nueva viva en el esquema `shop` (nunca en `public`).
 | `0014_vinculos_varios_usuarios` | `DROP INDEX cl_contacto_activa` (de la `0007`): varios usuarios de la tienda por cliente de Alegra | **Antes** de mergear #129: con el índice, el segundo vínculo del mismo cliente falla con 23505. |
 | `0015_drop_catalogo_shop` | `DROP` de la copia propia del catálogo (`shop.catalog_products`, `catalog_categories`, `catalog_sync_log`); no toca `shop.immutable_unaccent` | **Después** de desplegar el Shop que lee todo el catálogo de las vistas del CRM (0035/0037) y de retirar la sync propia. Irreversible sin datos; ver "Catálogo desde el CRM". |
 | `0018_clientes_espejo_clerk` | `shop.clientes` (espejo de usuarios de Clerk por tenant) + funciones `shop.clientes_upsert_clerk` / `shop.clientes_eliminar_clerk` + índice `cl_usuario_fecha` en `client_links` + `GRANT` condicional a `shop_app` | **Antes** de abrir el PR del espejo: el webhook `/api/webhooks/clerk` llama a las funciones. Ver "Espejo de usuarios de Clerk". |
-| `0019_client_links_auditoria` | `client_links.vinculado_por`, `vinculado_por_nombre`, `revocado_por`, `revocado_por_nombre` (nullable): quién vinculó o desvinculó desde el admin del CRM (`metodo='operador'`). El Shop no las escribe ni las lee | **Antes** de abrir el PR de "Clientes de la tienda" con acciones (R4a): el CRM las escribe al vincular/desvincular. Va junto con la `0039` del CRM, que suma `acceso_facturacion` al final de la vista `public.alegra_contacts_shop` (el Shop la declara en `crm.ts` pero la empieza a leer recién en R4b). |
+| `0019_client_links_auditoria` | `client_links.vinculado_por`, `vinculado_por_nombre`, `revocado_por`, `revocado_por_nombre` (nullable): quién vinculó o desvinculó desde el admin del CRM (`metodo='operador'`). El Shop no las escribe ni las lee | **Antes** de abrir el PR de "Clientes de la tienda" con acciones (R4a): el CRM las escribe al vincular/desvincular. Va junto con la `0039` del CRM, que suma `acceso_facturacion` al final de la vista `public.alegra_contacts_shop` (el Shop la declara en `crm.ts` y la lee desde R4b: `accesoFacturacionEspejo` y `columnasVinculables`, con select explícito ⇒ la 0039 tiene que estar aplicada antes de desplegar el Shop). |
 
 El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
 `MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
@@ -400,6 +400,8 @@ minuto por cuenta y lo comparten el CRM, el bot y el Shop.
 | Lectura (`src/lib/contactos-espejo.ts`) | Filtro en la vista | Sin fila activa |
 |---|---|---|
 | `contactosPorEmail` (vinculación automática) | `emails_norm @> [email]` y `types @> ['client']` | 1 búsqueda en vivo `email=` antes de grabar `sin_coincidencia` |
+| `contactosPorEmail` (reintento de quien quedó `sin_coincidencia`) | ídem | ninguno: nunca Alegra en vivo |
+| `accesoFacturacionEspejo` (Facturación de Mi cuenta) | `alegra_id`; lee `acceso_facturacion` (0039 del CRM) | ninguno: sin acceso (fail-closed) |
 | `contactoPorDocumento` (vinculación por OTP) | `identification_norm = dígitos`; desempate: cliente, id numérico menor | 1 búsqueda en vivo por documento (la de siempre) |
 | `contactoPorDocumento` (perfil de facturación) | ídem | ninguno: `coincide_con_alegra = null` |
 | `vinculablePorId` (confirmar el OTP) | `alegra_id` | sólo se usa si Alegra en vivo falla |

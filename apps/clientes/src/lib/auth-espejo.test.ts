@@ -46,7 +46,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 import { identidadActual, idPriceListCliente } from "./auth";
 
 function filaEspejo(tipo: "corriente" | "contado", lista: string | null, estadoLista = "active") {
-  return ["42", "Cliente 42 SA", "20-12345678-9", null, ["client"], lista, "Lista", estadoLista, tipo];
+  return ["42", "Cliente 42 SA", "20-12345678-9", null, ["client"], lista, "Lista", estadoLista, tipo, tipo === "corriente"];
 }
 
 beforeEach(() => {

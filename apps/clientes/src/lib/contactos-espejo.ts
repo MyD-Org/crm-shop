@@ -144,16 +144,18 @@ export async function contactoPorId(alegraId: string): Promise<ContactoEspejo | 
 }
 
 /**
- * Sólo el tipo de cuenta, SÓLO del espejo (1 query a la vista, nunca Alegra en
- * vivo): lo usa el layout de Mi cuenta en cada página para decidir la entrada
- * Condiciones, y un respaldo en vivo por navegación gastaría la cuota de
- * `/contacts`. Sin fila activa ⇒ `null` (el menú no muestra Condiciones; la
- * página, que sí puede consultar en vivo, decide por su cuenta).
+ * ¿El contacto tiene acceso a Facturación de Mi cuenta? SÓLO del espejo (1 query
+ * a la vista, nunca Alegra en vivo): lo usa `accesoFacturacion()` en cada página
+ * de Mi cuenta, y un respaldo en vivo por navegación gastaría la cuota de
+ * `/contacts`. La regla vive en la vista del CRM (0039): `acceso_facturacion` =
+ * cuenta corriente O excepción vigente otorgada desde el admin del CRM. Sin fila
+ * activa ⇒ `null`; cualquier valor que no sea `true` ⇒ `false` (fail-closed).
+ * Lanza si la vista no responde: quien llama decide.
  */
-export async function tipoCuentaEspejo(alegraId: string): Promise<ContactoEspejo["tipoCuenta"] | null> {
+export async function accesoFacturacionEspejo(alegraId: string): Promise<boolean | null> {
   if (!esIdAlegra(alegraId)) return null;
   const [fila] = await getDb()
-    .select({ tipoCuenta: crmContactos.tipoCuenta })
+    .select({ acceso: crmContactos.accesoFacturacion })
     .from(crmContactos)
     .where(
       and(
@@ -165,7 +167,7 @@ export async function tipoCuentaEspejo(alegraId: string): Promise<ContactoEspejo
     )
     .limit(1);
   if (!fila) return null;
-  return fila.tipoCuenta === "corriente" ? "corriente" : "contado";
+  return fila.acceso === true;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +187,12 @@ export interface ContactoVinculable {
   priceList: { id: string; name: string; status?: string } | null;
   tipoCuenta: "corriente" | "contado";
   types: string[];
+  /**
+   * ¿Ve Facturación de Mi cuenta? Del espejo, la columna `acceso_facturacion` de
+   * la vista (cuenta corriente O excepción del CRM). De un contacto EN VIVO, sólo
+   * cuenta corriente: la excepción existe únicamente para contactos del espejo.
+   */
+  accesoFacturacion: boolean;
 }
 
 /** Filas activas del tenant del Shop en la cuenta principal. */
@@ -206,6 +214,8 @@ const columnasVinculables = {
   priceListName: crmContactos.priceListName,
   priceListStatus: crmContactos.priceListStatus,
   tipoCuenta: crmContactos.tipoCuenta,
+  // 0039 del CRM (tiene que estar aplicada: el select es explícito).
+  accesoFacturacion: crmContactos.accesoFacturacion,
 };
 
 type FilaVinculable = {
@@ -218,6 +228,7 @@ type FilaVinculable = {
   priceListName: string | null;
   priceListStatus: string | null;
   tipoCuenta: "corriente" | "contado" | null;
+  accesoFacturacion: boolean | null;
 };
 
 function aVinculable(f: FilaVinculable): ContactoVinculable {
@@ -235,19 +246,23 @@ function aVinculable(f: FilaVinculable): ContactoVinculable {
       : null,
     tipoCuenta: f.tipoCuenta === "corriente" ? "corriente" : "contado",
     types: f.types ?? [],
+    accesoFacturacion: f.accesoFacturacion === true,
   };
 }
 
 /** Un contacto leído EN VIVO de Alegra, en la misma forma que una fila del espejo. */
 export function vinculableDeAlegra(c: AlegraContact): ContactoVinculable {
+  const tipoCuenta = tipoCuentaDe(c);
   return {
     id: String(c.id),
     name: c.name,
     identification: textoONull(c.identification),
     email: textoONull(c.email),
     priceList: c.priceList?.id ? { ...c.priceList, id: String(c.priceList.id) } : null,
-    tipoCuenta: tipoCuentaDe(c),
+    tipoCuenta,
     types: Array.isArray(c.type) ? (c.type as string[]) : [],
+    // En vivo no hay excepción (vive en el CRM, sólo para contactos del espejo).
+    accesoFacturacion: tipoCuenta === "corriente",
   };
 }
 
@@ -324,19 +339,21 @@ export async function comercialEspejo(
 
 /**
  * ¿Vincular la cuenta le cambia algo a quien compra con el documento de este
- * contacto? Sólo si es cuenta corriente (ve Facturación) o tiene una lista de
- * precios propia distinta de la general. Un cliente de contado del local, a
- * precio de lista, no gana nada vinculando: no se le ofrece. Si el espejo no
- * responde ⇒ false (no se ofrece; comprar a lista está bien). 1–2 queries.
+ * contacto? Sólo si tiene acceso a Facturación (cuenta corriente o excepción del
+ * CRM) o una lista de precios propia distinta de la general. Un cliente de
+ * contado del local, a precio de lista, no gana nada vinculando: no se le
+ * ofrece. Si el espejo no responde ⇒ false (no se ofrece; comprar a lista está
+ * bien). 1–2 queries.
  */
 export async function vincularCambiaAlgo(alegraId: string): Promise<boolean> {
   try {
-    const c = await comercialEspejo(alegraId);
+    const c = await vinculablePorId(alegraId);
     if (!c) return false;
-    if (c.tipoCuenta === "corriente") return true;
-    if (!c.idPriceList) return false;
+    if (c.accesoFacturacion) return true;
+    const propia = idPriceListUsable(c);
+    if (!propia) return false;
     const general = await idListaGeneral();
-    return general !== null && c.idPriceList !== general;
+    return general !== null && propia !== general;
   } catch (err) {
     console.error(`contactos-espejo: vincularCambiaAlgo caído (${err instanceof Error ? err.name : "desconocido"})`);
     return false;

@@ -3,6 +3,8 @@
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio } from "@/lib/format";
@@ -180,7 +182,7 @@ export function CartPreview({
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-medium text-text">{item.name}</p>
+                        <p className="truncate text-xs font-medium text-text">{formatNombreProducto(item.name, item.brand ? formatMarca(item.brand) : undefined)}</p>
                         <p className="text-xs text-muted">{item.qty} u. · {fmt(item.price)} c/u</p>
                       </div>
                       <p className="shrink-0 text-xs font-bold text-text">{fmt(item.price * item.qty)}</p>

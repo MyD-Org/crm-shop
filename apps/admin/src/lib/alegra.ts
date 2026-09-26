@@ -1196,9 +1196,13 @@ export async function listNumberTemplates(config: TenantConfig): Promise<AlegraN
 /** Crea una cotización. No es documento fiscal: se puede borrar por API (deleteEstimate). */
 export async function createEstimate(config: TenantConfig, input: AlegraEstimateInput): Promise<AlegraEstimate> {
   if (config.alegraMock) return mockCreateEstimate(input)
+  // Fecha del día en Argentina: con toISOString (UTC) una factura emitida después de las 21 h
+  // saldría con fecha de mañana. Alegra exige dueDate: contado ⇒ vence el mismo día.
+  const hoy = hoyArgentina()
   const body: Record<string, unknown> = {
     client: Number.isNaN(Number(input.contactAlegraId)) ? input.contactAlegraId : Number(input.contactAlegraId),
-    date: new Date().toISOString().slice(0, 10),
+    date: hoy,
+    dueDate: hoy,
     items: input.items.map((it) => ({
       id: Number.isNaN(Number(it.alegraId)) ? it.alegraId : Number(it.alegraId),
       quantity: it.quantity,
@@ -1258,11 +1262,20 @@ export async function deleteEstimate(config: TenantConfig, alegraId: string): Pr
  * obligatorio y con `requireAdminPlus`; `numberTemplate.id` se revalida contra
  * `listNumberTemplates` server-side antes de esta llamada (ver ese módulo).
  */
+/** YYYY-MM-DD del día actual en America/Argentina/Buenos_Aires. */
+export function hoyArgentina(ahora: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(ahora)
+}
+
 export async function createInvoice(config: TenantConfig, input: AlegraInvoiceCreateInput): Promise<AlegraInvoiceCreated> {
   if (config.alegraMock) return mockCreateInvoice(input)
+  // Fecha del día en Argentina: con toISOString (UTC) una factura emitida después de las 21 h
+  // saldría con fecha de mañana. Alegra exige dueDate: contado ⇒ vence el mismo día.
+  const hoy = hoyArgentina()
   const body: Record<string, unknown> = {
     client: Number.isNaN(Number(input.contactAlegraId)) ? input.contactAlegraId : Number(input.contactAlegraId),
-    date: new Date().toISOString().slice(0, 10),
+    date: hoy,
+    dueDate: hoy,
     numberTemplate: { id: Number.isNaN(Number(input.numberTemplate.id)) ? input.numberTemplate.id : Number(input.numberTemplate.id) },
     items: input.items.map((it) => ({
       id: Number.isNaN(Number(it.alegraId)) ? it.alegraId : Number(it.alegraId),

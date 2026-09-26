@@ -61,3 +61,12 @@ describe("createInvoice", () => {
     expect(r.date).toBe(new Date().toISOString().slice(0, 10))
   })
 })
+
+describe("hoyArgentina", () => {
+  it("usa la fecha de Argentina, no la de UTC", async () => {
+    const { hoyArgentina } = await import("./alegra")
+    // 23:30 del 26/09 en Argentina = 02:30 UTC del 27/09
+    expect(hoyArgentina(new Date("2026-09-27T02:30:00Z"))).toBe("2026-09-26")
+    expect(hoyArgentina(new Date("2026-09-26T15:00:00Z"))).toBe("2026-09-26")
+  })
+})

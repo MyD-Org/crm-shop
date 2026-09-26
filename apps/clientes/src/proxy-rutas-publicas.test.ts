@@ -92,3 +92,18 @@ describe("proxy: RUTAS_PUBLICAS", () => {
     });
   });
 });
+
+/**
+ * El logo de los mails se sirve desde public/images: si el proxy corre sobre
+ * esa ruta, con el gate puesto la URL devuelve la página de "Próximamente" y el
+ * logo sale roto en todos los mails.
+ */
+describe("matcher del proxy", () => {
+  it("no corre sobre public/images (logo de los mails) y sí sobre las páginas", async () => {
+    const { config } = await import("./proxy");
+    const patron = new RegExp(`^${config.matcher[0]}$`);
+    expect(patron.test("/images/central-led/logo-mail.png")).toBe(false);
+    expect(patron.test("/catalogo")).toBe(true);
+    expect(patron.test("/producto/123")).toBe(true);
+  });
+});

@@ -167,7 +167,7 @@ export function CartPreview({
               {/* `scroll-fino` (utilidad del DS): la misma barra fina y del color de
                   la piel que la lista de marcas, en vez de la gris del sistema.
                   `pr-3` la separa de los precios. */}
-              <ul className="scroll-fino -mx-1 max-h-72 space-y-3 overflow-y-auto px-1 pr-3">
+              <ul className="scroll-fino -mx-1 max-h-72 space-y-3 overflow-y-auto px-1 [scrollbar-gutter:stable_both-edges]">
                 {items.map((item) => (
                   <li key={item.id}>
                     {/* Fila y miniatura concéntricas: radio de la fila = el de la miniatura (sm) + el padding (p-1), como el ítem de un menú del DS. */}

@@ -308,6 +308,7 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
           onValueChange={(v) => cambiarFiltro("precio", v)}
           options={[
             { value: TODOS, label: "Con y sin precio" },
+            { value: "con", label: "Con precio" },
             { value: "sin", label: "Sin precio" },
           ]}
         />

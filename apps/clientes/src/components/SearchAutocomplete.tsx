@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
 import { fmtMonto } from "@/lib/cuotas-textos";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
 
 function SearchIcon() {
@@ -121,7 +123,13 @@ export function SearchAutocomplete() {
             </div>
           ) : (
             <ul>
-              {results.map((p) => (
+              {results.map((p) => {
+                // Sólo para mostrar: `p.name` no se toca.
+                const nombreParaMostrar = formatNombreProducto(
+                  p.name,
+                  p.brand ? formatMarca(p.brand) : undefined
+                );
+                return (
                 <li key={p.id}>
                   <button
                     onClick={() => { setOpen(false); router.push(`/producto/${p.id}`); }}
@@ -131,7 +139,7 @@ export function SearchAutocomplete() {
                       {p.images?.[0] ? (
                         <Image
                           src={p.images[0].url}
-                          alt={p.images[0].alt ?? p.name}
+                          alt={p.images[0].alt ?? nombreParaMostrar}
                           fill
                           sizes="44px"
                           className="object-contain p-1"
@@ -141,7 +149,7 @@ export function SearchAutocomplete() {
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-text">{p.name}</span>
+                      <span className="block truncate text-sm font-medium text-text">{nombreParaMostrar}</span>
                       <span className="block truncate text-xs text-muted">{p.brand}</span>
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
@@ -149,7 +157,8 @@ export function SearchAutocomplete() {
                     </span>
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>

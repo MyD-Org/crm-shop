@@ -208,11 +208,26 @@ export function hrefCon(
   estado: EstadoCatalogo,
   cambios: Partial<EstadoCatalogo>
 ): string {
-  return hrefCatalogo({
+  return hrefCatalogo(estadoConCambios(estado, cambios));
+}
+
+/**
+ * Aplica un cambio parcial sobre un estado y devuelve el estado resultante
+ * (misma regla que `hrefCon`: todo cambio que no sea de página vuelve a la
+ * 1). La usan `hrefCon` y, en el cliente, quien necesite encadenar varios
+ * cambios sin esperar a que React vuelva a renderizar entre uno y otro (ver
+ * `CatalogoClient`): ahí no alcanza con leer el estado del último render,
+ * porque dos cambios seguidos pueden llegar antes de que ese render pase.
+ */
+export function estadoConCambios(
+  estado: EstadoCatalogo,
+  cambios: Partial<EstadoCatalogo>
+): EstadoCatalogo {
+  return {
     ...estado,
     pagina: cambios.pagina ?? 1,
     ...cambios,
-  });
+  };
 }
 
 /**

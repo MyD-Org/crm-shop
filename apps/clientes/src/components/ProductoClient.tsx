@@ -7,7 +7,8 @@ import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
-import { formatRubro } from "@/lib/formato-rubro";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
@@ -63,6 +64,12 @@ export function ProductoClient({
   // `conPrecioSql` en src/lib/catalog.ts). La ficha se lee en vivo, así que el
   // filtro de los listados no la cubre y hay que cortar acá también.
   const sinPrecio = !(producto.price > 0);
+  // Sólo para mostrar: el nombre real (para buscar, ordenar, SEO/JSON-LD)
+  // sigue siendo `producto.name` tal como lo resolvió el servidor.
+  const nombreParaMostrar = formatNombreProducto(
+    producto.name,
+    producto.brand ? formatMarca(producto.brand) : undefined
+  );
 
   return (
     <>
@@ -82,13 +89,13 @@ export function ProductoClient({
             </>
           )}
           {" / "}
-          <span className="text-text">{producto.name}</span>
+          <span className="text-text">{nombreParaMostrar}</span>
         </nav>
 
         {/* Galería un poco más angosta que la info: los nombres de Alegra son
             largos y necesitan el ancho más que la foto. */}
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-          <GaleriaProducto fotos={producto.images} nombre={producto.name} />
+          <GaleriaProducto fotos={producto.images} nombre={nombreParaMostrar} />
 
           {/* Info */}
           <div className="space-y-5">
@@ -104,7 +111,7 @@ export function ProductoClient({
                 {/* Tamaño contenido: los nombres vienen de Alegra, largos y en
                     mayúsculas; a 4xl ocupaban cinco líneas. */}
                 <h1 className="mt-1 font-display text-2xl font-medium leading-tight tracking-tight text-text md:text-[28px]">
-                  {producto.name}
+                  {nombreParaMostrar}
                 </h1>
                 {producto.sku && (
                   <div className="mt-2">
@@ -112,7 +119,7 @@ export function ProductoClient({
                   </div>
                 )}
               </div>
-              <BotonCompartir titulo={producto.name} />
+              <BotonCompartir titulo={nombreParaMostrar} />
             </div>
 
             {/* Card de precio */}

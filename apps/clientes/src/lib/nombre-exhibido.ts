@@ -31,6 +31,27 @@ export function nombreExhibido(fila: {
   );
 }
 
+/** Normaliza para comparar: recorta, colapsa espacios y es case-insensitive. */
+const normalizado = (v: string) => v.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * La descripción tal como se le muestra al visitante: `undefined` si no hay
+ * dato, o si es el mismo texto que el nombre exhibido (pasa cuando
+ * `nombreExhibido` ya tomó la descripción de Alegra como nombre, `nameEsCodigo`,
+ * pero también con productos que por otra razón repiten el mismo texto en los
+ * dos campos). Mostrarla ahí sería repetir el título.
+ */
+export function descripcionExhibida(fila: {
+  overlayNombre: string | null;
+  description: string | null;
+  name: string;
+  code: string | null;
+}): string | undefined {
+  const descripcion = fila.description?.trim();
+  if (!descripcion) return undefined;
+  return normalizado(descripcion) === normalizado(nombreExhibido(fila)) ? undefined : descripcion;
+}
+
 /**
  * `nombreExhibido` en SQL, para consultas con base en la vista del CRM
  * (`crmCatalogo`) que ya traen el overlay (`joinOverlay`).

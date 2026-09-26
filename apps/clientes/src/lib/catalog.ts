@@ -43,7 +43,7 @@ import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
-import { joinOverlay, nombreExhibido } from "./nombre-exhibido";
+import { descripcionExhibida, joinOverlay, nombreExhibido } from "./nombre-exhibido";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -119,7 +119,10 @@ export function mapFilaToProduct(
     // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
     // código (y es con lo que el CRM elige destacados, ver destacados.ts).
     sku: fila.code || fila.name || undefined,
-    description: fila.description || undefined,
+    // Si es el mismo texto que `name` (pasa sobre todo cuando `nombreExhibido`
+    // tomó la descripción de Alegra como nombre), no hay descripción que
+    // mostrar: repetiría el título.
+    description: descripcionExhibida(fila),
     category: fila.categoryName || undefined,
     images: fotosPermitidas(urlsDeFotos(fila.overlayFotos, baseMedios), hostsMedios),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.

@@ -70,6 +70,7 @@ export function DireccionAutocomplete({
   // El texto que ya se resolvió: evita re-consultar apenas se elige una opción,
   // porque seleccionar cambia el value y dispararía la búsqueda de nuevo.
   const yaResueltoRef = useRef<string | null>(null);
+  const suspendidoAntesRef = useRef(suspendido);
 
   useEffect(() => {
     return () => {
@@ -77,6 +78,18 @@ export function DireccionAutocomplete({
       abortRef.current?.abort();
     };
   }, []);
+
+  // Quien suspendió (pasó a cargar la dirección a mano) puede volver al modo
+  // búsqueda desde afuera (el link "Buscar la dirección" del formulario). Sin
+  // este reset, si el texto no cambió desde que se suspendió, la próxima letra
+  // que escriba seguiría sin buscar nada: `yaResueltoRef` compara contra ESE
+  // texto, no contra "no hay nada resuelto".
+  useEffect(() => {
+    if (suspendidoAntesRef.current && !suspendido) {
+      yaResueltoRef.current = null;
+    }
+    suspendidoAntesRef.current = suspendido;
+  }, [suspendido]);
 
   function buscar(texto: string) {
     if (debounceRef.current) clearTimeout(debounceRef.current);

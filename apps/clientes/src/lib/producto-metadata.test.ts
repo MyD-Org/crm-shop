@@ -12,11 +12,11 @@ const base: Product = {
 };
 
 describe("metadataProducto", () => {
-  it("título y descripción para la vista previa del link", () => {
+  it("título y descripción para la vista previa del link (el título se formatea, sólo para mostrar)", () => {
     const m = metadataProducto(base, false);
-    expect(m.title).toBe("LAMPARA LED A60 9W");
+    expect(m.title).toBe("Lampara LED A60 9W");
     expect(m.description).toBe("Marca · Código 02141N");
-    expect(m.openGraph).toMatchObject({ title: "LAMPARA LED A60 9W", description: "Marca · Código 02141N" });
+    expect(m.openGraph).toMatchObject({ title: "Lampara LED A60 9W", description: "Marca · Código 02141N" });
   });
 
   it("sin marca ni código no inventa descripción", () => {
@@ -29,7 +29,7 @@ describe("metadataProducto", () => {
       false,
     );
     expect(m.openGraph).toMatchObject({
-      images: [{ url: "https://media.plataforma.example/a.jpg", width: 1200, alt: "LAMPARA LED A60 9W" }],
+      images: [{ url: "https://media.plataforma.example/a.jpg", width: 1200, alt: "Lampara LED A60 9W" }],
     });
   });
 

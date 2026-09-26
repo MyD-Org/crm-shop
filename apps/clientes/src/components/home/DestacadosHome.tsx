@@ -10,6 +10,8 @@ import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { destacadosHome } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -68,6 +70,8 @@ export async function DestacadosHome({
         // > el ícono de siempre.
         const fotoReal = p.images?.[0];
         const imagenDecorativa = imagenes[i];
+        // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
+        const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
         return (
           <Link
             key={p.id}
@@ -77,7 +81,7 @@ export async function DestacadosHome({
             <ProductCard
               variant="editorial"
               className="h-full overflow-hidden"
-              name={p.name}
+              name={nombreParaMostrar}
               brand={p.brand}
               price={p.precioFinal ?? p.price}
               oldPrice={p.oldPrice}
@@ -88,7 +92,7 @@ export async function DestacadosHome({
                 fotoReal ? (
                   <Image
                     src={fotoReal.url}
-                    alt={fotoReal.alt || p.name}
+                    alt={fotoReal.alt || nombreParaMostrar}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                     className="object-contain p-4"
@@ -96,7 +100,7 @@ export async function DestacadosHome({
                 ) : imagenDecorativa ? (
                   <Image
                     src={imagenDecorativa}
-                    alt={p.name}
+                    alt={nombreParaMostrar}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                     className="object-cover"

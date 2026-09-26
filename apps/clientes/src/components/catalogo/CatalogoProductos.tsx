@@ -8,6 +8,8 @@ import { CuotasCard } from "@/components/CuotasCard";
 import type { Product } from "@/data/products";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
 import { etiquetaStock, maxCantidad } from "@/lib/catalogo-vista";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";
@@ -43,7 +45,10 @@ export function CatalogoProductos({
       )}
       aria-busy={navegando}
     >
-      {productos.map((p) => (
+      {productos.map((p) => {
+        // Sólo para mostrar: `p.name` (buscar, ordenar, carrito) no se toca.
+        const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
+        return (
         <ProductCard
           key={p.id}
           variant="editorial"
@@ -52,7 +57,7 @@ export function CatalogoProductos({
           href={`/producto/${p.id}`}
           renderLink={linkNext}
           brand={p.brand}
-          name={p.name}
+          name={nombreParaMostrar}
           code={p.sku}
           stock={p.stock}
           stockLabel={etiquetaStock(p)}
@@ -68,7 +73,7 @@ export function CatalogoProductos({
             p.images?.[0] ? (
               <Image
                 src={p.images[0].url}
-                alt={p.images[0].alt ?? p.name}
+                alt={p.images[0].alt ?? nombreParaMostrar}
                 fill
                 sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
                 className="object-contain p-4"
@@ -95,7 +100,8 @@ export function CatalogoProductos({
             />
           }
         />
-      ))}
+        );
+      })}
     </div>
   );
 }

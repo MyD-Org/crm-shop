@@ -386,7 +386,11 @@ ${metaVerificacionFacebook()}<title>Central LED — Próximamente</title>
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/cron).*)",
+    // `images/`: los archivos de public/images no pasan por el gate. Los mails
+    // enlazan el logo desde el sitio (/images/central-led/logo-mail.png) y con
+    // el gate puesto esa URL devolvía la página de "Próximamente" (200 HTML):
+    // en todos los mails el logo salía roto. Son imágenes públicas del sitio.
+    "/((?!_next/static|_next/image|favicon.ico|api/cron|images/).*)",
     // Ruta interna de Clerk (auto-proxy del Frontend API). Ya la cubre el
     // patrón de arriba, pero Clerk pide declararla explícitamente: si algún día
     // se toca ese negative lookahead, esto evita romper el login sin darse cuenta.

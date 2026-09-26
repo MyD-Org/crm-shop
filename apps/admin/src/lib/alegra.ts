@@ -16,16 +16,21 @@ import {
   mockInvoicesByContact,
   mockAllInvoices,
   mockPaymentsByContact,
+  mockNumberTemplates,
+  mockCreateInvoice,
 } from "./mock-alegra"
 
 // Cliente de Alegra (productos, contactos, cotizaciones, listas de precio, formas de pago).
 // Auth HTTP Basic (email:token). Espejo del patrón de lib/flexxus.ts. Modo mock (alegraMock)
 // usa fixtures locales — permite construir/probar sin credenciales. Ver ADR catálogo Alegra.
 //
-// OJO: las cuentas de Alegra son REALES (no hay sandbox). Las lecturas son inocuas; las
-// escrituras deliberadas son cotizaciones (/estimates, borrables por API) y pagos (/payments,
+// OJO: las cuentas de Alegra son REALES (no hay sandbox). Las lecturas son inocuas. Las
+// escrituras deliberadas son cotizaciones (/estimates, borrables por API), pagos (/payments,
 // decisión explícita del backoffice de comprobantes: el admin carga el cobro real del
-// cliente, imputado a facturas abiertas). No exponer creación de facturas desde acá.
+// cliente, imputado a facturas abiertas) y, desde 2026-09-26, facturas (/invoices) — pero
+// SOLO desde el flujo nuevo de "Emitir factura" (requireAdminPlus, ver factura-emitir.ts):
+// es dinero real e irreversible, con preview obligatorio antes de confirmar. No agregar otro
+// llamador de `createInvoice` sin pasar por ese mismo control.
 
 const ALEGRA_BASE = process.env.ALEGRA_BASE_URL ?? "https://api.alegra.com/api/v1"
 const PAGE_SIZE = 30 // Alegra topea limit en 30
@@ -154,6 +159,38 @@ export interface AlegraInvoice {
   status: string // Alegra: open | closed | draft | void
   clientAlegraId: string
 }
+// ── Numeraciones (number templates) de la cuenta — para el selector de "Emitir factura" ──
+export interface AlegraNumberTemplate {
+  alegraId: string
+  name: string
+  prefix: string | null
+  /** "INVOICE_A" | "INVOICE_B" | "INVOICE_C" | "INVOICE_X" | otros valores no-factura de Alegra. */
+  subDocumentType: string
+  isElectronic: boolean
+  status: string // "active" | "inactive"
+}
+
+// ── Creación de facturas (POST /invoices) — escritura real e irreversible, sin sandbox ──
+export interface AlegraInvoiceLineInput {
+  alegraId: string // alegra_item_id de order_items
+  quantity: number
+  price: number // precio_unitario congelado del pedido
+}
+
+export interface AlegraInvoiceCreateInput {
+  contactAlegraId: string
+  items: AlegraInvoiceLineInput[]
+  numberTemplate: { id: string } // SIEMPRE requerido: no hay "sin numeración" en este flujo
+  observations?: string
+}
+
+export interface AlegraInvoiceCreated {
+  alegraId: string
+  number: string | null
+  date: string
+  total: number
+}
+
 export interface AlegraPaymentApplied {
   invoiceAlegraId: string
   invoiceNumber: string | null
@@ -1092,6 +1129,68 @@ export async function listCurrencies(config: TenantConfig): Promise<AlegraCurren
   return Array.isArray(page) ? page.map(mapRawCurrency) : []
 }
 
+// ── Numeraciones (number templates) — selector de tipo de comprobante en "Emitir factura" ──
+//
+// GET /number-templates trae TODOS los tipos de documento de la cuenta (facturas A/B/C,
+// "Presupuesto X", notas de crédito, etc.), no sólo facturas. Se filtra a
+// `documentType === "invoice"` ANTES de mapear — "Presupuesto X" nunca debe ofrecerse como
+// numeración de factura. El status (activa/inactiva) NO se filtra acá: es responsabilidad de
+// quien consume la lista (factura-emitir.ts, rebanada B), que decide qué hacer con cada caso.
+
+function mapRawNumberTemplate(raw: Record<string, unknown>): AlegraNumberTemplate {
+  return {
+    alegraId: String(raw.id),
+    name: String(raw.name ?? ""),
+    prefix: raw.prefix != null && String(raw.prefix).trim() ? String(raw.prefix) : null,
+    subDocumentType: String(raw.subDocumentType ?? ""),
+    isElectronic: Boolean(raw.isElectronic),
+    status: String(raw.status ?? "active"),
+  }
+}
+
+/**
+ * Caché en memoria del proceso, TTL 60s por tenant. `/number-templates` no cambia seguido
+ * (alta de numeración es un evento raro en Alegra) y el preview de "Emitir factura" puede
+ * reabrirse varias veces sobre el mismo pedido mientras el operador decide: no vale gastar
+ * cuota de la cuenta real ni exponerse a más 429 por algo casi estático. Sigue el mismo patrón
+ * que los overrides "en vivo" de corta vida ya usados en este archivo
+ * (`getMockItemLive`/`__setMockLiveOverride`).
+ */
+const NUMBER_TEMPLATES_TTL_MS = 60_000
+const numberTemplatesCache = new Map<string, { data: AlegraNumberTemplate[]; at: number }>()
+
+/** Sólo para tests: vacía la caché de numeraciones entre casos. */
+export function __clearNumberTemplatesCache(): void {
+  numberTemplatesCache.clear()
+}
+
+/** Numeraciones de tipo factura de la cuenta (activas e inactivas), con caché de 60s por tenant. */
+export async function listNumberTemplates(config: TenantConfig): Promise<AlegraNumberTemplate[]> {
+  const cached = numberTemplatesCache.get(config.id)
+  if (cached && Date.now() - cached.at < NUMBER_TEMPLATES_TTL_MS) return cached.data
+
+  let data: AlegraNumberTemplate[]
+  if (config.alegraMock) {
+    data = mockNumberTemplates
+      .filter((t) => t.documentType === "invoice")
+      .map((t) => ({
+        alegraId: t.alegraId,
+        name: t.name,
+        prefix: t.prefix,
+        subDocumentType: t.subDocumentType,
+        isElectronic: t.isElectronic,
+        status: t.status,
+      }))
+  } else {
+    const page = (await alegraFetch(config, "/number-templates")) as Record<string, unknown>[]
+    data = Array.isArray(page)
+      ? page.filter((raw) => raw.documentType === "invoice").map(mapRawNumberTemplate)
+      : []
+  }
+  numberTemplatesCache.set(config.id, { data, at: Date.now() })
+  return data
+}
+
 // ── Cotizaciones (estimates) — la única ESCRITURA permitida contra Alegra ──
 
 /** Crea una cotización. No es documento fiscal: se puede borrar por API (deleteEstimate). */
@@ -1152,6 +1251,34 @@ export async function deleteEstimate(config: TenantConfig, alegraId: string): Pr
 
 // ── Facturas y pagos (cuenta corriente del cliente) ──
 // Alegra es el ERP: el portal lee de acá lo que antes venía de Flexxus. Ver lib/erp.ts.
+
+/**
+ * Crea la factura real en Alegra (POST /invoices). Escritura irreversible: no hay sandbox.
+ * SOLO se llama desde el flujo de "Emitir factura" (factura-emitir.ts), después del preview
+ * obligatorio y con `requireAdminPlus`; `numberTemplate.id` se revalida contra
+ * `listNumberTemplates` server-side antes de esta llamada (ver ese módulo).
+ */
+export async function createInvoice(config: TenantConfig, input: AlegraInvoiceCreateInput): Promise<AlegraInvoiceCreated> {
+  if (config.alegraMock) return mockCreateInvoice(input)
+  const body: Record<string, unknown> = {
+    client: Number.isNaN(Number(input.contactAlegraId)) ? input.contactAlegraId : Number(input.contactAlegraId),
+    date: new Date().toISOString().slice(0, 10),
+    numberTemplate: { id: Number.isNaN(Number(input.numberTemplate.id)) ? input.numberTemplate.id : Number(input.numberTemplate.id) },
+    items: input.items.map((it) => ({
+      id: Number.isNaN(Number(it.alegraId)) ? it.alegraId : Number(it.alegraId),
+      quantity: it.quantity,
+      price: it.price,
+    })),
+  }
+  if (input.observations) body.observations = input.observations
+  const raw = (await alegraFetch(config, "/invoices", undefined, { method: "POST", body })) as Record<string, unknown>
+  return {
+    alegraId: String(raw.id),
+    number: mapRawInvoice(raw).number,
+    date: String(raw.date ?? ""),
+    total: Number(raw.total ?? 0),
+  }
+}
 
 /** Facturas de venta de un contacto (todas; el portal filtra por estado). */
 export async function listInvoicesByContact(config: TenantConfig, contactAlegraId: string): Promise<AlegraInvoice[]> {

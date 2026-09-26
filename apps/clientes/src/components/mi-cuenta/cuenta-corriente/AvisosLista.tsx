@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, EmptyState, useToast } from "@myd-org/ui";
 import { describirAviso, textoNoLeidos, type Aviso } from "@/lib/cuenta-corriente/vista-avisos";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { IconoCampana, IconoFlecha } from "../iconos";
 
 /**
@@ -18,6 +19,11 @@ export function AvisosLista({ avisos: iniciales, esCuentaCorriente }: { avisos: 
   const { toast } = useToast();
   const [avisos, setAvisos] = useState(iniciales);
   const [marcando, setMarcando] = useState(false);
+  // Aviso puntual que se está marcando/abriendo (evita doble envío por doble
+  // click). Se resetea al ocultar la página: con Cache Components no se
+  // desmonta al navegar, y si no se limpia el botón queda cargando al volver.
+  const [marcandoId, setMarcandoId] = useState<string | null>(null);
+  useAlOcultar(() => setMarcandoId(null));
   const noLeidos = avisos.filter((a) => !a.leido).length;
 
   /** Optimista: la lista cambia al instante; si falla, vuelve atrás y avisa. */
@@ -51,9 +57,21 @@ export function AvisosLista({ avisos: iniciales, esCuentaCorriente }: { avisos: 
   }
 
   async function abrir(aviso: Aviso, href: string) {
-    // Si no se pudo marcar, igual se navega: el aviso queda sin leer.
-    if (!aviso.leido) await marcar(aviso.ids);
+    if (marcandoId) return;
+    if (!aviso.leido) {
+      setMarcandoId(aviso.id);
+      // Si no se pudo marcar, igual se navega: el aviso queda sin leer.
+      await marcar(aviso.ids);
+      setMarcandoId(null);
+    }
     router.push(href);
+  }
+
+  async function marcarUno(aviso: Aviso) {
+    if (marcandoId) return;
+    setMarcandoId(aviso.id);
+    await marcar(aviso.ids);
+    setMarcandoId(null);
   }
 
   if (avisos.length === 0) {
@@ -71,7 +89,13 @@ export function AvisosLista({ avisos: iniciales, esCuentaCorriente }: { avisos: 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">{noLeidos > 0 ? textoNoLeidos(noLeidos) : "Leyó todos sus avisos."}</p>
         {noLeidos > 0 && (
-          <Button variant="outline" size="sm" loading={marcando} onClick={() => void marcarTodos()}>
+          <Button
+            variant="outline"
+            size="sm"
+            loading={marcando}
+            disabled={marcandoId !== null}
+            onClick={() => void marcarTodos()}
+          >
             Marcar todos como leídos
           </Button>
         )}
@@ -94,12 +118,24 @@ export function AvisosLista({ avisos: iniciales, esCuentaCorriente }: { avisos: 
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
                   {d.destino ? (
-                    <Button variant="outline" size="sm" onClick={() => void abrir(aviso, d.destino!.href)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={marcandoId === aviso.id}
+                      disabled={marcando || (marcandoId !== null && marcandoId !== aviso.id)}
+                      onClick={() => void abrir(aviso, d.destino!.href)}
+                    >
                       {d.destino.label} <IconoFlecha />
                     </Button>
                   ) : (
                     !aviso.leido && (
-                      <Button variant="ghost" size="sm" onClick={() => void marcar(aviso.ids)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        loading={marcandoId === aviso.id}
+                        disabled={marcando || (marcandoId !== null && marcandoId !== aviso.id)}
+                        onClick={() => void marcarUno(aviso)}
+                      >
                         Marcar como leído
                       </Button>
                     )

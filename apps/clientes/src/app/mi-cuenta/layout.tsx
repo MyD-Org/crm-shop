@@ -26,15 +26,23 @@ export default async function MiCuentaLayout({
 }) {
   const identidad = await identidadActual();
   if (!identidad.clerkUserId && !identidad.cliente) return <>{children}</>;
+  // Envío y facturación son consultas independientes entre sí (sólo dependen
+  // de la identidad, ya resuelta): en paralelo en vez de en cascada, así el
+  // nav (y con él, `mi-cuenta/loading.tsx` para el contenido) aparece antes.
+  const [envio, esCuentaCorriente] = await Promise.all([envioHabilitado(), accesoFacturacion()]);
   // Sin envío a domicilio, "Direcciones y envíos" no tiene nada que ofrecer.
-  const despliegue = { ...CAPACIDADES_DESPLIEGUE, direcciones: await envioHabilitado() };
-  // Con vínculo, hasta dos consultas a la base y NINGUNA a Alegra (esto corre en
-  // cada página de Mi cuenta): el tipo de cuenta del espejo decide todo el grupo
-  // Facturación (sin fila o con el espejo caído, no se ofrece; la página decide
-  // lo mismo con la misma lectura) y, sólo a cuenta corriente, el contador de
-  // avisos sin leer va como badge de Avisos. Si falla, el menú se arma sin badge.
+  const despliegue = { ...CAPACIDADES_DESPLIEGUE, direcciones: envio };
+  // Con vínculo, una consulta más a la base y NINGUNA a Alegra (esto corre en
+  // cada página de Mi cuenta): sólo a cuenta corriente, el contador de avisos
+  // sin leer va como badge de Avisos. Si falla, el menú se arma sin badge.
+  //
+  // Depende de `esCuentaCorriente` (arriba), así que queda en cascada. No se
+  // separó en su propio Suspense (badge del nav) porque el número ya viaja
+  // horneado dentro de `entradas` (`seccionesVisibles`, tipo síncrono) y
+  // `MiCuentaShell` es cliente: pasar el conteo como promesa exigiría cambiar
+  // ese contrato para todas las páginas de Mi cuenta, un cambio de otra
+  // tanda. Igual es una sola consulta a la base, rápida y no bloquea Alegra.
   const codigo = identidad.cliente?.codigocliente;
-  const esCuentaCorriente = await accesoFacturacion();
   let noLeidos = 0;
   if (esCuentaCorriente && despliegue.avisos && codigo) {
     try {

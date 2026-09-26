@@ -46,8 +46,8 @@ function prefiereMenosMovimiento() {
 
 /**
  * Latido del ícono: sube rápido y se asienta, 300 ms. Arranca desde la escala
- * en la que esté (si una alta llega a mitad del latido anterior, lo retoma en
- * vez de saltar a 1), así varias altas seguidas no se acumulan ni tironean.
+ * en la que esté (si un cambio llega a mitad del latido anterior, lo retoma en
+ * vez de saltar a 1), así varios cambios seguidos no se acumulan ni tironean.
  */
 function latir(el: HTMLElement) {
   const actual = parseFloat(getComputedStyle(el).scale);
@@ -64,22 +64,22 @@ function latir(el: HTMLElement) {
 }
 
 /**
- * Feedback de una alta sobre el botón del carrito, en lugar de abrir el
- * popover: el ícono late y el número nuevo entra desde abajo (el chip lo
- * recorta, como un contador). Con reduced motion no se mueve nada: el chip
- * sólo se ilumina y se apaga.
+ * Feedback de un cambio de cantidad sobre el botón del carrito, en lugar de
+ * abrir el popover: el ícono late y el número nuevo entra desde abajo si subió
+ * o desde arriba si bajó (el chip lo recorta, como un contador que gira). Con
+ * reduced motion no se mueve nada: el chip sólo se ilumina y se apaga.
  */
-function festejarAlta(icono: HTMLElement, numero: HTMLElement, destello: HTMLElement) {
+function acusarCambio(icono: HTMLElement, numero: HTMLElement, destello: HTMLElement, sentido: 1 | -1) {
   if (prefiereMenosMovimiento()) {
     destello.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: "ease" });
     return;
   }
   latir(icono);
-  // Cada alta trae un número nuevo: que vuelva a entrar desde abajo es lo que
+  // Cada cambio trae un número nuevo: que vuelva a entrar es lo que
   // corresponde, por eso acá no hace falta retomar la animación anterior.
   numero.animate(
     [
-      { translate: "0 70%", opacity: 0 },
+      { translate: sentido === 1 ? "0 70%" : "0 -70%", opacity: 0 },
       { translate: "0 0", opacity: 1 },
     ],
     { duration: 220, easing: EASE_OUT },
@@ -102,7 +102,7 @@ export function CartPreview({
   const numeroRef = useRef<HTMLSpanElement>(null);
   const destelloRef = useRef<HTMLSpanElement>(null);
   const carrito = useCart();
-  const { altas } = carrito;
+  const { cambio } = carrito;
   // En el hueco del header (se hidrata después del shell) el contexto ya trae
   // el carrito del navegador; el HTML del servidor, el vacío. Hasta terminar
   // de hidratar se repite lo del servidor (ver useHidratado).
@@ -112,17 +112,18 @@ export function CartPreview({
   const count = hidratado ? carrito.count : 0;
 
   /**
-   * Agregar al carrito NO abre el popover (lo abre sólo el usuario, con hover
-   * o clic): el botón acusa la alta con una animación corta. Layout effect para
-   * que el número nuevo no llegue a pintarse quieto un frame antes de entrar.
+   * Agregar, sumar, restar o quitar NO abre el popover (lo abre sólo el
+   * usuario, con hover o clic): el botón acusa el cambio con una animación
+   * corta. Layout effect para que el número nuevo no llegue a pintarse quieto
+   * un frame antes de entrar.
    */
   useLayoutEffect(() => {
-    if (altas === 0) return;
+    if (cambio.n === 0) return;
     const icono = iconoRef.current;
     const numero = numeroRef.current;
     const destello = destelloRef.current;
-    if (icono && numero && destello) festejarAlta(icono, numero, destello);
-  }, [altas]);
+    if (icono && numero && destello) acusarCambio(icono, numero, destello, cambio.sentido);
+  }, [cambio]);
 
   /**
    * Al navegar se cierra: el header no se desmonta entre páginas, así que sin

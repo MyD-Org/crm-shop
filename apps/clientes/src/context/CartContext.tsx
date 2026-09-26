@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -119,13 +120,20 @@ interface CartContextValue {
   /** false durante el render del servidor y la hidratación. */
   ready: boolean;
   /**
-   * Contador que sube con cada alta (addItem/addItems). El botón del carrito
-   * del header lo mira para latir: es un contador y no un booleano para que
-   * dos altas seguidas del mismo producto vuelvan a disparar la animación. No
-   * se deriva de `count` a propósito: el count también cambia al hidratar o al
-   * traer el carrito de otro dispositivo, y eso no es algo que hizo el usuario.
+   * Último cambio de cantidad hecho por el usuario (agregar, sumar, restar o
+   * quitar). El botón del carrito del header lo mira para latir: `n` es un
+   * contador y no un booleano para que dos cambios seguidos vuelvan a disparar
+   * la animación, y `sentido` dice si el número entra desde abajo (sube) o
+   * desde arriba (baja). No se deriva de `count` a propósito: el count también
+   * cambia al hidratar o al traer el carrito de otro dispositivo, y eso no es
+   * algo que hizo el usuario.
    */
-  altas: number;
+  cambio: CambioCarrito;
+}
+
+export interface CambioCarrito {
+  n: number;
+  sentido: 1 | -1;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -143,10 +151,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const usuario = isSignedIn && userId ? userId : null;
   const { toast } = useToast();
-  const [altas, setAltas] = useState(0);
+  const [cambio, setCambio] = useState<CambioCarrito>({ n: 0, sentido: 1 });
+  const marcarCambio = useCallback(
+    (sentido: 1 | -1) => setCambio((c) => ({ n: c.n + 1, sentido })),
+    [],
+  );
 
   // Nunca mostrar el carrito de otro usuario (equipo compartido, sesión vencida).
   const items = itemsVisibles(cache, { isLoaded, usuario });
+  // Para saber, al cambiar una cantidad, si subió o bajó sin rehacer los
+  // callbacks en cada render.
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  });
 
   useEffect(() => {
     elMotor().setAvisar(({ titulo, tono }) => toast({ title: titulo, tone: tono }));
@@ -179,24 +197,27 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const addItem = useCallback((newItem: ItemNuevo, qty = 1) => {
     // Última barrera: nada entra al carrito a $ 0 aunque algún botón lo intente.
     if (!(newItem.price > 0)) return;
-    setAltas((n) => n + 1);
+    marcarCambio(1);
     elMotor().mutar((prev) => agregar(prev, newItem, qty));
-  }, []);
+  }, [marcarCambio]);
 
   const addItems = useCallback((lista: { item: ItemNuevo; qty: number }[]) => {
     const validos = lista.filter((l) => l.item.price > 0);
     if (validos.length === 0) return;
-    setAltas((n) => n + 1);
+    marcarCambio(1);
     elMotor().mutar((prev) => agregarVarios(prev, validos));
-  }, []);
+  }, [marcarCambio]);
 
   const removeItem = useCallback((id: string) => {
+    if (itemsRef.current.some((i) => i.id === id)) marcarCambio(-1);
     elMotor().mutar((prev) => actualizarQty(prev, id, 0));
-  }, []);
+  }, [marcarCambio]);
 
   const updateQty = useCallback((id: string, qty: number) => {
+    const antes = itemsRef.current.find((i) => i.id === id)?.qty;
+    if (antes !== undefined && qty !== antes) marcarCambio(qty > antes ? 1 : -1);
     elMotor().mutar((prev) => actualizarQty(prev, id, qty));
-  }, []);
+  }, [marcarCambio]);
 
   const clear = useCallback(() => {
     elMotor().mutar(() => ({ items: CARRITO_VACIO, avisos: [] }));
@@ -220,7 +241,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         total,
         count,
         ready,
-        altas,
+        cambio,
       }}
     >
       {children}

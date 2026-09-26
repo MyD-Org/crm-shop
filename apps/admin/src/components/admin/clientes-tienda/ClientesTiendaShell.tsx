@@ -15,6 +15,7 @@ import {
 } from "@myd-org/ui"
 import type { ClienteTiendaDto } from "@/lib/clientes-tienda-repo"
 import { textoRango } from "../pedidos/logica"
+import { ClienteTiendaDetalle } from "./ClienteTiendaDetalle"
 import { fmtFechaCliente } from "./format"
 import {
   FILTROS_INICIALES,
@@ -46,6 +47,8 @@ interface Props {
   /** Si la carga del server falló: el shell muestra el aviso y reintenta al montar. */
   initialError?: string
   pageSize: number
+  /** admin+ (rol fresco, calculado en el server): muestra las acciones del detalle. */
+  puedeGestionar?: boolean
 }
 
 const ERROR_CARGA = "No se pudieron cargar los clientes de la tienda. Inténtelo nuevamente."
@@ -56,7 +59,13 @@ function errorDe(body: unknown): string | null {
   return typeof error === "string" && error.trim() !== "" ? error : null
 }
 
-export function ClientesTiendaShell({ initialItems, initialTotal, initialError = "", pageSize }: Props) {
+export function ClientesTiendaShell({
+  initialItems,
+  initialTotal,
+  initialError = "",
+  pageSize,
+  puedeGestionar = false,
+}: Props) {
   const [filtros, setFiltros] = useState<FiltrosLista>(FILTROS_INICIALES)
   const [busqueda, setBusqueda] = useState("")
   const [items, setItems] = useState(initialItems)
@@ -65,6 +74,7 @@ export function ClientesTiendaShell({ initialItems, initialTotal, initialError =
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(initialError)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [seleccionado, setSeleccionado] = useState<ClienteTiendaDto | null>(null)
 
   const load = useCallback(async () => {
     // `no-store`: misma URL al volver a la lista; sin esto el navegador cachea el GET.
@@ -262,6 +272,7 @@ export function ClientesTiendaShell({ initialItems, initialTotal, initialError =
               rows={items}
               rowKey={(c) => c.clerkUserId}
               empty={vacio}
+              onRowClick={setSeleccionado}
             />
           )}
           {(total > 0 || start > 0) && (
@@ -288,6 +299,16 @@ export function ClientesTiendaShell({ initialItems, initialTotal, initialError =
             </div>
           )}
         </>
+      )}
+
+      {seleccionado && (
+        <ClienteTiendaDetalle
+          key={seleccionado.clerkUserId}
+          cliente={seleccionado}
+          puedeGestionar={puedeGestionar}
+          onClose={() => setSeleccionado(null)}
+          onCambio={actualizar}
+        />
       )}
     </div>
   )

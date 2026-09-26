@@ -82,6 +82,16 @@ export const clientLinks = shop.table(
     metodo: text("metodo").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /**
+     * Auditoría de los vínculos que se hacen o deshacen desde el admin del CRM
+     * (metodo 'operador', 0019): id y nombre CONGELADO del usuario del CRM (sin FK
+     * a admin_users, así el historial sobrevive a su baja). Los caminos del Shop
+     * no las escriben: quedan en null.
+     */
+    vinculadoPor: uuid("vinculado_por"),
+    vinculadoPorNombre: text("vinculado_por_nombre"),
+    revocadoPor: uuid("revocado_por"),
+    revocadoPorNombre: text("revocado_por_nombre"),
   },
   (t) => [
     // Un usuario puede tener UNA sola vinculación activa, pero sí varias

@@ -360,7 +360,8 @@ export const alegraWebhookAvisos = pgTable(
 // por teléfono o listar clientes costaba ~200 requests contra una cuota compartida.
 //
 // OJO: el Shop NO lee esta tabla sino la vista `public.alegra_contacts_shop` (migraciones
-// 0031/0032/0034, vive solo en SQL), y la actualiza sólo vía la función SECURITY DEFINER
+// 0031/0032/0034/0036/0039, vive solo en SQL; 0039 suma `acceso_facturacion`, calculada con
+// `contactos_acceso_facturacion`), y la actualiza sólo vía la función SECURITY DEFINER
 // `public.shop_contacto_write_through` (0034, también sólo en SQL). Si cambia o se borra una
 // columna expuesta en esa vista, hay que recrear la vista EN LA MISMA MIGRACIÓN.
 export const alegraContacts = pgTable(
@@ -435,6 +436,39 @@ export const alegraContacts = pgTable(
     index("ac_tenant_ident").on(t.tenantId, t.identificationNorm).where(sql`"identification_norm" IS NOT NULL`),
     index("ac_emails_gin").using("gin", t.emailsNorm),
     index("ac_phones_gin").using("gin", t.phonesNorm),
+  ],
+)
+
+// Excepción de acceso a Facturación de Mi cuenta del Shop, por CONTACTO de Alegra (empresa),
+// change `clientes-tienda-admin` (0039). Hoy el Shop sólo muestra Facturación a los contactos en
+// cuenta corriente; un admin/superadmin del CRM puede otorgarla a un contacto de contado.
+//  - Una fila por otorgamiento; quitar = UPDATE de revocado_* (nunca DELETE: el historial queda).
+//  - A lo sumo UNA vigente por (tenant, cuenta, contacto): índice parcial `caf_vigente`.
+//  - otorgado_por / revocado_por sin FK a admin_users: el nombre queda congelado y el historial
+//    sobrevive a la baja del usuario (patrón `estado_actualizado_por_nombre`).
+//  - CHECK `caf_revocacion_completa` (revocado_en y revocado_por van juntos): vive SÓLO en el
+//    .sql, como el resto de los CHECK de esta app.
+//  - Sin FK a alegra_contacts: la sync reescribe esa tabla por upsert y un contacto puede salir
+//    del espejo; la excepción queda registrada y la vista la ignora mientras no esté activo.
+// El Shop NO lee esta tabla (sin GRANT a shop_app): ve sólo `alegra_contacts_shop.acceso_facturacion`.
+export const contactosAccesoFacturacion = pgTable(
+  "contactos_acceso_facturacion",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraAccount: text("alegra_account").notNull().default("principal"),
+    alegraId: text("alegra_id").notNull(),
+    otorgadoPor: uuid("otorgado_por").notNull(),
+    otorgadoPorNombre: text("otorgado_por_nombre").notNull(),
+    otorgadoEn: timestamp("otorgado_en", { withTimezone: true }).notNull().defaultNow(),
+    revocadoPor: uuid("revocado_por"),
+    revocadoPorNombre: text("revocado_por_nombre"),
+    revocadoEn: timestamp("revocado_en", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("caf_vigente")
+      .on(t.tenantId, t.alegraAccount, t.alegraId)
+      .where(sql`"revocado_en" IS NULL`),
   ],
 )
 

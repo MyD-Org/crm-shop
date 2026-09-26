@@ -72,6 +72,14 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     expect(vista.mobile).toBe("text");
   });
 
+  it("la vista del espejo trae acceso_facturacion al final (0039 del CRM)", () => {
+    const vista = esperado["public.alegra_contacts_shop"];
+    expect(vista.acceso_facturacion).toBe("boolean");
+    expect(Object.keys(vista).at(-1)).toBe("acceso_facturacion");
+    // La excepción vive en una tabla del CRM que el Shop no lee: sólo la columna calculada.
+    expect(esperado["public.contactos_acceso_facturacion"]).toBeUndefined();
+  });
+
   it("la vista de catálogo trae el producto entero (0037) pero nunca `raw`", () => {
     const vista = esperado["public.catalog_products_shop"];
     expect(Object.keys(vista)).toEqual([

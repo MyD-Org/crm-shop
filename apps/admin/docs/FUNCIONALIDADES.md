@@ -388,13 +388,15 @@ Guarda también el contacto crudo en `raw`.
   Vacío, espacios, clave ausente o forma inesperada ⇒ NULL. Se recalculan solas con cada
   escritura de `raw`. No hay columna de país: Alegra no la manda.
 
-**Vista `alegra_contacts_shop`** (migraciones 0031, 0032, 0034 y 0036, vive solo en SQL). Es lo
+**Vista `alegra_contacts_shop`** (migraciones 0031, 0032, 0034, 0036 y 0039, vive solo en SQL). Es lo
 único del espejo que lee el Shop, con el rol `shop_app` (`GRANT SELECT` sobre la vista, nada
-sobre la tabla). Expone 30 columnas: las 16 de 0031, más `seller_name`, `payment_term_name`,
+sobre la tabla). Expone 31 columnas: las 16 de 0031, más `seller_name`, `payment_term_name`,
 `payment_term_days` y `credit_limit` (0032, para Condiciones y la barra de límite de crédito
 de "Mi cuenta" del Shop), más las 7 de facturación de 0034, más `phone_primary`,
 `phone_secondary` y `mobile` (0036, para que el checkout no pida un teléfono que el espejo ya
-tiene) al final. Nunca `raw`, `phones_norm` ni `seller_id`. Si se cambia o borra una columna expuesta, la vista se recrea **en la misma
+tiene), más `acceso_facturacion` (0039: cuenta corriente O excepción vigente en
+`contactos_acceso_facturacion`, ver [Clientes de la tienda](#clientes-de-la-tienda)) al final.
+Nunca `raw`, `phones_norm` ni `seller_id`. Si se cambia o borra una columna expuesta, la vista se recrea **en la misma
 migración** (DROP + CREATE + GRANT).
 
 **Función `shop_contacto_write_through(tenant, cuenta, alegra_id, raw jsonb) → text`**
@@ -421,7 +423,7 @@ cualquier otro objeto de `public` le da 42501:
 | Objeto | Tipo | Permiso | Migración |
 |---|---|---|---|
 | esquema `public` | esquema | USAGE | 0031 (repetido en cada bloque) |
-| `alegra_contacts_shop` | vista del espejo de contactos | SELECT (30 columnas desde 0036; sin `raw`, `phones_norm` ni `seller_id`) | 0031, re-concedido en 0032/0034/0036 al recrear la vista |
+| `alegra_contacts_shop` | vista del espejo de contactos | SELECT (31 columnas desde 0039; sin `raw`, `phones_norm` ni `seller_id`) | 0031, re-concedido en 0032/0034/0036/0039 al recrear la vista |
 | `shop_contacto_write_through(text, text, text, jsonb)` | función `SECURITY DEFINER` | EXECUTE (PUBLIC revocado) | 0034 |
 | `catalog_products_shop` | vista del espejo de productos | SELECT (12 columnas; ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) | 0035, re-concedido en 0037 |
 | `catalog_categories_shop` | vista del espejo de categorías de Alegra | SELECT (5 columnas) | 0037 |
@@ -433,7 +435,9 @@ cualquier otro objeto de `public` le da 42501:
 | `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
 
 Sin permiso, a propósito: las tablas base `catalog_products`, `catalog_categories` y
-`alegra_contacts` (el Shop las ve sólo por sus vistas) y la función `alegra_suma_impuestos`.
+`alegra_contacts` (el Shop las ve sólo por sus vistas), `contactos_acceso_facturacion` (guarda
+quién otorgó cada excepción; el Shop ve sólo la columna calculada de la vista) y la función
+`alegra_suma_impuestos`.
 
 Los GRANTs de las migraciones son condicionales: si el rol `shop_app` se creó después de
 migrar, correr como owner, en orden, el bloque `DO $$ … $$` del final de
@@ -442,7 +446,9 @@ migrar, correr como owner, en orden, el bloque `DO $$ … $$` del final de
 función), el de `drizzle/0035_catalog_products_shop.sql`, el de
 `drizzle/0036_alegra_contacts_shop_telefonos.sql` (SELECT de la vista recreada con teléfonos),
 el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y el de
-`drizzle/0038_grants_overlay_shop.sql` (overlay y categorías de la tienda). Todos son
+`drizzle/0038_grants_overlay_shop.sql` (overlay y categorías de la tienda) y el de
+`drizzle/0039_contactos_acceso_facturacion.sql` (SELECT de la vista recreada con
+`acceso_facturacion`). Todos son
 idempotentes. Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
 `test/integration/shop-contacto-write-through.integration.test.ts`,
@@ -769,8 +775,9 @@ el estado del pedido, y la factura en Alegra no se toca.
 
 Sección del sidebar **"Clientes de la tienda"** (`/admin/clientes-tienda`), justo después de
 Pedidos. Lista las personas registradas en la tienda del tenant con su vínculo a Alegra, su
-acceso a Facturación de Mi cuenta y sus pedidos. **Sólo lectura** por ahora (las acciones de
-vincular y dar acceso llegan en un cambio posterior).
+acceso a Facturación de Mi cuenta y sus pedidos. Al tocar una fila se abre el detalle; ahí un
+**admin o superadmin** puede vincular/desvincular la cuenta y dar/quitar el acceso a
+Facturación (ver "Acciones" abajo). El operador ve el listado y el detalle sin acciones.
 
 - **Fuente**: `shop.clientes` (espejo de los usuarios de Clerk, migración 0018 **del Shop**,
   alimentado por el webhook `/api/webhooks/clerk` del Shop y el backfill). Es el ancla del
@@ -778,14 +785,16 @@ vincular y dar acceso llegan en un cambio posterior).
   baja en Clerk (`eliminado_en`) no aparecen.
 - **Columnas**: Nombre, Email, Alta, Vínculo (razón social + estado "Sin vincular" / "Sin
   coincidencia" / "Ambiguo" / "Vinculado" / "Revocado" + método), Tipo de cuenta, Acceso a
-  Facturación ("Por cuenta corriente" / "No"), Pedidos y Último pedido. Fechas en hora de
+  Facturación ("Por cuenta corriente" / "Por excepción" / "No"), Pedidos y Último pedido. Fechas en hora de
   Argentina.
 - **Vínculo mostrado**: el activo si hay; si no, el más reciente (índice `cl_usuario_fecha`).
   `sin_coincidencia` con `alegra_contact_id` `'ambiguo'` ⇒ "Ambiguo"; vacío ⇒ "Sin coincidencia".
-- **Acceso a Facturación**: la misma regla que el Shop (`accesoFacturacion()`): vínculo activo
-  y contacto **activo** de la cuenta principal del tenant con `tipo_cuenta = 'corriente'`.
-  Contacto ausente o inactivo ⇒ tipo de cuenta vacío, acceso "No" y la razón social del
-  snapshot del vínculo (fail-closed).
+- **Acceso a Facturación**: la misma regla que el Shop: vínculo activo y contacto **activo** de
+  la cuenta principal del tenant con `acceso_facturacion` en la vista `alegra_contacts_shop`
+  (0039: cuenta corriente O excepción vigente). Origen: `tipo_cuenta = 'corriente'` ⇒ "Por
+  cuenta corriente"; si no, "Por excepción". Contacto ausente o inactivo ⇒ tipo de cuenta
+  vacío, acceso "No" y la razón social del snapshot del vínculo (fail-closed), aunque tenga una
+  excepción vigente (el detalle lo avisa).
 - **Filtros**: búsqueda por nombre, email o razón social (sin distinguir mayúsculas; `%`, `_` y
   `\` literales), vínculo (todos / vinculados / sin vincular), acceso (con / sin) y "con
   pedidos". Orden por alta descendente, páginas de 25 (máximo 50).
@@ -795,6 +804,42 @@ vincular y dar acceso llegan en un cambio posterior).
   `shop-schema-contrato.integration.test.ts`.
 - **Auth**: `requireOperatorPlus` (operator, admin y superadmin). Errores `{error, code}` en
   usted; el log de una falla lleva sólo tenant, nombre y código del error.
+
+### Acciones (admin y superadmin)
+
+Todas piden confirmación explícita, dejan quién (id + nombre congelado del usuario del CRM) y
+cuándo, y nunca borran filas. La página sólo esconde los botones al operador
+(`puedeGestionar = roleRank(rol fresco) >= 1`); la autoridad es `requireAdminPlus` en cada API.
+Un operador que llama a la API recibe el **mismo 404 `{error:"No encontrado", code:"not_found"}`**
+que devuelve `requireAdminPlus` en todas las rutas admin nuevas (no un 403: así no se distingue
+"no tengo permiso" de "no existe").
+
+- **Excepción de acceso a Facturación** (por CONTACTO de Alegra, la empresa): tabla
+  `contactos_acceso_facturacion` (0039). "Dar acceso a Facturación" inserta una vigente (a lo
+  sumo una por tenant + cuenta + contacto: índice parcial `caf_vigente`; repetir ⇒ 200 sin
+  cambios); sólo a clientes activos de contado (a un cuenta corriente ⇒ 422, ya tiene acceso).
+  "Quitar acceso" hace UPDATE de `revocado_en/por/por_nombre` (el historial queda). El Shop ve el
+  efecto en la próxima navegación del usuario, por `alegra_contacts_shop.acceso_facturacion`
+  (el Shop empieza a leerla en el cambio siguiente, R4b).
+- **Vincular**: buscador de clientes activos de Alegra del tenant (razón social, CUIT o
+  cualquier email de `emails_norm`) → confirmación → fila en `shop.client_links` con
+  `estado='activa'`, `metodo='operador'`, snapshot del contacto (razón social, CUIT, lista de
+  precios usable, tipo de cuenta) y `vinculado_por/_nombre` (0019 del Shop). Si el usuario ya
+  tiene un vínculo activo a otro contacto ⇒ 409 (hay que desvincular primero); al mismo ⇒ 200
+  sin cambios. Dos pedidos simultáneos quedan serializados (`FOR UPDATE` sobre `shop.clientes`)
+  y el índice `cl_user_activa` es la última red.
+- **Desvincular**: el activo pasa a `estado='revocada'` con `revoked_at` y `revocado_por/_nombre`.
+  Una fila previa (revocada o `sin_coincidencia`) impide que el auto-vínculo por email del Shop
+  lo vuelva a vincular solo.
+- **Logs**: una línea JSON por acción (`shop_cliente_vinculado`, `shop_cliente_desvinculado`,
+  `acceso_facturacion_otorgado`, `acceso_facturacion_quitado`) con tenant, ids y actor; nunca
+  emails ni razones sociales.
+- **Código**: `src/lib/clientes-tienda-acciones.ts`, rutas
+  `src/app/api/admin/contactos-alegra/route.ts`,
+  `src/app/api/admin/contactos-alegra/[alegraId]/acceso-facturacion/route.ts` y
+  `src/app/api/admin/clientes-tienda/[clerkUserId]/vinculo/route.ts`; UI
+  `ClienteTiendaDetalle.tsx` y `VincularContacto.tsx`. Tests:
+  `clientes-tienda-acciones.integration.test.ts` y `acceso-facturacion-0039.integration.test.ts`.
 
 ---
 
@@ -867,6 +912,9 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | GET | `/api/admin/pedidos/{id}/factura?numero=` | operator+ | Busca y valida la factura en Alegra para el pedido, sin guardar |
 | POST/DELETE | `/api/admin/pedidos/{id}/factura` | operator+ | Vincula (`{alegraId}`, marca facturado) / desvincula (`?alegraId=` esperado) |
 | GET | `/api/admin/clientes-tienda` | operator+ | Usuarios de la tienda del tenant (`q`, `vinculo=todos\|vinculados\|sin_vincular`, `acceso=todos\|con\|sin`, `pedidos=todos\|con`, `start`, `limit`); sólo lectura |
+| POST/DELETE | `/api/admin/clientes-tienda/{clerkUserId}/vinculo` | admin | Vincula (`{alegraContactId}`, método operador, auditado) / desvincula (revoca, nunca borra) |
+| GET | `/api/admin/contactos-alegra?q=` | admin | Buscador de clientes activos de Alegra para vincular (razón social, CUIT, email; hasta 10) |
+| POST/DELETE | `/api/admin/contactos-alegra/{alegraId}/acceso-facturacion` | admin | Da / quita la excepción de acceso a Facturación del contacto (idempotentes, auditadas) |
 | GET | `/api/admin/pending-counts` | sesión (cualquier rol) | Contadores de novedades para los badges del sidebar: inbox (activas con `awaiting_reply`) y comprobantes pending (admin+, null para operadores); filtra por `?since=`/`sinceInbox`/`sinceComprobantes` |
 
 ---

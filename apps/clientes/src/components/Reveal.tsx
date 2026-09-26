@@ -8,7 +8,11 @@ import type { ReactNode } from "react";
  * en el cliente, post-hidrato, así que el scanner tiene que verlas acá.
  */
 const CLASES_OCULTAS = "opacity-0 translate-y-5";
-const CLASES_TRANSICION = "transition-all duration-700 ease-[cubic-bezier(.2,.7,.2,1)]";
+// Sólo opacidad y desplazamiento (nada de `transition-all`: la clase queda
+// puesta para siempre y animaría cualquier otro cambio del wrapper). Misma
+// curva ease-out que el resto del Shop; 500 ms porque es una entrada de
+// contenido al scrollear, no una respuesta a un clic.
+const CLASES_TRANSICION = "transition-[opacity,translate] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]";
 
 /**
  * Reveal on-scroll (progressive enhancement). El HTML del server renderiza el

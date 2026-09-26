@@ -25,11 +25,6 @@ function CartIcon() {
   );
 }
 
-/** Placeholder para las secciones que Alegra todavía no alimenta. */
-function SinDatos({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-muted">{children}</p>;
-}
-
 const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> = {
   in: { texto: "En stock", color: "bg-success" },
   low: { texto: "Últimas unidades", color: "bg-warning" },
@@ -40,12 +35,10 @@ const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> =
  * Ficha de producto. Los datos llegan resueltos desde el espejo del catálogo
  * (con el overlay del CRM) via el Server Component `producto/[id]/page.tsx`.
  *
- * Hay: nombre, marca, SKU, descripción, precio, stock, categoría y las fotos
- * del overlay. NO hay especificaciones, opiniones, variantes ni precios por
- * volumen: esas secciones se mantienen visibles pero vacías, a la espera de la
- * capa propia del shop (ver docs/arquitectura-integraciones.md). Variantes y
- * precio por cantidad son la excepcion: sin datos no se dibuja nada, porque un
- * bloque que siempre dice "no hay" no le sirve a nadie.
+ * Hay: nombre, marca, SKU, descripción (si existe), precio, stock, categoría y las fotos
+ * del overlay. La descripción se muestra sólo si tiene contenido. Variantes y precios
+ * por cantidad se ocultan si no hay datos, porque un bloque que siempre dice "no hay"
+ * no le sirve a nadie.
  */
 export function ProductoClient({
   producto,
@@ -56,7 +49,6 @@ export function ProductoClient({
   oferta?: OfertaCuotas | null;
 }) {
   const [qty, setQty] = useState(1);
-  const [activeTab, setActiveTab] = useState<"specs" | "desc" | "reviews">("desc");
   const { addItem } = useCart();
 
   // Cuotas sobre el precio final unitario: sin IVA conocido no se calcula nada.
@@ -172,49 +164,15 @@ export function ProductoClient({
           </div>
         </div>
 
-        {/* Tabs */}
-        <section className="mt-12">
-          <div className="flex gap-1 border-b border-border">
-            {(
-              [
-                ["desc", "Descripción"],
-                ["specs", "Especificaciones"],
-                ["reviews", "Opiniones"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-                  activeTab === key
-                    ? "border-b-2 border-primary text-primary"
-                    : "text-muted hover:text-text"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="py-6">
-            {activeTab === "desc" &&
-              (producto.description ? (
-                <p className="max-w-prose text-sm leading-relaxed text-muted">
-                  {producto.description}
-                </p>
-              ) : (
-                <SinDatos>Este producto no tiene descripción cargada.</SinDatos>
-              ))}
-
-            {activeTab === "specs" && (
-              <SinDatos>Este producto no tiene especificaciones cargadas.</SinDatos>
-            )}
-
-            {activeTab === "reviews" && (
-              <SinDatos>Todavía no hay opiniones de este producto.</SinDatos>
-            )}
-          </div>
-        </section>
+        {/* Descripción */}
+        {producto.description && (
+          <section className="mt-12">
+            <h2 className="mb-6 font-display text-xl font-medium text-text">Descripción</h2>
+            <p className="max-w-prose text-sm leading-relaxed text-muted">
+              {producto.description}
+            </p>
+          </section>
+        )}
       </main>
     </>
   );

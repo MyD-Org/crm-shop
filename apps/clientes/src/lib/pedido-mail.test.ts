@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { REGISTRO, infracciones } from "@/test/registro-usted";
 import { armarMailPedido } from "./pedido-mail";
 import { avisoDelCobro } from "./pedido-avisos";
 
@@ -47,6 +48,28 @@ describe("armarMailPedido", () => {
     const m = armarMailPedido({ ...base, aviso: "pago_recibido", pedidosUrl: null, comercio: "A\r\nBcc: x@cliente.example" });
     expect(m.html).not.toContain("Ver mis pedidos");
     expect(m.subject).not.toMatch(/[\r\n]/);
+  });
+
+  it("documento HTML completo (layout común) y pie con el comercio, el sitio y el aviso de automático", () => {
+    const m = armarMailPedido({ ...base, aviso: "pago_recibido", sitioUrl: "https://tienda.cliente.example" });
+    expect(m.html).toContain("<!DOCTYPE html>");
+    expect(m.html).toContain('<meta charset="utf-8">');
+    expect(m.html).toContain('href="https://tienda.cliente.example"');
+    expect(m.html).toContain("Este es un mensaje automático.");
+    expect(m.text).toContain("Tienda <Demo> · https://tienda.cliente.example");
+    expect(m.text).toContain("Este es un mensaje automático.");
+  });
+
+  it("en usted: sin voseo ni tuteo", () => {
+    const m = armarMailPedido({
+      ...base,
+      aviso: "recibido",
+      lineas: [{ nombre: "Lámpara", cantidad: 1 }],
+      pagoPendienteEnLinea: true,
+    });
+    for (const parte of [m.subject, m.html, m.text]) {
+      expect(infracciones(parte, REGISTRO)).toEqual([]);
+    }
   });
 });
 

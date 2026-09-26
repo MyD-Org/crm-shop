@@ -19,14 +19,13 @@
  */
 
 import { escapeHtml } from "./escape-html";
+import { FUENTE_MAIL, pieTexto, tarjetaMail } from "./mail-layout";
 
 export interface MailCodigoVinculacion {
   subject: string;
   html: string;
   text: string;
 }
-
-const FUENTE = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
 
 /** "123456" → "123 456". Otros largos quedan como vienen. */
 function agrupar(codigo: string): string {
@@ -55,50 +54,44 @@ export function armarMailCodigoVinculacion(input: {
   tienda: string;
   /** null = sin logo: va el nombre de la tienda en texto, como antes. */
   logoUrl?: string | null;
+  /** `urlSitioMail()`: si está, el pie lleva un link al sitio. */
+  sitioUrl?: string | null;
 }): MailCodigoVinculacion {
   const e = escapeHtml;
-  const { codigo, vigenciaMin, tienda, logoUrl } = input;
+  const { codigo, vigenciaMin, tienda, logoUrl, sitioUrl } = input;
   const vence = `Vence en ${vigenciaMin} minutos.`;
   const aviso = "Si no lo pidió, ignore este mensaje: nadie puede acceder a su cuenta sin este código.";
 
   const subject = `${codigo} es su código para vincular su cuenta`;
 
-  const html = `
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Su código es ${e(codigo)}. ${e(vence)}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8f8f6;padding:32px 16px">
-  <tr><td align="center">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:440px;background:#ffffff;border-radius:12px;border-top:3px solid #1e5aa8">
-      <tr><td style="padding:28px 32px 0">
-        ${
-          logoUrl
-            ? `<img src="${e(logoUrl)}" width="180" height="23" alt="${e(tienda)}" style="display:block;border:0;outline:none;text-decoration:none;height:23px;width:180px;font-family:${FUENTE};font-size:16px;font-weight:700;color:#1e5aa8">`
-            : `<div style="font-family:${FUENTE};font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#1e5aa8">${e(tienda)}</div>`
-        }
-      </td></tr>
-      <tr><td style="padding:20px 32px 0;font-family:${FUENTE};color:#1c2733">
+  const cuerpoHtml = `
+      <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
         <p style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700">Vincule su cuenta</p>
         <p style="margin:0;font-size:15px;line-height:1.55;color:#77808a">Use este código para asociar su cuenta de cliente a su usuario de la tienda.</p>
       </td></tr>
       <tr><td style="padding:24px 32px 0">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#e9f1fa;border:1px solid #d3e2f4;border-radius:10px">
           <tr><td align="center" style="padding:20px 16px 18px">
-            <div style="font-family:${FUENTE};font-size:34px;line-height:1;font-weight:700;letter-spacing:0.12em;color:#16283f;font-variant-numeric:tabular-nums;white-space:nowrap">${e(agrupar(codigo))}</div>
-            <div style="font-family:${FUENTE};font-size:13px;line-height:1.4;color:#77808a;margin-top:12px">${e(vence)}</div>
+            <div style="font-family:${FUENTE_MAIL};font-size:34px;line-height:1;font-weight:700;letter-spacing:0.12em;color:#16283f;font-variant-numeric:tabular-nums;white-space:nowrap">${e(agrupar(codigo))}</div>
+            <div style="font-family:${FUENTE_MAIL};font-size:13px;line-height:1.4;color:#77808a;margin-top:12px">${e(vence)}</div>
           </td></tr>
         </table>
-      </td></tr>
-      <tr><td style="padding:24px 32px 28px;font-family:${FUENTE};font-size:12px;line-height:1.55;color:#a8b0b9">
-        <p style="margin:0">${e(aviso)}</p>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>`;
+      </td></tr>`;
+
+  const html = tarjetaMail({
+    preheader: `Su código es ${codigo}. ${vence}`,
+    logoUrl,
+    nombreComercio: tienda,
+    cuerpoHtml,
+    pie: [aviso],
+    sitioUrl,
+  });
 
   const text = [
     `Su código para vincular su cuenta en la tienda de ${tienda} es ${codigo}.`,
     vence,
     ``,
-    aviso,
+    ...pieTexto(tienda, sitioUrl, [aviso]),
   ].join("\n");
 
   return { subject, html, text };

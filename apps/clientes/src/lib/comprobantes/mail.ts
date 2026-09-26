@@ -14,6 +14,7 @@
 // Todo dato del cliente pasa por escapeHtml y el asunto sale en una sola línea.
 
 import { enviarEmail } from "../email";
+import { FUENTE_MAIL, pieTexto, tarjetaMail, urlSitioMail } from "../mail-layout";
 import { extFor } from "./archivo";
 import type { ComprobanteFila, ResultadoMail } from "./repo";
 import { METHOD_LABELS } from "./validacion";
@@ -114,6 +115,8 @@ export interface DatosMailComprobante {
   /** Email del cliente (replyTo). Sólo con esto el pie invita a responderle. */
   clientEmail?: string | null;
   duplicateOf?: { id: string; submittedAt: Date } | null;
+  /** `urlSitioMail()`: si está, el pie lleva un link al sitio. */
+  sitioUrl?: string | null;
 }
 
 export function armarMailComprobante(input: DatosMailComprobante): { subject: string; html: string; text: string } {
@@ -142,27 +145,19 @@ export function armarMailComprobante(input: DatosMailComprobante): { subject: st
   const convertedNote = r.convertedFrom ? ` (convertido de ${e(r.convertedFrom)})` : "";
   const archivo = `${e(r.fileMime)} · ${formatMb(r.fileSize)}${convertedNote}`;
   const pie = `Enviado automáticamente desde Mi cuenta de la tienda de ${tenantName}.`;
-  const replyNote = input.clientEmail
-    ? `<p style="margin:16px 0 0;padding-top:16px;border-top:1px solid #eef1f5">Responda este mail para escribirle al cliente.</p>`
-    : "";
+  const replyNote = "Responda este mail para escribirle al cliente.";
   const notesRow = r.notes
     ? `<tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Notas</td><td style="padding:6px 0">${e(r.notes)}</td></tr>`
     : "";
   const boton = input.adminUrl
     ? `<tr><td style="padding:20px 32px 28px">
-        <a href="${e(input.adminUrl)}" style="display:inline-block;background:#1f8cff;color:#ffffff;text-decoration:none;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px">Ver en el backoffice</a>
+        <a href="${e(input.adminUrl)}" style="display:inline-block;background:#1f8cff;color:#ffffff;text-decoration:none;font-family:${FUENTE_MAIL};font-size:14px;font-weight:600;padding:12px 24px;border-radius:8px">Ver en el backoffice</a>
       </td></tr>`
     : `<tr><td style="padding:12px 32px 0"></td></tr>`;
 
   // El mail se renderiza en clientes de correo: estilos inline, fuera del DS.
-  const html = `
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef1f5;padding:32px 16px">
-  <tr><td align="center">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:440px;background:#ffffff;border-radius:12px;border-top:3px solid #1f8cff">
-      <tr><td style="padding:28px 32px 0">
-        <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280">${e(tenantName)}</div>
-      </td></tr>
-      <tr><td style="padding:20px 32px 0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.55;color:#111827">
+  const cuerpoHtml = `
+      <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};font-size:15px;line-height:1.55;color:#111827">
         <p style="margin:0 0 16px;font-size:18px;font-weight:700">Comprobante de pago recibido</p>
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:14px">
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top;width:130px">Cliente</td><td style="padding:6px 0">${e(r.razonsocial)}</td></tr>
@@ -178,14 +173,18 @@ export function armarMailComprobante(input: DatosMailComprobante): { subject: st
         <p style="margin:16px 0 0">${e(sizeNote)}</p>
         ${dupNote ? `<p style="margin:8px 0 0;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#9a3412;font-size:13px">${e(dupNote)}</p>` : ""}
       </td></tr>
-      ${boton}
-      <tr><td style="padding:0 32px 28px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:12px;line-height:1.55;color:#9ca3af">
-        <p style="margin:0">${e(pie)}</p>
-        ${replyNote}
-      </td></tr>
-    </table>
-  </td></tr>
-</table>`;
+      ${boton}`;
+
+  const pieMail = input.clientEmail ? [pie, replyNote] : [pie];
+  const html = tarjetaMail({
+    preheader: `Comprobante de pago recibido · ${tenantName}`,
+    nombreComercio: tenantName,
+    colorFranja: "#1f8cff",
+    colorFondo: "#eef1f5",
+    cuerpoHtml,
+    pie: pieMail,
+    sitioUrl: input.sitioUrl,
+  });
 
   const text = [
     `Comprobante de pago recibido (${tenantName})`,
@@ -204,7 +203,7 @@ export function armarMailComprobante(input: DatosMailComprobante): { subject: st
     ...(dupNote ? [dupNote] : []),
     ...(input.adminUrl ? [``, `Ver en el backoffice: ${input.adminUrl}`] : []),
     ``,
-    pie + (input.clientEmail ? " Responda este mail para escribirle al cliente." : ""),
+    ...pieTexto(tenantName, input.sitioUrl, pieMail),
   ].join("\n");
 
   return { subject, html, text };
@@ -313,6 +312,7 @@ export async function enviarAvisoComprobante(entrada: EntradaAviso, deps: DepsAv
     attachmentIncluded: attachment !== undefined,
     clientEmail,
     duplicateOf: duplicateOf ?? null,
+    sitioUrl: urlSitioMail(env.NEXT_PUBLIC_SITE_URL),
   });
 
   const enviado = await enviar({

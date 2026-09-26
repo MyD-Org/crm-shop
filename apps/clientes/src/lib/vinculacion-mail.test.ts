@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { REGISTRO, infracciones } from "@/test/registro-usted";
 import { armarMailCodigoVinculacion, urlLogoMail } from "./vinculacion-mail";
 
 const mail = armarMailCodigoVinculacion({ codigo: "123456", vigenciaMin: 10, tienda: "Tienda Ejemplo" });
@@ -19,9 +20,26 @@ describe("armarMailCodigoVinculacion", () => {
   it("todo en usted: sin voseo ni tuteo", () => {
     for (const parte of [mail.subject, mail.html, mail.text]) {
       expect(parte).not.toMatch(/\b(tu|tus|te|vos)\b|pediste|ignorá|usá|vinculá/i);
+      expect(infracciones(parte, REGISTRO)).toEqual([]);
     }
     expect(mail.html).toContain("Vincule su cuenta");
     expect(mail.html).toContain("cuenta de cliente");
+  });
+
+  it("documento completo (layout común) y pie con el comercio, el sitio y el aviso de automático", () => {
+    expect(mail.html).toContain("<!DOCTYPE html>");
+    expect(mail.html).toContain('<meta charset="utf-8">');
+    expect(mail.html).toContain("Este es un mensaje automático.");
+    expect(mail.text).toContain("Este es un mensaje automático.");
+
+    const conSitio = armarMailCodigoVinculacion({
+      codigo: "123456",
+      vigenciaMin: 10,
+      tienda: "Tienda Ejemplo",
+      sitioUrl: "https://tienda.cliente.example",
+    });
+    expect(conSitio.html).toContain('href="https://tienda.cliente.example"');
+    expect(conSitio.text).toContain("Tienda Ejemplo · https://tienda.cliente.example");
   });
 
   it("escapa el nombre de la tienda", () => {

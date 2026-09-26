@@ -31,6 +31,7 @@ import {
 } from "./arrepentimiento";
 import { armarMailArrepentimientoCliente, armarMailArrepentimientoComercio } from "./arrepentimiento-mail";
 import { contarRecientesPorEmail, insertarSolicitud, marcarEnvios } from "./arrepentimiento-repo";
+import { urlSitioMail } from "./mail-layout";
 import { permitir } from "./rate-limit";
 import { urlLogoMail } from "./vinculacion-mail";
 
@@ -123,6 +124,7 @@ export async function enviarSolicitudArrepentimiento(
     console.warn(`[arrepentimiento] ${codigo}: sin destinatario del comercio (correo legal ni de comprobantes)`);
   }
 
+  const sitioUrl = urlSitioMail();
   const mailCliente = armarMailArrepentimientoCliente({
     codigo,
     nombre: valores.nombre,
@@ -130,6 +132,7 @@ export async function enviarSolicitudArrepentimiento(
     motivo: valores.motivo || undefined,
     comercio: tenant?.nombre || legal.razonSocial,
     logoUrl: urlLogoMail(),
+    sitioUrl,
   });
   const mailComercio = armarMailArrepentimientoComercio({
     codigo,
@@ -139,6 +142,7 @@ export async function enviarSolicitudArrepentimiento(
     pedido: valores.pedido || undefined,
     motivo: valores.motivo || undefined,
     fecha,
+    sitioUrl,
   });
   const tags = [{ name: "tipo", value: "arrepentimiento" }];
 

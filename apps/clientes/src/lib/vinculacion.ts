@@ -52,6 +52,7 @@ import {
 import { sincronizarContactoConPerfil } from "./contacto-write-through";
 import { enmascararEmail, enviarEmail } from "./email";
 import { getPerfilFacturacion } from "./facturacion-db";
+import { urlSitioMail } from "./mail-layout";
 import { armarMailCodigoVinculacion, urlLogoMail } from "./vinculacion-mail";
 import { permitir } from "./rate-limit";
 
@@ -476,6 +477,7 @@ export async function solicitarVinculacion(
       vigenciaMin: VIGENCIA_MIN,
       tienda: "Central LED",
       logoUrl: urlLogoMail(),
+      sitioUrl: urlSitioMail(),
     }),
   });
 

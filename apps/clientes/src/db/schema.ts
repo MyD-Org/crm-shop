@@ -94,6 +94,9 @@ export const clientLinks = shop.table(
     // persona con dos emails, varias personas de una empresa): cada uno pasó
     // por el código al email de Alegra. `cl_contacto_activa` se borró en 0014.
     index("cl_contacto").on(t.alegraContactId),
+    // Último vínculo de cada usuario en cualquier estado (el listado "Clientes
+    // de la tienda" del CRM). `cl_user_activa` es parcial y no sirve para eso.
+    index("cl_usuario_fecha").on(t.clerkUserId, t.createdAt),
   ],
 );
 
@@ -768,6 +771,56 @@ export const solicitudesArrepentimiento = shop.table(
     check(
       "sa_largos",
       sql`char_length(${t.nombre}) <= 120 and char_length(${t.email}) <= 254 and char_length(${t.telefono}) <= 40 and char_length(coalesce(${t.pedidoNumero}, '')) <= 40 and char_length(coalesce(${t.motivo}, '')) <= 1000`,
+    ),
+  ],
+);
+
+/**
+ * Espejo de los usuarios de Clerk de la tienda (migración 0018).
+ *
+ * El CRM no tiene clave de Clerk: sabe quién se registró en la tienda leyendo
+ * esta tabla. La alimentan el webhook `/api/webhooks/clerk` (user.created,
+ * user.updated, user.deleted) y el backfill `npm run clientes:backfill`, los dos
+ * a través de las funciones SQL `shop.clientes_upsert_clerk` y
+ * `shop.clientes_eliminar_clerk` (definidas a mano en la 0018: drift que vive
+ * sólo en SQL). Nunca se escribe con el query builder.
+ *
+ * - Una fila por (tenant, usuario de Clerk): el mismo usuario en dos tiendas
+ *   son dos filas.
+ * - `actualizado_en_clerk` es el `updated_at` del usuario en Clerk: un evento
+ *   más viejo que lo guardado se ignora (los webhooks pueden llegar
+ *   desordenados o repetidos).
+ * - Baja (`user.deleted`): la fila queda con `eliminado_en` y SIN email ni
+ *   nombre (CHECK `sc_eliminado_sin_datos`); nada la resucita después.
+ */
+export const clientes = shop.table(
+  "clientes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Tenant del deploy (SHOP_TENANT_ID), nunca uno que venga en el payload. */
+    tenantId: text("tenant_id").notNull(),
+    clerkUserId: text("clerk_user_id").notNull(),
+    /** Email principal tal cual en Clerk; null si no tiene (p. ej. sólo teléfono). */
+    email: text("email"),
+    /** El mismo email en minúsculas y sin espacios, para buscar. */
+    emailNorm: text("email_norm"),
+    nombre: text("nombre"),
+    creadoEnClerk: timestamp("creado_en_clerk", { withTimezone: true }),
+    actualizadoEnClerk: timestamp("actualizado_en_clerk", { withTimezone: true }).notNull(),
+    eliminadoEn: timestamp("eliminado_en", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("sc_tenant_usuario").on(t.tenantId, t.clerkUserId),
+    index("sc_tenant_alta").on(t.tenantId, t.creadoEnClerk),
+    check(
+      "sc_largos",
+      sql`char_length(coalesce(${t.email}, '')) <= 254 and char_length(coalesce(${t.nombre}, '')) <= 200`,
+    ),
+    check(
+      "sc_eliminado_sin_datos",
+      sql`${t.eliminadoEn} IS NULL OR (${t.email} IS NULL AND ${t.emailNorm} IS NULL AND ${t.nombre} IS NULL)`,
     ),
   ],
 );

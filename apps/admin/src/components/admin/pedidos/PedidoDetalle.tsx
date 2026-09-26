@@ -173,6 +173,8 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
         <CambiarEstadoControl
           pedidoId={pedido.id}
           estado={pedido.estado}
+          entregaTipo={pedido.entrega.tipo === "retiro" ? "retiro" : "envio"}
+          tieneFactura={pedido.factura !== null}
           onChanged={setPedido}
           onConflicto={() => void recargar(true)}
         />

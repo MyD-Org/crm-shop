@@ -3,13 +3,17 @@
 import { useState } from "react"
 import { Button, Dialog, Field, Select, Textarea, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
-import { MOTIVO_MAX, type EstadoPedido } from "@/lib/pedidos-transiciones"
+import { MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { interpretarRespuestaCambio, motivoValido, opcionesDeDestino } from "./logica"
 
 interface Props {
   pedidoId: string
   /** Estado que se está MOSTRANDO: viaja como `estadoEsperado` (concurrencia optimista). */
   estado: EstadoPedido
+  /** Tipo de entrega del pedido: decide si `en_camino` es un destino ofrecido. */
+  entregaTipo: EntregaTipo
+  /** Si el pedido ya tiene una factura de Alegra vinculada (`pedido.factura !== null`). */
+  tieneFactura: boolean
   /** 200: el PATCH devuelve el detalle completo y reemplaza al que está en pantalla. */
   onChanged: (pedido: PedidoDetalleDto) => void
   /** 409: otro usuario lo cambió antes; hay que volver a pedir el pedido. */
@@ -18,15 +22,22 @@ interface Props {
 
 const SIN_DESTINO = ""
 
-export function CambiarEstadoControl({ pedidoId, estado, onChanged, onConflicto }: Props) {
+const AVISO_SIN_FACTURA =
+  "Este pedido no tiene factura vinculada. Si lo marca como entregado, deja de reservar stock y Alegra " +
+  "no lo descuenta hasta que se facture. ¿Desea continuar?"
+
+export function CambiarEstadoControl({ pedidoId, estado, entregaTipo, tieneFactura, onChanged, onConflicto }: Props) {
   const { toast } = useToast()
   // "" = nada elegido: Radix lo toma como "mostrar el placeholder" (no es el value de un ítem).
   const [destino, setDestino] = useState<string>(SIN_DESTINO)
   const [dialogoAbierto, setDialogoAbierto] = useState(false)
   const [motivo, setMotivo] = useState("")
   const [guardando, setGuardando] = useState(false)
+  // "Entregado" sin factura vinculada: se pide una confirmación extra, en su propio diálogo
+  // (sólo UI: el servidor no bloquea esta transición aunque falte la factura).
+  const [confirmarSinFactura, setConfirmarSinFactura] = useState(false)
 
-  const opciones = opcionesDeDestino(estado)
+  const opciones = opcionesDeDestino(estado, entregaTipo)
 
   if (opciones.length === 0) {
     return (
@@ -38,6 +49,7 @@ export function CambiarEstadoControl({ pedidoId, estado, onChanged, onConflicto 
 
   function cerrarDialogo() {
     setDialogoAbierto(false)
+    setConfirmarSinFactura(false)
     setMotivo("")
     setDestino(SIN_DESTINO)
   }
@@ -46,6 +58,15 @@ export function CambiarEstadoControl({ pedidoId, estado, onChanged, onConflicto 
     setDestino(valor)
     // Cancelar no se guarda con el botón común: pide el motivo antes, en su propio diálogo.
     if (valor === "cancelado") setDialogoAbierto(true)
+  }
+
+  function guardar() {
+    // Entregado sin factura: primero el aviso, recién con la confirmación se manda el PATCH.
+    if (destino === "entregado" && !tieneFactura) {
+      setConfirmarSinFactura(true)
+      return
+    }
+    void enviar(destino)
   }
 
   async function enviar(nuevo: string, motivoCancelacion?: string) {
@@ -95,9 +116,9 @@ export function CambiarEstadoControl({ pedidoId, estado, onChanged, onConflicto 
           </Field>
         </div>
         <Button
-          onClick={() => void enviar(destino)}
+          onClick={guardar}
           disabled={destino === SIN_DESTINO || destino === "cancelado"}
-          loading={guardando && !dialogoAbierto}
+          loading={guardando && !dialogoAbierto && !confirmarSinFactura}
         >
           Guardar
         </Button>
@@ -135,6 +156,24 @@ export function CambiarEstadoControl({ pedidoId, estado, onChanged, onConflicto 
           />
         </Field>
       </Dialog>
+
+      <Dialog
+        open={confirmarSinFactura}
+        onOpenChange={(open) => { if (!open && !guardando) setConfirmarSinFactura(false) }}
+        title="Marcar como entregado"
+        description={AVISO_SIN_FACTURA}
+        headerBorder={false}
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setConfirmarSinFactura(false)} disabled={guardando}>
+              Volver
+            </Button>
+            <Button loading={guardando} onClick={() => void enviar(destino)}>
+              Continuar
+            </Button>
+          </div>
+        }
+      />
     </>
   )
 }

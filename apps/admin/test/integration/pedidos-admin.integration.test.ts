@@ -424,39 +424,65 @@ describe("admin: pedidos del Shop", () => {
   describe("ADM-4: los 36 pares ordenados, por HTTP", () => {
     const PARES = ESTADOS_PEDIDO.flatMap((desde) => ESTADOS_PEDIDO.map((hacia) => [desde, hacia] as const))
 
-    it.each(PARES)("%s → %s", async (desde, hacia) => {
-      const pedido = await seedEn(desde)
-      const antes = await rowById(pedido.id)
-      const t0 = Date.now()
-      const res = await patch(pedido.id, {
-        estado: hacia,
-        estadoEsperado: desde,
-        ...(hacia === "cancelado" ? { motivo: "Sin stock" } : {}),
-      })
-      const t1 = Date.now()
+    // La tabla depende del tipo de entrega (retiro no tiene parada "en_camino"): se corre la
+    // matriz completa para los dos, sembrando el pedido con ESE `entrega_tipo`.
+    describe.each(["retiro", "envio"] as const)("entrega_tipo = %s", (entregaTipo) => {
+      it.each(PARES)("%s → %s", async (desde, hacia) => {
+        const pedido = await seedEn(desde, TENANT_A, { entregaTipo })
+        const antes = await rowById(pedido.id)
+        const t0 = Date.now()
+        const res = await patch(pedido.id, {
+          estado: hacia,
+          estadoEsperado: desde,
+          ...(hacia === "cancelado" ? { motivo: "Sin stock" } : {}),
+        })
+        const t1 = Date.now()
 
-      if (puedeTransicionar(desde, hacia)) {
-        expect(res.status).toBe(200)
-        expect(res.headers.get("Cache-Control")).toBe("private, no-store")
-        const body = await res.json()
-        expect(body.estado).toBe(hacia)
-        const despues = await rowById(pedido.id)
-        expect(despues.estado).toBe(hacia)
-        // ADM-7: auditoría.
-        expect(despues.estadoActualizadoPor).toBe(operatorA)
-        expect(despues.estadoActualizadoPorNombre).toBe("Ope Rador")
-        expect(despues.estadoActualizadoEn).not.toBeNull()
-        expect(despues.estadoActualizadoEn!.getTime()).toBeGreaterThanOrEqual(t0 - 1000)
-        expect(despues.estadoActualizadoEn!.getTime()).toBeLessThanOrEqual(t1 + 1000)
-        expect(despues.updatedAt.getTime()).toBe(despues.estadoActualizadoEn!.getTime())
-        expect(despues.cancelacionMotivo).toBe(hacia === "cancelado" ? "Sin stock" : antes.cancelacionMotivo)
-      } else {
-        expect(res.status).toBe(422)
-        expect(res.headers.get("Cache-Control")).toBe("private, no-store")
-        expect(await res.json()).toEqual({ error: mensajeTransicionInvalida(desde, hacia), code: "invalid_transition" })
-        // Fila idéntica: estado, auditoría, motivo y updated_at.
-        expect(await rowById(pedido.id)).toEqual(antes)
-      }
+        if (puedeTransicionar(desde, hacia, entregaTipo)) {
+          expect(res.status).toBe(200)
+          expect(res.headers.get("Cache-Control")).toBe("private, no-store")
+          const body = await res.json()
+          expect(body.estado).toBe(hacia)
+          const despues = await rowById(pedido.id)
+          expect(despues.estado).toBe(hacia)
+          // ADM-7: auditoría.
+          expect(despues.estadoActualizadoPor).toBe(operatorA)
+          expect(despues.estadoActualizadoPorNombre).toBe("Ope Rador")
+          expect(despues.estadoActualizadoEn).not.toBeNull()
+          expect(despues.estadoActualizadoEn!.getTime()).toBeGreaterThanOrEqual(t0 - 1000)
+          expect(despues.estadoActualizadoEn!.getTime()).toBeLessThanOrEqual(t1 + 1000)
+          expect(despues.updatedAt.getTime()).toBe(despues.estadoActualizadoEn!.getTime())
+          expect(despues.cancelacionMotivo).toBe(hacia === "cancelado" ? "Sin stock" : antes.cancelacionMotivo)
+        } else {
+          expect(res.status).toBe(422)
+          expect(res.headers.get("Cache-Control")).toBe("private, no-store")
+          expect(await res.json()).toEqual({
+            error: mensajeTransicionInvalida(desde, hacia),
+            code: "invalid_transition",
+          })
+          // Fila idéntica: estado, auditoría, motivo y updated_at.
+          expect(await rowById(pedido.id)).toEqual(antes)
+        }
+      })
+    })
+
+    it("retiro: preparación va directo a entregado, y entregado sólo corrige a preparación o confirmado", async () => {
+      const preparacion = await seedEn("preparacion", TENANT_A, { entregaTipo: "retiro" })
+      const res = await patch(preparacion.id, { estado: "en_camino", estadoEsperado: "preparacion" })
+      expect(res.status).toBe(422)
+      expect((await res.json()).code).toBe("invalid_transition")
+
+      const entregado = await seedEn("entregado", TENANT_A, { entregaTipo: "retiro" })
+      const res2 = await patch(entregado.id, { estado: "en_camino", estadoEsperado: "entregado" })
+      expect(res2.status).toBe(422)
+      expect((await res2.json()).code).toBe("invalid_transition")
+    })
+
+    it("retiro con un pedido viejo en en_camino: sale a sus destinos normales", async () => {
+      const pedido = await seedEn("en_camino", TENANT_A, { entregaTipo: "retiro" })
+      const res = await patch(pedido.id, { estado: "entregado", estadoEsperado: "en_camino" })
+      expect(res.status).toBe(200)
+      expect((await rowById(pedido.id)).estado).toBe("entregado")
     })
 
     it("mensajes canónicos de los casos con regla propia", async () => {

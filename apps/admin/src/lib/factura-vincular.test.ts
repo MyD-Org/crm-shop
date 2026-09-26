@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import type { AlegraFacturaResumen } from "./alegra"
-import { numeroFacturaCoincide, resolverFactura, validarFactura } from "./factura-vincular"
+import {
+  nombreDocumentoAlegra,
+  numeroFacturaCoincide,
+  parsearUrlAlegra,
+  resolverFactura,
+  validarFactura,
+} from "./factura-vincular"
 
 // Lógica pura de "Vincular factura": qué factura corresponde a lo que tipeó el operador y si
 // se puede vincular al pedido. Datos inventados.
@@ -54,6 +60,55 @@ describe("validarFactura", () => {
   it("otro cliente no (y una factura sin cliente tampoco, si el pedido tiene uno)", () => {
     expect(validarFactura(f({ clienteAlegraId: "56" }), "55")).toEqual({ ok: false, motivo: "otro_cliente" })
     expect(validarFactura(f({ clienteAlegraId: null }), "55")).toEqual({ ok: false, motivo: "otro_cliente" })
+  })
+})
+
+describe("parsearUrlAlegra", () => {
+  it("reconoce el enlace de una factura y devuelve el id", () => {
+    expect(parsearUrlAlegra("https://app.alegra.com/invoice/view/id/2618")).toEqual({
+      tipo: "invoice",
+      id: "2618",
+    })
+  })
+
+  it("acepta http, mayúsculas, espacios alrededor y un path/query después del id", () => {
+    expect(parsearUrlAlegra("  http://APP.ALEGRA.com/invoice/view/id/2618  ")).toEqual({
+      tipo: "invoice",
+      id: "2618",
+    })
+    expect(parsearUrlAlegra("https://app.alegra.com/invoice/view/id/2618?tab=detail")).toEqual({
+      tipo: "invoice",
+      id: "2618",
+    })
+    expect(parsearUrlAlegra("https://app.alegra.com/invoice/view/id/2618/print")).toEqual({
+      tipo: "invoice",
+      id: "2618",
+    })
+  })
+
+  it("reconoce un enlace a OTRO tipo de documento, sin convertirlo en factura", () => {
+    expect(parsearUrlAlegra("https://app.alegra.com/remission/view/id/900")).toEqual({
+      tipo: "otro",
+      documento: "remission",
+    })
+    expect(parsearUrlAlegra("https://app.alegra.com/estimate/view/id/12")).toEqual({
+      tipo: "otro",
+      documento: "estimate",
+    })
+  })
+
+  it("un número, un texto suelto o una URL de otro sitio no son un enlace de Alegra", () => {
+    for (const t of ["00201-00007040", "2618", "", "https://cliente.example/invoice/view/id/2618"]) {
+      expect(parsearUrlAlegra(t)).toBeNull()
+    }
+  })
+})
+
+describe("nombreDocumentoAlegra", () => {
+  it("nombres conocidos y uno genérico para lo que no se reconoce", () => {
+    expect(nombreDocumentoAlegra("remission")).toBe("un remito")
+    expect(nombreDocumentoAlegra("estimate")).toBe("una cotización")
+    expect(nombreDocumentoAlegra("algo-nuevo")).toBe("otro tipo de documento")
   })
 })
 
@@ -123,5 +178,32 @@ describe("resolverFactura", () => {
     const d = deps()
     expect(await resolverFactura("  ", null, d)).toEqual({ kind: "no_encontrada" })
     expect(d.porNumero).not.toHaveBeenCalled()
+  })
+
+  it("enlace de Alegra a una factura: resuelve DIRECTO por id, sin pasar por la búsqueda por número", async () => {
+    const d = deps([[f({ alegraId: "1", numero: "00201-00000001" })]], f({ alegraId: "2618" }))
+    expect(await resolverFactura("https://app.alegra.com/invoice/view/id/2618", null, d)).toEqual({
+      kind: "ok",
+      factura: f({ alegraId: "2618" }),
+    })
+    expect(d.porId).toHaveBeenCalledWith("2618")
+    expect(d.porNumero).not.toHaveBeenCalled()
+  })
+
+  it("enlace a una factura que ya no existe en Alegra → no_encontrada", async () => {
+    const d = deps([], null)
+    expect(await resolverFactura("https://app.alegra.com/invoice/view/id/999", null, d)).toEqual({
+      kind: "no_encontrada",
+    })
+  })
+
+  it("enlace a OTRO tipo de documento → rechazado, sin gastar ninguna request", async () => {
+    const d = deps([[f()]], f())
+    expect(await resolverFactura("https://app.alegra.com/remission/view/id/900", null, d)).toEqual({
+      kind: "url_otro_documento",
+      documento: "remission",
+    })
+    expect(d.porNumero).not.toHaveBeenCalled()
+    expect(d.porId).not.toHaveBeenCalled()
   })
 })

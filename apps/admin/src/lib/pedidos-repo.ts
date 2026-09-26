@@ -3,7 +3,7 @@ import { getDb } from "@/db"
 import { alegraContacts } from "@/db/schema"
 import { shopOrders, shopOrderItems, type ShopOrderItemRow, type ShopOrderRow } from "@/db/shop-schema"
 import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
-import type { EstadoPedido } from "@/lib/pedidos-transiciones"
+import type { EntregaTipo, EstadoPedido } from "@/lib/pedidos-transiciones"
 
 // Acceso a los pedidos del Shop (`shop.orders` / `shop.order_items`) desde el CRM.
 //
@@ -131,6 +131,23 @@ export async function getPedido(
   // Los ítems se piden DESPUÉS de confirmar que el pedido es de este tenant.
   const [items, listaPrecios] = await Promise.all([itemsDe(pedido.id), listaParaRevision(tenantId, pedido)])
   return { pedido, items, listaPrecios }
+}
+
+/**
+ * Sólo el `entrega_tipo` (columna `text`, sin CHECK): el PATCH lo necesita para elegir la
+ * tabla de transiciones ANTES de tocar el estado, sin traer el pedido entero. `null` = no
+ * existe / es de otro tenant / id malformado (mismo criterio que `getPedido`); un valor que no
+ * sea "retiro" ni "envio" (dato viejo o corrupto) se normaliza a "envio", la tabla sin
+ * restricciones extra.
+ */
+export async function getEntregaTipoPedido(tenantId: string, id: string): Promise<EntregaTipo | null> {
+  if (!UUID_RE.test(id)) return null
+  const [row] = await getDb()
+    .select({ entregaTipo: shopOrders.entregaTipo })
+    .from(shopOrders)
+    .where(and(eq(shopOrders.tenantId, tenantId), eq(shopOrders.id, id)))
+  if (!row) return null
+  return row.entregaTipo === "retiro" ? "retiro" : "envio"
 }
 
 export interface CambiarEstadoInput {

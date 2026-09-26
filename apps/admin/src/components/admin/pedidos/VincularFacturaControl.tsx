@@ -216,7 +216,10 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
         }}
       >
         <div className="w-full sm:w-72">
-          <Field label="Número de factura" hint="Tal como figura en Alegra, por ejemplo 00201-00007040.">
+          <Field
+            label="Número o enlace de la factura"
+            hint="Tal como figura en Alegra (por ejemplo 00201-00007040) o el enlace a la factura."
+          >
             <Input
               value={numero}
               onChange={(e) => setNumero(e.target.value)}

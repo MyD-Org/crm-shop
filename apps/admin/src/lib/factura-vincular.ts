@@ -32,6 +32,45 @@ export function numeroFacturaCoincide(numero: string | null, tipeado: string): b
 
 export type MotivoFacturaInvalida = "borrador" | "anulada" | "otro_cliente"
 
+// ───────────────────────── Enlace de Alegra ─────────────────────────
+//
+// El operador puede tipear, en vez del número, el enlace que Alegra muestra en su propia UI
+// ("https://app.alegra.com/invoice/view/id/2618"): un patrón conocido de la URL real del
+// producto (no un dominio de cliente), así que se puede escribir literal acá y en los tests.
+// Un enlace a OTRO tipo de documento (remito, cotización, nota de crédito…) se reconoce pero
+// se rechaza con un error propio: no hay forma de "convertirlo" en factura.
+
+const ALEGRA_DOC_URL_RE = /^https?:\/\/app\.alegra\.com\/([a-z-]+)\/view\/id\/(\d+)(?:[/?#]|$)/i
+
+/** Nombre legible del tipo de documento de Alegra, para el mensaje de error. */
+const ALEGRA_DOCUMENTOS: Record<string, string> = {
+  remission: "un remito",
+  estimate: "una cotización",
+  "credit-note": "una nota de crédito",
+  "debit-note": "una nota de débito",
+  "purchase-order": "una orden de compra",
+  bill: "un gasto",
+}
+
+export type UrlAlegraParseada = { tipo: "invoice"; id: string } | { tipo: "otro"; documento: string }
+
+/**
+ * Si `tipeado` es un enlace de Alegra a un documento (`.../<documento>/view/id/<id>`), lo
+ * reconoce y devuelve su tipo e id. `null` si no matchea ese patrón (no es un enlace de Alegra
+ * reconocible: se sigue probando como número o como id, tal cual antes).
+ */
+export function parsearUrlAlegra(tipeado: string): UrlAlegraParseada | null {
+  const m = ALEGRA_DOC_URL_RE.exec(tipeado.trim())
+  if (!m) return null
+  const [, documento, id] = m
+  return documento.toLowerCase() === "invoice" ? { tipo: "invoice", id } : { tipo: "otro", documento: documento.toLowerCase() }
+}
+
+/** Nombre legible del documento para el mensaje de error ("un remito", …); genérico si no se reconoce. */
+export function nombreDocumentoAlegra(documento: string): string {
+  return ALEGRA_DOCUMENTOS[documento] ?? "otro tipo de documento"
+}
+
 /**
  * ¿Se puede vincular esta factura a un pedido con ese contacto de Alegra (`cliente_codigo`,
  * null = consumidor final sin cuenta)? Borrador y anulada nunca. Con contacto, la factura
@@ -59,6 +98,8 @@ export type ResolverFacturaResult =
   | { kind: "ok"; factura: AlegraFacturaResumen }
   | { kind: "no_encontrada" }
   | { kind: "ambigua" }
+  /** Enlace de Alegra a OTRO tipo de documento (no una factura): la ruta arma el error. */
+  | { kind: "url_otro_documento"; documento: string }
 
 /**
  * Lo tipeado, en el formato con el que filtra Alegra. `numberTemplate_fullNumber` no completa
@@ -77,7 +118,12 @@ function unicasPorId(lista: AlegraFacturaResumen[]): AlegraFacturaResumen[] {
 }
 
 /**
- * Busca la factura que tipeó el operador. Como mucho 3 requests a Alegra:
+ * Busca la factura que tipeó el operador. Acepta el número (como siempre) o un enlace de
+ * Alegra a la factura ("https://app.alegra.com/invoice/view/id/2618"): con enlace, resuelve
+ * DIRECTO por id (`porId`), sin pasar por la búsqueda por número. Un enlace a otro tipo de
+ * documento de Alegra se rechaza (`url_otro_documento`) antes de gastar ninguna request.
+ *
+ * Sin enlace, como mucho 3 requests a Alegra:
  *   1. por número (filtro de Alegra + coincidencia exacta acá);
  *   2. si no hubo y el pedido tiene contacto: por número entre las facturas del contacto
  *      (red por si Alegra ignora el filtro de número: trae las 30 más recientes del cliente);
@@ -91,6 +137,14 @@ export async function resolverFactura(
   deps: ResolverFacturaDeps,
 ): Promise<ResolverFacturaResult> {
   const t = tipeado.trim()
+
+  const url = parsearUrlAlegra(t)
+  if (url) {
+    if (url.tipo === "otro") return { kind: "url_otro_documento", documento: url.documento }
+    const porId = await deps.porId(url.id)
+    return porId ? { kind: "ok", factura: porId } : { kind: "no_encontrada" }
+  }
+
   if (!/[0-9A-Za-z]/.test(t)) return { kind: "no_encontrada" }
 
   const consulta = numeroParaConsulta(t)

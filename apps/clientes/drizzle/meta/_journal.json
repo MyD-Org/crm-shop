@@ -127,6 +127,13 @@
       "when": 1790376972708,
       "tag": "0017_pago_registrado_por",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790384447569,
+      "tag": "0018_clientes_espejo_clerk",
+      "breakpoints": true
     }
   ]
 }

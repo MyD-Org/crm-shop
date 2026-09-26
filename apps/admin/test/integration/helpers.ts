@@ -18,11 +18,13 @@ function guard() {
  * Vacía las tablas que tocan los tests. CASCADE limpia también las que referencian por FK.
  * Incluye `shop.order_items` y `shop.orders` (drizzle las renderiza calificadas): los pedidos
  * del Shop no cuelgan por FK de `tenants`, así que el CASCADE de arriba no los alcanza.
+ * `shop.clientes` (espejo de usuarios de Clerk, 0018 del Shop) va con SQL crudo: todavía no está
+ * declarada en shop-schema.ts.
  */
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderItems}, ${shopOrders} restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderItems}, ${shopOrders}, shop.clientes restart identity cascade`,
   )
 }
 

@@ -262,6 +262,7 @@ toda tabla nueva viva en el esquema `shop` (nunca en `public`).
 | `0013_pedidos_factura_vinculada` | `orders.factura_alegra_id`, `factura_numero`, `factura_fecha`, `factura_total` (factura de Alegra que el CRM vincula al pedido) + CHECK `orders_factura_facturado_check` (factura ⇒ `facturado_en`) | **Antes** de mergear el "Vincular factura" del admin: el CRM selecciona las columnas al leer cualquier pedido y sin ellas cae la sección Pedidos. El Shop no las lee. |
 | `0014_vinculos_varios_usuarios` | `DROP INDEX cl_contacto_activa` (de la `0007`): varios usuarios de la tienda por cliente de Alegra | **Antes** de mergear #129: con el índice, el segundo vínculo del mismo cliente falla con 23505. |
 | `0015_drop_catalogo_shop` | `DROP` de la copia propia del catálogo (`shop.catalog_products`, `catalog_categories`, `catalog_sync_log`); no toca `shop.immutable_unaccent` | **Después** de desplegar el Shop que lee todo el catálogo de las vistas del CRM (0035/0037) y de retirar la sync propia. Irreversible sin datos; ver "Catálogo desde el CRM". |
+| `0018_clientes_espejo_clerk` | `shop.clientes` (espejo de usuarios de Clerk por tenant) + funciones `shop.clientes_upsert_clerk` / `shop.clientes_eliminar_clerk` + índice `cl_usuario_fecha` en `client_links` + `GRANT` condicional a `shop_app` | **Antes** de abrir el PR del espejo: el webhook `/api/webhooks/clerk` llama a las funciones. Ver "Espejo de usuarios de Clerk". |
 
 El comando es el mismo (`npm run db:migrate` parado en `apps/clientes`, con
 `MIGRATE_DATABASE_URL` apuntando a la base directa). Al terminar,
@@ -649,6 +650,63 @@ SELECT has_column_privilege('shop_app', 'shop.orders', 'motivo_revision', 'SELEC
 
 **Rollback:** revertir el PR del Shop primero (la 0009 y la 0010 pueden
 quedar: afloja NOT NULL / columna nullable). Las reversas están en sus cabeceras.
+
+## Espejo de usuarios de Clerk (`shop.clientes`)
+
+Change `clientes-tienda-admin`, rebanada R1. El CRM no tiene clave de Clerk: sabe
+quién se registró en la tienda leyendo `shop.clientes`, que alimentan el webhook
+`POST /api/webhooks/clerk` y el backfill `npm run clientes:backfill`.
+
+- **Escritura sólo por funciones** (0018, drift que vive sólo en SQL):
+  `shop.clientes_upsert_clerk(tenant, clerk_user_id, email, nombre, creado, actualizado)`
+  pisa sólo si el `updated_at` de Clerk que llega es `>=` al guardado y nunca sobre
+  una baja; `shop.clientes_eliminar_clerk(tenant, clerk_user_id)` anonimiza (email,
+  email_norm y nombre en null, `eliminado_en`) o deja un tombstone si no había fila.
+  Las prueba `apps/admin/test/integration/shop-clientes-espejo.integration.test.ts`.
+- **Permisos:** `REVOKE ... FROM PUBLIC` sobre las dos funciones y `GRANT EXECUTE`
+  a `shop_app` en el bloque `DO $$` del final de la 0018 (los `DEFAULT PRIVILEGES`
+  del Paso 1 cubren tablas, no funciones). Si `shop_app` se crea **después** de
+  aplicar la 0018 (base nueva), correr a mano ese bloque `DO $$ … $$` como
+  `<OWNER_ROLE>`.
+- **Tenant:** siempre `SHOP_TENANT_ID` del deploy; nunca uno del payload.
+- **Privacidad:** los logs del webhook y del backfill llevan tipo de evento, id de
+  usuario de Clerk y cantidades. Nunca emails, nombres ni payloads.
+
+**Verificación después de aplicar la 0018** (como `<OWNER_ROLE>`):
+
+```sql
+SELECT count(*) FROM shop.clientes;                                            -- 0
+SELECT proname FROM pg_proc WHERE pronamespace = 'shop'::regnamespace
+  AND proname LIKE 'clientes\_%';                                              -- 2 filas
+SELECT has_function_privilege('shop_app',
+  'shop.clientes_upsert_clerk(text,text,text,text,timestamptz,timestamptz)', 'EXECUTE'); -- true
+SELECT has_function_privilege('shop_app', 'shop.clientes_eliminar_clerk(text,text)', 'EXECUTE'); -- true
+```
+
+**Orden de despliegue y pasos manuales:**
+
+1. **U3a** — aplicar la 0018 en producción desde la rama (`npm run db:migrate` con
+   `MIGRATE_DATABASE_URL` directa, sondeando antes el host) y verificar. Recién
+   después abrir el PR.
+2. Merge y deploy del Shop.
+3. **U1** — Clerk Dashboard, instancia de **producción** → Webhooks → *Add Endpoint*:
+   URL `https://<dominio-del-shop>/api/webhooks/clerk`, eventos `user.created`,
+   `user.updated` y `user.deleted` (ninguno más).
+4. **U2** — copiar el *Signing Secret* del endpoint a `CLERK_WEBHOOK_SIGNING_SECRET`
+   en Vercel (proyecto Shop, entorno Production; Preview sólo si se da de alta un
+   endpoint en la instancia de desarrollo) y **redeployar**: sin redeploy la
+   función no ve la variable y responde 500 "Webhook no configurado".
+5. **U2b** — *Send test event* (`user.created`) desde Clerk ⇒ 200 con JSON (no el
+   HTML de la cortina). Un alta real de prueba aparece en `shop.clientes`.
+6. **U4** — backfill, parado en `apps/clientes` con `CLERK_SECRET_KEY`,
+   `DATABASE_URL` (`shop_app`) y `SHOP_TENANT_ID` de producción:
+   `BACKFILL_CONFIRM=<host> npm run clientes:backfill -- --dry-run` (sólo cuenta),
+   revisar las cantidades, y luego sin `--dry-run`. Una segunda corrida debe dar
+   0 insertados. Va **después** de U1/U2 para no perder altas intermedias.
+
+**Rollback:** revertir el PR primero (webhook y script). La tabla y las funciones
+pueden quedar; la reversa está en la cabecera de la 0018. En Clerk, desactivar el
+endpoint.
 
 ## Nota sobre el ambiente local de tests (`crm_test`)
 

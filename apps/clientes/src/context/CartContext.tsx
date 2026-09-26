@@ -119,11 +119,13 @@ interface CartContextValue {
   /** false durante el render del servidor y la hidratación. */
   ready: boolean;
   /**
-   * Contador que sube con cada alta. El preview del header lo mira para
-   * abrirse solo: es un contador y no un booleano para que dos altas seguidas
-   * del mismo producto vuelvan a disparar el efecto.
+   * Contador que sube con cada alta (addItem/addItems). El botón del carrito
+   * del header lo mira para latir: es un contador y no un booleano para que
+   * dos altas seguidas del mismo producto vuelvan a disparar la animación. No
+   * se deriva de `count` a propósito: el count también cambia al hidratar o al
+   * traer el carrito de otro dispositivo, y eso no es algo que hizo el usuario.
    */
-  aperturaPreview: number;
+  altas: number;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -141,7 +143,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const usuario = isSignedIn && userId ? userId : null;
   const { toast } = useToast();
-  const [aperturaPreview, setAperturaPreview] = useState(0);
+  const [altas, setAltas] = useState(0);
 
   // Nunca mostrar el carrito de otro usuario (equipo compartido, sesión vencida).
   const items = itemsVisibles(cache, { isLoaded, usuario });
@@ -177,14 +179,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const addItem = useCallback((newItem: ItemNuevo, qty = 1) => {
     // Última barrera: nada entra al carrito a $ 0 aunque algún botón lo intente.
     if (!(newItem.price > 0)) return;
-    setAperturaPreview((n) => n + 1);
+    setAltas((n) => n + 1);
     elMotor().mutar((prev) => agregar(prev, newItem, qty));
   }, []);
 
   const addItems = useCallback((lista: { item: ItemNuevo; qty: number }[]) => {
     const validos = lista.filter((l) => l.item.price > 0);
     if (validos.length === 0) return;
-    setAperturaPreview((n) => n + 1);
+    setAltas((n) => n + 1);
     elMotor().mutar((prev) => agregarVarios(prev, validos));
   }, []);
 
@@ -218,7 +220,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         total,
         count,
         ready,
-        aperturaPreview,
+        altas,
       }}
     >
       {children}

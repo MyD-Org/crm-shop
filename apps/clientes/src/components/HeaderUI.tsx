@@ -97,8 +97,6 @@ function HeaderVista({
         )
       : [];
 
-  // Cuál de las dos instancias del carrito está a la vista (ver compactActions).
-  const [compacto, setCompacto] = useState(false);
   // Sin <Show> de Clerk: mientras cierra sesión deja la sesión "en
   // transición" (isLoaded=false) hasta terminar de navegar a la home, y <Show>
   // no renderiza ninguna de las dos ramas: el "Ingresá" desaparecía unos
@@ -130,10 +128,7 @@ function HeaderVista({
       <SiteHeader
         brandPlacement="start"
         compactOnScroll
-        onCompactChange={setCompacto}
-        // El preview del carrito se abre solo al agregar: con dos instancias
-        // montadas, sólo la que está a la vista debe abrirse.
-        compactActions={<CartPreview autoAbrir={compacto} pathname={pathname} />}
+        compactActions={<CartPreview pathname={pathname} />}
         brandName="Central"
         brandAccent="Led"
         brandSub="Iluminación · Electricidad"
@@ -175,7 +170,7 @@ function HeaderVista({
               <MenuUsuario nombre={nombre} esCuentaCorriente={esCuentaCorriente} />
             )}
 
-            <CartPreview autoAbrir={!compacto} pathname={pathname} />
+            <CartPreview pathname={pathname} />
           </>
         }
       />

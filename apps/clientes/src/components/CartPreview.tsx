@@ -1,6 +1,6 @@
 "use client";
 
-import { type PointerEvent, useEffect, useRef, useState } from "react";
+import { type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatNombreProducto } from "@/lib/formato-nombre";
@@ -37,12 +37,58 @@ function LightbulbIcon() {
 // que $2.344.755,60 salía "$ 2.344.755,6", con un solo decimal.
 const fmt = fmtPrecio;
 
+/** La misma curva que el popover de acá y el stepper de AddToCartButton. */
+const EASE_OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
+
+function prefiereMenosMovimiento() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * Latido del ícono: sube rápido y se asienta, 300 ms. Arranca desde la escala
+ * en la que esté (si una alta llega a mitad del latido anterior, lo retoma en
+ * vez de saltar a 1), así varias altas seguidas no se acumulan ni tironean.
+ */
+function latir(el: HTMLElement) {
+  const actual = parseFloat(getComputedStyle(el).scale);
+  const desde = Number.isFinite(actual) ? actual : 1;
+  for (const a of el.getAnimations()) a.cancel();
+  el.animate(
+    [
+      { scale: desde, easing: EASE_OUT },
+      { scale: 1.15, offset: 0.3, easing: EASE_OUT },
+      { scale: 1 },
+    ],
+    { duration: 300 },
+  );
+}
+
+/**
+ * Feedback de una alta sobre el botón del carrito, en lugar de abrir el
+ * popover: el ícono late y el número nuevo entra desde abajo (el chip lo
+ * recorta, como un contador). Con reduced motion no se mueve nada: el chip
+ * sólo se ilumina y se apaga.
+ */
+function festejarAlta(icono: HTMLElement, numero: HTMLElement, destello: HTMLElement) {
+  if (prefiereMenosMovimiento()) {
+    destello.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: "ease" });
+    return;
+  }
+  latir(icono);
+  // Cada alta trae un número nuevo: que vuelva a entrar desde abajo es lo que
+  // corresponde, por eso acá no hace falta retomar la animación anterior.
+  numero.animate(
+    [
+      { translate: "0 70%", opacity: 0 },
+      { translate: "0 0", opacity: 1 },
+    ],
+    { duration: 220, easing: EASE_OUT },
+  );
+}
+
 export function CartPreview({
-  autoAbrir = true,
   pathname = null,
 }: {
-  /** Hay dos instancias (header completo y barra compacta): solo la visible se abre sola al agregar. */
-  autoAbrir?: boolean;
   /**
    * Ruta actual, la pasa el header. No se lee con `usePathname` acá: en el
    * shell estático de una ruta con parámetros (ficha, pedido) ese hook
@@ -52,8 +98,11 @@ export function CartPreview({
 } = {}) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iconoRef = useRef<HTMLSpanElement>(null);
+  const numeroRef = useRef<HTMLSpanElement>(null);
+  const destelloRef = useRef<HTMLSpanElement>(null);
   const carrito = useCart();
-  const { aperturaPreview } = carrito;
+  const { altas } = carrito;
   // En el hueco del header (se hidrata después del shell) el contexto ya trae
   // el carrito del navegador; el HTML del servidor, el vacío. Hasta terminar
   // de hidratar se repite lo del servidor (ver useHidratado).
@@ -63,27 +112,17 @@ export function CartPreview({
   const count = hidratado ? carrito.count : 0;
 
   /**
-   * Agregar al carrito (desde una card o desde la ficha) abre el preview unos
-   * segundos: el comprador ve qué quedó adentro sin irse de donde está.
-   *
-   * La apertura se ajusta en el render, no en un efecto: así el dropdown ya
-   * sale pintado en el mismo commit del alta, sin un frame de más. El cierre
-   * sí va en un efecto, y usa el MISMO ref que el hover, para que el mouse
-   * encima lo cancele.
+   * Agregar al carrito NO abre el popover (lo abre sólo el usuario, con hover
+   * o clic): el botón acusa la alta con una animación corta. Layout effect para
+   * que el número nuevo no llegue a pintarse quieto un frame antes de entrar.
    */
-  const [ultimaAlta, setUltimaAlta] = useState(0);
-  if (aperturaPreview !== ultimaAlta) {
-    setUltimaAlta(aperturaPreview);
-    if (autoAbrir) setOpen(true);
-  }
-
-  useEffect(() => {
-    if (aperturaPreview === 0) return;
-    closeTimer.current = setTimeout(() => setOpen(false), 4000);
-    return () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    };
-  }, [aperturaPreview]);
+  useLayoutEffect(() => {
+    if (altas === 0) return;
+    const icono = iconoRef.current;
+    const numero = numeroRef.current;
+    const destello = destelloRef.current;
+    if (icono && numero && destello) festejarAlta(icono, numero, destello);
+  }, [altas]);
 
   /**
    * Al navegar se cierra: el header no se desmonta entre páginas, así que sin
@@ -123,13 +162,18 @@ export function CartPreview({
         href="/carrito"
         className="flex items-center gap-2 rounded-full bg-primary px-[18px] py-[9px] text-sm font-semibold text-on-primary transition-colors hover:bg-accent hover:text-white"
       >
-        <CartIcon />
+        <span ref={iconoRef} className="inline-flex">
+          <CartIcon />
+        </span>
         {/* En pantallas chicas queda sólo el ícono + la cantidad: la palabra
             mide 52px y es lo que hace que el carrito no entre al lado de la
             marca en la primera fila del header. El ícono ya dice qué es. */}
         <span className="max-sm:sr-only">Carrito</span>
-        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/20 text-[11px] font-extrabold">
-          {count}
+        <span className="relative inline-flex h-5 min-w-5 items-center justify-center overflow-hidden rounded-full bg-white/20 text-[11px] font-extrabold">
+          <span ref={destelloRef} aria-hidden className="absolute inset-0 bg-white/30 opacity-0" />
+          <span ref={numeroRef} className="relative">
+            {count}
+          </span>
         </span>
       </Link>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Button, Card, Divider, FacetGroup, RangeSlider, Switch } from "@myd-org/ui";
+import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Switch } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import {
   cambiosDeRango,
@@ -16,6 +16,7 @@ import {
   limpiarFiltros,
 } from "@/lib/catalogo-vista";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
+import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
 
@@ -120,12 +121,26 @@ export function CatalogoFiltros({
   );
 }
 
+/** Sólo dígitos: lo que puede escribir la persona en Desde/Hasta. */
+const soloDigitos = (s: string) => s.replace(/[^\d]/g, "");
+
 /**
- * Slider de precio. Mientras se arrastra, el valor vive acá; la navegación
- * sale sólo al soltar (`onValueCommit`). El valor local queda atado a la
- * URL y al rango vigentes: cuando cualquiera de los dos cambia (llegó la
- * página nueva), manda de nuevo lo que dice la URL.
+ * Slider de precio (escala logarítmica, ver `@/lib/escala-precio`) + dos
+ * campos numéricos ("Desde" / "Hasta") sincronizados con él.
+ *
+ * El slider arrastra POSICIONES (0..1000), no precios: la mayoría de los
+ * productos cae cerca del mínimo, y en una escala lineal ese tramo ocupa un
+ * pixel. Mientras se arrastra, la posición vive acá; la navegación sale sólo
+ * al soltar (`onValueCommit`). Los campos de texto, en cambio, escriben el
+ * monto EXACTO (sin el redondeo "lindo" del slider) y navegan al perder foco
+ * o con Enter.
+ *
+ * Los dos controles quedan atados a la URL y al rango vigentes: cuando
+ * cualquiera de los dos cambia (llegó una página nueva) y la persona no está
+ * escribiendo, vuelven a mostrar lo que dice la URL.
  */
+const miles = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+
 function FiltroPrecio({
   facetas,
   estado,
@@ -138,12 +153,50 @@ function FiltroPrecio({
   const idPrecio = useId();
   const rango = facetas.precio;
   const clave = `${estado.precioMin}|${estado.precioMax}|${rango?.min}|${rango?.max}`;
-  const [arrastre, setArrastre] = useState<{ clave: string; valor: [number, number] } | null>(
+  const [arrastre, setArrastre] = useState<{ clave: string; posiciones: [number, number] } | null>(
     null
   );
+  const [editando, setEditando] = useState<null | "desde" | "hasta">(null);
+  const [textoDesde, setTextoDesde] = useState("");
+  const [textoHasta, setTextoHasta] = useState("");
   if (!rango) return null;
 
-  const valor = arrastre?.clave === clave ? arrastre.valor : rangoEfectivo(estado, rango);
+  const [precioMin, precioMax] = rangoEfectivo(estado, rango);
+  const posicionesBase: [number, number] = [
+    precioAPosicion(precioMin, rango.min, rango.max),
+    precioAPosicion(precioMax, rango.min, rango.max),
+  ];
+  const posiciones = arrastre?.clave === clave ? arrastre.posiciones : posicionesBase;
+  const precios: [number, number] = [
+    posicionAPrecio(posiciones[0], rango.min, rango.max),
+    posicionAPrecio(posiciones[1], rango.min, rango.max),
+  ];
+
+  // Los campos de texto siguen a la posición vigente salvo mientras se los
+  // está editando (patrón de React: ajustar estado durante el render, no en
+  // un efecto, para no perder lo que la persona está tipeando).
+  // Con separador de miles para leerlo de un vistazo; al tipear se limpia.
+  if (editando !== "desde" && textoDesde !== miles(precios[0])) {
+    setTextoDesde(miles(precios[0]));
+  }
+  if (editando !== "hasta" && textoHasta !== miles(precios[1])) {
+    setTextoHasta(miles(precios[1]));
+  }
+
+  const confirmarInput = (campo: "desde" | "hasta") => {
+    setEditando(null);
+    const texto = campo === "desde" ? textoDesde : textoHasta;
+    if (texto.trim() === "") return;
+    const n = Number(soloDigitos(texto));
+    if (!Number.isFinite(n)) return;
+    const acotado = Math.min(Math.max(Math.trunc(n), rango.min), rango.max);
+    let [min, max] = precios;
+    if (campo === "desde") min = acotado;
+    else max = acotado;
+    if (min > max) [min, max] = [max, min];
+    setArrastre(null);
+    ir(cambiosDeRango([min, max], rango));
+  };
 
   return (
     <section aria-labelledby={idPrecio} className="flex flex-col gap-3">
@@ -151,17 +204,60 @@ function FiltroPrecio({
         Precio
       </h3>
       <RangeSlider
-        min={rango.min}
-        max={rango.max}
+        min={POSICION_MIN}
+        max={POSICION_MAX}
         step={1}
-        value={valor}
-        onValueChange={(v) => setArrastre({ clave, valor: v })}
-        onValueCommit={(v) => ir(cambiosDeRango(v, rango))}
-        formatValue={fmtPesos}
+        value={posiciones}
+        onValueChange={(v) => setArrastre({ clave, posiciones: v })}
+        onValueCommit={(v) => {
+          setArrastre(null);
+          const precioDesde = posicionAPrecio(v[0], rango.min, rango.max);
+          const precioHasta = posicionAPrecio(v[1], rango.min, rango.max);
+          ir(cambiosDeRango([precioDesde, precioHasta], rango));
+        }}
+        formatValue={(p) => fmtPesos(posicionAPrecio(p, rango.min, rango.max))}
         thumbLabels={["Precio mínimo", "Precio máximo"]}
         disabled={rango.min === rango.max}
         aria-label="Precio"
       />
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Desde">
+          <Input
+            type="text"
+            inputMode="numeric"
+            value={textoDesde}
+            onFocus={() => setEditando("desde")}
+            onChange={(e) => setTextoDesde(soloDigitos(e.target.value))}
+            onBlur={() => confirmarInput("desde")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                confirmarInput("desde");
+                e.currentTarget.blur();
+              }
+            }}
+            disabled={rango.min === rango.max}
+            aria-label="Precio desde"
+          />
+        </Field>
+        <Field label="Hasta">
+          <Input
+            type="text"
+            inputMode="numeric"
+            value={textoHasta}
+            onFocus={() => setEditando("hasta")}
+            onChange={(e) => setTextoHasta(soloDigitos(e.target.value))}
+            onBlur={() => confirmarInput("hasta")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                confirmarInput("hasta");
+                e.currentTarget.blur();
+              }
+            }}
+            disabled={rango.min === rango.max}
+            aria-label="Precio hasta"
+          />
+        </Field>
+      </div>
     </section>
   );
 }

@@ -16,11 +16,12 @@
 9. [Espejo de contactos de Alegra](#espejo-de-contactos-de-alegra)
 10. [Stock casi en tiempo real (webhooks de Alegra)](#stock-casi-en-tiempo-real-webhooks-de-alegra)
 11. [Pedidos del Shop: vincular factura](#pedidos-del-shop-vincular-factura)
-12. [Base de datos](#base-de-datos)
-13. [Feature flags](#feature-flags)
-14. [Referencia de endpoints](#referencia-de-endpoints)
-15. [Variables de entorno](#variables-de-entorno)
-16. [Comandos](#comandos)
+12. [Clientes de la tienda](#clientes-de-la-tienda)
+13. [Base de datos](#base-de-datos)
+14. [Feature flags](#feature-flags)
+15. [Referencia de endpoints](#referencia-de-endpoints)
+16. [Variables de entorno](#variables-de-entorno)
+17. [Comandos](#comandos)
 
 ---
 
@@ -764,6 +765,39 @@ el estado del pedido, y la factura en Alegra no se toca.
 
 ---
 
+## Clientes de la tienda
+
+Sección del sidebar **"Clientes de la tienda"** (`/admin/clientes-tienda`), justo después de
+Pedidos. Lista las personas registradas en la tienda del tenant con su vínculo a Alegra, su
+acceso a Facturación de Mi cuenta y sus pedidos. **Sólo lectura** por ahora (las acciones de
+vincular y dar acceso llegan en un cambio posterior).
+
+- **Fuente**: `shop.clientes` (espejo de los usuarios de Clerk, migración 0018 **del Shop**,
+  alimentado por el webhook `/api/webhooks/clerk` del Shop y el backfill). Es el ancla del
+  tenant: `shop.client_links` no tiene tenant, se une por `clerk_user_id`. Usuarios dados de
+  baja en Clerk (`eliminado_en`) no aparecen.
+- **Columnas**: Nombre, Email, Alta, Vínculo (razón social + estado "Sin vincular" / "Sin
+  coincidencia" / "Ambiguo" / "Vinculado" / "Revocado" + método), Tipo de cuenta, Acceso a
+  Facturación ("Por cuenta corriente" / "No"), Pedidos y Último pedido. Fechas en hora de
+  Argentina.
+- **Vínculo mostrado**: el activo si hay; si no, el más reciente (índice `cl_usuario_fecha`).
+  `sin_coincidencia` con `alegra_contact_id` `'ambiguo'` ⇒ "Ambiguo"; vacío ⇒ "Sin coincidencia".
+- **Acceso a Facturación**: la misma regla que el Shop (`accesoFacturacion()`): vínculo activo
+  y contacto **activo** de la cuenta principal del tenant con `tipo_cuenta = 'corriente'`.
+  Contacto ausente o inactivo ⇒ tipo de cuenta vacío, acceso "No" y la razón social del
+  snapshot del vínculo (fail-closed).
+- **Filtros**: búsqueda por nombre, email o razón social (sin distinguir mayúsculas; `%`, `_` y
+  `\` literales), vínculo (todos / vinculados / sin vincular), acceso (con / sin) y "con
+  pedidos". Orden por alta descendente, páginas de 25 (máximo 50).
+- **Código**: `src/lib/clientes-tienda-repo.ts` (SQL crudo con LATERAL, `tenantId` primero),
+  `src/app/api/admin/clientes-tienda/route.ts`, `src/components/admin/clientes-tienda/`.
+  Declaración de `shop.clientes` / `shop.client_links` en `src/db/shop-schema.ts`, vigilada por
+  `shop-schema-contrato.integration.test.ts`.
+- **Auth**: `requireOperatorPlus` (operator, admin y superadmin). Errores `{error, code}` en
+  usted; el log de una falla lleva sólo tenant, nombre y código del error.
+
+---
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
@@ -832,6 +866,7 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | GET/PUT | `/api/admin/settings/receipts` | admin | Casilla de avisos de comprobantes del tenant |
 | GET | `/api/admin/pedidos/{id}/factura?numero=` | operator+ | Busca y valida la factura en Alegra para el pedido, sin guardar |
 | POST/DELETE | `/api/admin/pedidos/{id}/factura` | operator+ | Vincula (`{alegraId}`, marca facturado) / desvincula (`?alegraId=` esperado) |
+| GET | `/api/admin/clientes-tienda` | operator+ | Usuarios de la tienda del tenant (`q`, `vinculo=todos\|vinculados\|sin_vincular`, `acceso=todos\|con\|sin`, `pedidos=todos\|con`, `start`, `limit`); sólo lectura |
 | GET | `/api/admin/pending-counts` | sesión (cualquier rol) | Contadores de novedades para los badges del sidebar: inbox (activas con `awaiting_reply`) y comprobantes pending (admin+, null para operadores); filtra por `?since=`/`sinceInbox`/`sinceComprobantes` |
 
 ---

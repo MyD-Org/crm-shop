@@ -131,3 +131,42 @@ export const shopOrderItems = shop.table("order_items", {
 
 export type ShopOrderRow = typeof shopOrders.$inferSelect
 export type ShopOrderItemRow = typeof shopOrderItems.$inferSelect
+
+// Espejo de los usuarios de Clerk de cada tienda (0018 del Shop). Lo escribe SÓLO el Shop
+// (webhook + backfill, por las funciones `shop.clientes_*`); el CRM lo lee para el listado
+// "Clientes de la tienda". Es el ancla del tenant de ese listado: `client_links` no tiene
+// tenant_id. Una baja de Clerk deja la fila con `eliminado_en` y sin email/nombre (CHECK).
+export const shopClientes = shop.table("clientes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  clerkUserId: text("clerk_user_id").notNull(),
+  email: text("email"),
+  emailNorm: text("email_norm"),
+  nombre: text("nombre"),
+  creadoEnClerk: timestamp("creado_en_clerk", { withTimezone: true }),
+  actualizadoEnClerk: timestamp("actualizado_en_clerk", { withTimezone: true }).notNull(),
+  eliminadoEn: timestamp("eliminado_en", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+// Vínculo usuario de la tienda ↔ contacto de Alegra (0000/0014 del Shop). SIN tenant_id: el
+// tenant sale de `shopClientes` (mismo clerk_user_id). Nunca se borra: 'activa' | 'revocada' |
+// 'sin_coincidencia' ('sin_coincidencia' guarda alegra_contact_id '' o 'ambiguo').
+export const shopClientLinks = shop.table("client_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clerkUserId: text("clerk_user_id").notNull(),
+  alegraContactId: text("alegra_contact_id").notNull(),
+  razonSocial: text("razon_social"),
+  cuit: text("cuit"),
+  idPriceList: text("id_price_list"),
+  tipoCuenta: text("tipo_cuenta"), // 'corriente' | 'contado'
+  estado: text("estado").notNull().default("activa"),
+  // 'email_verificado' | 'otp_email' | 'cookie_crm' | 'operador'
+  metodo: text("metodo").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+})
+
+export type ShopClienteRow = typeof shopClientes.$inferSelect
+export type ShopClientLinkRow = typeof shopClientLinks.$inferSelect

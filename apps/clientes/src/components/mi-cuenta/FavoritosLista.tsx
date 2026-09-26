@@ -78,7 +78,7 @@ export function FavoritosLista({
             <AddToCartButton
               disabled={p.stock === "out"}
               max={maxCantidad(p)}
-              product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
+              product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
             />
           }
         />

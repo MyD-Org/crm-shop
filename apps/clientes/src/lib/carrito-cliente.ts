@@ -24,6 +24,13 @@ export interface CartItem {
    * con problema.
    */
   faltante?: boolean;
+  /**
+   * URL de la foto de portada del producto, sólo para pintar el carrito sin
+   * esperar al servidor. Igual que `price`/`name`/`brand`: es referencial y
+   * puede quedar vieja; con sesión, `enriquecer()` (carrito-db.ts) la vuelve a
+   * resolver del catálogo en cada carga. Sin foto, el ícono de siempre.
+   */
+  image?: string;
 }
 
 /** Caché local: `owner` es el userId de Clerk, o null para invitado / cookie CRM. */

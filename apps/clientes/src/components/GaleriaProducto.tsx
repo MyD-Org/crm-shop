@@ -17,8 +17,8 @@ export function GaleriaProducto({ fotos, nombre }: { fotos?: ProductImage[]; nom
   const foto = lista[Math.min(activa, lista.length - 1)];
 
   return (
-    <div className="space-y-3">
-      <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-[24px] bg-elevated">
+    <div className="min-w-0 space-y-3">
+      <div className="relative flex aspect-square min-w-0 items-center justify-center overflow-hidden rounded-[24px] border border-border bg-surface">
         {foto ? (
           <Image
             // La key fuerza el cambio de imagen sin arrastrar la anterior mientras carga.
@@ -38,7 +38,7 @@ export function GaleriaProducto({ fotos, nombre }: { fotos?: ProductImage[]; nom
       </div>
 
       {lista.length > 1 && (
-        <ul className="flex gap-2 overflow-x-auto pb-1" aria-label="Fotos del producto">
+        <ul className="flex min-w-0 gap-2 overflow-x-auto pb-1" aria-label="Fotos del producto">
           {lista.map((f, i) => (
             <li key={f.url} className="shrink-0">
               <button
@@ -47,7 +47,7 @@ export function GaleriaProducto({ fotos, nombre }: { fotos?: ProductImage[]; nom
                 aria-label={`Ver foto ${i + 1} de ${lista.length}`}
                 aria-pressed={i === activa}
                 className={cn(
-                  "relative block h-16 w-16 overflow-hidden rounded-xl border bg-elevated transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]",
+                  "relative block h-16 w-16 overflow-hidden rounded-xl border bg-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]",
                   i === activa ? "border-primary" : "border-border hover:border-muted",
                 )}
               >

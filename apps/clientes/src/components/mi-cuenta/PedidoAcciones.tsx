@@ -33,7 +33,13 @@ export function PedidoAcciones({
     // Una sola actualización del carrito: con sesión, un solo guardado.
     addItems(
       items.map((item) => ({
-        item: { id: item.id, name: item.nombreVisible, brand: item.brand, price: item.price },
+        item: {
+          id: item.id,
+          name: item.nombreVisible,
+          brand: item.brand,
+          price: item.price,
+          image: item.imagen?.url,
+        },
         qty: item.qty,
       })),
     );

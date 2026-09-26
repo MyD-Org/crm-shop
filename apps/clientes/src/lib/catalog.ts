@@ -127,12 +127,49 @@ export function mapFilaToProduct(
 }
 
 /**
+ * `productos/{tenant}/{alegraId}/{uuid}` — lo que comparten las variantes
+ * (320/800/1600) de una misma foto. Mismo criterio que `prefijoDe` en
+ * apps/admin/src/components/admin/catalogo/FotosProducto.tsx.
+ */
+function prefijoDeFoto(key: string): string {
+  return key.replace(/-\d+\.webp$/, "");
+}
+
+/**
+ * El admin guarda las 3 variantes de cada foto como filas separadas; acá se
+ * agrupan por foto lógica (mismo prefijo), preservando el orden de la
+ * primera aparición, y se elige la variante más grande del grupo: es la que
+ * mejor se ve en el detalle, y `next/image` la redimensiona solo para las
+ * miniaturas y la card, así que no hace falta cargar las tres.
+ */
+function agruparFotos(fotos: FotoCrm[]): FotoCrm[] {
+  const orden: string[] = [];
+  const porPrefijo = new Map<string, FotoCrm[]>();
+  for (const f of fotos) {
+    const p = prefijoDeFoto(f.key);
+    if (!porPrefijo.has(p)) {
+      porPrefijo.set(p, []);
+      orden.push(p);
+    }
+    porPrefijo.get(p)?.push(f);
+  }
+  return orden.map((p) => {
+    const variantes = porPrefijo.get(p) ?? [];
+    return [...variantes].sort((a, b) => b.w - a.w)[0];
+  });
+}
+
+/**
  * El CRM guarda la key del objeto en R2 y la URL se compone al leer, con la
  * misma base pública que usa el CRM. Sin base configurada no hay fotos.
  */
 function urlsDeFotos(fotos: FotoCrm[] | null, base: string | null) {
   if (!fotos?.length || !base) return undefined;
-  return fotos.map((f) => ({ url: `${base}/${f.key}`, w: f.w, ...(f.alt !== undefined ? { alt: f.alt } : {}) }));
+  return agruparFotos(fotos).map((f) => ({
+    url: `${base}/${f.key}`,
+    w: f.w,
+    ...(f.alt !== undefined ? { alt: f.alt } : {}),
+  }));
 }
 
 

@@ -87,7 +87,7 @@ export function ProductoClient({
 
         {/* Galería un poco más angosta que la info: los nombres de Alegra son
             largos y necesitan el ancho más que la foto. */}
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
           <GaleriaProducto fotos={producto.images} nombre={producto.name} />
 
           {/* Info */}
@@ -152,7 +152,7 @@ export function ProductoClient({
             <div className="flex items-center gap-3">
               <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} />
               <Button
-                onClick={() => addItem(producto, qty)}
+                onClick={() => addItem({ ...producto, image: producto.images?.[0]?.url }, qty)}
                 disabled={agotado || sinPrecio}
                 className="flex flex-1 items-center justify-center gap-2"
               >

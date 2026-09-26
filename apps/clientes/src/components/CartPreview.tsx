@@ -2,6 +2,7 @@
 
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio } from "@/lib/format";
@@ -171,8 +172,12 @@ export function CartPreview({
                       href={`/producto/${item.id}`}
                       className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-elevated"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted/40">
-                        <LightbulbIcon />
+                      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface text-muted/40">
+                        {item.image ? (
+                          <Image src={item.image} alt="" fill sizes="40px" className="object-contain p-0.5" />
+                        ) : (
+                          <LightbulbIcon />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-medium text-text">{item.name}</p>

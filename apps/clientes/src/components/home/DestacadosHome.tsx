@@ -63,7 +63,11 @@ export async function DestacadosHome({
   return (
     <ProductosCarrusel label={label}>
       {destacados.map((p, i) => {
-        const imagen = imagenes[i];
+        // Prioridad de la imagen: la foto real del producto (overlay del CRM) >
+        // la decorativa de la sección (curada por posición, ver home-defaults.ts)
+        // > el ícono de siempre.
+        const fotoReal = p.images?.[0];
+        const imagenDecorativa = imagenes[i];
         return (
           <Link
             key={p.id}
@@ -81,23 +85,38 @@ export async function DestacadosHome({
               // La card entera es un <Link>: el corazón corta la navegación.
               cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
               image={
-                imagen ? (
+                fotoReal ? (
+                  // Fondo blanco propio (las fotos de producto suelen tener fondo
+                  // blanco): el wrap del DS es bg-elevated, así que se enmarca
+                  // acá mismo, dentro del slot que expone `image`.
+                  <div className="absolute inset-0 flex items-center justify-center rounded-[16px] border border-border bg-surface">
+                    <Image
+                      src={fotoReal.url}
+                      alt={fotoReal.alt || p.name}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      className="object-contain p-4"
+                    />
+                  </div>
+                ) : imagenDecorativa ? (
                   <Image
-                    src={imagen}
+                    src={imagenDecorativa}
                     alt={p.name}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                     className="object-cover"
                   />
                 ) : (
-                  <LightbulbIcon className="h-20 w-20 text-muted/30" />
+                  <div className="absolute inset-0 flex items-center justify-center rounded-[16px] border border-border bg-surface">
+                    <LightbulbIcon className="h-20 w-20 text-muted/30" />
+                  </div>
                 )
               }
               priceNote={p.sku ? `Cód. ${p.sku}` : undefined}
               actionPlacement="below"
               action={
                 <AddToCartButton
-                  product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
+                  product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
                 />
               }
               installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}

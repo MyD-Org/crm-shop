@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
@@ -160,8 +161,15 @@ export function CarritoClient({
                     linea?.problema ? "border-danger/40" : "border-border/50"
                   }`}
                 >
-                  <Link href={`/producto/${item.id}`} className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-elevated sm:h-24 sm:w-24 transition-opacity hover:opacity-80">
-                    <LightbulbIcon className="h-8 w-8 text-muted/30 sm:h-12 sm:w-12" />
+                  <Link
+                    href={`/producto/${item.id}`}
+                    className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface transition-opacity hover:opacity-80 sm:h-24 sm:w-24"
+                  >
+                    {item.image ? (
+                      <Image src={item.image} alt="" fill sizes="96px" className="object-contain p-1" />
+                    ) : (
+                      <LightbulbIcon className="h-8 w-8 text-muted/30 sm:h-12 sm:w-12" />
+                    )}
                   </Link>
 
                   <div className="flex min-w-0 flex-1 flex-col gap-1">

@@ -1,9 +1,8 @@
 import { notFound, redirect } from "next/navigation";
-import { EmptyState } from "@myd-org/ui";
-import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { AvisoSeccionCaida } from "@/components/mi-cuenta/cuenta-corriente/AvisoSeccionCaida";
 import { ComprobantesPagos } from "@/components/mi-cuenta/cuenta-corriente/ComprobantesPagos";
 import { PagosSeccion } from "@/components/mi-cuenta/cuenta-corriente/PagosSeccion";
+import { accesoFacturacion } from "@/lib/acceso-facturacion";
 import { identidadActual } from "@/lib/auth";
 import { listarDelCliente } from "@/lib/comprobantes/repo";
 import { contactoPorId } from "@/lib/contactos-espejo";
@@ -12,7 +11,7 @@ import { motivoAlegra } from "@/lib/cuenta-corriente/mensajes";
 import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
 import { contactoWhatsApp } from "@/lib/cuenta-corriente/whatsapp";
 import { rutaIngreso } from "@/lib/ingreso";
-import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
+import { RUTAS_MI_CUENTA, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 import { comprobantesR2Config } from "@/lib/r2";
 import { shopTenantId } from "@/lib/tenant";
 
@@ -21,22 +20,16 @@ import { shopTenantId } from "@/lib/tenant";
  * "Cargar más") y, arriba, los pagos que informó y siguen en revisión; el
  * detalle con las facturas imputadas y el PDF en un visor dentro de la página.
  * "Informar pago" sólo con el almacenamiento de comprobantes configurado
- * (CMP-5). Todo vinculado la ve, contado incluido.
+ * (CMP-5). Sólo cuenta corriente
+ * (`accesoFacturacion`): sin vínculo o de contado ⇒ 404.
  */
 export default async function PagosPage() {
   if (!seccionDesplegada("pagos")) notFound();
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.pagos));
 
-  // Sin vínculo no se llama a Alegra ni se lee `public`: se ofrece vincular.
-  if (!cliente) {
-    return (
-      <EmptyState
-        title="Vincule su cuenta de cliente para ver su cuenta corriente."
-        action={<BotonEnlace href={rutaVincular(RUTAS_MI_CUENTA.pagos)}>Vincular mi cuenta</BotonEnlace>}
-      />
-    );
-  }
+  // Sin acceso (sin vínculo o de contado) la sección no existe: ni Alegra ni `public`.
+  if (!cliente || !(await accesoFacturacion())) notFound();
 
   const codigo = cliente.codigocliente;
   const comprobantes = comprobantesR2Config() !== null;

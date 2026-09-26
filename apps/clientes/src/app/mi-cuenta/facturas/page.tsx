@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { EmptyState } from "@myd-org/ui";
-import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FacturasYSaldo } from "@/components/mi-cuenta/cuenta-corriente/FacturasYSaldo";
+import { accesoFacturacion } from "@/lib/acceso-facturacion";
 import { identidadActual } from "@/lib/auth";
 import { resolverDeepLink } from "@/lib/cuenta-corriente/deep-link";
 import { getCuenta, getFacturasPage, muestraLimite } from "@/lib/cuenta-corriente/erp-cc";
@@ -9,15 +8,15 @@ import { motivoAlegra } from "@/lib/cuenta-corriente/mensajes";
 import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
 import { contactoWhatsApp } from "@/lib/cuenta-corriente/whatsapp";
 import { rutaIngreso } from "@/lib/ingreso";
-import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
+import { RUTAS_MI_CUENTA, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 
 /**
  * "Facturas y saldo": el saldo (deuda, vencido, a vencer) y la lista de
  * facturas del cliente vinculado, con el PDF en un visor dentro de la página.
  * La primera página viene del servidor; "Cargar más" y los filtros van a
- * `/api/mi-cuenta/facturas`. Todo vinculado la ve, contado incluido; pero a
- * contado el bloque Saldo sólo se le muestra si tiene facturas impagas (el
- * límite de crédito, sólo cuenta corriente con límite cargado).
+ * `/api/mi-cuenta/facturas`. Sólo cuenta corriente según el espejo
+ * (`accesoFacturacion`): sin vínculo o de contado ⇒ 404. El límite de crédito,
+ * sólo con límite cargado.
  */
 export default async function FacturasPage({
   searchParams,
@@ -28,15 +27,8 @@ export default async function FacturasPage({
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.facturas));
 
-  // Sin vínculo no se llama a Alegra ni se lee `public`: se ofrece vincular.
-  if (!cliente) {
-    return (
-      <EmptyState
-        title="Vincule su cuenta de cliente para ver su cuenta corriente."
-        action={<BotonEnlace href={rutaVincular(RUTAS_MI_CUENTA.facturas)}>Vincular mi cuenta</BotonEnlace>}
-      />
-    );
-  }
+  // Sin acceso (sin vínculo o de contado) la sección no existe: ni Alegra ni `public`.
+  if (!cliente || !(await accesoFacturacion())) notFound();
 
   const codigo = cliente.codigocliente;
   const [cuentaR, paginaR, tenantR] = await Promise.allSettled([
@@ -68,8 +60,8 @@ export default async function FacturasPage({
     cuit: cuenta?.cliente.cuit ?? cliente.cuit,
   });
 
-  // Contado: el bloque Saldo sólo aparece si debe algo. Si el saldo no se pudo
-  // traer, se decide con el tipo de cuenta de la identidad.
+  // Defensivo: si Alegra lo diera de contado (el espejo dijo corriente), el
+  // bloque Saldo sólo aparece si debe algo. Sin saldo, el tipo de la identidad.
   const mostrarSaldo = cuenta
     ? cuenta.cliente.tipoCuenta === "corriente" || cuenta.cliente.deudatotal > 0 || cuenta.abiertas.length > 0
     : cliente.tipoCuenta === "corriente";

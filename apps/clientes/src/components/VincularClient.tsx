@@ -10,7 +10,7 @@ type Paso = "documento" | "codigo" | "confirmar";
 
 /** Título y bajada de la card: todo el flujo vive en una sola card. */
 const TITULO = "Vincule su cuenta de cliente";
-const BAJADA = "Vea sus facturas y sus compras en Central LED.";
+const BAJADA = "Compre con sus precios y condiciones de cliente de Central LED.";
 
 export function VincularClient({
   volver,
@@ -103,9 +103,9 @@ export function VincularClient({
         return;
       }
       // Directo a donde tiene sentido seguir (el checkout si venía de ahí; si
-      // no, sus facturas) y refresco de los Server Components: el header y los
+      // no, el resumen de Mi cuenta: Facturación es sólo de cuenta corriente) y refresco de los Server Components: el header y los
       // precios pasan a resolverse con la lista del cliente recién vinculado.
-      router.replace(volver ?? RUTAS_MI_CUENTA.facturas);
+      router.replace(volver ?? RUTAS_MI_CUENTA.resumen);
       router.refresh();
     } catch {
       setError("No pudimos conectarnos. Revise su conexión.");

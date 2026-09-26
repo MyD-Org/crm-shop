@@ -7,8 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const identidad = vi.fn();
+/** Cuenta corriente por defecto; `mockResolvedValueOnce(false)` = contado o sin fila en el espejo. */
+const acceso = vi.fn(async () => true);
 const getDocumentPdf = vi.fn();
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
+vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/cuenta-corriente/alegra-cc", () => ({
   esDocumentKind: (v: unknown) => v === "factura" || v === "pago" || v === "presupuesto",
   esLimiteAlegra: (e: unknown) => e instanceof Error && /^Alegra 429 /.test(e.message),
@@ -88,11 +91,14 @@ describe("GET /api/mi-cuenta/documentos/[kind]/[id]", () => {
     expect(identidad).not.toHaveBeenCalled();
   });
 
-  it("anónimo 401; sin vínculo 403", async () => {
+  it("anónimo 401; sin vínculo o de contado 404", async () => {
     identidad.mockResolvedValue({ clerkUserId: null, cliente: null });
     await esperaError(await pedir("factura", "1"), 401, "Inicie sesión para ver su cuenta corriente.");
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
-    await esperaError(await pedir("factura", "1"), 403, "Vincule su cuenta de cliente para ver sus documentos.");
+    await esperaError(await pedir("factura", "1"), 404, "Esta sección no está disponible para su cuenta.");
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
+    acceso.mockResolvedValueOnce(false);
+    await esperaError(await pedir("factura", "1"), 404, "Esta sección no está disponible para su cuenta.");
     expect(getDocumentPdf).not.toHaveBeenCalled();
   });
 

@@ -1,41 +1,31 @@
 import { notFound, redirect } from "next/navigation";
-import { EmptyState } from "@myd-org/ui";
-import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { AvisoSeccionCaida } from "@/components/mi-cuenta/cuenta-corriente/AvisoSeccionCaida";
 import { AvisosLista } from "@/components/mi-cuenta/cuenta-corriente/AvisosLista";
+import { accesoFacturacion } from "@/lib/acceso-facturacion";
 import { identidadActual } from "@/lib/auth";
-import { tipoCuentaEspejo } from "@/lib/contactos-espejo";
 import { listarAvisos } from "@/lib/cuenta-corriente/avisos";
 import { rutaIngreso } from "@/lib/ingreso";
-import { RUTAS_MI_CUENTA, rutaVincular, seccionDesplegada } from "@/lib/mi-cuenta-nav";
+import { RUTAS_MI_CUENTA, seccionDesplegada } from "@/lib/mi-cuenta-nav";
 
 /**
  * Avisos: los avisos de vencimiento que el CRM le envió al cliente (ex campana
- * del portal). Sólo la base: ninguna llamada a Alegra. Todo vinculado la ve,
- * contado incluido.
+ * del portal). Sólo la base: ninguna llamada a Alegra. Sólo cuenta corriente
+ * (`accesoFacturacion`): sin vínculo o de contado ⇒ 404.
  */
 export default async function AvisosPage() {
   if (!seccionDesplegada("avisos")) notFound();
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.avisos));
+  if (!cliente || !(await accesoFacturacion())) notFound();
 
-  if (!cliente) {
-    return (
-      <EmptyState
-        title="Vincule su cuenta de cliente para recibir avisos de sus facturas."
-        action={<BotonEnlace href={rutaVincular(RUTAS_MI_CUENTA.avisos)}>Vincular mi cuenta</BotonEnlace>}
-      />
-    );
-  }
-
-  const codigo = cliente.codigocliente;
-  const [avisosR, tipoR] = await Promise.allSettled([listarAvisos(codigo), tipoCuentaEspejo(codigo)]);
-  if (avisosR.status === "rejected") {
-    console.error(`mi-cuenta/avisos: lectura caída (${avisosR.reason instanceof Error ? avisosR.reason.name : "desconocido"})`);
+  let avisos: Awaited<ReturnType<typeof listarAvisos>>;
+  try {
+    avisos = await listarAvisos(cliente.codigocliente);
+  } catch (err) {
+    console.error(`mi-cuenta/avisos: lectura caída (${err instanceof Error ? err.name : "desconocido"})`);
     return <AvisoSeccionCaida que="sus avisos" />;
   }
-  // Sin espejo, "condiciones actualizadas" lleva a Facturas y saldo (siempre visible).
-  const esCuentaCorriente = tipoR.status === "fulfilled" && tipoR.value === "corriente";
 
-  return <AvisosLista avisos={avisosR.value} esCuentaCorriente={esCuentaCorriente} />;
+  // Con acceso ya es cuenta corriente: "condiciones actualizadas" lleva a Condiciones.
+  return <AvisosLista avisos={avisos} esCuentaCorriente />;
 }

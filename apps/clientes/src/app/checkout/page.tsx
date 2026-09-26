@@ -4,6 +4,7 @@ import { CheckoutClient } from "@/components/CheckoutClient";
 import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
+import { vincularCambiaAlgo } from "@/lib/contactos-espejo";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
 import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { pagosHabilitados } from "@/lib/pagos-flag";
@@ -54,6 +55,10 @@ export default async function CheckoutPage() {
   ]);
 
   const perfil = dc.perfil;
+  // Su documento ya es de un cliente de Alegra y no vinculó: se le ofrece
+  // vincular sólo si eso le cambia algo (lista propia o cuenta corriente).
+  const coincidente = !cliente ? perfil?.coincideConAlegra : null;
+  const sugerirVincular = coincidente ? await vincularCambiaAlgo(coincidente) : false;
   // Para el formulario del no vinculado: sólo las columnas que muestra.
   const perfilUI = perfil
     ? {
@@ -88,9 +93,7 @@ export default async function CheckoutPage() {
         pagosHabilitados={pagos}
         envioHabilitado={envio}
         direccionesGuardadas={direcciones}
-        // Su documento ya es de un cliente de Alegra y no vinculó: se le
-        // recomienda vincular ANTES de pagar a precio de lista.
-        sugerirVincular={Boolean(perfil?.coincideConAlegra) && !cliente}
+        sugerirVincular={sugerirVincular}
       />
     </>
   );

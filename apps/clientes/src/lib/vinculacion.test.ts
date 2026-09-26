@@ -155,17 +155,32 @@ describe("intentarVinculacionPorEmail", () => {
     });
   });
 
-  it("miss en el espejo: exactamente 1 búsqueda en vivo; si trae un cliente, vincula", async () => {
+  it("miss en el espejo: exactamente 1 búsqueda en vivo; si trae un cliente cuenta corriente, vincula", async () => {
     buscarContactosPorEmail.mockResolvedValue([
-      { id: "9", name: "Cliente Nuevo", type: ["client"], term: { days: 0 }, priceList: null },
+      { id: "9", name: "Cliente Nuevo", type: ["client"], term: { days: 30 }, priceList: null },
     ]);
     const r = await intentarVinculacionPorEmail(nuevoUsuario(), "nuevo@cliente.example");
     expect(buscarContactosPorEmail).toHaveBeenCalledTimes(1);
     expect(r?.alegraContactId).toBe("9");
     expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({
       alegra_contact_id: "9",
-      tipo_cuenta: "contado",
+      tipo_cuenta: "corriente",
     });
+  });
+
+  it("cliente de contado en el espejo: no vincula ni graba sin_coincidencia (0 llamadas a Alegra)", async () => {
+    espejo = [filaEspejo("42", { tipo: "contado" })];
+    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example")).toBeNull();
+    expect(buscarContactosPorEmail).not.toHaveBeenCalled();
+    expect(insertsEn("client_links")).toHaveLength(0);
+  });
+
+  it("cliente de contado en vivo: no vincula ni graba sin_coincidencia", async () => {
+    buscarContactosPorEmail.mockResolvedValue([
+      { id: "9", name: "Cliente Nuevo", type: ["client"], term: { days: 0 }, priceList: null },
+    ]);
+    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "nuevo@cliente.example")).toBeNull();
+    expect(insertsEn("client_links")).toHaveLength(0);
   });
 
   it("solo proveedor en vivo (el espejo ya filtra clientes): sin_coincidencia tras el respaldo", async () => {

@@ -9,7 +9,8 @@ import { seedOperator, seedShopOrder, seedShopOrderItem, seedTenant, truncateAll
 
 // "Vincular factura" (change webhooks-stock-alegra, PR-3b) contra la base real de test, con
 // las migraciones REALES del Shop (0011 facturado_*, 0012 stock_reservado, 0013 factura_*).
-// Alegra se simula con un fetch falso por URL: nada sale a la red. Datos inventados.
+// Alegra (y el CDN del PDF) se simula con un fetch falso por URL: nada sale a la red. El mail
+// "Su factura" se intercepta en `sendEmail`: nada sale a Resend. Datos inventados.
 
 let session: Record<string, unknown>
 
@@ -18,8 +19,14 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-tenant-id": "tenant-a" }),
 }))
 vi.mock("iron-session", () => ({ getIronSession: async () => session }))
+const sendEmail = vi.fn(async (..._args: unknown[]) => true)
+vi.mock("@/lib/email", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/email")>()),
+  sendEmail: (...args: unknown[]) => sendEmail(...args),
+}))
 
 const { GET, POST, DELETE } = await import("@/app/api/admin/pedidos/[id]/factura/route")
+const { POST: REENVIAR } = await import("@/app/api/admin/pedidos/[id]/factura/reenviar/route")
 
 const TENANT_A = "tenant-a"
 const TENANT_B = "tenant-b"
@@ -47,10 +54,14 @@ const alegra = {
   facturas: [] as FacturaRaw[],
   status: 200,
   llamadas: [] as string[],
+  /** Lo que da el CDN por la URL firmada del PDF. null = Alegra no informa PDF. */
+  pdf: "%PDF-1.4 factura de prueba" as string | null,
 }
+const PDF_URL = "https://cdn.alegra.example/firmada/7040.pdf?token=secreto"
 
 function fakeFetch(input: unknown): Promise<Response> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url
+  if (url === PDF_URL) return Promise.resolve(new Response(alegra.pdf ?? "", { status: 200 }))
   if (!url.includes("api.alegra.com")) return Promise.reject(new Error(`fetch inesperado en test: ${url}`))
   const u = new URL(url)
   const path = u.pathname.replace("/api/v1", "")
@@ -59,6 +70,9 @@ function fakeFetch(input: unknown): Promise<Response> {
   const porId = path.match(/^\/invoices\/(\d+)$/)
   if (porId) {
     const f = alegra.facturas.find((x) => String(x.id) === porId[1])
+    if (f && u.searchParams.get("fields") === "pdf") {
+      return Promise.resolve(Response.json({ ...f, pdf: alegra.pdf === null ? null : PDF_URL }))
+    }
     return Promise.resolve(f ? Response.json(f) : new Response('{"message":"no existe"}', { status: 404 }))
   }
   if (path === "/invoices") {
@@ -92,6 +106,8 @@ const buscar = (id: string, numero: string, host?: string) =>
   GET(req(`/api/admin/pedidos/${id}/factura?numero=${encodeURIComponent(numero)}`, { host }), idParams(id))
 const vincular = (id: string, body: unknown, host?: string) =>
   POST(req(`/api/admin/pedidos/${id}/factura`, { method: "POST", body, host }), idParams(id))
+const reenviar = (id: string, host?: string) =>
+  REENVIAR(req(`/api/admin/pedidos/${id}/factura/reenviar`, { method: "POST", host }), idParams(id))
 const desvincular = (id: string, esperada?: string, host?: string) =>
   DELETE(
     req(`/api/admin/pedidos/${id}/factura${esperada ? `?alegraId=${esperada}` : ""}`, { method: "DELETE", host }),
@@ -118,6 +134,7 @@ describe("admin: vincular factura de Alegra a un pedido", () => {
     alegra.facturas = [factura()]
     alegra.status = 200
     alegra.llamadas = []
+    alegra.pdf = "%PDF-1.4 factura de prueba"
     await truncateAll()
     await seedTenant(TENANT_A)
     await seedTenant(TENANT_B)
@@ -251,13 +268,66 @@ describe("admin: vincular factura de Alegra a un pedido", () => {
       expect(await reservado(TENANT_A, "item-9")).toBe(0)
     })
 
-    it("idempotente: la misma factura otra vez → 200 sin cambiar la fecha original", async () => {
+    it("idempotente: la misma factura otra vez → 200 sin cambiar la fecha original ni reenviar el mail", async () => {
       const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
       await vincular(p.id, { alegraId: "7040" })
       const primera = (await rowById(p.id)).facturadoEn
       const res = await vincular(p.id, { alegraId: "7040" })
       expect(res.status).toBe(200)
       expect((await rowById(p.id)).facturadoEn).toEqual(primera)
+      expect(await res.json()).not.toHaveProperty("avisoFactura")
+      expect(sendEmail).toHaveBeenCalledTimes(1)
+    })
+
+    it("le manda al cliente la factura con el PDF adjunto y lo informa enmascarado", async () => {
+      const p = await seedShopOrder(TENANT_A, { estado: "confirmado", clienteCodigo: "55" })
+      const res = await vincular(p.id, { alegraId: "7040" })
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as PedidoDetalleDto & { avisoFactura: unknown }
+      expect(body.avisoFactura).toEqual({ resultado: "enviado", destino: "co*******@cliente.example" })
+      expect(body.factura?.alegraId).toBe("7040")
+
+      expect(sendEmail).toHaveBeenCalledTimes(1)
+      const [, to, subject, html, , opts] = sendEmail.mock.calls[0] as [
+        unknown,
+        string,
+        string,
+        string,
+        string,
+        { attachments: { filename: string; content: Buffer }[]; idempotencyKey: string },
+      ]
+      expect(to).toBe("comprador@cliente.example")
+      expect(subject).toContain(`Factura 00201-00007040 de su pedido PED-${String(p.numero).padStart(8, "0")}`)
+      expect(html).not.toContain(PDF_URL)
+      expect(opts.attachments[0].filename).toBe("Factura-00201-00007040.pdf")
+      expect(opts.attachments[0].content.toString()).toBe("%PDF-1.4 factura de prueba")
+      expect(opts.idempotencyKey).toBe(`pedido-factura/${p.id}/7040`)
+    })
+
+    it("sin PDF en Alegra: vincula igual y no manda el mail", async () => {
+      alegra.pdf = null
+      const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
+      const res = await vincular(p.id, { alegraId: "7040" })
+      expect(res.status).toBe(200)
+      expect(((await res.json()) as { avisoFactura: unknown }).avisoFactura).toMatchObject({ resultado: "sin_pdf" })
+      expect((await rowById(p.id)).facturaAlegraId).toBe("7040")
+      expect(sendEmail).not.toHaveBeenCalled()
+    })
+
+    it("pedido sin email: vincula igual y avisa sin_email", async () => {
+      const p = await seedShopOrder(TENANT_A, { estado: "confirmado", clienteEmail: "" })
+      const res = await vincular(p.id, { alegraId: "7040" })
+      expect(((await res.json()) as { avisoFactura: unknown }).avisoFactura).toEqual({ resultado: "sin_email", destino: null })
+      expect(sendEmail).not.toHaveBeenCalled()
+    })
+
+    it("si Resend falla, la factura queda vinculada igual", async () => {
+      sendEmail.mockRejectedValueOnce(new Error("from no verificado"))
+      const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
+      const res = await vincular(p.id, { alegraId: "7040" })
+      expect(res.status).toBe(200)
+      expect(((await res.json()) as { avisoFactura: unknown }).avisoFactura).toMatchObject({ resultado: "fallo" })
+      expect((await rowById(p.id)).facturaAlegraId).toBe("7040")
     })
 
     it("con otra factura ya vinculada → 409 y no cambia nada", async () => {
@@ -305,6 +375,34 @@ describe("admin: vincular factura de Alegra a un pedido", () => {
       session = {}
       const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
       expect((await vincular(p.id, { alegraId: "7040" })).status).toBe(401)
+    })
+  })
+
+  describe("reenviar factura (POST …/reenviar)", () => {
+    it("vuelve a mandar el mail con otra clave de idempotencia", async () => {
+      const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
+      await vincular(p.id, { alegraId: "7040" })
+      const res = await reenviar(p.id)
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ avisoFactura: { resultado: "enviado", destino: "co*******@cliente.example" } })
+      expect(sendEmail).toHaveBeenCalledTimes(2)
+      const clave = (sendEmail.mock.calls[1][5] as { idempotencyKey: string }).idempotencyKey
+      expect(clave).toMatch(new RegExp(`^pedido-factura/${p.id}/7040/reenvio/\\d+$`))
+    })
+
+    it("sin factura vinculada → 422; pedido ajeno o id malformado → 404; sin sesión → 401", async () => {
+      const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
+      const r422 = await reenviar(p.id)
+      expect(r422.status).toBe(422)
+      expect(await r422.json()).toMatchObject({ code: "sin_factura" })
+
+      const ajeno = await seedShopOrder(TENANT_B, { estado: "confirmado", facturaAlegraId: "7040", facturadoEn: new Date() })
+      expect((await reenviar(ajeno.id)).status).toBe(404)
+      expect((await reenviar("no-es-uuid")).status).toBe(404)
+      expect(sendEmail).not.toHaveBeenCalled()
+
+      session = {} as Record<string, unknown>
+      expect((await reenviar(p.id)).status).toBe(401)
     })
   })
 

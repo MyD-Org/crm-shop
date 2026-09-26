@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const identidad = vi.fn();
+/** Cuenta corriente por defecto; `mockResolvedValueOnce(false)` = contado o sin fila en el espejo. */
+const acceso = vi.fn(async () => true);
 const r2 = { presignPut: vi.fn() };
 const getR2 = vi.fn<() => typeof r2 | null>();
 const crearSubiendo = vi.fn();
@@ -15,6 +17,7 @@ const listarDelCliente = vi.fn();
 const contactoPorId = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
+vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/r2", () => ({ getComprobantesR2: () => getR2() }));
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-a" }));
 vi.mock("@/lib/contactos-espejo", () => ({ contactoPorId: (...a: unknown[]) => contactoPorId(...a) }));
@@ -81,11 +84,14 @@ beforeEach(() => {
 });
 
 describe("POST /api/mi-cuenta/comprobantes (init)", () => {
-  it("anónimo: 401; sin vínculo: 403; nada se crea", async () => {
+  it("anónimo: 401; sin vínculo o de contado: 404; nada se crea", async () => {
     identidad.mockResolvedValue({ clerkUserId: null, cliente: null });
     expect((await post(body())).status).toBe(401);
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
-    expect((await post(body())).status).toBe(403);
+    expect((await post(body())).status).toBe(404);
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
+    acceso.mockResolvedValueOnce(false);
+    expect((await post(body())).status).toBe(404);
     expect(crearSubiendo).not.toHaveBeenCalled();
   });
 

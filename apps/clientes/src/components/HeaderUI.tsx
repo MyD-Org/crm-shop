@@ -35,6 +35,8 @@ export type CuentaHeader =
       nombre: string | null;
       /** Hay sesión de Clerk (la cookie del CRM sola no cuenta: no tiene menú). */
       conSesion: boolean;
+      /** Cuenta corriente según el espejo: sólo así el menú ofrece Facturas. */
+      esCuentaCorriente: boolean;
     };
 
 /** Alto de la barra de categorías del DS (52px + borde). */
@@ -116,6 +118,7 @@ function HeaderVista({
   const conSesion =
     hidratado && (clerkCargo || isLoaded) ? !!userId : cuenta.estado === "resuelta" ? cuenta.conSesion : null;
   const nombre = cuenta.estado === "resuelta" ? cuenta.nombre : null;
+  const esCuentaCorriente = cuenta.estado === "resuelta" && cuenta.esCuentaCorriente;
 
   return (
     // `site-header` en el wrapper y no en <SiteHeader>: el DS pone className
@@ -169,7 +172,7 @@ function HeaderVista({
                 Seguridad / Cerrar sesión). Los datos y la seguridad siguen
                 siendo el panel de Clerk: ver src/components/MenuUsuario.tsx.
               */
-              <MenuUsuario nombre={nombre} />
+              <MenuUsuario nombre={nombre} esCuentaCorriente={esCuentaCorriente} />
             )}
 
             <CartPreview autoAbrir={!compacto} pathname={pathname} />

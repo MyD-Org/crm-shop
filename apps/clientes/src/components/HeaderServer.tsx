@@ -3,6 +3,7 @@ import { connection } from "next/server"
 import type { VisibleOn } from "@myd-org/ui"
 import { categoriasNav } from "@/lib/catalogo-publico"
 import { flagsPublicos } from "@/lib/flags-publicos"
+import { accesoFacturacion } from "@/lib/acceso-facturacion"
 import { identidadActual } from "@/lib/auth"
 import { getContenidoHome } from "@/lib/home-datos"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
@@ -66,8 +67,12 @@ async function HeaderDinamico({
   // base o los flags (en el prerender no arranca ninguna lectura, y el catch
   // de abajo no confunde el corte del prerender con una base caída).
   await connection()
-  const [identidad, categorias] = await Promise.all([
+  const [identidad, esCuentaCorriente, categorias] = await Promise.all([
     identidadActual(),
+    // Facturas en el menú: sólo cuenta corriente. Una consulta al espejo (base,
+    // nunca Alegra) y sólo con vínculo; compartida por request con Mi cuenta.
+    // Si falla, el menú va sin Facturas.
+    accesoFacturacion(),
     flagsPublicos()
       .then(({ soloVisibles }) => categoriasNav(soloVisibles))
       .catch((err: unknown) => {
@@ -84,6 +89,7 @@ async function HeaderDinamico({
         // su razon social, no por como se llama su cuenta de Gmail.
         nombre: identidad.cliente?.razonsocial ?? identidad.nombre ?? identidad.email ?? null,
         conSesion: identidad.clerkUserId !== null,
+        esCuentaCorriente,
       }}
       // La vinculacion de cuenta corriente NO va en el header: ocupa mucho para
       // algo que la mayoria no necesita, y se busca en "Mi cuenta > Mis datos".

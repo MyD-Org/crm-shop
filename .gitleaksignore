@@ -10,3 +10,10 @@
 # Token de relleno ("0123456789abcdef" x2) en el test del plan de suscripciones de stock (PR #112).
 # Se reemplazó por "a".repeat(32); el commit quedó en el historial de la rama y no se reescribe.
 b373a8e525a3f62cfd94327ed0e02f7f39cfe06c:apps/admin/src/lib/alegra-webhooks-stock.test.ts:generic-api-key:9
+# URLs de Postgres de relleno ("usuario:password@host") en un .env.example que agregó un agente en
+# la rama del PR #178; el archivo se retiró en la misma rama (el guard prohíbe .env*), pero el
+# commit quedó en el historial y no se reescribe (sin force push en este remoto).
+5fd3099f5f4c1f56aadef8394a8de9dd9a27cdf7:apps/clientes/.env.example:postgres-url-con-password:2
+5fd3099f5f4c1f56aadef8394a8de9dd9a27cdf7:apps/clientes/.env.example:postgres-url-con-password:3
+5fd3099f5f4c1f56aadef8394a8de9dd9a27cdf7:apps/clientes/.env.example:postgres-url-con-password:4
+5fd3099f5f4c1f56aadef8394a8de9dd9a27cdf7:apps/clientes/.env.example:postgres-url-con-password:5

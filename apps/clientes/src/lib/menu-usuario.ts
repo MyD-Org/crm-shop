@@ -20,7 +20,8 @@ export const HREF_FAVORITOS = RUTAS_MI_CUENTA.favoritos;
 
 /**
  * "Facturación" lleva a "Facturas y saldo": desde que el portal del CRM dejó de
- * enlazarse, el Shop es la única puerta a la cuenta corriente del cliente.
+ * enlazarse, el Shop es la única puerta a la cuenta corriente del cliente. Sólo
+ * para cuenta corriente (ver `entradasMenu`).
  */
 export const HREF_FACTURACION = RUTAS_MI_CUENTA.facturas;
 
@@ -41,26 +42,31 @@ export interface EntradaMenu {
 
 /**
  * Entradas del menú, en el orden de la navegación de Mi cuenta. Favoritos y
- * Facturación aparecen sólo cuando el despliegue ya publica su sección.
- * "Facturas" y nunca "Cuenta corriente": la ven también los clientes de
- * contado (y quien no vinculó, que ahí encuentra cómo hacerlo). Los
- * separadores los agrega el componente.
+ * Facturación aparecen sólo cuando el despliegue ya publica su sección, y
+ * Facturación además sólo a cuenta corriente (`esCuentaCorriente`, del espejo:
+ * lo resuelve el header en el servidor, como el menú de Mi cuenta). "Facturas"
+ * y nunca "Cuenta corriente": se busca por lo que contiene. Los separadores los
+ * agrega el componente.
  */
 export function entradasMenu(
   despliegue: CapacidadesDespliegue = CAPACIDADES_DESPLIEGUE,
+  esCuentaCorriente = false,
 ): readonly EntradaMenu[] {
   return [
     { id: "pedidos", label: "Mis pedidos" },
     ...(despliegue.favoritos ? [{ id: "favoritos", label: "Favoritos" } as const] : []),
-    ...(despliegue.facturas ? [{ id: "facturacion", label: "Facturas" } as const] : []),
+    ...(esCuentaCorriente && despliegue.facturas ? [{ id: "facturacion", label: "Facturas" } as const] : []),
     { id: "datos", label: "Mis datos" },
     { id: "seguridad", label: "Seguridad" },
     { id: "salir", label: "Cerrar sesión", tone: "danger" },
   ];
 }
 
-/** Menú del despliegue actual. */
+/** Menú del despliegue actual para quien no es cuenta corriente. */
 export const ENTRADAS_MENU: readonly EntradaMenu[] = entradasMenu();
+
+/** Menú del despliegue actual para cuenta corriente (con Facturas). */
+export const ENTRADAS_MENU_CC: readonly EntradaMenu[] = entradasMenu(CAPACIDADES_DESPLIEGUE, true);
 
 /**
  * Texto para el lector de pantalla del botón que abre el menú. El nombre

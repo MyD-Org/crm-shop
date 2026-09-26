@@ -89,28 +89,25 @@ describe("seccionesVisibles", () => {
     ]);
   });
 
-  it("rebanada 2 sin vínculo: Pagos y Presupuestos no aparecen", () => {
+  it("rebanada 2 sin vínculo: ninguna sección de Facturación", () => {
     const s = ids(seccionesVisibles(cap(true, false), REBANADA_2));
-    expect(s).toContain("facturas");
-    expect(s).not.toContain("pagos");
-    expect(s).not.toContain("presupuestos");
+    for (const id of ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]) expect(s).not.toContain(id);
   });
 
-  it("contado: todo Facturación menos Condiciones", () => {
+  it("contado vinculado: ninguna sección de Facturación, aunque todo esté desplegado", () => {
     const s = ids(seccionesVisibles(cap(true, true, false), TODO));
-    expect(s).toEqual(expect.arrayContaining(["facturas", "pagos", "presupuestos", "avisos"]));
-    expect(s).not.toContain("condiciones");
+    for (const id of ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]) expect(s).not.toContain(id);
+    expect(s).toEqual(["pedidos", "favoritos", "datos", "direcciones", "seguridad", "salir"]);
   });
 
-  it("sin vínculo: sólo Facturas y saldo (la página ofrece vincular), aunque el resto esté desplegado", () => {
-    const s = ids(seccionesVisibles(cap(true, false, true), TODO));
-    expect(s).toContain("facturas");
-    for (const id of ["pagos", "presupuestos", "condiciones", "avisos"]) expect(s).not.toContain(id);
+  it("sin vínculo: ninguna sección de Facturación, aunque se pasara cuenta corriente", () => {
+    const s = ids(seccionesVisibles(capacidadesDe({ clerkUserId: "u", cliente: null }, true), TODO));
+    for (const id of ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]) expect(s).not.toContain(id);
   });
 
-  it("cookie del CRM sin Clerk: Pedidos, Facturación y Direcciones y envíos", () => {
-    const s = seccionesVisibles(cap(false, true), REBANADA_1);
-    expect(ids(s)).toEqual(["pedidos", "facturas", "direcciones"]);
+  it("cookie del CRM sin Clerk: Pedidos, Facturación (sólo cuenta corriente) y Direcciones y envíos", () => {
+    expect(ids(seccionesVisibles(cap(false, true, true), REBANADA_1))).toEqual(["pedidos", "facturas", "direcciones"]);
+    expect(ids(seccionesVisibles(cap(false, true), REBANADA_1))).toEqual(["pedidos", "direcciones"]);
   });
 
   it("sin Facturación desplegada: 5 entradas para Clerk", () => {
@@ -119,7 +116,7 @@ describe("seccionesVisibles", () => {
   });
 
   it("la función es total: sin identidad quedan las secciones públicas", () => {
-    expect(ids(seccionesVisibles(cap(false, false), TODO))).toEqual(["pedidos", "facturas", "direcciones"]);
+    expect(ids(seccionesVisibles(cap(false, false), TODO))).toEqual(["pedidos", "direcciones"]);
   });
 
   it("por default usa el despliegue actual: toda Facturación (rebanada 4: Condiciones y Avisos)", () => {
@@ -154,9 +151,9 @@ describe("seccionesVisibles", () => {
   });
 
   it("badge: sólo si el contador es mayor a 0", () => {
-    const con = seccionesVisibles(cap(true, true), TODO, { avisos: 3 });
+    const con = seccionesVisibles(cap(true, true, true), TODO, { avisos: 3 });
     expect(con.find((x) => x.id === "avisos")?.badge).toBe(3);
-    const sin = seccionesVisibles(cap(true, true), TODO, { avisos: 0 });
+    const sin = seccionesVisibles(cap(true, true, true), TODO, { avisos: 0 });
     expect(sin.find((x) => x.id === "avisos")).not.toHaveProperty("badge");
     expect(sin.find((x) => x.id === "pedidos")).not.toHaveProperty("badge");
   });
@@ -178,7 +175,7 @@ describe("agruparSecciones", () => {
     expect(grupos.map((g) => g.id)).toEqual(["compras", "perfil"]);
   });
 
-  it("nunca 'Cuenta corriente' como título: lo ven también los de contado", () => {
+  it("nunca 'Cuenta corriente' como título: se busca por lo que contiene", () => {
     expect(GRUPOS_MI_CUENTA.map((g) => g.label)).not.toContain("Cuenta corriente");
   });
 });
@@ -199,9 +196,9 @@ describe("seccionDesplegada", () => {
 });
 
 describe("rebanada 4 (Condiciones y Avisos) con el despliegue actual", () => {
-  it("contado vinculado: Avisos sí, Condiciones no (sin entrada en el menú)", () => {
+  it("contado vinculado: ni Avisos ni Condiciones (sin entrada en el menú)", () => {
     const s = ids(seccionesVisibles(cap(true, true, false)));
-    expect(s).toContain("avisos");
+    expect(s).not.toContain("avisos");
     expect(s).not.toContain("condiciones");
   });
 
@@ -223,7 +220,7 @@ describe("rebanada 4 (Condiciones y Avisos) con el despliegue actual", () => {
   });
 
   it("badge de avisos sin leer en la entrada Avisos", () => {
-    const avisos = seccionesVisibles(cap(true, true), undefined, { avisos: 2 }).find((x) => x.id === "avisos");
+    const avisos = seccionesVisibles(cap(true, true, true), undefined, { avisos: 2 }).find((x) => x.id === "avisos");
     expect(avisos).toMatchObject({ grupo: "facturacion", badge: 2 });
   });
 });
@@ -358,10 +355,17 @@ describe("bajadaMiCuenta", () => {
     );
   });
 
-  it("con todo desplegado menciona facturas y favoritos", () => {
-    expect(bajadaMiCuenta(TODO)).toBe(
+  it("con todo desplegado, a cuenta corriente le menciona facturas y favoritos", () => {
+    expect(bajadaMiCuenta(TODO, true)).toBe(
       "Siga sus pedidos, consulte sus facturas y su saldo, guarde sus favoritos y administre sus direcciones y datos.",
     );
+  });
+
+  it("a quien no es cuenta corriente no le promete facturas", () => {
+    const texto = bajadaMiCuenta(TODO);
+    expect(texto).toBe("Siga sus pedidos, guarde sus favoritos y administre sus direcciones y datos.");
+    expect(texto).not.toMatch(/factura/i);
+    expect(bajadaMiCuenta(TODO, false)).toBe(texto);
   });
 
   it("por defecto usa lo desplegado hoy", () => {

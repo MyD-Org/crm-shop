@@ -1,6 +1,6 @@
 import { esIdAlegra } from "@/lib/alegra";
 import { esDocumentKind, esLimiteAlegra, getDocumentPdf } from "@/lib/cuenta-corriente/alegra-cc";
-import { jsonNoStore, noStore, requerirCliente } from "@/lib/cuenta-corriente/guard";
+import { jsonNoStore, noStore, requerirCuentaCorriente } from "@/lib/cuenta-corriente/guard";
 import {
   DOCUMENTO_CAIDO,
   DOCUMENTO_INVALIDO,
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ kind
     return jsonNoStore({ error: DOCUMENTO_INVALIDO }, { status: 400 });
   }
 
-  const guard = await requerirCliente();
+  const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
 
   let doc: Awaited<ReturnType<typeof getDocumentPdf>>;

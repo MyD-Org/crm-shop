@@ -7,10 +7,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const identidad = vi.fn();
+/** Cuenta corriente por defecto; `mockResolvedValueOnce(false)` = contado o sin fila en el espejo. */
+const acceso = vi.fn(async () => true);
 const listarAvisos = vi.fn();
 const contarNoLeidos = vi.fn();
 const marcarLeidos = vi.fn();
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
+vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/cuenta-corriente/avisos", () => ({
   listarAvisos: (...a: unknown[]) => listarAvisos(...a),
   contarNoLeidos: (...a: unknown[]) => contarNoLeidos(...a),
@@ -40,13 +43,16 @@ beforeEach(() => {
 });
 
 describe("GET /api/mi-cuenta/avisos", () => {
-  it("anónimo: 401; sin vínculo: 403; sin tocar la base", async () => {
+  it("anónimo: 401; sin vínculo o de contado: 404; sin tocar la base", async () => {
     identidad.mockResolvedValue({ clerkUserId: null, cliente: null });
     expect((await GET()).status).toBe(401);
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
     const res = await GET();
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
+    acceso.mockResolvedValueOnce(false);
+    expect((await GET()).status).toBe(404);
     expect(listarAvisos).not.toHaveBeenCalled();
   });
 

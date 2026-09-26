@@ -8,6 +8,7 @@ import { useHidratado } from "@/lib/hidratado";
 import { Avatar, DropdownMenu, type DropdownMenuEntry } from "@myd-org/ui";
 import {
   ENTRADAS_MENU,
+  ENTRADAS_MENU_CC,
   HREF_FACTURACION,
   HREF_FAVORITOS,
   HREF_MIS_DATOS,
@@ -97,8 +98,11 @@ const ICONOS: Record<IdEntradaMenu, React.ReactNode> = {
  * Clerk. El menú es nuestro. "Mis pedidos" y "Mis datos" son páginas del
  * sitio; solo "Seguridad" abre el panel de Clerk, que sigue siendo el dueño de
  * contraseña, correo, verificación en dos pasos y sesiones.
+ *
+ * `esCuentaCorriente` lo resuelve el servidor (HeaderServer, espejo del CRM):
+ * viene en el mismo HTML que se hidrata, así que el menú no cambia al hidratar.
  */
-export function MenuUsuario({ nombre }: { nombre: string | null }) {
+export function MenuUsuario({ nombre, esCuentaCorriente }: { nombre: string | null; esCuentaCorriente: boolean }) {
   const router = useRouter();
   const clerk = useClerk();
   // En el hueco del header Clerk puede haber cargado antes de hidratar: el
@@ -135,7 +139,8 @@ export function MenuUsuario({ nombre }: { nombre: string | null }) {
   // Sin cabecera: el nombre ya está en el botón que abre el menú, a unos pocos
   // píxeles, y el correo vive en Mis datos. Sin ella el menú es exactamente la
   // misma lista que la barra lateral de Mi cuenta, flotando.
-  const items: DropdownMenuEntry[] = ENTRADAS_MENU.flatMap((entrada): DropdownMenuEntry[] => {
+  const entradas = esCuentaCorriente ? ENTRADAS_MENU_CC : ENTRADAS_MENU;
+  const items: DropdownMenuEntry[] = entradas.flatMap((entrada): DropdownMenuEntry[] => {
     const item: DropdownMenuEntry = {
       label: entrada.label,
       icon: ICONOS[entrada.id],

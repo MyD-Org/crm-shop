@@ -17,7 +17,7 @@ export default function IngresarPage() {
         <div className="text-center">
           <h1 className="text-2xl font-extrabold text-text">Ingrese a su cuenta</h1>
           <p className="mt-2 text-sm text-muted">
-            Para ver sus pedidos, sus facturas y sus compras.
+            Para seguir sus pedidos y guardar sus favoritos.
           </p>
         </div>
         {/*

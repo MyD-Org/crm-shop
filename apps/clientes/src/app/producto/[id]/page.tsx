@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { productoPublico } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
+import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 
@@ -35,5 +36,16 @@ export default async function ProductoPage({ params }: Props) {
 
   if (!producto) notFound();
 
-  return <ProductoClient producto={producto} oferta={oferta} />;
+  return (
+    <>
+      {/* Structured data (Rich Results de Google): ver src/lib/producto-jsonld.ts. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdProductoHtml(producto, process.env.NEXT_PUBLIC_SITE_URL),
+        }}
+      />
+      <ProductoClient producto={producto} oferta={oferta} />
+    </>
+  );
 }

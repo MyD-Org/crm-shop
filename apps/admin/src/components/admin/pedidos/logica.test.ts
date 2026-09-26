@@ -60,9 +60,9 @@ describe("opcionesDeFiltro", () => {
 })
 
 describe("opcionesDeDestino", () => {
-  it("ofrece SÓLO las transiciones permitidas desde el estado actual", () => {
-    expect(opcionesDeDestino("pendiente").map((o) => o.value)).toEqual(["confirmado", "cancelado"])
-    expect(opcionesDeDestino("entregado").map((o) => o.value)).toEqual([
+  it("ofrece SÓLO las transiciones permitidas desde el estado actual (envío)", () => {
+    expect(opcionesDeDestino("pendiente", "envio").map((o) => o.value)).toEqual(["confirmado", "cancelado"])
+    expect(opcionesDeDestino("entregado", "envio").map((o) => o.value)).toEqual([
       "en_camino",
       "preparacion",
       "confirmado",
@@ -70,16 +70,34 @@ describe("opcionesDeDestino", () => {
   })
 
   it("entregado no ofrece cancelar; cancelado no ofrece nada", () => {
-    expect(opcionesDeDestino("entregado").some((o) => o.value === "cancelado")).toBe(false)
-    expect(opcionesDeDestino("cancelado")).toEqual([])
+    expect(opcionesDeDestino("entregado", "envio").some((o) => o.value === "cancelado")).toBe(false)
+    expect(opcionesDeDestino("cancelado", "envio")).toEqual([])
+    expect(opcionesDeDestino("cancelado", "retiro")).toEqual([])
   })
 
   it("usa las etiquetas visibles", () => {
-    expect(opcionesDeDestino("preparacion").map((o) => o.label)).toEqual([
+    expect(opcionesDeDestino("preparacion", "envio").map((o) => o.label)).toEqual([
       "En camino",
       "Entregado",
       "Confirmado",
       "Cancelado",
+    ])
+  })
+
+  it("retiro: no ofrece en_camino como destino desde preparación ni desde entregado", () => {
+    expect(opcionesDeDestino("preparacion", "retiro").map((o) => o.value)).toEqual([
+      "entregado",
+      "confirmado",
+      "cancelado",
+    ])
+    expect(opcionesDeDestino("entregado", "retiro").map((o) => o.value)).toEqual(["preparacion", "confirmado"])
+  })
+
+  it("retiro: un pedido viejo en en_camino sigue ofreciendo sus destinos normales", () => {
+    expect(opcionesDeDestino("en_camino", "retiro").map((o) => o.value)).toEqual([
+      "entregado",
+      "preparacion",
+      "cancelado",
     ])
   })
 })

@@ -5,7 +5,7 @@ import {
   type AlegraFacturaResumen,
 } from "@/lib/alegra"
 import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
-import { resolverFactura, validarFactura, type MotivoFacturaInvalida } from "@/lib/factura-vincular"
+import { nombreDocumentoAlegra, resolverFactura, validarFactura, type MotivoFacturaInvalida } from "@/lib/factura-vincular"
 import { enviarFacturaPedido, logAvisoFactura, type AvisoFactura } from "@/lib/pedido-factura-aviso"
 import {
   desvincularFactura,
@@ -48,13 +48,15 @@ const fail = (status: number, code: string, error: string, extra: Record<string,
   Response.json({ error, code, ...extra }, { status, headers: NO_STORE })
 
 const MSG = {
-  numero: "Ingrese el número de la factura, tal como figura en Alegra.",
+  numero: "Ingrese el número o el enlace de la factura, tal como figura en Alegra.",
   alegraId: "Indique la factura a vincular.",
   cancelado: "Un pedido cancelado no admite una factura vinculada.",
   yaVinculada: "El pedido ya tiene una factura vinculada. Desvincúlela antes de vincular otra.",
   conflicto: "El pedido fue modificado por otra persona. Actualice la página e inténtelo nuevamente.",
   noEncontrada: "No encontramos esa factura en Alegra. Verifique el número e inténtelo nuevamente.",
   ambigua: "Hay más de una factura con ese número en Alegra. Ingrese el número completo, con el punto de venta.",
+  urlOtroDocumento: (documento: string) =>
+    `Ese enlace corresponde a ${nombreDocumentoAlegra(documento)} de Alegra, no a una factura. Ingrese el número o el enlace de la factura.`,
   limite: "Alegra está recibiendo demasiadas consultas. Inténtelo nuevamente en un minuto.",
   alegra: "Alegra no respondió bien. Inténtelo nuevamente en unos minutos.",
   sinConfig: "No se pudo consultar Alegra para esta empresa. Inténtelo nuevamente en unos minutos.",
@@ -141,6 +143,9 @@ export async function GET(req: Request, { params }: IdParams) {
     }
     if (resultado.kind === "no_encontrada") return fail(422, "factura_no_encontrada", MSG.noEncontrada)
     if (resultado.kind === "ambigua") return fail(422, "factura_ambigua", MSG.ambigua)
+    if (resultado.kind === "url_otro_documento") {
+      return fail(422, "factura_url_otro_documento", MSG.urlOtroDocumento(resultado.documento))
+    }
 
     const factura = resultado.factura
     const validacion = validarFactura(factura, clienteCodigo)

@@ -9,6 +9,7 @@ import {
   MOTIVO_MAX,
   MOTIVO_MIN,
   transicionesDesde,
+  type EntregaTipo,
   type EstadoPedido,
 } from "@/lib/pedidos-transiciones"
 
@@ -29,11 +30,11 @@ export function opcionesDeFiltro(): OpcionSelect[] {
 }
 
 /**
- * Destinos que la UI OFRECE desde un estado: los de la tabla de transiciones, nada más.
- * Es comodidad, no seguridad: el que valida es el PATCH.
+ * Destinos que la UI OFRECE desde un estado, según el tipo de entrega del pedido: los de la
+ * tabla de transiciones, nada más. Es comodidad, no seguridad: el que valida es el PATCH.
  */
-export function opcionesDeDestino(estado: EstadoPedido): OpcionSelect[] {
-  return transicionesDesde(estado).map((destino) => ({
+export function opcionesDeDestino(estado: EstadoPedido, entregaTipo: EntregaTipo): OpcionSelect[] {
+  return transicionesDesde(estado, entregaTipo).map((destino) => ({
     value: destino,
     label: ESTADO_PEDIDO_LABEL[destino],
   }))

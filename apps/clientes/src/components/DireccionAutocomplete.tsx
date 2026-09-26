@@ -1,10 +1,12 @@
 "use client";
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import type { Pais } from "@/lib/facturacion";
 import { Field, Input, Spinner } from "@myd-org/ui";
 
 /**
- * Autocompletado de direcciones argentinas contra /api/geocode (Nominatim).
+ * Autocompletado de direcciones contra /api/geocode (Nominatim), del país que
+ * se le pase (Argentina si no se pasa ninguno).
  *
  * Vive acá y no dentro de cada formulario porque lo usan dos: el domicilio
  * fiscal y las direcciones de envío. Duplicar el debounce, el manejo de
@@ -34,6 +36,7 @@ export function DireccionAutocomplete({
   onSeleccionar,
   onCargarAMano,
   suspendido,
+  pais = "AR",
   ayuda,
   placeholder = "Escriba la calle y el número…",
   error,
@@ -57,6 +60,8 @@ export function DireccionAutocomplete({
    * desplegable se abre sobre los campos que está completando y se los tapa.
    */
   suspendido?: boolean;
+  /** País en el que se buscan las sugerencias (el elegido en el formulario). */
+  pais?: Pais;
   /**
    * Línea chica debajo del campo, con el estilo del hint del DS pero admite un
    * link (el hint de Field sólo acepta texto). No se muestra si hay error.
@@ -67,6 +72,14 @@ export function DireccionAutocomplete({
 }) {
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([]);
   const [abierto, setAbierto] = useState(false);
+  // Al cambiar de país, las sugerencias del anterior ya no sirven (patrón de
+  // React: ajustar estado durante el render, no en un efecto).
+  const [paisAnterior, setPaisAnterior] = useState(pais);
+  if (pais !== paisAnterior) {
+    setPaisAnterior(pais);
+    setSugerencias([]);
+    setAbierto(false);
+  }
   const [indice, setIndice] = useState(-1);
   const [buscando, setBuscando] = useState(false);
 
@@ -117,7 +130,7 @@ export function DireccionAutocomplete({
       setBuscando(true);
       try {
         const res = await fetch(
-          `/api/geocode?text=${encodeURIComponent(texto)}`,
+          `/api/geocode?text=${encodeURIComponent(texto)}&pais=${pais}`,
           {
             signal: ctrl.signal,
           },

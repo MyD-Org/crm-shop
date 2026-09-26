@@ -535,6 +535,7 @@ export function FacturacionForm({
                 setDireccionResuelta(true);
               }}
               suspendido={modoManual}
+              pais={form.pais}
               // Vuelta del modo manual, como ayuda pegada al campo y no como un
               // botón suelto: sin esto `modoManual` nunca volvía a `false` (el
               // autocompletado suspendido no busca). El reset de lo ya resuelto

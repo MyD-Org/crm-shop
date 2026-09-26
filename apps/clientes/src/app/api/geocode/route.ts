@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { claveSolicitante } from "@/lib/auth";
+import { codigoPaisGeocode, idiomaGeocode } from "@/lib/geocode-pais";
 import { permitir } from "@/lib/rate-limit";
 
 /**
- * Autocompletado de direcciones argentinas contra Nominatim (OpenStreetMap).
+ * Autocompletado de direcciones contra Nominatim (OpenStreetMap), acotado al
+ * país que eligió el cliente (`?pais=AR|BR|PY`; sin país, Argentina).
  *
  * Por qué Nominatim y no otro: se compararon los tres gratuitos contra
  * direcciones reales de Puerto Iguazú y Eldorado. Nominatim fue el único que
@@ -71,7 +73,7 @@ const MAX_POR_MINUTO = 40;
 function limpiarNombre(v: string | undefined): string {
   if (!v) return "";
   return v
-    .replace(/^(Municipio|Partido|Departamento|Provincia|Comuna)\s+de\s+/i, "")
+    .replace(/^(Municipio|Partido|Departamento|Provincia|Comuna|Estado)\s+(de|do|da)\s+/i, "")
     .replace(/^Municipio\s+/i, "")
     .trim();
 }
@@ -100,11 +102,14 @@ export async function GET(req: Request) {
   // Normalizado a minúsculas: la cache es por URL, así "San Martin" y
   // "san martin" comparten entrada en vez de ocupar dos.
   url.searchParams.set("q", text.toLowerCase());
-  url.searchParams.set("countrycodes", "ar");
+  const pais = searchParams.get("pais");
+  url.searchParams.set("countrycodes", codigoPaisGeocode(pais));
   url.searchParams.set("format", "json");
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("limit", "6");
-  url.searchParams.set("accept-language", "es");
+  // Nombres en el idioma del país: en una factura brasileña va "Foz do
+  // Iguaçu", no la traducción "Foz de Iguazú".
+  url.searchParams.set("accept-language", idiomaGeocode(pais));
 
   let res: Response;
   try {

@@ -31,6 +31,8 @@ El Shop usa el esquema `shop` de la misma base Postgres del CRM (ver
 de las vistas del CRM (`public.catalog_products_shop` y
 `public.catalog_categories_shop`), que llena la sync del CRM.
 
+Ver `.env.example` para la lista completa de variables con ejemplos y agrupaciones.
+
 | Variable | Para qué |
 |---|---|
 | `DATABASE_URL` | Conexión de la app en tiempo de ejecución. Pooled, rol `shop_app`. Es la única variable que lee el runtime. |

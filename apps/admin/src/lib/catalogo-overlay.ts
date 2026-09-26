@@ -287,12 +287,32 @@ export interface ProductoAlegra {
   code?: string | null
 }
 
-/** overlay.nombre → alegra.description → alegra.name. Vaciar el nombre propio vuelve al default. */
+/**
+ * ¿El `name` de Alegra es el código del producto? Pasa cuando `name` es la referencia o la
+ * referencia sin el sufijo de marca (`JDSDA261` / `JDSDA261-JDV`). Sin referencia no se puede
+ * saber, y se asume que no: hoy todos los ítems activos la tienen.
+ */
+export function nameEsCodigo(producto: ProductoAlegra): boolean {
+  const name = noVacio(producto.name)?.toUpperCase()
+  const code = noVacio(producto.code)?.toUpperCase()
+  return !!name && !!code && (code === name || code.startsWith(`${name}-`))
+}
+
+/**
+ * overlay.nombre → alegra.name, salvo que el name sea el código: ahí alegra.description (y si
+ * está vacía, el código). Vaciar el nombre propio vuelve al default.
+ *
+ * Antes la descripción iba siempre segunda, de cuando en Alegra el name era el código y el nombre
+ * comercial vivía en la descripción. Hoy el name trae el nombre y la descripción las
+ * características: mostrarla de título dejaba "2 PIEZAS/JUEGO, AC. CR-V…" en vez del producto.
+ */
 export function nombreEfectivo(
   nombreOverlay: string | null | undefined,
   producto: ProductoAlegra,
 ): string {
-  return noVacio(nombreOverlay) ?? noVacio(producto.description) ?? producto.name
+  return (
+    noVacio(nombreOverlay) ?? (nameEsCodigo(producto) ? noVacio(producto.description) : null) ?? producto.name
+  )
 }
 
 /** alegra.code si tiene valor, si no alegra.name (que en la práctica ES el código). */
@@ -306,8 +326,24 @@ export function skuEfectivo(producto: ProductoAlegra): string {
  * ORDER BY ordena por `name`, el orden y la paginación dejarían de corresponderse con lo que
  * el usuario ve.
  */
-export const nombreEfectivoSql = (overlayNombre: SQL | unknown, productoDescripcion: SQL | unknown, productoName: SQL | unknown): SQL =>
-  sql`coalesce(nullif(btrim(${overlayNombre}), ''), nullif(btrim(${productoDescripcion}), ''), ${productoName})`
+export const nombreEfectivoSql = (
+  overlayNombre: SQL | unknown,
+  productoDescripcion: SQL | unknown,
+  productoName: SQL | unknown,
+  productoCode: SQL | unknown,
+): SQL =>
+  sql`coalesce(
+    nullif(btrim(${overlayNombre}), ''),
+    CASE WHEN ${nameEsCodigoSql(productoName, productoCode)} THEN nullif(btrim(${productoDescripcion}), '') END,
+    ${productoName}
+  )`
+
+/** `nameEsCodigo` en SQL. `starts_with` y no LIKE: un `_` o `%` en el name no puede hacer de comodín. */
+const nameEsCodigoSql = (productoName: SQL | unknown, productoCode: SQL | unknown): SQL =>
+  sql`(nullif(btrim(${productoName}), '') IS NOT NULL AND (
+    upper(btrim(${productoCode})) = upper(btrim(${productoName}))
+    OR starts_with(upper(btrim(${productoCode})), upper(btrim(${productoName})) || '-')
+  ))`
 
 export const skuEfectivoSql = (productoCode: SQL | unknown, productoName: SQL | unknown): SQL =>
   sql`coalesce(nullif(btrim(${productoCode}), ''), ${productoName})`

@@ -115,13 +115,12 @@ describe("cotizar", () => {
     expect(c.total).toBe(1240);
   });
 
-  it("el nombre de la línea es el mismo que muestra el catálogo (overlay → descripción → name)", async () => {
+  it("el nombre de la línea es el mismo que muestra el catálogo (overlay → name, o descripción si el name es el código)", async () => {
     filas = [["10", "Abrazadera", null, null, precios, "8", "21", "active", null]];
     const c = await cotizar([{ id: "10", qty: 1 }]);
     const [{ sql, params }] = grabadora.consultas;
-    expect(sql).toContain(
-      'coalesce(nullif("public"."catalog_overlay"."nombre", \'\'), nullif("catalog_products_shop"."description", \'\'), "catalog_products_shop"."name")',
-    );
+    expect(sql).toContain('nullif(btrim("public"."catalog_overlay"."nombre"), \'\')');
+    expect(sql).toMatch(/CASE WHEN [\s\S]*starts_with\(upper\(btrim\("catalog_products_shop"\."code"\)\)[\s\S]* THEN nullif\(btrim\("catalog_products_shop"\."description"\), ''\) END/);
     const join = sql.match(/left join "public"\."catalog_overlay" on \(.*?"public"\."catalog_overlay"\."tenant_id" = \$(\d+)\)/);
     expect(join, sql).not.toBeNull();
     expect(params[Number(join![1]) - 1]).toBe("tenant-test");

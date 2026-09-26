@@ -382,7 +382,7 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
   const q = (f.q ?? "").trim()
   if (q) {
     const like = `%${q}%`
-    const nombre = nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`)
+    const nombre = nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)
     cond.push(sql`(
       unaccent(${nombre}) ILIKE unaccent(${like})
       OR unaccent(p.code) ILIKE unaccent(${like})
@@ -890,7 +890,7 @@ const columnasListado = sql`
   p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
   o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.updated_at,
   c.nombre AS categoria_nombre,
-  ${nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`)} AS nombre_efectivo,
+  ${nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)} AS nombre_efectivo,
   ${skuEfectivoSql(sql`p.code`, sql`p.name`)} AS sku,
   coalesce(
     (SELECT array_agg(cot.tag_id::text) FROM ${catalogOverlayTags} cot WHERE cot.overlay_id = o.id),
@@ -923,7 +923,7 @@ export async function listarProductos(
   const start = Math.max(0, opciones.start ?? 0)
   const limit = Math.min(LIMITE_LISTADO_MAX, Math.max(1, opciones.limit ?? LIMITE_LISTADO_DEFAULT))
   const where = whereListado(tenantId, filtros)
-  const nombre = nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`)
+  const nombre = nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)
   const orden =
     opciones.orden === "nombre-desc"
       ? sql`${nombre} DESC, p.alegra_id DESC`

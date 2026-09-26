@@ -20,9 +20,11 @@ import {
   contactoPorDocumento,
   contactoPorId,
   contactosPorEmail,
+  accesoFacturacionEspejo,
   idListaGeneral,
-  tipoCuentaEspejo,
+  vinculableDeAlegra,
   vinculablePorId,
+  vincularCambiaAlgo,
 } from "./contactos-espejo";
 
 /** Fila de la vista en el orden del select de `delEspejo`. */
@@ -111,30 +113,42 @@ describe("contactoPorId", () => {
   });
 });
 
-describe("tipoCuentaEspejo (layout de Mi cuenta)", () => {
-  it("lee sólo tipo_cuenta de la vista, con los mismos filtros", async () => {
-    grabadora = dbGrabadora(() => [["corriente"]]);
-    expect(await tipoCuentaEspejo("42")).toBe("corriente");
+describe("accesoFacturacionEspejo (Facturación de Mi cuenta)", () => {
+  it("lee sólo acceso_facturacion de la vista, con los mismos filtros", async () => {
+    grabadora = dbGrabadora(() => [[true]]);
+    expect(await accesoFacturacionEspejo("42")).toBe(true);
     const [consulta] = grabadora.consultas;
-    expect(consulta.sql).toMatch(/^select "tipo_cuenta" from "public"\."alegra_contacts_shop"/);
+    expect(consulta.sql).toMatch(/^select "acceso_facturacion" from "public"\."alegra_contacts_shop"/);
+    expect(consulta.sql).toMatch(/"tenant_id" = \$\d/);
+    expect(consulta.sql).toMatch(/"alegra_account" = \$\d/);
+    expect(consulta.sql).toMatch(/"status" = \$\d/);
     expect(consulta.params).toEqual(expect.arrayContaining(["tenant-test", "principal", "42", "active"]));
   });
 
-  it("contado o nulo en el espejo ⇒ contado", async () => {
+  it("sin acceso (contado sin excepción) ⇒ false; valor raro ⇒ false", async () => {
+    grabadora = dbGrabadora(() => [[false]]);
+    expect(await accesoFacturacionEspejo("42")).toBe(false);
     grabadora = dbGrabadora(() => [[null]]);
-    expect(await tipoCuentaEspejo("42")).toBe("contado");
+    expect(await accesoFacturacionEspejo("42")).toBe(false);
   });
 
-  it("sin fila: null y NUNCA consulta Alegra en vivo", async () => {
+  it("sin fila activa: null y NUNCA consulta Alegra en vivo", async () => {
     grabadora = dbGrabadora(() => []);
-    expect(await tipoCuentaEspejo("7")).toBeNull();
+    expect(await accesoFacturacionEspejo("7")).toBeNull();
     expect(getContacto).not.toHaveBeenCalled();
   });
 
   it("id inválido: null sin consultar", async () => {
-    grabadora = dbGrabadora(() => [["corriente"]]);
-    expect(await tipoCuentaEspejo("../x")).toBeNull();
+    grabadora = dbGrabadora(() => [[true]]);
+    expect(await accesoFacturacionEspejo("../x")).toBeNull();
     expect(grabadora.consultas).toHaveLength(0);
+  });
+
+  it("la lectura falla: tira (quien llama decide, fail-closed)", async () => {
+    grabadora = dbGrabadora(() => {
+      throw Object.assign(new Error("x"), { code: "42703" });
+    });
+    await expect(accesoFacturacionEspejo("42")).rejects.toThrow();
   });
 });
 
@@ -142,9 +156,9 @@ describe("tipoCuentaEspejo (layout de Mi cuenta)", () => {
  * Lecturas de la vinculación y de la lista de precios (rebanada 3): SÓLO espejo,
  * nunca Alegra. Fila en el orden de `columnasVinculables`: alegraId, name,
  * identification, email, types, priceListId, priceListName, priceListStatus,
- * tipoCuenta. Datos inventados.
+ * tipoCuenta, accesoFacturacion (0039 del CRM). Datos inventados.
  */
-const VINCULABLE: unknown[] = ["42", "Cliente Uno SA", "20-12345678-9", "compras@cliente.example", ["client"], "7", "Mayorista", "active", "corriente"];
+const VINCULABLE: unknown[] = ["42", "Cliente Uno SA", "20-12345678-9", "compras@cliente.example", ["client"], "7", "Mayorista", "active", "corriente", true];
 
 describe("contactosPorEmail", () => {
   it("normaliza el email (mayúsculas y espacios) y filtra tenant, cuenta, activa y clientes", async () => {
@@ -152,6 +166,7 @@ describe("contactosPorEmail", () => {
     const r = await contactosPorEmail("  Compras@Cliente.EXAMPLE ");
     const [consulta] = grabadora.consultas;
     expect(consulta.sql).toContain('from "public"."alegra_contacts_shop"');
+    expect(consulta.sql).toContain('"acceso_facturacion"');
     expect(consulta.sql).toMatch(/"emails_norm" @> \$\d/);
     expect(consulta.sql).toMatch(/"types" @> \$\d/);
     expect(consulta.params).toEqual(
@@ -167,6 +182,7 @@ describe("contactosPorEmail", () => {
         types: ["client"],
         priceList: { id: "7", name: "Mayorista", status: "active" },
         tipoCuenta: "corriente",
+        accesoFacturacion: true,
       },
     ]);
     expect(getContacto).not.toHaveBeenCalled();
@@ -232,6 +248,77 @@ describe("vinculablePorId y comercialEspejo", () => {
     expect(await comercialEspejo("42")).toEqual({ tipoCuenta: "corriente", idPriceList: undefined });
     grabadora = dbGrabadora(() => []);
     expect(await comercialEspejo("42")).toBeNull();
+  });
+});
+
+describe("accesoFacturacion del contacto vinculable", () => {
+  it("del espejo: la columna de la vista (contado con excepción ⇒ true)", async () => {
+    const fila = [...VINCULABLE];
+    fila[8] = "contado";
+    fila[9] = true;
+    grabadora = dbGrabadora(() => [fila]);
+    expect(await vinculablePorId("42")).toMatchObject({ tipoCuenta: "contado", accesoFacturacion: true });
+  });
+
+  it("del espejo: sin la columna o nula ⇒ false (fail-closed)", async () => {
+    const fila = [...VINCULABLE];
+    fila[9] = null;
+    grabadora = dbGrabadora(() => [fila]);
+    expect(await vinculablePorId("42")).toMatchObject({ accesoFacturacion: false });
+  });
+
+  it("en vivo (vinculableDeAlegra): sólo cuenta corriente; la excepción no existe fuera del espejo", () => {
+    expect(
+      vinculableDeAlegra({ id: "9", name: "Cliente Nuevo", type: ["client"], term: { days: 30 } } as never),
+    ).toMatchObject({ tipoCuenta: "corriente", accesoFacturacion: true });
+    expect(
+      vinculableDeAlegra({ id: "9", name: "Cliente Nuevo", type: ["client"], term: { days: 0 } } as never),
+    ).toMatchObject({ tipoCuenta: "contado", accesoFacturacion: false });
+  });
+});
+
+describe("vincularCambiaAlgo (aviso del checkout)", () => {
+  const LISTA_GENERAL = [[[{ idPriceList: 1, price: 100, main: true }]]];
+
+  it("contado con excepción de acceso: sí (ve Facturación), sin mirar la lista general", async () => {
+    const fila = [...VINCULABLE];
+    fila[5] = null;
+    fila[8] = "contado";
+    fila[9] = true;
+    grabadora = dbGrabadora(() => [fila]);
+    expect(await vincularCambiaAlgo("42")).toBe(true);
+    expect(grabadora.consultas).toHaveLength(1);
+  });
+
+  it("cuenta corriente: sí", async () => {
+    grabadora = dbGrabadora(() => [VINCULABLE]);
+    expect(await vincularCambiaAlgo("42")).toBe(true);
+  });
+
+  it("contado sin acceso y a precio de lista general: no", async () => {
+    const fila = [...VINCULABLE];
+    fila[5] = "1";
+    fila[8] = "contado";
+    fila[9] = false;
+    grabadora = dbGrabadora((c) => (c.sql.includes("catalog_products_shop") ? LISTA_GENERAL : [fila]));
+    expect(await vincularCambiaAlgo("42")).toBe(false);
+  });
+
+  it("contado sin acceso con lista propia distinta de la general: sí", async () => {
+    const fila = [...VINCULABLE];
+    fila[8] = "contado";
+    fila[9] = false;
+    grabadora = dbGrabadora((c) => (c.sql.includes("catalog_products_shop") ? LISTA_GENERAL : [fila]));
+    expect(await vincularCambiaAlgo("42")).toBe(true);
+  });
+
+  it("sin fila o la vista falla: no", async () => {
+    grabadora = dbGrabadora(() => []);
+    expect(await vincularCambiaAlgo("42")).toBe(false);
+    grabadora = dbGrabadora(() => {
+      throw new Error("x");
+    });
+    expect(await vincularCambiaAlgo("42")).toBe(false);
   });
 });
 

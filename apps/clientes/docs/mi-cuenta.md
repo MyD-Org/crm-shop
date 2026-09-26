@@ -72,10 +72,35 @@ está apagada) leen la misma bandera. Encendidas todas: `favoritos`,
 además depende del flag `envio`).
 
 El layout de Mi cuenta corre en cada página: con vínculo hace dos consultas a
-la base y ninguna a Alegra — `tipoCuentaEspejo` (sólo el espejo, SIN el
-respaldo en vivo de `contactoPorId`: una navegación no puede gastar cuota de
-`/contacts`) para la entrada Condiciones, y `contarNoLeidos` para el badge de
-Avisos. Si alguna falla, el menú se arma igual (sin Condiciones, sin badge).
+la base y ninguna a Alegra — `accesoFacturacion()` (lee `acceso_facturacion`
+del espejo con `accesoFacturacionEspejo`, SIN el respaldo en vivo de
+`contactoPorId`: una navegación no puede gastar cuota de `/contacts`) para el
+grupo Facturación, y `contarNoLeidos` para el badge de Avisos. Si alguna falla,
+el menú se arma igual (sin Facturación, sin badge).
+
+### Acceso a Facturación y vínculo automático
+
+- Facturación (Facturas y saldo, Pagos, Presupuestos, Condiciones, Avisos) la
+  ve quien está vinculado a un contacto con `acceso_facturacion = true` en la
+  vista `public.alegra_contacts_shop` del CRM (0039): **cuenta corriente, o de
+  contado con una excepción vigente** que un admin otorgó desde "Clientes de la
+  tienda". Contacto inactivo en el espejo, sin fila o lectura caída ⇒ sin
+  acceso (fail-closed). Sin caché entre requests: dar o quitar la excepción se
+  ve en la próxima navegación. Quitarla no desvincula (la lista de precios del
+  contacto sigue).
+- Vínculo automático por email verificado (`intentarVinculacionPorEmail`):
+  vincula si el ÚNICO contacto cliente con ese email (principal o persona
+  asociada, `emails_norm`) tiene acceso según la vista. Sin acceso ⇒ no vincula
+  ni graba nada (la próxima visita reintenta). Si el match vino de la búsqueda
+  en vivo en Alegra (el espejo todavía no lo tiene), decide sólo por cuenta
+  corriente: la excepción existe únicamente para contactos del espejo.
+- Quien quedó `sin_coincidencia` se reintenta en cada visita SÓLO contra el
+  espejo (nunca Alegra en vivo, sin grabar otra fila): un único match con
+  acceso ⇒ vínculo activo. Un vínculo `revocada` (desvinculado desde el CRM)
+  corta el automático para siempre.
+- El aviso "vincular" del checkout (`vincularCambiaAlgo`) se ofrece si el
+  contacto tiene acceso a Facturación o una lista de precios propia distinta de
+  la general.
 
 ## Cuenta corriente
 
@@ -204,8 +229,7 @@ también clientes de contado.
 
 | Qué | Quién |
 |---|---|
-| Facturas y saldo, Pagos, Presupuestos, Avisos, Informar pago | Todo cliente vinculado (contado incluido). Sin vínculo, "Facturas y saldo" ofrece vincular. |
-| Condiciones | Sólo cuenta corriente según el espejo (`alegra_contacts_shop.tipo_cuenta = 'corriente'`). Contado: sin entrada en el menú y `/mi-cuenta/condiciones` da 404. |
+| Grupo Facturación (incluye Informar pago) | Vinculados con acceso a Facturación (cuenta corriente o excepción del CRM; ver [Acceso a Facturación](#acceso-a-facturación-y-vínculo-automático)). Sin acceso: sin entrada en el menú y páginas/API con 404. |
 | Barra de límite de crédito / disponible | Sólo cuenta corriente con límite > 0. |
 
 `tipo_cuenta` se lee del espejo (columna generada del CRM: plazo mayor a 0 o

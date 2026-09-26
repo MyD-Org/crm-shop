@@ -17,8 +17,13 @@ let espejo: unknown[][] | Error = [];
 let otpFila: unknown[] | null = null;
 /** El contacto ya tiene un vínculo activo de OTRO usuario (no debe importar). */
 let contactoDeOtro = false;
+/** Estados de las filas de `client_links` que ya tiene el usuario. */
+let vinculosPrevios: string[] = [];
 
 function responder(c: ConsultaGrabada): unknown[][] | undefined {
+  if (c.sql.startsWith('select "estado" from "shop"."client_links"')) {
+    return vinculosPrevios.map((e) => [e]);
+  }
   if (c.sql.includes('"alegra_contacts_shop"')) {
     if (espejo instanceof Error) throw espejo;
     return espejo;
@@ -83,8 +88,15 @@ import {
 /** Fila de la vista en el orden de `columnasVinculables`. */
 function filaEspejo(
   id: string,
-  extra: Partial<{ email: string | null; tipo: "corriente" | "contado"; lista: string | null }> = {},
+  extra: Partial<{
+    email: string | null;
+    tipo: "corriente" | "contado";
+    lista: string | null;
+    /** `acceso_facturacion` de la vista; por defecto, cuenta corriente sin excepción. */
+    acceso: boolean;
+  }> = {},
 ) {
+  const tipo = extra.tipo ?? "corriente";
   return [
     id,
     `Cliente ${id} SA`,
@@ -94,7 +106,8 @@ function filaEspejo(
     extra.lista === undefined ? "7" : extra.lista,
     "Mayorista",
     "active",
-    extra.tipo ?? "corriente",
+    tipo,
+    extra.acceso ?? tipo === "corriente",
   ];
 }
 
@@ -111,6 +124,7 @@ beforeEach(() => {
   espejo = [];
   otpFila = null;
   contactoDeOtro = false;
+  vinculosPrevios = [];
   tareasAfter = [];
   grabadora = dbGrabadora(responder);
   buscarContactosPorEmail.mockReset().mockResolvedValue([]);
@@ -214,6 +228,88 @@ describe("intentarVinculacionPorEmail", () => {
     expect(insertsEn("client_links")[0].sql).toMatch(
       /on conflict \("clerk_user_id"\) where "estado" = 'activa' do nothing/,
     );
+  });
+
+  it("persona de un contacto de contado CON excepción de acceso (único match): vincula", async () => {
+    espejo = [filaEspejo("42", { tipo: "contado", acceso: true })];
+    const r = await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example");
+    expect(r).toEqual({ alegraContactId: "42", razonSocial: "Cliente 42 SA" });
+    expect(buscarContactosPorEmail).not.toHaveBeenCalled();
+    expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({
+      alegra_contact_id: "42",
+      tipo_cuenta: "contado",
+      estado: "activa",
+      metodo: "email_verificado",
+    });
+  });
+
+  it("dos contactos con el email, uno con acceso: ambiguo, no vincula a ninguno", async () => {
+    espejo = [filaEspejo("42", { tipo: "contado", acceso: true }), filaEspejo("43", { tipo: "contado" })];
+    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example")).toBeNull();
+    const inserts = insertsEn("client_links");
+    expect(inserts).toHaveLength(1);
+    expect(valoresInsertados(inserts[0])).toMatchObject({ alegra_contact_id: "ambiguo", estado: "sin_coincidencia" });
+  });
+
+  it("ya tiene un vínculo activo: no consulta el espejo ni graba", async () => {
+    vinculosPrevios = ["activa"];
+    espejo = [filaEspejo("42")];
+    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example")).toBeNull();
+    expect(grabadora.consultas.some((c) => c.sql.includes("alegra_contacts_shop"))).toBe(false);
+    expect(insertsEn("client_links")).toHaveLength(0);
+  });
+
+  it("vínculo revocado desde el admin: el automático NO vuelve a vincular", async () => {
+    vinculosPrevios = ["sin_coincidencia", "revocada"];
+    espejo = [filaEspejo("42")];
+    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example")).toBeNull();
+    expect(grabadora.consultas.some((c) => c.sql.includes("alegra_contacts_shop"))).toBe(false);
+    expect(buscarContactosPorEmail).not.toHaveBeenCalled();
+    expect(insertsEn("client_links")).toHaveLength(0);
+  });
+
+  describe("reintento de quien quedó sin_coincidencia (sólo espejo)", () => {
+    it("ahora hay un único match con acceso: vincula sin respaldo en vivo ni otra sin_coincidencia", async () => {
+      vinculosPrevios = ["sin_coincidencia"];
+      espejo = [filaEspejo("42", { tipo: "contado", acceso: true })];
+      const r = await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example");
+      expect(r).toEqual({ alegraContactId: "42", razonSocial: "Cliente 42 SA" });
+      expect(buscarContactosPorEmail).not.toHaveBeenCalled();
+      const inserts = insertsEn("client_links");
+      expect(inserts).toHaveLength(1);
+      expect(valoresInsertados(inserts[0])).toMatchObject({ alegra_contact_id: "42", estado: "activa" });
+      expect(inserts[0].sql).toMatch(/on conflict \("clerk_user_id"\) where "estado" = 'activa' do nothing/);
+    });
+
+    it("sigue sin match: nada, y NUNCA Alegra en vivo", async () => {
+      vinculosPrevios = ["sin_coincidencia"];
+      espejo = [];
+      expect(await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example")).toBeNull();
+      expect(buscarContactosPorEmail).not.toHaveBeenCalled();
+      expect(insertsEn("client_links")).toHaveLength(0);
+    });
+
+    it("sigue ambiguo: nada", async () => {
+      vinculosPrevios = ["sin_coincidencia"];
+      espejo = [filaEspejo("42"), filaEspejo("43")];
+      expect(await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example")).toBeNull();
+      expect(insertsEn("client_links")).toHaveLength(0);
+    });
+
+    it("único match sin acceso (contado sin excepción): nada", async () => {
+      vinculosPrevios = ["sin_coincidencia"];
+      espejo = [filaEspejo("42", { tipo: "contado" })];
+      expect(await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example")).toBeNull();
+      expect(insertsEn("client_links")).toHaveLength(0);
+    });
+
+    it("el espejo falla: nada, sin respaldo en vivo", async () => {
+      vinculosPrevios = ["sin_coincidencia"];
+      espejo = Object.assign(new Error("permission denied"), { code: "42501" });
+      expect(await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example")).toBeNull();
+      expect(buscarContactosPorEmail).not.toHaveBeenCalled();
+      expect(insertsEn("client_links")).toHaveLength(0);
+    });
   });
 
   it("el espejo falla (permiso): cae a la búsqueda en vivo de siempre", async () => {

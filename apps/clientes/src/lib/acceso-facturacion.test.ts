@@ -1,48 +1,55 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const identidad = vi.fn();
-const tipoCuenta = vi.fn();
+const acceso = vi.fn();
 vi.mock("./auth", () => ({ identidadActual: () => identidad() }));
-vi.mock("./contactos-espejo", () => ({ tipoCuentaEspejo: (...a: unknown[]) => tipoCuenta(...a) }));
+vi.mock("./contactos-espejo", () => ({ accesoFacturacionEspejo: (...a: unknown[]) => acceso(...a) }));
 
 import { accesoFacturacion } from "./acceso-facturacion";
 
 beforeEach(() => {
   identidad.mockReset();
-  tipoCuenta.mockReset();
+  acceso.mockReset();
 });
 
 describe("accesoFacturacion", () => {
   it("sin vínculo: sin acceso y sin leer el espejo", async () => {
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
     expect(await accesoFacturacion()).toBe(false);
-    expect(tipoCuenta).not.toHaveBeenCalled();
+    expect(acceso).not.toHaveBeenCalled();
   });
 
-  it("vinculado cuenta corriente: con acceso, leído con el código de la identidad", async () => {
+  it("vinculado cuenta corriente (la vista informa acceso): con acceso, leído con el código de la identidad", async () => {
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42" } });
-    tipoCuenta.mockResolvedValue("corriente");
+    acceso.mockResolvedValue(true);
     expect(await accesoFacturacion()).toBe(true);
-    expect(tipoCuenta).toHaveBeenCalledWith("42");
+    expect(acceso).toHaveBeenCalledWith("42");
   });
 
-  it("vinculado de contado o sin fila en el espejo: sin acceso", async () => {
+  it("vinculado de contado con excepción del CRM: con acceso (la vista ya suma la excepción)", async () => {
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "43", tipoCuenta: "contado" } });
+    acceso.mockResolvedValue(true);
+    expect(await accesoFacturacion()).toBe(true);
+  });
+
+  it("de contado sin excepción, sin fila o contacto inactivo en el espejo: sin acceso", async () => {
     identidad.mockResolvedValue({ clerkUserId: null, cliente: { codigocliente: "42" } });
-    tipoCuenta.mockResolvedValue("contado");
+    acceso.mockResolvedValue(false);
     expect(await accesoFacturacion()).toBe(false);
-    tipoCuenta.mockResolvedValue(null);
+    acceso.mockResolvedValue(null);
     expect(await accesoFacturacion()).toBe(false);
   });
 
-  it("espejo caído: sin acceso y el log sin datos del contacto", async () => {
+  it("espejo caído: sin acceso y el log sólo con el nombre del error", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", razonsocial: "ACME SA" } });
-    tipoCuenta.mockRejectedValue(new TypeError("fetch failed"));
+    acceso.mockRejectedValue(new TypeError("fetch failed"));
     expect(await accesoFacturacion()).toBe(false);
     const log = error.mock.calls.flat().join(" ");
     expect(log).toContain("TypeError");
     expect(log).not.toContain("42");
     expect(log).not.toContain("ACME");
+    expect(log).not.toContain("fetch failed");
     error.mockRestore();
   });
 });

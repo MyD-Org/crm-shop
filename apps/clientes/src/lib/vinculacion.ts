@@ -8,8 +8,8 @@
  * Hacen falta dos caminos, y el orden importa:
  *
  * 1. **Match por email verificado** (`intentarVinculacionPorEmail`) — el normal.
- *    Silencioso, automático, sin pedirle nada al cliente. Sólo para cuenta
- *    corriente.
+ *    Silencioso, automático, sin pedirle nada al cliente. Sólo para contactos
+ *    con acceso a Facturación (cuenta corriente o excepción del CRM).
  * 2. **OTP por CUIT** (`solicitarVinculacion` + `confirmarVinculacion`) — el
  *    plan B, para quien entra con un mail distinto al que tiene cargado el
  *    sistema, o cuando dos contactos comparten casilla.
@@ -168,9 +168,11 @@ async function delEspejoOVacio<T>(lectura: () => Promise<T>, vacio: T, que: stri
  * código a una casilla cuya propiedad ya está verificada es pedir dos veces la
  * misma prueba.
  *
- * Se ejecuta como mucho UNA vez por usuario: el resultado (haya match o no)
- * queda registrado en `client_links`, así una cuenta sin coincidencia no
- * dispara una consulta a Alegra en cada visita.
+ * Se ejecuta como mucho UNA vez por usuario contra Alegra: el resultado (haya
+ * match o no) queda registrado en `client_links`, así una cuenta sin
+ * coincidencia no dispara una consulta a Alegra en cada visita. Quien quedó
+ * `sin_coincidencia` se reintenta SÓLO contra el espejo (ver
+ * `reintentarDesdeElEspejo`); un vínculo `activa` o `revocada` corta acá.
  *
  * Devuelve el vínculo creado, o null si no hubo match.
  */
@@ -187,14 +189,19 @@ export async function intentarVinculacionPorEmail(
   if (!email) return null;
   const db = getDb();
 
-  // ¿Ya se resolvió antes? Cubre tanto un vínculo activo como un intento
-  // previo sin resultado. Una sola query indexada.
-  const [existente] = await db
-    .select({ id: clientLinks.id })
+  // ¿Ya se resolvió antes? Una sola query indexada (`cl_usuario_fecha`).
+  //  - Un vínculo activo: no hay nada que hacer.
+  //  - Uno revocado (lo desvinculó un admin desde el CRM): se respeta, el
+  //    automático nunca vuelve a vincularlo solo.
+  //  - Sólo intentos `sin_coincidencia`: reintento contra el espejo, sin Alegra.
+  const previos = await db
+    .select({ estado: clientLinks.estado })
     .from(clientLinks)
-    .where(eq(clientLinks.clerkUserId, clerkUserId))
-    .limit(1);
-  if (existente) return null;
+    .where(eq(clientLinks.clerkUserId, clerkUserId));
+  if (previos.length > 0) {
+    if (previos.some((p) => p.estado !== "sin_coincidencia")) return null;
+    return reintentarDesdeElEspejo(clerkUserId, email);
+  }
 
   // Espejo primero (0 requests). Ya viene filtrado a clientes: en esta cuenta la
   // enorme mayoría de los contactos son proveedores, y vincular a un proveedor
@@ -238,14 +245,17 @@ export async function intentarVinculacionPorEmail(
 
   const contacto = clientes[0];
 
-  // Sólo cuenta corriente se vincula sola: al cliente de contado el vínculo no
-  // le da nada que necesite para comprar (la sección Facturación es sólo de
-  // cuenta corriente). NO se graba "sin coincidencia": el día que en Alegra le
-  // carguen plazo o límite, la próxima visita lo vincula. Con fila en el
-  // espejo, reintentar cuesta una query; el respaldo en vivo sólo corre
-  // mientras el espejo esté atrasado. Un contado con lista propia puede
+  // Sólo se vincula solo quien tiene acceso a Facturación: cuenta corriente, o
+  // de contado con la excepción que un admin otorgó desde el CRM (columna
+  // `acceso_facturacion` de la vista). Un match que vino de Alegra en vivo
+  // decide sólo por cuenta corriente (`vinculableDeAlegra`): la excepción existe
+  // únicamente para contactos del espejo. Al resto el vínculo no le da nada que
+  // necesite para comprar. NO se graba "sin coincidencia": el día que le carguen
+  // plazo o límite, o le den la excepción, la próxima visita lo vincula. Con
+  // fila en el espejo, reintentar cuesta una query; el respaldo en vivo sólo
+  // corre mientras el espejo esté atrasado. Un contado con lista propia puede
   // vincular a mano (/mi-cuenta/vincular, o el aviso del checkout).
-  if (contacto.tipoCuenta !== "corriente") return null;
+  if (!contacto.accesoFacturacion) return null;
 
   /**
    * El chequeo de `existente` de arriba y este insert NO son atómicos, y
@@ -259,18 +269,43 @@ export async function intentarVinculacionPorEmail(
    * llama relee el vínculo (`resolverVinculacion`), así que el perdedor de la
    * carrera igual devuelve la fila correcta.
    */
-  await db
-      .insert(clientLinks)
-      .values({
-        clerkUserId,
-        alegraContactId: String(contacto.id),
-        ...snapshotDelContacto(contacto),
-        estado: "activa",
-        metodo: "email_verificado",
-      })
-      .onConflictDoNothing(conflictoDelUsuario);
+  return insertarVinculoPorEmail(clerkUserId, contacto);
+}
+
+async function insertarVinculoPorEmail(
+  clerkUserId: string,
+  contacto: ContactoVinculable,
+): Promise<{ alegraContactId: string; razonSocial?: string }> {
+  await getDb()
+    .insert(clientLinks)
+    .values({
+      clerkUserId,
+      alegraContactId: String(contacto.id),
+      ...snapshotDelContacto(contacto),
+      estado: "activa",
+      metodo: "email_verificado",
+    })
+    .onConflictDoNothing(conflictoDelUsuario);
 
   return { alegraContactId: String(contacto.id), razonSocial: contacto.name };
+}
+
+/**
+ * Quien quedó `sin_coincidencia` (0 o más de un contacto con su email, o el
+ * email todavía no estaba cargado como persona asociada) se reintenta en cada
+ * visita, pero SÓLO contra el espejo: nunca Alegra en vivo (la cuota de
+ * `/contacts` es de ~5 requests por minuto y la comparten el CRM y el bot) y sin
+ * grabar otra fila `sin_coincidencia`. Exactamente un contacto cliente con
+ * acceso a Facturación ⇒ vínculo activo; cualquier otra cosa ⇒ nada. Cuesta una
+ * query al índice de `emails_norm` por request para estos usuarios.
+ */
+async function reintentarDesdeElEspejo(
+  clerkUserId: string,
+  email: string,
+): Promise<{ alegraContactId: string; razonSocial?: string } | null> {
+  const clientes = await delEspejoOVacio(() => contactosPorEmail(email), [], "email");
+  if (clientes.length !== 1 || !clientes[0].accesoFacturacion) return null;
+  return insertarVinculoPorEmail(clerkUserId, clientes[0]);
 }
 
 export type ResultadoSolicitud =

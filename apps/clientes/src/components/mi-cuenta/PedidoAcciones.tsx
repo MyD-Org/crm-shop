@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, useToast } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useCart } from "@/context/CartContext";
 import type { OrderItem } from "@/data/orders";
 import { hrefPedido } from "@/lib/mi-cuenta-nav";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { IconoDescarga, IconoFlecha, IconoRefresh } from "./iconos";
 
 /**
@@ -28,12 +30,26 @@ export function PedidoAcciones({
   const { addItems } = useCart();
   const { toast } = useToast();
   const router = useRouter();
+  // Evita duplicar los ítems si se toca dos veces antes de llegar al carrito.
+  // Con Cache Components la página no se desmonta al navegar (queda oculta),
+  // así que hay que resetear al ocultarse o el botón queda deshabilitado para
+  // siempre si vuelve a este pedido (ver `useAlOcultar`).
+  const [agregando, setAgregando] = useState(false);
+  useAlOcultar(() => setAgregando(false));
 
   function volverAComprar() {
+    if (agregando) return;
+    setAgregando(true);
     // Una sola actualización del carrito: con sesión, un solo guardado.
     addItems(
       items.map((item) => ({
-        item: { id: item.id, name: item.nombreVisible, brand: item.brand, price: item.price },
+        item: {
+          id: item.id,
+          name: item.nombreVisible,
+          brand: item.brand,
+          price: item.price,
+          image: item.imagen?.url,
+        },
         qty: item.qty,
       })),
     );
@@ -53,7 +69,7 @@ export function PedidoAcciones({
           Ver detalle <IconoFlecha />
         </Button>
       )}
-      <Button variant="outline" onClick={volverAComprar}>
+      <Button variant="outline" loading={agregando} onClick={volverAComprar}>
         <IconoRefresh /> Volver a comprar
       </Button>
       {facturaId && (

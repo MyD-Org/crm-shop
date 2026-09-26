@@ -10,6 +10,8 @@ import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { destacadosHome } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -63,7 +65,13 @@ export async function DestacadosHome({
   return (
     <ProductosCarrusel label={label}>
       {destacados.map((p, i) => {
-        const imagen = imagenes[i];
+        // Prioridad de la imagen: la foto real del producto (overlay del CRM) >
+        // la decorativa de la sección (curada por posición, ver home-defaults.ts)
+        // > el ícono de siempre.
+        const fotoReal = p.images?.[0];
+        const imagenDecorativa = imagenes[i];
+        // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
+        const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
         return (
           <Link
             key={p.id}
@@ -73,7 +81,7 @@ export async function DestacadosHome({
             <ProductCard
               variant="editorial"
               className="h-full overflow-hidden"
-              name={p.name}
+              name={nombreParaMostrar}
               brand={p.brand}
               price={p.precioFinal ?? p.price}
               oldPrice={p.oldPrice}
@@ -81,10 +89,18 @@ export async function DestacadosHome({
               // La card entera es un <Link>: el corazón corta la navegación.
               cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
               image={
-                imagen ? (
+                fotoReal ? (
                   <Image
-                    src={imagen}
-                    alt={p.name}
+                    src={fotoReal.url}
+                    alt={fotoReal.alt || nombreParaMostrar}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                    className="object-contain p-4"
+                  />
+                ) : imagenDecorativa ? (
+                  <Image
+                    src={imagenDecorativa}
+                    alt={nombreParaMostrar}
                     fill
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                     className="object-cover"
@@ -97,7 +113,7 @@ export async function DestacadosHome({
               actionPlacement="below"
               action={
                 <AddToCartButton
-                  product={{ id: p.id, name: p.name, brand: p.brand, price: p.price }}
+                  product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
                 />
               }
               installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}

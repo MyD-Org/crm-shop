@@ -18,6 +18,7 @@ import {
   mergeMax,
   normalizarCarrito,
   parsearCache,
+  parsearItems,
   validarItemsBody,
   validarVersion,
   type CacheCarrito,
@@ -222,6 +223,19 @@ describe("parsearCache", () => {
     expect(parsearCache(raw, null)).toEqual(
       cache("user_1", [{ id: "1", name: "", brand: "", price: 10, qty: 9_999 }], null),
     );
+  });
+});
+
+describe("parsearItems: foto", () => {
+  it("conserva la foto https o propia y descarta cualquier otra", () => {
+    const base = { id: "1", name: "A", brand: "B", price: 10, qty: 1 };
+    expect(parsearItems([{ ...base, image: "https://media.plataforma.example/a.webp" }])?.[0].image).toBe(
+      "https://media.plataforma.example/a.webp"
+    );
+    expect(parsearItems([{ ...base, image: "/images/a.webp" }])?.[0].image).toBe("/images/a.webp");
+    expect(parsearItems([{ ...base, image: "javascript:alert(1)" }])?.[0]).not.toHaveProperty("image");
+    expect(parsearItems([{ ...base, image: "//otro.example/a.webp" }])?.[0]).not.toHaveProperty("image");
+    expect(parsearItems([base])?.[0]).not.toHaveProperty("image");
   });
 });
 

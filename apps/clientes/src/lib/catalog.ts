@@ -43,7 +43,7 @@ import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
-import { joinOverlay, nombreExhibido } from "./nombre-exhibido";
+import { descripcionExhibida, joinOverlay, nombreExhibido } from "./nombre-exhibido";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -119,11 +119,47 @@ export function mapFilaToProduct(
     // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
     // código (y es con lo que el CRM elige destacados, ver destacados.ts).
     sku: fila.code || fila.name || undefined,
-    description: fila.description || undefined,
+    // Si es el mismo texto que `name` (pasa sobre todo cuando `nombreExhibido`
+    // tomó la descripción de Alegra como nombre), no hay descripción que
+    // mostrar: repetiría el título.
+    description: descripcionExhibida(fila),
     category: fila.categoryName || undefined,
     images: fotosPermitidas(urlsDeFotos(fila.overlayFotos, baseMedios), hostsMedios),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
+}
+
+/**
+ * `productos/{tenant}/{alegraId}/{uuid}` — lo que comparten las variantes
+ * (320/800/1600) de una misma foto. Mismo criterio que `prefijoDe` en
+ * apps/admin/src/components/admin/catalogo/FotosProducto.tsx.
+ */
+function prefijoDeFoto(key: string): string {
+  return key.replace(/-\d+\.webp$/, "");
+}
+
+/**
+ * El admin guarda las 3 variantes de cada foto como filas separadas; acá se
+ * agrupan por foto lógica (mismo prefijo), preservando el orden de la
+ * primera aparición, y se elige la variante más grande del grupo: es la que
+ * mejor se ve en el detalle, y `next/image` la redimensiona solo para las
+ * miniaturas y la card, así que no hace falta cargar las tres.
+ */
+function agruparFotos(fotos: FotoCrm[]): FotoCrm[] {
+  const orden: string[] = [];
+  const porPrefijo = new Map<string, FotoCrm[]>();
+  for (const f of fotos) {
+    const p = prefijoDeFoto(f.key);
+    if (!porPrefijo.has(p)) {
+      porPrefijo.set(p, []);
+      orden.push(p);
+    }
+    porPrefijo.get(p)?.push(f);
+  }
+  return orden.map((p) => {
+    const variantes = porPrefijo.get(p) ?? [];
+    return [...variantes].sort((a, b) => b.w - a.w)[0];
+  });
 }
 
 /**
@@ -132,7 +168,11 @@ export function mapFilaToProduct(
  */
 function urlsDeFotos(fotos: FotoCrm[] | null, base: string | null) {
   if (!fotos?.length || !base) return undefined;
-  return fotos.map((f) => ({ url: `${base}/${f.key}`, w: f.w, ...(f.alt !== undefined ? { alt: f.alt } : {}) }));
+  return agruparFotos(fotos).map((f) => ({
+    url: `${base}/${f.key}`,
+    w: f.w,
+    ...(f.alt !== undefined ? { alt: f.alt } : {}),
+  }));
 }
 
 

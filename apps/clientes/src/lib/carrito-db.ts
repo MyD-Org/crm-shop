@@ -168,7 +168,7 @@ export async function enriquecer(
   return lineas.map(({ id, qty }) => {
     const p = productos.get(id);
     return p
-      ? { id, qty, name: p.name, brand: p.brand, price: p.price }
+      ? { id, qty, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }
       : { id, qty, name: "", brand: "", price: 0, faltante: true };
   });
 }

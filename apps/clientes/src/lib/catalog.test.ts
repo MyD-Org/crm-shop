@@ -115,4 +115,34 @@ describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
     const p = mapFilaToProduct({ ...base, overlayFotos: [foto] }, undefined, [HOST], null);
     expect(p.images).toBeUndefined();
   });
+
+  it("agrupa las 3 variantes de una misma foto en una sola imagen, con la más grande", () => {
+    const variantes = [
+      { key: "t1/abc-320.webp", w: 320 },
+      { key: "t1/abc-800.webp", w: 800 },
+      { key: "t1/abc-1600.webp", w: 1600, alt: "Lámpara" },
+    ];
+    const p = mapFilaToProduct({ ...base, overlayFotos: variantes }, undefined, [HOST], BASE);
+    expect(p.images).toEqual([{ url: `${BASE}/t1/abc-1600.webp`, w: 1600, alt: "Lámpara" }]);
+  });
+
+  it("dos fotos distintas de 3 variantes cada una quedan como 2 imágenes, en orden", () => {
+    const variantes = [
+      { key: "t1/aaa-320.webp", w: 320 },
+      { key: "t1/bbb-320.webp", w: 320 },
+      { key: "t1/aaa-800.webp", w: 800 },
+      { key: "t1/bbb-1600.webp", w: 1600 },
+      { key: "t1/aaa-1600.webp", w: 1600 },
+    ];
+    const p = mapFilaToProduct({ ...base, overlayFotos: variantes }, undefined, [HOST], BASE);
+    expect(p.images).toEqual([
+      { url: `${BASE}/t1/aaa-1600.webp`, w: 1600 },
+      { url: `${BASE}/t1/bbb-1600.webp`, w: 1600 },
+    ]);
+  });
+
+  it("si la foto original era chica y sólo tiene una variante, no rompe el agrupado", () => {
+    const p = mapFilaToProduct({ ...base, overlayFotos: [{ key: "t1/sola-320.webp", w: 320 }] }, undefined, [HOST], BASE);
+    expect(p.images).toEqual([{ url: `${BASE}/t1/sola-320.webp`, w: 320 }]);
+  });
 });

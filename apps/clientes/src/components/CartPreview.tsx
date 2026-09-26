@@ -2,6 +2,9 @@
 
 import { type PointerEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 import { Button } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { fmtPrecio } from "@/lib/format";
@@ -136,7 +139,7 @@ export function CartPreview({
           oculte al terminar el fade. Crece desde la esquina del botón; con
           reduced motion sólo cambia la opacidad. */}
       <div
-        className={`absolute right-0 top-full z-50 mt-3 w-80 origin-top-right overflow-hidden rounded-xl border border-border bg-surface shadow-lg transition-[opacity,scale,visibility] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:scale-100 ${
+        className={`absolute right-0 top-full z-50 mt-3 w-80 origin-top-right overflow-hidden rounded-lg border border-border bg-surface shadow-lg transition-[opacity,scale,visibility] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:scale-100 ${
           open
             ? "visible scale-100 opacity-100 duration-[180ms]"
             : "pointer-events-none invisible scale-[0.96] opacity-0 duration-[120ms]"
@@ -156,26 +159,32 @@ export function CartPreview({
           </div>
         ) : (
           <>
-            <div className="p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
+            {/* Estructura de menú: el popover deja 8px (px-2) y la fila otros 8px
+                (px-2), así la miniatura queda alineada a 16px con el título, el
+                total y el botón. Radios concéntricos en tres niveles: popover
+                rounded-lg, fila = lg − 8px, miniatura = lg − 16px. `scroll-fino`
+                es la barra fina del DS. */}
+            <div className="pt-4">
+              <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-muted">
                 Carrito ({count} productos)
               </p>
 
-              {/* `scroll-fino` (utilidad del DS): la misma barra fina y del color de
-                  la piel que la lista de marcas, en vez de la gris del sistema.
-                  `pr-3` la separa de los precios. */}
-              <ul className="scroll-fino -mx-1 max-h-72 space-y-3 overflow-y-auto px-1 pr-3">
+              <ul className="scroll-fino max-h-72 space-y-0.5 overflow-y-auto px-2 pb-2">
                 {items.map((item) => (
                   <li key={item.id}>
                     <Link
                       href={`/producto/${item.id}`}
-                      className="flex items-center gap-3 rounded-lg p-1 transition-colors hover:bg-elevated"
+                      className="flex items-center gap-3 rounded-[calc(var(--radius-lg)-0.5rem)] px-2 py-2 transition-colors hover:bg-elevated"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted/40">
-                        <LightbulbIcon />
+                      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-lg)-1rem)] border border-border bg-surface text-muted/40">
+                        {item.image ? (
+                          <Image src={item.image} alt="" fill sizes="40px" className="object-contain p-0.5" />
+                        ) : (
+                          <LightbulbIcon />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-medium text-text">{item.name}</p>
+                        <p className="truncate text-xs font-medium text-text">{formatNombreProducto(item.name, item.brand ? formatMarca(item.brand) : undefined)}</p>
                         <p className="text-xs text-muted">{item.qty} u. · {fmt(item.price)} c/u</p>
                       </div>
                       <p className="shrink-0 text-xs font-bold text-text">{fmt(item.price * item.qty)}</p>

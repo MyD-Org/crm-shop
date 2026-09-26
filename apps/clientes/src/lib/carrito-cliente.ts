@@ -24,6 +24,13 @@ export interface CartItem {
    * con problema.
    */
   faltante?: boolean;
+  /**
+   * URL de la foto de portada del producto, sólo para pintar el carrito sin
+   * esperar al servidor. Igual que `price`/`name`/`brand`: es referencial y
+   * puede quedar vieja; con sesión, `enriquecer()` (carrito-db.ts) la vuelve a
+   * resolver del catálogo en cada carga. Sin foto, el ícono de siempre.
+   */
+  image?: string;
 }
 
 /** Caché local: `owner` es el userId de Clerk, o null para invitado / cookie CRM. */
@@ -229,6 +236,14 @@ export function aLineas(items: readonly LineaCarrito[]): LineaCarrito[] {
 // --- Caché local ------------------------------------------------------------
 
 /**
+ * La foto viaja con el ítem (servidor o storage). El storage es editable: sólo
+ * se aceptan URLs https o rutas propias, nunca `javascript:` ni `data:`.
+ */
+function esUrlDeImagen(v: unknown): v is string {
+  return typeof v === "string" && (v.startsWith("https://") || (v.startsWith("/") && !v.startsWith("//")));
+}
+
+/**
  * Valida item por item: el storage es editable por el usuario y sobrevive a
  * deploys, así que puede tener la forma de una versión anterior del carrito.
  * También se usa con las respuestas de /api/carrito. null si no es un array.
@@ -247,6 +262,7 @@ export function parsearItems(parsed: unknown): CartItem[] | null {
         variant: item.variant ? String(item.variant) : undefined,
         price: Number(item.price) || 0,
         qty: Math.min(qty, QTY_MAX),
+        ...(esUrlDeImagen(item.image) ? { image: item.image } : {}),
         ...(item.faltante === true ? { faltante: true } : {}),
       },
     ];

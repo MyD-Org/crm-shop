@@ -32,7 +32,7 @@ export default async function MiCuentaPage() {
   const conFavoritos = CAPACIDADES_DESPLIEGUE.favoritos && !!clerkUserId;
   // Avisos es de Facturación: sólo cuenta corriente (lectura compartida con el layout).
   const conAvisos = CAPACIDADES_DESPLIEGUE.avisos && !!cliente && (await accesoFacturacion());
-  const [pedidos, resumen, favoritos, noLeidos] = await Promise.all([
+  const [pedidos, resumen, favoritos, noLeidos, pagos] = await Promise.all([
     listarPedidos(dueno, 3),
     resumenPedidos(dueno),
     conFavoritos && clerkUserId
@@ -40,8 +40,8 @@ export default async function MiCuentaPage() {
       : [],
     // Si la lectura falla, el resumen se muestra igual, sin el aviso.
     conAvisos && cliente ? contarNoLeidos(cliente.codigocliente).catch(() => 0) : 0,
+    pagosHabilitados(),
   ]);
-  const pagos = await pagosHabilitados();
 
   return (
     <div className="flex flex-col gap-8">

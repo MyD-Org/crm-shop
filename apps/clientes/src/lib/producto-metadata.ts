@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import type { Product } from "@/data/products";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 
 /**
  * Metadata de la ficha: lo que muestran WhatsApp, Google y compañía al pegar el
@@ -21,20 +23,25 @@ export function metadataProducto(producto: Product, conBase: boolean): Metadata 
   const partes = [producto.brand, producto.sku && `Código ${producto.sku}`].filter(Boolean);
   const description = partes.length > 0 ? partes.join(" · ") : undefined;
   const portada = producto.images?.[0];
+  // Sólo para mostrar: `producto.name` (el dato real) no se toca.
+  const nombre = formatNombreProducto(
+    producto.name,
+    producto.brand ? formatMarca(producto.brand) : undefined
+  );
 
   return {
-    title: producto.name,
+    title: nombre,
     description,
     ...(conBase ? { alternates: { canonical: ruta } } : {}),
     openGraph: {
       type: "website",
-      title: producto.name,
+      title: nombre,
       description,
       ...(conBase ? { url: ruta } : {}),
       ...(portada
-        ? { images: [{ url: portada.url, width: portada.w, alt: portada.alt || producto.name }] }
+        ? { images: [{ url: portada.url, width: portada.w, alt: portada.alt || nombre }] }
         : conBase
-          ? { images: [{ url: IMAGEN_SITIO, width: 1200, height: 630, alt: producto.name }] }
+          ? { images: [{ url: IMAGEN_SITIO, width: 1200, height: 630, alt: nombre }] }
           : {}),
     },
   };

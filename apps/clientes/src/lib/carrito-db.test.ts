@@ -230,4 +230,32 @@ describe("enriquecer", () => {
     expect(await enriquecer([], undefined)).toEqual([]);
     expect(getProductosPorIds).not.toHaveBeenCalled();
   });
+
+  it("con fotos en el espejo, la portada viaja como image (siempre fresca, nunca se persiste)", async () => {
+    getProductosPorIds.mockResolvedValue(
+      new Map([
+        [
+          "1",
+          {
+            id: "1",
+            name: "Lámpara",
+            brand: "Marca",
+            price: 150,
+            images: [{ url: "https://media.plataforma.example/a.webp", w: 1600 }],
+          },
+        ],
+      ]),
+    );
+    const r = await enriquecer([{ id: "1", qty: 2 }], undefined);
+    expect(r).toEqual([
+      {
+        id: "1",
+        qty: 2,
+        name: "Lámpara",
+        brand: "Marca",
+        price: 150,
+        image: "https://media.plataforma.example/a.webp",
+      },
+    ]);
+  });
 });

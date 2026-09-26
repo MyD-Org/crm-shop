@@ -25,6 +25,8 @@ import { CuotasResumen } from "@/components/CuotasResumen";
 import { resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 import {
   CONDICION_IVA_LABEL,
   TIPO_DOC_LABEL,
@@ -1096,7 +1098,7 @@ export function CheckoutClient({
             {cotizacion?.lineas.map((linea) => (
               <li key={linea.id} className="flex justify-between gap-2 text-sm">
                 <span className={linea.problema ? "text-danger" : "text-muted"}>
-                  {linea.name}
+                  {formatNombreProducto(linea.name, linea.brand ? formatMarca(linea.brand) : undefined)}
                   <span className="ml-1 text-xs">x{linea.qty}</span>
                   {linea.problema && (
                     <span className="mt-0.5 block text-xs">{linea.detalle}</span>

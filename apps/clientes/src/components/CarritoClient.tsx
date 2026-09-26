@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
@@ -10,6 +11,8 @@ import { CuotasResumen } from "@/components/CuotasResumen";
 import { baseCarrito, resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -153,6 +156,11 @@ export function CarritoClient({
                 ultimasLineas?.find((l) => l.id === item.id),
               );
 
+              const marca = linea?.brand || item.brand;
+              const nombre = linea && !linea.problema ? linea.name : item.name;
+              // Sólo para mostrar: el nombre que viaja en el pedido no se toca.
+              const nombreParaMostrar = formatNombreProducto(nombre, marca ? formatMarca(marca) : undefined);
+
               return (
                 <div
                   key={item.id}
@@ -160,16 +168,23 @@ export function CarritoClient({
                     linea?.problema ? "border-danger/40" : "border-border/50"
                   }`}
                 >
-                  <Link href={`/producto/${item.id}`} className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-elevated sm:h-24 sm:w-24 transition-opacity hover:opacity-80">
-                    <LightbulbIcon className="h-8 w-8 text-muted/30 sm:h-12 sm:w-12" />
+                  <Link
+                    href={`/producto/${item.id}`}
+                    className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface transition-opacity hover:opacity-80 sm:h-24 sm:w-24"
+                  >
+                    {item.image ? (
+                      <Image src={item.image} alt="" fill sizes="96px" className="object-contain p-1" />
+                    ) : (
+                      <LightbulbIcon className="h-8 w-8 text-muted/30 sm:h-12 sm:w-12" />
+                    )}
                   </Link>
 
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                      {linea?.brand || item.brand}
+                      {marca}
                     </p>
                     <Link href={`/producto/${item.id}`} className="break-words text-sm font-semibold text-text transition-colors hover:text-primary">
-                      {linea && !linea.problema ? linea.name : item.name}
+                      {nombreParaMostrar}
                     </Link>
                     {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
                     {precio ? (

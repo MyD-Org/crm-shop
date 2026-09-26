@@ -14,25 +14,22 @@
 
 /** Siglas que se leen en mayúscula aunque el resto del nombre se formatee. */
 const ACRONIMOS = new Set([
-  "led",
-  "usb",
-  "usb-c",
-  "tv",
-  "rgb",
-  "rgbw",
-  "pvc",
-  "ac",
-  "dc",
-  "ac/dc",
-  "wifi",
-  "wi-fi",
-  "hdmi",
-  "vga",
-  "ip",
-  "lan",
-  "wan",
-  "plc",
-  "led/rgb",
+  "led", "usb", "tv", "rgb", "rgbw", "pvc", "ac", "dc", "wifi", "hdmi", "vga",
+  "ip", "lan", "wan", "plc", "utp", "ftp", "stp", "ul", "iso", "iec", "tia",
+  "eia", "poe", "ups", "nvr", "dvr", "xvr", "cctv", "ptz", "hd", "fhd", "uhd",
+  "smd", "cob", "abs", "ce", "rohs", "din", "dmx", "dali", "ir", "sd", "cat",
+  "rj", "awg", "iram", "nema", "bt", "nfc", "gps", "ai",
+]);
+
+/**
+ * Palabras cortas del castellano que NO son siglas: sin esta lista, la
+ * heurística de "hasta 3 letras = sigla" dejaría "DE" o "LUZ" en mayúscula.
+ */
+const PALABRAS_CORTAS = new Set([
+  "a", "e", "o", "u", "y", "x", "al", "de", "el", "en", "la", "lo", "no", "su",
+  "un", "con", "del", "las", "los", "mas", "más", "por", "sin", "una", "uno",
+  "dos", "luz", "sol", "par", "pie", "red", "uso", "gas", "eje", "ojo", "max",
+  "min", "mix", "set", "kit", "box", "pack", "tipo", "para", "doble", "tres",
 ]);
 
 /** Unidades que van pegadas a un número, en su forma canónica de escritura. */
@@ -53,15 +50,19 @@ const UNIDADES: Record<string, string> = {
   g: "g",
 };
 
-/** Vocales (con y sin tilde) para la heurística de siglas cortas. */
-const VOCALES = /[AEIOUÁÉÍÓÚ]/i;
-
 /** Sólo letras y dígitos, en mayúscula: para comparar sin que estorbe la puntuación. */
 const normalizarParaComparar = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-/** ¿El texto ya tiene alguna minúscula? Si la tiene, se deja como está. */
-function tieneMinuscula(texto: string): boolean {
-  return /[a-záéíóúñü]/.test(texto);
+/**
+ * ¿El texto viene en MAYÚSCULAS SOSTENIDAS? Se tolera alguna minúscula suelta
+ * (unidades como "305m" dentro de un nombre en mayúscula); si más de un 20 %
+ * de las letras ya son minúsculas, el nombre se considera presentable.
+ */
+function estaEnMayusculas(texto: string): boolean {
+  const letras = texto.match(/\p{L}/gu) ?? [];
+  if (letras.length === 0) return false;
+  const minusculas = letras.filter((l) => l !== l.toUpperCase()).length;
+  return minusculas / letras.length <= 0.2;
 }
 
 /**
@@ -78,57 +79,65 @@ function comoUnidadPegada(token: string): string | null {
 }
 
 function capitalizar(palabra: string): string {
-  return palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase();
+  // Salta la puntuación inicial: "(100%" o "“LAMPARA".
+  const i = palabra.search(/\p{L}/u);
+  if (i < 0) return palabra.toLowerCase();
+  return palabra.slice(0, i) + palabra.charAt(i).toUpperCase() + palabra.slice(i + 1).toLowerCase();
 }
 
-/**
- * Formatea un token (palabra) del nombre. `marca` ya viene normalizada
- * (`normalizarParaComparar`) para no repetir el trabajo por cada palabra.
- */
-function formatearToken(token: string, marcaNormalizada: string | null, marcaDisplay: string | null): string {
-  if (marcaNormalizada && normalizarParaComparar(token) === marcaNormalizada) {
-    return marcaDisplay ?? capitalizar(token);
+/** Una parte de palabra sin separadores internos ("ISO", "IEC", "24AWG"). */
+function formatearParte(parte: string, marcaNormalizada: string | null, marcaDisplay: string | null): string {
+  if (marcaNormalizada && normalizarParaComparar(parte) === marcaNormalizada) {
+    return marcaDisplay ?? capitalizar(parte);
   }
 
-  if (/\d/.test(token)) {
+  if (/\d/.test(parte)) {
     // Número con letras: unidad reconocida, o si no, código/medida que se
-    // deja tal cual vino (en mayúscula, como el resto de las siglas).
-    return comoUnidadPegada(token) ?? token.toUpperCase();
+    // deja en mayúscula ("JDHU2909", "CAT5E", "24AWG").
+    const nucleo = parte.replace(/[^\p{L}\p{N}.,"]/gu, "");
+    const unidad = comoUnidadPegada(nucleo);
+    return unidad ? parte.replace(nucleo, unidad) : parte.toUpperCase();
   }
 
-  const soloLetras = token.replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ]/g, "");
-  const clave = soloLetras.toLowerCase();
-  if (ACRONIMOS.has(clave) || ACRONIMOS.has(token.toLowerCase())) {
-    return token.toUpperCase();
-  }
-  // Sigla corta sin vocales que no está en la lista (p. ej. "PVC", "TV",
-  // "RGB" ya cubiertas arriba, pero cualquier otra combinación parecida).
-  if (soloLetras.length >= 2 && soloLetras.length <= 5 && !VOCALES.test(soloLetras)) {
-    return token.toUpperCase();
-  }
+  const clave = parte.replace(/[^\p{L}]/gu, "").toLowerCase();
+  if (ACRONIMOS.has(clave)) return parte.toUpperCase();
+  // Sigla corta que no está en la lista: hasta 3 letras y no es una palabra
+  // del castellano ("UL", "NVR"), o sin ninguna vocal ("PCB", "HDMI").
+  if (clave.length >= 2 && clave.length <= 3 && !PALABRAS_CORTAS.has(clave)) return parte.toUpperCase();
+  if (clave.length >= 2 && clave.length <= 5 && !/[aeiouáéíóú]/.test(clave)) return parte.toUpperCase();
 
-  return capitalizar(token);
+  return parte.toLowerCase();
 }
 
 /**
- * Nombre de producto listo para mostrar: primera letra en mayúscula por
- * palabra, preservando siglas, códigos de modelo y unidades. No hace nada
- * si el nombre ya tiene alguna minúscula (ya está presentable) o si está
- * vacío.
+ * Nombre de producto listo para mostrar, en formato oración: la primera letra
+ * en mayúscula y el resto en minúscula, preservando siglas, códigos de modelo,
+ * unidades y la marca. No hace nada si el nombre no viene en MAYÚSCULAS
+ * SOSTENIDAS (ya está presentable) o si está vacío.
  *
  * `marca`, si se pasa, es la marca YA formateada para mostrar (por ejemplo
  * con `formatMarca`): si una palabra del nombre coincide con ella, se
- * reemplaza por esa forma en vez de titular la palabra a mano.
+ * reemplaza por esa forma.
  */
 export function formatNombreProducto(nombre: string, marca?: string | null): string {
-  if (!nombre || tieneMinuscula(nombre)) return nombre;
+  if (!nombre || !estaEnMayusculas(nombre)) return nombre;
 
   const marcaNormalizada = marca ? normalizarParaComparar(marca) : null;
   const marcaDisplay = marca ?? null;
 
-  return nombre
+  const resultado = nombre
     .split(/\s+/)
     .filter(Boolean)
-    .map((token) => formatearToken(token, marcaNormalizada, marcaDisplay))
+    // "ISO/IEC", "USB-C", "AC/DC": cada parte se evalúa por separado.
+    .map((token) =>
+      token
+        .split(/([/-])/)
+        .map((parte) => (parte === "/" || parte === "-" ? parte : formatearParte(parte, marcaNormalizada, marcaDisplay)))
+        .join("")
+    )
     .join(" ");
+
+  // Formato oración: mayúscula al principio y después de cada punto (si ahí
+  // quedó una minúscula; una sigla o código ya viene en mayúscula).
+  return resultado.replace(/(^|[.!?]\s+)([^\p{L}]*)(\p{L})/gu, (_, antes, medio, letra) => antes + medio + letra.toUpperCase());
 }

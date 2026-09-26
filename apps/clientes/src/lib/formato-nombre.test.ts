@@ -2,32 +2,40 @@ import { describe, expect, it } from "vitest";
 import { formatNombreProducto } from "./formato-nombre";
 
 describe("formatNombreProducto", () => {
-  it("si ya tiene alguna minúscula, lo deja como está", () => {
+  it("si no viene en mayúsculas sostenidas, lo deja como está", () => {
     expect(formatNombreProducto("Lampara Led Panel")).toBe("Lampara Led Panel");
-    expect(formatNombreProducto("LAMPARA Led")).toBe("LAMPARA Led");
+    expect(formatNombreProducto("LAMPARA Led colgante")).toBe("LAMPARA Led colgante");
   });
 
   it("vacío se deja como está", () => {
     expect(formatNombreProducto("")).toBe("");
   });
 
-  it("título normal, palabra por palabra", () => {
-    expect(formatNombreProducto("LAMPARA COLGANTE DECORATIVA")).toBe(
-      "Lampara Colgante Decorativa"
+  it("formato oración: sólo la primera letra en mayúscula", () => {
+    expect(formatNombreProducto("LAMPARA COLGANTE DECORATIVA")).toBe("Lampara colgante decorativa");
+    expect(formatNombreProducto("ABRAZADERA DE MANGUERA TIPO AMERICANO")).toBe(
+      "Abrazadera de manguera tipo americano"
     );
   });
 
-  it("preserva siglas conocidas", () => {
+  it("preserva siglas conocidas y cortas", () => {
     expect(formatNombreProducto("CINTA LED RGB IP65")).toBe("Cinta LED RGB IP65");
     expect(formatNombreProducto("CABLE USB TV")).toBe("Cable USB TV");
     expect(formatNombreProducto("FUENTE AC/DC PVC")).toBe("Fuente AC/DC PVC");
+    expect(formatNombreProducto("CERTIFICADO UL")).toBe("Certificado UL");
+  });
+
+  it("las palabras cortas del castellano no se toman por siglas", () => {
+    expect(formatNombreProducto("TIRA DE LUZ CON SENSOR")).toBe("Tira de luz con sensor");
+  });
+
+  it("no toca la primera palabra si es sigla o código", () => {
+    expect(formatNombreProducto("LED PANEL 60X60")).toBe("LED panel 60X60");
   });
 
   it("preserva unidades pegadas a números en su forma canónica", () => {
     expect(formatNombreProducto("FUENTE 12V 10W")).toBe("Fuente 12V 10W");
-    expect(formatNombreProducto("TRANSFORMADOR 220V")).toBe("Transformador 220V");
     expect(formatNombreProducto("PANEL LED 4000K")).toBe("Panel LED 4000K");
-    // La fuente viene toda en mayúscula: "25MM" se lee "25mm".
     expect(formatNombreProducto("CANO 25MM")).toBe("Cano 25mm");
   });
 
@@ -42,18 +50,20 @@ describe("formatNombreProducto", () => {
   });
 
   it("preserva la marca del producto si aparece en el nombre, con su forma de exhibición", () => {
-    expect(formatNombreProducto("LAMPARA LED JADEVER A60", "Jadever")).toBe(
-      "Lampara LED Jadever A60"
-    );
+    expect(formatNombreProducto("LAMPARA LED JADEVER A60", "Jadever")).toBe("Lampara LED Jadever A60");
   });
 
-  it("sin marca pasada, la palabra se titula como cualquier otra", () => {
-    expect(formatNombreProducto("LAMPARA LED JADEVER A60")).toBe("Lampara LED Jadever A60");
+  it("nombre real con siglas separadas por barra, puntuación y una unidad en minúscula", () => {
+    expect(
+      formatNombreProducto(
+        "CABLE UTP CAT5E COLOR GRIS INTERIOR, 24AWG- ISO/IEC 11801, TIA/EIA 568. CERTIFICADO UL (100% COBRE), 305m"
+      )
+    ).toBe(
+      "Cable UTP CAT5E color gris interior, 24AWG- ISO/IEC 11801, TIA/EIA 568. Certificado UL (100% cobre), 305m"
+    );
   });
 
   it("combinación real: siglas, unidad, marca y código en el mismo nombre", () => {
-    expect(formatNombreProducto("CINTA LED RGB 12V 5M JADEVER", "Jadever")).toBe(
-      "Cinta LED RGB 12V 5m Jadever"
-    );
+    expect(formatNombreProducto("CINTA LED RGB 12V 5M JADEVER", "Jadever")).toBe("Cinta LED RGB 12V 5m Jadever");
   });
 });

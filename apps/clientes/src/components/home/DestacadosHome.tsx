@@ -86,18 +86,13 @@ export async function DestacadosHome({
               cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
               image={
                 fotoReal ? (
-                  // Fondo blanco propio (las fotos de producto suelen tener fondo
-                  // blanco): el wrap del DS es bg-elevated, así que se enmarca
-                  // acá mismo, dentro del slot que expone `image`.
-                  <div className="absolute inset-0 flex items-center justify-center rounded-[16px] border border-border bg-surface">
-                    <Image
-                      src={fotoReal.url}
-                      alt={fotoReal.alt || p.name}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-                      className="object-contain p-4"
-                    />
-                  </div>
+                  <Image
+                    src={fotoReal.url}
+                    alt={fotoReal.alt || p.name}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                    className="object-contain p-4"
+                  />
                 ) : imagenDecorativa ? (
                   <Image
                     src={imagenDecorativa}
@@ -107,9 +102,7 @@ export async function DestacadosHome({
                     className="object-cover"
                   />
                 ) : (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-[16px] border border-border bg-surface">
-                    <LightbulbIcon className="h-20 w-20 text-muted/30" />
-                  </div>
+                  <LightbulbIcon className="h-20 w-20 text-muted/30" />
                 )
               }
               priceNote={p.sku ? `Cód. ${p.sku}` : undefined}

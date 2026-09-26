@@ -145,14 +145,6 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
     if (r.tipo === "conflicto") onConflicto()
   }
 
-  const reserva = (
-    <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
-      {pedido.reservaStock
-        ? "Este pedido está reservando stock en la tienda."
-        : "Este pedido no está reservando stock en la tienda."}
-    </p>
-  )
-
   if (pedido.factura) {
     const vinculada = textoUltimoCambio(pedido.facturadoPorNombre, pedido.facturadoEn)
     return (
@@ -167,7 +159,6 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
             Vinculada {vinculada}. El pedido figura como facturado.
           </p>
         )}
-        {reserva}
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" loading={reenviando} onClick={() => void reenviar()} disabled={guardando}>
             Reenviar factura
@@ -233,7 +224,6 @@ export function VincularFacturaControl({ pedido, onChanged, onConflicto }: Props
           Buscar
         </Button>
       </form>
-      {reserva}
 
       <Dialog
         open={encontrada !== null}

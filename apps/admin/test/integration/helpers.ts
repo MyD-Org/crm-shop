@@ -2,7 +2,16 @@ import { randomUUID } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants, adminUsers, paymentReceipts } from "@/db/schema"
-import { shopOrders, shopOrderItems, type ShopOrderItemRow, type ShopOrderRow } from "@/db/shop-schema"
+import {
+  shopClientLinks,
+  shopClientes,
+  shopOrders,
+  shopOrderItems,
+  type ShopClienteRow,
+  type ShopClientLinkRow,
+  type ShopOrderItemRow,
+  type ShopOrderRow,
+} from "@/db/shop-schema"
 import { assertLocalTestDb } from "./db-url"
 
 // Helpers compartidos por los tests de integración: siembran datos mínimos (tenant, operador)
@@ -18,13 +27,13 @@ function guard() {
  * Vacía las tablas que tocan los tests. CASCADE limpia también las que referencian por FK.
  * Incluye `shop.order_items` y `shop.orders` (drizzle las renderiza calificadas): los pedidos
  * del Shop no cuelgan por FK de `tenants`, así que el CASCADE de arriba no los alcanza.
- * `shop.clientes` (espejo de usuarios de Clerk, 0018 del Shop) va con SQL crudo: todavía no está
- * declarada en shop-schema.ts.
+ * También `shop.clientes` (espejo de usuarios de Clerk, 0018 del Shop) y `shop.client_links`:
+ * tampoco tienen FK a `tenants`.
  */
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderItems}, ${shopOrders}, shop.clientes restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks} restart identity cascade`,
   )
 }
 
@@ -127,6 +136,55 @@ export async function seedShopOrderItem(
       subtotal: "1000.00",
       iva: "210.00",
       total: "1210.00",
+      ...overrides,
+    })
+    .returning()
+  return row
+}
+
+/**
+ * Usuario del espejo de Clerk (`shop.clientes`) sembrado directo, sin pasar por las funciones
+ * del Shop (esas las prueba shop-clientes-espejo). Datos inventados, dominio `.example`.
+ */
+export async function seedShopCliente(
+  tenantId: string,
+  overrides: Partial<typeof shopClientes.$inferInsert> = {},
+): Promise<ShopClienteRow> {
+  guard()
+  const clerkUserId = overrides.clerkUserId ?? `user_${randomUUID().replace(/-/g, "")}`
+  const email = overrides.email === undefined ? `${clerkUserId}@cliente.example` : overrides.email
+  const [row] = await getDb()
+    .insert(shopClientes)
+    .values({
+      tenantId,
+      clerkUserId,
+      email,
+      emailNorm: email ? email.trim().toLowerCase() : null,
+      nombre: "Cliente de Prueba",
+      creadoEnClerk: new Date("2026-09-01T12:00:00Z"),
+      actualizadoEnClerk: new Date("2026-09-01T12:00:00Z"),
+      ...overrides,
+    })
+    .returning()
+  return row
+}
+
+/** Fila de `shop.client_links` (vínculo, revocado o marca sin_coincidencia). */
+export async function seedClientLink(
+  clerkUserId: string,
+  overrides: Partial<typeof shopClientLinks.$inferInsert> = {},
+): Promise<ShopClientLinkRow> {
+  guard()
+  const [row] = await getDb()
+    .insert(shopClientLinks)
+    .values({
+      clerkUserId,
+      alegraContactId: "1001",
+      razonSocial: "Cliente Ejemplo SA",
+      cuit: "30711111110",
+      tipoCuenta: "contado",
+      estado: "activa",
+      metodo: "email_verificado",
       ...overrides,
     })
     .returning()

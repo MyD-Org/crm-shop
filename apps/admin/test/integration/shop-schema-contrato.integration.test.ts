@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from "vitest"
 import { eq, sql } from "drizzle-orm"
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core"
 import { getDb } from "@/db"
-import { shopOrders, shopOrderItems } from "@/db/shop-schema"
+import { shopClientes, shopClientLinks, shopOrders, shopOrderItems } from "@/db/shop-schema"
 import { seedShopOrder, seedShopOrderItem, truncateAll } from "./helpers"
 
 // Test de CONTRATO entre las dos apps (ADM-10).
@@ -41,7 +41,7 @@ async function columnasReales(schema: string, tabla: string): Promise<Map<string
   return new Map(filas.map((f) => [f.column_name, f]))
 }
 
-const TABLAS: PgTable[] = [shopOrders, shopOrderItems]
+const TABLAS: PgTable[] = [shopOrders, shopOrderItems, shopClientes, shopClientLinks]
 
 describe("contrato: shop-schema.ts del CRM vs. las migraciones reales del Shop", () => {
   beforeEach(async () => {

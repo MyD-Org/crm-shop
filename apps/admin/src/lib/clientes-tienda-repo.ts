@@ -10,10 +10,12 @@ import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
 //    (`shop.client_links` no tiene tenant); pedidos y contactos se filtran además por el mismo
 //    tenant, así un clerk_user_id repetido en dos tiendas no mezcla datos.
 //  - SQL crudo parametrizado (design D10): LATERAL para el último vínculo y los pedidos. Sólo
-//    lectura: el CRM no escribe nada de estas tablas en R3.
-//  - Acceso a Facturación = la MISMA regla que el Shop (`accesoFacturacion()`): vínculo activo +
-//    contacto activo de la cuenta principal del tenant con tipo_cuenta 'corriente'. Contacto
-//    ausente o inactivo ⇒ "no" (fail-closed). La excepción por contacto llega en R4a.
+//    lectura: las acciones (vincular, excepción) viven en clientes-tienda-acciones.ts.
+//  - Acceso a Facturación = la MISMA regla que el Shop: vínculo activo + contacto activo de la
+//    cuenta principal del tenant con `acceso_facturacion` en la VISTA `alegra_contacts_shop`
+//    (0039: cuenta corriente O excepción vigente otorgada desde este admin). Una sola definición
+//    de la regla, en SQL. Contacto ausente o inactivo ⇒ "no" (fail-closed). El origen se
+//    deriva: tipo 'corriente' ⇒ "corriente"; si no, "excepcion".
 
 export const CLIENTES_TIENDA_DEFAULT_LIMIT = 25
 export const CLIENTES_TIENDA_MAX_LIMIT = 50
@@ -56,9 +58,11 @@ export interface ClienteTiendaDto {
   }
   /** Del espejo, sólo con vínculo activo y contacto activo. */
   tipoCuenta: "corriente" | "contado" | null
-  /** "excepcion" recién desde R4a. */
   acceso: AccesoFacturacion
-  /** R4a. En R3 siempre false. */
+  /**
+   * Hay una excepción vigente para el contacto del vínculo activo (aunque el contacto esté
+   * inactivo y por eso `acceso` sea "no"). Decide qué botón ofrece la UI: Dar o Quitar.
+   */
   excepcionVigente: boolean
   pedidos: number
   ultimoPedidoEn: string | null
@@ -75,7 +79,8 @@ interface FilaListado {
   razon_social: string | null
   link_desde: Date | string | null
   tipo_cuenta: string | null
-  acceso_corriente: boolean
+  acceso: boolean
+  excepcion_vigente: boolean
   pedidos: number
   ultimo_pedido: Date | string | null
 }
@@ -116,8 +121,8 @@ function aDto(f: FilaListado): ClienteTiendaDto {
       desde: iso(f.link_desde),
     },
     tipoCuenta: tipo,
-    acceso: f.acceso_corriente ? "corriente" : "no",
-    excepcionVigente: false,
+    acceso: !f.acceso ? "no" : tipo === "corriente" ? "corriente" : "excepcion",
+    excepcionVigente: f.excepcion_vigente === true,
     pedidos: Number(f.pedidos) || 0,
     ultimoPedidoEn: iso(f.ultimo_pedido),
   }
@@ -142,14 +147,22 @@ export async function listarClientesTienda(
 
   // CTE compartida por la página y el conteo. El vínculo que se muestra es el activo si hay
   // uno; si no, el más reciente (cl_usuario_fecha, 0018 del Shop). El contacto sólo se une con
-  // vínculo activo y contacto activo, igual que decide el Shop.
+  // vínculo activo y contacto activo, igual que decide el Shop. `excepcion_vigente` mira la tabla
+  // sin filtrar por status (el índice parcial caf_vigente resuelve el EXISTS).
   const base = sql`
     WITH base AS (
       SELECT c.id, c.clerk_user_id, c.nombre, c.email, c.creado_en_clerk,
              l.estado AS link_estado, l.metodo AS link_metodo, l.alegra_contact_id,
              coalesce(v.name, l.razon_social) AS razon_social, l.created_at AS link_desde,
              v.tipo_cuenta,
-             coalesce(v.tipo_cuenta = 'corriente', false) AS acceso_corriente,
+             coalesce(v.acceso_facturacion, false) AS acceso,
+             (l.estado = 'activa' AND EXISTS (
+                SELECT 1 FROM public.contactos_acceso_facturacion e
+                WHERE e.tenant_id = c.tenant_id
+                  AND e.alegra_account = ${CUENTA_ALEGRA_PRINCIPAL}
+                  AND e.alegra_id = l.alegra_contact_id
+                  AND e.revocado_en IS NULL
+             )) IS TRUE AS excepcion_vigente,
              o.pedidos, o.ultimo_pedido
       FROM shop.clientes c
       LEFT JOIN LATERAL (
@@ -159,7 +172,7 @@ export async function listarClientesTienda(
         ORDER BY (cl.estado = 'activa') DESC, cl.created_at DESC, cl.id DESC
         LIMIT 1
       ) l ON true
-      LEFT JOIN public.alegra_contacts v
+      LEFT JOIN public.alegra_contacts_shop v
         ON l.estado = 'activa'
        AND v.tenant_id = c.tenant_id
        AND v.alegra_account = ${CUENTA_ALEGRA_PRINCIPAL}
@@ -177,8 +190,8 @@ export async function listarClientesTienda(
   const condiciones: SQL[] = []
   if (filtro.vinculo === "vinculados") condiciones.push(sql`link_estado = 'activa'`)
   if (filtro.vinculo === "sin_vincular") condiciones.push(sql`link_estado IS DISTINCT FROM 'activa'`)
-  if (filtro.acceso === "con") condiciones.push(sql`acceso_corriente`)
-  if (filtro.acceso === "sin") condiciones.push(sql`NOT acceso_corriente`)
+  if (filtro.acceso === "con") condiciones.push(sql`acceso`)
+  if (filtro.acceso === "sin") condiciones.push(sql`NOT acceso`)
   if (filtro.pedidos === "con") condiciones.push(sql`pedidos > 0`)
   const where = condiciones.length ? sql`WHERE ${sql.join(condiciones, sql` AND `)}` : sql``
 

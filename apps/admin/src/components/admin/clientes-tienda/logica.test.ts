@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
+import type { ClienteTiendaDto } from "@/lib/clientes-tienda-repo"
 import {
   FILTROS_INICIALES,
+  accionesDisponibles,
+  mensajeDeError,
+  textoConfirmarDarAcceso,
+  textoConfirmarDesvincular,
+  textoConfirmarQuitarAcceso,
+  textoConfirmarVincular,
   OPCIONES_ACCESO,
   OPCIONES_PEDIDOS,
   OPCIONES_VINCULO,
@@ -95,5 +102,76 @@ describe("filtros y estado vacío", () => {
   it("mensaje vacío según haya filtros", () => {
     expect(mensajeVacio(false)).toBe("Todavía no hay clientes registrados en la tienda.")
     expect(mensajeVacio(true)).toBe("No hay clientes que coincidan con su búsqueda.")
+  })
+})
+
+describe("acciones de admin (R4a)", () => {
+  const base: ClienteTiendaDto = {
+    clerkUserId: "user_1",
+    nombre: "Ana",
+    email: "ana@cliente.example",
+    altaEn: null,
+    vinculo: { estado: "vinculado", metodo: "operador", alegraContactId: "101", razonSocial: "Contado SA", desde: null },
+    tipoCuenta: "contado",
+    acceso: "no",
+    excepcionVigente: false,
+    pedidos: 0,
+    ultimoPedidoEn: null,
+  }
+  const con = (cambio: Partial<ClienteTiendaDto>, vinculo: Partial<ClienteTiendaDto["vinculo"]> = {}) => ({
+    ...base,
+    ...cambio,
+    vinculo: { ...base.vinculo, ...vinculo },
+  })
+  const ninguna = { vincular: false, desvincular: false, darAcceso: false, quitarAcceso: false }
+
+  it("un operador no ve ninguna acción", () => {
+    expect(accionesDisponibles(base, false)).toEqual(ninguna)
+    expect(accionesDisponibles(con({}, { estado: "sin_vincular" }), false)).toEqual(ninguna)
+  })
+
+  it("vinculado a contado sin excepción ⇒ desvincular y dar acceso", () => {
+    expect(accionesDisponibles(base, true)).toEqual({ ...ninguna, desvincular: true, darAcceso: true })
+  })
+
+  it("con excepción vigente ⇒ quitar acceso (aunque el contacto esté inactivo)", () => {
+    expect(accionesDisponibles(con({ acceso: "excepcion", excepcionVigente: true }), true)).toEqual({
+      ...ninguna,
+      desvincular: true,
+      quitarAcceso: true,
+    })
+    expect(accionesDisponibles(con({ tipoCuenta: null, excepcionVigente: true }), true).quitarAcceso).toBe(true)
+  })
+
+  it("cuenta corriente o contacto inactivo/ausente ⇒ no se ofrece dar acceso", () => {
+    expect(accionesDisponibles(con({ tipoCuenta: "corriente", acceso: "corriente" }), true).darAcceso).toBe(false)
+    expect(accionesDisponibles(con({ tipoCuenta: null }), true).darAcceso).toBe(false)
+  })
+
+  it.each(["sin_vincular", "sin_coincidencia", "ambiguo", "revocado"] as const)("%s ⇒ sólo vincular", (estado) => {
+    expect(accionesDisponibles(con({}, { estado }), true)).toEqual({ ...ninguna, vincular: true })
+  })
+
+  it("textos de confirmación en usted, con la razón social", () => {
+    expect(textoConfirmarVincular("Contado SA")).toBe(
+      "Al vincular esta cuenta a Contado SA, el usuario verá los precios y el historial de pedidos de ese cliente. ¿Desea continuar?",
+    )
+    expect(textoConfirmarDesvincular("Contado SA")).toBe(
+      "¿Desea desvincular esta cuenta de Contado SA? El usuario dejará de ver sus precios, pedidos y Facturación en la próxima navegación.",
+    )
+    expect(textoConfirmarDarAcceso("Contado SA")).toBe(
+      "Todos los usuarios vinculados a Contado SA verán Facturación en Mi cuenta. ¿Desea continuar?",
+    )
+    expect(textoConfirmarQuitarAcceso("Contado SA")).toBe(
+      "¿Desea quitar el acceso a Facturación a Contado SA? Sus usuarios dejarán de verla en la próxima navegación.",
+    )
+    expect(textoConfirmarDesvincular(null)).toContain("de este cliente")
+  })
+
+  it("mensajeDeError: usa el {error} de un 4xx y el genérico para 5xx o red", () => {
+    expect(mensajeDeError(409, { error: "Ya vinculado." }, "Genérico.")).toBe("Ya vinculado.")
+    expect(mensajeDeError(500, { error: "detalle" }, "Genérico.")).toBe("Genérico.")
+    expect(mensajeDeError(null, null, "Genérico.")).toBe("Genérico.")
+    expect(mensajeDeError(404, { error: "" }, "Genérico.")).toBe("Genérico.")
   })
 })

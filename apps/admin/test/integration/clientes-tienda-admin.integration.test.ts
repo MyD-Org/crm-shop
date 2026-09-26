@@ -158,7 +158,7 @@ describe("clientes de la tienda: repo", () => {
     expect(rev.acceso).toBe("no")
     expect(rev.tipoCuenta).toBeNull()
     for (const u of ["user_nada", "user_sc", "user_amb"]) expect(porId(items, u).acceso).toBe("no")
-    // En R3 la excepción no existe todavía.
+    // Sin excepciones cargadas.
     expect(items.every((i) => i.excepcionVigente === false)).toBe(true)
   })
 

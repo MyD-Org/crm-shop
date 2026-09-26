@@ -289,7 +289,7 @@ describe("migración 0034: shop_contacto_write_through y permisos de shop_app (D
       })
     })
 
-    it("shop_app lee de la vista exactamente las 30 columnas del contrato (0036 sumó teléfonos)", async () => {
+    it("shop_app lee de la vista exactamente las 31 columnas del contrato (0036 sumó teléfonos, 0039 el acceso)", async () => {
       const { r } = await como("shop_app", "SELECT * FROM public.alegra_contacts_shop WHERE tenant_id = 'tenant-wt' AND alegra_id = '501'")
       if (!r.ok) throw new Error(`SELECT falló con ${r.code}`)
       expect(Object.keys(r.filas[0])).toEqual([
@@ -323,6 +323,7 @@ describe("migración 0034: shop_contacto_write_through y permisos de shop_app (D
         "phone_primary",
         "phone_secondary",
         "mobile",
+        "acceso_facturacion",
       ])
       expect(r.filas[0].address_city).toBe("Ciudad Ejemplo")
       expect(r.filas[0].address_street).toBeNull()

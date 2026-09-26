@@ -133,6 +133,12 @@ export const crmContactos = publico
     phonePrimary: text("phone_primary"),
     phoneSecondary: text("phone_secondary"),
     mobile: text("mobile"),
+    // 0039 (change `clientes-tienda-admin`): acceso a Facturación de Mi cuenta =
+    // cuenta corriente O excepción vigente otorgada desde el admin del CRM
+    // (tabla `contactos_acceso_facturacion`, que el Shop no lee). Declarada acá
+    // para el contrato; ningún select la pide todavía: se empieza a leer en R4b,
+    // que requiere la 0039 aplicada en la base.
+    accesoFacturacion: boolean("acceso_facturacion").notNull(),
   })
   .existing();
 

@@ -134,6 +134,13 @@
       "when": 1790384447569,
       "tag": "0018_clientes_espejo_clerk",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790422579238,
+      "tag": "0019_client_links_auditoria",
+      "breakpoints": true
     }
   ]
 }

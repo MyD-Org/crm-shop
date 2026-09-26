@@ -166,6 +166,12 @@ export const shopClientLinks = shop.table("client_links", {
   metodo: text("metodo").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  // 0019 del Shop: quién vinculó/desvinculó desde este admin (metodo 'operador'). Id y nombre
+  // congelado del usuario del CRM, sin FK. Los caminos del Shop las dejan en null.
+  vinculadoPor: uuid("vinculado_por"),
+  vinculadoPorNombre: text("vinculado_por_nombre"),
+  revocadoPor: uuid("revocado_por"),
+  revocadoPorNombre: text("revocado_por_nombre"),
 })
 
 export type ShopClienteRow = typeof shopClientes.$inferSelect

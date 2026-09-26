@@ -47,7 +47,8 @@
     "address_postal_code": "text",
     "phone_primary": "text",
     "phone_secondary": "text",
-    "mobile": "text"
+    "mobile": "text",
+    "acceso_facturacion": "boolean"
   },
   "public.tenants": {
     "id": "text",

@@ -6,6 +6,7 @@
 import type { BadgeTone } from "@myd-org/ui"
 import type {
   AccesoFacturacion,
+  ClienteTiendaDto,
   EstadoVinculo,
   FiltroAcceso,
   FiltroPedidos,
@@ -109,4 +110,52 @@ export function etiquetaTipoCuenta(tipo: "corriente" | "contado" | null): string
   if (tipo === "corriente") return "Cuenta corriente"
   if (tipo === "contado") return "Contado"
   return "—"
+}
+
+// ───────────────────────── Acciones de admin (R4a) ─────────────────────────
+
+export interface AccionesCliente {
+  vincular: boolean
+  desvincular: boolean
+  darAcceso: boolean
+  quitarAcceso: boolean
+}
+
+/**
+ * Qué botones ofrece el detalle. Sólo esconde: la autoridad es `requireAdminPlus` en la API.
+ *  - Vincular: sin vínculo activo (incluye sin coincidencia, ambiguo y revocado).
+ *  - Dar acceso: vinculado a un contacto ACTIVO de contado sin excepción vigente. A un cuenta
+ *    corriente no se le ofrece (ya tiene acceso); con el contacto inactivo o fuera del espejo
+ *    tampoco (la API lo rechazaría).
+ *  - Quitar acceso: hay excepción vigente, aunque el contacto esté inactivo.
+ */
+export function accionesDisponibles(c: ClienteTiendaDto, puedeGestionar: boolean): AccionesCliente {
+  const ninguna = { vincular: false, desvincular: false, darAcceso: false, quitarAcceso: false }
+  if (!puedeGestionar) return ninguna
+  if (c.vinculo.estado !== "vinculado" || !c.vinculo.alegraContactId) return { ...ninguna, vincular: true }
+  return {
+    ...ninguna,
+    desvincular: true,
+    darAcceso: !c.excepcionVigente && c.tipoCuenta === "contado",
+    quitarAcceso: c.excepcionVigente,
+  }
+}
+
+export const textoConfirmarVincular = (razonSocial: string): string =>
+  `Al vincular esta cuenta a ${razonSocial}, el usuario verá los precios y el historial de pedidos de ese cliente. ¿Desea continuar?`
+
+export const textoConfirmarDesvincular = (razonSocial: string | null): string =>
+  `¿Desea desvincular esta cuenta de ${razonSocial ?? "este cliente"}? El usuario dejará de ver sus precios, pedidos y Facturación en la próxima navegación.`
+
+export const textoConfirmarDarAcceso = (razonSocial: string | null): string =>
+  `Todos los usuarios vinculados a ${razonSocial ?? "este cliente"} verán Facturación en Mi cuenta. ¿Desea continuar?`
+
+export const textoConfirmarQuitarAcceso = (razonSocial: string | null): string =>
+  `¿Desea quitar el acceso a Facturación a ${razonSocial ?? "este cliente"}? Sus usuarios dejarán de verla en la próxima navegación.`
+
+/** El {error} redactado de un 4xx; para un 5xx, la red caída o un cuerpo raro, el genérico. */
+export function mensajeDeError(status: number | null, body: unknown, generico: string): string {
+  if (status === null || status >= 500) return generico
+  const error = (body as { error?: unknown } | null)?.error
+  return typeof error === "string" && error.trim() !== "" ? error : generico
 }

@@ -158,14 +158,30 @@ describe("validarTag", () => {
 })
 
 describe("nombreEfectivo / skuEfectivo", () => {
-  const producto = { name: "JDSDA261", description: "TERMICA 2X16", code: null }
+  // name = código (la referencia sin el sufijo de marca): el nombre comercial está en la descripción
+  const producto = { name: "JDSDA261", description: "TERMICA 2X16", code: "JDSDA261-JDV" }
 
   it("usa el nombre propio cuando lo hay", () => {
     expect(nombreEfectivo("Térmica bipolar 16A", producto)).toBe("Térmica bipolar 16A")
   })
 
-  it("cae a la descripción de Alegra sin nombre propio", () => {
+  it("si el name es el código, cae a la descripción de Alegra", () => {
     expect(nombreEfectivo(null, producto)).toBe("TERMICA 2X16")
+    expect(nombreEfectivo(null, { ...producto, code: "JDSDA261" })).toBe("TERMICA 2X16")
+    expect(nombreEfectivo(null, { ...producto, name: "jdsda261" })).toBe("TERMICA 2X16")
+  })
+
+  it("si el name es un nombre, lo usa aunque haya descripción (la descripción son características)", () => {
+    const conNombre = { name: "PUNTAS DE DESTORNILLADOR, PH2 X 50MM", description: "2 PIEZAS/JUEGO", code: "JDSV2K12-JDV" }
+    expect(nombreEfectivo(null, conNombre)).toBe("PUNTAS DE DESTORNILLADOR, PH2 X 50MM")
+  })
+
+  it("sin referencia no se puede saber si el name es el código: usa el name", () => {
+    expect(nombreEfectivo(null, { ...producto, code: null })).toBe("JDSDA261")
+  })
+
+  it("un prefijo que no termina en guion no cuenta como código", () => {
+    expect(nombreEfectivo(null, { ...producto, code: "JDSDA2610-JDV" })).toBe("JDSDA261")
   })
 
   it("cae al name de Alegra sin descripción", () => {
@@ -178,12 +194,12 @@ describe("nombreEfectivo / skuEfectivo", () => {
   })
 
   it("nunca devuelve cadena vacía ni 'null'", () => {
-    expect(nombreEfectivo("", { name: "JDSDA261", description: null })).toBe("JDSDA261")
+    expect(nombreEfectivo("", { name: "JDSDA261", description: null, code: "JDSDA261-JDV" })).toBe("JDSDA261")
   })
 
   it("el SKU es el code, y sin code el name", () => {
     expect(skuEfectivo({ name: "JDSDA261", code: "TB16" })).toBe("TB16")
-    expect(skuEfectivo(producto)).toBe("JDSDA261")
+    expect(skuEfectivo({ ...producto, code: null })).toBe("JDSDA261")
     expect(skuEfectivo({ name: "JDSDA261", code: "  " })).toBe("JDSDA261")
   })
 })

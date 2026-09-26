@@ -314,15 +314,26 @@ describe("API del panel de catálogo — productos", () => {
 
   describe("ficha y edición", () => {
     it("la ficha trae lo de Alegra y lo editable, con el nombre resuelto", async () => {
-      await seedProducto(TENANT_A, "1", { name: "JDSDA261", description: "TERMICA 2X16", stock: "7" })
+      await seedProducto(TENANT_A, "1", { name: "JDSDA261", code: "JDSDA261-JDV", description: "TERMICA 2X16", stock: "7" })
 
       const res = await producto.GET(req("/api/admin/catalogo/productos/1"), params("1"))
       const { producto: p } = (await res.json()) as { producto: Record<string, unknown> }
       expect(p.nombreEfectivo).toBe("TERMICA 2X16")
-      expect(p.sku).toBe("JDSDA261")
+      expect(p.sku).toBe("JDSDA261-JDV")
       expect(p.stock).toBe("7")
       expect(p.visible).toBe(false)
       expect(p.motivos).toEqual(["oculto"])
+    })
+
+    it("si el name de Alegra no es el código, es el nombre (la descripción son características)", async () => {
+      await seedProducto(TENANT_A, "1", { name: "PUNTAS PH2 X 50MM", code: "JDSV2K12-JDV", description: "2 PIEZAS/JUEGO" })
+
+      const res = await producto.GET(req("/api/admin/catalogo/productos/1"), params("1"))
+      const { producto: p } = (await res.json()) as { producto: Record<string, unknown> }
+      expect(p.nombreEfectivo).toBe("PUNTAS PH2 X 50MM")
+      expect((await listar("?orden=nombre")).body.items.map((i) => (i as { nombreEfectivo?: string }).nombreEfectivo)).toEqual([
+        "PUNTAS PH2 X 50MM",
+      ])
     })
 
     it("guardar sólo el nombre no toca categoría, etiquetas ni fotos", async () => {
@@ -356,7 +367,7 @@ describe("API del panel de catálogo — productos", () => {
     })
 
     it("vaciar el nombre propio vuelve al de Alegra y no es un error de validación", async () => {
-      await seedProducto(TENANT_A, "1", { name: "JDSDA261", description: "TERMICA 2X16" })
+      await seedProducto(TENANT_A, "1", { name: "JDSDA261", code: "JDSDA261-JDV", description: "TERMICA 2X16" })
       await guardarOverlay(TENANT_A, "1", { nombre: "Térmica bipolar 16A" })
 
       const res = await producto.PATCH(

@@ -70,13 +70,18 @@ describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
     expect(p.sku).toBe("02141N");
   });
 
-  it("sin overlay, el nombre es la descripción de Alegra", () => {
-    const p = mapFilaToProduct({ ...base, description: "Cable unipolar" });
+  it("sin overlay y con el name = código, el nombre es la descripción de Alegra", () => {
+    const p = mapFilaToProduct({ ...base, code: "02141N-GEN", description: "Cable unipolar" });
     expect(p.name).toBe("Cable unipolar");
   });
 
+  it("sin overlay y con un name que no es el código, el nombre es el name", () => {
+    const p = mapFilaToProduct({ ...base, name: "Cable unipolar 2,5 mm", code: "CU25-GEN", description: "ROLLO 100 M" });
+    expect(p.name).toBe("Cable unipolar 2,5 mm");
+  });
+
   it("un nombre de overlay vacío no pisa la descripción", () => {
-    const p = mapFilaToProduct({ ...base, overlayNombre: "", description: "Cable unipolar" });
+    const p = mapFilaToProduct({ ...base, code: "02141N-GEN", overlayNombre: "", description: "Cable unipolar" });
     expect(p.name).toBe("Cable unipolar");
   });
 

@@ -32,6 +32,13 @@ async function direccionesParaCheckout(clerkUserId: string): Promise<DireccionEn
  * en el servidor, para que la página nunca renderice sin identidad.
  */
 export default async function CheckoutPage() {
+  // Los flags no dependen de la identidad: arrancan antes de esperarla para
+  // que se resuelvan en paralelo con esa consulta en vez de después (misma
+  // semántica, una espera menos en la cascada). `identidadActual` decide el
+  // redirect, así que a ella sí hay que esperarla antes de renderizar.
+  const pagosPromise = pagosHabilitados();
+  const envioPromise = envioHabilitado();
+
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
     redirect(rutaIngreso("/checkout"));
@@ -46,7 +53,7 @@ export default async function CheckoutPage() {
   // El flag de pagos se lee acá, en el server, y al checkout le llega como
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
-  const [pagos, envio] = await Promise.all([pagosHabilitados(), envioHabilitado()]);
+  const [pagos, envio] = await Promise.all([pagosPromise, envioPromise]);
   const [dc, oferta, direcciones] = await Promise.all([
     datosDelContacto({ clerkUserId, cliente }),
     pagos ? getOfertaCuotasSinCache() : null,

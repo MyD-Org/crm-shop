@@ -2,6 +2,14 @@
 // es paranoica acá: los datos del cliente vienen del portal y el mail se renderiza en
 // clientes que ejecutan HTML — todo dato pasa por escapeHtml y el subject sale en una
 // sola línea. El adjunto (o su ausencia por tamaño) se decide afuera y se informa acá.
+//
+// NO usa `emailCardHtml` de email-layout.ts: es una notificación interna con una grilla de
+// datos (cliente/CUIT/monto/…), no la tarjeta de "aviso al cliente" de los demás mails. Sí
+// reexporta `escapeHtml` de ahí para no tener dos implementaciones del mismo escape.
+
+import { emailDocumentHtml, escapeHtml } from "@/lib/email-layout"
+
+export { escapeHtml }
 
 /** Tope de adjunto: 10 MiB. A partir de +1 byte el mail va con link en vez de archivo. */
 export const ATTACH_MAX_BYTES = 10 * 1024 * 1024 // 10485760
@@ -12,16 +20,6 @@ export const RECEIPT_EMAIL_SUBJECT_PREFIX = "[Comprobante de pago]"
 const SUBJECT_MAX = 200
 const FROM_DISPLAY_NAME_MAX = 64
 const AR_TZ = "America/Argentina/Buenos_Aires"
-
-/** Escape HTML completo (& < > " ') para todo dato que viene del cliente o del tenant. */
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-}
 
 /** CR/LF y controles ⇒ espacio (defensa contra header injection en el subject). */
 function oneLine(s: string): string {
@@ -161,6 +159,8 @@ export function buildReceiptEmail(input: ReceiptEmailInput): { subject: string; 
   </td></tr>
 </table>`
 
+  const htmlDoc = emailDocumentHtml(html, subject)
+
   const text = [
     `Comprobante de pago recibido (${tenantName})`,
     ``,
@@ -183,5 +183,5 @@ export function buildReceiptEmail(input: ReceiptEmailInput): { subject: string; 
       (input.clientEmail ? " Respondé este mail para escribirle al cliente." : ""),
   ].join("\n")
 
-  return { subject, html, text }
+  return { subject, html: htmlDoc, text }
 }

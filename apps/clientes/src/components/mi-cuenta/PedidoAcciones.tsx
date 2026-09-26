@@ -8,7 +8,7 @@ import { useCart } from "@/context/CartContext";
 import type { OrderItem } from "@/data/orders";
 import { hrefPedido } from "@/lib/mi-cuenta-nav";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
-import { IconoFactura, IconoFlecha, IconoRefresh } from "./iconos";
+import { IconoDescarga, IconoFlecha, IconoRefresh } from "./iconos";
 
 /**
  * Acciones de un pedido: ver el detalle, volver a comprar (suma las mismas
@@ -82,7 +82,7 @@ export function PedidoAcciones({
       {facturaId && (
         <>
           <Button variant="outline" onClick={() => setVerFactura(true)}>
-            <IconoFactura size={16} /> Ver factura{facturaNumero ? ` ${facturaNumero}` : ""}
+            <IconoDescarga /> Factura
           </Button>
           <DocumentViewer
             open={verFactura}

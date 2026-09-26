@@ -129,3 +129,42 @@ export function interpretarRespuestaFactura<T>(
   }
   return { tipo: "error", mensaje: MENSAJE_ERROR_GENERICO }
 }
+
+/** `avisoFactura` de POST vincular y de POST reenviar: cómo salió el mail "Su factura". */
+export interface AvisoFacturaDto {
+  resultado: "enviado" | "sin_email" | "sin_pdf" | "fallo"
+  /** Email del cliente enmascarado por el servidor (`c***@cliente.example`). */
+  destino: string | null
+}
+
+const RESULTADOS_AVISO = new Set(["enviado", "sin_email", "sin_pdf", "fallo"])
+
+/**
+ * Separa `avisoFactura` del detalle del pedido que devuelve POST vincular, para no guardarlo
+ * en el estado del pedido. Un `avisoFactura` con otra forma se ignora (null).
+ */
+export function separarAvisoFactura<T extends object>(body: T): { detalle: T; aviso: AvisoFacturaDto | null } {
+  const { avisoFactura, ...detalle } = body as T & { avisoFactura?: unknown }
+  return { detalle: detalle as T, aviso: leerAvisoFactura(avisoFactura) }
+}
+
+export function leerAvisoFactura(v: unknown): AvisoFacturaDto | null {
+  if (v === null || typeof v !== "object") return null
+  const { resultado, destino } = v as Record<string, unknown>
+  if (typeof resultado !== "string" || !RESULTADOS_AVISO.has(resultado)) return null
+  return { resultado: resultado as AvisoFacturaDto["resultado"], destino: typeof destino === "string" ? destino : null }
+}
+
+/** Texto breve para el operador según cómo salió el mail. */
+export function mensajeAvisoFactura(aviso: AvisoFacturaDto): { texto: string; ok: boolean } {
+  if (aviso.resultado === "enviado") {
+    return { texto: aviso.destino ? `Enviamos la factura a ${aviso.destino}.` : "Enviamos la factura al cliente.", ok: true }
+  }
+  if (aviso.resultado === "sin_email") {
+    return { texto: "El pedido no tiene un email válido: la factura no se envió por mail.", ok: false }
+  }
+  if (aviso.resultado === "sin_pdf") {
+    return { texto: "No se pudo obtener el PDF de la factura en Alegra: no se envió por mail.", ok: false }
+  }
+  return { texto: "No se pudo enviar la factura por mail.", ok: false }
+}

@@ -6,6 +6,7 @@ import {
 } from "@/lib/alegra"
 import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
 import { resolverFactura, validarFactura, type MotivoFacturaInvalida } from "@/lib/factura-vincular"
+import { enviarFacturaPedido, logAvisoFactura, type AvisoFactura } from "@/lib/pedido-factura-aviso"
 import {
   desvincularFactura,
   getPedido,
@@ -23,13 +24,14 @@ import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
 //          contra el pedido, SIN guardar nada: 200 { factura, clienteVerificado, otrosPedidos }.
 //   POST   /api/admin/pedidos/[id]/factura  { alegraId } → la vuelve a leer de Alegra (no se
 //          confía en lo que manda el navegador), revalida y la vincula: marca el pedido como
-//          facturado y libera su reserva de stock. 200 = detalle completo.
+//          facturado y libera su reserva de stock. 200 = detalle completo + `avisoFactura`
+//          (resultado del mail "Su factura" con el PDF, sólo cuando el vínculo es nuevo).
 //   DELETE /api/admin/pedidos/[id]/factura?alegraId=… → desvincula y quita la marca. `alegraId`
 //          (opcional) = la que el operador tenía en pantalla: si ahora hay otra → 409.
 //
 // Mismo guard que el cambio de estado (operator | admin | superadmin); el tenant sale del
 // guard. Pedido inexistente, ajeno o con id malformado → el mismo 404. Ninguna de las tres
-// cambia el estado del pedido ni avisa al cliente.
+// cambia el estado del pedido. Sólo el POST le escribe al cliente: le manda la factura.
 //
 // Orden de chequeos de GET/POST: guard → payload (400) → pedido (404 / 422 cancelado / 409 ya
 // tiene otra factura) → Alegra (503 si nos frena, 502 si falla) → factura (422) → UPDATE.
@@ -99,11 +101,14 @@ function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
   return fail(502, "alegra_error", MSG.alegra)
 }
 
-function respuestaResultado(result: FacturaResult): Response {
+function respuestaResultado(result: FacturaResult, aviso?: AvisoFactura): Response {
   if (result.kind === "not_found") return adminNotFoundResponse()
   if (result.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (result.kind === "conflict") return fail(409, "conflict", MSG.conflicto)
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios), { headers: NO_STORE })
+  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios)
+  // `avisoFactura` va aparte del detalle: el componente lo saca antes de guardar el pedido.
+  const body = aviso ? { ...detalle, avisoFactura: { resultado: aviso.resultado, destino: aviso.destino } } : detalle
+  return Response.json(body, { headers: NO_STORE })
 }
 
 export async function GET(req: Request, { params }: IdParams) {
@@ -172,11 +177,13 @@ export async function POST(req: Request, { params }: IdParams) {
   const now = new Date()
   let result: FacturaResult
   let factura: AlegraFacturaResumen | null
+  let yaVinculada = false
   try {
     const found = await getPedido(guard.tenantId, id)
     if (!found) return adminNotFoundResponse()
     const bloqueo = chequeoPedido(found.pedido, alegraId)
     if (bloqueo) return bloqueo
+    yaVinculada = found.pedido.facturaAlegraId === alegraId
 
     const config = await configDe(guard.tenantId)
     if (!config) return fail(500, "internal", MSG.sinConfig)
@@ -203,6 +210,7 @@ export async function POST(req: Request, { params }: IdParams) {
   }
 
   if (result.kind === "conflict") return fail(409, "ya_vinculada", MSG.yaVinculada)
+  let aviso: AvisoFactura | undefined
   if (result.kind === "ok") {
     // Sin datos del cliente: ids, número de factura y actor.
     console.info(
@@ -215,8 +223,15 @@ export async function POST(req: Request, { params }: IdParams) {
         at: now.toISOString(),
       }),
     )
+    // Mail "Su factura" con el PDF, después de persistir. Repetir el POST con la misma factura
+    // no lo vuelve a mandar (para eso está "Reenviar factura"); dos POST simultáneos sí lo
+    // intentan, y la clave de idempotencia de Resend deja salir uno solo.
+    if (!yaVinculada) {
+      aviso = await enviarFacturaPedido({ tenantId: guard.tenantId, pedido: result.pedido })
+      logAvisoFactura(ctx, aviso)
+    }
   }
-  return respuestaResultado(result)
+  return respuestaResultado(result, aviso)
 }
 
 export async function DELETE(req: Request, { params }: IdParams) {

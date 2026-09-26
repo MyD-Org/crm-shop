@@ -15,11 +15,12 @@ export type AvisoResult =
 
 const PATH_PEDIDOS = "/mi-cuenta/pedidos"
 
-function looksLikeEmail(s: string | null): s is string {
+export function looksLikeEmail(s: string | null): s is string {
   return typeof s === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)
 }
 
-function pedidosUrl(): string | null {
+/** Link absoluto a "Mis pedidos" del Shop, o null sin NEXT_PUBLIC_SHOP_URL. */
+export function pedidosUrl(): string | null {
   const base = process.env.NEXT_PUBLIC_SHOP_URL?.trim()
   return base ? `${base.replace(/\/+$/, "")}${PATH_PEDIDOS}` : null
 }

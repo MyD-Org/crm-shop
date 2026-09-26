@@ -78,25 +78,35 @@ export interface PedidoEstadoEmailInput {
 }
 
 /** CR/LF y controles ⇒ espacio (el nombre del tenant va al subject). */
-function oneLine(s: string): string {
+export function oneLine(s: string): string {
   return s.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim()
 }
 
-export function buildPedidoEstadoEmail(input: PedidoEstadoEmailInput): { subject: string; html: string; text: string } {
+/** "Hola, Ana:" o "Hola:" si el pedido no tiene nombre. */
+export function saludoPedido(contactoNombre: string): string {
+  const nombre = contactoNombre.trim()
+  return nombre ? `Hola, ${nombre}:` : "Hola:"
+}
+
+/**
+ * HTML común de los mails del pedido (estado, pago, factura): encabezado con el tenant,
+ * título, párrafos, una línea gris al pie y el botón "Ver mis pedidos" si hay link.
+ * Todo el texto se escapa acá.
+ */
+export function pedidoEmailHtml(input: {
+  tenantName: string
+  titulo: string
+  parrafos: string[]
+  pie: string
+  pedidosUrl?: string | null
+}): string {
   const e = escapeHtml
-  const copy = COPY[input.aviso]
-  const retiro = input.entregaTipo === "retiro"
-  const cuerpo = copy.cuerpo(retiro)
-  const nombre = input.contactoNombre.trim()
-  const saludo = nombre ? `Hola, ${nombre}:` : "Hola:"
-
-  const subject = `${oneLine(input.tenantName)} — Pedido ${input.numero} ${copy.asunto}`.slice(0, 200)
-
   const boton = input.pedidosUrl
     ? `<p style="margin:24px 0 0"><a href="${e(input.pedidosUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">Ver mis pedidos</a></p>`
     : ""
+  const parrafos = input.parrafos.map((p) => `\n        <p style="margin:0 0 12px">${e(p)}</p>`).join("")
 
-  const html = `
+  return `
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef1f5;padding:32px 16px">
   <tr><td align="center">
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:440px;background:#ffffff;border-radius:12px;border-top:3px solid #1f8cff">
@@ -104,14 +114,29 @@ export function buildPedidoEstadoEmail(input: PedidoEstadoEmailInput): { subject
         <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280">${e(input.tenantName)}</div>
       </td></tr>
       <tr><td style="padding:20px 32px 28px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.55;color:#111827">
-        <p style="margin:0 0 16px;font-size:18px;font-weight:700">${e(copy.titulo)}</p>
-        <p style="margin:0 0 12px">${e(saludo)}</p>
-        <p style="margin:0 0 12px">${e(cuerpo)}</p>
-        <p style="margin:0;color:#6b7280;font-size:14px">Pedido ${e(input.numero)}</p>${boton}
+        <p style="margin:0 0 16px;font-size:18px;font-weight:700">${e(input.titulo)}</p>${parrafos}
+        <p style="margin:0;color:#6b7280;font-size:14px">${e(input.pie)}</p>${boton}
       </td></tr>
     </table>
   </td></tr>
 </table>`
+}
+
+export function buildPedidoEstadoEmail(input: PedidoEstadoEmailInput): { subject: string; html: string; text: string } {
+  const copy = COPY[input.aviso]
+  const retiro = input.entregaTipo === "retiro"
+  const cuerpo = copy.cuerpo(retiro)
+  const saludo = saludoPedido(input.contactoNombre)
+
+  const subject = `${oneLine(input.tenantName)} — Pedido ${input.numero} ${copy.asunto}`.slice(0, 200)
+
+  const html = pedidoEmailHtml({
+    tenantName: input.tenantName,
+    titulo: copy.titulo,
+    parrafos: [saludo, cuerpo],
+    pie: `Pedido ${input.numero}`,
+    pedidosUrl: input.pedidosUrl,
+  })
 
   const text = [
     copy.titulo,

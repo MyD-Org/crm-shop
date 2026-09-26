@@ -139,6 +139,8 @@ const soloDigitos = (s: string) => s.replace(/[^\d]/g, "");
  * cualquiera de los dos cambia (llegó una página nueva) y la persona no está
  * escribiendo, vuelven a mostrar lo que dice la URL.
  */
+const miles = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+
 function FiltroPrecio({
   facetas,
   estado,
@@ -173,11 +175,12 @@ function FiltroPrecio({
   // Los campos de texto siguen a la posición vigente salvo mientras se los
   // está editando (patrón de React: ajustar estado durante el render, no en
   // un efecto, para no perder lo que la persona está tipeando).
-  if (editando !== "desde" && textoDesde !== String(precios[0])) {
-    setTextoDesde(String(precios[0]));
+  // Con separador de miles para leerlo de un vistazo; al tipear se limpia.
+  if (editando !== "desde" && textoDesde !== miles(precios[0])) {
+    setTextoDesde(miles(precios[0]));
   }
-  if (editando !== "hasta" && textoHasta !== String(precios[1])) {
-    setTextoHasta(String(precios[1]));
+  if (editando !== "hasta" && textoHasta !== miles(precios[1])) {
+    setTextoHasta(miles(precios[1]));
   }
 
   const confirmarInput = (campo: "desde" | "hasta") => {

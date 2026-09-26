@@ -9,7 +9,7 @@ export default function RegistroPage() {
           <h1 className="text-2xl font-extrabold text-text">Cree su cuenta</h1>
           <p className="mt-2 text-sm text-muted">
             Si ya es cliente de Central LED, después podrá vincular su cuenta
-            para ver sus facturas y sus compras.
+            para comprar con sus precios y condiciones de cliente.
           </p>
         </div>
         <SignUp fallbackRedirectUrl="/" signInFallbackRedirectUrl="/" />

@@ -1,7 +1,7 @@
 import { esLimiteAlegra } from "@/lib/cuenta-corriente/alegra-cc";
 import { FACTURAS_PAGE_SIZE, getFacturasPage } from "@/lib/cuenta-corriente/erp-cc";
 import { paramsFacturas } from "@/lib/cuenta-corriente/filtros";
-import { jsonNoStore, requerirCliente } from "@/lib/cuenta-corriente/guard";
+import { jsonNoStore, requerirCuentaCorriente } from "@/lib/cuenta-corriente/guard";
 import { ALEGRA_OCUPADO, FACTURAS_CAIDAS, motivoAlegra } from "@/lib/cuenta-corriente/mensajes";
 
 /**
@@ -13,7 +13,7 @@ import { ALEGRA_OCUPADO, FACTURAS_CAIDAS, motivoAlegra } from "@/lib/cuenta-corr
  * página es fija (30); no hay `limit` que pida el historial entero de una.
  */
 export async function GET(request: Request) {
-  const guard = await requerirCliente();
+  const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
 
   const params = paramsFacturas(new URL(request.url).searchParams);

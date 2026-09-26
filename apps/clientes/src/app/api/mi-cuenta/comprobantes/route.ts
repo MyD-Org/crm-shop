@@ -16,7 +16,7 @@ import {
   parseInitBody,
 } from "@/lib/comprobantes/validacion";
 import { startSeguro } from "@/lib/cuenta-corriente/filtros";
-import { jsonNoStore, requerirCliente } from "@/lib/cuenta-corriente/guard";
+import { jsonNoStore, requerirCuentaCorriente } from "@/lib/cuenta-corriente/guard";
 import { getComprobantesR2 } from "@/lib/r2";
 import { permitir } from "@/lib/rate-limit";
 import { shopTenantId } from "@/lib/tenant";
@@ -39,7 +39,7 @@ import { shopTenantId } from "@/lib/tenant";
 const HORA_MS = 60 * 60 * 1000;
 
 export async function GET(request: Request) {
-  const guard = await requerirCliente();
+  const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
   if (!getComprobantesR2()) return jsonNoStore({ error: COMPROBANTES_NO_DISPONIBLE }, { status: 503 });
 
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const guard = await requerirCliente();
+  const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
   const { cliente } = guard;
 

@@ -323,6 +323,27 @@ export async function comercialEspejo(
 }
 
 /**
+ * ¿Vincular la cuenta le cambia algo a quien compra con el documento de este
+ * contacto? Sólo si es cuenta corriente (ve Facturación) o tiene una lista de
+ * precios propia distinta de la general. Un cliente de contado del local, a
+ * precio de lista, no gana nada vinculando: no se le ofrece. Si el espejo no
+ * responde ⇒ false (no se ofrece; comprar a lista está bien). 1–2 queries.
+ */
+export async function vincularCambiaAlgo(alegraId: string): Promise<boolean> {
+  try {
+    const c = await comercialEspejo(alegraId);
+    if (!c) return false;
+    if (c.tipoCuenta === "corriente") return true;
+    if (!c.idPriceList) return false;
+    const general = await idListaGeneral();
+    return general !== null && c.idPriceList !== general;
+  } catch (err) {
+    console.error(`contactos-espejo: vincularCambiaAlgo caído (${err instanceof Error ? err.name : "desconocido"})`);
+    return false;
+  }
+}
+
+/**
  * Id de la lista de precios GENERAL (la principal: `main` en los precios de
  * Alegra), leída de un ítem activo del espejo de productos del CRM. Es la lista
  * con la que compra quien no vinculó cuenta. `null` = no se pudo saber (sin

@@ -2,7 +2,7 @@ import { confirmarComprobante } from "@/lib/comprobantes/confirmar";
 import { enviarAvisoComprobante } from "@/lib/comprobantes/mail";
 import { COMPROBANTES_NO_DISPONIBLE, CONFIRM_CAIDO } from "@/lib/comprobantes/mensajes";
 import * as repo from "@/lib/comprobantes/repo";
-import { jsonNoStore, requerirCliente } from "@/lib/cuenta-corriente/guard";
+import { jsonNoStore, requerirCuentaCorriente } from "@/lib/cuenta-corriente/guard";
 import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
 import { getComprobantesR2 } from "@/lib/r2";
 import { shopTenantId } from "@/lib/tenant";
@@ -23,7 +23,7 @@ import { shopTenantId } from "@/lib/tenant";
 export const maxDuration = 60;
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const guard = await requerirCliente();
+  const guard = await requerirCuentaCorriente();
   if (guard.error) return guard.error;
 
   const r2 = getComprobantesR2();

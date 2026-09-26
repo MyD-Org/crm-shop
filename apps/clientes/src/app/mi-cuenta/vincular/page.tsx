@@ -24,8 +24,8 @@ export default async function VincularPage({
   if (!clerkUserId) redirect(rutaIngreso(RUTAS_MI_CUENTA.vincular));
 
   // Ya vinculado: no hay nada que hacer acá (Mis datos muestra a qué cuenta).
-  // Sigue a donde iba o a sus facturas, como al terminar de vincular.
-  if (cliente) redirect(volver ?? RUTAS_MI_CUENTA.facturas);
+  // Sigue a donde iba o al resumen, como al terminar de vincular.
+  if (cliente) redirect(volver ?? RUTAS_MI_CUENTA.resumen);
 
   // Si su documento de facturación ya coincide con un cliente, se precarga: es
   // el que casi seguro va a escribir. Igual se valida con el código por email.

@@ -8,7 +8,8 @@
  * Hacen falta dos caminos, y el orden importa:
  *
  * 1. **Match por email verificado** (`intentarVinculacionPorEmail`) — el normal.
- *    Silencioso, automático, sin pedirle nada al cliente.
+ *    Silencioso, automático, sin pedirle nada al cliente. Sólo para cuenta
+ *    corriente.
  * 2. **OTP por CUIT** (`solicitarVinculacion` + `confirmarVinculacion`) — el
  *    plan B, para quien entra con un mail distinto al que tiene cargado el
  *    sistema, o cuando dos contactos comparten casilla.
@@ -236,6 +237,15 @@ export async function intentarVinculacionPorEmail(
   }
 
   const contacto = clientes[0];
+
+  // Sólo cuenta corriente se vincula sola: al cliente de contado el vínculo no
+  // le da nada que necesite para comprar (la sección Facturación es sólo de
+  // cuenta corriente). NO se graba "sin coincidencia": el día que en Alegra le
+  // carguen plazo o límite, la próxima visita lo vincula. Con fila en el
+  // espejo, reintentar cuesta una query; el respaldo en vivo sólo corre
+  // mientras el espejo esté atrasado. Un contado con lista propia puede
+  // vincular a mano (/mi-cuenta/vincular, o el aviso del checkout).
+  if (contacto.tipoCuenta !== "corriente") return null;
 
   /**
    * El chequeo de `existente` de arriba y este insert NO son atómicos, y

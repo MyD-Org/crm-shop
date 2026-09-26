@@ -247,9 +247,10 @@ interface Props {
    */
   direccionesGuardadas?: DireccionEnvio[];
   /**
-   * El documento de facturación ya es de un cliente de Alegra y la cuenta no
-   * está vinculada: se recomienda vincular antes de confirmar. Si confirma
-   * igual, el pedido sale con `requiereRevision`.
+   * El documento de facturación ya es de un cliente de Alegra, la cuenta no
+   * está vinculada y vincular le cambia algo (lista propia o cuenta corriente,
+   * `vincularCambiaAlgo`): se recomienda vincular antes de confirmar. Si
+   * confirma igual, el pedido sale con `requiereRevision`.
    */
   sugerirVincular?: boolean;
 }

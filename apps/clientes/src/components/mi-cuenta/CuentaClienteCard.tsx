@@ -7,9 +7,8 @@ import { documentoEnLinea } from "@/lib/facturacion";
  * "Cuenta de cliente" y no "cuenta corriente" a propósito: en Alegra también
  * hay clientes de CONTADO, con historial y facturas.
  *
- * Sin vincular no se usa esta card: Mis datos pregunta si ya es cliente
- * (`PreguntaCliente`), muestra `AvisoVincular` o un enlace discreto
- * (`SugerirVincular`), según `estadoMisDatos`.
+ * Sin vincular no se muestra nada en su lugar: al cliente de la tienda no se
+ * le ofrece vincular.
  */
 export function CuentaClienteCard({ razonSocialVinculada, cuit }: { razonSocialVinculada: string; cuit?: string }) {
   return (

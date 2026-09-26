@@ -7,7 +7,7 @@
 // (ej. en_camino → preparacion) son errores del operador que se deshacen: mandar
 // "Su pedido está en preparación" después de "Su pedido está en camino" confunde al cliente.
 
-import { escapeHtml } from "@/lib/receipt-email"
+import { emailCardHtml, emailDocumentHtml, oneLine, saludo } from "@/lib/email-layout"
 import type { EstadoPedido } from "@/lib/pedidos-transiciones"
 
 /** Orden del camino feliz. `cancelado` queda afuera: se avisa siempre. */
@@ -68,6 +68,8 @@ const COPY: Record<AvisoPedido, { asunto: string; titulo: string; cuerpo: (retir
 
 export interface PedidoEstadoEmailInput {
   tenantName: string
+  /** URL del logo del tenant, ya validada con `safeLogoUrl`. Sin esto, la cabecera va en texto. */
+  logoUrl?: string | null
   /** "PED-00000123". */
   numero: string
   contactoNombre: string
@@ -77,74 +79,40 @@ export interface PedidoEstadoEmailInput {
   pedidosUrl?: string | null
 }
 
-/** CR/LF y controles ⇒ espacio (el nombre del tenant va al subject). */
-export function oneLine(s: string): string {
-  return s.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim()
-}
-
-/** "Hola, Ana:" o "Hola:" si el pedido no tiene nombre. */
+/** "Hola, Ana:" o "Hola:" si el pedido no tiene nombre. Envuelve `saludo` de email-layout.ts. */
 export function saludoPedido(contactoNombre: string): string {
-  const nombre = contactoNombre.trim()
-  return nombre ? `Hola, ${nombre}:` : "Hola:"
-}
-
-/**
- * HTML común de los mails del pedido (estado, pago, factura): encabezado con el tenant,
- * título, párrafos, una línea gris al pie y el botón "Ver mis pedidos" si hay link.
- * Todo el texto se escapa acá.
- */
-export function pedidoEmailHtml(input: {
-  tenantName: string
-  titulo: string
-  parrafos: string[]
-  pie: string
-  pedidosUrl?: string | null
-}): string {
-  const e = escapeHtml
-  const boton = input.pedidosUrl
-    ? `<p style="margin:24px 0 0"><a href="${e(input.pedidosUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px">Ver mis pedidos</a></p>`
-    : ""
-  const parrafos = input.parrafos.map((p) => `\n        <p style="margin:0 0 12px">${e(p)}</p>`).join("")
-
-  return `
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#eef1f5;padding:32px 16px">
-  <tr><td align="center">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:440px;background:#ffffff;border-radius:12px;border-top:3px solid #1f8cff">
-      <tr><td style="padding:28px 32px 0">
-        <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#6b7280">${e(input.tenantName)}</div>
-      </td></tr>
-      <tr><td style="padding:20px 32px 28px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.55;color:#111827">
-        <p style="margin:0 0 16px;font-size:18px;font-weight:700">${e(input.titulo)}</p>${parrafos}
-        <p style="margin:0;color:#6b7280;font-size:14px">${e(input.pie)}</p>${boton}
-      </td></tr>
-    </table>
-  </td></tr>
-</table>`
+  return saludo(contactoNombre)
 }
 
 export function buildPedidoEstadoEmail(input: PedidoEstadoEmailInput): { subject: string; html: string; text: string } {
   const copy = COPY[input.aviso]
   const retiro = input.entregaTipo === "retiro"
   const cuerpo = copy.cuerpo(retiro)
-  const saludo = saludoPedido(input.contactoNombre)
+  const saludoTexto = saludoPedido(input.contactoNombre)
+  const pie = `Pedido ${input.numero}`
 
   const subject = `${oneLine(input.tenantName)} — Pedido ${input.numero} ${copy.asunto}`.slice(0, 200)
 
-  const html = pedidoEmailHtml({
-    tenantName: input.tenantName,
-    titulo: copy.titulo,
-    parrafos: [saludo, cuerpo],
-    pie: `Pedido ${input.numero}`,
-    pedidosUrl: input.pedidosUrl,
-  })
+  const html = emailDocumentHtml(
+    emailCardHtml({
+      tenantName: input.tenantName,
+      logoUrl: input.logoUrl,
+      preheader: cuerpo,
+      titulo: copy.titulo,
+      parrafos: [saludoTexto, cuerpo],
+      pie,
+      boton: input.pedidosUrl ? { url: input.pedidosUrl, texto: "Ver mis pedidos" } : null,
+    }),
+    copy.titulo,
+  )
 
   const text = [
     copy.titulo,
     "",
-    saludo,
+    saludoTexto,
     cuerpo,
     "",
-    `Pedido ${input.numero}`,
+    pie,
     ...(input.pedidosUrl ? ["", `Ver mis pedidos: ${input.pedidosUrl}`] : []),
   ].join("\n")
 

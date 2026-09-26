@@ -8,6 +8,7 @@
 
 import { getDocumentPdf } from "@/lib/alegra"
 import { maskEmail, sendEmail } from "@/lib/email"
+import { safeLogoUrl } from "@/lib/email-layout"
 import { looksLikeEmail, pedidosUrl } from "@/lib/pedido-estado-aviso"
 import { buildPedidoFacturaEmail, esPdf, nombreAdjuntoFactura } from "@/lib/pedido-factura-email"
 import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
@@ -94,6 +95,7 @@ export async function enviarFacturaPedido(input: {
     const numeroFactura = pedido.facturaNumero ?? doc.number
     const { subject, html, text } = buildPedidoFacturaEmail({
       tenantName: tenant.name,
+      logoUrl: safeLogoUrl(tenant.logoPath),
       numeroPedido: formatearNumeroPedido(pedido.numero),
       numeroFactura,
       contactoNombre: pedido.contactoNombre,

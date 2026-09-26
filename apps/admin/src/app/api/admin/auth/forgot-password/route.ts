@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
-import { Resend } from "resend"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
 import { generateToken } from "@/lib/admin-crypto"
+import { sendEmail } from "@/lib/email"
+import { safeLogoUrl } from "@/lib/email-layout"
+import { buildForgotPasswordEmail } from "@/lib/forgot-password-email"
+import { EMPTY_TENANT, tenantConfigFromRow } from "@/lib/tenants"
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -15,7 +18,8 @@ export async function POST(req: NextRequest) {
   // Siempre responder OK para no filtrar si el email existe
   if (!user || !user.passwordHash) return NextResponse.json({ ok: true })
 
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId))
+  const [tenantRow] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId))
+  const tenant = tenantRow ? tenantConfigFromRow(tenantRow) : EMPTY_TENANT
   const { token, tokenHash } = generateToken()
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1h
 
@@ -24,23 +28,19 @@ export async function POST(req: NextRequest) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
   const resetUrl = `${baseUrl}/admin/reset-password/${token}`
 
-  const resend = new Resend(process.env.RESEND_API_KEY)
-  const { error } = await resend.emails.send({
-    from: tenant?.resendFrom ?? "noreply@example.com",
-    to: user.email,
-    subject: "Recuperar contraseña — Backoffice",
-    html: `
-      <p>Hola ${user.name},</p>
-      <p>Recibimos una solicitud para restablecer su contraseña del backoffice.</p>
-      <p><a href="${resetUrl}">Restablecer contraseña</a></p>
-      <p>El link vence en 1 hora. Si no lo solicitaste, ignorá este email.</p>
-    `,
+  const { subject, html, text } = buildForgotPasswordEmail({
+    tenantName: tenant.name,
+    logoUrl: safeLogoUrl(tenant.logoPath),
+    nombre: user.name,
+    resetUrl,
   })
-  // Resend v6 no tira excepción en errores de API, devuelve { error }. Sin este chequeo el
-  // fallo queda invisible: la respuesta sigue siendo { ok: true } a propósito (no filtrar si
-  // el email existe), pero al menos loguea para que se pueda diagnosticar puertas adentro.
-  if (error) {
-    console.error("[forgot-password] Resend error:", `${error.name}: ${error.message}`)
+
+  try {
+    await sendEmail(tenant, user.email, subject, html, text)
+  } catch (err) {
+    // No tira: la respuesta sigue siendo { ok: true } a propósito (no filtrar si el email
+    // existe), pero al menos loguea para que se pueda diagnosticar puertas adentro.
+    console.error("[forgot-password] no se pudo enviar el mail:", err instanceof Error ? err.message : String(err))
   }
 
   return NextResponse.json({ ok: true })

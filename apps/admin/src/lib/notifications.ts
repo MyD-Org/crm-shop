@@ -3,7 +3,9 @@ import { getDb } from "@/db"
 import { notificationLog, notificationRules, tenants as tenantsTable } from "@/db/schema"
 import { getClientes, getFacturas } from "@/lib/erp"
 import { sendEmail } from "@/lib/email"
-import type { TenantConfig } from "@/lib/tenants"
+import { safeLogoUrl } from "@/lib/email-layout"
+import { buildCobranzaEmail } from "@/lib/cobranza-email"
+import { tenantConfigFromRow, type TenantConfig } from "@/lib/tenants"
 import type { Cliente, Factura } from "@/types"
 
 // ── Gestor de Cobranza ──────────────────────────────────────────────────────
@@ -35,73 +37,22 @@ function diasDesdeVencimiento(factura: Factura, hoy: Date): number {
   return Math.round((hoy.getTime() - venc.getTime()) / 86_400_000)
 }
 
-function fmt(n: number) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2 }).format(n)
-}
-
 function saldoDe(f: Factura): number {
   return f.importe - (f.pagado ?? 0)
 }
 
-function tenantConfigFromRow(row: typeof tenantsTable.$inferSelect): TenantConfig {
-  return {
-    id: row.id,
-    name: row.name,
-    subtitle: row.subtitle,
-    logoPath: row.logoPath,
-    alegraEmail: row.alegraEmail,
-    alegraToken: row.alegraToken,
-    alegraMock: row.alegraMock,
-    whatsappNumber: row.whatsappNumber,
-    resendFrom: row.resendFrom,
-    receiptsEmail: row.receiptsEmail,
-    aiApiBaseUrl: row.aiApiUrl,
-    aiApiKey: row.aiApiKey,
-    aiAgentId: row.aiAgentId,
-    aiTenantId: row.aiTenantId,
-  }
-}
-
 function buildEmail(tenant: TenantConfig, cliente: Cliente, items: PendingNotification[]) {
-  const vencidas = items.filter((i) => i.diasDiff > 0)
-
-  const subject = vencidas.length
-    ? `${tenant.name} — Tiene ${vencidas.length === 1 ? "una factura vencida" : `${vencidas.length} facturas vencidas`}`
-    : `${tenant.name} — Recordatorio de vencimiento`
-
-  const filas = items
-    .map((i) => {
-      const estado =
-        i.diasDiff > 0 ? `vencida hace ${i.diasDiff} día${i.diasDiff === 1 ? "" : "s"}` : i.diasDiff === 0 ? "vence hoy" : `vence en ${-i.diasDiff} día${i.diasDiff === -1 ? "" : "s"}`
-      return `<tr>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${i.factura.id}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${i.factura.vencimiento}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right">${fmt(saldoDe(i.factura))}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:${i.diasDiff > 0 ? "#b91c1c" : "#92400e"}">${estado}</td>
-      </tr>`
-    })
-    .join("")
-
-  const total = items.reduce((acc, i) => acc + saldoDe(i.factura), 0)
-
-  const html = `
-  <div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;color:#111827">
-    <h2 style="font-size:18px">${tenant.name}</h2>
-    <p>Hola ${cliente.razonsocial},</p>
-    <p>${vencidas.length ? "Le recordamos que tiene facturas con saldo vencido:" : "Le recordamos los próximos vencimientos de su cuenta corriente:"}</p>
-    <table style="border-collapse:collapse;width:100%;font-size:14px">
-      <thead><tr style="text-align:left;color:#6b7280">
-        <th style="padding:8px 12px">Factura</th><th style="padding:8px 12px">Vencimiento</th>
-        <th style="padding:8px 12px;text-align:right">Saldo</th><th style="padding:8px 12px">Estado</th>
-      </tr></thead>
-      <tbody>${filas}</tbody>
-    </table>
-    <p style="font-weight:600">Total: ${fmt(total)}</p>
-    <p>Puede ver el detalle y descargar sus facturas desde el portal de clientes.</p>
-    <p style="color:#6b7280;font-size:12px">Si ya realizaste el pago, desestimá este mensaje. Ante cualquier duda contáctese con atención al cliente.</p>
-  </div>`
-
-  return { subject, html }
+  return buildCobranzaEmail({
+    tenantName: tenant.name,
+    logoUrl: safeLogoUrl(tenant.logoPath),
+    clienteNombre: cliente.razonsocial,
+    items: items.map((i) => ({
+      facturaId: i.factura.id,
+      vencimiento: i.factura.vencimiento,
+      saldo: saldoDe(i.factura),
+      diasDiff: i.diasDiff,
+    })),
+  })
 }
 
 export async function runNotifications(filter?: {
@@ -181,11 +132,11 @@ export async function runNotifications(filter?: {
       if (!pendientes.length) continue
 
       // Un solo email por cliente agrupando todas sus facturas
-      const { subject, html } = buildEmail(tenant, cliente, pendientes)
+      const { subject, html, text } = buildEmail(tenant, cliente, pendientes)
       let status = "sent"
       let errorMsg: string | null = null
       try {
-        await sendEmail(tenant, cliente.email, subject, html)
+        await sendEmail(tenant, cliente.email, subject, html, text)
         result.sent += pendientes.length
         result.details.push(`${cliente.codigocliente}: email con ${pendientes.length} factura(s)`)
       } catch (err) {

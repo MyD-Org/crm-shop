@@ -5,10 +5,13 @@
 // Módulo PURO (sin db, env ni red): arma el mail y valida el PDF ya descargado. La descarga y
 // el envío los hace `enviarFacturaPedido` (pedido-factura-aviso.ts), después de persistir.
 
-import { oneLine, pedidoEmailHtml, saludoPedido } from "@/lib/pedido-estado-email"
+import { emailCardHtml, emailDocumentHtml, oneLine } from "@/lib/email-layout"
+import { saludoPedido } from "@/lib/pedido-estado-email"
 
 export interface PedidoFacturaEmailInput {
   tenantName: string
+  /** URL del logo del tenant, ya validada con `safeLogoUrl`. Sin esto, la cabecera va en texto. */
+  logoUrl?: string | null
   /** "PED-00000123". */
   numeroPedido: string
   /** Número de la factura en Alegra ("00201-00007040"). null = Alegra no lo informó. */
@@ -30,13 +33,18 @@ export function buildPedidoFacturaEmail(input: PedidoFacturaEmailInput): { subje
     200,
   )
 
-  const html = pedidoEmailHtml({
-    tenantName: input.tenantName,
+  const html = emailDocumentHtml(
+    emailCardHtml({
+      tenantName: input.tenantName,
+      logoUrl: input.logoUrl,
+      preheader: cuerpo,
+      titulo,
+      parrafos: [saludo, cuerpo],
+      pie,
+      boton: input.pedidosUrl ? { url: input.pedidosUrl, texto: "Ver mis pedidos" } : null,
+    }),
     titulo,
-    parrafos: [saludo, cuerpo],
-    pie,
-    pedidosUrl: input.pedidosUrl,
-  })
+  )
 
   const text = [
     titulo,

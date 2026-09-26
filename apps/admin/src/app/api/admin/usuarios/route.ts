@@ -2,59 +2,45 @@ import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { getIronSession } from "iron-session"
 import { and, eq } from "drizzle-orm"
-import { Resend } from "resend"
 import { getDb } from "@/db"
 import { adminUsers, adminPasswordTokens, tenants } from "@/db/schema"
 import { generateToken } from "@/lib/admin-crypto"
 import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { assignableRoles, canManageUsers, type AdminRole } from "@/lib/roles"
+import { sendEmail } from "@/lib/email"
+import { safeLogoUrl } from "@/lib/email-layout"
+import { buildInvitacionEmail } from "@/lib/invitacion-email"
+import { EMPTY_TENANT, tenantConfigFromRow, type TenantConfig } from "@/lib/tenants"
 
 async function getAdminSession() {
   return getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
 }
 
-// Etiqueta visible del rol (para el email de invitación).
-function roleLabel(role: string): string {
-  if (role === "superadmin") return "Superadmin"
-  if (role === "admin") return "Admin"
-  return "Operador"
-}
-
 // Intenta enviar el email de invitación. Devuelve { sent, errorMsg }.
-// Resend v6 retorna { data, error } sin tirar excepción en errores de API.
 async function trySendInviteEmail({
   tenant,
   user,
   role,
   inviteUrl,
 }: {
-  tenant: { resendFrom?: string | null; name?: string | null } | undefined
+  tenant: TenantConfig
   user: { email: string; name: string }
   role: string
   inviteUrl: string
 }): Promise<{ sent: boolean; errorMsg?: string }> {
+  const { subject, html, text } = buildInvitacionEmail({
+    tenantName: tenant.name,
+    logoUrl: safeLogoUrl(tenant.logoPath),
+    nombre: user.name,
+    role,
+    inviteUrl,
+  })
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY)
-    const { error } = await resend.emails.send({
-      from: tenant?.resendFrom ?? "noreply@example.com",
-      to: user.email,
-      subject: `Invitación al backoffice de ${tenant?.name ?? ""}`,
-      html: `
-        <p>Hola ${user.name},</p>
-        <p>Fuiste invitado como <strong>${roleLabel(role)}</strong> del backoffice.</p>
-        <p><a href="${inviteUrl}">Aceptar invitación y crear contraseña</a></p>
-        <p>El link vence en 7 días.</p>
-      `,
-    })
-    if (error) {
-      const msg = `${error.name}: ${error.message}`
-      console.error("[invite] Resend error:", msg)
-      return { sent: false, errorMsg: msg }
-    }
-    return { sent: true }
+    const enviado = await sendEmail(tenant, user.email, subject, html, text)
+    return { sent: enviado }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error("[invite] Resend exception:", msg)
+    console.error("[invite] no se pudo enviar el mail:", msg)
     return { sent: false, errorMsg: msg }
   }
 }
@@ -112,7 +98,8 @@ export async function POST(req: NextRequest) {
     .where(and(eq(adminUsers.email, body.email.toLowerCase()), eq(adminUsers.tenantId, session.tenantId)))
   if (existing.length) return NextResponse.json({ error: "El email ya está en uso" }, { status: 409 })
 
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const [tenantRow] = await db.select().from(tenants).where(eq(tenants.id, session.tenantId))
+  const tenant = tenantRow ? tenantConfigFromRow(tenantRow) : EMPTY_TENANT
   const [user] = await db.insert(adminUsers).values({
     tenantId: session.tenantId,
     email: body.email.toLowerCase(),

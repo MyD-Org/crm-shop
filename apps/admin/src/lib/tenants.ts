@@ -1,3 +1,5 @@
+import type { tenants as tenantsTable } from "@/db/schema"
+
 export interface TenantConfig {
   id: string
   name: string
@@ -14,6 +16,49 @@ export interface TenantConfig {
   aiApiKey: string
   aiAgentId: string
   aiTenantId: string // UUID del tenant en la ai-api (para auth de staff/inbox)
+}
+
+/** Fila de la tabla `tenants` → `TenantConfig`. Único lugar con ese mapeo (antes duplicado). */
+export function tenantConfigFromRow(row: typeof tenantsTable.$inferSelect): TenantConfig {
+  return {
+    id: row.id,
+    name: row.name,
+    subtitle: row.subtitle,
+    logoPath: row.logoPath,
+    alegraEmail: row.alegraEmail,
+    alegraToken: row.alegraToken,
+    alegraMock: row.alegraMock,
+    whatsappNumber: row.whatsappNumber,
+    resendFrom: row.resendFrom,
+    receiptsEmail: row.receiptsEmail,
+    aiApiBaseUrl: row.aiApiUrl,
+    aiApiKey: row.aiApiKey,
+    aiAgentId: row.aiAgentId,
+    aiTenantId: row.aiTenantId,
+  }
+}
+
+/**
+ * Tenant "vacío": from de mail neutro y sin nombre. Para mails de rutas de auth del backoffice
+ * (recuperar contraseña, invitación) cuando el usuario autenticado no tiene tenant asociado —
+ * no debería pasar nunca (todo `adminUser` tiene `tenantId`), pero sin esto el envío rompe en
+ * vez de degradar.
+ */
+export const EMPTY_TENANT: TenantConfig = {
+  id: "",
+  name: "",
+  subtitle: "",
+  logoPath: "",
+  alegraEmail: "",
+  alegraToken: "",
+  alegraMock: true,
+  whatsappNumber: "",
+  resendFrom: "noreply@example.com",
+  receiptsEmail: "",
+  aiApiBaseUrl: "",
+  aiApiKey: "",
+  aiAgentId: "",
+  aiTenantId: "",
 }
 
 function buildTenantConfig(id: string): TenantConfig | null {
@@ -217,22 +262,7 @@ export async function getTenantByIdFromDb(id: string): Promise<TenantConfig | nu
     const [row] = await getDb().select().from(tenantsTable).where(eq(tenantsTable.id, id))
     if (!row) return getTenantById(id)
 
-    return {
-      id: row.id,
-      name: row.name,
-      subtitle: row.subtitle,
-      logoPath: row.logoPath,
-      alegraEmail: row.alegraEmail,
-      alegraToken: row.alegraToken,
-      alegraMock: row.alegraMock,
-      whatsappNumber: row.whatsappNumber,
-      resendFrom: row.resendFrom,
-      receiptsEmail: row.receiptsEmail,
-      aiApiBaseUrl: row.aiApiUrl,
-      aiApiKey: row.aiApiKey,
-      aiAgentId: row.aiAgentId,
-      aiTenantId: row.aiTenantId,
-    }
+    return tenantConfigFromRow(row)
   } catch (err) {
     console.error("getTenantByIdFromDb: DB no disponible, fallback a env:", err)
     return getTenantById(id)

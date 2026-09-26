@@ -2,20 +2,21 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, useToast } from "@myd-org/ui";
+import { Button, DocumentViewer, useToast } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useCart } from "@/context/CartContext";
 import type { OrderItem } from "@/data/orders";
 import { hrefPedido } from "@/lib/mi-cuenta-nav";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
-import { IconoDescarga, IconoFlecha, IconoRefresh } from "./iconos";
+import { IconoFactura, IconoFlecha, IconoRefresh } from "./iconos";
 
 /**
  * Acciones de un pedido: ver el detalle, volver a comprar (suma las mismas
  * cantidades al carrito; el precio y el stock se confirman ahí) y, cuando un
  * operador del CRM vinculó una factura de Alegra al pedido (`facturaId`),
- * descargarla. La descarga es por pedido (`/api/mi-cuenta/pedidos/[id]/factura/pdf`):
- * sirve para cualquier dueño del pedido, tenga o no cuenta corriente.
+ * verla en el visor del DS (el mismo de Facturación), que ofrece descargarla.
+ * El PDF es por pedido (`/api/mi-cuenta/pedidos/[id]/factura/pdf`): sirve para
+ * cualquier dueño del pedido, tenga o no cuenta corriente.
  */
 export function PedidoAcciones({
   pedidoId,
@@ -39,6 +40,9 @@ export function PedidoAcciones({
   // siempre si vuelve a este pedido (ver `useAlOcultar`).
   const [agregando, setAgregando] = useState(false);
   useAlOcultar(() => setAgregando(false));
+  const [verFactura, setVerFactura] = useState(false);
+  const urlFactura = `/api/mi-cuenta/pedidos/${pedidoId}/factura/pdf`;
+  const tituloFactura = facturaNumero ? `Factura ${facturaNumero}` : "Factura";
 
   function volverAComprar() {
     if (agregando) return;
@@ -76,9 +80,19 @@ export function PedidoAcciones({
         <IconoRefresh /> Volver a comprar
       </Button>
       {facturaId && (
-        <Button variant="outline" href={`/api/mi-cuenta/pedidos/${pedidoId}/factura/pdf`}>
-          <IconoDescarga /> Descargar factura{facturaNumero ? ` ${facturaNumero}` : ""}
-        </Button>
+        <>
+          <Button variant="outline" onClick={() => setVerFactura(true)}>
+            <IconoFactura size={16} /> Ver factura{facturaNumero ? ` ${facturaNumero}` : ""}
+          </Button>
+          <DocumentViewer
+            open={verFactura}
+            onOpenChange={setVerFactura}
+            title={tituloFactura}
+            src={verFactura ? urlFactura : ""}
+            downloadHref={`${urlFactura}?download=1`}
+            hint={null}
+          />
+        </>
       )}
     </div>
   );

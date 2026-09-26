@@ -174,4 +174,17 @@ describe("armarOrder", () => {
     expect(order.metodoEntrega).not.toBe("envio");
     expect(order.facturaId).toBeUndefined();
   });
+
+  it("sin factura vinculada: facturaId y facturaNumero undefined", () => {
+    const order = armarOrder(fila, [], new Map());
+    expect(order.facturaId).toBeUndefined();
+    expect(order.facturaNumero).toBeUndefined();
+  });
+
+  it("con factura vinculada: mapea el id de Alegra y el número visible", () => {
+    const conFactura = { ...fila, facturaAlegraId: "987", facturaNumero: "FV-1-00012876" } as unknown as FilaOrder;
+    const order = armarOrder(conFactura, [], new Map());
+    expect(order.facturaId).toBe("987");
+    expect(order.facturaNumero).toBe("FV-1-00012876");
+  });
 });

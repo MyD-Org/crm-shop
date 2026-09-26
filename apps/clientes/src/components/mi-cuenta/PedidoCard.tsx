@@ -62,7 +62,12 @@ export function PedidoCard({ pedido, pagosHabilitados }: { pedido: Order; pagosH
       </div>
 
       <div className="mt-4">
-        <PedidoAcciones pedidoId={pedido.id} items={pedido.items} facturaId={pedido.facturaId} />
+        <PedidoAcciones
+          pedidoId={pedido.id}
+          items={pedido.items}
+          facturaId={pedido.facturaId}
+          facturaNumero={pedido.facturaNumero}
+        />
       </div>
     </Card>
   );

@@ -331,6 +331,8 @@ export function armarOrder(
     iva: num(fila.iva),
     costoEnvio: num(fila.costoEnvio),
     total: num(fila.total),
+    ...(fila.facturaAlegraId ? { facturaId: fila.facturaAlegraId } : {}),
+    ...(fila.facturaNumero ? { facturaNumero: fila.facturaNumero } : {}),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);
       const imagen = producto?.images?.[0];

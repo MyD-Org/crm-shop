@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
@@ -25,6 +25,30 @@ function CartIcon() {
     </svg>
   );
 }
+
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+/**
+ * Las dos caras del botón de agregar ("Agregar al carrito" / "Agregado")
+ * apiladas en la misma celda: el botón no cambia de ancho y el cambio es una
+ * transición (no keyframes), así que un segundo clic a mitad del cambio lo
+ * retoma sin saltos. Misma curva que el resto de las altas; el blur de 2px
+ * funde las dos caras para que no se lean superpuestas. Con reduced motion
+ * queda sólo el fundido.
+ */
+const CARA_BOTON =
+  "col-start-1 row-start-1 flex items-center justify-center gap-2 transition-[opacity,translate,filter] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:translate-y-0";
+const CARA_VISIBLE = "translate-y-0 opacity-100 blur-0";
+const CARA_ARRIBA = "-translate-y-2 opacity-0 blur-[2px]";
+const CARA_ABAJO = "translate-y-2 opacity-0 blur-[2px]";
+/** Cuánto queda "Agregado" antes de volver al texto de siempre. */
+const MS_AGREGADO = 1600;
 
 const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> = {
   in: { texto: "En stock", color: "bg-success" },
@@ -51,6 +75,22 @@ export function ProductoClient({
 }) {
   const [qty, setQty] = useState(1);
   const { addItem } = useCart();
+  // Confirmación en el mismo botón: agregar ya no abre el preview del header.
+  const [agregado, setAgregado] = useState(false);
+  const timerAgregado = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timerAgregado.current) clearTimeout(timerAgregado.current);
+    },
+    [],
+  );
+
+  function agregar() {
+    addItem({ ...producto, image: producto.images?.[0]?.url }, qty);
+    setAgregado(true);
+    if (timerAgregado.current) clearTimeout(timerAgregado.current);
+    timerAgregado.current = setTimeout(() => setAgregado(false), MS_AGREGADO);
+  }
 
   // Cuotas sobre el precio final unitario: sin IVA conocido no se calcula nada.
   const mejorCuota = mejorOpcionPara(producto.precioFinal, oferta);
@@ -159,13 +199,25 @@ export function ProductoClient({
             <div className="flex items-center gap-3">
               <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} />
               <Button
-                onClick={() => addItem({ ...producto, image: producto.images?.[0]?.url }, qty)}
+                onClick={agregar}
                 disabled={agotado || sinPrecio}
                 className="flex flex-1 items-center justify-center gap-2"
               >
-                <CartIcon />
-                {sinPrecio ? "Consulte el precio" : agotado ? "Sin stock" : "Agregar al carrito"}
+                <span className="grid">
+                  <span aria-hidden={agregado} className={`${CARA_BOTON} ${agregado ? CARA_ARRIBA : CARA_VISIBLE}`}>
+                    <CartIcon />
+                    {sinPrecio ? "Consulte el precio" : agotado ? "Sin stock" : "Agregar al carrito"}
+                  </span>
+                  <span aria-hidden={!agregado} className={`${CARA_BOTON} ${agregado ? CARA_VISIBLE : CARA_ABAJO}`}>
+                    <CheckIcon />
+                    Agregado
+                  </span>
+                </span>
               </Button>
+              {/* El cambio de texto del botón no se anuncia solo. */}
+              <span role="status" className="sr-only">
+                {agregado ? "Producto agregado al carrito." : ""}
+              </span>
               <BotonFavorito productId={producto.id} />
             </div>
           </div>

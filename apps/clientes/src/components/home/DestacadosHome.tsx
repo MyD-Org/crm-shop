@@ -76,7 +76,7 @@ export async function DestacadosHome({
           <Link
             key={p.id}
             href={`/producto/${p.id}`}
-            className="block transition-transform duration-300 hover:-translate-y-1"
+            className="block transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 motion-reduce:hover:translate-y-0"
           >
             <ProductCard
               variant="editorial"

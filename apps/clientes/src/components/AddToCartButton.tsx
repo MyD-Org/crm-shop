@@ -50,7 +50,8 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
         disabled={deshabilitado}
         onClick={(e) => {
           sinNavegar(e);
-          // Sin toast: el preview del header se abre solo y muestra lo que entró.
+          // Sin toast: el stepper que aparece acá y el latido del carrito del
+          // header ya confirman la alta.
           if (!product) return;
           setAnimarEntrada(true);
           addItem(product);

@@ -202,7 +202,7 @@ export function DireccionAutocomplete({
         {abierto && sugerencias.length > 0 && (
           // Mismo tratamiento que el Select del DS: contenedor con p-1 y radio =
           // el del ítem (sm) + ese padding, para que las curvas sean concéntricas.
-          <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-[calc(var(--radius-sm)+0.25rem)] border border-border bg-surface p-1 shadow-lg">
+          <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-menu-1 border border-border bg-surface p-1 shadow-lg">
             {sugerencias.map((s, i) => (
               <li key={`${s.label}-${i}`}>
                 <button

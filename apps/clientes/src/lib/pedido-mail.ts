@@ -4,11 +4,12 @@
  * arma `pedido-avisos.ts` y los manda.
  *
  * Los cambios de estado y el pago offline los avisa el CRM, que es donde el operador los hace
- * (apps/admin/src/lib/pedido-estado-email.ts). Mismo esqueleto que `arrepentimiento-mail.ts`:
- * tarjeta de 440px, franja azul, logo o nombre de la tienda. Todo dato del comprador pasa por
- * `escapeHtml`, y el asunto sale en una sola línea.
+ * (apps/admin/src/lib/pedido-estado-email.ts). Usa el layout común de `mail-layout.ts` (tarjeta
+ * de 440px, franja azul, logo o nombre de la tienda, pie con el comercio y el link al sitio).
+ * Todo dato del comprador pasa por `escapeHtml`, y el asunto sale en una sola línea.
  */
 import { escapeHtml as e } from "./escape-html";
+import { FUENTE_MAIL, pieTexto, tarjetaMail } from "./mail-layout";
 
 export interface MailPedido {
   subject: string;
@@ -34,6 +35,8 @@ export interface DatosMailPedido {
   logoUrl?: string | null;
   /** Link absoluto a "Mis pedidos". Sin él, el mail no lleva botón. */
   pedidosUrl?: string | null;
+  /** `urlSitioMail()`: si está, el pie lleva un link al sitio. */
+  sitioUrl?: string | null;
   /** Sólo "recibido": resumen del pedido. */
   lineas?: LineaMail[];
   total?: number;
@@ -42,8 +45,6 @@ export interface DatosMailPedido {
   /** Sólo "recibido": el pago en línea todavía no se completó. */
   pagoPendienteEnLinea?: boolean;
 }
-
-const FUENTE = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
 
 function oneLine(s: string): string {
   return s
@@ -109,9 +110,9 @@ function resumen(d: DatosMailPedido): string {
     .join("");
   return `
       <tr><td style="padding:20px 32px 0">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:${FUENTE};border-bottom:1px solid #eceae4;padding-bottom:8px">${filas}
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:${FUENTE_MAIL};border-bottom:1px solid #eceae4;padding-bottom:8px">${filas}
         </table>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:${FUENTE};margin-top:8px">${datosHtml}
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:${FUENTE_MAIL};margin-top:8px">${datosHtml}
         </table>
       </td></tr>`;
 }
@@ -124,34 +125,28 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   const subject = `${oneLine(d.comercio)} — Pedido ${d.numero} ${copy.asunto}`.slice(0, 200);
   const conResumen = d.aviso === "recibido" && (d.lineas?.length ?? 0) > 0;
 
-  const html = `
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${e(`${copy.titulo} · Pedido ${d.numero}`)}</div>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8f8f6;padding:32px 16px">
-  <tr><td align="center">
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:440px;background:#ffffff;border-radius:12px;border-top:3px solid #1e5aa8">
-      <tr><td style="padding:28px 32px 0">
-        ${
-          d.logoUrl
-            ? `<img src="${e(d.logoUrl)}" width="180" height="23" alt="${e(d.comercio)}" style="display:block;border:0;outline:none;text-decoration:none;height:23px;width:180px;font-family:${FUENTE};font-size:16px;font-weight:700;color:#1e5aa8">`
-            : `<div style="font-family:${FUENTE};font-size:13px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#1e5aa8">${e(d.comercio)}</div>`
-        }
-      </td></tr>
-      <tr><td style="padding:20px 32px 0;font-family:${FUENTE};color:#1c2733">
+  const cuerpoHtml = `
+      <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
         <p style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700">${e(copy.titulo)}</p>
         <p style="margin:0 0 8px;font-size:15px;line-height:1.55">${e(saludo)}</p>
         <p style="margin:0;font-size:15px;line-height:1.55;color:#77808a">${e(bajada)}</p>
         <p style="margin:12px 0 0;font-size:14px;color:#77808a">Pedido <strong style="color:#1c2733">${e(d.numero)}</strong></p>
       </td></tr>${conResumen ? resumen(d) : ""}
-      <tr><td style="padding:24px 32px 28px;font-family:${FUENTE}">
+      <tr><td style="padding:24px 32px 28px;font-family:${FUENTE_MAIL}">
         ${
           d.pedidosUrl
             ? `<a href="${e(d.pedidosUrl)}" style="display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px">Ver mis pedidos</a>`
             : ""
         }
-      </td></tr>
-    </table>
-  </td></tr>
-</table>`;
+      </td></tr>`;
+
+  const html = tarjetaMail({
+    preheader: `${copy.titulo} · Pedido ${d.numero}`,
+    logoUrl: d.logoUrl,
+    nombreComercio: d.comercio,
+    cuerpoHtml,
+    sitioUrl: d.sitioUrl,
+  });
 
   const lineasTexto = conResumen
     ? [
@@ -171,6 +166,8 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     `Pedido ${d.numero}`,
     ...lineasTexto,
     ...(d.pedidosUrl ? ["", `Ver mis pedidos: ${d.pedidosUrl}`] : []),
+    "",
+    ...pieTexto(d.comercio, d.sitioUrl),
   ].join("\n");
 
   return { subject, html, text };

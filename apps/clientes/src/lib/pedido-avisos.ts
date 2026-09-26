@@ -13,6 +13,7 @@ import { orderItems, orders } from "@/db/schema";
 import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { enviarEmail } from "./email";
 import { ENTREGA_LABEL, PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
+import { urlSitioMail } from "./mail-layout";
 import { armarMailPedido, type AvisoPedidoShop } from "./pedido-mail";
 import { shopTenantId } from "./tenant";
 import { urlLogoMail } from "./vinculacion-mail";
@@ -81,6 +82,7 @@ async function enviarAviso(pedidoId: string, aviso: AvisoPedidoShop, clave: stri
       comercio: comercio || "Su pedido",
       logoUrl: urlLogoMail(),
       pedidosUrl: urlPedidos(),
+      sitioUrl: urlSitioMail(),
       lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
       total: Number(pedido.total),
       entrega: ENTREGA_LABEL[pedido.entregaTipo as EntregaTipo],

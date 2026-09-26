@@ -161,7 +161,7 @@ describe("envío válido", () => {
     const [aCliente, aComercio] = enviarEmail.mock.calls.map((c) => c[0]);
     expect(aCliente).toMatchObject({
       to: "ana@cliente.example",
-      subject: "Recibimos su solicitud de arrepentimiento ARR-000042",
+      subject: "Tienda Ejemplo — Recibimos su solicitud de arrepentimiento ARR-000042",
       replyTo: "legal@cliente.example",
       idempotencyKey: "ARR-000042-cliente",
     });

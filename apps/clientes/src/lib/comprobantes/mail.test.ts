@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { REGISTRO, infracciones } from "@/test/registro-usted";
 import type { OpcionesEmail } from "../email";
 import { ATTACH_MAX_BYTES, armarMailComprobante, enviarAvisoComprobante, urlBackoffice, type RepoMail } from "./mail";
 import type { ComprobanteFila } from "./repo";
@@ -114,7 +115,20 @@ describe("armarMailComprobante", () => {
       expect(texto).toContain("Enviado automáticamente desde Mi cuenta de la tienda de Tienda Demo.");
       expect(texto).toContain("Responda este mail para escribirle al cliente.");
       expect(texto).not.toMatch(/\b(?:abrilo|respondé|portal de clientes)\b/i);
+      expect(infracciones(texto, REGISTRO)).toEqual([]);
     }
+  });
+
+  it("documento HTML completo (layout común) y pie con el sitio si está", () => {
+    const mail = armarMailComprobante(datos(null));
+    expect(mail.html).toContain("<!DOCTYPE html>");
+    expect(mail.html).toContain('<meta charset="utf-8">');
+    expect(mail.html).toContain("Este es un mensaje automático.");
+    expect(mail.text).toContain("Este es un mensaje automático.");
+
+    const conSitio = armarMailComprobante({ ...datos(null), sitioUrl: "https://tienda.cliente.example" });
+    expect(conSitio.html).toContain('href="https://tienda.cliente.example"');
+    expect(conSitio.text).toContain("Tienda Demo · https://tienda.cliente.example");
   });
 });
 

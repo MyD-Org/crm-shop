@@ -23,7 +23,7 @@ const comercio = armarMailArrepentimientoComercio({
 
 describe("mail al cliente", () => {
   it("asunto con el código; el código, los datos y los próximos pasos en html y texto", () => {
-    expect(cliente.subject).toBe("Recibimos su solicitud de arrepentimiento ARR-000042");
+    expect(cliente.subject).toBe("Tienda Ejemplo — Recibimos su solicitud de arrepentimiento ARR-000042");
     for (const parte of [cliente.html, cliente.text]) {
       expect(parte).toContain("ARR-000042");
       expect(parte).toContain("PED-00001000");
@@ -77,6 +77,30 @@ describe("ambos mails", () => {
   it("en usted: sin voseo ni tuteo", () => {
     for (const parte of [cliente.subject, cliente.html, cliente.text, comercio.subject, comercio.html, comercio.text]) {
       expect(infracciones(parte, REGISTRO)).toEqual([]);
+    }
+  });
+
+  it("pie común: comercio y aviso de mensaje automático; con sitio, además el link", () => {
+    for (const m of [cliente, comercio]) {
+      expect(m.html).toContain("Este es un mensaje automático.");
+      expect(m.text).toContain("Este es un mensaje automático.");
+    }
+
+    const conSitio = armarMailArrepentimientoCliente({
+      codigo: "ARR-000042",
+      nombre: "Ana Pérez",
+      comercio: "Tienda Ejemplo",
+      sitioUrl: "https://tienda.cliente.example",
+    });
+    expect(conSitio.html).toContain('href="https://tienda.cliente.example"');
+    expect(conSitio.text).toContain("Tienda Ejemplo · https://tienda.cliente.example");
+  });
+
+  it("documento HTML completo (layout común)", () => {
+    for (const m of [cliente, comercio]) {
+      expect(m.html).toContain("<!DOCTYPE html>");
+      expect(m.html).toContain('<meta charset="utf-8">');
+      expect(m.html).toContain('<meta name="color-scheme" content="light">');
     }
   });
 });

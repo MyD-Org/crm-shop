@@ -10,6 +10,8 @@ import { CuotasResumen } from "@/components/CuotasResumen";
 import { baseCarrito, resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -153,6 +155,11 @@ export function CarritoClient({
                 ultimasLineas?.find((l) => l.id === item.id),
               );
 
+              const marca = linea?.brand || item.brand;
+              const nombre = linea && !linea.problema ? linea.name : item.name;
+              // Sólo para mostrar: el nombre que viaja en el pedido no se toca.
+              const nombreParaMostrar = formatNombreProducto(nombre, marca ? formatMarca(marca) : undefined);
+
               return (
                 <div
                   key={item.id}
@@ -166,10 +173,10 @@ export function CarritoClient({
 
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                      {linea?.brand || item.brand}
+                      {marca}
                     </p>
                     <Link href={`/producto/${item.id}`} className="break-words text-sm font-semibold text-text transition-colors hover:text-primary">
-                      {linea && !linea.problema ? linea.name : item.name}
+                      {nombreParaMostrar}
                     </Link>
                     {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
                     {precio ? (

@@ -11,6 +11,8 @@ import type { Product } from "@/data/products";
 import { etiquetaStock, maxCantidad } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
+import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatMarca } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { BotonEnlace } from "./BotonEnlace";
 import { IconoLampara } from "./iconos";
@@ -44,7 +46,10 @@ export function FavoritosLista({
 
   return (
     <div className="flex flex-col gap-3">
-      {visibles.map((p) => (
+      {visibles.map((p) => {
+        // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
+        const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
+        return (
         <ProductCard
           key={p.id}
           variant="editorial"
@@ -52,7 +57,7 @@ export function FavoritosLista({
           href={`/producto/${p.id}`}
           renderLink={linkNext}
           brand={p.brand}
-          name={p.name}
+          name={nombreParaMostrar}
           code={p.sku}
           stock={p.stock}
           stockLabel={etiquetaStock(p)}
@@ -63,7 +68,7 @@ export function FavoritosLista({
             p.images?.[0] ? (
               <Image
                 src={p.images[0].url}
-                alt={p.images[0].alt ?? p.name}
+                alt={p.images[0].alt ?? nombreParaMostrar}
                 fill
                 sizes="(min-width: 640px) 160px, 128px"
                 className="object-contain p-2"
@@ -82,7 +87,8 @@ export function FavoritosLista({
             />
           }
         />
-      ))}
+        );
+      })}
     </div>
   );
 }

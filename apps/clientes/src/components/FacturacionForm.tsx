@@ -559,6 +559,23 @@ export function FacturacionForm({
               </button>
             )}
 
+            {/*
+              Vuelta del modo manual: sin esto, `modoManual` nunca volvía a
+              `false` (el autocompletado suspendido no busca, así que elegir
+              una sugerencia —lo único que lo desactivaba— nunca pasaba). El
+              reset de lo ya resuelto vive en `DireccionAutocomplete`, atado a
+              que `suspendido` pase de `true` a `false`.
+            */}
+            {modoManual && (
+              <button
+                type="button"
+                onClick={() => setModoManual(false)}
+                className="self-start text-sm text-primary hover:underline"
+              >
+                Buscar la dirección
+              </button>
+            )}
+
             {direccionResuelta && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <Field label="Ciudad" error={errores.domicilioCiudad}>

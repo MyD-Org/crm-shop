@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useOptimistic, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
@@ -12,7 +12,7 @@ import { CatalogoProductos } from "@/components/catalogo/CatalogoProductos";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import type { Facetas } from "@/lib/catalog";
-import { hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
+import { estadoConCambios, hrefCatalogo, hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, limpiarFiltros } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -55,20 +55,29 @@ export function CatalogoClient({
   // aparece recién junto con los resultados y parece que el clic no anduvo).
   // Al terminar la navegación, `estado` ya es el nuevo y el optimista se
   // descarta solo. Clics seguidos se acumulan porque parten de `estadoVisible`.
-  const [estadoVisible, marcar] = useOptimistic(
-    estado,
-    (actual: EstadoCatalogo, cambios: Partial<EstadoCatalogo>) => ({
-      ...actual,
-      pagina: cambios.pagina ?? 1,
-      ...cambios,
-    }),
-  );
+  const [estadoVisible, marcar] = useOptimistic(estado, estadoConCambios);
+
+  // `ir` puede llamarse dos veces seguidas antes de que React vuelva a
+  // renderizar (dos clics rápidos, o un commit del slider seguido de un
+  // toggle): si la URL de la segunda se armara con el `estadoVisible` de acá
+  // arriba (el del último render), pisaría el cambio de la primera en vez de
+  // acumularse, y el filtro quedaba aplicado "a veces sí, a veces no". Por
+  // eso la base para el href es esta ref, que se actualiza en cada llamada
+  // aunque todavía no haya habido un render de por medio (la hoja de mobile
+  // no tiene este problema porque su borrador vive en un `useState` con
+  // updater funcional, ver CatalogoFiltrosSheet).
+  const estadoVisibleRef = useRef(estadoVisible);
+  useEffect(() => {
+    estadoVisibleRef.current = estadoVisible;
+  }, [estadoVisible]);
 
   const navegar = (href: string) => startTransition(() => router.push(href));
   const ir = (cambios: Partial<EstadoCatalogo>) =>
     startTransition(() => {
+      const siguiente = estadoConCambios(estadoVisibleRef.current, cambios);
+      estadoVisibleRef.current = siguiente;
       marcar(cambios);
-      router.push(hrefCon(estadoVisible, cambios));
+      router.push(hrefCatalogo(siguiente));
     });
 
   // Mejor opción de cuotas por producto, sobre su precio final unitario.

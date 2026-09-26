@@ -9,6 +9,7 @@ import {
   comoOrden,
   comoPagina,
   comoPrecio,
+  estadoConCambios,
   hrefCanonico,
   hrefCatalogo,
   hrefCon,
@@ -250,6 +251,37 @@ describe("armado de URLs", () => {
     expect(
       hrefCon({ ...base, precioMin: 500, precioMax: 9000 }, { precioMin: undefined })
     ).toBe("/catalogo?precio_max=9000");
+  });
+});
+
+describe("estadoConCambios", () => {
+  // Regresión: el panel de filtros de desktop armaba la URL con el
+  // `estadoVisible` del último render, así que dos cambios seguidos antes de
+  // que React renderizara de nuevo se pisaban (un filtro quedaba aplicado
+  // "a veces sí, a veces no"). El fix es encadenar sobre el ESTADO
+  // RESULTANTE del cambio anterior, no sobre el estado original.
+  it("dos cambios encadenados se acumulan, no se pisan", () => {
+    const trasElPrimero = estadoConCambios(base, { marcas: ["Philips"] });
+    const trasElSegundo = estadoConCambios(trasElPrimero, { precioMin: 500 });
+    expect(trasElSegundo.marcas).toEqual(["Philips"]);
+    expect(trasElSegundo.precioMin).toBe(500);
+  });
+
+  it("encadenar sobre el estado ORIGINAL en vez del resultante pierde el primer cambio (lo que pasaba antes del fix)", () => {
+    // Este test documenta el bug: si en vez de encadenar se recalculan los
+    // dos cambios contra `base`, el segundo pisa al primero.
+    const segundoContraElOriginal = estadoConCambios(base, { precioMin: 500 });
+    expect(segundoContraElOriginal.marcas).toEqual([]);
+  });
+
+  it("todo cambio que no sea de página vuelve a la 1, igual que hrefCon", () => {
+    expect(estadoConCambios({ ...base, pagina: 7 }, { marcas: ["Philips"] }).pagina).toBe(1);
+    expect(estadoConCambios({ ...base, pagina: 7 }, { pagina: 3 }).pagina).toBe(3);
+  });
+
+  it("hrefCon usa estadoConCambios para armar la URL", () => {
+    const estado = estadoConCambios(base, { marcas: ["Philips"] });
+    expect(hrefCatalogo(estado)).toBe(hrefCon(base, { marcas: ["Philips"] }));
   });
 });
 

@@ -116,9 +116,12 @@ export function DireccionAutocomplete({
       abortRef.current = ctrl;
       setBuscando(true);
       try {
-        const res = await fetch(`/api/geocode?text=${encodeURIComponent(texto)}`, {
-          signal: ctrl.signal,
-        });
+        const res = await fetch(
+          `/api/geocode?text=${encodeURIComponent(texto)}`,
+          {
+            signal: ctrl.signal,
+          },
+        );
         if (!res.ok) return;
         const data = (await res.json()) as Sugerencia[];
         setSugerencias(data);
@@ -159,74 +162,86 @@ export function DireccionAutocomplete({
   }
 
   return (
-    <div className="relative">
-      <Field label={label} error={error}>
-        <Input
-          ref={inputRef}
-          value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            buscar(e.target.value);
-          }}
-          onKeyDown={onKeyDown}
-          // El blur se demora: sin esto, el clic en una sugerencia cierra la
-          // lista antes de que el evento llegue y no se selecciona nada.
-          onBlur={() => setTimeout(() => setAbierto(false), 150)}
-          onFocus={() => sugerencias.length > 0 && setAbierto(true)}
-          placeholder={placeholder}
-          autoComplete="off"
-          role="combobox"
-          aria-expanded={abierto}
-          aria-autocomplete="list"
-        />
-      </Field>
-      {ayuda && !error && <div className="mt-1.5 text-xs text-muted">{ayuda}</div>}
+    <div>
+      {/* El desplegable se ancla a este bloque (label + input), no al de afuera:
+        así sale pegado al campo y no debajo de la línea de ayuda. */}
+      <div className="relative">
+        <Field label={label} error={error}>
+          <Input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+              buscar(e.target.value);
+            }}
+            onKeyDown={onKeyDown}
+            // El blur se demora: sin esto, el clic en una sugerencia cierra la
+            // lista antes de que el evento llegue y no se selecciona nada.
+            onBlur={() => setTimeout(() => setAbierto(false), 150)}
+            onFocus={() => sugerencias.length > 0 && setAbierto(true)}
+            placeholder={placeholder}
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={abierto}
+            aria-autocomplete="list"
+          />
+        </Field>
 
-      {/*
+        {/*
         `pointer-events-none` para que la ruedita no se coma el clic: queda
         encima del input y sin esto tapa la zona donde el usuario sigue
         escribiendo. El `label` lo lee el lector de pantalla, que necesita algo
         —una animación sola no comunica nada.
       */}
-      {buscando && (
-        <span className="pointer-events-none absolute right-3 top-9 text-muted">
-          <Spinner size="sm" label="Buscando direcciones" />
-        </span>
-      )}
+        {buscando && (
+          <span className="pointer-events-none absolute right-3 top-9 text-muted">
+            <Spinner size="sm" label="Buscando direcciones" />
+          </span>
+        )}
 
-      {abierto && sugerencias.length > 0 && (
-        <ul className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
-          {sugerencias.map((s, i) => (
-            <li key={`${s.label}-${i}`}>
-              <button
-                type="button"
-                onMouseDown={() => elegir(s)}
-                className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
-                  i === indice ? "bg-elevated text-primary" : "text-text hover:bg-elevated"
-                }`}
-              >
-                {s.label}
-              </button>
-            </li>
-          ))}
+        {abierto && sugerencias.length > 0 && (
+          // Mismo tratamiento que el Select del DS: contenedor con p-1 y radio =
+          // el del ítem (sm) + ese padding, para que las curvas sean concéntricas.
+          <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-[calc(var(--radius-sm)+0.25rem)] border border-border bg-surface p-1 shadow-lg">
+            {sugerencias.map((s, i) => (
+              <li key={`${s.label}-${i}`}>
+                <button
+                  type="button"
+                  onMouseDown={() => elegir(s)}
+                  className={`w-full rounded-sm px-3 py-2 text-left text-sm transition-colors ${
+                    i === indice
+                      ? "bg-elevated text-primary"
+                      : "text-text hover:bg-elevated"
+                  }`}
+                >
+                  {s.label}
+                </button>
+              </li>
+            ))}
 
-          {/* Última fila: la salida a mano, donde el usuario ya está mirando. */}
-          {onCargarAMano && (
-            <li className="border-t border-border">
-              <button
-                type="button"
-                onMouseDown={() => {
-                  setAbierto(false);
-                  setSugerencias([]);
-                  onCargarAMano();
-                }}
-                className="w-full px-4 py-2.5 text-left text-sm font-semibold text-primary transition-colors hover:bg-elevated"
-              >
-                Ninguna es mi dirección — cargarla a mano
-              </button>
-            </li>
-          )}
-        </ul>
+            {/* Última fila: la salida a mano, donde el usuario ya está mirando. */}
+            {onCargarAMano && (
+              <li className="mt-1 border-t border-border pt-1">
+                <button
+                  type="button"
+                  onMouseDown={() => {
+                    setAbierto(false);
+                    setSugerencias([]);
+                    onCargarAMano();
+                  }}
+                  className="w-full rounded-sm px-3 py-2 text-left text-sm font-semibold text-primary transition-colors hover:bg-elevated"
+                >
+                  Ninguna es mi dirección — cargarla a mano
+                </button>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+      {/* Con el desplegable abierto la salida ya está en su última fila: la
+          ayuda se esconde para no repetirla. */}
+      {ayuda && !error && !abierto && (
+        <div className="mt-1.5 text-xs text-muted">{ayuda}</div>
       )}
     </div>
   );

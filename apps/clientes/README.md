@@ -31,10 +31,9 @@ El Shop usa el esquema `shop` de la misma base Postgres del CRM (ver
 de las vistas del CRM (`public.catalog_products_shop` y
 `public.catalog_categories_shop`), que llena la sync del CRM.
 
-Ver `.env.example` para la lista completa de variables con ejemplos y agrupaciones.
-
 | Variable | Para qué |
 |---|---|
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Instancia de Clerk (Production en prod). `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/ingresar` y `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/registro`; `NEXT_PUBLIC_CLERK_PROXY_URL` solo si Clerk va por proxy. |
 | `DATABASE_URL` | Conexión de la app en tiempo de ejecución. Pooled, rol `shop_app`. Es la única variable que lee el runtime. |
 | `MIGRATE_DATABASE_URL` | Solo para `npm run db:migrate`. Conexión directa (sin pooler), rol dueño del esquema `shop`. El runtime nunca la usa. |
 | `SHOP_TENANT_ID` | Obligatoria: el Shop no arranca sin ella (falla en `src/instrumentation.ts`, salvo durante `next build`). Tiene que ser un valor de `public.tenants.id` del CRM. |

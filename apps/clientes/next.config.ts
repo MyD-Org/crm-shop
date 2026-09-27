@@ -36,6 +36,10 @@ const nextConfig: NextConfig = {
     // se corrompe y rompe el dev con errores "SST file" / build-manifest ENOENT.
     // Lo desactivamos hasta que sea estable.
     turbopackFileSystemCacheForDev: false,
+    // Con el manejador viejo, al tocar un producto desde abajo del catálogo la
+    // ficha abría con el scroll al fondo (footer): en prod Next no llegaba a
+    // subir y solo quedaba el recorte del navegador al achicarse la página.
+    appNewScrollHandler: true,
   },
   // Comprobantes de pago: HEIC/HEIF → JPEG con heic-decode (WASM de
   // libheif-js) y sharp (binario nativo). Se cargan desde node_modules en

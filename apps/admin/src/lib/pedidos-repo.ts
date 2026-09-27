@@ -37,6 +37,55 @@ export type PedidoItemRow = ShopOrderItemRow
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/**
+ * Valor sentinela de `factura_alegra_id` mientras se reserva el pedido para emitir su factura
+ * (ver la sección "Emisión de factura" más abajo, `reservarEmisionFactura`). Nunca es un id real
+ * de Alegra (los ids de Alegra son numéricos). Se define acá arriba porque además de la emisión
+ * la usan `condicionCola`/`toPedidoDto`/`toPedidoDetalleDto`: un pedido reservado (vigente o
+ * colgado) NO cuenta como facturado para el badge, las colas ni el DTO que ve el Shop.
+ */
+export const RESERVA_EMISION_SENTINEL = "__reservando_emision__"
+
+/**
+ * Cuánto puede durar una reserva antes de considerarse abandonada (la función que la creó murió
+ * a mitad de camino: timeout de Vercel, crash, deploy — nunca llegó a llamar
+ * `liberarReservaEmisionFactura` ni `persistirFacturaEmitida`). Tiene que superar con margen
+ * amplio el `maxDuration` de la ruta de emisión (60s, ver `factura/emitir/route.ts`): 5 minutos
+ * es bastante más que cualquier timeout de función esperable, y bastante menos que "para
+ * siempre" (que es lo que pasaba antes de este fix).
+ */
+export const RESERVA_EMISION_TTL_MINUTOS = 5
+
+/**
+ * ¿En qué estado está la reserva de emisión de este pedido? `null` = no hay reserva (el pedido no
+ * tiene factura, o ya tiene una factura REAL persistida — no un sentinel). Sólo tiene sentido
+ * cuando `facturaAlegraId === RESERVA_EMISION_SENTINEL`.
+ */
+export function estadoReservaEmision(
+  pedido: Pick<PedidoRow, "facturaAlegraId" | "facturadoEn">,
+  now: Date = new Date(),
+): "vigente" | "vencida" | null {
+  if (pedido.facturaAlegraId !== RESERVA_EMISION_SENTINEL) return null
+  const antiguedadMs = pedido.facturadoEn ? now.getTime() - pedido.facturadoEn.getTime() : Infinity
+  return antiguedadMs > RESERVA_EMISION_TTL_MINUTOS * 60_000 ? "vencida" : "vigente"
+}
+
+/**
+ * `WHERE` que trata como "libre para reservar/vincular" tanto un pedido sin factura como uno con
+ * una reserva de emisión VENCIDA (ver `estadoReservaEmision`). La usan `reservarEmisionFactura` y
+ * `vincularFactura`: si la función que reservó murió a mitad de camino, tanto "Emitir" como
+ * "Vincular" tienen que poder retomar el pedido en vez de quedar bloqueados para siempre.
+ */
+function reservaEmisionLibre(): SQL {
+  return or(
+    isNull(shopOrders.facturaAlegraId),
+    and(
+      eq(shopOrders.facturaAlegraId, RESERVA_EMISION_SENTINEL),
+      sql`${shopOrders.facturadoEn} < now() - make_interval(mins => ${RESERVA_EMISION_TTL_MINUTOS})`,
+    )!,
+  )!
+}
+
 /** Las cuatro colas de "cosas para revisar" del tablero. Cada una es un predicado fijo, siempre
  *  sobre el tenant completo (nunca sobre los filtros que el operador tenga puestos). */
 export type Cola = "sin_confirmar" | "pago" | "datos" | "sin_factura"
@@ -76,7 +125,14 @@ function condicionCola(cola: Cola): SQL {
     case "datos":
       return and(eq(shopOrders.requiereRevision, true), ne(shopOrders.estado, "cancelado"))!
     case "sin_factura":
-      return and(eq(shopOrders.estado, "entregado"), isNull(shopOrders.facturadoEn))!
+      // `facturado_en` no alcanza sola: mientras el pedido tiene una reserva de emisión puesta
+      // (`factura_alegra_id = RESERVA_EMISION_SENTINEL`, ver la sección de emisión más abajo),
+      // `facturado_en` YA está seteado (lo exige un CHECK de la base) aunque todavía no haya
+      // factura real — vigente o colgada, cuenta como "sin factura" para esta cola.
+      return and(
+        eq(shopOrders.estado, "entregado"),
+        or(isNull(shopOrders.facturadoEn), eq(shopOrders.facturaAlegraId, RESERVA_EMISION_SENTINEL))!,
+      )!
   }
 }
 
@@ -458,11 +514,16 @@ async function okConItems(tenantId: string, pedido: PedidoRow): Promise<FacturaR
  * facturado: `facturado_en` deja de ser NULL y el pedido sale de `shop.stock_reservado`, o sea
  * que libera su reserva. NO cambia el estado.
  *
- * UN UPDATE condicional (`WHERE id AND tenant AND estado <> 'cancelado' AND sin factura`),
- * igual que `cambiarEstado`: dos operadores a la vez → uno solo gana. Si no afectó filas, un
- * SELECT (también por tenant) distingue: no existe/ajeno, cancelado, ya tenía ESA factura
- * (idempotente → ok, sin tocar la fecha original ni sumar un evento de más) u otra (conflict).
- * El evento 'factura_vinculada' del historial va en la MISMA transacción que el UPDATE.
+ * UN UPDATE condicional (`WHERE id AND tenant AND estado <> 'cancelado' AND (sin factura O
+ * reserva de emisión VENCIDA, ver `reservaEmisionLibre`)`), igual que `cambiarEstado`: dos
+ * operadores a la vez → uno solo gana. Una reserva de "Emitir factura" que quedó colgada (la
+ * función murió a mitad de camino) también se puede recuperar vinculando a mano la factura que
+ * Alegra sí llegó a crear — esa es justamente la vía de recuperación que ofrece el mensaje de
+ * error de la emisión. Si no afectó filas, un SELECT (también por tenant) distingue: no
+ * existe/ajeno, cancelado, ya tenía ESA factura (idempotente → ok, sin tocar la fecha original ni
+ * sumar un evento de más), otra factura real, o una reserva de emisión VIGENTE (conflict: hay una
+ * emisión en curso, no se puede vincular por encima). El evento 'factura_vinculada' del historial
+ * va en la MISMA transacción que el UPDATE.
  */
 export async function vincularFactura(
   tenantId: string,
@@ -485,14 +546,7 @@ export async function vincularFactura(
         facturadoPorNombre: actor.name,
         updatedAt: now,
       })
-      .where(
-        and(
-          eq(shopOrders.id, id),
-          eq(shopOrders.tenantId, tenantId),
-          ne(shopOrders.estado, "cancelado"),
-          isNull(shopOrders.facturaAlegraId),
-        ),
-      )
+      .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), ne(shopOrders.estado, "cancelado"), reservaEmisionLibre()))
       .returning()
     if (!fila) return null
     await registrarEvento(tx, {
@@ -529,24 +583,25 @@ export async function vincularFactura(
 // `factura_alegra_id` (no hay una columna dedicada para esto todavía — no hace falta una
 // migración nueva para un valor transitorio que dura lo que tarda la llamada a Alegra).
 //
-// Riesgo documentado: mientras el pedido está "reservado", `facturaAlegraId` no es `null`, así
-// que `toPedidoDto`/`toPedidoDetalleDto` lo mostrarían como "facturado" (badge, cola
-// `sin_factura`) si alguien pidiera el pedido en esa ventana — que dura lo que tarda UNA llamada
-// HTTP a Alegra (createInvoice), típicamente bajo un segundo. Se aceptó este costo transitorio
-// en vez de sumar una columna nueva sólo para el lock.
-
-/** Valor sentinela de `factura_alegra_id` mientras se reserva el pedido para emitir. Nunca es un
- *  id real de Alegra (los ids de Alegra son numéricos). */
-export const RESERVA_EMISION_SENTINEL = "__reservando_emision__"
+// Riesgo documentado (acotado, no eliminado): mientras el pedido está "reservado" (vigente o
+// vencida), `facturaAlegraId` no es `null` a nivel de columna — `toPedidoDto`/`toPedidoDetalleDto`
+// y las colas lo tratan explícitamente como "no facturado" (ver `estadoReservaEmision` y
+// `condicionCola("sin_factura")` arriba) para que el badge, las colas y el Shop no muestren una
+// factura que no existe. Si la reserva queda VENCIDA (la función que la creó murió a mitad de
+// camino: timeout, crash, deploy), tanto `reservarEmisionFactura` como `vincularFactura` la tratan
+// como libre (`reservaEmisionLibre`, TTL `RESERVA_EMISION_TTL_MINUTOS`) para que "Emitir" o
+// "Vincular" puedan retomar el pedido sin quedar bloqueado para siempre.
 
 export type ReservaEmisionResult = { kind: "ok" } | { kind: "not_found" } | { kind: "cancelado" } | { kind: "conflict" }
 
 /**
  * Reserva el pedido para emitir su factura, ANTES de llamar a `createInvoice`. Mismo predicado
- * que `vincularFactura` (`WHERE ... AND estado <> 'cancelado' AND factura_alegra_id IS NULL`),
- * así que sólo una de dos confirmaciones simultáneas gana la reserva; la otra recibe `conflict`
- * sin haber llegado a llamar a Alegra. No inserta ningún evento del historial (la reserva no es
- * un hecho de negocio; sólo lo es la emisión, si se completa).
+ * que `vincularFactura` (`WHERE ... AND estado <> 'cancelado' AND (sin factura O reserva
+ * vencida)`, ver `reservaEmisionLibre`), así que sólo una de dos confirmaciones simultáneas gana
+ * la reserva; la otra recibe `conflict` sin haber llegado a llamar a Alegra. Una reserva VENCIDA
+ * (de una corrida anterior que murió a mitad de camino) también se puede retomar. No inserta
+ * ningún evento del historial (la reserva no es un hecho de negocio; sólo lo es la emisión, si se
+ * completa).
  *
  * También pone `facturado_en`/`facturado_por(_nombre)`: el CHECK `orders_factura_facturado_check`
  * (0013 del Shop) exige que un `factura_alegra_id` no nulo venga siempre con `facturado_en` no
@@ -569,14 +624,7 @@ export async function reservarEmisionFactura(
       facturadoPorNombre: input.actor.name,
       updatedAt: input.now,
     })
-    .where(
-      and(
-        eq(shopOrders.id, id),
-        eq(shopOrders.tenantId, tenantId),
-        ne(shopOrders.estado, "cancelado"),
-        isNull(shopOrders.facturaAlegraId),
-      ),
-    )
+    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), ne(shopOrders.estado, "cancelado"), reservaEmisionLibre()))
     .returning()
   if (fila) return { kind: "ok" }
 
@@ -905,8 +953,13 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   actualizadoEn: string
   /** Lista de precios del contacto de Alegra con ese documento; sólo con `otra_lista_precios`. */
   revisionListaPrecios: string | null
-  /** Factura de Alegra vinculada (copia de cuando se vinculó), o null. */
+  /** Factura de Alegra vinculada (copia de cuando se vinculó), o null. Un sentinel de reserva de
+   *  emisión (ver `emisionReserva`) NUNCA aparece acá: no es una factura real. */
   factura: { alegraId: string; numero: string | null; fecha: string | null; total: number | null } | null
+  /** `"vigente"` = hay una emisión en curso (no ofrecer Emitir/Vincular); `"vencida"` = una
+   *  emisión anterior no terminó (Emitir/Vincular siguen disponibles, con aviso); `null` = no hay
+   *  ninguna reserva (sin factura, o ya con una factura real). */
+  emisionReserva: "vigente" | "vencida" | null
   facturadoEn: string | null
   facturadoPorNombre: string | null
   /** Si el pedido está apartando stock en este momento (ver `reservaStock`). */
@@ -938,7 +991,10 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
     requiereRevision: row.requiereRevision,
     motivoRevision: row.motivoRevision,
     pagoRevision: esPagoRevision(row.pagoRevision) ? row.pagoRevision : null,
-    facturado: !!row.facturaAlegraId,
+    // Un sentinel de reserva de emisión (vigente o vencida) NO es una factura real: ni el badge
+    // "Facturado" del listado/tablero ni la cola `sin_factura` (ver `condicionCola` arriba) lo
+    // cuentan como tal.
+    facturado: !!row.facturaAlegraId && row.facturaAlegraId !== RESERVA_EMISION_SENTINEL,
   }
 }
 
@@ -991,14 +1047,16 @@ export function toPedidoDetalleDto(
     estadoActualizadoPorNombre: row.estadoActualizadoPorNombre,
     actualizadoEn: row.updatedAt.toISOString(),
     revisionListaPrecios: listaPrecios,
-    factura: row.facturaAlegraId
-      ? {
-          alegraId: row.facturaAlegraId,
-          numero: row.facturaNumero,
-          fecha: row.facturaFecha,
-          total: row.facturaTotal == null ? null : num(row.facturaTotal),
-        }
-      : null,
+    factura:
+      row.facturaAlegraId && row.facturaAlegraId !== RESERVA_EMISION_SENTINEL
+        ? {
+            alegraId: row.facturaAlegraId,
+            numero: row.facturaNumero,
+            fecha: row.facturaFecha,
+            total: row.facturaTotal == null ? null : num(row.facturaTotal),
+          }
+        : null,
+    emisionReserva: estadoReservaEmision(row),
     facturadoEn: iso(row.facturadoEn),
     facturadoPorNombre: row.facturadoPorNombre,
     reservaStock: reservaStock(row),

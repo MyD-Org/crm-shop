@@ -5,6 +5,7 @@ import { getDb } from "@/db"
 import { shopOrders, type ShopOrderRow } from "@/db/shop-schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
+import { RESERVA_EMISION_SENTINEL, RESERVA_EMISION_TTL_MINUTOS } from "@/lib/pedidos-repo"
 import { seedOperator, seedShopOrder, seedShopOrderItem, seedTenant, truncateAll } from "./helpers"
 
 // "Vincular factura" (change webhooks-stock-alegra, PR-3b) contra la base real de test, con
@@ -375,6 +376,30 @@ describe("admin: vincular factura de Alegra a un pedido", () => {
       session = {}
       const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
       expect((await vincular(p.id, { alegraId: "7040" })).status).toBe(401)
+    })
+
+    it("reserva de emisión VIGENTE (Emitir en curso) → 409 emision_en_curso, no vincula por encima", async () => {
+      const p = await seedShopOrder(TENANT_A, {
+        estado: "confirmado",
+        facturaAlegraId: RESERVA_EMISION_SENTINEL,
+        facturadoEn: new Date(), // recién reservada
+      })
+      const res = await vincular(p.id, { alegraId: "7040" })
+      expect(res.status).toBe(409)
+      expect(await res.json()).toMatchObject({ code: "emision_en_curso" })
+      expect((await rowById(p.id)).facturaAlegraId).toBe(RESERVA_EMISION_SENTINEL)
+    })
+
+    it("reserva de emisión VENCIDA (emisión colgada) → se puede recuperar vinculando la factura", async () => {
+      const vencida = new Date(Date.now() - (RESERVA_EMISION_TTL_MINUTOS * 60_000 + 1000))
+      const p = await seedShopOrder(TENANT_A, {
+        estado: "confirmado",
+        facturaAlegraId: RESERVA_EMISION_SENTINEL,
+        facturadoEn: vencida,
+      })
+      const res = await vincular(p.id, { alegraId: "7040" })
+      expect(res.status).toBe(200)
+      expect((await rowById(p.id)).facturaAlegraId).toBe("7040")
     })
   })
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/factura-emitir"
 import { enviarFacturaPedido, logAvisoFactura, type AvisoFactura } from "@/lib/pedido-factura-aviso"
 import {
+  estadoReservaEmision,
   getPedido,
   liberarReservaEmisionFactura,
   persistirFacturaEmitida,
@@ -71,6 +72,7 @@ const MSG = {
     "La numeración seleccionada ya no está disponible. Vuelva a abrir la vista previa e inténtelo nuevamente.",
   numeracionRequerida: "Seleccione una numeración para emitir la factura.",
   conflicto: "El pedido fue modificado por otra persona. Actualice la página e inténtelo nuevamente.",
+  emisionEnCurso: "Hay una emisión de esta factura en curso. Espere unos segundos y actualice la página.",
   interno_confirmar: "No se pudo emitir la factura. Inténtelo nuevamente.",
   creadaSinVincular: (alegraId: string, numero: string | null) =>
     `La factura se creó en Alegra${numero ? ` (número ${numero})` : ` (id ${alegraId})`}, pero no se pudo vincular ` +
@@ -84,6 +86,21 @@ function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
   }
   console.error("[admin/pedidos/factura/emitir] Alegra respondió mal", { ...ctx, err })
   return fail(502, "alegra_error", MSG.alegra)
+}
+
+/**
+ * Chequeo de idempotencia común a GET y POST, consciente de la reserva de emisión (ver
+ * `estadoReservaEmision` en pedidos-repo.ts): una factura REAL, o una reserva VIGENTE (emisión en
+ * curso), bloquean; una reserva VENCIDA (la corrida anterior murió a mitad de camino: timeout,
+ * crash, deploy) se trata como si el pedido no tuviera factura, para que se pueda reintentar.
+ * `null` = seguir adelante.
+ */
+function chequeoFacturaExistente(pedido: PedidoRow): Response | null {
+  if (!pedido.facturaAlegraId) return null
+  const estado = estadoReservaEmision(pedido)
+  if (estado === "vencida") return null
+  if (estado === "vigente") return fail(409, "emision_en_curso", MSG.emisionEnCurso)
+  return fail(409, "ya_vinculada", MSG.yaFacturado)
 }
 
 async function configDe(tenantId: string): Promise<TenantConfig | null> {
@@ -104,8 +121,10 @@ export async function GET(req: Request, { params }: IdParams) {
     const found = await getPedido(guard.tenantId, id)
     if (!found) return adminNotFoundResponse()
     // Idempotencia: un pedido ya facturado (emitido o vinculado a mano) no vuelve a mostrar un
-    // preview de emisión — mismo código que usa "vincular" para "ya tiene otra factura".
-    if (found.pedido.facturaAlegraId) return fail(409, "ya_vinculada", MSG.yaFacturado)
+    // preview de emisión; una emisión VIGENTE tampoco (hay una en curso); una VENCIDA sí deja
+    // seguir, como si no tuviera factura (ver `chequeoFacturaExistente`).
+    const bloqueo = chequeoFacturaExistente(found.pedido)
+    if (bloqueo) return bloqueo
 
     const config = await configDe(guard.tenantId)
     if (!config) return fail(500, "internal", MSG.sinConfig)
@@ -171,8 +190,10 @@ export async function POST(req: Request, { params }: IdParams) {
     return fail(500, "internal", MSG.interno_confirmar)
   }
 
-  // Idempotencia: ya facturado (emitido o vinculado) antes de gastar cuota de Alegra.
-  if (pedido.facturaAlegraId) return fail(409, "ya_vinculada", MSG.yaFacturado)
+  // Idempotencia: ya facturado o con una emisión vigente, antes de gastar cuota de Alegra. Una
+  // reserva vencida deja seguir (`reservarEmisionFactura` la retoma más abajo).
+  const bloqueoExistente = chequeoFacturaExistente(pedido)
+  if (bloqueoExistente) return bloqueoExistente
   if (pedido.estado === "cancelado") return fail(422, "cancelado", MSG.cancelado)
 
   const config = await configDe(guard.tenantId)

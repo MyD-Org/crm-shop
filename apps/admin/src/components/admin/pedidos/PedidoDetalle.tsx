@@ -259,14 +259,28 @@ export function PedidoDetalle({ initial, esAdminPlus }: { initial: PedidoDetalle
           </Card>
 
           <Card title="Factura" className="p-4">
-            <VincularFacturaControl pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
-            {!pedido.factura && pedido.estado !== "cancelado" && (
-              <EmitirFacturaControl
-                pedido={pedido}
-                onChanged={setPedido}
-                onConflicto={() => void recargar(true)}
-                esAdminPlus={esAdminPlus}
-              />
+            {pedido.emisionReserva === "vigente" ? (
+              <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+                Emisión en curso… Actualice la página en unos segundos.
+              </p>
+            ) : (
+              <>
+                {pedido.emisionReserva === "vencida" && (
+                  <Alert tone="warning" title="Una emisión anterior no terminó">
+                    Revise en Alegra si la factura se creó antes de volver a emitir. Si existe, use &ldquo;Vincular
+                    factura&rdquo;.
+                  </Alert>
+                )}
+                <VincularFacturaControl pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+                {!pedido.factura && pedido.estado !== "cancelado" && (
+                  <EmitirFacturaControl
+                    pedido={pedido}
+                    onChanged={setPedido}
+                    onConflicto={() => void recargar(true)}
+                    esAdminPlus={esAdminPlus}
+                  />
+                )}
+              </>
             )}
           </Card>
         </aside>

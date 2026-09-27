@@ -187,4 +187,12 @@ describe("armarOrder", () => {
     expect(order.facturaId).toBe("987");
     expect(order.facturaNumero).toBe("FV-1-00012876");
   });
+
+  it("con una emisión reservada/colgada en el admin (sentinel): facturaId undefined", () => {
+    // El admin escribe este valor en factura_alegra_id mientras emite (o si la emisión quedó
+    // colgada por un timeout/crash): todavía no hay factura real, no se ofrece el botón.
+    const reservando = { ...fila, facturaAlegraId: "__reservando_emision__", facturaNumero: null } as unknown as FilaOrder;
+    const order = armarOrder(reservando, [], new Map());
+    expect(order.facturaId).toBeUndefined();
+  });
 });

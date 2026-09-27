@@ -6,6 +6,7 @@ import { tenants } from "@/db/schema"
 import { shopOrderEventos, shopOrders } from "@/db/shop-schema"
 import { __clearNumberTemplatesCache, __clearTaxesCache } from "@/lib/alegra"
 import { mockAllInvoices, mockContacts } from "@/lib/mock-alegra"
+import { RESERVA_EMISION_SENTINEL, RESERVA_EMISION_TTL_MINUTOS } from "@/lib/pedidos-repo"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import { seedOperator, seedShopOrder, seedShopOrderItem, seedTenant, truncateAll } from "./helpers"
 
@@ -200,6 +201,29 @@ describe("admin: preview de emisión de factura (GET, sin escritura)", () => {
     session = {}
     const p = await seedShopOrder(TENANT_A, { estado: "confirmado" })
     expect((await preview(p.id)).status).toBe(401)
+  })
+
+  it("reserva de emisión VIGENTE (Emitir en curso) → 409 emision_en_curso", async () => {
+    const p = await seedShopOrder(TENANT_A, {
+      estado: "confirmado",
+      facturaAlegraId: RESERVA_EMISION_SENTINEL,
+      facturadoEn: new Date(), // recién reservada
+    })
+    const res = await preview(p.id)
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "emision_en_curso" })
+  })
+
+  it("reserva de emisión VENCIDA (emisión colgada) → 200, se arma el preview como si no tuviera factura", async () => {
+    const vencida = new Date(Date.now() - (RESERVA_EMISION_TTL_MINUTOS * 60_000 + 1000))
+    const p = await seedShopOrder(TENANT_A, {
+      estado: "confirmado",
+      facturaAlegraId: RESERVA_EMISION_SENTINEL,
+      facturadoEn: vencida,
+    })
+    await seedShopOrderItem(p.id)
+    const res = await preview(p.id)
+    expect(res.status).toBe(200)
   })
 })
 
@@ -427,5 +451,25 @@ describe("admin: confirmación de emisión de factura (POST)", () => {
     session = {}
     const p = await pedidoFacturable()
     expect((await emitir(p.id, { numberTemplateId: "1" })).status).toBe(401)
+  })
+
+  it("reserva de emisión VIGENTE: 409 emision_en_curso, sin llamar createInvoice de nuevo", async () => {
+    const p = await pedidoFacturable({ facturaAlegraId: RESERVA_EMISION_SENTINEL, facturadoEn: new Date() })
+    const antes = mockAllInvoices().length
+    const res = await emitir(p.id, { numberTemplateId: "1" })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ code: "emision_en_curso" })
+    expect(mockAllInvoices()).toHaveLength(antes)
+  })
+
+  it("reserva de emisión VENCIDA: se retoma y crea la factura normalmente", async () => {
+    const vencida = new Date(Date.now() - (RESERVA_EMISION_TTL_MINUTOS * 60_000 + 1000))
+    const p = await pedidoFacturable({ facturaAlegraId: RESERVA_EMISION_SENTINEL, facturadoEn: vencida })
+    const antes = mockAllInvoices().length
+    const res = await emitir(p.id, { numberTemplateId: "1" })
+    expect(res.status).toBe(200)
+    expect(mockAllInvoices()).toHaveLength(antes + 1)
+    const [row] = await getDb().select().from(shopOrders).where(eq(shopOrders.id, p.id))
+    expect(row.facturaAlegraId).not.toBe(RESERVA_EMISION_SENTINEL)
   })
 })

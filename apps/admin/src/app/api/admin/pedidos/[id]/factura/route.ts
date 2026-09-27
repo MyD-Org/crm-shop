@@ -9,6 +9,7 @@ import { nombreDocumentoAlegra, resolverFactura, validarFactura, type MotivoFact
 import { enviarFacturaPedido, logAvisoFactura, type AvisoFactura } from "@/lib/pedido-factura-aviso"
 import {
   desvincularFactura,
+  estadoReservaEmision,
   getPedido,
   pedidosConFactura,
   toPedidoDetalleDto,
@@ -52,6 +53,7 @@ const MSG = {
   alegraId: "Indique la factura a vincular.",
   cancelado: "Un pedido cancelado no admite una factura vinculada.",
   yaVinculada: "El pedido ya tiene una factura vinculada. Desvincúlela antes de vincular otra.",
+  emisionEnCurso: "Hay una emisión de esta factura en curso. Espere unos segundos e inténtelo nuevamente.",
   conflicto: "El pedido fue modificado por otra persona. Actualice la página e inténtelo nuevamente.",
   noEncontrada: "No encontramos esa factura en Alegra. Verifique el número e inténtelo nuevamente.",
   ambigua: "Hay más de una factura con ese número en Alegra. Ingrese el número completo, con el punto de venta.",
@@ -79,10 +81,21 @@ const facturaDto = (f: AlegraFacturaResumen) => ({
   clienteNombre: f.clienteNombre,
 })
 
-/** 404 / 422 / 409 según el pedido, antes de ir a Alegra. `null` = se puede seguir. */
+/**
+ * 404 / 422 / 409 según el pedido, antes de ir a Alegra. `null` = se puede seguir.
+ *
+ * Una reserva de "Emitir factura" (ver `estadoReservaEmision` en pedidos-repo.ts) cuenta como
+ * "ya tiene factura" SÓLO si está VIGENTE (hay una emisión en curso, no se puede vincular por
+ * encima). Si está VENCIDA (la emisión anterior murió a mitad de camino: timeout, crash,
+ * deploy), se trata como si el pedido no tuviera factura — es justo la vía de recuperación que
+ * ofrece el mensaje de error de la emisión ("use Vincular factura").
+ */
 function chequeoPedido(pedido: PedidoRow, alegraId?: string): Response | null {
   if (pedido.estado === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (pedido.facturaAlegraId && pedido.facturaAlegraId !== alegraId) {
+    const estadoReserva = estadoReservaEmision(pedido)
+    if (estadoReserva === "vencida") return null
+    if (estadoReserva === "vigente") return fail(409, "emision_en_curso", MSG.emisionEnCurso)
     return fail(409, "ya_vinculada", MSG.yaVinculada)
   }
   return null

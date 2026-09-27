@@ -94,9 +94,15 @@ export const mockSellers: AlegraSeller[] = [
   { alegraId: "sl-2", name: "Vendedor Demo", identification: null, status: "active" },
 ]
 
+// Shape real confirmado el 2026-09-27 contra la cuenta de Alegra Argentina (GET /taxes): id "1"
+// IVA 21% activo, id "2" IVA 27% INACTIVO, id "3" IVA 10.5% activo, id "4" Exento de IVA (0%)
+// activo. "Emitir factura" (rebanada C) mapea `order_items.iva_porcentaje` a uno de estos ids
+// buscando el impuesto ACTIVO cuyo `percentage` coincide (0 → Exento).
 export const mockTaxes: AlegraTax[] = [
-  { alegraId: "tx-iva21", name: "IVA 21%", percentage: 21, status: "active" },
-  { alegraId: "tx-iva105", name: "IVA 10.5%", percentage: 10.5, status: "active" },
+  { alegraId: "1", name: "IVA 21%", percentage: 21, status: "active" },
+  { alegraId: "2", name: "IVA 27%", percentage: 27, status: "inactive" },
+  { alegraId: "3", name: "IVA 10.5%", percentage: 10.5, status: "active" },
+  { alegraId: "4", name: "Exento de IVA", percentage: 0, status: "active" },
 ]
 
 export const mockCurrencies: AlegraCurrency[] = [

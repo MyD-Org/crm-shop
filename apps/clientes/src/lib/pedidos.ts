@@ -302,6 +302,16 @@ export type FilaOrder = typeof orders.$inferSelect;
 export type FilaItem = typeof orderItems.$inferSelect;
 
 /**
+ * Sentinel que el CRM (apps/admin, `lib/pedidos-repo.ts`, `RESERVA_EMISION_SENTINEL`) escribe en
+ * `factura_alegra_id` mientras reserva el pedido para emitir su factura en Alegra (ANTES de
+ * llamar a la API, para que dos confirmaciones simultáneas no generen dos facturas). No es un id
+ * real de Alegra: si la función del admin muere a mitad de camino (timeout, crash, deploy) puede
+ * quedar colgado hasta 5 minutos. Las dos apps NO comparten código — este valor se duplica a
+ * mano y tiene que coincidir con el de admin si algún día cambia.
+ */
+const RESERVA_EMISION_SENTINEL_ADMIN = "__reservando_emision__";
+
+/**
  * Arma el `Order` de UI. `productos` es el espejo del catálogo para los ítems
  * de las líneas (ver `productosDeLineas`): de ahí salen el nombre real, el
  * código y la foto. Un ítem que ya no está en el espejo cae al snapshot de la
@@ -331,7 +341,11 @@ export function armarOrder(
     iva: num(fila.iva),
     costoEnvio: num(fila.costoEnvio),
     total: num(fila.total),
-    ...(fila.facturaAlegraId ? { facturaId: fila.facturaAlegraId } : {}),
+    // Mientras el admin tiene una emisión reservada (o colgada), no hay factura real todavía:
+    // no se le ofrece al cliente un botón "Factura" que apuntaría a un PDF inexistente.
+    ...(fila.facturaAlegraId && fila.facturaAlegraId !== RESERVA_EMISION_SENTINEL_ADMIN
+      ? { facturaId: fila.facturaAlegraId }
+      : {}),
     ...(fila.facturaNumero ? { facturaNumero: fila.facturaNumero } : {}),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);

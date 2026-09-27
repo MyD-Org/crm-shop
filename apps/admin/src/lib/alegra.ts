@@ -174,7 +174,9 @@ export interface AlegraNumberTemplate {
 export interface AlegraInvoiceLineInput {
   alegraId: string // alegra_item_id de order_items
   quantity: number
-  price: number // precio_unitario congelado del pedido
+  price: number // precio_unitario congelado del pedido (NETO, sin IVA)
+  /** Impuesto de la línea (id de /taxes de la cuenta). Sin esto, Alegra factura la línea sin IVA. */
+  tax?: { id: string }[]
 }
 
 export interface AlegraInvoiceCreateInput {
@@ -1117,10 +1119,34 @@ export async function listSellers(config: TenantConfig): Promise<AlegraSeller[]>
   return Array.isArray(page) ? page.map(mapRawSeller) : []
 }
 
+/**
+ * Caché en memoria del proceso, TTL 60s por tenant — mismo patrón que `listNumberTemplates`:
+ * `/taxes` no cambia seguido (dar de alta/baja un impuesto es un evento raro de la cuenta) y
+ * "Emitir factura" (rebanada C) puede reabrir el preview varias veces sobre el mismo pedido
+ * mientras el operador decide, además de volver a leerlos al confirmar (revalidación
+ * server-side): no vale gastar cuota de la cuenta real por algo casi estático.
+ */
+const TAXES_TTL_MS = 60_000
+const taxesCache = new Map<string, { data: AlegraTax[]; at: number }>()
+
+/** Sólo para tests: vacía la caché de impuestos entre casos. */
+export function __clearTaxesCache(): void {
+  taxesCache.clear()
+}
+
 export async function listTaxes(config: TenantConfig): Promise<AlegraTax[]> {
-  if (config.alegraMock) return mockTaxes
-  const page = (await alegraFetch(config, "/taxes")) as Record<string, unknown>[]
-  return Array.isArray(page) ? page.map(mapRawTax) : []
+  const cached = taxesCache.get(config.id)
+  if (cached && Date.now() - cached.at < TAXES_TTL_MS) return cached.data
+
+  let data: AlegraTax[]
+  if (config.alegraMock) {
+    data = mockTaxes
+  } else {
+    const page = (await alegraFetch(config, "/taxes")) as Record<string, unknown>[]
+    data = Array.isArray(page) ? page.map(mapRawTax) : []
+  }
+  taxesCache.set(config.id, { data, at: Date.now() })
+  return data
 }
 
 export async function listCurrencies(config: TenantConfig): Promise<AlegraCurrency[]> {
@@ -1281,6 +1307,7 @@ export async function createInvoice(config: TenantConfig, input: AlegraInvoiceCr
       id: Number.isNaN(Number(it.alegraId)) ? it.alegraId : Number(it.alegraId),
       quantity: it.quantity,
       price: it.price,
+      ...(it.tax ? { tax: it.tax.map((t) => ({ id: Number.isNaN(Number(t.id)) ? t.id : Number(t.id) })) } : {}),
     })),
   }
   if (input.observations) body.observations = input.observations

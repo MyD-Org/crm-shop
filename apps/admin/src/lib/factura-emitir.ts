@@ -1,4 +1,4 @@
-import type { AlegraNumberTemplate } from "./alegra"
+import type { AlegraInvoiceLineInput, AlegraNumberTemplate, AlegraTax } from "./alegra"
 import type { PedidoItemRow, PedidoRow } from "./pedidos-repo"
 
 // "Emitir factura" (detalle de pedido del admin, rebanada B): lógica pura para armar el preview
@@ -94,6 +94,60 @@ function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100
 }
 
+// ───────────────────────── Impuestos por línea (mapeo a /taxes de Alegra) ─────────────────────────
+
+/**
+ * Tolerancia de comparación de porcentajes: `order_items.iva_porcentaje` es `numeric(5,2)` y
+ * `AlegraTax.percentage` puede venir como número de punto flotante; comparar con `===` arriesga
+ * un falso negativo por redondeo binario (21 vs 20.999999999999996).
+ */
+const TOLERANCIA_PORCENTAJE = 0.01
+
+/**
+ * El impuesto ACTIVO de la cuenta cuyo `percentage` coincide con el IVA de la línea (0% →
+ * "Exento"). `null` si ninguno matchea (línea sin impuesto mapeable: aviso bloqueante, ver
+ * `resolverItemsAlegra`) — nunca se inventa un id ni se cae a "el primero que haya".
+ */
+export function elegirImpuestoParaLinea(taxes: AlegraTax[], ivaPorcentaje: number): AlegraTax | null {
+  return (
+    taxes.find(
+      (t) => t.status === "active" && t.percentage != null && Math.abs(t.percentage - ivaPorcentaje) < TOLERANCIA_PORCENTAJE,
+    ) ?? null
+  )
+}
+
+export interface ResultadoItemsAlegra {
+  items: AlegraInvoiceLineInput[]
+  avisos: AvisoBloqueante[]
+}
+
+/**
+ * Arma los `items` de `AlegraInvoiceCreateInput` a partir de las líneas del preview, resolviendo
+ * el impuesto de cada una contra `/taxes` (ver `elegirImpuestoParaLinea`). `price` es el
+ * `precioUnitario` NETO de la línea, tal cual (el Shop ya lo congeló sin IVA — ver
+ * `resolverPreviewEmision`, conclusión de IVA/precios de la rebanada B): NUNCA se divide por
+ * `(1 + iva/100)`. Una línea sin impuesto que coincida produce un aviso bloqueante nombrando el
+ * ítem y el porcentaje, en vez de mandar la línea sin IVA en silencio.
+ */
+export function resolverItemsAlegra(lineas: LineaFacturaPreview[], taxes: AlegraTax[]): ResultadoItemsAlegra {
+  const items: AlegraInvoiceLineInput[] = []
+  const avisos: AvisoBloqueante[] = []
+  for (const l of lineas) {
+    const impuesto = elegirImpuestoParaLinea(taxes, l.ivaPorcentaje)
+    if (!impuesto) {
+      avisos.push({
+        motivo: "impuesto_sin_mapear",
+        detalle:
+          `El ítem "${l.nombre}" tiene IVA ${l.ivaPorcentaje}% y no hay un impuesto activo con ese porcentaje ` +
+          "en la cuenta de Alegra. Revise los impuestos de la cuenta antes de emitir.",
+      })
+      continue
+    }
+    items.push({ alegraId: l.alegraItemId, quantity: l.cantidad, price: l.precioUnitario, tax: [{ id: impuesto.alegraId }] })
+  }
+  return { items, avisos }
+}
+
 /**
  * Total de una línea con IVA (lo que facturaría Alegra: `precioUnitario` es NETO — así lo
  * congela el checkout del Shop, ver `apps/clientes/src/db/schema.ts` — más el impuesto de la
@@ -165,6 +219,8 @@ export interface PreviewEmisionFactura {
 export interface ResolverPreviewEmisionDeps {
   listNumberTemplates: () => Promise<AlegraNumberTemplate[]>
   findContactByIdentifier: (documento: string) => Promise<{ alegraId: string } | null>
+  /** Para el aviso de línea sin impuesto mapeable (ver `resolverItemsAlegra`). */
+  listTaxes: () => Promise<AlegraTax[]>
 }
 
 /**
@@ -203,7 +259,10 @@ export async function resolverPreviewEmision(
   const total = round2(lineas.reduce((acc, l) => acc + totalConIvaDeLinea(l), 0))
   const totalPedido = round2(num(pedido.subtotal) + num(pedido.iva))
 
-  const avisos = [...avisosLineas]
+  const taxes = await deps.listTaxes()
+  const { avisos: avisosImpuestos } = resolverItemsAlegra(lineas, taxes)
+
+  const avisos = [...avisosLineas, ...avisosImpuestos]
   if (Math.abs(total - totalPedido) > DIFERENCIA_TOTAL_MAXIMA) {
     avisos.push({
       motivo: "diferencia_total",
@@ -225,4 +284,18 @@ export async function resolverPreviewEmision(
     bloqueo,
     avisos,
   }
+}
+
+// ───────────────────────── Validación server-side de la numeración (rebanada C) ─────────────────────────
+
+/**
+ * ¿El `numberTemplateId` que mandó el navegador sigue siendo una numeración de factura activa?
+ * El servidor NUNCA confía en el id que vino del preview: entre que se abrió y que se confirma
+ * puede haberse dado de baja en Alegra, o directamente ser un id inventado. `numeraciones` tiene
+ * que ser una lectura FRESCA de `listNumberTemplates` (con su caché de 60s, no un valor viejo
+ * guardado en memoria del request anterior).
+ */
+export function validarNumeracionElegida(numberTemplateId: string, numeraciones: AlegraNumberTemplate[]): boolean {
+  const encontrada = numeraciones.find((n) => n.alegraId === numberTemplateId)
+  return !!encontrada && encontrada.status === "active" && encontrada.subDocumentType.startsWith("INVOICE_")
 }

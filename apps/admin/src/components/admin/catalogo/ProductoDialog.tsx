@@ -167,11 +167,11 @@ export function ProductoDialog({ producto, categorias, tags, sincronizacion, onC
                 <Input
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  placeholder={producto.descripcionAlegra ?? producto.nombreAlegra}
+                  placeholder={nombreDeAlegra(producto)}
                 />
               </Field>
               <ValorDeAlegra
-                valor={producto.descripcionAlegra ?? producto.nombreAlegra}
+                valor={nombreDeAlegra(producto)}
                 usandoPropio={nombre.trim() !== ""}
                 onVolver={() => setNombre("")}
               />
@@ -253,6 +253,16 @@ export function ProductoDialog({ producto, categorias, tags, sincronizacion, onC
       </div>
     </Dialog>
   )
+}
+
+// Lo que muestra la tienda sin nombre propio: el name de Alegra, salvo que sea el código (ahí la
+// descripción). Misma regla que nombreEfectivo de lib/catalogo-overlay, que no se importa acá
+// porque arrastra drizzle al bundle del cliente.
+function nombreDeAlegra(producto: { nombreAlegra: string; descripcionAlegra: string | null; code: string | null }): string {
+  const name = producto.nombreAlegra.trim().toUpperCase()
+  const code = producto.code?.trim().toUpperCase()
+  const esCodigo = !!name && !!code && (code === name || code.startsWith(`${name}-`))
+  return (esCodigo ? producto.descripcionAlegra?.trim() || null : null) ?? producto.nombreAlegra
 }
 
 function DatoAlegra({ etiqueta, valor }: { etiqueta: string; valor: string }) {

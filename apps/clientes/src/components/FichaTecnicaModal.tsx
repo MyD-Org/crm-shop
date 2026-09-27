@@ -8,12 +8,14 @@ import { Dialog } from "@myd-org/ui";
  * MediosDePagoModal (Dialog controlado, foco devuelto al botón al cerrar).
  *
  * El iframe se monta recién al abrir: la ficha no baja el PDF si nadie lo mira.
- * Chrome de Android no dibuja PDFs dentro de un iframe, así que el pie siempre
- * ofrece abrirlo o descargarlo aparte.
+ * En pantallas chicas el PDF embebido se ve mal (Chrome de Android ni lo dibuja):
+ * ahí el enlace se sigue normal y el PDF se abre/descarga con el visor del celular.
  */
+const MEDIA_MODAL = "(min-width: 768px)";
+
 export function FichaTecnicaModal({ url, nombreProducto }: { url: string; nombreProducto: string }) {
   const [abierto, setAbierto] = useState(false);
-  const botonRef = useRef<HTMLButtonElement>(null);
+  const botonRef = useRef<HTMLAnchorElement>(null);
   const cambiarAbierto = (abrir: boolean) => {
     setAbierto(abrir);
     if (!abrir) requestAnimationFrame(() => botonRef.current?.focus());
@@ -21,16 +23,21 @@ export function FichaTecnicaModal({ url, nombreProducto }: { url: string; nombre
 
   return (
     <>
-      <button
+      <a
         ref={botonRef}
-        type="button"
-        onClick={() => setAbierto(true)}
-        aria-haspopup="dialog"
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => {
+          if (!window.matchMedia(MEDIA_MODAL).matches) return;
+          e.preventDefault();
+          setAbierto(true);
+        }}
         className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
       >
         <FileIcon />
         Ver ficha técnica
-      </button>
+      </a>
       <Dialog
         open={abierto}
         onOpenChange={cambiarAbierto}

@@ -1,4 +1,4 @@
-import { boolean, date, integer, numeric, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { boolean, date, integer, jsonb, numeric, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
 // PROHIBIDO importar o re-exportar este archivo desde `src/db/schema.ts`.
@@ -131,6 +131,26 @@ export const shopOrderItems = shop.table("order_items", {
 
 export type ShopOrderRow = typeof shopOrders.$inferSelect
 export type ShopOrderItemRow = typeof shopOrderItems.$inferSelect
+
+// Historial de eventos del pedido (0020 del Shop). El CRM es el ÚNICO que la escribe (dentro de
+// la misma transacción que el UPDATE de `orders`); no la lee ningún otro proceso. `detalle` es
+// jsonb suelto a propósito (forma distinta por tipo, ver el comentario de la migración 0020 del
+// Shop); acá se tipa como `Record<string, unknown>` y el DTO del detalle arma cada evento según
+// su `tipo`.
+export const shopOrderEventos = shop.table("order_eventos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  // SIN `.references()`: la FK (on delete cascade) es del Shop y ya existe en la base.
+  orderId: uuid("order_id").notNull(),
+  // 'estado' | 'pago' | 'factura_vinculada' | 'factura_desvinculada' | 'factura_emitida' | 'cancelado'.
+  tipo: text("tipo").notNull(),
+  detalle: jsonb("detalle").$type<Record<string, unknown>>().notNull().default({}),
+  actorId: text("actor_id"),
+  actorNombre: text("actor_nombre"),
+  creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export type ShopOrderEventoRow = typeof shopOrderEventos.$inferSelect
 
 // Espejo de los usuarios de Clerk de cada tienda (0018 del Shop). Lo escribe SÓLO el Shop
 // (webhook + backfill, por las funciones `shop.clientes_*`); el CRM lo lee para el listado

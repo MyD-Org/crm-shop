@@ -1,9 +1,21 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm"
-import { getDb } from "@/db"
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { getDb, type Db } from "@/db"
 import { alegraContacts } from "@/db/schema"
-import { shopOrders, shopOrderItems, type ShopOrderItemRow, type ShopOrderRow } from "@/db/shop-schema"
+import {
+  shopOrderEventos,
+  shopOrders,
+  shopOrderItems,
+  type ShopOrderEventoRow,
+  type ShopOrderItemRow,
+  type ShopOrderRow,
+} from "@/db/shop-schema"
 import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
 import type { EntregaTipo, EstadoPedido } from "@/lib/pedidos-transiciones"
+
+// Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
+// dentro de una. Todas las escrituras de este archivo que insertan un evento van adentro de una
+// transacción con su UPDATE: o se guardan los dos, o ninguno.
+type Ejecutor = Db | Parameters<Parameters<Db["transaction"]>[0]>[0]
 
 // Acceso a los pedidos del Shop (`shop.orders` / `shop.order_items`) desde el CRM.
 //
@@ -25,28 +37,97 @@ export type PedidoItemRow = ShopOrderItemRow
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/** Las cuatro colas de "cosas para revisar" del tablero. Cada una es un predicado fijo, siempre
+ *  sobre el tenant completo (nunca sobre los filtros que el operador tenga puestos). */
+export type Cola = "sin_confirmar" | "pago" | "datos" | "sin_factura"
+
 export interface ListarPedidosFiltro {
   /** "todos" (o ausente) = sin filtro. */
   estado?: EstadoPedido | "todos"
+  /** Número (con o sin "PED-"/ceros), nombre de contacto, razón social o email. */
+  q?: string
+  entrega?: EntregaTipo
+  pago?: "pagado" | "pendiente"
+  cola?: Cola
   start?: number
-  /** Default PEDIDOS_DEFAULT_LIMIT, máximo PEDIDOS_MAX_LIMIT. */
+  /** Default PEDIDOS_DEFAULT_LIMIT, máximo PEDIDOS_MAX_LIMIT. Se ignora si `vista === "tablero"`. */
   limit?: number
+  /** "tablero": no cancelados + entregados de los últimos 7 días, sin paginar, tope 300. */
+  vista?: "tablero"
 }
+
+export interface ColasCounts {
+  sin_confirmar: number
+  pago: number
+  datos: number
+  sin_factura: number
+}
+
+const COLAS_VACIAS: ColasCounts = { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0 }
+
+/** El mismo predicado que ve el operador al elegir cada cola (usado también para `colas`, con
+ *  FILTER, y para `filtro.cola`, en el WHERE). */
+function condicionCola(cola: Cola): SQL {
+  switch (cola) {
+    case "sin_confirmar":
+      return eq(shopOrders.estado, "pendiente")
+    case "pago":
+      return isNotNull(shopOrders.pagoRevision)
+    case "datos":
+      return and(eq(shopOrders.requiereRevision, true), ne(shopOrders.estado, "cancelado"))!
+    case "sin_factura":
+      return and(eq(shopOrders.estado, "entregado"), isNull(shopOrders.facturadoEn))!
+  }
+}
+
+const VENTANA_TABLERO = sql`interval '7 days'`
+
+export const TABLERO_MAX_LIMIT = 300
 
 export async function listarPedidos(
   tenantId: string,
   filtro: ListarPedidosFiltro = {},
-): Promise<{ items: PedidoRow[]; total: number }> {
-  const start = Math.max(0, Math.trunc(filtro.start ?? 0))
-  const limit = Math.min(PEDIDOS_MAX_LIMIT, Math.max(1, Math.trunc(filtro.limit ?? PEDIDOS_DEFAULT_LIMIT)))
+): Promise<{ items: PedidoRow[]; total: number; colas: ColasCounts }> {
+  const tenantWhere = eq(shopOrders.tenantId, tenantId)
 
-  const conditions: SQL[] = [eq(shopOrders.tenantId, tenantId)]
+  const conditions: SQL[] = [tenantWhere]
   if (filtro.estado && filtro.estado !== "todos") conditions.push(eq(shopOrders.estado, filtro.estado))
-  const where = and(...conditions)
+  if (filtro.entrega) conditions.push(eq(shopOrders.entregaTipo, filtro.entrega))
+  if (filtro.pago) conditions.push(eq(shopOrders.pagoEstado, filtro.pago))
+  if (filtro.cola) conditions.push(condicionCola(filtro.cola))
+  if (filtro.vista === "tablero") {
+    conditions.push(
+      and(
+        ne(shopOrders.estado, "cancelado"),
+        or(ne(shopOrders.estado, "entregado"), sql`${shopOrders.estadoActualizadoEn} >= now() - ${VENTANA_TABLERO}`)!,
+      )!,
+    )
+  }
+  const q = filtro.q?.trim()
+  if (q) {
+    // El número se busca por texto (ILIKE), no por igualdad: "1000" matchea el pedido PED-
+    // 00001000 sin que el operador tenga que tipear el prefijo ni los ceros, y "PED-00001000"
+    // (o "ped-1000") matchea igual porque se compara también contra el número YA formateado.
+    const soloDigitos = q.replace(/\D/g, "")
+    const like = `%${q}%`
+    const condiciones = [
+      sql`unaccent(${shopOrders.contactoNombre}) ILIKE unaccent(${like})`,
+      sql`unaccent(coalesce(${shopOrders.clienteRazonSocial}, '')) ILIKE unaccent(${like})`,
+      sql`${shopOrders.clienteEmail} ILIKE ${like}`,
+      sql`('PED-' || lpad(${shopOrders.numero}::text, 8, '0')) ILIKE ${like}`,
+    ]
+    if (soloDigitos) condiciones.push(sql`${shopOrders.numero}::text ILIKE ${`%${soloDigitos}%`}`)
+    conditions.push(or(...condiciones)!)
+  }
+  const where = and(...conditions)!
 
-  // Mismo patrón que el listado de comprobantes: página + count en paralelo. El desempate por
-  // id hace que la paginación sea estable cuando dos pedidos comparten `created_at`.
-  const [items, count] = await Promise.all([
+  const limit = filtro.vista === "tablero" ? TABLERO_MAX_LIMIT : Math.min(PEDIDOS_MAX_LIMIT, Math.max(1, Math.trunc(filtro.limit ?? PEDIDOS_DEFAULT_LIMIT)))
+  const start = filtro.vista === "tablero" ? 0 : Math.max(0, Math.trunc(filtro.start ?? 0))
+
+  // Página + count + colas, en paralelo. El desempate por id hace que la paginación sea estable
+  // cuando dos pedidos comparten `created_at`. Las colas cuentan SIEMPRE sobre el tenant entero,
+  // sin los filtros de arriba: son la foto de "cuánto falta", no de la página actual.
+  const [items, count, colasFila] = await Promise.all([
     getDb()
       .select()
       .from(shopOrders)
@@ -58,8 +139,25 @@ export async function listarPedidos(
       .select({ count: sql<number>`count(*)::int` })
       .from(shopOrders)
       .where(where),
+    getDb()
+      .select({
+        sinConfirmar: sql<number>`count(*) filter (where ${condicionCola("sin_confirmar")})::int`,
+        pago: sql<number>`count(*) filter (where ${condicionCola("pago")})::int`,
+        datos: sql<number>`count(*) filter (where ${condicionCola("datos")})::int`,
+        sinFactura: sql<number>`count(*) filter (where ${condicionCola("sin_factura")})::int`,
+      })
+      .from(shopOrders)
+      .where(tenantWhere),
   ])
-  return { items, total: count[0]?.count ?? 0 }
+  const colas: ColasCounts = colasFila[0]
+    ? {
+        sin_confirmar: colasFila[0].sinConfirmar,
+        pago: colasFila[0].pago,
+        datos: colasFila[0].datos,
+        sin_factura: colasFila[0].sinFactura,
+      }
+    : COLAS_VACIAS
+  return { items, total: count[0]?.count ?? 0, colas }
 }
 
 async function itemsDe(orderId: string): Promise<PedidoItemRow[]> {
@@ -70,6 +168,77 @@ async function itemsDe(orderId: string): Promise<PedidoItemRow[]> {
     .from(shopOrderItems)
     .where(eq(shopOrderItems.orderId, orderId))
     .orderBy(asc(shopOrderItems.name), asc(shopOrderItems.id))
+}
+
+// ───────────────────────── Historial (shop.order_eventos, 0020 del Shop) ─────────────────────────
+
+/** Los mismos 6 tipos que el CHECK `order_eventos_tipo_check` de la base, más `'creado'`, que
+ *  nunca se guarda: se deriva de `orders.created_at` al leer (ver `historialDe`). */
+export type EventoTipo =
+  | "creado"
+  | "estado"
+  | "pago"
+  | "factura_vinculada"
+  | "factura_desvinculada"
+  | "factura_emitida"
+  | "cancelado"
+
+export interface EventoHistorialDto {
+  tipo: EventoTipo
+  detalle: Record<string, unknown>
+  actorNombre: string | null
+  en: string
+}
+
+/** Inserta un evento del historial. SIEMPRE dentro de la misma transacción que el UPDATE que lo
+ *  motiva (el `ejecutor` es el `tx`, nunca `getDb()` suelto, salvo que quien llama ya esté fuera
+ *  de toda transacción a propósito). */
+async function registrarEvento(
+  ejecutor: Ejecutor,
+  input: {
+    tenantId: string
+    orderId: string
+    tipo: Exclude<EventoTipo, "creado">
+    detalle: Record<string, unknown>
+    actor: { id: string; name: string } | null
+    now: Date
+  },
+): Promise<void> {
+  await ejecutor.insert(shopOrderEventos).values({
+    tenantId: input.tenantId,
+    orderId: input.orderId,
+    tipo: input.tipo,
+    detalle: input.detalle,
+    actorId: input.actor?.id ?? null,
+    actorNombre: input.actor?.name ?? null,
+    creadoEn: input.now,
+  })
+}
+
+function toEventoDto(row: ShopOrderEventoRow): EventoHistorialDto {
+  return {
+    tipo: row.tipo as EventoTipo,
+    detalle: row.detalle,
+    actorNombre: row.actorNombre,
+    en: row.creadoEn.toISOString(),
+  }
+}
+
+/**
+ * Historial completo de un pedido, del más nuevo al más viejo. El evento "creado" NUNCA está en
+ * la tabla (ver el comentario de la migración 0020 del Shop): se agrega acá al final, con
+ * `orders.created_at`, así que siempre aparece aunque el pedido no tenga ningún otro evento.
+ */
+async function historialDe(tenantId: string, orderId: string, creadoEnPedido: Date): Promise<EventoHistorialDto[]> {
+  const eventos = await getDb()
+    .select()
+    .from(shopOrderEventos)
+    .where(and(eq(shopOrderEventos.tenantId, tenantId), eq(shopOrderEventos.orderId, orderId)))
+    .orderBy(desc(shopOrderEventos.creadoEn), desc(shopOrderEventos.id))
+  return [
+    ...eventos.map(toEventoDto),
+    { tipo: "creado", detalle: {}, actorNombre: null, en: creadoEnPedido.toISOString() },
+  ]
 }
 
 /**
@@ -113,6 +282,23 @@ async function listaParaRevision(tenantId: string, pedido: PedidoRow): Promise<s
   }
 }
 
+export interface DetalleExtras {
+  items: PedidoItemRow[]
+  listaPrecios: string | null
+  historial: EventoHistorialDto[]
+}
+
+/** Lo que el detalle suma a la fila, aparte de sus propias columnas: ítems, lista de precios (si
+ *  aplica) e historial. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
+async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<DetalleExtras> {
+  const [items, listaPrecios, historial] = await Promise.all([
+    itemsDe(pedido.id),
+    listaParaRevision(tenantId, pedido),
+    historialDe(tenantId, pedido.id, pedido.createdAt),
+  ])
+  return { items, listaPrecios, historial }
+}
+
 /**
  * Detalle. `null` = no existe, es de OTRO tenant, o el id no es un uuid: la ruta traduce los
  * tres al mismo 404. El formato se valida ANTES de consultar porque Postgres contesta un id
@@ -121,16 +307,15 @@ async function listaParaRevision(tenantId: string, pedido: PedidoRow): Promise<s
 export async function getPedido(
   tenantId: string,
   id: string,
-): Promise<{ pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null } | null> {
+): Promise<({ pedido: PedidoRow } & DetalleExtras) | null> {
   if (!UUID_RE.test(id)) return null
   const [pedido] = await getDb()
     .select()
     .from(shopOrders)
     .where(and(eq(shopOrders.tenantId, tenantId), eq(shopOrders.id, id)))
   if (!pedido) return null
-  // Los ítems se piden DESPUÉS de confirmar que el pedido es de este tenant.
-  const [items, listaPrecios] = await Promise.all([itemsDe(pedido.id), listaParaRevision(tenantId, pedido)])
-  return { pedido, items, listaPrecios }
+  const extras = await detalleExtras(tenantId, pedido)
+  return { pedido, ...extras }
 }
 
 /**
@@ -162,7 +347,7 @@ export interface CambiarEstadoInput {
 }
 
 export type CambiarEstadoResult =
-  | { kind: "ok"; pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null }
+  | ({ kind: "ok"; pedido: PedidoRow } & DetalleExtras)
   | { kind: "not_found" }
   | { kind: "conflict"; actual: EstadoPedido }
 
@@ -172,9 +357,14 @@ export type CambiarEstadoResult =
  *
  * Es UN solo UPDATE condicional: `WHERE id AND tenant_id AND estado = esperado`. Ese WHERE es
  * el lock — si dos operadores mandan a la vez, Postgres serializa los dos UPDATE sobre la
- * fila y el segundo ya no matchea `estado = esperado`, así que afecta 0 filas. Sin
- * transacción ni SELECT FOR UPDATE. El motivo viaja en el MISMO statement que el estado: o se
- * guardan los dos o ninguno.
+ * fila y el segundo ya no matchea `estado = esperado`, así que afecta 0 filas. El motivo viaja
+ * en el MISMO statement que el estado: o se guardan los dos o ninguno.
+ *
+ * El UPDATE y el/los evento(s) del historial (`shop.order_eventos`) van en la MISMA transacción:
+ * un cambio de estado exitoso siempre deja su rastro, y si el insert del evento fallara el
+ * UPDATE se deshace con él. Cancelar deja DOS eventos ('estado' con el par desde/hacia, y
+ * 'cancelado' con el motivo aparte): así el historial puede mostrar el motivo sin tener que leer
+ * el detalle de un evento 'estado'.
  */
 export async function cambiarEstado(
   tenantId: string,
@@ -188,26 +378,46 @@ export async function cambiarEstado(
     throw new Error("cambiarEstado: cancelar exige motivo")
   }
 
-  const [actualizado] = await getDb()
-    .update(shopOrders)
-    .set({
-      estado: input.nuevo,
-      // En cualquier transición que no cancela la columna NO se toca (ni se pisa con null).
-      ...(input.nuevo === "cancelado" ? { cancelacionMotivo: input.motivo } : {}),
-      estadoActualizadoEn: input.now,
-      estadoActualizadoPor: input.actor.id,
-      estadoActualizadoPorNombre: input.actor.name,
-      updatedAt: input.now,
+  const actualizado = await getDb().transaction(async (tx) => {
+    const [fila] = await tx
+      .update(shopOrders)
+      .set({
+        estado: input.nuevo,
+        // En cualquier transición que no cancela la columna NO se toca (ni se pisa con null).
+        ...(input.nuevo === "cancelado" ? { cancelacionMotivo: input.motivo } : {}),
+        estadoActualizadoEn: input.now,
+        estadoActualizadoPor: input.actor.id,
+        estadoActualizadoPorNombre: input.actor.name,
+        updatedAt: input.now,
+      })
+      .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), eq(shopOrders.estado, input.esperado)))
+      .returning()
+    if (!fila) return null
+
+    await registrarEvento(tx, {
+      tenantId,
+      orderId: fila.id,
+      tipo: "estado",
+      detalle: { desde: input.esperado, hacia: input.nuevo },
+      actor: input.actor,
+      now: input.now,
     })
-    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), eq(shopOrders.estado, input.esperado)))
-    .returning()
+    if (input.nuevo === "cancelado") {
+      await registrarEvento(tx, {
+        tenantId,
+        orderId: fila.id,
+        tipo: "cancelado",
+        detalle: { motivo: input.motivo },
+        actor: input.actor,
+        now: input.now,
+      })
+    }
+    return fila
+  })
 
   if (actualizado) {
-    const [items, listaPrecios] = await Promise.all([
-      itemsDe(actualizado.id),
-      listaParaRevision(tenantId, actualizado),
-    ])
-    return { kind: "ok", pedido: actualizado, items, listaPrecios }
+    const extras = await detalleExtras(tenantId, actualizado)
+    return { kind: "ok", pedido: actualizado, ...extras }
   }
 
   // 0 filas: o no existe / es de otro tenant, o alguien lo movió primero. Se distingue con un
@@ -232,15 +442,15 @@ export interface FacturaParaVincular {
 }
 
 export type FacturaResult =
-  | { kind: "ok"; pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null }
+  | ({ kind: "ok"; pedido: PedidoRow } & DetalleExtras)
   | { kind: "not_found" }
   | { kind: "cancelado" }
   /** El pedido ya tiene OTRA factura (vincular) o no la que el operador tenía en pantalla (desvincular). */
   | { kind: "conflict" }
 
 async function okConItems(tenantId: string, pedido: PedidoRow): Promise<FacturaResult> {
-  const [items, listaPrecios] = await Promise.all([itemsDe(pedido.id), listaParaRevision(tenantId, pedido)])
-  return { kind: "ok", pedido, items, listaPrecios }
+  const extras = await detalleExtras(tenantId, pedido)
+  return { kind: "ok", pedido, ...extras }
 }
 
 /**
@@ -251,7 +461,8 @@ async function okConItems(tenantId: string, pedido: PedidoRow): Promise<FacturaR
  * UN UPDATE condicional (`WHERE id AND tenant AND estado <> 'cancelado' AND sin factura`),
  * igual que `cambiarEstado`: dos operadores a la vez → uno solo gana. Si no afectó filas, un
  * SELECT (también por tenant) distingue: no existe/ajeno, cancelado, ya tenía ESA factura
- * (idempotente → ok, sin tocar la fecha original) u otra (conflict).
+ * (idempotente → ok, sin tocar la fecha original ni sumar un evento de más) u otra (conflict).
+ * El evento 'factura_vinculada' del historial va en la MISMA transacción que el UPDATE.
  */
 export async function vincularFactura(
   tenantId: string,
@@ -261,27 +472,39 @@ export async function vincularFactura(
   if (!UUID_RE.test(id)) return { kind: "not_found" }
   const { factura, actor, now } = input
 
-  const [actualizado] = await getDb()
-    .update(shopOrders)
-    .set({
-      facturaAlegraId: factura.alegraId,
-      facturaNumero: factura.numero,
-      facturaFecha: factura.fecha || null,
-      facturaTotal: factura.total.toFixed(2),
-      facturadoEn: now,
-      facturadoPor: actor.id,
-      facturadoPorNombre: actor.name,
-      updatedAt: now,
+  const actualizado = await getDb().transaction(async (tx) => {
+    const [fila] = await tx
+      .update(shopOrders)
+      .set({
+        facturaAlegraId: factura.alegraId,
+        facturaNumero: factura.numero,
+        facturaFecha: factura.fecha || null,
+        facturaTotal: factura.total.toFixed(2),
+        facturadoEn: now,
+        facturadoPor: actor.id,
+        facturadoPorNombre: actor.name,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(shopOrders.id, id),
+          eq(shopOrders.tenantId, tenantId),
+          ne(shopOrders.estado, "cancelado"),
+          isNull(shopOrders.facturaAlegraId),
+        ),
+      )
+      .returning()
+    if (!fila) return null
+    await registrarEvento(tx, {
+      tenantId,
+      orderId: fila.id,
+      tipo: "factura_vinculada",
+      detalle: { numero: factura.numero },
+      actor,
+      now,
     })
-    .where(
-      and(
-        eq(shopOrders.id, id),
-        eq(shopOrders.tenantId, tenantId),
-        ne(shopOrders.estado, "cancelado"),
-        isNull(shopOrders.facturaAlegraId),
-      ),
-    )
-    .returning()
+    return fila
+  })
   if (actualizado) return okConItems(tenantId, actualizado)
 
   const [existente] = await getDb()
@@ -296,32 +519,49 @@ export async function vincularFactura(
 
 /**
  * Desvincula la factura y quita la marca de facturado (las siete columnas juntas). Si el
- * pedido sigue vivo, vuelve a reservar stock. Idempotente: sin factura → ok sin cambios.
- * `esperada` = la factura que el operador tenía en pantalla: si ahora hay otra → conflict.
+ * pedido sigue vivo, vuelve a reservar stock. Idempotente: sin factura → ok sin cambios (y sin
+ * evento de más). `esperada` = la factura que el operador tenía en pantalla: si ahora hay otra →
+ * conflict. El evento 'factura_desvinculada' guarda el número que tenía ANTES de borrarlo, y va
+ * en la MISMA transacción que el UPDATE.
  */
 export async function desvincularFactura(
   tenantId: string,
   id: string,
-  input: { esperada: string | null; now: Date },
+  input: { esperada: string | null; actor: { id: string; name: string }; now: Date },
 ): Promise<FacturaResult> {
   if (!UUID_RE.test(id)) return { kind: "not_found" }
   const conditions: SQL[] = [eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), isNotNull(shopOrders.facturaAlegraId)]
   if (input.esperada) conditions.push(eq(shopOrders.facturaAlegraId, input.esperada))
 
-  const [actualizado] = await getDb()
-    .update(shopOrders)
-    .set({
-      facturaAlegraId: null,
-      facturaNumero: null,
-      facturaFecha: null,
-      facturaTotal: null,
-      facturadoEn: null,
-      facturadoPor: null,
-      facturadoPorNombre: null,
-      updatedAt: input.now,
+  const actualizado = await getDb().transaction(async (tx) => {
+    const [previa] = await tx.select().from(shopOrders).where(and(...conditions))
+    if (!previa) return null
+    const numeroPrevio = previa.facturaNumero
+    const [fila] = await tx
+      .update(shopOrders)
+      .set({
+        facturaAlegraId: null,
+        facturaNumero: null,
+        facturaFecha: null,
+        facturaTotal: null,
+        facturadoEn: null,
+        facturadoPor: null,
+        facturadoPorNombre: null,
+        updatedAt: input.now,
+      })
+      .where(and(...conditions))
+      .returning()
+    if (!fila) return null
+    await registrarEvento(tx, {
+      tenantId,
+      orderId: fila.id,
+      tipo: "factura_desvinculada",
+      detalle: { numero: numeroPrevio },
+      actor: input.actor,
+      now: input.now,
     })
-    .where(and(...conditions))
-    .returning()
+    return fila
+  })
   if (actualizado) return okConItems(tenantId, actualizado)
 
   const [existente] = await getDb()
@@ -343,7 +583,7 @@ export function esPagoManual(row: Pick<PedidoRow, "pagoMetodo" | "pagoProveedor"
 }
 
 export type PagoManualResult =
-  | { kind: "ok"; pedido: PedidoRow; items: PedidoItemRow[]; listaPrecios: string | null; cambio: boolean }
+  | ({ kind: "ok"; pedido: PedidoRow; cambio: boolean } & DetalleExtras)
   | { kind: "not_found" }
   /** Pago online: lo mueve sólo el webhook del proveedor. */
   | { kind: "no_manual" }
@@ -355,8 +595,9 @@ export type PagoManualResult =
  * UN UPDATE condicional, como `cambiarEstado`: `WHERE id AND tenant AND medio offline AND
  * pago_estado = <el opuesto>` (+ no cancelado, sólo al registrar). Si no afectó filas, un
  * SELECT (también por tenant) distingue: no existe/ajeno, online, cancelado, o ya estaba así
- * (idempotente → ok con `cambio: false`, para no avisar dos veces al cliente).
- * Anular se permite con el pedido cancelado: es justo el caso de un pago cargado por error.
+ * (idempotente → ok con `cambio: false`, para no avisar dos veces al cliente NI sumar un evento
+ * de más). Anular se permite con el pedido cancelado: es justo el caso de un pago cargado por
+ * error. El evento 'pago' del historial va en la MISMA transacción que el UPDATE.
  */
 export async function registrarPagoManual(
   tenantId: string,
@@ -377,20 +618,32 @@ export async function registrarPagoManual(
   ]
   if (input.pagado) conditions.push(ne(shopOrders.estado, "cancelado"))
 
-  const [actualizado] = await getDb()
-    .update(shopOrders)
-    .set({
-      pagoEstado: destino,
-      pagoActualizadoEn: input.now,
-      pagoRegistradoPor: input.actor.id,
-      pagoRegistradoPorNombre: input.actor.name,
-      updatedAt: input.now,
+  const actualizado = await getDb().transaction(async (tx) => {
+    const [fila] = await tx
+      .update(shopOrders)
+      .set({
+        pagoEstado: destino,
+        pagoActualizadoEn: input.now,
+        pagoRegistradoPor: input.actor.id,
+        pagoRegistradoPorNombre: input.actor.name,
+        updatedAt: input.now,
+      })
+      .where(and(...conditions))
+      .returning()
+    if (!fila) return null
+    await registrarEvento(tx, {
+      tenantId,
+      orderId: fila.id,
+      tipo: "pago",
+      detalle: { estado: destino },
+      actor: input.actor,
+      now: input.now,
     })
-    .where(and(...conditions))
-    .returning()
+    return fila
+  })
   if (actualizado) {
-    const [items, listaPrecios] = await Promise.all([itemsDe(actualizado.id), listaParaRevision(tenantId, actualizado)])
-    return { kind: "ok", pedido: actualizado, items, listaPrecios, cambio: true }
+    const extras = await detalleExtras(tenantId, actualizado)
+    return { kind: "ok", pedido: actualizado, cambio: true, ...extras }
   }
 
   const [existente] = await getDb()
@@ -400,8 +653,8 @@ export async function registrarPagoManual(
   if (!existente) return { kind: "not_found" }
   if (!esPagoManual(existente)) return { kind: "no_manual" }
   if (existente.pagoEstado === destino) {
-    const [items, listaPrecios] = await Promise.all([itemsDe(existente.id), listaParaRevision(tenantId, existente)])
-    return { kind: "ok", pedido: existente, items, listaPrecios, cambio: false }
+    const extras = await detalleExtras(tenantId, existente)
+    return { kind: "ok", pedido: existente, cambio: false, ...extras }
   }
   return { kind: "cancelado" }
 }
@@ -519,6 +772,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   /** Operador que registró o anuló el último pago offline. */
   pagoRegistradoPorNombre: string | null
   items: PedidoItemDto[]
+  /** Del más nuevo al más viejo; el evento 'creado' (derivado, nunca guardado) siempre es el último. */
+  historial: EventoHistorialDto[]
 }
 
 // Los DTO se arman campo por campo (nunca `...row`): `tenant_id` y cualquier columna que se
@@ -561,6 +816,7 @@ export function toPedidoDetalleDto(
   row: PedidoRow,
   items: PedidoItemRow[],
   listaPrecios: string | null = null,
+  historial: EventoHistorialDto[] = [],
 ): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
@@ -604,5 +860,6 @@ export function toPedidoDetalleDto(
     pagoActualizadoEn: iso(row.pagoActualizadoEn),
     pagoRegistradoPorNombre: row.pagoRegistradoPorNombre,
     items: items.map(toItemDto),
+    historial,
   }
 }

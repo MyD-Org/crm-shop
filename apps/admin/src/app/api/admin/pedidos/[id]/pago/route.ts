@@ -65,7 +65,9 @@ async function mover(req: Request, { params }: IdParams, pagado: boolean): Promi
     }
   }
 
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios), { headers: NO_STORE })
+  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial), {
+    headers: NO_STORE,
+  })
 }
 
 export function POST(req: Request, ctx: IdParams) {

@@ -107,7 +107,7 @@ function respuestaResultado(result: FacturaResult, aviso?: AvisoFactura): Respon
   if (result.kind === "not_found") return adminNotFoundResponse()
   if (result.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (result.kind === "conflict") return fail(409, "conflict", MSG.conflicto)
-  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios)
+  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial)
   // `avisoFactura` va aparte del detalle: el componente lo saca antes de guardar el pedido.
   const body = aviso ? { ...detalle, avisoFactura: { resultado: aviso.resultado, destino: aviso.destino } } : detalle
   return Response.json(body, { headers: NO_STORE })
@@ -248,7 +248,11 @@ export async function DELETE(req: Request, { params }: IdParams) {
   const now = new Date()
   let result: FacturaResult
   try {
-    result = await desvincularFactura(guard.tenantId, id, { esperada, now })
+    result = await desvincularFactura(guard.tenantId, id, {
+      esperada,
+      actor: { id: guard.user.id, name: guard.user.name },
+      now,
+    })
   } catch (err) {
     console.error("[admin/pedidos/factura] no se pudo desvincular la factura", {
       tenant: guard.tenantId,

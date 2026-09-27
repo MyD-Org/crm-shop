@@ -45,7 +45,9 @@ export async function GET(req: Request, { params }: IdParams) {
   try {
     const found = await getPedido(guard.tenantId, id)
     if (!found) return adminNotFoundResponse()
-    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios), { headers: NO_STORE })
+    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios, found.historial), {
+      headers: NO_STORE,
+    })
   } catch (err) {
     console.error("[admin/pedidos] no se pudo leer el detalle", { tenant: guard.tenantId, orderId: id, err })
     return fail(500, "internal", "No se pudo cargar el pedido. Inténtelo nuevamente.")
@@ -143,5 +145,7 @@ export async function PATCH(req: Request, { params }: IdParams) {
   })
   logAviso("estado", { tenant: guard.tenantId, orderId: id }, aviso)
 
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios), { headers: NO_STORE })
+  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial), {
+    headers: NO_STORE,
+  })
 }

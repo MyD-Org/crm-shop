@@ -5,6 +5,7 @@ import { Button, QuantityStepper } from "@myd-org/ui";
 import { PlusIcon } from "@/components/catalogo/iconos";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CANTIDAD_MAXIMA } from "@/lib/catalogo-vista";
+import { useHidratado } from "@/lib/hidratado";
 
 interface AddToCartButtonProps {
   disabled?: boolean;
@@ -37,7 +38,10 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
   // producto ya estaba en el carrito al cargar la página, aparece quieto.
   const [animarEntrada, setAnimarEntrada] = useState(false);
 
-  const inCart = product ? items.find((i) => i.id === product.id) : null;
+  // Mientras hidrata, "no está en el carrito" como en el servidor: en un hueco
+  // que llega por streaming el carrito ya está cargado (ver useHidratado).
+  const hidratado = useHidratado();
+  const inCart = hidratado && product ? items.find((i) => i.id === product.id) : null;
   const qty = inCart?.qty ?? 0;
 
   if (!inCart || !product) {

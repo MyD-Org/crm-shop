@@ -96,7 +96,13 @@ function Sku({ sku }: { sku: string }) {
 }
 
 export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Props) {
-  const [filtros, setFiltros] = useState<Filtros>({})
+  const [filtros, setFiltros] = useState<Filtros>({
+    estado: "oculto",
+    foto: "con",
+    alegra: "active",
+    precio: "con",
+    stock: "con",
+  })
   const [busqueda, setBusqueda] = useState("")
   const [start, setStart] = useState(0)
   const [datos, setDatos] = useState<ListadoDto | null>(null)
@@ -300,8 +306,9 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="min-w-[220px] max-w-[420px] flex-1">
+        <div className="min-w-0 w-full sm:max-w-[420px] sm:flex-1">
           <SearchInput
+            className="w-full"
             value={busqueda}
             onValueChange={setBusqueda}
             onClear={() => setBusqueda("")}
@@ -310,7 +317,7 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
           />
         </div>
         {filtrosActivos > 0 && (
-          <Button variant="ghost" size="sm" onClick={limpiarFiltros}>
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={limpiarFiltros}>
             Limpiar filtros ({filtrosActivos})
           </Button>
         )}

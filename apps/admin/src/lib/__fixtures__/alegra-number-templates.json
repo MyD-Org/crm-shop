@@ -1,0 +1,53 @@
+{
+  "_comentario": "Fixture que REEMPLAZA la llamada en vivo a GET /number-templates (documentType=invoice, status=active) contra la cuenta de Alegra Argentina. Cierra la open question del design sdd/admin-emitir-factura-pedido/design ('confirmar shape exacto de /number-templates'). Se documentó así (fixture, no llamada real) porque esta sesión de implementación no tuvo acceso de red a la cuenta de Alegra. Shape y valores de A/B/C/Presupuesto X confirmados por la usuaria el 2026-09-26 (ver sdd/admin-emitir-factura-pedido/tasks, tarea A.1.1). Reemplazar por una verificación real si en algún momento se dispone de acceso.",
+  "data": [
+    {
+      "id": "1",
+      "name": "Factura A",
+      "prefix": "0001",
+      "isDefault": true,
+      "status": "active",
+      "documentType": "invoice",
+      "isElectronic": false,
+      "subDocumentType": "INVOICE_A",
+      "nextInvoiceNumber": 123,
+      "autoincrement": true
+    },
+    {
+      "id": "2",
+      "name": "Factura B",
+      "prefix": "0002",
+      "isDefault": false,
+      "status": "active",
+      "documentType": "invoice",
+      "isElectronic": false,
+      "subDocumentType": "INVOICE_B",
+      "nextInvoiceNumber": 45,
+      "autoincrement": true
+    },
+    {
+      "id": "3",
+      "name": "Factura C",
+      "prefix": "0003",
+      "isDefault": false,
+      "status": "active",
+      "documentType": "invoice",
+      "isElectronic": false,
+      "subDocumentType": "INVOICE_C",
+      "nextInvoiceNumber": 12,
+      "autoincrement": true
+    },
+    {
+      "id": "18",
+      "name": "Presupuesto X",
+      "prefix": "00029",
+      "isDefault": false,
+      "status": "active",
+      "documentType": "estimate",
+      "isElectronic": false,
+      "subDocumentType": "INVOICE_X",
+      "nextInvoiceNumber": 7,
+      "autoincrement": true
+    }
+  ]
+}

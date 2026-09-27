@@ -10,6 +10,9 @@ import type {
   AlegraEstimate,
   AlegraEstimateInput,
   AlegraInvoice,
+  AlegraInvoiceCreateInput,
+  AlegraInvoiceCreated,
+  AlegraNumberTemplate,
   AlegraPayment,
 } from "./alegra"
 
@@ -175,4 +178,43 @@ export function mockPaymentsByContact(contactAlegraId: string): AlegraPayment[] 
   // Un pago pertenece al contacto si alguna factura imputada es suya.
   const contactInvoiceIds = new Set(mockInvoicesByContact(contactAlegraId).map((i) => i.alegraId))
   return mockPayments.filter((p) => p.invoices.some((inv) => contactInvoiceIds.has(inv.invoiceAlegraId)))
+}
+
+// ── Numeraciones (number templates) — "Emitir factura" (rebanada A) ──
+// `documentType` no es parte de AlegraNumberTemplate (esa es la forma normalizada que ya
+// filtró por tipo invoice): acá se mantiene porque `listNumberTemplates` en modo mock aplica
+// el MISMO filtro documentType === "invoice" que aplicaría sobre el crudo real de Alegra,
+// antes de mapear/exponer AlegraNumberTemplate.
+export type MockNumberTemplate = AlegraNumberTemplate & { documentType: string }
+
+export const mockNumberTemplates: MockNumberTemplate[] = [
+  { alegraId: "1", name: "Factura A", prefix: "0001", subDocumentType: "INVOICE_A", isElectronic: false, status: "active", documentType: "invoice" },
+  { alegraId: "2", name: "Factura B", prefix: "0002", subDocumentType: "INVOICE_B", isElectronic: false, status: "active", documentType: "invoice" },
+  { alegraId: "3", name: "Factura C", prefix: "0003", subDocumentType: "INVOICE_C", isElectronic: false, status: "active", documentType: "invoice" },
+  // Numeración de invoice dada de baja: sirve para testear que B/C (rebanada B) no la eligen.
+  { alegraId: "4", name: "Factura A (punto de venta 2, dado de baja)", prefix: "0004", subDocumentType: "INVOICE_A", isElectronic: false, status: "inactive", documentType: "invoice" },
+  // Numeración de otro tipo de documento: listNumberTemplates debe excluirla siempre.
+  { alegraId: "18", name: "Presupuesto X", prefix: "00029", subDocumentType: "INVOICE_X", isElectronic: false, status: "active", documentType: "estimate" },
+]
+
+// ── Facturas creadas (createInvoice) — misma cola que lee mockAllInvoices() ──
+
+let nextInvoiceId = 1000
+
+export function mockCreateInvoice(input: AlegraInvoiceCreateInput): AlegraInvoiceCreated {
+  const total = input.items.reduce((acc, it) => acc + it.price * it.quantity, 0)
+  const id = `inv-${nextInvoiceId}`
+  nextInvoiceId += 1
+  const created: AlegraInvoice = {
+    alegraId: id,
+    number: String(nextInvoiceId - 1),
+    date: new Date().toISOString().slice(0, 10),
+    dueDate: null,
+    total: Math.round(total * 100) / 100,
+    balance: Math.round(total * 100) / 100,
+    status: "open",
+    clientAlegraId: input.contactAlegraId,
+  }
+  mockInvoices.push(created)
+  return { alegraId: created.alegraId, number: created.number, date: created.date, total: created.total }
 }

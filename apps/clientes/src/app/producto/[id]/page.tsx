@@ -1,4 +1,4 @@
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { productoPublico } from "@/lib/catalogo-publico";
@@ -7,6 +7,8 @@ import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
+import { envioHabilitado } from "@/lib/envio-flag";
+import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -32,7 +34,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductoPage({ params }: Props) {
   const { id } = await params;
   // En paralelo: la oferta de cuotas no depende del producto (motor sólo-monto).
-  const [producto, oferta] = await Promise.all([productoDe(id), getOfertaCuotas()]);
+  const [producto, oferta, envio, { soloVisibles }] = await Promise.all([
+    productoDe(id),
+    getOfertaCuotas(),
+    envioHabilitado(),
+    flagsPublicos(),
+  ]);
 
   if (!producto) notFound();
 
@@ -45,7 +52,23 @@ export default async function ProductoPage({ params }: Props) {
           __html: jsonLdProductoHtml(producto, process.env.NEXT_PUBLIC_SITE_URL),
         }}
       />
-      <ProductoClient producto={producto} oferta={oferta} />
+      <ProductoClient
+        producto={producto}
+        oferta={oferta}
+        envio={envio}
+        relacionados={
+          producto.category ? (
+            <Suspense fallback={null}>
+              <RelacionadosProducto
+                categoria={producto.category}
+                productoId={producto.id}
+                soloVisibles={soloVisibles}
+                oferta={oferta}
+              />
+            </Suspense>
+          ) : null
+        }
+      />
     </>
   );
 }

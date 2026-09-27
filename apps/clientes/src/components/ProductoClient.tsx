@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
@@ -8,7 +8,7 @@ import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
-import { formatNombreProducto } from "@/lib/formato-nombre";
+import { formatDescripcionProducto, formatNombreProducto } from "@/lib/formato-nombre";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -16,6 +16,8 @@ import { useCart } from "@/context/CartContext";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { GaleriaProducto } from "@/components/GaleriaProducto";
+import { EntregaProducto } from "@/components/producto/EntregaProducto";
+import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
 import type { Product } from "@/data/products";
 
 function CartIcon() {
@@ -52,28 +54,40 @@ const CARA_ABAJO = "translate-y-2 opacity-0 blur-[2px]";
 /** Cuánto queda "Agregado" antes de volver al texto de siempre. */
 const MS_AGREGADO = 1600;
 
-const ESTADO_STOCK: Record<Product["stock"], { texto: string; color: string }> = {
-  in: { texto: "En stock", color: "bg-success" },
-  low: { texto: "Últimas unidades", color: "bg-warning" },
-  out: { texto: "Sin stock", color: "bg-danger" },
+const ESTADO_STOCK: Record<Product["stock"], { texto: string; clases: string }> = {
+  in: { texto: "En stock", clases: "bg-success-soft text-success" },
+  low: { texto: "Últimas unidades", clases: "bg-warning-soft text-warning" },
+  out: { texto: "Sin stock", clases: "bg-danger-soft text-danger" },
 };
+
+/** Nombres de Alegra largos ("1 int y 1 toma 10 A (BI) stik superficie"): un escalón menos. */
+const LARGO_NOMBRE_EXTENSO = 32;
 
 /**
  * Ficha de producto. Los datos llegan resueltos desde el espejo del catálogo
  * (con el overlay del CRM) via el Server Component `producto/[id]/page.tsx`.
  *
- * Hay: nombre, marca, SKU, descripción (si existe), precio, stock, categoría y las fotos
- * del overlay. La descripción se muestra sólo si tiene contenido. Variantes y precios
- * por cantidad se ocultan si no hay datos, porque un bloque que siempre dice "no hay"
- * no le sirve a nadie.
+ * Desktop: foto (7/12) con la descripción, la ficha técnica y las
+ * especificaciones debajo; a la derecha (5/12) la columna de compra, fija
+ * mientras se scrollea (top-24: debajo del header compacto, que aparece fijo al bajar). Mobile: foto 4:3, compra, detalle, y una barra fija
+ * abajo con la cantidad y "Agregar al carrito" para que el botón esté siempre
+ * a mano. Los bloques sin datos (descripción, ficha técnica,
+ * especificaciones, relacionados) no se dibujan: un bloque que siempre dice
+ * "no hay" no le sirve a nadie.
  */
 export function ProductoClient({
   producto,
   oferta = null,
+  envio = false,
+  relacionados = null,
 }: {
   producto: Product;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
+  /** Flag `envio` (ver src/lib/envio-flag.ts): si se anuncia el envío a domicilio. */
+  envio?: boolean;
+  /** "Más de <categoría>", armado en el server (va en su propio Suspense). */
+  relacionados?: ReactNode;
 }) {
   const [qty, setQty] = useState(1);
   const { addItem } = useCart();
@@ -100,7 +114,7 @@ export function ProductoClient({
   const estado = ESTADO_STOCK[producto.stock];
   const agotado = producto.stock === "out";
   // Sin cantidad si es 0 o menos (pasa con la simulación de stock): nada de
-  // "En stock — 0 disponibles".
+  // "En stock: 0 disponibles".
   const disponibles = textoUnidadesDisponibles(producto);
   // Un ítem sin precio en Alegra llega a 0: nunca se ofrece a la venta (ver
   // `conPrecioSql` en src/lib/catalog.ts). La ficha se lee en vivo, así que el
@@ -112,12 +126,66 @@ export function ProductoClient({
     producto.name,
     producto.brand ? formatMarca(producto.brand) : undefined
   );
+  const nombreExtenso = nombreParaMostrar.length > LARGO_NOMBRE_EXTENSO;
+
+  const selector = (
+    <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} />
+  );
+  // El mismo botón en la fila de desktop y en la barra de mobile: una sola
+  // cantidad y un solo "Agregado" para los dos.
+  const botonAgregar = (
+    <Button
+      onClick={agregar}
+      disabled={agotado || sinPrecio}
+      className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap"
+    >
+      <span className="grid">
+        <span aria-hidden={agregado} className={`${CARA_BOTON} ${agregado ? CARA_ARRIBA : CARA_VISIBLE}`}>
+          <CartIcon />
+          {sinPrecio ? "Consulte el precio" : agotado ? "Sin stock" : "Agregar al carrito"}
+        </span>
+        <span aria-hidden={!agregado} className={`${CARA_BOTON} ${agregado ? CARA_VISIBLE : CARA_ABAJO}`}>
+          <CheckIcon />
+          Agregado
+        </span>
+      </span>
+    </Button>
+  );
+
+  const detalle = (
+    <>
+      {(producto.description || producto.fichaTecnicaUrl) && (
+        <section aria-labelledby={producto.description ? "descripcion-titulo" : undefined}>
+          {producto.description && (
+            <>
+              <h2 id="descripcion-titulo" className="mb-3 font-display text-lg font-semibold text-text">
+                Descripción
+              </h2>
+              <p className="max-w-prose whitespace-pre-line text-[15px] leading-relaxed text-text">
+                {formatDescripcionProducto(
+                  producto.description,
+                  producto.brand ? formatMarca(producto.brand) : undefined
+                )}
+              </p>
+            </>
+          )}
+          {/* Ficha técnica: sólo si el CRM cargó un PDF para este producto. */}
+          {producto.fichaTecnicaUrl && (
+            <div className={producto.description ? "mt-4" : undefined}>
+              <FichaTecnicaModal url={producto.fichaTecnicaUrl} nombreProducto={nombreParaMostrar} />
+            </div>
+          )}
+        </section>
+      )}
+      <EspecificacionesProducto filas={producto.especificaciones} />
+    </>
+  );
 
   return (
     <>
-      <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
+      <main className="mx-auto w-full max-w-contenido flex-1 px-4 pt-6 lg:pb-16 lg:pt-8">
         {/* Breadcrumb */}
-        <nav className="mb-6 text-sm text-muted">
+        <nav className="mb-5 truncate text-sm text-muted lg:mb-6">
           <Link href="/" className="text-muted transition-colors hover:text-accent">Inicio</Link>
           {producto.category && (
             <>
@@ -134,38 +202,54 @@ export function ProductoClient({
           <span className="text-text">{nombreParaMostrar}</span>
         </nav>
 
-        {/* Galería un poco más angosta que la info: los nombres de Alegra son
-            largos y necesitan el ancho más que la foto. */}
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-          <GaleriaProducto fotos={producto.images} nombre={nombreParaMostrar} />
+        {/* Grilla con áreas: en mobile galería → compra → detalle; desde lg el
+            detalle sube debajo de la galería y la compra ocupa la columna
+            derecha entera (así puede quedar fija con sticky). */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-x-12 lg:gap-y-10">
+          <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+            <GaleriaProducto
+              fotos={producto.images}
+              nombre={nombreParaMostrar}
+              acciones={
+                <>
+                  <BotonCompartir titulo={nombreParaMostrar} />
+                  {/* En desktop el favorito va junto al botón de compra. */}
+                  <span className="lg:hidden">
+                    <BotonFavorito productId={producto.id} />
+                  </span>
+                </>
+              }
+            />
+          </div>
 
-          {/* Info */}
-          <div className="space-y-5">
-            {/* Compartir junto al título y no en la fila de compra: en mobile esa
-                fila ya va justa y "Agregar al carrito" se partía en dos líneas. */}
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                {producto.brand && (
-                  <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                    {producto.brand}
-                  </p>
-                )}
-                {/* Tamaño contenido: los nombres vienen de Alegra, largos y en
-                    mayúsculas; a 4xl ocupaban cinco líneas. */}
-                <h1 className="mt-1 font-display text-2xl font-medium leading-tight tracking-tight text-text md:text-[28px]">
-                  {nombreParaMostrar}
-                </h1>
-                {producto.sku && (
-                  <div className="mt-2">
-                    <span className="text-xs text-muted">SKU {producto.sku}</span>
-                  </div>
-                )}
-              </div>
-              <BotonCompartir titulo={nombreParaMostrar} />
+          <aside className="min-w-0 space-y-6 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
+            <div>
+              {producto.brand && (
+                <Link
+                  href={`/catalogo?marca=${encodeURIComponent(producto.brand)}`}
+                  className="text-sm font-bold text-accent transition-colors hover:text-primary"
+                >
+                  {formatMarca(producto.brand)}
+                </Link>
+              )}
+              <h1
+                className={`mt-1 text-balance font-display font-semibold leading-[1.08] tracking-tight text-text ${
+                  nombreExtenso ? "text-2xl lg:text-[30px]" : "text-[30px] lg:text-[40px]"
+                }`}
+              >
+                {nombreParaMostrar}
+              </h1>
+              {producto.sku && (
+                <p className="mt-3 flex items-center gap-2 text-[13px] text-muted">
+                  Código
+                  <span className="rounded-md bg-elevated px-2 py-0.5 font-bold tracking-wide text-text">
+                    {producto.sku}
+                  </span>
+                </p>
+              )}
             </div>
 
-            {/* Card de precio */}
-            <div className="rounded-[24px] border border-border bg-surface p-6">
+            <div>
               {sinPrecio ? (
                 <p className="text-lg font-semibold text-muted">
                   Precio no disponible. Consulte por WhatsApp o por teléfono.
@@ -174,74 +258,53 @@ export function ProductoClient({
                 <PrecioConImpuestos price={producto.price} precioFinal={producto.precioFinal} />
               )}
               {!sinPrecio && mejorCuota && oferta && producto.precioFinal != null && (
-                <div className="mt-3 border-t border-border pt-3">
+                <div className="mt-3">
                   <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />
                   <MediosDePagoModal
                     precioFinal={producto.precioFinal}
                     oferta={oferta}
-                    className="mt-1 text-primary transition-colors hover:text-accent"
+                    className="mt-0.5 text-accent transition-colors hover:text-primary"
                   />
                 </div>
               )}
-              <div className="mt-3 flex items-center gap-3">
-                <span className="flex items-center gap-1.5 text-sm text-muted">
-                  <span className={`h-2 w-2 rounded-full ${estado.color}`} />
-                  {estado.texto}
-                  {disponibles && (
-                    <>
-                      <span className="text-muted/60">—</span>
-                      {disponibles}
-                    </>
-                  )}
-                </span>
-              </div>
             </div>
 
-            {/* Cantidad + agregar */}
-            <div className="flex items-center gap-3">
-              <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} />
-              <Button
-                onClick={agregar}
-                disabled={agotado || sinPrecio}
-                className="flex flex-1 items-center justify-center gap-2"
-              >
-                <span className="grid">
-                  <span aria-hidden={agregado} className={`${CARA_BOTON} ${agregado ? CARA_ARRIBA : CARA_VISIBLE}`}>
-                    <CartIcon />
-                    {sinPrecio ? "Consulte el precio" : agotado ? "Sin stock" : "Agregar al carrito"}
-                  </span>
-                  <span aria-hidden={!agregado} className={`${CARA_BOTON} ${agregado ? CARA_VISIBLE : CARA_ABAJO}`}>
-                    <CheckIcon />
-                    Agregado
-                  </span>
-                </span>
-              </Button>
-              {/* El cambio de texto del botón no se anuncia solo. */}
-              <span role="status" className="sr-only">
-                {agregado ? "Producto agregado al carrito." : ""}
-              </span>
+            <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${estado.clases}`}>
+              <span className="h-2 w-2 rounded-full bg-current" aria-hidden />
+              {estado.texto}
+              {disponibles && `: ${disponibles}`}
+            </p>
+
+            {/* Cantidad + agregar (desktop; en mobile va en la barra fija). */}
+            <div className="hidden items-center gap-3 lg:flex">
+              {selector}
+              {botonAgregar}
               <BotonFavorito productId={producto.id} />
             </div>
-          </div>
+
+            <EntregaProducto envio={envio} />
+          </aside>
+
+          <div className="min-w-0 space-y-10 lg:col-start-1 lg:row-start-2">{detalle}</div>
         </div>
 
-        {/* Descripción */}
-        {producto.description && (
-          <section className="mt-12">
-            <h2 className="mb-6 font-display text-xl font-medium text-text">Descripción</h2>
-            <p className="max-w-prose text-sm leading-relaxed text-muted">
-              {producto.description}
-            </p>
-          </section>
-        )}
+        {relacionados}
 
-        {/* Ficha técnica: sólo si el CRM cargó un PDF para este producto. */}
-        {producto.fichaTecnicaUrl && (
-          <section className="mt-6">
-            <FichaTecnicaModal url={producto.fichaTecnicaUrl} nombreProducto={nombreParaMostrar} />
-          </section>
-        )}
+        {/* Barra de compra en mobile. Sticky (no fixed) y última del main:
+            acompaña todo el scroll de la ficha y se detiene donde empieza el
+            footer, así nunca lo tapa. */}
+        <div className="sticky bottom-0 z-30 -mx-4 mt-10 border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+          <div className="flex items-center gap-3">
+            {selector}
+            {botonAgregar}
+          </div>
+        </div>
       </main>
+
+      {/* El cambio de texto del botón no se anuncia solo. */}
+      <span role="status" className="sr-only">
+        {agregado ? "Producto agregado al carrito." : ""}
+      </span>
     </>
   );
 }

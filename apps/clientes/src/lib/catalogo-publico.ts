@@ -177,6 +177,37 @@ export async function destacadosHome(args: {
   return elegirDestacados(pool, skus, cantidad);
 }
 
+async function primeraPaginaCategoria(categoria: string, soloVisibles: boolean): Promise<Product[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  console.info("[cache] categoria-relacionados miss");
+  try {
+    const { productos } = await getPaginaCatalogo({ filtros: { categorias: [categoria] }, pagina: 1, soloVisibles });
+    cacheLife("catalogo");
+    return productos;
+  } catch (err) {
+    console.error("[catalogo-publico] no se pudieron cargar los relacionados:", err);
+    cacheLife("degradado");
+    return [];
+  }
+}
+
+/**
+ * "Más de <categoría>" en la ficha: la primera página de la categoría, sin el
+ * producto que se está viendo ni los agotados. La caché es por categoría (no
+ * por producto): todas las fichas de un rubro comparten la misma entrada. Si
+ * la base falla, vacío y la sección no se dibuja.
+ */
+export async function relacionadosProducto(args: {
+  categoria: string;
+  excluirId: string;
+  cantidad: number;
+  soloVisibles: boolean;
+}): Promise<Product[]> {
+  const productos = await primeraPaginaCategoria(args.categoria, args.soloVisibles);
+  return productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);
+}
+
 /**
  * Ids de los productos publicados, para el sitemap. Si la base falla, vacío
  * (el sitemap sale con las páginas fijas) y guardado sólo con el perfil

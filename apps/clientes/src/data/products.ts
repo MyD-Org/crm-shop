@@ -21,6 +21,12 @@ export interface ProductImage {
  * Alegra: son concepto del shop y hoy nadie los completa. Se mantienen en el
  * tipo para cuando exista esa capa (ver docs/arquitectura-integraciones.md).
  */
+/** Una fila de la tabla de especificaciones de la ficha. */
+export interface EspecificacionProducto {
+  etiqueta: string;
+  valor: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -49,6 +55,11 @@ export interface Product {
   images?: ProductImage[];
   /** Ficha técnica (PDF) del overlay del CRM, ya compuesta. undefined = sin ficha. */
   fichaTecnicaUrl?: string;
+  /**
+   * Datos técnicos en tabla (potencia, base, temperatura de color…). Todavía no
+   * hay de dónde sacarlos: la ficha los muestra sólo si llegan con contenido.
+   */
+  especificaciones?: EspecificacionProducto[];
   oldPrice?: number;
   discount?: string;
   badgeTone?: "danger" | "info" | "warning" | "neutral";

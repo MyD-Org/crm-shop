@@ -308,6 +308,28 @@ describe("alternarCategoria", () => {
     { label: "Seguridad", nivel: 1 },
   ];
 
+  it("destildar una hija cubierta saca a la madre y deja tildadas las hermanas", () => {
+    expect(alternarCategoria(facetas, ["Iluminación", "Seguridad"], "Paneles", false)).toEqual([
+      "Seguridad",
+      "Focos led",
+    ]);
+  });
+
+  it("destildar una nieta cubierta deja las hermanas de cada nivel del camino", () => {
+    const arbol = [
+      { label: "Iluminación", nivel: 1 },
+      { label: "Focos led", nivel: 2 },
+      { label: "Dicroicas", nivel: 3 },
+      { label: "Bulbos", nivel: 3 },
+      { label: "Paneles", nivel: 2 },
+    ];
+    expect(alternarCategoria(arbol, ["Iluminación"], "Dicroicas", false)).toEqual(["Paneles", "Bulbos"]);
+  });
+
+  it("destildar algo que no está ni cubierto no cambia nada", () => {
+    expect(alternarCategoria(facetas, ["Seguridad"], "Paneles", false)).toEqual(["Seguridad"]);
+  });
+
   it("tildar una madre saca a sus hijas y nietas, y deja lo de otras ramas", () => {
     expect(
       alternarCategoria(facetas, ["Dicroicas", "Paneles", "Seguridad"], "Iluminación", true),

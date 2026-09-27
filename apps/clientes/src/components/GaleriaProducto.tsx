@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { cn } from "@myd-org/ui";
 import type { ProductImage } from "@/data/products";
@@ -18,8 +18,21 @@ import { LightbulbIcon } from "@/components/catalogo/iconos";
  * lateral que el del dedo (y no un corte). Con reduced motion el salto es
  * instantáneo. La foto activa sale de la posición del scroll: una sola
  * fuente de verdad para el dedo, el trackpad, las flechas y las miniaturas.
+ *
+ * En el celular la foto es 4:3 (así el precio entra en la primera pantalla) y
+ * las miniaturas van abajo; desde lg la foto es cuadrada y las miniaturas
+ * forman una columna a la izquierda. `acciones` (compartir, favorito) flota
+ * arriba a la derecha de la foto.
  */
-export function GaleriaProducto({ fotos, nombre }: { fotos?: ProductImage[]; nombre: string }) {
+export function GaleriaProducto({
+  fotos,
+  nombre,
+  acciones,
+}: {
+  fotos?: ProductImage[];
+  nombre: string;
+  acciones?: ReactNode;
+}) {
   const [activa, setActiva] = useState(0);
   const pistaRef = useRef<HTMLDivElement>(null);
   const lista = fotos ?? [];
@@ -40,11 +53,11 @@ export function GaleriaProducto({ fotos, nombre }: { fotos?: ProductImage[]; nom
   }
 
   return (
-    <div className="min-w-0 space-y-3">
-      <div className="relative aspect-square min-w-0 overflow-hidden rounded-[24px] border border-border bg-surface">
+    <div className="flex min-w-0 flex-col gap-3 lg:flex-row-reverse lg:gap-4">
+      <div className="relative aspect-[4/3] min-w-0 flex-1 overflow-hidden rounded-[24px] border border-border bg-surface lg:aspect-square">
         {lista.length === 0 ? (
           <div className="flex h-full items-center justify-center">
-            <LightbulbIcon className="h-48 w-48 text-muted/20" />
+            <LightbulbIcon className="h-28 w-28 text-muted/20 lg:h-44 lg:w-44" />
           </div>
         ) : (
           <div
@@ -65,8 +78,8 @@ export function GaleriaProducto({ fotos, nombre }: { fotos?: ProductImage[]; nom
                   src={f.url}
                   alt={f.alt || nombre}
                   fill
-                  // La galería ocupa ~5/11 del contenido desde lg; debajo, todo el ancho.
-                  sizes="(min-width: 1024px) 45vw, 100vw"
+                  // La galería ocupa ~7/12 del contenido desde lg; debajo, todo el ancho.
+                  sizes="(min-width: 1024px) 55vw, 100vw"
                   className="object-contain p-6"
                   // La portada es el elemento más grande de la ficha (LCP).
                   preload={i === 0}
@@ -79,10 +92,14 @@ export function GaleriaProducto({ fotos, nombre }: { fotos?: ProductImage[]; nom
             ))}
           </div>
         )}
+        {acciones && <div className="absolute right-3 top-3 flex gap-2">{acciones}</div>}
       </div>
 
       {varias && (
-        <ul className="flex min-w-0 gap-2 overflow-x-auto pb-1" aria-label="Fotos del producto">
+        <ul
+          className="flex min-w-0 gap-2 overflow-x-auto pb-1 lg:w-16 lg:shrink-0 lg:flex-col lg:overflow-x-visible lg:overflow-y-auto lg:pb-0"
+          aria-label="Fotos del producto"
+        >
           {lista.map((f, i) => (
             <li key={f.url} className="shrink-0">
               <button

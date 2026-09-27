@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatNombreProducto } from "./formato-nombre";
+import { formatDescripcionProducto, formatNombreProducto } from "./formato-nombre";
 
 describe("formatNombreProducto", () => {
   it("si no viene en mayúsculas sostenidas, lo deja como está", () => {
@@ -65,5 +65,19 @@ describe("formatNombreProducto", () => {
 
   it("combinación real: siglas, unidad, marca y código en el mismo nombre", () => {
     expect(formatNombreProducto("CINTA LED RGB 12V 5M JADEVER", "Jadever")).toBe("Cinta LED RGB 12V 5m Jadever");
+  });
+});
+
+describe("formatDescripcionProducto", () => {
+  it("formatea una descripción en mayúsculas sostenidas", () => {
+    expect(formatDescripcionProducto("220VCA - 5 METROS")).toBe("220VCA - 5 metros");
+  });
+
+  it("respeta los saltos de línea y formatea cada línea", () => {
+    expect(formatDescripcionProducto("LAMPARA LED 12V\nUSO INTERIOR")).toBe("Lampara LED 12V\nUso interior");
+  });
+
+  it("deja como está lo que ya viene presentable", () => {
+    expect(formatDescripcionProducto("E27, 1620lm, 200-240VCa")).toBe("E27, 1620lm, 200-240VCa");
   });
 });

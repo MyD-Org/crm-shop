@@ -46,6 +46,25 @@ describe("createInvoice", () => {
     ])
   })
 
+  it("incluye el array tax por línea cuando el input lo trae", async () => {
+    const f = responde(Response.json({ id: 9002, date: "2026-09-26", total: 2287.9 }))
+    await createInvoice(tenant, {
+      ...input,
+      items: [{ alegraId: "it-1", quantity: 1, price: 1890, tax: [{ id: "1" }] }],
+    })
+    const call = f.mock.calls[0] as unknown[]
+    const body = JSON.parse(String((call[1] as RequestInit).body))
+    expect(body.items).toEqual([{ id: "it-1", quantity: 1, price: 1890, tax: [{ id: 1 }] }])
+  })
+
+  it("sin tax en el input, no manda el campo tax", async () => {
+    const f = responde(Response.json({ id: 9003, date: "2026-09-26", total: 1890 }))
+    await createInvoice(tenant, input)
+    const call = f.mock.calls[0] as unknown[]
+    const body = JSON.parse(String((call[1] as RequestInit).body))
+    expect(body.items[0]).not.toHaveProperty("tax")
+  })
+
   it("devuelve AlegraInvoiceCreated a partir de la respuesta", async () => {
     responde(Response.json({ id: 9001, date: "2026-09-26", total: 5370, numberTemplate: { fullNumber: "0001-00000042" } }))
     const r = await createInvoice(tenant, input)

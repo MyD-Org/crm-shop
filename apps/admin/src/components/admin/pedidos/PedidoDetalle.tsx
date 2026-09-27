@@ -6,6 +6,7 @@ import { ArrowLeft } from "lucide-react"
 import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Textarea, type StepItem, type TableColumn, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
+import { EmitirFacturaControl } from "./EmitirFacturaControl"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
@@ -45,7 +46,7 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
   )
 }
 
-export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
+export function PedidoDetalle({ initial, esAdminPlus }: { initial: PedidoDetalleDto; esAdminPlus: boolean }) {
   const { toast } = useToast()
   const [pedido, setPedido] = useState(initial)
 
@@ -260,14 +261,12 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
           <Card title="Factura" className="p-4">
             <VincularFacturaControl pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
             {!pedido.factura && pedido.estado !== "cancelado" && (
-              <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                <Button variant="ghost" size="sm" disabled title="Disponible próximamente">
-                  Emitir factura
-                </Button>
-                <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>
-                  Emitir la factura de Alegra desde acá está en desarrollo. Por ahora, vincule una factura hecha por fuera.
-                </p>
-              </div>
+              <EmitirFacturaControl
+                pedido={pedido}
+                onChanged={setPedido}
+                onConflicto={() => void recargar(true)}
+                esAdminPlus={esAdminPlus}
+              />
             )}
           </Card>
         </aside>

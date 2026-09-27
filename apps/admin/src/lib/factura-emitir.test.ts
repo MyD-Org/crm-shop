@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
-import type { AlegraNumberTemplate } from "./alegra"
+import type { AlegraNumberTemplate, AlegraTax } from "./alegra"
 import {
   armarLineasFactura,
+  elegirImpuestoParaLinea,
   elegirNumeracionPorDefecto,
   puedeEmitir,
+  resolverItemsAlegra,
   resolverPreviewEmision,
   tieneCuit,
+  validarNumeracionElegida,
   type ResolverPreviewEmisionDeps,
 } from "./factura-emitir"
 import type { PedidoItemRow, PedidoRow } from "./pedidos-repo"
@@ -182,10 +185,13 @@ describe("resolverPreviewEmision", () => {
   const B = numeracion({ alegraId: "2", subDocumentType: "INVOICE_B", status: "active" })
   const C = numeracion({ alegraId: "3", subDocumentType: "INVOICE_C", status: "active" })
 
+  const TAX_21 = { alegraId: "1", name: "IVA 21%", percentage: 21, status: "active" } as AlegraTax
+
   function deps(over: Partial<ResolverPreviewEmisionDeps> = {}): ResolverPreviewEmisionDeps {
     return {
       listNumberTemplates: vi.fn(async () => [A, B, C]),
       findContactByIdentifier: vi.fn(async () => null),
+      listTaxes: vi.fn(async () => [TAX_21]),
       ...over,
     }
   }
@@ -280,5 +286,85 @@ describe("resolverPreviewEmision", () => {
       deps(),
     )
     expect(preview.avisos.some((a) => a.motivo === "diferencia_total")).toBe(false)
+  })
+
+  it("línea sin impuesto que coincida en /taxes: aviso bloqueante 'impuesto_sin_mapear'", async () => {
+    // El ítem tiene 27% de IVA pero listTaxes sólo devuelve el 21% activo.
+    const preview = await resolverPreviewEmision(pedido(), [item({ ivaPorcentaje: "27.00" })], deps())
+    expect(preview.avisos.some((a) => a.motivo === "impuesto_sin_mapear")).toBe(true)
+  })
+})
+
+// ───────────────────────── Impuestos por línea (rebanada C) ─────────────────────────
+
+describe("elegirImpuestoParaLinea", () => {
+  const IVA_21 = { alegraId: "1", name: "IVA 21%", percentage: 21, status: "active" } as AlegraTax
+  const IVA_27_INACTIVO = { alegraId: "2", name: "IVA 27%", percentage: 27, status: "inactive" } as AlegraTax
+  const IVA_105 = { alegraId: "3", name: "IVA 10.5%", percentage: 10.5, status: "active" } as AlegraTax
+  const EXENTO = { alegraId: "4", name: "Exento de IVA", percentage: 0, status: "active" } as AlegraTax
+  const taxes = [IVA_21, IVA_27_INACTIVO, IVA_105, EXENTO]
+
+  it("encuentra el impuesto activo con el porcentaje exacto", () => {
+    expect(elegirImpuestoParaLinea(taxes, 21)).toEqual(IVA_21)
+    expect(elegirImpuestoParaLinea(taxes, 10.5)).toEqual(IVA_105)
+  })
+
+  it("0% mapea al impuesto Exento", () => {
+    expect(elegirImpuestoParaLinea(taxes, 0)).toEqual(EXENTO)
+  })
+
+  it("ignora un impuesto inactivo aunque el porcentaje coincida", () => {
+    expect(elegirImpuestoParaLinea(taxes, 27)).toBeNull()
+  })
+
+  it("sin ningún impuesto que coincida, null", () => {
+    expect(elegirImpuestoParaLinea(taxes, 5)).toBeNull()
+  })
+
+  it("tolera el error de punto flotante (20.999999999999996 ~ 21)", () => {
+    expect(elegirImpuestoParaLinea(taxes, 0.07 * 300)).toEqual(IVA_21)
+  })
+})
+
+describe("resolverItemsAlegra", () => {
+  const IVA_21 = { alegraId: "1", name: "IVA 21%", percentage: 21, status: "active" } as AlegraTax
+
+  it("mapea cada línea a AlegraInvoiceLineInput con price NETO y el tax resuelto", () => {
+    const linea = { alegraItemId: "it-1", nombre: "Lámpara", cantidad: 2, precioUnitario: 500, ivaPorcentaje: 21 }
+    const { items, avisos } = resolverItemsAlegra([linea], [IVA_21])
+    expect(items).toEqual([{ alegraId: "it-1", quantity: 2, price: 500, tax: [{ id: "1" }] }])
+    expect(avisos).toEqual([])
+  })
+
+  it("línea sin impuesto que coincida: aviso bloqueante, sin agregar el item", () => {
+    const linea = { alegraItemId: "it-1", nombre: "Lámpara", cantidad: 2, precioUnitario: 500, ivaPorcentaje: 27 }
+    const { items, avisos } = resolverItemsAlegra([linea], [IVA_21])
+    expect(items).toEqual([])
+    expect(avisos).toEqual([
+      {
+        motivo: "impuesto_sin_mapear",
+        detalle:
+          'El ítem "Lámpara" tiene IVA 27% y no hay un impuesto activo con ese porcentaje ' +
+          "en la cuenta de Alegra. Revise los impuestos de la cuenta antes de emitir.",
+      },
+    ])
+  })
+})
+
+describe("validarNumeracionElegida", () => {
+  const A = numeracion({ alegraId: "1", subDocumentType: "INVOICE_A", status: "active" })
+  const A_INACTIVA = numeracion({ alegraId: "4", subDocumentType: "INVOICE_A", status: "inactive" })
+  const numeraciones = [A, A_INACTIVA]
+
+  it("id presente, activo y de tipo invoice → true", () => {
+    expect(validarNumeracionElegida("1", numeraciones)).toBe(true)
+  })
+
+  it("id inactivo → false", () => {
+    expect(validarNumeracionElegida("4", numeraciones)).toBe(false)
+  })
+
+  it("id inexistente → false", () => {
+    expect(validarNumeracionElegida("999", numeraciones)).toBe(false)
   })
 })

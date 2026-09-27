@@ -517,6 +517,148 @@ export async function vincularFactura(
   return { kind: "cancelado" }
 }
 
+// ───────────────────────── Emisión de factura ("Emitir factura", rebanada C) ─────────────────────────
+//
+// A diferencia de "vincular" (donde la factura ya existe en Alegra: el operador sólo la busca y
+// la lee), acá el POST del endpoint de emisión es quien LLAMA a `createInvoice` — una escritura
+// real e irreversible contra Alegra. Si dos admins confirman casi al mismo tiempo, el UPDATE
+// condicional de `vincularFactura` (que corre DESPUÉS de crear la factura) no alcanza para
+// evitar que los dos lleguen a llamar a `createInvoice`: para eso hace falta reservar el pedido
+// ANTES de tocar Alegra. `reservarEmisionFactura` hace exactamente eso, con el mismo patrón de
+// UPDATE condicional atómico que el resto del archivo, usando un valor sentinela en
+// `factura_alegra_id` (no hay una columna dedicada para esto todavía — no hace falta una
+// migración nueva para un valor transitorio que dura lo que tarda la llamada a Alegra).
+//
+// Riesgo documentado: mientras el pedido está "reservado", `facturaAlegraId` no es `null`, así
+// que `toPedidoDto`/`toPedidoDetalleDto` lo mostrarían como "facturado" (badge, cola
+// `sin_factura`) si alguien pidiera el pedido en esa ventana — que dura lo que tarda UNA llamada
+// HTTP a Alegra (createInvoice), típicamente bajo un segundo. Se aceptó este costo transitorio
+// en vez de sumar una columna nueva sólo para el lock.
+
+/** Valor sentinela de `factura_alegra_id` mientras se reserva el pedido para emitir. Nunca es un
+ *  id real de Alegra (los ids de Alegra son numéricos). */
+export const RESERVA_EMISION_SENTINEL = "__reservando_emision__"
+
+export type ReservaEmisionResult = { kind: "ok" } | { kind: "not_found" } | { kind: "cancelado" } | { kind: "conflict" }
+
+/**
+ * Reserva el pedido para emitir su factura, ANTES de llamar a `createInvoice`. Mismo predicado
+ * que `vincularFactura` (`WHERE ... AND estado <> 'cancelado' AND factura_alegra_id IS NULL`),
+ * así que sólo una de dos confirmaciones simultáneas gana la reserva; la otra recibe `conflict`
+ * sin haber llegado a llamar a Alegra. No inserta ningún evento del historial (la reserva no es
+ * un hecho de negocio; sólo lo es la emisión, si se completa).
+ *
+ * También pone `facturado_en`/`facturado_por(_nombre)`: el CHECK `orders_factura_facturado_check`
+ * (0013 del Shop) exige que un `factura_alegra_id` no nulo venga siempre con `facturado_en` no
+ * nulo — el sentinel no es la excepción. `persistirFacturaEmitida` los vuelve a escribir con los
+ * valores reales al confirmar; `liberarReservaEmisionFactura` los limpia junto con el sentinel si
+ * la emisión no llega a completarse.
+ */
+export async function reservarEmisionFactura(
+  tenantId: string,
+  id: string,
+  input: { actor: { id: string; name: string }; now: Date },
+): Promise<ReservaEmisionResult> {
+  if (!UUID_RE.test(id)) return { kind: "not_found" }
+  const [fila] = await getDb()
+    .update(shopOrders)
+    .set({
+      facturaAlegraId: RESERVA_EMISION_SENTINEL,
+      facturadoEn: input.now,
+      facturadoPor: input.actor.id,
+      facturadoPorNombre: input.actor.name,
+      updatedAt: input.now,
+    })
+    .where(
+      and(
+        eq(shopOrders.id, id),
+        eq(shopOrders.tenantId, tenantId),
+        ne(shopOrders.estado, "cancelado"),
+        isNull(shopOrders.facturaAlegraId),
+      ),
+    )
+    .returning()
+  if (fila) return { kind: "ok" }
+
+  const [existente] = await getDb()
+    .select()
+    .from(shopOrders)
+    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
+  if (!existente) return { kind: "not_found" }
+  if (existente.estado === "cancelado") return { kind: "cancelado" }
+  return { kind: "conflict" }
+}
+
+/**
+ * Libera la reserva sin dejar rastro (`createInvoice` falló: 429, error de Alegra, o cualquier
+ * excepción entre la reserva y la llamada, incluida una falla al persistir después de crear la
+ * factura). Sólo libera SU PROPIA reserva (`WHERE factura_alegra_id = RESERVA_EMISION_SENTINEL`):
+ * si por lo que sea la fila ya no está reservada (no debería pasar: nadie más puede tocarla
+ * mientras el sentinel está puesto), no hace nada.
+ */
+export async function liberarReservaEmisionFactura(tenantId: string, id: string): Promise<void> {
+  if (!UUID_RE.test(id)) return
+  await getDb()
+    .update(shopOrders)
+    .set({ facturaAlegraId: null, facturadoEn: null, facturadoPor: null, facturadoPorNombre: null })
+    .where(
+      and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId), eq(shopOrders.facturaAlegraId, RESERVA_EMISION_SENTINEL)),
+    )
+}
+
+/**
+ * Reemplaza la reserva por los datos reales de la factura YA creada en Alegra (`createInvoice`
+ * tuvo éxito) y registra el evento `'factura_emitida'` del historial en la MISMA transacción —
+ * a diferencia de `vincularFactura`, que registra `'factura_vinculada'`: son hechos de negocio
+ * distintos aunque persistan las mismas columnas. El UPDATE exige `factura_alegra_id =
+ * RESERVA_EMISION_SENTINEL`: si la reserva se perdió (no debería, nadie más puede tocarla), no
+ * afecta filas y el resultado es `conflict` — la ruta lo trata como "se creó en Alegra pero no
+ * se pudo persistir" (ver `factura/emitir/route.ts`).
+ */
+export async function persistirFacturaEmitida(
+  tenantId: string,
+  id: string,
+  input: { factura: FacturaParaVincular; actor: { id: string; name: string }; now: Date },
+): Promise<FacturaResult> {
+  if (!UUID_RE.test(id)) return { kind: "not_found" }
+  const { factura, actor, now } = input
+
+  const actualizado = await getDb().transaction(async (tx) => {
+    const [fila] = await tx
+      .update(shopOrders)
+      .set({
+        facturaAlegraId: factura.alegraId,
+        facturaNumero: factura.numero,
+        facturaFecha: factura.fecha || null,
+        facturaTotal: factura.total.toFixed(2),
+        facturadoEn: now,
+        facturadoPor: actor.id,
+        facturadoPorNombre: actor.name,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(shopOrders.id, id),
+          eq(shopOrders.tenantId, tenantId),
+          eq(shopOrders.facturaAlegraId, RESERVA_EMISION_SENTINEL),
+        ),
+      )
+      .returning()
+    if (!fila) return null
+    await registrarEvento(tx, {
+      tenantId,
+      orderId: fila.id,
+      tipo: "factura_emitida",
+      detalle: { numero: factura.numero },
+      actor,
+      now,
+    })
+    return fila
+  })
+  if (actualizado) return okConItems(tenantId, actualizado)
+  return { kind: "conflict" }
+}
+
 /**
  * Desvincula la factura y quita la marca de facturado (las siete columnas juntas). Si el
  * pedido sigue vivo, vuelve a reservar stock. Idempotente: sin factura → ok sin cambios (y sin

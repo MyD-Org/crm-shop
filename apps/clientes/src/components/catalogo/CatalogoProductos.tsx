@@ -36,12 +36,13 @@ export function CatalogoProductos({
   return (
     <div
       // 2/3/4 columnas: 24 productos por página entran justo en las tres
-      // grillas, sin filas huérfanas.
+      // grillas, sin filas huérfanas. En mobile el gap es chico (8 px): con
+      // dos columnas de ~170 px, cada px de gap se lo come el ancho de la card.
       className={cn(
         "transition-opacity",
         vista === "lista"
-          ? "flex flex-col gap-3"
-          : "grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4",
+          ? "flex flex-col gap-2 sm:gap-3"
+          : "grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 md:gap-5 xl:grid-cols-4",
         navegando && "opacity-50"
       )}
       aria-busy={navegando}

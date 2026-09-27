@@ -50,7 +50,7 @@ export function CatalogoSkeleton() {
           </div>
         </header>
 
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 md:gap-5 xl:grid-cols-4">
           {Array.from({ length: CARDS }, (_, i) => (
             <ProductCardSkeleton key={i} variant="soft" layout="grid" />
           ))}

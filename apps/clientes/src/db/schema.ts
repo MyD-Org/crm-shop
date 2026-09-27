@@ -496,6 +496,57 @@ export const orders = shop.table(
 );
 
 /**
+ * Historial de eventos de un pedido (migración `0020`, change `admin-pedidos-datos`).
+ *
+ * Hasta acá el detalle del pedido sólo conocía el ÚLTIMO cambio de estado
+ * (`orders.estado_actualizado_*`), el último pago manual y la factura vinculada actual: no
+ * había forma de reconstruir la secuencia completa. Esta tabla agrega esa fila por cada evento,
+ * sin tocar las columnas "resumen" de `orders` (siguen existiendo, las sigue escribiendo el CRM
+ * igual que antes; esta tabla es ADEMÁS, no en vez de).
+ *
+ * El evento "creado" NO se guarda acá: se deriva de `orders.created_at` al leer el historial, así
+ * un pedido recién insertado por el Shop ya tiene su primer evento sin que el Shop tenga que
+ * conocer esta tabla ni escribirle nada (evita un contrato nuevo entre las dos apps).
+ *
+ * `detalle` es informativo por tipo, sin forma fija en la base (motivo del `jsonb` suelto en vez
+ * de columnas): `{desde,hacia}` para 'estado', `{motivo}` para 'cancelado', `{numero}` para
+ * 'factura_vinculada' / 'factura_desvinculada' / 'factura_emitida', `{estado}` para 'pago'.
+ *
+ * `actorId`/`actorNombre` son el mismo patrón "congelado, sin FK" que `orders.estado_actualizado_*`:
+ * quedan en null cuando el evento no tiene un operador humano detrás (p. ej. un pago online que
+ * mueve el webhook del proveedor).
+ *
+ * Sólo el CRM la escribe hoy (dentro de la misma transacción que el UPDATE de `orders`); el Shop
+ * no la lee ni la escribe, así que no hace falta GRANT a `shop_app`.
+ */
+export const orderEventos = shop.table(
+  "order_eventos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    /** 'estado' | 'pago' | 'factura_vinculada' | 'factura_desvinculada' | 'factura_emitida' | 'cancelado'. */
+    tipo: text("tipo").notNull(),
+    detalle: jsonb("detalle").$type<Record<string, unknown>>().notNull().default({}),
+    /** `admin_users.id` congelado como texto; null si el evento no lo hizo un operador. */
+    actorId: text("actor_id"),
+    actorNombre: text("actor_nombre"),
+    creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("order_eventos_tenant_order_fecha").on(t.tenantId, t.orderId, t.creadoEn.desc()),
+    check(
+      "order_eventos_tipo_check",
+      sql`${t.tipo} in ('estado','pago','factura_vinculada','factura_desvinculada','factura_emitida','cancelado')`,
+    ),
+  ],
+);
+
+export type OrderEventoRow = typeof orderEventos.$inferSelect;
+
+/**
  * Líneas del pedido. Snapshot puro: no hay FK viva al catálogo a
  * propósito — se guarda el `alegraItemId` como referencia informativa, pero el
  * nombre y el precio que se muestran salen de acá, no de un join.

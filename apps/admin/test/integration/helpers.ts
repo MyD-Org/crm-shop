@@ -5,10 +5,12 @@ import { tenants, adminUsers, paymentReceipts } from "@/db/schema"
 import {
   shopClientLinks,
   shopClientes,
+  shopOrderEventos,
   shopOrders,
   shopOrderItems,
   type ShopClienteRow,
   type ShopClientLinkRow,
+  type ShopOrderEventoRow,
   type ShopOrderItemRow,
   type ShopOrderRow,
 } from "@/db/shop-schema"
@@ -33,7 +35,7 @@ function guard() {
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks} restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderEventos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks} restart identity cascade`,
   )
 }
 
@@ -136,6 +138,26 @@ export async function seedShopOrderItem(
       subtotal: "1000.00",
       iva: "210.00",
       total: "1210.00",
+      ...overrides,
+    })
+    .returning()
+  return row
+}
+
+/** Evento del historial de un pedido (`shop.order_eventos`, 0020 del Shop). Datos inventados. */
+export async function seedOrderEvento(
+  tenantId: string,
+  orderId: string,
+  overrides: Partial<typeof shopOrderEventos.$inferInsert> = {},
+): Promise<ShopOrderEventoRow> {
+  guard()
+  const [row] = await getDb()
+    .insert(shopOrderEventos)
+    .values({
+      tenantId,
+      orderId,
+      tipo: "estado",
+      detalle: { desde: "pendiente", hacia: "confirmado" },
       ...overrides,
     })
     .returning()

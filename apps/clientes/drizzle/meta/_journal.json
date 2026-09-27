@@ -141,6 +141,13 @@
       "when": 1790422579238,
       "tag": "0019_client_links_auditoria",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790469970929,
+      "tag": "0020_order_eventos",
+      "breakpoints": true
     }
   ]
 }

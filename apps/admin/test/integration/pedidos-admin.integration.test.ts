@@ -299,8 +299,12 @@ describe("admin: pedidos del Shop", () => {
       expect((await list("?limit=100")).status).toBe(200)
     })
 
-    it("sin pedidos: lista vacía, total 0", async () => {
-      expect(await (await list()).json()).toEqual({ items: [], total: 0 })
+    it("sin pedidos: lista vacía, total 0, colas en cero", async () => {
+      expect(await (await list()).json()).toEqual({
+        items: [],
+        total: 0,
+        colas: { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0 },
+      })
     })
   })
 

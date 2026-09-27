@@ -526,6 +526,30 @@ const getArbolCategorias = cache(async function getArbolCategorias(): Promise<No
 });
 
 /**
+ * Nombres de una categoría propia y de las que la contienen, de la raíz a ella
+ * (para las migas de la ficha). Vacío si no está en el árbol o si cuelga de
+ * una inactiva: igual que en el menú, una inactiva corta su rama.
+ */
+export function rutaEnArbol(arbol: NodoCategoria[], id: string): string[] {
+  const porId = new Map(arbol.map((n) => [n.id, n]));
+  const ruta: string[] = [];
+  const vistos = new Set<string>();
+  let n = porId.get(id);
+  while (n && !vistos.has(n.id)) {
+    vistos.add(n.id);
+    ruta.unshift(n.nombre);
+    if (!n.parentId) return ruta;
+    n = porId.get(n.parentId);
+  }
+  return [];
+}
+
+/** Ruta de una categoría propia en el árbol activo del tenant (ver `rutaEnArbol`). */
+export async function getRutaCategoriaPropia(id: string): Promise<string[]> {
+  return rutaEnArbol(await getArbolCategorias(), id);
+}
+
+/**
  * Suma los conteos por categoría hacia arriba (cada producto cuenta en su
  * categoría y en todas las que la contienen) y devuelve el árbol en orden de
  * lectura —una rama entera antes de la siguiente—, sin las ramas vacías.

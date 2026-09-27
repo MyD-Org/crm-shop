@@ -38,6 +38,7 @@ import {
   getFacetas,
   getPaginaCatalogo,
   getProducto,
+  getRutaCategoriaPropia,
   type Facetas,
   type FiltrosCatalogo,
   type PaginaCatalogo,
@@ -115,6 +116,26 @@ async function productoCacheado(id: string, soloVisibles: boolean): Promise<Prod
 export function productoPublico(id: string, soloVisibles: boolean): Promise<Product | null> {
   if (!esIdAlegra(id)) return Promise.resolve(null);
   return productoCacheado(id, soloVisibles);
+}
+
+/**
+ * Migas de la ficha: la categoría propia del producto con las que la
+ * contienen (raíz → hoja). Si la base falla, vacío (la ficha cae a la
+ * categoría de Alegra) y guardado sólo con el perfil `degradado`.
+ */
+export async function rutaCategoriaPublica(categoriaId: string): Promise<string[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  console.info("[cache] ruta-categoria miss");
+  try {
+    const ruta = await getRutaCategoriaPropia(categoriaId);
+    cacheLife("catalogo");
+    return ruta;
+  } catch (err) {
+    console.error("[catalogo-publico] no se pudo leer la ruta de la categoría:", err);
+    cacheLife("degradado");
+    return [];
+  }
 }
 
 /**

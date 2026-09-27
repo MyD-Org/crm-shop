@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
@@ -80,6 +80,7 @@ export function ProductoClient({
   oferta = null,
   envio = false,
   relacionados = null,
+  rutaCategorias = [],
 }: {
   producto: Product;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
@@ -88,6 +89,8 @@ export function ProductoClient({
   envio?: boolean;
   /** "Más de <categoría>", armado en el server (va en su propio Suspense). */
   relacionados?: ReactNode;
+  /** Categoría del admin con sus padres (raíz → hoja), para las migas. Vacío = la de Alegra. */
+  rutaCategorias?: string[];
 }) {
   const [qty, setQty] = useState(1);
   const { addItem } = useCart();
@@ -187,17 +190,17 @@ export function ProductoClient({
         {/* Breadcrumb */}
         <nav className="mb-5 truncate text-sm text-muted lg:mb-6">
           <Link href="/" className="text-muted transition-colors hover:text-accent">Inicio</Link>
-          {producto.category && (
-            <>
+          {(rutaCategorias.length ? rutaCategorias : producto.category ? [producto.category] : []).map((c) => (
+            <Fragment key={c}>
               {" / "}
               <Link
-                href={`/catalogo?categoria=${encodeURIComponent(producto.category)}`}
+                href={`/catalogo?categoria=${encodeURIComponent(c)}`}
                 className="text-muted transition-colors hover:text-accent"
               >
-                {formatRubro(producto.category)}
+                {formatRubro(c)}
               </Link>
-            </>
-          )}
+            </Fragment>
+          ))}
           {" / "}
           <span className="text-text">{nombreParaMostrar}</span>
         </nav>

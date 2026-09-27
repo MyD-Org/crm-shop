@@ -27,15 +27,9 @@
   .beamStop { stop-opacity: .85; }
   .halo { opacity: .65; }
   .glow, .halo { transform-box: fill-box; transform-origin: center; transform: scale(1.25); }
-  /* Dim only the photograph, below the screen-blended light and DS text veil. */
-  .root > section > img, .mobilePhoto img {
-    filter: brightness(calc(1 - var(--light-level, 0) * .22));
-    transition: filter 300ms ease-out;
-  }
-  .root[data-intro] > section > img, .root[data-intro] .mobilePhoto img {
-    transition-duration: 900ms;
-    transition-timing-function: ease-in-out;
-  }
+  /* Dim only the photograph, below the screen-blended light and DS text veil.
+     Fixed, not tied to the lights: the scene stays dark with every lamp off. */
+  .root > section > img, .mobilePhoto img { filter: brightness(.78); }
   .root > section > img { object-fit: cover; object-position: 88% center; background: none; }
   /* The DS veils are made for a photo beside the text; on mobile the text column
      spans the card and together they wash the scene out. One lighter veil, denser
@@ -58,6 +52,4 @@
 }
 /* Slower cross-fade for the first-view intro (INTRO_FADE_MS in InteractiveHero). */
 .root[data-intro] .light { transition-duration: 900ms; transition-timing-function: ease-in-out; }
-@media (prefers-reduced-motion: reduce) {
-  .light, .root > section > img, .mobilePhoto img { transition: none; }
-}
+@media (prefers-reduced-motion: reduce) { .light { transition: none; } }

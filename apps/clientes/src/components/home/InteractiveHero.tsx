@@ -28,15 +28,9 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   const [pressed, setPressed] = useState<number[]>([]);
   const [rect, setRect] = useState<ReturnType<typeof sceneRect> | null>(null);
   const uid = useId().replaceAll(":", "");
-  const paint = useCallback((values: number[]) => {
-    let level = 0;
-    layers.current.forEach((layer, i) => {
-      const opacity = pinned.current.has(i) ? 1 : values[i] ?? 0;
-      if (layer) layer.style.opacity = String(opacity);
-      level = Math.max(level, opacity);
-    });
-    root.current?.style.setProperty("--light-level", String(level));
-  }, []);
+  const paint = useCallback((values: number[]) => layers.current.forEach((layer, i) => {
+    if (layer) layer.style.opacity = String(pinned.current.has(i) ? 1 : values[i] ?? 0);
+  }), []);
 
   useEffect(() => {
     if (!enabled || !root.current || !scene.current) return;

@@ -10,9 +10,16 @@ import {
   interpretarRespuestaFactura,
   motivoValido,
   opcionesDeDestino,
+  esSinFactura,
   opcionesDeFiltro,
+  opcionesDeFiltroEntrega,
+  opcionesDeFiltroPago,
+  opcionesOtroEstado,
+  pasosPedido,
   queryDeLista,
+  siguientePaso,
   textoRango,
+  verboSiguientePaso,
 } from "./logica"
 
 describe("queryDeLista", () => {
@@ -233,5 +240,97 @@ describe("avisoFactura (mail de la factura)", () => {
     expect(mensajeAvisoFactura({ resultado: "sin_email", destino: null }).ok).toBe(false)
     expect(mensajeAvisoFactura({ resultado: "sin_pdf", destino: "x" }).texto).toContain("PDF")
     expect(mensajeAvisoFactura({ resultado: "fallo", destino: "x" }).texto).toBe("No se pudo enviar la factura por mail.")
+  })
+})
+
+describe("queryDeLista: filtros nuevos (q, entrega, pago, cola, vista)", () => {
+  it("q/entrega/pago/cola se omiten cuando no vienen (el servidor los toma como 'sin filtro')", () => {
+    expect(queryDeLista({ estado: "todos", start: 0, limit: 25 })).toBe("estado=todos&start=0&limit=25")
+  })
+
+  it("'todos' de entrega/pago tampoco viaja: sólo el de estado es explícito", () => {
+    expect(queryDeLista({ estado: "todos", entrega: "todos", pago: "todos", start: 0, limit: 25 })).toBe(
+      "estado=todos&start=0&limit=25",
+    )
+  })
+
+  it("q se manda recortado y sólo si queda algo después del trim", () => {
+    expect(queryDeLista({ estado: "todos", q: "  laura  ", start: 0, limit: 25 })).toBe(
+      "estado=todos&q=laura&start=0&limit=25",
+    )
+    expect(queryDeLista({ estado: "todos", q: "   ", start: 0, limit: 25 })).toBe("estado=todos&start=0&limit=25")
+  })
+
+  it("entrega, pago y cola se agregan cuando vienen", () => {
+    expect(
+      queryDeLista({ estado: "todos", entrega: "envio", pago: "pendiente", cola: "pago", start: 0, limit: 25 }),
+    ).toBe("estado=todos&entrega=envio&pago=pendiente&cola=pago&start=0&limit=25")
+  })
+
+  it("vista=tablero reemplaza start/limit por vista (el servidor los ignora igual)", () => {
+    expect(queryDeLista({ estado: "todos", start: 40, limit: 25, vista: "tablero" })).toBe(
+      "estado=todos&vista=tablero",
+    )
+  })
+})
+
+describe("opcionesDeFiltroEntrega / opcionesDeFiltroPago", () => {
+  it("sin valores vacíos, 'todos' primero", () => {
+    expect(opcionesDeFiltroEntrega().map((o) => o.value)).toEqual(["todos", "envio", "retiro"])
+    expect(opcionesDeFiltroPago().map((o) => o.value)).toEqual(["todos", "pagado", "pendiente"])
+  })
+})
+
+describe("pasosPedido / siguientePaso / verboSiguientePaso", () => {
+  it("un envío tiene 5 pasos, un retiro se salta 'en_camino'", () => {
+    expect(pasosPedido("envio")).toEqual(["pendiente", "confirmado", "preparacion", "en_camino", "entregado"])
+    expect(pasosPedido("retiro")).toEqual(["pendiente", "confirmado", "preparacion", "entregado"])
+  })
+
+  it("siguientePaso avanza un solo casillero del camino feliz", () => {
+    expect(siguientePaso("pendiente", "envio")).toBe("confirmado")
+    expect(siguientePaso("confirmado", "envio")).toBe("preparacion")
+    expect(siguientePaso("preparacion", "envio")).toBe("en_camino")
+    expect(siguientePaso("en_camino", "envio")).toBe("entregado")
+    // Retiro: de preparación va directo a entregado (sin "en_camino").
+    expect(siguientePaso("preparacion", "retiro")).toBe("entregado")
+  })
+
+  it("entregado y cancelado no tienen siguiente paso", () => {
+    expect(siguientePaso("entregado", "envio")).toBeNull()
+    expect(siguientePaso("cancelado", "envio")).toBeNull()
+  })
+
+  it("verboSiguientePaso: 'entregado' cambia de verbo según el tipo de entrega", () => {
+    expect(verboSiguientePaso("confirmado", "envio")).toBe("Confirmar pedido")
+    expect(verboSiguientePaso("preparacion", "envio")).toBe("Pasar a preparación")
+    expect(verboSiguientePaso("en_camino", "envio")).toBe("Marcar en camino")
+    expect(verboSiguientePaso("entregado", "envio")).toBe("Marcar como entregado")
+    expect(verboSiguientePaso("entregado", "retiro")).toBe("Marcar como retirado")
+  })
+})
+
+describe("opcionesOtroEstado", () => {
+  it("no repite el destino que ya se ofrece como botón primario", () => {
+    const otros = opcionesOtroEstado("confirmado", "envio")
+    expect(otros.map((o) => o.value)).not.toContain("preparacion")
+    expect(otros.map((o) => o.value)).toEqual(["entregado", "pendiente", "cancelado"])
+  })
+
+  it("'cancelado' se etiqueta como acción, no como estado", () => {
+    const otros = opcionesOtroEstado("pendiente", "envio")
+    expect(otros.find((o) => o.value === "cancelado")?.label).toBe("Cancelar pedido")
+  })
+
+  it("un pedido cancelado no ofrece ningún otro estado", () => {
+    expect(opcionesOtroEstado("cancelado", "envio")).toEqual([])
+  })
+})
+
+describe("esSinFactura", () => {
+  it("sólo es 'sin factura' un pedido ENTREGADO y sin factura vinculada", () => {
+    expect(esSinFactura({ estado: "entregado", facturado: false })).toBe(true)
+    expect(esSinFactura({ estado: "entregado", facturado: true })).toBe(false)
+    expect(esSinFactura({ estado: "preparacion", facturado: false })).toBe(false)
   })
 })

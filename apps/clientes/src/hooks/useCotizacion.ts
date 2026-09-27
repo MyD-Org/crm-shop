@@ -35,6 +35,13 @@ export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth"
  * ajusta de a uno no lo percibe, y quien clickea rápido genera un solo request.
  */
 const ESPERA_MS = 350;
+/**
+ * Ante un 429 (límite de cotizaciones por minuto) no se muestra error: el
+ * límite es una protección del servidor, no algo que el cliente pueda
+ * resolver. Se reintenta solo tras esta espera y, mientras tanto, los totales
+ * siguen estimados como en cualquier recotización.
+ */
+const REINTENTO_429_MS = 5_000;
 
 /**
  * Resultado de un fetch, etiquetado con los inputs que lo produjeron.
@@ -94,6 +101,7 @@ export function useCotizacion(opts: {
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
     const etiqueta = { clave, nonce, entregaTipo, ciudad };
+    let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
       yaCotizo.current = true;
@@ -108,6 +116,13 @@ export function useCotizacion(opts: {
             ciudad: ciudad || undefined,
           }),
         });
+
+        if (r.status === 429) {
+          if (!ctrl.signal.aborted) {
+            reintento = setTimeout(() => setNonce((n) => n + 1), REINTENTO_429_MS);
+          }
+          return;
+        }
 
         if (r.status === 401) {
           setRes({ ...etiqueta, data: null, error: null, noAuth: true });
@@ -149,6 +164,7 @@ export function useCotizacion(opts: {
     // el request ni siquiera se abre.
     return () => {
       clearTimeout(timer);
+      clearTimeout(reintento);
       ctrl.abort();
     };
   }, [clave, ready, activo, vacio, entregaTipo, ciudad, nonce]);

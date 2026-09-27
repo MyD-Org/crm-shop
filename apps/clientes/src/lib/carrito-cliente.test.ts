@@ -19,6 +19,7 @@ import {
   normalizarCarrito,
   parsearCache,
   parsearItems,
+  restaurar,
   validarItemsBody,
   validarVersion,
   type CacheCarrito,
@@ -193,6 +194,35 @@ describe("agregar / agregarVarios / actualizarQty", () => {
 
   it("aLineas deja sólo id y qty", () => {
     expect(aLineas([item("1", 2)])).toEqual([l("1", 2)]);
+  });
+});
+
+describe("restaurar (Deshacer)", () => {
+  const item = (id: string, qty: number): CartItem => ({ ...prod(id), qty });
+
+  it("vuelve a poner la línea en su posición original, con su cantidad", () => {
+    const r = restaurar([item("a", 1), item("c", 3)], item("b", 2), 1);
+    expect(r.items.map((i) => [i.id, i.qty])).toEqual([["a", 1], ["b", 2], ["c", 3]]);
+    expect(r.avisos).toEqual([]);
+  });
+
+  it("es idempotente: un segundo Deshacer no suma unidades", () => {
+    const una = restaurar([item("a", 1)], item("b", 2), 1).items;
+    const dos = restaurar(una, item("b", 2), 1).items;
+    expect(dos).toBe(una);
+    expect(dos.find((i) => i.id === "b")?.qty).toBe(2);
+  });
+
+  it("acota la posición al largo actual del carrito", () => {
+    expect(restaurar([item("a", 1)], item("b", 1), 9).items.map((i) => i.id)).toEqual(["a", "b"]);
+    expect(restaurar([item("a", 1)], item("b", 1), -3).items.map((i) => i.id)).toEqual(["b", "a"]);
+  });
+
+  it("no agrega una línea nueva si ya hay MAX_LINEAS", () => {
+    const llenos = ids(MAX_LINEAS).map((id) => item(id, 1));
+    const r = restaurar(llenos, item("x", 1), 0);
+    expect(r.items).toBe(llenos);
+    expect(r.avisos).toEqual(["lineas"]);
   });
 });
 

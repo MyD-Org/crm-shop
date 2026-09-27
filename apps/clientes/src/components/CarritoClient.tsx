@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
+import type { CartItem } from "@/lib/carrito-cliente";
+import { AvisoQuitado } from "@/components/AvisoQuitado";
+import { CIUDADES_ENVIO, MINIMO_ENVIO } from "@/lib/envio";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
@@ -22,6 +27,28 @@ function LightbulbIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+function TrashIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+/** Una línea recién quitada, con lo necesario para reponerla donde estaba. */
+type Quitado = { item: CartItem; indice: number; nombre: string };
+
+/** Lo que dura el colapso de una línea al quitarla, antes de sacarla del carrito. */
+const SALIDA_MS = 220;
 
 function AlertIcon() {
   return (
@@ -56,7 +83,99 @@ export function CarritoClient({
   /** Flag `envio` (ver src/lib/envio-flag.ts): si se anuncia el envío a domicilio. */
   envio?: boolean;
 }) {
-  const { items, updateQty, removeItem: remove, ready } = useCart();
+  const { items, updateQty, removeItem: remove, restoreItem, ready } = useCart();
+  // Líneas que se están yendo: colapsan SALIDA_MS antes de salir del carrito.
+  const [saliendo, setSaliendo] = useState<ReadonlySet<string>>(new Set());
+  // Bajas que el aviso puede deshacer. Varias seguidas se agrupan en un solo
+  // aviso ("Quitó 2 productos") y un solo Deshacer las repone a todas.
+  // En un ref: la baja se registra SALIDA_MS después del clic, y dos bajas
+  // seguidas no deben pisarse con una copia vieja de la lista.
+  const quitados = useRef<Quitado[]>([]);
+  const [aviso, setAviso] = useState<{ visible: boolean; texto: string; imagenes: (string | undefined)[]; clave: number }>({
+    visible: false,
+    texto: "",
+    imagenes: [],
+    clave: 0,
+  });
+
+  /**
+   * Mobile: la barra fija "se entrega" al resumen. Cuando la tarjeta del
+   * resumen entra en pantalla, la barra baja y se va, y la tarjeta (que tiene
+   * el mismo total y el mismo botón) aparece; al volver a subir, al revés. Así
+   * nunca se ven dos botones de compra a la vez. La tarjeta conserva su lugar
+   * en el flujo: la página no cambia de alto y el scroll no salta.
+   */
+  const resumenRef = useRef<HTMLElement>(null);
+  const [resumenALaVista, setResumenALaVista] = useState(false);
+  const hayItems = items.length > 0;
+  useEffect(() => {
+    const el = resumenRef.current;
+    if (!ready || !hayItems || !el) return;
+    const obs = new IntersectionObserver(([e]) => setResumenALaVista(e.isIntersecting), {
+      threshold: 0.2,
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [ready, hayItems]);
+
+  /**
+   * Quitar con Deshacer: la línea colapsa, sale del carrito y abajo aparece el
+   * aviso con Deshacer, que la repone en la misma posición y con la misma
+   * cantidad.
+   */
+  function quitarConDeshacer(item: CartItem, nombreParaMostrar: string) {
+    const reducido = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // La posición, contada sin las líneas que todavía están colapsando: esas
+    // salen antes que ésta, y Deshacer repone en el orden inverso.
+    const indice = items.filter((i) => i.id === item.id || !saliendo.has(i.id)).findIndex((i) => i.id === item.id);
+    setSaliendo((s) => new Set(s).add(item.id));
+    window.setTimeout(() => {
+      remove(item.id);
+      setSaliendo((s) => {
+        const n = new Set(s);
+        n.delete(item.id);
+        return n;
+      });
+      const pila = [...quitados.current.filter((x) => x.item.id !== item.id), { item, indice, nombre: nombreParaMostrar }];
+      quitados.current = pila;
+      setAviso((a) => ({
+        visible: true,
+        texto:
+          pila.length === 1
+            ? `Se quitó ${nombreParaMostrar} del carrito`
+            : `Se quitaron ${pila.length} productos del carrito`,
+        imagenes: [...pila].reverse().map((q) => q.item.image),
+        clave: a.clave + 1,
+      }));
+    }, reducido ? 0 : SALIDA_MS);
+  }
+
+  function cerrarAviso() {
+    setAviso((a) => ({ ...a, visible: false }));
+    quitados.current = [];
+  }
+
+  function deshacer() {
+    // Primero se cierra el aviso: un segundo clic ya no tiene dónde caer. Cada
+    // índice se tomó sobre la lista tal como estaba en ESA baja, así que se
+    // reponen en orden inverso (la última baja primero): deshace paso a paso.
+    const pila = quitados.current;
+    cerrarAviso();
+    for (const q of [...pila].reverse()) restoreItem(q.item, q.indice);
+  }
+
+  const avisoQuitado = (sobreBarra: boolean) => (
+    <AvisoQuitado
+      texto={aviso.texto}
+      imagenes={aviso.imagenes}
+      visible={aviso.visible}
+      clave={aviso.clave}
+      sobreBarra={sobreBarra}
+      onDeshacer={deshacer}
+      onVencer={cerrarAviso}
+    />
+  );
+
   // El carrito siempre cotiza como "retiro": la entrega se elige en el checkout.
   const { cotizacion, estado, error, recotizar, ultimasLineas } = useCotizacion({
     entregaTipo: "retiro",
@@ -86,6 +205,7 @@ export function CarritoClient({
             <Button>Ver catálogo</Button>
           </Link>
         </main>
+        {avisoQuitado(false)}
       </>
     );
   }
@@ -121,10 +241,17 @@ export function CarritoClient({
     total === null ? (estado === "cargando" ? "Calculando…" : "A confirmar") : fmtPrecio(total);
   const unidadesCarrito = items.reduce((a, it) => a + it.qty, 0);
 
-  const botonCompra = (
+  // Progreso al envío gratis: el mínimo es sin impuestos, igual que el subtotal.
+  // Sólo con el flag `envio`: sin envío propio no hay nada que prometer.
+  const faltaEnvio = envio && subtotal !== null ? Math.max(0, MINIMO_ENVIO - subtotal) : null;
+  const pctEnvio = subtotal !== null ? Math.min(100, Math.floor((subtotal / MINIMO_ENVIO) * 100)) : 0;
+
+  const lineasConProblema = cotizacion?.lineas.filter((l) => l.problema).length ?? 0;
+
+  const botonCompra = (etiquetaBloqueado?: string) => (
     <Link href="/checkout" className="block" aria-disabled={cotizacion?.hayProblemas || undefined}>
       <Button className="w-full" disabled={cotizacion?.hayProblemas}>
-        Iniciar compra
+        {cotizacion?.hayProblemas && etiquetaBloqueado ? etiquetaBloqueado : "Iniciar compra"}
       </Button>
     </Link>
   );
@@ -160,8 +287,9 @@ export function CarritoClient({
         )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-9">
-          {/* Items */}
-          <ul className="rounded-[20px] border border-border bg-surface px-4 lg:px-6">
+          {/* Items: una tarjeta por producto. Al quitar, la fila colapsa
+              (grid-rows 1fr → 0fr) y la de abajo sube a su lugar. */}
+          <ul className="flex flex-col">
             {items.map((item) => {
               const linea = lineaDe(item.id);
               const precio = precioLineaCarrito(
@@ -174,82 +302,106 @@ export function CarritoClient({
               const nombre = linea && !linea.problema ? linea.name : item.name;
               // Sólo para mostrar: el nombre que viaja en el pedido no se toca.
               const nombreParaMostrar = formatNombreProducto(nombre, marca ? formatMarca(marca) : undefined);
-
-              const cantidad = (
-                <QuantityStepper
-                  value={item.qty}
-                  onValueChange={(qty) => updateQty(item.id, qty)}
-                  min={1}
-                  max={linea?.stockDisponible ?? 999}
-                />
-              );
-              const quitar = (
-                <button
-                  type="button"
-                  onClick={() => remove(item.id)}
-                  className="rounded-sm text-[13px] font-semibold text-muted underline underline-offset-4 transition-colors hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-                  aria-label={`Quitar ${nombreParaMostrar} del carrito`}
-                >
-                  Quitar
-                </button>
-              );
-              const totalLinea = precio ? (
-                <p className="font-display text-base font-semibold tabular-nums text-text lg:text-[17px]">
-                  {fmtPrecio(precio.total)}
-                </p>
-              ) : null;
+              const seVa = saliendo.has(item.id);
 
               return (
                 <li
                   key={item.id}
-                  className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-3 gap-y-2 border-b border-border py-4 last:border-b-0 lg:grid-cols-[64px_minmax(0,1fr)_auto_128px] lg:items-center lg:gap-x-5"
+                  aria-hidden={seVa || undefined}
+                  className={`grid transition-[grid-template-rows,opacity] duration-[220ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+                    seVa ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100"
+                  }`}
                 >
-                  <Link
-                    href={`/producto/${item.id}`}
-                    className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface transition-opacity hover:opacity-80 lg:h-16 lg:w-16"
-                  >
-                    {item.image ? (
-                      <Image src={item.image} alt="" fill sizes="64px" className="object-contain p-1" />
-                    ) : (
-                      <LightbulbIcon className="h-8 w-8 text-muted/30" />
-                    )}
-                  </Link>
+                  {/* overflow-hidden sólo mientras colapsa: siempre puesto, recorta
+                      la sombra de la tarjeta (y la de hover, que baja 24 px). */}
+                  <div className={`min-h-0 ${seVa ? "overflow-hidden" : ""}`}>
+                    <div className="pb-3">
+                      <article
+                        className={`grid grid-cols-[72px_minmax(0,1fr)_40px] gap-x-4 gap-y-3 rounded-[22px] bg-surface p-4 shadow-[var(--shadow-1)] transition-[box-shadow,translate] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-px hover:shadow-[0_8px_20px_-10px_var(--color-border-strong)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 lg:grid-cols-[104px_minmax(0,1fr)_40px] lg:gap-x-5 lg:p-[18px] ${
+                          linea?.problema ? "outline-2 outline-highlight" : ""
+                        }`}
+                      >
+                        <Link
+                          href={`/producto/${item.id}`}
+                          tabIndex={-1}
+                          aria-hidden="true"
+                          className="relative flex h-[72px] w-[72px] shrink-0 items-center self-start justify-center overflow-hidden rounded-2xl bg-elevated lg:row-span-2 lg:h-[104px] lg:w-[104px]"
+                        >
+                          {item.image ? (
+                            <Image src={item.image} alt="" fill sizes="104px" className="object-contain p-2" />
+                          ) : (
+                            <LightbulbIcon className="h-10 w-10 text-accent" />
+                          )}
+                        </Link>
 
-                  <div className="min-w-0">
-                    {marca && <p className="text-[12.5px] font-bold text-accent">{formatMarca(marca)}</p>}
-                    <Link
-                      href={`/producto/${item.id}`}
-                      className="break-words text-[15px] font-bold leading-snug text-text transition-colors hover:text-accent"
-                    >
-                      {nombreParaMostrar}
-                    </Link>
-                    {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
-                    {precio ? (
-                      <p className="text-[13px] tabular-nums text-muted">{fmtPrecio(precio.unitario)} c/u</p>
-                    ) : (
-                      estado === "cargando" && <p className="text-[13px] text-muted">Calculando…</p>
-                    )}
-                    <div className="mt-1 lg:hidden">{quitar}</div>
-                    {linea?.problema && (
-                      <p className="mt-1 flex items-center gap-1.5 text-[12.5px] font-bold text-danger">
-                        <AlertIcon />
-                        {linea.detalle}
-                      </p>
-                    )}
-                  </div>
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                          {marca && (
+                            <p className="text-[11.5px] font-extrabold uppercase tracking-[0.08em] text-accent">
+                              {formatMarca(marca)}
+                            </p>
+                          )}
+                          <Link
+                            href={`/producto/${item.id}`}
+                            className="break-words text-[15px] font-extrabold leading-snug text-text underline-offset-[3px] hover:text-accent hover:underline lg:text-[17px]"
+                          >
+                            {nombreParaMostrar}
+                          </Link>
+                          {item.variant && <p className="text-xs text-muted">{item.variant}</p>}
+                          {/* Mobile: el unitario va acá; al lado del stepper no entra con el total. */}
+                          {precio && (
+                            <p className="text-[13px] tabular-nums text-muted lg:hidden">
+                              {item.qty} × {fmtPrecio(precio.unitario)}
+                            </p>
+                          )}
+                          {linea?.problema && (
+                            <p className="flex items-center gap-1.5 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] font-bold text-warning">
+                              <AlertIcon />
+                              {linea.detalle}
+                            </p>
+                          )}
+                        </div>
 
-                  {/* Desktop: cantidad con "Quitar" debajo, y el total en su columna. */}
-                  <div className="hidden flex-col items-center gap-1 lg:flex">
-                    {cantidad}
-                    {quitar}
-                  </div>
-                  <div className="hidden text-right lg:block">{totalLinea}</div>
+                        <button
+                          type="button"
+                          onClick={() => quitarConDeshacer(item, nombreParaMostrar)}
+                          disabled={seVa}
+                          className="-mr-1.5 -mt-1.5 flex h-10 w-10 items-center justify-center self-start rounded-xl text-muted transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+                          aria-label={`Quitar ${nombreParaMostrar} del carrito`}
+                        >
+                          <TrashIcon />
+                        </button>
 
-                  {/* Mobile: cantidad y total en una fila debajo del nombre ("Quitar"
-                      va junto al unitario: los tres juntos no entran en 375 px). */}
-                  <div className="col-start-2 flex min-w-0 items-center justify-between gap-3 lg:hidden">
-                    {cantidad}
-                    {totalLinea}
+                        {/* Cantidad y total en una fila propia: así el nombre sólo
+                            comparte el ancho con la papelera, no con el total. En
+                            mobile ocupa todo el ancho de la tarjeta. */}
+                        <div className="col-span-3 flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2 lg:col-span-2 lg:col-start-2">
+                          <div className="flex items-center gap-3.5">
+                            <QuantityStepper
+                              value={item.qty}
+                              onValueChange={(qty) => updateQty(item.id, qty)}
+                              min={1}
+                              max={linea?.stockDisponible ?? 999}
+                            />
+                            {precio ? (
+                              <span className="hidden text-[13px] tabular-nums text-muted lg:inline">
+                                {item.qty} × {fmtPrecio(precio.unitario)}
+                              </span>
+                            ) : (
+                              estado === "cargando" && <span className="text-[13px] text-muted">Calculando…</span>
+                            )}
+                          </div>
+                          {precio && (
+                            <p
+                              className={`font-display text-base font-semibold tabular-nums lg:text-xl ${
+                                linea?.problema ? "text-muted line-through" : "text-text"
+                              }`}
+                            >
+                              {fmtPrecio(precio.total)}
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    </div>
                   </div>
                 </li>
               );
@@ -257,7 +409,44 @@ export function CarritoClient({
           </ul>
 
           {/* Resumen */}
-          <aside className="h-fit space-y-5 rounded-[20px] border border-border bg-surface p-5 lg:sticky lg:top-24 lg:p-6">
+          <aside
+            ref={resumenRef}
+            className={`h-fit space-y-5 rounded-[22px] bg-surface p-5 shadow-[var(--shadow-1)] transition-[opacity,translate] duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:sticky lg:top-24 lg:translate-y-0 lg:p-6 lg:opacity-100 ${
+              resumenALaVista ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+            }`}
+          >
+            {faltaEnvio !== null && (
+              <div className="space-y-2.5 rounded-2xl bg-bg p-4" aria-live="polite">
+                <p className="flex items-center gap-2 text-sm font-bold text-text">
+                  <span
+                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success text-white transition-[scale,opacity] duration-[240ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
+                      faltaEnvio === 0 ? "scale-100 opacity-100" : "scale-[0.6] opacity-0"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    <CheckIcon />
+                  </span>
+                  {faltaEnvio === 0
+                    ? "Su compra tiene envío a domicilio gratis"
+                    : `Le faltan ${fmtPrecio(faltaEnvio)} sin impuestos para el envío gratis`}
+                </p>
+                <div
+                  role="progressbar"
+                  aria-label="Progreso hacia el envío gratis"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={pctEnvio}
+                  className="h-2 overflow-hidden rounded-full bg-elevated"
+                >
+                  <div
+                    className="h-full rounded-full bg-success transition-[width] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
+                    style={{ width: `${pctEnvio}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted">Envío propio a {CIUDADES_ENVIO.join(" y ")}.</p>
+              </div>
+            )}
+
             <h2 className="font-display text-lg font-semibold text-text">Resumen del pedido</h2>
 
             <dl className="space-y-2 text-sm">
@@ -285,15 +474,13 @@ export function CarritoClient({
 
             <div className="flex items-baseline justify-between gap-3 border-t border-border pt-4">
               <span className="font-bold text-text">Total</span>
-              <span
-                className={
-                  total === null
-                    ? "text-sm font-medium text-muted"
-                    : "font-display text-2xl font-bold tracking-tight tabular-nums text-text"
-                }
-              >
-                {textoTotal}
-              </span>
+              {total === null ? (
+                <span className="text-sm font-medium text-muted">{textoTotal}</span>
+              ) : (
+                <span className="font-display text-[28px] font-bold tracking-tight tabular-nums text-text">
+                  {fmtPrecio(total)}
+                </span>
+              )}
             </div>
 
             <CuotasResumen resumen={resumen} />
@@ -304,32 +491,49 @@ export function CarritoClient({
               </p>
             )}
 
-            {/* En mobile el botón va en la barra fija de abajo. */}
-            <div className="hidden space-y-3 lg:block">
-              {botonCompra}
+            {/* También en mobile: cuando el resumen está a la vista, la barra fija se va. */}
+            <div className="space-y-3">
+              {botonCompra()}
               <Link href="/catalogo" className="block text-center text-sm font-semibold text-accent hover:underline">
                 Seguir comprando
               </Link>
             </div>
 
             <EntregaProducto envio={envio} />
-
-            <Link href="/catalogo" className="block text-center text-sm font-semibold text-accent hover:underline lg:hidden">
-              Seguir comprando
-            </Link>
           </aside>
         </div>
 
         {/* Barra de compra en mobile: sticky y última del main, acompaña el
             scroll y se detiene donde empieza el footer. */}
-        <div data-sin-footer-mobile className="sticky bottom-0 z-30 -mx-4 mt-8 flex items-center gap-4 border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
-          <div className="shrink-0">
-            <p className="text-xs font-semibold text-muted">Total</p>
-            <p className="font-display text-lg font-bold tabular-nums text-text">{textoTotal}</p>
+        <div
+          data-sin-footer-mobile
+          aria-hidden={resumenALaVista || undefined}
+          inert={resumenALaVista || undefined}
+          className={`sticky bottom-0 z-30 -mx-4 mt-8 flex items-center gap-4 rounded-t-[20px] border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-[opacity,translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:hidden ${
+            resumenALaVista ? "pointer-events-none translate-y-full opacity-0" : "translate-y-0 opacity-100"
+          }`}
+        >
+          <div className="min-w-0 shrink-0">
+            {total === null ? (
+              <p className="font-display text-lg font-bold text-muted">{textoTotal}</p>
+            ) : (
+              <p className="font-display text-lg font-bold tabular-nums text-text">{fmtPrecio(total)}</p>
+            )}
+            {resumen?.mejor && (
+              <p className={`text-xs font-bold ${resumen.mejor.sinInteres ? "text-success" : "text-muted"}`}>
+                {TEXTOS_CUOTAS.linea(resumen.mejor.cuotas, resumen.mejor.montoCuota, resumen.mejor.sinInteres)}
+              </p>
+            )}
           </div>
-          <div className="min-w-0 flex-1">{botonCompra}</div>
+          <div className="min-w-0 flex-1">
+            {botonCompra(
+              lineasConProblema === 1 ? "Revise 1 producto" : `Revise ${lineasConProblema} productos`,
+            )}
+          </div>
         </div>
       </main>
+      {/* Mobile: sobre la barra fija, salvo que se haya retirado por el resumen. */}
+      {avisoQuitado(!resumenALaVista)}
     </>
   );
 }

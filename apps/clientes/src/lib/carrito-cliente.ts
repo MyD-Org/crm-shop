@@ -198,6 +198,26 @@ export function agregar(
   return { items: [...items, { ...nuevo, qty: Math.min(cant, QTY_MAX) }], avisos };
 }
 
+/**
+ * Vuelve a poner una línea que se acaba de quitar ("Deshacer"), en su posición
+ * original y con su cantidad. Idempotente: si la línea ya está (un segundo
+ * clic, u otra pestaña que la volvió a agregar), no suma nada. Por eso no usa
+ * `agregar`, que acumula.
+ */
+export function restaurar(
+  items: CartItem[],
+  item: CartItem,
+  indice: number,
+): { items: CartItem[]; avisos: AvisoCarrito[] } {
+  if (items.some((i) => i.id === item.id)) return { items, avisos: [] };
+  if (items.length >= MAX_LINEAS) return { items, avisos: ["lineas"] };
+  const cant = Math.floor(item.qty);
+  if (!(cant > 0)) return { items, avisos: [] };
+  const pos = Math.max(0, Math.min(Math.floor(indice), items.length));
+  const linea = { ...item, qty: Math.min(cant, QTY_MAX) };
+  return { items: [...items.slice(0, pos), linea, ...items.slice(pos)], avisos: [] };
+}
+
 /** Varias altas como UNA sola actualización (p. ej. "Repetir pedido"). */
 export function agregarVarios(
   items: CartItem[],

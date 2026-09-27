@@ -87,13 +87,23 @@ export function anuncioResultados(
 }
 
 /**
- * Etiqueta de stock cuando quedan pocas unidades y se sabe cuántas. En el
- * resto de los casos `undefined`: el DS pone "En stock" / "Últimas
- * unidades" / "Sin stock".
+ * Etiqueta de stock cuando quedan pocas unidades y se sabe cuántas: "Quedan
+ * 3", un dato y no una alarma. En el resto de los casos `undefined`: el DS
+ * pone "Últimas unidades" / "Sin stock" (las cards ya no muestran "En
+ * stock": ver `mostrarStockEnCard`).
  */
 export function etiquetaStock(p: Pick<Product, "stock" | "stockQty">): string | undefined {
   const n = unidadesPositivas(p);
-  return p.stock === "low" && n != null ? `¡Últimas ${n}!` : undefined;
+  if (p.stock !== "low" || n == null) return undefined;
+  return n === 1 ? "Queda 1" : `Quedan ${miles.format(n)}`;
+}
+
+/**
+ * ¿La card muestra el estado de stock? Sólo cuando es una excepción (pocas
+ * unidades o sin stock): "En stock" en cada card de la grilla es ruido.
+ */
+export function mostrarStockEnCard(p: Pick<Product, "stock">): boolean {
+  return p.stock !== "in";
 }
 
 /**

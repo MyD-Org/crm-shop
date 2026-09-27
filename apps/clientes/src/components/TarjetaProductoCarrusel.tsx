@@ -7,7 +7,8 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
-import { formatNombreProducto } from "@/lib/formato-nombre";
+import { etiquetaStock, mostrarStockEnCard } from "@/lib/catalogo-vista";
+import { nombreParaCard } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
@@ -44,7 +45,7 @@ export function TarjetaProductoCarrusel({
   const p = conPrecioCuenta(producto, usePreciosCuenta([producto.id]).get(producto.id));
   const fotoReal = p.images?.[0];
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
-  const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
+  const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, p.brand ? formatMarca(p.brand) : undefined);
   return (
     <Link
       href={`/producto/${p.id}`}
@@ -55,6 +56,9 @@ export function TarjetaProductoCarrusel({
         className="h-full overflow-hidden"
         name={nombreParaMostrar}
         brand={p.brand}
+        stock={p.stock}
+        stockLabel={etiquetaStock(p)}
+        showStock={mostrarStockEnCard(p)}
         price={p.precioFinal ?? p.price}
         oldPrice={p.oldPrice}
         badge={badgeProducto(p)}
@@ -81,7 +85,8 @@ export function TarjetaProductoCarrusel({
             <LightbulbIcon className="h-20 w-20 text-muted/30" />
           )
         }
-        priceNote={p.sku ? `Cód. ${p.sku}` : undefined}
+        // Si el nombre ya es el código, la nota lo repetiría.
+        priceNote={p.sku && !esCodigo ? `Cód. ${p.sku}` : undefined}
         actionPlacement="below"
         action={
           <AddToCartButton

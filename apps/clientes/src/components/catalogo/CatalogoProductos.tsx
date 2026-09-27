@@ -7,8 +7,8 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import type { Product } from "@/data/products";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
-import { etiquetaStock, maxCantidad } from "@/lib/catalogo-vista";
-import { formatNombreProducto } from "@/lib/formato-nombre";
+import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
+import { nombreParaCard } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 import { badgeProducto } from "@/components/badge-producto";
@@ -48,7 +48,7 @@ export function CatalogoProductos({
     >
       {productos.map((p) => {
         // Sólo para mostrar: `p.name` (buscar, ordenar, carrito) no se toca.
-        const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
+        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, p.brand ? formatMarca(p.brand) : undefined);
         return (
         <ProductCard
           key={p.id}
@@ -59,9 +59,11 @@ export function CatalogoProductos({
           renderLink={linkNext}
           brand={p.brand}
           name={nombreParaMostrar}
-          code={p.sku}
+          // Si el nombre ya es el código, la línea "Cód." lo repetiría.
+          code={esCodigo ? undefined : p.sku}
           stock={p.stock}
           stockLabel={etiquetaStock(p)}
+          showStock={mostrarStockEnCard(p)}
           // Final con IVA si se conoce; si no, el de siempre.
           price={p.precioFinal ?? p.price}
           oldPrice={p.oldPrice}

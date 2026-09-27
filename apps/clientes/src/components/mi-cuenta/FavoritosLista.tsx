@@ -10,10 +10,10 @@ import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
-import { etiquetaStock, maxCantidad } from "@/lib/catalogo-vista";
+import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
-import { formatNombreProducto } from "@/lib/formato-nombre";
+import { nombreParaCard } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { BotonEnlace } from "./BotonEnlace";
@@ -53,7 +53,7 @@ export function FavoritosLista({
     <div className="flex flex-col gap-3">
       {visibles.map((p) => {
         // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
-        const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
+        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, p.brand ? formatMarca(p.brand) : undefined);
         return (
         <ProductCard
           key={p.id}
@@ -63,9 +63,10 @@ export function FavoritosLista({
           renderLink={linkNext}
           brand={p.brand}
           name={nombreParaMostrar}
-          code={p.sku}
+          code={esCodigo ? undefined : p.sku}
           stock={p.stock}
           stockLabel={etiquetaStock(p)}
+          showStock={mostrarStockEnCard(p)}
           // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
           price={p.precioFinal ?? p.price}
           oldPrice={p.oldPrice}

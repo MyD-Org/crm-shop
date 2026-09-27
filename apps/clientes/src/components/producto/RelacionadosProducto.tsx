@@ -8,44 +8,48 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 const CANTIDAD = 8;
 
 /**
- * "Más de <categoría>" al pie de la ficha. Va en su propio Suspense: si tarda
+ * "Productos similares" al pie de la ficha (misma categoría, ver
+ * `relacionadosProducto`). Va en su propio Suspense: si tarda
  * o falla, la ficha ya se ve y esta sección simplemente no aparece.
  */
 export async function RelacionadosProducto({
+  categoriaPropiaId,
   categoria,
   productoId,
   soloVisibles,
   oferta,
 }: {
-  categoria: string;
+  categoriaPropiaId?: string;
+  categoria?: string;
   productoId: string;
   soloVisibles: boolean;
   oferta: OfertaCuotas | null;
 }) {
-  const productos = await relacionadosProducto({
+  const relacionados = await relacionadosProducto({
+    categoriaPropiaId,
     categoria,
     excluirId: productoId,
     cantidad: CANTIDAD,
     soloVisibles,
   });
-  if (productos.length === 0) return null;
+  if (!relacionados || relacionados.productos.length === 0) return null;
 
-  const rubro = formatRubro(categoria);
+  const rubro = formatRubro(relacionados.categoria);
   return (
     <section aria-labelledby="relacionados-titulo" className="mt-16">
       <div className="mb-5 flex items-baseline justify-between gap-4">
         <h2 id="relacionados-titulo" className="font-display text-xl font-semibold text-text">
-          Más de {rubro}
+          Productos similares
         </h2>
         <Link
-          href={`/catalogo?categoria=${encodeURIComponent(categoria)}`}
+          href={`/catalogo?categoria=${encodeURIComponent(relacionados.categoria)}`}
           className="shrink-0 text-sm font-semibold text-accent transition-colors hover:text-primary"
         >
-          Ver todo
+          Ver todo en {rubro}
         </Link>
       </div>
-      <ProductosCarrusel label={`Más de ${rubro}`}>
-        {productos.map((p) => (
+      <ProductosCarrusel label={`Productos similares de ${rubro}`}>
+        {relacionados.productos.map((p) => (
           <TarjetaProductoCarrusel key={p.id} producto={p} oferta={oferta} />
         ))}
       </ProductosCarrusel>

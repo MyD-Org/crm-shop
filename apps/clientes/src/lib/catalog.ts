@@ -85,6 +85,8 @@ interface FilaCatalogo {
   /** numeric de Postgres: llega como string. null = sin IVA conocido. */
   ivaPorcentaje: string | null;
   categoryName: string | null;
+  /** Categoría asignada en el admin. Opcional por los fixtures de test (como `overlayFichaTecnica`). */
+  overlayCategoriaId?: string | null;
   /** Nombre curado en el CRM. null = sin fila de overlay o sin nombre. */
   overlayNombre: string | null;
   /** Fotos del overlay, con la key de R2. null = sin fila de overlay (left join). */
@@ -137,6 +139,7 @@ export function mapFilaToProduct(
     // mostrar: repetiría el título.
     description: descripcionExhibida(fila),
     category: fila.categoryName || undefined,
+    categoriaPropiaId: fila.overlayCategoriaId ?? undefined,
     images: fotosPermitidas(urlsDeFotos(fila.overlayFotos, baseMedios), hostsMedios),
     fichaTecnicaUrl: urlDeFicha(fila.overlayFichaTecnica, baseMedios),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
@@ -227,6 +230,7 @@ const COLUMNAS_CATALOGO = {
   overlayNombre: crmOverlay.nombre,
   overlayFotos: crmOverlay.fotos,
   overlayFichaTecnica: crmOverlay.fichaTecnica,
+  overlayCategoriaId: crmOverlay.categoriaId,
 };
 
 /**
@@ -297,6 +301,52 @@ export async function getCatalogo(opts: {
 
   const filas = await query;
   return filas.map((f) => mapFilaToProduct(f, opts.idPriceList));
+}
+
+/**
+ * Productos de UNA categoría del admin, exacta (sin su subárbol), para los
+ * relacionados de la ficha: en un velador a batería, más veladores a batería y
+ * no todo "Iluminación". Solo con stock, en orden alfabético. null si la
+ * categoría no existe o está inactiva.
+ */
+export async function getCategoriaExacta(opts: {
+  categoriaId: string;
+  limit: number;
+  soloVisibles: boolean;
+}): Promise<{ nombre: string; productos: Product[] } | null> {
+  const [categoria] = await getDb()
+    .select({ nombre: crmCategorias.nombre })
+    .from(crmCategorias)
+    .where(
+      and(
+        eq(crmCategorias.id, opts.categoriaId),
+        eq(crmCategorias.tenantId, shopTenantId()),
+        eq(crmCategorias.activa, true),
+      ),
+    )
+    .limit(1);
+  if (!categoria) return null;
+
+  const filas = await getDb()
+    .select(COLUMNAS_CATALOGO)
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(stockReservado, joinReserva())
+    .where(
+      and(
+        enTenantCatalogo(),
+        activoSql,
+        conPrecioSql,
+        soloVisiblesSql(opts.soloVisibles),
+        eq(crmOverlay.categoriaId, opts.categoriaId),
+        conStockSql,
+      ),
+    )
+    .orderBy(asc(crmCatalogo.name))
+    .limit(opts.limit);
+
+  return { nombre: categoria.nombre, productos: filas.map((f) => mapFilaToProduct(f)) };
 }
 
 /**

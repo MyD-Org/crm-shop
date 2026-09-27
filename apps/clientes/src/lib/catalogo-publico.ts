@@ -33,6 +33,7 @@ import type { Product } from "@/data/products";
 import { esIdAlegra } from "./alegra";
 import {
   getCatalogo,
+  getCategoriaExacta,
   getCategorias,
   getFacetas,
   getPaginaCatalogo,
@@ -192,20 +193,60 @@ async function primeraPaginaCategoria(categoria: string, soloVisibles: boolean):
   }
 }
 
+/** Tope de la caché por categoría exacta: alcanza para `cantidad` + el propio producto. */
+const TOPE_CATEGORIA_EXACTA = 24;
+
+async function categoriaExacta(
+  categoriaId: string,
+  soloVisibles: boolean,
+): Promise<{ nombre: string; productos: Product[] } | null> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  console.info("[cache] categoria-exacta miss");
+  try {
+    const r = await getCategoriaExacta({ categoriaId, limit: TOPE_CATEGORIA_EXACTA, soloVisibles });
+    cacheLife("catalogo");
+    return r;
+  } catch (err) {
+    console.error("[catalogo-publico] no se pudieron cargar los relacionados:", err);
+    cacheLife("degradado");
+    return null;
+  }
+}
+
+export interface Relacionados {
+  /** Nombre de la categoría (para el link "Ver todo en …"). */
+  categoria: string;
+  productos: Product[];
+}
+
 /**
- * "Más de <categoría>" en la ficha: la primera página de la categoría, sin el
- * producto que se está viendo ni los agotados. La caché es por categoría (no
- * por producto): todas las fichas de un rubro comparten la misma entrada. Si
- * la base falla, vacío y la sección no se dibuja.
+ * "Productos similares" en la ficha: los de la MISMA categoría que el producto,
+ * sin el que se está viendo ni los agotados.
+ *
+ * Con categoría asignada en el admin, es esa exacta (sin subcategorías): en un
+ * velador a batería, más veladores a batería. Sin ella, la categoría de Alegra
+ * como antes. La caché es por categoría (no por producto): todas las fichas de
+ * un rubro comparten la misma entrada. Si la base falla, vacío y la sección no
+ * se dibuja.
  */
 export async function relacionadosProducto(args: {
-  categoria: string;
+  categoriaPropiaId?: string;
+  categoria?: string;
   excluirId: string;
   cantidad: number;
   soloVisibles: boolean;
-}): Promise<Product[]> {
+}): Promise<Relacionados | null> {
+  const recortar = (productos: Product[]) =>
+    productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);
+
+  if (args.categoriaPropiaId) {
+    const exacta = await categoriaExacta(args.categoriaPropiaId, args.soloVisibles);
+    if (exacta) return { categoria: exacta.nombre, productos: recortar(exacta.productos) };
+  }
+  if (!args.categoria) return null;
   const productos = await primeraPaginaCategoria(args.categoria, args.soloVisibles);
-  return productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);
+  return { categoria: args.categoria, productos: recortar(productos) };
 }
 
 /**

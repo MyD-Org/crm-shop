@@ -48,6 +48,8 @@ export interface Product {
   description?: string;
   /** Categoria del item en Alegra (itemCategory.name). */
   category?: string;
+  /** Categoría asignada en el admin del CRM (la exacta, sin subárbol). undefined = sin clasificar. */
+  categoriaPropiaId?: string;
   /**
    * Fotos del overlay del CRM (portada = [0]), ya filtradas a los hosts de
    * medios permitidos (ver src/lib/catalogo-medios.ts). undefined = sin fotos.

@@ -57,9 +57,10 @@ export default async function ProductoPage({ params }: Props) {
         oferta={oferta}
         envio={envio}
         relacionados={
-          producto.category ? (
+          producto.categoriaPropiaId || producto.category ? (
             <Suspense fallback={null}>
               <RelacionadosProducto
+                categoriaPropiaId={producto.categoriaPropiaId}
                 categoria={producto.category}
                 productoId={producto.id}
                 soloVisibles={soloVisibles}

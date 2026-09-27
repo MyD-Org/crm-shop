@@ -750,6 +750,25 @@ export function CheckoutClient({
     pago: "Pago",
   };
 
+  // Los pasos van dentro de la primera card de cada paso, arriba del título:
+  // afuera quedaban flotando lejos del formulario que ordenan.
+  const cabeceraPasos = (
+    <div className="-mx-5 mb-5 border-b border-border/60 px-5 pb-5">
+      <Stepper
+        ariaLabel="Pasos del pedido"
+        size="sm"
+        steps={PASOS_CHECKOUT.map((p, i) => {
+          const actual = PASOS_CHECKOUT.indexOf(pasoActual);
+          return {
+            label: etiquetaPaso[p],
+            state: i < actual ? "done" : i === actual ? "current" : "pending",
+          };
+        })}
+        stateLabels={{ done: "completo", current: "paso actual", pending: "pendiente" }}
+      />
+    </div>
+  );
+
   /** Opciones de entrega: en su sección o dentro del paso del domicilio fiscal. */
   const bloqueEntrega = (
     <>
@@ -895,21 +914,7 @@ export function CheckoutClient({
 
       <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
         {/* ------------------------------------------------------ formulario */}
-        <div className="space-y-6">
-          <div ref={refPasos} className="scroll-mt-24 px-1">
-            <Stepper
-              ariaLabel="Pasos del pedido"
-              size="sm"
-              steps={PASOS_CHECKOUT.map((p, i) => {
-                const actual = PASOS_CHECKOUT.indexOf(pasoActual);
-                return {
-                  label: etiquetaPaso[p],
-                  state: i < actual ? "done" : i === actual ? "current" : "pending",
-                };
-              })}
-              stateLabels={{ done: "completo", current: "paso actual", pending: "pendiente" }}
-            />
-          </div>
+        <div ref={refPasos} className="scroll-mt-24 space-y-6">
 
           {/*
             Su documento ya es de un cliente de Alegra y no vinculó: se vincula
@@ -947,6 +952,7 @@ export function CheckoutClient({
 
           {seccionFacturacion && (pasoActual === "datos" || pasoActual === "entrega") && (
             <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+              {cabeceraPasos}
               <h2 className="font-display text-2xl font-medium text-text">
                 {pasoActual === "datos" ? "Datos de facturación" : "Domicilio y entrega"}
               </h2>
@@ -987,6 +993,7 @@ export function CheckoutClient({
           {/* Con la sección de facturación, nombre y teléfono se piden ahí. */}
           {!seccionFacturacion && pasoActual === "datos" && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            {cabeceraPasos}
             {/* Vinculado: los datos vienen de Alegra y no se editan desde la tienda. */}
             {facturacionCompleta && <ResumenFacturacion datos={facturacion.datos} />}
             <h2 className="mb-4 font-display text-2xl font-medium text-text">Datos de contacto</h2>
@@ -1019,6 +1026,7 @@ export function CheckoutClient({
 
           {!seccionFacturacion && pasoActual === "entrega" && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            {cabeceraPasos}
             <h2 className="mb-4 font-display text-2xl font-medium text-text">Entrega</h2>
             {bloqueEntrega}
             <NavPaso
@@ -1032,6 +1040,7 @@ export function CheckoutClient({
           <>
           {!pagosHabilitados && (
             <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+              {cabeceraPasos}
               <h2 className="mb-2 font-display text-2xl font-medium text-text">Pago</h2>
               <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
             </section>
@@ -1039,6 +1048,7 @@ export function CheckoutClient({
 
           {pagosHabilitados && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            {cabeceraPasos}
             <h2 className="mb-4 font-display text-2xl font-medium text-text">Forma de pago</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               {metodosPago.map((m) => (

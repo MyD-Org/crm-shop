@@ -67,20 +67,22 @@ export function CatalogoProductos({
           badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
           // El slot queda fuera del enlace estirado de la card: no navega.
           cornerAction={<BotonFavorito productId={p.id} />}
-          // Portada del overlay del CRM si hay una servible (host en
-          // SHOP_MEDIA_HOSTS); si no, el placeholder.
-          image={
-            p.images?.[0] ? (
-              <Image
-                src={p.images[0].url}
-                alt={p.images[0].alt ?? nombreParaMostrar}
-                fill
-                sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
-                className="object-contain p-4"
-              />
-            ) : (
-              <LightbulbIcon className="h-20 w-20 text-muted/30" />
-            )
+          // Fotos del overlay del CRM servibles (host en SHOP_MEDIA_HOSTS);
+          // si no hay ninguna, el placeholder. Con más de una, la card arma la
+          // galería y monta de la 2.ª en adelante recién al acercarse.
+          images={
+            p.images?.length
+              ? p.images.map((f, i) => (
+                  <Image
+                    key={f.url}
+                    src={f.url}
+                    alt={i === 0 ? (f.alt ?? nombreParaMostrar) : (f.alt ?? "")}
+                    fill
+                    sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
+                    className="object-contain p-4"
+                  />
+                ))
+              : [<LightbulbIcon key="sin-foto" className="h-20 w-20 text-muted/30" />]
           }
           // Siempre presente, aunque no haya cuotas: reserva la línea para que
           // el precio no baile entre cards de la misma fila.

@@ -193,6 +193,11 @@ function prefijoDe(key: string): string {
   return key.replace(/-\d+\.webp$/, "")
 }
 
+/** Cantidad de fotos lógicas: cada foto se guarda en varios anchos que comparten el prefijo. */
+export function contarFotos(fotos: Pick<FotoDto, "key">[]): number {
+  return new Set(fotos.map((f) => prefijoDe(f.key))).size
+}
+
 interface Grupo {
   prefijo: string
   miniatura: string | null

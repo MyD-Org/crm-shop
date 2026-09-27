@@ -38,14 +38,18 @@ export async function RelacionadosProducto({
   return (
     <section aria-labelledby="relacionados-titulo" className="mt-16">
       <div className="mb-5 flex items-baseline justify-between gap-4">
-        <h2 id="relacionados-titulo" className="font-display text-xl font-semibold text-text">
+        <h2 id="relacionados-titulo" className="shrink-0 font-display text-xl font-semibold text-text">
           Productos similares
         </h2>
+        {/* En mobile solo "Ver todo": con el nombre del rubro el link no
+            entraba y ensanchaba la página. Desde sm se recorta con "…". */}
         <Link
           href={`/catalogo?categoria=${encodeURIComponent(relacionados.categoria)}`}
-          className="shrink-0 text-sm font-semibold text-accent transition-colors hover:text-primary"
+          aria-label={`Ver todo en ${rubro}`}
+          title={`Ver todo en ${rubro}`}
+          className="min-w-0 truncate text-sm font-semibold text-accent transition-colors hover:text-primary"
         >
-          Ver todo en {rubro}
+          Ver todo<span className="max-sm:hidden"> en {rubro}</span>
         </Link>
       </div>
       <ProductosCarrusel label={`Productos similares de ${rubro}`}>

@@ -10,7 +10,7 @@ import { dbGrabadora, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fix
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { enArbolConConteo, getCategorias, getFacetas, getPaginaCatalogo } from "./catalog";
+import { enArbolConConteo, getCategorias, rutaEnArbol, getFacetas, getPaginaCatalogo } from "./catalog";
 
 const ILUMINACION = "11111111-1111-4111-8111-111111111111";
 const FOCOS = "22222222-2222-4222-8222-222222222222";
@@ -42,6 +42,25 @@ function conArbol() {
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   grabadora = dbGrabadora((c) => (c.sql.includes("count(*)") ? [[1]] : []));
+});
+
+describe("rutaEnArbol", () => {
+  const nodos = ARBOL.map(([id, parentId, nombre, orden]) => ({
+    id: id as string,
+    parentId: parentId as string | null,
+    nombre: nombre as string,
+    orden: orden as number,
+  }));
+
+  it("de la raíz a la categoría", () => {
+    expect(rutaEnArbol(nodos, FOCOS)).toEqual(["ILUMINACION", "Focos led"]);
+    expect(rutaEnArbol(nodos, ILUMINACION)).toEqual(["ILUMINACION"]);
+  });
+
+  it("vacía si la categoría no está o cuelga de una que no está (inactiva)", () => {
+    expect(rutaEnArbol(nodos, "no-existe")).toEqual([]);
+    expect(rutaEnArbol(nodos.filter((n) => n.id !== ILUMINACION), FOCOS)).toEqual([]);
+  });
 });
 
 describe("enArbolConConteo", () => {

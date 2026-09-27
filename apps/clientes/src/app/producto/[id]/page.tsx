@@ -1,7 +1,7 @@
 import { cache, Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { productoPublico } from "@/lib/catalogo-publico";
+import { productoPublico, rutaCategoriaPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
@@ -42,6 +42,8 @@ export default async function ProductoPage({ params }: Props) {
   ]);
 
   if (!producto) notFound();
+  // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
+  const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
 
   return (
     <>
@@ -56,6 +58,7 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         oferta={oferta}
         envio={envio}
+        rutaCategorias={rutaCategorias}
         relacionados={
           producto.categoriaPropiaId || producto.category ? (
             <Suspense fallback={null}>

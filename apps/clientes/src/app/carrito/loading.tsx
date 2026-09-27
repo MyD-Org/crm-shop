@@ -7,18 +7,18 @@ import { Skeleton } from "@myd-org/ui";
  */
 export default function CargandoCarrito() {
   return (
-    <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8" aria-busy>
-      <Skeleton className="mb-6 h-9 w-40" />
+    <main className="mx-auto w-full max-w-contenido flex-1 px-4 pb-16 pt-6 lg:pt-8" aria-busy>
+      <Skeleton className="mb-5 h-8 w-48 lg:mb-6" />
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-4">
-          <Skeleton className="h-28 w-full rounded-[20px]" />
-          <Skeleton className="h-28 w-full rounded-[20px]" />
-          <Skeleton className="h-28 w-full rounded-[20px]" />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-9">
+        <div className="space-y-4 rounded-[20px] border border-border bg-surface p-4 lg:p-6">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
         </div>
 
-        <div className="h-fit rounded-[24px] border border-border bg-surface p-6 lg:sticky lg:top-24">
-          <Skeleton className="mb-4 h-5 w-24" />
+        <div className="h-fit rounded-[20px] border border-border bg-surface p-5 lg:sticky lg:top-24 lg:p-6">
+          <Skeleton className="mb-4 h-5 w-40" />
           <div className="space-y-3">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-full" />

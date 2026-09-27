@@ -57,7 +57,7 @@ export function PedidoCard({ pedido, pagosHabilitados }: { pedido: Order; pagosH
         </p>
         <p className="text-sm text-text">
           <span className="text-base font-semibold">{fmtPrecio(pedido.total)}</span>{" "}
-          <span className="text-xs text-muted">IVA incl.</span>
+          <span className="text-xs text-muted">Impuestos incl.</span>
         </p>
       </div>
 

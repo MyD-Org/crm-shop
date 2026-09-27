@@ -63,7 +63,7 @@ export function PedidoDetalle({ pedido, pagosHabilitados }: { pedido: Order; pag
         </ul>
         <dl className="mt-4 flex flex-col gap-2 border-t border-border pt-4 text-sm">
           <Fila label="Subtotal" valor={fmtPrecio(pedido.subtotal)} />
-          <Fila label="IVA" valor={fmtPrecio(pedido.iva)} />
+          <Fila label="Impuestos" valor={fmtPrecio(pedido.iva)} />
           {pedido.costoEnvio > 0 && <Fila label="Envío" valor={fmtPrecio(pedido.costoEnvio)} />}
           <Fila label="Total" valor={fmtPrecio(pedido.total)} fuerte />
         </dl>

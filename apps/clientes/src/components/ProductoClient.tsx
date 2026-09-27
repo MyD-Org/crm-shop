@@ -8,6 +8,7 @@ import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { formatDescripcionProducto, formatNombreProducto } from "@/lib/formato-nombre";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
@@ -76,7 +77,7 @@ const LARGO_NOMBRE_EXTENSO = 32;
  * "no hay" no le sirve a nadie.
  */
 export function ProductoClient({
-  producto,
+  producto: productoLista,
   oferta = null,
   envio = false,
   relacionados = null,
@@ -92,6 +93,12 @@ export function ProductoClient({
   /** Categoría del admin con sus padres (raíz → hoja), para las migas. Vacío = la de Alegra. */
   rutaCategorias?: string[];
 }) {
+  // La ficha viene cacheada con la lista general; si el cliente tiene lista
+  // propia más barata, se pisa acá (precio, cuotas y el aviso de su cuenta).
+  const producto = conPrecioCuenta(
+    productoLista,
+    usePreciosCuenta([productoLista.id]).get(productoLista.id),
+  );
   const [qty, setQty] = useState(1);
   const { addItem } = useCart();
   // Confirmación en el mismo botón: agregar ya no abre el preview del header.
@@ -258,7 +265,11 @@ export function ProductoClient({
                   Precio no disponible. Consulte por WhatsApp o por teléfono.
                 </p>
               ) : (
-                <PrecioConImpuestos price={producto.price} precioFinal={producto.precioFinal} />
+                <PrecioConImpuestos
+                  price={producto.price}
+                  precioFinal={producto.precioFinal}
+                  precioLista={producto.precioEspecial ? producto.oldPrice : undefined}
+                />
               )}
               {!sinPrecio && mejorCuota && oferta && producto.precioFinal != null && (
                 <div className="mt-3">

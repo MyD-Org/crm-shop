@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Badge, ProductCard, cn } from "@myd-org/ui";
+import { ProductCard, cn } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
@@ -11,6 +11,7 @@ import { etiquetaStock, maxCantidad } from "@/lib/catalogo-vista";
 import { formatNombreProducto } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
+import { badgeProducto } from "@/components/badge-producto";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";
 
@@ -64,7 +65,7 @@ export function CatalogoProductos({
           // Final con IVA si se conoce; si no, el de siempre.
           price={p.precioFinal ?? p.price}
           oldPrice={p.oldPrice}
-          badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
+          badge={badgeProducto(p)}
           // El slot queda fuera del enlace estirado de la card: no navega.
           cornerAction={<BotonFavorito productId={p.id} />}
           // Fotos del overlay del CRM servibles (host en SHOP_MEDIA_HOSTS);

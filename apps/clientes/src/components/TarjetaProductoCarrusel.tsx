@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
-import { Badge, ProductCard } from "@myd-org/ui";
+import { ProductCard } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
@@ -9,6 +11,8 @@ import { formatNombreProducto } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
+import { badgeProducto } from "@/components/badge-producto";
+import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -28,7 +32,7 @@ function LightbulbIcon({ className }: { className?: string }) {
  * decorativa que pase el que llama > el ícono de siempre.
  */
 export function TarjetaProductoCarrusel({
-  producto: p,
+  producto,
   oferta,
   imagenDecorativa,
 }: {
@@ -36,6 +40,8 @@ export function TarjetaProductoCarrusel({
   oferta: OfertaCuotas | null;
   imagenDecorativa?: string;
 }) {
+  // Precio especial de la cuenta: todas las tarjetas se piden en una sola tanda.
+  const p = conPrecioCuenta(producto, usePreciosCuenta([producto.id]).get(producto.id));
   const fotoReal = p.images?.[0];
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
   const nombreParaMostrar = formatNombreProducto(p.name, p.brand ? formatMarca(p.brand) : undefined);
@@ -51,7 +57,7 @@ export function TarjetaProductoCarrusel({
         brand={p.brand}
         price={p.precioFinal ?? p.price}
         oldPrice={p.oldPrice}
-        badge={p.badgeText ? <Badge tone={p.badgeTone}>{p.badgeText}</Badge> : undefined}
+        badge={badgeProducto(p)}
         // La card entera es un <Link>: el corazón corta la navegación.
         cornerAction={<BotonFavorito productId={p.id} dentroDeLink />}
         image={

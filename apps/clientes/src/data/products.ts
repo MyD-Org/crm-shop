@@ -63,6 +63,8 @@ export interface Product {
    */
   especificaciones?: EspecificacionProducto[];
   oldPrice?: number;
+  /** Precio de la lista propia del cliente (ver `conPrecioCuenta`). */
+  precioEspecial?: boolean;
   discount?: string;
   badgeTone?: "danger" | "info" | "warning" | "neutral";
   badgeText?: string;

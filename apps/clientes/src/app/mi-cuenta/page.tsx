@@ -36,7 +36,7 @@ export default async function MiCuentaPage() {
     listarPedidos(dueno, 3),
     resumenPedidos(dueno),
     conFavoritos && clerkUserId
-      ? listarFavoritos(clerkUserId, { limite: 4, idPriceList: cliente?.idPriceList })
+      ? listarFavoritos(clerkUserId, { limite: 4 })
       : [],
     // Si la lectura falla, el resumen se muestra igual, sin el aviso.
     conAvisos && cliente ? contarNoLeidos(cliente.codigocliente).catch(() => 0) : 0,

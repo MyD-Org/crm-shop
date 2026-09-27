@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
 import { fmtMonto } from "@/lib/cuotas-textos";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
+import { STOCK_INCLUYE_SIN_STOCK } from "@/lib/catalogo-url";
 
 function SearchIcon() {
   return (
@@ -79,7 +80,9 @@ export function SearchAutocomplete() {
   const submit = () => {
     if (!query.trim()) return;
     setOpen(false);
-    router.push(`/catalogo?q=${encodeURIComponent(query.trim())}`);
+    // Con todos los productos, no solo los con stock: las sugerencias incluyen
+    // los sin stock y la búsqueda tiene que mostrar lo mismo.
+    router.push(`/catalogo?q=${encodeURIComponent(query.trim())}&stock=${STOCK_INCLUYE_SIN_STOCK}`);
   };
 
   const showDropdown = open && debouncedQuery.trim().length > 0;

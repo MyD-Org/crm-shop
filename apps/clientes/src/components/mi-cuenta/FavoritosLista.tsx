@@ -8,6 +8,8 @@ import { CuotasCard } from "@/components/CuotasCard";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
+import { badgeProducto } from "@/components/badge-producto";
+import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { etiquetaStock, maxCantidad } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
@@ -32,7 +34,10 @@ export function FavoritosLista({
   oferta: OfertaCuotas | null;
 }) {
   const { ready, esFavorito } = useFavoritos();
-  const visibles = visiblesEnLista(productos, ready, esFavorito);
+  const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));
+  const visibles = visiblesEnLista(productos, ready, esFavorito).map((p) =>
+    conPrecioCuenta(p, preciosCuenta.get(p.id)),
+  );
 
   // Quitó el último desde esta misma página.
   if (visibles.length === 0) {
@@ -64,6 +69,7 @@ export function FavoritosLista({
           // Final con IVA si se conoce; si no, el de siempre (igual que el catálogo).
           price={p.precioFinal ?? p.price}
           oldPrice={p.oldPrice}
+          badge={badgeProducto(p)}
           image={
             p.images?.[0] ? (
               <Image

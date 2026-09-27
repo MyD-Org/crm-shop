@@ -31,7 +31,7 @@ export default async function FavoritosPage() {
   }
 
   const [productos, oferta] = await Promise.all([
-    listarFavoritos(clerkUserId, { idPriceList: cliente?.idPriceList }),
+    listarFavoritos(clerkUserId),
     getOfertaCuotasSinCache(),
   ]);
 

@@ -11,6 +11,7 @@ import { CatalogoFiltrosSheet } from "@/components/catalogo/CatalogoFiltrosSheet
 import { CatalogoProductos } from "@/components/catalogo/CatalogoProductos";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
+import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import type { Facetas } from "@/lib/catalog";
 import { estadoConCambios, hrefCatalogo, hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, limpiarFiltros } from "@/lib/catalogo-vista";
@@ -86,16 +87,23 @@ export function CatalogoClient({
       router.push(hrefCatalogo(siguiente));
     });
 
+  // Precio especial de la cuenta, si el cliente tiene lista propia más barata.
+  const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));
+  const productosCuenta = useMemo(
+    () => productos.map((p) => conPrecioCuenta(p, preciosCuenta.get(p.id))),
+    [productos, preciosCuenta],
+  );
+
   // Mejor opción de cuotas por producto, sobre su precio final unitario.
   const cuotasPorProducto = useMemo(() => {
     const m = new Map<string, OpcionCuotas>();
     if (!oferta) return m;
-    for (const p of productos) {
+    for (const p of productosCuenta) {
       const mejor = mejorOpcionPara(p.precioFinal, oferta);
       if (mejor) m.set(p.id, mejor);
     }
     return m;
-  }, [productos, oferta]);
+  }, [productosCuenta, oferta]);
 
   const conFiltros = hayFiltros(estado);
 
@@ -177,7 +185,7 @@ export function CatalogoClient({
             )
           ) : (
             <CatalogoProductos
-              productos={productos}
+              productos={productosCuenta}
               vista={estadoVisible.vista}
               navegando={navegando}
               cuotasPorProducto={cuotasPorProducto}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { RefreshCw, ShoppingBag } from "lucide-react"
@@ -80,6 +80,8 @@ function leerVistaGuardada(): Vista {
   }
 }
 
+const sinSuscripcion = () => () => {}
+
 function guardarVista(v: Vista) {
   try {
     localStorage.setItem(VISTA_KEY, v)
@@ -90,9 +92,11 @@ function guardarVista(v: Vista) {
 
 export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
   const router = useRouter()
-  const [vista, setVista] = useState<Vista>("lista")
-  // La vista guardada se lee recién al montar (evita mismatch de hidratación server/cliente).
-  useEffect(() => setVista(leerVistaGuardada()), [])
+  // La vista guardada se lee del lado del cliente; en el server (y al hidratar) vale "lista",
+  // así no hay mismatch. La elección de esta sesión pisa a la guardada.
+  const vistaGuardada = useSyncExternalStore(sinSuscripcion, leerVistaGuardada, () => "lista" as Vista)
+  const [vistaElegida, setVista] = useState<Vista | null>(null)
+  const vista = vistaElegida ?? vistaGuardada
 
   const [filtro, setFiltro] = useState<FiltroEstado>(FILTRO_TODOS)
   const [entrega, setEntrega] = useState<FiltroEntrega>(FILTRO_ENTREGA_TODOS)

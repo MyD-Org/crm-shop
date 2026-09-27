@@ -241,7 +241,7 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
         {/* Acciones: sticky en desktop, primero en mobile (ver order-* arriba). */}
         <aside className="order-1 flex flex-col gap-4 lg:sticky lg:top-4 lg:order-2">
           <Card title="Estado" className="p-4">
-            <EstadoAcciones pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+            <EstadoAcciones key={pedido.estado} pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
           </Card>
 
           <Card title="Pago" className="p-4">
@@ -323,8 +323,8 @@ function EstadoAcciones({
   onConflicto: () => void
 }) {
   const entregaTipo: EntregaTipo = pedido.entrega.tipo === "retiro" ? "retiro" : "envio"
+  // `key={pedido.estado}` en el padre reinicia este estado al cambiar de estado.
   const [otro, setOtro] = useState("")
-  useEffect(() => setOtro(""), [pedido.estado])
 
   const {
     intencion,

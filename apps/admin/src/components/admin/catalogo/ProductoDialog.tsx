@@ -10,11 +10,13 @@ import {
   fmtFechaHora,
   precioDeLista,
   type CategoriaDto,
+  type FichaDto,
   type ProductoDto,
   type Sincronizacion,
   type TagDto,
 } from "./tipos"
 import { FotosProducto } from "./FotosProducto"
+import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 
 interface Props {
   producto: ProductoDto
@@ -48,9 +50,11 @@ export function ProductoDialog({ producto, categorias, tags, sincronizacion, onC
   const [categoriaId, setCategoriaId] = useState(producto.categoriaId ?? SIN_CATEGORIA)
   const [tagIds, setTagIds] = useState<string[]>(producto.tagIds)
   const [visible, setVisible] = useState(producto.visible)
-  // Las fotos se guardan APARTE del resto de la ficha: cada cambio se persiste solo, porque la
-  // subida ya ocurrió y perderla al cancelar el diálogo dejaría objetos huérfanos en R2.
+  // Las fotos y la ficha técnica se guardan APARTE del resto de la ficha: cada cambio se
+  // persiste solo, porque la subida ya ocurrió y perderla al cancelar el diálogo dejaría
+  // objetos huérfanos en R2.
   const [fotos, setFotos] = useState(producto.fotos)
+  const [fichaTecnica, setFichaTecnica] = useState<FichaDto | null>(producto.fichaTecnica)
   const [nuevoTag, setNuevoTag] = useState("")
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState("")
@@ -244,6 +248,8 @@ export function ProductoDialog({ producto, categorias, tags, sincronizacion, onC
         </div>
 
         <FotosProducto alegraId={producto.alegraId} fotos={fotos} onCambio={setFotos} />
+
+        <FichaTecnicaProducto alegraId={producto.alegraId} ficha={fichaTecnica} onCambio={setFichaTecnica} />
       </div>
     </Dialog>
   )

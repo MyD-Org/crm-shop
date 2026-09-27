@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { basePublicaFotos, esAnchoValido, fotoKey, shopMediaConfig, urlPublicaFoto } from "./shop-media"
+import { basePublicaFotos, esAnchoValido, fichaKey, fotoKey, shopMediaConfig, urlPublicaFoto } from "./shop-media"
 
 const ID = "0123456789ab4cde8f0123456789abcd"
 const UUID = `${ID.slice(0, 8)}-${ID.slice(8, 12)}-${ID.slice(12, 16)}-${ID.slice(16, 20)}-${ID.slice(20)}`
@@ -70,5 +70,17 @@ describe("esAnchoValido", () => {
   it("sólo acepta los anchos que el panel genera", () => {
     expect([320, 800, 1600].every(esAnchoValido)).toBe(true)
     expect(esAnchoValido(640)).toBe(false)
+  })
+})
+
+describe("fichaKey", () => {
+  it("arma la key con el tenant, el producto y el id", () => {
+    expect(fichaKey("central-led", "9001", UUID)).toBe(`productos/central-led/9001/ficha-${UUID}.pdf`)
+  })
+
+  it("rechaza partes que romperían el layout de keys", () => {
+    expect(() => fichaKey("../otro", "9001", UUID)).toThrow()
+    expect(() => fichaKey("t", "../9001", UUID)).toThrow()
+    expect(() => fichaKey("t", "9001", "no-es-uuid")).toThrow()
   })
 })

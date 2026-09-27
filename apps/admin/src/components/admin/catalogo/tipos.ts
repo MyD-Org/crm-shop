@@ -23,6 +23,14 @@ export interface FotoDto {
   alt?: string
 }
 
+/** Ficha técnica (PDF) de un producto, con la url ya compuesta. null = sin ficha cargada. */
+export interface FichaDto {
+  key: string
+  url: string | null
+  nombre: string
+  bytes: number
+}
+
 export interface ProductoDto {
   alegraId: string
   code: string | null
@@ -42,6 +50,7 @@ export interface ProductoDto {
   orden: number | null
   tagIds: string[]
   fotos: FotoDto[]
+  fichaTecnica: FichaDto | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
 }
@@ -183,4 +192,12 @@ export function stockDe(stock: string | null): { texto: string; hay: boolean } |
   const n = Number(stock)
   if (!Number.isFinite(n)) return null
   return { texto: n.toLocaleString("es-AR", { maximumFractionDigits: 2 }), hay: n > 0 }
+}
+
+/** "1,3 MB" o "480 KB": el tamaño de un archivo, para mostrar junto a su nombre. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toLocaleString("es-AR", { maximumFractionDigits: 0 })} KB`
+  return `${(kb / 1024).toLocaleString("es-AR", { maximumFractionDigits: 1 })} MB`
 }

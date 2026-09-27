@@ -6,8 +6,8 @@ import {
   type OrdenListado,
   type Seleccion,
 } from "@/lib/catalogo-overlay-repo"
-import type { FotoOverlay } from "@/db/schema"
-import { basePublicaFotos } from "./shop-media"
+import type { FichaTecnicaOverlay, FotoOverlay } from "@/db/schema"
+import { basePublicaFotos, urlPublicaFoto } from "./shop-media"
 
 // Piezas compartidas por /api/admin/catalogo/*: respuestas, parseo de la query del listado y el
 // aviso al Shop. Todos los textos van en español formal de usted — los `{error}` de acá se
@@ -167,4 +167,18 @@ export function conUrlDeFotos<T extends { fotos: FotoOverlay[] }>(
   base: string | null = basePublicaFotos(),
 ): Omit<T, "fotos"> & { fotos: (FotoOverlay & { url: string | null })[] } {
   return { ...p, fotos: p.fotos.map((f) => ({ ...f, url: base ? `${base}/${f.key}` : null })) }
+}
+
+/**
+ * Agrega a la ficha técnica su `url` pública, componiéndola desde la key. Mismo criterio que
+ * `conUrlDeFotos`: sin bucket configurado, o sin ficha cargada, viaja `null`.
+ */
+export function conUrlDeFicha<T extends { fichaTecnica: FichaTecnicaOverlay | null }>(
+  p: T,
+  base: string | null = basePublicaFotos(),
+): Omit<T, "fichaTecnica"> & { fichaTecnica: (FichaTecnicaOverlay & { url: string | null }) | null } {
+  return {
+    ...p,
+    fichaTecnica: p.fichaTecnica ? { ...p.fichaTecnica, url: urlPublicaFoto(p.fichaTecnica.key, base) } : null,
+  }
 }

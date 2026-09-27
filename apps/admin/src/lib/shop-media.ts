@@ -98,6 +98,20 @@ export function fotoKey(tenantId: string, alegraId: string, id: string, ancho: n
 }
 
 /**
+ * Key de la ficha técnica de un producto: `productos/{tenant}/{alegraId}/ficha-{uuid}.pdf`.
+ *
+ * Prefijo `productos/{tenant}/{alegraId}/` compartido con las fotos: es lo que ata el archivo a
+ * ESTE producto y lo que valida la ruta antes de persistir la key que mandó el navegador. El uuid
+ * (no el nombre original) evita que dos cargas sucesivas con el mismo nombre de archivo choquen.
+ */
+export function fichaKey(tenantId: string, alegraId: string, id: string): string {
+  if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`)
+  if (!ALEGRA_ID_RE.test(alegraId)) throw new Error(`alegraId inválido para key de R2: ${JSON.stringify(alegraId)}`)
+  if (!UUID_RE.test(id)) throw new Error(`id inválido para key de R2: ${JSON.stringify(id)}`)
+  return `productos/${tenantId}/${alegraId}/ficha-${id}.pdf`
+}
+
+/**
  * URL pública de una foto, compuesta al LEER.
  *
  * En la base se guarda la key, nunca la URL: hoy la base pública es un `pub-*.r2.dev` que Cloudflare

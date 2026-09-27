@@ -19,6 +19,7 @@ import {
   validarMovimiento,
   validarTag,
   type CategoriaValida,
+  type FichaTecnicaOverlay,
   type FotoOverlay,
   type MotivoNoPublicado,
   type NodoCategoria,
@@ -454,6 +455,7 @@ export interface CamposOverlay {
   categoriaId?: string | null
   orden?: number | null
   fotos?: FotoOverlay[]
+  fichaTecnica?: FichaTecnicaOverlay | null
 }
 
 /**
@@ -475,6 +477,7 @@ export async function guardarOverlay(
   if (campos.categoriaId !== undefined) set.categoriaId = campos.categoriaId
   if (campos.orden !== undefined) set.orden = campos.orden
   if (campos.fotos !== undefined) set.fotos = campos.fotos
+  if (campos.fichaTecnica !== undefined) set.fichaTecnica = campos.fichaTecnica
 
   const [row] = await ejecutor
     .insert(catalogOverlay)
@@ -823,6 +826,7 @@ export interface ProductoAdmin {
   orden: number | null
   tagIds: string[]
   fotos: FotoOverlay[]
+  fichaTecnica: FichaTecnicaOverlay | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
 }
@@ -848,6 +852,7 @@ interface FilaListadoCruda {
   categoria_nombre: string | null
   orden: number | null
   fotos: FotoOverlay[] | null
+  ficha_tecnica: FichaTecnicaOverlay | null
   updated_at: Date | string | null
   nombre_efectivo: string
   sku: string
@@ -879,6 +884,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     orden: f.orden,
     tagIds: f.tag_ids ?? [],
     fotos: f.fotos ?? [],
+    fichaTecnica: f.ficha_tecnica ?? null,
     actualizadoEn: iso(f.updated_at),
     // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
     motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
@@ -888,7 +894,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
 /** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
 const columnasListado = sql`
   p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
-  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.updated_at,
+  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.updated_at,
   c.nombre AS categoria_nombre,
   ${nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)} AS nombre_efectivo,
   ${skuEfectivoSql(sql`p.code`, sql`p.name`)} AS sku,

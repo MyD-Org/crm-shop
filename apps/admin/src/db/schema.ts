@@ -550,6 +550,17 @@ export interface FotoOverlay {
   alt?: string
 }
 
+/**
+ * La ficha técnica (PDF) de un producto, o null si no tiene. Igual que las fotos: se guarda la
+ * KEY del objeto en R2, nunca la URL (la url se compone al leer, en `urlPublicaFicha()`).
+ * `nombre` es el nombre del archivo original (para el link de descarga) y `bytes` su tamaño.
+ */
+export interface FichaTecnicaOverlay {
+  key: string
+  nombre: string
+  bytes: number
+}
+
 // Overlay comercial, ESPARSO: sólo hay fila para los productos que alguien tocó. La ausencia
 // de fila equivale a todos los defaults (visible=false, sin nombre, sin categoría, sin fotos).
 export const catalogOverlay = pgTable(
@@ -565,6 +576,9 @@ export const catalogOverlay = pgTable(
     categoriaId: uuid("categoria_id").references(() => shopCategories.id, { onDelete: "set null" }),
     orden: integer("orden"), // null = sin destacar (NULLS LAST en la vidriera)
     fotos: jsonb("fotos").$type<FotoOverlay[]>().notNull().default([]),
+    // Ficha técnica (PDF), opcional. A diferencia de `fotos` (array de variantes) es un solo
+    // archivo: null = sin ficha cargada.
+    fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaOverlay | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Insumo del delta hacia el Shop: lo setea el repo con now() de Postgres en CADA escritura.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

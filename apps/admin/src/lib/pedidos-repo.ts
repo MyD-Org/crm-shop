@@ -720,6 +720,9 @@ export interface PedidoListaDto {
   motivoRevision: string | null
   /** Pago a revisar (lo marca el Shop): cobrado dos veces, o cobrado estando cancelado. */
   pagoRevision: PagoRevision | null
+  /** Si el pedido tiene una factura de Alegra vinculada. La bandera "Sin factura" de la lista y
+   *  el tablero es `estado === "entregado" && !facturado` (misma regla que la cola `sin_factura`). */
+  facturado: boolean
 }
 
 export interface PedidoItemDto {
@@ -793,6 +796,7 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
     requiereRevision: row.requiereRevision,
     motivoRevision: row.motivoRevision,
     pagoRevision: esPagoRevision(row.pagoRevision) ? row.pagoRevision : null,
+    facturado: !!row.facturaAlegraId,
   }
 }
 

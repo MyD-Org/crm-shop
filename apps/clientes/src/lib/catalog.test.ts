@@ -145,4 +145,20 @@ describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
     const p = mapFilaToProduct({ ...base, overlayFotos: [{ key: "t1/sola-320.webp", w: 320 }] }, undefined, [HOST], BASE);
     expect(p.images).toEqual([{ url: `${BASE}/t1/sola-320.webp`, w: 320 }]);
   });
+
+  it("sin ficha técnica en el overlay, fichaTecnicaUrl es undefined", () => {
+    expect(mapFilaToProduct({ ...base, overlayFichaTecnica: null }, undefined, [HOST], BASE).fichaTecnicaUrl).toBeUndefined();
+  });
+
+  it("con ficha técnica y base pública configurada, compone la url con la key", () => {
+    const ficha = { key: "productos/t1/7/ficha-abc.pdf", nombre: "ficha.pdf", bytes: 1024 };
+    const p = mapFilaToProduct({ ...base, overlayFichaTecnica: ficha }, undefined, [HOST], BASE);
+    expect(p.fichaTecnicaUrl).toBe(`${BASE}/productos/t1/7/ficha-abc.pdf`);
+  });
+
+  it("con ficha técnica pero sin base pública configurada, fichaTecnicaUrl es undefined", () => {
+    const ficha = { key: "productos/t1/7/ficha-abc.pdf", nombre: "ficha.pdf", bytes: 1024 };
+    const p = mapFilaToProduct({ ...base, overlayFichaTecnica: ficha }, undefined, [HOST], null);
+    expect(p.fichaTecnicaUrl).toBeUndefined();
+  });
 });

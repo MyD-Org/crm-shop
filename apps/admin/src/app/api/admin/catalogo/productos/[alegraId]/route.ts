@@ -1,5 +1,5 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { avisarShop, conUrlDeFotos, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
+import { avisarShop, conUrlDeFicha, conUrlDeFotos, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
 import { validarCamposOverlay } from "@/lib/catalogo-overlay"
 import {
   asignarTagsProducto,
@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: Params) {
   const { alegraId } = await params
   const producto = await detalleProducto(guard.tenantId, alegraId)
   if (!producto) return adminNotFoundResponse()
-  return Response.json({ producto: conUrlDeFotos(producto) }, { headers: NO_STORE })
+  return Response.json({ producto: conUrlDeFicha(conUrlDeFotos(producto)) }, { headers: NO_STORE })
 }
 
 export async function PATCH(req: Request, { params }: Params) {

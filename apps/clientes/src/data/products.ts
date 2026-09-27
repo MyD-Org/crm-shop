@@ -47,6 +47,8 @@ export interface Product {
    * medios permitidos (ver src/lib/catalogo-medios.ts). undefined = sin fotos.
    */
   images?: ProductImage[];
+  /** Ficha técnica (PDF) del overlay del CRM, ya compuesta. undefined = sin ficha. */
+  fichaTecnicaUrl?: string;
   oldPrice?: number;
   discount?: string;
   badgeTone?: "danger" | "info" | "warning" | "neutral";

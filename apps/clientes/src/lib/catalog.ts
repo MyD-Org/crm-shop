@@ -34,7 +34,14 @@ import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
-import { crmCatalogo, crmCategorias, crmCategoriasAlegra, crmOverlay, type FotoCrm } from "@/db/crm";
+import {
+  crmCatalogo,
+  crmCategorias,
+  crmCategoriasAlegra,
+  crmOverlay,
+  type FichaTecnicaCrm,
+  type FotoCrm,
+} from "@/db/crm";
 import { esIdAlegra, mapPrecios, precioDeLista } from "./alegra";
 import { activoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
@@ -82,6 +89,12 @@ interface FilaCatalogo {
   overlayNombre: string | null;
   /** Fotos del overlay, con la key de R2. null = sin fila de overlay (left join). */
   overlayFotos: FotoCrm[] | null;
+  /**
+   * Ficha técnica del overlay, con la key de R2. null = sin overlay o sin ficha cargada.
+   * Opcional (no `| undefined` explícito) para no obligar a los fixtures de test existentes a
+   * declararla: `mapFilaToProduct` la trata igual que null si no vino.
+   */
+  overlayFichaTecnica?: FichaTecnicaCrm | null;
 }
 
 /**
@@ -125,8 +138,15 @@ export function mapFilaToProduct(
     description: descripcionExhibida(fila),
     category: fila.categoryName || undefined,
     images: fotosPermitidas(urlsDeFotos(fila.overlayFotos, baseMedios), hostsMedios),
+    fichaTecnicaUrl: urlDeFicha(fila.overlayFichaTecnica, baseMedios),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
+}
+
+/** Mismo criterio que `urlsDeFotos`: la key se guarda en el CRM, la url se compone al leer. */
+function urlDeFicha(ficha: FichaTecnicaCrm | null | undefined, base: string | null): string | undefined {
+  if (!ficha || !base) return undefined;
+  return `${base}/${ficha.key}`;
 }
 
 /**
@@ -206,6 +226,7 @@ const COLUMNAS_CATALOGO = {
   categoryName: crmCategoriasAlegra.name,
   overlayNombre: crmOverlay.nombre,
   overlayFotos: crmOverlay.fotos,
+  overlayFichaTecnica: crmOverlay.fichaTecnica,
 };
 
 /**

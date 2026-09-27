@@ -381,6 +381,9 @@ export function CarritoClient({
                               onValueChange={(qty) => updateQty(item.id, qty)}
                               min={1}
                               max={linea?.stockDisponible ?? 999}
+                              // El contador de todo el sitio. Sin tacho: quitar
+                              // tiene su propio botón, con Deshacer.
+                              tone="soft"
                             />
                             {precio ? (
                               <span className="hidden text-[13px] tabular-nums text-muted lg:inline">

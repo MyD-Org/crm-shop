@@ -20,16 +20,7 @@ import { GaleriaProducto } from "@/components/GaleriaProducto";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
 import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
 import type { Product } from "@/data/products";
-
-function CartIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-    </svg>
-  );
-}
-
+import { CartIcon } from "@/components/catalogo/iconos";
 
 function CheckIcon() {
   return (
@@ -139,12 +130,15 @@ export function ProductoClient({
   const nombreExtenso = nombreParaMostrar.length > LARGO_NOMBRE_EXTENSO;
 
   const selector = (
-    <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} />
+    // El mismo contador que las cards y el carrito, en su tamaño grande. Sin
+    // tacho: acá se elige la cantidad antes de agregar (mínimo 1).
+    <QuantityStepper value={qty} onValueChange={setQty} min={1} max={maxCantidad(producto)} tone="soft" size="lg" />
   );
   // El mismo botón en la fila de desktop y en la barra de mobile: una sola
   // cantidad y un solo "Agregado" para los dos.
   const botonAgregar = (
     <Button
+      size="lg"
       onClick={agregar}
       disabled={agotado || sinPrecio}
       className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap"

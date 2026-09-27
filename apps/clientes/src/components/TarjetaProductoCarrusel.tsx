@@ -45,17 +45,18 @@ export function TarjetaProductoCarrusel({
   const p = conPrecioCuenta(producto, usePreciosCuenta([producto.id]).get(producto.id));
   const fotoReal = p.images?.[0];
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
-  const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, p.brand ? formatMarca(p.brand) : undefined);
+  const marca = p.brand ? formatMarca(p.brand) : undefined;
+  const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, marca);
   return (
     <Link
       href={`/producto/${p.id}`}
       className="block transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 motion-reduce:hover:translate-y-0"
     >
       <ProductCard
-        variant="editorial"
+        variant="soft"
         className="h-full overflow-hidden"
         name={nombreParaMostrar}
-        brand={p.brand}
+        brand={marca}
         stock={p.stock}
         stockLabel={etiquetaStock(p)}
         showStock={mostrarStockEnCard(p)}
@@ -82,12 +83,11 @@ export function TarjetaProductoCarrusel({
               className="object-cover"
             />
           ) : (
-            <LightbulbIcon className="h-20 w-20 text-muted/30" />
+            <LightbulbIcon className="h-12 w-12 text-muted/40" />
           )
         }
         // Si el nombre ya es el código, la nota lo repetiría.
         priceNote={p.sku && !esCodigo ? `Cód. ${p.sku}` : undefined}
-        actionPlacement="below"
         action={
           <AddToCartButton
             product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}

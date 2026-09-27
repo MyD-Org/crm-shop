@@ -48,16 +48,17 @@ export function CatalogoProductos({
     >
       {productos.map((p) => {
         // Sólo para mostrar: `p.name` (buscar, ordenar, carrito) no se toca.
-        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, p.brand ? formatMarca(p.brand) : undefined);
+        const marca = p.brand ? formatMarca(p.brand) : undefined;
+        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, marca);
         return (
         <ProductCard
           key={p.id}
-          variant="editorial"
+          variant="soft"
           layout={vista === "lista" ? "list" : "grid"}
           className="h-full"
           href={`/producto/${p.id}`}
           renderLink={linkNext}
-          brand={p.brand}
+          brand={marca}
           name={nombreParaMostrar}
           // Si el nombre ya es el código, la línea "Cód." lo repetiría.
           code={esCodigo ? undefined : p.sku}
@@ -85,7 +86,7 @@ export function CatalogoProductos({
                     className="object-contain p-4"
                   />
                 ))
-              : [<LightbulbIcon key="sin-foto" className="h-20 w-20 text-muted/30" />]
+              : [<LightbulbIcon key="sin-foto" className="h-12 w-12 text-muted/40" />]
           }
           // Siempre presente, aunque no haya cuotas: reserva la línea para que
           // el precio no baile entre cards de la misma fila.
@@ -94,9 +95,6 @@ export function CatalogoProductos({
               <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
             </span>
           }
-          // Siempre abajo: el "+" se vuelve stepper al agregar, y al costado
-          // unas cards lo dejaban junto al precio y otras abajo según su largo.
-          actionPlacement="below"
           action={
             <AddToCartButton
               disabled={p.stock === "out"}

@@ -2,7 +2,7 @@
 
 import { useState, type MouseEvent } from "react";
 import { Button, QuantityStepper } from "@myd-org/ui";
-import { PlusIcon } from "@/components/catalogo/iconos";
+import { CartIcon } from "@/components/catalogo/iconos";
 import { useCart, type CartItem } from "@/context/CartContext";
 import { CANTIDAD_MAXIMA } from "@/lib/catalogo-vista";
 import { useHidratado } from "@/lib/hidratado";
@@ -25,7 +25,11 @@ function sinNavegar(e: MouseEvent) {
   e.stopPropagation();
 }
 
-/** "+" redondo para agregar; con el producto en el carrito, el stepper del DS. */
+/**
+ * "Agregar" a todo el ancho; con el producto en el carrito, el contador del DS
+ * del mismo alto y el mismo fondo (nada salta al agregar). Con 1 unidad el "−"
+ * es un tacho: ese toque lo saca del carrito.
+ */
 export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: AddToCartButtonProps) {
   const { items, addItem, removeItem, updateQty } = useCart();
 
@@ -47,9 +51,8 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
   if (!inCart || !product) {
     return (
       <Button
-        variant="primary"
-        size="icon-lg"
-        shape="round"
+        variant="soft"
+        className="w-full"
         aria-label="Agregar al carrito"
         disabled={deshabilitado}
         onClick={(e) => {
@@ -61,7 +64,8 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
           addItem(product);
         }}
       >
-        <PlusIcon />
+        <CartIcon />
+        Agregar
       </Button>
     );
   }
@@ -73,8 +77,8 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
       onClick={sinNavegar}
       className={
         animarEntrada
-          ? "inline-flex origin-right transition-[opacity,scale] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] starting:scale-[0.9] starting:opacity-0 motion-reduce:starting:scale-100"
-          : undefined
+          ? "flex w-full transition-opacity duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] starting:opacity-0"
+          : "flex w-full"
       }
     >
       <QuantityStepper
@@ -86,6 +90,10 @@ export function AddToCartButton({ disabled, max = CANTIDAD_MAXIMA, product }: Ad
         onValueChange={(n) => (n <= 0 ? removeItem(product.id) : updateQty(product.id, n))}
         decrementLabel="Quitar uno"
         incrementLabel="Agregar uno más"
+        removeLabel="Quitar del carrito"
+        tone="soft"
+        size="md"
+        fullWidth
       />
     </span>
   );

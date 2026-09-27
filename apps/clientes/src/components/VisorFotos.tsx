@@ -15,6 +15,11 @@ import type { ProductImage } from "@/data/products";
  * celular se pasa de foto con el dedo y la inercia nativa. Flechas desde md;
  * con teclado, ← → para moverse y Esc para cerrar.
  *
+ * En el celular ocupa toda la pantalla; desde md es un modal grande sobre la
+ * página oscurecida, y un clic afuera lo cierra. Arriba a la izquierda va la
+ * marca (como el header: "Led" derecho y en el acento, ver .site-header em), sólo acá: en la galería y el catálogo
+ * esa esquina y la otra ya tienen botones.
+ *
  * Va por portal al `<body>`: dentro de la ficha, cualquier ancestro con
  * transform u overflow lo recortaría.
  */
@@ -79,71 +84,67 @@ export function VisorFotos({
 
   return createPortal(
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Fotos de ${nombre}`}
-      className="fixed inset-0 z-[100] flex flex-col overscroll-contain bg-surface"
+      className="fixed inset-0 z-[100] overscroll-contain bg-surface md:flex md:items-center md:justify-center md:bg-text/60 md:p-8"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCerrar(activa);
+      }}
     >
-      <div className="flex shrink-0 items-center justify-between px-4 py-3">
-        <span className="text-sm text-muted" aria-live="polite">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Fotos de ${nombre}`}
+        className="flex h-full w-full flex-col bg-surface md:h-[min(85vh,56rem)] md:max-w-5xl md:overflow-hidden md:rounded-[24px] md:shadow-2"
+      >
+        <div className="flex shrink-0 items-center justify-between px-4 py-3 md:px-6">
+          <span className="font-display text-xl font-semibold tracking-tight text-text" aria-hidden="true">
+            Central <span className="text-accent">Led</span>
+          </span>
+          <button
+            ref={cerrarRef}
+            type="button"
+            onClick={() => onCerrar(activa)}
+            aria-label="Cerrar"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-text transition-[background-color,scale] duration-150 ease-out hover:bg-elevated active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="relative min-h-0 flex-1">
+          <div
+            ref={pistaRef}
+            onScroll={varias ? alDesplazar : undefined}
+            className="no-scrollbar flex h-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
+          >
+            {fotos.map((f, i) => (
+              <div key={f.url} className="relative h-full w-full shrink-0 snap-center snap-always">
+                <Image
+                  src={f.url}
+                  alt={f.alt || nombre}
+                  fill
+                  sizes="(min-width: 768px) 1024px, 100vw"
+                  className="object-contain md:p-6"
+                  // La activa y sus vecinas ya: al deslizar tienen que estar listas.
+                  loading={Math.abs(i - activa) <= 1 ? "eager" : "lazy"}
+                />
+              </div>
+            ))}
+          </div>
+
+          {varias && (
+            <>
+              <Flecha hacia="prev" oculta={activa === 0} onClick={() => irA(activa - 1)} />
+              <Flecha hacia="next" oculta={activa === fotos.length - 1} onClick={() => irA(activa + 1)} />
+            </>
+          )}
+        </div>
+
+        <div className="flex h-12 shrink-0 items-center justify-center text-sm text-muted" aria-live="polite">
           {varias ? `${activa + 1} / ${fotos.length}` : ""}
-        </span>
-        <button
-          ref={cerrarRef}
-          type="button"
-          onClick={() => onCerrar(activa)}
-          aria-label="Cerrar"
-          className="flex h-11 w-11 items-center justify-center rounded-full text-text transition-[background-color,scale] duration-150 ease-out hover:bg-elevated active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={pistaRef}
-          onScroll={varias ? alDesplazar : undefined}
-          className="no-scrollbar flex h-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain"
-        >
-          {fotos.map((f, i) => (
-            <div key={f.url} className="relative h-full w-full shrink-0 snap-center snap-always">
-              <Image
-                src={f.url}
-                alt={f.alt || nombre}
-                fill
-                sizes="100vw"
-                className="object-contain md:p-6"
-                // La activa y sus vecinas ya: al deslizar tienen que estar listas.
-                loading={Math.abs(i - activa) <= 1 ? "eager" : "lazy"}
-              />
-            </div>
-          ))}
         </div>
-
-        {varias && (
-          <>
-            <Flecha hacia="prev" oculta={activa === 0} onClick={() => irA(activa - 1)} />
-            <Flecha hacia="next" oculta={activa === fotos.length - 1} onClick={() => irA(activa + 1)} />
-          </>
-        )}
       </div>
-
-      {varias && (
-        <div aria-hidden="true" className="flex shrink-0 justify-center gap-1.5 py-4">
-          {fotos.map((f, i) => (
-            <span
-              key={f.url}
-              className={
-                i === activa
-                  ? "h-1.5 w-4 rounded-full bg-text/70 transition-[width] duration-200 ease-out"
-                  : "h-1.5 w-1.5 rounded-full bg-text/25 transition-[width] duration-200 ease-out"
-              }
-            />
-          ))}
-        </div>
-      )}
     </div>,
     document.body,
   );

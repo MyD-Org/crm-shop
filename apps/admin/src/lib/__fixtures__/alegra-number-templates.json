@@ -43,7 +43,7 @@
       "prefix": "00029",
       "isDefault": false,
       "status": "active",
-      "documentType": "estimate",
+      "documentType": "invoice",
       "isElectronic": false,
       "subDocumentType": "INVOICE_X",
       "nextInvoiceNumber": 7,

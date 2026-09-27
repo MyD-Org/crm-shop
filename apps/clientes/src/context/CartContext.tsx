@@ -14,6 +14,7 @@ import { useToast } from "@myd-org/ui";
 import {
   actualizarQty,
   agregar,
+  restaurar,
   agregarVarios,
   CARRITO_VACIO,
   CLAVE_CACHE,
@@ -110,6 +111,8 @@ interface CartContextValue {
   /** Varias altas como UNA sola actualización (un solo guardado). */
   addItems: (lista: { item: ItemNuevo; qty: number }[]) => void;
   removeItem: (id: string) => void;
+  /** "Deshacer" de un quitar: repone la línea en `indice`. No suma si ya está. */
+  restoreItem: (item: CartItem, indice: number) => void;
   updateQty: (id: string, qty: number) => void;
   clear: () => void;
   /** Tras crear un pedido: el servidor ya vació su carrito; sólo se limpia el local. */
@@ -213,6 +216,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     elMotor().mutar((prev) => actualizarQty(prev, id, 0));
   }, [marcarCambio]);
 
+  const restoreItem = useCallback((item: CartItem, indice: number) => {
+    if (itemsRef.current.some((i) => i.id === item.id)) return;
+    marcarCambio(1);
+    elMotor().mutar((prev) => restaurar(prev, item, indice));
+  }, [marcarCambio]);
+
   const updateQty = useCallback((id: string, qty: number) => {
     const antes = itemsRef.current.find((i) => i.id === id)?.qty;
     if (antes !== undefined && qty !== antes) marcarCambio(qty > antes ? 1 : -1);
@@ -235,6 +244,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         addItem,
         addItems,
         removeItem,
+        restoreItem,
         updateQty,
         clear,
         vaciarTrasPedido,

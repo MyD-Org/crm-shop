@@ -5,7 +5,8 @@ import type { TenantConfig } from "./tenants"
 import numberTemplatesFixture from "./__fixtures__/alegra-number-templates.json"
 
 // listNumberTemplates: GET /number-templates de Alegra, filtrado a documentType === "invoice"
-// (excluye "Presupuesto X", que es de otro documentType) y mapeado a AlegraNumberTemplate.
+// y mapeado a AlegraNumberTemplate. "Presupuesto X" (INVOICE_X) ES de documentType invoice en la
+// cuenta real: tiene que aparecer (se puede emitir con X aunque el pedido tenga aviso de IVA).
 // Fetch falso: nada sale a la red. Shape real confirmado el 2026-09-26 (ver A.1.1, fixture
 // alegra-number-templates.json que reemplaza la llamada en vivo).
 
@@ -36,11 +37,15 @@ describe("listNumberTemplates", () => {
     })
   })
 
-  it("filtra a documentType === 'invoice': excluye Presupuesto X", async () => {
-    responde(Response.json(numberTemplatesFixture.data))
+  it("filtra a documentType === 'invoice': incluye Presupuesto X y excluye otros documentos", async () => {
+    const conRemito = [
+      ...numberTemplatesFixture.data,
+      { id: "30", name: "Remitos", prefix: "00001", status: "active", documentType: "remission", subDocumentType: "", isElectronic: false },
+    ]
+    responde(Response.json(conRemito))
     const r = await listNumberTemplates(tenant)
-    expect(r.map((x) => x.alegraId).sort()).toEqual(["1", "2", "3"])
-    expect(r.some((x) => x.name === "Presupuesto X")).toBe(false)
+    expect(r.map((x) => x.alegraId).sort()).toEqual(["1", "18", "2", "3"])
+    expect(r.find((x) => x.alegraId === "18")?.subDocumentType).toBe("INVOICE_X")
   })
 
   it("no filtra por status: una numeración inactiva de invoice igual aparece", async () => {
@@ -71,13 +76,13 @@ describe("listNumberTemplates", () => {
     expect(url.pathname).toMatch(/\/number-templates$/)
   })
 
-  it("modo mock: usa mockNumberTemplates (5 fixtures, incluye inactiva y no-invoice)", async () => {
+  it("modo mock: usa mockNumberTemplates (5 fixtures, incluye una inactiva)", async () => {
     const mock = { ...tenant, alegraMock: true } as TenantConfig
     const r = await listNumberTemplates(mock)
     // mockNumberTemplates trae A, B, C activas, una cuarta de invoice inactiva y "Presupuesto X"
-    // (documentType != invoice): el filtro deja solo las 4 de invoice, activas o no.
+    // (también invoice, como en la cuenta real).
     expect(r).toHaveLength(mockNumberTemplates.filter((x) => x.documentType === "invoice").length)
-    expect(r.some((x) => x.name === "Presupuesto X")).toBe(false)
+    expect(r.some((x) => x.name === "Presupuesto X")).toBe(true)
   })
 })
 

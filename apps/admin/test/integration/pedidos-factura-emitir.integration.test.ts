@@ -9,8 +9,7 @@ import { invalidateTenantRegistry } from "@/lib/tenants"
 import { seedOperator, seedShopOrder, seedShopOrderItem, seedTenant, truncateAll } from "./helpers"
 
 // "Emitir factura" (rebanada B): preview puro, GET únicamente. Contra la base real de test, en
-// modo `alegraMock` (fixtures de mock-alegra.ts: numeraciones A/B/C activas + una A inactiva +
-// "Presupuesto X"): NADA sale a la red. El GET nunca escribe — se verifica explícitamente que
+// modo `alegraMock` (fixtures de mock-alegra.ts: numeraciones A/B/C/X activas + una A inactiva): NADA sale a la red. El GET nunca escribe — se verifica explícitamente que
 // no toca `factura_alegra_id` ni llama a ningún endpoint de escritura de Alegra. Datos
 // inventados.
 
@@ -115,12 +114,13 @@ describe("admin: preview de emisión de factura (GET, sin escritura)", () => {
     expect(body.totalPedido).toBe(1210)
     expect(body.bloqueo).toBeNull()
     expect(body.avisos).toEqual([])
-    // Numeraciones activas de tipo invoice del mock: A, B, C (ambas la A inactiva y
-    // "Presupuesto X", de otro documentType, quedan afuera).
+    // Numeraciones activas de tipo invoice del mock: A, B, C y "Presupuesto X" (la A inactiva
+    // queda afuera).
     expect(body.numeraciones.map((n: { subDocumentType: string }) => n.subDocumentType).sort()).toEqual([
       "INVOICE_A",
       "INVOICE_B",
       "INVOICE_C",
+      "INVOICE_X",
     ])
     // Receptor con CUIT → se sugiere la numeración A.
     expect(body.numeracionSugeridaId).toBe("1")

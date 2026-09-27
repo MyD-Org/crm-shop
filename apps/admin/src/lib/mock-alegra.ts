@@ -194,7 +194,7 @@ export const mockNumberTemplates: MockNumberTemplate[] = [
   // Numeración de invoice dada de baja: sirve para testear que B/C (rebanada B) no la eligen.
   { alegraId: "4", name: "Factura A (punto de venta 2, dado de baja)", prefix: "0004", subDocumentType: "INVOICE_A", isElectronic: false, status: "inactive", documentType: "invoice" },
   // Numeración de otro tipo de documento: listNumberTemplates debe excluirla siempre.
-  { alegraId: "18", name: "Presupuesto X", prefix: "00029", subDocumentType: "INVOICE_X", isElectronic: false, status: "active", documentType: "estimate" },
+  { alegraId: "18", name: "Presupuesto X", prefix: "00029", subDocumentType: "INVOICE_X", isElectronic: false, status: "active", documentType: "invoice" },
 ]
 
 // ── Facturas creadas (createInvoice) — misma cola que lee mockAllInvoices() ──

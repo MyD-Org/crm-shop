@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { COVER_QUERY, HERO_LIGHTS, MIN_TARGET_PX, SHELF_STRIP, STUDIO_IMAGE, STUDIO_IMAGE_MOBILE, proximity, sceneRect } from "./hero-lights";
 import styles from "./InteractiveHero.module.css";
 
@@ -28,6 +28,15 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
   const [pressed, setPressed] = useState<number[]>([]);
   const [rect, setRect] = useState<ReturnType<typeof sceneRect> | null>(null);
   const uid = useId().replaceAll(":", "");
+  const paint = useCallback((values: number[]) => {
+    let level = 0;
+    layers.current.forEach((layer, i) => {
+      const opacity = pinned.current.has(i) ? 1 : values[i] ?? 0;
+      if (layer) layer.style.opacity = String(opacity);
+      level = Math.max(level, opacity);
+    });
+    root.current?.style.setProperty("--light-level", String(level));
+  }, []);
 
   useEffect(() => {
     if (!enabled || !root.current || !scene.current) return;
@@ -39,9 +48,6 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
     let started = false;
     let frame = 0;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const paint = (values: number[]) => layers.current.forEach((layer, i) => {
-      if (layer) layer.style.opacity = String(pinned.current.has(i) ? 1 : values[i] ?? 0);
-    });
     const stop = () => {
       interrupted = true;
       timers.forEach(clearTimeout);
@@ -124,14 +130,14 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
       host.removeEventListener("pointerleave", leave);
       motion.removeEventListener("change", stop);
     };
-  }, [enabled]);
+  }, [enabled, paint]);
 
   function toggle(index: number) {
     stopIntro.current();
     if (pinned.current.has(index)) pinned.current.delete(index);
     else pinned.current.add(index);
     setPressed([...pinned.current]);
-    layers.current.forEach((layer, i) => { if (layer) layer.style.opacity = pinned.current.has(i) ? "1" : "0"; });
+    paint([]);
   }
 
   if (!enabled) return <>{children}</>;
@@ -151,8 +157,8 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
             <filter id={`${uid}-blur`} x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="18" /></filter>
             <filter id={`${uid}-soft`} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" /></filter>
             <clipPath id={`${uid}-belowShade`}><rect x="1100" y="662" width="245" height="148"/></clipPath>
-            <radialGradient id={`${uid}-glow`}><stop stopColor="#ffe4b0" stopOpacity=".8" /><stop offset="1" stopColor="#ffe4b0" stopOpacity="0" /></radialGradient>
-            <linearGradient id={`${uid}-beam`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#ffe5b4" stopOpacity=".5"/><stop offset="1" stopColor="#ffe5b4" stopOpacity="0"/></linearGradient>
+            <radialGradient id={`${uid}-glow`}><stop className={styles.glowStop} stopColor="#ffe4b0" stopOpacity=".8" /><stop offset="1" stopColor="#ffe4b0" stopOpacity="0" /></radialGradient>
+            <linearGradient id={`${uid}-beam`} x1="0" y1="0" x2="0" y2="1"><stop className={styles.beamStop} stopColor="#ffe5b4" stopOpacity=".5"/><stop offset="1" stopColor="#ffe5b4" stopOpacity="0"/></linearGradient>
             <clipPath id={`${uid}-basket`}><path d="M1370 234 Q1360 278 1311 300 Q1263 322 1271 366 Q1278 401 1311 417 Q1385 437 1462 417 Q1496 402 1500 365 Q1507 323 1465 300 Q1416 277 1403 234 Z"/></clipPath>
             <radialGradient id={`${uid}-interior`}><stop stopColor="#fff4ce" stopOpacity=".95"/><stop offset=".25" stopColor="#ffe0a0" stopOpacity=".65"/><stop offset="1" stopColor="#ffcb7a" stopOpacity="0"/></radialGradient>
           </defs>
@@ -163,7 +169,7 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
                 <path d="M1168 661 L1274 661 L1315 777 Q1221 803 1127 777 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-soft)`}/>
               </g>
               <ellipse cx="1221" cy="660" rx="52" ry="2.4" fill="#fff2d1"/>
-              <ellipse cx="1221" cy="781" rx="96" ry="19" fill={`url(#${uid}-glow)`}/>
+              <ellipse cx="1221" cy="781" rx="96" ry="19" className={styles.glow} fill={`url(#${uid}-glow)`}/>
               <path d="M1223 666 L1223 771" stroke="#ffe7bc" strokeWidth="1.3" opacity=".4"/>
             </>}
             {light.id === "spot" && <>
@@ -172,16 +178,16 @@ export function InteractiveHero({ children, enabled }: { children: ReactNode; en
               {/* Fills the whole lens face (centre ≈ 1120,149, tilted ~38°), not just the LED chip. */}
               <ellipse cx="1120" cy="149" rx="24" ry="18" transform="rotate(38 1120 149)" fill={`url(#${uid}-interior)`}/>
               <ellipse cx="1122" cy="146" rx="18" ry="11" transform="rotate(38 1122 146)" fill="#fff5dc"/>
-              <ellipse cx="930" cy="512" rx="120" ry="100" fill={`url(#${uid}-glow)`}/>
+              <ellipse cx="930" cy="512" rx="120" ry="100" className={styles.glow} fill={`url(#${uid}-glow)`}/>
             </>}
             {light.id === "pendant" && <>
               {/* Translucent inner glow preserves the photographic bamboo weave. */}
-              <ellipse cx="1385" cy="359" rx="144" ry="118" fill={`url(#${uid}-interior)`} opacity=".3"/>
+              <ellipse className={styles.halo} cx="1385" cy="359" rx="144" ry="118" fill={`url(#${uid}-interior)`} opacity=".3"/>
               <g clipPath={`url(#${uid}-basket)`}>
                 <ellipse cx="1385" cy="359" rx="104" ry="78" fill={`url(#${uid}-interior)`}/>
               </g>
               <path d="M1320 423 L1450 423 L1536 780 L1234 780 Z" fill={`url(#${uid}-beam)`} filter={`url(#${uid}-blur)`}/>
-              <ellipse cx="1385" cy="786" rx="146" ry="25" fill={`url(#${uid}-glow)`}/>
+              <ellipse cx="1385" cy="786" rx="146" ry="25" className={styles.glow} fill={`url(#${uid}-glow)`}/>
             </>}
             {light.id === "linear" && <>
               {/* No fixture in the photo: a hidden strip lights the shelf's underside edge to edge. */}

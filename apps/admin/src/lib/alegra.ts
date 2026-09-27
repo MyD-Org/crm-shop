@@ -18,6 +18,8 @@ import {
   mockPaymentsByContact,
   mockNumberTemplates,
   mockCreateInvoice,
+  mockAllRemisiones,
+  mockCreateRemission,
 } from "./mock-alegra"
 
 // Cliente de Alegra (productos, contactos, cotizaciones, listas de precio, formas de pago).
@@ -1320,6 +1322,150 @@ export async function createInvoice(config: TenantConfig, input: AlegraInvoiceCr
   }
 }
 
+// ── Remito ("Emitir remito" / "Vincular remito existente", rebanada D) ──────────────────────
+//
+// Confirmado contra la ayuda de Alegra Argentina (2026-09-27, `ayuda.alegra.com`): la
+// remisión/remito "no genera movimientos de inventario, categorías de venta, ni cuentas por
+// cobrar. Es simplemente un documento informativo" — sólo la FACTURA descuenta stock en Alegra.
+// Por eso emitir un remito acá, independiente de la factura, no arriesga descontar inventario
+// dos veces.
+//
+// `POST /invoices` acepta `remissions: [ids]` para facturar un remito automáticamente, pero no
+// sirve para este flujo: la factura de este pedido puede haberse emitido ANTES que el remito
+// (rebanadas A-C), y Alegra tomaría las líneas del remito tal cual —a precio 0— para armar la
+// factura. Tampoco existe el camino inverso: una factura ya emitida no tiene ningún campo para
+// apuntar a un remito posterior. Por eso remito y factura son documentos independientes acá,
+// relacionados sólo del lado del pedido (`shop.order_remitos` + `shop.orders.factura_*`) y en
+// el texto de `observations` de cada uno, nunca por un campo nativo de Alegra.
+//
+// El remito se emite SIEMPRE en 0 (`price: 0` en cada línea): es un papel de depósito, no una
+// venta. Mismo criterio ya verificado en un cambio hermano de este mismo dominio
+// (`inventory-management-app`, PR #47): "el remito va en cero... dice QUÉ sale, no cuánto vale".
+
+export interface AlegraRemisionResumen {
+  alegraId: string
+  /** Número legible tal como lo muestra Alegra, o null. */
+  numero: string | null
+  /** Emisión, YYYY-MM-DD. */
+  fecha: string
+  clienteAlegraId: string | null
+  clienteNombre: string | null
+}
+
+export interface AlegraRemissionLineInput {
+  alegraId: string
+  quantity: number
+  description?: string
+}
+
+export interface AlegraRemissionCreateInput {
+  contactAlegraId: string
+  items: AlegraRemissionLineInput[]
+  observations?: string
+}
+
+export interface AlegraRemissionCreated {
+  alegraId: string
+  number: string | null
+  date: string
+}
+
+function mapRawRemisionResumen(raw: Record<string, unknown>): AlegraRemisionResumen {
+  const client = (raw.client ?? {}) as Record<string, unknown>
+  const numberTemplate = raw.numberTemplate as { fullNumber?: unknown; formattedNumber?: unknown } | undefined
+  const fullNumber = numberTemplate?.fullNumber ?? numberTemplate?.formattedNumber ?? raw.number
+  return {
+    alegraId: String(raw.id),
+    numero: fullNumber != null && String(fullNumber).trim() ? String(fullNumber) : null,
+    fecha: String(raw.date ?? ""),
+    clienteAlegraId: client.id != null ? String(client.id) : null,
+    clienteNombre: client.name != null && String(client.name).trim() ? String(client.name) : null,
+  }
+}
+
+/**
+ * Un remito por id. 404 → null; 429 → AlegraRateLimitError; otro error → AlegraHttpError. Mismo
+ * criterio que `getFacturaPorId`: sin reintentos agresivos (uso interactivo), y un id que no son
+ * sólo dígitos no se consulta.
+ */
+export async function getRemisionPorId(
+  config: TenantConfig,
+  alegraId: string,
+  opts: { reintentos429?: number } = {},
+): Promise<AlegraRemisionResumen | null> {
+  if (config.alegraMock) {
+    const r = mockAllRemisiones().find((x) => x.alegraId === alegraId)
+    return r ? { ...r } : null
+  }
+  if (!/^\d+$/.test(alegraId)) return null
+  try {
+    const raw = (await alegraFetch(config, `/remissions/${alegraId}`, undefined, undefined, {
+      reintentos429: opts.reintentos429 ?? REINTENTOS_429_INTERACTIVO,
+    })) as Record<string, unknown> | null
+    if (!raw || raw.id == null) return null
+    return mapRawRemisionResumen(raw)
+  } catch (err) {
+    if (err instanceof AlegraHttpError && err.status === 404) return null
+    throw err
+  }
+}
+
+/** Remitos candidatos para un número tipeado: misma estrategia que `buscarFacturasPorNumero`. */
+export async function buscarRemisionesPorNumero(
+  config: TenantConfig,
+  numero: string,
+  opts: { clientId?: string; reintentos429?: number } = {},
+): Promise<AlegraRemisionResumen[]> {
+  if (config.alegraMock) {
+    return mockAllRemisiones().filter((x) => !opts.clientId || x.clienteAlegraId === opts.clientId)
+  }
+  const page = await alegraFetch(
+    config,
+    "/remissions",
+    {
+      numberTemplate_fullNumber: numero,
+      ...(opts.clientId ? { client_id: opts.clientId } : {}),
+      order_field: "date",
+      order_direction: "DESC",
+      start: "0",
+      limit: String(PAGE_SIZE),
+    },
+    undefined,
+    { reintentos429: opts.reintentos429 ?? REINTENTOS_429_INTERACTIVO },
+  )
+  return Array.isArray(page) ? (page as Record<string, unknown>[]).map(mapRawRemisionResumen) : []
+}
+
+/**
+ * Crea el remito real en Alegra (POST /remissions), siempre con `price: 0` en cada línea (ver
+ * el comentario de la sección: es un papel de depósito, no una venta). Escritura real: no hay
+ * sandbox. Sólo se llama desde el flujo de "Emitir remito", con `requireAdminPlus`.
+ */
+export async function createRemission(
+  config: TenantConfig,
+  input: AlegraRemissionCreateInput,
+): Promise<AlegraRemissionCreated> {
+  if (config.alegraMock) return mockCreateRemission(input)
+  const hoy = hoyArgentina()
+  const body: Record<string, unknown> = {
+    client: Number.isNaN(Number(input.contactAlegraId)) ? input.contactAlegraId : Number(input.contactAlegraId),
+    date: hoy,
+    // Alegra exige dueDate también para remisiones; un remito no "vence", así que se manda la
+    // misma fecha (mismo criterio documentado en el cambio hermano de este dominio).
+    dueDate: hoy,
+    items: input.items.map((it) => ({
+      id: Number.isNaN(Number(it.alegraId)) ? it.alegraId : Number(it.alegraId),
+      quantity: it.quantity,
+      price: 0,
+      ...(it.description ? { description: it.description } : {}),
+    })),
+  }
+  if (input.observations) body.observations = input.observations
+  const raw = (await alegraFetch(config, "/remissions", undefined, { method: "POST", body })) as Record<string, unknown>
+  const resumen = mapRawRemisionResumen(raw)
+  return { alegraId: resumen.alegraId, number: resumen.numero, date: resumen.fecha || hoy }
+}
+
 /** Facturas de venta de un contacto (todas; el portal filtra por estado). */
 export async function listInvoicesByContact(config: TenantConfig, contactAlegraId: string): Promise<AlegraInvoice[]> {
   if (config.alegraMock) return mockInvoicesByContact(contactAlegraId)
@@ -1573,6 +1719,7 @@ export const DOCUMENT_RESOURCES = {
   factura: "invoices",
   pago: "payments",
   presupuesto: "estimates",
+  remision: "remissions",
 } as const
 
 export type DocumentKind = keyof typeof DOCUMENT_RESOURCES

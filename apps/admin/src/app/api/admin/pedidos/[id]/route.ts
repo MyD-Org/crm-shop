@@ -45,7 +45,7 @@ export async function GET(req: Request, { params }: IdParams) {
   try {
     const found = await getPedido(guard.tenantId, id)
     if (!found) return adminNotFoundResponse()
-    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios, found.historial), {
+    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios, found.historial, found.remito), {
       headers: NO_STORE,
     })
   } catch (err) {
@@ -145,7 +145,7 @@ export async function PATCH(req: Request, { params }: IdParams) {
   })
   logAviso("estado", { tenant: guard.tenantId, orderId: id }, aviso)
 
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial), {
+  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito), {
     headers: NO_STORE,
   })
 }

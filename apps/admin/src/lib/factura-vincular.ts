@@ -55,15 +55,27 @@ const ALEGRA_DOCUMENTOS: Record<string, string> = {
 export type UrlAlegraParseada = { tipo: "invoice"; id: string } | { tipo: "otro"; documento: string }
 
 /**
+ * Reconoce CUALQUIER enlace de Alegra a un documento (`.../<documento>/view/id/<id>`), sin
+ * importar el tipo — la usan tanto "Vincular factura" (que sólo acepta `invoice`, ver
+ * `parsearUrlAlegra`) como "Vincular remito existente" (`lib/remito.ts`, que sólo acepta
+ * `remission`). `null` si no matchea ese patrón.
+ */
+export function parsearUrlAlegraCualquiera(tipeado: string): { documento: string; id: string } | null {
+  const m = ALEGRA_DOC_URL_RE.exec(tipeado.trim())
+  if (!m) return null
+  const [, documento, id] = m
+  return { documento: documento.toLowerCase(), id }
+}
+
+/**
  * Si `tipeado` es un enlace de Alegra a un documento (`.../<documento>/view/id/<id>`), lo
  * reconoce y devuelve su tipo e id. `null` si no matchea ese patrón (no es un enlace de Alegra
  * reconocible: se sigue probando como número o como id, tal cual antes).
  */
 export function parsearUrlAlegra(tipeado: string): UrlAlegraParseada | null {
-  const m = ALEGRA_DOC_URL_RE.exec(tipeado.trim())
-  if (!m) return null
-  const [, documento, id] = m
-  return documento.toLowerCase() === "invoice" ? { tipo: "invoice", id } : { tipo: "otro", documento: documento.toLowerCase() }
+  const r = parsearUrlAlegraCualquiera(tipeado)
+  if (!r) return null
+  return r.documento === "invoice" ? { tipo: "invoice", id: r.id } : { tipo: "otro", documento: r.documento }
 }
 
 /** Nombre legible del documento para el mensaje de error ("un remito", …); genérico si no se reconoce. */

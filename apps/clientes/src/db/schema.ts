@@ -527,7 +527,11 @@ export const orderEventos = shop.table(
     orderId: uuid("order_id")
       .notNull()
       .references(() => orders.id, { onDelete: "cascade" }),
-    /** 'estado' | 'pago' | 'factura_vinculada' | 'factura_desvinculada' | 'factura_emitida' | 'cancelado'. */
+    /**
+     * 'estado' | 'pago' | 'factura_vinculada' | 'factura_desvinculada' | 'factura_emitida' |
+     * 'cancelado' | 'remito_emitido' | 'remito_vinculado' | 'remito_desvinculado' (los tres
+     * últimos, migración `0021`, change `admin-emitir-factura-pedido` rebanada D).
+     */
     tipo: text("tipo").notNull(),
     detalle: jsonb("detalle").$type<Record<string, unknown>>().notNull().default({}),
     /** `admin_users.id` congelado como texto; null si el evento no lo hizo un operador. */
@@ -539,12 +543,64 @@ export const orderEventos = shop.table(
     index("order_eventos_tenant_order_fecha").on(t.tenantId, t.orderId, t.creadoEn.desc()),
     check(
       "order_eventos_tipo_check",
-      sql`${t.tipo} in ('estado','pago','factura_vinculada','factura_desvinculada','factura_emitida','cancelado')`,
+      sql`${t.tipo} in ('estado','pago','factura_vinculada','factura_desvinculada','factura_emitida','cancelado','remito_emitido','remito_vinculado','remito_desvinculado')`,
     ),
   ],
 );
 
 export type OrderEventoRow = typeof orderEventos.$inferSelect;
+
+/**
+ * Remito único por pedido (migración `0021`, change `admin-emitir-factura-pedido` rebanada D).
+ *
+ * DECISIÓN DE LA USUARIA: un remito único e íntegro por pedido, sin entregas parciales por
+ * línea — por eso NO hay una tabla de líneas de remito (a diferencia de `order_items`): el
+ * papel dice "salió todo el pedido", nunca una cantidad parcial.
+ *
+ * Confirmado contra la ayuda de Alegra Argentina (2026-09-27): la remisión/remito "no genera
+ * movimientos de inventario... es simplemente un documento informativo" — sólo la factura
+ * descuenta stock en Alegra. Por eso emitir un remito acá es seguro (no hay riesgo de
+ * descontar inventario dos veces entre remito y factura, que son documentos independientes sin
+ * campo nativo que los asocie: ver el comentario de `createRemission` en `lib/alegra.ts`).
+ *
+ * TABLA APARTE y no columnas en `orders` (a diferencia de `factura_*`): así el error de
+ * unicidad de Postgres (`orders_remitos_order_id_key`) alcanza para bloquear un segundo remito
+ * sin necesitar el mecanismo de reserva atómica con sentinel que sí hace falta para "Emitir
+ * factura" (rebanada C) — ahí la reserva evita descontar stock dos veces si dos POST llegan casi
+ * juntos; acá, al no haber ningún efecto de stock/dinero en juego (documento puramente
+ * informativo), el peor caso de una carrera es sólo un remito huérfano en Alegra sin vincular
+ * localmente, aceptable y de mucha menor severidad.
+ *
+ * `tenant_id` va DUPLICADO acá (no sólo alcanzable via join a `orders`) siguiendo el mismo
+ * patrón que `order_eventos`: toda consulta de este archivo filtra por tenant sin depender de
+ * un join.
+ */
+export const orderRemitos = shop.table(
+  "order_remitos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    remitoAlegraId: text("remito_alegra_id").notNull(),
+    remitoNumero: text("remito_numero"),
+    remitoFecha: date("remito_fecha", { mode: "string" }),
+    remitidoEn: timestamp("remitido_en", { withTimezone: true }).notNull().defaultNow(),
+    /** `admin_users.id` congelado como texto, sin FK (mismo patrón que `order_eventos.actor_id`). */
+    remitidoPor: text("remitido_por"),
+    remitidoPorNombre: text("remitido_por_nombre"),
+  },
+  (t) => [
+    // Remito único por pedido: la restricción vive en el esquema, no sólo en código (ver el
+    // comentario de la tabla). `registrarRemito`/`vincularRemito` atrapan el error 23505 de
+    // Postgres y lo traducen a un conflicto de negocio propio.
+    uniqueIndex("order_remitos_order_id").on(t.orderId),
+    index("order_remitos_tenant_order").on(t.tenantId, t.orderId),
+  ],
+);
+
+export type OrderRemitoRow = typeof orderRemitos.$inferSelect;
 
 /**
  * Líneas del pedido. Snapshot puro: no hay FK viva al catálogo a

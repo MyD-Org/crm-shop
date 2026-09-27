@@ -3,10 +3,12 @@ import { getDb, type Db } from "@/db"
 import { alegraContacts } from "@/db/schema"
 import {
   shopOrderEventos,
+  shopOrderRemitos,
   shopOrders,
   shopOrderItems,
   type ShopOrderEventoRow,
   type ShopOrderItemRow,
+  type ShopOrderRemitoRow,
   type ShopOrderRow,
 } from "@/db/shop-schema"
 import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
@@ -34,6 +36,7 @@ export const PEDIDOS_MAX_LIMIT = 50
 
 export type PedidoRow = ShopOrderRow
 export type PedidoItemRow = ShopOrderItemRow
+export type RemitoRow = ShopOrderRemitoRow
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -238,6 +241,9 @@ export type EventoTipo =
   | "factura_desvinculada"
   | "factura_emitida"
   | "cancelado"
+  | "remito_emitido"
+  | "remito_vinculado"
+  | "remito_desvinculado"
 
 export interface EventoHistorialDto {
   tipo: EventoTipo
@@ -342,17 +348,30 @@ export interface DetalleExtras {
   items: PedidoItemRow[]
   listaPrecios: string | null
   historial: EventoHistorialDto[]
+  /** Remito único del pedido (0021 del Shop), o `null` si todavía no tiene. */
+  remito: RemitoRow | null
+}
+
+/** El remito del pedido, si tiene (a lo sumo uno: unicidad de `order_id`, ver la migración 0021
+ *  del Shop). */
+async function remitoDe(tenantId: string, orderId: string): Promise<RemitoRow | null> {
+  const [fila] = await getDb()
+    .select()
+    .from(shopOrderRemitos)
+    .where(and(eq(shopOrderRemitos.tenantId, tenantId), eq(shopOrderRemitos.orderId, orderId)))
+  return fila ?? null
 }
 
 /** Lo que el detalle suma a la fila, aparte de sus propias columnas: ítems, lista de precios (si
- *  aplica) e historial. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
+ *  aplica), historial y remito. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
 async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<DetalleExtras> {
-  const [items, listaPrecios, historial] = await Promise.all([
+  const [items, listaPrecios, historial, remito] = await Promise.all([
     itemsDe(pedido.id),
     listaParaRevision(tenantId, pedido),
     historialDe(tenantId, pedido.id, pedido.createdAt),
+    remitoDe(tenantId, pedido.id),
   ])
-  return { items, listaPrecios, historial }
+  return { items, listaPrecios, historial, remito }
 }
 
 /**
@@ -763,6 +782,152 @@ export async function desvincularFactura(
   return okConItems(tenantId, existente)
 }
 
+// ───────────────────────── Remito único por pedido (rebanada D) ─────────────────────────
+//
+// A diferencia de la factura, el remito vive en su PROPIA tabla (`shop.order_remitos`, 0021 del
+// Shop) con una restricción de unicidad en `order_id`: un segundo intento de remitar el mismo
+// pedido choca contra Postgres (23505) en vez de necesitar el mecanismo de reserva atómica con
+// sentinel de "Emitir factura" (rebanada C). Alcanza acá porque el remito es un documento
+// puramente informativo en Alegra (confirmado: no descuenta inventario), así que el peor caso de
+// una carrera entre dos "Emitir remito" casi simultáneos es un remito huérfano en Alegra sin
+// vincular localmente — sin ningún efecto de stock o dinero de por medio.
+
+export interface RemitoParaVincular {
+  alegraId: string
+  numero: string | null
+  /** Emisión, YYYY-MM-DD; puede venir vacío si Alegra no la trae. */
+  fecha: string
+}
+
+export type RemitoResult =
+  | ({ kind: "ok"; pedido: PedidoRow } & DetalleExtras)
+  | { kind: "not_found" }
+  | { kind: "cancelado" }
+  /** El pedido ya tiene un remito (vincular/emitir) o no tiene el que el operador esperaba ver
+   *  (desvincular, si se agrega esa validación en el futuro). */
+  | { kind: "conflict" }
+
+async function okConItemsRemito(tenantId: string, pedido: PedidoRow): Promise<RemitoResult> {
+  const extras = await detalleExtras(tenantId, pedido)
+  return { kind: "ok", pedido, ...extras }
+}
+
+/**
+ * Inserta el remito del pedido (vinculado o emitido, sólo cambia el tipo de evento) dentro de
+ * una transacción con su evento del historial. `not_found`/`cancelado` se chequean ANTES del
+ * INSERT; el conflicto por remito duplicado sale de capturar el 23505 de Postgres (la
+ * restricción de unicidad de `order_id`), no de un SELECT previo — así una carrera real entre
+ * dos requests también quede resuelta por la base, no sólo por la lectura de esta función.
+ */
+async function insertarRemito(
+  tenantId: string,
+  id: string,
+  input: { remito: RemitoParaVincular; actor: { id: string; name: string }; now: Date },
+  tipoEvento: "remito_vinculado" | "remito_emitido",
+): Promise<RemitoResult> {
+  if (!UUID_RE.test(id)) return { kind: "not_found" }
+  const { remito, actor, now } = input
+
+  const [pedido] = await getDb()
+    .select()
+    .from(shopOrders)
+    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
+  if (!pedido) return { kind: "not_found" }
+  if (pedido.estado === "cancelado") return { kind: "cancelado" }
+
+  try {
+    await getDb().transaction(async (tx) => {
+      await tx.insert(shopOrderRemitos).values({
+        tenantId,
+        orderId: id,
+        remitoAlegraId: remito.alegraId,
+        remitoNumero: remito.numero,
+        remitoFecha: remito.fecha || null,
+        remitidoEn: now,
+        remitidoPor: actor.id,
+        remitidoPorNombre: actor.name,
+      })
+      await registrarEvento(tx, {
+        tenantId,
+        orderId: id,
+        tipo: tipoEvento,
+        detalle: { numero: remito.numero },
+        actor,
+        now,
+      })
+    })
+  } catch (err) {
+    if (esUniqueViolation(err)) return { kind: "conflict" }
+    throw err
+  }
+  return okConItemsRemito(tenantId, pedido)
+}
+
+/** Camina la cadena de `cause` (drizzle/postgres-js envuelve el error crudo de Postgres ahí
+ *  cuando la falla ocurre dentro de una transacción) buscando el código 23505 (unique_violation).
+ *  Mismo patrón que `catalogo-overlay-repo.ts`/`cuotas-repo.ts`. */
+function esUniqueViolation(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && i < 3; e = (e as { cause?: unknown }).cause, i++) {
+    if ((e as { code?: unknown }).code === "23505") return true
+  }
+  return false
+}
+
+/** "Vincular remito existente": el remito ya está emitido en Alegra (a mano, o desde otro
+ *  proceso) y el operador lo asocia al pedido. */
+export async function vincularRemito(
+  tenantId: string,
+  id: string,
+  input: { remito: RemitoParaVincular; actor: { id: string; name: string }; now: Date },
+): Promise<RemitoResult> {
+  return insertarRemito(tenantId, id, input, "remito_vinculado")
+}
+
+/** "Emitir remito": el remito se acaba de crear en Alegra (`createRemission`, ver
+ *  `lib/alegra.ts`) y se persiste el vínculo. */
+export async function registrarRemitoEmitido(
+  tenantId: string,
+  id: string,
+  input: { remito: RemitoParaVincular; actor: { id: string; name: string }; now: Date },
+): Promise<RemitoResult> {
+  return insertarRemito(tenantId, id, input, "remito_emitido")
+}
+
+/**
+ * Suelta el remito del pedido. NO TOCA ALEGRA: el documento sigue emitido allá (mismo criterio
+ * que `desvincularFactura`). Idempotente: sin remito → ok sin cambios ni evento de más. El
+ * evento 'remito_desvinculado' guarda el número que tenía ANTES de borrarlo.
+ */
+export async function desvincularRemito(
+  tenantId: string,
+  id: string,
+  input: { actor: { id: string; name: string }; now: Date },
+): Promise<RemitoResult> {
+  if (!UUID_RE.test(id)) return { kind: "not_found" }
+  const [pedido] = await getDb()
+    .select()
+    .from(shopOrders)
+    .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
+  if (!pedido) return { kind: "not_found" }
+
+  await getDb().transaction(async (tx) => {
+    const [previo] = await tx
+      .delete(shopOrderRemitos)
+      .where(and(eq(shopOrderRemitos.tenantId, tenantId), eq(shopOrderRemitos.orderId, id)))
+      .returning()
+    if (!previo) return
+    await registrarEvento(tx, {
+      tenantId,
+      orderId: id,
+      tipo: "remito_desvinculado",
+      detalle: { numero: previo.remitoNumero },
+      actor: input.actor,
+      now: input.now,
+    })
+  })
+  return okConItemsRemito(tenantId, pedido)
+}
+
 // ───────────────────────── Pago offline ─────────────────────────
 
 /** Medios que cobra el comercio por fuera de la tienda: el pago lo registra un operador. */
@@ -960,6 +1125,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
    *  emisión anterior no terminó (Emitir/Vincular siguen disponibles, con aviso); `null` = no hay
    *  ninguna reserva (sin factura, o ya con una factura real). */
   emisionReserva: "vigente" | "vencida" | null
+  /** Remito único del pedido (0021 del Shop), o `null` si todavía no tiene. */
+  remito: { alegraId: string; numero: string | null; fecha: string | null } | null
   facturadoEn: string | null
   facturadoPorNombre: string | null
   /** Si el pedido está apartando stock en este momento (ver `reservaStock`). */
@@ -1019,6 +1186,7 @@ export function toPedidoDetalleDto(
   items: PedidoItemRow[],
   listaPrecios: string | null = null,
   historial: EventoHistorialDto[] = [],
+  remito: RemitoRow | null = null,
 ): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
@@ -1057,6 +1225,7 @@ export function toPedidoDetalleDto(
           }
         : null,
     emisionReserva: estadoReservaEmision(row),
+    remito: remito ? { alegraId: remito.remitoAlegraId, numero: remito.remitoNumero, fecha: remito.remitoFecha } : null,
     facturadoEn: iso(row.facturadoEn),
     facturadoPorNombre: row.facturadoPorNombre,
     reservaStock: reservaStock(row),

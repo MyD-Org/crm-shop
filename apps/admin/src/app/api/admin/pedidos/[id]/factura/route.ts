@@ -120,7 +120,7 @@ function respuestaResultado(result: FacturaResult, aviso?: AvisoFactura): Respon
   if (result.kind === "not_found") return adminNotFoundResponse()
   if (result.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (result.kind === "conflict") return fail(409, "conflict", MSG.conflicto)
-  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial)
+  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito)
   // `avisoFactura` va aparte del detalle: el componente lo saca antes de guardar el pedido.
   const body = aviso ? { ...detalle, avisoFactura: { resultado: aviso.resultado, destino: aviso.destino } } : detalle
   return Response.json(body, { headers: NO_STORE })

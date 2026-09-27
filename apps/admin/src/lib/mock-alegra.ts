@@ -224,3 +224,44 @@ export function mockCreateInvoice(input: AlegraInvoiceCreateInput): AlegraInvoic
   mockInvoices.push(created)
   return { alegraId: created.alegraId, number: created.number, date: created.date, total: created.total }
 }
+
+// ── Remitos (rebanada D: "Emitir remito" / "Vincular remito existente") ──
+// Fixtures propias, sin relación con `mockInvoices`: remito y factura son documentos
+// independientes en Alegra (ver el comentario de `createRemission` en alegra.ts).
+
+interface MockRemision {
+  alegraId: string
+  numero: string | null
+  fecha: string
+  clienteAlegraId: string | null
+  clienteNombre: string | null
+}
+
+const mockRemisiones: MockRemision[] = [
+  { alegraId: "rem-1", numero: "0001-00000512", fecha: "2026-05-20", clienteAlegraId: "ct-1", clienteNombre: "Cliente Uno" },
+]
+
+/** Todos los remitos de las fixtures (para "Vincular remito existente" en modo mock). */
+export function mockAllRemisiones(): MockRemision[] {
+  return mockRemisiones
+}
+
+let nextRemisionId = 900
+
+export function mockCreateRemission(input: {
+  contactAlegraId: string
+  items: { alegraId: string; quantity: number; description?: string }[]
+  observations?: string
+}): { alegraId: string; number: string | null; date: string } {
+  const id = `rem-${nextRemisionId}`
+  nextRemisionId += 1
+  const created: MockRemision = {
+    alegraId: id,
+    numero: String(nextRemisionId - 1),
+    fecha: new Date().toISOString().slice(0, 10),
+    clienteAlegraId: input.contactAlegraId,
+    clienteNombre: null,
+  }
+  mockRemisiones.push(created)
+  return { alegraId: created.alegraId, number: created.numero, date: created.fecha }
+}

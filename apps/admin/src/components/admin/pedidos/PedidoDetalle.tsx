@@ -8,6 +8,7 @@ import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { EmitirFacturaControl } from "./EmitirFacturaControl"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
+import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
 import { opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
@@ -283,6 +284,17 @@ export function PedidoDetalle({ initial, esAdminPlus }: { initial: PedidoDetalle
               </>
             )}
           </Card>
+
+          {esAdminPlus && (
+            <Card title="Remito" className="p-4">
+              <RemitoControl
+                pedido={pedido}
+                onChanged={setPedido}
+                onConflicto={() => void recargar(true)}
+                esAdminPlus={esAdminPlus}
+              />
+            </Card>
+          )}
         </aside>
       </div>
 

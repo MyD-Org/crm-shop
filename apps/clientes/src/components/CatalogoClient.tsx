@@ -33,6 +33,7 @@ export function CatalogoClient({
   total,
   paginas,
   oferta = null,
+  filtrosSinBusqueda = false,
 }: {
   /** Sólo la página actual, nunca el catálogo entero. */
   productos: Product[];
@@ -44,6 +45,11 @@ export function CatalogoClient({
   paginas: number;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
+  /**
+   * La búsqueda no encontró nada y `facetas` son las del catálogo sin ella
+   * (ver catalogo/page.tsx): tocar un filtro también quita la búsqueda.
+   */
+  filtrosSinBusqueda?: boolean;
 }) {
   const router = useRouter();
   // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
@@ -93,6 +99,13 @@ export function CatalogoClient({
 
   const conFiltros = hayFiltros(estado);
 
+  // Con los filtros de todo el catálogo (búsqueda sin resultados), filtrar
+  // sin sacar la búsqueda volvería a dar 0: el panel la quita al tocarlo.
+  const irFiltros = filtrosSinBusqueda
+    ? (cambios: Partial<EstadoCatalogo>) => ir({ ...cambios, query: undefined })
+    : ir;
+  const estadoFiltros = filtrosSinBusqueda ? { ...estadoVisible, query: undefined } : estadoVisible;
+
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
       {/* Encabezado a todo el ancho, por encima de las dos columnas. Vista y
@@ -104,7 +117,7 @@ export function CatalogoClient({
         acciones={
           <div className="flex items-center gap-3 max-lg:w-full max-lg:justify-between">
             <div className="lg:hidden">
-              <CatalogoFiltrosSheet facetas={facetas} estado={estadoVisible} navegar={navegar} />
+              <CatalogoFiltrosSheet facetas={facetas} estado={estadoFiltros} navegar={navegar} />
             </div>
             <CatalogoControles estado={estadoVisible} ir={ir} />
           </div>
@@ -132,26 +145,36 @@ export function CatalogoClient({
             Sin valores arbitrarios.
         */}
         <aside className="scroll-fino sticky top-20 hidden max-h-screen w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-20 lg:block">
-          <CatalogoFiltros facetas={facetas} estado={estadoVisible} ir={ir} />
+          <CatalogoFiltros facetas={facetas} estado={estadoFiltros} ir={irFiltros} />
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
           {productos.length === 0 ? (
-            <EmptyState
-              title="No encontramos productos con esos filtros."
-              description={
-                estado.query && !conFiltros
-                  ? "Pruebe con otra palabra o revise la ortografía."
-                  : "Quite alguno de los filtros e inténtelo de nuevo."
-              }
-              action={
-                conFiltros ? (
-                  <Button variant="secondary" onClick={() => ir(limpiarFiltros())}>
-                    Limpiar filtros
+            // Sin culpar al visitante ("revise la ortografía"): se dice qué
+            // pasó y se ofrece por dónde seguir.
+            estado.query ? (
+              <EmptyState
+                title={`No hay resultados para "${estado.query}"`}
+                description="Puede buscar con otras palabras o elegir una categoría de la lista."
+                action={
+                  <Button variant="secondary" onClick={() => ir({ ...limpiarFiltros(), query: undefined })}>
+                    Ver todos los productos
                   </Button>
-                ) : undefined
-              }
-            />
+                }
+              />
+            ) : (
+              <EmptyState
+                title="No hay productos con estos filtros"
+                description="Quite alguno para ver más opciones."
+                action={
+                  conFiltros ? (
+                    <Button variant="secondary" onClick={() => ir(limpiarFiltros())}>
+                      Limpiar filtros
+                    </Button>
+                  ) : undefined
+                }
+              />
+            )
           ) : (
             <CatalogoProductos
               productos={productos}

@@ -89,11 +89,19 @@ async function CatalogoResultados({ searchParams }: Props) {
   //   de precio sale del conjunto filtrado sin el propio rango;
   // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
   //   o error) ⇒ el catálogo sale sin cuotas.
-  const [pagina, facetas, oferta] = await Promise.all([
+  const [pagina, facetasBusqueda, oferta] = await Promise.all([
     paginaCatalogoPublica({ filtros, orden: estado.orden, pagina: estado.pagina, soloVisibles }),
     facetasPublicas(filtros, soloVisibles),
     getOfertaCuotas(),
   ]);
+  // Una búsqueda sin resultados dejaba el panel de filtros vacío ("Sin
+  // categorías…"): sin nada para tocar, la única salida era borrar el texto.
+  // En ese caso el panel muestra los filtros sin la búsqueda, y tocar uno la
+  // quita (ver `filtrosSinBusqueda` en CatalogoClient).
+  const filtrosSinBusqueda = pagina.total === 0 && Boolean(filtros.busqueda?.trim());
+  const facetas = filtrosSinBusqueda
+    ? await facetasPublicas({ ...filtros, busqueda: undefined }, soloVisibles)
+    : facetasBusqueda;
 
   return (
     <CatalogoClient
@@ -103,6 +111,7 @@ async function CatalogoResultados({ searchParams }: Props) {
       // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
       estado={{ ...estado, pagina: pagina.pagina }}
       facetas={facetas}
+      filtrosSinBusqueda={filtrosSinBusqueda}
       oferta={oferta}
     />
   );

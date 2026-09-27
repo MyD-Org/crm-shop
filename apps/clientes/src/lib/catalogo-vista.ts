@@ -267,11 +267,39 @@ export function itemsDeFaceta<F extends { label: string; count: number }>(
   ];
 }
 
+/** Índices de las hijas directas de `facetas[i]` (orden de lectura). */
+function hijasDirectas(facetas: { label: string; nivel?: number }[], i: number): number[] {
+  const nivel = facetas[i].nivel ?? 1;
+  const hijas: number[] = [];
+  for (let j = i + 1; j < facetas.length && (facetas[j].nivel ?? 1) > nivel; j++) {
+    if ((facetas[j].nivel ?? 1) === nivel + 1) hijas.push(j);
+  }
+  return hijas;
+}
+
+/** Índices de las madres de `facetas[i]`, de la más cercana a la raíz. */
+function madresDe(facetas: { label: string; nivel?: number }[], i: number): number[] {
+  const madres: number[] = [];
+  let nivel = facetas[i].nivel ?? 1;
+  for (let j = i - 1; j >= 0 && nivel > 1; j--) {
+    const n = facetas[j].nivel ?? 1;
+    if (n < nivel) {
+      madres.push(j);
+      nivel = n;
+    }
+  }
+  return madres;
+}
+
 /**
  * Nueva selección de categorías al tildar o destildar `valor`. Tildar una
  * madre ya filtra por toda su rama (ver `filtroCategoriasSql`), así que sus
  * hijas tildadas se sacan: quedarían repetidas en la URL y en los chips.
  * `facetas` va en orden de lectura (cada madre seguida de sus hijas).
+ *
+ * Destildar una hija que está cubierta por una madre tildada (el filtro la
+ * muestra tildada y clicable) saca a la madre y deja tildadas las demás
+ * hermanas de cada nivel del camino: "toda Iluminación menos Tubos".
  */
 export function alternarCategoria(
   facetas: { label: string; nivel?: number }[],
@@ -279,7 +307,27 @@ export function alternarCategoria(
   valor: string,
   tildado: boolean,
 ): string[] {
-  if (!tildado) return seleccion.filter((x) => x !== valor);
+  if (!tildado) {
+    if (seleccion.includes(valor)) return seleccion.filter((x) => x !== valor);
+    const iValor = facetas.findIndex((f) => f.label === valor);
+    if (iValor < 0) return seleccion;
+    const madres = madresDe(facetas, iValor);
+    const cubridora = madres.find((m) => seleccion.includes(facetas[m].label));
+    if (cubridora == null) return seleccion;
+    // Camino desde la madre tildada hasta la hija: en cada nivel quedan
+    // tildadas las hermanas que no están en el camino.
+    const camino = new Set([...madres, iValor]);
+    const agregadas: string[] = [];
+    let actual = cubridora;
+    while (actual !== iValor) {
+      const hijas = hijasDirectas(facetas, actual);
+      const siguiente = hijas.find((h) => camino.has(h));
+      for (const h of hijas) if (h !== siguiente) agregadas.push(facetas[h].label);
+      if (siguiente == null) break;
+      actual = siguiente;
+    }
+    return [...seleccion.filter((x) => x !== facetas[cubridora].label), ...agregadas];
+  }
   const i = facetas.findIndex((f) => f.label === valor);
   const hijas = new Set<string>();
   if (i >= 0) {

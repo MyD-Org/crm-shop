@@ -5,6 +5,7 @@ import Image from "next/image";
 import { cn } from "@myd-org/ui";
 import type { ProductImage } from "@/data/products";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
+import { VisorFotos } from "@/components/VisorFotos";
 
 /**
  * Galería de la ficha con las fotos del overlay del CRM (portada = [0]), ya
@@ -23,6 +24,9 @@ import { LightbulbIcon } from "@/components/catalogo/iconos";
  * las miniaturas van abajo; desde lg la foto es cuadrada y las miniaturas
  * forman una columna a la izquierda. `acciones` (compartir, favorito) flota
  * arriba a la derecha de la foto.
+ *
+ * Tocar la foto grande la abre a pantalla completa (`VisorFotos`). Un
+ * deslizamiento no dispara el clic, así que pasar de foto no abre el visor.
  */
 export function GaleriaProducto({
   fotos,
@@ -34,6 +38,7 @@ export function GaleriaProducto({
   acciones?: ReactNode;
 }) {
   const [activa, setActiva] = useState(0);
+  const [visor, setVisor] = useState(false);
   const pistaRef = useRef<HTMLDivElement>(null);
   const lista = fotos ?? [];
   const varias = lista.length > 1;
@@ -50,6 +55,14 @@ export function GaleriaProducto({
     if (!pista) return;
     const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     pista.scrollTo({ left: i * pista.clientWidth, behavior: quieto ? "instant" : "smooth" });
+  }
+
+  function cerrarVisor(i: number) {
+    setVisor(false);
+    // La galería queda en la foto en la que se cerró el visor, sin animar.
+    const pista = pistaRef.current;
+    if (pista) pista.scrollLeft = i * pista.clientWidth;
+    setActiva(i);
   }
 
   return (
@@ -73,7 +86,13 @@ export function GaleriaProducto({
             className="no-scrollbar flex h-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)]"
           >
             {lista.map((f, i) => (
-              <div key={f.url} className="relative h-full w-full shrink-0 snap-center snap-always">
+              <button
+                key={f.url}
+                type="button"
+                onClick={() => setVisor(true)}
+                aria-label={`Ampliar foto ${i + 1} de ${lista.length}`}
+                className="relative block h-full w-full shrink-0 cursor-zoom-in snap-center snap-always focus-visible:outline-none"
+              >
                 <Image
                   src={f.url}
                   alt={f.alt || nombre}
@@ -88,7 +107,7 @@ export function GaleriaProducto({
                   // no lleva `loading`: con `preload` no se combina.)
                   loading={i === 0 ? undefined : Math.abs(i - activa) <= 1 ? "eager" : "lazy"}
                 />
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -118,6 +137,8 @@ export function GaleriaProducto({
           ))}
         </ul>
       )}
+
+      {visor && <VisorFotos fotos={lista} nombre={nombre} inicial={activa} onCerrar={cerrarVisor} />}
     </div>
   );
 }

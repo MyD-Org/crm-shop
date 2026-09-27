@@ -3,6 +3,7 @@
 // la respuesta del PATCH. Vive aparte de los componentes porque esta app no tiene jsdom: lo
 // que se puede equivocar se prueba acá, y los componentes quedan como cableado.
 
+import type { Cola } from "@/lib/pedidos-repo"
 import {
   ESTADOS_PEDIDO,
   ESTADO_PEDIDO_LABEL,
@@ -29,6 +30,43 @@ export function opcionesDeFiltro(): OpcionSelect[] {
   ]
 }
 
+/** Mismo patrón que `FILTRO_TODOS`, para los Select de entrega y pago. */
+export const FILTRO_ENTREGA_TODOS = "todos"
+export const FILTRO_PAGO_TODOS = "todos"
+export type FiltroEntrega = EntregaTipo | typeof FILTRO_ENTREGA_TODOS
+export type FiltroPago = "pagado" | "pendiente" | typeof FILTRO_PAGO_TODOS
+
+export function opcionesDeFiltroEntrega(): OpcionSelect[] {
+  return [
+    { value: FILTRO_ENTREGA_TODOS, label: "Envío y retiro" },
+    { value: "envio", label: "Envío" },
+    { value: "retiro", label: "Retiro en local" },
+  ]
+}
+
+export function opcionesDeFiltroPago(): OpcionSelect[] {
+  return [
+    { value: FILTRO_PAGO_TODOS, label: "Pagados y pendientes" },
+    { value: "pagado", label: "Pagados" },
+    { value: "pendiente", label: "Pago pendiente" },
+  ]
+}
+
+/** Las 4 colas de "Para atender", en el orden en que se muestran. Severidad = color de la barrita. */
+export const COLAS_INFO: Record<Cola, { label: string; severidad: "amber" | "danger" | "info" }> = {
+  sin_confirmar: { label: "Sin confirmar", severidad: "amber" },
+  pago: { label: "Pago a revisar", severidad: "danger" },
+  datos: { label: "Revisar datos", severidad: "amber" },
+  sin_factura: { label: "Entregados sin factura", severidad: "info" },
+}
+
+export const ORDEN_COLAS: Cola[] = ["sin_confirmar", "pago", "datos", "sin_factura"]
+
+/** Misma regla que la cola `sin_factura` del servidor: ENTREGADO y sin factura vinculada. */
+export function esSinFactura(p: { estado: EstadoPedido; facturado: boolean }): boolean {
+  return p.estado === "entregado" && !p.facturado
+}
+
 /**
  * Destinos que la UI OFRECE desde un estado, según el tipo de entrega del pedido: los de la
  * tabla de transiciones, nada más. Es comodidad, no seguridad: el que valida es el PATCH.
@@ -40,13 +78,34 @@ export function opcionesDeDestino(estado: EstadoPedido, entregaTipo: EntregaTipo
   }))
 }
 
-/** Query string de `GET /api/admin/pedidos`. "todos" viaja explícito: `estado=` vacío es 400. */
-export function queryDeLista(input: { estado: FiltroEstado; start: number; limit: number }): string {
-  const params = new URLSearchParams({
-    estado: input.estado,
-    start: String(Math.max(0, Math.trunc(input.start))),
-    limit: String(input.limit),
-  })
+export interface FiltrosLista {
+  estado: FiltroEstado
+  q?: string
+  entrega?: FiltroEntrega
+  pago?: FiltroPago
+  cola?: Cola | null
+}
+
+/**
+ * Query string de `GET /api/admin/pedidos`. "todos" viaja explícito para `estado` (`estado=`
+ * vacío es 400); `entrega`/`pago`/`cola` en cambio se OMITEN cuando son "todos" o no vienen,
+ * porque el servidor los toma como "sin filtro" con su sola ausencia (ver route.ts).
+ */
+export function queryDeLista(
+  input: FiltrosLista & { start: number; limit: number; vista?: "tablero" },
+): string {
+  const params = new URLSearchParams({ estado: input.estado })
+  const q = input.q?.trim()
+  if (q) params.set("q", q)
+  if (input.entrega && input.entrega !== FILTRO_ENTREGA_TODOS) params.set("entrega", input.entrega)
+  if (input.pago && input.pago !== FILTRO_PAGO_TODOS) params.set("pago", input.pago)
+  if (input.cola) params.set("cola", input.cola)
+  if (input.vista) {
+    params.set("vista", input.vista)
+  } else {
+    params.set("start", String(Math.max(0, Math.trunc(input.start))))
+    params.set("limit", String(input.limit))
+  }
   return params.toString()
 }
 
@@ -61,6 +120,45 @@ export function textoRango(start: number, cantidad: number, total: number): stri
 export function motivoValido(texto: string): boolean {
   const largo = texto.trim().length
   return largo >= MOTIVO_MIN && largo <= MOTIVO_MAX
+}
+
+// ───────────────────────── Camino feliz: Stepper y botón principal ─────────────────────────
+
+/** Pasos del "camino feliz" que muestra el Stepper del detalle, según el tipo de entrega: un
+ *  retiro no tiene parada "en_camino". `cancelado` no es un paso: se muestra aparte. */
+export function pasosPedido(entregaTipo: EntregaTipo): EstadoPedido[] {
+  const base: EstadoPedido[] = ["pendiente", "confirmado", "preparacion", "en_camino", "entregado"]
+  return entregaTipo === "retiro" ? base.filter((e) => e !== "en_camino") : base
+}
+
+/**
+ * El destino "de una sola flecha hacia adelante" desde `estado`, según el camino feliz de
+ * `entregaTipo`. `null` si no hay siguiente (ya está entregado o el pedido está cancelado): ahí
+ * sólo queda "Otro estado". No ofrece retrocesos ni cancelar: eso es `opcionesDeDestino`.
+ */
+export function siguientePaso(estado: EstadoPedido, entregaTipo: EntregaTipo): EstadoPedido | null {
+  const pasos = pasosPedido(entregaTipo)
+  const idx = pasos.indexOf(estado)
+  if (idx === -1 || idx === pasos.length - 1) return null
+  return pasos[idx + 1]
+}
+
+/** Texto del botón primario para pasar al `siguiente` paso. "Entregado" cambia de verbo en retiro. */
+export function verboSiguientePaso(siguiente: EstadoPedido, entregaTipo: EntregaTipo): string {
+  if (siguiente === "confirmado") return "Confirmar pedido"
+  if (siguiente === "preparacion") return "Pasar a preparación"
+  if (siguiente === "en_camino") return "Marcar en camino"
+  if (siguiente === "entregado") return entregaTipo === "retiro" ? "Marcar como retirado" : "Marcar como entregado"
+  return ESTADO_PEDIDO_LABEL[siguiente]
+}
+
+/** Destinos para el Select "Otro estado": los que ofrece la tabla de transiciones, MENOS el que
+ *  ya se ofrece como botón primario (`siguientePaso`). Cancelar sigue apareciendo acá. */
+export function opcionesOtroEstado(estado: EstadoPedido, entregaTipo: EntregaTipo): OpcionSelect[] {
+  const siguiente = siguientePaso(estado, entregaTipo)
+  return opcionesDeDestino(estado, entregaTipo)
+    .filter((o) => o.value !== siguiente)
+    .map((o) => (o.value === "cancelado" ? { ...o, label: "Cancelar pedido" } : o))
 }
 
 export const MENSAJE_ERROR_GENERICO = "No se pudo actualizar el pedido. Inténtelo nuevamente."

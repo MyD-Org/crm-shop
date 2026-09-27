@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Button, Dialog, Field, Select, Textarea, useToast } from "@myd-org/ui"
+import { Button, Dialog, Field, Select, Textarea } from "@myd-org/ui"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
 import { MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
-import { interpretarRespuestaCambio, motivoValido, opcionesDeDestino } from "./logica"
+import { opcionesDeDestino } from "./logica"
+import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
 
 interface Props {
   pedidoId: string
@@ -22,20 +23,14 @@ interface Props {
 
 const SIN_DESTINO = ""
 
-const AVISO_SIN_FACTURA =
-  "Este pedido no tiene factura vinculada. Si lo marca como entregado, deja de reservar stock y Alegra " +
-  "no lo descuenta hasta que se facture. ¿Desea continuar?"
-
 export function CambiarEstadoControl({ pedidoId, estado, entregaTipo, tieneFactura, onChanged, onConflicto }: Props) {
-  const { toast } = useToast()
   // "" = nada elegido: Radix lo toma como "mostrar el placeholder" (no es el value de un ítem).
   const [destino, setDestino] = useState<string>(SIN_DESTINO)
-  const [dialogoAbierto, setDialogoAbierto] = useState(false)
-  const [motivo, setMotivo] = useState("")
-  const [guardando, setGuardando] = useState(false)
-  // "Entregado" sin factura vinculada: se pide una confirmación extra, en su propio diálogo
-  // (sólo UI: el servidor no bloquea esta transición aunque falte la factura).
-  const [confirmarSinFactura, setConfirmarSinFactura] = useState(false)
+  const { intencion, motivo, setMotivo, guardando, puedeCancelar, pedirCambio, confirmarCancelacion, confirmarSinFactura, cerrar } =
+    useCambiarEstado<{ id: string; estado: EstadoPedido }>({
+      onChanged: (p) => onChanged(p as unknown as PedidoDetalleDto),
+      onConflicto,
+    })
 
   const opciones = opcionesDeDestino(estado, entregaTipo)
 
@@ -47,59 +42,21 @@ export function CambiarEstadoControl({ pedidoId, estado, entregaTipo, tieneFactu
     )
   }
 
-  function cerrarDialogo() {
-    setDialogoAbierto(false)
-    setConfirmarSinFactura(false)
-    setMotivo("")
+  function cerrarTodo() {
+    cerrar()
     setDestino(SIN_DESTINO)
   }
 
   function elegir(valor: string) {
     setDestino(valor)
-    // Cancelar no se guarda con el botón común: pide el motivo antes, en su propio diálogo.
-    if (valor === "cancelado") setDialogoAbierto(true)
+    // Cancelar no se guarda con el botón común: pide el motivo apenas se elige, en su diálogo.
+    if (valor === "cancelado") pedirCambio({ id: pedidoId, estado }, "cancelado", tieneFactura)
   }
 
   function guardar() {
-    // Entregado sin factura: primero el aviso, recién con la confirmación se manda el PATCH.
-    if (destino === "entregado" && !tieneFactura) {
-      setConfirmarSinFactura(true)
-      return
-    }
-    void enviar(destino)
+    if (destino === SIN_DESTINO || destino === "cancelado") return
+    pedirCambio({ id: pedidoId, estado }, destino as EstadoPedido, tieneFactura)
   }
-
-  async function enviar(nuevo: string, motivoCancelacion?: string) {
-    setGuardando(true)
-    const res = await fetch(`/api/admin/pedidos/${pedidoId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        estado: nuevo,
-        estadoEsperado: estado,
-        ...(motivoCancelacion !== undefined ? { motivo: motivoCancelacion } : {}),
-      }),
-    }).catch(() => null)
-    const body: unknown = res ? await res.json().catch(() => null) : null
-    const resultado = interpretarRespuestaCambio<PedidoDetalleDto>(res?.status ?? null, body)
-    setGuardando(false)
-
-    if (resultado.tipo === "ok") {
-      cerrarDialogo()
-      toast({ title: "El estado del pedido se actualizó.", tone: "success" })
-      onChanged(resultado.pedido)
-      return
-    }
-    toast({ title: resultado.mensaje, tone: "danger" })
-    if (resultado.tipo === "conflicto") {
-      // Lo que está en pantalla ya no es verdad: se cierra todo y se recarga el pedido.
-      cerrarDialogo()
-      onConflicto()
-    }
-    // Error común (400/422/red): el diálogo queda abierto con el motivo escrito, para reintentar.
-  }
-
-  const puedeCancelar = motivoValido(motivo)
 
   return (
     <>
@@ -118,27 +75,22 @@ export function CambiarEstadoControl({ pedidoId, estado, entregaTipo, tieneFactu
         <Button
           onClick={guardar}
           disabled={destino === SIN_DESTINO || destino === "cancelado"}
-          loading={guardando && !dialogoAbierto && !confirmarSinFactura}
+          loading={guardando && intencion === null}
         >
           Guardar
         </Button>
       </div>
 
       <Dialog
-        open={dialogoAbierto}
-        onOpenChange={(open) => { if (!open && !guardando) cerrarDialogo() }}
+        open={intencion?.tipo === "motivo"}
+        onOpenChange={(open) => { if (!open && !guardando) cerrarTodo() }}
         title="Cancelar pedido"
         description="Esta acción no se puede deshacer. Indique el motivo de la cancelación."
         headerBorder={false}
         footer={
           <div className="flex gap-2 justify-end">
-            <Button variant="ghost" onClick={cerrarDialogo} disabled={guardando}>Volver</Button>
-            <Button
-              variant="danger"
-              loading={guardando}
-              disabled={!puedeCancelar}
-              onClick={() => void enviar("cancelado", motivo.trim())}
-            >
+            <Button variant="ghost" onClick={cerrarTodo} disabled={guardando}>Volver</Button>
+            <Button variant="danger" loading={guardando} disabled={!puedeCancelar} onClick={confirmarCancelacion}>
               Cancelar pedido
             </Button>
           </div>
@@ -158,19 +110,15 @@ export function CambiarEstadoControl({ pedidoId, estado, entregaTipo, tieneFactu
       </Dialog>
 
       <Dialog
-        open={confirmarSinFactura}
-        onOpenChange={(open) => { if (!open && !guardando) setConfirmarSinFactura(false) }}
+        open={intencion?.tipo === "sinFactura"}
+        onOpenChange={(open) => { if (!open && !guardando) cerrarTodo() }}
         title="Marcar como entregado"
         description={AVISO_SIN_FACTURA}
         headerBorder={false}
         footer={
           <div className="flex gap-2 justify-end">
-            <Button variant="ghost" onClick={() => setConfirmarSinFactura(false)} disabled={guardando}>
-              Volver
-            </Button>
-            <Button loading={guardando} onClick={() => void enviar(destino)}>
-              Continuar
-            </Button>
+            <Button variant="ghost" onClick={cerrarTodo} disabled={guardando}>Volver</Button>
+            <Button loading={guardando} onClick={confirmarSinFactura}>Continuar</Button>
           </div>
         }
       />

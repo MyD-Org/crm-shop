@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
-import { Alert, Badge, Card, Table, type TableColumn, useToast } from "@myd-org/ui"
+import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Textarea, type StepItem, type TableColumn, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
-import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
-import { CambiarEstadoControl } from "./CambiarEstadoControl"
+import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
+import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
+import { opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
@@ -19,6 +20,7 @@ import {
   pagoEstadoLabel,
   pagoMetodoLabel,
   revisionInfo,
+  textoEvento,
   textoUltimoCambio,
   tonoEstado,
 } from "./format"
@@ -155,11 +157,6 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
         <p className="text-sm mt-0.5" style={{ color: "var(--ink-soft)" }}>
           Realizado el {fmtFechaPedido(pedido.creadoEn)}
         </p>
-        {pedido.pagoRevision && (
-          <p role="alert" className="mt-2 text-sm text-danger">
-            {PAGO_REVISION_INFO[pedido.pagoRevision].detalle}
-          </p>
-        )}
       </div>
 
       {revision && (
@@ -168,91 +165,113 @@ export function PedidoDetalle({ initial }: { initial: PedidoDetalleDto }) {
           {revision.detalle}
         </Alert>
       )}
+      {pedido.pagoRevision && (
+        <Alert tone="danger" title={PAGO_REVISION_INFO[pedido.pagoRevision].label}>
+          {PAGO_REVISION_INFO[pedido.pagoRevision].detalle}
+        </Alert>
+      )}
 
-      <Seccion titulo="Estado del pedido">
-        <CambiarEstadoControl
-          pedidoId={pedido.id}
-          estado={pedido.estado}
-          entregaTipo={pedido.entrega.tipo === "retiro" ? "retiro" : "envio"}
-          tieneFactura={pedido.factura !== null}
-          onChanged={setPedido}
-          onConflicto={() => void recargar(true)}
-        />
-      </Seccion>
+      {/* Grid principal + columna de acciones. En mobile, las acciones van PRIMERO (order-first)
+          y la columna deja de ser sticky (position: static por el propio flujo de la grilla). */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="order-2 flex flex-col gap-4 lg:order-1">
+          <Seccion titulo="Productos">
+            <Table<PedidoItemDto>
+              columns={columns}
+              rows={pedido.items}
+              rowKey={(i) => i.id}
+              empty="Este pedido no tiene productos."
+            />
+            <dl className="mt-3 ml-auto flex w-full max-w-xs flex-col gap-1 text-sm tabular-nums">
+              <Total label="Subtotal" valor={fmtMoneda(pedido.subtotal)} />
+              <Total label="IVA" valor={fmtMoneda(pedido.iva)} />
+              <Total label="Envío" valor={fmtMoneda(pedido.costoEnvio)} />
+              <Total label="Total" valor={fmtMoneda(pedido.total)} destacado />
+            </dl>
+          </Seccion>
 
-      <Seccion titulo="Factura de Alegra">
-        <VincularFacturaControl
-          pedido={pedido}
-          onChanged={setPedido}
-          onConflicto={() => void recargar(true)}
-        />
-      </Seccion>
+          <Seccion titulo="Aclaraciones del cliente">
+            <p className="text-sm whitespace-pre-wrap break-words" style={{ color: pedido.notas ? "var(--ink)" : "var(--ink-faint)" }}>
+              {pedido.notas || "El cliente no dejó aclaraciones."}
+            </p>
+          </Seccion>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Seccion titulo="Contacto">
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Dato label="Nombre">{pedido.contacto.nombre}</Dato>
-            <Dato label="Teléfono">{pedido.contacto.telefono}</Dato>
-            <Dato label="Email">{pedido.cliente.email}</Dato>
-            <Dato label="Cliente">
-              {[pedido.cliente.razonSocial, pedido.cliente.codigo && `Cód. ${pedido.cliente.codigo}`]
-                .filter(Boolean)
-                .join(" · ")}
-            </Dato>
-          </dl>
-        </Seccion>
-
-        <Seccion titulo="Entrega">
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Dato label="Tipo">{entregaLabel(pedido.entrega.tipo)}</Dato>
-            {(esEnvio || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
-            {(esEnvio || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
-          </dl>
-        </Seccion>
-
-        <Seccion titulo="Facturación">
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Dato label="Razón social">{pedido.facturacion.razonSocial}</Dato>
-            <Dato label="Documento">{documento}</Dato>
-            <Dato label="Condición de IVA">{condicionIvaLabel(pedido.facturacion.condicionIva)}</Dato>
-            <Dato label="Domicilio">{pedido.facturacion.domicilio}</Dato>
-          </dl>
-        </Seccion>
-
-        <Seccion titulo="Pago">
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Dato label="Medio de pago">{pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
-            <Dato label="Estado del pago">{pagoEstadoLabel(pedido.pagoEstado)}</Dato>
-            {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
-              <Dato label={pedido.pagoEstado === "pagado" ? "Pago registrado" : "Pago anulado"}>
-                {textoUltimoCambio(pedido.pagoRegistradoPorNombre, pedido.pagoActualizadoEn)}
+          <Seccion titulo="Cliente y facturación">
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Dato label="Nombre">{pedido.contacto.nombre}</Dato>
+              <Dato label="Teléfono">{pedido.contacto.telefono}</Dato>
+              <Dato label="Email">{pedido.cliente.email}</Dato>
+              <Dato label="Cliente">
+                {[pedido.cliente.razonSocial, pedido.cliente.codigo && `Cód. ${pedido.cliente.codigo}`]
+                  .filter(Boolean)
+                  .join(" · ")}
               </Dato>
+              <Dato label="Razón social (facturación)">{pedido.facturacion.razonSocial}</Dato>
+              <Dato label="Documento">{documento}</Dato>
+              <Dato label="Condición de IVA">{condicionIvaLabel(pedido.facturacion.condicionIva)}</Dato>
+              <Dato label="Domicilio">{pedido.facturacion.domicilio}</Dato>
+            </dl>
+          </Seccion>
+
+          <Seccion titulo="Entrega">
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Dato label="Tipo">{entregaLabel(pedido.entrega.tipo)}</Dato>
+              {(esEnvio || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
+              {(esEnvio || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
+            </dl>
+          </Seccion>
+
+          <Seccion titulo="Historial">
+            {pedido.historial.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--ink-faint)" }}>Este pedido todavía no tiene movimientos.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {pedido.historial.map((evento, i) => (
+                  <li key={i} className="grid grid-cols-1 gap-0.5 text-sm sm:grid-cols-[150px_1fr] sm:gap-3">
+                    <span className="tabular-nums" style={{ color: "var(--ink-faint)" }}>{fmtFechaPedido(evento.en)}</span>
+                    <span style={{ color: "var(--ink)" }}>{textoEvento(evento)}</span>
+                  </li>
+                ))}
+              </ul>
             )}
-          </dl>
-          <RegistrarPagoControl pedido={pedido} onChanged={setPedido} />
-        </Seccion>
+            <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>El cliente no ve el historial.</p>
+          </Seccion>
+        </div>
+
+        {/* Acciones: sticky en desktop, primero en mobile (ver order-* arriba). */}
+        <aside className="order-1 flex flex-col gap-4 lg:sticky lg:top-4 lg:order-2">
+          <Card title="Estado" className="p-4">
+            <EstadoAcciones key={pedido.estado} pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+          </Card>
+
+          <Card title="Pago" className="p-4">
+            <dl className="mb-2 flex flex-col gap-1">
+              <Dato label="Medio de pago">{pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
+              <Dato label="Estado del pago">{pagoEstadoLabel(pedido.pagoEstado)}</Dato>
+              {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
+                <Dato label={pedido.pagoEstado === "pagado" ? "Pago registrado" : "Pago anulado"}>
+                  {textoUltimoCambio(pedido.pagoRegistradoPorNombre, pedido.pagoActualizadoEn)}
+                </Dato>
+              )}
+            </dl>
+            <RegistrarPagoControl pedido={pedido} onChanged={setPedido} />
+          </Card>
+
+          <Card title="Factura" className="p-4">
+            <VincularFacturaControl pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+            {!pedido.factura && pedido.estado !== "cancelado" && (
+              <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <Button variant="ghost" size="sm" disabled title="Disponible próximamente">
+                  Emitir factura
+                </Button>
+                <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>
+                  Emitir la factura de Alegra desde acá está en desarrollo. Por ahora, vincule una factura hecha por fuera.
+                </p>
+              </div>
+            )}
+          </Card>
+        </aside>
       </div>
-
-      <Seccion titulo="Aclaraciones del cliente">
-        <p className="text-sm whitespace-pre-wrap break-words" style={{ color: pedido.notas ? "var(--ink)" : "var(--ink-faint)" }}>
-          {pedido.notas || "El cliente no dejó aclaraciones."}
-        </p>
-      </Seccion>
-
-      <Seccion titulo="Productos">
-        <Table<PedidoItemDto>
-          columns={columns}
-          rows={pedido.items}
-          rowKey={(i) => i.id}
-          empty="Este pedido no tiene productos."
-        />
-        <dl className="mt-3 ml-auto flex w-full max-w-xs flex-col gap-1 text-sm tabular-nums">
-          <Total label="Subtotal" valor={fmtMoneda(pedido.subtotal)} />
-          <Total label="IVA" valor={fmtMoneda(pedido.iva)} />
-          <Total label="Envío" valor={fmtMoneda(pedido.costoEnvio)} />
-          <Total label="Total" valor={fmtMoneda(pedido.total)} destacado />
-        </dl>
-      </Seccion>
 
       <Seccion titulo="Notas internas">
         <dl className="grid grid-cols-1 gap-3">
@@ -284,6 +303,133 @@ function Total({ label, valor, destacado }: { label: string; valor: string; dest
     >
       <dt>{label}</dt>
       <dd>{valor}</dd>
+    </div>
+  )
+}
+
+/**
+ * Bloque de acciones de estado: Stepper del camino feliz, botón primario para el siguiente paso
+ * y un Select con el resto de los destinos (incluido "Cancelar pedido"). Usa el mismo
+ * `useCambiarEstado` que `PedidosTablero`: el diálogo de motivo y el aviso de "entregado sin
+ * factura" son un solo lugar para las dos pantallas.
+ */
+function EstadoAcciones({
+  pedido,
+  onChanged,
+  onConflicto,
+}: {
+  pedido: PedidoDetalleDto
+  onChanged: (pedido: PedidoDetalleDto) => void
+  onConflicto: () => void
+}) {
+  const entregaTipo: EntregaTipo = pedido.entrega.tipo === "retiro" ? "retiro" : "envio"
+  // `key={pedido.estado}` en el padre reinicia este estado al cambiar de estado.
+  const [otro, setOtro] = useState("")
+
+  const {
+    intencion,
+    motivo,
+    setMotivo,
+    guardando,
+    puedeCancelar,
+    pedirCambio,
+    confirmarCancelacion,
+    confirmarSinFactura,
+    cerrar,
+  } = useCambiarEstado<{ id: string; estado: EstadoPedido }>({
+    onChanged: (p) => onChanged(p as unknown as PedidoDetalleDto),
+    onConflicto,
+  })
+
+  if (pedido.estado === "cancelado") {
+    return (
+      <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+        Cancelado{pedido.cancelacionMotivo ? `: ${pedido.cancelacionMotivo}` : ""}. No admite más cambios de estado.
+      </p>
+    )
+  }
+
+  const pasos = pasosPedido(entregaTipo)
+  const idx = pasos.indexOf(pedido.estado)
+  const steps: StepItem[] = pasos.map((e, i) => ({
+    label: ESTADO_PEDIDO_LABEL[e],
+    state: i < idx ? "done" : i === idx ? "current" : "pending",
+  }))
+  const siguiente = siguientePaso(pedido.estado, entregaTipo)
+  const otrosDestinos = opcionesOtroEstado(pedido.estado, entregaTipo)
+  const tieneFactura = pedido.factura !== null
+
+  function elegirOtro(valor: string) {
+    setOtro(valor)
+    if (valor) pedirCambio({ id: pedido.id, estado: pedido.estado }, valor as EstadoPedido, tieneFactura)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Stepper steps={steps} orientation="vertical" size="sm" ariaLabel="Seguimiento del pedido" />
+
+      {siguiente && (
+        <Button
+          onClick={() => pedirCambio({ id: pedido.id, estado: pedido.estado }, siguiente, tieneFactura)}
+          loading={guardando && intencion === null}
+        >
+          {verboSiguientePaso(siguiente, entregaTipo)}
+        </Button>
+      )}
+
+      {otrosDestinos.length > 0 && (
+        <Field label="Otro estado">
+          <Select
+            value={otro}
+            onValueChange={elegirOtro}
+            options={otrosDestinos}
+            placeholder="Seleccione…"
+            disabled={guardando}
+          />
+        </Field>
+      )}
+
+      <Dialog
+        open={intencion?.tipo === "motivo"}
+        onOpenChange={(open) => { if (!open && !guardando) cerrar() }}
+        title="Cancelar pedido"
+        description="Esta acción no se puede deshacer. Indique el motivo de la cancelación."
+        headerBorder={false}
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={cerrar} disabled={guardando}>Volver</Button>
+            <Button variant="danger" loading={guardando} disabled={!puedeCancelar} onClick={confirmarCancelacion}>
+              Cancelar pedido
+            </Button>
+          </div>
+        }
+      >
+        <Field label="Motivo" hint={`${motivo.length}/${MOTIVO_MAX}`}>
+          <Textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={4}
+            maxLength={MOTIVO_MAX}
+            required
+            aria-required="true"
+            disabled={guardando}
+          />
+        </Field>
+      </Dialog>
+
+      <Dialog
+        open={intencion?.tipo === "sinFactura"}
+        onOpenChange={(open) => { if (!open && !guardando) cerrar() }}
+        title="Marcar como entregado"
+        description={AVISO_SIN_FACTURA}
+        headerBorder={false}
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={cerrar} disabled={guardando}>Volver</Button>
+            <Button loading={guardando} onClick={confirmarSinFactura}>Continuar</Button>
+          </div>
+        }
+      />
     </div>
   )
 }

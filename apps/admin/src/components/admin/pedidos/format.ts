@@ -6,8 +6,8 @@
 // server (UTC) y otra en el navegador (-03) y React lo marca como hydration mismatch.
 
 import type { BadgeTone } from "@myd-org/ui"
-import type { PagoRevision } from "@/lib/pedidos-repo"
-import type { EstadoPedido } from "@/lib/pedidos-transiciones"
+import type { EventoHistorialDto, PagoRevision } from "@/lib/pedidos-repo"
+import { ESTADO_PEDIDO_LABEL, esEstadoPedido, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { fmtMonto } from "../comprobantes/format"
 
 /** 123456.7 → "$ 123.456,70". Reusa el formateador de moneda del admin (comprobantes). */
@@ -38,6 +38,27 @@ export function fmtFechaPedido(iso: string | null): string {
   const parte: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {}
   for (const { type, value } of FECHA_HORA.formatToParts(fecha)) parte[type] = value
   return `${parte.day}/${parte.month}/${parte.year}, ${parte.hour}:${parte.minute}`
+}
+
+const MIN = 60_000
+const HORA = 60 * MIN
+const DIA = 24 * HORA
+
+/**
+ * "hace 5 min" / "hace 3 h" / "hace 2 d", para la lista y las tarjetas del tablero. `ahora` se
+ * recibe como parámetro (default `Date.now()`) para que el resultado sea determinístico en los
+ * tests; en pantalla nunca hace falta pasarlo. `iso` inválido o futuro → "—" (no se resta un
+ * pedido "creado en el futuro" por relojes desincronizados).
+ */
+export function fmtFechaRelativa(iso: string | null, ahora: number = Date.now()): string {
+  if (!iso) return "—"
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return "—"
+  const diff = ahora - t
+  if (diff < 0) return "—"
+  if (diff < HORA) return `hace ${Math.max(0, Math.round(diff / MIN))} min`
+  if (diff < DIA) return `hace ${Math.round(diff / HORA)} h`
+  return `hace ${Math.round(diff / DIA)} d`
 }
 
 /** Fecha sin hora de Alegra ("2026-09-20") → "20/09/2026". Sin Date: no hay zona que corra el día. */
@@ -213,5 +234,57 @@ export function revisionInfo(d: DatosRevision): { titulo: string; detalle: strin
           "existente en lugar de crear uno nuevo, y verifique si corresponde aplicarle su lista " +
           "de precios.",
       }
+  }
+}
+
+// ───────────────────────────────── Historial (shop.order_eventos) ─────────────────────────────
+
+function actorTexto(actorNombre: string | null): string {
+  return actorNombre?.trim() ? actorNombre.trim() : "el cliente"
+}
+
+function detalleString(detalle: Record<string, unknown>, clave: string): string | null {
+  const v = detalle[clave]
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null
+}
+
+/**
+ * Texto legible de un evento del historial, por `tipo` (`EventoHistorialDto`, contrato de
+ * `admin-pedidos-rediseno/datos`). Un `detalle` con datos faltantes o de forma inesperada no
+ * revienta: cae a un texto genérico para ese tipo, nunca deja la fila en blanco.
+ */
+export function textoEvento(evento: EventoHistorialDto): string {
+  const { tipo, detalle, actorNombre } = evento
+  switch (tipo) {
+    case "creado":
+      return "Pedido realizado en la tienda"
+    case "estado": {
+      const hacia = detalleString(detalle, "hacia")
+      const etiqueta = hacia && esEstadoPedido(hacia) ? ESTADO_PEDIDO_LABEL[hacia] : hacia
+      return `Estado: ${etiqueta ?? "cambió"}, por ${actorTexto(actorNombre)}`
+    }
+    case "cancelado": {
+      const motivo = detalleString(detalle, "motivo")
+      return motivo ? `Pedido cancelado: ${motivo}` : `Pedido cancelado por ${actorTexto(actorNombre)}`
+    }
+    case "pago": {
+      const estado = detalleString(detalle, "estado")
+      const etiqueta = estado ? pagoEstadoLabel(estado) : null
+      return `Pago: ${etiqueta ?? "actualizado"}, por ${actorTexto(actorNombre)}`
+    }
+    case "factura_vinculada": {
+      const numero = detalleString(detalle, "numero")
+      return `Factura ${numero ?? ""} vinculada por ${actorTexto(actorNombre)}`.replace("  ", " ")
+    }
+    case "factura_desvinculada": {
+      const numero = detalleString(detalle, "numero")
+      return `Factura ${numero ?? ""} desvinculada por ${actorTexto(actorNombre)}`.replace("  ", " ")
+    }
+    case "factura_emitida": {
+      const numero = detalleString(detalle, "numero")
+      return `Factura ${numero ?? ""} emitida por ${actorTexto(actorNombre)}`.replace("  ", " ")
+    }
+    default:
+      return "Movimiento del pedido"
   }
 }

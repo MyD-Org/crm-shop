@@ -1,20 +1,27 @@
 import { describe, expect, it } from "vitest"
 import { ESTADOS_PEDIDO } from "@/lib/pedidos-transiciones"
+import type { EventoHistorialDto } from "@/lib/pedidos-repo"
 import {
   condicionIvaLabel,
   entregaLabel,
   fmtCantidad,
   fmtFechaDia,
   fmtFechaPedido,
+  fmtFechaRelativa,
   fmtMoneda,
   pagoEstadoLabel,
   pagoMetodoLabel,
   revisionInfo,
+  textoEvento,
   textoUltimoCambio,
   tituloRevision,
   tonoEstado,
   type DatosRevision,
 } from "./format"
+
+function evento(parcial: Partial<EventoHistorialDto> & Pick<EventoHistorialDto, "tipo">): EventoHistorialDto {
+  return { detalle: {}, actorNombre: null, en: "2026-09-20T10:00:00.000Z", ...parcial }
+}
 
 // Intl separa el símbolo del número con un espacio duro (U+00A0): se normaliza para comparar.
 const plano = (s: string | null) => (s ?? "").replace(/\s/g, " ")
@@ -216,5 +223,69 @@ describe("fmtFechaDia", () => {
     expect(fmtFechaDia(null)).toBe("—")
     expect(fmtFechaDia("")).toBe("—")
     expect(fmtFechaDia("20/09/2026")).toBe("—")
+  })
+})
+
+describe("fmtFechaRelativa", () => {
+  const ahora = new Date("2026-09-20T12:00:00.000Z").getTime()
+
+  it("minutos, horas y días redondeados", () => {
+    expect(fmtFechaRelativa(new Date(ahora - 5 * 60_000).toISOString(), ahora)).toBe("hace 5 min")
+    expect(fmtFechaRelativa(new Date(ahora - 3 * 3_600_000).toISOString(), ahora)).toBe("hace 3 h")
+    expect(fmtFechaRelativa(new Date(ahora - 2 * 86_400_000).toISOString(), ahora)).toBe("hace 2 d")
+  })
+
+  it("vacío, inválido o futuro → raya", () => {
+    expect(fmtFechaRelativa(null, ahora)).toBe("—")
+    expect(fmtFechaRelativa("no-es-fecha", ahora)).toBe("—")
+    expect(fmtFechaRelativa(new Date(ahora + 60_000).toISOString(), ahora)).toBe("—")
+  })
+})
+
+describe("textoEvento", () => {
+  it("'creado' es siempre el mismo texto, sin actor", () => {
+    expect(textoEvento(evento({ tipo: "creado" }))).toBe("Pedido realizado en la tienda")
+  })
+
+  it("'estado' muestra la etiqueta del destino y el actor", () => {
+    expect(
+      textoEvento(evento({ tipo: "estado", detalle: { desde: "pendiente", hacia: "confirmado" }, actorNombre: "Ana Pérez" })),
+    ).toBe("Estado: Confirmado, por Ana Pérez")
+  })
+
+  it("sin actor (evento del cliente o dato viejo) dice 'el cliente'", () => {
+    expect(textoEvento(evento({ tipo: "estado", detalle: { hacia: "cancelado" }, actorNombre: null }))).toBe(
+      "Estado: Cancelado, por el cliente",
+    )
+  })
+
+  it("'cancelado' con motivo lo muestra; sin motivo cae al actor", () => {
+    expect(textoEvento(evento({ tipo: "cancelado", detalle: { motivo: "Sin stock" } }))).toBe(
+      "Pedido cancelado: Sin stock",
+    )
+    expect(textoEvento(evento({ tipo: "cancelado", detalle: {}, actorNombre: "Ana" }))).toBe(
+      "Pedido cancelado por Ana",
+    )
+  })
+
+  it("'pago' usa la etiqueta de pagoEstadoLabel", () => {
+    expect(textoEvento(evento({ tipo: "pago", detalle: { estado: "pagado" }, actorNombre: "Ana" }))).toBe(
+      "Pago: Pagado, por Ana",
+    )
+  })
+
+  it("factura_vinculada / desvinculada / emitida incluyen el número", () => {
+    expect(textoEvento(evento({ tipo: "factura_vinculada", detalle: { numero: "0001-00000012" }, actorNombre: "Ana" }))).toBe(
+      "Factura 0001-00000012 vinculada por Ana",
+    )
+    expect(textoEvento(evento({ tipo: "factura_desvinculada", detalle: { numero: "0001-00000012" } }))).toBe(
+      "Factura 0001-00000012 desvinculada por el cliente",
+    )
+  })
+
+  it("detalle con forma inesperada no revienta: cae al texto genérico del tipo", () => {
+    expect(textoEvento(evento({ tipo: "estado", detalle: { hacia: 123 as unknown as string } }))).toBe(
+      "Estado: cambió, por el cliente",
+    )
   })
 })

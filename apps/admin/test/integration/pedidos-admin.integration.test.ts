@@ -233,6 +233,7 @@ describe("admin: pedidos del Shop", () => {
         requiereRevision: true,
         motivoRevision: "documento_incompatible",
         pagoRevision: null,
+        facturado: false,
       })
       // El motivo interno y los datos de contacto finos no viajan en el listado.
       expect(body.items[0]).not.toHaveProperty("cancelacionMotivo")

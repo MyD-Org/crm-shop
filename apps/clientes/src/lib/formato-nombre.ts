@@ -141,3 +141,16 @@ export function formatNombreProducto(nombre: string, marca?: string | null): str
   // quedó una minúscula; una sigla o código ya viene en mayúscula).
   return resultado.replace(/(^|[.!?]\s+)([^\p{L}]*)(\p{L})/gu, (_, antes, medio, letra) => antes + medio + letra.toUpperCase());
 }
+
+/**
+ * Descripción de producto lista para mostrar: el mismo formato oración que el
+ * nombre, aplicado línea por línea para no perder los saltos de línea (la
+ * ficha los respeta). Una línea que no viene en MAYÚSCULAS SOSTENIDAS queda
+ * como está. Sólo display, igual que `formatNombreProducto`.
+ */
+export function formatDescripcionProducto(descripcion: string, marca?: string | null): string {
+  return descripcion
+    .split("\n")
+    .map((linea) => (linea.trim() ? formatNombreProducto(linea.trim(), marca) : ""))
+    .join("\n");
+}

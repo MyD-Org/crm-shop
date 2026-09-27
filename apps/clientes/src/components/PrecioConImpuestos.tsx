@@ -21,9 +21,9 @@ interface Props {
 export function PrecioConImpuestos({ price, precioFinal }: Props) {
   return (
     <div>
-      <span className="text-4xl font-extrabold text-text">{fmt(precioFinal ?? price)}</span>
+      <span className="font-display text-[34px] font-bold leading-none tracking-tight text-text tabular-nums lg:text-[38px]">{fmt(precioFinal ?? price)}</span>
       {precioFinal != null && (
-        <p className="mt-1 text-xs tracking-wide text-muted">
+        <p className="mt-2 text-[13px] text-muted">
           precio sin impuestos nacionales {fmt(price)}
         </p>
       )}

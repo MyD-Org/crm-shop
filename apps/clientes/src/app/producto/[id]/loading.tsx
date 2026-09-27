@@ -9,20 +9,24 @@ import { Skeleton } from "@myd-org/ui";
  */
 export default function CargandoProducto() {
   return (
-    <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8" aria-busy>
-      <Skeleton className="mb-6 h-4 w-56" />
+    <main className="mx-auto w-full max-w-contenido flex-1 px-4 pb-16 pt-6 lg:pt-8" aria-busy>
+      <Skeleton className="mb-5 h-4 w-56 lg:mb-6" />
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-        <Skeleton className="aspect-square w-full rounded-[24px]" />
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-x-12">
+        <Skeleton className="aspect-[4/3] w-full rounded-[24px] lg:aspect-square" />
 
-        <div className="space-y-5">
+        <div className="space-y-6">
           <div className="space-y-2">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-8 w-4/5" />
-            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-10 w-4/5" />
+            <Skeleton className="h-5 w-32" />
           </div>
-          <Skeleton className="h-40 w-full rounded-[24px]" />
-          <Skeleton className="h-12 w-full rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-8 w-44 rounded-full" />
+          <Skeleton className="hidden h-12 w-full rounded-full lg:block" />
         </div>
       </div>
 

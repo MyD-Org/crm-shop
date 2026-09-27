@@ -28,15 +28,19 @@ export function FichaTecnicaModal({ url, nombreProducto }: { url: string; nombre
         href={url}
         target="_blank"
         rel="noopener noreferrer"
+        download
         onClick={(e) => {
           if (!window.matchMedia(MEDIA_MODAL).matches) return;
           e.preventDefault();
           setAbierto(true);
         }}
-        className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+        className="inline-flex items-center gap-2 rounded-sm text-sm font-semibold text-accent underline decoration-accent/35 underline-offset-4 transition-colors hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
       >
         <FileIcon />
-        Ver ficha técnica
+        {/* Mismo corte que MEDIA_MODAL (md = 768px): en el celular el enlace
+            baja el PDF, así que dice "Descargar"; desde md abre el modal. */}
+        <span className="md:hidden">Descargar ficha técnica</span>
+        <span className="hidden md:inline">Ver ficha técnica</span>
       </a>
       <Dialog
         open={abierto}

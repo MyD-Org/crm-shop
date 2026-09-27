@@ -1117,7 +1117,7 @@ export function CheckoutClient({
               <span className="font-medium">{fmtPrecio(cotizacion?.subtotal ?? 0)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted">IVA</span>
+              <span className="text-muted">Impuestos</span>
               <span className="font-medium">{fmtPrecio(cotizacion?.iva ?? 0)}</span>
             </div>
             {entrega === "envio" && (

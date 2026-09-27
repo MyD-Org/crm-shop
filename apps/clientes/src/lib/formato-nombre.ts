@@ -143,6 +143,23 @@ export function formatNombreProducto(nombre: string, marca?: string | null): str
 }
 
 /**
+ * Nombre para el título de una card. Hay productos cuyo nombre en el CRM es
+ * sólo el código del fabricante ("1200", "02141N"): solo, como título, no
+ * dice nada, y además repite la línea "Cód.". En ese caso el título pasa a
+ * ser marca + código ("Akai 1200") y `esCodigo` avisa que la línea del código
+ * sobra.
+ *
+ * "Sólo un código" = una única palabra que tiene algún dígito. Sin marca no
+ * hay con qué completarlo y queda como está. Sólo display, igual que
+ * `formatNombreProducto`; `marca` va YA formateada (`formatMarca`).
+ */
+export function nombreParaCard(nombre: string, marca?: string | null): { nombre: string; esCodigo: boolean } {
+  const formateado = formatNombreProducto(nombre, marca).trim();
+  const esCodigo = Boolean(marca) && /^\S+$/.test(formateado) && /\d/.test(formateado);
+  return { nombre: esCodigo ? `${marca} ${formateado}` : formateado, esCodigo };
+}
+
+/**
  * Descripción de producto lista para mostrar: el mismo formato oración que el
  * nombre, aplicado línea por línea para no perder los saltos de línea (la
  * ficha los respeta). Una línea que no viene en MAYÚSCULAS SOSTENIDAS queda

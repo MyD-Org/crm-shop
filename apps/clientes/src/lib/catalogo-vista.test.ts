@@ -8,6 +8,7 @@ import {
   contarFiltrosActivos,
   etiquetaBotonFiltros,
   etiquetaStock,
+  mostrarStockEnCard,
   fmtPesos,
   hayFiltros,
   indexable,
@@ -103,7 +104,8 @@ describe("anuncioResultados", () => {
 
 describe("etiquetaStock", () => {
   it("pocas unidades con cantidad conocida", () => {
-    expect(etiquetaStock({ stock: "low", stockQty: 3 })).toBe("¡Últimas 3!");
+    expect(etiquetaStock({ stock: "low", stockQty: 3 })).toBe("Quedan 3");
+    expect(etiquetaStock({ stock: "low", stockQty: 1 })).toBe("Queda 1");
   });
 
   it("en cualquier otro caso deja el texto por defecto del DS", () => {
@@ -112,9 +114,17 @@ describe("etiquetaStock", () => {
     expect(etiquetaStock({ stock: "out", stockQty: 0 })).toBeUndefined();
   });
 
-  it("nunca dice ¡Últimas n! con n menor o igual a cero", () => {
+  it("nunca dice Quedan n con n menor o igual a cero", () => {
     expect(etiquetaStock({ stock: "low", stockQty: 0 })).toBeUndefined();
     expect(etiquetaStock({ stock: "low", stockQty: -2 })).toBeUndefined();
+  });
+});
+
+describe("mostrarStockEnCard", () => {
+  it("sólo las excepciones: pocas unidades o sin stock", () => {
+    expect(mostrarStockEnCard({ stock: "in" })).toBe(false);
+    expect(mostrarStockEnCard({ stock: "low" })).toBe(true);
+    expect(mostrarStockEnCard({ stock: "out" })).toBe(true);
   });
 });
 

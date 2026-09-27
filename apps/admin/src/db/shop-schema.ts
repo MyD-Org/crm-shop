@@ -142,7 +142,8 @@ export const shopOrderEventos = shop.table("order_eventos", {
   tenantId: text("tenant_id").notNull(),
   // SIN `.references()`: la FK (on delete cascade) es del Shop y ya existe en la base.
   orderId: uuid("order_id").notNull(),
-  // 'estado' | 'pago' | 'factura_vinculada' | 'factura_desvinculada' | 'factura_emitida' | 'cancelado'.
+  // 'estado' | 'pago' | 'factura_vinculada' | 'factura_desvinculada' | 'factura_emitida' |
+  // 'cancelado' | 'remito_emitido' | 'remito_vinculado' | 'remito_desvinculado' (0021 del Shop).
   tipo: text("tipo").notNull(),
   detalle: jsonb("detalle").$type<Record<string, unknown>>().notNull().default({}),
   actorId: text("actor_id"),
@@ -151,6 +152,23 @@ export const shopOrderEventos = shop.table("order_eventos", {
 })
 
 export type ShopOrderEventoRow = typeof shopOrderEventos.$inferSelect
+
+// Remito único por pedido (0021 del Shop, change `admin-emitir-factura-pedido` rebanada D). Sin
+// `.references()`: la FK es del Shop y ya existe en la base. La unicidad de `order_id` vive en
+// el índice único del Shop (`order_remitos_order_id`); acá sólo se declara la forma de la fila.
+export const shopOrderRemitos = shop.table("order_remitos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  orderId: uuid("order_id").notNull(),
+  remitoAlegraId: text("remito_alegra_id").notNull(),
+  remitoNumero: text("remito_numero"),
+  remitoFecha: date("remito_fecha", { mode: "string" }),
+  remitidoEn: timestamp("remitido_en", { withTimezone: true }).notNull().defaultNow(),
+  remitidoPor: text("remitido_por"),
+  remitidoPorNombre: text("remitido_por_nombre"),
+})
+
+export type ShopOrderRemitoRow = typeof shopOrderRemitos.$inferSelect
 
 // Espejo de los usuarios de Clerk de cada tienda (0018 del Shop). Lo escribe SÓLO el Shop
 // (webhook + backfill, por las funciones `shop.clientes_*`); el CRM lo lee para el listado

@@ -284,6 +284,18 @@ export function textoEvento(evento: EventoHistorialDto): string {
       const numero = detalleString(detalle, "numero")
       return `Factura ${numero ?? ""} emitida por ${actorTexto(actorNombre)}`.replace("  ", " ")
     }
+    case "remito_emitido": {
+      const numero = detalleString(detalle, "numero")
+      return `Remito ${numero ?? ""} emitido por ${actorTexto(actorNombre)}`.replace("  ", " ")
+    }
+    case "remito_vinculado": {
+      const numero = detalleString(detalle, "numero")
+      return `Remito ${numero ?? ""} vinculado por ${actorTexto(actorNombre)}`.replace("  ", " ")
+    }
+    case "remito_desvinculado": {
+      const numero = detalleString(detalle, "numero")
+      return `Remito ${numero ?? ""} desvinculado por ${actorTexto(actorNombre)}`.replace("  ", " ")
+    }
     default:
       return "Movimiento del pedido"
   }

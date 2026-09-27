@@ -322,7 +322,7 @@ export function CarritoClient({
 
         {/* Barra de compra en mobile: sticky y última del main, acompaña el
             scroll y se detiene donde empieza el footer. */}
-        <div className="sticky bottom-0 z-30 -mx-4 mt-8 flex items-center gap-4 border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+        <div data-sin-footer-mobile className="sticky bottom-0 z-30 -mx-4 mt-8 flex items-center gap-4 border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div className="shrink-0">
             <p className="text-xs font-semibold text-muted">Total</p>
             <p className="font-display text-lg font-bold tabular-nums text-text">{textoTotal}</p>

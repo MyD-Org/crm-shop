@@ -21,13 +21,16 @@ import { columnasFooter } from "@/lib/legales/footer";
  * Va en el shell estático (Cache Components): los datos salen de
  * `'use cache'` y el año también, así no hace falta un request para pintarlo.
  *
+ * En mobile no se muestra en las páginas con una barra fija abajo (ficha,
+ * carrito, checkout): ver `[data-sin-footer-mobile]` en globals.css.
+ *
  * Admin: botón "Editar footer" arriba del footer, en un hueco aparte
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
   const [anio, legal, footer] = await Promise.all([anioActual(), getDatosLegales(), getDatosFooter()]);
   return (
-    <>
+    <div className="footer-global">
       <Suspense fallback={null}>
         <BotonEditarFooterSiAdmin inicial={footer} />
       </Suspense>
@@ -50,7 +53,7 @@ export async function SiteFooter() {
           ) : undefined
         }
       />
-    </>
+    </div>
   );
 }
 

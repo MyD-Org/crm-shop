@@ -107,6 +107,16 @@ body {
   font-style: normal;
 }
 
+/* Sin footer en mobile donde hay una barra fija abajo (ficha, carrito,
+   checkout): al llegar al final quedaba la barra encima del footer. La
+   página se marca con `data-sin-footer-mobile`; 64rem = `lg`, el mismo corte
+   en el que esas barras desaparecen (`lg:hidden`). */
+@media (width < 64rem) {
+  body:has([data-sin-footer-mobile]) .footer-global {
+    display: none;
+  }
+}
+
 /* ==================================================================
    DS (@myd-org/ui) en paleta cálida — las decisiones visuales del diseño
    aprobado viven ACÁ, como tokens, única fuente de verdad. El DS consume

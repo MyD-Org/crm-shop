@@ -84,6 +84,8 @@ export default async function CheckoutPage() {
 
   return (
     <>
+      {/* Sin footer en mobile: ver `[data-sin-footer-mobile]` en globals.css. */}
+      <span data-sin-footer-mobile hidden />
       <CheckoutClient
         nombreSugerido={
           dc.datos.razonSocial ?? cliente?.razonsocial ?? nombre ?? ""

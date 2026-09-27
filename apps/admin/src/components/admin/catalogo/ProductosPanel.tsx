@@ -1,9 +1,21 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
-import { Package, RefreshCw } from "lucide-react"
-import { Badge, Button, Dialog, EmptyState, SearchInput, Select, SelectionBar, Table, type TableColumn } from "@myd-org/ui"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
+import { Check, Copy, Package, RefreshCw } from "lucide-react"
+import {
+  Badge,
+  Button,
+  Dialog,
+  EmptyState,
+  SearchInput,
+  Select,
+  SelectionBar,
+  Table,
+  useToast,
+  type TableColumn,
+} from "@myd-org/ui"
 import { ProductoDialog, caminoCategoria } from "./ProductoDialog"
+import { contarFotos } from "./FotosProducto"
 import {
   api,
   TEXTO_MOTIVO,
@@ -48,8 +60,40 @@ interface Pendiente {
  */
 const TODOS = "todos"
 
-/** Sin ancho propio cada filtro se lleva un renglón entero. */
-const ANCHO_FILTRO = "w-[190px]"
+/** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag"] as const
+
+/** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
+function Sku({ sku }: { sku: string }) {
+  const { toast } = useToast()
+  const [copiado, setCopiado] = useState(false)
+
+  async function copiar(e: MouseEvent) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(sku)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 1500)
+    } catch {
+      toast({ title: "No se pudo copiar el SKU", tone: "danger" })
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      SKU {sku}
+      <Button
+        variant="ghost"
+        size="inline"
+        onClick={(e) => void copiar(e)}
+        aria-label={copiado ? "SKU copiado" : `Copiar el SKU ${sku}`}
+        title={copiado ? "Copiado" : "Copiar SKU"}
+      >
+        {copiado ? <Check size={12} /> : <Copy size={12} />}
+      </Button>
+    </span>
+  )
+}
 
 export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Props) {
   const [filtros, setFiltros] = useState<Filtros>({})
@@ -101,6 +145,15 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
       else Object.assign(next, { [clave]: valor })
       return next
     })
+    setStart(0)
+    setSeleccion([])
+    setTodoElFiltro(false)
+  }
+
+  const filtrosActivos = CLAVES_FILTRO.filter((k) => filtros[k] !== undefined).length
+
+  function limpiarFiltros() {
+    setFiltros((prev) => (prev.q ? { q: prev.q } : {}))
     setStart(0)
     setSeleccion([])
     setTodoElFiltro(false)
@@ -161,8 +214,7 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
             {p.nombreEfectivo}
           </div>
           <div className="text-xs" style={{ color: "var(--ink-faint)" }}>
-            SKU {p.sku}
-            {p.nombre === null && " · sin nombre propio"}
+            <Sku sku={p.sku} />
           </div>
         </>
       ),
@@ -207,7 +259,7 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
       hideBelow: "md",
       render: (p) =>
         p.fotos.length > 0 ? (
-          <Badge tone="neutral">{p.fotos.length}</Badge>
+          <Badge tone="neutral">{contarFotos(p.fotos)}</Badge>
         ) : (
           <span className="text-xs" style={{ color: "var(--ink-faint)" }}>
             Sin foto
@@ -248,7 +300,7 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="min-w-[220px] max-w-[320px] flex-1">
+        <div className="min-w-[220px] max-w-[420px] flex-1">
           <SearchInput
             value={busqueda}
             onValueChange={setBusqueda}
@@ -257,78 +309,82 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
             aria-label="Buscar productos"
           />
         </div>
+        {filtrosActivos > 0 && (
+          <Button variant="ghost" size="sm" onClick={limpiarFiltros}>
+            Limpiar filtros ({filtrosActivos})
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
         <Select
-          className={ANCHO_FILTRO}
           aria-label="Filtrar por categoría"
           value={filtros.categoria ?? TODOS}
           onValueChange={(v) => cambiarFiltro("categoria", v)}
           options={[
-            { value: TODOS, label: "Todas las categorías" },
-            { value: "sin", label: "Sin clasificar" },
-            ...categorias.map((c) => ({ value: c.id, label: caminoCategoria(categorias, c.id) })),
+            { value: TODOS, label: "Categoría: todas" },
+            { value: "sin", label: "Categoría: sin clasificar" },
+            ...categorias.map((c) => ({ value: c.id, label: `Categoría: ${caminoCategoria(categorias, c.id)}` })),
           ]}
         />
         <Select
-          className={ANCHO_FILTRO}
           aria-label="Filtrar por estado"
           value={filtros.estado ?? TODOS}
           onValueChange={(v) => cambiarFiltro("estado", v)}
           options={[
-            { value: TODOS, label: "Publicados y ocultos" },
-            { value: "visible", label: "Publicados" },
-            { value: "oculto", label: "Ocultos" },
+            { value: TODOS, label: "Tienda: todos" },
+            { value: "visible", label: "Tienda: publicados" },
+            { value: "oculto", label: "Tienda: ocultos" },
           ]}
         />
         <Select
-          className={ANCHO_FILTRO}
           aria-label="Filtrar por fotos"
           value={filtros.foto ?? TODOS}
           onValueChange={(v) => cambiarFiltro("foto", v)}
           options={[
-            { value: TODOS, label: "Con y sin foto" },
-            { value: "sin", label: "Sin foto" },
-            { value: "con", label: "Con foto" },
+            { value: TODOS, label: "Fotos: todos" },
+            { value: "con", label: "Fotos: con foto" },
+            { value: "sin", label: "Fotos: sin foto" },
           ]}
         />
         <Select
-          className={ANCHO_FILTRO}
           aria-label="Filtrar por estado en Alegra"
           value={filtros.alegra ?? TODOS}
           onValueChange={(v) => cambiarFiltro("alegra", v)}
           options={[
-            { value: TODOS, label: "Activos y de baja" },
-            { value: "active", label: "Activos en Alegra" },
-            { value: "inactive", label: "De baja en Alegra" },
+            { value: TODOS, label: "Alegra: todos" },
+            { value: "active", label: "Alegra: activos" },
+            { value: "inactive", label: "Alegra: de baja" },
           ]}
         />
         <Select
-          className={ANCHO_FILTRO}
           aria-label="Filtrar por precio"
           value={filtros.precio ?? TODOS}
           onValueChange={(v) => cambiarFiltro("precio", v)}
           options={[
-            { value: TODOS, label: "Con y sin precio" },
-            { value: "con", label: "Con precio" },
-            { value: "sin", label: "Sin precio" },
+            { value: TODOS, label: "Precio: todos" },
+            { value: "con", label: "Precio: con precio" },
+            { value: "sin", label: "Precio: sin precio" },
           ]}
         />
         <Select
-          className={ANCHO_FILTRO}
           aria-label="Filtrar por stock"
           value={filtros.stock ?? TODOS}
           onValueChange={(v) => cambiarFiltro("stock", v)}
           options={[
-            { value: TODOS, label: "Con y sin stock" },
-            { value: "con", label: "Con stock" },
-            { value: "sin", label: "Sin stock" },
+            { value: TODOS, label: "Stock: todos" },
+            { value: "con", label: "Stock: con stock" },
+            { value: "sin", label: "Stock: sin stock" },
           ]}
         />
         <Select
-          className={ANCHO_FILTRO}
           aria-label="Filtrar por etiqueta"
           value={filtros.tag ?? TODOS}
           onValueChange={(v) => cambiarFiltro("tag", v)}
-          options={[{ value: TODOS, label: "Todas las etiquetas" }, ...tags.map((t) => ({ value: t.id, label: t.nombre }))]}
+          options={[
+            { value: TODOS, label: "Etiqueta: todas" },
+            ...tags.map((t) => ({ value: t.id, label: `Etiqueta: ${t.nombre}` })),
+          ]}
         />
       </div>
 

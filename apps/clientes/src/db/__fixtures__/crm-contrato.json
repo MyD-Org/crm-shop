@@ -15,7 +15,8 @@
     "visible": "boolean",
     "nombre": "text",
     "categoria_id": "uuid",
-    "fotos": "jsonb"
+    "fotos": "jsonb",
+    "ficha_tecnica": "jsonb"
   },
   "public.alegra_contacts_shop": {
     "tenant_id": "text",

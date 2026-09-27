@@ -54,6 +54,13 @@ export interface FotoCrm {
   alt?: string;
 }
 
+/** La ficha técnica (PDF) del overlay tal como la guarda el CRM: la KEY en R2, no la URL. */
+export interface FichaTecnicaCrm {
+  key: string;
+  nombre: string;
+  bytes: number;
+}
+
 /** Taxonomía propia de la tienda, hasta 3 niveles (`public.shop_categories`). */
 export const crmCategorias = publico.table("shop_categories", {
   id: uuid("id").primaryKey(),
@@ -78,6 +85,7 @@ export const crmOverlay = publico.table("catalog_overlay", {
   nombre: text("nombre"),
   categoriaId: uuid("categoria_id"),
   fotos: jsonb("fotos").$type<FotoCrm[]>().notNull(),
+  fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaCrm | null>(),
 });
 
 // ---------------------------------------------------------------------------

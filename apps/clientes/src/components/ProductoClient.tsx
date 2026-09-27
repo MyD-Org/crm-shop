@@ -26,6 +26,17 @@ function CartIcon() {
   );
 }
 
+function FileDownIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M12 12v6" />
+      <path d="m9 15 3 3 3-3" />
+    </svg>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -230,6 +241,21 @@ export function ProductoClient({
             <p className="max-w-prose text-sm leading-relaxed text-muted">
               {producto.description}
             </p>
+          </section>
+        )}
+
+        {/* Ficha técnica: sólo si el CRM cargó un PDF para este producto. */}
+        {producto.fichaTecnicaUrl && (
+          <section className="mt-6">
+            <a
+              href={producto.fichaTecnicaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-accent"
+            >
+              <FileDownIcon />
+              Descargar ficha técnica
+            </a>
           </section>
         )}
       </main>

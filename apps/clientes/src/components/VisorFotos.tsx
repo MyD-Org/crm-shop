@@ -17,7 +17,7 @@ import type { ProductImage } from "@/data/products";
  *
  * En el celular ocupa toda la pantalla; desde md es un modal grande sobre la
  * página oscurecida, y un clic afuera lo cierra. Arriba a la izquierda va la
- * marca (el mismo wordmark del header), sólo acá: en la galería y el catálogo
+ * marca (como el header: "Led" derecho y en el acento, ver .site-header em), sólo acá: en la galería y el catálogo
  * esa esquina y la otra ya tienen botones.
  *
  * Va por portal al `<body>`: dentro de la ficha, cualquier ancestro con
@@ -97,7 +97,7 @@ export function VisorFotos({
       >
         <div className="flex shrink-0 items-center justify-between px-4 py-3 md:px-6">
           <span className="font-display text-xl font-semibold tracking-tight text-text" aria-hidden="true">
-            Central <em className="italic text-highlight">Led</em>
+            Central <span className="text-accent">Led</span>
           </span>
           <button
             ref={cerrarRef}

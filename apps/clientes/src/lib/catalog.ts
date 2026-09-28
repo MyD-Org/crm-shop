@@ -337,7 +337,12 @@ function relevanciaSql(q: string, tolerante: boolean) {
       sql`(case when ${contiene(nombre, t)} then 4 when ${contiene(codigo, t)} then 3 when ${contiene(marcaCategoria, t)} then 2 else 1 end)`,
   );
   partes.push(sql`(case when ${codigo} = ${terminos.join(" ")} then 20 else 0 end)`);
-  partes.push(sql`(case when ${nombre} LIKE ${patronPrefijo(raizPlural(terminos[0]))} then 2 else 0 end)`);
+  // En la tolerante el primer término puede no ser prefijo exacto de nada
+  // ("lamparita" no lo es de "lámpara"): alcanza con que el nombre empiece
+  // con sus primeras 4 letras. Sin esto, "Dimmer para lámparas" le ganaba a
+  // "Lámpara bulbo" por orden alfabético (los dos se parecen igual).
+  const prefijo = tolerante ? raizPlural(terminos[0]).slice(0, 4) : raizPlural(terminos[0]);
+  partes.push(sql`(case when ${nombre} LIKE ${patronPrefijo(prefijo)} then 2 else 0 end)`);
   if (tolerante) {
     for (const t of terminos.filter(admiteParecido)) {
       partes.push(sql`public.word_similarity(${raizPlural(t)}, ${nombre}) * 4`);

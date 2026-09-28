@@ -86,4 +86,8 @@ describe("búsqueda del catálogo", () => {
     const { sql } = grabadora.consultas[0];
     expect(sql).not.toContain(" LIKE ");
   });
+  it("en la tolerante, empezar con las primeras 4 letras cuenta como prefijo", async () => {
+    await getCatalogo({ soloVisibles: false, busqueda: "lamparita", tolerante: true });
+    expect(grabadora.consultas[0].params).toContain("lamp%");
+  });
 });

@@ -5,7 +5,6 @@ import { STOCK_INCLUYE_SIN_STOCK, type EstadoCatalogo } from "./catalogo-url";
 const base: EstadoCatalogo = {
   query: undefined,
   categorias: [],
-  categoriasExcluidas: [],
   marcas: [],
   orden: "nombre",
   pagina: 1,
@@ -58,11 +57,6 @@ describe("limpiarBorrador", () => {
       precioMin: undefined,
       precioMax: undefined,
     });
-  });
-
-  it("limpiar también borra exclusiones de categoría", () => {
-    expect(limpiarBorrador({ ...base, categorias: ["HOGAR"], categoriasExcluidas: ["Tubos"] }))
-      .toMatchObject({ categorias: [], categoriasExcluidas: [] });
   });
 });
 

@@ -42,7 +42,6 @@ const mismaLista = (a: string[], b: string[]) =>
 function manejaLaHoja(e: EstadoCatalogo): Partial<EstadoCatalogo> {
   return {
     categorias: e.categorias,
-    categoriasExcluidas: e.categoriasExcluidas,
     marcas: e.marcas,
     precioMin: e.precioMin,
     precioMax: e.precioMax,
@@ -54,21 +53,12 @@ function manejaLaHoja(e: EstadoCatalogo): Partial<EstadoCatalogo> {
 function sinCambios(a: EstadoCatalogo, b: EstadoCatalogo): boolean {
   return (
     mismaLista(a.categorias, b.categorias) &&
-    mismaLista(a.categoriasExcluidas, b.categoriasExcluidas) &&
     mismaLista(a.marcas, b.marcas) &&
     a.precioMin === b.precioMin &&
     a.precioMax === b.precioMax &&
     a.soloStock === b.soloStock &&
     a.orden === b.orden
   );
-}
-
-/** Cambios que confirma la hoja, o `null` si no hay nada que aplicar. */
-export function cambiosAlAplicar(
-  estado: EstadoCatalogo,
-  borrador: EstadoCatalogo
-): Partial<EstadoCatalogo> | null {
-  return sinCambios(estado, borrador) ? null : manejaLaHoja(borrador);
 }
 
 /**
@@ -78,6 +68,6 @@ export function cambiosAlAplicar(
  * sale del borrador: se elige adentro de la hoja.
  */
 export function hrefAlAplicar(estado: EstadoCatalogo, borrador: EstadoCatalogo): string | null {
-  const cambios = cambiosAlAplicar(estado, borrador);
-  return cambios ? hrefCon(estado, cambios) : null;
+  if (sinCambios(estado, borrador)) return null;
+  return hrefCon(estado, manejaLaHoja(borrador));
 }

@@ -23,7 +23,6 @@ import {
 const base: EstadoCatalogo = {
   query: undefined,
   categorias: [],
-  categoriasExcluidas: [],
   marcas: [],
   orden: "nombre",
   pagina: 1,
@@ -100,7 +99,6 @@ describe("lectura de la query string", () => {
     ).toEqual({
       query: "led",
       categorias: ["Iluminación"],
-      categoriasExcluidas: [],
       marcas: ["Philips", "Osram"],
       orden: "precio-asc",
       pagina: 2,
@@ -108,18 +106,6 @@ describe("lectura de la query string", () => {
       precioMax: 50000,
       soloStock: false,
       vista: "lista",
-    });
-  });
-
-  it("lee categorías excluidas repetidas sin alterar los enlaces existentes", () => {
-    expect(
-      leerEstado({
-        categoria: "HOGAR",
-        categoria_excluida: ["Tubos", "Tubos", "  Faroles "],
-      }),
-    ).toMatchObject({
-      categorias: ["HOGAR"],
-      categoriasExcluidas: ["Tubos", "Faroles"],
     });
   });
 
@@ -193,16 +179,6 @@ describe("armado de URLs", () => {
     ).toBe("/catalogo?categoria=Cables&marca=Philips&marca=Osram");
   });
 
-  it("serializa la exclusión de una descendiente sin expandir sus hermanas", () => {
-    expect(
-      hrefCatalogo({
-        ...base,
-        categorias: ["HOGAR"],
-        categoriasExcluidas: ["Tubos"],
-      }),
-    ).toBe("/catalogo?categoria=HOGAR&categoria_excluida=Tubos");
-  });
-
   it("no escribe el orden ni la página cuando están en su default", () => {
     expect(hrefCatalogo({ ...base, orden: "nombre", pagina: 1 })).toBe("/catalogo");
     expect(hrefCatalogo({ ...base, orden: "precio-asc", pagina: 3 })).toBe(
@@ -215,7 +191,6 @@ describe("armado de URLs", () => {
       hrefCatalogo({
         query: undefined,
         categorias: ["ILUMINACION"],
-        categoriasExcluidas: [],
         marcas: ["GENROD"],
         precioMin: 500,
         precioMax: 50000,
@@ -382,11 +357,6 @@ describe("hrefCanonico", () => {
 });
 
 describe("filtrosDeEstado", () => {
-  it("conserva inclusiones y exclusiones para que el SQL resuelva el subárbol", () => {
-    expect(
-      filtrosDeEstado(leerEstado({ categoria: "HOGAR", categoria_excluida: "Tubos" })),
-    ).toMatchObject({ categorias: ["HOGAR"], categoriasExcluidas: ["Tubos"] });
-  });
   it("sin parámetros, la consulta pide sólo productos con stock", () => {
     expect(filtrosDeEstado(leerEstado({})).soloStock).toBe(true);
   });
@@ -409,9 +379,8 @@ describe("filtrosDeEstado", () => {
         })
       )
     ).toEqual({
-        busqueda: "led",
-        categorias: ["ILUMINACION"],
-        categoriasExcluidas: [],
+      busqueda: "led",
+      categorias: ["ILUMINACION"],
       marcas: ["GENROD"],
       precioMin: 500,
       precioMax: 900,

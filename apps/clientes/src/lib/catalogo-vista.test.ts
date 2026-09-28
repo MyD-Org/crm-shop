@@ -389,6 +389,26 @@ describe("itemsDeCategorias", () => {
       ["Faroles", true],
     ]);
   });
+
+  it("conserva en su lugar las categorías seleccionadas y excluidas aunque su faceta tenga cuenta cero", () => {
+    const arbol = [
+      { label: "Electricidad", count: 3, nivel: 1 },
+      { label: "Selectores", count: 3, nivel: 2 },
+      { label: "Herramientas", count: 1, nivel: 1 },
+    ];
+    const items = itemsDeCategorias(arbol, ["HOGAR"], ["Luces de emergencia"]);
+
+    expect(items.map((f) => [f.label, f.count, f.nivel, f.checked])).toEqual([
+      ["HOGAR", 0, 1, true],
+      ["Luces de emergencia", 0, 2, false],
+      ["Electricidad", 3, 1, false],
+      ["Selectores", 3, 2, false],
+      ["Herramientas", 1, 1, false],
+    ]);
+    expect(
+      alternarCategoria(items, { categorias: ["HOGAR"], categoriasExcluidas: ["Luces de emergencia"] }, "Luces de emergencia", true),
+    ).toEqual({ categorias: ["HOGAR"], categoriasExcluidas: [] });
+  });
 });
 
 describe("chips de exclusión de categoría", () => {

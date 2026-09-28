@@ -291,12 +291,23 @@ export function itemsDeCategorias<F extends { label: string; count: number; nive
   facetas: F[],
   categorias: string[],
   excluidas: string[],
-): (F & { checked: boolean })[] {
-  return facetas.map((f, i) => {
-    const cubreMadre = madresDe(facetas, i).some((m) => categorias.includes(facetas[m].label));
+): ((F | FacetaCategoriaAusente) & { checked: boolean })[] {
+  const presentes = new Set(facetas.map((f) => f.label));
+  // La respuesta anterior puede seguir en pantalla durante una navegación
+  // optimista. También el fallback plano de Alegra no trae la jerarquía. En
+  // ambos casos dejamos visibles los valores de la URL para poder deshacerlos.
+  const ausentes = [
+    ...categorias.map((label) => ({ label, count: 0, nivel: 1 })),
+    ...excluidas.map((label) => ({ label, count: 0, nivel: 2 })),
+  ].filter((f, i, todos) => !presentes.has(f.label) && todos.findIndex((x) => x.label === f.label) === i);
+  const items = [...ausentes, ...facetas];
+  return items.map((f, i) => {
+    const cubreMadre = madresDe(items, i).some((m) => categorias.includes(items[m].label));
     return { ...f, checked: (categorias.includes(f.label) || cubreMadre) && !excluidas.includes(f.label) };
   });
 }
+
+type FacetaCategoriaAusente = { label: string; count: number; nivel: number };
 
 /** Índices de las madres de `facetas[i]`, de la más cercana a la raíz. */
 function madresDe(facetas: { label: string; nivel?: number }[], i: number): number[] {

@@ -33,31 +33,37 @@ export function CatalogoProductos({
   navegando: boolean;
   cuotasPorProducto: Map<string, OpcionCuotas>;
 }) {
+  // La línea de cuotas se reserva sólo si algún producto de la página tiene
+  // cuotas: así el precio no baila entre cards de una fila, y sin cuotas en
+  // ninguno las cards no cargan una línea vacía.
+  const reservarCuotas = productos.some((p) => cuotasPorProducto.has(p.id));
   return (
     <div
       // 2/3/4 columnas: 24 productos por página entran justo en las tres
-      // grillas, sin filas huérfanas.
+      // grillas, sin filas huérfanas. En mobile el gap es chico (8 px): con
+      // dos columnas de ~170 px, cada px de gap se lo come el ancho de la card.
       className={cn(
         "transition-opacity",
         vista === "lista"
-          ? "flex flex-col gap-3"
-          : "grid grid-cols-2 gap-5 md:grid-cols-3 xl:grid-cols-4",
+          ? "flex flex-col gap-2 sm:gap-3"
+          : "grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 md:gap-5 xl:grid-cols-4",
         navegando && "opacity-50"
       )}
       aria-busy={navegando}
     >
       {productos.map((p) => {
         // Sólo para mostrar: `p.name` (buscar, ordenar, carrito) no se toca.
-        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, p.brand ? formatMarca(p.brand) : undefined);
+        const marca = p.brand ? formatMarca(p.brand) : undefined;
+        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, marca);
         return (
         <ProductCard
           key={p.id}
-          variant="editorial"
+          variant="soft"
           layout={vista === "lista" ? "list" : "grid"}
           className="h-full"
           href={`/producto/${p.id}`}
           renderLink={linkNext}
-          brand={p.brand}
+          brand={marca}
           name={nombreParaMostrar}
           // Si el nombre ya es el código, la línea "Cód." lo repetiría.
           code={esCodigo ? undefined : p.sku}
@@ -85,18 +91,15 @@ export function CatalogoProductos({
                     className="object-contain p-4"
                   />
                 ))
-              : [<LightbulbIcon key="sin-foto" className="h-20 w-20 text-muted/30" />]
+              : [<LightbulbIcon key="sin-foto" className="h-12 w-12 text-muted/40" />]
           }
-          // Siempre presente, aunque no haya cuotas: reserva la línea para que
-          // el precio no baile entre cards de la misma fila.
           installments={
-            <span className="block min-h-4.5">
-              <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
-            </span>
+            reservarCuotas ? (
+              <span className="block min-h-4.5">
+                <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
+              </span>
+            ) : undefined
           }
-          // Siempre abajo: el "+" se vuelve stepper al agregar, y al costado
-          // unas cards lo dejaban junto al precio y otras abajo según su largo.
-          actionPlacement="below"
           action={
             <AddToCartButton
               disabled={p.stock === "out"}

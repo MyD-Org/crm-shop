@@ -53,15 +53,16 @@ export function FavoritosLista({
     <div className="flex flex-col gap-3">
       {visibles.map((p) => {
         // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
-        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, p.brand ? formatMarca(p.brand) : undefined);
+        const marca = p.brand ? formatMarca(p.brand) : undefined;
+        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, marca);
         return (
         <ProductCard
           key={p.id}
-          variant="editorial"
+          variant="soft"
           layout="list"
           href={`/producto/${p.id}`}
           renderLink={linkNext}
-          brand={p.brand}
+          brand={marca}
           name={nombreParaMostrar}
           code={esCodigo ? undefined : p.sku}
           stock={p.stock}

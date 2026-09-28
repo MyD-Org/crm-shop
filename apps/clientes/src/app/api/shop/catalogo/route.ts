@@ -28,6 +28,17 @@ export async function GET(req: NextRequest) {
     // Sin caché a propósito: cada texto buscado sería una entrada nueva.
     const { soloVisibles } = await flagsPublicos();
     const productos = await getCatalogo({ busqueda: q, limit, soloVisibles });
+    // Sin resultados: segundo intento tolerante a errores de tipeo (mismo
+    // criterio que la page del catálogo). Si falla, se devuelve lo exacto.
+    if (q && productos.length === 0) {
+      const parecidos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true }).catch(
+        (err: unknown) => {
+          console.error("[/api/shop/catalogo] falló la búsqueda tolerante:", err);
+          return productos;
+        },
+      );
+      return NextResponse.json(parecidos);
+    }
     return NextResponse.json(productos);
   } catch (err) {
     console.error("[/api/shop/catalogo] error:", err);

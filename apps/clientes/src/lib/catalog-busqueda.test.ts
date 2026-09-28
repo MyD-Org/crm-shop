@@ -32,18 +32,51 @@ describe("búsqueda del catálogo", () => {
     expect(params).toContain("%lampara%");
   });
 
-  it("busca sobre la vista del CRM (nombre, código y descripción), no sobre la copia vieja del Shop", async () => {
-    // "lampara" encuentra "Lámpara colgante": unaccent + lower en los dos lados.
+
+  it("busca sobre la vista del CRM, en nombre curado, nombre, código, descripción, marca y categoría", async () => {
     await getCatalogo({ soloVisibles: false, busqueda: "lampara" });
     const { sql } = grabadora.consultas[0];
     expect(sql).toContain('from "public"."catalog_products_shop"');
-    for (const col of ["name", "code", "description"]) {
-      expect(sql).toContain(
-        `"shop".immutable_unaccent(lower("catalog_products_shop"."${col}")) LIKE "shop".immutable_unaccent(lower($`,
-      );
-    }
+    expect(sql).toContain(
+      `"shop".immutable_unaccent(lower(concat_ws(' ', "public"."catalog_overlay"."nombre", "catalog_products_shop"."name", "catalog_products_shop"."code", "catalog_products_shop"."description", "catalog_products_shop"."brand", "catalog_categories_shop"."name"))) LIKE $`,
+    );
     expect(sql).not.toContain('"shop"."catalog_products"');
     expect(sql).not.toContain('"public"."catalog_products"');
     expect(sql).not.toMatch(/from "catalog_products"/);
+  });
+
+  it("cada término es su propia condición (en cualquier orden), con plurales reducidos", async () => {
+    await getCatalogo({ soloVisibles: false, busqueda: "Lámparas LED" });
+    const { sql, params } = grabadora.consultas[0];
+    expect(params).toContain("%lampara%");
+    expect(params).toContain("%led%");
+    expect(params).not.toContain("%lámparas led%");
+    expect(sql.match(/\) LIKE \$/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(sql).not.toContain("word_similarity");
+  });
+
+  it("con búsqueda ordena por relevancia (y desempata por nombre)", async () => {
+    await getCatalogo({ soloVisibles: false, busqueda: "foco" });
+    const { sql } = grabadora.consultas[0];
+    const orden = sql.slice(sql.indexOf(" order by "));
+    expect(orden).toMatch(/^ order by \(case when /);
+    expect(orden).toContain("then 4 when");
+    expect(orden).toContain("then 20 else 0 end");
+    expect(orden).toMatch(/ desc, "catalog_products_shop"\."name" asc$/);
+  });
+
+  it("la búsqueda tolerante suma el parecido por trigramas, calificado en public", async () => {
+    await getCatalogo({ soloVisibles: false, busqueda: "lampra", tolerante: true });
+    const { sql } = grabadora.consultas[0];
+    const total = sql.match(/word_similarity\(/g)?.length ?? 0;
+    const calificadas = sql.match(/public\.word_similarity\(/g)?.length ?? 0;
+    expect(total).toBeGreaterThan(0);
+    expect(calificadas).toBe(total);
+  });
+
+  it("sin términos útiles no filtra por texto", async () => {
+    await getCatalogo({ soloVisibles: false, busqueda: " ,, " });
+    const { sql } = grabadora.consultas[0];
+    expect(sql).not.toContain(" LIKE ");
   });
 });

@@ -51,7 +51,13 @@ import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
 import { precioCuenta, type PrecioCuenta } from "./precio-cuenta";
-import { descripcionExhibida, joinOverlay, nombreExhibido } from "./nombre-exhibido";
+import {
+  descripcionExhibida,
+  joinOverlay,
+  nombreExhibido,
+  nombreExhibidoSql,
+} from "./nombre-exhibido";
+import { patronLike, patronPrefijo, raizPlural, terminosBusqueda } from "./catalogo-busqueda";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -235,31 +241,90 @@ const COLUMNAS_CATALOGO = {
 };
 
 /**
- * Condición de búsqueda por texto, insensible a mayúsculas Y a tildes.
- *
- * Las tildes importan: el catálogo dice "Termomagnético" y el cliente escribe
- * "termomagnetico". `ILIKE` solo resuelve mayúsculas, así que se normalizan los
- * dos lados con `"shop".immutable_unaccent` (ver drizzle/0000_baseline.sql).
+ * Minúsculas y sin tildes en SQL. Las tildes importan: el catálogo dice
+ * "Termomagnético" y el cliente escribe "termomagnetico". Del lado del texto
+ * buscado lo mismo lo hace `terminosBusqueda` (catalogo-busqueda.ts).
  *
  * La función se llama CALIFICADA con su esquema: vive en `shop`, y que se
  * resuelva sin calificar dependería del `search_path` de la conexión, que por
- * el pooler no está garantizado. Es el único objeto SQL que este código nombra
- * a mano; las vistas del CRM las califica drizzle desde `crm.ts`, y las
- * columnas quedan calificadas con el nombre de la vista.
- *
- * Busca en el nombre, en el código y en la descripción — en esta cuenta de
- * Alegra el nombre comercial vive en `description`, así que sin ese tercer
- * campo la búsqueda no encontraría casi nada.
+ * el pooler no está garantizado. Lo mismo `public.word_similarity` (pg_trgm).
+ * Las vistas del CRM las califica drizzle desde `crm.ts`, y las columnas
+ * quedan calificadas con el nombre de la vista.
  */
-function coincideTexto(q: string) {
-  const patron = `%${q}%`;
-  const norm = (col: unknown) =>
-    sql`"shop".immutable_unaccent(lower(${col})) LIKE "shop".immutable_unaccent(lower(${patron}))`;
-  return or(
-    norm(crmCatalogo.name),
-    norm(crmCatalogo.code),
-    norm(crmCatalogo.description)
+const sinTildes = (expr: unknown) => sql`"shop".immutable_unaccent(lower(${expr}))`;
+
+/**
+ * Todo el texto por el que se puede encontrar un producto, en una cadena:
+ * nombre curado (overlay), nombre, código, descripción, marca y categoría de
+ * Alegra. En esta cuenta de Alegra el nombre comercial vive en `description`,
+ * así que sin ella la búsqueda no encontraría casi nada. `concat_ws` saltea
+ * los null. Exige los joins al overlay y a las categorías (los tienen todas
+ * las consultas del catálogo).
+ */
+const textoBuscableSql = () =>
+  sinTildes(
+    sql`concat_ws(' ', ${crmOverlay.nombre}, ${crmCatalogo.name}, ${crmCatalogo.code}, ${crmCatalogo.description}, ${crmCatalogo.brand}, ${crmCategoriasAlegra.name})`,
   );
+
+/** `expr LIKE '%término%'`, con el plural reducido (ver `raizPlural`). */
+const contiene = (expr: unknown, termino: string) =>
+  sql`${expr} LIKE ${patronLike(raizPlural(termino))}`;
+
+/**
+ * Parecido mínimo (pg_trgm `word_similarity`, 0..1) para que un término
+ * cuente en la búsqueda tolerante. 0.5 deja pasar "lampra" → "lámpara" (0.7)
+ * sin traer palabras que sólo comparten una sílaba.
+ */
+const UMBRAL_PARECIDO = 0.5;
+
+/**
+ * Condición de búsqueda por texto: TODOS los términos tienen que aparecer en
+ * algún lado del producto, en cualquier orden ("lampara led" encuentra
+ * "Lámpara 9W LED"). Sin términos útiles, no filtra.
+ *
+ * `tolerante` suma, por término, el parecido por trigramas: es el segundo
+ * intento cuando la búsqueda exacta no trajo nada (errores de tipeo, ver la
+ * page del catálogo y `/api/shop/catalogo`). Necesita `pg_trgm`
+ * (drizzle/0022).
+ */
+function coincideTexto(q: string, tolerante = false) {
+  const terminos = terminosBusqueda(q);
+  if (!terminos.length) return undefined;
+  const texto = textoBuscableSql();
+  return and(
+    ...terminos.map((t) =>
+      tolerante
+        ? or(
+            contiene(texto, t),
+            sql`public.word_similarity(${raizPlural(t)}, ${texto}) >= ${UMBRAL_PARECIDO}`,
+          )
+        : contiene(texto, t),
+    ),
+  );
+}
+
+/**
+ * Puntaje de relevancia para el orden `relevancia`. Por término, pesa DÓNDE
+ * aparece: en el nombre exhibido 4, en el código 3, en la marca o categoría
+ * 2, en otro lado (descripción) 1. Encima: código exacto +20 (quien pega un
+ * código quiere ESE producto) y nombre que empieza con el primer término +2.
+ * En la búsqueda tolerante se suma el parecido de cada término con el nombre.
+ */
+function relevanciaSql(q: string, tolerante: boolean) {
+  const terminos = terminosBusqueda(q);
+  const nombre = sinTildes(nombreExhibidoSql);
+  const codigo = sinTildes(crmCatalogo.code);
+  const marcaCategoria = sinTildes(sql`concat_ws(' ', ${marcaSql}, ${crmCategoriasAlegra.name})`);
+  const partes = terminos.map((t) => {
+    const patron = patronLike(raizPlural(t));
+    return sql`(case when ${nombre} LIKE ${patron} then 4 when ${codigo} LIKE ${patron} then 3 when ${marcaCategoria} LIKE ${patron} then 2 else 1 end)`;
+  });
+  partes.push(sql`(case when ${codigo} = ${terminos.join(" ")} then 20 else 0 end)`);
+  partes.push(sql`(case when ${nombre} LIKE ${patronPrefijo(raizPlural(terminos[0]))} then 2 else 0 end)`);
+  if (tolerante) {
+    for (const t of terminos) partes.push(sql`public.word_similarity(${raizPlural(t)}, ${nombre}) * 4`);
+  }
+  return sql.join(partes, sql` + `);
 }
 
 /**
@@ -276,8 +341,11 @@ export async function getCatalogo(opts: {
   limit?: number;
   offset?: number;
   busqueda?: string;
+  /** Segundo intento con parecido por trigramas (ver `coincideTexto`). */
+  tolerante?: boolean;
 }): Promise<Product[]> {
   const q = opts.busqueda?.trim();
+  const conTerminos = terminosBusqueda(q).length > 0;
 
   let query = getDb()
     .select(COLUMNAS_CATALOGO)
@@ -291,10 +359,15 @@ export async function getCatalogo(opts: {
         activoSql,
         conPrecioSql,
         soloVisiblesSql(opts.soloVisibles),
-        q ? coincideTexto(q) : undefined
+        q ? coincideTexto(q, opts.tolerante) : undefined
       )
     )
-    .orderBy(asc(crmCatalogo.name))
+    // Con búsqueda (el autocomplete), lo más relevante primero.
+    .orderBy(
+      ...(q && conTerminos
+        ? [sql`${relevanciaSql(q, !!opts.tolerante)} desc`, asc(crmCatalogo.name)]
+        : [asc(crmCatalogo.name)]),
+    )
     .$dynamic();
 
   if (opts.limit != null) query = query.limit(opts.limit);
@@ -429,6 +502,13 @@ export const PRODUCTOS_POR_PAGINA = 24;
 /** Filtros que aplica el servidor. Categorías y marcas son OR dentro del grupo. */
 export interface FiltrosCatalogo {
   busqueda?: string;
+  /**
+   * Segundo intento de la búsqueda, tolerante a errores de tipeo (ver
+   * `coincideTexto`). Lo decide la page cuando la exacta no trajo nada, y va
+   * en los MISMOS filtros de la página y de las facetas: así cuentan el
+   * mismo conjunto que se ve.
+   */
+  busquedaTolerante?: boolean;
   categorias?: string[];
   marcas?: string[];
   /** Extremos inclusivos del rango, sobre el precio exhibido (con IVA). */
@@ -655,7 +735,7 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros, soloVi
     activoSql,
     conPrecioSql,
     soloVisiblesSql(soloVisibles),
-    q ? coincideTexto(q) : undefined,
+    q ? coincideTexto(q, filtros.busquedaTolerante) : undefined,
     aplicar.categorias && filtros.categorias?.length
       ? filtroCategoriasSql(filtros.categorias)
       : undefined,
@@ -677,8 +757,14 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros, soloVi
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
  */
-function ordenDe(orden: OrdenCatalogo) {
+function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo) {
   switch (orden) {
+    case "relevancia": {
+      const q = filtros.busqueda?.trim();
+      // Sin términos útiles no hay con qué puntuar: alfabético.
+      if (!q || !terminosBusqueda(q).length) return [asc(crmCatalogo.name)];
+      return [sql`${relevanciaSql(q, !!filtros.busquedaTolerante)} desc`, asc(crmCatalogo.name)];
+    }
     case "precio-asc":
       return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];
     case "precio-desc":
@@ -735,7 +821,7 @@ export async function getPaginaCatalogo(opts: {
         .leftJoin(crmOverlay, joinOverlay())
         .leftJoin(stockReservado, joinReserva())
         .where(where)
-        .orderBy(...ordenDe(opts.orden ?? ORDEN_DEFAULT))
+        .orderBy(...ordenDe(opts.orden ?? ORDEN_DEFAULT, filtros))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];

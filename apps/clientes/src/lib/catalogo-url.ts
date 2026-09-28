@@ -23,9 +23,19 @@ import type { FiltrosCatalogo } from "@/lib/catalog";
  * detrás, ordenaba por nombre. Los links viejos con `orden=ventas` siguen
  * resolviendo (ver `comoOrden`).
  */
-export const ORDENES = ["nombre", "precio-asc", "precio-desc"] as const;
+export const ORDENES = ["relevancia", "nombre", "precio-asc", "precio-desc"] as const;
 export type OrdenCatalogo = (typeof ORDENES)[number];
+/** Default SIN búsqueda. Con búsqueda es `relevancia` (ver `ordenPorDefecto`). */
 export const ORDEN_DEFAULT: OrdenCatalogo = "nombre";
+
+/**
+ * El default depende de si hay texto buscado: con búsqueda, lo más parecido
+ * primero; sin búsqueda, alfabético. "Relevancia" sin búsqueda no significa
+ * nada, así que nunca es el orden de un estado sin `query`.
+ */
+export function ordenPorDefecto(query: string | undefined): OrdenCatalogo {
+  return query ? "relevancia" : ORDEN_DEFAULT;
+}
 
 /** Orden que aceptan las URLs viejas y que hoy equivale al default. */
 const ORDEN_ALIAS_VIEJO = "ventas";
@@ -102,15 +112,18 @@ export function comoPagina(v: ParamCrudo): number {
 }
 
 /**
- * Valida un orden que viene de la URL. Cualquier cosa rara cae al default;
- * `ventas` (links viejos) también, porque hoy ES el default.
+ * Valida un orden que viene de la URL. Cualquier cosa rara cae al default
+ * (que depende de si hay búsqueda, ver `ordenPorDefecto`); `ventas` (links
+ * viejos) también. `relevancia` sin búsqueda cae al alfabético.
  */
-export function comoOrden(v: ParamCrudo): OrdenCatalogo {
+export function comoOrden(v: ParamCrudo, query?: string): OrdenCatalogo {
   const s = primero(v);
-  if (s === ORDEN_ALIAS_VIEJO) return ORDEN_DEFAULT;
+  const porDefecto = ordenPorDefecto(query);
+  if (s === ORDEN_ALIAS_VIEJO) return porDefecto;
+  if (s === "relevancia" && !query) return ORDEN_DEFAULT;
   return (ORDENES as readonly string[]).includes(s ?? "")
     ? (s as OrdenCatalogo)
-    : ORDEN_DEFAULT;
+    : porDefecto;
 }
 
 /**
@@ -161,7 +174,7 @@ export function leerEstado(params: {
     query: q || undefined,
     categorias: comoLista(params.categoria),
     marcas: comoLista(params.marca),
-    orden: comoOrden(params.orden),
+    orden: comoOrden(params.orden, q || undefined),
     pagina: comoPagina(params.pagina),
     precioMin,
     precioMax,
@@ -186,7 +199,7 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   if (estado.precioMin != null) sp.set("precio_min", String(estado.precioMin));
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
   if (estado.soloStock !== SOLO_STOCK_DEFAULT) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
-  if (estado.orden !== ORDEN_DEFAULT) sp.set("orden", estado.orden);
+  if (estado.orden !== ordenPorDefecto(estado.query)) sp.set("orden", estado.orden);
   if (estado.vista !== VISTA_DEFAULT) sp.set("vista", estado.vista);
   if (estado.pagina > 1) sp.set("pagina", String(estado.pagina));
   const qs = sp.toString();
@@ -223,11 +236,10 @@ export function estadoConCambios(
   estado: EstadoCatalogo,
   cambios: Partial<EstadoCatalogo>
 ): EstadoCatalogo {
-  return {
-    ...estado,
-    pagina: cambios.pagina ?? 1,
-    ...cambios,
-  };
+  const nuevo = { ...estado, pagina: cambios.pagina ?? 1, ...cambios };
+  // Quitar la búsqueda deja sin sentido "Relevancia": vuelve al alfabético.
+  if (nuevo.orden === "relevancia" && !nuevo.query) nuevo.orden = ORDEN_DEFAULT;
+  return nuevo;
 }
 
 /**

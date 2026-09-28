@@ -19,6 +19,7 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
+import { BotonCompartirCarrito } from "@/components/carrito/BotonCompartirCarrito";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -259,11 +260,16 @@ export function CarritoClient({
   return (
     <>
       <main className="mx-auto w-full max-w-contenido flex-1 px-4 pt-6 lg:pb-16 lg:pt-8">
-        <div className="mb-5 flex items-baseline gap-3 lg:mb-6">
-          <h1 className="font-display text-[26px] font-semibold tracking-tight text-text lg:text-[32px]">Carrito</h1>
-          <span className="text-sm font-semibold text-muted">
-            {unidadesCarrito} {unidadesCarrito === 1 ? "producto" : "productos"}
-          </span>
+        <div className="mb-5 flex items-center gap-3 lg:mb-6">
+          <div className="flex items-baseline gap-3">
+            <h1 className="font-display text-[26px] font-semibold tracking-tight text-text lg:text-[32px]">Carrito</h1>
+            <span className="text-sm font-semibold text-muted">
+              {unidadesCarrito} {unidadesCarrito === 1 ? "producto" : "productos"}
+            </span>
+          </div>
+          <div className="ml-auto">
+            <BotonCompartirCarrito items={items} />
+          </div>
         </div>
 
         {(!conSesion || estado === "no_auth") && (

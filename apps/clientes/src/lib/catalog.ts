@@ -287,8 +287,10 @@ const admiteParecido = (termino: string) => termino.length >= 4;
 
 /**
  * Parecido mínimo (pg_trgm `word_similarity`, 0..1) para que un término
- * cuente en la búsqueda tolerante. 0.5 deja pasar "lampra" → "lámpara" (0.7)
- * sin traer palabras que sólo comparten una sílaba.
+ * cuente en la búsqueda tolerante. Medido contra el catálogo real: "lampra"
+ * → "lámpara" da 0.57 y "termomagentico" → "termomagnético" 0.58, así que un
+ * umbral más alto los pierde. El costo es algo de ruido ("foco" → "focal"
+ * da 0.60): lo resuelven los sinónimos, no el umbral.
  */
 const UMBRAL_PARECIDO = 0.5;
 

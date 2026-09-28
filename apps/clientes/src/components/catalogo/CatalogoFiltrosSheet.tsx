@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Badge, Button, Dialog, Divider, Select } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
-import { cambiarBorrador, cambiosAlAplicar, limpiarBorrador } from "@/lib/catalogo-borrador";
+import { cambiarBorrador, hrefAlAplicar, limpiarBorrador } from "@/lib/catalogo-borrador";
 import type { EstadoCatalogo, OrdenCatalogo } from "@/lib/catalogo-url";
 import { ORDENES, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
 import { CatalogoFiltros } from "./CatalogoFiltros";
@@ -28,13 +28,13 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
 export function CatalogoFiltrosSheet({
   facetas,
   estado,
-  ir,
+  navegar,
 }: {
   facetas: Facetas;
   /** Estado vigente (la URL). */
   estado: EstadoCatalogo;
-  /** Aplica el borrador al estado optimista y programa una sola actualización. */
-  ir: (cambios: Partial<EstadoCatalogo>) => void;
+  /** Navega a una URL del catálogo (el padre la envuelve en una transición). */
+  navegar: (href: string) => void;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [borrador, setBorrador] = useState(estado);
@@ -50,8 +50,8 @@ export function CatalogoFiltrosSheet({
 
   const aplicar = () => {
     setAbierto(false);
-    const cambios = cambiosAlAplicar(estado, borrador);
-    if (cambios) ir(cambios);
+    const href = hrefAlAplicar(estado, borrador);
+    if (href) navegar(href);
   };
 
   return (

@@ -54,8 +54,6 @@ export interface EstadoCatalogo {
   /** Texto buscado (`?q=`). */
   query?: string;
   categorias: string[];
-  /** Descendientes que se restan de las categorías incluidas (`?categoria_excluida=`). */
-  categoriasExcluidas: string[];
   marcas: string[];
   orden: OrdenCatalogo;
   /** 1-based. */
@@ -143,7 +141,6 @@ function comoVista(v: ParamCrudo): VistaCatalogo {
 export function leerEstado(params: {
   q?: ParamCrudo;
   categoria?: ParamCrudo;
-  categoria_excluida?: ParamCrudo;
   marca?: ParamCrudo;
   orden?: ParamCrudo;
   pagina?: ParamCrudo;
@@ -163,7 +160,6 @@ export function leerEstado(params: {
   return {
     query: q || undefined,
     categorias: comoLista(params.categoria),
-    categoriasExcluidas: comoLista(params.categoria_excluida),
     marcas: comoLista(params.marca),
     orden: comoOrden(params.orden),
     pagina: comoPagina(params.pagina),
@@ -186,7 +182,6 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   const sp = new URLSearchParams();
   if (estado.query) sp.set("q", estado.query);
   for (const c of estado.categorias) sp.append("categoria", c);
-  for (const c of estado.categoriasExcluidas) sp.append("categoria_excluida", c);
   for (const m of estado.marcas) sp.append("marca", m);
   if (estado.precioMin != null) sp.set("precio_min", String(estado.precioMin));
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
@@ -278,7 +273,6 @@ export function cambiosDeRango(
 export function hrefCanonico(estado: EstadoCatalogo): string {
   return hrefCatalogo({
     categorias: estado.categorias.slice(0, 1),
-    categoriasExcluidas: [],
     marcas: [],
     orden: ORDEN_DEFAULT,
     pagina: estado.pagina,
@@ -296,7 +290,6 @@ export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosCatalogo {
   return {
     busqueda: estado.query,
     categorias: estado.categorias,
-    categoriasExcluidas: estado.categoriasExcluidas,
     marcas: estado.marcas,
     precioMin: estado.precioMin,
     precioMax: estado.precioMax,

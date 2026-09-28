@@ -8,7 +8,7 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { etiquetaStock, mostrarStockEnCard } from "@/lib/catalogo-vista";
-import { nombreParaCard } from "@/lib/formato-nombre";
+import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
@@ -46,7 +46,7 @@ export function TarjetaProductoCarrusel({
   const fotoReal = p.images?.[0];
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
   const marca = p.brand ? formatMarca(p.brand) : undefined;
-  const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, marca);
+  const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
   return (
     <Link
       href={`/producto/${p.id}`}

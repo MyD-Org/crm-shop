@@ -13,7 +13,7 @@ import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
-import { nombreParaCard } from "@/lib/formato-nombre";
+import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { BotonEnlace } from "./BotonEnlace";
@@ -54,7 +54,7 @@ export function FavoritosLista({
       {visibles.map((p) => {
         // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
         const marca = p.brand ? formatMarca(p.brand) : undefined;
-        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, marca);
+        const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
         return (
         <ProductCard
           key={p.id}

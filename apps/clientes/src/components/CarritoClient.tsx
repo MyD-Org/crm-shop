@@ -16,7 +16,7 @@ import { CuotasResumen } from "@/components/CuotasResumen";
 import { baseCarrito, resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
-import { formatNombreProducto } from "@/lib/formato-nombre";
+import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
 
@@ -301,7 +301,7 @@ export function CarritoClient({
               const marca = linea?.brand || item.brand;
               const nombre = linea && !linea.problema ? linea.name : item.name;
               // Sólo para mostrar: el nombre que viaja en el pedido no se toca.
-              const nombreParaMostrar = formatNombreProducto(nombre, marca ? formatMarca(marca) : undefined);
+              const { nombre: nombreParaMostrar } = nombreConMarca(nombre, marca ? formatMarca(marca) : undefined);
               const seVa = saliendo.has(item.id);
 
               return (

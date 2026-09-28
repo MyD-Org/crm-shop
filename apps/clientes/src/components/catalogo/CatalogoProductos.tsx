@@ -8,7 +8,7 @@ import { CuotasCard } from "@/components/CuotasCard";
 import type { Product } from "@/data/products";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
-import { nombreParaCard } from "@/lib/formato-nombre";
+import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 import { badgeProducto } from "@/components/badge-producto";
@@ -54,7 +54,7 @@ export function CatalogoProductos({
       {productos.map((p) => {
         // Sólo para mostrar: `p.name` (buscar, ordenar, carrito) no se toca.
         const marca = p.brand ? formatMarca(p.brand) : undefined;
-        const { nombre: nombreParaMostrar, esCodigo } = nombreParaCard(p.name, marca);
+        const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
         return (
         <ProductCard
           key={p.id}

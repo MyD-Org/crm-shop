@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { Product } from "@/data/products";
-import { formatNombreProducto } from "@/lib/formato-nombre";
+import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 
 /**
@@ -24,7 +24,7 @@ export function metadataProducto(producto: Product, conBase: boolean): Metadata 
   const description = partes.length > 0 ? partes.join(" · ") : undefined;
   const portada = producto.images?.[0];
   // Sólo para mostrar: `producto.name` (el dato real) no se toca.
-  const nombre = formatNombreProducto(
+  const { nombre } = nombreConMarca(
     producto.name,
     producto.brand ? formatMarca(producto.brand) : undefined
   );

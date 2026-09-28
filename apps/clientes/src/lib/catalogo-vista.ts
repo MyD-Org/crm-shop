@@ -52,10 +52,22 @@ export function migas(estado: EstadoCatalogo): BreadcrumbItem[] {
  * Sin "Más vendidos": nunca hubo un dato de ventas detrás (ordenaba por nombre).
  */
 export const ORDENES: { label: string; value: OrdenCatalogo }[] = [
+  { label: "Relevancia", value: "relevancia" },
   { label: "Nombre A-Z", value: "nombre" },
   { label: "Precio: menor a mayor", value: "precio-asc" },
   { label: "Precio: mayor a menor", value: "precio-desc" },
 ];
+
+/**
+ * Órdenes que se ofrecen para un estado: "Relevancia" sólo con búsqueda (o si
+ * ya es el orden vigente: con `filtrosSinBusqueda` el panel recibe el estado
+ * sin `query`, y el Select no puede quedar sin la opción elegida).
+ */
+export function ordenesPara(estado: Pick<EstadoCatalogo, "query" | "orden">) {
+  return estado.query || estado.orden === "relevancia"
+    ? ORDENES
+    : ORDENES.filter((o) => o.value !== "relevancia");
+}
 
 /** Título de la página: la búsqueda gana; si no, la categoría única. */
 export function tituloCatalogo(estado: EstadoCatalogo): string {

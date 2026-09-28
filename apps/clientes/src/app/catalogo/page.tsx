@@ -89,11 +89,28 @@ async function CatalogoResultados({ searchParams }: Props) {
   //   de precio sale del conjunto filtrado sin el propio rango;
   // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
   //   o error) ⇒ el catálogo sale sin cuotas.
-  const [pagina, facetasBusqueda, oferta] = await Promise.all([
+  const [exacta, facetasExactas, oferta] = await Promise.all([
     paginaCatalogoPublica({ filtros, orden: estado.orden, pagina: estado.pagina, soloVisibles }),
     facetasPublicas(filtros, soloVisibles),
     getOfertaCuotas(),
   ]);
+  // Búsqueda sin resultados: segundo intento tolerante a errores de tipeo
+  // ("lampra" → "lámpara"). Página y facetas con los MISMOS filtros, para que
+  // cuenten el conjunto que se ve. Si falla (p. ej. falta pg_trgm), queda la
+  // búsqueda exacta vacía y sigue el camino de `filtrosSinBusqueda`.
+  let pagina = exacta;
+  let facetasBusqueda = facetasExactas;
+  if (exacta.total === 0 && filtros.busqueda?.trim()) {
+    const tolerantes = { ...filtros, busquedaTolerante: true };
+    const segundo = await Promise.all([
+      paginaCatalogoPublica({ filtros: tolerantes, orden: estado.orden, pagina: estado.pagina, soloVisibles }),
+      facetasPublicas(tolerantes, soloVisibles),
+    ]).catch((err: unknown) => {
+      console.error("[catalogo] falló la búsqueda tolerante:", err);
+      return null;
+    });
+    if (segundo && segundo[0].total > 0) [pagina, facetasBusqueda] = segundo;
+  }
   // Una búsqueda sin resultados dejaba el panel de filtros vacío ("Sin
   // categorías…"): sin nada para tocar, la única salida era borrar el texto.
   // En ese caso el panel muestra los filtros sin la búsqueda, y tocar uno la

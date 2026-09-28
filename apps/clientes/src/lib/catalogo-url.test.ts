@@ -52,10 +52,37 @@ describe("lectura de la query string", () => {
     expect(comoPagina(undefined)).toBe(1);
   });
 
-  it("los órdenes ofrecidos son nombre y precio; el default es nombre", () => {
-    expect(ORDENES).toEqual(["nombre", "precio-asc", "precio-desc"]);
+  it("los órdenes ofrecidos son relevancia, nombre y precio; sin búsqueda el default es nombre", () => {
+    expect(ORDENES).toEqual(["relevancia", "nombre", "precio-asc", "precio-desc"]);
     expect(ORDENES).not.toContain("ventas");
     expect(ORDEN_DEFAULT).toBe("nombre");
+  });
+
+  it("con búsqueda el default es relevancia; sin búsqueda, relevancia no vale", () => {
+    expect(comoOrden(undefined, "led")).toBe("relevancia");
+    expect(comoOrden("basura", "led")).toBe("relevancia");
+    expect(comoOrden("ventas", "led")).toBe("relevancia");
+    expect(comoOrden("nombre", "led")).toBe("nombre");
+    expect(comoOrden("relevancia")).toBe("nombre");
+    expect(leerEstado({ q: "led" }).orden).toBe("relevancia");
+    expect(leerEstado({ q: "  ", orden: "relevancia" }).orden).toBe("nombre");
+  });
+
+  it("relevancia con búsqueda no viaja en la URL; nombre con búsqueda sí", () => {
+    expect(hrefCatalogo({ ...base, query: "led", orden: "relevancia" })).toBe("/catalogo?q=led");
+    expect(hrefCatalogo({ ...base, query: "led", orden: "nombre" })).toBe(
+      "/catalogo?q=led&orden=nombre"
+    );
+  });
+
+  it("quitar la búsqueda con orden relevancia vuelve al alfabético", () => {
+    const conBusqueda = { ...base, query: "led", orden: "relevancia" as const };
+    expect(estadoConCambios(conBusqueda, { query: undefined }).orden).toBe("nombre");
+    expect(hrefCon(conBusqueda, { query: undefined })).toBe("/catalogo");
+    // Un orden elegido a mano sobrevive.
+    expect(hrefCon({ ...conBusqueda, orden: "precio-asc" }, { query: undefined })).toBe(
+      "/catalogo?orden=precio-asc"
+    );
   });
 
   it("un orden que no existe cae en el default", () => {
@@ -216,7 +243,7 @@ describe("armado de URLs", () => {
   });
 
   it("conserva la búsqueda al cambiar de página", () => {
-    expect(hrefCon({ ...base, query: "led" }, { pagina: 4 })).toBe(
+    expect(hrefCon({ ...base, query: "led", orden: "relevancia" }, { pagina: 4 })).toBe(
       "/catalogo?q=led&pagina=4"
     );
   });

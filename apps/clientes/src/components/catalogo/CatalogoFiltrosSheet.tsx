@@ -5,7 +5,7 @@ import { Badge, Button, Dialog, Divider, Select } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import { cambiarBorrador, hrefAlAplicar, limpiarBorrador } from "@/lib/catalogo-borrador";
 import type { EstadoCatalogo, OrdenCatalogo } from "@/lib/catalogo-url";
-import { ORDENES, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
+import { ordenesPara, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
 import { CatalogoFiltros } from "./CatalogoFiltros";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 
@@ -93,7 +93,7 @@ export function CatalogoFiltrosSheet({
               Ordenar por
             </h3>
             <Select
-              options={ORDENES}
+              options={ordenesPara(borrador)}
               value={borrador.orden}
               onValueChange={(v) =>
                 setBorrador((b) => cambiarBorrador(b, { orden: v as OrdenCatalogo }))

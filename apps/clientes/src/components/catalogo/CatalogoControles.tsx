@@ -2,7 +2,7 @@
 
 import { SegmentedControl, Select } from "@myd-org/ui";
 import type { EstadoCatalogo, OrdenCatalogo, VistaCatalogo } from "@/lib/catalogo-url";
-import { ORDENES } from "@/lib/catalogo-vista";
+import { ordenesPara } from "@/lib/catalogo-vista";
 import { GridIcon, ListIcon } from "./iconos";
 
 const VISTAS = [
@@ -36,7 +36,7 @@ export function CatalogoControles({
           vista, que no los cambia. */}
       <div className="hidden lg:block">
         <Select
-          options={ORDENES}
+          options={ordenesPara(estado)}
           value={estado.orden}
           onValueChange={(v) => ir({ orden: v as OrdenCatalogo })}
           aria-label="Ordenar productos"

@@ -17,6 +17,7 @@ import {
   restaurar,
   agregarVarios,
   CARRITO_VACIO,
+  normalizarCarrito,
   CLAVE_CACHE,
   itemsVisibles,
   type CacheCarrito,
@@ -110,6 +111,8 @@ interface CartContextValue {
   addItem: (item: ItemNuevo, qty?: number) => void;
   /** Varias altas como UNA sola actualización (un solo guardado). */
   addItems: (lista: { item: ItemNuevo; qty: number }[]) => void;
+  /** Reemplaza TODO el carrito por `lista` en una sola actualización (carrito compartido). */
+  replaceItems: (lista: { item: ItemNuevo; qty: number }[]) => void;
   removeItem: (id: string) => void;
   /** "Deshacer" de un quitar: repone la línea en `indice`. No suma si ya está. */
   restoreItem: (item: CartItem, indice: number) => void;
@@ -211,6 +214,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     elMotor().mutar((prev) => agregarVarios(prev, validos));
   }, [marcarCambio]);
 
+  const replaceItems = useCallback((lista: { item: ItemNuevo; qty: number }[]) => {
+    const nuevos = lista
+      .filter((l) => l.item.price > 0)
+      .map(({ item, qty }) => ({ ...item, qty }));
+    if (nuevos.length === 0) return;
+    marcarCambio(1);
+    // Una sola mutación: con sesión, un solo guardado (no "vaciar" + "agregar").
+    elMotor().mutar(() => normalizarCarrito(nuevos));
+  }, [marcarCambio]);
+
   const removeItem = useCallback((id: string) => {
     if (itemsRef.current.some((i) => i.id === id)) marcarCambio(-1);
     elMotor().mutar((prev) => actualizarQty(prev, id, 0));
@@ -243,6 +256,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         items,
         addItem,
         addItems,
+        replaceItems,
         removeItem,
         restoreItem,
         updateQty,

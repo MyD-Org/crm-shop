@@ -76,7 +76,7 @@ export const COPY_CARRITO = {
  * Mismo criterio que `esIdAlegra` (src/lib/alegra.ts): enteros positivos. Se
  * repite acá porque aquel módulo es sólo de servidor.
  */
-function esIdValido(id: unknown): id is string {
+export function esIdValido(id: unknown): id is string {
   return typeof id === "string" && id.length <= ID_MAX_LARGO && /^\d+$/.test(id);
 }
 

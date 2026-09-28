@@ -109,7 +109,7 @@ describe("filtro por categoría", () => {
   it("con árbol, busca en el subárbol de la categoría por la clasificación del CRM", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
     for (const { sql, params } of grabadora.consultas) {
-      expect(sql).toContain("with recursive arbol");
+      expect(sql).toContain('with recursive "arbol_incluido"');
       expect(sql).toContain('"public"."catalog_overlay"."categoria_id" in');
       expect(params).toContain("ILUMINACION");
       expect(params).toContain("tenant-test");
@@ -125,6 +125,35 @@ describe("filtro por categoría", () => {
       expect(sql).toContain("not in");
       expect(params).toContain("ILUMINACION");
       expect(params).toContain("Focos led");
+    }
+  });
+
+  it("la categoría del header y una descendiente excluida usan CTEs independientes", async () => {
+    // El header entra con la raíz; destildar una hija debe poder sumar
+    // `categoria_excluida` sin declarar dos veces la misma CTE en Postgres.
+    const filtros = { categorias: ["ILUMINACION"], categoriasExcluidas: ["Focos led"] };
+    await getPaginaCatalogo({ soloVisibles: false, filtros });
+    await getFacetas(filtros, false);
+
+    const consultasConFiltro = grabadora.consultas.filter((c) => c.sql.includes("with recursive"));
+    expect(consultasConFiltro).not.toHaveLength(0);
+
+    for (const { sql, params } of consultasConFiltro) {
+      const incluida = sql.match(
+        /with recursive "arbol_incluido" as \(\s*select id from "public"\."shop_categories" where activa and tenant_id = \$(\d+) and nombre in \(\$(\d+)\)/,
+      );
+      const excluida = sql.match(
+        /with recursive "arbol_excluido" as \(\s*select id from "public"\."shop_categories" where activa and tenant_id = \$(\d+) and nombre in \(\$(\d+)\)/,
+      );
+
+      expect(incluida, sql).not.toBeNull();
+      expect(excluida, sql).not.toBeNull();
+      expect(params[Number(incluida![1]) - 1]).toBe("tenant-test");
+      expect(params[Number(incluida![2]) - 1]).toBe("ILUMINACION");
+      expect(params[Number(excluida![1]) - 1]).toBe("tenant-test");
+      expect(params[Number(excluida![2]) - 1]).toBe("Focos led");
+      expect(incluida![1]).not.toBe(excluida![1]);
+      expect(incluida![2]).not.toBe(excluida![2]);
     }
   });
 

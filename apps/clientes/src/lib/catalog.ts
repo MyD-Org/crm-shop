@@ -517,25 +517,34 @@ const hayArbolSql = () =>
  * clasificar no cae en ninguna. Sin árbol, el filtro de siempre sobre la
  * categoría de Alegra.
  */
-function subarbolCategoriasSql(nombres: string[]) {
+function subarbolCategoriasSql(
+  nombres: string[],
+  nombreCte: "arbol_incluido" | "arbol_excluido",
+) {
   const lista = sql.join(
     nombres.map((n) => sql`${n}`),
     sql`, `,
   );
   const tenant = shopTenantId();
+  // Cada subárbol vive en su propia CTE. La inclusión y la exclusión pueden
+  // coexistir en un mismo WHERE (header + destildar una hija), por eso no
+  // pueden compartir nombre aunque cada una esté entre paréntesis.
+  const arbol = sql.identifier(nombreCte);
   return sql`(
-    with recursive arbol as (
+    with recursive ${arbol} as (
       select id from ${crmCategorias} where activa and tenant_id = ${tenant} and nombre in (${lista})
       union all
-      select c.id from ${crmCategorias} c join arbol a on c.parent_id = a.id where c.activa
+      select c.id from ${crmCategorias} c join ${arbol} a on c.parent_id = a.id where c.activa
     )
-    select id from arbol
+    select id from ${arbol}
   )`;
 }
 
 function filtroCategoriasSql(nombres: string[], excluidas: string[] = []) {
-  const subarbol = subarbolCategoriasSql(nombres);
-  const subarbolExcluido = excluidas.length ? subarbolCategoriasSql(excluidas) : undefined;
+  const subarbol = subarbolCategoriasSql(nombres, "arbol_incluido");
+  const subarbolExcluido = excluidas.length
+    ? subarbolCategoriasSql(excluidas, "arbol_excluido")
+    : undefined;
   const excluyeArbol = subarbolExcluido ? sql`${crmOverlay.categoriaId} not in ${subarbolExcluido}` : undefined;
   const excluyeAlegra = excluidas.length
     ? sql`${crmCategoriasAlegra.name} not in ${sql.join(excluidas.map((n) => sql`${n}`), sql`, `)}`

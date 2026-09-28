@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDescripcionProducto, formatNombreProducto, nombreParaCard } from "./formato-nombre";
+import { formatDescripcionProducto, formatNombreProducto, nombreConMarca } from "./formato-nombre";
 
 describe("formatNombreProducto", () => {
   it("si no viene en mayúsculas sostenidas, lo deja como está", () => {
@@ -82,27 +82,27 @@ describe("formatDescripcionProducto", () => {
   });
 });
 
-describe("nombreParaCard", () => {
+describe("nombreConMarca", () => {
   it("si el nombre es sólo un código, lo antepone la marca y avisa que el código sobra", () => {
-    expect(nombreParaCard("1200", "Akai")).toEqual({ nombre: "Akai 1200", esCodigo: true });
-    expect(nombreParaCard("02141N", "Genrod")).toEqual({ nombre: "Genrod 02141N", esCodigo: true });
-    expect(nombreParaCard("AR-111", "Tacoma")).toEqual({ nombre: "Tacoma AR-111", esCodigo: true });
+    expect(nombreConMarca("1200", "Akai")).toEqual({ nombre: "Akai 1200", esCodigo: true });
+    expect(nombreConMarca("02141N", "Genrod")).toEqual({ nombre: "Genrod 02141N", esCodigo: true });
+    expect(nombreConMarca("AR-111", "Tacoma")).toEqual({ nombre: "Tacoma AR-111", esCodigo: true });
   });
 
   it("un nombre descriptivo queda como lo deja formatNombreProducto", () => {
-    expect(nombreParaCard("AR-111 15W", "Tacoma")).toEqual({ nombre: "AR-111 15W", esCodigo: false });
-    expect(nombreParaCard("LAMPARA LED JADEVER A60", "Jadever")).toEqual({
+    expect(nombreConMarca("AR-111 15W", "Tacoma")).toEqual({ nombre: "AR-111 15W", esCodigo: false });
+    expect(nombreConMarca("LAMPARA LED JADEVER A60", "Jadever")).toEqual({
       nombre: "Lampara LED Jadever A60",
       esCodigo: false,
     });
   });
 
   it("una sola palabra sin números no es un código", () => {
-    expect(nombreParaCard("Zapatilla", "Kalop")).toEqual({ nombre: "Zapatilla", esCodigo: false });
+    expect(nombreConMarca("Zapatilla", "Kalop")).toEqual({ nombre: "Zapatilla", esCodigo: false });
   });
 
   it("sin marca no hay con qué completarlo: queda como está", () => {
-    expect(nombreParaCard("1200")).toEqual({ nombre: "1200", esCodigo: false });
-    expect(nombreParaCard("1200", "")).toEqual({ nombre: "1200", esCodigo: false });
+    expect(nombreConMarca("1200")).toEqual({ nombre: "1200", esCodigo: false });
+    expect(nombreConMarca("1200", "")).toEqual({ nombre: "1200", esCodigo: false });
   });
 });

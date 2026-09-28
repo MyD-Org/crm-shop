@@ -9,7 +9,7 @@ import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
-import { formatDescripcionProducto, formatNombreProducto } from "@/lib/formato-nombre";
+import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -123,7 +123,7 @@ export function ProductoClient({
   const sinPrecio = !(producto.price > 0);
   // Sólo para mostrar: el nombre real (para buscar, ordenar, SEO/JSON-LD)
   // sigue siendo `producto.name` tal como lo resolvió el servidor.
-  const nombreParaMostrar = formatNombreProducto(
+  const { nombre: nombreParaMostrar } = nombreConMarca(
     producto.name,
     producto.brand ? formatMarca(producto.brand) : undefined
   );

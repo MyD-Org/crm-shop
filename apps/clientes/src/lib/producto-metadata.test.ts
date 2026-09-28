@@ -19,6 +19,12 @@ describe("metadataProducto", () => {
     expect(m.openGraph).toMatchObject({ title: "Lampara LED A60 9W", description: "Marca · Código 02141N" });
   });
 
+  it("si el nombre es sólo un código, el título lleva la marca (\"1200\" solo no dice nada al compartir el link)", () => {
+    const m = metadataProducto({ ...base, name: "1200", brand: "AKAI", sku: "1200-AKAI" }, false);
+    expect(m.title).toBe("Akai 1200");
+    expect(m.openGraph).toMatchObject({ title: "Akai 1200" });
+  });
+
   it("sin marca ni código no inventa descripción", () => {
     expect(metadataProducto({ ...base, brand: "", sku: undefined }, false).description).toBeUndefined();
   });

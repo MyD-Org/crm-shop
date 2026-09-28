@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
 import { fmtMonto } from "@/lib/cuotas-textos";
-import { formatNombreProducto } from "@/lib/formato-nombre";
+import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
 import { STOCK_INCLUYE_SIN_STOCK } from "@/lib/catalogo-url";
@@ -128,10 +128,8 @@ export function SearchAutocomplete() {
             <ul>
               {results.map((p) => {
                 // Sólo para mostrar: `p.name` no se toca.
-                const nombreParaMostrar = formatNombreProducto(
-                  p.name,
-                  p.brand ? formatMarca(p.brand) : undefined
-                );
+                const marca = p.brand ? formatMarca(p.brand) : undefined;
+                const { nombre: nombreParaMostrar } = nombreConMarca(p.name, marca);
                 return (
                 <li key={p.id}>
                   <button
@@ -153,7 +151,7 @@ export function SearchAutocomplete() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-text">{nombreParaMostrar}</span>
-                      <span className="block truncate text-xs text-muted">{p.brand}</span>
+                      <span className="block truncate text-xs text-muted">{marca}</span>
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
                       {fmtMonto(p.precioFinal ?? p.price)}

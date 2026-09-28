@@ -76,7 +76,7 @@ Decisiones tomadas en brainstorming:
   sólo con el carrito no vacío.
 - Arma la URL absoluta (`window.location.origin + hrefCompartido(items)`).
 - Si existe `navigator.share` → share sheet con título y texto
-  ("Te comparto mi carrito de <tienda>"). Si el usuario cancela, no se muestra
+  ("Le comparto mi carrito") — los textos del carrito van en usted (guarda `carrito-checkout-sin-voseo.test.ts`). Si el usuario cancela, no se muestra
   nada (`AbortError` se ignora).
 - Si no → `navigator.clipboard.writeText` + toast "Link copiado".
 - Si falla el portapapeles → toast de error con el link visible para copiar a
@@ -96,7 +96,7 @@ Decisiones tomadas en brainstorming:
   "N productos de este carrito ya no están disponibles" y **no se cargan**.
 - **Renderizar la página no modifica ningún carrito** (los crawlers de preview
   de WhatsApp/Telegram hacen GET al link). La carga es una acción del usuario.
-- Metadata: `title` "Te compartieron un carrito", `description` "N productos
+- Metadata: `title` "Le compartieron un carrito", `description` "N productos
   en <tienda>", `robots: noindex`. OG image: la de la tienda.
 - La página está detrás del gate del sitio igual que el resto (no se agrega a
   `RUTAS_PUBLICAS`: esa lista es para servidores externos sin cookies).

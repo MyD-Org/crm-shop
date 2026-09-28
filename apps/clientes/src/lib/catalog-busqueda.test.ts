@@ -55,6 +55,13 @@ describe("búsqueda del catálogo", () => {
     expect(sql).not.toContain("word_similarity");
   });
 
+  it("un plural busca también el término tal cual: \"luces\" sigue encontrando \"50 LUCES\"", async () => {
+    await getCatalogo({ soloVisibles: false, busqueda: "luces" });
+    const { params } = grabadora.consultas[0];
+    expect(params).toContain("%luces%");
+    expect(params).toContain("%luz%");
+  });
+
   it("con búsqueda ordena por relevancia (y desempata por nombre)", async () => {
     await getCatalogo({ soloVisibles: false, busqueda: "foco" });
     const { sql } = grabadora.consultas[0];

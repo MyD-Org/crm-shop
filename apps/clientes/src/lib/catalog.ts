@@ -57,7 +57,13 @@ import {
   nombreExhibido,
   nombreExhibidoSql,
 } from "./nombre-exhibido";
-import { patronLike, patronPrefijo, raizPlural, terminosBusqueda } from "./catalogo-busqueda";
+import {
+  formasTermino,
+  patronLike,
+  patronPrefijo,
+  raizPlural,
+  terminosBusqueda,
+} from "./catalogo-busqueda";
 import type { Product } from "@/data/products";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -266,9 +272,18 @@ const textoBuscableSql = () =>
     sql`concat_ws(' ', ${crmOverlay.nombre}, ${crmCatalogo.name}, ${crmCatalogo.code}, ${crmCatalogo.description}, ${crmCatalogo.brand}, ${crmCategoriasAlegra.name})`,
   );
 
-/** `expr LIKE '%término%'`, con el plural reducido (ver `raizPlural`). */
-const contiene = (expr: unknown, termino: string) =>
-  sql`${expr} LIKE ${patronLike(raizPlural(termino))}`;
+/** `expr` contiene el término o su singular (ver `formasTermino`). */
+const contiene = (expr: unknown, termino: string) => {
+  const formas = formasTermino(termino).map((f) => sql`${expr} LIKE ${patronLike(f)}`);
+  return formas.length === 1 ? formas[0] : sql`(${sql.join(formas, sql` or `)})`;
+};
+
+/**
+ * Términos a los que se les aplica el parecido por trigramas: sólo palabras
+ * de 4 o más. Un "9w" o "e27" mal tipeado no debería traer coincidencias
+ * difusas (los trigramas de algo tan corto se parecen a cualquier cosa).
+ */
+const admiteParecido = (termino: string) => termino.length >= 4;
 
 /**
  * Parecido mínimo (pg_trgm `word_similarity`, 0..1) para que un término
@@ -293,7 +308,7 @@ function coincideTexto(q: string, tolerante = false) {
   const texto = textoBuscableSql();
   return and(
     ...terminos.map((t) =>
-      tolerante
+      tolerante && admiteParecido(t)
         ? or(
             contiene(texto, t),
             sql`public.word_similarity(${raizPlural(t)}, ${texto}) >= ${UMBRAL_PARECIDO}`,
@@ -315,14 +330,16 @@ function relevanciaSql(q: string, tolerante: boolean) {
   const nombre = sinTildes(nombreExhibidoSql);
   const codigo = sinTildes(crmCatalogo.code);
   const marcaCategoria = sinTildes(sql`concat_ws(' ', ${marcaSql}, ${crmCategoriasAlegra.name})`);
-  const partes = terminos.map((t) => {
-    const patron = patronLike(raizPlural(t));
-    return sql`(case when ${nombre} LIKE ${patron} then 4 when ${codigo} LIKE ${patron} then 3 when ${marcaCategoria} LIKE ${patron} then 2 else 1 end)`;
-  });
+  const partes = terminos.map(
+    (t) =>
+      sql`(case when ${contiene(nombre, t)} then 4 when ${contiene(codigo, t)} then 3 when ${contiene(marcaCategoria, t)} then 2 else 1 end)`,
+  );
   partes.push(sql`(case when ${codigo} = ${terminos.join(" ")} then 20 else 0 end)`);
   partes.push(sql`(case when ${nombre} LIKE ${patronPrefijo(raizPlural(terminos[0]))} then 2 else 0 end)`);
   if (tolerante) {
-    for (const t of terminos) partes.push(sql`public.word_similarity(${raizPlural(t)}, ${nombre}) * 4`);
+    for (const t of terminos.filter(admiteParecido)) {
+      partes.push(sql`public.word_similarity(${raizPlural(t)}, ${nombre}) * 4`);
+    }
   }
   return sql.join(partes, sql` + `);
 }

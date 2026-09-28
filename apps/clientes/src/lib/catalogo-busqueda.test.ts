@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { patronLike, raizPlural, terminosBusqueda } from "./catalogo-busqueda";
+import { formasTermino, patronLike, raizPlural, terminosBusqueda } from "./catalogo-busqueda";
 
 describe("terminosBusqueda", () => {
   it("parte por palabras: el orden en que se escriben no importa", () => {
@@ -60,5 +60,14 @@ describe("patronLike", () => {
     expect(patronLike("50%")).toBe("%50\\%%");
     expect(patronLike("a_b")).toBe("%a\\_b%");
     expect(patronLike("c:\\x")).toBe("%c:\\\\x%");
+  });
+});
+
+describe("formasTermino", () => {
+  it("busca el término tal cual y su singular, si difiere", () => {
+    expect(formasTermino("luces")).toEqual(["luces", "luz"]);
+    expect(formasTermino("lamparas")).toEqual(["lamparas", "lampara"]);
+    expect(formasTermino("led")).toEqual(["led"]);
+    expect(formasTermino("e27")).toEqual(["e27"]);
   });
 });

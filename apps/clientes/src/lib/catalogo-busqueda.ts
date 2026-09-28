@@ -55,6 +55,18 @@ export function raizPlural(termino: string): string {
   return termino;
 }
 
+/**
+ * Formas de un término que se buscan con `LIKE '%…%'`: el término tal cual y,
+ * si difiere, su singular aproximado. Las dos, porque la regla "-ces" → "-z"
+ * no deja el singular DENTRO del plural: sólo con "luz", "luces" dejaría de
+ * encontrar "GUIRNALDA 50 LUCES". Un singular de menos de 3 letras no se usa
+ * ("tres" → "tre" está bien; algo más corto encontraría casi todo).
+ */
+export function formasTermino(termino: string): string[] {
+  const raiz = raizPlural(termino);
+  return raiz !== termino && raiz.length >= 3 ? [termino, raiz] : [termino];
+}
+
 /** Escapa los comodines de LIKE (el escape por defecto es `\`). */
 const escaparLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
 

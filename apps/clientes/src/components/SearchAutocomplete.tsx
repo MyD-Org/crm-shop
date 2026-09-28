@@ -38,7 +38,8 @@ export function SearchAutocomplete() {
   const [results, setResults] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Búsqueda server-side contra Alegra (filtra por `name`, substring).
+  // Búsqueda server-side sobre el catálogo del CRM (misma regla que /catalogo:
+  // por términos, con plurales y relevancia; ver `coincideTexto` en catalog.ts).
   useEffect(() => {
     const q = debouncedQuery.trim();
     const controller = new AbortController();

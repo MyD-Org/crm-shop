@@ -58,9 +58,15 @@ export const ORDENES: { label: string; value: OrdenCatalogo }[] = [
   { label: "Precio: mayor a menor", value: "precio-desc" },
 ];
 
-/** Órdenes que se ofrecen para un estado: "Relevancia" sólo con búsqueda. */
-export function ordenesPara(estado: Pick<EstadoCatalogo, "query">) {
-  return estado.query ? ORDENES : ORDENES.filter((o) => o.value !== "relevancia");
+/**
+ * Órdenes que se ofrecen para un estado: "Relevancia" sólo con búsqueda (o si
+ * ya es el orden vigente: con `filtrosSinBusqueda` el panel recibe el estado
+ * sin `query`, y el Select no puede quedar sin la opción elegida).
+ */
+export function ordenesPara(estado: Pick<EstadoCatalogo, "query" | "orden">) {
+  return estado.query || estado.orden === "relevancia"
+    ? ORDENES
+    : ORDENES.filter((o) => o.value !== "relevancia");
 }
 
 /** Título de la página: la búsqueda gana; si no, la categoría única. */

@@ -182,6 +182,12 @@ export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null):
     ...estado.categorias.map((c) =>
       chip(`categoria:${c}`, formatRubro(c), {
         categorias: estado.categorias.filter((x) => x !== c),
+        categoriasExcluidas: [],
+      })
+    ),
+    ...estado.categoriasExcluidas.map((c) =>
+      chip(`categoria-excluida:${c}`, `Sin ${formatRubro(c)}`, {
+        categoriasExcluidas: estado.categoriasExcluidas.filter((x) => x !== c),
       })
     ),
     ...estado.marcas.map((m) =>
@@ -209,6 +215,7 @@ export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null):
 export function limpiarFiltros(): Partial<EstadoCatalogo> {
   return {
     categorias: [],
+    categoriasExcluidas: [],
     marcas: [],
     precioMin: undefined,
     precioMax: undefined,
@@ -225,6 +232,7 @@ export function hayFiltros(estado: EstadoCatalogo): boolean {
 export function contarFiltrosActivos(estado: EstadoCatalogo): number {
   return (
     estado.categorias.length +
+    estado.categoriasExcluidas.length +
     estado.marcas.length +
     (hayPrecio(estado) ? 1 : 0) +
     (stockFueraDeDefault(estado) ? 1 : 0)
@@ -255,6 +263,7 @@ export function indexable(estado: EstadoCatalogo): boolean {
     estado.orden === ORDEN_DEFAULT &&
     estado.vista === VISTA_DEFAULT &&
     estado.categorias.length <= 1
+    && estado.categoriasExcluidas.length === 0
   );
 }
 
@@ -277,14 +286,16 @@ export function itemsDeFaceta<F extends { label: string; count: number }>(
   ];
 }
 
-/** Índices de las hijas directas de `facetas[i]` (orden de lectura). */
-function hijasDirectas(facetas: { label: string; nivel?: number }[], i: number): number[] {
-  const nivel = facetas[i].nivel ?? 1;
-  const hijas: number[] = [];
-  for (let j = i + 1; j < facetas.length && (facetas[j].nivel ?? 1) > nivel; j++) {
-    if ((facetas[j].nivel ?? 1) === nivel + 1) hijas.push(j);
-  }
-  return hijas;
+/** Ítems de categoría: una madre marcada cubre a sus descendientes salvo exclusiones. */
+export function itemsDeCategorias<F extends { label: string; count: number; nivel?: number }>(
+  facetas: F[],
+  categorias: string[],
+  excluidas: string[],
+): (F & { checked: boolean })[] {
+  return facetas.map((f, i) => {
+    const cubreMadre = madresDe(facetas, i).some((m) => categorias.includes(facetas[m].label));
+    return { ...f, checked: (categorias.includes(f.label) || cubreMadre) && !excluidas.includes(f.label) };
+  });
 }
 
 /** Índices de las madres de `facetas[i]`, de la más cercana a la raíz. */
@@ -313,30 +324,20 @@ function madresDe(facetas: { label: string; nivel?: number }[], i: number): numb
  */
 export function alternarCategoria(
   facetas: { label: string; nivel?: number }[],
-  seleccion: string[],
+  seleccion: Pick<EstadoCatalogo, "categorias" | "categoriasExcluidas">,
   valor: string,
   tildado: boolean,
-): string[] {
+): Pick<EstadoCatalogo, "categorias" | "categoriasExcluidas"> {
+  const { categorias, categoriasExcluidas } = seleccion;
+  const sinExclusiones = (siguientes: string[]) => ({ categorias: siguientes, categoriasExcluidas: [] });
   if (!tildado) {
-    if (seleccion.includes(valor)) return seleccion.filter((x) => x !== valor);
+    if (categorias.includes(valor)) return sinExclusiones(categorias.filter((x) => x !== valor));
     const iValor = facetas.findIndex((f) => f.label === valor);
     if (iValor < 0) return seleccion;
     const madres = madresDe(facetas, iValor);
-    const cubridora = madres.find((m) => seleccion.includes(facetas[m].label));
+    const cubridora = madres.find((m) => categorias.includes(facetas[m].label));
     if (cubridora == null) return seleccion;
-    // Camino desde la madre tildada hasta la hija: en cada nivel quedan
-    // tildadas las hermanas que no están en el camino.
-    const camino = new Set([...madres, iValor]);
-    const agregadas: string[] = [];
-    let actual = cubridora;
-    while (actual !== iValor) {
-      const hijas = hijasDirectas(facetas, actual);
-      const siguiente = hijas.find((h) => camino.has(h));
-      for (const h of hijas) if (h !== siguiente) agregadas.push(facetas[h].label);
-      if (siguiente == null) break;
-      actual = siguiente;
-    }
-    return [...seleccion.filter((x) => x !== facetas[cubridora].label), ...agregadas];
+    return { categorias, categoriasExcluidas: [...categoriasExcluidas, valor] };
   }
   const i = facetas.findIndex((f) => f.label === valor);
   const hijas = new Set<string>();
@@ -346,5 +347,10 @@ export function alternarCategoria(
       hijas.add(facetas[j].label);
     }
   }
-  return [...seleccion.filter((x) => x !== valor && !hijas.has(x)), valor];
+  const iValor = facetas.findIndex((f) => f.label === valor);
+  const cubierta = iValor >= 0 && madresDe(facetas, iValor).some((m) => categorias.includes(facetas[m].label));
+  if (cubierta) {
+    return { categorias, categoriasExcluidas: categoriasExcluidas.filter((x) => x !== valor) };
+  }
+  return sinExclusiones([...categorias.filter((x) => x !== valor && !hijas.has(x)), valor]);
 }

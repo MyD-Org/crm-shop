@@ -107,6 +107,18 @@ describe("filtro por categoría", () => {
     }
   });
 
+  it("con árbol, resta el subárbol excluido sin expandir categorías hermanas", async () => {
+    await getPaginaCatalogo({
+      soloVisibles: false,
+      filtros: { categorias: ["ILUMINACION"], categoriasExcluidas: ["Focos led"] },
+    });
+    for (const { sql, params } of grabadora.consultas) {
+      expect(sql).toContain("not in");
+      expect(params).toContain("ILUMINACION");
+      expect(params).toContain("Focos led");
+    }
+  });
+
   it("sin árbol cae a la categoría de Alegra, en la misma consulta", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
     for (const { sql } of grabadora.consultas) {

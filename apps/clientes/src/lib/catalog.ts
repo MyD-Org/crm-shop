@@ -430,6 +430,8 @@ export const PRODUCTOS_POR_PAGINA = 24;
 export interface FiltrosCatalogo {
   busqueda?: string;
   categorias?: string[];
+  /** Subárboles a restar de las categorías incluidas. */
+  categoriasExcluidas?: string[];
   marcas?: string[];
   /** Extremos inclusivos del rango, sobre el precio exhibido (con IVA). */
   precioMin?: number;
@@ -515,13 +517,13 @@ const hayArbolSql = () =>
  * clasificar no cae en ninguna. Sin árbol, el filtro de siempre sobre la
  * categoría de Alegra.
  */
-function filtroCategoriasSql(nombres: string[]) {
+function subarbolCategoriasSql(nombres: string[]) {
   const lista = sql.join(
     nombres.map((n) => sql`${n}`),
     sql`, `,
   );
   const tenant = shopTenantId();
-  const subarbol = sql`(
+  return sql`(
     with recursive arbol as (
       select id from ${crmCategorias} where activa and tenant_id = ${tenant} and nombre in (${lista})
       union all
@@ -529,8 +531,17 @@ function filtroCategoriasSql(nombres: string[]) {
     )
     select id from arbol
   )`;
-  return sql`((${hayArbolSql()} and ${crmOverlay.categoriaId} in ${subarbol})
-    or (not ${hayArbolSql()} and ${inArray(crmCategoriasAlegra.name, nombres)}))`;
+}
+
+function filtroCategoriasSql(nombres: string[], excluidas: string[] = []) {
+  const subarbol = subarbolCategoriasSql(nombres);
+  const subarbolExcluido = excluidas.length ? subarbolCategoriasSql(excluidas) : undefined;
+  const excluyeArbol = subarbolExcluido ? sql`${crmOverlay.categoriaId} not in ${subarbolExcluido}` : undefined;
+  const excluyeAlegra = excluidas.length
+    ? sql`${crmCategoriasAlegra.name} not in ${sql.join(excluidas.map((n) => sql`${n}`), sql`, `)}`
+    : undefined;
+  return sql`((${hayArbolSql()} and ${crmOverlay.categoriaId} in ${subarbol}${excluyeArbol ? sql` and ${excluyeArbol}` : sql``})
+    or (not ${hayArbolSql()} and ${inArray(crmCategoriasAlegra.name, nombres)}${excluyeAlegra ? sql` and ${excluyeAlegra}` : sql``}))`;
 }
 
 /** Categoría propia activa, tal como la necesitan el menú y las facetas. */
@@ -657,7 +668,7 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros, soloVi
     soloVisiblesSql(soloVisibles),
     q ? coincideTexto(q) : undefined,
     aplicar.categorias && filtros.categorias?.length
-      ? filtroCategoriasSql(filtros.categorias)
+      ? filtroCategoriasSql(filtros.categorias, filtros.categoriasExcluidas)
       : undefined,
     aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)

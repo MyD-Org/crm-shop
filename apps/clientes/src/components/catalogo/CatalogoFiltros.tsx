@@ -12,6 +12,7 @@ import {
   alternarCategoria,
   fmtPesos,
   hayFiltros,
+  itemsDeCategorias,
   itemsDeFaceta,
   limpiarFiltros,
 } from "@/lib/catalogo-vista";
@@ -48,7 +49,7 @@ export function CatalogoFiltros({
     <div className="flex flex-col gap-5">
       <FacetGroup
         title="Categorías"
-        items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
+        items={itemsDeCategorias(facetas.categorias, estado.categorias, estado.categoriasExcluidas).map((c) => ({
           value: c.label,
           label: formatRubro(c.label),
           // Las subcategorías van debajo de su madre, corridas un nivel.
@@ -58,7 +59,7 @@ export function CatalogoFiltros({
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) =>
-          ir({ categorias: alternarCategoria(facetas.categorias, estado.categorias, valor, tildado) })
+          ir(alternarCategoria(facetas.categorias, estado, valor, tildado))
         }
         emptyText="Sin categorías para estos filtros"
       />

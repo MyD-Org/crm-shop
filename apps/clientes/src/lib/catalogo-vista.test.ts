@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   alternarCategoria,
+  itemsDeCategorias,
   itemsDeFaceta,
   anuncioResultados,
   chipsActivos,
@@ -24,6 +25,7 @@ import type { EstadoCatalogo } from "./catalogo-url";
 const base: EstadoCatalogo = {
   query: undefined,
   categorias: [],
+  categoriasExcluidas: [],
   marcas: [],
   orden: "nombre",
   pagina: 1,
@@ -192,7 +194,7 @@ describe("chipsActivos", () => {
       "Incluye sin stock",
     ]);
     expect(chips[1].removeLabel).toBe("Quitar filtro Marca: Genrod");
-    expect(chips[0].cambios).toEqual({ categorias: [] });
+    expect(chips[0].cambios).toEqual({ categorias: [], categoriasExcluidas: [] });
     expect(chips[1].cambios).toEqual({ marcas: ["MACROLED"] });
     expect(chips[3].cambios).toEqual({ precioMin: undefined, precioMax: undefined });
     expect(chips[4].removeLabel).toBe("Quitar filtro Incluye sin stock");
@@ -219,6 +221,7 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
   it("limpiar borra filtros y conserva búsqueda, orden y vista (no los toca)", () => {
     expect(limpiarFiltros()).toEqual({
       categorias: [],
+      categoriasExcluidas: [],
       marcas: [],
       precioMin: undefined,
       precioMax: undefined,
@@ -318,11 +321,10 @@ describe("alternarCategoria", () => {
     { label: "Seguridad", nivel: 1 },
   ];
 
-  it("destildar una hija cubierta saca a la madre y deja tildadas las hermanas", () => {
-    expect(alternarCategoria(facetas, ["Iluminación", "Seguridad"], "Paneles", false)).toEqual([
-      "Seguridad",
-      "Focos led",
-    ]);
+  it("destildar una hija cubierta conserva a la madre y registra una exclusión explícita", () => {
+    expect(
+      alternarCategoria(facetas, { categorias: ["Iluminación", "Seguridad"], categoriasExcluidas: [] }, "Paneles", false),
+    ).toEqual({ categorias: ["Iluminación", "Seguridad"], categoriasExcluidas: ["Paneles"] });
   });
 
   it("destildar una nieta cubierta deja las hermanas de cada nivel del camino", () => {
@@ -333,34 +335,88 @@ describe("alternarCategoria", () => {
       { label: "Bulbos", nivel: 3 },
       { label: "Paneles", nivel: 2 },
     ];
-    expect(alternarCategoria(arbol, ["Iluminación"], "Dicroicas", false)).toEqual(["Paneles", "Bulbos"]);
+    expect(
+      alternarCategoria(arbol, { categorias: ["Iluminación"], categoriasExcluidas: [] }, "Dicroicas", false),
+    ).toEqual({ categorias: ["Iluminación"], categoriasExcluidas: ["Dicroicas"] });
   });
 
   it("destildar algo que no está ni cubierto no cambia nada", () => {
-    expect(alternarCategoria(facetas, ["Seguridad"], "Paneles", false)).toEqual(["Seguridad"]);
+    expect(
+      alternarCategoria(facetas, { categorias: ["Seguridad"], categoriasExcluidas: [] }, "Paneles", false),
+    ).toEqual({ categorias: ["Seguridad"], categoriasExcluidas: [] });
   });
 
   it("tildar una madre saca a sus hijas y nietas, y deja lo de otras ramas", () => {
     expect(
-      alternarCategoria(facetas, ["Dicroicas", "Paneles", "Seguridad"], "Iluminación", true),
-    ).toEqual(["Seguridad", "Iluminación"]);
+      alternarCategoria(facetas, { categorias: ["Dicroicas", "Paneles", "Seguridad"], categoriasExcluidas: [] }, "Iluminación", true),
+    ).toEqual({ categorias: ["Seguridad", "Iluminación"], categoriasExcluidas: [] });
   });
 
   it("tildar una hoja sólo la agrega", () => {
-    expect(alternarCategoria(facetas, ["Electricidad"], "Paneles", true)).toEqual([
-      "Electricidad",
-      "Paneles",
-    ]);
+    expect(
+      alternarCategoria(facetas, { categorias: ["Electricidad"], categoriasExcluidas: [] }, "Paneles", true),
+    ).toEqual({ categorias: ["Electricidad", "Paneles"], categoriasExcluidas: [] });
   });
 
   it("destildar la saca", () => {
-    expect(alternarCategoria(facetas, ["Iluminación", "Seguridad"], "Iluminación", false)).toEqual([
-      "Seguridad",
-    ]);
+    expect(
+      alternarCategoria(facetas, { categorias: ["Iluminación", "Seguridad"], categoriasExcluidas: ["Paneles"] }, "Iluminación", false),
+    ).toEqual({ categorias: ["Seguridad"], categoriasExcluidas: [] });
   });
 
   it("sin árbol (categorías planas, sin nivel) se comporta como una lista común", () => {
     const planas = [{ label: "A" }, { label: "B" }];
-    expect(alternarCategoria(planas, ["A"], "B", true)).toEqual(["A", "B"]);
+    expect(
+      alternarCategoria(planas, { categorias: ["A"], categoriasExcluidas: [] }, "B", true),
+    ).toEqual({ categorias: ["A", "B"], categoriasExcluidas: [] });
+  });
+});
+
+describe("itemsDeCategorias", () => {
+  it("sólo marca descendientes de la madre elegida y deja destildada una exclusión", () => {
+    const arbol = [
+      { label: "Electricidad", count: 1, nivel: 1 },
+      { label: "Cables", count: 1, nivel: 2 },
+      { label: "HOGAR", count: 1, nivel: 1 },
+      { label: "Tubos", count: 1, nivel: 2 },
+      { label: "Faroles", count: 1, nivel: 2 },
+    ];
+    expect(itemsDeCategorias(arbol, ["HOGAR"], ["Tubos"]).map((f) => [f.label, f.checked])).toEqual([
+      ["Electricidad", false],
+      ["Cables", false],
+      ["HOGAR", true],
+      ["Tubos", false],
+      ["Faroles", true],
+    ]);
+  });
+
+  it("conserva en su lugar las categorías seleccionadas y excluidas aunque su faceta tenga cuenta cero", () => {
+    const arbol = [
+      { label: "Electricidad", count: 3, nivel: 1 },
+      { label: "Selectores", count: 3, nivel: 2 },
+      { label: "Herramientas", count: 1, nivel: 1 },
+    ];
+    const items = itemsDeCategorias(arbol, ["HOGAR"], ["Luces de emergencia"]);
+
+    expect(items.map((f) => [f.label, f.count, f.nivel, f.checked])).toEqual([
+      ["HOGAR", 0, 1, true],
+      ["Luces de emergencia", 0, 2, false],
+      ["Electricidad", 3, 1, false],
+      ["Selectores", 3, 2, false],
+      ["Herramientas", 1, 1, false],
+    ]);
+    expect(
+      alternarCategoria(items, { categorias: ["HOGAR"], categoriasExcluidas: ["Luces de emergencia"] }, "Luces de emergencia", true),
+    ).toEqual({ categorias: ["HOGAR"], categoriasExcluidas: [] });
+  });
+});
+
+describe("chips de exclusión de categoría", () => {
+  it("quitar la categoría padre también quita sus exclusiones, sin dejar un filtro oculto", () => {
+    const chip = chipsActivos(
+      { ...base, categorias: ["HOGAR"], categoriasExcluidas: ["Tubos"] },
+      null,
+    ).find((c) => c.clave === "categoria:HOGAR");
+    expect(chip?.cambios).toEqual({ categorias: [], categoriasExcluidas: [] });
   });
 });

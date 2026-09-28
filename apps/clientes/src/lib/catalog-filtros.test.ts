@@ -123,13 +123,12 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
     expect(precio.sql).toMatch(/ceil\(max\([\s\S]*\/ 100\)\)\)::int/);
   });
 
-  it("cada grupo aplica el rango de precio salvo el propio rango", async () => {
+  it("las categorías permanecen disponibles al elegir una marca", async () => {
     await getFacetas({ precioMin: 500, marcas: ["X"] }, false);
     const { categorias, marcas, precio } = facetas(grabadora.consultas);
 
     expect(cuenta(categorias.sql, PRECIO_MINIMO)).toBe(1);
-    expect(categorias.sql).toContain("in ($");
-    expect(categorias.params).toContain("X");
+    expect(categorias.params).not.toContain("X");
 
     expect(cuenta(marcas.sql, PRECIO_MINIMO)).toBe(1);
     expect(marcas.params).not.toContain("X");
@@ -139,13 +138,13 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
     expect(precio.params).toContain("X");
   });
 
-  it("las marcas se cuentan con el stock filtrado y sin el filtro de marcas", async () => {
+  it("las marcas se cruzan con stock, pero las categorías no se reducen por marca", async () => {
     await getFacetas({ soloStock: true, marcas: ["GENROD"] }, false);
     const { categorias, marcas, precio } = facetas(grabadora.consultas);
     expect(marcas.sql).toMatch(STOCK);
     expect(marcas.params).not.toContain("GENROD");
     expect(categorias.sql).toMatch(STOCK);
-    expect(categorias.params).toContain("GENROD");
+    expect(categorias.params).not.toContain("GENROD");
     expect(precio.sql).toMatch(STOCK);
   });
 

@@ -12,6 +12,7 @@ import {
   alternarCategoria,
   fmtPesos,
   hayFiltros,
+  itemsDeCategorias,
   itemsDeFaceta,
   limpiarFiltros,
 } from "@/lib/catalogo-vista";
@@ -44,11 +45,19 @@ export function CatalogoFiltros({
 }) {
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
+  // Incluye valores de la URL que la faceta vigente no trajo todavía. El mismo
+  // árbol se usa al alternar para que una exclusión con cuenta cero sea
+  // reversible, también durante la navegación optimista.
+  const categorias = itemsDeCategorias(
+    facetas.categorias,
+    estado.categorias,
+    estado.categoriasExcluidas,
+  );
   const grupos = (
     <div className="flex flex-col gap-5">
       <FacetGroup
         title="Categorías"
-        items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
+        items={categorias.map((c) => ({
           value: c.label,
           label: formatRubro(c.label),
           // Las subcategorías van debajo de su madre, corridas un nivel.
@@ -58,7 +67,7 @@ export function CatalogoFiltros({
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) =>
-          ir({ categorias: alternarCategoria(facetas.categorias, estado.categorias, valor, tildado) })
+          ir(alternarCategoria(categorias, estado, valor, tildado))
         }
         emptyText="Sin categorías para estos filtros"
       />

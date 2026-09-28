@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useOptimistic, useRef, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
 import { CatalogoControles } from "@/components/catalogo/CatalogoControles";
@@ -14,6 +14,7 @@ import type { Product } from "@/data/products";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import type { Facetas } from "@/lib/catalog";
 import { estadoConCambios, hrefCatalogo, hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
+import { NavegacionCatalogo } from "@/lib/catalogo-navegacion";
 import { anuncioResultados, hayFiltros, limpiarFiltros } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -53,16 +54,16 @@ export function CatalogoClient({
   filtrosSinBusqueda?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
   // en vez de quedarse muda.
-  const [navegando, startTransition] = useTransition();
+  const [refrescando, startTransition] = useTransition();
+  const [actualizando, setActualizando] = useState(false);
 
-  // Estado optimista: el filtro que toca el visitante se marca en el acto,
-  // sin esperar a que el servidor responda con la URL nueva (si no, el tilde
-  // aparece recién junto con los resultados y parece que el clic no anduvo).
-  // Al terminar la navegación, `estado` ya es el nuevo y el optimista se
-  // descarta solo. Clics seguidos se acumulan porque parten de `estadoVisible`.
-  const [estadoVisible, marcar] = useOptimistic(estado, estadoConCambios);
+  // Estado local optimista: los tildes cambian en el acto, mientras el server
+  // prepara la grilla final. A diferencia de `useOptimistic`, no se descarta
+  // por una respuesta anterior de una navegación que ya quedó obsoleta.
+  const [estadoVisible, setEstadoVisible] = useState(estado);
 
   // `ir` puede llamarse dos veces seguidas antes de que React vuelva a
   // renderizar (dos clics rápidos, o un commit del slider seguido de un
@@ -78,14 +79,51 @@ export function CatalogoClient({
     estadoVisibleRef.current = estadoVisible;
   }, [estadoVisible]);
 
-  const navegar = (href: string) => startTransition(() => router.push(href));
-  const ir = (cambios: Partial<EstadoCatalogo>) =>
-    startTransition(() => {
-      const siguiente = estadoConCambios(estadoVisibleRef.current, cambios);
-      estadoVisibleRef.current = siguiente;
-      marcar(cambios);
-      router.push(hrefCatalogo(siguiente));
-    });
+  // La URL se actualiza al instante (también se puede copiar durante la
+  // espera), pero el refresh se agrupa: varios clics rápidos consultan sólo
+  // el estado final. `pushState` para el primer clic y `replaceState` para el
+  // resto dejan un único paso útil para el botón Atrás.
+  const navegacion = useMemo(
+    () =>
+      new NavegacionCatalogo({
+        actualizar: () => startTransition(() => router.refresh()),
+        push: (href) => window.history.pushState(null, "", href),
+        replace: (href) => window.history.replaceState(null, "", href),
+      }),
+    [router, startTransition],
+  );
+  useEffect(() => () => navegacion.cancelar(), [navegacion]);
+
+  const hrefActual = searchParams.size ? `/catalogo?${searchParams}` : "/catalogo";
+  useEffect(() => {
+    const hrefVisible = hrefCatalogo(estadoVisibleRef.current);
+    const hrefServidor = hrefCatalogo(estado);
+
+    // Una respuesta del refresh actual confirma el estado optimista.
+    if (hrefServidor === hrefVisible) {
+      setActualizando(false);
+      return;
+    }
+    // Si la URL cambió por Atrás/Adelante u otro link, ése sí es un estado
+    // externo y gana. Una respuesta vieja conserva la URL visible y se ignora.
+    if (hrefActual !== hrefVisible) {
+      navegacion.cancelar();
+      estadoVisibleRef.current = estado;
+      setEstadoVisible(estado);
+      setActualizando(false);
+    }
+  }, [estado, hrefActual, navegacion]);
+
+  const navegar = (href: string) => {
+    setActualizando(true);
+    navegacion.programar(href);
+  };
+  const ir = (cambios: Partial<EstadoCatalogo>) => {
+    const siguiente = estadoConCambios(estadoVisibleRef.current, cambios);
+    estadoVisibleRef.current = siguiente;
+    setEstadoVisible(siguiente);
+    navegar(hrefCatalogo(siguiente));
+  };
 
   // Precio especial de la cuenta, si el cliente tiene lista propia más barata.
   const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));
@@ -125,7 +163,7 @@ export function CatalogoClient({
         acciones={
           <div className="flex items-center gap-3 max-lg:w-full max-lg:justify-between">
             <div className="lg:hidden">
-              <CatalogoFiltrosSheet facetas={facetas} estado={estadoFiltros} navegar={navegar} />
+              <CatalogoFiltrosSheet facetas={facetas} estado={estadoFiltros} ir={irFiltros} />
             </div>
             <CatalogoControles estado={estadoVisible} ir={ir} />
           </div>
@@ -134,7 +172,7 @@ export function CatalogoClient({
 
       {/* Los filtros puestos, debajo del encabezado y sólo en mobile: en
           desktop el panel lateral ya muestra los tildes. */}
-      <CatalogoChips estado={estadoVisible} rango={facetas.precio} ir={ir} />
+      <CatalogoChips estado={estadoVisible} rango={facetas.precio} ir={irFiltros} />
 
       <div className="mt-8 flex gap-6">
         {/*
@@ -187,7 +225,7 @@ export function CatalogoClient({
             <CatalogoProductos
               productos={productosCuenta}
               vista={estadoVisible.vista}
-              navegando={navegando}
+              navegando={actualizando || refrescando}
               cuotasPorProducto={cuotasPorProducto}
             />
           )}
@@ -207,7 +245,9 @@ export function CatalogoClient({
 
           {/* Sólo para lectores de pantalla: el cambio de página no mueve el foco. */}
           <p className="sr-only" role="status">
-            {anuncioResultados(productos.length, total, estado.pagina, paginas)}
+            {actualizando || refrescando
+              ? "Actualizando resultados…"
+              : anuncioResultados(productos.length, total, estado.pagina, paginas)}
           </p>
         </div>
       </div>

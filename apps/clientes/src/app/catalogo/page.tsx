@@ -17,6 +17,7 @@ type Props = {
   searchParams: Promise<{
     q?: ParamCrudo;
     categoria?: ParamCrudo;
+    categoria_excluida?: ParamCrudo;
     marca?: ParamCrudo;
     orden?: ParamCrudo;
     pagina?: ParamCrudo;

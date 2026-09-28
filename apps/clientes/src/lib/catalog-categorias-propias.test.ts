@@ -89,6 +89,15 @@ describe("enArbolConConteo", () => {
     expect(r.map((f) => f.label)).toEqual(["ELECTRICIDAD"]);
   });
 
+  it("conserva la ruta y cuenta cero de categorías activas aunque otros filtros no las traigan", () => {
+    const r = enArbolConConteo(nodos, new Map([[ELECTRICIDAD, 1]]), ["Focos led"]);
+    expect(r).toEqual([
+      { label: "ILUMINACION", count: 0, nivel: 1 },
+      { label: "Focos led", count: 0, nivel: 2 },
+      { label: "ELECTRICIDAD", count: 1, nivel: 1 },
+    ]);
+  });
+
   it("lo que cuelga de una categoría inactiva (fuera del árbol) no se muestra", () => {
     const sinIluminacion = nodos.filter((n) => n.id !== ILUMINACION);
     const r = enArbolConConteo(sinIluminacion, new Map([[FOCOS, 2]]));
@@ -104,6 +113,18 @@ describe("filtro por categoría", () => {
       expect(sql).toContain('"public"."catalog_overlay"."categoria_id" in');
       expect(params).toContain("ILUMINACION");
       expect(params).toContain("tenant-test");
+    }
+  });
+
+  it("con árbol, resta el subárbol excluido sin expandir categorías hermanas", async () => {
+    await getPaginaCatalogo({
+      soloVisibles: false,
+      filtros: { categorias: ["ILUMINACION"], categoriasExcluidas: ["Focos led"] },
+    });
+    for (const { sql, params } of grabadora.consultas) {
+      expect(sql).toContain("not in");
+      expect(params).toContain("ILUMINACION");
+      expect(params).toContain("Focos led");
     }
   });
 

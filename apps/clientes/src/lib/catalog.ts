@@ -430,6 +430,8 @@ export const PRODUCTOS_POR_PAGINA = 24;
 export interface FiltrosCatalogo {
   busqueda?: string;
   categorias?: string[];
+  /** Subárboles a restar de las categorías incluidas. */
+  categoriasExcluidas?: string[];
   marcas?: string[];
   /** Extremos inclusivos del rango, sobre el precio exhibido (con IVA). */
   precioMin?: number;
@@ -515,13 +517,13 @@ const hayArbolSql = () =>
  * clasificar no cae en ninguna. Sin árbol, el filtro de siempre sobre la
  * categoría de Alegra.
  */
-function filtroCategoriasSql(nombres: string[]) {
+function subarbolCategoriasSql(nombres: string[]) {
   const lista = sql.join(
     nombres.map((n) => sql`${n}`),
     sql`, `,
   );
   const tenant = shopTenantId();
-  const subarbol = sql`(
+  return sql`(
     with recursive arbol as (
       select id from ${crmCategorias} where activa and tenant_id = ${tenant} and nombre in (${lista})
       union all
@@ -529,8 +531,17 @@ function filtroCategoriasSql(nombres: string[]) {
     )
     select id from arbol
   )`;
-  return sql`((${hayArbolSql()} and ${crmOverlay.categoriaId} in ${subarbol})
-    or (not ${hayArbolSql()} and ${inArray(crmCategoriasAlegra.name, nombres)}))`;
+}
+
+function filtroCategoriasSql(nombres: string[], excluidas: string[] = []) {
+  const subarbol = subarbolCategoriasSql(nombres);
+  const subarbolExcluido = excluidas.length ? subarbolCategoriasSql(excluidas) : undefined;
+  const excluyeArbol = subarbolExcluido ? sql`${crmOverlay.categoriaId} not in ${subarbolExcluido}` : undefined;
+  const excluyeAlegra = excluidas.length
+    ? sql`${crmCategoriasAlegra.name} not in ${sql.join(excluidas.map((n) => sql`${n}`), sql`, `)}`
+    : undefined;
+  return sql`((${hayArbolSql()} and ${crmOverlay.categoriaId} in ${subarbol}${excluyeArbol ? sql` and ${excluyeArbol}` : sql``})
+    or (not ${hayArbolSql()} and ${inArray(crmCategoriasAlegra.name, nombres)}${excluyeAlegra ? sql` and ${excluyeAlegra}` : sql``}))`;
 }
 
 /** Categoría propia activa, tal como la necesitan el menú y las facetas. */
@@ -587,8 +598,20 @@ export async function getRutaCategoriaPropia(id: string): Promise<string[]> {
 export function enArbolConConteo(
   arbol: NodoCategoria[],
   conteos: Map<string, number>,
+  /** Categorías activas que se conservan aunque los otros filtros den cero. */
+  conservar: string[] = [],
 ): (Faceta & { nivel: number })[] {
   const porId = new Map(arbol.map((n) => [n.id, n]));
+  const idsAConservar = new Set<string>();
+  const nombresAConservar = new Set(conservar);
+  // Mantener la ruta completa evita convertir una subcategoría en una raíz
+  // visual cuando texto/precio/stock deja su cuenta en cero.
+  for (const n of arbol) {
+    if (!nombresAConservar.has(n.nombre)) continue;
+    for (let actual: NodoCategoria | undefined = n; actual; actual = actual.parentId ? porId.get(actual.parentId) : undefined) {
+      idsAConservar.add(actual.id);
+    }
+  }
   const total = new Map<string, number>();
   for (const [id, cantidad] of conteos) {
     const vistos = new Set<string>();
@@ -605,7 +628,7 @@ export function enArbolConConteo(
   const recorrer = (parentId: string | null, nivel: number) => {
     for (const n of hijas(parentId)) {
       const count = total.get(n.id) ?? 0;
-      if (count === 0) continue;
+      if (count === 0 && !idsAConservar.has(n.id)) continue;
       salida.push({ label: n.nombre, count, nivel });
       recorrer(n.id, nivel + 1);
     }
@@ -657,7 +680,7 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros, soloVi
     soloVisiblesSql(soloVisibles),
     q ? coincideTexto(q) : undefined,
     aplicar.categorias && filtros.categorias?.length
-      ? filtroCategoriasSql(filtros.categorias)
+      ? filtroCategoriasSql(filtros.categorias, filtros.categoriasExcluidas)
       : undefined,
     aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)
@@ -802,8 +825,9 @@ export interface Facetas {
  * Cada faceta cuenta sobre lo que matchea la búsqueda MÁS los filtros de los
  * OTROS grupos, y no sobre el propio: las marcas se cuentan dentro de las
  * categorías tildadas (tildar "Herramientas" deja sólo las marcas que tienen
- * herramientas, con la cantidad que tienen), pero siguen mostrándose todas las
- * categorías disponibles para poder tildar otra sin destildar la primera. Con
+ * herramientas, con la cantidad que tienen). Las categorías, en cambio, no
+ * aplican marca: así el árbol no salta ni esconde opciones al elegir una marca.
+ * Con
  * el mismo criterio, el rango de precio se calcula sobre todo lo demás pero
  * sin el rango vigente: si no, los límites del slider se achicarían a lo que
  * el visitante acaba de elegir y ya no podría volver a abrirlo.
@@ -813,7 +837,11 @@ export async function getFacetas(
   /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
   soloVisibles: boolean,
 ): Promise<Facetas> {
-  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles);
+  const whereCategorias = condicionesDe(
+    filtros,
+    { ...APLICAR_TODOS, categorias: false, marcas: false },
+    soloVisibles,
+  );
   const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles);
   const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles);
 
@@ -821,7 +849,12 @@ export async function getFacetas(
 
   const [categorias, marcas, [rango]] = await Promise.all([
     arbol.length
-      ? conteoPorCategoriaPropia(whereCategorias).then((c) => enArbolConConteo(arbol, c))
+      ? conteoPorCategoriaPropia(whereCategorias).then((c) =>
+        enArbolConConteo(arbol, c, [
+          ...(filtros.categorias ?? []),
+          ...(filtros.categoriasExcluidas ?? []),
+        ]),
+      )
       : getDb()
       .select({
         label: sql<string>`${crmCategoriasAlegra.name}`,

@@ -96,8 +96,10 @@ Decisiones tomadas en brainstorming:
   "N productos de este carrito ya no están disponibles" y **no se cargan**.
 - **Renderizar la página no modifica ningún carrito** (los crawlers de preview
   de WhatsApp/Telegram hacen GET al link). La carga es una acción del usuario.
-- Metadata: `title` "Le compartieron un carrito", `description` "N productos
-  en <tienda>", `robots: noindex`. OG image: la de la tienda.
+- Metadata **estática**: `title` "Le compartieron un carrito", `robots: noindex`.
+  No lee `searchParams`: con Cache Components una metadata que lee el request
+  bloquea el render de toda la página (se detectó al verificar en el navegador),
+  así que la vista previa no dice cuántos productos son. OG image: la de la tienda.
 - La página está detrás del gate del sitio igual que el resto (no se agrega a
   `RUTAS_PUBLICAS`: esa lista es para servidores externos sin cookies).
 

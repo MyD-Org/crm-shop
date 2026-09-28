@@ -22,13 +22,22 @@ type Props = { searchParams: Promise<{ i?: string | string[] }> };
 
 const valor = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
-export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
-  const n = parsearCompartido(valor((await searchParams).i)).length;
-  return {
-    title: "Le compartieron un carrito",
-    description: n === 1 ? "1 producto listo para cargar en su carrito." : `${n} productos listos para cargar en su carrito.`,
-    robots: { index: false, follow: false },
-  };
+// Estática a propósito: con Cache Components, una metadata que lee
+// `searchParams` bloquea el render de toda la página (ver la doc de
+// generateMetadata). Por eso la vista previa no dice cuántos productos son.
+export const metadata: Metadata = {
+  title: "Le compartieron un carrito",
+  description: "Revise los productos y cárguelos en su carrito.",
+  robots: { index: false, follow: false },
+};
+
+/** El mismo ícono que usa el carrito para los productos sin foto. */
+function IconoLampara() {
+  return (
+    <svg className="h-8 w-8 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 3.5-2 5.5-2.5 6.5H7.5C7 15.5 5 13.5 5 9a7 7 0 0 1 7-7z" />
+    </svg>
+  );
 }
 
 function Linea({ producto, disponible }: { producto: ProductoCompartido; disponible: boolean }) {
@@ -37,7 +46,11 @@ function Linea({ producto, disponible }: { producto: ProductoCompartido; disponi
   return (
     <li className="flex items-center gap-4 rounded-[22px] bg-surface p-4 shadow-[var(--shadow-1)]">
       <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-elevated">
-        {item.image && <Image src={item.image} alt="" fill sizes="64px" className="object-contain p-2" />}
+        {item.image ? (
+          <Image src={item.image} alt="" fill sizes="64px" className="object-contain p-2" />
+        ) : (
+          <IconoLampara />
+        )}
       </div>
       <div className="min-w-0 flex-1">
         {disponible ? (

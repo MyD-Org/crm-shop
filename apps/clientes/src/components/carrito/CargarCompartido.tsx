@@ -74,19 +74,20 @@ export function CargarCompartido({ items: compartidos }: { items: CartItem[] }) 
         onOpenChange={setPreguntando}
         title="Ya tiene productos en su carrito"
         description="Puede reemplazar su carrito por el compartido o sumar estos productos a los que ya tiene."
-        size="sm"
+        size="md"
         footer={
-          <>
-            <Button type="button" variant="ghost" onClick={() => setPreguntando(false)} disabled={cargando}>
-              Cancelar
+          // En el celular, apilados y con la acción principal arriba: en fila no entran.
+          <div className="flex w-full flex-col gap-2 sm:flex-row-reverse sm:justify-start">
+            <Button type="button" onClick={reemplazar} disabled={cargando}>
+              Reemplazar mi carrito
             </Button>
             <Button type="button" variant="outline" onClick={sumar} disabled={cargando}>
               Sumar a mi carrito
             </Button>
-            <Button type="button" onClick={reemplazar} disabled={cargando}>
-              Reemplazar mi carrito
+            <Button type="button" variant="ghost" onClick={() => setPreguntando(false)} disabled={cargando}>
+              Cancelar
             </Button>
-          </>
+          </div>
         }
       />
     </>

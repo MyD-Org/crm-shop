@@ -73,14 +73,18 @@ Decisiones tomadas en brainstorming:
 ### 2. Compartir (emisor)
 
 - Botón **"Compartir carrito"** en `src/components/CarritoClient.tsx`, visible
-  sólo con el carrito no vacío.
-- Arma la URL absoluta (`window.location.origin + hrefCompartido(items)`).
-- Si existe `navigator.share` → share sheet con título y texto
-  ("Le comparto mi carrito") — los textos del carrito van en usted (guarda `carrito-checkout-sin-voseo.test.ts`). Si el usuario cancela, no se muestra
-  nada (`AbortError` se ignora).
-- Si no → `navigator.clipboard.writeText` + toast "Link copiado".
-- Si falla el portapapeles → toast de error con el link visible para copiar a
-  mano.
+  sólo con el carrito no vacío. Abre un **menú propio** (`DropdownMenu` de
+  `@myd-org/ui`), no la hoja nativa: en escritorio esa hoja ofrece AirDrop,
+  Notas o Recordatorios y no WhatsApp.
+  - **WhatsApp** → `https://wa.me/?text=<mensaje>` en otra pestaña, sin
+    destinatario (el usuario elige el contacto).
+  - **Copiar enlace** → portapapeles + toast; si falla, toast de error con el
+    link visible para copiar a mano.
+  - **Más opciones** → sólo donde existe `navigator.share`: abre la hoja del
+    sistema a pedido. Cancelarla no avisa nada.
+- El mensaje es `"Te comparto mi carrito: <url>"`. **Tutea a propósito**: es la
+  voz del cliente hablándole a otra persona, no copy de la tienda (que sigue en
+  usted). Vive en `carrito-compartido.ts`, fuera de la guarda de voseo.
 - Las líneas marcadas `faltante` se incluyen igual: el receptor verá el aviso
   en la preview.
 

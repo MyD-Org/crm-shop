@@ -81,3 +81,17 @@ export function separarDisponibles(items: CartItem[]): {
   for (const i of items) (i.faltante || !(i.price > 0) ? noDisponibles : disponibles).push(i);
   return { disponibles, noDisponibles };
 }
+
+/**
+ * El texto que manda el CLIENTE a otra persona, con su voz: por eso tutea. No
+ * es copy de la tienda (ese va en usted, ver CLAUDE.md raíz), y por eso vive
+ * acá y no en los componentes que revisa `carrito-checkout-sin-voseo.test.ts`.
+ */
+export function mensajeCompartido(url: string): string {
+  return `Te comparto mi carrito: ${url}`;
+}
+
+/** WhatsApp sin destinatario: el usuario elige el contacto en la app. */
+export function hrefWhatsApp(url: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(mensajeCompartido(url))}`;
+}

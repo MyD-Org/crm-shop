@@ -3,6 +3,8 @@ import {
   accionAlCompartir,
   codificarCompartido,
   hrefCompartido,
+  hrefWhatsApp,
+  mensajeCompartido,
   parsearCompartido,
   separarDisponibles,
 } from "./carrito-compartido";
@@ -120,5 +122,21 @@ describe("separarDisponibles", () => {
     ]);
     expect(disponibles.map((i) => i.id)).toEqual(["1", "4"]);
     expect(noDisponibles.map((i) => i.id)).toEqual(["2", "3"]);
+  });
+});
+
+describe("mensaje y WhatsApp", () => {
+  const url = "https://tienda.example/carrito/compartido?i=7:2,9:1";
+
+  it("el mensaje lleva el link completo", () => {
+    expect(mensajeCompartido(url)).toBe(`Te comparto mi carrito: ${url}`);
+  });
+
+  it("el link de WhatsApp no tiene destinatario y escapa el texto", () => {
+    const href = hrefWhatsApp(url);
+    expect(href.startsWith("https://wa.me/?text=")).toBe(true);
+    // `?`, `=`, `:` y `,` del link van escapados: si no, WhatsApp corta el texto.
+    expect(href).not.toContain("?i=");
+    expect(decodeURIComponent(href.slice("https://wa.me/?text=".length))).toBe(mensajeCompartido(url));
   });
 });

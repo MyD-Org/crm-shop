@@ -92,7 +92,9 @@ export function SearchAutocomplete() {
 
   return (
     <div ref={containerRef} className="relative flex w-full max-w-2xl">
-      <div className="flex w-full overflow-hidden rounded-lg border border-border bg-elevated focus-within:border-primary">
+      {/* Blanco (surface) con borde y sombra suave, no el relleno elevated: el
+          campo se lee como campo, y el borde sale de la tinta del tema. */}
+      <div className="flex w-full overflow-hidden rounded-lg border border-[color-mix(in_srgb,var(--color-text)_14%,transparent)] bg-surface shadow-[0_1px_2px_rgba(22,40,63,0.06)] focus-within:border-primary">
         <input
           type="text"
           value={query}

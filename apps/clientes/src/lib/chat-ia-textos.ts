@@ -49,6 +49,11 @@ export const ETIQUETAS_CHAT = {
   handoffLabel: "Continuar por WhatsApp",
   unavailableLabel: "Sin stock",
   referenceTotalLabel: "Total de referencia",
+  carouselLabel: "Productos recomendados",
+  carouselPrev: "Ver anteriores",
+  carouselNext: "Ver siguientes",
+  stockOneLabel: "Queda 1",
+  stockFewLabel: "Quedan {n}",
 } as const;
 
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";

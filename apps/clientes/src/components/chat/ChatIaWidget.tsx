@@ -76,7 +76,11 @@ async function resolver(ids: readonly string[]): Promise<ProductoResuelto[]> {
 
 export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
   const router = useRouter();
-  const { addItems, items } = useCart();
+  const { addItems, items, updateQty, removeItem } = useCart();
+
+  // Cantidad de cada producto en el carrito: con esto la card del chat pasa de "Agregar" al
+  // contador, igual que en el catálogo.
+  const cartQuantities = useMemo(() => Object.fromEntries(items.map((i) => [i.id, i.qty])), [items]);
 
   // Acciones de las cards de venta (platform ADR 0014). La card trae ids: el
   // precio y la foto salen de /api/chat-ia/productos con la lista de quien mira.
@@ -89,6 +93,8 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
           .catch(() => [])
           .then(() => addItems(lineasAItems(lineas, resueltos)));
       },
+      onSetQuantity: (id, qty) => (qty <= 0 ? removeItem(id) : updateQty(id, qty)),
+      cartQuantities,
       onOpenProduct: (id) => router.push(`/producto/${encodeURIComponent(id)}`),
       onHandoff: (card) => {
         const mensaje = mensajeTraspaso(
@@ -100,7 +106,7 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
         if (href) window.open(href, "_blank", "noopener,noreferrer");
       },
     }),
-    [addItems, items, router],
+    [addItems, cartQuantities, items, removeItem, router, updateQty],
   );
 
   const config = useMemo(() => ({ baseUrl: "/ai-api", agentId, fetchToken: pedirToken, fetch: fetchConToken }), [agentId]);
@@ -111,6 +117,7 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       branding={{ title: titulo, subtitle: SUBTITULO_CHAT, primaryColor: COLOR_CHAT }}
       labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo }}
       theme="light"
+      enableHistory
       commerce={commerce}
     />
   );

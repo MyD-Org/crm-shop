@@ -54,6 +54,10 @@ export const ETIQUETAS_CHAT = {
   carouselNext: "Ver siguientes",
   stockOneLabel: "Queda 1",
   stockFewLabel: "Quedan {n}",
+  codeLabel: "Cód.",
+  decrementLabel: "Quitar uno",
+  incrementLabel: "Agregar uno más",
+  removeLabel: "Quitar del carrito",
 } as const;
 
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";

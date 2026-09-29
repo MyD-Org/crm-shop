@@ -47,8 +47,18 @@ describe("aProductoResuelto", () => {
       imageUrl: "https://cliente.example/foto.jpg",
       price: 12100,
       available: true,
+      maxQuantity: 999,
       precioNeto: 10000,
     });
+  });
+
+  it("código, tope de cantidad y aviso de stock bajo como la card del catálogo", () => {
+    const p = aProductoResuelto({ ...base, sku: "BT-55-MCL", stock: "low", stockQty: 3 });
+    expect(p).toMatchObject({ sku: "BT-55-MCL", maxQuantity: 3, stock: 3 });
+    // Con stock alto no se avisa; el nombre que ya es el código no se repite.
+    expect(aProductoResuelto({ ...base, stock: "in", stockQty: 40 })).toMatchObject({ maxQuantity: 40 });
+    expect(aProductoResuelto({ ...base, stock: "in", stockQty: 40 })).not.toHaveProperty("stock");
+    expect(aProductoResuelto({ ...base, sku: base.name })).not.toHaveProperty("sku");
   });
 
   it("sin stock o a $ 0 ⇒ no disponible; a $ 0 sin precio", () => {

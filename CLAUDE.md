@@ -2,6 +2,7 @@
 
 ## Registro de textos de UI
 
+
 Todo texto visible del producto —portal, admin, mails, plantillas de WhatsApp y los mensajes
 de error que devuelven las API ({error} que se muestran en pantalla)— va en **español formal
 de usted**.

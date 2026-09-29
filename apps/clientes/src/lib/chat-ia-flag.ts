@@ -18,5 +18,9 @@ import { aiApiConfig } from "./ai-api-config";
 
 export async function chatIaHabilitado(): Promise<boolean> {
   if (!aiApiConfig()) return false;
+  // TEMPORAL (diagnóstico, revertir): en producción el chat se prende sin leer Vercel Flags,
+  // para separar "falla la lectura del flag" de "falta config de ai-api". El sitio está detrás
+  // del gate de Próximamente. Los tests no tienen VERCEL_ENV y siguen probando el flag.
+  if (process.env.VERCEL_ENV === "production") return true;
   return chatIaFlag();
 }

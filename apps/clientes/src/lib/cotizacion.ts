@@ -33,6 +33,7 @@ import { estadoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { joinOverlay, nombreExhibidoSql } from "./nombre-exhibido";
 import { costoEnvio, type EntregaTipo } from "./envio";
+import { precioCuenta } from "./precio-cuenta";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
 
 /** Lo único que el cliente tiene derecho a elegir. */
@@ -62,6 +63,8 @@ export interface LineaCotizada {
   total: number;
   /** null = ítem no inventariable (servicio): siempre disponible. */
   stockDisponible: number | null;
+  /** true = el unitario sale de la lista propia de la cuenta y es más barato que el de la general. */
+  precioEspecial?: boolean;
   problema?: ProblemaLinea;
   /** Texto listo para mostrar cuando hay `problema`. */
   detalle?: string;
@@ -75,6 +78,8 @@ export interface Cotizacion {
   total: number;
   /** true si alguna línea tiene `problema`: bloquea la confirmación. */
   hayProblemas: boolean;
+  /** true si alguna línea usa un precio de la lista propia de la cuenta. */
+  listaPreferencial: boolean;
 }
 
 // Máximo de unidades por línea y techo de líneas por pedido: los mismos del
@@ -157,6 +162,10 @@ export function cotizarItem(
     total: redondear(subtotal + iva),
     stockDisponible,
   };
+
+  if (Array.isArray(item.price) && precioCuenta(item.price, ivaPorcentaje, idPriceList)) {
+    linea.precioEspecial = true;
+  }
 
   if (item.status === "inactive") {
     linea.problema = "inactivo";
@@ -279,5 +288,6 @@ export async function cotizar(
     costoEnvio: envio,
     total: redondear(subtotal + iva + envio),
     hayProblemas: lineas.some((l) => l.problema),
+    listaPreferencial: lineas.some((l) => l.precioEspecial),
   };
 }

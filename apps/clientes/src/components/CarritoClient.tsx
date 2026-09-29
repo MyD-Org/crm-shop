@@ -283,6 +283,18 @@ export function CarritoClient({
           </div>
         )}
 
+        {cotizacion?.listaPreferencial && (
+          <div className="mb-6 flex items-start gap-3 rounded-[20px] border border-accent/30 bg-accent/5 p-4 text-sm">
+            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-white" aria-hidden="true">
+              <CheckIcon />
+            </span>
+            <p className="text-text">
+              <span className="font-semibold">Su cuenta tiene precios preferenciales.</span>{" "}
+              <span className="text-muted">Los importes del carrito ya los incluyen.</span>
+            </p>
+          </div>
+        )}
+
         {estado === "error" && (
           <div className="mb-6 flex items-center justify-between gap-4 rounded-[20px] border border-danger/40 bg-danger/5 p-4 text-sm">
             <span className="text-text">{error}</span>

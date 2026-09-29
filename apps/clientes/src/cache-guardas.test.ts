@@ -37,6 +37,7 @@ const CON_CACHE = [
   "components/SiteFooter.tsx",
   "lib/catalogo-publico.ts",
   "lib/cuotas-datos.ts",
+  "lib/sucursales-datos.ts",
 ];
 
 /** Lo que cotiza o cobra: siempre del espejo en vivo (FRS-4). */

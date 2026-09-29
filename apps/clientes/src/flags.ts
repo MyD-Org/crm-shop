@@ -41,6 +41,13 @@ export const envioFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const sucursalesFlag = flag<boolean>({
+  key: "sucursales",
+  description: "Sucursales y zonas: el checkout asigna la sucursal al pedido y se muestra el selector de zona",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 export const chatIaFlag = flag<boolean>({
   key: "chat-ia",
   description: "Burbuja del chat con el agente en todas las páginas del Shop",

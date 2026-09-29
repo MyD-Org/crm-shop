@@ -26,6 +26,11 @@ import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
 import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
 import { avisarPedidoRecibido } from "@/lib/pedido-avisos";
 import { permitir } from "@/lib/rate-limit";
+import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
+import { SucursalPedidoError } from "@/lib/sucursales-pedido";
+import { COOKIE_ZONA, claveDeCookie } from "@/lib/zona";
+import { claveProvincia } from "@/lib/sucursales";
+import { cookies } from "next/headers";
 
 /**
  * Techo de confirmaciones por comprador. Una persona real confirma un pedido,
@@ -75,6 +80,9 @@ interface BodyPedido {
    * guardarlos). Se revalidan acá y el pedido queda para revisión.
    */
   complementoFacturacion?: unknown;
+  /** Con el flag `sucursales`: provincia de entrega (envío) y local de retiro (slug). */
+  entregaProvincia?: unknown;
+  sucursalRetiro?: unknown;
 }
 
 /**
@@ -361,6 +369,22 @@ export async function POST(req: Request) {
         : await listaDelContactoCoincidente(dc.perfil?.coincideConAlegra)),
     });
 
+    // Con el flag `sucursales`: los datos con los que `crearPedido` asigna la sucursal. Provincia
+    // de entrega: la del body, si no la zona elegida (cookie), si no la del domicilio de facturación.
+    // Apagado = undefined y el pedido queda sin sucursal, como siempre.
+    const sucursalEntrada = (await sucursalesHabilitadas())
+      ? {
+          entregaTipo,
+          provincia: claveProvincia(texto(body.entregaProvincia, 80)) || null,
+          ciudad: entregaCiudad || null,
+          sucursalRetiro: entregaTipo === "retiro" ? texto(body.sucursalRetiro, 20) || null : null,
+        }
+      : undefined;
+    if (sucursalEntrada && !sucursalEntrada.provincia) {
+      const cookieZona = claveDeCookie((await cookies()).get(COOKIE_ZONA)?.value);
+      sucursalEntrada.provincia = cookieZona ?? (claveProvincia(datosFactura.domicilioProvincia) || null);
+    }
+
     let pedido: Awaited<ReturnType<typeof crearPedido>>;
     try {
       pedido = await crearPedido(
@@ -395,11 +419,15 @@ export async function POST(req: Request) {
           requiereRevision: motivoRevision !== null,
           motivoRevision,
           idempotencyKey: idempotencyKey || undefined,
+          sucursalEntrada,
         },
         cotizacion,
         plan,
       );
     } catch (err) {
+      if (err instanceof SucursalPedidoError) {
+        return NextResponse.json({ error: err.message, motivo: err.codigo }, { status: 409 });
+      }
       if (!(err instanceof StockInsuficienteError)) throw err;
       // Otro checkout se llevó las unidades entre la cotización y el pedido (la
       // transacción ya se deshizo). Se re-cotiza, que ya descuenta su reserva,

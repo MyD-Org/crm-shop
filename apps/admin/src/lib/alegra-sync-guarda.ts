@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogSyncLog } from "@/db/schema"
 
@@ -72,13 +72,65 @@ export function evaluarCorrida(
   }
 }
 
-/** Conteos de la ÚLTIMA corrida 'ok' del tenant (ni 'parcial' ni 'error' bajan la vara). */
-export async function baseDeCorrida(tenantId: string): Promise<Conteo | null> {
+/** `cuenta_id` NULL = la principal (las corridas de antes de las cuentas secundarias). */
+const deCuenta = (cuentaId: string | null | undefined): SQL =>
+  cuentaId ? eq(catalogSyncLog.cuentaId, cuentaId) : (isNull(catalogSyncLog.cuentaId) as SQL)
+
+/**
+ * Conteos de la ÚLTIMA corrida 'ok' de la cuenta del tenant (ni 'parcial' ni 'error' bajan la
+ * vara). Sin `cuentaId` es la cuenta principal. Cada cuenta tiene su propia base: la secundaria
+ * lee muchos menos ítems que la principal y no puede compararse con ella.
+ */
+export async function baseDeCorrida(tenantId: string, cuentaId?: string | null): Promise<Conteo | null> {
   const [row] = await getDb()
     .select({ items: catalogSyncLog.itemsSynced, categorias: catalogSyncLog.categoriesSynced })
     .from(catalogSyncLog)
-    .where(and(eq(catalogSyncLog.tenantId, tenantId), eq(catalogSyncLog.status, "ok")))
+    .where(and(eq(catalogSyncLog.tenantId, tenantId), deCuenta(cuentaId), eq(catalogSyncLog.status, "ok")))
     .orderBy(desc(catalogSyncLog.startedAt))
     .limit(1)
   return row ?? null
 }
+
+/**
+ * Una corrida 'running' más nueva que esto cuenta como en curso. Más vieja = quedó colgada (la
+ * ruta muere a los 300 s) y no bloquea para siempre.
+ */
+export const VENTANA_CORRIDA_EN_CURSO_MIN = 10
+
+/**
+ * Guarda de concurrencia POR CUENTA: abre el log 'running' de la corrida sólo si no hay otra en
+ * curso para la misma cuenta del tenant (la principal = `cuentaId` NULL). El chequeo y el insert
+ * van en una transacción con un lock advisory por (tenant, cuenta), así dos corridas simultáneas
+ * (cron + botón manual) no pasan las dos. Devuelve el id del log o null si ya hay una en curso.
+ * La base (`baseDeCorrida`) se toma ANTES de llamar acá, para que no cuente el log recién abierto.
+ */
+export async function abrirCorrida(
+  tenantId: string,
+  cuentaId: string | null,
+  trigger: "cron" | "manual",
+  startedAt: Date,
+): Promise<string | null> {
+  return getDb().transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`alegra-sync:${tenantId}:${cuentaId ?? "principal"}`}))`)
+    const [enCurso] = await tx
+      .select({ id: catalogSyncLog.id })
+      .from(catalogSyncLog)
+      .where(
+        and(
+          eq(catalogSyncLog.tenantId, tenantId),
+          deCuenta(cuentaId),
+          eq(catalogSyncLog.status, "running"),
+          sql`${catalogSyncLog.startedAt} > now() - make_interval(mins => ${VENTANA_CORRIDA_EN_CURSO_MIN})`,
+        ),
+      )
+      .limit(1)
+    if (enCurso) return null
+    const [log] = await tx
+      .insert(catalogSyncLog)
+      .values({ tenantId, cuentaId, trigger, status: "running", startedAt })
+      .returning({ id: catalogSyncLog.id })
+    return log.id
+  })
+}
+
+export const MSG_SYNC_EN_CURSO = "Ya hay una sincronización en curso para esta cuenta. Inténtelo nuevamente en unos minutos."

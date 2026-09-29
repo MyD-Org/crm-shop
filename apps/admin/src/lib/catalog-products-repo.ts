@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, isNull, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogProducts } from "@/db/schema"
 import type { AlegraProduct } from "./alegra"
@@ -106,10 +106,60 @@ export async function upsertProductos(
   }
 }
 
+export interface ProductoSecundaria {
+  /** Ya mapeado (`mapItemSecundario`): `alegraId` sintético, listas y categoría de la principal. */
+  producto: AlegraProduct
+  /** Id real del ítem en SU cuenta. */
+  alegraIdCuenta: string
+  /** Estado de la fila (`estadoSoloSecundaria`); `active` = visto y ofrecible. */
+  estado: "active" | "inactive"
+}
+
+/**
+ * Upsert de filas SOLO-SECUNDARIA (change `sucursales-igz-mdp`, D14): productos que existen sólo
+ * en una cuenta secundaria. Misma frescura por fila que `upsertProductos`; además marca la cuenta
+ * de origen y limpia `reemplazado_por_alegra_id` (si la principal la había absorbido y hoy vuelve
+ * a ser solo-secundaria, la fila es legítima otra vez). `stock` = stock de la cuenta de origen.
+ */
+export async function upsertProductosSecundaria(
+  tenantId: string,
+  cuentaId: string,
+  items: ProductoSecundaria[],
+  opts: { leidoAt: Date; leidoPor: LeidoPor },
+): Promise<void> {
+  const unicos = [...new Map(items.map((it) => [it.producto.alegraId, it])).values()]
+  const db = getDb()
+  for (let i = 0; i < unicos.length; i += LOTE) {
+    const ahora = new Date()
+    await db
+      .insert(catalogProducts)
+      .values(
+        unicos.slice(i, i + LOTE).map((it) => ({
+          ...fila(tenantId, it.producto, opts.leidoAt, opts.leidoPor, ahora),
+          status: it.estado,
+          cuentaId,
+          alegraIdCuenta: it.alegraIdCuenta,
+          reemplazadoPorAlegraId: null,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [catalogProducts.tenantId, catalogProducts.alegraId],
+        set: {
+          ...SET_POR_FRESCURA,
+          cuentaId: sql`excluded.cuenta_id`,
+          alegraIdCuenta: sql`excluded.alegra_id_cuenta`,
+          reemplazadoPorAlegraId: sql`null`,
+        },
+      })
+  }
+}
+
 /**
  * Alegra respondió 404 al re-leer el ítem: queda no disponible (`status='inactive'`), sin borrar
  * la fila, SALVO que ya tenga una lectura más nueva que ésta. Si el ítem no estaba en el espejo
- * no hace nada. Devuelve si marcó la fila.
+ * no hace nada. Devuelve si marcó la fila. Sólo filas de la cuenta PRINCIPAL (`cuenta_id IS NULL`):
+ * el `alegraId` que llega es un id numérico de esa cuenta y una fila solo-secundaria lleva id
+ * sintético, así que nunca deberían cruzarse; el filtro lo deja explícito.
  */
 export async function marcarItemInactivo(tenantId: string, alegraId: string, leidoAt: Date): Promise<boolean> {
   const rows = await getDb()
@@ -119,6 +169,7 @@ export async function marcarItemInactivo(tenantId: string, alegraId: string, lei
       and(
         eq(catalogProducts.tenantId, tenantId),
         eq(catalogProducts.alegraId, alegraId),
+        isNull(catalogProducts.cuentaId),
         sql`coalesce(${catalogProducts.alegraLeidoAt}, '-infinity'::timestamptz) <= ${leidoAt.toISOString()}::timestamptz`,
       ),
     )

@@ -1,7 +1,7 @@
 import { getDb } from "@/db"
 import { tenants as tenantsTable } from "@/db/schema"
 import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
-import { syncCatalog, type SyncResult } from "@/lib/alegra-sync"
+import { syncTenant, type SyncTenantResult } from "@/lib/alegra-sync-tenant"
 import { bearerMatches } from "@/lib/secure-compare"
 
 // Sincroniza TODOS los tenants en una sola invocación: necesita más margen que la sync manual.
@@ -14,8 +14,12 @@ export const maxDuration = 300
 // `?aceptar_baja=1` (sólo junto con `?tenant=`): la corrida de ESE tenant acepta leer mucho menos
 // que la última OK y da de baja lo no visto (salida del operador ante una baja masiva legítima;
 // ver la guarda en lib/alegra-sync-guarda.ts). El botón manual del admin nunca lo pasa.
+//
+// Multicuenta (change `sucursales-igz-mdp`): por cada tenant corre primero la cuenta principal y
+// después cada cuenta secundaria activa (lib/alegra-sync-tenant.ts); el resumen de cada una viaja
+// en `cuentas` (sólo si el tenant tiene secundarias). Una falla de una cuenta no frena a la otra.
 
-type ResultadoTenant = { tenant: string } & SyncResult
+type ResultadoTenant = { tenant: string } & SyncTenantResult
 
 function conAlegra(cfg: TenantConfig | null): cfg is TenantConfig {
   // Sin Alegra configurado (ni mock ni token) → saltear.
@@ -50,7 +54,7 @@ export async function POST(req: Request) {
     const results: ResultadoTenant[] = []
     for (const cfg of configs) {
       if (aceptarBaja) console.info(`[cron/alegra-sync] tenant=${cfg.id} aceptarBaja=1`)
-      results.push({ tenant: cfg.id, ...(await syncCatalog(cfg, "cron", { aceptarBaja })) })
+      results.push({ tenant: cfg.id, ...(await syncTenant(cfg, "cron", { aceptarBaja })) })
     }
     return Response.json({ tenants: results })
   } catch (err) {

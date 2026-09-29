@@ -302,6 +302,13 @@
       "when": 1790720840950,
       "tag": "0042_alegra_cuentas",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0043_catalog_sync_log_resumen",
+      "breakpoints": true
     }
   ]
 }

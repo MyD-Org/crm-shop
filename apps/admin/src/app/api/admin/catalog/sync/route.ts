@@ -5,13 +5,14 @@ import { getDb } from "@/db"
 import { catalogSyncLog } from "@/db/schema"
 import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { getTenantByIdFromDb } from "@/lib/tenants"
-import { syncCatalog } from "@/lib/alegra-sync"
+import { syncTenant } from "@/lib/alegra-sync-tenant"
 
 // Catálogos grandes pueden necesitar varias tandas de páginas a Alegra (30 items/página,
 // tope de la API). El default de la plataforma no alcanzaba y la sync daba 504.
 export const maxDuration = 300
 
-// POST: dispara una sincronización manual del catálogo con Alegra (botón del admin).
+// POST: dispara una sincronización manual del catálogo con Alegra (botón del admin): la cuenta
+// principal y después cada cuenta secundaria activa (lib/alegra-sync-tenant.ts).
 export async function POST() {
   const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
   if (!session.userId) return Response.json({ error: "no autorizado" }, { status: 401 })
@@ -19,7 +20,7 @@ export async function POST() {
   const tenant = await getTenantByIdFromDb(session.tenantId)
   if (!tenant) return Response.json({ error: "tenant no encontrado" }, { status: 404 })
 
-  const result = await syncCatalog(tenant, "manual")
+  const result = await syncTenant(tenant, "manual")
   return Response.json(result, { status: result.ok ? 200 : 502 })
 }
 

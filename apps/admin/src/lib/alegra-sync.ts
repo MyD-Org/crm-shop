@@ -1,10 +1,11 @@
-import { and, eq, lt, sql } from "drizzle-orm"
+import { and, eq, isNull, lt, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogCategories, catalogProducts, catalogSyncLog } from "@/db/schema"
 import type { TenantConfig } from "./tenants"
 import { listAllCategories, listAllItems } from "./alegra"
 import { upsertProductos } from "./catalog-products-repo"
-import { baseDeCorrida, evaluarCorrida } from "./alegra-sync-guarda"
+import { abrirCorrida, baseDeCorrida, evaluarCorrida, MSG_SYNC_EN_CURSO } from "./alegra-sync-guarda"
+import { absorberSoloSecundaria, escribirStockPrincipal } from "./catalogo-union-repo"
 import { avisarShop } from "./aviso-shop"
 
 // Sincroniza el catálogo de Alegra a la cache local (upsert por alegraId). Lo que no se ve en la
@@ -16,6 +17,14 @@ import { avisarShop } from "./aviso-shop"
 // empuja el overlay ni marca stale, y queda 'parcial' en catalog_sync_log (con el motivo). Para
 // aceptar una baja masiva legítima: `opts.aceptarBaja` (sólo desde el workflow, con tenant).
 // Estados del log: 'running' | 'ok' | 'parcial' | 'error'.
+//
+// Catálogo unión (change `sucursales-igz-mdp`, rebanada D): esta es la sync de la cuenta PRINCIPAL.
+// `catalog_products.stock` de sus filas = stock de la principal. El "stale" y la baja de ítems
+// se acotan a `cuenta_id IS NULL`: las filas solo-secundaria (de otra cuenta) las administra la
+// sync de su cuenta (`alegra-sync-cuenta.ts`) y la de la principal NO debe darlas de baja. Al
+// final escribe el stock de la principal en `catalog_stock_sucursal` (para las sucursales que
+// usan su cuenta) y corre la absorción: un código que era solo-secundaria y ahora existe (o se
+// reactivó) en la principal pasa a mandar la principal.
 //
 // Al terminar bien (también 'parcial': lo leído ya se upserteó) avisa al Shop para que descarte
 // su caché del catálogo (lib/aviso-shop.ts). El aviso es best-effort: si el Shop no responde, la
@@ -49,10 +58,10 @@ export async function syncCatalog(
   // La base se toma ANTES de abrir el log de esta corrida.
   const base = await baseDeCorrida(config.id)
   const runStart = new Date()
-  const [log] = await db
-    .insert(catalogSyncLog)
-    .values({ tenantId: config.id, trigger, status: "running", startedAt: runStart })
-    .returning({ id: catalogSyncLog.id })
+  // Guarda de concurrencia: una sola corrida a la vez de la cuenta principal del tenant.
+  const logId = await abrirCorrida(config.id, null, trigger, runStart)
+  if (!logId) return { ok: false, itemsSynced: 0, categoriesSynced: 0, error: MSG_SYNC_EN_CURSO }
+  const log = { id: logId }
 
   try {
     // ── Categorías ──
@@ -87,6 +96,9 @@ export async function syncCatalog(
     // lib/catalog-products-repo.ts).
     const items = await listAllItems(config)
     await upsertProductos(config.id, items, { leidoAt: runStart, leidoPor: "sync" })
+
+    // Stock de la principal por sucursal (para las sucursales que usan su cuenta).
+    await escribirStockPrincipal(config.id)
 
     const guarda = evaluarCorrida({ items: items.length, categorias: categories.length }, base, opts)
     if (guarda.parcial) {
@@ -129,8 +141,13 @@ export async function syncCatalog(
       await db
         .update(catalogProducts)
         .set({ status: "inactive" })
-        .where(and(eq(catalogProducts.tenantId, config.id), lt(catalogProducts.syncedAt, runStart)))
+        // Sólo la principal: las filas solo-secundaria (`cuenta_id` no nulo) no se ven acá.
+        .where(and(eq(catalogProducts.tenantId, config.id), isNull(catalogProducts.cuentaId), lt(catalogProducts.syncedAt, runStart)))
     }
+    // Absorción: DESPUÉS del stale, para decidir con el estado final de la principal (un ítem que
+    // acaba de darse de baja no absorbe a su par solo-secundaria).
+    await absorberSoloSecundaria(config.id)
+
     if (!guarda.parcialCategorias) {
       await db
         .update(catalogCategories)

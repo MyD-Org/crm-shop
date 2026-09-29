@@ -9,6 +9,8 @@
  *   rewrite `/ai-api/*` de next.config.ts y `POST /api/ai-token`.
  * - `AI_API_KEY`: API key del tenant en ai-api (para `/v1/end-user-sessions`).
  * - `AI_AGENT_ID`: agente con el que chatea el widget (no es secreto).
+ * - `AI_AGENT_ID_CLIENTE` (opcional): agente para el cliente VINCULADO (modelo
+ *   más capaz y tools de cuenta). Sin ella, todos usan `AI_AGENT_ID`.
  *
  * Falta cualquiera ⇒ `null` ⇒ no hay chat aunque el flag `chat-ia` esté prendido.
  */
@@ -16,6 +18,8 @@ export interface AiApiConfig {
   url: string;
   apiKey: string;
   agentId: string;
+  /** Agente del cliente vinculado; ausente = el mismo `agentId`. */
+  agentIdCliente?: string;
 }
 
 /** Base http(s) sin barra final, o null si no es una URL usable. */
@@ -36,5 +40,6 @@ export function aiApiConfig(env: Record<string, string | undefined> = process.en
   const apiKey = env.AI_API_KEY?.trim();
   const agentId = env.AI_AGENT_ID?.trim();
   if (!url || !apiKey || !agentId) return null;
-  return { url, apiKey, agentId };
+  const agentIdCliente = env.AI_AGENT_ID_CLIENTE?.trim();
+  return { url, apiKey, agentId, ...(agentIdCliente ? { agentIdCliente } : {}) };
 }

@@ -5,11 +5,16 @@
  *   `external_id` que usa el portal del CRM (el codigocliente) y un `crm_token`
  *   firmado para el tenant del Shop en `claims`: las tools de cuenta del agente
  *   consultan `/api/agent/*` del CRM con ese token.
- * - Sin vínculo (Clerk sin cuenta de cliente, o anónimo): visitante SIN claims.
+ * - Sin vínculo (Clerk sin cuenta de cliente, o anónimo): visitante sin `crm_token`.
  *   En ai-api una tool que necesita `{{end_user.claims.crm_token}}` falla antes
  *   de salir (placeholder inexistente) y el agente sólo puede responder preventa.
  *   El `external_id` lleva prefijo propio para que nunca coincida con un
  *   codigocliente (ni con la historia de chat de un cliente real).
+ *
+ * Toda sesión lleva `claims.tier` (`cliente` / `registrado` / `visitante`):
+ * ai-api aplica con eso los topes diarios por usuario (`limits_by_tier`). El
+ * nivel lo decide el Shop y no ai-api porque sólo el Shop sabe quién es quién;
+ * viaja server-to-server con la API key, así que el navegador no lo puede tocar.
  */
 import type { Identidad } from "./auth";
 import { mintAgentToken } from "./agent-token";
@@ -31,10 +36,13 @@ export function esIdVisitante(v: string | undefined | null): v is string {
   return !!v && UUID.test(v);
 }
 
+/** Nivel del usuario del chat: define sus topes de uso en ai-api. */
+export type TierChat = "cliente" | "registrado" | "visitante";
+
 export interface SesionChat {
   external_id: string;
   display_name?: string;
-  claims?: { crm_token: string };
+  claims: { tier: TierChat; crm_token?: string };
 }
 
 export function sesionChat(
@@ -47,14 +55,15 @@ export function sesionChat(
     return {
       external_id: cliente.codigocliente,
       ...(cliente.razonsocial ? { display_name: cliente.razonsocial } : {}),
-      claims: { crm_token: mintAgentToken(cliente.codigocliente, tenantId) },
+      claims: { tier: "cliente", crm_token: mintAgentToken(cliente.codigocliente, tenantId) },
     };
   }
   if (clerkUserId) {
     return {
       external_id: `${PREFIJO_CLERK}${clerkUserId}`,
       ...(nombre ? { display_name: nombre } : {}),
+      claims: { tier: "registrado" },
     };
   }
-  return { external_id: `${PREFIJO_VISITANTE}${visitanteId}` };
+  return { external_id: `${PREFIJO_VISITANTE}${visitanteId}`, claims: { tier: "visitante" } };
 }

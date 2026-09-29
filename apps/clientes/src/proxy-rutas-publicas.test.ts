@@ -83,6 +83,15 @@ describe("proxy: RUTAS_PUBLICAS", () => {
       expect(clerk).not.toHaveBeenCalled();
     });
 
+    it("la búsqueda del agente del chat llega al handler (la llama ai-api, sin cookie)", async () => {
+      process.env.SITE_AUTH_USER = "equipo";
+      process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";
+      const { proxy } = await import("./proxy");
+      const r = await proxy(new NextRequest("https://tienda.example/api/chat-ia/buscar?q=led"), {} as never);
+      expect(r.headers.get("x-middleware-next")).toBe("1");
+      expect(clerk).not.toHaveBeenCalled();
+    });
+
     it("control: otra API sin cookie sí recibe la cortina", async () => {
       process.env.SITE_AUTH_USER = "equipo";
       process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";

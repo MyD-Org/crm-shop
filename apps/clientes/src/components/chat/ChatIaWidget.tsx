@@ -1,8 +1,13 @@
 "use client";
 
-import { ChatDrawer } from "@myd-org/ai-widget/preset";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { ChatDrawer, type CommerceCallbacks } from "@myd-org/ai-widget/preset";
 import "@myd-org/ai-widget/styles";
+import { useCart } from "@/context/CartContext";
 import type { PropsChatIa } from "@/lib/chat-ia";
+import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
+import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
 import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
 
 /**
@@ -16,12 +21,57 @@ async function pedirToken(): Promise<string> {
   return ((await res.json()) as { token: string }).token;
 }
 
+/**
+ * Lo último que el servidor devolvió para cada id. "Agregar" casi siempre viene
+ * justo después de que la card se dibujó, así que en general no hace falta
+ * volver a pedir: el carrito igual recotiza todo en /api/carrito/cotizar.
+ */
+const resueltos = new Map<string, ProductoResuelto>();
+
+async function resolver(ids: readonly string[]): Promise<ProductoResuelto[]> {
+  if (ids.length === 0) return [];
+  const res = await fetch(`/api/chat-ia/productos?ids=${ids.join(",")}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`chat-ia/productos ${res.status}`);
+  const productos = (await res.json()) as ProductoResuelto[];
+  for (const p of productos) resueltos.set(p.id, p);
+  return productos;
+}
+
 export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
+  const router = useRouter();
+  const { addItems, items } = useCart();
+
+  // Acciones de las cards de venta (platform ADR 0014). La card trae ids: el
+  // precio y la foto salen de /api/chat-ia/productos con la lista de quien mira.
+  const commerce = useMemo<CommerceCallbacks>(
+    () => ({
+      resolveProducts: resolver,
+      onAddProducts: (lineas) => {
+        const faltan = lineas.map((l) => l.id).filter((id) => !resueltos.has(id));
+        void (faltan.length ? resolver(faltan) : Promise.resolve([]))
+          .catch(() => [])
+          .then(() => addItems(lineasAItems(lineas, resueltos)));
+      },
+      onOpenProduct: (id) => router.push(`/producto/${encodeURIComponent(id)}`),
+      onHandoff: (card) => {
+        const mensaje = mensajeTraspaso(
+          card.summary,
+          items.map(({ id, qty }) => ({ id, qty })),
+          window.location.origin,
+        );
+        const href = hrefWhatsApp(card.phone, mensaje);
+        if (href) window.open(href, "_blank", "noopener,noreferrer");
+      },
+    }),
+    [addItems, items, router],
+  );
+
   return (
     <ChatDrawer
       config={{ baseUrl: "/ai-api", agentId, fetchToken: pedirToken }}
       branding={{ title: titulo, subtitle: SUBTITULO_CHAT, primaryColor: COLOR_CHAT }}
       labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo }}
+      commerce={commerce}
     />
   );
 }

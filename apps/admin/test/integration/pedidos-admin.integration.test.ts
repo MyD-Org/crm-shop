@@ -6,6 +6,7 @@ import { getDb } from "@/db"
 import { adminUsers, alegraContacts, catalogProducts } from "@/db/schema"
 import { shopOrders, shopOrderItems, type ShopOrderRow } from "@/db/shop-schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
+import { crearSucursal } from "@/lib/sucursales-repo"
 import {
   ESTADOS_PEDIDO,
   mensajeTransicionInvalida,
@@ -234,6 +235,7 @@ describe("admin: pedidos del Shop", () => {
         motivoRevision: "documento_incompatible",
         pagoRevision: null,
         facturado: false,
+        sucursal: null,
       })
       // El motivo interno y los datos de contacto finos no viajan en el listado.
       expect(body.items[0]).not.toHaveProperty("cancelacionMotivo")
@@ -306,6 +308,60 @@ describe("admin: pedidos del Shop", () => {
         total: 0,
         colas: { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0 },
       })
+    })
+  })
+
+  // ───────────────────────────── Sucursal en Pedidos (change sucursales-igz-mdp, A.4) ─────────────────────────────
+  describe("sucursal: filtro, listado y detalle", () => {
+    const regla = {
+      v: 1,
+      regla: "zona:misiones",
+      motivo: "zona",
+      provincia: "misiones",
+      zonaId: null,
+      sucursalZona: "igz",
+      facturaSucursal: null,
+      lineasATraer: [],
+    }
+
+    it("filtra por sucursal, sin filtro trae todos y un operador ve todas las sucursales", async () => {
+      await crearSucursal(TENANT_A, { slug: "igz", nombre: "Iguazú" })
+      await crearSucursal(TENANT_A, { slug: "mdp", nombre: "Mar del Plata" })
+      const enIgz = await seedEn("pendiente", TENANT_A, { sucursal: "igz", sucursalRegla: regla as never })
+      const enMdp = await seedEn("pendiente", TENANT_A, { sucursal: "mdp" })
+      const historico = await seedEn("pendiente", TENANT_A)
+
+      const filtrado = await (await list("?estado=todos&sucursal=igz")).json()
+      expect(filtrado.items.map((i: { id: string }) => i.id)).toEqual([enIgz.id])
+      expect(filtrado.items[0].sucursal).toBe("igz")
+
+      const todas = await (await list("?estado=todos")).json()
+      expect(todas.total).toBe(3)
+      expect(todas.items.map((i: { id: string }) => i.id).sort()).toEqual([enIgz.id, enMdp.id, historico.id].sort())
+      expect(todas.items.find((i: { id: string }) => i.id === historico.id).sucursal).toBeNull()
+    })
+
+    it("un slug que no existe en el tenant es 400 (no una lista vacía)", async () => {
+      await crearSucursal(TENANT_A, { slug: "igz", nombre: "Iguazú" })
+      const res = await list("?estado=todos&sucursal=xyz")
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: "La sucursal indicada no existe", code: "invalid" })
+    })
+
+    it("la sucursal de otro tenant no se puede filtrar", async () => {
+      await crearSucursal(TENANT_B, { slug: "solob", nombre: "Solo B" })
+      expect((await list("?estado=todos&sucursal=solob")).status).toBe(400)
+    })
+
+    it("el detalle trae la sucursal y la regla congelada; un pedido anterior trae null", async () => {
+      const conRegla = await seedEn("pendiente", TENANT_A, { sucursal: "igz", sucursalRegla: regla as never })
+      const anterior = await seedEn("pendiente", TENANT_A)
+      const a = await (await detail(conRegla.id)).json()
+      expect(a.sucursal).toBe("igz")
+      expect(a.sucursalRegla).toEqual(regla)
+      const b = await (await detail(anterior.id)).json()
+      expect(b.sucursal).toBeNull()
+      expect(b.sucursalRegla).toBeNull()
     })
   })
 

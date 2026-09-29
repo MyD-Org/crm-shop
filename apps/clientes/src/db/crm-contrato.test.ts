@@ -111,6 +111,28 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     ]);
   });
 
+  it("de sucursales sólo se declaran las columnas concedidas por el GRANT (0041 del CRM)", () => {
+    expect(Object.keys(esperado["public.sucursales"])).toEqual([
+      "tenant_id",
+      "slug",
+      "nombre",
+      "direccion",
+      "ciudad",
+      "provincia",
+      "whatsapp",
+      "horario",
+      "acepta_retiro",
+      "acepta_envio",
+      "envio_ciudades",
+      "orden",
+      "activa",
+      "predeterminada",
+    ]);
+    for (const prohibida of ["id", "maestra", "deposito_alegra_id", "created_at", "updated_at"]) {
+      expect(esperado["public.sucursales"][prohibida], prohibida).toBeUndefined();
+    }
+  });
+
   it("de tenants sólo se declaran las columnas del GRANT", () => {
     expect(Object.keys(esperado["public.tenants"]).sort()).toEqual(
       ["id", "name", "receipts_email", "whatsapp_number"],

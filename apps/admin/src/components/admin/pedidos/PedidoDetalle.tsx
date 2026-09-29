@@ -5,6 +5,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Textarea, type StepItem, type TableColumn, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
+import { reglaATexto, type NombresSucursal } from "@/lib/sucursales-texto"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { EmitirFacturaControl } from "./EmitirFacturaControl"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
@@ -47,7 +48,16 @@ function Seccion({ titulo, children }: { titulo: string; children: React.ReactNo
   )
 }
 
-export function PedidoDetalle({ initial, esAdminPlus }: { initial: PedidoDetalleDto; esAdminPlus: boolean }) {
+export function PedidoDetalle({
+  initial,
+  esAdminPlus,
+  nombresSucursal = {},
+}: {
+  initial: PedidoDetalleDto
+  esAdminPlus: boolean
+  /** `slug -> nombre` de las sucursales del tenant, para mostrar la asignada con su nombre. */
+  nombresSucursal?: NombresSucursal
+}) {
   const { toast } = useToast()
   const [pedido, setPedido] = useState(initial)
 
@@ -250,6 +260,7 @@ export function PedidoDetalle({ initial, esAdminPlus }: { initial: PedidoDetalle
               <Dato label="Tipo">{entregaLabel(pedido.entrega.tipo)}</Dato>
               {(esEnvio || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
               {(esEnvio || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
+              <Dato label="Sucursal">{reglaATexto(pedido.sucursal, pedido.sucursalRegla, nombresSucursal)}</Dato>
             </dl>
           </Seccion>
 

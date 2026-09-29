@@ -162,6 +162,13 @@
       "when": 1790632945694,
       "tag": "0022_busqueda_pg_trgm",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790718048650,
+      "tag": "0023_orders_sucursal",
+      "breakpoints": true
     }
   ]
 }

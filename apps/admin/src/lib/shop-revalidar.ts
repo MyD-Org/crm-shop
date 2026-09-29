@@ -1,5 +1,8 @@
 // Ping al Shop. SIN payload, así un ping no puede inyectar configuración.
 //   - cuotas   → el Shop vuelve a leer del CRM (contrato platform/contracts/cuotas/v2, punto 2)
+//   - sucursales → el Shop descarta la caché de sucursales/zonas (y la del catálogo, que depende de
+//     ellas) para mostrar el cambio de reglas sin esperar el TTL. La ruta del lado del Shop es
+//     la tarea A.2.3; hasta que exista el ping responde 404 y queda como no propagado.
 //   - catálogo → el Shop ya lee el catálogo comercial directo de estas tablas (misma base); el
 //     ping sólo le hace descartar lo que tenga renderizado en caché, para que el cambio se vea
 //     en la próxima visita.
@@ -16,6 +19,7 @@ export const PING_TIMEOUT_MS = 5000
 
 const PATH_CUOTAS = "/api/internal/cuotas/revalidar"
 const PATH_CATALOGO = "/api/internal/catalogo/revalidar"
+const PATH_SUCURSALES = "/api/internal/sucursales/revalidar"
 
 /** `{ ok: true }` en JSON; cualquier otra cosa (HTML, JSON sin `ok: true`, cuerpo roto) es false. */
 async function esRespuestaOk(res: Response): Promise<boolean> {
@@ -66,3 +70,6 @@ export const pingShopRevalidarCuotas = (): Promise<{ propagado: boolean }> =>
 
 export const pingShopRevalidarCatalogo = (): Promise<{ propagado: boolean }> =>
   pingShopRevalidar(PATH_CATALOGO, "catalogo")
+
+export const pingShopRevalidarSucursales = (): Promise<{ propagado: boolean }> =>
+  pingShopRevalidar(PATH_SUCURSALES, "sucursales")

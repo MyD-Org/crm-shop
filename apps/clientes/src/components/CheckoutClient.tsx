@@ -9,6 +9,7 @@ import { useCotizacion } from "@/hooks/useCotizacion";
 import { COPY_CARRITO } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
+import { PROVINCIAS_SELECTOR, type OpcionesCheckoutSucursales } from "@/lib/zona";
 import { VincularClient } from "@/components/VincularClient";
 import { eleccionInicial, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import { fmtPrecio } from "@/lib/format";
@@ -255,6 +256,11 @@ interface Props {
    * confirma igual, el pedido sale con `requiereRevision`.
    */
   sugerirVincular?: boolean;
+  /**
+   * Con el flag `sucursales` prendido (resuelto en el server): locales de retiro y zona vigente.
+   * Habilita "Local de retiro" (retiro) y "Provincia de entrega" (envío). null = checkout de siempre.
+   */
+  sucursales?: OpcionesCheckoutSucursales | null;
 }
 
 export function CheckoutClient({
@@ -269,11 +275,14 @@ export function CheckoutClient({
   pagosHabilitados,
   direccionesGuardadas = [],
   sugerirVincular = false,
+  sucursales = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready } = useCart();
 
   const [pago, setPago] = useState<PagoMetodo>("transferencia");
   const [entrega, setEntrega] = useState<EntregaTipo>("retiro");
+  const [localRetiro, setLocalRetiro] = useState(sucursales?.localInicial ?? "");
+  const [provinciaEntrega, setProvinciaEntrega] = useState(sucursales?.provinciaInicial ?? "");
   const [ciudad, setCiudad] = useState("");
   const [direccion, setDireccion] = useState("");
   // Envío a domicilio arranca con la predeterminada. `ciudad` y `direccion`
@@ -533,6 +542,9 @@ export function CheckoutClient({
           pagoMetodo: pagoElegido,
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
+          // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
+          sucursalRetiro: sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined,
+          entregaProvincia: sucursales && entrega === "envio" && provinciaEntrega ? provinciaEntrega : undefined,
         }),
       });
 
@@ -788,6 +800,26 @@ export function CheckoutClient({
                 />
               )}
             </div>
+            {sucursales && entrega === "retiro" && sucursales.locales.length > 0 && (
+              <div className="mt-4">
+                <Field label="Local de retiro">
+                  <Select
+                    options={sucursales.locales.map((l) => ({
+                      label: `${l.nombre} · ${l.direccion}`,
+                      value: l.slug,
+                    }))}
+                    value={localRetiro}
+                    onValueChange={setLocalRetiro}
+                    placeholder="Seleccionar local"
+                  />
+                </Field>
+                {sucursales.locales.find((l) => l.slug === localRetiro)?.horario ? (
+                  <p className="mt-2 text-sm text-muted">
+                    Horario: {sucursales.locales.find((l) => l.slug === localRetiro)?.horario}
+                  </p>
+                ) : null}
+              </div>
+            )}
             {envioHabilitado && !admiteEnvio && (
               <p className="mt-3 text-sm text-muted">
                 El envío a domicilio solo está disponible para compradores de Argentina.
@@ -796,6 +828,18 @@ export function CheckoutClient({
 
             {entrega === "envio" && (
               <>
+                {sucursales && (
+                  <div className="mt-4">
+                    <Field label="Provincia de entrega">
+                      <Select
+                        options={PROVINCIAS_SELECTOR.map((p) => ({ label: p.nombre, value: p.clave }))}
+                        value={provinciaEntrega}
+                        onValueChange={setProvinciaEntrega}
+                        placeholder="Seleccionar provincia"
+                      />
+                    </Field>
+                  </div>
+                )}
                 {ofrecerFiscal && (
                   <div className="mt-4 rounded-lg bg-bg p-3 text-sm">
                     {!aOtraDireccion && (

@@ -309,3 +309,41 @@ export const crmComprobantes = publico.table("payment_receipts", {
   submittedAt: timestamp("submitted_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
+
+/**
+ * Sucursales del tenant (`public.sucursales`, change `sucursales-igz-mdp`, migración 0041 del CRM).
+ * SELECT por COLUMNA: quedan afuera `id`, `maestra`, `deposito_alegra_id` y los timestamps, y
+ * cualquier columna futura (p. ej. la cuenta de Alegra) hasta que una migración del CRM la conceda.
+ * Declarar acá una columna no concedida rompería toda la consulta (`permission denied`).
+ */
+export const crmSucursales = publico.table("sucursales", {
+  tenantId: text("tenant_id").notNull(),
+  slug: text("slug").notNull(),
+  nombre: text("nombre").notNull(),
+  direccion: text("direccion").notNull(),
+  ciudad: text("ciudad").notNull(),
+  provincia: text("provincia").notNull(),
+  whatsapp: text("whatsapp").notNull(),
+  horario: text("horario").notNull(),
+  aceptaRetiro: boolean("acepta_retiro").notNull(),
+  aceptaEnvio: boolean("acepta_envio").notNull(),
+  envioCiudades: text("envio_ciudades").array().notNull(),
+  orden: integer("orden").notNull(),
+  activa: boolean("activa").notNull(),
+  predeterminada: boolean("predeterminada").notNull(),
+});
+
+/**
+ * Zonas: provincia -> sucursal (`public.zonas`, migración 0041 del CRM). SELECT de la tabla entera
+ * (no tiene nada sensible). Una fila por provincia y tenant; sin fila = sucursal predeterminada.
+ */
+export const crmZonas = publico.table("zonas", {
+  id: uuid("id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  provinciaClave: text("provincia_clave").notNull(),
+  provincia: text("provincia").notNull(),
+  sucursal: text("sucursal").notNull(),
+  facturaSucursal: text("factura_sucursal"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});

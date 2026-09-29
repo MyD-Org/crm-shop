@@ -1,8 +1,9 @@
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
+import { listarSucursales } from "@/lib/sucursales-repo"
 import { listarPedidos, TABLERO_MAX_LIMIT, toPedidoDto, type Cola } from "@/lib/pedidos-repo"
 import { esEstadoPedido, type EstadoPedido } from "@/lib/pedidos-transiciones"
 
-// GET /api/admin/pedidos?estado=&q=&entrega=&pago=&cola=&start=&limit=&vista= — pedidos del Shop
+// GET /api/admin/pedidos?estado=&q=&entrega=&pago=&cola=&sucursal=&start=&limit=&vista= — pedidos del Shop
 // del tenant de la sesión. Abierto desde OPERATOR (requireOperatorPlus). El tenant sale SÓLO
 // del guard: cualquier `tenantId` que venga en la query se ignora.
 //
@@ -57,6 +58,16 @@ export async function GET(req: Request) {
   }
   const cola = (colaParam as Cola | null) ?? undefined
 
+  // Filtro por sucursal: todos los operadores ven todas las sucursales. Un slug que no existe en
+  // el tenant es 400 (no una lista vacía que parezca "no hay pedidos").
+  const sucursalParam = url.searchParams.get("sucursal")
+  let sucursal: string | undefined
+  if (sucursalParam !== null && sucursalParam !== "" && sucursalParam !== "todas") {
+    const existentes = await listarSucursales(guard.tenantId)
+    if (!existentes.some((s) => s.slug === sucursalParam)) return invalid("La sucursal indicada no existe")
+    sucursal = sucursalParam
+  }
+
   const vistaParam = url.searchParams.get("vista")
   if (vistaParam !== null && vistaParam !== "tablero") return invalid("La vista indicada no es válida")
   const vista = vistaParam === "tablero" ? ("tablero" as const) : undefined
@@ -79,6 +90,7 @@ export async function GET(req: Request) {
       entrega,
       pago,
       cola,
+      sucursal,
       start,
       limit: vista === "tablero" ? TABLERO_MAX_LIMIT : limit,
       vista,

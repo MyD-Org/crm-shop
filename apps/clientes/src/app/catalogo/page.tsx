@@ -12,6 +12,7 @@ import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
+import { ZonaCatalogo } from "@/components/ZonaCatalogo";
 
 type Props = {
   searchParams: Promise<{
@@ -36,7 +37,9 @@ type Props = {
  * relativo sin base rompe el build y uno resuelto contra localhost es peor
  * que ninguno.
  */
-export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
+export async function generateMetadata({
+  searchParams,
+}: Props): Promise<Metadata> {
   const estado = leerEstado(await searchParams);
   return {
     robots: { index: indexable(estado), follow: true },
@@ -69,7 +72,10 @@ export default function CatalogoPage({ searchParams }: Props) {
 
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
 async function CatalogoResultados({ searchParams }: Props) {
-  const [params, { soloVisibles }] = await Promise.all([searchParams, flagsPublicos()]);
+  const [params, { soloVisibles }] = await Promise.all([
+    searchParams,
+    flagsPublicos(),
+  ]);
   const estado = leerEstado(params);
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
@@ -90,7 +96,12 @@ async function CatalogoResultados({ searchParams }: Props) {
   // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
   //   o error) ⇒ el catálogo sale sin cuotas.
   const [exacta, facetasExactas, oferta] = await Promise.all([
-    paginaCatalogoPublica({ filtros, orden: estado.orden, pagina: estado.pagina, soloVisibles }),
+    paginaCatalogoPublica({
+      filtros,
+      orden: estado.orden,
+      pagina: estado.pagina,
+      soloVisibles,
+    }),
     facetasPublicas(filtros, soloVisibles),
     getOfertaCuotas(),
   ]);
@@ -103,7 +114,12 @@ async function CatalogoResultados({ searchParams }: Props) {
   if (exacta.total === 0 && filtros.busqueda?.trim()) {
     const tolerantes = { ...filtros, busquedaTolerante: true };
     const segundo = await Promise.all([
-      paginaCatalogoPublica({ filtros: tolerantes, orden: estado.orden, pagina: estado.pagina, soloVisibles }),
+      paginaCatalogoPublica({
+        filtros: tolerantes,
+        orden: estado.orden,
+        pagina: estado.pagina,
+        soloVisibles,
+      }),
       facetasPublicas(tolerantes, soloVisibles),
     ]).catch((err: unknown) => {
       console.error("[catalogo] falló la búsqueda tolerante:", err);
@@ -115,21 +131,28 @@ async function CatalogoResultados({ searchParams }: Props) {
   // categorías…"): sin nada para tocar, la única salida era borrar el texto.
   // En ese caso el panel muestra los filtros sin la búsqueda, y tocar uno la
   // quita (ver `filtrosSinBusqueda` en CatalogoClient).
-  const filtrosSinBusqueda = pagina.total === 0 && Boolean(filtros.busqueda?.trim());
+  const filtrosSinBusqueda =
+    pagina.total === 0 && Boolean(filtros.busqueda?.trim());
   const facetas = filtrosSinBusqueda
     ? await facetasPublicas({ ...filtros, busqueda: undefined }, soloVisibles)
     : facetasBusqueda;
 
   return (
-    <CatalogoClient
-      productos={pagina.productos}
-      total={pagina.total}
-      paginas={pagina.paginas}
-      // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
-      estado={{ ...estado, pagina: pagina.pagina }}
-      facetas={facetas}
-      filtrosSinBusqueda={filtrosSinBusqueda}
-      oferta={oferta}
-    />
+    <>
+      {/* Zona vigente (flag `sucursales`): no cambia qué productos se ven. */}
+      <Suspense fallback={null}>
+        <ZonaCatalogo />
+      </Suspense>
+      <CatalogoClient
+        productos={pagina.productos}
+        total={pagina.total}
+        paginas={pagina.paginas}
+        // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
+        estado={{ ...estado, pagina: pagina.pagina }}
+        facetas={facetas}
+        filtrosSinBusqueda={filtrosSinBusqueda}
+        oferta={oferta}
+      />
+    </>
   );
 }

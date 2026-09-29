@@ -10,3 +10,5 @@
 export const TAG_HOME = "home";
 export const TAG_CATALOGO = "catalogo";
 export const TAG_CUOTAS = "cuotas";
+/** Sucursales y zonas que el CRM carga en Configuración (`sucursales-datos.ts`). */
+export const TAG_SUCURSALES = "sucursales";

@@ -1,3 +1,4 @@
+import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import { boolean, date, integer, jsonb, numeric, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
 // ─────────────────────────────────────────────────────────────────────────────────────────
@@ -108,6 +109,14 @@ export const shopOrders = shop.table("orders", {
 
   // Aclaración que escribió el CLIENTE en el checkout (no confundir con el motivo interno).
   notas: text("notas"),
+
+  // --- Sucursal asignada (0023 del Shop, change `sucursales-igz-mdp`) ---
+  // Las escribe el Shop al crear el pedido; el CRM sólo las lee. `sucursal` = `public.sucursales.slug`
+  // (sin FK: otro esquema). NULL = pedido anterior a las sucursales o con el flag apagado.
+  sucursal: text("sucursal"),
+  // Snapshot de la regla (`ReglaAplicada`), congelado: cambiar las zonas después no lo altera.
+  sucursalRegla: jsonb("sucursal_regla").$type<ReglaAplicada>(),
+  sucursalAsignadaEn: timestamp("sucursal_asignada_en", { withTimezone: true }),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

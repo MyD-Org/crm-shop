@@ -14,6 +14,7 @@ import {
   opcionesDeFiltro,
   opcionesDeFiltroEntrega,
   opcionesDeFiltroPago,
+  opcionesDeFiltroSucursal,
   opcionesOtroEstado,
   pasosPedido,
   queryDeLista,
@@ -332,5 +333,23 @@ describe("esSinFactura", () => {
     expect(esSinFactura({ estado: "entregado", facturado: false })).toBe(true)
     expect(esSinFactura({ estado: "entregado", facturado: true })).toBe(false)
     expect(esSinFactura({ estado: "preparacion", facturado: false })).toBe(false)
+  })
+})
+
+describe("filtro por sucursal", () => {
+  it("'todas' o ausente se omite de la query; un slug viaja", () => {
+    expect(queryDeLista({ estado: "todos", sucursal: "todas", start: 0, limit: 25 })).toBe("estado=todos&start=0&limit=25")
+    expect(queryDeLista({ estado: "todos", start: 0, limit: 25 })).toBe("estado=todos&start=0&limit=25")
+    expect(queryDeLista({ estado: "todos", sucursal: "igz", start: 0, limit: 25 })).toBe(
+      "estado=todos&sucursal=igz&start=0&limit=25",
+    )
+  })
+
+  it("las opciones arrancan con 'Todas las sucursales' y no tienen valores vacíos", () => {
+    const o = opcionesDeFiltroSucursal([{ slug: "igz", nombre: "Iguazú" }])
+    expect(o).toEqual([
+      { value: "todas", label: "Todas las sucursales" },
+      { value: "igz", label: "Iguazú" },
+    ])
   })
 })

@@ -12,6 +12,7 @@ import {
   type ShopOrderRow,
 } from "@/db/shop-schema"
 import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
+import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import type { EntregaTipo, EstadoPedido } from "@/lib/pedidos-transiciones"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
@@ -101,6 +102,8 @@ export interface ListarPedidosFiltro {
   entrega?: EntregaTipo
   pago?: "pagado" | "pendiente"
   cola?: Cola
+  /** Slug de sucursal (`shop.orders.sucursal`); ausente = todas. La ruta valida que exista. */
+  sucursal?: string
   start?: number
   /** Default PEDIDOS_DEFAULT_LIMIT, máximo PEDIDOS_MAX_LIMIT. Se ignora si `vista === "tablero"`. */
   limit?: number
@@ -154,6 +157,7 @@ export async function listarPedidos(
   if (filtro.entrega) conditions.push(eq(shopOrders.entregaTipo, filtro.entrega))
   if (filtro.pago) conditions.push(eq(shopOrders.pagoEstado, filtro.pago))
   if (filtro.cola) conditions.push(condicionCola(filtro.cola))
+  if (filtro.sucursal) conditions.push(eq(shopOrders.sucursal, filtro.sucursal))
   if (filtro.vista === "tablero") {
     conditions.push(
       and(
@@ -1078,6 +1082,8 @@ export interface PedidoListaDto {
   /** Si el pedido tiene una factura de Alegra vinculada. La bandera "Sin factura" de la lista y
    *  el tablero es `estado === "entregado" && !facturado` (misma regla que la cola `sin_factura`). */
   facturado: boolean
+  /** Slug de la sucursal que atiende el pedido; null = pedido anterior a las sucursales. */
+  sucursal: string | null
 }
 
 export interface PedidoItemDto {
@@ -1095,6 +1101,8 @@ export interface PedidoItemDto {
 }
 
 export interface PedidoDetalleDto extends PedidoListaDto {
+  /** Regla que asignó la sucursal, congelada al crear el pedido (null = anterior a las zonas). */
+  sucursalRegla: ReglaAplicada | null
   cliente: { codigo: string | null; razonSocial: string | null; cuit: string | null; email: string | null }
   contacto: { nombre: string; telefono: string }
   entrega: { tipo: string; ciudad: string | null; direccion: string | null }
@@ -1162,6 +1170,7 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
     // "Facturado" del listado/tablero ni la cola `sin_factura` (ver `condicionCola` arriba) lo
     // cuentan como tal.
     facturado: !!row.facturaAlegraId && row.facturaAlegraId !== RESERVA_EMISION_SENTINEL,
+    sucursal: row.sucursal,
   }
 }
 
@@ -1190,6 +1199,7 @@ export function toPedidoDetalleDto(
 ): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
+    sucursalRegla: row.sucursalRegla ?? null,
     cliente: {
       codigo: row.clienteCodigo,
       razonSocial: row.clienteRazonSocial,

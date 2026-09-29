@@ -16,6 +16,7 @@ import {
 } from "@myd-org/ui"
 import type { Cola, ColasCounts, PedidoListaDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
+import { SIN_SUCURSAL } from "@/lib/sucursales-texto"
 import { PedidosTablero } from "./PedidosTablero"
 import {
   PAGO_REVISION_INFO,
@@ -30,12 +31,14 @@ import {
   COLAS_INFO,
   FILTRO_ENTREGA_TODOS,
   FILTRO_PAGO_TODOS,
+  FILTRO_SUCURSAL_TODAS,
   FILTRO_TODOS,
   ORDEN_COLAS,
   esSinFactura,
   opcionesDeFiltro,
   opcionesDeFiltroEntrega,
   opcionesDeFiltroPago,
+  opcionesDeFiltroSucursal,
   queryDeLista,
   textoRango,
   type FiltroEntrega,
@@ -54,6 +57,8 @@ interface Props {
   initialItems: PedidoListaDto[]
   initialTotal: number
   pageSize: number
+  /** Sucursales del tenant (todas, para todos los operadores): opciones del filtro y nombres de la columna. */
+  sucursales?: { slug: string; nombre: string }[]
 }
 
 type Vista = "lista" | "tablero"
@@ -90,7 +95,7 @@ function guardarVista(v: Vista) {
   }
 }
 
-export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
+export function PedidosShell({ initialItems, initialTotal, pageSize, sucursales = [] }: Props) {
   const router = useRouter()
   // La vista guardada se lee del lado del cliente; en el server (y al hidratar) vale "lista",
   // así no hay mismatch. La elección de esta sesión pisa a la guardada.
@@ -101,6 +106,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
   const [filtro, setFiltro] = useState<FiltroEstado>(FILTRO_TODOS)
   const [entrega, setEntrega] = useState<FiltroEntrega>(FILTRO_ENTREGA_TODOS)
   const [pago, setPago] = useState<FiltroPago>(FILTRO_PAGO_TODOS)
+  const [sucursal, setSucursal] = useState(FILTRO_SUCURSAL_TODAS)
   const [cola, setCola] = useState<Cola | null>(null)
   const [qInput, setQInput] = useState("")
   const [q, setQ] = useState("")
@@ -126,6 +132,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
       entrega,
       pago,
       cola,
+      sucursal,
       start,
       limit: pageSize,
       vista: vista === "tablero" ? "tablero" : undefined,
@@ -142,7 +149,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
       setError(ERROR_CARGA)
     }
     setCargando(false)
-  }, [cola, entrega, filtro, pago, pageSize, q, start, vista])
+  }, [cola, entrega, filtro, pago, pageSize, q, start, sucursal, vista])
 
   // Carga al montar y al cambiar cualquier filtro, la página o la vista. El IIFE es el patrón de
   // ComprobantesShell (evita el falso positivo de set-state-in-effect).
@@ -185,8 +192,15 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
     setStart(0)
   }
 
+  function cambiarSucursal(valor: string) {
+    setCargando(true)
+    setSucursal(valor)
+    setStart(0)
+  }
+
   function quitarFiltros() {
     setCargando(true)
+    setSucursal(FILTRO_SUCURSAL_TODAS)
     setFiltro(FILTRO_TODOS)
     setEntrega(FILTRO_ENTREGA_TODOS)
     setPago(FILTRO_PAGO_TODOS)
@@ -197,13 +211,15 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
   }
 
   const hayFiltrosActivos =
-    filtro !== FILTRO_TODOS || entrega !== FILTRO_ENTREGA_TODOS || pago !== FILTRO_PAGO_TODOS || cola !== null || q !== ""
+    filtro !== FILTRO_TODOS || entrega !== FILTRO_ENTREGA_TODOS || pago !== FILTRO_PAGO_TODOS || sucursal !== FILTRO_SUCURSAL_TODAS || cola !== null || q !== ""
 
   function irAPagina(nuevoStart: number) {
     setCargando(true)
     setStart(nuevoStart)
   }
 
+  const nombresSucursal = new Map(sucursales.map((s) => [s.slug, s.nombre]))
+  const opcionesSucursal = opcionesDeFiltroSucursal(sucursales)
   const href = (p: PedidoListaDto) => `/admin/pedidos/${p.id}`
 
   const columns: TableColumn<PedidoListaDto>[] = [
@@ -258,6 +274,18 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
           </div>
         </>
       ),
+    },
+    {
+      key: "sucursal",
+      header: "Sucursal",
+      hideBelow: "lg",
+      className: "text-xs",
+      render: (p) =>
+        p.sucursal ? (
+          <span style={{ color: "var(--ink-soft)" }}>{nombresSucursal.get(p.sucursal) ?? p.sucursal}</span>
+        ) : (
+          <span style={{ color: "var(--ink-faint)" }}>{SIN_SUCURSAL}</span>
+        ),
     },
     {
       key: "total",
@@ -328,7 +356,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
         })}
       </div>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 lg:grid-cols-5">
         <div className="sm:col-span-1">
           <SearchInput
             value={qInput}
@@ -342,6 +370,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize }: Props) {
         <Select aria-label="Estado" value={filtro} onValueChange={cambiarFiltro} options={OPCIONES_FILTRO} />
         <Select aria-label="Entrega" value={entrega} onValueChange={cambiarEntrega} options={OPCIONES_ENTREGA} />
         <Select aria-label="Pago" value={pago} onValueChange={cambiarPago} options={OPCIONES_PAGO} />
+        <Select aria-label="Sucursal" value={sucursal} onValueChange={cambiarSucursal} options={opcionesSucursal} />
       </div>
 
       {!items.length && !error && start === 0 ? (

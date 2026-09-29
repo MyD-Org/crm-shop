@@ -29,6 +29,12 @@ export function canManageUsers(role: string): boolean {
   return roleRank(role) >= RANK.admin
 }
 
+// ¿Puede ver el precio de COSTO de los productos (detalle del pedido)? admin y superadmin.
+// Decisión de la usuaria (2026-09-29): el operador ve stock pero nunca el costo.
+export function canSeeCosts(role: string): boolean {
+  return roleRank(role) >= RANK.admin
+}
+
 // Roles que `actor` puede ASIGNAR al invitar/editar. El admin puede crear operadores y otros
 // admins (administra el equipo del cliente); superadmin lo asigna únicamente el superadmin.
 export function assignableRoles(actor: string): AdminRole[] {

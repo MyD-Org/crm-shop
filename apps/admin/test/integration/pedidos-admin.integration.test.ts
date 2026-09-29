@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { eq, sql } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
-import { adminUsers, alegraContacts } from "@/db/schema"
+import { adminUsers, alegraContacts, catalogProducts } from "@/db/schema"
 import { shopOrders, shopOrderItems, type ShopOrderRow } from "@/db/shop-schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import {
@@ -373,6 +373,49 @@ describe("admin: pedidos del Shop", () => {
       expect(itemB).toMatchObject({ qty: 1.5, precioUnitario: 500, ivaPorcentaje: 21, subtotal: 1000, iva: 210, total: 1210 })
       // El tenant es interno: no se serializa.
       expect(body).not.toHaveProperty("tenantId")
+    })
+
+    it("stock y costo del espejo del catálogo: el stock lo ven todos; el costo, sólo admin+", async () => {
+      const pedido = await seedEn("pendiente")
+      // Tres casos: en el espejo con costo cargado / en el espejo sin costo / fuera del espejo.
+      // El mismo alegra_id existe en el tenant B con otro stock: el JOIN tiene que ir por tenant.
+      await getDb()
+        .insert(catalogProducts)
+        .values([
+          {
+            tenantId: TENANT_A,
+            alegraId: "item-1",
+            name: "Lámpara A",
+            stock: "7",
+            raw: { id: "item-1", inventory: { unitCost: 277.9, availableQuantity: 7 } },
+          },
+          { tenantId: TENANT_A, alegraId: "item-2", name: "Lámpara B", stock: "0", raw: { id: "item-2" } },
+          { tenantId: TENANT_B, alegraId: "item-1", name: "Otra", stock: "999", raw: { inventory: { unitCost: 1 } } },
+        ])
+      await seedShopOrderItem(pedido.id, { name: "Lámpara A", alegraItemId: "item-1", qty: "2.000" })
+      await seedShopOrderItem(pedido.id, { name: "Lámpara B", alegraItemId: "item-2", qty: "1.000" })
+      await seedShopOrderItem(pedido.id, { name: "Lámpara C", alegraItemId: "item-3", qty: "1.000" })
+
+      const porNombre = (items: Record<string, unknown>[]) =>
+        Object.fromEntries(items.map((i) => [i.name as string, i]))
+
+      // Operator: stock sí, y la clave `costoUnitario` NI APARECE.
+      const opRes = await detail(pedido.id)
+      expect(opRes.status).toBe(200)
+      const op = porNombre((await opRes.json()).items)
+      expect(op["Lámpara A"]).toMatchObject({ stockActual: 7 })
+      expect(op["Lámpara B"]).toMatchObject({ stockActual: 0 })
+      expect(op["Lámpara C"]).toMatchObject({ stockActual: null })
+      for (const i of Object.values(op)) expect(i).not.toHaveProperty("costoUnitario")
+
+      // Admin: además el costo (null si Alegra no lo tiene o el producto no está en el espejo).
+      login(adminA)
+      const adRes = await detail(pedido.id)
+      expect(adRes.status).toBe(200)
+      const ad = porNombre((await adRes.json()).items)
+      expect(ad["Lámpara A"]).toMatchObject({ stockActual: 7, costoUnitario: 277.9 })
+      expect(ad["Lámpara B"]).toMatchObject({ stockActual: 0, costoUnitario: null })
+      expect(ad["Lámpara C"]).toMatchObject({ stockActual: null, costoUnitario: null })
     })
 
     it("id malformado o inexistente → el mismo 404 (nunca 500)", async () => {

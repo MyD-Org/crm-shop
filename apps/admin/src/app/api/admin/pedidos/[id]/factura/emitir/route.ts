@@ -29,6 +29,7 @@ import {
   type PedidoRow,
 } from "@/lib/pedidos-repo"
 import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
+import { canSeeCosts } from "@/lib/roles"
 
 // "Emitir factura" del detalle de pedido. Endpoint y acción de UI separados de "Vincular
 // factura" (.../factura/route.ts): acá se CREA la factura real en Alegra (dinero real e
@@ -146,11 +147,11 @@ export async function GET(req: Request, { params }: IdParams) {
   }
 }
 
-function respuestaResultado(result: FacturaResult, aviso?: AvisoFactura): Response {
+function respuestaResultado(result: FacturaResult, incluirCosto: boolean, aviso?: AvisoFactura): Response {
   if (result.kind === "not_found") return adminNotFoundResponse()
   if (result.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (result.kind === "conflict") return fail(409, "ya_vinculada", MSG.yaFacturado)
-  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito)
+  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto })
   const body = aviso ? { ...detalle, avisoFactura: { resultado: aviso.resultado, destino: aviso.destino } } : detalle
   return Response.json(body, { headers: NO_STORE })
 }
@@ -353,5 +354,5 @@ export async function POST(req: Request, { params }: IdParams) {
 
   const aviso = await enviarFacturaPedido({ tenantId: guard.tenantId, pedido: result.pedido })
   logAvisoFactura(ctx, aviso)
-  return respuestaResultado(result, aviso)
+  return respuestaResultado(result, canSeeCosts(guard.user.role), aviso)
 }

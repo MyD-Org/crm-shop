@@ -18,6 +18,7 @@ import {
   type PedidoRow,
 } from "@/lib/pedidos-repo"
 import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
+import { canSeeCosts } from "@/lib/roles"
 
 // "Vincular factura" del detalle de pedido (change webhooks-stock-alegra, PR-3b).
 //
@@ -116,11 +117,11 @@ function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
   return fail(502, "alegra_error", MSG.alegra)
 }
 
-function respuestaResultado(result: FacturaResult, aviso?: AvisoFactura): Response {
+function respuestaResultado(result: FacturaResult, incluirCosto: boolean, aviso?: AvisoFactura): Response {
   if (result.kind === "not_found") return adminNotFoundResponse()
   if (result.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (result.kind === "conflict") return fail(409, "conflict", MSG.conflicto)
-  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito)
+  const detalle = toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto })
   // `avisoFactura` va aparte del detalle: el componente lo saca antes de guardar el pedido.
   const body = aviso ? { ...detalle, avisoFactura: { resultado: aviso.resultado, destino: aviso.destino } } : detalle
   return Response.json(body, { headers: NO_STORE })
@@ -249,7 +250,7 @@ export async function POST(req: Request, { params }: IdParams) {
       logAvisoFactura(ctx, aviso)
     }
   }
-  return respuestaResultado(result, aviso)
+  return respuestaResultado(result, canSeeCosts(guard.user.role), aviso)
 }
 
 export async function DELETE(req: Request, { params }: IdParams) {
@@ -285,5 +286,5 @@ export async function DELETE(req: Request, { params }: IdParams) {
       }),
     )
   }
-  return respuestaResultado(result)
+  return respuestaResultado(result, canSeeCosts(guard.user.role))
 }

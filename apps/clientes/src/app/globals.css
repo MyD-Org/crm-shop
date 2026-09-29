@@ -92,6 +92,22 @@ body {
   }
 }
 
+/* Barra compacta (al scrollear) en desktop: el DS la arma para la home, con el
+   nav ocupando el medio y el buscador arrinconado contra el carrito en 200/340px.
+   Fuera de la home no hay nav, así que el medio quedaba vacío y el buscador
+   flotaba lejos de la marca. Sin nav se replica el header completo: el buscador
+   arranca pegado a la marca y crece hasta el tope propio de SearchAutocomplete
+   (max-w-2xl). `:first-child + div` = el hermano de la marca es el buscador, no
+   un <nav>: con nav (home) la barra queda como la dibuja el DS. Se alinea acá
+   hasta que el DS lo resuelva. */
+@media (min-width: 1024px) {
+  .site-header > header + div > div > :first-child + div {
+    flex: 1 1 0%;
+    width: auto;
+    margin-left: 0;
+  }
+}
+
 /* Marca ("Led") con un solo color por tema: el acento. El DS la pinta en
    highlight; se alinea acá hasta que el DS lo resuelva.
    - Header (fondo claro): el acento tal cual.

@@ -43,3 +43,17 @@ export function aiApiConfig(env: Record<string, string | undefined> = process.en
   const agentIdCliente = env.AI_AGENT_ID_CLIENTE?.trim();
   return { url, apiKey, agentId, ...(agentIdCliente ? { agentIdCliente } : {}) };
 }
+
+/**
+ * TEMPORAL (diagnóstico, revertir): estado de cada variable de ai-api SIN sus valores,
+ * para saber cuál falta en el deploy cuando `aiApiConfig()` da null.
+ */
+export function diagnosticoAiApi(env: Record<string, string | undefined> = process.env) {
+  const estado = (v: string | undefined) => (v?.trim() ? "ok" : "ausente");
+  return {
+    AI_API_URL: !env.AI_API_URL?.trim() ? "ausente" : normalizarUrlAiApi(env.AI_API_URL) ? "ok" : "inválida",
+    AI_API_KEY: estado(env.AI_API_KEY),
+    AI_AGENT_ID: estado(env.AI_AGENT_ID),
+    VERCEL_ENV: env.VERCEL_ENV ?? "(sin VERCEL_ENV)",
+  };
+}

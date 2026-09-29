@@ -27,6 +27,8 @@ describe("leerSucursalesYZonas", () => {
   });
 
   it("no pide columnas fuera del contrato", () => {
-    expect(Object.keys(getTableColumns(crmSucursales))).not.toContain("cuentaAlegraId");
+    expect(Object.keys(getTableColumns(crmSucursales))).not.toContain(
+      "cuentaAlegraId",
+    );
   });
 });

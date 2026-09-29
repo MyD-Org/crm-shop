@@ -13,12 +13,22 @@ let provinciaFactura: string | undefined;
 
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
 vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
-vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/server")>()), after: () => {} }));
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: () => {},
+}));
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ get: (n: string) => (n === "shop_zona" && cookieZona ? { value: cookieZona } : undefined) }),
+  cookies: async () => ({
+    get: (n: string) =>
+      n === "shop_zona" && cookieZona ? { value: cookieZona } : undefined,
+  }),
 }));
 vi.mock("@/lib/auth", () => ({
-  identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.example" }),
+  identidadActual: async () => ({
+    clerkUserId: "user_1",
+    cliente: null,
+    email: "a@b.example",
+  }),
   idPriceListCliente: async () => undefined,
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
@@ -32,13 +42,20 @@ vi.mock("@/lib/pedidos", () => ({
 }));
 vi.mock("@/lib/facturacion-db", () => ({
   getPerfilFacturacion: async () => ({
-    pais: "AR", tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF", telefono: "1",
+    pais: "AR",
+    tipoDoc: "DNI",
+    nroDoc: "1",
+    razonSocial: "X",
+    condicionIva: "CF",
+    telefono: "1",
     domicilioProvincia: provinciaFactura ?? null,
   }),
   perfilCompleto: () => true,
   guardarTelefonoSiFalta: async () => {},
 }));
-vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: async () => null }));
+vi.mock("@/lib/cuotas-datos", () => ({
+  getOfertaCuotasParaPedido: async () => null,
+}));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: async () => false }));
 vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => false }));
 
@@ -65,9 +82,21 @@ beforeEach(() => {
   cookieZona = undefined;
   provinciaFactura = undefined;
   crearPedido.mockReset();
-  crearPedido.mockResolvedValue({ id: "p1", numero: "PED-1", repetido: false, cuotasMax: null });
+  crearPedido.mockResolvedValue({
+    id: "p1",
+    numero: "PED-1",
+    repetido: false,
+    cuotasMax: null,
+  });
   cotizar.mockReset();
-  cotizar.mockResolvedValue({ lineas: [{ id: "1", qty: 1 }], hayProblemas: false, subtotal: 100, iva: 21, costoEnvio: 0, total: 121 });
+  cotizar.mockResolvedValue({
+    lineas: [{ id: "1", qty: 1 }],
+    hayProblemas: false,
+    subtotal: 100,
+    iva: 21,
+    costoEnvio: 0,
+    total: 121,
+  });
 });
 
 describe("POST /api/pedidos — sucursales", () => {
@@ -80,7 +109,10 @@ describe("POST /api/pedidos — sucursales", () => {
   it("flag prendido, retiro: pasa el local elegido", async () => {
     setFlag("sucursales", true);
     await post({ sucursalRetiro: "sede-a" });
-    expect(datosPedido().sucursalEntrada).toMatchObject({ entregaTipo: "retiro", sucursalRetiro: "sede-a" });
+    expect(datosPedido().sucursalEntrada).toMatchObject({
+      entregaTipo: "retiro",
+      sucursalRetiro: "sede-a",
+    });
   });
 
   it("provincia: la del body gana a la cookie de zona, y ésta al domicilio de facturación", async () => {
@@ -107,9 +139,17 @@ describe("POST /api/pedidos — sucursales", () => {
 
   it("rechazo de reglas: 409 en usted con el motivo", async () => {
     setFlag("sucursales", true);
-    crearPedido.mockRejectedValue(new SucursalPedidoError("sin_retiro", "La sucursal seleccionada no admite retiro. Seleccione otro local de retiro."));
+    crearPedido.mockRejectedValue(
+      new SucursalPedidoError(
+        "sin_retiro",
+        "La sucursal seleccionada no admite retiro. Seleccione otro local de retiro.",
+      ),
+    );
     const r = await post({ sucursalRetiro: "sede-a" });
     expect(r.status).toBe(409);
-    expect(await r.json()).toMatchObject({ motivo: "sin_retiro", error: expect.stringContaining("Seleccione") });
+    expect(await r.json()).toMatchObject({
+      motivo: "sin_retiro",
+      error: expect.stringContaining("Seleccione"),
+    });
   });
 });

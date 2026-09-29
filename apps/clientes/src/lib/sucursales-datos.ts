@@ -21,7 +21,10 @@ export async function sucursalesCacheadas(): Promise<DatosSucursales> {
     cacheLife("sucursales");
     return datos;
   } catch (err) {
-    console.error("[sucursales-datos] no se pudieron leer las sucursales:", err);
+    console.error(
+      "[sucursales-datos] no se pudieron leer las sucursales:",
+      err,
+    );
     cacheLife("degradado");
     return { sucursales: [], zonas: [] };
   }

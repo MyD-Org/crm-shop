@@ -14,7 +14,10 @@ export async function sucursalesHabilitadas(): Promise<boolean> {
   try {
     return await sucursalesFlag();
   } catch (err) {
-    console.error("[sucursales-flag] no se pudo evaluar el flag; se asume apagado:", err);
+    console.error(
+      "[sucursales-flag] no se pudo evaluar el flag; se asume apagado:",
+      err,
+    );
     return false;
   }
 }

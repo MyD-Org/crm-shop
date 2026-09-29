@@ -7,7 +7,11 @@
  * ignora. La zona NUNCA cambia qué productos se ven: sólo decide la sucursal que la atiende.
  */
 import { PROVINCIAS_AR } from "./provincias";
-import { claveProvincia, resolverZona, type ResolucionZona } from "./sucursales";
+import {
+  claveProvincia,
+  resolverZona,
+  type ResolucionZona,
+} from "./sucursales";
 import type { DatosSucursales, SucursalVista } from "./sucursales-repo";
 
 export const COOKIE_ZONA = "shop_zona";
@@ -45,8 +49,55 @@ export function zonaVigente(entrada: {
   const provinciaClave = cookie ?? perfil;
   const origen = cookie ? "cookie" : perfil ? "perfil" : "default";
 
-  const r = resolverZona(provinciaClave, entrada.datos.zonas, entrada.datos.sucursales);
-  if ("error" in r) return { provinciaClave, origen, sucursal: null, resolucion: null };
-  const sucursal = entrada.datos.sucursales.find((s) => s.slug === r.sucursal) ?? null;
+  const r = resolverZona(
+    provinciaClave,
+    entrada.datos.zonas,
+    entrada.datos.sucursales,
+  );
+  if ("error" in r)
+    return { provinciaClave, origen, sucursal: null, resolucion: null };
+  const sucursal =
+    entrada.datos.sucursales.find((s) => s.slug === r.sucursal) ?? null;
   return { provinciaClave, origen, sucursal, resolucion: r };
+}
+
+/** Lo que el checkout necesita con el flag `sucursales` prendido. */
+export interface OpcionesCheckoutSucursales {
+  locales: {
+    slug: string;
+    nombre: string;
+    direccion: string;
+    horario: string;
+  }[];
+  /** Local preseleccionado (retiro): el de la zona si admite retiro, si no la predeterminada. */
+  localInicial: string | null;
+  /** Provincia preseleccionada (envío): la de la zona vigente (cookie o perfil); null = ninguna. */
+  provinciaInicial: string | null;
+}
+
+/**
+ * Locales de retiro (activos y con retiro) y preselecciones del checkout. Sin ningún local que
+ * admita retiro devuelve `locales: []` (el checkout no muestra el selector y el server cae al
+ * respaldo de `sucursales-pedido.ts`).
+ */
+export function opcionesCheckout(
+  zona: ZonaVigente,
+  datos: DatosSucursales,
+): OpcionesCheckoutSucursales {
+  const admiten = datos.sucursales
+    .filter((s) => s.activa && s.aceptaRetiro)
+    .sort((a, b) => a.orden - b.orden || a.slug.localeCompare(b.slug));
+  const deLaZona = admiten.find((s) => s.slug === zona.sucursal?.slug);
+  const inicial =
+    deLaZona ?? admiten.find((s) => s.predeterminada) ?? admiten[0];
+  return {
+    locales: admiten.map((s) => ({
+      slug: s.slug,
+      nombre: s.nombre,
+      direccion: s.direccion,
+      horario: s.horario,
+    })),
+    localInicial: inicial?.slug ?? null,
+    provinciaInicial: zona.provinciaClave,
+  };
 }

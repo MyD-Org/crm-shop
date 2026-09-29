@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { claveDeCookie, zonaVigente } from "./zona";
+import { claveDeCookie, opcionesCheckout, zonaVigente } from "./zona";
 import type { DatosSucursales, SucursalVista } from "./sucursales-repo";
 
-const suc = (slug: string, extra: Partial<SucursalVista> = {}): SucursalVista => ({
+const suc = (
+  slug: string,
+  extra: Partial<SucursalVista> = {},
+): SucursalVista => ({
   slug,
   nombre: `Sucursal ${slug}`,
   ciudad: "Ciudad Ejemplo",
   provincia: "Provincia Ejemplo",
+  direccion: "Calle Ejemplo 123",
+  horario: "Lunes a viernes de 9 a 18",
   aceptaRetiro: true,
   aceptaEnvio: true,
   envioCiudades: [],
@@ -17,14 +22,26 @@ const suc = (slug: string, extra: Partial<SucursalVista> = {}): SucursalVista =>
 });
 
 const datos: DatosSucursales = {
-  sucursales: [suc("sede-a"), suc("sede-b", { orden: 2, predeterminada: true })],
-  zonas: [{ id: "z1", provinciaClave: "misiones", sucursal: "sede-a", facturaSucursal: null }],
+  sucursales: [
+    suc("sede-a"),
+    suc("sede-b", { orden: 2, predeterminada: true }),
+  ],
+  zonas: [
+    {
+      id: "z1",
+      provinciaClave: "misiones",
+      sucursal: "sede-a",
+      facturaSucursal: null,
+    },
+  ],
 };
 
 describe("claveDeCookie", () => {
   it("acepta sólo la clave exacta de una provincia conocida", () => {
     expect(claveDeCookie("misiones")).toBe("misiones");
-    expect(claveDeCookie("ciudadautonomadebuenosaires")).toBe("ciudadautonomadebuenosaires");
+    expect(claveDeCookie("ciudadautonomadebuenosaires")).toBe(
+      "ciudadautonomadebuenosaires",
+    );
     expect(claveDeCookie("Misiones")).toBeNull();
     expect(claveDeCookie("marte")).toBeNull();
     expect(claveDeCookie("")).toBeNull();
@@ -60,18 +77,27 @@ describe("zonaVigente", () => {
   });
 
   it("la cookie le gana al perfil", () => {
-    const z = zonaVigente({ cookie: "cordoba", perfilProvincia: "Misiones", datos });
+    const z = zonaVigente({
+      cookie: "cordoba",
+      perfilProvincia: "Misiones",
+      datos,
+    });
     expect(z.origen).toBe("cookie");
     expect(z.sucursal?.slug).toBe("sede-b");
   });
 
   it("perfil con una provincia que no es una jurisdicción: default", () => {
-    expect(zonaVigente({ perfilProvincia: "Narnia", datos }).origen).toBe("default");
+    expect(zonaVigente({ perfilProvincia: "Narnia", datos }).origen).toBe(
+      "default",
+    );
   });
 
   it("sin ninguna sucursal activa: sin sucursal (no asigna en silencio)", () => {
     const z = zonaVigente({
-      datos: { ...datos, sucursales: datos.sucursales.map((s) => ({ ...s, activa: false })) },
+      datos: {
+        ...datos,
+        sucursales: datos.sucursales.map((s) => ({ ...s, activa: false })),
+      },
     });
     expect(z.sucursal).toBeNull();
   });
@@ -82,6 +108,50 @@ describe("el catálogo no depende de la zona", () => {
     const a = zonaVigente({ cookie: "misiones", datos });
     const b = zonaVigente({ cookie: "cordoba", datos });
     expect(Object.keys(a).sort()).toEqual(Object.keys(b).sort());
-    expect(Object.keys(a)).toEqual(["provinciaClave", "origen", "sucursal", "resolucion"]);
+    expect(Object.keys(a)).toEqual([
+      "provinciaClave",
+      "origen",
+      "sucursal",
+      "resolucion",
+    ]);
+  });
+});
+
+describe("opcionesCheckout", () => {
+  const z = (cookie?: string) => zonaVigente({ cookie, datos });
+  it("preselecciona el local de la zona si admite retiro y la provincia de la zona", () => {
+    const o = opcionesCheckout(z("misiones"), datos);
+    expect(o.localInicial).toBe("sede-a");
+    expect(o.provinciaInicial).toBe("misiones");
+    expect(o.locales.map((l) => l.slug)).toEqual(["sede-a", "sede-b"]);
+    expect(o.locales[0]).toEqual({
+      slug: "sede-a",
+      nombre: "Sucursal sede-a",
+      direccion: "Calle Ejemplo 123",
+      horario: "Lunes a viernes de 9 a 18",
+    });
+  });
+
+  it("sin zona elegida: la predeterminada y sin provincia", () => {
+    const o = opcionesCheckout(z(), datos);
+    expect(o.localInicial).toBe("sede-b");
+    expect(o.provinciaInicial).toBeNull();
+  });
+
+  it("si la sucursal de la zona no admite retiro, cae en la predeterminada; los inactivos no se ofrecen", () => {
+    const d: DatosSucursales = {
+      ...datos,
+      sucursales: [
+        suc("sede-a", { aceptaRetiro: false }),
+        suc("sede-b", { orden: 2, predeterminada: true }),
+        suc("sede-c", { orden: 3, activa: false }),
+      ],
+    };
+    const o = opcionesCheckout(
+      zonaVigente({ cookie: "misiones", datos: d }),
+      d,
+    );
+    expect(o.localInicial).toBe("sede-b");
+    expect(o.locales.map((l) => l.slug)).toEqual(["sede-b"]);
   });
 });

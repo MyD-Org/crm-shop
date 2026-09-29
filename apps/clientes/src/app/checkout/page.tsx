@@ -11,17 +11,23 @@ import { pagosHabilitados } from "@/lib/pagos-flag";
 import { envioHabilitado } from "@/lib/envio-flag";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
+import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
  * ejemplo, `0003` todavía sin aplicar) el checkout sigue como antes, sin
  * direcciones: comprar importa más que la precarga.
  */
-async function direccionesParaCheckout(clerkUserId: string): Promise<DireccionEnvio[]> {
+async function direccionesParaCheckout(
+  clerkUserId: string,
+): Promise<DireccionEnvio[]> {
   try {
     return await listarDirecciones(clerkUserId);
   } catch (err) {
-    console.error("[checkout] no se pudieron leer las direcciones guardadas:", err);
+    console.error(
+      "[checkout] no se pudieron leer las direcciones guardadas:",
+      err,
+    );
     return [];
   }
 }
@@ -54,6 +60,13 @@ export default async function CheckoutPage() {
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
   const [pagos, envio] = await Promise.all([pagosPromise, envioPromise]);
+  // Con el flag `sucursales`: locales de retiro y zona vigente. null = como siempre.
+  const sucursales = await opcionesCheckoutDelVisitante().catch(
+    (err: unknown) => {
+      console.error("[checkout] no se pudieron leer las sucursales:", err);
+      return null;
+    },
+  );
   const [dc, oferta, direcciones] = await Promise.all([
     datosDelContacto({ clerkUserId, cliente }),
     pagos ? getOfertaCuotasSinCache() : null,
@@ -65,7 +78,9 @@ export default async function CheckoutPage() {
   // Su documento ya es de un cliente de Alegra y no vinculó: se le ofrece
   // vincular sólo si eso le cambia algo (lista propia o cuenta corriente).
   const coincidente = !cliente ? perfil?.coincideConAlegra : null;
-  const sugerirVincular = coincidente ? await vincularCambiaAlgo(coincidente) : false;
+  const sugerirVincular = coincidente
+    ? await vincularCambiaAlgo(coincidente)
+    : false;
   // Para el formulario del no vinculado: sólo las columnas que muestra.
   const perfilUI = perfil
     ? {
@@ -92,7 +107,10 @@ export default async function CheckoutPage() {
         }
         // Vinculado: el de Alegra (no se vuelve a pedir); si no hay, el del perfil.
         telefonoSugerido={
-          telefonoDelCheckout({ telefonoAlegra: dc.telefonoAlegra, telefonoPerfil: perfil?.telefono }).inicial
+          telefonoDelCheckout({
+            telefonoAlegra: dc.telefonoAlegra,
+            telefonoPerfil: perfil?.telefono,
+          }).inicial
         }
         emailCliente={cliente?.email ?? email}
         facturacion={paraElCliente(dc)}
@@ -103,6 +121,7 @@ export default async function CheckoutPage() {
         envioHabilitado={envio}
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}
+        sucursales={sucursales}
       />
     </>
   );

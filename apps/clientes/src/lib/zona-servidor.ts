@@ -9,7 +9,13 @@ import { identidadActual } from "./auth";
 import { getPerfilFacturacion } from "./facturacion-db";
 import { sucursalesHabilitadas } from "./sucursales-flag";
 import { sucursalesCacheadas } from "./sucursales-datos";
-import { COOKIE_ZONA, zonaVigente, type ZonaVigente } from "./zona";
+import {
+  COOKIE_ZONA,
+  opcionesCheckout,
+  zonaVigente,
+  type OpcionesCheckoutSucursales,
+  type ZonaVigente,
+} from "./zona";
 
 export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
   if (!(await sucursalesHabilitadas())) return null;
@@ -21,10 +27,19 @@ export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
   if (!cookie) {
     try {
       const { clerkUserId } = await identidadActual();
-      if (clerkUserId) perfilProvincia = (await getPerfilFacturacion(clerkUserId))?.domicilioProvincia ?? null;
+      if (clerkUserId)
+        perfilProvincia =
+          (await getPerfilFacturacion(clerkUserId))?.domicilioProvincia ?? null;
     } catch (err) {
       console.error("[zona] no se pudo leer la provincia del perfil:", err);
     }
   }
   return zonaVigente({ cookie, perfilProvincia, datos });
 });
+
+/** Opciones del checkout (locales de retiro y provincia inicial). null = flag apagado o sin sucursales. */
+export async function opcionesCheckoutDelVisitante(): Promise<OpcionesCheckoutSucursales | null> {
+  const zona = await zonaDelVisitante();
+  if (!zona) return null;
+  return opcionesCheckout(zona, await sucursalesCacheadas());
+}

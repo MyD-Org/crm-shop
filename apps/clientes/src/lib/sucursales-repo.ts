@@ -15,6 +15,8 @@ export interface SucursalVista extends SucursalDato {
   nombre: string;
   ciudad: string;
   provincia: string;
+  direccion: string;
+  horario: string;
 }
 
 export interface DatosSucursales {
@@ -25,7 +27,9 @@ export interface DatosSucursales {
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
 type Ejecutor = Pick<ReturnType<typeof getDb>, "select">;
 
-export async function leerSucursalesYZonas(db: Ejecutor = getDb()): Promise<DatosSucursales> {
+export async function leerSucursalesYZonas(
+  db: Ejecutor = getDb(),
+): Promise<DatosSucursales> {
   const tenant = shopTenantId();
   const [sucursales, zonas] = await Promise.all([
     db
@@ -34,6 +38,8 @@ export async function leerSucursalesYZonas(db: Ejecutor = getDb()): Promise<Dato
         nombre: crmSucursales.nombre,
         ciudad: crmSucursales.ciudad,
         provincia: crmSucursales.provincia,
+        direccion: crmSucursales.direccion,
+        horario: crmSucursales.horario,
         aceptaRetiro: crmSucursales.aceptaRetiro,
         aceptaEnvio: crmSucursales.aceptaEnvio,
         envioCiudades: crmSucursales.envioCiudades,

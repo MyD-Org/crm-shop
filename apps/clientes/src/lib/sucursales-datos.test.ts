@@ -7,7 +7,9 @@ vi.mock("next/cache", () => ({
   cacheLife: (...a: unknown[]) => cacheLife(...a),
 }));
 const leer = vi.fn();
-vi.mock("./sucursales-repo", () => ({ leerSucursalesYZonas: (...a: unknown[]) => leer(...a) }));
+vi.mock("./sucursales-repo", () => ({
+  leerSucursalesYZonas: (...a: unknown[]) => leer(...a),
+}));
 
 import { sucursalesCacheadas } from "./sucursales-datos";
 

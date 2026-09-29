@@ -135,5 +135,31 @@
     "name": "text",
     "parent_alegra_id": "text",
     "activo": "boolean"
+  },
+  "public.sucursales": {
+    "tenant_id": "text",
+    "slug": "text",
+    "nombre": "text",
+    "direccion": "text",
+    "ciudad": "text",
+    "provincia": "text",
+    "whatsapp": "text",
+    "horario": "text",
+    "acepta_retiro": "boolean",
+    "acepta_envio": "boolean",
+    "envio_ciudades": "text[]",
+    "orden": "integer",
+    "activa": "boolean",
+    "predeterminada": "boolean"
+  },
+  "public.zonas": {
+    "id": "uuid",
+    "tenant_id": "text",
+    "provincia_clave": "text",
+    "provincia": "text",
+    "sucursal": "text",
+    "factura_sucursal": "text",
+    "created_at": "timestamp with time zone",
+    "updated_at": "timestamp with time zone"
   }
 }

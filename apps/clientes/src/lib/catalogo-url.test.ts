@@ -10,6 +10,8 @@ import {
   comoPagina,
   comoPrecio,
   estadoConCambios,
+  estadoDeBusqueda,
+  filtrosDesfasados,
   hrefCanonico,
   hrefCatalogo,
   hrefCon,
@@ -413,5 +415,56 @@ describe("filtrosDeEstado", () => {
       precioMax: 900,
       soloStock: true,
     });
+  });
+});
+
+describe("URL del browser contra el estado que renderizó el servidor", () => {
+  const sp = (qs: string) => new URLSearchParams(qs);
+
+  it("lee la query string del browser con las mismas reglas que la page", () => {
+    expect(
+      estadoDeBusqueda(sp("q=led&categoria=Hogar&marca=KING&marca=AKAI&stock=todos&pagina=2"))
+    ).toEqual({
+      ...base,
+      query: "led",
+      orden: "relevancia",
+      categorias: ["Hogar"],
+      marcas: ["KING", "AKAI"],
+      soloStock: false,
+      pagina: 2,
+    });
+    expect(estadoDeBusqueda(sp(""))).toEqual(base);
+  });
+
+  it("una categoría con coma llega entera", () => {
+    expect(estadoDeBusqueda(sp("categoria=Llaves%2C+tomas+y+accesorios")).categorias).toEqual([
+      "Llaves, tomas y accesorios",
+    ]);
+  });
+
+  // Next 16.2.9 arma la clave del segmento de la página con
+  // Object.fromEntries(new URLSearchParams(search)): de un parámetro repetido
+  // sólo queda el último valor. `marca=KING&marca=AKAI` y `marca=AKAI` dan la
+  // misma clave, Next no pide datos nuevos y la página queda con los de antes.
+  it("detecta la navegación en la que Next reusó la página vieja", () => {
+    const renderizado = { ...base, marcas: ["KING", "AKAI"] };
+    expect(filtrosDesfasados(renderizado, sp("marca=AKAI"))).toBe(true);
+    expect(filtrosDesfasados(renderizado, sp("marca=TACOMA&marca=AKAI"))).toBe(true);
+    expect(
+      filtrosDesfasados({ ...base, categorias: ["Tubos", "Veladores"] }, sp("categoria=Veladores"))
+    ).toBe(true);
+  });
+
+  it("no hay desfase cuando la URL y el render coinciden, sin importar el orden", () => {
+    const renderizado = { ...base, categorias: ["Hogar"], marcas: ["KING", "AKAI"] };
+    expect(filtrosDesfasados(renderizado, sp("categoria=Hogar&marca=KING&marca=AKAI"))).toBe(false);
+    expect(filtrosDesfasados(renderizado, sp("categoria=Hogar&marca=AKAI&marca=KING"))).toBe(false);
+    expect(filtrosDesfasados(base, sp(""))).toBe(false);
+  });
+
+  it("la página efectiva distinta de la pedida no es un desfase", () => {
+    // La page manda la página recortada (URL dice 99, hay 12): eso no se
+    // arregla pidiendo de nuevo.
+    expect(filtrosDesfasados({ ...base, pagina: 12 }, sp("pagina=99"))).toBe(false);
   });
 });

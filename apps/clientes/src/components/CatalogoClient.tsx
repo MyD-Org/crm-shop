@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useOptimistic, useRef, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
 import { CatalogoControles } from "@/components/catalogo/CatalogoControles";
@@ -13,7 +13,14 @@ import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import type { Facetas } from "@/lib/catalog";
-import { estadoConCambios, hrefCatalogo, hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
+import {
+  estadoConCambios,
+  estadoDeBusqueda,
+  filtrosDesfasados,
+  hrefCatalogo,
+  hrefCon,
+  type EstadoCatalogo,
+} from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, limpiarFiltros } from "@/lib/catalogo-vista";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -57,12 +64,25 @@ export function CatalogoClient({
   // en vez de quedarse muda.
   const [navegando, startTransition] = useTransition();
 
+  // Al destildar una marca o categoría que no es la última de la URL, Next
+  // cambia la URL pero reusa la página vieja sin pedirla (ver
+  // `filtrosDesfasados`): el tilde volvía a aparecer y el filtro no se iba.
+  // Si la URL del router y lo que renderizó el servidor no coinciden, se
+  // muestra lo que dice la URL y se pide la página de nuevo.
+  const searchParams = useSearchParams();
+  const desfasado = filtrosDesfasados(estado, searchParams);
+  const claveUrl = searchParams.toString();
+  useEffect(() => {
+    if (desfasado) startTransition(() => router.refresh());
+  }, [desfasado, claveUrl, router]);
+  const estadoBase = desfasado ? estadoDeBusqueda(searchParams) : estado;
+
   // Estado optimista: el filtro que toca el visitante se marca en el acto,
   // sin esperar a que el servidor responda con la URL nueva (si no, el tilde
   // aparece recién junto con los resultados y parece que el clic no anduvo).
   // Al terminar la navegación, `estado` ya es el nuevo y el optimista se
   // descarta solo. Clics seguidos se acumulan porque parten de `estadoVisible`.
-  const [estadoVisible, marcar] = useOptimistic(estado, estadoConCambios);
+  const [estadoVisible, marcar] = useOptimistic(estadoBase, estadoConCambios);
 
   // `ir` puede llamarse dos veces seguidas antes de que React vuelva a
   // renderizar (dos clics rápidos, o un commit del slider seguido de un
@@ -187,7 +207,7 @@ export function CatalogoClient({
             <CatalogoProductos
               productos={productosCuenta}
               vista={estadoVisible.vista}
-              navegando={navegando}
+              navegando={navegando || desfasado}
               cuotasPorProducto={cuotasPorProducto}
             />
           )}

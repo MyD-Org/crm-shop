@@ -1,6 +1,7 @@
 import { adminNotFoundResponse, requireOperatorPlus } from "@/lib/admin-route-guard"
 import { avisarClientePedido, logAviso } from "@/lib/pedido-estado-aviso"
 import { registrarPagoManual, toPedidoDetalleDto, type PagoManualResult } from "@/lib/pedidos-repo"
+import { canSeeCosts } from "@/lib/roles"
 
 // "Registrar pago" del detalle de pedido, para los medios que cobra el comercio por fuera de la
 // tienda (transferencia, efectivo, cuenta corriente, a coordinar). Guarda quién lo hizo.
@@ -65,7 +66,9 @@ async function mover(req: Request, { params }: IdParams, pagado: boolean): Promi
     }
   }
 
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito), {
+  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, {
+      incluirCosto: canSeeCosts(guard.user.role),
+    }), {
     headers: NO_STORE,
   })
 }

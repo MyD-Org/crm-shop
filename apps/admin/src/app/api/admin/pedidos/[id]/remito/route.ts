@@ -3,6 +3,7 @@ import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard
 import { nombreDocumentoAlegra, resolverRemito, validarRemision } from "@/lib/remito"
 import { desvincularRemito, getPedido, toPedidoDetalleDto, vincularRemito, type PedidoRow, type RemitoResult } from "@/lib/pedidos-repo"
 import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
+import { canSeeCosts } from "@/lib/roles"
 
 // "Vincular remito existente" del detalle de pedido (rebanada D, remito único por pedido).
 //
@@ -75,12 +76,12 @@ function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
   return fail(502, "alegra_error", MSG.alegra)
 }
 
-function respuestaResultado(result: RemitoResult): Response {
+function respuestaResultado(result: RemitoResult, incluirCosto: boolean): Response {
   if (result.kind === "not_found") return adminNotFoundResponse()
   if (result.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (result.kind === "conflict") return fail(409, "conflict", MSG.conflicto)
   return Response.json(
-    toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito),
+    toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto }),
     { headers: NO_STORE },
   )
 }
@@ -185,7 +186,7 @@ export async function POST(req: Request, { params }: IdParams) {
       }),
     )
   }
-  return respuestaResultado(result)
+  return respuestaResultado(result, canSeeCosts(guard.user.role))
 }
 
 export async function DELETE(req: Request, { params }: IdParams) {
@@ -219,5 +220,5 @@ export async function DELETE(req: Request, { params }: IdParams) {
       }),
     )
   }
-  return respuestaResultado(result)
+  return respuestaResultado(result, canSeeCosts(guard.user.role))
 }

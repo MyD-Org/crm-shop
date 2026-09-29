@@ -116,6 +116,20 @@ export function PedidoDetalle({
       render: (i) => <span style={{ color: "var(--ink)" }}>{fmtCantidad(i.qty)}</span>,
     },
     {
+      // Stock ACTUAL del espejo del catálogo, no el del momento del pedido. Sin dato (producto
+      // fuera del espejo) muestra una raya: que falte se tiene que notar.
+      key: "stock",
+      header: "Stock",
+      align: "right",
+      hideBelow: "sm",
+      className: "tabular-nums",
+      render: (i) => (
+        <span style={{ color: i.stockActual !== null && i.stockActual < i.qty ? "var(--red)" : "var(--ink-soft)" }}>
+          {i.stockActual === null ? "—" : fmtCantidad(i.stockActual)}
+        </span>
+      ),
+    },
+    {
       key: "precio",
       header: "Precio unit.",
       align: "right",
@@ -123,6 +137,22 @@ export function PedidoDetalle({
       className: "tabular-nums",
       render: (i) => <span style={{ color: "var(--ink-soft)" }}>{fmtMoneda(i.precioUnitario)}</span>,
     },
+    // Costo unitario cargado en Alegra: SÓLO admin+. El DTO no trae el campo para operator (ver
+    // `canSeeCosts`), así que la columna se oculta por rol y no por "vino null".
+    ...(esAdminPlus
+      ? [
+          {
+            key: "costo",
+            header: "Costo",
+            align: "right",
+            hideBelow: "md",
+            className: "tabular-nums",
+            render: (i) => (
+              <span style={{ color: "var(--ink-soft)" }}>{i.costoUnitario == null ? "—" : fmtMoneda(i.costoUnitario)}</span>
+            ),
+          } satisfies TableColumn<PedidoItemDto>,
+        ]
+      : []),
     {
       key: "iva",
       header: "IVA",

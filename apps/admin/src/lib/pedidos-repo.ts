@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
-import { alegraContacts } from "@/db/schema"
+import { alegraContacts, catalogProducts } from "@/db/schema"
 import {
   shopOrderEventos,
   shopOrderRemitos,
@@ -223,12 +223,31 @@ export async function listarPedidos(
   return { items, total: count[0]?.count ?? 0, colas }
 }
 
-async function itemsDe(orderId: string): Promise<PedidoItemRow[]> {
+/**
+ * Ítem del pedido más lo que HOY dice el espejo del catálogo (`catalog_products`) de ese mismo
+ * producto, por `alegra_item_id`. Los dos son un snapshot de la última sync/webhook, no un dato
+ * en vivo, y son `null` si el producto ya no está en el espejo:
+ *  - `catalogoStock`: `catalog_products.stock`.
+ *  - `catalogoCosto`: el "costo unitario" cargado en Alegra (`raw->inventory->unitCost`); el
+ *    espejo no lo tiene en columna propia, sale del ítem completo que guarda `raw`.
+ */
+export type PedidoItemConCatalogo = PedidoItemRow & { catalogoStock: string | null; catalogoCosto: string | null }
+
+async function itemsDe(tenantId: string, orderId: string): Promise<PedidoItemConCatalogo[]> {
   // Orden determinístico para que el detalle no "baile" entre cargas. `order_items` no tiene
-  // fecha ni posición; nombre + id alcanza.
+  // fecha ni posición; nombre + id alcanza. El LEFT JOIN al espejo lleva el tenant en el ON:
+  // `alegra_id` sólo es único por tenant (índice `cat_tenant_alegra`).
   return getDb()
-    .select()
+    .select({
+      ...getTableColumns(shopOrderItems),
+      catalogoStock: catalogProducts.stock,
+      catalogoCosto: sql<string | null>`${catalogProducts.raw}->'inventory'->>'unitCost'`,
+    })
     .from(shopOrderItems)
+    .leftJoin(
+      catalogProducts,
+      and(eq(catalogProducts.tenantId, tenantId), eq(catalogProducts.alegraId, shopOrderItems.alegraItemId)),
+    )
     .where(eq(shopOrderItems.orderId, orderId))
     .orderBy(asc(shopOrderItems.name), asc(shopOrderItems.id))
 }
@@ -349,7 +368,7 @@ async function listaParaRevision(tenantId: string, pedido: PedidoRow): Promise<s
 }
 
 export interface DetalleExtras {
-  items: PedidoItemRow[]
+  items: PedidoItemConCatalogo[]
   listaPrecios: string | null
   historial: EventoHistorialDto[]
   /** Remito único del pedido (0021 del Shop), o `null` si todavía no tiene. */
@@ -370,7 +389,7 @@ async function remitoDe(tenantId: string, orderId: string): Promise<RemitoRow | 
  *  aplica), historial y remito. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
 async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<DetalleExtras> {
   const [items, listaPrecios, historial, remito] = await Promise.all([
-    itemsDe(pedido.id),
+    itemsDe(tenantId, pedido.id),
     listaParaRevision(tenantId, pedido),
     historialDe(tenantId, pedido.id, pedido.createdAt),
     remitoDe(tenantId, pedido.id),
@@ -1047,6 +1066,12 @@ export function reservaStock(row: PedidoRow, now: Date = new Date()): boolean {
 
 /** `numeric` de Postgres llega como string. */
 const num = (v: string | null): number => (v == null ? 0 : Number(v))
+/** Como `num` pero conserva el "no hay dato": `null` y un texto no numérico dan `null`, no 0. */
+const numONull = (v: string | null | undefined): number | null => {
+  if (v == null || v === "") return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
 const iso = (d: Date | null): string | null => (d ? d.toISOString() : null)
 
 /** Mismo formato visible que usa el Shop (`formatearNumero`): el cliente y el operador tienen
@@ -1098,6 +1123,13 @@ export interface PedidoItemDto {
   subtotal: number
   iva: number
   total: number
+  /** Stock actual del producto según el espejo del catálogo (snapshot de la última sync o
+   *  webhook, no en vivo). `null` = el producto ya no está en el espejo. */
+  stockActual: number | null
+  /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja para admin y
+   *  superadmin (`incluirCosto` en `toPedidoDetalleDto`): para operator la clave no existe en
+   *  la respuesta. `null` = sin costo cargado en Alegra, o producto fuera del espejo. */
+  costoUnitario?: number | null
 }
 
 export interface PedidoDetalleDto extends PedidoListaDto {
@@ -1174,8 +1206,11 @@ export function toPedidoDto(row: PedidoRow): PedidoListaDto {
   }
 }
 
-function toItemDto(item: PedidoItemRow): PedidoItemDto {
-  return {
+/** Ítem con o sin los datos del espejo: los tests y algún caller viejo arman filas peladas. */
+type ItemParaDto = PedidoItemRow & Partial<Pick<PedidoItemConCatalogo, "catalogoStock" | "catalogoCosto">>
+
+function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
+  const dto: PedidoItemDto = {
     id: item.id,
     alegraItemId: item.alegraItemId,
     code: item.code,
@@ -1187,15 +1222,26 @@ function toItemDto(item: PedidoItemRow): PedidoItemDto {
     subtotal: num(item.subtotal),
     iva: num(item.iva),
     total: num(item.total),
+    stockActual: numONull(item.catalogoStock),
   }
+  // La clave se AGREGA sólo con permiso (nunca `costoUnitario: undefined`): así ni siquiera el
+  // nombre del campo aparece en la respuesta que ve un operador.
+  if (incluirCosto) dto.costoUnitario = numONull(item.catalogoCosto)
+  return dto
+}
+
+export interface DetalleDtoOpciones {
+  /** Incluir el costo unitario de cada ítem. Sale de `canSeeCosts(rol)` del guard. */
+  incluirCosto?: boolean
 }
 
 export function toPedidoDetalleDto(
   row: PedidoRow,
-  items: PedidoItemRow[],
+  items: ItemParaDto[],
   listaPrecios: string | null = null,
   historial: EventoHistorialDto[] = [],
   remito: RemitoRow | null = null,
+  { incluirCosto = false }: DetalleDtoOpciones = {},
 ): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
@@ -1242,7 +1288,7 @@ export function toPedidoDetalleDto(
     pagoManual: esPagoManual(row),
     pagoActualizadoEn: iso(row.pagoActualizadoEn),
     pagoRegistradoPorNombre: row.pagoRegistradoPorNombre,
-    items: items.map(toItemDto),
+    items: items.map((i) => toItemDto(i, incluirCosto)),
     historial,
   }
 }

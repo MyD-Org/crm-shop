@@ -8,6 +8,7 @@ import {
   mensajeTransicionInvalida,
   puedeTransicionar,
 } from "@/lib/pedidos-transiciones"
+import { canSeeCosts } from "@/lib/roles"
 
 // GET   /api/admin/pedidos/[id] — detalle con ítems.
 // PATCH /api/admin/pedidos/[id] — cambio de estado. Body { estado, estadoEsperado, motivo? }.
@@ -45,7 +46,9 @@ export async function GET(req: Request, { params }: IdParams) {
   try {
     const found = await getPedido(guard.tenantId, id)
     if (!found) return adminNotFoundResponse()
-    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios, found.historial, found.remito), {
+    return Response.json(toPedidoDetalleDto(found.pedido, found.items, found.listaPrecios, found.historial, found.remito, {
+      incluirCosto: canSeeCosts(guard.user.role),
+    }), {
       headers: NO_STORE,
     })
   } catch (err) {
@@ -145,7 +148,9 @@ export async function PATCH(req: Request, { params }: IdParams) {
   })
   logAviso("estado", { tenant: guard.tenantId, orderId: id }, aviso)
 
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito), {
+  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, {
+      incluirCosto: canSeeCosts(guard.user.role),
+    }), {
     headers: NO_STORE,
   })
 }

@@ -110,6 +110,7 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       config={config}
       branding={{ title: titulo, subtitle: SUBTITULO_CHAT, primaryColor: COLOR_CHAT }}
       labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo }}
+      theme="light"
       commerce={commerce}
     />
   );

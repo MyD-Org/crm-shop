@@ -35,6 +35,11 @@ const RUTAS_PUBLICAS = [
   // y se autentica con la firma. Sin esto la cortina responde 200 con HTML, Clerk da el evento
   // por entregado y el alta nunca llega al espejo.
   "/api/webhooks/clerk",
+  // Búsqueda del agente vendedor del chat: la llama ai-api (tool buscar_productos) desde su
+  // servidor, sin cookie de gate. Sin esto el agente recibe el HTML de la cortina, no encuentra
+  // ningún producto y no hay error en ningún lado. Es de solo lectura sobre el catálogo público
+  // y responde 404 con el flag `chat-ia` apagado.
+  "/api/chat-ia/buscar",
 ];
 
 /**

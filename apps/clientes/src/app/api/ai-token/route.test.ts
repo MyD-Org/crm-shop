@@ -4,7 +4,7 @@ import { setFlag } from "@/test/flags";
 /**
  * POST /api/ai-token (CHAT-1, CHAT-3): con el flag apagado 404 sin tocar nada;
  * vinculado ⇒ sesión con crm_token; sin vínculo o anónimo ⇒ visitante sin
- * claims. La API key y el secreto nunca vuelven al navegador.
+ * crm_token. Toda sesión lleva su nivel (`claims.tier`) para los topes de ai-api. La API key y el secreto nunca vuelven al navegador.
  */
 
 const identidad = vi.fn();
@@ -88,19 +88,24 @@ describe("POST /api/ai-token", () => {
     const crmToken = (cuerpo.claims as { crm_token: string }).crm_token;
     const payload = JSON.parse(Buffer.from(crmToken.split(".")[0], "base64url").toString());
     expect(payload).toMatchObject({ c: "42", t: "tienda-demo" });
+    expect((cuerpo.claims as { tier: string }).tier).toBe("cliente");
     expect(cookieSet).not.toHaveBeenCalled();
   });
 
-  it("logueado sin vínculo ⇒ visitante sin claims, con prefijo propio", async () => {
+  it("logueado sin vínculo ⇒ registrado sin crm_token, con prefijo propio", async () => {
     identidad.mockResolvedValue({ clerkUserId: "user_9", nombre: "Ana", cliente: null });
     expect((await pedir()).status).toBe(200);
-    expect(cuerpoEnviado()).toEqual({ external_id: "shop-clerk:user_9", display_name: "Ana" });
+    expect(cuerpoEnviado()).toEqual({
+      external_id: "shop-clerk:user_9",
+      display_name: "Ana",
+      claims: { tier: "registrado" },
+    });
   });
 
-  it("anónimo nuevo ⇒ visitante sin claims y cookie httpOnly con un UUID", async () => {
+  it("anónimo nuevo ⇒ visitante sin crm_token y cookie httpOnly con un UUID", async () => {
     expect((await pedir({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" })).status).toBe(200);
     const cuerpo = cuerpoEnviado();
-    expect(cuerpo.claims).toBeUndefined();
+    expect(cuerpo.claims).toEqual({ tier: "visitante" });
     expect(cuerpo.external_id).toMatch(/^shop-visitante:[0-9a-f-]{36}$/);
     const [nombre, valor, opciones] = cookieSet.mock.calls[0];
     expect(nombre).toBe("chat_visitante");

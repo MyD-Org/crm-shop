@@ -7,6 +7,7 @@
  * nunca llega al navegador.
  */
 import { aiApiConfig } from "./ai-api-config";
+import { identidadActual } from "./auth";
 import { chatIaHabilitado } from "./chat-ia-flag";
 import { datosTenant } from "./cuenta-corriente/tenant-cc";
 
@@ -25,5 +26,17 @@ export async function propsChatIa(): Promise<PropsChatIa | null> {
     console.error(`[chat-ia] no se pudo leer el tenant: ${err instanceof Error ? err.name : "desconocido"}`);
     return null;
   });
-  return { agentId: config.agentId, titulo: tenant?.nombre || TITULO_CHAT_POR_DEFECTO };
+  return { agentId: await agenteSegunIdentidad(config), titulo: tenant?.nombre || TITULO_CHAT_POR_DEFECTO };
+}
+
+/**
+ * El cliente vinculado chatea con su propio agente (modelo más capaz, tools de
+ * cuenta) si está configurado. Sólo se lee la identidad cuando hay dos agentes:
+ * con uno no cambia nada. El agente es un dato público; lo que protege la cuenta
+ * es el `crm_token`, que sólo lleva la sesión del vinculado (ver chat-ia-sesion).
+ */
+async function agenteSegunIdentidad(config: { agentId: string; agentIdCliente?: string }): Promise<string> {
+  if (!config.agentIdCliente) return config.agentId;
+  const identidad = await identidadActual().catch(() => null);
+  return identidad?.cliente?.codigocliente ? config.agentIdCliente : config.agentId;
 }

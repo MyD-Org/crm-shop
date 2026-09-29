@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { PEDIDOS_DEFAULT_LIMIT, listarPedidos, toPedidoDto } from "@/lib/pedidos-repo"
 import { isKnownAdminRole } from "@/lib/roles"
+import { listarSucursales } from "@/lib/sucursales-repo"
 import { PedidosShell } from "@/components/admin/pedidos/PedidosShell"
 
 export const dynamic = "force-dynamic"
@@ -16,7 +17,10 @@ export default async function PedidosPage() {
 
   // Primera página sin filtro, directo del repo (no se le pega a la propia API). El shell
   // refetcha por la API al montar y al cambiar de filtro/página.
-  const { items, total } = await listarPedidos(guard.tenantId, { estado: "todos" })
+  const [{ items, total }, sucursales] = await Promise.all([
+    listarPedidos(guard.tenantId, { estado: "todos" }),
+    listarSucursales(guard.tenantId),
+  ])
 
   return (
     <div className="p-4 md:p-6">
@@ -31,6 +35,7 @@ export default async function PedidosPage() {
         initialItems={items.map(toPedidoDto)}
         initialTotal={total}
         pageSize={PEDIDOS_DEFAULT_LIMIT}
+        sucursales={sucursales.map((s) => ({ slug: s.slug, nombre: s.nombre }))}
       />
     </div>
   )

@@ -52,6 +52,16 @@ export function opcionesDeFiltroPago(): OpcionSelect[] {
   ]
 }
 
+/** Valor del filtro "todas las sucursales" (mismo patrón que `FILTRO_TODOS`). */
+export const FILTRO_SUCURSAL_TODAS = "todas"
+
+export function opcionesDeFiltroSucursal(sucursales: { slug: string; nombre: string }[]): OpcionSelect[] {
+  return [
+    { value: FILTRO_SUCURSAL_TODAS, label: "Todas las sucursales" },
+    ...sucursales.map((s) => ({ value: s.slug, label: s.nombre })),
+  ]
+}
+
 /** Las 4 colas de "Para atender", en el orden en que se muestran. Severidad = color de la barrita. */
 export const COLAS_INFO: Record<Cola, { label: string; severidad: "amber" | "danger" | "info" }> = {
   sin_confirmar: { label: "Sin confirmar", severidad: "amber" },
@@ -84,11 +94,12 @@ export interface FiltrosLista {
   entrega?: FiltroEntrega
   pago?: FiltroPago
   cola?: Cola | null
+  sucursal?: string
 }
 
 /**
  * Query string de `GET /api/admin/pedidos`. "todos" viaja explícito para `estado` (`estado=`
- * vacío es 400); `entrega`/`pago`/`cola` en cambio se OMITEN cuando son "todos" o no vienen,
+ * vacío es 400); `entrega`/`pago`/`cola`/`sucursal` en cambio se OMITEN cuando son "todos" o no vienen,
  * porque el servidor los toma como "sin filtro" con su sola ausencia (ver route.ts).
  */
 export function queryDeLista(
@@ -100,6 +111,7 @@ export function queryDeLista(
   if (input.entrega && input.entrega !== FILTRO_ENTREGA_TODOS) params.set("entrega", input.entrega)
   if (input.pago && input.pago !== FILTRO_PAGO_TODOS) params.set("pago", input.pago)
   if (input.cola) params.set("cola", input.cola)
+  if (input.sucursal && input.sucursal !== FILTRO_SUCURSAL_TODAS) params.set("sucursal", input.sucursal)
   if (input.vista) {
     params.set("vista", input.vista)
   } else {

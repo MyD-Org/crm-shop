@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { getPedido, toPedidoDetalleDto } from "@/lib/pedidos-repo"
 import { isKnownAdminRole, roleRank } from "@/lib/roles"
+import { listarSucursales } from "@/lib/sucursales-repo"
 import { PedidoDetalle } from "@/components/admin/pedidos/PedidoDetalle"
 
 export const dynamic = "force-dynamic"
@@ -17,10 +18,14 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
   const encontrado = await getPedido(guard.tenantId, id)
   if (!encontrado) notFound()
 
+  const sucursales = await listarSucursales(guard.tenantId)
+  const nombresSucursal = Object.fromEntries(sucursales.map((s) => [s.slug, s.nombre]))
+
   return (
     <div className="p-4 md:p-6">
       <PedidoDetalle
         initial={toPedidoDetalleDto(encontrado.pedido, encontrado.items, encontrado.listaPrecios, encontrado.historial, encontrado.remito)}
+        nombresSucursal={nombresSucursal}
         esAdminPlus={roleRank(guard.user.role) >= roleRank("admin")}
       />
     </div>

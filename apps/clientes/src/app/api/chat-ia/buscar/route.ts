@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getCatalogo } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoAgente, limiteBusqueda } from "@/lib/chat-ia-productos";
-import { diagnosticoAiApi } from "@/lib/ai-api-config";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { permitir } from "@/lib/rate-limit";
 
@@ -36,8 +35,7 @@ function ipDe(req: Request): string {
  * público. Precios de la lista general (no hay sesión: llama ai-api).
  */
 export async function GET(req: Request) {
-  // TEMPORAL (diagnóstico, revertir): el 404 dice qué variable de ai-api falta, sin valores.
-  if (!(await chatIaHabilitado())) return json({ error: "No encontrado.", diagnostico: diagnosticoAiApi() }, 404);
+  if (!(await chatIaHabilitado())) return json({ error: "No encontrado." }, 404);
   if (!permitir(`chat-ia-buscar:${ipDe(req)}`, USOS_POR_MINUTO, 60_000)) {
     return json({ error: "Demasiadas búsquedas. Reintentar en un momento." }, 429);
   }

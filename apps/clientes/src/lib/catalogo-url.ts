@@ -184,6 +184,49 @@ export function leerEstado(params: {
 }
 
 /**
+ * Lee el estado desde la query string del browser (`useSearchParams`), con
+ * las mismas reglas que `leerEstado` usa en la page.
+ */
+export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
+  const param = (k: string) => sp.getAll(k);
+  return leerEstado({
+    q: param("q"),
+    categoria: param("categoria"),
+    marca: param("marca"),
+    orden: param("orden"),
+    pagina: param("pagina"),
+    precio_min: param("precio_min"),
+    precio_max: param("precio_max"),
+    stock: param("stock"),
+    vista: param("vista"),
+  });
+}
+
+/** Misma selección, sin importar el orden. */
+const mismoConjunto = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((x) => b.includes(x));
+
+/**
+ * La URL que muestra el router tiene otras categorías o marcas que las que
+ * renderizó el servidor.
+ *
+ * Pasa por un bug de Next (16.2.9, `createSegmentFromRouteTree` en
+ * ppr-navigations.js): la clave del segmento de la página sale de
+ * `Object.fromEntries(new URLSearchParams(search))`, que de un parámetro
+ * repetido se queda sólo con el ÚLTIMO valor. `marca=KING&marca=AKAI` y
+ * `marca=AKAI` dan la misma clave, así que al destildar KING Next cambia la
+ * URL pero reusa la página vieja sin pedir nada al servidor. Sólo lo sufren
+ * los parámetros repetibles; el resto no se compara (la página, por ejemplo,
+ * llega recortada a la última que existe y no es un desfase).
+ */
+export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams): boolean {
+  const url = estadoDeBusqueda(sp);
+  return (
+    !mismoConjunto(estado.categorias, url.categorias) || !mismoConjunto(estado.marcas, url.marcas)
+  );
+}
+
+/**
  * URL del catálogo para un estado dado. Omite lo que está en su default para
  * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=nombre&pagina=1`.
  *

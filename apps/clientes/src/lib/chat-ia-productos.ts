@@ -12,6 +12,7 @@
  * Funciones puras: las rutas hacen la lectura de la base.
  */
 import type { Product } from "@/data/products";
+import { maxCantidad } from "./catalogo-vista";
 
 /** Largo de la descripción que ve el modelo. Más es ruido y costo. */
 export const DESCRIPCION_MAX = 200;
@@ -40,6 +41,12 @@ export interface ProductoResuelto {
   imageUrl?: string;
   price?: number;
   available: boolean;
+  /** Código del producto (línea "Cód." de la card); ausente si el nombre ya es el código. */
+  sku?: string;
+  /** Unidades que deja elegir el contador de la card: las disponibles, o el tope general. */
+  maxQuantity: number;
+  /** Unidades, sólo con stock bajo ("Queda 1" / "Quedan N"), igual que la card del catálogo. */
+  stock?: number;
   /**
    * Propio del Shop (el widget lo ignora): precio NETO, el que guarda el
    * carrito (`CartItem.price`). `price` es el exhibido, con IVA si se conoce.
@@ -82,6 +89,9 @@ export function aProductoResuelto(p: Product): ProductoResuelto {
     // sin precio la card muestra el nombre y no un "$ 0" engañoso.
     ...(precio > 0 ? { price: precio } : {}),
     available: p.stock !== "out" && precio > 0,
+    ...(p.sku && p.sku !== p.name ? { sku: p.sku } : {}),
+    maxQuantity: maxCantidad(p),
+    ...(p.stock === "low" && p.stockQty != null && p.stockQty > 0 ? { stock: p.stockQty } : {}),
     precioNeto: p.price,
   };
 }

@@ -12,6 +12,7 @@ import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
+import { ZonaCatalogo } from "@/components/ZonaCatalogo";
 
 type Props = {
   searchParams: Promise<{
@@ -121,7 +122,12 @@ async function CatalogoResultados({ searchParams }: Props) {
     : facetasBusqueda;
 
   return (
-    <CatalogoClient
+    <>
+      {/* Zona vigente (flag `sucursales`): no cambia qué productos se ven. */}
+      <Suspense fallback={null}>
+        <ZonaCatalogo />
+      </Suspense>
+      <CatalogoClient
       productos={pagina.productos}
       total={pagina.total}
       paginas={pagina.paginas}
@@ -130,6 +136,7 @@ async function CatalogoResultados({ searchParams }: Props) {
       facetas={facetas}
       filtrosSinBusqueda={filtrosSinBusqueda}
       oferta={oferta}
-    />
+      />
+    </>
   );
 }

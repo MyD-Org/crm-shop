@@ -34,6 +34,9 @@ import {
 } from "./envio";
 import { avisarCobro } from "./pedido-avisos";
 import { shopTenantId } from "./tenant";
+import type { EntradaAsignacion } from "./sucursales";
+import { leerSucursalesYZonas } from "./sucursales-repo";
+import { decidirSucursalDePedido } from "./sucursales-pedido";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -81,6 +84,12 @@ export interface DatosPedido {
    * intento devuelve el pedido que ya existe en vez de crear otro.
    */
   idempotencyKey?: string;
+  /**
+   * Sólo con el flag `sucursales` prendido: modalidad, provincia, ciudad y local de retiro con los
+   * que se asigna la sucursal. `crearPedido` relee las reglas SIN caché dentro de la transacción y
+   * congela `sucursal`, `sucursal_regla` y `sucursal_asignada_en`. Ausente = quedan en NULL.
+   */
+  sucursalEntrada?: EntradaAsignacion;
 }
 
 /**
@@ -124,6 +133,12 @@ export async function crearPedido(
   }
 
   return getDb().transaction(async (tx) => {
+    // Las reglas de sucursales se leen frescas acá adentro (nunca de la caché de mostrar). Sin
+    // sucursales cargadas da null y el pedido sigue; retiro/envío inválido tira SucursalPedidoError.
+    const asignacion = datos.sucursalEntrada
+      ? decidirSucursalDePedido(datos.sucursalEntrada, await leerSucursalesYZonas(tx))
+      : null;
+
     const [pedido] = await tx
       .insert(orders)
       .values({
@@ -159,6 +174,9 @@ export async function crearPedido(
         total: String(cotizacion.total),
         cuotasMax: plan?.cuotasMax ?? null,
         cuotasPlan: plan,
+        sucursal: asignacion?.sucursal ?? null,
+        sucursalRegla: asignacion?.regla ?? null,
+        sucursalAsignadaEn: asignacion ? new Date() : null,
       })
       // El `where` acá es el predicado del índice parcial, no un filtro de
       // filas: sin él, Postgres no sabe qué índice usar para resolver el

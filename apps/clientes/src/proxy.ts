@@ -31,6 +31,8 @@ const RUTAS_PUBLICAS = [
   "/api/internal/catalogo/revalidar",
   // Lo mismo para el aviso de que cambiaron las cuotas (proveedores o escalones).
   "/api/internal/cuotas/revalidar",
+  // Lo mismo para el aviso de que cambiaron las sucursales o las zonas.
+  "/api/internal/sucursales/revalidar",
   // Webhook de Clerk (espejo de usuarios en shop.clientes): Clerk/Svix no tiene cookie de gate
   // y se autentica con la firma. Sin esto la cortina responde 200 con HTML, Clerk da el evento
   // por entregado y el alta nunca llega al espejo.

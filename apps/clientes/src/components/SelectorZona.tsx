@@ -2,12 +2,13 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Select } from "@myd-org/ui";
 import { COOKIE_ZONA, COOKIE_ZONA_MAX_AGE } from "@/lib/zona";
 
 /**
  * Zona vigente del visitante, discreta y cambiable (catálogo, con el flag `sucursales`
  * prendido). Elegir una provincia guarda la cookie `shop_zona` con la clave de esa provincia y
- * pide la página de nuevo. Vaciar la elección borra la cookie y vuelve la sucursal predeterminada.
+ * pide la página de nuevo. Sin elección vale la sucursal predeterminada.
  * No cambia qué productos se ven: sólo qué sucursal atiende.
  */
 export function SelectorZona({
@@ -42,22 +43,17 @@ export function SelectorZona({
           Sucursal de su zona: <span className="text-text">{sucursal}</span>
         </span>
       ) : null}
-      <label className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <span>Provincia</span>
-        <select
-          className="rounded-md border border-border bg-surface px-2 py-1 text-text"
+        <Select
+          aria-label="Provincia"
+          options={provincias.map((p) => ({ label: p.nombre, value: p.clave }))}
           value={actual ?? ""}
-          onChange={(e) => elegir(e.target.value)}
+          onValueChange={elegir}
+          placeholder="Seleccione su provincia"
           disabled={pendiente}
-        >
-          <option value="">Seleccione su provincia</option>
-          {provincias.map((p) => (
-            <option key={p.clave} value={p.clave}>
-              {p.nombre}
-            </option>
-          ))}
-        </select>
-      </label>
+        />
+      </div>
     </div>
   );
 }

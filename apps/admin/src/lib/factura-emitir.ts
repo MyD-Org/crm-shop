@@ -234,6 +234,7 @@ export async function resolverPreviewEmision(
   pedido: PedidoRow,
   items: PedidoItemRow[],
   deps: ResolverPreviewEmisionDeps,
+  opts: { cuentaPrincipal?: boolean } = {},
 ): Promise<PreviewEmisionFactura> {
   const numeracionesCrudas = await deps.listNumberTemplates()
   const numeraciones = numeracionesCrudas.filter(
@@ -242,7 +243,10 @@ export async function resolverPreviewEmision(
   const numeracionSugeridaId = elegirNumeracionPorDefecto(numeraciones, { tieneCuit: tieneCuit(pedido) })
   const numeracionSugerida = numeraciones.find((n) => n.alegraId === numeracionSugeridaId) ?? null
 
-  let contactoAlegraId: string | null = pedido.clienteCodigo
+  // `cliente_codigo` es el id del contacto en la cuenta PRINCIPAL: en otra cuenta no existe, así
+  // que se busca por documento (o se crea), nunca se reutiliza ese id (design D6).
+  const esPrincipal = opts.cuentaPrincipal ?? true
+  let contactoAlegraId: string | null = esPrincipal ? pedido.clienteCodigo : null
   let esNuevo = false
   if (!contactoAlegraId) {
     const documento = pedido.facturacionNroDoc?.trim()

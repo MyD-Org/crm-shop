@@ -7,7 +7,11 @@ import {
   esProduccion,
   MSG_SIN_CREDENCIALES,
   MSG_SIN_CUENTA,
+  esFacturaCruzada,
+  resolverCuentaFactura,
+  textoMotivoCuentaFactura,
   ultimos4,
+  type SucursalCuentaDato,
 } from "./sucursales-cuenta"
 
 const BASE: TenantConfig = {
@@ -94,5 +98,89 @@ describe("ultimos4", () => {
     expect(ultimos4("abcdefghijkl1234")).toBe("1234")
     expect(ultimos4("corto")).toBeNull()
     expect(ultimos4("")).toBeNull()
+  })
+})
+
+
+// ── Cuenta que factura un pedido (fixture inventado: dos sucursales, cada una con su cuenta) ──
+
+const CUENTA_IGZ = "11111111-1111-4111-8111-111111111111"
+const CUENTA_MDP = "22222222-2222-4222-8222-222222222222"
+const SUCURSALES: SucursalCuentaDato[] = [
+  { slug: "igz", cuentaAlegraId: CUENTA_IGZ },
+  { slug: "mdp", cuentaAlegraId: CUENTA_MDP },
+  { slug: "sin-cuenta", cuentaAlegraId: null },
+]
+const base = { override: null, facturaSucursal: null, sucursales: SUCURSALES, cuentaPrincipalId: CUENTA_IGZ }
+
+describe("resolverCuentaFactura", () => {
+  const casos: { nombre: string; entrada: Parameters<typeof resolverCuentaFactura>[0]; esperado: ReturnType<typeof resolverCuentaFactura> }[] = [
+    {
+      nombre: "por defecto: la cuenta de la sucursal que despacha",
+      entrada: { ...base, sucursalDespacho: "mdp" },
+      esperado: { cuentaId: CUENTA_MDP, motivo: "despacho", sucursal: "mdp" },
+    },
+    {
+      nombre: "la zona fuerza otra sucursal (Misiones factura por Iguazú aunque despache Mar del Plata)",
+      entrada: { ...base, sucursalDespacho: "mdp", facturaSucursal: "igz" },
+      esperado: { cuentaId: CUENTA_IGZ, motivo: "zona", sucursal: "igz" },
+    },
+    {
+      nombre: "el operador manda sobre la zona y sobre la sucursal",
+      entrada: { ...base, sucursalDespacho: "igz", facturaSucursal: "igz", override: CUENTA_MDP },
+      esperado: { cuentaId: CUENTA_MDP, motivo: "override", sucursal: null },
+    },
+    {
+      nombre: "pedido anterior a las sucursales: cuenta principal",
+      entrada: { ...base, sucursalDespacho: null },
+      esperado: { cuentaId: CUENTA_IGZ, motivo: "principal", sucursal: null },
+    },
+    {
+      nombre: "la sucursal que despacha no tiene cuenta: no se cae a otra en silencio",
+      entrada: { ...base, sucursalDespacho: "sin-cuenta" },
+      esperado: { cuentaId: null, motivo: "sin_cuenta", sucursal: "sin-cuenta" },
+    },
+    {
+      nombre: "la zona apunta a una sucursal sin cuenta: sin cuenta (no cae al despacho)",
+      entrada: { ...base, sucursalDespacho: "mdp", facturaSucursal: "sin-cuenta" },
+      esperado: { cuentaId: null, motivo: "sin_cuenta", sucursal: "sin-cuenta" },
+    },
+    {
+      nombre: "sucursal desconocida (dada de baja): sin cuenta",
+      entrada: { ...base, sucursalDespacho: "borrada" },
+      esperado: { cuentaId: null, motivo: "sin_cuenta", sucursal: "borrada" },
+    },
+    {
+      nombre: "sin sucursal y sin cuenta principal: sin cuenta",
+      entrada: { ...base, sucursalDespacho: null, cuentaPrincipalId: null },
+      esperado: { cuentaId: null, motivo: "sin_cuenta", sucursal: null },
+    },
+  ]
+  for (const c of casos) it(c.nombre, () => expect(resolverCuentaFactura(c.entrada)).toEqual(c.esperado))
+})
+
+describe("esFacturaCruzada", () => {
+  const e = { sucursales: SUCURSALES, cuentaPrincipalId: CUENTA_IGZ }
+  it("misma cuenta que la sucursal que despacha: no es cruzada", () => {
+    expect(esFacturaCruzada({ ...e, cuentaFacturaId: CUENTA_MDP, sucursalDespacho: "mdp" })).toBe(false)
+  })
+  it("otra cuenta: es cruzada (despacha Mar del Plata, factura Iguazú)", () => {
+    expect(esFacturaCruzada({ ...e, cuentaFacturaId: CUENTA_IGZ, sucursalDespacho: "mdp" })).toBe(true)
+  })
+  it("pedido sin sucursal: se compara contra la cuenta principal", () => {
+    expect(esFacturaCruzada({ ...e, cuentaFacturaId: CUENTA_IGZ, sucursalDespacho: null })).toBe(false)
+    expect(esFacturaCruzada({ ...e, cuentaFacturaId: CUENTA_MDP, sucursalDespacho: null })).toBe(true)
+  })
+  it("sin cuenta de facturación o despacho sin cuenta: no se puede afirmar, false", () => {
+    expect(esFacturaCruzada({ ...e, cuentaFacturaId: null, sucursalDespacho: "mdp" })).toBe(false)
+    expect(esFacturaCruzada({ ...e, cuentaFacturaId: CUENTA_IGZ, sucursalDespacho: "sin-cuenta" })).toBe(false)
+  })
+})
+
+describe("textoMotivoCuentaFactura", () => {
+  it("explica el motivo en usted", () => {
+    expect(textoMotivoCuentaFactura("zona", "Misiones")).toBe("Por zona Misiones")
+    expect(textoMotivoCuentaFactura("despacho")).toBe("Sucursal que despacha")
+    expect(textoMotivoCuentaFactura("sin_cuenta")).toMatch(/no tiene una cuenta/)
   })
 })

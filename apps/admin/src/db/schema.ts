@@ -1069,3 +1069,53 @@ export const catalogStockSucursal = pgTable(
     }).onDelete("cascade"),
   ],
 )
+
+// ── Cuenta de Alegra que factura cada pedido (change `sucursales-igz-mdp`, rebanada D, lote 3) ──
+//
+// Una fila por pedido cuando el operador eligió otra cuenta o cuando se emitió una factura. El
+// DEFAULT (cuenta de la sucursal que despacha, o la de la zona si la regla lo fuerza) NO se guarda:
+// se calcula (`resolverCuentaFactura`). `order_id` referencia `shop.orders.id` SIN FK (otro
+// esquema, dueño Shop): esta tabla es del CRM a propósito para no pedirle una columna al Shop.
+//
+//  - `cuenta_override_id` + `override_*`: la elección del operador y su auditoría (quién, cuándo y
+//    la cuenta que había antes; NULL = era el default). El historial del pedido no admite tipos de
+//    evento nuevos (CHECK del Shop), por eso la auditoría vive acá.
+//  - `factura_cuenta_id` / `factura_cruzada`: la cuenta con la que SE EMITIÓ la factura y si difiere
+//    de la sucursal que despacha (la reserva de stock sigue en la que despacha, rebanada B). Se
+//    limpian al desvincular la factura.
+//
+// `shop_app` NO tiene permiso sobre esta tabla (rebanada B decide si necesita `factura_cruzada`).
+export const pedidoFacturaCuenta = pgTable(
+  "pedido_factura_cuenta",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    orderId: uuid("order_id").notNull(),
+    cuentaOverrideId: uuid("cuenta_override_id"),
+    overridePor: text("override_por"),
+    overridePorNombre: text("override_por_nombre"),
+    overrideEn: timestamp("override_en", { withTimezone: true }),
+    overrideAnteriorId: uuid("override_anterior_id"),
+    facturaCuentaId: uuid("factura_cuenta_id"),
+    facturaCruzada: boolean("factura_cruzada").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "pfc_pk", columns: [t.tenantId, t.orderId] }),
+    foreignKey({
+      name: "pfc_override_fk",
+      columns: [t.tenantId, t.cuentaOverrideId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
+    foreignKey({
+      name: "pfc_anterior_fk",
+      columns: [t.tenantId, t.overrideAnteriorId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
+    foreignKey({
+      name: "pfc_factura_fk",
+      columns: [t.tenantId, t.facturaCuentaId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
+  ],
+)

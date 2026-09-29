@@ -73,3 +73,91 @@ export function configParaSucursalSinCuenta(base: TenantConfig, slugSucursal: st
 export function ultimos4(token: string): string | null {
   return token.length >= 12 ? token.slice(-4) : null
 }
+
+// ── Cuenta que factura un pedido (rebanada D, lote 3; design D5/D6) ──────────────────────────────
+//
+// Precedencia: (1) la cuenta que el operador eligió en el pedido; (2) la de la sucursal que
+// `regla.facturaSucursal` fuerza (zona Misiones → Iguazú); (3) la de la sucursal que despacha
+// (`orders.sucursal`). Un pedido anterior a las sucursales (sin `sucursal`) factura con la cuenta
+// principal. Si la sucursal que corresponde no tiene cuenta, NO se cae a otra en silencio: se
+// devuelve `sin_cuenta` para que el operador elija a mano (facturar por la empresa equivocada es
+// un problema fiscal, no un detalle).
+
+export interface SucursalCuentaDato {
+  slug: string
+  cuentaAlegraId: string | null
+}
+
+export type MotivoCuentaFactura = "override" | "zona" | "despacho" | "principal" | "sin_cuenta"
+
+export interface ResolucionCuentaFactura {
+  cuentaId: string | null
+  motivo: MotivoCuentaFactura
+  /** Sucursal que aportó la cuenta (la de la zona o la que despacha); null si fue el override o la principal. */
+  sucursal: string | null
+}
+
+export interface EntradaCuentaFactura {
+  /** `pedido_factura_cuenta.cuenta_override_id`. */
+  override: string | null
+  /** `orders.sucursal_regla.facturaSucursal` (slug) o null. */
+  facturaSucursal: string | null
+  /** `orders.sucursal` (slug) o null (pedido anterior a las sucursales). */
+  sucursalDespacho: string | null
+  sucursales: SucursalCuentaDato[]
+  cuentaPrincipalId: string | null
+}
+
+const cuentaDe = (slug: string, sucursales: SucursalCuentaDato[]) =>
+  sucursales.find((s) => s.slug === slug)?.cuentaAlegraId ?? null
+
+export function resolverCuentaFactura(e: EntradaCuentaFactura): ResolucionCuentaFactura {
+  if (e.override) return { cuentaId: e.override, motivo: "override", sucursal: null }
+  if (e.facturaSucursal) {
+    const cuentaId = cuentaDe(e.facturaSucursal, e.sucursales)
+    return cuentaId
+      ? { cuentaId, motivo: "zona", sucursal: e.facturaSucursal }
+      : { cuentaId: null, motivo: "sin_cuenta", sucursal: e.facturaSucursal }
+  }
+  if (e.sucursalDespacho) {
+    const cuentaId = cuentaDe(e.sucursalDespacho, e.sucursales)
+    return cuentaId
+      ? { cuentaId, motivo: "despacho", sucursal: e.sucursalDespacho }
+      : { cuentaId: null, motivo: "sin_cuenta", sucursal: e.sucursalDespacho }
+  }
+  return e.cuentaPrincipalId
+    ? { cuentaId: e.cuentaPrincipalId, motivo: "principal", sucursal: null }
+    : { cuentaId: null, motivo: "sin_cuenta", sucursal: null }
+}
+
+/**
+ * ¿La cuenta que factura es distinta de la de la sucursal que despacha? (venta entre empresas: el
+ * stock lo descuenta la que despacha y la reserva sigue ahí). Sin cuenta en alguno de los dos lados
+ * no se puede afirmar que sea cruzada: false.
+ */
+export function esFacturaCruzada(e: {
+  cuentaFacturaId: string | null
+  sucursalDespacho: string | null
+  sucursales: SucursalCuentaDato[]
+  cuentaPrincipalId: string | null
+}): boolean {
+  if (!e.cuentaFacturaId) return false
+  const cuentaDespacho = e.sucursalDespacho ? cuentaDe(e.sucursalDespacho, e.sucursales) : e.cuentaPrincipalId
+  return !!cuentaDespacho && cuentaDespacho !== e.cuentaFacturaId
+}
+
+/** Por qué se ofrece esa cuenta, en usted. `provincia` = nombre legible si el motivo es la zona. */
+export function textoMotivoCuentaFactura(motivo: MotivoCuentaFactura, provincia?: string | null): string {
+  switch (motivo) {
+    case "override":
+      return "Elegida por un operador para este pedido"
+    case "zona":
+      return provincia ? `Por zona ${provincia}` : "Por la zona del pedido"
+    case "despacho":
+      return "Sucursal que despacha"
+    case "principal":
+      return "Cuenta principal (pedido anterior a las sucursales)"
+    default:
+      return "La sucursal no tiene una cuenta de Alegra asignada"
+  }
+}

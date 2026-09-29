@@ -7,6 +7,7 @@ import { motivoError } from "./alegra-webhook-comun"
 import type { EventoStock } from "./alegra-stock-webhook"
 import { marcarItemInactivo, upsertProductos } from "./catalog-products-repo"
 import { avisarShop } from "./aviso-shop"
+import { partirIdDeCola, refrescarItemDeCuenta } from "./alegra-stock-cuenta"
 
 // Cola de ítems a re-leer de Alegra (tabla alegra_item_refresh) y su drenador.
 //
@@ -22,6 +23,9 @@ import { avisarShop } from "./aviso-shop"
 // - Al terminar, si hubo cambios (ítems leídos o dados de baja), avisa al Shop UNA vez por
 //   drenaje para que descarte su caché del catálogo (lib/aviso-shop.ts). Best-effort: un fallo
 //   del aviso no cambia el resultado del drenaje.
+// - Cuentas secundarias (change `sucursales-igz-mdp`, D2): sus ítems entran a la MISMA cola con el
+//   id `<slug>:<id_en_cuenta>` (el formato del `alegra_id` sintético) y el drenador los lee de su
+//   cuenta con sus credenciales. Un id numérico sin ":" es siempre de la principal.
 // - Logs: tenant y conteos. Nunca datos de Alegra.
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0]
@@ -240,16 +244,27 @@ export async function drenarTenant(
           }
           const leidoAt = new Date()
           try {
-            const producto = await getItemParaEspejo(config, f.alegraId, {
-              reintentos429: REINTENTOS_429,
-              onRequest: () => r.requests++,
-            })
-            if (producto) {
-              await upsertProductos(tenantId, [producto], { leidoAt, leidoPor: "webhook" })
-              r.leidos++
+            if (partirIdDeCola(f.alegraId)) {
+              // Ítem de una cuenta SECUNDARIA (id `<slug>:<id>`): se lee de SU cuenta, con SUS
+              // credenciales (alegra-stock-cuenta.ts). La principal nunca lo consulta.
+              const res = await refrescarItemDeCuenta(config, f.alegraId, leidoAt, {
+                reintentos429: REINTENTOS_429,
+                onRequest: () => r.requests++,
+              })
+              if (res === "baja") r.inactivos++
+              else if (res !== "ignorado") r.leidos++
             } else {
-              await marcarItemInactivo(tenantId, f.alegraId, leidoAt)
-              r.inactivos++
+              const producto = await getItemParaEspejo(config, f.alegraId, {
+                reintentos429: REINTENTOS_429,
+                onRequest: () => r.requests++,
+              })
+              if (producto) {
+                await upsertProductos(tenantId, [producto], { leidoAt, leidoPor: "webhook" })
+                r.leidos++
+              } else {
+                await marcarItemInactivo(tenantId, f.alegraId, leidoAt)
+                r.inactivos++
+              }
             }
             await cerrarLeida(tenantId, f.alegraId, leidoAt)
           } catch (err) {

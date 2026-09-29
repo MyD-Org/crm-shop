@@ -12,6 +12,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  foreignKey,
   customType,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core"
@@ -896,3 +897,78 @@ export const paymentConfigVersions = pgTable("payment_config_versions", {
     .references(() => tenants.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+// ── Sucursales y zonas (change `sucursales-igz-mdp`, rebanada A) ───────────────────────────
+//
+// La sucursal es la unidad comercial (zona, retiro, reserva); no se confunde con la cuenta de
+// Alegra que factura (esa relación llega en la rebanada D). Todos los valores (direcciones,
+// WhatsApp, horarios) se cargan por el admin: la migración crea solo estructura. El Shop lee
+// estas tablas con `shop_app` (GRANT por columna en la migración 0041).
+//
+// Drift que vive SOLO en SQL: el CHECK del slug (`^[a-z0-9-]{2,20}$`) y los GRANTs.
+export const sucursales = pgTable(
+  "sucursales",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    // Estable e inmutable: `shop.orders.sucursal` la guarda como texto, sin FK entre esquemas.
+    slug: text("slug").notNull(),
+    nombre: text("nombre").notNull(),
+    direccion: text("direccion").notNull().default(""),
+    ciudad: text("ciudad").notNull().default(""),
+    provincia: text("provincia").notNull().default(""),
+    whatsapp: text("whatsapp").notNull().default(""),
+    horario: text("horario").notNull().default(""),
+    aceptaRetiro: boolean("acepta_retiro").notNull().default(true),
+    aceptaEnvio: boolean("acepta_envio").notNull().default(true),
+    // Ciudades a las que envía esta sucursal; vacío = toda su zona.
+    envioCiudades: text("envio_ciudades").array().notNull().default(sql`'{}'::text[]`),
+    orden: integer("orden").notNull().default(0),
+    // Baja lógica: nunca se borra una sucursal que algún pedido usa.
+    activa: boolean("activa").notNull().default(true),
+    // Una por tenant: destino de las provincias sin zona.
+    predeterminada: boolean("predeterminada").notNull().default(false),
+    // Una por tenant: la de la cuenta de Alegra maestra del catálogo.
+    maestra: boolean("maestra").notNull().default(false),
+    // Reservada por si una sola cuenta de Alegra sirve a dos sucursales (no se usa todavía).
+    depositoAlegraId: text("deposito_alegra_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // UNIQUE completo (no parcial): lo necesitan las FK compuestas de `zonas`.
+    uniqueIndex("sucursales_tenant_slug_uniq").on(t.tenantId, t.slug),
+    uniqueIndex("sucursales_predeterminada_uniq").on(t.tenantId).where(sql`${t.predeterminada}`),
+    uniqueIndex("sucursales_maestra_uniq").on(t.tenantId).where(sql`${t.maestra}`),
+  ],
+)
+
+// Zona = provincia -> sucursal. Una fila por provincia y tenant; sin fila, rige la
+// predeterminada. `provinciaClave` es el nombre normalizado (mayúsculas/tildes/espacios).
+export const zonas = pgTable(
+  "zonas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    provinciaClave: text("provincia_clave").notNull(),
+    provincia: text("provincia").notNull(),
+    sucursal: text("sucursal").notNull(),
+    // Sucursal cuya cuenta factura las ventas de esta zona, si difiere de la que despacha.
+    facturaSucursal: text("factura_sucursal"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("zonas_tenant_provincia_uniq").on(t.tenantId, t.provinciaClave),
+    foreignKey({
+      name: "zonas_sucursal_fk",
+      columns: [t.tenantId, t.sucursal],
+      foreignColumns: [sucursales.tenantId, sucursales.slug],
+    }),
+    foreignKey({
+      name: "zonas_factura_sucursal_fk",
+      columns: [t.tenantId, t.facturaSucursal],
+      foreignColumns: [sucursales.tenantId, sucursales.slug],
+    }),
+  ],
+)

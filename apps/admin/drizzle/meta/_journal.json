@@ -288,6 +288,13 @@
       "when": 1790296192849,
       "tag": "0040_catalogo_ficha_tecnica",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790716913749,
+      "tag": "0041_sucursales_zonas",
+      "breakpoints": true
     }
   ]
 }

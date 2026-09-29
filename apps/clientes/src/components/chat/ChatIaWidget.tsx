@@ -22,6 +22,43 @@ async function pedirToken(): Promise<string> {
 }
 
 /**
+ * El widget manda `Authorization: Bearer ` (vacío) si el usuario escribe antes de que su
+ * token llegue, o si el pedido inicial falló, y `createConversation` no reintenta ante un
+ * 401: ai-api responde `missing_session_token` y el chat muestra "la sesión venció" sin que
+ * recargar sirva de nada. Este fetch se asegura de que el pedido lleve un token y, si ai-api
+ * lo rechaza (401), pide uno nuevo y reintenta una vez.
+ */
+let tokenEnCurso: Promise<string> | null = null;
+
+function obtenerToken(renovar = false): Promise<string> {
+  if (renovar || !tokenEnCurso) {
+    const pedido = pedirToken();
+    tokenEnCurso = pedido;
+    // Un fallo no se queda cacheado: el próximo pedido vuelve a intentar.
+    pedido.catch(() => {
+      if (tokenEnCurso === pedido) tokenEnCurso = null;
+    });
+  }
+  return tokenEnCurso;
+}
+
+const conBearer = (init: RequestInit | undefined, token: string): RequestInit => {
+  const headers = new Headers(init?.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  return { ...init, headers };
+};
+
+const tieneToken = (init: RequestInit | undefined) =>
+  (new Headers(init?.headers).get("Authorization") ?? "").replace(/^Bearer\s*/i, "").length > 0;
+
+const fetchConToken: typeof fetch = async (input, init) => {
+  const primero = tieneToken(init) ? init : conBearer(init, await obtenerToken());
+  const res = await fetch(input, primero);
+  if (res.status !== 401) return res;
+  return fetch(input, conBearer(init, await obtenerToken(true)));
+};
+
+/**
  * Lo último que el servidor devolvió para cada id. "Agregar" casi siempre viene
  * justo después de que la card se dibujó, así que en general no hace falta
  * volver a pedir: el carrito igual recotiza todo en /api/carrito/cotizar.
@@ -66,9 +103,11 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
     [addItems, items, router],
   );
 
+  const config = useMemo(() => ({ baseUrl: "/ai-api", agentId, fetchToken: pedirToken, fetch: fetchConToken }), [agentId]);
+
   return (
     <ChatDrawer
-      config={{ baseUrl: "/ai-api", agentId, fetchToken: pedirToken }}
+      config={config}
       branding={{ title: titulo, subtitle: SUBTITULO_CHAT, primaryColor: COLOR_CHAT }}
       labels={{ ...ETIQUETAS_CHAT, headerTitle: titulo }}
       commerce={commerce}

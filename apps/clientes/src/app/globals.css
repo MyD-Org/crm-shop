@@ -198,15 +198,20 @@ body {
 [data-theme="calido-azul"] {
   --color-bg: #f8f8f6;
   --color-surface: #ffffff;
-  --color-elevated: #e9f1fa;
+  /* relleno neutro (miniaturas, hovers, pistas): crema "papel" que sigue al
+     fondo del sitio, NO el celeste de marca. El tinte azul queda sólo en los
+     *-soft (chips, badges, avisos). Antes valía #e9f1fa = accent-soft y todo
+     el sitio se veía lavado. */
+  --color-elevated: #f2f0eb;
   --color-border: rgba(28, 39, 51, 0.1);
   /* anillo de foco: sólido (ver el mismo cambio y su porqué en el tema
      "calido" más arriba). */
   --color-ring: #1e5aa8;
   --color-text: #1c2733;
-  /* mismo tono, oscurecido a ≥4,5:1 (ver "calido"). */
-  --color-muted: #666e77;
-  --color-subtle: #626d7a;
+  /* mismo tono, oscurecido a ≥4,5:1 contra bg y elevated (ver "calido"):
+     5:1 y 5,1:1 sobre elevated. */
+  --color-muted: #5f6770;
+  --color-subtle: #5c6673;
   --color-primary: #16283f;
   /* acá sí funciona como texto de botón en hover (5,98:1): no hace falta
      oscurecerlo como en "calido". */

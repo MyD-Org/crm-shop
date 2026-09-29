@@ -2,6 +2,7 @@
 
 Monorepo con dos aplicaciones Next.js independientes:
 
+
 | Carpeta | Qué es |
 |---|---|
 | `apps/admin` | CRM: backoffice, portal de clientes (empresas sin tienda) y API para agentes |

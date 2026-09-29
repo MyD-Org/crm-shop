@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { pingShopRevalidarCatalogo, pingShopRevalidarCuotas, PING_TIMEOUT_MS } from "@/lib/shop-revalidar"
+import { pingShopRevalidarCatalogo, pingShopRevalidarCuotas, pingShopRevalidarSucursales, PING_TIMEOUT_MS } from "@/lib/shop-revalidar"
 
 const fetchMock = vi.fn()
 
@@ -126,5 +126,32 @@ describe("pingShopRevalidarCatalogo", () => {
     vi.stubEnv("SHOP_INTERNAL_URL", "")
     await expect(pingShopRevalidarCatalogo()).resolves.toEqual({ propagado: false })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("pingShopRevalidarSucursales", () => {
+  it("pega al endpoint de sucursales con Bearer y sin body; JSON ok → propagado", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    await expect(pingShopRevalidarSucursales()).resolves.toEqual({ propagado: true })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe("https://shop.test/api/internal/sucursales/revalidar")
+    expect(init.method).toBe("POST")
+    expect(init.body).toBeUndefined()
+    expect(new Headers(init.headers).get("authorization")).toBe("Bearer s3cr3t")
+  })
+
+  it("best-effort: error de red o 404 (ruta del Shop todavía sin desplegar) no tiran", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"))
+    await expect(pingShopRevalidarSucursales()).resolves.toEqual({ propagado: false })
+    fetchMock.mockResolvedValue(new Response("not found", { status: 404 }))
+    await expect(pingShopRevalidarSucursales()).resolves.toEqual({ propagado: false })
+  })
+
+  it("200 con HTML (cortina del gate) → no propagado y el warn lleva la etiqueta", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    fetchMock.mockResolvedValue(new Response("<!doctype html>", { status: 200, headers: { "content-type": "text/html" } }))
+    await expect(pingShopRevalidarSucursales()).resolves.toEqual({ propagado: false })
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[sucursales]"))
   })
 })

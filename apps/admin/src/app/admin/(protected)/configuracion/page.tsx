@@ -9,6 +9,7 @@ import { ConfiguracionShell } from "@/components/admin/ConfiguracionShell"
 import { normalizeSchedule, normalizeExceptions } from "@/lib/schedule"
 import { roleRank } from "@/lib/roles"
 import { listarEscalones, listarProveedores, toEscalonDto, toProveedorDto } from "@/lib/cuotas-repo"
+import { listarSucursales, listarZonas, toSucursalDto, toZonaDto } from "@/lib/sucursales-repo"
 import { obtenerTasasMercadoPago, type TasasMP } from "@/lib/mp-tasas"
 
 export const dynamic = "force-dynamic"
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic"
 // Página accesible a admin y superadmin. Los tabs se filtran adentro:
 // - Horarios → admin+superadmin.
 // - Catálogo → superadmin-only (es data de plataforma, ver src/lib/roles.ts).
+// - Sucursales y ventas → admin+superadmin.
 // - Medios de pago / Cuotas → admin+superadmin. Las tasas de Mercado Pago (MP_PUBLIC_KEY) se
 //   consultan acá con caché de 1 h; si MP falla la página carga igual con un aviso.
 export default async function ConfiguracionPage() {
@@ -51,7 +53,7 @@ export default async function ConfiguracionPage() {
   // Un COUNT agrupado en SQL, no una query por lista trayendo TODOS los ids para contarlos
   // en JS (con miles de ítems eso traía miles de filas solo para mostrar un número).
   const listIds = lists.map((l) => l.id)
-  const [counts, [tenant], proveedores, escalones, tasasMP] = await Promise.all([
+  const [counts, [tenant], proveedores, escalones, tasasMP, sucursalesFilas, zonasFilas] = await Promise.all([
     listIds.length
       ? db
           .select({ priceListId: catalogItems.priceListId, count: count() })
@@ -73,6 +75,8 @@ export default async function ConfiguracionPage() {
     isAdminPlus
       ? obtenerTasasMercadoPago({ publicKey: process.env.MP_PUBLIC_KEY }).catch((): TasasMP => ({ estado: "error" }))
       : Promise.resolve<TasasMP>({ estado: "sin_clave" }),
+    isAdminPlus ? listarSucursales(session.tenantId) : Promise.resolve([]),
+    isAdminPlus ? listarZonas(session.tenantId) : Promise.resolve([]),
   ])
   const countMap = Object.fromEntries(counts.map((c) => [c.priceListId, c.count]))
 
@@ -105,12 +109,15 @@ export default async function ConfiguracionPage() {
         showCatalog={isSuperadmin}
         showReceipts={isAdminPlus}
         showCuotas={isAdminPlus}
+        showSucursales={isAdminPlus}
         initialLists={initialLists}
         initialPaymentConditions={initialPaymentConditions}
         initialSchedule={initialSchedule}
         initialReceiptsEmail={tenant?.receiptsEmail ?? ""}
         initialProveedores={proveedores.map(toProveedorDto)}
         initialEscalones={escalones.map(toEscalonDto)}
+        initialSucursales={sucursalesFilas.map(toSucursalDto)}
+        initialZonas={zonasFilas.map(toZonaDto)}
         tasasMP={tasasMP}
       />
     </div>

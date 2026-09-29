@@ -820,6 +820,31 @@ export async function listAllItems(config: TenantConfig): Promise<AlegraProduct[
   return fetchAllPages(config, "/items", mapRawItem, { order_field: "id", order_direction: "ASC" })
 }
 
+export type ResultadoPruebaAlegra =
+  | { ok: true }
+  | { ok: false; motivo: "credenciales" | "limite" | "error"; mensaje: string }
+
+/**
+ * Prueba de conexión de una cuenta: UNA llamada de solo lectura (`GET /items?limit=1`), sin
+ * reintentos largos por 429. Nunca lanza: devuelve el motivo en usted para mostrar en pantalla
+ * (el detalle crudo de Alegra no viaja al cliente). En mock no sale a la red.
+ */
+export async function probarConexionAlegra(config: TenantConfig): Promise<ResultadoPruebaAlegra> {
+  if (config.alegraMock) return { ok: true }
+  try {
+    await alegraFetch(config, "/items", { limit: "1", start: "0" }, undefined, { reintentos429: 1 })
+    return { ok: true }
+  } catch (err) {
+    if (err instanceof AlegraRateLimitError) {
+      return { ok: false, motivo: "limite", mensaje: "Alegra está limitando las consultas. Inténtelo nuevamente en unos minutos." }
+    }
+    if (err instanceof AlegraHttpError && (err.status === 401 || err.status === 403)) {
+      return { ok: false, motivo: "credenciales", mensaje: "Alegra rechazó las credenciales. Verifique el correo y el token." }
+    }
+    return { ok: false, motivo: "error", mensaje: "No pudimos conectarnos con Alegra. Inténtelo nuevamente." }
+  }
+}
+
 /** Precio/stock EN VIVO de ítems puntuales (momento decisivo: checkout, presupuesto del bot). */
 export async function getItemsLive(config: TenantConfig, alegraIds: string[]): Promise<AlegraProduct[]> {
   const ids = [...new Set(alegraIds)].filter(Boolean)

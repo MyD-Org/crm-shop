@@ -259,9 +259,20 @@ export const catalogProducts = pgTable(
     alegraLeidoAt: timestamp("alegra_leido_at", { withTimezone: true }),
     /** Quién hizo esa lectura: 'sync' | 'webhook'. */
     leidoPor: text("leido_por"),
+    /**
+     * Cuenta de Alegra de la que sale la fila (change `sucursales-igz-mdp`, rebanada D, catálogo
+     * unión). NULL = cuenta PRINCIPAL del tenant (todas las filas de hoy). Una fila con `cuentaId`
+     * es un producto que vive SOLO en esa cuenta secundaria. `stock` = stock de la cuenta de origen.
+     */
+    cuentaId: uuid("cuenta_id").references((): AnyPgColumn => alegraCuentas.id),
+    /** Id del ítem en SU cuenta de origen. NULL = igual a `alegraId` (filas de la principal). */
+    alegraIdCuenta: text("alegra_id_cuenta"),
+    /** Si otra fila absorbió a esta (mismo código dado de alta en la principal): su `alegraId`. */
+    reemplazadoPorAlegraId: text("reemplazado_por_alegra_id"),
   },
   (t) => [
     uniqueIndex("cp_tenant_alegra").on(t.tenantId, t.alegraId),
+    index("cp_tenant_cuenta").on(t.tenantId, t.cuentaId),
     index("cp_tenant_code").on(t.tenantId, t.code),
     index("cp_tenant_category").on(t.tenantId, t.categoryAlegraId),
   ],
@@ -280,6 +291,8 @@ export const catalogSyncLog = pgTable(
     error: text("error"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /** Cuenta que sincronizó esta corrida. NULL = la principal (change `sucursales-igz-mdp`, D). */
+    cuentaId: uuid("cuenta_id").references((): AnyPgColumn => alegraCuentas.id),
   },
   (t) => [index("csl_tenant_started").on(t.tenantId, t.startedAt)],
 )
@@ -932,10 +945,19 @@ export const sucursales = pgTable(
     maestra: boolean("maestra").notNull().default(false),
     // Reservada por si una sola cuenta de Alegra sirve a dos sucursales (no se usa todavía).
     depositoAlegraId: text("deposito_alegra_id"),
+    // Cuenta de Alegra que factura y de la que se sincroniza el stock de esta sucursal (rebanada
+    // D). NULL = sin asignar. FK compuesta (tenant_id, cuenta_alegra_id): no cruza tenants. NO la
+    // lee el Shop (GRANT por columna de 0041).
+    cuentaAlegraId: uuid("cuenta_alegra_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    foreignKey({
+      name: "sucursales_cuenta_alegra_fk",
+      columns: [t.tenantId, t.cuentaAlegraId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
     // UNIQUE completo (no parcial): lo necesitan las FK compuestas de `zonas`.
     uniqueIndex("sucursales_tenant_slug_uniq").on(t.tenantId, t.slug),
     uniqueIndex("sucursales_predeterminada_uniq").on(t.tenantId).where(sql`${t.predeterminada}`),
@@ -970,5 +992,75 @@ export const zonas = pgTable(
       columns: [t.tenantId, t.facturaSucursal],
       foreignColumns: [sucursales.tenantId, sucursales.slug],
     }),
+  ],
+)
+
+// ── Cuentas de Alegra y stock por sucursal (change `sucursales-igz-mdp`, rebanada D) ───────
+//
+// La sucursal es la unidad comercial; la CUENTA de Alegra es la unidad contable (credenciales,
+// CUIT, sync). `sucursales.cuenta_alegra_id` las une (N:1).
+//
+// La cuenta PRINCIPAL (`principal = true`, una por tenant, creada por la migración 0042) NO
+// guarda credenciales: reutiliza las de `tenants` (`configParaCuenta`), así no hay dos copias del
+// token. Las secundarias guardan email/token acá; la API NUNCA devuelve el token y `shop_app` no
+// tiene ningún permiso sobre esta tabla. (Cifrado en reposo: pendiente, igual que `tenants`.)
+//
+// Drift que vive SOLO en SQL: el CHECK del slug (`^[a-z0-9-]{2,12}$`, entra en el `alegra_id`
+// sintético `<slug>:<id>` de los productos solo-secundaria), el índice único parcial de
+// `principal` y los GRANTs.
+export const alegraCuentas = pgTable(
+  "alegra_cuentas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    // Inmutable una vez creada.
+    slug: text("slug").notNull(),
+    nombre: text("nombre").notNull(),
+    // Solo dígitos (11), validado con dígito verificador en la app. '' = sin cargar.
+    cuit: text("cuit").notNull().default(""),
+    alegraEmail: text("alegra_email").notNull().default(""),
+    alegraToken: text("alegra_token").notNull().default(""),
+    alegraMock: boolean("alegra_mock").notNull().default(false),
+    // La que manda en los productos repetidos. Una por tenant.
+    principal: boolean("principal").notNull().default(false),
+    activa: boolean("activa").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("alegra_cuentas_tenant_slug_uniq").on(t.tenantId, t.slug),
+    // Lo necesita la FK compuesta de `sucursales`.
+    uniqueIndex("alegra_cuentas_tenant_id_uniq").on(t.tenantId, t.id),
+    uniqueIndex("alegra_cuentas_principal_uniq").on(t.tenantId).where(sql`${t.principal}`),
+  ],
+)
+
+// Stock de cada producto en cada sucursal (una fila por producto × sucursal). `alegraId` es el
+// `alegra_id` de la fila de `catalog_products` (real o sintético `<slug>:<id>`); `itemIdCuenta`
+// es el id del ítem en la cuenta de ESA sucursal (pareo). Fila ausente = 0 solo para ítems
+// inventariables. El Shop lee (tenant_id, sucursal, alegra_id, stock, leido_at), sin `item_id_cuenta`.
+//
+// Drift que vive SOLO en SQL: CHECK de `origen` y GRANT por columna.
+export const catalogStockSucursal = pgTable(
+  "catalog_stock_sucursal",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    sucursal: text("sucursal").notNull(),
+    alegraId: text("alegra_id").notNull(),
+    itemIdCuenta: text("item_id_cuenta"),
+    stock: numeric("stock").notNull().default("0"),
+    // 'sync' | 'webhook' | 'factura' | 'manual' ('manual' = par forzado desde el admin; el sync no lo pisa)
+    origen: text("origen").notNull(),
+    leidoAt: timestamp("leido_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "css_pk", columns: [t.tenantId, t.sucursal, t.alegraId] }),
+    uniqueIndex("css_sucursal_item_uniq").on(t.tenantId, t.sucursal, t.itemIdCuenta).where(sql`${t.itemIdCuenta} is not null`),
+    foreignKey({
+      name: "css_sucursal_fk",
+      columns: [t.tenantId, t.sucursal],
+      foreignColumns: [sucursales.tenantId, sucursales.slug],
+    }).onDelete("cascade"),
   ],
 )

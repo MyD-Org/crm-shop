@@ -1,6 +1,6 @@
 import { authAgentTenantRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
-import { getItemsLive } from "@/lib/alegra"
+import { getItemsLiveDelCatalogo } from "@/lib/alegra-live-catalogo"
 
 // GET /api/agent/prices?ids=it-1,it-2
 // Devuelve precio/stock EN VIVO de Alegra para los productos indicados (por alegraId). Lo usa la
@@ -16,7 +16,8 @@ export async function GET(req: Request) {
     const ids = (url.searchParams.get("ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean)
     if (!ids.length) return Response.json({ error: "ids es requerido" }, { status: 400 })
 
-    const items = await getItemsLive(tenant, ids)
+    // Resuelve el id real y las credenciales de la cuenta de origen (ids sintéticos de filas solo-secundaria).
+    const items = await getItemsLiveDelCatalogo(tenant, ids)
 
     return Response.json({
       products: items.map((it) => ({

@@ -293,6 +293,11 @@ export const catalogSyncLog = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     /** Cuenta que sincronizó esta corrida. NULL = la principal (change `sucursales-igz-mdp`, D). */
     cuentaId: uuid("cuenta_id").references((): AnyPgColumn => alegraCuentas.id),
+    /**
+     * Detalle de la corrida de una cuenta secundaria (0043): pareados, solo-secundaria y los
+     * "Códigos a revisar". Forma en `ResumenSync` (lib/alegra-sync-cuenta.ts). NULL en la principal.
+     */
+    resumen: jsonb("resumen"),
   },
   (t) => [index("csl_tenant_started").on(t.tenantId, t.startedAt)],
 )

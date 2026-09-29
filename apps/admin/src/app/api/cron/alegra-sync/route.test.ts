@@ -24,8 +24,8 @@ vi.mock("@/lib/tenants", () => ({
   },
 }))
 
-vi.mock("@/lib/alegra-sync", () => ({
-  syncCatalog: async (cfg: TenantConfig, trigger: string, opts?: { aceptarBaja?: boolean }) => {
+vi.mock("@/lib/alegra-sync-tenant", () => ({
+  syncTenant: async (cfg: TenantConfig, trigger: string, opts?: { aceptarBaja?: boolean }) => {
     state.llamadas.push({ tenant: cfg.id, trigger, aceptarBaja: opts?.aceptarBaja })
     return state.parcialEn === cfg.id
       ? { ok: true, parcial: true, motivo: "items 5 < base 100 (umbral 95 %)", itemsSynced: 5, categoriesSynced: 3 }

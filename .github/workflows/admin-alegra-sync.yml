@@ -80,7 +80,9 @@ jobs:
           # Resumen para logs públicos: solo identificador de tenant, ok, parcial, conteos numéricos
           # y el motivo de una corrida parcial (sólo números). Nunca el campo "error" (puede traer
           # detalle interno de Alegra o del proveedor).
-          jq -c '.tenants[] | {tenant, ok, parcial, motivo, itemsSynced, categoriesSynced}' response.json \
+          # `cuentas` (solo en tenants con cuentas secundarias) trae el mismo resumen por cuenta:
+          # la principal corre primero y después cada secundaria, todo en esta misma invocación.
+          jq -c '.tenants[] | {tenant, ok, parcial, motivo, itemsSynced, categoriesSynced, cuentas: [(.cuentas // [])[] | {cuenta, ok, parcial, motivo, itemsSynced, pareados, soloSecundaria, duplicados, sinCodigo}]}' response.json \
             || echo "(respuesta no resumible)"
 
           if [ "$http_code" != "200" ]; then

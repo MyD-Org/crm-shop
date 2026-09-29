@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
 import {
   catalogCategories,
@@ -360,7 +360,12 @@ export interface FiltrosAdmin {
   stock?: "con" | "sin"
   /** uuid de un tag. */
   tag?: string
+  /** Cuenta de Alegra de origen: "principal" (`cuenta_id` NULL) o el slug de una cuenta secundaria. */
+  cuenta?: string
 }
+
+/** Slug de una cuenta secundaria (el mismo formato que valida `alegra_cuentas`). */
+export const RE_SLUG_CUENTA = /^[a-z0-9-]{2,12}$/
 
 /** Ids de la categoría y todo su subárbol (tope de 3 niveles, pero el CTE no depende de eso). */
 const subarbolSql = (tenantId: string, categoriaId: string): SQL => sql`
@@ -430,6 +435,16 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
 
   if (f.stock === "con") cond.push(sql`coalesce(p.stock, 0) > 0`)
   else if (f.stock === "sin") cond.push(sql`coalesce(p.stock, 0) <= 0`)
+
+  // Catálogo unión (`sucursales-igz-mdp`): una fila que otra absorbió (`reemplazado_por_alegra_id`)
+  // ya no es un producto del catálogo —su código lo lleva otra fila—: no se lista. Sigue en la
+  // base porque los pedidos históricos apuntan a su id.
+  cond.push(sql`p.reemplazado_por_alegra_id IS NULL`)
+
+  if (f.cuenta === "principal") cond.push(sql`p.cuenta_id IS NULL`)
+  else if (f.cuenta && RE_SLUG_CUENTA.test(f.cuenta)) {
+    cond.push(sql`p.cuenta_id = (SELECT ac.id FROM alegra_cuentas ac WHERE ac.tenant_id = p.tenant_id AND ac.slug = ${f.cuenta})`)
+  }
 
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (
@@ -829,6 +844,12 @@ export interface ProductoAdmin {
   fichaTecnica: FichaTecnicaOverlay | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
+  /**
+   * Cuenta de Alegra de la que sale la fila cuando NO es la principal (producto que existe solo en
+   * esa cuenta). `sucursal` = nombre de la sucursal que usa esa cuenta, para el badge "Solo en …".
+   * null = cuenta principal.
+   */
+  cuenta: { slug: string; nombre: string; sucursal: string | null } | null
 }
 
 export type OrdenListado = "nombre" | "nombre-desc" | "actualizado"
@@ -858,6 +879,9 @@ interface FilaListadoCruda {
   sku: string
   tag_ids: string[] | null
   alegra_status: string | null
+  cuenta_slug: string | null
+  cuenta_nombre: string | null
+  cuenta_sucursal: string | null
 }
 
 const iso = (v: Date | string | null): string | null =>
@@ -888,6 +912,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     actualizadoEn: iso(f.updated_at),
     // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
     motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
+    cuenta: f.cuenta_slug ? { slug: f.cuenta_slug, nombre: f.cuenta_nombre ?? f.cuenta_slug, sucursal: f.cuenta_sucursal } : null,
   }
 }
 
@@ -896,6 +921,8 @@ const columnasListado = sql`
   p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
   o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.updated_at,
   c.nombre AS categoria_nombre,
+  ac.slug AS cuenta_slug, ac.nombre AS cuenta_nombre,
+  (SELECT s.nombre FROM sucursales s WHERE s.tenant_id = p.tenant_id AND s.cuenta_alegra_id = p.cuenta_id ORDER BY s.orden, s.slug LIMIT 1) AS cuenta_sucursal,
   ${nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)} AS nombre_efectivo,
   ${skuEfectivoSql(sql`p.code`, sql`p.name`)} AS sku,
   coalesce(
@@ -908,6 +935,7 @@ const desdeListado = sql`
   FROM ${catalogProducts} p
   LEFT JOIN ${catalogOverlay} o ON (o.tenant_id = p.tenant_id AND o.alegra_id = p.alegra_id)
   LEFT JOIN ${shopCategories} c ON (c.id = o.categoria_id AND c.tenant_id = p.tenant_id)
+  LEFT JOIN alegra_cuentas ac ON (ac.id = p.cuenta_id AND ac.tenant_id = p.tenant_id)
 `
 
 /**
@@ -1003,7 +1031,8 @@ export async function ultimaSyncAlegra(tenantId: string): Promise<string | null>
   const [row] = await getDb()
     .select({ finishedAt: catalogSyncLog.finishedAt })
     .from(catalogSyncLog)
-    .where(and(eq(catalogSyncLog.tenantId, tenantId), eq(catalogSyncLog.status, "ok")))
+    // Sólo la cuenta principal: la de cada secundaria se ve en "Revisión" del catálogo.
+    .where(and(eq(catalogSyncLog.tenantId, tenantId), isNull(catalogSyncLog.cuentaId), eq(catalogSyncLog.status, "ok")))
     .orderBy(desc(catalogSyncLog.startedAt))
     .limit(1)
   return row?.finishedAt ? row.finishedAt.toISOString() : null

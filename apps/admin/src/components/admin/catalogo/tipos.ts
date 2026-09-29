@@ -53,6 +53,15 @@ export interface ProductoDto {
   fichaTecnica: FichaDto | null
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
+  /** Cuenta de Alegra de origen cuando NO es la principal (producto solo de esa cuenta). null = principal. */
+  cuenta: { slug: string; nombre: string; sucursal: string | null } | null
+}
+
+/** Cuentas de Alegra del tenant, para la columna/filtro "Cuenta de origen" (solo con más de una). */
+export interface CuentaOrigenDto {
+  slug: string
+  nombre: string
+  principal: boolean
 }
 
 export interface CategoriaDto {
@@ -102,6 +111,8 @@ export interface Filtros {
   precio?: "con" | "sin"
   stock?: "con" | "sin"
   tag?: string
+  /** "principal" o el slug de una cuenta secundaria. */
+  cuenta?: string
 }
 
 export type Seleccion =

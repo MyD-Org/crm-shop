@@ -1,5 +1,6 @@
 import {
   esUuid,
+  RE_SLUG_CUENTA,
   LIMITE_LISTADO_DEFAULT,
   LIMITE_LISTADO_MAX,
   type FiltrosAdmin,
@@ -94,6 +95,12 @@ export function parsearQueryListado(url: URL): QueryListado | Response {
     filtros.tag = tag
   }
 
+  const cuenta = p.get("cuenta")
+  if (cuenta !== null) {
+    if (cuenta !== "principal" && !RE_SLUG_CUENTA.test(cuenta)) return invalidResponse("La cuenta de origen es inválida", "cuenta")
+    filtros.cuenta = cuenta
+  }
+
   const startParam = p.get("start")
   const start = startParam === null ? 0 : Number(startParam)
   if (!Number.isInteger(start) || start < 0) return invalidResponse("La paginación es inválida", "start")
@@ -139,7 +146,7 @@ export function parsearSeleccion(body: unknown): Seleccion | Response {
     // masiva "sobre todo lo que coincide" tiene que resolver exactamente el mismo conjunto.
     const params = new URLSearchParams()
     if (esObjeto(s.filtros)) {
-      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "tag"]) {
+      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "tag", "cuenta"]) {
         const valor = s.filtros[clave]
         if (typeof valor === "string" && valor !== "") params.set(clave, valor)
       }

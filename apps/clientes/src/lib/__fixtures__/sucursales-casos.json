@@ -1,0 +1,539 @@
+{
+  "_comentario": "Casos compartidos con apps/admin (copia idéntica). Datos ficticios. Si cambia esta copia, cambia la del CRM.",
+  "datasets": {
+    "base": {
+      "sucursales": [
+        {
+          "slug": "sede-a",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [
+            "Puerto Iguazú",
+            "El Dorado"
+          ],
+          "orden": 1,
+          "activa": true,
+          "predeterminada": false
+        },
+        {
+          "slug": "sede-b",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [],
+          "orden": 2,
+          "activa": true,
+          "predeterminada": true
+        }
+      ],
+      "zonas": [
+        {
+          "id": "zona-misiones",
+          "provinciaClave": "misiones",
+          "sucursal": "sede-a",
+          "facturaSucursal": null
+        },
+        {
+          "id": "zona-tucuman",
+          "provinciaClave": "tucuman",
+          "sucursal": "sede-b",
+          "facturaSucursal": "sede-a"
+        }
+      ]
+    },
+    "zona_inactiva": {
+      "sucursales": [
+        {
+          "slug": "sede-a",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [
+            "Puerto Iguazú"
+          ],
+          "orden": 1,
+          "activa": false,
+          "predeterminada": false
+        },
+        {
+          "slug": "sede-b",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [],
+          "orden": 2,
+          "activa": true,
+          "predeterminada": true
+        }
+      ],
+      "zonas": [
+        {
+          "id": "zona-misiones",
+          "provinciaClave": "misiones",
+          "sucursal": "sede-a",
+          "facturaSucursal": null
+        },
+        {
+          "id": "zona-tucuman",
+          "provinciaClave": "tucuman",
+          "sucursal": "sede-b",
+          "facturaSucursal": "sede-a"
+        }
+      ]
+    },
+    "sin_activas": {
+      "sucursales": [
+        {
+          "slug": "sede-a",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [],
+          "orden": 1,
+          "activa": false,
+          "predeterminada": false
+        },
+        {
+          "slug": "sede-b",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [],
+          "orden": 2,
+          "activa": false,
+          "predeterminada": true
+        }
+      ],
+      "zonas": [
+        {
+          "id": "zona-misiones",
+          "provinciaClave": "misiones",
+          "sucursal": "sede-a",
+          "facturaSucursal": null
+        },
+        {
+          "id": "zona-tucuman",
+          "provinciaClave": "tucuman",
+          "sucursal": "sede-b",
+          "facturaSucursal": "sede-a"
+        }
+      ]
+    },
+    "predeterminada_inactiva": {
+      "sucursales": [
+        {
+          "slug": "sede-a",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [],
+          "orden": 1,
+          "activa": true,
+          "predeterminada": false
+        },
+        {
+          "slug": "sede-b",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [],
+          "orden": 2,
+          "activa": false,
+          "predeterminada": true
+        }
+      ],
+      "zonas": []
+    },
+    "sin_retiro_ni_envio": {
+      "sucursales": [
+        {
+          "slug": "sede-a",
+          "aceptaRetiro": false,
+          "aceptaEnvio": false,
+          "envioCiudades": [],
+          "orden": 1,
+          "activa": true,
+          "predeterminada": false
+        },
+        {
+          "slug": "sede-b",
+          "aceptaRetiro": true,
+          "aceptaEnvio": true,
+          "envioCiudades": [],
+          "orden": 2,
+          "activa": true,
+          "predeterminada": true
+        }
+      ],
+      "zonas": [
+        {
+          "id": "zona-misiones",
+          "provinciaClave": "misiones",
+          "sucursal": "sede-a",
+          "facturaSucursal": null
+        },
+        {
+          "id": "zona-tucuman",
+          "provinciaClave": "tucuman",
+          "sucursal": "sede-b",
+          "facturaSucursal": "sede-a"
+        }
+      ]
+    }
+  },
+  "resolverZona": [
+    {
+      "caso": "Misiones tiene zona",
+      "dataset": "base",
+      "provincia": "Misiones",
+      "esperado": {
+        "sucursal": "sede-a",
+        "zonaId": "zona-misiones",
+        "motivo": "zona",
+        "regla": "zona:misiones"
+      }
+    },
+    {
+      "caso": "Variantes de escritura (minúsculas)",
+      "dataset": "base",
+      "provincia": "misiones",
+      "esperado": {
+        "sucursal": "sede-a",
+        "zonaId": "zona-misiones",
+        "motivo": "zona",
+        "regla": "zona:misiones"
+      }
+    },
+    {
+      "caso": "Variantes de escritura (espacios)",
+      "dataset": "base",
+      "provincia": " Misiones ",
+      "esperado": {
+        "sucursal": "sede-a",
+        "zonaId": "zona-misiones",
+        "motivo": "zona",
+        "regla": "zona:misiones"
+      }
+    },
+    {
+      "caso": "Tilde en la provincia",
+      "dataset": "base",
+      "provincia": "Tucumán",
+      "esperado": {
+        "sucursal": "sede-b",
+        "zonaId": "zona-tucuman",
+        "motivo": "zona",
+        "regla": "zona:tucuman"
+      }
+    },
+    {
+      "caso": "Provincia sin regla va al default",
+      "dataset": "base",
+      "provincia": "Córdoba",
+      "esperado": {
+        "sucursal": "sede-b",
+        "zonaId": null,
+        "motivo": "predeterminada",
+        "regla": "zona:default"
+      }
+    },
+    {
+      "caso": "Sin provincia va al default",
+      "dataset": "base",
+      "provincia": null,
+      "esperado": {
+        "sucursal": "sede-b",
+        "zonaId": null,
+        "motivo": "predeterminada",
+        "regla": "zona:default"
+      }
+    },
+    {
+      "caso": "Provincia vacía va al default",
+      "dataset": "base",
+      "provincia": "  ",
+      "esperado": {
+        "sucursal": "sede-b",
+        "zonaId": null,
+        "motivo": "predeterminada",
+        "regla": "zona:default"
+      }
+    },
+    {
+      "caso": "Zona con sucursal inactiva cae al default activo",
+      "dataset": "zona_inactiva",
+      "provincia": "Misiones",
+      "esperado": {
+        "sucursal": "sede-b",
+        "zonaId": "zona-misiones",
+        "motivo": "fallback_inactiva",
+        "regla": "zona:fallback_inactiva"
+      }
+    },
+    {
+      "caso": "Ninguna sucursal activa falla explícito (zona)",
+      "dataset": "sin_activas",
+      "provincia": "Misiones",
+      "esperado": {
+        "error": "sin_sucursal_activa"
+      }
+    },
+    {
+      "caso": "Ninguna sucursal activa falla explícito (default)",
+      "dataset": "sin_activas",
+      "provincia": "Córdoba",
+      "esperado": {
+        "error": "sin_sucursal_activa"
+      }
+    },
+    {
+      "caso": "Default inactivo cae a la primera activa",
+      "dataset": "predeterminada_inactiva",
+      "provincia": "Córdoba",
+      "esperado": {
+        "sucursal": "sede-a",
+        "zonaId": null,
+        "motivo": "fallback_inactiva",
+        "regla": "zona:fallback_inactiva"
+      }
+    }
+  ],
+  "asignarSucursal": [
+    {
+      "caso": "Envío a Misiones",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú"
+      },
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        }
+      }
+    },
+    {
+      "caso": "Envío a Misiones, ciudad con otra grafía",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "misiones",
+        "ciudad": "eldorado"
+      },
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        }
+      }
+    },
+    {
+      "caso": "Envío a Misiones, ciudad fuera de la lista de la sucursal",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Posadas"
+      },
+      "esperado": {
+        "error": "sin_envio"
+      }
+    },
+    {
+      "caso": "Envío a Misiones sin ciudad y con lista de ciudades",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones"
+      },
+      "esperado": {
+        "error": "sin_envio"
+      }
+    },
+    {
+      "caso": "Envío a provincia sin regla",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Córdoba",
+        "ciudad": "Córdoba"
+      },
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "zona:default",
+          "motivo": "predeterminada",
+          "provincia": "cordoba",
+          "zonaId": null,
+          "sucursalZona": "sede-b",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        }
+      }
+    },
+    {
+      "caso": "Envío con la cuenta que factura forzada por la zona",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Tucumán",
+        "ciudad": "San Miguel"
+      },
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "zona:tucuman",
+          "motivo": "zona",
+          "provincia": "tucuman",
+          "zonaId": "zona-tucuman",
+          "sucursalZona": "sede-b",
+          "facturaSucursal": "sede-a",
+          "lineasATraer": []
+        }
+      }
+    },
+    {
+      "caso": "Envío con la sucursal de la zona inactiva",
+      "dataset": "zona_inactiva",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú"
+      },
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "zona:fallback_inactiva",
+          "motivo": "fallback_inactiva",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-b",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        }
+      }
+    },
+    {
+      "caso": "Envío sin ninguna sucursal activa",
+      "dataset": "sin_activas",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú"
+      },
+      "esperado": {
+        "error": "sin_sucursal_activa"
+      }
+    },
+    {
+      "caso": "Envío a una sucursal que no acepta envío",
+      "dataset": "sin_retiro_ni_envio",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú"
+      },
+      "esperado": {
+        "error": "sin_envio"
+      }
+    },
+    {
+      "caso": "Retiro ignora la zona",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "provincia": "Misiones",
+        "sucursalRetiro": "sede-b"
+      },
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "retiro:sede-b",
+          "motivo": "retiro_local",
+          "provincia": null,
+          "zonaId": null,
+          "sucursalZona": "sede-b",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        }
+      }
+    },
+    {
+      "caso": "Retiro sin provincia",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-a"
+      },
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "retiro:sede-a",
+          "motivo": "retiro_local",
+          "provincia": null,
+          "zonaId": null,
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        }
+      }
+    },
+    {
+      "caso": "Retiro en local que no acepta retiro",
+      "dataset": "sin_retiro_ni_envio",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-a"
+      },
+      "esperado": {
+        "error": "sin_retiro"
+      }
+    },
+    {
+      "caso": "Retiro en local inactivo",
+      "dataset": "zona_inactiva",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-a"
+      },
+      "esperado": {
+        "error": "sin_retiro"
+      }
+    },
+    {
+      "caso": "Retiro sin elegir local",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "retiro"
+      },
+      "esperado": {
+        "error": "sin_retiro"
+      }
+    },
+    {
+      "caso": "Retiro en un local que no existe",
+      "dataset": "base",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "no-existe"
+      },
+      "esperado": {
+        "error": "sin_retiro"
+      }
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
+import type { ReglaAplicada } from "../lib/sucursales";
 
 /**
  * Todas las tablas del Shop viven en el esquema `shop` de la base del CRM.
@@ -439,6 +440,20 @@ export const orders = shop.table(
     facturaNumero: text("factura_numero"),
     facturaFecha: date("factura_fecha", { mode: "string" }),
     facturaTotal: numeric("factura_total", { precision: 14, scale: 2 }),
+
+    // --- Sucursal asignada (migración 0023, change `sucursales-igz-mdp`) ---
+    /**
+     * Slug de la sucursal (`public.sucursales.slug` del CRM) que atiende el pedido. Sin FK: es otro
+     * esquema y `shop_app` no tiene REFERENCES sobre `public` (mismo criterio que `tenantId`).
+     * NULL = pedido anterior a las sucursales, o creado con el flag `sucursales` apagado.
+     */
+    sucursal: text("sucursal"),
+    /**
+     * Snapshot de la regla que asignó la sucursal (`ReglaAplicada` de `lib/sucursales.ts`),
+     * congelado al crear el pedido: cambiar las zonas después no lo altera.
+     */
+    sucursalRegla: jsonb("sucursal_regla").$type<ReglaAplicada>(),
+    sucursalAsignadaEn: timestamp("sucursal_asignada_en", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -3,6 +3,8 @@
 import { useState } from "react"
 import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Table, Textarea, useToast } from "@myd-org/ui"
 import type { SucursalDto, ZonaDto } from "@/lib/sucursales-repo"
+import type { CuentaDto, CuentasYAsignaciones } from "@/lib/alegra-cuentas-repo"
+import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/alegra-cuentas-validacion"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
 
@@ -14,9 +16,12 @@ import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib
 //
 // Los datos reales (direcciones, WhatsApp, horarios) se cargan acá, nunca en el repo.
 
+// Cuenta de Alegra por sucursal (rebanada D): el token es write-only (el servidor nunca lo
+// devuelve; solo informa si está configurado y sus últimos 4 caracteres).
 interface Props {
   initialSucursales: SucursalDto[]
   initialZonas: ZonaDto[]
+  initialCuentas: CuentasYAsignaciones
 }
 
 type ApiError = { error?: string; code?: string; campo?: string }
@@ -42,6 +47,26 @@ type SucursalForm = {
 }
 
 type ZonaForm = { provincia: string; sucursal: string; facturaSucursal: string }
+
+type CuentaForm = {
+  sucursal: SucursalDto
+  modo: ModoCuenta
+  email: string
+  token: string
+  cuit: string
+  // Ya tiene una cuenta propia guardada: el token vacío conserva el guardado.
+  tieneCuentaPropia: boolean
+  tokenConfigurado: boolean
+  tokenUltimos4: string | null
+}
+
+type Prueba = { ok: boolean; mensaje: string }
+
+const MODOS_CUENTA = [
+  { value: "ninguna", label: "Sin cuenta asignada" },
+  { value: "principal", label: "Cuenta principal del negocio" },
+  { value: "propia", label: "Cuenta propia de la sucursal" },
+]
 
 const SIN_PROVINCIA = "__sin_provincia"
 const SIN_FACTURA = "__sin_factura"
@@ -128,9 +153,13 @@ function CheckboxLabel(props: { id: string; checked: boolean; onChange: (v: bool
 
 const porOrden = (a: SucursalDto, b: SucursalDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
 
-export function SucursalesTab({ initialSucursales, initialZonas }: Props) {
+export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas }: Props) {
   const [sucursales, setSucursales] = useState(initialSucursales)
   const [zonas, setZonas] = useState(initialZonas)
+  const [cuentas, setCuentas] = useState(initialCuentas)
+  const [cuentaForm, setCuentaForm] = useState<CuentaForm | null>(null)
+  const [prueba, setPrueba] = useState<Prueba | null>(null)
+  const [probando, setProbando] = useState(false)
   const [sucursalForm, setSucursalForm] = useState<SucursalForm | null>(null)
   const [zonaForm, setZonaForm] = useState<ZonaForm | null>(null)
   const [borrarSucursal, setBorrarSucursal] = useState<SucursalDto | null>(null)
@@ -138,6 +167,92 @@ export function SucursalesTab({ initialSucursales, initialZonas }: Props) {
   const [errores, setErrores] = useState<Errores>({})
   const [guardando, setGuardando] = useState(false)
   const { toast } = useToast()
+
+  const cuentaDe = (slugSucursal: string): CuentaDto | undefined => {
+    const slugCuenta = cuentas.asignaciones[slugSucursal]
+    return slugCuenta ? cuentas.cuentas.find((c) => c.slug === slugCuenta) : undefined
+  }
+
+  const abrirCuenta = (s: SucursalDto) => {
+    const c = cuentaDe(s.slug)
+    setErrores({})
+    setPrueba(null)
+    setCuentaForm({
+      sucursal: s,
+      modo: !c ? "ninguna" : c.principal ? "principal" : "propia",
+      email: c && !c.principal ? c.email : "",
+      token: "",
+      cuit: c ? formatearCuit(c.cuit) : "",
+      tieneCuentaPropia: Boolean(c && !c.principal),
+      tokenConfigurado: Boolean(c && !c.principal && c.tokenConfigurado),
+      tokenUltimos4: c && !c.principal ? c.tokenUltimos4 : null,
+    })
+  }
+
+  function cuerpoCuenta(f: CuentaForm) {
+    return {
+      modo: f.modo,
+      ...(f.modo === "ninguna" ? {} : { cuit: f.cuit }),
+      ...(f.modo === "propia" ? { email: f.email, token: f.token } : {}),
+    }
+  }
+
+  async function recargarCuentas() {
+    try {
+      const { res, json } = await enviar("/api/admin/alegra-cuentas", "GET")
+      if (res.ok && json) setCuentas(json as unknown as CuentasYAsignaciones)
+    } catch {
+      // Queda como estaba: el guardado ya se hizo.
+    }
+  }
+
+  async function guardarCuenta() {
+    if (!cuentaForm) return
+    setErrores({})
+    const cuerpo = cuerpoCuenta(cuentaForm)
+    const v = validarCuentaEntrada(cuerpo, { esAlta: !cuentaForm.tieneCuentaPropia })
+    if (!v.ok) return setErrores({ [v.campo === "body" ? "general" : v.campo]: v.error })
+
+    setGuardando(true)
+    try {
+      const { res, json } = await enviar(`/api/admin/sucursales/${cuentaForm.sucursal.slug}/cuenta-alegra`, "PUT", cuerpo)
+      if (!res.ok || !json) return manejarError(res, json)
+      await recargarCuentas()
+      setCuentaForm(null)
+      toast({ title: "Cuenta de Alegra guardada", tone: "success" })
+    } catch {
+      setErrores({ general: "Error de conexión. Inténtelo nuevamente." })
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function probarCuenta() {
+    if (!cuentaForm) return
+    setPrueba(null)
+    setProbando(true)
+    try {
+      const propia = cuentaForm.modo === "propia"
+      const { res, json } = await enviar(
+        `/api/admin/sucursales/${cuentaForm.sucursal.slug}/cuenta-alegra/probar`,
+        "POST",
+        propia ? { email: cuentaForm.email, token: cuentaForm.token } : {},
+      )
+      if (!res.ok || !json) {
+        setPrueba({ ok: false, mensaje: json?.error ?? "No pudimos probar la conexión. Inténtelo nuevamente." })
+        return
+      }
+      setPrueba(
+        json.ok === true
+          ? { ok: true, mensaje: "La conexión con Alegra funciona correctamente." }
+          : { ok: false, mensaje: typeof json.mensaje === "string" ? json.mensaje : "No pudimos conectarnos con Alegra." },
+      )
+    } catch {
+      setPrueba({ ok: false, mensaje: "Error de conexión. Inténtelo nuevamente." })
+    } finally {
+      setProbando(false)
+    }
+  }
 
   const nombreDe = (slug: string | null) => (slug ? sucursales.find((s) => s.slug === slug)?.nombre ?? slug : "")
   const predeterminada = sucursales.find((s) => s.predeterminada)
@@ -326,6 +441,16 @@ export function SucursalesTab({ initialSucursales, initialZonas }: Props) {
                 hideBelow: "sm",
               },
               {
+                key: "cuenta",
+                header: "Cuenta de Alegra",
+                render: (s) => {
+                  const c = cuentaDe(s.slug)
+                  if (!c) return <span style={{ color: "var(--ink-soft)" }}>Sin asignar</span>
+                  return c.principal ? "Principal del negocio" : c.nombre
+                },
+                hideBelow: "md",
+              },
+              {
                 key: "modalidad",
                 header: "Retiro / envío",
                 render: (s) => [s.aceptaRetiro ? "Retiro" : null, s.aceptaEnvio ? "Envío" : null].filter(Boolean).join(" y ") || "Ninguno",
@@ -344,6 +469,9 @@ export function SucursalesTab({ initialSucursales, initialZonas }: Props) {
                   <div className="flex gap-1 justify-end">
                     <Button size="sm" variant="ghost" onClick={() => abrirSucursal(desdeDto(s))}>
                       Editar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => abrirCuenta(s)}>
+                      Cuenta de Alegra
                     </Button>
                     {!s.predeterminada && (
                       <Button size="sm" variant="ghost" onClick={() => alternarActiva(s)}>
@@ -575,6 +703,93 @@ export function SucursalesTab({ initialSucursales, initialZonas }: Props) {
                 aria-invalid={Boolean(errores.facturaSucursal)}
               />
             </Field>
+            {errores.general && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.general}</p>}
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={cuentaForm !== null}
+        onOpenChange={(open) => {
+          if (!open) setCuentaForm(null)
+        }}
+        title={cuentaForm ? `Cuenta de Alegra de ${cuentaForm.sucursal.nombre}` : "Cuenta de Alegra"}
+        description="La cuenta define de dónde se toma el stock de la sucursal y por cuál se factura. El token se guarda en el servidor y no se vuelve a mostrar."
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setCuentaForm(null)}>Cancelar</Button>
+            {cuentaForm && cuentaForm.modo !== "ninguna" && (
+              <Button variant="secondary" loading={probando} disabled={probando || guardando} onClick={probarCuenta}>
+                Probar conexión
+              </Button>
+            )}
+            <Button loading={guardando} disabled={guardando} onClick={guardarCuenta}>Guardar</Button>
+          </div>
+        }
+      >
+        {cuentaForm && (
+          <div className="flex flex-col gap-3">
+            <Field label="Cuenta" error={errores.modo}>
+              <Select
+                options={MODOS_CUENTA}
+                value={cuentaForm.modo}
+                onValueChange={(modo) => {
+                  setPrueba(null)
+                  setCuentaForm((f) => (f ? { ...f, modo: modo as ModoCuenta } : f))
+                }}
+                aria-label="Cuenta"
+              />
+            </Field>
+            {cuentaForm.modo === "principal" && (
+              <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                Usa las credenciales de Alegra del negocio, que ya están cargadas en la configuración general.
+              </p>
+            )}
+            {cuentaForm.modo === "propia" && (
+              <>
+                <Field label="Correo de Alegra" error={errores.email}>
+                  <Input
+                    type="email"
+                    autoComplete="off"
+                    value={cuentaForm.email}
+                    onChange={(e) => setCuentaForm((f) => (f ? { ...f, email: e.target.value } : f))}
+                    aria-invalid={Boolean(errores.email)}
+                  />
+                </Field>
+                <Field
+                  label="Token de Alegra"
+                  hint={
+                    cuentaForm.tokenConfigurado
+                      ? `Token configurado${cuentaForm.tokenUltimos4 ? ` (termina en ${cuentaForm.tokenUltimos4})` : ""}. Déjelo vacío para conservarlo.`
+                      : "Se obtiene en Alegra, en la configuración de la cuenta."
+                  }
+                  error={errores.token}
+                >
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    value={cuentaForm.token}
+                    onChange={(e) => setCuentaForm((f) => (f ? { ...f, token: e.target.value } : f))}
+                    aria-invalid={Boolean(errores.token)}
+                  />
+                </Field>
+              </>
+            )}
+            {cuentaForm.modo !== "ninguna" && (
+              <Field label="CUIT" hint="11 dígitos. Es el de la empresa que factura con esta cuenta." error={errores.cuit}>
+                <Input
+                  inputMode="numeric"
+                  value={cuentaForm.cuit}
+                  onChange={(e) => setCuentaForm((f) => (f ? { ...f, cuit: e.target.value } : f))}
+                  aria-invalid={Boolean(errores.cuit)}
+                />
+              </Field>
+            )}
+            {prueba && (
+              <p className="text-sm" role="status" style={{ color: prueba.ok ? "var(--green)" : "var(--red)" }}>
+                {prueba.mensaje}
+              </p>
+            )}
             {errores.general && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.general}</p>}
           </div>
         )}

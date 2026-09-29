@@ -295,6 +295,13 @@
       "when": 1790716913749,
       "tag": "0041_sucursales_zonas",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790720840950,
+      "tag": "0042_alegra_cuentas",
+      "breakpoints": true
     }
   ]
 }

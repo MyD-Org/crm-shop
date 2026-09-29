@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Card, Tabs } from "@myd-org/ui"
 import type { EscalonDto, ProveedorDto } from "@/lib/cuotas-repo"
 import type { SucursalDto, ZonaDto } from "@/lib/sucursales-repo"
+import type { CuentasYAsignaciones } from "@/lib/alegra-cuentas-repo"
 import type { TasasMP } from "@/lib/mp-tasas"
 import { CatalogManager } from "./CatalogManager"
 import { CuotasTab } from "./CuotasTab"
@@ -45,6 +46,7 @@ interface Props {
   initialEscalones: EscalonDto[]
   initialSucursales: SucursalDto[]
   initialZonas: ZonaDto[]
+  initialCuentas: CuentasYAsignaciones
   tasasMP: TasasMP
 }
 
@@ -63,6 +65,7 @@ export function ConfiguracionShell({
   initialEscalones,
   initialSucursales,
   initialZonas,
+  initialCuentas,
   tasasMP,
 }: Props) {
   const [tab, setTab] = useState<Tab>(showCatalog ? "catalogo" : "horarios")
@@ -92,7 +95,7 @@ export function ConfiguracionShell({
       )}
       {tab === "cuotas" && showCuotas && <CuotasTab initialProveedores={initialProveedores} initialEscalones={initialEscalones} tasasMP={tasasMP} />}
       {tab === "sucursales" && showSucursales && (
-        <SucursalesTab initialSucursales={initialSucursales} initialZonas={initialZonas} />
+        <SucursalesTab initialSucursales={initialSucursales} initialZonas={initialZonas} initialCuentas={initialCuentas} />
       )}
       {tab === "horarios" && <ScheduleForm initialSchedule={initialSchedule} />}
     </div>

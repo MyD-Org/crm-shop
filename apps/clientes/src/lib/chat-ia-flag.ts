@@ -14,10 +14,14 @@
  * Vive en Vercel Flags (key `chat-ia`, ver src/flags.ts): se cambia sin redeploy.
  */
 import { chatIaFlag } from "@/flags";
-import { aiApiConfig } from "./ai-api-config";
+import { aiApiConfig, diagnosticoAiApi } from "./ai-api-config";
 
 export async function chatIaHabilitado(): Promise<boolean> {
-  if (!aiApiConfig()) return false;
+  if (!aiApiConfig()) {
+    // TEMPORAL (diagnóstico, revertir): qué variable falta, sin valores.
+    console.warn(`[chat-ia] apagado por config de ai-api: ${JSON.stringify(diagnosticoAiApi())}`);
+    return false;
+  }
   // TEMPORAL (diagnóstico, revertir): en producción el chat se prende sin leer Vercel Flags,
   // para separar "falla la lectura del flag" de "falta config de ai-api". El sitio está detrás
   // del gate de Próximamente. Los tests no tienen VERCEL_ENV y siguen probando el flag.

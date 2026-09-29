@@ -25,6 +25,7 @@ import {
   queryDeFiltros,
   stockDe,
   type CategoriaDto,
+  type CuentaOrigenDto,
   type Filtros,
   type ListadoDto,
   type ProductoDto,
@@ -35,6 +36,10 @@ import {
 interface Props {
   categorias: CategoriaDto[]
   tags: TagDto[]
+  /** Cuentas de Alegra del tenant; con más de una aparece el filtro "Cuenta". */
+  cuentas: CuentaOrigenDto[]
+  /** Búsqueda inicial (viene de "Ver en Productos" de la solapa Revisión). */
+  busquedaInicial?: string
   onTagCreado: (tag: TagDto) => void
   onCambio: () => void
 }
@@ -61,7 +66,7 @@ interface Pendiente {
 const TODOS = "todos"
 
 /** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
-const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag"] as const
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta"] as const
 
 /** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
 function Sku({ sku }: { sku: string }) {
@@ -95,7 +100,7 @@ function Sku({ sku }: { sku: string }) {
   )
 }
 
-export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Props) {
+export function ProductosPanel({ categorias, tags, cuentas, busquedaInicial, onTagCreado, onCambio }: Props) {
   const [filtros, setFiltros] = useState<Filtros>({
     estado: "oculto",
     foto: "con",
@@ -103,7 +108,7 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
     precio: "con",
     stock: "con",
   })
-  const [busqueda, setBusqueda] = useState("")
+  const [busqueda, setBusqueda] = useState(busquedaInicial ?? "")
   const [start, setStart] = useState(0)
   const [datos, setDatos] = useState<ListadoDto | null>(null)
   const [cargando, setCargando] = useState(true)
@@ -210,6 +215,9 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
   const hasta = Math.min(start + items.length, total)
   const seleccionados = todoElFiltro ? total : seleccion.length
 
+  const hayVariasCuentas = cuentas.length > 1
+  const nombreCuentaPrincipal = cuentas.find((c) => c.principal)?.nombre ?? "Principal"
+
   const columns: TableColumn<ProductoDto>[] = [
     {
       key: "producto",
@@ -222,6 +230,11 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
           <div className="text-xs" style={{ color: "var(--ink-faint)" }}>
             <Sku sku={p.sku} />
           </div>
+          {p.cuenta && (
+            <div className="mt-1">
+              <Badge tone="info">Solo en {p.cuenta.sucursal ?? p.cuenta.nombre}</Badge>
+            </div>
+          )}
         </>
       ),
     },
@@ -235,6 +248,20 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
         </span>
       ),
     },
+    ...(hayVariasCuentas
+      ? [
+          {
+            key: "cuenta",
+            header: "Cuenta de origen",
+            hideBelow: "lg",
+            render: (p: ProductoDto) => (
+              <span className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                {p.cuenta ? p.cuenta.nombre : nombreCuentaPrincipal}
+              </span>
+            ),
+          } satisfies TableColumn<ProductoDto>,
+        ]
+      : []),
     {
       key: "precio",
       header: "Precio",
@@ -323,7 +350,7 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <Select
           aria-label="Filtrar por categoría"
           value={filtros.categoria ?? TODOS}
@@ -384,6 +411,18 @@ export function ProductosPanel({ categorias, tags, onTagCreado, onCambio }: Prop
             { value: "sin", label: "Stock: sin stock" },
           ]}
         />
+        {hayVariasCuentas && (
+          <Select
+            aria-label="Filtrar por cuenta de origen"
+            value={filtros.cuenta ?? TODOS}
+            onValueChange={(v) => cambiarFiltro("cuenta", v)}
+            options={[
+              { value: TODOS, label: "Cuenta de origen: todas" },
+              { value: "principal", label: `Cuenta de origen: ${nombreCuentaPrincipal}` },
+              ...cuentas.filter((c) => !c.principal).map((c) => ({ value: c.slug, label: `Cuenta de origen: solo ${c.nombre}` })),
+            ]}
+          />
+        )}
         <Select
           aria-label="Filtrar por etiqueta"
           value={filtros.tag ?? TODOS}

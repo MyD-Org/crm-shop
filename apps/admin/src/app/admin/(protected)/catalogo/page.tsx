@@ -1,4 +1,7 @@
 import { notFound } from "next/navigation"
+import { asc, eq, and } from "drizzle-orm"
+import { getDb } from "@/db"
+import { alegraCuentas } from "@/db/schema"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { listarCategoriasConUso, listarTags } from "@/lib/catalogo-overlay-repo"
 import { basePublicaFotos } from "@/lib/shop-media"
@@ -16,9 +19,15 @@ export default async function CatalogoPage() {
   const guard = await getGuardedAdminSession()
   if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
 
-  const [categorias, tags] = await Promise.all([
+  const [categorias, tags, cuentas] = await Promise.all([
     listarCategoriasConUso(guard.tenantId),
     listarTags(guard.tenantId),
+    // Sólo nombre y slug (nunca credenciales): alcanza para la columna/filtro "Cuenta de origen".
+    getDb()
+      .select({ slug: alegraCuentas.slug, nombre: alegraCuentas.nombre, principal: alegraCuentas.principal })
+      .from(alegraCuentas)
+      .where(and(eq(alegraCuentas.tenantId, guard.tenantId), eq(alegraCuentas.activa, true)))
+      .orderBy(asc(alegraCuentas.slug)),
   ])
 
   // La url se compone acá, al servir: en la base sólo vive la key.
@@ -37,7 +46,7 @@ export default async function CatalogoPage() {
           Qué muestra la tienda: nombres, categorías, etiquetas y publicación
         </p>
       </div>
-      <CatalogoShell initialCategorias={conUrlDeImagen} initialTags={tags} />
+      <CatalogoShell initialCategorias={conUrlDeImagen} initialTags={tags} cuentas={cuentas} />
     </div>
   )
 }

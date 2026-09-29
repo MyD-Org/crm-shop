@@ -197,7 +197,7 @@ export function CatalogoClient({
         <aside
           ref={panelRef}
           onScroll={medirPanel}
-          className={`sticky top-20 hidden max-h-[calc(100dvh-5rem)] w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:block ${
+          className={`sticky top-20 hidden max-h-[calc(100dvh-5rem)] w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-12 [scrollbar-width:none] lg:block ${
             hayMasArriba && hayMasAbajo
               ? "[mask-image:linear-gradient(to_bottom,transparent,black_48px,black_calc(100%-48px),transparent)]"
               : hayMasAbajo

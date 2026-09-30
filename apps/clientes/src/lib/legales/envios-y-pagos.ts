@@ -7,6 +7,7 @@
 import {
   CIUDADES_ENVIO,
   ENTREGA_LABEL,
+  ENVIO_A_COORDINAR_LABEL,
   MINIMO_ENVIO,
   PAGO_LABEL,
   pagosDisponibles,
@@ -30,13 +31,13 @@ export function bloquesEnviosYPagos(ctx: { envio: boolean; pagos: boolean; cuota
         titulo: "Entregas",
         parrafos: [
           `${ENTREGA_LABEL.envio}: disponible para ${listar(CIUDADES_ENVIO)}, en compras desde ${fmtPesosEnteros(MINIMO_ENVIO)} sin impuestos.`,
-          `Para otras localidades, elija «${ENTREGA_LABEL.retiro}» al finalizar la compra y el comercio coordinará la entrega con usted.`,
+          `Para otras localidades, elija «${ENVIO_A_COORDINAR_LABEL}» al finalizar la compra y el comercio coordinará la entrega con usted.`,
         ],
       }
     : {
         titulo: "Entregas",
         parrafos: [
-          `Por el momento, las compras se entregan con la modalidad «${ENTREGA_LABEL.retiro}»: una vez confirmado el pedido, el comercio se comunicará con usted para coordinar.`,
+          `Por el momento, puede elegir «${ENTREGA_LABEL.retiro}» o «${ENVIO_A_COORDINAR_LABEL}»: una vez confirmado el pedido, el comercio se comunicará con usted para coordinar la entrega.`,
         ],
       };
 

@@ -12,7 +12,7 @@ import { getDb } from "@/db";
 import { orderItems, orders } from "@/db/schema";
 import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { enviarEmail } from "./email";
-import { ENTREGA_LABEL, type EntregaTipo } from "./envio";
+import { etiquetaEntrega } from "./envio";
 import { contactoDeSucursal } from "./contacto-pedido-repo";
 import { nombreDelPago } from "./medios-pago";
 import { leerMediosPagoTolerante } from "./medios-pago-repo";
@@ -100,7 +100,7 @@ async function enviarAviso(
       sitioUrl: urlSitioMail(),
       lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
       total: Number(pedido.total),
-      entrega: ENTREGA_LABEL[pedido.entregaTipo as EntregaTipo],
+      entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
       pagoPendienteEnLinea: pedido.pagoMetodo === "mercadopago" && pedido.pagoEstado !== "pagado",
       ...(contacto

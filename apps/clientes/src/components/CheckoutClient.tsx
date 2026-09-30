@@ -39,6 +39,8 @@ import {
 } from "@/lib/facturacion";
 import {
   CIUDADES_ENVIO,
+  ENTREGA_LABEL,
+  ENVIO_A_COORDINAR_LABEL,
   PAGO_LABEL,
   ciudadConEnvio,
   pagosDisponibles,
@@ -238,7 +240,7 @@ interface Props {
   admiteEnvio: boolean;
   /**
    * Flag de envío (src/lib/envio-flag.ts) resuelto en el server. Apagado: sólo
-   * se ofrece el retiro / entrega a coordinar, sin importar `admiteEnvio`.
+   * se ofrecen retiro en local y envío a coordinar, sin importar `admiteEnvio`.
    */
   envioHabilitado: boolean;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
@@ -308,7 +310,11 @@ export function CheckoutClient({
   const [pago, setPago] = useState<PagoMetodo>("transferencia");
   // Con el flag `pedido-a-confirmar`: slug del medio del CRM que eligió el comprador.
   const [medioSlug, setMedioSlug] = useState("");
-  const [entrega, setEntrega] = useState<EntregaTipo>("retiro");
+  // Tres opciones y dos tipos de pedido: "coordinar" es un `envio` sin ciudad ni
+  // dirección (esEnvioACoordinar en src/lib/envio.ts), "domicilio" el envío propio.
+  const [opcionEntrega, setOpcionEntrega] = useState<"retiro" | "domicilio" | "coordinar">("retiro");
+  const entrega: EntregaTipo = opcionEntrega === "retiro" ? "retiro" : "envio";
+  const aDomicilio = opcionEntrega === "domicilio";
   const [localRetiro, setLocalRetiro] = useState(sucursales?.localInicial ?? "");
   const [provinciaEntrega, setProvinciaEntrega] = useState(sucursales?.provinciaInicial ?? "");
   const [ciudad, setCiudad] = useState("");
@@ -371,7 +377,7 @@ export function CheckoutClient({
     !!fiscalCalle &&
     !!fiscalCiudad;
   const [aOtraDireccion, setAOtraDireccion] = useState(false);
-  const usarFiscal = entrega === "envio" && ofrecerFiscal && !aOtraDireccion;
+  const usarFiscal = aDomicilio && ofrecerFiscal && !aOtraDireccion;
   const ciudadEntrega = usarFiscal && fiscalCiudad ? fiscalCiudad : ciudadElegida;
   const direccionEntrega = usarFiscal && fiscalCalle ? fiscalCalle : direccionElegida;
 
@@ -484,7 +490,7 @@ export function CheckoutClient({
 
   const { cotizacion, estado, error, recotizar } = useCotizacion({
     entregaTipo: entrega,
-    ciudad: entrega === "envio" ? ciudadEntrega : undefined,
+    ciudad: aDomicilio ? ciudadEntrega : undefined,
     // Cambiar la provincia (la zona) o la modalidad recotiza: revalida el stock por sucursal.
     provincia: sucursales && entrega === "envio" && provinciaEntrega ? provinciaEntrega : undefined,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
@@ -523,7 +529,7 @@ export function CheckoutClient({
   const contactoCompleto =
     nombre.trim() !== "" && hayTelefonoParaPedido(telefono, facturacion.telefonoAlegra);
   const entregaCompleta =
-    entrega === "retiro" || (ciudadEntrega !== "" && direccionEntrega.trim() !== "");
+    !aDomicilio || (ciudadEntrega !== "" && direccionEntrega.trim() !== "");
   const datosCompletos = contactoCompleto && entregaCompleta;
 
   function continuarDesdeContacto() {
@@ -539,7 +545,7 @@ export function CheckoutClient({
       setErrorPaso("Indique la ciudad y la dirección de entrega.");
       return false;
     }
-    if (entrega === "envio" && cotizacion && !envioDisponible) {
+    if (aDomicilio && cotizacion && !envioDisponible) {
       setErrorPaso("Revise la opción de envío.");
       return false;
     }
@@ -558,7 +564,7 @@ export function CheckoutClient({
     cotizacion.lineas.length > 0 &&
     datosCompletos &&
     facturacionCompleta &&
-    (entrega === "retiro" || envioDisponible) &&
+    (!aDomicilio || envioDisponible) &&
     pasoActual === "pago" &&
     !enviando;
 
@@ -586,8 +592,8 @@ export function CheckoutClient({
           contactoNombre: nombre,
           contactoTelefono: telefono,
           entregaTipo: entrega,
-          entregaCiudad: entrega === "envio" ? ciudadEntrega : undefined,
-          entregaDireccion: entrega === "envio" ? direccionEntrega : undefined,
+          entregaCiudad: aDomicilio ? ciudadEntrega : undefined,
+          entregaDireccion: aDomicilio ? direccionEntrega : undefined,
           pagoMetodo: pagoParaEnviar,
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
@@ -855,21 +861,29 @@ export function CheckoutClient({
   /** Opciones de entrega: en su sección o dentro del paso del domicilio fiscal. */
   const bloqueEntrega = (
     <>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div
+              className={`grid gap-3 ${envioHabilitado && admiteEnvio ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+            >
               <RadioCard
-                selected={entrega === "retiro"}
-                onClick={() => setEntrega("retiro")}
-                title="Retiro en local / a coordinar"
-                description="Retira en el local o coordinamos la entrega con usted"
+                selected={opcionEntrega === "retiro"}
+                onClick={() => setOpcionEntrega("retiro")}
+                title={ENTREGA_LABEL.retiro}
+                description="Retire su pedido en el local que elija"
               />
               {envioHabilitado && admiteEnvio && (
                 <RadioCard
-                  selected={entrega === "envio"}
-                  onClick={() => setEntrega("envio")}
-                  title="Envío a domicilio"
+                  selected={aDomicilio}
+                  onClick={() => setOpcionEntrega("domicilio")}
+                  title={ENTREGA_LABEL.envio}
                   description={`Sin cargo a ${CIUDADES_ENVIO.join(" y ")}`}
                 />
               )}
+              <RadioCard
+                selected={opcionEntrega === "coordinar"}
+                onClick={() => setOpcionEntrega("coordinar")}
+                title={ENVIO_A_COORDINAR_LABEL}
+                description="Un asesor coordina con usted el destino y el costo del envío"
+              />
             </div>
             {sucursales && entrega === "retiro" && sucursales.locales.length > 0 && (
               <div className="mt-4">
@@ -892,20 +906,21 @@ export function CheckoutClient({
               </p>
             )}
 
-            {entrega === "envio" && (
+            {entrega === "envio" && sucursales && (
+              <div className="mt-4">
+                <Field label="Provincia de entrega">
+                  <Select
+                    options={PROVINCIAS_SELECTOR.map((p) => ({ label: p.nombre, value: p.clave }))}
+                    value={provinciaEntrega}
+                    onValueChange={setProvinciaEntrega}
+                    placeholder="Seleccionar provincia"
+                  />
+                </Field>
+              </div>
+            )}
+
+            {aDomicilio && (
               <>
-                {sucursales && (
-                  <div className="mt-4">
-                    <Field label="Provincia de entrega">
-                      <Select
-                        options={PROVINCIAS_SELECTOR.map((p) => ({ label: p.nombre, value: p.clave }))}
-                        value={provinciaEntrega}
-                        onValueChange={setProvinciaEntrega}
-                        placeholder="Seleccionar provincia"
-                      />
-                    </Field>
-                  </div>
-                )}
                 {ofrecerFiscal && (
                   <div className="mt-4 rounded-lg bg-bg p-3 text-sm">
                     {!aOtraDireccion && (
@@ -1283,7 +1298,11 @@ export function CheckoutClient({
             {entrega === "envio" && (
               <div className="flex justify-between">
                 <span className="text-muted">Envío</span>
-                <span className="font-medium text-success">Sin cargo</span>
+                {aDomicilio ? (
+                  <span className="font-medium text-success">Sin cargo</span>
+                ) : (
+                  <span className="font-medium text-muted">A coordinar</span>
+                )}
               </div>
             )}
             <div className="flex justify-between pt-2">
@@ -1325,7 +1344,7 @@ export function CheckoutClient({
                   ? "Revise los productos marcados en rojo."
                   : !datosCompletos
                     ? "Complete todos los campos para continuar."
-                    : entrega === "envio" && !envioDisponible
+                    : aDomicilio && !envioDisponible
                       ? "Revise la opción de envío."
                       : "Confirmando precios y stock…"}
             </p>

@@ -53,9 +53,35 @@ export function ciudadConEnvio(
 export const MINIMO_ENVIO = 100_000;
 
 export const ENTREGA_LABEL: Record<EntregaTipo, string> = {
-  retiro: "Retiro en local / a coordinar",
+  retiro: "Retiro en local",
   envio: "Envío a domicilio",
 };
+
+/** Etiqueta del envío que se coordina con un asesor (sin ciudad ni dirección). */
+export const ENVIO_A_COORDINAR_LABEL = "Envío a coordinar";
+
+/**
+ * "Envío a coordinar" es un `envio` sin ciudad ni dirección: un asesor acuerda
+ * con el cliente el destino y el costo. No depende del flag `envio` ni de la
+ * zona de envío propio (eso es sólo para el envío a domicilio).
+ */
+export function esEnvioACoordinar(
+  tipo: string,
+  ciudad: string | null | undefined,
+  direccion: string | null | undefined,
+): boolean {
+  return tipo === "envio" && !ciudad?.trim() && !direccion?.trim();
+}
+
+/** Etiqueta de la entrega de un pedido ya creado, distinguiendo el envío a coordinar. */
+export function etiquetaEntrega(
+  tipo: string,
+  ciudad?: string | null,
+  direccion?: string | null,
+): string {
+  if (esEnvioACoordinar(tipo, ciudad, direccion)) return ENVIO_A_COORDINAR_LABEL;
+  return ENTREGA_LABEL[tipo as EntregaTipo] ?? tipo;
+}
 
 export const PAGO_LABEL: Record<PagoMetodo, string> = {
   transferencia: "Transferencia bancaria",
@@ -86,7 +112,7 @@ export function evaluarEnvio(
   if (!CIUDADES_ENVIO.includes(ciudad as (typeof CIUDADES_ENVIO)[number])) {
     return {
       disponible: false,
-      motivo: `Solo hacemos envío propio a ${CIUDADES_ENVIO.join(" y ")}. Para el resto del país, elija "Retiro en local / a coordinar" y lo gestionamos con usted.`,
+      motivo: `Solo hacemos envío propio a ${CIUDADES_ENVIO.join(" y ")}. Para el resto del país, elija "${ENVIO_A_COORDINAR_LABEL}" y lo gestionamos con usted.`,
     };
   }
   return { disponible: true };

@@ -3,7 +3,7 @@ import { getArbolCategorias, getCatalogo } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoAgente, facetasDeProductos, limiteBusqueda } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
-import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
+import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
@@ -60,7 +60,8 @@ export async function GET(req: Request) {
     const [{ soloVisibles }, disp, estructurados] = await Promise.all([
       flagsPublicos(),
       dispDelVisitante(),
-      atributosEstructuradosDisponibles(),
+      // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
+      usarAtributosEstructurados(),
     ]);
     const conAtributos = estructurados ? { atributosEstructurados: true } : {};
     let productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp, ...conAtributos });

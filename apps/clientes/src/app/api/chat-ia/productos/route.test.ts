@@ -57,6 +57,22 @@ describe("GET /api/chat-ia/productos", () => {
     expect(idPriceListCliente).not.toHaveBeenCalled();
   });
 
+  it("atributos estructurados sólo con busqueda-ia Y la tabla disponible", async () => {
+    getProductosPorIds.mockResolvedValue(new Map([["1", prod("1")]]));
+    disponibles.mockResolvedValue(true);
+    await pedir("?ids=1");
+    expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], { idPriceList: undefined, soloActivos: true, soloVisibles: false });
+    setFlag("busqueda-ia", true);
+    await pedir("?ids=1");
+    expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], {
+      idPriceList: undefined,
+      soloActivos: true,
+      soloVisibles: false,
+      atributosEstructurados: true,
+    });
+    disponibles.mockResolvedValue(false);
+  });
+
   it("cliente vinculado ⇒ su lista de precios, sacada de la sesión", async () => {
     identidad.mockResolvedValue({ clerkUserId: "u", cliente: { codigocliente: "42" } });
     idPriceListCliente.mockResolvedValue("lista-7");

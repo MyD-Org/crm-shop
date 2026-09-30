@@ -11,8 +11,7 @@ import { envioHabilitado } from "@/lib/envio-flag";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
-import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
-import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
+import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -26,14 +25,13 @@ type Props = { params: Promise<{ id: string }> };
 const productoDe = cache(async (id: string) => {
   // Con el flag `disponibilidad-sucursal`, `disp` (sucursal de la zona) es parte de la clave de la
   // caché y excluye lo oculto en las sucursales que sirven al visitante. Sin flag: undefined.
-  const [{ soloVisibles }, disp, conBusquedaIa] = await Promise.all([
-    flagsPublicos(),
-    dispDelVisitante(),
-    busquedaIaHabilitada(),
-  ]);
   // Tabla "Características" (fichas estructuradas, fase 2): sólo con el flag `busqueda-ia` y con
   // `catalog_atributos` legible; si no, la ficha de siempre (sin la tabla).
-  const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
+  const [{ soloVisibles }, disp, estructurados] = await Promise.all([
+    flagsPublicos(),
+    dispDelVisitante(),
+    usarAtributosEstructurados(),
+  ]);
   return productoPublico(id, soloVisibles, disp, estructurados);
 });
 

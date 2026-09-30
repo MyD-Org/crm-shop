@@ -68,7 +68,17 @@ describe("GET /api/chat-ia/buscar", () => {
     log.mockRestore();
   });
 
-  it("con catalog_atributos disponible pide los atributos y los devuelve compactos", async () => {
+  it("tabla disponible pero flag busqueda-ia apagado ⇒ no pide atributos", async () => {
+    disponibles.mockResolvedValue(true);
+    setFlag("busqueda-ia", false);
+    getCatalogo.mockResolvedValue([producto]);
+    await pedir("?q=lampara&limit=3");
+    expect(getCatalogo).toHaveBeenCalledWith({ busqueda: "lampara", limit: 3, soloVisibles: true });
+    disponibles.mockResolvedValue(false);
+  });
+
+  it("con busqueda-ia y catalog_atributos disponible pide los atributos y los devuelve compactos", async () => {
+    setFlag("busqueda-ia", true);
     disponibles.mockResolvedValueOnce(true);
     getCatalogo.mockResolvedValue([{ ...producto, atributosEstructurados: { potencia_w: { n: 9, t: null }, zocalo: { n: null, t: "e27" } } }]);
     const res = await pedir("?q=lampara&limit=3");

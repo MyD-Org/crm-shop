@@ -5,7 +5,7 @@ import { getProductosPorIds } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoResuelto, MAX_IDS_RESOLVER } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
-import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
+import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
@@ -50,7 +50,8 @@ export async function GET(req: Request) {
       flagsPublicos(),
       dispDelVisitante(),
       identidad.cliente ? idPriceListCliente(identidad.cliente.codigocliente) : Promise.resolve(undefined),
-      atributosEstructuradosDisponibles(),
+      // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
+      usarAtributosEstructurados(),
     ]);
     const productos = await getProductosPorIds(ids, {
       idPriceList: idPriceList ?? undefined,

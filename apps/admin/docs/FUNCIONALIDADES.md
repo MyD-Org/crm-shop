@@ -434,6 +434,7 @@ cualquier otro objeto de `public` le da 42501:
 | `client_commercial_conditions` | tabla | SELECT | 0032 |
 | `notification_log` | tabla | SELECT, UPDATE sólo `read_at` | 0032 |
 | `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
+| `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0047 |
 
 Sin permiso, a propósito: las tablas base `catalog_products`, `catalog_categories` y
 `alegra_contacts` (el Shop las ve sólo por sus vistas), `contactos_acceso_facturacion` (guarda
@@ -449,7 +450,8 @@ función), el de `drizzle/0035_catalog_products_shop.sql`, el de
 el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y el de
 `drizzle/0038_grants_overlay_shop.sql` (overlay y categorías de la tienda) y el de
 `drizzle/0039_contactos_acceso_facturacion.sql` (SELECT de la vista recreada con
-`acceso_facturacion`). Todos son
+`acceso_facturacion`) y el de `drizzle/0047_catalog_atributos.sql` (SELECT por columna de
+`catalog_atributos`; lo verifica `test/integration/catalog-atributos.integration.test.ts`). Todos son
 idempotentes. Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
 `test/integration/shop-contacto-write-through.integration.test.ts`,

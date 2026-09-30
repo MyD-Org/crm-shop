@@ -1176,3 +1176,30 @@ export const pedidoFacturaCuenta = pgTable(
     }),
   ],
 )
+
+// ── Atributos técnicos estructurados del catálogo (fase 2 del catálogo asistido, subproyecto 5) ──
+//
+// Una fila por (producto, clave). `alegraId` es el de `catalog_products` (sin FK: igual que el
+// overlay, puede preceder al espejo). Las numéricas van en `valorNum` (potencia_w, temperatura_k,
+// flujo_lm, tension_v, ip) y las categóricas en `valorTexto` (tono, zocalo; tension_v de rango
+// guarda además "85-265" en `valorTexto`).
+//
+// Precedencia de `fuente`: manual > pdf > nombre. Una escritura NUNCA pisa una fila de mayor
+// precedencia (lo hace cumplir el upsert de `lib/catalogo-atributos-repo.ts` en SQL).
+//
+// Drift que vive SOLO en SQL (como 0046): los CHECK de `clave` y `fuente` y el GRANT por columna
+// a `shop_app` (tenant_id, alegra_id, clave, valor_num, valor_texto). Migración 0047.
+export const catalogAtributos = pgTable(
+  "catalog_atributos",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraId: text("alegra_id").notNull(),
+    clave: text("clave").notNull(),
+    valorNum: numeric("valor_num"),
+    valorTexto: text("valor_texto"),
+    // 'nombre' | 'pdf' | 'manual'
+    fuente: text("fuente").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: "catalog_atributos_pk", columns: [t.tenantId, t.alegraId, t.clave] })],
+)

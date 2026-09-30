@@ -17,7 +17,8 @@
     "db:seed": "tsx --env-file-if-exists=.env.local src/db/seed.ts",
     "db:seed-tenant": "tsx --env-file-if-exists=.env.local src/db/seed-tenant.ts",
     "tenant:rename": "tsx --env-file-if-exists=.env.local scripts/rename-tenant.ts",
-    "alegra:smoke": "tsx --env-file-if-exists=.env.local scripts/alegra-smoke.ts"
+    "alegra:smoke": "tsx --env-file-if-exists=.env.local scripts/alegra-smoke.ts",
+    "catalogo:atributos-backfill": "tsx --env-file-if-exists=.env.local scripts/backfill-catalogo-atributos.ts"
   },
   "dependencies": {
     "@myd-org/ai-widget": "file:vendor/myd-org-ai-widget-0.1.12.tgz",

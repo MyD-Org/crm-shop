@@ -7,6 +7,7 @@ import { upsertProductos } from "./catalog-products-repo"
 import { abrirCorrida, baseDeCorrida, evaluarCorrida, MSG_SYNC_EN_CURSO } from "./alegra-sync-guarda"
 import { absorberSoloSecundaria, escribirStockPrincipal } from "./catalogo-union-repo"
 import { avisarShop } from "./aviso-shop"
+import { sincronizarAtributosDeNombre } from "./catalogo-atributos-repo"
 
 // Sincroniza el catálogo de Alegra a la cache local (upsert por alegraId). Lo que no se ve en la
 // corrida se marca 'inactive' (stale), solo si el run completó OK. Deja bitácora en catalog_sync_log.
@@ -96,6 +97,10 @@ export async function syncCatalog(
     // lib/catalog-products-repo.ts).
     const items = await listAllItems(config)
     await upsertProductos(config.id, items, { leidoAt: runStart, leidoPor: "sync" })
+
+    // Atributos técnicos del nombre (potencia, kelvin, zócalo…) → catalog_atributos, fuente
+    // 'nombre'. Tolerante: si falla (p. ej. la migración 0047 sin aplicar) la sync sigue igual.
+    await sincronizarAtributosDeNombre(config.id, items, "sync")
 
     // Stock de la principal por sucursal (para las sucursales que usan su cuenta).
     await escribirStockPrincipal(config.id)

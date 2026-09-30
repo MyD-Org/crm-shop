@@ -330,6 +330,13 @@
       "when": 1790830000000,
       "tag": "0046_medios_pago_shop",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790840000000,
+      "tag": "0047_catalog_atributos",
+      "breakpoints": true
     }
   ]
 }

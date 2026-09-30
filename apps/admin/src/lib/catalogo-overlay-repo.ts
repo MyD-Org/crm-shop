@@ -12,6 +12,7 @@ import {
   shopTags,
 } from "@/db/schema"
 import {
+  MSG_SUCURSAL_INVALIDA,
   motivoNoPublicado,
   nombreEfectivoSql,
   slugify,
@@ -26,6 +27,7 @@ import {
   type NodoCategoria,
   type TagValido,
 } from "@/lib/catalogo-overlay"
+import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
 
 // Acceso a datos del catálogo comercial. TODO filtra por el `tenantId` del guard, nunca por uno
 // que venga del body: un id de otro tenant se comporta igual que uno inexistente (not_found).
@@ -626,6 +628,45 @@ export async function masivaOverlay(
     SELECT ${tenantId}, s.alegra_id, ${valor}, ${updatedBy}, now() FROM (${sel}) s
     ON CONFLICT (tenant_id, alegra_id) DO UPDATE
       SET ${columna} = excluded.${columna}, updated_by = excluded.updated_by, updated_at = now()
+    RETURNING 1
+  `)
+  return { kind: "ok", afectados: filas.length }
+}
+
+/**
+ * Visibilidad por sucursal en masa: `visible: false` agrega el slug a `oculto_en_sucursales` de
+ * cada producto de la selección (deja de ofrecerse en esa sucursal); `visible: true` lo saca. El
+ * resto de la lista no se toca: ocultar en una sucursal no cambia lo que ya estaba oculto en otra.
+ * No modifica `visible` (la publicación en la tienda): son dos decisiones distintas.
+ *
+ * Una sola sentencia, como `masivaOverlay`: crea las filas de overlay que falten e idempotente
+ * (ocultar dos veces deja el slug una sola vez). Un slug que no es una sucursal de ESTE tenant se
+ * rechaza antes de escribir (REQ-MT-01).
+ */
+export async function masivaSucursal(
+  tenantId: string,
+  seleccion: Seleccion,
+  accion: { slug: string; visible: boolean },
+  updatedBy: string | null = null,
+  ejecutor: Ejecutor = getDb(),
+): Promise<ResultadoMasiva> {
+  const malo = validarSeleccion(seleccion)
+  if (malo) return malo
+  if (typeof accion.slug !== "string" || accion.slug === "" || !(await sonSlugsDeSucursal(tenantId, [accion.slug]))) {
+    return { kind: "invalid", campo: "slug", error: MSG_SUCURSAL_INVALIDA }
+  }
+
+  const sel = seleccionSql(tenantId, seleccion)
+  const slug = accion.slug
+  const inicial = accion.visible ? sql`'{}'::text[]` : sql`ARRAY[${slug}]::text[]`
+  const sinSlug = sql`array_remove(${catalogOverlay}.oculto_en_sucursales, ${slug})`
+  const siguiente = accion.visible ? sinSlug : sql`array_append(${sinSlug}, ${slug})`
+
+  const filas = await ejecutor.execute(sql`
+    INSERT INTO ${catalogOverlay} (tenant_id, alegra_id, oculto_en_sucursales, updated_by, updated_at)
+    SELECT ${tenantId}, s.alegra_id, ${inicial}, ${updatedBy}, now() FROM (${sel}) s
+    ON CONFLICT (tenant_id, alegra_id) DO UPDATE
+      SET oculto_en_sucursales = ${siguiente}, updated_by = excluded.updated_by, updated_at = now()
     RETURNING 1
   `)
   return { kind: "ok", afectados: filas.length }

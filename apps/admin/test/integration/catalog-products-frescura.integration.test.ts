@@ -13,6 +13,7 @@ vi.mock("@/lib/alegra", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/alegra")>()),
   listAllCategories: async () => [],
   listAllItems: async () => itemsDeAlegra,
+  listItemsLote: async (_c: unknown, start: number) => ({ items: itemsDeAlegra.slice(start), siguiente: itemsDeAlegra.length, fin: true }),
 }))
 
 const { syncCatalog } = await import("@/lib/alegra-sync")

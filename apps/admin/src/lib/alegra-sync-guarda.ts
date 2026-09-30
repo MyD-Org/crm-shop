@@ -92,16 +92,24 @@ export async function baseDeCorrida(tenantId: string, cuentaId?: string | null):
 }
 
 /**
- * Una corrida 'running' más nueva que esto cuenta como en curso. Más vieja = quedó colgada (la
- * ruta muere a los 300 s) y no bloquea para siempre.
+ * Una corrida 'running' con actividad más reciente que esto cuenta como en curso. Más vieja =
+ * quedó colgada (la ruta murió a mitad) y no bloquea para siempre: la siguiente corrida la marca
+ * 'error' (MSG_CORRIDA_INTERRUMPIDA). La actividad es `actividad_at` (la renueva cada tramo de una
+ * sync por tramos) o, si no hay, `started_at`.
  */
-export const VENTANA_CORRIDA_EN_CURSO_MIN = 10
+export const VENTANA_CORRIDA_EN_CURSO_MIN = 15
+
+export const MSG_CORRIDA_INTERRUMPIDA = "Corrida interrumpida."
+
+const ultimaActividad = sql`coalesce(${catalogSyncLog.actividadAt}, ${catalogSyncLog.startedAt})`
 
 /**
  * Guarda de concurrencia POR CUENTA: abre el log 'running' de la corrida sólo si no hay otra en
  * curso para la misma cuenta del tenant (la principal = `cuentaId` NULL). El chequeo y el insert
  * van en una transacción con un lock advisory por (tenant, cuenta), así dos corridas simultáneas
- * (cron + botón manual) no pasan las dos. Devuelve el id del log o null si ya hay una en curso.
+ * (cron + botón manual) no pasan las dos. Antes de decidir, las corridas 'running' abandonadas
+ * (sin actividad hace más de VENTANA_CORRIDA_EN_CURSO_MIN) se marcan 'error'. Devuelve el id del
+ * log o null si ya hay una en curso.
  * La base (`baseDeCorrida`) se toma ANTES de llamar acá, para que no cuente el log recién abierto.
  */
 export async function abrirCorrida(
@@ -112,22 +120,26 @@ export async function abrirCorrida(
 ): Promise<string | null> {
   return getDb().transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`alegra-sync:${tenantId}:${cuentaId ?? "principal"}`}))`)
-    const [enCurso] = await tx
-      .select({ id: catalogSyncLog.id })
-      .from(catalogSyncLog)
+    await tx
+      .update(catalogSyncLog)
+      .set({ status: "error", error: MSG_CORRIDA_INTERRUMPIDA, finishedAt: new Date() })
       .where(
         and(
           eq(catalogSyncLog.tenantId, tenantId),
           deCuenta(cuentaId),
           eq(catalogSyncLog.status, "running"),
-          sql`${catalogSyncLog.startedAt} > now() - make_interval(mins => ${VENTANA_CORRIDA_EN_CURSO_MIN})`,
+          sql`${ultimaActividad} <= now() - make_interval(mins => ${VENTANA_CORRIDA_EN_CURSO_MIN})`,
         ),
       )
+    const [enCurso] = await tx
+      .select({ id: catalogSyncLog.id })
+      .from(catalogSyncLog)
+      .where(and(eq(catalogSyncLog.tenantId, tenantId), deCuenta(cuentaId), eq(catalogSyncLog.status, "running")))
       .limit(1)
     if (enCurso) return null
     const [log] = await tx
       .insert(catalogSyncLog)
-      .values({ tenantId, cuentaId, trigger, status: "running", startedAt })
+      .values({ tenantId, cuentaId, trigger, status: "running", startedAt, actividadAt: startedAt })
       .returning({ id: catalogSyncLog.id })
     return log.id
   })

@@ -327,6 +327,30 @@ credenciales. Fechas normalizadas a `DD/MM/YYYY`; estados de Alegra mapeados a
 > `Cliente.limitecredito` es 0 (la barra de uso de crédito del portal no muestra tope).
 > A resolver desde la DB propia si se necesita.
 
+### Sync del catálogo por tramos
+
+Alegra entrega 30 ítems por página y 150 requests por minuto: la cuenta principal de un tenant de
+~18 000 ítems tarda ~5 min y no entra en una invocación (`maxDuration = 300`). La sync es
+**reanudable** (`syncTenant`, `src/lib/alegra-sync-tenant.ts`):
+
+- Cada invocación procesa con un presupuesto de ~220 s (`PRESUPUESTO_TRAMO_MS`). Si no terminó,
+  guarda el cursor en `catalog_sync_cursor` (una fila por tenant: cuenta actual, offset de
+  lectura de la principal, resultados ya cerrados) y responde `{ ok: true, continuar: true,
+  progreso }`; la siguiente llamada retoma desde ahí.
+- El stale, las bajas, la absorción y el resumen de una cuenta corren **solo** cuando su pasada
+  completa terminó, nunca con una pasada parcial. La principal se reanuda a mitad de la lectura;
+  una secundaria es un solo tramo (necesita todos sus ítems para el pareo). Cada cuenta es al
+  menos un tramo propio: si tras cerrar una queda menos de la mitad del presupuesto, la siguiente
+  va en el tramo que sigue.
+- Quien dispara vuelve a llamar mientras venga `continuar: true`: el workflow
+  `admin-alegra-sync` (por tenant: `?listar=1` para obtener los ids y después `?tenant=<id>` en
+  bucle) y el botón "Sincronizar con Alegra" del Catálogo (`POST /api/admin/catalog/sync`, admin+).
+- Un tramo en ejecución retiene el cursor 330 s (`lock_hasta`); dos llamadas simultáneas no lo
+  toman a la vez.
+- **Corridas colgadas**: una fila `catalog_sync_log` en `running` sin actividad (`actividad_at`,
+  o `started_at`) hace más de 15 min está abandonada: no bloquea y la siguiente sync la marca
+  `error` con "Corrida interrumpida." Un cursor abandonado se descarta y se empieza de cero.
+
 ### Sync incompleta
 
 La sync del catálogo (`syncCatalog`, `src/lib/alegra-sync.ts`) es la única fuente del catálogo

@@ -298,9 +298,24 @@ export const catalogSyncLog = pgTable(
      * "Códigos a revisar". Forma en `ResumenSync` (lib/alegra-sync-cuenta.ts). NULL en la principal.
      */
     resumen: jsonb("resumen"),
+    /**
+     * Última señal de vida de una corrida por tramos (0047). Una fila 'running' sin actividad hace
+     * más de VENTANA_CORRIDA_EN_CURSO_MIN se considera abandonada. NULL = se usa `started_at`.
+     */
+    actividadAt: timestamp("actividad_at", { withTimezone: true }),
   },
   (t) => [index("csl_tenant_started").on(t.tenantId, t.startedAt)],
 )
+
+// Cursor de la sync reanudable por tramos (0047): una fila por tenant mientras haya una corrida
+// a medias (cuenta actual, offset de lectura, resultados ya cerrados). Forma en `CursorSync`
+// (lib/alegra-sync-tenant.ts). Se borra al terminar la corrida. `lockHasta` = tramo en ejecución.
+export const catalogSyncCursor = pgTable("catalog_sync_cursor", {
+  tenantId: text("tenant_id").primaryKey().references(() => tenants.id),
+  cursor: jsonb("cursor").notNull(),
+  lockHasta: timestamp("lock_hasta", { withTimezone: true }),
+  actividadAt: timestamp("actividad_at", { withTimezone: true }).notNull().defaultNow(),
+})
 
 // ── Stock casi en tiempo real: avisos de Alegra (change `webhooks-stock-alegra`) ───────────
 //

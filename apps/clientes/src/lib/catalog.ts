@@ -30,7 +30,7 @@
  */
 
 import { cache } from "react";
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
@@ -72,9 +72,10 @@ import {
   columnasConteoAtributos,
   facetasDeConteos,
   filtroAtributosSql,
-  numeroDe,
+  criterioSql,
   type ContextoAtributos,
 } from "./catalogo-atributos-sql";
+import type { CriterioEstructurado } from "./catalogo-atributos";
 import { caracteristicasDe, leerAtributosEstructurados } from "./catalogo-caracteristicas";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
@@ -290,14 +291,42 @@ const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false) 
   return estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
 };
 
+/**
+ * Filas de `catalog_atributos` del producto de la fila con una clave (la PK entera: una búsqueda
+ * de índice). `extra` agrega condiciones sobre `valor_num`/`valor_texto`.
+ */
+const filaAtributoSql = (clave: string, extra?: SQL) =>
+  sql`select 1 from ${crmAtributos}
+    where ${crmAtributos.tenantId} = ${shopTenantId()} and ${crmAtributos.alegraId} = ${crmCatalogo.alegraId}
+      and ${crmAtributos.clave} = ${clave}${extra ? sql` and ${extra}` : sql``}`;
+
+/** `EXISTS` de un valor estructurado que cumple el criterio (una por atributo del WHERE). */
+const existeAtributoSql = (c: CriterioEstructurado) =>
+  sql`exists (${filaAtributoSql(c.clave, criterioSql(c, sql`${crmAtributos.valorNum}`, sql`${crmAtributos.valorTexto}`))})`;
+
 /** Contexto de las condiciones de atributos: el texto buscable y, si se pueden leer, los estructurados. */
 const contextoAtributos = (filtros: Pick<FiltrosCatalogo, "atributosEstructurados">): ContextoAtributos => ({
   texto: textoBuscableSql(),
-  ...(filtros.atributosEstructurados ? { attrs: atributosFilaSql() } : {}),
+  ...(filtros.atributosEstructurados ? { existe: existeAtributoSql } : {}),
 });
 
-/** Potencia (W) estructurada del producto de la fila, numeric o NULL. */
-const potenciaSql = () => numeroDe(atributosFilaSql(), "potencia_w");
+/** Filtro de potencia en UN `EXISTS` (los dos extremos sobre la misma fila). */
+const filtroPotenciaSql = (min?: number, max?: number) =>
+  min == null && max == null
+    ? undefined
+    : sql`exists (${filaAtributoSql(
+        "potencia_w",
+        and(
+          min != null ? sql`${crmAtributos.valorNum} >= ${min}` : undefined,
+          max != null ? sql`${crmAtributos.valorNum} <= ${max}` : undefined,
+        ),
+      )})`;
+
+/** Potencia (W) estructurada del producto de la fila, numeric o NULL (una búsqueda por PK). */
+const potenciaSql = () =>
+  sql`(select ${crmAtributos.valorNum} from ${crmAtributos}
+    where ${crmAtributos.tenantId} = ${shopTenantId()} and ${crmAtributos.alegraId} = ${crmCatalogo.alegraId}
+      and ${crmAtributos.clave} = 'potencia_w')`;
 
 /** Con `disp`, sólo productos que alguna sucursal activa sirve (ver `visibleEnSucursalSql`). */
 const visibleEnZonaSql = (disp?: ContextoDisponibilidad) => (disp ? visibleEnSucursalSql(disp) : undefined);
@@ -886,11 +915,8 @@ function condicionesDe(
       ? inArray(marcaSql, filtros.marcas)
       : undefined,
     aplicar.atributos ? filtroAtributosSql(contextoAtributos(filtros), filtros.atributos) : undefined,
-    aplicar.potencia && filtros.atributosEstructurados && filtros.potenciaMin != null
-      ? sql`${potenciaSql()} >= ${filtros.potenciaMin}`
-      : undefined,
-    aplicar.potencia && filtros.atributosEstructurados && filtros.potenciaMax != null
-      ? sql`${potenciaSql()} <= ${filtros.potenciaMax}`
+    aplicar.potencia && filtros.atributosEstructurados
+      ? filtroPotenciaSql(filtros.potenciaMin, filtros.potenciaMax)
       : undefined,
     aplicar.precio && filtros.precioMin != null
       ? sql`${precioExhibidoSql} >= ${filtros.precioMin}`

@@ -11,10 +11,10 @@
  * El día que haya un campo estructurado cambia el patrón, no la URL ni la UI.
  *
  * Fase 2 (fichas estructuradas): cada atributo declara además su `estructurado`, el criterio
- * sobre `public.catalog_atributos` del CRM. Si el producto TIENE un valor para esa clave, decide
- * el valor (una corrección manual en el CRM le gana al nombre); si no lo tiene, decide el patrón.
- * Misma URL (`?atr=`), misma UI: sólo sube la cobertura. Sin la tabla (migración sin aplicar) todo
- * queda como en la fase 1.
+ * sobre `public.catalog_atributos` del CRM. Un producto cumple el atributo si cumple el dato
+ * estructurado O el patrón del nombre: el dato estructurado sólo SUMA productos, nunca saca uno
+ * que el nombre ya traía (la cobertura sólo sube, spec fase 2). Misma URL (`?atr=`), misma UI.
+ * Sin la tabla (migración sin aplicar) todo queda como en la fase 1.
  *
  * Módulo puro (sin DB ni React): lo usan el SQL del catálogo (`~*`), la URL
  * (valida los ids), el panel de filtros, la interpretación de búsquedas y el
@@ -250,15 +250,17 @@ export function cumpleEstructurado(c: CriterioEstructurado, v: ValorEstructurado
 }
 
 /**
- * Atributos del diccionario que cumple un producto: primero el dato estructurado de su clave (si
- * lo tiene) y, si no, el patrón sobre nombre + descripción. Sin `estructurados`, idéntico a
- * `atributosDeTexto`.
+ * Atributos del diccionario que cumple un producto: el dato estructurado de su clave O el patrón
+ * sobre nombre + descripción (el estructurado sólo agrega). Sin `estructurados`, idéntico a
+ * `atributosDeTexto`. Mismo criterio que el SQL de catalogo-atributos-sql.
  */
 export function atributosDeProducto(texto: string, estructurados?: AtributosEstructurados): Atributo[] {
   if (!estructurados) return atributosDeTexto(texto);
   const t = normalizarTexto(texto);
   return ATRIBUTOS.filter((a) => {
-    const decide = a.estructurado ? cumpleEstructurado(a.estructurado, estructurados[a.estructurado.clave]) : null;
-    return decide ?? REGEX.get(a.id)!.test(t);
+    const estructurado = a.estructurado
+      ? cumpleEstructurado(a.estructurado, estructurados[a.estructurado.clave]) === true
+      : false;
+    return estructurado || REGEX.get(a.id)!.test(t);
   });
 }

@@ -7,11 +7,16 @@
  * El patrón viaja como PARÁMETRO (`$n`), nunca interpolado: sale del
  * diccionario en código, pero así ni siquiera hace falta escaparlo.
  *
- * Fase 2 (fichas estructuradas): con `attrs` (el jsonb `{clave: {n, t}}` de
- * `public.catalog_atributos` del producto, ver `atributosFilaSql` en
- * catalog.ts) cada atributo mira PRIMERO el dato estructurado de su clave y, si
- * el producto no lo tiene, el patrón (`coalesce(<estructurado>, <patrón>)`).
- * Sin `attrs` (flag apagado o tabla sin migrar) el SQL es el de la fase 1.
+ * Fase 2 (fichas estructuradas): un producto cumple un atributo si cumple el
+ * dato estructurado de su clave (`public.catalog_atributos`) O el patrón:
+ * `(coalesce(<estructurado>, false) or <patrón>)`. El estructurado sólo SUMA
+ * productos (la cobertura sólo sube). Dos formas de leer el dato, con el mismo
+ * resultado (`criterioSql` sobre un número y un texto):
+ * - en el WHERE, `existe`: un `EXISTS` por atributo contra la PK de la tabla
+ *   (una sola búsqueda de índice por producto y atributo, sin armar jsonb);
+ * - en las facetas, `attrs`: el jsonb `{clave: {n, t}}` que la subconsulta de
+ *   conteo arma UNA vez por fila (ver `atributosFilaSql` en catalog.ts).
+ * Sin ninguna de las dos (flag apagado o tabla sin migrar) el SQL es el de la fase 1.
  *
  * SOLO servidor (lo importa catalog.ts).
  */
@@ -19,11 +24,16 @@ import { and, or, sql, type SQL } from "drizzle-orm";
 import { ATRIBUTOS, atributosPorGrupo, type Atributo, type CriterioEstructurado } from "./catalogo-atributos";
 import type { ClaveEstructurada } from "./catalogo-caracteristicas";
 
-/** Lo que necesita cada condición: el texto normalizado y, si hay, los atributos estructurados. */
+/** Lo que necesita cada condición: el texto normalizado y, si hay, cómo leer los estructurados. */
 export interface ContextoAtributos {
   texto: SQL;
-  /** jsonb `{clave: {n, t}}` del producto (NULL si no tiene ninguno). */
+  /** jsonb `{clave: {n, t}}` del producto (NULL si no tiene ninguno). Para la consulta de facetas. */
   attrs?: SQL;
+  /**
+   * `EXISTS` de una fila de `catalog_atributos` del producto con esa clave que cumple el
+   * criterio (lo arma catalog.ts, que conoce la tabla y el producto). Para el WHERE.
+   */
+  existe?: (c: CriterioEstructurado) => SQL;
 }
 
 /**
@@ -35,7 +45,7 @@ function valorDe(attrs: SQL, clave: ClaveEstructurada): SQL {
   return sql`(${attrs} -> ${sql.raw(`'${clave}'`)})`;
 }
 
-/** `valor_num` de una clave, como numeric (NULL si no hay). */
+/** `valor_num` de una clave del jsonb, como numeric (NULL si no hay). */
 export function numeroDe(attrs: SQL, clave: ClaveEstructurada): SQL {
   return sql`(${valorDe(attrs, clave)} ->> 'n')::numeric`;
 }
@@ -46,12 +56,10 @@ const textoDe = (attrs: SQL, clave: ClaveEstructurada) => sql`(${valorDe(attrs, 
 const RANGO = "^[0-9]+([.][0-9]+)?-[0-9]+([.][0-9]+)?$";
 
 /**
- * Condición estructurada: NULL si el producto no tiene dato para la clave (decide el patrón);
- * si lo tiene, verdadero o falso. Mismo criterio que `cumpleEstructurado` (JS).
+ * El criterio sobre un `valor_num` (`n`) y un `valor_texto` (`t`): verdadero si cumple alguna de
+ * sus partes; NULL/falso si no (sin dato, todo da NULL). Mismo criterio que `cumpleEstructurado`.
  */
-function cumpleEstructuradoSql(attrs: SQL, c: CriterioEstructurado): SQL {
-  const n = numeroDe(attrs, c.clave);
-  const t = textoDe(attrs, c.clave);
+export function criterioSql(c: CriterioEstructurado, n: SQL, t: SQL): SQL {
   const partes: SQL[] = [];
   if (c.textos?.length) partes.push(sql`${t} in (${sql.join(c.textos.map((x) => sql`${x}`), sql`, `)})`);
   if (c.numeros?.length) partes.push(sql`${n} in (${sql.join(c.numeros.map((x) => sql`${x}`), sql`, `)})`);
@@ -68,14 +76,21 @@ function cumpleEstructuradoSql(attrs: SQL, c: CriterioEstructurado): SQL {
     partes.push(sql`(case when ${t} ~ ${RANGO} then split_part(${t}, '-', 1)::numeric <= ${c.enRango}
       and split_part(${t}, '-', 2)::numeric >= ${c.enRango} else false end)`);
   }
-  return sql`(case when ${valorDe(attrs, c.clave)} is not null then coalesce(${or(...partes)}, false) end)`;
+  return or(...partes)!;
 }
 
-/** El producto cumple un atributo: estructurado primero (si hay `attrs`), si no el patrón (`~*`). */
+/** Condición estructurada (nunca NULL): con `existe` en el WHERE, con `attrs` en las facetas. */
+function estructuradoSql(ctx: ContextoAtributos, c: CriterioEstructurado): SQL | undefined {
+  if (ctx.existe) return ctx.existe(c);
+  if (ctx.attrs) return sql`coalesce(${criterioSql(c, numeroDe(ctx.attrs, c.clave), textoDe(ctx.attrs, c.clave))}, false)`;
+  return undefined;
+}
+
+/** El producto cumple un atributo: el dato estructurado O el patrón (`~*`). */
 function cumple(ctx: ContextoAtributos, a: Atributo): SQL {
   const patron = sql`${ctx.texto} ~* ${a.patron}`;
-  if (!ctx.attrs || !a.estructurado) return patron;
-  return sql`coalesce(${cumpleEstructuradoSql(ctx.attrs, a.estructurado)}, ${patron})`;
+  const estructurado = a.estructurado ? estructuradoSql(ctx, a.estructurado) : undefined;
+  return estructurado ? sql`(${estructurado} or ${patron})` : patron;
 }
 
 /**

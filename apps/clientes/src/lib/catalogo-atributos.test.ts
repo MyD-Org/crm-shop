@@ -100,15 +100,19 @@ describe("diccionario", () => {
   });
 });
 
-describe("fase 2: dato estructurado primero, patrón del nombre si no hay", () => {
+describe("fase 2: dato estructurado O patrón del nombre (la cobertura sólo sube)", () => {
   const idsDe = (texto: string, e?: AtributosEstructurados) => atributosDeProducto(texto, e).map((a) => a.id);
 
   it("sin estructurados es idéntico a atributosDeTexto", () => {
     expect(idsDe("REFLECTOR LED 50W CALIDO")).toEqual(ids("REFLECTOR LED 50W CALIDO"));
   });
 
-  it("el valor estructurado de una clave le gana al nombre (una corrección manual en el CRM)", () => {
-    expect(idsDe("REFLECTOR LED 50W CALIDO", { tono: { n: null, t: "frio" } })).toEqual(["tono-frio"]);
+  it("el dato estructurado suma, nunca saca: nombre CALIDO + tono frío ⇒ los dos", () => {
+    expect(idsDe("REFLECTOR LED 50W CALIDO", { tono: { n: null, t: "frio" } })).toEqual(["tono-calido", "tono-frio"]);
+  });
+
+  it("sólo el dato estructurado cumple (el nombre no dice nada) ⇒ incluido", () => {
+    expect(idsDe("REFLECTOR LED 50W", { tono: { n: null, t: "neutro" } })).toEqual(["tono-neutro"]);
   });
 
   it("sube la cobertura: el dato de la ficha agrega lo que el nombre no dice", () => {
@@ -122,8 +126,8 @@ describe("fase 2: dato estructurado primero, patrón del nombre si no hay", () =
     expect(idsDe("LAMPARA 220V CALIDO", { zocalo: { n: null, t: "e27" } })).toEqual(["tono-calido", "zocalo-e27", "tension-220v"]);
   });
 
-  it("IP estructurado bajo no es exterior aunque el nombre diga 'exterior'", () => {
-    expect(idsDe("APLIQUE EXTERIOR", { ip: { n: 44, t: null } })).toEqual([]);
+  it("IP estructurado 20 pero el nombre dice 'exterior' ⇒ sigue incluido (el nombre matchea)", () => {
+    expect(idsDe("APLIQUE EXTERIOR", { ip: { n: 20, t: null } })).toEqual(["apto-exterior"]);
   });
 
   it("tensión: número exacto o rango que la incluye", () => {

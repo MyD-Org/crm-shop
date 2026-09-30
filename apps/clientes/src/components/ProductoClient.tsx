@@ -21,6 +21,7 @@ import { EntregaProducto } from "@/components/producto/EntregaProducto";
 import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
+import { DudasProducto } from "@/components/producto/DudasProducto";
 import type { Product } from "@/data/products";
 import { CartIcon } from "@/components/catalogo/iconos";
 
@@ -307,6 +308,9 @@ export function ProductoClient({
             )}
 
             <EntregaProducto envio={envio} />
+
+            {/* Preguntas sugeridas al asesor: sólo con el chat montado. */}
+            <DudasProducto producto={producto} />
           </aside>
 
           <div className="min-w-0 space-y-10 lg:col-start-1 lg:row-start-2">{detalle}</div>

@@ -18,6 +18,8 @@ const leerReglas = vi.fn(async () => reglas);
 const leerBruta = vi.fn(async () => bruta);
 
 const tx = {
+  // Savepoint (`tx.transaction`): el ejecutor anidado es el mismo mock.
+  transaction: async (cb: (t: unknown) => unknown) => cb(tx),
   select: () => ({
     from: () => ({ where: () => ({ limit: async () => existente }) }),
   }),
@@ -72,6 +74,10 @@ import {
 } from "./pedidos";
 import { SucursalPedidoError } from "./sucursales-pedido";
 import { StockInsuficienteError } from "./stock-disponible";
+
+/** Texto de un valor `sql\`...\`` de drizzle (para verificar el literal `'infinity'`). */
+const sqlTexto = (v: unknown): string =>
+  JSON.stringify((v as { queryChunks?: unknown[] } | null)?.queryChunks ?? v);
 
 const linea = (id: string, qty = 1) => ({
   id,
@@ -214,10 +220,10 @@ describe("crearPedido con disponibilidad por sucursal", () => {
     expect(vence - antes).toBeLessThan(7 * 24 * 60 * 60_000 + 5_000);
   });
 
-  it("reserva_dias 0: nunca vence (NULL)", async () => {
+  it("reserva_dias 0: nunca vence ('infinity', nunca NULL)", async () => {
     reglas.reservaDias = 0;
     await crear();
-    expect(valoresPedido[0].reservaVenceEn).toBeNull();
+    expect(sqlTexto(valoresPedido[0].reservaVenceEn)).toContain("infinity");
   });
 
   it("pago online (Mercado Pago) conserva su ventana de 24 h", async () => {
@@ -318,14 +324,46 @@ describe("crearPedido con disponibilidad por sucursal", () => {
 });
 
 describe("crearPedido con el flag apagado", () => {
-  it("valida contra la vista 0012 después del insert y deja reserva_vence_en en NULL", async () => {
+  it("valida contra la vista 0012 después del insert y, con sucursal, congela su reserva (no NULL)", async () => {
+    const antes = Date.now();
     await crear({ disponibilidadSucursal: false });
-    expect(leerReglas).not.toHaveBeenCalled();
     expect(leerBruta).not.toHaveBeenCalled();
     expect(disponiblesLegacy).toHaveBeenCalledTimes(1);
     expect(eventos).toEqual(["pedido", "lock", "items"]);
-    expect(valoresPedido[0].reservaVenceEn).toBeNull();
+    expect(valoresPedido[0]).toMatchObject({ sucursal: "sede-a" });
+    const vence = (valoresPedido[0].reservaVenceEn as Date).getTime();
+    expect(vence - antes).toBeGreaterThanOrEqual(7 * 24 * 60 * 60_000 - 5);
+    expect(vence - antes).toBeLessThan(7 * 24 * 60 * 60_000 + 5_000);
     expect(valoresItems[0][0]).toMatchObject({ aTraerDe: null });
+  });
+
+  it("con reserva_dias 0 queda 'infinity'", async () => {
+    reglas.reservaDias = 0;
+    await crear({ disponibilidadSucursal: false });
+    expect(sqlTexto(valoresPedido[0].reservaVenceEn)).toContain("infinity");
+  });
+
+  it("sin poder leer las reglas rige el default de 7 días", async () => {
+    leerReglas.mockRejectedValueOnce(new Error("sin permiso"));
+    const antes = Date.now();
+    await crear({ disponibilidadSucursal: false });
+    const vence = (valoresPedido[0].reservaVenceEn as Date).getTime();
+    expect(vence - antes).toBeGreaterThanOrEqual(7 * 24 * 60 * 60_000 - 5);
+    expect(vence - antes).toBeLessThan(7 * 24 * 60 * 60_000 + 5_000);
+  });
+
+  it("pago online conserva su ventana de 24 h", async () => {
+    const antes = Date.now();
+    await crear({ disponibilidadSucursal: false, pagoMetodo: "mercadopago" });
+    const vence = (valoresPedido[0].reservaVenceEn as Date).getTime();
+    expect(vence - antes).toBeLessThan(VENTANA_PAGO_MS + 5_000);
+    expect(vence - antes).toBeGreaterThanOrEqual(VENTANA_PAGO_MS - 5);
+  });
+
+  it("sin contexto de sucursal (sin sucursalEntrada) no hay sucursal ni reserva que congelar", async () => {
+    await crear({ disponibilidadSucursal: false, sucursalEntrada: undefined });
+    expect(valoresPedido[0].sucursal).toBeNull();
+    expect(valoresPedido[0].reservaVenceEn).toBeNull();
   });
 });
 
@@ -336,10 +374,15 @@ describe("calcularReservaVenceEn", () => {
       calcularReservaVenceEn("a_coordinar", { reservaDias: 3 }, ahora),
     ).toEqual(new Date("2026-01-13T12:00:00Z"));
   });
-  it("0 días: nunca vence", () => {
+  it("0 días: nunca vence ('infinity')", () => {
     expect(
       calcularReservaVenceEn("efectivo", { reservaDias: 0 }, ahora),
-    ).toBeNull();
+    ).toBe("infinity");
+  });
+  it("sin reglas: 7 días", () => {
+    expect(calcularReservaVenceEn("efectivo", null, ahora)).toEqual(
+      new Date("2026-01-17T12:00:00Z"),
+    );
   });
   it("Mercado Pago: 24 h, sin mirar las reglas", () => {
     expect(

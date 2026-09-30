@@ -17,6 +17,8 @@ import {
   type SucursalOpcionDto,
   type TagDto,
 } from "./tipos"
+import { AyudaTooltip } from "../AyudaTooltip"
+import { AYUDA_VISIBLE_EN } from "./ayudas"
 import { FotosProducto } from "./FotosProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 
@@ -307,8 +309,9 @@ export function VisibleEn({
 
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1 text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
+      <legend className="mb-1 flex items-center gap-1 text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
         Visible en
+        <AyudaTooltip etiqueta="Visible en" texto={AYUDA_VISIBLE_EN} />
       </legend>
       {activas.map((s) => {
         const visibleAhora = !ocultoEn.includes(s.slug)

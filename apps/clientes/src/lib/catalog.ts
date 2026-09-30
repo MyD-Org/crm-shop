@@ -572,6 +572,11 @@ export interface FiltrosCatalogo {
    * grupos, OR dentro del grupo, con `~*` sobre el texto buscable.
    */
   atributos?: string[];
+  /**
+   * Sólo facetas: no calcular la de atributos (flag `busqueda-ia` apagado: el
+   * panel queda como siempre y no se paga esa consulta). Sale `atributos: []`.
+   */
+  sinFacetaAtributos?: boolean;
   /** Extremos inclusivos del rango, sobre el precio exhibido (con IVA). */
   precioMin?: number;
   precioMax?: number;
@@ -1035,13 +1040,15 @@ export async function getFacetas(
       .leftJoin(stockReservado, joinReserva())
       .where(wherePrecio),
     // Todos los atributos en una sola consulta (ver `columnasConteoAtributos`).
-    getDb()
-      .select(columnasConteoAtributos(textoBuscableSql(), filtros.atributos))
-      .from(crmCatalogo)
-      .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-      .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(stockReservado, joinReserva())
-      .where(whereAtributos),
+    filtros.sinFacetaAtributos
+      ? Promise.resolve([])
+      : getDb()
+          .select(columnasConteoAtributos(textoBuscableSql(), filtros.atributos))
+          .from(crmCatalogo)
+          .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+          .leftJoin(crmOverlay, joinOverlay())
+          .leftJoin(stockReservado, joinReserva())
+          .where(whereAtributos),
   ]);
 
   const precio =

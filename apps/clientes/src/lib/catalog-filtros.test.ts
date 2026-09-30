@@ -233,3 +233,12 @@ describe("filtro y facetas de atributos (`atr`)", () => {
     expect(marcas!.params).toContain(patron("tono-calido"));
   });
 });
+
+describe("faceta de atributos con el flag busqueda-ia apagado", () => {
+  it("sinFacetaAtributos: no se consulta y sale vacía", async () => {
+    const f = await getFacetas({ sinFacetaAtributos: true }, false);
+    expect(f.atributos).toEqual([]);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
+    for (const { sql } of grabadora.consultas) expect(sql).not.toContain("count(*) filter");
+  });
+});

@@ -97,7 +97,9 @@ async function CatalogoResultados({ searchParams }: Props) {
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).
-  const filtros = filtrosDeEstado(estado);
+  // Sin el flag `busqueda-ia`, el panel queda como siempre: sin la faceta de
+  // características (ni su consulta).
+  const filtros = { ...filtrosDeEstado(estado), ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }) };
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
   // resuelven en Postgres: filtrar u ordenar después de paginar daría

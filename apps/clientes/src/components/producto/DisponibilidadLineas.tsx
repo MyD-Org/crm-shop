@@ -12,8 +12,8 @@ const CLASE_TONO: Record<TonoDisponibilidad, string> = {
 };
 
 /**
- * Disponibilidad por modalidad de un producto: "Envío: disponible" y "Retiro en <local>:
- * disponible | con demora de N días | no disponible". Sólo se dibuja con el flag
+ * Disponibilidad de un producto por local y de envío: "Retiro en <local>: disponible hoy |
+ * disponible en N días | no disponible" y "Envío a domicilio: ...". Sólo se dibuja con el flag
  * `disponibilidad-sucursal` (el server no manda `disponibilidad` si está apagado). El envío sólo
  * se anuncia con el flag `envio`.
  */

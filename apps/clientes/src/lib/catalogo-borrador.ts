@@ -46,6 +46,7 @@ function manejaLaHoja(e: EstadoCatalogo): Partial<EstadoCatalogo> {
     precioMin: e.precioMin,
     precioMax: e.precioMax,
     soloStock: e.soloStock,
+    retiroEn: e.retiroEn,
     orden: e.orden,
   };
 }
@@ -57,6 +58,7 @@ function sinCambios(a: EstadoCatalogo, b: EstadoCatalogo): boolean {
     a.precioMin === b.precioMin &&
     a.precioMax === b.precioMax &&
     a.soloStock === b.soloStock &&
+    a.retiroEn === b.retiroEn &&
     a.orden === b.orden
   );
 }

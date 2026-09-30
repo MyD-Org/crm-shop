@@ -4,16 +4,21 @@
  * apagado devuelve null: nada de zona.
  */
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { identidadActual } from "./auth";
 import { getPerfilFacturacion } from "./facturacion-db";
 import { sucursalesHabilitadas } from "./sucursales-flag";
 import { disponibilidadSucursalHabilitada } from "./disponibilidad-sucursal-flag";
-import { contextoDisponibilidad, type ContextoDisponibilidad } from "./disponibilidad-contexto";
+import {
+  contextoDisponibilidad,
+  contextoUnion,
+  type ContextoDisponibilidad,
+} from "./disponibilidad-contexto";
 import { reglasVentaCacheadas, sucursalesCacheadas } from "./sucursales-datos";
 import {
   COOKIE_ZONA,
   opcionesCheckout,
+  provinciaDeGeoIp,
   zonaVigente,
   type OpcionesCheckoutSucursales,
   type ZonaVigente,
@@ -36,7 +41,13 @@ export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
       console.error("[zona] no se pudo leer la provincia del perfil:", err);
     }
   }
-  return zonaVigente({ cookie, perfilProvincia, datos });
+  // Sin cookie ni perfil, la IP sugiere la provincia (sólo para precargar la entrega).
+  let ipProvincia: string | null = null;
+  if (!cookie && !perfilProvincia) {
+    const h = await headers();
+    ipProvincia = provinciaDeGeoIp(h.get("x-vercel-ip-country"), h.get("x-vercel-ip-country-region"));
+  }
+  return zonaVigente({ cookie, perfilProvincia, ipProvincia, datos });
 });
 
 /** Opciones del checkout (locales de retiro y provincia inicial). null = flag apagado o sin sucursales. */
@@ -73,3 +84,65 @@ export const dispDelVisitante = cache(async (): Promise<ContextoDisponibilidad |
     return undefined;
   }
 });
+
+/**
+ * Contexto de disponibilidad del CATÁLOGO (listado, facetas, ficha, relacionados, menú, home,
+ * búsquedas del chat). No depende del visitante: "hay stock" = stock en CUALQUIER local activo y
+ * se muestra todo lo que alguna sucursal ofrece. La zona recién importa en la entrega (carrito y
+ * checkout, `dispDelVisitante`). Como no lee cookie, IP ni identidad, la clave de la caché del
+ * catálogo es la misma para todos.
+ *
+ * `undefined` = flag `disponibilidad-sucursal` apagado (o sin sucursales): stock único de siempre.
+ */
+export const dispCatalogo = cache(async (): Promise<ContextoDisponibilidad | undefined> => {
+  if (!(await disponibilidadSucursalHabilitada())) return undefined;
+  try {
+    const [datos, reglas] = await Promise.all([sucursalesCacheadas(), reglasVentaCacheadas()]);
+    const base = contextoDisponibilidad({ zona: null, sucursales: datos.sucursales, reglas });
+    return base ? contextoUnion(base) : undefined;
+  } catch (err) {
+    console.error("[zona] no se pudo armar el contexto del catálogo:", err);
+    return undefined;
+  }
+});
+
+/** Locales que se ofrecen en el filtro "Con stock en": activos y que aceptan retiro, por `orden`. */
+export async function localesDeRetiro(): Promise<{ slug: string; nombre: string }[]> {
+  if (!(await disponibilidadSucursalHabilitada())) return [];
+  try {
+    const datos = await sucursalesCacheadas();
+    return datos.sucursales
+      .filter((s) => s.activa && s.aceptaRetiro)
+      .sort((a, b) => a.orden - b.orden || a.slug.localeCompare(b.slug))
+      .map((s) => ({ slug: s.slug, nombre: s.nombre }));
+  } catch (err) {
+    console.error("[zona] no se pudieron leer los locales de retiro:", err);
+    return [];
+  }
+}
+
+/**
+ * Contexto del filtro "Con stock en <local>": sólo cuenta el stock de ese local y excluye lo que
+ * el local tiene oculto. `undefined` si el flag está apagado o el slug no es un local activo con
+ * retiro (la page lo descarta y usa `dispCatalogo`).
+ */
+export async function dispConStockEn(slug: string): Promise<ContextoDisponibilidad | undefined> {
+  if (!(await disponibilidadSucursalHabilitada())) return undefined;
+  try {
+    const [datos, reglas] = await Promise.all([sucursalesCacheadas(), reglasVentaCacheadas()]);
+    const local = datos.sucursales.find((s) => s.slug === slug && s.activa && s.aceptaRetiro);
+    if (!local) return undefined;
+    return (
+      contextoDisponibilidad({
+        zona: null,
+        sucursales: datos.sucursales,
+        reglas,
+        modalidad: "retiro",
+        local: slug,
+      }) ?? undefined
+    );
+  } catch (err) {
+    console.error("[zona] no se pudo armar el contexto del filtro por local:", err);
+    return undefined;
+  }
+}

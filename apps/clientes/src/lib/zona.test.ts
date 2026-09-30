@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claveDeCookie, opcionesCheckout, zonaVigente } from "./zona";
+import { claveDeCookie, opcionesCheckout, provinciaDeGeoIp, zonaVigente } from "./zona";
 import type { DatosSucursales, SucursalVista } from "./sucursales-repo";
 
 const suc = (
@@ -153,5 +153,40 @@ describe("opcionesCheckout", () => {
     );
     expect(o.localInicial).toBe("sede-b");
     expect(o.locales.map((l) => l.slug)).toEqual(["sede-b"]);
+  });
+});
+
+describe("provinciaDeGeoIp", () => {
+  it("traduce el código ISO 3166-2 de Argentina a la provincia", () => {
+    expect(provinciaDeGeoIp("AR", "N")).toBe("Misiones");
+    expect(provinciaDeGeoIp("ar", "b")).toBe("Buenos Aires");
+    expect(provinciaDeGeoIp("AR", "AR-C")).toBe("Ciudad Autónoma de Buenos Aires");
+  });
+
+  it("fuera de Argentina, sin región o con un código desconocido no sugiere nada", () => {
+    expect(provinciaDeGeoIp("PY", "N")).toBeNull();
+    expect(provinciaDeGeoIp("AR", null)).toBeNull();
+    expect(provinciaDeGeoIp("AR", "I")).toBeNull();
+    expect(provinciaDeGeoIp(null, null)).toBeNull();
+  });
+});
+
+describe("zonaVigente con la provincia sugerida por la IP", () => {
+  it("la IP decide sólo si no hay cookie ni perfil", () => {
+    const porIp = zonaVigente({ ipProvincia: "Misiones", datos });
+    expect(porIp.origen).toBe("ip");
+    expect(porIp.provinciaClave).toBe("misiones");
+    expect(porIp.sucursal?.slug).toBe("sede-a");
+  });
+
+  it("el perfil y la cookie mandan sobre la IP", () => {
+    expect(zonaVigente({ perfilProvincia: "Córdoba", ipProvincia: "Misiones", datos }).origen).toBe("perfil");
+    expect(zonaVigente({ cookie: "cordoba", ipProvincia: "Misiones", datos }).origen).toBe("cookie");
+  });
+
+  it("una provincia por IP desconocida cae en la predeterminada", () => {
+    const z = zonaVigente({ ipProvincia: "Atlántida", datos });
+    expect(z.origen).toBe("default");
+    expect(z.sucursal?.slug).toBe("sede-b");
   });
 });

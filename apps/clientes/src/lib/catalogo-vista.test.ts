@@ -364,3 +364,29 @@ describe("alternarCategoria", () => {
     expect(alternarCategoria(planas, ["A"], "B", true)).toEqual(["A", "B"]);
   });
 });
+
+describe("filtro 'Con stock en <local>' en chips y contadores", () => {
+  const locales = [
+    { slug: "igz", nombre: "Puerto Iguazú" },
+    { slug: "mdp", nombre: "Mar del Plata" },
+  ];
+
+  it("muestra el chip con el nombre del local y quitarlo borra sólo ese filtro", () => {
+    const chips = chipsActivos({ ...base, retiroEn: "igz" }, null, locales);
+    const chip = chips.find((c) => c.clave === "retiro");
+    expect(chip?.etiqueta).toBe("Con stock en Puerto Iguazú");
+    expect(chip?.cambios).toEqual({ retiroEn: undefined });
+  });
+
+  it("sin la lista de locales usa el slug", () => {
+    expect(chipsActivos({ ...base, retiroEn: "igz" }, null).find((c) => c.clave === "retiro")?.etiqueta).toBe(
+      "Con stock en igz",
+    );
+  });
+
+  it("cuenta como un filtro activo y 'Limpiar' lo quita", () => {
+    expect(contarFiltrosActivos({ ...base, retiroEn: "igz" })).toBe(contarFiltrosActivos(base) + 1);
+    expect(hayFiltros({ ...base, retiroEn: "igz" })).toBe(true);
+    expect(limpiarFiltros()).toMatchObject({ retiroEn: undefined });
+  });
+});

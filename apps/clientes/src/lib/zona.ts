@@ -3,8 +3,9 @@
  * cookie, la provincia del perfil y las reglas como datos; no lee el request ni la DB.
  *
  * Precedencia: cookie `shop_zona` válida > provincia del perfil (`domicilio_provincia`, sólo con
- * usuario logueado) > sucursal predeterminada. Una cookie que no es una provincia conocida se
- * ignora. La zona NUNCA cambia qué productos se ven: sólo decide la sucursal que la atiende.
+ * usuario logueado) > provincia de la IP (sugerencia) > sucursal predeterminada. Una cookie que
+ * no es una provincia conocida se ignora. La zona NUNCA cambia qué productos se ven ni el stock
+ * del catálogo: sólo decide la sucursal que atiende la entrega (carrito y checkout).
  */
 import { PROVINCIAS_AR } from "./provincias";
 import {
@@ -30,10 +31,55 @@ export function claveDeCookie(valor: string | null | undefined): string | null {
   return PROVINCIAS_SELECTOR.some((p) => p.clave === valor) ? valor : null;
 }
 
+/**
+ * Provincia sugerida por la geolocalización de la IP (headers `x-vercel-ip-country` y
+ * `x-vercel-ip-country-region`, código ISO 3166-2 sin el prefijo del país). Sólo Argentina.
+ *
+ * Es una SUGERENCIA para precargar la provincia de entrega: acierta bastante en conexiones fijas,
+ * pero los celulares suelen salir por Buenos Aires y cerca de la frontera la IP puede figurar en
+ * otro país. Nunca decide sola: el cliente la confirma o la cambia en el checkout. El código
+ * postal por IP no se usa: en Argentina no es confiable.
+ */
+const PROVINCIA_POR_REGION_ISO: Record<string, string> = {
+  A: "Salta",
+  B: "Buenos Aires",
+  C: "Ciudad Autónoma de Buenos Aires",
+  D: "San Luis",
+  E: "Entre Ríos",
+  F: "La Rioja",
+  G: "Santiago del Estero",
+  H: "Chaco",
+  J: "San Juan",
+  K: "Catamarca",
+  L: "La Pampa",
+  M: "Mendoza",
+  N: "Misiones",
+  P: "Formosa",
+  Q: "Neuquén",
+  R: "Río Negro",
+  S: "Santa Fe",
+  T: "Tucumán",
+  U: "Chubut",
+  V: "Tierra del Fuego",
+  W: "Corrientes",
+  X: "Córdoba",
+  Y: "Jujuy",
+  Z: "Santa Cruz",
+};
+
+export function provinciaDeGeoIp(
+  pais: string | null | undefined,
+  region: string | null | undefined,
+): string | null {
+  if ((pais ?? "").trim().toUpperCase() !== "AR") return null;
+  const codigo = (region ?? "").trim().toUpperCase().replace(/^AR-/, "");
+  return PROVINCIA_POR_REGION_ISO[codigo] ?? null;
+}
+
 export interface ZonaVigente {
-  /** Clave de la provincia elegida (cookie o perfil); null = ninguna (se usa la predeterminada). */
+  /** Clave de la provincia elegida (cookie, perfil o IP); null = ninguna (se usa la predeterminada). */
   provinciaClave: string | null;
-  origen: "cookie" | "perfil" | "default";
+  origen: "cookie" | "perfil" | "ip" | "default";
   /** Sucursal que atiende la zona; null si no hay ninguna activa. */
   sucursal: SucursalVista | null;
   resolucion: ResolucionZona | null;
@@ -42,12 +88,15 @@ export interface ZonaVigente {
 export function zonaVigente(entrada: {
   cookie?: string | null;
   perfilProvincia?: string | null;
+  /** Provincia sugerida por la IP (`provinciaDeGeoIp`); la de menor prioridad. */
+  ipProvincia?: string | null;
   datos: DatosSucursales;
 }): ZonaVigente {
   const cookie = claveDeCookie(entrada.cookie);
   const perfil = claveProvincia(entrada.perfilProvincia) || null;
-  const provinciaClave = cookie ?? perfil;
-  const origen = cookie ? "cookie" : perfil ? "perfil" : "default";
+  const ip = claveProvincia(entrada.ipProvincia) || null;
+  const provinciaClave = cookie ?? perfil ?? ip;
+  const origen = cookie ? "cookie" : perfil ? "perfil" : ip ? "ip" : "default";
 
   const r = resolverZona(
     provinciaClave,

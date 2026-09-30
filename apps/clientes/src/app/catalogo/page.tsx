@@ -12,8 +12,7 @@ import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
-import { ZonaCatalogo } from "@/components/ZonaCatalogo";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
 
 type Props = {
   searchParams: Promise<{
@@ -25,6 +24,7 @@ type Props = {
     precio_min?: ParamCrudo;
     precio_max?: ParamCrudo;
     stock?: ParamCrudo;
+    retiro?: ParamCrudo;
     vista?: ParamCrudo;
   }>;
 };
@@ -73,14 +73,20 @@ export default function CatalogoPage({ searchParams }: Props) {
 
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
 async function CatalogoResultados({ searchParams }: Props) {
-  // `disp`: sucursal de la zona y sus reglas (flag `disponibilidad-sucursal`; undefined = apagado).
-  // Viaja como argumento a las lecturas cacheadas: nunca se lee la cookie adentro de la caché.
-  const [params, { soloVisibles }, disp] = await Promise.all([
+  // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
+  // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
+  // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
+  const [params, { soloVisibles }, dispGeneral, locales] = await Promise.all([
     searchParams,
     flagsPublicos(),
-    dispDelVisitante(),
+    dispCatalogo(),
+    localesDeRetiro(),
   ]);
-  const estado = leerEstado(params);
+  const leido = leerEstado(params);
+  // Un local desconocido (o el flag apagado) se descarta: el filtro vuelve a "cualquier local".
+  const dispLocal = leido.retiroEn ? await dispConStockEn(leido.retiroEn) : undefined;
+  const estado = dispLocal ? leido : { ...leido, retiroEn: undefined };
+  const disp = dispLocal ?? dispGeneral;
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).
@@ -145,17 +151,14 @@ async function CatalogoResultados({ searchParams }: Props) {
 
   return (
     <>
-      {/* Zona vigente (flag `sucursales`): no cambia qué productos se ven. */}
-      <Suspense fallback={null}>
-        <ZonaCatalogo />
-      </Suspense>
       <CatalogoClient
         productos={pagina.productos}
         total={pagina.total}
         paginas={pagina.paginas}
         // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
         estado={{ ...estado, pagina: pagina.pagina }}
-        facetas={facetas}
+        // El filtro "Con stock en <local>" sólo tiene sentido con más de un local.
+        facetas={locales.length > 1 ? { ...facetas, locales } : facetas}
         filtrosSinBusqueda={filtrosSinBusqueda}
         oferta={oferta}
       />

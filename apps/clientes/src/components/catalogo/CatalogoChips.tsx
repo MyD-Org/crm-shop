@@ -29,13 +29,16 @@ import { chipsActivos } from "@/lib/catalogo-vista";
 export function CatalogoChips({
   estado,
   rango,
+  locales,
   ir,
 }: {
   estado: EstadoCatalogo;
   rango: RangoPrecio | null;
+  /** Locales del filtro "Con stock en": ponen el nombre en el chip. */
+  locales?: { slug: string; nombre: string }[];
   ir: (cambios: Partial<EstadoCatalogo>) => void;
 }) {
-  const chips = chipsActivos(estado, rango);
+  const chips = chipsActivos(estado, rango, locales);
   if (chips.length === 0) return null;
 
   return (

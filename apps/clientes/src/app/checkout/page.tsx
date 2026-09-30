@@ -12,6 +12,8 @@ import { envioHabilitado } from "@/lib/envio-flag";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
+import { pedidoAConfirmarHabilitado } from "@/lib/pedido-a-confirmar-flag";
+import { mediosPagoCacheados } from "@/lib/medios-pago-datos";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -44,6 +46,7 @@ export default async function CheckoutPage() {
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
   const pagosPromise = pagosHabilitados();
   const envioPromise = envioHabilitado();
+  const aConfirmarPromise = pedidoAConfirmarHabilitado();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
@@ -59,7 +62,10 @@ export default async function CheckoutPage() {
   // El flag de pagos se lee acá, en el server, y al checkout le llega como
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
-  const [pagos, envio] = await Promise.all([pagosPromise, envioPromise]);
+  const [pagos, envio, aConfirmar] = await Promise.all([pagosPromise, envioPromise, aConfirmarPromise]);
+  // Con el flag `pedido-a-confirmar`: medios de pago del CRM. Tabla ausente o vacía = [] (el
+  // checkout sigue con las opciones fijas).
+  const mediosPago = aConfirmar ? await mediosPagoCacheados() : null;
   // Con el flag `sucursales`: locales de retiro y zona vigente. null = como siempre.
   const sucursales = await opcionesCheckoutDelVisitante().catch(
     (err: unknown) => {
@@ -122,6 +128,8 @@ export default async function CheckoutPage() {
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}
+        pedidoAConfirmar={aConfirmar}
+        mediosPago={mediosPago}
       />
     </>
   );

@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Button, Card, Field, Input, Select, useToast } from "@myd-org/ui"
+import { Button, Card, Field, Input, Select, Textarea, useToast } from "@myd-org/ui"
 import { validarReglasVenta, type ReglasVenta } from "@/lib/reglas-venta-validacion"
 
-// Configuración → Sucursales y ventas: reglas de venta del negocio (disponibilidad, reserva y
+// Sucursales: reglas de venta del negocio (disponibilidad, reserva y
 // contacto). Rigen para los pedidos NUEVOS; los ya creados conservan la regla con la que se
 // tomaron. Cada guardado avisa al Shop (best-effort): si el aviso no llegó, el cambio igual quedó
 // guardado y la tienda lo toma en su próximo ciclo.
@@ -18,6 +18,7 @@ type Form = {
   reservaDias: string
   avisoSinContactarHoras: string
   contactoHorasHabiles: string
+  mensajeConfirmacion: string
 }
 
 const OPCIONES_SI_NO = [
@@ -37,6 +38,7 @@ const desdeReglas = (r: ReglasVenta): Form => ({
   reservaDias: String(r.reservaDias),
   avisoSinContactarHoras: String(r.avisoSinContactarHoras),
   contactoHorasHabiles: String(r.contactoHorasHabiles),
+  mensajeConfirmacion: r.mensajeConfirmacion,
 })
 
 const cuerpo = (f: Form) => ({
@@ -46,6 +48,7 @@ const cuerpo = (f: Form) => ({
   reservaDias: f.reservaDias,
   avisoSinContactarHoras: f.avisoSinContactarHoras,
   contactoHorasHabiles: f.contactoHorasHabiles,
+  mensajeConfirmacion: f.mensajeConfirmacion,
 })
 
 export function ReglasVentaCard() {
@@ -194,6 +197,24 @@ export function ReglasVentaCard() {
                 inputMode="numeric"
                 value={form.contactoHorasHabiles}
                 onChange={(e) => cambiar("contactoHorasHabiles", e.target.value)}
+              />
+            </Field>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--ink-faint)" }}>
+              Confirmación de la compra
+            </h3>
+            <Field
+              label="Mensaje de confirmación"
+              hint="Es el texto que ve el cliente al finalizar la compra. Puede usar {plazo} (el plazo de contacto) y {whatsapp} (el WhatsApp de la sucursal que atiende el pedido): la tienda los reemplaza. Si lo deja vacío, se muestra el mensaje predeterminado."
+              error={errores.mensajeConfirmacion}
+            >
+              <Textarea
+                rows={4}
+                value={form.mensajeConfirmacion}
+                onChange={(e) => cambiar("mensajeConfirmacion", e.target.value)}
+                aria-invalid={Boolean(errores.mensajeConfirmacion)}
               />
             </Field>
           </section>

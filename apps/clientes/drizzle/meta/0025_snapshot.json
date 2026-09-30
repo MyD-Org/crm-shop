@@ -1,5 +1,5 @@
 {
-  "id": "0470711b-a351-4572-baf3-be1ae22dba70",
+  "id": "3f250107-b1ba-4fec-a41b-98bf8faf7bb9",
   "prevId": "8b8a781d-0a92-4ebe-a8d0-352a24288837",
   "version": "7",
   "dialect": "postgresql",
@@ -140,106 +140,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "shop.busqueda_interpretaciones": {
-      "name": "busqueda_interpretaciones",
-      "schema": "shop",
-      "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consulta_norm": {
-          "name": "consulta_norm",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "arbol_hash": {
-          "name": "arbol_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "resultado": {
-          "name": "resultado",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "fuente": {
-          "name": "fuente",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "hits": {
-          "name": "hits",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "last_used_at": {
-          "name": "last_used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bi_tenant_uso": {
-          "name": "bi_tenant_uso",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_used_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {
-        "bi_pk": {
-          "name": "bi_pk",
-          "columns": [
-            "tenant_id",
-            "consulta_norm",
-            "arbol_hash"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "bi_largos": {
-          "name": "bi_largos",
-          "value": "char_length(\"shop\".\"busqueda_interpretaciones\".\"consulta_norm\") <= 120 and char_length(\"shop\".\"busqueda_interpretaciones\".\"arbol_hash\") <= 64"
-        }
-      },
       "isRLSEnabled": false
     },
     "shop.carts": {

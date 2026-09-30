@@ -86,3 +86,37 @@ describe("avisoDelCobro", () => {
     expect(avisoDelCobro("pagado", "fallido", true)).toBeNull();
   });
 });
+
+describe("armarMailPedido: contacto del pedido a confirmar", () => {
+  const contacto = {
+    mensaje: "Nos comunicaremos dentro de las 24 horas hábiles.",
+    whatsappVisible: "+54 9 11 5555-0100",
+    whatsappUrl: "https://wa.me/5491155550100?text=Hola",
+  };
+
+  it("recibido: incluye el plazo y el enlace de WhatsApp (escapados)", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido", contacto });
+    expect(m.html).toContain("Nos comunicaremos dentro de las 24 horas hábiles.");
+    expect(m.html).toContain('href="https://wa.me/5491155550100?text=Hola"');
+    expect(m.html).toContain("+54 9 11 5555-0100");
+    expect(m.text).toContain("Nos comunicaremos dentro de las 24 horas hábiles.");
+    expect(m.text).toContain("https://wa.me/5491155550100?text=Hola");
+  });
+
+  it("sin WhatsApp: sólo el plazo, sin enlace", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido", contacto: { mensaje: contacto.mensaje } });
+    expect(m.text).toContain(contacto.mensaje);
+    expect(m.html).not.toContain("wa.me");
+    expect(m.text).not.toContain("WhatsApp");
+  });
+
+  it("los avisos de pago no llevan el bloque de contacto", () => {
+    const m = armarMailPedido({ ...base, aviso: "pago_recibido", contacto });
+    expect(m.html).not.toContain("wa.me");
+  });
+
+  it("sin contacto (flag apagado) el mail queda como siempre", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido" });
+    expect(m.text).not.toContain("Nos comunicaremos");
+  });
+});

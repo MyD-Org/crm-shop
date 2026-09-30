@@ -6,7 +6,7 @@ import type { EscalonDto, ProveedorDto } from "@/lib/cuotas-repo"
 import { CUOTAS_MAX, CUOTAS_MIN, PROVEEDORES } from "@/lib/cuotas"
 import { textoTasa, type TasaCuotas, type TasasMP } from "@/lib/mp-tasas"
 
-// Configuración → Medios de pago / Cuotas (admin y superadmin). Por proveedor de pago (hoy sólo
+// Pagos y cuotas (admin y superadmin). Por proveedor de pago (hoy sólo
 // Mercado Pago, para todas las tarjetas de crédito) el tenant define escalones: desde un monto
 // mínimo (con IVA) se ofrecen hasta N cuotas. Para un monto, el Shop usa el mayor máximo de los
 // escalones alcanzados; si no alcanza ninguno, 1 pago. Aplican igual a todos los productos.

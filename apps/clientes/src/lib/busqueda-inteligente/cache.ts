@@ -1,6 +1,6 @@
 /**
  * Caché de interpretaciones (`shop.busqueda_interpretaciones`, migración
- * 0025) y búsquedas frecuentes. SOLO servidor.
+ * 0026) y búsquedas frecuentes. SOLO servidor.
  *
  * Todo acceso va envuelto: si la tabla no existe (el código se desplegó antes
  * que la migración) o la base falla, la interpretación sigue sin caché y las
@@ -48,7 +48,7 @@ export function comoResultado(v: unknown): ResultadoGuardado {
 }
 
 /**
- * Mientras la migración 0025 no esté aplicada, CADA búsqueda falla contra la
+ * Mientras la migración 0026 no esté aplicada, CADA búsqueda falla contra la
  * caché: un `console.error` por búsqueda llenaba los logs (y el overlay de
  * errores de Next en dev). Se avisa UNA vez por proceso, como advertencia: la
  * búsqueda sigue igual sin caché.
@@ -59,7 +59,7 @@ const registrarFallo = (que: string) => (err: unknown) => {
   if (!avisado) {
     avisado = true;
     console.warn(
-      `[busqueda-ia] caché de interpretaciones no disponible (${que}: ${err instanceof Error ? err.name : "desconocido"}); se sigue sin caché. ¿Falta la migración 0025? (se avisa una vez por proceso)`,
+      `[busqueda-ia] caché de interpretaciones no disponible (${que}: ${err instanceof Error ? err.name : "desconocido"}); se sigue sin caché. ¿Falta la migración 0026? (se avisa una vez por proceso)`,
     );
   }
   return null;

@@ -10,7 +10,7 @@ import { CatalogoShell } from "@/components/admin/catalogo/CatalogoShell"
 
 export const dynamic = "force-dynamic"
 
-// Panel de catálogo: admin+ (operator → 404, igual que Comprobantes y Configuración). No pide
+// Panel de catálogo: admin+ (operator → 404, igual que Comprobantes y Horarios). No pide
 // superadmin a propósito: curar el catálogo es trabajo diario, no una configuración del sistema.
 //
 // La primera página de productos la pide el shell por API (tiene sus propios filtros); acá sólo

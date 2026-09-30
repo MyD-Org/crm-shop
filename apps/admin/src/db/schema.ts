@@ -854,7 +854,7 @@ export const paymentReceipts = pgTable(
   ],
 )
 
-// Proveedores de pago del tenant en el Shop (Configuración → Medios de pago / Cuotas).
+// Proveedores de pago del tenant en el Shop (Pagos y cuotas).
 // v2 (platform/contracts/cuotas/v2): una fila por proveedor con codigo_proveedor = "credito"
 // (aplica a todas las tarjetas de crédito). Las filas v1 por marca (visa, master) quedan en la
 // tabla y se ignoran. Tasas y sin interés los informa el proveedor (no viven acá).
@@ -1022,9 +1022,40 @@ export const reglasVenta = pgTable("reglas_venta", {
   avisoSinContactarHoras: integer("aviso_sin_contactar_horas").notNull().default(24),
   // Horas hábiles que se le prometen al cliente para el contacto.
   contactoHorasHabiles: integer("contacto_horas_habiles").notNull().default(24),
+  // Mensaje de confirmación que ve el cliente al terminar la compra (migración 0046). Vacío = texto
+  // por defecto del Shop. Variables `{plazo}` y `{whatsapp}` que reemplaza el Shop.
+  mensajeConfirmacion: text("mensaje_confirmacion").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+// Medios de pago del checkout del Shop (change `sucursales-igz-mdp`, rebanada C; migración 0046).
+// Tabla APARTE de `payment_methods` (esa es de proveedores de cuotas: decisión O10). Una fila por
+// medio y tenant; `slug` es lo que el Shop guarda en `shop.orders.pago_metodo` (sin FK entre
+// esquemas), por eso es inmutable y no se borra si algún pedido lo usa (se desactiva).
+// `instrucciones` es el texto que ve el cliente al elegirlo. `cobro_online` queda reservado
+// (todavía sin uso: ningún medio de esta tabla cobra online).
+//
+// Drift que vive SOLO en SQL: el CHECK del slug (`^[a-z0-9-]{2,30}$`), la siembra por tenant y el
+// GRANT SELECT a `shop_app`.
+export const mediosPagoShop = pgTable(
+  "medios_pago_shop",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    slug: text("slug").notNull(),
+    nombre: text("nombre").notNull(),
+    instrucciones: text("instrucciones").notNull().default(""),
+    activo: boolean("activo").notNull().default(true),
+    aplicaRetiro: boolean("aplica_retiro").notNull().default(true),
+    aplicaEnvio: boolean("aplica_envio").notNull().default(true),
+    cobroOnline: boolean("cobro_online").notNull().default(false),
+    orden: integer("orden").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("medios_pago_shop_tenant_slug_uniq").on(t.tenantId, t.slug)],
+)
 
 // ── Cuentas de Alegra y stock por sucursal (change `sucursales-igz-mdp`, rebanada D) ───────
 //

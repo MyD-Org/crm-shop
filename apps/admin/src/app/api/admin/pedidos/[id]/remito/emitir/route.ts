@@ -212,8 +212,7 @@ export async function POST(req: Request, { params }: IdParams) {
       }),
     )
     return Response.json(
-      toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, {
-      incluirCosto: canSeeCosts(guard.user.role),
+      toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto: canSeeCosts(guard.user.role), pagoManual: result.pagoManual,
     }),
       { headers: NO_STORE },
     )

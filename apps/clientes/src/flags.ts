@@ -56,6 +56,14 @@ export const disponibilidadSucursalFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const pedidoAConfirmarFlag = flag<boolean>({
+  key: "pedido-a-confirmar",
+  description:
+    "Checkout sin cobro: medios de pago cargados en el CRM, plazo de contacto y WhatsApp de la sucursal en la confirmación (apagado: checkout de siempre)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 export const chatIaFlag = flag<boolean>({
   key: "chat-ia",
   description: "Burbuja del chat con el agente en todas las páginas del Shop",

@@ -1,5 +1,5 @@
 import { and, eq, ne, or, isNull, sql, type SQL } from "drizzle-orm"
-import { catalogProducts } from "@/db/schema"
+import { catalogProducts, catalogOverlay, sucursales } from "@/db/schema"
 
 /**
  * Qué productos se pueden ofrecer a un cliente.
@@ -57,4 +57,25 @@ export function esVendibleSql(alias: string): SQL {
       WHERE jsonb_typeof(${alias}.prices) = 'array'
     ), 0) > 0
   )`)
+}
+
+/**
+ * Excluye lo oculto en TODAS las sucursales activas del tenant (`catalog_overlay.oculto_en_sucursales`
+ * las contiene a todas). Lo usa el bot (`/api/agent/catalog`), que no tiene noción de zona: no
+ * puede saber en qué sucursal atiende al cliente, así que sólo descarta lo que no se ofrece en
+ * NINGUNA. Un producto oculto en una sola sucursal sigue apareciendo (la tienda lo filtra por zona).
+ * Sin sucursales activas, o sin fila de overlay, no excluye nada. No mira `visible` (el bot ofrece
+ * el espejo de Alegra completo, no sólo la vidriera de la tienda).
+ */
+export function noOcultoEnTodasLasSucursales(): SQL {
+  return sql`NOT EXISTS (
+    select 1 from ${catalogOverlay} o
+    where o.tenant_id = ${catalogProducts.tenantId}
+      and o.alegra_id = ${catalogProducts.alegraId}
+      and exists (select 1 from ${sucursales} s0 where s0.tenant_id = o.tenant_id and s0.activa)
+      and not exists (
+        select 1 from ${sucursales} s
+        where s.tenant_id = o.tenant_id and s.activa and not (s.slug = any(o.oculto_en_sucursales))
+      )
+  )`
 }

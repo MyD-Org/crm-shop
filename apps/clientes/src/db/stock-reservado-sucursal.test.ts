@@ -24,7 +24,10 @@ const sinComentarios = (sql: string) =>
 
 const SQL_0012 = leer("../../drizzle/0012_stock_reservado.sql");
 const SQL_0024 = leer("../../drizzle/0024_orders_reserva_sucursal.sql");
-const CODIGO = sinComentarios(SQL_0024);
+const SQL_0025 = leer("../../drizzle/0025_stock_reservado_sucursal_vence.sql");
+const CODIGO_0024 = sinComentarios(SQL_0024);
+// La definición vigente de la vista es la de la 0025 (recrea la de la 0024).
+const CODIGO = sinComentarios(SQL_0025);
 
 describe("la vista 0012 no cambió (guarda del lote 1 de la rebanada B)", () => {
   it("el archivo de la migración 0012 es byte a byte el de siempre", () => {
@@ -33,8 +36,10 @@ describe("la vista 0012 no cambió (guarda del lote 1 de la rebanada B)", () => 
   });
 
   it("la 0024 no toca la vista stock_reservado", () => {
+    expect(CODIGO_0024).not.toMatch(/"shop"\."stock_reservado"(?!_)/);
+    expect(CODIGO_0024).not.toMatch(/DROP VIEW/i);
     expect(CODIGO).not.toMatch(/"shop"\."stock_reservado"(?!_)/);
-    expect(CODIGO).not.toMatch(/DROP VIEW/i);
+    expect(CODIGO).toContain('DROP VIEW "shop"."stock_reservado_sucursal";');
   });
 
   it("stock-disponible.ts sigue leyendo la 0012, no la vista por sucursal", () => {
@@ -45,7 +50,7 @@ describe("la vista 0012 no cambió (guarda del lote 1 de la rebanada B)", () => 
   });
 });
 
-describe("shop.stock_reservado_sucursal (0024)", () => {
+describe("shop.stock_reservado_sucursal (0024, recreada por la 0025)", () => {
   it("agrupa por tenant, sucursal de reserva e ítem, con las columnas que declara schema.ts", () => {
     expect(CODIGO).toMatch(/CREATE VIEW "shop"\."stock_reservado_sucursal" AS/);
     expect(CODIGO).toContain("coalesce(oi.a_traer_de, o.sucursal) AS sucursal");
@@ -65,11 +70,12 @@ describe("shop.stock_reservado_sucursal (0024)", () => {
     expect(CODIGO).toContain("(o.facturado_en IS NULL OR o.factura_cruzada)");
   });
 
-  it("el pendiente reserva si está pagado o su vencimiento es NULL o futuro", () => {
+  it("el pendiente reserva si está pagado o su vencimiento es futuro; NULL = 24 h desde created_at", () => {
     expect(CODIGO).toContain("o.estado <> 'pendiente'");
     expect(CODIGO).toContain("o.pago_estado = 'pagado'");
-    expect(CODIGO).toContain("o.reserva_vence_en IS NULL");
-    expect(CODIGO).toContain("o.reserva_vence_en > now()");
+    expect(CODIGO).toContain("coalesce(o.reserva_vence_en, o.created_at + interval '24 hours') > now()");
+    // NULL ya NO significa "no vence": "nunca" es 'infinity'.
+    expect(CODIGO).not.toContain("o.reserva_vence_en IS NULL");
   });
 
   it("los pedidos sin sucursal no entran", () => {
@@ -77,7 +83,7 @@ describe("shop.stock_reservado_sucursal (0024)", () => {
   });
 
   it("los pendientes sin pago existentes conservan su ventana de 24 h (backfill)", () => {
-    expect(CODIGO).toMatch(
+    expect(CODIGO_0024).toMatch(
       /UPDATE "shop"\."orders"\s+SET "reserva_vence_en" = "created_at" \+ interval '24 hours'\s+WHERE "estado" = 'pendiente' AND "pago_estado" <> 'pagado' AND "reserva_vence_en" IS NULL/,
     );
   });
@@ -91,14 +97,16 @@ describe("shop.stock_reservado_sucursal (0024)", () => {
       'ALTER TABLE "shop"."orders" ADD COLUMN "contactado_por" uuid;',
       'ALTER TABLE "shop"."orders" ADD COLUMN "contactado_por_nombre" text;',
     ]) {
-      expect(CODIGO).toContain(c);
+      expect(CODIGO_0024).toContain(c);
     }
   });
 
   it("documenta la reversa y el drift que vive sólo en SQL", () => {
-    expect(SQL_0024).toContain("Reversa");
-    expect(SQL_0024).toContain('DROP VIEW "shop"."stock_reservado_sucursal"');
-    expect(SQL_0024).toContain("Drift que vive SOLO en SQL");
+    for (const sql of [SQL_0024, SQL_0025]) {
+      expect(sql).toContain("Reversa");
+      expect(sql).toContain('DROP VIEW "shop"."stock_reservado_sucursal"');
+      expect(sql).toContain("Drift que vive SOLO en SQL");
+    }
   });
 
   it("el GRANT a shop_app es condicional", () => {

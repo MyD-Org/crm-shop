@@ -66,8 +66,7 @@ async function mover(req: Request, { params }: IdParams, pagado: boolean): Promi
     }
   }
 
-  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, {
-      incluirCosto: canSeeCosts(guard.user.role),
+  return Response.json(toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto: canSeeCosts(guard.user.role), pagoManual: result.pagoManual,
     }), {
     headers: NO_STORE,
   })

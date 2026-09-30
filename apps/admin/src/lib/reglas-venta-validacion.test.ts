@@ -10,7 +10,19 @@ describe("validarReglasVenta", () => {
       reservaDias: 7,
       avisoSinContactarHoras: 24,
       contactoHorasHabiles: 24,
+      mensajeConfirmacion: "",
     })
+  })
+
+  it("mensaje de confirmación: se recorta, acepta {plazo} y {whatsapp} y rechaza otras variables o excesos", () => {
+    expect(validarReglasVenta({ mensajeConfirmacion: "  Le escribiremos en {plazo}. {whatsapp}  " })).toEqual({
+      ok: true,
+      cambios: { mensajeConfirmacion: "Le escribiremos en {plazo}. {whatsapp}" },
+    })
+    expect(validarReglasVenta({ mensajeConfirmacion: "" })).toEqual({ ok: true, cambios: { mensajeConfirmacion: "" } })
+    expect(validarReglasVenta({ mensajeConfirmacion: "Hola {nombre}" })).toMatchObject({ ok: false, campo: "mensajeConfirmacion" })
+    expect(validarReglasVenta({ mensajeConfirmacion: "a".repeat(1001) })).toMatchObject({ ok: false, campo: "mensajeConfirmacion" })
+    expect(validarReglasVenta({ mensajeConfirmacion: 5 })).toMatchObject({ ok: false, campo: "mensajeConfirmacion" })
   })
 
   it("acepta un cambio parcial y devuelve solo lo enviado", () => {

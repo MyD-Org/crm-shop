@@ -7,9 +7,10 @@ import type { CuentaDto, CuentasYAsignaciones } from "@/lib/alegra-cuentas-repo"
 import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/alegra-cuentas-validacion"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { ReglasVentaCard } from "./ReglasVentaCard"
+import { MediosPagoShopCard } from "./MediosPagoShopCard"
 import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
 
-// Configuración → Sucursales y ventas (parte A): ABM de sucursales y de zonas (provincia ->
+// Sucursales (parte A): ABM de sucursales y de zonas (provincia ->
 // sucursal). La sucursal es la unidad comercial (retiro, envío, zona); la cuenta de Alegra que
 // factura se asigna en otra etapa. Los cambios rigen para los pedidos nuevos y no alteran los ya
 // creados. Cada guardado avisa al Shop; si el aviso no llegó (`propagado: false`) el cambio igual
@@ -557,6 +558,8 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
       </Card>
 
       <ReglasVentaCard />
+
+      <MediosPagoShopCard />
 
       <Dialog
         open={sucursalForm !== null}

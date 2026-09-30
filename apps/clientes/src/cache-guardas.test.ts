@@ -40,6 +40,7 @@ const CON_CACHE = [
   "lib/cuotas-datos.ts",
   "lib/sucursales-datos.ts",
   "lib/busqueda-inteligente/frecuentes.ts",
+  "lib/medios-pago-datos.ts",
 ];
 
 /** Lo que cotiza o cobra: siempre del espejo en vivo (FRS-4). */

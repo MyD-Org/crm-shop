@@ -44,6 +44,11 @@ export interface DatosMailPedido {
   pago?: string;
   /** Sólo "recibido": el pago en línea todavía no se completó. */
   pagoPendienteEnLinea?: boolean;
+  /**
+   * Sólo "recibido", con el flag `pedido-a-confirmar`: plazo de contacto (mensaje ya resuelto) y
+   * WhatsApp de la sucursal asignada. Sin `whatsappUrl` va sólo el mensaje.
+   */
+  contacto?: { mensaje: string; whatsappVisible?: string; whatsappUrl?: string };
 }
 
 function oneLine(s: string): string {
@@ -124,12 +129,23 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   const saludo = nombre ? `Hola, ${nombre}:` : "Hola:";
   const subject = `${oneLine(d.comercio)} — Pedido ${d.numero} ${copy.asunto}`.slice(0, 200);
   const conResumen = d.aviso === "recibido" && (d.lineas?.length ?? 0) > 0;
+  const contacto = d.aviso === "recibido" ? d.contacto : undefined;
+  const whatsappOk = Boolean(contacto?.whatsappUrl && contacto.whatsappVisible);
 
   const cuerpoHtml = `
       <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
         <p style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700">${e(copy.titulo)}</p>
         <p style="margin:0 0 8px;font-size:15px;line-height:1.55">${e(saludo)}</p>
         <p style="margin:0;font-size:15px;line-height:1.55;color:#77808a">${e(bajada)}</p>
+        ${
+          contacto
+            ? `<p style="margin:12px 0 0;font-size:15px;line-height:1.55;white-space:pre-line">${e(contacto.mensaje)}</p>${
+                whatsappOk
+                  ? `<p style="margin:8px 0 0;font-size:14px;line-height:1.55;color:#77808a">También puede escribirnos por WhatsApp al <a href="${e(contacto.whatsappUrl!)}" style="color:#1e5aa8">${e(contacto.whatsappVisible!)}</a>.</p>`
+                  : ""
+              }`
+            : ""
+        }
         <p style="margin:12px 0 0;font-size:14px;color:#77808a">Pedido <strong style="color:#1c2733">${e(d.numero)}</strong></p>
       </td></tr>${conResumen ? resumen(d) : ""}
       <tr><td style="padding:24px 32px 28px;font-family:${FUENTE_MAIL}">
@@ -162,6 +178,10 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     "",
     saludo,
     bajada,
+    ...(contacto ? ["", contacto.mensaje] : []),
+    ...(contacto && whatsappOk
+      ? [`También puede escribirnos por WhatsApp al ${contacto.whatsappVisible}: ${contacto.whatsappUrl}`]
+      : []),
     "",
     `Pedido ${d.numero}`,
     ...lineasTexto,

@@ -96,8 +96,8 @@ describe("comoResultado", () => {
   });
 });
 
-describe("contrato de la tabla con la migración 0025", () => {
-  const sql = readFileSync(fileURLToPath(new URL("../../../drizzle/0025_busqueda_interpretaciones.sql", import.meta.url)), "utf8");
+describe("contrato de la tabla con la migración 0026", () => {
+  const sql = readFileSync(fileURLToPath(new URL("../../../drizzle/0026_busqueda_interpretaciones.sql", import.meta.url)), "utf8");
 
   it("crea la tabla con la clave y las columnas que usa el código", () => {
     for (const col of ["tenant_id", "consulta_norm", "arbol_hash", "resultado", "fuente", "hits", "created_at", "last_used_at"]) {

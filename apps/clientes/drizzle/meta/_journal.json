@@ -180,8 +180,15 @@
     {
       "idx": 25,
       "version": "7",
-      "when": 1790734158462,
-      "tag": "0025_busqueda_interpretaciones",
+      "when": 1790764662000,
+      "tag": "0025_stock_reservado_sucursal_vence",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790769446171,
+      "tag": "0026_busqueda_interpretaciones",
       "breakpoints": true
     }
   ]

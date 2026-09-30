@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
 import { shopOrders, type ShopOrderRow } from "@/db/shop-schema"
@@ -84,6 +84,35 @@ describe("admin: registrar el pago de un pedido offline", () => {
     expect(res.status).toBe(200)
     expect((await rowById(p.id)).pagoEstado).toBe("pendiente")
     expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("medio configurable sin cobro online (aunque esté inactivo) se registra a mano; uno online no", async () => {
+    await getDb().execute(sql`INSERT INTO medios_pago_shop (tenant_id, slug, nombre, activo, cobro_online) VALUES
+      (${TENANT_A}, 'tarjeta-local', 'Tarjeta en el local', true, false),
+      (${TENANT_A}, 'giro-viejo', 'Giro', false, false),
+      (${TENANT_A}, 'link-externo', 'Link', true, true),
+      (${TENANT_B}, 'solo-de-b', 'Solo B', true, false)`)
+    for (const slug of ["tarjeta-local", "giro-viejo"]) {
+      const p = await seedShopOrder(TENANT_A, { pagoMetodo: slug, estado: "confirmado" })
+      const res = await registrar(p.id)
+      expect(res.status).toBe(200)
+      expect(((await res.json()) as PedidoDetalleDto).pagoManual).toBe(true)
+      expect((await rowById(p.id)).pagoEstado).toBe("pagado")
+      expect((await anular(p.id)).status).toBe(200)
+      expect((await rowById(p.id)).pagoEstado).toBe("pendiente")
+    }
+    const online = await seedShopOrder(TENANT_A, { pagoMetodo: "link-externo" })
+    expect((await registrar(online.id)).status).toBe(422)
+    const ajeno = await seedShopOrder(TENANT_A, { pagoMetodo: "solo-de-b" })
+    expect((await registrar(ajeno.id)).status).toBe(422)
+    const desconocido = await seedShopOrder(TENANT_A, { pagoMetodo: "inventado" })
+    expect((await registrar(desconocido.id)).status).toBe(422)
+  })
+
+  it("un medio manual con proveedor de pago (pago online) sigue sin poder registrarse", async () => {
+    await getDb().execute(sql`INSERT INTO medios_pago_shop (tenant_id, slug, nombre, cobro_online) VALUES (${TENANT_A}, 'tarjeta-local', 'Tarjeta', false)`)
+    const p = await seedShopOrder(TENANT_A, { pagoMetodo: "tarjeta-local", pagoProveedor: "mobbex" })
+    expect((await registrar(p.id)).status).toBe(422)
   })
 
   it("Mercado Pago → 422 y no toca nada", async () => {

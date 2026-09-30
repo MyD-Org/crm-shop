@@ -1,7 +1,7 @@
 import { and, eq, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogProducts } from "@/db/schema"
-import { esVendible } from "@/lib/catalogo-vendible"
+import { esVendible, noOcultoEnTodasLasSucursales } from "@/lib/catalogo-vendible"
 import { authAgentTenantRequest } from "@/lib/agent-auth"
 import { getTenantConfig } from "@/lib/tenant-context"
 
@@ -54,6 +54,8 @@ export async function GET(req: Request) {
           // verdadero porque el sync lo escribía fijo: el bot podía cotizar productos dados de
           // baja en Alegra y otros con precio cero.
           esVendible(),
+          // Sin zona en el bot: sólo se descarta lo oculto en TODAS las sucursales activas.
+          noOcultoEnTodasLasSucursales(),
           ...searchTerms.map(tokenMatch),
         ),
       )

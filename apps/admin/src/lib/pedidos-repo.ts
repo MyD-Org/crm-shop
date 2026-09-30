@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
-import { alegraContacts, catalogProducts } from "@/db/schema"
+import { alegraContacts, catalogProducts, mediosPagoShop } from "@/db/schema"
 import {
   shopOrderEventos,
   shopOrderRemitos,
@@ -385,6 +385,8 @@ export interface DetalleExtras {
   historial: EventoHistorialDto[]
   /** Remito único del pedido (0021 del Shop), o `null` si todavía no tiene. */
   remito: RemitoRow | null
+  /** ¿Se puede registrar/anular el pago a mano? Ver `esPagoManual` y `slugsMediosManuales`. */
+  pagoManual: boolean
 }
 
 /** El remito del pedido, si tiene (a lo sumo uno: unicidad de `order_id`, ver la migración 0021
@@ -400,13 +402,14 @@ async function remitoDe(tenantId: string, orderId: string): Promise<RemitoRow | 
 /** Lo que el detalle suma a la fila, aparte de sus propias columnas: ítems, lista de precios (si
  *  aplica), historial y remito. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
 async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<DetalleExtras> {
-  const [items, listaPrecios, historial, remito] = await Promise.all([
+  const [items, listaPrecios, historial, remito, manuales] = await Promise.all([
     itemsDe(tenantId, pedido.id),
     listaParaRevision(tenantId, pedido),
     historialDe(tenantId, pedido.id, pedido.createdAt),
     remitoDe(tenantId, pedido.id),
+    slugsMediosManuales(tenantId),
   ])
-  return { items, listaPrecios, historial, remito }
+  return { items, listaPrecios, historial, remito, pagoManual: esPagoManual(pedido, manuales) }
 }
 
 /**
@@ -970,8 +973,31 @@ export async function desvincularRemito(
 /** Medios que cobra el comercio por fuera de la tienda: el pago lo registra un operador. */
 export const PAGO_METODOS_MANUALES = ["transferencia", "efectivo", "cuenta_corriente", "a_coordinar"] as const
 
-export function esPagoManual(row: Pick<PedidoRow, "pagoMetodo" | "pagoProveedor">): boolean {
-  return (PAGO_METODOS_MANUALES as readonly string[]).includes(row.pagoMetodo) && row.pagoProveedor === null
+/**
+ * Slugs de los medios del tenant que NO cobran online (`medios_pago_shop.cobro_online = false`),
+ * activos o no: un pedido viejo puede haber elegido un medio que el operador desactivó después.
+ * El slug es inmutable y `shop.orders.pago_metodo` lo guarda como texto, sin FK.
+ */
+export async function slugsMediosManuales(tenantId: string): Promise<string[]> {
+  const filas = await getDb()
+    .select({ slug: mediosPagoShop.slug })
+    .from(mediosPagoShop)
+    .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.cobroOnline, false)))
+  return filas.map((f) => f.slug)
+}
+
+/**
+ * Manual = método de la lista fija O un medio configurable sin cobro online (`extras`, de
+ * `slugsMediosManuales`), y sin proveedor de pago: un pago online sólo lo mueve el webhook.
+ */
+export function esPagoManual(
+  row: Pick<PedidoRow, "pagoMetodo" | "pagoProveedor">,
+  extras: readonly string[] = [],
+): boolean {
+  return (
+    row.pagoProveedor === null &&
+    ((PAGO_METODOS_MANUALES as readonly string[]).includes(row.pagoMetodo) || extras.includes(row.pagoMetodo))
+  )
 }
 
 export type PagoManualResult =
@@ -1001,10 +1027,11 @@ export async function registrarPagoManual(
   const destino = input.pagado ? "pagado" : "pendiente"
   const origen = input.pagado ? "pendiente" : "pagado"
 
+  const manuales = await slugsMediosManuales(tenantId)
   const conditions: SQL[] = [
     eq(shopOrders.id, id),
     eq(shopOrders.tenantId, tenantId),
-    inArray(shopOrders.pagoMetodo, [...PAGO_METODOS_MANUALES]),
+    inArray(shopOrders.pagoMetodo, [...PAGO_METODOS_MANUALES, ...manuales]),
     isNull(shopOrders.pagoProveedor),
     eq(shopOrders.pagoEstado, origen),
   ]
@@ -1043,7 +1070,7 @@ export async function registrarPagoManual(
     .from(shopOrders)
     .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
   if (!existente) return { kind: "not_found" }
-  if (!esPagoManual(existente)) return { kind: "no_manual" }
+  if (!esPagoManual(existente, manuales)) return { kind: "no_manual" }
   if (existente.pagoEstado === destino) {
     const extras = await detalleExtras(tenantId, existente)
     return { kind: "ok", pedido: existente, cambio: false, ...extras }
@@ -1282,6 +1309,8 @@ function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
 }
 
 export interface DetalleDtoOpciones {
+  /** `DetalleExtras.pagoManual` (incluye los medios configurables). Sin él, sólo la lista fija. */
+  pagoManual?: boolean
   /** Incluir el costo unitario de cada ítem. Sale de `canSeeCosts(rol)` del guard. */
   incluirCosto?: boolean
 }
@@ -1292,7 +1321,7 @@ export function toPedidoDetalleDto(
   listaPrecios: string | null = null,
   historial: EventoHistorialDto[] = [],
   remito: RemitoRow | null = null,
-  { incluirCosto = false }: DetalleDtoOpciones = {},
+  { incluirCosto = false, pagoManual }: DetalleDtoOpciones = {},
 ): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
@@ -1337,7 +1366,7 @@ export function toPedidoDetalleDto(
     facturadoPorNombre: row.facturadoPorNombre,
     reservaStock: reservaStock(row),
     reserva: reservaDePendiente(row),
-    pagoManual: esPagoManual(row),
+    pagoManual: pagoManual ?? esPagoManual(row),
     pagoActualizadoEn: iso(row.pagoActualizadoEn),
     pagoRegistradoPorNombre: row.pagoRegistradoPorNombre,
     items: items.map((i) => toItemDto(i, incluirCosto)),

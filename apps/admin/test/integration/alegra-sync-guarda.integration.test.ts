@@ -38,7 +38,7 @@ const cfg = (id: string) => ({ id }) as Parameters<typeof syncCatalog>[0]
 let categoriasDeAlegra: AlegraCategory[] = []
 let itemsDeAlegra: AlegraProduct[] = []
 let fallaAlegra = false
-let tamLote = Number.POSITIVE_INFINITY
+const tamLote = Number.POSITIVE_INFINITY
 const lotesLeidos: number[] = []
 
 const VIEJO = "2026-01-01T00:00:00Z"

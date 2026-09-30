@@ -447,8 +447,16 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
     cond.push(f.precio === "con" ? conPrecio : sql`NOT ${conPrecio}`)
   }
 
-  if (f.stock === "con") cond.push(sql`coalesce(p.stock, 0) > 0`)
-  else if (f.stock === "sin") cond.push(sql`coalesce(p.stock, 0) <= 0`)
+  // "Con stock" = en CUALQUIER sucursal: el stock de la cuenta de origen (`p.stock`) o una fila de
+  // `catalog_stock_sucursal` con stock. Sin esto, un producto repetido con 0 en la principal y
+  // stock en otra sucursal quedaba como "sin stock".
+  if (f.stock === "con" || f.stock === "sin") {
+    const conStock = sql`(coalesce(p.stock, 0) > 0 OR EXISTS (
+      SELECT 1 FROM ${catalogStockSucursal} css
+      WHERE css.tenant_id = p.tenant_id AND css.alegra_id = p.alegra_id AND css.stock > 0
+    ))`
+    cond.push(f.stock === "con" ? conStock : sql`NOT ${conStock}`)
+  }
 
   // Catálogo unión (`sucursales-igz-mdp`): una fila que otra absorbió (`reemplazado_por_alegra_id`)
   // ya no es un producto del catálogo —su código lo lleva otra fila—: no se lista. Sigue en la

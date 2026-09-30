@@ -80,6 +80,13 @@ describe("filtro stockEn (Con stock en)", () => {
     expect(await ids({ stockEn: "mdp" })).toEqual(["1"])
   })
 
+  it("«con stock» y «sin stock» miran cualquier sucursal, no solo la cuenta de origen", async () => {
+    // Repetido con 0 en la principal y stock en otra sucursal (las pantallas de MDP): tiene stock.
+    await getDb().execute(sql`UPDATE catalog_products SET stock = 0 WHERE tenant_id = ${A} AND alegra_id IN ('1', '3')`)
+    expect(await ids({ stock: "con" })).toEqual(["1", "2"])
+    expect(await ids({ stock: "sin" })).toEqual(["3"])
+  })
+
   it("sin filtro lista todo", async () => {
     expect(await ids({})).toEqual(["1", "2", "3"])
   })

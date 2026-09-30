@@ -556,6 +556,7 @@ export function CarritoClient({
             scroll y se detiene donde empieza el footer. */}
         <div
           data-sin-footer-mobile
+          data-barra-compra
           aria-hidden={resumenALaVista || undefined}
           inert={resumenALaVista || undefined}
           className={`sticky bottom-0 z-30 -mx-4 mt-8 flex items-center gap-4 rounded-t-[20px] border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-[opacity,translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:hidden ${

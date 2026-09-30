@@ -320,8 +320,9 @@ export function ProductoClient({
 
         {/* Barra de compra en mobile. Sticky (no fixed) y última del main:
             acompaña todo el scroll de la ficha y se detiene donde empieza el
-            footer, así nunca lo tapa. */}
-        <div data-sin-footer-mobile className="sticky bottom-0 z-30 -mx-4 mt-10 border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+            footer, así nunca lo tapa. `data-barra-compra`: el launcher del
+            chat se corre arriba de ella (globals.css). */}
+        <div data-sin-footer-mobile data-barra-compra className="sticky bottom-0 z-30 -mx-4 mt-10 border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
           <div className="flex items-center gap-3">
             {selector}
             {botonAgregar}

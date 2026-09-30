@@ -62,3 +62,11 @@ export const chatIaFlag = flag<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 });
+
+export const busquedaIaFlag = flag<boolean>({
+  key: "busqueda-ia",
+  description:
+    "Búsqueda inteligente del catálogo: interpreta búsquedas en lenguaje natural en filtros (determinista + Jev), franja 'Entendimos' y guía del buscador",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});

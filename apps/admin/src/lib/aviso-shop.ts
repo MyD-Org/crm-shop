@@ -10,6 +10,14 @@ import { pingShopRevalidarCatalogo } from "@/lib/shop-revalidar"
 //   - fin de una sync de Alegra que terminó bien (lib/alegra-sync.ts)
 //   - fin de un drenaje de stock con cambios (lib/alegra-stock-cola.ts)
 
+// El runner del workflow (scripts/alegra-sync.ts) corre fuera de Vercel: no tiene las credenciales
+// del Shop ni sentido registrar "aviso no entregado". Apaga el aviso en ese proceso; el workflow
+// avisa después por /api/cron/alegra-sync/post-sync (que sí corre en Vercel).
+let avisoDesactivado = false
+export function desactivarAvisoShop(): void {
+  avisoDesactivado = true
+}
+
 /**
  * Aviso al Shop DESPUÉS de persistir. Nunca bloquea el guardado: el Shop lee estas tablas
  * directo, así que el cambio ya está a la vista; el aviso sólo le hace descartar lo que tenga
@@ -17,6 +25,7 @@ import { pingShopRevalidarCatalogo } from "@/lib/shop-revalidar"
  * propio último aviso entregado, no le pregunta al Shop cuándo sincronizó).
  */
 export async function avisarShop(tenantId: string): Promise<{ propagado: boolean }> {
+  if (avisoDesactivado) return { propagado: false }
   const { propagado } = await pingShopRevalidarCatalogo()
   try {
     await registrarAvisoShop(tenantId, propagado)

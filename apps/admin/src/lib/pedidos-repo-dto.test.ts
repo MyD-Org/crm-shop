@@ -77,3 +77,14 @@ describe("toPedidoDetalleDto: stock y costo del ítem", () => {
     expect(dto).toMatchObject({ stockActual: null, costoUnitario: null })
   })
 })
+
+describe("esPagoManual con medios configurables", () => {
+  it("lista fija, o slug manual del tenant; nunca con proveedor de pago", async () => {
+    const { esPagoManual } = await import("./pedidos-repo")
+    expect(esPagoManual({ pagoMetodo: "efectivo", pagoProveedor: null })).toBe(true)
+    expect(esPagoManual({ pagoMetodo: "tarjeta-local", pagoProveedor: null })).toBe(false)
+    expect(esPagoManual({ pagoMetodo: "tarjeta-local", pagoProveedor: null }, ["tarjeta-local"])).toBe(true)
+    expect(esPagoManual({ pagoMetodo: "tarjeta-local", pagoProveedor: "mobbex" }, ["tarjeta-local"])).toBe(false)
+    expect(esPagoManual({ pagoMetodo: "efectivo", pagoProveedor: "modo" })).toBe(false)
+  })
+})

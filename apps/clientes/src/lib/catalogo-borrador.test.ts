@@ -6,6 +6,7 @@ const base: EstadoCatalogo = {
   query: undefined,
   categorias: [],
   marcas: [],
+  atributos: [],
   orden: "nombre",
   pagina: 1,
   soloStock: true,
@@ -125,5 +126,15 @@ describe("hrefAlAplicar", () => {
     expect(hrefAlAplicar(estado, cambiarBorrador(estado, { soloStock: true }))).toBe(
       "/catalogo"
     );
+  });
+});
+
+describe("atributos en la hoja", () => {
+  it("un atributo tildado en el borrador viaja al aplicar; sin cambios no navega", () => {
+    const b = cambiarBorrador(base, { atributos: ["tono-calido"] });
+    expect(hrefAlAplicar(base, b)).toBe("/catalogo?atr=tono-calido");
+    const conAtr = { ...base, atributos: ["zocalo-e27", "tono-frio"] };
+    expect(hrefAlAplicar(conAtr, { ...conAtr, atributos: ["tono-frio", "zocalo-e27"] })).toBeNull();
+    expect(limpiarBorrador(conAtr).atributos).toEqual([]);
   });
 });

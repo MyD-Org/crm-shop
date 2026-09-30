@@ -186,7 +186,7 @@ export function parseInitBody(body: unknown, now: Date): InitValidation {
 }
 
 /**
- * Mail destino de comprobantes (Configuración → Comprobantes). Un solo email:
+ * Mail destino de comprobantes (Comprobantes → Ajustes). Un solo email:
  * sin comas/punto y coma/CRLF/espacios/<> (eso bloquea la inyección de headers y
  * de destinatarios extra). Vacío ⇒ "" (sin destino, feature apagada). El dominio se
  * normaliza a minúsculas.

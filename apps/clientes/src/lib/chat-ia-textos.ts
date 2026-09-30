@@ -58,6 +58,14 @@ export const ETIQUETAS_CHAT = {
   decrementLabel: "Quitar uno",
   incrementLabel: "Agregar uno más",
   removeLabel: "Quitar del carrito",
+  // Cards `catalog` y `spec` (ai-widget 0.7.0, catálogo asistido).
+  availableLabel: "Disponible",
+  catalogAppliedLabel: "Filtros aplicados: {summary}",
+  catalogSuggestedLabel: "Filtros sugeridos: {summary}",
+  catalogUndoLabel: "Deshacer",
+  catalogViewLabel: "Ver en el catálogo",
+  specAttributesLabel: "Características",
+  specSheetLabel: "Ficha técnica (PDF)",
 } as const;
 
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";

@@ -1,5 +1,5 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
-import { NO_STORE, parsearSeleccion } from "@/lib/catalogo-admin"
+import { NO_STORE, parsearSeleccion, validarStockEn } from "@/lib/catalogo-admin"
 import { contarSeleccion } from "@/lib/catalogo-overlay-repo"
 
 // POST /api/admin/catalogo/productos/masiva/contar — cuántos productos alcanza una selección.
@@ -16,6 +16,10 @@ export async function POST(req: Request) {
 
   const seleccion = parsearSeleccion(await req.json().catch(() => null))
   if (seleccion instanceof Response) return seleccion
+  if (seleccion.tipo === "filtro") {
+    const stockEnInvalido = await validarStockEn(guard.tenantId, seleccion.filtros)
+    if (stockEnInvalido) return stockEnInvalido
+  }
 
   const afectados = await contarSeleccion(guard.tenantId, seleccion)
   return Response.json({ afectados }, { headers: NO_STORE })

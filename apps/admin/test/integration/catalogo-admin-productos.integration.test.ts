@@ -4,6 +4,7 @@ import { NextRequest } from "next/server"
 import { getDb } from "@/db"
 import { catalogOverlay, catalogProducts, shopCategories, shopTags } from "@/db/schema"
 import { crearCategoria, guardarOverlay } from "@/lib/catalogo-overlay-repo"
+import { crearSucursal } from "@/lib/sucursales-repo"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
 
 // L6 — API del panel de catálogo, productos. DB real (crm_test), guard real (requireAdminPlus:
@@ -432,6 +433,25 @@ describe("API del panel de catálogo — productos", () => {
         }),
       )
       expect((await res.json()).afectados).toBe(2)
+    })
+
+    it("mostrar/ocultar en una sucursal: aplica con un slug del tenant y rechaza lo demás", async () => {
+      await crearSucursal(TENANT_A, { slug: "igz", nombre: "Iguazú" })
+      await crearSucursal(TENANT_A, { slug: "mdp", nombre: "Mar del Plata" })
+      for (const id of ["1", "2"]) await seedProducto(TENANT_A, id)
+      const post = (accion: unknown) =>
+        masiva.POST(req("/api/admin/catalogo/productos/masiva", { body: { seleccion: { tipo: "ids", alegraIds: ["1", "2"] }, accion } }))
+
+      const ok = await post({ tipo: "sucursal", slug: "mdp", visible: false })
+      expect(ok.status).toBe(200)
+      expect((await ok.json()).afectados).toBe(2)
+      const filas = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.tenantId, TENANT_A))
+      expect(filas.map((f) => f.ocultoEnSucursales)).toEqual([["mdp"], ["mdp"]])
+
+      // Slug que no es una sucursal del tenant: validación (422). Cuerpo mal formado: 400.
+      expect((await post({ tipo: "sucursal", slug: "otra", visible: false })).status).toBe(422)
+      expect((await post({ tipo: "sucursal", slug: "mdp" })).status).toBe(400)
+      expect((await post({ tipo: "sucursal", visible: true })).status).toBe(400)
     })
 
     it("ocultar dos veces es idempotente, no un error", async () => {

@@ -5,11 +5,13 @@ import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Table, Tex
 import type { SucursalDto, ZonaDto } from "@/lib/sucursales-repo"
 import type { CuentaDto, CuentasYAsignaciones } from "@/lib/alegra-cuentas-repo"
 import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/alegra-cuentas-validacion"
+import { normalizarIdentificador } from "@/lib/identificador"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { ReglasVentaCard } from "./ReglasVentaCard"
+import { MediosPagoShopCard } from "./MediosPagoShopCard"
 import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
 
-// Configuración → Sucursales y ventas (parte A): ABM de sucursales y de zonas (provincia ->
+// Sucursales (parte A): ABM de sucursales y de zonas (provincia ->
 // sucursal). La sucursal es la unidad comercial (retiro, envío, zona); la cuenta de Alegra que
 // factura se asigna en otra etapa. Los cambios rigen para los pedidos nuevos y no alteran los ya
 // creados. Cada guardado avisa al Shop; si el aviso no llegó (`propagado: false`) el cambio igual
@@ -558,6 +560,8 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
 
       <ReglasVentaCard />
 
+      <MediosPagoShopCard />
+
       <Dialog
         open={sucursalForm !== null}
         onOpenChange={(open) => {
@@ -575,13 +579,13 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
           <div className="flex flex-col gap-3">
             <Field
               label="Identificador"
-              hint="De 2 a 20 caracteres: minúsculas, números o guiones. No se puede cambiar después."
+              hint="De 2 a 20 caracteres: letras, números o guiones (se pasa a minúsculas y los espacios a guiones). No se puede cambiar después."
               error={errores.slug}
             >
               <Input
                 value={sucursalForm.slug}
                 disabled={Boolean(sucursalForm.editandoSlug)}
-                onChange={(e) => setS({ slug: e.target.value })}
+                onChange={(e) => setS({ slug: normalizarIdentificador(e.target.value) })}
                 aria-invalid={Boolean(errores.slug)}
               />
             </Field>

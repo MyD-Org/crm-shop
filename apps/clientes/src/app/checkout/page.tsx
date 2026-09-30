@@ -4,7 +4,6 @@ import { CheckoutClient } from "@/components/CheckoutClient";
 import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
-import { vincularCambiaAlgo } from "@/lib/contactos-espejo";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
 import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { pagosHabilitados } from "@/lib/pagos-flag";
@@ -12,6 +11,8 @@ import { envioHabilitado } from "@/lib/envio-flag";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
+import { pedidoAConfirmarHabilitado } from "@/lib/pedido-a-confirmar-flag";
+import { mediosPagoCacheados } from "@/lib/medios-pago-datos";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -44,6 +45,7 @@ export default async function CheckoutPage() {
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
   const pagosPromise = pagosHabilitados();
   const envioPromise = envioHabilitado();
+  const aConfirmarPromise = pedidoAConfirmarHabilitado();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
@@ -59,7 +61,10 @@ export default async function CheckoutPage() {
   // El flag de pagos se lee acá, en el server, y al checkout le llega como
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
-  const [pagos, envio] = await Promise.all([pagosPromise, envioPromise]);
+  const [pagos, envio, aConfirmar] = await Promise.all([pagosPromise, envioPromise, aConfirmarPromise]);
+  // Con el flag `pedido-a-confirmar`: medios de pago del CRM. Tabla ausente o vacía = [] (el
+  // checkout sigue con las opciones fijas).
+  const mediosPago = aConfirmar ? await mediosPagoCacheados() : null;
   // Con el flag `sucursales`: locales de retiro y zona vigente. null = como siempre.
   const sucursales = await opcionesCheckoutDelVisitante().catch(
     (err: unknown) => {
@@ -76,11 +81,9 @@ export default async function CheckoutPage() {
 
   const perfil = dc.perfil;
   // Su documento ya es de un cliente de Alegra y no vinculó: se le ofrece
-  // vincular sólo si eso le cambia algo (lista propia o cuenta corriente).
-  const coincidente = !cliente ? perfil?.coincideConAlegra : null;
-  const sugerirVincular = coincidente
-    ? await vincularCambiaAlgo(coincidente)
-    : false;
+  // vincular siempre, tenga o no cuenta corriente (el vínculo ata la compra al
+  // contacto y trae sus datos de Alegra).
+  const sugerirVincular = !cliente && !!perfil?.coincideConAlegra;
   // Para el formulario del no vinculado: sólo las columnas que muestra.
   const perfilUI = perfil
     ? {
@@ -122,6 +125,8 @@ export default async function CheckoutPage() {
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}
+        pedidoAConfirmar={aConfirmar}
+        mediosPago={mediosPago}
       />
     </>
   );

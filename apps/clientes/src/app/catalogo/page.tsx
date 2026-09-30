@@ -1,31 +1,46 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { facetasPublicas, paginaCatalogoPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
+  consultaInterpretada,
   filtrosDeEstado,
   hrefCanonico,
   leerEstado,
+  sinBusquedaIa,
+  type EstadoCatalogo,
   type ParamCrudo,
 } from "@/lib/catalogo-url";
 import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
-import { ZonaCatalogo } from "@/components/ZonaCatalogo";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
+import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
+import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
+import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
+import { interpretar } from "@/lib/busqueda-inteligente/servidor";
+import { decidirBusqueda } from "@/lib/busqueda-inteligente/flujo";
+import { chipsSugeridos } from "@/lib/busqueda-inteligente/url";
+import { getPaginaCatalogo } from "@/lib/catalog";
+import { FranjaSugerencias } from "@/components/catalogo/FranjaBusqueda";
+import { FranjaSugerenciasServidor } from "@/components/catalogo/FranjaSugerenciasServidor";
 
 type Props = {
   searchParams: Promise<{
     q?: ParamCrudo;
     categoria?: ParamCrudo;
     marca?: ParamCrudo;
+    atr?: ParamCrudo;
     orden?: ParamCrudo;
     pagina?: ParamCrudo;
     precio_min?: ParamCrudo;
     precio_max?: ParamCrudo;
     stock?: ParamCrudo;
+    retiro?: ParamCrudo;
     vista?: ParamCrudo;
+    ia?: ParamCrudo;
   }>;
 };
 
@@ -41,7 +56,8 @@ type Props = {
 export async function generateMetadata({
   searchParams,
 }: Props): Promise<Metadata> {
-  const estado = leerEstado(await searchParams);
+  const [params, conBusquedaIa] = await Promise.all([searchParams, busquedaIaHabilitada()]);
+  const estado = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
   return {
     robots: { index: indexable(estado), follow: true },
     ...(process.env.NEXT_PUBLIC_SITE_URL
@@ -73,18 +89,28 @@ export default function CatalogoPage({ searchParams }: Props) {
 
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
 async function CatalogoResultados({ searchParams }: Props) {
-  // `disp`: sucursal de la zona y sus reglas (flag `disponibilidad-sucursal`; undefined = apagado).
-  // Viaja como argumento a las lecturas cacheadas: nunca se lee la cookie adentro de la caché.
-  const [params, { soloVisibles }, disp] = await Promise.all([
+  // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
+  // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
+  // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
+  const [params, { soloVisibles }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
     searchParams,
     flagsPublicos(),
-    dispDelVisitante(),
+    dispCatalogo(),
+    localesDeRetiro(),
+    busquedaIaHabilitada(),
   ]);
-  const estado = leerEstado(params);
+  // Flag `busqueda-ia` apagado: igual que antes del cambio (sin `atr` ni `ia`).
+  const leido = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
+  // Un local desconocido (o el flag apagado) se descarta: el filtro vuelve a "cualquier local".
+  const dispLocal = leido.retiroEn ? await dispConStockEn(leido.retiroEn) : undefined;
+  const estado = dispLocal ? leido : { ...leido, retiroEn: undefined };
+  const disp = dispLocal ?? dispGeneral;
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).
-  const filtros = filtrosDeEstado(estado);
+  // Sin el flag `busqueda-ia`, el panel queda como siempre: sin la faceta de
+  // características (ni su consulta).
+  const filtros = { ...filtrosDeEstado(estado), ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }) };
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
   // resuelven en Postgres: filtrar u ordenar después de paginar daría
@@ -143,22 +169,94 @@ async function CatalogoResultados({ searchParams }: Props) {
     ? await facetasPublicas({ ...filtros, busqueda: undefined }, soloVisibles, disp)
     : facetasBusqueda;
 
+  // Búsqueda inteligente (flag `busqueda-ia`). Puede redirigir: va afuera de
+  // todo try/catch (`redirect` tira).
+  const busquedaIa = conBusquedaIa ? await busquedaInteligente(estado, pagina.total, disp) : undefined;
+
   return (
     <>
-      {/* Zona vigente (flag `sucursales`): no cambia qué productos se ven. */}
-      <Suspense fallback={null}>
-        <ZonaCatalogo />
-      </Suspense>
       <CatalogoClient
         productos={pagina.productos}
         total={pagina.total}
         paginas={pagina.paginas}
         // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
         estado={{ ...estado, pagina: pagina.pagina }}
-        facetas={facetas}
+        // El filtro "Con stock en <local>" sólo tiene sentido con más de un local.
+        facetas={locales.length > 1 ? { ...facetas, locales } : facetas}
         filtrosSinBusqueda={filtrosSinBusqueda}
         oferta={oferta}
+        busquedaIa={busquedaIa}
       />
     </>
   );
+}
+
+/**
+ * Flujo de la búsqueda inteligente sobre el resultado de la búsqueda clásica
+ * (spec catálogo asistido, §4). La clásica ya corrió y se muestra igual; esto
+ * sólo se suma.
+ *
+ * - Los usos de la caché (búsquedas frecuentes) sólo se cuentan en la página 1
+ *   sin `ia=`: paginar o recargar una página interpretada no es otra búsqueda.
+ * - Con `ia=` en la URL (ya interpretada, o `ia=0` "tal cual") NUNCA se vuelve
+ *   a interpretar: es el freno contra el bucle de redirecciones. Si la URL
+ *   interpretada no trajo nada, se buscan las alternativas (caché, sin sumar
+ *   un uso) para el "sin resultados".
+ * - `debeInterpretar` y 0–3 resultados: se interpreta en ESTE request y, si
+ *   hay algo para aplicar, `redirect` a la URL interpretada (`ia=<consulta>`):
+ *   el primer render ya llega rescatado. Si quedó texto que importa
+ *   ("pecera"), sólo si ese estado trae algo; si no, la interpretación se
+ *   ofrece como sugerencias (ver `decidirBusqueda`). Dentro del `<Suspense>` de la página
+ *   Next lo resuelve como redirección del lado del cliente.
+ * - `debeInterpretar` con resultados: la grilla sale ya y la franja llega por
+ *   streaming con los filtros propuestos como chips (nada se aplica solo).
+ */
+/**
+ * Cuántos productos trae un estado del catálogo (el interpretado, antes de
+ * redirigir). Si la base falla, 0: no se redirige a ciegas.
+ */
+async function contarResultados(
+  estado: EstadoCatalogo,
+  disp: ContextoDisponibilidad | undefined,
+): Promise<number> {
+  const { soloVisibles } = await flagsPublicos();
+  return getPaginaCatalogo({ filtros: filtrosDeEstado(estado), pagina: 1, porPagina: 1, soloVisibles, disp })
+    .then((p) => p.total)
+    .catch((err: unknown) => {
+      console.error(`[catalogo] no se pudo contar la búsqueda interpretada: ${err instanceof Error ? err.name : "desconocido"}`);
+      return 0;
+    });
+}
+
+async function busquedaInteligente(
+  estado: EstadoCatalogo,
+  total: number,
+  disp: ContextoDisponibilidad | undefined,
+) {
+  const q = estado.query;
+  if (!estado.ia && q && debeInterpretar(q, total)) {
+    if (total >= POCOS_RESULTADOS) {
+      return {
+        alternativas: [],
+        franja: (
+          <Suspense fallback={null}>
+            <FranjaSugerenciasServidor estado={estado} consulta={q} />
+          </Suspense>
+        ),
+      };
+    }
+    const interpretacion = await interpretar(q, { sumarUso: estado.pagina === 1 });
+    const decision = await decidirBusqueda(estado, total, interpretacion, (destino) => contarResultados(destino, disp));
+    if (decision.redirigir) redirect(decision.redirigir);
+    return {
+      alternativas: decision.alternativas,
+      franja: total > 0 ? <FranjaSugerencias consulta={q} chips={decision.chipsFranja} /> : undefined,
+    };
+  }
+  const consulta = consultaInterpretada(estado);
+  if (consulta && total === 0) {
+    const interpretacion = await interpretar(consulta, { soloLectura: true });
+    return { alternativas: interpretacion ? chipsSugeridos(estado, [interpretacion.sugerir], "reemplazar") : [] };
+  }
+  return { alternativas: [] };
 }

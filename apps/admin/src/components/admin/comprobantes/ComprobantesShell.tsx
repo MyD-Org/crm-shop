@@ -1,12 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { AlertTriangle, Receipt, RefreshCw } from "lucide-react"
-import { Badge, Button, EmptyState, Table, type TableColumn, Tabs } from "@myd-org/ui"
+import { AlertTriangle, Receipt, RefreshCw, Settings } from "lucide-react"
+import { Badge, Button, Dialog, EmptyState, Table, type TableColumn, Tabs } from "@myd-org/ui"
 import type { AdminReceiptDto } from "@/lib/payment-receipts"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 import { markVisited } from "@/lib/admin-last-visit"
 import { ComprobanteDialog } from "./ComprobanteDialog"
+import { ReceiptsEmailForm } from "../ReceiptsEmailForm"
 import { fmtFecha, fmtFechaHora, fmtMonto, methodLabel } from "./format"
 
 type Tab = "pending" | "loaded"
@@ -22,6 +23,8 @@ interface Props {
   initialItems: AdminReceiptDto[]
   initialTotal: number
   initialReceiptsEmailConfigured: boolean
+  /** Mail que recibe los avisos: se edita desde el diálogo de Ajustes de esta pantalla. */
+  initialReceiptsEmail: string
   initialStorageConfigured: boolean
   /** Id de `?id=` (link del mail): el shell abre ese comprobante, o avisa "no encontrado". */
   initialOpenId?: string
@@ -37,6 +40,7 @@ export function ComprobantesShell({
   initialItems,
   initialTotal,
   initialReceiptsEmailConfigured,
+  initialReceiptsEmail,
   initialStorageConfigured,
   initialOpenId,
   pageSize,
@@ -50,6 +54,10 @@ export function ComprobantesShell({
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState("")
   const [openId, setOpenId] = useState<string | null>(null)
+  // Ajustes de la sección (hoy, sólo el mail de avisos). Vive acá y no en una pantalla de
+  // configuración general: quien revisa comprobantes es quien lo va a buscar.
+  const [ajustesOpen, setAjustesOpen] = useState(false)
+  const [receiptsEmail, setReceiptsEmail] = useState(initialReceiptsEmail)
   // Link del mail con id inexistente/ajeno: el GET detalle da 404 (idéntico al de operator) y
   // la pantalla lo dice en vez de abrir el diálogo, sin revelar nada.
   const [notFoundId, setNotFoundId] = useState<string | null>(null)
@@ -206,10 +214,10 @@ export function ComprobantesShell({
         >
           <AlertTriangle size={15} strokeWidth={1.8} />
           <span>
-            Todavía no configuraste el email que recibe los comprobantes.{" "}
-            <a href="/admin/configuracion" style={{ textDecoration: "underline", fontWeight: 600 }}>
-              Configuralo en Configuración → Comprobantes
-            </a>{" "}
+            Todavía no configuró el email que recibe los comprobantes.{" "}
+            <button type="button" onClick={() => setAjustesOpen(true)} style={{ textDecoration: "underline", fontWeight: 600 }}>
+              Configúrelo en Ajustes
+            </button>{" "}
             para que le llegue el aviso con cada comprobante.
           </span>
         </div>
@@ -235,15 +243,37 @@ export function ComprobantesShell({
         </div>
       )}
 
-      <Tabs
-        variant="underline"
-        value={tab}
-        onValueChange={(v) => cambiarTab(v as Tab)}
-        items={[
-          { value: "pending", label: "Pendientes" },
-          { value: "loaded", label: "Cargados" },
-        ]}
-      />
+      <div className="flex items-end justify-between gap-3">
+        <Tabs
+          variant="underline"
+          value={tab}
+          onValueChange={(v) => cambiarTab(v as Tab)}
+          items={[
+            { value: "pending", label: "Pendientes" },
+            { value: "loaded", label: "Cargados" },
+          ]}
+        />
+        <Button variant="ghost" size="sm" onClick={() => setAjustesOpen(true)}>
+          <Settings size={15} strokeWidth={1.6} />
+          Ajustes
+        </Button>
+      </div>
+
+      <Dialog
+        open={ajustesOpen}
+        onOpenChange={setAjustesOpen}
+        title="Ajustes de comprobantes"
+        description="Los clientes pueden informar un pago desde Mi cuenta adjuntando el comprobante. Indique a qué email se avisa."
+      >
+        <ReceiptsEmailForm
+          initialReceiptsEmail={receiptsEmail}
+          onSaved={(email) => {
+            setReceiptsEmail(email)
+            setReceiptsEmailConfigured(email !== "")
+            setAjustesOpen(false)
+          }}
+        />
+      </Dialog>
 
       {!items.length && !error ? (
         <EmptyState

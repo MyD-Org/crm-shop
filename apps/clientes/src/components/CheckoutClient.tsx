@@ -46,6 +46,9 @@ import {
   type PagoMetodo,
 } from "@/lib/envio";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
+import { PedidoContacto } from "@/components/PedidoContacto";
+import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
+import { NOTA_PAGO_A_CONFIRMAR, medioElegido, mediosParaModalidad, type MedioPago } from "@/lib/medios-pago";
 import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
 import type { DisponibilidadVista } from "@/lib/disponibilidad-textos";
 import { itemDe } from "@/lib/tracking/eventos";
@@ -254,9 +257,8 @@ interface Props {
    */
   direccionesGuardadas?: DireccionEnvio[];
   /**
-   * El documento de facturación ya es de un cliente de Alegra, la cuenta no
-   * está vinculada y vincular le cambia algo (lista propia o cuenta corriente,
-   * `vincularCambiaAlgo`): se recomienda vincular antes de confirmar. Si
+   * El documento de facturación ya es de un cliente de Alegra y la cuenta no
+   * está vinculada: se recomienda vincular antes de confirmar. Si
    * confirma igual, el pedido sale con `requiereRevision`.
    */
   sugerirVincular?: boolean;
@@ -265,6 +267,16 @@ interface Props {
    * Habilita "Local de retiro" (retiro) y "Provincia de entrega" (envío). null = checkout de siempre.
    */
   sucursales?: OpcionesCheckoutSucursales | null;
+  /**
+   * Flag `pedido-a-confirmar` (resuelto en el server). Prendido, la confirmación informa el plazo
+   * de contacto y el WhatsApp de la sucursal (los manda el servidor en la respuesta del pedido).
+   */
+  pedidoAConfirmar?: boolean;
+  /**
+   * Medios de pago cargados en el CRM (con el flag `pedido-a-confirmar`). El paso Pago ofrece los
+   * que aplican a la modalidad, sin cobro. null o vacío = las opciones fijas de siempre.
+   */
+  mediosPago?: MedioPago[] | null;
 }
 
 export function CheckoutClient({
@@ -280,6 +292,8 @@ export function CheckoutClient({
   direccionesGuardadas = [],
   sugerirVincular = false,
   sucursales = null,
+  pedidoAConfirmar = false,
+  mediosPago = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready } = useCart();
 
@@ -292,6 +306,8 @@ export function CheckoutClient({
   }, [ready, items]);
 
   const [pago, setPago] = useState<PagoMetodo>("transferencia");
+  // Con el flag `pedido-a-confirmar`: slug del medio del CRM que eligió el comprador.
+  const [medioSlug, setMedioSlug] = useState("");
   const [entrega, setEntrega] = useState<EntregaTipo>("retiro");
   const [localRetiro, setLocalRetiro] = useState(sucursales?.localInicial ?? "");
   const [provinciaEntrega, setProvinciaEntrega] = useState(sucursales?.provinciaInicial ?? "");
@@ -384,6 +400,8 @@ export function CheckoutClient({
     total: number;
     /** Máximo de cuotas congelado en el pedido. null = sin límite propio (flag off o legacy). */
     cuotasMax: number | null;
+    /** Plazo y WhatsApp de la sucursal (flag `pedido-a-confirmar`). */
+    contacto?: ContactoPedidoVista | null;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -494,6 +512,13 @@ export function CheckoutClient({
   // formulario muestra una opción que el servidor va a rechazar.
   const pagoElegido: PagoMetodo = metodosPago.includes(pago) ? pago : metodosPago[0];
 
+  // Con el flag `pedido-a-confirmar` y medios cargados, el paso Pago ofrece los del CRM (sin
+  // cobro) y el pedido guarda el slug. Sin medios cargados se sigue con lo de arriba.
+  const modoMedios = pedidoAConfirmar && !!mediosPago && mediosPago.length > 0;
+  const medioSel = modoMedios ? medioElegido(mediosPago, entrega, medioSlug) : null;
+  const mediosParaElegir = modoMedios ? mediosParaModalidad(mediosPago, entrega) : [];
+  const pagoParaEnviar: string = modoMedios ? (medioSel?.slug ?? "a_coordinar") : pagoElegido;
+
   const envioDisponible = cotizacion?.envio.disponible ?? false;
   const contactoCompleto =
     nombre.trim() !== "" && hayTelefonoParaPedido(telefono, facturacion.telefonoAlegra);
@@ -563,7 +588,7 @@ export function CheckoutClient({
           entregaTipo: entrega,
           entregaCiudad: entrega === "envio" ? ciudadEntrega : undefined,
           entregaDireccion: entrega === "envio" ? direccionEntrega : undefined,
-          pagoMetodo: pagoElegido,
+          pagoMetodo: pagoParaEnviar,
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
@@ -613,6 +638,7 @@ export function CheckoutClient({
         id: json.id,
         total,
         cuotasMax: typeof json.cuotasMax === "number" ? json.cuotasMax : null,
+        contacto: pedidoAConfirmar ? (json.contacto ?? null) : null,
       });
       // Conversión: al crear el pedido, también con Mercado Pago todavía impago.
       track({
@@ -730,7 +756,12 @@ export function CheckoutClient({
           </h1>
           <p className={`mt-2 text-sm font-semibold text-text ${ENTRADA_EXITO} delay-[180ms]`}>{confirmado.numero}</p>
           <p className={`mt-3 text-sm text-muted ${ENTRADA_EXITO} delay-[240ms]`}>
-            {pagado ? (
+            {pedidoAConfirmar && !pagado ? (
+              <>
+                Su pedido quedó a confirmar; todavía no se realizó ningún cobro.
+                {modoMedios && medioSel ? <> Medio de pago elegido: {medioSel.nombre}.</> : null}
+              </>
+            ) : pagado ? (
               <>
                 Ya cobramos su pedido. Nos comunicaremos con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"}.
@@ -755,6 +786,13 @@ export function CheckoutClient({
                 <> Le enviamos el detalle a {emailCliente}.</>
               ))}
           </p>
+          {pedidoAConfirmar && !pagado && confirmado.contacto && (
+            <PedidoContacto
+              contacto={confirmado.contacto}
+              centrado
+              className={`mt-3 ${ENTRADA_EXITO} delay-[270ms]`}
+            />
+          )}
           <div className={`mt-6 flex justify-center gap-3 ${ENTRADA_EXITO} delay-[300ms]`}>
             <Link href="/mi-cuenta">
               <Button>Ver mis pedidos</Button>
@@ -846,11 +884,6 @@ export function CheckoutClient({
                     placeholder="Seleccionar local"
                   />
                 </Field>
-                {sucursales.locales.find((l) => l.slug === localRetiro)?.horario ? (
-                  <p className="mt-2 text-sm text-muted">
-                    Horario: {sucursales.locales.find((l) => l.slug === localRetiro)?.horario}
-                  </p>
-                ) : null}
               </div>
             )}
             {envioHabilitado && !admiteEnvio && (
@@ -1006,6 +1039,7 @@ export function CheckoutClient({
                 <div className="mt-3">
                   <VincularClient
                     embebido
+                    enviarAlAbrir
                     documentoSugerido={perfilFacturacion?.nroDoc ?? ""}
                     onVinculado={() => {
                       setVinculando(false);
@@ -1017,7 +1051,8 @@ export function CheckoutClient({
               ) : (
                 <>
                   <p className="mt-1 text-sm text-muted">
-                    Vincule su cuenta para que esta compra quede registrada en ella.
+                    Vincule su cuenta para que esta compra quede registrada en ella. Le
+                    enviaremos un código al email registrado en su cuenta de cliente.
                   </p>
                   <Button size="sm" className="mt-3" onClick={() => setVinculando(true)}>
                     Vincular mi cuenta
@@ -1115,6 +1150,34 @@ export function CheckoutClient({
 
           {pasoActual === "pago" && (
           <>
+          {modoMedios && (
+          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
+            {cabeceraPasos}
+            <h2 className="mb-4 font-display text-2xl font-medium text-text">Medio de pago</h2>
+            {medioSel ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {mediosParaElegir.map((m) => (
+                    <RadioCard
+                      key={m.slug}
+                      selected={medioSel.slug === m.slug}
+                      onClick={() => setMedioSlug(m.slug)}
+                      title={m.nombre}
+                    />
+                  ))}
+                </div>
+                {medioSel.instrucciones.trim() && (
+                  <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
+            )}
+            <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>
+          </section>
+          )}
+
+          {!modoMedios && (<>
           {!pagosHabilitados && (
             <section className="rounded-[20px] border border-border/50 bg-surface p-5">
               {cabeceraPasos}
@@ -1145,6 +1208,7 @@ export function CheckoutClient({
             )}
           </section>
           )}
+          </>)}
 
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
             <h2 className="mb-4 font-display text-2xl font-medium text-text">

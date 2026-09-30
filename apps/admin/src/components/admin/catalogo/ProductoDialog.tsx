@@ -9,6 +9,7 @@ import {
   ErrorApi,
   fmtFechaHora,
   precioDeLista,
+  stockEnSucursal,
   type CategoriaDto,
   type FichaDto,
   type ProductoDto,
@@ -16,6 +17,8 @@ import {
   type SucursalOpcionDto,
   type TagDto,
 } from "./tipos"
+import { AyudaTooltip } from "../AyudaTooltip"
+import { AYUDA_VISIBLE_EN } from "./ayudas"
 import { FotosProducto } from "./FotosProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 
@@ -159,6 +162,25 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             <DatoAlegra etiqueta="Descripción en Alegra" valor={producto.descripcionAlegra ?? "—"} />
             <DatoAlegra etiqueta="Precio de lista" valor={precio ?? "Sin precio"} />
             <DatoAlegra etiqueta="Stock" valor={producto.stock ?? "—"} />
+            {sucursales.length > 1 && (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
+                  Stock por sucursal
+                </span>
+                {sucursales
+                  .filter((s) => s.activa)
+                  .map((s) => {
+                    const st = stockEnSucursal(producto, s.slug)
+                    return (
+                      <DatoAlegra
+                        key={s.slug}
+                        etiqueta={s.nombre}
+                        valor={st ? `${st.texto}${st.leidoAt ? ` (actualizado el ${fmtFechaHora(st.leidoAt)})` : ""}` : "Sin dato"}
+                      />
+                    )
+                  })}
+              </div>
+            )}
             <DatoAlegra etiqueta="Estado" valor={producto.status === "active" ? "Activo" : "Inactivo"} />
             <DatoAlegra etiqueta="Última sincronización" valor={fmtFechaHora(producto.syncedAt)} />
             <p className="mt-1 text-xs" style={{ color: "var(--ink-faint)" }}>
@@ -287,8 +309,9 @@ export function VisibleEn({
 
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1 text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
+      <legend className="mb-1 flex items-center gap-1 text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
         Visible en
+        <AyudaTooltip etiqueta="Visible en" texto={AYUDA_VISIBLE_EN} />
       </legend>
       {activas.map((s) => {
         const visibleAhora = !ocultoEn.includes(s.slug)

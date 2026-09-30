@@ -4,7 +4,10 @@ import {
   ORDEN_DEFAULT,
   SOLO_STOCK_DEFAULT,
   STOCK_INCLUYE_SIN_STOCK,
+  IA_DESACTIVADA,
   cambiosDeRango,
+  consultaInterpretada,
+  sinBusquedaIa,
   comoLista,
   comoOrden,
   comoPagina,
@@ -26,6 +29,7 @@ const base: EstadoCatalogo = {
   query: undefined,
   categorias: [],
   marcas: [],
+  atributos: [],
   orden: "nombre",
   pagina: 1,
   soloStock: true,
@@ -129,6 +133,7 @@ describe("lectura de la query string", () => {
       query: "led",
       categorias: ["Iluminación"],
       marcas: ["Philips", "Osram"],
+      atributos: [],
       orden: "precio-asc",
       pagina: 2,
       precioMin: 500,
@@ -221,6 +226,7 @@ describe("armado de URLs", () => {
         query: undefined,
         categorias: ["ILUMINACION"],
         marcas: ["GENROD"],
+        atributos: [],
         precioMin: 500,
         precioMax: 50000,
         soloStock: false,
@@ -411,6 +417,7 @@ describe("filtrosDeEstado", () => {
       busqueda: "led",
       categorias: ["ILUMINACION"],
       marcas: ["GENROD"],
+      atributos: [],
       precioMin: 500,
       precioMax: 900,
       soloStock: true,
@@ -466,5 +473,110 @@ describe("URL del browser contra el estado que renderizó el servidor", () => {
     // La page manda la página recortada (URL dice 99, hay 12): eso no se
     // arregla pidiendo de nuevo.
     expect(filtrosDesfasados({ ...base, pagina: 12 }, sp("pagina=99"))).toBe(false);
+  });
+});
+
+describe("atributos (`atr`) y búsqueda inteligente (`ia`)", () => {
+  const sp = (qs: string) => new URLSearchParams(qs);
+  it("lee `atr` repetible, descarta los ids desconocidos y ordena como el diccionario", () => {
+    const e = leerEstado({ atr: ["zocalo-e27", "inventado", "tono-calido", "tono-calido"] });
+    expect(e.atributos).toEqual(["tono-calido", "zocalo-e27"]);
+    expect(leerEstado({}).atributos).toEqual([]);
+  });
+
+  it("ida y vuelta con `atr` e `ia` (orden estable de parámetros)", () => {
+    const e = leerEstado({ q: "50w", categoria: "Reflectores", atr: ["apto-exterior", "tono-calido"], ia: "reflector calido para el patio 50w" });
+    const href = hrefCatalogo(e);
+    expect(href).toBe(
+      "/catalogo?q=50w&categoria=Reflectores&atr=tono-calido&atr=apto-exterior&ia=reflector+calido+para+el+patio+50w",
+    );
+    expect(estadoDeBusqueda(new URLSearchParams(href.split("?")[1]))).toEqual(e);
+  });
+
+  it("`ia=0` es la búsqueda tal cual; la consulta interpretada es cualquier otro valor", () => {
+    expect(consultaInterpretada(leerEstado({ ia: IA_DESACTIVADA }))).toBeUndefined();
+    expect(consultaInterpretada(leerEstado({ ia: " luz para el patio " }))).toBe("luz para el patio");
+    expect(consultaInterpretada(leerEstado({}))).toBeUndefined();
+    expect(hrefCatalogo({ ...base, query: "reflector", orden: "relevancia", ia: IA_DESACTIVADA })).toBe("/catalogo?q=reflector&ia=0");
+  });
+
+  it("`q` se recorta a 200 caracteres", () => {
+    expect(leerEstado({ q: "y".repeat(5000) }).query).toHaveLength(200);
+  });
+
+  it("`ia` se recorta a 120 caracteres", () => {
+    expect(leerEstado({ ia: "x".repeat(300) }).ia).toHaveLength(120);
+  });
+
+  it("cambiar filtros o página conserva `ia`; cambiar la búsqueda lo quita", () => {
+    const e = { ...base, atributos: ["tono-calido"], ia: "luz calida" };
+    expect(estadoConCambios(e, { atributos: [] }).ia).toBe("luz calida");
+    expect(estadoConCambios(e, { pagina: 2 }).ia).toBe("luz calida");
+    expect(estadoConCambios(e, { query: "otra cosa" }).ia).toBeUndefined();
+    expect(estadoConCambios(e, { query: "luz calida", ia: IA_DESACTIVADA }).ia).toBe(IA_DESACTIVADA);
+  });
+
+  it("el canonical no lleva atributos ni `ia`, y los filtros los pasan al SQL", () => {
+    const e = { ...base, categorias: ["Reflectores"], atributos: ["tono-frio"], ia: "x" };
+    expect(hrefCanonico(e)).toBe("/catalogo?categoria=Reflectores");
+    expect(filtrosDeEstado(e).atributos).toEqual(["tono-frio"]);
+  });
+
+  it("un atributo destildado que Next no pidió de nuevo es un desfase", () => {
+    const renderizado = { ...base, atributos: ["tono-calido", "zocalo-e27"] };
+    expect(filtrosDesfasados(renderizado, sp("atr=zocalo-e27"))).toBe(true);
+    expect(filtrosDesfasados(renderizado, sp("atr=zocalo-e27&atr=tono-calido"))).toBe(false);
+  });
+});
+
+describe("flag busqueda-ia apagado", () => {
+  const sp = (qs: string) => new URLSearchParams(qs);
+
+  it("sinBusquedaIa: sin atributos ni ia, como el catálogo de siempre", () => {
+    const e = leerEstado({ q: "reflector", categoria: "Reflectores", atr: "tono-calido", ia: "algo" });
+    const apagado = sinBusquedaIa(e);
+    expect(apagado.atributos).toEqual([]);
+    expect(apagado).not.toHaveProperty("ia");
+    expect(hrefCatalogo(apagado)).toBe("/catalogo?q=reflector&categoria=Reflectores");
+  });
+
+  it("los atributos de la URL no cuentan como desfase (si no, se pediría la página en bucle)", () => {
+    const renderizado = sinBusquedaIa(leerEstado({ atr: "tono-calido" }));
+    expect(filtrosDesfasados(renderizado, sp("atr=tono-calido"), false)).toBe(false);
+    expect(filtrosDesfasados(renderizado, sp("atr=tono-calido"))).toBe(true);
+  });
+});
+
+describe("filtro 'Con stock en <local>' (?retiro=)", () => {
+  it("lee un slug de local y descarta lo que no tiene forma de slug", () => {
+    expect(leerEstado({ retiro: "igz" }).retiroEn).toBe("igz");
+    expect(leerEstado({ retiro: " MDP " }).retiroEn).toBe("mdp");
+    expect(leerEstado({ retiro: ["igz", "mdp"] }).retiroEn).toBe("igz");
+    for (const malo of ["", "a b", "igz;drop", "-igz", "x".repeat(41)]) {
+      expect(leerEstado({ retiro: malo }).retiroEn).toBeUndefined();
+    }
+    expect(leerEstado({}).retiroEn).toBeUndefined();
+  });
+
+  it("viaja en la URL después de stock y se lee igual desde el browser", () => {
+    const estado = { ...leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK }), retiroEn: "igz" };
+    expect(hrefCatalogo(estado)).toBe("/catalogo?stock=todos&retiro=igz");
+    expect(estadoDeBusqueda(new URLSearchParams("retiro=igz")).retiroEn).toBe("igz");
+    expect(hrefCatalogo(leerEstado({}))).toBe("/catalogo");
+  });
+
+  it("implica 'solo con stock' aunque la URL diga stock=todos", () => {
+    expect(filtrosDeEstado(leerEstado({ retiro: "igz", stock: STOCK_INCLUYE_SIN_STOCK })).soloStock).toBe(true);
+    expect(filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })).soloStock).toBe(false);
+  });
+
+  it("no forma parte del canonical", () => {
+    expect(hrefCanonico(leerEstado({ retiro: "igz" }))).toBe("/catalogo");
+  });
+
+  it("cambiarlo vuelve a la página 1 y undefined lo borra", () => {
+    const estado = { ...leerEstado({ pagina: "4" }), retiroEn: "igz" };
+    expect(hrefCon(estado, { retiroEn: undefined })).toBe("/catalogo");
+    expect(hrefCon(estado, { retiroEn: "mdp" })).toBe("/catalogo?retiro=mdp");
   });
 });

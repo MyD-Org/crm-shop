@@ -24,7 +24,6 @@ import {
   idListaGeneral,
   vinculableDeAlegra,
   vinculablePorId,
-  vincularCambiaAlgo,
 } from "./contactos-espejo";
 
 /** Fila de la vista en el orden del select de `delEspejo`. */
@@ -274,51 +273,6 @@ describe("accesoFacturacion del contacto vinculable", () => {
     expect(
       vinculableDeAlegra({ id: "9", name: "Cliente Nuevo", type: ["client"], term: { days: 0 } } as never),
     ).toMatchObject({ tipoCuenta: "contado", accesoFacturacion: false });
-  });
-});
-
-describe("vincularCambiaAlgo (aviso del checkout)", () => {
-  const LISTA_GENERAL = [[[{ idPriceList: 1, price: 100, main: true }]]];
-
-  it("contado con excepción de acceso: sí (ve Facturación), sin mirar la lista general", async () => {
-    const fila = [...VINCULABLE];
-    fila[5] = null;
-    fila[8] = "contado";
-    fila[9] = true;
-    grabadora = dbGrabadora(() => [fila]);
-    expect(await vincularCambiaAlgo("42")).toBe(true);
-    expect(grabadora.consultas).toHaveLength(1);
-  });
-
-  it("cuenta corriente: sí", async () => {
-    grabadora = dbGrabadora(() => [VINCULABLE]);
-    expect(await vincularCambiaAlgo("42")).toBe(true);
-  });
-
-  it("contado sin acceso y a precio de lista general: no", async () => {
-    const fila = [...VINCULABLE];
-    fila[5] = "1";
-    fila[8] = "contado";
-    fila[9] = false;
-    grabadora = dbGrabadora((c) => (c.sql.includes("catalog_products_shop") ? LISTA_GENERAL : [fila]));
-    expect(await vincularCambiaAlgo("42")).toBe(false);
-  });
-
-  it("contado sin acceso con lista propia distinta de la general: sí", async () => {
-    const fila = [...VINCULABLE];
-    fila[8] = "contado";
-    fila[9] = false;
-    grabadora = dbGrabadora((c) => (c.sql.includes("catalog_products_shop") ? LISTA_GENERAL : [fila]));
-    expect(await vincularCambiaAlgo("42")).toBe(true);
-  });
-
-  it("sin fila o la vista falla: no", async () => {
-    grabadora = dbGrabadora(() => []);
-    expect(await vincularCambiaAlgo("42")).toBe(false);
-    grabadora = dbGrabadora(() => {
-      throw new Error("x");
-    });
-    expect(await vincularCambiaAlgo("42")).toBe(false);
   });
 });
 

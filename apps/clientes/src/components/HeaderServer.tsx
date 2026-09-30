@@ -1,10 +1,11 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
 import type { VisibleOn } from "@myd-org/ui"
-import { dispDelVisitante } from "@/lib/zona-servidor"
+import { dispCatalogo } from "@/lib/zona-servidor"
 import { categoriasNav } from "@/lib/catalogo-publico"
 import { flagsPublicos } from "@/lib/flags-publicos"
 import { accesoFacturacion } from "@/lib/acceso-facturacion"
+import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag"
 import { identidadActual } from "@/lib/auth"
 import { getContenidoHome } from "@/lib/home-datos"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
@@ -68,18 +69,21 @@ async function HeaderDinamico({
   // base o los flags (en el prerender no arranca ninguna lectura, y el catch
   // de abajo no confunde el corte del prerender con una base caída).
   await connection()
-  const [identidad, esCuentaCorriente, categorias] = await Promise.all([
+  const [identidad, esCuentaCorriente, categorias, busquedaIa] = await Promise.all([
     identidadActual(),
     // Facturas en el menú: sólo cuenta corriente. Una consulta al espejo (base,
     // nunca Alegra) y sólo con vínculo; compartida por request con Mi cuenta.
     // Si falla, el menú va sin Facturas.
     accesoFacturacion(),
     flagsPublicos()
-      .then(async ({ soloVisibles }) => categoriasNav(soloVisibles, await dispDelVisitante()))
+      .then(async ({ soloVisibles }) => categoriasNav(soloVisibles, await dispCatalogo()))
       .catch((err: unknown) => {
         console.error("[Header] no se pudieron cargar las categorias:", err)
         return [] as string[]
       }),
+    // Búsqueda inteligente en el buscador (flag `busqueda-ia`). Si el flag no
+    // responde, el buscador de siempre.
+    busquedaIaHabilitada().catch(() => false),
   ])
 
   return (
@@ -97,6 +101,7 @@ async function HeaderDinamico({
       categorias={categorias}
       navBadge={navBadge}
       navBadgeVisibleOn={navBadgeVisibleOn}
+      busquedaIa={busquedaIa}
     />
   )
 }

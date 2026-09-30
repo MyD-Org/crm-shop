@@ -5,7 +5,7 @@ import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { parseReceiptsEmail } from "@/lib/receipt-validation"
 
 // GET/PUT /api/admin/settings/receipts — mail destino de los avisos de comprobantes
-// (Configuración → Comprobantes). Un solo email o vacío ("" = feature sin destino:
+// (Comprobantes → Ajustes). Un solo email o vacío ("" = feature sin destino:
 // los mails quedan "skipped"). El UPDATE toca SOLO el tenant del guard: un tenantId
 // en el body se ignora por completo.
 

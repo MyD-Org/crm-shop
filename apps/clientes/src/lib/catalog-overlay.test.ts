@@ -74,7 +74,7 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
     await getPaginaCatalogo({ soloVisibles: false });
     await getCatalogo({ soloVisibles: false, limit: 10 });
     await getFacetas({}, false);
-    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(6);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(7);
     for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
   });
 
@@ -90,10 +90,10 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
     exigeVisible(grabadora.consultas[0]);
   });
 
-  it("encendido: las tres facetas exigen visible = true", async () => {
+  it("encendido: las cuatro facetas exigen visible = true", async () => {
     await getFacetas({ marcas: ["GENROD"] }, true);
     const consultas = sinLecturaDelArbol(grabadora.consultas);
-    expect(consultas).toHaveLength(3);
+    expect(consultas).toHaveLength(4);
     for (const c of consultas) exigeVisible(c);
   });
 

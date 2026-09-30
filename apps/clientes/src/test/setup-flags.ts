@@ -8,7 +8,9 @@ vi.mock("@/flags", () => ({
   envioFlag: async () => estadoFlags().envio,
   sucursalesFlag: async () => estadoFlags().sucursales,
   disponibilidadSucursalFlag: async () => estadoFlags()["disponibilidad-sucursal"],
+  pedidoAConfirmarFlag: async () => estadoFlags()["pedido-a-confirmar"],
   chatIaFlag: async () => estadoFlags()["chat-ia"],
+  busquedaIaFlag: async () => estadoFlags()["busqueda-ia"],
   trackingFlag: async () => estadoFlags().tracking,
 }));
 

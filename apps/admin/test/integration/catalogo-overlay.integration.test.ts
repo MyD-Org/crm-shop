@@ -15,12 +15,14 @@ import {
   impactoBorrarTag,
   listarTags,
   masivaOverlay,
+  masivaSucursal,
   masivaTags,
   renombrarTag,
   reordenarNivel,
   tagsDeProducto,
   type Seleccion,
 } from "@/lib/catalogo-overlay-repo"
+import { crearSucursal } from "@/lib/sucursales-repo"
 import { seedTenant, truncateAll } from "./helpers"
 
 // Repositorio del catálogo comercial (L3). DB real (crm_test).
@@ -375,6 +377,75 @@ describe("acciones masivas por descriptor", () => {
     await guardarOverlay(TENANT_A, "1", { nombre: "Térmica bipolar 16A" })
     expect(await contarSeleccion(TENANT_A, { tipo: "filtro", filtros: { q: "bipolar" } })).toBe(1)
     expect(await contarSeleccion(TENANT_A, { tipo: "filtro", filtros: { q: "COD-1" } })).toBe(1)
+  })
+})
+
+describe("visibilidad por sucursal en masa", () => {
+  const ocultoEn = async (tenantId: string, alegraId: string): Promise<string[] | undefined> => {
+    const [row] = await getDb()
+      .select({ oculto: catalogOverlay.ocultoEnSucursales })
+      .from(catalogOverlay)
+      .where(and(eq(catalogOverlay.tenantId, tenantId), eq(catalogOverlay.alegraId, alegraId)))
+    return row?.oculto
+  }
+
+  beforeEach(async () => {
+    await crearSucursal(TENANT_A, { slug: "igz", nombre: "Iguazú" })
+    await crearSucursal(TENANT_A, { slug: "mdp", nombre: "Mar del Plata" })
+    await crearSucursal(TENANT_B, { slug: "unica", nombre: "Única" })
+    for (const id of ["1", "2", "3"]) await seedProducto(TENANT_A, id)
+    await seedProducto(TENANT_B, "1") // de otro tenant: nunca se toca
+  })
+
+  it("ocultar en una sucursal crea las filas que faltan y no toca la publicación ni las otras sucursales", async () => {
+    await guardarOverlay(TENANT_A, "1", { visible: true, ocultoEnSucursales: ["igz"] })
+
+    const r = await masivaSucursal(TENANT_A, { tipo: "ids", alegraIds: ["1", "2"] }, { slug: "mdp", visible: false })
+    expect(r).toEqual({ kind: "ok", afectados: 2 })
+
+    expect((await ocultoEn(TENANT_A, "1"))?.sort()).toEqual(["igz", "mdp"])
+    expect(await ocultoEn(TENANT_A, "2")).toEqual(["mdp"])
+    expect(await ocultoEn(TENANT_A, "3")).toBeUndefined() // no seleccionado: sigue sin fila
+    const [uno] = await getDb().select().from(catalogOverlay).where(and(eq(catalogOverlay.tenantId, TENANT_A), eq(catalogOverlay.alegraId, "1")))
+    expect(uno.visible).toBe(true)
+  })
+
+  it("es idempotente: ocultar dos veces deja el slug una sola vez", async () => {
+    const sel: Seleccion = { tipo: "ids", alegraIds: ["1"] }
+    await masivaSucursal(TENANT_A, sel, { slug: "mdp", visible: false })
+    await masivaSucursal(TENANT_A, sel, { slug: "mdp", visible: false })
+    expect(await ocultoEn(TENANT_A, "1")).toEqual(["mdp"])
+  })
+
+  it("mostrar saca sólo ese slug", async () => {
+    await guardarOverlay(TENANT_A, "1", { ocultoEnSucursales: ["igz", "mdp"] })
+    await masivaSucursal(TENANT_A, { tipo: "ids", alegraIds: ["1", "2"] }, { slug: "mdp", visible: true })
+    expect(await ocultoEn(TENANT_A, "1")).toEqual(["igz"])
+    expect(await ocultoEn(TENANT_A, "2")).toEqual([]) // fila nueva: visible en todas
+  })
+
+  it("por filtro alcanza a todo el conjunto y nunca a otro tenant", async () => {
+    const r = await masivaSucursal(TENANT_A, { tipo: "filtro", filtros: {} }, { slug: "mdp", visible: false })
+    expect(r).toEqual({ kind: "ok", afectados: 3 })
+    expect(await ocultoEn(TENANT_B, "1")).toBeUndefined()
+  })
+
+  it("rechaza un slug inexistente o de otro tenant sin escribir nada", async () => {
+    for (const slug of ["nada", "unica", ""]) {
+      const r = await masivaSucursal(TENANT_A, { tipo: "ids", alegraIds: ["1"] }, { slug, visible: false })
+      expect(r.kind).toBe("invalid")
+      if (r.kind === "invalid") expect(r.campo).toBe("slug")
+    }
+    expect(await ocultoEn(TENANT_A, "1")).toBeUndefined()
+  })
+
+  it("avanza updated_at sólo en los seleccionados", async () => {
+    await guardarOverlay(TENANT_A, "1", { visible: true })
+    await guardarOverlay(TENANT_A, "2", { visible: true })
+    await envejecer(TENANT_A)
+    await masivaSucursal(TENANT_A, { tipo: "ids", alegraIds: ["1"] }, { slug: "mdp", visible: false })
+    expect(hace1h(await updatedAtDe(TENANT_A, "1"))).toBe(false)
+    expect(hace1h(await updatedAtDe(TENANT_A, "2"))).toBe(true)
   })
 })
 

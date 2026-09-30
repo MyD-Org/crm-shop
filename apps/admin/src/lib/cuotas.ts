@@ -1,4 +1,4 @@
-// Cuotas por proveedor (Configuración → Medios de pago / Cuotas). Lógica PURA: validación de
+// Cuotas por proveedor (Pagos y cuotas). Lógica PURA: validación de
 // lo que manda el backoffice, regla "no dos escalones activos con el mismo monto mínimo" y
 // armado del payload del contrato v2 (platform/contracts/cuotas/v2) que lee el Shop. Sin DB:
 // el acceso a datos vive en src/lib/cuotas-repo.ts.

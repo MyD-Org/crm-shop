@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
@@ -9,6 +9,8 @@ import { CatalogoEncabezado } from "@/components/catalogo/CatalogoEncabezado";
 import { CatalogoFiltros } from "@/components/catalogo/CatalogoFiltros";
 import { CatalogoFiltrosSheet } from "@/components/catalogo/CatalogoFiltrosSheet";
 import { CatalogoProductos } from "@/components/catalogo/CatalogoProductos";
+import { CatalogoSinResultados } from "@/components/catalogo/CatalogoSinResultados";
+import { FranjaInterpretada } from "@/components/catalogo/FranjaBusqueda";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
@@ -17,11 +19,14 @@ import {
   estadoConCambios,
   estadoDeBusqueda,
   filtrosDesfasados,
+  sinBusquedaIa,
   hrefCatalogo,
   hrefCon,
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
-import { anuncioResultados, hayFiltros, limpiarFiltros } from "@/lib/catalogo-vista";
+import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
+import { hrefTalCual, type ChipSugerido } from "@/lib/busqueda-inteligente/url";
+import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
@@ -42,6 +47,7 @@ export function CatalogoClient({
   paginas,
   oferta = null,
   filtrosSinBusqueda = false,
+  busquedaIa,
 }: {
   /** Sólo la página actual, nunca el catálogo entero. */
   productos: Product[];
@@ -58,6 +64,13 @@ export function CatalogoClient({
    * (ver catalogo/page.tsx): tocar un filtro también quita la búsqueda.
    */
   filtrosSinBusqueda?: boolean;
+  /**
+   * Búsqueda inteligente (flag `busqueda-ia`); ausente = catálogo de siempre.
+   * - `franja`: la franja de sugerencias que llega por streaming (hueco con
+   *   `<Suspense>` armado en la page), cuando la búsqueda trajo resultados.
+   * - `alternativas`: lo sugerido para el "sin resultados".
+   */
+  busquedaIa?: { franja?: ReactNode; alternativas: ChipSugerido[] };
 }) {
   const router = useRouter();
   // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
@@ -70,12 +83,16 @@ export function CatalogoClient({
   // Si la URL del router y lo que renderizó el servidor no coinciden, se
   // muestra lo que dice la URL y se pide la página de nuevo.
   const searchParams = useSearchParams();
-  const desfasado = filtrosDesfasados(estado, searchParams);
+  const desfasado = filtrosDesfasados(estado, searchParams, !!busquedaIa);
   const claveUrl = searchParams.toString();
   useEffect(() => {
     if (desfasado) startTransition(() => router.refresh());
   }, [desfasado, claveUrl, router]);
-  const estadoBase = desfasado ? estadoDeBusqueda(searchParams) : estado;
+  const estadoBase = desfasado
+    ? busquedaIa
+      ? estadoDeBusqueda(searchParams)
+      : sinBusquedaIa(estadoDeBusqueda(searchParams))
+    : estado;
 
   // Estado optimista: el filtro que toca el visitante se marca en el acto,
   // sin esperar a que el servidor responda con la URL nueva (si no, el tilde
@@ -118,6 +135,13 @@ export function CatalogoClient({
     estadoVisibleRef.current = estadoVisible;
   }, [estadoVisible]);
 
+  // Lo que muestra el catálogo, para el contexto de pantalla del chat
+  // (`contextoParaChat`, contrato contexto-pantalla-shop/v1).
+  useEffect(() => {
+    fijarCatalogoParaChat({ estado, total, productos });
+    return () => fijarCatalogoParaChat(null);
+  }, [estado, total, productos]);
+
   const navegar = (href: string) => startTransition(() => router.push(href));
   const ir = (cambios: Partial<EstadoCatalogo>) =>
     startTransition(() => {
@@ -154,6 +178,11 @@ export function CatalogoClient({
     : ir;
   const estadoFiltros = filtrosSinBusqueda ? { ...estadoVisible, query: undefined } : estadoVisible;
 
+  // Búsqueda interpretada (`?ia=`): la franja "Entendimos" muestra categorías y
+  // atributos, y los chips de mobile dejan de repetirlos.
+  const interpretada = busquedaIa ? interpretacionVigente(estadoVisible) : undefined;
+  const consultaVacia = interpretacionVigente(estado) ?? estado.query;
+
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
       {/* Encabezado a todo el ancho, por encima de las dos columnas. Vista y
@@ -174,7 +203,13 @@ export function CatalogoClient({
 
       {/* Los filtros puestos, debajo del encabezado y sólo en mobile: en
           desktop el panel lateral ya muestra los tildes. */}
-      <CatalogoChips estado={estadoVisible} rango={facetas.precio} ir={ir} />
+      <CatalogoChips
+        estado={estadoVisible}
+        rango={facetas.precio}
+        locales={facetas.locales}
+        ir={ir}
+        sinInterpretados={!!interpretada}
+      />
 
       <div className="mt-8 flex gap-6">
         {/*
@@ -211,7 +246,23 @@ export function CatalogoClient({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
-          {productos.length === 0 ? (
+          {/* Franja de la búsqueda inteligente. La región `aria-live` existe
+              desde el primer render (vacía) y lo que llega por streaming se
+              anuncia; una región que aparece junto con su contenido no. Vacía,
+              el margen negativo compensa el `gap` de la columna. */}
+          {busquedaIa && (
+            <div aria-live="polite" className="empty:-mb-6">
+              {interpretada ? <FranjaInterpretada estado={estadoVisible} ir={ir} /> : productos.length > 0 ? busquedaIa.franja : null}
+            </div>
+          )}
+          {productos.length === 0 && busquedaIa && consultaVacia ? (
+            <CatalogoSinResultados
+              consulta={consultaVacia}
+              alternativas={busquedaIa.alternativas}
+              talCualHref={interpretacionVigente(estado) ? hrefTalCual(estado, consultaVacia) : undefined}
+              verTodos={() => ir({ ...limpiarFiltros(), query: undefined, ia: undefined })}
+            />
+          ) : productos.length === 0 ? (
             // Sin culpar al visitante ("revise la ortografía"): se dice qué
             // pasó y se ofrece por dónde seguir.
             estado.query ? (

@@ -1,9 +1,12 @@
 /**
  * Textos de disponibilidad por modalidad (ficha, carrito y checkout). Módulo PURO. Registro de usted
- * del Shop; son frases de estado ("Envío: disponible"), sin imperativos.
+ * del Shop; son frases de estado ("Retiro en <local>: disponible hoy"), sin imperativos.
  *
- * Reglas (spec de la rebanada B): "Envío: disponible" y "Retiro en <local>: disponible | con demora
- * de N días | no disponible". La demora 0 se dice "a coordinar" (sin plazo numérico).
+ * Una línea por local y una de envío, sin que el visitante elija nada:
+ *   "Retiro en <local>: disponible hoy | disponible en N días | no disponible"
+ *   "Envío a domicilio: disponible | disponible en N días | no disponible"
+ * Los días salen de "Días de demora al traer de otra sucursal" (reglas de venta del CRM); 0 se dice
+ * "a coordinar" (sin plazo numérico).
  */
 import type {
   DisponibilidadEnvio,
@@ -19,19 +22,20 @@ export interface LocalDisponibilidad {
   nombre: string;
 }
 
-const demora = (dias: number | null): string =>
+/** Plazo cuando hay que traerlo de otra sucursal: "en 3 días"; 0 o sin dato = "a coordinar". */
+const plazo = (dias: number | null): string =>
   dias === null || dias <= 0
     ? "a coordinar"
-    : `con demora de ${dias} ${dias === 1 ? "día" : "días"}`;
+    : `disponible en ${dias} ${dias === 1 ? "día" : "días"}`;
 
 export function textoEnvio(d: DisponibilidadEnvio): string {
   switch (d.estado) {
     case "disponible":
-      return "Envío: disponible";
+      return "Envío a domicilio: disponible";
     case "a_traer":
-      return `Envío: disponible ${demora(d.demoraDias)}`;
+      return `Envío a domicilio: ${plazo(d.demoraDias)}`;
     default:
-      return "Envío: no disponible";
+      return "Envío a domicilio: no disponible";
   }
 }
 
@@ -41,9 +45,9 @@ export function textoRetiro(
 ): string {
   switch (d.estado) {
     case "disponible":
-      return `Retiro en ${nombreLocal}: disponible`;
+      return `Retiro en ${nombreLocal}: disponible hoy`;
     case "con_demora":
-      return `Retiro en ${nombreLocal}: ${demora(d.demoraDias)}`;
+      return `Retiro en ${nombreLocal}: ${plazo(d.demoraDias)}`;
     default:
       return `Retiro en ${nombreLocal}: no disponible`;
   }
@@ -68,8 +72,8 @@ const tonoRetiro = (d: DisponibilidadRetiro): TonoDisponibilidad =>
       : "no";
 
 /**
- * Una línea por modalidad: el envío (sólo si `conEnvio`: con el flag `envio` apagado no se
- * promete) y un retiro por cada local.
+ * Primero un retiro por cada local (en el orden de los locales) y al final el envío (sólo si
+ * `conEnvio`: con el flag `envio` apagado no se promete).
  */
 export function lineasDisponibilidad(
   d: DisponibilidadVista,
@@ -78,8 +82,6 @@ export function lineasDisponibilidad(
 ): LineaDisponibilidad[] {
   const conEnvio = opts.conEnvio ?? true;
   const lineas: LineaDisponibilidad[] = [];
-  if (conEnvio && d.envio)
-    lineas.push({ texto: textoEnvio(d.envio), tono: tonoEnvio(d.envio) });
   if (d.retiro) {
     for (const l of locales) {
       const r = d.retiro[l.slug];
@@ -87,6 +89,8 @@ export function lineasDisponibilidad(
         lineas.push({ texto: textoRetiro(l.nombre, r), tono: tonoRetiro(r) });
     }
   }
+  if (conEnvio && d.envio)
+    lineas.push({ texto: textoEnvio(d.envio), tono: tonoEnvio(d.envio) });
   return lineas;
 }
 

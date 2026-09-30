@@ -171,6 +171,21 @@ export type StockFn = (sucursal: string, id: string) => number | null;
 export interface ReglasVenta {
   /** Días de traslado entre sucursales; 0 = "a coordinar" (sin plazo numérico). */
   trasladoDias: number;
+  /**
+   * Envío con respaldo: si la sucursal de la zona no cubre una línea, otra la despacha ("a
+   * traer"). Ausente = true (el default de `reglas_venta`). Falso: el envío sale sólo de la de la zona.
+   */
+  respaldoEnvio?: boolean;
+  /**
+   * Retiro sin stock en el local elegido: `ofrecer` = se ofrece trayéndolo de otra sucursal, con
+   * demora; `bloquear` = no se ofrece. Ausente = `ofrecer`.
+   */
+  retiroSinStock?: "bloquear" | "ofrecer";
+}
+
+/** ¿Vale traer de otra sucursal lo que falta en la preferida? (según la modalidad y las reglas). */
+export function permiteRespaldo(modalidad: "envio" | "retiro", reglas: ReglasVenta | undefined): boolean {
+  return modalidad === "envio" ? reglas?.respaldoEnvio !== false : reglas?.retiroSinStock !== "bloquear";
 }
 
 /** Cómo sale una línea del pedido (sólo con `entrada.lineas`). */
@@ -214,6 +229,8 @@ export function origenDeLinea(
   preferida: string,
   sucursales: SucursalDato[],
   stock: StockFn,
+  /** Falso = sin respaldo: sólo la preferida puede despachar (regla `respaldo_envio` / `retiro_sin_stock`). */
+  respaldo = true,
 ): OrigenLinea {
   const candidatas = activas(sucursales).filter((s) => !linea.ocultoEn.includes(s.slug));
   if (candidatas.length === 0) return { error: "no_servible" };
@@ -224,8 +241,8 @@ export function origenDeLinea(
   if (candidatas.some((s) => s.slug === preferida) && cubre(preferida)) {
     return { origen: preferida, aTraer: false };
   }
-  const respaldo = candidatas.find((s) => s.slug !== preferida && cubre(s.slug));
-  return respaldo ? { origen: respaldo.slug, aTraer: true } : { error: "sin_stock" };
+  const otra = respaldo ? candidatas.find((s) => s.slug !== preferida && cubre(s.slug)) : undefined;
+  return otra ? { origen: otra.slug, aTraer: true } : { error: "sin_stock" };
 }
 
 /** Junta el origen de cada línea en una asignación, o el error de las que no se pueden servir. */
@@ -235,8 +252,10 @@ function resolverLineas(
   sucursales: SucursalDato[],
   stock: StockFn,
   reglas: ReglasVenta | undefined,
+  modalidad: "envio" | "retiro",
 ): { lineas: LineaAsignada[]; aTraer: string[]; demoraDias: number | null } | ErrorLineas {
-  const resueltas = lineas.map((l) => ({ l, r: origenDeLinea(l, preferida, sucursales, stock) }));
+  const respaldo = permiteRespaldo(modalidad, reglas);
+  const resueltas = lineas.map((l) => ({ l, r: origenDeLinea(l, preferida, sucursales, stock, respaldo) }));
   const noServibles = resueltas.filter((x) => "error" in x.r && x.r.error === "no_servible").map((x) => x.l.id);
   if (noServibles.length > 0) return { error: "no_servible", ids: noServibles };
   const sinStock = resueltas.filter((x) => "error" in x.r).map((x) => x.l.id);
@@ -281,7 +300,7 @@ export function asignarSucursal(
     if (ocultas.length > 0) return { error: "sin_retiro", ids: ocultas };
     const porLineas =
       entrada.lineas && stock
-        ? resolverLineas(entrada.lineas, local.slug, sucursales, stock, datos.reglas)
+        ? resolverLineas(entrada.lineas, local.slug, sucursales, stock, datos.reglas, "retiro")
         : undefined;
     if (porLineas && "error" in porLineas) return porLineas;
     return {
@@ -312,7 +331,7 @@ export function asignarSucursal(
   }
   const porLineas =
     entrada.lineas && stock
-      ? resolverLineas(entrada.lineas, destino.slug, sucursales, stock, datos.reglas)
+      ? resolverLineas(entrada.lineas, destino.slug, sucursales, stock, datos.reglas, "envio")
       : undefined;
   if (porLineas && "error" in porLineas) return porLineas;
   const zonaFila = zona.zonaId ? zonas.find((z) => z.id === zona.zonaId) : undefined;

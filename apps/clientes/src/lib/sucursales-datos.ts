@@ -11,7 +11,13 @@
  */
 import { cacheLife, cacheTag } from "next/cache";
 import { TAG_SUCURSALES } from "./cache-tags";
-import { leerSucursalesYZonas, type DatosSucursales } from "./sucursales-repo";
+import {
+  REGLAS_VENTA_DEFAULT,
+  leerReglasVenta,
+  leerSucursalesYZonas,
+  type DatosSucursales,
+  type ReglasVentaTenant,
+} from "./sucursales-repo";
 
 export async function sucursalesCacheadas(): Promise<DatosSucursales> {
   "use cache: remote";
@@ -27,5 +33,24 @@ export async function sucursalesCacheadas(): Promise<DatosSucursales> {
     );
     cacheLife("degradado");
     return { sucursales: [], zonas: [] };
+  }
+}
+
+/**
+ * Reglas de venta para MOSTRAR (demora de traslado, retiro con o sin respaldo, envío con respaldo).
+ * Mismo tag y mismo perfil que las sucursales: el ping del CRM las vence al guardar. Falla =
+ * defaults con el perfil `degradado`. La decisión que escribe un pedido relee sin caché.
+ */
+export async function reglasVentaCacheadas(): Promise<ReglasVentaTenant> {
+  "use cache: remote";
+  cacheTag(TAG_SUCURSALES);
+  try {
+    const reglas = await leerReglasVenta();
+    cacheLife("sucursales");
+    return reglas;
+  } catch (err) {
+    console.error("[sucursales-datos] no se pudieron leer las reglas de venta:", err);
+    cacheLife("degradado");
+    return REGLAS_VENTA_DEFAULT;
   }
 }

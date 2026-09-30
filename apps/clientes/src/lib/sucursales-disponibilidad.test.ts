@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import casos from "./__fixtures__/sucursales-lineas-casos.json";
 import type { SucursalDato } from "./sucursales";
-import { disponibilidadPorSucursal, disponibleNeto } from "./sucursales-disponibilidad";
+import { armarStockPorSucursal, disponibilidadPorSucursal, disponibleNeto } from "./sucursales-disponibilidad";
 
 const sucursales = casos.dataset.sucursales as SucursalDato[];
 const reglas = { trasladoDias: 7 };
@@ -159,5 +159,54 @@ describe("disponibilidadPorSucursal: retiro por local", () => {
     const sin = sucursales.map((s) => (s.slug === "sede-a" ? { ...s, aceptaRetiro: false } : s));
     const r = disponibilidadPorSucursal({ ...retiro, sucursales: sin, stockPorSucursal: { P: { "sede-b": 1 } } });
     expect(Object.keys(r.productos.P.retiro ?? {})).toEqual(["sede-b"]);
+  });
+});
+
+describe("reglas de respaldo (respaldo_envio y retiro_sin_stock)", () => {
+  const stockPorSucursal = { P: { "sede-a": 0, "sede-b": 4 } };
+
+  it("envío sin respaldo: sin stock en la zona no sale de la otra sucursal", () => {
+    const r = disponibilidadPorSucursal({
+      ...base,
+      stockPorSucursal,
+      reglas: { trasladoDias: 7, respaldoEnvio: false },
+    });
+    expect(r.productos.P.envio).toEqual({ estado: "sin_stock", origen: null, demoraDias: null });
+    expect(r.productos.P.servible).toBe(true);
+    expect(r.lineasATraer).toEqual([]);
+  });
+
+  it("retiro que se bloquea sin stock local: no se ofrece con demora", () => {
+    const r = disponibilidadPorSucursal({
+      ...base,
+      modalidad: "retiro",
+      stockPorSucursal,
+      reglas: { trasladoDias: 7, retiroSinStock: "bloquear" },
+    });
+    expect(r.productos.P.retiro?.["sede-a"].estado).toBe("sin_stock");
+    expect(r.productos.P.retiro?.["sede-b"].estado).toBe("disponible");
+  });
+
+  it("los defaults (sin los campos) ofrecen respaldo en envío y retiro con demora", () => {
+    const envio = disponibilidadPorSucursal({ ...base, stockPorSucursal });
+    expect(envio.productos.P.envio?.estado).toBe("a_traer");
+    const retiro = disponibilidadPorSucursal({ ...base, modalidad: "retiro", stockPorSucursal });
+    expect(retiro.productos.P.retiro?.["sede-a"].estado).toBe("con_demora");
+  });
+});
+
+describe("armarStockPorSucursal", () => {
+  const slugs = ["sede-a", "sede-b"];
+  it("con filas por sucursal manda el detalle y la que falta vale 0", () => {
+    const r = armarStockPorSucursal([{ alegraId: "1", stock: 9 }], [{ alegraId: "1", sucursal: "sede-b", stock: 3 }], slugs, "sede-a");
+    expect(r["1"]).toEqual({ "sede-a": 0, "sede-b": 3 });
+  });
+  it("sin ninguna fila, el stock de la vista es de la sucursal heredera", () => {
+    const r = armarStockPorSucursal([{ alegraId: "1", stock: 9 }], [], slugs, "sede-a");
+    expect(r["1"]).toEqual({ "sede-a": 9, "sede-b": 0 });
+  });
+  it("no inventariable (stock null) queda null aunque haya filas", () => {
+    const r = armarStockPorSucursal([{ alegraId: "1", stock: null }], [{ alegraId: "1", sucursal: "sede-a", stock: 2 }], slugs, "sede-a");
+    expect(r["1"]).toBeNull();
   });
 });

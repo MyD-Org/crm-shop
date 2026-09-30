@@ -133,6 +133,20 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     }
   });
 
+  it("del stock por sucursal sólo se declaran las columnas del GRANT (0042 del CRM)", () => {
+    expect(Object.keys(esperado["public.catalog_stock_sucursal"])).toEqual([
+      "tenant_id",
+      "sucursal",
+      "alegra_id",
+      "stock",
+      "leido_at",
+    ]);
+    // `item_id_cuenta` es el id del ítem en la cuenta de Alegra de la sucursal: no se concede.
+    for (const prohibida of ["item_id_cuenta", "origen", "synced_at"]) {
+      expect(esperado["public.catalog_stock_sucursal"][prohibida], prohibida).toBeUndefined();
+    }
+  });
+
   it("de tenants sólo se declaran las columnas del GRANT", () => {
     expect(Object.keys(esperado["public.tenants"]).sort()).toEqual(
       ["id", "name", "receipts_email", "whatsapp_number"],

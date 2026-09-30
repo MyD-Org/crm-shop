@@ -14,6 +14,7 @@ import type {
   AlegraInvoiceCreated,
   AlegraNumberTemplate,
   AlegraPayment,
+  AlegraItemCreateInput,
 } from "./alegra"
 
 // Fixtures para desarrollo sin credenciales de Alegra (alegraMock=true). Sirven tanto para la
@@ -264,4 +265,33 @@ export function mockCreateRemission(input: {
   }
   mockRemisiones.push(created)
   return { alegraId: created.alegraId, number: created.numero, date: created.fecha }
+}
+
+// ── Ítems creados al facturar (D6) ──
+// En mock no hay "cuentas": los ítems creados viven en memoria del proceso y `buscar` mira los del
+// fixture y los creados. Para probar el multicuenta en serio, los tests inyectan las funciones.
+const itemsCreados: AlegraProduct[] = []
+let nextItemId = 5000
+
+export function mockBuscarItemsPorCodigo(codigoNormalizado: string): AlegraProduct[] {
+  return [...mockItems, ...itemsCreados].filter((it) => (it.code ?? "").trim().toLowerCase() === codigoNormalizado)
+}
+
+export function mockCreateItem(input: AlegraItemCreateInput): AlegraProduct {
+  const creado: AlegraProduct = {
+    alegraId: `it-${nextItemId++}`,
+    code: input.code,
+    name: input.name,
+    description: null,
+    categoryAlegraId: null,
+    prices: [{ idPriceList: "1", name: "Público", price: input.price }],
+    stock: 0,
+    status: "active",
+    images: [],
+    brand: null,
+    ivaPorcentaje: null,
+    raw: {},
+  }
+  itemsCreados.push(creado)
+  return creado
 }

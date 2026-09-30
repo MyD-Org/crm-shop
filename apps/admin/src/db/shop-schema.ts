@@ -118,6 +118,19 @@ export const shopOrders = shop.table("orders", {
   sucursalRegla: jsonb("sucursal_regla").$type<ReglaAplicada>(),
   sucursalAsignadaEn: timestamp("sucursal_asignada_en", { withTimezone: true }),
 
+  // --- Reserva por sucursal, factura cruzada y contacto (0024 del Shop, `sucursales-igz-mdp` B) ---
+  // Factura emitida por OTRA cuenta que la sucursal que despacha: la vista de reserva sigue
+  // reservando en la sucursal que despacha hasta entregar/cancelar. Lo escribe el CRM con
+  // `facturado_en` (y la vuelve a false al desvincular).
+  facturaCruzada: boolean("factura_cruzada").notNull().default(false),
+  // Snapshot de `crearPedido`: created_at + reglas.reserva_dias ('infinity' si 0; +24 h con cobro
+  // online). NULL = pedido anterior (24 h de siempre). Lo escribe el Shop; el CRM solo lo lee.
+  reservaVenceEn: timestamp("reserva_vence_en", { withTimezone: true }),
+  // Seguimiento de contacto de los pendientes ("Marcar contactado"); lo escribe el CRM.
+  contactadoEn: timestamp("contactado_en", { withTimezone: true }),
+  contactadoPor: uuid("contactado_por"),
+  contactadoPorNombre: text("contactado_por_nombre"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })
@@ -136,6 +149,9 @@ export const shopOrderItems = shop.table("order_items", {
   subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
   iva: numeric("iva", { precision: 14, scale: 2 }).notNull(),
   total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+  // Slug de la sucursal desde la que sale ESTA línea cuando es "a traer" de otra (0024 del Shop;
+  // NULL = la del pedido). Lo escribe el Shop; el CRM solo lo lee.
+  aTraerDe: text("a_traer_de"),
 })
 
 export type ShopOrderRow = typeof shopOrders.$inferSelect

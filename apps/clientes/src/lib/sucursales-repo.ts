@@ -6,9 +6,9 @@
  */
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { crmSucursales, crmZonas } from "@/db/crm";
+import { crmReglasVenta, crmSucursales, crmZonas } from "@/db/crm";
 import { shopTenantId } from "./tenant";
-import type { SucursalDato, ZonaDato } from "./sucursales";
+import type { ReglasVenta, SucursalDato, ZonaDato } from "./sucursales";
 
 /** Sucursal tal como se muestra: lo de `SucursalDato` más lo que ve el visitante. */
 export interface SucursalVista extends SucursalDato {
@@ -60,4 +60,47 @@ export async function leerSucursalesYZonas(
       .where(eq(crmZonas.tenantId, tenant)),
   ]);
   return { sucursales, zonas };
+}
+
+/** Reglas de venta del tenant tal como las guarda el CRM (`public.reglas_venta`). */
+export interface ReglasVentaTenant extends ReglasVenta {
+  respaldoEnvio: boolean;
+  retiroSinStock: "bloquear" | "ofrecer";
+  /** Días que dura la reserva de un pedido sin cobro online; 0 = nunca vence. */
+  reservaDias: number;
+  avisoSinContactarHoras: number;
+  contactoHorasHabiles: number;
+}
+
+/**
+ * Lo que rige si el tenant no tiene fila en `reglas_venta` (tenant nuevo): los mismos defaults que
+ * la migración 0045 del CRM (sí, ofrecer, 7, 7, 24, 24).
+ */
+export const REGLAS_VENTA_DEFAULT: ReglasVentaTenant = {
+  respaldoEnvio: true,
+  retiroSinStock: "ofrecer",
+  trasladoDias: 7,
+  reservaDias: 7,
+  avisoSinContactarHoras: 24,
+  contactoHorasHabiles: 24,
+};
+
+/**
+ * Lectura SIN caché de las reglas de venta del tenant. Las decisiones que escriben un pedido
+ * (dentro de la transacción de `crearPedido`) usan ésta; `reglasVentaCacheadas` sirve para mostrar.
+ */
+export async function leerReglasVenta(db: Ejecutor = getDb()): Promise<ReglasVentaTenant> {
+  const [fila] = await db
+    .select({
+      respaldoEnvio: crmReglasVenta.respaldoEnvio,
+      retiroSinStock: crmReglasVenta.retiroSinStock,
+      trasladoDias: crmReglasVenta.trasladoDias,
+      reservaDias: crmReglasVenta.reservaDias,
+      avisoSinContactarHoras: crmReglasVenta.avisoSinContactarHoras,
+      contactoHorasHabiles: crmReglasVenta.contactoHorasHabiles,
+    })
+    .from(crmReglasVenta)
+    .where(eq(crmReglasVenta.tenantId, shopTenantId()))
+    .limit(1);
+  return fila ?? REGLAS_VENTA_DEFAULT;
 }

@@ -12,6 +12,7 @@ import type { PedidoListaDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, puedeTransicionar, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { esSinFactura, opcionesDeDestino, type OpcionSelect } from "./logica"
 import { PAGO_REVISION_INFO, entregaLabel, fmtFechaRelativa, fmtMoneda, tituloRevision } from "./format"
+import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
 
 /** Columnas del tablero: los 5 pasos del camino feliz. "Entregado" ya viene acotado a los
@@ -86,6 +87,7 @@ export function PedidosTablero({ items, onRecargar }: Props) {
             disabled={guardando}
           />
         </Field>
+        <MotivosFrecuentes onElegir={(m) => setMotivo(m.slice(0, MOTIVO_MAX))} disabled={guardando} />
       </Dialog>
 
       <Dialog

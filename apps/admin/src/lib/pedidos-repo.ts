@@ -12,6 +12,9 @@ import {
   type ShopOrderRow,
 } from "@/db/shop-schema"
 import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
+import { limpiarFacturaCuenta } from "@/lib/pedido-factura-cuenta-repo"
+import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-repo"
+import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import type { EntregaTipo, EstadoPedido } from "@/lib/pedidos-transiciones"
 
@@ -92,7 +95,7 @@ function reservaEmisionLibre(): SQL {
 
 /** Las cuatro colas de "cosas para revisar" del tablero. Cada una es un predicado fijo, siempre
  *  sobre el tenant completo (nunca sobre los filtros que el operador tenga puestos). */
-export type Cola = "sin_confirmar" | "pago" | "datos" | "sin_factura"
+export type Cola = "sin_confirmar" | "pago" | "datos" | "sin_factura" | "sin_contactar"
 
 export interface ListarPedidosFiltro {
   /** "todos" (o ausente) = sin filtro. */
@@ -116,13 +119,15 @@ export interface ColasCounts {
   pago: number
   datos: number
   sin_factura: number
+  /** Pendientes sin contactar tras el umbral de las reglas de venta; 0 si el aviso está apagado. */
+  sin_contactar: number
 }
 
-const COLAS_VACIAS: ColasCounts = { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0 }
+const COLAS_VACIAS: ColasCounts = { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0, sin_contactar: 0 }
 
 /** El mismo predicado que ve el operador al elegir cada cola (usado también para `colas`, con
  *  FILTER, y para `filtro.cola`, en el WHERE). */
-function condicionCola(cola: Cola): SQL {
+function condicionCola(cola: Cola, sinContactar: SQL = sql`false`): SQL {
   switch (cola) {
     case "sin_confirmar":
       return eq(shopOrders.estado, "pendiente")
@@ -130,6 +135,10 @@ function condicionCola(cola: Cola): SQL {
       return isNotNull(shopOrders.pagoRevision)
     case "datos":
       return and(eq(shopOrders.requiereRevision, true), ne(shopOrders.estado, "cancelado"))!
+    case "sin_contactar":
+      // El predicado lo arma `predicadoSinContactar` (necesita el umbral de las reglas de venta);
+      // con el aviso apagado es `false` y la cola queda vacía.
+      return sinContactar
     case "sin_factura":
       // `facturado_en` no alcanza sola: mientras el pedido tiene una reserva de emisión puesta
       // (`factura_alegra_id = RESERVA_EMISION_SENTINEL`, ver la sección de emisión más abajo),
@@ -151,12 +160,13 @@ export async function listarPedidos(
   filtro: ListarPedidosFiltro = {},
 ): Promise<{ items: PedidoRow[]; total: number; colas: ColasCounts }> {
   const tenantWhere = eq(shopOrders.tenantId, tenantId)
+  const sinContactar = predicadoSinContactar(await estadoContacto(tenantId))
 
   const conditions: SQL[] = [tenantWhere]
   if (filtro.estado && filtro.estado !== "todos") conditions.push(eq(shopOrders.estado, filtro.estado))
   if (filtro.entrega) conditions.push(eq(shopOrders.entregaTipo, filtro.entrega))
   if (filtro.pago) conditions.push(eq(shopOrders.pagoEstado, filtro.pago))
-  if (filtro.cola) conditions.push(condicionCola(filtro.cola))
+  if (filtro.cola) conditions.push(condicionCola(filtro.cola, sinContactar))
   if (filtro.sucursal) conditions.push(eq(shopOrders.sucursal, filtro.sucursal))
   if (filtro.vista === "tablero") {
     conditions.push(
@@ -208,6 +218,7 @@ export async function listarPedidos(
         pago: sql<number>`count(*) filter (where ${condicionCola("pago")})::int`,
         datos: sql<number>`count(*) filter (where ${condicionCola("datos")})::int`,
         sinFactura: sql<number>`count(*) filter (where ${condicionCola("sin_factura")})::int`,
+        sinContactar: sql<number>`count(*) filter (where ${sinContactar})::int`,
       })
       .from(shopOrders)
       .where(tenantWhere),
@@ -218,6 +229,7 @@ export async function listarPedidos(
         pago: colasFila[0].pago,
         datos: colasFila[0].datos,
         sin_factura: colasFila[0].sinFactura,
+        sin_contactar: colasFila[0].sinContactar,
       }
     : COLAS_VACIAS
   return { items, total: count[0]?.count ?? 0, colas }
@@ -792,6 +804,8 @@ export async function desvincularFactura(
       actor: input.actor,
       now: input.now,
     })
+    // La cuenta con la que se había emitido deja de valer (la elección del operador se conserva).
+    await limpiarFacturaCuenta(tenantId, fila.id, tx)
     return fila
   })
   if (actualizado) return okConItems(tenantId, actualizado)
@@ -1109,6 +1123,13 @@ export interface PedidoListaDto {
   facturado: boolean
   /** Slug de la sucursal que atiende el pedido; null = pedido anterior a las sucursales. */
   sucursal: string | null
+  /**
+   * Pendiente que lleva más del umbral de las reglas de venta sin marcarse "contactado". Lo agrega
+   * la ruta del listado (`enriquecerConContacto`); ausente = no calculado / aviso apagado.
+   */
+  sinContactar?: boolean
+  /** Momento en que se marcó "contactado" (ISO); ausente o null = sin contactar. */
+  contactadoEn?: string | null
 }
 
 export interface PedidoItemDto {
@@ -1126,6 +1147,9 @@ export interface PedidoItemDto {
   /** Stock actual del producto según el espejo del catálogo (snapshot de la última sync o
    *  webhook, no en vivo). `null` = el producto ya no está en el espejo. */
   stockActual: number | null
+  /** Slug de la sucursal de la que se TRAE esta línea (no sale de la que despacha el pedido);
+   *  null = sale de la sucursal del pedido. */
+  aTraerDe: string | null
   /** Costo unitario cargado en Alegra (`inventory.unitCost`). SÓLO viaja para admin y
    *  superadmin (`incluirCosto` en `toPedidoDetalleDto`): para operator la clave no existe en
    *  la respuesta. `null` = sin costo cargado en Alegra, o producto fuera del espejo. */
@@ -1171,6 +1195,9 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   facturadoPorNombre: string | null
   /** Si el pedido está apartando stock en este momento (ver `reservaStock`). */
   reservaStock: boolean
+  /** Vencimiento de la reserva de un pendiente sin pago (`venceEn` null = sin vencimiento);
+   *  null = el pedido no depende de un vencimiento (confirmado, pagado o facturado). */
+  reserva: ReservaPedido | null
   /** Pago offline: el operador lo registra o lo anula desde el detalle. */
   pagoManual: boolean
   pagoActualizadoEn: string | null
@@ -1223,6 +1250,7 @@ function toItemDto(item: ItemParaDto, incluirCosto: boolean): PedidoItemDto {
     iva: num(item.iva),
     total: num(item.total),
     stockActual: numONull(item.catalogoStock),
+    aTraerDe: item.aTraerDe,
   }
   // La clave se AGREGA sólo con permiso (nunca `costoUnitario: undefined`): así ni siquiera el
   // nombre del campo aparece en la respuesta que ve un operador.
@@ -1285,6 +1313,7 @@ export function toPedidoDetalleDto(
     facturadoEn: iso(row.facturadoEn),
     facturadoPorNombre: row.facturadoPorNombre,
     reservaStock: reservaStock(row),
+    reserva: reservaDePendiente(row),
     pagoManual: esPagoManual(row),
     pagoActualizadoEn: iso(row.pagoActualizadoEn),
     pagoRegistradoPorNombre: row.pagoRegistradoPorNombre,

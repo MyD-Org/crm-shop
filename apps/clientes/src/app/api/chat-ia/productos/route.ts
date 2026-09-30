@@ -5,6 +5,7 @@ import { getProductosPorIds } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoResuelto, MAX_IDS_RESOLVER } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { dispDelVisitante } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
 /** Una por card del chat; el widget pide una vez por card. */
@@ -44,14 +45,16 @@ export async function GET(req: Request) {
   if (ids.length === 0) return json([]);
 
   try {
-    const [{ soloVisibles }, idPriceList] = await Promise.all([
+    const [{ soloVisibles }, disp, idPriceList] = await Promise.all([
       flagsPublicos(),
+      dispDelVisitante(),
       identidad.cliente ? idPriceListCliente(identidad.cliente.codigocliente) : Promise.resolve(undefined),
     ]);
     const productos = await getProductosPorIds(ids, {
       idPriceList: idPriceList ?? undefined,
       soloActivos: true,
       soloVisibles,
+      disp,
     });
     return json(ids.flatMap((id) => {
       const p = productos.get(id);

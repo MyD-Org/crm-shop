@@ -100,6 +100,14 @@ export function leerAvisoStock(evento: EventoStock, payload: unknown): AvisoStoc
   }
 }
 
+function prefijar(a: AvisoStock, slug: string): AvisoStock {
+  return {
+    ...a,
+    docId: a.docId ? `${slug}:${a.docId}` : null,
+    itemIds: a.itemIds.map((id) => `${slug}:${id}`),
+  }
+}
+
 // ── Registrar el aviso (antes de responder) ──
 
 export type AccionAvisoStock = "encolado" | "borrador" | "sin_id" | "sin_indice" | "error"
@@ -123,15 +131,22 @@ export async function registrarAviso(
   tenantId: string,
   evento: EventoStock,
   payload: unknown,
+  /** Slug de la cuenta SECUNDARIA que mandó el aviso; sin él, es la principal. */
+  cuentaSlug?: string,
 ): Promise<ResultadoAvisoStock> {
-  const aviso = leerAvisoStock(evento, payload)
-  if (!aviso) return { accion: "sin_id", items: 0, encolados: 0 }
+  const crudo = leerAvisoStock(evento, payload)
+  if (!crudo) return { accion: "sin_id", items: 0, encolados: 0 }
+  // Los ids de Alegra son POR CUENTA. Los de una secundaria se guardan con el prefijo `<slug>:` (el
+  // mismo formato del `alegra_id` sintético de sus productos): así la cola y el índice de
+  // documentos no chocan con los de la principal y el drenador sabe de qué cuenta leer.
+  const aviso: AvisoStock = cuentaSlug ? prefijar(crudo, cuentaSlug) : crudo
+  const etiqueta = cuentaSlug ? `${cuentaSlug}:${evento}` : evento
 
   return getDb().transaction(async (tx) => {
     // Contador de avisos por día (hora de Buenos Aires) y evento: para notar que dejaron de llegar.
     await tx
       .insert(alegraWebhookAvisos)
-      .values({ tenantId, dia: sql`(now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date`, evento, cantidad: 1 })
+      .values({ tenantId, dia: sql`(now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date`, evento: etiqueta, cantidad: 1 })
       .onConflictDoUpdate({
         target: [alegraWebhookAvisos.tenantId, alegraWebhookAvisos.dia, alegraWebhookAvisos.evento],
         set: { cantidad: sql`${alegraWebhookAvisos.cantidad} + 1`, ultimoAt: sql`now()` },
@@ -235,4 +250,59 @@ export function planSuscripcionesStock(
 /** La URL con el token tapado: alcanza para reconocerla sin filtrar el secreto. */
 export function enmascararUrlStock(url: string): string {
   return url.replace(/(\/api\/webhooks\/alegra\/stock\/[^/]+\/[^/]+\/)([^/?#]+)/, (_, pre: string, tok: string) => `${pre}${tok.slice(0, 4)}…`)
+}
+
+
+// ── Avisos de stock de una cuenta SECUNDARIA (D2) ──
+//
+// Ruta: /api/webhooks/alegra/stock-cuenta/<cuentaId>/<evento>/<token>. Token = HMAC del id de la
+// CUENTA con el dominio `alegra-stock-cuenta` (no se reutiliza el de la principal). El aviso es sólo
+// un disparador, igual que en la principal.
+
+export function tokenWebhookStockCuenta(
+  cuentaId: string,
+  secreto: string | undefined = process.env.ALEGRA_WEBHOOK_SECRET,
+): string | null {
+  return tokenWebhook("alegra-stock-cuenta", cuentaId, secreto)
+}
+
+export function tokenWebhookStockCuentaValido(
+  cuentaId: string,
+  token: string,
+  secreto: string | undefined = process.env.ALEGRA_WEBHOOK_SECRET,
+): boolean {
+  return tokenValido("alegra-stock-cuenta", cuentaId, token, secreto)
+}
+
+export function rutaWebhookStockCuenta(cuentaId: string, evento: EventoStock, token: string): string {
+  return `/api/webhooks/alegra/stock-cuenta/${encodeURIComponent(cuentaId)}/${evento}/${token}`
+}
+
+/** Suscripción de stock de ESTA cuenta (no las de otra cuenta, ni las de la principal). */
+export function esSuscripcionStockCuenta(cuentaId: string, s: SuscripcionAlegra): boolean {
+  return (
+    (EVENTOS_STOCK as readonly string[]).includes(s.event) &&
+    s.url.includes(`/api/webhooks/alegra/stock-cuenta/${encodeURIComponent(cuentaId)}/`)
+  )
+}
+
+export function planSuscripcionesStockCuenta(
+  cuentaId: string,
+  baseUrl: string,
+  token: string,
+  actuales: SuscripcionAlegra[],
+): PlanSuscripciones {
+  const nuestras = actuales.filter((s) => esSuscripcionStockCuenta(cuentaId, s))
+  const plan = EVENTOS_STOCK.map((event) => ({ event, url: `${baseUrl}${rutaWebhookStockCuenta(cuentaId, event, token)}` }))
+  const existe = (p: { event: string; url: string }) => nuestras.some((s) => s.event === p.event && mismaUrl(s.url, p.url))
+  return {
+    vigentes: plan.filter(existe).map((p) => p.event),
+    faltan: plan.filter((p) => !existe(p)),
+    viejas: nuestras.filter((s) => !plan.some((p) => p.event === s.event && mismaUrl(s.url, p.url))),
+  }
+}
+
+/** La URL de una cuenta con el token tapado. */
+export function enmascararUrlStockCuenta(url: string): string {
+  return url.replace(/(\/api\/webhooks\/alegra\/stock-cuenta\/[^/]+\/[^/]+\/)([^/?#]+)/, (_, pre: string, tok: string) => `${pre}${tok.slice(0, 4)}…`)
 }

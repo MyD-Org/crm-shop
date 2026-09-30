@@ -4,6 +4,7 @@ import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { relacionadosProducto } from "@/lib/catalogo-publico";
 import { formatRubro } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
+import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 
 const CANTIDAD = 8;
 
@@ -17,12 +18,15 @@ export async function RelacionadosProducto({
   categoria,
   productoId,
   soloVisibles,
+  disp,
   oferta,
 }: {
   categoriaPropiaId?: string;
   categoria?: string;
   productoId: string;
   soloVisibles: boolean;
+  /** Flag `disponibilidad-sucursal`: contexto de la zona del visitante (undefined = apagado). */
+  disp?: ContextoDisponibilidad;
   oferta: OfertaCuotas | null;
 }) {
   const relacionados = await relacionadosProducto({
@@ -31,6 +35,7 @@ export async function RelacionadosProducto({
     excluirId: productoId,
     cantidad: CANTIDAD,
     soloVisibles,
+    disp,
   });
   if (!relacionados || relacionados.productos.length === 0) return null;
 

@@ -15,13 +15,14 @@
 8. [Integración con Alegra (ERP)](#integración-con-alegra-erp)
 9. [Espejo de contactos de Alegra](#espejo-de-contactos-de-alegra)
 10. [Stock casi en tiempo real (webhooks de Alegra)](#stock-casi-en-tiempo-real-webhooks-de-alegra)
-11. [Pedidos del Shop: vincular factura](#pedidos-del-shop-vincular-factura)
-12. [Clientes de la tienda](#clientes-de-la-tienda)
-13. [Base de datos](#base-de-datos)
-14. [Feature flags](#feature-flags)
-15. [Referencia de endpoints](#referencia-de-endpoints)
-16. [Variables de entorno](#variables-de-entorno)
-17. [Comandos](#comandos)
+11. [Cuenta que factura cada pedido (multicuenta)](#cuenta-que-factura-cada-pedido-multicuenta)
+12. [Pedidos del Shop: vincular factura](#pedidos-del-shop-vincular-factura)
+13. [Clientes de la tienda](#clientes-de-la-tienda)
+14. [Base de datos](#base-de-datos)
+15. [Feature flags](#feature-flags)
+16. [Referencia de endpoints](#referencia-de-endpoints)
+17. [Variables de entorno](#variables-de-entorno)
+18. [Comandos](#comandos)
 
 ---
 
@@ -648,6 +649,38 @@ inertes.
 secreto en Vercel, redeploy, y correr `crear` de los dos scripts (detectan las URLs viejas;
 bórrelas con `borrar` antes).
 
+**Cuentas secundarias (sucursal con cuenta de Alegra propia; change `sucursales-igz-mdp`, D2)**.
+La cuenta de cada sucursal secundaria (p. ej. Mar del Plata) tiene su PROPIA ruta y su PROPIO
+token, distinto del de la principal:
+
+- Ruta `POST /api/webhooks/alegra/stock-cuenta/<cuentaId>/<evento>/<token>`; el token es el HMAC
+  del id de la cuenta (dominio `alegra-stock-cuenta`, mismo `ALEGRA_WEBHOOK_SECRET`). Un token de
+  otra cuenta o el de la principal dan 404.
+- Los ítems de una secundaria entran a la MISMA cola con el id `<slug>:<id_en_cuenta>` (el formato
+  del `alegra_id` sintético) y el drenador los lee de SU cuenta con SUS credenciales. Un id
+  numérico sin ":" es siempre de la principal. Los avisos se cuentan como `<slug>:<evento>` en
+  `alegra_webhook_avisos`.
+- Qué actualiza un aviso de la secundaria: un ítem **pareado** con la principal, solo el stock de
+  la sucursal en `catalog_stock_sucursal`; un ítem **solo-secundaria**, su fila propia de
+  `catalog_products` y su stock (activo solo con stock > 0 si la principal lo tiene inactivo); un
+  ítem **desconocido**, se lo empareja por código como la sync (par, fila nueva o se ignora si el
+  código está repetido o falta). Un ítem borrado en Alegra queda en stock 0 (inactivo si era
+  solo-secundaria). La categoría de una fila solo-secundaria no se recalcula por webhook: la
+  corrige la sync diaria.
+- **Paso manual de la usuaria (D.2.7)**: suscribir los avisos de la cuenta de MDP en Alegra, una
+  vez por cuenta, con el mismo script y `--cuenta <slug>` (pide "SI"; las credenciales salen de
+  `alegra_cuentas`):
+
+  ```bash
+  CRM_DATABASE_URL="<conexión de prod>" ALEGRA_WEBHOOK_SECRET="<el mismo de Vercel>" \
+    npx tsx --env-file-if-exists=.env.local scripts/alegra-webhooks-stock.ts \
+    --tenant <TENANT_ID> --cuenta mdp --base-url https://empresa.plataforma.example crear
+  ```
+
+  `listar` y `borrar` con `--cuenta` tocan solo las suscripciones de esa cuenta. Verificar con
+  un movimiento de stock real en MDP (`[alegra-stock-cuenta]` en los logs) y con un producto
+  nuevo cargado solo en MDP, que debe aparecer en la tienda. Sin este paso rige la sync diaria.
+
 **Consultas de guardia** (solo lectura):
 
 ```sql
@@ -725,6 +758,42 @@ RESET ROLE;
 ```
 
 ---
+
+## Cuenta que factura cada pedido (multicuenta)
+
+Change `sucursales-igz-mdp`, rebanada D, lote 3. Cada sucursal tiene su cuenta de Alegra; la
+factura (y el remito) de un pedido se emiten con las credenciales de UNA cuenta:
+
+- **Cuál**: el operador la elige en el pedido > la que fuerza la zona (`zonas.factura_sucursal`,
+  p. ej. Misiones factura por Iguazú) > la cuenta de la sucursal que despacha (`orders.sucursal`).
+  Un pedido sin sucursal usa la cuenta principal. Si la sucursal no tiene cuenta no se cae a otra
+  en silencio: el diálogo pide elegir una. Puras: `resolverCuentaFactura` y `esFacturaCruzada`
+  (`src/lib/sucursales-cuenta.ts`).
+- **Dónde se guarda**: tabla del CRM `pedido_factura_cuenta` (migración 0044), una fila por
+  pedido, SIN columnas nuevas en `shop.orders`: la cuenta elegida con su auditoría (quién, cuándo,
+  cuenta anterior) y, al emitir, la cuenta con la que se facturó y `factura_cruzada`. El
+  historial del pedido no admite tipos de evento nuevos (CHECK del Shop), por eso la auditoría
+  vive ahí. Se limpia `factura_cuenta_id` al desvincular la factura.
+- **Factura cruzada**: la cuenta que factura difiere de la de la sucursal que despacha (venta
+  entre empresas). El stock lo sigue descontando la sucursal que despacha; el ajuste entre las
+  dos empresas queda fuera del sistema. El detalle del pedido y el diálogo lo avisan.
+- **Emitir** (`factura/emitir`): `GET ?cuenta=<slug>` previsualiza otra cuenta, `POST { cuenta }`
+  la elige y la guarda. Numeraciones, impuestos, contacto, ítems y la factura salen de ESA cuenta.
+  El `cliente_codigo` del pedido es un id de la principal: en otra cuenta el contacto se busca por
+  documento o se crea (sin escribir el espejo de contactos). `GET .../factura/cuenta` (operator+)
+  devuelve la cuenta, el motivo y la auditoría para el detalle.
+- **Ítems**: nunca se manda a Alegra el `alegra_item_id` del pedido tal cual (puede ser el
+  sintético `<slug>:<id>`). `asegurarItemsEnCuenta` (`src/lib/alegra-items-cuenta.ts`) resuelve el
+  id real: fila del catálogo de esa cuenta, `catalog_stock_sucursal.item_id_cuenta`, búsqueda por
+  código en Alegra y, si no existe, lo CREA (mismo código y nombre, IVA y precio del pedido, sin
+  stock), guardando el pareo (`origen='factura'`). Serializado por (tenant, cuenta, código) con un
+  lock advisory: dos emisiones simultáneas crean un solo ítem. Código repetido en la cuenta
+  destino, o IVA sin impuesto equivalente, abortan con mensaje antes de emitir.
+  Abierto O4: si Alegra AR rechaza crear un inventariable con stock 0, `createItem` reintenta como
+  no inventariable (constante `CREAR_ITEM_INVENTARIABLE` en `alegra.ts`); confirmar con una
+  factura real.
+- **Remito**: sale por la cuenta de la factura (la registrada al emitirla; si todavía no se
+  facturó, la que corresponde al pedido). Con la principal sigue exigiendo el cliente de Alegra.
 
 ## Pedidos del Shop: vincular factura
 
@@ -856,7 +925,8 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | `payment_receipts` | Comprobantes de pago informados desde el portal: metadatos, máquina de estados y resultado del mail (el archivo vive en R2) |
 | `alegra_contacts` | Espejo de contactos de Alegra (ver [Espejo de contactos](#espejo-de-contactos-de-alegra)); el Shop lee la vista `alegra_contacts_shop` |
 | `alegra_contacts_sync_log` | Bitácora de la sync de contactos (estado, conteos, requests) |
-| `alegra_item_refresh` | Cola de ítems a re-leer de Alegra por avisos de stock (ver [Stock casi en tiempo real](#stock-casi-en-tiempo-real-webhooks-de-alegra)) |
+| `alegra_item_refresh` | Cola de ítems a re-leer de Alegra por avisos de stock (ver [Stock casi en tiempo real](#stock-casi-en-tiempo-real-webhooks-de-alegra)); los ítems de una cuenta secundaria llevan el id `<slug>:<id>` |
+| `pedido_factura_cuenta` | Cuenta de Alegra elegida por el operador (con auditoría) y con la que se facturó cada pedido, y `factura_cruzada` (ver [Cuenta que factura](#cuenta-que-factura-cada-pedido-multicuenta)) |
 | `alegra_documento_items` | Índice factura/compra → ids de ítems del último aviso (sin datos del documento) |
 | `alegra_stock_drenaje` | Lease del drenador de stock por tenant y último drenaje |
 | `alegra_webhook_avisos` | Avisos de stock recibidos por tenant, día y evento |

@@ -12,7 +12,10 @@ import { secureCompare } from "./secure-compare"
 // - Logs: nunca valores del cuerpo (las facturas y los contactos traen datos de clientes). La
 //   primera vez por (flujo, tenant, evento) y por instancia se loguean las CLAVES, sin valores.
 
-export type DominioWebhook = "alegra-contactos" | "alegra-stock"
+// `alegra-stock-cuenta`: avisos de stock de una cuenta SECUNDARIA (change `sucursales-igz-mdp`,
+// D2). El "id" que se firma es el de la CUENTA (uuid), no el del tenant: el token de una cuenta no
+// abre la ruta de otra ni la del stock de la principal.
+export type DominioWebhook = "alegra-contactos" | "alegra-stock" | "alegra-stock-cuenta"
 
 /** Largo mínimo del secreto: uno corto se adivina y abre la escritura del espejo. */
 const SECRETO_MIN = 32

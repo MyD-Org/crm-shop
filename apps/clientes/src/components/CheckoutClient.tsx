@@ -46,6 +46,8 @@ import {
   type PagoMetodo,
 } from "@/lib/envio";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
+import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
+import type { DisponibilidadVista } from "@/lib/disponibilidad-textos";
 import { itemDe } from "@/lib/tracking/eventos";
 import { track } from "@/lib/tracking/track";
 
@@ -465,9 +467,21 @@ export function CheckoutClient({
   const { cotizacion, estado, error, recotizar } = useCotizacion({
     entregaTipo: entrega,
     ciudad: entrega === "envio" ? ciudadEntrega : undefined,
+    // Cambiar la provincia (la zona) o la modalidad recotiza: revalida el stock por sucursal.
+    provincia: sucursales && entrega === "envio" && provinciaEntrega ? provinciaEntrega : undefined,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
+
+  // Flag `disponibilidad-sucursal`: de la disponibilidad por modalidad que devolvió la cotización,
+  // sólo lo de la modalidad elegida (el envío, o el local de retiro seleccionado).
+  const disponibilidadElegida = (id: string): DisponibilidadVista | null => {
+    const d = cotizacion?.disponibilidad?.productos[id];
+    if (!d) return null;
+    if (entrega === "envio") return { ...d, retiro: null };
+    const local = d.retiro?.[localRetiro];
+    return local ? { ...d, envio: null, retiro: { [localRetiro]: local } } : null;
+  };
 
   // Con los pagos apagados esto es ["a_coordinar"], así que `pagoElegido` (abajo)
   // deriva a "a_coordinar" sin estado extra y la rama de Mercado Pago queda
@@ -1175,6 +1189,15 @@ export function CheckoutClient({
                   <span className="ml-1 text-xs">x{linea.qty}</span>
                   {linea.problema && (
                     <span className="mt-0.5 block text-xs">{linea.detalle}</span>
+                  )}
+                  {/* Flag `disponibilidad-sucursal`: sólo la modalidad elegida (envío o el local de retiro). */}
+                  {!linea.problema && disponibilidadElegida(linea.id) && (
+                    <DisponibilidadLineas
+                      disponibilidad={disponibilidadElegida(linea.id)!}
+                      locales={cotizacion?.disponibilidad?.locales ?? []}
+                      envio={envioHabilitado}
+                      className="mt-1"
+                    />
                   )}
                 </span>
                 <span className="shrink-0 font-medium text-text">

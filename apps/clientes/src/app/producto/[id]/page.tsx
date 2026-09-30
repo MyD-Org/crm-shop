@@ -9,6 +9,8 @@ import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { envioHabilitado } from "@/lib/envio-flag";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
+import { dispDelVisitante } from "@/lib/zona-servidor";
+import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -20,8 +22,10 @@ type Props = { params: Promise<{ id: string }> };
  * cotizan del espejo en vivo.
  */
 const productoDe = cache(async (id: string) => {
-  const { soloVisibles } = await flagsPublicos();
-  return productoPublico(id, soloVisibles);
+  // Con el flag `disponibilidad-sucursal`, `disp` (sucursal de la zona) es parte de la clave de la
+  // caché y excluye lo oculto en las sucursales que sirven al visitante. Sin flag: undefined.
+  const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+  return productoPublico(id, soloVisibles, disp);
 });
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
@@ -34,14 +38,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductoPage({ params }: Props) {
   const { id } = await params;
   // En paralelo: la oferta de cuotas no depende del producto (motor sólo-monto).
-  const [producto, oferta, envio, { soloVisibles }] = await Promise.all([
+  const [producto, oferta, envio, { soloVisibles }, disp] = await Promise.all([
     productoDe(id),
     getOfertaCuotas(),
     envioHabilitado(),
     flagsPublicos(),
+    dispDelVisitante(),
   ]);
 
   if (!producto) notFound();
+  // "Envío: disponible" / "Retiro en <local>: ..." (sólo con el flag `disponibilidad-sucursal`).
+  const disponibilidad = await disponibilidadParaMostrar([producto.id], disp);
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
 
@@ -58,6 +65,11 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         oferta={oferta}
         envio={envio}
+        disponibilidad={
+          disponibilidad?.productos[producto.id]
+            ? { producto: disponibilidad.productos[producto.id], locales: disponibilidad.locales }
+            : undefined
+        }
         rutaCategorias={rutaCategorias}
         relacionados={
           producto.categoriaPropiaId || producto.category ? (
@@ -67,6 +79,7 @@ export default async function ProductoPage({ params }: Props) {
                 categoria={producto.category}
                 productoId={producto.id}
                 soloVisibles={soloVisibles}
+                disp={disp}
                 oferta={oferta}
               />
             </Suspense>

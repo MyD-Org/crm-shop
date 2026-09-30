@@ -3,6 +3,7 @@ import { getCatalogo } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoAgente, limiteBusqueda } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { dispDelVisitante } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
 /**
@@ -46,12 +47,14 @@ export async function GET(req: Request) {
   const limit = limiteBusqueda(params.get("limit"));
 
   try {
-    const { soloVisibles } = await flagsPublicos();
-    let productos = await getCatalogo({ busqueda: q, limit, soloVisibles });
+    // La llamada viene de ai-api (sin cookie de zona): con el flag `disponibilidad-sucursal` se usa
+    // la zona predeterminada, así el agente no ofrece lo oculto ni cuenta stock que no hay.
+    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+    let productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp });
     // Mismo criterio que el buscador del Shop: si lo exacto no trae nada, se
     // reintenta tolerando typos. Si ese intento falla, queda lo exacto (vacío).
     if (productos.length === 0) {
-      productos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true }).catch((err: unknown) => {
+      productos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true, disp }).catch((err: unknown) => {
         console.error(`[chat-ia/buscar] falló la búsqueda tolerante: ${err instanceof Error ? err.name : "desconocido"}`);
         return productos;
       });

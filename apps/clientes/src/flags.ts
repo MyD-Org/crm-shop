@@ -48,6 +48,14 @@ export const sucursalesFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const disponibilidadSucursalFlag = flag<boolean>({
+  key: "disponibilidad-sucursal",
+  description:
+    "Disponibilidad y reserva por sucursal: stock por local, retiro con demora, envío con respaldo y productos ocultos por sucursal (requiere el flag sucursales)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 export const chatIaFlag = flag<boolean>({
   key: "chat-ia",
   description: "Burbuja del chat con el agente en todas las páginas del Shop",

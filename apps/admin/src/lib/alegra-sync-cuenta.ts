@@ -100,14 +100,20 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 const cortar = <T>(xs: T[]): T[] => xs.slice(0, TOPE_LISTA_REVISAR)
 
-interface FilaStock {
+export interface FilaStock {
   alegraId: string
   itemIdCuenta: string
   stock: number | null
 }
 
 /** Escribe el stock de la cuenta en cada una de sus sucursales. No pisa pares manuales ni lecturas más frescas. */
-async function escribirStock(tenantId: string, slugs: string[], filas: FilaStock[], leidoAt: Date): Promise<void> {
+export async function escribirStock(
+  tenantId: string,
+  slugs: string[],
+  filas: FilaStock[],
+  leidoAt: Date,
+  origen: "sync" | "webhook" = "sync",
+): Promise<void> {
   const db = getDb()
   for (const lote of chunk(filas, LOTE)) {
     const ahora = new Date()
@@ -121,7 +127,7 @@ async function escribirStock(tenantId: string, slugs: string[], filas: FilaStock
             alegraId: f.alegraId,
             itemIdCuenta: f.itemIdCuenta,
             stock: String(f.stock ?? 0),
-            origen: "sync",
+            origen,
             leidoAt,
             syncedAt: ahora,
           })),

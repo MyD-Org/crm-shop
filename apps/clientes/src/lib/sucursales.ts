@@ -9,7 +9,9 @@
  * El CRM tiene una copia de estas funciones (`apps/admin`; no hay workspaces) y las dos ejecutan el
  * MISMO fixture (`__fixtures__/sucursales-casos.json`). Si cambia una, cambia la otra.
  *
- * En la rebanada A sólo hay retiro y envío por zona; el respaldo por stock llega en la B.
+ * Rebanada A: retiro y envío por zona. Rebanada B (lote 1): con `entrada.lineas` y una función de
+ * stock, `asignarSucursal` también resuelve el ORIGEN de cada línea (respaldo por stock, líneas "a
+ * traer", visibilidad por sucursal). Sin `lineas` el comportamiento es el de la A, idéntico.
  */
 import { provinciaCanonica } from "./provincias";
 
@@ -71,7 +73,7 @@ export interface ReglaAplicada {
   sucursalZona: string;
   /** Cuenta que factura si la zona lo fuerza (`zonas.factura_sucursal`); null = la de despacho. */
   facturaSucursal: string | null;
-  /** Líneas que se traen de otra sucursal (rebanada B); vacío en la A. */
+  /** Ids de las líneas que se traen de otra sucursal (rebanada B); vacío en la A y sin respaldo. */
   lineasATraer: string[];
 }
 
@@ -144,11 +146,127 @@ export interface EntradaAsignacion {
   ciudad?: string | null;
   /** Slug del local elegido (retiro). */
   sucursalRetiro?: string | null;
+  /**
+   * Líneas del pedido (rebanada B). Con ellas, `asignarSucursal` necesita la función de stock y
+   * resuelve el origen de cada una. Sin ellas se comporta como en la rebanada A.
+   */
+  lineas?: LineaEntrada[];
+}
+
+/** Una línea a asignar: `ocultoEn` = `catalog_overlay.oculto_en_sucursales` del producto. */
+export interface LineaEntrada {
+  id: string;
+  qty: number;
+  ocultoEn: string[];
+}
+
+/**
+ * Disponible NETO de reserva de un producto en una sucursal. `null` = no inventariable (siempre
+ * disponible); una sucursal sin fila de stock para un inventariable vale 0 (la resuelve quien
+ * arma la función).
+ */
+export type StockFn = (sucursal: string, id: string) => number | null;
+
+/** Reglas de venta que usa la asignación (subconjunto de `public.reglas_venta`). */
+export interface ReglasVenta {
+  /** Días de traslado entre sucursales; 0 = "a coordinar" (sin plazo numérico). */
+  trasladoDias: number;
+  /**
+   * Envío con respaldo: si la sucursal de la zona no cubre una línea, otra la despacha ("a
+   * traer"). Ausente = true (el default de `reglas_venta`). Falso: el envío sale sólo de la de la zona.
+   */
+  respaldoEnvio?: boolean;
+  /**
+   * Retiro sin stock en el local elegido: `ofrecer` = se ofrece trayéndolo de otra sucursal, con
+   * demora; `bloquear` = no se ofrece. Ausente = `ofrecer`.
+   */
+  retiroSinStock?: "bloquear" | "ofrecer";
+}
+
+/** ¿Vale traer de otra sucursal lo que falta en la preferida? (según la modalidad y las reglas). */
+export function permiteRespaldo(modalidad: "envio" | "retiro", reglas: ReglasVenta | undefined): boolean {
+  return modalidad === "envio" ? reglas?.respaldoEnvio !== false : reglas?.retiroSinStock !== "bloquear";
+}
+
+/** Cómo sale una línea del pedido (sólo con `entrada.lineas`). */
+export interface LineaAsignada {
+  id: string;
+  /** Sucursal de la que sale la línea. */
+  origen: string;
 }
 
 export interface Asignacion {
   sucursal: string;
   regla: ReglaAplicada;
+  /** Origen por línea; sólo si la entrada trajo `lineas`. */
+  lineas?: LineaAsignada[];
+  /**
+   * Demora por traslado cuando alguna línea es "a traer"; null si no hay ninguna. 0 = "a coordinar".
+   * Sólo si la entrada trajo `lineas`.
+   */
+  demoraDias?: number | null;
+}
+
+/** Errores de la asignación por líneas (rebanada B); `ids` son las líneas afectadas. */
+export interface ErrorLineas {
+  error: "sin_stock" | "no_servible" | "sin_retiro";
+  ids: string[];
+}
+
+/** Resultado de resolver el origen de UNA línea. */
+export type OrigenLinea = { origen: string; aTraer: boolean } | { error: "sin_stock" | "no_servible" };
+
+/**
+ * Origen de una línea. `preferida` es la sucursal que debería despachar (la de la zona o el local de
+ * retiro). Una sucursal en `linea.ocultoEn` NO es candidata (ni origen ni respaldo). Si la preferida
+ * sirve la línea (stock suficiente o no inventariable), sale de ahí; si no, el respaldo es la
+ * primera otra sucursal activa, por `orden`, que la cubra entera (una línea sale de UNA sola
+ * sucursal). `aTraer` = el origen no es la preferida. Sin candidatas = `no_servible`; con
+ * candidatas pero ninguna con stock = `sin_stock`.
+ */
+export function origenDeLinea(
+  linea: LineaEntrada,
+  preferida: string,
+  sucursales: SucursalDato[],
+  stock: StockFn,
+  /** Falso = sin respaldo: sólo la preferida puede despachar (regla `respaldo_envio` / `retiro_sin_stock`). */
+  respaldo = true,
+): OrigenLinea {
+  const candidatas = activas(sucursales).filter((s) => !linea.ocultoEn.includes(s.slug));
+  if (candidatas.length === 0) return { error: "no_servible" };
+  const cubre = (slug: string) => {
+    const disponible = stock(slug, linea.id);
+    return disponible === null || disponible >= linea.qty;
+  };
+  if (candidatas.some((s) => s.slug === preferida) && cubre(preferida)) {
+    return { origen: preferida, aTraer: false };
+  }
+  const otra = respaldo ? candidatas.find((s) => s.slug !== preferida && cubre(s.slug)) : undefined;
+  return otra ? { origen: otra.slug, aTraer: true } : { error: "sin_stock" };
+}
+
+/** Junta el origen de cada línea en una asignación, o el error de las que no se pueden servir. */
+function resolverLineas(
+  lineas: LineaEntrada[],
+  preferida: string,
+  sucursales: SucursalDato[],
+  stock: StockFn,
+  reglas: ReglasVenta | undefined,
+  modalidad: "envio" | "retiro",
+): { lineas: LineaAsignada[]; aTraer: string[]; demoraDias: number | null } | ErrorLineas {
+  const respaldo = permiteRespaldo(modalidad, reglas);
+  const resueltas = lineas.map((l) => ({ l, r: origenDeLinea(l, preferida, sucursales, stock, respaldo) }));
+  const noServibles = resueltas.filter((x) => "error" in x.r && x.r.error === "no_servible").map((x) => x.l.id);
+  if (noServibles.length > 0) return { error: "no_servible", ids: noServibles };
+  const sinStock = resueltas.filter((x) => "error" in x.r).map((x) => x.l.id);
+  if (sinStock.length > 0) return { error: "sin_stock", ids: sinStock };
+  const ok = resueltas.map((x) => ({ id: x.l.id, ...(x.r as { origen: string; aTraer: boolean }) }));
+  const aTraer = ok.filter((x) => x.aTraer).map((x) => x.id);
+  return {
+    lineas: ok.map(({ id, origen }) => ({ id, origen })),
+    aTraer,
+    demoraDias: aTraer.length > 0 ? (reglas?.trasladoDias ?? null) : null,
+  };
 }
 
 /**
@@ -157,16 +275,34 @@ export interface Asignacion {
  * - Retiro: la del local elegido. Debe existir, estar activa y aceptar retiro; la zona NO cuenta.
  * - Envío: la de la zona de la provincia de entrega. Debe aceptar envío y, si tiene lista de
  *   ciudades, la ciudad de entrega tiene que estar en ella (sin ciudad, con lista: no hay envío).
+ *
+ * Con `entrada.lineas` (rebanada B) además resuelve el origen de cada línea: un solo pedido, sin
+ * partirlo; las líneas que la preferida no cubre salen de otra sucursal ("a traer", con la demora
+ * de `datos.reglas`). Retiro: una línea oculta en el local elegido no se retira ahí (`sin_retiro`
+ * con los ids). Sin stock en ninguna: `sin_stock`; ninguna sucursal puede servirla por visibilidad:
+ * `no_servible`. `regla.motivo` no cambia por el respaldo: lo dicen `regla.lineasATraer` y
+ * `lineas`.
  */
 export function asignarSucursal(
   entrada: EntradaAsignacion,
-  datos: { sucursales: SucursalDato[]; zonas: ZonaDato[] },
-): Asignacion | { error: ErrorSucursal } {
+  datos: { sucursales: SucursalDato[]; zonas: ZonaDato[]; reglas?: ReglasVenta },
+  stock?: StockFn,
+): Asignacion | { error: ErrorSucursal } | ErrorLineas {
   const { sucursales, zonas } = datos;
+  if (entrada.lineas && !stock) {
+    throw new Error("asignarSucursal: con `lineas` hace falta la función de stock");
+  }
 
   if (entrada.entregaTipo === "retiro") {
     const local = sucursales.find((s) => s.slug === entrada.sucursalRetiro);
     if (!local || !local.activa || !local.aceptaRetiro) return { error: "sin_retiro" };
+    const ocultas = (entrada.lineas ?? []).filter((l) => l.ocultoEn.includes(local.slug)).map((l) => l.id);
+    if (ocultas.length > 0) return { error: "sin_retiro", ids: ocultas };
+    const porLineas =
+      entrada.lineas && stock
+        ? resolverLineas(entrada.lineas, local.slug, sucursales, stock, datos.reglas, "retiro")
+        : undefined;
+    if (porLineas && "error" in porLineas) return porLineas;
     return {
       sucursal: local.slug,
       regla: {
@@ -177,8 +313,9 @@ export function asignarSucursal(
         zonaId: null,
         sucursalZona: local.slug,
         facturaSucursal: null,
-        lineasATraer: [],
+        lineasATraer: porLineas?.aTraer ?? [],
       },
+      ...(porLineas ? { lineas: porLineas.lineas, demoraDias: porLineas.demoraDias } : {}),
     };
   }
 
@@ -192,6 +329,11 @@ export function asignarSucursal(
       return { error: "sin_envio" };
     }
   }
+  const porLineas =
+    entrada.lineas && stock
+      ? resolverLineas(entrada.lineas, destino.slug, sucursales, stock, datos.reglas, "envio")
+      : undefined;
+  if (porLineas && "error" in porLineas) return porLineas;
   const zonaFila = zona.zonaId ? zonas.find((z) => z.id === zona.zonaId) : undefined;
   return {
     sucursal: destino.slug,
@@ -203,7 +345,8 @@ export function asignarSucursal(
       zonaId: zona.zonaId,
       sucursalZona: destino.slug,
       facturaSucursal: zonaFila?.facturaSucursal ?? null,
-      lineasATraer: [],
+      lineasATraer: porLineas?.aTraer ?? [],
     },
+    ...(porLineas ? { lineas: porLineas.lineas, demoraDias: porLineas.demoraDias } : {}),
   };
 }

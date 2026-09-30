@@ -18,6 +18,8 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { GaleriaProducto } from "@/components/GaleriaProducto";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
+import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
+import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
 import type { Product } from "@/data/products";
 import { CartIcon } from "@/components/catalogo/iconos";
@@ -75,8 +77,14 @@ export function ProductoClient({
   envio = false,
   relacionados = null,
   rutaCategorias = [],
+  disponibilidad,
 }: {
   producto: Product;
+  /**
+   * Flag `disponibilidad-sucursal`: disponibilidad del producto por modalidad, armada en el server.
+   * Ausente = flag apagado (la ficha se ve como siempre).
+   */
+  disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
   /** Flag `envio` (ver src/lib/envio-flag.ts): si se anuncia el envío a domicilio. */
@@ -297,6 +305,14 @@ export function ProductoClient({
               {botonAgregar}
               <BotonFavorito productId={producto.id} />
             </div>
+
+            {disponibilidad && (
+              <DisponibilidadLineas
+                disponibilidad={disponibilidad.producto}
+                locales={disponibilidad.locales}
+                envio={envio}
+              />
+            )}
 
             <EntregaProducto envio={envio} />
           </aside>

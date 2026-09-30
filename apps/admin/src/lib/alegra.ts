@@ -20,6 +20,8 @@ import {
   mockCreateInvoice,
   mockAllRemisiones,
   mockCreateRemission,
+  mockBuscarItemsPorCodigo,
+  mockCreateItem,
 } from "./mock-alegra"
 
 // Cliente de Alegra (productos, contactos, cotizaciones, listas de precio, formas de pago).
@@ -885,6 +887,70 @@ export async function getItemParaEspejo(
     return mapRawItem(raw)
   } catch (err) {
     if (err instanceof AlegraHttpError && err.status === 404) return null
+    throw err
+  }
+}
+
+// ── Alta de ítems al facturar por otra cuenta (change `sucursales-igz-mdp`, D6) ──
+
+/**
+ * Ítems de la cuenta cuyo código (referencia) es EXACTAMENTE `codigo` (comparación sin mayúsculas ni
+ * espacios sobrantes). La API de Alegra busca por texto (`query`) y no garantiza coincidencia
+ * exacta, así que se filtra acá. Sólo lectura; si hubiera más de 30 coincidencias parciales el
+ * exacto podría quedar afuera de la primera página (código muy corto: raro, y el caso se ve como
+ * "no existe" → se intentaría crear; ver `asegurarItemsEnCuenta`).
+ */
+export async function buscarItemsPorCodigo(config: TenantConfig, codigo: string): Promise<AlegraProduct[]> {
+  const buscado = codigo.trim().toLowerCase()
+  if (!buscado) return []
+  if (config.alegraMock) return mockBuscarItemsPorCodigo(buscado)
+  const raw = (await alegraFetch(config, "/items", { query: codigo.trim(), limit: "30", start: "0" })) as unknown
+  const filas = Array.isArray(raw) ? (raw as Record<string, unknown>[]) : []
+  return filas.map(mapRawItem).filter((it) => (it.code ?? "").trim().toLowerCase() === buscado)
+}
+
+export interface AlegraItemCreateInput {
+  name: string
+  /** Código / referencia; null = se crea sin referencia. */
+  code: string | null
+  /** Precio unitario NETO (sin IVA). */
+  price: number
+  /** Id de impuesto de ESA cuenta (`/taxes`), o null para crear el ítem sin impuesto. */
+  taxId: string | null
+}
+
+/**
+ * ¿Se crea el ítem como inventariable (con stock inicial 0)? Abierto O4 del design: no está
+ * verificado que Alegra AR deje facturar un inventariable con stock 0 recién creado. Si el alta
+ * como inventariable falla con un 4xx, `createItem` reintenta SIN inventario (producto no
+ * inventariable): el ítem queda usable para facturar aunque no lleve stock. Cambiar esta constante
+ * a `false` fuerza siempre el alta no inventariable.
+ */
+export const CREAR_ITEM_INVENTARIABLE = true
+
+/**
+ * Crea un ítem en la cuenta de `config` (para facturar por una cuenta que no lo tiene). Sin stock
+ * inicial. NO es idempotente por sí solo: quien llama busca antes (`buscarItemsPorCodigo`) y
+ * serializa por código (`asegurarItemsEnCuenta`).
+ */
+export async function createItem(config: TenantConfig, input: AlegraItemCreateInput): Promise<AlegraProduct> {
+  if (config.alegraMock) return mockCreateItem(input)
+  const base: Record<string, unknown> = {
+    name: input.name,
+    price: input.price,
+    ...(input.code ? { reference: input.code } : {}),
+    ...(input.taxId ? { tax: [{ id: Number.isNaN(Number(input.taxId)) ? input.taxId : Number(input.taxId) }] } : {}),
+  }
+  const crear = async (body: Record<string, unknown>) =>
+    mapRawItem((await alegraFetch(config, "/items", undefined, { method: "POST", body })) as Record<string, unknown>)
+  if (!CREAR_ITEM_INVENTARIABLE) return crear({ ...base, type: "product" })
+  try {
+    return await crear({ ...base, type: "product", inventory: { unit: "unit", initialQuantity: 0, unitCost: 0 } })
+  } catch (err) {
+    // 4xx (validación): no se creó nada, es seguro reintentar como no inventariable. 429 y 5xx no.
+    if (err instanceof AlegraHttpError && err.status >= 400 && err.status < 500 && err.status !== 429) {
+      return crear({ ...base, type: "product" })
+    }
     throw err
   }
 }

@@ -51,6 +51,8 @@ export interface ProductoDto {
   tagIds: string[]
   fotos: FotoDto[]
   fichaTecnica: FichaDto | null
+  /** Slugs de sucursal donde NO se ofrece (vacío = visible en todas). */
+  ocultoEnSucursales: string[]
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
   /** Cuenta de Alegra de origen cuando NO es la principal (producto solo de esa cuenta). null = principal. */
@@ -113,6 +115,15 @@ export interface Filtros {
   tag?: string
   /** "principal" o el slug de una cuenta secundaria. */
   cuenta?: string
+  /** "visible:<slug>" u "oculto:<slug>" (visibilidad por sucursal). */
+  sucursal?: string
+}
+
+/** Sucursal del tenant, para el campo "Visible en" del producto y el filtro del listado. */
+export interface SucursalOpcionDto {
+  slug: string
+  nombre: string
+  activa: boolean
 }
 
 export type Seleccion =

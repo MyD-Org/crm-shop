@@ -598,6 +598,10 @@ export const catalogOverlay = pgTable(
     // Ficha técnica (PDF), opcional. A diferencia de `fotos` (array de variantes) es un solo
     // archivo: null = sin ficha cargada.
     fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaOverlay | null>(),
+    // Slugs de `sucursales` donde el producto NO se ofrece (vacío = visible en todas). Sin FK
+    // (array): la API del admin valida los slugs. Migración 0045; el Shop la lee directo del
+    // overlay (GRANT por columna) solo con el flag `disponibilidad-sucursal`.
+    ocultoEnSucursales: text("oculto_en_sucursales").array().notNull().default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Insumo del delta hacia el Shop: lo setea el repo con now() de Postgres en CADA escritura.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1000,6 +1004,28 @@ export const zonas = pgTable(
   ],
 )
 
+// Reglas de venta por tenant (change `sucursales-igz-mdp`, rebanada B; migración 0045). Una fila
+// por tenant; si falta, rigen los mismos defaults en código (`reglas-venta-validacion.ts`).
+// Drift que vive SOLO en SQL: los CHECK (enteros >= 0; `retiro_sin_stock` en bloquear/ofrecer), la
+// siembra de filas por tenant y el GRANT SELECT a `shop_app`.
+export const reglasVenta = pgTable("reglas_venta", {
+  tenantId: text("tenant_id").primaryKey().references(() => tenants.id),
+  // Envío: si la sucursal de la zona no tiene stock, se despacha desde otra ("a traer").
+  respaldoEnvio: boolean("respaldo_envio").notNull().default(true),
+  // Retiro sin stock en el local: 'bloquear' o 'ofrecer' (con demora de `traslado_dias`).
+  retiroSinStock: text("retiro_sin_stock").notNull().default("ofrecer"),
+  // Días de demora prometidos al traer de otra sucursal (0 = "a coordinar").
+  trasladoDias: integer("traslado_dias").notNull().default(7),
+  // Días que un pedido sin cobro online reserva stock (0 = nunca vence).
+  reservaDias: integer("reserva_dias").notNull().default(7),
+  // Horas sin contactar tras las cuales el pedido se resalta en Pedidos.
+  avisoSinContactarHoras: integer("aviso_sin_contactar_horas").notNull().default(24),
+  // Horas hábiles que se le prometen al cliente para el contacto.
+  contactoHorasHabiles: integer("contacto_horas_habiles").notNull().default(24),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
 // ── Cuentas de Alegra y stock por sucursal (change `sucursales-igz-mdp`, rebanada D) ───────
 //
 // La sucursal es la unidad comercial; la CUENTA de Alegra es la unidad contable (credenciales,
@@ -1067,5 +1093,55 @@ export const catalogStockSucursal = pgTable(
       columns: [t.tenantId, t.sucursal],
       foreignColumns: [sucursales.tenantId, sucursales.slug],
     }).onDelete("cascade"),
+  ],
+)
+
+// ── Cuenta de Alegra que factura cada pedido (change `sucursales-igz-mdp`, rebanada D, lote 3) ──
+//
+// Una fila por pedido cuando el operador eligió otra cuenta o cuando se emitió una factura. El
+// DEFAULT (cuenta de la sucursal que despacha, o la de la zona si la regla lo fuerza) NO se guarda:
+// se calcula (`resolverCuentaFactura`). `order_id` referencia `shop.orders.id` SIN FK (otro
+// esquema, dueño Shop): esta tabla es del CRM a propósito para no pedirle una columna al Shop.
+//
+//  - `cuenta_override_id` + `override_*`: la elección del operador y su auditoría (quién, cuándo y
+//    la cuenta que había antes; NULL = era el default). El historial del pedido no admite tipos de
+//    evento nuevos (CHECK del Shop), por eso la auditoría vive acá.
+//  - `factura_cuenta_id` / `factura_cruzada`: la cuenta con la que SE EMITIÓ la factura y si difiere
+//    de la sucursal que despacha (la reserva de stock sigue en la que despacha, rebanada B). Se
+//    limpian al desvincular la factura.
+//
+// `shop_app` NO tiene permiso sobre esta tabla (rebanada B decide si necesita `factura_cruzada`).
+export const pedidoFacturaCuenta = pgTable(
+  "pedido_factura_cuenta",
+  {
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    orderId: uuid("order_id").notNull(),
+    cuentaOverrideId: uuid("cuenta_override_id"),
+    overridePor: text("override_por"),
+    overridePorNombre: text("override_por_nombre"),
+    overrideEn: timestamp("override_en", { withTimezone: true }),
+    overrideAnteriorId: uuid("override_anterior_id"),
+    facturaCuentaId: uuid("factura_cuenta_id"),
+    facturaCruzada: boolean("factura_cruzada").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "pfc_pk", columns: [t.tenantId, t.orderId] }),
+    foreignKey({
+      name: "pfc_override_fk",
+      columns: [t.tenantId, t.cuentaOverrideId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
+    foreignKey({
+      name: "pfc_anterior_fk",
+      columns: [t.tenantId, t.overrideAnteriorId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
+    foreignKey({
+      name: "pfc_factura_fk",
+      columns: [t.tenantId, t.facturaCuentaId],
+      foreignColumns: [alegraCuentas.tenantId, alegraCuentas.id],
+    }),
   ],
 )

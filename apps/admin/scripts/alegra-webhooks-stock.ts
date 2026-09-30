@@ -21,6 +21,18 @@
  * - CRM_DATABASE_URL manda sobre DATABASE_URL (--env-file no pisa una variable ya exportada).
  * - El token es un secreto: en pantalla se muestra enmascarado.
  * - `borrar` toca SOLO las suscripciones de stock de este tenant, nunca las de contactos.
+ *
+ * CUENTA SECUNDARIA (change `sucursales-igz-mdp`, D2): con `--cuenta <slug>` el script trabaja
+ * sobre la cuenta de Alegra de esa sucursal (p. ej. Mar del Plata), no sobre la del tenant:
+ *
+ *   ... scripts/alegra-webhooks-stock.ts --tenant <tenant-id> --cuenta <slug> \
+ *     --base-url https://<tenant>.plataforma.example crear
+ *
+ *   - Las credenciales salen de `alegra_cuentas` (o, sólo fuera de producción, de las variables
+ *     `<TENANT>_ALEGRA_EMAIL_<SLUG>` / `_TOKEN_<SLUG>`).
+ *   - Las URLs apuntan a /api/webhooks/alegra/stock-cuenta/<cuentaId>/<evento>/<token>; el token
+ *     (HMAC del id de la cuenta, dominio `alegra-stock-cuenta`) es distinto del de la principal.
+ *   - listar / borrar tocan SOLO las suscripciones de esa cuenta.
  * - Si Alegra rechaza un evento al crear, lo informa y sigue con los demás.
  */
 import { createInterface } from "node:readline/promises"
@@ -33,10 +45,18 @@ import {
 } from "../src/lib/alegra"
 import {
   enmascararUrlStock,
+  enmascararUrlStockCuenta,
   esSuscripcionStock,
+  esSuscripcionStockCuenta,
   planSuscripcionesStock,
+  planSuscripcionesStockCuenta,
   tokenWebhookStock,
+  tokenWebhookStockCuenta,
 } from "../src/lib/alegra-stock-webhook"
+import { and, eq } from "drizzle-orm"
+import { getDb } from "../src/db"
+import { alegraCuentas } from "../src/db/schema"
+import { configParaCuenta } from "../src/lib/sucursales-cuenta"
 import { getTenantByIdFromDb } from "../src/lib/tenants"
 
 if (process.env.CRM_DATABASE_URL) process.env.DATABASE_URL = process.env.CRM_DATABASE_URL
@@ -50,7 +70,12 @@ function argumentos() {
     return i >= 0 ? args[i + 1] : undefined
   }
   const accion = args.find((a) => a === "crear" || a === "listar" || a === "borrar") as Accion | undefined
-  return { tenant: valor("--tenant")?.trim(), baseUrl: valor("--base-url")?.trim().replace(/\/+$/, ""), accion }
+  return {
+    tenant: valor("--tenant")?.trim(),
+    cuenta: valor("--cuenta")?.trim(),
+    baseUrl: valor("--base-url")?.trim().replace(/\/+$/, ""),
+    accion,
+  }
 }
 
 async function confirmar(pregunta: string): Promise<boolean> {
@@ -69,9 +94,9 @@ function motivo(err: unknown): string {
 }
 
 async function main() {
-  const { tenant, baseUrl, accion } = argumentos()
+  const { tenant, cuenta: cuentaSlug, baseUrl, accion } = argumentos()
   if (!tenant || !accion || (accion === "crear" && !baseUrl)) {
-    console.error("Uso: ... scripts/alegra-webhooks-stock.ts --tenant <id> --base-url <https://…> crear|listar|borrar")
+    console.error("Uso: ... scripts/alegra-webhooks-stock.ts --tenant <id> [--cuenta <slug>] --base-url <https://…> crear|listar|borrar")
     console.error("(--base-url sólo hace falta para crear; con él, listar marca las desactualizadas)")
     process.exitCode = 1
     return
@@ -85,29 +110,59 @@ async function main() {
   const host = (process.env.DATABASE_URL ?? "").replace(/^.*@/, "").replace(/[/?].*$/, "")
   console.log(`base del CRM: ${host || "???"}  (${/localhost|127\.0\.0\.1/.test(host) ? "LOCAL" : "REMOTA"})`)
 
-  const config = await getTenantByIdFromDb(tenant)
-  if (!config) {
+  const base = await getTenantByIdFromDb(tenant)
+  if (!base) {
     console.error(`No existe el tenant "${tenant}".`)
     process.exitCode = 1
     return
   }
+
+  // Cuenta secundaria (`--cuenta`) o la del tenant.
+  let config = base
+  let cuentaId: string | null = null
+  if (cuentaSlug) {
+    const [fila] = await getDb()
+      .select()
+      .from(alegraCuentas)
+      .where(and(eq(alegraCuentas.tenantId, tenant), eq(alegraCuentas.slug, cuentaSlug)))
+    if (!fila || fila.principal) {
+      console.error(`No existe una cuenta secundaria "${cuentaSlug}" en el tenant "${tenant}" (la principal usa la ruta de siempre, sin --cuenta).`)
+      process.exitCode = 1
+      return
+    }
+    try {
+      config = configParaCuenta(base, fila)
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : "La cuenta no tiene credenciales.")
+      process.exitCode = 1
+      return
+    }
+    cuentaId = fila.id
+  }
   if (config.alegraMock || !config.alegraToken) {
-    console.error(`El tenant "${tenant}" no tiene una cuenta real de Alegra configurada (mock o sin token).`)
+    console.error(`${cuentaSlug ? `La cuenta "${cuentaSlug}"` : `El tenant "${tenant}"`} no tiene una cuenta real de Alegra configurada (mock o sin token).`)
     process.exitCode = 1
     return
   }
-  console.log(`tenant:       ${tenant}  (credenciales de Alegra: cargadas)\n`)
+  console.log(`tenant:       ${tenant}${cuentaSlug ? `  cuenta: ${cuentaSlug}` : ""}  (credenciales de Alegra: cargadas)\n`)
 
   const todas = await listWebhookSubscriptions(config)
-  const actuales = todas.filter((s) => esSuscripcionStock(tenant, s))
-  const token = tokenWebhookStock(tenant)
-  const plan = baseUrl && token ? planSuscripcionesStock(tenant, baseUrl, token, todas) : null
+  const esNuestra = (s: (typeof todas)[number]) => (cuentaId ? esSuscripcionStockCuenta(cuentaId, s) : esSuscripcionStock(tenant, s))
+  const enmascarar = cuentaId ? enmascararUrlStockCuenta : enmascararUrlStock
+  const actuales = todas.filter(esNuestra)
+  const token = cuentaId ? tokenWebhookStockCuenta(cuentaId) : tokenWebhookStock(tenant)
+  const plan =
+    baseUrl && token
+      ? cuentaId
+        ? planSuscripcionesStockCuenta(cuentaId, baseUrl, token, todas)
+        : planSuscripcionesStock(tenant, baseUrl, token, todas)
+      : null
   const vieja = (id: string) => plan?.viejas.some((v) => v.id === id) ?? false
 
   if (accion === "listar") {
     if (actuales.length === 0) console.log("No hay suscripciones de stock de este tenant.")
     for (const s of actuales) {
-      console.log(`- ${s.event.padEnd(15)} id=${s.id}  ${enmascararUrlStock(s.url)}${vieja(s.id) ? "  (DESACTUALIZADA)" : ""}`)
+      console.log(`- ${s.event.padEnd(15)} id=${s.id}  ${enmascarar(s.url)}${vieja(s.id) ? "  (DESACTUALIZADA)" : ""}`)
     }
     if (plan && plan.faltan.length > 0) console.log(`\nFaltan ${plan.faltan.length} de 9: ${plan.faltan.map((f) => f.event).join(", ")}`)
     return
@@ -119,7 +174,7 @@ async function main() {
       return
     }
     console.log("Se van a BORRAR en Alegra (sólo las de stock; las de contactos no se tocan):")
-    for (const s of actuales) console.log(`- ${s.event.padEnd(15)} id=${s.id}  ${enmascararUrlStock(s.url)}`)
+    for (const s of actuales) console.log(`- ${s.event.padEnd(15)} id=${s.id}  ${enmascarar(s.url)}`)
     if (!(await confirmar("\n¿Borrar estas suscripciones?"))) return console.log("Cancelado. No se tocó nada.")
     for (const s of actuales) {
       await deleteWebhookSubscription(config, s.id)
@@ -138,12 +193,12 @@ async function main() {
   if (plan.viejas.length > 0) {
     console.log("\nHay suscripciones de stock de este tenant con OTRA url (otro host o secreto viejo). No se tocan;")
     console.log("si sobran, bórrelas con `borrar` y vuelva a crear:")
-    for (const s of plan.viejas) console.log(`- ${s.event.padEnd(15)} id=${s.id}  ${enmascararUrlStock(s.url)}`)
+    for (const s of plan.viejas) console.log(`- ${s.event.padEnd(15)} id=${s.id}  ${enmascarar(s.url)}`)
   }
   if (plan.faltan.length === 0) return console.log("\nNada que crear.")
 
   console.log("\nSe van a CREAR en Alegra:")
-  for (const p of plan.faltan) console.log(`- ${p.event.padEnd(15)} ${enmascararUrlStock(p.url)}`)
+  for (const p of plan.faltan) console.log(`- ${p.event.padEnd(15)} ${enmascarar(p.url)}`)
   if (!(await confirmar("\n¿Crear estas suscripciones?"))) return console.log("Cancelado. No se tocó nada.")
   const rechazadas: string[] = []
   for (const p of plan.faltan) {

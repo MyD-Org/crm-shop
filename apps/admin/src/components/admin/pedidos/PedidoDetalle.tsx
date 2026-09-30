@@ -7,10 +7,14 @@ import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Text
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { reglaATexto, type NombresSucursal } from "@/lib/sucursales-texto"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
+import { CuentaFacturaInfo } from "./CuentaFacturaInfo"
+import { ContactoControl } from "./ContactoControl"
 import { EmitirFacturaControl } from "./EmitirFacturaControl"
+import { ReservaControl } from "./ReservaControl"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
 import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
+import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
 import { opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
 import {
@@ -83,6 +87,7 @@ export function PedidoDetalle({
   const ultimoCambio = textoUltimoCambio(pedido.estadoActualizadoPorNombre, pedido.estadoActualizadoEn)
   const documento = [pedido.facturacion.tipoDoc, pedido.facturacion.nroDoc].filter(Boolean).join(" ")
   const esEnvio = pedido.entrega.tipo === "envio"
+  const lineasATraer = pedido.items.filter((i) => i.aTraerDe)
   const revision = pedido.requiereRevision
     ? revisionInfo({
         motivo: pedido.motivoRevision,
@@ -100,6 +105,11 @@ export function PedidoDetalle({
       render: (i) => (
         <>
           <div className="font-medium" style={{ color: "var(--ink)" }}>{i.name}</div>
+          {i.aTraerDe && (
+            <div className="text-xs font-medium" style={{ color: "var(--amber)" }}>
+              A traer de {nombresSucursal[i.aTraerDe] ?? i.aTraerDe}
+            </div>
+          )}
           {(i.code || i.brand) && (
             <div className="text-xs" style={{ color: "var(--ink-faint)" }}>
               {[i.code, i.brand].filter(Boolean).join(" · ")}
@@ -256,6 +266,14 @@ export function PedidoDetalle({
           </Seccion>
 
           <Seccion titulo="Entrega">
+            {lineasATraer.length > 0 && (
+              <div className="mb-3">
+                <Alert tone="warning" title="Hay productos a traer de otra sucursal">
+                  {lineasATraer.length === 1 ? "Un producto de este pedido no sale" : `${lineasATraer.length} productos de este pedido no salen`}{" "}
+                  de la sucursal que despacha: hay que trasladarlos antes de entregar.
+                </Alert>
+              </div>
+            )}
             <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Dato label="Tipo">{entregaLabel(pedido.entrega.tipo)}</Dato>
               {(esEnvio || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
@@ -284,6 +302,12 @@ export function PedidoDetalle({
         {/* Acciones: sticky en desktop, primero en mobile (ver order-* arriba). */}
         <aside className="order-1 flex flex-col gap-4 lg:sticky lg:top-4 lg:order-2">
           <Card title="Estado" className="p-4">
+            <ContactoControl pedidoId={pedido.id} estado={pedido.estado} creadoEn={pedido.creadoEn} />
+            <ReservaControl
+              pedido={pedido}
+              esAdminPlus={esAdminPlus}
+              onChanged={(venceEn) => setPedido((p) => ({ ...p, reserva: { venceEn } }))}
+            />
             <EstadoAcciones key={pedido.estado} pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
           </Card>
 
@@ -301,6 +325,7 @@ export function PedidoDetalle({
           </Card>
 
           <Card title="Factura" className="p-4">
+            <CuentaFacturaInfo pedido={pedido} />
             {pedido.emisionReserva === "vigente" ? (
               <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
                 Emisión en curso… Actualice la página en unos segundos.
@@ -481,6 +506,7 @@ function EstadoAcciones({
             disabled={guardando}
           />
         </Field>
+        <MotivosFrecuentes onElegir={(m) => setMotivo(m.slice(0, MOTIVO_MAX))} disabled={guardando} />
       </Dialog>
 
       <Dialog

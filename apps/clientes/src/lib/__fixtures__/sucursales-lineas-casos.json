@@ -1,0 +1,710 @@
+{
+  "_comentario": "Casos de asignarSucursal CON líneas (rebanada B, lote 1). Sólo del Shop: no son parte del fixture compartido con el CRM (sucursales-casos.json). Datos ficticios. `stock` = disponible neto por sucursal y producto; ausente = 0; null = no inventariable.",
+  "dataset": {
+    "sucursales": [
+      {
+        "slug": "sede-a",
+        "aceptaRetiro": true,
+        "aceptaEnvio": true,
+        "envioCiudades": [
+          "Puerto Iguazú",
+          "El Dorado"
+        ],
+        "orden": 1,
+        "activa": true,
+        "predeterminada": false
+      },
+      {
+        "slug": "sede-b",
+        "aceptaRetiro": true,
+        "aceptaEnvio": true,
+        "envioCiudades": [],
+        "orden": 2,
+        "activa": true,
+        "predeterminada": true
+      }
+    ],
+    "zonas": [
+      {
+        "id": "zona-misiones",
+        "provinciaClave": "misiones",
+        "sucursal": "sede-a",
+        "facturaSucursal": null
+      },
+      {
+        "id": "zona-tucuman",
+        "provinciaClave": "tucuman",
+        "sucursal": "sede-b",
+        "facturaSucursal": "sede-a"
+      }
+    ]
+  },
+  "casos": [
+    {
+      "caso": "envío Misiones: A sale de sede-a, B sin stock allá se trae de sede-b (un solo pedido)",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          },
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 5,
+          "B": 0
+        },
+        "sede-b": {
+          "B": 3
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": [
+            "B"
+          ]
+        },
+        "lineas": [
+          {
+            "id": "A",
+            "origen": "sede-a"
+          },
+          {
+            "id": "B",
+            "origen": "sede-b"
+          }
+        ],
+        "demoraDias": 7
+      }
+    },
+    {
+      "caso": "envío Misiones: todo cubierto por el origen, sin líneas a traer ni demora",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          },
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 5,
+          "B": 2
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        },
+        "lineas": [
+          {
+            "id": "A",
+            "origen": "sede-a"
+          },
+          {
+            "id": "B",
+            "origen": "sede-a"
+          }
+        ],
+        "demoraDias": null
+      }
+    },
+    {
+      "caso": "envío Misiones: producto sólo de sede-b (sin fila en sede-a = 0) se trae",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "SOLO-B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-b": {
+          "SOLO-B": 4
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": [
+            "SOLO-B"
+          ]
+        },
+        "lineas": [
+          {
+            "id": "SOLO-B",
+            "origen": "sede-b"
+          }
+        ],
+        "demoraDias": 7
+      }
+    },
+    {
+      "caso": "envío Misiones: sin stock en ninguna sucursal",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          },
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 5
+        },
+        "sede-b": {}
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "error": "sin_stock",
+        "ids": [
+          "B"
+        ]
+      }
+    },
+    {
+      "caso": "envío Misiones: la cantidad pedida no la cubre una sola sucursal (no se parte la línea)",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 3,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 2
+        },
+        "sede-b": {
+          "A": 2
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "error": "sin_stock",
+        "ids": [
+          "A"
+        ]
+      }
+    },
+    {
+      "caso": "envío Misiones: oculto en sede-a con stock en las dos, la línea sale de sede-b (a traer)",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": [
+              "sede-a"
+            ]
+          },
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 5,
+          "B": 5
+        },
+        "sede-b": {
+          "A": 5
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": [
+            "A"
+          ]
+        },
+        "lineas": [
+          {
+            "id": "A",
+            "origen": "sede-b"
+          },
+          {
+            "id": "B",
+            "origen": "sede-a"
+          }
+        ],
+        "demoraDias": 7
+      }
+    },
+    {
+      "caso": "envío Misiones: oculto en todas las sucursales, no servible",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": [
+              "sede-a",
+              "sede-b"
+            ]
+          },
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 5,
+          "B": 5
+        },
+        "sede-b": {
+          "A": 5
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "error": "no_servible",
+        "ids": [
+          "A"
+        ]
+      }
+    },
+    {
+      "caso": "envío Misiones: no inventariable (stock null) siempre disponible en el origen",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "N",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "N": null
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        },
+        "lineas": [
+          {
+            "id": "N",
+            "origen": "sede-a"
+          }
+        ],
+        "demoraDias": null
+      }
+    },
+    {
+      "caso": "envío Misiones: demora 0 = a coordinar",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Misiones",
+        "ciudad": "Puerto Iguazú",
+        "lineas": [
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-b": {
+          "B": 1
+        }
+      },
+      "trasladoDias": 0,
+      "esperado": {
+        "sucursal": "sede-a",
+        "regla": {
+          "v": 1,
+          "regla": "zona:misiones",
+          "motivo": "zona",
+          "provincia": "misiones",
+          "zonaId": "zona-misiones",
+          "sucursalZona": "sede-a",
+          "facturaSucursal": null,
+          "lineasATraer": [
+            "B"
+          ]
+        },
+        "lineas": [
+          {
+            "id": "B",
+            "origen": "sede-b"
+          }
+        ],
+        "demoraDias": 0
+      }
+    },
+    {
+      "caso": "envío a Tucumán (zona sede-b): sale de sede-b y respalda con sede-a",
+      "entrada": {
+        "entregaTipo": "envio",
+        "provincia": "Tucumán",
+        "ciudad": "San Miguel de Tucumán",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          },
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 5
+        },
+        "sede-b": {
+          "B": 2
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "zona:tucuman",
+          "motivo": "zona",
+          "provincia": "tucuman",
+          "zonaId": "zona-tucuman",
+          "sucursalZona": "sede-b",
+          "facturaSucursal": "sede-a",
+          "lineasATraer": [
+            "A"
+          ]
+        },
+        "lineas": [
+          {
+            "id": "A",
+            "origen": "sede-a"
+          },
+          {
+            "id": "B",
+            "origen": "sede-b"
+          }
+        ],
+        "demoraDias": 7
+      }
+    },
+    {
+      "caso": "retiro en sede-b: sin stock local y con stock en sede-a, se ofrece con demora",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-b",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 3
+        },
+        "sede-b": {
+          "A": 0
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "retiro:sede-b",
+          "motivo": "retiro_local",
+          "provincia": null,
+          "zonaId": null,
+          "sucursalZona": "sede-b",
+          "facturaSucursal": null,
+          "lineasATraer": [
+            "A"
+          ]
+        },
+        "lineas": [
+          {
+            "id": "A",
+            "origen": "sede-a"
+          }
+        ],
+        "demoraDias": 7
+      }
+    },
+    {
+      "caso": "retiro en sede-b con stock local: sin demora",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-b",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 3
+        },
+        "sede-b": {
+          "A": 1
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "retiro:sede-b",
+          "motivo": "retiro_local",
+          "provincia": null,
+          "zonaId": null,
+          "sucursalZona": "sede-b",
+          "facturaSucursal": null,
+          "lineasATraer": []
+        },
+        "lineas": [
+          {
+            "id": "A",
+            "origen": "sede-b"
+          }
+        ],
+        "demoraDias": null
+      }
+    },
+    {
+      "caso": "retiro en sede-b: demora 0 = a coordinar",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-b",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 3
+        }
+      },
+      "trasladoDias": 0,
+      "esperado": {
+        "sucursal": "sede-b",
+        "regla": {
+          "v": 1,
+          "regla": "retiro:sede-b",
+          "motivo": "retiro_local",
+          "provincia": null,
+          "zonaId": null,
+          "sucursalZona": "sede-b",
+          "facturaSucursal": null,
+          "lineasATraer": [
+            "A"
+          ]
+        },
+        "lineas": [
+          {
+            "id": "A",
+            "origen": "sede-a"
+          }
+        ],
+        "demoraDias": 0
+      }
+    },
+    {
+      "caso": "retiro en sede-b: línea oculta en ese local no se retira ahí",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-b",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": [
+              "sede-b"
+            ]
+          },
+          {
+            "id": "B",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {
+        "sede-a": {
+          "A": 3,
+          "B": 3
+        },
+        "sede-b": {
+          "B": 3
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "error": "sin_retiro",
+        "ids": [
+          "A"
+        ]
+      }
+    },
+    {
+      "caso": "retiro en sede-b: sin stock en ninguna",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-b",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": []
+          }
+        ]
+      },
+      "stock": {},
+      "trasladoDias": 7,
+      "esperado": {
+        "error": "sin_stock",
+        "ids": [
+          "A"
+        ]
+      }
+    },
+    {
+      "caso": "retiro en sede-a: respaldo oculto en sede-b no se usa (queda sin stock)",
+      "entrada": {
+        "entregaTipo": "retiro",
+        "sucursalRetiro": "sede-a",
+        "lineas": [
+          {
+            "id": "A",
+            "qty": 1,
+            "ocultoEn": [
+              "sede-b"
+            ]
+          }
+        ]
+      },
+      "stock": {
+        "sede-b": {
+          "A": 9
+        }
+      },
+      "trasladoDias": 7,
+      "esperado": {
+        "error": "sin_stock",
+        "ids": [
+          "A"
+        ]
+      }
+    }
+  ]
+}

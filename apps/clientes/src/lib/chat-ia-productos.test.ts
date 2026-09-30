@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Product } from "@/data/products";
-import { aProductoAgente, aProductoResuelto, DESCRIPCION_MAX, limiteBusqueda, lineasAItems } from "./chat-ia-productos";
+import {
+  aProductoAgente,
+  aProductoResuelto,
+  DESCRIPCION_MAX,
+  facetasDeProductos,
+  limiteBusqueda,
+  lineasAItems,
+} from "./chat-ia-productos";
 
 const base: Product = {
   id: "1101",
@@ -48,8 +55,28 @@ describe("aProductoResuelto", () => {
       price: 12100,
       available: true,
       maxQuantity: 999,
+      attributes: ["Apto exterior"],
       precioNeto: 10000,
     });
+  });
+
+  it("código, atributos del diccionario y ficha técnica para la card spec", () => {
+    const p = aProductoResuelto({
+      ...base,
+      name: "REFLECTOR LED 50W CALIDO",
+      description: "Para exterior",
+      sku: "RF-50-C",
+      fichaTecnicaUrl: "https://cliente.example/fichas/rf-50.pdf",
+    });
+    expect(p).toMatchObject({
+      code: "RF-50-C",
+      attributes: ["Luz cálida", "Apto exterior"],
+      specUrl: "https://cliente.example/fichas/rf-50.pdf",
+    });
+    const sinNada = aProductoResuelto({ ...base, name: "Cinta aisladora", description: undefined });
+    expect(sinNada).not.toHaveProperty("attributes");
+    expect(sinNada).not.toHaveProperty("specUrl");
+    expect(sinNada).not.toHaveProperty("code");
   });
 
   it("código, tope de cantidad y aviso de stock bajo como la card del catálogo", () => {
@@ -93,5 +120,31 @@ describe("lineasAItems", () => {
         qty: 3,
       },
     ]);
+  });
+});
+
+describe("facetasDeProductos", () => {
+  const productos: Product[] = [
+    { ...base, id: "1", name: "REFLECTOR LED 50W CALIDO", brand: "GENROD", category: "ILUMINACION", categoriaPropiaId: "c1" },
+    { ...base, id: "2", name: "REFLECTOR 30W IP66 FRIO", brand: "GENROD", category: "ILUMINACION", categoriaPropiaId: "c1" },
+    { ...base, id: "3", name: "PROYECTOR 100W", brand: "MACROLED", category: "ILUMINACION", categoriaPropiaId: "c2", description: undefined },
+  ];
+
+  it("con árbol propio: categorías por el nombre de la categoría propia; marcas y atributos sin repetidos", () => {
+    const f = facetasDeProductos(productos, new Map([["c1", "REFLECTORES"], ["c2", "Proyectores"]]));
+    expect(f.categorias).toEqual([
+      { id: "REFLECTORES", nombre: "Reflectores" },
+      { id: "Proyectores", nombre: "Proyectores" },
+    ]);
+    expect(f.marcas.map((m) => m.id)).toEqual(["GENROD", "MACROLED"]);
+    expect(f.atributos).toEqual([
+      { id: "tono-calido", nombre: "Luz cálida" },
+      { id: "apto-exterior", nombre: "Apto exterior" },
+      { id: "tono-frio", nombre: "Luz fría" },
+    ]);
+  });
+
+  it("sin árbol: la categoría de Alegra (la que filtra el catálogo sin árbol)", () => {
+    expect(facetasDeProductos(productos, new Map()).categorias).toEqual([{ id: "ILUMINACION", nombre: "Iluminación" }]);
   });
 });

@@ -38,10 +38,10 @@ describe("productos sin precio (precio 0)", () => {
     for (const c of grabadora.consultas) exigePrecioPositivo(c.sql);
   });
 
-  it("getFacetas no los cuenta en categorías, marcas ni rango de precio", async () => {
+  it("getFacetas no los cuenta en categorías, marcas, rango de precio ni atributos", async () => {
     await getFacetas({}, false);
     const consultas = sinLecturaDelArbol(grabadora.consultas);
-    expect(consultas).toHaveLength(3);
+    expect(consultas).toHaveLength(4);
     for (const c of consultas) exigePrecioPositivo(c.sql);
   });
 });

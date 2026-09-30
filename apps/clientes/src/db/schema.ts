@@ -11,6 +11,7 @@ import {
   boolean,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
@@ -990,5 +991,42 @@ export const clientes = shop.table(
       "sc_eliminado_sin_datos",
       sql`${t.eliminadoEn} IS NULL OR (${t.email} IS NULL AND ${t.emailNorm} IS NULL AND ${t.nombre} IS NULL)`,
     ),
+  ],
+);
+
+/**
+ * Caché de la búsqueda inteligente (flag `busqueda-ia`, migración `0025`): qué
+ * se entendió de una consulta del buscador (categorías y atributos a aplicar o
+ * sugerir, ver src/lib/busqueda-inteligente/). Evita volver a llamar a Jev por
+ * la misma consulta y alimenta las "Búsquedas frecuentes" del buscador.
+ *
+ * - Clave `(tenant_id, consulta_norm, arbol_hash)`: la consulta normalizada
+ *   (minúsculas, sin tildes, espacios colapsados, hasta 120 caracteres) y un
+ *   hash de los ids y nombres del árbol de categorías activo. Si el tenant
+ *   cambia su árbol, las interpretaciones viejas dejan de coincidir solas.
+ * - Nunca se guardan consultas que parecen email o teléfono (se descartan
+ *   antes de interpretar).
+ * - `resultado` = `{ aplicar, sugerir }` tal como lo devuelve `interpretar`.
+ * - Toda lectura y escritura va envuelta: si la tabla no existe o falla, la
+ *   búsqueda sigue sin caché (src/lib/busqueda-inteligente/cache.ts).
+ */
+export const busquedaInterpretaciones = shop.table(
+  "busqueda_interpretaciones",
+  {
+    tenantId: text("tenant_id").notNull(),
+    consultaNorm: text("consulta_norm").notNull(),
+    arbolHash: text("arbol_hash").notNull(),
+    resultado: jsonb("resultado").$type<Record<string, unknown>>().notNull(),
+    /** `deterministico` | `jev`. */
+    fuente: text("fuente").notNull(),
+    hits: integer("hits").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: "bi_pk", columns: [t.tenantId, t.consultaNorm, t.arbolHash] }),
+    // Búsquedas frecuentes: por tenant, las usadas en los últimos 30 días.
+    index("bi_tenant_uso").on(t.tenantId, t.lastUsedAt),
+    check("bi_largos", sql`char_length(${t.consultaNorm}) <= 120 and char_length(${t.arbolHash}) <= 64`),
   ],
 );

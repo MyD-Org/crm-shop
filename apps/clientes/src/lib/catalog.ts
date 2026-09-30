@@ -67,6 +67,7 @@ import {
 import type { Product } from "@/data/products";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
+import { columnasConteoAtributos, facetasDeConteos, filtroAtributosSql } from "./catalogo-atributos-sql";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
 const STOCK_BAJO = 5;
@@ -566,6 +567,16 @@ export interface FiltrosCatalogo {
   busquedaTolerante?: boolean;
   categorias?: string[];
   marcas?: string[];
+  /**
+   * Ids del diccionario de atributos (catalogo-atributos.ts): AND entre
+   * grupos, OR dentro del grupo, con `~*` sobre el texto buscable.
+   */
+  atributos?: string[];
+  /**
+   * Sólo facetas: no calcular la de atributos (flag `busqueda-ia` apagado: el
+   * panel queda como siempre y no se paga esa consulta). Sale `atributos: []`.
+   */
+  sinFacetaAtributos?: boolean;
   /** Extremos inclusivos del rango, sobre el precio exhibido (con IVA). */
   precioMin?: number;
   precioMax?: number;
@@ -679,8 +690,12 @@ interface NodoCategoria {
   orden: number;
 }
 
-/** Árbol de categorías propias activas del tenant. Vacío = todavía no armó ninguna. */
-const getArbolCategorias = cache(async function getArbolCategorias(): Promise<NodoCategoria[]> {
+/**
+ * Árbol de categorías propias activas del tenant. Vacío = todavía no armó
+ * ninguna. Deduplicado por request (`cache` de React): también lo lee la
+ * interpretación de búsquedas (busqueda-inteligente/).
+ */
+export const getArbolCategorias = cache(async function getArbolCategorias(): Promise<NodoCategoria[]> {
   return getDb()
     .select({
       id: crmCategorias.id,
@@ -769,6 +784,7 @@ async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>)
 interface AplicarFiltros {
   categorias: boolean;
   marcas: boolean;
+  atributos: boolean;
   precio: boolean;
   stock: boolean;
 }
@@ -776,6 +792,7 @@ interface AplicarFiltros {
 const APLICAR_TODOS: AplicarFiltros = {
   categorias: true,
   marcas: true,
+  atributos: true,
   precio: true,
   stock: true,
 };
@@ -806,6 +823,7 @@ function condicionesDe(
     aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)
       : undefined,
+    aplicar.atributos ? filtroAtributosSql(textoBuscableSql(), filtros.atributos) : undefined,
     aplicar.precio && filtros.precioMin != null
       ? sql`${precioExhibidoSql} >= ${filtros.precioMin}`
       : undefined,
@@ -948,6 +966,11 @@ export interface Facetas {
   categorias: Faceta[];
   marcas: Faceta[];
   /**
+   * Atributos con conteo > 0 (`label` = id del diccionario; el nombre lo pone
+   * la UI con `nombreAtributo`). Cada grupo cuenta con los filtros de los otros.
+   */
+  atributos: Faceta[];
+  /**
    * Rango real de precios exhibidos del conjunto filtrado, sin el propio
    * filtro de precio (límites del slider). null = ningún producto cumple.
    */
@@ -957,6 +980,27 @@ export interface Facetas {
    * agrega la page del catálogo cuando hay más de uno. Ausente = el filtro no se muestra.
    */
   locales?: { slug: string; nombre: string }[];
+}
+
+/**
+ * Conteos de todos los atributos en UNA consulta (ver `columnasConteoAtributos`).
+ * El texto normalizado (`immutable_unaccent(lower(concat_ws(…)))`) se calcula
+ * una sola vez por fila en una subconsulta y los ~11 patrones corren sobre esa
+ * columna. EXPLAIN ANALYZE sobre el catálogo real (2026-09-29): ~160 ms con
+ * búsqueda (igual que las otras facetas, que corren en paralelo) y ~210 ms sin
+ * búsqueda (antes 160–300 y 220–350 ms); sin búsqueda la faceta sale de la
+ * caché compartida del catálogo.
+ */
+function consultaConteoAtributos(where: ReturnType<typeof condicionesDe>, atributos: string[] | undefined) {
+  const filas = getDb()
+    .select({ texto: sql<string>`${textoBuscableSql()}`.as("texto") })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(stockReservado, joinReserva())
+    .where(where)
+    .as("filas_atributos");
+  return getDb().select(columnasConteoAtributos(sql`${filas.texto}`, atributos)).from(filas);
 }
 
 /**
@@ -981,10 +1025,11 @@ export async function getFacetas(
   const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles, disp);
   const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, disp);
   const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, disp);
+  const whereAtributos = condicionesDe(filtros, { ...APLICAR_TODOS, atributos: false }, soloVisibles, disp);
 
   const arbol = await getArbolCategorias();
 
-  const [categorias, marcas, [rango]] = await Promise.all([
+  const [categorias, marcas, [rango], [conteoAtributos]] = await Promise.all([
     arbol.length
       ? conteoPorCategoriaPropia(whereCategorias).then((c) => enArbolConConteo(arbol, c))
       : getDb()
@@ -1020,6 +1065,7 @@ export async function getFacetas(
       .leftJoin(crmOverlay, joinOverlay())
       .leftJoin(stockReservado, joinReserva())
       .where(wherePrecio),
+    filtros.sinFacetaAtributos ? Promise.resolve([]) : consultaConteoAtributos(whereAtributos, filtros.atributos),
   ]);
 
   const precio =
@@ -1027,7 +1073,7 @@ export async function getFacetas(
       ? { min: rango.min, max: rango.max }
       : null;
 
-  return { categorias, marcas, precio };
+  return { categorias, marcas, atributos: facetasDeConteos(conteoAtributos), precio };
 }
 
 

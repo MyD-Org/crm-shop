@@ -31,14 +31,22 @@ export function CatalogoChips({
   rango,
   locales,
   ir,
+  sinInterpretados = false,
 }: {
   estado: EstadoCatalogo;
   rango: RangoPrecio | null;
   /** Locales del filtro "Con stock en": ponen el nombre en el chip. */
   locales?: { slug: string; nombre: string }[];
   ir: (cambios: Partial<EstadoCatalogo>) => void;
+  /**
+   * Categorías y atributos ya se muestran en la franja "Entendimos" (búsqueda
+   * interpretada): acá quedan sólo los demás filtros, para no repetirlos.
+   */
+  sinInterpretados?: boolean;
 }) {
-  const chips = chipsActivos(estado, rango, locales);
+  const chips = chipsActivos(estado, rango, locales).filter(
+    (c) => !sinInterpretados || !/^(categoria|atributo):/.test(c.clave),
+  );
   if (chips.length === 0) return null;
 
   return (

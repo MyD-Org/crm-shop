@@ -50,6 +50,11 @@ interface PropsHeader {
   navBadge?: NavBadgeContent | null;
   /** El badge sólo en mobile o en desktop (visibilidad del editor). */
   navBadgeVisibleOn?: VisibleOn;
+  /**
+   * Flag `busqueda-ia`: el buscador rota ejemplos y muestra la guía al
+   * enfocarlo. Lo resuelve el hueco del header; en el shell, apagado.
+   */
+  busquedaIa?: boolean;
 }
 
 /** Header con la ruta actual (nav de la home, cierre del preview del carrito). */
@@ -77,6 +82,7 @@ function HeaderVista({
   categorias,
   navBadge = null,
   navBadgeVisibleOn,
+  busquedaIa = false,
   pathname,
 }: PropsHeader & { pathname: string | null }) {
 
@@ -132,7 +138,7 @@ function HeaderVista({
         brandName="Central"
         brandAccent="Led"
         brandSub="Iluminación · Electricidad"
-        search={<SearchAutocomplete />}
+        search={<SearchAutocomplete busquedaIa={busquedaIa} />}
         nav={nav}
         // Marca y nav con next/link: con `<a>` cada clic recargaba la página.
         renderLink={linkNext}

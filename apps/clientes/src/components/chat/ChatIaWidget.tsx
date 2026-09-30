@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ChatDrawer, type CommerceCallbacks } from "@myd-org/ai-widget/preset";
 import "@myd-org/ai-widget/styles";
 import { useCart } from "@/context/CartContext";
@@ -9,6 +9,16 @@ import type { PropsChatIa } from "@/lib/chat-ia";
 import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
 import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
 import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
+import { useChatIa } from "@/hooks/useChatIa";
+import { contextoParaChat } from "@/lib/chat-ia-puente";
+import {
+  ATRIBUTO_DOCK,
+  MEDIA_DOCK,
+  comoDeshacer,
+  hrefDeFiltros,
+  idProductoDeRuta,
+  puedeNavegarSolo,
+} from "@/lib/chat-ia-integracion";
 
 /**
  * El widget habla con ai-api por `/ai-api/*` (rewrite same-origin de
@@ -74,9 +84,56 @@ async function resolver(ids: readonly string[]): Promise<ProductoResuelto[]> {
   return productos;
 }
 
+/** ¿La pantalla es lo bastante ancha para acoplar el chat? (`MEDIA_DOCK`, sigue los cambios). */
+function suscribirDock(aviso: () => void) {
+  const mq = window.matchMedia(MEDIA_DOCK);
+  mq.addEventListener("change", aviso);
+  return () => mq.removeEventListener("change", aviso);
+}
+const hayLugarParaDock = () => window.matchMedia(MEDIA_DOCK).matches;
+const sinDockEnServidor = () => false;
+
+/**
+ * Nombre del producto de la ficha para el contexto de pantalla: el `<h1>` de
+ * la página (la ficha lo tiene). Barato y sin pedir nada; si no está, el
+ * contexto va sin producto.
+ */
+function nombreEnPantalla(): string | undefined {
+  return document.querySelector("main h1")?.textContent?.trim() || undefined;
+}
+
 export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
   const router = useRouter();
+  const pathname = usePathname();
   const { addItems, items, updateQty, removeItem } = useCart();
+
+  // Puente con la página (lib/chat-ia-puente.ts): al montarse, el chat queda
+  // disponible para los "Conversar" del catálogo; `pedido` es su `sendRequest`.
+  const { registrar, pedido } = useChatIa();
+  useEffect(() => registrar(), [registrar]);
+
+  // Abierto controlado (el drawer se abre solo al llegar un `sendRequest`, y
+  // avisa por `onOpenChange`). Desde 1280 px se acopla a la derecha.
+  const [abierto, setAbierto] = useState(false);
+  const acoplable = useSyncExternalStore(suscribirDock, hayLugarParaDock, sinDockEnServidor);
+  const acoplado = acoplable && abierto;
+
+  // Acoplado y abierto, el layout le reserva el ancho (`padding-right` en
+  // globals.css): el contenido se corre en vez de quedar tapado. Arranca sin
+  // el atributo (el chat siempre carga cerrado): nada salta en el primer pintado.
+  useEffect(() => {
+    const html = document.documentElement;
+    if (acoplado) html.setAttribute(ATRIBUTO_DOCK, "abierto");
+    else html.removeAttribute(ATRIBUTO_DOCK);
+    return () => html.removeAttribute(ATRIBUTO_DOCK);
+  }, [acoplado]);
+
+  // Lo último de la página para los callbacks que el widget llama más tarde
+  // (contexto de pantalla, navegación automática) sin rearmar la config.
+  const vigente = useRef({ pathname, lineas: items.length, acoplado, abierto });
+  useEffect(() => {
+    vigente.current = { pathname, lineas: items.length, acoplado, abierto };
+  }, [pathname, items.length, acoplado, abierto]);
 
   // Cantidad de cada producto en el carrito: con esto la card del chat pasa de "Agregar" al
   // contador, igual que en el catálogo.
@@ -96,6 +153,21 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       onSetQuantity: (id, qty) => (qty <= 0 ? removeItem(id) : updateQty(id, qty)),
       cartQuantities,
       onOpenProduct: (id) => router.push(`/producto/${encodeURIComponent(id)}`),
+      // Card `catalog`: la URL la arma catalogo-url (descarta lo inválido) y
+      // "Deshacer" vuelve a la página anterior.
+      onNavigateCatalog: (filtros) => {
+        const anterior = `${window.location.pathname}${window.location.search}`;
+        const destino = hrefDeFiltros(filtros);
+        router.push(destino);
+        return {
+          undo: () => {
+            const actual = `${window.location.pathname}${window.location.search}`;
+            if (comoDeshacer(actual, destino) === "atras") router.back();
+            else router.push(anterior);
+          },
+        };
+      },
+      shouldAutoNavigate: () => puedeNavegarSolo(vigente.current),
       onHandoff: (card) => {
         const mensaje = mensajeTraspaso(
           card.summary,
@@ -109,7 +181,25 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
     [addItems, cartQuantities, items, removeItem, router, updateQty],
   );
 
-  const config = useMemo(() => ({ baseUrl: "/ai-api", agentId, fetchToken: pedirToken, fetch: fetchConToken }), [agentId]);
+  const config = useMemo(
+    () => ({
+      baseUrl: "/ai-api",
+      agentId,
+      fetchToken: pedirToken,
+      fetch: fetchConToken,
+      // Contexto de pantalla con cada mensaje (contrato contexto-pantalla-shop/v1).
+      getPageContext: () => {
+        const { pathname: ruta, lineas } = vigente.current;
+        const id = idProductoDeRuta(ruta);
+        const nombre = id ? nombreEnPantalla() : undefined;
+        return contextoParaChat(ruta, {
+          ...(id && nombre ? { producto: { id, name: nombre } } : {}),
+          carrito: { lineas },
+        });
+      },
+    }),
+    [agentId],
+  );
 
   return (
     <ChatDrawer
@@ -119,6 +209,10 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       theme="light"
       enableHistory
       commerce={commerce}
+      open={abierto}
+      onOpenChange={setAbierto}
+      dock={acoplable ? "right" : "none"}
+      sendRequest={pedido ?? undefined}
     />
   );
 }

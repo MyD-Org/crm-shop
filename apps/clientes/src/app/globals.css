@@ -9,6 +9,20 @@
  */
 @theme {
   --container-contenido: 1600px;
+  /* Entrada suave de lo que llega por streaming (franja de la búsqueda
+     inteligente, guía del buscador). Se usa con `motion-safe:`: con
+     `prefers-reduced-motion` aparece sin animación. */
+  --animate-aparecer: aparecer 180ms ease-out;
+  @keyframes aparecer {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }
 
 /* Token propio de la app, redefinido por tema más abajo: no existe en el DS
@@ -17,6 +31,22 @@
    hace con sus propios --color-*, y valga lo que cada [data-theme] redefina. */
 @theme inline {
   --color-success-sobre-oscuro: var(--color-success-sobre-oscuro);
+}
+
+/* Chat del asistente acoplado a la derecha (ai-widget 0.7.0, pantallas de
+   1280 px o más): ancho del panel, y mientras está abierto el <body> le reserva
+   ese ancho (ChatIaWidget pone `data-chat-dock` en <html>). El chat carga
+   cerrado, así que el primer pintado no se corre. */
+:root {
+  --aichat-dock-width: 400px;
+}
+html[data-chat-dock="abierto"] body {
+  padding-right: var(--aichat-dock-width);
+}
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition: padding-right 200ms ease-out;
+  }
 }
 
 /* Fuentes: next/font las carga en el layout (--font-nunito / --font-sora) y

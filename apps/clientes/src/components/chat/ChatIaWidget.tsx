@@ -11,7 +11,14 @@ import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
 import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
 import { useChatIa } from "@/hooks/useChatIa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
-import { ATRIBUTO_DOCK, MEDIA_DOCK, hrefDeFiltros, idProductoDeRuta, puedeNavegarSolo } from "@/lib/chat-ia-integracion";
+import {
+  ATRIBUTO_DOCK,
+  MEDIA_DOCK,
+  comoDeshacer,
+  hrefDeFiltros,
+  idProductoDeRuta,
+  puedeNavegarSolo,
+} from "@/lib/chat-ia-integracion";
 
 /**
  * El widget habla con ai-api por `/ai-api/*` (rewrite same-origin de
@@ -150,8 +157,15 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       // "Deshacer" vuelve a la página anterior.
       onNavigateCatalog: (filtros) => {
         const anterior = `${window.location.pathname}${window.location.search}`;
-        router.push(hrefDeFiltros(filtros));
-        return { undo: () => router.push(anterior) };
+        const destino = hrefDeFiltros(filtros);
+        router.push(destino);
+        return {
+          undo: () => {
+            const actual = `${window.location.pathname}${window.location.search}`;
+            if (comoDeshacer(actual, destino) === "atras") router.back();
+            else router.push(anterior);
+          },
+        };
       },
       shouldAutoNavigate: () => puedeNavegarSolo(vigente.current),
       onHandoff: (card) => {

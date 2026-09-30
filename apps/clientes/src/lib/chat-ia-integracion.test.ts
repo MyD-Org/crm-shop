@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { estadoDeFiltros, hrefDeFiltros, idProductoDeRuta, puedeNavegarSolo } from "./chat-ia-integracion";
+import {
+  comoDeshacer,
+  estadoDeFiltros,
+  hrefDeFiltros,
+  idProductoDeRuta,
+  mismaUrlCatalogo,
+  puedeNavegarSolo,
+} from "./chat-ia-integracion";
 
 describe("filtros del agente → URL del catálogo", () => {
   it("mapea todos los campos con las reglas de catalogo-url", () => {
@@ -56,5 +63,26 @@ describe("idProductoDeRuta", () => {
     expect(idProductoDeRuta("/producto/11%2001/")).toBe("11 01");
     expect(idProductoDeRuta("/catalogo")).toBeUndefined();
     expect(idProductoDeRuta("/producto/1/otra")).toBeUndefined();
+  });
+});
+
+describe("deshacer la navegación del agente", () => {
+  const destino = "/catalogo?categoria=Reflectores&atr=tono-calido";
+
+  it("sigue en la página a la que navegó el agente ⇒ atrás en el historial", () => {
+    expect(comoDeshacer(destino, destino)).toBe("atras");
+    // El mismo estado con otro orden o codificación de parámetros es la misma página.
+    expect(comoDeshacer("/catalogo?atr=tono-calido&categoria=Reflectores", destino)).toBe("atras");
+  });
+
+  it("ya se movió (otro filtro, otra página) ⇒ a la URL anterior", () => {
+    expect(comoDeshacer("/catalogo?categoria=Reflectores&atr=tono-calido&pagina=2", destino)).toBe("anterior");
+    expect(comoDeshacer("/producto/1101", destino)).toBe("anterior");
+  });
+
+  it("mismaUrlCatalogo fuera del catálogo compara el texto", () => {
+    expect(mismaUrlCatalogo("/carrito", "/carrito/")).toBe(true);
+    expect(mismaUrlCatalogo("/producto/1", "/producto/2")).toBe(false);
+    expect(mismaUrlCatalogo("/catalogo?q=luz+calida", "/catalogo?q=luz%20calida")).toBe(true);
   });
 });

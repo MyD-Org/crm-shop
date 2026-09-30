@@ -5,6 +5,7 @@ import {
   catalogOverlay,
   catalogOverlayTags,
   catalogProducts,
+  catalogStockSucursal,
   catalogSyncLog,
   shopCategories,
   shopSyncPing,
@@ -367,10 +368,15 @@ export interface FiltrosAdmin {
    * sucursal; "oculto:<slug>" = está oculto en ella.
    */
   sucursal?: string
+  /** Slug de sucursal: solo productos con stock mayor a cero en ESA sucursal (`catalog_stock_sucursal`). */
+  stockEn?: string
 }
 
 /** `visible:<slug>` u `oculto:<slug>`, con el formato del slug de sucursal. */
 export const RE_FILTRO_SUCURSAL = /^(visible|oculto):[a-z0-9-]{2,20}$/
+
+/** Slug de una sucursal (el mismo formato que valida `sucursales`). */
+export const RE_SLUG_SUCURSAL = /^[a-z0-9-]{2,20}$/
 
 /** Slug de una cuenta secundaria (el mismo formato que valida `alegra_cuentas`). */
 export const RE_SLUG_CUENTA = /^[a-z0-9-]{2,12}$/
@@ -458,6 +464,14 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
     const [modo, slug] = f.sucursal.split(":")
     const oculto = sql`${slug} = ANY(coalesce(o.oculto_en_sucursales, '{}'::text[]))`
     cond.push(modo === "oculto" ? oculto : sql`NOT (${oculto})`)
+  }
+
+  if (f.stockEn && RE_SLUG_SUCURSAL.test(f.stockEn)) {
+    cond.push(sql`EXISTS (
+      SELECT 1 FROM ${catalogStockSucursal} css
+      WHERE css.tenant_id = p.tenant_id AND css.alegra_id = p.alegra_id
+        AND css.sucursal = ${f.stockEn} AND css.stock > 0
+    )`)
   }
 
   if (f.tag && esUuid(f.tag)) {
@@ -869,6 +883,11 @@ export interface ProductoAdmin {
    * null = cuenta principal.
    */
   cuenta: { slug: string; nombre: string; sucursal: string | null } | null
+  /**
+   * Stock del producto en cada sucursal (una entrada por fila de `catalog_stock_sucursal`; la
+   * sucursal sin fila no figura). `leidoAt` = cuándo se leyó ese stock de Alegra.
+   */
+  stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]
 }
 
 export type OrdenListado = "nombre" | "nombre-desc" | "actualizado"
@@ -934,7 +953,36 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
     motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
     cuenta: f.cuenta_slug ? { slug: f.cuenta_slug, nombre: f.cuenta_nombre ?? f.cuenta_slug, sucursal: f.cuenta_sucursal } : null,
+    stockSucursales: [],
   }
+}
+
+/**
+ * Stock por sucursal de un conjunto de productos, en UNA sola consulta (sin N+1) y siempre
+ * acotada al tenant. Devuelve un mapa alegraId → filas (ordenadas por sucursal).
+ */
+async function stockPorSucursal(
+  tenantId: string,
+  alegraIds: string[],
+): Promise<Map<string, ProductoAdmin["stockSucursales"]>> {
+  const mapa = new Map<string, ProductoAdmin["stockSucursales"]>()
+  if (alegraIds.length === 0) return mapa
+  const filas = await getDb()
+    .select({
+      alegraId: catalogStockSucursal.alegraId,
+      sucursal: catalogStockSucursal.sucursal,
+      stock: catalogStockSucursal.stock,
+      leidoAt: catalogStockSucursal.leidoAt,
+    })
+    .from(catalogStockSucursal)
+    .where(and(eq(catalogStockSucursal.tenantId, tenantId), inArray(catalogStockSucursal.alegraId, alegraIds)))
+    .orderBy(asc(catalogStockSucursal.sucursal))
+  for (const f of filas) {
+    const lista = mapa.get(f.alegraId) ?? []
+    lista.push({ sucursal: f.sucursal, stock: f.stock, leidoAt: f.leidoAt ? f.leidoAt.toISOString() : null })
+    mapa.set(f.alegraId, lista)
+  }
+  return mapa
 }
 
 /** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
@@ -997,8 +1045,12 @@ export async function listarProductos(
     db.execute(sql`SELECT count(*)::int AS n ${desdeListado} WHERE ${where}`),
   ])
 
+  const items = (filas as unknown as FilaListadoCruda[]).map(aProductoAdmin)
+  const stock = await stockPorSucursal(tenantId, items.map((i) => i.alegraId))
+  for (const i of items) i.stockSucursales = stock.get(i.alegraId) ?? []
+
   return {
-    items: (filas as unknown as FilaListadoCruda[]).map(aProductoAdmin),
+    items,
     total: Number((conteo[0] as { n: number }).n),
   }
 }
@@ -1011,7 +1063,10 @@ export async function detalleProducto(tenantId: string, alegraId: string): Promi
     LIMIT 1
   `)
   const fila = (filas as unknown as FilaListadoCruda[])[0]
-  return fila ? aProductoAdmin(fila) : null
+  if (!fila) return null
+  const producto = aProductoAdmin(fila)
+  producto.stockSucursales = (await stockPorSucursal(tenantId, [alegraId])).get(alegraId) ?? []
+  return producto
 }
 
 // ─── Frescura del aviso al Shop (decisión D1) ────────────────────────────────────────────

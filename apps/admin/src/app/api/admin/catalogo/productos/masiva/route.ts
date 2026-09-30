@@ -1,5 +1,5 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
-import { avisarShop, invalidResponse, NO_STORE, parsearSeleccion, validacionResponse } from "@/lib/catalogo-admin"
+import { avisarShop, invalidResponse, NO_STORE, parsearSeleccion, validacionResponse, validarStockEn } from "@/lib/catalogo-admin"
 import { masivaOverlay, masivaTags, type Seleccion } from "@/lib/catalogo-overlay-repo"
 
 // POST /api/admin/catalogo/productos/masiva — publicar, ocultar, asignar categoría o etiqueta
@@ -29,6 +29,10 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null)
   const seleccion = parsearSeleccion(body)
   if (seleccion instanceof Response) return seleccion
+  if (seleccion.tipo === "filtro") {
+    const stockEnInvalido = await validarStockEn(guard.tenantId, seleccion.filtros)
+    if (stockEnInvalido) return stockEnInvalido
+  }
 
   const accion = esObjeto(body) && esObjeto(body.accion) ? body.accion : null
   if (!accion) return invalidResponse("Seleccione una acción", "accion")

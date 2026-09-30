@@ -2,6 +2,7 @@ import {
   esUuid,
   RE_SLUG_CUENTA,
   RE_FILTRO_SUCURSAL,
+  RE_SLUG_SUCURSAL,
   LIMITE_LISTADO_DEFAULT,
   LIMITE_LISTADO_MAX,
   type FiltrosAdmin,
@@ -9,6 +10,7 @@ import {
   type Seleccion,
 } from "@/lib/catalogo-overlay-repo"
 import type { FichaTecnicaOverlay, FotoOverlay } from "@/db/schema"
+import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
 import { basePublicaFotos, urlPublicaFoto } from "./shop-media"
 
 // Piezas compartidas por /api/admin/catalogo/*: respuestas, parseo de la query del listado y el
@@ -31,6 +33,16 @@ export const conflictoResponse = (error: string, code: string): Response =>
 
 // El aviso al Shop vive en lib/aviso-shop.ts (lo usan también la sync y el drenaje de stock).
 export { avisarShop } from "@/lib/aviso-shop"
+
+/**
+ * `stockEn` tiene que ser una sucursal de ESTE tenant: un slug ajeno o inexistente es 400, no un
+ * listado vacío (el parser de arriba es puro y solo valida el formato). null = todo bien.
+ */
+export async function validarStockEn(tenantId: string, filtros: FiltrosAdmin): Promise<Response | null> {
+  if (filtros.stockEn === undefined) return null
+  if (await sonSlugsDeSucursal(tenantId, [filtros.stockEn])) return null
+  return invalidResponse("La sucursal del filtro de stock no existe", "stockEn")
+}
 
 export interface QueryListado {
   filtros: FiltrosAdmin
@@ -108,6 +120,12 @@ export function parsearQueryListado(url: URL): QueryListado | Response {
     filtros.sucursal = sucursal
   }
 
+  const stockEn = p.get("stockEn")
+  if (stockEn !== null) {
+    if (!RE_SLUG_SUCURSAL.test(stockEn)) return invalidResponse("La sucursal del filtro de stock es inválida", "stockEn")
+    filtros.stockEn = stockEn
+  }
+
   const startParam = p.get("start")
   const start = startParam === null ? 0 : Number(startParam)
   if (!Number.isInteger(start) || start < 0) return invalidResponse("La paginación es inválida", "start")
@@ -153,7 +171,7 @@ export function parsearSeleccion(body: unknown): Seleccion | Response {
     // masiva "sobre todo lo que coincide" tiene que resolver exactamente el mismo conjunto.
     const params = new URLSearchParams()
     if (esObjeto(s.filtros)) {
-      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "tag", "cuenta", "sucursal"]) {
+      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "tag", "cuenta", "sucursal", "stockEn"]) {
         const valor = s.filtros[clave]
         if (typeof valor === "string" && valor !== "") params.set(clave, valor)
       }

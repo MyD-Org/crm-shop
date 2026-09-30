@@ -25,6 +25,7 @@ import {
   precioDeLista,
   queryDeFiltros,
   stockDe,
+  stockEnSucursal,
   type CategoriaDto,
   type CuentaOrigenDto,
   type SucursalOpcionDto,
@@ -70,7 +71,7 @@ interface Pendiente {
 const TODOS = "todos"
 
 /** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
-const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta", "sucursal"] as const
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta", "sucursal", "stockEn"] as const
 
 /** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
 function Sku({ sku }: { sku: string }) {
@@ -222,7 +223,10 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
   const hayVariasCuentas = cuentas.length > 1
   const hayVariasSucursales = sucursales.length > 1
   const nombreSucursal = (slug: string) => sucursales.find((s) => s.slug === slug)?.nombre ?? slug
-  const nombreCuentaPrincipal = cuentas.find((c) => c.principal)?.nombre ?? "Principal"
+  // Manda el nombre de la SUCURSAL asignada a la cuenta: el de la cuenta puede haber quedado viejo.
+  const nombreDeCuenta = (c: CuentaOrigenDto) => c.sucursal ?? c.nombre
+  const nombreCuentaPrincipal = nombreDeCuenta(cuentas.find((c) => c.principal) ?? { slug: "", nombre: "Principal", principal: true })
+  const sucursalesActivas = sucursales.filter((s) => s.activa)
 
   const columns: TableColumn<ProductoDto>[] = [
     {
@@ -268,7 +272,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             hideBelow: "lg",
             render: (p: ProductoDto) => (
               <span className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                {p.cuenta ? p.cuenta.nombre : nombreCuentaPrincipal}
+                {p.cuenta ? (p.cuenta.sucursal ?? p.cuenta.nombre) : nombreCuentaPrincipal}
               </span>
             ),
           } satisfies TableColumn<ProductoDto>,
@@ -293,7 +297,16 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       render: (p) => {
         const s = stockDe(p.stock)
         return (
-          <span style={{ color: s?.hay ? "var(--ink-soft)" : "var(--ink-faint)" }}>{s ? s.texto : "Sin dato"}</span>
+          <>
+            <div style={{ color: s?.hay ? "var(--ink-soft)" : "var(--ink-faint)" }}>{s ? s.texto : "Sin dato"}</div>
+            {hayVariasSucursales && (
+              <div className="whitespace-nowrap" style={{ color: "var(--ink-faint)" }}>
+                {sucursalesActivas
+                  .map((suc) => `${suc.nombre} ${stockEnSucursal(p, suc.slug)?.texto ?? "—"}`)
+                  .join(" · ")}
+              </div>
+            )}
+          </>
         )
       },
     },
@@ -430,20 +443,33 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             onValueChange={(v) => cambiarFiltro("cuenta", v)}
             options={[
               { value: TODOS, label: "Cuenta de origen: todas" },
-              { value: "principal", label: `Cuenta de origen: ${nombreCuentaPrincipal}` },
-              ...cuentas.filter((c) => !c.principal).map((c) => ({ value: c.slug, label: `Cuenta de origen: solo ${c.nombre}` })),
+              { value: "principal", label: `Cuenta de origen: ${nombreCuentaPrincipal} (incluye repetidos)` },
+              ...cuentas
+                .filter((c) => !c.principal)
+                .map((c) => ({ value: c.slug, label: `Cuenta de origen: existen solo en ${nombreDeCuenta(c)}` })),
             ]}
           />
         )}
         {hayVariasSucursales && (
           <Select
-            aria-label="Filtrar por visibilidad en sucursal"
+            aria-label="Filtrar por sucursal donde se ofrece el producto"
             value={filtros.sucursal ?? TODOS}
             onValueChange={(v) => cambiarFiltro("sucursal", v)}
             options={[
-              { value: TODOS, label: "Sucursal: todas" },
-              ...sucursales.map((s) => ({ value: `visible:${s.slug}`, label: `Visible en ${s.nombre}` })),
-              ...sucursales.map((s) => ({ value: `oculto:${s.slug}`, label: `Oculto en ${s.nombre}` })),
+              { value: TODOS, label: "Visible en: todas" },
+              ...sucursales.map((s) => ({ value: `visible:${s.slug}`, label: `Visible en: ${s.nombre}` })),
+              ...sucursales.map((s) => ({ value: `oculto:${s.slug}`, label: `Oculto en: ${s.nombre}` })),
+            ]}
+          />
+        )}
+        {hayVariasSucursales && (
+          <Select
+            aria-label="Filtrar por sucursal con stock"
+            value={filtros.stockEn ?? TODOS}
+            onValueChange={(v) => cambiarFiltro("stockEn", v)}
+            options={[
+              { value: TODOS, label: "Con stock en: todas" },
+              ...sucursalesActivas.map((s) => ({ value: s.slug, label: `Con stock en ${s.nombre}` })),
             ]}
           />
         )}
@@ -457,6 +483,15 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           ]}
         />
       </div>
+
+      {(hayVariasCuentas || hayVariasSucursales) && (
+        <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+          {hayVariasCuentas &&
+            "«Cuenta de origen: existen solo en …» muestra los productos que están únicamente en esa cuenta, no los que tienen stock allí. "}
+          {hayVariasSucursales &&
+            "Para ver los productos con stock en una sucursal use «Con stock en»; «Visible en» y «Oculto en» indican dónde se ofrece cada producto en la tienda."}
+        </p>
+      )}
 
       {datos && (
         <p className="text-xs" style={{ color: "var(--ink-faint)" }}>

@@ -1,5 +1,5 @@
 import type { TenantConfig } from "./tenants"
-import { syncTenant, type SyncTenantResult } from "./alegra-sync-tenant"
+import { syncTenant, type EventoProgreso, type SyncTenantResult } from "./alegra-sync-tenant"
 
 // Lógica del runner de la sync programada (scripts/alegra-sync.ts), separada del script para poder
 // testearla: parseo de args, resumen sin secretos y la corrida completa de cada tenant en un solo
@@ -99,18 +99,48 @@ export interface ResultadoRunner {
   exitCode: 0 | 1
 }
 
+/** Cada cuántos ítems leídos de la principal se imprime una línea de avance. */
+export const CADA_ITEMS_LOG = 1500
+
+const nombreCuenta = (cuenta: string) => (cuenta === "principal" ? "cuenta principal" : `cuenta ${cuenta}`)
+
+/**
+ * Observador de avance que imprime líneas para el log del runner ("central-led · cuenta principal:
+ * 6.000 ítems leídos"). Solo conteos y slugs: sin credenciales ni detalle de Alegra.
+ */
+export function logDeProgreso(
+  tenant: string,
+  log: (linea: string) => void = console.log,
+): (e: EventoProgreso) => void {
+  let proximo = CADA_ITEMS_LOG
+  const n = (v: number) => v.toLocaleString("es-AR")
+  return (e) => {
+    if (e.tipo === "cuenta-inicio") {
+      proximo = CADA_ITEMS_LOG
+      log(`${tenant} · ${nombreCuenta(e.cuenta)}: empieza`)
+    } else if (e.tipo === "lectura") {
+      if (e.leidos < proximo) return
+      log(`${tenant} · ${nombreCuenta(e.cuenta)}: ${n(e.leidos)} ítems leídos`)
+      proximo = (Math.floor(e.leidos / CADA_ITEMS_LOG) + 1) * CADA_ITEMS_LOG
+    } else {
+      log(`${tenant} · ${nombreCuenta(e.cuenta)}: ${e.ok ? "terminó" : "falló"} (${n(e.itemsSynced)} ítems)`)
+    }
+  }
+}
+
 /** Sincroniza COMPLETAS (principal + secundarias) las cuentas de cada tenant, de a uno. */
 export async function correrSync(
   configs: TenantConfig[],
-  opts: { aceptarBaja?: boolean } = {},
+  opts: { aceptarBaja?: boolean; log?: (linea: string) => void } = {},
 ): Promise<ResultadoRunner> {
   const resumenes: ResumenTenant[] = []
   for (const cfg of configs) {
     let r: SyncTenantResult
+    const onProgreso = logDeProgreso(cfg.id, opts.log)
     try {
-      r = await syncTenant(cfg, "cron", { aceptarBaja: opts.aceptarBaja })
+      r = await syncTenant(cfg, "cron", { aceptarBaja: opts.aceptarBaja, onProgreso })
       for (let v = 1; r.continuar && v < MAX_VUELTAS; v++) {
-        r = await syncTenant(cfg, "cron", { aceptarBaja: opts.aceptarBaja })
+        r = await syncTenant(cfg, "cron", { aceptarBaja: opts.aceptarBaja, onProgreso })
       }
       if (r.continuar) r = { ok: false, itemsSynced: r.itemsSynced, categoriesSynced: r.categoriesSynced, error: "sync_incompleta" }
     } catch (err) {

@@ -55,6 +55,7 @@ type Accion =
   | { tipo: "visible"; valor: boolean }
   | { tipo: "categoria"; categoriaId: string | null }
   | { tipo: "tag"; tagId: string; modo: "agregar" | "quitar" }
+  | { tipo: "sucursal"; slug: string; visible: boolean }
 
 interface Pendiente {
   accion: Accion
@@ -578,6 +579,28 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
               )
             }
           />
+          {hayVariasSucursales && (
+            <Select
+              aria-label="Mostrar u ocultar la selección en una sucursal"
+              value=""
+              placeholder="Visibilidad por sucursal"
+              options={[
+                ...sucursales.map((s) => ({ value: `mostrar:${s.slug}`, label: `Mostrar en ${s.nombre}` })),
+                ...sucursales.map((s) => ({ value: `ocultar:${s.slug}`, label: `Ocultar en ${s.nombre}` })),
+              ]}
+              onValueChange={(v) => {
+                const corte = v.indexOf(":")
+                const visible = v.slice(0, corte) === "mostrar"
+                const slug = v.slice(corte + 1)
+                void preparar({ tipo: "sucursal", slug, visible }, (n) => {
+                  const cuantos = `${n} producto${n === 1 ? "" : "s"}`
+                  return visible
+                    ? `Va a mostrar ${cuantos} en ${nombreSucursal(slug)}.`
+                    : `Va a ocultar ${cuantos} en ${nombreSucursal(slug)}. Seguirán a la venta en las demás sucursales.`
+                })
+              }}
+            />
+          )}
           {tags.length > 0 && (
             <Select
               aria-label="Asignar etiqueta a la selección"

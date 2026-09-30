@@ -1,14 +1,16 @@
 import { requireAdminPlus } from "@/lib/admin-route-guard"
 import { avisarShop, invalidResponse, NO_STORE, parsearSeleccion, validacionResponse, validarStockEn } from "@/lib/catalogo-admin"
-import { masivaOverlay, masivaTags, type Seleccion } from "@/lib/catalogo-overlay-repo"
+import { MSG_SUCURSAL_INVALIDA } from "@/lib/catalogo-overlay"
+import { masivaOverlay, masivaSucursal, masivaTags, type Seleccion } from "@/lib/catalogo-overlay-repo"
 
-// POST /api/admin/catalogo/productos/masiva — publicar, ocultar, asignar categoría o etiqueta
-// sobre una selección.
+// POST /api/admin/catalogo/productos/masiva — publicar, ocultar, asignar categoría o etiqueta,
+// o mostrar/ocultar en una sucursal, sobre una selección.
 //
 // Body: { seleccion, accion }
 //   seleccion: { tipo:"ids", alegraIds } | { tipo:"filtro", filtros, excluir }
 //   accion:    { tipo:"visible", valor } | { tipo:"categoria", categoriaId }
 //            | { tipo:"tag", tagId, modo:"agregar"|"quitar" }
+//            | { tipo:"sucursal", slug, visible }   (visible:false = deja de ofrecerse en esa sucursal)
 //
 // La selección por FILTRO se re-evalúa en el servidor en una sola sentencia: "todo lo que
 // coincide" pueden ser ~5959 productos y el navegador no manda esa lista (REQ-ADM-03). La
@@ -73,6 +75,11 @@ async function ejecutar(
       return invalidResponse("La acción sobre la etiqueta es inválida", "modo")
     }
     return masivaTags(tenantId, seleccion, accion.tagId, accion.modo, updatedBy)
+  }
+  if (accion.tipo === "sucursal") {
+    if (typeof accion.slug !== "string") return invalidResponse(MSG_SUCURSAL_INVALIDA, "slug")
+    if (typeof accion.visible !== "boolean") return invalidResponse("La visibilidad en la sucursal es inválida", "visible")
+    return masivaSucursal(tenantId, seleccion, { slug: accion.slug, visible: accion.visible }, updatedBy)
   }
   return invalidResponse("La acción es inválida", "accion")
 }

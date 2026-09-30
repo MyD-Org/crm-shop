@@ -1020,6 +1020,7 @@ export function CheckoutClient({
                 <div className="mt-3">
                   <VincularClient
                     embebido
+                    enviarAlAbrir
                     documentoSugerido={perfilFacturacion?.nroDoc ?? ""}
                     onVinculado={() => {
                       setVinculando(false);
@@ -1031,7 +1032,8 @@ export function CheckoutClient({
               ) : (
                 <>
                   <p className="mt-1 text-sm text-muted">
-                    Vincule su cuenta para que esta compra quede registrada en ella.
+                    Vincule su cuenta para que esta compra quede registrada en ella. Le
+                    enviaremos un código al email registrado en su cuenta de cliente.
                   </p>
                   <Button size="sm" className="mt-3" onClick={() => setVinculando(true)}>
                     Vincular mi cuenta

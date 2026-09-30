@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Card, Field, Input } from "@myd-org/ui";
 import { documentoEnLinea } from "@/lib/facturacion";
@@ -17,6 +17,7 @@ export function VincularClient({
   documentoSugerido = "",
   embebido = false,
   onVinculado,
+  enviarAlAbrir = false,
 }: {
   /** Ruta interna a la que volver al terminar (ej. "/checkout"). */
   volver?: string;
@@ -26,6 +27,11 @@ export function VincularClient({
   embebido?: boolean;
   /** Vinculada: quien lo usa sigue en su página en vez de navegar a `volver`. */
   onVinculado?: () => void;
+  /**
+   * Embebido con el documento ya conocido: pide el código apenas se abre, sin
+   * un segundo clic en "Enviarme el código" (quien abrió ya eligió vincular).
+   */
+  enviarAlAbrir?: boolean;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState<Paso>("documento");
@@ -35,6 +41,18 @@ export function VincularClient({
   const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  // Guarda contra el doble montaje de StrictMode: un solo mail por apertura.
+  const envioAutomatico = useRef(false);
+
+  // Embebido con el documento ya conocido: no se lo vuelve a pedir.
+  const documentoFijo = embebido && Boolean(documentoSugerido);
+
+  useEffect(() => {
+    if (!enviarAlAbrir || !documentoFijo || envioAutomatico.current) return;
+    envioAutomatico.current = true;
+    void solicitar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sólo al abrir
+  }, []);
 
   async function solicitar() {
     setCargando(true);
@@ -171,8 +189,6 @@ export function VincularClient({
     );
   }
 
-  // Embebido con el documento ya conocido: no se lo vuelve a pedir.
-  const documentoFijo = embebido && Boolean(documentoSugerido);
 
   return contenedor(
     TITULO,
@@ -181,13 +197,20 @@ export function VincularClient({
       {aviso && <p className="mb-4 rounded-lg bg-elevated p-3 text-sm text-text">{aviso}</p>}
       {paso === "documento" && documentoFijo ? (
         <>
-          <p className="text-sm text-muted">
-            Le enviaremos un código al email registrado en su cuenta de cliente.
-          </p>
+          {/* Con envío automático el texto ya lo mostró quien lo abrió. */}
+          {enviarAlAbrir ? (
+            cargando && <p className="text-sm text-muted">Enviando el código…</p>
+          ) : (
+            <p className="text-sm text-muted">
+              Le enviaremos un código al email registrado en su cuenta de cliente.
+            </p>
+          )}
           {errorBox}
-          <Button className="mt-4" onClick={solicitar} disabled={cargando}>
-            {cargando ? "Enviando…" : "Enviarme el código"}
-          </Button>
+          {(!enviarAlAbrir || (error && !cargando)) && (
+            <Button className="mt-4" onClick={solicitar} disabled={cargando}>
+              {cargando ? "Enviando…" : enviarAlAbrir ? "Reintentar" : "Enviarme el código"}
+            </Button>
+          )}
         </>
       ) : paso === "documento" ? (
         <>

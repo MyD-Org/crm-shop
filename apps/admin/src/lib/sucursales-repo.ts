@@ -116,6 +116,19 @@ export async function listarZonas(tenantId: string): Promise<ZonaRow[]> {
   return getDb().select().from(zonas).where(eq(zonas.tenantId, tenantId)).orderBy(asc(zonas.provincia))
 }
 
+/**
+ * ¿Todos estos slugs son sucursales de ESTE tenant (activas o dadas de baja)? Lo usa la API del
+ * overlay del catálogo para validar "Visible en": un slug de otro tenant o inexistente no pasa.
+ */
+export async function sonSlugsDeSucursal(tenantId: string, slugs: string[]): Promise<boolean> {
+  if (slugs.length === 0) return true
+  const filas = await getDb()
+    .select({ slug: sucursales.slug })
+    .from(sucursales)
+    .where(and(eq(sucursales.tenantId, tenantId), inArray(sucursales.slug, slugs)))
+  return filas.length === new Set(slugs).size
+}
+
 /** Baja las marcas únicas que el alta/cambio va a subir (transferencia: primero la vieja). */
 async function transferirMarcas(
   tx: Tx,

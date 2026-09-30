@@ -181,7 +181,14 @@ export interface CamposOverlayValidos {
   categoriaId?: string | null
   orden?: number | null
   tagIds?: string[]
+  /** Slugs de sucursal donde NO se ofrece (vacío = visible en todas). El servidor valida que existan. */
+  ocultoEnSucursales?: string[]
 }
+
+/** Mismo formato que el slug de `sucursales` (`^[a-z0-9-]{2,20}$`). */
+const RE_SLUG_SUCURSAL = /^[a-z0-9-]{2,20}$/
+const MAX_SUCURSALES_OCULTAS = 50
+export const MSG_SUCURSAL_INVALIDA = "Seleccione una sucursal válida."
 
 const presente = (body: Record<string, unknown>, clave: string): boolean =>
   Object.prototype.hasOwnProperty.call(body, clave)
@@ -240,6 +247,18 @@ export function validarCamposOverlay(body: unknown): Resultado<CamposOverlayVali
       return fail("tagIds", "Seleccione etiquetas válidas")
     }
     campos.tagIds = [...new Set(body.tagIds as string[])]
+  }
+
+  if (presente(body, "ocultoEnSucursales")) {
+    const v = body.ocultoEnSucursales
+    if (
+      !Array.isArray(v) ||
+      v.length > MAX_SUCURSALES_OCULTAS ||
+      v.some((s) => typeof s !== "string" || !RE_SLUG_SUCURSAL.test(s))
+    ) {
+      return fail("ocultoEnSucursales", MSG_SUCURSAL_INVALIDA)
+    }
+    campos.ocultoEnSucursales = [...new Set(v as string[])]
   }
 
   return { ok: true, value: campos }

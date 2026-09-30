@@ -289,4 +289,20 @@ describe("validarCamposOverlay", () => {
   it("deduplica las etiquetas", () => {
     expect(valor({ tagIds: ["a", "a", "b"] })).toEqual({ tagIds: ["a", "b"] })
   })
+
+  it("ocultoEnSucursales: acepta slugs de sucursal y deduplica; [] = visible en todas", () => {
+    expect(valor({ ocultoEnSucursales: ["mdp", "mdp", "igz"] })).toEqual({ ocultoEnSucursales: ["mdp", "igz"] })
+    expect(valor({ ocultoEnSucursales: [] })).toEqual({ ocultoEnSucursales: [] })
+  })
+
+  it("ocultoEnSucursales: rechaza formatos que no son un slug, con el mensaje en usted", () => {
+    for (const malo of ["mdp", [1], ["MDP"], ["a"], ["con espacio"], [""], null]) {
+      const r = validarCamposOverlay({ ocultoEnSucursales: malo })
+      expect(r.ok, JSON.stringify(malo)).toBe(false)
+      if (!r.ok) {
+        expect(r.campo).toBe("ocultoEnSucursales")
+        expect(r.error).toBe("Seleccione una sucursal válida.")
+      }
+    }
+  })
 })

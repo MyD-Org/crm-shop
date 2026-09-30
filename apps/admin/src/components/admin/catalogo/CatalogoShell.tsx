@@ -6,13 +6,15 @@ import { CategoriasPanel } from "./CategoriasPanel"
 import { ProductosPanel } from "./ProductosPanel"
 import { RevisionPanel } from "./RevisionPanel"
 import { TagsPanel } from "./TagsPanel"
-import { api, type CategoriaDto, type CuentaOrigenDto, type TagDto } from "./tipos"
+import { api, type CategoriaDto, type CuentaOrigenDto, type SucursalOpcionDto, type TagDto } from "./tipos"
 
 interface Props {
   initialCategorias: CategoriaDto[]
   initialTags: TagDto[]
   /** Cuentas de Alegra del tenant. Con más de una aparecen la columna/filtro de origen y la solapa Revisión. */
   cuentas: CuentaOrigenDto[]
+  /** Sucursales del tenant, para "Visible en" y el filtro por sucursal (solo con más de una). */
+  sucursales: SucursalOpcionDto[]
 }
 
 type Tab = "productos" | "categorias" | "etiquetas" | "revision"
@@ -26,7 +28,7 @@ type Tab = "productos" | "categorias" | "etiquetas" | "revision"
  * listado de productos las necesita para sus filtros y para las acciones masivas, y la ficha
  * para sus selectores.
  */
-export function CatalogoShell({ initialCategorias, initialTags, cuentas }: Props) {
+export function CatalogoShell({ initialCategorias, initialTags, cuentas, sucursales }: Props) {
   const [tab, setTab] = useState<Tab>("productos")
   // Búsqueda que trae "Ver en Productos" de la solapa Revisión; la `key` remonta el panel para aplicarla.
   const [busquedaInicial, setBusquedaInicial] = useState<{ q: string; n: number }>({ q: "", n: 0 })
@@ -63,6 +65,7 @@ export function CatalogoShell({ initialCategorias, initialTags, cuentas }: Props
           categorias={categorias}
           tags={tags}
           cuentas={cuentas}
+          sucursales={sucursales}
           busquedaInicial={busquedaInicial.q}
           onTagCreado={(tag) => setTags((prev) => [...prev, tag].sort((a, b) => a.nombre.localeCompare(b.nombre)))}
           onCambio={() => void recargarTaxonomia()}

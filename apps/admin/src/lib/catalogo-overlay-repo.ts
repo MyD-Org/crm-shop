@@ -362,7 +362,15 @@ export interface FiltrosAdmin {
   tag?: string
   /** Cuenta de Alegra de origen: "principal" (`cuenta_id` NULL) o el slug de una cuenta secundaria. */
   cuenta?: string
+  /**
+   * Visibilidad por sucursal (`oculto_en_sucursales`): "visible:<slug>" = se ofrece en esa
+   * sucursal; "oculto:<slug>" = está oculto en ella.
+   */
+  sucursal?: string
 }
+
+/** `visible:<slug>` u `oculto:<slug>`, con el formato del slug de sucursal. */
+export const RE_FILTRO_SUCURSAL = /^(visible|oculto):[a-z0-9-]{2,20}$/
 
 /** Slug de una cuenta secundaria (el mismo formato que valida `alegra_cuentas`). */
 export const RE_SLUG_CUENTA = /^[a-z0-9-]{2,12}$/
@@ -446,6 +454,12 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
     cond.push(sql`p.cuenta_id = (SELECT ac.id FROM alegra_cuentas ac WHERE ac.tenant_id = p.tenant_id AND ac.slug = ${f.cuenta})`)
   }
 
+  if (f.sucursal && RE_FILTRO_SUCURSAL.test(f.sucursal)) {
+    const [modo, slug] = f.sucursal.split(":")
+    const oculto = sql`${slug} = ANY(coalesce(o.oculto_en_sucursales, '{}'::text[]))`
+    cond.push(modo === "oculto" ? oculto : sql`NOT (${oculto})`)
+  }
+
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (
       SELECT 1 FROM ${catalogOverlayTags} cot WHERE cot.overlay_id = o.id AND cot.tag_id = ${f.tag}
@@ -471,6 +485,8 @@ export interface CamposOverlay {
   orden?: number | null
   fotos?: FotoOverlay[]
   fichaTecnica?: FichaTecnicaOverlay | null
+  /** Slugs de sucursal donde el producto NO se ofrece (vacío = visible en todas). */
+  ocultoEnSucursales?: string[]
 }
 
 /**
@@ -493,6 +509,7 @@ export async function guardarOverlay(
   if (campos.orden !== undefined) set.orden = campos.orden
   if (campos.fotos !== undefined) set.fotos = campos.fotos
   if (campos.fichaTecnica !== undefined) set.fichaTecnica = campos.fichaTecnica
+  if (campos.ocultoEnSucursales !== undefined) set.ocultoEnSucursales = campos.ocultoEnSucursales
 
   const [row] = await ejecutor
     .insert(catalogOverlay)
@@ -842,6 +859,8 @@ export interface ProductoAdmin {
   tagIds: string[]
   fotos: FotoOverlay[]
   fichaTecnica: FichaTecnicaOverlay | null
+  /** Slugs de sucursal donde NO se ofrece (vacío = visible en todas). */
+  ocultoEnSucursales: string[]
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
   /**
@@ -874,6 +893,7 @@ interface FilaListadoCruda {
   orden: number | null
   fotos: FotoOverlay[] | null
   ficha_tecnica: FichaTecnicaOverlay | null
+  oculto_en_sucursales: string[] | null
   updated_at: Date | string | null
   nombre_efectivo: string
   sku: string
@@ -909,6 +929,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
     tagIds: f.tag_ids ?? [],
     fotos: f.fotos ?? [],
     fichaTecnica: f.ficha_tecnica ?? null,
+    ocultoEnSucursales: f.oculto_en_sucursales ?? [],
     actualizadoEn: iso(f.updated_at),
     // Orientativo: el Shop vuelve a evaluar la regla sobre SU copia y su evaluación es la que manda.
     motivos: motivoNoPublicado({ visible, status: f.status, alegraStatus: f.alegra_status, prices: f.prices }),
@@ -919,7 +940,7 @@ function aProductoAdmin(f: FilaListadoCruda): ProductoAdmin {
 /** Las columnas del listado y de la ficha son las mismas: una sola definición, un solo orden. */
 const columnasListado = sql`
   p.alegra_id, p.code, p.name, p.description, p.status, p.alegra_status, p.prices, p.stock, p.synced_at,
-  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.updated_at,
+  o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.oculto_en_sucursales, o.updated_at,
   c.nombre AS categoria_nombre,
   ac.slug AS cuenta_slug, ac.nombre AS cuenta_nombre,
   (SELECT s.nombre FROM sucursales s WHERE s.tenant_id = p.tenant_id AND s.cuenta_alegra_id = p.cuenta_id ORDER BY s.orden, s.slug LIMIT 1) AS cuenta_sucursal,

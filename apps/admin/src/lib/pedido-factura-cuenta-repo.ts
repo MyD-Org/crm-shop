@@ -222,21 +222,28 @@ export async function guardarCuentaElegida(
     })
 }
 
-/** Deja asentada la cuenta con la que se emitió la factura y si fue cruzada. */
+/**
+ * Deja asentada la cuenta con la que se emitió la factura y si fue cruzada. Las dos escrituras
+ * (`public.pedido_factura_cuenta` y la marca `shop.orders.factura_cruzada` que lee la vista de
+ * reserva) van en UNA transacción (misma base): si falla la segunda no queda la primera, y la
+ * reserva de un pedido cruzado no se libera antes de tiempo.
+ */
 export async function registrarFacturaCuenta(
   tenantId: string,
   orderId: string,
   input: { cuentaId: string; cruzada: boolean; now: Date },
 ): Promise<void> {
-  await getDb()
-    .insert(pedidoFacturaCuenta)
-    .values({ tenantId, orderId, facturaCuentaId: input.cuentaId, facturaCruzada: input.cruzada })
-    .onConflictDoUpdate({
-      target: [pedidoFacturaCuenta.tenantId, pedidoFacturaCuenta.orderId],
-      set: { facturaCuentaId: input.cuentaId, facturaCruzada: input.cruzada, updatedAt: input.now },
-    })
-  // Misma marca en `shop.orders`: la lee la vista de reserva.
-  await escribirFacturaCruzadaShop(tenantId, orderId, input.cruzada)
+  await getDb().transaction(async (tx) => {
+    await tx
+      .insert(pedidoFacturaCuenta)
+      .values({ tenantId, orderId, facturaCuentaId: input.cuentaId, facturaCruzada: input.cruzada })
+      .onConflictDoUpdate({
+        target: [pedidoFacturaCuenta.tenantId, pedidoFacturaCuenta.orderId],
+        set: { facturaCuentaId: input.cuentaId, facturaCruzada: input.cruzada, updatedAt: input.now },
+      })
+    // Misma marca en `shop.orders`: la lee la vista de reserva.
+    await escribirFacturaCruzadaShop(tenantId, orderId, input.cruzada, tx)
+  })
 }
 
 /** Al desvincular la factura la cuenta con la que se emitió deja de valer (la elección se conserva). */

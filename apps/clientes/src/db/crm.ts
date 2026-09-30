@@ -415,3 +415,19 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
+
+/**
+ * Atributos técnicos estructurados por producto (`public.catalog_atributos`, migración 0047 del
+ * CRM; catálogo asistido fase 2). SELECT POR COLUMNA: `fuente` y `updated_at` NO se conceden (la
+ * precedencia manual > pdf > nombre la resuelve el CRM al escribir; el Shop lee el valor que
+ * quedó). Una fila por (tenant, producto, clave); `alegraId` es el de `crmCatalogo`. La migración
+ * puede no estar aplicada: el Shop lo averigua antes de usarla (`catalogo-atributos-disponibles.ts`)
+ * y, sin ella, filtra con los patrones del nombre como en la fase 1.
+ */
+export const crmAtributos = publico.table("catalog_atributos", {
+  tenantId: text("tenant_id").notNull(),
+  alegraId: text("alegra_id").notNull(),
+  clave: text("clave").notNull(),
+  valorNum: numeric("valor_num"),
+  valorTexto: text("valor_texto"),
+});

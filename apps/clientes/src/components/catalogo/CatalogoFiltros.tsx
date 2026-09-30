@@ -4,8 +4,10 @@ import { useId, useState } from "react";
 import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Switch } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import {
+  cambiosDePotencia,
   cambiosDeRango,
   rangoEfectivo,
+  rangoEfectivoPotencia,
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
 import {
@@ -99,6 +101,14 @@ export function CatalogoFiltros({
             onToggle={(valor, tildado) => ir({ atributos: alternar(estado.atributos, valor, tildado) })}
             emptyText="Sin características para estos filtros"
           />
+        </>
+      )}
+      {/* Potencia (fase 2): sólo con datos estructurados (flag `busqueda-ia` y la tabla del CRM),
+          y sobre los productos que tienen potencia cargada. */}
+      {facetas.potencia && (
+        <>
+          <Divider />
+          <FiltroPotencia rango={facetas.potencia} estado={estado} ir={ir} />
         </>
       )}
       {facetas.precio && (
@@ -279,6 +289,58 @@ function FiltroPrecio({
           />
         </Field>
       </div>
+    </section>
+  );
+}
+
+const fmtWatts = (w: number) => `${w.toLocaleString("es-AR", { maximumFractionDigits: 1 })} W`;
+
+/**
+ * Slider de potencia en watts (misma escala logarítmica que el precio: la mayoría de los
+ * productos tiene pocos watts y unos pocos llegan a miles). Navega al soltar.
+ */
+function FiltroPotencia({
+  rango,
+  estado,
+  ir,
+}: {
+  rango: NonNullable<Facetas["potencia"]>;
+  estado: EstadoCatalogo;
+  ir: Ir;
+}) {
+  const idPotencia = useId();
+  const clave = `${estado.potenciaMin}|${estado.potenciaMax}|${rango.min}|${rango.max}`;
+  const [arrastre, setArrastre] = useState<{ clave: string; posiciones: [number, number] } | null>(null);
+  const [min, max] = rangoEfectivoPotencia(estado, rango);
+  const posiciones: [number, number] =
+    arrastre?.clave === clave
+      ? arrastre.posiciones
+      : [precioAPosicion(min, rango.min, rango.max), precioAPosicion(max, rango.min, rango.max)];
+  const aWatts = (p: number) => posicionAPrecio(p, rango.min, rango.max);
+
+  return (
+    <section aria-labelledby={idPotencia} className="flex flex-col gap-3">
+      <h3 id={idPotencia} className="text-xs font-semibold uppercase tracking-wide text-muted">
+        Potencia
+      </h3>
+      <RangeSlider
+        min={POSICION_MIN}
+        max={POSICION_MAX}
+        step={1}
+        value={posiciones}
+        onValueChange={(v) => setArrastre({ clave, posiciones: v })}
+        onValueCommit={(v) => {
+          setArrastre(null);
+          ir(cambiosDePotencia([aWatts(v[0]), aWatts(v[1])], rango));
+        }}
+        formatValue={(p) => fmtWatts(aWatts(p))}
+        thumbLabels={["Potencia mínima", "Potencia máxima"]}
+        disabled={rango.min === rango.max}
+        aria-label="Potencia"
+      />
+      <p className="text-xs text-muted">
+        {fmtWatts(aWatts(posiciones[0]))} – {fmtWatts(aWatts(posiciones[1]))}
+      </p>
     </section>
   );
 }

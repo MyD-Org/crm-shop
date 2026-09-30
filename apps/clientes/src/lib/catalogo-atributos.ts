@@ -10,6 +10,12 @@
  * etiqueta encuentra el producto sólo si el nombre o la descripción lo dicen.
  * El día que haya un campo estructurado cambia el patrón, no la URL ni la UI.
  *
+ * Fase 2 (fichas estructuradas): cada atributo declara además su `estructurado`, el criterio
+ * sobre `public.catalog_atributos` del CRM. Si el producto TIENE un valor para esa clave, decide
+ * el valor (una corrección manual en el CRM le gana al nombre); si no lo tiene, decide el patrón.
+ * Misma URL (`?atr=`), misma UI: sólo sube la cobertura. Sin la tabla (migración sin aplicar) todo
+ * queda como en la fase 1.
+ *
  * Módulo puro (sin DB ni React): lo usan el SQL del catálogo (`~*`), la URL
  * (valida los ids), el panel de filtros, la interpretación de búsquedas y el
  * chat (`attributes` de `resolveProducts`).
@@ -20,6 +26,8 @@
  * base los corre en Postgres, y tienen que significar lo mismo. El borde de
  * palabra se escribe `(^|[^a-z0-9])` sobre el texto ya normalizado.
  */
+
+import type { AtributosEstructurados, ClaveEstructurada, ValorEstructurado } from "./catalogo-caracteristicas";
 
 export const GRUPOS_ATRIBUTO = ["tono", "ambiente", "zocalo", "tension"] as const;
 export type GrupoAtributo = (typeof GRUPOS_ATRIBUTO)[number];
@@ -38,6 +46,25 @@ export interface Atributo {
    * determinista (ver busqueda-inteligente/deterministico.ts).
    */
   sinonimos: string[];
+  /** Criterio sobre el dato estructurado (ver `cumpleEstructurado`). */
+  estructurado?: CriterioEstructurado;
+}
+
+/**
+ * Qué valor de `catalog_atributos` cumple un atributo. Alcanza con que cumpla UNO de los
+ * criterios dados:
+ * - `textos`: `valor_texto` es uno de estos (tono "calido", zócalo "e27");
+ * - `numeros`: `valor_num` es uno de estos (tensión 220 o 230);
+ * - `desde`/`hasta`: `valor_num` en el rango (IP 65 a 68);
+ * - `enRango`: `valor_texto` es un rango "a-b" que incluye este número (tensión "85-265" ⇒ 220).
+ */
+export interface CriterioEstructurado {
+  clave: ClaveEstructurada;
+  textos?: string[];
+  numeros?: number[];
+  desde?: number;
+  hasta?: number;
+  enRango?: number;
 }
 
 /** Inicio de palabra sobre texto normalizado. */
@@ -63,6 +90,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     // "calid[oa]" y no "calid": "ALTA CALIDAD" no es luz cálida.
     patron: `${INI}calid[oa]s?${FIN}|${INI}warm${FIN}|${kelvin("2700|3000")}`,
     sinonimos: ["calida", "calido", "calidas", "calidos", "warm", "2700k", "3000k", "luz calida"],
+    estructurado: { clave: "tono", textos: ["calido"] },
   },
   {
     id: "tono-neutro",
@@ -70,6 +98,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "Luz neutra",
     patron: `${INI}neutr[oa]s?${FIN}|${kelvin("4000|4500")}`,
     sinonimos: ["neutra", "neutro", "neutras", "neutros", "4000k", "4500k", "luz neutra"],
+    estructurado: { clave: "tono", textos: ["neutro"] },
   },
   {
     id: "tono-frio",
@@ -77,6 +106,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "Luz fría",
     patron: `${INI}fri[oa]s?${FIN}|${INI}luz (de )?dia${FIN}|${INI}daylight${FIN}|${kelvin("6000|6500")}`,
     sinonimos: ["fria", "frio", "frias", "frios", "6000k", "6500k", "luz dia", "luz de dia", "luz fria"],
+    estructurado: { clave: "tono", textos: ["frio"] },
   },
   {
     id: "apto-exterior",
@@ -85,6 +115,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     // IP65 a IP68: protegidos contra chorros de agua. IP20/IP44 no.
     patron: `${INI}ip ?6[5-8]([^0-9]|$)|${INI}exterior(es)?${FIN}|${INI}intemperie${FIN}`,
     sinonimos: ["exterior", "exteriores", "intemperie", "ip65", "ip66", "ip67", "ip68"],
+    estructurado: { clave: "ip", desde: 65, hasta: 68 },
   },
   {
     id: "zocalo-e27",
@@ -92,6 +123,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "Rosca E27",
     patron: zocalo("e", "27"),
     sinonimos: ["e27", "e 27", "rosca comun", "rosca grande"],
+    estructurado: { clave: "zocalo", textos: ["e27"] },
   },
   {
     id: "zocalo-e14",
@@ -99,6 +131,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "Rosca E14",
     patron: zocalo("e", "14"),
     sinonimos: ["e14", "e 14", "rosca fina", "rosca chica"],
+    estructurado: { clave: "zocalo", textos: ["e14"] },
   },
   {
     id: "zocalo-gu10",
@@ -106,6 +139,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "GU10",
     patron: zocalo("gu", "10"),
     sinonimos: ["gu10", "gu 10"],
+    estructurado: { clave: "zocalo", textos: ["gu10"] },
   },
   {
     id: "zocalo-mr16",
@@ -113,6 +147,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "MR16",
     patron: zocalo("mr", "16"),
     sinonimos: ["mr16", "mr 16"],
+    estructurado: { clave: "zocalo", textos: ["mr16"] },
   },
   {
     id: "tension-12v",
@@ -120,6 +155,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "12 V",
     patron: tension("12"),
     sinonimos: ["12v", "12 v", "12vcc", "12 volts", "12 volt"],
+    estructurado: { clave: "tension_v", numeros: [12], enRango: 12 },
   },
   {
     id: "tension-24v",
@@ -127,6 +163,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     nombre: "24 V",
     patron: tension("24"),
     sinonimos: ["24v", "24 v", "24vcc", "24 volts", "24 volt"],
+    estructurado: { clave: "tension_v", numeros: [24], enRango: 24 },
   },
   {
     id: "tension-220v",
@@ -135,6 +172,7 @@ export const ATRIBUTOS: readonly Atributo[] = [
     // 220/230 V explícitos, o un rango de entrada que los incluye ("AC85-265V").
     patron: `${tension("2[23]0")}|[0-9]{2,3} ?- ?2[4-6][05] ?(v|vac|volt)`,
     sinonimos: ["220v", "220 v", "220vac", "220 volts", "230v"],
+    estructurado: { clave: "tension_v", numeros: [220, 230], enRango: 220 },
   },
 ];
 
@@ -191,4 +229,36 @@ const REGEX = new Map(ATRIBUTOS.map((a) => [a.id, new RegExp(a.patron, "i")]));
 export function atributosDeTexto(texto: string): Atributo[] {
   const t = normalizarTexto(texto);
   return ATRIBUTOS.filter((a) => REGEX.get(a.id)!.test(t));
+}
+
+/**
+ * ¿El valor estructurado cumple el criterio? `null` si el producto no tiene dato para esa clave
+ * (entonces decide el patrón sobre el nombre). Mismo criterio que el SQL de catalogo-atributos-sql.
+ */
+export function cumpleEstructurado(c: CriterioEstructurado, v: ValorEstructurado | undefined): boolean | null {
+  if (!v) return null;
+  if (c.textos && v.t != null && c.textos.includes(v.t)) return true;
+  if (c.numeros && v.n != null && c.numeros.includes(v.n)) return true;
+  if ((c.desde != null || c.hasta != null) && v.n != null && v.n >= (c.desde ?? -Infinity) && v.n <= (c.hasta ?? Infinity)) {
+    return true;
+  }
+  if (c.enRango != null && v.t != null) {
+    const m = /^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(v.t);
+    if (m && Number(m[1]) <= c.enRango && c.enRango <= Number(m[2])) return true;
+  }
+  return false;
+}
+
+/**
+ * Atributos del diccionario que cumple un producto: primero el dato estructurado de su clave (si
+ * lo tiene) y, si no, el patrón sobre nombre + descripción. Sin `estructurados`, idéntico a
+ * `atributosDeTexto`.
+ */
+export function atributosDeProducto(texto: string, estructurados?: AtributosEstructurados): Atributo[] {
+  if (!estructurados) return atributosDeTexto(texto);
+  const t = normalizarTexto(texto);
+  return ATRIBUTOS.filter((a) => {
+    const decide = a.estructurado ? cumpleEstructurado(a.estructurado, estructurados[a.estructurado.clave]) : null;
+    return decide ?? REGEX.get(a.id)!.test(t);
+  });
 }

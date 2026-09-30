@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   ATRIBUTOS,
   atributoPorId,
+  atributosDeProducto,
   atributosDeTexto,
+  cumpleEstructurado,
   atributosPorGrupo,
   atributosValidos,
   esAtributo,
   nombreAtributo,
 } from "./catalogo-atributos";
+import type { AtributosEstructurados } from "./catalogo-caracteristicas";
 
 const ids = (texto: string) => atributosDeTexto(texto).map((a) => a.id);
 
@@ -94,5 +97,49 @@ describe("diccionario", () => {
     expect(nombreAtributo("apto-exterior")).toBe("Apto exterior");
     expect(nombreAtributo("otro")).toBe("otro");
     expect(atributoPorId("tension-12v")?.grupo).toBe("tension");
+  });
+});
+
+describe("fase 2: dato estructurado primero, patrón del nombre si no hay", () => {
+  const idsDe = (texto: string, e?: AtributosEstructurados) => atributosDeProducto(texto, e).map((a) => a.id);
+
+  it("sin estructurados es idéntico a atributosDeTexto", () => {
+    expect(idsDe("REFLECTOR LED 50W CALIDO")).toEqual(ids("REFLECTOR LED 50W CALIDO"));
+  });
+
+  it("el valor estructurado de una clave le gana al nombre (una corrección manual en el CRM)", () => {
+    expect(idsDe("REFLECTOR LED 50W CALIDO", { tono: { n: null, t: "frio" } })).toEqual(["tono-frio"]);
+  });
+
+  it("sube la cobertura: el dato de la ficha agrega lo que el nombre no dice", () => {
+    expect(idsDe("REFLECTOR LED 50W", { ip: { n: 66, t: null }, zocalo: { n: null, t: "e27" } })).toEqual([
+      "apto-exterior",
+      "zocalo-e27",
+    ]);
+  });
+
+  it("una clave sin dato estructurado sigue con el patrón", () => {
+    expect(idsDe("LAMPARA 220V CALIDO", { zocalo: { n: null, t: "e27" } })).toEqual(["tono-calido", "zocalo-e27", "tension-220v"]);
+  });
+
+  it("IP estructurado bajo no es exterior aunque el nombre diga 'exterior'", () => {
+    expect(idsDe("APLIQUE EXTERIOR", { ip: { n: 44, t: null } })).toEqual([]);
+  });
+
+  it("tensión: número exacto o rango que la incluye", () => {
+    expect(idsDe("PANEL", { tension_v: { n: 220, t: "85-265" } })).toEqual(["tension-220v"]);
+    expect(idsDe("DRIVER", { tension_v: { n: 24, t: "12-24" } })).toEqual(["tension-12v", "tension-24v"]);
+    expect(idsDe("DISYUNTOR", { tension_v: { n: 230, t: "230/400" } })).toEqual(["tension-220v"]);
+  });
+
+  it("cumpleEstructurado: null sin dato, false si no cumple", () => {
+    const c = atributoPorId("tono-calido")!.estructurado!;
+    expect(cumpleEstructurado(c, undefined)).toBeNull();
+    expect(cumpleEstructurado(c, { n: null, t: "neutro" })).toBe(false);
+    expect(cumpleEstructurado(c, { n: null, t: "calido" })).toBe(true);
+  });
+
+  it("todo atributo del diccionario declara su criterio estructurado", () => {
+    for (const a of ATRIBUTOS) expect(a.estructurado, a.id).toBeDefined();
   });
 });

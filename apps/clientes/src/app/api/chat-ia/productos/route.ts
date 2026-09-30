@@ -5,6 +5,7 @@ import { getProductosPorIds } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoResuelto, MAX_IDS_RESOLVER } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
@@ -45,16 +46,19 @@ export async function GET(req: Request) {
   if (ids.length === 0) return json([]);
 
   try {
-    const [{ soloVisibles }, disp, idPriceList] = await Promise.all([
+    const [{ soloVisibles }, disp, idPriceList, estructurados] = await Promise.all([
       flagsPublicos(),
       dispDelVisitante(),
       identidad.cliente ? idPriceListCliente(identidad.cliente.codigocliente) : Promise.resolve(undefined),
+      atributosEstructuradosDisponibles(),
     ]);
     const productos = await getProductosPorIds(ids, {
       idPriceList: idPriceList ?? undefined,
       soloActivos: true,
       soloVisibles,
       disp,
+      // Card `spec`: valores técnicos estructurados si la tabla del CRM está disponible.
+      ...(estructurados ? { atributosEstructurados: true } : {}),
     });
     return json(ids.flatMap((id) => {
       const p = productos.get(id);

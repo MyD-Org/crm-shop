@@ -1,9 +1,10 @@
 import type { EspecificacionProducto } from "@/data/products";
 
 /**
- * Tabla de datos técnicos de la ficha (etiqueta a la izquierda, valor a la
- * derecha). Hoy ningún producto trae especificaciones: sin filas no dibuja
- * nada, así que queda listo para cuando el CRM las cargue.
+ * Tabla "Características" de la ficha (etiqueta a la izquierda, valor a la
+ * derecha), con los datos técnicos estructurados del CRM (`catalog_atributos`:
+ * potencia, tono, zócalo…; ver catalogo-caracteristicas.ts). Sin filas no
+ * dibuja nada: llegan sólo con el flag `busqueda-ia` y la tabla del CRM.
  */
 export function EspecificacionesProducto({ filas }: { filas?: EspecificacionProducto[] }) {
   const conDatos = (filas ?? []).filter((f) => f.etiqueta.trim() && f.valor.trim());
@@ -12,7 +13,7 @@ export function EspecificacionesProducto({ filas }: { filas?: EspecificacionProd
   return (
     <section aria-labelledby="especificaciones-titulo">
       <h2 id="especificaciones-titulo" className="mb-3 font-display text-lg font-semibold text-text">
-        Especificaciones
+        Características
       </h2>
       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] border-t border-border text-sm">
         {conDatos.map((f) => (

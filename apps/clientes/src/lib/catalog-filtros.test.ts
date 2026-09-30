@@ -242,3 +242,60 @@ describe("faceta de atributos con el flag busqueda-ia apagado", () => {
     for (const { sql } of grabadora.consultas) expect(sql).not.toContain("count(*) filter");
   });
 });
+
+describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
+  const TABLA = '"public"."catalog_atributos"';
+
+  it("sin `atributosEstructurados` ninguna consulta nombra la tabla (idéntico a la fase 1)", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { atributos: ["tono-calido"], potenciaMin: 10 } });
+    await getFacetas({ atributos: ["tono-calido"], potenciaMax: 50 }, false);
+    for (const { sql } of grabadora.consultas) {
+      expect(sql).not.toContain("catalog_atributos");
+      expect(sql).not.toContain("potencia_w");
+    }
+  });
+
+  it("con estructurados, el atributo mira primero el dato de su clave y cae al patrón", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { atributos: ["tono-calido"], atributosEstructurados: true } });
+    const [conteo, pagina] = grabadora.consultas;
+    for (const { sql, params } of [conteo, pagina]) {
+      expect(sql).toContain(TABLA);
+      expect(sql).toMatch(/coalesce\(\(case when \(\(select jsonb_object_agg[\s\S]*-> 'tono'\) is not null then/);
+      expect(sql).toMatch(/"public"\."catalog_atributos"\."tenant_id" = \$\d+ and "public"\."catalog_atributos"\."alegra_id" = "catalog_products_shop"\."alegra_id"/);
+      expect(params).toContain("tenant-test");
+      expect(params).toContain("calido");
+      expect(params).toContain(ATRIBUTOS.find((a) => a.id === "tono-calido")!.patron);
+    }
+    // La página trae además el jsonb de cada producto (para las características).
+    expect(pagina.sql).toMatch(/as "atributos"|jsonb_object_agg/);
+  });
+
+  it("potencia: rango inclusivo sobre potencia_w, sólo con estructurados", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { atributosEstructurados: true, potenciaMin: 10, potenciaMax: 50 } });
+    for (const { sql, params } of grabadora.consultas) {
+      expect(sql).toMatch(/-> 'potencia_w'\) ->> 'n'\)::numeric >= \$\d+/);
+      expect(sql).toMatch(/-> 'potencia_w'\) ->> 'n'\)::numeric <= \$\d+/);
+      expect(params).toContain(10);
+      expect(params).toContain(50);
+    }
+  });
+
+  it("facetas: una consulta más con el rango de potencia, sin el propio filtro de potencia", async () => {
+    await getFacetas({ atributosEstructurados: true, potenciaMin: 10 }, false);
+    const consultas = sinLecturaDelArbol(grabadora.consultas);
+    expect(consultas).toHaveLength(5);
+    const potencia = consultas.find((c) => c.sql.includes("floor(min((((select jsonb_object_agg"));
+    expect(potencia).toBeDefined();
+    expect(potencia!.sql).toMatch(/::numeric is not null/);
+    expect(potencia!.sql).not.toMatch(/::numeric >= \$\d+/);
+    // Las otras facetas sí aplican el filtro de potencia.
+    const marcas = consultas.find((c) => c.sql.includes("group by coalesce(nullif("));
+    expect(marcas!.sql).toMatch(/-> 'potencia_w'\) ->> 'n'\)::numeric >= \$\d+/);
+  });
+
+  it("con el flag apagado (sinFacetaAtributos) no hay faceta de potencia aunque la tabla exista", async () => {
+    const f = await getFacetas({ atributosEstructurados: true, sinFacetaAtributos: true }, false);
+    expect(f.potencia).toBeUndefined();
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
+  });
+});

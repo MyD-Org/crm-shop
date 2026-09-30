@@ -9,6 +9,8 @@ vi.mock("@/lib/catalog", () => ({
   getArbolCategorias: () => getArbolCategorias(),
 }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+const disponibles = vi.fn(async () => false);
+vi.mock("@/lib/catalogo-atributos-disponibles", () => ({ atributosEstructuradosDisponibles: () => disponibles() }));
 vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisibles: true, cuotas: false }) }));
 
 import { GET } from "./route";
@@ -64,6 +66,14 @@ describe("GET /api/chat-ia/buscar", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([]);
     log.mockRestore();
+  });
+
+  it("con catalog_atributos disponible pide los atributos y los devuelve compactos", async () => {
+    disponibles.mockResolvedValueOnce(true);
+    getCatalogo.mockResolvedValue([{ ...producto, atributosEstructurados: { potencia_w: { n: 9, t: null }, zocalo: { n: null, t: "e27" } } }]);
+    const res = await pedir("?q=lampara&limit=3");
+    expect(getCatalogo).toHaveBeenCalledWith({ busqueda: "lampara", limit: 3, soloVisibles: true, atributosEstructurados: true });
+    expect((await res.json())[0].atributos).toEqual({ potencia_w: 9, zocalo: "e27" });
   });
 
   it("rate limit ⇒ 429", async () => {

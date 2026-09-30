@@ -19,6 +19,7 @@ import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { ZonaCatalogo } from "@/components/ZonaCatalogo";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
+import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
 import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
 import { interpretar } from "@/lib/busqueda-inteligente/servidor";
 import { decidirBusqueda } from "@/lib/busqueda-inteligente/flujo";
@@ -37,6 +38,8 @@ type Props = {
     pagina?: ParamCrudo;
     precio_min?: ParamCrudo;
     precio_max?: ParamCrudo;
+    potencia_min?: ParamCrudo;
+    potencia_max?: ParamCrudo;
     stock?: ParamCrudo;
     vista?: ParamCrudo;
     ia?: ParamCrudo;
@@ -103,7 +106,16 @@ async function CatalogoResultados({ searchParams }: Props) {
   // defecto (ver `SOLO_STOCK_DEFAULT`).
   // Sin el flag `busqueda-ia`, el panel queda como siempre: sin la faceta de
   // características (ni su consulta).
-  const filtros = { ...filtrosDeEstado(estado), ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }) };
+  //
+  // Fichas estructuradas (fase 2): con el flag y `catalog_atributos` legible (la migración del CRM
+  // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
+  // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
+  const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
+  const filtros = {
+    ...filtrosDeEstado(estado),
+    ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
+    ...(estructurados ? { atributosEstructurados: true } : {}),
+  };
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
   // resuelven en Postgres: filtrar u ordenar después de paginar daría

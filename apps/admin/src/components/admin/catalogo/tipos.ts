@@ -57,6 +57,8 @@ export interface ProductoDto {
   motivos: MotivoNoPublicado[]
   /** Cuenta de Alegra de origen cuando NO es la principal (producto solo de esa cuenta). null = principal. */
   cuenta: { slug: string; nombre: string; sucursal: string | null } | null
+  /** Stock en cada sucursal (sin fila = sin dato). `stock` viaja como texto numérico. */
+  stockSucursales: { sucursal: string; stock: string; leidoAt: string | null }[]
 }
 
 /** Cuentas de Alegra del tenant, para la columna/filtro "Cuenta de origen" (solo con más de una). */
@@ -64,6 +66,8 @@ export interface CuentaOrigenDto {
   slug: string
   nombre: string
   principal: boolean
+  /** Nombre de la sucursal asignada a esta cuenta (manda sobre `nombre`, que puede haber quedado viejo). */
+  sucursal?: string | null
 }
 
 export interface CategoriaDto {
@@ -117,6 +121,8 @@ export interface Filtros {
   cuenta?: string
   /** "visible:<slug>" u "oculto:<slug>" (visibilidad por sucursal). */
   sucursal?: string
+  /** Slug de sucursal: solo productos con stock en ella. */
+  stockEn?: string
 }
 
 /** Sucursal del tenant, para el campo "Visible en" del producto y el filtro del listado. */
@@ -214,6 +220,17 @@ export function stockDe(stock: string | null): { texto: string; hay: boolean } |
   const n = Number(stock)
   if (!Number.isFinite(n)) return null
   return { texto: n.toLocaleString("es-AR", { maximumFractionDigits: 2 }), hay: n > 0 }
+}
+
+/**
+ * Stock de un producto en una sucursal: "12", "0" o null si no hay fila (sin dato). El stock de
+ * `catalog_stock_sucursal` viaja como texto numérico.
+ */
+export function stockEnSucursal(p: Pick<ProductoDto, "stockSucursales">, slug: string): { texto: string; hay: boolean; leidoAt: string | null } | null {
+  const fila = p.stockSucursales.find((f) => f.sucursal === slug)
+  if (!fila) return null
+  const s = stockDe(fila.stock)
+  return s ? { ...s, leidoAt: fila.leidoAt } : null
 }
 
 /** "1,3 MB" o "480 KB": el tamaño de un archivo, para mostrar junto a su nombre. */

@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { connection } from "next/server"
 import type { VisibleOn } from "@myd-org/ui"
-import { dispDelVisitante } from "@/lib/zona-servidor"
+import { dispCatalogo } from "@/lib/zona-servidor"
 import { categoriasNav } from "@/lib/catalogo-publico"
 import { flagsPublicos } from "@/lib/flags-publicos"
 import { accesoFacturacion } from "@/lib/acceso-facturacion"
@@ -76,7 +76,7 @@ async function HeaderDinamico({
     // Si falla, el menú va sin Facturas.
     accesoFacturacion(),
     flagsPublicos()
-      .then(async ({ soloVisibles }) => categoriasNav(soloVisibles, await dispDelVisitante()))
+      .then(async ({ soloVisibles }) => categoriasNav(soloVisibles, await dispCatalogo()))
       .catch((err: unknown) => {
         console.error("[Header] no se pudieron cargar las categorias:", err)
         return [] as string[]

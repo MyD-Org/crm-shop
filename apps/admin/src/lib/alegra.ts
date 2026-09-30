@@ -422,6 +422,38 @@ async function alegraFetch(
 const PAGE_CONCURRENCY = 4
 
 
+/**
+ * Lee UN grupo de páginas (PAGE_CONCURRENCY en paralelo) desde `start`. `fin` = Alegra no tiene
+ * más filas después de este grupo. `siguiente` es el offset del próximo grupo.
+ */
+async function fetchGrupo<T>(
+  config: TenantConfig,
+  path: string,
+  map: (raw: Record<string, unknown>) => T,
+  extraParams: Record<string, string>,
+  start: number,
+): Promise<{ rows: T[]; siguiente: number; fin: boolean }> {
+  const starts = Array.from({ length: PAGE_CONCURRENCY }, (_, i) => start + i * PAGE_SIZE)
+  const pages = (await Promise.all(
+    starts.map((s) => alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) })),
+  )) as Record<string, unknown>[][]
+
+  const rows: T[] = []
+  let fin = false
+  for (const page of pages) {
+    if (!Array.isArray(page) || page.length === 0) {
+      fin = true
+      break
+    }
+    for (const row of page) rows.push(map(row))
+    if (page.length < PAGE_SIZE) {
+      fin = true
+      break
+    }
+  }
+  return { rows, siguiente: start + PAGE_CONCURRENCY * PAGE_SIZE, fin }
+}
+
 async function fetchAllPages<T>(
   config: TenantConfig,
   path: string,
@@ -430,29 +462,12 @@ async function fetchAllPages<T>(
 ): Promise<T[]> {
   const out: T[] = []
   let start = 0
-  let done = false
-  while (!done) {
-    const starts = Array.from({ length: PAGE_CONCURRENCY }, (_, i) => start + i * PAGE_SIZE)
-    const pages = (await Promise.all(
-      starts.map((s) =>
-        alegraFetch(config, path, { ...extraParams, start: String(s), limit: String(PAGE_SIZE) }),
-      ),
-    )) as Record<string, unknown>[][]
-
-    for (const page of pages) {
-      if (!Array.isArray(page) || page.length === 0) {
-        done = true
-        break
-      }
-      for (const row of page) out.push(map(row))
-      if (page.length < PAGE_SIZE) {
-        done = true
-        break
-      }
-    }
-    start += PAGE_CONCURRENCY * PAGE_SIZE
+  for (;;) {
+    const g = await fetchGrupo(config, path, map, extraParams, start)
+    out.push(...g.rows)
+    if (g.fin) return out
+    start = g.siguiente
   }
-  return out
 }
 
 // ── Mapeo crudo de Alegra → normalizado ──
@@ -820,6 +835,27 @@ export async function listAllCategories(config: TenantConfig): Promise<AlegraCat
 export async function listAllItems(config: TenantConfig): Promise<AlegraProduct[]> {
   if (config.alegraMock) return mockItems
   return fetchAllPages(config, "/items", mapRawItem, { order_field: "id", order_direction: "ASC" })
+}
+
+export interface LoteItems {
+  items: AlegraProduct[]
+  /** Offset desde el que sigue la lectura (guardable como cursor). */
+  siguiente: number
+  /** No hay más ítems después de este lote. */
+  fin: boolean
+}
+
+/**
+ * Un lote de ítems (hasta PAGE_CONCURRENCY páginas) desde el offset `start`, para leer el catálogo
+ * por tramos: quien llama decide cuándo cortar (presupuesto de tiempo) y guarda `siguiente` como
+ * cursor. Mismo orden estable (por id) que `listAllItems`. En mock devuelve todo en el primer lote.
+ */
+export async function listItemsLote(config: TenantConfig, start: number): Promise<LoteItems> {
+  if (config.alegraMock) {
+    return start === 0 ? { items: mockItems, siguiente: mockItems.length, fin: true } : { items: [], siguiente: start, fin: true }
+  }
+  const g = await fetchGrupo(config, "/items", mapRawItem, { order_field: "id", order_direction: "ASC" }, start)
+  return { items: g.rows, siguiente: g.siguiente, fin: g.fin }
 }
 
 export type ResultadoPruebaAlegra =

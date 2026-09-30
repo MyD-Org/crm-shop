@@ -86,6 +86,12 @@ export interface EstadoCatalogo {
    * `?stock=todos` lo apaga. Ver `SOLO_STOCK_DEFAULT`.
    */
   soloStock: boolean;
+  /**
+   * Slug del local donde tiene que haber stock (`?retiro=igz`): "Con stock en Puerto Iguazú".
+   * Implica `soloStock`. La page lo valida contra los locales activos que aceptan retiro; uno
+   * desconocido se descarta. Ausente = stock en cualquier local.
+   */
+  retiroEn?: string;
   /** `?vista=lista`; cualquier otra cosa es grilla. */
   vista: VistaCatalogo;
   /**
@@ -177,6 +183,12 @@ function comoSoloStock(v: ParamCrudo): boolean {
   return primero(v) === STOCK_INCLUYE_SIN_STOCK ? false : SOLO_STOCK_DEFAULT;
 }
 
+/** Slug de local: minúsculas, dígitos y guiones. Cualquier otra cosa se ignora. */
+function comoRetiro(v: ParamCrudo): string | undefined {
+  const s = primero(v)?.trim().toLowerCase();
+  return s && /^[a-z0-9][a-z0-9-]{0,39}$/.test(s) ? s : undefined;
+}
+
 /** `vista=lista` exactamente; cualquier otra cosa es la grilla. */
 function comoVista(v: ParamCrudo): VistaCatalogo {
   return primero(v) === "lista" ? "lista" : VISTA_DEFAULT;
@@ -193,6 +205,7 @@ export function leerEstado(params: {
   precio_min?: ParamCrudo;
   precio_max?: ParamCrudo;
   stock?: ParamCrudo;
+  retiro?: ParamCrudo;
   vista?: ParamCrudo;
   ia?: ParamCrudo;
 }): EstadoCatalogo {
@@ -215,6 +228,7 @@ export function leerEstado(params: {
     precioMin,
     precioMax,
     soloStock: comoSoloStock(params.stock),
+    retiroEn: comoRetiro(params.retiro),
     vista: comoVista(params.vista),
     ...(ia ? { ia } : {}),
   };
@@ -236,6 +250,7 @@ export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
     precio_min: param("precio_min"),
     precio_max: param("precio_max"),
     stock: param("stock"),
+    retiro: param("retiro"),
     vista: param("vista"),
     ia: param("ia"),
   });
@@ -285,8 +300,8 @@ export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams, c
  * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=nombre&pagina=1`.
  *
  * El orden de los parámetros es fijo (`q, categoria*, marca*, atr*,
- * precio_min, precio_max, stock, orden, vista, pagina, ia`): dos estados
- * iguales dan la misma URL, que es lo que necesitan el canonical y los tests.
+ * precio_min, precio_max, stock, retiro, orden, vista, pagina, ia`): dos
+ * estados iguales dan la misma URL, que es lo que necesitan el canonical y los tests.
  */
 export function hrefCatalogo(estado: EstadoCatalogo): string {
   const sp = new URLSearchParams();
@@ -297,6 +312,7 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   if (estado.precioMin != null) sp.set("precio_min", String(estado.precioMin));
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
   if (estado.soloStock !== SOLO_STOCK_DEFAULT) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
+  if (estado.retiroEn) sp.set("retiro", estado.retiroEn);
   if (estado.orden !== ordenPorDefecto(estado.query)) sp.set("orden", estado.orden);
   if (estado.vista !== VISTA_DEFAULT) sp.set("vista", estado.vista);
   if (estado.pagina > 1) sp.set("pagina", String(estado.pagina));
@@ -409,6 +425,7 @@ export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosCatalogo {
     atributos: estado.atributos,
     precioMin: estado.precioMin,
     precioMax: estado.precioMax,
-    soloStock: estado.soloStock,
+    // "Con stock en <local>" es un filtro de stock: sin stock no tiene sentido.
+    soloStock: estado.soloStock || Boolean(estado.retiroEn),
   };
 }

@@ -15,6 +15,7 @@ import { seedTenant, truncateAll } from "./helpers"
 vi.mock("@/lib/alegra", () => ({
   listAllCategories: async () => categoriasDeAlegra,
   listAllItems: async () => itemsDeAlegra,
+  listItemsLote: async (_c: unknown, start: number) => ({ items: itemsDeAlegra.slice(start), siguiente: itemsDeAlegra.length, fin: true }),
 }))
 
 const { syncCatalog } = await import("@/lib/alegra-sync")

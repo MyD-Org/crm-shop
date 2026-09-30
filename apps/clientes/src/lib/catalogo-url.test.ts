@@ -546,3 +546,37 @@ describe("flag busqueda-ia apagado", () => {
     expect(filtrosDesfasados(renderizado, sp("atr=tono-calido"))).toBe(true);
   });
 });
+
+describe("filtro 'Con stock en <local>' (?retiro=)", () => {
+  it("lee un slug de local y descarta lo que no tiene forma de slug", () => {
+    expect(leerEstado({ retiro: "igz" }).retiroEn).toBe("igz");
+    expect(leerEstado({ retiro: " MDP " }).retiroEn).toBe("mdp");
+    expect(leerEstado({ retiro: ["igz", "mdp"] }).retiroEn).toBe("igz");
+    for (const malo of ["", "a b", "igz;drop", "-igz", "x".repeat(41)]) {
+      expect(leerEstado({ retiro: malo }).retiroEn).toBeUndefined();
+    }
+    expect(leerEstado({}).retiroEn).toBeUndefined();
+  });
+
+  it("viaja en la URL después de stock y se lee igual desde el browser", () => {
+    const estado = { ...leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK }), retiroEn: "igz" };
+    expect(hrefCatalogo(estado)).toBe("/catalogo?stock=todos&retiro=igz");
+    expect(estadoDeBusqueda(new URLSearchParams("retiro=igz")).retiroEn).toBe("igz");
+    expect(hrefCatalogo(leerEstado({}))).toBe("/catalogo");
+  });
+
+  it("implica 'solo con stock' aunque la URL diga stock=todos", () => {
+    expect(filtrosDeEstado(leerEstado({ retiro: "igz", stock: STOCK_INCLUYE_SIN_STOCK })).soloStock).toBe(true);
+    expect(filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })).soloStock).toBe(false);
+  });
+
+  it("no forma parte del canonical", () => {
+    expect(hrefCanonico(leerEstado({ retiro: "igz" }))).toBe("/catalogo");
+  });
+
+  it("cambiarlo vuelve a la página 1 y undefined lo borra", () => {
+    const estado = { ...leerEstado({ pagina: "4" }), retiroEn: "igz" };
+    expect(hrefCon(estado, { retiroEn: undefined })).toBe("/catalogo");
+    expect(hrefCon(estado, { retiroEn: "mdp" })).toBe("/catalogo?retiro=mdp");
+  });
+});

@@ -203,7 +203,13 @@ export function CatalogoClient({
 
       {/* Los filtros puestos, debajo del encabezado y sólo en mobile: en
           desktop el panel lateral ya muestra los tildes. */}
-      <CatalogoChips estado={estadoVisible} rango={facetas.precio} ir={ir} sinInterpretados={!!interpretada} />
+      <CatalogoChips
+        estado={estadoVisible}
+        rango={facetas.precio}
+        locales={facetas.locales}
+        ir={ir}
+        sinInterpretados={!!interpretada}
+      />
 
       <div className="mt-8 flex gap-6">
         {/*

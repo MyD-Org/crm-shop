@@ -255,9 +255,8 @@ interface Props {
    */
   direccionesGuardadas?: DireccionEnvio[];
   /**
-   * El documento de facturación ya es de un cliente de Alegra, la cuenta no
-   * está vinculada y vincular le cambia algo (lista propia o cuenta corriente,
-   * `vincularCambiaAlgo`): se recomienda vincular antes de confirmar. Si
+   * El documento de facturación ya es de un cliente de Alegra y la cuenta no
+   * está vinculada: se recomienda vincular antes de confirmar. Si
    * confirma igual, el pedido sale con `requiereRevision`.
    */
   sugerirVincular?: boolean;
@@ -866,11 +865,6 @@ export function CheckoutClient({
                     placeholder="Seleccionar local"
                   />
                 </Field>
-                {sucursales.locales.find((l) => l.slug === localRetiro)?.horario ? (
-                  <p className="mt-2 text-sm text-muted">
-                    Horario: {sucursales.locales.find((l) => l.slug === localRetiro)?.horario}
-                  </p>
-                ) : null}
               </div>
             )}
             {envioHabilitado && !admiteEnvio && (
@@ -1026,6 +1020,7 @@ export function CheckoutClient({
                 <div className="mt-3">
                   <VincularClient
                     embebido
+                    enviarAlAbrir
                     documentoSugerido={perfilFacturacion?.nroDoc ?? ""}
                     onVinculado={() => {
                       setVinculando(false);
@@ -1037,7 +1032,8 @@ export function CheckoutClient({
               ) : (
                 <>
                   <p className="mt-1 text-sm text-muted">
-                    Vincule su cuenta para que esta compra quede registrada en ella.
+                    Vincule su cuenta para que esta compra quede registrada en ella. Le
+                    enviaremos un código al email registrado en su cuenta de cliente.
                   </p>
                   <Button size="sm" className="mt-3" onClick={() => setVinculando(true)}>
                     Vincular mi cuenta

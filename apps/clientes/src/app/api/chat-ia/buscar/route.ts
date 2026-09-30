@@ -3,7 +3,7 @@ import { getArbolCategorias, getCatalogo } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoAgente, facetasDeProductos, limiteBusqueda } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
 /**
@@ -53,9 +53,9 @@ export async function GET(req: Request) {
   const limit = limiteBusqueda(params.get("limit"));
 
   try {
-    // La llamada viene de ai-api (sin cookie de zona): con el flag `disponibilidad-sucursal` se usa
-    // la zona predeterminada, así el agente no ofrece lo oculto ni cuenta stock que no hay.
-    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+    // Con el flag `disponibilidad-sucursal`, el mismo criterio que el catálogo: stock en cualquier
+    // local y sin lo que ninguna sucursal ofrece (el agente no ofrece lo oculto ni stock que no hay).
+    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
     let productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp });
     // Mismo criterio que el buscador del Shop: si lo exacto no trae nada, se
     // reintenta tolerando typos. Si ese intento falla, queda lo exacto (vacío).

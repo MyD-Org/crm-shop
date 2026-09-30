@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   configs: {} as Record<string, Partial<TenantConfig> | null>,
   llamadas: [] as { tenant: string; trigger: string; aceptarBaja?: boolean }[],
   parcialEn: null as string | null,
+  continuaEn: null as string | null,
 }))
 
 vi.mock("@/db", () => ({
@@ -25,8 +26,12 @@ vi.mock("@/lib/tenants", () => ({
 }))
 
 vi.mock("@/lib/alegra-sync-tenant", () => ({
+  PRESUPUESTO_TRAMO_MS: 220_000,
   syncTenant: async (cfg: TenantConfig, trigger: string, opts?: { aceptarBaja?: boolean }) => {
     state.llamadas.push({ tenant: cfg.id, trigger, aceptarBaja: opts?.aceptarBaja })
+    if (state.continuaEn === cfg.id) {
+      return { ok: true, continuar: true, itemsSynced: 60, categoriesSynced: 3, progreso: { cuenta: "principal", leidos: 60, estimado: 100, restantes: 0 } }
+    }
     return state.parcialEn === cfg.id
       ? { ok: true, parcial: true, motivo: "items 5 < base 100 (umbral 95 %)", itemsSynced: 5, categoriesSynced: 3 }
       : { ok: true, itemsSynced: 100, categoriesSynced: 3 }
@@ -55,6 +60,7 @@ beforeEach(() => {
   }
   state.llamadas = []
   state.parcialEn = null
+  state.continuaEn = null
 })
 
 afterEach(() => {
@@ -77,6 +83,7 @@ describe("/api/cron/alegra-sync", () => {
         { tenant: "tenant-a", ok: true, itemsSynced: 100, categoriesSynced: 3 },
         { tenant: "tenant-b", ok: true, itemsSynced: 100, categoriesSynced: 3 },
       ],
+      continuar: false,
     })
     expect(state.llamadas).toEqual([
       { tenant: "tenant-a", trigger: "cron", aceptarBaja: false },
@@ -121,6 +128,28 @@ describe("/api/cron/alegra-sync", () => {
     const res = await pedir("?tenant=tenant-a&aceptar_baja=1")
     expect(res.status).toBe(200)
     expect(state.llamadas).toEqual([{ tenant: "tenant-a", trigger: "cron", aceptarBaja: true }])
+  })
+
+  it("?listar=1 devuelve solo los ids con Alegra y no sincroniza", async () => {
+    const res = await pedir("?listar=1")
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ tenants: ["tenant-a", "tenant-b"] })
+    expect(state.llamadas).toEqual([])
+  })
+
+  it("un tenant que necesita otro tramo responde continuar:true (raíz y tenant)", async () => {
+    state.continuaEn = "tenant-a"
+    const body = await (await pedir("?tenant=tenant-a")).json()
+    expect(body.continuar).toBe(true)
+    expect(body.tenants[0]).toMatchObject({ tenant: "tenant-a", ok: true, continuar: true, progreso: { cuenta: "principal", leidos: 60 } })
+  })
+
+  it("sin ?tenant=, corta en el primer tenant que continúa y no toca los siguientes", async () => {
+    state.continuaEn = "tenant-a"
+    const body = await (await pedir()).json()
+    expect(body.continuar).toBe(true)
+    expect(body.tenants.map((t: { tenant: string }) => t.tenant)).toEqual(["tenant-a"])
+    expect(state.llamadas.map((l) => l.tenant)).toEqual(["tenant-a"])
   })
 
   it("GET es la misma ruta (Vercel Cron)", () => {

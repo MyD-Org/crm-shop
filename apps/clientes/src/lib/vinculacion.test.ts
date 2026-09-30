@@ -182,19 +182,28 @@ describe("intentarVinculacionPorEmail", () => {
     });
   });
 
-  it("cliente de contado en el espejo: no vincula ni graba sin_coincidencia (0 llamadas a Alegra)", async () => {
+  it("cliente de contado en el espejo: vincula igual (0 llamadas a Alegra)", async () => {
     espejo = [filaEspejo("42", { tipo: "contado" })];
-    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example")).toBeNull();
+    const r = await intentarVinculacionPorEmail(nuevoUsuario(), "compras@cliente.example");
+    expect(r?.alegraContactId).toBe("42");
     expect(buscarContactosPorEmail).not.toHaveBeenCalled();
-    expect(insertsEn("client_links")).toHaveLength(0);
+    expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({
+      alegra_contact_id: "42",
+      tipo_cuenta: "contado",
+      estado: "activa",
+    });
   });
 
-  it("cliente de contado en vivo: no vincula ni graba sin_coincidencia", async () => {
+  it("cliente de contado en vivo: vincula igual", async () => {
     buscarContactosPorEmail.mockResolvedValue([
       { id: "9", name: "Cliente Nuevo", type: ["client"], term: { days: 0 }, priceList: null },
     ]);
-    expect(await intentarVinculacionPorEmail(nuevoUsuario(), "nuevo@cliente.example")).toBeNull();
-    expect(insertsEn("client_links")).toHaveLength(0);
+    const r = await intentarVinculacionPorEmail(nuevoUsuario(), "nuevo@cliente.example");
+    expect(r?.alegraContactId).toBe("9");
+    expect(valoresInsertados(insertsEn("client_links")[0])).toMatchObject({
+      alegra_contact_id: "9",
+      tipo_cuenta: "contado",
+    });
   });
 
   it("solo proveedor en vivo (el espejo ya filtra clientes): sin_coincidencia tras el respaldo", async () => {
@@ -296,11 +305,12 @@ describe("intentarVinculacionPorEmail", () => {
       expect(insertsEn("client_links")).toHaveLength(0);
     });
 
-    it("único match sin acceso (contado sin excepción): nada", async () => {
+    it("único match de contado sin excepción: vincula", async () => {
       vinculosPrevios = ["sin_coincidencia"];
       espejo = [filaEspejo("42", { tipo: "contado" })];
-      expect(await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example")).toBeNull();
-      expect(insertsEn("client_links")).toHaveLength(0);
+      const r = await intentarVinculacionPorEmail(nuevoUsuario(), "ana@cliente.example");
+      expect(r?.alegraContactId).toBe("42");
+      expect(insertsEn("client_links")).toHaveLength(1);
     });
 
     it("el espejo falla: nada, sin respaldo en vivo", async () => {

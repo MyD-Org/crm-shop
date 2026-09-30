@@ -68,6 +68,14 @@ html[data-chat-dock="abierto"] body {
     bottom: calc(var(--aichat-peek-height, 64px) + env(safe-area-inset-bottom, 0px));
   }
 }
+/* Entre 768 px y `lg` el widget ya no es mobile (launcher y teaser a 26 px del
+   borde, sin `--aichat-launcher-bottom`) pero las barras de compra siguen: se
+   suben a mano para que no tapen "Agregar al carrito" / "Iniciar compra". */
+@media (48rem <= width < 64rem) {
+  :root:has([data-barra-compra]:not([aria-hidden])) :is(.aichat-launcher, .aichat-teaser) {
+    bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
 @media (prefers-reduced-motion: no-preference) {
   body {
     transition: padding-right 200ms ease-out;

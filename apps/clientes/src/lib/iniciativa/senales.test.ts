@@ -51,6 +51,14 @@ describe("señal: búsqueda sin resultados", () => {
     expect(memoria.mostrada).toBe(true);
   });
 
+  it("no si la página ya invita al asesor en línea (Conversar del sin resultados): la búsqueda igual cuenta", () => {
+    const evento: EventoIniciativa = { tipo: "busqueda", consulta: "lampara para pecera", sinResultados: true, conInvitacionEnLinea: true };
+    const r = procesarEvento(MEMORIA_INICIAL, evento, ctx());
+    expect(r.invitacion).toBeNull();
+    expect(r.memoria.busquedas).toEqual(["lampara para pecera"]);
+    expect(r.memoria.mostrada).toBe(false);
+  });
+
   it("nunca con una búsqueda con forma de código", () => {
     expect(correr([busqueda("DL-18W", true)]).invitaciones).toEqual([]);
     expect(correr([busqueda("7791234567890", true)]).invitaciones).toEqual([]);

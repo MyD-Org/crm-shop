@@ -191,10 +191,13 @@ export function CatalogoClient({
   // el chat se carga aparte, así que se vuelve a anotar cuando aparece (la
   // misma búsqueda no cuenta dos veces).
   const { disponible: chatDisponible } = useChatIa();
+  // Con la búsqueda inteligente, el sin resultados (CatalogoSinResultados) ya
+  // invita al asesor en línea: el teaser no se suma encima.
   const sinResultados = productos.length === 0;
+  const conInvitacionEnLinea = sinResultados && !!busquedaIa;
   useEffect(() => {
-    if (consultaVacia && chatDisponible) anotarBusqueda(consultaVacia, sinResultados);
-  }, [consultaVacia, sinResultados, chatDisponible]);
+    if (consultaVacia && chatDisponible) anotarBusqueda(consultaVacia, sinResultados, conInvitacionEnLinea);
+  }, [consultaVacia, sinResultados, conInvitacionEnLinea, chatDisponible]);
 
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">

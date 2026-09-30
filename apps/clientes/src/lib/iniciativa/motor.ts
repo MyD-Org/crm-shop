@@ -43,7 +43,11 @@ export function anotarEvento(evento: EventoIniciativa, ahora = Date.now()): bool
   return publicado !== null;
 }
 
-/** El catálogo terminó de mostrar una búsqueda (con o sin resultados). */
-export function anotarBusqueda(consulta: string, sinResultados: boolean): boolean {
-  return anotarEvento({ tipo: "busqueda", consulta, sinResultados });
+/**
+ * El catálogo terminó de mostrar una búsqueda (con o sin resultados).
+ * `conInvitacionEnLinea`: el sin resultados ya muestra "Conversar" (ver
+ * senales.ts).
+ */
+export function anotarBusqueda(consulta: string, sinResultados: boolean, conInvitacionEnLinea = false): boolean {
+  return anotarEvento({ tipo: "busqueda", consulta, sinResultados, conInvitacionEnLinea });
 }

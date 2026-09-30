@@ -7,7 +7,9 @@
  *
  * Señales (solo concretas):
  * - `sin-resultados`: una búsqueda que no trajo nada (el rescate de la fase 1
- *   ya corrió: es lo que dibuja el "sin resultados" del catálogo).
+ *   ya corrió: es lo que dibuja el "sin resultados" del catálogo). No si la
+ *   página ya invita al asesor en línea (el "Conversar" del sin resultados de
+ *   la búsqueda inteligente): solo en el sin resultados de siempre.
  * - `busquedas`: `BUSQUEDAS_PARA_INVITAR` búsquedas distintas en la sesión sin
  *   agregar nada al carrito (agregar reinicia la cuenta).
  * - `ficha`: `MS_FICHA` en una ficha de producto sin agregar.
@@ -46,7 +48,17 @@ export interface MemoriaSesion {
 export const MEMORIA_INICIAL: MemoriaSesion = { busquedas: [], ultimaEsCodigo: false, mostrada: false, descartada: false };
 
 export type EventoIniciativa =
-  | { tipo: "busqueda"; consulta: string; sinResultados: boolean }
+  | {
+      tipo: "busqueda";
+      consulta: string;
+      sinResultados: boolean;
+      /**
+       * La página ya ofrece al asesor en línea (el "¿Quiere que un asesor le
+       * ayude a elegir? · Conversar" del sin resultados de la búsqueda
+       * inteligente): el teaser repetiría lo mismo y lo taparía.
+       */
+      conInvitacionEnLinea?: boolean;
+    }
   | { tipo: "agregado" }
   | { tipo: "ficha-sin-agregar" };
 
@@ -122,8 +134,9 @@ export function procesarEvento(
       ultimaEsCodigo: false,
       busquedas: nueva ? [...memoria.busquedas, consulta].slice(-MAX_RECORDADAS) : memoria.busquedas,
     };
-    if (evento.sinResultados) candidata = invitacion("sin-resultados", MENSAJES_AL_CHAT.sinResultados(consulta));
-    else if (nueva && siguiente.busquedas.length >= BUSQUEDAS_PARA_INVITAR) {
+    if (evento.sinResultados) {
+      if (!evento.conInvitacionEnLinea) candidata = invitacion("sin-resultados", MENSAJES_AL_CHAT.sinResultados(consulta));
+    } else if (nueva && siguiente.busquedas.length >= BUSQUEDAS_PARA_INVITAR) {
       candidata = invitacion("busquedas", MENSAJES_AL_CHAT.busquedas(siguiente.busquedas.slice(-BUSQUEDAS_PARA_INVITAR)));
     }
   }

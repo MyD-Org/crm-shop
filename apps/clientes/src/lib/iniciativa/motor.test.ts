@@ -60,6 +60,13 @@ describe("motor de la invitación + puente", () => {
     expect(Number(local.datos.get(CLAVE_ULTIMA))).toBeGreaterThan(0);
   });
 
+  it("sin teaser si el sin resultados ya muestra Conversar en línea", () => {
+    registrarChatIa();
+    expect(anotarBusqueda("lampara para pecera", true, true)).toBe(false);
+    expect(teaserChatIa()).toBeNull();
+    expect(leerMemoria()).toMatchObject({ busquedas: ["lampara para pecera"], mostrada: false });
+  });
+
   it("aceptar abre el chat con el mensaje de la señal y saca el teaser", () => {
     registrarChatIa();
     anotarBusqueda("lampara para pecera", true);

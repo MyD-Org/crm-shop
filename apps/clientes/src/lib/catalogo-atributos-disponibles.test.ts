@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 import { atributosEstructuradosDisponibles, reiniciarDisponibilidadAtributos } from "./catalogo-atributos-disponibles";
 
 /** Un `select` de drizzle falso: `.from().limit()` resuelve o tira como la base. */
@@ -7,16 +8,27 @@ function dbQue(resultado: "ok" | Error) {
     if (resultado instanceof Error) throw resultado;
     return [];
   });
-  const select = vi.fn(() => ({ from: () => ({ limit }) }));
+  const select = vi.fn(() => ({ from: () => ({ where: () => ({ limit }) }) }));
   return { db: { select } as never, select };
 }
 
 beforeEach(() => {
+  vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   reiniciarDisponibilidadAtributos();
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 describe("atributosEstructuradosDisponibles", () => {
+  it("el SQL real: las 5 columnas concedidas, con el tenant y LIMIT 0", async () => {
+    const g = dbGrabadora();
+    expect(await atributosEstructuradosDisponibles(g.db as never, 0)).toBe(true);
+    const [{ sql, params }] = g.consultas;
+    expect(sql).toMatch(/from "public"\."catalog_atributos" where "public"\."catalog_atributos"\."tenant_id" = \$1 limit \$2/);
+    expect(sql).not.toMatch(/fuente|updated_at/);
+    expect(params).toEqual(["tenant-test", 0]);
+    reiniciarDisponibilidadAtributos();
+  });
+
   it("la tabla responde ⇒ true", async () => {
     expect(await atributosEstructuradosDisponibles(dbQue("ok").db, 0)).toBe(true);
   });

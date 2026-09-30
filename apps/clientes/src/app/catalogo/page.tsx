@@ -224,8 +224,14 @@ async function CatalogoResultados({ searchParams }: Props) {
  * redirigir). Si la base falla, 0: no se redirige a ciegas.
  */
 async function contarResultados(estado: EstadoCatalogo): Promise<number> {
-  const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
-  return getPaginaCatalogo({ filtros: filtrosDeEstado(estado), pagina: 1, porPagina: 1, soloVisibles, disp })
+  const [{ soloVisibles }, disp, estructurados] = await Promise.all([
+    flagsPublicos(),
+    dispDelVisitante(),
+    atributosEstructuradosDisponibles(),
+  ]);
+  // Mismo criterio que la página que se va a mostrar (sólo corre con el flag `busqueda-ia`).
+  const filtros = { ...filtrosDeEstado(estado), ...(estructurados ? { atributosEstructurados: true } : {}) };
+  return getPaginaCatalogo({ filtros, pagina: 1, porPagina: 1, soloVisibles, disp })
     .then((p) => p.total)
     .catch((err: unknown) => {
       console.error(`[catalogo] no se pudo contar la búsqueda interpretada: ${err instanceof Error ? err.name : "desconocido"}`);

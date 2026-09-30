@@ -124,9 +124,12 @@ export function aProductoResuelto(p: Product): ProductoResuelto {
  * técnicos ("50 W", "3000 K", "IP65"). El contrato `sales-cards/v1` es una lista de textos.
  */
 function atributosDe(p: Pick<Product, "name" | "description" | "atributosEstructurados">): { attributes?: string[] } {
+  // Sin repetidos: "220 V" puede salir del diccionario y del valor técnico a la vez.
   const nombres = [
-    ...atributosDeProducto(`${p.name} ${p.description ?? ""}`, p.atributosEstructurados).map((a) => a.nombre),
-    ...etiquetasTecnicas(p.atributosEstructurados),
+    ...new Set([
+      ...atributosDeProducto(`${p.name} ${p.description ?? ""}`, p.atributosEstructurados).map((a) => a.nombre),
+      ...etiquetasTecnicas(p.atributosEstructurados),
+    ]),
   ];
   return nombres.length ? { attributes: nombres } : {};
 }

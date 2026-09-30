@@ -12,8 +12,10 @@
  *
  * SOLO servidor.
  */
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmAtributos } from "@/db/crm";
+import { shopTenantId } from "./tenant";
 
 /** Cuánto se recuerda la respuesta (por instancia). */
 const TTL_MS = 5 * 60_000;
@@ -39,6 +41,8 @@ export async function atributosEstructuradosDisponibles(
         valorTexto: crmAtributos.valorTexto,
       })
       .from(crmAtributos)
+      // Con el tenant, como toda lectura de `public` (y `LIMIT 0`: no trae filas).
+      .where(eq(crmAtributos.tenantId, shopTenantId()))
       .limit(0);
     valor = true;
   } catch (err) {

@@ -178,6 +178,11 @@ describe("fichas estructuradas (fase 2)", () => {
     ]);
   });
 
+  it("card spec sin repetidos: 220 V del diccionario y del valor técnico es uno solo", () => {
+    const p: Product = { ...base, name: "LAMPARA", description: undefined, atributosEstructurados: { tension_v: { n: 220, t: null } } };
+    expect(aProductoResuelto(p).attributes).toEqual(["220 V"]);
+  });
+
   it("facetas del agente usan el dato estructurado", () => {
     const f = facetasDeProductos([conAtributos], new Map());
     expect(f.atributos.map((a) => a.id)).toEqual(["tono-calido", "apto-exterior", "tension-220v"]);

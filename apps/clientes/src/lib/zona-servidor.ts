@@ -4,7 +4,7 @@
  * apagado devuelve null: nada de zona.
  */
 import { cache } from "react";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { identidadActual } from "./auth";
 import { getPerfilFacturacion } from "./facturacion-db";
 import { sucursalesHabilitadas } from "./sucursales-flag";
@@ -18,7 +18,6 @@ import { reglasVentaCacheadas, sucursalesCacheadas } from "./sucursales-datos";
 import {
   COOKIE_ZONA,
   opcionesCheckout,
-  provinciaDeGeoIp,
   zonaVigente,
   type OpcionesCheckoutSucursales,
   type ZonaVigente,
@@ -41,13 +40,7 @@ export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
       console.error("[zona] no se pudo leer la provincia del perfil:", err);
     }
   }
-  // Sin cookie ni perfil, la IP sugiere la provincia (sólo para precargar la entrega).
-  let ipProvincia: string | null = null;
-  if (!cookie && !perfilProvincia) {
-    const h = await headers();
-    ipProvincia = provinciaDeGeoIp(h.get("x-vercel-ip-country"), h.get("x-vercel-ip-country-region"));
-  }
-  return zonaVigente({ cookie, perfilProvincia, ipProvincia, datos });
+  return zonaVigente({ cookie, perfilProvincia, datos });
 });
 
 /** Opciones del checkout (locales de retiro y provincia inicial). null = flag apagado o sin sucursales. */

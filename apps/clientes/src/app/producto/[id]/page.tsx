@@ -50,7 +50,7 @@ export default async function ProductoPage({ params }: Props) {
   if (!producto) notFound();
   // "Retiro en <local>: ..." por cada local y "Envío a domicilio: ..." (sólo con el flag
   // `disponibilidad-sucursal`), sin que el visitante elija nada. El envío usa la zona del visitante
-  // (perfil o provincia sugerida por la IP) sólo para el plazo; no cambia qué se ve.
+  // (perfil o predeterminada) sólo para el plazo; no cambia qué se ve.
   const disponibilidad = await disponibilidadParaMostrar([producto.id], dispEntrega);
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];

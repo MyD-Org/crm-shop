@@ -13,6 +13,7 @@ import {
   hashArbol,
   leerInterpretacion,
   MIN_USOS_FRECUENTE,
+  reiniciarAvisoCache,
 } from "./cache";
 
 beforeEach(() => {
@@ -66,16 +67,22 @@ describe("lectura, escritura y frecuentes", () => {
     expect(c.sql).toMatch(/order by sum\(.*\)::int desc/);
   });
 
-  it("si la tabla no existe (o la base falla), nada se rompe", async () => {
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("si la tabla no existe (o la base falla), nada se rompe y se avisa una sola vez (warn)", async () => {
+    reiniciarAvisoCache();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
     grabadora = dbGrabadora((): never => {
       throw Object.assign(new Error('relation "shop.busqueda_interpretaciones" does not exist'), { name: "PostgresError" });
     });
     await expect(leerInterpretacion("t1", "consulta privada", "h")).resolves.toBeNull();
     await expect(guardarInterpretacion("t1", "consulta privada", "h", { resultado, fuente: "jev" })).resolves.toBeUndefined();
     await expect(busquedasFrecuentes("t1")).resolves.toEqual([]);
+    await leerInterpretacion("t1", "otra consulta", "h");
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(error).not.toHaveBeenCalled();
     for (const [msg] of log.mock.calls) expect(String(msg)).not.toContain("consulta privada");
     log.mockRestore();
+    error.mockRestore();
   });
 });
 

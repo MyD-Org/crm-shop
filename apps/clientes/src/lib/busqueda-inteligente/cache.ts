@@ -47,10 +47,28 @@ export function comoResultado(v: unknown): ResultadoGuardado {
   };
 }
 
+/**
+ * Mientras la migración 0025 no esté aplicada, CADA búsqueda falla contra la
+ * caché: un `console.error` por búsqueda llenaba los logs (y el overlay de
+ * errores de Next en dev). Se avisa UNA vez por proceso, como advertencia: la
+ * búsqueda sigue igual sin caché.
+ */
+let avisado = false;
+
 const registrarFallo = (que: string) => (err: unknown) => {
-  console.error(`[busqueda-ia] caché (${que}) no disponible: ${err instanceof Error ? err.name : "desconocido"}`);
+  if (!avisado) {
+    avisado = true;
+    console.warn(
+      `[busqueda-ia] caché de interpretaciones no disponible (${que}: ${err instanceof Error ? err.name : "desconocido"}); se sigue sin caché. ¿Falta la migración 0025? (se avisa una vez por proceso)`,
+    );
+  }
   return null;
 };
+
+/** Solo tests: vuelve a avisar el próximo fallo. */
+export function reiniciarAvisoCache() {
+  avisado = false;
+}
 
 /**
  * Busca una interpretación y, si está y `sumarUso`, le suma un uso (una sola

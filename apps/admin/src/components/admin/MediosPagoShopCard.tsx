@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Table, Textarea, useToast } from "@myd-org/ui"
 import type { MedioPagoDto } from "@/lib/medios-pago-shop-repo"
+import { normalizarIdentificador } from "@/lib/identificador"
 import { validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
 // Configuración → Sucursales y ventas: medios de pago que el checkout del Shop ofrece. Cada
@@ -312,13 +313,13 @@ export function MediosPagoShopCard() {
             </Field>
             <Field
               label="Identificador"
-              hint="De 2 a 30 caracteres: minúsculas, números o guiones. Queda registrado en los pedidos y no se puede cambiar después."
+              hint="De 2 a 30 caracteres: letras, números o guiones (se pasa a minúsculas y los espacios a guiones). Queda registrado en los pedidos y no se puede cambiar después."
               error={errores.slug}
             >
               <Input
                 value={form.slug}
                 disabled={Boolean(form.editandoSlug)}
-                onChange={(e) => cambiar({ slug: e.target.value })}
+                onChange={(e) => cambiar({ slug: normalizarIdentificador(e.target.value) })}
                 aria-invalid={Boolean(errores.slug)}
               />
             </Field>

@@ -26,8 +26,7 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
   return (
     <div className="p-4 md:p-6">
       <PedidoDetalle
-        initial={toPedidoDetalleDto(encontrado.pedido, encontrado.items, encontrado.listaPrecios, encontrado.historial, encontrado.remito, {
-          incluirCosto: canSeeCosts(guard.user.role),
+        initial={toPedidoDetalleDto(encontrado.pedido, encontrado.items, encontrado.listaPrecios, encontrado.historial, encontrado.remito, { incluirCosto: canSeeCosts(guard.user.role), pagoManual: encontrado.pagoManual,
         })}
         nombresSucursal={nombresSucursal}
         mediosPago={mediosPago}

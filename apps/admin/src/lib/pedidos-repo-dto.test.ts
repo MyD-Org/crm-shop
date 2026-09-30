@@ -21,6 +21,8 @@ const pedido = {
   costoEnvio: "0.00",
   total: "1210.00",
   requiereRevision: false,
+  facturadoEn: null,
+  reservaVenceEn: null,
 } as unknown as PedidoRow
 
 const item = (over: Record<string, unknown> = {}): PedidoItemRow =>
@@ -37,6 +39,7 @@ const item = (over: Record<string, unknown> = {}): PedidoItemRow =>
     subtotal: "300.00",
     iva: "63.00",
     total: "363.00",
+    aTraerDe: null,
     ...over,
   }) as PedidoItemRow
 

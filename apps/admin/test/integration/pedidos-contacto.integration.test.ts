@@ -1,17 +1,15 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, beforeEach, describe, expect, it } from "vitest"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { listarPedidos, toPedidoDto } from "@/lib/pedidos-repo"
 import { contactoDe, enriquecerConContacto, estadoContacto, marcarContactado } from "@/lib/pedidos-contacto-repo"
 import { guardarReglasVenta } from "@/lib/reglas-venta-repo"
-import { reiniciarCacheColumnasShop } from "@/lib/shop-columnas"
 import { seedShopOrder, seedTenant, truncateAll } from "./helpers"
 
 /**
- * Cola "Sin contactar" y "Marcar contactado" (change `sucursales-igz-mdp`, rebanada B).
- * Las columnas `contactado_*` son de la migración 0024 del Shop: si todavía no están en la base de
- * test se crean acá SOLO para probar (y se quitan al final); el caso "sin columnas" corre antes,
- * mientras no existen. Datos inventados.
+ * Cola "Sin contactar" y "Marcar contactado" (change `sucursales-igz-mdp`, rebanada B). Las
+ * columnas `contactado_*` son de la migración 0024 del Shop (las aplica el setup de integración).
+ * Datos inventados.
  */
 
 const A = "tenant-a"
@@ -21,58 +19,17 @@ const ACTOR = { id: "11111111-1111-4111-8111-111111111111", name: "Ana Operadora
 const haceHoras = (h: number) => new Date(Date.now() - h * 3_600_000)
 const ids = (items: { id: string }[]) => items.map((i) => i.id).sort()
 
-let existiaAntes = false
-
-async function tieneColumnas(): Promise<boolean> {
-  const r = await getDb().execute(
-    sql`select count(*)::int as n from information_schema.columns where table_schema='shop' and table_name='orders' and column_name in ('contactado_en','contactado_por','contactado_por_nombre')`,
-  )
-  return Number((r[0] as { n: number }).n) === 3
-}
-
-beforeAll(async () => {
-  existiaAntes = await tieneColumnas()
-})
-
 afterAll(async () => {
   await truncateAll()
-  if (!existiaAntes) {
-    await getDb().execute(sql`alter table shop.orders drop column if exists contactado_en, drop column if exists contactado_por, drop column if exists contactado_por_nombre`)
-  }
-  reiniciarCacheColumnasShop()
 })
 
 beforeEach(async () => {
   await truncateAll()
   await seedTenant(A)
   await seedTenant(B)
-  reiniciarCacheColumnasShop()
 })
 
-async function crearColumnas() {
-  await getDb().execute(sql`alter table shop.orders add column if not exists contactado_en timestamptz, add column if not exists contactado_por uuid, add column if not exists contactado_por_nombre text`)
-  reiniciarCacheColumnasShop()
-}
-
-describe("sin las columnas del Shop", () => {
-  it("degrada sin error: nada figura sin contactar y marcar responde no_disponible", async (ctx) => {
-    if (existiaAntes) return ctx.skip()
-    const p = await seedShopOrder(A, { createdAt: haceHoras(48) })
-    expect((await estadoContacto(A)).disponible).toBe(false)
-    const { colas } = await listarPedidos(A, {})
-    expect(colas.sin_contactar).toBe(0)
-    expect((await listarPedidos(A, { cola: "sin_contactar" })).items).toEqual([])
-    expect(await marcarContactado(A, p.id, ACTOR)).toEqual({ kind: "no_disponible" })
-    const r = await enriquecerConContacto(A, [{ ...toPedidoDto(p) }])
-    expect(r.items[0].sinContactar).toBe(false)
-  })
-})
-
-describe("con las columnas del Shop", () => {
-  beforeEach(async () => {
-    await crearColumnas()
-  })
-
+describe("cola y contacto", () => {
   it("la cola cuenta y lista solo los pendientes sin contactar pasado el umbral (default 24 h)", async () => {
     const viejo = await seedShopOrder(A, { createdAt: haceHoras(25) })
     await seedShopOrder(A, { createdAt: haceHoras(2) }) // reciente
@@ -123,7 +80,7 @@ describe("con las columnas del Shop", () => {
     await marcarContactado(A, contactado.id, ACTOR)
     const { items } = await listarPedidos(A, {})
     const r = await enriquecerConContacto(A, items.map(toPedidoDto))
-    expect(r.contacto).toEqual({ disponible: true, umbralHoras: 24 })
+    expect(r.contacto).toEqual({ umbralHoras: 24 })
     expect(r.items.find((i) => i.id === viejo.id)).toMatchObject({ sinContactar: true, contactadoEn: null })
     const c = r.items.find((i) => i.id === contactado.id)
     expect(c?.sinContactar).toBe(false)

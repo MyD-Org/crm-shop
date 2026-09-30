@@ -3,12 +3,11 @@ import { contactoDe, estadoContacto, marcarContactado } from "@/lib/pedidos-cont
 
 // Seguimiento de contacto de un pedido pendiente (change `sucursales-igz-mdp`, rebanada B).
 //
-//   GET  /api/admin/pedidos/[id]/contacto → { disponible, umbralHoras, contactadoEn, contactadoPorNombre }
+//   GET  /api/admin/pedidos/[id]/contacto → { umbralHoras, contactadoEn, contactadoPorNombre }
 //   POST /api/admin/pedidos/[id]/contacto → "Marcar contactado" (sin body; una sola vez).
 //
-// Actor y tenant salen del guard. `disponible: false` = la migración del Shop que agrega las
-// columnas todavía no está aplicada: la UI oculta la acción. Pedido inexistente, ajeno o con id
-// malformado → el mismo 404. Abierto desde OPERATOR.
+// Actor y tenant salen del guard. Pedido inexistente, ajeno o con id malformado → el mismo 404.
+// Abierto desde OPERATOR.
 
 const NO_STORE = { "Cache-Control": "private, no-store" }
 
@@ -26,7 +25,6 @@ export async function GET(req: Request, { params }: IdParams) {
     const c = (await contactoDe(guard.tenantId, [id])).get(id)
     return Response.json(
       {
-        disponible: estado.disponible,
         umbralHoras: estado.umbralHoras,
         contactadoEn: c?.contactadoEn ? c.contactadoEn.toISOString() : null,
         contactadoPorNombre: c?.contactadoPorNombre ?? null,
@@ -46,9 +44,6 @@ export async function POST(req: Request, { params }: IdParams) {
   try {
     const r = await marcarContactado(guard.tenantId, id, { id: guard.user.id, name: guard.user.name })
     if (r.kind === "not_found") return adminNotFoundResponse()
-    if (r.kind === "no_disponible") {
-      return fail(503, "no_disponible", "Todavía no se puede registrar el contacto. Inténtelo más tarde.")
-    }
     if (r.kind === "cancelado") return fail(422, "cancelado", "Un pedido cancelado no admite marcarse como contactado.")
     if (r.kind === "ya_contactado") {
       // Idempotente: repetir devuelve lo que ya estaba, sin pisarlo.

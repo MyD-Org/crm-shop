@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { HomeClient } from "@/components/HomeClient";
 import { DestacadosHome, DestacadosHomeSkeleton } from "@/components/home/DestacadosHome";
 import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
+import { CuentenosSiBusquedaIa } from "@/components/home/CuentenosQueNecesita";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
 import { sinCamposOcultos, sinMarcasDeAcento } from "@/data/home-defaults";
@@ -15,7 +16,8 @@ import { jsonLdSitioHtml } from "@/lib/sitio-jsonld";
  *
  * Shell estático (Cache Components): el contenido sale de `getContenidoHome`
  * (`'use cache'`, tag `home`). Lo que es por request va en huecos: los
- * destacados (catálogo, cuotas y sus flags) y el editor.
+ * destacados (catálogo, cuotas y sus flags), "Cuéntenos qué necesita" (flag
+ * `busqueda-ia`) y el editor.
  *
  * Editor: la página es la misma para todos. No calcula `esAdmin()`: eso lo
  * resuelve el hueco `EdicionSiAdmin` (dentro de `<Suspense fallback={null}>`),
@@ -43,6 +45,11 @@ export default async function Home() {
               skus={skus}
               imagenes={secDestacados.imagenes ?? []}
             />
+          </Suspense>
+        }
+        busquedaAsistida={
+          <Suspense fallback={null}>
+            <CuentenosSiBusquedaIa />
           </Suspense>
         }
       />

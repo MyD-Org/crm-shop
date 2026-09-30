@@ -12,7 +12,8 @@
 import { atributoPorId } from "../catalogo-atributos";
 import { pareceCodigo } from "./gate";
 import { normalizarConsulta } from "./normalizar";
-import { deterministico, textoResidual } from "./deterministico";
+import { deterministico } from "./deterministico";
+import { residuoDeBusqueda } from "./residuo";
 import {
   ATRIBUTO_DE_AMBIENTE,
   ATRIBUTO_DE_TONO,
@@ -171,7 +172,8 @@ export async function interpretarCon(q: string, deps: Dependencias): Promise<Int
   const resultado = combinar(det, jev);
 
   const aplica = resultado.aplicar.categorias.length > 0 || resultado.aplicar.atributos.length > 0;
-  const q2 = aplica ? textoResidual(norm, det.absorbidos) : undefined;
+  // Lo que la interpretación no tradujo y sí importa se queda como texto (ver residuo.ts).
+  const q2 = aplica ? residuoDeBusqueda(norm, det.absorbidos, resultado.aplicar.categorias) : undefined;
   if (q2) resultado.aplicar.q = q2;
 
   const aportoJev =

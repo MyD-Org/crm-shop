@@ -20,8 +20,9 @@ import { dispDelVisitante } from "@/lib/zona-servidor";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
 import { interpretar } from "@/lib/busqueda-inteligente/servidor";
-import { hayQueAplicar } from "@/lib/busqueda-inteligente/tipos";
-import { chipsSugeridos, hrefInterpretada } from "@/lib/busqueda-inteligente/url";
+import { decidirBusqueda } from "@/lib/busqueda-inteligente/flujo";
+import { chipsSugeridos } from "@/lib/busqueda-inteligente/url";
+import { getPaginaCatalogo } from "@/lib/catalog";
 import { FranjaSugerencias } from "@/components/catalogo/FranjaBusqueda";
 import { FranjaSugerenciasServidor } from "@/components/catalogo/FranjaSugerenciasServidor";
 
@@ -196,11 +197,27 @@ async function CatalogoResultados({ searchParams }: Props) {
  *   un uso) para el "sin resultados".
  * - `debeInterpretar` y 0–3 resultados: se interpreta en ESTE request y, si
  *   hay algo para aplicar, `redirect` a la URL interpretada (`ia=<consulta>`):
- *   el primer render ya llega rescatado. Dentro del `<Suspense>` de la página
+ *   el primer render ya llega rescatado. Si quedó texto que importa
+ *   ("pecera"), sólo si ese estado trae algo; si no, la interpretación se
+ *   ofrece como sugerencias (ver `decidirBusqueda`). Dentro del `<Suspense>` de la página
  *   Next lo resuelve como redirección del lado del cliente.
  * - `debeInterpretar` con resultados: la grilla sale ya y la franja llega por
  *   streaming con los filtros propuestos como chips (nada se aplica solo).
  */
+/**
+ * Cuántos productos trae un estado del catálogo (el interpretado, antes de
+ * redirigir). Si la base falla, 0: no se redirige a ciegas.
+ */
+async function contarResultados(estado: EstadoCatalogo): Promise<number> {
+  const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+  return getPaginaCatalogo({ filtros: filtrosDeEstado(estado), pagina: 1, porPagina: 1, soloVisibles, disp })
+    .then((p) => p.total)
+    .catch((err: unknown) => {
+      console.error(`[catalogo] no se pudo contar la búsqueda interpretada: ${err instanceof Error ? err.name : "desconocido"}`);
+      return 0;
+    });
+}
+
 async function busquedaInteligente(estado: EstadoCatalogo, total: number) {
   const q = estado.query;
   if (!estado.ia && q && debeInterpretar(q, total)) {
@@ -215,11 +232,11 @@ async function busquedaInteligente(estado: EstadoCatalogo, total: number) {
       };
     }
     const interpretacion = await interpretar(q, { sumarUso: estado.pagina === 1 });
-    if (interpretacion && hayQueAplicar(interpretacion)) redirect(hrefInterpretada(estado, interpretacion));
-    const sugerir = interpretacion ? [interpretacion.sugerir] : [];
+    const decision = await decidirBusqueda(estado, total, interpretacion, (destino) => contarResultados(destino));
+    if (decision.redirigir) redirect(decision.redirigir);
     return {
-      alternativas: total === 0 ? chipsSugeridos(estado, sugerir, "reemplazar") : [],
-      franja: total > 0 ? <FranjaSugerencias consulta={q} chips={chipsSugeridos(estado, sugerir)} /> : undefined,
+      alternativas: decision.alternativas,
+      franja: total > 0 ? <FranjaSugerencias consulta={q} chips={decision.chipsFranja} /> : undefined,
     };
   }
   const consulta = consultaInterpretada(estado);

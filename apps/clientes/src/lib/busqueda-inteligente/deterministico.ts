@@ -34,7 +34,7 @@ export function tokensDe(consultaNorm: string): string[] {
 const normalizar = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 /** Palabras significativas del nombre de una categoría, en singular. */
-function palabrasCategoria(nombre: string): string[] {
+export function palabrasCategoria(nombre: string): string[] {
   return tokensDe(normalizar(nombre))
     .filter((p) => !PALABRAS_VACIAS.has(p))
     .map(raizPlural);

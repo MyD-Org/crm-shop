@@ -23,14 +23,20 @@ const union = (a: string[], b: string[]) => [...new Set([...a, ...b])];
  * volver a interpretar).
  */
 export function hrefInterpretada(estado: EstadoCatalogo, i: Pick<Interpretacion, "consulta" | "aplicar">): string {
-  return hrefCatalogo(
-    estadoConCambios(estado, {
-      query: i.aplicar.q,
-      categorias: union(estado.categorias, i.aplicar.categorias),
-      atributos: union(estado.atributos, i.aplicar.atributos),
-      ia: i.consulta,
-    }),
-  );
+  return hrefCatalogo(estadoInterpretado(estado, i));
+}
+
+/** El estado al que lleva `hrefInterpretada` (para contar sus resultados antes de ir). */
+export function estadoInterpretado(
+  estado: EstadoCatalogo,
+  i: Pick<Interpretacion, "consulta" | "aplicar">,
+): EstadoCatalogo {
+  return estadoConCambios(estado, {
+    query: i.aplicar.q,
+    categorias: union(estado.categorias, i.aplicar.categorias),
+    atributos: union(estado.atributos, i.aplicar.atributos),
+    ia: i.consulta,
+  });
 }
 
 /**

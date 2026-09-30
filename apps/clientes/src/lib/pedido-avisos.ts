@@ -12,7 +12,10 @@ import { getDb } from "@/db";
 import { orderItems, orders } from "@/db/schema";
 import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { enviarEmail } from "./email";
-import { ENTREGA_LABEL, PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
+import { ENTREGA_LABEL, type EntregaTipo } from "./envio";
+import { contactoDeSucursal } from "./contacto-pedido-repo";
+import { nombreDelPago } from "./medios-pago";
+import { leerMediosPagoTolerante } from "./medios-pago-repo";
 import { urlSitioMail } from "./mail-layout";
 import { armarMailPedido, type AvisoPedidoShop } from "./pedido-mail";
 import { shopTenantId } from "./tenant";
@@ -45,7 +48,12 @@ export function avisoDelCobro(antes: string, despues: string, reversion: boolean
   return null;
 }
 
-async function enviarAviso(pedidoId: string, aviso: AvisoPedidoShop, clave: string): Promise<void> {
+async function enviarAviso(
+  pedidoId: string,
+  aviso: AvisoPedidoShop,
+  clave: string,
+  opciones: { aConfirmar?: boolean } = {},
+): Promise<void> {
   try {
     const [pedido] = await getDb()
       .select()
@@ -75,9 +83,16 @@ async function enviarAviso(pedidoId: string, aviso: AvisoPedidoShop, clave: stri
             .orderBy(asc(orderItems.id))
         : [];
 
+    // Flag `pedido-a-confirmar` (lo resuelve quien llama: acá no hay request): el pago con el
+    // nombre del medio del CRM y el plazo + WhatsApp de la sucursal. Lecturas que no tiran.
+    const numero = `PED-${String(pedido.numero).padStart(8, "0")}`;
+    const aConfirmar = aviso === "recibido" && opciones.aConfirmar === true;
+    const medios = aConfirmar ? await leerMediosPagoTolerante() : null;
+    const contacto = aConfirmar ? await contactoDeSucursal(pedido.sucursal, numero) : null;
+
     const mail = armarMailPedido({
       aviso,
-      numero: `PED-${String(pedido.numero).padStart(8, "0")}`,
+      numero,
       contactoNombre: pedido.contactoNombre,
       comercio: comercio || "Su pedido",
       logoUrl: urlLogoMail(),
@@ -86,8 +101,18 @@ async function enviarAviso(pedidoId: string, aviso: AvisoPedidoShop, clave: stri
       lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
       total: Number(pedido.total),
       entrega: ENTREGA_LABEL[pedido.entregaTipo as EntregaTipo],
-      pago: PAGO_LABEL[pedido.pagoMetodo as PagoMetodo],
+      pago: nombreDelPago(pedido.pagoMetodo, medios),
       pagoPendienteEnLinea: pedido.pagoMetodo === "mercadopago" && pedido.pagoEstado !== "pagado",
+      ...(contacto
+        ? {
+            contacto: {
+              mensaje: contacto.mensaje,
+              ...(contacto.whatsapp
+                ? { whatsappVisible: contacto.whatsapp.visible, whatsappUrl: contacto.whatsapp.url }
+                : {}),
+            },
+          }
+        : {}),
     });
 
     const r = await enviarEmail({
@@ -104,8 +129,8 @@ async function enviarAviso(pedidoId: string, aviso: AvisoPedidoShop, clave: stri
 }
 
 /** "Recibimos su pedido", al crearlo. Quien llama descarta los pedidos repetidos. */
-export function avisarPedidoRecibido(pedidoId: string): Promise<void> {
-  return enviarAviso(pedidoId, "recibido", `pedido/${pedidoId}/recibido`);
+export function avisarPedidoRecibido(pedidoId: string, opciones: { aConfirmar?: boolean } = {}): Promise<void> {
+  return enviarAviso(pedidoId, "recibido", `pedido/${pedidoId}/recibido`, opciones);
 }
 
 /** Aviso del cobro en línea, si corresponde (ver `avisoDelCobro`). */

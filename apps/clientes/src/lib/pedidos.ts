@@ -67,7 +67,11 @@ export interface DatosPedido {
   entregaTipo: EntregaTipo;
   entregaCiudad?: string;
   entregaDireccion?: string;
-  pagoMetodo: PagoMetodo;
+  /**
+   * Método fijo de `envio.ts` o, con el flag `pedido-a-confirmar`, el `slug` de un medio de
+   * `medios_pago_shop`. Sin CHECK en la base: es texto.
+   */
+  pagoMetodo: PagoMetodo | (string & {});
   notas?: string;
   /** Copia congelada del perfil de facturación al momento de comprar. */
   facturacion?: {
@@ -107,7 +111,7 @@ export interface DatosPedido {
  * reglas de venta; 0 = nunca vence (NULL, que la vista `stock_reservado_sucursal` lee como "no vence").
  */
 export function calcularReservaVenceEn(
-  pagoMetodo: PagoMetodo,
+  pagoMetodo: string,
   reglas: Pick<ReglasVentaTenant, "reservaDias">,
   ahora: Date = new Date(),
 ): Date | null {
@@ -436,6 +440,8 @@ export function armarOrder(
     estado: fila.estado as OrderEstado,
     pagoEstado: fila.pagoEstado as PagoEstado,
     metodoPago: PAGO_LABEL[fila.pagoMetodo as PagoMetodo] ?? fila.pagoMetodo,
+    pagoMetodoSlug: fila.pagoMetodo,
+    ...(fila.sucursal ? { sucursal: fila.sucursal } : {}),
     metodoEntrega:
       ENTREGA_LABEL[fila.entregaTipo as EntregaTipo] ?? fila.entregaTipo,
     entregaTipo: fila.entregaTipo as EntregaTipoPedido,

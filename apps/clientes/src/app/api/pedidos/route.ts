@@ -5,7 +5,6 @@ import {
   evaluarEnvio,
   pagosDisponibles,
   type EntregaTipo,
-  type PagoMetodo,
 } from "@/lib/envio";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { marcarStockCambiado } from "@/lib/cache-invalidar";
@@ -19,6 +18,10 @@ import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
 import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { pagosHabilitados } from "@/lib/pagos-flag";
+import { pedidoAConfirmarHabilitado } from "@/lib/pedido-a-confirmar-flag";
+import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import { pagoValidoConMedios } from "@/lib/medios-pago";
+import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { idPriceListUsable } from "@/lib/alegra";
@@ -177,7 +180,7 @@ export async function POST(req: Request) {
     body.entregaTipo === "envio" ? "envio" : "retiro";
   const entregaCiudad = texto(body.entregaCiudad, 80);
   const entregaDireccion = texto(body.entregaDireccion, 200);
-  const pagoMetodo = texto(body.pagoMetodo, 40) as PagoMetodo;
+  const pagoMetodo = texto(body.pagoMetodo, 40);
 
   const idempotencyKey = texto(body.idempotencyKey, 40);
   if (idempotencyKey && !CLAVE_VALIDA.test(idempotencyKey)) {
@@ -241,7 +244,17 @@ export async function POST(req: Request) {
   // pantalla: con los pagos apagados un POST directo con "mercadopago" se
   // rechaza igual que cualquier método no disponible, y con los pagos prendidos
   // "a_coordinar" tampoco entra.
-  if (!pagosDisponibles(entregaTipo, await pagosHabilitados()).includes(pagoMetodo)) {
+  //
+  // Con el flag `pedido-a-confirmar` y medios cargados en el CRM, el método es el `slug` de uno de
+  // ellos (releídos SIN caché: la decisión que escribe un pedido no usa lo cacheado). Sin medios
+  // (tabla ausente o vacía) rige lo de siempre.
+  const aConfirmar = await pedidoAConfirmarHabilitado();
+  const mediosCrm = aConfirmar ? await leerMediosPagoTolerante() : [];
+  const pagoValido =
+    mediosCrm.length > 0
+      ? pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo)
+      : (pagosDisponibles(entregaTipo, await pagosHabilitados()) as string[]).includes(pagoMetodo);
+  if (!pagoValido) {
     return NextResponse.json(
       { error: "Ese medio de pago no está disponible para la entrega elegida." },
       { status: 400 },
@@ -478,7 +491,7 @@ export async function POST(req: Request) {
     // idempotencyKey) ya tuvo su mail.
     if (!pedido.repetido) {
       const pedidoId = pedido.id;
-      after(() => avisarPedidoRecibido(pedidoId));
+      after(() => avisarPedidoRecibido(pedidoId, { aConfirmar }));
     }
 
     // El perfil aprende el teléfono del primer pedido, para no pedirlo en la
@@ -496,8 +509,12 @@ export async function POST(req: Request) {
     // 200 y no 201 cuando la clave ya existía: no se creó nada nuevo. El
     // checkout trata los dos casos igual —muestra el número— pero la diferencia
     // importa para cualquiera que lea los logs.
+    // Con el flag `pedido-a-confirmar`: plazo prometido y WhatsApp de la sucursal asignada. Nunca
+    // hace fallar la respuesta (el pedido ya existe): sin datos, la pantalla usa el texto genérico.
+    const contacto = aConfirmar ? await contactoDelPedido(pedido.id, pedido.numero) : null;
+
     return NextResponse.json(
-      { ...pedido, cuotasMax: await cuotasParaCliente(pedido.cuotasMax), cotizacion },
+      { ...pedido, cuotasMax: await cuotasParaCliente(pedido.cuotasMax), cotizacion, ...(contacto ? { contacto } : {}) },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

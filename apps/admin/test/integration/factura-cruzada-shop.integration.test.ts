@@ -52,6 +52,27 @@ describe("factura_cruzada en shop.orders", () => {
     expect(await cruzada(ajeno.id)).toBe(false)
   })
 
+  it("es atómica: si falla la escritura en shop.orders no queda la fila de pedido_factura_cuenta", async () => {
+    const p = await seedShopOrder(A)
+    await db().execute(sql`
+      create or replace function public.test_falla_factura_cruzada() returns trigger language plpgsql as
+      $$ begin raise exception 'falla simulada'; end $$`)
+    await db().execute(sql`
+      create trigger test_falla_factura_cruzada before update on shop.orders
+      for each row execute function public.test_falla_factura_cruzada()`)
+    try {
+      await expect(
+        registrarFacturaCuenta(A, p.id, { cuentaId: cuentaA, cruzada: true, now: new Date() }),
+      ).rejects.toThrow()
+    } finally {
+      await db().execute(sql`drop trigger if exists test_falla_factura_cruzada on shop.orders`)
+      await db().execute(sql`drop function if exists public.test_falla_factura_cruzada()`)
+    }
+    const filas = await db().execute(sql`select 1 from pedido_factura_cuenta where order_id = ${p.id}::uuid`)
+    expect(filas.length).toBe(0)
+    expect(await cruzada(p.id)).toBe(false)
+  })
+
   it("limpiar dentro de una transacción escribe con el mismo ejecutor", async () => {
     const p = await seedShopOrder(A)
     await registrarFacturaCuenta(A, p.id, { cuentaId: cuentaA, cruzada: true, now: new Date() })

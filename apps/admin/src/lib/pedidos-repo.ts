@@ -1064,12 +1064,35 @@ export async function pedidosConFactura(tenantId: string, alegraId: string, exce
 }
 
 /**
- * ¿Este pedido está reservando stock ahora? Mismo criterio que la vista `shop.stock_reservado`
- * (migración 0012 del Shop); lo fija contra la vista `stock-reservado.integration.test.ts`.
+ * ¿Este pedido está reservando stock ahora? Espeja la vista que rige para el pedido:
+ *
+ *  - CON `sucursal` (pedidos del flujo por sucursal): `shop.stock_reservado_sucursal` (0024 del Shop,
+ *    recreada por la 0025). Reserva un pedido vivo (pendiente / confirmado / preparación / en camino)
+ *    no facturado, o facturado por otra cuenta (`factura_cruzada`: sigue hasta entregar o cancelar);
+ *    un pendiente sin pago solo mientras `coalesce(reserva_vence_en, created_at + 24 h) > now()`
+ *    (NULL = 24 h desde la creación; `infinity` = nunca vence).
+ *  - SIN `sucursal` (anteriores a las sucursales o creados con el flag apagado): esa vista no los
+ *    cuenta; rige la vista `shop.stock_reservado` (0012: 24 h fijo, facturado no reserva).
+ *
+ * Lo fija contra las vistas `stock-reservado.integration.test.ts` (0012) y
+ * `stock-reservado-sucursal.integration.test.ts` (por sucursal).
  */
+const ESTADOS_VIVOS = ["pendiente", "confirmado", "preparacion", "en_camino"]
 const ESTADOS_QUE_RESERVAN = ["confirmado", "preparacion", "en_camino"]
 export const VENTANA_PENDIENTE_MS = 24 * 60 * 60_000
 export function reservaStock(row: PedidoRow, now: Date = new Date()): boolean {
+  if (row.sucursal === null) return reservaStockLegacy(row, now)
+  if (!ESTADOS_VIVOS.includes(row.estado)) return false
+  if (row.facturadoEn && !row.facturaCruzada) return false
+  if (row.estado !== "pendiente" || row.pagoEstado === "pagado") return true
+  const vence = row.reservaVenceEn
+  // `infinity` llega como fecha no finita: nunca vence.
+  if (vence && !Number.isFinite(vence.getTime())) return true
+  const limite = vence ? vence.getTime() : row.createdAt.getTime() + VENTANA_PENDIENTE_MS
+  return limite > now.getTime()
+}
+
+function reservaStockLegacy(row: PedidoRow, now: Date): boolean {
   if (row.facturadoEn) return false
   if (ESTADOS_QUE_RESERVAN.includes(row.estado)) return true
   if (row.estado !== "pendiente") return false

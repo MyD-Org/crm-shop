@@ -176,6 +176,13 @@
       "when": 1790727643493,
       "tag": "0024_orders_reserva_sucursal",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790764662000,
+      "tag": "0025_stock_reservado_sucursal_vence",
+      "breakpoints": true
     }
   ]
 }

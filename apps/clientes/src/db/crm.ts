@@ -347,3 +347,20 @@ export const crmZonas = publico.table("zonas", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
+
+/**
+ * Stock por (producto, sucursal) (`public.catalog_stock_sucursal`, change `sucursales-igz-mdp`,
+ * migración 0042 del CRM). SELECT por COLUMNA: `item_id_cuenta` (id del ítem en la cuenta de esa
+ * sucursal), `origen` y `synced_at` NO se conceden. `alegraId` es el de `catalog_products` (el
+ * mismo que `crmCatalogo.alegraId`, sintético `<cuenta>:<id>` para un producto de una sola cuenta
+ * secundaria). Una fila ausente vale 0 sólo para un producto inventariable (`stock` no nulo en
+ * `crmCatalogo`). Es el stock BRUTO de la cuenta: la reserva se resta con
+ * `shop.stock_reservado_sucursal`.
+ */
+export const crmStockSucursal = publico.table("catalog_stock_sucursal", {
+  tenantId: text("tenant_id").notNull(),
+  sucursal: text("sucursal").notNull(),
+  alegraId: text("alegra_id").notNull(),
+  stock: numeric("stock").notNull(),
+  leidoAt: timestamp("leido_at", { withTimezone: true }),
+});

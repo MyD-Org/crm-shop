@@ -598,6 +598,10 @@ export const catalogOverlay = pgTable(
     // Ficha técnica (PDF), opcional. A diferencia de `fotos` (array de variantes) es un solo
     // archivo: null = sin ficha cargada.
     fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaOverlay | null>(),
+    // Slugs de `sucursales` donde el producto NO se ofrece (vacío = visible en todas). Sin FK
+    // (array): la API del admin valida los slugs. Migración 0045; el Shop la lee directo del
+    // overlay (GRANT por columna) solo con el flag `disponibilidad-sucursal`.
+    ocultoEnSucursales: text("oculto_en_sucursales").array().notNull().default(sql`'{}'::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Insumo del delta hacia el Shop: lo setea el repo con now() de Postgres en CADA escritura.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -999,6 +1003,28 @@ export const zonas = pgTable(
     }),
   ],
 )
+
+// Reglas de venta por tenant (change `sucursales-igz-mdp`, rebanada B; migración 0045). Una fila
+// por tenant; si falta, rigen los mismos defaults en código (`reglas-venta-validacion.ts`).
+// Drift que vive SOLO en SQL: los CHECK (enteros >= 0; `retiro_sin_stock` en bloquear/ofrecer), la
+// siembra de filas por tenant y el GRANT SELECT a `shop_app`.
+export const reglasVenta = pgTable("reglas_venta", {
+  tenantId: text("tenant_id").primaryKey().references(() => tenants.id),
+  // Envío: si la sucursal de la zona no tiene stock, se despacha desde otra ("a traer").
+  respaldoEnvio: boolean("respaldo_envio").notNull().default(true),
+  // Retiro sin stock en el local: 'bloquear' o 'ofrecer' (con demora de `traslado_dias`).
+  retiroSinStock: text("retiro_sin_stock").notNull().default("ofrecer"),
+  // Días de demora prometidos al traer de otra sucursal (0 = "a coordinar").
+  trasladoDias: integer("traslado_dias").notNull().default(7),
+  // Días que un pedido sin cobro online reserva stock (0 = nunca vence).
+  reservaDias: integer("reserva_dias").notNull().default(7),
+  // Horas sin contactar tras las cuales el pedido se resalta en Pedidos.
+  avisoSinContactarHoras: integer("aviso_sin_contactar_horas").notNull().default(24),
+  // Horas hábiles que se le prometen al cliente para el contacto.
+  contactoHorasHabiles: integer("contacto_horas_habiles").notNull().default(24),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
 
 // ── Cuentas de Alegra y stock por sucursal (change `sucursales-igz-mdp`, rebanada D) ───────
 //

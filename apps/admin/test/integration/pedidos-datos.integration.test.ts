@@ -319,7 +319,7 @@ describe("admin: historial, filtros, colas y tablero de Pedidos", () => {
 
       // Con un filtro puesto (estado=confirmado) `colas` sigue contando el tenant ENTERO.
       const body = await (await list("?estado=confirmado")).json()
-      expect(body.colas).toEqual({ sin_confirmar: 1, pago: 1, datos: 1, sin_factura: 1 })
+      expect(body.colas).toEqual({ sin_confirmar: 1, pago: 1, datos: 1, sin_factura: 1, sin_contactar: 0 })
 
       expect((await (await list("?cola=sin_confirmar")).json()).items.map((i: { id: string }) => i.id)).toEqual([
         sinConfirmar.id,

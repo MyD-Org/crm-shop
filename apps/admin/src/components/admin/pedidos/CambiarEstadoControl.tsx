@@ -5,6 +5,7 @@ import { Button, Dialog, Field, Select, Textarea } from "@myd-org/ui"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
 import { MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { opcionesDeDestino } from "./logica"
+import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
 
 interface Props {
@@ -107,6 +108,7 @@ export function CambiarEstadoControl({ pedidoId, estado, entregaTipo, tieneFactu
             disabled={guardando}
           />
         </Field>
+        <MotivosFrecuentes onElegir={(m) => setMotivo(m.slice(0, MOTIVO_MAX))} disabled={guardando} />
       </Dialog>
 
       <Dialog

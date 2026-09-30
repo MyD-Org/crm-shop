@@ -50,6 +50,8 @@ interface ListaResponse {
   items: PedidoListaDto[]
   total: number
   colas: ColasCounts
+  /** Estado del aviso "sin contactar": `disponible` = ya existen las columnas del Shop; horas = umbral (0 = apagado). */
+  contacto?: { disponible: boolean; umbralHoras: number }
 }
 
 interface Props {
@@ -72,7 +74,7 @@ const OPCIONES_VISTA = [
 ]
 const ERROR_CARGA = "No se pudieron cargar los pedidos. Inténtelo nuevamente."
 const VISTA_KEY = "admin-pedidos-vista"
-const COLAS_VACIAS: ColasCounts = { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0 }
+const COLAS_VACIAS: ColasCounts = { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0, sin_contactar: 0 }
 /** Debounce del buscador: no manda un fetch por cada tecla. */
 const DEBOUNCE_BUSQUEDA_MS = 350
 
@@ -113,6 +115,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize, sucursales 
   const [items, setItems] = useState(initialItems)
   const [total, setTotal] = useState(initialTotal)
   const [colas, setColas] = useState<ColasCounts>(COLAS_VACIAS)
+  const [avisoContacto, setAvisoContacto] = useState({ disponible: false, umbralHoras: 0 })
   const [start, setStart] = useState(0)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState("")
@@ -143,6 +146,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize, sucursales 
       setItems(data.items)
       setTotal(data.total)
       setColas(data.colas ?? COLAS_VACIAS)
+      setAvisoContacto(data.contacto ?? { disponible: false, umbralHoras: 0 })
       setError("")
     } else {
       // Red caída o respuesta !ok: no se borra lo que ya está en pantalla, sólo se avisa.
@@ -311,6 +315,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize, sucursales 
             </span>
           )}
           {esSinFactura(p) && <Badge tone="neutral">Sin factura</Badge>}
+          {p.sinContactar && <Badge tone="danger">Sin contactar</Badge>}
         </div>
       ),
     },
@@ -325,9 +330,10 @@ export function PedidosShell({ initialItems, initialTotal, pageSize, sucursales 
 
       <div className="flex flex-wrap items-stretch gap-2">
         <span className="self-center text-sm" style={{ color: "var(--ink-soft)" }}>Para atender</span>
-        {ORDEN_COLAS.map((k) => {
+        {ORDEN_COLAS.filter((k) => k !== "sin_contactar" || (avisoContacto.disponible && avisoContacto.umbralHoras > 0)).map((k) => {
           const n = colas[k]
           const info = COLAS_INFO[k]
+          const rotulo = k === "sin_contactar" ? `${info.label} hace más de ${avisoContacto.umbralHoras} h` : info.label
           const activa = cola === k
           return (
             <button
@@ -350,7 +356,7 @@ export function PedidosShell({ initialItems, initialTotal, pageSize, sucursales 
               <span className="font-semibold tabular-nums" style={{ color: n === 0 ? "var(--ink-faint)" : "var(--ink)" }}>
                 {n}
               </span>
-              <span style={{ color: "var(--ink-soft)" }}>{info.label}</span>
+              <span style={{ color: "var(--ink-soft)" }}>{rotulo}</span>
             </button>
           )
         })}

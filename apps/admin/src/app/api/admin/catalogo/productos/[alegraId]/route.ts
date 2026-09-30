@@ -1,6 +1,7 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { avisarShop, conUrlDeFicha, conUrlDeFotos, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
-import { validarCamposOverlay } from "@/lib/catalogo-overlay"
+import { avisarShop, conUrlDeFicha, conUrlDeFotos, invalidResponse, NO_STORE, validacionResponse } from "@/lib/catalogo-admin"
+import { MSG_SUCURSAL_INVALIDA, validarCamposOverlay } from "@/lib/catalogo-overlay"
+import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
 import {
   asignarTagsProducto,
   categoriaPropia,
@@ -8,6 +9,7 @@ import {
   guardarOverlay,
 } from "@/lib/catalogo-overlay-repo"
 
+// (`ocultoEnSucursales`: slugs de sucursal donde el producto NO se ofrece; vacío = todas.)
 // GET   /api/admin/catalogo/productos/[alegraId] — ficha: lo de Alegra (sólo lectura) + overlay.
 // PATCH /api/admin/catalogo/productos/[alegraId] — upsert del overlay.
 //
@@ -46,6 +48,11 @@ export async function PATCH(req: Request, { params }: Params) {
   const { tagIds, ...campos } = v.value
   if (campos.categoriaId != null && !(await categoriaPropia(guard.tenantId, campos.categoriaId))) {
     return validacionResponse("Seleccione una categoría válida", "categoriaId")
+  }
+
+  // "Visible en": cada slug tiene que ser una sucursal de ESTE tenant (el array no tiene FK).
+  if (campos.ocultoEnSucursales !== undefined && !(await sonSlugsDeSucursal(guard.tenantId, campos.ocultoEnSucursales))) {
+    return invalidResponse(MSG_SUCURSAL_INVALIDA, "ocultoEnSucursales")
   }
 
   if (Object.keys(campos).length > 0) {

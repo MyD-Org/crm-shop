@@ -13,6 +13,7 @@ import {
   type FichaDto,
   type ProductoDto,
   type Sincronizacion,
+  type SucursalOpcionDto,
   type TagDto,
 } from "./tipos"
 import { FotosProducto } from "./FotosProducto"
@@ -22,6 +23,8 @@ interface Props {
   producto: ProductoDto
   categorias: CategoriaDto[]
   tags: TagDto[]
+  /** Sucursales del tenant, para "Visible en" (el campo aparece solo con más de una). */
+  sucursales: SucursalOpcionDto[]
   sincronizacion: Sincronizacion
   onCerrar: () => void
   onGuardado: (producto: ProductoDto) => void
@@ -44,12 +47,13 @@ export function caminoCategoria(categorias: CategoriaDto[], id: string): string 
 /** Radix reserva el string vacío en Select: con `""` la opción no se muestra. */
 const SIN_CATEGORIA = "sin-categoria"
 
-export function ProductoDialog({ producto, categorias, tags, sincronizacion, onCerrar, onGuardado, onTagCreado }: Props) {
+export function ProductoDialog({ producto, categorias, tags, sucursales, sincronizacion, onCerrar, onGuardado, onTagCreado }: Props) {
   const [nombre, setNombre] = useState(producto.nombre ?? "")
   const [descripcion, setDescripcion] = useState(producto.descripcion ?? "")
   const [categoriaId, setCategoriaId] = useState(producto.categoriaId ?? SIN_CATEGORIA)
   const [tagIds, setTagIds] = useState<string[]>(producto.tagIds)
   const [visible, setVisible] = useState(producto.visible)
+  const [ocultoEn, setOcultoEn] = useState<string[]>(producto.ocultoEnSucursales)
   // Las fotos y la ficha técnica se guardan APARTE del resto de la ficha: cada cambio se
   // persiste solo, porque la subida ya ocurrió y perderla al cancelar el diálogo dejaría
   // objetos huérfanos en R2.
@@ -78,6 +82,8 @@ export function ProductoDialog({ producto, categorias, tags, sincronizacion, onC
             categoriaId: categoriaId === SIN_CATEGORIA ? null : categoriaId,
             visible,
             tagIds,
+            // Solo se manda si el campo se mostró: con una sola sucursal no hay nada que elegir.
+            ...(sucursales.length > 1 ? { ocultoEnSucursales: ocultoEn } : {}),
           }),
         },
       )
@@ -244,6 +250,10 @@ export function ProductoDialog({ producto, categorias, tags, sincronizacion, onC
               <Checkbox checked={visible} onCheckedChange={setVisible} aria-label="Publicar en la tienda" />
               Publicar en la tienda
             </label>
+
+            {sucursales.length > 1 && (
+              <VisibleEn sucursales={sucursales} ocultoEn={ocultoEn} onCambio={setOcultoEn} />
+            )}
           </section>
         </div>
 
@@ -252,6 +262,62 @@ export function ProductoDialog({ producto, categorias, tags, sincronizacion, onC
         <FichaTecnicaProducto alegraId={producto.alegraId} ficha={fichaTecnica} onCambio={setFichaTecnica} />
       </div>
     </Dialog>
+  )
+}
+
+/**
+ * Campo "Visible en": un check por sucursal ACTIVA, todas tildadas por defecto. Destildar una
+ * agrega su slug a `oculto_en_sucursales`; destildar todas oculta el producto en todas. Un slug de
+ * una sucursal dada de baja se conserva y se muestra "Sucursal inactiva" (no se puede tildar).
+ */
+export function VisibleEn({
+  sucursales,
+  ocultoEn,
+  onCambio,
+}: {
+  sucursales: SucursalOpcionDto[]
+  ocultoEn: string[]
+  onCambio: (ocultoEn: string[]) => void
+}) {
+  const activas = sucursales.filter((s) => s.activa)
+  const inactivasOcultas = sucursales.filter((s) => !s.activa && ocultoEn.includes(s.slug))
+  const ocultoEnTodas = activas.length > 0 && activas.every((s) => ocultoEn.includes(s.slug))
+  const alternar = (slug: string, visibleAhora: boolean) =>
+    onCambio(visibleAhora ? ocultoEn.filter((s) => s !== slug) : [...new Set([...ocultoEn, slug])])
+
+  return (
+    <fieldset className="flex flex-col gap-1.5">
+      <legend className="mb-1 text-xs font-medium" style={{ color: "var(--ink-soft)" }}>
+        Visible en
+      </legend>
+      {activas.map((s) => {
+        const visibleAhora = !ocultoEn.includes(s.slug)
+        return (
+          <label key={s.slug} className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
+            <Checkbox
+              checked={visibleAhora}
+              onCheckedChange={(v) => alternar(s.slug, v === true)}
+              aria-label={`Visible en ${s.nombre}`}
+            />
+            {s.nombre}
+          </label>
+        )
+      })}
+      {inactivasOcultas.map((s) => (
+        <span key={s.slug} className="text-sm" style={{ color: "var(--ink-faint)" }}>
+          {s.nombre}: Sucursal inactiva
+        </span>
+      ))}
+      {ocultoEnTodas && (
+        <p className="text-xs" role="status" style={{ color: "var(--amber)" }}>
+          El producto quedará oculto en todas las sucursales.
+        </p>
+      )}
+      <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+        Si oculta el producto en una sucursal, no se ofrecerá para retiro ni se despachará desde ella; su stock se sigue
+        sincronizando.
+      </p>
+    </fieldset>
   )
 }
 

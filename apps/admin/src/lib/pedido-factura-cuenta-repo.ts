@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { alegraCuentas, pedidoFacturaCuenta, sucursales, tenants } from "@/db/schema"
+import { escribirFacturaCruzadaShop } from "./factura-cruzada-shop"
 import type { PedidoRow } from "./pedidos-repo"
 import {
   configParaCuenta,
@@ -234,12 +235,16 @@ export async function registrarFacturaCuenta(
       target: [pedidoFacturaCuenta.tenantId, pedidoFacturaCuenta.orderId],
       set: { facturaCuentaId: input.cuentaId, facturaCruzada: input.cruzada, updatedAt: input.now },
     })
+  // Misma marca en `shop.orders` (si la columna del Shop ya existe): la lee la vista de reserva.
+  await escribirFacturaCruzadaShop(tenantId, orderId, input.cruzada)
 }
 
 /** Al desvincular la factura la cuenta con la que se emitió deja de valer (la elección se conserva). */
-export async function limpiarFacturaCuenta(tenantId: string, orderId: string, ej: Pick<ReturnType<typeof getDb>, "update"> = getDb()): Promise<void> {
+export async function limpiarFacturaCuenta(tenantId: string, orderId: string, ej: Pick<ReturnType<typeof getDb>, "update" | "execute"> = getDb()): Promise<void> {
   await ej
     .update(pedidoFacturaCuenta)
     .set({ facturaCuentaId: null, facturaCruzada: false, updatedAt: new Date() })
     .where(and(eq(pedidoFacturaCuenta.tenantId, tenantId), eq(pedidoFacturaCuenta.orderId, orderId)))
+  // Y la marca del Shop vuelve a false (si la columna existe): sin factura no hay factura cruzada.
+  await escribirFacturaCruzadaShop(tenantId, orderId, false, ej)
 }

@@ -26,6 +26,7 @@ import {
   stockDe,
   type CategoriaDto,
   type CuentaOrigenDto,
+  type SucursalOpcionDto,
   type Filtros,
   type ListadoDto,
   type ProductoDto,
@@ -38,6 +39,8 @@ interface Props {
   tags: TagDto[]
   /** Cuentas de Alegra del tenant; con más de una aparece el filtro "Cuenta". */
   cuentas: CuentaOrigenDto[]
+  /** Sucursales del tenant; con más de una aparecen el filtro "Visible en" y el badge "Oculto en …". */
+  sucursales: SucursalOpcionDto[]
   /** Búsqueda inicial (viene de "Ver en Productos" de la solapa Revisión). */
   busquedaInicial?: string
   onTagCreado: (tag: TagDto) => void
@@ -66,7 +69,7 @@ interface Pendiente {
 const TODOS = "todos"
 
 /** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
-const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta"] as const
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta", "sucursal"] as const
 
 /** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
 function Sku({ sku }: { sku: string }) {
@@ -100,7 +103,7 @@ function Sku({ sku }: { sku: string }) {
   )
 }
 
-export function ProductosPanel({ categorias, tags, cuentas, busquedaInicial, onTagCreado, onCambio }: Props) {
+export function ProductosPanel({ categorias, tags, cuentas, sucursales, busquedaInicial, onTagCreado, onCambio }: Props) {
   const [filtros, setFiltros] = useState<Filtros>({
     estado: "oculto",
     foto: "con",
@@ -216,6 +219,8 @@ export function ProductosPanel({ categorias, tags, cuentas, busquedaInicial, onT
   const seleccionados = todoElFiltro ? total : seleccion.length
 
   const hayVariasCuentas = cuentas.length > 1
+  const hayVariasSucursales = sucursales.length > 1
+  const nombreSucursal = (slug: string) => sucursales.find((s) => s.slug === slug)?.nombre ?? slug
   const nombreCuentaPrincipal = cuentas.find((c) => c.principal)?.nombre ?? "Principal"
 
   const columns: TableColumn<ProductoDto>[] = [
@@ -230,9 +235,15 @@ export function ProductosPanel({ categorias, tags, cuentas, busquedaInicial, onT
           <div className="text-xs" style={{ color: "var(--ink-faint)" }}>
             <Sku sku={p.sku} />
           </div>
-          {p.cuenta && (
-            <div className="mt-1">
-              <Badge tone="info">Solo en {p.cuenta.sucursal ?? p.cuenta.nombre}</Badge>
+          {(p.cuenta || (hayVariasSucursales && p.ocultoEnSucursales.length > 0)) && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {p.cuenta && <Badge tone="info">Solo en {p.cuenta.sucursal ?? p.cuenta.nombre}</Badge>}
+              {hayVariasSucursales &&
+                p.ocultoEnSucursales.map((slug) => (
+                  <Badge key={slug} tone="warning">
+                    Oculto en {nombreSucursal(slug)}
+                  </Badge>
+                ))}
             </div>
           )}
         </>
@@ -423,6 +434,18 @@ export function ProductosPanel({ categorias, tags, cuentas, busquedaInicial, onT
             ]}
           />
         )}
+        {hayVariasSucursales && (
+          <Select
+            aria-label="Filtrar por visibilidad en sucursal"
+            value={filtros.sucursal ?? TODOS}
+            onValueChange={(v) => cambiarFiltro("sucursal", v)}
+            options={[
+              { value: TODOS, label: "Sucursal: todas" },
+              ...sucursales.map((s) => ({ value: `visible:${s.slug}`, label: `Visible en ${s.nombre}` })),
+              ...sucursales.map((s) => ({ value: `oculto:${s.slug}`, label: `Oculto en ${s.nombre}` })),
+            ]}
+          />
+        )}
         <Select
           aria-label="Filtrar por etiqueta"
           value={filtros.tag ?? TODOS}
@@ -557,6 +580,7 @@ export function ProductosPanel({ categorias, tags, cuentas, busquedaInicial, onT
           producto={abierto}
           categorias={categorias}
           tags={tags}
+          sucursales={sucursales}
           sincronizacion={datos?.sincronizacion ?? { alegra: null, avisoShop: { ultimoOkAt: null, ultimoIntentoAt: null } }}
           onCerrar={() => setAbierto(null)}
           onTagCreado={onTagCreado}

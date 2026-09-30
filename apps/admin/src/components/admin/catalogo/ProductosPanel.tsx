@@ -11,12 +11,24 @@ import {
   Select,
   SelectionBar,
   Table,
+  Tooltip,
   useToast,
   type TableColumn,
 } from "@myd-org/ui"
 import { ProductoDialog, caminoCategoria } from "./ProductoDialog"
 import { contarFotos } from "./FotosProducto"
 import { SincronizarAlegra } from "./SincronizarAlegra"
+import { AyudaTooltip } from "../AyudaTooltip"
+import {
+  AYUDA_CUENTA_ORIGEN,
+  AYUDA_ESTADO,
+  AYUDA_OCULTAR,
+  AYUDA_OCULTO_EN,
+  AYUDA_PUBLICAR,
+  AYUDA_SOLO_EN,
+  AYUDA_STOCK_SUCURSALES,
+  AYUDA_VISIBLE_EN,
+} from "./ayudas"
 import {
   api,
   TEXTO_MOTIVO,
@@ -102,6 +114,16 @@ function Sku({ sku }: { sku: string }) {
       >
         {copiado ? <Check size={12} /> : <Copy size={12} />}
       </Button>
+    </span>
+  )
+}
+
+/** Encabezado de columna con su ícono de ayuda. */
+function ConAyuda({ titulo, texto }: { titulo: string; texto: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      {titulo}
+      <AyudaTooltip etiqueta={titulo} texto={texto} />
     </span>
   )
 }
@@ -266,12 +288,20 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           </div>
           {(p.cuenta || (hayVariasSucursales && p.ocultoEnSucursales.length > 0)) && (
             <div className="mt-1 flex flex-wrap gap-1">
-              {p.cuenta && <Badge tone="info">Solo en {p.cuenta.sucursal ?? p.cuenta.nombre}</Badge>}
+              {p.cuenta && (
+                <Tooltip content={AYUDA_SOLO_EN}>
+                  <span>
+                    <Badge tone="info">Solo en {p.cuenta.sucursal ?? p.cuenta.nombre}</Badge>
+                  </span>
+                </Tooltip>
+              )}
               {hayVariasSucursales &&
                 p.ocultoEnSucursales.map((slug) => (
-                  <Badge key={slug} tone="warning">
-                    Oculto en {nombreSucursal(slug)}
-                  </Badge>
+                  <Tooltip key={slug} content={AYUDA_OCULTO_EN}>
+                    <span>
+                      <Badge tone="warning">Oculto en {nombreSucursal(slug)}</Badge>
+                    </span>
+                  </Tooltip>
                 ))}
             </div>
           )}
@@ -292,7 +322,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       ? [
           {
             key: "cuenta",
-            header: "Cuenta de origen",
+            header: <ConAyuda titulo="Cuenta de origen" texto={AYUDA_CUENTA_ORIGEN} />,
             hideBelow: "lg",
             render: (p: ProductoDto) => (
               <span className="text-xs" style={{ color: "var(--ink-soft)" }}>
@@ -314,7 +344,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
     },
     {
       key: "stock",
-      header: "Stock",
+      header: hayVariasSucursales ? <ConAyuda titulo="Stock" texto={AYUDA_STOCK_SUCURSALES} /> : "Stock",
       align: "right",
       hideBelow: "sm",
       className: "tabular-nums text-xs",
@@ -350,7 +380,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
     },
     {
       key: "estado",
-      header: "Estado",
+      header: <ConAyuda titulo="Estado" texto={AYUDA_ESTADO} />,
       render: (p) =>
         p.motivos.length === 0 ? (
           <Badge tone="success">Publicado</Badge>
@@ -508,6 +538,12 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             "«Cuenta de origen: existen solo en …» muestra los productos que están únicamente en esa cuenta, no los que tienen stock allí. "}
           {hayVariasSucursales &&
             "Para ver los productos con stock en una sucursal use «Stock: con stock en …»; «Visible en» y «Oculto en» indican dónde se ofrece cada producto en la tienda."}
+          {hayVariasSucursales && (
+            <>
+              {" "}
+              <AyudaTooltip etiqueta="Visible en y Oculto en" texto={AYUDA_VISIBLE_EN} />
+            </>
+          )}
         </p>
       )}
 
@@ -549,20 +585,24 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             setTodoElFiltro(false)
           }}
         >
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void preparar({ tipo: "visible", valor: true }, (n) => `Va a publicar ${n} producto${n === 1 ? "" : "s"} en la tienda.`)}
-          >
-            Publicar
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void preparar({ tipo: "visible", valor: false }, (n) => `Va a ocultar ${n} producto${n === 1 ? "" : "s"} de la tienda.`)}
-          >
-            Ocultar
-          </Button>
+          <Tooltip content={AYUDA_PUBLICAR}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void preparar({ tipo: "visible", valor: true }, (n) => `Va a publicar ${n} producto${n === 1 ? "" : "s"} en la tienda.`)}
+            >
+              Publicar
+            </Button>
+          </Tooltip>
+          <Tooltip content={hayVariasSucursales ? AYUDA_OCULTAR : "Saca los productos de la tienda."}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void preparar({ tipo: "visible", valor: false }, (n) => `Va a ocultar ${n} producto${n === 1 ? "" : "s"} de la tienda.`)}
+            >
+              Ocultar
+            </Button>
+          </Tooltip>
           <Select
             aria-label="Asignar categoría a la selección"
             value=""
@@ -579,6 +619,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
               )
             }
           />
+          {hayVariasSucursales && <AyudaTooltip etiqueta="Visibilidad por sucursal" texto={AYUDA_VISIBLE_EN} />}
           {hayVariasSucursales && (
             <Select
               aria-label="Mostrar u ocultar la selección en una sucursal"

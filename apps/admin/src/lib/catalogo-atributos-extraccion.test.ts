@@ -3,6 +3,7 @@ import {
   CLAVES_ATRIBUTO,
   extraerAtributosDeNombre,
   normalizarAtributos,
+  parsearEdicionManual,
   tonoDeKelvin,
   type AtributoExtraido,
 } from "./catalogo-atributos-extraccion"
@@ -160,5 +161,30 @@ describe("normalizarAtributos (lo que llega del PDF o del panel manual)", () => 
   it("no es objeto → nada", () => {
     expect(normalizarAtributos(null)).toEqual([])
     expect(normalizarAtributos("x")).toEqual([])
+  })
+})
+
+describe("parsearEdicionManual", () => {
+  it("valores a fijar y claves a quitar", () => {
+    expect(parsearEdicionManual({ valores: { potencia_w: "45", tono: "Cálido", ip: null, zocalo: "" } })).toEqual({
+      ok: true,
+      valores: [
+        { clave: "potencia_w", valorNum: 45, valorTexto: null },
+        { clave: "tono", valorNum: null, valorTexto: "calido" },
+      ],
+      quitar: ["ip", "zocalo"],
+    })
+  })
+
+  it("no completa el tono desde los kelvin (eso lo decide el operador)", () => {
+    const r = parsearEdicionManual({ valores: { temperatura_k: 3000 } })
+    expect(r).toEqual({ ok: true, valores: [{ clave: "temperatura_k", valorNum: 3000, valorTexto: null }], quitar: [] })
+  })
+
+  it("clave desconocida o valor inválido → error con el campo", () => {
+    expect(parsearEdicionManual({ valores: { color: "rojo" } })).toMatchObject({ ok: false, campo: "color" })
+    expect(parsearEdicionManual({ valores: { potencia_w: "mucha" } })).toMatchObject({ ok: false, campo: "potencia_w" })
+    expect(parsearEdicionManual({ valores: { temperatura_k: 50 } })).toMatchObject({ ok: false, campo: "temperatura_k" })
+    expect(parsearEdicionManual(null)).toMatchObject({ ok: false, campo: "valores" })
   })
 })

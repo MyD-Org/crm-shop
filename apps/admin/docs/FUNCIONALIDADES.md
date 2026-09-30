@@ -761,6 +761,27 @@ RESET ROLE;
 
 ---
 
+### Datos técnicos estructurados (`catalog_atributos`, 0047)
+
+Potencia, temperatura de color, tono, IP, lúmenes, tensión y zócalo por producto, para los
+filtros y la tabla "Características" del Shop (catálogo asistido fase 2, subproyecto 5). Una fila
+por (producto, clave), con su **fuente** y la precedencia **manual > pdf > nombre**: una fuente
+nunca pisa a otra de mayor precedencia (lo aplica el upsert de `lib/catalogo-atributos-repo.ts`).
+
+- **Nombre** (`lib/catalogo-atributos-extraccion.ts`): parser conservador sobre nombre +
+  descripción de Alegra. Corre en la sync principal, en la de cuentas secundarias y en el
+  drenador de webhooks, sobre los productos tocados; si falla (p. ej. la migración sin aplicar)
+  loguea y la sync sigue igual. Backfill idempotente: `npm run catalogo:atributos-backfill --
+  --tenant <id> [--aplicar]` (dry-run por defecto).
+- **Ficha PDF**: botón **Leer ficha técnica** en el detalle del producto (admin+). Manda el PDF de
+  `catalog_overlay.ficha_tecnica` a Claude Haiku (`claude-haiku-4-5`, `ANTHROPIC_API_KEY`) con
+  un esquema de salida cerrado y guarda `fuente = 'pdf'`. Lote: `npm run catalogo:leer-fichas --
+  --tenant <id>` sólo **estima** el costo; leer requiere `--ejecutar` (decisión explícita).
+- **Manual**: en el mismo panel, los campos cambiados quedan `manual`; un campo vacío se quita.
+
+Cada escritura desde el admin avisa al Shop (descarta su caché). El Shop lee las columnas
+concedidas por la 0047 y, sin la tabla, sigue con los patrones sobre el nombre de la fase 1.
+
 ## Cuenta que factura cada pedido (multicuenta)
 
 Change `sucursales-igz-mdp`, rebanada D, lote 3. Cada sucursal tiene su cuenta de Alegra; la

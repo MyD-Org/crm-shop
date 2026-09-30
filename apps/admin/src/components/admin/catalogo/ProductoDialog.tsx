@@ -18,6 +18,7 @@ import {
 } from "./tipos"
 import { FotosProducto } from "./FotosProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
+import { AtributosProducto } from "./AtributosProducto"
 
 interface Props {
   producto: ProductoDto
@@ -260,6 +261,8 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
         <FotosProducto alegraId={producto.alegraId} fotos={fotos} onCambio={setFotos} />
 
         <FichaTecnicaProducto alegraId={producto.alegraId} ficha={fichaTecnica} onCambio={setFichaTecnica} />
+
+        <AtributosProducto alegraId={producto.alegraId} tieneFicha={fichaTecnica !== null} />
       </div>
     </Dialog>
   )

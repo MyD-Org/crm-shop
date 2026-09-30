@@ -243,3 +243,36 @@ export function normalizarAtributos(entrada: unknown): AtributoExtraido[] {
   const orden = (c: ClaveAtributo) => CLAVES_ATRIBUTO.indexOf(c)
   return out.sort((a, b) => orden(a.clave) - orden(b.clave))
 }
+
+export type EdicionManual =
+  | { ok: true; valores: AtributoExtraido[]; quitar: ClaveAtributo[] }
+  | { ok: false; error: string; campo: string }
+
+/**
+ * Cuerpo del PUT del panel manual: `{ valores: { <clave>: valor | null } }`. `null` o "" quita la
+ * clave; un valor lo fija como `manual`. Un valor que no se puede interpretar es un error (no se
+ * descarta en silencio: el operador tiene que saber que no se guardó).
+ */
+export function parsearEdicionManual(body: unknown): EdicionManual {
+  const valores = (body as { valores?: unknown } | null)?.valores
+  if (!valores || typeof valores !== "object" || Array.isArray(valores)) {
+    return { ok: false, error: "Indique los valores a guardar.", campo: "valores" }
+  }
+  const out: AtributoExtraido[] = []
+  const quitar: ClaveAtributo[] = []
+  for (const [clave, v] of Object.entries(valores as Record<string, unknown>)) {
+    if (!(CLAVES_ATRIBUTO as readonly string[]).includes(clave)) {
+      return { ok: false, error: "Hay un dato técnico desconocido.", campo: clave }
+    }
+    const c = clave as ClaveAtributo
+    if (v == null || (typeof v === "string" && v.trim() === "")) {
+      quitar.push(c)
+      continue
+    }
+    // Normaliza la clave sola (sin completar el tono desde los kelvin: eso es del PDF).
+    const [a] = normalizarAtributos({ [c]: v }).filter((x) => x.clave === c)
+    if (!a) return { ok: false, error: `El valor de "${ETIQUETA_ATRIBUTO[c]}" no es válido.`, campo: c }
+    out.push(a)
+  }
+  return { ok: true, valores: out, quitar }
+}

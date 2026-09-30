@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { Alert, Button, Dialog, Field, Select, useToast } from "@myd-org/ui"
+import type { CuentaFacturaDto } from "@/lib/pedido-factura-cuenta-repo"
 import type { PedidoDetalleDto } from "@/lib/pedidos-repo"
+import { textoVentaEntreEmpresas } from "./CuentaFacturaInfo"
 import { fmtCantidad, fmtMoneda } from "./format"
 import { interpretarRespuestaFactura, separarAvisoFactura, mensajeAvisoFactura } from "./logica"
 
@@ -34,6 +36,8 @@ interface PreviewEmision {
   contacto: { alegraId: string | null; esNuevo: boolean; nombre: string }
   bloqueo: Aviso | null
   avisos: Aviso[]
+  /** Cuenta de Alegra que factura (rebanada D). Ausente en respuestas anteriores. */
+  cuenta?: CuentaFacturaDto & { itemsACrear: string[] }
 }
 
 interface Props {
@@ -69,23 +73,27 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
   const [cargando, setCargando] = useState(false)
   const [preview, setPreview] = useState<PreviewEmision | null>(null)
   const [numeracionId, setNumeracionId] = useState("")
+  /** Cuenta elegida a mano en este diálogo; null = la que propone el sistema. */
+  const [eleccion, setEleccion] = useState<string | null>(null)
   const [emitiendo, setEmitiendo] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const base = `/api/admin/pedidos/${pedido.id}/factura/emitir`
 
-  async function llamar(init?: RequestInit) {
-    const res = await fetch(base, { cache: "no-store", ...init }).catch(() => null)
+  async function llamar(init?: RequestInit, cuentaSlug?: string | null) {
+    const url = cuentaSlug ? `${base}?cuenta=${encodeURIComponent(cuentaSlug)}` : base
+    const res = await fetch(url, { cache: "no-store", ...init }).catch(() => null)
     const body: unknown = res ? await res.json().catch(() => null) : null
     return { status: res?.status ?? null, body }
   }
 
-  async function abrir() {
+  async function abrir(cuentaSlug: string | null = null) {
     setAbierto(true)
     setCargando(true)
     setError(null)
     setPreview(null)
-    const { status, body } = await llamar()
+    setEleccion(cuentaSlug)
+    const { status, body } = await llamar(undefined, cuentaSlug)
     setCargando(false)
     const r = interpretarRespuestaFactura<PreviewEmision>(status, body, esPreview)
     if (r.tipo === "ok") {
@@ -101,6 +109,7 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
     if (emitiendo) return
     setAbierto(false)
     setPreview(null)
+    setEleccion(null)
     setNumeracionId("")
     setError(null)
   }
@@ -116,7 +125,7 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
     const { status, body } = await llamar({
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ numberTemplateId: numeracionId }),
+      body: JSON.stringify({ numberTemplateId: numeracionId, ...(eleccion ? { cuenta: eleccion } : {}) }),
     })
     setEmitiendo(false)
     const r = interpretarRespuestaFactura<PedidoDetalleDto>(status, body, esDetalle)
@@ -179,6 +188,36 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
         )}
         {preview && (
           <div className="flex flex-col gap-4">
+            {preview.cuenta && preview.cuenta.cuentas.length > 1 && (
+              <div className="flex flex-col gap-2">
+                <Field label="Cuenta que factura">
+                  <Select
+                    value={eleccion ?? preview.cuenta.efectiva?.slug ?? ""}
+                    onValueChange={(slug) => void abrir(slug)}
+                    options={preview.cuenta.cuentas.map((c) => ({ value: c.slug, label: c.nombre }))}
+                    placeholder="Seleccione…"
+                    disabled={emitiendo || cargando}
+                  />
+                </Field>
+                {preview.cuenta.efectiva && (
+                  <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                    {eleccion ? "Elegida para este pedido" : preview.cuenta.efectiva.texto}
+                  </p>
+                )}
+                {preview.cuenta.cruzada && (
+                  <Alert tone="warning" title="Venta entre empresas">
+                    {textoVentaEntreEmpresas(preview.cuenta)}
+                  </Alert>
+                )}
+                {preview.cuenta.itemsACrear.length > 0 && (
+                  <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                    Al emitir se darán de alta en la cuenta seleccionada, si todavía no existen:{" "}
+                    {preview.cuenta.itemsACrear.join(", ")}.
+                  </p>
+                )}
+              </div>
+            )}
+
             <Field label="Tipo de comprobante">
               <Select
                 value={numeracionId}

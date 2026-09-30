@@ -1,6 +1,16 @@
 import { AlegraRateLimitError, AlegraHttpError, createRemission } from "@/lib/alegra"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { armarPreviewRemito, lineasParaAlegra, observacionesRemito, puedeEmitirRemito } from "@/lib/remito"
+import { armarLineasFactura } from "@/lib/factura-emitir"
+import { asegurarItemsEnCuenta } from "@/lib/alegra-items-cuenta"
+import { contactoDelPedidoEnCuenta } from "@/lib/contacto-en-cuenta"
+import {
+  cargarContextoCuentaFactura,
+  comoDestino,
+  configDeCuentaRow,
+  resolverParaPedido,
+  MSG_SIN_CUENTA_FACTURA,
+} from "@/lib/pedido-factura-cuenta-repo"
 import {
   formatearNumeroPedido,
   getPedido,
@@ -17,6 +27,11 @@ import { canSeeCosts } from "@/lib/roles"
 //
 //   GET  → preview (dry-run, sin escritura): líneas, avisos y si se puede emitir.
 //   POST → confirma: crea el remito en Alegra y lo persiste. 200 = detalle completo.
+//
+// Cuenta (change `sucursales-igz-mdp`, rebanada D): el remito se emite en la MISMA cuenta que la
+// factura (la registrada al emitirla; si todavía no se facturó, la que corresponde al pedido). En una
+// cuenta distinta de la principal el contacto se busca por documento o se crea (el `cliente_codigo`
+// del pedido es un id de la principal) y los ítems se resuelven/crean en esa cuenta.
 //
 // Remito único por pedido (decisión de la usuaria): la unicidad la garantiza la restricción de
 // `shop.order_remitos.order_id` (ver pedidos-repo.ts, `insertarRemito`), así que una carrera
@@ -64,6 +79,13 @@ function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
   return fail(502, "alegra_error", MSG.alegra)
 }
 
+/** Cuenta del remito: la de la factura si ya se emitió por esta vía; si no, la calculada del pedido. */
+async function cuentaDelRemito(tenantId: string, pedido: PedidoRow) {
+  const ctx = await cargarContextoCuentaFactura(tenantId, pedido.id)
+  const deLaFactura = ctx.fila?.facturaCuentaId ? ctx.cuentas.find((c) => c.id === ctx.fila?.facturaCuentaId) : undefined
+  return deLaFactura ?? resolverParaPedido(pedido, ctx).cuenta
+}
+
 export async function GET(req: Request, { params }: IdParams) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
@@ -76,10 +98,16 @@ export async function GET(req: Request, { params }: IdParams) {
     if (bloqueo) return bloqueo
 
     const preview = armarPreviewRemito(found.items)
-    const { bloqueo: bloqueoContacto } = puedeEmitirRemito(found.pedido)
-    const avisos = bloqueoContacto ? [...preview.avisos, bloqueoContacto] : preview.avisos
+    const cuenta = await cuentaDelRemito(guard.tenantId, found.pedido)
+    // Con la cuenta principal el remito reusa el contacto de la factura; en otra cuenta se busca o
+    // se crea al emitir, así que `cliente_codigo` no es requisito.
+    const { bloqueo: bloqueoContacto } = cuenta && !cuenta.principal ? { bloqueo: null } : puedeEmitirRemito(found.pedido)
+    const avisos = [...preview.avisos, ...(bloqueoContacto ? [bloqueoContacto] : []), ...(cuenta ? [] : [MSG_SIN_CUENTA_FACTURA])]
 
-    return Response.json({ lineas: preview.lineas, avisos }, { headers: NO_STORE })
+    return Response.json(
+      { lineas: preview.lineas, avisos, cuenta: cuenta ? { slug: cuenta.slug, nombre: cuenta.nombre } : null },
+      { headers: NO_STORE },
+    )
   } catch (err) {
     console.error("[admin/pedidos/remito/emitir] no se pudo preparar el preview", { tenant: guard.tenantId, orderId: id, err })
     return fail(500, "internal", "No se pudo preparar la vista previa. Inténtelo nuevamente.")
@@ -99,21 +127,47 @@ export async function POST(req: Request, { params }: IdParams) {
     const bloqueo = chequeoPedido(found.pedido, found.remito !== null)
     if (bloqueo) return bloqueo
 
-    const { bloqueo: bloqueoContacto } = puedeEmitirRemito(found.pedido)
-    if (bloqueoContacto) return fail(422, "sin_contacto", bloqueoContacto)
+    const cuenta = await cuentaDelRemito(guard.tenantId, found.pedido)
+    if (!cuenta) return fail(422, "sin_cuenta", MSG_SIN_CUENTA_FACTURA)
+
+    if (cuenta.principal) {
+      const { bloqueo: bloqueoContacto } = puedeEmitirRemito(found.pedido)
+      if (bloqueoContacto) return fail(422, "sin_contacto", bloqueoContacto)
+    }
 
     const preview = armarPreviewRemito(found.items)
     if (preview.avisos.length > 0) return fail(422, "items_sin_alegra", preview.avisos[0])
     if (preview.lineas.length === 0) return fail(422, "sin_lineas", "El pedido no tiene ítems para remitir.")
 
-    const config = await configDe(guard.tenantId)
-    if (!config) return fail(500, "internal", MSG.sinConfig)
+    const base = await configDe(guard.tenantId)
+    if (!base) return fail(500, "internal", MSG.sinConfig)
+    let config: TenantConfig
+    try {
+      config = configDeCuentaRow(base, cuenta)
+    } catch (err) {
+      return fail(422, "cuenta_sin_credenciales", err instanceof Error ? err.message : MSG.sinConfig)
+    }
+
+    // Ids reales de los ítems en la cuenta (se crean si no existen) y contacto de esa cuenta.
+    let lineas = preview.lineas
+    let contactoId: string
+    try {
+      const items = await asegurarItemsEnCuenta(guard.tenantId, config, comoDestino(cuenta), armarLineasFactura(found.items).lineas)
+      if (!items.ok) return fail(422, "item_en_cuenta", items.error)
+      lineas = lineas.map((l) => ({ ...l, alegraItemId: items.ids.get(l.alegraItemId) ?? l.alegraItemId }))
+      const contacto = await contactoDelPedidoEnCuenta(config, found.pedido, cuenta.principal)
+      if (!contacto) return fail(422, "sin_contacto", "El pedido no tiene datos para dar de alta al cliente en la cuenta de Alegra.")
+      contactoId = contacto.alegraId
+    } catch (err) {
+      if (err instanceof AlegraHttpError || err instanceof AlegraRateLimitError) return errorAlegra(err, ctx)
+      throw err
+    }
 
     let creado
     try {
       creado = await createRemission(config, {
-        contactAlegraId: found.pedido.clienteCodigo as string,
-        items: lineasParaAlegra(preview.lineas),
+        contactAlegraId: contactoId,
+        items: lineasParaAlegra(lineas),
         observations: observacionesRemito(formatearNumeroPedido(found.pedido.numero), found.pedido.facturaNumero),
       })
     } catch (err) {

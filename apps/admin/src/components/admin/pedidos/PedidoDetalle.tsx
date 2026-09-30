@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Text
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
 import { reglaATexto, type NombresSucursal } from "@/lib/sucursales-texto"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
+import { CuentaFacturaInfo } from "./CuentaFacturaInfo"
 import { EmitirFacturaControl } from "./EmitirFacturaControl"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
 import { RemitoControl } from "./RemitoControl"
@@ -301,6 +302,7 @@ export function PedidoDetalle({
           </Card>
 
           <Card title="Factura" className="p-4">
+            <CuentaFacturaInfo pedido={pedido} />
             {pedido.emisionReserva === "vigente" ? (
               <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
                 Emisión en curso… Actualice la página en unos segundos.

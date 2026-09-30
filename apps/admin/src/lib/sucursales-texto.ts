@@ -11,7 +11,7 @@ export type NombresSucursal = Record<string, string>
 
 const nombreDe = (slug: string, nombres: NombresSucursal) => nombres[slug] ?? slug
 
-function nombreProvincia(clave: string | null): string | null {
+export function nombreProvincia(clave: string | null): string | null {
   if (!clave) return null
   return PROVINCIAS.find((p) => claveProvincia(p) === clave) ?? null
 }

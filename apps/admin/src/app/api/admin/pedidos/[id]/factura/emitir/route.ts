@@ -8,7 +8,19 @@ import {
   type AlegraInvoiceCreateInput,
 } from "@/lib/alegra"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { crearContacto } from "@/lib/contactos"
+import { crearContactoEnCuenta } from "@/lib/contacto-en-cuenta"
+import { asegurarItemsEnCuenta, itemsSinIdEnCuenta, type LineaParaCuenta } from "@/lib/alegra-items-cuenta"
+import {
+  armarCuentaFacturaDto,
+  cargarContextoCuentaFactura,
+  comoDestino,
+  configDeCuentaRow,
+  guardarCuentaElegida,
+  registrarFacturaCuenta,
+  resolverParaPedido,
+  MSG_CUENTA_INEXISTENTE,
+  MSG_SIN_CUENTA_FACTURA,
+} from "@/lib/pedido-factura-cuenta-repo"
 import {
   armarLineasFactura,
   puedeEmitir,
@@ -43,6 +55,12 @@ import { canSeeCosts } from "@/lib/roles"
 //   numeración y el bloqueo por IVA SERVER-SIDE (nunca confía en lo que mostró el preview),
 //   resuelve o crea el contacto, crea la factura en Alegra (`createInvoice`) y persiste el
 //   vínculo con el evento 'factura_emitida' del historial. 200 = detalle + `avisoFactura`.
+//
+// Cuenta que factura (change `sucursales-igz-mdp`, rebanada D): por defecto la de la sucursal que
+// despacha (o la que fuerza la zona); un admin puede elegir otra (`?cuenta=<slug>` en el GET,
+// `cuenta` en el POST, que la guarda con su auditoría). Todo —numeraciones, impuestos, contacto,
+// ítems y la factura— se hace con las credenciales de ESA cuenta; el id de cada línea se resuelve
+// en ella (y el ítem se crea si no existe). Ver `pedido-factura-cuenta-repo.ts`.
 //
 // Permiso `requireAdminPlus` (no `requireOperatorPlus`, a diferencia de "vincular") en los dos
 // verbos: emitir crea dinero real e irreversible en Alegra, aunque el GET sólo lea.
@@ -127,20 +145,62 @@ export async function GET(req: Request, { params }: IdParams) {
     const bloqueo = chequeoFacturaExistente(found.pedido)
     if (bloqueo) return bloqueo
 
-    const config = await configDe(guard.tenantId)
-    if (!config) return fail(500, "internal", MSG.sinConfig)
+    const base = await configDe(guard.tenantId)
+    if (!base) return fail(500, "internal", MSG.sinConfig)
+
+    const url = new URL(req.url)
+    const eleccion = url.searchParams.get("cuenta")?.trim() || null
+    const ctxCuenta = await cargarContextoCuentaFactura(guard.tenantId, id)
+    const res = resolverParaPedido(found.pedido, ctxCuenta, eleccion)
+    const dtoCuenta = armarCuentaFacturaDto(found.pedido, ctxCuenta, false, eleccion)
+
+    // Sin cuenta (o sin credenciales): vista previa "degradada" con el motivo como aviso bloqueante,
+    // para que el operador pueda elegir otra cuenta desde el mismo diálogo.
+    let config: TenantConfig | null = null
+    let motivoSinConfig: string | null = null
+    if (!res.cuenta) {
+      motivoSinConfig = eleccion ? MSG_CUENTA_INEXISTENTE : MSG_SIN_CUENTA_FACTURA
+    } else {
+      try {
+        config = configDeCuentaRow(base, res.cuenta)
+      } catch (err) {
+        motivoSinConfig = err instanceof Error ? err.message : MSG.sinConfig
+      }
+    }
+    if (!config || !res.cuenta) {
+      const { lineas } = armarLineasFactura(found.items)
+      const degradada = {
+        lineas,
+        total: 0,
+        totalPedido: 0,
+        numeraciones: [],
+        numeracionSugeridaId: null,
+        contacto: { alegraId: null, esNuevo: false, nombre: found.pedido.facturacionRazonSocial?.trim() || found.pedido.contactoNombre },
+        bloqueo: null,
+        avisos: [{ motivo: "sin_cuenta", detalle: motivoSinConfig ?? MSG_SIN_CUENTA_FACTURA }],
+        cuenta: { ...dtoCuenta, itemsACrear: [] as string[] },
+      }
+      return Response.json(degradada, { headers: NO_STORE })
+    }
+    const cfg = config
 
     let preview
     try {
-      preview = await resolverPreviewEmision(found.pedido, found.items, {
-        listNumberTemplates: () => listNumberTemplates(config),
-        findContactByIdentifier: (documento) => findContactByIdentifier(config, documento),
-        listTaxes: () => listTaxes(config),
-      })
+      preview = await resolverPreviewEmision(
+        found.pedido,
+        found.items,
+        {
+          listNumberTemplates: () => listNumberTemplates(cfg),
+          findContactByIdentifier: (documento) => findContactByIdentifier(cfg, documento),
+          listTaxes: () => listTaxes(cfg),
+        },
+        { cuentaPrincipal: res.cuenta.principal },
+      )
     } catch (err) {
       return errorAlegra(err, ctx)
     }
-    return Response.json(preview, { headers: NO_STORE })
+    const itemsACrear = await itemsSinIdEnCuenta(guard.tenantId, comoDestino(res.cuenta), lineasParaCuenta(found.items))
+    return Response.json({ ...preview, cuenta: { ...dtoCuenta, itemsACrear } }, { headers: NO_STORE })
   } catch (err) {
     console.error("[admin/pedidos/factura/emitir] no se pudo armar el preview", { ...ctx, err })
     return fail(500, "internal", MSG.interno)
@@ -161,6 +221,16 @@ function nombreParaContacto(pedido: PedidoRow): string {
   return pedido.facturacionRazonSocial?.trim() || pedido.contactoNombre
 }
 
+/** Líneas del pedido tal como las necesita `asegurarItemsEnCuenta` (sin las que no tienen ítem). */
+function lineasParaCuenta(items: PedidoItemRow[]): LineaParaCuenta[] {
+  return armarLineasFactura(items).lineas.map((l) => ({
+    alegraItemId: l.alegraItemId,
+    nombre: l.nombre,
+    precioUnitario: l.precioUnitario,
+    ivaPorcentaje: l.ivaPorcentaje,
+  }))
+}
+
 export async function POST(req: Request, { params }: IdParams) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
@@ -173,6 +243,9 @@ export async function POST(req: Request, { params }: IdParams) {
   if (typeof numberTemplateId !== "string" || !numberTemplateId.trim() || numberTemplateId.length > NUMBER_TEMPLATE_ID_MAX) {
     return fail(400, "invalid", MSG.numeracionRequerida)
   }
+
+  const cuentaBody = (body as Record<string, unknown>).cuenta
+  const eleccion = typeof cuentaBody === "string" && cuentaBody.trim() ? cuentaBody.trim().slice(0, 40) : null
 
   const { id } = await params
   const ctx = { tenant: guard.tenantId, orderId: id }
@@ -197,8 +270,20 @@ export async function POST(req: Request, { params }: IdParams) {
   if (bloqueoExistente) return bloqueoExistente
   if (pedido.estado === "cancelado") return fail(422, "cancelado", MSG.cancelado)
 
-  const config = await configDe(guard.tenantId)
-  if (!config) return fail(500, "internal", MSG.sinConfig)
+  const base = await configDe(guard.tenantId)
+  if (!base) return fail(500, "internal", MSG.sinConfig)
+
+  // Cuenta que factura: la elegida en esta request, la guardada en el pedido o la calculada.
+  const ctxCuenta = await cargarContextoCuentaFactura(guard.tenantId, id)
+  const res = resolverParaPedido(pedido, ctxCuenta, eleccion)
+  if (!res.cuenta) return fail(422, "sin_cuenta", eleccion ? MSG_CUENTA_INEXISTENTE : MSG_SIN_CUENTA_FACTURA)
+  const cuenta = res.cuenta
+  let config: TenantConfig
+  try {
+    config = configDeCuentaRow(base, cuenta)
+  } catch (err) {
+    return fail(422, "cuenta_sin_credenciales", err instanceof Error ? err.message : MSG.sinConfig)
+  }
 
   // ── Validaciones server-side, TODAS antes de tocar Alegra con una escritura ──
   let numeraciones
@@ -224,11 +309,16 @@ export async function POST(req: Request, { params }: IdParams) {
 
   let preview
   try {
-    preview = await resolverPreviewEmision(pedido, items, {
-      listNumberTemplates: async () => numeraciones,
-      findContactByIdentifier: (documento) => findContactByIdentifier(config, documento),
-      listTaxes: async () => taxes,
-    })
+    preview = await resolverPreviewEmision(
+      pedido,
+      items,
+      {
+        listNumberTemplates: async () => numeraciones,
+        findContactByIdentifier: (documento) => findContactByIdentifier(config, documento),
+        listTaxes: async () => taxes,
+      },
+      { cuentaPrincipal: cuenta.principal },
+    )
   } catch (err) {
     return errorAlegra(err, ctx)
   }
@@ -249,14 +339,54 @@ export async function POST(req: Request, { params }: IdParams) {
   if (reserva.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (reserva.kind === "conflict") return fail(409, "ya_vinculada", MSG.yaFacturado)
 
+  // Elección del operador (si difiere de lo que ya regía): se guarda con su auditoría.
+  if (eleccion) {
+    const antes = resolverParaPedido(pedido, ctxCuenta)
+    if (antes.cuenta?.id !== cuenta.id) {
+      try {
+        await guardarCuentaElegida(guard.tenantId, id, { cuentaId: cuenta.id, anteriorId: antes.cuenta?.id ?? null, actor, now })
+      } catch (err) {
+        await liberarReservaEmisionFactura(guard.tenantId, id)
+        console.error("[admin/pedidos/factura/emitir] no se pudo guardar la cuenta elegida", { ...ctx, err })
+        return fail(500, "internal", MSG.interno_confirmar)
+      }
+    }
+  }
+
+  // Id REAL de cada línea en la cuenta que factura (se crea el ítem si no existe). Nunca se manda
+  // el `alegra_item_id` del pedido tal cual: puede ser sintético.
+  let idsEnCuenta: Map<string, string>
+  try {
+    const resItems = await asegurarItemsEnCuenta(guard.tenantId, config, comoDestino(cuenta), lineasParaCuenta(items))
+    if (!resItems.ok) {
+      await liberarReservaEmisionFactura(guard.tenantId, id)
+      return fail(422, "item_en_cuenta", resItems.error)
+    }
+    idsEnCuenta = resItems.ids
+    if (resItems.creados.length > 0) {
+      console.info(
+        JSON.stringify({ event: "alegra_items_creados_al_facturar", tenant: guard.tenantId, orderId: id, cuenta: cuenta.slug, cantidad: resItems.creados.length }),
+      )
+    }
+  } catch (err) {
+    await liberarReservaEmisionFactura(guard.tenantId, id)
+    return errorAlegra(err, ctx)
+  }
+  const itemsAlegraCuenta = itemsAlegra.map((it) => ({ ...it, alegraId: idsEnCuenta.get(it.alegraId) ?? it.alegraId }))
+
   let contactoAlegraId = preview.contacto.alegraId
   try {
     if (preview.contacto.esNuevo || !contactoAlegraId) {
-      const creado = await crearContacto(config, {
-        name: nombreParaContacto(pedido),
-        identification: pedido.facturacionNroDoc?.trim() || undefined,
-        email: pedido.clienteEmail?.trim() || undefined,
-      })
+      // La vista previa ya buscó por documento en ESTA cuenta y no lo encontró: se crea.
+      const creado = await crearContactoEnCuenta(
+        config,
+        {
+          name: nombreParaContacto(pedido),
+          identification: pedido.facturacionNroDoc?.trim() || undefined,
+          email: pedido.clienteEmail?.trim() || undefined,
+        },
+        cuenta.principal,
+      )
       contactoAlegraId = creado.alegraId
     }
   } catch (err) {
@@ -266,7 +396,7 @@ export async function POST(req: Request, { params }: IdParams) {
 
   const createInput: AlegraInvoiceCreateInput = {
     contactAlegraId: contactoAlegraId,
-    items: itemsAlegra,
+    items: itemsAlegraCuenta,
     numberTemplate: { id: numberTemplateId },
   }
 
@@ -350,6 +480,14 @@ export async function POST(req: Request, { params }: IdParams) {
       alegraId: creada.alegraId,
       numero: creada.number,
     })
+  }
+
+  // Cuenta con la que se emitió y si fue venta entre empresas (la reserva sigue en la que despacha).
+  // La factura ya existe y está vinculada: un fallo acá no la deshace, sólo se deja constancia.
+  try {
+    await registrarFacturaCuenta(guard.tenantId, id, { cuentaId: cuenta.id, cruzada: res.cruzada, now })
+  } catch (err) {
+    console.error("[admin/pedidos/factura/emitir] no se pudo registrar la cuenta de la factura", { ...ctx, cuenta: cuenta.slug, err })
   }
 
   const aviso = await enviarFacturaPedido({ tenantId: guard.tenantId, pedido: result.pedido })

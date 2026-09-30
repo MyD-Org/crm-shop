@@ -12,6 +12,7 @@ import {
   type ShopOrderRow,
 } from "@/db/shop-schema"
 import { CUENTA_ALEGRA_PRINCIPAL } from "@/lib/alegra-contacts-repo"
+import { limpiarFacturaCuenta } from "@/lib/pedido-factura-cuenta-repo"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import type { EntregaTipo, EstadoPedido } from "@/lib/pedidos-transiciones"
 
@@ -792,6 +793,8 @@ export async function desvincularFactura(
       actor: input.actor,
       now: input.now,
     })
+    // La cuenta con la que se había emitido deja de valer (la elección del operador se conserva).
+    await limpiarFacturaCuenta(tenantId, fila.id, tx)
     return fila
   })
   if (actualizado) return okConItems(tenantId, actualizado)

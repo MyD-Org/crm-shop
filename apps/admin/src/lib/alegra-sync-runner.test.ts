@@ -50,3 +50,25 @@ describe("resumir", () => {
     expect(hayProblema(r)).toBe(false)
   })
 })
+
+describe("logDeProgreso", () => {
+  it("imprime cada ~1.500 ítems de la principal y el inicio y fin de cada cuenta", async () => {
+    const { logDeProgreso } = await import("./alegra-sync-runner")
+    const lineas: string[] = []
+    const on = logDeProgreso("central-led", (l) => lineas.push(l))
+    on({ tipo: "cuenta-inicio", cuenta: "principal" })
+    for (const leidos of [300, 900, 1500, 1800, 3000, 3300, 4500]) on({ tipo: "lectura", cuenta: "principal", leidos })
+    on({ tipo: "cuenta-fin", cuenta: "principal", ok: true, itemsSynced: 4800 })
+    on({ tipo: "cuenta-inicio", cuenta: "mdp" })
+    on({ tipo: "cuenta-fin", cuenta: "mdp", ok: false, itemsSynced: 0 })
+    expect(lineas).toEqual([
+      "central-led · cuenta principal: empieza",
+      "central-led · cuenta principal: 1.500 ítems leídos",
+      "central-led · cuenta principal: 3.000 ítems leídos",
+      "central-led · cuenta principal: 4.500 ítems leídos",
+      "central-led · cuenta principal: terminó (4.800 ítems)",
+      "central-led · cuenta mdp: empieza",
+      "central-led · cuenta mdp: falló (0 ítems)",
+    ])
+  })
+})

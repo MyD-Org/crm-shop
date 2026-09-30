@@ -32,6 +32,16 @@ export interface Progreso {
   restantes: number
 }
 
+/**
+ * Avance de la corrida para quien quiera mostrarlo (el runner de GitHub Actions lo imprime).
+ * Solo lleva conteos y el slug de la cuenta: nada sensible. Es opcional y no cambia el
+ * comportamiento de las rutas, que no lo pasan.
+ */
+export type EventoProgreso =
+  | { tipo: "cuenta-inicio"; cuenta: string }
+  | { tipo: "lectura"; cuenta: string; leidos: number }
+  | { tipo: "cuenta-fin"; cuenta: string; ok: boolean; itemsSynced: number }
+
 export interface SyncTenantResult extends SyncResult {
   /** Resumen por cuenta secundaria; ausente si el tenant no tiene ninguna activa. */
   cuentas?: SyncCuentaResult[]
@@ -150,13 +160,21 @@ function resultadoParcial(cur: CursorSync): SyncTenantResult {
 export async function syncTenant(
   config: TenantConfig,
   trigger: "cron" | "manual",
-  opts: { aceptarBaja?: boolean; presupuestoMs?: number } = {},
+  opts: { aceptarBaja?: boolean; presupuestoMs?: number; onProgreso?: (e: EventoProgreso) => void } = {},
 ): Promise<SyncTenantResult> {
   const presupuesto = opts.presupuestoMs ?? Number.POSITIVE_INFINITY
   const deadline = Date.now() + presupuesto
   // Cada cuenta tiene su tramo: si queda menos de la mitad del presupuesto, la próxima va aparte.
   const hayMargen = () => deadline - Date.now() >= presupuesto / 2
   const syncOpts = { aceptarBaja: opts.aceptarBaja }
+  // Un observador que falla nunca puede tirar la sync.
+  const avisar = (e: EventoProgreso) => {
+    try {
+      opts.onProgreso?.(e)
+    } catch {
+      /* solo informativo */
+    }
+  }
 
   const toma = await tomarCursor(config.id)
   if (toma.enCurso) return { ok: false, itemsSynced: 0, categoriesSynced: 0, error: MSG_SYNC_EN_CURSO }
@@ -164,10 +182,12 @@ export async function syncTenant(
 
   try {
     if (cur.fase === "principal") {
+      avisar({ tipo: "cuenta-inicio", cuenta: "principal" })
       const t = await syncCatalogTramo(config, trigger, syncOpts, cur.principal, {
         deadline,
         onProgreso: async (p) => {
           cur.principal = p
+          avisar({ tipo: "lectura", cuenta: "principal", leidos: p.items })
           await guardarCursor(config.id, cur, false)
         },
       })
@@ -177,6 +197,7 @@ export async function syncTenant(
         return resultadoParcial(cur)
       }
       cur.principalResult = t.result
+      avisar({ tipo: "cuenta-fin", cuenta: "principal", ok: t.result.ok, itemsSynced: t.result.itemsSynced })
       cur.principal = null
       cur.pendientes = (await secundariasActivas(config.id)).map((c) => c.slug)
       cur.fase = "secundarias"
@@ -196,6 +217,7 @@ export async function syncTenant(
         cur.pendientes.shift()
         continue
       }
+      avisar({ tipo: "cuenta-inicio", cuenta: slug })
       try {
         cur.cuentas.push(await syncCuentaSecundaria(config, c, trigger, syncOpts))
       } catch (err) {
@@ -203,6 +225,8 @@ export async function syncTenant(
         console.error(`[alegra-sync-tenant] tenant=${config.id} cuenta=${slug} error: ${err instanceof Error ? err.name : "error"}`)
         cur.cuentas.push({ ok: false, cuenta: slug, itemsSynced: 0, categoriesSynced: 0, error: "sync_failed" })
       }
+      const ultima = cur.cuentas[cur.cuentas.length - 1]
+      avisar({ tipo: "cuenta-fin", cuenta: slug, ok: ultima.ok, itemsSynced: ultima.itemsSynced })
       cur.pendientes.shift()
       if (cur.pendientes.length > 0 && !hayMargen()) {
         await guardarCursor(config.id, cur, true)

@@ -27,7 +27,7 @@ vi.mock("@/lib/alegra", async (importOriginal) => ({
     return { items: todos.slice(start, start + tamLote), siguiente: start + tamLote, fin }
   },
 }))
-let tamLote = Number.POSITIVE_INFINITY
+const tamLote = Number.POSITIVE_INFINITY
 
 const { avisarShopMock } = vi.hoisted(() => ({ avisarShopMock: vi.fn() }))
 vi.mock("@/lib/aviso-shop", () => ({ avisarShop: avisarShopMock }))

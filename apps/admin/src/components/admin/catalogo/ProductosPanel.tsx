@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
 import { Check, Copy, Package, RefreshCw } from "lucide-react"
 import {
   Badge,
@@ -25,6 +25,7 @@ import {
   precioDeLista,
   queryDeFiltros,
   stockDe,
+  stockEnSucursal,
   type CategoriaDto,
   type CuentaOrigenDto,
   type SucursalOpcionDto,
@@ -70,7 +71,7 @@ interface Pendiente {
 const TODOS = "todos"
 
 /** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
-const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta", "sucursal"] as const
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta", "sucursal", "stockEn"] as const
 
 /** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
 function Sku({ sku }: { sku: string }) {
@@ -123,18 +124,26 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
   const [pendiente, setPendiente] = useState<Pendiente | null>(null)
   const [aplicando, setAplicando] = useState(false)
 
+  // Sólo vale la respuesta del último pedido: una consulta vieja que llega tarde (p. ej. la de los
+  // filtros iniciales después de "Limpiar filtros") no debe pisar el listado actual.
+  const pedidoActual = useRef(0)
+
   const cargar = useCallback(async () => {
+    const pedido = ++pedidoActual.current
     setCargando(true)
     try {
       const params = queryDeFiltros(filtros)
       params.set("start", String(start))
       params.set("limit", String(PAGINA))
-      setDatos(await api<ListadoDto>(`/api/admin/catalogo/productos?${params.toString()}`))
+      const respuesta = await api<ListadoDto>(`/api/admin/catalogo/productos?${params.toString()}`)
+      if (pedido !== pedidoActual.current) return
+      setDatos(respuesta)
       setError("")
     } catch (err) {
+      if (pedido !== pedidoActual.current) return
       setError(err instanceof ErrorApi ? err.message : "No pudimos cargar el catálogo.")
     } finally {
-      setCargando(false)
+      if (pedido === pedidoActual.current) setCargando(false)
     }
   }, [filtros, start])
 
@@ -158,6 +167,21 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       const next = { ...prev }
       if (valor === TODOS) delete next[clave]
       else Object.assign(next, { [clave]: valor })
+      return next
+    })
+    setStart(0)
+    setSeleccion([])
+    setTodoElFiltro(false)
+  }
+
+  /** El select de stock maneja dos parámetros excluyentes: `stock` (con/sin) y `stockEn` (sucursal). */
+  function cambiarFiltroStock(valor: string) {
+    setFiltros((prev) => {
+      const next = { ...prev }
+      delete next.stock
+      delete next.stockEn
+      if (valor.startsWith("en:")) next.stockEn = valor.slice(3)
+      else if (valor !== TODOS) Object.assign(next, { stock: valor })
       return next
     })
     setStart(0)
@@ -222,7 +246,10 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
   const hayVariasCuentas = cuentas.length > 1
   const hayVariasSucursales = sucursales.length > 1
   const nombreSucursal = (slug: string) => sucursales.find((s) => s.slug === slug)?.nombre ?? slug
-  const nombreCuentaPrincipal = cuentas.find((c) => c.principal)?.nombre ?? "Principal"
+  // Manda el nombre de la SUCURSAL asignada a la cuenta: el de la cuenta puede haber quedado viejo.
+  const nombreDeCuenta = (c: CuentaOrigenDto) => c.sucursal ?? c.nombre
+  const nombreCuentaPrincipal = nombreDeCuenta(cuentas.find((c) => c.principal) ?? { slug: "", nombre: "Principal", principal: true })
+  const sucursalesActivas = sucursales.filter((s) => s.activa)
 
   const columns: TableColumn<ProductoDto>[] = [
     {
@@ -268,7 +295,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             hideBelow: "lg",
             render: (p: ProductoDto) => (
               <span className="text-xs" style={{ color: "var(--ink-soft)" }}>
-                {p.cuenta ? p.cuenta.nombre : nombreCuentaPrincipal}
+                {p.cuenta ? (p.cuenta.sucursal ?? p.cuenta.nombre) : nombreCuentaPrincipal}
               </span>
             ),
           } satisfies TableColumn<ProductoDto>,
@@ -293,7 +320,16 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       render: (p) => {
         const s = stockDe(p.stock)
         return (
-          <span style={{ color: s?.hay ? "var(--ink-soft)" : "var(--ink-faint)" }}>{s ? s.texto : "Sin dato"}</span>
+          <>
+            <div style={{ color: s?.hay ? "var(--ink-soft)" : "var(--ink-faint)" }}>{s ? s.texto : "Sin dato"}</div>
+            {hayVariasSucursales && (
+              <div className="whitespace-nowrap" style={{ color: "var(--ink-faint)" }}>
+                {sucursalesActivas
+                  .map((suc) => `${suc.nombre} ${stockEnSucursal(p, suc.slug)?.texto ?? "—"}`)
+                  .join(" · ")}
+              </div>
+            )}
+          </>
         )
       },
     },
@@ -413,14 +449,19 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             { value: "sin", label: "Precio: sin precio" },
           ]}
         />
+        {/* Un solo filtro de stock: "con/sin stock" mira cualquier sucursal; con varias sucursales
+            se suma "con stock en <sucursal>" (parámetro `stockEn`). */}
         <Select
           aria-label="Filtrar por stock"
-          value={filtros.stock ?? TODOS}
-          onValueChange={(v) => cambiarFiltro("stock", v)}
+          value={filtros.stockEn ? `en:${filtros.stockEn}` : (filtros.stock ?? TODOS)}
+          onValueChange={cambiarFiltroStock}
           options={[
             { value: TODOS, label: "Stock: todos" },
             { value: "con", label: "Stock: con stock" },
             { value: "sin", label: "Stock: sin stock" },
+            ...(hayVariasSucursales
+              ? sucursalesActivas.map((s) => ({ value: `en:${s.slug}`, label: `Stock: con stock en ${s.nombre}` }))
+              : []),
           ]}
         />
         {hayVariasCuentas && (
@@ -430,20 +471,22 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             onValueChange={(v) => cambiarFiltro("cuenta", v)}
             options={[
               { value: TODOS, label: "Cuenta de origen: todas" },
-              { value: "principal", label: `Cuenta de origen: ${nombreCuentaPrincipal}` },
-              ...cuentas.filter((c) => !c.principal).map((c) => ({ value: c.slug, label: `Cuenta de origen: solo ${c.nombre}` })),
+              { value: "principal", label: `Cuenta de origen: ${nombreCuentaPrincipal} (incluye repetidos)` },
+              ...cuentas
+                .filter((c) => !c.principal)
+                .map((c) => ({ value: c.slug, label: `Cuenta de origen: existen solo en ${nombreDeCuenta(c)}` })),
             ]}
           />
         )}
         {hayVariasSucursales && (
           <Select
-            aria-label="Filtrar por visibilidad en sucursal"
+            aria-label="Filtrar por sucursal donde se ofrece el producto"
             value={filtros.sucursal ?? TODOS}
             onValueChange={(v) => cambiarFiltro("sucursal", v)}
             options={[
-              { value: TODOS, label: "Sucursal: todas" },
-              ...sucursales.map((s) => ({ value: `visible:${s.slug}`, label: `Visible en ${s.nombre}` })),
-              ...sucursales.map((s) => ({ value: `oculto:${s.slug}`, label: `Oculto en ${s.nombre}` })),
+              { value: TODOS, label: "Visible en: todas" },
+              ...sucursales.map((s) => ({ value: `visible:${s.slug}`, label: `Visible en: ${s.nombre}` })),
+              ...sucursales.map((s) => ({ value: `oculto:${s.slug}`, label: `Oculto en: ${s.nombre}` })),
             ]}
           />
         )}
@@ -457,6 +500,15 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           ]}
         />
       </div>
+
+      {(hayVariasCuentas || hayVariasSucursales) && (
+        <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+          {hayVariasCuentas &&
+            "«Cuenta de origen: existen solo en …» muestra los productos que están únicamente en esa cuenta, no los que tienen stock allí. "}
+          {hayVariasSucursales &&
+            "Para ver los productos con stock en una sucursal use «Stock: con stock en …»; «Visible en» y «Oculto en» indican dónde se ofrece cada producto en la tienda."}
+        </p>
+      )}
 
       {datos && (
         <p className="text-xs" style={{ color: "var(--ink-faint)" }}>

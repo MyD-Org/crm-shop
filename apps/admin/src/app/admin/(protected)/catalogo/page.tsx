@@ -24,17 +24,25 @@ export default async function CatalogoPage() {
     listarTags(guard.tenantId),
     // Sólo nombre y slug (nunca credenciales): alcanza para la columna/filtro "Cuenta de origen".
     getDb()
-      .select({ slug: alegraCuentas.slug, nombre: alegraCuentas.nombre, principal: alegraCuentas.principal })
+      .select({ id: alegraCuentas.id, slug: alegraCuentas.slug, nombre: alegraCuentas.nombre, principal: alegraCuentas.principal })
       .from(alegraCuentas)
       .where(and(eq(alegraCuentas.tenantId, guard.tenantId), eq(alegraCuentas.activa, true)))
       .orderBy(asc(alegraCuentas.slug)),
     // Para el campo "Visible en" del producto y el filtro por sucursal (solo slug, nombre y estado).
     getDb()
-      .select({ slug: sucursales.slug, nombre: sucursales.nombre, activa: sucursales.activa })
+      .select({ slug: sucursales.slug, nombre: sucursales.nombre, activa: sucursales.activa, cuentaAlegraId: sucursales.cuentaAlegraId })
       .from(sucursales)
       .where(eq(sucursales.tenantId, guard.tenantId))
       .orderBy(asc(sucursales.orden), asc(sucursales.nombre)),
   ])
+
+  // El nombre de la cuenta puede haber quedado desfasado del de su sucursal: el filtro "Cuenta de
+  // origen" muestra el de la SUCURSAL asignada (la primera por orden) cuando existe.
+  const cuentasConSucursal = cuentas.map(({ id, ...c }) => ({
+    ...c,
+    sucursal: sucursalesDelTenant.find((s) => s.cuentaAlegraId === id)?.nombre ?? null,
+  }))
+  const sucursalesOpciones = sucursalesDelTenant.map((s) => ({ slug: s.slug, nombre: s.nombre, activa: s.activa }))
 
   // La url se compone acá, al servir: en la base sólo vive la key.
   const base = basePublicaFotos()
@@ -52,7 +60,7 @@ export default async function CatalogoPage() {
           Qué muestra la tienda: nombres, categorías, etiquetas y publicación
         </p>
       </div>
-      <CatalogoShell initialCategorias={conUrlDeImagen} initialTags={tags} cuentas={cuentas} sucursales={sucursalesDelTenant} />
+      <CatalogoShell initialCategorias={conUrlDeImagen} initialTags={tags} cuentas={cuentasConSucursal} sucursales={sucursalesOpciones} />
     </div>
   )
 }

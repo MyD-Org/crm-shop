@@ -12,7 +12,8 @@
  * Funciones puras: las rutas hacen la lectura de la base.
  */
 import type { Product } from "@/data/products";
-import { atributosDeTexto } from "./catalogo-atributos";
+import { atributosDeProducto } from "./catalogo-atributos";
+import { atributosParaAgente, etiquetasTecnicas } from "./catalogo-caracteristicas";
 import { maxCantidad } from "./catalogo-vista";
 import { formatMarca, formatRubro } from "./formato-rubro";
 
@@ -33,6 +34,12 @@ export interface ProductoAgente {
   precioReferencia: number;
   stock: "disponible" | "pocas unidades" | "sin stock";
   descripcion?: string;
+  /**
+   * Datos técnicos estructurados del CRM (fichas estructuradas, fase 2), compactos:
+   * `{ potencia_w: 50, tono: "calido", tension_v: "85-265", zocalo: "e27" }`. Así el agente
+   * compara sin leer PDFs. Ausente si el producto no tiene o la tabla no está disponible.
+   */
+  atributos?: Record<string, number | string>;
 }
 
 /** Contrato `ResolvedProduct` de platform/contracts/sales-cards/v1. */
@@ -86,6 +93,7 @@ export function aProductoAgente(p: Product): ProductoAgente {
     precioReferencia: p.precioFinal ?? p.price,
     stock: STOCK_TEXTO[p.stock] ?? "disponible",
     ...(recortar(p.description, DESCRIPCION_MAX) ? { descripcion: recortar(p.description, DESCRIPCION_MAX) } : {}),
+    ...(atributosParaAgente(p.atributosEstructurados) ? { atributos: atributosParaAgente(p.atributosEstructurados) } : {}),
   };
 }
 
@@ -110,9 +118,19 @@ export function aProductoResuelto(p: Product): ProductoResuelto {
   };
 }
 
-/** `{ attributes }` con los nombres de los atributos del producto, o nada. */
-function atributosDe(p: Pick<Product, "name" | "description">): { attributes?: string[] } {
-  const nombres = atributosDeTexto(`${p.name} ${p.description ?? ""}`).map((a) => a.nombre);
+/**
+ * `{ attributes }` para la card `spec`: los atributos del diccionario que cumple el producto (dato
+ * estructurado primero, patrón del nombre si no hay) y, con datos estructurados, los valores
+ * técnicos ("50 W", "3000 K", "IP65"). El contrato `sales-cards/v1` es una lista de textos.
+ */
+function atributosDe(p: Pick<Product, "name" | "description" | "atributosEstructurados">): { attributes?: string[] } {
+  // Sin repetidos: "220 V" puede salir del diccionario y del valor técnico a la vez.
+  const nombres = [
+    ...new Set([
+      ...atributosDeProducto(`${p.name} ${p.description ?? ""}`, p.atributosEstructurados).map((a) => a.nombre),
+      ...etiquetasTecnicas(p.atributosEstructurados),
+    ]),
+  ];
   return nombres.length ? { attributes: nombres } : {};
 }
 
@@ -152,7 +170,7 @@ export function facetasDeProductos(
       : p.category;
     if (categoria && !categorias.has(categoria)) categorias.set(categoria, { id: categoria, nombre: formatRubro(categoria) });
     if (p.brand && !marcas.has(p.brand)) marcas.set(p.brand, { id: p.brand, nombre: formatMarca(p.brand) });
-    for (const a of atributosDeTexto(`${p.name} ${p.description ?? ""}`)) {
+    for (const a of atributosDeProducto(`${p.name} ${p.description ?? ""}`, p.atributosEstructurados)) {
       if (!atributos.has(a.id)) atributos.set(a.id, { id: a.id, nombre: a.nombre });
     }
   }

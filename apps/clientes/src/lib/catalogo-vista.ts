@@ -177,6 +177,20 @@ export interface ChipFiltro {
 const hayPrecio = (e: Pick<EstadoCatalogo, "precioMin" | "precioMax">) =>
   e.precioMin != null || e.precioMax != null;
 
+const hayPotencia = (e: Pick<EstadoCatalogo, "potenciaMin" | "potenciaMax">) =>
+  e.potenciaMin != null || e.potenciaMax != null;
+
+const watts = (n: number) => `${n.toLocaleString("es-AR")} W`;
+
+/** "Potencia: 10 – 50 W", "Potencia: desde 10 W", "Potencia: hasta 50 W". */
+function etiquetaPotencia(estado: EstadoCatalogo): string {
+  if (estado.potenciaMin != null && estado.potenciaMax != null)
+    return `Potencia: ${estado.potenciaMin.toLocaleString("es-AR")} – ${watts(estado.potenciaMax)}`;
+  return estado.potenciaMin != null
+    ? `Potencia: desde ${watts(estado.potenciaMin)}`
+    : `Potencia: hasta ${watts(estado.potenciaMax ?? 0)}`;
+}
+
 function etiquetaPrecio(estado: EstadoCatalogo, rango: RangoPrecio | null): string {
   if (rango) {
     const [min, max] = rangoEfectivo(estado, rango);
@@ -208,7 +222,7 @@ export interface LocalFiltro {
 
 /**
  * Chips de filtros activos, en el orden del panel: categorías → marcas →
- * características (atributos) → precio → stock.
+ * características (atributos) → potencia → precio → stock.
  * `locales` pone el nombre del local en el chip de "Con stock en"; sin él se muestra el slug.
  */
 export function chipsActivos(
@@ -234,6 +248,9 @@ export function chipsActivos(
     ...estado.atributos.map((a) =>
       chip(`atributo:${a}`, nombreAtributo(a), { atributos: estado.atributos.filter((x) => x !== a) })
     ),
+    ...(hayPotencia(estado)
+      ? [chip("potencia", etiquetaPotencia(estado), { potenciaMin: undefined, potenciaMax: undefined })]
+      : []),
     ...(hayPrecio(estado)
       ? [
           chip("precio", etiquetaPrecio(estado, rango), {
@@ -268,6 +285,8 @@ export function limpiarFiltros(): Partial<EstadoCatalogo> {
     atributos: [],
     precioMin: undefined,
     precioMax: undefined,
+    potenciaMin: undefined,
+    potenciaMax: undefined,
     soloStock: SOLO_STOCK_DEFAULT,
     retiroEn: undefined,
   };
@@ -285,6 +304,7 @@ export function contarFiltrosActivos(estado: EstadoCatalogo): number {
     estado.marcas.length +
     estado.atributos.length +
     (hayPrecio(estado) ? 1 : 0) +
+    (hayPotencia(estado) ? 1 : 0) +
     (estado.retiroEn || stockFueraDeDefault(estado) ? 1 : 0)
   );
 }
@@ -311,6 +331,7 @@ export function indexable(estado: EstadoCatalogo): boolean {
     estado.marcas.length === 0 &&
     estado.atributos.length === 0 &&
     !hayPrecio(estado) &&
+    !hayPotencia(estado) &&
     !stockFueraDeDefault(estado) &&
     estado.orden === ORDEN_DEFAULT &&
     estado.vista === VISTA_DEFAULT &&

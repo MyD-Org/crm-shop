@@ -52,6 +52,8 @@ describe("filtrosCacheables", () => {
     expect(filtrosCacheables({ busqueda: "led" })).toBe(false);
     expect(filtrosCacheables({ precioMin: 0 })).toBe(false);
     expect(filtrosCacheables({ precioMax: 5000 })).toBe(false);
+    expect(filtrosCacheables({ potenciaMin: 10 })).toBe(false);
+    expect(filtrosCacheables({ potenciaMax: 50 })).toBe(false);
   });
 });
 

@@ -148,3 +148,43 @@ describe("facetasDeProductos", () => {
     expect(facetasDeProductos(productos, new Map()).categorias).toEqual([{ id: "ILUMINACION", nombre: "Iluminación" }]);
   });
 });
+
+describe("fichas estructuradas (fase 2)", () => {
+  const conAtributos: Product = {
+    ...base,
+    name: "REFLECTOR LED 50W",
+    description: undefined,
+    atributosEstructurados: {
+      potencia_w: { n: 50, t: null },
+      tono: { n: null, t: "calido" },
+      ip: { n: 65, t: null },
+      tension_v: { n: 220, t: "85-265" },
+    },
+  };
+
+  it("ProductoAgente trae los atributos compactos; sin estructurados no aparece la clave", () => {
+    expect(aProductoAgente(conAtributos).atributos).toEqual({ potencia_w: 50, tono: "calido", ip: 65, tension_v: "85-265" });
+    expect(aProductoAgente(base)).not.toHaveProperty("atributos");
+  });
+
+  it("card spec: atributos del diccionario (estructurado primero) + valores técnicos", () => {
+    expect(aProductoResuelto(conAtributos).attributes).toEqual([
+      "Luz cálida",
+      "Apto exterior",
+      "220 V",
+      "50 W",
+      "IP65",
+      "85–265 V",
+    ]);
+  });
+
+  it("card spec sin repetidos: 220 V del diccionario y del valor técnico es uno solo", () => {
+    const p: Product = { ...base, name: "LAMPARA", description: undefined, atributosEstructurados: { tension_v: { n: 220, t: null } } };
+    expect(aProductoResuelto(p).attributes).toEqual(["220 V"]);
+  });
+
+  it("facetas del agente usan el dato estructurado", () => {
+    const f = facetasDeProductos([conAtributos], new Map());
+    expect(f.atributos.map((a) => a.id)).toEqual(["tono-calido", "apto-exterior", "tension-220v"]);
+  });
+});

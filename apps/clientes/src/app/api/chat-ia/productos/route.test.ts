@@ -11,6 +11,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/catalog", () => ({ getProductosPorIds: (...a: unknown[]) => getProductosPorIds(...a) }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
+const disponibles = vi.fn(async () => false);
+vi.mock("@/lib/catalogo-atributos-disponibles", () => ({ atributosEstructuradosDisponibles: () => disponibles() }));
 vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisibles: false, cuotas: false }) }));
 
 import { GET } from "./route";
@@ -53,6 +55,22 @@ describe("GET /api/chat-ia/productos", () => {
     });
     expect((await res.json()).map((p: { id: string }) => p.id)).toEqual(["1", "2"]);
     expect(idPriceListCliente).not.toHaveBeenCalled();
+  });
+
+  it("atributos estructurados sólo con busqueda-ia Y la tabla disponible", async () => {
+    getProductosPorIds.mockResolvedValue(new Map([["1", prod("1")]]));
+    disponibles.mockResolvedValue(true);
+    await pedir("?ids=1");
+    expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], { idPriceList: undefined, soloActivos: true, soloVisibles: false });
+    setFlag("busqueda-ia", true);
+    await pedir("?ids=1");
+    expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], {
+      idPriceList: undefined,
+      soloActivos: true,
+      soloVisibles: false,
+      atributosEstructurados: true,
+    });
+    disponibles.mockResolvedValue(false);
   });
 
   it("cliente vinculado ⇒ su lista de precios, sacada de la sesión", async () => {

@@ -393,6 +393,24 @@ describe("búsqueda interpretada (`ia`)", () => {
   });
 });
 
+describe("potencia en chips, contador, limpiar e indexable (fase 2)", () => {
+  it("chip con el rango y cambio que lo quita", () => {
+    const chips = chipsActivos({ ...base, potenciaMin: 10, potenciaMax: 50 }, null);
+    expect(chips).toContainEqual(
+      expect.objectContaining({ clave: "potencia", etiqueta: "Potencia: 10 – 50 W", cambios: { potenciaMin: undefined, potenciaMax: undefined } }),
+    );
+    expect(chipsActivos({ ...base, potenciaMin: 100 }, null).find((c) => c.clave === "potencia")?.etiqueta).toBe("Potencia: desde 100 W");
+    expect(chipsActivos({ ...base, potenciaMax: 9 }, null).find((c) => c.clave === "potencia")?.etiqueta).toBe("Potencia: hasta 9 W");
+  });
+
+  it("cuenta como filtro, limpiar la quita y no es indexable", () => {
+    expect(contarFiltrosActivos({ ...base, potenciaMin: 10 })).toBe(1);
+    expect(limpiarFiltros()).toHaveProperty("potenciaMin", undefined);
+    expect(limpiarFiltros()).toHaveProperty("potenciaMax", undefined);
+    expect(indexable({ ...base, potenciaMax: 50 })).toBe(false);
+  });
+});
+
 describe("filtro 'Con stock en <local>' en chips y contadores", () => {
   const locales = [
     { slug: "igz", nombre: "Puerto Iguazú" },

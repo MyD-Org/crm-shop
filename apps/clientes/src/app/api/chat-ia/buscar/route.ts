@@ -3,6 +3,7 @@ import { getArbolCategorias, getCatalogo } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoAgente, facetasDeProductos, limiteBusqueda } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
@@ -55,12 +56,19 @@ export async function GET(req: Request) {
   try {
     // Con el flag `disponibilidad-sucursal`, el mismo criterio que el catálogo: stock en cualquier
     // local y sin lo que ninguna sucursal ofrece (el agente no ofrece lo oculto ni stock que no hay).
-    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
-    let productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp });
+    // Datos técnicos estructurados (`ProductoAgente.atributos`) si la tabla del CRM está disponible.
+    const [{ soloVisibles }, disp, estructurados] = await Promise.all([
+      flagsPublicos(),
+      dispCatalogo(),
+      // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
+      usarAtributosEstructurados(),
+    ]);
+    const conAtributos = estructurados ? { atributosEstructurados: true } : {};
+    let productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp, ...conAtributos });
     // Mismo criterio que el buscador del Shop: si lo exacto no trae nada, se
     // reintenta tolerando typos. Si ese intento falla, queda lo exacto (vacío).
     if (productos.length === 0) {
-      productos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true, disp }).catch((err: unknown) => {
+      productos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true, disp, ...conAtributos }).catch((err: unknown) => {
         console.error(`[chat-ia/buscar] falló la búsqueda tolerante: ${err instanceof Error ? err.name : "desconocido"}`);
         return productos;
       });

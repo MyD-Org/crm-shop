@@ -7,6 +7,7 @@ import { motivoError } from "./alegra-webhook-comun"
 import type { EventoStock } from "./alegra-stock-webhook"
 import { marcarItemInactivo, upsertProductos } from "./catalog-products-repo"
 import { avisarShop } from "./aviso-shop"
+import { sincronizarAtributosDeNombre } from "./catalogo-atributos-repo"
 import { partirIdDeCola, refrescarItemDeCuenta } from "./alegra-stock-cuenta"
 
 // Cola de ítems a re-leer de Alegra (tabla alegra_item_refresh) y su drenador.
@@ -260,6 +261,8 @@ export async function drenarTenant(
               })
               if (producto) {
                 await upsertProductos(tenantId, [producto], { leidoAt, leidoPor: "webhook" })
+                // Un cambio de nombre llega por acá en minutos: sus atributos también (tolerante).
+                await sincronizarAtributosDeNombre(tenantId, [producto], "webhook")
                 r.leidos++
               } else {
                 await marcarItemInactivo(tenantId, f.alegraId, leidoAt)

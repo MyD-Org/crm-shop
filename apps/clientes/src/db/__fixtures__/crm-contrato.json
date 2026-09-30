@@ -196,5 +196,12 @@
     "orden": "integer",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
+  },
+  "public.catalog_atributos": {
+    "tenant_id": "text",
+    "alegra_id": "text",
+    "clave": "text",
+    "valor_num": "numeric",
+    "valor_texto": "text"
   }
 }

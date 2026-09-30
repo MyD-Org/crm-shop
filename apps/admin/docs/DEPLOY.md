@@ -61,6 +61,7 @@ actualizalos también allá.
 | `STAFF_TOKEN_SECRET` | Compartido con ai-api |
 | `SHOP_INTERNAL_URL` | Opcional. Base URL del Shop del mismo entorno (ej. `https://dev.cliente.example`). Al guardar Medios de pago / Cuotas el CRM hace `POST {SHOP_INTERNAL_URL}/api/internal/cuotas/revalidar`; sin la var el ping es no-op y el Shop toma los cambios en su próximo cron. Contrato: `platform/contracts/cuotas/v2`. |
 | `MP_PUBLIC_KEY` | Opcional. Public key de Mercado Pago **del mismo entorno que el Shop** (TEST en Preview/dev, productiva en Production). Sólo se usa para mostrar en Configuración → Medios de pago / Cuotas las tasas reales por cantidad de cuotas (`GET api.mercadopago.com/v1/payment_methods/installments`, caché 1 h). Es pública (no es secreto). Sin la var el panel de tasas muestra un aviso; si Mercado Pago falla, la página carga igual. |
+| `ANTHROPIC_API_KEY` | Opcional. Lector de fichas técnicas del catálogo (botón "Leer ficha técnica", Claude Haiku). Sin la var el botón queda deshabilitado y la ruta responde 503. |
 | `RESEND_API_KEY` | Envío de emails (el `RESEND_FROM` debe ser un dominio verificado en Resend) |
 | `ADMIN_EMAIL` | Login del backoffice |
 | `ADMIN_PASSWORD` | Login del backoffice — usar una contraseña fuerte en prod |

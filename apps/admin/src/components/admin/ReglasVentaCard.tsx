@@ -176,7 +176,7 @@ export function ReglasVentaCard() {
             </h3>
             <Field
               label="Horas para el aviso “sin contactar”"
-              hint="Pasadas estas horas sin marcar el pedido como contactado, se resalta en Pedidos."
+              hint="Pasadas estas horas sin marcar el pedido como contactado, se resalta en Pedidos. Con 0 no se resalta ningún pedido."
               error={errores.avisoSinContactarHoras}
             >
               <Input

@@ -62,15 +62,20 @@ export function opcionesDeFiltroSucursal(sucursales: { slug: string; nombre: str
   ]
 }
 
-/** Las 4 colas de "Para atender", en el orden en que se muestran. Severidad = color de la barrita. */
+/** Las colas de "Para atender", en el orden en que se muestran. Severidad = color de la barrita. */
 export const COLAS_INFO: Record<Cola, { label: string; severidad: "amber" | "danger" | "info" }> = {
   sin_confirmar: { label: "Sin confirmar", severidad: "amber" },
   pago: { label: "Pago a revisar", severidad: "danger" },
   datos: { label: "Revisar datos", severidad: "amber" },
   sin_factura: { label: "Entregados sin factura", severidad: "info" },
+  // El umbral de horas es de las reglas de venta: la pantalla lo agrega al rótulo.
+  sin_contactar: { label: "Sin contactar", severidad: "danger" },
 }
 
-export const ORDEN_COLAS: Cola[] = ["sin_confirmar", "pago", "datos", "sin_factura"]
+export const ORDEN_COLAS: Cola[] = ["sin_confirmar", "sin_contactar", "pago", "datos", "sin_factura"]
+
+/** Atajos del diálogo de cancelación. "Sin respuesta" es el motivo típico de la cola "Sin contactar". */
+export const MOTIVOS_FRECUENTES = ["Sin respuesta del cliente"] as const
 
 /** Misma regla que la cola `sin_factura` del servidor: ENTREGADO y sin factura vinculada. */
 export function esSinFactura(p: { estado: EstadoPedido; facturado: boolean }): boolean {

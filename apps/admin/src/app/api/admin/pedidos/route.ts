@@ -1,5 +1,6 @@
 import { requireOperatorPlus } from "@/lib/admin-route-guard"
 import { listarSucursales } from "@/lib/sucursales-repo"
+import { enriquecerConContacto } from "@/lib/pedidos-contacto-repo"
 import { listarPedidos, TABLERO_MAX_LIMIT, toPedidoDto, type Cola } from "@/lib/pedidos-repo"
 import { esEstadoPedido, type EstadoPedido } from "@/lib/pedidos-transiciones"
 
@@ -19,7 +20,7 @@ const Q_MAX = 120
 
 const ENTREGA_TIPOS = ["retiro", "envio"] as const
 const PAGO_ESTADOS = ["pagado", "pendiente"] as const
-const COLAS = ["sin_confirmar", "pago", "datos", "sin_factura"] as const
+const COLAS = ["sin_confirmar", "pago", "datos", "sin_factura", "sin_contactar"] as const
 
 const invalid = (error: string) => Response.json({ error, code: "invalid" }, { status: 400, headers: NO_STORE })
 
@@ -95,7 +96,8 @@ export async function GET(req: Request) {
       limit: vista === "tablero" ? TABLERO_MAX_LIMIT : limit,
       vista,
     })
-    return Response.json({ items: items.map(toPedidoDto), total, colas }, { headers: NO_STORE })
+    const { items: conContacto, contacto } = await enriquecerConContacto(guard.tenantId, items.map(toPedidoDto))
+    return Response.json({ items: conContacto, total, colas, contacto }, { headers: NO_STORE })
   } catch (err) {
     // Caso típico: el esquema `shop` todavía no existe en esta base. Tiene que fallar RUIDOSO
     // (500 + log), no contestar una lista vacía que parezca "no hay pedidos". El detalle

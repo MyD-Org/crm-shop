@@ -33,15 +33,48 @@
   --color-success-sobre-oscuro: var(--color-success-sobre-oscuro);
 }
 
-/* Chat del asistente acoplado a la derecha (ai-widget 0.7.0, pantallas de
-   1280 px o más): ancho del panel, y mientras está abierto el <body> le reserva
-   ese ancho (ChatIaWidget pone `data-chat-dock` en <html>). El chat carga
+/* viewport-fit=cover (layout.tsx): en horizontal, con muesca, el contenido no
+   se mete debajo; es el mismo recorte que había sin `cover`. Arriba y abajo
+   se encargan los elementos fijos (barras de compra, avisos, visor). */
+body {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Chat del asistente acoplado a la derecha (ai-widget, pantallas de 1280 px o
+   más): ancho del panel, y mientras está abierto el <body> le reserva ese
+   ancho (ChatIaWidget pone `data-chat-dock` en <html>). El chat carga
    cerrado, así que el primer pintado no se corre. */
 :root {
   --aichat-dock-width: 400px;
 }
 html[data-chat-dock="abierto"] body {
-  padding-right: var(--aichat-dock-width);
+  padding-right: calc(var(--aichat-dock-width) + env(safe-area-inset-right, 0px));
+}
+
+/* Chat en mobile (ai-widget 0.8.0, < 768 px) y las barras de compra fijas de
+   la ficha y el carrito (`data-barra-compra`, `lg:hidden`):
+   - el launcher (y el teaser, que va arriba de él) sube por encima de la
+     barra mientras se ve (la del carrito se retira con `aria-hidden` cuando el
+     resumen está a la vista). 5.5rem = alto de la barra + 1rem, lo mismo que
+     usa el aviso de "Quitó…"; la safe-area la suma el widget.
+   - con la hoja minimizada (barra "peek" del chat abajo, `data-chat-peek`),
+     la barra de compra se apoya encima de ella en vez de quedar tapada. */
+@media (width < 64rem) {
+  :root:has([data-barra-compra]:not([aria-hidden])) {
+    --aichat-launcher-bottom: 5.5rem;
+  }
+  html[data-chat-peek] [data-barra-compra] {
+    bottom: calc(var(--aichat-peek-height, 64px) + env(safe-area-inset-bottom, 0px));
+  }
+}
+/* Entre 768 px y `lg` el widget ya no es mobile (launcher y teaser a 26 px del
+   borde, sin `--aichat-launcher-bottom`) pero las barras de compra siguen: se
+   suben a mano para que no tapen "Agregar al carrito" / "Iniciar compra". */
+@media (48rem <= width < 64rem) {
+  :root:has([data-barra-compra]:not([aria-hidden])) :is(.aichat-launcher, .aichat-teaser) {
+    bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   body {

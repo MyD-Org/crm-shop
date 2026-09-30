@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { esAR } from "@/lib/clerk-localizacion";
 import { Nunito_Sans, Sora } from "next/font/google";
@@ -49,6 +49,19 @@ export const metadata: Metadata = {
         },
       }
     : {}),
+};
+
+/**
+ * `viewport-fit=cover`: la página ocupa también el área de la muesca y del
+ * indicador de inicio, y `env(safe-area-inset-*)` deja de valer 0. Lo pide la
+ * hoja mobile del chat (ai-widget 0.8.0) y lo usan las barras fijas de abajo
+ * (ficha, carrito, avisos, visor de fotos). Los costados los cubre el
+ * `padding` del `<body>` en globals.css. Ancho y escala, los de siempre.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 /**

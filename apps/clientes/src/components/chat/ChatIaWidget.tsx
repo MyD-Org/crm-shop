@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChatDrawer, type CommerceCallbacks } from "@myd-org/ai-widget/preset";
+import { ChatDrawer, type ChatPresentation, type CommerceCallbacks } from "@myd-org/ai-widget/preset";
 import "@myd-org/ai-widget/styles";
 import { useCart } from "@/context/CartContext";
 import type { PropsChatIa } from "@/lib/chat-ia";
@@ -10,11 +10,16 @@ import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
 import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
 import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
 import { useChatIa } from "@/hooks/useChatIa";
+import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
 import {
   ATRIBUTO_DOCK,
+  ATRIBUTO_PEEK,
+  BREAKPOINT_MOBILE,
   MEDIA_DOCK,
+  MEDIA_MOBILE,
   comoDeshacer,
+  hojaMinimizada,
   hrefDeFiltros,
   idProductoDeRuta,
   puedeNavegarSolo,
@@ -84,14 +89,21 @@ async function resolver(ids: readonly string[]): Promise<ProductoResuelto[]> {
   return productos;
 }
 
-/** ¿La pantalla es lo bastante ancha para acoplar el chat? (`MEDIA_DOCK`, sigue los cambios). */
-function suscribirDock(aviso: () => void) {
-  const mq = window.matchMedia(MEDIA_DOCK);
-  mq.addEventListener("change", aviso);
-  return () => mq.removeEventListener("change", aviso);
+/**
+ * ¿Cumple la pantalla una media query? (sigue los cambios). Para el dock
+ * (`MEDIA_DOCK`) y la hoja mobile (`MEDIA_MOBILE`). En el servidor, no.
+ */
+function useMedia(query: string): boolean {
+  const suscribir = useCallback(
+    (aviso: () => void) => {
+      const mq = window.matchMedia(query);
+      mq.addEventListener("change", aviso);
+      return () => mq.removeEventListener("change", aviso);
+    },
+    [query],
+  );
+  return useSyncExternalStore(suscribir, () => window.matchMedia(query).matches, () => false);
 }
-const hayLugarParaDock = () => window.matchMedia(MEDIA_DOCK).matches;
-const sinDockEnServidor = () => false;
 
 /**
  * Nombre del producto de la ficha para el contexto de pantalla: el `<h1>` de
@@ -105,18 +117,51 @@ function nombreEnPantalla(): string | undefined {
 export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
   const router = useRouter();
   const pathname = usePathname();
-  const { addItems, items, updateQty, removeItem } = useCart();
+  const { addItems, items, updateQty, removeItem, cambio } = useCart();
 
   // Puente con la página (lib/chat-ia-puente.ts): al montarse, el chat queda
   // disponible para los "Conversar" del catálogo; `pedido` es su `sendRequest`.
-  const { registrar, pedido } = useChatIa();
+  const { registrar, pedido, teaser, aceptarTeaser, descartarTeaser } = useChatIa();
   useEffect(() => registrar(), [registrar]);
 
   // Abierto controlado (el drawer se abre solo al llegar un `sendRequest`, y
-  // avisa por `onOpenChange`). Desde 1280 px se acopla a la derecha.
+  // avisa por `onOpenChange`). Desde 1280 px se acopla a la derecha. El puente
+  // se entera por `useSenalesIniciativa` (`fijarChatAbierto`), en cada cambio.
   const [abierto, setAbierto] = useState(false);
-  const acoplable = useSyncExternalStore(suscribirDock, hayLugarParaDock, sinDockEnServidor);
+  const acoplable = useMedia(MEDIA_DOCK);
   const acoplado = acoplable && abierto;
+
+  // Hoja mobile (< 768 px): presentación controlada ("expanded" | "peek"). El
+  // widget pide los cambios (Minimizar, arrastre, atrás del sistema, card que
+  // navegó sola, abrir) por `onPresentationChange` y acá se reflejan. Cerrar
+  // o un pedido nuevo de la página ("Conversar", una pregunta sugerida, el
+  // teaser) vuelven a "expanded": lo que se acaba de pedir se tiene que ver.
+  const mobile = useMedia(MEDIA_MOBILE);
+  const [presentacion, setPresentacion] = useState<ChatPresentation>("expanded");
+  const [ultimoPedido, setUltimoPedido] = useState(pedido?.id);
+  if (pedido?.id !== ultimoPedido) {
+    setUltimoPedido(pedido?.id);
+    setPresentacion("expanded");
+  }
+  const cambiarAbierto = useCallback((siguiente: boolean) => {
+    setAbierto(siguiente);
+    if (!siguiente) setPresentacion("expanded");
+  }, []);
+  const minimizada = hojaMinimizada({ mobile, abierto, presentacion });
+
+  // Hoja minimizada: globals.css sube las barras de compra fijas (ficha,
+  // carrito) por encima de la barra del chat.
+  useEffect(() => {
+    const html = document.documentElement;
+    if (minimizada) html.setAttribute(ATRIBUTO_PEEK, "");
+    else html.removeAttribute(ATRIBUTO_PEEK);
+    return () => html.removeAttribute(ATRIBUTO_PEEK);
+  }, [minimizada]);
+
+  // Invitación proactiva (src/lib/iniciativa/): chat abierto, checkout,
+  // agregados al carrito y la espera en la ficha. El teaser queda en el puente
+  // (`teaser`, `aceptarTeaser`, `descartarTeaser`) para el launcher.
+  useSenalesIniciativa({ pathname, abierto, cambio });
 
   // Acoplado y abierto, el layout le reserva el ancho (`padding-right` en
   // globals.css): el contenido se corre en vez de quedar tapado. Arranca sin
@@ -130,10 +175,10 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
 
   // Lo último de la página para los callbacks que el widget llama más tarde
   // (contexto de pantalla, navegación automática) sin rearmar la config.
-  const vigente = useRef({ pathname, lineas: items.length, acoplado, abierto });
+  const vigente = useRef({ pathname, lineas: items.length, acoplado, abierto, mobile });
   useEffect(() => {
-    vigente.current = { pathname, lineas: items.length, acoplado, abierto };
-  }, [pathname, items.length, acoplado, abierto]);
+    vigente.current = { pathname, lineas: items.length, acoplado, abierto, mobile };
+  }, [pathname, items.length, acoplado, abierto, mobile]);
 
   // Cantidad de cada producto en el carrito: con esto la card del chat pasa de "Agregar" al
   // contador, igual que en el catálogo.
@@ -210,9 +255,17 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       enableHistory
       commerce={commerce}
       open={abierto}
-      onOpenChange={setAbierto}
+      onOpenChange={cambiarAbierto}
       dock={acoplable ? "right" : "none"}
       sendRequest={pedido ?? undefined}
+      mobileBreakpoint={BREAKPOINT_MOBILE}
+      presentation={presentacion}
+      onPresentationChange={setPresentacion}
+      // Invitación proactiva (src/lib/iniciativa/): el puente cuenta los topes
+      // al aceptar o cerrar; el widget sólo la dibuja.
+      teaser={teaser ?? undefined}
+      onTeaserAction={aceptarTeaser}
+      onTeaserDismiss={descartarTeaser}
     />
   );
 }

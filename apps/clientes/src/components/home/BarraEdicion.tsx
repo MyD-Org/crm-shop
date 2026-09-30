@@ -52,7 +52,7 @@ export function BarraEdicion({
   return (
     <div
       data-editor=""
-      className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border bg-surface px-4 py-2 shadow-lg"
+      className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-lg"
     >
       <Switch label="Modo edición" checked={activo} onCheckedChange={setActivo} />
       <Button variant="outline" size="sm" onClick={() => setAbrirAnuncio(true)}>

@@ -295,6 +295,13 @@ describe("validarCamposOverlay", () => {
     expect(valor({ ocultoEnSucursales: [] })).toEqual({ ocultoEnSucursales: [] })
   })
 
+  it("mostrarMarca: acepta booleanos y rechaza el resto", () => {
+    expect(valor({ mostrarMarca: false })).toEqual({ mostrarMarca: false })
+    expect(valor({ mostrarMarca: true })).toEqual({ mostrarMarca: true })
+    const r = validarCamposOverlay({ mostrarMarca: "no" })
+    expect(r.ok).toBe(false)
+  })
+
   it("ocultoEnSucursales: rechaza formatos que no son un slug, con el mensaje en usted", () => {
     for (const malo of ["mdp", [1], ["MDP"], ["a"], ["con espacio"], [""], null]) {
       const r = validarCamposOverlay({ ocultoEnSucursales: malo })

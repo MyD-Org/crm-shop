@@ -183,6 +183,8 @@ export interface CamposOverlayValidos {
   tagIds?: string[]
   /** Slugs de sucursal donde NO se ofrece (vacío = visible en todas). El servidor valida que existan. */
   ocultoEnSucursales?: string[]
+  /** false = el Shop no exhibe la marca del producto. */
+  mostrarMarca?: boolean
 }
 
 /** Mismo formato que el slug de `sucursales` (`^[a-z0-9-]{2,20}$`). */
@@ -259,6 +261,11 @@ export function validarCamposOverlay(body: unknown): Resultado<CamposOverlayVali
       return fail("ocultoEnSucursales", MSG_SUCURSAL_INVALIDA)
     }
     campos.ocultoEnSucursales = [...new Set(v as string[])]
+  }
+
+  if (presente(body, "mostrarMarca")) {
+    if (typeof body.mostrarMarca !== "boolean") return fail("mostrarMarca", "Indique si se muestra la marca")
+    campos.mostrarMarca = body.mostrarMarca
   }
 
   return { ok: true, value: campos }

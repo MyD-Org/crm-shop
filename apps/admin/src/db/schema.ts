@@ -617,6 +617,9 @@ export const catalogOverlay = pgTable(
     // (array): la API del admin valida los slugs. Migración 0045; el Shop la lee directo del
     // overlay (GRANT por columna) solo con el flag `disponibilidad-sucursal`.
     ocultoEnSucursales: text("oculto_en_sucursales").array().notNull().default(sql`'{}'::text[]`),
+    // false = el Shop no exhibe la marca de este producto (ni en la card, ni en la ficha, ni en el
+    // filtro de marcas). Migración 0048; el Shop la lee directo del overlay (GRANT por columna).
+    mostrarMarca: boolean("mostrar_marca").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Insumo del delta hacia el Shop: lo setea el repo con now() de Postgres en CADA escritura.
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -51,8 +51,8 @@ export async function escribirStockPrincipal(tenantId: string, ej: Ejecutor = ge
  */
 export async function copiarOverlaySiFalta(tx: Ejecutor, tenantId: string, desde: string, hacia: string): Promise<boolean> {
   const nuevas = await tx.execute(sql`
-    INSERT INTO catalog_overlay (tenant_id, alegra_id, visible, nombre, descripcion, categoria_id, orden, fotos, ficha_tecnica, updated_by, updated_at)
-    SELECT o.tenant_id, ${hacia}, o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, 'sistema:catalogo-union', now()
+    INSERT INTO catalog_overlay (tenant_id, alegra_id, visible, nombre, descripcion, categoria_id, orden, fotos, ficha_tecnica, mostrar_marca, updated_by, updated_at)
+    SELECT o.tenant_id, ${hacia}, o.visible, o.nombre, o.descripcion, o.categoria_id, o.orden, o.fotos, o.ficha_tecnica, o.mostrar_marca, 'sistema:catalogo-union', now()
     FROM catalog_overlay o
     WHERE o.tenant_id = ${tenantId} AND o.alegra_id = ${desde}
     ON CONFLICT (tenant_id, alegra_id) DO NOTHING

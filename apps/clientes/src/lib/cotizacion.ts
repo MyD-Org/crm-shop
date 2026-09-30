@@ -198,6 +198,8 @@ export interface FilaEspejo {
   ivaPorcentaje: string | null;
   status: string;
   categoryName: string | null;
+  /** false = el admin pidió no exhibir la marca. null/ausente = sin overlay ⇒ se muestra. */
+  mostrarMarca?: boolean | null;
 }
 
 /**
@@ -210,6 +212,8 @@ export interface FilaEspejo {
  *   numéricos).
  */
 export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
+  // Con la marca apagada tampoco va la categoría: `cotizarItem` la usa de fallback de la marca.
+  const conMarca = fila.mostrarMarca !== false;
   return {
     id: fila.alegraId,
     name: fila.name,
@@ -222,8 +226,8 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
         : undefined,
     inventory:
       fila.stock != null ? { availableQuantity: Number(fila.stock) } : undefined,
-    customFields: fila.brand ? [{ name: "Marca", value: fila.brand }] : undefined,
-    itemCategory: fila.categoryName ? { name: fila.categoryName } : undefined,
+    customFields: conMarca && fila.brand ? [{ name: "Marca", value: fila.brand }] : undefined,
+    itemCategory: conMarca && fila.categoryName ? { name: fila.categoryName } : undefined,
   };
 }
 
@@ -255,6 +259,7 @@ async function leerEspejo(ids: string[], disp?: ContextoDisponibilidad): Promise
         ? sql<string>`(case when ${activoSql} and ${visibleEnSucursalSql(disp)} then 'active' else 'inactive' end)`
         : estadoSql,
       categoryName: crmCategoriasAlegra.name,
+      mostrarMarca: crmOverlay.mostrarMarca,
     })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())

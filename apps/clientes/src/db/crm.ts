@@ -91,6 +91,8 @@ export const crmOverlay = publico.table("catalog_overlay", {
    * 0045 del CRM. Sólo se lee con el flag `disponibilidad-sucursal` prendido.
    */
   ocultoEnSucursales: text("oculto_en_sucursales").array().notNull(),
+  /** false = no exhibir la marca del producto (card, ficha, filtro, carrito). Migración 0048 del CRM. */
+  mostrarMarca: boolean("mostrar_marca").notNull(),
 });
 
 // ---------------------------------------------------------------------------

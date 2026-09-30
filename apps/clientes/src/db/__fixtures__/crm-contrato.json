@@ -17,7 +17,8 @@
     "categoria_id": "uuid",
     "fotos": "jsonb",
     "ficha_tecnica": "jsonb",
-    "oculto_en_sucursales": "text[]"
+    "oculto_en_sucursales": "text[]",
+    "mostrar_marca": "boolean"
   },
   "public.alegra_contacts_shop": {
     "tenant_id": "text",

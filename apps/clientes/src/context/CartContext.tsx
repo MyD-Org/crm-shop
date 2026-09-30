@@ -24,6 +24,8 @@ import {
   type CartItem,
 } from "@/lib/carrito-cliente";
 import { crearMotorCarrito, type MotorCarrito } from "@/lib/carrito-sync";
+import { itemDe } from "@/lib/tracking/eventos";
+import { track } from "@/lib/tracking/track";
 
 /**
  * Carrito del cliente.
@@ -205,6 +207,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (!(newItem.price > 0)) return;
     marcarCambio(1);
     elMotor().mutar((prev) => agregar(prev, newItem, qty));
+    track({ tipo: "agregar_carrito", items: [itemDe(newItem, qty)] });
   }, [marcarCambio]);
 
   const addItems = useCallback((lista: { item: ItemNuevo; qty: number }[]) => {
@@ -212,6 +215,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (validos.length === 0) return;
     marcarCambio(1);
     elMotor().mutar((prev) => agregarVarios(prev, validos));
+    track({ tipo: "agregar_carrito", items: validos.map((l) => itemDe(l.item, l.qty)) });
   }, [marcarCambio]);
 
   const replaceItems = useCallback((lista: { item: ItemNuevo; qty: number }[]) => {

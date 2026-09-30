@@ -3,6 +3,7 @@ import { hostsDeMedios } from "./src/lib/catalogo-medios";
 import { REDIRECTS_MI_CUENTA } from "./src/lib/mi-cuenta-redirects";
 import { normalizarUrlAiApi } from "./src/lib/ai-api-config";
 import { headersDeSeguridad } from "./src/lib/headers-seguridad";
+import { rewritesPosthog } from "./src/lib/tracking/config";
 
 const nextConfig: NextConfig = {
   // Shell estático + huecos por request (Partial Prerendering). Lo que depende
@@ -90,10 +91,22 @@ const nextConfig: NextConfig = {
   // Chat con el agente: el widget habla con ai-api por el mismo origen (sin
   // CORS). Sólo existe si AI_API_URL está definida; que el chat se muestre lo
   // decide el flag `chat-ia` (src/lib/chat-ia-flag.ts), no esta regla.
+  //
+  // PostHog: la ingesta va por `/ingest` en el mismo origen (sin hosts nuevos en
+  // la CSP y menos cortes de bloqueadores). Sólo con POSTHOG_KEY; que se cargue
+  // lo decide el flag `tracking` (src/lib/tracking-flag.ts).
   rewrites: async () => {
     const aiApi = normalizarUrlAiApi(process.env.AI_API_URL);
-    return aiApi ? [{ source: "/ai-api/:path*", destination: `${aiApi}/:path*` }] : [];
+    return [
+      ...(aiApi ? [{ source: "/ai-api/:path*", destination: `${aiApi}/:path*` }] : []),
+      ...rewritesPosthog(),
+    ];
   },
+  // El SDK de PostHog manda a rutas con barra final (`/ingest/e/`): sin esto
+  // Next las redirige (308) y el proxy de arriba pierde los eventos. Las
+  // páginas con y sin barra quedan iguales; el canonical (metadataBase) marca
+  // la buena.
+  skipTrailingSlashRedirect: true,
 };
 
 export default nextConfig;

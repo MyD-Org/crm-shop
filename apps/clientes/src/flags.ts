@@ -54,3 +54,10 @@ export const chatIaFlag = flag<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 });
+
+export const trackingFlag = flag<boolean>({
+  key: "tracking",
+  description: "Analítica y píxeles (Vercel Analytics, Speed Insights, Meta Pixel, GA4, PostHog) en todas las páginas del Shop",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});

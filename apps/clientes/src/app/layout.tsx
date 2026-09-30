@@ -11,6 +11,7 @@ import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
 import { TEMA_POR_DEFECTO, scriptTema } from "@/lib/tema-ip";
 import { BloqueoFavoritos } from "@/components/BloqueoFavoritos";
 import { ChatIaServidor } from "@/components/chat/ChatIaServidor";
+import { TrackingServidor } from "@/components/tracking/TrackingServidor";
 import "./globals.css";
 
 // Fuentes del diseño aprobado, self-hosted vía next/font; la paleta cálida las
@@ -77,8 +78,8 @@ const aparienciaClerk = {
  * Layout raíz, parte del shell estático (Cache Components): no lee cookies ni
  * headers. El contenido administrable (anuncio, badge, footer) sale de
  * `'use cache'`; lo que depende del visitante va en huecos con `<Suspense>`:
- * identidad y nav en el header, bloqueo de favoritos, chat (flag `chat-ia`) y
- * la página misma.
+ * identidad y nav en el header, bloqueo de favoritos, chat (flag `chat-ia`),
+ * tracking (flag `tracking`) y la página misma.
  */
 export default async function RootLayout({
   children,
@@ -127,6 +128,9 @@ export default async function RootLayout({
             </Suspense>
             <Suspense fallback={null}>
               <ChatIaServidor />
+            </Suspense>
+            <Suspense fallback={null}>
+              <TrackingServidor />
             </Suspense>
           </Providers>
         </ClerkProvider>

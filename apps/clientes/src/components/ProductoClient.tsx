@@ -21,6 +21,8 @@ import { EntregaProducto } from "@/components/producto/EntregaProducto";
 import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
 import type { Product } from "@/data/products";
 import { CartIcon } from "@/components/catalogo/iconos";
+import { itemDe } from "@/lib/tracking/eventos";
+import { track } from "@/lib/tracking/track";
 
 function CheckIcon() {
   return (
@@ -92,6 +94,12 @@ export function ProductoClient({
   );
   const [qty, setQty] = useState(1);
   const { addItem } = useCart();
+  // Una vista por producto (no por cada cambio de precio de cuenta).
+  const idVisto = productoLista.id;
+  useEffect(() => {
+    track({ tipo: "ver_producto", item: itemDe(productoLista) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a propósito: sólo al cambiar de producto
+  }, [idVisto]);
   // Confirmación en el mismo botón: agregar ya no abre el preview del header.
   const [agregado, setAgregado] = useState(false);
   const timerAgregado = useRef<ReturnType<typeof setTimeout> | null>(null);

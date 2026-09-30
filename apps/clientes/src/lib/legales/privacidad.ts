@@ -24,7 +24,16 @@ export function bloquesPrivacidad(d: DatosLegales): Bloque[] {
       titulo: "Para qué los usamos",
       parrafos: [
         "Utilizamos esos datos para gestionar su cuenta y sus pedidos, facturar, coordinar entregas, responder sus consultas y cumplir obligaciones legales.",
-        "No los cedemos a terceros, salvo a los proveedores necesarios para prestar el servicio (por ejemplo, facturación, cobros o envío de correos) o cuando la ley lo exija.",
+        "No los cedemos a terceros, salvo a los proveedores necesarios para prestar el servicio (por ejemplo, facturación, cobros, envío de correos o medición del sitio, según se detalla en «Cookies y herramientas de análisis») o cuando la ley lo exija.",
+      ],
+    },
+    {
+      titulo: "Cookies y herramientas de análisis",
+      parrafos: [
+        "Para saber cómo se usa la tienda y medir nuestras campañas utilizamos cookies y herramientas de análisis de terceros: Vercel Web Analytics y Speed Insights (visitas y rendimiento de las páginas, sin cookies), Google Analytics, el píxel de Meta (Facebook e Instagram) y PostHog (uso del sitio y grabaciones de sesión anónimas).",
+        "Estas herramientas registran datos de navegación como las páginas que visita, los productos que ve o agrega al carrito, los pedidos que confirma (número y monto), el tipo de dispositivo y navegador, y su ubicación aproximada. En las grabaciones de sesión todo lo que usted escribe en los formularios queda oculto, y en las páginas de ingreso y registro no se registra nada.",
+        "Estos proveedores pueden procesar la información en servidores ubicados fuera de la República Argentina.",
+        "Usted puede bloquear o borrar las cookies desde la configuración de su navegador, y administrar los anuncios que ve desde las preferencias de su cuenta de Meta o de Google. Bloquearlas no le impide comprar en la tienda.",
       ],
     },
     {

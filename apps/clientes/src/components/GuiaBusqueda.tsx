@@ -43,12 +43,15 @@ export const GuiaBusqueda = forwardRef<
   };
 
   const ejemplo = (texto: string) => (
-    <li key={texto}>
+    <li key={texto} className="min-w-0 max-w-full">
       <button
         type="button"
         onClick={() => onElegir(texto)}
         aria-label={TEXTOS_GUIA.buscarEjemplo(texto)}
-        className="rounded-full border border-border bg-surface px-3 py-1 text-left text-sm text-text transition-colors hover:border-primary hover:bg-elevated focus-visible:border-primary"
+        // Cada ejemplo en UNA línea: una píldora partida en dos ("luz cálida
+        // para / el living") se lee como dos ejemplos. Si alguna vez no entra
+        // en el ancho del panel, se corta con "…" en vez de partirse.
+        className="max-w-full truncate whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-left text-sm text-text transition-colors hover:border-primary hover:bg-elevated focus-visible:border-primary"
       >
         {texto}
       </button>
@@ -68,11 +71,13 @@ export const GuiaBusqueda = forwardRef<
         <ChispaIcon className="h-4 w-4 shrink-0 text-accent" />
         {TEXTOS_GUIA.titulo}
       </p>
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Un grupo por fila (título al costado desde `sm`): con tres columnas
+          los ejemplos largos no entraban en el ancho del buscador. */}
+      <div className="flex flex-col gap-3">
         {TEXTOS_GUIA.grupos.map((g) => (
-          <section key={g.titulo} aria-label={g.titulo} className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-text">{g.titulo}</h3>
-            <ul className="flex flex-wrap gap-2">{g.ejemplos.map(ejemplo)}</ul>
+          <section key={g.titulo} aria-label={g.titulo} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <h3 className="shrink-0 text-sm font-semibold text-text sm:w-36">{g.titulo}</h3>
+            <ul className="flex min-w-0 flex-wrap gap-2">{g.ejemplos.map(ejemplo)}</ul>
           </section>
         ))}
       </div>

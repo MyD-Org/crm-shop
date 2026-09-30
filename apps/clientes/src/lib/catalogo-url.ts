@@ -241,6 +241,17 @@ export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
   });
 }
 
+/**
+ * El estado tal como lo ve el catálogo con el flag `busqueda-ia` APAGADO:
+ * sin atributos ni `ia` (el catálogo de siempre no los conoce). Así una URL
+ * con `?atr=` o `?ia=` da, con el flag apagado, lo mismo que antes del cambio.
+ */
+export function sinBusquedaIa(estado: EstadoCatalogo): EstadoCatalogo {
+  const { ia: _ia, ...resto } = estado;
+  void _ia;
+  return { ...resto, atributos: [] };
+}
+
 /** Misma selección, sin importar el orden. */
 const mismoConjunto = (a: string[], b: string[]) =>
   a.length === b.length && a.every((x) => b.includes(x));
@@ -258,8 +269,10 @@ const mismoConjunto = (a: string[], b: string[]) =>
  * los parámetros repetibles; el resto no se compara (la página, por ejemplo,
  * llega recortada a la última que existe y no es un desfase).
  */
-export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams): boolean {
-  const url = estadoDeBusqueda(sp);
+export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams, conBusquedaIa = true): boolean {
+  // Sin el flag los atributos de la URL se ignoran: compararlos pediría la
+  // página una y otra vez.
+  const url = conBusquedaIa ? estadoDeBusqueda(sp) : sinBusquedaIa(estadoDeBusqueda(sp));
   return (
     !mismoConjunto(estado.categorias, url.categorias) ||
     !mismoConjunto(estado.marcas, url.marcas) ||

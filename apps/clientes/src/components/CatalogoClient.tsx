@@ -19,6 +19,7 @@ import {
   estadoConCambios,
   estadoDeBusqueda,
   filtrosDesfasados,
+  sinBusquedaIa,
   hrefCatalogo,
   hrefCon,
   type EstadoCatalogo,
@@ -82,12 +83,16 @@ export function CatalogoClient({
   // Si la URL del router y lo que renderizó el servidor no coinciden, se
   // muestra lo que dice la URL y se pide la página de nuevo.
   const searchParams = useSearchParams();
-  const desfasado = filtrosDesfasados(estado, searchParams);
+  const desfasado = filtrosDesfasados(estado, searchParams, !!busquedaIa);
   const claveUrl = searchParams.toString();
   useEffect(() => {
     if (desfasado) startTransition(() => router.refresh());
   }, [desfasado, claveUrl, router]);
-  const estadoBase = desfasado ? estadoDeBusqueda(searchParams) : estado;
+  const estadoBase = desfasado
+    ? busquedaIa
+      ? estadoDeBusqueda(searchParams)
+      : sinBusquedaIa(estadoDeBusqueda(searchParams))
+    : estado;
 
   // Estado optimista: el filtro que toca el visitante se marca en el acto,
   // sin esperar a que el servidor responda con la URL nueva (si no, el tilde

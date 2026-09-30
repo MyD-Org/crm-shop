@@ -8,6 +8,7 @@ import {
   filtrosDeEstado,
   hrefCanonico,
   leerEstado,
+  sinBusquedaIa,
   type EstadoCatalogo,
   type ParamCrudo,
 } from "@/lib/catalogo-url";
@@ -54,7 +55,8 @@ type Props = {
 export async function generateMetadata({
   searchParams,
 }: Props): Promise<Metadata> {
-  const estado = leerEstado(await searchParams);
+  const [params, conBusquedaIa] = await Promise.all([searchParams, busquedaIaHabilitada()]);
+  const estado = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
   return {
     robots: { index: indexable(estado), follow: true },
     ...(process.env.NEXT_PUBLIC_SITE_URL
@@ -94,7 +96,8 @@ async function CatalogoResultados({ searchParams }: Props) {
     dispDelVisitante(),
     busquedaIaHabilitada(),
   ]);
-  const estado = leerEstado(params);
+  // Flag apagado: igual que antes del cambio (sin `atr` ni `ia`).
+  const estado = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).

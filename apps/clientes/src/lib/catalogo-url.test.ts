@@ -7,6 +7,7 @@ import {
   IA_DESACTIVADA,
   cambiosDeRango,
   consultaInterpretada,
+  sinBusquedaIa,
   comoLista,
   comoOrden,
   comoPagina,
@@ -525,5 +526,23 @@ describe("atributos (`atr`) y búsqueda inteligente (`ia`)", () => {
     const renderizado = { ...base, atributos: ["tono-calido", "zocalo-e27"] };
     expect(filtrosDesfasados(renderizado, sp("atr=zocalo-e27"))).toBe(true);
     expect(filtrosDesfasados(renderizado, sp("atr=zocalo-e27&atr=tono-calido"))).toBe(false);
+  });
+});
+
+describe("flag busqueda-ia apagado", () => {
+  const sp = (qs: string) => new URLSearchParams(qs);
+
+  it("sinBusquedaIa: sin atributos ni ia, como el catálogo de siempre", () => {
+    const e = leerEstado({ q: "reflector", categoria: "Reflectores", atr: "tono-calido", ia: "algo" });
+    const apagado = sinBusquedaIa(e);
+    expect(apagado.atributos).toEqual([]);
+    expect(apagado).not.toHaveProperty("ia");
+    expect(hrefCatalogo(apagado)).toBe("/catalogo?q=reflector&categoria=Reflectores");
+  });
+
+  it("los atributos de la URL no cuentan como desfase (si no, se pediría la página en bucle)", () => {
+    const renderizado = sinBusquedaIa(leerEstado({ atr: "tono-calido" }));
+    expect(filtrosDesfasados(renderizado, sp("atr=tono-calido"), false)).toBe(false);
+    expect(filtrosDesfasados(renderizado, sp("atr=tono-calido"))).toBe(true);
   });
 });

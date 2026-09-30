@@ -56,6 +56,13 @@ export interface Order {
   estado: OrderEstado;
   pagoEstado: PagoEstado;
   metodoPago: string;
+  /**
+   * Lo que guarda `orders.pago_metodo`: método fijo o, con el flag `pedido-a-confirmar`, el slug de
+   * un medio de pago del CRM. Mi cuenta lo resuelve a su nombre (`nombreDelPago`).
+   */
+  pagoMetodoSlug?: string;
+  /** Slug de la sucursal asignada (`orders.sucursal`); undefined = sin sucursal. */
+  sucursal?: string;
   /** Etiqueta para mostrar ("Envío a domicilio", …). */
   metodoEntrega: string;
   /** Tipo crudo: decide los pasos del seguimiento y el texto de "entregado". */

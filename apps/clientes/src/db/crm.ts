@@ -384,6 +384,34 @@ export const crmReglasVenta = publico.table("reglas_venta", {
   reservaDias: integer("reserva_dias").notNull(),
   avisoSinContactarHoras: integer("aviso_sin_contactar_horas").notNull(),
   contactoHorasHabiles: integer("contacto_horas_habiles").notNull(),
+  /**
+   * Texto de la confirmación del pedido (rebanada C). Vacío = el texto por defecto del Shop.
+   * Admite `{plazo}` y `{whatsapp}`. Llega con una migración del CRM que puede no estar aplicada
+   * todavía: NO se lee junto con el resto de las reglas (ver `leerMensajeConfirmacion`).
+   */
+  mensajeConfirmacion: text("mensaje_confirmacion").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * Medios de pago del Shop (`public.medios_pago_shop`, rebanada C del change `sucursales-igz-mdp`),
+ * editables en el admin del CRM. SELECT de la tabla entera para `shop_app`. El pedido guarda el
+ * `slug` en `orders.pago_metodo`. `cobro_online` no cambia nada todavía (no hay integración): el
+ * Shop lo trata como manual. La migración del CRM puede no estar aplicada: toda lectura tolera que
+ * la tabla no exista (`medios-pago-repo.ts`).
+ */
+export const crmMediosPagoShop = publico.table("medios_pago_shop", {
+  id: uuid("id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  slug: text("slug").notNull(),
+  nombre: text("nombre").notNull(),
+  instrucciones: text("instrucciones").notNull(),
+  activo: boolean("activo").notNull(),
+  aplicaRetiro: boolean("aplica_retiro").notNull(),
+  aplicaEnvio: boolean("aplica_envio").notNull(),
+  cobroOnline: boolean("cobro_online").notNull(),
+  orden: integer("orden").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

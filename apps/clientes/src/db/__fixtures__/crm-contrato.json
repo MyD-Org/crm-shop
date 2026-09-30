@@ -178,6 +178,21 @@
     "reserva_dias": "integer",
     "aviso_sin_contactar_horas": "integer",
     "contacto_horas_habiles": "integer",
+    "mensaje_confirmacion": "text",
+    "created_at": "timestamp with time zone",
+    "updated_at": "timestamp with time zone"
+  },
+  "public.medios_pago_shop": {
+    "id": "uuid",
+    "tenant_id": "text",
+    "slug": "text",
+    "nombre": "text",
+    "instrucciones": "text",
+    "activo": "boolean",
+    "aplica_retiro": "boolean",
+    "aplica_envio": "boolean",
+    "cobro_online": "boolean",
+    "orden": "integer",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
   }

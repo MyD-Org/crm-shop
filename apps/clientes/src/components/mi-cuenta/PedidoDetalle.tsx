@@ -4,6 +4,8 @@ import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
 import { ocultarEstadoPago } from "@/lib/pago-estado-visible";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
+import { PedidoContacto } from "@/components/PedidoContacto";
+import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { PedidoAcciones } from "./PedidoAcciones";
 import { PedidoLinea } from "./PedidoLinea";
 
@@ -21,7 +23,19 @@ function Fila({ label, valor, fuerte = false }: { label: string; valor: string; 
  * entrega, pago, productos con unitario y totales. El envío sólo aparece si
  * tuvo costo. Sin acción de cancelar (sigue en el checkout).
  */
-export function PedidoDetalle({ pedido, pagosHabilitados }: { pedido: Order; pagosHabilitados: boolean }) {
+export function PedidoDetalle({
+  pedido,
+  pagosHabilitados,
+  medioPago,
+  contacto,
+}: {
+  pedido: Order;
+  pagosHabilitados: boolean;
+  /** Flag `pedido-a-confirmar`: medio del CRM que eligió el comprador (nombre e instrucciones). */
+  medioPago?: { nombre: string; instrucciones: string | null };
+  /** Flag `pedido-a-confirmar`: plazo de contacto y WhatsApp de la sucursal asignada. */
+  contacto?: ContactoPedidoVista;
+}) {
   const pill = estadoPedidoPill(pedido, { pagosHabilitados });
   const pasos = seguimientoPedido(pedido, { pagosHabilitados });
   // Con los pagos apagados "Pago pendiente" no se muestra: se coordina por fuera.
@@ -50,10 +64,19 @@ export function PedidoDetalle({ pedido, pagosHabilitados }: { pedido: Order; pag
           )}
         </Card>
         <Card title="Pago">
-          <p className="text-sm text-muted">{pedido.metodoPago}</p>
+          <p className="text-sm text-muted">{medioPago?.nombre ?? pedido.metodoPago}</p>
+          {medioPago?.instrucciones && pedido.estado === "pendiente" && (
+            <p className="mt-1 whitespace-pre-line text-sm text-text">{medioPago.instrucciones}</p>
+          )}
           {verEstadoPago && <p className="mt-1 text-sm text-text">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</p>}
         </Card>
       </div>
+
+      {contacto && (pedido.estado === "pendiente" || contacto.whatsapp) && (
+        <Card title="Contacto">
+          <PedidoContacto contacto={contacto} mostrarPlazo={pedido.estado === "pendiente"} />
+        </Card>
+      )}
 
       <Card title="Productos">
         <ul className="flex flex-col gap-3">

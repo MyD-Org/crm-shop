@@ -82,6 +82,13 @@ export interface EstadoCatalogo {
   precioMin?: number;
   precioMax?: number;
   /**
+   * Extremos de la potencia en watts (`?potencia_min=&potencia_max=`, flag
+   * `busqueda-ia`): enteros >= 0, sólo sobre productos con potencia
+   * estructurada (`catalog_atributos.potencia_w`). Ausente = sin tope.
+   */
+  potenciaMin?: number;
+  potenciaMax?: number;
+  /**
    * Sólo productos con disponibilidad. Default `true` (sin parámetro);
    * `?stock=todos` lo apaga. Ver `SOLO_STOCK_DEFAULT`.
    */
@@ -204,6 +211,8 @@ export function leerEstado(params: {
   pagina?: ParamCrudo;
   precio_min?: ParamCrudo;
   precio_max?: ParamCrudo;
+  potencia_min?: ParamCrudo;
+  potencia_max?: ParamCrudo;
   stock?: ParamCrudo;
   retiro?: ParamCrudo;
   vista?: ParamCrudo;
@@ -217,6 +226,12 @@ export function leerEstado(params: {
   if (precioMin != null && precioMax != null && precioMin > precioMax) {
     [precioMin, precioMax] = [precioMax, precioMin];
   }
+  // Potencia: mismas reglas que el precio (entero >= 0; invertidos se intercambian).
+  let potenciaMin = comoPrecio(params.potencia_min);
+  let potenciaMax = comoPrecio(params.potencia_max);
+  if (potenciaMin != null && potenciaMax != null && potenciaMin > potenciaMax) {
+    [potenciaMin, potenciaMax] = [potenciaMax, potenciaMin];
+  }
   const ia = primero(params.ia)?.trim().slice(0, LARGO_MAX_IA);
   return {
     query: q || undefined,
@@ -227,6 +242,8 @@ export function leerEstado(params: {
     pagina: comoPagina(params.pagina),
     precioMin,
     precioMax,
+    ...(potenciaMin != null ? { potenciaMin } : {}),
+    ...(potenciaMax != null ? { potenciaMax } : {}),
     soloStock: comoSoloStock(params.stock),
     retiroEn: comoRetiro(params.retiro),
     vista: comoVista(params.vista),
@@ -249,6 +266,8 @@ export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
     pagina: param("pagina"),
     precio_min: param("precio_min"),
     precio_max: param("precio_max"),
+    potencia_min: param("potencia_min"),
+    potencia_max: param("potencia_max"),
     stock: param("stock"),
     retiro: param("retiro"),
     vista: param("vista"),
@@ -258,12 +277,15 @@ export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
 
 /**
  * El estado tal como lo ve el catálogo con el flag `busqueda-ia` APAGADO:
- * sin atributos ni `ia` (el catálogo de siempre no los conoce). Así una URL
- * con `?atr=` o `?ia=` da, con el flag apagado, lo mismo que antes del cambio.
+ * sin atributos, potencia ni `ia` (el catálogo de siempre no los conoce). Así
+ * una URL con `?atr=`, `?potencia_min=` o `?ia=` da, con el flag apagado, lo
+ * mismo que antes del cambio.
  */
 export function sinBusquedaIa(estado: EstadoCatalogo): EstadoCatalogo {
-  const { ia: _ia, ...resto } = estado;
+  const { ia: _ia, potenciaMin: _pmin, potenciaMax: _pmax, ...resto } = estado;
   void _ia;
+  void _pmin;
+  void _pmax;
   return { ...resto, atributos: [] };
 }
 
@@ -300,8 +322,9 @@ export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams, c
  * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=nombre&pagina=1`.
  *
  * El orden de los parámetros es fijo (`q, categoria*, marca*, atr*,
- * precio_min, precio_max, stock, retiro, orden, vista, pagina, ia`): dos
- * estados iguales dan la misma URL, que es lo que necesitan el canonical y los tests.
+ * precio_min, precio_max, potencia_min, potencia_max, stock, retiro, orden, vista,
+ * pagina, ia`): dos estados
+ * iguales dan la misma URL, que es lo que necesitan el canonical y los tests.
  */
 export function hrefCatalogo(estado: EstadoCatalogo): string {
   const sp = new URLSearchParams();
@@ -311,6 +334,8 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   for (const a of atributosValidos(estado.atributos)) sp.append("atr", a);
   if (estado.precioMin != null) sp.set("precio_min", String(estado.precioMin));
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
+  if (estado.potenciaMin != null) sp.set("potencia_min", String(estado.potenciaMin));
+  if (estado.potenciaMax != null) sp.set("potencia_max", String(estado.potenciaMax));
   if (estado.soloStock !== SOLO_STOCK_DEFAULT) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
   if (estado.retiroEn) sp.set("retiro", estado.retiroEn);
   if (estado.orden !== ordenPorDefecto(estado.query)) sp.set("orden", estado.orden);
@@ -425,7 +450,29 @@ export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosCatalogo {
     atributos: estado.atributos,
     precioMin: estado.precioMin,
     precioMax: estado.precioMax,
+    potenciaMin: estado.potenciaMin,
+    potenciaMax: estado.potenciaMax,
     // "Con stock en <local>" es un filtro de stock: sin stock no tiene sentido.
     soloStock: estado.soloStock || Boolean(estado.retiroEn),
   };
+}
+
+/** Potencia de la URL recortada al rango real (mismas reglas que `rangoEfectivo`). */
+export function rangoEfectivoPotencia(
+  estado: Pick<EstadoCatalogo, "potenciaMin" | "potenciaMax">,
+  rango: RangoPrecio | null
+): [number, number] {
+  return rangoEfectivo({ precioMin: estado.potenciaMin, precioMax: estado.potenciaMax }, rango);
+}
+
+/**
+ * Cambios de estado para un rango de potencia comprometido en el slider: un
+ * extremo que coincide con el límite real no viaja (igual que el precio).
+ */
+export function cambiosDePotencia(
+  valor: [number, number],
+  rango: RangoPrecio | null
+): Pick<EstadoCatalogo, "potenciaMin" | "potenciaMax"> {
+  const { precioMin, precioMax } = cambiosDeRango(valor, rango);
+  return { potenciaMin: precioMin, potenciaMax: precioMax };
 }

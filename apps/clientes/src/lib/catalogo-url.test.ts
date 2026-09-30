@@ -6,6 +6,8 @@ import {
   STOCK_INCLUYE_SIN_STOCK,
   IA_DESACTIVADA,
   cambiosDeRango,
+  cambiosDePotencia,
+  rangoEfectivoPotencia,
   consultaInterpretada,
   sinBusquedaIa,
   comoLista,
@@ -545,6 +547,49 @@ describe("flag busqueda-ia apagado", () => {
     expect(filtrosDesfasados(renderizado, sp("atr=tono-calido"), false)).toBe(false);
     expect(filtrosDesfasados(renderizado, sp("atr=tono-calido"))).toBe(true);
   });
+});
+
+describe("potencia (?potencia_min=&potencia_max=, fase 2)", () => {
+  it("se lee como el precio: enteros >= 0, invertidos se intercambian, basura se ignora", () => {
+    expect(leerEstado({ potencia_min: "10", potencia_max: "50" })).toMatchObject({ potenciaMin: 10, potenciaMax: 50 });
+    expect(leerEstado({ potencia_min: "200", potencia_max: "20" })).toMatchObject({ potenciaMin: 20, potenciaMax: 200 });
+    const e = leerEstado({ potencia_min: "mucha", potencia_max: "-1" });
+    expect(e.potenciaMin).toBeUndefined();
+    expect(e.potenciaMax).toBeUndefined();
+    expect(leerEstado({ potencia_min: "12.7" }).potenciaMin).toBe(12);
+  });
+
+  it("viaja en la URL después del precio, en orden fijo, y vuelve a leerse igual", () => {
+    const estado = { ...base, precioMax: 9000, potenciaMin: 10, potenciaMax: 50 };
+    const href = hrefCatalogo(estado);
+    expect(href).toBe("/catalogo?precio_max=9000&potencia_min=10&potencia_max=50");
+    expect(estadoDeBusqueda(new URLSearchParams(href.split("?")[1]))).toMatchObject({ potenciaMin: 10, potenciaMax: 50 });
+  });
+
+  it("llega a los filtros de la consulta", () => {
+    expect(filtrosDeEstado(leerEstado({ potencia_min: "5" }))).toMatchObject({ potenciaMin: 5, potenciaMax: undefined });
+  });
+
+  it("con el flag apagado se ignora (sinBusquedaIa) y no entra al canonical", () => {
+    const e = sinBusquedaIa(leerEstado({ potencia_min: "10", potencia_max: "50" }));
+    expect(e.potenciaMin).toBeUndefined();
+    expect(e.potenciaMax).toBeUndefined();
+    expect(hrefCatalogo(e)).toBe("/catalogo");
+    expect(hrefCanonico({ ...base, potenciaMin: 10 })).toBe("/catalogo");
+  });
+
+  it("cambiar la potencia vuelve a la página 1; quitarla borra los parámetros", () => {
+    expect(hrefCon({ ...base, pagina: 4 }, { potenciaMin: 10 })).toBe("/catalogo?potencia_min=10");
+    expect(hrefCon({ ...base, potenciaMin: 10, potenciaMax: 50 }, { potenciaMin: undefined, potenciaMax: undefined })).toBe("/catalogo");
+  });
+
+  it("slider: rango efectivo y extremos que coinciden con el límite no viajan", () => {
+    const rango = { min: 3, max: 2000 };
+    expect(rangoEfectivoPotencia({ potenciaMin: 1 }, rango)).toEqual([3, 2000]);
+    expect(rangoEfectivoPotencia({ potenciaMin: 10, potenciaMax: 50 }, rango)).toEqual([10, 50]);
+    expect(cambiosDePotencia([3, 50], rango)).toEqual({ potenciaMin: undefined, potenciaMax: 50 });
+    expect(cambiosDePotencia([10, 2000], null)).toEqual({ potenciaMin: undefined, potenciaMax: undefined });
+    });
 });
 
 describe("filtro 'Con stock en <local>' (?retiro=)", () => {

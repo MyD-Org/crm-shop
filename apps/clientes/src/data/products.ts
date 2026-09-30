@@ -1,3 +1,4 @@
+import type { AtributosEstructurados } from "@/lib/catalogo-caracteristicas";
 import type { ProductStock } from "@myd-org/ui";
 
 /**
@@ -58,10 +59,16 @@ export interface Product {
   /** Ficha técnica (PDF) del overlay del CRM, ya compuesta. undefined = sin ficha. */
   fichaTecnicaUrl?: string;
   /**
-   * Datos técnicos en tabla (potencia, base, temperatura de color…). Todavía no
-   * hay de dónde sacarlos: la ficha los muestra sólo si llegan con contenido.
+   * Datos técnicos en tabla (potencia, base, temperatura de color…), desde los
+   * atributos estructurados del CRM (`catalogo-caracteristicas.ts`). La ficha
+   * los muestra sólo si llegan con contenido (y con el flag `busqueda-ia`).
    */
   especificaciones?: EspecificacionProducto[];
+  /**
+   * Atributos estructurados del CRM (`public.catalog_atributos`), sólo cuando la
+   * consulta los pidió. Los usan los filtros del chat y la card `spec`.
+   */
+  atributosEstructurados?: AtributosEstructurados;
   oldPrice?: number;
   /** Precio de la lista propia del cliente (ver `conPrecioCuenta`). */
   precioEspecial?: boolean;

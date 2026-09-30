@@ -19,6 +19,7 @@ import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
+import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
 import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
 import { interpretar } from "@/lib/busqueda-inteligente/servidor";
 import { decidirBusqueda } from "@/lib/busqueda-inteligente/flujo";
@@ -37,6 +38,8 @@ type Props = {
     pagina?: ParamCrudo;
     precio_min?: ParamCrudo;
     precio_max?: ParamCrudo;
+    potencia_min?: ParamCrudo;
+    potencia_max?: ParamCrudo;
     stock?: ParamCrudo;
     retiro?: ParamCrudo;
     vista?: ParamCrudo;
@@ -110,7 +113,16 @@ async function CatalogoResultados({ searchParams }: Props) {
   // defecto (ver `SOLO_STOCK_DEFAULT`).
   // Sin el flag `busqueda-ia`, el panel queda como siempre: sin la faceta de
   // características (ni su consulta).
-  const filtros = { ...filtrosDeEstado(estado), ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }) };
+  //
+  // Fichas estructuradas (fase 2): con el flag y `catalog_atributos` legible (la migración del CRM
+  // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
+  // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
+  const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
+  const filtros = {
+    ...filtrosDeEstado(estado),
+    ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
+    ...(estructurados ? { atributosEstructurados: true } : {}),
+  };
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
   // resuelven en Postgres: filtrar u ordenar después de paginar daría
@@ -219,8 +231,13 @@ async function contarResultados(
   estado: EstadoCatalogo,
   disp: ContextoDisponibilidad | undefined,
 ): Promise<number> {
-  const { soloVisibles } = await flagsPublicos();
-  return getPaginaCatalogo({ filtros: filtrosDeEstado(estado), pagina: 1, porPagina: 1, soloVisibles, disp })
+  const [{ soloVisibles }, estructurados] = await Promise.all([
+    flagsPublicos(),
+    atributosEstructuradosDisponibles(),
+  ]);
+  // Mismo criterio que la página que se va a mostrar (sólo corre con el flag `busqueda-ia`).
+  const filtros = { ...filtrosDeEstado(estado), ...(estructurados ? { atributosEstructurados: true } : {}) };
+  return getPaginaCatalogo({ filtros, pagina: 1, porPagina: 1, soloVisibles, disp })
     .then((p) => p.total)
     .catch((err: unknown) => {
       console.error(`[catalogo] no se pudo contar la búsqueda interpretada: ${err instanceof Error ? err.name : "desconocido"}`);

@@ -30,11 +30,12 @@
  */
 
 import { cache } from "react";
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
 import {
+  crmAtributos,
   crmCatalogo,
   crmCategorias,
   crmCategoriasAlegra,
@@ -67,7 +68,15 @@ import {
 import type { Product } from "@/data/products";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
-import { columnasConteoAtributos, facetasDeConteos, filtroAtributosSql } from "./catalogo-atributos-sql";
+import {
+  columnasConteoAtributos,
+  facetasDeConteos,
+  filtroAtributosSql,
+  criterioSql,
+  type ContextoAtributos,
+} from "./catalogo-atributos-sql";
+import type { CriterioEstructurado } from "./catalogo-atributos";
+import { caracteristicasDe, leerAtributosEstructurados } from "./catalogo-caracteristicas";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
 const STOCK_BAJO = 5;
@@ -113,6 +122,11 @@ interface FilaCatalogo {
    * declararla: `mapFilaToProduct` la trata igual que null si no vino.
    */
   overlayFichaTecnica?: FichaTecnicaCrm | null;
+  /**
+   * Atributos estructurados (`public.catalog_atributos`), el jsonb de `atributosFilaSql`. Sólo
+   * viene cuando la consulta los pidió (flag + tabla disponible); ausente o null = sin datos.
+   */
+  atributos?: unknown;
 }
 
 /**
@@ -137,6 +151,8 @@ export function mapFilaToProduct(
 ): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
   const price = precioDeLista(mapPrecios(fila.prices), idPriceList);
+  const atributosEstructurados = leerAtributosEstructurados(fila.atributos);
+  const especificaciones = caracteristicasDe(atributosEstructurados);
   return {
     id: fila.alegraId,
     // La marca sale del customField de Alegra; si no está cargado, cae al
@@ -158,6 +174,8 @@ export function mapFilaToProduct(
     categoriaPropiaId: fila.overlayCategoriaId ?? undefined,
     images: fotosPermitidas(urlsDeFotos(fila.overlayFotos, baseMedios), hostsMedios),
     fichaTecnicaUrl: urlDeFicha(fila.overlayFichaTecnica, baseMedios),
+    ...(atributosEstructurados ? { atributosEstructurados } : {}),
+    ...(especificaciones.length ? { especificaciones } : {}),
     // oldPrice / discount / badge → capa de marketing del shop, no de Alegra.
   };
 }
@@ -250,11 +268,65 @@ const COLUMNAS_CATALOGO_BASE = {
 };
 
 /**
- * Las columnas del catálogo. Con `disp` (flag `disponibilidad-sucursal`), el stock es el de las
- * sucursales del contexto menos su reserva (`stockSucursalSql`); sin él, el de siempre.
+ * Atributos estructurados del producto de la fila (`public.catalog_atributos`, migración 0048 del
+ * CRM) como UN jsonb `{clave: {n: valor_num, t: valor_texto}}`, NULL si no tiene ninguno.
+ * Subconsulta correlacionada por la PK (tenant, producto): una lectura de índice por fila. Con el
+ * tenant en el WHERE, como toda lectura de `public`.
+ *
+ * Sólo se arma cuando quien llama ya sabe que la tabla existe y se puede leer
+ * (`atributosEstructuradosDisponibles`): nombrarla sin la migración rompería la consulta entera.
  */
-const columnasCatalogo = (disp?: ContextoDisponibilidad) =>
-  disp ? { ...COLUMNAS_CATALOGO_BASE, stock: stockSucursalSql(disp) } : COLUMNAS_CATALOGO_BASE;
+const atributosFilaSql = () =>
+  sql`(select jsonb_object_agg(${crmAtributos.clave}, jsonb_build_object('n', ${crmAtributos.valorNum}, 't', ${crmAtributos.valorTexto}))
+    from ${crmAtributos}
+    where ${crmAtributos.tenantId} = ${shopTenantId()} and ${crmAtributos.alegraId} = ${crmCatalogo.alegraId})`;
+
+/**
+ * Las columnas del catálogo. Con `disp` (flag `disponibilidad-sucursal`), el stock es el de las
+ * sucursales del contexto menos su reserva (`stockSucursalSql`); sin él, el de siempre. Con
+ * `estructurados`, además los atributos de `catalog_atributos` (ver `atributosFilaSql`).
+ */
+const columnasCatalogo = (disp?: ContextoDisponibilidad, estructurados = false) => {
+  const base = disp ? { ...COLUMNAS_CATALOGO_BASE, stock: stockSucursalSql(disp) } : COLUMNAS_CATALOGO_BASE;
+  return estructurados ? { ...base, atributos: sql<unknown>`${atributosFilaSql()}` } : base;
+};
+
+/**
+ * Filas de `catalog_atributos` del producto de la fila con una clave (la PK entera: una búsqueda
+ * de índice). `extra` agrega condiciones sobre `valor_num`/`valor_texto`.
+ */
+const filaAtributoSql = (clave: string, extra?: SQL) =>
+  sql`select 1 from ${crmAtributos}
+    where ${crmAtributos.tenantId} = ${shopTenantId()} and ${crmAtributos.alegraId} = ${crmCatalogo.alegraId}
+      and ${crmAtributos.clave} = ${clave}${extra ? sql` and ${extra}` : sql``}`;
+
+/** `EXISTS` de un valor estructurado que cumple el criterio (una por atributo del WHERE). */
+const existeAtributoSql = (c: CriterioEstructurado) =>
+  sql`exists (${filaAtributoSql(c.clave, criterioSql(c, sql`${crmAtributos.valorNum}`, sql`${crmAtributos.valorTexto}`))})`;
+
+/** Contexto de las condiciones de atributos: el texto buscable y, si se pueden leer, los estructurados. */
+const contextoAtributos = (filtros: Pick<FiltrosCatalogo, "atributosEstructurados">): ContextoAtributos => ({
+  texto: textoBuscableSql(),
+  ...(filtros.atributosEstructurados ? { existe: existeAtributoSql } : {}),
+});
+
+/** Filtro de potencia en UN `EXISTS` (los dos extremos sobre la misma fila). */
+const filtroPotenciaSql = (min?: number, max?: number) =>
+  min == null && max == null
+    ? undefined
+    : sql`exists (${filaAtributoSql(
+        "potencia_w",
+        and(
+          min != null ? sql`${crmAtributos.valorNum} >= ${min}` : undefined,
+          max != null ? sql`${crmAtributos.valorNum} <= ${max}` : undefined,
+        ),
+      )})`;
+
+/** Potencia (W) estructurada del producto de la fila, numeric o NULL (una búsqueda por PK). */
+const potenciaSql = () =>
+  sql`(select ${crmAtributos.valorNum} from ${crmAtributos}
+    where ${crmAtributos.tenantId} = ${shopTenantId()} and ${crmAtributos.alegraId} = ${crmCatalogo.alegraId}
+      and ${crmAtributos.clave} = 'potencia_w')`;
 
 /** Con `disp`, sólo productos que alguna sucursal activa sirve (ver `visibleEnSucursalSql`). */
 const visibleEnZonaSql = (disp?: ContextoDisponibilidad) => (disp ? visibleEnSucursalSql(disp) : undefined);
@@ -385,12 +457,17 @@ export async function getCatalogo(opts: {
    * productos ocultos por sucursal. Ausente = stock único, como siempre.
    */
   disp?: ContextoDisponibilidad;
+  /**
+   * Sumar los atributos estructurados de cada producto (`catalog_atributos`). Sólo con la tabla
+   * disponible (`atributosEstructuradosDisponibles`).
+   */
+  atributosEstructurados?: boolean;
 }): Promise<Product[]> {
   const q = opts.busqueda?.trim();
   const conTerminos = terminosBusqueda(q).length > 0;
 
   let query = getDb()
-    .select(columnasCatalogo(opts.disp))
+    .select(columnasCatalogo(opts.disp, opts.atributosEstructurados))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
@@ -495,12 +572,14 @@ export async function getProductosPorIds(
     soloVisibles?: boolean;
     /** Con `soloActivos`, también excluye lo oculto en todas las sucursales que sirven al visitante. */
     disp?: ContextoDisponibilidad;
+    /** Sumar los atributos estructurados (sólo con la tabla disponible). */
+    atributosEstructurados?: boolean;
   },
 ): Promise<Map<string, Product>> {
   if (alegraIds.length === 0) return new Map();
 
   const filas = await getDb()
-    .select(columnasCatalogo(opts?.disp))
+    .select(columnasCatalogo(opts?.disp, opts?.atributosEstructurados))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
@@ -577,6 +656,16 @@ export interface FiltrosCatalogo {
    * panel queda como siempre y no se paga esa consulta). Sale `atributos: []`.
    */
   sinFacetaAtributos?: boolean;
+  /**
+   * `public.catalog_atributos` se puede leer (flag `busqueda-ia` + tabla disponible, lo decide la
+   * page con `atributosEstructuradosDisponibles`). Con él, `atributos` mira primero el dato
+   * estructurado, hay filtro y faceta de potencia, y los productos traen sus características.
+   * Sin él, todo como en la fase 1 (y `potenciaMin`/`potenciaMax` se ignoran).
+   */
+  atributosEstructurados?: boolean;
+  /** Extremos inclusivos de la potencia en watts (sólo productos con `potencia_w`). */
+  potenciaMin?: number;
+  potenciaMax?: number;
   /** Extremos inclusivos del rango, sobre el precio exhibido (con IVA). */
   precioMin?: number;
   precioMax?: number;
@@ -786,6 +875,7 @@ interface AplicarFiltros {
   marcas: boolean;
   atributos: boolean;
   precio: boolean;
+  potencia: boolean;
   stock: boolean;
 }
 
@@ -794,6 +884,7 @@ const APLICAR_TODOS: AplicarFiltros = {
   marcas: true,
   atributos: true,
   precio: true,
+  potencia: true,
   stock: true,
 };
 
@@ -823,7 +914,10 @@ function condicionesDe(
     aplicar.marcas && filtros.marcas?.length
       ? inArray(marcaSql, filtros.marcas)
       : undefined,
-    aplicar.atributos ? filtroAtributosSql(textoBuscableSql(), filtros.atributos) : undefined,
+    aplicar.atributos ? filtroAtributosSql(contextoAtributos(filtros), filtros.atributos) : undefined,
+    aplicar.potencia && filtros.atributosEstructurados
+      ? filtroPotenciaSql(filtros.potenciaMin, filtros.potenciaMax)
+      : undefined,
     aplicar.precio && filtros.precioMin != null
       ? sql`${precioExhibidoSql} >= ${filtros.precioMin}`
       : undefined,
@@ -902,7 +996,7 @@ export async function getPaginaCatalogo(opts: {
 
   const filas = total
     ? await getDb()
-        .select(columnasCatalogo(opts.disp))
+        .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados))
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay())
@@ -937,6 +1031,8 @@ export async function getProducto(
     idPriceList?: string;
     /** Flag `disponibilidad-sucursal`: null si ninguna sucursal que sirve al visitante lo ofrece. */
     disp?: ContextoDisponibilidad;
+    /** Sumar características estructuradas (flag `busqueda-ia` + tabla disponible). */
+    atributosEstructurados?: boolean;
   },
 ): Promise<Product | null> {
   // Un id que no es de Alegra no es un producto: ni se consulta.
@@ -946,6 +1042,7 @@ export async function getProducto(
     soloActivos: true,
     soloVisibles: opts.soloVisibles,
     disp: opts.disp,
+    atributosEstructurados: opts.atributosEstructurados,
   });
   return productos.get(id) ?? null;
 }
@@ -976,6 +1073,11 @@ export interface Facetas {
    */
   precio: RangoPrecio | null;
   /**
+   * Rango real de potencia (W) de los productos filtrados que TIENEN `potencia_w`, sin el propio
+   * filtro de potencia. null = ninguno la tiene; ausente = no se calculó (sin estructurados).
+   */
+  potencia?: RangoPrecio | null;
+  /**
    * Locales para el filtro "Con stock en <local>" (activos y con retiro). No salen de Postgres: los
    * agrega la page del catálogo cuando hay más de uno. Ausente = el filtro no se muestra.
    */
@@ -991,16 +1093,42 @@ export interface Facetas {
  * búsqueda (antes 160–300 y 220–350 ms); sin búsqueda la faceta sale de la
  * caché compartida del catálogo.
  */
-function consultaConteoAtributos(where: ReturnType<typeof condicionesDe>, atributos: string[] | undefined) {
+function consultaConteoAtributos(
+  where: ReturnType<typeof condicionesDe>,
+  atributos: string[] | undefined,
+  estructurados = false,
+) {
+  // Con estructurados, el jsonb de cada producto también se lee UNA vez por fila.
   const filas = getDb()
-    .select({ texto: sql<string>`${textoBuscableSql()}`.as("texto") })
+    .select({
+      texto: sql<string>`${textoBuscableSql()}`.as("texto"),
+      ...(estructurados ? { attrs: sql<unknown>`${atributosFilaSql()}`.as("attrs") } : {}),
+    })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
     .leftJoin(stockReservado, joinReserva())
     .where(where)
     .as("filas_atributos");
-  return getDb().select(columnasConteoAtributos(sql`${filas.texto}`, atributos)).from(filas);
+  const ctx: ContextoAtributos = estructurados
+    ? { texto: sql`${filas.texto}`, attrs: sql`"filas_atributos"."attrs"` }
+    : { texto: sql`${filas.texto}` };
+  return getDb().select(columnasConteoAtributos(ctx, atributos)).from(filas);
+}
+
+/** Rango real de potencia (enteros hacia afuera) sobre los productos que tienen `potencia_w`. */
+function consultaRangoPotencia(where: ReturnType<typeof condicionesDe>) {
+  const potencia = potenciaSql();
+  return getDb()
+    .select({
+      min: sql<number | null>`floor(min(${potencia}))::int`,
+      max: sql<number | null>`ceil(max(${potencia}))::int`,
+    })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(stockReservado, joinReserva())
+    .where(and(where, sql`${potencia} is not null`));
 }
 
 /**
@@ -1026,10 +1154,15 @@ export async function getFacetas(
   const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, disp);
   const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, disp);
   const whereAtributos = condicionesDe(filtros, { ...APLICAR_TODOS, atributos: false }, soloVisibles, disp);
+  // Potencia: sólo con estructurados y con el panel de características (flag `busqueda-ia`).
+  const conPotencia = Boolean(filtros.atributosEstructurados) && !filtros.sinFacetaAtributos;
+  const wherePotencia = conPotencia
+    ? condicionesDe(filtros, { ...APLICAR_TODOS, potencia: false }, soloVisibles, disp)
+    : undefined;
 
   const arbol = await getArbolCategorias();
 
-  const [categorias, marcas, [rango], [conteoAtributos]] = await Promise.all([
+  const [categorias, marcas, [rango], [conteoAtributos], rangoPotencia] = await Promise.all([
     arbol.length
       ? conteoPorCategoriaPropia(whereCategorias).then((c) => enArbolConConteo(arbol, c))
       : getDb()
@@ -1065,7 +1198,10 @@ export async function getFacetas(
       .leftJoin(crmOverlay, joinOverlay())
       .leftJoin(stockReservado, joinReserva())
       .where(wherePrecio),
-    filtros.sinFacetaAtributos ? Promise.resolve([]) : consultaConteoAtributos(whereAtributos, filtros.atributos),
+    filtros.sinFacetaAtributos
+      ? Promise.resolve([])
+      : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados),
+    conPotencia ? consultaRangoPotencia(wherePotencia).then(([r]) => r) : Promise.resolve(undefined),
   ]);
 
   const precio =
@@ -1073,7 +1209,19 @@ export async function getFacetas(
       ? { min: rango.min, max: rango.max }
       : null;
 
-  return { categorias, marcas, atributos: facetasDeConteos(conteoAtributos), precio };
+  const potencia = conPotencia
+    ? rangoPotencia?.min != null && rangoPotencia?.max != null
+      ? { min: rangoPotencia.min, max: rangoPotencia.max }
+      : null
+    : undefined;
+
+  return {
+    categorias,
+    marcas,
+    atributos: facetasDeConteos(conteoAtributos),
+    precio,
+    ...(potencia !== undefined ? { potencia } : {}),
+  };
 }
 
 

@@ -86,6 +86,11 @@ export const crmOverlay = publico.table("catalog_overlay", {
   categoriaId: uuid("categoria_id"),
   fotos: jsonb("fotos").$type<FotoCrm[]>().notNull(),
   fichaTecnica: jsonb("ficha_tecnica").$type<FichaTecnicaCrm | null>(),
+  /**
+   * Slugs de `sucursales` donde el producto NO se ofrece (vacío = visible en todas). Migración
+   * 0045 del CRM. Sólo se lee con el flag `disponibilidad-sucursal` prendido.
+   */
+  ocultoEnSucursales: text("oculto_en_sucursales").array().notNull(),
 });
 
 // ---------------------------------------------------------------------------
@@ -363,4 +368,22 @@ export const crmStockSucursal = publico.table("catalog_stock_sucursal", {
   alegraId: text("alegra_id").notNull(),
   stock: numeric("stock").notNull(),
   leidoAt: timestamp("leido_at", { withTimezone: true }),
+});
+
+/**
+ * Reglas de venta del tenant (`public.reglas_venta`, migración 0045 del CRM): UNA fila por tenant
+ * (PK `tenant_id`), SELECT de la tabla entera. Sin fila (tenant nuevo) el Shop usa los mismos
+ * defaults que el CRM (`REGLAS_VENTA_DEFAULT` en `sucursales-repo.ts`). `reservaDias` = 0 significa
+ * que la reserva nunca vence.
+ */
+export const crmReglasVenta = publico.table("reglas_venta", {
+  tenantId: text("tenant_id").notNull(),
+  respaldoEnvio: boolean("respaldo_envio").notNull(),
+  retiroSinStock: text("retiro_sin_stock").$type<"bloquear" | "ofrecer">().notNull(),
+  trasladoDias: integer("traslado_dias").notNull(),
+  reservaDias: integer("reserva_dias").notNull(),
+  avisoSinContactarHoras: integer("aviso_sin_contactar_horas").notNull(),
+  contactoHorasHabiles: integer("contacto_horas_habiles").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

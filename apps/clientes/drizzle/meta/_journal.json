@@ -169,6 +169,13 @@
       "when": 1790718048650,
       "tag": "0023_orders_sucursal",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790727643493,
+      "tag": "0024_orders_reserva_sucursal",
+      "breakpoints": true
     }
   ]
 }

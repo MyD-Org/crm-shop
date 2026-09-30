@@ -161,5 +161,12 @@
     "factura_sucursal": "text",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
+  },
+  "public.catalog_stock_sucursal": {
+    "tenant_id": "text",
+    "sucursal": "text",
+    "alegra_id": "text",
+    "stock": "numeric",
+    "leido_at": "timestamp with time zone"
   }
 }

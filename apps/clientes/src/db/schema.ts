@@ -455,6 +455,23 @@ export const orders = shop.table(
     sucursalRegla: jsonb("sucursal_regla").$type<ReglaAplicada>(),
     sucursalAsignadaEn: timestamp("sucursal_asignada_en", { withTimezone: true }),
 
+    // --- Reserva por sucursal (migración 0024, change `sucursales-igz-mdp`, rebanada B) ---
+    /**
+     * El pedido se factura por una cuenta distinta de la que despacha: la reserva se mantiene en la
+     * sucursal que despacha hasta entregar o cancelar (facturar no la libera).
+     */
+    facturaCruzada: boolean("factura_cruzada").notNull().default(false),
+    /**
+     * Hasta cuándo reserva un pendiente sin pago (snapshot de `crearPedido`). NULL = sin vencimiento
+     * (`infinity` si la regla es "nunca"); los pendientes anteriores a la 0024 se rellenaron con
+     * `created_at + 24 h`.
+     */
+    reservaVenceEn: timestamp("reserva_vence_en", { withTimezone: true }),
+    /** Cuándo un operador marcó el pedido como contactado (lo escribe el CRM). */
+    contactadoEn: timestamp("contactado_en", { withTimezone: true }),
+    contactadoPor: uuid("contactado_por"),
+    contactadoPorNombre: text("contactado_por_nombre"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -642,6 +659,11 @@ export const orderItems = shop.table(
     subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
     iva: numeric("iva", { precision: 14, scale: 2 }).notNull(),
     total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+    /**
+     * Slug de la sucursal de la que se TRAE esta línea cuando no sale de la que despacha el pedido
+     * (línea "a traer"; migración 0024). Sin FK. NULL = sale de `orders.sucursal`.
+     */
+    aTraerDe: text("a_traer_de"),
   },
   (t) => [index("order_items_order").on(t.orderId)],
 );
@@ -663,6 +685,20 @@ export const orderItems = shop.table(
 export const stockReservado = shop
   .view("stock_reservado", {
     tenantId: text("tenant_id").notNull(),
+    alegraItemId: text("alegra_item_id").notNull(),
+    qty: numeric("qty").notNull(),
+  })
+  .existing();
+
+/**
+ * Unidades reservadas por (tenant, sucursal, ítem) (vista `shop.stock_reservado_sucursal`,
+ * migración 0024). Vive AL LADO de `stockReservado`, que no cambia. Ver el header de la migración
+ * para las reglas. `.existing()`: la vista la crea la migración a mano.
+ */
+export const stockReservadoSucursal = shop
+  .view("stock_reservado_sucursal", {
+    tenantId: text("tenant_id").notNull(),
+    sucursal: text("sucursal").notNull(),
     alegraItemId: text("alegra_item_id").notNull(),
     qty: numeric("qty").notNull(),
   })

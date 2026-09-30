@@ -7,15 +7,26 @@
  * perfil `degradado` (minutos), no por una hora.
  */
 import { cacheLife } from "next/cache";
+import { getArbolCategorias } from "../catalog";
 import { busquedasFrecuentes } from "./cache";
+import { esBusquedaPublicable, vocabularioConocido } from "./publicable";
 
 /** Cuántas se muestran en la guía. */
 export const CANTIDAD_FRECUENTES = 6;
+/** Candidatas que se leen para quedarse con las publicables. */
+const CANDIDATAS = 30;
 
 export async function busquedasFrecuentesCacheadas(tenantId: string): Promise<string[]> {
   "use cache: remote";
   console.info("[cache] busquedas-frecuentes miss");
-  const busquedas = await busquedasFrecuentes(tenantId, CANTIDAD_FRECUENTES);
+  // Sólo las que están hechas de vocabulario conocido (ver publicable.ts): el
+  // mínimo de usos solo no alcanza para publicar texto escrito por visitantes.
+  const [candidatas, arbol] = await Promise.all([
+    busquedasFrecuentes(tenantId, CANDIDATAS),
+    getArbolCategorias().catch(() => []),
+  ]);
+  const vocabulario = vocabularioConocido(arbol);
+  const busquedas = candidatas.filter((q) => esBusquedaPublicable(q, vocabulario)).slice(0, CANTIDAD_FRECUENTES);
   if (busquedas.length) cacheLife("busquedas");
   else cacheLife("degradado");
   return busquedas;

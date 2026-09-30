@@ -6,6 +6,9 @@ const { busquedasFrecuentes, cacheLifeMock } = vi.hoisted(() => ({
   cacheLifeMock: vi.fn(),
 }));
 vi.mock("@/lib/busqueda-inteligente/cache", () => ({ busquedasFrecuentes }));
+vi.mock("@/lib/catalog", () => ({
+  getArbolCategorias: async () => [{ id: "c1", parentId: null, nombre: "Reflectores", orden: 1 }],
+}));
 vi.mock("next/cache", () => ({ cacheLife: cacheLifeMock }));
 vi.mock("next/server", async (importar) => ({
   ...(await importar<typeof import("next/server")>()),
@@ -29,11 +32,12 @@ describe("GET /api/shop/busquedas-frecuentes", () => {
 
   it("prendido ⇒ las frecuentes del tenant, cacheadas una hora", async () => {
     setFlag("busqueda-ia", true);
-    busquedasFrecuentes.mockResolvedValue(["luz calida", "reflector exterior"]);
+    busquedasFrecuentes.mockResolvedValue(["luz calida", "juan perez", "reflector exterior", "compren aca"]);
     const res = await GET();
     expect(res.status).toBe(200);
+    // Sólo las hechas de vocabulario conocido: el texto libre no se publica.
     expect(await res.json()).toEqual({ busquedas: ["luz calida", "reflector exterior"] });
-    expect(busquedasFrecuentes).toHaveBeenCalledWith("tenant-test", 6);
+    expect(busquedasFrecuentes).toHaveBeenCalledWith("tenant-test", 30);
     expect(cacheLifeMock).toHaveBeenCalledWith("busquedas");
   });
 

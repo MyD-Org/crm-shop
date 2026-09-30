@@ -27,7 +27,7 @@ import type { Cotizacion } from "./cotizacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
 import type { PlanPedido } from "./pagos/cuotas-tipos";
 import {
-  ENTREGA_LABEL,
+  etiquetaEntrega,
   PAGO_LABEL,
   type EntregaTipo,
   type PagoMetodo,
@@ -468,8 +468,7 @@ export function armarOrder(
     metodoPago: PAGO_LABEL[fila.pagoMetodo as PagoMetodo] ?? fila.pagoMetodo,
     pagoMetodoSlug: fila.pagoMetodo,
     ...(fila.sucursal ? { sucursal: fila.sucursal } : {}),
-    metodoEntrega:
-      ENTREGA_LABEL[fila.entregaTipo as EntregaTipo] ?? fila.entregaTipo,
+    metodoEntrega: etiquetaEntrega(fila.entregaTipo, fila.entregaCiudad, fila.entregaDireccion),
     entregaTipo: fila.entregaTipo as EntregaTipoPedido,
     entregaCiudad: fila.entregaCiudad ?? undefined,
     entregaDireccion: fila.entregaDireccion ?? undefined,

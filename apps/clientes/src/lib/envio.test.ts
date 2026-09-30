@@ -5,6 +5,8 @@ import {
   PAGO_LABEL,
   ciudadConEnvio,
   costoEnvio,
+  esEnvioACoordinar,
+  etiquetaEntrega,
   evaluarEnvio,
   pagosDisponibles,
 } from "./envio";
@@ -37,7 +39,7 @@ describe("evaluarEnvio", () => {
     expect(r.disponible).toBe(false);
     // El motivo se le muestra al cliente: tiene que decirle qué hacer, no solo
     // que no se puede.
-    expect(r.motivo).toContain("Retiro");
+    expect(r.motivo).toContain("Envío a coordinar");
   });
 
   it("pide elegir ciudad cuando no hay ninguna", () => {
@@ -140,5 +142,22 @@ describe("ciudadConEnvio (zona de envío propia, única fuente)", () => {
 
   it("lo que devuelve lo acepta evaluarEnvio (checkout y servidor coinciden)", () => {
     expect(evaluarEnvio(MINIMO_ENVIO, ciudadConEnvio("eldorado")).disponible).toBe(true);
+  });
+});
+
+describe("envío a coordinar", () => {
+  it("es un envío sin ciudad ni dirección", () => {
+    expect(esEnvioACoordinar("envio", undefined, undefined)).toBe(true);
+    expect(esEnvioACoordinar("envio", " ", "")).toBe(true);
+    expect(esEnvioACoordinar("envio", "Puerto Iguazú", "Av. San Martín 1234")).toBe(false);
+    // Con uno solo de los dos es un envío a domicilio incompleto, no a coordinar.
+    expect(esEnvioACoordinar("envio", "Puerto Iguazú", undefined)).toBe(false);
+    expect(esEnvioACoordinar("retiro", undefined, undefined)).toBe(false);
+  });
+
+  it("la etiqueta del pedido lo distingue del envío a domicilio", () => {
+    expect(etiquetaEntrega("envio", null, null)).toBe("Envío a coordinar");
+    expect(etiquetaEntrega("envio", "El Dorado", "Calle 1")).toBe("Envío a domicilio");
+    expect(etiquetaEntrega("retiro")).toBe("Retiro en local");
   });
 });

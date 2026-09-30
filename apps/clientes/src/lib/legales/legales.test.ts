@@ -110,7 +110,7 @@ describe("envíos y pagos", () => {
     const t = texto(bloquesEnviosYPagos({ envio: false, pagos: false, cuotas: false }));
     expect(t).not.toContain("Puerto Iguazú");
     expect(t).not.toContain("El Dorado");
-    expect(t).toContain("Retiro en local / a coordinar");
+    expect(t).toContain("«Retiro en local» o «Envío a coordinar»");
   });
 
   it("envío prendido: ciudades y mínimo formateado", () => {

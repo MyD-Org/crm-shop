@@ -2,6 +2,7 @@ import { NextResponse, after } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
 import {
+  esEnvioACoordinar,
   evaluarEnvio,
   pagosDisponibles,
   type EntregaTipo,
@@ -222,19 +223,23 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  // Con el flag `envio` apagado el checkout no ofrece el envío; esto cubre el
-  // POST directo (y un checkout abierto antes de apagarlo).
-  if (entregaTipo === "envio" && !(await envioHabilitado())) {
+  // Envío sin ciudad ni dirección = "Envío a coordinar": lo acuerda un asesor,
+  // así que no pasa por el flag `envio` ni por la zona de envío propio.
+  const aCoordinar = esEnvioACoordinar(entregaTipo, entregaCiudad, entregaDireccion);
+  const aDomicilio = entregaTipo === "envio" && !aCoordinar;
+  // Con el flag `envio` apagado el checkout no ofrece el envío a domicilio; esto
+  // cubre el POST directo (y un checkout abierto antes de apagarlo).
+  if (aDomicilio && !(await envioHabilitado())) {
     return NextResponse.json(
       {
         error:
-          "El envío a domicilio no está disponible por el momento. Seleccione retiro en el local o entrega a coordinar.",
+          "El envío a domicilio no está disponible por el momento. Seleccione retiro en el local o envío a coordinar.",
         motivo: "envio_no_disponible",
       },
       { status: 409 },
     );
   }
-  if (entregaTipo === "envio" && (!entregaCiudad || !entregaDireccion)) {
+  if (aDomicilio && (!entregaCiudad || !entregaDireccion)) {
     return NextResponse.json(
       { error: "Para envío a domicilio hacen falta ciudad y dirección." },
       { status: 400 },
@@ -323,11 +328,11 @@ export async function POST(req: Request) {
 
   // Solo se envía dentro de Argentina. El checkout ya no le ofrece el envío a
   // un comprador con documento de otro país; esto cubre el POST directo.
-  if (entregaTipo === "envio" && !admiteEnvio(datosFactura.pais)) {
+  if (aDomicilio && !admiteEnvio(datosFactura.pais)) {
     return NextResponse.json(
       {
         error:
-          "El envío a domicilio solo está disponible para compradores de Argentina. Seleccione retiro en el local.",
+          "El envío a domicilio solo está disponible para compradores de Argentina. Seleccione retiro en el local o envío a coordinar.",
         motivo: "envio_no_disponible_pais",
       },
       { status: 409 },
@@ -376,7 +381,7 @@ export async function POST(req: Request) {
     }
 
     const envio = evaluarEnvio(cotizacion.subtotal, entregaCiudad);
-    if (entregaTipo === "envio" && !envio.disponible) {
+    if (aDomicilio && !envio.disponible) {
       return NextResponse.json({ error: envio.motivo, cotizacion }, { status: 409 });
     }
 

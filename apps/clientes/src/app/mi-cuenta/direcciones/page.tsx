@@ -51,7 +51,7 @@ export default async function DireccionesPage() {
           <p className="text-sm text-muted">{textoEnvio(CIUDADES_ENVIO, MINIMO_ENVIO)}</p>
         </Card>
         <Card title="Retiro en local">
-          <p className="text-sm text-muted">{ENTREGA_LABEL.retiro}</p>
+          <p className="text-sm text-muted">Retire su pedido en el local que elija, o coordinamos el envío con usted.</p>
         </Card>
       </div>
       {/* El DS 0.13 no tiene Alert tone="info": neutral hasta que exista. */}

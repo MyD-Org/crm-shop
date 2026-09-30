@@ -94,6 +94,8 @@ export function PedidoDetalle({
   const ultimoCambio = textoUltimoCambio(pedido.estadoActualizadoPorNombre, pedido.estadoActualizadoEn)
   const documento = [pedido.facturacion.tipoDoc, pedido.facturacion.nroDoc].filter(Boolean).join(" ")
   const esEnvio = pedido.entrega.tipo === "envio"
+  // Envío sin ciudad ni dirección: el Shop lo ofrece como "Envío a coordinar" (lo acuerda un asesor).
+  const envioACoordinar = esEnvio && !pedido.entrega.ciudad?.trim() && !pedido.entrega.direccion?.trim()
   const lineasATraer = pedido.items.filter((i) => i.aTraerDe)
   const whatsappRaw = pedido.sucursal ? whatsappsSucursal[pedido.sucursal] : undefined
   const whatsappHref = whatsappLink(whatsappRaw)
@@ -285,9 +287,9 @@ export function PedidoDetalle({
               </div>
             )}
             <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Dato label="Tipo">{entregaLabel(pedido.entrega.tipo)}</Dato>
-              {(esEnvio || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
-              {(esEnvio || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
+              <Dato label="Tipo">{envioACoordinar ? "Envío a coordinar" : entregaLabel(pedido.entrega.tipo)}</Dato>
+              {((esEnvio && !envioACoordinar) || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
+              {((esEnvio && !envioACoordinar) || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
               <Dato label="Sucursal">{reglaATexto(pedido.sucursal, pedido.sucursalRegla, nombresSucursal)}</Dato>
               {whatsappSucursal && (
                 <Dato label="WhatsApp de la sucursal">

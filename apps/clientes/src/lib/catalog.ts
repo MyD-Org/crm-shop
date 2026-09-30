@@ -978,6 +978,27 @@ export interface Facetas {
 }
 
 /**
+ * Conteos de todos los atributos en UNA consulta (ver `columnasConteoAtributos`).
+ * El texto normalizado (`immutable_unaccent(lower(concat_ws(…)))`) se calcula
+ * una sola vez por fila en una subconsulta y los ~11 patrones corren sobre esa
+ * columna. EXPLAIN ANALYZE sobre el catálogo real (2026-09-29): ~160 ms con
+ * búsqueda (igual que las otras facetas, que corren en paralelo) y ~210 ms sin
+ * búsqueda (antes 160–300 y 220–350 ms); sin búsqueda la faceta sale de la
+ * caché compartida del catálogo.
+ */
+function consultaConteoAtributos(where: ReturnType<typeof condicionesDe>, atributos: string[] | undefined) {
+  const filas = getDb()
+    .select({ texto: sql<string>`${textoBuscableSql()}`.as("texto") })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(stockReservado, joinReserva())
+    .where(where)
+    .as("filas_atributos");
+  return getDb().select(columnasConteoAtributos(sql`${filas.texto}`, atributos)).from(filas);
+}
+
+/**
  * Facetas con sus conteos, calculadas en Postgres.
  *
  * Cada faceta cuenta sobre lo que matchea la búsqueda MÁS los filtros de los
@@ -1039,16 +1060,7 @@ export async function getFacetas(
       .leftJoin(crmOverlay, joinOverlay())
       .leftJoin(stockReservado, joinReserva())
       .where(wherePrecio),
-    // Todos los atributos en una sola consulta (ver `columnasConteoAtributos`).
-    filtros.sinFacetaAtributos
-      ? Promise.resolve([])
-      : getDb()
-          .select(columnasConteoAtributos(textoBuscableSql(), filtros.atributos))
-          .from(crmCatalogo)
-          .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-          .leftJoin(crmOverlay, joinOverlay())
-          .leftJoin(stockReservado, joinReserva())
-          .where(whereAtributos),
+    filtros.sinFacetaAtributos ? Promise.resolve([]) : consultaConteoAtributos(whereAtributos, filtros.atributos),
   ]);
 
   const precio =

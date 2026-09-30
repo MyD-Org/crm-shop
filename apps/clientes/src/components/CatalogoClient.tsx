@@ -25,6 +25,7 @@ import {
 } from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
 import { hrefTalCual, type ChipSugerido } from "@/lib/busqueda-inteligente/url";
+import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
@@ -128,6 +129,13 @@ export function CatalogoClient({
   useEffect(() => {
     estadoVisibleRef.current = estadoVisible;
   }, [estadoVisible]);
+
+  // Lo que muestra el catálogo, para el contexto de pantalla del chat
+  // (`contextoParaChat`, contrato contexto-pantalla-shop/v1).
+  useEffect(() => {
+    fijarCatalogoParaChat({ estado, total, productos });
+    return () => fijarCatalogoParaChat(null);
+  }, [estado, total, productos]);
 
   const navegar = (href: string) => startTransition(() => router.push(href));
   const ir = (cambios: Partial<EstadoCatalogo>) =>

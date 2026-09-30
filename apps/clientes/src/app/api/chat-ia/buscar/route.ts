@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getCatalogo } from "@/lib/catalog";
+import { getArbolCategorias, getCatalogo } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
-import { aProductoAgente, limiteBusqueda } from "@/lib/chat-ia-productos";
+import { aProductoAgente, facetasDeProductos, limiteBusqueda } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
@@ -25,7 +25,7 @@ function ipDe(req: Request): string {
 }
 
 /**
- * GET /api/chat-ia/buscar?q=<texto>&limit=<n>
+ * GET /api/chat-ia/buscar?q=<texto>&limit=<n>[&facetas=1]
  *
  * Búsqueda del catálogo para el agente vendedor del chat. Es LA MISMA búsqueda
  * del Shop (términos, plurales, relevancia y el segundo intento tolerante a
@@ -34,6 +34,12 @@ function ipDe(req: Request): string {
  *
  * Pública y de solo lectura, como /api/shop/catalogo: el catálogo ya es
  * público. Precios de la lista general (no hay sesión: llama ai-api).
+ *
+ * Con `facetas=1` (el vendedor que filtra el catálogo, spec catálogo asistido):
+ * `{ productos, facetas }`, con `facetas.categorias`, `facetas.marcas` y
+ * `facetas.atributos` como `{ id, nombre }` del conjunto encontrado, con los
+ * mismos ids que filtra el catálogo (`navigate_catalog` sólo puede proponer
+ * ids que aparecieron acá). Sin el parámetro, el array de siempre.
  */
 export async function GET(req: Request) {
   if (!(await chatIaHabilitado())) return json({ error: "No encontrado." }, 404);
@@ -59,7 +65,12 @@ export async function GET(req: Request) {
         return productos;
       });
     }
-    return json(productos.map(aProductoAgente));
+    if (params.get("facetas") !== "1") return json(productos.map(aProductoAgente));
+    // Nombres de las categorías propias (lo que viaja en `?categoria=`). Si el
+    // árbol no se puede leer, las facetas salen con la categoría de Alegra.
+    const arbol = await getArbolCategorias().catch(() => []);
+    const nombres = new Map(arbol.map((n) => [n.id, n.nombre]));
+    return json({ productos: productos.map(aProductoAgente), facetas: facetasDeProductos(productos, nombres) });
   } catch (err) {
     console.error(`[chat-ia/buscar] ${err instanceof Error ? err.name : "desconocido"}`);
     return json({ error: "No se pudo buscar en el catálogo." }, 502);

@@ -12,7 +12,9 @@
  * Funciones puras: las rutas hacen la lectura de la base.
  */
 import type { Product } from "@/data/products";
+import { atributosDeTexto } from "./catalogo-atributos";
 import { maxCantidad } from "./catalogo-vista";
+import { formatMarca, formatRubro } from "./formato-rubro";
 
 /** Largo de la descripción que ve el modelo. Más es ruido y costo. */
 export const DESCRIPCION_MAX = 200;
@@ -47,6 +49,15 @@ export interface ProductoResuelto {
   maxQuantity: number;
   /** Unidades, sólo con stock bajo ("Queda 1" / "Quedan N"), igual que la card del catálogo. */
   stock?: number;
+  /** Código del producto (card `spec`, ai-widget 0.7.0), siempre que se conozca. */
+  code?: string;
+  /**
+   * Nombres de los atributos del diccionario que cumple el producto (card
+   * `spec`): "Luz cálida", "Apto exterior"… Mismo criterio que el filtro `atr`.
+   */
+  attributes?: string[];
+  /** Ficha técnica (PDF), si el producto tiene una cargada en el CRM. */
+  specUrl?: string;
   /**
    * Propio del Shop (el widget lo ignora): precio NETO, el que guarda el
    * carrito (`CartItem.price`). `price` es el exhibido, con IVA si se conoce.
@@ -92,8 +103,60 @@ export function aProductoResuelto(p: Product): ProductoResuelto {
     ...(p.sku && p.sku !== p.name ? { sku: p.sku } : {}),
     maxQuantity: maxCantidad(p),
     ...(p.stock === "low" && p.stockQty != null && p.stockQty > 0 ? { stock: p.stockQty } : {}),
+    ...(p.sku ? { code: p.sku } : {}),
+    ...atributosDe(p),
+    ...(p.fichaTecnicaUrl ? { specUrl: p.fichaTecnicaUrl } : {}),
     precioNeto: p.price,
   };
+}
+
+/** `{ attributes }` con los nombres de los atributos del producto, o nada. */
+function atributosDe(p: Pick<Product, "name" | "description">): { attributes?: string[] } {
+  const nombres = atributosDeTexto(`${p.name} ${p.description ?? ""}`).map((a) => a.nombre);
+  return nombres.length ? { attributes: nombres } : {};
+}
+
+/** Una opción de faceta para el agente: `id` es lo que viaja en la URL del catálogo. */
+export interface OpcionFaceta {
+  id: string;
+  nombre: string;
+}
+
+/** Facetas del conjunto que encontró la búsqueda del agente (`/api/chat-ia/buscar?facetas=1`). */
+export interface FacetasAgente {
+  categorias: OpcionFaceta[];
+  marcas: OpcionFaceta[];
+  atributos: OpcionFaceta[];
+}
+
+/**
+ * Facetas de los productos encontrados, con los mismos ids que filtra el
+ * catálogo (así `navigate_catalog` sólo propone filtros que existen):
+ * - categorías por NOMBRE: la categoría propia del producto si el tenant
+ *   tiene árbol (`nombresCategoriaPropia`: id → nombre), si no la de Alegra;
+ * - marcas por la marca exhibida (la que usa `?marca=`);
+ * - atributos del diccionario que cumple el nombre o la descripción.
+ * Sin repetidos, en el orden en que aparecen (el de relevancia).
+ */
+export function facetasDeProductos(
+  productos: readonly Product[],
+  nombresCategoriaPropia: ReadonlyMap<string, string>,
+): FacetasAgente {
+  const conArbol = nombresCategoriaPropia.size > 0;
+  const categorias = new Map<string, OpcionFaceta>();
+  const marcas = new Map<string, OpcionFaceta>();
+  const atributos = new Map<string, OpcionFaceta>();
+  for (const p of productos) {
+    const categoria = conArbol
+      ? p.categoriaPropiaId && nombresCategoriaPropia.get(p.categoriaPropiaId)
+      : p.category;
+    if (categoria && !categorias.has(categoria)) categorias.set(categoria, { id: categoria, nombre: formatRubro(categoria) });
+    if (p.brand && !marcas.has(p.brand)) marcas.set(p.brand, { id: p.brand, nombre: formatMarca(p.brand) });
+    for (const a of atributosDeTexto(`${p.name} ${p.description ?? ""}`)) {
+      if (!atributos.has(a.id)) atributos.set(a.id, { id: a.id, nombre: a.nombre });
+    }
+  }
+  return { categorias: [...categorias.values()], marcas: [...marcas.values()], atributos: [...atributos.values()] };
 }
 
 /** `limit` del query acotado a [1, LIMITE_BUSQUEDA_MAX]; basura ⇒ el default. */

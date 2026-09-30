@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { leerEstado } from "./catalogo-url";
 import {
   LARGO_MAX_PEDIDO,
+  contextoParaChat,
   conversar,
+  fijarCatalogoParaChat,
   estadoChatIa,
   estadoChatIaServidor,
   pedidoChatIa,
@@ -52,5 +55,15 @@ describe("puente con el chat", () => {
   it("en el servidor nunca hay chat", () => {
     registrarChatIa();
     expect(estadoChatIaServidor()).toEqual({ disponible: false, pedido: null });
+  });
+});
+
+describe("contexto de pantalla para el chat", () => {
+  it("el catálogo publicado entra sólo en /catalogo; al desmontarse se va", () => {
+    fijarCatalogoParaChat({ estado: leerEstado({ atr: "tono-calido" }), total: 12, productos: [{ id: "1101", name: "Reflector" }] });
+    expect(contextoParaChat("/catalogo").catalogo).toMatchObject({ url: "atr=tono-calido", total: 12, primeros: [{ id: "1101", nombre: "Reflector" }] });
+    expect(contextoParaChat("/carrito", { carrito: { lineas: 2 } })).toEqual({ v: 1, pagina: "carrito", carrito: { lineas: 2 } });
+    fijarCatalogoParaChat(null);
+    expect(contextoParaChat("/catalogo")).toEqual({ v: 1, pagina: "catalogo" });
   });
 });

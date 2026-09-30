@@ -10,6 +10,7 @@ import { hrefWhatsApp, mensajeTraspaso } from "@/lib/chat-ia-handoff";
 import { lineasAItems, type ProductoResuelto } from "@/lib/chat-ia-productos";
 import { COLOR_CHAT, ETIQUETAS_CHAT, SUBTITULO_CHAT } from "@/lib/chat-ia-textos";
 import { useChatIa } from "@/hooks/useChatIa";
+import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
 import {
   ATRIBUTO_DOCK,
@@ -105,7 +106,7 @@ function nombreEnPantalla(): string | undefined {
 export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
   const router = useRouter();
   const pathname = usePathname();
-  const { addItems, items, updateQty, removeItem } = useCart();
+  const { addItems, items, updateQty, removeItem, cambio } = useCart();
 
   // Puente con la página (lib/chat-ia-puente.ts): al montarse, el chat queda
   // disponible para los "Conversar" del catálogo; `pedido` es su `sendRequest`.
@@ -117,6 +118,11 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
   const [abierto, setAbierto] = useState(false);
   const acoplable = useSyncExternalStore(suscribirDock, hayLugarParaDock, sinDockEnServidor);
   const acoplado = acoplable && abierto;
+
+  // Invitación proactiva (src/lib/iniciativa/): chat abierto, checkout,
+  // agregados al carrito y la espera en la ficha. El teaser queda en el puente
+  // (`teaser`, `aceptarTeaser`, `descartarTeaser`) para el launcher.
+  useSenalesIniciativa({ pathname, abierto, cambio });
 
   // Acoplado y abierto, el layout le reserva el ancho (`padding-right` en
   // globals.css): el contenido se corre en vez de quedar tapado. Arranca sin

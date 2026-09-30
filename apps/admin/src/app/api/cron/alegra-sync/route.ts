@@ -1,12 +1,14 @@
-import { getDb } from "@/db"
-import { tenants as tenantsTable } from "@/db/schema"
-import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
+import { tenantsConAlegra } from "@/lib/alegra-sync-tenants"
 import { PRESUPUESTO_TRAMO_MS, syncTenant, type SyncTenantResult } from "@/lib/alegra-sync-tenant"
 import { bearerMatches } from "@/lib/secure-compare"
 
 // Sincroniza TODOS los tenants en una sola invocación: necesita más margen que la sync manual.
 export const maxDuration = 300
 
+// La sync PROGRAMADA (workflow admin-alegra-sync) ya no pasa por acá: corre completa dentro del
+// runner de GitHub Actions (scripts/alegra-sync.ts). Esta ruta por tramos queda para el botón
+// "Sincronizar con Alegra" del admin (y para operar a mano con curl).
+//
 // Sincroniza el catálogo de Alegra a la cache de todos los tenants con Alegra configurado, o
 // sólo el de `?tenant=<id>`. Lo invoca el workflow admin-alegra-sync (o curl en dev) con
 // CRON_SECRET. Best-effort por tenant. Ver ADR catálogo.
@@ -28,11 +30,6 @@ export const maxDuration = 300
 
 type ResultadoTenant = { tenant: string } & SyncTenantResult
 
-function conAlegra(cfg: TenantConfig | null): cfg is TenantConfig {
-  // Sin Alegra configurado (ni mock ni token) → saltear.
-  return !!cfg && (cfg.alegraMock || !!cfg.alegraToken)
-}
-
 export async function POST(req: Request) {
   if (!bearerMatches(req.headers.get("authorization"), process.env.CRON_SECRET)) {
     return Response.json({ error: "unauthorized" }, { status: 401 })
@@ -46,14 +43,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const ids = soloTenant
-      ? [soloTenant]
-      : (await getDb().select({ id: tenantsTable.id }).from(tenantsTable)).map((r) => r.id)
-    const configs: TenantConfig[] = []
-    for (const id of ids) {
-      const cfg = await getTenantByIdFromDb(id)
-      if (conAlegra(cfg)) configs.push(cfg)
-    }
+    const configs = await tenantsConAlegra(soloTenant)
     if (soloTenant && configs.length === 0) {
       return Response.json({ error: "Tenant inexistente o sin Alegra configurado." }, { status: 404 })
     }

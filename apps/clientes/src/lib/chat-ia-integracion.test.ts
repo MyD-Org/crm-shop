@@ -6,6 +6,9 @@ import {
   idProductoDeRuta,
   mismaUrlCatalogo,
   puedeNavegarSolo,
+  BREAKPOINT_MOBILE,
+  MEDIA_MOBILE,
+  hojaMinimizada,
 } from "./chat-ia-integracion";
 
 describe("filtros del agente → URL del catálogo", () => {
@@ -54,6 +57,28 @@ describe("puedeNavegarSolo", () => {
     expect(puedeNavegarSolo({ pathname: "/catalogo", acoplado: false, abierto: true })).toBe(false);
     expect(puedeNavegarSolo({ pathname: "/catalogo", acoplado: true, abierto: false })).toBe(false);
     expect(puedeNavegarSolo({ pathname: "/producto/1", acoplado: true, abierto: true })).toBe(false);
+  });
+
+  it("en la hoja mobile abierta (expandida o minimizada) también, sólo en /catalogo", () => {
+    expect(puedeNavegarSolo({ pathname: "/catalogo", acoplado: false, abierto: true, mobile: true })).toBe(true);
+    expect(puedeNavegarSolo({ pathname: "/catalogo", acoplado: false, abierto: false, mobile: true })).toBe(false);
+    expect(puedeNavegarSolo({ pathname: "/", acoplado: false, abierto: true, mobile: true })).toBe(false);
+    // Entre 768 y 1279 px: drawer flotante, tapa la grilla.
+    expect(puedeNavegarSolo({ pathname: "/catalogo", acoplado: false, abierto: true, mobile: false })).toBe(false);
+  });
+});
+
+describe("hoja mobile", () => {
+  it("la media query es la del widget (max-width: breakpoint - 0.02)", () => {
+    expect(BREAKPOINT_MOBILE).toBe(768);
+    expect(MEDIA_MOBILE).toBe("(max-width: 767.98px)");
+  });
+
+  it("minimizada sólo en mobile, abierta y en peek", () => {
+    expect(hojaMinimizada({ mobile: true, abierto: true, presentacion: "peek" })).toBe(true);
+    expect(hojaMinimizada({ mobile: true, abierto: true, presentacion: "expanded" })).toBe(false);
+    expect(hojaMinimizada({ mobile: true, abierto: false, presentacion: "peek" })).toBe(false);
+    expect(hojaMinimizada({ mobile: false, abierto: true, presentacion: "peek" })).toBe(false);
   });
 });
 

@@ -1,7 +1,8 @@
 /**
- * Integración del Shop con el chat del asistente (ai-widget 0.7.0, spec
- * catálogo asistido §6): de los filtros que propone el agente a una URL del
- * catálogo, cuándo el chat se acopla a la derecha y cuándo puede navegar solo.
+ * Integración del Shop con el chat del asistente (ai-widget 0.8.0, spec
+ * catálogo asistido §6 y fase 2 §4): de los filtros que propone el agente a
+ * una URL del catálogo, cuándo el chat se acopla a la derecha, cuándo es la
+ * hoja mobile y cuándo puede navegar solo.
  * Módulo puro: lo usa ChatIaWidget.
  */
 import type { CatalogFilters } from "@myd-org/ai-widget";
@@ -24,6 +25,21 @@ export const MEDIA_DOCK = "(min-width: 1280px)";
  * al `<body>` el `padding-right` del ancho del panel (`--aichat-dock-width`).
  */
 export const ATRIBUTO_DOCK = "data-chat-dock";
+
+/**
+ * Ancho por debajo del cual el chat es la hoja mobile a pantalla completa
+ * (`mobileBreakpoint` del ChatDrawer). La media query es la misma que arma
+ * el widget (`max-width: <breakpoint - 0.02>px`): los dos cambian juntos.
+ */
+export const BREAKPOINT_MOBILE = 768;
+export const MEDIA_MOBILE = `(max-width: ${BREAKPOINT_MOBILE - 0.02}px)`;
+
+/**
+ * Atributo de `<html>` que marca la hoja mobile minimizada (barra "peek"
+ * abajo): globals.css sube las barras de compra fijas de la ficha y el
+ * carrito para que la barra del chat no las tape.
+ */
+export const ATRIBUTO_PEEK = "data-chat-peek";
 
 /**
  * Filtros del agente → estado del catálogo, con las MISMAS reglas que la URL
@@ -51,11 +67,21 @@ export function hrefDeFiltros(f: CatalogFilters): string {
 
 /**
  * ¿Puede una card `catalog` en vivo navegar sola? Sólo si el visitante ya está
- * en el catálogo y ve el chat acoplado al lado: ve el cambio sin perder el
- * chat. Si no, la card muestra "Ver en el catálogo".
+ * en el catálogo y el chat está abierto de forma que ve el cambio sin perderlo:
+ * - acoplado a la derecha (≥ 1280 px): el catálogo se actualiza al lado;
+ * - hoja mobile (< 768 px), expandida o minimizada: la hoja pasa sola a la
+ *   barra "peek" con "Filtros aplicados" y el catálogo queda a la vista.
+ * En el medio (drawer flotante que tapa la grilla) o cerrado, la card muestra
+ * "Ver en el catálogo".
  */
-export function puedeNavegarSolo(opts: { pathname: string; acoplado: boolean; abierto: boolean }): boolean {
-  return opts.pathname.replace(/\/+$/, "") === "/catalogo" && opts.acoplado && opts.abierto;
+export function puedeNavegarSolo(opts: { pathname: string; acoplado: boolean; abierto: boolean; mobile?: boolean }): boolean {
+  const enCatalogo = opts.pathname.replace(/\/+$/, "") === "/catalogo";
+  return enCatalogo && opts.abierto && (opts.acoplado || opts.mobile === true);
+}
+
+/** ¿La hoja mobile está abierta y minimizada (barra "peek" abajo)? */
+export function hojaMinimizada(opts: { mobile: boolean; abierto: boolean; presentacion: "expanded" | "peek" }): boolean {
+  return opts.mobile && opts.abierto && opts.presentacion === "peek";
 }
 
 /** Id del producto de la ficha (`/producto/[id]`), o `undefined` fuera de ella. */

@@ -153,6 +153,7 @@ function TituloSeccion({ textos, linkTodos }: { textos: TextosSeccion; linkTodos
 export function HomeClient({
   contenido,
   destacados,
+  busquedaAsistida = null,
 }: {
   contenido: HomeContent;
   /**
@@ -160,6 +161,13 @@ export function HomeClient({
    * (precio, stock, cuotas y flags). Lo arma app/page.tsx.
    */
   destacados: ReactNode;
+  /**
+   * "Cuéntenos qué necesita" (flag `busqueda-ia`): hueco por request con su
+   * `<Suspense fallback={null}>`, armado en app/page.tsx. Va debajo de la
+   * cinta de marcas, fuera de la primera pantalla: al llegar por streaming no
+   * mueve nada de lo que ya se ve.
+   */
+  busquedaAsistida?: ReactNode;
 }) {
   const { marquee, servicios } = contenido;
   // Los textos apagados con "Mostrar" no se pintan. El editor no depende de
@@ -235,6 +243,8 @@ export function HomeClient({
       </SeccionEditable>
 
       <div className="mx-auto max-w-contenido px-[clamp(18px,4vw,48px)]">
+        {busquedaAsistida}
+
         {/* Ambientes */}
         <Reveal>
           <SeccionEditable seccion="ambientes" visibilidad={vis("ambientes")}>

@@ -5,6 +5,7 @@ import { ErrorLecturaFicha, leerFichaPdf, MODELO_FICHA } from "@/lib/catalogo-at
 import { detalleProducto } from "@/lib/catalogo-overlay-repo"
 import { R2TooLargeError } from "@/lib/r2"
 import { getShopMediaR2 } from "@/lib/shop-media"
+import { tomarLectura } from "@/lib/catalogo-atributos-lectura-guarda"
 
 // POST /api/admin/catalogo/productos/[alegraId]/atributos/leer-ficha — botón "Leer ficha técnica".
 //
@@ -14,6 +15,8 @@ import { getShopMediaR2 } from "@/lib/shop-media"
 // informa como `protegidos`). A pedido y de a un producto; el lote masivo es un script aparte.
 //
 // admin+ (operator → 404). Tenant = el del guard. El PDF nunca pasa por el navegador.
+// Cada lectura es una llamada paga: una sola en curso por producto y un tope por tenant por minuto
+// (`catalogo-atributos-lectura-guarda.ts`), así los clics repetidos no disparan varias.
 
 export const maxDuration = 60
 
@@ -40,39 +43,59 @@ export async function POST(req: Request, { params }: Params) {
   const r2 = getShopMediaR2()
   if (!r2) return errorResponse("El almacenamiento de archivos no está configurado. Avise al administrador.", 503)
 
+  const permiso = tomarLectura(guard.tenantId, alegraId)
+  if (!permiso.ok) {
+    return permiso.motivo === "en_curso"
+      ? errorResponse("Ya se está leyendo la ficha de este producto. Espere a que termine.", 409)
+      : errorResponse("Se alcanzó el límite de lecturas por minuto. Inténtelo de nuevo en un momento.", 429)
+  }
+  try {
+    return await leerYGuardar(guard.tenantId, alegraId, producto.nombreEfectivo || alegraId, producto.fichaTecnica.key, r2)
+  } finally {
+    permiso.liberar()
+  }
+}
+
+async function leerYGuardar(
+  tenantId: string,
+  alegraId: string,
+  nombre: string,
+  key: string,
+  r2: NonNullable<ReturnType<typeof getShopMediaR2>>,
+): Promise<Response> {
   let pdf: Uint8Array | null
   try {
-    pdf = await r2.getObject(producto.fichaTecnica.key, { maxBytes: MAX_BYTES_FICHA })
+    pdf = await r2.getObject(key, { maxBytes: MAX_BYTES_FICHA })
   } catch (err) {
     if (err instanceof R2TooLargeError) return errorResponse("La ficha técnica supera el tamaño que se puede leer.", 422)
-    console.error(`[leer-ficha] tenant=${guard.tenantId} R2: ${err instanceof Error ? err.name : "error"}`)
+    console.error(`[leer-ficha] tenant=${tenantId} R2: ${err instanceof Error ? err.name : "error"}`)
     return errorResponse("No se pudo leer el archivo de la ficha técnica. Inténtelo de nuevo.", 502)
   }
   if (!pdf) return errorResponse("No se encontró el archivo de la ficha técnica. Vuelva a subirlo.", 404)
 
   let lectura
   try {
-    lectura = await leerFichaPdf(pdf, producto.nombreEfectivo || alegraId)
+    lectura = await leerFichaPdf(pdf, nombre)
   } catch (err) {
     if (err instanceof ErrorLecturaFicha) {
-      console.warn(`[leer-ficha] tenant=${guard.tenantId} producto=${alegraId} ${err.message}`)
+      console.warn(`[leer-ficha] tenant=${tenantId} producto=${alegraId} ${err.message}`)
       return errorResponse(err.paraUsuario, err.estado ?? 502)
     }
     throw err
   }
 
   const escritas = await upsertAtributos(
-    guard.tenantId,
+    tenantId,
     lectura.atributos.map((a) => ({ alegraId, ...a })),
     "pdf",
   )
-  if (escritas > 0) await avisarShop(guard.tenantId)
+  if (escritas > 0) await avisarShop(tenantId)
   console.info(
-    `[leer-ficha] tenant=${guard.tenantId} producto=${alegraId} modelo=${MODELO_FICHA} leidos=${lectura.atributos.length} ` +
+    `[leer-ficha] tenant=${tenantId} producto=${alegraId} modelo=${MODELO_FICHA} leidos=${lectura.atributos.length} ` +
       `escritos=${escritas} tokens=${lectura.uso.entrada}/${lectura.uso.salida}`,
   )
 
-  const atributos = await leerAtributos(guard.tenantId, alegraId)
+  const atributos = await leerAtributos(tenantId, alegraId)
   return Response.json(
     {
       atributos,

@@ -4,6 +4,7 @@ import { getDb } from "@/db"
 import { catalogProducts } from "@/db/schema"
 import { guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { upsertAtributos } from "@/lib/catalogo-atributos-repo"
+import { MAX_LECTURAS_POR_MINUTO, reiniciarGuardaLectura } from "@/lib/catalogo-atributos-lectura-guarda"
 import { FakeR2 } from "./fake-r2"
 import { seedOperator, seedTenant, truncateAll } from "./helpers"
 
@@ -62,6 +63,7 @@ beforeEach(async () => {
   fake = new FakeR2()
   r2.actual = fake
   lector.leer.mockReset()
+  reiniciarGuardaLectura()
 })
 afterAll(async () => {
   await truncateAll()
@@ -125,5 +127,33 @@ describe("leer ficha técnica", () => {
     const res = await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))
     expect(res.status).toBe(404)
     expect(lector.leer).not.toHaveBeenCalled()
+  })
+
+  it("doble clic: una segunda lectura del mismo producto en curso → 409 y una sola llamada al lector", async () => {
+    await guardarOverlay(A, "100", { fichaTecnica: { key: KEY, nombre: "ficha.pdf", bytes: 4 } }, admin)
+    fake.objects.set(KEY, { body: new Uint8Array([0x25]), contentType: "application/pdf" })
+    let soltar: (v: unknown) => void = () => {}
+    lector.leer.mockReturnValue(new Promise((r) => (soltar = r)))
+    const primera = rutaLeer.POST(req("/x", { method: "POST" }), params("100"))
+    await new Promise((r) => setTimeout(r, 50))
+    const segunda = await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))
+    expect(segunda.status).toBe(409)
+    soltar({ atributos: [], uso: { entrada: 1, salida: 1 } })
+    expect((await primera).status).toBe(200)
+    expect(lector.leer).toHaveBeenCalledTimes(1)
+    // Terminada la primera, se puede volver a leer.
+    lector.leer.mockResolvedValue({ atributos: [], uso: { entrada: 1, salida: 1 } })
+    expect((await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))).status).toBe(200)
+  })
+
+  it(`tope por tenant: la lectura ${MAX_LECTURAS_POR_MINUTO + 1} del minuto → 429 sin llamar al lector`, async () => {
+    await guardarOverlay(A, "100", { fichaTecnica: { key: KEY, nombre: "ficha.pdf", bytes: 4 } }, admin)
+    fake.objects.set(KEY, { body: new Uint8Array([0x25]), contentType: "application/pdf" })
+    lector.leer.mockResolvedValue({ atributos: [], uso: { entrada: 1, salida: 1 } })
+    for (let i = 0; i < MAX_LECTURAS_POR_MINUTO; i++) {
+      expect((await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))).status).toBe(200)
+    }
+    expect((await rutaLeer.POST(req("/x", { method: "POST" }), params("100"))).status).toBe(429)
+    expect(lector.leer).toHaveBeenCalledTimes(MAX_LECTURAS_POR_MINUTO)
   })
 })

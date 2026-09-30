@@ -45,3 +45,13 @@ export function reglaATexto(
       return nombre
   }
 }
+
+/**
+ * Enlace `https://wa.me/<solo dígitos>` para el WhatsApp de una sucursal. El número se guarda como
+ * lo tipeó el operador ("+54 9 ..."); wa.me pide solo dígitos. Devuelve null si no hay dígitos
+ * suficientes para que sea un número.
+ */
+export function whatsappLink(numero: string | null | undefined): string | null {
+  const digitos = (numero ?? "").replace(/\D/g, "")
+  return digitos.length >= 6 ? `https://wa.me/${digitos}` : null
+}

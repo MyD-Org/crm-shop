@@ -1,5 +1,5 @@
 // Validación pura de las reglas de venta (sin DB, sin Next): la comparten la API y el formulario
-// de Configuración → Sucursales y ventas, así el operador ve el mismo mensaje en los dos lados.
+// de Sucursales, así el operador ve el mismo mensaje en los dos lados.
 // Textos en usted. Los valores por defecto son los del design (sí, ofrecer, 7, 7, 24, 24) y los
 // usa también el Shop cuando el tenant no tiene fila.
 

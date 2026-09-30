@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { MessageSquare, Users, LogOut, Settings, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound } from "lucide-react"
+import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock } from "lucide-react"
 import { SideNav, ToastProvider } from "@myd-org/ui"
 import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
 import { NotificationsPrompt } from "./NotificationsPrompt"
@@ -126,18 +126,24 @@ function roleLabel(role: AdminRole): string {
 // `flag`: entradas gateadas por feature flag (evaluado server-side y pasado por prop).
 // `minRole`: nivel mínimo para ver la entrada (usa el ranking de roles).
 // `badge`: contador de pendientes que va sobre el ícono (ver usePendingCounts).
+// `group`: el sidebar parte el menú en tres grupos, en orden de frecuencia de uso:
+//   Operación (lo de todos los días, con badges) · Datos (lo que se carga y mantiene) ·
+//   Administración (se toca cada tanto). El operador sólo ve Operación y Clientes.
+//   Las entradas van ya ordenadas por grupo: SideNav no reordena.
 const NAV = [
-  { href: "/admin/inbox", label: "Mensajes", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
+  { href: "/admin/inbox", label: "Mensajes", group: "Operación", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
   // Sin `minRole`: los pedidos del Shop los ve y los mueve también el operador (operator es el piso).
-  { href: "/admin/pedidos", label: "Pedidos", icon: <ShoppingBag size={16} strokeWidth={1.6} /> },
+  { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} /> },
+  { href: "/admin/comprobantes", label: "Comprobantes", group: "Operación", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
+  { href: "/admin/catalogo", label: "Catálogo", group: "Datos", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   // Sin `minRole`: el listado de usuarios de la tienda es de sólo lectura y lo ve el operador.
-  { href: "/admin/clientes-tienda", label: "Clientes de la tienda", icon: <UserRound size={16} strokeWidth={1.6} /> },
-  { href: "/admin/uso", label: "Uso del bot", icon: <BarChart3 size={16} strokeWidth={1.6} />, minRole: "superadmin" as const, flag: "usagePanel" as const },
-  { href: "/admin/configuracion", label: "Configuración", icon: <Settings size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/catalogo", label: "Catálogo", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/comprobantes", label: "Comprobantes", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
-  { href: "/admin/usuarios", label: "Usuarios", icon: <Users size={16} strokeWidth={1.6} />, minRole: "admin" as const },
-  { href: "/admin/plantillas", label: "Plantillas", icon: <FileText size={16} strokeWidth={1.6} />, minRole: "superadmin" as const },
+  { href: "/admin/clientes-tienda", label: "Clientes de la tienda", group: "Datos", icon: <UserRound size={16} strokeWidth={1.6} /> },
+  { href: "/admin/sucursales", label: "Sucursales", group: "Datos", icon: <Store size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/cuotas", label: "Pagos y cuotas", group: "Datos", icon: <CreditCard size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/horarios", label: "Horarios", group: "Datos", icon: <Clock size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/plantillas", label: "Plantillas", group: "Datos", icon: <FileText size={16} strokeWidth={1.6} />, minRole: "superadmin" as const },
+  { href: "/admin/usuarios", label: "Usuarios", group: "Administración", icon: <Users size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/uso", label: "Uso del bot", group: "Administración", icon: <BarChart3 size={16} strokeWidth={1.6} />, minRole: "superadmin" as const, flag: "usagePanel" as const },
 ]
 
 export function AdminShell(props: AdminShellProps) {
@@ -281,6 +287,7 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
       items={visibleNav.map((item) => ({
         href: item.href,
         label: item.label,
+        group: item.group,
         icon: item.badge ? <BadgeIcon icon={item.icon} count={pendingCounts ? pendingCounts[item.badge] : null} /> : item.icon,
         active: pathname.startsWith(item.href),
       }))}

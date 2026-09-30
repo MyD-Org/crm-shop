@@ -1,5 +1,5 @@
 // Tasas reales de Mercado Pago por cantidad de cuotas, SÓLO para mostrar en el backoffice
-// (Configuración → Medios de pago / Cuotas) al lado de la configuración. No forman parte del
+// (Pagos y cuotas) al lado de la configuración. No forman parte del
 // contrato con el Shop: el Shop consulta sus propias tasas con su token.
 //
 // GET /v1/payment_methods/installments?public_key=…&amount=…&payment_method_id={visa|master}

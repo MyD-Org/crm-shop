@@ -17,7 +17,7 @@
  * SOLO servidor: usa la DB.
  */
 
-import { and, inArray } from "drizzle-orm";
+import { and, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
 import { crmCatalogo, crmCategoriasAlegra, crmOverlay } from "@/db/crm";
@@ -29,7 +29,9 @@ import {
   resolverPrecio,
   type AlegraItem,
 } from "./alegra";
-import { estadoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
+import { activoSql, estadoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
+import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
+import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { joinOverlay, nombreExhibidoSql } from "./nombre-exhibido";
 import { costoEnvio, type EntregaTipo } from "./envio";
@@ -234,7 +236,7 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
  * esta misma cotización (y revalida el disponible dentro de la transacción del
  * pedido, ver `crearPedido`).
  */
-async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
+async function leerEspejo(ids: string[], disp?: ContextoDisponibilidad): Promise<Map<string, AlegraItem>> {
   if (ids.length === 0) return new Map();
   const filas: FilaEspejo[] = await getDb()
     .select({
@@ -244,9 +246,14 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
       code: crmCatalogo.code,
       brand: crmCatalogo.brand,
       prices: preciosSql,
-      stock: stockSql,
+      // Con `disp` (flag `disponibilidad-sucursal`): el mejor disponible entre las sucursales que
+      // cuentan; y un producto oculto en todas las sucursales que lo servirían queda "inactivo".
+      // La decisión por modalidad (retiro en un local, respaldo) la toma `asignarSucursal`.
+      stock: disp ? stockSucursalSql(disp) : stockSql,
       ivaPorcentaje: crmCatalogo.ivaPorcentaje,
-      status: estadoSql,
+      status: disp
+        ? sql<string>`(case when ${activoSql} and ${visibleEnSucursalSql(disp)} then 'active' else 'inactive' end)`
+        : estadoSql,
       categoryName: crmCategoriasAlegra.name,
     })
     .from(crmCatalogo)
@@ -266,9 +273,21 @@ async function leerEspejo(ids: string[]): Promise<Map<string, AlegraItem>> {
  */
 export async function cotizar(
   pedidas: LineaPedida[],
-  opts: { idPriceList?: string; entregaTipo?: EntregaTipo } = {},
+  opts: {
+    idPriceList?: string;
+    entregaTipo?: EntregaTipo;
+    /**
+     * Flag `disponibilidad-sucursal`: contexto para cotizar el stock por sucursal. Se pasa el de la
+     * UNIÓN (`contarEn` = todas las activas): la cotización es permisiva y la decisión definitiva
+     * (retiro en un local, respaldo) la toma `asignarSucursal` al crear el pedido.
+     */
+    disp?: ContextoDisponibilidad;
+  } = {},
 ): Promise<Cotizacion> {
-  const items = await leerEspejo(pedidas.map((p) => p.id));
+  const items = await leerEspejo(
+    pedidas.map((p) => p.id),
+    opts.disp,
+  );
   const lineas = pedidas.map((pedida) => {
     const item = items.get(pedida.id);
     return item

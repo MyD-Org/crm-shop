@@ -11,7 +11,7 @@
  * Todavía sin consumidores: el lote 2 lo cablea a catálogo, ficha y carrito, detrás del flag
  * `disponibilidad-sucursal`.
  */
-import { origenDeLinea, type ReglasVenta, type SucursalDato } from "./sucursales";
+import { origenDeLinea, permiteRespaldo, type ReglasVenta, type SucursalDato } from "./sucursales";
 
 /** Por producto: stock por sucursal; `null` en el producto = no inventariable. */
 export type StockPorSucursal = Record<string, Record<string, number> | null>;
@@ -99,7 +99,7 @@ export function disponibilidadPorSucursal(entrada: EntradaDisponibilidad): Resul
 
     let envio: DisponibilidadEnvio | null = null;
     if (modalidad === "envio") {
-      const r = origenDeLinea(linea, zona, sucursales, stock);
+      const r = origenDeLinea(linea, zona, sucursales, stock, permiteRespaldo("envio", reglas));
       if ("error" in r) {
         envio = { estado: r.error, origen: null, demoraDias: null };
       } else if (r.aTraer) {
@@ -118,7 +118,7 @@ export function disponibilidadPorSucursal(entrada: EntradaDisponibilidad): Resul
           retiro[local.slug] = { estado: "oculto", desde: null, demoraDias: null };
           continue;
         }
-        const r = origenDeLinea(linea, local.slug, sucursales, stock);
+        const r = origenDeLinea(linea, local.slug, sucursales, stock, permiteRespaldo("retiro", reglas));
         if ("error" in r) retiro[local.slug] = { estado: "sin_stock", desde: null, demoraDias: null };
         else if (r.aTraer)
           retiro[local.slug] = { estado: "con_demora", desde: r.origen, demoraDias: reglas.trasladoDias };
@@ -129,4 +129,51 @@ export function disponibilidadPorSucursal(entrada: EntradaDisponibilidad): Resul
     productos[id] = { envio, retiro, servible };
   }
   return { productos, lineasATraer };
+}
+
+/** Una fila de `catalog_stock_sucursal` (stock BRUTO de la cuenta de esa sucursal). */
+export interface FilaStockSucursal {
+  alegraId: string;
+  sucursal: string;
+  stock: number;
+}
+
+/**
+ * Arma el stock BRUTO por producto y sucursal a partir de lo que devuelve la DB.
+ *
+ * - `productos`: `stock` de la vista del CRM por producto (`null` = no inventariable); es el stock
+ *   de la cuenta de origen del producto.
+ * - Producto con filas en `catalog_stock_sucursal`: manda ese detalle; una sucursal sin fila vale 0.
+ * - Producto SIN ninguna fila (todavía no lo sincronizó el CRM por sucursal): su stock de la vista
+ *   se le asigna a `stockHeredado` y el resto de las sucursales valen 0. Es el respaldo de la
+ *   transición: la sync del CRM llena las filas y esto deja de aplicar solo.
+ */
+export function armarStockPorSucursal(
+  productos: { alegraId: string; stock: number | null }[],
+  filas: FilaStockSucursal[],
+  sucursales: string[],
+  stockHeredado: string,
+): StockPorSucursal {
+  const porProducto = new Map<string, Map<string, number>>();
+  for (const f of filas) {
+    const m = porProducto.get(f.alegraId) ?? new Map<string, number>();
+    m.set(f.sucursal, (m.get(f.sucursal) ?? 0) + f.stock);
+    porProducto.set(f.alegraId, m);
+  }
+  const salida: StockPorSucursal = {};
+  for (const p of productos) {
+    if (p.stock === null) {
+      salida[p.alegraId] = null;
+      continue;
+    }
+    const total = p.stock;
+    const filasDe = porProducto.get(p.alegraId);
+    salida[p.alegraId] = Object.fromEntries(
+      sucursales.map((slug) => [
+        slug,
+        filasDe ? (filasDe.get(slug) ?? 0) : slug === stockHeredado ? total : 0,
+      ]),
+    );
+  }
+  return salida;
 }

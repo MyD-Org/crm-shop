@@ -4,6 +4,10 @@ import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
 import { pagosHabilitados } from "@/lib/pagos-flag";
 import { permitir } from "@/lib/rate-limit";
+import { dispDelVisitante } from "@/lib/zona-servidor";
+import { contextoUnion } from "@/lib/disponibilidad-contexto";
+import { contextoParaProvincia, disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
+import { claveProvincia } from "@/lib/sucursales";
 
 /**
  * Techo por usuario.
@@ -29,7 +33,10 @@ function ipDe(req: Request): string | null {
 
 /**
  * POST /api/carrito/cotizar
- * Body: { items: [{ id, qty }], entregaTipo?, ciudad? }
+ * Body: { items: [{ id, qty }], entregaTipo?, ciudad?, provincia? }
+ * `provincia` (sólo con el flag `disponibilidad-sucursal`): la de entrega elegida en el checkout;
+ * define la sucursal de la zona con la que se calcula la disponibilidad. Con el flag prendido la
+ * respuesta suma `disponibilidad` (envío y retiro por local, por producto).
  *
  * Totales del carrito leídos del catálogo del CRM (vista `catalog_products_shop` + lista de precios
  * del snapshot de `client_links`), sin llamadas a Alegra. El carrito y el
@@ -55,7 +62,7 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { items?: unknown; entregaTipo?: unknown; ciudad?: unknown };
+  let body: { items?: unknown; entregaTipo?: unknown; ciudad?: unknown; provincia?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -91,10 +98,24 @@ export async function POST(req: Request) {
     const idPriceList = cliente
       ? await idPriceListCliente(cliente.codigocliente)
       : undefined;
-    const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo });
+    // Flag `disponibilidad-sucursal`: stock por sucursal (unión) y disponibilidad por modalidad.
+    const base = await dispDelVisitante();
+    const provincia = typeof body.provincia === "string" ? claveProvincia(body.provincia) : "";
+    const disp = base ? await contextoParaProvincia(base, provincia || null) : undefined;
+    const cotizacion = await cotizar(lineas, {
+      idPriceList,
+      entregaTipo,
+      disp: disp ? contextoUnion(disp) : undefined,
+    });
+    const disponibilidad = await disponibilidadParaMostrar(
+      lineas.map((l) => l.id),
+      disp,
+      Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
+    );
 
     return NextResponse.json({
       ...cotizacion,
+      ...(disponibilidad ? { disponibilidad } : {}),
       envio: evaluarEnvio(cotizacion.subtotal, ciudad),
       pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),
     });

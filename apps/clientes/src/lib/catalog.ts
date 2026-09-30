@@ -65,6 +65,8 @@ import {
   terminosBusqueda,
 } from "./catalogo-busqueda";
 import type { Product } from "@/data/products";
+import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
+import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
 const STOCK_BAJO = 5;
@@ -230,7 +232,7 @@ function soloVisiblesSql(soloVisibles: boolean) {
  * Columnas del join, en un solo lugar para no repetirlas entre queries. El
  * stock, menos lo reservado (exige el join a `stockReservado`).
  */
-const COLUMNAS_CATALOGO = {
+const COLUMNAS_CATALOGO_BASE = {
   alegraId: crmCatalogo.alegraId,
   name: crmCatalogo.name,
   code: crmCatalogo.code,
@@ -245,6 +247,16 @@ const COLUMNAS_CATALOGO = {
   overlayFichaTecnica: crmOverlay.fichaTecnica,
   overlayCategoriaId: crmOverlay.categoriaId,
 };
+
+/**
+ * Las columnas del catálogo. Con `disp` (flag `disponibilidad-sucursal`), el stock es el de las
+ * sucursales del contexto menos su reserva (`stockSucursalSql`); sin él, el de siempre.
+ */
+const columnasCatalogo = (disp?: ContextoDisponibilidad) =>
+  disp ? { ...COLUMNAS_CATALOGO_BASE, stock: stockSucursalSql(disp) } : COLUMNAS_CATALOGO_BASE;
+
+/** Con `disp`, sólo productos que alguna sucursal activa sirve (ver `visibleEnSucursalSql`). */
+const visibleEnZonaSql = (disp?: ContextoDisponibilidad) => (disp ? visibleEnSucursalSql(disp) : undefined);
 
 /**
  * Minúsculas y sin tildes en SQL. Las tildes importan: el catálogo dice
@@ -367,12 +379,17 @@ export async function getCatalogo(opts: {
   busqueda?: string;
   /** Segundo intento con parecido por trigramas (ver `coincideTexto`). */
   tolerante?: boolean;
+  /**
+   * Contexto de disponibilidad por sucursal (flag `disponibilidad-sucursal`): stock por sucursal y
+   * productos ocultos por sucursal. Ausente = stock único, como siempre.
+   */
+  disp?: ContextoDisponibilidad;
 }): Promise<Product[]> {
   const q = opts.busqueda?.trim();
   const conTerminos = terminosBusqueda(q).length > 0;
 
   let query = getDb()
-    .select(COLUMNAS_CATALOGO)
+    .select(columnasCatalogo(opts.disp))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
@@ -383,6 +400,7 @@ export async function getCatalogo(opts: {
         activoSql,
         conPrecioSql,
         soloVisiblesSql(opts.soloVisibles),
+        visibleEnZonaSql(opts.disp),
         q ? coincideTexto(q, opts.tolerante) : undefined
       )
     )
@@ -411,6 +429,11 @@ export async function getCategoriaExacta(opts: {
   categoriaId: string;
   limit: number;
   soloVisibles: boolean;
+  /**
+   * Contexto de disponibilidad por sucursal (flag `disponibilidad-sucursal`): stock por sucursal y
+   * productos ocultos por sucursal. Ausente = stock único, como siempre.
+   */
+  disp?: ContextoDisponibilidad;
 }): Promise<{ nombre: string; productos: Product[] } | null> {
   const [categoria] = await getDb()
     .select({ nombre: crmCategorias.nombre })
@@ -426,7 +449,7 @@ export async function getCategoriaExacta(opts: {
   if (!categoria) return null;
 
   const filas = await getDb()
-    .select(COLUMNAS_CATALOGO)
+    .select(columnasCatalogo(opts.disp))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
@@ -437,8 +460,9 @@ export async function getCategoriaExacta(opts: {
         activoSql,
         conPrecioSql,
         soloVisiblesSql(opts.soloVisibles),
+        visibleEnZonaSql(opts.disp),
         eq(crmOverlay.categoriaId, opts.categoriaId),
-        conStockSql,
+        conStock(opts.disp),
       ),
     )
     .orderBy(asc(crmCatalogo.name))
@@ -464,12 +488,18 @@ export async function getCategoriaExacta(opts: {
  */
 export async function getProductosPorIds(
   alegraIds: readonly string[],
-  opts?: { idPriceList?: string; soloActivos?: boolean; soloVisibles?: boolean },
+  opts?: {
+    idPriceList?: string;
+    soloActivos?: boolean;
+    soloVisibles?: boolean;
+    /** Con `soloActivos`, también excluye lo oculto en todas las sucursales que sirven al visitante. */
+    disp?: ContextoDisponibilidad;
+  },
 ): Promise<Map<string, Product>> {
   if (alegraIds.length === 0) return new Map();
 
   const filas = await getDb()
-    .select(COLUMNAS_CATALOGO)
+    .select(columnasCatalogo(opts?.disp))
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
@@ -480,6 +510,7 @@ export async function getProductosPorIds(
         inArray(crmCatalogo.alegraId, [...alegraIds]),
         opts?.soloActivos ? activoSql : undefined,
         opts?.soloActivos ? soloVisiblesSql(opts.soloVisibles ?? false) : undefined,
+        opts?.soloActivos ? visibleEnZonaSql(opts.disp) : undefined,
       ),
     );
 
@@ -601,7 +632,10 @@ const conPrecioSql = sql`${precioSql} > 0`;
  * "Solo con stock", en SQL. Replica `derivarStock`: null = no inventariable
  * = disponible; `<= 0` = sin stock.
  */
-const conStockSql = sql`(${stockSql} is null or ${stockSql} > 0)`;
+const conStock = (disp?: ContextoDisponibilidad) => {
+  const stock = disp ? stockSucursalSql(disp) : stockSql;
+  return sql`(${stock} is null or ${stock} > 0)`;
+};
 
 /**
  * ¿El tenant ya armó su árbol de categorías en el CRM? Mientras no tenga
@@ -752,13 +786,19 @@ const APLICAR_TODOS: AplicarFiltros = {
  * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
  * faceta excluye su propio grupo (ver `getFacetas`).
  */
-function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros, soloVisibles: boolean) {
+function condicionesDe(
+  filtros: FiltrosCatalogo,
+  aplicar: AplicarFiltros,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+) {
   const q = filtros.busqueda?.trim();
   return and(
     enTenantCatalogo(),
     activoSql,
     conPrecioSql,
     soloVisiblesSql(soloVisibles),
+    visibleEnZonaSql(disp),
     q ? coincideTexto(q, filtros.busquedaTolerante) : undefined,
     aplicar.categorias && filtros.categorias?.length
       ? filtroCategoriasSql(filtros.categorias)
@@ -772,7 +812,7 @@ function condicionesDe(filtros: FiltrosCatalogo, aplicar: AplicarFiltros, soloVi
     aplicar.precio && filtros.precioMax != null
       ? sql`${precioExhibidoSql} <= ${filtros.precioMax}`
       : undefined,
-    aplicar.stock && filtros.soloStock ? conStockSql : undefined,
+    aplicar.stock && filtros.soloStock ? conStock(disp) : undefined,
   );
 }
 
@@ -820,10 +860,15 @@ export async function getPaginaCatalogo(opts: {
   pagina?: number;
   porPagina?: number;
   idPriceList?: string;
+  /**
+   * Contexto de disponibilidad por sucursal (flag `disponibilidad-sucursal`): stock por sucursal y
+   * productos ocultos por sucursal. Ausente = stock único, como siempre.
+   */
+  disp?: ContextoDisponibilidad;
 }): Promise<PaginaCatalogo> {
   const filtros = opts.filtros ?? {};
   const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
-  const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles);
+  const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles, opts.disp);
 
   const [conteo] = await getDb()
     .select({ total: sql<number>`count(*)::int` })
@@ -839,7 +884,7 @@ export async function getPaginaCatalogo(opts: {
 
   const filas = total
     ? await getDb()
-        .select(COLUMNAS_CATALOGO)
+        .select(columnasCatalogo(opts.disp))
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay())
@@ -872,6 +917,8 @@ export async function getProducto(
     /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
     soloVisibles: boolean;
     idPriceList?: string;
+    /** Flag `disponibilidad-sucursal`: null si ninguna sucursal que sirve al visitante lo ofrece. */
+    disp?: ContextoDisponibilidad;
   },
 ): Promise<Product | null> {
   // Un id que no es de Alegra no es un producto: ni se consulta.
@@ -880,6 +927,7 @@ export async function getProducto(
     idPriceList: opts.idPriceList,
     soloActivos: true,
     soloVisibles: opts.soloVisibles,
+    disp: opts.disp,
   });
   return productos.get(id) ?? null;
 }
@@ -922,10 +970,12 @@ export async function getFacetas(
   filtros: FiltrosCatalogo,
   /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
   soloVisibles: boolean,
+  /** Flag `disponibilidad-sucursal` (ver `ContextoDisponibilidad`). */
+  disp?: ContextoDisponibilidad,
 ): Promise<Facetas> {
-  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles);
-  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles);
-  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles);
+  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles, disp);
+  const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, disp);
+  const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, disp);
 
   const arbol = await getArbolCategorias();
 
@@ -988,12 +1038,13 @@ export async function getFacetas(
  */
 export const getCategorias = cache(async function getCategorias(
   soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
 ): Promise<string[]> {
   // Con árbol propio el menú muestra sus raíces, en el orden del CRM, contando
   // lo que se publica de verdad (mismo WHERE que la grilla sin filtros).
   const arbol = await getArbolCategorias();
   if (arbol.length) {
-    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles));
+    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp));
     return enArbolConConteo(arbol, conteos)
       .filter((c) => c.nivel === 1)
       .map((c) => c.label);

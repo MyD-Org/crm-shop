@@ -10,6 +10,7 @@ import { AvisoQuitado } from "@/components/AvisoQuitado";
 import { CIUDADES_ENVIO, MINIMO_ENVIO } from "@/lib/envio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { useCart } from "@/context/CartContext";
+import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
 import { CuotasResumen } from "@/components/CuotasResumen";
@@ -376,6 +377,15 @@ export function CarritoClient({
                               <AlertIcon />
                               {linea.detalle}
                             </p>
+                          )}
+                          {/* Flag `disponibilidad-sucursal`: envío y retiro por local. */}
+                          {!linea?.problema && cotizacion?.disponibilidad?.productos[item.id] && (
+                            <DisponibilidadLineas
+                              disponibilidad={cotizacion.disponibilidad.productos[item.id]}
+                              locales={cotizacion.disponibilidad.locales}
+                              envio={envio}
+                              className="mt-0.5"
+                            />
                           )}
                         </div>
 

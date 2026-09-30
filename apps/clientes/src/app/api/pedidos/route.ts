@@ -29,6 +29,9 @@ import { permitir } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { SucursalPedidoError } from "@/lib/sucursales-pedido";
 import { COOKIE_ZONA, claveDeCookie } from "@/lib/zona";
+import { dispDelVisitante } from "@/lib/zona-servidor";
+import { contextoUnion } from "@/lib/disponibilidad-contexto";
+import { contextoParaProvincia } from "@/lib/disponibilidad-vista";
 import { claveProvincia } from "@/lib/sucursales";
 import { cookies } from "next/headers";
 
@@ -323,7 +326,30 @@ export async function POST(req: Request) {
     const idPriceList = cliente
       ? await idPriceListCliente(cliente.codigocliente)
       : undefined;
-    const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo });
+    // Con el flag `sucursales`: los datos con los que `crearPedido` asigna la sucursal. Provincia
+    // de entrega: la del body, si no la zona elegida (cookie), si no la del domicilio de facturación.
+    // Apagado = undefined y el pedido queda sin sucursal, como siempre.
+    const sucursalEntrada = (await sucursalesHabilitadas())
+      ? {
+          entregaTipo,
+          provincia: claveProvincia(texto(body.entregaProvincia, 80)) || null,
+          ciudad: entregaCiudad || null,
+          sucursalRetiro: entregaTipo === "retiro" ? texto(body.sucursalRetiro, 20) || null : null,
+        }
+      : undefined;
+    if (sucursalEntrada && !sucursalEntrada.provincia) {
+      const cookieZona = claveDeCookie((await cookies()).get(COOKIE_ZONA)?.value);
+      sucursalEntrada.provincia = cookieZona ?? (claveProvincia(datosFactura.domicilioProvincia) || null);
+    }
+
+    // Flag `disponibilidad-sucursal`: stock por sucursal. La cotización cuenta la UNIÓN de las
+    // sucursales activas (permisiva); la decisión definitiva por modalidad la toma `crearPedido`.
+    const dispBase = sucursalEntrada ? await dispDelVisitante() : undefined;
+    const disp = dispBase
+      ? await contextoParaProvincia(dispBase, entregaTipo === "envio" ? sucursalEntrada?.provincia : null)
+      : undefined;
+    const dispCotizacion = disp ? contextoUnion(disp) : undefined;
+    const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion });
 
     // Nada se persiste si hay una sola línea con problema: se devuelve la
     // cotización entera para que el checkout marque exactamente cuál falla.
@@ -369,22 +395,6 @@ export async function POST(req: Request) {
         : await listaDelContactoCoincidente(dc.perfil?.coincideConAlegra)),
     });
 
-    // Con el flag `sucursales`: los datos con los que `crearPedido` asigna la sucursal. Provincia
-    // de entrega: la del body, si no la zona elegida (cookie), si no la del domicilio de facturación.
-    // Apagado = undefined y el pedido queda sin sucursal, como siempre.
-    const sucursalEntrada = (await sucursalesHabilitadas())
-      ? {
-          entregaTipo,
-          provincia: claveProvincia(texto(body.entregaProvincia, 80)) || null,
-          ciudad: entregaCiudad || null,
-          sucursalRetiro: entregaTipo === "retiro" ? texto(body.sucursalRetiro, 20) || null : null,
-        }
-      : undefined;
-    if (sucursalEntrada && !sucursalEntrada.provincia) {
-      const cookieZona = claveDeCookie((await cookies()).get(COOKIE_ZONA)?.value);
-      sucursalEntrada.provincia = cookieZona ?? (claveProvincia(datosFactura.domicilioProvincia) || null);
-    }
-
     let pedido: Awaited<ReturnType<typeof crearPedido>>;
     try {
       pedido = await crearPedido(
@@ -420,19 +430,23 @@ export async function POST(req: Request) {
           motivoRevision,
           idempotencyKey: idempotencyKey || undefined,
           sucursalEntrada,
+          disponibilidadSucursal: disp !== undefined,
         },
         cotizacion,
         plan,
       );
     } catch (err) {
       if (err instanceof SucursalPedidoError) {
-        return NextResponse.json({ error: err.message, motivo: err.codigo }, { status: 409 });
+        return NextResponse.json(
+          { error: err.message, motivo: err.codigo, ...(err.ids.length > 0 ? { ids: err.ids } : {}) },
+          { status: 409 },
+        );
       }
       if (!(err instanceof StockInsuficienteError)) throw err;
       // Otro checkout se llevó las unidades entre la cotización y el pedido (la
       // transacción ya se deshizo). Se re-cotiza, que ya descuenta su reserva,
       // para que el checkout marque qué línea no alcanza.
-      return productosCambiaron(await cotizar(lineas, { idPriceList, entregaTipo }));
+      return productosCambiaron(await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion }));
     }
 
     // El pedido reservó stock: el listado cacheado se renueva en la próxima

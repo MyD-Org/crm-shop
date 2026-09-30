@@ -8,7 +8,9 @@ import { cookies } from "next/headers";
 import { identidadActual } from "./auth";
 import { getPerfilFacturacion } from "./facturacion-db";
 import { sucursalesHabilitadas } from "./sucursales-flag";
-import { sucursalesCacheadas } from "./sucursales-datos";
+import { disponibilidadSucursalHabilitada } from "./disponibilidad-sucursal-flag";
+import { contextoDisponibilidad, type ContextoDisponibilidad } from "./disponibilidad-contexto";
+import { reglasVentaCacheadas, sucursalesCacheadas } from "./sucursales-datos";
 import {
   COOKIE_ZONA,
   opcionesCheckout,
@@ -43,3 +45,31 @@ export async function opcionesCheckoutDelVisitante(): Promise<OpcionesCheckoutSu
   if (!zona) return null;
   return opcionesCheckout(zona, await sucursalesCacheadas());
 }
+
+/**
+ * Contexto de disponibilidad del visitante (flag `disponibilidad-sucursal`): la sucursal de su zona
+ * y las reglas de venta. `undefined` = flag apagado (o sin sucursales activas): todo el catálogo
+ * usa el stock único de siempre. Se pasa como ARGUMENTO a las lecturas cacheadas
+ * (`catalogo-publico.ts`), nunca se lee adentro de un scope cacheado. Si algo falla al leer las
+ * reglas, se cae a "sin contexto" (stock único): una falla de configuración no apaga la tienda.
+ */
+export const dispDelVisitante = cache(async (): Promise<ContextoDisponibilidad | undefined> => {
+  if (!(await disponibilidadSucursalHabilitada())) return undefined;
+  try {
+    const [zona, datos, reglas] = await Promise.all([
+      zonaDelVisitante(),
+      sucursalesCacheadas(),
+      reglasVentaCacheadas(),
+    ]);
+    return (
+      contextoDisponibilidad({
+        zona: zona?.sucursal?.slug,
+        sucursales: datos.sucursales,
+        reglas,
+      }) ?? undefined
+    );
+  } catch (err) {
+    console.error("[zona] no se pudo armar el contexto de disponibilidad:", err);
+    return undefined;
+  }
+});

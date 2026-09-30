@@ -22,6 +22,7 @@ export const toReglasDto = (r: Fila): ReglasVenta => ({
   reservaDias: r.reservaDias,
   avisoSinContactarHoras: r.avisoSinContactarHoras,
   contactoHorasHabiles: r.contactoHorasHabiles,
+  mensajeConfirmacion: r.mensajeConfirmacion,
 })
 
 export async function leerReglasVenta(tenantId: string): Promise<ReglasVenta> {

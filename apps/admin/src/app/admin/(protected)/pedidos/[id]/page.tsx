@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { getPedido, toPedidoDetalleDto } from "@/lib/pedidos-repo"
 import { canSeeCosts, isKnownAdminRole, roleRank } from "@/lib/roles"
+import { nombresMediosPago } from "@/lib/medios-pago-shop-repo"
 import { listarSucursales } from "@/lib/sucursales-repo"
 import { PedidoDetalle } from "@/components/admin/pedidos/PedidoDetalle"
 
@@ -18,8 +19,9 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
   const encontrado = await getPedido(guard.tenantId, id)
   if (!encontrado) notFound()
 
-  const sucursales = await listarSucursales(guard.tenantId)
+  const [sucursales, mediosPago] = await Promise.all([listarSucursales(guard.tenantId), nombresMediosPago(guard.tenantId)])
   const nombresSucursal = Object.fromEntries(sucursales.map((s) => [s.slug, s.nombre]))
+  const whatsappsSucursal = Object.fromEntries(sucursales.map((s) => [s.slug, s.whatsapp]))
 
   return (
     <div className="p-4 md:p-6">
@@ -28,6 +30,8 @@ export default async function PedidoPage({ params }: { params: Promise<{ id: str
           incluirCosto: canSeeCosts(guard.user.role),
         })}
         nombresSucursal={nombresSucursal}
+        mediosPago={mediosPago}
+        whatsappsSucursal={whatsappsSucursal}
         esAdminPlus={roleRank(guard.user.role) >= roleRank("admin")}
       />
     </div>

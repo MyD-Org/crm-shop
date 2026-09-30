@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { Alert, Badge, Button, Card, Dialog, Field, Select, Stepper, Table, Textarea, type StepItem, type TableColumn, useToast } from "@myd-org/ui"
 import type { PedidoDetalleDto, PedidoItemDto } from "@/lib/pedidos-repo"
-import { reglaATexto, type NombresSucursal } from "@/lib/sucursales-texto"
+import { reglaATexto, whatsappLink, type NombresSucursal } from "@/lib/sucursales-texto"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
 import { CuentaFacturaInfo } from "./CuentaFacturaInfo"
 import { ContactoControl } from "./ContactoControl"
@@ -56,11 +56,18 @@ export function PedidoDetalle({
   initial,
   esAdminPlus,
   nombresSucursal = {},
+  mediosPago = {},
+  whatsappsSucursal = {},
 }: {
   initial: PedidoDetalleDto
   esAdminPlus: boolean
   /** `slug -> nombre` de las sucursales del tenant, para mostrar la asignada con su nombre. */
   nombresSucursal?: NombresSucursal
+  /** `slug -> nombre` de los medios de pago del checkout (`medios_pago_shop`); un slug que no está
+   *  cae a las etiquetas de siempre y, si tampoco, al texto crudo. */
+  mediosPago?: Record<string, string>
+  /** `slug de sucursal -> WhatsApp` para el enlace de contacto de la sucursal asignada. */
+  whatsappsSucursal?: Record<string, string>
 }) {
   const { toast } = useToast()
   const [pedido, setPedido] = useState(initial)
@@ -88,6 +95,9 @@ export function PedidoDetalle({
   const documento = [pedido.facturacion.tipoDoc, pedido.facturacion.nroDoc].filter(Boolean).join(" ")
   const esEnvio = pedido.entrega.tipo === "envio"
   const lineasATraer = pedido.items.filter((i) => i.aTraerDe)
+  const whatsappRaw = pedido.sucursal ? whatsappsSucursal[pedido.sucursal] : undefined
+  const whatsappHref = whatsappLink(whatsappRaw)
+  const whatsappSucursal = whatsappHref && whatsappRaw ? { href: whatsappHref, texto: whatsappRaw.trim() } : null
   const revision = pedido.requiereRevision
     ? revisionInfo({
         motivo: pedido.motivoRevision,
@@ -279,6 +289,13 @@ export function PedidoDetalle({
               {(esEnvio || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
               {(esEnvio || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
               <Dato label="Sucursal">{reglaATexto(pedido.sucursal, pedido.sucursalRegla, nombresSucursal)}</Dato>
+              {whatsappSucursal && (
+                <Dato label="WhatsApp de la sucursal">
+                  <a href={whatsappSucursal.href} target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "var(--blue)" }}>
+                    {whatsappSucursal.texto}
+                  </a>
+                </Dato>
+              )}
             </dl>
           </Seccion>
 
@@ -313,7 +330,7 @@ export function PedidoDetalle({
 
           <Card title="Pago" className="p-4">
             <dl className="mb-2 flex flex-col gap-1">
-              <Dato label="Medio de pago">{pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
+              <Dato label="Medio de pago">{Object.hasOwn(mediosPago, pedido.pagoMetodo) ? mediosPago[pedido.pagoMetodo] : pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
               <Dato label="Estado del pago">{pagoEstadoLabel(pedido.pagoEstado)}</Dato>
               {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
                 <Dato label={pedido.pagoEstado === "pagado" ? "Pago registrado" : "Pago anulado"}>

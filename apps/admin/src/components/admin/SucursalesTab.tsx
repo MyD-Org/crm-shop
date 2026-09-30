@@ -7,6 +7,7 @@ import type { CuentaDto, CuentasYAsignaciones } from "@/lib/alegra-cuentas-repo"
 import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/alegra-cuentas-validacion"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { ReglasVentaCard } from "./ReglasVentaCard"
+import { MediosPagoShopCard } from "./MediosPagoShopCard"
 import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
 
 // Configuración → Sucursales y ventas (parte A): ABM de sucursales y de zonas (provincia ->
@@ -557,6 +558,8 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
       </Card>
 
       <ReglasVentaCard />
+
+      <MediosPagoShopCard />
 
       <Dialog
         open={sucursalForm !== null}

@@ -13,6 +13,8 @@ export interface ReglasVenta {
   reservaDias: number
   avisoSinContactarHoras: number
   contactoHorasHabiles: number
+  /** Mensaje de confirmación de la compra; vacío = el que trae el Shop por defecto. */
+  mensajeConfirmacion: string
 }
 
 export const REGLAS_VENTA_DEFAULT: ReglasVenta = {
@@ -22,7 +24,12 @@ export const REGLAS_VENTA_DEFAULT: ReglasVenta = {
   reservaDias: 7,
   avisoSinContactarHoras: 24,
   contactoHorasHabiles: 24,
+  mensajeConfirmacion: "",
 }
+
+/** Variables que el Shop reemplaza en el mensaje de confirmación. */
+export const VARIABLES_CONFIRMACION = ["plazo", "whatsapp"] as const
+export const MAX_MENSAJE_CONFIRMACION = 1000
 
 /** Topes razonables: evitan un 99999 por error de tipeo. */
 export const MAX_DIAS = 365
@@ -59,6 +66,25 @@ export function validarReglasVenta(body: unknown): { ok: true; cambios: Partial<
       return { ok: false, campo: "retiroSinStock", error: "Seleccione una opción de la lista." }
     }
     cambios.retiroSinStock = body.retiroSinStock as RetiroSinStock
+  }
+
+  if (body.mensajeConfirmacion !== undefined) {
+    if (typeof body.mensajeConfirmacion !== "string") {
+      return { ok: false, campo: "mensajeConfirmacion", error: "El mensaje indicado no es válido." }
+    }
+    const msg = body.mensajeConfirmacion.trim()
+    if (msg.length > MAX_MENSAJE_CONFIRMACION) {
+      return { ok: false, campo: "mensajeConfirmacion", error: `El mensaje admite hasta ${MAX_MENSAJE_CONFIRMACION} caracteres.` }
+    }
+    const desconocida = [...msg.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]).find((v) => !(VARIABLES_CONFIRMACION as readonly string[]).includes(v))
+    if (desconocida !== undefined) {
+      return {
+        ok: false,
+        campo: "mensajeConfirmacion",
+        error: `La variable {${desconocida}} no existe. Use solo {plazo} y {whatsapp}.`,
+      }
+    }
+    cambios.mensajeConfirmacion = msg
   }
 
   for (const [campo, unidad, max] of ENTEROS) {

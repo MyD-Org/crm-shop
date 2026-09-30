@@ -16,6 +16,13 @@ vi.mock("@/lib/alegra", async (importOriginal) => ({
     if (fallaAlegra) throw new Error("alegra caída")
     return itemsDeAlegra
   },
+  // Lectura por lotes de `tamLote` ítems (por defecto todo de una vez).
+  listItemsLote: async (_c: unknown, start: number) => {
+    if (fallaAlegra) throw new Error("alegra caída")
+    lotesLeidos.push(start)
+    const items = itemsDeAlegra.slice(start, start + tamLote)
+    return { items, siguiente: start + tamLote, fin: start + tamLote >= itemsDeAlegra.length }
+  },
 }))
 
 // El aviso al Shop se mockea: acá sólo importa CUÁNDO se dispara y que su fallo no cambie nada.
@@ -31,6 +38,8 @@ const cfg = (id: string) => ({ id }) as Parameters<typeof syncCatalog>[0]
 let categoriasDeAlegra: AlegraCategory[] = []
 let itemsDeAlegra: AlegraProduct[] = []
 let fallaAlegra = false
+let tamLote = Number.POSITIVE_INFINITY
+const lotesLeidos: number[] = []
 
 const VIEJO = "2026-01-01T00:00:00Z"
 const OVERLAY_VIEJO = new Date(VIEJO).toISOString()

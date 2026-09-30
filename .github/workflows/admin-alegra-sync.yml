@@ -1,6 +1,7 @@
 # El endpoint /api/cron/alegra-sync existe pero no está en el "crons" de vercel.json:
 # el plan Hobby topea la cantidad de cron jobs y solo permite una corrida por día.
 # Se dispara desde acá, que además deja elegir la frecuencia. Ver AGENTS.md.
+# La ruta es reanudable por tramos: el job la llama en bucle hasta que el tenant termina.
 
 name: admin · Sync catálogo Alegra
 
@@ -36,70 +37,129 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # Acota cuánto retiene el grupo compartido si curl se cuelga; 320 s < 10 min, no altera
-    # el comportamiento normal.
-    timeout-minutes: 10
+    # Cada tramo de la ruta dura hasta ~4 min y un tenant grande necesita 2 o 3 (la principal de
+    # Central Led sola tarda ~5 min). El bucle de abajo corta antes, con TOPE_SEG, para cerrar con
+    # resumen; esto acota cuánto retiene el grupo compartido si algo se cuelga.
+    timeout-minutes: 45
     steps:
-      - name: Disparar la sincronización
+      - name: Sincronizar por tramos
         env:
           BASE_URL: ${{ secrets.ADMIN_BASE_URL }}
           CRON_SECRET: ${{ secrets.ADMIN_CRON_SECRET }}
           # Inputs por env (nunca interpolados en el script). En el cron vienen vacíos.
           TENANT: ${{ inputs.tenant }}
           ACEPTAR_BAJA: ${{ inputs.aceptar_baja }}
+          # Tramos máximos por tenant y pausa entre tramos.
+          MAX_TRAMOS: "12"
+          PAUSA_SEG: "5"
+          # Tope total del bucle, por debajo de timeout-minutes.
+          TOPE_SEG: "2400"
         run: |
           if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "Faltan los secrets ADMIN_BASE_URL o ADMIN_CRON_SECRET del repo." >&2
             exit 1
           fi
 
-          query=""
+          aceptar=""
           if [ -n "$TENANT" ]; then
             if ! printf '%s' "$TENANT" | grep -Eq '^[A-Za-z0-9_-]+$'; then
               echo "::error::El tenant sólo admite letras, números, guiones y guiones bajos."
               exit 1
             fi
-            query="?tenant=$TENANT"
-            if [ "$ACEPTAR_BAJA" = "true" ]; then
-              query="$query&aceptar_baja=1"
-            fi
+            if [ "$ACEPTAR_BAJA" = "true" ]; then aceptar="&aceptar_baja=1"; fi
           elif [ "$ACEPTAR_BAJA" = "true" ]; then
             echo "::error::aceptar_baja requiere indicar el tenant."
             exit 1
           fi
 
-          # --max-time 320 > maxDuration=300 de la ruta: si Vercel corta, queremos ver su
-          # error, no un timeout de curl. -sS calla la barra de progreso pero no los errores.
-          http_code=$(curl -sS -o response.json -w '%{http_code}' \
-            --max-time 320 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$BASE_URL/api/cron/alegra-sync$query")
+          # Una llamada a la ruta; deja el cuerpo en response.json e imprime el HTTP status
+          # ("000" si curl no llegó). --max-time 320 > maxDuration=300 de la ruta: si Vercel
+          # corta, queremos ver su error, no un timeout de curl.
+          llamar() {
+            curl -sS -o response.json -w '%{http_code}' \
+              --max-time 320 \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              "$BASE_URL/api/cron/alegra-sync$1" || true
+          }
 
-          echo "HTTP $http_code"
+          respuesta_valida() {
+            jq -e '.tenants | type == "array"' response.json > /dev/null 2>&1
+          }
 
-          # Resumen para logs públicos: solo identificador de tenant, ok, parcial, conteos numéricos
-          # y el motivo de una corrida parcial (sólo números). Nunca el campo "error" (puede traer
-          # detalle interno de Alegra o del proveedor).
-          # `cuentas` (solo en tenants con cuentas secundarias) trae el mismo resumen por cuenta:
-          # la principal corre primero y después cada secundaria, todo en esta misma invocación.
-          jq -c '.tenants[] | {tenant, ok, parcial, motivo, itemsSynced, categoriesSynced, cuentas: [(.cuentas // [])[] | {cuenta, ok, parcial, motivo, itemsSynced, pareados, soloSecundaria, duplicados, sinCodigo}]}' response.json \
-            || echo "(respuesta no resumible)"
-
-          if [ "$http_code" != "200" ]; then
-            echo "::error::La sincronización falló con HTTP $http_code"
-            exit 1
+          # Tenants a sincronizar: el del input o, sin input, todos los que tienen Alegra.
+          if [ -n "$TENANT" ]; then
+            tenants="$TENANT"
+          else
+            http_code=$(llamar "?listar=1")
+            if [ "$http_code" != "200" ] || ! respuesta_valida; then
+              echo "::error::No se pudo obtener la lista de tenants (HTTP $http_code)."
+              exit 1
+            fi
+            tenants=$(jq -r '.tenants[]' response.json)
           fi
 
-          # La ruta responde 200 aunque un tenant falle (es best-effort por tenant):
-          # hay que mirar el ok de cada uno para enterarse.
-          if grep -q '"ok":false' response.json; then
-            echo "::error::Al menos un tenant falló. Ver el detalle de arriba."
+          inicio=$(date +%s)
+          fallidos=""
+          parciales=""
+
+          for t in $tenants; do
+            if ! printf '%s' "$t" | grep -Eq '^[A-Za-z0-9_-]+$'; then
+              echo "::error::Id de tenant inválido en la lista."
+              fallidos="$fallidos (id inválido)"
+              continue
+            fi
+            tramo=0
+            while :; do
+              tramo=$((tramo + 1))
+              if [ "$tramo" -gt "$MAX_TRAMOS" ]; then
+                echo "::error::El tenant $t superó $MAX_TRAMOS tramos sin terminar."
+                fallidos="$fallidos $t"
+                break
+              fi
+              if [ $(( $(date +%s) - inicio )) -ge "$TOPE_SEG" ]; then
+                echo "::error::Tope de tiempo con la sincronización de $t sin terminar. Vuelva a ejecutar el workflow: retoma desde donde quedó."
+                fallidos="$fallidos $t"
+                break
+              fi
+
+              http_code=$(llamar "?tenant=$t$aceptar")
+              echo "tenant=$t tramo=$tramo HTTP $http_code"
+              if [ "$http_code" != "200" ] || ! respuesta_valida; then
+                echo "::error::El tramo $tramo de $t falló (HTTP $http_code o respuesta que no es la de la ruta)."
+                fallidos="$fallidos $t"
+                break
+              fi
+
+              # Resumen para logs públicos: solo identificador de tenant, ok, parcial, conteos
+              # numéricos, el avance y el motivo de una corrida parcial (sólo números). Nunca el
+              # campo "error" (puede traer detalle interno de Alegra o del proveedor).
+              # `cuentas` (solo con cuentas secundarias) trae el mismo resumen por cuenta.
+              jq -c '.tenants[] | {tenant, ok, parcial, motivo, continuar, itemsSynced, categoriesSynced, progreso, cuentas: [(.cuentas // [])[] | {cuenta, ok, parcial, motivo, itemsSynced, pareados, soloSecundaria, duplicados, sinCodigo}]}' response.json \
+                || echo "(respuesta no resumible)"
+
+              # La ruta responde 200 aunque un tenant falle: hay que mirar el ok de cada uno.
+              if jq -e '.tenants | any(.ok == false)' response.json > /dev/null; then
+                echo "::error::El tenant $t falló en el tramo $tramo. Ver el detalle de arriba."
+                fallidos="$fallidos $t"
+                break
+              fi
+              if jq -e '.tenants | any(.parcial == true or (.cuentas // [] | any(.parcial == true)))' response.json > /dev/null; then
+                parciales="$parciales $t"
+              fi
+              # Sin `continuar` la corrida del tenant terminó.
+              if ! jq -e '.continuar == true' response.json > /dev/null; then break; fi
+              sleep "$PAUSA_SEG"
+            done
+          done
+
+          if [ -n "$fallidos" ]; then
+            echo "::error::Fallaron:$fallidos."
             exit 1
           fi
 
           # La guarda frenó la baja de productos (Alegra devolvió muchos menos que la última
           # corrida OK). Falla para que GitHub avise; ver "Sync incompleta" en FUNCIONALIDADES.md.
-          if grep -q '"parcial":true' response.json; then
-            echo "::error::La sincronización quedó incompleta: no se dio de baja ningún producto."
+          if [ -n "$parciales" ]; then
+            echo "::error::La sincronización quedó incompleta en:$parciales. No se dio de baja ningún producto."
             exit 1
           fi

@@ -20,7 +20,14 @@ vi.mock("@/lib/alegra", async (importOriginal) => ({
     if (fallas.has(cfg.alegraToken)) throw new Error("alegra caída")
     return items[cfg.alegraToken] ?? []
   },
+  listItemsLote: async (cfg: { alegraToken: string }, start: number) => {
+    if (fallas.has(cfg.alegraToken)) throw new Error("alegra caída")
+    const todos = items[cfg.alegraToken] ?? []
+    const fin = start + tamLote >= todos.length
+    return { items: todos.slice(start, start + tamLote), siguiente: start + tamLote, fin }
+  },
 }))
+let tamLote = Number.POSITIVE_INFINITY
 
 const { avisarShopMock } = vi.hoisted(() => ({ avisarShopMock: vi.fn() }))
 vi.mock("@/lib/aviso-shop", () => ({ avisarShop: avisarShopMock }))

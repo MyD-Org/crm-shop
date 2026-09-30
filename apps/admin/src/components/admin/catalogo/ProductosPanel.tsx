@@ -16,6 +16,7 @@ import {
 } from "@myd-org/ui"
 import { ProductoDialog, caminoCategoria } from "./ProductoDialog"
 import { contarFotos } from "./FotosProducto"
+import { SincronizarAlegra } from "./SincronizarAlegra"
 import {
   api,
   TEXTO_MOTIVO,
@@ -463,6 +464,8 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           tienda: {fmtFechaHora(datos.sincronizacion.avisoShop.ultimoOkAt)}
         </p>
       )}
+
+      <SincronizarAlegra onTerminado={() => void cargar()} />
 
       {error && (
         <div

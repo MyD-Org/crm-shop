@@ -1,5 +1,5 @@
 /**
- * Datos técnicos ESTRUCTURADOS de un producto (`public.catalog_atributos` del CRM, migración 0047;
+ * Datos técnicos ESTRUCTURADOS de un producto (`public.catalog_atributos` del CRM, migración 0048;
  * contrato `crm-shop-base/v1`). El CRM los escribe desde el nombre, la ficha PDF o a mano, con
  * precedencia manual > pdf > nombre; el Shop sólo lee el valor que quedó.
  *

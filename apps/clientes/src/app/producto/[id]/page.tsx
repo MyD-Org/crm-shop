@@ -9,7 +9,7 @@ import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { envioHabilitado } from "@/lib/envio-flag";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 
@@ -23,13 +23,13 @@ type Props = { params: Promise<{ id: string }> };
  * cotizan del espejo en vivo.
  */
 const productoDe = cache(async (id: string) => {
-  // Con el flag `disponibilidad-sucursal`, `disp` (sucursal de la zona) es parte de la clave de la
-  // caché y excluye lo oculto en las sucursales que sirven al visitante. Sin flag: undefined.
+  // Con el flag `disponibilidad-sucursal`, `disp` es el del catálogo: igual para todos (stock en
+  // cualquier local, sin lo que ninguna sucursal ofrece). Sin flag: undefined.
   // Tabla "Características" (fichas estructuradas, fase 2): sólo con el flag `busqueda-ia` y con
   // `catalog_atributos` legible; si no, la ficha de siempre (sin la tabla).
   const [{ soloVisibles }, disp, estructurados] = await Promise.all([
     flagsPublicos(),
-    dispDelVisitante(),
+    dispCatalogo(),
     usarAtributosEstructurados(),
   ]);
   return productoPublico(id, soloVisibles, disp, estructurados);
@@ -45,17 +45,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductoPage({ params }: Props) {
   const { id } = await params;
   // En paralelo: la oferta de cuotas no depende del producto (motor sólo-monto).
-  const [producto, oferta, envio, { soloVisibles }, disp] = await Promise.all([
+  const [producto, oferta, envio, { soloVisibles }, disp, dispEntrega] = await Promise.all([
     productoDe(id),
     getOfertaCuotas(),
     envioHabilitado(),
     flagsPublicos(),
+    dispCatalogo(),
     dispDelVisitante(),
   ]);
 
   if (!producto) notFound();
-  // "Envío: disponible" / "Retiro en <local>: ..." (sólo con el flag `disponibilidad-sucursal`).
-  const disponibilidad = await disponibilidadParaMostrar([producto.id], disp);
+  // "Retiro en <local>: ..." por cada local y "Envío a domicilio: ..." (sólo con el flag
+  // `disponibilidad-sucursal`), sin que el visitante elija nada. El envío usa la zona del visitante
+  // (perfil o predeterminada) sólo para el plazo; no cambia qué se ve.
+  const disponibilidad = await disponibilidadParaMostrar([producto.id], dispEntrega);
   // Migas: la categoría del admin con sus padres. Sin ella, la de Alegra.
   const rutaCategorias = producto.categoriaPropiaId ? await rutaCategoriaPublica(producto.categoriaPropiaId) : [];
 

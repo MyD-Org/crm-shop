@@ -15,19 +15,19 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
 import { seedTenant, truncateAll } from "./helpers"
 
 /**
- * Migración 0047 (catálogo asistido fase 2, subproyecto 5): `catalog_atributos` con la
+ * Migración 0048 (catálogo asistido fase 2, subproyecto 5): `catalog_atributos` con la
  * precedencia manual > pdf > nombre aplicada por el upsert, los CHECK de clave/fuente y el GRANT
  * por columna a `shop_app` (mismo patrón que catalog-products-shop-grants: crea el rol NOLOGIN si
  * no existe, corre el bloque DO $$ leído del .sql y verifica como shop_app). Datos inventados.
  */
 
 const A = "tenant-atr"
-const MIGRACION = fileURLToPath(new URL("../../drizzle/0047_catalog_atributos.sql", import.meta.url))
+const MIGRACION = fileURLToPath(new URL("../../drizzle/0048_catalog_atributos.sql", import.meta.url))
 
 function bloqueDeGrants(): string {
   const partes = readFileSync(MIGRACION, "utf8").split("--> statement-breakpoint")
   const bloque = partes[partes.length - 1]
-  if (!/DO \$\$/.test(bloque)) throw new Error("0047: no encontré el bloque DO $$ de los GRANTs")
+  if (!/DO \$\$/.test(bloque)) throw new Error("0048: no encontré el bloque DO $$ de los GRANTs")
   return bloque
 }
 

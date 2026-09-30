@@ -268,7 +268,7 @@ const COLUMNAS_CATALOGO_BASE = {
 };
 
 /**
- * Atributos estructurados del producto de la fila (`public.catalog_atributos`, migración 0047 del
+ * Atributos estructurados del producto de la fila (`public.catalog_atributos`, migración 0048 del
  * CRM) como UN jsonb `{clave: {n: valor_num, t: valor_texto}}`, NULL si no tiene ninguno.
  * Subconsulta correlacionada por la PK (tenant, producto): una lectura de índice por fila. Con el
  * tenant en el WHERE, como toda lectura de `public`.
@@ -1077,6 +1077,11 @@ export interface Facetas {
    * filtro de potencia. null = ninguno la tiene; ausente = no se calculó (sin estructurados).
    */
   potencia?: RangoPrecio | null;
+  /**
+   * Locales para el filtro "Con stock en <local>" (activos y con retiro). No salen de Postgres: los
+   * agrega la page del catálogo cuando hay más de uno. Ausente = el filtro no se muestra.
+   */
+  locales?: { slug: string; nombre: string }[];
 }
 
 /**

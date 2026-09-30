@@ -214,11 +214,22 @@ const ETIQUETA_INCLUYE_SIN_STOCK = "Incluye sin stock";
 const stockFueraDeDefault = (e: Pick<EstadoCatalogo, "soloStock">) =>
   e.soloStock !== SOLO_STOCK_DEFAULT;
 
+/** Local de retiro para el filtro "Con stock en <local>" (slug + nombre para el texto). */
+export interface LocalFiltro {
+  slug: string;
+  nombre: string;
+}
+
 /**
  * Chips de filtros activos, en el orden del panel: categorías → marcas →
  * características (atributos) → potencia → precio → stock.
+ * `locales` pone el nombre del local en el chip de "Con stock en"; sin él se muestra el slug.
  */
-export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null): ChipFiltro[] {
+export function chipsActivos(
+  estado: EstadoCatalogo,
+  rango: RangoPrecio | null,
+  locales: LocalFiltro[] = [],
+): ChipFiltro[] {
   const chip = (clave: string, etiqueta: string, cambios: Partial<EstadoCatalogo>) => ({
     clave,
     etiqueta,
@@ -248,9 +259,17 @@ export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null):
           }),
         ]
       : []),
-    ...(stockFueraDeDefault(estado)
-      ? [chip("stock", ETIQUETA_INCLUYE_SIN_STOCK, { soloStock: SOLO_STOCK_DEFAULT })]
-      : []),
+    ...(estado.retiroEn
+      ? [
+          chip(
+            "retiro",
+            `Con stock en ${locales.find((l) => l.slug === estado.retiroEn)?.nombre ?? estado.retiroEn}`,
+            { retiroEn: undefined },
+          ),
+        ]
+      : stockFueraDeDefault(estado)
+        ? [chip("stock", ETIQUETA_INCLUYE_SIN_STOCK, { soloStock: SOLO_STOCK_DEFAULT })]
+        : []),
   ];
 }
 
@@ -269,6 +288,7 @@ export function limpiarFiltros(): Partial<EstadoCatalogo> {
     potenciaMin: undefined,
     potenciaMax: undefined,
     soloStock: SOLO_STOCK_DEFAULT,
+    retiroEn: undefined,
   };
 }
 
@@ -285,7 +305,7 @@ export function contarFiltrosActivos(estado: EstadoCatalogo): number {
     estado.atributos.length +
     (hayPrecio(estado) ? 1 : 0) +
     (hayPotencia(estado) ? 1 : 0) +
-    (stockFueraDeDefault(estado) ? 1 : 0)
+    (estado.retiroEn || stockFueraDeDefault(estado) ? 1 : 0)
   );
 }
 

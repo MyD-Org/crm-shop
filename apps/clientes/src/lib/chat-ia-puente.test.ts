@@ -17,7 +17,7 @@ beforeEach(() => reiniciarChatIa());
 
 describe("puente con el chat", () => {
   it("sin chat registrado no está disponible y conversar no hace nada", () => {
-    expect(estadoChatIa()).toEqual({ disponible: false, pedido: null });
+    expect(estadoChatIa()).toEqual({ disponible: false, pedido: null, teaser: null });
     expect(conversar("luz para el patio")).toBe(false);
     expect(pedidoChatIa()).toBeNull();
   });
@@ -49,12 +49,12 @@ describe("puente con el chat", () => {
     baja1();
     expect(estadoChatIa().disponible).toBe(true);
     baja2();
-    expect(estadoChatIa()).toEqual({ disponible: false, pedido: null });
+    expect(estadoChatIa()).toEqual({ disponible: false, pedido: null, teaser: null });
   });
 
   it("en el servidor nunca hay chat", () => {
     registrarChatIa();
-    expect(estadoChatIaServidor()).toEqual({ disponible: false, pedido: null });
+    expect(estadoChatIaServidor()).toEqual({ disponible: false, pedido: null, teaser: null });
   });
 });
 

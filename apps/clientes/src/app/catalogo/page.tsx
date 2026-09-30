@@ -16,8 +16,8 @@ import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
-import { ZonaCatalogo } from "@/components/ZonaCatalogo";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
+import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
 import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
@@ -41,6 +41,7 @@ type Props = {
     potencia_min?: ParamCrudo;
     potencia_max?: ParamCrudo;
     stock?: ParamCrudo;
+    retiro?: ParamCrudo;
     vista?: ParamCrudo;
     ia?: ParamCrudo;
   }>;
@@ -91,16 +92,22 @@ export default function CatalogoPage({ searchParams }: Props) {
 
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
 async function CatalogoResultados({ searchParams }: Props) {
-  // `disp`: sucursal de la zona y sus reglas (flag `disponibilidad-sucursal`; undefined = apagado).
-  // Viaja como argumento a las lecturas cacheadas: nunca se lee la cookie adentro de la caché.
-  const [params, { soloVisibles }, disp, conBusquedaIa] = await Promise.all([
+  // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
+  // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
+  // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
+  const [params, { soloVisibles }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
     searchParams,
     flagsPublicos(),
-    dispDelVisitante(),
+    dispCatalogo(),
+    localesDeRetiro(),
     busquedaIaHabilitada(),
   ]);
-  // Flag apagado: igual que antes del cambio (sin `atr` ni `ia`).
-  const estado = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
+  // Flag `busqueda-ia` apagado: igual que antes del cambio (sin `atr` ni `ia`).
+  const leido = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
+  // Un local desconocido (o el flag apagado) se descarta: el filtro vuelve a "cualquier local".
+  const dispLocal = leido.retiroEn ? await dispConStockEn(leido.retiroEn) : undefined;
+  const estado = dispLocal ? leido : { ...leido, retiroEn: undefined };
+  const disp = dispLocal ?? dispGeneral;
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).
@@ -176,21 +183,18 @@ async function CatalogoResultados({ searchParams }: Props) {
 
   // Búsqueda inteligente (flag `busqueda-ia`). Puede redirigir: va afuera de
   // todo try/catch (`redirect` tira).
-  const busquedaIa = conBusquedaIa ? await busquedaInteligente(estado, pagina.total) : undefined;
+  const busquedaIa = conBusquedaIa ? await busquedaInteligente(estado, pagina.total, disp) : undefined;
 
   return (
     <>
-      {/* Zona vigente (flag `sucursales`): no cambia qué productos se ven. */}
-      <Suspense fallback={null}>
-        <ZonaCatalogo />
-      </Suspense>
       <CatalogoClient
         productos={pagina.productos}
         total={pagina.total}
         paginas={pagina.paginas}
         // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
         estado={{ ...estado, pagina: pagina.pagina }}
-        facetas={facetas}
+        // El filtro "Con stock en <local>" sólo tiene sentido con más de un local.
+        facetas={locales.length > 1 ? { ...facetas, locales } : facetas}
         filtrosSinBusqueda={filtrosSinBusqueda}
         oferta={oferta}
         busquedaIa={busquedaIa}
@@ -223,10 +227,12 @@ async function CatalogoResultados({ searchParams }: Props) {
  * Cuántos productos trae un estado del catálogo (el interpretado, antes de
  * redirigir). Si la base falla, 0: no se redirige a ciegas.
  */
-async function contarResultados(estado: EstadoCatalogo): Promise<number> {
-  const [{ soloVisibles }, disp, estructurados] = await Promise.all([
+async function contarResultados(
+  estado: EstadoCatalogo,
+  disp: ContextoDisponibilidad | undefined,
+): Promise<number> {
+  const [{ soloVisibles }, estructurados] = await Promise.all([
     flagsPublicos(),
-    dispDelVisitante(),
     atributosEstructuradosDisponibles(),
   ]);
   // Mismo criterio que la página que se va a mostrar (sólo corre con el flag `busqueda-ia`).
@@ -239,7 +245,11 @@ async function contarResultados(estado: EstadoCatalogo): Promise<number> {
     });
 }
 
-async function busquedaInteligente(estado: EstadoCatalogo, total: number) {
+async function busquedaInteligente(
+  estado: EstadoCatalogo,
+  total: number,
+  disp: ContextoDisponibilidad | undefined,
+) {
   const q = estado.query;
   if (!estado.ia && q && debeInterpretar(q, total)) {
     if (total >= POCOS_RESULTADOS) {
@@ -253,7 +263,7 @@ async function busquedaInteligente(estado: EstadoCatalogo, total: number) {
       };
     }
     const interpretacion = await interpretar(q, { sumarUso: estado.pagina === 1 });
-    const decision = await decidirBusqueda(estado, total, interpretacion, (destino) => contarResultados(destino));
+    const decision = await decidirBusqueda(estado, total, interpretacion, (destino) => contarResultados(destino, disp));
     if (decision.redirigir) redirect(decision.redirigir);
     return {
       alternativas: decision.alternativas,

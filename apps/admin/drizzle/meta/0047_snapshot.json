@@ -1,5 +1,5 @@
 {
-  "id": "6258a6fe-41e0-44dd-bbc9-4dcc7f032f84",
+  "id": "695a9088-8db6-4db8-aa42-cc7c03aa496b",
   "prevId": "1b0786fa-0a1d-433c-8f72-fd534ccb218a",
   "version": "7",
   "dialect": "postgresql",
@@ -1139,85 +1139,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.catalog_atributos": {
-      "name": "catalog_atributos",
-      "schema": "",
-      "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "alegra_id": {
-          "name": "alegra_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "clave": {
-          "name": "clave",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valor_num": {
-          "name": "valor_num",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "valor_texto": {
-          "name": "valor_texto",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "fuente": {
-          "name": "fuente",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "catalog_atributos_tenant_id_tenants_id_fk": {
-          "name": "catalog_atributos_tenant_id_tenants_id_fk",
-          "tableFrom": "catalog_atributos",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "catalog_atributos_pk": {
-          "name": "catalog_atributos_pk",
-          "columns": [
-            "tenant_id",
-            "alegra_id",
-            "clave"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.catalog_categories": {
       "name": "catalog_categories",
       "schema": "",
@@ -2122,6 +2043,58 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.catalog_sync_cursor": {
+      "name": "catalog_sync_cursor",
+      "schema": "",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "cursor": {
+          "name": "cursor",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lock_hasta": {
+          "name": "lock_hasta",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actividad_at": {
+          "name": "actividad_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "catalog_sync_cursor_tenant_id_tenants_id_fk": {
+          "name": "catalog_sync_cursor_tenant_id_tenants_id_fk",
+          "tableFrom": "catalog_sync_cursor",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.catalog_sync_log": {
       "name": "catalog_sync_log",
       "schema": "",
@@ -2194,6 +2167,12 @@
         "resumen": {
           "name": "resumen",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actividad_at": {
+          "name": "actividad_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         }

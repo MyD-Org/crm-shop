@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCatalogo } from "@/lib/catalog";
 import { flagsPublicos } from "@/lib/flags-publicos";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo } from "@/lib/zona-servidor";
 
 /**
  * Tope de resultados. Ya no es el límite de Alegra (el espejo local no lo
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   try {
     // Sin caché a propósito: cada texto buscado sería una entrada nueva.
-    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
     const productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp });
     // Sin resultados: segundo intento tolerante a errores de tipeo (mismo
     // criterio que la page del catálogo). Si falla, se devuelve lo exacto.

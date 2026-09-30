@@ -8,7 +8,7 @@ import {
   type ClaveAtributo,
 } from "./catalogo-atributos-extraccion"
 
-// Escritura y lectura de `public.catalog_atributos` (migración 0047).
+// Escritura y lectura de `public.catalog_atributos` (migración 0048).
 //
 // PRECEDENCIA: manual > pdf > nombre. Una escritura NUNCA pisa una fila de mayor precedencia, y la
 // regla vive en el SQL del upsert (ON CONFLICT … DO UPDATE … WHERE), no sólo en TS: dos escrituras
@@ -213,7 +213,7 @@ export async function guardarAtributosManual(
 
 /**
  * Hook de la sync de Alegra (y del drenador de webhooks): lo que dice el nombre de los productos
- * tocados pasa a `catalog_atributos`. TOLERANTE: un error (la migración 0047 sin aplicar, un
+ * tocados pasa a `catalog_atributos`. TOLERANTE: un error (la migración 0048 sin aplicar, un
  * nombre raro, la base) se loguea y NO rompe la sync, que ya escribió el espejo.
  */
 export async function sincronizarAtributosDeNombre(

@@ -335,7 +335,14 @@
       "idx": 47,
       "version": "7",
       "when": 1790840000000,
-      "tag": "0047_catalog_atributos",
+      "tag": "0047_sync_reanudable",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1790850000000,
+      "tag": "0048_catalog_atributos",
       "breakpoints": true
     }
   ]

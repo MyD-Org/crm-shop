@@ -287,7 +287,7 @@ Credenciales por tenant (`{PREFIX}_ALEGRA_EMAIL/TOKEN`); sin credenciales corre 
 **mock** (`mock-alegra.ts`). El mock se apaga solo al setear el token.
 
 - **Catálogo**: `listAllCategories`, `listAllItems` — sync a cache local
-  (`alegra-sync.ts`, cron `/api/cron/alegra-sync`, con [guarda](#sync-incompleta)) — y
+  (`alegra-sync.ts`, programada en el runner de GitHub Actions, con [guarda](#sync-incompleta)) — y
   `getItemsLive` (precio/stock al momento).
   `getItemParaEspejo` lee UN ítem para el espejo distinguiendo 404 / 429 / error (lo usan los
   [avisos de stock](#stock-casi-en-tiempo-real-webhooks-de-alegra)).
@@ -327,6 +327,45 @@ credenciales. Fechas normalizadas a `DD/MM/YYYY`; estados de Alegra mapeados a
 > `Cliente.limitecredito` es 0 (la barra de uso de crédito del portal no muestra tope).
 > A resolver desde la DB propia si se necesita.
 
+### Sync del catálogo programada (runner de Actions)
+
+La sync **programada** (workflow `admin-alegra-sync`, diaria y a mano) corre COMPLETA dentro del
+runner de GitHub Actions, no en una función de Vercel: `apps/admin/scripts/alegra-sync.ts`
+(`npx tsx`, lógica en `src/lib/alegra-sync-runner.ts`) conecta con `DATABASE_URL`
+(secret `ADMIN_DATABASE_URL`) y por cada tenant con Alegra sincroniza la cuenta principal y las
+secundarias en un solo proceso, sin presupuesto de tiempo (reutiliza `syncTenant`). Args:
+`--tenant <id>` y `--aceptar-baja` (requiere tenant). Imprime un JSON por tenant con conteos y
+estado (nunca credenciales, host ni el detalle crudo de errores de Alegra) y sale con código 1 si
+algún tenant falló o quedó parcial. Respeta la guarda de concurrencia y las corridas colgadas de
+abajo. El runner no avisa al Shop (no tiene sus credenciales ni el caché de Next): al terminar el
+workflow llama a `POST /api/cron/alegra-sync/post-sync?tenant=<id>` (`CRON_SECRET`) por cada
+tenant sincronizado, que sólo hace el ping de revalidación al Shop y registra la frescura.
+
+### Sync del catálogo por tramos (botón del admin)
+
+Es lo que usa el botón "Sincronizar con Alegra" (y `curl` a mano); el workflow programado ya no
+pasa por acá. Alegra entrega 30 ítems por página y 150 requests por minuto: la cuenta principal de un tenant de
+~18 000 ítems tarda ~5 min y no entra en una invocación (`maxDuration = 300`). La sync es
+**reanudable** (`syncTenant`, `src/lib/alegra-sync-tenant.ts`):
+
+- Cada invocación procesa con un presupuesto de ~220 s (`PRESUPUESTO_TRAMO_MS`). Si no terminó,
+  guarda el cursor en `catalog_sync_cursor` (una fila por tenant: cuenta actual, offset de
+  lectura de la principal, resultados ya cerrados) y responde `{ ok: true, continuar: true,
+  progreso }`; la siguiente llamada retoma desde ahí.
+- El stale, las bajas, la absorción y el resumen de una cuenta corren **solo** cuando su pasada
+  completa terminó, nunca con una pasada parcial. La principal se reanuda a mitad de la lectura;
+  una secundaria es un solo tramo (necesita todos sus ítems para el pareo). Cada cuenta es al
+  menos un tramo propio: si tras cerrar una queda menos de la mitad del presupuesto, la siguiente
+  va en el tramo que sigue.
+- Quien dispara vuelve a llamar mientras venga `continuar: true`: el botón "Sincronizar con
+  Alegra" del Catálogo (`POST /api/admin/catalog/sync`, admin+) o quien use la ruta cron por
+  tramos a mano (`?listar=1` para obtener los ids y después `?tenant=<id>` en bucle).
+- Un tramo en ejecución retiene el cursor 330 s (`lock_hasta`); dos llamadas simultáneas no lo
+  toman a la vez.
+- **Corridas colgadas**: una fila `catalog_sync_log` en `running` sin actividad (`actividad_at`,
+  o `started_at`) hace más de 15 min está abandonada: no bloquea y la siguiente sync la marca
+  `error` con "Corrida interrumpida." Un cursor abandonado se descarta y se empieza de cero.
+
 ### Sync incompleta
 
 La sync del catálogo (`syncCatalog`, `src/lib/alegra-sync.ts`) es la única fuente del catálogo
@@ -355,9 +394,9 @@ FROM catalog_sync_log ORDER BY started_at DESC LIMIT 10;
 
 **Aceptar una baja masiva legítima** (se borraron muchos ítems en Alegra de verdad): GitHub →
 Actions → *admin · Sync catálogo Alegra* → **Run workflow**, con `tenant` = el id del tenant y
-`aceptar_baja` tildado. Llama a `/api/cron/alegra-sync?tenant=<id>&aceptar_baja=1`: esa corrida
-no aplica la guarda y da de baja lo no visto. `aceptar_baja` sin `tenant` da 400; un tenant
-inexistente o sin Alegra, 404. El botón del admin nunca acepta bajas: si da parcial, hay que
+`aceptar_baja` tildado. Corre `scripts/alegra-sync.ts --tenant <id> --aceptar-baja` en el runner: esa corrida
+no aplica la guarda y da de baja lo no visto. `aceptar_baja` sin `tenant` falla el workflow; un tenant
+inexistente o sin Alegra también. El botón del admin nunca acepta bajas: si da parcial, hay que
 reintentar más tarde o pasar por Actions.
 
 ---
@@ -434,7 +473,7 @@ cualquier otro objeto de `public` le da 42501:
 | `client_commercial_conditions` | tabla | SELECT | 0032 |
 | `notification_log` | tabla | SELECT, UPDATE sólo `read_at` | 0032 |
 | `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
-| `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0047 |
+| `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0048 |
 
 Sin permiso, a propósito: las tablas base `catalog_products`, `catalog_categories` y
 `alegra_contacts` (el Shop las ve sólo por sus vistas), `contactos_acceso_facturacion` (guarda
@@ -450,7 +489,7 @@ función), el de `drizzle/0035_catalog_products_shop.sql`, el de
 el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y el de
 `drizzle/0038_grants_overlay_shop.sql` (overlay y categorías de la tienda) y el de
 `drizzle/0039_contactos_acceso_facturacion.sql` (SELECT de la vista recreada con
-`acceso_facturacion`) y el de `drizzle/0047_catalog_atributos.sql` (SELECT por columna de
+`acceso_facturacion`) y el de `drizzle/0048_catalog_atributos.sql` (SELECT por columna de
 `catalog_atributos`; lo verifica `test/integration/catalog-atributos.integration.test.ts`). Todos son
 idempotentes. Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
@@ -761,7 +800,7 @@ RESET ROLE;
 
 ---
 
-### Datos técnicos estructurados (`catalog_atributos`, 0047)
+### Datos técnicos estructurados (`catalog_atributos`, 0048)
 
 Potencia, temperatura de color, tono, IP, lúmenes, tensión y zócalo por producto, para los
 filtros y la tabla "Características" del Shop (catálogo asistido fase 2, subproyecto 5). Una fila
@@ -780,7 +819,7 @@ nunca pisa a otra de mayor precedencia (lo aplica el upsert de `lib/catalogo-atr
 - **Manual**: en el mismo panel, los campos cambiados quedan `manual`; un campo vacío se quita.
 
 Cada escritura desde el admin avisa al Shop (descarta su caché). El Shop lee las columnas
-concedidas por la 0047 y, sin la tabla, sigue con los patrones sobre el nombre de la fase 1.
+concedidas por la 0048 y, sin la tabla, sigue con los patrones sobre el nombre de la fase 1.
 
 ## Cuenta que factura cada pedido (multicuenta)
 
@@ -980,7 +1019,8 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | PATCH | `/api/notifications/log` | sesión | Marca leídas (`ids` o `all`) |
 | POST | `/api/notifications/send` | `CRON_SECRET` | Disparo manual del gestor de cobranza |
 | POST/GET | `/api/cron/notifications` | `CRON_SECRET` | Disparo automático (Vercel Cron) |
-| POST/GET | `/api/cron/alegra-sync` | `CRON_SECRET` | Sync del catálogo (`?tenant=` opcional; `?aceptar_baja=1` sólo con tenant, ver [Sync incompleta](#sync-incompleta)) |
+| POST/GET | `/api/cron/alegra-sync` | `CRON_SECRET` | Sync del catálogo por tramos (botón del admin / a mano; `?tenant=` opcional; `?aceptar_baja=1` sólo con tenant, ver [Sync incompleta](#sync-incompleta)) |
+| POST | `/api/cron/alegra-sync/post-sync` | `CRON_SECRET` | Aviso al Shop tras la sync del runner (`?tenant=` obligatorio) |
 | POST/GET | `/api/cron/alegra-contactos-sync` | `CRON_SECRET` | Sync del espejo de contactos (`?tenant=` opcional, `?trigger=manual`) |
 | POST/GET | `/api/webhooks/alegra/contactos/<tenant>/<evento>/<token>` | token HMAC (`ALEGRA_WEBHOOK_SECRET`) | Avisos de contactos de Alegra → espejo (GET solo verifica la URL) |
 | POST/GET | `/api/cron/alegra-stock-drenar` | `CRON_SECRET` | Drena la cola de re-lectura de stock (`?tenant=` opcional) |

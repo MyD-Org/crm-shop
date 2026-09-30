@@ -1,5 +1,5 @@
 /**
- * Backfill de `catalog_atributos` (fuente 'nombre') desde el espejo de productos (migración 0047).
+ * Backfill de `catalog_atributos` (fuente 'nombre') desde el espejo de productos (migración 0048).
  *
  * Hace lo mismo que el hook de la sync de Alegra (`sincronizarAtributosDeNombre`), pero sobre TODO
  * el espejo del tenant, sin esperar a la próxima sync. Idempotente: correrlo dos veces da lo mismo
@@ -9,7 +9,7 @@
  *
  *   npx tsx --env-file-if-exists=.env.local scripts/backfill-catalogo-atributos.ts --tenant <id> [--aplicar]
  *
- * NO se corre solo: requiere la migración 0047 aplicada en la base de destino.
+ * NO se corre solo: requiere la migración 0048 aplicada en la base de destino.
  */
 import { and, asc, eq, gt } from "drizzle-orm"
 import { getDb } from "../src/db"

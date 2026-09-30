@@ -1,5 +1,5 @@
 /**
- * ¿El Shop puede leer `public.catalog_atributos`? (migración 0047 del CRM + su GRANT por columna).
+ * ¿El Shop puede leer `public.catalog_atributos`? (migración 0048 del CRM + su GRANT por columna).
  *
  * La tabla puede no existir todavía (la migración se aplica a mano) o el permiso puede faltar (el
  * rol se creó después). Una consulta del catálogo que la nombre y falle rompería la tienda entera,

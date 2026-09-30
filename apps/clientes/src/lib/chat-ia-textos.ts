@@ -66,6 +66,12 @@ export const ETIQUETAS_CHAT = {
   catalogViewLabel: "Ver en el catálogo",
   specAttributesLabel: "Características",
   specSheetLabel: "Ficha técnica (PDF)",
+  // Hoja mobile (ai-widget 0.8.0, por debajo de 768 px).
+  minimizeLabel: "Minimizar",
+  closeLabel: "Cerrar",
+  peekExpandLabel: "Abrir la conversación",
+  peekEmptyLabel: "Continuar la conversación",
+  peekResultsLabel: "Ver resultados",
 } as const;
 
 export const SUBTITULO_CHAT = "Consultas sobre productos y pedidos";

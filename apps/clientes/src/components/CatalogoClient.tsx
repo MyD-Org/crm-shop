@@ -27,6 +27,8 @@ import {
 import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
 import { hrefTalCual, type ChipSugerido } from "@/lib/busqueda-inteligente/url";
 import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
+import { anotarBusqueda } from "@/lib/iniciativa/motor";
+import { useChatIa } from "@/hooks/useChatIa";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
@@ -183,6 +185,20 @@ export function CatalogoClient({
   const interpretada = busquedaIa ? interpretacionVigente(estadoVisible) : undefined;
   const consultaVacia = interpretacionVigente(estado) ?? estado.query;
 
+  // Señales de la invitación proactiva del asesor (src/lib/iniciativa/): cada
+  // búsqueda distinta y si terminó sin resultados (después del rescate de la
+  // búsqueda inteligente, que ya corrió en el servidor). Sin chat no hace nada;
+  // el chat se carga aparte, así que se vuelve a anotar cuando aparece (la
+  // misma búsqueda no cuenta dos veces).
+  const { disponible: chatDisponible } = useChatIa();
+  // Con la búsqueda inteligente, el sin resultados (CatalogoSinResultados) ya
+  // invita al asesor en línea: el teaser no se suma encima.
+  const sinResultados = productos.length === 0;
+  const conInvitacionEnLinea = sinResultados && !!busquedaIa;
+  useEffect(() => {
+    if (consultaVacia && chatDisponible) anotarBusqueda(consultaVacia, sinResultados, conInvitacionEnLinea);
+  }, [consultaVacia, sinResultados, conInvitacionEnLinea, chatDisponible]);
+
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
       {/* Encabezado a todo el ancho, por encima de las dos columnas. Vista y
@@ -203,7 +219,13 @@ export function CatalogoClient({
 
       {/* Los filtros puestos, debajo del encabezado y sólo en mobile: en
           desktop el panel lateral ya muestra los tildes. */}
-      <CatalogoChips estado={estadoVisible} rango={facetas.precio} ir={ir} sinInterpretados={!!interpretada} />
+      <CatalogoChips
+        estado={estadoVisible}
+        rango={facetas.precio}
+        locales={facetas.locales}
+        ir={ir}
+        sinInterpretados={!!interpretada}
+      />
 
       <div className="mt-8 flex gap-6">
         {/*

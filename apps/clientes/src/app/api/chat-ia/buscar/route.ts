@@ -4,7 +4,7 @@ import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoAgente, facetasDeProductos, limiteBusqueda } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
 
 /**
@@ -54,12 +54,12 @@ export async function GET(req: Request) {
   const limit = limiteBusqueda(params.get("limit"));
 
   try {
-    // La llamada viene de ai-api (sin cookie de zona): con el flag `disponibilidad-sucursal` se usa
-    // la zona predeterminada, así el agente no ofrece lo oculto ni cuenta stock que no hay.
+    // Con el flag `disponibilidad-sucursal`, el mismo criterio que el catálogo: stock en cualquier
+    // local y sin lo que ninguna sucursal ofrece (el agente no ofrece lo oculto ni stock que no hay).
     // Datos técnicos estructurados (`ProductoAgente.atributos`) si la tabla del CRM está disponible.
     const [{ soloVisibles }, disp, estructurados] = await Promise.all([
       flagsPublicos(),
-      dispDelVisitante(),
+      dispCatalogo(),
       // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
       usarAtributosEstructurados(),
     ]);

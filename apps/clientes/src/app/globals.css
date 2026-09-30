@@ -33,6 +33,22 @@
   --color-success-sobre-oscuro: var(--color-success-sobre-oscuro);
 }
 
+/* Chat del asistente acoplado a la derecha (ai-widget 0.7.0, pantallas de
+   1280 px o más): ancho del panel, y mientras está abierto el <body> le reserva
+   ese ancho (ChatIaWidget pone `data-chat-dock` en <html>). El chat carga
+   cerrado, así que el primer pintado no se corre. */
+:root {
+  --aichat-dock-width: 400px;
+}
+html[data-chat-dock="abierto"] body {
+  padding-right: var(--aichat-dock-width);
+}
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition: padding-right 200ms ease-out;
+  }
+}
+
 /* Fuentes: next/font las carga en el layout (--font-nunito / --font-sora) y
    acá se cablean a los roles del DS para el caso sin data-theme. */
 :root {

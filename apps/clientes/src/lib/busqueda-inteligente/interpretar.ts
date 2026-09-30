@@ -36,12 +36,24 @@ export interface Dependencias {
    * devuelve `null` (caído, lento), el resultado NO se guarda: la próxima vez
    * se vuelve a intentar con Jev.
    */
-  jev: ((consulta: string, preguntas: Record<string, PreguntaChoice>) => Promise<Respuestas | null>) | null;
+  jev:
+    | ((consulta: string, preguntas: Record<string, PreguntaChoice>, timeoutMs: number) => Promise<Respuestas | null>)
+    | null;
+  /** Reloj (ms) para el presupuesto de Jev; por defecto `Date.now`. */
+  ahora?: () => number;
   leerCache: (consultaNorm: string, arbolHash: string) => Promise<Guardado | null>;
   guardarCache: (consultaNorm: string, arbolHash: string, guardado: Guardado) => Promise<void>;
 }
 
 const vacio = (): FiltrosInterpretados => ({ categorias: [], atributos: [] });
+
+/**
+ * Presupuesto TOTAL de Jev por interpretación (las dos llamadas juntas): el
+ * camino que redirige con 0–3 resultados nunca espera más que esto.
+ */
+export const PRESUPUESTO_JEV_MS = 2500;
+/** Con menos de esto por delante, la subcategoría no se pregunta (no llegaría). */
+export const MINIMO_PARA_SUB_MS = 400;
 
 const PREGUNTA_RAIZ = "¿A qué categoría de la tienda corresponde lo que busca el cliente?";
 const PREGUNTA_SUB = "¿A qué subcategoría corresponde lo que busca el cliente?";
@@ -68,13 +80,15 @@ async function preguntarAJev(
   arbol: NodoArbol[],
   jev: NonNullable<Dependencias["jev"]>,
   conCategoria: boolean,
+  ahora: () => number,
 ): Promise<AporteJev | null> {
+  const limite = ahora() + PRESUPUESTO_JEV_MS;
   const raices = hijasDe(arbol, null);
   const opcionesRaiz = conCategoria && raices.length > 1 ? opcionesDeCategorias(raices, arbol) : null;
   const preguntas: Record<string, PreguntaChoice> = { tono: PREGUNTA_TONO, ambiente: PREGUNTA_AMBIENTE };
   if (opcionesRaiz) preguntas.raiz = { type: "choice", question: PREGUNTA_RAIZ, criteria: opcionesRaiz.criteria };
 
-  const r1 = await jev(consulta, preguntas);
+  const r1 = await jev(consulta, preguntas, PRESUPUESTO_JEV_MS);
   if (!r1) return null;
   const aporte: AporteJev = { aplicar: vacio(), sugerir: vacio() };
 
@@ -88,9 +102,14 @@ async function preguntarAJev(
 
   const hijas = hijasDe(arbol, raiz.id);
   let sub: { nodo: NodoArbol; confianza: number } | null = null;
-  if (r1.raiz.confidence >= UMBRAL_SUGERIR && hijas.length > 1) {
+  const restante = limite - ahora();
+  if (r1.raiz.confidence >= UMBRAL_SUGERIR && hijas.length > 1 && restante >= MINIMO_PARA_SUB_MS) {
     const opcionesSub = opcionesDeCategorias(hijas, arbol);
-    const r2 = await jev(consulta, { sub: { type: "choice", question: PREGUNTA_SUB, criteria: opcionesSub.criteria } });
+    const r2 = await jev(
+      consulta,
+      { sub: { type: "choice", question: PREGUNTA_SUB, criteria: opcionesSub.criteria } },
+      restante,
+    );
     const nodo = r2?.sub && opcionesSub.porClave.get(r2.sub.choice);
     if (nodo && r2?.sub) sub = { nodo, confianza: r2.sub.confidence };
   }
@@ -148,7 +167,7 @@ export async function interpretarCon(q: string, deps: Dependencias): Promise<Int
   const det = deterministico(norm, deps.arbol);
   // Escalera de costo: con una categoría resuelta por nombre, Jev no suma.
   const usarJev = det.categorias.length === 0 && deps.jev != null;
-  const jev = usarJev ? await preguntarAJev(consulta, deps.arbol, deps.jev!, true) : null;
+  const jev = usarJev ? await preguntarAJev(consulta, deps.arbol, deps.jev!, true, deps.ahora ?? Date.now) : null;
   const resultado = combinar(det, jev);
 
   const aplica = resultado.aplicar.categorias.length > 0 || resultado.aplicar.atributos.length > 0;

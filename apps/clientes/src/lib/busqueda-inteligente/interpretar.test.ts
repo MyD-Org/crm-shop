@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { interpretarCon, type Dependencias } from "./interpretar";
+import { MINIMO_PARA_SUB_MS, PRESUPUESTO_JEV_MS, interpretarCon, type Dependencias } from "./interpretar";
 import type { PreguntaChoice, Respuestas } from "./jev";
 import type { NodoArbol } from "./tipos";
 
@@ -124,5 +124,32 @@ describe("interpretarCon", () => {
     const d = deps({ jev: null });
     await interpretarCon("luz calida para el living", d);
     expect(d.guardarCache).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("presupuesto total de Jev (2,5 s entre las dos llamadas)", () => {
+  it("la primera llamada recibe el presupuesto entero y la segunda sólo lo que queda", async () => {
+    let t = 0;
+    const jev = vi.fn<NonNullable<Dependencias["jev"]>>(async (_c, preguntas): Promise<Respuestas> => {
+      t += 1500;
+      return "sub" in preguntas
+        ? { sub: { choice: "apliques", confidence: 0.95 } }
+        : { raiz: { choice: "iluminacion", confidence: 0.95 } };
+    });
+    await interpretarCon("luz para la pared del living", deps({ jev, ahora: () => t }));
+    expect(jev).toHaveBeenCalledTimes(2);
+    expect(jev.mock.calls[0][2]).toBe(PRESUPUESTO_JEV_MS);
+    expect(jev.mock.calls[1][2]).toBe(PRESUPUESTO_JEV_MS - 1500);
+  });
+
+  it("si no queda presupuesto suficiente, no pregunta la subcategoría (la raíz se aplica igual)", async () => {
+    let t = 0;
+    const jev = vi.fn(async (): Promise<Respuestas> => {
+      t += PRESUPUESTO_JEV_MS - MINIMO_PARA_SUB_MS + 1;
+      return { raiz: { choice: "iluminacion", confidence: 0.95 } };
+    });
+    const r = await interpretarCon("luz para la pared del living", deps({ jev, ahora: () => t }));
+    expect(jev).toHaveBeenCalledTimes(1);
+    expect(r!.aplicar.categorias).toEqual(["ILUMINACION"]);
   });
 });

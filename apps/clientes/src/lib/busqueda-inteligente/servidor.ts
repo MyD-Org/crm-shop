@@ -29,7 +29,9 @@ export async function interpretar(
     });
     return await interpretarCon(q, {
       arbol,
-      jev: process.env.JEV_API_KEY?.trim() ? (consulta, preguntas) => consultarJev(consulta, preguntas) : null,
+      jev: process.env.JEV_API_KEY?.trim()
+        ? (consulta, preguntas, timeoutMs) => consultarJev(consulta, preguntas, { timeoutMs })
+        : null,
       leerCache: (norm, hash) => leerInterpretacion(tenant, norm, hash, opciones.sumarUso ?? true),
       guardarCache: (norm, hash, guardado) => guardarInterpretacion(tenant, norm, hash, guardado),
     });

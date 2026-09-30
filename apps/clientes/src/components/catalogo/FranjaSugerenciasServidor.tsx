@@ -11,7 +11,8 @@ import { FranjaSugerencias } from "./FranjaBusqueda";
  * determinista o Jev, ~0,5 s). Si no hay nada que proponer, no dibuja nada.
  */
 export async function FranjaSugerenciasServidor({ estado, consulta }: { estado: EstadoCatalogo; consulta: string }) {
-  const interpretacion = await interpretar(consulta);
+  // Sólo la página 1 cuenta como búsqueda (las siguientes son la misma búsqueda paginada).
+  const interpretacion = await interpretar(consulta, { sumarUso: estado.pagina === 1 });
   if (!interpretacion) return null;
   const chips = chipsSugeridos(estado, [interpretacion.aplicar, interpretacion.sugerir]);
   if (chips.length === 0) return null;

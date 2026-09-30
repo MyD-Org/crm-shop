@@ -188,6 +188,8 @@ async function CatalogoResultados({ searchParams }: Props) {
  * (spec catálogo asistido, §4). La clásica ya corrió y se muestra igual; esto
  * sólo se suma.
  *
+ * - Los usos de la caché (búsquedas frecuentes) sólo se cuentan en la página 1
+ *   sin `ia=`: paginar o recargar una página interpretada no es otra búsqueda.
  * - Con `ia=` en la URL (ya interpretada, o `ia=0` "tal cual") NUNCA se vuelve
  *   a interpretar: es el freno contra el bucle de redirecciones. Si la URL
  *   interpretada no trajo nada, se buscan las alternativas (caché, sin sumar
@@ -212,7 +214,7 @@ async function busquedaInteligente(estado: EstadoCatalogo, total: number) {
         ),
       };
     }
-    const interpretacion = await interpretar(q);
+    const interpretacion = await interpretar(q, { sumarUso: estado.pagina === 1 });
     if (interpretacion && hayQueAplicar(interpretacion)) redirect(hrefInterpretada(estado, interpretacion));
     const sugerir = interpretacion ? [interpretacion.sugerir] : [];
     return {

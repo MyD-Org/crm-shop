@@ -51,6 +51,8 @@ jobs:
         working-directory: apps/admin
     steps:
       - name: Validar secrets e inputs
+        # Corre antes del checkout: `apps/admin` todavía no existe.
+        working-directory: .
         env:
           DATABASE_URL: ${{ secrets.ADMIN_DATABASE_URL }}
           BASE_URL: ${{ secrets.ADMIN_BASE_URL }}

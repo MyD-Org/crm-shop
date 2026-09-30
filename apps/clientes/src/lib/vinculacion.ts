@@ -8,8 +8,9 @@
  * Hacen falta dos caminos, y el orden importa:
  *
  * 1. **Match por email verificado** (`intentarVinculacionPorEmail`) — el normal.
- *    Silencioso, automático, sin pedirle nada al cliente. Sólo para contactos
- *    con acceso a Facturación (cuenta corriente o excepción del CRM).
+ *    Silencioso, automático, sin pedirle nada al cliente. Vincula a cualquier
+ *    cliente, de contado o de cuenta corriente; lo de Facturación lo sigue
+ *    decidiendo `accesoFacturacion()`.
  * 2. **OTP por CUIT** (`solicitarVinculacion` + `confirmarVinculacion`) — el
  *    plan B, para quien entra con un mail distinto al que tiene cargado el
  *    sistema, o cuando dos contactos comparten casilla.
@@ -246,17 +247,11 @@ export async function intentarVinculacionPorEmail(
 
   const contacto = clientes[0];
 
-  // Sólo se vincula solo quien tiene acceso a Facturación: cuenta corriente, o
-  // de contado con la excepción que un admin otorgó desde el CRM (columna
-  // `acceso_facturacion` de la vista). Un match que vino de Alegra en vivo
-  // decide sólo por cuenta corriente (`vinculableDeAlegra`): la excepción existe
-  // únicamente para contactos del espejo. Al resto el vínculo no le da nada que
-  // necesite para comprar. NO se graba "sin coincidencia": el día que le carguen
-  // plazo o límite, o le den la excepción, la próxima visita lo vincula. Con
-  // fila en el espejo, reintentar cuesta una query; el respaldo en vivo sólo
-  // corre mientras el espejo esté atrasado. Un contado con lista propia puede
-  // vincular a mano (/mi-cuenta/vincular, o el aviso del checkout).
-  if (!contacto.accesoFacturacion) return null;
+  // Se vincula TODO cliente con match único, tenga o no cuenta corriente: el
+  // vínculo trae los datos que ya están en Alegra y ata sus compras al contacto.
+  // Lo que ve en Mi cuenta (Facturación, Pagos, Presupuestos…) no depende del
+  // vínculo sino de `accesoFacturacion()`, que sigue exigiendo cuenta corriente
+  // o la excepción del CRM.
 
   /**
    * El chequeo de `existente` de arriba y este insert NO son atómicos, y
@@ -296,16 +291,15 @@ async function insertarVinculoPorEmail(
  * email todavía no estaba cargado como persona asociada) se reintenta en cada
  * visita, pero SÓLO contra el espejo: nunca Alegra en vivo (la cuota de
  * `/contacts` es de ~5 requests por minuto y la comparten el CRM y el bot) y sin
- * grabar otra fila `sin_coincidencia`. Exactamente un contacto cliente con
- * acceso a Facturación ⇒ vínculo activo; cualquier otra cosa ⇒ nada. Cuesta una
- * query al índice de `emails_norm` por request para estos usuarios.
+ * grabar otra fila `sin_coincidencia`. Exactamente un contacto cliente ⇒
+ * vínculo activo; cualquier otra cosa ⇒ nada. Cuesta una query al índice de `emails_norm` por request para estos usuarios.
  */
 async function reintentarDesdeElEspejo(
   clerkUserId: string,
   email: string,
 ): Promise<{ alegraContactId: string; razonSocial?: string } | null> {
   const clientes = await delEspejoOVacio(() => contactosPorEmail(email), [], "email");
-  if (clientes.length !== 1 || !clientes[0].accesoFacturacion) return null;
+  if (clientes.length !== 1) return null;
   return insertarVinculoPorEmail(clerkUserId, clientes[0]);
 }
 

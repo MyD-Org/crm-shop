@@ -866,11 +866,6 @@ export function CheckoutClient({
                     placeholder="Seleccionar local"
                   />
                 </Field>
-                {sucursales.locales.find((l) => l.slug === localRetiro)?.horario ? (
-                  <p className="mt-2 text-sm text-muted">
-                    Horario: {sucursales.locales.find((l) => l.slug === localRetiro)?.horario}
-                  </p>
-                ) : null}
               </div>
             )}
             {envioHabilitado && !admiteEnvio && (

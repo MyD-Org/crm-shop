@@ -12,6 +12,7 @@ vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
 import { getFacetas, getPaginaCatalogo } from "./catalog";
 import { STOCK_INCLUYE_SIN_STOCK, filtrosDeEstado, leerEstado } from "./catalogo-url";
+import { ATRIBUTOS } from "./catalogo-atributos";
 
 /** count(*) = 1 para que la página también dispare la consulta de filas. */
 const conConteo = (c: ConsultaGrabada) =>
@@ -108,9 +109,9 @@ describe('filtro "solo con stock" (SQL-1)', () => {
 });
 
 describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
-  it("son tres consultas: categorías, marcas y rango de precio", async () => {
+  it("son cuatro consultas: categorías, marcas, rango de precio y atributos", async () => {
     await getFacetas({}, false);
-    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(4);
     const { categorias, marcas, precio } = facetas(grabadora.consultas);
     expect(categorias.sql).toContain('"catalog_categories_shop"."name"');
     // Sin marca en la vista, cuenta bajo el nombre de su categoría de Alegra
@@ -188,5 +189,47 @@ describe("orden por defecto (SQL-5)", () => {
       expect(sql).not.toContain("ventas");
       expect(params).not.toContain("ventas");
     }
+  });
+});
+
+describe("filtro y facetas de atributos (`atr`)", () => {
+  const patron = (id: string) => ATRIBUTOS.find((a) => a.id === id)!.patron;
+  const REGEX = /"shop"\.immutable_unaccent\(lower\(concat_ws\(.*?\)\)\) ~\* \$\d+/g;
+
+  it("AND entre grupos, OR dentro del grupo, con el patrón como parámetro", async () => {
+    await getPaginaCatalogo({
+      soloVisibles: false,
+      filtros: { atributos: ["tono-calido", "tono-frio", "apto-exterior"] },
+    });
+    for (const { sql, params } of grabadora.consultas) {
+      expect(cuenta(sql, REGEX)).toBe(3);
+      expect(sql).toMatch(/\(.* ~\* \$\d+ or .* ~\* \$\d+\) and .* ~\* \$\d+/);
+      expect(params).toContain(patron("tono-calido"));
+      expect(params).toContain(patron("tono-frio"));
+      expect(params).toContain(patron("apto-exterior"));
+    }
+  });
+
+  it("ids desconocidos no filtran; sin atributos el WHERE no tiene `~*`", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { atributos: ["inventado"] } });
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
+    for (const { sql } of grabadora.consultas) expect(sql).not.toContain("~*");
+  });
+
+  it("una sola consulta de facetas cuenta cada atributo con los filtros de los OTROS grupos", async () => {
+    await getFacetas({ atributos: ["tono-calido", "zocalo-e27"] }, false);
+    const atributos = sinLecturaDelArbol(grabadora.consultas).find((c) => c.sql.includes("count(*) filter"));
+    expect(atributos).toBeDefined();
+    const { sql, params } = atributos!;
+    expect(cuenta(sql, /count\(\*\) filter/g)).toBe(ATRIBUTOS.length);
+    // El WHERE de la consulta no lleva atributos: sólo los `filter` de cada columna.
+    expect(sql.split(" where ").at(-1)).not.toContain("~*");
+    // "Luz fría" se cuenta con la rosca E27 aplicada pero sin "Luz cálida".
+    const iFrio = params.indexOf(patron("tono-frio"));
+    expect(iFrio).toBeGreaterThan(-1);
+    expect(params[iFrio - 1]).toBe(patron("zocalo-e27"));
+    // Las demás facetas sí filtran por los atributos tildados.
+    const marcas = sinLecturaDelArbol(grabadora.consultas).find((c) => c.sql.includes("group by coalesce(nullif("));
+    expect(marcas!.params).toContain(patron("tono-calido"));
   });
 });

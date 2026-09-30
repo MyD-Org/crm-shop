@@ -13,6 +13,7 @@
 // Sólo el tipo: `import type` se borra al compilar y no arrastra el driver
 // de Postgres al bundle del browser.
 import type { FiltrosCatalogo } from "@/lib/catalog";
+import { atributosValidos } from "@/lib/catalogo-atributos";
 
 /**
  * Criterios de orden que ofrece el catálogo. Viven ACÁ y no en `catalog.ts`
@@ -65,6 +66,12 @@ export interface EstadoCatalogo {
   query?: string;
   categorias: string[];
   marcas: string[];
+  /**
+   * Atributos del diccionario (`?atr=`, repetible; ver catalogo-atributos.ts).
+   * Los ids desconocidos se descartan al leer; quedan en el orden del
+   * diccionario.
+   */
+  atributos: string[];
   orden: OrdenCatalogo;
   /** 1-based. */
   pagina: number;
@@ -81,6 +88,26 @@ export interface EstadoCatalogo {
   soloStock: boolean;
   /** `?vista=lista`; cualquier otra cosa es grilla. */
   vista: VistaCatalogo;
+  /**
+   * Búsqueda inteligente (`?ia=`, flag `busqueda-ia`):
+   * - la consulta original, cuando el estado vino de interpretarla (la franja
+   *   muestra "Entendimos:" y ofrece verla tal cual);
+   * - `"0"` (`IA_DESACTIVADA`): la búsqueda se muestra tal cual, sin interpretar.
+   * Con cualquier valor la page NO vuelve a interpretar (evita el bucle de
+   * redirecciones).
+   */
+  ia?: string;
+}
+
+/** Valor de `?ia=` que pide ver la búsqueda tal cual, sin interpretarla. */
+export const IA_DESACTIVADA = "0";
+
+/** Tope de largo de `?ia=` (igual que la consulta que se interpreta). */
+const LARGO_MAX_IA = 120;
+
+/** La consulta original si el estado vino de interpretarla; si no, `undefined`. */
+export function consultaInterpretada(estado: Pick<EstadoCatalogo, "ia">): string | undefined {
+  return estado.ia && estado.ia !== IA_DESACTIVADA ? estado.ia : undefined;
 }
 
 /**
@@ -155,12 +182,14 @@ export function leerEstado(params: {
   q?: ParamCrudo;
   categoria?: ParamCrudo;
   marca?: ParamCrudo;
+  atr?: ParamCrudo;
   orden?: ParamCrudo;
   pagina?: ParamCrudo;
   precio_min?: ParamCrudo;
   precio_max?: ParamCrudo;
   stock?: ParamCrudo;
   vista?: ParamCrudo;
+  ia?: ParamCrudo;
 }): EstadoCatalogo {
   const q = primero(params.q)?.trim();
   let precioMin = comoPrecio(params.precio_min);
@@ -170,16 +199,19 @@ export function leerEstado(params: {
   if (precioMin != null && precioMax != null && precioMin > precioMax) {
     [precioMin, precioMax] = [precioMax, precioMin];
   }
+  const ia = primero(params.ia)?.trim().slice(0, LARGO_MAX_IA);
   return {
     query: q || undefined,
     categorias: comoLista(params.categoria),
     marcas: comoLista(params.marca),
+    atributos: atributosValidos(comoLista(params.atr)),
     orden: comoOrden(params.orden, q || undefined),
     pagina: comoPagina(params.pagina),
     precioMin,
     precioMax,
     soloStock: comoSoloStock(params.stock),
     vista: comoVista(params.vista),
+    ...(ia ? { ia } : {}),
   };
 }
 
@@ -193,12 +225,14 @@ export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
     q: param("q"),
     categoria: param("categoria"),
     marca: param("marca"),
+    atr: param("atr"),
     orden: param("orden"),
     pagina: param("pagina"),
     precio_min: param("precio_min"),
     precio_max: param("precio_max"),
     stock: param("stock"),
     vista: param("vista"),
+    ia: param("ia"),
   });
 }
 
@@ -222,7 +256,9 @@ const mismoConjunto = (a: string[], b: string[]) =>
 export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams): boolean {
   const url = estadoDeBusqueda(sp);
   return (
-    !mismoConjunto(estado.categorias, url.categorias) || !mismoConjunto(estado.marcas, url.marcas)
+    !mismoConjunto(estado.categorias, url.categorias) ||
+    !mismoConjunto(estado.marcas, url.marcas) ||
+    !mismoConjunto(estado.atributos, url.atributos)
   );
 }
 
@@ -230,21 +266,23 @@ export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams): 
  * URL del catálogo para un estado dado. Omite lo que está en su default para
  * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=nombre&pagina=1`.
  *
- * El orden de los parámetros es fijo (`q, categoria*, marca*, precio_min,
- * precio_max, stock, orden, vista, pagina`): dos estados iguales dan la misma
- * URL, que es lo que necesitan el canonical y los tests.
+ * El orden de los parámetros es fijo (`q, categoria*, marca*, atr*,
+ * precio_min, precio_max, stock, orden, vista, pagina, ia`): dos estados
+ * iguales dan la misma URL, que es lo que necesitan el canonical y los tests.
  */
 export function hrefCatalogo(estado: EstadoCatalogo): string {
   const sp = new URLSearchParams();
   if (estado.query) sp.set("q", estado.query);
   for (const c of estado.categorias) sp.append("categoria", c);
   for (const m of estado.marcas) sp.append("marca", m);
+  for (const a of atributosValidos(estado.atributos)) sp.append("atr", a);
   if (estado.precioMin != null) sp.set("precio_min", String(estado.precioMin));
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
   if (estado.soloStock !== SOLO_STOCK_DEFAULT) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
   if (estado.orden !== ordenPorDefecto(estado.query)) sp.set("orden", estado.orden);
   if (estado.vista !== VISTA_DEFAULT) sp.set("vista", estado.vista);
   if (estado.pagina > 1) sp.set("pagina", String(estado.pagina));
+  if (estado.ia) sp.set("ia", estado.ia);
   const qs = sp.toString();
   return qs ? `/catalogo?${qs}` : "/catalogo";
 }
@@ -280,6 +318,9 @@ export function estadoConCambios(
   cambios: Partial<EstadoCatalogo>
 ): EstadoCatalogo {
   const nuevo = { ...estado, pagina: cambios.pagina ?? 1, ...cambios };
+  // Otra búsqueda ya no es la que se interpretó (ni la que se pidió ver tal
+  // cual): `ia` sólo sigue si quien cambia la búsqueda lo pasa explícito.
+  if ("query" in cambios && cambios.query !== estado.query && !("ia" in cambios)) delete nuevo.ia;
   // Quitar la búsqueda deja sin sentido "Relevancia": vuelve al alfabético.
   if (nuevo.orden === "relevancia" && !nuevo.query) nuevo.orden = ORDEN_DEFAULT;
   return nuevo;
@@ -329,6 +370,7 @@ export function hrefCanonico(estado: EstadoCatalogo): string {
   return hrefCatalogo({
     categorias: estado.categorias.slice(0, 1),
     marcas: [],
+    atributos: [],
     orden: ORDEN_DEFAULT,
     pagina: estado.pagina,
     soloStock: SOLO_STOCK_DEFAULT,
@@ -346,6 +388,7 @@ export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosCatalogo {
     busqueda: estado.query,
     categorias: estado.categorias,
     marcas: estado.marcas,
+    atributos: estado.atributos,
     precioMin: estado.precioMin,
     precioMax: estado.precioMax,
     soloStock: estado.soloStock,

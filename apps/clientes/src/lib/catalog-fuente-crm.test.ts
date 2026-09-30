@@ -103,7 +103,7 @@ describe("el catálogo lee del CRM, menos la reserva", () => {
   it("facetas con categorías de Alegra: agrupan por el nombre de la vista de categorías", async () => {
     await getFacetas({}, false);
     const consultas = sinLecturaDelArbol(grabadora.consultas);
-    expect(consultas).toHaveLength(3);
+    expect(consultas).toHaveLength(4);
     for (const c of consultas) {
       exigeFuenteCrm(c);
       expect(c.sql).toContain(ACTIVO);

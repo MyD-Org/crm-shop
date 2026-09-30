@@ -18,6 +18,7 @@ import {
   maxCantidad,
   CANTIDAD_MAXIMA,
   tituloCatalogo,
+  interpretacionVigente,
 } from "./catalogo-vista";
 import type { EstadoCatalogo } from "./catalogo-url";
 
@@ -25,6 +26,7 @@ const base: EstadoCatalogo = {
   query: undefined,
   categorias: [],
   marcas: [],
+  atributos: [],
   orden: "nombre",
   pagina: 1,
   soloStock: true,
@@ -199,6 +201,13 @@ describe("chipsActivos", () => {
     expect(chips[4].cambios).toEqual({ soloStock: true });
   });
 
+  it("los atributos van después de las marcas, con su nombre visible", () => {
+    const chips = chipsActivos({ ...base, marcas: ["GENROD"], atributos: ["tono-calido", "apto-exterior"] }, rango);
+    expect(chips.map((c) => c.etiqueta)).toEqual(["Marca: Genrod", "Luz cálida", "Apto exterior"]);
+    expect(chips[1].cambios).toEqual({ atributos: ["apto-exterior"] });
+    expect(chips[1].removeLabel).toBe("Quitar filtro Luz cálida");
+  });
+
   it("las claves son únicas (sirven de key de React)", () => {
     const chips = chipsActivos(
       { ...base, categorias: ["X"], marcas: ["X"], precioMax: 900 },
@@ -220,6 +229,7 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
     expect(limpiarFiltros()).toEqual({
       categorias: [],
       marcas: [],
+      atributos: [],
       precioMin: undefined,
       precioMax: undefined,
       soloStock: true,
@@ -247,6 +257,7 @@ describe("limpiarFiltros / hayFiltros / contarFiltrosActivos", () => {
       })
     ).toBe(5);
     expect(contarFiltrosActivos(base)).toBe(0);
+    expect(contarFiltrosActivos({ ...base, atributos: ["tono-frio", "zocalo-e27"] })).toBe(2);
     expect(contarFiltrosActivos({ ...base, soloStock: true })).toBe(0);
   });
 });
@@ -267,6 +278,8 @@ describe("indexable", () => {
     expect(indexable({ ...base, orden: "precio-asc" })).toBe(false);
     expect(indexable({ ...base, vista: "lista" })).toBe(false);
     expect(indexable({ ...base, categorias: ["A", "B"] })).toBe(false);
+    expect(indexable({ ...base, atributos: ["tono-calido"] })).toBe(false);
+    expect(indexable({ ...base, categorias: ["Reflectores"], ia: "reflector para el patio" })).toBe(false);
   });
 });
 
@@ -362,5 +375,20 @@ describe("alternarCategoria", () => {
   it("sin árbol (categorías planas, sin nivel) se comporta como una lista común", () => {
     const planas = [{ label: "A" }, { label: "B" }];
     expect(alternarCategoria(planas, ["A"], "B", true)).toEqual(["A", "B"]);
+  });
+});
+
+describe("búsqueda interpretada (`ia`)", () => {
+  it("el título y las migas hablan de lo que escribió el visitante", () => {
+    const e = { ...base, categorias: ["Reflectores"], atributos: ["apto-exterior"], ia: "luz para el patio" };
+    expect(interpretacionVigente(e)).toBe("luz para el patio");
+    expect(tituloCatalogo(e)).toBe('Resultados para "luz para el patio"');
+    expect(migas(e).at(-1)).toEqual({ label: "Resultados" });
+  });
+
+  it("sin nada de lo interpretado (o con `ia=0`) deja de ser una interpretación", () => {
+    expect(interpretacionVigente({ ...base, ia: "luz para el patio" })).toBeUndefined();
+    expect(interpretacionVigente({ ...base, query: "reflector", ia: "0" })).toBeUndefined();
+    expect(tituloCatalogo({ ...base, query: "reflector", ia: "0" })).toBe('Resultados para "reflector"');
   });
 });

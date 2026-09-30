@@ -16,6 +16,7 @@ import {
   limpiarFiltros,
 } from "@/lib/catalogo-vista";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
+import { nombreAtributo } from "@/lib/catalogo-atributos";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
@@ -25,7 +26,8 @@ const alternar = (lista: string[], valor: string, tildado: boolean) =>
   tildado ? [...lista, valor] : lista.filter((x) => x !== valor);
 
 /**
- * Panel de filtros: categorías, marcas, precio y disponibilidad. Puro: todo
+ * Panel de filtros: categorías, marcas, características (atributos del
+ * diccionario, ver catalogo-atributos.ts), precio y disponibilidad. Puro: todo
  * lo que toca el visitante sale por `ir` como cambios de estado (que el
  * padre convierte en URL). Sin `dentroDeSheet` va dentro de una `Card` con
  * "Limpiar" en el encabezado (aside de desktop); con `dentroDeSheet` se
@@ -80,6 +82,25 @@ export function CatalogoFiltros({
         emptyText="Sin marcas para estos filtros"
         searchEmptyText="No hay marcas que coincidan con su búsqueda."
       />
+      {/* Sólo con algo para ofrecer: los atributos salen del nombre del
+          producto y en muchas categorías (herramientas, cables) no hay
+          ninguno. Uno tildado que ya no cuenta sigue apareciendo (itemsDeFaceta). */}
+      {(facetas.atributos.length > 0 || estado.atributos.length > 0) && (
+        <>
+          <Divider />
+          <FacetGroup
+            title="Características"
+            items={itemsDeFaceta(facetas.atributos, estado.atributos).map((a) => ({
+              value: a.label,
+              label: nombreAtributo(a.label),
+              count: a.count,
+              checked: a.checked,
+            }))}
+            onToggle={(valor, tildado) => ir({ atributos: alternar(estado.atributos, valor, tildado) })}
+            emptyText="Sin características para estos filtros"
+          />
+        </>
+      )}
       {facetas.precio && (
         <>
           <Divider />

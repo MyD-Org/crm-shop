@@ -13,10 +13,12 @@ import type { BreadcrumbItem } from "@myd-org/ui";
 import type { Product } from "@/data/products";
 import { fmtPesosEnteros } from "@/lib/format";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
+import { nombreAtributo } from "@/lib/catalogo-atributos";
 import {
   ORDEN_DEFAULT,
   SOLO_STOCK_DEFAULT,
   VISTA_DEFAULT,
+  consultaInterpretada,
   rangoEfectivo,
   type EstadoCatalogo,
   type OrdenCatalogo,
@@ -38,7 +40,7 @@ export function migas(estado: EstadoCatalogo): BreadcrumbItem[] {
     { label: "Inicio", href: "/" },
     { label: "Catálogo", href: "/catalogo" },
   ];
-  if (estado.query) items.push({ label: "Resultados" });
+  if (estado.query || interpretacionVigente(estado)) items.push({ label: "Resultados" });
   else if (estado.categorias.length === 1)
     items.push({ label: formatRubro(estado.categorias[0]) });
   return items;
@@ -69,8 +71,24 @@ export function ordenesPara(estado: Pick<EstadoCatalogo, "query" | "orden">) {
     : ORDENES.filter((o) => o.value !== "relevancia");
 }
 
-/** Título de la página: la búsqueda gana; si no, la categoría única. */
+/**
+ * La consulta original de una búsqueda interpretada (`?ia=`), mientras siga
+ * habiendo algo de lo que salió de ella (texto, categorías o atributos). Si el
+ * visitante quitó todo, el estado ya no es "lo que entendimos" de nada.
+ */
+export function interpretacionVigente(estado: EstadoCatalogo): string | undefined {
+  const consulta = consultaInterpretada(estado);
+  if (!consulta) return undefined;
+  return estado.query || estado.categorias.length || estado.atributos.length ? consulta : undefined;
+}
+
+/**
+ * Título de la página: la búsqueda gana (la que escribió el visitante, aunque
+ * se haya interpretado en filtros); si no, la categoría única.
+ */
 export function tituloCatalogo(estado: EstadoCatalogo): string {
+  const interpretada = interpretacionVigente(estado);
+  if (interpretada) return `Resultados para "${interpretada}"`;
   if (estado.query) return `Resultados para "${estado.query}"`;
   if (estado.categorias.length === 1) return formatRubro(estado.categorias[0]);
   return "Catálogo";
@@ -182,7 +200,10 @@ const ETIQUETA_INCLUYE_SIN_STOCK = "Incluye sin stock";
 const stockFueraDeDefault = (e: Pick<EstadoCatalogo, "soloStock">) =>
   e.soloStock !== SOLO_STOCK_DEFAULT;
 
-/** Chips de filtros activos, en el orden del panel: categorías → marcas → precio → stock. */
+/**
+ * Chips de filtros activos, en el orden del panel: categorías → marcas →
+ * características (atributos) → precio → stock.
+ */
 export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null): ChipFiltro[] {
   const chip = (clave: string, etiqueta: string, cambios: Partial<EstadoCatalogo>) => ({
     clave,
@@ -198,6 +219,9 @@ export function chipsActivos(estado: EstadoCatalogo, rango: RangoPrecio | null):
     ),
     ...estado.marcas.map((m) =>
       chip(`marca:${m}`, `Marca: ${formatMarca(m)}`, { marcas: estado.marcas.filter((x) => x !== m) })
+    ),
+    ...estado.atributos.map((a) =>
+      chip(`atributo:${a}`, nombreAtributo(a), { atributos: estado.atributos.filter((x) => x !== a) })
     ),
     ...(hayPrecio(estado)
       ? [
@@ -222,6 +246,7 @@ export function limpiarFiltros(): Partial<EstadoCatalogo> {
   return {
     categorias: [],
     marcas: [],
+    atributos: [],
     precioMin: undefined,
     precioMax: undefined,
     soloStock: SOLO_STOCK_DEFAULT,
@@ -238,6 +263,7 @@ export function contarFiltrosActivos(estado: EstadoCatalogo): number {
   return (
     estado.categorias.length +
     estado.marcas.length +
+    estado.atributos.length +
     (hayPrecio(estado) ? 1 : 0) +
     (stockFueraDeDefault(estado) ? 1 : 0)
   );
@@ -261,7 +287,9 @@ export function etiquetaBotonFiltros(activos: number): string {
 export function indexable(estado: EstadoCatalogo): boolean {
   return (
     !estado.query &&
+    !estado.ia &&
     estado.marcas.length === 0 &&
+    estado.atributos.length === 0 &&
     !hayPrecio(estado) &&
     !stockFueraDeDefault(estado) &&
     estado.orden === ORDEN_DEFAULT &&

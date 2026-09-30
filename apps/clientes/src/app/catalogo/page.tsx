@@ -20,6 +20,7 @@ type Props = {
     q?: ParamCrudo;
     categoria?: ParamCrudo;
     marca?: ParamCrudo;
+    atr?: ParamCrudo;
     orden?: ParamCrudo;
     pagina?: ParamCrudo;
     precio_min?: ParamCrudo;

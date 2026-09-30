@@ -236,8 +236,9 @@ describe("admin: pedidos del Shop", () => {
         pagoRevision: null,
         facturado: false,
         sucursal: null,
-        // Seguimiento de contacto (rebanada B): siempre presentes (false / null si no aplica).
-        sinContactar: false,
+        // Seguimiento de contacto (rebanada B): siempre presentes. Es un pendiente de enero sin
+        // contactar: pasó el umbral de 24 h, así que figura "sin contactar".
+        sinContactar: true,
         contactadoEn: null,
       })
       // El motivo interno y los datos de contacto finos no viajan en el listado.
@@ -313,7 +314,7 @@ describe("admin: pedidos del Shop", () => {
         colas: { sin_confirmar: 0, pago: 0, datos: 0, sin_factura: 0, sin_contactar: 0 },
       })
       // `contacto` depende de que la migración del Shop con las columnas de contacto esté aplicada.
-      expect(cuerpo.contacto).toEqual({ disponible: expect.any(Boolean), umbralHoras: 24 })
+      expect(cuerpo.contacto).toEqual({ umbralHoras: 24 })
     })
   })
 

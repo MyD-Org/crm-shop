@@ -8,11 +8,9 @@ import { fmtFechaPedido } from "./format"
 
 // Seguimiento de contacto de un pedido pendiente (change `sucursales-igz-mdp`, rebanada B):
 // muestra si ya se contactó al cliente y permite marcarlo. La acción aparece solo mientras el
-// pedido está pendiente; `disponible: false` (todavía no se aplicó la migración del Shop que
-// agrega las columnas) oculta todo el bloque.
+// pedido está pendiente.
 
 interface Estado {
-  disponible: boolean
   umbralHoras: number
   contactadoEn: string | null
   contactadoPorNombre: string | null
@@ -37,7 +35,7 @@ export function ContactoControl({ pedidoId, estado, creadoEn }: { pedidoId: stri
     }
   }, [pedidoId])
 
-  if (!datos?.disponible) return null
+  if (!datos) return null
   if (!datos.contactadoEn && estado !== "pendiente") return null
 
   async function marcar() {

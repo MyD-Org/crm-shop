@@ -56,4 +56,23 @@ describe("politicaCsp", () => {
       "report-uri https://reportes.example/csp",
     );
   });
+
+  it("tracking: Meta y GA4 sólo con su ID cargado", () => {
+    const sin = politicaCsp({ NODE_ENV: "production" });
+    expect(sin).not.toContain("facebook");
+    expect(sin).not.toContain("googletagmanager");
+    expect(sin).not.toContain("va.vercel-scripts.com");
+
+    const con = politicaCsp({ NODE_ENV: "production", META_PIXEL_ID: "1234567890", GA4_MEASUREMENT_ID: "G-ABC123" });
+    expect(con).toMatch(/script-src [^;]*https:\/\/connect\.facebook\.net/);
+    expect(con).toMatch(/img-src [^;]*https:\/\/www\.facebook\.com/);
+    expect(con).toMatch(/connect-src [^;]*https:\/\/www\.facebook\.com/);
+    expect(con).toMatch(/script-src [^;]*https:\/\/www\.googletagmanager\.com/);
+    expect(con).toMatch(/connect-src [^;]*https:\/\/\*\.google-analytics\.com [^;]*https:\/\/\*\.analytics\.google\.com/);
+    expect(con).toMatch(/img-src [^;]*https:\/\/\*\.google-analytics\.com/);
+  });
+
+  it("el script de Vercel Analytics de desarrollo sólo en desarrollo", () => {
+    expect(politicaCsp({ NODE_ENV: "development" })).toMatch(/script-src [^;]*https:\/\/va\.vercel-scripts\.com/);
+  });
 });

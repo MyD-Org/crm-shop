@@ -11,6 +11,7 @@ vi.mock("@/flags", () => ({
   pedidoAConfirmarFlag: async () => estadoFlags()["pedido-a-confirmar"],
   chatIaFlag: async () => estadoFlags()["chat-ia"],
   busquedaIaFlag: async () => estadoFlags()["busqueda-ia"],
+  trackingFlag: async () => estadoFlags().tracking,
 }));
 
 beforeEach(() => {

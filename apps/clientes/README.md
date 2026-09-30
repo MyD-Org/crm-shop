@@ -56,6 +56,9 @@ de las vistas del CRM (`public.catalog_products_shop` y
 | `FACEBOOK_DOMAIN_VERIFICATION` | Token de verificación de dominio de Meta (el `content` del meta `facebook-domain-verification`). Lo emiten el layout y la cortina de "Próximamente" (`src/proxy.ts`); sin la variable no se emite y Meta da el dominio por no verificado. Se lee en el build (el layout es shell estático): un cambio requiere redesplegar. Solo letras y números. |
 | `JEV_API_KEY` | Opcional, secreto, server-only. Key de Jev (Typesafe) para la búsqueda inteligente (flag `busqueda-ia`): clasifica búsquedas en categorías, tono y ambiente. Sin ella la búsqueda inteligente usa sólo lo determinista (diccionario de atributos y nombres de categoría), sin costo. Ver `src/lib/busqueda-inteligente/jev.ts`. |
 | `CSP_REPORT_URI` | Opcional. Endpoint que recibe los reportes de la CSP (`report-uri`). La CSP está en Report-Only (`src/lib/headers-seguridad.ts`); sin la variable los reportes quedan sólo en la consola del navegador. Se lee en el build. |
+| `META_PIXEL_ID` | Opcional. ID del píxel de Meta (sólo dígitos). Con el flag `tracking` prendido carga el Pixel (PageView, ViewContent, AddToCart, InitiateCheckout, Purchase) y suma sus hosts a la CSP. La CSP se arma en el build: un cambio requiere redesplegar. |
+| `GA4_MEASUREMENT_ID` | Opcional. ID de medición de Google Analytics 4 (`G-…`). Igual que el anterior: eventos de ecommerce de GA4 y hosts en la CSP; se lee en el build. |
+| `POSTHOG_KEY` / `POSTHOG_REGION` | Opcional. Project API key de PostHog (`phc_…`) y región (`us`, default, o `eu`). Alimenta el rewrite `/ingest/*` hacia PostHog Cloud (se lee en el build: un cambio requiere redesplegar). Grabación de sesiones con todos los inputs enmascarados. |
 
 ### Flags (Vercel Flags, sin redeploy)
 
@@ -73,6 +76,7 @@ sirven apagados.
 | `envio` | El checkout ofrece envío a domicilio (ciudades y mínimo de `src/lib/envio.ts`) y Mi cuenta lo anuncia. Apagado: sólo retiro / entrega a coordinar; `POST /api/pedidos` rechaza el envío. |
 | `chat-ia` | Burbuja del chat con el agente en todas las páginas (requiere las envs `AI_*`). Cliente vinculado: el agente puede consultar su cuenta (`crm_token`). Sin vínculo o anónimo: visitante sin datos de cuenta, sólo preventa. Apagado: no hay widget y `POST /api/ai-token` responde 404. Ver `src/lib/chat-ia-flag.ts`. |
 | `busqueda-ia` | Búsqueda inteligente del catálogo: el panel de filtros suma "Características" (`?atr=`: tono, apto exterior, zócalo, tensión), `/catalogo` interpreta búsquedas en lenguaje natural o con pocos resultados (redirige a la URL interpretada con `?ia=`, o propone filtros en una franja), el "sin resultados" ofrece alternativas y el buscador rota ejemplos y muestra una guía al enfocarlo. Requiere la migración `0026` para la caché (sin ella funciona sin caché). Apagado: catálogo y buscador como siempre (se ignora `?atr=`); `/api/shop/busquedas-frecuentes` responde 404. Ver `src/lib/busqueda-ia-flag.ts`. |
+| `tracking` | Vercel Web Analytics y Speed Insights en todas las páginas, más Meta Pixel, GA4 y PostHog si tienen su variable. URLs limpias (sólo `utm_*`, `fbclid`, `gclid`…; excepto el Pixel, que manda la URL tal cual) y nada en `/ingresar` ni `/registro`. Apagado: no se carga ningún script de medición. Se prende el día de la apertura. Ver `src/lib/tracking-flag.ts`. |
 
 Los flags nuevos van en Vercel Flags, no como variable `=1`.
 

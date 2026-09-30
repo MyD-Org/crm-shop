@@ -103,6 +103,15 @@ describe("política de privacidad", () => {
     expect(t).toMatch(/arrepentimiento/);
     expect(t).not.toMatch(/inscripci[oó]n n/i);
   });
+
+  it("informa las cookies y herramientas de análisis que carga el flag `tracking`", () => {
+    const bloques = bloquesPrivacidad({});
+    const cookies = bloques.find((b) => b.titulo === "Cookies y herramientas de análisis");
+    expect(cookies).toBeDefined();
+    const t = texto(bloques);
+    for (const proveedor of ["Vercel", "Google Analytics", "Meta", "PostHog"]) expect(t).toContain(proveedor);
+    expect(t).toMatch(/fuera de la República Argentina/);
+  });
 });
 
 describe("envíos y pagos", () => {

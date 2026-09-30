@@ -29,6 +29,8 @@ export interface EnvCsp {
   SHOP_MEDIA_HOSTS?: string;
   R2_SHOP_MEDIA_PUBLIC_URL?: string;
   CSP_REPORT_URI?: string;
+  META_PIXEL_ID?: string;
+  GA4_MEASUREMENT_ID?: string;
 }
 
 /**
@@ -74,6 +76,18 @@ const MERCADO_PAGO = [
   "https://*.mlstatic.com",
 ];
 
+/**
+ * Tracking (flag `tracking`, ver src/lib/tracking-flag.ts). Meta y GA4 entran
+ * sólo si su ID está cargado; PostHog va por `/ingest` y Vercel Analytics y
+ * Speed Insights por `/_vercel/*`, los dos en 'self'. En desarrollo el script
+ * de Vercel Analytics sale de su CDN.
+ */
+const META_SCRIPT = "https://connect.facebook.net";
+const META_PIXEL = "https://www.facebook.com";
+const GTM = "https://www.googletagmanager.com";
+const GA = ["https://*.google-analytics.com", "https://*.analytics.google.com"];
+const VERCEL_SCRIPTS_DEV = "https://va.vercel-scripts.com";
+
 /** Turnstile: el captcha del sign-up de Clerk. */
 const CLOUDFLARE_CHALLENGES = "https://challenges.cloudflare.com";
 
@@ -95,6 +109,9 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
     ...(origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL) ? [origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL)!] : []),
   ];
 
+  const meta = Boolean(env.META_PIXEL_ID?.trim());
+  const ga4 = Boolean(env.GA4_MEASUREMENT_ID?.trim());
+
   const directivas: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": [
@@ -104,6 +121,9 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
       ...clerk,
       CLOUDFLARE_CHALLENGES,
       ...MERCADO_PAGO,
+      ...(meta ? [META_SCRIPT] : []),
+      ...(ga4 ? [GTM] : []),
+      ...(dev ? [VERCEL_SCRIPTS_DEV] : []),
     ],
     // Clerk y el Brick inyectan estilos inline.
     "style-src": ["'self'", "'unsafe-inline'"],
@@ -114,6 +134,8 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
       "https://img.clerk.com",
       ...medios,
       ...MERCADO_PAGO,
+      ...(meta ? [META_PIXEL] : []),
+      ...(ga4 ? [GTM, ...GA] : []),
     ],
     // next/font sirve las fuentes desde el mismo origen.
     "font-src": ["'self'", "data:", ...MERCADO_PAGO],
@@ -123,7 +145,9 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
       ...MERCADO_PAGO,
       // Subidas firmadas (comprobantes de pago, imágenes de la home) directo a R2.
       "https://*.r2.cloudflarestorage.com",
-      ...(dev ? ["ws:"] : []),
+      ...(meta ? [META_PIXEL, META_SCRIPT] : []),
+      ...(ga4 ? [GTM, ...GA] : []),
+      ...(dev ? ["ws:", VERCEL_SCRIPTS_DEV] : []),
     ],
     "frame-src": ["'self'", CLOUDFLARE_CHALLENGES, ...MERCADO_PAGO],
     "worker-src": ["'self'", "blob:"],

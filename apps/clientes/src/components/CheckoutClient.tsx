@@ -51,6 +51,8 @@ import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { NOTA_PAGO_A_CONFIRMAR, medioElegido, mediosParaModalidad, type MedioPago } from "@/lib/medios-pago";
 import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
 import type { DisponibilidadVista } from "@/lib/disponibilidad-textos";
+import { itemDe } from "@/lib/tracking/eventos";
+import { track } from "@/lib/tracking/track";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -294,6 +296,14 @@ export function CheckoutClient({
   mediosPago = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready } = useCart();
+
+  // Inicio de checkout: una vez por visita, cuando el carrito ya cargó con algo.
+  const checkoutMedido = useRef(false);
+  useEffect(() => {
+    if (!ready || items.length === 0 || checkoutMedido.current) return;
+    checkoutMedido.current = true;
+    track({ tipo: "iniciar_checkout", items: items.map((i) => itemDe(i, i.qty)) });
+  }, [ready, items]);
 
   const [pago, setPago] = useState<PagoMetodo>("transferencia");
   // Con el flag `pedido-a-confirmar`: slug del medio del CRM que eligió el comprador.
@@ -622,12 +632,21 @@ export function CheckoutClient({
       // sin pagar se retoma desde Mis pedidos o volviendo al checkout (el
       // `useEffect` de arriba lo rescata), sin duplicarlo. Cancelarlo NO
       // vuelve a llenar el carrito (decisión 2026-09-24).
+      const total = json.cotizacion?.total ?? cotizacion?.total ?? 0;
       setConfirmado({
         numero: json.numero,
         id: json.id,
-        total: json.cotizacion?.total ?? cotizacion?.total ?? 0,
+        total,
         cuotasMax: typeof json.cuotasMax === "number" ? json.cuotasMax : null,
         contacto: pedidoAConfirmar ? (json.contacto ?? null) : null,
+      });
+      // Conversión: al crear el pedido, también con Mercado Pago todavía impago.
+      track({
+        tipo: "pedido_confirmado",
+        pedidoId: String(json.id),
+        numero: json.numero,
+        total,
+        items: items.map((i) => itemDe(i, i.qty)),
       });
       vaciarTrasPedido();
     } catch {

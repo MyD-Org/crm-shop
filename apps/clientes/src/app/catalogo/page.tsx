@@ -1,11 +1,14 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { facetasPublicas, paginaCatalogoPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
+  consultaInterpretada,
   filtrosDeEstado,
   hrefCanonico,
   leerEstado,
+  type EstadoCatalogo,
   type ParamCrudo,
 } from "@/lib/catalogo-url";
 import { indexable } from "@/lib/catalogo-vista";
@@ -14,6 +17,13 @@ import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { ZonaCatalogo } from "@/components/ZonaCatalogo";
 import { dispDelVisitante } from "@/lib/zona-servidor";
+import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
+import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
+import { interpretar } from "@/lib/busqueda-inteligente/servidor";
+import { hayQueAplicar } from "@/lib/busqueda-inteligente/tipos";
+import { chipsSugeridos, hrefInterpretada } from "@/lib/busqueda-inteligente/url";
+import { FranjaSugerencias } from "@/components/catalogo/FranjaBusqueda";
+import { FranjaSugerenciasServidor } from "@/components/catalogo/FranjaSugerenciasServidor";
 
 type Props = {
   searchParams: Promise<{
@@ -27,6 +37,7 @@ type Props = {
     precio_max?: ParamCrudo;
     stock?: ParamCrudo;
     vista?: ParamCrudo;
+    ia?: ParamCrudo;
   }>;
 };
 
@@ -76,10 +87,11 @@ export default function CatalogoPage({ searchParams }: Props) {
 async function CatalogoResultados({ searchParams }: Props) {
   // `disp`: sucursal de la zona y sus reglas (flag `disponibilidad-sucursal`; undefined = apagado).
   // Viaja como argumento a las lecturas cacheadas: nunca se lee la cookie adentro de la caché.
-  const [params, { soloVisibles }, disp] = await Promise.all([
+  const [params, { soloVisibles }, disp, conBusquedaIa] = await Promise.all([
     searchParams,
     flagsPublicos(),
     dispDelVisitante(),
+    busquedaIaHabilitada(),
   ]);
   const estado = leerEstado(params);
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
@@ -144,6 +156,10 @@ async function CatalogoResultados({ searchParams }: Props) {
     ? await facetasPublicas({ ...filtros, busqueda: undefined }, soloVisibles, disp)
     : facetasBusqueda;
 
+  // Búsqueda inteligente (flag `busqueda-ia`). Puede redirigir: va afuera de
+  // todo try/catch (`redirect` tira).
+  const busquedaIa = conBusquedaIa ? await busquedaInteligente(estado, pagina.total) : undefined;
+
   return (
     <>
       {/* Zona vigente (flag `sucursales`): no cambia qué productos se ven. */}
@@ -159,7 +175,53 @@ async function CatalogoResultados({ searchParams }: Props) {
         facetas={facetas}
         filtrosSinBusqueda={filtrosSinBusqueda}
         oferta={oferta}
+        busquedaIa={busquedaIa}
       />
     </>
   );
+}
+
+/**
+ * Flujo de la búsqueda inteligente sobre el resultado de la búsqueda clásica
+ * (spec catálogo asistido, §4). La clásica ya corrió y se muestra igual; esto
+ * sólo se suma.
+ *
+ * - Con `ia=` en la URL (ya interpretada, o `ia=0` "tal cual") NUNCA se vuelve
+ *   a interpretar: es el freno contra el bucle de redirecciones. Si la URL
+ *   interpretada no trajo nada, se buscan las alternativas (caché, sin sumar
+ *   un uso) para el "sin resultados".
+ * - `debeInterpretar` y 0–3 resultados: se interpreta en ESTE request y, si
+ *   hay algo para aplicar, `redirect` a la URL interpretada (`ia=<consulta>`):
+ *   el primer render ya llega rescatado. Dentro del `<Suspense>` de la página
+ *   Next lo resuelve como redirección del lado del cliente.
+ * - `debeInterpretar` con resultados: la grilla sale ya y la franja llega por
+ *   streaming con los filtros propuestos como chips (nada se aplica solo).
+ */
+async function busquedaInteligente(estado: EstadoCatalogo, total: number) {
+  const q = estado.query;
+  if (!estado.ia && q && debeInterpretar(q, total)) {
+    if (total >= POCOS_RESULTADOS) {
+      return {
+        alternativas: [],
+        franja: (
+          <Suspense fallback={null}>
+            <FranjaSugerenciasServidor estado={estado} consulta={q} />
+          </Suspense>
+        ),
+      };
+    }
+    const interpretacion = await interpretar(q);
+    if (interpretacion && hayQueAplicar(interpretacion)) redirect(hrefInterpretada(estado, interpretacion));
+    const sugerir = interpretacion ? [interpretacion.sugerir] : [];
+    return {
+      alternativas: total === 0 ? chipsSugeridos(estado, sugerir, "reemplazar") : [],
+      franja: total > 0 ? <FranjaSugerencias consulta={q} chips={chipsSugeridos(estado, sugerir)} /> : undefined,
+    };
+  }
+  const consulta = consultaInterpretada(estado);
+  if (consulta && total === 0) {
+    const interpretacion = await interpretar(consulta, { sumarUso: false });
+    return { alternativas: interpretacion ? chipsSugeridos(estado, [interpretacion.sugerir], "reemplazar") : [] };
+  }
+  return { alternativas: [] };
 }

@@ -9,6 +9,20 @@
  */
 @theme {
   --container-contenido: 1600px;
+  /* Entrada suave de lo que llega por streaming (franja de la búsqueda
+     inteligente, guía del buscador). Se usa con `motion-safe:`: con
+     `prefers-reduced-motion` aparece sin animación. */
+  --animate-aparecer: aparecer 180ms ease-out;
+  @keyframes aparecer {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }
 
 /* Token propio de la app, redefinido por tema más abajo: no existe en el DS

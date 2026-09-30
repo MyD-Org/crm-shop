@@ -104,3 +104,11 @@ describe("contrato de la tabla con la migración 0025", () => {
     expect(sql).not.toMatch(/GRANT [A-Z, ]*DELETE[A-Z, ]* ON/);
   });
 });
+
+describe("lectura sin sumar uso", () => {
+  it("la página ya interpretada sólo lee (select), no actualiza", async () => {
+    grabadora = dbGrabadora(() => [[resultado, "deterministico"]]);
+    expect(await leerInterpretacion("t1", "x", "h", false)).toEqual({ resultado, fuente: "deterministico" });
+    expect(grabadora.consultas[0].sql).toMatch(/^select /);
+  });
+});

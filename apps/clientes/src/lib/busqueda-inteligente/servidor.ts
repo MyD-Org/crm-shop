@@ -14,7 +14,13 @@ import { interpretarCon } from "./interpretar";
 import { consultarJev } from "./jev";
 import type { Interpretacion, NodoArbol } from "./tipos";
 
-export async function interpretar(q: string): Promise<Interpretacion | null> {
+export async function interpretar(
+  q: string,
+  opciones: {
+    /** `false` en la página ya interpretada (`?ia=`): lee la caché sin sumar un uso. */
+    sumarUso?: boolean;
+  } = {},
+): Promise<Interpretacion | null> {
   try {
     const tenant = shopTenantId();
     const arbol: NodoArbol[] = await getArbolCategorias().catch((err: unknown) => {
@@ -24,7 +30,7 @@ export async function interpretar(q: string): Promise<Interpretacion | null> {
     return await interpretarCon(q, {
       arbol,
       jev: process.env.JEV_API_KEY?.trim() ? (consulta, preguntas) => consultarJev(consulta, preguntas) : null,
-      leerCache: (norm, hash) => leerInterpretacion(tenant, norm, hash),
+      leerCache: (norm, hash) => leerInterpretacion(tenant, norm, hash, opciones.sumarUso ?? true),
       guardarCache: (norm, hash, guardado) => guardarInterpretacion(tenant, norm, hash, guardado),
     });
   } catch (err) {

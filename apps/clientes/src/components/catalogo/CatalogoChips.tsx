@@ -30,12 +30,20 @@ export function CatalogoChips({
   estado,
   rango,
   ir,
+  sinInterpretados = false,
 }: {
   estado: EstadoCatalogo;
   rango: RangoPrecio | null;
   ir: (cambios: Partial<EstadoCatalogo>) => void;
+  /**
+   * Categorías y atributos ya se muestran en la franja "Entendimos" (búsqueda
+   * interpretada): acá quedan sólo los demás filtros, para no repetirlos.
+   */
+  sinInterpretados?: boolean;
 }) {
-  const chips = chipsActivos(estado, rango);
+  const chips = chipsActivos(estado, rango).filter(
+    (c) => !sinInterpretados || !/^(categoria|atributo):/.test(c.clave),
+  );
   if (chips.length === 0) return null;
 
   return (

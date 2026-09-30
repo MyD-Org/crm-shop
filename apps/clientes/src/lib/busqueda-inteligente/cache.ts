@@ -53,26 +53,31 @@ const registrarFallo = (que: string) => (err: unknown) => {
 };
 
 /**
- * Busca una interpretación y, si está, le suma un uso (una sola consulta:
- * `update … returning`). `null` si no está o si la caché no responde.
+ * Busca una interpretación y, si está y `sumarUso`, le suma un uso (una sola
+ * consulta: `update … returning`). Sin `sumarUso` sólo lee: lo usa la página
+ * ya interpretada (`?ia=`), que no es una búsqueda nueva. `null` si no está o
+ * si la caché no responde.
  */
 export async function leerInterpretacion(
   tenantId: string,
   consultaNorm: string,
   arbolHash: string,
+  sumarUso = true,
 ): Promise<Guardado | null> {
   try {
-    const [fila] = await getDb()
-      .update(busquedaInterpretaciones)
-      .set({ hits: sql`${busquedaInterpretaciones.hits} + 1`, lastUsedAt: sql`now()` })
-      .where(
-        and(
-          eq(busquedaInterpretaciones.tenantId, tenantId),
-          eq(busquedaInterpretaciones.consultaNorm, consultaNorm),
-          eq(busquedaInterpretaciones.arbolHash, arbolHash),
-        ),
-      )
-      .returning({ resultado: busquedaInterpretaciones.resultado, fuente: busquedaInterpretaciones.fuente });
+    const clave = and(
+      eq(busquedaInterpretaciones.tenantId, tenantId),
+      eq(busquedaInterpretaciones.consultaNorm, consultaNorm),
+      eq(busquedaInterpretaciones.arbolHash, arbolHash),
+    );
+    const columnas = { resultado: busquedaInterpretaciones.resultado, fuente: busquedaInterpretaciones.fuente };
+    const [fila] = sumarUso
+      ? await getDb()
+          .update(busquedaInterpretaciones)
+          .set({ hits: sql`${busquedaInterpretaciones.hits} + 1`, lastUsedAt: sql`now()` })
+          .where(clave)
+          .returning(columnas)
+      : await getDb().select(columnas).from(busquedaInterpretaciones).where(clave).limit(1);
     if (!fila) return null;
     return {
       resultado: comoResultado(fila.resultado),

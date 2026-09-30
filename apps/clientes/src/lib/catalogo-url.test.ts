@@ -499,6 +499,10 @@ describe("atributos (`atr`) y búsqueda inteligente (`ia`)", () => {
     expect(hrefCatalogo({ ...base, query: "reflector", orden: "relevancia", ia: IA_DESACTIVADA })).toBe("/catalogo?q=reflector&ia=0");
   });
 
+  it("`q` se recorta a 200 caracteres", () => {
+    expect(leerEstado({ q: "y".repeat(5000) }).query).toHaveLength(200);
+  });
+
   it("`ia` se recorta a 120 caracteres", () => {
     expect(leerEstado({ ia: "x".repeat(300) }).ia).toHaveLength(120);
   });

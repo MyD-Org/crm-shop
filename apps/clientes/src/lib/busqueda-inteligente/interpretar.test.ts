@@ -127,6 +127,16 @@ describe("interpretarCon", () => {
   });
 });
 
+describe("lo que viaja a Jev", () => {
+  it("la consulta normalizada y recortada a 120, no el q crudo", async () => {
+    const jev = jevFalso({});
+    await interpretarCon(`¿Algo LINDO para el Jardín? ${"x".repeat(300)}`, deps({ jev }));
+    const enviada = jev.mock.calls[0][0];
+    expect(enviada.startsWith("algo lindo para el jardin")).toBe(true);
+    expect(enviada.length).toBeLessThanOrEqual(120);
+  });
+});
+
 describe("presupuesto total de Jev (2,5 s entre las dos llamadas)", () => {
   it("la primera llamada recibe el presupuesto entero y la segunda sólo lo que queda", async () => {
     let t = 0;

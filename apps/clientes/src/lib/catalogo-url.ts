@@ -104,6 +104,11 @@ export const IA_DESACTIVADA = "0";
 
 /** Tope de largo de `?ia=` (igual que la consulta que se interpreta). */
 const LARGO_MAX_IA = 120;
+/**
+ * Tope de largo de `?q=`: holgado para cualquier búsqueda real (la búsqueda
+ * usa hasta 8 términos), pero una URL con kilobytes de texto no llega al SQL.
+ */
+export const LARGO_MAX_Q = 200;
 
 /** La consulta original si el estado vino de interpretarla; si no, `undefined`. */
 export function consultaInterpretada(estado: Pick<EstadoCatalogo, "ia">): string | undefined {
@@ -191,7 +196,7 @@ export function leerEstado(params: {
   vista?: ParamCrudo;
   ia?: ParamCrudo;
 }): EstadoCatalogo {
-  const q = primero(params.q)?.trim();
+  const q = primero(params.q)?.trim().slice(0, LARGO_MAX_Q).trim();
   let precioMin = comoPrecio(params.precio_min);
   let precioMax = comoPrecio(params.precio_max);
   // Invertidos se intercambian: quien escribió min=9000&max=100 quiso un

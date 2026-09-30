@@ -168,7 +168,8 @@ export async function interpretarCon(q: string, deps: Dependencias): Promise<Int
   const det = deterministico(norm, deps.arbol);
   // Escalera de costo: con una categoría resuelta por nombre, Jev no suma.
   const usarJev = det.categorias.length === 0 && deps.jev != null;
-  const jev = usarJev ? await preguntarAJev(consulta, deps.arbol, deps.jev!, true, deps.ahora ?? Date.now) : null;
+  // A Jev viaja la consulta normalizada y recortada (120), nunca el `q` crudo.
+  const jev = usarJev ? await preguntarAJev(norm, deps.arbol, deps.jev!, true, deps.ahora ?? Date.now) : null;
   const resultado = combinar(det, jev);
 
   const aplica = resultado.aplicar.categorias.length > 0 || resultado.aplicar.atributos.length > 0;

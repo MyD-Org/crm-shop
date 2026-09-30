@@ -241,7 +241,7 @@ async function busquedaInteligente(estado: EstadoCatalogo, total: number) {
   }
   const consulta = consultaInterpretada(estado);
   if (consulta && total === 0) {
-    const interpretacion = await interpretar(consulta, { sumarUso: false });
+    const interpretacion = await interpretar(consulta, { soloLectura: true });
     return { alternativas: interpretacion ? chipsSugeridos(estado, [interpretacion.sugerir], "reemplazar") : [] };
   }
   return { alternativas: [] };

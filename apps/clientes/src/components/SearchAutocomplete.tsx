@@ -140,7 +140,15 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
   };
 
   return (
-    <div ref={containerRef} className="relative flex w-full max-w-2xl">
+    <div
+      ref={containerRef}
+      // Con teclado: si el foco sale del buscador (Tab después del último
+      // ejemplo de la guía o de la última sugerencia), el desplegable se cierra.
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+      className="relative flex w-full max-w-2xl"
+    >
       {/* Blanco (surface) con borde y sombra suave, no el relleno elevated: el
           campo se lee como campo, y el borde sale de la tinta del tema. */}
       <div className="flex w-full overflow-hidden rounded-lg border border-[color-mix(in_srgb,var(--color-text)_14%,transparent)] bg-surface shadow-[0_1px_2px_rgba(22,40,63,0.06)] focus-within:border-primary">

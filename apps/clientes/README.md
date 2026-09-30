@@ -54,6 +54,7 @@ de las vistas del CRM (`public.catalog_products_shop` y
 | `AI_API_KEY` | API key del tenant en ai-api (secreto, server-only). La usa `POST /api/ai-token` para abrir sesiones. |
 | `AI_AGENT_ID` | Agente de ai-api con el que chatea el widget (no es secreto). Sin cualquiera de las tres `AI_*`, no hay chat aunque el flag `chat-ia` esté prendido. El `crm_token` de los clientes vinculados se firma con `SESSION_SECRET` (el mismo del CRM). |
 | `FACEBOOK_DOMAIN_VERIFICATION` | Token de verificación de dominio de Meta (el `content` del meta `facebook-domain-verification`). Lo emiten el layout y la cortina de "Próximamente" (`src/proxy.ts`); sin la variable no se emite y Meta da el dominio por no verificado. Se lee en el build (el layout es shell estático): un cambio requiere redesplegar. Solo letras y números. |
+| `JEV_API_KEY` | Opcional, secreto, server-only. Key de Jev (Typesafe) para la búsqueda inteligente (flag `busqueda-ia`): clasifica búsquedas en categorías, tono y ambiente. Sin ella la búsqueda inteligente usa sólo lo determinista (diccionario de atributos y nombres de categoría), sin costo. Ver `src/lib/busqueda-inteligente/jev.ts`. |
 | `CSP_REPORT_URI` | Opcional. Endpoint que recibe los reportes de la CSP (`report-uri`). La CSP está en Report-Only (`src/lib/headers-seguridad.ts`); sin la variable los reportes quedan sólo en la consola del navegador. Se lee en el build. |
 
 ### Flags (Vercel Flags, sin redeploy)
@@ -71,6 +72,7 @@ sirven apagados.
 | `catalogo-solo-visibles` | Sólo productos publicados (`visible`) en el overlay del CRM. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
 | `envio` | El checkout ofrece envío a domicilio (ciudades y mínimo de `src/lib/envio.ts`) y Mi cuenta lo anuncia. Apagado: sólo retiro / entrega a coordinar; `POST /api/pedidos` rechaza el envío. |
 | `chat-ia` | Burbuja del chat con el agente en todas las páginas (requiere las envs `AI_*`). Cliente vinculado: el agente puede consultar su cuenta (`crm_token`). Sin vínculo o anónimo: visitante sin datos de cuenta, sólo preventa. Apagado: no hay widget y `POST /api/ai-token` responde 404. Ver `src/lib/chat-ia-flag.ts`. |
+| `busqueda-ia` | Búsqueda inteligente del catálogo: filtro por características (`?atr=`) siempre disponible; con el flag, `/catalogo` interpreta búsquedas en lenguaje natural o con pocos resultados (redirige a la URL interpretada con `?ia=`, o propone filtros en una franja), el "sin resultados" ofrece alternativas y el buscador rota ejemplos y muestra una guía al enfocarlo. Requiere la migración `0025` para la caché (sin ella funciona sin caché). Apagado: catálogo y buscador como siempre; `/api/shop/busquedas-frecuentes` responde 404. Ver `src/lib/busqueda-ia-flag.ts`. |
 
 Los flags nuevos van en Vercel Flags, no como variable `=1`.
 

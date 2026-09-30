@@ -11,13 +11,22 @@ import {
   resolverZona,
   type Asignacion,
   type EntradaAsignacion,
+  type ReglasVenta,
+  type StockFn,
 } from "./sucursales";
 import type { DatosSucursales } from "./sucursales-repo";
 
+/**
+ * Error de asignación. `sin_retiro` y `sin_envio` son de la rebanada A; con el flag
+ * `disponibilidad-sucursal` suma `sin_stock` (ninguna sucursal cubre la línea), `no_servible`
+ * (oculta en todas las que la despacharían) y `sin_retiro` con `ids` (líneas ocultas en el local
+ * elegido). `ids` = las líneas afectadas. La ruta responde 409 con el mensaje en usted.
+ */
 export class SucursalPedidoError extends Error {
   constructor(
-    readonly codigo: "sin_retiro" | "sin_envio",
+    readonly codigo: "sin_retiro" | "sin_envio" | "sin_stock" | "no_servible",
     mensaje: string,
+    readonly ids: string[] = [],
   ) {
     super(mensaje);
     this.name = "SucursalPedidoError";
@@ -29,13 +38,36 @@ export const MENSAJE_SIN_RETIRO =
 export const MENSAJE_SIN_ENVIO =
   "El envío a domicilio no está disponible para la provincia o la ciudad indicada. Seleccione retiro en el local.";
 
+export const MENSAJE_SIN_RETIRO_PRODUCTOS =
+  "Algunos productos no se ofrecen para retiro en el local seleccionado. Seleccione otro local o el envío a domicilio.";
+export const MENSAJE_SIN_STOCK =
+  "No hay disponibilidad de algunos productos para la sucursal que atiende su pedido. Revise el carrito.";
+
+export function mensajeNoServible(cantidad: number): string {
+  return cantidad === 1
+    ? "El producto ya no está disponible."
+    : "Algunos productos ya no están disponibles. Quítelos del carrito para continuar.";
+}
+
+/**
+ * Con `stock` y `entrada.lineas` (flag `disponibilidad-sucursal`) también resuelve el origen de cada
+ * línea con las reglas de venta de `datos.reglas` (lo que se lee fresco dentro de la transacción).
+ */
 export function decidirSucursalDePedido(
   entrada: EntradaAsignacion,
-  datos: DatosSucursales,
+  datos: DatosSucursales & { reglas?: ReglasVenta },
+  stock?: StockFn,
 ): Asignacion | null {
   if (datos.sucursales.length === 0) return null;
-  const r = asignarSucursal(conLocalDeRetiro(entrada, datos), datos);
+  const r = asignarSucursal(conLocalDeRetiro(entrada, datos), datos, stock);
   if (!("error" in r)) return r;
+  if ("ids" in r) {
+    if (r.error === "sin_retiro")
+      throw new SucursalPedidoError("sin_retiro", MENSAJE_SIN_RETIRO_PRODUCTOS, r.ids);
+    if (r.error === "no_servible")
+      throw new SucursalPedidoError("no_servible", mensajeNoServible(r.ids.length), r.ids);
+    throw new SucursalPedidoError("sin_stock", MENSAJE_SIN_STOCK, r.ids);
+  }
   if (r.error === "sin_sucursal_activa") {
     // Decisión de negocio: una configuración a medias (sucursales cargadas pero todas inactivas) NO
     // frena ventas. El pedido queda con la sucursal en NULL y se avisa en el log para corregirlo.

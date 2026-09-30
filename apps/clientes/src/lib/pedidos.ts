@@ -34,9 +34,11 @@ import {
 } from "./envio";
 import { avisarCobro } from "./pedido-avisos";
 import { shopTenantId } from "./tenant";
-import type { EntradaAsignacion } from "./sucursales";
-import { leerSucursalesYZonas } from "./sucursales-repo";
+import type { Asignacion, EntradaAsignacion } from "./sucursales";
+import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from "./sucursales-repo";
 import { decidirSucursalDePedido } from "./sucursales-pedido";
+import { disponibleNeto } from "./sucursales-disponibilidad";
+import { leerDisponibilidadBruta } from "./stock-sucursal";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -90,6 +92,28 @@ export interface DatosPedido {
    * congela `sucursal`, `sucursal_regla` y `sucursal_asignada_en`. Ausente = quedan en NULL.
    */
   sucursalEntrada?: EntradaAsignacion;
+  /**
+   * Flag `disponibilidad-sucursal` (junto con `sucursalEntrada`): asigna la sucursal Y el origen de
+   * cada línea con el stock por sucursal (menos la reserva por sucursal) leído dentro de la
+   * transacción, después de los locks por ítem; congela `reserva_vence_en` según `reglas_venta` y
+   * `order_items.a_traer_de` por línea. Ausente/false = la validación de stock de siempre (vista 0012).
+   */
+  disponibilidadSucursal?: boolean;
+}
+
+/**
+ * Hasta cuándo reserva un pedido pendiente (snapshot que se guarda en `orders.reserva_vence_en`).
+ * Pago online (Mercado Pago): la ventana de siempre, 24 h. Sin cobro online: `reserva_dias` de las
+ * reglas de venta; 0 = nunca vence (NULL, que la vista `stock_reservado_sucursal` lee como "no vence").
+ */
+export function calcularReservaVenceEn(
+  pagoMetodo: PagoMetodo,
+  reglas: Pick<ReglasVentaTenant, "reservaDias">,
+  ahora: Date = new Date(),
+): Date | null {
+  if (pagoMetodo === "mercadopago") return new Date(ahora.getTime() + VENTANA_PAGO_MS);
+  if (reglas.reservaDias <= 0) return null;
+  return new Date(ahora.getTime() + reglas.reservaDias * 24 * 60 * 60_000);
 }
 
 /**
@@ -132,12 +156,65 @@ export async function crearPedido(
     throw new Error("No hay líneas válidas para crear el pedido");
   }
 
+  const pedidasPorItem = new Map<string, number>();
+  for (const l of lineas) pedidasPorItem.set(l.id, (pedidasPorItem.get(l.id) ?? 0) + l.qty);
+  const ids = [...pedidasPorItem.keys()].sort();
+
   return getDb().transaction(async (tx) => {
     // Las reglas de sucursales se leen frescas acá adentro (nunca de la caché de mostrar). Sin
     // sucursales cargadas da null y el pedido sigue; retiro/envío inválido tira SucursalPedidoError.
-    const asignacion = datos.sucursalEntrada
-      ? decidirSucursalDePedido(datos.sucursalEntrada, await leerSucursalesYZonas(tx))
-      : null;
+    let asignacion: Asignacion | null = null;
+    let reservaVenceEn: Date | null = null;
+    // Con el flag `disponibilidad-sucursal` el stock por sucursal se valida ANTES de escribir el
+    // pedido (la asignación lo necesita para decidir el origen), así que los locks por ítem se
+    // toman primero. Un reintento idempotente se corta antes: sus líneas ya reservan y no
+    // tienen que pasar otra vez por la asignación.
+    let validadoPorSucursal = false;
+    if (datos.disponibilidadSucursal && datos.sucursalEntrada) {
+      if (datos.idempotencyKey) {
+        const [existente] = await tx
+          .select({ id: orders.id, numero: orders.numero, cuotasMax: orders.cuotasMax })
+          .from(orders)
+          .where(and(eq(orders.idempotencyKey, datos.idempotencyKey), eq(orders.tenantId, shopTenantId())))
+          .limit(1);
+        if (existente) {
+          return {
+            id: existente.id,
+            numero: formatearNumero(existente.numero),
+            repetido: true,
+            cuotasMax: existente.cuotasMax,
+          };
+        }
+      }
+      await bloquearItems(tx, ids);
+      const [sucursalesYZonas, reglas] = await Promise.all([leerSucursalesYZonas(tx), leerReglasVenta(tx)]);
+      const activas = sucursalesYZonas.sucursales
+        .filter((s) => s.activa)
+        .sort((a, b) => a.orden - b.orden || a.slug.localeCompare(b.slug))
+        .map((s) => s.slug);
+      if (activas.length > 0) {
+        const bruta = await leerDisponibilidadBruta(ids, activas, activas[0], tx);
+        // Un id que ya no está en el espejo: no hay con qué asignarlo (mismo criterio que la 0012).
+        const faltan = ids.filter((id) => !(id in bruta.stockPorSucursal));
+        if (faltan.length > 0) throw new StockInsuficienteError(faltan);
+        asignacion = decidirSucursalDePedido(
+          {
+            ...datos.sucursalEntrada,
+            lineas: ids.map((id) => ({
+              id,
+              qty: pedidasPorItem.get(id)!,
+              ocultoEn: bruta.ocultoEn[id] ?? [],
+            })),
+          },
+          { ...sucursalesYZonas, reglas },
+          (sucursal, id) => disponibleNeto(bruta.stockPorSucursal[id], bruta.reservadoPorSucursal[id], sucursal),
+        );
+        validadoPorSucursal = asignacion !== null;
+        reservaVenceEn = calcularReservaVenceEn(datos.pagoMetodo, reglas);
+      }
+    } else if (datos.sucursalEntrada) {
+      asignacion = decidirSucursalDePedido(datos.sucursalEntrada, await leerSucursalesYZonas(tx));
+    }
 
     const [pedido] = await tx
       .insert(orders)
@@ -177,6 +254,7 @@ export async function crearPedido(
         sucursal: asignacion?.sucursal ?? null,
         sucursalRegla: asignacion?.regla ?? null,
         sucursalAsignadaEn: asignacion ? new Date() : null,
+        reservaVenceEn: validadoPorSucursal ? reservaVenceEn : null,
       })
       // El `where` acá es el predicado del índice parcial, no un filtro de
       // filas: sin él, Postgres no sabe qué índice usar para resolver el
@@ -218,18 +296,18 @@ export async function crearPedido(
     }
 
     // Pedido nuevo: todavía sin líneas, así que no se cuenta a sí mismo en la
-    // reserva que se relee acá.
-    const pedidasPorItem = new Map<string, number>();
-    for (const l of lineas) pedidasPorItem.set(l.id, (pedidasPorItem.get(l.id) ?? 0) + l.qty);
-    const ids = [...pedidasPorItem.keys()].sort();
-    await bloquearItems(tx, ids);
-    const disponibles = await disponiblesEnTx(tx, ids);
-    const faltan = ids.filter((id) => {
-      if (!disponibles.has(id)) return true; // ya no está en el espejo
-      const disponible = disponibles.get(id);
-      return disponible != null && disponible < pedidasPorItem.get(id)!;
-    });
-    if (faltan.length > 0) throw new StockInsuficienteError(faltan);
+    // reserva que se relee acá. Con el flag `disponibilidad-sucursal` ya se validó (por sucursal,
+    // arriba, con los mismos locks): no se vuelve a validar contra la vista 0012.
+    if (!validadoPorSucursal) {
+      await bloquearItems(tx, ids);
+      const disponibles = await disponiblesEnTx(tx, ids);
+      const faltan = ids.filter((id) => {
+        if (!disponibles.has(id)) return true; // ya no está en el espejo
+        const disponible = disponibles.get(id);
+        return disponible != null && disponible < pedidasPorItem.get(id)!;
+      });
+      if (faltan.length > 0) throw new StockInsuficienteError(faltan);
+    }
 
     await tx.insert(orderItems).values(
       lineas.map((l) => ({
@@ -244,6 +322,8 @@ export async function crearPedido(
         subtotal: String(l.subtotal),
         iva: String(l.iva),
         total: String(l.total),
+        // Línea "a traer": el origen no es la sucursal que despacha el pedido.
+        aTraerDe: aTraerDe(asignacion, l.id),
       })),
     );
 
@@ -261,6 +341,12 @@ export async function crearPedido(
       cuotasMax: pedido.cuotasMax,
     };
   });
+}
+
+/** Sucursal de la que se trae una línea si no sale de la que despacha; null si sale de ésa. */
+function aTraerDe(asignacion: Asignacion | null, id: string): string | null {
+  const origen = asignacion?.lineas?.find((l) => l.id === id)?.origen;
+  return origen && origen !== asignacion?.sucursal ? origen : null;
 }
 
 /**

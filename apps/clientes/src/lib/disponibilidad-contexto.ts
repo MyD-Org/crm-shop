@@ -33,6 +33,16 @@ export interface ContextoDisponibilidad {
   local?: string;
 }
 
+/**
+ * El mismo contexto pero contando el stock de TODAS las sucursales activas y sin local: es el que usa
+ * la cotización del carrito. Es permisivo a propósito (deja pasar lo que alguna sucursal puede
+ * servir): la decisión definitiva por modalidad (retiro en un local, envío con o sin respaldo) la
+ * toma `asignarSucursal` al crear el pedido.
+ */
+export function contextoUnion(ctx: ContextoDisponibilidad): ContextoDisponibilidad {
+  return { zona: ctx.zona, activas: ctx.activas, contarEn: ctx.activas, stockHeredado: ctx.stockHeredado };
+}
+
 const ordenadas = (sucursales: SucursalDato[]) =>
   sucursales
     .filter((s) => s.activa)

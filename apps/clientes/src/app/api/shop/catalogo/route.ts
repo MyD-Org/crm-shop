@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCatalogo } from "@/lib/catalog";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { dispDelVisitante } from "@/lib/zona-servidor";
 
 /**
  * Tope de resultados. Ya no es el límite de Alegra (el espejo local no lo
@@ -26,12 +27,12 @@ export async function GET(req: NextRequest) {
 
   try {
     // Sin caché a propósito: cada texto buscado sería una entrada nueva.
-    const { soloVisibles } = await flagsPublicos();
-    const productos = await getCatalogo({ busqueda: q, limit, soloVisibles });
+    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+    const productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp });
     // Sin resultados: segundo intento tolerante a errores de tipeo (mismo
     // criterio que la page del catálogo). Si falla, se devuelve lo exacto.
     if (q && productos.length === 0) {
-      const parecidos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true }).catch(
+      const parecidos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true, disp }).catch(
         (err: unknown) => {
           console.error("[/api/shop/catalogo] falló la búsqueda tolerante:", err);
           return productos;

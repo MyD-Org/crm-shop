@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  lineasDisponibilidad,
   textoEnvio,
   textoRetiro,
   textosDisponibilidad,
@@ -85,6 +86,29 @@ describe("textos de disponibilidad", () => {
       "Retiro en Sede B: con demora de 7 días",
       "Retiro en Sede A: disponible",
     ]);
+  });
+
+  it("sin el flag de envío no se promete el envío y cada línea trae su tono", () => {
+    const d = {
+      servible: true,
+      envio: { estado: "a_traer" as const, origen: "b", demoraDias: 7 },
+      retiro: {
+        a: { estado: "sin_stock" as const, desde: null, demoraDias: null },
+        b: { estado: "con_demora" as const, desde: "a", demoraDias: 7 },
+      },
+    };
+    const locales = [
+      { slug: "a", nombre: "Sede A" },
+      { slug: "b", nombre: "Sede B" },
+    ];
+    expect(lineasDisponibilidad(d, locales, { conEnvio: false })).toEqual([
+      { texto: "Retiro en Sede A: no disponible", tono: "no" },
+      { texto: "Retiro en Sede B: con demora de 7 días", tono: "demora" },
+    ]);
+    expect(lineasDisponibilidad(d, locales)[0]).toEqual({
+      texto: "Envío: disponible con demora de 7 días",
+      tono: "demora",
+    });
   });
 
   it("sin envío ni retiro no hay texto", () => {

@@ -1,6 +1,7 @@
 import { connection, NextResponse } from "next/server";
 import { getCategorias } from "@/lib/catalog";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { dispDelVisitante } from "@/lib/zona-servidor";
 
 /**
  * GET /api/shop/categorias
@@ -11,8 +12,8 @@ export async function GET() {
   // Por request: sin esto el build podría prerenderizar la respuesta.
   await connection();
   try {
-    const { soloVisibles } = await flagsPublicos();
-    const categorias = await getCategorias(soloVisibles);
+    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+    const categorias = disp ? await getCategorias(soloVisibles, disp) : await getCategorias(soloVisibles);
     return NextResponse.json({ categorias });
   } catch (err) {
     console.error("[/api/shop/categorias] error:", err);

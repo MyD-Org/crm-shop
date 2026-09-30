@@ -13,6 +13,7 @@ import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { ZonaCatalogo } from "@/components/ZonaCatalogo";
+import { dispDelVisitante } from "@/lib/zona-servidor";
 
 type Props = {
   searchParams: Promise<{
@@ -72,9 +73,12 @@ export default function CatalogoPage({ searchParams }: Props) {
 
 /** Las lecturas del catálogo y el render del cliente (lo que suspende). */
 async function CatalogoResultados({ searchParams }: Props) {
-  const [params, { soloVisibles }] = await Promise.all([
+  // `disp`: sucursal de la zona y sus reglas (flag `disponibilidad-sucursal`; undefined = apagado).
+  // Viaja como argumento a las lecturas cacheadas: nunca se lee la cookie adentro de la caché.
+  const [params, { soloVisibles }, disp] = await Promise.all([
     searchParams,
     flagsPublicos(),
+    dispDelVisitante(),
   ]);
   const estado = leerEstado(params);
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
@@ -101,8 +105,9 @@ async function CatalogoResultados({ searchParams }: Props) {
       orden: estado.orden,
       pagina: estado.pagina,
       soloVisibles,
+      disp,
     }),
-    facetasPublicas(filtros, soloVisibles),
+    facetasPublicas(filtros, soloVisibles, disp),
     getOfertaCuotas(),
   ]);
   // Búsqueda sin resultados: segundo intento tolerante a errores de tipeo
@@ -119,8 +124,9 @@ async function CatalogoResultados({ searchParams }: Props) {
         orden: estado.orden,
         pagina: estado.pagina,
         soloVisibles,
+        disp,
       }),
-      facetasPublicas(tolerantes, soloVisibles),
+      facetasPublicas(tolerantes, soloVisibles, disp),
     ]).catch((err: unknown) => {
       console.error("[catalogo] falló la búsqueda tolerante:", err);
       return null;
@@ -134,7 +140,7 @@ async function CatalogoResultados({ searchParams }: Props) {
   const filtrosSinBusqueda =
     pagina.total === 0 && Boolean(filtros.busqueda?.trim());
   const facetas = filtrosSinBusqueda
-    ? await facetasPublicas({ ...filtros, busqueda: undefined }, soloVisibles)
+    ? await facetasPublicas({ ...filtros, busqueda: undefined }, soloVisibles, disp)
     : facetasBusqueda;
 
   return (

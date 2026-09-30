@@ -49,18 +49,52 @@ export function textoRetiro(
   }
 }
 
-/** Una línea de texto por modalidad: el envío y un retiro por cada local. */
-export function textosDisponibilidad(
+/** Cómo se pinta una línea: disponible, con demora o no disponible. */
+export type TonoDisponibilidad = "ok" | "demora" | "no";
+
+export interface LineaDisponibilidad {
+  texto: string;
+  tono: TonoDisponibilidad;
+}
+
+const tonoEnvio = (d: DisponibilidadEnvio): TonoDisponibilidad =>
+  d.estado === "disponible" ? "ok" : d.estado === "a_traer" ? "demora" : "no";
+
+const tonoRetiro = (d: DisponibilidadRetiro): TonoDisponibilidad =>
+  d.estado === "disponible"
+    ? "ok"
+    : d.estado === "con_demora"
+      ? "demora"
+      : "no";
+
+/**
+ * Una línea por modalidad: el envío (sólo si `conEnvio`: con el flag `envio` apagado no se
+ * promete) y un retiro por cada local.
+ */
+export function lineasDisponibilidad(
   d: DisponibilidadVista,
   locales: LocalDisponibilidad[],
-): string[] {
-  const lineas: string[] = [];
-  if (d.envio) lineas.push(textoEnvio(d.envio));
+  opts: { conEnvio?: boolean } = {},
+): LineaDisponibilidad[] {
+  const conEnvio = opts.conEnvio ?? true;
+  const lineas: LineaDisponibilidad[] = [];
+  if (conEnvio && d.envio)
+    lineas.push({ texto: textoEnvio(d.envio), tono: tonoEnvio(d.envio) });
   if (d.retiro) {
     for (const l of locales) {
       const r = d.retiro[l.slug];
-      if (r) lineas.push(textoRetiro(l.nombre, r));
+      if (r)
+        lineas.push({ texto: textoRetiro(l.nombre, r), tono: tonoRetiro(r) });
     }
   }
   return lineas;
+}
+
+/** Sólo los textos (ver `lineasDisponibilidad`). */
+export function textosDisponibilidad(
+  d: DisponibilidadVista,
+  locales: LocalDisponibilidad[],
+  opts: { conEnvio?: boolean } = {},
+): string[] {
+  return lineasDisponibilidad(d, locales, opts).map((l) => l.texto);
 }

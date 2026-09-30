@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "@/context/CartContext";
 import type { Cotizacion } from "@/lib/cotizacion";
 import type { EntregaTipo, PagoMetodo } from "@/lib/envio";
+import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 
 /**
  * Cotización del carrito contra el servidor.
@@ -19,6 +20,11 @@ import type { EntregaTipo, PagoMetodo } from "@/lib/envio";
 export interface CotizacionResponse extends Cotizacion {
   envio: { disponible: boolean; motivo?: string };
   pagosDisponibles: PagoMetodo[];
+  /**
+   * Sólo con el flag `disponibilidad-sucursal`: disponibilidad por producto (envío y retiro por
+   * local) y los locales con su nombre. Ausente = flag apagado.
+   */
+  disponibilidad?: { productos: Record<string, DisponibilidadVista>; locales: LocalDisponibilidad[] };
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
@@ -55,6 +61,7 @@ interface Resultado {
   nonce: number;
   entregaTipo: EntregaTipo;
   ciudad: string;
+  provincia: string;
   data: CotizacionResponse | null;
   error: string | null;
   noAuth: boolean;
@@ -63,6 +70,11 @@ interface Resultado {
 export function useCotizacion(opts: {
   entregaTipo: EntregaTipo;
   ciudad?: string;
+  /**
+   * Provincia de entrega elegida (clave de zona). Cambiarla recotiza: define la sucursal de la
+   * zona con la que se calcula la disponibilidad (flag `disponibilidad-sucursal`).
+   */
+  provincia?: string;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -72,6 +84,7 @@ export function useCotizacion(opts: {
 
   const activo = opts.activo ?? true;
   const ciudad = opts.ciudad ?? "";
+  const provincia = opts.provincia ?? "";
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -100,7 +113,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -114,6 +127,7 @@ export function useCotizacion(opts: {
             items: lineas.map(([id, qty]) => ({ id, qty })),
             entregaTipo,
             ciudad: ciudad || undefined,
+            provincia: provincia || undefined,
           }),
         });
 
@@ -167,7 +181,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -177,7 +191,8 @@ export function useCotizacion(opts: {
     res.clave === clave &&
     res.nonce === nonce &&
     res.entregaTipo === entregaTipo &&
-    res.ciudad === ciudad;
+    res.ciudad === ciudad &&
+    res.provincia === provincia;
 
   let estado: EstadoCotizacion;
   if (vacio) estado = "vacio";

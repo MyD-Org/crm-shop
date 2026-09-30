@@ -29,7 +29,8 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
  * Los únicos módulos con scopes cacheados. Todo lo que se sirve a cualquier
  * visitante y nada del visitante: contenido de la home, año del footer, el
  * catálogo público, la oferta de cuotas para exhibir y los archivos de la
- * imagen OG del sitio.
+ * imagen OG del sitio. También las búsquedas frecuentes de la guía del
+ * buscador (iguales para todos; salen de la caché de interpretaciones).
  */
 const CON_CACHE = [
   "app/opengraph-image.tsx",
@@ -38,6 +39,7 @@ const CON_CACHE = [
   "lib/catalogo-publico.ts",
   "lib/cuotas-datos.ts",
   "lib/sucursales-datos.ts",
+  "lib/busqueda-inteligente/frecuentes.ts",
 ];
 
 /** Lo que cotiza o cobra: siempre del espejo en vivo (FRS-4). */
@@ -72,7 +74,7 @@ describe("guardas de caché", () => {
   });
 
   it("las funciones cacheadas no evalúan flags ni leen el request (van como argumento)", () => {
-    for (const ruta of ["lib/catalogo-publico.ts", "lib/catalog.ts"]) {
+    for (const ruta of ["lib/catalogo-publico.ts", "lib/catalog.ts", "lib/busqueda-inteligente/frecuentes.ts"]) {
       const src = CODIGO.find((a) => a.ruta === ruta)!.src;
       expect(src, ruta).not.toMatch(/from "@\/flags"|-flag"|flags-publicos|next\/headers|identidadActual|esAdmin/);
     }

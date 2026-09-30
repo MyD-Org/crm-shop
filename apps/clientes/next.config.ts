@@ -34,6 +34,9 @@ const nextConfig: NextConfig = {
     // guardar (tag `sucursales`); si se pierde, vencen solas a los 5 minutos. expire no baja de
     // 300 (ver `degradado`).
     sucursales: { stale: 60, revalidate: 300, expire: 300 },
+    // Búsquedas frecuentes de la guía del buscador (flag `busqueda-ia`): salen
+    // de la caché de interpretaciones y cambian despacio. Una hora.
+    busquedas: { stale: 300, revalidate: 3600, expire: 3600 },
   },
   experimental: {
     // El caché de filesystem de Turbopack (beta, on por defecto en Next 16.1+)

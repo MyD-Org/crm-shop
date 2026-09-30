@@ -1,14 +1,20 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
 import { fmtMonto } from "@/lib/cuotas-textos";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
-import { STOCK_INCLUYE_SIN_STOCK } from "@/lib/catalogo-url";
+import {
+  INTERVALO_PLACEHOLDER_MS,
+  hrefBusqueda,
+  placeholderBuscador,
+  vistaDesplegable,
+} from "@/lib/busqueda-inteligente/descubrimiento";
+import { GuiaBusqueda } from "./GuiaBusqueda";
 
 function SearchIcon() {
   return (
@@ -28,11 +34,36 @@ function useDebounced<T>(value: T, delay = 150): T {
   return debounced;
 }
 
-export function SearchAutocomplete() {
+/**
+ * Buscador del header. Con `busquedaIa` (flag `busqueda-ia`, lo resuelve el
+ * hueco del header) suma el descubrimiento de la búsqueda flexible: el
+ * placeholder rota entre un código, una necesidad y un uso (quieto con
+ * `prefers-reduced-motion`), y al enfocar el campo vacío aparece la guía con
+ * ejemplos y búsquedas frecuentes (ver GuiaBusqueda). Sin el flag, el de
+ * siempre.
+ */
+export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolean }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const guiaRef = useRef<HTMLDivElement>(null);
+  const idGuia = useId();
+
+  // Placeholder que rota (sólo con el flag, con el campo vacío y sin foco, y
+  // nunca con `prefers-reduced-motion`).
+  const [indicePlaceholder, setIndicePlaceholder] = useState(0);
+  const quieto = !busquedaIa || open || query !== "";
+  useEffect(() => {
+    if (quieto || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setInterval(() => setIndicePlaceholder((i) => i + 1), INTERVALO_PLACEHOLDER_MS);
+    return () => window.clearInterval(id);
+  }, [quieto]);
+
+  // Búsquedas frecuentes: se piden una vez, la primera vez que se abre la guía.
+  const [frecuentes, setFrecuentes] = useState<string[] | null>(null);
+  const pidioFrecuentes = useRef(false);
 
   const debouncedQuery = useDebounced(query, 250);
   const [results, setResults] = useState<Product[]>([]);
@@ -80,15 +111,33 @@ export function SearchAutocomplete() {
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
-  const submit = () => {
-    if (!query.trim()) return;
+  const submit = (texto = query) => {
+    if (!texto.trim()) return;
     setOpen(false);
     // Con todos los productos, no solo los con stock: las sugerencias incluyen
     // los sin stock y la búsqueda tiene que mostrar lo mismo.
-    router.push(`/catalogo?q=${encodeURIComponent(query.trim())}&stock=${STOCK_INCLUYE_SIN_STOCK}`);
+    router.push(hrefBusqueda(texto));
   };
 
-  const showDropdown = open && debouncedQuery.trim().length > 0;
+  const vista = vistaDesplegable({ busquedaIa, abierto: open, texto: query, textoDebounced: debouncedQuery });
+  const showDropdown = vista === "resultados";
+  const guiaAbierta = vista === "guia";
+
+  useEffect(() => {
+    if (!guiaAbierta || pidioFrecuentes.current) return;
+    pidioFrecuentes.current = true;
+    fetch("/api/shop/busquedas-frecuentes")
+      .then((r) => (r.ok ? r.json() : { busquedas: [] }))
+      .then((d: { busquedas?: unknown }) =>
+        setFrecuentes(Array.isArray(d.busquedas) ? d.busquedas.filter((x): x is string => typeof x === "string") : []),
+      )
+      .catch(() => setFrecuentes([]));
+  }, [guiaAbierta]);
+
+  const elegirEjemplo = (texto: string) => {
+    setQuery(texto);
+    submit(texto);
+  };
 
   return (
     <div ref={containerRef} className="relative flex w-full max-w-2xl">
@@ -99,23 +148,51 @@ export function SearchAutocomplete() {
           type="text"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          ref={inputRef}
           onFocus={() => setOpen(true)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            // ↓ entra a la guía; Escape la cierra.
+            if (e.key === "ArrowDown" && guiaAbierta) {
+              e.preventDefault();
+              guiaRef.current?.querySelector("button")?.focus();
+            }
+            if (e.key === "Escape") setOpen(false);
+          }}
           // Corto a propósito: al lado está la lupa, y cualquier texto más
-          // largo se cortaba a mitad de palabra en el header angosto.
-          placeholder="Buscar"
+          // largo se cortaba a mitad de palabra en el header angosto. Con la
+          // búsqueda inteligente rota entre ejemplos (el que no entra se
+          // desvanece con el mask).
+          placeholder={placeholderBuscador(busquedaIa, indicePlaceholder)}
+          aria-label="Buscar productos"
+          // Con el flag, el campo es un combobox: abre la guía o las sugerencias.
+          role={busquedaIa ? "combobox" : undefined}
+          aria-expanded={busquedaIa ? guiaAbierta || showDropdown : undefined}
+          aria-controls={guiaAbierta ? idGuia : undefined}
           // El mask difumina el borde derecho: si el placeholder (o lo tipeado)
           // no entra, se desvanece en vez de cortarse a mitad de palabra.
           className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm text-text placeholder:text-muted outline-none [mask-image:linear-gradient(to_right,black_calc(100%-16px),transparent)]"
         />
         <button
-          onClick={submit}
+          onClick={() => submit()}
           aria-label="Buscar"
           className="flex shrink-0 items-center gap-2 bg-transparent px-4 text-sm font-medium text-muted transition-colors hover:text-text"
         >
           <SearchIcon />
         </button>
       </div>
+
+      {guiaAbierta && (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">
+          <GuiaBusqueda
+            ref={guiaRef}
+            id={idGuia}
+            frecuentes={frecuentes}
+            onElegir={elegirEjemplo}
+            onEscape={() => inputRef.current?.focus()}
+          />
+        </div>
+      )}
 
       {showDropdown && (
         <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">

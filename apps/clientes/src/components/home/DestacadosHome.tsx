@@ -4,7 +4,7 @@ import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { destacadosHome } from "@/lib/catalogo-publico";
-import { dispDelVisitante } from "@/lib/zona-servidor";
+import { dispCatalogo } from "@/lib/zona-servidor";
 import { flagsPublicos } from "@/lib/flags-publicos";
 
 interface PropsCarrusel {
@@ -40,7 +40,7 @@ export async function DestacadosHome({
   await connection();
   // Si el catálogo falla, `destacadosHome` degrada a destacados vacíos (la
   // sección ya renderiza la grilla vacía) en vez de tumbar la página entera.
-  const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispDelVisitante()]);
+  const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
   const [oferta, destacados] = await Promise.all([
     getOfertaCuotas(),
     destacadosHome({ skus, cantidad, soloVisibles, disp }),

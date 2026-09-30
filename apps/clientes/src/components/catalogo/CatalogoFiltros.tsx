@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Switch } from "@myd-org/ui";
+import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Select, Switch } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import {
   cambiosDeRango,
@@ -19,6 +19,9 @@ import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
+
+/** Valor del selector "Con stock en" que no filtra por local (no viaja en la URL). */
+const TODOS_LOS_LOCALES = "todos";
 
 /** Alterna un valor en una lista de filtros. */
 const alternar = (lista: string[], valor: string, tildado: boolean) =>
@@ -96,9 +99,25 @@ export function CatalogoFiltros({
         </h3>
         <Switch
           label="Solo con stock"
-          checked={estado.soloStock}
-          onCheckedChange={(v) => ir({ soloStock: v })}
+          checked={estado.soloStock || Boolean(estado.retiroEn)}
+          // Apagarlo también quita "Con stock en <local>": sin stock no hay local que filtrar.
+          onCheckedChange={(v) => ir(v ? { soloStock: true } : { soloStock: false, retiroEn: undefined })}
         />
+        {facetas.locales && facetas.locales.length > 1 && (
+          <Field label="Con stock en">
+            <Select
+              aria-label="Con stock en"
+              options={[
+                { value: TODOS_LOS_LOCALES, label: "Cualquier local" },
+                ...facetas.locales.map((l) => ({ value: l.slug, label: l.nombre })),
+              ]}
+              value={estado.retiroEn ?? TODOS_LOS_LOCALES}
+              onValueChange={(v) =>
+                ir(v === TODOS_LOS_LOCALES ? { retiroEn: undefined } : { retiroEn: v, soloStock: true })
+              }
+            />
+          </Field>
+        )}
       </section>
     </div>
   );

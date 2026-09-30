@@ -10,22 +10,22 @@ describe("textos de disponibilidad", () => {
   it("envío disponible, con traslado y sin stock", () => {
     expect(
       textoEnvio({ estado: "disponible", origen: "a", demoraDias: null }),
-    ).toBe("Envío: disponible");
+    ).toBe("Envío a domicilio: disponible");
     expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 7 })).toBe(
-      "Envío: disponible con demora de 7 días",
+      "Envío a domicilio: disponible en 7 días",
     );
     expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 1 })).toBe(
-      "Envío: disponible con demora de 1 día",
+      "Envío a domicilio: disponible en 1 día",
     );
     expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 0 })).toBe(
-      "Envío: disponible a coordinar",
+      "Envío a domicilio: a coordinar",
     );
     expect(
       textoEnvio({ estado: "sin_stock", origen: null, demoraDias: null }),
-    ).toBe("Envío: no disponible");
+    ).toBe("Envío a domicilio: no disponible");
     expect(
       textoEnvio({ estado: "no_servible", origen: null, demoraDias: null }),
-    ).toBe("Envío: no disponible");
+    ).toBe("Envío a domicilio: no disponible");
   });
 
   it("retiro disponible, con demora y no disponible (sin stock u oculto)", () => {
@@ -35,14 +35,14 @@ describe("textos de disponibilidad", () => {
         desde: null,
         demoraDias: null,
       }),
-    ).toBe("Retiro en Sede A: disponible");
+    ).toBe("Retiro en Sede A: disponible hoy");
     expect(
       textoRetiro("Sede A", {
         estado: "con_demora",
         desde: "b",
         demoraDias: 7,
       }),
-    ).toBe("Retiro en Sede A: con demora de 7 días");
+    ).toBe("Retiro en Sede A: disponible en 7 días");
     expect(
       textoRetiro("Sede A", {
         estado: "con_demora",
@@ -66,7 +66,7 @@ describe("textos de disponibilidad", () => {
     ).toBe("Retiro en Sede A: no disponible");
   });
 
-  it("una línea por modalidad, en el orden de los locales", () => {
+  it("un retiro por local, en el orden de los locales, y el envío al final", () => {
     const t = textosDisponibilidad(
       {
         servible: true,
@@ -82,9 +82,9 @@ describe("textos de disponibilidad", () => {
       ],
     );
     expect(t).toEqual([
-      "Envío: disponible",
-      "Retiro en Sede B: con demora de 7 días",
-      "Retiro en Sede A: disponible",
+      "Retiro en Sede B: disponible en 7 días",
+      "Retiro en Sede A: disponible hoy",
+      "Envío a domicilio: disponible",
     ]);
   });
 
@@ -103,10 +103,10 @@ describe("textos de disponibilidad", () => {
     ];
     expect(lineasDisponibilidad(d, locales, { conEnvio: false })).toEqual([
       { texto: "Retiro en Sede A: no disponible", tono: "no" },
-      { texto: "Retiro en Sede B: con demora de 7 días", tono: "demora" },
+      { texto: "Retiro en Sede B: disponible en 7 días", tono: "demora" },
     ]);
-    expect(lineasDisponibilidad(d, locales)[0]).toEqual({
-      texto: "Envío: disponible con demora de 7 días",
+    expect(lineasDisponibilidad(d, locales).at(-1)).toEqual({
+      texto: "Envío a domicilio: disponible en 7 días",
       tono: "demora",
     });
   });

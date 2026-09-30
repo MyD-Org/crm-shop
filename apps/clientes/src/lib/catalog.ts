@@ -952,6 +952,11 @@ export interface Facetas {
    * filtro de precio (límites del slider). null = ningún producto cumple.
    */
   precio: RangoPrecio | null;
+  /**
+   * Locales para el filtro "Con stock en <local>" (activos y con retiro). No salen de Postgres: los
+   * agrega la page del catálogo cuando hay más de uno. Ausente = el filtro no se muestra.
+   */
+  locales?: { slug: string; nombre: string }[];
 }
 
 /**

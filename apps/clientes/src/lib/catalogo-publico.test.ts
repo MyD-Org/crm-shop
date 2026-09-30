@@ -152,3 +152,24 @@ describe("destacadosHome", () => {
     expect(cacheLifeMock.mock.calls).toEqual([["degradado"]]);
   });
 });
+
+describe("con `disp` (flag disponibilidad-sucursal): la sucursal viaja como argumento", () => {
+  const disp = { zona: "sede-a", activas: ["sede-a", "sede-b"], contarEn: ["sede-a", "sede-b"], stockHeredado: "sede-a" };
+  const pagina = { productos: [], total: 0, pagina: 1, paginas: 1 };
+
+  it("página, facetas, ficha y nav lo pasan a la lectura", async () => {
+    cat.getPaginaCatalogo.mockResolvedValue(pagina);
+    cat.getFacetas.mockResolvedValue({ categorias: [], marcas: [], precio: null });
+    cat.getProducto.mockResolvedValue(prod("42", "A"));
+    cat.getCategorias.mockResolvedValue([]);
+    const args = { filtros: {}, orden: "nombre" as const, pagina: 1, soloVisibles: false, disp };
+    await paginaCatalogoPublica(args);
+    await facetasPublicas({}, false, disp);
+    await productoPublico("42", false, disp);
+    await categoriasNav(false, disp);
+    expect(cat.getPaginaCatalogo).toHaveBeenCalledWith(args);
+    expect(cat.getFacetas).toHaveBeenCalledWith({}, false, disp);
+    expect(cat.getProducto).toHaveBeenCalledWith("42", { soloVisibles: false, disp });
+    expect(cat.getCategorias).toHaveBeenCalledWith(false, disp);
+  });
+});

@@ -13,6 +13,10 @@
  *   del espejo en vivo (src/lib/cotizacion.ts).
  * - Los flags llegan como argumento (`flagsPublicos()`, evaluado por request
  *   afuera): son parte de la clave.
+ * - Con el flag `disponibilidad-sucursal`, la sucursal de la zona del visitante
+ *   (y sus reglas) llega como argumento `disp` (`ContextoDisponibilidad`): NUNCA
+ *   se lee la cookie adentro de un scope cacheado. Una entrada por sucursal de
+ *   zona; sin `disp` (flag apagado) la clave y el resultado son los de siempre.
  * - Tag `catalogo` (src/lib/cache-tags.ts) y perfil `catalogo` de
  *   next.config.ts (expire 15 min = TTL de seguridad). Lo invalidan el aviso
  *   del CRM (`/api/internal/catalogo/revalidar`, al terminar la sync o un
@@ -46,6 +50,7 @@ import {
 import { TAG_CATALOGO } from "./cache-tags";
 import type { OrdenCatalogo } from "./catalogo-url";
 import { elegirDestacados } from "./destacados";
+import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 
 /** Categoría de Alegra que alimenta los destacados de la home. */
 const CATEGORIA_DESTACADOS = "ILUMINACION";
@@ -66,6 +71,8 @@ export interface ArgsPaginaPublica {
   orden: OrdenCatalogo;
   pagina: number;
   soloVisibles: boolean;
+  /** Flag `disponibilidad-sucursal` (ver `ContextoDisponibilidad`). */
+  disp?: ContextoDisponibilidad;
 }
 
 async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> {
@@ -84,27 +91,41 @@ export function paginaCatalogoPublica(args: ArgsPaginaPublica): Promise<PaginaCa
   return filtrosCacheables(args.filtros) ? paginaCacheada(args) : getPaginaCatalogo(args);
 }
 
-async function facetasCacheadas(filtros: FiltrosCatalogo, soloVisibles: boolean): Promise<Facetas> {
+async function facetasCacheadas(
+  filtros: FiltrosCatalogo,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<Facetas> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] catalogo-facetas miss");
-  return getFacetas(filtros, soloVisibles);
+  return disp ? getFacetas(filtros, soloVisibles, disp) : getFacetas(filtros, soloVisibles);
 }
 
 /** Facetas del catálogo público (mismo criterio de cacheo que la página). */
-export function facetasPublicas(filtros: FiltrosCatalogo, soloVisibles: boolean): Promise<Facetas> {
+export function facetasPublicas(
+  filtros: FiltrosCatalogo,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<Facetas> {
   return filtrosCacheables(filtros)
-    ? facetasCacheadas(filtros, soloVisibles)
-    : getFacetas(filtros, soloVisibles);
+    ? facetasCacheadas(filtros, soloVisibles, disp)
+    : disp
+      ? getFacetas(filtros, soloVisibles, disp)
+      : getFacetas(filtros, soloVisibles);
 }
 
-async function productoCacheado(id: string, soloVisibles: boolean): Promise<Product | null> {
+async function productoCacheado(
+  id: string,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<Product | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] producto miss");
-  return getProducto(id, { soloVisibles });
+  return getProducto(id, { soloVisibles, disp });
 }
 
 /**
@@ -113,9 +134,13 @@ async function productoCacheado(id: string, soloVisibles: boolean): Promise<Prod
  * CRM o a los 15 minutos). Un id que no es de Alegra ni llega a la caché (los
  * bots que prueban rutas no la llenan). Si la base falla, TIRA y no se cachea.
  */
-export function productoPublico(id: string, soloVisibles: boolean): Promise<Product | null> {
+export function productoPublico(
+  id: string,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<Product | null> {
   if (!esIdAlegra(id)) return Promise.resolve(null);
-  return productoCacheado(id, soloVisibles);
+  return productoCacheado(id, soloVisibles, disp);
 }
 
 /**
@@ -142,12 +167,12 @@ export async function rutaCategoriaPublica(categoriaId: string): Promise<string[
  * Categorías del menú del header. Si la base falla, vacío (el header se
  * renderiza igual) y guardado sólo con el perfil `degradado` (minutos).
  */
-export async function categoriasNav(soloVisibles: boolean): Promise<string[]> {
+export async function categoriasNav(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<string[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] categorias-nav miss");
   try {
-    const categorias = await getCategorias(soloVisibles);
+    const categorias = disp ? await getCategorias(soloVisibles, disp) : await getCategorias(soloVisibles);
     cacheLife("catalogo");
     return categorias;
   } catch (err) {
@@ -167,25 +192,26 @@ export async function destacadosHome(args: {
   skus: string[];
   cantidad: number;
   soloVisibles: boolean;
+  disp?: ContextoDisponibilidad;
 }): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] destacados miss");
-  const { skus, cantidad, soloVisibles } = args;
+  const { skus, cantidad, soloVisibles, disp } = args;
   let fallo = false;
   const registrar = (err: unknown) => {
     fallo = true;
     console.error("[catalogo-publico] no se pudieron cargar los destacados:", err);
   };
   const [iluminacion, general] = await Promise.all([
-    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, pagina: 1, soloVisibles }).catch(
+    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, pagina: 1, soloVisibles, disp }).catch(
       (err: unknown): { productos: Product[] } => {
         registrar(err);
         return { productos: [] };
       },
     ),
     skus.length
-      ? getCatalogo({ limit: LIMITE_RESPALDO_DESTACADOS, soloVisibles }).catch((err: unknown): Product[] => {
+      ? getCatalogo({ limit: LIMITE_RESPALDO_DESTACADOS, soloVisibles, disp }).catch((err: unknown): Product[] => {
           registrar(err);
           return [];
         })
@@ -199,12 +225,16 @@ export async function destacadosHome(args: {
   return elegirDestacados(pool, skus, cantidad);
 }
 
-async function primeraPaginaCategoria(categoria: string, soloVisibles: boolean): Promise<Product[]> {
+async function primeraPaginaCategoria(
+  categoria: string,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] categoria-relacionados miss");
   try {
-    const { productos } = await getPaginaCatalogo({ filtros: { categorias: [categoria] }, pagina: 1, soloVisibles });
+    const { productos } = await getPaginaCatalogo({ filtros: { categorias: [categoria] }, pagina: 1, soloVisibles, disp });
     cacheLife("catalogo");
     return productos;
   } catch (err) {
@@ -220,12 +250,13 @@ const TOPE_CATEGORIA_EXACTA = 24;
 async function categoriaExacta(
   categoriaId: string,
   soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
 ): Promise<{ nombre: string; productos: Product[] } | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] categoria-exacta miss");
   try {
-    const r = await getCategoriaExacta({ categoriaId, limit: TOPE_CATEGORIA_EXACTA, soloVisibles });
+    const r = await getCategoriaExacta({ categoriaId, limit: TOPE_CATEGORIA_EXACTA, soloVisibles, disp });
     cacheLife("catalogo");
     return r;
   } catch (err) {
@@ -257,16 +288,17 @@ export async function relacionadosProducto(args: {
   excluirId: string;
   cantidad: number;
   soloVisibles: boolean;
+  disp?: ContextoDisponibilidad;
 }): Promise<Relacionados | null> {
   const recortar = (productos: Product[]) =>
     productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);
 
   if (args.categoriaPropiaId) {
-    const exacta = await categoriaExacta(args.categoriaPropiaId, args.soloVisibles);
+    const exacta = await categoriaExacta(args.categoriaPropiaId, args.soloVisibles, args.disp);
     if (exacta) return { categoria: exacta.nombre, productos: recortar(exacta.productos) };
   }
   if (!args.categoria) return null;
-  const productos = await primeraPaginaCategoria(args.categoria, args.soloVisibles);
+  const productos = await primeraPaginaCategoria(args.categoria, args.soloVisibles, args.disp);
   return { categoria: args.categoria, productos: recortar(productos) };
 }
 

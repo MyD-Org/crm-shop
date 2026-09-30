@@ -49,6 +49,18 @@ describe("mapFilaToProduct (espejo)", () => {
   });
 });
 
+describe("mapFilaToProduct: mostrar marca", () => {
+  it("sin overlay o con mostrar_marca = true exhibe la marca", () => {
+    expect(mapFilaToProduct({ ...fila, ivaPorcentaje: null }).brand).toBe("Philips");
+    expect(mapFilaToProduct({ ...fila, ivaPorcentaje: null, overlayMostrarMarca: true }).brand).toBe("Philips");
+  });
+
+  it("con mostrar_marca = false no hay marca, ni siquiera el fallback de la categoría", () => {
+    expect(mapFilaToProduct({ ...fila, ivaPorcentaje: null, overlayMostrarMarca: false }).brand).toBe("");
+    expect(mapFilaToProduct({ ...fila, brand: null, ivaPorcentaje: null, overlayMostrarMarca: false }).brand).toBe("");
+  });
+});
+
 describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
   // En esta cuenta de Alegra `name` es el código y el nombre comercial vive en
   // `description`; el overlay del CRM puede pisar los dos.

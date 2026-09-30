@@ -113,6 +113,8 @@ interface FilaCatalogo {
    * declararla: `mapFilaToProduct` la trata igual que null si no vino.
    */
   overlayFichaTecnica?: FichaTecnicaCrm | null;
+  /** false = el admin pidió no exhibir la marca. null/ausente = sin overlay ⇒ se muestra. */
+  overlayMostrarMarca?: boolean | null;
 }
 
 /**
@@ -141,7 +143,8 @@ export function mapFilaToProduct(
     id: fila.alegraId,
     // La marca sale del customField de Alegra; si no está cargado, cae al
     // nombre de la categoría (mismo criterio que la ficha en vivo).
-    brand: fila.brand || fila.categoryName || "",
+    // `mostrar_marca = false` en el overlay la apaga del todo (sin fallback a la categoría).
+    brand: fila.overlayMostrarMarca === false ? "" : fila.brand || fila.categoryName || "",
     name: nombreExhibido(fila),
     price,
     ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
@@ -247,6 +250,7 @@ const COLUMNAS_CATALOGO_BASE = {
   overlayFotos: crmOverlay.fotos,
   overlayFichaTecnica: crmOverlay.fichaTecnica,
   overlayCategoriaId: crmOverlay.categoriaId,
+  overlayMostrarMarca: crmOverlay.mostrarMarca,
 };
 
 /**
@@ -597,9 +601,11 @@ export interface PaginaCatalogo {
 /**
  * Marca efectiva del producto, en SQL. Tiene que replicar el fallback de
  * `mapFilaToProduct`: si el customField de Alegra vino vacío, la marca que se
- * exhibe (y por la que se filtra) es el nombre de la categoría.
+ * exhibe (y por la que se filtra) es el nombre de la categoría; con
+ * `mostrar_marca = false` en el overlay no hay marca. Requiere el join al overlay.
  */
-const marcaSql = sql<string>`coalesce(nullif(${crmCatalogo.brand}, ''), ${crmCategoriasAlegra.name})`;
+const marcaSql = sql<string>`(case when ${crmOverlay.mostrarMarca} is false then null
+  else coalesce(nullif(${crmCatalogo.brand}, ''), ${crmCategoriasAlegra.name}) end)`;
 
 /**
  * Precio de lista principal, extraído del jsonb `prices`. Equivalente en SQL de

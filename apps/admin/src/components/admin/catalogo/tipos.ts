@@ -53,6 +53,8 @@ export interface ProductoDto {
   fichaTecnica: FichaDto | null
   /** Slugs de sucursal donde NO se ofrece (vacío = visible en todas). */
   ocultoEnSucursales: string[]
+  /** false = el Shop no exhibe la marca. */
+  mostrarMarca: boolean
   actualizadoEn: string | null
   motivos: MotivoNoPublicado[]
   /** Cuenta de Alegra de origen cuando NO es la principal (producto solo de esa cuenta). null = principal. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LINEAS, normalizarLineas } from "./cotizacion";
+import { itemDesdeEspejo, MAX_LINEAS, normalizarLineas } from "./cotizacion";
 
 /**
  * `normalizarLineas` es la puerta de entrada de todo lo que manda el browser al
@@ -125,5 +125,29 @@ describe("cotizarItem y el stock de Alegra", () => {
     const linea = cotizarItem({ id: "1", qty: 2 }, item(50), undefined);
     expect(linea.stockDisponible).toBe(50);
     expect(linea.problema).toBeUndefined();
+  });
+});
+
+describe("itemDesdeEspejo: mostrar marca", () => {
+  const fila = {
+    alegraId: "1",
+    name: "Pantalla",
+    code: null,
+    brand: "Acme",
+    prices: [],
+    stock: null,
+    ivaPorcentaje: null,
+    status: "active",
+    categoryName: "Iluminación",
+  };
+
+  it("con la marca apagada no viajan ni la marca ni la categoría de fallback", () => {
+    const item = itemDesdeEspejo({ ...fila, mostrarMarca: false });
+    expect(item.customFields).toBeUndefined();
+    expect(item.itemCategory).toBeUndefined();
+  });
+
+  it("sin overlay la marca viaja como siempre", () => {
+    expect(itemDesdeEspejo({ ...fila, mostrarMarca: null }).customFields).toEqual([{ name: "Marca", value: "Acme" }]);
   });
 });

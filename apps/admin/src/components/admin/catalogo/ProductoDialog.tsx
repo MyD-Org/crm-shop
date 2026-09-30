@@ -57,6 +57,7 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
   const [tagIds, setTagIds] = useState<string[]>(producto.tagIds)
   const [visible, setVisible] = useState(producto.visible)
   const [ocultoEn, setOcultoEn] = useState<string[]>(producto.ocultoEnSucursales)
+  const [mostrarMarca, setMostrarMarca] = useState(producto.mostrarMarca)
   // Las fotos y la ficha técnica se guardan APARTE del resto de la ficha: cada cambio se
   // persiste solo, porque la subida ya ocurrió y perderla al cancelar el diálogo dejaría
   // objetos huérfanos en R2.
@@ -84,6 +85,7 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             descripcion: descripcion.trim() === "" ? null : descripcion,
             categoriaId: categoriaId === SIN_CATEGORIA ? null : categoriaId,
             visible,
+            mostrarMarca,
             tagIds,
             // Solo se manda si el campo se mostró: con una sola sucursal no hay nada que elegir.
             ...(sucursales.length > 1 ? { ocultoEnSucursales: ocultoEn } : {}),
@@ -271,6 +273,11 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             <label className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
               <Checkbox checked={visible} onCheckedChange={setVisible} aria-label="Publicar en la tienda" />
               Publicar en la tienda
+            </label>
+
+            <label className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
+              <Checkbox checked={mostrarMarca} onCheckedChange={setMostrarMarca} aria-label="Mostrar la marca en la tienda" />
+              Mostrar la marca en la tienda
             </label>
 
             {sucursales.length > 1 && (

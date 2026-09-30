@@ -47,7 +47,7 @@ function facetas(consultas: ConsultaGrabada[]) {
   };
   return {
     categorias: buscar((s) => s.includes('group by "catalog_categories_shop"."name"')),
-    marcas: buscar((s) => s.includes("group by coalesce(nullif(")),
+    marcas: buscar((s) => s.includes("group by (case when")),
     precio: buscar((s) => s.includes("floor(min(")),
   };
 }
@@ -117,7 +117,7 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
     // Sin marca en la vista, cuenta bajo el nombre de su categoría de Alegra
     // (p. ej. "Iluminación"), con la categoría del mismo tenant.
     expect(marcas.sql).toContain(
-      'group by coalesce(nullif("catalog_products_shop"."brand", \'\'), "catalog_categories_shop"."name")',
+      'group by (case when "public"."catalog_overlay"."mostrar_marca" is false then null\n  else coalesce(nullif("catalog_products_shop"."brand", \'\'), "catalog_categories_shop"."name") end)',
     );
     expect(marcas.sql).toMatch(/"catalog_categories_shop"\."tenant_id" = \$\d+\)/);
     expect(precio.sql).toMatch(/floor\(min\([\s\S]*\/ 100\)\)\)::int/);
@@ -229,7 +229,7 @@ describe("filtro y facetas de atributos (`atr`)", () => {
     expect(iFrio).toBeGreaterThan(-1);
     expect(params[iFrio - 1]).toBe(patron("zocalo-e27"));
     // Las demás facetas sí filtran por los atributos tildados.
-    const marcas = sinLecturaDelArbol(grabadora.consultas).find((c) => c.sql.includes("group by coalesce(nullif("));
+    const marcas = sinLecturaDelArbol(grabadora.consultas).find((c) => c.sql.includes("group by (case when"));
     expect(marcas!.params).toContain(patron("tono-calido"));
   });
 });

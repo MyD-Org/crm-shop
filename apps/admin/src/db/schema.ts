@@ -854,7 +854,7 @@ export const paymentReceipts = pgTable(
   ],
 )
 
-// Proveedores de pago del tenant en el Shop (Configuración → Medios de pago / Cuotas).
+// Proveedores de pago del tenant en el Shop (Pagos y cuotas).
 // v2 (platform/contracts/cuotas/v2): una fila por proveedor con codigo_proveedor = "credito"
 // (aplica a todas las tarjetas de crédito). Las filas v1 por marca (visa, master) quedan en la
 // tabla y se ignoran. Tasas y sin interés los informa el proveedor (no viven acá).

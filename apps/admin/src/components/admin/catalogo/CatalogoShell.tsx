@@ -21,7 +21,7 @@ type Tab = "productos" | "categorias" | "etiquetas" | "revision"
 
 /**
  * Panel de catálogo: la sección donde se cura lo que la tienda muestra. Vive en la navegación
- * principal y no dentro de Configuración porque es trabajo diario sobre miles de productos, no
+ * principal (y no como pestaña de un "Configuración") porque es trabajo diario sobre miles de productos, no
  * un ajuste que se toca una vez.
  *
  * Categorías y etiquetas se cargan una sola vez acá y se comparten con las tres solapas: el

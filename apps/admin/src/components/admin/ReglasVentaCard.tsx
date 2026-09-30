@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Button, Card, Field, Input, Select, Textarea, useToast } from "@myd-org/ui"
 import { validarReglasVenta, type ReglasVenta } from "@/lib/reglas-venta-validacion"
 
-// Configuración → Sucursales y ventas: reglas de venta del negocio (disponibilidad, reserva y
+// Sucursales: reglas de venta del negocio (disponibilidad, reserva y
 // contacto). Rigen para los pedidos NUEVOS; los ya creados conservan la regla con la que se
 // tomaron. Cada guardado avisa al Shop (best-effort): si el aviso no llegó, el cambio igual quedó
 // guardado y la tienda lo toma en su próximo ciclo.

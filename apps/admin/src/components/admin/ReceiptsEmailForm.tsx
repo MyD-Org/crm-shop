@@ -6,12 +6,14 @@ import { Button, Field, Input, useToast } from "@myd-org/ui"
 
 interface Props {
   initialReceiptsEmail: string
+  /** Se guardó bien: el host (el diálogo de Ajustes de Comprobantes) lo usa para cerrarse. */
+  onSaved?: (email: string) => void
 }
 
-// Configuración → Comprobantes: el único mail destino de los avisos de comprobantes de pago
+// Comprobantes → Ajustes: el único mail destino de los avisos de comprobantes de pago
 // (`tenants.receipts_email`, expuesto por GET/PUT /api/admin/settings/receipts). Vacío =
 // permitido: los avisos quedan "skipped" y la pantalla de Comprobantes muestra el aviso.
-export function ReceiptsEmailForm({ initialReceiptsEmail }: Props) {
+export function ReceiptsEmailForm({ initialReceiptsEmail, onSaved }: Props) {
   const [email, setEmail] = useState(initialReceiptsEmail)
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
@@ -32,10 +34,12 @@ export function ReceiptsEmailForm({ initialReceiptsEmail }: Props) {
         setError(body?.error ?? "No pudimos guardar el email")
         return
       }
-      setEmail(body.receiptsEmail ?? email)
+      const guardado: string = body.receiptsEmail ?? email
+      setEmail(guardado)
       // El aviso de "destino no configurado" en /admin/comprobantes depende de este valor.
       router.refresh()
       toast({ title: "Email guardado", tone: "success" })
+      onSaved?.(guardado)
     } catch {
       setError("Error de conexión. Intente nuevamente.")
     } finally {

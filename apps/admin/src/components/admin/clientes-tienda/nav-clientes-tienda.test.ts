@@ -22,9 +22,10 @@ describe("AdminShell: entrada Clientes de la tienda", () => {
     expect(entrada[0]).not.toContain("flag")
   })
 
-  it("va justo después de Pedidos", () => {
+  it("va en el grupo Datos, justo después de Catálogo", () => {
+    expect(entrada[0]).toContain('group: "Datos"')
     const entradas = lineas.filter((l) => /^\s*\{ href: "\/admin\//.test(l))
-    const i = entradas.findIndex((l) => l.includes('"/admin/pedidos"'))
+    const i = entradas.findIndex((l) => l.includes('"/admin/catalogo"'))
     expect(entradas[i + 1]).toContain('"/admin/clientes-tienda"')
   })
 })

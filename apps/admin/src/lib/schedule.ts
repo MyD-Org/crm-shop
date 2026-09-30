@@ -1,7 +1,7 @@
 // Modelo canónico del horario de atención del negocio.
 //
 // Es lo que el ai-api consulta (GET /api/internal/business-hours) y lo que el admin
-// carga desde Configuración → Horarios. Forma del contrato con el agente:
+// carga desde Horarios. Forma del contrato con el agente:
 //
 //   { notes: string | null, schedule: { monday: [{open,close}, ...], ..., sunday: [] } }
 //

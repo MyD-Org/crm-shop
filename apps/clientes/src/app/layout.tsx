@@ -5,7 +5,6 @@ import { esAR } from "@/lib/clerk-localizacion";
 import { Nunito_Sans, Sora } from "next/font/google";
 import { Providers } from "@/components/Providers";
 import { Header } from "@/components/HeaderServer";
-import { UbicacionHeader } from "@/components/ubicacion/UbicacionHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { getContenidoHome } from "@/lib/home-datos";
 import { clasesVisibilidad, visibilidadDe } from "@/data/home-defaults";
@@ -131,8 +130,6 @@ export default async function RootLayout({
               </div>
             )}
             <Header />
-            {/* Franja "Estás en …": el Header del DS no tiene lugar para la ubicación. */}
-            <UbicacionHeader />
             {/* Red de seguridad: una página que lea el request arriba de todo
                 (Mi cuenta, checkout, carrito) queda como hueco entero en vez
                 de romper el prerender. El fallback ocupa el alto de la

@@ -400,6 +400,13 @@
       "when": 1791287100000,
       "tag": "0056_payment_receipts_pedido",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1791373500000,
+      "tag": "0057_medio_pago_mercadopago",
+      "breakpoints": true
     }
   ]
 }

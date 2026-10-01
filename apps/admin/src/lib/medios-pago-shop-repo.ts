@@ -3,6 +3,7 @@ import { getDb } from "@/db"
 import { mediosPagoShop } from "@/db/schema"
 import {
   MSG_SIN_ENTREGA,
+  SLUG_MERCADOPAGO,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
   type CambiosMedioPago,
@@ -92,7 +93,9 @@ export async function crearMedioPago(tenantId: string, body: unknown): Promise<R
 export async function actualizarMedioPago(tenantId: string, slug: string, body: unknown): Promise<ResultadoMedio> {
   const v = validarMedioPagoCambios(body)
   if (!v.ok) return { kind: "invalid", campo: v.campo, error: v.error }
-  const cambios: CambiosMedioPago = v.cambios
+  // `cobro_online` no se cambia desde el admin: lo fija la migración que siembra mercadopago.
+  const cambios: CambiosMedioPago = { ...v.cambios }
+  delete cambios.cobroOnline
 
   return getDb().transaction(async (tx): Promise<ResultadoMedio> => {
     const [actual] = await tx
@@ -132,6 +135,9 @@ async function pedidosUsanMedio(tx: Tx, tenantId: string, slug: string): Promise
 }
 
 export async function eliminarMedioPago(tenantId: string, slug: string): Promise<ResultadoBorradoMedio> {
+  if (slug === SLUG_MERCADOPAGO) {
+    return { kind: "conflict", error: "Este medio de pago no se puede eliminar; desactívelo." }
+  }
   return getDb().transaction(async (tx): Promise<ResultadoBorradoMedio> => {
     const [actual] = await tx
       .select({ slug: mediosPagoShop.slug })

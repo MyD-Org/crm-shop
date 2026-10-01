@@ -5,6 +5,8 @@ export const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 export const MAX_NOMBRE = 60
 export const MAX_INSTRUCCIONES = 1000
 export const MAX_ORDEN = 999
+/** Fila fija sembrada por la migración 0057: se edita, pero no se crea, no se elimina ni cambia su slug. */
+export const SLUG_MERCADOPAGO = "mercadopago"
 
 export type Invalido = { ok: false; campo: string; error: string }
 
@@ -79,6 +81,7 @@ export function validarMedioPagoNuevo(body: unknown): { ok: true; valor: MedioPa
   if (!SLUG_MEDIO_RE.test(slug)) {
     return invalido("slug", "El identificador debe tener de 2 a 30 caracteres: minúsculas, números o guiones.")
   }
+  if (slug === SLUG_MERCADOPAGO) return invalido("slug", "Ese identificador está reservado.")
   if (typeof body.nombre !== "string" || body.nombre.trim() === "") return invalido("nombre", "Ingrese el nombre.")
 
   const c = validarCampos(body)

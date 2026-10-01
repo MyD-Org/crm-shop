@@ -2,7 +2,7 @@ import { AlegraRateLimitError, buscarRemisionesPorNumero, getRemisionPorId, type
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { nombreDocumentoAlegra, resolverRemito, validarRemision } from "@/lib/remito"
 import { desvincularRemito, getPedido, toPedidoDetalleDto, vincularRemito, type PedidoRow, type RemitoResult } from "@/lib/pedidos-repo"
-import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
+import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 import { canSeeCosts } from "@/lib/roles"
 
 // "Vincular remito existente" del detalle de pedido (rebanada D, remito único por pedido).
@@ -43,7 +43,6 @@ const MSG = {
     `Ese enlace corresponde a ${nombreDocumentoAlegra(documento)} de Alegra, no a un remito. Ingrese el número o el enlace del remito.`,
   limite: "Alegra está recibiendo demasiadas consultas. Inténtelo nuevamente en un minuto.",
   alegra: "Alegra no respondió bien. Inténtelo nuevamente en unos minutos.",
-  sinConfig: "No se pudo consultar Alegra para esta empresa. Inténtelo nuevamente en unos minutos.",
   interno: "No se pudo actualizar el pedido. Inténtelo nuevamente.",
 } as const
 
@@ -59,12 +58,6 @@ function chequeoPedido(pedido: PedidoRow, tieneRemito: boolean): Response | null
   if (pedido.estado === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (tieneRemito) return fail(409, "ya_vinculado", MSG.yaVinculado)
   return null
-}
-
-async function configDe(tenantId: string): Promise<TenantConfig | null> {
-  const config = await getTenantByIdFromDb(tenantId)
-  if (!config) console.error(`[admin/pedidos/remito] sin config para tenant "${tenantId}"`)
-  return config
 }
 
 function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
@@ -101,8 +94,9 @@ export async function GET(req: Request, { params }: IdParams) {
     const bloqueo = chequeoPedido(found.pedido, found.remito !== null)
     if (bloqueo) return bloqueo
 
-    const config = await configDe(guard.tenantId)
-    if (!config) return fail(500, "internal", MSG.sinConfig)
+    const cfg = await configAlegraDelPedido(guard.tenantId, found.pedido)
+    if (!cfg.ok) return fail(cfg.status, cfg.code, cfg.error)
+    const config = cfg.config
 
     const clienteCodigo = found.pedido.clienteCodigo
     let resultado
@@ -154,8 +148,9 @@ export async function POST(req: Request, { params }: IdParams) {
     const bloqueo = chequeoPedido(found.pedido, found.remito !== null)
     if (bloqueo) return bloqueo
 
-    const config = await configDe(guard.tenantId)
-    if (!config) return fail(500, "internal", MSG.sinConfig)
+    const cfg = await configAlegraDelPedido(guard.tenantId, found.pedido)
+    if (!cfg.ok) return fail(cfg.status, cfg.code, cfg.error)
+    const config = cfg.config
 
     let remision: AlegraRemisionResumen | null
     try {

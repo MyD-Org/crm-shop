@@ -13,6 +13,7 @@ import { looksLikeEmail, pedidosUrl } from "@/lib/pedido-estado-aviso"
 import { buildPedidoFacturaEmail, esPdf, nombreAdjuntoFactura } from "@/lib/pedido-factura-email"
 import { formatearNumeroPedido, type PedidoRow } from "@/lib/pedidos-repo"
 import { ATTACH_MAX_BYTES } from "@/lib/receipt-email"
+import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 
 /** Lo que ve el operador. `destino` va enmascarado (`c***@cliente.example`). */
@@ -85,9 +86,12 @@ export async function enviarFacturaPedido(input: {
   try {
     const tenant = await getTenantByIdFromDb(tenantId)
     if (!tenant) return { resultado: "fallo", destino, motivo: "tenant no encontrado" }
-    if (tenant.alegraMock) return { resultado: "sin_pdf", destino, motivo: "alegra mock" }
+    // El PDF se pide a la cuenta de Alegra del pedido (sucursal), no a la principal.
+    const cfg = await configAlegraDelPedido(tenantId, pedido)
+    if (!cfg.ok) return { resultado: "fallo", destino, motivo: cfg.error }
+    if (cfg.config.alegraMock) return { resultado: "sin_pdf", destino, motivo: "alegra mock" }
 
-    const doc = await getDocumentPdf(tenant, "factura", alegraId)
+    const doc = await getDocumentPdf(cfg.config, "factura", alegraId)
     if (!doc?.pdfUrl) return { resultado: "sin_pdf", destino, motivo: doc ? "factura sin PDF" : "factura no encontrada" }
     const descarga = await descargarPdf(doc.pdfUrl)
     if (!descarga.ok) return { resultado: "sin_pdf", destino, motivo: descarga.motivo }

@@ -7,6 +7,7 @@ import type { PedidoRow } from "@/lib/pedidos-repo"
 const getDocumentPdf = vi.fn()
 const sendEmail = vi.fn()
 const getTenantByIdFromDb = vi.fn()
+const configAlegraDelPedido = vi.fn()
 
 vi.mock("@/lib/alegra", () => ({ getDocumentPdf: (...a: unknown[]) => getDocumentPdf(...a) }))
 vi.mock("@/lib/email", async (importOriginal) => ({
@@ -14,6 +15,7 @@ vi.mock("@/lib/email", async (importOriginal) => ({
   sendEmail: (...a: unknown[]) => sendEmail(...a),
 }))
 vi.mock("@/lib/tenants", () => ({ getTenantByIdFromDb: (...a: unknown[]) => getTenantByIdFromDb(...a) }))
+vi.mock("@/lib/pedido-cuenta-alegra", () => ({ configAlegraDelPedido: (...a: unknown[]) => configAlegraDelPedido(...a) }))
 
 const { enviarFacturaPedido } = await import("@/lib/pedido-factura-aviso")
 
@@ -36,6 +38,7 @@ let fetchMock: ReturnType<typeof vi.fn>
 beforeEach(() => {
   getDocumentPdf.mockReset().mockResolvedValue({ clientAlegraId: "55", pdfUrl: PDF_URL, number: "00201-00007040" })
   sendEmail.mockReset().mockResolvedValue(true)
+  configAlegraDelPedido.mockReset().mockResolvedValue({ ok: true, config: { id: "tenant-a", alegraMock: false }, cuentaSlug: "principal" })
   getTenantByIdFromDb.mockReset().mockResolvedValue({ id: "tenant-a", name: "Tienda Demo", alegraMock: false })
   fetchMock = vi.fn(async () => new Response(PDF, { status: 200, headers: { "content-type": "application/octet-stream" } }))
   vi.stubGlobal("fetch", fetchMock)
@@ -133,7 +136,25 @@ describe("enviarFacturaPedido", () => {
   it("sin número guardado usa el de Alegra; tenant en modo mock → sin_pdf", async () => {
     await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido({ facturaNumero: null }) })
     expect(sendEmail.mock.calls[0][5].attachments[0].filename).toBe("Factura-00201-00007040.pdf")
-    getTenantByIdFromDb.mockResolvedValueOnce({ id: "tenant-a", name: "Tienda Demo", alegraMock: true })
+    configAlegraDelPedido.mockResolvedValueOnce({ ok: true, config: { id: "tenant-a", alegraMock: true }, cuentaSlug: "principal" })
     expect((await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido() })).resultado).toBe("sin_pdf")
+  })
+
+  it("pide el PDF a la cuenta de Alegra del pedido (sucursal), no a la principal", async () => {
+    const cuentaMdp = { id: "tenant-a", alegraEmail: "mdp@cliente.example", alegraToken: "t-mdp", alegraMock: false }
+    configAlegraDelPedido.mockResolvedValueOnce({ ok: true, config: cuentaMdp, cuentaSlug: "mdp" })
+    const p = pedido({ sucursal: "mdp" } as Partial<PedidoRow>)
+    const r = await enviarFacturaPedido({ tenantId: "tenant-a", pedido: p })
+    expect(r.resultado).toBe("enviado")
+    expect(configAlegraDelPedido).toHaveBeenCalledWith("tenant-a", p)
+    expect(getDocumentPdf).toHaveBeenCalledWith(cuentaMdp, "factura", "7040")
+  })
+
+  it("sin cuenta resoluble no manda nada y avisa el fallo", async () => {
+    configAlegraDelPedido.mockResolvedValueOnce({ ok: false, status: 422, code: "sin_cuenta", error: "Seleccione una cuenta." })
+    const r = await enviarFacturaPedido({ tenantId: "tenant-a", pedido: pedido() })
+    expect(r.resultado).toBe("fallo")
+    expect(getDocumentPdf).not.toHaveBeenCalled()
+    expect(sendEmail).not.toHaveBeenCalled()
   })
 })

@@ -16,10 +16,19 @@
  * `contextoParaChat(pathname, …)` (contrato contexto-pantalla-shop/v1, ver
  * src/lib/contexto-pantalla.ts). No es reactivo: se lee al mandar cada mensaje.
  *
+ * Invitación proactiva (teaser del launcher, spec fase 2 §3): el motor de
+ * señales (src/lib/iniciativa/motor.ts) propone un `teaser` con
+ * `proponerTeaser`; el widget lo dibuja junto al launcher y responde con
+ * `aceptarTeaser(id)` (abre el chat con `teaser.mensaje` y cuenta para el tope)
+ * o `descartarTeaser(id)` (lo cierra, cuenta para el tope y no vuelve en la
+ * sesión). Con el chat abierto no hay teaser: el widget avisa con
+ * `fijarChatAbierto`. Nada de esto gasta tokens hasta que el visitante acepta.
+ *
  * Store de módulo (sin React) para poder testearlo en node; el hook
  * `useChatIa` (src/hooks/useChatIa.ts) lo lee con `useSyncExternalStore`.
  */
 import { contextoPantalla, type ContextoPantallaShop, type EntradaContexto } from "./contexto-pantalla";
+import { marcarTope } from "./iniciativa/almacen";
 
 export interface PedidoChatIa {
   /** Cambia con cada pedido: el widget envía cuando ve un id nuevo. */
@@ -27,19 +36,35 @@ export interface PedidoChatIa {
   text: string;
 }
 
+/**
+ * Invitación proactiva para el launcher. `text`, `actionLabel` y
+ * `dismissLabel` son lo que se dibuja; `mensaje`, lo que se envía al aceptar.
+ */
+export interface TeaserChatIa {
+  /** Cambia con cada invitación; es lo que vuelve en aceptar/descartar. */
+  id: string;
+  text: string;
+  actionLabel: string;
+  dismissLabel: string;
+  mensaje: string;
+}
+
 export interface EstadoChatIa {
   /** Hay un chat montado que puede recibir pedidos. */
   disponible: boolean;
   /** Último pedido de conversación, o null. */
   pedido: PedidoChatIa | null;
+  /** Invitación vigente para el launcher, o null. */
+  teaser: TeaserChatIa | null;
 }
 
 /** Tope del texto que se manda como primer mensaje (el de la búsqueda). */
 export const LARGO_MAX_PEDIDO = 500;
 
-let estado: EstadoChatIa = { disponible: false, pedido: null };
+let estado: EstadoChatIa = { disponible: false, pedido: null, teaser: null };
 let registrados = 0;
 let secuencia = 0;
+let chatAbierto = false;
 const oyentes = new Set<() => void>();
 
 function publicar(nuevo: EstadoChatIa) {
@@ -59,7 +84,7 @@ export function estadoChatIa(): EstadoChatIa {
 }
 
 /** Estado del servidor (y del primer render): nunca hay chat. */
-const ESTADO_SERVIDOR: EstadoChatIa = { disponible: false, pedido: null };
+const ESTADO_SERVIDOR: EstadoChatIa = { disponible: false, pedido: null, teaser: null };
 export function estadoChatIaServidor(): EstadoChatIa {
   return ESTADO_SERVIDOR;
 }
@@ -76,7 +101,10 @@ export function registrarChatIa(): () => void {
     if (!activo) return;
     activo = false;
     registrados -= 1;
-    if (registrados === 0) publicar({ disponible: false, pedido: null });
+    if (registrados === 0) {
+      chatAbierto = false;
+      publicar({ disponible: false, pedido: null, teaser: null });
+    }
   };
 }
 
@@ -95,6 +123,63 @@ export function conversar(texto: string): boolean {
 /** El último pedido (lo que el widget pasa como `sendRequest`). */
 export function pedidoChatIa(): PedidoChatIa | null {
   return estado.pedido;
+}
+
+/**
+ * El widget avisa si el chat está abierto: abierto, no se invita, y la
+ * invitación que hubiera se retira (sin contar como cerrada).
+ */
+export function fijarChatAbierto(abierto: boolean): void {
+  chatAbierto = abierto;
+  if (abierto && estado.teaser) publicar({ ...estado, teaser: null });
+}
+
+export function chatIaAbierto(): boolean {
+  return chatAbierto;
+}
+
+/**
+ * Propone una invitación. Solo prende si hay chat, está cerrado y no hay otra
+ * a la vista; devuelve el teaser publicado o null.
+ */
+export function proponerTeaser(teaser: Omit<TeaserChatIa, "id"> & { senal: string }): TeaserChatIa | null {
+  if (!estado.disponible || chatAbierto || estado.teaser) return null;
+  secuencia += 1;
+  const { senal, ...resto } = teaser;
+  const publicado: TeaserChatIa = { ...resto, id: `teaser-${senal}-${secuencia}` };
+  publicar({ ...estado, teaser: publicado });
+  return publicado;
+}
+
+/**
+ * "Sí, ayúdeme": abre el chat con el mensaje de la invitación y cuenta para
+ * el tope. `false` si `id` no es la invitación vigente.
+ */
+export function aceptarTeaser(id: string): boolean {
+  const teaser = estado.teaser;
+  if (!teaser || teaser.id !== id) return false;
+  publicar({ ...estado, teaser: null });
+  marcarTope({ descartada: false, ahora: Date.now() });
+  conversar(teaser.mensaje);
+  return true;
+}
+
+/** Cerrar: la invitación se va, cuenta para el tope y no vuelve en la sesión. */
+export function descartarTeaser(id: string): boolean {
+  if (!estado.teaser || estado.teaser.id !== id) return false;
+  publicar({ ...estado, teaser: null });
+  marcarTope({ descartada: true, ahora: Date.now() });
+  return true;
+}
+
+/** Saca la invitación sin contarla como cerrada (p.ej. se entró al checkout). */
+export function retirarTeaser(): void {
+  if (estado.teaser) publicar({ ...estado, teaser: null });
+}
+
+/** La invitación vigente (lo que el widget pasa como `teaser`). */
+export function teaserChatIa(): TeaserChatIa | null {
+  return estado.teaser;
 }
 
 let catalogoVisible: EntradaContexto["catalogo"] | null = null;
@@ -121,6 +206,7 @@ export function reiniciarChatIa() {
   catalogoVisible = null;
   registrados = 0;
   secuencia = 0;
-  estado = { disponible: false, pedido: null };
+  chatAbierto = false;
+  estado = { disponible: false, pedido: null, teaser: null };
   oyentes.clear();
 }

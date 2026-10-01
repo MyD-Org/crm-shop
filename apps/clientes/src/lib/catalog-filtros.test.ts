@@ -242,3 +242,75 @@ describe("faceta de atributos con el flag busqueda-ia apagado", () => {
     for (const { sql } of grabadora.consultas) expect(sql).not.toContain("count(*) filter");
   });
 });
+
+describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
+  const TABLA = '"public"."catalog_atributos"';
+
+  it("sin `atributosEstructurados` ninguna consulta nombra la tabla (idéntico a la fase 1)", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { atributos: ["tono-calido"], potenciaMin: 10 } });
+    await getFacetas({ atributos: ["tono-calido"], potenciaMax: 50 }, false);
+    for (const { sql } of grabadora.consultas) {
+      expect(sql).not.toContain("catalog_atributos");
+      expect(sql).not.toContain("potencia_w");
+    }
+  });
+
+  /** Un EXISTS contra la PK de catalog_atributos, con el tenant y el producto de la fila. */
+  const EXISTS = /exists \(select 1 from "public"\."catalog_atributos"\s+where "public"\."catalog_atributos"\."tenant_id" = \$\d+ and "public"\."catalog_atributos"\."alegra_id" = "catalog_products_shop"\."alegra_id"\s+and "public"\."catalog_atributos"\."clave" = \$\d+/g;
+
+  it("con estructurados: (EXISTS estructurado OR patrón) por atributo, un solo EXISTS cada uno", async () => {
+    await getPaginaCatalogo({
+      soloVisibles: false,
+      filtros: { atributos: ["tono-calido", "tension-220v"], atributosEstructurados: true, soloStock: false },
+    });
+    const [conteo, pagina] = grabadora.consultas;
+    for (const { sql, params } of [conteo, pagina]) {
+      expect(sql).toContain(TABLA);
+      // Dos atributos ⇒ exactamente dos EXISTS en el WHERE (sin subconsultas repetidas).
+      expect(cuenta(sql.split(" where (").slice(1).join(" where ("), EXISTS)).toBe(2);
+      // OR con el patrón: el estructurado sólo suma productos.
+      expect(sql).toMatch(/"valor_texto" in \(\$\d+\)\) or "shop"\.immutable_unaccent\(lower\(concat_ws\([\s\S]*?\)\)\) ~\* \$\d+\)/);
+      expect(sql).not.toMatch(/coalesce\(\(case when/);
+      expect(params).toContain("tenant-test");
+      expect(params).toEqual(expect.arrayContaining(["tono", "calido", "tension_v", 220, 230]));
+      expect(params).toContain(ATRIBUTOS.find((a) => a.id === "tono-calido")!.patron);
+    }
+    // El jsonb por producto sólo aparece en las columnas de la página (Características), no en el WHERE.
+    expect(conteo.sql).not.toContain("jsonb_object_agg");
+    expect(pagina.sql.split(" where (")[0]).toContain("jsonb_object_agg");
+  });
+
+  it("potencia: los dos extremos en UN solo EXISTS sobre potencia_w, sólo con estructurados", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { atributosEstructurados: true, potenciaMin: 10, potenciaMax: 50, soloStock: false } });
+    const [conteo] = grabadora.consultas;
+    expect(cuenta(conteo.sql, EXISTS)).toBe(1);
+    expect(conteo.sql).toMatch(/"valor_num" >= \$\d+ and "public"\."catalog_atributos"\."valor_num" <= \$\d+\)\)/);
+    expect(conteo.params).toEqual(expect.arrayContaining(["potencia_w", 10, 50]));
+  });
+
+  it("facetas: el conteo lee el jsonb una vez por fila y usa (estructurado OR patrón)", async () => {
+    await getFacetas({ atributosEstructurados: true }, false);
+    const conteo = sinLecturaDelArbol(grabadora.consultas).find((c) => c.sql.includes("count(*) filter"))!;
+    expect(cuenta(conteo.sql, /jsonb_object_agg/g)).toBe(1);
+    expect(conteo.sql).toMatch(/count\(\*\) filter \(where \(coalesce\(\(\("filas_atributos"\."attrs" -> 'tono'\) ->> 't'\) in \(\$\d+\), false\) or "texto" ~\* \$\d+\)\)/);
+  });
+
+  it("facetas: una consulta más con el rango de potencia, sin el propio filtro de potencia", async () => {
+    await getFacetas({ atributosEstructurados: true, potenciaMin: 10 }, false);
+    const consultas = sinLecturaDelArbol(grabadora.consultas);
+    expect(consultas).toHaveLength(5);
+    const potencia = consultas.find((c) => c.sql.includes('floor(min((select "public"."catalog_atributos"."valor_num"'));
+    expect(potencia).toBeDefined();
+    expect(potencia!.sql).toMatch(/'potencia_w'\) is not null/);
+    expect(potencia!.sql).not.toMatch(/"valor_num" >= \$\d+/);
+    // Las otras facetas sí aplican el filtro de potencia.
+    const marcas = consultas.find((c) => c.sql.includes("group by (case when"));
+    expect(marcas!.sql).toMatch(/"valor_num" >= \$\d+/);
+  });
+
+  it("con el flag apagado (sinFacetaAtributos) no hay faceta de potencia aunque la tabla exista", async () => {
+    const f = await getFacetas({ atributosEstructurados: true, sinFacetaAtributos: true }, false);
+    expect(f.potencia).toBeUndefined();
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
+  });
+});

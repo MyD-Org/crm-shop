@@ -174,3 +174,24 @@ describe("mapFilaToProduct: nombre, sku y fotos del overlay", () => {
     expect(p.fichaTecnicaUrl).toBeUndefined();
   });
 });
+
+describe("mapFilaToProduct con atributos estructurados (fase 2)", () => {
+  it("el jsonb de catalog_atributos llega como atributosEstructurados y tabla Características", () => {
+    const p = mapFilaToProduct({
+      ...fila,
+      ivaPorcentaje: null,
+      atributos: { potencia_w: { n: "12", t: null }, zocalo: { n: null, t: "e27" } },
+    });
+    expect(p.atributosEstructurados).toEqual({ potencia_w: { n: 12, t: null }, zocalo: { n: null, t: "e27" } });
+    expect(p.especificaciones).toEqual([
+      { etiqueta: "Potencia", valor: "12 W" },
+      { etiqueta: "Base / zócalo", valor: "E27" },
+    ]);
+  });
+
+  it("sin atributos (o null) el producto queda como siempre", () => {
+    const p = mapFilaToProduct({ ...fila, ivaPorcentaje: null, atributos: null });
+    expect(p).not.toHaveProperty("atributosEstructurados");
+    expect(p).not.toHaveProperty("especificaciones");
+  });
+});

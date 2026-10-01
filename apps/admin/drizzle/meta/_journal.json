@@ -344,6 +344,13 @@
       "when": 1790845000000,
       "tag": "0048_catalogo_mostrar_marca",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790850000000,
+      "tag": "0049_catalog_atributos",
+      "breakpoints": true
     }
   ]
 }

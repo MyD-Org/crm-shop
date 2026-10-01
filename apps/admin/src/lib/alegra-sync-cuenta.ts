@@ -12,6 +12,7 @@ import {
   type ItemSecundarioMapeado,
 } from "./alegra-pareo"
 import { upsertProductosSecundaria, type ProductoSecundaria } from "./catalog-products-repo"
+import { sincronizarAtributosDeNombre } from "./catalogo-atributos-repo"
 import { abrirCorrida, baseDeCorrida, evaluarCorrida, MSG_SYNC_EN_CURSO } from "./alegra-sync-guarda"
 import {
   absorberSoloSecundaria,
@@ -281,6 +282,8 @@ export async function syncCuentaSecundaria(
       estado: estadoSoloSecundaria(adoptada, m.producto.stock),
     }))
     await upsertProductosSecundaria(tenantId, cuenta.id, filasSecundaria, { leidoAt: runStart, leidoPor: "sync" })
+    // Atributos del nombre de las filas solo-secundaria (tolerante, como en la sync principal).
+    await sincronizarAtributosDeNombre(tenantId, filasSecundaria.map((f) => f.producto), `sync-cuenta:${cuenta.slug}`)
     await escribirStock(
       tenantId,
       slugs,

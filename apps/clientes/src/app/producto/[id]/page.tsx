@@ -11,6 +11,7 @@ import { envioHabilitado } from "@/lib/envio-flag";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
 import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
+import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -24,8 +25,14 @@ type Props = { params: Promise<{ id: string }> };
 const productoDe = cache(async (id: string) => {
   // Con el flag `disponibilidad-sucursal`, `disp` es el del catálogo: igual para todos (stock en
   // cualquier local, sin lo que ninguna sucursal ofrece). Sin flag: undefined.
-  const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
-  return productoPublico(id, soloVisibles, disp);
+  // Tabla "Características" (fichas estructuradas, fase 2): sólo con el flag `busqueda-ia` y con
+  // `catalog_atributos` legible; si no, la ficha de siempre (sin la tabla).
+  const [{ soloVisibles }, disp, estructurados] = await Promise.all([
+    flagsPublicos(),
+    dispCatalogo(),
+    usarAtributosEstructurados(),
+  ]);
+  return productoPublico(id, soloVisibles, disp, estructurados);
 });
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */

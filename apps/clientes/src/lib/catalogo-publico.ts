@@ -63,7 +63,14 @@ const LIMITE_RESPALDO_DESTACADOS = 300;
  * se repiten (ver la guía de `use cache: remote`, "Cache key considerations").
  */
 export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
-  return !filtros.busqueda?.trim() && filtros.precioMin == null && filtros.precioMax == null;
+  return (
+    !filtros.busqueda?.trim() &&
+    filtros.precioMin == null &&
+    filtros.precioMax == null &&
+    // La potencia es un rango libre como el precio: multiplicaría las claves de la caché.
+    filtros.potenciaMin == null &&
+    filtros.potenciaMax == null
+  );
 }
 
 export interface ArgsPaginaPublica {
@@ -120,12 +127,14 @@ async function productoCacheado(
   id: string,
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  /** Con características estructuradas (va en la clave de la caché). */
+  estructurados = false,
 ): Promise<Product | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] producto miss");
-  return getProducto(id, { soloVisibles, disp });
+  return getProducto(id, { soloVisibles, disp, ...(estructurados ? { atributosEstructurados: true } : {}) });
 }
 
 /**
@@ -138,9 +147,14 @@ export function productoPublico(
   id: string,
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  /**
+   * Sumar las características de `catalog_atributos` (flag `busqueda-ia` + tabla disponible, ver
+   * `atributosEstructuradosDisponibles`). Sin él, el producto de siempre.
+   */
+  estructurados = false,
 ): Promise<Product | null> {
   if (!esIdAlegra(id)) return Promise.resolve(null);
-  return productoCacheado(id, soloVisibles, disp);
+  return estructurados ? productoCacheado(id, soloVisibles, disp, true) : productoCacheado(id, soloVisibles, disp);
 }
 
 /**

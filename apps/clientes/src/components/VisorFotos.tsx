@@ -84,7 +84,7 @@ export function VisorFotos({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] overscroll-contain bg-surface md:flex md:items-center md:justify-center md:bg-text/60 md:p-8"
+      className="fixed inset-0 z-[100] overscroll-contain bg-surface pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] md:flex md:items-center md:justify-center md:bg-text/60 md:p-8"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCerrar(activa);
       }}

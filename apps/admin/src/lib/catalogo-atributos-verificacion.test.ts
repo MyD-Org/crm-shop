@@ -559,6 +559,21 @@ describe("tono = tipo de luz: luces de color", () => {
     }
   })
 
+  it("un color de luz exige rótulo de luz en la celda o en la fila", () => {
+    const luz = (celdas: Celda[]) => verificarLectura(lectura(null, { tono: { valor: "verde" } }), ficha(celdas))
+    expect(aceptados(luz([["Tipo de luz: Verde", 150, 700]]))).toEqual([["tono", "verde"]])
+    expect(aceptados(luz([["Tipo de luz", 40, 700], ["Verde", 150, 700]]))).toEqual([["tono", "verde"]])
+    expect(motivos(luz([["Color: Verde", 150, 700]]))).toEqual(["tono:tono_sin_rotulo_de_luz"])
+    expect(motivos(luz([["Color", 40, 700], ["Verde", 150, 700]]))).toEqual(["tono:tono_sin_rotulo_de_luz"])
+    const rojo = verificarLectura(lectura(null, { tono: { valor: "rojo" } }), ficha([["Color del cuerpo: Rojo", 150, 700]]))
+    expect(motivos(rojo)).toEqual(["tono:tono_sin_rotulo_de_luz"])
+  })
+
+  it("RGB se acepta sin rótulo de luz y los blancos no cambian", () => {
+    expect(aceptados(verificarLectura(lectura(null, { tono: { valor: "rgb" } }), ficha([["Modelo", 40, 700], ["RGB", 150, 700]])))).toEqual([["tono", "rgb"]])
+    expect(aceptados(verificarLectura(lectura(null, { tono: { valor: "calido" } }), ficha([["Color", 40, 700], ["Cálido", 150, 700]])))).toEqual([["tono", "calido"]])
+  })
+
   it("RGB no avala RGBW ni al revés; otro color tampoco", () => {
     const solo = ficha([["Luz", 40, 700], ["RGB", 150, 700]])
     expect(motivos(verificarLectura(lectura(null, { tono: { valor: "rgbw" } }), solo))).toEqual(["tono:valor_no_en_texto"])

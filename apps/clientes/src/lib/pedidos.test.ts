@@ -163,6 +163,11 @@ describe("armarOrder", () => {
     expect(item.imagen).toBeUndefined();
   });
 
+  it("comprobanteInformado sólo aparece si hay comprobantes informados", () => {
+    expect(armarOrder(fila, [], new Map()).comprobanteInformado).toBeUndefined();
+    expect(armarOrder(fila, [], new Map(), true).comprobanteInformado).toBe(true);
+  });
+
   it("el code congelado en la línea gana sobre el sku del espejo", () => {
     const [item] = armarOrder(fila, [linea({ code: "REF-1" })], new Map([["42", lampara]])).items;
     expect(item.codigo).toBe("REF-1");

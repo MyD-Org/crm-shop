@@ -100,6 +100,26 @@ export function condicionDuenio(tenantId: string, duenio: Duenio) {
   );
 }
 
+/**
+ * Ids de los pedidos (de los pasados) que ya tienen al menos un comprobante informado
+ * (`pending` o `loaded`) en el tenant. UNA consulta agrupada, sin N+1; sin ids no consulta.
+ */
+export async function pedidosConComprobanteInformado(tenantId: string, pedidoIds: string[]): Promise<Set<string>> {
+  if (pedidoIds.length === 0) return new Set();
+  const filas = await getDb()
+    .select({ pedidoId: crmComprobantes.shopOrderId })
+    .from(crmComprobantes)
+    .where(
+      and(
+        eq(crmComprobantes.tenantId, tenantId),
+        inArray(crmComprobantes.shopOrderId, pedidoIds),
+        inArray(crmComprobantes.status, ["pending", "loaded"]),
+      ),
+    )
+    .groupBy(crmComprobantes.shopOrderId);
+  return new Set(filas.flatMap((f) => (f.pedidoId ? [f.pedidoId] : [])));
+}
+
 /** Filas no-`uploading` del dueño en las últimas 24 h (tope diario; incluye
  * `rejected`, que cuenta contra la cuota). */
 export async function contarRecientes(tenantId: string, duenio: Duenio, now: Date): Promise<number> {

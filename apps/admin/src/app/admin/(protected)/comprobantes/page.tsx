@@ -46,7 +46,6 @@ export default async function ComprobantesPage({
         initialItems={await toAdminDtos(guard.tenantId, items, now)}
         initialTotal={total}
         initialReceiptsEmailConfigured={(tenant?.receiptsEmail ?? "") !== ""}
-        initialReceiptsEmail={tenant?.receiptsEmail ?? ""}
         initialStorageConfigured={r2Config() !== null}
         initialOpenId={sp.id}
         pageSize={ADMIN_LIST_DEFAULT_LIMIT}

@@ -13,6 +13,11 @@ interface Props {
   initial: AdminReceiptDto | null
   onClose: () => void
   onChanged: (next: AdminReceiptDto) => void
+  /** Si se abre desde el detalle de un pedido: el detalle y el archivo se piden por las rutas del
+   *  pedido (acotadas a ese pedido, accesibles al operador) en vez de las de Comprobantes. */
+  pedidoId?: string
+  /** Sin acciones (cargar en Alegra, marcar, reenviar): para quien no es admin+. */
+  soloLectura?: boolean
 }
 
 type ConfirmAction = "loaded" | "pending"
@@ -88,11 +93,13 @@ function fmtCentavos(cents: number): string {
 }
 
 // El archivo NUNCA pasa por la función: el <img>/<iframe> y window.open siguen el 302 a R2.
-function fileUrl(id: string, download = false) {
-  return `/api/admin/comprobantes/${id}/file${download ? "?download=1" : ""}`
+function fileUrl(id: string, download = false, pedidoId?: string) {
+  const base = pedidoId ? `/api/admin/pedidos/${pedidoId}/comprobantes/${id}` : `/api/admin/comprobantes/${id}`
+  return `${base}/file${download ? "?download=1" : ""}`
 }
 
-export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
+export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, soloLectura = false }: Props) {
+  const detalleUrl = pedidoId ? `/api/admin/pedidos/${pedidoId}/comprobantes/${id}` : `/api/admin/comprobantes/${id}`
   const [receipt, setReceipt] = useState<AdminReceiptDto | null>(initial)
   const [notFound, setNotFound] = useState(false)
   const [cargando, setCargando] = useState(!initial)
@@ -119,7 +126,7 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
   // Detalle fresco al abrir: la fila de la lista puede tener el estado viejo, y cuando se abre
   // por ?id= (link del mail) no hay fila. 404 = inexistente/ajeno: mismo aviso que en la lista.
   useEffect(() => {
-    fetch(`/api/admin/comprobantes/${id}`, { cache: "no-store" })
+    fetch(detalleUrl, { cache: "no-store" })
       .then(async (res) => {
         if (cancelado.current) return
         if (!res.ok) {
@@ -139,7 +146,7 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
     return () => {
       cancelado.current = true
     }
-  }, [id])
+  }, [id, detalleUrl])
 
   function actualizar(next: AdminReceiptDto) {
     setReceipt(next)
@@ -361,7 +368,7 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
                 style={{ border: "1px solid var(--border)", background: "var(--bg)" }}
               >
                 <Image
-                  src={fileUrl(id)}
+                  src={fileUrl(id, false, pedidoId)}
                   alt="Comprobante de pago"
                   fill
                   unoptimized
@@ -371,7 +378,7 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
               </div>
             ) : (
               <iframe
-                src={fileUrl(id)}
+                src={fileUrl(id, false, pedidoId)}
                 title="Comprobante de pago"
                 className="w-full rounded-[var(--radius)]"
                 style={{ height: "min(46vh, 520px)", border: "1px solid var(--border)", background: "var(--bg)" }}
@@ -385,28 +392,28 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
             )}
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => window.open(fileUrl(id), "_blank", "noopener")}>
+              <Button variant="ghost" size="sm" onClick={() => window.open(fileUrl(id, false, pedidoId), "_blank", "noopener")}>
                 <ExternalLink size={13} /> Abrir en pestaña nueva
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => window.open(fileUrl(id, true), "_blank", "noopener")}>
+              <Button variant="ghost" size="sm" onClick={() => window.open(fileUrl(id, true, pedidoId), "_blank", "noopener")}>
                 <Download size={13} /> Descargar
               </Button>
-              {puedeCargarEnAlegra && (
+              {!soloLectura && puedeCargarEnAlegra && (
                 <Button size="sm" onClick={abrirCarga} disabled={accionando}>
                   <Check size={13} /> Cargar en Alegra
                 </Button>
               )}
-              {receipt.status === "pending" && (
+              {!soloLectura && receipt.status === "pending" && (
                 <Button variant="ghost" size="sm" onClick={() => { setErrorAccion(""); setConfirm("loaded") }} disabled={accionando}>
                   Ya lo cargué a mano
                 </Button>
               )}
-              {receipt.status === "loaded" && !cargadoEnAlegra && (
+              {!soloLectura && receipt.status === "loaded" && !cargadoEnAlegra && (
                 <Button variant="secondary" size="sm" onClick={() => { setErrorAccion(""); setConfirm("pending") }} disabled={accionando}>
                   Deshacer
                 </Button>
               )}
-              {puedeReenviar && (
+              {!soloLectura && puedeReenviar && (
                 <Button variant="ghost" size="sm" onClick={reenviarMail} disabled={accionando}>
                   <RotateCw size={13} /> Reenviar mail
                 </Button>

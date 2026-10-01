@@ -47,6 +47,7 @@ import {
 } from "./cuentas-bancarias";
 import { leerCuentasBancariasEnTx } from "./cuentas-bancarias-repo";
 import type { PedidoParaComprobante } from "./comprobantes/pedido";
+import { pedidosConComprobanteInformado } from "./comprobantes/repo";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -522,6 +523,7 @@ export function armarOrder(
   fila: FilaOrder,
   items: FilaItem[],
   productos: ReadonlyMap<string, Product> = new Map(),
+  comprobanteInformado = false,
 ): Order {
   return {
     id: fila.id,
@@ -548,6 +550,7 @@ export function armarOrder(
       ? { facturaId: fila.facturaAlegraId }
       : {}),
     ...(fila.facturaNumero ? { facturaNumero: fila.facturaNumero } : {}),
+    ...(comprobanteInformado ? { comprobanteInformado: true } : {}),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);
       const imagen = producto?.images?.[0];
@@ -621,6 +624,18 @@ function esDeSuDueno(dueno: DuenoPedidos) {
 }
 
 /**
+ * Ids de los pedidos con al menos un comprobante informado: UNA consulta agrupada por todos los
+ * pedidos, y sólo por los de transferencia con pago pendiente (los únicos que muestran el aviso).
+ * Si la lectura falla, la vista se arma igual, sin saber de comprobantes.
+ */
+async function comprobantesInformadosDe(filas: FilaOrder[]): Promise<Set<string>> {
+  const ids = filas
+    .filter((f) => f.pagoMetodo === SLUG_TRANSFERENCIA && f.pagoEstado === "pendiente")
+    .map((f) => f.id);
+  return pedidosConComprobanteInformado(shopTenantId(), ids).catch(() => new Set<string>());
+}
+
+/**
  * Pedidos de un cliente, del más nuevo al más viejo.
  *
  * Dos queries y un agrupado en memoria en vez de un join: con el join, un pedido
@@ -660,7 +675,8 @@ export async function listarPedidos(
   }
 
   const productos = await productosDeLineas(items);
-  return filas.map((f) => armarOrder(f, porPedido.get(f.id) ?? [], productos));
+  const conComprobante = await comprobantesInformadosDe(filas);
+  return filas.map((f) => armarOrder(f, porPedido.get(f.id) ?? [], productos, conComprobante.has(f.id)));
 }
 
 /**
@@ -688,7 +704,8 @@ const getPedidoCacheado = cache(async function getPedidoCacheado(
     .from(orderItems)
     .where(eq(orderItems.orderId, fila.id));
 
-  return armarOrder(fila, items, await productosDeLineas(items));
+  const conComprobante = await comprobantesInformadosDe([fila]);
+  return armarOrder(fila, items, await productosDeLineas(items), conComprobante.has(fila.id));
 });
 
 /**

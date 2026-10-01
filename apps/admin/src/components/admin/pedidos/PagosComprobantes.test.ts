@@ -55,10 +55,10 @@ describe("PagosComprobantes", () => {
     expect(html).toContain("Cuenta informada al comprador")
   })
 
-  it("cada comprobante con archivo tiene su enlace al visor del pedido; sin archivo no hay enlace", () => {
+  it("cada comprobante con archivo tiene su botón que abre el popup; sin archivo no hay botón", () => {
     const html = render({ comprobantes: [comprobante(), comprobante({ id: "c2", tieneArchivo: false })] })
-    expect(html).toContain('href="/api/admin/pedidos/ped-1/comprobantes/c1/file"')
-    expect(html).not.toContain("comprobantes/c2/file")
+    expect(html.match(/Ver comprobante/g)).toHaveLength(1)
+    expect(html).not.toContain("<a ")
     expect(html).toContain("Por revisar")
   })
 

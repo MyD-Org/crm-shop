@@ -8,6 +8,7 @@ import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/aleg
 import { normalizarIdentificador } from "@/lib/identificador"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { ReglasVentaCard } from "./ReglasVentaCard"
+import { ReceiptsEmailForm } from "./ReceiptsEmailForm"
 import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
 
 // Sucursales (parte A): ABM de sucursales y de zonas (provincia ->
@@ -24,6 +25,8 @@ interface Props {
   initialSucursales: SucursalDto[]
   initialZonas: ZonaDto[]
   initialCuentas: CuentasYAsignaciones
+  /** Email de empresa que recibe los avisos de comprobantes (`tenants.receipts_email`). */
+  initialReceiptsEmail: string
 }
 
 type ApiError = { error?: string; code?: string; campo?: string }
@@ -147,7 +150,7 @@ function CheckboxLabel(props: { id: string; checked: boolean; onChange: (v: bool
 
 const porOrden = (a: SucursalDto, b: SucursalDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
 
-export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas }: Props) {
+export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas, initialReceiptsEmail }: Props) {
   const [sucursales, setSucursales] = useState(initialSucursales)
   const [zonas, setZonas] = useState(initialZonas)
   const [cuentas, setCuentas] = useState(initialCuentas)
@@ -488,6 +491,13 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
             </Button>
           </div>
         </div>
+      </Card>
+
+      <Card
+        title="Avisos de comprobantes de pago"
+        description="Aplica a toda la empresa, no a una sucursal. Es el mismo email que se usa como respaldo cuando una sucursal no tiene email de avisos de pedidos."
+      >
+        <ReceiptsEmailForm initialReceiptsEmail={initialReceiptsEmail} />
       </Card>
 
       <Card

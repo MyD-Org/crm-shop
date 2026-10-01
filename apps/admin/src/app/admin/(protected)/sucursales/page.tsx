@@ -1,4 +1,7 @@
+import { eq } from "drizzle-orm"
 import { notFound } from "next/navigation"
+import { getDb } from "@/db"
+import { tenants } from "@/db/schema"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { roleRank } from "@/lib/roles"
 import { listarSucursales, listarZonas, toSucursalDto, toZonaDto } from "@/lib/sucursales-repo"
@@ -13,10 +16,14 @@ export default async function SucursalesPage() {
   const guard = await getGuardedAdminSession()
   if (!guard.ok || roleRank(guard.user.role) < 1) notFound()
 
-  const [sucursales, zonas, cuentas] = await Promise.all([
+  const [sucursales, zonas, cuentas, [tenant]] = await Promise.all([
     listarSucursales(guard.tenantId),
     listarZonas(guard.tenantId),
     listarCuentas(guard.tenantId),
+    getDb()
+      .select({ receiptsEmail: tenants.receiptsEmail })
+      .from(tenants)
+      .where(eq(tenants.id, guard.tenantId)),
   ])
 
   return (
@@ -32,6 +39,7 @@ export default async function SucursalesPage() {
         initialSucursales={sucursales.map(toSucursalDto)}
         initialZonas={zonas.map(toZonaDto)}
         initialCuentas={cuentas}
+        initialReceiptsEmail={tenant?.receiptsEmail ?? ""}
       />
     </div>
   )

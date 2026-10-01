@@ -117,8 +117,8 @@ const RESERVA_DIAS_DEFAULT = 7; // = REGLAS_VENTA_DEFAULT.reservaDias (sucursale
 /**
  * Hasta cuándo reserva un pedido pendiente (snapshot que se guarda en `orders.reserva_vence_en`).
  * Pago online (Mercado Pago): la ventana de siempre, 24 h. Sin cobro online: `reserva_dias` de las
- * reglas de venta; 0 = nunca vence (`'infinity'`: la vista `stock_reservado_sucursal` lee NULL como
- * "24 h desde created_at", nunca como "no vence"). Sin reglas (null): el default de 7 días.
+ * reglas de venta; 0 = nunca vence (`'infinity'`: las vistas `stock_reservado` y
+ * `stock_reservado_sucursal` leen NULL como "24 h desde created_at", nunca como "no vence"). Sin reglas (null): el default de 7 días.
  */
 export function calcularReservaVenceEn(
   pagoMetodo: string,
@@ -230,10 +230,11 @@ export async function crearPedido(
     } else if (datos.sucursalEntrada) {
       asignacion = decidirSucursalDePedido(datos.sucursalEntrada, await leerSucursalesYZonas(tx));
     }
-    // Todo pedido con sucursal lleva su vencimiento de reserva (nunca NULL: la vista lo leería como
-    // 24 h). Sin contexto de disponibilidad se leen igual las reglas, en un savepoint para que un
-    // error de lectura no aborte la transacción del pedido; si no se pueden leer rige el default.
-    if (asignacion && reservaVenceEn === null) {
+    // Una sola regla de reserva, con o sin sucursal y con o sin el flag: todo pedido lleva su
+    // vencimiento (nunca NULL: la vista lo leería como 24 h). Sin contexto de disponibilidad se
+    // leen igual las reglas, en un savepoint para que un error de lectura no aborte la
+    // transacción del pedido; si no se pueden leer rige el default.
+    if (reservaVenceEn === null) {
       let reglasReserva: Pick<ReglasVentaTenant, "reservaDias"> | null = null;
       try {
         reglasReserva = await tx.transaction((sp) => leerReglasVenta(sp));
@@ -283,11 +284,7 @@ export async function crearPedido(
         sucursalRegla: asignacion?.regla ?? null,
         sucursalAsignadaEn: asignacion ? new Date() : null,
         reservaVenceEn:
-          asignacion && reservaVenceEn
-            ? reservaVenceEn === RESERVA_SIN_VENCIMIENTO
-              ? sql`'infinity'::timestamptz`
-              : reservaVenceEn
-            : null,
+          reservaVenceEn === RESERVA_SIN_VENCIMIENTO ? sql`'infinity'::timestamptz` : reservaVenceEn,
       })
       // El `where` acá es el predicado del índice parcial, no un filtro de
       // filas: sin él, Postgres no sabe qué índice usar para resolver el

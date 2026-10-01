@@ -60,3 +60,36 @@ describe("shop.stock_reservado (0012)", () => {
     );
   });
 });
+
+describe("shop.stock_reservado (0028: una sola regla de reserva)", () => {
+  const SQL28 = readFileSync(
+    fileURLToPath(new URL("../../drizzle/0028_stock_reservado_vence.sql", import.meta.url)),
+    "utf8",
+  );
+  const CODIGO28 = SQL28.split("\n")
+    .filter((l) => !l.trimStart().startsWith("--"))
+    .join("\n");
+  const SQL25 = readFileSync(
+    fileURLToPath(new URL("../../drizzle/0025_stock_reservado_sucursal_vence.sql", import.meta.url)),
+    "utf8",
+  );
+
+  it("el vencimiento del pendiente es el mismo predicado que la 0025", () => {
+    const predicado = "coalesce(o.reserva_vence_en, o.created_at + interval '24 hours') > now()";
+    expect(CODIGO28).toContain(predicado);
+    expect(SQL25).toContain(predicado);
+    expect(CODIGO28).toContain("o.pago_estado = 'pagado'");
+    expect(CODIGO28).not.toMatch(/created_at > now\(\)/);
+  });
+
+  it("estados vivos de la 0025, facturado como la 0012, recreada con DROP + CREATE + GRANT", () => {
+    expect(CODIGO28).toContain("o.estado IN ('pendiente', 'confirmado', 'preparacion', 'en_camino')");
+    expect(CODIGO28).toContain("o.facturado_en IS NULL");
+    expect(CODIGO28).not.toContain("factura_cruzada");
+    expect(CODIGO28).toContain('DROP VIEW "shop"."stock_reservado";');
+    expect(CODIGO28).toContain("GROUP BY o.tenant_id, oi.alegra_item_id");
+    expect(CODIGO28).toMatch(
+      /IF EXISTS \(SELECT 1 FROM pg_roles WHERE rolname = 'shop_app'\) THEN\s+GRANT SELECT ON "shop"\."stock_reservado" TO shop_app;/,
+    );
+  });
+});

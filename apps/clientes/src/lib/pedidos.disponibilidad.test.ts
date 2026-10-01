@@ -360,10 +360,32 @@ describe("crearPedido con el flag apagado", () => {
     expect(vence - antes).toBeGreaterThanOrEqual(VENTANA_PAGO_MS - 5);
   });
 
-  it("sin contexto de sucursal (sin sucursalEntrada) no hay sucursal ni reserva que congelar", async () => {
+  it("sin contexto de sucursal (sin sucursalEntrada) no hay sucursal pero la reserva se congela igual", async () => {
+    const antes = Date.now();
     await crear({ disponibilidadSucursal: false, sucursalEntrada: undefined });
     expect(valoresPedido[0].sucursal).toBeNull();
-    expect(valoresPedido[0].reservaVenceEn).toBeNull();
+    const vence = (valoresPedido[0].reservaVenceEn as Date).getTime();
+    expect(vence - antes).toBeGreaterThanOrEqual(7 * 24 * 60 * 60_000 - 5);
+    expect(vence - antes).toBeLessThan(7 * 24 * 60 * 60_000 + 5_000);
+  });
+
+  it("sin sucursal y con reserva_dias 0 queda 'infinity'; con Mercado Pago, 24 h", async () => {
+    reglas.reservaDias = 0;
+    await crear({ disponibilidadSucursal: false, sucursalEntrada: undefined });
+    expect(sqlTexto(valoresPedido[0].reservaVenceEn)).toContain("infinity");
+    const antes = Date.now();
+    await crear({ disponibilidadSucursal: false, sucursalEntrada: undefined, pagoMetodo: "mercadopago" });
+    const vence = (valoresPedido.at(-1)!.reservaVenceEn as Date).getTime();
+    expect(vence - antes).toBeGreaterThanOrEqual(VENTANA_PAGO_MS - 5);
+    expect(vence - antes).toBeLessThan(VENTANA_PAGO_MS + 5_000);
+  });
+
+  it("sin sucursal y sin poder leer las reglas rige el default de 7 días", async () => {
+    leerReglas.mockRejectedValueOnce(new Error("sin permiso"));
+    const antes = Date.now();
+    await crear({ disponibilidadSucursal: undefined, sucursalEntrada: undefined });
+    const vence = (valoresPedido[0].reservaVenceEn as Date).getTime();
+    expect(vence - antes).toBeGreaterThanOrEqual(7 * 24 * 60 * 60_000 - 5);
   });
 });
 

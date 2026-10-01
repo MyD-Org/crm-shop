@@ -64,6 +64,43 @@ describe("shop.stock_reservado (0012 del Shop)", () => {
     expect(await reservadoPorItem(T1)).toEqual({ reciente: 1, casi: 1, pagado: 1 })
   })
 
+  it("pendiente con reserva_vence_en: manda ese vencimiento (vigente reserva, vencido no, infinity siempre)", async () => {
+    const ahora = Date.now()
+    const DIA = 24 * HORA
+    // Creados hace 3 días: con la regla vieja (24 h fijas) ninguno reservaría.
+    const viejo = new Date(ahora - 3 * DIA)
+    await pedido(T1, "vigente", 1, { estado: "pendiente", createdAt: viejo, reservaVenceEn: new Date(ahora + 4 * DIA) })
+    await pedido(T1, "vencido", 1, { estado: "pendiente", createdAt: viejo, reservaVenceEn: new Date(ahora - HORA) })
+    const inf = await pedido(T1, "infinito", 1, { estado: "pendiente", createdAt: new Date(ahora - 90 * DIA) })
+    await getDb().execute(sql`update shop.orders set reserva_vence_en = 'infinity' where id = ${inf.id}::uuid`)
+    await pedido(T1, "nulo-viejo", 1, { estado: "pendiente", createdAt: viejo })
+    await pedido(T1, "pagado", 1, { estado: "pendiente", pagoEstado: "pagado", createdAt: viejo, reservaVenceEn: new Date(ahora - HORA) })
+    await pedido(T1, "facturado", 1, { estado: "pendiente", facturadoEn: new Date(), reservaVenceEn: new Date(ahora + DIA) })
+    expect(await reservadoPorItem(T1)).toEqual({ vigente: 1, infinito: 1, pagado: 1 })
+  })
+
+  it("reservaStock() coincide con la vista también con reserva_vence_en y sin sucursal", async () => {
+    const ahora = Date.now()
+    const DIA = 24 * HORA
+    const casos: Parameters<typeof seedShopOrder>[1][] = [
+      { estado: "pendiente", createdAt: new Date(ahora - 3 * DIA), reservaVenceEn: new Date(ahora + DIA) },
+      { estado: "pendiente", createdAt: new Date(ahora - 3 * DIA), reservaVenceEn: new Date(ahora - HORA) },
+      { estado: "pendiente", createdAt: new Date(ahora - 3 * DIA) },
+      { estado: "pendiente", createdAt: new Date(ahora - 2 * HORA), reservaVenceEn: new Date(ahora - HORA) },
+    ]
+    for (const [i, over] of casos.entries()) {
+      const o = await pedido(T1, `vence-${i}`, 1, over)
+      const enVista = `vence-${i}` in (await reservadoPorItem(T1))
+      const [row] = await getDb().select().from(shopOrders).where(eq(shopOrders.id, o.id))
+      expect(reservaStock(row), `caso ${i}`).toBe(enVista)
+    }
+    const inf = await pedido(T1, "vence-inf", 1, { estado: "pendiente", createdAt: new Date(ahora - 30 * DIA) })
+    await getDb().execute(sql`update shop.orders set reserva_vence_en = 'infinity' where id = ${inf.id}::uuid`)
+    const [rowInf] = await getDb().select().from(shopOrders).where(eq(shopOrders.id, inf.id))
+    expect(reservaStock(rowInf)).toBe(true)
+    expect("vence-inf" in (await reservadoPorItem(T1))).toBe(true)
+  })
+
   it("un pedido facturado no reserva aunque siga vivo; al quitar la marca vuelve", async () => {
     const o = await pedido(T1, "item-1", 2, { estado: "preparacion", facturadoEn: new Date() })
     expect(await reservadoPorItem(T1)).toEqual({})

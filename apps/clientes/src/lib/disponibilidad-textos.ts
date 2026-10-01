@@ -129,3 +129,52 @@ export function textosDisponibilidad(
 ): string[] {
   return lineasDisponibilidad(d, locales, opts).map((l) => l.texto);
 }
+
+// --- Carrito: un solo estado para todo el pedido ---------------------------------------------
+
+/** Cuánto "pesa" un estado: manda el producto más lento. "A coordinar" (0/null días) va al final. */
+const pesoDemora = (dias: number | null): number => (dias === null || dias <= 0 ? 10_000 : dias);
+const pesoRetiro = (d: DisponibilidadRetiro): number =>
+  d.estado === "disponible" ? 0 : d.estado === "con_demora" ? pesoDemora(d.demoraDias) : 100_000;
+const pesoEnvio = (d: DisponibilidadEnvio): number =>
+  d.estado === "disponible" ? 0 : d.estado === "a_traer" ? pesoDemora(d.demoraDias) : 100_000;
+
+const productos1 = (n: number) => (n === 1 ? "1 producto" : `${n} productos`);
+
+/**
+ * Resumen del carrito: por cada local y para el envío, el estado del producto más lento (el pedido
+ * sale completo), y por local una nota con cuántos productos se traen de otra sucursal o no están.
+ */
+export function resumenDisponibilidadCarrito(
+  productos: DisponibilidadVista[],
+  locales: LocalDisponibilidad[],
+): { producto: DisponibilidadVista; notasLocal: Record<string, string> } | null {
+  if (productos.length === 0) return null;
+  const retiro: Record<string, DisponibilidadRetiro> = {};
+  const notasLocal: Record<string, string> = {};
+  for (const l of locales) {
+    const estados = productos.map((p) => p.retiro?.[l.slug]).filter((r): r is DisponibilidadRetiro => !!r);
+    if (estados.length === 0) continue;
+    retiro[l.slug] = estados.reduce((peor, r) => (pesoRetiro(r) > pesoRetiro(peor) ? r : peor));
+    const aTraer = estados.filter((r) => r.estado === "con_demora").length;
+    const no = estados.filter((r) => r.estado === "sin_stock" || r.estado === "oculto").length;
+    const notas = [
+      aTraer > 0 && `${productos1(aTraer)} se ${aTraer === 1 ? "trae" : "traen"} de otra sucursal`,
+      no > 0 && `${productos1(no)} no ${no === 1 ? "está disponible" : "están disponibles"} en este local`,
+    ].filter(Boolean);
+    if (notas.length > 0) notasLocal[l.slug] = notas.join(" · ");
+  }
+  const envios = productos.map((p) => p.envio).filter((e): e is DisponibilidadEnvio => !!e);
+  const envio = envios.length > 0 ? envios.reduce((peor, e) => (pesoEnvio(e) > pesoEnvio(peor) ? e : peor)) : null;
+  return {
+    producto: { ...productos[0], retiro: Object.keys(retiro).length > 0 ? retiro : null, envio },
+    notasLocal,
+  };
+}
+
+/** ¿El producto no se puede ni retirar en ningún local ni enviar? (único aviso por ítem del carrito). */
+export function sinEntregaPosible(d: DisponibilidadVista): boolean {
+  const retiroAlguno = Object.values(d.retiro ?? {}).some((r) => r.estado === "disponible" || r.estado === "con_demora");
+  const envioPosible = d.envio ? d.envio.estado === "disponible" || d.envio.estado === "a_traer" : false;
+  return !retiroAlguno && !envioPosible;
+}

@@ -60,11 +60,14 @@ export function EntregaProducto({
   provincia = null,
   localidad = null,
   disponibilidad,
+  notasLocal,
 }: {
   configEnvio: ConfigEnvio;
   provincia?: string | null;
   localidad?: string | null;
   disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
+  /** Carrito: aclaración por local ("1 producto se trae de otra sucursal"). */
+  notasLocal?: Record<string, string>;
 }) {
   const retiro = disponibilidad?.producto.retiro;
   const locales = retiro ? (disponibilidad?.locales ?? []).filter((l) => retiro[l.slug]) : [];
@@ -84,6 +87,7 @@ export function EntregaProducto({
                   <span className="text-text">{l.nombre}</span>
                   {" · "}
                   <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{estado.texto}</span>
+                  {notasLocal?.[l.slug] && <span className="block text-muted">{notasLocal[l.slug]}</span>}
                   {l.direccion && (
                     <span className="block text-muted">
                       {[l.direccion, l.ciudad].filter(Boolean).join(", ")}

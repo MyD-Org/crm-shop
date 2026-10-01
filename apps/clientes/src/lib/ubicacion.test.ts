@@ -44,23 +44,27 @@ describe("validarCookieUbicacion", () => {
 });
 
 describe("resolverUbicacion", () => {
-  it("dirección guardada le gana a la cookie", () => {
+  it("la cookie (elección explícita) le gana a la dirección guardada", () => {
     const r = resolverUbicacion({
       direccionGuardada: { ciudad: "Posadas", provincia: "Misiones" },
       cookie: BA,
     });
+    expect(r.origen).toBe("cookie");
+    expect(r.ubicacion).toEqual(BA);
+  });
+
+  it("sin cookie usa la dirección guardada", () => {
+    const r = resolverUbicacion({ direccionGuardada: { ciudad: "Posadas", provincia: "Misiones" }, cookie: null });
     expect(r.origen).toBe("direccion");
     expect(r.ubicacion).toEqual(MISIONES);
   });
 
-  it("sin dirección usable (provincia desconocida o vacía) cae a la cookie", () => {
-    expect(resolverUbicacion({ direccionGuardada: { ciudad: "Posadas", provincia: null }, cookie: BA })).toEqual({
-      ubicacion: BA,
-      origen: "cookie",
+  it("sin cookie y con dirección no usable (provincia desconocida o vacía): sin ubicación", () => {
+    expect(resolverUbicacion({ direccionGuardada: { ciudad: "Posadas", provincia: null } })).toEqual({
+      ubicacion: null,
+      origen: "ninguna",
     });
-    expect(resolverUbicacion({ direccionGuardada: { ciudad: "X", provincia: "Atlantis" }, cookie: BA }).origen).toBe(
-      "cookie",
-    );
+    expect(resolverUbicacion({ direccionGuardada: { ciudad: "X", provincia: "Atlantis" } }).origen).toBe("ninguna");
   });
 
   it("sin nada: sin ubicación", () => {

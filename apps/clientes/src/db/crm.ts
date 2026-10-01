@@ -332,6 +332,8 @@ export const crmSucursales = publico.table("sucursales", {
   ciudad: text("ciudad").notNull(),
   provincia: text("provincia").notNull(),
   whatsapp: text("whatsapp").notNull(),
+  /** Destino del aviso de pedido nuevo (0054 del CRM, GRANT por columna); null = sin destinatario propio. */
+  emailPedidos: text("email_pedidos"),
   horario: text("horario").notNull(),
   /** Horario semanal (shape de `tenants.schedule`); `{}` = sin configurar. GRANT de la 0051. */
   schedule: jsonb("schedule").$type<unknown>().notNull(),

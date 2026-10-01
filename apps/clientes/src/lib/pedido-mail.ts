@@ -192,3 +192,124 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
 
   return { subject, html, text };
 }
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/**
+ * A quién va el aviso de pedido nuevo: el email de la sucursal del pedido; si falta (o no es un
+ * email), el `receipts_email` de la empresa; si tampoco, null (no se manda nada).
+ */
+export function destinoAvisoOperador(
+  emailSucursal: string | null | undefined,
+  emailEmpresa: string | null | undefined,
+): string | null {
+  for (const c of [emailSucursal, emailEmpresa]) {
+    const limpio = c?.trim();
+    if (limpio && EMAIL_RE.test(limpio)) return limpio;
+  }
+  return null;
+}
+
+export interface DatosMailPedidoOperador {
+  /** "PED-00000042". */
+  numero: string;
+  comercio: string;
+  /** Nombre de la sucursal del pedido; ausente si no se pudo leer. */
+  sucursal?: string | null;
+  contactoNombre: string;
+  contactoTelefono: string;
+  clienteEmail?: string | null;
+  lineas: LineaMail[];
+  total: number;
+  entrega?: string;
+  pago?: string;
+  /** Link absoluto al pedido en el administrador (`CRM_ADMIN_URL`). Sin él, el mail va sin botón. */
+  pedidoUrl?: string | null;
+  logoUrl?: string | null;
+  sitioUrl?: string | null;
+}
+
+/** Mail al local: "Nuevo pedido". Puro; todo dato del comprador pasa por `escapeHtml`. */
+export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido {
+  const subject = `${oneLine(d.comercio)} — Nuevo pedido ${d.numero}`.slice(0, 200);
+  const bajada = "Se registró un pedido nuevo en la tienda. Revíselo y coordine con la persona compradora.";
+  const comprador: [string, string | undefined][] = [
+    ["Nombre", d.contactoNombre.trim() || undefined],
+    ["Teléfono", d.contactoTelefono.trim() || undefined],
+    ["Email", d.clienteEmail?.trim() || undefined],
+  ];
+  const pedido: [string, string | undefined][] = [
+    ["Sucursal", d.sucursal?.trim() || undefined],
+    ["Total", moneda(d.total)],
+    ["Entrega", d.entrega],
+    ["Pago", d.pago],
+  ];
+  const filasDe = (datos: [string, string | undefined][]) =>
+    datos
+      .filter((f): f is [string, string] => Boolean(f[1]))
+      .map(
+        ([k, v]) => `
+          <tr>
+            <td style="padding:4px 0;font-size:13px;color:#77808a;width:90px">${e(k)}</td>
+            <td style="padding:4px 0;font-size:14px;color:#1c2733">${e(v)}</td>
+          </tr>`,
+      )
+      .join("");
+  const lineasHtml = d.lineas
+    .map(
+      (l) => `
+          <tr>
+            <td style="padding:4px 0;font-size:14px;color:#1c2733">${e(l.nombre)}</td>
+            <td align="right" style="padding:4px 0 4px 12px;font-size:14px;color:#77808a;white-space:nowrap">× ${e(cantidad(l.cantidad))}</td>
+          </tr>`,
+    )
+    .join("");
+  const tabla = (filas: string, extra = "") =>
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:${FUENTE_MAIL};${extra}">${filas}
+        </table>`;
+
+  const cuerpoHtml = `
+      <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
+        <p style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700">Nuevo pedido</p>
+        <p style="margin:0;font-size:15px;line-height:1.55;color:#77808a">${e(bajada)}</p>
+        <p style="margin:12px 0 0;font-size:14px;color:#77808a">Pedido <strong style="color:#1c2733">${e(d.numero)}</strong></p>
+      </td></tr>
+      <tr><td style="padding:16px 32px 0">
+        ${tabla(filasDe(comprador), "border-bottom:1px solid #eceae4;padding-bottom:8px")}
+        ${tabla(lineasHtml, "border-bottom:1px solid #eceae4;padding:8px 0;margin-top:8px")}
+        ${tabla(filasDe(pedido), "margin-top:8px")}
+      </td></tr>
+      <tr><td style="padding:24px 32px 28px;font-family:${FUENTE_MAIL}">
+        ${
+          d.pedidoUrl
+            ? `<a href="${e(d.pedidoUrl)}" style="display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px">Ver el pedido</a>`
+            : ""
+        }
+      </td></tr>`;
+
+  const html = tarjetaMail({
+    preheader: `Nuevo pedido ${d.numero} · ${moneda(d.total)}`,
+    logoUrl: d.logoUrl,
+    nombreComercio: d.comercio,
+    cuerpoHtml,
+    sitioUrl: d.sitioUrl,
+  });
+
+  const text = [
+    "Nuevo pedido",
+    "",
+    bajada,
+    "",
+    `Pedido ${d.numero}`,
+    ...comprador.filter((f) => f[1]).map(([k, v]) => `${k}: ${v}`),
+    "",
+    ...d.lineas.map((l) => `- ${l.nombre} × ${cantidad(l.cantidad)}`),
+    "",
+    ...pedido.filter((f) => f[1]).map(([k, v]) => `${k}: ${v}`),
+    ...(d.pedidoUrl ? ["", `Ver el pedido: ${d.pedidoUrl}`] : []),
+    "",
+    ...pieTexto(d.comercio, d.sitioUrl),
+  ].join("\n");
+
+  return { subject, html, text };
+}

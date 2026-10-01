@@ -24,7 +24,7 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { idPriceListUsable } from "@/lib/alegra";
 import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
 import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
-import { avisarPedidoRecibido } from "@/lib/pedido-avisos";
+import { avisarOperadorPedidoNuevo, avisarPedidoRecibido } from "@/lib/pedido-avisos";
 import { permitir } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { SucursalPedidoError } from "@/lib/sucursales-pedido";
@@ -502,7 +502,12 @@ export async function POST(req: Request) {
     // idempotencyKey) ya tuvo su mail.
     if (!pedido.repetido) {
       const pedidoId = pedido.id;
-      after(() => avisarPedidoRecibido(pedidoId, { aConfirmar }));
+      // Y el aviso al local (sucursal del pedido, o el email de la empresa), en el mismo after():
+      // ninguno de los dos lanza, y el del comprador sale primero.
+      after(async () => {
+        await avisarPedidoRecibido(pedidoId, { aConfirmar });
+        await avisarOperadorPedidoNuevo(pedidoId);
+      });
     }
 
     // El perfil aprende el teléfono del primer pedido, para no pedirlo en la

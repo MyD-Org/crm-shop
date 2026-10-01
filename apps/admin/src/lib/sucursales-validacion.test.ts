@@ -50,6 +50,7 @@ describe("validarSucursalNueva", () => {
         ciudad: "",
         provincia: "",
         whatsapp: "",
+        emailPedidos: null,
         aceptaRetiro: true,
         aceptaEnvio: true,
         envioCiudades: [],
@@ -161,5 +162,24 @@ describe("validarZona", () => {
     expect(r.ok && r.valor.facturaSucursal).toBe("bbb")
     const vacio = validarZona({ provincia: "Chaco", sucursal: "aaa", facturaSucursal: "" })
     expect(vacio.ok && vacio.valor.facturaSucursal).toBeNull()
+  })
+})
+
+describe("email de avisos de pedidos", () => {
+  it("acepta un email válido y lo normaliza", () => {
+    const r = validarSucursalNueva({ slug: "aaa", nombre: "A", emailPedidos: "  Pedidos@Local.example " })
+    expect(r.ok && r.valor.emailPedidos).toBe("pedidos@local.example")
+  })
+  it("vacío equivale a sin destinatario (null)", () => {
+    const r = validarSucursalNueva({ slug: "aaa", nombre: "A", emailPedidos: "  " })
+    expect(r.ok && r.valor.emailPedidos).toBeNull()
+  })
+  it("rechaza un email mal formado, con mensaje en usted", () => {
+    const r = validarSucursalNueva({ slug: "aaa", nombre: "A", emailPedidos: "no-es-mail" })
+    expect(r).toEqual({ ok: false, campo: "emailPedidos", error: "Ingrese un email válido, por ejemplo pedidos@su-dominio.com." })
+  })
+  it("en un cambio parcial se puede limpiar", () => {
+    const r = validarSucursalCambios({ emailPedidos: "" })
+    expect(r.ok && r.cambios.emailPedidos).toBeNull()
   })
 })

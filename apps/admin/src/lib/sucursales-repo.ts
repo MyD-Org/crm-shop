@@ -33,6 +33,7 @@ export interface SucursalDto {
   ciudad: string
   provincia: string
   whatsapp: string
+  emailPedidos: string | null
   aceptaRetiro: boolean
   aceptaEnvio: boolean
   envioCiudades: string[]
@@ -56,6 +57,7 @@ export const toSucursalDto = (r: SucursalRow): SucursalDto => ({
   ciudad: r.ciudad,
   provincia: r.provincia,
   whatsapp: r.whatsapp,
+  emailPedidos: r.emailPedidos,
   aceptaRetiro: r.aceptaRetiro,
   aceptaEnvio: r.aceptaEnvio,
   envioCiudades: r.envioCiudades,

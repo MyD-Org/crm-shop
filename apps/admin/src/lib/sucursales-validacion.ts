@@ -9,6 +9,7 @@ export const SLUG_RE = /^[a-z0-9-]{2,20}$/
 export const SLUGS_RESERVADOS = ["zonas"]
 
 const WHATSAPP_RE = /^\+?[0-9 ()-]{6,24}$/
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 export const MAX_CIUDADES = 50
 
 export type Invalido = { ok: false; campo: string; error: string }
@@ -20,6 +21,8 @@ export interface SucursalValida {
   ciudad: string
   provincia: string
   whatsapp: string
+  /** Destino del aviso de pedido nuevo; null = sin destinatario (cae al mail de la empresa). */
+  emailPedidos: string | null
   aceptaRetiro: boolean
   aceptaEnvio: boolean
   envioCiudades: string[]
@@ -106,6 +109,15 @@ function validarCampos(body: Record<string, unknown>): { ok: true; cambios: Camb
     cambios.whatsapp = wa.valor
   }
 
+  const em = texto(body, "emailPedidos", "El email", { max: 254 })
+  if (!em.ok) return em
+  if (em.valor !== undefined) {
+    if (em.valor !== "" && !EMAIL_RE.test(em.valor)) {
+      return invalido("emailPedidos", "Ingrese un email válido, por ejemplo pedidos@su-dominio.com.")
+    }
+    cambios.emailPedidos = em.valor === "" ? null : em.valor.toLowerCase()
+  }
+
   for (const campo of ["aceptaRetiro", "aceptaEnvio", "activa", "predeterminada", "maestra"] as const) {
     const b = booleano(body, campo)
     if (!b.ok) return b
@@ -158,6 +170,7 @@ export function validarSucursalNueva(body: unknown): { ok: true; valor: Sucursal
       ciudad: x.ciudad ?? "",
       provincia: x.provincia ?? "",
       whatsapp: x.whatsapp ?? "",
+      emailPedidos: x.emailPedidos ?? null,
       aceptaRetiro: x.aceptaRetiro ?? true,
       aceptaEnvio: x.aceptaEnvio ?? true,
       envioCiudades: x.envioCiudades ?? [],

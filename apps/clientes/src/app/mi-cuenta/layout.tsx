@@ -4,7 +4,8 @@ import { accesoFacturacion } from "@/lib/acceso-facturacion";
 import { identidadActual } from "@/lib/auth";
 import { contarNoLeidos } from "@/lib/cuenta-corriente/avisos";
 import { CAPACIDADES_DESPLIEGUE, capacidadesDe, seccionesVisibles } from "@/lib/mi-cuenta-nav";
-import { envioHabilitado } from "@/lib/envio-flag";
+import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
+import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 
 /**
  * Shell de Mi cuenta: saludo, breadcrumb (slot `@migas`) y navegación por
@@ -29,9 +30,12 @@ export default async function MiCuentaLayout({
   // Envío y facturación son consultas independientes entre sí (sólo dependen
   // de la identidad, ya resuelta): en paralelo en vez de en cascada, así el
   // nav (y con él, `mi-cuenta/loading.tsx` para el contenido) aparece antes.
-  const [envio, esCuentaCorriente] = await Promise.all([envioHabilitado(), accesoFacturacion()]);
+  const [reglas, esCuentaCorriente] = await Promise.all([reglasVentaCacheadas(), accesoFacturacion()]);
   // Sin envío a domicilio, "Direcciones y envíos" no tiene nada que ofrecer.
-  const despliegue = { ...CAPACIDADES_DESPLIEGUE, direcciones: envio };
+  const despliegue = {
+    ...CAPACIDADES_DESPLIEGUE,
+    direcciones: (reglas.envio ?? CONFIG_ENVIO_DEFAULT).domicilioActivo,
+  };
   // Con vínculo, una consulta más a la base y NINGUNA a Alegra (esto corre en
   // cada página de Mi cuenta): sólo a cuenta corriente, el contador de avisos
   // sin leer va como badge de Avisos. Si falla, el menú se arma sin badge.

@@ -7,7 +7,8 @@ import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
 import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { pagosHabilitados } from "@/lib/pagos-flag";
-import { envioHabilitado } from "@/lib/envio-flag";
+import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
+import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
@@ -44,7 +45,7 @@ export default async function CheckoutPage() {
   // semántica, una espera menos en la cascada). `identidadActual` decide el
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
   const pagosPromise = pagosHabilitados();
-  const envioPromise = envioHabilitado();
+  const reglasPromise = reglasVentaCacheadas();
   const aConfirmarPromise = pedidoAConfirmarHabilitado();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
@@ -61,7 +62,7 @@ export default async function CheckoutPage() {
   // El flag de pagos se lee acá, en el server, y al checkout le llega como
   // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
   // no hay dónde mostrarla.
-  const [pagos, envio, aConfirmar] = await Promise.all([pagosPromise, envioPromise, aConfirmarPromise]);
+  const [pagos, reglas, aConfirmar] = await Promise.all([pagosPromise, reglasPromise, aConfirmarPromise]);
   // Con el flag `pedido-a-confirmar`: medios de pago del CRM. Tabla ausente o vacía = [] (el
   // checkout sigue con las opciones fijas).
   const mediosPago = aConfirmar ? await mediosPagoCacheados() : null;
@@ -121,7 +122,7 @@ export default async function CheckoutPage() {
         admiteEnvio={admiteEnvio(dc.datos.pais)}
         oferta={oferta}
         pagosHabilitados={pagos}
-        envioHabilitado={envio}
+        configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}

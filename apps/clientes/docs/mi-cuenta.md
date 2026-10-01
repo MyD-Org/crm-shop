@@ -69,7 +69,7 @@ presupuestos, condiciones, avisos }`) enciende cada sección cuando su rebanada
 la publica: navegación, menú del header y la ruta (`seccionDesplegada`, 404 si
 está apagada) leen la misma bandera. Encendidas todas: `favoritos`,
 `facturas`, `pagos`, `presupuestos`, `condiciones` y `avisos` (`direcciones`
-además depende del flag `envio`).
+además depende de que el envío a domicilio esté activo en el CRM).
 
 El layout de Mi cuenta corre en cada página: con vínculo hace dos consultas a
 la base y ninguna a Alegra — `accesoFacturacion()` (lee `acceso_facturacion`
@@ -326,12 +326,10 @@ desplegar (runbook en
   tope, vista y la línea que viaja al pedido.
 - `src/lib/provincias.ts`: las 24 jurisdicciones y `provinciaCanonica`
   (acentos, "Provincia de …", CABA).
-- `src/lib/envio.ts` → `ciudadConEnvio`: **única** definición de la zona de
-  envío para una dirección guardada. Se puede guardar cualquier dirección del
-  país; fuera de la zona (hoy `CIUDADES_ENVIO`) se guarda igual y se muestra
-  "El envío a … se coordina por separado". Cuando el envío se abra a todo el
-  país se cambia sólo `envio.ts` (`CIUDADES_ENVIO`/`ciudadConEnvio`/
-  `evaluarEnvio`).
+- `src/lib/envio.ts` → `evaluarEnvio` / `textoRegla`: si el envío a una
+  dirección es gratis o a coordinar lo decide la configuración del CRM
+  (`reglas_venta.envio_*`) con la provincia de la dirección; no hay zonas
+  fijas. Se puede guardar cualquier dirección del país.
 
 **Servidor** (`src/lib/direcciones-envio-db.ts`): toda consulta filtra por
 tenant + usuario. Lista con la predeterminada primero y después la más nueva.
@@ -373,10 +371,10 @@ así que una calle que OSM no conoce se carga igual.
 **Checkout**: con Clerk y "Envío a domicilio", `SelectorDireccionEnvio`
 arranca en la predeterminada; se puede elegir otra guardada u "Otra dirección
 para esta compra" (los campos de siempre, sin tocar las guardadas). Con una
-guardada, el pedido recibe la ciudad escrita como en `CIUDADES_ENVIO` y en
-`entregaDireccion` calle, CP, provincia y referencias (hasta 200 caracteres).
-Una guardada fuera de zona se lista con el aviso y `evaluarEnvio` la rechaza
-para envío, igual que hoy cualquier ciudad fuera de la lista. Si leer las
+guardada, el pedido recibe su ciudad y su provincia, y en `entregaDireccion`
+calle, CP, provincia y referencias (hasta 200 caracteres). El subtexto del
+envío ("Gratis" o "Costo de envío a coordinar") sale de la cotización con esa
+provincia; un envío fuera del alcance gratis se crea igual, a coordinar. Si leer las
 direcciones falla, el checkout sigue sin precarga. Anónimos y cookie del CRM
 sin Clerk: sin cambios. `POST /api/pedidos` no cambió.
 

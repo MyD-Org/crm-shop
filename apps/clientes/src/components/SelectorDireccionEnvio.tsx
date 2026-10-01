@@ -1,10 +1,8 @@
 "use client";
 
-import { Alert, Field, Select } from "@myd-org/ui";
+import { Field, Select } from "@myd-org/ui";
 import {
   OTRA_DIRECCION,
-  avisoFueraDeZona,
-  fueraDeZona,
   lineasDireccion,
   opcionDireccion,
   type DireccionEnvio,
@@ -15,9 +13,8 @@ import {
  * guardada). Arranca en la predeterminada. "Otra dirección para esta compra"
  * devuelve los campos de siempre del checkout y no toca las guardadas.
  *
- * Una guardada fuera de la zona de envío se lista igual, con el aviso de que se
- * coordina por separado: el checkout no la acepta para envío mientras la zona
- * (`src/lib/envio.ts`) siga limitada, y cuando se abra funciona sola.
+ * Toda guardada sirve para envío a domicilio: si es gratis o a coordinar lo
+ * muestra el checkout con la regla vigente (`evaluarEnvio`), no este selector.
  */
 export function SelectorDireccionEnvio({
   direcciones,
@@ -50,11 +47,6 @@ export function SelectorDireccionEnvio({
             </span>
           ))}
         </address>
-      )}
-      {elegida && fueraDeZona(elegida) && (
-        <Alert tone="warning">
-          {avisoFueraDeZona(elegida.ciudad)} Elija el retiro o coordinaremos la entrega con usted.
-        </Alert>
       )}
     </div>
   );

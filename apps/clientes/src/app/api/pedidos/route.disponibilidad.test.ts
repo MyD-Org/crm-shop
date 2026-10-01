@@ -142,7 +142,6 @@ describe("POST /api/pedidos — disponibilidad por sucursal", () => {
 
   it("envío: la zona del contexto sale de la provincia elegida", async () => {
     setFlag("sucursales", true);
-    setFlag("envio", true);
     estadoDisp = true;
     await post({
       entregaTipo: "envio",

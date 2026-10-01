@@ -190,6 +190,13 @@
       "when": 1790769446171,
       "tag": "0026_busqueda_interpretaciones",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790819658192,
+      "tag": "0027_orders_envio_gratis",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,8 @@ import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
-import { envioHabilitado } from "@/lib/envio-flag";
+import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
+import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
 import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
@@ -45,10 +46,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductoPage({ params }: Props) {
   const { id } = await params;
   // En paralelo: la oferta de cuotas no depende del producto (motor sólo-monto).
-  const [producto, oferta, envio, { soloVisibles }, disp, dispEntrega] = await Promise.all([
+  const [producto, oferta, reglas, { soloVisibles }, disp, dispEntrega] = await Promise.all([
     productoDe(id),
     getOfertaCuotas(),
-    envioHabilitado(),
+    reglasVentaCacheadas(),
     flagsPublicos(),
     dispCatalogo(),
     dispDelVisitante(),
@@ -74,7 +75,7 @@ export default async function ProductoPage({ params }: Props) {
       <ProductoClient
         producto={producto}
         oferta={oferta}
-        envio={envio}
+        configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
         disponibilidad={
           disponibilidad?.productos[producto.id]
             ? { producto: disponibilidad.productos[producto.id], locales: disponibilidad.locales }

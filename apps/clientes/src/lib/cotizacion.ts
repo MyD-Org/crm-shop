@@ -303,7 +303,7 @@ export async function cotizar(
   const validas = lineas.filter((l) => !l.problema);
   const subtotal = redondear(validas.reduce((a, l) => a + l.subtotal, 0));
   const iva = redondear(validas.reduce((a, l) => a + l.iva, 0));
-  const envio = costoEnvio(opts.entregaTipo ?? "retiro");
+  const envio = costoEnvio();
 
   return {
     lineas,

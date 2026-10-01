@@ -1,4 +1,11 @@
-import { CIUDADES_ENVIO, MINIMO_ENVIO } from "@/lib/envio";
+import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
+import {
+  estadoEnvio,
+  estadoRetiroLocal,
+  type DisponibilidadVista,
+  type LocalDisponibilidad,
+  type TonoDisponibilidad,
+} from "@/lib/disponibilidad-textos";
 
 function IconoEnvio() {
   return (
@@ -18,38 +25,88 @@ function IconoLocal() {
   );
 }
 
-function Fila({ icono, titulo, detalle }: { icono: React.ReactNode; titulo: string; detalle: string }) {
+const CLASE_TONO: Record<TonoDisponibilidad, string> = {
+  ok: "text-success",
+  demora: "text-warning",
+  no: "text-danger",
+};
+
+function Fila({ icono, titulo, children }: { icono: React.ReactNode; titulo: string; children: React.ReactNode }) {
   return (
     <li className="grid grid-cols-[20px_minmax(0,1fr)] gap-3 text-sm">
       <span className="mt-0.5 text-accent">{icono}</span>
-      <span>
+      <div className="min-w-0">
         <span className="block font-semibold text-text">{titulo}</span>
-        <span className="text-muted">{detalle}</span>
-      </span>
+        {children}
+      </div>
     </li>
   );
 }
 
+const urlMapa = (l: LocalDisponibilidad) =>
+  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([l.direccion, l.ciudad].filter(Boolean).join(", "))}`;
+
 /**
- * Cómo se entrega, al lado del botón de compra. Mismas reglas que el checkout
- * (src/lib/envio.ts): el envío propio sólo aparece con el flag `envio`
- * prendido, y el retiro siempre.
+ * Cómo se entrega, al lado del botón de compra (estilo "Retiro gratis en sucursal" de las grandes
+ * tiendas, sin modal). Mismas reglas que el checkout (src/lib/envio.ts):
+ * - Envío a domicilio: el texto sale de la configuración del CRM (`textoEnvioFicha`: gratis, gratis
+ *   desde $X, costo a coordinar); sin fila si el envío está desactivado. `provincia`/`localidad`
+ *   (la ubicación del visitante) son opcionales: sin ellas rige la regla general.
+ * - Retiro en el local: siempre; con `disponibilidad` (flag `disponibilidad-sucursal`) lista cada
+ *   local con su dirección y su estado, si no, un texto genérico.
  */
-export function EntregaProducto({ envio }: { envio: boolean }) {
+export function EntregaProducto({
+  configEnvio,
+  provincia = null,
+  localidad = null,
+  disponibilidad,
+}: {
+  configEnvio: ConfigEnvio;
+  provincia?: string | null;
+  localidad?: string | null;
+  disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
+}) {
+  const retiro = disponibilidad?.producto.retiro;
+  const locales = retiro ? (disponibilidad?.locales ?? []).filter((l) => retiro[l.slug]) : [];
+  const envioDomicilio = disponibilidad?.producto.envio ? estadoEnvio(disponibilidad.producto.envio) : null;
+  const textoEnvio = textoEnvioFicha(configEnvio, provincia, localidad);
   return (
-    <ul className="space-y-3.5 border-t border-border pt-5">
-      {envio && (
-        <Fila
-          icono={<IconoEnvio />}
-          titulo="Envío a domicilio"
-          detalle={`Gratis en compras desde $${MINIMO_ENVIO.toLocaleString("es-AR")} sin impuestos a ${CIUDADES_ENVIO.join(" y ")}.`}
-        />
+    <ul className="space-y-4 border-t border-border pt-5">
+      <Fila icono={<IconoLocal />} titulo="Retiro gratis en el local">
+        {locales.length === 0 ? (
+          <span className="text-muted">Sin cargo, en nuestros locales.</span>
+        ) : (
+          <ul className="mt-1.5 space-y-2">
+            {locales.map((l) => {
+              const estado = estadoRetiroLocal(retiro![l.slug]);
+              return (
+                <li key={l.slug}>
+                  <span className="text-text">{l.nombre}</span>
+                  {" · "}
+                  <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{estado.texto}</span>
+                  {l.direccion && (
+                    <span className="block text-muted">
+                      {[l.direccion, l.ciudad].filter(Boolean).join(", ")}
+                      {" · "}
+                      <a href={urlMapa(l)} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                        Ver mapa
+                      </a>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Fila>
+      {textoEnvio && (
+        <Fila icono={<IconoEnvio />} titulo="Envío a domicilio">
+          <span className="block text-muted">{textoEnvio}</span>
+          {envioDomicilio && (
+            <span className={`font-semibold ${CLASE_TONO[envioDomicilio.tono]}`}>{envioDomicilio.texto}</span>
+          )}
+        </Fila>
       )}
-      <Fila
-        icono={<IconoLocal />}
-        titulo="Retiro en el local"
-        detalle="Sin cargo. Si está en otra ciudad, coordinamos el envío con usted."
-      />
     </ul>
   );
 }

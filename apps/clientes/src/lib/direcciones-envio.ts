@@ -5,13 +5,10 @@
  * checkout (client components) y la API (servidor), con las mismas reglas. La
  * persistencia está en `direcciones-envio-db.ts`.
  *
- * Se puede guardar cualquier dirección de la Argentina. Si la localidad queda
- * fuera de la zona de envío propio (`ciudadConEnvio` de `envio.ts`, la única
- * definición) se guarda igual y se avisa que el envío se coordina por
- * separado. El checkout la lista, pero no la acepta para envío a domicilio
- * mientras la zona siga limitada.
+ * Se puede guardar cualquier dirección de la Argentina. Que el envío a ese
+ * destino sea gratis o a coordinar lo decide `evaluarEnvio` (`envio.ts`) con la
+ * configuración del CRM y la provincia de la dirección: acá no hay zonas fijas.
  */
-import { CIUDADES_ENVIO, ciudadConEnvio } from "./envio";
 import { provinciaCanonica } from "./provincias";
 
 /** Tope de direcciones por usuario (decisión del usuario). */
@@ -128,16 +125,6 @@ export function validarDireccion(entrada: unknown): ResultadoValidacion {
   };
 }
 
-/** ¿La localidad queda fuera de la zona de envío propio de hoy? */
-export function fueraDeZona(d: Pick<DireccionEnvio, "ciudad">): boolean {
-  return ciudadConEnvio(d.ciudad) === null;
-}
-
-/** Aviso para una dirección fuera de la zona (Mi cuenta y checkout). */
-export function avisoFueraDeZona(ciudad: string): string {
-  return `El envío a ${ciudad} se coordina por separado: hoy enviamos a ${CIUDADES_ENVIO.join(" y ")}.`;
-}
-
 export function etiquetaDireccion(d: Pick<DireccionEnvio, "etiqueta">): string {
   return d.etiqueta || "Dirección";
 }
@@ -169,13 +156,11 @@ export function lineaEntrega(d: DireccionEnvio): string {
 }
 
 /**
- * Ciudad y dirección que el checkout manda al pedido con una dirección
- * guardada. En zona, la ciudad sale escrita como en `CIUDADES_ENVIO` (la que
- * acepta `evaluarEnvio`); fuera de zona se manda tal cual y `evaluarEnvio` la
- * rechaza para envío, igual que hoy con cualquier ciudad fuera de la lista.
+ * Ciudad y dirección que el checkout manda al pedido con una dirección guardada:
+ * la ciudad tal cual se guardó y la línea de entrega (`lineaEntrega`).
  */
 export function entregaDesdeGuardada(d: DireccionEnvio): { ciudad: string; direccion: string } {
-  return { ciudad: ciudadConEnvio(d.ciudad) ?? d.ciudad, direccion: lineaEntrega(d) };
+  return { ciudad: d.ciudad, direccion: lineaEntrega(d) };
 }
 
 /** Valor del selector del checkout para "otra dirección sólo para esta compra". */
@@ -195,8 +180,8 @@ export function entregaElegida(
   direcciones: DireccionEnvio[],
   eleccion: string,
   tipeada: { ciudad: string; direccion: string },
-): { ciudad: string; direccion: string; guardada: DireccionEnvio | null; fueraDeZona: boolean } {
+): { ciudad: string; direccion: string; guardada: DireccionEnvio | null } {
   const guardada = eleccion === OTRA_DIRECCION ? undefined : direcciones.find((d) => d.id === eleccion);
-  if (!guardada) return { ...tipeada, guardada: null, fueraDeZona: false };
-  return { ...entregaDesdeGuardada(guardada), guardada, fueraDeZona: fueraDeZona(guardada) };
+  if (!guardada) return { ...tipeada, guardada: null };
+  return { ...entregaDesdeGuardada(guardada), guardada };
 }

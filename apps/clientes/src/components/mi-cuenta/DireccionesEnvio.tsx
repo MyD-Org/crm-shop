@@ -5,9 +5,7 @@ import { Alert, Badge, Button, Card, Dialog, EmptyState } from "@myd-org/ui";
 import type { DireccionPrellenada } from "@/lib/direccion-envio";
 import {
   MAX_DIRECCIONES,
-  avisoFueraDeZona,
   etiquetaDireccion,
-  fueraDeZona,
   lineasDireccion,
   type CampoDireccion,
   type DireccionEnvio,
@@ -172,7 +170,6 @@ export function DireccionesEnvio({
                     </span>
                   ))}
                 </address>
-                {fueraDeZona(d) && <Alert tone="warning">{avisoFueraDeZona(d.ciudad)}</Alert>}
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => abrir(d.id)}>
                     Editar

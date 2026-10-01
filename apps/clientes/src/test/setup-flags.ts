@@ -5,7 +5,6 @@ vi.mock("@/flags", () => ({
   pagosFlag: async () => estadoFlags().pagos,
   cuotasFlag: async () => estadoFlags().cuotas,
   catalogoSoloVisiblesFlag: async () => estadoFlags()["catalogo-solo-visibles"],
-  envioFlag: async () => estadoFlags().envio,
   sucursalesFlag: async () => estadoFlags().sucursales,
   disponibilidadSucursalFlag: async () => estadoFlags()["disponibilidad-sucursal"],
   pedidoAConfirmarFlag: async () => estadoFlags()["pedido-a-confirmar"],

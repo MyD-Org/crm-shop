@@ -1,17 +1,13 @@
 import { NextResponse, after } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
-import {
-  esEnvioACoordinar,
-  evaluarEnvio,
-  pagosDisponibles,
-  type EntregaTipo,
-} from "@/lib/envio";
+import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
+import { leerConfigEnvio } from "@/lib/sucursales-repo";
+import { provinciaCanonica } from "@/lib/provincias";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { marcarStockCambiado } from "@/lib/cache-invalidar";
 import { StockInsuficienteError } from "@/lib/stock-disponible";
 import { admiteEnvio } from "@/lib/facturacion";
-import { envioHabilitado } from "@/lib/envio-flag";
 import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
 import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
 import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
@@ -223,18 +219,18 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  // Envío sin ciudad ni dirección = "Envío a coordinar": lo acuerda un asesor,
-  // así que no pasa por el flag `envio` ni por la zona de envío propio.
-  const aCoordinar = esEnvioACoordinar(entregaTipo, entregaCiudad, entregaDireccion);
-  const aDomicilio = entregaTipo === "envio" && !aCoordinar;
-  // Con el flag `envio` apagado el checkout no ofrece el envío a domicilio; esto
-  // cubre el POST directo (y un checkout abierto antes de apagarlo).
-  if (aDomicilio && !(await envioHabilitado())) {
+  // Desde `envio-gratis-configurable` el envío siempre es a domicilio (ciudad y dirección): el
+  // "Envío a coordinar" aparte se fusionó con él (si no es gratis, el costo se coordina).
+  const aDomicilio = entregaTipo === "envio";
+  // La configuración se relee SIN caché: la UI puede mostrar lo que había hace minutos, el
+  // servidor decide con lo de ahora. Un pedido a domicilio NUNCA se rechaza por no ser gratis
+  // (se crea sin cobrar envío, el costo se coordina); sólo si el admin apagó el envío.
+  const configEnvio = aDomicilio ? await leerConfigEnvio() : null;
+  if (aDomicilio && configEnvio && !configEnvio.domicilioActivo) {
     return NextResponse.json(
       {
-        error:
-          "El envío a domicilio no está disponible por el momento. Seleccione retiro en el local o envío a coordinar.",
-        motivo: "envio_no_disponible",
+        error: "El envío a domicilio no está disponible. Elija retiro en el local.",
+        motivo: "envio_inactivo",
       },
       { status: 409 },
     );
@@ -242,6 +238,15 @@ export async function POST(req: Request) {
   if (aDomicilio && (!entregaCiudad || !entregaDireccion)) {
     return NextResponse.json(
       { error: "Para envío a domicilio hacen falta ciudad y dirección." },
+      { status: 400 },
+    );
+  }
+  // La provincia sale del CUERPO del pedido (no de la cookie de zona) y es obligatoria, canónica,
+  // para el envío a domicilio: de ella depende si es gratis.
+  const entregaProvincia = aDomicilio ? provinciaCanonica(texto(body.entregaProvincia, 80)) : null;
+  if (aDomicilio && !entregaProvincia) {
+    return NextResponse.json(
+      { error: "Indique la provincia de entrega." },
       { status: 400 },
     );
   }
@@ -332,7 +337,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "El envío a domicilio solo está disponible para compradores de Argentina. Seleccione retiro en el local o envío a coordinar.",
+          "El envío a domicilio solo está disponible para compradores de Argentina. Seleccione retiro en el local.",
         motivo: "envio_no_disponible_pais",
       },
       { status: 409 },
@@ -380,10 +385,9 @@ export async function POST(req: Request) {
       return productosCambiaron(cotizacion);
     }
 
-    const envio = evaluarEnvio(cotizacion.subtotal, entregaCiudad);
-    if (aDomicilio && !envio.disponible) {
-      return NextResponse.json({ error: envio.motivo, cotizacion }, { status: 409 });
-    }
+    // `null` = retiro (no aplica); true/false = envío a domicilio gratis o a coordinar.
+    const envioGratis =
+      aDomicilio && configEnvio ? evaluarEnvio(cotizacion.subtotal, entregaProvincia, configEnvio).gratis : null;
 
     /**
      * Plan de cuotas congelado sobre el total RE-COTIZADO, con la oferta de la
@@ -439,6 +443,7 @@ export async function POST(req: Request) {
           entregaTipo,
           entregaCiudad: entregaCiudad || undefined,
           entregaDireccion: entregaDireccion || undefined,
+          envioGratis,
           pagoMetodo,
           notas: texto(body.notas, 500) || undefined,
           // Congelado desde la lectura única: la condición real (exento, o el

@@ -1,0 +1,13 @@
+-- Si el envío a domicilio resultó gratis (change `envio-gratis-configurable`, rebanada B). ADITIVA:
+-- una columna nullable; nada existente cambia.
+--   - NULL = retiro, o pedido anterior a esta migración (sin dato).
+--   - true = envío a domicilio gratis según la regla vigente al pedir.
+--   - false = envío a domicilio con costo a coordinar.
+-- El costo online (`costo_envio`) sigue siendo 0: esto sólo distingue "gratis" de "a coordinar"
+-- en Pedidos del admin.
+--
+-- El código la escribe en cada pedido: esta migración tiene que correr ANTES de desplegar el código.
+--
+-- Reversa (a mano, en una migración nueva, append-only; nunca editar ésta):
+--   ALTER TABLE "shop"."orders" DROP COLUMN "envio_gratis";
+ALTER TABLE "shop"."orders" ADD COLUMN "envio_gratis" boolean;

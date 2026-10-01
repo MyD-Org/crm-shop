@@ -18,7 +18,7 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { GaleriaProducto } from "@/components/GaleriaProducto";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
-import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
+import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "@/lib/envio";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
 import { DudasProducto } from "@/components/producto/DudasProducto";
@@ -75,7 +75,7 @@ const LARGO_NOMBRE_EXTENSO = 32;
 export function ProductoClient({
   producto: productoLista,
   oferta = null,
-  envio = false,
+  configEnvio = CONFIG_ENVIO_DEFAULT,
   relacionados = null,
   rutaCategorias = [],
   disponibilidad,
@@ -88,8 +88,8 @@ export function ProductoClient({
   disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
-  /** Flag `envio` (ver src/lib/envio-flag.ts): si se anuncia el envío a domicilio. */
-  envio?: boolean;
+  /** Configuración de envío del CRM (reglas de venta): qué se anuncia del envío a domicilio. */
+  configEnvio?: ConfigEnvio;
   /** "Más de <categoría>", armado en el server (va en su propio Suspense). */
   relacionados?: ReactNode;
   /** Categoría del admin con sus padres (raíz → hoja), para las migas. Vacío = la de Alegra. */
@@ -307,15 +307,7 @@ export function ProductoClient({
               <BotonFavorito productId={producto.id} />
             </div>
 
-            {disponibilidad && (
-              <DisponibilidadLineas
-                disponibilidad={disponibilidad.producto}
-                locales={disponibilidad.locales}
-                envio={envio}
-              />
-            )}
-
-            <EntregaProducto envio={envio} />
+            <EntregaProducto configEnvio={configEnvio} disponibilidad={disponibilidad} />
 
             {/* Preguntas sugeridas al asesor: sólo con el chat montado. */}
             <DudasProducto producto={producto} />

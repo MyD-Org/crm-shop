@@ -392,6 +392,20 @@ export const crmReglasVenta = publico.table("reglas_venta", {
    * todavía: NO se lee junto con el resto de las reglas (ver `leerMensajeConfirmacion`).
    */
   mensajeConfirmacion: text("mensaje_confirmacion").notNull(),
+  /**
+   * Envío a domicilio configurable desde el CRM (change `envio-gratis-configurable`, rebanada A).
+   * Llegan con una migración del CRM que puede no estar aplicada todavía: NO se leen junto con el
+   * resto de las reglas (ver `leerConfigEnvio` en sucursales-repo.ts). Los NULL de alcance, modo y
+   * mínimo significan "sin configurar"; el CHECK del CRM impide encender el envío gratis sin ellos.
+   */
+  envioDomicilioActivo: boolean("envio_domicilio_activo").notNull(),
+  envioGratisActivo: boolean("envio_gratis_activo").notNull(),
+  envioGratisAlcance: text("envio_gratis_alcance").$type<"pais" | "provincias">(),
+  /** Claves de provincia (`claveProvincia`), como `zonas.provincia_clave`. */
+  envioGratisProvincias: text("envio_gratis_provincias").array().notNull(),
+  envioGratisMinimoModo: text("envio_gratis_minimo_modo").$type<"sin_minimo" | "desde">(),
+  /** Sin impuestos; sólo con modo `desde`. */
+  envioGratisMinimo: numeric("envio_gratis_minimo", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

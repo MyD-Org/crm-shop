@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 let identidad: { clerkUserId: string | null; cliente: { codigocliente: string } | null };
 const cotizar = vi.fn();
 const idPriceListCliente = vi.fn();
+let configEnvio: ConfigEnvio = CONFIG_ENVIO_DEFAULT;
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => identidad,
@@ -18,8 +19,14 @@ vi.mock("@/lib/cotizacion", async (importOriginal) => ({
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
 vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: async () => false }));
+// La config de envío se relee SIN caché en cada cotización.
+vi.mock("@/lib/sucursales-repo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sucursales-repo")>()),
+  leerConfigEnvio: async () => configEnvio,
+}));
 
 import { POST } from "./route";
+import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "@/lib/envio";
 
 function pedido(ip = "203.0.113.7") {
   return new Request("https://tienda.example/api/carrito/cotizar", {
@@ -30,6 +37,7 @@ function pedido(ip = "203.0.113.7") {
 }
 
 beforeEach(() => {
+  configEnvio = CONFIG_ENVIO_DEFAULT;
   identidad = { clerkUserId: null, cliente: null };
   cotizar.mockReset();
   cotizar.mockResolvedValue({
@@ -70,5 +78,37 @@ describe("POST /api/carrito/cotizar", () => {
     expect((await POST(pedido("203.0.113.3"))).status).toBe(429);
     // Otra IP no comparte el techo.
     expect((await POST(pedido("203.0.113.4"))).status).toBe(200);
+  });
+});
+
+describe("POST /api/carrito/cotizar — envío evaluado con la config releída", () => {
+  const conProvincia = (provincia?: string) =>
+    new Request("https://tienda.example/api/carrito/cotizar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.50" },
+      body: JSON.stringify({ items: [{ id: "1", qty: 2 }], entregaTipo: "envio", provincia }),
+    });
+
+  it("gratis apagado: disponible, a coordinar, motivo gratis_apagado", async () => {
+    const { envio } = await (await POST(conProvincia("Misiones"))).json();
+    expect(envio).toMatchObject({ disponible: true, gratis: false, aCoordinar: true, motivo: "gratis_apagado" });
+  });
+
+  it("en alcance con el mínimo cumplido: gratis; bajo el mínimo: dice cuánto falta", async () => {
+    configEnvio = { domicilioActivo: true, gratis: { alcance: "provincias", provincias: ["misiones"], minimo: 1000 } };
+    expect((await (await POST(conProvincia("Misiones"))).json()).envio).toMatchObject({ gratis: true, motivo: null });
+    configEnvio = { domicilioActivo: true, gratis: { alcance: "provincias", provincias: ["misiones"], minimo: 1500 } };
+    expect((await (await POST(conProvincia("misiones"))).json()).envio).toMatchObject({
+      gratis: false,
+      motivo: "bajo_minimo",
+      faltante: 500,
+    });
+  });
+
+  it("sin provincia y alcance por provincias: sin_ubicacion; con el envío inactivo: no disponible", async () => {
+    configEnvio = { domicilioActivo: true, gratis: { alcance: "provincias", provincias: ["misiones"], minimo: null } };
+    expect((await (await POST(conProvincia())).json()).envio.motivo).toBe("sin_ubicacion");
+    configEnvio = { domicilioActivo: false, gratis: null };
+    expect((await (await POST(conProvincia("Misiones"))).json()).envio).toMatchObject({ disponible: false, motivo: "inactivo" });
   });
 });

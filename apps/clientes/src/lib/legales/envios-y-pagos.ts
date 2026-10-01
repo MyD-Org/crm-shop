@@ -1,19 +1,17 @@
 /**
- * Página Envíos y pagos: el contenido sale de las reglas de `lib/envio.ts` y
- * de los flags (`envio`, `pagos`, `cuotas`) que resuelve la página en el
- * server. Nada de texto fijo duplicado: si cambian las ciudades o el mínimo,
- * la página se acomoda sola.
+ * Página Envíos y pagos: el contenido sale de la configuración de envío del CRM
+ * (`ConfigEnvio`, texto con `textoRegla`) y de los flags (`pagos`, `cuotas`)
+ * que resuelve la página en el server. Nada de texto fijo duplicado: si cambian
+ * el alcance o el mínimo, la página se acomoda sola.
  */
 import {
-  CIUDADES_ENVIO,
   ENTREGA_LABEL,
-  ENVIO_A_COORDINAR_LABEL,
-  MINIMO_ENVIO,
   PAGO_LABEL,
   pagosDisponibles,
+  textoRegla,
+  type ConfigEnvio,
   type EntregaTipo,
 } from "@/lib/envio";
-import { fmtPesosEnteros } from "@/lib/format";
 import type { Bloque } from "./comun";
 
 function listar(items: readonly string[]): string {
@@ -25,19 +23,19 @@ function mediosDe(tipo: EntregaTipo): string {
   return listar(pagosDisponibles(tipo, true).map((m) => PAGO_LABEL[m]));
 }
 
-export function bloquesEnviosYPagos(ctx: { envio: boolean; pagos: boolean; cuotas: boolean }): Bloque[] {
-  const entregas: Bloque = ctx.envio
+export function bloquesEnviosYPagos(ctx: { envio: ConfigEnvio; pagos: boolean; cuotas: boolean }): Bloque[] {
+  const entregas: Bloque = ctx.envio.domicilioActivo
     ? {
         titulo: "Entregas",
         parrafos: [
-          `${ENTREGA_LABEL.envio}: disponible para ${listar(CIUDADES_ENVIO)}, en compras desde ${fmtPesosEnteros(MINIMO_ENVIO)} sin impuestos.`,
-          `Para otras localidades, elija «${ENVIO_A_COORDINAR_LABEL}» al finalizar la compra y el comercio coordinará la entrega con usted.`,
+          `${ENTREGA_LABEL.envio}: ${textoRegla(ctx.envio)}`,
+          `Una vez confirmado el pedido, el comercio se comunicará con usted para coordinar la entrega.`,
         ],
       }
     : {
         titulo: "Entregas",
         parrafos: [
-          `Por el momento, puede elegir «${ENTREGA_LABEL.retiro}» o «${ENVIO_A_COORDINAR_LABEL}»: una vez confirmado el pedido, el comercio se comunicará con usted para coordinar la entrega.`,
+          `Por el momento, la única opción de entrega es «${ENTREGA_LABEL.retiro}»: el envío a domicilio no está disponible.`,
         ],
       };
 
@@ -46,7 +44,7 @@ export function bloquesEnviosYPagos(ctx: { envio: boolean; pagos: boolean; cuota
         titulo: "Medios de pago",
         parrafos: [
           `Con ${ENTREGA_LABEL.retiro.toLowerCase()}: ${mediosDe("retiro")}.`,
-          ...(ctx.envio ? [`Con ${ENTREGA_LABEL.envio.toLowerCase()}: ${mediosDe("envio")}.`] : []),
+          ...(ctx.envio.domicilioActivo ? [`Con ${ENTREGA_LABEL.envio.toLowerCase()}: ${mediosDe("envio")}.`] : []),
           ...(ctx.cuotas
             ? ["Cuando elija pagar en cuotas, el costo financiero total (CFT) se informa antes de confirmar la compra."]
             : []),

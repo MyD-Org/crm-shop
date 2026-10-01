@@ -6,8 +6,6 @@ import { DireccionAutocomplete } from "@/components/DireccionAutocomplete";
 import type { DireccionPrellenada } from "@/lib/direccion-envio";
 import {
   LARGOS_DIRECCION,
-  avisoFueraDeZona,
-  fueraDeZona,
   type CampoDireccion,
 } from "@/lib/direcciones-envio";
 import {
@@ -24,8 +22,7 @@ const OPCIONES_PROVINCIA = PROVINCIAS_AR.map((p) => ({ label: p, value: p }));
  * (no navega a otra página). Cualquier localidad del país: la calle se
  * autocompleta contra `/api/geocode` (todo el país) y los demás campos quedan
  * siempre a la vista, así que una calle que el geocodificador no conoce se
- * carga igual. Si la localidad queda fuera de la zona de envío, se avisa pero
- * se guarda.
+ * carga igual.
  */
 export function DireccionForm({
   titulo,
@@ -76,8 +73,6 @@ export function DireccionForm({
       setRespaldo(null);
     }
   }
-
-  const ciudad = form.ciudad.trim();
 
   return (
     <Card title={titulo} className="sm:col-span-2">
@@ -161,10 +156,6 @@ export function DireccionForm({
             onChange={(e) => set("referencias", e.target.value)}
           />
         </Field>
-
-        {ciudad && fueraDeZona({ ciudad }) && (
-          <Alert tone="warning">{avisoFueraDeZona(ciudad)}</Alert>
-        )}
 
         {!esPredeterminada && (
           <label className="flex items-center gap-2 text-sm text-text">

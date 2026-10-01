@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("./tenant", () => ({ shopTenantId: () => "tenant-ejemplo" }));
 vi.mock("@/db", () => ({ getDb: () => ({}) }));
 
-import { leerSucursalesYZonas } from "./sucursales-repo";
+import { configEnvioDeFila, leerConfigEnvio, leerSucursalesYZonas, type FilaEnvio } from "./sucursales-repo";
+import { CONFIG_ENVIO_DEFAULT } from "./envio";
 import { getTableColumns } from "drizzle-orm";
 import { crmSucursales } from "@/db/crm";
 
@@ -30,5 +31,68 @@ describe("leerSucursalesYZonas", () => {
     expect(Object.keys(getTableColumns(crmSucursales))).not.toContain(
       "cuentaAlegraId",
     );
+  });
+});
+
+const FILA: FilaEnvio = {
+  envioDomicilioActivo: true,
+  envioGratisActivo: true,
+  envioGratisAlcance: "provincias",
+  envioGratisProvincias: ["misiones", "corrientes"],
+  envioGratisMinimoModo: "desde",
+  envioGratisMinimo: "100000.00",
+};
+
+describe("configEnvioDeFila (fila del CRM -> ConfigEnvio)", () => {
+  it("gratis activo y completo: alcance, provincias y mínimo como número", () => {
+    expect(configEnvioDeFila(FILA)).toEqual({
+      domicilioActivo: true,
+      gratis: { alcance: "provincias", provincias: ["misiones", "corrientes"], minimo: 100000 },
+    });
+  });
+
+  it("gratis apagado (lo que deja la migración): gratis null, domicilio activo", () => {
+    expect(
+      configEnvioDeFila({ ...FILA, envioGratisActivo: false, envioGratisAlcance: null, envioGratisMinimoModo: null, envioGratisMinimo: null }),
+    ).toEqual(CONFIG_ENVIO_DEFAULT);
+  });
+
+  it("sin_minimo: mínimo null; todo el país ignora la lista de provincias", () => {
+    expect(
+      configEnvioDeFila({ ...FILA, envioGratisAlcance: "pais", envioGratisMinimoModo: "sin_minimo", envioGratisMinimo: null }),
+    ).toEqual({ domicilioActivo: true, gratis: { alcance: "pais", provincias: [], minimo: null } });
+  });
+
+  it("columnas incompletas con gratis activo: nunca 'todo' ni 'sin mínimo', gratis null", () => {
+    expect(configEnvioDeFila({ ...FILA, envioGratisAlcance: null }).gratis).toBeNull();
+    expect(configEnvioDeFila({ ...FILA, envioGratisMinimoModo: null }).gratis).toBeNull();
+    expect(configEnvioDeFila({ ...FILA, envioGratisMinimo: null }).gratis).toBeNull();
+    expect(configEnvioDeFila({ ...FILA, envioGratisMinimo: "0.00" }).gratis).toBeNull();
+  });
+
+  it("domicilio inactivo se respeta", () => {
+    expect(configEnvioDeFila({ ...FILA, envioDomicilioActivo: false }).domicilioActivo).toBe(false);
+  });
+});
+
+describe("leerConfigEnvio", () => {
+  const dbCon = (resultado: () => Promise<unknown[]>) => ({
+    select: () => ({ from: () => ({ where: () => ({ limit: resultado }) }) }),
+  });
+
+  it("lee la fila del tenant y la mapea", async () => {
+    expect(await leerConfigEnvio(dbCon(async () => [FILA]) as never)).toMatchObject({ gratis: { alcance: "provincias" } });
+  });
+
+  it("sin fila: el default", async () => {
+    expect(await leerConfigEnvio(dbCon(async () => []) as never)).toEqual(CONFIG_ENVIO_DEFAULT);
+  });
+
+  it("si la lectura falla (columnas sin migrar, base caída): el default, sin tirar", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const rota = dbCon(async () => {
+      throw new Error('column "envio_domicilio_activo" does not exist');
+    });
+    expect(await leerConfigEnvio(rota as never)).toEqual(CONFIG_ENVIO_DEFAULT);
   });
 });

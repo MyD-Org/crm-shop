@@ -7,7 +7,7 @@ import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import type { CartItem } from "@/lib/carrito-cliente";
 import { AvisoQuitado } from "@/components/AvisoQuitado";
-import { CIUDADES_ENVIO, MINIMO_ENVIO } from "@/lib/envio";
+import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { useCart } from "@/context/CartContext";
 import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
@@ -80,12 +80,15 @@ function AlertIcon() {
 export function CarritoClient({
   oferta,
   conSesion,
-  envio = false,
+  configEnvio = CONFIG_ENVIO_DEFAULT,
+  provincia = null,
 }: {
   oferta: OfertaCuotas | null;
   conSesion: boolean;
-  /** Flag `envio` (ver src/lib/envio-flag.ts): si se anuncia el envío a domicilio. */
-  envio?: boolean;
+  /** Configuración de envío del CRM (cacheada: sólo para mostrar; el servidor decide al pedir). */
+  configEnvio?: ConfigEnvio;
+  /** Provincia conocida del visitante (dirección guardada predeterminada). null = sin ubicación. */
+  provincia?: string | null;
 }) {
   const { items, updateQty, removeItem: remove, restoreItem, ready } = useCart();
   // "¿Le falta algo?": sólo con el chat montado (spec catálogo asistido fase 2, §3).
@@ -247,10 +250,12 @@ export function CarritoClient({
     total === null ? (estado === "cargando" ? "Calculando…" : "A confirmar") : fmtPrecio(total);
   const unidadesCarrito = items.reduce((a, it) => a + it.qty, 0);
 
-  // Progreso al envío gratis: el mínimo es sin impuestos, igual que el subtotal.
-  // Sólo con el flag `envio`: sin envío propio no hay nada que prometer.
-  const faltaEnvio = envio && subtotal !== null ? Math.max(0, MINIMO_ENVIO - subtotal) : null;
-  const pctEnvio = subtotal !== null ? Math.min(100, Math.floor((subtotal / MINIMO_ENVIO) * 100)) : 0;
+  // Progreso al envío gratis: el mínimo es sin impuestos, igual que el subtotal. La barra sólo
+  // aparece si el envío está activo, el gratis está encendido con un mínimo, y la provincia
+  // conocida está en el alcance (sin ubicación o fuera de alcance no se promete nada).
+  const progresoEnvio = progresoEnvioGratis(subtotal, provincia, configEnvio);
+  const faltaEnvio = progresoEnvio ? progresoEnvio.faltante : null;
+  const pctEnvio = progresoEnvio?.pct ?? 0;
 
   const lineasConProblema = cotizacion?.lineas.filter((l) => l.problema).length ?? 0;
 
@@ -387,7 +392,7 @@ export function CarritoClient({
                             <DisponibilidadLineas
                               disponibilidad={cotizacion.disponibilidad.productos[item.id]}
                               locales={cotizacion.disponibilidad.locales}
-                              envio={envio}
+                              envio={configEnvio.domicilioActivo}
                               className="mt-0.5"
                             />
                           )}
@@ -478,7 +483,6 @@ export function CarritoClient({
                     style={{ width: `${pctEnvio}%` }}
                   />
                 </div>
-                <p className="text-xs text-muted">Envío propio a {CIUDADES_ENVIO.join(" y ")}.</p>
               </div>
             )}
 
@@ -548,7 +552,7 @@ export function CarritoClient({
               )}
             </div>
 
-            <EntregaProducto envio={envio} />
+            <EntregaProducto configEnvio={configEnvio} provincia={provincia} />
           </aside>
         </div>
 

@@ -5,6 +5,7 @@ import { listarEscalones, listarProveedores, toEscalonDto, toProveedorDto } from
 import { obtenerTasasMercadoPago, type TasasMP } from "@/lib/mp-tasas"
 import { CuotasTab } from "@/components/admin/CuotasTab"
 import { MediosPagoShopCard } from "@/components/admin/MediosPagoShopCard"
+import { CuentasBancariasShopCard } from "@/components/admin/CuentasBancariasShopCard"
 
 export const dynamic = "force-dynamic"
 
@@ -37,6 +38,7 @@ export default async function CuotasPage() {
           tasasMP={tasasMP}
         />
         <MediosPagoShopCard />
+        <CuentasBancariasShopCard />
       </div>
     </div>
   )

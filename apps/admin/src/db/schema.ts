@@ -1107,6 +1107,40 @@ export const mediosPagoShop = pgTable(
   (t) => [uniqueIndex("medios_pago_shop_tenant_slug_uniq").on(t.tenantId, t.slug)],
 )
 
+// ── Cuentas bancarias del Shop (change `pago-transferencia-comprobante`, rebanada A) ─────────
+//
+// Cuentas a las que el cliente transfiere. El Shop elige una por sucursal y monto (menor `orden`
+// entre las que cumplen; la predeterminada es respaldo y compite como cualquiera). Sin datos reales
+// en el repo: se cargan por el admin.
+//
+// Drift que vive SOLO en SQL: los CHECKs (CBU 22 dígitos, CUIT 11 o vacío, todas OR >=1 sucursal,
+// rango de montos, predeterminada => activa), el índice único parcial de la predeterminada y el
+// GRANT SELECT por columna a `shop_app`.
+export const cuentasBancariasShop = pgTable(
+  "cuentas_bancarias_shop",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alias: text("alias").notNull(),
+    cbu: text("cbu").notNull(),
+    banco: text("banco").notNull().default(""),
+    titular: text("titular").notNull().default(""),
+    cuit: text("cuit").notNull().default(""),
+    // "Todas las sucursales" es una elección explícita; false exige al menos un slug.
+    todasLasSucursales: boolean("todas_las_sucursales").notNull().default(false),
+    sucursalSlugs: text("sucursal_slugs").array().notNull().default(sql`'{}'::text[]`),
+    // NULL = sin límite. Rango inclusivo sobre el total con impuestos.
+    montoMin: numeric("monto_min", { precision: 14, scale: 2 }),
+    montoMax: numeric("monto_max", { precision: 14, scale: 2 }),
+    activa: boolean("activa").notNull().default(true),
+    predeterminada: boolean("predeterminada").notNull().default(false),
+    orden: integer("orden").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("cuentas_bancarias_shop_tenant_cbu_uniq").on(t.tenantId, t.cbu)],
+)
+
 // ── Cuentas de Alegra y stock por sucursal (change `sucursales-igz-mdp`, rebanada D) ───────
 //
 // La sucursal es la unidad comercial; la CUENTA de Alegra es la unidad contable (credenciales,

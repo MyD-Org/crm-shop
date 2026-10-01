@@ -79,6 +79,8 @@ export function parseWhatsappNumbers(raw: unknown): { id: string; phone: string 
   for (const item of list) {
     if (!item || typeof item !== "object") continue
     const o = item as Record<string, unknown>
+    // El número de prueba de Meta y los deshabilitados no reciben clientes: no se nombran.
+    if (o.isTest === true || o.enabled === false) continue
     const id = [o.channelAccountId, o.channel_account_id, o.id].find((v) => typeof v === "string" && v)
     if (typeof id !== "string") continue
     const phone = [o.displayPhoneNumber, o.business_phone, o.display_phone_number, o.phone].find((v) => typeof v === "string" && v)

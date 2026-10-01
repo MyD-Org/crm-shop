@@ -71,6 +71,15 @@ describe("parseWhatsappNumbers / canalesEditables", () => {
     const real = [{ channelAccountId: "cuenta-1", phoneNumberId: "1", displayPhoneNumber: "+54 9 11 0000-0001", verifiedName: "X", wabaId: null, enabled: true, isTest: false, isDefault: true }]
     expect(parseWhatsappNumbers(real)).toEqual([{ id: "cuenta-1", phone: "+54 9 11 0000-0001" }])
   })
+  it("omite el número de prueba y los deshabilitados", () => {
+    const base = { phoneNumberId: "1", verifiedName: "X", wabaId: null, isDefault: false }
+    const r = parseWhatsappNumbers([
+      { ...base, channelAccountId: "prueba", displayPhoneNumber: null, enabled: true, isTest: true },
+      { ...base, channelAccountId: "baja", displayPhoneNumber: "+54 9 11 0000-0003", enabled: false, isTest: false },
+      { ...base, channelAccountId: "real", displayPhoneNumber: "+54 9 11 0000-0004", enabled: true, isTest: false },
+    ])
+    expect(r).toEqual([{ id: "real", phone: "+54 9 11 0000-0004" }])
+  })
   it("acepta lista o {numbers} y descarta lo ilegible", () => {
     const item = { id: "a", business_phone: "+54 9 11 0000-0000" }
     expect(parseWhatsappNumbers([item, null, { x: 1 }])).toEqual([{ id: "a", phone: "+54 9 11 0000-0000" }])

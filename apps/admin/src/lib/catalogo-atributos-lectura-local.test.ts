@@ -227,6 +227,23 @@ describe("aplicarAceptados", () => {
     expect(formatearResumenAplicar(r, false)).toContain("dry-run")
   })
 
+  it("--aplicar: avisa al Shop si escribió; un aviso que falla no tumba la carga", async () => {
+    const d = { ...deps(), avisarShop: vi.fn(async () => ({ propagado: true })) }
+    const r = await aplicarAceptados(contenido, "central", d, true)
+    expect(d.avisarShop).toHaveBeenCalledWith("central")
+    expect(r.avisoShop).toBe("entregado")
+    const roto = { ...deps(), avisarShop: vi.fn(async () => { throw new Error("red") }) }
+    const r2 = await aplicarAceptados(contenido, "central", roto, true)
+    expect(r2).toMatchObject({ escritas: 4, avisoShop: "falló" })
+  })
+
+  it("no avisa en dry-run ni si no escribió nada", async () => {
+    const d = { ...deps(), avisarShop: vi.fn(async () => ({ propagado: true })) }
+    await aplicarAceptados(contenido, "central", d, false)
+    await aplicarAceptados("no es json", "central", d, true)
+    expect(d.avisarShop).not.toHaveBeenCalled()
+  })
+
   it("--aplicar: upsert con fuente pdf (la precedencia la resuelve el SQL del upsert)", async () => {
     const d = deps()
     const r = await aplicarAceptados(contenido, "central", d, true)

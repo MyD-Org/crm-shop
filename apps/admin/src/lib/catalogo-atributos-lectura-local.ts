@@ -251,6 +251,8 @@ export interface DepsAplicar {
   leerExistentes(tenantId: string, ids: string[]): Promise<Map<string, ExistenteAtributo>>
   /** Upsert fuente 'pdf' con precedencia; devuelve cuántas filas quedaron escritas. */
   upsertPdf(tenantId: string, filas: { alegraId: string; clave: ClaveAtributo; valorNum: number | null; valorTexto: string | null }[]): Promise<number>
+  /** Aviso al Shop para que revalide el catálogo (se llama sólo si se escribió algo). Opcional. */
+  avisarShop?(tenantId: string): Promise<{ propagado: boolean }>
 }
 
 export interface ResumenAplicar {
@@ -264,6 +266,8 @@ export interface ResumenAplicar {
   iguales: number
   protegidasManual: number
   escritas: number | null
+  /** Resultado del aviso al Shop (null si no se escribió nada o no hay aviso). */
+  avisoShop: "entregado" | "no entregado" | "falló" | null
 }
 
 const mismoValor = (a: AtributoExtraido, b: ExistenteAtributo) =>
@@ -306,6 +310,7 @@ export async function aplicarAceptados(
     iguales: 0,
     protegidasManual: 0,
     escritas: null,
+    avisoShop: null,
   }
   for (const f of filas) {
     r.porClave[f.clave] = (r.porClave[f.clave] ?? 0) + 1
@@ -325,6 +330,15 @@ export async function aplicarAceptados(
   } else if (aplicar) {
     r.escritas = 0
   }
+  // Avisar al Shop después de escribir; que el ping falle no tumba la carga (el cambio ya está en la base).
+  if (r.escritas && deps.avisarShop) {
+    try {
+      r.avisoShop = (await deps.avisarShop(tenantId)).propagado ? "entregado" : "no entregado"
+    } catch (err) {
+      r.avisoShop = "falló"
+      console.warn(`[atributos-pdf] no se pudo avisar al Shop: ${err instanceof Error ? err.name : "error"}`)
+    }
+  }
   return r
 }
 
@@ -334,6 +348,8 @@ export function formatearResumenAplicar(r: ResumenAplicar, aplicar: boolean): st
     `lineas=${r.lineas} invalidas=${r.invalidas} conflictos=${r.conflictos}`,
     `por clave: ${orden.join(" ") || "(ninguna)"}`,
     `nuevas=${r.nuevas} cambian=${r.cambian} confirmanNombre=${r.confirmanNombre} iguales=${r.iguales} protegidasManual=${r.protegidasManual}`,
-    aplicar ? `escritas=${r.escritas}` : "dry-run: no se escribió nada (usar --aplicar)",
+    aplicar
+      ? `escritas=${r.escritas}${r.avisoShop ? `\naviso al Shop: ${r.avisoShop === "entregado" ? "entregado" : "no entregado (el cambio igual ya está en la base)"}` : ""}`
+      : "dry-run: no se escribió nada (usar --aplicar)",
   ].join("\n")
 }

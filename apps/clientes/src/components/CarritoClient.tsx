@@ -14,6 +14,7 @@ import { resumenDisponibilidadCarrito, sinEntregaPosible } from "@/lib/disponibi
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
 import { CuotasResumen } from "@/components/CuotasResumen";
+import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { baseCarrito, resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -249,10 +250,8 @@ export function CarritoClient({
    */
   // Base de cuotas = total con IVA. Confirmado → el de la cotización; mientras
   // recotiza → estimado con los precios/IVA ya conocidos y las cantidades nuevas.
-  const resumen = resumenCuotas(
-    baseCarrito({ items, totalConfirmado: confirmado ? cotizacion.total : null, ultimasLineas }),
-    oferta,
-  );
+  const baseCuotas = baseCarrito({ items, totalConfirmado: confirmado ? cotizacion.total : null, ultimasLineas });
+  const resumen = resumenCuotas(baseCuotas, oferta);
 
   const unidadesCotizadas = confirmado
     ? cotizacion.lineas.filter((l) => !l.problema).reduce((a, l) => a + l.qty, 0)
@@ -535,7 +534,18 @@ export function CarritoClient({
               )}
             </div>
 
-            <CuotasResumen resumen={resumen} />
+            <CuotasResumen
+              resumen={resumen}
+              accion={
+                resumen?.mejor && oferta && baseCuotas != null ? (
+                  <MediosDePagoModal
+                    precioFinal={baseCuotas}
+                    oferta={oferta}
+                    className="mt-1 text-xs text-accent transition-colors hover:text-primary"
+                  />
+                ) : null
+              }
+            />
 
             {cotizacion?.hayProblemas && (
               <p className="rounded-lg bg-danger/5 p-3 text-xs text-danger">

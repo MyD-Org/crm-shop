@@ -153,6 +153,18 @@ describe("CuotasResumen (carrito)", () => {
     expect(renderToStaticMarkup(createElement(CuotasResumen, { resumen: null }))).toBe("");
   });
 
+  it("muestra la acción (Ver medios de pago) debajo de la línea de cuotas", () => {
+    const html = renderToStaticMarkup(
+      createElement(CuotasResumen, {
+        resumen: resumenCuotas(120000, o),
+        accion: createElement("button", { type: "button" }, TEXTOS_CUOTAS.verMediosDePago),
+      }),
+    );
+    const t = texto(html);
+    expect(t).toContain(TEXTOS_CUOTAS.verMediosDePago);
+    expect(t.indexOf("3 cuotas de")).toBeLessThan(t.indexOf(TEXTOS_CUOTAS.verMediosDePago));
+  });
+
   it("checkout: plan del pedido con título y sin barra", () => {
     const html = renderToStaticMarkup(
       createElement(CuotasResumen, {

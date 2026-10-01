@@ -1228,7 +1228,9 @@ export async function cancelarPedidoPendiente(
           eq(orders.id, id),
           esDeSuDueno(dueno),
           eq(orders.estado, "pendiente"),
-          eq(orders.pagoEstado, "pendiente"),
+          // `fallido` también: un cobro rechazado no vuelve al pedido incancelable
+          // (el intento abierto, si lo hay, se sigue chequeando abajo).
+          inArray(orders.pagoEstado, ["pendiente", "fallido"]),
           // Con factura vinculada por un operador ya no lo cancela el cliente.
           isNull(orders.facturaAlegraId),
         ),

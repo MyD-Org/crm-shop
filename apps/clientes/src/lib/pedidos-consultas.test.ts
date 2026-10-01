@@ -666,11 +666,12 @@ describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
     expect(sql).toContain('"orders"."clerk_user_id" =');
 
     const estado = where.match(/"orders"\."estado" = \$(\d+)/);
-    const pago = where.match(/"orders"\."pago_estado" = \$(\d+)/);
+    const pago = where.match(/"orders"\."pago_estado" in \(\$(\d+), \$(\d+)\)/);
     expect(estado, "falta el filtro por estado").not.toBeNull();
     expect(pago, "falta el filtro por pago_estado").not.toBeNull();
     expect(params[Number(estado![1]) - 1]).toBe("pendiente");
-    expect(params[Number(pago![1]) - 1]).toBe("pendiente");
+    expect([params[Number(pago![1]) - 1], params[Number(pago![2]) - 1]]).toEqual(["pendiente", "fallido"]);
+    expect(where).toContain('"orders"."factura_alegra_id" is null');
 
     const update = grabadora.consultas[2];
     expect(update.sql).toMatch(/^update "shop"\."orders"/);

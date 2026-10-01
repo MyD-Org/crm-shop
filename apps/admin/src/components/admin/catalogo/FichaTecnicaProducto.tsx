@@ -18,6 +18,11 @@ interface Props {
   onCambio: (ficha: FichaDto | null) => void
 }
 
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer())
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("")
+}
+
 const MAX_BYTES = 10 * 1024 * 1024
 const MAX_MB = MAX_BYTES / 1024 / 1024
 
@@ -42,14 +47,25 @@ export function FichaTecnicaProducto({ alegraId, ficha, onCambio }: Props) {
 
     setSubiendo(true)
     try {
-      const { key, url, headers } = await api<{ key: string; url: string; headers: { "content-type": string } }>(
-        `/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/ficha`,
-        { method: "POST", body: JSON.stringify({ nombre: file.name, bytes: file.size }) },
-      )
+      // La key sale del CONTENIDO (sha256): si el mismo PDF ya está en el bucket, el servidor
+      // responde `existente` y no hace falta volver a subirlo.
+      const sha256 = await sha256Hex(file)
+      const firma = await api<{
+        key: string
+        existente: boolean
+        url?: string
+        headers?: { "content-type": string }
+      }>(`/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/ficha`, {
+        method: "POST",
+        body: JSON.stringify({ nombre: file.name, bytes: file.size, sha256 }),
+      })
+      const { key } = firma
 
-      // Los headers son los MISMOS que se firmaron: si no coinciden, R2 responde 403.
-      const res = await fetch(url, { method: "PUT", headers, body: file })
-      if (!res.ok) throw new Error(`La subida falló (${res.status}).`)
+      if (!firma.existente) {
+        // Los headers son los MISMOS que se firmaron: si no coinciden, R2 responde 403.
+        const res = await fetch(firma.url!, { method: "PUT", headers: firma.headers, body: file })
+        if (!res.ok) throw new Error(`La subida falló (${res.status}).`)
+      }
 
       const { producto } = await api<{ producto: { fichaTecnica: FichaDto } }>(
         `/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/ficha`,

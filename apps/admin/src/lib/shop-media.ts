@@ -111,6 +111,31 @@ export function fichaKey(tenantId: string, alegraId: string, id: string): string
   return `productos/${tenantId}/${alegraId}/ficha-${id}.pdf`
 }
 
+const SHA256_RE = /^[0-9a-f]{64}$/
+
+/**
+ * Key de una ficha técnica POR CONTENIDO: `productos/{tenant}/fichas/{sha256}.pdf`.
+ *
+ * El nombre es el sha256 del archivo: el mismo PDF se guarda UNA vez por tenant y todos los
+ * productos que lo usan apuntan a la misma key. Por eso un objeto de este tipo puede estar
+ * referenciado por varios productos y NO se puede borrar sin mirar quién más lo usa
+ * (`catalogo-ficha-repo.borrarFichaSiHuerfana`). `fichas` no puede chocar con un alegraId
+ * (los alegraId de `fichaKey` van seguidos de `/ficha-{uuid}.pdf`, no de `/{sha}.pdf`).
+ */
+export function fichaContenidoKey(tenantId: string, sha256: string): string {
+  if (!TENANT_ID_RE.test(tenantId)) throw new Error(`tenantId inválido para key de R2: ${JSON.stringify(tenantId)}`)
+  if (!SHA256_RE.test(sha256)) throw new Error(`sha256 inválido para key de R2: ${JSON.stringify(sha256)}`)
+  return `productos/${tenantId}/fichas/${sha256}.pdf`
+}
+
+/** Si la key es de contenido y de ESTE tenant, devuelve su sha256; si no, null. */
+export function shaDeFichaContenidoKey(tenantId: string, key: string): string | null {
+  const prefijo = `productos/${tenantId}/fichas/`
+  if (!TENANT_ID_RE.test(tenantId) || !key.startsWith(prefijo) || !key.endsWith(".pdf")) return null
+  const sha = key.slice(prefijo.length, -".pdf".length)
+  return SHA256_RE.test(sha) ? sha : null
+}
+
 /**
  * URL pública de una foto, compuesta al LEER.
  *

@@ -593,6 +593,17 @@ export interface FichaTecnicaOverlay {
   key: string
   nombre: string
   bytes: number
+  /**
+   * sha256 (hex) del PDF. Presente cuando la key es POR CONTENIDO (`fichaContenidoKey`): varios
+   * productos pueden compartir el mismo objeto. El Shop sólo usa `key`: los campos extra son
+   * inertes para él.
+   */
+  sha256?: string
+  /**
+   * La key de antes de pasar a contenido (la copia propia del producto). Se conserva como
+   * respaldo para `revertir`; no se borra del bucket sin una orden explícita.
+   */
+  origen?: { key: string; bytes: number }
 }
 
 // Overlay comercial, ESPARSO: sólo hay fila para los productos que alguien tocó. La ausencia

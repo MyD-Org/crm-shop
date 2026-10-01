@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { basePublicaFotos, esAnchoValido, fichaKey, fotoKey, shopMediaConfig, urlPublicaFoto } from "./shop-media"
+import {
+  basePublicaFotos,
+  esAnchoValido,
+  fichaContenidoKey,
+  fichaKey,
+  fotoKey,
+  shaDeFichaContenidoKey,
+  shopMediaConfig,
+  urlPublicaFoto,
+} from "./shop-media"
 
 const ID = "0123456789ab4cde8f0123456789abcd"
 const UUID = `${ID.slice(0, 8)}-${ID.slice(8, 12)}-${ID.slice(12, 16)}-${ID.slice(16, 20)}-${ID.slice(20)}`
@@ -82,5 +91,28 @@ describe("fichaKey", () => {
     expect(() => fichaKey("../otro", "9001", UUID)).toThrow()
     expect(() => fichaKey("t", "../9001", UUID)).toThrow()
     expect(() => fichaKey("t", "9001", "no-es-uuid")).toThrow()
+  })
+})
+
+describe("fichaContenidoKey", () => {
+  const SHA = "ab".repeat(32)
+
+  it("arma la key por contenido: tenant + sha256, sin producto", () => {
+    expect(fichaContenidoKey("central-led", SHA)).toBe(`productos/central-led/fichas/${SHA}.pdf`)
+  })
+
+  it("rechaza tenants y hashes que romperían el layout", () => {
+    expect(() => fichaContenidoKey("../otro", SHA)).toThrow()
+    expect(() => fichaContenidoKey("t", "abc")).toThrow()
+    expect(() => fichaContenidoKey("t", SHA.toUpperCase())).toThrow()
+    expect(() => fichaContenidoKey("t", `${SHA}/../x`)).toThrow()
+  })
+
+  it("shaDeFichaContenidoKey reconoce sólo las keys de ese tenant", () => {
+    expect(shaDeFichaContenidoKey("t", fichaContenidoKey("t", SHA))).toBe(SHA)
+    expect(shaDeFichaContenidoKey("otro", fichaContenidoKey("t", SHA))).toBeNull()
+    expect(shaDeFichaContenidoKey("t", `productos/t/9001/ficha-${UUID}.pdf`)).toBeNull()
+    expect(shaDeFichaContenidoKey("t", `productos/t/fichas/${SHA}.png`)).toBeNull()
+    expect(shaDeFichaContenidoKey("t", `productos/t/fichas/${"z".repeat(64)}.pdf`)).toBeNull()
   })
 })

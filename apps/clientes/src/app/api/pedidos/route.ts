@@ -28,12 +28,11 @@ import { avisarPedidoRecibido } from "@/lib/pedido-avisos";
 import { permitir } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { SucursalPedidoError } from "@/lib/sucursales-pedido";
-import { COOKIE_ZONA, claveDeCookie } from "@/lib/zona";
+import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
 import { contextoParaProvincia } from "@/lib/disponibilidad-vista";
 import { claveProvincia } from "@/lib/sucursales";
-import { cookies } from "next/headers";
 
 /**
  * Techo de confirmaciones por comprador. Una persona real confirma un pedido,
@@ -361,8 +360,10 @@ export async function POST(req: Request) {
         }
       : undefined;
     if (sucursalEntrada && !sucursalEntrada.provincia) {
-      const cookieZona = claveDeCookie((await cookies()).get(COOKIE_ZONA)?.value);
-      sucursalEntrada.provincia = cookieZona ?? (claveProvincia(datosFactura.domicilioProvincia) || null);
+      // Sin provincia de entrega: la de la ubicación del visitante y, si no, la del domicilio fiscal.
+      // (La cookie `shop_zona` del selector viejo ya no se lee.)
+      const { ubicacion } = await ubicacionDelVisitante().catch(() => ({ ubicacion: null }));
+      sucursalEntrada.provincia = ubicacion?.provincia ?? (claveProvincia(datosFactura.domicilioProvincia) || null);
     }
 
     // Flag `disponibilidad-sucursal`: stock por sucursal. La cotización cuenta la UNIÓN de las

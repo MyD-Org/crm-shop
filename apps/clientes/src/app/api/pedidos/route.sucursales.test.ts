@@ -9,6 +9,7 @@ import { SucursalPedidoError } from "@/lib/sucursales-pedido";
 const crearPedido = vi.fn();
 const cotizar = vi.fn();
 let cookieZona: string | undefined;
+let ubicacionProvincia: string | undefined;
 let provinciaFactura: string | undefined;
 
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
@@ -21,6 +22,12 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({
     get: (n: string) =>
       n === "shop_zona" && cookieZona ? { value: cookieZona } : undefined,
+  }),
+}));
+vi.mock("@/lib/ubicacion-servidor", () => ({
+  ubicacionDelVisitante: async () => ({
+    ubicacion: ubicacionProvincia ? { localidad: "Ciudad Ejemplo", provincia: ubicacionProvincia } : null,
+    origen: ubicacionProvincia ? "cookie" : "ninguna",
   }),
 }));
 vi.mock("@/lib/auth", () => ({
@@ -80,6 +87,7 @@ const datosPedido = () => crearPedido.mock.calls[0][1];
 
 beforeEach(() => {
   cookieZona = undefined;
+  ubicacionProvincia = undefined;
   provinciaFactura = undefined;
   crearPedido.mockReset();
   crearPedido.mockResolvedValue({
@@ -115,9 +123,9 @@ describe("POST /api/pedidos — sucursales", () => {
     });
   });
 
-  it("provincia: la del body gana a la cookie de zona, y ésta al domicilio de facturación", async () => {
+  it("provincia: la del body gana a la ubicación del visitante, y ésta al domicilio de facturación", async () => {
     setFlag("sucursales", true);
-    cookieZona = "cordoba";
+    ubicacionProvincia = "cordoba";
     provinciaFactura = "Misiones";
     await post({ entregaProvincia: "Tucumán" });
     expect(datosPedido().sucursalEntrada.provincia).toBe("tucuman");
@@ -125,16 +133,17 @@ describe("POST /api/pedidos — sucursales", () => {
     await post();
     expect(datosPedido().sucursalEntrada.provincia).toBe("cordoba");
     crearPedido.mockClear();
-    cookieZona = undefined;
+    ubicacionProvincia = undefined;
     await post();
     expect(datosPedido().sucursalEntrada.provincia).toBe("misiones");
   });
 
-  it("cookie con provincia inválida: se ignora", async () => {
+  it("la cookie vieja shop_zona ya no se lee", async () => {
     setFlag("sucursales", true);
-    cookieZona = "atlantida";
+    cookieZona = "cordoba";
+    provinciaFactura = "Misiones";
     await post();
-    expect(datosPedido().sucursalEntrada.provincia).toBeNull();
+    expect(datosPedido().sucursalEntrada.provincia).toBe("misiones");
   });
 
   it("rechazo de reglas: 409 en usted con el motivo", async () => {

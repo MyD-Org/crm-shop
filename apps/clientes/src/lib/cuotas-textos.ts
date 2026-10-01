@@ -36,11 +36,17 @@ export const TEXTOS_CUOTAS = {
   cft: (pct: number) => `CFT ${fmtPct(pct)}`,
   tea: (pct: number) => `TEA ${fmtPct(pct)}`,
 
-  /** "6 cuotas sin interés de $20.000" / "12 cuotas de $13.500". */
-  linea: (cuotas: number, montoCuota: number, sinInteres: boolean) =>
+  /**
+   * "6 cuotas sin interés de $20.000" / "12 cuotas de $13.500 con interés
+   * (total $162.000)". Con interés siempre lo dice; el total financiado se suma
+   * si se pasa (la card del catálogo y la barra mobile lo omiten por espacio).
+   */
+  linea: (cuotas: number, montoCuota: number, sinInteres: boolean, total?: number) =>
     sinInteres
       ? `${cuotasDe(cuotas)} sin interés de ${fmtMonto(montoCuota)}`
-      : `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,
+      : `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)} con interés${
+          total !== undefined ? ` (total ${fmtMonto(total)})` : ""
+        }`,
 
   /** Cuotas de una fila del modal: "6 cuotas de $20.000". */
   filaCuotas: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,

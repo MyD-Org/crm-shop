@@ -310,6 +310,8 @@ export function PedidoDetalle({
             cuentaPago={pedido.cuentaPago}
             comprobantes={pedido.comprobantes}
             pagos={pedido.pagos}
+            esAdminPlus={esAdminPlus}
+            onChanged={() => void recargar(false)}
           />
 
           <Seccion titulo="Historial">

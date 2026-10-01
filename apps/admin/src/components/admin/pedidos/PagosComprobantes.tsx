@@ -1,4 +1,8 @@
-import { Badge, Card } from "@myd-org/ui"
+"use client"
+
+import { useState } from "react"
+import { Badge, Button, Card } from "@myd-org/ui"
+import { ComprobanteDialog } from "@/components/admin/comprobantes/ComprobanteDialog"
 import type { ComprobantePedidoDto, CuentaPagoDto, PagoRegistradoDto } from "@/lib/pedidos-repo"
 import { fmtFechaDia, fmtFechaPedido, fmtMoneda } from "./format"
 
@@ -20,15 +24,23 @@ export function PagosComprobantes({
   cuentaPago,
   comprobantes,
   pagos,
+  esAdminPlus = false,
+  onChanged,
 }: {
   pedidoId: string
   cuentaPago: CuentaPagoDto | null
   comprobantes: ComprobantePedidoDto[]
   pagos: PagoRegistradoDto[]
+  /** admin+: el popup trae las acciones de Comprobantes; el operador lo ve de sólo lectura. */
+  esAdminPlus?: boolean
+  /** El popup cambió el comprobante (p. ej. "Ya lo cargué a mano"): refrescar el pedido. */
+  onChanged?: () => void
 }) {
+  const [abierto, setAbierto] = useState<string | null>(null)
   if (!cuentaPago && comprobantes.length === 0 && pagos.length === 0) return null
 
   return (
+    <>
     <Card title="Pagos y comprobantes" className="p-4">
       <div className="flex flex-col gap-4">
         {cuentaPago && (
@@ -58,15 +70,9 @@ export function PagosComprobantes({
                     {c.estado === "loaded" ? "Ya cargado" : "Por revisar"}
                   </Badge>
                   {c.tieneArchivo && (
-                    <a
-                      href={`/api/admin/pedidos/${pedidoId}/comprobantes/${c.id}/file`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                      style={{ color: "var(--blue)" }}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => setAbierto(c.id)}>
                       Ver comprobante
-                    </a>
+                    </Button>
                   )}
                 </li>
               ))}
@@ -97,5 +103,16 @@ export function PagosComprobantes({
         )}
       </div>
     </Card>
+      {abierto && (
+        <ComprobanteDialog
+          id={abierto}
+          initial={null}
+          pedidoId={esAdminPlus ? undefined : pedidoId}
+          soloLectura={!esAdminPlus}
+          onClose={() => setAbierto(null)}
+          onChanged={() => onChanged?.()}
+        />
+      )}
+    </>
   )
 }

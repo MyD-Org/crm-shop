@@ -147,6 +147,8 @@
     "provincia": "text",
     "whatsapp": "text",
     "horario": "text",
+    "schedule": "jsonb",
+    "schedule_exceptions": "jsonb",
     "acepta_retiro": "boolean",
     "acepta_envio": "boolean",
     "envio_ciudades": "text[]",

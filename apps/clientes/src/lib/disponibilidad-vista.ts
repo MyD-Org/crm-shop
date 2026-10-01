@@ -69,6 +69,8 @@ export async function disponibilidadParaMostrar(
         direccion: s.direccion,
         ciudad: s.ciudad,
         horario: s.horario,
+        schedule: s.schedule,
+        excepciones: s.excepciones,
         whatsapp: s.whatsapp,
       }));
     return { productos: r.productos, locales };

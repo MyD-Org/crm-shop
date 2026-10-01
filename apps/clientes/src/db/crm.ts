@@ -319,7 +319,8 @@ export const crmComprobantes = publico.table("payment_receipts", {
 
 /**
  * Sucursales del tenant (`public.sucursales`, change `sucursales-igz-mdp`, migración 0041 del CRM).
- * SELECT por COLUMNA: quedan afuera `id`, `maestra`, `deposito_alegra_id` y los timestamps, y
+ * SELECT por COLUMNA (0041, ampliado con `schedule` y `schedule_exceptions` en la 0051): quedan
+ * afuera `id`, `maestra`, `deposito_alegra_id` y los timestamps, y
  * cualquier columna futura (p. ej. la cuenta de Alegra) hasta que una migración del CRM la conceda.
  * Declarar acá una columna no concedida rompería toda la consulta (`permission denied`).
  */
@@ -332,6 +333,10 @@ export const crmSucursales = publico.table("sucursales", {
   provincia: text("provincia").notNull(),
   whatsapp: text("whatsapp").notNull(),
   horario: text("horario").notNull(),
+  /** Horario semanal (shape de `tenants.schedule`); `{}` = sin configurar. GRANT de la 0051. */
+  schedule: jsonb("schedule").$type<unknown>().notNull(),
+  /** Excepciones (feriados, cierres, horario especial); `[]` = ninguna. GRANT de la 0051. */
+  scheduleExceptions: jsonb("schedule_exceptions").$type<unknown>().notNull(),
   aceptaRetiro: boolean("acepta_retiro").notNull(),
   aceptaEnvio: boolean("acepta_envio").notNull(),
   envioCiudades: text("envio_ciudades").array().notNull(),

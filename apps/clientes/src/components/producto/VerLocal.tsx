@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Dialog } from "@myd-org/ui";
 import { enlaceWhatsapp } from "@/lib/contacto-pedido";
+import { horarioParaMostrar, hoyBuenosAires } from "@/lib/horario-agrupado";
 import type { EstadoProductoLocal, LocalDisponibilidad, TonoDisponibilidad } from "@/lib/disponibilidad-textos";
 
 const CLASE_TONO: Record<TonoDisponibilidad, string> = {
@@ -19,6 +20,10 @@ const MARCA: Record<TonoDisponibilidad, string> = { ok: "✓", demora: "•", no
  */
 export function VerLocal({ local, productos }: { local: LocalDisponibilidad; productos?: EstadoProductoLocal[] }) {
   const [abierto, setAbierto] = useState(false);
+  // "Hoy" se calcula al abrir (en el cliente, con fecha de Buenos Aires): ni en el render del
+  // servidor ni en una caché, así no hay desfasaje de hidratación ni excepciones vencidas.
+  const [hoy, setHoy] = useState("");
+  const horario = horarioParaMostrar(local, hoy);
   const direccion = [local.direccion, local.ciudad].filter(Boolean).join(", ");
   const whatsapp = enlaceWhatsapp(local.whatsapp);
   const consulta = encodeURIComponent(direccion);
@@ -27,7 +32,10 @@ export function VerLocal({ local, productos }: { local: LocalDisponibilidad; pro
     <>
       <button
         type="button"
-        onClick={() => setAbierto(true)}
+        onClick={() => {
+          setHoy(hoyBuenosAires());
+          setAbierto(true);
+        }}
         aria-haspopup="dialog"
         className="shrink-0 text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
       >
@@ -47,10 +55,22 @@ export function VerLocal({ local, productos }: { local: LocalDisponibilidad; pro
             </div>
           )}
           <dl className="space-y-2">
-            {local.horario && (
+            {horario.semanal && (
               <div>
                 <dt className="font-semibold text-text">Horario</dt>
-                <dd className="whitespace-pre-line text-muted">{local.horario}</dd>
+                <dd className="whitespace-pre-line text-muted">{horario.semanal.split(" · ").join("\n")}</dd>
+              </div>
+            )}
+            {horario.excepciones.length > 0 && (
+              <div>
+                <dt className="font-semibold text-text">Próximos cambios</dt>
+                <dd>
+                  <ul className="text-muted">
+                    {horario.excepciones.map((e) => (
+                      <li key={e}>{e}</li>
+                    ))}
+                  </ul>
+                </dd>
               </div>
             )}
             {whatsapp && (

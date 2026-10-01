@@ -6,13 +6,13 @@ import { Button, Field, Input, useToast } from "@myd-org/ui"
 
 interface Props {
   initialReceiptsEmail: string
-  /** Se guardó bien: el host (el diálogo de Ajustes de Comprobantes) lo usa para cerrarse. */
+  /** Se guardó bien: el host puede reaccionar (opcional). */
   onSaved?: (email: string) => void
 }
 
-// Comprobantes → Ajustes: el único mail destino de los avisos de comprobantes de pago
+// Sucursales → Avisos de comprobantes de pago: el único mail destino de los avisos de comprobantes de pago
 // (`tenants.receipts_email`, expuesto por GET/PUT /api/admin/settings/receipts). Vacío =
-// permitido: los avisos quedan "skipped" y la pantalla de Comprobantes muestra el aviso.
+// permitido: los avisos quedan "skipped" y la pantalla de Comprobantes muestra un aviso con enlace a Sucursales.
 export function ReceiptsEmailForm({ initialReceiptsEmail, onSaved }: Props) {
   const [email, setEmail] = useState(initialReceiptsEmail)
   const [error, setError] = useState("")
@@ -50,7 +50,7 @@ export function ReceiptsEmailForm({ initialReceiptsEmail, onSaved }: Props) {
   return (
     <div className="flex flex-col gap-3 max-w-xl">
       <Field
-        label="Email para comprobantes"
+        label="Email que recibe los avisos de comprobantes de pago"
         hint="Cuando un cliente informa un pago desde el portal, se avisa a este email con el comprobante adjunto (hasta 10 MB; si pesa más, con un link). Si lo deja vacío, los avisos no se envían: los comprobantes siguen llegando a la pantalla de Comprobantes."
       >
         <Input

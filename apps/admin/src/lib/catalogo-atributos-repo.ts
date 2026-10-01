@@ -167,6 +167,28 @@ export async function leerAtributos(tenantId: string, alegraId: string): Promise
     .sort((a, b) => orden(a.clave) - orden(b.clave))
 }
 
+/** Filas actuales de varios productos, por clave `alegraId|clave` (para el dry-run del aplicador de PDF). */
+export async function leerAtributosDeProductos(
+  tenantId: string,
+  alegraIds: string[],
+): Promise<Map<string, { fuente: FuenteAtributo; valorNum: number | null; valorTexto: string | null }>> {
+  const out = new Map<string, { fuente: FuenteAtributo; valorNum: number | null; valorTexto: string | null }>()
+  for (let i = 0; i < alegraIds.length; i += LOTE) {
+    const filas = await getDb()
+      .select()
+      .from(catalogAtributos)
+      .where(and(eq(catalogAtributos.tenantId, tenantId), inArray(catalogAtributos.alegraId, alegraIds.slice(i, i + LOTE))))
+    for (const f of filas) {
+      out.set(`${f.alegraId}|${f.clave}`, {
+        fuente: f.fuente as FuenteAtributo,
+        valorNum: f.valorNum != null ? Number(f.valorNum) : null,
+        valorTexto: f.valorTexto,
+      })
+    }
+  }
+  return out
+}
+
 /**
  * Panel manual: los valores dados quedan `manual` (le ganan a todo) y las claves de `quitar` se
  * borran (de cualquier fuente: "este dato está mal"). Una clave quitada puede volver con la próxima

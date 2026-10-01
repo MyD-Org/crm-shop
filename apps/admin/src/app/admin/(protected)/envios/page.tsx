@@ -21,7 +21,7 @@ export default async function EnviosPage() {
           Envío a domicilio, envío gratis y desde dónde sale el envío
         </p>
       </div>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <EnviosCard />
         <EnviosSucursalesCard />
       </div>

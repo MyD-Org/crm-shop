@@ -8,7 +8,6 @@ import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/aleg
 import { normalizarIdentificador } from "@/lib/identificador"
 import { PROVINCIAS, claveProvincia } from "@/lib/provincias"
 import { ReglasVentaCard } from "./ReglasVentaCard"
-import { MediosPagoShopCard } from "./MediosPagoShopCard"
 import { validarSucursalCambios, validarSucursalNueva, validarZona } from "@/lib/sucursales-validacion"
 
 // Sucursales (parte A): ABM de sucursales y de zonas (provincia ->
@@ -551,8 +550,6 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
       </Card>
 
       <ReglasVentaCard />
-
-      <MediosPagoShopCard />
 
       <Dialog
         open={sucursalForm !== null}

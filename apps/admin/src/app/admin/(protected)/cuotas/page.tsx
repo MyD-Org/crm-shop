@@ -4,6 +4,7 @@ import { roleRank } from "@/lib/roles"
 import { listarEscalones, listarProveedores, toEscalonDto, toProveedorDto } from "@/lib/cuotas-repo"
 import { obtenerTasasMercadoPago, type TasasMP } from "@/lib/mp-tasas"
 import { CuotasTab } from "@/components/admin/CuotasTab"
+import { MediosPagoShopCard } from "@/components/admin/MediosPagoShopCard"
 
 export const dynamic = "force-dynamic"
 
@@ -26,14 +27,17 @@ export default async function CuotasPage() {
       <div className="mb-6 pl-10 md:pl-0">
         <h1 className="text-lg font-semibold" style={{ color: "var(--ink)" }}>Pagos y cuotas</h1>
         <p className="text-sm mt-0.5" style={{ color: "var(--ink-soft)" }}>
-          Proveedores de pago y cuotas que ofrece el Shop
+          Proveedores de pago, cuotas y medios de pago del checkout
         </p>
       </div>
-      <CuotasTab
-        initialProveedores={proveedores.map(toProveedorDto)}
-        initialEscalones={escalones.map(toEscalonDto)}
-        tasasMP={tasasMP}
-      />
+      <div className="flex flex-col gap-4">
+        <CuotasTab
+          initialProveedores={proveedores.map(toProveedorDto)}
+          initialEscalones={escalones.map(toEscalonDto)}
+          tasasMP={tasasMP}
+        />
+        <MediosPagoShopCard />
+      </div>
     </div>
   )
 }

@@ -376,3 +376,53 @@ describe("consolidar", () => {
     expect(r.conflictos).toEqual([a("2", 2), a("2", 3)])
   })
 })
+
+describe("fila = código de Alegra con sufijo de marca", () => {
+  const TABLA: Celda[] = [
+    RELLENO,
+    ["Codigo", 40, 720], ["Potencia", 120, 720], ["Flujo", 200, 720],
+    ["ABC123", 40, 700], ["10W", 120, 700], ["800LM", 200, 700],
+    ["ABC124", 40, 680], ["20W", 120, 680], ["1600LM", 200, 680],
+  ]
+
+  it("la fila viene con el sufijo de marca y se busca sin él", () => {
+    const r = verificarLectura(lectura("ABC123-XYZ", { potencia_w: { valor: 10 }, flujo_lm: { valor: 800 } }), ctx(TABLA, { code: "ABC123-XYZ", nombre: "REFLECTOR" }))
+    expect(r.descartes).toEqual([])
+    expect(aceptados(r)).toEqual([["potencia_w", 10], ["flujo_lm", 800]])
+  })
+
+  it("con separadores opcionales en el PDF", () => {
+    const t: Celda[] = [RELLENO, ["ABC-123", 40, 700], ["10W", 120, 700], ["ABC-124", 40, 680], ["20W", 120, 680]]
+    const r = verificarLectura(lectura("ABC123-XYZ", { potencia_w: { valor: 10 } }), ctx(t, { code: "ABC123-XYZ", nombre: "REFLECTOR" }))
+    expect(aceptados(r)).toEqual([["potencia_w", 10]])
+  })
+
+  it("prefijo duplicado en Alegra", () => {
+    const t: Celda[] = [RELLENO, ["990101001A", 40, 700], ["10W", 120, 700], ["990101002A", 40, 680], ["20W", 120, 680]]
+    const r = verificarLectura(lectura("99990101001A-XYZ", { potencia_w: { valor: 10 } }), ctx(t, { code: "99990101001A-XYZ", nombre: "REFLECTOR" }))
+    expect(r.descartes).toEqual([])
+    expect(aceptados(r)).toEqual([["potencia_w", 10]])
+    const otro = verificarLectura(lectura("99990101009A-XYZ", { potencia_w: { valor: 10 } }), ctx(t, { code: "99990101009A-XYZ", nombre: "REFLECTOR" }))
+    expect(motivos(otro)).toEqual(["potencia_w:fila_no_en_texto"])
+  })
+
+  it("el rigor sigue: valor de otra fila, fila ausente y fila de otro código", () => {
+    const c = ctx(TABLA, { code: "ABC123-XYZ", nombre: "REFLECTOR" })
+    expect(motivos(verificarLectura(lectura("ABC123-XYZ", { potencia_w: { valor: 20 } }), c))).toEqual(["potencia_w:valor_fuera_de_fila"])
+    expect(motivos(verificarLectura(lectura("ABC999-XYZ", { potencia_w: { valor: 10 } }), c))).toEqual(["potencia_w:fila_no_en_texto"])
+    expect(motivos(verificarLectura(lectura("ABC124", { potencia_w: { valor: 20 } }), c))).toEqual(["potencia_w:fila_no_coincide"])
+  })
+})
+
+describe("montaje: superficie / sobrepuesto equivalen a aplicar", () => {
+  const t = (txt: string): Celda[] => [RELLENO, ["Montaje", 40, 700], [txt, 120, 700]]
+  const c = (txt: string) => ctx(t(txt), { nombre: "PLAFON", unicoProducto: true })
+  it.each(["De superficie", "Superficie", "Sobrepuesto"])("%s", (txt) => {
+    expect(terminosEn("montaje", txt.toUpperCase())).toEqual(["aplicar"])
+    expect(aceptados(verificarLectura(lectura(null, { montaje: { valor: "aplicar" } }), c(txt)))).toEqual([["montaje", "aplicar"]])
+  })
+  it("no vale para embutir ni se confunde con otra palabra", () => {
+    expect(motivos(verificarLectura(lectura(null, { montaje: { valor: "embutir" } }), c("De superficie")))).toEqual(["montaje:valor_no_en_texto"])
+    expect(terminosEn("montaje", "SUPERFICIES PLANAS")).toEqual([])
+  })
+})

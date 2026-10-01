@@ -269,7 +269,12 @@ function evidenciaNumerica(clave: ClaveAtributo, a: AtributoExtraido, cita: stri
   return new RegExp(ev.palabra).test(cita) ? "ok" : "unidad_no_en_texto"
 }
 
-function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, cita: string): EvidenciaValor {
+/** Sinónimos que sólo valen al leer el PDF: "de superficie" / "superficie" = montaje "aplicar". */
+const sinonimosDePdf = (clave: ClaveAtributo, t: string): string =>
+  clave === "montaje" ? t.replace(/(?<![A-Z0-9])(?:DE )?SUPERFICIE(?![A-Z0-9])/g, "APLICAR") : t
+
+function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, citaCruda: string): EvidenciaValor {
+  const cita = sinonimosDePdf(clave, citaCruda)
   const v = a.valorTexto ?? ""
   switch (clave) {
     case "tono": {
@@ -405,7 +410,7 @@ export function terminosEn(clave: ClaveAtributo, texto: string): string[] {
     return out
   }
   if (DEFINICION_ATRIBUTOS[clave].tipo === "texto") {
-    const v = extraerAtributosDeNombre(texto).find((x) => x.clave === clave)?.valorTexto
+    const v = extraerAtributosDeNombre(sinonimosDePdf(clave, texto)).find((x) => x.clave === clave)?.valorTexto
     return v ? [v.toLowerCase()] : []
   }
   const ev = EVIDENCIA_NUM[clave]
@@ -566,6 +571,15 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
   const textoCompacto = compacto(textoLineas)
 
   const fila = typeof lectura.fila === "string" && tieneAlfanum(normalizarCita(lectura.fila)) ? normalizarCita(lectura.fila) : null
+  // Si la fila es el código de Alegra con sufijo de marca, se busca la forma sin sufijo (y sin el
+  // prefijo duplicado), con las mismas variantes que el matcher de código.
+  const codeNorm = ctx.code ? normalizarCita(ctx.code) : null
+  const filaSinSufijo = fila && codeNorm && fila === codeNorm ? fila.replace(/-[A-Z]{2,5}$/, "") : null
+  const filaBuscada = filaSinSufijo && filaSinSufijo !== fila && filaSinSufijo.replace(/[^A-Z0-9]/g, "").length >= 3 ? filaSinSufijo : fila
+  const formasDeFila = (f: string): string[] => {
+    const dup = /^(\d{2,3})\1/.exec(f.replace(/[^A-Z0-9]/g, ""))
+    return filaBuscada === fila || !dup ? [f] : [f, f.replace(/[^A-Z0-9]/g, "").slice(dup[1].length)]
+  }
   const tokens = tokensDelNombre(ctx.nombre)
   const delNombre = extraerAtributosDeNombre(ctx.nombre)
 
@@ -584,10 +598,10 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
   }
 
   // Cada aparición de la fila: ¿es de este producto? ¿qué celdas le pertenecen?
-  const apariciones = fila
-    ? ocurrenciasDeFila(fila, doc).map((celda) => {
+  const apariciones = filaBuscada
+    ? [...new Set(formasDeFila(filaBuscada).flatMap((f) => ocurrenciasDeFila(f, doc)))].map((celda) => {
         const c = contextoDeFila(doc, celda)
-        const porCodigo = filaCoincideConCodigo(fila, ctx.code)
+        const porCodigo = filaCoincideConCodigo(filaBuscada, ctx.code)
         const porTokens = tokens.length > 0 && tokens.every((t) => c.celdas.some((x) => t.re.test(x.norm)))
         return { celda, ...c, esDelProducto: porCodigo || porTokens }
       })

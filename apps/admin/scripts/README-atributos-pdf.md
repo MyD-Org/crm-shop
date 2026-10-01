@@ -45,6 +45,9 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    celdas de esa fila/columna) y el valor tiene que estar en la misma línea que el identificador de la
    fila (tabla normal) o en la misma columna (tabla transpuesta: se detecta porque hay otros
    identificadores de la misma forma en su línea, y cada celda va al encabezado más cercano por `x`).
+   Si la `fila` es el código de Alegra con sufijo de marca (`-XYZ`), se busca en el PDF sin el sufijo
+   (con separadores opcionales y sin el prefijo duplicado). Para el montaje, "superficie" / "de
+   superficie" / "sobrepuesto" cuentan como "aplicar".
 4. Si el nombre ya dice otro valor para la misma clave: se descarta el del PDF (`contradice_nombre`).
 5. PDF sin capa de texto: `sin_texto`. Rangos y vocabularios de `normalizarAtributos`: `valor_invalido`.
 

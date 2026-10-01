@@ -18,11 +18,12 @@
 11. [Cuenta que factura cada pedido (multicuenta)](#cuenta-que-factura-cada-pedido-multicuenta)
 12. [Pedidos del Shop: vincular factura](#pedidos-del-shop-vincular-factura)
 13. [Clientes de la tienda](#clientes-de-la-tienda)
-14. [Base de datos](#base-de-datos)
-15. [Feature flags](#feature-flags)
-16. [Referencia de endpoints](#referencia-de-endpoints)
-17. [Variables de entorno](#variables-de-entorno)
-18. [Comandos](#comandos)
+14. [Horarios por sucursal](#horarios-por-sucursal)
+15. [Base de datos](#base-de-datos)
+16. [Feature flags](#feature-flags)
+17. [Referencia de endpoints](#referencia-de-endpoints)
+18. [Variables de entorno](#variables-de-entorno)
+19. [Comandos](#comandos)
 
 ---
 
@@ -474,6 +475,7 @@ cualquier otro objeto de `public` le da 42501:
 | `notification_log` | tabla | SELECT, UPDATE sólo `read_at` | 0032 |
 | `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
 | `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0048 |
+| `sucursales` | tabla | SELECT por columna: las de 0041 (`tenant_id, slug, nombre, direccion, ciudad, provincia, whatsapp, horario, acepta_retiro, acepta_envio, envio_ciudades, orden, activa, predeterminada`) más `schedule, schedule_exceptions` (0051). Siguen afuera `id`, `deposito_alegra_id`, `cuenta_alegra_id` y los timestamps | 0041, 0051 |
 
 Sin permiso, a propósito: las tablas base `catalog_products`, `catalog_categories` y
 `alegra_contacts` (el Shop las ve sólo por sus vistas), `contactos_acceso_facturacion` (guarda
@@ -490,7 +492,10 @@ el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y
 `drizzle/0038_grants_overlay_shop.sql` (overlay y categorías de la tienda) y el de
 `drizzle/0039_contactos_acceso_facturacion.sql` (SELECT de la vista recreada con
 `acceso_facturacion`) y el de `drizzle/0049_catalog_atributos.sql` (SELECT por columna de
-`catalog_atributos`; lo verifica `test/integration/catalog-atributos.integration.test.ts`). Todos son
+`catalog_atributos`; lo verifica `test/integration/catalog-atributos.integration.test.ts`) y el de
+`drizzle/0051_sucursales_horario.sql` (SELECT por columna de `sucursales.schedule` y
+`schedule_exceptions`: el de 0041 es por columna y NO se hereda; lo verifica
+`test/integration/horarios-sucursal-0051.integration.test.ts`). Todos son
 idempotentes. Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
 `test/integration/shop-contacto-write-through.integration.test.ts`,
@@ -974,6 +979,45 @@ que devuelve `requireAdminPlus` en todas las rutas admin nuevas (no un 403: así
 
 ---
 
+## Horarios por sucursal
+
+Change `horarios-por-sucursal`, rebanada A (migración **0051**). Cada sucursal tiene su horario
+semanal y sus excepciones (feriados, vacaciones, horario especial) propios; la empresa
+(`tenants.schedule` / `tenants.schedule_exceptions`) sólo se edita y se usa cuando el tenant no
+tiene sucursales activas.
+
+- **Datos**: `sucursales.schedule jsonb NOT NULL DEFAULT '{}'` y `schedule_exceptions jsonb NOT NULL
+  DEFAULT '[]'`, con el mismo shape que `tenants` (`src/lib/schedule.ts`). `'{}'` = sin horario
+  configurado. La migración copió a cada sucursal existente el horario y las excepciones de su
+  empresa; `sucursales.horario` (texto libre) queda **deprecado**: se conserva, ya no se edita en
+  Sucursales y el Shop lo usa sólo de respaldo si la sucursal no tiene horario estructurado.
+- **Permisos**: `shop_app` lee `schedule` y `schedule_exceptions` (GRANT por columna de 0051, ver
+  la tabla «Permisos de `shop_app` sobre `public`»); nada más cambia.
+- **Admin → Horarios**: con sucursales activas muestra un selector de sucursal (`?sucursal=<slug>`,
+  por defecto la predeterminada; deshabilitado mientras se edita). Sin sucursales activas, edita
+  la empresa como antes. **Copiar a las otras sucursales** (sólo con 2 o más activas): copia lo
+  guardado de la sucursal actual (excepciones, horario semanal o ambos) a las elegidas y
+  **reemplaza** lo cargado en el destino, en una transacción con el lock por tenant de
+  `sucursales-repo`. Un destino que no es del tenant responde 404 y no escribe nada.
+- **API**: `GET/PUT /api/admin/settings/schedule[?sucursal=<slug>]` (404 si el slug no es del
+  tenant de la sesión) y `POST /api/admin/settings/schedule/copiar`
+  (`{ desde, hacia: slug[] | "todas", que: "excepciones" | "horario" | "todo" }`). Admin y superadmin.
+  Al guardar o copiar en sucursales se avisa al Shop (`pingShopRevalidarSucursales`, nunca tira).
+- **Contrato con la ai-api** (`GET /api/internal/business-hours?tenantId=`), aditivo:
+  `{ notes, schedule, sucursales: [{ slug, nombre, ciudad, predeterminada, schedule, notes }] }`.
+  `notes` y `schedule` de la raíz son el legado: salen de la sucursal predeterminada activa (o la
+  primera por `orden`) y, sin sucursales activas, de `tenants.*`. `sucursales` lista sólo las
+  activas, ordenadas por `orden` y nombre. No trae `abierto_ahora`: lo calcula la ai-api con su
+  reloj. `notes` es el texto de las excepciones (`exceptionsToNotes`).
+- **Código**: `src/lib/horarios-repo.ts`, `src/lib/horarios-seleccion.ts`,
+  `src/lib/business-hours.ts`, `src/components/admin/ScheduleForm.tsx`. Tests: unitarios de cada
+  uno y `test/integration/horarios-sucursal-0051.integration.test.ts` (backfill, GRANT, repo,
+  copiar, endpoint).
+- **Migración**: se aplica a mano en prod ANTES de mergear (ver `apps/admin/AGENTS.md`).
+  Reversa en el encabezado de `drizzle/0051_sucursales_horario.sql`.
+
+---
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
@@ -1042,6 +1086,9 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | GET | `/api/admin/comprobantes/{id}/load-context` | admin | Facturas abiertas del cliente + cuentas bancarias, para "Cargar en Alegra" |
 | POST | `/api/admin/comprobantes/{id}/load-to-alegra` | admin | Crea el pago en Alegra (imputado a facturas elegidas), adjunta el comprobante y marca la fila |
 | GET/PUT | `/api/admin/settings/receipts` | admin | Casilla de avisos de comprobantes del tenant |
+| GET/PUT | `/api/admin/settings/schedule` | admin | Horario semanal y excepciones; `?sucursal=<slug>` = el de esa sucursal (404 si no es del tenant), sin parámetro = el de la empresa |
+| POST | `/api/admin/settings/schedule/copiar` | admin | Copia excepciones, horario semanal o ambos de una sucursal a otras (`{ desde, hacia, que }`), reemplazando lo cargado |
+| GET | `/api/internal/business-hours?tenantId=` | `INTERNAL_SECRET` | Horario para la ai-api: `{ notes, schedule, sucursales[] }` (legado = predeterminada; ver [Horarios por sucursal](#horarios-por-sucursal)) |
 | GET | `/api/admin/pedidos/{id}/factura?numero=` | operator+ | Busca y valida la factura en Alegra para el pedido, sin guardar |
 | POST/DELETE | `/api/admin/pedidos/{id}/factura` | operator+ | Vincula (`{alegraId}`, marca facturado) / desvincula (`?alegraId=` esperado) |
 | GET | `/api/admin/clientes-tienda` | operator+ | Usuarios de la tienda del tenant (`q`, `vinculo=todos\|vinculados\|sin_vincular`, `acceso=todos\|con\|sin`, `pedidos=todos\|con`, `start`, `limit`); sólo lectura |

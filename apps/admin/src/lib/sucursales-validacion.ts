@@ -20,7 +20,6 @@ export interface SucursalValida {
   ciudad: string
   provincia: string
   whatsapp: string
-  horario: string
   aceptaRetiro: boolean
   aceptaEnvio: boolean
   envioCiudades: string[]
@@ -82,7 +81,6 @@ function validarCampos(body: Record<string, unknown>): { ok: true; cambios: Camb
   for (const [campo, etiqueta, max] of [
     ["direccion", "La dirección", 200],
     ["ciudad", "La ciudad", 100],
-    ["horario", "El horario", 500],
   ] as const) {
     const t = texto(body, campo, etiqueta, { max })
     if (!t.ok) return t
@@ -160,7 +158,6 @@ export function validarSucursalNueva(body: unknown): { ok: true; valor: Sucursal
       ciudad: x.ciudad ?? "",
       provincia: x.provincia ?? "",
       whatsapp: x.whatsapp ?? "",
-      horario: x.horario ?? "",
       aceptaRetiro: x.aceptaRetiro ?? true,
       aceptaEnvio: x.aceptaEnvio ?? true,
       envioCiudades: x.envioCiudades ?? [],

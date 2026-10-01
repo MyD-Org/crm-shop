@@ -50,7 +50,6 @@ describe("validarSucursalNueva", () => {
         ciudad: "",
         provincia: "",
         whatsapp: "",
-        horario: "",
         aceptaRetiro: true,
         aceptaEnvio: true,
         envioCiudades: [],
@@ -89,6 +88,20 @@ describe("validarSucursalNueva", () => {
       error: "Ingrese un número entero igual o mayor que cero.",
     })
     expect(validarSucursalNueva({ slug: "aaa", nombre: "A", orden: 1.5 }).ok).toBe(false)
+  })
+
+  it("ignora un `horario` viejo en el body (el texto libre ya no se edita)", () => {
+    const largo = "x".repeat(600)
+    const alta = validarSucursalNueva({ slug: "aaa", nombre: "A", horario: largo })
+    expect(alta.ok).toBe(true)
+    expect(alta.ok && "horario" in alta.valor).toBe(false)
+    expect(validarSucursalCambios({ horario: "Lun a Vie" })).toEqual({
+      ok: false,
+      campo: "body",
+      error: "No hay cambios para guardar.",
+    })
+    const c = validarSucursalCambios({ nombre: "B", horario: "Lun a Vie" })
+    expect(c).toEqual({ ok: true, cambios: { nombre: "B" } })
   })
 
   it("rechaza tipos incorrectos y un cuerpo que no es objeto", () => {

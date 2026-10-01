@@ -515,7 +515,7 @@ export function ScheduleForm({ initialSchedule, sucursales, sucursalSlug }: Prop
 }
 
 function etiquetaSucursal(s: SucursalHorarioItem): string {
-  return `${s.nombre}${s.ciudad ? ` · ${s.ciudad}` : ""}${s.predeterminada ? " (predeterminada)" : ""}`
+  return `${s.nombre}${s.ciudad ? ` · ${s.ciudad}` : ""}`
 }
 
 // Selector de sucursal: navega a `?sucursal=<slug>`; la página (server) carga el horario de esa

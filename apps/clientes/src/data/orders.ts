@@ -88,6 +88,11 @@ export interface Order {
   facturaId?: string;
   /** Número legible de esa factura ("FV-1-00012876"), para mostrar junto al botón. */
   facturaNumero?: string;
+  /**
+   * true si el pedido ya tiene al menos un comprobante de transferencia informado (pending o
+   * loaded). Lo usa el aviso de la card; undefined = ninguno o no consultado.
+   */
+  comprobanteInformado?: boolean;
 }
 
 export interface OrderSummary {

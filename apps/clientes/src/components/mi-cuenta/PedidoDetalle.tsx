@@ -10,6 +10,7 @@ import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
 import { TEXTO_PLAZO_COMPROBANTE, puedeSubirComprobante } from "@/lib/comprobantes/pedido";
+import { AvisoComprobante } from "./AvisoComprobante";
 import { InformarPagoPedido } from "./InformarPagoPedido";
 import { CancelarPedido } from "./CancelarPedido";
 import { PedidoAcciones } from "./PedidoAcciones";
@@ -79,7 +80,12 @@ export function PedidoDetalle({
             <CuentaTransferencia cuenta={cuentaVisible.cuenta} importe={cuentaVisible.cuenta ? pedido.total : undefined} className="mt-3" />
           )}
           {puedeSubirComprobante(pedido) && (
-            <div className="mt-3">
+            <div id="comprobante" className="mt-3 scroll-mt-24">
+              {pedido.comprobanteInformado && (
+                <div className="mb-3">
+                  <AvisoComprobante aviso="en_revision" pedidoId={pedido.id} conEnlace={false} />
+                </div>
+              )}
               <p className="mb-2 text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
               <InformarPagoPedido pedido={{ id: pedido.id, numero: pedido.numero, total: pedido.total }} />
             </div>

@@ -4,6 +4,8 @@ import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
 import { etiquetaUnidades, unidadesPedido } from "@/lib/pedido-vista";
+import { avisoComprobante } from "@/lib/comprobantes/aviso-card";
+import { AvisoComprobante } from "./AvisoComprobante";
 import { PedidoAcciones } from "./PedidoAcciones";
 import { PedidoLinea } from "./PedidoLinea";
 
@@ -17,6 +19,7 @@ export function PedidoCard({ pedido }: { pedido: Order }) {
   const pill = estadoPedidoPill(pedido);
   const pasos = seguimientoPedido(pedido);
   const unidades = unidadesPedido(pedido.items);
+  const aviso = avisoComprobante(pedido);
 
   return (
     <Card>
@@ -33,6 +36,12 @@ export function PedidoCard({ pedido }: { pedido: Order }) {
       {pasos && (
         <div className="mt-5">
           <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="sm" />
+        </div>
+      )}
+
+      {aviso && (
+        <div className="mt-4">
+          <AvisoComprobante aviso={aviso} pedidoId={pedido.id} />
         </div>
       )}
 

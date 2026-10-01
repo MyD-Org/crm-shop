@@ -677,12 +677,13 @@ export const orderItems = shop.table(
 );
 
 /**
- * Unidades reservadas por ítem (vista `shop.stock_reservado`, migración 0012).
+ * Unidades reservadas por ítem (vista `shop.stock_reservado`, migración 0012; recreada por la 0028).
  *
  * Suma de `qty` de las líneas de los pedidos del Shop que todavía apartan
  * stock: no facturados y en `confirmado`, `preparacion` o `en_camino`, o
- * `pendiente` con menos de 24 h desde su creación (la misma ventana que
- * `VENTANA_PAGO_MS`) o ya pagado online. Cancelar, entregar, marcar facturado o
+ * `pendiente` mientras `coalesce(reserva_vence_en, created_at + 24 h) > now()` (los
+ * `reserva_dias` de las reglas de venta; 24 h = `VENTANA_PAGO_MS` con Mercado Pago o sin dato) o
+ * ya pagado online. Cancelar, entregar, marcar facturado o
  * dejar vencer un pendiente libera la reserva sin escribir nada: se calcula al
  * leer. El disponible que ve y valida el Shop es `stock − qty` (ver
  * `src/lib/stock-disponible.ts`); el espejo del stock nunca se toca.

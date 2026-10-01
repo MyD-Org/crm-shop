@@ -17,6 +17,12 @@ import type { Cotizacion } from "./cotizacion";
 
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
+// `crearPedido` siempre lee las reglas de venta (reserva_dias) para congelar `reserva_vence_en`;
+// acá no se ejercita esa lectura (la cubre pedidos.disponibilidad.test.ts), así que no ensucia la grabación.
+vi.mock("./sucursales-repo", async (orig) => ({
+  ...(await orig<typeof import("./sucursales-repo")>()),
+  leerReglasVenta: async () => ({ reservaDias: 7 }),
+}));
 
 import {
   cancelarPedidoPendiente,

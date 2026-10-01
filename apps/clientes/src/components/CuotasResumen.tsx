@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Progress } from "@myd-org/ui";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import type { ResumenCuotas } from "@/lib/cuotas-exhibicion";
@@ -9,11 +10,14 @@ import type { ResumenCuotas } from "@/lib/cuotas-exhibicion";
 export function CuotasResumen({
   resumen,
   titulo,
+  accion,
   className = "",
 }: {
   resumen: ResumenCuotas | null;
   /** Encabezado opcional (checkout). */
   titulo?: string;
+  /** Debajo de la línea de cuotas (carrito: "Ver medios de pago"). */
+  accion?: ReactNode;
   className?: string;
 }) {
   if (!resumen) return null;
@@ -32,6 +36,7 @@ export function CuotasResumen({
           {TEXTOS_CUOTAS.linea(mejor.cuotas, mejor.montoCuota, mejor.sinInteres)}
         </p>
       )}
+      {accion}
       {escalon && (
         <div className={resumen.titulo ? "mt-3" : ""}>
           <p className="mb-1.5 text-xs font-medium text-text">{escalon.texto}</p>

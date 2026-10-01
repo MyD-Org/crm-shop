@@ -10,7 +10,7 @@ import { dbGrabadora, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fix
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { enArbolConConteo, getCategorias, rutaEnArbol, getFacetas, getPaginaCatalogo } from "./catalog";
+import { arbolCompletoConConteo, enArbolConConteo, getCategorias, rutaEnArbol, getFacetas, getPaginaCatalogo } from "./catalog";
 
 const ILUMINACION = "11111111-1111-4111-8111-111111111111";
 const FOCOS = "22222222-2222-4222-8222-222222222222";
@@ -93,6 +93,25 @@ describe("enArbolConConteo", () => {
     const sinIluminacion = nodos.filter((n) => n.id !== ILUMINACION);
     const r = enArbolConConteo(sinIluminacion, new Map([[FOCOS, 2]]));
     expect(r).toEqual([]);
+  });
+});
+
+describe("arbolCompletoConConteo", () => {
+  const nodos = ARBOL.map(([id, parentId, nombre, orden]) => ({
+    id: id as string,
+    parentId: parentId as string | null,
+    nombre: nombre as string,
+    orden: orden as number,
+  }));
+
+  it("conserva las categorías del catálogo, con 0 las que el filtro deja afuera", () => {
+    const base = new Map([[FOCOS, 2], [ELECTRICIDAD, 4]]);
+    const r = arbolCompletoConConteo(nodos, base, new Map([[FOCOS, 1]]));
+    expect(r).toEqual([
+      { label: "ILUMINACION", count: 1, nivel: 1 },
+      { label: "Focos led", count: 1, nivel: 2 },
+      { label: "ELECTRICIDAD", count: 0, nivel: 1 },
+    ]);
   });
 });
 

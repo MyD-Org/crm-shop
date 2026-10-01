@@ -9,6 +9,13 @@ import { SLUG_TRANSFERENCIA } from "../cuentas-bancarias";
 /** Tope de comprobantes informados por pedido (anti-abuso; se cuenta en la base). */
 export const MAX_COMPROBANTES_POR_PEDIDO = 5;
 
+/**
+ * Plazo que se le pide al comprador para informar la transferencia (pantalla "Pedido recibido",
+ * Mi cuenta y mail). Es un pedido, no una regla: nada cancela el pedido si se pasa.
+ */
+export const TEXTO_PLAZO_COMPROBANTE =
+  "Suba el comprobante de la transferencia ahora o, a más tardar, dentro de las próximas 24 h hábiles. También puede hacerlo desde Mis pedidos.";
+
 /** Lo mínimo del pedido que necesita informar un pago, ya validado contra su dueño. */
 export interface PedidoParaComprobante {
   id: string;

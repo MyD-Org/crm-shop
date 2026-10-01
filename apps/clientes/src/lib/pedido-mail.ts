@@ -11,6 +11,7 @@
 import { escapeHtml as e } from "./escape-html";
 import { FUENTE_MAIL, pieTexto, tarjetaMail } from "./mail-layout";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "./cuentas-bancarias";
+import { TEXTO_PLAZO_COMPROBANTE } from "./comprobantes/pedido";
 
 export interface MailPedido {
   subject: string;
@@ -98,7 +99,8 @@ function bloqueTransferenciaHtml(t: { cuenta: CuentaPagoSnapshot | null }, total
           </tr>`,
         )
         .join("")}
-        </table>`
+        </table>
+        <p style="margin:10px 0 0;font-size:14px;line-height:1.55;color:#1c2733">${e(TEXTO_PLAZO_COMPROBANTE)}</p>`
     : `<p style="margin:6px 0 0;font-size:14px;line-height:1.55;color:#77808a">${e(TEXTO_SIN_CUENTA)}</p>`;
   return `
       <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
@@ -110,7 +112,9 @@ function bloqueTransferenciaTexto(t: { cuenta: CuentaPagoSnapshot | null }, tota
   return [
     "",
     "Datos para transferir",
-    ...(t.cuenta ? filasCuenta(t.cuenta, total).map(([k, v]) => `${k}: ${v}`) : [TEXTO_SIN_CUENTA]),
+    ...(t.cuenta
+      ? [...filasCuenta(t.cuenta, total).map(([k, v]) => `${k}: ${v}`), "", TEXTO_PLAZO_COMPROBANTE]
+      : [TEXTO_SIN_CUENTA]),
   ];
 }
 

@@ -59,6 +59,8 @@ import { DisponibilidadLineas, ListaLineas } from "@/components/producto/Disponi
 import { resumenEntregaPedido, type DisponibilidadVista } from "@/lib/disponibilidad-textos";
 import { itemDe } from "@/lib/tracking/eventos";
 import { track } from "@/lib/tracking/track";
+import { InformarPago } from "@/components/mi-cuenta/cuenta-corriente/InformarPago";
+import { TEXTO_PLAZO_COMPROBANTE } from "@/lib/comprobantes/pedido";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { pieTransferencia } from "@/lib/pie-pago-transferencia";
@@ -414,6 +416,8 @@ export function CheckoutClient({
    * el brick necesita un monto para mostrar, y traer los pedidos completos por
    * cada render sería innecesario.
    */
+  /** "Pedido recibido" por transferencia: el comprador ya informó el comprobante en esta pantalla. */
+  const [comprobanteInformado, setComprobanteInformado] = useState(false);
   const [confirmado, setConfirmado] = useState<{
     numero: string;
     id: string;
@@ -498,6 +502,7 @@ export function CheckoutClient({
     if (!confirmado) return;
     setConfirmado(null);
     setPagado(false);
+    setComprobanteInformado(false);
     setErrorCancelar(null);
     setErrorEnvio(null);
     setPasoActual("datos");
@@ -824,6 +829,22 @@ export function CheckoutClient({
             <div className={`mt-4 text-left ${ENTRADA_EXITO} delay-[260ms]`}>
               <p className="mb-2 text-sm font-semibold text-text">Datos para transferir</p>
               <CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />
+              {/* Sin cuenta todavía no hay a dónde transferir: el comprobante se pide recién con los datos. */}
+              {confirmado.cuentaPago &&
+                (comprobanteInformado ? (
+                  <p className="mt-4 rounded-lg bg-success/10 p-3 text-sm text-success">
+                    Recibimos su comprobante. Le avisaremos cuando registremos el pago.
+                  </p>
+                ) : (
+                  <div className="mt-4">
+                    <p className="mb-2 text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
+                    <InformarPago
+                      ultimos={[]}
+                      pedido={{ id: confirmado.id, numero: confirmado.numero, total: confirmado.total }}
+                      onInformado={() => setComprobanteInformado(true)}
+                    />
+                  </div>
+                ))}
             </div>
           )}
           {!pagado && confirmado.contacto && (

@@ -9,7 +9,7 @@ import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
-import { puedeSubirComprobante } from "@/lib/comprobantes/pedido";
+import { TEXTO_PLAZO_COMPROBANTE, puedeSubirComprobante } from "@/lib/comprobantes/pedido";
 import { InformarPagoPedido } from "./InformarPagoPedido";
 import { CancelarPedido } from "./CancelarPedido";
 import { PedidoAcciones } from "./PedidoAcciones";
@@ -80,6 +80,7 @@ export function PedidoDetalle({
           )}
           {puedeSubirComprobante(pedido) && (
             <div className="mt-3">
+              <p className="mb-2 text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
               <InformarPagoPedido pedido={{ id: pedido.id, numero: pedido.numero, total: pedido.total }} />
             </div>
           )}

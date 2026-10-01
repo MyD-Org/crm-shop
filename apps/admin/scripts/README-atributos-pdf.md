@@ -66,6 +66,9 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    **Ángulo**: sólo si el rótulo de su fila/columna o su celda habla de ángulo, apertura o haz ("Beam
    angle"); "giro", "rotación", "inclinación", "orientable" y "basculante" se descartan
    (`angulo_no_es_de_luz`).
+   Una potencia o corriente "máxima" (carga admitida de un riel, controlador o tecla: "200W Máx", "Carga máxima 200W",
+   "Potencia máxima de lámpara: 60W", "hasta 60W") no es la del producto: si "máx", "máximo/a", "maximum" o "hasta" está en su
+   celda, en el rótulo de su fila o columna o en la celda pegada de la misma línea, se descarta (`valor_maximo`).
 5. PDF sin capa de texto: `sin_texto`. Rangos y vocabularios de `normalizarAtributos`: `valor_invalido`.
 
 Dos lecturas distintas del mismo (producto, clave) se descartan (`conflicto_entre_lecturas`).

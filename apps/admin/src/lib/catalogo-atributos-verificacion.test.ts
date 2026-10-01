@@ -548,6 +548,40 @@ describe("unidad con borde exacto", () => {
   })
 })
 
+describe("potencia y corriente máximas no son las del producto", () => {
+  const una = (celdas: Celda[], clave: string, valor: number) =>
+    verificarLectura(lectura(null, { [clave]: { valor } }), ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "X" }))
+  const fila = (txt: string, clave: string, valor: number) => una([["Dato", 40, 700], [txt, 120, 700]], clave, valor)
+
+  it("la potencia común se acepta", () => {
+    expect(aceptados(fila("Potencia 20W", "potencia_w", 20))).toEqual([["potencia_w", 20]])
+  })
+  it.each([
+    ["Potencia 20W máx.", "potencia_w", 20],
+    ["200W Máx", "potencia_w", 200],
+    ["1000W max.", "potencia_w", 1000],
+    ["18W máx", "potencia_w", 18],
+    ["Carga máxima 200W", "potencia_w", 200],
+    ["Potencia máxima de lámpara: 60W", "potencia_w", 60],
+    ["Potencia hasta 60W", "potencia_w", 60],
+    ["Corriente 4.2A Máx", "corriente_a", 4.2],
+    ["4.2A Máx.", "corriente_a", 4.2],
+    ["Corriente maximum 4.2A", "corriente_a", 4.2],
+  ])("%s se descarta", (txt, clave, valor) => {
+    expect(motivos(fila(txt, clave, valor))).toEqual([`${clave}:valor_maximo`])
+  })
+  it("el máximo en la celda vecina de la misma línea", () => {
+    expect(motivos(una([["Potencia lámpara máx.", 40, 700], ["60W", 160, 700]], "potencia_w", 60))).toEqual(["potencia_w:valor_maximo"])
+    expect(motivos(una([["Potencia", 40, 700], ["60W", 120, 700], ["Máx.", 170, 700]], "potencia_w", 60))).toEqual(["potencia_w:valor_maximo"])
+  })
+  it("el máximo en el rótulo de la columna", () => {
+    expect(motivos(una([["Carga máxima", 120, 720], ["Riel", 40, 700], ["200W", 120, 700]], "potencia_w", 200))).toEqual(["potencia_w:valor_maximo"])
+  })
+  it("otra magnitud con máximo no afecta a la potencia", () => {
+    expect(aceptados(una([["Potencia", 40, 700], ["20W", 120, 700], ["Temp. máx. 50C", 40, 680]], "potencia_w", 20))).toEqual([["potencia_w", 20]])
+  })
+})
+
 describe("color de la luz no es color del producto", () => {
   const propia = (celdas: Celda[], nombre: string) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre, code: "TR-001-XYZ" })
   const color = (valor: string) => lectura(null, { color: { valor } })

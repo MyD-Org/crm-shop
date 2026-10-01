@@ -93,10 +93,10 @@ describe("envioFichaSegunUbicacion (fila de envío de la ficha)", () => {
   });
 
   it("sin ubicación pero la ubicación no cambia nada: la regla general", () => {
-    expect(texto(envioFichaSegunUbicacion({ domicilioActivo: true, gratis: null }, null))).toBe("Costo de envío a coordinar");
+    expect(envioFichaSegunUbicacion({ domicilioActivo: true, gratis: null }, null)).toEqual({ tipo: "pedir" });
     expect(
-      texto(envioFichaSegunUbicacion({ domicilioActivo: true, gratis: { alcance: "pais", provincias: [], minimo: null } }, null)),
-    ).toBe("Envío gratis");
+      envioFichaSegunUbicacion({ domicilioActivo: true, gratis: { alcance: "pais", provincias: [], minimo: null } }, null),
+    ).toEqual({ tipo: "pedir" });
   });
 
   it("con ubicación en alcance sin mínimo: Gratis a <localidad>", () => {

@@ -13,6 +13,7 @@ import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto
 import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
+import { estadoEnvio } from "@/lib/disponibilidad-textos";
 import { EnvioProductoUbicacion } from "@/components/producto/EnvioProductoUbicacion";
 
 type Props = { params: Promise<{ id: string }> };
@@ -81,7 +82,10 @@ export default async function ProductoPage({ params }: Props) {
           // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
           // fallback, para que la ficha siga con su shell estático.
           <Suspense fallback={textoEnvioFicha(reglas.envio ?? CONFIG_ENVIO_DEFAULT)}>
-            <EnvioProductoUbicacion configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT} />
+            <EnvioProductoUbicacion
+              configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
+              plazo={disponibilidad?.productos[producto.id]?.envio ? estadoEnvio(disponibilidad.productos[producto.id].envio!) : null}
+            />
           </Suspense>
         }
         disponibilidad={

@@ -568,6 +568,7 @@ export function CarritoClient({
               provincia={provincia}
               disponibilidad={resumenEntrega ? { producto: resumenEntrega.producto, locales: cotizacion!.disponibilidad!.locales } : undefined}
               notasLocal={resumenEntrega?.notasLocal}
+              ubicacionConocida={provincia !== null}
             />
           </aside>
         </div>

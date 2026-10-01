@@ -99,9 +99,8 @@ export function envioFichaSegunUbicacion(
   ubicacion: UbicacionVisitante | null,
 ): { tipo: "pedir" } | { tipo: "texto"; texto: string } | null {
   if (!config.domicilioActivo) return null;
-  if (!ubicacion && config.gratis?.alcance === "provincias" && config.gratis.provincias.length > 0) {
-    return { tipo: "pedir" };
-  }
+  // Sin ubicación no se promete plazo ni costo: se le pide la localidad.
+  if (!ubicacion) return { tipo: "pedir" };
   const texto = textoEnvioFicha(config, ubicacion?.provincia, ubicacion?.localidad);
   return texto ? { tipo: "texto", texto } : null;
 }
@@ -109,6 +108,7 @@ export function envioFichaSegunUbicacion(
 /** Textos de la UI y de los mensajes de error de la API (usted). */
 export const TEXTOS_UBICACION = {
   pedir: "Ingrese su localidad",
+  pedirEnvio: "Ingrese su localidad para ver plazo y costo",
   cambiar: "Cambiar ubicación",
   usarMiUbicacion: "Usar mi ubicación",
   ubicando: "Buscando su ubicación…",

@@ -16,6 +16,7 @@ import {
 import { sql } from "drizzle-orm";
 import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
 import type { ReglaAplicada } from "../lib/sucursales";
+import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
 
 /**
  * Todas las tablas del Shop viven en el esquema `shop` de la base del CRM.
@@ -376,6 +377,13 @@ export const orders = shop.table(
      * "a coordinar" en Pedidos del admin.
      */
     envioGratis: boolean("envio_gratis"),
+    /**
+     * Cuenta bancaria congelada al crear un pedido por transferencia (change
+     * `pago-transferencia-comprobante`). NULL = no había cuenta aplicable (u otro medio de pago, o
+     * pedido anterior a la 0029): las vistas muestran "Le enviaremos los datos para transferir".
+     * Se muestra lo congelado, nunca se vuelve a resolver.
+     */
+    pagoCuenta: jsonb("pago_cuenta").$type<CuentaPagoSnapshot>(),
     total: numeric("total", { precision: 14, scale: 2 }).notNull(),
 
     notas: text("notas"),

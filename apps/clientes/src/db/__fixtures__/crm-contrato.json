@@ -212,5 +212,21 @@
     "clave": "text",
     "valor_num": "numeric",
     "valor_texto": "text"
+  },
+  "public.cuentas_bancarias_shop": {
+    "id": "uuid",
+    "tenant_id": "text",
+    "alias": "text",
+    "cbu": "text",
+    "banco": "text",
+    "titular": "text",
+    "cuit": "text",
+    "todas_las_sucursales": "boolean",
+    "sucursal_slugs": "text[]",
+    "monto_min": "numeric(14, 2)",
+    "monto_max": "numeric(14, 2)",
+    "activa": "boolean",
+    "predeterminada": "boolean",
+    "orden": "integer"
   }
 }

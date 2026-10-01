@@ -5,6 +5,7 @@ import { useCart } from "@/context/CartContext";
 import type { Cotizacion } from "@/lib/cotizacion";
 import type { EntregaTipo, EnvioEvaluado, PagoMetodo } from "@/lib/envio";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
+import type { CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 
 /**
  * Cotización del carrito contra el servidor.
@@ -25,6 +26,11 @@ export interface CotizacionResponse extends Cotizacion {
    * local) y los locales con su nombre. Ausente = flag apagado.
    */
   disponibilidad?: { productos: Record<string, DisponibilidadVista>; locales: LocalDisponibilidad[] };
+  /**
+   * Sólo si se pidió `conCuenta` y hay sesión: la cuenta para transferir que corresponde a la
+   * entrega y al total (null = sin cuenta aplicable). El pedido la vuelve a resolver y la congela.
+   */
+  cuentaTransferencia?: CuentaPagoSnapshot | null;
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
@@ -62,6 +68,8 @@ interface Resultado {
   entregaTipo: EntregaTipo;
   ciudad: string;
   provincia: string;
+  conCuenta: boolean;
+  sucursalRetiro: string;
   data: CotizacionResponse | null;
   error: string | null;
   noAuth: boolean;
@@ -75,6 +83,13 @@ export function useCotizacion(opts: {
    * zona con la que se calcula la disponibilidad (flag `disponibilidad-sucursal`).
    */
   provincia?: string;
+  /**
+   * Pide también la cuenta para transferir (medio Transferencia elegido). Cambiarla, o el local de
+   * retiro, recotiza: la cuenta depende de la sucursal y del total.
+   */
+  conCuenta?: boolean;
+  /** Local de retiro elegido (slug); sólo cuenta con `conCuenta` y retiro. */
+  sucursalRetiro?: string;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -85,6 +100,8 @@ export function useCotizacion(opts: {
   const activo = opts.activo ?? true;
   const ciudad = opts.ciudad ?? "";
   const provincia = opts.provincia ?? "";
+  const conCuenta = opts.conCuenta ?? false;
+  const sucursalRetiro = conCuenta && opts.entregaTipo === "retiro" ? (opts.sucursalRetiro ?? "") : "";
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -113,7 +130,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -128,6 +145,8 @@ export function useCotizacion(opts: {
             entregaTipo,
             ciudad: ciudad || undefined,
             provincia: provincia || undefined,
+            conCuenta: conCuenta || undefined,
+            sucursalRetiro: sucursalRetiro || undefined,
           }),
         });
 
@@ -181,7 +200,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -192,7 +211,9 @@ export function useCotizacion(opts: {
     res.nonce === nonce &&
     res.entregaTipo === entregaTipo &&
     res.ciudad === ciudad &&
-    res.provincia === provincia;
+    res.provincia === provincia &&
+    res.conCuenta === conCuenta &&
+    res.sucursalRetiro === sucursalRetiro;
 
   let estado: EstadoCotizacion;
   if (vacio) estado = "vacio";

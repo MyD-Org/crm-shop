@@ -10,6 +10,10 @@ import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
 import { contextoParaProvincia, disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { claveProvincia } from "@/lib/sucursales";
+import { cuentasBancariasCacheadas } from "@/lib/cuentas-bancarias-datos";
+import { cuentaParaVistaPrevia } from "@/lib/cuenta-transferencia";
+import { sucursalesCacheadas } from "@/lib/sucursales-datos";
+import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 
 /**
  * Techo por usuario.
@@ -66,7 +70,13 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { items?: unknown; entregaTipo?: unknown; provincia?: unknown };
+  let body: {
+    items?: unknown;
+    entregaTipo?: unknown;
+    provincia?: unknown;
+    conCuenta?: unknown;
+    sucursalRetiro?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -118,8 +128,36 @@ export async function POST(req: Request) {
       Object.fromEntries(lineas.map((l) => [l.id, l.qty])),
     );
 
+    // Vista previa de la cuenta de la transferencia (sólo con identidad: el checkout exige
+    // sesión). Se resuelve con lecturas cacheadas y el total cotizado; el pedido la vuelve a
+    // resolver sin caché y la congela.
+    let cuentaTransferencia: Awaited<ReturnType<typeof cuentaParaVistaPrevia>> | undefined;
+    if (body.conCuenta === true && (clerkUserId || cliente)) {
+      const [cuentas, datos, sucursalesActivas] = await Promise.all([
+        cuentasBancariasCacheadas(),
+        sucursalesCacheadas(),
+        sucursalesHabilitadas(),
+      ]);
+      const sucursalRetiro =
+        entregaTipo === "retiro" && typeof body.sucursalRetiro === "string"
+          ? body.sucursalRetiro.trim().slice(0, 20) || null
+          : null;
+      cuentaTransferencia = cuentaParaVistaPrevia({
+        cuentas,
+        datos,
+        entrada: {
+          entregaTipo,
+          provincia: provincia || null,
+          sucursalRetiro,
+        },
+        total: cotizacion.total,
+        sucursalesActivas,
+      });
+    }
+
     return NextResponse.json({
       ...cotizacion,
+      ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
       envio: evaluarEnvio(cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),
       pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),

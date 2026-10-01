@@ -79,7 +79,7 @@ const datos: DatosPedido = {
   contactoNombre: "Ana",
   contactoTelefono: "123",
   entregaTipo: "retiro",
-  pagoMetodo: "transferencia",
+  pagoMetodo: "efectivo",
   idempotencyKey: "clave-1",
 };
 

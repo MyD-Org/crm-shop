@@ -108,6 +108,9 @@ export const shopOrders = shop.table("orders", {
   // Envío a domicilio gratis según la regla vigente al pedir (migración Shop 0027). NULL = retiro
   // o pedido anterior; false = costo a coordinar.
   envioGratis: boolean("envio_gratis"),
+  // Cuenta bancaria congelada al pedir por transferencia (migración Shop 0029). NULL = sin cuenta
+  // aplicable u otro medio de pago. Forma: CuentaPagoSnapshot v1 del Shop.
+  pagoCuenta: jsonb("pago_cuenta").$type<Record<string, unknown>>(),
   total: numeric("total", { precision: 14, scale: 2 }).notNull(),
 
   // Aclaración que escribió el CLIENTE en el checkout (no confundir con el motivo interno).

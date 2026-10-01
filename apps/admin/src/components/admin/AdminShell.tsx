@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock } from "lucide-react"
+import { MessageSquare, Users, LogOut, BarChart3, FileText, Package, Receipt, ShoppingBag, UserRound, Store, CreditCard, Clock, Truck } from "lucide-react"
 import { SideNav, ToastProvider } from "@myd-org/ui"
 import { AvailabilityToggle, type Availability } from "./AvailabilityToggle"
 import { NotificationsPrompt } from "./NotificationsPrompt"
@@ -139,6 +139,7 @@ const NAV = [
   // Sin `minRole`: el listado de usuarios de la tienda es de sólo lectura y lo ve el operador.
   { href: "/admin/clientes-tienda", label: "Clientes de la tienda", group: "Datos", icon: <UserRound size={16} strokeWidth={1.6} /> },
   { href: "/admin/sucursales", label: "Sucursales", group: "Datos", icon: <Store size={16} strokeWidth={1.6} />, minRole: "admin" as const },
+  { href: "/admin/envios", label: "Envíos", group: "Datos", icon: <Truck size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/cuotas", label: "Pagos y cuotas", group: "Datos", icon: <CreditCard size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/horarios", label: "Horarios", group: "Datos", icon: <Clock size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   { href: "/admin/plantillas", label: "Plantillas", group: "Datos", icon: <FileText size={16} strokeWidth={1.6} />, minRole: "superadmin" as const },

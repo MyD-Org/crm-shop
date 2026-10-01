@@ -351,6 +351,13 @@
       "when": 1790850000000,
       "tag": "0049_catalog_atributos",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790855000000,
+      "tag": "0050_envio_configurable",
+      "breakpoints": true
     }
   ]
 }

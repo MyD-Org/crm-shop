@@ -22,8 +22,8 @@ describe("AdminShell: menú por grupos", () => {
     expect(fuente).not.toContain('label: "Configuración"')
   })
 
-  it("Sucursales, Pagos y cuotas y Horarios son entradas propias del grupo Datos, sólo admin+", () => {
-    for (const href of ["/admin/sucursales", "/admin/cuotas", "/admin/horarios"]) {
+  it("Sucursales, Envíos, Pagos y cuotas y Horarios son entradas propias del grupo Datos, sólo admin+", () => {
+    for (const href of ["/admin/sucursales", "/admin/envios", "/admin/cuotas", "/admin/horarios"]) {
       const entrada = entradas.filter((l) => l.includes(`href: "${href}"`))
       expect(entrada, href).toHaveLength(1)
       expect(grupoDe(entrada[0]), href).toBe("Datos")

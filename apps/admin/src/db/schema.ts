@@ -1043,6 +1043,19 @@ export const reglasVenta = pgTable("reglas_venta", {
   // Mensaje de confirmación que ve el cliente al terminar la compra (migración 0046). Vacío = texto
   // por defecto del Shop. Variables `{plazo}` y `{whatsapp}` que reemplaza el Shop.
   mensajeConfirmacion: text("mensaje_confirmacion").notNull().default(""),
+  // Envío configurable (migración 0049, change `envio-gratis-configurable`). Dos interruptores:
+  // domicilio (se ofrece, con costo a coordinar) y gratis (apagado al migrar). Alcance, provincias
+  // y mínimo sólo aplican con gratis activo; NULL = sin configurar. Los CHECK viven sólo en SQL.
+  envioDomicilioActivo: boolean("envio_domicilio_activo").notNull().default(true),
+  envioGratisActivo: boolean("envio_gratis_activo").notNull().default(false),
+  // 'pais' | 'provincias'
+  envioGratisAlcance: text("envio_gratis_alcance"),
+  // Claves de provincia (`claveProvincia`), como `zonas.provincia_clave`.
+  envioGratisProvincias: text("envio_gratis_provincias").array().notNull().default(sql`'{}'::text[]`),
+  // 'sin_minimo' | 'desde'
+  envioGratisMinimoModo: text("envio_gratis_minimo_modo"),
+  // Sin impuestos; sólo con modo 'desde'.
+  envioGratisMinimo: numeric("envio_gratis_minimo", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 })

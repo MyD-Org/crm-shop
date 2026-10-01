@@ -5,7 +5,8 @@ import {
   mejorOpcionPara,
   resumenCuotas,
 } from "./cuotas-exhibicion";
-import { fmtMonto, fmtPct, TEXTOS_CUOTAS } from "./cuotas-textos";
+import { fmtPrecio } from "./format";
+import { fmtPct, TEXTOS_CUOTAS } from "./cuotas-textos";
 import type { OfertaCuotas, OpcionOfertada } from "./pagos/cuotas-tipos";
 
 /**
@@ -41,27 +42,27 @@ function oferta(escalones: Escalones, opciones: OpcionOfertada[], extra: OfertaC
 
 describe("textos", () => {
   it("montos y porcentajes en formato argentino", () => {
-    expect(fmtMonto(20000)).toBe("$20.000,00");
-    expect(fmtMonto(10333.33)).toBe("$10.333,33");
-    expect(fmtMonto(13500.5)).toBe("$13.500,50");
+    expect(fmtPrecio(20000)).toBe("$\u00a020.000,00");
+    expect(fmtPrecio(10333.33)).toBe("$\u00a010.333,33");
+    expect(fmtPrecio(13500.5)).toBe("$\u00a013.500,50");
     expect(fmtPct(45.678)).toBe("45,68%");
     expect(fmtPct(0)).toBe("0,00%");
   });
 
   it("línea de la card: sin interés con su cantidad; con interés lo dice y suma el total financiado", () => {
-    expect(TEXTOS_CUOTAS.linea(6, 20000, true)).toBe("6 cuotas sin interés de $20.000,00");
-    expect(TEXTOS_CUOTAS.linea(6, 20000, true, 120000)).toBe("6 cuotas sin interés de $20.000,00");
-    expect(TEXTOS_CUOTAS.linea(12, 13500, false)).toBe("12 cuotas de $13.500,00 con interés");
+    expect(TEXTOS_CUOTAS.linea(6, 20000, true)).toBe("6 cuotas sin interés de $ 20.000,00");
+    expect(TEXTOS_CUOTAS.linea(6, 20000, true, 120000)).toBe("6 cuotas sin interés de $ 20.000,00");
+    expect(TEXTOS_CUOTAS.linea(12, 13500, false)).toBe("12 cuotas de $ 13.500,00 con interés");
     expect(TEXTOS_CUOTAS.linea(12, 13500, false, 162000)).toBe(
-      "12 cuotas de $13.500,00 con interés (total $162.000,00)",
+      "12 cuotas de $ 13.500,00 con interés (total $ 162.000,00)",
     );
   });
 
   it("carrito: hasta N y te faltan para hasta N", () => {
     expect(TEXTOS_CUOTAS.hasta(6, true)).toBe("Hasta 6 cuotas sin interés");
     expect(TEXTOS_CUOTAS.hasta(12, false)).toBe("Hasta 12 cuotas");
-    expect(TEXTOS_CUOTAS.teFaltan(30000, 6)).toBe("Le faltan $30.000,00 para hasta 6 cuotas");
-    expect(TEXTOS_CUOTAS.teFaltan(30000.01, 12)).toBe("Le faltan $30.000,01 para hasta 12 cuotas");
+    expect(TEXTOS_CUOTAS.teFaltan(30000, 6)).toBe("Le faltan $ 30.000,00 para hasta 6 cuotas");
+    expect(TEXTOS_CUOTAS.teFaltan(30000.01, 12)).toBe("Le faltan $ 30.000,01 para hasta 12 cuotas");
   });
 
   it("título del bloque del modal por proveedor", () => {
@@ -94,11 +95,11 @@ describe("mejorOpcionPara", () => {
 describe("resumenCuotas (carrito / checkout)", () => {
   const o = oferta(esc([3, 0], [6, 150000]), [op({ cuotas: 3 }), op({ cuotas: 6 }), op({ cuotas: 12, tasaPct: 30 })]);
 
-  it("escalón: te faltan $30.000,00 para hasta 6 cuotas y barra al 80%", () => {
+  it("escalón: te faltan $ 30.000,00 para hasta 6 cuotas y barra al 80%", () => {
     const r = resumenCuotas(120000, o)!;
     expect(r.titulo).toBe("Hasta 3 cuotas sin interés");
     expect(r.escalon).toEqual({
-      texto: "Le faltan $30.000,00 para hasta 6 cuotas",
+      texto: "Le faltan $ 30.000,00 para hasta 6 cuotas",
       progresoPct: 80,
       faltante: 30000,
       montoMinimo: 150000,
@@ -129,7 +130,7 @@ describe("resumenCuotas (carrito / checkout)", () => {
     const soloAlto = oferta(esc([6, 150000]), [op({ cuotas: 6 })]);
     const r = resumenCuotas(50000, soloAlto)!;
     expect(r.titulo).toBeNull();
-    expect(r.escalon?.texto).toBe("Le faltan $100.000,00 para hasta 6 cuotas");
+    expect(r.escalon?.texto).toBe("Le faltan $ 100.000,00 para hasta 6 cuotas");
     expect(r.escalon?.progresoPct).toBe(33);
   });
 

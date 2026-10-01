@@ -1,4 +1,5 @@
-import { fmtMonto, TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
+import { fmtPrecio } from "@/lib/format";
 import type { BloqueProveedor } from "@/lib/cuotas-exhibicion";
 
 /**
@@ -23,7 +24,7 @@ export function MediosDePagoDetalle({ bloques }: { bloques: BloqueProveedor[] })
                 {TEXTOS_CUOTAS.unPago}
                 <span className="block text-xs text-muted">{TEXTOS_CUOTAS.precioContado}</span>
               </span>
-              <span className="text-sm font-semibold text-text">{fmtMonto(b.precioContado)}</span>
+              <span className="text-sm font-semibold text-text">{fmtPrecio(b.precioContado)}</span>
             </li>
             {b.opciones.map((o) => (
               <li key={o.cuotas} className="flex items-start justify-between gap-4 px-3 py-2.5">
@@ -48,7 +49,7 @@ export function MediosDePagoDetalle({ bloques }: { bloques: BloqueProveedor[] })
                 </span>
                 <span className="shrink-0 text-right text-xs text-muted">
                   {TEXTOS_CUOTAS.total}
-                  <span className="block text-sm font-semibold text-text">{fmtMonto(o.total)}</span>
+                  <span className="block text-sm font-semibold text-text">{fmtPrecio(o.total)}</span>
                 </span>
               </li>
             ))}

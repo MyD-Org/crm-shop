@@ -146,3 +146,31 @@ describe("POST /api/pedidos — envío a domicilio configurable", () => {
     expect(r.status).toBe(400);
   });
 });
+
+describe("POST /api/pedidos — precio cambiado desde que el comprador lo vio", () => {
+  it("total visto igual al recotizado: crea el pedido", async () => {
+    expect((await post({ totalVisto: 120_000 })).status).toBeLessThan(300);
+    expect(crearPedido).toHaveBeenCalledTimes(1);
+  });
+
+  it("total visto distinto: 409 precio_cambio con el total nuevo y no crea el pedido", async () => {
+    const r = await post({ totalVisto: 100_000 });
+    expect(r.status).toBe(409);
+    const json = await r.json();
+    expect(json.motivo).toBe("precio_cambio");
+    expect(json.totalNuevo).toBe(120_000);
+    expect(json.error).toBe("El precio de algunos productos cambió. Revise el nuevo total antes de confirmar.");
+    expect(json.cotizacion.total).toBe(120_000);
+    expect(crearPedido).not.toHaveBeenCalled();
+  });
+
+  it("sin total visto (compatibilidad): crea como hoy", async () => {
+    expect((await post()).status).toBeLessThan(300);
+    expect(crearPedido).toHaveBeenCalledTimes(1);
+  });
+
+  it("total visto inválido se ignora", async () => {
+    expect((await post({ totalVisto: "abc" })).status).toBeLessThan(300);
+  });
+});
+

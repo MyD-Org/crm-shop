@@ -85,6 +85,8 @@ interface BodyPedido {
   /** Con el flag `sucursales`: provincia de entrega (envío) y local de retiro (slug). */
   entregaProvincia?: unknown;
   sucursalRetiro?: unknown;
+  /** Total que el comprador vio en el checkout. Opcional: sin él se crea al precio actual. */
+  totalVisto?: unknown;
 }
 
 /**
@@ -384,6 +386,22 @@ export async function POST(req: Request) {
       const creadoEnElMedio = await pedidoYaCreado();
       if (creadoEnElMedio) return creadoEnElMedio;
       return productosCambiaron(cotizacion);
+    }
+
+    // El comprador confirma lo que vio: si el total recotizado difiere (el precio
+    // cambió con el checkout abierto) no se crea nada y se le muestra el nuevo.
+    // Un reintento idempotente ya volvió arriba, así que no llega acá.
+    const totalVisto = typeof body.totalVisto === "number" && Number.isFinite(body.totalVisto) ? body.totalVisto : null;
+    if (totalVisto !== null && Math.abs(totalVisto - cotizacion.total) >= 0.005) {
+      return NextResponse.json(
+        {
+          error: "El precio de algunos productos cambió. Revise el nuevo total antes de confirmar.",
+          motivo: "precio_cambio",
+          totalNuevo: cotizacion.total,
+          cotizacion,
+        },
+        { status: 409 },
+      );
     }
 
     // `null` = retiro (no aplica); true/false = envío a domicilio gratis o a coordinar.

@@ -2,8 +2,8 @@
  * Lectura de la ubicación del visitante en el server. Lee el request (cookie e identidad), así que
  * va SIEMPRE fuera de los scopes cacheados y dentro de un hueco por request (Suspense).
  *
- * Precedencia (ver `resolverUbicacion`): dirección guardada con sesión → cookie `shop_ubicacion` →
- * sin ubicación. Una falla al leer las direcciones no rompe nada: se sigue con la cookie.
+ * Precedencia (ver `resolverUbicacion`): cookie `shop_ubicacion` (elección explícita) → dirección
+ * guardada con sesión → sin ubicación. Una falla al leer las direcciones no rompe nada.
  */
 import { cache } from "react";
 import { cookies } from "next/headers";

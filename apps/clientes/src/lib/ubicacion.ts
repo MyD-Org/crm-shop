@@ -2,8 +2,8 @@
  * Ubicación del visitante (change `envio-gratis-configurable`, rebanada C). Módulo PURO: sin Next,
  * sin red. Lo importan el server (cookie, páginas) y la UI.
  *
- * Precedencia: dirección guardada (con sesión) → cookie `shop_ubicacion` (geolocalización con
- * permiso o localidad elegida a mano) → sin ubicación. Nunca se inventa una por default ni se usa
+ * Precedencia: cookie `shop_ubicacion` (elección explícita: localidad elegida a mano o
+ * geolocalización con permiso) → dirección guardada (con sesión) → sin ubicación. Nunca se inventa una por default ni se usa
  * la IP. No hay código postal: la unidad es la localidad y de ahí sale la provincia.
  */
 import { PROVINCIAS_AR } from "./provincias";
@@ -78,9 +78,10 @@ export function resolverUbicacion(entrada: {
   direccionGuardada?: { ciudad: string; provincia: string | null } | null;
   cookie?: UbicacionVisitante | null;
 }): { ubicacion: UbicacionVisitante | null; origen: OrigenUbicacion } {
+  // Lo que el visitante eligió a mano manda sobre la dirección guardada.
+  if (entrada.cookie) return { ubicacion: entrada.cookie, origen: "cookie" };
   const dir = desdeDireccion(entrada.direccionGuardada);
   if (dir) return { ubicacion: dir, origen: "direccion" };
-  if (entrada.cookie) return { ubicacion: entrada.cookie, origen: "cookie" };
   return { ubicacion: null, origen: "ninguna" };
 }
 

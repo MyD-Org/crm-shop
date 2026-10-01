@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { SignInButton, useAuth } from "@clerk/nextjs";
 import { SiteHeader, type VisibleOn } from "@myd-org/ui";
@@ -55,6 +55,8 @@ interface PropsHeader {
    * enfocarlo. Lo resuelve el hueco del header; en el shell, apagado.
    */
   busquedaIa?: boolean;
+  /** Indicador de localidad bajo el logo (slot `brandExtra` del DS). Lo resuelve el servidor. */
+  ubicacion?: ReactNode;
 }
 
 /** Header con la ruta actual (nav de la home, cierre del preview del carrito). */
@@ -83,6 +85,7 @@ function HeaderVista({
   navBadge = null,
   navBadgeVisibleOn,
   busquedaIa = false,
+  ubicacion,
   pathname,
 }: PropsHeader & { pathname: string | null }) {
 
@@ -132,6 +135,7 @@ function HeaderVista({
       {/* La barra de anuncio vive en src/app/layout.tsx (global desde e88aec5,
           contenido administrable); acá solo va el header+nav globales. */}
       <SiteHeader
+        brandExtra={ubicacion}
         brandPlacement="start"
         compactOnScroll
         compactActions={<CartPreview pathname={pathname} />}

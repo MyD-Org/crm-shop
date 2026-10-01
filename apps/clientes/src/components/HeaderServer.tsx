@@ -1,4 +1,4 @@
-import { Suspense } from "react"
+import { Suspense, type ReactNode } from "react"
 import { connection } from "next/server"
 import type { VisibleOn } from "@myd-org/ui"
 import { dispCatalogo } from "@/lib/zona-servidor"
@@ -10,6 +10,7 @@ import { identidadActual } from "@/lib/auth"
 import { getContenidoHome } from "@/lib/home-datos"
 import { visibilidadDe, type NavBadgeContent } from "@/data/home-defaults"
 import { HeaderSinRuta, HeaderUI } from "./HeaderUI"
+import { UbicacionHeader } from "./ubicacion/UbicacionHeader"
 
 /**
  * Header global. Va en el shell estático: el badge del nav sale del contenido
@@ -31,6 +32,8 @@ export async function Header() {
     categorias: null,
     navBadge,
     navBadgeVisibleOn,
+    // Localidad bajo el logo (slot del DS); trae su propio hueco por request.
+    ubicacion: <UbicacionHeader />,
   }
 
   // Fallback de dos pisos: con la ruta (rutas sin parámetros, que se conocen
@@ -44,7 +47,7 @@ export async function Header() {
         </Suspense>
       }
     >
-      <HeaderDinamico navBadge={navBadge} navBadgeVisibleOn={navBadgeVisibleOn} />
+      <HeaderDinamico navBadge={navBadge} navBadgeVisibleOn={navBadgeVisibleOn} ubicacion={pendiente.ubicacion} />
     </Suspense>
   )
 }
@@ -53,9 +56,11 @@ export async function Header() {
 async function HeaderDinamico({
   navBadge,
   navBadgeVisibleOn,
+  ubicacion,
 }: {
   navBadge: NavBadgeContent | null
   navBadgeVisibleOn?: VisibleOn
+  ubicacion: ReactNode
 }) {
   // Las categorias del menu salen del catalogo real, cacheadas y compartidas
   // (`categoriasNav`, tag `catalogo`). Si la lectura falla, el header se
@@ -102,6 +107,7 @@ async function HeaderDinamico({
       navBadge={navBadge}
       navBadgeVisibleOn={navBadgeVisibleOn}
       busquedaIa={busquedaIa}
+      ubicacion={ubicacion}
     />
   )
 }

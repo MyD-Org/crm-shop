@@ -32,7 +32,7 @@ export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
   const cookie = (await cookies()).get(COOKIE_ZONA)?.value ?? null;
   let perfilProvincia: string | null = null;
   if (!cookie) {
-    // La ubicación del visitante (dirección guardada o la que eligió en "Estás en…") manda sobre
+    // La ubicación del visitante (la que eligió a mano o, si no, su dirección guardada) manda sobre
     // el perfil: el plazo de entrega tiene que ser el de la zona que ve en la franja.
     const { ubicacion } = await ubicacionDelVisitante();
     if (ubicacion) return zonaVigente({ perfilProvincia: ubicacion.provincia, datos });

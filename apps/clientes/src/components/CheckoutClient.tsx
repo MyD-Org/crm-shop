@@ -51,8 +51,8 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { NOTA_PAGO_A_CONFIRMAR, medioElegido, mediosParaModalidad, type MedioPago } from "@/lib/medios-pago";
-import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
-import type { DisponibilidadVista } from "@/lib/disponibilidad-textos";
+import { DisponibilidadLineas, ListaLineas } from "@/components/producto/DisponibilidadLineas";
+import { resumenEntregaPedido, type DisponibilidadVista } from "@/lib/disponibilidad-textos";
 import { itemDe } from "@/lib/tracking/eventos";
 import { track } from "@/lib/tracking/track";
 
@@ -519,6 +519,17 @@ export function CheckoutClient({
     const local = d.retiro?.[localRetiro];
     return local ? { ...d, envio: null, retiro: { [localRetiro]: local } } : null;
   };
+
+  // Un solo mensaje de entrega para todo el pedido (el producto más lento) debajo de los productos;
+  // por producto sólo queda el aviso de los que no se pueden entregar en la modalidad elegida.
+  const entregaPedido = resumenEntregaPedido(
+    (cotizacion?.lineas ?? []).flatMap((l) => {
+      const disp = l.problema ? null : disponibilidadElegida(l.id);
+      return disp ? [{ id: l.id, disp }] : [];
+    }),
+    cotizacion?.disponibilidad?.locales ?? [],
+    { conEnvio: configEnvio.domicilioActivo },
+  );
 
   // Con los pagos apagados esto es ["a_coordinar"], así que `pagoElegido` (abajo)
   // deriva a "a_coordinar" sin estado extra y la rama de Mercado Pago queda
@@ -1284,8 +1295,9 @@ export function CheckoutClient({
                   {linea.problema && (
                     <span className="mt-0.5 block text-xs">{linea.detalle}</span>
                   )}
-                  {/* Flag `disponibilidad-sucursal`: sólo la modalidad elegida (envío o el local de retiro). */}
-                  {!linea.problema && disponibilidadElegida(linea.id) && (
+                  {/* Flag `disponibilidad-sucursal`: aviso sólo si ESTE producto no se puede entregar
+                      en la modalidad elegida; el estado del pedido va una vez, debajo de la lista. */}
+                  {!linea.problema && disponibilidadElegida(linea.id) && entregaPedido.sinEntrega.includes(linea.id) && (
                     <DisponibilidadLineas
                       disponibilidad={disponibilidadElegida(linea.id)!}
                       locales={cotizacion?.disponibilidad?.locales ?? []}
@@ -1300,6 +1312,15 @@ export function CheckoutClient({
               </li>
             ))}
           </ul>
+
+          {entregaPedido.resumen && (
+            <div className="mb-4">
+              <ListaLineas lineas={[entregaPedido.resumen]} />
+              {entregaPedido.aclaracion && (
+                <p className="mt-1 text-xs text-muted">{entregaPedido.aclaracion}</p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2 border-t border-border pt-4 text-sm">
             <div className="flex justify-between">

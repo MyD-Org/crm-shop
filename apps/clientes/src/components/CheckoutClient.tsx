@@ -55,6 +55,7 @@ import { DisponibilidadLineas, ListaLineas } from "@/components/producto/Disponi
 import { resumenEntregaPedido, type DisponibilidadVista } from "@/lib/disponibilidad-textos";
 import { itemDe } from "@/lib/tracking/eventos";
 import { track } from "@/lib/tracking/track";
+import { rutaIngreso } from "@/lib/ingreso";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -212,6 +213,8 @@ const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
  * "Forma de pago". El comprador tiene que saber ANTES de confirmar que no va a
  * pagar ahora ni elegir cómo.
  */
+const TEXTO_SESION_VENCIDA = "Su sesión venció. Inicie sesión para confirmar el pedido.";
+
 const AVISO_PAGO_A_COORDINAR =
   "El pago se coordina con un asesor después de confirmar su pedido.";
 
@@ -627,6 +630,13 @@ export function CheckoutClient({
           entregaProvincia: aDomicilio && provinciaEntrega ? provinciaEntrega : undefined,
         }),
       });
+
+      if (res.status === 401) {
+        // Sesión vencida: se recotiza para que el resumen muestre el enlace de ingreso.
+        setErrorEnvio(TEXTO_SESION_VENCIDA);
+        recotizar();
+        return;
+      }
 
       const json = await res.json();
 
@@ -1280,6 +1290,15 @@ export function CheckoutClient({
             <p className="mb-4 text-sm text-muted">Confirmando precios y stock…</p>
           )}
 
+          {estado === "no_auth" && (
+            <div className="mb-4 rounded-lg bg-danger/5 p-3 text-xs">
+              <p className="text-danger">{TEXTO_SESION_VENCIDA}</p>
+              <Link href={rutaIngreso("/checkout")} className="mt-1 inline-block font-semibold text-primary hover:underline">
+                Iniciar sesión
+              </Link>
+            </div>
+          )}
+
           {estado === "error" && (
             <div className="mb-4 rounded-lg bg-danger/5 p-3 text-xs">
               <p className="text-danger">{error}</p>
@@ -1365,7 +1384,7 @@ export function CheckoutClient({
             />
           )}
 
-          {errorEnvio && (
+          {errorEnvio && estado !== "no_auth" && (
             <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
           )}
 
@@ -1375,7 +1394,9 @@ export function CheckoutClient({
 
           {!puedeConfirmar && !enviando && (
             <p className="mt-2 text-center text-xs text-muted">
-              {!facturacionCompleta
+              {estado === "no_auth"
+                ? "Inicie sesión para confirmar el pedido."
+                : !facturacionCompleta
                 ? "Cargue sus datos de facturación para continuar."
                 : pasoActual !== "pago"
                   ? "Complete los pasos para confirmar el pedido."
@@ -1390,7 +1411,9 @@ export function CheckoutClient({
           )}
 
           <p className="mt-3 text-center text-xs text-muted">
-            {pagosHabilitados
+            {pagoElegido === "mercadopago"
+              ? "Al confirmar el pedido, pasará a pagar con Mercado Pago."
+              : pagosHabilitados
               ? "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido."
               : "No se le cobrará nada ahora. Un asesor coordinará el pago con usted."}
           </p>

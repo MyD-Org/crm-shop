@@ -17,7 +17,7 @@ import {
   type FacturaResult,
   type PedidoRow,
 } from "@/lib/pedidos-repo"
-import { getTenantByIdFromDb, type TenantConfig } from "@/lib/tenants"
+import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 import { canSeeCosts } from "@/lib/roles"
 
 // "Vincular factura" del detalle de pedido (change webhooks-stock-alegra, PR-3b).
@@ -62,7 +62,6 @@ const MSG = {
     `Ese enlace corresponde a ${nombreDocumentoAlegra(documento)} de Alegra, no a una factura. Ingrese el número o el enlace de la factura.`,
   limite: "Alegra está recibiendo demasiadas consultas. Inténtelo nuevamente en un minuto.",
   alegra: "Alegra no respondió bien. Inténtelo nuevamente en unos minutos.",
-  sinConfig: "No se pudo consultar Alegra para esta empresa. Inténtelo nuevamente en unos minutos.",
   interno: "No se pudo actualizar el pedido. Inténtelo nuevamente.",
 } as const
 
@@ -102,12 +101,6 @@ function chequeoPedido(pedido: PedidoRow, alegraId?: string): Response | null {
   return null
 }
 
-async function configDe(tenantId: string): Promise<TenantConfig | null> {
-  const config = await getTenantByIdFromDb(tenantId)
-  if (!config) console.error(`[admin/pedidos/factura] sin config para tenant "${tenantId}"`)
-  return config
-}
-
 function errorAlegra(err: unknown, ctx: Record<string, unknown>): Response {
   if (err instanceof AlegraRateLimitError) {
     console.warn("[admin/pedidos/factura] Alegra 429", ctx)
@@ -142,8 +135,9 @@ export async function GET(req: Request, { params }: IdParams) {
     const bloqueo = chequeoPedido(found.pedido)
     if (bloqueo) return bloqueo
 
-    const config = await configDe(guard.tenantId)
-    if (!config) return fail(500, "internal", MSG.sinConfig)
+    const cfg = await configAlegraDelPedido(guard.tenantId, found.pedido)
+    if (!cfg.ok) return fail(cfg.status, cfg.code, cfg.error)
+    const config = cfg.config
 
     const clienteCodigo = found.pedido.clienteCodigo
     let resultado
@@ -204,8 +198,9 @@ export async function POST(req: Request, { params }: IdParams) {
     if (bloqueo) return bloqueo
     yaVinculada = found.pedido.facturaAlegraId === alegraId
 
-    const config = await configDe(guard.tenantId)
-    if (!config) return fail(500, "internal", MSG.sinConfig)
+    const cfg = await configAlegraDelPedido(guard.tenantId, found.pedido)
+    if (!cfg.ok) return fail(cfg.status, cfg.code, cfg.error)
+    const config = cfg.config
 
     try {
       factura = await getFacturaPorId(config, alegraId)

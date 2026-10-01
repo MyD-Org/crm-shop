@@ -1,7 +1,7 @@
 import { requireAdminPlus, adminNotFoundResponse } from "@/lib/admin-route-guard"
 import { getDocumentPdf } from "@/lib/alegra"
 import { getPedido } from "@/lib/pedidos-repo"
-import { getTenantByIdFromDb } from "@/lib/tenants"
+import { configAlegraDelPedido } from "@/lib/pedido-cuenta-alegra"
 
 // PDF del remito vinculado al pedido, para el visor (`DocumentViewer` del DS) del detalle de
 // pedido. Mismo criterio que el proxy del portal (`app/api/portal/documentos/[kind]/[id]`): el
@@ -22,8 +22,9 @@ export async function GET(req: Request, { params }: IdParams) {
     const found = await getPedido(guard.tenantId, id)
     if (!found || !found.remito) return adminNotFoundResponse()
 
-    const config = await getTenantByIdFromDb(guard.tenantId)
-    if (!config) return Response.json({ error: "No se pudo consultar Alegra para esta empresa." }, { status: 500 })
+    const cfg = await configAlegraDelPedido(guard.tenantId, found.pedido)
+    if (!cfg.ok) return Response.json({ error: cfg.error, code: cfg.code }, { status: cfg.status })
+    const config = cfg.config
     if (config.alegraMock) return Response.json({ error: "No disponible en modo mock" }, { status: 501 })
 
     const doc = await getDocumentPdf(config, "remision", found.remito.remitoAlegraId)

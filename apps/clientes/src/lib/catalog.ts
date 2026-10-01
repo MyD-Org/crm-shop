@@ -872,6 +872,21 @@ export function enArbolConConteo(
   return salida;
 }
 
+/**
+ * El árbol del panel de filtros: las mismas categorías que el catálogo sin
+ * filtros (`base`, sin las vacías), cada una con lo que cuenta dentro de la
+ * búsqueda y los demás filtros (`filtrado`), 0 incluido. Así filtrar no deja
+ * el panel con una sola categoría.
+ */
+export function arbolCompletoConConteo(
+  arbol: NodoCategoria[],
+  base: Map<string, number>,
+  filtrado: Map<string, number>,
+): (Faceta & { nivel: number })[] {
+  const conteo = new Map(enArbolConConteo(arbol, filtrado).map((c) => [c.label, c.count]));
+  return enArbolConConteo(arbol, base).map((c) => ({ ...c, count: conteo.get(c.label) ?? 0 }));
+}
+
 /** Productos por categoría propia (sólo la directa; `enArbolConConteo` suma hacia arriba). */
 async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>) {
   const filas = await getDb()
@@ -1236,7 +1251,10 @@ export async function getFacetas(
 
   const [categorias, marcas, [rango], [conteoAtributos], rangoPotencia] = await Promise.all([
     arbol.length
-      ? conteoPorCategoriaPropia(whereCategorias).then((c) => enArbolConConteo(arbol, c))
+      ? Promise.all([
+          conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
+          conteoPorCategoriaPropia(whereCategorias),
+        ]).then(([base, filtrado]) => arbolCompletoConConteo(arbol, base, filtrado))
       : getDb()
       .select({
         label: sql<string>`${crmCategoriasAlegra.name}`,

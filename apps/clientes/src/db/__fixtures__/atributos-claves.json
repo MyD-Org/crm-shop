@@ -1,0 +1,42 @@
+{
+  "claves": [
+    "potencia_w",
+    "temperatura_k",
+    "tono",
+    "ip",
+    "flujo_lm",
+    "tension_v",
+    "zocalo",
+    "corriente_a",
+    "polos",
+    "seccion_mm2",
+    "medidas_mm",
+    "color",
+    "poder_corte_ka",
+    "curva",
+    "sensibilidad_ma",
+    "largo_m",
+    "montaje",
+    "angulo_grados"
+  ],
+  "tipos": {
+    "potencia_w": "num",
+    "temperatura_k": "num",
+    "tono": "texto",
+    "ip": "num",
+    "flujo_lm": "num",
+    "tension_v": "num",
+    "zocalo": "texto",
+    "corriente_a": "num",
+    "polos": "num",
+    "seccion_mm2": "num",
+    "medidas_mm": "texto",
+    "color": "texto",
+    "poder_corte_ka": "num",
+    "curva": "texto",
+    "sensibilidad_ma": "num",
+    "largo_m": "num",
+    "montaje": "texto",
+    "angulo_grados": "num"
+  }
+}

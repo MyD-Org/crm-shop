@@ -8,6 +8,15 @@ import { channelLabel, contactRowKey, contactThreadHref, type InboxContact } fro
 import { previewText } from "@/lib/message-text"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 import { markVisited } from "@/lib/admin-last-visit"
+import {
+  CANAL_TODAS,
+  buildCanalTabs,
+  filterByCanal,
+  guardarSeleccion,
+  leerSeleccion,
+  resolveSelected,
+} from "@/lib/inbox-canales"
+import { CanalesNombresEditor } from "@/components/admin/CanalesNombresEditor"
 
 type Tab = "active" | "history"
 type Scope = "all" | "mine"
@@ -20,13 +29,25 @@ interface Props {
   initialContacts: InboxContact[]
   currentUserId: string
   initialBotEnabled: boolean
+  /** Nombres de los canales definidos por el admin (clave = channel_account_id). */
+  initialCanalNombres: Record<string, string>
+  /** Admin o superadmin: puede editar los nombres de los canales. */
+  canEditCanales: boolean
 }
 
-export function InboxList({ initialContacts, currentUserId, initialBotEnabled }: Props) {
+export function InboxList({ initialContacts, currentUserId, initialBotEnabled, initialCanalNombres, canEditCanales }: Props) {
   const [contacts, setContacts] = useState(initialContacts)
   const [botEnabled, setBotEnabled] = useState(initialBotEnabled)
   const [tab, setTab] = useState<Tab>("active")
   const [scope, setScope] = useState<Scope>("all")
+  const [canalNombres, setCanalNombres] = useState(initialCanalNombres)
+  // Canal elegido: se lee de localStorage recién tras montar (el SSR no lo tiene) y se
+  // guarda por navegador. Sin storage arranca en "Todas".
+  const [canalSel, setCanalSel] = useState(CANAL_TODAS)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage solo existe en el cliente
+    setCanalSel(leerSeleccion())
+  }, [])
   // Los valores dependientes de "ahora" (color de urgencia, "hace 5m") se rendean solo
   // despues del mount para evitar mismatch server/cliente: el SSR corre en Vercel (UTC) y
   // el navegador en -03, ademas de que Date.now() difiere entre ambos. Un mismatch acá
@@ -123,7 +144,9 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled }:
 
   const mine = contacts.filter((c) => c.assigned_operator_id === currentUserId)
   const pendingCount = contacts.filter((c) => c.awaiting_reply).length
-  const visible = scope === "mine" ? mine : contacts
+  const canalTabs = buildCanalTabs(contacts, canalNombres)
+  const canalActivo = resolveSelected(canalSel, canalTabs)
+  const visible = filterByCanal(scope === "mine" ? mine : contacts, canalActivo)
 
   return (
     <div className="flex flex-col gap-3">
@@ -170,6 +193,40 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled }:
           },
         ]}
       />
+
+      {(canalTabs.length > 1 || canEditCanales) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {canalTabs.length > 1 && (
+            <Tabs
+              variant="pill"
+              value={canalActivo}
+              onValueChange={(v) => {
+                setCanalSel(v)
+                guardarSeleccion(v)
+              }}
+              items={[
+                { value: CANAL_TODAS, label: "Todas" },
+                ...canalTabs.map((t) => ({
+                  value: t.key,
+                  label: (
+                    <span className="flex items-center gap-1.5">
+                      {t.label}
+                      {t.pending > 0 && (
+                        <Badge tone="warning" className="text-[10px] px-1.5 py-0">
+                          {t.pending}
+                        </Badge>
+                      )}
+                    </span>
+                  ),
+                })),
+              ]}
+            />
+          )}
+          {canEditCanales && (
+            <CanalesNombresEditor contacts={contacts} nombres={canalNombres} onSaved={setCanalNombres} />
+          )}
+        </div>
+      )}
 
       {!visible.length ? (
         <EmptyState

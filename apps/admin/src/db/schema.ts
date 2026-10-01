@@ -1239,3 +1239,18 @@ export const catalogAtributos = pgTable(
   },
   (t) => [primaryKey({ name: "catalog_atributos_pk", columns: [t.tenantId, t.alegraId, t.clave] })],
 )
+
+// Nombre que el admin le da a cada canal de entrada del inbox (un número de WhatsApp por
+// sucursal, la cuenta de Instagram...). `channel_account_id` es el id de la cuenta en ai-api,
+// sin FK entre bases. Sin fila, la solapa del inbox muestra el teléfono o el nombre del canal.
+export const inboxCanales = pgTable(
+  "inbox_canales",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    channelAccountId: text("channel_account_id").notNull(),
+    nombre: text("nombre").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("inbox_canales_tenant_cuenta_uniq").on(t.tenantId, t.channelAccountId)],
+)

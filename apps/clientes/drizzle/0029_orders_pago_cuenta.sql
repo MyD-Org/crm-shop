@@ -1,0 +1,13 @@
+-- Cuenta bancaria congelada en el pedido (change `pago-transferencia-comprobante`, rebanada B).
+-- ADITIVA: una columna nullable; nada existente cambia.
+--   - NULL = pedido sin cuenta aplicable, con otro medio de pago o anterior a esta migración:
+--     las vistas muestran "Le enviaremos los datos para transferir".
+--   - jsonb = CuentaPagoSnapshot v1 (alias, CBU, banco, titular, CUIT, motivo, sucursal, total
+--     evaluado). Se muestra lo congelado; no se vuelve a resolver.
+--
+-- El código la escribe en cada pedido por transferencia: esta migración tiene que correr ANTES de
+-- desplegar el código (db:migrate no corre en el deploy).
+--
+-- Reversa (a mano, en una migración nueva, append-only; nunca editar ésta):
+--   ALTER TABLE "shop"."orders" DROP COLUMN "pago_cuenta";
+ALTER TABLE "shop"."orders" ADD COLUMN "pago_cuenta" jsonb;

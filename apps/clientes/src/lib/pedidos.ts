@@ -39,6 +39,13 @@ import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from ".
 import { decidirSucursalDePedido } from "./sucursales-pedido";
 import { disponibleNeto } from "./sucursales-disponibilidad";
 import { leerDisponibilidadBruta } from "./stock-sucursal";
+import {
+  armarSnapshotCuenta,
+  resolverCuenta,
+  SLUG_TRANSFERENCIA,
+  type CuentaPagoSnapshot,
+} from "./cuentas-bancarias";
+import { leerCuentasBancariasEnTx } from "./cuentas-bancarias-repo";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -167,7 +174,14 @@ export async function crearPedido(
    * oferta leíble o medio offline → cuotas_max null (legacy 1..24).
    */
   plan: PlanPedido | null = null,
-): Promise<{ id: string; numero: string; repetido: boolean; cuotasMax: number | null }> {
+): Promise<{
+  id: string;
+  numero: string;
+  repetido: boolean;
+  cuotasMax: number | null;
+  /** Cuenta congelada de la transferencia; null = sin cuenta aplicable u otro medio de pago. */
+  cuentaPago: CuentaPagoSnapshot | null;
+}> {
   const lineas = cotizacion.lineas.filter((l) => !l.problema);
   if (lineas.length === 0) {
     throw new Error("No hay líneas válidas para crear el pedido");
@@ -190,7 +204,12 @@ export async function crearPedido(
     if (datos.disponibilidadSucursal && datos.sucursalEntrada) {
       if (datos.idempotencyKey) {
         const [existente] = await tx
-          .select({ id: orders.id, numero: orders.numero, cuotasMax: orders.cuotasMax })
+          .select({
+            id: orders.id,
+            numero: orders.numero,
+            cuotasMax: orders.cuotasMax,
+            pagoCuenta: orders.pagoCuenta,
+          })
           .from(orders)
           .where(and(eq(orders.idempotencyKey, datos.idempotencyKey), eq(orders.tenantId, shopTenantId())))
           .limit(1);
@@ -200,6 +219,7 @@ export async function crearPedido(
             numero: formatearNumero(existente.numero),
             repetido: true,
             cuotasMax: existente.cuotasMax,
+            cuentaPago: existente.pagoCuenta ?? null,
           };
         }
       }
@@ -250,6 +270,16 @@ export async function crearPedido(
       reservaVenceEn = calcularReservaVenceEn(datos.pagoMetodo, reglasReserva);
     }
 
+    // Transferencia: la cuenta se resuelve ACÁ, con lectura fresca (nunca la caché de mostrar), la
+    // sucursal ya asignada (null con el flag apagado) y el total cotizado, y se congela en el
+    // pedido. Sin cuentas aplicables queda NULL: el pedido no se frena por eso.
+    let cuentaPago: CuentaPagoSnapshot | null = null;
+    if (datos.pagoMetodo === SLUG_TRANSFERENCIA) {
+      const entrada = { sucursal: asignacion?.sucursal ?? null, total: cotizacion.total };
+      const resuelta = resolverCuenta(await leerCuentasBancariasEnTx(tx), entrada);
+      cuentaPago = resuelta ? armarSnapshotCuenta(resuelta, entrada) : null;
+    }
+
     const [pedido] = await tx
       .insert(orders)
       .values({
@@ -272,6 +302,7 @@ export async function crearPedido(
         entregaDireccion: datos.entregaDireccion ?? null,
         envioGratis: datos.envioGratis ?? null,
         pagoMetodo: datos.pagoMetodo,
+        pagoCuenta: cuentaPago,
         notas: datos.notas ?? null,
         facturacionTipoDoc: datos.facturacion?.tipoDoc ?? null,
         facturacionNroDoc: datos.facturacion?.nroDoc ?? null,
@@ -306,7 +337,12 @@ export async function crearPedido(
     // nuevo — duplicarlas dejaría el pedido con el doble de todo.
     if (!pedido) {
       const [existente] = await tx
-        .select({ id: orders.id, numero: orders.numero, cuotasMax: orders.cuotasMax })
+        .select({
+          id: orders.id,
+          numero: orders.numero,
+          cuotasMax: orders.cuotasMax,
+          pagoCuenta: orders.pagoCuenta,
+        })
         .from(orders)
         .where(
           and(
@@ -328,6 +364,7 @@ export async function crearPedido(
         numero: formatearNumero(existente.numero),
         repetido: true,
         cuotasMax: existente.cuotasMax,
+        cuentaPago: existente.pagoCuenta ?? null,
       };
     }
 
@@ -379,6 +416,7 @@ export async function crearPedido(
       numero: formatearNumero(pedido.numero),
       repetido: false,
       cuotasMax: pedido.cuotasMax,
+      cuentaPago,
     };
   });
 }
@@ -429,15 +467,30 @@ async function bloquearItems(tx: Pick<ReturnType<typeof getDb>, "execute">, ids:
 export async function getPedidoPorClave(
   idempotencyKey: string,
   dueno: DuenoPedidos,
-): Promise<{ id: string; numero: string; cuotasMax: number | null } | null> {
+): Promise<{
+  id: string;
+  numero: string;
+  cuotasMax: number | null;
+  cuentaPago: CuentaPagoSnapshot | null;
+} | null> {
   const [fila] = await getDb()
-    .select({ id: orders.id, numero: orders.numero, cuotasMax: orders.cuotasMax })
+    .select({
+      id: orders.id,
+      numero: orders.numero,
+      cuotasMax: orders.cuotasMax,
+      pagoCuenta: orders.pagoCuenta,
+    })
     .from(orders)
     .where(and(eq(orders.idempotencyKey, idempotencyKey), esDeSuDueno(dueno)))
     .limit(1);
 
   return fila
-    ? { id: fila.id, numero: formatearNumero(fila.numero), cuotasMax: fila.cuotasMax }
+    ? {
+        id: fila.id,
+        numero: formatearNumero(fila.numero),
+        cuotasMax: fila.cuotasMax,
+        cuentaPago: fila.pagoCuenta ?? null,
+      }
     : null;
 }
 
@@ -478,6 +531,8 @@ export function armarOrder(
     metodoPago: PAGO_LABEL[fila.pagoMetodo as PagoMetodo] ?? fila.pagoMetodo,
     pagoMetodoSlug: fila.pagoMetodo,
     ...(fila.sucursal ? { sucursal: fila.sucursal } : {}),
+    // La cuenta congelada al pedir (transferencia); sin snapshot, las vistas muestran el mensaje neutro.
+    ...(fila.pagoCuenta ? { cuentaPago: fila.pagoCuenta } : {}),
     metodoEntrega: etiquetaEntrega(fila.entregaTipo, fila.entregaCiudad, fila.entregaDireccion),
     entregaTipo: fila.entregaTipo as EntregaTipoPedido,
     entregaCiudad: fila.entregaCiudad ?? undefined,

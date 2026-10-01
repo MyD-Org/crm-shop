@@ -440,6 +440,32 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
 });
 
 /**
+ * Cuentas bancarias del Shop para pagos por transferencia (`public.cuentas_bancarias_shop`,
+ * migración 0055 del CRM, change `pago-transferencia-comprobante`). SELECT POR COLUMNA para
+ * `shop_app`: quedan afuera `created_at` y `updated_at` (declararlos rompería la consulta con
+ * `permission denied`). Los montos son `numeric` (llegan como string); `sucursal_slugs` es el
+ * array de slugs de `public.sucursales` cuando `todas_las_sucursales` es false. La migración del
+ * CRM puede no estar aplicada: toda lectura tolera que la tabla no exista
+ * (`cuentas-bancarias-repo.ts`).
+ */
+export const crmCuentasBancariasShop = publico.table("cuentas_bancarias_shop", {
+  id: uuid("id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  alias: text("alias").notNull(),
+  cbu: text("cbu").notNull(),
+  banco: text("banco").notNull(),
+  titular: text("titular").notNull(),
+  cuit: text("cuit").notNull(),
+  todasLasSucursales: boolean("todas_las_sucursales").notNull(),
+  sucursalSlugs: text("sucursal_slugs").array().notNull(),
+  montoMin: numeric("monto_min", { precision: 14, scale: 2 }),
+  montoMax: numeric("monto_max", { precision: 14, scale: 2 }),
+  activa: boolean("activa").notNull(),
+  predeterminada: boolean("predeterminada").notNull(),
+  orden: integer("orden").notNull(),
+});
+
+/**
  * Atributos técnicos estructurados por producto (`public.catalog_atributos`, migración 0049 del
  * CRM; catálogo asistido fase 2). SELECT POR COLUMNA: `fuente` y `updated_at` NO se conceden (la
  * precedencia manual > pdf > nombre la resuelve el CRM al escribir; el Shop lee el valor que

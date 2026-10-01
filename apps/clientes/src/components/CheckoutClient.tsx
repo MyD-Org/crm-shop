@@ -56,6 +56,9 @@ import { resumenEntregaPedido, type DisponibilidadVista } from "@/lib/disponibil
 import { itemDe } from "@/lib/tracking/eventos";
 import { track } from "@/lib/tracking/track";
 import { rutaIngreso } from "@/lib/ingreso";
+import { CuentaTransferencia } from "@/components/CuentaTransferencia";
+import { pieTransferencia } from "@/lib/pie-pago-transferencia";
+import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -199,7 +202,7 @@ function RadioCard({
  * pagaba después. Con un Record, agregar un medio sin su texto no compila.
  */
 const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
-  transferencia: "Le enviamos el CBU al confirmar el pedido",
+  transferencia: "Verá los datos de la cuenta para transferir",
   efectivo: "Paga al momento del retiro",
   cuenta_corriente: "Se carga a su cuenta corriente",
   mercadopago: "Paga ahora con tarjeta, en cuotas si lo desea",
@@ -207,6 +210,26 @@ const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
   // pago". Está porque el Record exige un texto por método.
   a_coordinar: "Un asesor coordinará el pago con usted después de confirmar su pedido",
 };
+
+/**
+ * Datos de la cuenta para transferir en el paso Pago. `undefined` = todavía no llegó la cotización
+ * (o no hay sesión): no se muestra nada hasta tenerla; `null` = sin cuenta aplicable.
+ */
+function BloqueCuentaPago({
+  cuenta,
+  total,
+}: {
+  cuenta: CuentaPagoSnapshot | null | undefined;
+  total: number | undefined;
+}) {
+  if (cuenta === undefined) return null;
+  return (
+    <div className="mt-4">
+      <p className="mb-2 text-sm font-semibold text-text">Datos para transferir</p>
+      <CuentaTransferencia cuenta={cuenta} importe={cuenta ? total : undefined} />
+    </div>
+  );
+}
 
 /**
  * Aviso del checkout cuando los pagos están apagados: reemplaza a la sección
@@ -423,6 +446,8 @@ export function CheckoutClient({
     cuotasMax: number | null;
     /** Plazo y WhatsApp de la sucursal (flag `pedido-a-confirmar`). */
     contacto?: ContactoPedidoVista | null;
+    /** Cuenta congelada en el pedido (transferencia); null = sin cuenta aplicable. */
+    cuentaPago?: CuentaPagoSnapshot | null;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -503,12 +528,37 @@ export function CheckoutClient({
     claveIntento.current = null;
   });
 
+  // Con los pagos apagados esto es ["a_coordinar"], así que `pagoElegido` (abajo)
+  // deriva a "a_coordinar" sin estado extra y la rama de Mercado Pago queda
+  // inalcanzable.
+  const metodosPago = pagosDisponibles(entrega, pagosHabilitados);
+
+  // Efectivo solo existe con retiro. Si el cliente lo eligió y después pasó a
+  // envío, el método se corrige DERIVÁNDOLO en el render — no sincronizando el
+  // estado desde un efecto, que agrega un render de más y un frame donde el
+  // formulario muestra una opción que el servidor va a rechazar.
+  const pagoElegido: PagoMetodo = metodosPago.includes(pago) ? pago : metodosPago[0];
+
+  // Con el flag `pedido-a-confirmar` y medios cargados, el paso Pago ofrece los del CRM (sin
+  // cobro) y el pedido guarda el slug. Sin medios cargados se sigue con lo de arriba.
+  const modoMedios = pedidoAConfirmar && !!mediosPago && mediosPago.length > 0;
+  const medioSel = modoMedios ? medioElegido(mediosPago, entrega, medioSlug) : null;
+  const mediosParaElegir = modoMedios ? mediosParaModalidad(mediosPago, entrega) : [];
+  const pagoParaEnviar: string = modoMedios ? (medioSel?.slug ?? "a_coordinar") : pagoElegido;
+
+  // Transferencia: el servidor devuelve la cuenta que corresponde a la entrega, el local y el total.
+  const conCuenta = pagoParaEnviar === SLUG_TRANSFERENCIA;
+  const localParaCuenta = sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined;
+
   const { cotizacion, estado, error, recotizar } = useCotizacion({
     entregaTipo: entrega,
     ciudad: aDomicilio ? ciudadEntrega : undefined,
     // La provincia de entrega define si el envío es gratis y, con el flag de sucursales, la zona:
     // cambiarla (o la modalidad) recotiza.
     provincia: aDomicilio && provinciaEntrega ? provinciaEntrega : undefined,
+    // Con Transferencia también pide la cuenta; cambiar el local de retiro la recalcula.
+    conCuenta,
+    sucursalRetiro: localParaCuenta,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
@@ -533,24 +583,6 @@ export function CheckoutClient({
     cotizacion?.disponibilidad?.locales ?? [],
     { conEnvio: configEnvio.domicilioActivo },
   );
-
-  // Con los pagos apagados esto es ["a_coordinar"], así que `pagoElegido` (abajo)
-  // deriva a "a_coordinar" sin estado extra y la rama de Mercado Pago queda
-  // inalcanzable.
-  const metodosPago = pagosDisponibles(entrega, pagosHabilitados);
-
-  // Efectivo solo existe con retiro. Si el cliente lo eligió y después pasó a
-  // envío, el método se corrige DERIVÁNDOLO en el render — no sincronizando el
-  // estado desde un efecto, que agrega un render de más y un frame donde el
-  // formulario muestra una opción que el servidor va a rechazar.
-  const pagoElegido: PagoMetodo = metodosPago.includes(pago) ? pago : metodosPago[0];
-
-  // Con el flag `pedido-a-confirmar` y medios cargados, el paso Pago ofrece los del CRM (sin
-  // cobro) y el pedido guarda el slug. Sin medios cargados se sigue con lo de arriba.
-  const modoMedios = pedidoAConfirmar && !!mediosPago && mediosPago.length > 0;
-  const medioSel = modoMedios ? medioElegido(mediosPago, entrega, medioSlug) : null;
-  const mediosParaElegir = modoMedios ? mediosParaModalidad(mediosPago, entrega) : [];
-  const pagoParaEnviar: string = modoMedios ? (medioSel?.slug ?? "a_coordinar") : pagoElegido;
 
   const envioDisponible = cotizacion?.envio.disponible ?? false;
   const contactoCompleto =
@@ -681,6 +713,7 @@ export function CheckoutClient({
         total,
         cuotasMax: typeof json.cuotasMax === "number" ? json.cuotasMax : null,
         contacto: pedidoAConfirmar ? (json.contacto ?? null) : null,
+        cuentaPago: json.cuentaPago ?? null,
       });
       // Conversión: al crear el pedido, también con Mercado Pago todavía impago.
       track({
@@ -828,6 +861,12 @@ export function CheckoutClient({
                 <> Le enviamos el detalle a {emailCliente}.</>
               ))}
           </p>
+          {!pagado && conCuenta && (
+            <div className={`mt-4 text-left ${ENTRADA_EXITO} delay-[260ms]`}>
+              <p className="mb-2 text-sm font-semibold text-text">Datos para transferir</p>
+              <CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />
+            </div>
+          )}
           {pedidoAConfirmar && !pagado && confirmado.contacto && (
             <PedidoContacto
               contacto={confirmado.contacto}
@@ -1228,6 +1267,7 @@ export function CheckoutClient({
             ) : (
               <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
             )}
+            {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
             <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>
           </section>
           )}
@@ -1256,6 +1296,7 @@ export function CheckoutClient({
                 />
               ))}
             </div>
+            {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
             {entrega === "envio" && (
               <p className="mt-3 text-xs text-muted">
                 El pago en efectivo solo está disponible si retira por el local.
@@ -1414,6 +1455,8 @@ export function CheckoutClient({
           <p className="mt-3 text-center text-xs text-muted">
             {pagoElegido === "mercadopago"
               ? "Al confirmar el pedido, pasará a pagar con Mercado Pago."
+              : conCuenta
+              ? pieTransferencia(Boolean(cotizacion?.cuentaTransferencia))
               : pagosHabilitados
               ? "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido."
               : "No se le cobrará nada ahora. Un asesor coordinará el pago con usted."}

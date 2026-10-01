@@ -18,7 +18,13 @@ import { contactoDeSucursal } from "./contacto-pedido-repo";
 import { nombreDelPago } from "./medios-pago";
 import { leerMediosPagoTolerante } from "./medios-pago-repo";
 import { urlSitioMail } from "./mail-layout";
-import { armarMailPedido, armarMailPedidoOperador, destinoAvisoOperador, type AvisoPedidoShop } from "./pedido-mail";
+import {
+  armarMailPedido,
+  armarMailPedidoOperador,
+  destinoAvisoOperador,
+  transferenciaParaMail,
+  type AvisoPedidoShop,
+} from "./pedido-mail";
 import { shopTenantId } from "./tenant";
 import { urlLogoMail } from "./vinculacion-mail";
 
@@ -104,6 +110,10 @@ async function enviarAviso(
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
       pagoPendienteEnLinea: pedido.pagoMetodo === "mercadopago" && pedido.pagoEstado !== "pagado",
+      // Transferencia: la cuenta congelada en el pedido (nunca se vuelve a resolver).
+      ...(aviso === "recibido" && transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta)
+        ? { transferencia: transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta) }
+        : {}),
       ...(contacto
         ? {
             contacto: {

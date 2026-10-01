@@ -10,6 +10,7 @@
  */
 import { escapeHtml as e } from "./escape-html";
 import { FUENTE_MAIL, pieTexto, tarjetaMail } from "./mail-layout";
+import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "./cuentas-bancarias";
 
 export interface MailPedido {
   subject: string;
@@ -49,6 +50,68 @@ export interface DatosMailPedido {
    * WhatsApp de la sucursal asignada. Sin `whatsappUrl` va sólo el mensaje.
    */
   contacto?: { mensaje: string; whatsappVisible?: string; whatsappUrl?: string };
+  /**
+   * Sólo "recibido" y sólo si el pedido es por transferencia: la cuenta congelada en el pedido
+   * (`orders.pago_cuenta`). `cuenta: null` = sin cuenta aplicable: mensaje neutro, sin datos.
+   */
+  transferencia?: { cuenta: CuentaPagoSnapshot | null };
+}
+
+/**
+ * El bloque de la cuenta del mail "recibido": sólo si el pedido es por transferencia. Con snapshot
+ * lleva los datos congelados; sin snapshot (sin cuenta aplicable o pedido anterior), el mensaje neutro.
+ */
+export function transferenciaParaMail(
+  pagoMetodo: string,
+  pagoCuenta: CuentaPagoSnapshot | null | undefined,
+): { cuenta: CuentaPagoSnapshot | null } | undefined {
+  return pagoMetodo === SLUG_TRANSFERENCIA ? { cuenta: pagoCuenta ?? null } : undefined;
+}
+
+/** Mismo texto que `CuentaTransferencia` del checkout (no se importa: eso es un componente). */
+const TEXTO_SIN_CUENTA = "Le enviaremos los datos para transferir";
+
+/** Filas de la cuenta, sin los datos vacíos. */
+function filasCuenta(c: CuentaPagoSnapshot, total: number | undefined): [string, string][] {
+  const filas: [string, string][] = [
+    ["Alias", c.alias],
+    ["CBU", c.cbu],
+    ["Banco", c.banco],
+    ["Titular", c.titular],
+    ["CUIT", c.cuit],
+  ];
+  if (total !== undefined) filas.push(["Importe", moneda(total)]);
+  return filas.filter(([, v]) => v.trim() !== "");
+}
+
+function bloqueTransferenciaHtml(t: { cuenta: CuentaPagoSnapshot | null }, total: number | undefined): string {
+  const interior = t.cuenta
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:${FUENTE_MAIL};margin-top:6px">${filasCuenta(
+        t.cuenta,
+        total,
+      )
+        .map(
+          ([k, v]) => `
+          <tr>
+            <td style="padding:4px 0;font-size:13px;color:#77808a;width:90px">${e(k)}</td>
+            <td style="padding:4px 0;font-size:14px;color:#1c2733">${e(v)}</td>
+          </tr>`,
+        )
+        .join("")}
+        </table>`
+    : `<p style="margin:6px 0 0;font-size:14px;line-height:1.55;color:#77808a">${e(TEXTO_SIN_CUENTA)}</p>`;
+  return `
+      <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
+        <p style="margin:0;font-size:15px;font-weight:700">Datos para transferir</p>${interior}
+      </td></tr>`;
+}
+
+function bloqueTransferenciaTexto(t: { cuenta: CuentaPagoSnapshot | null }, total: number | undefined): string[] {
+  return [
+    "",
+    "Datos para transferir",
+    ...(t.cuenta ? filasCuenta(t.cuenta, total).map(([k, v]) => `${k}: ${v}`) : [TEXTO_SIN_CUENTA]),
+  ];
 }
 
 function oneLine(s: string): string {
@@ -131,6 +194,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   const conResumen = d.aviso === "recibido" && (d.lineas?.length ?? 0) > 0;
   const contacto = d.aviso === "recibido" ? d.contacto : undefined;
   const whatsappOk = Boolean(contacto?.whatsappUrl && contacto.whatsappVisible);
+  const transferencia = d.aviso === "recibido" ? d.transferencia : undefined;
 
   const cuerpoHtml = `
       <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
@@ -147,7 +211,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
             : ""
         }
         <p style="margin:12px 0 0;font-size:14px;color:#77808a">Pedido <strong style="color:#1c2733">${e(d.numero)}</strong></p>
-      </td></tr>${conResumen ? resumen(d) : ""}
+      </td></tr>${conResumen ? resumen(d) : ""}${transferencia ? bloqueTransferenciaHtml(transferencia, d.total) : ""}
       <tr><td style="padding:24px 32px 28px;font-family:${FUENTE_MAIL}">
         ${
           d.pedidosUrl
@@ -185,6 +249,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     "",
     `Pedido ${d.numero}`,
     ...lineasTexto,
+    ...(transferencia ? bloqueTransferenciaTexto(transferencia, d.total) : []),
     ...(d.pedidosUrl ? ["", `Ver mis pedidos: ${d.pedidosUrl}`] : []),
     "",
     ...pieTexto(d.comercio, d.sitioUrl),

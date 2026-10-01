@@ -7,6 +7,8 @@ import { seguimientoPedido } from "@/lib/pedido-seguimiento";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
+import { CuentaTransferencia } from "@/components/CuentaTransferencia";
+import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
 import { CancelarPedido } from "./CancelarPedido";
 import { PedidoAcciones } from "./PedidoAcciones";
 import { PedidoLinea } from "./PedidoLinea";
@@ -42,6 +44,8 @@ export function PedidoDetalle({
   const pasos = seguimientoPedido(pedido, { pagosHabilitados });
   // Con los pagos apagados "Pago pendiente" no se muestra: se coordina por fuera.
   const verEstadoPago = !ocultarEstadoPago(pedido.pagoEstado, pagosHabilitados);
+  // Transferencia pendiente: la cuenta congelada al pedir (sin snapshot, el mensaje neutro).
+  const cuentaVisible = cuentaDelPedido(pedido);
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,6 +75,9 @@ export function PedidoDetalle({
             <p className="mt-1 whitespace-pre-line text-sm text-text">{medioPago.instrucciones}</p>
           )}
           {verEstadoPago && <p className="mt-1 text-sm text-text">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</p>}
+          {cuentaVisible.mostrar && (
+            <CuentaTransferencia cuenta={cuentaVisible.cuenta} importe={cuentaVisible.cuenta ? pedido.total : undefined} className="mt-3" />
+          )}
         </Card>
       </div>
 

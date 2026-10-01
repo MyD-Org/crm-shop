@@ -7,6 +7,7 @@
  */
 
 import type { ProductImage } from "./products";
+import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
 
 export type OrderEstado =
   | "pendiente"
@@ -63,6 +64,11 @@ export interface Order {
   pagoMetodoSlug?: string;
   /** Slug de la sucursal asignada (`orders.sucursal`); undefined = sin sucursal. */
   sucursal?: string;
+  /**
+   * Cuenta bancaria congelada al pedir por transferencia (`orders.pago_cuenta`). undefined = sin
+   * cuenta aplicable, otro medio de pago o pedido anterior: se muestra el mensaje neutro.
+   */
+  cuentaPago?: CuentaPagoSnapshot;
   /** Etiqueta para mostrar ("Envío a domicilio", …). */
   metodoEntrega: string;
   /** Tipo crudo: decide los pasos del seguimiento y el texto de "entregado". */

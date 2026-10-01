@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCatalogo } from "@/lib/catalog";
+import { getCatalogo, getPaginaCatalogo } from "@/lib/catalog";
+import type { Product } from "@/data/products";
+import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
+import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
+import { pareceCodigo } from "@/lib/busqueda-inteligente/gate";
+import { criterioDe } from "@/lib/busqueda-v2/destino";
+import { planParaPagina } from "@/lib/busqueda-v2/servidor";
+import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { dispCatalogo } from "@/lib/zona-servidor";
 
@@ -27,7 +34,21 @@ export async function GET(req: NextRequest) {
 
   try {
     // Sin caché a propósito: cada texto buscado sería una entrada nueva.
-    const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+    const [{ soloVisibles }, disp, conBusquedaIa] = await Promise.all([
+      flagsPublicos(),
+      dispCatalogo(),
+      busquedaIaHabilitada(),
+    ]);
+    // Con el flag `busqueda-ia`, el desplegable busca igual que el Enter (`/buscar` → `?ia=1`):
+    // con el plan de la consulta. Si no, "panel de interior" no encontraba nada por texto exacto y
+    // la tolerante traía "Pantalla … Apta Exterior", mientras que el Enter mostraba paneles.
+    if (q && conBusquedaIa && !pareceCodigo(q)) {
+      const conPlan = await buscarConPlan(q, limit, soloVisibles, disp).catch((err: unknown) => {
+        console.error("[/api/shop/catalogo] falló la búsqueda con plan:", err);
+        return null;
+      });
+      if (conPlan?.length) return NextResponse.json(conPlan);
+    }
     const productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp });
     // Sin resultados: segundo intento tolerante a errores de tipeo (mismo
     // criterio que la page del catálogo). Si falla, se devuelve lo exacto.
@@ -48,4 +69,30 @@ export async function GET(req: NextRequest) {
       { status: 502 }
     );
   }
+}
+
+/** Mismo criterio que `/catalogo?ia=1` (ver `app/catalogo/page.tsx`); null si no hay plan. */
+async function buscarConPlan(
+  q: string,
+  limit: number,
+  soloVisibles: boolean,
+  disp: ContextoDisponibilidad | undefined,
+): Promise<Product[] | null> {
+  const [plan, estructurados] = await Promise.all([
+    planParaPagina(q, { soloVisibles }),
+    atributosEstructuradosDisponibles(),
+  ]);
+  if (!plan || plan.intencion === "codigo") return null;
+  const pagina = await getPaginaCatalogo({
+    filtros: {
+      busqueda: q,
+      planBusqueda: criterioDe(plan, { categorias: [], atributos: [] }),
+      ...(estructurados ? { atributosEstructurados: true } : {}),
+    },
+    orden: "relevancia",
+    porPagina: limit,
+    soloVisibles,
+    disp,
+  });
+  return pagina.productos;
 }

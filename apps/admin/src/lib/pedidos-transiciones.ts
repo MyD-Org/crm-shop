@@ -152,9 +152,20 @@ export const VENTANA_PAGO_MS = 24 * 60 * 60_000
  * Texto del aviso del diálogo "Cancelar con devolución" (sólo admin y superadmin): qué hay que
  * resolver FUERA del CRM antes de cancelar. Se combinan los que apliquen.
  */
-export function avisoCancelarConDevolucion(p: { pagado: boolean; facturado: boolean }): string {
+export function avisoCancelarConDevolucion(p: {
+  pagado: boolean
+  facturado: boolean
+  /** `pago_metodo` del pedido; "mercadopago" cambia el texto de la devolución. */
+  pagoMetodo?: string
+}): string {
   const partes: string[] = []
-  if (p.pagado) partes.push("Antes de cancelarlo, gestione la devolución en Mercado Pago.")
+  if (p.pagado) {
+    partes.push(
+      p.pagoMetodo === "mercadopago"
+        ? "Antes de cancelarlo, gestione la devolución en Mercado Pago."
+        : "Antes de cancelarlo, gestione la devolución del pago al cliente.",
+    )
+  }
   if (p.facturado) partes.push("Antes de cancelarlo, emita la nota de crédito en Alegra.")
   return partes.join(" ")
 }

@@ -124,8 +124,8 @@ export function ofreceCancelar(p: {
 }
 
 /** Aviso del diálogo "Cancelar con devolución" según lo que ya sabe la pantalla del pedido. */
-export function avisoDevolucion(p: { pagoEstado: string; facturado: boolean }): string {
-  return avisoCancelarConDevolucion({ pagado: p.pagoEstado === "pagado", facturado: p.facturado })
+export function avisoDevolucion(p: { pagoEstado: string; pagoMetodo: string; facturado: boolean }): string {
+  return avisoCancelarConDevolucion({ pagado: p.pagoEstado === "pagado", facturado: p.facturado, pagoMetodo: p.pagoMetodo })
 }
 
 export interface FiltrosLista {

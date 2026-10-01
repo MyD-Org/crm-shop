@@ -212,9 +212,16 @@ describe("cancelar con devolución", () => {
   it("el aviso se arma según el caso y combina los que aplican", () => {
     const pagado = "Antes de cancelarlo, gestione la devolución en Mercado Pago."
     const facturado = "Antes de cancelarlo, emita la nota de crédito en Alegra."
-    expect(avisoCancelarConDevolucion({ pagado: true, facturado: false })).toBe(pagado)
+    expect(avisoCancelarConDevolucion({ pagado: true, facturado: false, pagoMetodo: "mercadopago" })).toBe(pagado)
     expect(avisoCancelarConDevolucion({ pagado: false, facturado: true })).toBe(facturado)
-    expect(avisoCancelarConDevolucion({ pagado: true, facturado: true })).toBe(`${pagado} ${facturado}`)
+    expect(avisoCancelarConDevolucion({ pagado: true, facturado: true, pagoMetodo: "mercadopago" })).toBe(`${pagado} ${facturado}`)
     expect(avisoCancelarConDevolucion({ pagado: false, facturado: false })).toBe("")
+  })
+
+  it("pagado con cualquier medio que no es Mercado Pago: devolución al cliente", () => {
+    const otro = "Antes de cancelarlo, gestione la devolución del pago al cliente."
+    for (const pagoMetodo of ["transferencia", "efectivo", "a_coordinar", "cuenta_corriente", undefined]) {
+      expect(avisoCancelarConDevolucion({ pagado: true, facturado: false, pagoMetodo })).toBe(otro)
+    }
   })
 })

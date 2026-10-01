@@ -529,7 +529,7 @@ function EstadoAcciones({
         onOpenChange={(open) => { if (!open && !guardando) cerrar() }}
         title="Cancelar con devolución"
         description={
-          `${avisoDevolucion({ pagoEstado: pedido.pagoEstado, facturado: tieneFactura || pedido.facturadoEn !== null })} ` +
+          `${avisoDevolucion({ pagoEstado: pedido.pagoEstado, pagoMetodo: pedido.pagoMetodo, facturado: tieneFactura || pedido.facturadoEn !== null })} ` +
           "Esta acción no se puede deshacer y queda registrada con su nombre. Indique el motivo."
         }
         headerBorder={false}

@@ -1,0 +1,52 @@
+{
+  "nota": "Respuestas reales de Georef (datos.gob.ar), 2026-09-30. Sin datos de personas.",
+  "provincias": [
+    "Ciudad Autónoma de Buenos Aires",
+    "Neuquén",
+    "San Luis",
+    "Santa Fe",
+    "La Rioja",
+    "Catamarca",
+    "Tucumán",
+    "Chaco",
+    "Formosa",
+    "Santa Cruz",
+    "Chubut",
+    "Mendoza",
+    "Entre Ríos",
+    "San Juan",
+    "Jujuy",
+    "Santiago del Estero",
+    "Río Negro",
+    "Corrientes",
+    "Misiones",
+    "Salta",
+    "Córdoba",
+    "Buenos Aires",
+    "La Pampa",
+    "Tierra del Fuego, Antártida e Islas del Atlántico Sur"
+  ],
+  "ubicacion": {
+    "parametros": { "lat": -25.6, "lon": -54.57 },
+    "ubicacion": {
+      "departamento": { "id": "54063", "nombre": "Iguazú" },
+      "lat": -25.6,
+      "lon": -54.57,
+      "municipio": { "id": "540217", "nombre": "Puerto Iguazú" },
+      "provincia": { "id": "54", "nombre": "Misiones" }
+    }
+  },
+  "localidades": {
+    "cantidad": 1,
+    "inicio": 0,
+    "localidades": [
+      {
+        "id": "06518010",
+        "municipio": { "nombre": "Mar Chiquita" },
+        "nombre": "Coronel Vidal",
+        "provincia": { "nombre": "Buenos Aires" }
+      }
+    ],
+    "total": 1
+  }
+}

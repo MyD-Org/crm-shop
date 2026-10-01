@@ -76,6 +76,7 @@ export function ProductoClient({
   producto: productoLista,
   oferta = null,
   configEnvio = CONFIG_ENVIO_DEFAULT,
+  envioUbicacion,
   relacionados = null,
   rutaCategorias = [],
   disponibilidad,
@@ -90,6 +91,8 @@ export function ProductoClient({
   oferta?: OfertaCuotas | null;
   /** Configuración de envío del CRM (reglas de venta): qué se anuncia del envío a domicilio. */
   configEnvio?: ConfigEnvio;
+  /** Texto del envío según la ubicación del visitante (componente de servidor en su propio Suspense). */
+  envioUbicacion?: ReactNode;
   /** "Más de <categoría>", armado en el server (va en su propio Suspense). */
   relacionados?: ReactNode;
   /** Categoría del admin con sus padres (raíz → hoja), para las migas. Vacío = la de Alegra. */
@@ -307,7 +310,7 @@ export function ProductoClient({
               <BotonFavorito productId={producto.id} />
             </div>
 
-            <EntregaProducto configEnvio={configEnvio} disponibilidad={disponibilidad} />
+            <EntregaProducto configEnvio={configEnvio} envioUbicacion={envioUbicacion} disponibilidad={disponibilidad} />
 
             {/* Preguntas sugeridas al asesor: sólo con el chat montado. */}
             <DudasProducto producto={producto} />

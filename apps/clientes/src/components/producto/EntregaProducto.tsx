@@ -59,12 +59,19 @@ export function EntregaProducto({
   configEnvio,
   provincia = null,
   localidad = null,
+  envioUbicacion,
   disponibilidad,
   notasLocal,
 }: {
   configEnvio: ConfigEnvio;
   provincia?: string | null;
   localidad?: string | null;
+  /**
+   * Texto del envío según la ubicación del visitante, resuelto en un componente de servidor dentro
+   * de un `<Suspense>` (la cookie no se puede leer acá sin volver dinámica toda la ficha). Sin él,
+   * se usa `provincia`/`localidad` o la regla general.
+   */
+  envioUbicacion?: React.ReactNode;
   disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
   /** Carrito: aclaración por local ("1 producto se trae de otra sucursal"). */
   notasLocal?: Record<string, string>;
@@ -105,7 +112,7 @@ export function EntregaProducto({
       </Fila>
       {textoEnvio && (
         <Fila icono={<IconoEnvio />} titulo="Envío a domicilio">
-          <span className="block text-muted">{textoEnvio}</span>
+          <span className="block text-muted">{envioUbicacion ?? textoEnvio}</span>
           {envioDomicilio && (
             <span className={`font-semibold ${CLASE_TONO[envioDomicilio.tono]}`}>{envioDomicilio.texto}</span>
           )}

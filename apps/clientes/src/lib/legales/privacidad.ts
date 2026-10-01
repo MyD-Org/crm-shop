@@ -28,6 +28,14 @@ export function bloquesPrivacidad(d: DatosLegales): Bloque[] {
       ],
     },
     {
+      titulo: "Su ubicación",
+      parrafos: [
+        "Para mostrarle las condiciones de envío a su zona, la tienda le pide su localidad. Usted puede escribirla o, si lo prefiere, tocar «Usar mi ubicación»: en ese caso su navegador le pide permiso y, sólo si usted lo concede, enviamos sus coordenadas una única vez para saber en qué municipio y provincia se encuentra.",
+        "Para eso consultamos un servicio público y gratuito del Estado argentino (Georef, de datos.gob.ar). No guardamos sus coordenadas: se usan en el momento y se descartan.",
+        "Guardamos en su navegador una cookie llamada «shop_ubicacion» con la localidad y la provincia elegidas (sin coordenadas ni código postal). Dura un año y sólo se usa para mostrarle el envío que le corresponde. Usted puede quitarla en cualquier momento desde «Cambiar ubicación» o borrando las cookies del sitio, y puede negar el permiso de ubicación sin que eso le impida comprar.",
+      ],
+    },
+    {
       titulo: "Cookies y herramientas de análisis",
       parrafos: [
         "Para saber cómo se usa la tienda y medir nuestras campañas utilizamos cookies y herramientas de análisis de terceros: Vercel Web Analytics y Speed Insights (visitas y rendimiento de las páginas, sin cookies), Google Analytics, el píxel de Meta (Facebook e Instagram) y PostHog (uso del sitio y grabaciones de sesión anónimas).",

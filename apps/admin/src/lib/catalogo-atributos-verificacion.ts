@@ -40,6 +40,9 @@ export const MOTIVOS = [
   "fila_no_coincide",
   "valor_fuera_de_fila",
   "ambiguo_en_fila",
+  "termino_fuera_de_fila",
+  "valor_en_rango_o_lista",
+  "tension_parcial",
   "producto_no_ubicado",
   "valor_en_otra_pagina",
   "valor_invalido",
@@ -267,6 +270,24 @@ function evidenciaNumerica(clave: ClaveAtributo, a: AtributoExtraido, cita: stri
   if (!ev) return "ok"
   if (new RegExp(`(?<![0-9.,])${altNumero(n)}${ev.unidad}`).test(cita)) return "ok"
   return new RegExp(ev.palabra).test(cita) ? "ok" : "unidad_no_en_texto"
+}
+
+/**
+ * ¿El valor numérico aparece como parte de un rango ("1.400-1.500 LM", "1400~1500") o de una lista con
+ * barra ("2.050 / 2.100 LM", "3000/4000/6500K") en este texto? Un código de modelo ("EFLG2-20W") no cuenta.
+ */
+export function enRangoOLista(clave: ClaveAtributo, n: number, texto: string): boolean {
+  const num = altNumero(n)
+  const ip = clave === "ip" ? "(?:IP\\s?-?)?" : ""
+  const u = "(?:\\s?([A-Z°º²%]{1,6}))?"
+  const sep = "\\s?[-~/]\\s?"
+  const otro = "\\d+(?:[.,]\\d+)*"
+  // "50W / 2A" son dos magnitudes distintas, no una lista: sólo cuenta si las unidades coinciden o falta alguna.
+  const misma = (m: RegExpExecArray | null) => !!m && !(m[1] && m[2] && m[1] !== m[2])
+  const delante = new RegExp(`(?<![0-9.,])${ip}0?${num}(?![0-9])${u}${sep}${ip}${otro}${u}`, "g")
+  const detras = new RegExp(`(?<![A-Z0-9])${ip}${otro}${u}${sep}${ip}0?${num}(?![0-9])${u}`, "g")
+  for (const re of [delante, detras]) for (const m of texto.matchAll(re)) if (misma(m as unknown as RegExpExecArray)) return true
+  return false
 }
 
 /** Sinónimos que sólo valen al leer el PDF: "de superficie" / "superficie" = montaje "aplicar". */
@@ -620,11 +641,23 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
       continue
     }
     // 1. El valor está en el PDF.
-    const cands = candidatos(valido, doc)
+    let cands = candidatos(valido, doc)
     if (cands.length === 0) {
       const hayNumero = valido.valorNum != null && doc.celdas.some((c) => numerosDe(c.norm).has(valido.valorNum!))
       descartar(clave, hayNumero ? "unidad_no_en_texto" : "valor_no_en_texto", entrada)
       continue
+    }
+    // 1b. Un número que es parte de un rango o de una lista ("200-240V", "3000/4000K") no es el valor.
+    if (DEFINICION_ATRIBUTOS[clave].tipo === "num" && valido.valorNum != null) {
+      const esRangoTension = clave === "tension_v" && !!valido.valorTexto && /[-/]/.test(valido.valorTexto)
+      if (!esRangoTension) {
+        const sueltos = cands.filter((c) => !enRangoOLista(clave, valido.valorNum!, c.texto))
+        if (sueltos.length === 0) {
+          descartar(clave, clave === "tension_v" ? "tension_parcial" : "valor_en_rango_o_lista", entrada)
+          continue
+        }
+        cands = sueltos
+      }
     }
     // 2. ¿Es el único valor de esa magnitud en el PDF?
     const esVocabulario = DEFINICION_ATRIBUTOS[clave].tipo === "texto" && clave !== "medidas_mm"
@@ -632,7 +665,9 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
     const unico = terminos.size === 0 || (terminos.size === 1 && terminos.has(canonico(valido)))
     let regla: ReglaAceptacion
     let cand: Candidato = cands[0]
-    if (unico && (esVocabulario || ctx.unicoProducto)) {
+    // El vocabulario sólo vale por único término en la ficha de UN producto; en un catálogo compartido
+    // tiene que estar en la fila/columna del producto.
+    if (unico && ctx.unicoProducto) {
       regla = esVocabulario ? "vocabulario" : "unico"
       // Con varias páginas, el valor único tiene que estar en una página donde figura el producto.
       if (!esVocabulario && doc.paginas > 1) {
@@ -688,7 +723,7 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
         continue
       }
       if (!hallado) {
-        descartar(clave, "valor_fuera_de_fila", entrada)
+        descartar(clave, esVocabulario ? "termino_fuera_de_fila" : "valor_fuera_de_fila", entrada)
         continue
       }
       cand = hallado

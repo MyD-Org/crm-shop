@@ -47,7 +47,11 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    identificadores de la misma forma en su línea, y cada celda va al encabezado más cercano por `x`).
    Si la `fila` es el código de Alegra con sufijo de marca (`-XYZ`), se busca en el PDF sin el sufijo
    (con separadores opcionales y sin el prefijo duplicado). Para el montaje, "superficie" / "de
-   superficie" / "sobrepuesto" cuentan como "aplicar".
+   superficie" / "sobrepuesto" cuentan como "aplicar". En un PDF con más de un producto, el vocabulario
+   (color, montaje, tono, curva, zócalo) también tiene que estar en la fila/columna del producto
+   (`termino_fuera_de_fila`); el "único término" sólo vale en la ficha de un solo producto. Un número que
+   es parte de un rango o de una lista con barra con la misma unidad ("1.400-1.500 Lm", "3000/4000K") se
+   descarta (`valor_en_rango_o_lista`), y una tensión suelta contra un rango, también (`tension_parcial`).
 4. Si el nombre ya dice otro valor para la misma clave: se descarta el del PDF (`contradice_nombre`).
 5. PDF sin capa de texto: `sin_texto`. Rangos y vocabularios de `normalizarAtributos`: `valor_invalido`.
 

@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "medir:js": "tsx scripts/medir-js.ts",
-    "clientes:backfill": "tsx --env-file-if-exists=.env.local scripts/backfill-clientes-clerk.ts"
+    "clientes:backfill": "tsx --env-file-if-exists=.env.local scripts/backfill-clientes-clerk.ts",
+    "banco:grabar": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/grabar.ts",
+    "banco:busqueda": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/busqueda.ts"
   },
   "dependencies": {
     "@clerk/localizations": "^4.14.2",

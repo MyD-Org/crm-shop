@@ -7,6 +7,7 @@ import type { ChipSugerido } from "@/lib/busqueda-inteligente/url";
 import { ChipSumar } from "./FranjaBusqueda";
 import { ConversarIcon } from "./iconos";
 import Link from "next/link";
+import { track } from "@/lib/tracking/track";
 
 /**
  * "Sin resultados" con salida (búsqueda inteligente, flag `busqueda-ia`):
@@ -15,6 +16,8 @@ import Link from "next/link";
  * - Alternativas: lo que la interpretación sugirió, como chips-link (quitan la
  *   búsqueda y aplican ese filtro).
  * - Si la URL vino de interpretar, "Ver resultados de «consulta» tal cual".
+ * - Si la búsqueda no pasó por `/buscar` (clásica), "Ver productos
+ *   relacionados": la entiende la búsqueda v2.
  * - Si hay chat: "¿Quiere que un asesor le ayude a elegir? · Conversar", que
  *   abre el chat con la consulta como primer mensaje.
  * - Siempre, "Ver todos los productos".
@@ -23,11 +26,13 @@ export function CatalogoSinResultados({
   consulta,
   alternativas,
   talCualHref,
+  relacionadosHref,
   verTodos,
 }: {
   consulta: string;
   alternativas: ChipSugerido[];
   talCualHref?: string;
+  relacionadosHref?: string;
   verTodos: () => void;
 }) {
   const chat = useChatIa();
@@ -47,6 +52,11 @@ export function CatalogoSinResultados({
               </div>
             </div>
           )}
+          {relacionadosHref && (
+            <Link href={relacionadosHref} prefetch={false} className="text-sm font-semibold text-accent underline-offset-4 hover:underline">
+              {TEXTOS_SIN_RESULTADOS.relacionados}
+            </Link>
+          )}
           {talCualHref && (
             <Link href={talCualHref} prefetch={false} className="text-sm font-medium text-accent underline-offset-4 hover:underline">
               {TEXTOS_FRANJA.talCual(consulta)}
@@ -55,7 +65,14 @@ export function CatalogoSinResultados({
           {chat.disponible && (
             <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3 sm:flex-row sm:gap-3">
               <p className="text-sm text-text">{TEXTOS_SIN_RESULTADOS.asesor}</p>
-              <Button variant="primary" size="sm" onClick={() => chat.conversar(consulta)}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  track({ tipo: "busqueda_conversar", origen: "sin_resultados" });
+                  chat.conversar(consulta);
+                }}
+              >
                 <ConversarIcon className="shrink-0" />
                 {TEXTOS_SIN_RESULTADOS.conversar}
               </Button>

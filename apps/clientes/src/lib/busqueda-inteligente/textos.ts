@@ -15,6 +15,7 @@ export const TEXTOS_FRANJA = {
   texto: (texto: string) => `Texto: «${texto}»`,
   pista: "Puede describir lo que necesita con sus palabras.",
   cerrarPista: "Entendido",
+  pregunta: "Esto parece una consulta para el asesor",
 } as const;
 
 export const TEXTOS_SIN_RESULTADOS = {
@@ -25,6 +26,7 @@ export const TEXTOS_SIN_RESULTADOS = {
   asesor: "¿Quiere que un asesor le ayude a elegir?",
   conversar: "Conversar",
   verTodos: "Ver todos los productos",
+  relacionados: "Ver productos relacionados",
 } as const;
 
 /**

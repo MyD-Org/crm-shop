@@ -9,6 +9,7 @@ import {
   cambiosDePotencia,
   rangoEfectivoPotencia,
   consultaInterpretada,
+  IA_PLAN,
   sinBusquedaIa,
   comoLista,
   comoOrden,
@@ -498,6 +499,9 @@ describe("atributos (`atr`) y búsqueda inteligente (`ia`)", () => {
   it("`ia=0` es la búsqueda tal cual; la consulta interpretada es cualquier otro valor", () => {
     expect(consultaInterpretada(leerEstado({ ia: IA_DESACTIVADA }))).toBeUndefined();
     expect(consultaInterpretada(leerEstado({ ia: " luz para el patio " }))).toBe("luz para el patio");
+    // Búsqueda v2: `ia=1` ⇒ la consulta es el `q`.
+    expect(consultaInterpretada(leerEstado({ q: "foco cálido e27", ia: IA_PLAN }))).toBe("foco cálido e27");
+    expect(consultaInterpretada(leerEstado({ ia: IA_PLAN }))).toBeUndefined();
     expect(consultaInterpretada(leerEstado({}))).toBeUndefined();
     expect(hrefCatalogo({ ...base, query: "reflector", orden: "relevancia", ia: IA_DESACTIVADA })).toBe("/catalogo?q=reflector&ia=0");
   });

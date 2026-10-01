@@ -1,0 +1,494 @@
+{
+  "arbol": [
+    {
+      "id": "cat-001",
+      "parentId": "cat-047",
+      "nombre": "Termicas y Disyuntores",
+      "orden": 0
+    },
+    {
+      "id": "cat-002",
+      "parentId": "cat-047",
+      "nombre": "Cajas",
+      "orden": 0
+    },
+    {
+      "id": "cat-003",
+      "parentId": "cat-064",
+      "nombre": "Veladores",
+      "orden": 0
+    },
+    {
+      "id": "cat-004",
+      "parentId": "cat-064",
+      "nombre": "Colgantes",
+      "orden": 0
+    },
+    {
+      "id": "cat-005",
+      "parentId": "cat-066",
+      "nombre": "Camara wifi",
+      "orden": 0
+    },
+    {
+      "id": "cat-006",
+      "parentId": "cat-064",
+      "nombre": "Neones y tiras de led",
+      "orden": 0
+    },
+    {
+      "id": "cat-007",
+      "parentId": "cat-064",
+      "nombre": "Tubos",
+      "orden": 0
+    },
+    {
+      "id": "cat-008",
+      "parentId": "cat-063",
+      "nombre": "Herramientas manuales y electricas",
+      "orden": 0
+    },
+    {
+      "id": "cat-009",
+      "parentId": "cat-047",
+      "nombre": "Llaves, tomas y accesorios",
+      "orden": 0
+    },
+    {
+      "id": "cat-010",
+      "parentId": "cat-063",
+      "nombre": "Proteccion personal",
+      "orden": 0
+    },
+    {
+      "id": "cat-011",
+      "parentId": "cat-064",
+      "nombre": "Luminarias exteriores",
+      "orden": 0
+    },
+    {
+      "id": "cat-012",
+      "parentId": "cat-063",
+      "nombre": "Herramientas de electricista",
+      "orden": 0
+    },
+    {
+      "id": "cat-013",
+      "parentId": "cat-047",
+      "nombre": "Fuentes y drivers",
+      "orden": 0
+    },
+    {
+      "id": "cat-014",
+      "parentId": "cat-063",
+      "nombre": "Herramientas neumaticas",
+      "orden": 0
+    },
+    {
+      "id": "cat-015",
+      "parentId": "cat-047",
+      "nombre": "Interruptores termomagneticos",
+      "orden": 0
+    },
+    {
+      "id": "cat-016",
+      "parentId": "cat-047",
+      "nombre": "Accesorios electricos",
+      "orden": 0
+    },
+    {
+      "id": "cat-017",
+      "parentId": "cat-047",
+      "nombre": "Selectoras y pulsadores",
+      "orden": 0
+    },
+    {
+      "id": "cat-018",
+      "parentId": "cat-047",
+      "nombre": "Fusibles",
+      "orden": 0
+    },
+    {
+      "id": "cat-019",
+      "parentId": "cat-047",
+      "nombre": "Contactores",
+      "orden": 0
+    },
+    {
+      "id": "cat-020",
+      "parentId": "cat-047",
+      "nombre": "Automatismo y control",
+      "orden": 0
+    },
+    {
+      "id": "cat-021",
+      "parentId": "cat-047",
+      "nombre": "Senalizacion y medicion",
+      "orden": 0
+    },
+    {
+      "id": "cat-022",
+      "parentId": "cat-047",
+      "nombre": "Reles termicos",
+      "orden": 0
+    },
+    {
+      "id": "cat-023",
+      "parentId": "cat-047",
+      "nombre": "Reles",
+      "orden": 0
+    },
+    {
+      "id": "cat-024",
+      "parentId": "cat-047",
+      "nombre": "Cajas y gabinetes",
+      "orden": 0
+    },
+    {
+      "id": "cat-025",
+      "parentId": "cat-064",
+      "nombre": "Luces de emergencia",
+      "orden": 0
+    },
+    {
+      "id": "cat-026",
+      "parentId": "cat-047",
+      "nombre": "Capacitores",
+      "orden": 0
+    },
+    {
+      "id": "cat-027",
+      "parentId": "cat-047",
+      "nombre": "Transformadores de corriente",
+      "orden": 0
+    },
+    {
+      "id": "cat-028",
+      "parentId": "cat-047",
+      "nombre": "Temporizadores",
+      "orden": 0
+    },
+    {
+      "id": "cat-029",
+      "parentId": "cat-066",
+      "nombre": "Grabadores",
+      "orden": 0
+    },
+    {
+      "id": "cat-030",
+      "parentId": "cat-066",
+      "nombre": "Camaras",
+      "orden": 0
+    },
+    {
+      "id": "cat-031",
+      "parentId": "cat-047",
+      "nombre": "Pilas y baterias",
+      "orden": 0
+    },
+    {
+      "id": "cat-032",
+      "parentId": "cat-066",
+      "nombre": "Accesorios",
+      "orden": 0
+    },
+    {
+      "id": "cat-033",
+      "parentId": "cat-063",
+      "nombre": "Carpinteria",
+      "orden": 0
+    },
+    {
+      "id": "cat-034",
+      "parentId": "cat-063",
+      "nombre": "Plomeria",
+      "orden": 0
+    },
+    {
+      "id": "cat-035",
+      "parentId": "cat-063",
+      "nombre": "Jardineria",
+      "orden": 0
+    },
+    {
+      "id": "cat-036",
+      "parentId": "cat-063",
+      "nombre": "Herramientas de medicion",
+      "orden": 0
+    },
+    {
+      "id": "cat-037",
+      "parentId": "cat-063",
+      "nombre": "Herramientas para el auto",
+      "orden": 0
+    },
+    {
+      "id": "cat-038",
+      "parentId": "cat-063",
+      "nombre": "Pintureria",
+      "orden": 0
+    },
+    {
+      "id": "cat-039",
+      "parentId": "cat-063",
+      "nombre": "Adhesivos y cintas",
+      "orden": 0
+    },
+    {
+      "id": "cat-040",
+      "parentId": "cat-063",
+      "nombre": "Organizadores y almacenamiento",
+      "orden": 0
+    },
+    {
+      "id": "cat-041",
+      "parentId": "cat-063",
+      "nombre": "Candados",
+      "orden": 0
+    },
+    {
+      "id": "cat-042",
+      "parentId": "cat-063",
+      "nombre": "Bombas de agua",
+      "orden": 0
+    },
+    {
+      "id": "cat-043",
+      "parentId": "cat-047",
+      "nombre": "Precintos y sujecion de cables",
+      "orden": 0
+    },
+    {
+      "id": "cat-044",
+      "parentId": "cat-047",
+      "nombre": "Protecciones electricas",
+      "orden": 0
+    },
+    {
+      "id": "cat-045",
+      "parentId": "cat-047",
+      "nombre": "Bornes y conectores",
+      "orden": 0
+    },
+    {
+      "id": "cat-046",
+      "parentId": "cat-064",
+      "nombre": "Reflectores",
+      "orden": 0
+    },
+    {
+      "id": "cat-047",
+      "parentId": null,
+      "nombre": "ELECTRICIDAD",
+      "orden": 0
+    },
+    {
+      "id": "cat-048",
+      "parentId": "cat-064",
+      "nombre": "Rieles",
+      "orden": 0
+    },
+    {
+      "id": "cat-049",
+      "parentId": "cat-064",
+      "nombre": "Paneles",
+      "orden": 0
+    },
+    {
+      "id": "cat-050",
+      "parentId": "cat-047",
+      "nombre": "Conductores eléctricos",
+      "orden": 0
+    },
+    {
+      "id": "cat-051",
+      "parentId": "cat-047",
+      "nombre": "Sensores y fotocelulas",
+      "orden": 0
+    },
+    {
+      "id": "cat-052",
+      "parentId": "cat-064",
+      "nombre": "Apliques",
+      "orden": 0
+    },
+    {
+      "id": "cat-053",
+      "parentId": "cat-064",
+      "nombre": "Faroles",
+      "orden": 0
+    },
+    {
+      "id": "cat-054",
+      "parentId": "cat-065",
+      "nombre": "Ventiladores industriales",
+      "orden": 0
+    },
+    {
+      "id": "cat-055",
+      "parentId": "cat-065",
+      "nombre": "Extractores de aire",
+      "orden": 0
+    },
+    {
+      "id": "cat-056",
+      "parentId": "cat-065",
+      "nombre": "Ventiladores de techo",
+      "orden": 0
+    },
+    {
+      "id": "cat-057",
+      "parentId": "cat-065",
+      "nombre": "Ventiladores de pie",
+      "orden": 0
+    },
+    {
+      "id": "cat-058",
+      "parentId": "cat-065",
+      "nombre": "Ventiladores de pared",
+      "orden": 0
+    },
+    {
+      "id": "cat-059",
+      "parentId": "cat-065",
+      "nombre": "Repuestos y accesorios",
+      "orden": 0
+    },
+    {
+      "id": "cat-060",
+      "parentId": "cat-065",
+      "nombre": "Campanas y purificadores de cocina",
+      "orden": 0
+    },
+    {
+      "id": "cat-061",
+      "parentId": "cat-065",
+      "nombre": "Calefaccion y cortinas de aire",
+      "orden": 0
+    },
+    {
+      "id": "cat-062",
+      "parentId": null,
+      "nombre": "HOGAR",
+      "orden": 1
+    },
+    {
+      "id": "cat-063",
+      "parentId": null,
+      "nombre": "HERRAMIENTAS",
+      "orden": 2
+    },
+    {
+      "id": "cat-064",
+      "parentId": null,
+      "nombre": "ILUMINACION",
+      "orden": 3
+    },
+    {
+      "id": "cat-065",
+      "parentId": null,
+      "nombre": "VENTILADORES Y EXTRACTORES",
+      "orden": 4
+    },
+    {
+      "id": "cat-066",
+      "parentId": null,
+      "nombre": "SEGURIDAD",
+      "orden": 5
+    },
+    {
+      "id": "cat-067",
+      "parentId": "cat-047",
+      "nombre": "Bandejas portacables",
+      "orden": 0
+    },
+    {
+      "id": "cat-068",
+      "parentId": "cat-047",
+      "nombre": "Caños y cablecanal",
+      "orden": 0
+    },
+    {
+      "id": "cat-069",
+      "parentId": "cat-047",
+      "nombre": "Transformadores",
+      "orden": 0
+    },
+    {
+      "id": "cat-070",
+      "parentId": "cat-047",
+      "nombre": "Seccionadores y conmutadores",
+      "orden": 0
+    },
+    {
+      "id": "cat-071",
+      "parentId": "cat-064",
+      "nombre": "Embutidos",
+      "orden": 0
+    },
+    {
+      "id": "cat-072",
+      "parentId": "cat-064",
+      "nombre": "Lámparas",
+      "orden": 0
+    },
+    {
+      "id": "cat-073",
+      "parentId": "cat-072",
+      "nombre": "AR111 y PAR",
+      "orden": 0
+    },
+    {
+      "id": "cat-074",
+      "parentId": "cat-072",
+      "nombre": "Alta potencia",
+      "orden": 0
+    },
+    {
+      "id": "cat-075",
+      "parentId": "cat-072",
+      "nombre": "Bipin G4 y G9",
+      "orden": 0
+    },
+    {
+      "id": "cat-076",
+      "parentId": "cat-072",
+      "nombre": "Bulbos",
+      "orden": 0
+    },
+    {
+      "id": "cat-077",
+      "parentId": "cat-072",
+      "nombre": "Dicroicas",
+      "orden": 0
+    },
+    {
+      "id": "cat-078",
+      "parentId": "cat-072",
+      "nombre": "Filamento y vintage",
+      "orden": 0
+    },
+    {
+      "id": "cat-079",
+      "parentId": "cat-072",
+      "nombre": "Gotas y velas",
+      "orden": 0
+    },
+    {
+      "id": "cat-080",
+      "parentId": "cat-072",
+      "nombre": "Smart",
+      "orden": 0
+    },
+    {
+      "id": "cat-081",
+      "parentId": "cat-064",
+      "nombre": "Portalamparas y Zocalos",
+      "orden": 0
+    }
+  ],
+  "vacias": [
+    "Cajas",
+    "Camara wifi"
+  ]
+}

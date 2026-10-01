@@ -1,0 +1,1678 @@
+{
+  "modelo": "jev-1.13.0",
+  "grabadoEl": "2026-10-01",
+  "respuestas": {
+    "algo para sacar el olor del bano": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 0.95
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "extractores_de_aire",
+          "confidence": 0.99
+        }
+      }
+    },
+    "foco calido e27": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "calido",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.88
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.98
+        }
+      }
+    },
+    "cable para toma cocina": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.92
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.96
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 0.91
+        }
+      }
+    },
+    "camara para ver la casa desde el celular": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.39
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.67
+        },
+        "raiz": {
+          "choice": "seguridad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "camara_wifi",
+          "confidence": 0.92
+        }
+      }
+    },
+    "proyector cancha padel": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.72
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.88
+        }
+      }
+    },
+    "iluminar un cartel de noche": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.55
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.52
+        }
+      }
+    },
+    "luz fria para el taller": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.67
+        },
+        "tono": {
+          "choice": "frio",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "tubos",
+          "confidence": 0.48
+        }
+      }
+    },
+    "luz para el patio que no se moje": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.88
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "luminarias_exteriores",
+          "confidence": 0.99
+        }
+      }
+    },
+    "tira led para la cocina": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "neones_y_tiras_de_led",
+          "confidence": 1
+        }
+      }
+    },
+    "termica 20 amperes": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.98
+        }
+      }
+    },
+    "llave de luz doble": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.86
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.98
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "llaves_tomas_y_accesorios",
+          "confidence": 1
+        }
+      }
+    },
+    "ventilador de techo con luz": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.44
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "ventiladores_de_techo",
+          "confidence": 1
+        }
+      }
+    },
+    "luz que se prenda sola cuando pasa alguien": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.66
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.59
+        }
+      }
+    },
+    "lampara para leer en la mesa de luz": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.89
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "veladores",
+          "confidence": 0.96
+        }
+      }
+    },
+    "spot para embutir en el techo": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.69
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "embutidos",
+          "confidence": 0.86
+        }
+      }
+    },
+    "e27 9w": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.98
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.98
+        }
+      }
+    },
+    "contactor 9a bobina 220": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "contactores",
+          "confidence": 1
+        }
+      }
+    },
+    "disyuntor diferencial 2x40": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "protecciones_electricas",
+          "confidence": 0.59
+        }
+      }
+    },
+    "guardamotor trifasico": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reles_termicos",
+          "confidence": 0.48
+        }
+      }
+    },
+    "bandeja portacable perforada": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.94
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "bandejas_portacables",
+          "confidence": 1
+        }
+      }
+    },
+    "cano corrugado 3/4": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "canos_y_cablecanal",
+          "confidence": 1
+        }
+      }
+    },
+    "cable unipolar 2.5 mm": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.96
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 1
+        }
+      }
+    },
+    "bornera para riel din": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "bornes_y_conectores",
+          "confidence": 1
+        }
+      }
+    },
+    "gabinete estanco ip65": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.83
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "cajas_y_gabinetes",
+          "confidence": 1
+        }
+      }
+    },
+    "capacitor para motor": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "capacitores",
+          "confidence": 1
+        }
+      }
+    },
+    "fuente 12v para tira led": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.91
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "fuentes_y_drivers",
+          "confidence": 1
+        }
+      }
+    },
+    "driver para panel led": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.94
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "fuentes_y_drivers",
+          "confidence": 1
+        }
+      }
+    },
+    "temporizador para riel din": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.94
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.94
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "temporizadores",
+          "confidence": 1
+        }
+      }
+    },
+    "pulsador de emergencia hongo": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "selectoras_y_pulsadores",
+          "confidence": 1
+        }
+      }
+    },
+    "seccionador bajo carga": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "seccionadores_y_conmutadores",
+          "confidence": 0.99
+        }
+      }
+    },
+    "precintos plasticos": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "precintos_y_sujecion_de_cables",
+          "confidence": 1
+        }
+      }
+    },
+    "fusible nh": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.7
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "fusibles",
+          "confidence": 0.99
+        }
+      }
+    },
+    "rele termico": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reles_termicos",
+          "confidence": 0.99
+        }
+      }
+    },
+    "jabalina para puesta a tierra": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.55
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.94
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "accesorios_electricos",
+          "confidence": 0.67
+        }
+      }
+    },
+    "medidor de energia monofasico": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "senalizacion_y_medicion",
+          "confidence": 1
+        }
+      }
+    },
+    "que potencia necesito para 20 m2": {
+      "principal": {
+        "intencion": {
+          "choice": "pregunta",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.58
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.98
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.61
+        }
+      }
+    },
+    "cuantos watts consume un ventilador de techo": {
+      "principal": {
+        "intencion": {
+          "choice": "pregunta",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.43
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "ventiladores_de_techo",
+          "confidence": 1
+        }
+      }
+    },
+    "que cable uso para un aire acondicionado": {
+      "principal": {
+        "intencion": {
+          "choice": "pregunta",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.89
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 1
+        }
+      }
+    },
+    "como instalo una fotocelula": {
+      "principal": {
+        "intencion": {
+          "choice": "pregunta",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.68
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.98
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "sensores_y_fotocelulas",
+          "confidence": 1
+        }
+      }
+    },
+    "sirve una lampara led con un dimmer": {
+      "principal": {
+        "intencion": {
+          "choice": "pregunta",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.93
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.98
+        }
+      }
+    },
+    "luz calida para el living": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.4
+        },
+        "tono": {
+          "choice": "calido",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.9
+        }
+      }
+    },
+    "reflector para el patio": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.97
+        }
+      }
+    },
+    "aplique para el bano": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.34
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "apliques",
+          "confidence": 1
+        }
+      }
+    },
+    "colgante para la mesa del comedor": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "colgantes",
+          "confidence": 1
+        }
+      }
+    },
+    "zapatilla con varios enchufes": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.94
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.93
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.97
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "llaves_tomas_y_accesorios",
+          "confidence": 0.79
+        }
+      }
+    },
+    "linterna recargable": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.94
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "faroles",
+          "confidence": 0.33
+        }
+      }
+    },
+    "pilas aa": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "pilas_y_baterias",
+          "confidence": 1
+        }
+      }
+    },
+    "extractor para la cocina": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "campanas_y_purificadores_de_cocina",
+          "confidence": 0.63
+        }
+      }
+    },
+    "calefactor para el bano": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 0.63
+        }
+      }
+    },
+    "taladro percutor": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "herramientas_manuales_y_electricas",
+          "confidence": 0.83
+        }
+      }
+    },
+    "destornillador aislado": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "herramientas_de_electricista",
+          "confidence": 0.98
+        }
+      }
+    },
+    "candado para la reja": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.93
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.83
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "candados",
+          "confidence": 1
+        }
+      }
+    },
+    "manguera para el jardin": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.87
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "jardineria",
+          "confidence": 0.98
+        }
+      }
+    },
+    "luz de emergencia para cortes de luz": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.86
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.84
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "luces_de_emergencia",
+          "confidence": 1
+        }
+      }
+    },
+    "tester para medir tension": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.94
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.43
+        }
+      }
+    },
+    "dicroica gu10 fria": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "frio",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.78
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.99
+        }
+      }
+    },
+    "panel led 60x60": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.71
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "paneles",
+          "confidence": 1
+        }
+      }
+    },
+    "tubo led 120 cm": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "tubos",
+          "confidence": 1
+        }
+      }
+    },
+    "riel con spots para el local": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "rieles",
+          "confidence": 1
+        }
+      }
+    },
+    "farol para la entrada de la casa": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.92
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "faroles",
+          "confidence": 0.82
+        }
+      }
+    },
+    "camara de seguridad exterior": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "seguridad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "camaras",
+          "confidence": 0.87
+        }
+      }
+    },
+    "lamparas vintage de filamento": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.47
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.87
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 1
+        }
+      }
+    },
+    "luz para la escalera que se prenda sola": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.78
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.93
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.77
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "apliques",
+          "confidence": 0.48
+        }
+      }
+    },
+    "foco que gire para iluminar un cuadro": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.39
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.83
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.51
+        }
+      }
+    },
+    "luz blanca potente para el taller": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.58
+        },
+        "tono": {
+          "choice": "frio",
+          "confidence": 0.94
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.63
+        }
+      }
+    }
+  }
+}

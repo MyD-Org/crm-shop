@@ -9,13 +9,22 @@
  * en lo determinista y NO se guarda en la caché (se reintenta después).
  */
 import { permitir } from "../rate-limit";
-import type { Dependencias } from "./interpretar";
+import type { PreguntaChoice, Respuestas } from "./jev";
 
 export const JEV_POR_IP_POR_MINUTO = 20;
 export const JEV_GLOBAL_POR_MINUTO = 300;
 const MINUTO = 60_000;
 
-type ClienteJev = NonNullable<Dependencias["jev"]>;
+/** Cliente de Jev (fase 1 y búsqueda v2 tienen la misma forma). */
+type ClienteJev = (consulta: string, preguntas: Record<string, PreguntaChoice>, timeoutMs: number) => Promise<Respuestas | null>;
+
+/**
+ * ¿Hay cupo para `prefijo` (por IP y global, mismos topes que Jev)? Consume uno de cada si lo hay.
+ * Lo usa también la búsqueda v2 para las escrituras de planes en la base.
+ */
+export function dentroDelTope(prefijo: string, ip: string, puede: typeof permitir = permitir): boolean {
+  return puede(`${prefijo}:${ip}`, JEV_POR_IP_POR_MINUTO, MINUTO) && puede(`${prefijo}:global`, JEV_GLOBAL_POR_MINUTO, MINUTO);
+}
 
 /**
  * Envuelve el cliente de Jev con el tope. Se decide en la PRIMERA llamada de
@@ -24,9 +33,7 @@ type ClienteJev = NonNullable<Dependencias["jev"]>;
 export function jevConTope(jev: ClienteJev, ip: string, puede: typeof permitir = permitir): ClienteJev {
   let permitido: boolean | undefined;
   return async (consulta, preguntas, timeoutMs) => {
-    permitido ??=
-      puede(`busqueda-ia-jev:${ip}`, JEV_POR_IP_POR_MINUTO, MINUTO) &&
-      puede("busqueda-ia-jev:global", JEV_GLOBAL_POR_MINUTO, MINUTO);
+    permitido ??= dentroDelTope("busqueda-ia-jev", ip, puede);
     if (!permitido) return null;
     return jev(consulta, preguntas, timeoutMs);
   };

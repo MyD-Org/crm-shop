@@ -210,6 +210,21 @@ ofrece: `load-context` y `load-to-alegra` responden 409 en usted (Alegra necesit
 "Ya lo cargué a mano" sigue disponible. `shop_app` ya tenía SELECT/INSERT de tabla (0032): no hay
 GRANT nuevo y el UPDATE no incluye las columnas nuevas.
 
+**Registrar pago de un pedido con respaldo** (migración 0030 del Shop, change
+`pago-transferencia-comprobante`, rebanada D): en el detalle del pedido, "Registrar pago" abre un
+formulario con monto (precargado), fecha, referencia opcional y comprobante opcional (precargado
+con el último que subió el comprador, `payment_receipts.shop_order_id`). `POST
+/api/admin/pedidos/[id]/pago` con `{ monto, fecha, referencia?, receiptId? }` inserta una fila en
+`shop.order_payments`, marca el pedido pagado, deja el evento 'pago' del historial y pasa el
+comprobante a `loaded`, todo en la misma transacción (un comprobante que no es de ese pedido y
+tenant responde 422 y no guarda nada); el mail "pago recibido" es el de siempre. Registrar sobre un
+pedido ya pagado responde 409. `DELETE` anula: baja lógica (`anulado_en`, la fila queda) y el pedido
+vuelve a pendiente; el comprobante queda `loaded`. El detalle muestra la cuenta congelada
+(`pago_cuenta`), los comprobantes (enlace firmado por
+`GET /api/admin/pedidos/[id]/comprobantes/[receiptId]/file`, rol operador o más) y los pagos,
+anulados incluidos. `shop.order_payments` la escribe y la lee sólo el CRM (rol dueño): sin GRANT a
+`shop_app`.
+
 **Historial del cliente**: el historial de comprobantes informados vive dentro del modal
 "Informar pago": la sección "Últimos comprobantes enviados" muestra los últimos 5 (fecha,
 monto y estado Pendiente/Cargado) contra `GET /api/portal/comprobantes`, para frenar

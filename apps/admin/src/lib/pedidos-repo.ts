@@ -1,13 +1,15 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
-import { alegraContacts, catalogProducts, mediosPagoShop } from "@/db/schema"
+import { alegraContacts, catalogProducts, mediosPagoShop, paymentReceipts } from "@/db/schema"
 import {
   shopOrderEventos,
+  shopOrderPayments,
   shopOrderRemitos,
   shopOrders,
   shopOrderItems,
   type ShopOrderEventoRow,
   type ShopOrderItemRow,
+  type ShopOrderPaymentRow,
   type ShopOrderRemitoRow,
   type ShopOrderRow,
 } from "@/db/shop-schema"
@@ -387,6 +389,105 @@ export interface DetalleExtras {
   remito: RemitoRow | null
   /** ¿Se puede registrar/anular el pago a mano? Ver `esPagoManual` y `slugsMediosManuales`. */
   pagoManual: boolean
+  /** Pagos registrados a mano (`shop.order_payments`, 0030 del Shop), del más nuevo al más viejo;
+   *  los anulados quedan (baja lógica). */
+  pagos: PagoRegistradoDto[]
+  /** Comprobantes que subió el comprador para este pedido (`payment_receipts.shop_order_id`),
+   *  sólo los visibles (`pending`/`loaded`), del más nuevo al más viejo. */
+  comprobantes: ComprobantePedidoDto[]
+}
+
+export interface PagoRegistradoDto {
+  id: string
+  monto: number
+  /** "YYYY-MM-DD". */
+  fecha: string
+  referencia: string | null
+  receiptId: string | null
+  registradoPorNombre: string | null
+  creadoEn: string
+  anulado: { en: string; porNombre: string | null } | null
+}
+
+export interface ComprobantePedidoDto {
+  id: string
+  monto: number
+  /** "YYYY-MM-DD". */
+  fecha: string
+  estado: "pending" | "loaded"
+  subidoEn: string | null
+  /** Hay un archivo publicado que ver (el enlace sale de la ruta `comprobantes/[id]/file`). */
+  tieneArchivo: boolean
+  mime: string | null
+  nombreArchivo: string | null
+}
+
+function toPagoDto(row: ShopOrderPaymentRow): PagoRegistradoDto {
+  return {
+    id: row.id,
+    monto: num(row.amount),
+    fecha: row.paidOn,
+    referencia: row.referencia,
+    receiptId: row.receiptId,
+    registradoPorNombre: row.registradoPorNombre,
+    creadoEn: row.createdAt.toISOString(),
+    anulado: row.anuladoEn ? { en: row.anuladoEn.toISOString(), porNombre: row.anuladoPorNombre } : null,
+  }
+}
+
+async function pagosDe(tenantId: string, orderId: string): Promise<PagoRegistradoDto[]> {
+  const filas = await getDb()
+    .select()
+    .from(shopOrderPayments)
+    .where(and(eq(shopOrderPayments.tenantId, tenantId), eq(shopOrderPayments.orderId, orderId)))
+    .orderBy(desc(shopOrderPayments.createdAt), desc(shopOrderPayments.id))
+  return filas.map(toPagoDto)
+}
+
+async function comprobantesDe(tenantId: string, orderId: string): Promise<ComprobantePedidoDto[]> {
+  const filas = await getDb()
+    .select()
+    .from(paymentReceipts)
+    .where(
+      and(
+        eq(paymentReceipts.tenantId, tenantId),
+        eq(paymentReceipts.shopOrderId, orderId),
+        inArray(paymentReceipts.status, ["pending", "loaded"]),
+      ),
+    )
+    .orderBy(desc(paymentReceipts.submittedAt), desc(paymentReceipts.id))
+  return filas.map((f) => ({
+    id: f.id,
+    monto: num(f.amount),
+    fecha: f.paidOn,
+    estado: f.status as "pending" | "loaded",
+    subidoEn: iso(f.submittedAt),
+    tieneArchivo: Boolean(f.fileKey && f.fileMime),
+    mime: f.fileMime,
+    nombreArchivo: f.fileOriginalName,
+  }))
+}
+
+/** Un comprobante visible del pedido (para el enlace firmado del detalle), o `null`. */
+export async function comprobanteDelPedido(
+  tenantId: string,
+  orderId: string,
+  receiptId: string,
+): Promise<{ id: string; fileKey: string; fileMime: string; paidOn: string } | null> {
+  if (!UUID_RE.test(orderId) || !UUID_RE.test(receiptId)) return null
+  const [fila] = await getDb()
+    .select({ id: paymentReceipts.id, fileKey: paymentReceipts.fileKey, fileMime: paymentReceipts.fileMime, paidOn: paymentReceipts.paidOn })
+    .from(paymentReceipts)
+    .where(
+      and(
+        eq(paymentReceipts.tenantId, tenantId),
+        eq(paymentReceipts.id, receiptId),
+        eq(paymentReceipts.shopOrderId, orderId),
+        inArray(paymentReceipts.status, ["pending", "loaded"]),
+      ),
+    )
+  if (!fila || !fila.fileKey || !fila.fileMime) return null
+  return { id: fila.id, fileKey: fila.fileKey, fileMime: fila.fileMime, paidOn: fila.paidOn }
 }
 
 /** El remito del pedido, si tiene (a lo sumo uno: unicidad de `order_id`, ver la migración 0021
@@ -402,14 +503,16 @@ async function remitoDe(tenantId: string, orderId: string): Promise<RemitoRow | 
 /** Lo que el detalle suma a la fila, aparte de sus propias columnas: ítems, lista de precios (si
  *  aplica), historial y remito. Se piden en paralelo DESPUÉS de confirmar que el pedido es de ese tenant. */
 async function detalleExtras(tenantId: string, pedido: PedidoRow): Promise<DetalleExtras> {
-  const [items, listaPrecios, historial, remito, manuales] = await Promise.all([
+  const [items, listaPrecios, historial, remito, manuales, pagos, comprobantes] = await Promise.all([
     itemsDe(tenantId, pedido.id),
     listaParaRevision(tenantId, pedido),
     historialDe(tenantId, pedido.id, pedido.createdAt),
     remitoDe(tenantId, pedido.id),
     slugsMediosManuales(tenantId),
+    pagosDe(tenantId, pedido.id),
+    comprobantesDe(tenantId, pedido.id),
   ])
-  return { items, listaPrecios, historial, remito, pagoManual: esPagoManual(pedido, manuales) }
+  return { items, listaPrecios, historial, remito, pagoManual: esPagoManual(pedido, manuales), pagos, comprobantes }
 }
 
 /**
@@ -1056,22 +1159,49 @@ export type PagoManualResult =
   /** Pago online: lo mueve sólo el webhook del proveedor. */
   | { kind: "no_manual" }
   | { kind: "cancelado" }
+  /** Registrar sobre un pedido que ya figura pagado: se rechaza (no se duplica el pago). */
+  | { kind: "ya_pagado" }
+  /** El comprobante no es de este pedido (o de este tenant), o no está visible. Nada se guardó. */
+  | { kind: "comprobante_invalido" }
+
+/** Datos de un pago a registrar (ya validados por `validarPagoManual`). */
+export interface PagoARegistrar {
+  /** Decimal normalizado ("1210.00"). */
+  monto: string
+  /** "YYYY-MM-DD". */
+  fecha: string
+  referencia: string | null
+  receiptId: string | null
+}
+
+export type RegistrarPagoInput =
+  | ({ pagado: true; actor: { id: string; name: string }; now: Date } & PagoARegistrar)
+  | { pagado: false; actor: { id: string; name: string }; now: Date }
+
+/** Se lanza dentro de la transacción para revertirla cuando el comprobante no corresponde. */
+class ComprobanteInvalido extends Error {}
 
 /**
- * Registra (`pagado: true`) o anula (`pagado: false`) el pago de un pedido offline.
+ * Registra (`pagado: true`, con monto, fecha, referencia y comprobante opcional) o anula
+ * (`pagado: false`) el pago de un pedido offline.
  *
  * UN UPDATE condicional, como `cambiarEstado`: `WHERE id AND tenant AND medio offline AND
  * pago_estado = <el opuesto>` (+ no cancelado, sólo al registrar). Si no afectó filas, un
- * SELECT (también por tenant) distingue: no existe/ajeno, online, cancelado, o ya estaba así
- * (idempotente → ok con `cambio: false`, para no avisar dos veces al cliente NI sumar un evento
- * de más). Anular se permite con el pedido cancelado: es justo el caso de un pago cargado por
- * error. El evento 'pago' del historial va en la MISMA transacción que el UPDATE.
+ * SELECT (también por tenant) distingue: no existe/ajeno, online, cancelado, o ya estaba así.
+ * Registrar sobre un pedido ya pagado se RECHAZA (`ya_pagado`): no se duplica el pago, el evento
+ * ni el aviso. Anular uno ya pendiente es idempotente (ok con `cambio: false`). Anular se
+ * permite con el pedido cancelado: es justo el caso de un pago cargado por error.
+ *
+ * En la MISMA transacción que el UPDATE: la fila de `order_payments` (o la baja lógica de las
+ * activas al anular), el evento 'pago' del historial y, si viene `receiptId`, el comprobante del
+ * MISMO pedido y tenant (`pending` → `loaded`; uno ya `loaded` se acepta y queda igual). Un
+ * comprobante que no corresponde revierte todo (`comprobante_invalido`).
  */
 export async function registrarPagoManual(
   tenantId: string,
   id: string,
   /** `actor` sale del guard (fila fresca de admin_users), nunca del body. */
-  input: { pagado: boolean; actor: { id: string; name: string }; now: Date },
+  input: RegistrarPagoInput,
 ): Promise<PagoManualResult> {
   if (!UUID_RE.test(id)) return { kind: "not_found" }
   const destino = input.pagado ? "pagado" : "pendiente"
@@ -1087,29 +1217,101 @@ export async function registrarPagoManual(
   ]
   if (input.pagado) conditions.push(ne(shopOrders.estado, "cancelado"))
 
-  const actualizado = await getDb().transaction(async (tx) => {
-    const [fila] = await tx
-      .update(shopOrders)
-      .set({
-        pagoEstado: destino,
-        pagoActualizadoEn: input.now,
-        pagoRegistradoPor: input.actor.id,
-        pagoRegistradoPorNombre: input.actor.name,
-        updatedAt: input.now,
-      })
-      .where(and(...conditions))
-      .returning()
-    if (!fila) return null
-    await registrarEvento(tx, {
-      tenantId,
-      orderId: fila.id,
-      tipo: "pago",
-      detalle: { estado: destino },
-      actor: input.actor,
-      now: input.now,
+  let actualizado: PedidoRow | null
+  try {
+    actualizado = await getDb().transaction(async (tx) => {
+      const [fila] = await tx
+        .update(shopOrders)
+        .set({
+          pagoEstado: destino,
+          pagoActualizadoEn: input.now,
+          pagoRegistradoPor: input.actor.id,
+          pagoRegistradoPorNombre: input.actor.name,
+          updatedAt: input.now,
+        })
+        .where(and(...conditions))
+        .returning()
+      if (!fila) return null
+
+      if (input.pagado) {
+        let pagoId: string | null = null
+        if (input.receiptId) {
+          const [recibo] = await tx
+            .select({ id: paymentReceipts.id, status: paymentReceipts.status })
+            .from(paymentReceipts)
+            .where(
+              and(
+                eq(paymentReceipts.tenantId, tenantId),
+                eq(paymentReceipts.id, input.receiptId),
+                eq(paymentReceipts.shopOrderId, fila.id),
+                inArray(paymentReceipts.status, ["pending", "loaded"]),
+              ),
+            )
+          if (!recibo) throw new ComprobanteInvalido()
+          if (recibo.status === "pending") {
+            await tx
+              .update(paymentReceipts)
+              .set({ status: "loaded", loadedAt: input.now, loadedBy: input.actor.id, loadedByName: input.actor.name, updatedAt: input.now })
+              .where(and(eq(paymentReceipts.tenantId, tenantId), eq(paymentReceipts.id, recibo.id), eq(paymentReceipts.status, "pending")))
+          }
+        }
+        const [pago] = await tx
+          .insert(shopOrderPayments)
+          .values({
+            tenantId,
+            orderId: fila.id,
+            amount: input.monto,
+            paidOn: input.fecha,
+            referencia: input.referencia,
+            receiptId: input.receiptId,
+            registradoPor: input.actor.id,
+            registradoPorNombre: input.actor.name,
+            createdAt: input.now,
+          })
+          .returning({ id: shopOrderPayments.id })
+        pagoId = pago.id
+        await registrarEvento(tx, {
+          tenantId,
+          orderId: fila.id,
+          tipo: "pago",
+          detalle: {
+            estado: destino,
+            monto: input.monto,
+            fecha: input.fecha,
+            ...(input.referencia ? { referencia: input.referencia } : {}),
+            pagoId,
+            ...(input.receiptId ? { receiptId: input.receiptId } : {}),
+          },
+          actor: input.actor,
+          now: input.now,
+        })
+      } else {
+        // Baja lógica: las filas quedan para auditoría. El comprobante NO vuelve a pendiente.
+        await tx
+          .update(shopOrderPayments)
+          .set({ anuladoEn: input.now, anuladoPor: input.actor.id, anuladoPorNombre: input.actor.name })
+          .where(
+            and(
+              eq(shopOrderPayments.tenantId, tenantId),
+              eq(shopOrderPayments.orderId, fila.id),
+              isNull(shopOrderPayments.anuladoEn),
+            ),
+          )
+        await registrarEvento(tx, {
+          tenantId,
+          orderId: fila.id,
+          tipo: "pago",
+          detalle: { estado: destino },
+          actor: input.actor,
+          now: input.now,
+        })
+      }
+      return fila
     })
-    return fila
-  })
+  } catch (err) {
+    if (err instanceof ComprobanteInvalido) return { kind: "comprobante_invalido" }
+    throw err
+  }
   if (actualizado) {
     const extras = await detalleExtras(tenantId, actualizado)
     return { kind: "ok", pedido: actualizado, cambio: true, ...extras }
@@ -1122,6 +1324,7 @@ export async function registrarPagoManual(
   if (!existente) return { kind: "not_found" }
   if (!esPagoManual(existente, manuales)) return { kind: "no_manual" }
   if (existente.pagoEstado === destino) {
+    if (input.pagado) return { kind: "ya_pagado" }
     const extras = await detalleExtras(tenantId, existente)
     return { kind: "ok", pedido: existente, cambio: false, ...extras }
   }
@@ -1260,6 +1463,23 @@ export interface PedidoItemDto {
   costoUnitario?: number | null
 }
 
+/** Datos de la cuenta que se mostraron al comprador (snapshot `pago_cuenta`). */
+export interface CuentaPagoDto {
+  alias: string
+  cbu: string
+  banco: string
+  titular: string
+  cuit: string
+}
+
+function toCuentaPagoDto(snapshot: unknown): CuentaPagoDto | null {
+  if (!snapshot || typeof snapshot !== "object") return null
+  const s = snapshot as Record<string, unknown>
+  const t = (k: string) => (typeof s[k] === "string" ? (s[k] as string) : "")
+  const cuenta = { alias: t("alias"), cbu: t("cbu"), banco: t("banco"), titular: t("titular"), cuit: t("cuit") }
+  return cuenta.alias || cuenta.cbu ? cuenta : null
+}
+
 export interface PedidoDetalleDto extends PedidoListaDto {
   /** Regla que asignó la sucursal, congelada al crear el pedido (null = anterior a las zonas). */
   sucursalRegla: ReglaAplicada | null
@@ -1309,6 +1529,12 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   pagoActualizadoEn: string | null
   /** Operador que registró o anuló el último pago offline. */
   pagoRegistradoPorNombre: string | null
+  /** Cuenta bancaria congelada al crear el pedido por transferencia (`pago_cuenta`), o null. */
+  cuentaPago: CuentaPagoDto | null
+  /** Pagos registrados a mano; los anulados quedan con `anulado`. */
+  pagos: PagoRegistradoDto[]
+  /** Comprobantes subidos por el comprador para este pedido. */
+  comprobantes: ComprobantePedidoDto[]
   items: PedidoItemDto[]
   /** Del más nuevo al más viejo; el evento 'creado' (derivado, nunca guardado) siempre es el último. */
   historial: EventoHistorialDto[]
@@ -1369,6 +1595,10 @@ export interface DetalleDtoOpciones {
   pagoManual?: boolean
   /** Incluir el costo unitario de cada ítem. Sale de `canSeeCosts(rol)` del guard. */
   incluirCosto?: boolean
+  /** `DetalleExtras.pagos`. Sin él, ninguno. */
+  pagos?: PagoRegistradoDto[]
+  /** `DetalleExtras.comprobantes`. Sin él, ninguno. */
+  comprobantes?: ComprobantePedidoDto[]
 }
 
 export function toPedidoDetalleDto(
@@ -1377,7 +1607,7 @@ export function toPedidoDetalleDto(
   listaPrecios: string | null = null,
   historial: EventoHistorialDto[] = [],
   remito: RemitoRow | null = null,
-  { incluirCosto = false, pagoManual }: DetalleDtoOpciones = {},
+  { incluirCosto = false, pagoManual, pagos = [], comprobantes = [] }: DetalleDtoOpciones = {},
 ): PedidoDetalleDto {
   return {
     ...toPedidoDto(row),
@@ -1426,6 +1656,9 @@ export function toPedidoDetalleDto(
     pagoManual: pagoManual ?? esPagoManual(row),
     pagoActualizadoEn: iso(row.pagoActualizadoEn),
     pagoRegistradoPorNombre: row.pagoRegistradoPorNombre,
+    cuentaPago: toCuentaPagoDto(row.pagoCuenta),
+    pagos,
+    comprobantes,
     items: items.map((i) => toItemDto(i, incluirCosto)),
     historial,
   }

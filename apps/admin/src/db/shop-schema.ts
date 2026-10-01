@@ -201,6 +201,28 @@ export const shopOrderRemitos = shop.table("order_remitos", {
 
 export type ShopOrderRemitoRow = typeof shopOrderRemitos.$inferSelect
 
+// Pagos registrados a mano en un pedido offline (0030 del Shop, change `pago-transferencia-
+// comprobante` rebanada D). Sin `.references()`: la FK (on delete cascade) es del Shop y ya existe
+// en la base. `receipt_id` apunta a `public.payment_receipts.id` sin FK. Anular = baja lógica
+// (`anulado_en`). Sólo el CRM la escribe y la lee (rol dueño): el Shop no la usa.
+export const shopOrderPayments = shop.table("order_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  orderId: uuid("order_id").notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  paidOn: date("paid_on", { mode: "string" }).notNull(),
+  referencia: text("referencia"),
+  receiptId: uuid("receipt_id"),
+  registradoPor: uuid("registrado_por"),
+  registradoPorNombre: text("registrado_por_nombre"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  anuladoEn: timestamp("anulado_en", { withTimezone: true }),
+  anuladoPor: uuid("anulado_por"),
+  anuladoPorNombre: text("anulado_por_nombre"),
+})
+
+export type ShopOrderPaymentRow = typeof shopOrderPayments.$inferSelect
+
 // Espejo de los usuarios de Clerk de cada tienda (0018 del Shop). Lo escribe SÓLO el Shop
 // (webhook + backfill, por las funciones `shop.clientes_*`); el CRM lo lee para el listado
 // "Clientes de la tienda". Es el ancla del tenant de ese listado: `client_links` no tiene

@@ -74,7 +74,7 @@ function respuestaResultado(result: RemitoResult, incluirCosto: boolean): Respon
   if (result.kind === "cancelado") return fail(422, "cancelado", MSG.cancelado)
   if (result.kind === "conflict") return fail(409, "conflict", MSG.conflicto)
   return Response.json(
-    toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto, pagoManual: result.pagoManual }),
+    toPedidoDetalleDto(result.pedido, result.items, result.listaPrecios, result.historial, result.remito, { incluirCosto, pagoManual: result.pagoManual, pagos: result.pagos, comprobantes: result.comprobantes }),
     { headers: NO_STORE },
   )
 }

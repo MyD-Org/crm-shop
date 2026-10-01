@@ -50,7 +50,11 @@ const list = (query = "", host?: string) => listRoute(adminReq(`/api/admin/pedid
 const detail = (id: string) => detailRoute(adminReq(`/api/admin/pedidos/${id}`), idParams(id))
 const patch = (id: string, body: unknown) =>
   patchRoute(adminReq(`/api/admin/pedidos/${id}`, { method: "PATCH", body }), idParams(id))
-const registrarPago = (id: string) => pagoPOST(adminReq(`/api/admin/pedidos/${id}/pago`, { method: "POST" }), idParams(id))
+const registrarPago = (id: string) =>
+  pagoPOST(
+    adminReq(`/api/admin/pedidos/${id}/pago`, { method: "POST", body: { monto: "1210.00", fecha: new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10) } }),
+    idParams(id),
+  )
 const anularPago = (id: string) => pagoDELETE(adminReq(`/api/admin/pedidos/${id}/pago`, { method: "DELETE" }), idParams(id))
 
 async function eventosDe(orderId: string): Promise<ShopOrderEventoRow[]> {
@@ -144,10 +148,10 @@ describe("admin: historial, filtros, colas y tablero de Pedidos", () => {
       expect(eventos[0]).toMatchObject({ tipo: "pago", detalle: { estado: "pendiente" } })
     })
 
-    it("repetir un registro ya hecho (idempotente) NO agrega un segundo evento", async () => {
+    it("repetir un registro ya hecho se rechaza (409) y NO agrega un segundo evento", async () => {
       const pedido = await seedShopOrder(TENANT_A, { pagoMetodo: "efectivo", pagoEstado: "pagado" })
-      const res = await registrarPago(pedido.id) // ya estaba pagado: idempotente, cambio:false
-      expect(res.status).toBe(200)
+      const res = await registrarPago(pedido.id) // ya estaba pagado: no se duplica
+      expect(res.status).toBe(409)
       expect(await eventosDe(pedido.id)).toHaveLength(0)
     })
   })

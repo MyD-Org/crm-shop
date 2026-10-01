@@ -25,9 +25,13 @@ const { POST, DELETE } = await import("@/app/api/admin/pedidos/[id]/pago/route")
 const TENANT_A = "tenant-a"
 const TENANT_B = "tenant-b"
 
+// Registrar pago pide monto y fecha (rebanada D de `pago-transferencia-comprobante`); el detalle
+// de monto/comprobante se prueba en `pedidos-pago-detallado.integration.test.ts`.
+const CUERPO_PAGO = { monto: "1210.00", fecha: new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10) }
 const req = (id: string, method: "POST" | "DELETE") =>
   new NextRequest(`http://${TENANT_A}.localhost/api/admin/pedidos/${id}/pago`, {
     method,
+    ...(method === "POST" ? { body: JSON.stringify(CUERPO_PAGO) } : {}),
     headers: { host: `${TENANT_A}.localhost` },
   })
 const idParams = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -54,7 +58,7 @@ describe("admin: registrar el pago de un pedido offline", () => {
     await truncateAll()
   })
 
-  it("transferencia pendiente → pagado, un solo mail aunque se repita", async () => {
+  it("transferencia pendiente → pagado, un solo mail; repetir da 409", async () => {
     const p = await seedShopOrder(TENANT_A, { pagoMetodo: "transferencia", estado: "confirmado" })
     const res = await registrar(p.id)
     expect(res.status).toBe(200)
@@ -69,7 +73,8 @@ describe("admin: registrar el pago de un pedido offline", () => {
     expect(to).toBe("comprador@cliente.example")
     expect(subject).toContain("pago recibido")
 
-    expect((await registrar(p.id)).status).toBe(200)
+    // Repetir sobre un pedido ya pagado se rechaza (409): ni segundo mail ni segundo pago.
+    expect((await registrar(p.id)).status).toBe(409)
     expect(sendEmail).toHaveBeenCalledTimes(1)
   })
 

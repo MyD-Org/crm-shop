@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  DESCRIPCION_PDF,
   ErrorLecturaFicha,
   HERRAMIENTA_ATRIBUTOS,
   MODELO_FICHA,
@@ -114,6 +115,13 @@ describe("lectura de PDF con las claves ampliadas", () => {
       { clave: "polos", valorNum: 2, valorTexto: null },
       { clave: "medidas_mm", valorNum: null, valorTexto: "100x100x50" },
     ])
+  })
+
+  it("tono es el tipo de luz (con colores de luz) y color es el del producto", () => {
+    expect(DESCRIPCION_PDF.tono).toMatch(/Tipo de luz/)
+    expect(DESCRIPCION_PDF.tono).toMatch(/"verde"/)
+    expect(DESCRIPCION_PDF.tono).toMatch(/"rgbw"/)
+    expect(DESCRIPCION_PDF.color).toMatch(/cuerpo o carcasa/)
   })
 
   it("las descripciones del esquema vienen de DESCRIPCION_PDF (una por clave, sin vacías)", () => {

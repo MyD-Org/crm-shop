@@ -10,6 +10,7 @@ import {
   DEFINICION_ATRIBUTOS,
   ETIQUETA_ATRIBUTO,
   MONTAJES,
+  TONOS,
   type ClaveAtributo,
 } from "@/lib/catalogo-atributos-extraccion"
 import { api, ErrorApi } from "./tipos"
@@ -50,7 +51,23 @@ const SIN_DATO = "__sin_dato__"
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
 /** Claves de vocabulario cerrado: se eligen de una lista (el valor guardado es el de la base). */
+const ETIQUETA_TONO: Record<(typeof TONOS)[number], string> = {
+  calido: "Cálida",
+  neutro: "Neutra",
+  frio: "Fría",
+  rojo: "Roja",
+  verde: "Verde",
+  azul: "Azul",
+  amarillo: "Amarilla",
+  naranja: "Naranja",
+  violeta: "Violeta",
+  rosa: "Rosa",
+  rgb: "RGB",
+  rgbw: "RGBW",
+}
+
 const OPCIONES: Partial<Record<ClaveAtributo, { label: string; value: string }[]>> = {
+  tono: TONOS.map((t) => ({ label: ETIQUETA_TONO[t], value: t })),
   color: COLORES.map((c) => ({ label: cap(c), value: c })),
   curva: CURVAS.map((c) => ({ label: c.toUpperCase(), value: c })),
   montaje: MONTAJES.map((m) => ({

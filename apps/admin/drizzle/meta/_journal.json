@@ -386,6 +386,13 @@
       "when": 1791114300000,
       "tag": "0054_sucursales_email_pedidos",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1791200700000,
+      "tag": "0055_cuentas_bancarias_shop",
+      "breakpoints": true
     }
   ]
 }

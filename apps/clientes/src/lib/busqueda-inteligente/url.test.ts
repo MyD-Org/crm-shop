@@ -28,7 +28,7 @@ describe("hrefInterpretada", () => {
   it("descarta atributos inválidos (los valida catalogo-url)", () => {
     const href = hrefInterpretada(leerEstado({ q: "x y z" }), {
       consulta: "x y z",
-      aplicar: { categorias: [], atributos: ["tono-violeta"] },
+      aplicar: { categorias: [], atributos: ["tono-fucsia"] },
     });
     expect(href).toBe("/catalogo?ia=x+y+z");
   });

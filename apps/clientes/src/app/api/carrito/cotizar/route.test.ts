@@ -60,6 +60,7 @@ describe("POST /api/carrito/cotizar", () => {
     expect(cotizar).toHaveBeenCalledWith([{ id: "1", qty: 2 }], {
       idPriceList: undefined,
       entregaTipo: "retiro",
+      soloVisibles: false,
     });
     expect(idPriceListCliente).not.toHaveBeenCalled();
   });
@@ -70,6 +71,7 @@ describe("POST /api/carrito/cotizar", () => {
     expect(cotizar).toHaveBeenCalledWith(expect.any(Array), {
       idPriceList: "7",
       entregaTipo: "retiro",
+      soloVisibles: false,
     });
   });
 

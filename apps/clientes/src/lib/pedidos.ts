@@ -22,7 +22,7 @@ import {
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
 import { vaciarCarritoTx } from "./carrito-db";
-import { disponiblesEnTx, StockInsuficienteError } from "./stock-disponible";
+import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
 import type { Cotizacion } from "./cotizacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
 import type { PlanPedido } from "./pagos/cuotas-tipos";
@@ -92,6 +92,8 @@ export interface DatosPedido {
    * intento devuelve el pedido que ya existe en vez de crear otro.
    */
   idempotencyKey?: string;
+  /** Flag `catalogo-solo-visibles`: rechaza (dentro de la transacción) productos despublicados. */
+  soloVisibles?: boolean;
   /**
    * Sólo con el flag `sucursales` prendido: modalidad, provincia, ciudad y local de retiro con los
    * que se asigna la sucursal. `crearPedido` relee las reglas SIN caché dentro de la transacción y
@@ -202,6 +204,10 @@ export async function crearPedido(
         }
       }
       await bloquearItems(tx, ids);
+      if (datos.soloVisibles) {
+        const ocultos = await noVisiblesEnTx(tx, ids);
+        if (ocultos.length > 0) throw new ProductoNoDisponibleError(ocultos);
+      }
       const [sucursalesYZonas, reglas] = await Promise.all([leerSucursalesYZonas(tx), leerReglasVenta(tx)]);
       const activas = sucursalesYZonas.sucursales
         .filter((s) => s.activa)
@@ -333,6 +339,10 @@ export async function crearPedido(
     // arriba, con los mismos locks): no se vuelve a validar contra la vista 0012.
     if (!validadoPorSucursal) {
       await bloquearItems(tx, ids);
+      if (datos.soloVisibles) {
+        const ocultos = await noVisiblesEnTx(tx, ids);
+        if (ocultos.length > 0) throw new ProductoNoDisponibleError(ocultos);
+      }
       const disponibles = await disponiblesEnTx(tx, ids);
       const faltan = ids.filter((id) => {
         if (!disponibles.has(id)) return true; // ya no está en el espejo

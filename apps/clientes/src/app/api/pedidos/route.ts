@@ -1,12 +1,13 @@
 import { NextResponse, after } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
+import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
 import { provinciaCanonica } from "@/lib/provincias";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
 import { marcarStockCambiado } from "@/lib/cache-invalidar";
-import { StockInsuficienteError } from "@/lib/stock-disponible";
+import { ProductoNoDisponibleError, StockInsuficienteError } from "@/lib/stock-disponible";
 import { admiteEnvio } from "@/lib/facturacion";
 import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
 import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
@@ -373,7 +374,8 @@ export async function POST(req: Request) {
       ? await contextoParaProvincia(dispBase, entregaTipo === "envio" ? sucursalEntrada?.provincia : null)
       : undefined;
     const dispCotizacion = disp ? contextoUnion(disp) : undefined;
-    const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion });
+    const soloVisibles = await catalogoSoloVisibles();
+    const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion, soloVisibles });
 
     // Nada se persiste si hay una sola línea con problema: se devuelve la
     // cotización entera para que el checkout marque exactamente cuál falla.
@@ -455,6 +457,7 @@ export async function POST(req: Request) {
           idempotencyKey: idempotencyKey || undefined,
           sucursalEntrada,
           disponibilidadSucursal: disp !== undefined,
+          soloVisibles,
         },
         cotizacion,
         plan,
@@ -466,11 +469,16 @@ export async function POST(req: Request) {
           { status: 409 },
         );
       }
+      if (err instanceof ProductoNoDisponibleError) {
+        // Se despublicó entre la cotización y el pedido: se re-cotiza para marcar la línea.
+        const recotizada = await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion, soloVisibles });
+        return NextResponse.json({ error: err.message, cotizacion: recotizada, ids: err.ids }, { status: 409 });
+      }
       if (!(err instanceof StockInsuficienteError)) throw err;
       // Otro checkout se llevó las unidades entre la cotización y el pedido (la
       // transacción ya se deshizo). Se re-cotiza, que ya descuenta su reserva,
       // para que el checkout marque qué línea no alcanza.
-      return productosCambiaron(await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion }));
+      return productosCambiaron(await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion, soloVisibles }));
     }
 
     // El pedido reservó stock: el listado cacheado se renueva en la próxima

@@ -1,5 +1,5 @@
 /**
- * Datos técnicos ESTRUCTURADOS de un producto (`public.catalog_atributos` del CRM, migración 0049;
+ * Datos técnicos ESTRUCTURADOS de un producto (`public.catalog_atributos` del CRM, migración 0049, ampliada a 18 claves por la 0053;
  * contrato `crm-shop-base/v1`). El CRM los escribe desde el nombre, la ficha PDF o a mano, con
  * precedencia manual > pdf > nombre; el Shop sólo lee el valor que quedó.
  *
@@ -15,8 +15,45 @@ export const CLAVES_ESTRUCTURADAS = [
   "flujo_lm",
   "tension_v",
   "zocalo",
+  "corriente_a",
+  "polos",
+  "seccion_mm2",
+  "medidas_mm",
+  "color",
+  "poder_corte_ka",
+  "curva",
+  "sensibilidad_ma",
+  "largo_m",
+  "montaje",
+  "angulo_grados",
 ] as const;
 export type ClaveEstructurada = (typeof CLAVES_ESTRUCTURADAS)[number];
+
+/**
+ * Dónde vive el valor de cada clave: `num` = `valor_num`, `texto` = `valor_texto`. Se cruza con
+ * `__fixtures__/atributos-claves.json` (contrato compartido con el CRM). `tension_v` es numérica
+ * (un rango "85-265" viaja además en `t`).
+ */
+export const TIPO: Record<ClaveEstructurada, "num" | "texto"> = {
+  potencia_w: "num",
+  temperatura_k: "num",
+  tono: "texto",
+  ip: "num",
+  flujo_lm: "num",
+  tension_v: "num",
+  zocalo: "texto",
+  corriente_a: "num",
+  polos: "num",
+  seccion_mm2: "num",
+  medidas_mm: "texto",
+  color: "texto",
+  poder_corte_ka: "num",
+  curva: "texto",
+  sensibilidad_ma: "num",
+  largo_m: "num",
+  montaje: "texto",
+  angulo_grados: "num",
+};
 
 /** Un valor tal como viaja en la consulta: `n` = valor_num, `t` = valor_texto. */
 export interface ValorEstructurado {
@@ -49,7 +86,7 @@ export function leerAtributosEstructurados(crudo: unknown): AtributosEstructurad
   return Object.keys(out).length ? out : undefined;
 }
 
-const ETIQUETA: Record<ClaveEstructurada, string> = {
+export const ETIQUETA: Record<ClaveEstructurada, string> = {
   potencia_w: "Potencia",
   temperatura_k: "Temperatura de color",
   tono: "Tono de luz",
@@ -57,11 +94,48 @@ const ETIQUETA: Record<ClaveEstructurada, string> = {
   flujo_lm: "Flujo luminoso",
   tension_v: "Tensión",
   zocalo: "Base / zócalo",
+  corriente_a: "Corriente",
+  polos: "Polos",
+  seccion_mm2: "Sección",
+  medidas_mm: "Medidas",
+  color: "Color",
+  poder_corte_ka: "Poder de corte",
+  curva: "Curva",
+  sensibilidad_ma: "Sensibilidad",
+  largo_m: "Largo",
+  montaje: "Montaje",
+  angulo_grados: "Ángulo",
 };
 
 const TONO: Record<string, string> = { calido: "Cálida", neutro: "Neutra", frio: "Fría" };
 
+/** Vocabulario cerrado de color y montaje (el mismo del CRM); lo que no está acá se omite. */
+const COLOR: Record<string, string> = {
+  blanco: "Blanco",
+  negro: "Negro",
+  gris: "Gris",
+  rojo: "Rojo",
+  azul: "Azul",
+  verde: "Verde",
+  amarillo: "Amarillo",
+  marron: "Marrón",
+  naranja: "Naranja",
+  transparente: "Transparente",
+  plateado: "Plateado",
+  dorado: "Dorado",
+};
+const MONTAJE: Record<string, string> = {
+  embutir: "De embutir",
+  aplicar: "De aplicar",
+  colgante: "Colgante",
+  riel: "Para riel",
+  din: "Riel DIN",
+};
+const MEDIDAS = /^\d+(\.\d+)?(x\d+(\.\d+)?){1,2}$/;
+
 const num = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 1 });
+/** Dos decimales: 0,75 mm² no puede redondearse a "0,8". */
+const num2 = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
 
 /** Valor legible de una clave ("50 W", "3000 K", "IP65", "85–265 V", "E27"). null si no hay. */
 export function formatoValor(clave: ClaveEstructurada, v: ValorEstructurado | undefined): string | null {
@@ -83,6 +157,30 @@ export function formatoValor(clave: ClaveEstructurada, v: ValorEstructurado | un
       return v.t ? (TONO[v.t] ?? null) : null;
     case "zocalo":
       return v.t ? v.t.toUpperCase() : null;
+    case "corriente_a":
+      return v.n != null ? `${num2(v.n)} A` : null;
+    case "polos":
+      if (v.n == null || !Number.isInteger(v.n) || v.n < 1 || v.n > 4) return null;
+      return v.n === 1 ? "1 polo" : `${v.n} polos`;
+    case "seccion_mm2":
+      return v.n != null ? `${num2(v.n)} mm²` : null;
+    case "medidas_mm":
+      if (!v.t || !MEDIDAS.test(v.t)) return null;
+      return `${v.t.split("x").map((d) => Number(d).toLocaleString("es-AR", { maximumFractionDigits: 2, useGrouping: false })).join(" x ")} mm`;
+    case "color":
+      return v.t ? (COLOR[v.t] ?? null) : null;
+    case "poder_corte_ka":
+      return v.n != null ? `${num2(v.n)} kA` : null;
+    case "curva":
+      return v.t && /^[bcd]$/i.test(v.t) ? v.t.toUpperCase() : null;
+    case "sensibilidad_ma":
+      return v.n != null ? `${num2(v.n)} mA` : null;
+    case "largo_m":
+      return v.n != null ? `${num2(v.n)} m` : null;
+    case "montaje":
+      return v.t ? (MONTAJE[v.t] ?? null) : null;
+    case "angulo_grados":
+      return v.n != null ? `${num2(v.n)}°` : null;
   }
 }
 
@@ -105,21 +203,44 @@ export function atributosParaAgente(a: AtributosEstructurados | undefined): Reco
   for (const c of CLAVES_ESTRUCTURADAS) {
     const v = a[c];
     if (!v) continue;
-    const valor = c === "tono" || c === "zocalo" || (c === "tension_v" && v.t) ? v.t : v.n;
+    // Sólo se informa lo que el Shop sabe mostrar: un valor fuera de vocabulario no llega al modelo.
+    if (formatoValor(c, v) == null) continue;
+    const valor = TIPO[c] === "texto" || (c === "tension_v" && v.t) ? v.t : v.n;
     if (valor != null) out[c] = valor;
   }
   return Object.keys(out).length ? out : undefined;
 }
 
 /**
- * Valores numéricos para la card `spec` del chat (`attributes`, lista de textos): "50 W",
- * "3000 K", "1020 lm", "IP65", "220 V". El tono y el zócalo ya salen como atributos del
- * diccionario ("Luz cálida", "Rosca E27").
+ * Prioridad de los chips de la card `spec`: las cinco de siempre primero (los casos existentes no
+ * cambian) y después las eléctricas/dimensionales. Color, curva y montaje no son chips: se leen en
+ * la ficha; el tono y el zócalo ya salen como atributos del diccionario ("Luz cálida", "Rosca E27").
+ */
+const CLAVES_CHIP = [
+  "potencia_w",
+  "temperatura_k",
+  "flujo_lm",
+  "ip",
+  "tension_v",
+  "corriente_a",
+  "polos",
+  "seccion_mm2",
+  "medidas_mm",
+  "poder_corte_ka",
+  "sensibilidad_ma",
+  "largo_m",
+  "angulo_grados",
+] as const;
+const TOPE_CHIPS = 6;
+
+/**
+ * Valores para la card `spec` del chat (`attributes`, lista de textos): "50 W", "3000 K",
+ * "1020 lm", "IP65", "220 V", "16 A", "2 polos". Hasta 6, en el orden de prioridad.
  */
 export function etiquetasTecnicas(a: AtributosEstructurados | undefined): string[] {
   if (!a) return [];
-  return (["potencia_w", "temperatura_k", "flujo_lm", "ip", "tension_v"] as const).flatMap((c) => {
+  return CLAVES_CHIP.flatMap((c) => {
     const v = formatoValor(c, a[c]);
     return v ? [v] : [];
-  });
+  }).slice(0, TOPE_CHIPS);
 }

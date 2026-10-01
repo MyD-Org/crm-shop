@@ -103,7 +103,7 @@ describe("formato", () => {
       }),
     ).toEqual([
       { etiqueta: "Potencia", valor: "9 W" },
-      { etiqueta: "Tono de luz", valor: "Fría" },
+      { etiqueta: "Tipo de luz", valor: "Fría" },
       { etiqueta: "Base / zócalo", valor: "E27" },
     ]);
     expect(caracteristicasDe(undefined)).toEqual([]);
@@ -173,7 +173,7 @@ describe("solo se muestra lo que el producto tiene", () => {
     ).toEqual([
       { etiqueta: "Potencia", valor: "9 W" },
       { etiqueta: "Temperatura de color", valor: "3000 K" },
-      { etiqueta: "Tono de luz", valor: "Cálida" },
+      { etiqueta: "Tipo de luz", valor: "Cálida" },
       { etiqueta: "Protección", valor: "IP65" },
       { etiqueta: "Flujo luminoso", valor: "800 lm" },
       { etiqueta: "Tensión", valor: "220 V" },
@@ -252,5 +252,25 @@ describe("agente y chips con las claves ampliadas", () => {
     const chips = etiquetasTecnicas(MUESTRA);
     expect(chips).toEqual(["12 W", "3000 K", "900 lm", "IP65", "220 V", "25 A"]);
     expect(chips).toHaveLength(6);
+  });
+});
+
+describe("tipo de luz (tono) y color del producto", () => {
+  it("etiquetas", () => {
+    expect(ETIQUETA.tono).toBe("Tipo de luz");
+    expect(ETIQUETA.color).toBe("Color del producto");
+  });
+
+  it("formato de las luces de color y RGB", () => {
+    const f = (t: string) => formatoValor("tono", { n: null, t });
+    expect(["calido", "neutro", "frio", "rojo", "verde", "azul", "amarillo", "naranja", "violeta", "rosa", "rgb", "rgbw"].map(f)).toEqual([
+      "Cálida", "Neutra", "Fría", "Roja", "Verde", "Azul", "Amarilla", "Naranja", "Violeta", "Rosa", "RGB", "RGBW",
+    ]);
+    expect(f("turquesa")).toBeNull();
+  });
+
+  it("el agente recibe el tipo de luz de color, no uno inventado", () => {
+    expect(atributosParaAgente({ tono: { n: null, t: "verde" } })).toEqual({ tono: "verde" });
+    expect(atributosParaAgente({ tono: { n: null, t: "turquesa" } })).toBeUndefined();
   });
 });

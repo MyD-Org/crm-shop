@@ -314,10 +314,21 @@ function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, citaCruda: st
   const v = a.valorTexto ?? ""
   switch (clave) {
     case "tono": {
+      // Tipo de luz: blanca (cálida/neutra/fría), de color (roja/rojo, amarilla/amarillo…) o RGB/RGBW.
+      const palabra = (src: string) => new RegExp(`(?<![A-Z0-9])(?:${src})(?![A-Z0-9])`)
       const sin: Record<string, RegExp> = {
         calido: /CALID[OA]|WARM/,
         neutro: /NEUTR[OA]|NEUTRAL/,
         frio: /FRI[OA]|COOL|DAYLIGHT|LUZ DE DIA/,
+        rojo: palabra("ROJ[OA]S?|RED"),
+        verde: palabra("VERDES?|GREEN"),
+        azul: palabra("AZUL(?:ES)?|BLUE"),
+        amarillo: palabra("AMARILL[OA]S?|YELLOW"),
+        naranja: palabra("NARANJAS?|ORANGE"),
+        violeta: palabra("VIOLETAS?|PURPLE"),
+        rosa: palabra("ROSAS?|ROSAD[OA]S?|PINK"),
+        rgb: palabra("RGB"),
+        rgbw: palabra("RGBW"),
       }
       return sin[v]?.test(cita) ? "ok" : "valor_no_en_texto"
     }

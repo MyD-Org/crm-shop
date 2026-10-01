@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
   CLAVES_ATRIBUTO,
+  DEFINICION_ATRIBUTOS,
+  TONOS,
   extraerAtributosDeNombre,
   normalizarAtributos,
   parsearEdicionManual,
@@ -150,7 +152,7 @@ describe("normalizarAtributos (lo que llega del PDF o del panel manual)", () => 
   })
 
   it("tono inválido se ignora; tono explícito le gana al de kelvin", () => {
-    expect(comoMapa(normalizarAtributos({ tono: "violeta" }))).toEqual({})
+    expect(comoMapa(normalizarAtributos({ tono: "turquesa" }))).toEqual({})
     expect(comoMapa(normalizarAtributos({ tono: "Neutra", temperatura_k: 3000 }))).toEqual({
       tono: "neutro",
       temperatura_k: 3000,
@@ -488,5 +490,52 @@ describe("eficiencia y magnitudes por metro no son flujo, potencia ni corriente"
   it("no rompe lo que no es una relación", () => {
     expect(extraer("TERMOMAGNETICA 10A/30mA 2P")).toMatchObject({ polos: 2 })
     expect(extraer("TRAFO 230/400V 25M")).toMatchObject({ tension_v: 230, largo_m: 25 })
+  })
+})
+
+describe("tono = tipo de luz (luces de color y RGB)", () => {
+  it("'LUZ VERDE' y similares son tono, no color del producto", () => {
+    expect(extraer("TIRA LED 5M LUZ VERDE")).toEqual({ tono: "verde", largo_m: 5 })
+    expect(extraer("LAMPARA 9W E27 LUZ ROJA")).toEqual({ potencia_w: 9, zocalo: "e27", tono: "rojo" })
+    expect(extraer("FOCO 7W LUZ AMARILLA")).toEqual({ potencia_w: 7, tono: "amarillo" })
+    expect(extraer("FOCO 7W LUZ AZUL")).toEqual({ potencia_w: 7, tono: "azul" })
+    expect(extraer("FOCO 7W LUZ NARANJA")).toEqual({ potencia_w: 7, tono: "naranja" })
+    expect(extraer("FOCO 7W LUZ VIOLETA")).toEqual({ potencia_w: 7, tono: "violeta" })
+    expect(extraer("FOCO 7W LUZ ROSA")).toEqual({ potencia_w: 7, tono: "rosa" })
+  })
+
+  it("RGB y RGBW son tonos distintos", () => {
+    expect(extraer("TIRA LED 5050 RGB IP20")).toEqual({ tono: "rgb", ip: 20 })
+    expect(extraer("TIRA LED 5050 RGBW")).toEqual({ tono: "rgbw" })
+    expect(extraer("TIRA LED RGB/RGBW")).toEqual({})
+  })
+
+  it("conservador: un color suelto no es tipo de luz", () => {
+    expect(extraer("CABLE UNIPOLAR 2,5MM2 VERDE")).toEqual({ polos: 1, seccion_mm2: 2.5, color: "verde" })
+    expect(extraer("CINTA AISLADORA ROJA")).toEqual({ color: "rojo" })
+  })
+
+  it("dos tipos de luz distintos es ambiguo", () => {
+    expect(extraer("FOCO LUZ VERDE CALIDO")).toEqual({})
+  })
+
+  it("el valor externo acepta sinónimos con y sin género", () => {
+    for (const [entrada, esperado] of [
+      ["Roja", "rojo"], ["amarilla", "amarillo"], ["Luz verde", "verde"], ["Violeta", "violeta"], ["RGB", "rgb"], ["RGBW", "rgbw"],
+    ] as const) {
+      expect(comoMapa(normalizarAtributos({ tono: entrada }))).toEqual({ tono: esperado })
+    }
+    expect(comoMapa(normalizarAtributos({ tono: "RGBY" }))).toEqual({})
+  })
+
+  it("el panel manual guarda 'rgbw' y define etiquetas nuevas", () => {
+    expect(parsearEdicionManual({ valores: { tono: "rgbw" } })).toEqual({
+      ok: true,
+      valores: [{ clave: "tono", valorNum: null, valorTexto: "rgbw" }],
+      quitar: [],
+    })
+    expect(DEFINICION_ATRIBUTOS.tono.etiqueta).toBe("Tipo de luz")
+    expect(DEFINICION_ATRIBUTOS.color.etiqueta).toBe("Color del producto")
+    expect(TONOS).toEqual(["calido", "neutro", "frio", "rojo", "verde", "azul", "amarillo", "naranja", "violeta", "rosa", "rgb", "rgbw"])
   })
 })

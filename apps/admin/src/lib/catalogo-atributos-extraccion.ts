@@ -10,7 +10,8 @@
  * Reglas medidas sobre el catálogo (2026-09-30):
  * - `potencia_w`: número + "W" (o "KW" × 1000). "2X36W" no cuenta (varios tubos: ambiguo).
  * - `temperatura_k`: cuatro cifras + "K" entre 1800 y 10000. "10kA" (poder de corte) no cuenta.
- * - `tono`: la palabra (cálido/neutro/frío, "luz día", warm/daylight); si no está, desde los kelvin.
+ * - `tono` (Tipo de luz): la palabra (cálido/neutro/frío, "luz día", warm/daylight), una luz de color
+ *   ("LUZ VERDE"; un color suelto no cuenta) o RGB/RGBW; si no está, desde los kelvin.
  *   Dos tonos distintos en el nombre ("CALIDO/FRIO") = sin tono.
  * - `ip`: "IP" + dos cifras (IPX4 no se guarda).
  * - `flujo_lm`: número (con separador de miles) + "lm"/"lúmenes". El "5050" de las tiras es el chip.
@@ -52,7 +53,24 @@ export const CLAVES_ATRIBUTO = [
 ] as const
 export type ClaveAtributo = (typeof CLAVES_ATRIBUTO)[number]
 
-export const TONOS = ["calido", "neutro", "frio"] as const
+/**
+ * Valores de `tono`, que es el "Tipo de luz": blanca (cálido/neutro/frío), de color o RGB. El nombre
+ * de la clave y el CHECK de la base no cambian; el vocabulario vive acá (sin migración).
+ */
+export const TONOS = [
+  "calido",
+  "neutro",
+  "frio",
+  "rojo",
+  "verde",
+  "azul",
+  "amarillo",
+  "naranja",
+  "violeta",
+  "rosa",
+  "rgb",
+  "rgbw",
+] as const
 export type Tono = (typeof TONOS)[number]
 
 export const COLORES = [
@@ -99,7 +117,7 @@ export interface DefinicionAtributo {
 export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
   potencia_w: { tipo: "num", etiqueta: "Potencia (W)", rango: [0.1, 100_000], pista: "50" },
   temperatura_k: { tipo: "num", etiqueta: "Temperatura de color (K)", rango: [1800, 10000], pista: "3000" },
-  tono: { tipo: "texto", etiqueta: "Tono de luz", pista: "calido, neutro o frio" },
+  tono: { tipo: "texto", etiqueta: "Tipo de luz", pista: TONOS.join(", ") },
   ip: { tipo: "num", etiqueta: "Protección IP", rango: [0, 69], pista: "65" },
   flujo_lm: { tipo: "num", etiqueta: "Flujo luminoso (lm)", rango: [1, 1_000_000], pista: "1200" },
   tension_v: { tipo: "num", etiqueta: "Tensión (V)", rango: [1, 1000], pista: "220 o 85-265" },
@@ -108,7 +126,7 @@ export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
   polos: { tipo: "num", etiqueta: "Polos", rango: [1, 4], entero: true, pista: "1 a 4" },
   seccion_mm2: { tipo: "num", etiqueta: "Sección (mm²)", rango: [0.5, 1000], pista: "2,5" },
   medidas_mm: { tipo: "texto", etiqueta: "Medidas (mm)", pista: "AxB o AxBxC, p. ej. 300x400" },
-  color: { tipo: "texto", etiqueta: "Color", pista: COLORES.join(", ") },
+  color: { tipo: "texto", etiqueta: "Color del producto", pista: COLORES.join(", ") },
   poder_corte_ka: { tipo: "num", etiqueta: "Poder de corte (kA)", rango: [1, 100], pista: "6" },
   curva: { tipo: "texto", etiqueta: "Curva de disparo", pista: "B, C o D" },
   sensibilidad_ma: { tipo: "num", etiqueta: "Sensibilidad (mA)", rango: [5, 1000], pista: "30" },
@@ -155,10 +173,30 @@ const RE_TENSION = new RegExp(
 )
 const RE_ZOCALO = new RegExp(`${INI}(e ?-?(?:10|12|14|27|40)|gu ?-?(?:10|5[.,]3)|mr ?-?(?:11|16)|gx ?-?53|g ?-?(?:4|9|13|24)|r7s)${FIN}`)
 
+/**
+ * Luces de color: sólo con la palabra "luz" delante ("LUZ VERDE"). Un color suelto ("CABLE VERDE")
+ * es el color del producto, no el tipo de luz.
+ */
+const PALABRAS_LUZ_COLOR: Record<string, string> = {
+  rojo: "roj[oa]s?",
+  verde: "verdes?",
+  azul: "azul(?:es)?",
+  amarillo: "amarill[oa]s?",
+  naranja: "naranjas?",
+  violeta: "violetas?",
+  rosa: "rosas?|rosad[oa]s?",
+}
+const FRASE_LUZ_COLOR = `luz (?:${Object.values(PALABRAS_LUZ_COLOR).join("|")})`
+
 const PALABRAS_TONO: [Tono, RegExp][] = [
   ["calido", new RegExp(`${INI}(?:calid[oa]s?|warm)${FIN}`)],
   ["neutro", new RegExp(`${INI}neutr[oa]s?${FIN}`)],
   ["frio", new RegExp(`${INI}(?:fri[oa]s?|luz (?:de )?dia|daylight)${FIN}`)],
+  ...Object.entries(PALABRAS_LUZ_COLOR).map(
+    ([tono, src]) => [tono as Tono, new RegExp(`${INI}luz (?:${src})${FIN}`)] as [Tono, RegExp],
+  ),
+  ["rgb", new RegExp(`${INI}rgb${FIN}`)],
+  ["rgbw", new RegExp(`${INI}rgbw${FIN}`)],
 ]
 
 /** Tono de luz según la temperatura de color. null si no es un número razonable. */
@@ -243,7 +281,7 @@ const MONTAJE_PALABRAS: Record<Montaje, string> = {
 
 /** Frases de tono que contienen un color: "LUZ BLANCA", "BLANCO FRIO" son tono, no color. */
 const RE_FRASE_TONO = new RegExp(
-  `${INI}(?:luz (?:blanc[oa]s?|calid[oa]s?|fri[oa]s?|neutr[oa]s?|(?:de )?dia)|(?:blanc[oa]s?|bco) (?:calid|fri|neutr)[oa]s?|(?:calid|fri|neutr)[oa]s? (?:blanc[oa]s?|bco))${FIN}`,
+  `${INI}(?:luz (?:blanc[oa]s?|calid[oa]s?|fri[oa]s?|neutr[oa]s?|(?:de )?dia)|${FRASE_LUZ_COLOR}|(?:blanc[oa]s?|bco) (?:calid|fri|neutr)[oa]s?|(?:calid|fri|neutr)[oa]s? (?:blanc[oa]s?|bco))${FIN}`,
   "g",
 )
 
@@ -564,6 +602,10 @@ function tonoValido(v: unknown): Tono | null {
   if (/^calid[oa]s?$|^warm$/.test(t)) return "calido"
   if (/^neutr[oa]s?$/.test(t)) return "neutro"
   if (/^fri[oa]s?$|^daylight$|^luz (?:de )?dia$/.test(t)) return "frio"
+  for (const [tono, src] of Object.entries(PALABRAS_LUZ_COLOR)) {
+    if (new RegExp(`^(?:luz )?(?:${src})$`).test(t)) return tono as Tono
+  }
+  if (t === "rgb" || t === "rgbw") return t
   return null
 }
 

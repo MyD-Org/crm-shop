@@ -1,5 +1,5 @@
 /**
- * Atributos del catálogo como filtro real (`?atr=`): tono de luz, apto
+ * Atributos del catálogo como filtro real (`?atr=`): tipo de luz (clave `tono`), apto
  * exterior, zócalo y tensión.
  *
  * En Central LED las especificaciones viven en el NOMBRE del producto
@@ -107,6 +107,85 @@ export const ATRIBUTOS: readonly Atributo[] = [
     patron: `${INI}fri[oa]s?${FIN}|${INI}luz (de )?dia${FIN}|${INI}daylight${FIN}|${kelvin("6000|6500")}`,
     sinonimos: ["fria", "frio", "frias", "frios", "6000k", "6500k", "luz dia", "luz de dia", "luz fria"],
     estructurado: { clave: "tono", textos: ["frio"] },
+  },
+  {
+    id: "tono-rojo",
+    grupo: "tono",
+    nombre: "Luz roja",
+    // Sólo con "luz" delante: "CABLE ROJO" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz (roj[oa]s?)${FIN}`,
+    sinonimos: ["luz roja", "luz rojo"],
+    estructurado: { clave: "tono", textos: ["rojo"] },
+  },
+  {
+    id: "tono-verde",
+    grupo: "tono",
+    nombre: "Luz verde",
+    // Sólo con "luz" delante: "CABLE VERDE" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz (verdes?)${FIN}`,
+    sinonimos: ["luz verde"],
+    estructurado: { clave: "tono", textos: ["verde"] },
+  },
+  {
+    id: "tono-azul",
+    grupo: "tono",
+    nombre: "Luz azul",
+    // Sólo con "luz" delante: "CABLE AZUL" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz (azul(es)?)${FIN}`,
+    sinonimos: ["luz azul"],
+    estructurado: { clave: "tono", textos: ["azul"] },
+  },
+  {
+    id: "tono-amarillo",
+    grupo: "tono",
+    nombre: "Luz amarilla",
+    // Sólo con "luz" delante: "CABLE AMARILLO" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz (amarill[oa]s?)${FIN}`,
+    sinonimos: ["luz amarilla", "luz amarillo"],
+    estructurado: { clave: "tono", textos: ["amarillo"] },
+  },
+  {
+    id: "tono-naranja",
+    grupo: "tono",
+    nombre: "Luz naranja",
+    // Sólo con "luz" delante: "CABLE NARANJA" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz (naranjas?)${FIN}`,
+    sinonimos: ["luz naranja"],
+    estructurado: { clave: "tono", textos: ["naranja"] },
+  },
+  {
+    id: "tono-violeta",
+    grupo: "tono",
+    nombre: "Luz violeta",
+    // Sólo con "luz" delante: "CABLE VIOLETA" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz (violetas?)${FIN}`,
+    sinonimos: ["luz violeta"],
+    estructurado: { clave: "tono", textos: ["violeta"] },
+  },
+  {
+    id: "tono-rosa",
+    grupo: "tono",
+    nombre: "Luz rosa",
+    // Sólo con "luz" delante: "CABLE ROSA" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz (rosas?|rosad[oa]s?)${FIN}`,
+    sinonimos: ["luz rosa"],
+    estructurado: { clave: "tono", textos: ["rosa"] },
+  },
+  {
+    id: "tono-rgb",
+    grupo: "tono",
+    nombre: "RGB",
+    patron: `${INI}rgb${FIN}`,
+    sinonimos: ["rgb", "luz rgb", "multicolor"],
+    estructurado: { clave: "tono", textos: ["rgb"] },
+  },
+  {
+    id: "tono-rgbw",
+    grupo: "tono",
+    nombre: "RGBW",
+    patron: `${INI}rgbw${FIN}`,
+    sinonimos: ["rgbw", "luz rgbw"],
+    estructurado: { clave: "tono", textos: ["rgbw"] },
   },
   {
     id: "apto-exterior",

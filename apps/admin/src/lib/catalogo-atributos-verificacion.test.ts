@@ -547,3 +547,21 @@ describe("unidad con borde exacto", () => {
     expect(motivos(una(txt, clave, valor))).toEqual([`${clave}:valor_por_metro`])
   })
 })
+
+describe("tono = tipo de luz: luces de color", () => {
+  const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "TIRA LED 5M", code: "TL-001-XYZ" })
+
+  it("acepta el color de luz con sus sinónimos de género", () => {
+    for (const [texto, valor] of [["Luz roja", "rojo"], ["Luz rojo", "rojo"], ["Color de luz: Amarilla", "amarillo"], ["Luz amarillo", "amarillo"], ["Luz verde", "verde"], ["RGB", "rgb"], ["RGBW", "rgbw"]] as const) {
+      const r = verificarLectura(lectura(null, { tono: { valor } }), ficha([["Luz", 40, 700], [texto, 150, 700]]))
+      expect(r.descartes, texto).toEqual([])
+      expect(aceptados(r), texto).toEqual([["tono", valor]])
+    }
+  })
+
+  it("RGB no avala RGBW ni al revés; otro color tampoco", () => {
+    const solo = ficha([["Luz", 40, 700], ["RGB", 150, 700]])
+    expect(motivos(verificarLectura(lectura(null, { tono: { valor: "rgbw" } }), solo))).toEqual(["tono:valor_no_en_texto"])
+    expect(motivos(verificarLectura(lectura(null, { tono: { valor: "verde" } }), solo))).toEqual(["tono:valor_no_en_texto"])
+  })
+})

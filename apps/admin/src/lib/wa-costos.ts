@@ -57,11 +57,23 @@ export function levelText(level: WaLevel): string {
 
 /**
  * Sin números y con errores no hay dato: la UI debe decir "No se pudo consultar", nunca 0.
- * Un número ausente de `numbers` es consumo cero, pero sólo cuando no hubo errores.
+ * Si la ai-api todavía no le preguntó a Meta (`lastRunAt` null) tampoco hay dato: "pendiente".
+ * Un número ausente de `numbers` es consumo cero, pero sólo cuando ya se consultó sin errores.
  */
-export function waCostsStatus(s: WaCostsSummary): "sin-datos" | "vacio" | "datos" {
+export function waCostsStatus(s: WaCostsSummary): "pendiente" | "sin-datos" | "vacio" | "datos" {
   if (s.numbers.length > 0) return "datos"
-  return s.errors.length > 0 ? "sin-datos" : "vacio"
+  if (s.errors.length > 0) return "sin-datos"
+  return s.lastRunAt ? "vacio" : "pendiente"
+}
+
+/** ISO -> '1/10 14:30' en hora de Argentina, para "Actualizado el …". */
+export function lastRunText(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit",
+  })
 }
 
 /** Cantidad de números que merecen el cartel (warning o billing). */

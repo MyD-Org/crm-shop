@@ -40,10 +40,8 @@ type SucursalForm = {
   provincia: string
   whatsapp: string
   horario: string
-  envioCiudades: string
   orden: string
   aceptaRetiro: boolean
-  aceptaEnvio: boolean
   activa: boolean
   predeterminada: boolean
   maestra: boolean
@@ -82,10 +80,8 @@ const sucursalVacia = (orden: number): SucursalForm => ({
   provincia: "",
   whatsapp: "",
   horario: "",
-  envioCiudades: "",
   orden: String(orden),
   aceptaRetiro: true,
-  aceptaEnvio: true,
   activa: true,
   predeterminada: false,
   maestra: false,
@@ -100,10 +96,8 @@ const desdeDto = (s: SucursalDto): SucursalForm => ({
   provincia: s.provincia,
   whatsapp: s.whatsapp,
   horario: s.horario,
-  envioCiudades: s.envioCiudades.join(", "),
   orden: String(s.orden),
   aceptaRetiro: s.aceptaRetiro,
-  aceptaEnvio: s.aceptaEnvio,
   activa: s.activa,
   predeterminada: s.predeterminada,
   maestra: s.maestra,
@@ -118,10 +112,8 @@ function cuerpoSucursal(f: SucursalForm) {
     provincia: f.provincia,
     whatsapp: f.whatsapp,
     horario: f.horario,
-    envioCiudades: f.envioCiudades.split(",").map((c) => c.trim()).filter(Boolean),
     orden: f.orden.trim() === "" ? 0 : Number(f.orden),
     aceptaRetiro: f.aceptaRetiro,
-    aceptaEnvio: f.aceptaEnvio,
     activa: f.activa,
     predeterminada: f.predeterminada,
     maestra: f.maestra,
@@ -410,7 +402,7 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
     <div className="flex flex-col gap-4">
       <Card
         title="Sucursales"
-        description="Cada sucursal define un local de retiro y un origen de envío. Los cambios rigen para los pedidos nuevos; los pedidos ya creados conservan su sucursal."
+        description="Cada sucursal define un local de retiro. Desde dónde sale el envío se configura en Datos, Envíos. Los cambios rigen para los pedidos nuevos; los pedidos ya creados conservan su sucursal."
       >
         <div className="flex flex-col gap-3">
           <Table<SucursalDto>
@@ -455,8 +447,8 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
               },
               {
                 key: "modalidad",
-                header: "Retiro / envío",
-                render: (s) => [s.aceptaRetiro ? "Retiro" : null, s.aceptaEnvio ? "Envío" : null].filter(Boolean).join(" y ") || "Ninguno",
+                header: "Retiro",
+                render: (s) => (s.aceptaRetiro ? "Sí" : "—"),
                 hideBelow: "md",
               },
               {
@@ -618,22 +610,10 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
             <Field label="Horario de atención" error={errores.horario}>
               <Textarea value={sucursalForm.horario} rows={3} onChange={(e) => setS({ horario: e.target.value })} aria-invalid={Boolean(errores.horario)} />
             </Field>
-            <Field
-              label="Ciudades de envío"
-              hint="Separadas por coma. Vacío = toda la zona de la sucursal."
-              error={errores.envioCiudades}
-            >
-              <Input
-                value={sucursalForm.envioCiudades}
-                onChange={(e) => setS({ envioCiudades: e.target.value })}
-                aria-invalid={Boolean(errores.envioCiudades)}
-              />
-            </Field>
             <Field label="Orden" hint="Menor primero. Define la sucursal de respaldo." error={errores.orden}>
               <Input type="number" min={0} step={1} value={sucursalForm.orden} onChange={(e) => setS({ orden: e.target.value })} aria-invalid={Boolean(errores.orden)} />
             </Field>
             <CheckboxLabel id="suc-retiro" checked={sucursalForm.aceptaRetiro} onChange={(aceptaRetiro) => setS({ aceptaRetiro })} label="Acepta retiro en el local" />
-            <CheckboxLabel id="suc-envio" checked={sucursalForm.aceptaEnvio} onChange={(aceptaEnvio) => setS({ aceptaEnvio })} label="Realiza envíos" />
             <CheckboxLabel id="suc-activa" checked={sucursalForm.activa} onChange={(activa) => setS({ activa })} label="Activa" />
             <CheckboxLabel
               id="suc-pred"

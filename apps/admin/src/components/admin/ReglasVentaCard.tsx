@@ -12,7 +12,6 @@ import { validarReglasVenta, type ReglasVenta } from "@/lib/reglas-venta-validac
 type Errores = Record<string, string>
 
 type Form = {
-  respaldoEnvio: string
   retiroSinStock: string
   trasladoDias: string
   reservaDias: string
@@ -21,18 +20,12 @@ type Form = {
   mensajeConfirmacion: string
 }
 
-const OPCIONES_SI_NO = [
-  { value: "si", label: "Sí, despachar desde otra sucursal" },
-  { value: "no", label: "No, informar que no hay stock" },
-]
-
 const OPCIONES_RETIRO = [
   { value: "ofrecer", label: "Ofrecerlo con demora" },
   { value: "bloquear", label: "No permitir el retiro" },
 ]
 
 const desdeReglas = (r: ReglasVenta): Form => ({
-  respaldoEnvio: r.respaldoEnvio ? "si" : "no",
   retiroSinStock: r.retiroSinStock,
   trasladoDias: String(r.trasladoDias),
   reservaDias: String(r.reservaDias),
@@ -42,7 +35,6 @@ const desdeReglas = (r: ReglasVenta): Form => ({
 })
 
 const cuerpo = (f: Form) => ({
-  respaldoEnvio: f.respaldoEnvio === "si",
   retiroSinStock: f.retiroSinStock,
   trasladoDias: f.trasladoDias,
   reservaDias: f.reservaDias,
@@ -137,13 +129,6 @@ export function ReglasVentaCard() {
             <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--ink-faint)" }}>
               Disponibilidad
             </h3>
-            <Field
-              label="Envío con respaldo de otra sucursal"
-              hint="Si la sucursal de la zona del cliente no tiene stock, el pedido se despacha desde otra sucursal con stock."
-              error={errores.respaldoEnvio}
-            >
-              <Select options={OPCIONES_SI_NO} value={form.respaldoEnvio} onValueChange={(v) => cambiar("respaldoEnvio", v)} />
-            </Field>
             <Field
               label="Retiro sin stock en el local"
               hint="Qué hacer cuando el cliente elige retirar en un local que no tiene el producto pero otra sucursal sí."

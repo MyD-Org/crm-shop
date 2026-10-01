@@ -133,3 +133,27 @@ describe("estados sin prefijo (lista de locales de la ficha)", () => {
     expect(estadoEnvio({ estado: "a_traer", origen: "b", demoraDias: 1 }).texto).toBe("Disponible en 1 día");
   });
 });
+
+describe("resumen del carrito", () => {
+  const locales = [{ slug: "a", nombre: "A" }, { slug: "b", nombre: "B" }];
+  const hoy = { estado: "disponible" as const, desde: null, demoraDias: null };
+  const traer = { estado: "con_demora" as const, desde: "b", demoraDias: 7 };
+  const no = { estado: "sin_stock" as const, desde: null, demoraDias: null };
+  const p = (a: typeof hoy | typeof traer | typeof no, b: typeof hoy | typeof traer | typeof no) =>
+    ({ envio: { estado: "disponible" as const, origen: "a", demoraDias: null }, retiro: { a, b }, servible: true }) as never;
+
+  it("manda el producto más lento y cuenta los que se traen", async () => {
+    const { resumenDisponibilidadCarrito } = await import("./disponibilidad-textos");
+    const r = resumenDisponibilidadCarrito([p(hoy, hoy), p(traer, hoy), p(hoy, no)], locales)!;
+    expect(r.producto.retiro!.a.estado).toBe("con_demora");
+    expect(r.notasLocal.a).toBe("1 producto se trae de otra sucursal");
+    expect(r.producto.retiro!.b.estado).toBe("sin_stock");
+    expect(r.notasLocal.b).toBe("1 producto no está disponible en este local");
+  });
+
+  it("sin entrega posible sólo si no hay retiro ni envío", async () => {
+    const { sinEntregaPosible } = await import("./disponibilidad-textos");
+    expect(sinEntregaPosible({ envio: null, retiro: { a: no, b: no } } as never)).toBe(true);
+    expect(sinEntregaPosible({ envio: null, retiro: { a: traer, b: no } } as never)).toBe(false);
+  });
+});

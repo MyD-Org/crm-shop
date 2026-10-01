@@ -7,12 +7,14 @@ import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
 import { getOfertaCuotas } from "@/lib/cuotas-datos";
-import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
+import { CONFIG_ENVIO_DEFAULT, textoEnvioFicha } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
 import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
+import { estadoEnvio } from "@/lib/disponibilidad-textos";
+import { EnvioProductoUbicacion } from "@/components/producto/EnvioProductoUbicacion";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -76,6 +78,16 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         oferta={oferta}
         configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
+        envioUbicacion={
+          // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
+          // fallback, para que la ficha siga con su shell estático.
+          <Suspense fallback={textoEnvioFicha(reglas.envio ?? CONFIG_ENVIO_DEFAULT)}>
+            <EnvioProductoUbicacion
+              configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
+              plazo={disponibilidad?.productos[producto.id]?.envio ? estadoEnvio(disponibilidad.productos[producto.id].envio!) : null}
+            />
+          </Suspense>
+        }
         disponibilidad={
           disponibilidad?.productos[producto.id]
             ? { producto: disponibilidad.productos[producto.id], locales: disponibilidad.locales }

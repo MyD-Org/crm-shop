@@ -103,6 +103,19 @@ describe("política de privacidad", () => {
     expect(t).not.toMatch(/inscripci[oó]n n/i);
   });
 
+  it("declara la ubicación: permiso del navegador, Georef sin guardar coordenadas y la cookie shop_ubicacion", () => {
+    const bloques = bloquesPrivacidad({});
+    const ubicacion = bloques.find((b) => b.titulo === "Su ubicación");
+    expect(ubicacion).toBeDefined();
+    const t = texto([ubicacion!]);
+    expect(t).toMatch(/permiso/);
+    expect(t).toContain("Georef");
+    expect(t).toMatch(/No guardamos sus coordenadas/);
+    expect(t).toContain("shop_ubicacion");
+    expect(t).toMatch(/un año/);
+    expect(t).not.toMatch(/\btu\b|\bvos\b/i);
+  });
+
   it("informa las cookies y herramientas de análisis que carga el flag `tracking`", () => {
     const bloques = bloquesPrivacidad({});
     const cookies = bloques.find((b) => b.titulo === "Cookies y herramientas de análisis");

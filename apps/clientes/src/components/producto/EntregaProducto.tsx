@@ -1,4 +1,6 @@
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
+import { TEXTOS_UBICACION } from "@/lib/ubicacion";
+import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import {
   estadoEnvio,
   estadoRetiroLocal,
@@ -25,7 +27,7 @@ function IconoLocal() {
   );
 }
 
-const CLASE_TONO: Record<TonoDisponibilidad, string> = {
+export const CLASE_TONO: Record<TonoDisponibilidad, string> = {
   ok: "text-success",
   demora: "text-warning",
   no: "text-danger",
@@ -59,12 +61,25 @@ export function EntregaProducto({
   configEnvio,
   provincia = null,
   localidad = null,
+  envioUbicacion,
   disponibilidad,
+  notasLocal,
+  ubicacionConocida = true,
 }: {
   configEnvio: ConfigEnvio;
   provincia?: string | null;
   localidad?: string | null;
+  /**
+   * Texto del envío según la ubicación del visitante, resuelto en un componente de servidor dentro
+   * de un `<Suspense>` (la cookie no se puede leer acá sin volver dinámica toda la ficha). Sin él,
+   * se usa `provincia`/`localidad` o la regla general.
+   */
+  envioUbicacion?: React.ReactNode;
   disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
+  /** Carrito: aclaración por local ("1 producto se trae de otra sucursal"). */
+  notasLocal?: Record<string, string>;
+  /** Carrito: sin ubicación no se muestra plazo; se pide la localidad. (La ficha lo resuelve en el slot.) */
+  ubicacionConocida?: boolean;
 }) {
   const retiro = disponibilidad?.producto.retiro;
   const locales = retiro ? (disponibilidad?.locales ?? []).filter((l) => retiro[l.slug]) : [];
@@ -84,6 +99,7 @@ export function EntregaProducto({
                   <span className="text-text">{l.nombre}</span>
                   {" · "}
                   <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{estado.texto}</span>
+                  {notasLocal?.[l.slug] && <span className="block text-muted">{notasLocal[l.slug]}</span>}
                   {l.direccion && (
                     <span className="block text-muted">
                       {[l.direccion, l.ciudad].filter(Boolean).join(", ")}
@@ -101,9 +117,20 @@ export function EntregaProducto({
       </Fila>
       {textoEnvio && (
         <Fila icono={<IconoEnvio />} titulo="Envío a domicilio">
-          <span className="block text-muted">{textoEnvio}</span>
-          {envioDomicilio && (
-            <span className={`font-semibold ${CLASE_TONO[envioDomicilio.tono]}`}>{envioDomicilio.texto}</span>
+          {envioUbicacion ? (
+            // El slot de la ficha decide texto y plazo según la ubicación.
+            <span className="block text-muted">{envioUbicacion}</span>
+          ) : !ubicacionConocida ? (
+            <SelectorUbicacion className="font-semibold text-accent underline underline-offset-2 hover:no-underline">
+              {TEXTOS_UBICACION.pedirEnvio}
+            </SelectorUbicacion>
+          ) : (
+            <>
+              <span className="block text-muted">{textoEnvio}</span>
+              {envioDomicilio && (
+                <span className={`font-semibold ${CLASE_TONO[envioDomicilio.tono]}`}>{envioDomicilio.texto}</span>
+              )}
+            </>
           )}
         </Fila>
       )}

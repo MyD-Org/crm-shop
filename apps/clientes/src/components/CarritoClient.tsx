@@ -10,7 +10,7 @@ import { AvisoQuitado } from "@/components/AvisoQuitado";
 import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { useCart } from "@/context/CartContext";
-import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
+import { resumenDisponibilidadCarrito, sinEntregaPosible } from "@/lib/disponibilidad-textos";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
 import { CuotasResumen } from "@/components/CuotasResumen";
@@ -193,6 +193,16 @@ export function CarritoClient({
   // Los precios de cada línea salen de la cotización, con IVA como en la ficha
   // (ver precioLineaCarrito): el neto guardado en el carrito no se muestra.
   const lineaDe = (id: string) => cotizacion?.lineas.find((l) => l.id === id);
+  // Una sola disponibilidad para todo el pedido (manda el producto más lento), sin las líneas con problema.
+  const resumenEntrega = cotizacion?.disponibilidad
+    ? resumenDisponibilidadCarrito(
+        cotizacion.lineas
+          .filter((l) => !l.problema)
+          .map((l) => cotizacion.disponibilidad!.productos[l.id])
+          .filter(Boolean),
+        cotizacion.disponibilidad.locales,
+      )
+    : null;
   const confirmado = estado === "ok" && cotizacion;
 
   if (!ready) {
@@ -387,15 +397,16 @@ export function CarritoClient({
                               {linea.detalle}
                             </p>
                           )}
-                          {/* Flag `disponibilidad-sucursal`: envío y retiro por local. */}
-                          {!linea?.problema && cotizacion?.disponibilidad?.productos[item.id] && (
-                            <DisponibilidadLineas
-                              disponibilidad={cotizacion.disponibilidad.productos[item.id]}
-                              locales={cotizacion.disponibilidad.locales}
-                              envio={configEnvio.domicilioActivo}
-                              className="mt-0.5"
-                            />
-                          )}
+                          {/* Flag `disponibilidad-sucursal`: el detalle por local va una sola vez en el
+                              resumen; acá sólo el aviso de que no se puede de ninguna forma. */}
+                          {!linea?.problema &&
+                            cotizacion?.disponibilidad?.productos[item.id] &&
+                            sinEntregaPosible(cotizacion.disponibilidad.productos[item.id]) && (
+                              <p className="flex items-center gap-1.5 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] font-bold text-warning">
+                                <AlertIcon />
+                                Sin stock para retiro ni envío
+                              </p>
+                            )}
                         </div>
 
                         <button
@@ -552,7 +563,13 @@ export function CarritoClient({
               )}
             </div>
 
-            <EntregaProducto configEnvio={configEnvio} provincia={provincia} />
+            <EntregaProducto
+              configEnvio={configEnvio}
+              provincia={provincia}
+              disponibilidad={resumenEntrega ? { producto: resumenEntrega.producto, locales: cotizacion!.disponibilidad!.locales } : undefined}
+              notasLocal={resumenEntrega?.notasLocal}
+              ubicacionConocida={provincia !== null}
+            />
           </aside>
         </div>
 

@@ -13,7 +13,7 @@ describe("headers() de next.config", () => {
     expect(h["X-Content-Type-Options"]).toBe("nosniff");
     expect(h["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
     expect(h["X-Frame-Options"]).toBe("DENY");
-    expect(h["Permissions-Policy"]).toBe("camera=(), microphone=(), geolocation=()");
+    expect(h["Permissions-Policy"]).toBe("camera=(), microphone=(), geolocation=(self)");
     expect(h["Strict-Transport-Security"]).toMatch(/^max-age=\d+/);
     expect(h["Content-Security-Policy-Report-Only"]).toContain("default-src 'self'");
   });

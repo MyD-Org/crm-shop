@@ -134,3 +134,10 @@ export function mensajeNoCancelable(motivo: MotivoNoCancelable): string {
       return "No se puede cancelar un pedido que ya fue entregado."
   }
 }
+
+/**
+ * Ventana en la que un intento de pago online pendiente sigue "en curso". Es la misma
+ * `VENTANA_PAGO_MS` del Shop (apps/clientes/src/lib/pedidos.ts): pasadas 24 h desde que se creó
+ * el intento ya no se puede cobrar, así que un intento abandonado deja de bloquear la cancelación.
+ */
+export const VENTANA_PAGO_MS = 24 * 60 * 60_000

@@ -16,7 +16,7 @@ import { limpiarFacturaCuenta } from "@/lib/pedido-factura-cuenta-repo"
 import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-repo"
 import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
-import { motivoNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
+import { VENTANA_PAGO_MS, motivoNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
 // dentro de una. Todas las escrituras de este archivo que insertan un evento van adentro de una
@@ -506,7 +506,7 @@ export async function cambiarEstado(
       // Inexistente o con otro estado: sigue al UPDATE, que afecta 0 filas y cae en not_found/conflict.
       if (o && o.estado === input.esperado) {
         const intento = await tx.execute(
-          sql`select 1 from shop.pago_intentos where order_id = ${id} and tenant_id = ${tenantId} and estado = 'pendiente' limit 1`,
+          sql`select 1 from shop.pago_intentos where order_id = ${id} and tenant_id = ${tenantId} and estado = 'pendiente' and created_at > ${new Date(input.now.getTime() - VENTANA_PAGO_MS).toISOString()}::timestamptz limit 1`,
         )
         const [entrego] = await tx
           .select({ id: shopOrderEventos.id })

@@ -636,6 +636,14 @@ describe("admin: pedidos del Shop", () => {
         expect((await cancelar(pedido.id, "pendiente")).status).toBe(200)
       })
 
+      it("intento pendiente de más de 24 h (abandonado) ya no bloquea", async () => {
+        const pedido = await seedEn("pendiente", TENANT_A, { pagoMetodo: "mercadopago", pagoProveedor: "mercadopago" })
+        await getDb().execute(
+          sql`insert into shop.pago_intentos (tenant_id, order_id, proveedor, estado, created_at) values (${TENANT_A}, ${pedido.id}, 'mercadopago', 'pendiente', now() - interval '25 hours')`,
+        )
+        expect((await cancelar(pedido.id, "pendiente")).status).toBe(200)
+      })
+
       it("entregado → confirmado → cancelado ya no se puede (estuvo entregado)", async () => {
         const pedido = await seedEn("confirmado")
         expect((await patch(pedido.id, { estado: "entregado", estadoEsperado: "confirmado" })).status).toBe(200)

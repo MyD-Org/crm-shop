@@ -379,6 +379,13 @@
       "when": 1791027900000,
       "tag": "0053_atributos_ampliados",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1791114300000,
+      "tag": "0054_sucursales_email_pedidos",
+      "breakpoints": true
     }
   ]
 }

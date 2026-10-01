@@ -146,6 +146,7 @@
     "ciudad": "text",
     "provincia": "text",
     "whatsapp": "text",
+    "email_pedidos": "text",
     "horario": "text",
     "schedule": "jsonb",
     "schedule_exceptions": "jsonb",

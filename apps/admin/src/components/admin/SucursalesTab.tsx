@@ -38,6 +38,7 @@ type SucursalForm = {
   ciudad: string
   provincia: string
   whatsapp: string
+  emailPedidos: string
   orden: string
   aceptaRetiro: boolean
   activa: boolean
@@ -77,6 +78,7 @@ const sucursalVacia = (orden: number): SucursalForm => ({
   ciudad: "",
   provincia: "",
   whatsapp: "",
+  emailPedidos: "",
   orden: String(orden),
   aceptaRetiro: true,
   activa: true,
@@ -92,6 +94,7 @@ const desdeDto = (s: SucursalDto): SucursalForm => ({
   ciudad: s.ciudad,
   provincia: s.provincia,
   whatsapp: s.whatsapp,
+  emailPedidos: s.emailPedidos ?? "",
   orden: String(s.orden),
   aceptaRetiro: s.aceptaRetiro,
   activa: s.activa,
@@ -107,6 +110,7 @@ function cuerpoSucursal(f: SucursalForm) {
     ciudad: f.ciudad,
     provincia: f.provincia,
     whatsapp: f.whatsapp,
+    emailPedidos: f.emailPedidos,
     orden: f.orden.trim() === "" ? 0 : Number(f.orden),
     aceptaRetiro: f.aceptaRetiro,
     activa: f.activa,
@@ -598,6 +602,19 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
                 value={sucursalForm.whatsapp}
                 onChange={(e) => setS({ whatsapp: e.target.value })}
                 aria-invalid={Boolean(errores.whatsapp)}
+              />
+            </Field>
+            <Field
+              label="Email de avisos de pedidos"
+              hint="Recibe un aviso cada vez que se registra un pedido de esta sucursal. Si lo deja vacío, se usa el email de comprobantes de la empresa."
+              error={errores.emailPedidos}
+            >
+              <Input
+                type="email"
+                inputMode="email"
+                value={sucursalForm.emailPedidos}
+                onChange={(e) => setS({ emailPedidos: e.target.value })}
+                aria-invalid={Boolean(errores.emailPedidos)}
               />
             </Field>
             <Field label="Orden" hint="Menor primero. Define la sucursal de respaldo." error={errores.orden}>

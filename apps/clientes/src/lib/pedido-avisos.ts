@@ -9,6 +9,7 @@
  */
 import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { crmSucursales, crmTenants } from "@/db/crm";
 import { orderItems, orders } from "@/db/schema";
 import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { enviarEmail } from "./email";
@@ -17,7 +18,7 @@ import { contactoDeSucursal } from "./contacto-pedido-repo";
 import { nombreDelPago } from "./medios-pago";
 import { leerMediosPagoTolerante } from "./medios-pago-repo";
 import { urlSitioMail } from "./mail-layout";
-import { armarMailPedido, type AvisoPedidoShop } from "./pedido-mail";
+import { armarMailPedido, armarMailPedidoOperador, destinoAvisoOperador, type AvisoPedidoShop } from "./pedido-mail";
 import { shopTenantId } from "./tenant";
 import { urlLogoMail } from "./vinculacion-mail";
 
@@ -141,4 +142,101 @@ export async function avisarCobro(
   const aviso = avisoDelCobro(cambio.antes, cambio.despues, cambio.reversion);
   if (!aviso) return;
   await enviarAviso(pedidoId, aviso, `pedido/${pedidoId}/${aviso}/${cambio.referencia || "sin-ref"}`);
+}
+
+/** `CRM_ADMIN_URL` + ruta del pedido en el administrador; null sin la variable. */
+function urlPedidoAdmin(id: string, base = process.env.CRM_ADMIN_URL): string | null {
+  const b = base?.trim().replace(/\/+$/, "");
+  if (!b || !/^https?:\/\//.test(b)) return null;
+  return `${b}/admin/pedidos/${encodeURIComponent(id)}`;
+}
+
+/**
+ * "Nuevo pedido", al local. Destino: `sucursales.email_pedidos` de la sucursal del pedido; si falta,
+ * `tenants.receipts_email`; si tampoco, no se manda nada (sólo se loguea, sin datos del comprador).
+ * Nunca lanza. Quien llama descarta los pedidos repetidos.
+ */
+export async function avisarOperadorPedidoNuevo(pedidoId: string): Promise<void> {
+  try {
+    const db = getDb();
+    const tenantId = shopTenantId();
+    const [pedido] = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, pedidoId), eq(orders.tenantId, tenantId)))
+      .limit(1);
+    if (!pedido) return;
+
+    // Cada lectura por su cuenta: que falle una no impide avisar con la otra.
+    let sucursal: { nombre: string; emailPedidos: string | null } | undefined;
+    if (pedido.sucursal) {
+      try {
+        [sucursal] = await db
+          .select({ nombre: crmSucursales.nombre, emailPedidos: crmSucursales.emailPedidos })
+          .from(crmSucursales)
+          .where(and(eq(crmSucursales.tenantId, tenantId), eq(crmSucursales.slug, pedido.sucursal)))
+          .limit(1);
+      } catch (err) {
+        console.error("[avisos pedido] no se pudo leer la sucursal:", err);
+      }
+    }
+    let emailEmpresa: string | null = null;
+    try {
+      const [t] = await db
+        .select({ receiptsEmail: crmTenants.receiptsEmail })
+        .from(crmTenants)
+        .where(eq(crmTenants.id, tenantId))
+        .limit(1);
+      emailEmpresa = t?.receiptsEmail ?? null;
+    } catch (err) {
+      console.error("[avisos pedido] no se pudo leer el email de la empresa:", err);
+    }
+
+    const to = destinoAvisoOperador(sucursal?.emailPedidos, emailEmpresa);
+    if (!to) {
+      console.warn(`[avisos pedido] ${pedidoId} operador: sin email de destino (sucursal ni empresa)`);
+      return;
+    }
+
+    let comercio = "";
+    try {
+      comercio = (await datosTenant())?.nombre ?? "";
+    } catch (err) {
+      console.error("[avisos pedido] no se pudieron leer los datos del tenant:", err);
+    }
+    const lineas = await db
+      .select({ nombre: orderItems.name, cantidad: orderItems.qty })
+      .from(orderItems)
+      .where(eq(orderItems.orderId, pedidoId))
+      .orderBy(asc(orderItems.id));
+
+    const mail = armarMailPedidoOperador({
+      numero: `PED-${String(pedido.numero).padStart(8, "0")}`,
+      comercio: comercio || "Tienda",
+      sucursal: sucursal?.nombre ?? pedido.sucursal,
+      contactoNombre: pedido.contactoNombre,
+      contactoTelefono: pedido.contactoTelefono,
+      clienteEmail: pedido.clienteEmail,
+      lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
+      total: Number(pedido.total),
+      entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
+      pago: nombreDelPago(pedido.pagoMetodo, null),
+      pedidoUrl: urlPedidoAdmin(pedidoId),
+      logoUrl: urlLogoMail(),
+      sitioUrl: urlSitioMail(),
+    });
+
+    const replyTo = looksLikeEmail(pedido.clienteEmail?.trim() ?? null) ? pedido.clienteEmail!.trim() : undefined;
+    const r = await enviarEmail({
+      to,
+      ...mail,
+      ...(replyTo ? { replyTo } : {}),
+      tags: [{ name: "tipo", value: "pedido_operador" }],
+      idempotencyKey: `pedido/${pedidoId}/operador`,
+    });
+    if (r.ok) console.log(`[avisos pedido] ${pedidoId} operador: enviado`);
+    else if (!r.noConfigurado) console.error(`[avisos pedido] ${pedidoId} operador: ${r.error}`);
+  } catch (err) {
+    console.error(`[avisos pedido] ${pedidoId} operador: no se pudo enviar`, err);
+  }
 }

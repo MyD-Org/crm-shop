@@ -987,6 +987,9 @@ export const sucursales = pgTable(
     // D). NULL = sin asignar. FK compuesta (tenant_id, cuenta_alegra_id): no cruza tenants. NO la
     // lee el Shop (GRANT por columna de 0041).
     cuentaAlegraId: uuid("cuenta_alegra_id"),
+    // Destino del aviso "pedido nuevo" del Shop (0054). NULL = sin destinatario propio: el Shop
+    // cae a `tenants.receipts_email`. Lo lee el Shop (GRANT por columna de 0054).
+    emailPedidos: text("email_pedidos"),
     // Horario semanal y excepciones PROPIOS de la sucursal (0051), mismo shape que `tenants`.
     // '{}' = sin horario configurado. Los lee el Shop (GRANT por columna de 0051) y el endpoint
     // interno business-hours; los edita Admin → Horarios. `horario` (texto libre) queda deprecado.

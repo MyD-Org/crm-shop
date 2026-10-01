@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { REGISTRO, infracciones } from "@/test/registro-usted";
-import { armarMailPedido } from "./pedido-mail";
+import { armarMailPedido, armarMailPedidoOperador, destinoAvisoOperador } from "./pedido-mail";
 import { avisoDelCobro } from "./pedido-avisos";
 
 const base = {
@@ -118,5 +118,62 @@ describe("armarMailPedido: contacto del pedido a confirmar", () => {
   it("sin contacto (flag apagado) el mail queda como siempre", () => {
     const m = armarMailPedido({ ...base, aviso: "recibido" });
     expect(m.text).not.toContain("Nos comunicaremos");
+  });
+});
+
+describe("destinoAvisoOperador", () => {
+  it("prefiere el email de la sucursal", () => {
+    expect(destinoAvisoOperador("local@tienda.cliente.example", "pagos@tienda.cliente.example")).toBe(
+      "local@tienda.cliente.example",
+    );
+  });
+  it("sin email de sucursal cae al de comprobantes de la empresa", () => {
+    expect(destinoAvisoOperador(null, " pagos@tienda.cliente.example ")).toBe("pagos@tienda.cliente.example");
+    expect(destinoAvisoOperador("no es un mail", "pagos@tienda.cliente.example")).toBe("pagos@tienda.cliente.example");
+  });
+  it("sin ninguno válido, null", () => {
+    expect(destinoAvisoOperador("", "")).toBeNull();
+    expect(destinoAvisoOperador(null, undefined)).toBeNull();
+  });
+});
+
+describe("armarMailPedidoOperador", () => {
+  const op = {
+    numero: "PED-00000042",
+    comercio: "Tienda <Demo>",
+    sucursal: "Sucursal <Centro>",
+    contactoNombre: "Ana <b>",
+    contactoTelefono: "3757 400000",
+    clienteEmail: "ana@cliente.example",
+    lineas: [{ nombre: "Lámpara <LED>", cantidad: 2 }],
+    total: 12100,
+    entrega: "Envío a domicilio",
+    pago: "Transferencia bancaria",
+    pedidoUrl: "https://admin.plataforma.example/admin/pedidos/abc",
+  };
+
+  it("asunto, datos del comprador escapados y botón al tablero", () => {
+    const m = armarMailPedidoOperador(op);
+    expect(m.subject).toBe("Tienda <Demo> — Nuevo pedido PED-00000042");
+    expect(m.html).toContain("Ana &lt;b&gt;");
+    expect(m.html).toContain("Lámpara &lt;LED&gt;");
+    expect(m.html).not.toContain("<LED>");
+    expect(m.html).toContain("Sucursal &lt;Centro&gt;");
+    expect(m.html).toContain('href="https://admin.plataforma.example/admin/pedidos/abc"');
+    expect(m.text).toContain("- Lámpara <LED> × 2");
+    expect(m.text).toContain("Teléfono: 3757 400000");
+    expect(m.text).toContain("Email: ana@cliente.example");
+    expect(m.text).toContain("Ver el pedido: https://admin.plataforma.example/admin/pedidos/abc");
+  });
+
+  it("sin link al tablero no lleva botón", () => {
+    const m = armarMailPedidoOperador({ ...op, pedidoUrl: null });
+    expect(m.html).not.toContain("Ver el pedido");
+    expect(m.text).not.toContain("Ver el pedido");
+  });
+
+  it("copy en usted", () => {
+    const m = armarMailPedidoOperador(op);
+    expect(infracciones(m.text, REGISTRO)).toEqual([]);
   });
 });

@@ -65,7 +65,7 @@ vi.mock("@/lib/contacto-write-through", () => ({
   sincronizarContactoConPerfil: (...a: unknown[]) => sincronizar(...a),
 }));
 // La última tarea de after() es siempre el mail "Recibimos su pedido" (pedido nuevo).
-vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
+vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn(), avisarOperadorPedidoNuevo: vi.fn() }));
 let tareasAfter: Array<() => unknown> = [];
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),

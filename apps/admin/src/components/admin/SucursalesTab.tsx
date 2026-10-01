@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Table, Textarea, useToast } from "@myd-org/ui"
+import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Table, useToast } from "@myd-org/ui"
 import type { SucursalDto, ZonaDto } from "@/lib/sucursales-repo"
 import type { CuentaDto, CuentasYAsignaciones } from "@/lib/alegra-cuentas-repo"
 import { formatearCuit, validarCuentaEntrada, type ModoCuenta } from "@/lib/alegra-cuentas-validacion"
@@ -38,7 +38,6 @@ type SucursalForm = {
   ciudad: string
   provincia: string
   whatsapp: string
-  horario: string
   orden: string
   aceptaRetiro: boolean
   activa: boolean
@@ -78,7 +77,6 @@ const sucursalVacia = (orden: number): SucursalForm => ({
   ciudad: "",
   provincia: "",
   whatsapp: "",
-  horario: "",
   orden: String(orden),
   aceptaRetiro: true,
   activa: true,
@@ -94,7 +92,6 @@ const desdeDto = (s: SucursalDto): SucursalForm => ({
   ciudad: s.ciudad,
   provincia: s.provincia,
   whatsapp: s.whatsapp,
-  horario: s.horario,
   orden: String(s.orden),
   aceptaRetiro: s.aceptaRetiro,
   activa: s.activa,
@@ -110,7 +107,6 @@ function cuerpoSucursal(f: SucursalForm) {
     ciudad: f.ciudad,
     provincia: f.provincia,
     whatsapp: f.whatsapp,
-    horario: f.horario,
     orden: f.orden.trim() === "" ? 0 : Number(f.orden),
     aceptaRetiro: f.aceptaRetiro,
     activa: f.activa,
@@ -603,9 +599,6 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas 
                 onChange={(e) => setS({ whatsapp: e.target.value })}
                 aria-invalid={Boolean(errores.whatsapp)}
               />
-            </Field>
-            <Field label="Horario de atención" error={errores.horario}>
-              <Textarea value={sucursalForm.horario} rows={3} onChange={(e) => setS({ horario: e.target.value })} aria-invalid={Boolean(errores.horario)} />
             </Field>
             <Field label="Orden" hint="Menor primero. Define la sucursal de respaldo." error={errores.orden}>
               <Input type="number" min={0} step={1} value={sucursalForm.orden} onChange={(e) => setS({ orden: e.target.value })} aria-invalid={Boolean(errores.orden)} />

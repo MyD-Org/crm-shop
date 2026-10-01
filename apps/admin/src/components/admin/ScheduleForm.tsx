@@ -1,14 +1,16 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { CalendarX2, Pencil, Plus, Trash2, X } from "lucide-react"
+import { CalendarX2, Copy, Pencil, Plus, Trash2, X } from "lucide-react"
 import { useUnsavedGuard } from "@/lib/unsaved-guard"
 import {
   Button,
   Card,
+  Checkbox,
   Chip,
   DateRangeField,
+  Dialog,
   EmptyState,
   Field,
   Input,
@@ -25,6 +27,7 @@ import {
   type WeekdayKey,
   type WeeklySchedule,
 } from "@/lib/schedule"
+import type { SucursalHorarioItem } from "@/lib/horarios-repo"
 
 export type Schedule = {
   schedule: WeeklySchedule
@@ -33,6 +36,10 @@ export type Schedule = {
 
 interface Props {
   initialSchedule: Schedule
+  // Sucursales activas del tenant. Vacío = se edita el horario de la empresa, sin selector.
+  sucursales: SucursalHorarioItem[]
+  // Sucursal que se está editando (null = empresa). El padre monta el formulario con `key`.
+  sucursalSlug: string | null
 }
 
 // Estado de edición de una excepción: superset de los dos tipos. Al guardar se serializa
@@ -158,7 +165,7 @@ function RangeEditor({
   )
 }
 
-export function ScheduleForm({ initialSchedule }: Props) {
+export function ScheduleForm({ initialSchedule, sucursales, sucursalSlug }: Props) {
   const { toast } = useToast()
   const router = useRouter()
   // Generador de ids estables para keys de React. useState con initializer lazy = se crea
@@ -272,7 +279,10 @@ export function ScheduleForm({ initialSchedule }: Props) {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const res = await fetch("/api/admin/settings/schedule", {
+      const url = sucursalSlug
+        ? `/api/admin/settings/schedule?sucursal=${encodeURIComponent(sucursalSlug)}`
+        : "/api/admin/settings/schedule"
+      const res = await fetch(url, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -304,12 +314,26 @@ export function ScheduleForm({ initialSchedule }: Props) {
     }
   }
 
+  // Con sucursales, el selector va arriba. Mientras se edita queda deshabilitado: cambiar de
+  // sucursal a mitad de la edición perdería lo cargado.
+  const selector =
+    sucursales.length > 0 && sucursalSlug ? (
+      <SucursalSelector sucursales={sucursales} value={sucursalSlug} disabled={editing} />
+    ) : null
+
   if (!editing) {
+    const origen = sucursales.find((s) => s.slug === sucursalSlug)
     return (
       <ScheduleReadView
         blocks={blocks}
         exceptions={exceptions}
         closedDays={closedDays}
+        selector={selector}
+        copiar={
+          sucursales.length >= 2 && origen ? (
+            <CopiarASucursales origen={origen} sucursales={sucursales} />
+          ) : null
+        }
         onEdit={() => setEditing(true)}
       />
     )
@@ -317,13 +341,16 @@ export function ScheduleForm({ initialSchedule }: Props) {
 
   return (
     <div className="flex flex-col gap-5 w-full">
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={handleCancel} disabled={saving}>
-          Cancelar
-        </Button>
-        <Button size="sm" onClick={handleSave} loading={saving} disabled={saving}>
-          {saving ? "Guardando…" : "Guardar"}
-        </Button>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>{selector}</div>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={handleCancel} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button size="sm" onClick={handleSave} loading={saving} disabled={saving}>
+            {saving ? "Guardando…" : "Guardar"}
+          </Button>
+        </div>
       </div>
 
       {/* ===== Horario semanal ===== */}
@@ -487,6 +514,154 @@ export function ScheduleForm({ initialSchedule }: Props) {
   )
 }
 
+function etiquetaSucursal(s: SucursalHorarioItem): string {
+  return `${s.nombre}${s.ciudad ? ` · ${s.ciudad}` : ""}${s.predeterminada ? " (predeterminada)" : ""}`
+}
+
+// Selector de sucursal: navega a `?sucursal=<slug>`; la página (server) carga el horario de esa
+// sucursal y vuelve a montar el formulario con `key`.
+function SucursalSelector({
+  sucursales,
+  value,
+  disabled,
+}: {
+  sucursales: SucursalHorarioItem[]
+  value: string
+  disabled: boolean
+}) {
+  const router = useRouter()
+  return (
+    <div className="flex flex-col gap-1" style={{ width: "min(20rem, 100%)" }}>
+      <span className="text-xs font-semibold" style={{ color: "var(--ink-soft)" }}>
+        Sucursal
+      </span>
+      <Select
+        options={sucursales.map((s) => ({ label: etiquetaSucursal(s), value: s.slug }))}
+        value={value}
+        disabled={disabled}
+        onValueChange={(slug) => {
+          if (slug !== value) router.push(`/admin/horarios?sucursal=${encodeURIComponent(slug)}`)
+        }}
+        aria-label="Sucursal"
+      />
+    </div>
+  )
+}
+
+// "Copiar a las otras sucursales": toma lo GUARDADO de la sucursal actual (la vista de lectura
+// siempre coincide con lo guardado) y SOBRESCRIBE lo elegido en las demás. Pide confirmación.
+function CopiarASucursales({
+  origen,
+  sucursales,
+}: {
+  origen: SucursalHorarioItem
+  sucursales: SucursalHorarioItem[]
+}) {
+  const { toast } = useToast()
+  const router = useRouter()
+  const otras = useMemo(() => sucursales.filter((s) => s.slug !== origen.slug), [sucursales, origen.slug])
+  const [open, setOpen] = useState(false)
+  const [copiando, setCopiando] = useState(false)
+  const [conExcepciones, setConExcepciones] = useState(true)
+  const [conHorario, setConHorario] = useState(false)
+  const [destinos, setDestinos] = useState<string[]>([])
+
+  const abrir = () => {
+    setConExcepciones(true)
+    setConHorario(false)
+    setDestinos(otras.map((s) => s.slug))
+    setOpen(true)
+  }
+  const toggleDestino = (slug: string, on: boolean) =>
+    setDestinos((prev) => (on ? [...prev.filter((d) => d !== slug), slug] : prev.filter((d) => d !== slug)))
+
+  const que = conExcepciones && conHorario ? "todo" : conHorario ? "horario" : "excepciones"
+  const puedeCopiar = (conExcepciones || conHorario) && destinos.length > 0
+
+  const copiar = async () => {
+    setCopiando(true)
+    try {
+      const res = await fetch("/api/admin/settings/schedule/copiar", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ desde: origen.slug, hacia: destinos, que }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Error desconocido." }))
+        throw new Error(err.error ?? `Error ${res.status}`)
+      }
+      setOpen(false)
+      router.refresh()
+      toast({
+        title: "Horarios copiados",
+        description: `Se actualizaron ${destinos.length} ${destinos.length === 1 ? "sucursal" : "sucursales"}.`,
+        tone: "success",
+      })
+    } catch (err) {
+      toast({
+        title: "No se pudo copiar",
+        description: err instanceof Error ? err.message : String(err),
+        tone: "danger",
+      })
+    } finally {
+      setCopiando(false)
+    }
+  }
+
+  return (
+    <>
+      <Button variant="secondary" size="sm" onClick={abrir}>
+        <Copy size={14} strokeWidth={1.6} /> Copiar a las otras sucursales
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (!copiando) setOpen(v)
+        }}
+        title="Copiar a las otras sucursales"
+        description={`Se copia lo guardado de ${origen.nombre}. Lo que se copie reemplaza lo que hoy tienen cargado las sucursales elegidas.`}
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={copiando}>
+              Cancelar
+            </Button>
+            <Button onClick={copiar} loading={copiando} disabled={copiando || !puedeCopiar}>
+              Copiar
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-xs font-semibold" style={{ color: "var(--ink-soft)" }}>
+              Qué copiar
+            </legend>
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--ink)" }}>
+              <Checkbox checked={conExcepciones} onCheckedChange={setConExcepciones} />
+              Excepciones (feriados, vacaciones, horarios especiales)
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--ink)" }}>
+              <Checkbox checked={conHorario} onCheckedChange={setConHorario} />
+              Horario semanal
+            </label>
+          </fieldset>
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-xs font-semibold" style={{ color: "var(--ink-soft)" }}>
+              Copiar a
+            </legend>
+            {otras.map((s) => (
+              <label key={s.slug} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--ink)" }}>
+                <Checkbox checked={destinos.includes(s.slug)} onCheckedChange={(on) => toggleDestino(s.slug, on)} />
+                {etiquetaSucursal(s)}
+              </label>
+            ))}
+          </fieldset>
+        </div>
+      </Dialog>
+    </>
+  )
+}
+
 function formatExceptionDate(iso: string): string {
   const [y, m, d] = iso.split("-")
   return `${d}/${m}/${y}`
@@ -499,21 +674,29 @@ function ScheduleReadView({
   blocks,
   exceptions,
   closedDays,
+  selector,
+  copiar,
   onEdit,
 }: {
   blocks: BlockDraft[]
   exceptions: ExceptionDraft[]
   closedDays: WeekdayKey[]
+  selector: ReactNode
+  copiar: ReactNode
   onEdit: () => void
 }) {
   const openBlocks = blocks.filter((b) => b.days.length > 0)
 
   return (
     <div className="flex flex-col gap-5 w-full">
-      <div className="flex justify-end">
-        <Button variant="secondary" size="sm" onClick={onEdit}>
-          <Pencil size={14} strokeWidth={1.6} /> Editar
-        </Button>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>{selector}</div>
+        <div className="flex flex-wrap gap-2">
+          {copiar}
+          <Button variant="secondary" size="sm" onClick={onEdit}>
+            <Pencil size={14} strokeWidth={1.6} /> Editar
+          </Button>
+        </div>
       </div>
 
       {/* ===== Horario semanal ===== */}

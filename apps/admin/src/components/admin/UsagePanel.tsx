@@ -5,6 +5,7 @@ import { Tabs } from "@myd-org/ui"
 import { DollarSign, Coins, MessageSquare } from "lucide-react"
 import type { UsageSummary, UsageTotals } from "@/lib/inbox-api"
 import {
+  lastRunText,
   levelText,
   monthLabelUtc,
   usagePercent,
@@ -178,6 +179,10 @@ function WaCostsCard() {
         </p>
       ) : !data ? (
         <p className="text-sm" style={{ color: "var(--ink-soft)" }}>Cargando…</p>
+      ) : status === "pendiente" ? (
+        <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+          Todavía no se consultó a Meta. Los datos se actualizan una vez por día.
+        </p>
       ) : status === "vacio" ? (
         <p className="text-sm" style={{ color: "var(--ink-soft)" }}>Sin consumo de respuestas de servicio este mes.</p>
       ) : (
@@ -218,6 +223,11 @@ function WaCostsCard() {
             </p>
           )}
         </div>
+      )}
+      {data?.lastRunAt && (
+        <p className="text-xs mt-3" style={{ color: "var(--ink-faint)" }} suppressHydrationWarning>
+          Actualizado el {lastRunText(data.lastRunAt)} · Meta puede demorar algunas horas en reflejar el consumo.
+        </p>
       )}
     </div>
   )

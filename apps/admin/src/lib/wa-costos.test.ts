@@ -4,6 +4,7 @@ import {
   billingPushText,
   fmtMiles,
   isWaBillingKind,
+  lastRunText,
   levelText,
   monthLabelUtc,
   usagePercent,
@@ -38,8 +39,11 @@ describe("estado", () => {
   it("errores sin datos = sin-datos, nunca cero", () => {
     expect(waCostsStatus({ ...base, errors: [{ message: "x" }] })).toBe("sin-datos")
   })
-  it("sin errores ni números = vacío (consumo cero)", () => {
-    expect(waCostsStatus(base)).toBe("vacio")
+  it("nunca consultado = pendiente, no consumo cero", () => {
+    expect(waCostsStatus(base)).toBe("pendiente")
+  })
+  it("consultado sin errores ni números = vacío (consumo cero)", () => {
+    expect(waCostsStatus({ ...base, lastRunAt: "2026-10-02T09:05:00Z" })).toBe("vacio")
   })
   it("con números = datos", () => {
     const n = { phone: "+54 9 11 0000-0000", serviceVolume: 1, billedServiceVolume: 0, cost: 0, level: "ok" as const }
@@ -75,5 +79,14 @@ describe("push", () => {
     expect(billingPushText("service_billed", "+54 11 0000-0000", 1000, 1000).body).toBe(
       "WhatsApp empezó a cobrar las respuestas de +54 11 0000-0000 este mes.",
     )
+  })
+})
+
+describe("última actualización", () => {
+  it("muestra fecha y hora de Argentina", () => {
+    expect(lastRunText("2026-10-02T12:05:00Z")).toMatch(/2\/10.*09:05/)
+  })
+  it("ISO inválido se devuelve tal cual", () => {
+    expect(lastRunText("raro")).toBe("raro")
   })
 })

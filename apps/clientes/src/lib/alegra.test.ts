@@ -228,3 +228,26 @@ describe("ids de Alegra en la ruta", () => {
     expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toMatch(/\/items\/123$/);
   });
 });
+
+describe("precioDeLista: regla única de la cuenta", () => {
+  const prices = (propia?: number) => [
+    { idPriceList: "1", name: "General", price: 1000, main: true },
+    ...(propia === undefined ? [] : [{ idPriceList: "7", name: "Propia", price: propia, main: false }]),
+  ];
+
+  it("lista propia más barata: rige la propia", () => {
+    expect(precioDeLista(prices(800), "7")).toBe(800);
+  });
+  it("lista propia más cara: rige la general", () => {
+    expect(precioDeLista(prices(1200), "7")).toBe(1000);
+  });
+  it("lista propia igual: rige la general", () => {
+    expect(precioDeLista(prices(1000), "7")).toBe(1000);
+  });
+  it("lista propia en 0: rige la general (se puede comprar)", () => {
+    expect(precioDeLista(prices(0), "7")).toBe(1000);
+  });
+  it("lista propia ausente: rige la general", () => {
+    expect(precioDeLista(prices(), "7")).toBe(1000);
+  });
+});

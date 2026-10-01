@@ -197,9 +197,11 @@ export function CarritoClient({
   const resumenEntrega = cotizacion?.disponibilidad
     ? resumenDisponibilidadCarrito(
         cotizacion.lineas
-          .filter((l) => !l.problema)
-          .map((l) => cotizacion.disponibilidad!.productos[l.id])
-          .filter(Boolean),
+          .filter((l) => !l.problema && cotizacion.disponibilidad!.productos[l.id])
+          .map((l) => ({
+            nombre: nombreConMarca(l.name, l.brand ? formatMarca(l.brand) : undefined).nombre,
+            disp: cotizacion.disponibilidad!.productos[l.id],
+          })),
         cotizacion.disponibilidad.locales,
       )
     : null;
@@ -567,7 +569,7 @@ export function CarritoClient({
               configEnvio={configEnvio}
               provincia={provincia}
               disponibilidad={resumenEntrega ? { producto: resumenEntrega.producto, locales: cotizacion!.disponibilidad!.locales } : undefined}
-              notasLocal={resumenEntrega?.notasLocal}
+              detallePorLocal={resumenEntrega?.detallePorLocal}
               ubicacionConocida={provincia !== null}
             />
           </aside>

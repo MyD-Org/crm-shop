@@ -1,9 +1,12 @@
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION } from "@/lib/ubicacion";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
+import { VerLocal } from "@/components/producto/VerLocal";
 import {
   estadoEnvio,
   estadoRetiroLocal,
+  localesPorConveniencia,
+  type EstadoProductoLocal,
   type DisponibilidadVista,
   type LocalDisponibilidad,
   type TonoDisponibilidad,
@@ -45,9 +48,6 @@ function Fila({ icono, titulo, children }: { icono: React.ReactNode; titulo: str
   );
 }
 
-const urlMapa = (l: LocalDisponibilidad) =>
-  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([l.direccion, l.ciudad].filter(Boolean).join(", "))}`;
-
 /**
  * Cómo se entrega, al lado del botón de compra (estilo "Retiro gratis en sucursal" de las grandes
  * tiendas, sin modal). Mismas reglas que el checkout (src/lib/envio.ts):
@@ -63,7 +63,7 @@ export function EntregaProducto({
   localidad = null,
   envioUbicacion,
   disponibilidad,
-  notasLocal,
+  detallePorLocal,
   ubicacionConocida = true,
 }: {
   configEnvio: ConfigEnvio;
@@ -76,13 +76,14 @@ export function EntregaProducto({
    */
   envioUbicacion?: React.ReactNode;
   disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
-  /** Carrito: aclaración por local ("1 producto se trae de otra sucursal"). */
-  notasLocal?: Record<string, string>;
+  /** Carrito: estado de cada producto del pedido por local (popup "Ver local"). */
+  detallePorLocal?: Record<string, EstadoProductoLocal[]>;
   /** Carrito: sin ubicación no se muestra plazo; se pide la localidad. (La ficha lo resuelve en el slot.) */
   ubicacionConocida?: boolean;
 }) {
   const retiro = disponibilidad?.producto.retiro;
-  const locales = retiro ? (disponibilidad?.locales ?? []).filter((l) => retiro[l.slug]) : [];
+  // Primero el local que mejor sirve: lo primero que se lee es la opción que funciona.
+  const locales = retiro ? localesPorConveniencia(disponibilidad?.locales ?? [], retiro) : [];
   const envioDomicilio = disponibilidad?.producto.envio ? estadoEnvio(disponibilidad.producto.envio) : null;
   const textoEnvio = textoEnvioFicha(configEnvio, provincia, localidad);
   return (
@@ -91,24 +92,19 @@ export function EntregaProducto({
         {locales.length === 0 ? (
           <span className="text-muted">Sin cargo, en nuestros locales.</span>
         ) : (
-          <ul className="mt-1.5 space-y-2">
+          <ul className="mt-1.5 space-y-1.5">
             {locales.map((l) => {
               const estado = estadoRetiroLocal(retiro![l.slug]);
+              // En el carrito, "No disponible" es para el pedido completo, no para el local.
+              const texto = detallePorLocal && estado.tono === "no" ? "No disponible para este pedido" : estado.texto;
               return (
-                <li key={l.slug}>
-                  <span className="text-text">{l.nombre}</span>
-                  {" · "}
-                  <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{estado.texto}</span>
-                  {notasLocal?.[l.slug] && <span className="block text-muted">{notasLocal[l.slug]}</span>}
-                  {l.direccion && (
-                    <span className="block text-muted">
-                      {[l.direccion, l.ciudad].filter(Boolean).join(", ")}
-                      {" · "}
-                      <a href={urlMapa(l)} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                        Ver mapa
-                      </a>
-                    </span>
-                  )}
+                <li key={l.slug} className="flex items-baseline justify-between gap-3">
+                  <span>
+                    <span className="text-text">{l.nombre}</span>
+                    {" · "}
+                    <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{texto}</span>
+                  </span>
+                  {(l.direccion || l.horario) && <VerLocal local={l} productos={detallePorLocal?.[l.slug]} />}
                 </li>
               );
             })}

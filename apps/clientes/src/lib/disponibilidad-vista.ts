@@ -63,7 +63,14 @@ export async function disponibilidadParaMostrar(
     const locales = datos.sucursales
       .filter((s) => s.activa && s.aceptaRetiro)
       .sort((a, b) => a.orden - b.orden || a.slug.localeCompare(b.slug))
-      .map((s) => ({ slug: s.slug, nombre: s.nombre, direccion: s.direccion, ciudad: s.ciudad }));
+      .map((s) => ({
+        slug: s.slug,
+        nombre: s.nombre,
+        direccion: s.direccion,
+        ciudad: s.ciudad,
+        horario: s.horario,
+        whatsapp: s.whatsapp,
+      }));
     return { productos: r.productos, locales };
   } catch (err) {
     console.error(

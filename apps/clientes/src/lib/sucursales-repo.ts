@@ -18,6 +18,8 @@ export interface SucursalVista extends SucursalDato {
   provincia: string;
   direccion: string;
   horario: string;
+  /** Para el popup "Ver local". */
+  whatsapp?: string;
 }
 
 export interface DatosSucursales {
@@ -41,6 +43,7 @@ export async function leerSucursalesYZonas(
         provincia: crmSucursales.provincia,
         direccion: crmSucursales.direccion,
         horario: crmSucursales.horario,
+        whatsapp: crmSucursales.whatsapp,
         aceptaRetiro: crmSucursales.aceptaRetiro,
         aceptaEnvio: crmSucursales.aceptaEnvio,
         envioCiudades: crmSucursales.envioCiudades,

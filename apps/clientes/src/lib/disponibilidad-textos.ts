@@ -20,9 +20,11 @@ export type DisponibilidadVista = DisponibilidadProducto;
 export interface LocalDisponibilidad {
   slug: string;
   nombre: string;
-  /** Para la lista de locales de la ficha ("Catamarca 1865, Mar del Plata"). */
+  /** Para el popup "Ver local" (dirección, mapa, horario y WhatsApp). */
   direccion?: string;
   ciudad?: string;
+  horario?: string;
+  whatsapp?: string;
 }
 
 /** Plazo cuando hay que traerlo de otra sucursal: "en 3 días"; 0 o sin dato = "a coordinar". */
@@ -139,37 +141,49 @@ const pesoRetiro = (d: DisponibilidadRetiro): number =>
 const pesoEnvio = (d: DisponibilidadEnvio): number =>
   d.estado === "disponible" ? 0 : d.estado === "a_traer" ? pesoDemora(d.demoraDias) : 100_000;
 
-const productos1 = (n: number) => (n === 1 ? "1 producto" : `${n} productos`);
+/** Un producto del carrito con su estado en un local (detalle del popup "Ver local"). */
+export interface EstadoProductoLocal {
+  nombre: string;
+  estado: LineaDisponibilidad;
+}
 
 /**
  * Resumen del carrito: por cada local y para el envío, el estado del producto más lento (el pedido
- * sale completo), y por local una nota con cuántos productos se traen de otra sucursal o no están.
+ * sale completo), y por local el estado de cada producto para el popup "Ver local".
  */
 export function resumenDisponibilidadCarrito(
-  productos: DisponibilidadVista[],
+  productos: { nombre: string; disp: DisponibilidadVista }[],
   locales: LocalDisponibilidad[],
-): { producto: DisponibilidadVista; notasLocal: Record<string, string> } | null {
+): { producto: DisponibilidadVista; detallePorLocal: Record<string, EstadoProductoLocal[]> } | null {
   if (productos.length === 0) return null;
   const retiro: Record<string, DisponibilidadRetiro> = {};
-  const notasLocal: Record<string, string> = {};
+  const detallePorLocal: Record<string, EstadoProductoLocal[]> = {};
   for (const l of locales) {
-    const estados = productos.map((p) => p.retiro?.[l.slug]).filter((r): r is DisponibilidadRetiro => !!r);
-    if (estados.length === 0) continue;
-    retiro[l.slug] = estados.reduce((peor, r) => (pesoRetiro(r) > pesoRetiro(peor) ? r : peor));
-    const aTraer = estados.filter((r) => r.estado === "con_demora").length;
-    const no = estados.filter((r) => r.estado === "sin_stock" || r.estado === "oculto").length;
-    const notas = [
-      aTraer > 0 && `${productos1(aTraer)} se ${aTraer === 1 ? "trae" : "traen"} de otra sucursal`,
-      no > 0 && `${productos1(no)} no ${no === 1 ? "está disponible" : "están disponibles"} en este local`,
-    ].filter(Boolean);
-    if (notas.length > 0) notasLocal[l.slug] = notas.join(" · ");
+    const conEstado = productos
+      .map((p) => ({ nombre: p.nombre, r: p.disp.retiro?.[l.slug] }))
+      .filter((x): x is { nombre: string; r: DisponibilidadRetiro } => !!x.r);
+    if (conEstado.length === 0) continue;
+    retiro[l.slug] = conEstado.reduce((peor, x) => (pesoRetiro(x.r) > pesoRetiro(peor) ? x.r : peor), conEstado[0].r);
+    detallePorLocal[l.slug] = conEstado.map((x) => ({ nombre: x.nombre, estado: estadoRetiroLocal(x.r) }));
   }
-  const envios = productos.map((p) => p.envio).filter((e): e is DisponibilidadEnvio => !!e);
+  const envios = productos.map((p) => p.disp.envio).filter((e): e is DisponibilidadEnvio => !!e);
   const envio = envios.length > 0 ? envios.reduce((peor, e) => (pesoEnvio(e) > pesoEnvio(peor) ? e : peor)) : null;
   return {
-    producto: { ...productos[0], retiro: Object.keys(retiro).length > 0 ? retiro : null, envio },
-    notasLocal,
+    producto: { ...productos[0].disp, retiro: Object.keys(retiro).length > 0 ? retiro : null, envio },
+    detallePorLocal,
   };
+}
+
+/** Locales con retiro ordenados del que mejor sirve al que peor (hoy → con demora → no disponible). */
+export function localesPorConveniencia(
+  locales: LocalDisponibilidad[],
+  retiro: Record<string, DisponibilidadRetiro>,
+): LocalDisponibilidad[] {
+  return locales
+    .filter((l) => retiro[l.slug])
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => pesoRetiro(retiro[a.l.slug]) - pesoRetiro(retiro[b.l.slug]) || a.i - b.i)
+    .map((x) => x.l);
 }
 
 /** ¿El producto no se puede ni retirar en ningún local ni enviar? (único aviso por ítem del carrito). */

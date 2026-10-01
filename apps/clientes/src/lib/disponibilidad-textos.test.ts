@@ -144,11 +144,20 @@ describe("resumen del carrito", () => {
 
   it("manda el producto más lento y cuenta los que se traen", async () => {
     const { resumenDisponibilidadCarrito } = await import("./disponibilidad-textos");
-    const r = resumenDisponibilidadCarrito([p(hoy, hoy), p(traer, hoy), p(hoy, no)], locales)!;
+    const r = resumenDisponibilidadCarrito(
+      [{ nombre: "X", disp: p(hoy, hoy) }, { nombre: "Y", disp: p(traer, hoy) }, { nombre: "Z", disp: p(hoy, no) }],
+      locales,
+    )!;
     expect(r.producto.retiro!.a.estado).toBe("con_demora");
-    expect(r.notasLocal.a).toBe("1 producto se trae de otra sucursal");
     expect(r.producto.retiro!.b.estado).toBe("sin_stock");
-    expect(r.notasLocal.b).toBe("1 producto no está disponible en este local");
+    expect(r.detallePorLocal.b.map((x) => `${x.nombre}:${x.estado.tono}`)).toEqual(["X:ok", "Y:ok", "Z:no"]);
+    expect(r.detallePorLocal.a[1].estado.texto).toBe("Disponible en 7 días");
+  });
+
+  it("ordena los locales del que mejor sirve al que peor", async () => {
+    const { localesPorConveniencia } = await import("./disponibilidad-textos");
+    expect(localesPorConveniencia(locales, { a: no, b: traer }).map((l) => l.slug)).toEqual(["b", "a"]);
+    expect(localesPorConveniencia(locales, { a: hoy, b: hoy }).map((l) => l.slug)).toEqual(["a", "b"]);
   });
 
   it("sin entrega posible sólo si no hay retiro ni envío", async () => {

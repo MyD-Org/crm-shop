@@ -1222,6 +1222,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   subtotal: number
   iva: number
   costoEnvio: number
+  /** Envío a domicilio: true = gratis, false = costo a coordinar; null = retiro o pedido anterior. */
+  envioGratis: boolean | null
   /** Aclaración que escribió el CLIENTE en el checkout. */
   notas: string | null
   /** Dato INTERNO del CRM: el Shop nunca lo muestra. */
@@ -1344,6 +1346,7 @@ export function toPedidoDetalleDto(
     subtotal: num(row.subtotal),
     iva: num(row.iva),
     costoEnvio: num(row.costoEnvio),
+    envioGratis: row.envioGratis ?? null,
     notas: row.notas,
     cancelacionMotivo: row.cancelacionMotivo,
     estadoActualizadoEn: iso(row.estadoActualizadoEn),

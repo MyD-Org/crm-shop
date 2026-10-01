@@ -105,6 +105,9 @@ export const shopOrders = shop.table("orders", {
   subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
   iva: numeric("iva", { precision: 14, scale: 2 }).notNull(),
   costoEnvio: numeric("costo_envio", { precision: 14, scale: 2 }).notNull().default("0"),
+  // Envío a domicilio gratis según la regla vigente al pedir (migración Shop 0027). NULL = retiro
+  // o pedido anterior; false = costo a coordinar.
+  envioGratis: boolean("envio_gratis"),
   total: numeric("total", { precision: 14, scale: 2 }).notNull(),
 
   // Aclaración que escribió el CLIENTE en el checkout (no confundir con el motivo interno).

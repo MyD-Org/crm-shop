@@ -288,6 +288,9 @@ export function PedidoDetalle({
             )}
             <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Dato label="Tipo">{envioACoordinar ? "Envío a coordinar" : entregaLabel(pedido.entrega.tipo)}</Dato>
+              {esEnvio && (pedido.envioGratis !== null || envioACoordinar) && (
+                <Dato label="Costo de envío">{pedido.envioGratis ? "Gratis" : "A coordinar con el cliente"}</Dato>
+              )}
               {((esEnvio && !envioACoordinar) || pedido.entrega.ciudad) && <Dato label="Ciudad">{pedido.entrega.ciudad}</Dato>}
               {((esEnvio && !envioACoordinar) || pedido.entrega.direccion) && <Dato label="Dirección">{pedido.entrega.direccion}</Dato>}
               <Dato label="Sucursal">{reglaATexto(pedido.sucursal, pedido.sucursalRegla, nombresSucursal)}</Dato>

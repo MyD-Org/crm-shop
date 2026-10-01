@@ -11,12 +11,12 @@ describe("textos de disponibilidad", () => {
   it("envío disponible, con traslado y sin stock", () => {
     expect(
       textoEnvio({ estado: "disponible", origen: "a", demoraDias: null }),
-    ).toBe("Envío a domicilio: disponible");
+    ).toBe("Envío a domicilio: despacho dentro de las 24 h hábiles");
     expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 7 })).toBe(
-      "Envío a domicilio: disponible en 7 días",
+      "Envío a domicilio: despacho dentro de 8 días hábiles",
     );
     expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 1 })).toBe(
-      "Envío a domicilio: disponible en 1 día",
+      "Envío a domicilio: despacho dentro de 2 días hábiles",
     );
     expect(textoEnvio({ estado: "a_traer", origen: "b", demoraDias: 0 })).toBe(
       "Envío a domicilio: a coordinar",
@@ -85,7 +85,7 @@ describe("textos de disponibilidad", () => {
     expect(t).toEqual([
       "Retiro en Sede B: disponible en 7 días",
       "Retiro en Sede A: disponible hoy",
-      "Envío a domicilio: disponible",
+      "Envío a domicilio: despacho dentro de las 24 h hábiles",
     ]);
   });
 
@@ -107,7 +107,7 @@ describe("textos de disponibilidad", () => {
       { texto: "Retiro en Sede B: disponible en 7 días", tono: "demora" },
     ]);
     expect(lineasDisponibilidad(d, locales).at(-1)).toEqual({
-      texto: "Envío a domicilio: disponible en 7 días",
+      texto: "Envío a domicilio: despacho dentro de 8 días hábiles",
       tono: "demora",
     });
   });
@@ -130,8 +130,8 @@ describe("estados sin prefijo (lista de locales de la ficha)", () => {
 
   it("envío: disponible y con plazo", async () => {
     const { estadoEnvio } = await import("./disponibilidad-textos");
-    expect(estadoEnvio({ estado: "disponible", origen: "a", demoraDias: null }).texto).toBe("Disponible");
-    expect(estadoEnvio({ estado: "a_traer", origen: "b", demoraDias: 1 }).texto).toBe("Disponible en 1 día");
+    expect(estadoEnvio({ estado: "disponible", origen: "a", demoraDias: null }).texto).toBe("Despacho dentro de las 24 h hábiles");
+    expect(estadoEnvio({ estado: "a_traer", origen: "b", demoraDias: 1 }).texto).toBe("Despacho dentro de 2 días hábiles");
   });
 });
 
@@ -206,7 +206,7 @@ describe("resumenEntregaPedido (checkout)", () => {
 
   it("envío: con plazo, y sin envío activo no dice nada", () => {
     const prods = [{ id: "1", disp: envio({ estado: "a_traer", origen: "b", demoraDias: 7 }) }];
-    expect(resumenEntregaPedido(prods, locales).resumen?.texto).toBe("Envío a domicilio: disponible en 7 días");
+    expect(resumenEntregaPedido(prods, locales).resumen?.texto).toBe("Envío a domicilio: despacho dentro de 8 días hábiles");
     expect(resumenEntregaPedido(prods, locales, { conEnvio: false })).toEqual({ resumen: null, aclaracion: null, sinEntrega: [] });
   });
 
@@ -218,7 +218,7 @@ describe("resumenEntregaPedido (checkout)", () => {
       ],
       locales,
     );
-    expect(r.resumen?.texto).toBe("Envío a domicilio: disponible en 7 días");
+    expect(r.resumen?.texto).toBe("Envío a domicilio: despacho dentro de 8 días hábiles");
     expect(r.aclaracion).toBeNull();
   });
 

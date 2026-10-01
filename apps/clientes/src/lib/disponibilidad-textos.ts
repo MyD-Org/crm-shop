@@ -4,9 +4,10 @@
  *
  * Una línea por local y una de envío, sin que el visitante elija nada:
  *   "Retiro en <local>: disponible hoy | disponible en N días | no disponible"
- *   "Envío a domicilio: disponible | disponible en N días | no disponible"
+ *   "Envío a domicilio: despacho dentro de las 24 h hábiles | despacho dentro de N días hábiles | no disponible"
  * Los días salen de "Días de demora al traer de otra sucursal" (reglas de venta del CRM); 0 se dice
- * "a coordinar" (sin plazo numérico).
+ * "a coordinar" (sin plazo numérico). El envío promete el DESPACHO, no la llegada: la demora del
+ * flete no se conoce. Si hay que traerlo de otra sucursal, es la demora más el día del despacho.
  */
 import type { ExcepcionHorario, HorarioSemanal } from "./horario-agrupado";
 import type {
@@ -37,12 +38,19 @@ const plazo = (dias: number | null): string =>
     ? "a coordinar"
     : `disponible en ${dias} ${dias === 1 ? "día" : "días"}`;
 
+/** Plazo del envío: lo que se compromete es el despacho, no cuándo llega el flete. */
+const despacho = (d: DisponibilidadEnvio): string =>
+  d.estado === "disponible"
+    ? "despacho dentro de las 24 h hábiles"
+    : d.demoraDias === null || d.demoraDias <= 0
+      ? "a coordinar"
+      : `despacho dentro de ${d.demoraDias + 1} días hábiles`;
+
 export function textoEnvio(d: DisponibilidadEnvio): string {
   switch (d.estado) {
     case "disponible":
-      return "Envío a domicilio: disponible";
     case "a_traer":
-      return `Envío a domicilio: ${plazo(d.demoraDias)}`;
+      return `Envío a domicilio: ${despacho(d)}`;
     default:
       return "Envío a domicilio: no disponible";
   }
@@ -119,11 +127,7 @@ export function estadoRetiroLocal(d: DisponibilidadRetiro): LineaDisponibilidad 
 /** Estado del envío a domicilio sin el prefijo (fila de envío de la ficha). */
 export function estadoEnvio(d: DisponibilidadEnvio): LineaDisponibilidad {
   const texto =
-    d.estado === "disponible"
-      ? "Disponible"
-      : d.estado === "a_traer"
-        ? mayuscula(plazo(d.demoraDias))
-        : "No disponible";
+    d.estado === "disponible" || d.estado === "a_traer" ? mayuscula(despacho(d)) : "No disponible";
   return { texto, tono: tonoEnvio(d) };
 }
 

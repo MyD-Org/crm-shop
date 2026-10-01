@@ -113,13 +113,19 @@ export interface DatosCancelacion {
   estuvoEntregado: boolean
 }
 
-/** `null` = se puede cancelar. Orden de prioridad = orden del mensaje más útil para el operador. */
+/** Todos los bloqueos que aplican, en orden de prioridad. Vacío = se puede cancelar. */
+export function motivosNoCancelable(d: DatosCancelacion): MotivoNoCancelable[] {
+  const motivos: MotivoNoCancelable[] = []
+  if (d.pagoEstado === "pagado") motivos.push("pagado")
+  if (d.facturado) motivos.push("facturado")
+  if (d.intentoPagoPendiente) motivos.push("pago_en_curso")
+  if (d.estuvoEntregado) motivos.push("entregado")
+  return motivos
+}
+
+/** `null` = se puede cancelar. Si hay varios bloqueos, el de mayor prioridad. */
 export function motivoNoCancelable(d: DatosCancelacion): MotivoNoCancelable | null {
-  if (d.pagoEstado === "pagado") return "pagado"
-  if (d.facturado) return "facturado"
-  if (d.intentoPagoPendiente) return "pago_en_curso"
-  if (d.estuvoEntregado) return "entregado"
-  return null
+  return motivosNoCancelable(d)[0] ?? null
 }
 
 export function mensajeNoCancelable(motivo: MotivoNoCancelable): string {
@@ -141,3 +147,14 @@ export function mensajeNoCancelable(motivo: MotivoNoCancelable): string {
  * el intento ya no se puede cobrar, así que un intento abandonado deja de bloquear la cancelación.
  */
 export const VENTANA_PAGO_MS = 24 * 60 * 60_000
+
+/**
+ * Texto del aviso del diálogo "Cancelar con devolución" (sólo admin y superadmin): qué hay que
+ * resolver FUERA del CRM antes de cancelar. Se combinan los que apliquen.
+ */
+export function avisoCancelarConDevolucion(p: { pagado: boolean; facturado: boolean }): string {
+  const partes: string[] = []
+  if (p.pagado) partes.push("Antes de cancelarlo, gestione la devolución en Mercado Pago.")
+  if (p.facturado) partes.push("Antes de cancelarlo, emita la nota de crédito en Alegra.")
+  return partes.join(" ")
+}

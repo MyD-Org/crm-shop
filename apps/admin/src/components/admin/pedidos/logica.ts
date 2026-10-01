@@ -9,6 +9,7 @@ import {
   ESTADO_PEDIDO_LABEL,
   MOTIVO_MAX,
   MOTIVO_MIN,
+  avisoCancelarConDevolucion,
   motivoNoCancelable,
   transicionesDesde,
   type EntregaTipo,
@@ -120,6 +121,11 @@ export function ofreceCancelar(p: {
       estuvoEntregado,
     }) === null
   )
+}
+
+/** Aviso del diálogo "Cancelar con devolución" según lo que ya sabe la pantalla del pedido. */
+export function avisoDevolucion(p: { pagoEstado: string; facturado: boolean }): string {
+  return avisoCancelarConDevolucion({ pagado: p.pagoEstado === "pagado", facturado: p.facturado })
 }
 
 export interface FiltrosLista {

@@ -16,7 +16,7 @@ import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
-import { ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
+import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
@@ -330,7 +330,7 @@ export function PedidoDetalle({
               esAdminPlus={esAdminPlus}
               onChanged={(venceEn) => setPedido((p) => ({ ...p, reserva: { venceEn } }))}
             />
-            <EstadoAcciones key={pedido.estado} pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
+            <EstadoAcciones key={pedido.estado} esAdminPlus={esAdminPlus} pedido={pedido} onChanged={setPedido} onConflicto={() => void recargar(true)} />
           </Card>
 
           <Card title="Pago" className="p-4">
@@ -428,10 +428,12 @@ function Total({ label, valor, destacado }: { label: string; valor: string; dest
  */
 function EstadoAcciones({
   pedido,
+  esAdminPlus,
   onChanged,
   onConflicto,
 }: {
   pedido: PedidoDetalleDto
+  esAdminPlus: boolean
   onChanged: (pedido: PedidoDetalleDto) => void
   onConflicto: () => void
 }) {
@@ -448,6 +450,8 @@ function EstadoAcciones({
     pedirCambio,
     confirmarCancelacion,
     confirmarSinFactura,
+    pedirCancelacionForzada,
+    confirmarCancelacionForzada,
     cerrar,
   } = useCambiarEstado<{ id: string; estado: EstadoPedido }>({
     onChanged: (p) => onChanged(p as unknown as PedidoDetalleDto),
@@ -509,6 +513,47 @@ function EstadoAcciones({
           />
         </Field>
       )}
+
+      {esAdminPlus && (
+        <Button
+          variant="ghost"
+          onClick={() => pedirCancelacionForzada({ id: pedido.id, estado: pedido.estado })}
+          disabled={guardando}
+        >
+          Cancelar con devolución
+        </Button>
+      )}
+
+      <Dialog
+        open={intencion?.tipo === "forzado"}
+        onOpenChange={(open) => { if (!open && !guardando) cerrar() }}
+        title="Cancelar con devolución"
+        description={
+          `${avisoDevolucion({ pagoEstado: pedido.pagoEstado, facturado: tieneFactura || pedido.facturadoEn !== null })} ` +
+          "Esta acción no se puede deshacer y queda registrada con su nombre. Indique el motivo."
+        }
+        headerBorder={false}
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={cerrar} disabled={guardando}>Volver</Button>
+            <Button variant="danger" loading={guardando} disabled={!puedeCancelar} onClick={confirmarCancelacionForzada}>
+              Cancelar con devolución
+            </Button>
+          </div>
+        }
+      >
+        <Field label="Motivo" hint={`${motivo.length}/${MOTIVO_MAX}`}>
+          <Textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={4}
+            maxLength={MOTIVO_MAX}
+            required
+            aria-required="true"
+            disabled={guardando}
+          />
+        </Field>
+      </Dialog>
 
       <Dialog
         open={intencion?.tipo === "motivo"}

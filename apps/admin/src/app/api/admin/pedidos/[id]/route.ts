@@ -9,7 +9,7 @@ import {
   mensajeTransicionInvalida,
   puedeTransicionar,
 } from "@/lib/pedidos-transiciones"
-import { canSeeCosts } from "@/lib/roles"
+import { canSeeCosts, roleRank } from "@/lib/roles"
 
 // GET   /api/admin/pedidos/[id] — detalle con ítems.
 // PATCH /api/admin/pedidos/[id] — cambio de estado. Body { estado, estadoEsperado, motivo? }.
@@ -68,8 +68,20 @@ export async function PATCH(req: Request, { params }: IdParams) {
   const body: unknown = await req.json().catch(() => null)
   const campos = body !== null && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {}
   const { estado, estadoEsperado, motivo } = campos
+  const forzar = campos.forzar === true
   if (!esEstadoPedido(estado) || !esEstadoPedido(estadoEsperado)) {
     return fail(400, "invalid", "El estado indicado no es válido.")
+  }
+
+  // "Cancelar con devolución": sólo admin o superior, sólo para cancelar. Se valida ANTES de leer
+  // nada del pedido: un operador no se entera de nada, y un body armado a mano no lo salta.
+  if (forzar) {
+    if (roleRank(guard.user.role) < roleRank("admin")) {
+      return fail(403, "forbidden", "Su rol no permite cancelar con devolución.")
+    }
+    if (estado !== "cancelado") {
+      return fail(400, "invalid", "La cancelación con devolución sólo aplica a cancelar el pedido.")
+    }
   }
 
   const { id } = await params
@@ -86,7 +98,11 @@ export async function PATCH(req: Request, { params }: IdParams) {
   }
   if (entregaTipo === null) return adminNotFoundResponse()
 
-  if (!puedeTransicionar(estadoEsperado, estado, entregaTipo)) {
+  // Forzada: se salta la regla "entregado no se cancela" de la tabla, pero un cancelado sigue siendo terminal.
+  const transicionValida = forzar
+    ? estadoEsperado !== "cancelado"
+    : puedeTransicionar(estadoEsperado, estado, entregaTipo)
+  if (!transicionValida) {
     return fail(422, "invalid_transition", mensajeTransicionInvalida(estadoEsperado, estado))
   }
 
@@ -95,7 +111,9 @@ export async function PATCH(req: Request, { params }: IdParams) {
   if (estado === "cancelado") {
     const recortado = typeof motivo === "string" ? motivo.trim() : ""
     if (recortado.length < MOTIVO_MIN) {
-      return fail(422, "reason_required", "Indique el motivo de la cancelación.")
+      return forzar
+        ? fail(400, "reason_required", "Indique el motivo de la cancelación.")
+        : fail(422, "reason_required", "Indique el motivo de la cancelación.")
     }
     if (recortado.length > MOTIVO_MAX) {
       return fail(422, "reason_too_long", `El motivo no puede superar los ${MOTIVO_MAX} caracteres.`)
@@ -112,6 +130,7 @@ export async function PATCH(req: Request, { params }: IdParams) {
       motivo: motivoLimpio,
       actor: { id: guard.user.id, name: guard.user.name },
       now,
+      forzar,
     })
   } catch (err) {
     console.error("[admin/pedidos] no se pudo cambiar el estado", { tenant: guard.tenantId, orderId: id, err })
@@ -139,6 +158,7 @@ export async function PATCH(req: Request, { params }: IdParams) {
       orderId: id,
       from: estadoEsperado,
       to: estado,
+      ...(forzar ? { forzado: true } : {}),
       actor: { id: guard.user.id, name: guard.user.name, email: guard.user.email },
       at: now.toISOString(),
     }),

@@ -16,7 +16,7 @@ import { limpiarFacturaCuenta } from "@/lib/pedido-factura-cuenta-repo"
 import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-repo"
 import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
-import { VENTANA_PAGO_MS, motivoNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
+import { VENTANA_PAGO_MS, motivosNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
 // dentro de una. Todas las escrituras de este archivo que insertan un evento van adentro de una
@@ -457,6 +457,12 @@ export interface CambiarEstadoInput {
   /** Del guard (fila fresca de admin_users), nunca del body. */
   actor: { id: string; name: string }
   now: Date
+  /**
+   * "Cancelar con devolución": salta las guardas de `motivosNoCancelable` (pagado, facturado, pago
+   * en curso, estuvo entregado). La ruta SÓLO lo pone en true tras validar rol admin o superior;
+   * el evento queda marcado `forzado` con los bloqueos que se omitieron.
+   */
+  forzar?: boolean
 }
 
 export type CambiarEstadoResult =
@@ -493,6 +499,7 @@ export async function cambiarEstado(
     throw new Error("cambiarEstado: cancelar exige motivo")
   }
 
+  let omitidos: MotivoNoCancelable[] = []
   const actualizado = await getDb().transaction(async (tx) => {
     // Guardas de cancelación, en la MISMA transacción y con la fila bloqueada (`FOR UPDATE`): el
     // webhook de pago del Shop también bloquea la fila del pedido antes de tocar los intentos,
@@ -520,13 +527,14 @@ export async function cambiarEstado(
             ),
           )
           .limit(1)
-        const motivo = motivoNoCancelable({
+        const motivos = motivosNoCancelable({
           pagoEstado: o.pagoEstado,
           facturado: o.facturadoEn !== null,
           intentoPagoPendiente: intento.length > 0,
           estuvoEntregado: entrego !== undefined,
         })
-        if (motivo) return { bloqueo: motivo }
+        if (input.forzar) omitidos = motivos
+        else if (motivos[0]) return { bloqueo: motivos[0] }
       }
     }
     const [fila] = await tx
@@ -548,7 +556,11 @@ export async function cambiarEstado(
       tenantId,
       orderId: fila.id,
       tipo: "estado",
-      detalle: { desde: input.esperado, hacia: input.nuevo },
+      detalle: {
+        desde: input.esperado,
+        hacia: input.nuevo,
+        ...(input.forzar && input.nuevo === "cancelado" ? { forzado: true, omitidos } : {}),
+      },
       actor: input.actor,
       now: input.now,
     })
@@ -557,7 +569,7 @@ export async function cambiarEstado(
         tenantId,
         orderId: fila.id,
         tipo: "cancelado",
-        detalle: { motivo: input.motivo },
+        detalle: { motivo: input.motivo, ...(input.forzar ? { forzado: true, omitidos } : {}) },
         actor: input.actor,
         now: input.now,
       })

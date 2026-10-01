@@ -5,7 +5,9 @@ import {
   MOTIVO_MAX,
   MOTIVO_MIN,
   esEstadoPedido,
+  avisoCancelarConDevolucion,
   mensajeNoCancelable,
+  motivosNoCancelable,
   motivoNoCancelable,
   mensajeTransicionInvalida,
   puedeTransicionar,
@@ -194,5 +196,25 @@ describe("motivoNoCancelable / mensajeNoCancelable", () => {
     expect(mensajeNoCancelable("facturado")).toContain("Desvincule")
     expect(mensajeNoCancelable("pago_en_curso")).toContain("inténtelo")
     expect(mensajeNoCancelable("entregado")).toContain("entregado")
+  })
+})
+
+describe("cancelar con devolución", () => {
+  it("motivosNoCancelable lista todos los bloqueos en orden", () => {
+    expect(
+      motivosNoCancelable({ pagoEstado: "pagado", facturado: true, intentoPagoPendiente: true, estuvoEntregado: true }),
+    ).toEqual(["pagado", "facturado", "pago_en_curso", "entregado"])
+    expect(
+      motivosNoCancelable({ pagoEstado: "pendiente", facturado: false, intentoPagoPendiente: false, estuvoEntregado: false }),
+    ).toEqual([])
+  })
+
+  it("el aviso se arma según el caso y combina los que aplican", () => {
+    const pagado = "Antes de cancelarlo, gestione la devolución en Mercado Pago."
+    const facturado = "Antes de cancelarlo, emita la nota de crédito en Alegra."
+    expect(avisoCancelarConDevolucion({ pagado: true, facturado: false })).toBe(pagado)
+    expect(avisoCancelarConDevolucion({ pagado: false, facturado: true })).toBe(facturado)
+    expect(avisoCancelarConDevolucion({ pagado: true, facturado: true })).toBe(`${pagado} ${facturado}`)
+    expect(avisoCancelarConDevolucion({ pagado: false, facturado: false })).toBe("")
   })
 })

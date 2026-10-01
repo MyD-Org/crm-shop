@@ -558,8 +558,9 @@ describe("color de la luz no es color del producto", () => {
   })
 
   it("'Tipo de Luz Amarillo' y 'Luz amarilla' en una sola celda se descartan", () => {
-    expect(motivos(verificarLectura(color("amarillo"), propia([["Tipo de Luz Amarillo", 40, 700]], "TIRA LED")))).toEqual(["color:color_de_luz"])
-    // "Luz amarilla" ya no se reconoce como término de color (es tipo de luz): se descarta igual.
+    // Desde que el tono es el tipo de luz (#331), "luz amarilla" ya no es término de color: se
+    // descarta igual (valor_no_en_texto en vez de color_de_luz). Lo que importa es que no entre.
+    expect(aceptados(verificarLectura(color("amarillo"), propia([["Tipo de Luz Amarillo", 40, 700]], "TIRA LED")))).toEqual([])
     expect(aceptados(verificarLectura(color("amarillo"), propia([["Luz amarilla", 40, 700]], "APLIQUE")))).toEqual([])
   })
 

@@ -3,6 +3,7 @@ import postgres from "postgres"
 import { eq } from "drizzle-orm"
 import { tenants, notificationRules, adminUsers } from "./schema"
 import { hashPassword } from "../lib/admin-crypto"
+import { sembrarMedioMercadoPago } from "./medios-pago-semilla"
 
 // Alta de un tenant en la DB — la config vive en la tabla `tenants`, no en env vars.
 // `getTenantByIdFromDb` lee esta fila y solo cae al registro de env si no existe.
@@ -64,6 +65,10 @@ async function main() {
       .values({ tenantId: id })
       .onConflictDoNothing({ target: notificationRules.tenantId })
     console.log(`notification rules para "${id}" ok`)
+
+    // Fila fija de Mercado Pago del checkout (inactiva) — el admin la activa; ver medios-pago-semilla.ts.
+    await sembrarMedioMercadoPago(db, id)
+    console.log(`medio de pago mercadopago (inactivo) para "${id}" ok`)
 
     // Superadmin inicial — solo si ese email todavía no tiene cuenta (el índice de email es global).
     const adminEmail = arg("admin-email")

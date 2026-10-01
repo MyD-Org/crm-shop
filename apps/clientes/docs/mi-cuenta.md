@@ -252,9 +252,9 @@ en `client_links`.
 ## Estado y seguimiento del pedido
 
 - **Una sola pill** (`src/lib/estado-pedido-pill.ts`): cancelado → pago
-  rechazado → pago pendiente → pago confirmado → estado. Con los pagos apagados
-  (flag `pagos` apagado) un pedido pendiente dice "Pendiente" y no
-  "Pago pendiente": el pago se coordina por fuera.
+  rechazado → pago pendiente → pago confirmado → estado. Un pedido pendiente con un
+  medio que no es de cobro en línea (transferencia, efectivo, a coordinar) dice "Pendiente" y no
+  "Pago pendiente": el pago se coordina por fuera (`ocultarEstadoPago`, según el medio del pedido).
 - **Seguimiento** (`src/lib/pedido-seguimiento.ts`): proyección de estado ×
   pago × tipo de entrega. Retiro: Pedido recibido → Pago confirmado →
   Preparando → Retirado. Envío: … → Preparando → En camino → Entregado.

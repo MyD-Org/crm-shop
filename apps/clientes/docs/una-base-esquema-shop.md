@@ -55,7 +55,7 @@
      SHOP_TENANT_ID=<TENANT_SLUG>
      ```
      `<TENANT_SLUG>` debe ser un valor existente en `public.tenants.id`.
-   - El flag `pagos` (Vercel Flags) queda apagado.
+   - Los medios de pago salen de `public.medios_pago_shop` (el flag `pagos` se retiró; Mercado Pago es una fila inactiva hasta que se active desde el admin).
 
 **Verificación:** abra el archivo y confirme que no queda ningún
 `POSTGRES_URL*` ni un `DATABASE_URL` apuntando a producción.
@@ -219,13 +219,12 @@ DROP ROLE shop_app;
 
 (no toca `public` ni `drizzle`).
 
-## Nota para el Slice 2 (flag `pagos`)
+## Nota para el Slice 2 (medios de pago)
 
-No necesita ningún paso de base de datos. Se despliega con los pagos
-apagados desde el arranque (flag `pagos` apagado). Para habilitarlos
-más adelante: prenda el flag `pagos` en Vercel Flags (sin redeploy). Para
-volver atrás: apague el flag o revierta el PR — los pedidos
-`a_coordinar` que ya se generaron quedan válidos igual.
+No necesita ningún paso de base de datos. Históricamente se desplegó con los pagos apagados por el
+flag `pagos`; ese flag y `pedido-a-confirmar` se retiraron (change `medios-pago-desde-admin`): los
+medios salen de `public.medios_pago_shop` y Mercado Pago es una fila fija, inactiva hasta activarla
+desde el admin. Los pedidos `a_coordinar` que ya se generaron quedan válidos.
 
 ## Nota para el Slice 3 (admin "Pedidos")
 

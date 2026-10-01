@@ -87,7 +87,10 @@ que un navegador nunca la manda al dominio de otro tenant.
 
 ### Dar de alta un tenant
 
-1. Fila en la tabla `tenants` — `npm run db:seed-tenant -- --id <id> ...`
+1. Fila en la tabla `tenants` — `npm run db:seed-tenant -- --id <id> ...` (también siembra la fila
+   fija `mercadopago` inactiva de Medios de pago del checkout; es idempotente, ver
+   `src/db/medios-pago-semilla.ts`). Si el tenant se creó con un INSERT manual, sembrarla con
+   `INSERT INTO medios_pago_shop (tenant_id, slug, nombre, activo, aplica_retiro, aplica_envio, cobro_online, orden) VALUES ('<id>', 'mercadopago', 'Mercado Pago', false, true, true, true, 0) ON CONFLICT (tenant_id, slug) DO NOTHING;`
 2. Dominio agregado en Vercel.
 3. `TENANT_IDS` con el id, y `{PREFIX}_DOMAINS` con los hosts **completos**
    (ej. `TEVRO_DOMAINS=www.plataforma.example,plataforma.example`).
@@ -1046,6 +1049,21 @@ tiene sucursales activas.
   Reversa en el encabezado de `drizzle/0051_sucursales_horario.sql`.
 
 ---
+
+## Medios de pago del checkout
+
+Pagos y cuotas → **Medios de pago del checkout** (`public.medios_pago_shop`). Los medios que el
+Shop ofrece salen de esta tabla; ya no existen los flags `pagos` ni `pedido-a-confirmar`.
+
+- **Medios propios** (efectivo, transferencia, etc.): se crean, editan y eliminan desde el admin.
+  Cada uno tiene nombre, instrucciones, orden, activo y si aplica a retiro y/o envío.
+- **Mercado Pago es una fila fija** (`slug = mercadopago`, `cobro_online = true`): la siembra la
+  migración 0057 (y `db:seed-tenant` en los tenants nuevos), nace **inactiva**. Se puede activar,
+  ordenar y elegir a qué entrega aplica, pero no se crea, no se elimina (`409`) ni se le cambia el
+  slug ni el cobro online. Un alta con ese identificador se rechaza.
+- **Credenciales**: el Shop sólo ofrece Mercado Pago si tiene `MP_ACCESS_TOKEN` y
+  `NEXT_PUBLIC_MP_PUBLIC_KEY`; con el medio activo y sin credenciales no se muestra ni se acepta.
+- **Sin medios aplicables** a la modalidad elegida, el pedido queda "a coordinar".
 
 ## Cuentas bancarias del Shop
 

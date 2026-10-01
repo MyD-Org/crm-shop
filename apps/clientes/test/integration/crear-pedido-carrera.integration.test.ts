@@ -51,9 +51,13 @@ function cotizacion(...lineas: LineaCotizada[]): Cotizacion {
 
 async function limpiar() {
   assertLocalTestDb(process.env.DATABASE_URL || "");
-  await getDb().execute(
-    sql`truncate table public.tenants, shop.order_items, shop.orders, shop.carts restart identity cascade`,
-  );
+  // El cascade emite un NOTICE por cada tabla alcanzada: se silencia sólo en esta transacción.
+  await getDb().transaction(async (tx) => {
+    await tx.execute(sql`set local client_min_messages = warning`);
+    await tx.execute(
+      sql`truncate table public.tenants, shop.order_items, shop.orders, shop.carts restart identity cascade`,
+    );
+  });
 }
 
 /** Tenant + productos del espejo del CRM (`public.catalog_products`, que lee la vista del Shop). */

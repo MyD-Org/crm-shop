@@ -17,7 +17,7 @@ export default async function setup() {
   assertLocalTestDb(TEST_DATABASE_URL);
   const dbName = new URL(TEST_DATABASE_URL).pathname.replace(/^\//, "");
 
-  const admin = postgres(ADMIN_DATABASE_URL, { max: 1 });
+  const admin = postgres(ADMIN_DATABASE_URL, { max: 1, onnotice: () => {} });
   try {
     const exists = await admin`select 1 from pg_database where datname = ${dbName}`;
     if (exists.length === 0) await admin.unsafe(`CREATE DATABASE "${dbName}"`);
@@ -25,7 +25,7 @@ export default async function setup() {
     await admin.end();
   }
 
-  const client = postgres(TEST_DATABASE_URL, { max: 1 });
+  const client = postgres(TEST_DATABASE_URL, { max: 1, onnotice: () => {} });
   try {
     // La crea el proveedor en prod; CREATE EXTENSION pide superusuario.
     await client.unsafe("CREATE EXTENSION IF NOT EXISTS unaccent");

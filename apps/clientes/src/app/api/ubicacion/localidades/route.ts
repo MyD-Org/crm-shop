@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GeorefError, MIN_CARACTERES_LOCALIDAD, buscarLocalidades } from "@/lib/georef";
+import { GeorefError, MIN_CARACTERES_LOCALIDAD, buscarLocalidades, etiquetaLocalidad } from "@/lib/georef";
 import { permitir } from "@/lib/rate-limit";
 import { TEXTOS_UBICACION } from "@/lib/ubicacion";
 import { demasiadasConsultas, errorUbicacion, ipDe } from "@/lib/ubicacion-api";
@@ -21,10 +21,7 @@ export async function GET(req: Request) {
   try {
     const sugerencias = await buscarLocalidades(q);
     return NextResponse.json({
-      localidades: sugerencias.map((s) => ({
-        id: s.id,
-        etiqueta: `${s.localidad} — ${s.provinciaNombre}`,
-      })),
+      localidades: sugerencias.map((s) => ({ id: s.id, etiqueta: etiquetaLocalidad(s, sugerencias) })),
     });
   } catch (err) {
     console.error("[ubicacion] Georef no respondió (localidades):", err instanceof GeorefError ? err.motivo : "error");

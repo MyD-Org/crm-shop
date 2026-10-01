@@ -21,7 +21,7 @@ export const MIN_CARACTERES_LOCALIDAD = 4;
 export const MAX_LOCALIDADES = 8;
 /** Las búsquedas por texto se repiten entre visitantes y las localidades no se mudan: un día. */
 export const CACHE_LOCALIDADES_SEGUNDOS = 60 * 60 * 24;
-const CAMPOS_LOCALIDAD = "id,nombre,provincia.nombre,municipio.nombre";
+const CAMPOS_LOCALIDAD = "id,nombre,categoria,provincia.nombre,municipio.nombre,departamento.nombre";
 
 /** Argentina continental e insular (con margen): fuera de esta caja ni se llama a Georef. */
 export const CAJA_ARGENTINA = { latMin: -56, latMax: -21, lonMin: -74, lonMax: -53 } as const;
@@ -48,6 +48,10 @@ export interface SugerenciaLocalidad extends UbicacionResuelta {
   id: string;
   /** Nombre oficial de la provincia, para mostrar "Localidad — Provincia". */
   provinciaNombre: string;
+  /** Partido o departamento: distingue dos localidades con el mismo nombre en la misma provincia. */
+  partido?: string;
+  /** "Localidad simple", "Componente de localidad compuesta", "Entidad"… */
+  categoria?: string;
 }
 
 /** Nombre oficial de Georef → clave de provincia del Shop; null si no es una jurisdicción conocida. */
@@ -133,7 +137,32 @@ function aSugerencia(v: unknown): SugerenciaLocalidad | null {
   const provinciaNombre = texto(objeto(l.provincia)?.nombre);
   const provincia = provinciaDeGeoref(provinciaNombre);
   if (!id || !localidad || !provincia || !provinciaNombre || !/^\d{1,12}$/.test(id)) return null;
-  return { id, localidad, provincia, provinciaNombre };
+  const partido = texto(objeto(l.departamento)?.nombre) ?? undefined;
+  const categoria = texto(l.categoria) ?? undefined;
+  return { id, localidad, provincia, provinciaNombre, ...(partido && { partido }), ...(categoria && { categoria }) };
+}
+
+/**
+ * Georef devuelve la misma ciudad más de una vez (p. ej. Mar del Plata como "Localidad simple" y
+ * como "Entidad"). Una por nombre + provincia + partido, prefiriendo la que no es "Entidad".
+ */
+export function depurarLocalidades(lista: SugerenciaLocalidad[]): SugerenciaLocalidad[] {
+  const elegidas = new Map<string, SugerenciaLocalidad>();
+  for (const s of lista) {
+    const clave = `${normalizarBusqueda(s.localidad)}|${s.provincia}|${normalizarBusqueda(s.partido ?? "")}`;
+    const previa = elegidas.get(clave);
+    if (!previa || (previa.categoria === "Entidad" && s.categoria !== "Entidad")) elegidas.set(clave, s);
+  }
+  return [...elegidas.values()];
+}
+
+/** "Localidad — Provincia"; con el partido entre paréntesis si otra opción se llama igual en la misma provincia. */
+export function etiquetaLocalidad(s: SugerenciaLocalidad, todas: SugerenciaLocalidad[]): string {
+  const homonimas = todas.filter(
+    (o) => o.provincia === s.provincia && normalizarBusqueda(o.localidad) === normalizarBusqueda(s.localidad),
+  );
+  const conPartido = homonimas.length > 1 && s.partido ? ` (${s.partido})` : "";
+  return `${s.localidad}${conPartido} — ${s.provinciaNombre}`;
 }
 
 function sugerencias(data: unknown): SugerenciaLocalidad[] {
@@ -153,7 +182,7 @@ export async function buscarLocalidades(textoBusqueda: string, f: Fetcher = fetc
   url.searchParams.set("nombre", q);
   url.searchParams.set("max", String(MAX_LOCALIDADES));
   url.searchParams.set("campos", CAMPOS_LOCALIDAD);
-  return sugerencias(await pedir(url, { next: { revalidate: CACHE_LOCALIDADES_SEGUNDOS } }, f));
+  return depurarLocalidades(sugerencias(await pedir(url, { next: { revalidate: CACHE_LOCALIDADES_SEGUNDOS } }, f)));
 }
 
 /** Una localidad por su id (el servidor re-resuelve lo que eligió el visitante: no confía en el cliente). */

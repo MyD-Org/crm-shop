@@ -230,10 +230,16 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled }:
                   <span className="truncate">
                     {c.last_message
                       ? previewText(c.last_message)
-                      : `${channelLabel(c.channel)}${c.phone && c.phone !== c.contact ? ` · ${c.phone}` : ""}`}
+                      : c.phone && c.phone !== c.contact ? c.phone : ""}
                   </span>
                   <span className="shrink-0" suppressHydrationWarning>· {c.last_inbound_at && mounted ? formatTime(c.last_inbound_at) : "—"}</span>
                 </div>
+                {/* Canal y número del negocio siempre a la vista: con varios canales y números
+                    (una sucursal por número) el operador tiene que saber por dónde responde. */}
+                <p className="mt-0.5 text-xs truncate" style={{ color: "var(--ink-faint)" }}>
+                  {channelLabel(c.channel)}
+                  {c.business_phone ? ` · a ${c.business_phone}` : ""}
+                </p>
               </div>
 
               <WindowBadge within={c.within_window} />

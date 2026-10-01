@@ -109,8 +109,9 @@ La cancelación por parte del cliente (`POST /api/pedidos/:id/cancelar`) no
 corre con un intento abierto: primero intenta cancelarlo en MP, igual que antes
 de un reintento de cobro. Si ya se aprobó o no se puede cerrar, responde 409.
 
-`PagoMetodo` en `src/lib/envio.ts` suma `'mercadopago'`, con su label y su
-lugar en `pagosDisponibles()` (disponible tanto en retiro como en envío).
+Mercado Pago es una fila fija de `public.medios_pago_shop` (`slug = mercadopago`, sembrada inactiva
+por la migración 0057). Se ofrece sólo si está activa, aplica a la entrega elegida y el Shop tiene
+las credenciales (`mercadoPagoConfigurado()`); `pagosDisponibles()` y el flag `pagos` se retiraron.
 
 ## 5. Flujo con tarjeta
 

@@ -9,6 +9,7 @@ import { getDb } from "@/db";
 import { crmReglasVenta, crmSucursales, crmZonas } from "@/db/crm";
 import { shopTenantId } from "./tenant";
 import type { ReglasVenta, SucursalDato, ZonaDato } from "./sucursales";
+import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "./envio";
 
 /** Sucursal tal como se muestra: lo de `SucursalDato` más lo que ve el visitante. */
 export interface SucursalVista extends SucursalDato {
@@ -70,6 +71,11 @@ export interface ReglasVentaTenant extends ReglasVenta {
   reservaDias: number;
   avisoSinContactarHoras: number;
   contactoHorasHabiles: number;
+  /**
+   * Envío a domicilio y envío gratis. NO sale de `leerReglasVenta` (ver `leerConfigEnvio`, que se
+   * lee aparte): lo completa `reglasVentaCacheadas` para mostrar. Ausente = `CONFIG_ENVIO_DEFAULT`.
+   */
+  envio?: ConfigEnvio;
 }
 
 /**
@@ -83,6 +89,7 @@ export const REGLAS_VENTA_DEFAULT: ReglasVentaTenant = {
   reservaDias: 7,
   avisoSinContactarHoras: 24,
   contactoHorasHabiles: 24,
+  envio: CONFIG_ENVIO_DEFAULT,
 };
 
 /**
@@ -102,5 +109,75 @@ export async function leerReglasVenta(db: Ejecutor = getDb()): Promise<ReglasVen
     .from(crmReglasVenta)
     .where(eq(crmReglasVenta.tenantId, shopTenantId()))
     .limit(1);
+  // La config de envío NO va en este select (migración del CRM que puede faltar, y una consulta
+  // fallida abortaría la transacción de `crearPedido`): se lee aparte con `leerConfigEnvio`.
   return fila ?? REGLAS_VENTA_DEFAULT;
+}
+
+/** Lo que se lee de `reglas_venta` para armar la config de envío (sin armar nada todavía). */
+export interface FilaEnvio {
+  envioDomicilioActivo: boolean;
+  envioGratisActivo: boolean;
+  envioGratisAlcance: "pais" | "provincias" | null;
+  envioGratisProvincias: string[];
+  envioGratisMinimoModo: "sin_minimo" | "desde" | null;
+  /** numeric(12,2): llega como string. */
+  envioGratisMinimo: string | null;
+}
+
+/**
+ * Fila del CRM -> `ConfigEnvio`. Defensivo: `gratis` es null si el envío gratis está apagado o si
+ * las columnas quedaron incompletas (sin alcance, sin modo, o modo `desde` sin monto válido). Nunca
+ * interpreta un NULL como "todo el país" ni "sin mínimo".
+ */
+export function configEnvioDeFila(fila: FilaEnvio): ConfigEnvio {
+  if (!fila.envioGratisActivo) return { domicilioActivo: fila.envioDomicilioActivo, gratis: null };
+  const alcance = fila.envioGratisAlcance;
+  const modo = fila.envioGratisMinimoModo;
+  if (alcance !== "pais" && alcance !== "provincias") {
+    return { domicilioActivo: fila.envioDomicilioActivo, gratis: null };
+  }
+  let minimo: number | null = null;
+  if (modo === "desde") {
+    const n = fila.envioGratisMinimo === null ? NaN : Number(fila.envioGratisMinimo);
+    if (!Number.isFinite(n) || n <= 0) return { domicilioActivo: fila.envioDomicilioActivo, gratis: null };
+    minimo = n;
+  } else if (modo !== "sin_minimo") {
+    return { domicilioActivo: fila.envioDomicilioActivo, gratis: null };
+  }
+  return {
+    domicilioActivo: fila.envioDomicilioActivo,
+    gratis: { alcance, provincias: alcance === "provincias" ? fila.envioGratisProvincias : [], minimo },
+  };
+}
+
+/**
+ * Lectura SIN caché de la configuración de envío del tenant (`reglas_venta.envio_*`). Es la que
+ * usan cotizar y crear el pedido: la UI cacheada sólo muestra, el servidor decide.
+ *
+ * Va en su propia consulta, aparte de `leerReglasVenta` (mismo motivo que `mensaje_confirmacion`):
+ * son columnas de una migración del CRM que puede no estar aplicada todavía en ese entorno, y
+ * sumarlas al select rompería las reglas enteras. Si la lectura falla (columnas ausentes, base
+ * caída) devuelve el default (domicilio activo, costo a coordinar, sin gratis): nunca promete
+ * un envío gratis que no se pudo confirmar.
+ */
+export async function leerConfigEnvio(db?: Ejecutor): Promise<ConfigEnvio> {
+  try {
+    const [fila] = await (db ?? getDb())
+      .select({
+        envioDomicilioActivo: crmReglasVenta.envioDomicilioActivo,
+        envioGratisActivo: crmReglasVenta.envioGratisActivo,
+        envioGratisAlcance: crmReglasVenta.envioGratisAlcance,
+        envioGratisProvincias: crmReglasVenta.envioGratisProvincias,
+        envioGratisMinimoModo: crmReglasVenta.envioGratisMinimoModo,
+        envioGratisMinimo: crmReglasVenta.envioGratisMinimo,
+      })
+      .from(crmReglasVenta)
+      .where(eq(crmReglasVenta.tenantId, shopTenantId()))
+      .limit(1);
+    return fila ? configEnvioDeFila(fila) : CONFIG_ENVIO_DEFAULT;
+  } catch (err) {
+    console.error("[sucursales-repo] no se pudo leer la configuración de envío:", err);
+    return CONFIG_ENVIO_DEFAULT;
+  }
 }

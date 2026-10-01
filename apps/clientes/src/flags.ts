@@ -34,13 +34,6 @@ export const catalogoSoloVisiblesFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
-export const envioFlag = flag<boolean>({
-  key: "envio",
-  description: "Envío a domicilio en el checkout (apagado: solo retiro en local y envío a coordinar)",
-  defaultValue: false,
-  adapter: vercelAdapter,
-});
-
 export const sucursalesFlag = flag<boolean>({
   key: "sucursales",
   description: "Sucursales y zonas: el checkout asigna la sucursal al pedido y se muestra el selector de zona",

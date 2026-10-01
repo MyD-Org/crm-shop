@@ -76,7 +76,7 @@ const tonoRetiro = (d: DisponibilidadRetiro): TonoDisponibilidad =>
 
 /**
  * Primero un retiro por cada local (en el orden de los locales) y al final el envío (sólo si
- * `conEnvio`: con el flag `envio` apagado no se promete).
+ * `conEnvio`: con el envío a domicilio desactivado en el CRM no se promete).
  */
 export function lineasDisponibilidad(
   d: DisponibilidadVista,

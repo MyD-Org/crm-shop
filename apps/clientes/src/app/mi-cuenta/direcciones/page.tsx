@@ -5,11 +5,10 @@ import { DireccionesEnvio } from "@/components/mi-cuenta/DireccionesEnvio";
 import { identidadActual } from "@/lib/auth";
 import { direccionDesdeFacturacion } from "@/lib/direccion-envio";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
-import { CIUDADES_ENVIO, ENTREGA_LABEL, MINIMO_ENVIO } from "@/lib/envio";
-import { envioHabilitado } from "@/lib/envio-flag";
+import { CONFIG_ENVIO_DEFAULT, ENTREGA_LABEL, textoRegla } from "@/lib/envio";
+import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { getPerfilFacturacion } from "@/lib/facturacion-db";
 import { rutaIngreso } from "@/lib/ingreso";
-import { textoEnvio } from "@/lib/mi-cuenta-copy";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
 
 /**
@@ -17,15 +16,16 @@ import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
  * edición acá mismo, `DireccionesEnvio`), con el atajo de copiar el domicilio
  * de facturación. El domicilio fiscal en sí vive en Mis datos. Con la cookie
  * del CRM sin Clerk no hay dónde guardarlas: se invita a iniciar sesión.
- * Debajo, compactas, las reglas de entrega de `src/lib/envio.ts` (las mismas
- * que valida el checkout).
+ * Debajo, compactas, las reglas de entrega: el texto sale de la configuración
+ * de envío del CRM (`textoRegla`), la misma que evalúa el checkout.
  */
 export default async function DireccionesPage() {
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.direcciones));
-  // Con el flag `envio` apagado la sección no figura en la navegación: un link
-  // viejo o guardado vuelve a Pedidos.
-  if (!(await envioHabilitado())) redirect(RUTAS_MI_CUENTA.pedidos);
+  // Con el envío a domicilio desactivado en el CRM la sección no figura en la
+  // navegación: un link viejo o guardado vuelve a Pedidos.
+  const configEnvio = (await reglasVentaCacheadas()).envio ?? CONFIG_ENVIO_DEFAULT;
+  if (!configEnvio.domicilioActivo) redirect(RUTAS_MI_CUENTA.pedidos);
 
   const [direcciones, perfil] = clerkUserId
     ? await Promise.all([listarDirecciones(clerkUserId), getPerfilFacturacion(clerkUserId)])
@@ -48,17 +48,17 @@ export default async function DireccionesPage() {
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title={ENTREGA_LABEL.envio}>
-          <p className="text-sm text-muted">{textoEnvio(CIUDADES_ENVIO, MINIMO_ENVIO)}</p>
+          <p className="text-sm text-muted">{textoRegla(configEnvio)}</p>
         </Card>
         <Card title="Retiro en local">
-          <p className="text-sm text-muted">Retire su pedido en el local que elija, o coordinamos el envío con usted.</p>
+          <p className="text-sm text-muted">Retire su pedido en el local que elija.</p>
         </Card>
       </div>
       {/* El DS 0.13 no tiene Alert tone="info": neutral hasta que exista. */}
       <Alert tone="neutral">
         {clerkUserId
-          ? "Al finalizar cada compra puede elegir una de sus direcciones o indicar otra. Para otras localidades, el envío se coordina por separado."
-          : "La dirección de entrega se indica en cada compra. Para otras localidades, el envío se coordina por separado."}
+          ? "Al finalizar cada compra puede elegir una de sus direcciones o indicar otra."
+          : "La dirección de entrega se indica en cada compra."}
       </Alert>
     </section>
   );

@@ -1,4 +1,4 @@
-import { CIUDADES_ENVIO, MINIMO_ENVIO } from "@/lib/envio";
+import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import {
   estadoEnvio,
   estadoRetiroLocal,
@@ -49,21 +49,27 @@ const urlMapa = (l: LocalDisponibilidad) =>
 /**
  * Cómo se entrega, al lado del botón de compra (estilo "Retiro gratis en sucursal" de las grandes
  * tiendas, sin modal). Mismas reglas que el checkout (src/lib/envio.ts):
- * - Con el flag `envio`: envío a domicilio. Sin él: envío a todo el país "a coordinar" (sin
- *   empresa ni costo definidos todavía). Uno u otro, nunca los dos.
+ * - Envío a domicilio: el texto sale de la configuración del CRM (`textoEnvioFicha`: gratis, gratis
+ *   desde $X, costo a coordinar); sin fila si el envío está desactivado. `provincia`/`localidad`
+ *   (la ubicación del visitante) son opcionales: sin ellas rige la regla general.
  * - Retiro en el local: siempre; con `disponibilidad` (flag `disponibilidad-sucursal`) lista cada
  *   local con su dirección y su estado, si no, un texto genérico.
  */
 export function EntregaProducto({
-  envio,
+  configEnvio,
+  provincia = null,
+  localidad = null,
   disponibilidad,
 }: {
-  envio: boolean;
+  configEnvio: ConfigEnvio;
+  provincia?: string | null;
+  localidad?: string | null;
   disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
 }) {
   const retiro = disponibilidad?.producto.retiro;
   const locales = retiro ? (disponibilidad?.locales ?? []).filter((l) => retiro[l.slug]) : [];
   const envioDomicilio = disponibilidad?.producto.envio ? estadoEnvio(disponibilidad.producto.envio) : null;
+  const textoEnvio = textoEnvioFicha(configEnvio, provincia, localidad);
   return (
     <ul className="space-y-4 border-t border-border pt-5">
       <Fila icono={<IconoLocal />} titulo="Retiro gratis en el local">
@@ -93,18 +99,12 @@ export function EntregaProducto({
           </ul>
         )}
       </Fila>
-      {envio ? (
+      {textoEnvio && (
         <Fila icono={<IconoEnvio />} titulo="Envío a domicilio">
-          <span className="block text-muted">
-            Gratis en compras desde ${MINIMO_ENVIO.toLocaleString("es-AR")} sin impuestos a {CIUDADES_ENVIO.join(" y ")}.
-          </span>
+          <span className="block text-muted">{textoEnvio}</span>
           {envioDomicilio && (
             <span className={`font-semibold ${CLASE_TONO[envioDomicilio.tono]}`}>{envioDomicilio.texto}</span>
           )}
-        </Fila>
-      ) : (
-        <Fila icono={<IconoEnvio />} titulo="Envío a todo el país">
-          <span className="text-muted">Costo y plazo a coordinar con usted después de la compra.</span>
         </Fila>
       )}
     </ul>

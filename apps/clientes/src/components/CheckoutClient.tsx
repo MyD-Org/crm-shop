@@ -38,15 +38,15 @@ import {
   type TipoDoc,
 } from "@/lib/facturacion";
 import {
-  CIUDADES_ENVIO,
   ENTREGA_LABEL,
-  ENVIO_A_COORDINAR_LABEL,
   PAGO_LABEL,
-  ciudadConEnvio,
+  evaluarEnvio,
   pagosDisponibles,
+  type ConfigEnvio,
   type EntregaTipo,
   type PagoMetodo,
 } from "@/lib/envio";
+import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
@@ -239,10 +239,11 @@ interface Props {
    */
   admiteEnvio: boolean;
   /**
-   * Flag de envío (src/lib/envio-flag.ts) resuelto en el server. Apagado: sólo
-   * se ofrecen retiro en local y envío a coordinar, sin importar `admiteEnvio`.
+   * Configuración de envío del CRM resuelta en el server (cacheada: sólo para mostrar, el
+   * servidor decide al cotizar y al pedir). Con el domicilio inactivo sólo se ofrece el retiro en
+   * local, sin importar `admiteEnvio`. Si el envío es gratis o a coordinar lo dice `cotizacion.envio`.
    */
-  envioHabilitado: boolean;
+  configEnvio: ConfigEnvio;
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
   /**
@@ -288,7 +289,7 @@ export function CheckoutClient({
   facturacion,
   perfilFacturacion = null,
   admiteEnvio,
-  envioHabilitado,
+  configEnvio,
   oferta = null,
   pagosHabilitados,
   direccionesGuardadas = [],
@@ -310,13 +311,16 @@ export function CheckoutClient({
   const [pago, setPago] = useState<PagoMetodo>("transferencia");
   // Con el flag `pedido-a-confirmar`: slug del medio del CRM que eligió el comprador.
   const [medioSlug, setMedioSlug] = useState("");
-  // Tres opciones y dos tipos de pedido: "coordinar" es un `envio` sin ciudad ni
-  // dirección (esEnvioACoordinar en src/lib/envio.ts), "domicilio" el envío propio.
-  const [opcionEntrega, setOpcionEntrega] = useState<"retiro" | "domicilio" | "coordinar">("retiro");
+  // Dos opciones: retiro en local o envío a domicilio. El "envío a coordinar" aparte se fusionó
+  // con el domicilio: si el envío no es gratis, su costo se coordina después (src/lib/envio.ts).
+  const [opcionEntrega, setOpcionEntrega] = useState<"retiro" | "domicilio">("retiro");
   const entrega: EntregaTipo = opcionEntrega === "retiro" ? "retiro" : "envio";
   const aDomicilio = opcionEntrega === "domicilio";
+  const envioOfrecido = configEnvio.domicilioActivo && admiteEnvio;
   const [localRetiro, setLocalRetiro] = useState(sucursales?.localInicial ?? "");
-  const [provinciaEntrega, setProvinciaEntrega] = useState(sucursales?.provinciaInicial ?? "");
+  // Provincia de "otra dirección": la de la zona vigente si la hay. Con una dirección guardada o el
+  // domicilio fiscal, la provincia sale de ellos (ver `provinciaEntrega` más abajo).
+  const [provinciaManual, setProvinciaManual] = useState(sucursales?.provinciaInicial ?? "");
   const [ciudad, setCiudad] = useState("");
   const [direccion, setDireccion] = useState("");
   // Envío a domicilio arranca con la predeterminada. `ciudad` y `direccion`
@@ -324,14 +328,12 @@ export function CheckoutClient({
   const [eleccionDireccion, setEleccionDireccion] = useState(() =>
     eleccionInicial(direccionesGuardadas),
   );
-  // Ciudad y dirección que viajan a la cotización y al pedido. La zona de envío
-  // sigue decidiéndose en `evaluarEnvio` (src/lib/envio.ts): una guardada fuera
-  // de zona llega con su ciudad y se rechaza igual que hoy.
+  // Ciudad y dirección que viajan a la cotización y al pedido. Si el envío es gratis o a
+  // coordinar lo decide `evaluarEnvio` (src/lib/envio.ts) con la provincia de la dirección.
   const {
     ciudad: ciudadElegida,
     direccion: direccionElegida,
     guardada,
-    fueraDeZona: guardadaFueraDeZona,
   } = entregaElegida(direccionesGuardadas, eleccionDireccion, { ciudad, direccion });
   const [nombre, setNombre] = useState(nombreSugerido);
   const [telefono, setTelefono] = useState(telefonoSugerido);
@@ -359,7 +361,7 @@ export function CheckoutClient({
   const seccionFacturacion = !facturacion.vinculado;
   const router = useRouter();
 
-  // Envío al domicilio fiscal: con el flag de envío, sin direcciones guardadas
+  // Envío al domicilio fiscal: con el envío a domicilio activo, sin direcciones guardadas
   // y con el domicilio fiscal dentro de la zona, se ofrece por defecto y se
   // pregunta si va a otra dirección. El domicilio es el que se está cargando
   // (primera vez) o el de la facturación ya cargada.
@@ -367,19 +369,29 @@ export function CheckoutClient({
   const fiscalCalle = (
     seccionFacturacion ? fiscalEnCurso?.domicilioCalle : facturacion.datos.domicilioCalle
   )?.trim();
-  const fiscalCiudad = ciudadConEnvio(
-    seccionFacturacion ? fiscalEnCurso?.domicilioCiudad : facturacion.datos.domicilioCiudad,
+  const fiscalCiudad = (
+    seccionFacturacion ? fiscalEnCurso?.domicilioCiudad : facturacion.datos.domicilioCiudad
+  )?.trim();
+  const fiscalProvincia = provinciaCanonica(
+    seccionFacturacion ? fiscalEnCurso?.domicilioProvincia : facturacion.datos.domicilioProvincia,
   );
   const ofrecerFiscal =
-    envioHabilitado &&
-    admiteEnvio &&
+    envioOfrecido &&
     direccionesGuardadas.length === 0 &&
     !!fiscalCalle &&
-    !!fiscalCiudad;
+    !!fiscalCiudad &&
+    !!fiscalProvincia;
   const [aOtraDireccion, setAOtraDireccion] = useState(false);
   const usarFiscal = aDomicilio && ofrecerFiscal && !aOtraDireccion;
   const ciudadEntrega = usarFiscal && fiscalCiudad ? fiscalCiudad : ciudadElegida;
   const direccionEntrega = usarFiscal && fiscalCalle ? fiscalCalle : direccionElegida;
+  // Provincia de entrega: la del domicilio fiscal o de la dirección guardada elegida; si no, la que
+  // se carga en "otra dirección". Es un dato derivado de la dirección, no una regla que el cliente elija.
+  const provinciaEntrega = usarFiscal
+    ? (fiscalProvincia ?? "")
+    : guardada
+      ? (provinciaCanonica(guardada.provincia) ?? "")
+      : (provinciaCanonica(provinciaManual) ?? "");
 
   // Pasos del checkout: Sus datos (facturación o contacto) → Entrega (con el
   // domicilio fiscal si se está cargando) → Pago.
@@ -491,8 +503,9 @@ export function CheckoutClient({
   const { cotizacion, estado, error, recotizar } = useCotizacion({
     entregaTipo: entrega,
     ciudad: aDomicilio ? ciudadEntrega : undefined,
-    // Cambiar la provincia (la zona) o la modalidad recotiza: revalida el stock por sucursal.
-    provincia: sucursales && entrega === "envio" && provinciaEntrega ? provinciaEntrega : undefined,
+    // La provincia de entrega define si el envío es gratis y, con el flag de sucursales, la zona:
+    // cambiarla (o la modalidad) recotiza.
+    provincia: aDomicilio && provinciaEntrega ? provinciaEntrega : undefined,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
@@ -529,7 +542,8 @@ export function CheckoutClient({
   const contactoCompleto =
     nombre.trim() !== "" && hayTelefonoParaPedido(telefono, facturacion.telefonoAlegra);
   const entregaCompleta =
-    !aDomicilio || (ciudadEntrega !== "" && direccionEntrega.trim() !== "");
+    !aDomicilio ||
+    (ciudadEntrega.trim() !== "" && direccionEntrega.trim() !== "" && provinciaEntrega !== "");
   const datosCompletos = contactoCompleto && entregaCompleta;
 
   function continuarDesdeContacto() {
@@ -542,11 +556,11 @@ export function CheckoutClient({
 
   function validarEntrega(): boolean {
     if (!entregaCompleta) {
-      setErrorPaso("Indique la ciudad y la dirección de entrega.");
+      setErrorPaso("Indique la provincia, la ciudad y la dirección de entrega.");
       return false;
     }
     if (aDomicilio && cotizacion && !envioDisponible) {
-      setErrorPaso("Revise la opción de envío.");
+      setErrorPaso("El envío a domicilio no está disponible. Elija retiro en el local.");
       return false;
     }
     setErrorPaso(null);
@@ -599,7 +613,7 @@ export function CheckoutClient({
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
           sucursalRetiro: sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined,
-          entregaProvincia: sucursales && entrega === "envio" && provinciaEntrega ? provinciaEntrega : undefined,
+          entregaProvincia: aDomicilio && provinciaEntrega ? provinciaEntrega : undefined,
         }),
       });
 
@@ -858,11 +872,21 @@ export function CheckoutClient({
     </div>
   );
 
+  // Subtexto de "Envío a domicilio": lo evalúa el servidor (cotización con la provincia de entrega);
+  // sin cotización todavía se evalúa acá con la config mostrada, sin el monto.
+  const descripcionEnvio = cotizacion
+    ? cotizacion.envio.gratis
+      ? "Gratis"
+      : "Costo de envío a coordinar"
+    : evaluarEnvio(Number.POSITIVE_INFINITY, provinciaEntrega || null, configEnvio).gratis
+      ? "Gratis según el monto de su compra"
+      : "Costo de envío a coordinar";
+
   /** Opciones de entrega: en su sección o dentro del paso del domicilio fiscal. */
   const bloqueEntrega = (
     <>
             <div
-              className={`grid gap-3 ${envioHabilitado && admiteEnvio ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+              className={`grid gap-3 ${envioOfrecido ? "sm:grid-cols-2" : ""}`}
             >
               <RadioCard
                 selected={opcionEntrega === "retiro"}
@@ -870,20 +894,14 @@ export function CheckoutClient({
                 title={ENTREGA_LABEL.retiro}
                 description="Retire su pedido en el local que elija"
               />
-              {envioHabilitado && admiteEnvio && (
+              {envioOfrecido && (
                 <RadioCard
                   selected={aDomicilio}
                   onClick={() => setOpcionEntrega("domicilio")}
                   title={ENTREGA_LABEL.envio}
-                  description={`Sin cargo a ${CIUDADES_ENVIO.join(" y ")}`}
+                  description={descripcionEnvio}
                 />
               )}
-              <RadioCard
-                selected={opcionEntrega === "coordinar"}
-                onClick={() => setOpcionEntrega("coordinar")}
-                title={ENVIO_A_COORDINAR_LABEL}
-                description="Un asesor coordina con usted el destino y el costo del envío"
-              />
             </div>
             {sucursales && entrega === "retiro" && sucursales.locales.length > 0 && (
               <div className="mt-4">
@@ -900,23 +918,10 @@ export function CheckoutClient({
                 </Field>
               </div>
             )}
-            {envioHabilitado && !admiteEnvio && (
+            {configEnvio.domicilioActivo && !admiteEnvio && (
               <p className="mt-3 text-sm text-muted">
                 El envío a domicilio solo está disponible para compradores de Argentina.
               </p>
-            )}
-
-            {entrega === "envio" && sucursales && (
-              <div className="mt-4">
-                <Field label="Provincia de entrega">
-                  <Select
-                    options={PROVINCIAS_SELECTOR.map((p) => ({ label: p.nombre, value: p.clave }))}
-                    value={provinciaEntrega}
-                    onValueChange={setProvinciaEntrega}
-                    placeholder="Seleccionar provincia"
-                  />
-                </Field>
-              </div>
             )}
 
             {aDomicilio && (
@@ -925,7 +930,7 @@ export function CheckoutClient({
                   <div className="mt-4 rounded-lg bg-bg p-3 text-sm">
                     {!aOtraDireccion && (
                       <p className="mb-2 text-text">
-                        Se envía a su domicilio fiscal: {fiscalCalle}, {fiscalCiudad}.
+                        Se envía a su domicilio fiscal: {fiscalCalle}, {fiscalCiudad}, {fiscalProvincia}.
                       </p>
                     )}
                     <label className="flex items-center gap-2 text-text">
@@ -945,17 +950,23 @@ export function CheckoutClient({
                   />
                 )}
                 {!guardada && !usarFiscal && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <Field label="Ciudad">
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <Field label="Provincia">
                     <Select
-                      options={CIUDADES_ENVIO.map((c) => ({ label: c, value: c }))}
+                      options={PROVINCIAS_SELECTOR.map((p) => ({ label: p.nombre, value: p.clave }))}
                       // Siempre controlado: con `undefined` al principio React avisa que el
                       // Select pasa de no controlado a controlado al elegir. Radix muestra
                       // el placeholder igual con "" (lo que no admite "" son las opciones).
+                      value={provinciaManual}
+                      onValueChange={setProvinciaManual}
+                      placeholder="Seleccionar provincia"
+                    />
+                  </Field>
+                  <Field label="Ciudad">
+                    <Input
+                      placeholder="Posadas"
                       value={ciudad}
-                      onValueChange={setCiudad}
-                      placeholder="Seleccionar ciudad"
-                      className="border-[1.5px] border-border-strong focus-visible:border-primary focus-visible:ring-0"
+                      onChange={(e) => setCiudad(e.target.value)}
                     />
                   </Field>
                   <Field label="Dirección">
@@ -968,11 +979,15 @@ export function CheckoutClient({
                 </div>
                 )}
 
-                {/* Con una guardada fuera de zona ya se ve el aviso del selector. */}
-                {cotizacion && !envioDisponible && cotizacion.envio.motivo && !guardadaFueraDeZona && (
+                {(usarFiscal || guardada) && provinciaEntrega === "" && (
+                  <p className="mt-3 text-xs text-muted">
+                    Esta dirección no tiene una provincia válida. Elija otra dirección o cárguela de nuevo.
+                  </p>
+                )}
+                {cotizacion && !envioDisponible && (
                   <p className="mt-3 flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs text-text">
                     <span className="mt-px text-warning"><AlertIcon /></span>
-                    {cotizacion.envio.motivo}
+                    El envío a domicilio no está disponible. Elija retiro en el local.
                   </p>
                 )}
               </>
@@ -1274,7 +1289,7 @@ export function CheckoutClient({
                     <DisponibilidadLineas
                       disponibilidad={disponibilidadElegida(linea.id)!}
                       locales={cotizacion?.disponibilidad?.locales ?? []}
-                      envio={envioHabilitado}
+                      envio={configEnvio.domicilioActivo}
                       className="mt-1"
                     />
                   )}
@@ -1298,7 +1313,7 @@ export function CheckoutClient({
             {entrega === "envio" && (
               <div className="flex justify-between">
                 <span className="text-muted">Envío</span>
-                {aDomicilio ? (
+                {cotizacion?.envio.gratis ? (
                   <span className="font-medium text-success">Sin cargo</span>
                 ) : (
                   <span className="font-medium text-muted">A coordinar</span>
@@ -1345,7 +1360,7 @@ export function CheckoutClient({
                   : !datosCompletos
                     ? "Complete todos los campos para continuar."
                     : aDomicilio && !envioDisponible
-                      ? "Revise la opción de envío."
+                      ? "Elija retiro en el local: el envío no está disponible."
                       : "Confirmando precios y stock…"}
             </p>
           )}

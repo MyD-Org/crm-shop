@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DatosLegales } from "@/data/home-defaults";
-import { MINIMO_ENVIO } from "@/lib/envio";
-import { fmtPesosEnteros } from "@/lib/format";
+import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "@/lib/envio";
 import { URL_DEFENSA_CONSUMIDOR, identificacionComercio, type Bloque } from "./comun";
 import { bloquesTerminos } from "./terminos";
 import { bloquesPrivacidad } from "./privacidad";
@@ -114,28 +113,45 @@ describe("política de privacidad", () => {
   });
 });
 
+const ENVIO_INACTIVO: ConfigEnvio = { domicilioActivo: false, gratis: null };
+const ENVIO_GRATIS: ConfigEnvio = {
+  domicilioActivo: true,
+  gratis: { alcance: "provincias", provincias: ["misiones"], minimo: 100_000 },
+};
+
 describe("envíos y pagos", () => {
-  it("envío apagado: sin ciudades, solo retiro", () => {
-    const t = texto(bloquesEnviosYPagos({ envio: false, pagos: false, cuotas: false }));
-    expect(t).not.toContain("Puerto Iguazú");
-    expect(t).not.toContain("El Dorado");
-    expect(t).toContain("«Retiro en local» o «Envío a coordinar»");
+  it("envío inactivo: solo retiro, sin regla de envío", () => {
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, pagos: false, cuotas: false }));
+    expect(t).toContain("«Retiro en local»");
+    expect(t).toContain("no está disponible");
+    expect(t).not.toContain("Envío a coordinar");
   });
 
-  it("envío prendido: ciudades y mínimo formateado", () => {
-    const t = texto(bloquesEnviosYPagos({ envio: true, pagos: false, cuotas: false }));
-    expect(t).toContain("Puerto Iguazú");
-    expect(t).toContain("El Dorado");
-    expect(t).toContain(fmtPesosEnteros(MINIMO_ENVIO));
+  it("gratis apagado: envío a domicilio con costo a coordinar", () => {
+    const t = texto(bloquesEnviosYPagos({ envio: CONFIG_ENVIO_DEFAULT, pagos: false, cuotas: false }));
+    expect(t).toContain("El envío a domicilio tiene costo a coordinar.");
+  });
+
+  it("envío gratis configurado: provincia y mínimo formateado desde la config", () => {
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, pagos: false, cuotas: false }));
+    expect(t).toContain("Misiones");
+    expect(t).toContain("100.000");
+  });
+
+  it("cambia el mínimo, cambia la página (sin tocar código)", () => {
+    const cfg: ConfigEnvio = { ...ENVIO_GRATIS, gratis: { ...ENVIO_GRATIS.gratis!, minimo: 150_000 } };
+    const t = texto(bloquesEnviosYPagos({ envio: cfg, pagos: false, cuotas: false }));
+    expect(t).toContain("150.000");
+    expect(t).not.toContain("100.000");
   });
 
   it("pagos: apagado se coordina; prendido lista los medios; cuotas informa el CFT", () => {
-    expect(texto(bloquesEnviosYPagos({ envio: false, pagos: false, cuotas: false }))).toContain("A coordinar con un asesor");
-    const prendido = texto(bloquesEnviosYPagos({ envio: true, pagos: true, cuotas: true }));
+    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, pagos: false, cuotas: false }))).toContain("A coordinar con un asesor");
+    const prendido = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, pagos: true, cuotas: true }));
     expect(prendido).toContain("Transferencia bancaria");
     expect(prendido).toContain("Tarjeta o Mercado Pago");
     expect(prendido).toContain("CFT");
-    expect(texto(bloquesEnviosYPagos({ envio: true, pagos: true, cuotas: false }))).not.toContain("CFT");
+    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, pagos: true, cuotas: false }))).not.toContain("CFT");
   });
 });
 

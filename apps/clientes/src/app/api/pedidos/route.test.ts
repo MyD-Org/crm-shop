@@ -62,7 +62,6 @@ vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
 
 import { POST } from "./route";
 import { StockInsuficienteError } from "@/lib/stock-disponible";
-import { setFlag } from "@/test/flags";
 
 const ofertaCon6Desde150k: OfertaCuotas = {
   planesFetchedAt: null,
@@ -94,8 +93,6 @@ const post = (extra: Record<string, unknown> = {}) =>
 const planGuardado = () => crearPedido.mock.calls[0][3];
 
 beforeEach(() => {
-  // Estos casos ejercitan el envío propio: el flag `envio` prendido.
-  setFlag("envio", true);
   flag = true;
   pais = "AR";
   telefonoPerfil = null;
@@ -158,7 +155,7 @@ describe("POST /api/pedidos — plan de cuotas congelado", () => {
 });
 
 describe("POST /api/pedidos — envío solo dentro de Argentina", () => {
-  const conEnvio = { entregaTipo: "envio", entregaCiudad: "Puerto Iguazú", entregaDireccion: "Calle 1" };
+  const conEnvio = { entregaTipo: "envio", entregaCiudad: "Puerto Iguazú", entregaDireccion: "Calle 1", entregaProvincia: "Misiones" };
 
   it("rechaza el envío a un comprador con documento de otro país", async () => {
     pais = "BR";
@@ -173,24 +170,6 @@ describe("POST /api/pedidos — envío solo dentro de Argentina", () => {
     const r = await post({ pagoMetodo: "transferencia" });
     expect(r.status).toBeLessThan(300);
     expect(crearPedido).toHaveBeenCalled();
-  });
-});
-
-describe("POST /api/pedidos — flag envio apagado", () => {
-  it("rechaza el envío a domicilio y acepta el retiro", async () => {
-    setFlag("envio", false);
-    const envio = await post({
-      entregaTipo: "envio",
-      entregaCiudad: "Puerto Iguazú",
-      entregaDireccion: "Calle 1",
-      pagoMetodo: "transferencia",
-    });
-    expect(envio.status).toBe(409);
-    expect((await envio.json()).motivo).toBe("envio_no_disponible");
-    expect(crearPedido).not.toHaveBeenCalled();
-
-    const retiro = await post({ pagoMetodo: "transferencia" });
-    expect(retiro.status).toBeLessThan(300);
   });
 });
 

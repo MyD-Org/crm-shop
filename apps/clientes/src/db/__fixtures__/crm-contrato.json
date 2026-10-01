@@ -180,6 +180,12 @@
     "aviso_sin_contactar_horas": "integer",
     "contacto_horas_habiles": "integer",
     "mensaje_confirmacion": "text",
+    "envio_domicilio_activo": "boolean",
+    "envio_gratis_activo": "boolean",
+    "envio_gratis_alcance": "text",
+    "envio_gratis_provincias": "text[]",
+    "envio_gratis_minimo_modo": "text",
+    "envio_gratis_minimo": "numeric(12, 2)",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
   },

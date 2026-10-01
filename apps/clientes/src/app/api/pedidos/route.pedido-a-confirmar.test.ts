@@ -88,7 +88,6 @@ const post = (extra: Record<string, unknown> = {}) =>
   );
 
 beforeEach(() => {
-  setFlag("envio", true);
   pagos = false;
   medios = [];
   leerMedios.mockClear();
@@ -133,7 +132,7 @@ describe("POST /api/pedidos — flag pedido-a-confirmar prendido", () => {
 
   it("rechaza un medio que no aplica a la modalidad, uno inactivo y uno inventado", async () => {
     medios = [medio("efectivo", { aplicaEnvio: false }), medio("transferencia"), medio("viejo", { activo: false })];
-    const envio = { entregaTipo: "envio", entregaCiudad: "Puerto Iguazú", entregaDireccion: "Calle 1" };
+    const envio = { entregaTipo: "envio", entregaCiudad: "Puerto Iguazú", entregaDireccion: "Calle 1", entregaProvincia: "Misiones" };
     for (const extra of [{ pagoMetodo: "efectivo", ...envio }, { pagoMetodo: "viejo" }, { pagoMetodo: "xyz" }]) {
       const r = await post(extra);
       expect(r.status, JSON.stringify(extra)).toBe(400);
@@ -159,7 +158,7 @@ describe("POST /api/pedidos — flag pedido-a-confirmar prendido", () => {
 
   it("si ningún medio aplica a la modalidad, sólo entra a_coordinar", async () => {
     medios = [medio("efectivo", { aplicaEnvio: false })];
-    const envio = { entregaTipo: "envio", entregaCiudad: "Puerto Iguazú", entregaDireccion: "Calle 1" };
+    const envio = { entregaTipo: "envio", entregaCiudad: "Puerto Iguazú", entregaDireccion: "Calle 1", entregaProvincia: "Misiones" };
     expect((await post({ pagoMetodo: "efectivo", ...envio })).status).toBe(400);
     expect((await post({ pagoMetodo: "a_coordinar", ...envio })).status).toBe(201);
   });

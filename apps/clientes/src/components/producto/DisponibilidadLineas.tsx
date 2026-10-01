@@ -15,7 +15,7 @@ const CLASE_TONO: Record<TonoDisponibilidad, string> = {
  * Disponibilidad de un producto por local y de envío: "Retiro en <local>: disponible hoy |
  * disponible en N días | no disponible" y "Envío a domicilio: ...". Sólo se dibuja con el flag
  * `disponibilidad-sucursal` (el server no manda `disponibilidad` si está apagado). El envío sólo
- * se anuncia con el flag `envio`.
+ * se anuncia con el envío a domicilio activo en el CRM (`envio`).
  */
 export function DisponibilidadLineas({
   disponibilidad,

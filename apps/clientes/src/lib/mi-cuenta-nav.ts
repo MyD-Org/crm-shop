@@ -41,7 +41,7 @@ export interface CapacidadesDespliegue {
   favoritos: boolean;
   /** "Facturas y saldo" (portal-al-shop, rebanada 1). */
   facturas: boolean;
-  /** Direcciones y envíos: sólo con el flag `envio` prendido (src/lib/envio-flag.ts). */
+  /** Direcciones y envíos: sólo con el envío a domicilio activo en el CRM (`reglas_venta.envio_domicilio_activo`). */
   direcciones: boolean;
   pagos: boolean;
   presupuestos: boolean;

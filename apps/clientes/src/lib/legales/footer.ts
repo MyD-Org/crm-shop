@@ -1,7 +1,7 @@
 /**
  * Columnas del footer global (`src/components/SiteFooter.tsx`), puras para
  * testear orden y hrefs sin DOM. "Envíos y pagos" vive en Legales y se
- * muestra siempre (no depende del flag `envio`).
+ * muestra siempre (no depende de la configuración de envío).
  *
  * "Contacto" sale de la fila `footer` (editable desde la tienda, ver
  * `src/data/footer.ts`); "Mi cuenta" y "Legales" son fijas. Si Contacto queda

@@ -3,6 +3,7 @@ import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
 import { pagosHabilitados } from "@/lib/pagos-flag";
+import { leerConfigEnvio } from "@/lib/sucursales-repo";
 import { permitir } from "@/lib/rate-limit";
 import { dispDelVisitante } from "@/lib/zona-servidor";
 import { contextoUnion } from "@/lib/disponibilidad-contexto";
@@ -33,10 +34,12 @@ function ipDe(req: Request): string | null {
 
 /**
  * POST /api/carrito/cotizar
- * Body: { items: [{ id, qty }], entregaTipo?, ciudad?, provincia? }
- * `provincia` (sólo con el flag `disponibilidad-sucursal`): la de entrega elegida en el checkout;
- * define la sucursal de la zona con la que se calcula la disponibilidad. Con el flag prendido la
- * respuesta suma `disponibilidad` (envío y retiro por local, por producto).
+ * Body: { items: [{ id, qty }], entregaTipo?, provincia? }
+ * `provincia`: la de entrega (checkout) o la de la ubicación del cliente; con ella y la
+ * configuración de envío releída SIN caché (`leerConfigEnvio`) se evalúa `envio` (gratis, a
+ * coordinar, cuánto falta). Con el flag `disponibilidad-sucursal` también define la sucursal de la
+ * zona con la que se calcula la disponibilidad; con el flag prendido la respuesta suma
+ * `disponibilidad` (envío y retiro por local, por producto).
  *
  * Totales del carrito leídos del catálogo del CRM (vista `catalog_products_shop` + lista de precios
  * del snapshot de `client_links`), sin llamadas a Alegra. El carrito y el
@@ -62,7 +65,7 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { items?: unknown; entregaTipo?: unknown; ciudad?: unknown; provincia?: unknown };
+  let body: { items?: unknown; entregaTipo?: unknown; provincia?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -72,7 +75,7 @@ export async function POST(req: Request) {
   const lineas = normalizarLineas(body.items);
   const entregaTipo: EntregaTipo =
     body.entregaTipo === "envio" ? "envio" : "retiro";
-  const ciudad = typeof body.ciudad === "string" ? body.ciudad : undefined;
+  const provinciaTexto = typeof body.provincia === "string" ? body.provincia : null;
 
   if (lineas.length === 0) {
     return NextResponse.json({
@@ -82,7 +85,7 @@ export async function POST(req: Request) {
       costoEnvio: 0,
       total: 0,
       hayProblemas: false,
-      envio: evaluarEnvio(0, ciudad),
+      envio: evaluarEnvio(0, provinciaTexto, await leerConfigEnvio()),
       pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),
     });
   }
@@ -100,7 +103,7 @@ export async function POST(req: Request) {
       : undefined;
     // Flag `disponibilidad-sucursal`: stock por sucursal (unión) y disponibilidad por modalidad.
     const base = await dispDelVisitante();
-    const provincia = typeof body.provincia === "string" ? claveProvincia(body.provincia) : "";
+    const provincia = provinciaTexto ? claveProvincia(provinciaTexto) : "";
     const disp = base ? await contextoParaProvincia(base, provincia || null) : undefined;
     const cotizacion = await cotizar(lineas, {
       idPriceList,
@@ -116,7 +119,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...cotizacion,
       ...(disponibilidad ? { disponibilidad } : {}),
-      envio: evaluarEnvio(cotizacion.subtotal, ciudad),
+      envio: evaluarEnvio(cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),
       pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),
     });
   } catch (err) {

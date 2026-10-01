@@ -67,6 +67,8 @@ export interface DatosPedido {
   entregaTipo: EntregaTipo;
   entregaCiudad?: string;
   entregaDireccion?: string;
+  /** true/false si es envío a domicilio (gratis / a coordinar); null o ausente = retiro. */
+  envioGratis?: boolean | null;
   /**
    * Método fijo de `envio.ts` o, con el flag `pedido-a-confirmar`, el `slug` de un medio de
    * `medios_pago_shop`. Sin CHECK en la base: es texto.
@@ -261,6 +263,7 @@ export async function crearPedido(
         entregaTipo: datos.entregaTipo,
         entregaCiudad: datos.entregaCiudad ?? null,
         entregaDireccion: datos.entregaDireccion ?? null,
+        envioGratis: datos.envioGratis ?? null,
         pagoMetodo: datos.pagoMetodo,
         notas: datos.notas ?? null,
         facturacionTipoDoc: datos.facturacion?.tipoDoc ?? null,

@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { CIUDADES_ENVIO } from "./envio";
 import {
   LARGOS_DIRECCION,
   MAX_DIRECCIONES,
-  avisoFueraDeZona,
   OTRA_DIRECCION,
   eleccionInicial,
   entregaDesdeGuardada,
   entregaElegida,
   esIdDireccion,
   etiquetaDireccion,
-  fueraDeZona,
   lineaEntrega,
   lineasDireccion,
   normalizarCp,
@@ -156,21 +153,6 @@ describe("normalizarCp", () => {
   });
 });
 
-describe("zona de envío", () => {
-  it("dentro de la zona según envio.ts, con cualquier grafía", () => {
-    expect(fueraDeZona({ ciudad: "Puerto Iguazú" })).toBe(false);
-    expect(fueraDeZona({ ciudad: "eldorado" })).toBe(false);
-    expect(fueraDeZona({ ciudad: "Rosario" })).toBe(true);
-  });
-
-  it("el aviso nombra la localidad y las ciudades con envío, en usted", () => {
-    const aviso = avisoFueraDeZona("Rosario");
-    expect(aviso).toContain("Rosario");
-    expect(aviso).toContain("se coordina por separado");
-    for (const c of CIUDADES_ENVIO) expect(aviso).toContain(c);
-  });
-});
-
 describe("vista", () => {
   it("etiqueta por defecto cuando no tiene", () => {
     expect(etiquetaDireccion(guardada({ etiqueta: null }))).toBe("Dirección");
@@ -208,8 +190,8 @@ describe("entrega desde una dirección guardada (checkout)", () => {
     expect(lineaEntrega(larga).length).toBeLessThanOrEqual(200);
   });
 
-  it("en zona manda la ciudad como la escribe envio.ts; fuera de zona, la guardada", () => {
-    expect(entregaDesdeGuardada(guardada({ ciudad: "puerto iguazu" })).ciudad).toBe("Puerto Iguazú");
+  it("manda la ciudad tal cual se guardó, sin zonas fijas", () => {
+    expect(entregaDesdeGuardada(guardada({ ciudad: "puerto iguazu" })).ciudad).toBe("puerto iguazu");
     expect(entregaDesdeGuardada(guardada({ ciudad: "Rosario" })).ciudad).toBe("Rosario");
     expect(entregaDesdeGuardada(guardada()).direccion).toBe(lineaEntrega(guardada()));
   });
@@ -228,7 +210,6 @@ describe("esIdDireccion", () => {
 describe("checkout: elección de dirección", () => {
   const casa = guardada({ id: "a", predeterminada: false, ciudad: "Puerto Iguazú" });
   const obra = guardada({ id: "b", predeterminada: true, ciudad: "eldorado", etiqueta: "Obra" });
-  const rosario = guardada({ id: "c", predeterminada: false, ciudad: "Rosario", provincia: "Santa Fe" });
   const tipeada = { ciudad: "Puerto Iguazú", direccion: "Tipeada 1" };
 
   it("arranca en la predeterminada; sin guardadas, en 'otra'", () => {
@@ -237,21 +218,16 @@ describe("checkout: elección de dirección", () => {
     expect(eleccionInicial([casa])).toBe(OTRA_DIRECCION);
   });
 
-  it("con una guardada en zona manda su ciudad normalizada y su línea", () => {
+  it("con una guardada manda su ciudad y su línea", () => {
     expect(entregaElegida([casa, obra], "b", tipeada)).toEqual({
-      ciudad: "El Dorado",
+      ciudad: "eldorado",
       direccion: lineaEntrega(obra),
       guardada: obra,
-      fueraDeZona: false,
     });
   });
 
   it("'otra' (o un id que ya no está) usa lo tipeado y no toca las guardadas", () => {
-    expect(entregaElegida([casa], OTRA_DIRECCION, tipeada)).toEqual({ ...tipeada, guardada: null, fueraDeZona: false });
-    expect(entregaElegida([casa], "zzz", tipeada)).toEqual({ ...tipeada, guardada: null, fueraDeZona: false });
-  });
-
-  it("una guardada fuera de zona viaja con su ciudad y queda marcada", () => {
-    expect(entregaElegida([rosario], "c", tipeada)).toMatchObject({ ciudad: "Rosario", fueraDeZona: true });
+    expect(entregaElegida([casa], OTRA_DIRECCION, tipeada)).toEqual({ ...tipeada, guardada: null });
+    expect(entregaElegida([casa], "zzz", tipeada)).toEqual({ ...tipeada, guardada: null });
   });
 });

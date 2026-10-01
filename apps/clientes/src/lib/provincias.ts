@@ -51,6 +51,10 @@ const ALIAS: Record<string, ProvinciaAR> = {
   capitalfederal: "Ciudad Autónoma de Buenos Aires",
   ciudaddebuenosaires: "Ciudad Autónoma de Buenos Aires",
   tierradelfuegoantartidaeislasdelatlanticosur: "Tierra del Fuego",
+  tierradelfuegoantartidaeislasdelatlantico: "Tierra del Fuego",
+  tierradelfuegoaeias: "Tierra del Fuego",
+  buenosairescaba: "Ciudad Autónoma de Buenos Aires",
+  ciudadautonomadebuenosaires: "Ciudad Autónoma de Buenos Aires",
 };
 
 const POR_CLAVE = new Map<string, ProvinciaAR>(PROVINCIAS_AR.map((p) => [clave(p), p]));

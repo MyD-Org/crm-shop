@@ -369,6 +369,13 @@ export const orders = shop.table(
     subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
     iva: numeric("iva", { precision: 14, scale: 2 }).notNull(),
     costoEnvio: numeric("costo_envio", { precision: 14, scale: 2 }).notNull().default("0"),
+    /**
+     * Si el envío a domicilio resultó gratis según la regla vigente al pedir (`envio-gratis-
+     * configurable`). NULL = retiro o pedido anterior a la 0027 (sin dato); false = envío a
+     * domicilio con costo a coordinar. El costo online es siempre 0: esto distingue "gratis" de
+     * "a coordinar" en Pedidos del admin.
+     */
+    envioGratis: boolean("envio_gratis"),
     total: numeric("total", { precision: 14, scale: 2 }).notNull(),
 
     notas: text("notas"),

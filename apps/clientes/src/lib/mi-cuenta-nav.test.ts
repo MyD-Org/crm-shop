@@ -25,7 +25,7 @@ const TODO: CapacidadesDespliegue = {
   condiciones: true,
   avisos: true,
 };
-// Direcciones depende del flag `envio`, no de una rebanada: acá queda prendida.
+// Direcciones depende del envío a domicilio activo en el CRM, no de una rebanada: acá queda prendida.
 const NADA: CapacidadesDespliegue = {
   favoritos: false,
   facturas: false,
@@ -44,7 +44,7 @@ const cap = (clerk: boolean, vinculado: boolean, esCuentaCorriente = false) => (
 
 /** Navegación de Mi cuenta: secciones por identidad y despliegue (NAV-1, menú agrupado). */
 describe("seccionesVisibles", () => {
-  it("con el flag envio apagado, Direcciones y envíos no figura", () => {
+  it("con el envío a domicilio desactivado, Direcciones y envíos no figura", () => {
     const s = seccionesVisibles(cap(true, true), { ...TODO, direcciones: false });
     expect(ids(s)).not.toContain("direcciones");
     expect(ids(s)).toContain("pedidos");

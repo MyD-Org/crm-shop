@@ -88,7 +88,7 @@ describe("textos de disponibilidad", () => {
     ]);
   });
 
-  it("sin el flag de envío no se promete el envío y cada línea trae su tono", () => {
+  it("con el envío desactivado no se promete el envío y cada línea trae su tono", () => {
     const d = {
       servible: true,
       envio: { estado: "a_traer" as const, origen: "b", demoraDias: 7 },

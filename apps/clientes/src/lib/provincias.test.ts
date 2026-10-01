@@ -28,6 +28,16 @@ describe("provinciaCanonica", () => {
     ).toBe("Tierra del Fuego");
   });
 
+  it("entiende el nombre oficial de Georef y las variantes de CABA y Tierra del Fuego", () => {
+    expect(provinciaCanonica("Ciudad Autónoma de Buenos Aires")).toBe("Ciudad Autónoma de Buenos Aires");
+    expect(provinciaCanonica("provincia de CORDOBA")).toBe("Córdoba");
+    expect(provinciaCanonica("Tierra del Fuego, Antártida e Islas del Atlántico Sur")).toBe("Tierra del Fuego");
+    expect(provinciaCanonica("Tierra del Fuego AeIAS")).toBe("Tierra del Fuego");
+    expect(provinciaCanonica("Buenos Aires (CABA)")).toBe("Ciudad Autónoma de Buenos Aires");
+    // Sin pasar por alias, la provincia "Buenos Aires" sigue siendo la provincia.
+    expect(provinciaCanonica("Buenos Aires")).toBe("Buenos Aires");
+  });
+
   it("null si no es una provincia argentina", () => {
     expect(provinciaCanonica("Alto Paraná")).toBeNull();
     expect(provinciaCanonica("")).toBeNull();

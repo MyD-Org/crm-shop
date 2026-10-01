@@ -82,3 +82,19 @@ describe("hoyBuenosAires", () => {
     expect(hoyBuenosAires(new Date("2026-10-02T04:00:00Z"))).toBe("2026-10-02");
   });
 });
+
+describe("proximasExcepciones sin fecha", () => {
+  it("con hoy vacío o inválido no rompe y no muestra nada", async () => {
+    const { proximasExcepciones, horarioParaMostrar } = await import("./horario-agrupado");
+    const exc = [{ type: "closed", date: "2030-01-02" }] as never;
+    expect(proximasExcepciones(exc, "")).toEqual([]);
+    expect(proximasExcepciones(exc, "no-es-fecha")).toEqual([]);
+    expect(() => horarioParaMostrar({
+          schedule: {
+            monday: [{ open: "09:00", close: "13:00" }],
+            tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [],
+          } as never,
+          excepciones: exc,
+        }, "")).not.toThrow();
+  });
+});

@@ -165,6 +165,8 @@ export function proximasExcepciones(
   hoy: string,
   { dias = 30, max = 3 }: { dias?: number; max?: number } = {},
 ): string[] {
+  // Sin fecha válida (p. ej. antes de abrir el popup, "hoy" todavía vacío) no hay nada que mostrar.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(hoy)) return [];
   const limite = sumarDias(hoy, dias);
   return excepciones
     .filter((e) => {

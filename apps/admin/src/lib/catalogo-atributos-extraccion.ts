@@ -19,6 +19,13 @@
  *   el primero. Los amperes (100A, 10kA) nunca son tensión ni potencia.
  * - `zocalo`: E10/E12/E14/E27/E40, GU10, GU5.3, MR11/MR16, G4/G9/G13/G24, GX53, R7S.
  *
+ * Claves ampliadas (migración 0053): corriente_a, polos, seccion_mm2, medidas_mm, color,
+ * poder_corte_ka, curva, sensibilidad_ma, largo_m, montaje, angulo_grados. Se leen en un pipeline
+ * CON CONSUMO (cada regla borra lo que leyó para que la siguiente no lo reinterprete: "10kA" no es
+ * corriente, "3X1.5MM2" no son medidas). Ante la duda no devuelven nada; dos valores distintos de
+ * la misma clave en el nombre = ninguno. Los vocabularios cerrados (color, montaje, curva) viven
+ * acá, en código, no en el CHECK de la base: ampliarlos no necesita migración.
+ *
  * Módulo puro (sin DB): lo usan la sync de Alegra, el backfill y la normalización de lo que lee el
  * PDF o carga el panel (`normalizarAtributos`).
  */
@@ -31,11 +38,43 @@ export const CLAVES_ATRIBUTO = [
   "flujo_lm",
   "tension_v",
   "zocalo",
+  "corriente_a",
+  "polos",
+  "seccion_mm2",
+  "medidas_mm",
+  "color",
+  "poder_corte_ka",
+  "curva",
+  "sensibilidad_ma",
+  "largo_m",
+  "montaje",
+  "angulo_grados",
 ] as const
 export type ClaveAtributo = (typeof CLAVES_ATRIBUTO)[number]
 
 export const TONOS = ["calido", "neutro", "frio"] as const
 export type Tono = (typeof TONOS)[number]
+
+export const COLORES = [
+  "blanco",
+  "negro",
+  "gris",
+  "rojo",
+  "azul",
+  "verde",
+  "amarillo",
+  "marron",
+  "naranja",
+  "transparente",
+  "plateado",
+  "dorado",
+] as const
+export type Color = (typeof COLORES)[number]
+
+export const MONTAJES = ["embutir", "aplicar", "colgante", "riel", "din"] as const
+export type Montaje = (typeof MONTAJES)[number]
+
+export const CURVAS = ["b", "c", "d"] as const
 
 export interface AtributoExtraido {
   clave: ClaveAtributo
@@ -43,16 +82,53 @@ export interface AtributoExtraido {
   valorTexto: string | null
 }
 
-/** Etiquetas para el admin (el Shop tiene las suyas). */
-export const ETIQUETA_ATRIBUTO: Record<ClaveAtributo, string> = {
-  potencia_w: "Potencia (W)",
-  temperatura_k: "Temperatura de color (K)",
-  tono: "Tono de luz",
-  ip: "Protección IP",
-  flujo_lm: "Flujo luminoso (lm)",
-  tension_v: "Tensión (V)",
-  zocalo: "Zócalo",
+/**
+ * Registro único de claves: tipo de almacenamiento (`num` ⇒ valor_num, `texto` ⇒ valor_texto),
+ * etiqueta del admin, rango válido de las numéricas y pista del panel. Record exhaustivo: una clave
+ * nueva en `CLAVES_ATRIBUTO` sin definición no compila. El rango vive en código, no en el CHECK.
+ */
+export interface DefinicionAtributo {
+  tipo: "num" | "texto"
+  etiqueta: string
+  rango?: [number, number]
+  /** Si es true, un valor no entero se DESCARTA (no se redondea). */
+  entero?: boolean
+  pista: string
 }
+
+export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
+  potencia_w: { tipo: "num", etiqueta: "Potencia (W)", rango: [0.1, 100_000], pista: "50" },
+  temperatura_k: { tipo: "num", etiqueta: "Temperatura de color (K)", rango: [1800, 10000], pista: "3000" },
+  tono: { tipo: "texto", etiqueta: "Tono de luz", pista: "calido, neutro o frio" },
+  ip: { tipo: "num", etiqueta: "Protección IP", rango: [0, 69], pista: "65" },
+  flujo_lm: { tipo: "num", etiqueta: "Flujo luminoso (lm)", rango: [1, 1_000_000], pista: "1200" },
+  tension_v: { tipo: "num", etiqueta: "Tensión (V)", rango: [1, 1000], pista: "220 o 85-265" },
+  zocalo: { tipo: "texto", etiqueta: "Zócalo", pista: "E27, GU10…" },
+  corriente_a: { tipo: "num", etiqueta: "Corriente (A)", rango: [0.1, 6300], pista: "25" },
+  polos: { tipo: "num", etiqueta: "Polos", rango: [1, 4], entero: true, pista: "1 a 4" },
+  seccion_mm2: { tipo: "num", etiqueta: "Sección (mm²)", rango: [0.5, 1000], pista: "2,5" },
+  medidas_mm: { tipo: "texto", etiqueta: "Medidas (mm)", pista: "AxB o AxBxC, p. ej. 300x400" },
+  color: { tipo: "texto", etiqueta: "Color", pista: COLORES.join(", ") },
+  poder_corte_ka: { tipo: "num", etiqueta: "Poder de corte (kA)", rango: [1, 100], pista: "6" },
+  curva: { tipo: "texto", etiqueta: "Curva de disparo", pista: "B, C o D" },
+  sensibilidad_ma: { tipo: "num", etiqueta: "Sensibilidad (mA)", rango: [5, 1000], pista: "30" },
+  largo_m: { tipo: "num", etiqueta: "Largo (m)", rango: [0.1, 1000], pista: "100" },
+  montaje: { tipo: "texto", etiqueta: "Montaje", pista: MONTAJES.join(", ") },
+  angulo_grados: { tipo: "num", etiqueta: "Ángulo (°)", rango: [1, 360], entero: true, pista: "60" },
+}
+
+/** Etiquetas para el admin (el Shop tiene las suyas). Derivado de `DEFINICION_ATRIBUTOS`. */
+export const ETIQUETA_ATRIBUTO = Object.fromEntries(
+  CLAVES_ATRIBUTO.map((c) => [c, DEFINICION_ATRIBUTOS[c].etiqueta]),
+) as Record<ClaveAtributo, string>
+
+/** Rangos válidos de las numéricas (lo que sale de ahí se descarta). Derivado de `DEFINICION_ATRIBUTOS`. */
+export const RANGO: Partial<Record<ClaveAtributo, [number, number]>> = Object.fromEntries(
+  CLAVES_ATRIBUTO.flatMap((c) => {
+    const r = DEFINICION_ATRIBUTOS[c].rango
+    return r ? [[c, r]] : []
+  }),
+)
 
 /** Minúsculas y sin tildes. */
 function normalizar(s: string): string {
@@ -135,6 +211,287 @@ function zocalo(t: string): string | null {
   return m ? m[1].replace(/[ -]/g, "").replace(",", ".") : null
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Claves ampliadas (0053). Una sola implementación de las palabras para el nombre y para la
+// entrada externa (PDF / panel).
+// ---------------------------------------------------------------------------------------------
+
+const COLOR_PALABRAS: Record<Color, string> = {
+  blanco: "blanc[oa]s?|bco",
+  negro: "negr[oa]s?",
+  gris: "gris(?:es)?",
+  rojo: "roj[oa]s?",
+  azul: "azul(?:es)?",
+  verde: "verdes?",
+  amarillo: "amarill[oa]s?",
+  marron: "marron(?:es)?",
+  naranja: "naranjas?",
+  transparente: "transparentes?",
+  plateado: "platead[oa]s?",
+  dorado: "dorad[oa]s?",
+}
+
+const MONTAJE_PALABRAS: Record<Montaje, string> = {
+  embutir: "embut(?:ir|ido|ida|e|ible)|empotr(?:ar|ado|ada|able)",
+  aplicar: "aplicar|aplicad[oa]|sobrepon(?:er|ible)|sobrepuest[oa]",
+  colgante: "colgante|pendular|pendant|suspendid[oa]",
+  // "riel din" se evalúa (y consume) antes que "riel".
+  din: "riel din|din rail|montaje din",
+  riel: "riel|carril|track",
+}
+
+/** Frases de tono que contienen un color: "LUZ BLANCA", "BLANCO FRIO" son tono, no color. */
+const RE_FRASE_TONO = new RegExp(
+  `${INI}(?:luz (?:blanc[oa]s?|calid[oa]s?|fri[oa]s?|neutr[oa]s?|(?:de )?dia)|(?:blanc[oa]s?|bco) (?:calid|fri|neutr)[oa]s?|(?:calid|fri|neutr)[oa]s? (?:blanc[oa]s?|bco))${FIN}`,
+  "g",
+)
+
+const unicaCoincidencia = (palabras: Record<string, string>, t: string): string | null => {
+  const hallados = Object.entries(palabras).filter(([, src]) => new RegExp(`${INI}(?:${src})${FIN}`).test(t))
+  return hallados.length === 1 ? hallados[0][0] : null
+}
+
+/** Texto libre → color del vocabulario (null si no es exactamente uno de sus sinónimos). */
+export function colorValido(v: unknown): Color | null {
+  if (typeof v !== "string") return null
+  const t = normalizar(v.trim())
+  for (const c of COLORES) if (new RegExp(`^(?:${COLOR_PALABRAS[c]})$`).test(t)) return c
+  return null
+}
+
+/** Texto libre → montaje del vocabulario ("de aplicar", "riel din"…). */
+export function montajeValido(v: unknown): Montaje | null {
+  if (typeof v !== "string") return null
+  const t = normalizar(v.trim()).replace(/^(?:de|para|a)\s+/, "")
+  if (t === "din") return "din"
+  for (const m of MONTAJES) if (new RegExp(`^(?:${MONTAJE_PALABRAS[m]})$`).test(t)) return m
+  return null
+}
+
+/** "b" | "C" | "curva c" → "b" | "c" | "d". */
+export function curvaValida(v: unknown): (typeof CURVAS)[number] | null {
+  if (typeof v !== "string") return null
+  const m = /^(?:curva )?([bcd])$/.exec(normalizar(v.trim()))
+  return m ? (m[1] as (typeof CURVAS)[number]) : null
+}
+
+const DIM = "\\d{1,4}(?:[.,]\\d+)?"
+const MAX_DIM_MM = 20_000
+/** Un número de medida sin ceros de más ("300.0" → "300", "2,50" → "2.5"). */
+const fmtDim = (n: number) => String(Math.round(n * 100) / 100)
+
+/**
+ * "AxB" / "AxBxC" (separador x, × o *; unidad mm o cm opcional) → "AxB[xC]" en mm, o null.
+ * Para texto que llega de afuera (PDF / panel): el operador o el modelo ya dicen que son medidas, así
+ * que no aplica la heurística del nombre (que desconfía de dimensiones sin unidad).
+ */
+export function medidasValidas(v: unknown): string | null {
+  if (typeof v !== "string") return null
+  const m = new RegExp(`^\\s*(${DIM}(?:\\s*[x×*]\\s*${DIM}){1,2})\\s*(mm|cm)?\\s*$`).exec(normalizar(v))
+  if (!m) return null
+  const factor = m[2] === "cm" ? 10 : 1
+  const dims = m[1].split(/\s*[x×*]\s*/).map((d) => numero(d) * factor)
+  if (dims.some((d) => !(d > 0) || d > MAX_DIM_MM)) return null
+  return dims.map(fmtDim).join("x")
+}
+
+interface Consumo {
+  hallados: RegExpExecArray[]
+  resto: string
+}
+
+/**
+ * Busca todas las coincidencias de `re` (el grupo 1 es el borde izquierdo, que se conserva), las
+ * BORRA del texto (las cambia por un espacio) y devuelve el resto. `aceptar` puede rechazar una
+ * coincidencia: no se consume y no se cuenta.
+ */
+function consumir(resto: string, re: RegExp, aceptar: (m: RegExpExecArray) => boolean = () => true): Consumo {
+  const g = new RegExp(re.source, "g")
+  const hallados: RegExpExecArray[] = []
+  let out = ""
+  let ult = 0
+  for (let m = g.exec(resto); m; m = g.exec(resto)) {
+    if (m[0] === "") {
+      g.lastIndex++
+      continue
+    }
+    if (!aceptar(m)) continue
+    hallados.push(m)
+    out += `${resto.slice(ult, m.index)}${m[1]} `
+    ult = m.index + m[0].length
+  }
+  return { hallados, resto: out + resto.slice(ult) }
+}
+
+/** El único valor distinto de la lista, o null si no hay o hay más de uno (ante la duda, nada). */
+function unico<T>(xs: T[]): T | null {
+  return xs.length > 0 && xs.every((x) => x === xs[0]) ? xs[0] : null
+}
+
+/** Borde izquierdo CAPTURADO (para `consumir`). */
+const INIC = "(^|[^0-9a-z.,])"
+const NUM = "\\d{1,4}(?:[.,]\\d+)?"
+
+const RE_SECCION = new RegExp(`${INIC}(?:\\d+ ?x ?)?(${NUM}) ?(?:mm2|mm²)${FIN}`)
+const RE_MEDIDAS = new RegExp(`${INIC}(${DIM}(?: ?[x×] ?${DIM}){1,2})(?: ?(mm|cm))?${FIN}`)
+const RE_KA = new RegExp(`${INIC}(${NUM}) ?ka${FIN}`)
+const RE_MA = new RegExp(`${INIC}(\\d{1,4}) ?ma${FIN}`)
+const RE_NXA = new RegExp(`${INIC}([1-4])x(${NUM}) ?(?:a|amps?)${FIN}`)
+const RE_CURVA_EXPLICITA = new RegExp(`${INIC}curva ?([a-z])${FIN}`)
+const RE_CURVA_COMBINADA = new RegExp(`${INIC}([bcd]) ?-?(\\d{1,3})(?: ?a)?${FIN}`)
+const RE_POLOS = new RegExp(`${INIC}([1-4]) ?p${FIN}(?! ?\\+)`)
+const RE_POLOS_PALABRA = new RegExp(`${INIC}(uni|bi|tri|tetra)polar(?:es)?${FIN}`)
+// "5A" / "5 A" / "5 amperes"; "1 A 10V" (rango) no: una "a" suelta seguida de otro número no es unidad.
+// Un número pegado a otro por "-" o "/" es un rango ("13-18A") o una relación ("1200/5A"), no una corriente.
+const RE_CORRIENTE = new RegExp(`${INIC}(?<![0-9][-/])(${NUM})(?: ?(?:amperes?|amperios?|amps?)| a(?! ?\\d)|a)${FIN}`)
+// "25M" dentro de un código de modelo ("NCH8-25M/20", "GUIR-10MT-E27") no es un largo: sin "-" o "/" pegado.
+const RE_LARGO = new RegExp(`(^|[^0-9a-z.,/-])(${NUM}) ?(?:metros?|mts?|m)${FIN}(?![-/][0-9a-z])`)
+const RE_ANGULO = new RegExp(`${INIC}(\\d{1,3}) ?(?:°|º|grados?|deg)${FIN}`)
+
+/** Corrientes nominales normalizadas (serie IEC) que aceptamos tras una letra de curva ("C16"). */
+const SERIE_IEC = new Set([1, 2, 3, 4, 6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125])
+const CONTEXTO_PROTECCION = /termomagnetic|termica|llave|interruptor|disyuntor|automatico|breaker|mcb|\bdin\b|curva|icn/
+const SENSIBILIDAD_CONTEXTO = /diferencial|disyuntor|rcd|\bdif\b|sensibilidad/
+/** Telecom / cableado de datos: "4P" son pares y "CAT 6A" no son amperes. */
+const CONTEXTO_TELECOM = /(?:^|[^a-z0-9])(?:utp|ftp|sftp|rj ?\d+|cat ?[5-8]|coaxil|hdmi|usb|par(?:es)?(?![a-z]))/
+
+const POLOS_DE_PALABRA: Record<string, number> = { uni: 1, bi: 2, tri: 3, tetra: 4 }
+
+/** Dimensiones de una coincidencia de `RE_MEDIDAS` → "AxB[xC]" en mm, o null si la heurística duda. */
+function medidasDeNombre(m: RegExpExecArray): string | null {
+  const crudas = m[2].split(/ ?[x×] ?/)
+  const unidad = m[3]
+  const factor = unidad === "cm" ? 10 : 1
+  const dims = crudas.map((d) => numero(d) * factor)
+  if (dims.some((d) => !(d > 0) || d > MAX_DIM_MM)) return null
+  const entera = (d: string) => /^\d+$/.test(d)
+  if (unidad === "mm") {
+    // "4x2,5 mm" / "3x16 mm": conductores x sección (cable), no medidas.
+    const [primera, ...otras] = crudas
+    if (entera(primera) && Number(primera) <= 4 && (crudas.length === 2 || otras.some((d) => !entera(d)))) return null
+  } else if (!unidad) {
+    // Sin unidad es ambiguo (cm o mm): sólo 3 dimensiones enteras de 2-4 cifras, o 2 enteras >= 100.
+    const tres = crudas.length === 3 && crudas.every((d) => /^\d{2,4}$/.test(d))
+    const dos = crudas.length === 2 && crudas.every((d) => entera(d) && Number(d) >= 100)
+    if (!tres && !dos) return null
+  }
+  return dims.map(fmtDim).join("x")
+}
+
+/**
+ * Las once claves de la migración 0053 a partir del nombre ya normalizado. Corre DESPUÉS de las siete
+ * originales, que no cambian. Orden de las reglas = orden de consumo.
+ */
+function extraerAmpliadas(t: string): AtributoExtraido[] {
+  const out: AtributoExtraido[] = []
+  const num = (clave: ClaveAtributo, v: number | null) => {
+    const r = DEFINICION_ATRIBUTOS[clave].rango
+    if (v == null || !Number.isFinite(v)) return
+    if (r && (v < r[0] || v > r[1])) return
+    if (DEFINICION_ATRIBUTOS[clave].entero && !Number.isInteger(v)) return
+    out.push({ clave, valorNum: v, valorTexto: null })
+  }
+  const texto = (clave: ClaveAtributo, v: string | null) => {
+    if (v) out.push({ clave, valorNum: null, valorTexto: v })
+  }
+  let resto = t
+
+  // 1. seccion_mm2: la sección, nunca la cantidad de conductores ("3X1.5MM2" → 1.5).
+  let c = consumir(resto, RE_SECCION)
+  resto = c.resto
+  num("seccion_mm2", unico(c.hallados.map((m) => numero(m[2]))))
+
+  // 2. medidas_mm
+  const medidas: string[] = []
+  c = consumir(resto, RE_MEDIDAS, (m) => {
+    const v = medidasDeNombre(m)
+    if (v) medidas.push(v)
+    return v != null
+  })
+  resto = c.resto
+  texto("medidas_mm", unico(medidas))
+
+  // 3. poder_corte_ka (consume "10kA": no es tensión ni corriente)
+  c = consumir(resto, RE_KA)
+  resto = c.resto
+  num("poder_corte_ka", unico(c.hallados.map((m) => numero(m[2]))))
+
+  // 4. sensibilidad_ma: sólo con contexto de diferencial ("4-20mA" es una señal, no sensibilidad)
+  if (SENSIBILIDAD_CONTEXTO.test(t)) {
+    c = consumir(resto, RE_MA)
+    resto = c.resto
+    num("sensibilidad_ma", unico(c.hallados.map((m) => Number(m[2]))))
+  }
+
+  const polos: number[] = []
+  const corriente: number[] = []
+
+  // 5. NxNA: "2X25A" = 2 polos de 25 A ("2X36W" no: termina en W)
+  c = consumir(resto, RE_NXA)
+  resto = c.resto
+  for (const m of c.hallados) {
+    polos.push(Number(m[2]))
+    corriente.push(numero(m[3]))
+  }
+
+  // 6. curva (explícita y combinada "C16", que aporta la corriente)
+  const curvas: string[] = []
+  c = consumir(resto, RE_CURVA_EXPLICITA)
+  resto = c.resto
+  for (const m of c.hallados) if ((CURVAS as readonly string[]).includes(m[2])) curvas.push(m[2])
+  c = consumir(resto, RE_CURVA_COMBINADA, (m) => SERIE_IEC.has(Number(m[3])) && CONTEXTO_PROTECCION.test(t))
+  resto = c.resto
+  for (const m of c.hallados) {
+    curvas.push(m[2])
+    corriente.push(Number(m[3]))
+  }
+  texto("curva", unico(curvas))
+
+  // 7. polos: "3P" y las palabras (monofásico/trifásico NO son polos)
+  c = consumir(resto, RE_POLOS)
+  resto = c.resto
+  for (const m of c.hallados) polos.push(Number(m[2]))
+  c = consumir(resto, RE_POLOS_PALABRA)
+  resto = c.resto
+  for (const m of c.hallados) polos.push(POLOS_DE_PALABRA[m[2]])
+
+  // 8. corriente_a
+  c = consumir(resto, RE_CORRIENTE)
+  resto = c.resto
+  for (const m of c.hallados) corriente.push(numero(m[2]))
+
+  if (!CONTEXTO_TELECOM.test(t)) {
+    num("polos", unico(polos))
+    num("corriente_a", unico(corriente))
+  }
+
+  // 9. largo_m
+  c = consumir(resto, RE_LARGO)
+  resto = c.resto
+  num("largo_m", unico(c.hallados.map((m) => numero(m[2]))))
+
+  // 10. angulo_grados
+  c = consumir(resto, RE_ANGULO)
+  resto = c.resto
+  num("angulo_grados", unico(c.hallados.map((m) => Number(m[2]))))
+
+  // 11. color: antes se borran las frases de tono ("LUZ BLANCA", "BLANCO FRIO")
+  texto("color", unicaCoincidencia(COLOR_PALABRAS, resto.replace(RE_FRASE_TONO, " ")))
+
+  // 12. montaje: "riel din" antes que "riel", y lo consume
+  const montajes: string[] = []
+  c = consumir(resto, new RegExp(`${INIC}(?:${MONTAJE_PALABRAS.din})${FIN}`))
+  resto = c.resto
+  if (c.hallados.length > 0) montajes.push("din")
+  for (const m of ["embutir", "aplicar", "colgante", "riel"] as const) {
+    if (new RegExp(`${INI}(?:${MONTAJE_PALABRAS[m]})${FIN}`).test(resto)) montajes.push(m)
+  }
+  texto("montaje", unico(montajes))
+
+  return out
+}
+
 /**
  * Atributos que se leen del nombre (+ descripción). A lo sumo uno por clave, en el orden de
  * `CLAVES_ATRIBUTO`. Nunca tira.
@@ -165,17 +522,10 @@ export function extraerAtributosDeNombre(nombre: string, descripcion?: string | 
   const z = zocalo(t)
   if (z) out.push({ clave: "zocalo", valorNum: null, valorTexto: z })
 
+  out.push(...extraerAmpliadas(t))
+
   const orden = (c: ClaveAtributo) => CLAVES_ATRIBUTO.indexOf(c)
   return out.sort((a, b) => orden(a.clave) - orden(b.clave))
-}
-
-/** Rangos válidos de las numéricas (lo que sale de ahí se descarta). */
-const RANGO: Partial<Record<ClaveAtributo, [number, number]>> = {
-  potencia_w: [0.1, 100_000],
-  temperatura_k: [1800, 10000],
-  ip: [0, 69],
-  flujo_lm: [1, 1_000_000],
-  tension_v: [1, 1000],
 }
 
 function comoNumero(v: unknown): number | null {
@@ -185,9 +535,11 @@ function comoNumero(v: unknown): number | null {
 }
 
 function enRango(clave: ClaveAtributo, n: number | null): number | null {
-  const r = RANGO[clave]
-  if (n == null || !r) return n
-  return n >= r[0] && n <= r[1] ? n : null
+  if (n == null) return null
+  const { rango, entero } = DEFINICION_ATRIBUTOS[clave]
+  if (entero && !Number.isInteger(n)) return null
+  if (!rango) return n
+  return n >= rango[0] && n <= rango[1] ? n : null
 }
 
 function tonoValido(v: unknown): Tono | null {
@@ -217,6 +569,18 @@ export function normalizarAtributos(entrada: unknown): AtributoExtraido[] {
     } else if (clave === "zocalo") {
       const z = typeof v === "string" ? zocalo(normalizar(` ${v.trim()} `)) : null
       if (z) out.push({ clave, valorNum: null, valorTexto: z })
+    } else if (clave === "color") {
+      const col = colorValido(v)
+      if (col) out.push({ clave, valorNum: null, valorTexto: col })
+    } else if (clave === "montaje") {
+      const mo = montajeValido(v)
+      if (mo) out.push({ clave, valorNum: null, valorTexto: mo })
+    } else if (clave === "curva") {
+      const cu = curvaValida(v)
+      if (cu) out.push({ clave, valorNum: null, valorTexto: cu })
+    } else if (clave === "medidas_mm") {
+      const me = medidasValidas(v)
+      if (me) out.push({ clave, valorNum: null, valorTexto: me })
     } else if (clave === "tension_v") {
       const rango = typeof v === "string" ? /^\s*(\d{1,3})\s*([-/])\s*(\d{1,3})\s*$/.exec(v) : null
       if (rango) {

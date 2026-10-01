@@ -15,7 +15,7 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
 import { seedTenant, truncateAll } from "./helpers"
 
 /**
- * Migración 0048 (catálogo asistido fase 2, subproyecto 5): `catalog_atributos` con la
+ * Migración 0049 (catálogo asistido fase 2, subproyecto 5): `catalog_atributos` con la
  * precedencia manual > pdf > nombre aplicada por el upsert, los CHECK de clave/fuente y el GRANT
  * por columna a `shop_app` (mismo patrón que catalog-products-shop-grants: crea el rol NOLOGIN si
  * no existe, corre el bloque DO $$ leído del .sql y verifica como shop_app). Datos inventados.
@@ -27,7 +27,7 @@ const MIGRACION = fileURLToPath(new URL("../../drizzle/0049_catalog_atributos.sq
 function bloqueDeGrants(): string {
   const partes = readFileSync(MIGRACION, "utf8").split("--> statement-breakpoint")
   const bloque = partes[partes.length - 1]
-  if (!/DO \$\$/.test(bloque)) throw new Error("0048: no encontré el bloque DO $$ de los GRANTs")
+  if (!/DO \$\$/.test(bloque)) throw new Error("0049: no encontré el bloque DO $$ de los GRANTs")
   return bloque
 }
 
@@ -70,6 +70,23 @@ describe("catalog_atributos: precedencia", () => {
     expect(await reemplazarAtributosDeNombre(A, p)).toEqual({ escritas: 0, borradas: 0 })
   })
 
+  it("claves ampliadas: manual de 'polos' no lo pisa el nombre; cambiar el nombre borra las 'nombre' que ya no salen", async () => {
+    await reemplazarAtributosDeNombre(A, [{ alegraId: "5", name: "TERMICA 2X25A 6KA", description: null }])
+    expect(await mapa("5")).toEqual({
+      corriente_a: [25, "nombre"],
+      polos: [2, "nombre"],
+      poder_corte_ka: [6, "nombre"],
+    })
+
+    await guardarAtributosManual(A, "5", [{ clave: "polos", valorNum: 3, valorTexto: null }], [])
+    await reemplazarAtributosDeNombre(A, [{ alegraId: "5", name: "TERMICA 2X25A 6KA", description: null }])
+    expect((await mapa("5")).polos).toEqual([3, "manual"])
+
+    // El nombre cambia: las filas 'nombre' que ya no salen se borran; la manual de polos se conserva.
+    await reemplazarAtributosDeNombre(A, [{ alegraId: "5", name: "TERMICA", description: null }])
+    expect(await mapa("5")).toEqual({ polos: [3, "manual"] })
+  })
+
   it("el hook de la sync no tira aunque falle la base", async () => {
     await getDb().execute(dsql`ALTER TABLE catalog_atributos RENAME TO catalog_atributos_x`)
     try {
@@ -81,11 +98,56 @@ describe("catalog_atributos: precedencia", () => {
 
   it("CHECK de clave y fuente", async () => {
     await expect(
-      getDb().execute(dsql`INSERT INTO catalog_atributos (tenant_id, alegra_id, clave, valor_num, fuente) VALUES (${A}, '5', 'color', 1, 'nombre')`),
+      getDb().execute(dsql`INSERT INTO catalog_atributos (tenant_id, alegra_id, clave, valor_num, fuente) VALUES (${A}, '5', 'inventada', 1, 'nombre')`),
     ).rejects.toThrow()
     await expect(
       getDb().execute(dsql`INSERT INTO catalog_atributos (tenant_id, alegra_id, clave, valor_num, fuente) VALUES (${A}, '5', 'ip', 65, 'ia')`),
     ).rejects.toThrow()
+  })
+})
+
+describe("catalog_atributos: CHECK de clave ampliado (0053)", () => {
+  const fixture = JSON.parse(
+    readFileSync(fileURLToPath(new URL("../../../clientes/src/db/__fixtures__/atributos-claves.json", import.meta.url)), "utf8"),
+  ) as { claves: string[]; tipos: Record<string, "num" | "texto"> }
+  const NUEVAS = fixture.claves.slice(7)
+
+  it("la base migrada admite exactamente las 18 claves del fixture", async () => {
+    const filas = await getDb().execute<{ def: string }>(
+      dsql`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'catalog_atributos_clave_check' AND conrelid = 'public.catalog_atributos'::regclass`,
+    )
+    const claves = [...String(filas[0].def).matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1])
+    expect(new Set(claves)).toEqual(new Set(fixture.claves))
+    expect(claves).toHaveLength(18)
+  })
+
+  it("acepta una fila por cada una de las 11 claves nuevas", async () => {
+    expect(NUEVAS).toHaveLength(11)
+    for (const clave of NUEVAS) {
+      const num = fixture.tipos[clave] === "num"
+      await getDb().execute(
+        dsql`INSERT INTO catalog_atributos (tenant_id, alegra_id, clave, valor_num, valor_texto, fuente) VALUES (${A}, '9', ${clave}, ${num ? 1 : null}, ${num ? null : "x"}, 'manual')`,
+      )
+    }
+    expect((await leerAtributos(A, "9")).map((a) => a.clave).sort()).toEqual([...NUEVAS].sort())
+  })
+
+  it("rechaza claves fuera del vocabulario", async () => {
+    for (const clave of ["material", "rgb", "modulos", "diametro_mm"]) {
+      await expect(
+        getDb().execute(dsql`INSERT INTO catalog_atributos (tenant_id, alegra_id, clave, valor_num, fuente) VALUES (${A}, '9', ${clave}, 1, 'manual')`),
+      ).rejects.toThrow()
+    }
+  })
+
+  it("las 7 claves previas siguen válidas", async () => {
+    for (const clave of fixture.claves.slice(0, 7)) {
+      const num = fixture.tipos[clave] === "num"
+      await getDb().execute(
+        dsql`INSERT INTO catalog_atributos (tenant_id, alegra_id, clave, valor_num, valor_texto, fuente) VALUES (${A}, '8', ${clave}, ${num ? 1 : null}, ${num ? null : "x"}, 'manual')`,
+      )
+    }
+    expect(await leerAtributos(A, "8")).toHaveLength(7)
   })
 })
 

@@ -7,11 +7,11 @@
  * y sumarla sólo para esto no se justifica. SOLO servidor: usa `ANTHROPIC_API_KEY`.
  *
  * Salida CERRADA: el modelo está obligado a llamar a una herramienta cuyo esquema tiene exactamente
- * las siete claves de `CLAVES_ATRIBUTO` (cada una número/texto o null). Aun así la respuesta se
+ * las dieciocho claves de `CLAVES_ATRIBUTO` (cada una número/texto o null). Aun así la respuesta se
  * valida del lado nuestro (`normalizarAtributos`): claves desconocidas, rangos imposibles y basura
  * se descartan. Lo que el PDF no dice queda afuera (null ⇒ no se escribe).
  */
-import { normalizarAtributos, type AtributoExtraido } from "./catalogo-atributos-extraccion"
+import { CLAVES_ATRIBUTO, DEFINICION_ATRIBUTOS, normalizarAtributos, type AtributoExtraido, type ClaveAtributo } from "./catalogo-atributos-extraccion"
 
 export const MODELO_FICHA = "claude-haiku-4-5"
 const URL_API = "https://api.anthropic.com/v1/messages"
@@ -24,16 +24,48 @@ export const PRECIO_HAIKU_POR_MTOK = { entrada: 1, salida: 5 } as const
 /**
  * Heurística para estimar sin leer los PDFs: tokens por página de una ficha (texto + imagen de la
  * página, que es como la API procesa un PDF) y tokens de salida por lectura (una llamada a la
- * herramienta con siete campos). Conservadora: sobreestima.
+ * herramienta con dieciocho campos). Conservadora: sobreestima.
  */
 export const TOKENS_POR_PAGINA = 3000
 export const TOKENS_SALIDA_POR_FICHA = 300
-const TOKENS_PROMPT = 600
+/** Prompt de sistema + definición de la herramienta (18 claves con su descripción). */
+const TOKENS_PROMPT = 1600
 
-const numeroONull = (descripcion: string) => ({ type: ["number", "null"], description: descripcion })
-const textoONull = (descripcion: string) => ({ type: ["string", "null"], description: descripcion })
+/** Texto que lee el modelo para cada clave (una línea por clave; vive acá y no en el módulo del panel). */
+export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
+  potencia_w: "Potencia nominal en watts (número). Si hay varias variantes, null.",
+  temperatura_k: "Temperatura de color en kelvin (número, p. ej. 3000). Si es regulable o hay varias, null.",
+  tono: 'Tono de luz: "calido", "neutro" o "frio". null si no aplica o no se indica.',
+  ip: "Grado de protección IP como número de dos cifras (IP65 → 65). null si no se indica.",
+  flujo_lm: "Flujo luminoso en lúmenes (número).",
+  tension_v: 'Tensión de alimentación: un número ("220") o un rango ("85-265"). null si no se indica.',
+  zocalo: 'Zócalo o base de la lámpara ("E27", "GU10", "G9"…). null si no tiene.',
+  corriente_a: "Corriente nominal en amperes (número). No poner sensibilidad en mA ni poder de corte en kA.",
+  polos: "Cantidad de polos, entero de 1 a 4.",
+  seccion_mm2: "Sección del conductor en mm2 (número), no la cantidad de conductores.",
+  medidas_mm: 'Dimensiones externas en mm como "AxB" o "AxBxC" (p. ej. "300x1200"); null si no hay.',
+  color:
+    "Color del producto: blanco, negro, gris, rojo, azul, verde, amarillo, marron, naranja, transparente, plateado o dorado. La luz blanca/cálida/fría NO es color.",
+  poder_corte_ka: "Poder de corte en kA (número).",
+  curva: 'Curva de disparo: "B", "C" o "D".',
+  sensibilidad_ma: "Sensibilidad diferencial en mA (número), p. ej. 30.",
+  largo_m: "Largo en metros (número) de cable, rollo, tira o tubo.",
+  montaje: 'Tipo de montaje: "embutir", "aplicar", "colgante", "riel" o "din".',
+  angulo_grados: "Ángulo de apertura o haz en grados (número).",
+}
 
-/** Esquema cerrado de la salida: las mismas claves que `catalog_atributos`. */
+/**
+ * Tipo JSON de cada campo en la herramienta: el de `DEFINICION_ATRIBUTOS`, salvo la tensión, que el
+ * modelo puede devolver como rango de texto ("85-265").
+ */
+const tipoDeCampo = (c: ClaveAtributo) => (DEFINICION_ATRIBUTOS[c].tipo === "num" && c !== "tension_v" ? "number" : "string")
+
+/** Propiedades del esquema, armadas desde `CLAVES_ATRIBUTO`: nunca queda desfasado de la base. */
+const PROPIEDADES = Object.fromEntries(
+  CLAVES_ATRIBUTO.map((c) => [c, { type: [tipoDeCampo(c), "null"] as [string, "null"], description: DESCRIPCION_PDF[c] }]),
+) as Record<ClaveAtributo, { type: [string, "null"]; description: string }>
+
+/** Esquema cerrado de la salida: las mismas claves que `catalog_atributos`, todas requeridas (o null). */
 export const HERRAMIENTA_ATRIBUTOS = {
   name: NOMBRE_HERRAMIENTA,
   description:
@@ -41,16 +73,8 @@ export const HERRAMIENTA_ATRIBUTOS = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["potencia_w", "temperatura_k", "tono", "ip", "flujo_lm", "tension_v", "zocalo"],
-    properties: {
-      potencia_w: numeroONull("Potencia nominal en watts (número). Si hay varias variantes, null."),
-      temperatura_k: numeroONull("Temperatura de color en kelvin (número, p. ej. 3000). Si es regulable o hay varias, null."),
-      tono: textoONull('Tono de luz: "calido", "neutro" o "frio". null si no aplica o no se indica.'),
-      ip: numeroONull("Grado de protección IP como número de dos cifras (IP65 → 65). null si no se indica."),
-      flujo_lm: numeroONull("Flujo luminoso en lúmenes (número)."),
-      tension_v: textoONull('Tensión de alimentación: un número ("220") o un rango ("85-265"). null si no se indica.'),
-      zocalo: textoONull('Zócalo o base de la lámpara ("E27", "GU10", "G9"…). null si no tiene.'),
-    },
+    required: [...CLAVES_ATRIBUTO] as ClaveAtributo[],
+    properties: PROPIEDADES,
   },
 } as const
 

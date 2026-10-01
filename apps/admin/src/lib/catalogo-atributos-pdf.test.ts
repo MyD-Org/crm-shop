@@ -100,8 +100,29 @@ describe("leerFichaPdf (fetch simulado)", () => {
 describe("estimarCostoLote", () => {
   it("1.300 fichas de 2 páginas en Haiku 4.5 ($1 / $5 por MTok): pocos dólares", () => {
     const e = estimarCostoLote(1300, 2)
-    expect(e.tokensEntrada).toBe(1300 * (2 * 3000 + 600))
+    expect(e.tokensEntrada).toBe(1300 * (2 * 3000 + 1600))
     expect(e.tokensSalida).toBe(1300 * 300)
-    expect(e.usd).toBeCloseTo(8.58 + 1.95, 2)
+    expect(e.usd).toBeCloseTo(9.88 + 1.95, 2)
+  })
+})
+
+describe("lectura de PDF con las claves ampliadas", () => {
+  it("curva E se descarta y polos 2 se guarda; color null no deja fila", () => {
+    const r = interpretarRespuesta(respuestaOk({ polos: 2, curva: "E", color: null, corriente_a: 25, medidas_mm: "100x100x50", montaje: "volador" }))
+    expect(r.atributos).toEqual([
+      { clave: "corriente_a", valorNum: 25, valorTexto: null },
+      { clave: "polos", valorNum: 2, valorTexto: null },
+      { clave: "medidas_mm", valorNum: null, valorTexto: "100x100x50" },
+    ])
+  })
+
+  it("las descripciones del esquema vienen de DESCRIPCION_PDF (una por clave, sin vacías)", () => {
+    const props = HERRAMIENTA_ATRIBUTOS.input_schema.properties as Record<string, { description: string }>
+    for (const c of CLAVES_ATRIBUTO) expect(props[c].description.length).toBeGreaterThan(10)
+  })
+
+  it("el prompt sigue pidiendo no inferir", () => {
+    const p = pedidoLecturaFicha(PDF, "X")
+    expect(p.system).toMatch(/No infieras/)
   })
 })

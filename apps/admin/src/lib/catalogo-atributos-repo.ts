@@ -85,6 +85,13 @@ export async function upsertAtributos(tenantId: string, filas: FilaAtributo[], f
   return escritas
 }
 
+/** Cuántas filas hay por cada una de las claves del catálogo (las que no aparecen cuentan 0). */
+export function contarPorClave(filas: readonly { clave: string }[]): Record<ClaveAtributo, number> {
+  const out = Object.fromEntries(CLAVES_ATRIBUTO.map((c) => [c, 0])) as Record<ClaveAtributo, number>
+  for (const f of filas) if (f.clave in out) out[f.clave as ClaveAtributo] += 1
+  return out
+}
+
 export interface ProductoParaExtraer {
   alegraId: string
   name: string

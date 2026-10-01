@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { filasDeNombre, puedePisar, RANGO_FUENTE } from "./catalogo-atributos-repo"
+import { CLAVES_ATRIBUTO } from "./catalogo-atributos-extraccion"
+import { contarPorClave, filasDeNombre, puedePisar, RANGO_FUENTE } from "./catalogo-atributos-repo"
 
 // El SQL del upsert (precedencia en el ON CONFLICT … WHERE) se prueba contra Postgres en
 // test/integration/catalog-atributos.integration.test.ts. Acá, la regla y el armado de filas.
@@ -28,5 +29,17 @@ describe("filasDeNombre", () => {
       { alegraId: "10", clave: "potencia_w", valorNum: 50, valorTexto: null },
       { alegraId: "10", clave: "tono", valorNum: null, valorTexto: "calido" },
     ])
+  })
+})
+
+describe("contarPorClave (resumen del backfill)", () => {
+  it("devuelve las 18 claves, con 0 para las que nadie gana", () => {
+    const filas = filasDeNombre([
+      { alegraId: "1", name: "TERMICA 2X25A 6KA", description: null },
+      { alegraId: "2", name: "CABLE 2,5MM2 100M", description: null },
+    ])
+    const r = contarPorClave(filas)
+    expect(Object.keys(r)).toEqual([...CLAVES_ATRIBUTO])
+    expect(r).toMatchObject({ corriente_a: 1, polos: 1, poder_corte_ka: 1, seccion_mm2: 1, largo_m: 1, color: 0, montaje: 0 })
   })
 })

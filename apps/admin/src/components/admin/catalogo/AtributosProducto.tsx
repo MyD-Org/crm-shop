@@ -2,8 +2,16 @@
 
 import { useEffect, useState } from "react"
 import { FileSearch, Loader2, Save } from "lucide-react"
-import { Button, Input } from "@myd-org/ui"
-import { CLAVES_ATRIBUTO, ETIQUETA_ATRIBUTO, type ClaveAtributo } from "@/lib/catalogo-atributos-extraccion"
+import { Button, Input, Select } from "@myd-org/ui"
+import {
+  CLAVES_ATRIBUTO,
+  COLORES,
+  CURVAS,
+  DEFINICION_ATRIBUTOS,
+  ETIQUETA_ATRIBUTO,
+  MONTAJES,
+  type ClaveAtributo,
+} from "@/lib/catalogo-atributos-extraccion"
 import { api, ErrorApi } from "./tipos"
 
 /**
@@ -36,10 +44,19 @@ const TEXTO_FUENTE: Record<AtributoDto["fuente"], string> = {
   manual: "Manual",
 }
 
-const PISTA: Partial<Record<ClaveAtributo, string>> = {
-  tono: "calido, neutro o frio",
-  tension_v: "220 o 85-265",
-  zocalo: "E27, GU10…",
+/** Valor del `Select` que representa "sin dato" (el componente no admite valores vacíos). */
+const SIN_DATO = "__sin_dato__"
+
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
+
+/** Claves de vocabulario cerrado: se eligen de una lista (el valor guardado es el de la base). */
+const OPCIONES: Partial<Record<ClaveAtributo, { label: string; value: string }[]>> = {
+  color: COLORES.map((c) => ({ label: cap(c), value: c })),
+  curva: CURVAS.map((c) => ({ label: c.toUpperCase(), value: c })),
+  montaje: MONTAJES.map((m) => ({
+    label: { embutir: "De embutir", aplicar: "De aplicar", colgante: "Colgante", riel: "Para riel", din: "Riel DIN" }[m],
+    value: m,
+  })),
 }
 
 /** Valor como lo edita el operador: el rango de tensión se muestra como texto. */
@@ -157,12 +174,21 @@ export function AtributosProducto({ alegraId, tieneFicha }: Props) {
                     <span style={{ color: "var(--ink-faint)" }}>{TEXTO_FUENTE[a.fuente]}</span>
                   )}
                 </span>
-                <Input
-                  value={valor(c)}
-                  placeholder={PISTA[c] ?? "—"}
-                  onChange={(e) => setBorrador((b) => ({ ...b, [c]: e.target.value }))}
-                  aria-label={ETIQUETA_ATRIBUTO[c]}
-                />
+                {OPCIONES[c] ? (
+                  <Select
+                    options={[{ label: "Sin dato", value: SIN_DATO }, ...OPCIONES[c]!]}
+                    value={valor(c) || SIN_DATO}
+                    onValueChange={(v) => setBorrador((b) => ({ ...b, [c]: v === SIN_DATO ? "" : v }))}
+                    aria-label={ETIQUETA_ATRIBUTO[c]}
+                  />
+                ) : (
+                  <Input
+                    value={valor(c)}
+                    placeholder={DEFINICION_ATRIBUTOS[c].pista}
+                    onChange={(e) => setBorrador((b) => ({ ...b, [c]: e.target.value }))}
+                    aria-label={ETIQUETA_ATRIBUTO[c]}
+                  />
+                )}
               </label>
             )
           })}

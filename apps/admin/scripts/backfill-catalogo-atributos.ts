@@ -5,7 +5,8 @@
  * el espejo del tenant, sin esperar a la próxima sync. Idempotente: correrlo dos veces da lo mismo
  * (la segunda no escribe nada) y nunca pisa filas `pdf` ni `manual` (precedencia en el upsert).
  *
- * Dry-run por defecto: sin --aplicar sólo cuenta qué escribiría.
+ * Dry-run por defecto: sin --aplicar sólo cuenta qué escribiría (productos que ganan cada una de las
+ * 18 claves). Escribir exige el flag explícito --aplicar.
  *
  *   npx tsx --env-file-if-exists=.env.local scripts/backfill-catalogo-atributos.ts --tenant <id> [--aplicar]
  *
@@ -14,7 +15,7 @@
 import { and, asc, eq, gt } from "drizzle-orm"
 import { getDb } from "../src/db"
 import { catalogProducts } from "../src/db/schema"
-import { filasDeNombre, reemplazarAtributosDeNombre } from "../src/lib/catalogo-atributos-repo"
+import { contarPorClave, filasDeNombre, reemplazarAtributosDeNombre } from "../src/lib/catalogo-atributos-repo"
 
 const LOTE = 500
 
@@ -35,7 +36,7 @@ async function main() {
   let filas = 0
   let escritas = 0
   let borradas = 0
-  const porClave = new Map<string, number>()
+  const filasTodas: { clave: string }[] = []
   for (;;) {
     const lote = await getDb()
       .select({ alegraId: catalogProducts.alegraId, name: catalogProducts.name, description: catalogProducts.description })
@@ -49,7 +50,7 @@ async function main() {
     const extraidas = filasDeNombre(lote)
     filas += extraidas.length
     conAtributos += new Set(extraidas.map((f) => f.alegraId)).size
-    for (const f of extraidas) porClave.set(f.clave, (porClave.get(f.clave) ?? 0) + 1)
+    filasTodas.push(...extraidas)
     if (aplicar) {
       const r = await reemplazarAtributosDeNombre(tenant, lote)
       escritas += r.escritas
@@ -58,7 +59,8 @@ async function main() {
   }
 
   console.log(`tenant=${tenant} productos=${productos} conAtributos=${conAtributos} filas=${filas}`)
-  console.log(`por clave: ${[...porClave].map(([k, n]) => `${k}=${n}`).join(" ")}`)
+  // Una fila por producto y clave ⇒ el conteo es cuántos productos ganan cada una de las 18 (con ceros).
+  console.log(`por clave: ${Object.entries(contarPorClave(filasTodas)).map(([k, n]) => `${k}=${n}`).join(" ")}`)
   console.log(aplicar ? `escritas=${escritas} borradas=${borradas}` : "dry-run: no se escribió nada (usar --aplicar)")
   process.exit(0)
 }

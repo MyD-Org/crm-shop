@@ -17,14 +17,25 @@ describe("leerSucursalesYZonas", () => {
         from: () => ({
           where: async (w: unknown) => {
             wheres.push(w);
-            return "slug" in cols ? [{ slug: "s" }] : [{ id: "z" }];
+            return "slug" in cols
+              ? [
+                  { slug: "s", schedule: { monday: [{ open: "09:00", close: "18:00" }] }, scheduleExceptions: "basura" },
+                  { slug: "t", schedule: {}, scheduleExceptions: [] },
+                ]
+              : [{ id: "z" }];
           },
         }),
       }),
     };
     const r = await leerSucursalesYZonas(db as never);
     expect(wheres).toHaveLength(2);
-    expect(r).toEqual({ sucursales: [{ slug: "s" }], zonas: [{ id: "z" }] });
+    expect(r.zonas).toEqual([{ id: "z" }]);
+    // El horario sale normalizado: siete días, y lo inválido de la base se descarta.
+    expect(r.sucursales[0].slug).toBe("s");
+    expect(r.sucursales[0].schedule?.monday).toEqual([{ open: "09:00", close: "18:00" }]);
+    expect(r.sucursales[0].schedule?.sunday).toEqual([]);
+    expect(r.sucursales[0].excepciones).toEqual([]);
+    expect(r.sucursales[1].schedule?.monday).toEqual([]);
   });
 
   it("no pide columnas fuera del contrato", () => {

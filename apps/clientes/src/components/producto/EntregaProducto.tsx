@@ -1,5 +1,6 @@
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION } from "@/lib/ubicacion";
+import { tieneHorario } from "@/lib/horario-agrupado";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { VerLocal } from "@/components/producto/VerLocal";
 import {
@@ -104,7 +105,7 @@ export function EntregaProducto({
                     {" · "}
                     <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{texto}</span>
                   </span>
-                  {(l.direccion || l.horario) && <VerLocal local={l} productos={detallePorLocal?.[l.slug]} />}
+                  {(l.direccion || tieneHorario(l)) && <VerLocal local={l} productos={detallePorLocal?.[l.slug]} />}
                 </li>
               );
             })}

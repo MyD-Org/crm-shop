@@ -111,7 +111,7 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
     ]);
   });
 
-  it("de sucursales sólo se declaran las columnas concedidas por el GRANT (0041 del CRM)", () => {
+  it("de sucursales sólo se declaran las columnas concedidas por el GRANT (0041 y 0051 del CRM)", () => {
     expect(Object.keys(esperado["public.sucursales"])).toEqual([
       "tenant_id",
       "slug",
@@ -121,6 +121,8 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
       "provincia",
       "whatsapp",
       "horario",
+      "schedule",
+      "schedule_exceptions",
       "acepta_retiro",
       "acepta_envio",
       "envio_ciudades",

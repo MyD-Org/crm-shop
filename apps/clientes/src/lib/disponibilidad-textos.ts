@@ -8,6 +8,7 @@
  * Los días salen de "Días de demora al traer de otra sucursal" (reglas de venta del CRM); 0 se dice
  * "a coordinar" (sin plazo numérico).
  */
+import type { ExcepcionHorario, HorarioSemanal } from "./horario-agrupado";
 import type {
   DisponibilidadEnvio,
   DisponibilidadProducto,
@@ -24,6 +25,9 @@ export interface LocalDisponibilidad {
   direccion?: string;
   ciudad?: string;
   horario?: string;
+  /** Horario estructurado (normalizado en el servidor); el texto legado queda de respaldo. */
+  schedule?: HorarioSemanal;
+  excepciones?: ExcepcionHorario[];
   whatsapp?: string;
 }
 

@@ -10,6 +10,12 @@ import { crmReglasVenta, crmSucursales, crmZonas } from "@/db/crm";
 import { shopTenantId } from "./tenant";
 import type { ReglasVenta, SucursalDato, ZonaDato } from "./sucursales";
 import { CONFIG_ENVIO_DEFAULT, type ConfigEnvio } from "./envio";
+import {
+  normalizarExcepciones,
+  normalizarSchedule,
+  type ExcepcionHorario,
+  type HorarioSemanal,
+} from "./horario-agrupado";
 
 /** Sucursal tal como se muestra: lo de `SucursalDato` más lo que ve el visitante. */
 export interface SucursalVista extends SucursalDato {
@@ -17,7 +23,12 @@ export interface SucursalVista extends SucursalDato {
   ciudad: string;
   provincia: string;
   direccion: string;
+  /** Texto libre legado: sólo sirve de respaldo si no hay `schedule` (migración 0051). */
   horario: string;
+  /** Horario semanal estructurado, ya normalizado (siete días; vacío = sin configurar). */
+  schedule?: HorarioSemanal;
+  /** Excepciones del horario, ya normalizadas. */
+  excepciones?: ExcepcionHorario[];
   /** Para el popup "Ver local". */
   whatsapp?: string;
 }
@@ -43,6 +54,8 @@ export async function leerSucursalesYZonas(
         provincia: crmSucursales.provincia,
         direccion: crmSucursales.direccion,
         horario: crmSucursales.horario,
+        schedule: crmSucursales.schedule,
+        scheduleExceptions: crmSucursales.scheduleExceptions,
         whatsapp: crmSucursales.whatsapp,
         aceptaRetiro: crmSucursales.aceptaRetiro,
         aceptaEnvio: crmSucursales.aceptaEnvio,
@@ -63,7 +76,14 @@ export async function leerSucursalesYZonas(
       .from(crmZonas)
       .where(eq(crmZonas.tenantId, tenant)),
   ]);
-  return { sucursales, zonas };
+  return {
+    sucursales: sucursales.map(({ schedule, scheduleExceptions, ...resto }) => ({
+      ...resto,
+      schedule: normalizarSchedule(schedule),
+      excepciones: normalizarExcepciones(scheduleExceptions),
+    })),
+    zonas,
+  };
 }
 
 /** Reglas de venta del tenant tal como las guarda el CRM (`public.reglas_venta`). */

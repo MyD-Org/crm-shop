@@ -1074,10 +1074,9 @@ export function CheckoutClient({
             cuenta).
           */}
           {sugerirVincular && pasoActual === "datos" && (
-            <section className="rounded-[20px] border border-warning/40 bg-warning/5 p-5">
-              <p className="font-semibold text-text">Su documento figura como cliente de Central LED</p>
+            <section className="rounded-[20px] border border-border/50 bg-surface px-5 py-3">
               {vinculando ? (
-                <div className="mt-3">
+                <div>
                   <VincularClient
                     embebido
                     enviarAlAbrir
@@ -1090,15 +1089,14 @@ export function CheckoutClient({
                   />
                 </div>
               ) : (
-                <>
-                  <p className="mt-1 text-sm text-muted">
-                    Vincule su cuenta para que esta compra quede registrada en ella. Le
-                    enviaremos un código al email registrado en su cuenta de cliente.
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <p className="text-sm text-muted">
+                    Su documento figura como cliente. Vincule su cuenta para registrar esta compra en ella.
                   </p>
-                  <Button size="sm" className="mt-3" onClick={() => setVinculando(true)}>
+                  <Button size="sm" variant="ghost" onClick={() => setVinculando(true)}>
                     Vincular mi cuenta
                   </Button>
-                </>
+                </div>
               )}
             </section>
           )}

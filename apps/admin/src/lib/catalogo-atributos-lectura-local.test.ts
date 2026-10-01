@@ -12,7 +12,7 @@ import {
   type DepsAplicar,
   type ExistenteAtributo,
 } from "./catalogo-atributos-lectura-local"
-import { crearPdfDePrueba } from "./pdf-de-prueba"
+import { crearPdfDePrueba, crearPdfPosicionado, type TextoPosicionado } from "./pdf-de-prueba"
 
 // Todo ficticio.
 const RELLENO = "Descripcion general del producto con caracteristicas tecnicas y condiciones de uso del equipo."
@@ -24,6 +24,22 @@ async function escribirPdf(rel: string, paginas: string[][]) {
   await mkdir(path.dirname(abs), { recursive: true })
   await writeFile(abs, await crearPdfDePrueba(paginas))
 }
+
+async function escribirPdfPosicionado(rel: string, paginas: TextoPosicionado[][]) {
+  const abs = path.join(dir, rel)
+  await mkdir(path.dirname(abs), { recursive: true })
+  await writeFile(abs, await crearPdfPosicionado(paginas))
+}
+
+/** Tabla transpuesta: modelos como encabezados de columna, rótulos a la izquierda. */
+const tabla = (...columnas: { modelo: string; potencia: string; flujo: string; ip: string }[]): TextoPosicionado[] => [
+  { t: RELLENO, x: 40, y: 800 },
+  { t: "Modelo", x: 40, y: 720 }, { t: "Potencia", x: 40, y: 700 }, { t: "Flujo", x: 40, y: 680 }, { t: "IP", x: 40, y: 660 },
+  ...columnas.flatMap((c, i) => [
+    { t: c.modelo, x: 150 + i * 100, y: 720 }, { t: c.potencia, x: 150 + i * 100, y: 700 },
+    { t: c.flujo, x: 150 + i * 100, y: 680 }, { t: c.ip, x: 150 + i * 100, y: 660 },
+  ]),
+]
 
 const jsonl = (xs: unknown[]) => xs.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join("\n")
 const leerJsonl = async (rel: string) =>
@@ -51,12 +67,16 @@ beforeEach(async () => {
       { archivo: "escaneado.pdf", bytes: 1, productos: [{ id: "50", code: "ESC-0001-XYZ", nombre: "CAJA", marca: "Ejemplo" }] },
     ]),
   )
-  await escribirPdf("pdfs/reflectores.pdf", [
-    [RELLENO, "Reflector LED serie RF", "Modelo Potencia Flujo IP", "RF-10 10W 800LM IP65", "RF-20 20W 1600LM IP65", "RF-30 30W 2400LM IP66"],
+  await escribirPdfPosicionado("pdfs/reflectores.pdf", [
+    tabla(
+      { modelo: "RF-10", potencia: "10W", flujo: "800LM", ip: "65" },
+      { modelo: "RF-20", potencia: "20W", flujo: "1600LM", ip: "65" },
+      { modelo: "RF-30", potencia: "30W", flujo: "2400LM", ip: "66" },
+    ),
   ])
   await escribirPdf("pdfs/termica.pdf", [[RELLENO, "Termica bipolar 2P 25A poder de corte 6kA curva C"]])
   await escribirPdf("pdfs/escaneado.pdf", [[], []])
-  await escribirPdf("recortes/reflector-20.pdf", [[RELLENO, "RF-20 20W 1600LM IP65"]])
+  await escribirPdfPosicionado("recortes/reflector-20.pdf", [tabla({ modelo: "RF-20", potencia: "20W", flujo: "1600LM", ip: "65" })])
 })
 
 afterEach(async () => {
@@ -71,7 +91,7 @@ describe("verificarDirectorio", () => {
         // El caso que motivó las reglas: producto 20W, el modelo devuelve la fila de 10W.
         { id: "20", pdf: "pdfs/reflectores.pdf", fila: "RF-10", atributos: { potencia_w: { valor: 10, cita: "RF-10 10W 800LM IP65" }, flujo_lm: { valor: 800, cita: "RF-10 10W 800LM IP65" } } },
         // La fila correcta.
-        { id: "30", pdf: "pdfs/reflectores.pdf", fila: "RF-30", atributos: { flujo_lm: { valor: 2400, cita: "RF-30 30W 2400LM IP66" }, ip: { valor: 66, cita: "RF-30 30W 2400LM IP66" } } },
+        { id: "30", pdf: "pdfs/reflectores.pdf", fila: "RF-30", atributos: { flujo_lm: { valor: 2400 }, ip: { valor: 66, cita: "IP 66" } } },
         // Ficha individual: fila null.
         { id: "40", pdf: "pdfs/termica.pdf", fila: null, atributos: { poder_corte_ka: { valor: 6, cita: "poder de corte 6kA" }, curva: { valor: "c", cita: "curva C" } } },
         // Recorte con fila null: no es ficha de un solo producto.
@@ -86,7 +106,9 @@ describe("verificarDirectorio", () => {
     expect(aceptados.map((a) => `${a.id}:${a.clave}`).sort()).toEqual(["30:flujo_lm", "30:ip", "40:curva", "40:poder_corte_ka"])
     expect(aceptados.find((a) => a.id === "30" && a.clave === "flujo_lm")).toMatchObject({
       valorNum: 2400,
-      cita: "RF-30 30W 2400LM IP66",
+      cita: null,
+      regla: "fila",
+      evidencia: "2400LM",
       fila: "RF-30",
       pdf: "pdfs/reflectores.pdf",
     })
@@ -145,9 +167,9 @@ describe("verificarDirectorio", () => {
     )
     const r = await verificarDirectorio(dir)
     const aceptados = await leerJsonl("lectura/aceptados.jsonl")
-    // 800 LM sale de la fila de 10W (la cita no incluye la fila pedida): se descarta; el 2400 queda. ip: dos citas, mismo valor.
+    // 800 LM sale de la fila de 10W (otra columna): se descarta; el 2400 queda. ip: dos citas, mismo valor.
     expect(aceptados.map((a) => `${a.id}:${a.clave}:${a.valorNum}`).sort()).toEqual(["30:flujo_lm:2400", "30:ip:66"])
-    expect(r.porMotivo.fila_fuera_de_cita).toBe(1)
+    expect(r.porMotivo.valor_fuera_de_fila).toBe(1)
   })
 })
 

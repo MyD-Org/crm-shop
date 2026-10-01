@@ -25,7 +25,7 @@ import {
   type LecturaCruda,
   type Motivo,
 } from "./catalogo-atributos-verificacion"
-import { extraerTextoPaginas, type TextoPdf } from "./catalogo-ficha-texto"
+import { extraerItemsPaginas, type ItemTexto } from "./catalogo-ficha-texto"
 
 // ───────────────────────── formatos de archivo ─────────────────────────
 
@@ -40,9 +40,15 @@ export interface LineaAceptada {
   clave: ClaveAtributo
   valorNum: number | null
   valorTexto: string | null
-  cita: string
+  /** Cita del modelo (informativa). */
+  cita: string | null
   fila: string | null
   pdf: string
+  /** Regla que lo aceptó, texto del PDF que lo respalda y página (para revisar a ojo). */
+  regla: string
+  evidencia: string
+  pagina: number
+  citaEnTexto: boolean
 }
 
 export interface LineaDescarte {
@@ -64,7 +70,7 @@ export interface ResumenVerificacion {
 
 export interface OpcionesVerificacion {
   /** Extractor de texto (por defecto `unpdf`); inyectable en tests. */
-  extraer?: (bytes: Uint8Array) => Promise<TextoPdf>
+  extraer?: (bytes: Uint8Array) => Promise<ItemTexto[][]>
 }
 
 const jsonl = (xs: readonly unknown[]) => xs.map((x) => JSON.stringify(x)).join("\n") + (xs.length ? "\n" : "")
@@ -94,7 +100,7 @@ export function parsearLecturaCruda(linea: string): LecturaCruda | null {
 // ───────────────────────── verificación del directorio ─────────────────────────
 
 export async function verificarDirectorio(dir: string, opciones: OpcionesVerificacion = {}): Promise<ResumenVerificacion> {
-  const extraer = opciones.extraer ?? extraerTextoPaginas
+  const extraer = opciones.extraer ?? extraerItemsPaginas
   const raiz = path.resolve(dir)
   const indice = JSON.parse(await readFile(path.join(raiz, "indice.json"), "utf8")) as IndiceLocal[]
   const productos = new Map<string, { code: string | null; nombre: string }>()
@@ -107,11 +113,11 @@ export async function verificarDirectorio(dir: string, opciones: OpcionesVerific
   const dirCrudo = path.join(raiz, "lectura", "crudo")
   const archivos = (await readdir(dirCrudo).catch(() => [] as string[])).filter((f) => f.endsWith(".jsonl")).sort()
 
-  const textos = new Map<string, string[] | Motivo>()
-  const textoDe = async (abs: string): Promise<string[] | Motivo> => {
+  const textos = new Map<string, ItemTexto[][] | Motivo>()
+  const textoDe = async (abs: string): Promise<ItemTexto[][] | Motivo> => {
     const hit = textos.get(abs)
     if (hit) return hit
-    let r: string[] | Motivo
+    let r: ItemTexto[][] | Motivo
     let bytes: Buffer | null = null
     try {
       bytes = await readFile(abs)
@@ -120,7 +126,7 @@ export async function verificarDirectorio(dir: string, opciones: OpcionesVerific
     }
     if (bytes) {
       try {
-        r = (await extraer(new Uint8Array(bytes))).paginas
+        r = await extraer(new Uint8Array(bytes))
       } catch {
         r = "pdf_ilegible"
       }
@@ -169,9 +175,9 @@ export async function verificarDirectorio(dir: string, opciones: OpcionesVerific
         continue
       }
       const unicoProducto = rel.startsWith("pdfs/") && productosPorArchivo.get(path.basename(rel)) === 1
-      const r = verificarLectura(l, { code: producto.code, nombre: producto.nombre, textoPaginas: texto, unicoProducto })
+      const r = verificarLectura(l, { code: producto.code, nombre: producto.nombre, paginas: texto, unicoProducto })
       for (const a of r.aceptados) {
-        aceptadosBrutos.push({ id: l.id, clave: a.clave, valorNum: a.valorNum, valorTexto: a.valorTexto, cita: a.cita, fila: l.fila, pdf: rel })
+        aceptadosBrutos.push({ id: l.id, clave: a.clave, valorNum: a.valorNum, valorTexto: a.valorTexto, cita: a.cita, fila: l.fila, pdf: rel, regla: a.regla, evidencia: a.evidencia, pagina: a.pagina, citaEnTexto: a.citaEnTexto })
       }
       for (const d of r.descartes) {
         descartes.push({ id: l.id, pdf: l.pdf, fila: l.fila, clave: d.clave, motivo: d.motivo, valor: d.valor, cita: d.cita })

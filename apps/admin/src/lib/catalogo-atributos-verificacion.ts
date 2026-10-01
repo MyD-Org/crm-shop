@@ -1,23 +1,26 @@
 /**
  * Verificador determinista de atributos leídos de un PDF por un modelo (módulo PURO: sin red, sin
- * base, sin archivos). El modelo propone {valor, cita} por atributo y una `fila` por producto; este
+ * base, sin archivos). El modelo propone {valor, cita?} por atributo y una `fila` por producto; este
  * código decide qué se acepta. El modelo NUNCA carga nada por su cuenta.
  *
- * Reglas de rigor (todas se verifican acá, con tests):
+ * EVIDENCIA POSICIONAL. Las tablas de los catálogos salen de pdfjs por celdas (muchas veces por
+ * columna: encabezado y valor NO son texto contiguo), así que la cita ya no se exige literal (es
+ * informativa). Se trabaja con los items de texto y sus coordenadas:
  *
- * 1. EVIDENCIA LITERAL: la cita (normalizada: mayúsculas, sin tildes, espacios colapsados) tiene que
- *    aparecer en el texto del PDF y CONTENER el valor (número con coma o punto, con su unidad o con la
- *    palabra del campo; o el término del vocabulario / sus sinónimos). Si no, se descarta con motivo.
- * 2. FILA CORRECTA EN TABLAS: la `fila` (modelo o código de la variante) tiene que aparecer en el texto
- *    y coincidir con el producto: contiene el código de Alegra normalizado (sin sufijo de marca, con o
- *    sin separadores, con o sin prefijo duplicado) O todos los tokens "número + unidad" del nombre
- *    (20W, 63A, 300x1200) aparecen en la fila o en la cita. La cita tiene que incluir la fila (es la
- *    fila completa, no la del vecino). `fila` null sólo se acepta si el PDF es la ficha propia de UN
- *    solo producto.
- * 3. CRUCE CON EL NOMBRE: si el nombre ya dice un valor para la misma clave y el PDF dice otro, se
- *    descarta el del PDF ("contradice_nombre").
- * 4. SIN CAPA DE TEXTO: no se carga nada ("sin_texto").
- * 5. Rangos y vocabularios de `normalizarAtributos` siguen aplicando ("valor_invalido").
+ * 1. El VALOR se busca en las celdas (con el rótulo de su línea: "IP" + "20"): número + unidad
+ *    normalizados (coma o punto), o el término del vocabulario / sus sinónimos.
+ * 2. Ficha propia de UN producto: se acepta si el valor es el ÚNICO de esa magnitud en el PDF. Los
+ *    términos de vocabulario sin unidad (color, montaje, tono, curva, zócalo) se aceptan igual si hay un
+ *    único término de esa clave. Si hay varios valores distintos: hace falta `fila` y la regla 3.
+ * 3. Tabla o variantes: la `fila` tiene que coincidir con el producto (código de Alegra sin sufijo de
+ *    marca, o todos los tokens número+unidad del nombre: 20W, 63A, 300x1200, en las celdas de esa
+ *    fila o columna) Y el valor tiene que estar en la MISMA línea que el identificador de la fila (tabla
+ *    normal) o en la MISMA columna (tabla transpuesta: los modelos son encabezados de columna, se
+ *    detecta porque hay otros identificadores de la misma forma en su línea).
+ * 4. CRUCE CON EL NOMBRE: si el nombre ya dice otro valor para la misma clave, se descarta el del PDF
+ *    ("contradice_nombre").
+ * 5. SIN CAPA DE TEXTO: no se carga nada ("sin_texto").
+ * 6. Rangos y vocabularios de `normalizarAtributos` siguen aplicando ("valor_invalido").
  */
 import {
   CLAVES_ATRIBUTO,
@@ -28,19 +31,17 @@ import {
   type AtributoExtraido,
   type ClaveAtributo,
 } from "./catalogo-atributos-extraccion"
-import { tieneTexto } from "./catalogo-ficha-texto"
+import { agruparLineas, textoDeItems, tieneTexto, type ItemTexto } from "./catalogo-ficha-texto"
 
 export const MOTIVOS = [
   "sin_texto",
   "fila_ausente",
   "fila_no_en_texto",
   "fila_no_coincide",
-  "fila_fuera_de_cita",
-  "cita_ausente",
+  "valor_fuera_de_fila",
   "valor_invalido",
-  "cita_no_en_texto",
-  "valor_no_en_cita",
-  "unidad_no_en_cita",
+  "valor_no_en_texto",
+  "unidad_no_en_texto",
   "contradice_nombre",
   "conflicto_entre_lecturas",
   "clave_desconocida",
@@ -57,26 +58,35 @@ export interface LecturaCruda {
   id: string
   /** Ruta relativa al directorio de trabajo: `pdfs/<archivo>` o `recortes/<archivo>`. */
   pdf: string
-  /** Identificador literal de la fila/variante usada (modelo o código); null si la ficha es de un solo producto. */
+  /** Identificador literal de la fila/variante (o columna) usada: modelo o código; null si la ficha es de un solo producto. */
   fila: string | null
-  atributos: Record<string, { valor: unknown; cita: unknown }>
+  /** `cita` es opcional e informativa: no decide nada. */
+  atributos: Record<string, { valor: unknown; cita?: unknown }>
 }
 
 export interface ContextoVerificacion {
   /** Código de Alegra del producto (`catalog_products.code`). */
   code: string | null
   nombre: string
-  /** Texto por página; null si no se pudo extraer. */
-  textoPaginas: string[] | null
-  /** ¿El PDF es la ficha propia de un único producto? (si no, `fila` es obligatoria). */
+  /** Items de texto con coordenadas por página; null si no se pudo extraer. */
+  paginas: ItemTexto[][] | null
+  /** ¿El PDF es la ficha propia de un único producto? */
   unicoProducto: boolean
 }
+
+export type ReglaAceptacion = "unico" | "vocabulario" | "fila"
 
 export interface Aceptado {
   clave: ClaveAtributo
   valorNum: number | null
   valorTexto: string | null
-  cita: string
+  cita: string | null
+  /** Qué regla lo aceptó y el texto del PDF que lo respalda (para revisar a ojo). */
+  regla: ReglaAceptacion
+  evidencia: string
+  pagina: number
+  /** Si la cita del modelo aparece textual en alguna línea del PDF (informativo). */
+  citaEnTexto: boolean
 }
 
 export interface Descarte {
@@ -105,7 +115,6 @@ export function normalizarCita(s: string): string {
     .trim()
 }
 
-const SEP_PAGINA = " \u0001 "
 const compacto = (s: string) => s.replace(/\s+/g, "")
 const tieneAlfanum = (s: string) => /[A-Z0-9]/.test(s)
 const escapar = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -152,8 +161,25 @@ function regexCodigo(variante: string): RegExp {
   return new RegExp(`(?<![A-Z0-9])${[...variante].map(escapar).join("[ .\\-/]?")}(?![A-Z0-9])`)
 }
 
+const largoMinimoCodigo = (v: string) => (/\d/.test(v) && /[A-Z]/.test(v) ? 4 : /^\d+$/.test(v) ? 7 : 6)
+
+/**
+ * ¿La fila identifica a este código de Alegra? Tres formas:
+ * - la fila ES el código (sin sufijo de marca, con o sin separadores; sirve un SKU corto "3537");
+ * - el código figura dentro de la fila (con las longitudes mínimas de `variantesCodigo`);
+ * - la fila es el modelo y el código de Alegra le agrega variante y marca ("EFLG2-100W" ⊂
+ *   "EFLG2-100W-WW-MCL"), con la misma longitud mínima.
+ */
 export function filaCoincideConCodigo(filaNorm: string, code: string | null | undefined): boolean {
-  return variantesCodigo(code).some((v) => regexCodigo(v).test(filaNorm))
+  if (!code) return false
+  const filaCore = filaNorm.replace(/[^A-Z0-9]/g, "")
+  const codeNorm = normalizarCita(code)
+  const nucleo = codeNorm.replace(/-[A-Z]{2,4}$/, "").replace(/[^A-Z0-9]/g, "")
+  const dup = /^(\d{2,3})\1/.exec(nucleo)
+  const nucleos = dup ? [nucleo, nucleo.slice(dup[1].length)] : [nucleo]
+  if (filaCore.length >= 3 && nucleos.includes(filaCore)) return true
+  if (variantesCodigo(code).some((v) => regexCodigo(v).test(filaNorm))) return true
+  return filaCore.length >= largoMinimoCodigo(filaCore) && regexCodigo(filaCore).test(codeNorm)
 }
 
 const UNIDADES_TOKEN = "KVA|KW|KA|MA|MM2|MM|CM|MTS|MT|LM|HZ|AH|W|V|A|K|M"
@@ -204,7 +230,7 @@ const EVIDENCIA_NUM: Partial<Record<ClaveAtributo, { unidad: string; palabra: st
 
 const POLOS_PALABRA: Record<string, number> = { UNIPOLAR: 1, MONOPOLAR: 1, BIPOLAR: 2, TRIPOLAR: 3, TETRAPOLAR: 4 }
 
-type EvidenciaValor = "ok" | "valor_no_en_cita" | "unidad_no_en_cita"
+type EvidenciaValor = "ok" | "valor_no_en_texto" | "unidad_no_en_texto"
 
 function evidenciaNumerica(clave: ClaveAtributo, a: AtributoExtraido, cita: string): EvidenciaValor {
   const nums = numerosDe(cita)
@@ -212,32 +238,32 @@ function evidenciaNumerica(clave: ClaveAtributo, a: AtributoExtraido, cita: stri
     return a.valorNum != null && new RegExp(`(?<![A-Z])IP\\s?-?0?${a.valorNum}(?![0-9])`).test(cita)
       ? "ok"
       : nums.has(a.valorNum ?? NaN)
-        ? "unidad_no_en_cita"
-        : "valor_no_en_cita"
+        ? "unidad_no_en_texto"
+        : "valor_no_en_texto"
   }
   if (clave === "tension_v") {
     const rango = a.valorTexto ? /^(\d+)[-/](\d+)$/.exec(a.valorTexto) : null
     if (rango) {
       const [x, y] = [Number(rango[1]), Number(rango[2])]
-      if (!nums.has(x) || !nums.has(y)) return "valor_no_en_cita"
+      if (!nums.has(x) || !nums.has(y)) return "valor_no_en_texto"
       const re = new RegExp(
         `(?<![0-9.,])${altNumero(x)}\\s?[-/]\\s?${altNumero(y)}${EVIDENCIA_NUM.tension_v!.unidad}|(?<![0-9.,])${altNumero(y)}\\s?[-/]\\s?${altNumero(x)}${EVIDENCIA_NUM.tension_v!.unidad}`,
       )
-      return re.test(cita) || new RegExp(EVIDENCIA_NUM.tension_v!.palabra).test(cita) ? "ok" : "unidad_no_en_cita"
+      return re.test(cita) || new RegExp(EVIDENCIA_NUM.tension_v!.palabra).test(cita) ? "ok" : "unidad_no_en_texto"
     }
   }
   const n = a.valorNum
-  if (n == null) return "valor_no_en_cita"
+  if (n == null) return "valor_no_en_texto"
   if (clave === "polos") {
     for (const [pal, v] of Object.entries(POLOS_PALABRA)) if (v === n && new RegExp(`(?<![A-Z])${pal}`).test(cita)) return "ok"
   }
   const kw = clave === "potencia_w" && new RegExp(`(?<![0-9.,])${altNumero(n / 1000)}\\s?KW(?![A-Z])`).test(cita)
   if (kw) return "ok"
-  if (!nums.has(n)) return "valor_no_en_cita"
+  if (!nums.has(n)) return "valor_no_en_texto"
   const ev = EVIDENCIA_NUM[clave]
   if (!ev) return "ok"
   if (new RegExp(`(?<![0-9.,])${altNumero(n)}${ev.unidad}`).test(cita)) return "ok"
-  return new RegExp(ev.palabra).test(cita) ? "ok" : "unidad_no_en_cita"
+  return new RegExp(ev.palabra).test(cita) ? "ok" : "unidad_no_en_texto"
 }
 
 function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, cita: string): EvidenciaValor {
@@ -249,35 +275,220 @@ function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, cita: string)
         neutro: /NEUTR[OA]|NEUTRAL/,
         frio: /FRI[OA]|COOL|DAYLIGHT|LUZ DE DIA/,
       }
-      return sin[v]?.test(cita) ? "ok" : "valor_no_en_cita"
+      return sin[v]?.test(cita) ? "ok" : "valor_no_en_texto"
     }
     case "zocalo": {
       const re = new RegExp(`(?<![A-Z0-9])${[...normalizarCita(v)].map(escapar).join("[ -]?")}(?![A-Z0-9])`)
-      return re.test(cita) ? "ok" : "valor_no_en_cita"
+      return re.test(cita) ? "ok" : "valor_no_en_texto"
     }
     case "color":
     case "montaje": {
       // Misma lectura que el nombre: sinónimos del vocabulario, y "LUZ BLANCA" no es color.
       const hallado = extraerAtributosDeNombre(cita).find((x) => x.clave === clave)
-      return hallado?.valorTexto === v ? "ok" : "valor_no_en_cita"
+      return hallado?.valorTexto === v ? "ok" : "valor_no_en_texto"
     }
     case "curva": {
       const hallado = extraerAtributosDeNombre(cita).find((x) => x.clave === "curva")
       if (hallado?.valorTexto === v) return "ok"
-      return new RegExp(`CURVA\\W{0,3}${v.toUpperCase()}(?![A-Z])`).test(cita) ? "ok" : "valor_no_en_cita"
+      return new RegExp(`CURVA\\W{0,3}${v.toUpperCase()}(?![A-Z])`).test(cita) ? "ok" : "valor_no_en_texto"
     }
     case "medidas_mm": {
       const dims = cita.matchAll(/(\d+(?:[.,]\d+)?(?:\s?X\s?\d+(?:[.,]\d+)?){1,2})\s?(MM|CM)?(?![A-Z0-9])/g)
       for (const m of dims) if (medidasValidas(`${m[1]}${m[2] ? ` ${m[2]}` : ""}`.toLowerCase()) === v) return "ok"
-      return "valor_no_en_cita"
+      return "valor_no_en_texto"
     }
     default:
-      return "valor_no_en_cita"
+      return "valor_no_en_texto"
   }
 }
 
 export function valorEnCita(a: AtributoExtraido, citaNorm: string): EvidenciaValor {
   return DEFINICION_ATRIBUTOS[a.clave].tipo === "num" ? evidenciaNumerica(a.clave, a, citaNorm) : evidenciaTexto(a.clave, a, citaNorm)
+}
+
+// ───────────────────────── documento posicional ─────────────────────────
+
+/** Un fragmento de texto del PDF (ya normalizado) con su posición. `rotulo` = la primera celda de su línea (el rótulo de la fila: "IP", "Potencia"). */
+interface Celda {
+  norm: string
+  x: number
+  y: number
+  w: number
+  h: number
+  cx: number
+  pag: number
+  linea: number
+  rotulo: Celda | null
+}
+
+interface Doc {
+  celdas: Celda[]
+  lineas: Celda[][]
+}
+
+/** "90 lm/W" (eficiencia) no es flujo ni potencia: se borra antes de leer valores. */
+const limpiar = (s: string) => s.replace(/\d+(?:[.,]\d+)?\s?LM\s?\/\s?W(?:ATTS?)?/g, " ")
+
+const docs = new WeakMap<ItemTexto[][], Doc>()
+
+function construirDoc(paginas: ItemTexto[][]): Doc {
+  const hit = docs.get(paginas)
+  if (hit) return hit
+  const celdas: Celda[] = []
+  const lineas: Celda[][] = []
+  paginas.forEach((items, pag) => {
+    for (const ln of agruparLineas(items)) {
+      const cs: Celda[] = []
+      for (const it of ln) {
+        const norm = limpiar(normalizarCita(it.str))
+        if (!tieneAlfanum(norm)) continue
+        cs.push({ norm, x: it.x, y: it.y, w: it.w, h: it.h, cx: it.x + it.w / 2, pag, linea: lineas.length, rotulo: cs[0] ?? null })
+      }
+      if (cs.length === 0) continue
+      lineas.push(cs)
+      celdas.push(...cs)
+    }
+  })
+  const doc = { celdas, lineas }
+  docs.set(paginas, doc)
+  return doc
+}
+
+/** Textos donde se busca un valor en una celda: sola y con el rótulo de su línea ("IP" + "20"). */
+const textosDe = (c: Celda) => (c.rotulo ? [c.norm, `${c.rotulo.norm} ${c.norm}`] : [c.norm])
+
+interface Candidato {
+  celda: Celda | null
+  pag: number
+  y: number
+  texto: string
+}
+
+/** Dónde aparece el valor: celdas (con rótulo) y, si ninguna lo tiene entero, líneas completas. */
+function candidatos(a: AtributoExtraido, doc: Doc): Candidato[] {
+  const out: Candidato[] = []
+  for (const c of doc.celdas) {
+    // Con rótulo ("IP" + "20") sólo vale si el valor NO viene ya del rótulo.
+    const texto = textosDe(c).find((t) => valorEnCita(a, t) === "ok" && !(c.rotulo && t !== c.norm && valorEnCita(a, c.rotulo.norm) === "ok"))
+    if (texto) out.push({ celda: c, pag: c.pag, y: c.y, texto })
+  }
+  if (out.length) return out
+  for (const ln of doc.lineas) {
+    const texto = ln.map((c) => c.norm).join(" ")
+    if (valorEnCita(a, texto) === "ok") out.push({ celda: null, pag: ln[0].pag, y: ln[0].y, texto })
+  }
+  return out
+}
+
+// ───────────────────────── magnitudes: ¿hay más de un valor? ─────────────────────────
+
+const RE_NUM = "\\d+(?:[.,]\\d+)*"
+
+/** "1.100" de lúmenes es mil cien; en el resto de las magnitudes la coma/punto es decimal. */
+function aNumero(t: string, miles: boolean): number {
+  return miles && /^\d{1,3}(?:[.,]\d{3})+$/.test(t) ? Number(t.replace(/[.,]/g, "")) : Number(t.replace(",", "."))
+}
+
+/** Valores (canónicos, como string) de la magnitud de `clave` que aparecen en un texto normalizado. */
+export function terminosEn(clave: ClaveAtributo, texto: string): string[] {
+  if (clave === "ip") return [...texto.matchAll(/(?<![A-Z])IP\s?-?(\d{2})(?![0-9])/g)].map((m) => String(Number(m[1])))
+  if (clave === "medidas_mm") {
+    const out: string[] = []
+    for (const m of texto.matchAll(/(\d+(?:[.,]\d+)?(?:\s?X\s?\d+(?:[.,]\d+)?){1,2})\s?(MM|CM)?(?![A-Z0-9])/g)) {
+      const v = medidasValidas(`${m[1]}${m[2] ? ` ${m[2]}` : ""}`.toLowerCase())
+      if (v) out.push(v)
+    }
+    return out
+  }
+  if (DEFINICION_ATRIBUTOS[clave].tipo === "texto") {
+    const v = extraerAtributosDeNombre(texto).find((x) => x.clave === clave)?.valorTexto
+    return v ? [v.toLowerCase()] : []
+  }
+  const ev = EVIDENCIA_NUM[clave]
+  if (!ev) return []
+  const out: string[] = []
+  let resto = texto
+  if (clave === "tension_v") {
+    const rango = new RegExp(`(?<![0-9.,])(\\d+)\\s?([-/])\\s?(\\d+)${ev.unidad}`, "g")
+    resto = resto.replace(rango, (_m, a: string, sep: string, b: string) => {
+      const [x, y] = [Number(a), Number(b)]
+      out.push(sep === "/" ? `${x}/${y}` : `${Math.min(x, y)}-${Math.max(x, y)}`)
+      return " "
+    })
+  }
+  if (clave === "polos") {
+    for (const [pal, v] of Object.entries(POLOS_PALABRA)) if (new RegExp(`(?<![A-Z])${pal}`).test(resto)) out.push(String(v))
+  }
+  for (const m of resto.matchAll(new RegExp(`(?<![0-9.,])(${RE_NUM})${ev.unidad}`, "g"))) {
+    out.push(String(aNumero(m[1], clave === "flujo_lm")))
+  }
+  return out
+}
+
+function canonico(a: AtributoExtraido): string {
+  if (a.clave === "tension_v" && a.valorTexto) return a.valorTexto
+  if (a.valorTexto) return a.valorTexto.toLowerCase()
+  return String(a.valorNum)
+}
+
+// ───────────────────────── la fila: línea o columna ─────────────────────────
+
+/** Forma de un identificador: letras → A, dígitos → 9 ("EFLG2-20W" → "A9-9A"). */
+const forma = (s: string) => s.replace(/[A-Z]+/g, "A").replace(/[0-9]+/g, "9")
+/** ¿Dos celdas son identificadores "del mismo tipo"? Misma forma y largo parecido ("3537" y "3520", no "3537" y "20"). */
+const mismoTipo = (a: Celda, b: Celda) => forma(a.norm) === forma(b.norm) && Math.abs(a.norm.length - b.norm.length) <= 1
+
+const tolY = (a: Celda, b: Celda) => Math.max(2.5, 0.5 * Math.max(a.h, b.h))
+
+interface ContextoFila {
+  modo: "fila" | "columna"
+  celdas: Celda[]
+}
+
+/**
+ * Celdas que pertenecen a la fila/variante identificada por `fila`.
+ * - Tabla transpuesta (hay otros identificadores de la MISMA forma en su línea: los modelos son
+ *   encabezados de columna): la columna = celdas cuyo encabezado más cercano por `x` es `fila`.
+ * - Tabla normal: la línea (misma `y`).
+ */
+function contextoDeFila(doc: Doc, fila: Celda): ContextoFila {
+  const linea = doc.lineas[fila.linea]
+  const hermanos = linea.filter((c) => c !== fila && mismoTipo(c, fila))
+  if (hermanos.length === 0) {
+    const enLinea = doc.celdas.filter((c) => c.pag === fila.pag && Math.abs(c.y - fila.y) <= tolY(c, fila))
+    // Tabla transpuesta de UNA sola columna (el identificador no tiene hermanos en su línea): los valores
+    // están debajo. Sólo si en esa vertical no hay otros identificadores de la misma forma (si los hay,
+    // es la columna de ids de una tabla normal y lo de abajo son otras filas).
+    const alineada = (c: Celda) => c.pag === fila.pag && c.linea !== fila.linea && Math.abs(c.cx - fila.cx) <= Math.max(0.75 * fila.w, 10)
+    const debajo = doc.celdas.filter(alineada)
+    if (debajo.length > 0 && !debajo.some((c) => mismoTipo(c, fila))) return { modo: "columna", celdas: [...enLinea, ...debajo] }
+    return { modo: "fila", celdas: enLinea }
+  }
+  const cabeceras = [fila, ...hermanos].sort((a, b) => a.cx - b.cx)
+  const saltos = cabeceras
+    .slice(1)
+    .map((c, i) => c.cx - cabeceras[i].cx)
+    .sort((a, b) => a - b)
+  const salto = saltos[Math.floor(saltos.length / 2)]
+  const tope = Math.max(0.6 * salto, fila.w)
+  const celdas = doc.celdas.filter((c) => {
+    if (c.pag !== fila.pag) return false
+    if (c === fila) return true
+    if (c.linea === fila.linea) return false
+    const cerca = cabeceras.reduce((m, h) => (Math.abs(h.cx - c.cx) < Math.abs(m.cx - c.cx) ? h : m), cabeceras[0])
+    return cerca === fila && Math.abs(c.cx - fila.cx) <= tope
+  })
+  return { modo: "columna", celdas }
+}
+
+/** Celdas donde figura el identificador de la fila (con un separador opcional entre caracteres). */
+function ocurrenciasDeFila(filaNorm: string, doc: Doc): Celda[] {
+  const re = new RegExp(`(?<![A-Z0-9])${[...filaNorm.replace(/\s+/g, "")].map(escapar).join("[ .\\-/]?")}(?![A-Z0-9])`)
+  const celdas = doc.celdas.filter((c) => re.test(c.norm))
+  if (celdas.length || compacto(filaNorm).length < 4) return celdas
+  // Partido en varias celdas de la misma línea: se toma la primera de esa línea.
+  const cf = compacto(filaNorm)
+  return doc.lineas.filter((ln) => compacto(ln.map((c) => c.norm).join("")).includes(cf)).map((ln) => ln[0])
 }
 
 // ───────────────────────── verificación de una lectura ─────────────────────────
@@ -289,91 +500,115 @@ function igualesValores(a: AtributoExtraido, b: AtributoExtraido): boolean {
   return numIgual && a.valorTexto === b.valorTexto
 }
 
-/** Verifica una lectura contra el texto del PDF y el nombre/código del producto. Nunca tira. */
+/** Verifica una lectura contra los items del PDF y el nombre/código del producto. Nunca tira. */
 export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacion): ResultadoVerificacion {
   const aceptados: Aceptado[] = []
   const descartes: Descarte[] = []
-  const descartar = (clave: string, motivo: Motivo, a: { valor: unknown; cita: unknown }) =>
-    descartes.push({ clave, motivo, valor: a.valor, cita: a.cita })
+  const descartar = (clave: string, motivo: Motivo, a: { valor: unknown; cita?: unknown }) =>
+    descartes.push({ clave, motivo, valor: a.valor, cita: a.cita ?? null })
   const entradas = Object.entries(lectura.atributos ?? {})
 
-  // Regla 4: sin capa de texto no hay evidencia posible.
-  if (!ctx.textoPaginas || !tieneTexto(ctx.textoPaginas)) {
-    for (const [clave, a] of entradas) descartar(clave, "sin_texto", a ?? { valor: null, cita: null })
+  // Regla 5: sin capa de texto no hay evidencia posible.
+  if (!ctx.paginas || !tieneTexto(ctx.paginas.map(textoDeItems))) {
+    for (const [clave, a] of entradas) descartar(clave, "sin_texto", a ?? { valor: null })
     return { aceptados, descartes }
   }
-  const texto = ctx.textoPaginas.map(normalizarCita).join(SEP_PAGINA)
-  const textoCompacto = compacto(texto)
+  const doc = construirDoc(ctx.paginas)
+  const textoLineas = doc.lineas.map((l) => l.map((c) => c.norm).join(" ")).join("\n")
+  const textoCompacto = compacto(textoLineas)
 
-  // Regla 2 (parte de entrada): la fila tiene que existir en el texto.
   const fila = typeof lectura.fila === "string" && tieneAlfanum(normalizarCita(lectura.fila)) ? normalizarCita(lectura.fila) : null
-  let motivoFila: Motivo | null = null
-  let filaPorCodigo = false
-  if (fila == null) {
-    if (!ctx.unicoProducto) motivoFila = "fila_ausente"
-  } else {
-    const enTexto = texto.includes(fila) || (compacto(fila).length >= 4 && textoCompacto.includes(compacto(fila)))
-    if (!enTexto) motivoFila = "fila_no_en_texto"
-    else filaPorCodigo = filaCoincideConCodigo(fila, ctx.code)
-  }
   const tokens = tokensDelNombre(ctx.nombre)
-  if (!motivoFila && fila != null && !filaPorCodigo && tokens.length === 0) motivoFila = "fila_no_coincide"
-
   const delNombre = extraerAtributosDeNombre(ctx.nombre)
 
-  for (const [clave, a] of entradas) {
-    const entrada = a && typeof a === "object" ? a : { valor: null, cita: null }
+  // Cada aparición de la fila: ¿es de este producto? ¿qué celdas le pertenecen?
+  const apariciones = fila
+    ? ocurrenciasDeFila(fila, doc).map((celda) => {
+        const c = contextoDeFila(doc, celda)
+        const porCodigo = filaCoincideConCodigo(fila, ctx.code)
+        const porTokens = tokens.length > 0 && tokens.every((t) => c.celdas.some((x) => t.re.test(x.norm)))
+        return { celda, ...c, esDelProducto: porCodigo || porTokens }
+      })
+    : []
+
+  for (const [clave, bruto] of entradas) {
+    const entrada = bruto && typeof bruto === "object" ? bruto : { valor: null }
     if (!esClave(clave)) {
       descartar(clave, "clave_desconocida", entrada)
       continue
     }
-    if (motivoFila) {
-      descartar(clave, motivoFila, entrada)
-      continue
-    }
-    if (typeof entrada.cita !== "string" || !tieneAlfanum(normalizarCita(entrada.cita))) {
-      descartar(clave, "cita_ausente", entrada)
-      continue
-    }
-    const cita = normalizarCita(entrada.cita)
-    // Regla 5: rango y vocabulario.
+    // Regla 6: rango y vocabulario.
     const valido = normalizarAtributos({ [clave]: entrada.valor }).find((x) => x.clave === clave)
     if (!valido) {
       descartar(clave, "valor_invalido", entrada)
       continue
     }
-    // Regla 1: la cita es textual y contiene el valor.
-    const enTexto = texto.includes(cita) || (compacto(cita).length >= 4 && textoCompacto.includes(compacto(cita)))
-    if (cita.length < 3 || !enTexto) {
-      descartar(clave, "cita_no_en_texto", entrada)
+    // 1. El valor está en el PDF.
+    const cands = candidatos(valido, doc)
+    if (cands.length === 0) {
+      const hayNumero = valido.valorNum != null && doc.celdas.some((c) => numerosDe(c.norm).has(valido.valorNum!))
+      descartar(clave, hayNumero ? "unidad_no_en_texto" : "valor_no_en_texto", entrada)
       continue
     }
-    const ev = valorEnCita(valido, cita)
-    if (ev !== "ok") {
-      descartar(clave, ev, entrada)
-      continue
-    }
-    // Regla 2 (parte por cita): con fila, la cita tiene que ser de ESA fila (la incluye). Sin esto el modelo
-    // podría pedir la fila correcta y citar la del vecino.
-    if (fila != null && !cita.includes(fila) && !(compacto(fila).length >= 4 && compacto(cita).includes(compacto(fila)))) {
-      descartar(clave, "fila_fuera_de_cita", entrada)
-      continue
-    }
-    // Regla 2 (parte por producto): sin código en la fila, TODOS los tokens del nombre en fila o cita.
-    if (fila != null && !filaPorCodigo) {
-      const zona = `${fila} ${cita}`
-      if (!tokens.every((t) => t.re.test(zona))) {
+    // 2. ¿Es el único valor de esa magnitud en el PDF?
+    const esVocabulario = DEFINICION_ATRIBUTOS[clave].tipo === "texto" && clave !== "medidas_mm"
+    const terminos = new Set(doc.celdas.flatMap((c) => textosDe(c).flatMap((t) => terminosEn(clave, t))))
+    const unico = terminos.size === 0 || (terminos.size === 1 && terminos.has(canonico(valido)))
+    let regla: ReglaAceptacion
+    let cand: Candidato = cands[0]
+    if (unico && (esVocabulario || ctx.unicoProducto)) {
+      regla = esVocabulario ? "vocabulario" : "unico"
+    } else {
+      // 3. Hay varios valores: tiene que estar en la fila/columna del producto.
+      if (fila == null) {
+        descartar(clave, "fila_ausente", entrada)
+        continue
+      }
+      if (apariciones.length === 0) {
+        descartar(clave, "fila_no_en_texto", entrada)
+        continue
+      }
+      const delProducto = apariciones.filter((a) => a.esDelProducto)
+      if (delProducto.length === 0) {
         descartar(clave, "fila_no_coincide", entrada)
         continue
       }
+      const hallado = (() => {
+        for (const ap of delProducto) {
+          for (const c of cands) {
+            const pertenece = c.celda
+              ? ap.celdas.includes(c.celda) || c.celda === ap.celda
+              : ap.modo === "fila" && c.pag === ap.celda.pag && Math.abs(c.y - ap.celda.y) <= tolY(ap.celda, ap.celda)
+            if (pertenece) return c
+          }
+        }
+        return null
+      })()
+      if (!hallado) {
+        descartar(clave, "valor_fuera_de_fila", entrada)
+        continue
+      }
+      cand = hallado
+      regla = "fila"
     }
-    // Regla 3: el nombre manda.
+    // 4. El nombre manda.
     const enNombre = delNombre.find((x) => x.clave === clave)
     if (enNombre && !igualesValores(enNombre, valido)) {
       descartar(clave, "contradice_nombre", entrada)
       continue
     }
-    aceptados.push({ clave, valorNum: valido.valorNum, valorTexto: valido.valorTexto, cita: entrada.cita })
+    const cita = typeof entrada.cita === "string" ? entrada.cita : null
+    const citaNorm = cita ? normalizarCita(cita) : ""
+    aceptados.push({
+      clave,
+      valorNum: valido.valorNum,
+      valorTexto: valido.valorTexto,
+      cita,
+      regla,
+      evidencia: cand.texto,
+      pagina: cand.pag + 1,
+      citaEnTexto: citaNorm.length >= 3 && (textoLineas.includes(citaNorm) || textoCompacto.includes(compacto(citaNorm))),
+    })
   }
   return { aceptados, descartes }
 }
@@ -390,7 +625,8 @@ export function consolidar<T extends { id: string; clave: ClaveAtributo; valorNu
   const ok: T[] = []
   const conflictos: T[] = []
   for (const g of grupos.values()) {
-    if (g.every((x) => igualesValores({ clave: x.clave, valorNum: x.valorNum, valorTexto: x.valorTexto }, { clave: g[0].clave, valorNum: g[0].valorNum, valorTexto: g[0].valorTexto }))) ok.push(g[0])
+    const primero = { clave: g[0].clave, valorNum: g[0].valorNum, valorTexto: g[0].valorTexto }
+    if (g.every((x) => igualesValores({ clave: x.clave, valorNum: x.valorNum, valorTexto: x.valorTexto }, primero))) ok.push(g[0])
     else conflictos.push(...g)
   }
   return { aceptados: ok, conflictos }

@@ -16,28 +16,46 @@ los PDFs locales y escriben JSONL; el código decide qué se acepta.
 ## Formato de `crudo/*.jsonl` (una línea por producto)
 
 ```json
-{"id":"123","pdf":"pdfs/catalogo.pdf","fila":"RF-20","atributos":{"potencia_w":{"valor":20,"cita":"RF-20 20W 1600LM IP65"}}}
+{"id":"123","pdf":"pdfs/catalogo.pdf","fila":"EFLG2-20W","atributos":{"potencia_w":{"valor":20,"cita":"Potencia 20W"}}}
 ```
 
 - `id`: el de `indice.json`. `pdf`: ruta relativa a `<dir>` (no puede salir de `<dir>`).
-- `fila`: identificador LITERAL de la fila o variante usada (modelo o código tal como figura en el PDF).
-  `null` sólo si el PDF es la ficha propia de UN producto (`pdfs/<archivo>` con un único producto en
-  `indice.json`); en catálogos compartidos y en `recortes/` la fila es obligatoria.
-- `atributos`: `{clave: {valor, cita}}` con las claves de `CLAVES_ATRIBUTO`. `cita` es texto TEXTUAL del
-  PDF (copiado, no parafraseado) que contiene el valor y la fila completa (incluye el identificador de
-  la fila). No incluir claves sin evidencia: no inferir.
+- `fila`: identificador LITERAL de la fila o de la columna de la variante: el modelo o el código tal como
+  figura en el PDF (en una tabla transpuesta es el encabezado de columna). `null` sólo si el PDF es la
+  ficha propia de UN producto. En catálogos compartidos y en `recortes/` la fila es obligatoria (salvo
+  para color, montaje, tono, curva y zócalo si el PDF tiene un único término de esa clave).
+- `atributos`: `{clave: {valor, cita}}` con las claves de `CLAVES_ATRIBUTO`. **`cita` es opcional e
+  informativa** (no decide nada): sirve para que quien revise vea de dónde salió. No incluir claves sin
+  evidencia: no inferir.
 
-## Reglas que aplica `verificar-atributos-pdf.ts`
+## Cómo decide `verificar-atributos-pdf.ts` (evidencia posicional)
 
-1. La cita (mayúsculas, sin tildes, espacios colapsados) aparece en el texto del PDF y contiene el
-   valor, con su unidad o la palabra del campo (`IP65`, `25 A`, `E27`, sinónimos del vocabulario).
-2. La fila aparece en el texto y coincide con el producto (contiene su código de Alegra sin sufijo de
-   marca, o todos los tokens número+unidad del nombre: `20W`, `63A`, `300x1200`); la cita incluye la fila.
-3. Si el nombre ya dice otro valor para la misma clave: se descarta el del PDF (`contradice_nombre`).
-4. PDF sin capa de texto: no se carga nada (`sin_texto`).
-5. Rangos y vocabularios de `normalizarAtributos` (`valor_invalido`).
+Se extraen los items de texto de cada página con sus coordenadas (pdfjs vía unpdf) y se reconstruyen
+líneas (misma `y`) y columnas (alineación por `x`). Las tablas de los catálogos salen por celdas, así
+que el encabezado y el valor no son texto contiguo: por eso no se exige la cita literal.
+
+1. El valor tiene que estar en el PDF: número + unidad (coma o punto: `65W`, `1.100 lm`, `200 - 240VCa`,
+   `IP 20` con el rótulo de su línea, `300 x 1200 mm`) o el término del vocabulario / un sinónimo.
+2. Ficha propia de un producto (`pdfs/<archivo>` con un solo producto en `indice.json`): se acepta si es
+   el único valor de esa magnitud en el PDF. Si hay varios valores distintos (p. ej. `3000 K - 6500 K`),
+   hace falta `fila` y la regla 3. Color, montaje, tono, curva y zócalo se aceptan con un único término
+   de la clave en el PDF.
+3. Tabla o variantes: la `fila` tiene que coincidir con el producto (su código de Alegra sin sufijo de
+   marca, o el modelo que el código de Alegra extiende, o todos los tokens número+unidad del nombre en las
+   celdas de esa fila/columna) y el valor tiene que estar en la misma línea que el identificador de la
+   fila (tabla normal) o en la misma columna (tabla transpuesta: se detecta porque hay otros
+   identificadores de la misma forma en su línea, y cada celda va al encabezado más cercano por `x`).
+4. Si el nombre ya dice otro valor para la misma clave: se descarta el del PDF (`contradice_nombre`).
+5. PDF sin capa de texto: `sin_texto`. Rangos y vocabularios de `normalizarAtributos`: `valor_invalido`.
 
 Dos lecturas distintas del mismo (producto, clave) se descartan (`conflicto_entre_lecturas`).
+
+Límite conocido: en encabezados con subcolumnas (p. ej. cálido/frío bajo el mismo modelo) el valor se
+asigna a la columna del modelo; si el nombre del producto no dice cuál de las dos es, no hay forma de
+distinguirlas (el cruce con el nombre cubre temperatura y tono).
+
+`aceptados.jsonl` trae, además del valor: `regla` (`unico` | `vocabulario` | `fila`), `evidencia` (texto
+del PDF que lo respalda), `pagina` y `citaEnTexto` (si la cita del modelo aparece textual).
 
 ## Comandos (parado en `apps/admin`)
 
@@ -47,4 +65,5 @@ npx tsx --env-file-if-exists=.env.local scripts/aplicar-atributos-pdf.ts --desde
 npx tsx --env-file-if-exists=.env.local scripts/aplicar-atributos-pdf.ts --desde <dir>/lectura/aceptados.jsonl --tenant <id> --aplicar
 ```
 
-El aplicador sube con fuente `pdf` y respeta manual > pdf > nombre. Revisar `descartes.jsonl` antes de aplicar.
+El aplicador sube con fuente `pdf` y respeta manual > pdf > nombre. Revisar `descartes.jsonl` y una
+muestra de `aceptados.jsonl` (campo `evidencia`) antes de aplicar.

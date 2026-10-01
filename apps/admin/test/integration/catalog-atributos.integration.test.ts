@@ -70,6 +70,23 @@ describe("catalog_atributos: precedencia", () => {
     expect(await reemplazarAtributosDeNombre(A, p)).toEqual({ escritas: 0, borradas: 0 })
   })
 
+  it("claves ampliadas: manual de 'polos' no lo pisa el nombre; cambiar el nombre borra las 'nombre' que ya no salen", async () => {
+    await reemplazarAtributosDeNombre(A, [{ alegraId: "5", name: "TERMICA 2X25A 6KA", description: null }])
+    expect(await mapa("5")).toEqual({
+      corriente_a: [25, "nombre"],
+      polos: [2, "nombre"],
+      poder_corte_ka: [6, "nombre"],
+    })
+
+    await guardarAtributosManual(A, "5", [{ clave: "polos", valorNum: 3, valorTexto: null }], [])
+    await reemplazarAtributosDeNombre(A, [{ alegraId: "5", name: "TERMICA 2X25A 6KA", description: null }])
+    expect((await mapa("5")).polos).toEqual([3, "manual"])
+
+    // El nombre cambia: las filas 'nombre' que ya no salen se borran; la manual de polos se conserva.
+    await reemplazarAtributosDeNombre(A, [{ alegraId: "5", name: "TERMICA", description: null }])
+    expect(await mapa("5")).toEqual({ polos: [3, "manual"] })
+  })
+
   it("el hook de la sync no tira aunque falle la base", async () => {
     await getDb().execute(dsql`ALTER TABLE catalog_atributos RENAME TO catalog_atributos_x`)
     try {

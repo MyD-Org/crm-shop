@@ -599,6 +599,51 @@ export const orderEventos = shop.table(
 export type OrderEventoRow = typeof orderEventos.$inferSelect;
 
 /**
+ * Pagos registrados a mano por el CRM en un pedido offline (migración `0030`, change
+ * `pago-transferencia-comprobante`, rebanada D): monto, fecha, referencia y, si hay, el
+ * comprobante (`payment_receipts.id`, SIN FK: es del esquema `public`, dueño el CRM).
+ *
+ * Anular un pago es BAJA LÓGICA (`anulado_en`): la fila queda para auditoría. A lo sumo hay un
+ * pago activo por pedido en la práctica (el `UPDATE ... pago_estado = 'pendiente'` del CRM impide
+ * registrar otro mientras el pedido figura pagado), pero la tabla no lo impone con un índice
+ * único: queda abierta a pagos parciales.
+ *
+ * Sólo el CRM la escribe y la lee (rol dueño, igual que `order_eventos`): el Shop no la usa,
+ * así que no hace falta GRANT a `shop_app`.
+ */
+export const orderPayments = shop.table(
+  "order_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    paidOn: date("paid_on", { mode: "string" }).notNull(),
+    referencia: text("referencia"),
+    /** `public.payment_receipts.id`; sin FK entre esquemas. NULL = pago sin comprobante. */
+    receiptId: uuid("receipt_id"),
+    registradoPor: uuid("registrado_por"),
+    registradoPorNombre: text("registrado_por_nombre"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    anuladoEn: timestamp("anulado_en", { withTimezone: true }),
+    anuladoPor: uuid("anulado_por"),
+    anuladoPorNombre: text("anulado_por_nombre"),
+  },
+  (t) => [
+    index("order_payments_tenant_order").on(t.tenantId, t.orderId),
+    check("order_payments_amount_check", sql`${t.amount} > 0`),
+    check(
+      "order_payments_referencia_check",
+      sql`${t.referencia} is null or char_length(${t.referencia}) <= 100`,
+    ),
+  ],
+);
+
+export type OrderPaymentRow = typeof orderPayments.$inferSelect;
+
+/**
  * Remito único por pedido (migración `0021`, change `admin-emitir-factura-pedido` rebanada D).
  *
  * DECISIÓN DE LA USUARIA: un remito único e íntegro por pedido, sin entregas parciales por

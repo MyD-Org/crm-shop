@@ -128,6 +128,38 @@ describe("cotizarItem y el stock de Alegra", () => {
   });
 });
 
+describe("cotizarItem: precio efectivo de la cuenta", () => {
+  const item = (propia: number) =>
+    ({
+      id: "1",
+      name: "Panel LED",
+      status: "active",
+      price: [
+        { idPriceList: "1", price: 1000, main: true },
+        { idPriceList: "7", price: propia, main: false },
+      ],
+      inventory: { availableQuantity: 50 },
+    }) as unknown as AlegraItem;
+
+  it("propia más barata: cobra la propia y marca precio especial", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item(800), "7");
+    expect(l.precioUnitario).toBe(800);
+    expect(l.precioEspecial).toBe(true);
+  });
+
+  it("propia más cara: cobra la general, no el cliente paga más de lo que vio", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item(1200), "7");
+    expect(l.precioUnitario).toBe(1000);
+    expect(l.precioEspecial).toBeUndefined();
+  });
+
+  it("propia en 0: cobra la general y no queda sin_precio", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item(0), "7");
+    expect(l.precioUnitario).toBe(1000);
+    expect(l.problema).toBeUndefined();
+  });
+});
+
 describe("itemDesdeEspejo: mostrar marca", () => {
   const fila = {
     alegraId: "1",

@@ -472,18 +472,27 @@ export function ivaDeItem(item: Pick<AlegraItem, "tax">): number {
 }
 
 /**
- * Misma resolución de precio, pero sobre un array de precios suelto — la forma
- * que devuelve `mapPrecios` sobre los precios de la vista del CRM.
+ * Precio general: el de la lista principal (`main`) o, si no hay, el primero.
+ */
+export function precioGeneral(prices: AlegraPrice[] | undefined): number {
+  if (!Array.isArray(prices) || prices.length === 0) return 0;
+  const principal = prices.find((p) => p.main);
+  return (principal ?? prices[0]).price;
+}
+
+/**
+ * Precio efectivo para una cuenta: ÚNICA regla compartida por catálogo,
+ * carrito y pedido. La lista propia (`idPriceList`) se usa solo si existe, es
+ * mayor a 0 y es MENOR que la general; en cualquier otro caso rige la general.
  */
 export function precioDeLista(
   prices: AlegraPrice[] | undefined,
   idPriceList?: string
 ): number {
-  if (!Array.isArray(prices) || prices.length === 0) return 0;
-  if (idPriceList) {
-    const match = prices.find((p) => p.idPriceList === idPriceList);
-    if (match) return match.price;
+  const general = precioGeneral(prices);
+  if (idPriceList && Array.isArray(prices)) {
+    const propia = prices.find((p) => p.idPriceList === idPriceList);
+    if (propia && propia.price > 0 && propia.price < general) return propia.price;
   }
-  const principal = prices.find((p) => p.main);
-  return (principal ?? prices[0]).price;
+  return general;
 }

@@ -40,6 +40,10 @@ export const MOTIVOS = [
   "fila_no_coincide",
   "valor_fuera_de_fila",
   "ambiguo_en_fila",
+  "termino_fuera_de_fila",
+  "valor_en_rango_o_lista",
+  "valor_por_metro",
+  "tension_parcial",
   "producto_no_ubicado",
   "valor_en_otra_pagina",
   "valor_invalido",
@@ -266,10 +270,47 @@ function evidenciaNumerica(clave: ClaveAtributo, a: AtributoExtraido, cita: stri
   const ev = EVIDENCIA_NUM[clave]
   if (!ev) return "ok"
   if (new RegExp(`(?<![0-9.,])${altNumero(n)}${ev.unidad}`).test(cita)) return "ok"
-  return new RegExp(ev.palabra).test(cita) ? "ok" : "unidad_no_en_texto"
+  if (!new RegExp(ev.palabra).test(cita)) return "unidad_no_en_texto"
+  // La palabra clave alcanza para un número sin unidad ("Corriente 36"), no para uno con OTRA unidad
+  // pegada ("36 mA", "36 Wh", "36 VA"): si todas las apariciones del número llevan otra unidad, no vale.
+  const apariciones = [...cita.matchAll(new RegExp(`(?<![0-9.,])${altNumero(n)}(?![0-9])(?![.,]\\d)(\\s?(?:${OTRAS_UNIDADES})(?![A-Z0-9]))?`, "g"))]
+  return apariciones.length > 0 && apariciones.every((m) => m[1]) ? "unidad_no_en_texto" : "ok"
 }
 
-function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, cita: string): EvidenciaValor {
+const OTRAS_UNIDADES = "MAH|MA|KA|AH|WH|KWH|KW|MW|VA|KVA|KV|MV|VCA|VAC|VDC|VCC|LM|LX|HZ|MM2|MM|CM|MTS|MT|KG|G|°C|ºC|%|K|W|V|A|M"
+
+/** ¿La unidad del valor es "por metro" ("14 W/m", "2 A x m", "1200 lm/m", "lm por metro")? */
+export function esPorMetro(clave: ClaveAtributo, n: number, texto: string): boolean {
+  const ev = EVIDENCIA_NUM[clave]
+  if (!ev || !["potencia_w", "corriente_a", "flujo_lm"].includes(clave)) return false
+  const por = "\\s?(?:/|X|POR)\\s?(?:M|MT|MTS|MTRS|METROS?)(?![A-Z0-9])"
+  return new RegExp(`(?<![0-9.,])${altNumero(n)}${ev.unidad.replace(/\(\?!\[A-Z0-9?\]\)$/, "")}${por}`).test(texto)
+}
+
+/**
+ * ¿El valor numérico aparece como parte de un rango ("1.400-1.500 LM", "1400~1500") o de una lista con
+ * barra ("2.050 / 2.100 LM", "3000/4000/6500K") en este texto? Un código de modelo ("EFLG2-20W") no cuenta.
+ */
+export function enRangoOLista(clave: ClaveAtributo, n: number, texto: string): boolean {
+  const num = altNumero(n)
+  const ip = clave === "ip" ? "(?:IP\\s?-?)?" : ""
+  const u = "(?:\\s?([A-Z°º²%]{1,6}))?"
+  const sep = "\\s?[-~/]\\s?"
+  const otro = "\\d+(?:[.,]\\d+)*"
+  // "50W / 2A" son dos magnitudes distintas, no una lista: sólo cuenta si las unidades coinciden o falta alguna.
+  const misma = (m: RegExpExecArray | null) => !!m && !(m[1] && m[2] && m[1] !== m[2])
+  const delante = new RegExp(`(?<![0-9.,])${ip}0?${num}(?![0-9])${u}${sep}${ip}${otro}${u}`, "g")
+  const detras = new RegExp(`(?<![A-Z0-9])${ip}${otro}${u}${sep}${ip}0?${num}(?![0-9])${u}`, "g")
+  for (const re of [delante, detras]) for (const m of texto.matchAll(re)) if (misma(m as unknown as RegExpExecArray)) return true
+  return false
+}
+
+/** Sinónimos que sólo valen al leer el PDF: "de superficie" / "superficie" = montaje "aplicar". */
+const sinonimosDePdf = (clave: ClaveAtributo, t: string): string =>
+  clave === "montaje" ? t.replace(/(?<![A-Z0-9])(?:DE )?SUPERFICIE(?![A-Z0-9])/g, "APLICAR") : t
+
+function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, citaCruda: string): EvidenciaValor {
+  const cita = sinonimosDePdf(clave, citaCruda)
   const v = a.valorTexto ?? ""
   switch (clave) {
     case "tono": {
@@ -405,7 +446,7 @@ export function terminosEn(clave: ClaveAtributo, texto: string): string[] {
     return out
   }
   if (DEFINICION_ATRIBUTOS[clave].tipo === "texto") {
-    const v = extraerAtributosDeNombre(texto).find((x) => x.clave === clave)?.valorTexto
+    const v = extraerAtributosDeNombre(sinonimosDePdf(clave, texto)).find((x) => x.clave === clave)?.valorTexto
     return v ? [v.toLowerCase()] : []
   }
   const ev = EVIDENCIA_NUM[clave]
@@ -566,6 +607,15 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
   const textoCompacto = compacto(textoLineas)
 
   const fila = typeof lectura.fila === "string" && tieneAlfanum(normalizarCita(lectura.fila)) ? normalizarCita(lectura.fila) : null
+  // Si la fila es el código de Alegra con sufijo de marca, se busca la forma sin sufijo (y sin el
+  // prefijo duplicado), con las mismas variantes que el matcher de código.
+  const codeNorm = ctx.code ? normalizarCita(ctx.code) : null
+  const filaSinSufijo = fila && codeNorm && fila === codeNorm ? fila.replace(/-[A-Z]{2,5}$/, "") : null
+  const filaBuscada = filaSinSufijo && filaSinSufijo !== fila && filaSinSufijo.replace(/[^A-Z0-9]/g, "").length >= 3 ? filaSinSufijo : fila
+  const formasDeFila = (f: string): string[] => {
+    const dup = /^(\d{2,3})\1/.exec(f.replace(/[^A-Z0-9]/g, ""))
+    return filaBuscada === fila || !dup ? [f] : [f, f.replace(/[^A-Z0-9]/g, "").slice(dup[1].length)]
+  }
   const tokens = tokensDelNombre(ctx.nombre)
   const delNombre = extraerAtributosDeNombre(ctx.nombre)
 
@@ -584,10 +634,10 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
   }
 
   // Cada aparición de la fila: ¿es de este producto? ¿qué celdas le pertenecen?
-  const apariciones = fila
-    ? ocurrenciasDeFila(fila, doc).map((celda) => {
+  const apariciones = filaBuscada
+    ? [...new Set(formasDeFila(filaBuscada).flatMap((f) => ocurrenciasDeFila(f, doc)))].map((celda) => {
         const c = contextoDeFila(doc, celda)
-        const porCodigo = filaCoincideConCodigo(fila, ctx.code)
+        const porCodigo = filaCoincideConCodigo(filaBuscada, ctx.code)
         const porTokens = tokens.length > 0 && tokens.every((t) => c.celdas.some((x) => t.re.test(x.norm)))
         return { celda, ...c, esDelProducto: porCodigo || porTokens }
       })
@@ -606,11 +656,28 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
       continue
     }
     // 1. El valor está en el PDF.
-    const cands = candidatos(valido, doc)
+    let cands = candidatos(valido, doc)
     if (cands.length === 0) {
       const hayNumero = valido.valorNum != null && doc.celdas.some((c) => numerosDe(c.norm).has(valido.valorNum!))
       descartar(clave, hayNumero ? "unidad_no_en_texto" : "valor_no_en_texto", entrada)
       continue
+    }
+    // 1a. Potencia, corriente y flujo "por metro" no son el valor del producto.
+    if (valido.valorNum != null && cands.every((c) => esPorMetro(clave, valido.valorNum!, c.texto))) {
+      descartar(clave, "valor_por_metro", entrada)
+      continue
+    }
+    // 1b. Un número que es parte de un rango o de una lista ("200-240V", "3000/4000K") no es el valor.
+    if (DEFINICION_ATRIBUTOS[clave].tipo === "num" && valido.valorNum != null) {
+      const esRangoTension = clave === "tension_v" && !!valido.valorTexto && /[-/]/.test(valido.valorTexto)
+      if (!esRangoTension) {
+        const sueltos = cands.filter((c) => !enRangoOLista(clave, valido.valorNum!, c.texto))
+        if (sueltos.length === 0) {
+          descartar(clave, clave === "tension_v" ? "tension_parcial" : "valor_en_rango_o_lista", entrada)
+          continue
+        }
+        cands = sueltos
+      }
     }
     // 2. ¿Es el único valor de esa magnitud en el PDF?
     const esVocabulario = DEFINICION_ATRIBUTOS[clave].tipo === "texto" && clave !== "medidas_mm"
@@ -618,7 +685,9 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
     const unico = terminos.size === 0 || (terminos.size === 1 && terminos.has(canonico(valido)))
     let regla: ReglaAceptacion
     let cand: Candidato = cands[0]
-    if (unico && (esVocabulario || ctx.unicoProducto)) {
+    // El vocabulario sólo vale por único término en la ficha de UN producto; en un catálogo compartido
+    // tiene que estar en la fila/columna del producto.
+    if (unico && ctx.unicoProducto) {
       regla = esVocabulario ? "vocabulario" : "unico"
       // Con varias páginas, el valor único tiene que estar en una página donde figura el producto.
       if (!esVocabulario && doc.paginas > 1) {
@@ -674,7 +743,7 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
         continue
       }
       if (!hallado) {
-        descartar(clave, "valor_fuera_de_fila", entrada)
+        descartar(clave, esVocabulario ? "termino_fuera_de_fila" : "valor_fuera_de_fila", entrada)
         continue
       }
       cand = hallado

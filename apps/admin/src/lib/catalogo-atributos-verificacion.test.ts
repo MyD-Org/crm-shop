@@ -210,14 +210,20 @@ describe("ficha propia de un producto", () => {
   })
 
   it("varios valores de la misma magnitud: hace falta la fila", () => {
-    const r = verificarLectura(lectura(null, { temperatura_k: { valor: 3000 } }), propia())
+    const celdas: Celda[] = [RELLENO, ["Temperatura", 40, 660], ["3000K", 150, 660], ["Temperatura", 40, 640], ["6500K", 150, 640]]
+    const r = verificarLectura(lectura(null, { temperatura_k: { valor: 3000 } }), ctx(celdas, { unicoProducto: true, nombre: "COLGANTE", code: "CG-001-XYZ" }))
     expect(motivos(r)).toEqual(["temperatura_k:fila_ausente"])
   })
 
-  it("en un PDF compartido el valor único no alcanza (salvo vocabulario)", () => {
+  it("un valor que es extremo de un rango no se acepta", () => {
+    const r = verificarLectura(lectura(null, { temperatura_k: { valor: 3000 } }), propia())
+    expect(motivos(r)).toEqual(["temperatura_k:valor_en_rango_o_lista"])
+  })
+
+  it("en un PDF compartido el valor único no alcanza, tampoco el vocabulario", () => {
     const r = verificarLectura(lectura(null, { tension_v: { valor: 48 }, color: { valor: "negro" } }), propia({ unicoProducto: false }))
-    expect(motivos(r)).toEqual(["tension_v:fila_ausente"])
-    expect(aceptados(r)).toEqual([["color", "negro"]])
+    expect(motivos(r)).toEqual(["tension_v:fila_ausente", "color:fila_ausente"])
+    expect(aceptados(r)).toEqual([])
   })
 
   it("vocabulario con más de un término: tiene que estar en la fila del producto", () => {
@@ -225,7 +231,7 @@ describe("ficha propia de un producto", () => {
     const c = ctx(celdas, { code: "PL-20-XYZ", nombre: "PLAFON" })
     expect(motivos(verificarLectura(lectura(null, { color: { valor: "blanco" } }), c))).toEqual(["color:fila_ausente"])
     expect(aceptados(verificarLectura(lectura("PL-20", { color: { valor: "blanco" } }), c))).toEqual([["color", "blanco"]])
-    expect(motivos(verificarLectura(lectura("PL-20", { color: { valor: "negro" } }), c))).toEqual(["color:valor_fuera_de_fila"])
+    expect(motivos(verificarLectura(lectura("PL-20", { color: { valor: "negro" } }), c))).toEqual(["color:termino_fuera_de_fila"])
   })
 })
 
@@ -374,5 +380,170 @@ describe("consolidar", () => {
     const r = consolidar([a("1", 2), a("1", 2), a("2", 2), a("2", 3)])
     expect(r.aceptados).toEqual([a("1", 2)])
     expect(r.conflictos).toEqual([a("2", 2), a("2", 3)])
+  })
+})
+
+describe("fila = código de Alegra con sufijo de marca", () => {
+  const TABLA: Celda[] = [
+    RELLENO,
+    ["Codigo", 40, 720], ["Potencia", 120, 720], ["Flujo", 200, 720],
+    ["ABC123", 40, 700], ["10W", 120, 700], ["800LM", 200, 700],
+    ["ABC124", 40, 680], ["20W", 120, 680], ["1600LM", 200, 680],
+  ]
+
+  it("la fila viene con el sufijo de marca y se busca sin él", () => {
+    const r = verificarLectura(lectura("ABC123-XYZ", { potencia_w: { valor: 10 }, flujo_lm: { valor: 800 } }), ctx(TABLA, { code: "ABC123-XYZ", nombre: "REFLECTOR" }))
+    expect(r.descartes).toEqual([])
+    expect(aceptados(r)).toEqual([["potencia_w", 10], ["flujo_lm", 800]])
+  })
+
+  it("con separadores opcionales en el PDF", () => {
+    const t: Celda[] = [RELLENO, ["ABC-123", 40, 700], ["10W", 120, 700], ["ABC-124", 40, 680], ["20W", 120, 680]]
+    const r = verificarLectura(lectura("ABC123-XYZ", { potencia_w: { valor: 10 } }), ctx(t, { code: "ABC123-XYZ", nombre: "REFLECTOR" }))
+    expect(aceptados(r)).toEqual([["potencia_w", 10]])
+  })
+
+  it("prefijo duplicado en Alegra", () => {
+    const t: Celda[] = [RELLENO, ["990101001A", 40, 700], ["10W", 120, 700], ["990101002A", 40, 680], ["20W", 120, 680]]
+    const r = verificarLectura(lectura("99990101001A-XYZ", { potencia_w: { valor: 10 } }), ctx(t, { code: "99990101001A-XYZ", nombre: "REFLECTOR" }))
+    expect(r.descartes).toEqual([])
+    expect(aceptados(r)).toEqual([["potencia_w", 10]])
+    const otro = verificarLectura(lectura("99990101009A-XYZ", { potencia_w: { valor: 10 } }), ctx(t, { code: "99990101009A-XYZ", nombre: "REFLECTOR" }))
+    expect(motivos(otro)).toEqual(["potencia_w:fila_no_en_texto"])
+  })
+
+  it("el rigor sigue: valor de otra fila, fila ausente y fila de otro código", () => {
+    const c = ctx(TABLA, { code: "ABC123-XYZ", nombre: "REFLECTOR" })
+    expect(motivos(verificarLectura(lectura("ABC123-XYZ", { potencia_w: { valor: 20 } }), c))).toEqual(["potencia_w:valor_fuera_de_fila"])
+    expect(motivos(verificarLectura(lectura("ABC999-XYZ", { potencia_w: { valor: 10 } }), c))).toEqual(["potencia_w:fila_no_en_texto"])
+    expect(motivos(verificarLectura(lectura("ABC124", { potencia_w: { valor: 20 } }), c))).toEqual(["potencia_w:fila_no_coincide"])
+  })
+})
+
+describe("montaje: superficie / sobrepuesto equivalen a aplicar", () => {
+  const t = (txt: string): Celda[] => [RELLENO, ["Montaje", 40, 700], [txt, 120, 700]]
+  const c = (txt: string) => ctx(t(txt), { nombre: "PLAFON", unicoProducto: true })
+  it.each(["De superficie", "Superficie", "Sobrepuesto"])("%s", (txt) => {
+    expect(terminosEn("montaje", txt.toUpperCase())).toEqual(["aplicar"])
+    expect(aceptados(verificarLectura(lectura(null, { montaje: { valor: "aplicar" } }), c(txt)))).toEqual([["montaje", "aplicar"]])
+  })
+  it("no vale para embutir ni se confunde con otra palabra", () => {
+    expect(motivos(verificarLectura(lectura(null, { montaje: { valor: "embutir" } }), c("De superficie")))).toEqual(["montaje:valor_no_en_texto"])
+    expect(terminosEn("montaje", "SUPERFICIES PLANAS")).toEqual([])
+  })
+})
+
+describe("vocabulario en un catálogo compartido", () => {
+  // "superficie" aparece sólo en la descripción general y en un accesorio, no en la fila de la caja.
+  const CATALOGO: Celda[] = [
+    RELLENO,
+    ["Accesorio: caja de superficie para capsulada", 40, 780],
+    ["CJ-16", 40, 700], ["16 modulos", 150, 700],
+    ["CJ-32", 40, 680], ["32 modulos", 150, 680],
+  ]
+  const c = (parte: Partial<ContextoVerificacion> = {}) => ctx(CATALOGO, { code: "CJ-16-XYZ", nombre: "CAJA", ...parte })
+
+  it("termino_fuera_de_fila aunque sea el único término del PDF", () => {
+    expect(motivos(verificarLectura(lectura("CJ-16", { montaje: { valor: "aplicar" } }), c()))).toEqual(["montaje:termino_fuera_de_fila"])
+  })
+  it("sin fila se descarta", () => {
+    expect(motivos(verificarLectura(lectura(null, { montaje: { valor: "aplicar" } }), c()))).toEqual(["montaje:fila_ausente"])
+  })
+  it("en la ficha de un solo producto sigue valiendo el único término", () => {
+    expect(aceptados(verificarLectura(lectura(null, { montaje: { valor: "aplicar" } }), c({ unicoProducto: true })))).toEqual([["montaje", "aplicar"]])
+  })
+  it("si el término está en la fila del producto se acepta", () => {
+    const t: Celda[] = [RELLENO, ["CJ-16", 40, 700], ["De superficie", 150, 700], ["CJ-32", 40, 680], ["Embutir", 150, 680]]
+    const r = verificarLectura(lectura("CJ-16", { montaje: { valor: "aplicar" } }), ctx(t, { code: "CJ-16-XYZ", nombre: "CAJA" }))
+    expect(r.descartes).toEqual([])
+    expect(r.aceptados.map((a) => [a.clave, a.valorTexto, a.regla])).toEqual([["montaje", "aplicar", "fila"]])
+  })
+})
+
+describe("rangos y listas numéricas", () => {
+  const una = (txt: string, clave: string, valor: number, extra: Partial<ContextoVerificacion> = {}) =>
+    verificarLectura(lectura(null, { [clave]: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "X", ...extra }))
+
+  it.each([
+    ["Flujo 1.400-1.500 Lm", "flujo_lm", 1400],
+    ["Flujo 1.400 - 1.500 Lm", "flujo_lm", 1500],
+    ["Flujo 1400~1500 Lm", "flujo_lm", 1400],
+    ["Flujo 2.050 / 2.100 Lm", "flujo_lm", 2100],
+    ["Temperatura 3000/4000/6500K", "temperatura_k", 4000],
+    ["Temperatura 3000/4000/6500K", "temperatura_k", 6500],
+    ["10W-20W", "potencia_w", 20],
+  ])("%s (%s=%d) se descarta", (txt, clave, valor) => {
+    expect(motivos(una(txt, clave, valor))).toEqual([`${clave}:valor_en_rango_o_lista`])
+  })
+
+  it("un valor suelto y un código de modelo no son rango", () => {
+    expect(aceptados(una("1.400 Lm", "flujo_lm", 1400))).toEqual([["flujo_lm", 1400]])
+    expect(aceptados(una("Modelo EFLG2-20W 20W", "potencia_w", 20))).toEqual([["potencia_w", 20]])
+  })
+
+  it("dos magnitudes distintas con barra no son una lista", () => {
+    expect(aceptados(una("Transf. 380/24Vca 50W / 2A", "potencia_w", 50))).toEqual([["potencia_w", 50]])
+    expect(aceptados(una("Transf. 12W/0,5A", "potencia_w", 12))).toEqual([["potencia_w", 12]])
+    expect(aceptados(una("Transf. 12W/0,5A Corriente", "corriente_a", 0.5))).toEqual([["corriente_a", 0.5]])
+  })
+
+  it("lista alineada en columnas: cada valor bajo su propio identificador", () => {
+    const r = verificarLectura(lectura("RF-20", { flujo_lm: { valor: 1600 } }), ctx(TABLA_FILAS, { code: "RF-20-XYZ" }))
+    expect(aceptados(r)).toEqual([["flujo_lm", 1600]])
+  })
+})
+
+describe("tension_v: token completo", () => {
+  const t = (txt: string, valor: unknown) =>
+    verificarLectura(lectura(null, { tension_v: { valor } }), ctx([RELLENO, ["Tension", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "X" }))
+
+  it("un 220 suelto contra un rango es tension_parcial", () => {
+    expect(motivos(t("220-240V", 220))).toEqual(["tension_v:tension_parcial"])
+    expect(motivos(t("200 - 240VCa", 240))).toEqual(["tension_v:tension_parcial"])
+    expect(motivos(t("230/400V", 230))).toEqual(["tension_v:tension_parcial"])
+  })
+  it("el rango completo se acepta", () => {
+    expect(t("220-240V", "220-240").aceptados.map((a) => a.valorTexto)).toEqual(["220-240"])
+    expect(t("200 - 240VCa", "200-240").aceptados.map((a) => a.valorTexto)).toEqual(["200-240"])
+  })
+  it("un rango distinto del del PDF no se acepta", () => {
+    expect(motivos(t("200-240VCa", "220-240"))).toEqual(["tension_v:valor_no_en_texto"])
+  })
+  it("tensión simple", () => {
+    expect(aceptados(t("230V", 230))).toEqual([["tension_v", 230]])
+  })
+})
+
+describe("unidad con borde exacto", () => {
+  const una = (txt: string, clave: string, valor: number) =>
+    verificarLectura(lectura(null, { [clave]: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "X" }))
+
+  it.each([
+    ["Corriente 36 mA", "corriente_a", 36],
+    ["Corriente 36 kA", "corriente_a", 36],
+    ["Corriente 36 Ah", "corriente_a", 36],
+    ["Potencia 36 Wh", "potencia_w", 36],
+    ["Potencia 36 kWh", "potencia_w", 36],
+    ["Tension 36 VA", "tension_v", 36],
+    ["Flujo 36 lm/W", "flujo_lm", 36],
+  ])("%s no vale para %s=%d", (txt, clave, valor) => {
+    expect(aceptados(una(txt, clave, valor))).toEqual([])
+    expect(motivos(una(txt, clave, valor))).toHaveLength(1)
+  })
+
+  it("la unidad correcta sí, con o sin palabra clave", () => {
+    expect(aceptados(una("Corriente 36 A", "corriente_a", 36))).toEqual([["corriente_a", 36]])
+    expect(aceptados(una("Corriente 36", "corriente_a", 36))).toEqual([["corriente_a", 36]])
+    expect(aceptados(una("Potencia 36 W", "potencia_w", 36))).toEqual([["potencia_w", 36]])
+  })
+
+  it.each([
+    ["Potencia 14 W/m", "potencia_w", 14],
+    ["Potencia 14W/m", "potencia_w", 14],
+    ["Corriente 2 A x m", "corriente_a", 2],
+    ["Flujo 1200 lm/m", "flujo_lm", 1200],
+    ["Flujo 1200 LM POR METRO", "flujo_lm", 1200],
+  ])("%s es por metro", (txt, clave, valor) => {
+    expect(motivos(una(txt, clave, valor))).toEqual([`${clave}:valor_por_metro`])
   })
 })

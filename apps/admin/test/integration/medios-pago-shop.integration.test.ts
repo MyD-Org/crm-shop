@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest"
+import { readFileSync } from "node:fs"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import {
@@ -90,5 +91,47 @@ describe("reglas_venta.mensaje_confirmacion", () => {
     await guardarReglasVenta(A, { reservaDias: 3 })
     expect((await leerReglasVenta(A)).mensajeConfirmacion).toBe("Le escribiremos en {plazo}. WhatsApp: {whatsapp}.")
     expect(await guardarReglasVenta(A, { mensajeConfirmacion: "Hola {nombre}" })).toMatchObject({ kind: "invalid", campo: "mensajeConfirmacion" })
+  })
+})
+
+describe("fila fija mercadopago (migración 0057)", () => {
+  const sqlMigracion = readFileSync(new URL("../../drizzle/0057_medio_pago_mercadopago.sql", import.meta.url), "utf8")
+  const correrMigracion = async () => {
+    for (const parte of sqlMigracion.split("--> statement-breakpoint")) await getDb().execute(sql.raw(parte))
+  }
+
+  it("siembra una fila inactiva por tenant, al final del orden, y es idempotente", async () => {
+    await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia", orden: 0 })
+    await crearMedioPago(A, { slug: "efectivo", nombre: "Efectivo", orden: 5 })
+
+    await correrMigracion()
+    await correrMigracion()
+
+    const a = await listarMediosPago(A)
+    expect(a.filter((m) => m.slug === "mercadopago")).toEqual([
+      { slug: "mercadopago", nombre: "Mercado Pago", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6 },
+    ])
+    expect((await listarMediosPago(B)).filter((m) => m.slug === "mercadopago")).toHaveLength(1)
+  })
+
+  it("no pisa una fila que ya existe", async () => {
+    await getDb().execute(
+      sql`insert into medios_pago_shop (tenant_id, slug, nombre, activo, cobro_online, orden) values (${A}, 'mercadopago', 'Mercado Pago', true, true, 0)`,
+    )
+    await correrMigracion()
+    expect((await listarMediosPago(A)).find((m) => m.slug === "mercadopago")).toMatchObject({ activo: true, orden: 0 })
+  })
+
+  it("no se puede eliminar, pero sí activar y reordenar", async () => {
+    await correrMigracion()
+    expect(await eliminarMedioPago(A, "mercadopago")).toEqual({
+      kind: "conflict",
+      error: "Este medio de pago no se puede eliminar; desactívelo.",
+    })
+    expect(await actualizarMedioPago(A, "mercadopago", { activo: true, orden: 3, aplicaEnvio: false })).toMatchObject({
+      kind: "ok",
+      medio: { slug: "mercadopago", activo: true, orden: 3, aplicaEnvio: false, cobroOnline: true },
+    })
+    expect(await actualizarMedioPago(A, "mercadopago", { cobroOnline: false })).toMatchObject({ kind: "ok", medio: { cobroOnline: true } })
   })
 })

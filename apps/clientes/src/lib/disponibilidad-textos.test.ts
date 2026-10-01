@@ -210,6 +210,18 @@ describe("resumenEntregaPedido (checkout)", () => {
     expect(resumenEntregaPedido(prods, locales, { conEnvio: false })).toEqual({ resumen: null, aclaracion: null, sinEntrega: [] });
   });
 
+  it("envío con mezcla de plazos: sin aclaración de sucursales (es logística interna)", () => {
+    const r = resumenEntregaPedido(
+      [
+        { id: "1", disp: envio({ estado: "disponible", origen: "a", demoraDias: null }) },
+        { id: "2", disp: envio({ estado: "a_traer", origen: "b", demoraDias: 7 }) },
+      ],
+      locales,
+    );
+    expect(r.resumen?.texto).toBe("Envío a domicilio: disponible en 7 días");
+    expect(r.aclaracion).toBeNull();
+  });
+
   it("sin productos: nada", () => {
     expect(resumenEntregaPedido([], locales)).toEqual({ resumen: null, aclaracion: null, sinEntrega: [] });
   });

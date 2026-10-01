@@ -1015,9 +1015,14 @@ export function CheckoutClient({
         <span className="text-text">Finalizar pedido</span>
       </nav>
 
-      <h1 className="mb-6 font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
-        Finalizar pedido
-      </h1>
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h1 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
+          Finalizar pedido
+        </h1>
+        <Link href="/catalogo" className="text-sm text-muted hover:text-primary">
+          ← Seguir comprando
+        </Link>
+      </div>
 
 
       {estadoFacturacion.aviso === "faltan_datos" && !seccionFacturacion && (

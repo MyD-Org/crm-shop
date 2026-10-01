@@ -454,3 +454,39 @@ describe("extracción de claves nuevas desde el nombre", () => {
     expect(orden).toEqual([...orden].sort((a, b) => CLAVES_ATRIBUTO.indexOf(a) - CLAVES_ATRIBUTO.indexOf(b)))
   })
 })
+
+describe("eficiencia y magnitudes por metro no son flujo, potencia ni corriente", () => {
+  it("REFLECTOR 50W 110lm/W: la eficiencia no es flujo", () => {
+    expect(extraer("REFLECTOR 50W 110lm/W")).toEqual({ potencia_w: 50 })
+  })
+
+  it("PANEL 18W 1600LM 90 LM/W: el flujo es 1600", () => {
+    expect(extraer("PANEL 18W 1600LM 90 LM/W")).toEqual({ potencia_w: 18, flujo_lm: 1600 })
+  })
+
+  it.each(["110 lm/W", "130LM/W", "110lm/w", "110 lm / W", "110 lm/Watt", "110 lm por W", "110 lumenes por watt", "110 lúmenes por watt"])(
+    "variante de eficiencia %s: sin flujo",
+    (e) => {
+      expect(extraer(`REFLECTOR 50W ${e}`)).toEqual({ potencia_w: 50 })
+    },
+  )
+
+  it("eficiencia sin número (Lm/Watt) no rompe el resto", () => {
+    expect(extraer("PANEL 18W 1600LM Lm/Watt")).toEqual({ potencia_w: 18, flujo_lm: 1600 })
+  })
+
+  it("TIRA 14,4W/m 1200lm/m: por metro, ni flujo ni potencia", () => {
+    expect(extraer("TIRA 14,4W/m 1200lm/m")).toEqual({})
+  })
+
+  it("corriente por metro (A/m) y por m² (W/m²) no se extraen", () => {
+    expect(extraer("CABLE 5A/m")).toEqual({})
+    expect(extraer("PANEL 100 W/m² SOLAR")).toEqual({})
+    expect(extraer("TIRA 12W/mt 3000K")).toEqual({ temperatura_k: 3000, tono: "calido" })
+  })
+
+  it("no rompe lo que no es una relación", () => {
+    expect(extraer("TERMOMAGNETICA 10A/30mA 2P")).toMatchObject({ polos: 2 })
+    expect(extraer("TRAFO 230/400V 25M")).toMatchObject({ tension_v: 230, largo_m: 25 })
+  })
+})

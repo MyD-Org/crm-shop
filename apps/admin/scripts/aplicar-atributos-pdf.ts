@@ -12,6 +12,7 @@
  */
 import { readFile } from "node:fs/promises"
 import { aplicarAceptados, formatearResumenAplicar } from "../src/lib/catalogo-atributos-lectura-local"
+import { avisarShop } from "../src/lib/aviso-shop"
 import { leerAtributosDeProductos, upsertAtributos } from "../src/lib/catalogo-atributos-repo"
 
 function valor(argv: string[], flag: string): string | undefined {
@@ -33,6 +34,7 @@ async function main() {
     {
       leerExistentes: leerAtributosDeProductos,
       upsertPdf: (t, filas) => upsertAtributos(t, filas, "pdf"),
+      avisarShop,
     },
     aplicar,
   )

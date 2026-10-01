@@ -493,11 +493,27 @@ function extraerAmpliadas(t: string): AtributoExtraido[] {
 }
 
 /**
+ * Magnitudes que NO son el valor de la clave aunque lleven su unidad: la eficiencia ("110 lm/W",
+ * "90 lm por watt", "lúmenes por watt") no es flujo, y lo "por metro" o "por m²" ("14,4W/m",
+ * "1200lm/m", "5A/m", "100W/m²") no es la potencia, el flujo ni la corriente del producto. Se borran
+ * del texto antes de leer nada; ante la duda no se devuelve.
+ */
+const RE_EFICIENCIA = new RegExp(`${INIC}(?:\\d+(?:[.,]\\d+)? ?)?(?:lm|lumenes?) ?(?:/|por) ?(?:w|watts?|vatios?)${FIN}`, "g")
+const RE_POR_UNIDAD = new RegExp(
+  `${INIC}(?:\\d+(?:[.,]\\d+)? ?)?(?:k?w|watts?|lm|lumenes?|a|amps?|v|ma|ka) ?/ ?(?:m|mt|mts|metros?|m2|m²|cm|mm|h)${FIN}`,
+  "g",
+)
+
+function sinRelaciones(t: string): string {
+  return t.replace(RE_EFICIENCIA, "$1 ").replace(RE_POR_UNIDAD, "$1 ")
+}
+
+/**
  * Atributos que se leen del nombre (+ descripción). A lo sumo uno por clave, en el orden de
  * `CLAVES_ATRIBUTO`. Nunca tira.
  */
 export function extraerAtributosDeNombre(nombre: string, descripcion?: string | null): AtributoExtraido[] {
-  const t = normalizar(`${nombre ?? ""} ${descripcion ?? ""}`).replace(/\s+/g, " ").trim()
+  const t = sinRelaciones(normalizar(`${nombre ?? ""} ${descripcion ?? ""}`)).replace(/\s+/g, " ").trim()
   if (!t) return []
   const out: AtributoExtraido[] = []
   const num = (clave: ClaveAtributo, v: number | null) => {

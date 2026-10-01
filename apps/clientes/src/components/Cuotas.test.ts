@@ -50,14 +50,17 @@ describe("CuotasLinea (card y ficha)", () => {
     expect(t).toBe("6 cuotas sin interés de $ 20.000,00");
   });
 
-  it("con interés: 'N cuotas de $X', no dice 'sin interés'", () => {
-    const t = texto(
-      renderToStaticMarkup(
-        createElement(CuotasLinea, { opcion: opcion({ cuotas: 12, montoCuota: 13500, sinInteres: false }) }),
-      ),
-    );
-    expect(t).toBe("12 cuotas de $ 13.500,00");
+  it("con interés: lo dice y muestra el total financiado", () => {
+    const conInteres = opcion({ cuotas: 12, montoCuota: 13500, total: 162000, sinInteres: false });
+    const t = texto(renderToStaticMarkup(createElement(CuotasLinea, { opcion: conInteres })));
+    expect(t).toBe("12 cuotas de $ 13.500,00 con interés (total $ 162.000,00)");
     expect(t).not.toContain("sin interés");
+  });
+
+  it("con interés en la card del catálogo (sm): sin el total, para no alargar la línea", () => {
+    const conInteres = opcion({ cuotas: 12, montoCuota: 13500, total: 162000, sinInteres: false });
+    const t = texto(renderToStaticMarkup(createElement(CuotasLinea, { opcion: conInteres, tamano: "sm" })));
+    expect(t).toBe("12 cuotas de $ 13.500,00 con interés");
   });
 
   it("sin opción → nada", () => {
@@ -163,6 +166,14 @@ describe("CuotasResumen (carrito)", () => {
     const t = texto(html);
     expect(t).toContain(TEXTOS_CUOTAS.verMediosDePago);
     expect(t.indexOf("3 cuotas de")).toBeLessThan(t.indexOf(TEXTOS_CUOTAS.verMediosDePago));
+  });
+
+  it("con interés: la tarjeta lo aclara con el total financiado", () => {
+    const conInteres = oferta([{ cuotasMax: 3, montoMinimo: 0 }], [ofertada({ cuotas: 3, tasaPct: 20, cftPct: 25, teaPct: 21 })]);
+    const r = resumenCuotas(120000, conInteres);
+    const t = texto(renderToStaticMarkup(createElement(CuotasResumen, { resumen: r })));
+    expect(t).toContain("con interés (total");
+    expect(t).not.toContain("sin interés");
   });
 
   it("checkout: plan del pedido con título y sin barra", () => {

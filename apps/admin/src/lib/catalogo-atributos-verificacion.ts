@@ -52,6 +52,9 @@ export const MOTIVOS = [
   "valor_en_otra_pagina",
   "valor_invalido",
   "tono_sin_rotulo_de_luz",
+  "tono_en_accesorio",
+  "montaje_fuera_de_rotulo",
+  "angulo_no_es_de_luz",
   "valor_no_en_texto",
   "unidad_no_en_texto",
   "contradice_nombre",
@@ -450,6 +453,68 @@ function candidatos(a: AtributoExtraido, doc: Doc): Candidato[] {
   return out
 }
 
+// ───────────────────────── montaje, tono en accesorios y ángulo de luz ─────────────────────────
+
+const RE_ROTULO_INSTALACION = /^(?:TIPO DE )?(?:INSTALACION|MONTAJE|APLICACION)(?![A-Z0-9])/
+/** Frases que nombran "embutir" sin ser el montaje del producto (otro campo, o un accesorio). */
+const RE_EMBUTIR_AJENO = /CORTE (?:DE )?EMBUTID[OA]|COMPATIBLE CON|PARA EMBUTIR/
+const RE_EMBUTIR_AJENO_EN_ROTULO = /CORTE (?:DE )?EMBUTID[OA]|COMPATIBLE CON/
+
+/**
+ * Celdas del valor de los rótulos de instalación/montaje ("Tipo de instalación", "Instalación",
+ * "Montaje", "Aplicación"): la propia celda, las siguientes de su línea y, si el rótulo está solo, la
+ * celda de abajo alineada (tabla transpuesta). `null` si el PDF no tiene ningún rótulo de ese tipo.
+ */
+function celdasDeInstalacion(doc: Doc): Set<Celda> | null {
+  let out: Set<Celda> | null = null
+  for (const c of doc.celdas) {
+    if (c.norm.length >= 60 || !RE_ROTULO_INSTALACION.test(c.norm)) continue
+    out ??= new Set<Celda>()
+    out.add(c)
+    const ln = doc.lineas[c.linea]
+    const despues = ln.slice(ln.indexOf(c) + 1)
+    for (const d of despues) out.add(d)
+    const sigue = doc.lineas[c.linea + 1]
+    if (despues.length === 0 && sigue && sigue[0].pag === c.pag) {
+      for (const d of sigue) if (d.x <= c.x + c.w && c.x <= d.x + d.w) out.add(d)
+    }
+  }
+  return out
+}
+
+const RE_ACCESORIO = /(?<![A-Z])(?:CONECTORE?S?|CONTROLADORA?S?|CONTROL REMOTO|CABLES?|FUENTES?|AMPLIFICADORE?S?|EMPALMES?|CLIPS?|PERFILES?|PERFIL|DIFUSORE?S?)(?![A-Z])/
+
+const RE_ANGULO_DE_LUZ = /APERTURA|(?<![A-Z])HAZ(?![A-Z])|ANGULO|BEAM/
+const RE_ANGULO_MECANICO = /GIRO|ROTACION|INCLINACION|ORIENTABLE|BASCULANTE/
+
+/**
+ * ¿El rótulo del ángulo es de la luz? Se mira la propia celda, las anteriores de su línea (de derecha a
+ * izquierda) y el encabezado de su columna: decide el primer texto que habla de ángulo/apertura/haz o
+ * de giro/inclinación. Sin ninguno, no es evidencia de ángulo de luz.
+ */
+function esAnguloDeLuz(cand: Candidato, doc: Doc): boolean {
+  const decide = (t: string): boolean | null =>
+    RE_ANGULO_MECANICO.test(t) ? false : RE_ANGULO_DE_LUZ.test(t) ? true : null
+  if (!cand.celda) return decide(cand.texto) ?? false
+  const c = cand.celda
+  const ln = doc.lineas[c.linea]
+  const propio = decide(c.norm)
+  if (propio != null) return propio
+  for (let i = ln.indexOf(c) - 1; i >= 0; i--) {
+    const d = decide(ln[i].norm)
+    if (d != null) return d
+  }
+  for (let i = c.linea - 1; i >= 0 && c.linea - i <= 6; i--) {
+    if (doc.lineas[i][0].pag !== c.pag) break
+    for (const x of doc.lineas[i]) {
+      if (x.norm.length >= 40 || x.x > c.x + c.w || c.x > x.x + x.w) continue
+      const d = decide(x.norm)
+      if (d != null) return d
+    }
+  }
+  return false
+}
+
 // ───────────────────────── color de la luz ─────────────────────────
 
 const RE_LUZ = /(?<![A-Z])(LUZ|LIGHT)(?![A-Z])/
@@ -729,6 +794,32 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
       cands = cands.filter(bajoRotuloDeLuz)
       if (cands.length === 0) {
         descartar(clave, "tono_sin_rotulo_de_luz", entrada)
+        continue
+      }
+    }
+    // 1-ter. RGB/RGBW es del producto que emite la luz, no de un accesorio (conector, controladora…).
+    if (clave === "tono" && (valido.valorTexto === "rgb" || valido.valorTexto === "rgbw") && RE_ACCESORIO.test(normalizarCita(ctx.nombre))) {
+      descartar(clave, "tono_en_accesorio", entrada)
+      continue
+    }
+    // 1-quater. El montaje sale del rótulo de instalación, no de "corte embutido" ni de accesorios.
+    if (clave === "montaje") {
+      const instalacion = celdasDeInstalacion(doc)
+      cands = instalacion
+        ? cands.filter((c) =>
+            c.celda ? instalacion.has(c.celda) && !RE_EMBUTIR_AJENO_EN_ROTULO.test(c.texto) : RE_ROTULO_INSTALACION.test(c.texto) && !RE_EMBUTIR_AJENO_EN_ROTULO.test(c.texto),
+          )
+        : cands.filter((c) => !RE_EMBUTIR_AJENO.test(c.texto) && !(c.celda && RE_EMBUTIR_AJENO.test(c.celda.norm)))
+      if (cands.length === 0) {
+        descartar(clave, "montaje_fuera_de_rotulo", entrada)
+        continue
+      }
+    }
+    // 1-quinquies. Un ángulo es el de la luz (apertura, haz), no el de giro ni de inclinación.
+    if (clave === "angulo_grados") {
+      cands = cands.filter((c) => esAnguloDeLuz(c, doc))
+      if (cands.length === 0) {
+        descartar(clave, "angulo_no_es_de_luz", entrada)
         continue
       }
     }

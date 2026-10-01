@@ -49,9 +49,13 @@ describe("textos", () => {
     expect(fmtPct(0)).toBe("0,00%");
   });
 
-  it("línea de la card: sin interés con su cantidad; con interés 'Hasta N'", () => {
+  it("línea de la card: sin interés con su cantidad; con interés lo dice y suma el total financiado", () => {
     expect(TEXTOS_CUOTAS.linea(6, 20000, true)).toBe("6 cuotas sin interés de $ 20.000,00");
-    expect(TEXTOS_CUOTAS.linea(12, 13500, false)).toBe("12 cuotas de $ 13.500,00");
+    expect(TEXTOS_CUOTAS.linea(6, 20000, true, 120000)).toBe("6 cuotas sin interés de $ 20.000,00");
+    expect(TEXTOS_CUOTAS.linea(12, 13500, false)).toBe("12 cuotas de $ 13.500,00 con interés");
+    expect(TEXTOS_CUOTAS.linea(12, 13500, false, 162000)).toBe(
+      "12 cuotas de $ 13.500,00 con interés (total $ 162.000,00)",
+    );
   });
 
   it("carrito: hasta N y te faltan para hasta N", () => {

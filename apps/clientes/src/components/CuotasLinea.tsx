@@ -3,7 +3,8 @@ import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
 /**
  * Una línea con la mejor opción: "6 cuotas sin interés de $20.000" o
- * "12 cuotas de $13.500". Sin opción → nada.
+ * "12 cuotas de $13.500 con interés (total $162.000)". En "sm" (card del
+ * catálogo) va sin el total, por espacio. Sin opción → nada.
  *
  * `tono="oscuro"` queda para cards de fondo oscuro (la ficha usa "claro"
  * desde el reskin editorial).
@@ -37,7 +38,12 @@ export function CuotasLinea({
       : "text-text";
   return (
     <span className={`${TAMANOS[tamano]} ${color} ${className}`}>
-      {TEXTOS_CUOTAS.linea(opcion.cuotas, opcion.montoCuota, opcion.sinInteres)}
+      {TEXTOS_CUOTAS.linea(
+        opcion.cuotas,
+        opcion.montoCuota,
+        opcion.sinInteres,
+        tamano === "sm" ? undefined : opcion.total,
+      )}
     </span>
   );
 }

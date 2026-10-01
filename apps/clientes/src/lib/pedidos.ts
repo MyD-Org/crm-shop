@@ -1229,6 +1229,8 @@ export async function cancelarPedidoPendiente(
           esDeSuDueno(dueno),
           eq(orders.estado, "pendiente"),
           eq(orders.pagoEstado, "pendiente"),
+          // Con factura vinculada por un operador ya no lo cancela el cliente.
+          isNull(orders.facturaAlegraId),
         ),
       )
       .limit(1)

@@ -10,9 +10,11 @@ const cancelarPedidoPendiente = vi.fn();
 const intentoAbiertoDelPedido = vi.fn();
 const resolverIntentoAbierto = vi.fn();
 
+const identidadActual = vi.fn();
 vi.mock("@/lib/auth", () => ({
-  identidadActual: async () => ({ clerkUserId: "user_1", cliente: null }),
+  identidadActual: () => identidadActual(),
 }));
+vi.mock("@/lib/cache-invalidar", () => ({ marcarStockCambiado: () => {} }));
 vi.mock("@/lib/pedidos", () => ({
   cancelarPedidoPendiente: (...a: unknown[]) => cancelarPedidoPendiente(...a),
   intentoAbiertoDelPedido: (...a: unknown[]) => intentoAbiertoDelPedido(...a),
@@ -37,6 +39,7 @@ beforeEach(() => {
   for (const f of [cancelarPedidoPendiente, intentoAbiertoDelPedido, resolverIntentoAbierto]) f.mockReset();
   intentoAbiertoDelPedido.mockResolvedValue(null);
   cancelarPedidoPendiente.mockResolvedValue("cancelado");
+  identidadActual.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
 });
 
 describe("POST /api/pedidos/:id/cancelar", () => {
@@ -79,5 +82,16 @@ describe("POST /api/pedidos/:id/cancelar", () => {
   it("pedido que no califica: el 404 genérico de siempre", async () => {
     cancelarPedidoPendiente.mockResolvedValue(null);
     expect((await cancelar()).status).toBe(404);
+  });
+
+  it("sin sesión: 401 y no se toca nada", async () => {
+    identidadActual.mockResolvedValue({ clerkUserId: null, cliente: null });
+    expect((await cancelar()).status).toBe(401);
+    expect(cancelarPedidoPendiente).not.toHaveBeenCalled();
+  });
+
+  it("pasa el dueño a la cancelación (filtro por usuario del lado del servidor)", async () => {
+    await cancelar();
+    expect(cancelarPedidoPendiente).toHaveBeenCalledWith("p1", { clerkUserId: "user_1", clienteCodigo: undefined });
   });
 });

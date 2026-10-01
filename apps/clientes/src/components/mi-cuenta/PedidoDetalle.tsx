@@ -6,6 +6,8 @@ import { ocultarEstadoPago } from "@/lib/pago-estado-visible";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
+import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
+import { CancelarPedido } from "./CancelarPedido";
 import { PedidoAcciones } from "./PedidoAcciones";
 import { PedidoLinea } from "./PedidoLinea";
 
@@ -21,7 +23,7 @@ function Fila({ label, valor, fuerte = false }: { label: string; valor: string; 
 /**
  * Detalle de un pedido: cabecera con una pill, seguimiento (salvo cancelado),
  * entrega, pago, productos con unitario y totales. El envío sólo aparece si
- * tuvo costo. Sin acción de cancelar (sigue en el checkout).
+ * tuvo costo. Un pedido pendiente, sin pagar ni facturar, se puede cancelar.
  */
 export function PedidoDetalle({
   pedido,
@@ -99,6 +101,12 @@ export function PedidoDetalle({
         facturaNumero={pedido.facturaNumero}
         mostrarDetalle={false}
       />
+
+      {puedeCancelarPedido(pedido) && (
+        <div>
+          <CancelarPedido pedidoId={pedido.id} numero={pedido.numero} />
+        </div>
+      )}
     </div>
   );
 }

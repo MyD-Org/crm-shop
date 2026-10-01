@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm"
 import { NextRequest } from "next/server"
 import { getDb } from "@/db"
 import { adminUsers, alegraContacts, catalogProducts } from "@/db/schema"
-import { shopOrders, shopOrderItems, type ShopOrderRow } from "@/db/shop-schema"
+import { shopOrderEventos, shopOrders, shopOrderItems, type ShopOrderRow } from "@/db/shop-schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import { crearSucursal } from "@/lib/sucursales-repo"
 import {
@@ -594,6 +594,125 @@ describe("admin: pedidos del Shop", () => {
       const res = await patch(pedido.id, { estado: "entregado", estadoEsperado: "en_camino" })
       expect(res.status).toBe(200)
       expect((await rowById(pedido.id)).estado).toBe("entregado")
+    })
+
+    describe("guardas de cancelación", () => {
+      const cancelar = (id: string, estadoEsperado: EstadoPedido) =>
+        patch(id, { estado: "cancelado", estadoEsperado, motivo: "Prueba" })
+
+      async function sinCambios(id: string, estado: EstadoPedido) {
+        const fila = await rowById(id)
+        expect(fila.estado).toBe(estado)
+        expect(fila.cancelacionMotivo).toBeNull()
+      }
+
+      it("pagado: 422 not_cancelable y el pedido no cambia", async () => {
+        const pedido = await seedEn("confirmado", TENANT_A, { pagoEstado: "pagado" })
+        const res = await cancelar(pedido.id, "confirmado")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "pagado" })
+        await sinCambios(pedido.id, "confirmado")
+      })
+
+      it("facturado (facturado_en no nulo): 422 not_cancelable", async () => {
+        const pedido = await seedEn("pendiente", TENANT_A, { facturadoEn: new Date() })
+        const res = await cancelar(pedido.id, "pendiente")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "facturado" })
+        await sinCambios(pedido.id, "pendiente")
+      })
+
+      it("intento de Mercado Pago pendiente: 422; resuelto (fallido) deja cancelar", async () => {
+        const pedido = await seedEn("pendiente", TENANT_A, { pagoMetodo: "mercadopago", pagoProveedor: "mercadopago" })
+        await getDb().execute(
+          sql`insert into shop.pago_intentos (tenant_id, order_id, proveedor, estado) values (${TENANT_A}, ${pedido.id}, 'mercadopago', 'pendiente')`,
+        )
+        const res = await cancelar(pedido.id, "pendiente")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "pago_en_curso" })
+        await sinCambios(pedido.id, "pendiente")
+
+        await getDb().execute(sql`update shop.pago_intentos set estado = 'fallido' where order_id = ${pedido.id}`)
+        expect((await cancelar(pedido.id, "pendiente")).status).toBe(200)
+      })
+
+      it("intento pendiente de más de 24 h (abandonado) ya no bloquea", async () => {
+        const pedido = await seedEn("pendiente", TENANT_A, { pagoMetodo: "mercadopago", pagoProveedor: "mercadopago" })
+        await getDb().execute(
+          sql`insert into shop.pago_intentos (tenant_id, order_id, proveedor, estado, created_at) values (${TENANT_A}, ${pedido.id}, 'mercadopago', 'pendiente', now() - interval '25 hours')`,
+        )
+        expect((await cancelar(pedido.id, "pendiente")).status).toBe(200)
+      })
+
+      it("entregado → confirmado → cancelado ya no se puede (estuvo entregado)", async () => {
+        const pedido = await seedEn("confirmado")
+        expect((await patch(pedido.id, { estado: "entregado", estadoEsperado: "confirmado" })).status).toBe(200)
+        expect((await patch(pedido.id, { estado: "confirmado", estadoEsperado: "entregado" })).status).toBe(200)
+        const res = await cancelar(pedido.id, "confirmado")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "entregado" })
+        await sinCambios(pedido.id, "confirmado")
+      })
+
+      describe("cancelar con devolución (forzar)", () => {
+        const forzada = (id: string, estadoEsperado: EstadoPedido, motivo?: string) =>
+          patch(id, { estado: "cancelado", estadoEsperado, forzar: true, ...(motivo !== undefined ? { motivo } : {}) })
+
+        it("operador: 403 y el pedido no cambia", async () => {
+          const pedido = await seedEn("confirmado", TENANT_A, { pagoEstado: "pagado" })
+          const res = await forzada(pedido.id, "confirmado", "Devolución")
+          expect(res.status).toBe(403)
+          await sinCambios(pedido.id, "confirmado")
+        })
+
+        it("admin con motivo: cancela un pedido pagado y facturado, y deja el evento marcado", async () => {
+          login(adminA)
+          const pedido = await seedEn("preparacion", TENANT_A, { pagoEstado: "pagado", facturadoEn: new Date() })
+          const res = await forzada(pedido.id, "preparacion", "Devolución acordada")
+          expect(res.status).toBe(200)
+          const fila = await rowById(pedido.id)
+          expect(fila.estado).toBe("cancelado")
+          expect(fila.cancelacionMotivo).toBe("Devolución acordada")
+          const eventos = await getDb().select().from(shopOrderEventos).where(eq(shopOrderEventos.orderId, pedido.id))
+          const cancelado = eventos.find((e) => e.tipo === "cancelado")
+          expect(cancelado?.detalle).toMatchObject({ motivo: "Devolución acordada", forzado: true, omitidos: ["pagado", "facturado"] })
+          expect(cancelado?.actorNombre).toBeTruthy()
+        })
+
+        it("admin: también cancela un pedido entregado", async () => {
+          login(adminA)
+          const pedido = await seedEn("entregado", TENANT_A, { pagoEstado: "pagado" })
+          expect((await forzada(pedido.id, "entregado", "Devolución")).status).toBe(200)
+        })
+
+        it("admin sin motivo: 400 y no cambia nada", async () => {
+          login(adminA)
+          const pedido = await seedEn("confirmado", TENANT_A, { pagoEstado: "pagado" })
+          const res = await forzada(pedido.id, "confirmado")
+          expect(res.status).toBe(400)
+          await sinCambios(pedido.id, "confirmado")
+        })
+
+        it("forzar a otro estado que no es cancelado: 400", async () => {
+          login(adminA)
+          const pedido = await seedEn("pendiente")
+          const res = await patch(pedido.id, { estado: "confirmado", estadoEsperado: "pendiente", forzar: true })
+          expect(res.status).toBe(400)
+        })
+
+        it("la cancelación común sigue bloqueada para el admin", async () => {
+          login(adminA)
+          const pedido = await seedEn("confirmado", TENANT_A, { pagoEstado: "pagado" })
+          const res = await cancelar(pedido.id, "confirmado")
+          expect(res.status).toBe(422)
+          await sinCambios(pedido.id, "confirmado")
+        })
+      })
+
+      it("un pedido libre sigue cancelándose", async () => {
+        const pedido = await seedEn("pendiente")
+        expect((await cancelar(pedido.id, "pendiente")).status).toBe(200)
+      })
     })
 
     it("mensajes canónicos de los casos con regla propia", async () => {

@@ -9,6 +9,8 @@ import {
   ESTADO_PEDIDO_LABEL,
   MOTIVO_MAX,
   MOTIVO_MIN,
+  avisoCancelarConDevolucion,
+  motivoNoCancelable,
   transicionesDesde,
   type EntregaTipo,
   type EstadoPedido,
@@ -86,11 +88,44 @@ export function esSinFactura(p: { estado: EstadoPedido; facturado: boolean }): b
  * Destinos que la UI OFRECE desde un estado, según el tipo de entrega del pedido: los de la
  * tabla de transiciones, nada más. Es comodidad, no seguridad: el que valida es el PATCH.
  */
-export function opcionesDeDestino(estado: EstadoPedido, entregaTipo: EntregaTipo): OpcionSelect[] {
-  return transicionesDesde(estado, entregaTipo).map((destino) => ({
+export function opcionesDeDestino(
+  estado: EstadoPedido,
+  entregaTipo: EntregaTipo,
+  puedeCancelar = true,
+): OpcionSelect[] {
+  return transicionesDesde(estado, entregaTipo)
+    .filter((destino) => puedeCancelar || destino !== "cancelado")
+    .map((destino) => ({
     value: destino,
     label: ESTADO_PEDIDO_LABEL[destino],
   }))
+}
+
+/**
+ * ¿Se ofrece "Cancelar pedido"? Espeja las guardas del servidor con lo que la pantalla ya sabe
+ * (pago, factura, historial). El intento de pago online pendiente no viaja al cliente: ese caso
+ * lo rechaza el PATCH (422) y se muestra su mensaje. Comodidad, no seguridad.
+ */
+export function ofreceCancelar(p: {
+  pagoEstado: string
+  facturado: boolean
+  /** Eventos del historial (sólo en el detalle); en la lista no viajan. */
+  historial?: { tipo: string; detalle: Record<string, unknown> }[]
+}): boolean {
+  const estuvoEntregado = (p.historial ?? []).some((e) => e.tipo === "estado" && e.detalle.hacia === "entregado")
+  return (
+    motivoNoCancelable({
+      pagoEstado: p.pagoEstado,
+      facturado: p.facturado,
+      intentoPagoPendiente: false,
+      estuvoEntregado,
+    }) === null
+  )
+}
+
+/** Aviso del diálogo "Cancelar con devolución" según lo que ya sabe la pantalla del pedido. */
+export function avisoDevolucion(p: { pagoEstado: string; pagoMetodo: string; facturado: boolean }): string {
+  return avisoCancelarConDevolucion({ pagado: p.pagoEstado === "pagado", facturado: p.facturado, pagoMetodo: p.pagoMetodo })
 }
 
 export interface FiltrosLista {
@@ -171,9 +206,13 @@ export function verboSiguientePaso(siguiente: EstadoPedido, entregaTipo: Entrega
 
 /** Destinos para el Select "Otro estado": los que ofrece la tabla de transiciones, MENOS el que
  *  ya se ofrece como botón primario (`siguientePaso`). Cancelar sigue apareciendo acá. */
-export function opcionesOtroEstado(estado: EstadoPedido, entregaTipo: EntregaTipo): OpcionSelect[] {
+export function opcionesOtroEstado(
+  estado: EstadoPedido,
+  entregaTipo: EntregaTipo,
+  puedeCancelar = true,
+): OpcionSelect[] {
   const siguiente = siguientePaso(estado, entregaTipo)
-  return opcionesDeDestino(estado, entregaTipo)
+  return opcionesDeDestino(estado, entregaTipo, puedeCancelar)
     .filter((o) => o.value !== siguiente)
     .map((o) => (o.value === "cancelado" ? { ...o, label: "Cancelar pedido" } : o))
 }

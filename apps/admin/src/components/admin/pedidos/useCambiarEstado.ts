@@ -35,6 +35,7 @@ export interface UseCambiarEstadoInput<T extends PedidoBase> {
 export type IntencionCambio<T extends PedidoBase> =
   | { tipo: "motivo"; pedido: T; destino: "cancelado" }
   | { tipo: "sinFactura"; pedido: T; destino: EstadoPedido }
+  | { tipo: "forzado"; pedido: T; destino: "cancelado" }
 
 export function useCambiarEstado<T extends PedidoBase>({ onChanged, onConflicto }: UseCambiarEstadoInput<T>) {
   const { toast } = useToast()
@@ -48,7 +49,7 @@ export function useCambiarEstado<T extends PedidoBase>({ onChanged, onConflicto 
   }, [])
 
   const enviar = useCallback(
-    async (pedido: T, destino: EstadoPedido, motivoCancelacion?: string) => {
+    async (pedido: T, destino: EstadoPedido, motivoCancelacion?: string, forzar = false) => {
       setGuardando(true)
       const res = await fetch(`/api/admin/pedidos/${pedido.id}`, {
         method: "PATCH",
@@ -57,6 +58,7 @@ export function useCambiarEstado<T extends PedidoBase>({ onChanged, onConflicto 
           estado: destino,
           estadoEsperado: pedido.estado,
           ...(motivoCancelacion !== undefined ? { motivo: motivoCancelacion } : {}),
+          ...(forzar ? { forzar: true } : {}),
         }),
       }).catch(() => null)
       const body: unknown = res ? await res.json().catch(() => null) : null
@@ -104,6 +106,17 @@ export function useCambiarEstado<T extends PedidoBase>({ onChanged, onConflicto 
     void enviar(intencion.pedido, "cancelado", motivo.trim())
   }, [enviar, intencion, motivo])
 
+  /** Abre el diálogo de "Cancelar con devolución" (sólo se ofrece a admin o superior). */
+  const pedirCancelacionForzada = useCallback((pedido: T) => {
+    setMotivo("")
+    setIntencion({ tipo: "forzado", pedido, destino: "cancelado" })
+  }, [])
+
+  const confirmarCancelacionForzada = useCallback(() => {
+    if (!intencion || intencion.tipo !== "forzado") return
+    void enviar(intencion.pedido, "cancelado", motivo.trim(), true)
+  }, [enviar, intencion, motivo])
+
   const confirmarSinFactura = useCallback(() => {
     if (!intencion || intencion.tipo !== "sinFactura") return
     void enviar(intencion.pedido, intencion.destino)
@@ -118,6 +131,8 @@ export function useCambiarEstado<T extends PedidoBase>({ onChanged, onConflicto 
     pedirCambio,
     confirmarCancelacion,
     confirmarSinFactura,
+    pedirCancelacionForzada,
+    confirmarCancelacionForzada,
     cerrar,
   }
 }

@@ -9,6 +9,7 @@ import {
   interpretarRespuestaCambio,
   interpretarRespuestaFactura,
   motivoValido,
+  ofreceCancelar,
   opcionesDeDestino,
   esSinFactura,
   opcionesDeFiltro,
@@ -351,5 +352,30 @@ describe("filtro por sucursal", () => {
       { value: "todas", label: "Todas las sucursales" },
       { value: "igz", label: "Iguazú" },
     ])
+  })
+})
+
+describe("ofreceCancelar y la opción Cancelar", () => {
+  const libre = { pagoEstado: "pendiente", facturado: false }
+
+  it("pedido libre: se ofrece cancelar", () => {
+    expect(ofreceCancelar(libre)).toBe(true)
+    expect(opcionesDeDestino("confirmado", "envio").map((o) => o.value)).toContain("cancelado")
+  })
+
+  it("pagado o facturado: no se ofrece", () => {
+    expect(ofreceCancelar({ ...libre, pagoEstado: "pagado" })).toBe(false)
+    expect(ofreceCancelar({ ...libre, facturado: true })).toBe(false)
+  })
+
+  it("que haya estado entregado alguna vez (historial) lo impide", () => {
+    const historial = [{ tipo: "estado", detalle: { desde: "confirmado", hacia: "entregado" } }]
+    expect(ofreceCancelar({ ...libre, historial })).toBe(false)
+    expect(ofreceCancelar({ ...libre, historial: [{ tipo: "estado", detalle: { desde: "pendiente", hacia: "confirmado" } }] })).toBe(true)
+  })
+
+  it("sin permiso, 'cancelado' sale de las opciones y el resto queda igual", () => {
+    expect(opcionesDeDestino("confirmado", "envio", false).map((o) => o.value)).toEqual(["preparacion", "entregado", "pendiente"])
+    expect(opcionesOtroEstado("pendiente", "envio", false)).toEqual([])
   })
 })

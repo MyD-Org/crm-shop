@@ -93,3 +93,79 @@ export function mensajeTransicionInvalida(desde: EstadoPedido, hacia: EstadoPedi
   if (desde === "entregado" && hacia === "cancelado") return "Un pedido entregado no se puede cancelar."
   return `No es posible cambiar el pedido de «${ESTADO_PEDIDO_LABEL[desde]}» a «${ESTADO_PEDIDO_LABEL[hacia]}».`
 }
+
+/**
+ * Por qué un pedido NO se puede cancelar aunque la tabla de transiciones lo permita. Lo decide
+ * el servidor (`cambiarEstado`, dentro de la transacción); la UI usa `motivoNoCancelable` sólo
+ * para no ofrecer la opción.
+ *  - pagado: cobrado (online o registrado a mano); cancelar dejaría plata sin devolver.
+ *  - facturado: tiene factura vinculada o una emisión en curso (`facturado_en` no nulo).
+ *  - pago_en_curso: hay un intento de pago online pendiente (`shop.pago_intentos`).
+ *  - entregado: estuvo entregado alguna vez (aunque se lo haya devuelto a otro estado).
+ */
+export type MotivoNoCancelable = "pagado" | "facturado" | "pago_en_curso" | "entregado"
+
+export interface DatosCancelacion {
+  pagoEstado: string
+  /** `facturado_en` no nulo (factura real o reserva de emisión). */
+  facturado: boolean
+  intentoPagoPendiente: boolean
+  estuvoEntregado: boolean
+}
+
+/** Todos los bloqueos que aplican, en orden de prioridad. Vacío = se puede cancelar. */
+export function motivosNoCancelable(d: DatosCancelacion): MotivoNoCancelable[] {
+  const motivos: MotivoNoCancelable[] = []
+  if (d.pagoEstado === "pagado") motivos.push("pagado")
+  if (d.facturado) motivos.push("facturado")
+  if (d.intentoPagoPendiente) motivos.push("pago_en_curso")
+  if (d.estuvoEntregado) motivos.push("entregado")
+  return motivos
+}
+
+/** `null` = se puede cancelar. Si hay varios bloqueos, el de mayor prioridad. */
+export function motivoNoCancelable(d: DatosCancelacion): MotivoNoCancelable | null {
+  return motivosNoCancelable(d)[0] ?? null
+}
+
+export function mensajeNoCancelable(motivo: MotivoNoCancelable): string {
+  switch (motivo) {
+    case "pagado":
+      return "No se puede cancelar un pedido pagado. Anule el pago o gestione la devolución antes de cancelarlo."
+    case "facturado":
+      return "No se puede cancelar un pedido facturado. Desvincule la factura antes de cancelarlo."
+    case "pago_en_curso":
+      return "No se puede cancelar un pedido con un pago de Mercado Pago en curso. Espere a que el pago se resuelva e inténtelo nuevamente."
+    case "entregado":
+      return "No se puede cancelar un pedido que ya fue entregado."
+  }
+}
+
+/**
+ * Ventana en la que un intento de pago online pendiente sigue "en curso". Es la misma
+ * `VENTANA_PAGO_MS` del Shop (apps/clientes/src/lib/pedidos.ts): pasadas 24 h desde que se creó
+ * el intento ya no se puede cobrar, así que un intento abandonado deja de bloquear la cancelación.
+ */
+export const VENTANA_PAGO_MS = 24 * 60 * 60_000
+
+/**
+ * Texto del aviso del diálogo "Cancelar con devolución" (sólo admin y superadmin): qué hay que
+ * resolver FUERA del CRM antes de cancelar. Se combinan los que apliquen.
+ */
+export function avisoCancelarConDevolucion(p: {
+  pagado: boolean
+  facturado: boolean
+  /** `pago_metodo` del pedido; "mercadopago" cambia el texto de la devolución. */
+  pagoMetodo?: string
+}): string {
+  const partes: string[] = []
+  if (p.pagado) {
+    partes.push(
+      p.pagoMetodo === "mercadopago"
+        ? "Antes de cancelarlo, gestione la devolución en Mercado Pago."
+        : "Antes de cancelarlo, gestione la devolución del pago al cliente.",
+    )
+  }
+  if (p.facturado) partes.push("Antes de cancelarlo, emita la nota de crédito en Alegra.")
+  return partes.join(" ")
+}

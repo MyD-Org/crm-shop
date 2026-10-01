@@ -16,7 +16,7 @@ import { limpiarFacturaCuenta } from "@/lib/pedido-factura-cuenta-repo"
 import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-repo"
 import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
-import type { EntregaTipo, EstadoPedido } from "@/lib/pedidos-transiciones"
+import { VENTANA_PAGO_MS, motivosNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
 // dentro de una. Todas las escrituras de este archivo que insertan un evento van adentro de una
@@ -457,12 +457,20 @@ export interface CambiarEstadoInput {
   /** Del guard (fila fresca de admin_users), nunca del body. */
   actor: { id: string; name: string }
   now: Date
+  /**
+   * "Cancelar con devolución": salta las guardas de `motivosNoCancelable` (pagado, facturado, pago
+   * en curso, estuvo entregado). La ruta SÓLO lo pone en true tras validar rol admin o superior;
+   * el evento queda marcado `forzado` con los bloqueos que se omitieron.
+   */
+  forzar?: boolean
 }
 
 export type CambiarEstadoResult =
   | ({ kind: "ok"; pedido: PedidoRow } & DetalleExtras)
   | { kind: "not_found" }
   | { kind: "conflict"; actual: EstadoPedido }
+  /** Cancelar con pago, factura, pago en curso o entrega previa: no se toca nada. */
+  | { kind: "no_cancelable"; motivo: MotivoNoCancelable }
 
 /**
  * Cambia el estado con concurrencia optimista. NO valida la tabla de transiciones (eso es de
@@ -491,7 +499,44 @@ export async function cambiarEstado(
     throw new Error("cambiarEstado: cancelar exige motivo")
   }
 
+  let omitidos: MotivoNoCancelable[] = []
   const actualizado = await getDb().transaction(async (tx) => {
+    // Guardas de cancelación, en la MISMA transacción y con la fila bloqueada (`FOR UPDATE`): el
+    // webhook de pago del Shop también bloquea la fila del pedido antes de tocar los intentos,
+    // así que un cobro no puede colarse entre este chequeo y el UPDATE.
+    if (input.nuevo === "cancelado") {
+      const [o] = await tx
+        .select({ estado: shopOrders.estado, pagoEstado: shopOrders.pagoEstado, facturadoEn: shopOrders.facturadoEn })
+        .from(shopOrders)
+        .where(and(eq(shopOrders.id, id), eq(shopOrders.tenantId, tenantId)))
+        .for("update")
+      // Inexistente o con otro estado: sigue al UPDATE, que afecta 0 filas y cae en not_found/conflict.
+      if (o && o.estado === input.esperado) {
+        const intento = await tx.execute(
+          sql`select 1 from shop.pago_intentos where order_id = ${id} and tenant_id = ${tenantId} and estado = 'pendiente' and created_at > ${new Date(input.now.getTime() - VENTANA_PAGO_MS).toISOString()}::timestamptz limit 1`,
+        )
+        const [entrego] = await tx
+          .select({ id: shopOrderEventos.id })
+          .from(shopOrderEventos)
+          .where(
+            and(
+              eq(shopOrderEventos.orderId, id),
+              eq(shopOrderEventos.tenantId, tenantId),
+              eq(shopOrderEventos.tipo, "estado"),
+              sql`${shopOrderEventos.detalle}->>'hacia' = 'entregado'`,
+            ),
+          )
+          .limit(1)
+        const motivos = motivosNoCancelable({
+          pagoEstado: o.pagoEstado,
+          facturado: o.facturadoEn !== null,
+          intentoPagoPendiente: intento.length > 0,
+          estuvoEntregado: entrego !== undefined,
+        })
+        if (input.forzar) omitidos = motivos
+        else if (motivos[0]) return { bloqueo: motivos[0] }
+      }
+    }
     const [fila] = await tx
       .update(shopOrders)
       .set({
@@ -511,7 +556,11 @@ export async function cambiarEstado(
       tenantId,
       orderId: fila.id,
       tipo: "estado",
-      detalle: { desde: input.esperado, hacia: input.nuevo },
+      detalle: {
+        desde: input.esperado,
+        hacia: input.nuevo,
+        ...(input.forzar && input.nuevo === "cancelado" ? { forzado: true, omitidos } : {}),
+      },
       actor: input.actor,
       now: input.now,
     })
@@ -520,17 +569,18 @@ export async function cambiarEstado(
         tenantId,
         orderId: fila.id,
         tipo: "cancelado",
-        detalle: { motivo: input.motivo },
+        detalle: { motivo: input.motivo, ...(input.forzar ? { forzado: true, omitidos } : {}) },
         actor: input.actor,
         now: input.now,
       })
     }
-    return fila
+    return { fila }
   })
 
+  if (actualizado && "bloqueo" in actualizado && actualizado.bloqueo) return { kind: "no_cancelable", motivo: actualizado.bloqueo }
   if (actualizado) {
-    const extras = await detalleExtras(tenantId, actualizado)
-    return { kind: "ok", pedido: actualizado, ...extras }
+    const extras = await detalleExtras(tenantId, actualizado.fila)
+    return { kind: "ok", pedido: actualizado.fila, ...extras }
   }
 
   // 0 filas: o no existe / es de otro tenant, o alguien lo movió primero. Se distingue con un

@@ -1,9 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Tabs } from "@myd-org/ui"
 import { DollarSign, Coins, MessageSquare } from "lucide-react"
 import type { UsageSummary, UsageTotals } from "@/lib/inbox-api"
+import {
+  levelText,
+  monthLabelUtc,
+  usagePercent,
+  volumeText,
+  waCostsStatus,
+  type WaCostsSummary,
+  type WaLevel,
+} from "@/lib/wa-costos"
 
 // Costo estimado: números chicos (fracciones de USD). Mostramos más decimales cuando es < 1.
 function fmtUsd(n: number): string {
@@ -44,6 +53,8 @@ export function UsagePanel({ initial }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
+      <WaCostsCard />
+
       {/* Tiles: hoy y mes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <PeriodCard title="Hoy" totals={summary.today} />
@@ -120,6 +131,94 @@ function PeriodCard({ title, totals, highlight }: { title: string; totals: Usage
         <span className="flex items-center gap-1.5"><Coins className="w-4 h-4" />{fmtInt(totals.tokens)} tokens</span>
         <span className="flex items-center gap-1.5"><MessageSquare className="w-4 h-4" />{fmtInt(totals.botTurns)} turnos</span>
       </div>
+    </div>
+  )
+}
+
+const LEVEL_COLOR: Record<WaLevel, string> = {
+  ok: "var(--blue)",
+  warning: "var(--amber)",
+  billing: "var(--red)",
+  unknown: "var(--ink-soft)",
+}
+
+// Mensajes de WhatsApp del mes: conversaciones de servicio gratis (tope 1.000) y cobradas.
+// Se carga aparte del resto del panel: si la ai-api no responde, el tile lo dice sin romper la página.
+function WaCostsCard() {
+  const [data, setData] = useState<WaCostsSummary | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    fetch("/api/admin/inbox/wa-costos", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(String(res.status))
+        const json = (await res.json()) as WaCostsSummary
+        if (alive) setData(json)
+      })
+      .catch(() => alive && setFailed(true))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const status = data ? waCostsStatus(data) : null
+
+  return (
+    <div className="rounded-[var(--radius)] border p-4" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
+      <div className="flex items-baseline justify-between gap-2 mb-3">
+        <h2 className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Mensajes de WhatsApp</h2>
+        {data && <span className="text-xs" style={{ color: "var(--ink-soft)" }}>{monthLabelUtc(data.month)}</span>}
+      </div>
+
+      {failed || status === "sin-datos" ? (
+        <p className="text-sm" style={{ color: "var(--amber)" }}>
+          No se pudo consultar
+          {data?.errors[0]?.message ? `: ${data.errors[0].message}` : ". Inténtelo de nuevo más tarde."}
+        </p>
+      ) : !data ? (
+        <p className="text-sm" style={{ color: "var(--ink-soft)" }}>Cargando…</p>
+      ) : status === "vacio" ? (
+        <p className="text-sm" style={{ color: "var(--ink-soft)" }}>Sin consumo de respuestas de servicio este mes.</p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {data.numbers.map((n) => (
+            <div key={n.phone}>
+              <div className="flex items-center justify-between text-sm mb-1.5">
+                <span className="font-mono text-xs" style={{ color: "var(--ink)" }}>{n.phone}</span>
+                <span className="tabular-nums" style={{ color: "var(--ink)" }}>
+                  {volumeText(n.serviceVolume, data.limit)} gratis
+                </span>
+              </div>
+              <div
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={usagePercent(n.serviceVolume, data.limit)}
+                aria-label={`Respuestas de servicio de ${n.phone}`}
+                className="h-2 rounded-full overflow-hidden"
+                style={{ background: "var(--border)" }}
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${usagePercent(n.serviceVolume, data.limit)}%`, background: LEVEL_COLOR[n.level] }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs mt-1.5" style={{ color: "var(--ink-soft)" }}>
+                <span style={{ color: n.level === "ok" ? undefined : LEVEL_COLOR[n.level] }}>{levelText(n.level)}</span>
+                <span className="tabular-nums">
+                  Cobradas: {n.billedServiceVolume.toLocaleString("es-AR")} · Costo: {fmtUsd(n.cost)}
+                </span>
+              </div>
+            </div>
+          ))}
+          {data.errors.length > 0 && (
+            <p className="text-xs" style={{ color: "var(--amber)" }}>
+              Algunos datos no se pudieron consultar: {data.errors.map((e) => e.message).join("; ")}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

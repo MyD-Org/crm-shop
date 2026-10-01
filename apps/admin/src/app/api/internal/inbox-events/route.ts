@@ -2,7 +2,8 @@ import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants, conversationAssignments } from "@/db/schema"
 import { bearerMatches } from "@/lib/secure-compare"
-import { sendPushToDepartment, sendPushToOperator } from "@/lib/push"
+import { sendPushToDepartment, sendPushToOperator, sendPushToSuperadmins } from "@/lib/push"
+import { billingPushText, isWaBillingKind } from "@/lib/wa-costos"
 
 // Endpoint interno: la ai-api avisa al CRM de eventos del inbox para disparar notificaciones
 // push a los operadores. Auth via INTERNAL_SECRET (mismo canal que /api/internal/operators).
@@ -15,6 +16,8 @@ import { sendPushToDepartment, sendPushToOperator } from "@/lib/push"
 //     notifica a esa persona; si no, a los operadores disponibles del departamento.
 //   - event 'inbound': llegó un mensaje del cliente en una conversación en modo humano →
 //     se notifica al operador asignado (según conversation_assignments del CRM).
+//   - event 'wa_billing': aviso de costos de WhatsApp. No lleva conversationId; trae
+//     { kind: 'free_80'|'service_billed', month, phone, volume, limit } y va sólo a superadmins.
 export async function POST(req: Request) {
   if (!bearerMatches(req.headers.get("authorization"), process.env.INTERNAL_SECRET)) {
     return Response.json({ error: "unauthorized" }, { status: 401 })
@@ -27,9 +30,23 @@ export async function POST(req: Request) {
     department?: string | null
     operatorId?: string | null
     contactName?: string | null
+    kind?: string
+    month?: string
+    phone?: string
+    volume?: number
+    limit?: number
   } | null
-  if (!body?.tenantId || !body.event || !body.conversationId) {
+  if (!body?.tenantId || !body.event) {
     return Response.json({ error: "missing fields" }, { status: 400 })
+  }
+  // conversationId sólo es obligatorio para los eventos de conversación.
+  if (body.event !== "wa_billing" && !body.conversationId) {
+    return Response.json({ error: "missing fields" }, { status: 400 })
+  }
+  if (body.event === "wa_billing") {
+    if (!isWaBillingKind(body.kind) || !body.phone || typeof body.volume !== "number" || typeof body.limit !== "number") {
+      return Response.json({ error: "missing fields" }, { status: 400 })
+    }
   }
 
   const db = getDb()
@@ -47,7 +64,17 @@ export async function POST(req: Request) {
 
   let sent = 0
 
-  if (body.event === "handoff") {
+  if (body.event === "wa_billing") {
+    const kind = body.kind as "free_80" | "service_billed"
+    const texto = billingPushText(kind, body.phone!, body.volume!, body.limit!)
+    sent = await sendPushToSuperadmins(tenant.id, {
+      ...texto,
+      url: "/admin/uso",
+      icon,
+      // Un aviso por número, tipo y mes: no apilar repetidos.
+      tag: `wa_billing-${kind}-${body.phone}-${body.month ?? ""}`,
+    })
+  } else if (body.event === "handoff") {
     if (body.operatorId) {
       // Handoff a una persona puntual (assign_to_human por nombre).
       sent = await sendPushToOperator(tenant.id, body.operatorId, {
@@ -79,7 +106,7 @@ export async function POST(req: Request) {
           .where(
             and(
               eq(conversationAssignments.tenantId, tenant.id),
-              eq(conversationAssignments.conversationId, body.conversationId),
+              eq(conversationAssignments.conversationId, body.conversationId!),
             ),
           )
       )[0]?.operatorId

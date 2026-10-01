@@ -68,6 +68,7 @@ export interface CanalEditable {
 }
 
 /** Respuesta de ai-api GET /v1/staff/whatsapp-numbers, leída con tolerancia al formato. */
+// Forma real de ai-api GET /v1/staff/whatsapp-numbers: [{ channelAccountId, displayPhoneNumber, ... }].
 export function parseWhatsappNumbers(raw: unknown): { id: string; phone: string | null }[] {
   const list = Array.isArray(raw)
     ? raw
@@ -78,9 +79,9 @@ export function parseWhatsappNumbers(raw: unknown): { id: string; phone: string 
   for (const item of list) {
     if (!item || typeof item !== "object") continue
     const o = item as Record<string, unknown>
-    const id = [o.channel_account_id, o.id].find((v) => typeof v === "string" && v)
+    const id = [o.channelAccountId, o.channel_account_id, o.id].find((v) => typeof v === "string" && v)
     if (typeof id !== "string") continue
-    const phone = [o.business_phone, o.display_phone_number, o.phone].find((v) => typeof v === "string" && v)
+    const phone = [o.displayPhoneNumber, o.business_phone, o.display_phone_number, o.phone].find((v) => typeof v === "string" && v)
     out.push({ id, phone: typeof phone === "string" ? phone : null })
   }
   return out

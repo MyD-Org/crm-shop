@@ -50,9 +50,14 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
 
 Dos lecturas distintas del mismo (producto, clave) se descartan (`conflicto_entre_lecturas`).
 
-Límite conocido: en encabezados con subcolumnas (p. ej. cálido/frío bajo el mismo modelo) el valor se
-asigna a la columna del modelo; si el nombre del producto no dice cuál de las dos es, no hay forma de
-distinguirlas (el cruce con el nombre cubre temperatura y tono).
+Endurecimientos (preferimos perder un dato a cargar uno dudoso):
+
+- **Ambigüedad en la fila/columna** (`ambiguo_en_fila`): si dentro de la fila o columna del producto hay más de un valor distinto de la misma
+  magnitud (p. ej. 1100 lm y 1200 lm para cálido/frío), sólo se acepta si el nombre del producto dice temperatura o tono y coincide con el
+  encabezado de la subcolumna del valor (el más cercano por `x`, sin empate). Para temperatura y tono alcanza con que el nombre diga lo mismo.
+- **Valor único en ficha propia con varias páginas**: tiene que estar en una página donde figura el producto (su código de Alegra o todos los
+  tokens número+unidad del nombre). Si el producto no figura en ninguna página (`producto_no_ubicado`) o el valor está en otra
+  (`valor_en_otra_pagina`), se descarta; con un PDF de una sola página no se exige.
 
 `aceptados.jsonl` trae, además del valor: `regla` (`unico` | `vocabulario` | `fila`), `evidencia` (texto
 del PDF que lo respalda), `pagina` y `citaEnTexto` (si la cita del modelo aparece textual).

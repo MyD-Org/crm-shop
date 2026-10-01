@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
-import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
-import { pagosHabilitados } from "@/lib/pagos-flag";
+import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
 import { permitir } from "@/lib/rate-limit";
 import { dispDelVisitante } from "@/lib/zona-servidor";
@@ -97,7 +96,6 @@ export async function POST(req: Request) {
       total: 0,
       hayProblemas: false,
       envio: evaluarEnvio(0, provinciaTexto, await leerConfigEnvio()),
-      pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),
     });
   }
 
@@ -160,7 +158,6 @@ export async function POST(req: Request) {
       ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
       envio: evaluarEnvio(cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),
-      pagosDisponibles: pagosDisponibles(entregaTipo, await pagosHabilitados()),
     });
   } catch (err) {
     console.error("[/api/carrito/cotizar] error:", err);

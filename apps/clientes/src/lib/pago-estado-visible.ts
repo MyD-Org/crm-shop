@@ -1,18 +1,19 @@
 import type { PagoEstado } from "@/data/orders";
+import { esPagoEnLinea } from "./medios-pago";
 
 /**
  * ¿Se esconde el estado del pago de un pedido en Mi cuenta?
  *
- * Con los pagos apagados ningún pedido se paga en el Shop: todos quedan en
- * "pendiente" y la etiqueta "Pago pendiente" sólo confunde. "Pagado" y "Pago
- * rechazado" son hechos de cuando se cobraba, así que se siguen mostrando.
+ * "Pago pendiente" sólo tiene sentido en un pedido que se cobra en línea (Mercado Pago). Un pedido
+ * con transferencia, efectivo o "a coordinar" queda "a confirmar": ahí la etiqueta confunde. Lo
+ * decide cada pedido por su `pago_metodo`, no un flag global. "Pagado" y "Pago rechazado" son
+ * hechos y se muestran siempre.
  *
- * Puro a propósito: lo usan componentes de cliente, que no pueden leer el env.
- * El booleano lo resuelve la página en el server (src/lib/pagos-flag.ts).
+ * Puro a propósito: lo usan componentes de cliente.
  */
 export function ocultarEstadoPago(
   pagoEstado: PagoEstado,
-  pagosHabilitados: boolean,
+  pagoMetodo: string | null | undefined,
 ): boolean {
-  return !pagosHabilitados && pagoEstado === "pendiente";
+  return pagoEstado === "pendiente" && !esPagoEnLinea(pagoMetodo ?? "");
 }

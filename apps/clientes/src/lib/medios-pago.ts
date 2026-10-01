@@ -45,6 +45,17 @@ export interface OpcionesMedios {
 export const NOTA_PAGO_A_CONFIRMAR =
   "El pago se coordina después de confirmar el pedido; no se cobra en este paso.";
 
+/** Pie bajo "Confirmar pedido" según el medio elegido (la transferencia lo arma el checkout). */
+export const PIE_MERCADOPAGO = "Al confirmar el pedido, pasará a pagar con Mercado Pago.";
+export const PIE_A_COORDINAR = "No se le cobrará nada ahora. Un asesor coordinará el pago con usted.";
+export const PIE_GENERICO = "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido.";
+
+/** Pie para el medio elegido; `null` = no hay medio aplicable (el pedido sale "a_coordinar"). */
+export function pieDelMedio(medio: MedioPago | null): string {
+  if (!medio) return PIE_A_COORDINAR;
+  return esPagoEnLinea(medio.slug) ? PIE_MERCADOPAGO : PIE_GENERICO;
+}
+
 /**
  * Medios que se ofrecen para la modalidad: activos, que aplican a ella y sin slugs reservados (y sin
  * Mercado Pago si faltan credenciales), en el orden que fijó el operador (empate: por nombre, para

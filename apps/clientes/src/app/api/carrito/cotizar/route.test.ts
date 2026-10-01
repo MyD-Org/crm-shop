@@ -18,7 +18,6 @@ vi.mock("@/lib/cotizacion", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/cotizacion")>()),
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: async () => false }));
 // La config de envío se relee SIN caché en cada cotización.
 vi.mock("@/lib/sucursales-repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sucursales-repo")>()),

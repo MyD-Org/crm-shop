@@ -29,7 +29,8 @@ vi.mock("@/lib/pedidos", () => ({
   getPedidoPorClave: async () => null,
   listarPedidos: async () => [],
 }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => false }));
+// Sin medios cargados: el único pago válido es "a_coordinar".
+vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => [] }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => false }));
 
 let espejo: ContactoFacturacion | null = null;

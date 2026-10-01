@@ -5,6 +5,7 @@ import { URL_DEFENSA_CONSUMIDOR, identificacionComercio, type Bloque } from "./c
 import { bloquesTerminos } from "./terminos";
 import { bloquesPrivacidad } from "./privacidad";
 import { bloquesEnviosYPagos } from "./envios-y-pagos";
+import type { MedioPago } from "../medios-pago";
 import { columnasFooter, linksContacto } from "./footer";
 import { DEFAULTS_FOOTER } from "@/data/footer";
 import { bloquesArrepentimiento } from "./arrepentimiento";
@@ -15,6 +16,18 @@ function texto(bloques: Bloque[]): string {
     .flatMap((b) => [b.titulo, ...b.parrafos, ...(b.enlaces ?? []).map((e) => `${e.label} ${e.href}`)])
     .join("\n");
 }
+
+const medio = (slug: string, nombre: string, extra: Partial<MedioPago> = {}): MedioPago => ({
+  slug,
+  nombre,
+  instrucciones: "",
+  activo: true,
+  aplicaRetiro: true,
+  aplicaEnvio: true,
+  cobroOnline: slug === "mercadopago",
+  orden: 0,
+  ...extra,
+});
 
 const COMPLETOS: DatosLegales = {
   razonSocial: "Comercio Ejemplo SA",
@@ -134,37 +147,66 @@ const ENVIO_GRATIS: ConfigEnvio = {
 
 describe("envíos y pagos", () => {
   it("envío inactivo: solo retiro, sin regla de envío", () => {
-    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, pagos: false, cuotas: false }));
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, medios: [], cuotas: false }));
     expect(t).toContain("«Retiro en local»");
     expect(t).toContain("no está disponible");
     expect(t).not.toContain("Envío a coordinar");
   });
 
   it("gratis apagado: envío a domicilio con costo a coordinar", () => {
-    const t = texto(bloquesEnviosYPagos({ envio: CONFIG_ENVIO_DEFAULT, pagos: false, cuotas: false }));
+    const t = texto(bloquesEnviosYPagos({ envio: CONFIG_ENVIO_DEFAULT, medios: [], cuotas: false }));
     expect(t).toContain("El envío a domicilio tiene costo a coordinar.");
   });
 
   it("envío gratis configurado: provincia y mínimo formateado desde la config", () => {
-    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, pagos: false, cuotas: false }));
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios: [], cuotas: false }));
     expect(t).toContain("Misiones");
     expect(t).toContain("100.000");
   });
 
   it("cambia el mínimo, cambia la página (sin tocar código)", () => {
     const cfg: ConfigEnvio = { ...ENVIO_GRATIS, gratis: { ...ENVIO_GRATIS.gratis!, minimo: 150_000 } };
-    const t = texto(bloquesEnviosYPagos({ envio: cfg, pagos: false, cuotas: false }));
+    const t = texto(bloquesEnviosYPagos({ envio: cfg, medios: [], cuotas: false }));
     expect(t).toContain("150.000");
     expect(t).not.toContain("100.000");
   });
 
-  it("pagos: apagado se coordina; prendido lista los medios; cuotas informa el CFT", () => {
-    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, pagos: false, cuotas: false }))).toContain("A coordinar con un asesor");
-    const prendido = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, pagos: true, cuotas: true }));
+  it("sin medios aplicables se coordina con un asesor; con medios los lista; cuotas informa el CFT", () => {
+    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, medios: [], cuotas: false }))).toContain("A coordinar con un asesor");
+    const medios = [medio("transferencia", "Transferencia bancaria"), medio("mercadopago", "Mercado Pago")];
+    const prendido = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: true }));
     expect(prendido).toContain("Transferencia bancaria");
-    expect(prendido).toContain("Tarjeta o Mercado Pago");
+    expect(prendido).toContain("Mercado Pago");
     expect(prendido).toContain("CFT");
-    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, pagos: true, cuotas: false }))).not.toContain("CFT");
+    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: false }))).not.toContain("CFT");
+  });
+
+  it("cada modalidad lista los medios que le aplican", () => {
+    const medios = [
+      medio("efectivo", "Efectivo en el local", { aplicaEnvio: false }),
+      medio("transferencia", "Transferencia bancaria", { aplicaRetiro: false }),
+    ];
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: false }));
+    expect(t).toContain("Con retiro en local: Efectivo en el local.");
+    expect(t).toContain("Con envío a domicilio: Transferencia bancaria.");
+  });
+
+  it("una modalidad sin medios dice que el pago se coordina con un asesor", () => {
+    const medios = [medio("efectivo", "Efectivo en el local", { aplicaEnvio: false })];
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: false }));
+    expect(t).toContain("Con retiro en local: Efectivo en el local.");
+    expect(t).toContain("Con envío a domicilio: el pago se coordina con un asesor");
+  });
+
+  it("sin Mercado Pago en la lista no menciona el CFT aunque el flag de cuotas esté prendido", () => {
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios: [medio("transferencia", "Transferencia bancaria")], cuotas: true }));
+    expect(t).not.toContain("CFT");
+  });
+
+  it("no ofrece medios inactivos", () => {
+    const medios = [medio("viejo", "Medio viejo", { activo: false }), medio("transferencia", "Transferencia bancaria")];
+    const t = texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, medios, cuotas: false }));
+    expect(t).not.toContain("Medio viejo");
   });
 });
 

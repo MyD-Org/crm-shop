@@ -3,12 +3,16 @@ import {
   NOTA_PAGO_A_CONFIRMAR,
   SLUGS_RESERVADOS,
   SLUG_MERCADOPAGO,
+  PIE_A_COORDINAR,
+  PIE_GENERICO,
+  PIE_MERCADOPAGO,
   esPagoEnLinea,
   instruccionesDelPago,
   medioElegido,
   mediosParaModalidad,
   nombreDelPago,
   pagoValidoConMedios,
+  pieDelMedio,
   type MedioPago,
 } from "./medios-pago";
 
@@ -156,5 +160,24 @@ describe("la nota del paso Pago", () => {
     expect(NOTA_PAGO_A_CONFIRMAR).toBe(
       "El pago se coordina después de confirmar el pedido; no se cobra en este paso.",
     );
+  });
+});
+
+describe("pieDelMedio (texto bajo Confirmar pedido)", () => {
+  it("mercadopago: pasa a pagar con Mercado Pago", () => {
+    expect(pieDelMedio(medio({ slug: "mercadopago" }))).toBe(
+      "Al confirmar el pedido, pasará a pagar con Mercado Pago.",
+    );
+    expect(pieDelMedio(medio({ slug: "mercadopago" }))).toBe(PIE_MERCADOPAGO);
+  });
+  it("sin medio (a_coordinar): un asesor coordina el pago", () => {
+    expect(pieDelMedio(null)).toBe("No se le cobrará nada ahora. Un asesor coordinará el pago con usted.");
+    expect(pieDelMedio(null)).toBe(PIE_A_COORDINAR);
+  });
+  it("cualquier otro medio: texto genérico", () => {
+    expect(pieDelMedio(medio({ slug: "efectivo", instrucciones: "En caja" }))).toBe(
+      "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido.",
+    );
+    expect(pieDelMedio(medio({ slug: "cheque" }))).toBe(PIE_GENERICO);
   });
 });

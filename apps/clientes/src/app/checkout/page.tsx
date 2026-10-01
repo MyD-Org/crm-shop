@@ -6,14 +6,13 @@ import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
 import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
-import { pagosHabilitados } from "@/lib/pagos-flag";
 import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
-import { pedidoAConfirmarHabilitado } from "@/lib/pedido-a-confirmar-flag";
-import { mediosPagoCacheados } from "@/lib/medios-pago-datos";
+import { mediosOfrecibles } from "@/lib/medios-pago-datos";
+import { SLUG_MERCADOPAGO } from "@/lib/medios-pago";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -40,13 +39,12 @@ async function direccionesParaCheckout(
  * en el servidor, para que la página nunca renderice sin identidad.
  */
 export default async function CheckoutPage() {
-  // Los flags no dependen de la identidad: arrancan antes de esperarla para
+  // Las reglas y los medios de pago no dependen de la identidad: arrancan antes de esperarla para
   // que se resuelvan en paralelo con esa consulta en vez de después (misma
   // semántica, una espera menos en la cascada). `identidadActual` decide el
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
-  const pagosPromise = pagosHabilitados();
   const reglasPromise = reglasVentaCacheadas();
-  const aConfirmarPromise = pedidoAConfirmarHabilitado();
+  const mediosPromise = mediosOfrecibles();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
@@ -59,13 +57,10 @@ export default async function CheckoutPage() {
   // `POST /api/pedidos` (`datosDelContacto`): vinculado ⇒ espejo de Alegra.
   // En paralelo con la oferta de cuotas (null = sin cuotas: flag off, sin datos o error).
   //
-  // El flag de pagos se lee acá, en el server, y al checkout le llega como
-  // booleano. Apagado, la oferta de cuotas ni se consulta: sin "Forma de pago"
-  // no hay dónde mostrarla.
-  const [pagos, reglas, aConfirmar] = await Promise.all([pagosPromise, reglasPromise, aConfirmarPromise]);
-  // Con el flag `pedido-a-confirmar`: medios de pago del CRM. Tabla ausente o vacía = [] (el
-  // checkout sigue con las opciones fijas).
-  const mediosPago = aConfirmar ? await mediosPagoCacheados() : null;
+  // Los medios de pago son los del CRM, sin Mercado Pago si faltan las credenciales en el Shop. La
+  // oferta de cuotas sólo se consulta si Mercado Pago está entre ellos (activo o no: un pedido de
+  // Mercado Pago pendiente se retoma aunque se haya desactivado el medio).
+  const [reglas, mediosPago] = await Promise.all([reglasPromise, mediosPromise]);
   // Con el flag `sucursales`: locales de retiro y zona vigente. null = como siempre.
   const sucursales = await opcionesCheckoutDelVisitante().catch(
     (err: unknown) => {
@@ -75,7 +70,7 @@ export default async function CheckoutPage() {
   );
   const [dc, oferta, direcciones] = await Promise.all([
     datosDelContacto({ clerkUserId, cliente }),
-    pagos ? getOfertaCuotasSinCache() : null,
+    mediosPago.some((m) => m.slug === SLUG_MERCADOPAGO) ? getOfertaCuotasSinCache() : null,
     // Sólo con Clerk: la cookie del CRM sin Clerk no guarda direcciones.
     clerkUserId ? direccionesParaCheckout(clerkUserId) : [],
   ]);
@@ -121,12 +116,10 @@ export default async function CheckoutPage() {
         perfilFacturacion={perfilUI}
         admiteEnvio={admiteEnvio(dc.datos.pais)}
         oferta={oferta}
-        pagosHabilitados={pagos}
         configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}
-        pedidoAConfirmar={aConfirmar}
         mediosPago={mediosPago}
       />
     </>

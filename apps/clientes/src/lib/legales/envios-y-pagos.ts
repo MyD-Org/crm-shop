@@ -1,17 +1,17 @@
 /**
  * Página Envíos y pagos: el contenido sale de la configuración de envío del CRM
- * (`ConfigEnvio`, texto con `textoRegla`) y de los flags (`pagos`, `cuotas`)
- * que resuelve la página en el server. Nada de texto fijo duplicado: si cambian
- * el alcance o el mínimo, la página se acomoda sola.
+ * (`ConfigEnvio`, texto con `textoRegla`), de los medios de pago activos del CRM por modalidad
+ * (`medios_pago_shop`) y del flag `cuotas`, que resuelve la página en el server. Nada de texto fijo
+ * duplicado: si cambian el alcance, el mínimo o los medios, la página se acomoda sola.
  */
 import {
   ENTREGA_LABEL,
   PAGO_LABEL,
-  pagosDisponibles,
   textoRegla,
   type ConfigEnvio,
   type EntregaTipo,
 } from "@/lib/envio";
+import { SLUG_MERCADOPAGO, mediosParaModalidad, type MedioPago } from "@/lib/medios-pago";
 import type { Bloque } from "./comun";
 
 function listar(items: readonly string[]): string {
@@ -19,11 +19,18 @@ function listar(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
 }
 
-function mediosDe(tipo: EntregaTipo): string {
-  return listar(pagosDisponibles(tipo, true).map((m) => PAGO_LABEL[m]));
+const PAGO_A_COORDINAR = `${PAGO_LABEL.a_coordinar}: una vez confirmado el pedido, el comercio se comunicará con usted para acordar el medio de pago.`;
+
+/** Nombres de los medios que aplican a la modalidad; vacío si ninguno. */
+function mediosDe(tipo: EntregaTipo, medios: readonly MedioPago[]): string {
+  return listar(mediosParaModalidad(medios, tipo).map((m) => m.nombre));
 }
 
-export function bloquesEnviosYPagos(ctx: { envio: ConfigEnvio; pagos: boolean; cuotas: boolean }): Bloque[] {
+/**
+ * `medios`: los activos del CRM que el Shop puede ofrecer (sin Mercado Pago si faltan credenciales).
+ * Sin medios aplicables a ninguna modalidad, el pago se coordina con un asesor.
+ */
+export function bloquesEnviosYPagos(ctx: { envio: ConfigEnvio; medios: readonly MedioPago[]; cuotas: boolean }): Bloque[] {
   const entregas: Bloque = ctx.envio.domicilioActivo
     ? {
         titulo: "Entregas",
@@ -39,23 +46,27 @@ export function bloquesEnviosYPagos(ctx: { envio: ConfigEnvio; pagos: boolean; c
         ],
       };
 
-  const pagos: Bloque = ctx.pagos
+  const modalidades: EntregaTipo[] = ctx.envio.domicilioActivo ? ["retiro", "envio"] : ["retiro"];
+  const hayMedios = modalidades.some((t) => mediosParaModalidad(ctx.medios, t).length > 0);
+  const conMp = modalidades.some((t) =>
+    mediosParaModalidad(ctx.medios, t).some((m) => m.slug === SLUG_MERCADOPAGO),
+  );
+
+  const pagos: Bloque = hayMedios
     ? {
         titulo: "Medios de pago",
         parrafos: [
-          `Con ${ENTREGA_LABEL.retiro.toLowerCase()}: ${mediosDe("retiro")}.`,
-          ...(ctx.envio.domicilioActivo ? [`Con ${ENTREGA_LABEL.envio.toLowerCase()}: ${mediosDe("envio")}.`] : []),
-          ...(ctx.cuotas
+          ...modalidades.map((t) => {
+            const lista = mediosDe(t, ctx.medios);
+            const cuando = `Con ${ENTREGA_LABEL[t].toLowerCase()}`;
+            return lista ? `${cuando}: ${lista}.` : `${cuando}: el pago se coordina con un asesor una vez confirmado el pedido.`;
+          }),
+          ...(ctx.cuotas && conMp
             ? ["Cuando elija pagar en cuotas, el costo financiero total (CFT) se informa antes de confirmar la compra."]
             : []),
         ],
       }
-    : {
-        titulo: "Medios de pago",
-        parrafos: [
-          `${PAGO_LABEL.a_coordinar}: una vez confirmado el pedido, el comercio se comunicará con usted para acordar el medio de pago.`,
-        ],
-      };
+    : { titulo: "Medios de pago", parrafos: [PAGO_A_COORDINAR] };
 
   return [entregas, pagos];
 }

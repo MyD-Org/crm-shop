@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { pagosHabilitados } from "@/lib/pagos-flag";
+import { mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
 import { pedidoPendienteMasReciente } from "@/lib/pedidos";
 
 /**
@@ -19,11 +19,10 @@ export async function GET() {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // Con los pagos apagados no hay rescate: este endpoint existe para retomar
-  // el cobro de un pedido de Mercado Pago, y sin cobros no hay nada que
-  // retomar. Se corta antes de consultar la base; el checkout tampoco lo llama
-  // (doble seguro del lado del server).
-  if (!(await pagosHabilitados())) {
+  // Sin credenciales de Mercado Pago no hay rescate: este endpoint existe para retomar el cobro de
+  // un pedido de Mercado Pago y sin credenciales no se puede cobrar. Se corta antes de consultar la
+  // base. Con el medio desactivado en el CRM SÍ se rescata: el pedido ya existe y es de `mercadopago`.
+  if (!mercadoPagoConfigurado()) {
     return NextResponse.json({ pedido: null });
   }
 

@@ -2,8 +2,7 @@ import { Button } from "@myd-org/ui";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 
 /**
- * Plazo de contacto y WhatsApp de la sucursal de un pedido "a confirmar" (flag
- * `pedido-a-confirmar`). Sirve tanto en la pantalla de confirmación del checkout como en el detalle
+ * Plazo de contacto y WhatsApp de la sucursal de un pedido "a confirmar". Sirve tanto en la pantalla de confirmación del checkout como en el detalle
  * del pedido en Mi cuenta. Sin número de WhatsApp (pedido sin sucursal, o sucursal sin número) se
  * muestra sólo el texto.
  *

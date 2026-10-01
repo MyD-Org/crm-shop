@@ -5,22 +5,22 @@ import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { getDatosLegales } from "@/lib/home-datos";
 import { bloquesEnviosYPagos } from "@/lib/legales/envios-y-pagos";
-import { pagosHabilitados } from "@/lib/pagos-flag";
+import { mediosOfrecibles } from "@/lib/medios-pago-datos";
 
 export const metadata: Metadata = { title: "Envíos y pagos" };
 
-/** Contenido armado desde la configuración de envío del CRM y los flags `pagos` y `cuotas`. */
+/** Contenido armado desde la configuración de envío del CRM y los medios de pago del CRM y el flag `cuotas`. */
 export default async function EnviosYPagosPage() {
-  const [datos, reglas, pagos, cuotas] = await Promise.all([
+  const [datos, reglas, medios, cuotas] = await Promise.all([
     getDatosLegales(),
     reglasVentaCacheadas(),
-    pagosHabilitados(),
+    mediosOfrecibles(),
     cuotasHabilitadas(),
   ]);
   return (
     <PaginaLegal
       titulo="Envíos y pagos"
-      bloques={bloquesEnviosYPagos({ envio: reglas.envio ?? CONFIG_ENVIO_DEFAULT, pagos, cuotas })}
+      bloques={bloquesEnviosYPagos({ envio: reglas.envio ?? CONFIG_ENVIO_DEFAULT, medios, cuotas })}
       datos={datos}
     />
   );

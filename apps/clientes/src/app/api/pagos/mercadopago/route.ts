@@ -9,10 +9,9 @@ import {
 } from "@/lib/pedidos";
 import { ErrorProveedor, MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
-import { mercadoPago, urlNotificacion } from "@/lib/pagos/mercadopago";
+import { mercadoPago, mercadoPagoConfigurado, urlNotificacion } from "@/lib/pagos/mercadopago";
 import { permitir } from "@/lib/rate-limit";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { pagosHabilitados } from "@/lib/pagos-flag";
 import { validarCuotasPago } from "@/lib/pagos/cuotas-validacion";
 
 /** Intentos de cobro por usuario. Alto para no molestar a quien reintenta bien. */
@@ -52,16 +51,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // Con los pagos apagados no se INICIA ningún cobro, ni siquiera el de un
-  // pedido de Mercado Pago creado cuando estaban prendidos. El webhook y la
-  // conciliación siguen corriendo: un pago que ya estaba en vuelo se acredita
-  // igual. Se corta acá, antes de leer el pedido o de hablar con Mercado Pago.
-  if (!(await pagosHabilitados())) {
+  // Sin credenciales de Mercado Pago en el Shop no se puede cobrar nada. Se corta acá, antes de
+  // leer el pedido o de hablar con Mercado Pago. NO se exige que el medio esté activo en el CRM:
+  // sólo se cobran pedidos que ya son de `mercadopago` (más abajo), así un pedido en vuelo se paga
+  // aunque el operador desactive el medio; crear pedidos nuevos ya lo bloquea POST /api/pedidos.
+  // El webhook y la conciliación no pasan por acá y siguen corriendo siempre.
+  if (!mercadoPagoConfigurado()) {
     return NextResponse.json(
       {
         error:
           "Los pagos en línea no están disponibles en este momento. Un asesor coordinará el pago con usted.",
-        motivo: "pagos_deshabilitados",
+        motivo: "mp_no_configurado",
       },
       { status: 409 },
     );

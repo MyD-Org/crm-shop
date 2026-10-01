@@ -76,7 +76,8 @@ vi.mock("@/lib/cuotas-datos", () => ({
   getOfertaCuotasParaPedido: async () => null,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: async () => false }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => false }));
+// Sin medios cargados: el único pago válido es "a_coordinar".
+vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => [] }));
 
 import { POST } from "./route";
 import { setFlag } from "@/test/flags";

@@ -1,15 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { setFlag, type FlagDeTest } from "@/test/flags";
-import { pagosDisponibles } from "./envio";
-import { ocultarEstadoPago } from "./pago-estado-visible";
 import { validarCuotasPago } from "./pagos/cuotas-validacion";
-import { pagosHabilitados } from "./pagos-flag";
 import { cuotasHabilitadas } from "./cuotas-flag";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { flagsPublicos } from "./flags-publicos";
 import { sucursalesHabilitadas } from "./sucursales-flag";
 import { disponibilidadSucursalHabilitada } from "./disponibilidad-sucursal-flag";
-import { pedidoAConfirmarHabilitado } from "./pedido-a-confirmar-flag";
 
 /**
  * Tablas de combinaciones de los interruptores del Shop (Vercel Flags, mockeados
@@ -21,36 +17,6 @@ import { pedidoAConfirmarHabilitado } from "./pedido-a-confirmar-flag";
 const f = (flags: Partial<Record<FlagDeTest, boolean>>) => {
   for (const [k, v] of Object.entries(flags)) setFlag(k as FlagDeTest, v);
 };
-
-describe("pagos: medios visibles en el checkout", () => {
-  it.each([
-    { pagos: false, tipo: "retiro", esperado: ["a_coordinar"] },
-    { pagos: false, tipo: "envio", esperado: ["a_coordinar"] },
-    { pagos: true, tipo: "retiro", esperado: ["transferencia", "mercadopago", "efectivo"] },
-    { pagos: true, tipo: "envio", esperado: ["transferencia", "mercadopago"] },
-  ] as const)("pagos=$pagos, entrega=$tipo → $esperado", async ({ pagos, tipo, esperado }) => {
-    f({ pagos });
-    expect(pagosDisponibles(tipo, await pagosHabilitados())).toEqual(esperado);
-  });
-
-  it.each([
-    { pagos: false, estado: "pendiente", oculta: true },
-    { pagos: false, estado: "pagado", oculta: false },
-    { pagos: false, estado: "fallido", oculta: false },
-    { pagos: true, estado: "pendiente", oculta: false },
-    { pagos: true, estado: "pagado", oculta: false },
-    { pagos: true, estado: "fallido", oculta: false },
-  ] as const)("pagos=$pagos, pago $estado → oculta etiqueta: $oculta", async ({ pagos, estado, oculta }) => {
-    f({ pagos });
-    expect(ocultarEstadoPago(estado, await pagosHabilitados())).toBe(oculta);
-  });
-
-  it("pedido-a-confirmar no cambia los medios fijos: depende sólo de pagos", async () => {
-    f({ pagos: false, "pedido-a-confirmar": true });
-    expect(pagosDisponibles("envio", await pagosHabilitados())).toEqual(["a_coordinar"]);
-    expect(await pedidoAConfirmarHabilitado()).toBe(true);
-  });
-});
 
 describe("cuotas: validación del cobro según el flag", () => {
   it.each([
@@ -82,15 +48,6 @@ describe("visibilidad del catálogo y cuotas públicas", () => {
     expect(await cuotasHabilitadas()).toBe(cuotas);
     expect(await flagsPublicos()).toEqual({ soloVisibles: solo, cuotas });
   });
-
-  it("los flags de pagos y cuotas son independientes", async () => {
-    f({ pagos: true, cuotas: false });
-    expect(await pagosHabilitados()).toBe(true);
-    expect(await cuotasHabilitadas()).toBe(false);
-    f({ pagos: false, cuotas: true });
-    expect(await pagosHabilitados()).toBe(false);
-    expect(await cuotasHabilitadas()).toBe(true);
-  });
 });
 
 describe("sucursales y reserva por sucursal", () => {
@@ -108,14 +65,7 @@ describe("sucursales y reserva por sucursal", () => {
     },
   );
 
-  it("pedido-a-confirmar no depende de sucursales", async () => {
-    f({ sucursales: false, "pedido-a-confirmar": true });
-    expect(await pedidoAConfirmarHabilitado()).toBe(true);
-    f({ sucursales: true, "pedido-a-confirmar": false });
-    expect(await pedidoAConfirmarHabilitado()).toBe(false);
-  });
-
-  it("si Vercel Flags tira, sucursales, reserva y pedido a confirmar caen a apagado", async () => {
+  it("si Vercel Flags tira, sucursales y reserva caen a apagado", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.resetModules();
     vi.doMock("@/flags", () => ({
@@ -123,16 +73,11 @@ describe("sucursales y reserva por sucursal", () => {
         throw new Error("flags caído");
       },
       disponibilidadSucursalFlag: async () => true,
-      pedidoAConfirmarFlag: async () => {
-        throw new Error("flags caído");
-      },
     }));
     const suc = await import("./sucursales-flag");
     const disp = await import("./disponibilidad-sucursal-flag");
-    const conf = await import("./pedido-a-confirmar-flag");
     expect(await suc.sucursalesHabilitadas()).toBe(false);
     expect(await disp.disponibilidadSucursalHabilitada()).toBe(false);
-    expect(await conf.pedidoAConfirmarHabilitado()).toBe(false);
     vi.doUnmock("@/flags");
     vi.restoreAllMocks();
   });

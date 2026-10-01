@@ -5,8 +5,7 @@ import { describe, expect, it } from "vitest";
 /**
  * Guardas de texto del checkout con los datos de la cuenta para transferir (change
  * `pago-transferencia-comprobante`): ya no promete "Le enviamos el CBU", pide la cuenta junto con
- * la cotización cuando el medio es Transferencia, la muestra en el paso Pago (con y sin medios del
- * CRM) y en Pedido recibido con lo que devolvió el pedido.
+ * la cotización cuando el medio es Transferencia, la muestra en el paso Pago y en Pedido recibido con lo que devolvió el pedido.
  */
 const fuente = readFileSync(join(__dirname, "CheckoutClient.tsx"), "utf8");
 
@@ -21,14 +20,13 @@ describe("CheckoutClient: cuenta para transferir", () => {
     expect(fuente).toContain("sucursalRetiro: localParaCuenta,");
   });
 
-  it("muestra la cuenta en el paso Pago, en los dos modos", () => {
-    expect(fuente.match(/<BloqueCuentaPago /g)?.length).toBe(2);
+  it("muestra la cuenta en el paso Pago", () => {
+    expect(fuente.match(/<BloqueCuentaPago /g)?.length).toBe(1);
   });
 
   it("el pie del resumen con transferencia es coherente con los datos mostrados; otros medios mantienen su texto", () => {
     expect(fuente).toContain("? pieTransferencia(Boolean(cotizacion?.cuentaTransferencia))");
-    expect(fuente).toContain("No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido.");
-    expect(fuente).toContain("Al confirmar el pedido, pasará a pagar con Mercado Pago.");
+    expect(fuente).toContain("pieDelMedio(medioSel)");
   });
 
   it("Pedido recibido usa la cuenta congelada que devolvió el pedido", () => {

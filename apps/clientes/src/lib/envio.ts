@@ -21,7 +21,7 @@ export type PagoMetodo =
   | "cuenta_corriente"
   | "mercadopago"
   // Sin medio de pago: un asesor lo coordina después de confirmado el pedido.
-  // Es el único método válido mientras los pagos están apagados (pagos-flag.ts).
+  // Es el único método válido cuando ningún medio de `medios_pago_shop` aplica a la entrega.
   | "a_coordinar";
 
 export const ENTREGA_LABEL: Record<EntregaTipo, string> = {
@@ -223,28 +223,4 @@ export function textoEnvioFicha(
 /** Costo del envío online. Siempre 0: si es gratis no se cobra y si no, el costo se coordina fuera de línea. */
 export function costoEnvio(): 0 {
   return 0;
-}
-
-/**
- * Efectivo en el local solo tiene sentido si el cliente va a pasar por el local.
- * Mercado Pago no depende de la entrega: se cobra igual en los dos casos.
- *
- * El orden importa: es el que ve el cliente en el checkout, y `metodosPago[0]`
- * es el fallback cuando el método elegido deja de estar disponible.
- *
- * `pagosHabilitados` es OBLIGATORIO y llega de afuera: este módulo es puro y lo
- * importa el checkout (client component), así que no puede leer el env. El
- * server resuelve el flag (src/lib/pagos-flag.ts) y lo pasa; sin default para
- * que tsc obligue a cada caller a decidir. Apagado: el único método es
- * "a_coordinar", para cualquier entrega. Prendido: las listas de siempre, sin
- * "a_coordinar".
- */
-export function pagosDisponibles(
-  tipo: EntregaTipo,
-  pagosHabilitados: boolean,
-): PagoMetodo[] {
-  if (!pagosHabilitados) return ["a_coordinar"];
-  return tipo === "retiro"
-    ? ["transferencia", "mercadopago", "efectivo"]
-    : ["transferencia", "mercadopago"];
 }

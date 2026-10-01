@@ -3,8 +3,8 @@
  *
  * La tabla la crea una migración del CRM que puede no estar aplicada todavía: toda lectura
  * TOLERA que no exista (o que el permiso no esté concedido) y devuelve `[]`, que el checkout
- * interpreta como "sin medios cargados": sigue con las opciones fijas de siempre. Una lista vacía
- * (tabla vacía) se trata igual, a propósito: prender el flag antes de cargar los medios no puede
+ * interpreta como "sin medios cargados": el pago sale "a_coordinar". Una lista vacía
+ * (tabla vacía) se trata igual, a propósito: no cargar medios todavía no puede
  * dejar el paso Pago sin salida.
  *
  * Trae TODAS las filas del tenant (activas o no): el filtro por activo y por modalidad es puro
@@ -39,13 +39,13 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
   return filas;
 }
 
-/** Lo mismo, pero con la tabla ausente (o cualquier falla) devuelve `[]`: cae a las opciones fijas. */
+/** Lo mismo, pero con la tabla ausente (o cualquier falla) devuelve `[]`: el pago sale "a_coordinar". */
 export async function leerMediosPagoTolerante(db: Ejecutor = getDb()): Promise<MedioPago[]> {
   try {
     return await leerMediosPago(db);
   } catch (err) {
     console.warn(
-      "[medios-pago] no se pudieron leer los medios de pago del CRM; se usan las opciones fijas:",
+      "[medios-pago] no se pudieron leer los medios de pago del CRM; el pago sale a_coordinar:",
       err instanceof Error ? err.message : err,
     );
     return [];

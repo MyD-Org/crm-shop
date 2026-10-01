@@ -5,7 +5,6 @@ import { PedidoCard } from "@/components/mi-cuenta/PedidoCard";
 import { identidadActual } from "@/lib/auth";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
-import { pagosHabilitados } from "@/lib/pagos-flag";
 import { listarPedidos } from "@/lib/pedidos";
 
 /** Todos los pedidos del cliente (los 50 más recientes, como antes). */
@@ -14,7 +13,6 @@ export default async function PedidosPage() {
   if (!clerkUserId && !cliente) redirect(rutaIngreso(RUTAS_MI_CUENTA.pedidos));
 
   const pedidos = await listarPedidos({ clerkUserId, clienteCodigo: cliente?.codigocliente });
-  const pagos = await pagosHabilitados();
 
   return (
     <section>
@@ -26,7 +24,7 @@ export default async function PedidosPage() {
       ) : (
         <div className="flex flex-col gap-4">
           {pedidos.map((p) => (
-            <PedidoCard key={p.id} pedido={p} pagosHabilitados={pagos} />
+            <PedidoCard key={p.id} pedido={p} />
           ))}
         </div>
       )}

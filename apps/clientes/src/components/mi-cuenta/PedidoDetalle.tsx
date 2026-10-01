@@ -31,21 +31,19 @@ function Fila({ label, valor, fuerte = false }: { label: string; valor: string; 
  */
 export function PedidoDetalle({
   pedido,
-  pagosHabilitados,
   medioPago,
   contacto,
 }: {
   pedido: Order;
-  pagosHabilitados: boolean;
-  /** Flag `pedido-a-confirmar`: medio del CRM que eligió el comprador (nombre e instrucciones). */
+  /** Medio del CRM que eligió el comprador (nombre e instrucciones). */
   medioPago?: { nombre: string; instrucciones: string | null };
-  /** Flag `pedido-a-confirmar`: plazo de contacto y WhatsApp de la sucursal asignada. */
+  /** Plazo de contacto y WhatsApp de la sucursal asignada. */
   contacto?: ContactoPedidoVista;
 }) {
-  const pill = estadoPedidoPill(pedido, { pagosHabilitados });
-  const pasos = seguimientoPedido(pedido, { pagosHabilitados });
-  // Con los pagos apagados "Pago pendiente" no se muestra: se coordina por fuera.
-  const verEstadoPago = !ocultarEstadoPago(pedido.pagoEstado, pagosHabilitados);
+  const pill = estadoPedidoPill(pedido);
+  const pasos = seguimientoPedido(pedido);
+  // "Pago pendiente" sólo se muestra en un pedido que se cobra en línea (Mercado Pago).
+  const verEstadoPago = !ocultarEstadoPago(pedido.pagoEstado, pedido.pagoMetodoSlug);
   // Transferencia pendiente: la cuenta congelada al pedir (sin snapshot, el mensaje neutro).
   const cuentaVisible = cuentaDelPedido(pedido);
 

@@ -27,7 +27,6 @@ vi.mock("@/lib/cotizacion", async (importOriginal) => ({
     hayProblemas: false,
   }),
 }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: async () => false }));
 vi.mock("@/lib/sucursales-repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sucursales-repo")>()),
   leerConfigEnvio: async () => (await import("@/lib/envio")).CONFIG_ENVIO_DEFAULT,

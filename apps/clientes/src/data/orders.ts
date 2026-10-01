@@ -58,7 +58,7 @@ export interface Order {
   pagoEstado: PagoEstado;
   metodoPago: string;
   /**
-   * Lo que guarda `orders.pago_metodo`: método fijo o, con el flag `pedido-a-confirmar`, el slug de
+   * Lo que guarda `orders.pago_metodo`: método fijo o el slug de
    * un medio de pago del CRM. Mi cuenta lo resuelve a su nombre (`nombreDelPago`).
    */
   pagoMetodoSlug?: string;

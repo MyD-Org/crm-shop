@@ -13,9 +13,9 @@ import { PedidoLinea } from "./PedidoLinea";
  * entrega, pago y total, y las acciones. Server-safe: pill y pasos son
  * proyecciones puras del pedido.
  */
-export function PedidoCard({ pedido, pagosHabilitados }: { pedido: Order; pagosHabilitados: boolean }) {
-  const pill = estadoPedidoPill(pedido, { pagosHabilitados });
-  const pasos = seguimientoPedido(pedido, { pagosHabilitados });
+export function PedidoCard({ pedido }: { pedido: Order }) {
+  const pill = estadoPedidoPill(pedido);
+  const pasos = seguimientoPedido(pedido);
   const unidades = unidadesPedido(pedido.items);
 
   return (

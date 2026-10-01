@@ -78,7 +78,7 @@ export interface DatosPedido {
   /** true/false si es envío a domicilio (gratis / a coordinar); null o ausente = retiro. */
   envioGratis?: boolean | null;
   /**
-   * Método fijo de `envio.ts` o, con el flag `pedido-a-confirmar`, el `slug` de un medio de
+   * Método fijo de `envio.ts` o el `slug` de un medio de
    * `medios_pago_shop`. Sin CHECK en la base: es texto.
    */
   pagoMetodo: PagoMetodo | (string & {});
@@ -1303,7 +1303,7 @@ const MOTIVO_CANCELADO_POR_CLIENTE = "Cancelado por el cliente.";
  *    podría cancelar pedidos ajenos).
  *  - Sigue en `estado = 'pendiente'`: una vez que un operador lo confirmó, el
  *    pedido ya no es del comprador para cancelar. Antes solo se miraba
- *    `pago_estado`, y con los pagos apagados TODOS los pedidos quedan con el pago
+ *    `pago_estado`, y los pedidos que no se cobran en línea quedan con el pago
  *    pendiente para siempre: un comprador podía cancelar por API un pedido
  *    confirmado, en camino o entregado, a espaldas de quien lo estaba preparando.
  *  - Sigue en `pago_estado = 'pendiente'` — cancelar un pagado sería una

@@ -14,7 +14,7 @@ const PAGOS: PagoEstado[] = ["pendiente", "pagado", "fallido"];
 const ENTREGAS: EntregaTipoPedido[] = ["retiro", "envio"];
 
 function pasos(entregaTipo: EntregaTipoPedido, estado: OrderEstado, pagoEstado: PagoEstado) {
-  return seguimientoPedido({ entregaTipo, estado, pagoEstado });
+  return seguimientoPedido({ entregaTipo, estado, pagoEstado, pagoMetodoSlug: "mercadopago" });
 }
 
 /** `id:state` de cada paso, para comparar de un vistazo. */
@@ -129,12 +129,12 @@ describe("seguimientoPedido", () => {
     ]);
   });
 
-  describe("con los pagos apagados", () => {
-    const sinPagos = (entregaTipo: EntregaTipoPedido, estado: OrderEstado, pagoEstado: PagoEstado) =>
-      seguimientoPedido({ entregaTipo, estado, pagoEstado }, { pagosHabilitados: false });
+  describe("pedido que no se cobra en línea (transferencia, efectivo, a coordinar)", () => {
+    const manual = (entregaTipo: EntregaTipoPedido, estado: OrderEstado, pagoEstado: PagoEstado) =>
+      seguimientoPedido({ entregaTipo, estado, pagoEstado, pagoMetodoSlug: "transferencia" });
 
     it("el segundo paso dice 'Pedido confirmado' en lugar de 'Pago confirmado'", () => {
-      expect(sinPagos("retiro", "pendiente", "pendiente")!.map((p) => p.label)).toEqual([
+      expect(manual("retiro", "pendiente", "pendiente")!.map((p) => p.label)).toEqual([
         "Pedido recibido",
         "Pedido confirmado",
         "Preparando",
@@ -143,7 +143,7 @@ describe("seguimientoPedido", () => {
     });
 
     it("recién recibido: la confirmación en curso", () => {
-      expect(sinPagos("retiro", "pendiente", "pendiente")!.map((p) => `${p.id}:${p.state}`)).toEqual([
+      expect(manual("retiro", "pendiente", "pendiente")!.map((p) => `${p.id}:${p.state}`)).toEqual([
         "recibido:done",
         "pago:current",
         "preparando:pending",
@@ -152,20 +152,13 @@ describe("seguimientoPedido", () => {
     });
 
     it("un pago_estado 'pagado' no da el paso por hecho: sólo la confirmación del operador", () => {
-      expect(sinPagos("envio", "pendiente", "pagado")!.find((p) => p.id === "pago")!.state).toBe("current");
-      expect(sinPagos("envio", "confirmado", "pendiente")!.find((p) => p.id === "pago")!.state).toBe("done");
+      expect(manual("envio", "pendiente", "pagado")!.find((p) => p.id === "pago")!.state).toBe("current");
+      expect(manual("envio", "confirmado", "pendiente")!.find((p) => p.id === "pago")!.state).toBe("done");
     });
 
-    it("sin la opción se comporta como hasta ahora (pagos habilitados)", () => {
-      for (const e of ENTREGAS) {
-        for (const estado of ESTADOS) {
-          for (const pago of PAGOS) {
-            expect(seguimientoPedido({ entregaTipo: e, estado, pagoEstado: pago })).toEqual(
-              seguimientoPedido({ entregaTipo: e, estado, pagoEstado: pago }, { pagosHabilitados: true }),
-            );
-          }
-        }
-      }
+    it("sin medio informado se trata como un pedido manual", () => {
+      const o = { entregaTipo: "retiro", estado: "pendiente", pagoEstado: "pendiente" } as const;
+      expect(seguimientoPedido(o)![1].label).toBe("Pedido confirmado");
     });
   });
 });

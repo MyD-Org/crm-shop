@@ -47,6 +47,7 @@ export const MOTIVOS = [
   "termino_fuera_de_fila",
   "valor_en_rango_o_lista",
   "valor_por_metro",
+  "valor_maximo",
   "tension_parcial",
   "producto_no_ubicado",
   "valor_en_otra_pagina",
@@ -427,6 +428,32 @@ interface Candidato {
   pag: number
   y: number
   texto: string
+}
+
+/** "Máx", "máximo/a", "maximum", "hasta": un tope admitido (carga de un riel, de un controlador), no el valor del producto. */
+const RE_MAXIMO = /(?<![A-Z0-9])(?:MAX|MAXIM[OA]S?|MAXIMUM|HASTA)(?![A-Z0-9])/
+
+/**
+ * ¿El valor es un máximo? Mira la propia celda, su rótulo de fila, la celda pegada antes y después en la
+ * misma línea ("Potencia máxima de lámpara" | "60W", "20W" | "Máx.") y el rótulo de su columna (arriba).
+ */
+function esValorMaximo(cand: Candidato, doc: Doc): boolean {
+  if (RE_MAXIMO.test(cand.texto)) return true
+  const c = cand.celda
+  if (!c) return false
+  if (RE_MAXIMO.test(c.norm) || (c.rotulo && RE_MAXIMO.test(c.rotulo.norm))) return true
+  const ln = doc.lineas[c.linea]
+  const i = ln.indexOf(c)
+  if (i > 0 && RE_MAXIMO.test(ln[i - 1].norm)) return true
+  if (i >= 0 && i < ln.length - 1 && ln[i + 1].norm.length <= 14 && RE_MAXIMO.test(ln[i + 1].norm)) return true
+  for (let k = c.linea - 1; k >= 0 && c.linea - k <= 6; k--) {
+    if (doc.lineas[k][0].pag !== c.pag) break
+    for (const x of doc.lineas[k]) {
+      if (x.norm.length >= 40 || x.x > c.x + c.w || c.x > x.x + x.w) continue
+      if (RE_MAXIMO.test(x.norm)) return true
+    }
+  }
+  return false
 }
 
 /** Tonos que son un color (rojo, verde…): sólo valen bajo un rótulo de luz. RGB/RGBW no son color de producto. */
@@ -822,6 +849,15 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
         descartar(clave, "angulo_no_es_de_luz", entrada)
         continue
       }
+    }
+    // 1-sexies. Una potencia o corriente "máxima" (carga admitida de un riel, controlador, tecla) no es la del producto.
+    if (clave === "potencia_w" || clave === "corriente_a") {
+      const propios = cands.filter((c) => !esValorMaximo(c, doc))
+      if (propios.length === 0) {
+        descartar(clave, "valor_maximo", entrada)
+        continue
+      }
+      cands = propios
     }
     // 1a. Potencia, corriente y flujo "por metro" no son el valor del producto.
     if (valido.valorNum != null && cands.every((c) => esPorMetro(clave, valido.valorNum!, c.texto))) {

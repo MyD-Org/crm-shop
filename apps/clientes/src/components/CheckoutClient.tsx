@@ -1093,7 +1093,7 @@ export function CheckoutClient({
                   <p className="text-sm text-muted">
                     Su documento figura como cliente. Vincule su cuenta para registrar esta compra en ella.
                   </p>
-                  <Button size="sm" variant="ghost" onClick={() => setVinculando(true)}>
+                  <Button size="sm" onClick={() => setVinculando(true)}>
                     Vincular mi cuenta
                   </Button>
                 </div>

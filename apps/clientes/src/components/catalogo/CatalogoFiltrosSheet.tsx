@@ -57,7 +57,7 @@ export function CatalogoFiltrosSheet({
   return (
     <>
       <Button
-        variant="secondary"
+        variant="outline"
         size="sm"
         onClick={abrir}
         aria-label={etiquetaBotonFiltros(activos)}

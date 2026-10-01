@@ -476,6 +476,7 @@ cualquier otro objeto de `public` le da 42501:
 | `payment_receipts` | tabla | SELECT, INSERT, UPDATE sólo las columnas del flujo de informar pago (`status`, `processing_started_at`, `reject_reason`, `file_*`, `converted_from`, `email_*`, `submitted_at`, `updated_at`); nunca `loaded_*`, `alegra_payment_*`, `declared_*`, `amount`, `codigocliente` | 0032 |
 | `catalog_atributos` | tabla (atributos técnicos estructurados por producto) | SELECT sólo `tenant_id, alegra_id, clave, valor_num, valor_texto` (sin `fuente` ni `updated_at`) | 0048 |
 | `sucursales` | tabla | SELECT por columna: las de 0041 (`tenant_id, slug, nombre, direccion, ciudad, provincia, whatsapp, horario, acepta_retiro, acepta_envio, envio_ciudades, orden, activa, predeterminada`) más `schedule, schedule_exceptions` (0051). Siguen afuera `id`, `deposito_alegra_id`, `cuenta_alegra_id` y los timestamps | 0041, 0051 |
+| `cuentas_bancarias_shop` | tabla (cuentas a las que el Shop pide transferir) | SELECT por columna: `id, tenant_id, alias, cbu, banco, titular, cuit, todas_las_sucursales, sucursal_slugs, monto_min, monto_max, activa, predeterminada, orden`. Sin `created_at` ni `updated_at`; sin escritura | 0055 |
 
 Sin permiso, a propósito: las tablas base `catalog_products`, `catalog_categories` y
 `alegra_contacts` (el Shop las ve sólo por sus vistas), `contactos_acceso_facturacion` (guarda
@@ -495,7 +496,9 @@ el de `drizzle/0037_catalogo_shop_desde_crm.sql` (las dos vistas de catálogo) y
 `catalog_atributos`; lo verifica `test/integration/catalog-atributos.integration.test.ts`) y el de
 `drizzle/0051_sucursales_horario.sql` (SELECT por columna de `sucursales.schedule` y
 `schedule_exceptions`: el de 0041 es por columna y NO se hereda; lo verifica
-`test/integration/horarios-sucursal-0051.integration.test.ts`). Todos son
+`test/integration/horarios-sucursal-0051.integration.test.ts`) y el de
+`drizzle/0055_cuentas_bancarias_shop.sql` (SELECT por columna de `cuentas_bancarias_shop`; lo
+verifica `test/integration/cuentas-bancarias-shop.integration.test.ts`). Todos son
 idempotentes. Las reversas están en el encabezado de cada archivo. Los tests
 `test/integration/shop-cuenta-corriente-grants.integration.test.ts`,
 `test/integration/shop-contacto-write-through.integration.test.ts`,
@@ -1015,6 +1018,34 @@ tiene sucursales activas.
   copiar, endpoint).
 - **Migración**: se aplica a mano en prod ANTES de mergear (ver `apps/admin/AGENTS.md`).
   Reversa en el encabezado de `drizzle/0051_sucursales_horario.sql`.
+
+---
+
+## Cuentas bancarias del Shop
+
+Pagos y cuotas → **Cuentas bancarias para transferencias** (admin o superadmin; un operador recibe
+404). ABM de `public.cuentas_bancarias_shop` (migración 0055, change
+`pago-transferencia-comprobante`, rebanada A). Las cuentas reales se cargan por esta pantalla:
+nunca en el repo.
+
+- **Campos**: alias, CBU (22 dígitos), banco, titular, CUIT (11 dígitos u omitido), sucursales,
+  rango de monto, orden, activa y predeterminada. Único por tenant: el CBU.
+- **Sucursales**: `todas_las_sucursales` es una elección EXPLÍCITA ("Todas las sucursales" o
+  "Elegir sucursales"), nunca "lista vacía = todas". Con `true` aplica a cualquier pedido, también
+  sin sucursal resoluble; con `false` exige al menos una sucursal de `sucursales` del tenant
+  (`sucursal_slugs`, validadas al guardar; una sucursal dada de baja después simplemente no matchea).
+  Lo hacen cumplir la validación (`cuentas-bancarias-shop-validacion.ts`) y dos CHECK.
+- **Monto**: `monto_min` / `monto_max` inclusivos sobre el total con impuestos; vacío = sin límite;
+  se rechaza min > max.
+- **Resolución (la hace el Shop, rebanada B)**: entre las cuentas activas que cumplen sucursal y
+  monto gana la de menor `orden`; la predeterminada compite como cualquiera y además es respaldo si
+  ninguna cumple. A lo sumo UNA predeterminada por tenant (índice único parcial); marcar otra
+  desmarca la anterior en la misma transacción; no se puede desactivar la predeterminada.
+- **Aviso al Shop**: cada escritura llama a `pingShopRevalidarSucursales()` (best-effort).
+- **Permisos**: `shop_app` solo lee, por columna (sin `created_at` ni `updated_at`); ver la tabla de
+  [Permisos de `shop_app` sobre `public`](#espejo-de-contactos-de-alegra).
+- **Migración**: se aplica a mano en prod ANTES de mergear. Reversa en el encabezado de
+  `drizzle/0055_cuentas_bancarias_shop.sql`.
 
 ---
 

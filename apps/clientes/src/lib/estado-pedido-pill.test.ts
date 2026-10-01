@@ -29,7 +29,7 @@ describe("estadoPedidoPill", () => {
       ["confirmado", "fallido", "retiro", "Pago rechazado", "danger"],
     ];
     for (const [estado, pagoEstado, entregaTipo, label, tone] of casos) {
-      expect(estadoPedidoPill({ estado, pagoEstado, entregaTipo }), `${estado}/${pagoEstado}/${entregaTipo}`).toEqual({
+      expect(estadoPedidoPill({ estado, pagoEstado, entregaTipo, pagoMetodoSlug: "mercadopago" }), `${estado}/${pagoEstado}/${entregaTipo}`).toEqual({
         label,
         tone,
       });
@@ -41,7 +41,7 @@ describe("estadoPedidoPill", () => {
       for (const pagoEstado of PAGOS) {
         for (const entregaTipo of ENTREGAS) {
           const caso = `${estado}/${pagoEstado}/${entregaTipo}`;
-          const pill = estadoPedidoPill({ estado, pagoEstado, entregaTipo });
+          const pill = estadoPedidoPill({ estado, pagoEstado, entregaTipo, pagoMetodoSlug: "mercadopago" });
           expect(TONOS, caso).toContain(pill.tone);
           expect(pill.label.trim(), caso).not.toBe("");
 
@@ -64,7 +64,7 @@ describe("estadoPedidoPill", () => {
             // confirmado / preparacion / en_camino: el pago (pendiente o pagado) no cambia nada.
             expect(pill.tone, caso).toBe("info");
             expect(pill, caso).toEqual(
-              estadoPedidoPill({ estado, pagoEstado: "pagado", entregaTipo: "envio" }),
+              estadoPedidoPill({ estado, pagoEstado: "pagado", entregaTipo: "envio", pagoMetodoSlug: "mercadopago" }),
             );
           }
         }
@@ -83,35 +83,54 @@ describe("estadoPedidoPill", () => {
 });
 
 /**
- * Con los pagos apagados (pagos-flag.ts) ningún pedido se paga en el Shop:
- * "Pago pendiente" sólo confunde y ya estaba oculto antes del rediseño
- * (pago-estado-visible.ts). La pill conserva esa decisión.
+ * El estado de pago depende de cada pedido: sólo uno que se cobra en línea (Mercado Pago) dice
+ * "Pago pendiente"; los demás quedan "Pendiente" neutro (pago-estado-visible.ts).
  */
-describe("estadoPedidoPill con los pagos apagados", () => {
-  it("pendiente + pago pendiente no dice 'Pago pendiente'", () => {
+describe("estadoPedidoPill según el medio de pago del pedido", () => {
+  it("pedido de transferencia pendiente: 'Pendiente' neutro", () => {
     expect(
-      estadoPedidoPill(
-        { estado: "pendiente", pagoEstado: "pendiente", entregaTipo: "retiro" },
-        { pagosHabilitados: false },
-      ),
+      estadoPedidoPill({
+        estado: "pendiente",
+        pagoEstado: "pendiente",
+        entregaTipo: "retiro",
+        pagoMetodoSlug: "transferencia",
+      }),
     ).toEqual({ label: "Pendiente", tone: "neutral" });
   });
 
-  it("el resto de la matriz no cambia", () => {
+  it("pedido de Mercado Pago pendiente: 'Pago pendiente'", () => {
+    expect(
+      estadoPedidoPill({
+        estado: "pendiente",
+        pagoEstado: "pendiente",
+        entregaTipo: "envio",
+        pagoMetodoSlug: "mercadopago",
+      }).label,
+    ).toBe("Pago pendiente");
+  });
+
+  it("pedido de Mercado Pago pagado: 'Pago confirmado'", () => {
+    expect(
+      estadoPedidoPill({
+        estado: "pendiente",
+        pagoEstado: "pagado",
+        entregaTipo: "envio",
+        pagoMetodoSlug: "mercadopago",
+      }).label,
+    ).toBe("Pago confirmado");
+  });
+
+  it("el resto de la matriz no depende del medio", () => {
     for (const estado of ESTADOS) {
       for (const pagoEstado of PAGOS) {
         for (const entregaTipo of ENTREGAS) {
           if (estado === "pendiente" && pagoEstado === "pendiente") continue;
           const o = { estado, pagoEstado, entregaTipo };
-          expect(estadoPedidoPill(o, { pagosHabilitados: false })).toEqual(estadoPedidoPill(o));
+          expect(estadoPedidoPill({ ...o, pagoMetodoSlug: "transferencia" })).toEqual(
+            estadoPedidoPill({ ...o, pagoMetodoSlug: "mercadopago" }),
+          );
         }
       }
     }
-  });
-
-  it("por defecto (pagos prendidos) sigue diciendo 'Pago pendiente'", () => {
-    const o = { estado: "pendiente", pagoEstado: "pendiente", entregaTipo: "envio" } as const;
-    expect(estadoPedidoPill(o, { pagosHabilitados: true }).label).toBe("Pago pendiente");
-    expect(estadoPedidoPill(o).label).toBe("Pago pendiente");
   });
 });

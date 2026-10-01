@@ -39,18 +39,22 @@ import {
 } from "@/lib/facturacion";
 import {
   ENTREGA_LABEL,
-  PAGO_LABEL,
   evaluarEnvio,
-  pagosDisponibles,
   type ConfigEnvio,
   type EntregaTipo,
-  type PagoMetodo,
 } from "@/lib/envio";
 import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
-import { NOTA_PAGO_A_CONFIRMAR, medioElegido, mediosParaModalidad, type MedioPago } from "@/lib/medios-pago";
+import {
+  NOTA_PAGO_A_CONFIRMAR,
+  SLUG_MERCADOPAGO,
+  medioElegido,
+  mediosParaModalidad,
+  pieDelMedio,
+  type MedioPago,
+} from "@/lib/medios-pago";
 import { DisponibilidadLineas, ListaLineas } from "@/components/producto/DisponibilidadLineas";
 import { resumenEntregaPedido, type DisponibilidadVista } from "@/lib/disponibilidad-textos";
 import { itemDe } from "@/lib/tracking/eventos";
@@ -195,21 +199,8 @@ function RadioCard({
   );
 }
 
-/**
- * Qué le pasa al comprador con cada medio. Es un mapa y no un ternario porque
- * antes lo era: `transferencia` tenía su texto y TODO el resto heredaba "pagás
- * al momento del retiro", así que al sumar Mercado Pago la tarjeta decía que se
- * pagaba después. Con un Record, agregar un medio sin su texto no compila.
- */
-const DESCRIPCION_PAGO: Record<PagoMetodo, string> = {
-  transferencia: "Verá los datos de la cuenta para transferir",
-  efectivo: "Paga al momento del retiro",
-  cuenta_corriente: "Se carga a su cuenta corriente",
-  mercadopago: "Paga ahora con tarjeta, en cuotas si lo desea",
-  // Hoy no se llega a mostrar: con los pagos apagados no hay sección "Forma de
-  // pago". Está porque el Record exige un texto por método.
-  a_coordinar: "Un asesor coordinará el pago con usted después de confirmar su pedido",
-};
+/** Descripción del medio que dispara el cobro en línea (los demás muestran sus instrucciones del CRM). */
+const DESCRIPCION_MERCADOPAGO = "Paga ahora con tarjeta, en cuotas si lo desea";
 
 /**
  * Datos de la cuenta para transferir en el paso Pago. `undefined` = todavía no llegó la cotización
@@ -231,13 +222,12 @@ function BloqueCuentaPago({
   );
 }
 
-/**
- * Aviso del checkout cuando los pagos están apagados: reemplaza a la sección
- * "Forma de pago". El comprador tiene que saber ANTES de confirmar que no va a
- * pagar ahora ni elegir cómo.
- */
 const TEXTO_SESION_VENCIDA = "Su sesión venció. Inicie sesión para confirmar el pedido.";
 
+/**
+ * Aviso del paso Pago cuando ningún medio aplica a la entrega elegida: el comprador tiene que saber
+ * ANTES de confirmar que no va a pagar ahora ni elegir cómo.
+ */
 const AVISO_PAGO_A_COORDINAR =
   "El pago se coordina con un asesor después de confirmar su pedido.";
 
@@ -273,13 +263,6 @@ interface Props {
   /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
   oferta?: OfertaCuotas | null;
   /**
-   * Flag de pagos (src/lib/pagos-flag.ts) resuelto en el server: acá llega el booleano, nunca el
-   * env. Apagado: no hay "Forma de pago", el pedido sale con "a_coordinar", no
-   * se rescata ningún pendiente de Mercado Pago y nunca se entra al cobro. El
-   * servidor valida lo mismo al crear el pedido. Prendido: el checkout de antes.
-   */
-  pagosHabilitados: boolean;
-  /**
    * Direcciones de envío guardadas en Mi cuenta (sólo con Clerk; la
    * predeterminada primero). Vacío = el checkout de siempre: anónimos no
    * llegan acá y la cookie del CRM sin Clerk no guarda direcciones.
@@ -297,15 +280,11 @@ interface Props {
    */
   sucursales?: OpcionesCheckoutSucursales | null;
   /**
-   * Flag `pedido-a-confirmar` (resuelto en el server). Prendido, la confirmación informa el plazo
-   * de contacto y el WhatsApp de la sucursal (los manda el servidor en la respuesta del pedido).
+   * Medios de pago del CRM que el Shop puede ofrecer (resueltos en el server: sin `mercadopago` si
+   * faltan credenciales). El paso Pago muestra los activos que aplican a la modalidad; si no hay
+   * ninguno el pedido sale "a_coordinar". `mercadopago` dispara el cobro en línea.
    */
-  pedidoAConfirmar?: boolean;
-  /**
-   * Medios de pago cargados en el CRM (con el flag `pedido-a-confirmar`). El paso Pago ofrece los
-   * que aplican a la modalidad, sin cobro. null o vacío = las opciones fijas de siempre.
-   */
-  mediosPago?: MedioPago[] | null;
+  mediosPago?: MedioPago[];
 }
 
 export function CheckoutClient({
@@ -317,12 +296,10 @@ export function CheckoutClient({
   admiteEnvio,
   configEnvio,
   oferta = null,
-  pagosHabilitados,
   direccionesGuardadas = [],
   sugerirVincular = false,
   sucursales = null,
-  pedidoAConfirmar = false,
-  mediosPago = null,
+  mediosPago = [],
 }: Props) {
   const { items, vaciarTrasPedido, ready } = useCart();
 
@@ -334,8 +311,7 @@ export function CheckoutClient({
     track({ tipo: "iniciar_checkout", items: items.map((i) => itemDe(i, i.qty)) });
   }, [ready, items]);
 
-  const [pago, setPago] = useState<PagoMetodo>("transferencia");
-  // Con el flag `pedido-a-confirmar`: slug del medio del CRM que eligió el comprador.
+  // Slug del medio del CRM que eligió el comprador ("" = el primero que aplique).
   const [medioSlug, setMedioSlug] = useState("");
   // Dos opciones: retiro en local o envío a domicilio. El "envío a coordinar" aparte se fusionó
   // con el domicilio: si el envío no es gratis, su costo se coordina después (src/lib/envio.ts).
@@ -444,7 +420,9 @@ export function CheckoutClient({
     total: number;
     /** Máximo de cuotas congelado en el pedido. null = sin límite propio (flag off o legacy). */
     cuotasMax: number | null;
-    /** Plazo y WhatsApp de la sucursal (flag `pedido-a-confirmar`). */
+    /** El pedido se paga en línea (Mercado Pago): salta al cobro. */
+    pagoEnLinea?: boolean;
+    /** Plazo y WhatsApp de la sucursal. */
     contacto?: ContactoPedidoVista | null;
     /** Cuenta congelada en el pedido (transferencia); null = sin cuenta aplicable. */
     cuentaPago?: CuentaPagoSnapshot | null;
@@ -458,7 +436,7 @@ export function CheckoutClient({
    * pagar llega con el carrito vacío: sin esta espera vería "carrito vacío"
    * un instante antes de la pantalla de pago.
    */
-  const [buscandoPendiente, setBuscandoPendiente] = useState(pagosHabilitados);
+  const [buscandoPendiente, setBuscandoPendiente] = useState(true);
   /**
    * Al montar, se chequea si hay un pedido pendiente reciente de este comprador
    * (ver `pedidoPendienteMasReciente` en pedidos.ts). Sin este atajo, quien
@@ -467,9 +445,8 @@ export function CheckoutClient({
    * se ve normal y el carrito vacío espera (ver `buscandoPendiente`).
    */
   useEffect(() => {
-    // Sin cobros no hay nada que retomar: el rescate fuerza el método a Mercado
-    // Pago y salta al cobro, justo lo que el flag apagado tiene que impedir.
-    if (!pagosHabilitados) return;
+    // El servidor contesta `{ pedido: null }` sin credenciales de Mercado Pago, y rescata el pedido
+    // aunque el medio se haya desactivado en el CRM: el pedido ya existe.
     let cancelado = false;
     fetch("/api/pedidos/pendiente")
       .then((r) => (r.ok ? r.json() : null))
@@ -480,8 +457,8 @@ export function CheckoutClient({
           id: data.pedido.id,
           total: data.pedido.total,
           cuotasMax: typeof data.pedido.cuotasMax === "number" ? data.pedido.cuotasMax : null,
+          pagoEnLinea: true,
         });
-        setPago("mercadopago");
       })
       .catch(() => {
         // Silencioso: fallar en la detección solo lleva al flujo normal, no
@@ -493,7 +470,7 @@ export function CheckoutClient({
     return () => {
       cancelado = true;
     };
-  }, [pagosHabilitados]);
+  }, []);
 
   /**
    * Clave del intento de compra. Se genera en el PRIMER confirmar y se reusa en
@@ -524,27 +501,19 @@ export function CheckoutClient({
     setErrorCancelar(null);
     setErrorEnvio(null);
     setPasoActual("datos");
-    setBuscandoPendiente(pagosHabilitados);
+    setBuscandoPendiente(true);
     claveIntento.current = null;
   });
 
-  // Con los pagos apagados esto es ["a_coordinar"], así que `pagoElegido` (abajo)
-  // deriva a "a_coordinar" sin estado extra y la rama de Mercado Pago queda
-  // inalcanzable.
-  const metodosPago = pagosDisponibles(entrega, pagosHabilitados);
-
-  // Efectivo solo existe con retiro. Si el cliente lo eligió y después pasó a
-  // envío, el método se corrige DERIVÁNDOLO en el render — no sincronizando el
-  // estado desde un efecto, que agrega un render de más y un frame donde el
-  // formulario muestra una opción que el servidor va a rechazar.
-  const pagoElegido: PagoMetodo = metodosPago.includes(pago) ? pago : metodosPago[0];
-
-  // Con el flag `pedido-a-confirmar` y medios cargados, el paso Pago ofrece los del CRM (sin
-  // cobro) y el pedido guarda el slug. Sin medios cargados se sigue con lo de arriba.
-  const modoMedios = pedidoAConfirmar && !!mediosPago && mediosPago.length > 0;
-  const medioSel = modoMedios ? medioElegido(mediosPago, entrega, medioSlug) : null;
-  const mediosParaElegir = modoMedios ? mediosParaModalidad(mediosPago, entrega) : [];
-  const pagoParaEnviar: string = modoMedios ? (medioSel?.slug ?? "a_coordinar") : pagoElegido;
+  // El paso Pago ofrece los medios activos del CRM que aplican a la modalidad (`mediosPago` ya viene
+  // sin Mercado Pago si faltan credenciales) y el pedido guarda el slug. Si ninguno aplica, el
+  // pedido sale "a_coordinar": un asesor coordina el pago. Si el medio elegido deja de aplicar (pasó
+  // de retiro a envío), se corrige DERIVÁNDOLO en el render, sin efecto: sin un frame con una opción
+  // que el servidor rechazaría.
+  const mediosParaElegir = mediosParaModalidad(mediosPago, entrega);
+  const medioSel = medioElegido(mediosPago, entrega, medioSlug);
+  const pagoParaEnviar: string = medioSel?.slug ?? "a_coordinar";
+  const pagaEnLinea = pagoParaEnviar === SLUG_MERCADOPAGO;
 
   // Transferencia: el servidor devuelve la cuenta que corresponde a la entrega, el local y el total.
   const conCuenta = pagoParaEnviar === SLUG_TRANSFERENCIA;
@@ -712,7 +681,8 @@ export function CheckoutClient({
         id: json.id,
         total,
         cuotasMax: typeof json.cuotasMax === "number" ? json.cuotasMax : null,
-        contacto: pedidoAConfirmar ? (json.contacto ?? null) : null,
+        pagoEnLinea: pagoParaEnviar === SLUG_MERCADOPAGO,
+        contacto: json.contacto ?? null,
         cuentaPago: json.cuentaPago ?? null,
       });
       // Conversión: al crear el pedido, también con Mercado Pago todavía impago.
@@ -767,7 +737,7 @@ export function CheckoutClient({
     }
   }
 
-  if (confirmado && pagoElegido === "mercadopago" && !pagado) {
+  if (confirmado && confirmado.pagoEnLinea && !pagado) {
     return (
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
         <div className="text-center">
@@ -831,35 +801,24 @@ export function CheckoutClient({
           </h1>
           <p className={`mt-2 text-sm font-semibold text-text ${ENTRADA_EXITO} delay-[180ms]`}>{confirmado.numero}</p>
           <p className={`mt-3 text-sm text-muted ${ENTRADA_EXITO} delay-[240ms]`}>
-            {pedidoAConfirmar && !pagado ? (
-              <>
-                Su pedido quedó a confirmar; todavía no se realizó ningún cobro.
-                {modoMedios && medioSel ? <> Medio de pago elegido: {medioSel.nombre}.</> : null}
-              </>
-            ) : pagado ? (
+            {pagado ? (
               <>
                 Ya cobramos su pedido. Nos comunicaremos con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"}.
               </>
-            ) : !pagosHabilitados ? (
-              // Sin "el pago por …": no hay medio elegido que nombrar.
+            ) : medioSel ? (
+              <>
+                Su pedido quedó a confirmar; todavía no se realizó ningún cobro. Medio de pago elegido:{" "}
+                {medioSel.nombre}.
+              </>
+            ) : (
+              // Sin medio elegido: ningún medio aplicaba a la entrega.
               <>
                 Un asesor se comunicará con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"} y el pago.
               </>
-            ) : (
-              <>
-                Nos comunicaremos con usted para coordinar el{" "}
-                {entrega === "envio" ? "envío" : "retiro"} y el pago por{" "}
-                {PAGO_LABEL[pagoElegido].toLowerCase()}.
-              </>
             )}
-            {emailCliente &&
-              (pagosHabilitados ? (
-                <> Le enviamos el detalle a {emailCliente}.</>
-              ) : (
-                <> Le enviamos el detalle a {emailCliente}.</>
-              ))}
+            {emailCliente && <> Le enviamos el detalle a {emailCliente}.</>}
           </p>
           {!pagado && conCuenta && (
             <div className={`mt-4 text-left ${ENTRADA_EXITO} delay-[260ms]`}>
@@ -867,7 +826,7 @@ export function CheckoutClient({
               <CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />
             </div>
           )}
-          {pedidoAConfirmar && !pagado && confirmado.contacto && (
+          {!pagado && confirmado.contacto && (
             <PedidoContacto
               contacto={confirmado.contacto}
               centrado
@@ -1244,12 +1203,11 @@ export function CheckoutClient({
 
           {pasoActual === "pago" && (
           <>
-          {modoMedios && (
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
             {cabeceraPasos}
-            <h2 className="mb-4 font-display text-2xl font-medium text-text">Medio de pago</h2>
             {medioSel ? (
               <>
+                <h2 className="mb-4 font-display text-2xl font-medium text-text">Medio de pago</h2>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {mediosParaElegir.map((m) => (
                     <RadioCard
@@ -1257,54 +1215,23 @@ export function CheckoutClient({
                       selected={medioSel.slug === m.slug}
                       onClick={() => setMedioSlug(m.slug)}
                       title={m.nombre}
+                      description={m.slug === SLUG_MERCADOPAGO ? DESCRIPCION_MERCADOPAGO : undefined}
                     />
                   ))}
                 </div>
                 {medioSel.instrucciones.trim() && (
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
+                {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
+                {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
               </>
             ) : (
-              <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
-            )}
-            {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
-            <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>
-          </section>
-          )}
-
-          {!modoMedios && (<>
-          {!pagosHabilitados && (
-            <section className="rounded-[20px] border border-border/50 bg-surface p-5">
-              {cabeceraPasos}
-              <h2 className="mb-2 font-display text-2xl font-medium text-text">Pago</h2>
-              <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
-            </section>
-          )}
-
-          {pagosHabilitados && (
-          <section className="rounded-[20px] border border-border/50 bg-surface p-5">
-            {cabeceraPasos}
-            <h2 className="mb-4 font-display text-2xl font-medium text-text">Forma de pago</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {metodosPago.map((m) => (
-                <RadioCard
-                  key={m}
-                  selected={pagoElegido === m}
-                  onClick={() => setPago(m)}
-                  title={PAGO_LABEL[m]}
-                  description={DESCRIPCION_PAGO[m]}
-                />
-              ))}
-            </div>
-            {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
-            {entrega === "envio" && (
-              <p className="mt-3 text-xs text-muted">
-                El pago en efectivo solo está disponible si retira por el local.
-              </p>
+              <>
+                <h2 className="mb-2 font-display text-2xl font-medium text-text">Pago</h2>
+                <p className="text-sm text-muted">{AVISO_PAGO_A_COORDINAR}</p>
+              </>
             )}
           </section>
-          )}
-          </>)}
 
           <section className="rounded-[20px] border border-border/50 bg-surface p-5">
             <h2 className="mb-4 font-display text-2xl font-medium text-text">
@@ -1416,7 +1343,7 @@ export function CheckoutClient({
             </p>
           </div>
 
-          {pagoElegido === "mercadopago" && estado === "ok" && cotizacion && (
+          {pagaEnLinea && estado === "ok" && cotizacion && (
             // Referencia sobre el total cotizado. El máximo definitivo se congela
             // al confirmar, sobre el total real del pedido.
             <CuotasResumen
@@ -1453,13 +1380,7 @@ export function CheckoutClient({
           )}
 
           <p className="mt-3 text-center text-xs text-muted">
-            {pagoElegido === "mercadopago"
-              ? "Al confirmar el pedido, pasará a pagar con Mercado Pago."
-              : conCuenta
-              ? pieTransferencia(Boolean(cotizacion?.cuentaTransferencia))
-              : pagosHabilitados
-              ? "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido."
-              : "No se le cobrará nada ahora. Un asesor coordinará el pago con usted."}
+            {conCuenta ? pieTransferencia(Boolean(cotizacion?.cuentaTransferencia)) : pieDelMedio(medioSel)}
           </p>
         </div>
       </div>

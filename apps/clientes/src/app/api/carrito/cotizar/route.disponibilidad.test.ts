@@ -23,7 +23,6 @@ vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),
   cotizar: (...a: unknown[]) => cotizar(...a),
 }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: async () => false }));
 vi.mock("@/lib/zona-servidor", () => ({
   dispDelVisitante: async () => (estadoDisp ? disp : undefined),
 }));

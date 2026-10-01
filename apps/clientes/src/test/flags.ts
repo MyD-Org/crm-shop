@@ -7,7 +7,7 @@
  * El estado vive en `globalThis` y no en una variable del módulo para que
  * sobreviva a `vi.resetModules()` (los tests que reimportan con `await import`).
  */
-export type FlagDeTest = "pagos" | "cuotas" | "catalogo-solo-visibles" | "chat-ia" | "sucursales" | "disponibilidad-sucursal" | "busqueda-ia" | "pedido-a-confirmar" | "tracking";
+export type FlagDeTest = "cuotas" | "catalogo-solo-visibles" | "chat-ia" | "sucursales" | "disponibilidad-sucursal" | "busqueda-ia" | "tracking";
 
 type Estado = Record<FlagDeTest, boolean>;
 
@@ -19,7 +19,7 @@ export function estadoFlags(): Estado {
 }
 
 export function apagados(): Estado {
-  return { pagos: false, cuotas: false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, "pedido-a-confirmar": false, tracking: false };
+  return { cuotas: false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, tracking: false };
 }
 
 export function setFlag(flag: FlagDeTest, valor: boolean) {

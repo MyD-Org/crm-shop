@@ -25,11 +25,11 @@ vi.mock("@/lib/pagos/intento-abierto", () => ({
 vi.mock("@/lib/pagos/mercadopago", () => ({
   mercadoPago: { id: "mercadopago", crearPago: (...a: unknown[]) => crearPago(...a) },
   urlNotificacion: () => undefined,
+  mercadoPagoConfigurado: () => true,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
-// Estos tests son del cobro en sí: corren con los pagos prendidos. El flag
-// apagado y el método del pedido se prueban en route.pagos-flag.test.ts.
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
+// Estos tests son del cobro en sí. Las credenciales y el método del pedido se prueban en
+// route.medio.test.ts.
 
 import { POST } from "./route";
 

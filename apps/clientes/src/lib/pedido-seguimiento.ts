@@ -18,12 +18,13 @@
  * marca entregado. Cuando el follow-up `pedidos-listo-retiro` agregue el
  * estado, se inserta el paso en `PASOS` y el componente no cambia.
  *
- * Con los pagos apagados (`pagosHabilitados: false`, ver pagos-flag.ts) ningún
- * pedido se paga en el Shop: el segundo paso dice "Pedido confirmado" y se da
- * por hecho sólo cuando el operador confirma (misma regla que la pill).
+ * Si el pedido no se cobra en línea (su `pagoMetodoSlug` no es `mercadopago`) el
+ * segundo paso dice "Pedido confirmado" y se da por hecho sólo cuando el
+ * operador confirma (misma regla que la pill).
  */
 import type { StepState } from "@myd-org/ui";
 import type { EntregaTipoPedido, Order, OrderEstado } from "@/data/orders";
+import { esPagoEnLinea } from "./medios-pago";
 
 export type IdPasoSeguimiento =
   | "recibido"
@@ -39,7 +40,7 @@ export interface PasoSeguimiento {
   state: StepState;
 }
 
-type Pedido = Pick<Order, "estado" | "pagoEstado" | "entregaTipo">;
+type Pedido = Pick<Order, "estado" | "pagoEstado" | "entregaTipo" | "pagoMetodoSlug">;
 
 const PASOS: Record<EntregaTipoPedido, readonly IdPasoSeguimiento[]> = {
   retiro: ["recibido", "pago", "preparando", "retirado"],
@@ -59,12 +60,12 @@ const DESDE_CONFIRMADO: readonly OrderEstado[] = ["confirmado", "preparacion", "
 const DESDE_PREPARACION: readonly OrderEstado[] = ["preparacion", "en_camino", "entregado"];
 const DESDE_EN_CAMINO: readonly OrderEstado[] = ["en_camino", "entregado"];
 
-function hecho(paso: IdPasoSeguimiento, o: Pedido, pagosHabilitados: boolean): boolean {
+function hecho(paso: IdPasoSeguimiento, o: Pedido, pagoEnLinea: boolean): boolean {
   switch (paso) {
     case "recibido":
       return true;
     case "pago":
-      return (pagosHabilitados && o.pagoEstado === "pagado") || DESDE_CONFIRMADO.includes(o.estado);
+      return (pagoEnLinea && o.pagoEstado === "pagado") || DESDE_CONFIRMADO.includes(o.estado);
     case "preparando":
       return DESDE_PREPARACION.includes(o.estado);
     case "en_camino":
@@ -75,21 +76,19 @@ function hecho(paso: IdPasoSeguimiento, o: Pedido, pagosHabilitados: boolean): b
   }
 }
 
-export function seguimientoPedido(
-  o: Pedido,
-  { pagosHabilitados = true }: { pagosHabilitados?: boolean } = {},
-): PasoSeguimiento[] | null {
+export function seguimientoPedido(o: Pedido): PasoSeguimiento[] | null {
   if (o.estado === "cancelado") return null;
 
+  const pagoEnLinea = esPagoEnLinea(o.pagoMetodoSlug ?? "");
   let actualAsignado = false;
   return PASOS[o.entregaTipo].map((id) => {
     let state: StepState;
-    if (hecho(id, o, pagosHabilitados)) state = "done";
+    if (hecho(id, o, pagoEnLinea)) state = "done";
     else if (!actualAsignado) {
       state = "current";
       actualAsignado = true;
     } else state = "pending";
-    const label = id === "pago" && !pagosHabilitados ? "Pedido confirmado" : LABEL[id];
+    const label = id === "pago" && !pagoEnLinea ? "Pedido confirmado" : LABEL[id];
     return { id, label, state };
   });
 }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { claveIdempotencia, interpretar } from "./mercadopago";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { claveIdempotencia, interpretar, mercadoPagoConfigurado } from "./mercadopago";
 import type { DatosPago } from "./tipos";
 
 /**
@@ -204,7 +204,6 @@ describe("interpretar — pedido del pago (external_reference)", () => {
   });
 });
 
-import { afterEach, vi } from "vitest";
 import { mercadoPago } from "./mercadopago";
 import { ErrorProveedor } from "./tipos";
 
@@ -239,5 +238,25 @@ describe("mercadoPago.cancelarPago / errores HTTP", () => {
     const err = await mercadoPago.consultarPago("123").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ErrorProveedor);
     expect((err as ErrorProveedor).status).toBe(404);
+  });
+});
+
+describe("mercadoPagoConfigurado", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("exige el Access Token y la Public Key", () => {
+    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
+    expect(mercadoPagoConfigurado()).toBe(true);
+  });
+  it("sin Access Token no está configurado", () => {
+    vi.stubEnv("MP_ACCESS_TOKEN", "");
+    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
+    expect(mercadoPagoConfigurado()).toBe(false);
+  });
+  it("sin Public Key no está configurado", () => {
+    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "");
+    expect(mercadoPagoConfigurado()).toBe(false);
   });
 });

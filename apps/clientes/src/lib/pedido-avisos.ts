@@ -59,7 +59,6 @@ async function enviarAviso(
   pedidoId: string,
   aviso: AvisoPedidoShop,
   clave: string,
-  opciones: { aConfirmar?: boolean } = {},
 ): Promise<void> {
   try {
     const [pedido] = await getDb()
@@ -90,12 +89,12 @@ async function enviarAviso(
             .orderBy(asc(orderItems.id))
         : [];
 
-    // Flag `pedido-a-confirmar` (lo resuelve quien llama: acá no hay request): el pago con el
-    // nombre del medio del CRM y el plazo + WhatsApp de la sucursal. Lecturas que no tiran.
+    // En el "recibido": el pago con el nombre del medio del CRM y el plazo + WhatsApp de la
+    // sucursal. Lecturas que no tiran.
     const numero = `PED-${String(pedido.numero).padStart(8, "0")}`;
-    const aConfirmar = aviso === "recibido" && opciones.aConfirmar === true;
-    const medios = aConfirmar ? await leerMediosPagoTolerante() : null;
-    const contacto = aConfirmar ? await contactoDeSucursal(pedido.sucursal, numero) : null;
+    const recibido = aviso === "recibido";
+    const medios = recibido ? await leerMediosPagoTolerante() : null;
+    const contacto = recibido ? await contactoDeSucursal(pedido.sucursal, numero) : null;
 
     const mail = armarMailPedido({
       aviso,
@@ -140,8 +139,8 @@ async function enviarAviso(
 }
 
 /** "Recibimos su pedido", al crearlo. Quien llama descarta los pedidos repetidos. */
-export function avisarPedidoRecibido(pedidoId: string, opciones: { aConfirmar?: boolean } = {}): Promise<void> {
-  return enviarAviso(pedidoId, "recibido", `pedido/${pedidoId}/recibido`, opciones);
+export function avisarPedidoRecibido(pedidoId: string): Promise<void> {
+  return enviarAviso(pedidoId, "recibido", `pedido/${pedidoId}/recibido`);
 }
 
 /** Aviso del cobro en línea, si corresponde (ver `avisoDelCobro`). */

@@ -46,7 +46,7 @@ export interface DatosMailPedido {
   /** Sólo "recibido": el pago en línea todavía no se completó. */
   pagoPendienteEnLinea?: boolean;
   /**
-   * Sólo "recibido", con el flag `pedido-a-confirmar`: plazo de contacto (mensaje ya resuelto) y
+   * Sólo "recibido": plazo de contacto (mensaje ya resuelto) y
    * WhatsApp de la sucursal asignada. Sin `whatsappUrl` va sólo el mensaje.
    */
   contacto?: { mensaje: string; whatsappVisible?: string; whatsappUrl?: string };

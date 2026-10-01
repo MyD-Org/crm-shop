@@ -53,7 +53,7 @@ describe("leerMediosPago", () => {
 });
 
 describe("leerMediosPagoTolerante: la migración del CRM puede no estar aplicada", () => {
-  it("tabla inexistente: devuelve [] (el checkout sigue con las opciones fijas)", async () => {
+  it("tabla inexistente: devuelve [] (el pago sale a_coordinar)", async () => {
     const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
     const r = await leerMediosPagoTolerante(dbQueTira('relation "public.medios_pago_shop" does not exist') as never);
     expect(r).toEqual([]);

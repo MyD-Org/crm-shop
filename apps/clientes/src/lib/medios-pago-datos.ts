@@ -10,7 +10,8 @@
 import { cacheLife, cacheTag } from "next/cache";
 import { TAG_SUCURSALES } from "./cache-tags";
 import { leerMediosPago } from "./medios-pago-repo";
-import type { MedioPago } from "./medios-pago";
+import { SLUG_MERCADOPAGO, type MedioPago } from "./medios-pago";
+import { mercadoPagoConfigurado } from "./pagos/mercadopago";
 
 export async function mediosPagoCacheados(): Promise<MedioPago[]> {
   "use cache: remote";
@@ -27,4 +28,14 @@ export async function mediosPagoCacheados(): Promise<MedioPago[]> {
     cacheLife("degradado");
     return [];
   }
+}
+
+/** Quita `mercadopago` de la lista si el Shop no tiene credenciales para cobrar. */
+export function sinMpSiNoConfigurado(medios: readonly MedioPago[]): MedioPago[] {
+  return mercadoPagoConfigurado() ? [...medios] : medios.filter((m) => m.slug !== SLUG_MERCADOPAGO);
+}
+
+/** Medios para OFRECER (checkout, Envíos y pagos): los cacheados, sin MP si faltan credenciales. */
+export async function mediosOfrecibles(): Promise<MedioPago[]> {
+  return sinMpSiNoConfigurado(await mediosPagoCacheados());
 }

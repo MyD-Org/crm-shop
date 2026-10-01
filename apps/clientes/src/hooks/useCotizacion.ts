@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCart } from "@/context/CartContext";
 import type { Cotizacion } from "@/lib/cotizacion";
-import type { EntregaTipo, EnvioEvaluado, PagoMetodo } from "@/lib/envio";
+import type { EntregaTipo, EnvioEvaluado } from "@/lib/envio";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 import type { CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 
@@ -20,7 +20,6 @@ import type { CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 
 export interface CotizacionResponse extends Cotizacion {
   envio: EnvioEvaluado;
-  pagosDisponibles: PagoMetodo[];
   /**
    * Sólo con el flag `disponibilidad-sucursal`: disponibilidad por producto (envío y retiro por
    * local) y los locales con su nombre. Ausente = flag apagado.

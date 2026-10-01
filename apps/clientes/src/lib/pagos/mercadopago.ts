@@ -37,6 +37,14 @@ import { firmaValida } from "./mercadopago-firma";
 const API = "https://api.mercadopago.com/v1/payments";
 const TIMEOUT_MS = 15_000;
 
+/**
+ * ¿Hay credenciales para cobrar? Access Token (servidor) y Public Key (el Brick del navegador). Si
+ * falta alguna, el medio `mercadopago` no se ofrece ni se acepta aunque esté activo en el CRM.
+ */
+export function mercadoPagoConfigurado(): boolean {
+  return Boolean(process.env.MP_ACCESS_TOKEN) && Boolean(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY);
+}
+
 function accessToken(): string {
   const token = process.env.MP_ACCESS_TOKEN;
   if (!token) {

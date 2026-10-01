@@ -6,7 +6,8 @@ import type { PedidoParaPago } from "@/lib/pedidos";
  * del pedido. Con "a_coordinar" eso dejaba cobrar por Mercado Pago un pedido
  * que el comprador confirmó SIN medio de pago, con sólo conocer su id. Acá se
  * fija que un pedido que no es de Mercado Pago no se cobra nunca, y que con los
- * pagos apagados no se cobra ninguno.
+ * credenciales no se cobra ninguno. Con el medio desactivado en el CRM un pedido ya creado de
+ * Mercado Pago sí se cobra: la ruta no mira la tabla de medios.
  */
 
 const crearPago = vi.fn();
@@ -14,7 +15,7 @@ const registrarCobro = vi.fn();
 const registrarIntentoFallido = vi.fn();
 const getPedidoParaPago = vi.fn();
 let pedido: PedidoParaPago | null;
-let pagos = true;
+let configurado = true;
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "ana@cliente.example" }),
@@ -33,9 +34,9 @@ vi.mock("@/lib/pagos/intento-abierto", () => ({
 vi.mock("@/lib/pagos/mercadopago", () => ({
   mercadoPago: { id: "mercadopago", crearPago: (...a: unknown[]) => crearPago(...a) },
   urlNotificacion: () => undefined,
+  mercadoPagoConfigurado: () => configurado,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => pagos }));
 
 import { POST } from "./route";
 
@@ -56,7 +57,7 @@ const nadaSeCobro = () => {
 };
 
 beforeEach(() => {
-  pagos = true;
+  configurado = true;
   pedido = {
     id: "p1", numero: "PED-1", total: 120000, pagoEstado: "pendiente", pagoMetodo: "mercadopago",
     clienteEmail: "ana@cliente.example", facturacionTipoDoc: null, facturacionNroDoc: null,
@@ -71,7 +72,7 @@ beforeEach(() => {
 });
 
 describe("POST /api/pagos/mercadopago — método del pedido", () => {
-  it("pagos prendidos + pedido de Mercado Pago → se cobra como siempre", async () => {
+  it("con credenciales + pedido de Mercado Pago → se cobra como siempre", async () => {
     const r = await pagar();
     expect(r.status).toBe(200);
     expect(crearPago).toHaveBeenCalledTimes(1);
@@ -99,17 +100,17 @@ describe("POST /api/pagos/mercadopago — método del pedido", () => {
   });
 });
 
-describe("POST /api/pagos/mercadopago — pagos apagados", () => {
+describe("POST /api/pagos/mercadopago — sin credenciales", () => {
   beforeEach(() => {
-    pagos = false;
+    configurado = false;
   });
 
-  it("no cobra ni un pedido de Mercado Pago creado cuando estaban prendidos", async () => {
+  it("no cobra ni un pedido de Mercado Pago", async () => {
     const r = await pagar();
     expect(r.status).toBe(409);
     expect(await r.json()).toEqual({
       error: "Los pagos en línea no están disponibles en este momento. Un asesor coordinará el pago con usted.",
-      motivo: "pagos_deshabilitados",
+      motivo: "mp_no_configurado",
     });
     nadaSeCobro();
     // Se corta antes de leer el pedido.
@@ -121,5 +122,13 @@ describe("POST /api/pagos/mercadopago — pagos apagados", () => {
     const r = await pagar();
     expect(r.status).toBe(409);
     nadaSeCobro();
+  });
+});
+
+describe("POST /api/pagos/mercadopago — medio desactivado en el CRM", () => {
+  it("un pedido ya creado de Mercado Pago se cobra igual (la ruta no mira la tabla de medios)", async () => {
+    const r = await pagar();
+    expect(r.status).toBe(200);
+    expect(crearPago).toHaveBeenCalledTimes(1);
   });
 });

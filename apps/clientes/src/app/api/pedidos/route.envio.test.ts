@@ -44,7 +44,18 @@ vi.mock("@/lib/facturacion-db", () => ({
 }));
 vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: async () => null }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
+// Medios del CRM (`medios_pago_shop`): los tres de siempre; mercadopago es la fila fija con cobro online.
+const mediosCrm = ["transferencia", "efectivo", "mercadopago"].map((slug, orden) => ({
+  slug,
+  nombre: slug,
+  instrucciones: "",
+  activo: true,
+  aplicaRetiro: true,
+  aplicaEnvio: slug !== "efectivo",
+  cobroOnline: slug === "mercadopago",
+  orden,
+}));
+vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => mediosCrm }));
 vi.mock("@/lib/sucursales-repo", async (orig) => ({
   ...(await orig<typeof import("@/lib/sucursales-repo")>()),
   leerConfigEnvio: async () => config,

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
-import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
+import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
 import { leerConfigEnvio } from "@/lib/sucursales-repo";
 import { provinciaCanonica } from "@/lib/provincias";
 import { crearPedido, getPedidoPorClave, listarPedidos } from "@/lib/pedidos";
@@ -15,10 +15,9 @@ import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
 import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
 import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { pagosHabilitados } from "@/lib/pagos-flag";
-import { pedidoAConfirmarHabilitado } from "@/lib/pedido-a-confirmar-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { pagoValidoConMedios } from "@/lib/medios-pago";
+import { mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
@@ -252,20 +251,15 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  // Se valida contra el flag de ESTE momento, no contra lo que ofreció la
-  // pantalla: con los pagos apagados un POST directo con "mercadopago" se
-  // rechaza igual que cualquier método no disponible, y con los pagos prendidos
-  // "a_coordinar" tampoco entra.
-  //
-  // Con el flag `pedido-a-confirmar` y medios cargados en el CRM, el método es el `slug` de uno de
-  // ellos (releídos SIN caché: la decisión que escribe un pedido no usa lo cacheado). Sin medios
-  // (tabla ausente o vacía) rige lo de siempre.
-  const aConfirmar = await pedidoAConfirmarHabilitado();
-  const mediosCrm = aConfirmar ? await leerMediosPagoTolerante() : [];
-  const pagoValido =
-    mediosCrm.length > 0
-      ? pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo)
-      : (pagosDisponibles(entregaTipo, await pagosHabilitados()) as string[]).includes(pagoMetodo);
+  // Se valida contra lo de ESTE momento, no contra lo que ofreció la pantalla: el método es el
+  // `slug` de un medio activo del CRM que aplica a la modalidad (releídos SIN caché: la decisión
+  // que escribe un pedido no usa lo cacheado). `mercadopago` además exige credenciales en el Shop.
+  // Si ningún medio aplica (tabla ausente, vacía o sin medios para la modalidad) sólo vale
+  // "a_coordinar"; con medios aplicables, "a_coordinar" no entra.
+  const mediosCrm = await leerMediosPagoTolerante();
+  const pagoValido = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, {
+    mpDisponible: mercadoPagoConfigurado(),
+  });
   if (!pagoValido) {
     return NextResponse.json(
       { error: "Ese medio de pago no está disponible para la entrega elegida." },
@@ -531,7 +525,7 @@ export async function POST(req: Request) {
       // Y el aviso al local (sucursal del pedido, o el email de la empresa), en el mismo after():
       // ninguno de los dos lanza, y el del comprador sale primero.
       after(async () => {
-        await avisarPedidoRecibido(pedidoId, { aConfirmar });
+        await avisarPedidoRecibido(pedidoId);
         await avisarOperadorPedidoNuevo(pedidoId);
       });
     }
@@ -551,9 +545,9 @@ export async function POST(req: Request) {
     // 200 y no 201 cuando la clave ya existía: no se creó nada nuevo. El
     // checkout trata los dos casos igual —muestra el número— pero la diferencia
     // importa para cualquiera que lea los logs.
-    // Con el flag `pedido-a-confirmar`: plazo prometido y WhatsApp de la sucursal asignada. Nunca
-    // hace fallar la respuesta (el pedido ya existe): sin datos, la pantalla usa el texto genérico.
-    const contacto = aConfirmar ? await contactoDelPedido(pedido.id, pedido.numero) : null;
+    // Plazo prometido y WhatsApp de la sucursal asignada. Nunca hace fallar la respuesta (el pedido
+    // ya existe): sin datos, la pantalla usa el texto genérico.
+    const contacto = await contactoDelPedido(pedido.id, pedido.numero);
 
     return NextResponse.json(
       { ...pedido, cuotasMax: await cuotasParaCliente(pedido.cuotasMax), cotizacion, ...(contacto ? { contacto } : {}) },

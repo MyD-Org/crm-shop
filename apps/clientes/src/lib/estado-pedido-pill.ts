@@ -11,9 +11,9 @@
  * 5. confirmado / preparacion / en_camino → su nombre (info)
  * 6. entregado            → "Retirado" o "Entregado" según la entrega (success)
  *
- * Con los pagos apagados (`pagosHabilitados: false`, ver pagos-flag.ts) el
- * paso 3 dice "Pendiente" en neutro: ningún pedido se paga en el Shop y
- * "Pago pendiente" sólo confunde (misma regla que pago-estado-visible.ts).
+ * Si el pedido no se cobra en línea (su `pagoMetodoSlug` no es `mercadopago`) el
+ * paso 3 dice "Pendiente" en neutro: "Pago pendiente" sólo confunde (misma regla
+ * que pago-estado-visible.ts).
  */
 import type { BadgeTone } from "@myd-org/ui";
 import type { Order } from "@/data/orders";
@@ -31,13 +31,12 @@ const EN_CURSO: Record<"confirmado" | "preparacion" | "en_camino", string> = {
 };
 
 export function estadoPedidoPill(
-  o: Pick<Order, "estado" | "pagoEstado" | "entregaTipo">,
-  { pagosHabilitados = true }: { pagosHabilitados?: boolean } = {},
+  o: Pick<Order, "estado" | "pagoEstado" | "entregaTipo" | "pagoMetodoSlug">,
 ): PillEstado {
   if (o.estado === "cancelado") return { label: "Cancelado", tone: "danger" };
   if (o.pagoEstado === "fallido") return { label: "Pago rechazado", tone: "danger" };
   if (o.estado === "pendiente") {
-    if (ocultarEstadoPago(o.pagoEstado, pagosHabilitados)) {
+    if (ocultarEstadoPago(o.pagoEstado, o.pagoMetodoSlug)) {
       return { label: "Pendiente", tone: "neutral" };
     }
     return o.pagoEstado === "pagado"

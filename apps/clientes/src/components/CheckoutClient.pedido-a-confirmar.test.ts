@@ -1,36 +1,76 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Guardas de texto del checkout con el flag `pedido-a-confirmar`: el paso Pago con medios del CRM
- * sólo se arma en `modoMedios`, no deja el cobro en línea a la vista, y el flag no llega al bundle
- * del cliente (viaja como booleano desde el server).
+ * Guardas de texto del checkout (sin montar React: acá no hay jsdom). Los medios de pago salen de
+ * la tabla del CRM, sin flags: el paso Pago ofrece los medios activos que aplican, cae a
+ * "a_coordinar" si no hay ninguno, el pedido viaja con el slug elegido y Mercado Pago salta al cobro
+ * en línea. Ningún componente del cliente importa los flags (se evalúan en el server).
  */
+const SRC = fileURLToPath(new URL("..", import.meta.url));
 const fuente = readFileSync(join(__dirname, "CheckoutClient.tsx"), "utf8");
 
-describe("CheckoutClient con el flag pedido-a-confirmar", () => {
-  it("el paso Pago con medios del CRM sólo se ve en modoMedios y trae la nota", () => {
-    const titulo = fuente.indexOf(">Medio de pago</h2>");
-    expect(titulo).toBeGreaterThan(-1);
-    expect(fuente.slice(0, titulo).lastIndexOf("{modoMedios && (")).toBeGreaterThan(-1);
+function archivos(dir: string): string[] {
+  return readdirSync(dir).flatMap((n) => {
+    const p = join(dir, n);
+    return statSync(p).isDirectory() ? archivos(p) : [p];
+  });
+}
+
+describe("CheckoutClient con medios de pago de la tabla", () => {
+  it("el paso Pago ofrece los medios aplicables a la modalidad y trae la nota para los manuales", () => {
+    expect(fuente).toContain("const mediosParaElegir = mediosParaModalidad(mediosPago, entrega);");
+    expect(fuente).toContain(">Medio de pago</h2>");
+    expect(fuente).toContain("{!pagaEnLinea && <p");
     expect(fuente).toContain("{NOTA_PAGO_A_CONFIRMAR}");
   });
 
-  it("las opciones fijas quedan detrás de !modoMedios", () => {
-    expect(fuente).toContain("{!modoMedios && (<>");
+  it("sin medios aplicables muestra la sección Pago con el aviso de coordinar", () => {
+    expect(fuente).toContain(">Pago</h2>");
+    expect(fuente).toContain("{AVISO_PAGO_A_COORDINAR}");
+    expect(fuente).toContain(
+      '"El pago se coordina con un asesor después de confirmar su pedido."',
+    );
+    expect(fuente).toContain('medioSel?.slug ?? "a_coordinar"');
   });
 
   it("el pedido viaja con el slug del medio elegido", () => {
     expect(fuente).toContain("pagoMetodo: pagoParaEnviar,");
-    expect(fuente).toContain('modoMedios ? (medioSel?.slug ?? "a_coordinar") : pagoElegido');
   });
 
-  it("el cliente no importa el flag", () => {
-    expect(fuente).not.toMatch(/from\s+["'][^"']*pedido-a-confirmar-flag["']/);
+  it("Mercado Pago salta al cobro en línea (también al rescatar un pendiente)", () => {
+    expect(fuente).toContain("confirmado && confirmado.pagoEnLinea && !pagado");
+    expect(fuente).toContain("<PagoMercadoPago");
+    expect(fuente).toContain("pagoEnLinea: pagoParaEnviar === SLUG_MERCADOPAGO,");
+    expect(fuente).toContain("pagoEnLinea: true,");
   });
 
-  it("la confirmación muestra el bloque de contacto sólo con el flag y con el contacto del server", () => {
-    expect(fuente).toContain("pedidoAConfirmar && !pagado && confirmado.contacto");
+  it("el rescate del pendiente corre siempre: el servidor decide si hay algo que retomar", () => {
+    expect(fuente).toContain('fetch("/api/pedidos/pendiente")');
+    expect(fuente).toContain("useState(true)");
+  });
+
+  it("el pie bajo Confirmar sale del medio elegido", () => {
+    expect(fuente).toContain("pieDelMedio(medioSel)");
+  });
+
+  it("la confirmación muestra el contacto de la sucursal siempre que el servidor lo mande", () => {
+    expect(fuente).toContain("!pagado && confirmado.contacto");
+    expect(fuente).toContain("contacto: json.contacto ?? null,");
+  });
+});
+
+describe("los flags no salen del server", () => {
+  it('ningún "use client" importa @/flags ni un *-flag', () => {
+    const culpables = archivos(SRC)
+      .filter((p) => /\.(ts|tsx)$/.test(p))
+      .filter((p) => {
+        const t = readFileSync(p, "utf8");
+        // El import, no la mención: los comentarios sí apuntan al archivo.
+        return /^\s*["']use client["']/.test(t) && /from\s+["'](?:[^"']*-flag|@\/flags)["']/.test(t);
+      });
+    expect(culpables).toEqual([]);
   });
 });

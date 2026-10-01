@@ -12,13 +12,6 @@ import { vercelAdapter } from "@flags-sdk/vercel";
  * explicación de qué cambia prendido/apagado, y los tests mockean ese módulo.
  */
 
-export const pagosFlag = flag<boolean>({
-  key: "pagos",
-  description: "Medios de pago en el checkout (apagado: solo 'a coordinar', sin cobros)",
-  defaultValue: false,
-  adapter: vercelAdapter,
-});
-
 export const cuotasFlag = flag<boolean>({
   key: "cuotas",
   description: "Muestra cuotas y limita el Brick de Mercado Pago a la oferta vigente",
@@ -45,14 +38,6 @@ export const disponibilidadSucursalFlag = flag<boolean>({
   key: "disponibilidad-sucursal",
   description:
     "Disponibilidad y reserva por sucursal: stock por local, retiro con demora, envío con respaldo y productos ocultos por sucursal (requiere el flag sucursales)",
-  defaultValue: false,
-  adapter: vercelAdapter,
-});
-
-export const pedidoAConfirmarFlag = flag<boolean>({
-  key: "pedido-a-confirmar",
-  description:
-    "Checkout sin cobro: medios de pago cargados en el CRM, plazo de contacto y WhatsApp de la sucursal en la confirmación (apagado: checkout de siempre)",
   defaultValue: false,
   adapter: vercelAdapter,
 });

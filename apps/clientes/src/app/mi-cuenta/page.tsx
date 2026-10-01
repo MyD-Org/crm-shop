@@ -12,7 +12,6 @@ import { textoNoLeidos } from "@/lib/cuenta-corriente/vista-avisos";
 import { listarFavoritos } from "@/lib/favoritos";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CAPACIDADES_DESPLIEGUE, RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
-import { pagosHabilitados } from "@/lib/pagos-flag";
 import { listarPedidos, resumenPedidos } from "@/lib/pedidos";
 
 /**
@@ -32,7 +31,7 @@ export default async function MiCuentaPage() {
   const conFavoritos = CAPACIDADES_DESPLIEGUE.favoritos && !!clerkUserId;
   // Avisos es de Facturación: sólo cuenta corriente (lectura compartida con el layout).
   const conAvisos = CAPACIDADES_DESPLIEGUE.avisos && !!cliente && (await accesoFacturacion());
-  const [pedidos, resumen, favoritos, noLeidos, pagos] = await Promise.all([
+  const [pedidos, resumen, favoritos, noLeidos] = await Promise.all([
     listarPedidos(dueno, 3),
     resumenPedidos(dueno),
     conFavoritos && clerkUserId
@@ -40,7 +39,6 @@ export default async function MiCuentaPage() {
       : [],
     // Si la lectura falla, el resumen se muestra igual, sin el aviso.
     conAvisos && cliente ? contarNoLeidos(cliente.codigocliente).catch(() => 0) : 0,
-    pagosHabilitados(),
   ]);
 
   return (
@@ -72,7 +70,7 @@ export default async function MiCuentaPage() {
         ) : (
           <div className="flex flex-col gap-4">
             {pedidos.map((p) => (
-              <PedidoCard key={p.id} pedido={p} pagosHabilitados={pagos} />
+              <PedidoCard key={p.id} pedido={p} />
             ))}
           </div>
         )}

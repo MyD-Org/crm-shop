@@ -55,10 +55,19 @@ vi.mock("@/lib/facturacion-db", () => ({
 // `@/lib/facturacion` es la real (`admiteEnvio` incluida): mockearla sería testear el mock.
 vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: () => getOferta() }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
-// Estos tests son del flujo CON cobros: corren con los pagos prendidos, que es
-// cómo se comportaba la ruta antes del flag de pagos. El flag apagado se prueba
-// aparte, en route.pagos-flag.test.ts.
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
+// Medios del CRM (`medios_pago_shop`): los tres de siempre; mercadopago es la fila fija con cobro online.
+const mediosCrm = ["transferencia", "efectivo", "mercadopago"].map((slug, orden) => ({
+  slug,
+  nombre: slug,
+  instrucciones: "",
+  activo: true,
+  aplicaRetiro: true,
+  aplicaEnvio: slug !== "efectivo",
+  cobroOnline: slug === "mercadopago",
+  orden,
+}));
+vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => mediosCrm }));
+// Con credenciales de Mercado Pago (sin ellas el medio se rechaza: route.medios.test.ts).
 
 import { POST } from "./route";
 import { StockInsuficienteError } from "@/lib/stock-disponible";
@@ -93,6 +102,8 @@ const post = (extra: Record<string, unknown> = {}) =>
 const planGuardado = () => crearPedido.mock.calls[0][3];
 
 beforeEach(() => {
+  vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+  vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
   flag = true;
   pais = "AR";
   telefonoPerfil = null;

@@ -34,9 +34,9 @@ vi.mock("@/lib/pagos/intento-abierto", () => ({
 vi.mock("@/lib/pagos/mercadopago", () => ({
   mercadoPago: { id: "mercadopago", crearPago: (...a: unknown[]) => crearPago(...a) },
   urlNotificacion: () => undefined,
+  mercadoPagoConfigurado: () => true,
 }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
-vi.mock("@/lib/pagos-flag", () => ({ pagosHabilitados: () => true }));
 
 import { POST } from "./route";
 

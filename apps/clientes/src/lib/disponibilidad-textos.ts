@@ -229,8 +229,11 @@ export function resumenEntregaPedido(
   const resumen = peor ? (lineasDisponibilidad(peor.producto, locales, opts)[0] ?? null) : null;
   const textos = new Set(entregables.map((p) => p.linea.texto));
   const aTraer = entregables.filter((p) => p.linea.tono === "demora").length;
+  // Sólo en el retiro: explica por qué el local tarda. En el envío, de qué sucursal sale es
+  // logística interna; al cliente le alcanza con el plazo.
+  const esRetiro = Boolean(peor?.producto.retiro && Object.keys(peor.producto.retiro).length > 0);
   const aclaracion =
-    textos.size > 1 && aTraer > 0
+    esRetiro && textos.size > 1 && aTraer > 0
       ? `${aTraer} ${aTraer === 1 ? "producto se trae" : "productos se traen"} de otra sucursal`
       : null;
   return { resumen, aclaracion, sinEntrega };

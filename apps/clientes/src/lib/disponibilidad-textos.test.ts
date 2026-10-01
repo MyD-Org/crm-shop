@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   lineasDisponibilidad,
+  resumenEntregaPedido,
   textoEnvio,
   textoRetiro,
   textosDisponibilidad,
@@ -164,5 +165,52 @@ describe("resumen del carrito", () => {
     const { sinEntregaPosible } = await import("./disponibilidad-textos");
     expect(sinEntregaPosible({ envio: null, retiro: { a: no, b: no } } as never)).toBe(true);
     expect(sinEntregaPosible({ envio: null, retiro: { a: traer, b: no } } as never)).toBe(false);
+  });
+});
+
+describe("resumenEntregaPedido (checkout)", () => {
+  const locales = [{ slug: "a", nombre: "Iguazú" }];
+  const hoy = { estado: "disponible" as const, desde: null, demoraDias: null };
+  const demora = (d: number) => ({ estado: "con_demora" as const, desde: "b", demoraDias: d });
+  const sinStock = { estado: "sin_stock" as const, desde: null, demoraDias: null };
+  const retiro = (r: typeof hoy | ReturnType<typeof demora> | typeof sinStock) =>
+    ({ envio: null, retiro: { a: r } }) as never;
+  const envio = (e: { estado: string; origen: string | null; demoraDias: number | null }) =>
+    ({ envio: e, retiro: null }) as never;
+
+  it("todos iguales: una línea y sin aclaración", () => {
+    const r = resumenEntregaPedido(
+      [{ id: "1", disp: retiro(hoy) }, { id: "2", disp: retiro(hoy) }],
+      locales,
+    );
+    expect(r).toEqual({ resumen: { texto: "Retiro en Iguazú: disponible hoy", tono: "ok" }, aclaracion: null, sinEntrega: [] });
+  });
+
+  it("mezcla: manda el más lento y se aclara cuántos vienen de otra sucursal", () => {
+    const r = resumenEntregaPedido(
+      [{ id: "1", disp: retiro(hoy) }, { id: "2", disp: retiro(demora(3)) }, { id: "3", disp: retiro(demora(7)) }],
+      locales,
+    );
+    expect(r.resumen).toEqual({ texto: "Retiro en Iguazú: disponible en 7 días", tono: "demora" });
+    expect(r.aclaracion).toBe("2 productos se traen de otra sucursal");
+    const uno = resumenEntregaPedido([{ id: "1", disp: retiro(hoy) }, { id: "2", disp: retiro(demora(3)) }], locales);
+    expect(uno.aclaracion).toBe("1 producto se trae de otra sucursal");
+  });
+
+  it("el producto que no se puede entregar no pesa en la línea y lleva su propio aviso", () => {
+    const r = resumenEntregaPedido([{ id: "1", disp: retiro(hoy) }, { id: "2", disp: retiro(sinStock) }], locales);
+    expect(r.sinEntrega).toEqual(["2"]);
+    expect(r.resumen?.tono).toBe("ok");
+    expect(r.aclaracion).toBeNull();
+  });
+
+  it("envío: con plazo, y sin envío activo no dice nada", () => {
+    const prods = [{ id: "1", disp: envio({ estado: "a_traer", origen: "b", demoraDias: 7 }) }];
+    expect(resumenEntregaPedido(prods, locales).resumen?.texto).toBe("Envío a domicilio: disponible en 7 días");
+    expect(resumenEntregaPedido(prods, locales, { conEnvio: false })).toEqual({ resumen: null, aclaracion: null, sinEntrega: [] });
+  });
+
+  it("sin productos: nada", () => {
+    expect(resumenEntregaPedido([], locales)).toEqual({ resumen: null, aclaracion: null, sinEntrega: [] });
   });
 });

@@ -196,3 +196,42 @@ export function sinEntregaPosible(d: DisponibilidadVista): boolean {
   const envioPosible = d.envio ? d.envio.estado === "disponible" || d.envio.estado === "a_traer" : false;
   return !retiroAlguno && !envioPosible;
 }
+
+// --- Checkout: un solo mensaje de entrega para todo el pedido ---------------------------------
+
+/**
+ * Entrega del pedido en la modalidad elegida. `productos` trae la disponibilidad ya recortada a esa
+ * modalidad (sólo el envío, o sólo el local de retiro elegido). Devuelve:
+ *  - `resumen`: UNA línea con el estado del producto más lento (sin contar los que no se pueden
+ *    entregar), o null si no hay nada que decir;
+ *  - `aclaracion`: si no todos los productos tienen el mismo estado, cuántos se traen de otra
+ *    sucursal;
+ *  - `sinEntrega`: ids de los productos que NO se pueden entregar en esta modalidad (llevan su
+ *    propio aviso).
+ */
+export function resumenEntregaPedido(
+  productos: { id: string; disp: DisponibilidadVista }[],
+  locales: LocalDisponibilidad[],
+  opts: { conEnvio?: boolean } = {},
+): { resumen: LineaDisponibilidad | null; aclaracion: string | null; sinEntrega: string[] } {
+  const sinEntrega: string[] = [];
+  const entregables: { id: string; disp: DisponibilidadVista; linea: LineaDisponibilidad }[] = [];
+  for (const p of productos) {
+    const linea = lineasDisponibilidad(p.disp, locales, opts)[0];
+    if (!linea) continue;
+    if (linea.tono === "no") sinEntrega.push(p.id);
+    else entregables.push({ ...p, linea });
+  }
+  const peor = resumenDisponibilidadCarrito(
+    entregables.map((p) => ({ nombre: p.id, disp: p.disp })),
+    locales,
+  );
+  const resumen = peor ? (lineasDisponibilidad(peor.producto, locales, opts)[0] ?? null) : null;
+  const textos = new Set(entregables.map((p) => p.linea.texto));
+  const aTraer = entregables.filter((p) => p.linea.tono === "demora").length;
+  const aclaracion =
+    textos.size > 1 && aTraer > 0
+      ? `${aTraer} ${aTraer === 1 ? "producto se trae" : "productos se traen"} de otra sucursal`
+      : null;
+  return { resumen, aclaracion, sinEntrega };
+}

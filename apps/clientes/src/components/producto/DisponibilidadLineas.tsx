@@ -1,5 +1,6 @@
 import {
   lineasDisponibilidad,
+  type LineaDisponibilidad,
   type DisponibilidadVista,
   type LocalDisponibilidad,
   type TonoDisponibilidad,
@@ -31,6 +32,17 @@ export function DisponibilidadLineas({
   const lineas = lineasDisponibilidad(disponibilidad, locales, {
     conEnvio: envio,
   });
+  return <ListaLineas lineas={lineas} className={className} />;
+}
+
+/** Las líneas ya armadas (una por local o envío, o el resumen de todo el pedido). */
+export function ListaLineas({
+  lineas,
+  className = "",
+}: {
+  lineas: LineaDisponibilidad[];
+  className?: string;
+}) {
   if (lineas.length === 0) return null;
   return (
     <ul

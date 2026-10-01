@@ -4,7 +4,6 @@
  * apagado devuelve null: nada de zona.
  */
 import { cache } from "react";
-import { cookies } from "next/headers";
 import { identidadActual } from "./auth";
 import { ubicacionDelVisitante } from "./ubicacion-servidor";
 import { getPerfilFacturacion } from "./facturacion-db";
@@ -17,7 +16,6 @@ import {
 } from "./disponibilidad-contexto";
 import { reglasVentaCacheadas, sucursalesCacheadas } from "./sucursales-datos";
 import {
-  COOKIE_ZONA,
   opcionesCheckout,
   zonaVigente,
   type OpcionesCheckoutSucursales,
@@ -29,23 +27,21 @@ export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
   const datos = await sucursalesCacheadas();
   if (datos.sucursales.length === 0) return null;
 
-  const cookie = (await cookies()).get(COOKIE_ZONA)?.value ?? null;
+  // La cookie `shop_zona` del selector de zona viejo (sacado en #279) ya no se lee: muchos
+  // navegadores la conservan y pisaba la ubicación. La zona sale de la ubicación del visitante (la
+  // que eligió a mano o su dirección guardada) y, si no hay, de la provincia del perfil.
+  const { ubicacion } = await ubicacionDelVisitante();
+  if (ubicacion) return zonaVigente({ perfilProvincia: ubicacion.provincia, datos });
   let perfilProvincia: string | null = null;
-  if (!cookie) {
-    // La ubicación del visitante (la que eligió a mano o, si no, su dirección guardada) manda sobre
-    // el perfil: el plazo de entrega tiene que ser el de la zona que ve en la franja.
-    const { ubicacion } = await ubicacionDelVisitante();
-    if (ubicacion) return zonaVigente({ perfilProvincia: ubicacion.provincia, datos });
-    try {
-      const { clerkUserId } = await identidadActual();
-      if (clerkUserId)
-        perfilProvincia =
-          (await getPerfilFacturacion(clerkUserId))?.domicilioProvincia ?? null;
-    } catch (err) {
-      console.error("[zona] no se pudo leer la provincia del perfil:", err);
-    }
+  try {
+    const { clerkUserId } = await identidadActual();
+    if (clerkUserId)
+      perfilProvincia =
+        (await getPerfilFacturacion(clerkUserId))?.domicilioProvincia ?? null;
+  } catch (err) {
+    console.error("[zona] no se pudo leer la provincia del perfil:", err);
   }
-  return zonaVigente({ cookie, perfilProvincia, datos });
+  return zonaVigente({ perfilProvincia, datos });
 });
 
 /** Opciones del checkout (locales de retiro y provincia inicial). null = flag apagado o sin sucursales. */

@@ -1,4 +1,5 @@
 import { mintInboxToken } from "./inbox-token"
+import type { WaCostsSummary } from "./wa-costos"
 
 // Los mensajes llegan de múltiples canales (WhatsApp, Instagram, Messenger). Nombre
 // legible del canal para la UI; si no reconocemos el valor devolvemos lo que venga.
@@ -251,6 +252,15 @@ export async function getUsageSummary(
   days = 30,
 ): Promise<UsageSummary> {
   const res = await inboxFetch(aiApiUrl, aiTenantId, `/v1/inbox/usage?days=${days}`)
+  if (!res.ok) throw new Error(`ai-api error ${res.status}`)
+  return res.json()
+}
+
+// Costos de WhatsApp (conversaciones de servicio gratis vs. cobradas). Lo calcula la ai-api.
+export type { WaCostsSummary } from "@/lib/wa-costos"
+
+export async function getWaCosts(aiApiUrl: string, aiTenantId: string): Promise<WaCostsSummary> {
+  const res = await inboxFetch(aiApiUrl, aiTenantId, "/v1/inbox/wa-costs")
   if (!res.ok) throw new Error(`ai-api error ${res.status}`)
   return res.json()
 }

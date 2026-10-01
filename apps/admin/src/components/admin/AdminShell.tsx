@@ -13,6 +13,7 @@ import type { InboxContact } from "@/lib/inbox-api"
 import { roleRank, type AdminRole } from "@/lib/roles"
 import { UnsavedGuardProvider, useUnsavedGuardCtx } from "@/lib/unsaved-guard"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
+import { bannerText, type WaCostsSummary } from "@/lib/wa-costos"
 import { getLastVisit, SECTION_VISITED_EVENT, type BadgeSection } from "@/lib/admin-last-visit"
 
 interface AdminShellProps {
@@ -58,6 +59,25 @@ function BadgeIcon({ icon, count }: { icon: React.ReactNode; count: number | nul
       </span>
     </span>
   )
+}
+
+/** Cartel de costos de WhatsApp: una sola consulta al montar (sin polling). Sólo superadmin con el panel de uso habilitado. */
+function useWaCostsBanner(enabled: boolean): string | null {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    if (!enabled) return
+    let alive = true
+    fetch("/api/admin/inbox/wa-costos", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (alive && json) setText(bannerText(json as WaCostsSummary))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [enabled])
+  return text
 }
 
 function usePendingCounts(): PendingCounts | null {
@@ -170,6 +190,7 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
   // estado sin desincronizarse cuando el operador colapsa/expande el sidebar.
   const [availability, setAvailability] = useState<Availability>(initialAvailability)
   const pendingCounts = usePendingCounts()
+  const waBanner = useWaCostsBanner(role === "superadmin" && !!usagePanelEnabled)
 
   // Antes de ausentarse o cerrar sesión, chequea si el operador tiene conversaciones
   // asignadas dentro de la ventana de 24hs y sin responder; si las hay, pide confirmación.
@@ -323,6 +344,15 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
         </div>
       }
     >
+      {waBanner && (
+        <Link
+          href="/admin/uso"
+          className="block px-4 py-2 text-sm"
+          style={{ background: "var(--amber-soft)", color: "var(--amber)" }}
+        >
+          {waBanner}
+        </Link>
+      )}
       {children}
     </SideNav>
     <NotificationsPrompt />

@@ -1,7 +1,7 @@
 import webpush from "web-push"
 import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
-import { pushSubscriptions } from "@/db/schema"
+import { adminUsers, pushSubscriptions } from "@/db/schema"
 import { availableOperators } from "@/lib/assignment"
 
 // ── Web Push ────────────────────────────────────────────────────────────────
@@ -90,5 +90,19 @@ export async function sendPushToDepartment(
   if (!ensureConfigured()) return 0
   const operators = await availableOperators(tenantId, department)
   const counts = await Promise.all(operators.map((op) => sendPushToOperator(tenantId, op.id, payload)))
+  return counts.reduce((a, b) => a + b, 0)
+}
+
+/**
+ * Envía un push a los SUPERADMINS del tenant (todos sus dispositivos). Para avisos de
+ * administración (ej. costos de WhatsApp) que no pertenecen a ninguna conversación.
+ */
+export async function sendPushToSuperadmins(tenantId: string, payload: PushPayload): Promise<number> {
+  if (!ensureConfigured()) return 0
+  const admins = await getDb()
+    .select({ id: adminUsers.id })
+    .from(adminUsers)
+    .where(and(eq(adminUsers.tenantId, tenantId), eq(adminUsers.role, "superadmin")))
+  const counts = await Promise.all(admins.map((a) => sendPushToOperator(tenantId, a.id, payload)))
   return counts.reduce((a, b) => a + b, 0)
 }

@@ -186,7 +186,7 @@ describe("tabla transpuesta (los modelos son encabezados de columna)", () => {
   })
 
   it("tabla transpuesta de una sola columna: los valores están debajo del identificador", () => {
-    const celdas: Celda[] = [RELLENO, ["SKU", 40, 720], ["3537", 150, 720], ["Potencia", 40, 700], ["65w", 150, 700], ["IP", 40, 680], ["20", 150, 680], ["Potencia", 40, 300], ["45w", 150, 300]]
+    const celdas: Celda[] = [RELLENO, ["SKU", 40, 720], ["3537", 150, 720], ["Potencia", 40, 700], ["65w", 150, 700], ["IP", 40, 680], ["20", 150, 680], ["Potencia", 40, 300], ["45w", 400, 300]]
     const c = ctx(celdas, { code: "3537-ABC", nombre: "ALUMBRADO 65W" })
     expect(aceptados(verificarLectura(lectura("3537", { potencia_w: { valor: 65 } }), c))).toEqual([["potencia_w", 65]])
     expect(aceptados(verificarLectura(lectura("3537", { ip: { valor: 20 } }), c))).toEqual([["ip", 20]])
@@ -297,6 +297,74 @@ describe("cruce con el nombre, texto y rangos", () => {
     const t: Celda[] = [RELLENO, ["Curva", 40, 700], ["C", 150, 700], ["Portalamparas", 40, 680], ["E-27", 150, 680]]
     const r = verificarLectura(lectura(null, { zocalo: { valor: "E27" } }), ctx(t, { unicoProducto: true }))
     expect(aceptados(r)).toEqual([["zocalo", "e27"]])
+  })
+})
+
+describe("ambigüedad en la fila/columna (subcolumnas cálido/frío)", () => {
+  const SUBCOLUMNAS: Celda[] = [
+    RELLENO,
+    ["Modelo", 40, 720], ["EFLG2-20W", 250, 720], ["EFLG2-30W", 400, 720],
+    ["Tipo", 40, 700], ["Cálido", 235, 700], ["Frío", 300, 700], ["Cálido", 385, 700], ["Frío", 450, 700],
+    ["Flujo", 40, 680], ["1100lm", 240, 680], ["1200lm", 300, 680], ["1650lm", 390, 680], ["1800lm", 455, 680],
+    ["Temperatura", 40, 660], ["3000K", 240, 660], ["6500K", 300, 660], ["3000K", 390, 660], ["6500K", 455, 660],
+    ["Potencia", 40, 640], ["20W", 260, 640], ["30W", 410, 640],
+  ]
+  const producto = (nombre: string) => ctx(SUBCOLUMNAS, { code: "EFLG2-20W-WW-XYZ", nombre })
+
+  it("el nombre dice la temperatura y coincide con el encabezado de la subcolumna: se acepta", () => {
+    const r = verificarLectura(lectura("EFLG2-20W", { flujo_lm: { valor: 1100 }, temperatura_k: { valor: 3000 }, potencia_w: { valor: 20 } }), producto("REFLECTOR LED 20W 3000K"))
+    expect(r.descartes).toEqual([])
+    expect(r.aceptados.map((a) => a.clave).sort()).toEqual(["flujo_lm", "potencia_w", "temperatura_k"])
+  })
+
+  it("el valor es de la otra subcolumna: se descarta", () => {
+    const r = verificarLectura(lectura("EFLG2-20W", { flujo_lm: { valor: 1200 } }), producto("REFLECTOR LED 20W 3000K"))
+    expect(r.aceptados).toEqual([])
+    expect(motivos(r)).toEqual(["flujo_lm:ambiguo_en_fila"])
+  })
+
+  it("el nombre no dice temperatura ni tono: ambiguo_en_fila", () => {
+    const r = verificarLectura(lectura("EFLG2-20W", { flujo_lm: { valor: 1100 }, temperatura_k: { valor: 3000 } }), producto("REFLECTOR LED 20W"))
+    expect(motivos(r)).toEqual(["flujo_lm:ambiguo_en_fila", "temperatura_k:ambiguo_en_fila"])
+  })
+
+  it("el nombre dice sólo el tono ('CALIDO'): alcanza si el encabezado es cálido", () => {
+    expect(aceptados(verificarLectura(lectura("EFLG2-20W", { flujo_lm: { valor: 1100 } }), producto("REFLECTOR LED 20W CALIDO")))).toEqual([["flujo_lm", 1100]])
+    expect(motivos(verificarLectura(lectura("EFLG2-20W", { flujo_lm: { valor: 1200 } }), producto("REFLECTOR LED 20W CALIDO")))).toEqual(["flujo_lm:ambiguo_en_fila"])
+  })
+
+  it("un solo valor en la columna no es ambiguo", () => {
+    const r = verificarLectura(lectura("EFLG2-20W", { potencia_w: { valor: 20 } }), producto("REFLECTOR LED 20W"))
+    expect(aceptados(r)).toEqual([["potencia_w", 20]])
+  })
+})
+
+describe("valor único en ficha propia con varias páginas", () => {
+  const pag = (celdas: Celda[]) => items(celdas)
+  const base = { unicoProducto: true, code: "CG-001-XYZ", nombre: "COLGANTE" }
+
+  it("se acepta si está en la página donde figura el producto", () => {
+    const paginas = [pag([RELLENO, ["Codigo CG-001", 40, 700], ["DC48V", 150, 700]]), pag([RELLENO, ["Garantia 2 anos", 40, 700]])]
+    const r = verificarLectura(lectura(null, { tension_v: { valor: 48 } }), { ...base, paginas })
+    expect(aceptados(r)).toEqual([["tension_v", 48]])
+    expect(r.aceptados[0].pagina).toBe(1)
+  })
+
+  it("el valor único está en otra página: valor_en_otra_pagina", () => {
+    const paginas = [pag([RELLENO, ["Codigo CG-001", 40, 700]]), pag([RELLENO, ["Tension", 40, 700], ["DC48V", 150, 700]])]
+    expect(motivos(verificarLectura(lectura(null, { tension_v: { valor: 48 } }), { ...base, paginas }))).toEqual(["tension_v:valor_en_otra_pagina"])
+  })
+
+  it("producto no ubicado en ninguna página: sólo se acepta si el PDF tiene una página", () => {
+    const sin = [pag([RELLENO, ["Tension", 40, 700], ["DC48V", 150, 700]]), pag([RELLENO, ["Garantia 2 anos", 40, 700]])]
+    expect(motivos(verificarLectura(lectura(null, { tension_v: { valor: 48 } }), { ...base, paginas: sin }))).toEqual(["tension_v:producto_no_ubicado"])
+    expect(aceptados(verificarLectura(lectura(null, { tension_v: { valor: 48 } }), { ...base, paginas: [sin[0]] }))).toEqual([["tension_v", 48]])
+  })
+
+  it("también se ubica por los tokens número+unidad del nombre", () => {
+    const paginas = [pag([RELLENO, ["Lampara 12W", 40, 700], ["DC48V", 150, 700]]), pag([RELLENO, ["Garantia 2 anos", 40, 700]])]
+    const r = verificarLectura(lectura(null, { tension_v: { valor: 48 } }), { ...base, nombre: "LAMPARA 12W", code: null, paginas })
+    expect(aceptados(r)).toEqual([["tension_v", 48]])
   })
 })
 

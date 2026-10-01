@@ -39,6 +39,9 @@ export const MOTIVOS = [
   "fila_no_en_texto",
   "fila_no_coincide",
   "valor_fuera_de_fila",
+  "ambiguo_en_fila",
+  "producto_no_ubicado",
+  "valor_en_otra_pagina",
   "valor_invalido",
   "valor_no_en_texto",
   "unidad_no_en_texto",
@@ -324,6 +327,7 @@ interface Celda {
 interface Doc {
   celdas: Celda[]
   lineas: Celda[][]
+  paginas: number
 }
 
 /** "90 lm/W" (eficiencia) no es flujo ni potencia: se borra antes de leer valores. */
@@ -349,7 +353,7 @@ function construirDoc(paginas: ItemTexto[][]): Doc {
       celdas.push(...cs)
     }
   })
-  const doc = { celdas, lineas }
+  const doc = { celdas, lineas, paginas: paginas.length }
   docs.set(paginas, doc)
   return doc
 }
@@ -491,6 +495,50 @@ function ocurrenciasDeFila(filaNorm: string, doc: Doc): Celda[] {
   return doc.lineas.filter((ln) => compacto(ln.map((c) => c.norm).join("")).includes(cf)).map((ln) => ln[0])
 }
 
+/**
+ * ¿El nombre del producto desambigua cuál de los valores de la fila/columna es el suyo? Sólo si dice
+ * explícitamente temperatura o tono y coincide con el encabezado de la subcolumna del valor. Para la
+ * temperatura y el tono mismos, alcanza con que el nombre diga el mismo valor.
+ */
+function desambiguaElNombre(
+  clave: ClaveAtributo,
+  valido: AtributoExtraido,
+  cand: Candidato,
+  celdas: Celda[],
+  delNombre: AtributoExtraido[],
+): boolean {
+  const nombreTemp = delNombre.find((x) => x.clave === "temperatura_k")?.valorNum ?? null
+  const nombreTono = delNombre.find((x) => x.clave === "tono")?.valorTexto ?? null
+  if (clave === "temperatura_k") return nombreTemp != null && nombreTemp === valido.valorNum
+  if (clave === "tono") return nombreTono != null && nombreTono === valido.valorTexto
+  if (!cand.celda || (nombreTemp == null && nombreTono == null)) return false
+  const cx = cand.celda.cx
+  // Encabezados de subcolumna (temperatura o tono) por línea: el más cercano por x; con empate no hay respuesta.
+  const porLinea = new Map<number, Celda[]>()
+  for (const c of celdas) {
+    if (c.linea === cand.celda.linea) continue
+    const e = extraerAtributosDeNombre(c.norm)
+    if (e.some((x) => x.clave === "temperatura_k" || x.clave === "tono")) porLinea.set(c.linea, [...(porLinea.get(c.linea) ?? []), c])
+  }
+  let informativo = false
+  for (const cs of porLinea.values()) {
+    const orden = [...cs].sort((a, b) => Math.abs(a.cx - cx) - Math.abs(b.cx - cx))
+    if (orden.length > 1 && Math.abs(Math.abs(orden[0].cx - cx) - Math.abs(orden[1].cx - cx)) < 3) return false
+    const e = extraerAtributosDeNombre(orden[0].norm)
+    const temp = e.find((x) => x.clave === "temperatura_k")?.valorNum ?? null
+    const tono = e.find((x) => x.clave === "tono")?.valorTexto ?? null
+    if (temp != null && nombreTemp != null) {
+      if (temp !== nombreTemp) return false
+      informativo = true
+    }
+    if (tono != null && nombreTono != null) {
+      if (tono !== nombreTono) return false
+      informativo = true
+    }
+  }
+  return informativo
+}
+
 // ───────────────────────── verificación de una lectura ─────────────────────────
 
 const esClave = (c: string): c is ClaveAtributo => (CLAVES_ATRIBUTO as readonly string[]).includes(c)
@@ -520,6 +568,20 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
   const fila = typeof lectura.fila === "string" && tieneAlfanum(normalizarCita(lectura.fila)) ? normalizarCita(lectura.fila) : null
   const tokens = tokensDelNombre(ctx.nombre)
   const delNombre = extraerAtributosDeNombre(ctx.nombre)
+
+  // Páginas donde figura el producto: su código de Alegra o todos los tokens número+unidad del nombre.
+  let paginasProd: Set<number> | null = null
+  const paginasDelProducto = () => {
+    if (paginasProd) return paginasProd
+    paginasProd = new Set<number>()
+    for (let p = 0; p < doc.paginas; p++) {
+      const cs = doc.celdas.filter((c) => c.pag === p)
+      const porCodigo = !!ctx.code && cs.some((c) => filaCoincideConCodigo(c.norm, ctx.code))
+      const porTokens = tokens.length > 0 && tokens.every((t) => cs.some((c) => t.re.test(c.norm)))
+      if (porCodigo || porTokens) paginasProd.add(p)
+    }
+    return paginasProd
+  }
 
   // Cada aparición de la fila: ¿es de este producto? ¿qué celdas le pertenecen?
   const apariciones = fila
@@ -558,6 +620,20 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
     let cand: Candidato = cands[0]
     if (unico && (esVocabulario || ctx.unicoProducto)) {
       regla = esVocabulario ? "vocabulario" : "unico"
+      // Con varias páginas, el valor único tiene que estar en una página donde figura el producto.
+      if (!esVocabulario && doc.paginas > 1) {
+        const ubicado = paginasDelProducto()
+        if (ubicado.size === 0) {
+          descartar(clave, "producto_no_ubicado", entrada)
+          continue
+        }
+        const enPagina = cands.find((c) => ubicado.has(c.pag))
+        if (!enPagina) {
+          descartar(clave, "valor_en_otra_pagina", entrada)
+          continue
+        }
+        cand = enPagina
+      }
     } else {
       // 3. Hay varios valores: tiene que estar en la fila/columna del producto.
       if (fila == null) {
@@ -573,17 +649,30 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
         descartar(clave, "fila_no_coincide", entrada)
         continue
       }
+      let ambiguo = false
       const hallado = (() => {
         for (const ap of delProducto) {
           for (const c of cands) {
             const pertenece = c.celda
               ? ap.celdas.includes(c.celda) || c.celda === ap.celda
               : ap.modo === "fila" && c.pag === ap.celda.pag && Math.abs(c.y - ap.celda.y) <= tolY(ap.celda, ap.celda)
-            if (pertenece) return c
+            if (!pertenece) continue
+            // Más de un valor de la misma magnitud en la fila/columna (subcolumnas cálido/frío): sólo si el
+            // nombre desambigua explícitamente.
+            const distintos = new Set(ap.celdas.flatMap((x) => textosDe(x).flatMap((t) => terminosEn(clave, t))))
+            if (distintos.size > 1 && !desambiguaElNombre(clave, valido, c, ap.celdas, delNombre)) {
+              ambiguo = true
+              continue
+            }
+            return c
           }
         }
         return null
       })()
+      if (!hallado && ambiguo) {
+        descartar(clave, "ambiguo_en_fila", entrada)
+        continue
+      }
       if (!hallado) {
         descartar(clave, "valor_fuera_de_fila", entrada)
         continue

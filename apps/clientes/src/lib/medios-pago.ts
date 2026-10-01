@@ -3,9 +3,9 @@
  * checkout (client component) y la validación del servidor, así lo que se ofrece y lo que se
  * acepta no pueden divergir. Sin base ni flags.
  *
- * Con el flag `pedido-a-confirmar` el paso Pago ofrece estos medios en vez de las opciones fijas de
- * `envio.ts`, y `orders.pago_metodo` guarda el `slug`. No hay cobro en ese paso: `cobroOnline` se
- * trata como manual hasta que exista la integración.
+ * El paso Pago ofrece estos medios y `orders.pago_metodo` guarda el `slug`. Todos quedan "a
+ * confirmar" sin cobro, salvo `mercadopago` (fila fija con `cobroOnline`), que dispara el cobro en
+ * línea. Esa fila sólo se ofrece si hay credenciales: el servidor lo resuelve (`mpDisponible`).
  */
 import { PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
 
@@ -17,34 +17,51 @@ export interface MedioPago {
   activo: boolean;
   aplicaRetiro: boolean;
   aplicaEnvio: boolean;
-  /** Reservado para una integración futura: hoy se trata como un medio manual. */
+  /** Sólo la fila fija `mercadopago`: dispara el cobro en línea. */
   cobroOnline: boolean;
   orden: number;
 }
 
-/**
- * Slugs que el admin no puede usar como medio del Shop: `mercadopago` dispara el cobro en línea
- * (que este flujo no hace) y `a_coordinar` es el valor de respaldo cuando ningún medio aplica.
- */
-export const SLUGS_RESERVADOS: readonly string[] = ["mercadopago", "a_coordinar"];
+/** Slug de la fila fija que dispara el cobro en línea con Mercado Pago. */
+export const SLUG_MERCADOPAGO = "mercadopago";
 
-/** Nota del paso Pago: en este flujo el pedido queda "a confirmar", sin cobro. */
+/** Slug que el admin no puede usar: es el valor de respaldo cuando ningún medio aplica. */
+export const SLUGS_RESERVADOS: readonly string[] = ["a_coordinar"];
+
+/** ¿Este `pago_metodo` se cobra en línea? */
+export function esPagoEnLinea(slug: string): boolean {
+  return slug === SLUG_MERCADOPAGO;
+}
+
+export interface OpcionesMedios {
+  /**
+   * ¿Hay credenciales de Mercado Pago en el Shop? Por defecto sí (la lógica es pura: el servidor
+   * decide). Con `false` la fila `mercadopago` no se ofrece ni se acepta aunque esté activa.
+   */
+  mpDisponible?: boolean;
+}
+
+/** Nota del paso Pago: con los medios manuales el pedido queda "a confirmar", sin cobro. */
 export const NOTA_PAGO_A_CONFIRMAR =
   "El pago se coordina después de confirmar el pedido; no se cobra en este paso.";
 
 /**
- * Medios que se ofrecen para la modalidad: activos, que aplican a ella y sin slugs reservados, en el
- * orden que fijó el operador (empate: por nombre, para que el resultado sea estable).
+ * Medios que se ofrecen para la modalidad: activos, que aplican a ella y sin slugs reservados (y sin
+ * Mercado Pago si faltan credenciales), en el orden que fijó el operador (empate: por nombre, para
+ * que el resultado sea estable).
  */
 export function mediosParaModalidad(
   medios: readonly MedioPago[],
   entrega: EntregaTipo,
+  opts: OpcionesMedios = {},
 ): MedioPago[] {
+  const mpDisponible = opts.mpDisponible ?? true;
   return medios
     .filter(
       (m) =>
         m.activo &&
         !SLUGS_RESERVADOS.includes(m.slug) &&
+        (mpDisponible || m.slug !== SLUG_MERCADOPAGO) &&
         (entrega === "retiro" ? m.aplicaRetiro : m.aplicaEnvio),
     )
     .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, "es"));
@@ -55,8 +72,9 @@ export function medioElegido(
   medios: readonly MedioPago[],
   entrega: EntregaTipo,
   slug: string,
+  opts?: OpcionesMedios,
 ): MedioPago | null {
-  const aplicables = mediosParaModalidad(medios, entrega);
+  const aplicables = mediosParaModalidad(medios, entrega, opts);
   return aplicables.find((m) => m.slug === slug) ?? aplicables[0] ?? null;
 }
 
@@ -69,8 +87,9 @@ export function pagoValidoConMedios(
   medios: readonly MedioPago[],
   entrega: EntregaTipo,
   pagoMetodo: string,
+  opts?: OpcionesMedios,
 ): boolean {
-  const aplicables = mediosParaModalidad(medios, entrega);
+  const aplicables = mediosParaModalidad(medios, entrega, opts);
   if (aplicables.length === 0) return pagoMetodo === "a_coordinar";
   return aplicables.some((m) => m.slug === pagoMetodo);
 }

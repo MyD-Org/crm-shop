@@ -20,6 +20,10 @@
  * 4. CRUCE CON EL NOMBRE: si el nombre ya dice otro valor para la misma clave, se descarta el del PDF
  *    ("contradice_nombre").
  * 5. SIN CAPA DE TEXTO: no se carga nada ("sin_texto").
+ *    COLOR DE LA LUZ: para `color`, si el término figura tras "luz"/"tipo de luz"/"color de luz"/"light"
+ *    (en su celda, su línea o el encabezado de su columna), o el producto es una fuente de luz de color
+ *    (RGB, tira, lámpara) y el rótulo no es carcasa/cuerpo/terminación/acabado/"color", se descarta
+ *    ("color_de_luz"): es el color de la luz, no del producto.
  * 6. Rangos y vocabularios de `normalizarAtributos` siguen aplicando ("valor_invalido").
  */
 import {
@@ -51,6 +55,7 @@ export const MOTIVOS = [
   "valor_no_en_texto",
   "unidad_no_en_texto",
   "contradice_nombre",
+  "color_de_luz",
   "conflicto_entre_lecturas",
   "clave_desconocida",
   "producto_desconocido",
@@ -445,6 +450,43 @@ function candidatos(a: AtributoExtraido, doc: Doc): Candidato[] {
   return out
 }
 
+// ───────────────────────── color de la luz ─────────────────────────
+
+const RE_LUZ = /(?<![A-Z])(LUZ|LIGHT)(?![A-Z])/
+const RE_CUERPO = /CARCASA|CUERPO|TERMINACION|ACABADO/
+const RE_FUENTE_DE_COLOR = /(?<![A-Z])(RGB|RGBW|TIRA|CINTA|LAMPARA|LAMPARAS|LAMP|STRIP)(?![A-Z])/
+
+/**
+ * ¿El color leído es el de la LUZ y no el del producto? Ante la duda, sí. Mira el rótulo del valor:
+ * las celdas anteriores de su línea, lo que precede al término dentro de su celda y el encabezado de su
+ * columna (la celda corta más cercana por encima que se superpone en `x`).
+ */
+function esColorDeLuz(cand: Candidato, doc: Doc, nombre: string): boolean {
+  let previo = ""
+  let propio = cand.texto
+  let encabezado = ""
+  if (cand.celda) {
+    const ln = doc.lineas[cand.celda.linea]
+    previo = ln.slice(0, ln.indexOf(cand.celda)).map((c) => c.norm).join(" ")
+    propio = cand.celda.norm
+    const c = cand.celda
+    for (let i = c.linea - 1; i >= 0 && !encabezado; i--) {
+      const h = doc.lineas[i].find((x) => x.pag === c.pag && x.norm.length < 40 && x.x <= c.x + c.w && c.x <= x.x + x.w)
+      if (doc.lineas[i][0].pag !== c.pag) break
+      if (h) encabezado = h.norm
+    }
+  }
+  // Dentro de la celda, lo que va antes del primer término de color es parte del rótulo.
+  const palabras = propio.split(" ")
+  const k = palabras.findIndex((w) => terminosEn("color", w).length > 0)
+  const rotuloPropio = (k < 0 ? palabras : palabras.slice(0, k)).join(" ")
+  const rotulo = `${previo} ${rotuloPropio}`.replace(/[:.]/g, " ").replace(/\s+/g, " ").trim()
+  if (RE_LUZ.test(rotulo) || RE_LUZ.test(encabezado)) return true
+  if (!RE_FUENTE_DE_COLOR.test(normalizarCita(nombre))) return false
+  const etiqueta = rotulo || encabezado.replace(/[:.]/g, " ").trim()
+  return !(RE_CUERPO.test(etiqueta) || etiqueta === "COLOR")
+}
+
 // ───────────────────────── magnitudes: ¿hay más de un valor? ─────────────────────────
 
 const RE_NUM = "\\d+(?:[.,]\\d+)*"
@@ -781,6 +823,11 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
     const enNombre = delNombre.find((x) => x.clave === clave)
     if (enNombre && !igualesValores(enNombre, valido)) {
       descartar(clave, "contradice_nombre", entrada)
+      continue
+    }
+    // 4b. El color de la luz no es el color del producto.
+    if (clave === "color" && esColorDeLuz(cand, doc, ctx.nombre)) {
+      descartar(clave, "color_de_luz", entrada)
       continue
     }
     const cita = typeof entrada.cita === "string" ? entrada.cita : null

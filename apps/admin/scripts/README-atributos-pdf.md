@@ -53,6 +53,11 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    es parte de un rango o de una lista con barra con la misma unidad ("1.400-1.500 Lm", "3000/4000K") se
    descarta (`valor_en_rango_o_lista`), y una tensión suelta contra un rango, también (`tension_parcial`).
 4. Si el nombre ya dice otro valor para la misma clave: se descarta el del PDF (`contradice_nombre`).
+   **Color de la luz**: para `color`, si el término figura tras "luz", "tipo de luz", "color de luz",
+   "light" o "luz de color" (en su celda, su línea o el encabezado de su columna), se descarta
+   (`color_de_luz`): es el color de la luz, no del producto. Si el producto es una fuente de luz de color
+   (RGB, tira, cinta, lámpara), el color sólo se acepta con rótulo carcasa, cuerpo, terminación, acabado o
+   "color"; ante la duda, se descarta.
 5. PDF sin capa de texto: `sin_texto`. Rangos y vocabularios de `normalizarAtributos`: `valor_invalido`.
 
 Dos lecturas distintas del mismo (producto, clave) se descartan (`conflicto_entre_lecturas`).

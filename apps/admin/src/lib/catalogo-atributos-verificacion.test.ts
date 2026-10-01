@@ -548,6 +548,59 @@ describe("unidad con borde exacto", () => {
   })
 })
 
+describe("color de la luz no es color del producto", () => {
+  const propia = (celdas: Celda[], nombre: string) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre, code: "TR-001-XYZ" })
+  const color = (valor: string) => lectura(null, { color: { valor } })
+
+  it("'Tipo de luz: Verde' se descarta (rótulo y valor en celdas separadas)", () => {
+    const c = propia([["Tipo de luz", 40, 700], ["Verde", 150, 700]], "TIRA LED 12V")
+    expect(motivos(verificarLectura(color("verde"), c))).toEqual(["color:color_de_luz"])
+  })
+
+  it("'Tipo de Luz Amarillo' y 'Luz amarilla' en una sola celda se descartan", () => {
+    // Desde que el tono es el tipo de luz (#331), "luz amarilla" ya no es término de color: se
+    // descarta igual (valor_no_en_texto en vez de color_de_luz). Lo que importa es que no entre.
+    expect(aceptados(verificarLectura(color("amarillo"), propia([["Tipo de Luz Amarillo", 40, 700]], "TIRA LED")))).toEqual([])
+    expect(aceptados(verificarLectura(color("amarillo"), propia([["Luz amarilla", 40, 700]], "APLIQUE")))).toEqual([])
+  })
+
+  it("'Color de luz', 'Light' y 'Luz de color' también", () => {
+    for (const rotulo of ["Color de luz", "Light color", "Luz de color"]) {
+      const c = propia([[rotulo, 40, 700], ["Rojo", 150, 700]], "APLIQUE")
+      expect(motivos(verificarLectura(color("rojo"), c))).toEqual(["color:color_de_luz"])
+    }
+  })
+
+  it("el rótulo de la columna también cuenta", () => {
+    const c = propia([["Tipo de luz", 150, 720], ["Modelo", 40, 700], ["Verde", 150, 700]], "APLIQUE")
+    expect(motivos(verificarLectura(color("verde"), c))).toEqual(["color:color_de_luz"])
+  })
+
+  it("'Color de carcasa: Gris' se acepta", () => {
+    const c = propia([["Color de carcasa", 40, 700], ["Gris", 150, 700]], "TIRA LED RGB")
+    expect(aceptados(verificarLectura(color("gris"), c))).toEqual([["color", "gris"]])
+  })
+
+  it("'Color: Negro' en un aplique se acepta", () => {
+    const c = propia([["Color", 40, 700], ["Negro", 150, 700]], "APLIQUE EXTERIOR")
+    expect(aceptados(verificarLectura(color("negro"), c))).toEqual([["color", "negro"]])
+  })
+
+  it("fuente de luz de color: sólo vale con rótulo de carcasa, cuerpo, acabado o 'Color'", () => {
+    const sin = propia([["Emision", 40, 700], ["Rojo", 150, 700]], "LAMPARA RGB")
+    expect(motivos(verificarLectura(color("rojo"), sin))).toEqual(["color:color_de_luz"])
+    const cuerpo = propia([["Color del cuerpo", 40, 700], ["Blanco", 150, 700]], "LAMPARA RGB")
+    expect(aceptados(verificarLectura(color("blanco"), cuerpo))).toEqual([["color", "blanco"]])
+    const simple = propia([["Color", 40, 700], ["Blanco", 150, 700]], "TIRA LED")
+    expect(aceptados(verificarLectura(color("blanco"), simple))).toEqual([["color", "blanco"]])
+  })
+
+  it("no afecta a otras claves", () => {
+    const c = propia([["Tipo de luz", 40, 700], ["Verde", 150, 700], ["IP", 40, 680], ["65", 150, 680]], "TIRA LED")
+    expect(aceptados(verificarLectura(lectura(null, { ip: { valor: 65 } }), c))).toEqual([["ip", 65]])
+  })
+})
+
 describe("tono = tipo de luz: luces de color", () => {
   const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "TIRA LED 5M", code: "TL-001-XYZ" })
 

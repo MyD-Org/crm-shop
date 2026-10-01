@@ -42,6 +42,7 @@ export const MOTIVOS = [
   "ambiguo_en_fila",
   "termino_fuera_de_fila",
   "valor_en_rango_o_lista",
+  "valor_por_metro",
   "tension_parcial",
   "producto_no_ubicado",
   "valor_en_otra_pagina",
@@ -269,7 +270,21 @@ function evidenciaNumerica(clave: ClaveAtributo, a: AtributoExtraido, cita: stri
   const ev = EVIDENCIA_NUM[clave]
   if (!ev) return "ok"
   if (new RegExp(`(?<![0-9.,])${altNumero(n)}${ev.unidad}`).test(cita)) return "ok"
-  return new RegExp(ev.palabra).test(cita) ? "ok" : "unidad_no_en_texto"
+  if (!new RegExp(ev.palabra).test(cita)) return "unidad_no_en_texto"
+  // La palabra clave alcanza para un número sin unidad ("Corriente 36"), no para uno con OTRA unidad
+  // pegada ("36 mA", "36 Wh", "36 VA"): si todas las apariciones del número llevan otra unidad, no vale.
+  const apariciones = [...cita.matchAll(new RegExp(`(?<![0-9.,])${altNumero(n)}(?![0-9])(?![.,]\\d)(\\s?(?:${OTRAS_UNIDADES})(?![A-Z0-9]))?`, "g"))]
+  return apariciones.length > 0 && apariciones.every((m) => m[1]) ? "unidad_no_en_texto" : "ok"
+}
+
+const OTRAS_UNIDADES = "MAH|MA|KA|AH|WH|KWH|KW|MW|VA|KVA|KV|MV|VCA|VAC|VDC|VCC|LM|LX|HZ|MM2|MM|CM|MTS|MT|KG|G|°C|ºC|%|K|W|V|A|M"
+
+/** ¿La unidad del valor es "por metro" ("14 W/m", "2 A x m", "1200 lm/m", "lm por metro")? */
+export function esPorMetro(clave: ClaveAtributo, n: number, texto: string): boolean {
+  const ev = EVIDENCIA_NUM[clave]
+  if (!ev || !["potencia_w", "corriente_a", "flujo_lm"].includes(clave)) return false
+  const por = "\\s?(?:/|X|POR)\\s?(?:M|MT|MTS|MTRS|METROS?)(?![A-Z0-9])"
+  return new RegExp(`(?<![0-9.,])${altNumero(n)}${ev.unidad.replace(/\(\?!\[A-Z0-9?\]\)$/, "")}${por}`).test(texto)
 }
 
 /**
@@ -645,6 +660,11 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
     if (cands.length === 0) {
       const hayNumero = valido.valorNum != null && doc.celdas.some((c) => numerosDe(c.norm).has(valido.valorNum!))
       descartar(clave, hayNumero ? "unidad_no_en_texto" : "valor_no_en_texto", entrada)
+      continue
+    }
+    // 1a. Potencia, corriente y flujo "por metro" no son el valor del producto.
+    if (valido.valorNum != null && cands.every((c) => esPorMetro(clave, valido.valorNum!, c.texto))) {
+      descartar(clave, "valor_por_metro", entrada)
       continue
     }
     // 1b. Un número que es parte de un rango o de una lista ("200-240V", "3000/4000K") no es el valor.

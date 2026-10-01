@@ -513,3 +513,37 @@ describe("tension_v: token completo", () => {
     expect(aceptados(t("230V", 230))).toEqual([["tension_v", 230]])
   })
 })
+
+describe("unidad con borde exacto", () => {
+  const una = (txt: string, clave: string, valor: number) =>
+    verificarLectura(lectura(null, { [clave]: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "X" }))
+
+  it.each([
+    ["Corriente 36 mA", "corriente_a", 36],
+    ["Corriente 36 kA", "corriente_a", 36],
+    ["Corriente 36 Ah", "corriente_a", 36],
+    ["Potencia 36 Wh", "potencia_w", 36],
+    ["Potencia 36 kWh", "potencia_w", 36],
+    ["Tension 36 VA", "tension_v", 36],
+    ["Flujo 36 lm/W", "flujo_lm", 36],
+  ])("%s no vale para %s=%d", (txt, clave, valor) => {
+    expect(aceptados(una(txt, clave, valor))).toEqual([])
+    expect(motivos(una(txt, clave, valor))).toHaveLength(1)
+  })
+
+  it("la unidad correcta sí, con o sin palabra clave", () => {
+    expect(aceptados(una("Corriente 36 A", "corriente_a", 36))).toEqual([["corriente_a", 36]])
+    expect(aceptados(una("Corriente 36", "corriente_a", 36))).toEqual([["corriente_a", 36]])
+    expect(aceptados(una("Potencia 36 W", "potencia_w", 36))).toEqual([["potencia_w", 36]])
+  })
+
+  it.each([
+    ["Potencia 14 W/m", "potencia_w", 14],
+    ["Potencia 14W/m", "potencia_w", 14],
+    ["Corriente 2 A x m", "corriente_a", 2],
+    ["Flujo 1200 lm/m", "flujo_lm", 1200],
+    ["Flujo 1200 LM POR METRO", "flujo_lm", 1200],
+  ])("%s es por metro", (txt, clave, valor) => {
+    expect(motivos(una(txt, clave, valor))).toEqual([`${clave}:valor_por_metro`])
+  })
+})

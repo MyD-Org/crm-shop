@@ -27,11 +27,14 @@ export function CatalogoProductos({
   vista,
   navegando,
   cuotasPorProducto,
+  alElegir,
 }: {
   productos: Product[];
   vista: VistaCatalogo;
   navegando: boolean;
   cuotasPorProducto: Map<string, OpcionCuotas>;
+  /** Se llama con el índice (en esta página) del producto cuyo enlace se tocó (telemetría de la búsqueda). */
+  alElegir?: (indice: number) => void;
 }) {
   // La línea de cuotas se reserva sólo si algún producto de la página tiene
   // cuotas: así el precio no baila entre cards de una fila, y sin cuotas en
@@ -50,6 +53,17 @@ export function CatalogoProductos({
         navegando && "opacity-50"
       )}
       aria-busy={navegando}
+      // Delegado: la card del DS no expone su clic; se lee el enlace a la ficha que se tocó.
+      onClickCapture={
+        alElegir
+          ? (e) => {
+              const enlace = (e.target as HTMLElement).closest("a[href^='/producto/']");
+              const id = enlace?.getAttribute("href")?.slice("/producto/".length).split(/[?#]/)[0];
+              const indice = id ? productos.findIndex((p) => p.id === decodeURIComponent(id)) : -1;
+              if (indice >= 0) alElegir(indice);
+            }
+          : undefined
+      }
     >
       {productos.map((p) => {
         // Sólo para mostrar: `p.name` (buscar, ordenar, carrito) no se toca.

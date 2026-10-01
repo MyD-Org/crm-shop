@@ -6,19 +6,19 @@ import { ChispaIcon } from "@/components/catalogo/iconos";
 import { Reveal } from "@/components/Reveal";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { STOCK_INCLUYE_SIN_STOCK } from "@/lib/catalogo-url";
-import { hrefBusqueda } from "@/lib/busqueda-inteligente/descubrimiento";
+import { RUTA_BUSCAR, hrefBuscar } from "@/lib/busqueda-v2/enlaces";
 import { TEXTOS_CUENTENOS } from "@/lib/iniciativa/textos";
 
 /**
  * "Cuéntenos qué necesita" (spec catálogo asistido fase 2, §3): un campo que
- * manda al catálogo (la búsqueda inteligente de la fase 1 interpreta la
- * frase) y tres ejemplos que se tocan. No depende del chat: sale con el flag
- * `busqueda-ia`, que es el que hace que una frase encuentre algo.
+ * manda a `/buscar` (la búsqueda v2 entiende la frase y redirige al
+ * catálogo) y tres ejemplos que se tocan. No depende del chat: sale con el
+ * flag `busqueda-ia`, que es el que hace que una frase encuentre algo.
  *
- * Misma URL que el buscador del header (`hrefBusqueda`: `q` y todos los
+ * Misma URL que el buscador del header (`hrefBuscar`: `q` y todos los
  * productos, no sólo los con stock), así la home y el header muestran lo
- * mismo. `next/form`: el envío navega del lado del cliente y sin JS es un
- * `<form method="get">` común.
+ * mismo. `next/form`: el envío navega del lado del cliente (el router sigue
+ * el 307 de `/buscar`) y sin JS es un `<form method="get">` común.
  */
 export function CuentenosQueNecesita() {
   // Con `Reveal` como el resto de las secciones de la home.
@@ -48,7 +48,7 @@ export function CuentenosQueNecesita() {
 
             <div className="min-w-0">
               <Form
-                action="/catalogo"
+                action={RUTA_BUSCAR}
                 className="flex items-center gap-2 rounded-full border border-border bg-surface p-1.5 pl-5 shadow-[var(--shadow-1)] transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15"
               >
                 <label htmlFor="cuentenos-q" className="sr-only">
@@ -82,7 +82,7 @@ export function CuentenosQueNecesita() {
                   {TEXTOS_CUENTENOS.ejemplos.map((ejemplo) => (
                     <li key={ejemplo} className="min-w-0 max-w-full">
                       <Link
-                        href={hrefBusqueda(ejemplo)}
+                        href={hrefBuscar(ejemplo)}
                         prefetch={false}
                         aria-label={TEXTOS_CUENTENOS.buscarEjemplo(ejemplo)}
                         className="block max-w-full truncate whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-sm text-text transition-colors hover:border-primary hover:text-primary"

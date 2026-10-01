@@ -65,6 +65,8 @@ const LIMITE_RESPALDO_DESTACADOS = 300;
 export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
   return (
     !filtros.busqueda?.trim() &&
+    // El plan de la búsqueda v2 sale de una consulta libre: tantas claves como búsquedas.
+    !filtros.planBusqueda &&
     filtros.precioMin == null &&
     filtros.precioMax == null &&
     // La potencia es un rango libre como el precio: multiplicaría las claves de la caché.

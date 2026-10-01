@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, EmptyState, Pagination } from "@myd-org/ui";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
@@ -16,6 +16,7 @@ import type { Product } from "@/data/products";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import type { Facetas } from "@/lib/catalog";
 import {
+  IA_PLAN,
   estadoConCambios,
   estadoDeBusqueda,
   filtrosDesfasados,
@@ -26,6 +27,8 @@ import {
 } from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
 import { hrefTalCual, type ChipSugerido } from "@/lib/busqueda-inteligente/url";
+import type { Intencion } from "@/lib/busqueda-v2/plan";
+import { enviarBusquedaEnviada, enviarClickResultado } from "@/lib/busqueda-v2/telemetria";
 import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { anotarBusqueda } from "@/lib/iniciativa/motor";
 import { useChatIa } from "@/hooks/useChatIa";
@@ -68,11 +71,17 @@ export function CatalogoClient({
   filtrosSinBusqueda?: boolean;
   /**
    * Búsqueda inteligente (flag `busqueda-ia`); ausente = catálogo de siempre.
-   * - `franja`: la franja de sugerencias que llega por streaming (hueco con
-   *   `<Suspense>` armado en la page), cuando la búsqueda trajo resultados.
+   * - `intencion` y `sugerencias`: del plan de la búsqueda v2 (`?ia=1`), para la franja
+   *   (los blandos como "+ Afinar"; una pregunta destaca al asesor).
    * - `alternativas`: lo sugerido para el "sin resultados".
+   * - `relacionadosHref`: búsqueda clásica sin resultados → entenderla en `/buscar`.
    */
-  busquedaIa?: { franja?: ReactNode; alternativas: ChipSugerido[] };
+  busquedaIa?: {
+    intencion?: Intencion;
+    sugerencias: ChipSugerido[];
+    alternativas: ChipSugerido[];
+    relacionadosHref?: string;
+  };
 }) {
   const router = useRouter();
   // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
@@ -199,6 +208,12 @@ export function CatalogoClient({
     if (consultaVacia && chatDisponible) anotarBusqueda(consultaVacia, sinResultados, conInvitacionEnLinea);
   }, [consultaVacia, sinResultados, conInvitacionEnLinea, chatDisponible]);
 
+  // Telemetría (búsqueda v2): una búsqueda entendida recién llegada de `/buscar`.
+  const conPlan = !!busquedaIa && estado.ia === IA_PLAN && estado.pagina === 1 && !!estado.query;
+  useEffect(() => {
+    if (conPlan && estado.query) enviarBusquedaEnviada(estado.query, total);
+  }, [conPlan, estado.query, total]);
+
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">
       {/* Encabezado a todo el ancho, por encima de las dos columnas. Vista y
@@ -268,7 +283,14 @@ export function CatalogoClient({
               el margen negativo compensa el `gap` de la columna. */}
           {busquedaIa && (
             <div aria-live="polite" className="empty:-mb-6">
-              {interpretada ? <FranjaInterpretada estado={estadoVisible} ir={ir} /> : productos.length > 0 ? busquedaIa.franja : null}
+              {interpretada && (
+                <FranjaInterpretada
+                  estado={estadoVisible}
+                  ir={ir}
+                  sugerencias={busquedaIa.sugerencias}
+                  intencion={busquedaIa.intencion}
+                />
+              )}
             </div>
           )}
           {productos.length === 0 && busquedaIa && consultaVacia ? (
@@ -276,6 +298,7 @@ export function CatalogoClient({
               consulta={consultaVacia}
               alternativas={busquedaIa.alternativas}
               talCualHref={interpretacionVigente(estado) ? hrefTalCual(estado, consultaVacia) : undefined}
+              relacionadosHref={busquedaIa.relacionadosHref}
               verTodos={() => ir({ ...limpiarFiltros(), query: undefined, ia: undefined })}
             />
           ) : productos.length === 0 ? (
@@ -310,6 +333,11 @@ export function CatalogoClient({
               vista={estadoVisible.vista}
               navegando={navegando || desfasado}
               cuotasPorProducto={cuotasPorProducto}
+              alElegir={
+                busquedaIa && estado.query
+                  ? (i) => enviarClickResultado(estado.pagina, i, estado.ia === IA_PLAN)
+                  : undefined
+              }
             />
           )}
 

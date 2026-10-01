@@ -45,3 +45,6 @@ next-env.d.ts
 
 # mockups de brainstorming (visual companion)
 .superpowers/
+
+# banco de búsquedas: los reportes se generan en local (repo público, ver AGENTS.md)
+/src/lib/busqueda-v2/__banco__/reportes/

@@ -77,6 +77,9 @@ import {
 } from "./catalogo-atributos-sql";
 import type { CriterioEstructurado } from "./catalogo-atributos";
 import { caracteristicasDe, leerAtributosEstructurados } from "./catalogo-caracteristicas";
+import { condicionAmplia, condicionRecuperar } from "./busqueda-v2/recuperar";
+import { puntajeBusqueda } from "./busqueda-v2/ordenar";
+import type { CriterioPlan, PiezasBusqueda } from "./busqueda-v2/piezas";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
 const STOCK_BAJO = 5;
@@ -675,6 +678,13 @@ export interface FiltrosCatalogo {
   precioMax?: number;
   /** Sólo productos con disponibilidad (ver `condicionesDe`). */
   soloStock?: boolean;
+  /**
+   * Búsqueda v2 (`?ia=1`, flag `busqueda-ia`): lo blando del plan. Con él, el texto ya no filtra
+   * con AND: recupera candidatos (OR de términos, categorías y atributos blandos, ver
+   * busqueda-v2/recuperar.ts) y `relevancia` ordena con el puntaje del plan (busqueda-v2/ordenar.ts).
+   * Los duros viajan como siempre en `categorias` y `atributos`.
+   */
+  planBusqueda?: CriterioPlan;
 }
 
 export interface PaginaCatalogo {
@@ -895,6 +905,37 @@ const APLICAR_TODOS: AplicarFiltros = {
 };
 
 /**
+ * Condición de texto cuando el plan no trae nada que recupere: con filtros duros, ninguna (las
+ * palabras eran contexto: "luz cálida para el living" son las lámparas cálidas); sin ellos,
+ * cualquiera de sus términos aunque sean de contexto (`condicionAmplia`). Sin plan, la clásica.
+ */
+function textoSinPlan(filtros: FiltrosCatalogo, q: string | undefined, disp?: ContextoDisponibilidad) {
+  if (filtros.planBusqueda) {
+    if (filtros.categorias?.length || filtros.atributos?.length) return undefined;
+    const amplia = condicionAmplia(filtros.planBusqueda, piezasBusqueda(filtros, disp));
+    if (amplia) return amplia;
+  }
+  return q ? coincideTexto(q, filtros.busquedaTolerante) : undefined;
+}
+
+/**
+ * Piezas SQL del catálogo para la búsqueda v2 (busqueda-v2/piezas.ts): el texto buscable, dónde
+ * pesa un término, categorías con su subárbol, atributos y stock del contexto de sucursal.
+ */
+function piezasBusqueda(filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad): PiezasBusqueda {
+  const ctx = contextoAtributos(filtros);
+  return {
+    texto: textoBuscableSql(),
+    nombre: sinTildes(nombreExhibidoSql),
+    codigo: sinTildes(crmCatalogo.code),
+    marcaCategoria: sinTildes(sql`concat_ws(' ', ${marcaSql}, ${crmCategoriasAlegra.name})`),
+    enCategorias: filtroCategoriasSql,
+    cumpleAtributo: (id) => filtroAtributosSql(ctx, [id]),
+    conStock: conStock(disp),
+  };
+}
+
+/**
  * WHERE compartido por la página, el conteo y las facetas.
  *
  * `aplicar` dice qué grupos de filtros entran. La grilla los usa todos; cada
@@ -907,13 +948,15 @@ function condicionesDe(
   disp?: ContextoDisponibilidad,
 ) {
   const q = filtros.busqueda?.trim();
+  // Con plan (búsqueda v2) el texto recupera en vez de filtrar; sin nada que recupere, la clásica.
+  const recuperar = filtros.planBusqueda ? condicionRecuperar(filtros.planBusqueda, piezasBusqueda(filtros, disp)) : undefined;
   return and(
     enTenantCatalogo(),
     activoSql,
     conPrecioSql,
     soloVisiblesSql(soloVisibles),
     visibleEnZonaSql(disp),
-    q ? coincideTexto(q, filtros.busquedaTolerante) : undefined,
+    recuperar ?? textoSinPlan(filtros, q, disp),
     aplicar.categorias && filtros.categorias?.length
       ? filtroCategoriasSql(filtros.categorias)
       : undefined,
@@ -939,9 +982,13 @@ function condicionesDe(
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
  */
-function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo) {
+function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad) {
   switch (orden) {
     case "relevancia": {
+      // Búsqueda v2: el puntaje del plan, aunque no quede texto filtrando.
+      if (filtros.planBusqueda) {
+        return [sql`${puntajeBusqueda(filtros.planBusqueda, piezasBusqueda(filtros, disp))} desc`, asc(crmCatalogo.name)];
+      }
       const q = filtros.busqueda?.trim();
       // Sin términos útiles no hay con qué puntuar: alfabético.
       if (!q || !terminosBusqueda(q).length) return [asc(crmCatalogo.name)];
@@ -1008,7 +1055,7 @@ export async function getPaginaCatalogo(opts: {
         .leftJoin(crmOverlay, joinOverlay())
         .leftJoin(stockReservado, joinReserva())
         .where(where)
-        .orderBy(...ordenDe(opts.orden ?? ORDEN_DEFAULT, filtros))
+        .orderBy(...ordenDe(opts.orden ?? ORDEN_DEFAULT, filtros, opts.disp))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];
@@ -1019,6 +1066,25 @@ export async function getPaginaCatalogo(opts: {
     pagina,
     paginas,
   };
+}
+
+/**
+ * Sólo el conteo de productos que cumplen los filtros (sin traer filas). Lo usa la búsqueda v2
+ * para decidir si un filtro duro deja resultados antes de aplicarlo.
+ */
+export async function contarCatalogo(opts: {
+  soloVisibles: boolean;
+  filtros: FiltrosCatalogo;
+  disp?: ContextoDisponibilidad;
+}): Promise<number> {
+  const [conteo] = await getDb()
+    .select({ total: sql<number>`count(*)::int` })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(stockReservado, joinReserva())
+    .where(condicionesDe(opts.filtros, APLICAR_TODOS, opts.soloVisibles, opts.disp));
+  return conteo?.total ?? 0;
 }
 
 /**

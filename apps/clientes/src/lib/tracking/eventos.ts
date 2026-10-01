@@ -27,6 +27,47 @@ export type EventoTracking =
   | { tipo: "iniciar_checkout"; items: ItemTracking[] }
   | { tipo: "pedido_confirmado"; pedidoId: string; numero?: string | number; total: number; items: ItemTracking[] };
 
+/** Desde dónde se abrió el chat en la búsqueda. */
+export type OrigenConversar = "franja" | "sin_resultados" | "pregunta";
+
+/**
+ * Eventos de la búsqueda v2 (spec platform 2026-10-01, "Telemetría"). Sólo van a PostHog: no
+ * son de ecommerce (ni Meta ni GA4 los entienden). Sin datos personales: la consulta viaja
+ * normalizada y sólo si no parece un email o un teléfono (`normalizarConsulta`).
+ */
+export type EventoBusqueda =
+  | {
+      tipo: "busqueda_enviada";
+      intencion: string;
+      fuente: string;
+      total: number;
+      duros: number;
+      blandos: number;
+      ms_jev: number | null;
+      /** Normalizada; ausente si parecía un dato personal. */
+      consulta?: string;
+    }
+  /** `chip`: qué se quitó (en PostHog va como `tipo`). */
+  | { tipo: "busqueda_chip_quitado"; chip: "categoria" | "atributo"; valor: string }
+  | { tipo: "busqueda_ver_tal_cual" }
+  | { tipo: "busqueda_conversar"; origen: OrigenConversar }
+  | { tipo: "busqueda_resultado_click"; posicion: number; ia: boolean };
+
+/** Todo lo que el Shop puede mandar por `track()`. */
+export type EventoShop = EventoTracking | EventoBusqueda;
+
+const TIPOS_BUSQUEDA = new Set<EventoShop["tipo"]>([
+  "busqueda_enviada",
+  "busqueda_chip_quitado",
+  "busqueda_ver_tal_cual",
+  "busqueda_conversar",
+  "busqueda_resultado_click",
+]);
+
+export function esEventoBusqueda(e: EventoShop): e is EventoBusqueda {
+  return TIPOS_BUSQUEDA.has(e.tipo);
+}
+
 type Params = Record<string, unknown>;
 
 function itemsDe(e: EventoTracking): ItemTracking[] {
@@ -102,7 +143,12 @@ export function aGa4(e: EventoTracking): { nombre: string; params: Params } {
 // --- PostHog -------------------------------------------------------------------
 
 /** `posthog.capture(nombre, props)`: el nombre del dominio, props planas. */
-export function aPosthog(e: EventoTracking): { nombre: string; props: Params } {
+export function aPosthog(e: EventoShop): { nombre: string; props: Params } {
+  if (esEventoBusqueda(e)) {
+    if (e.tipo === "busqueda_chip_quitado") return { nombre: e.tipo, props: { tipo: e.chip, valor: e.valor } };
+    const { tipo, ...props } = e;
+    return { nombre: tipo, props };
+  }
   const items = itemsDe(e);
   const props: Params = {
     valor: valorDe(e),

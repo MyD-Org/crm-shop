@@ -8,7 +8,7 @@
  * no se loguea la consulta, sólo el tipo de error.
  */
 import { createHash } from "node:crypto";
-import { and, desc, eq, gt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { busquedaInterpretaciones } from "@/db/schema";
 import type { FiltrosInterpretados, Interpretacion, NodoArbol } from "./tipos";
@@ -144,13 +144,19 @@ export const DIAS_FRECUENTES = 30;
  */
 export const MIN_USOS_FRECUENTE = 3;
 
-/** Resultado no vacío: algo para aplicar o sugerir. */
-const conResultadoSql = sql`(
-  jsonb_array_length(coalesce(${busquedaInterpretaciones.resultado}->'aplicar'->'categorias', '[]'::jsonb))
-  + jsonb_array_length(coalesce(${busquedaInterpretaciones.resultado}->'aplicar'->'atributos', '[]'::jsonb))
-  + jsonb_array_length(coalesce(${busquedaInterpretaciones.resultado}->'sugerir'->'categorias', '[]'::jsonb))
-  + jsonb_array_length(coalesce(${busquedaInterpretaciones.resultado}->'sugerir'->'atributos', '[]'::jsonb))
-) > 0`;
+/**
+ * Resultado no vacío: algo para aplicar o sugerir (fila de la fase 1) o, en un plan de la
+ * búsqueda v2 (`version: 1`), algún filtro duro o alguna categoría o atributo blando.
+ */
+const largo = (ruta: SQL) => sql`jsonb_array_length(coalesce(${ruta}, '[]'::jsonb))`;
+const r = busquedaInterpretaciones.resultado;
+const conResultadoSql = sql`(case when ${r}->>'version' = '1' then (
+  ${largo(sql`${r}->'duros'->'categorias'`)} + ${largo(sql`${r}->'duros'->'atributos'`)}
+  + ${largo(sql`${r}->'blandos'->'categorias'`)} + ${largo(sql`${r}->'blandos'->'atributos'`)}
+) else (
+  ${largo(sql`${r}->'aplicar'->'categorias'`)} + ${largo(sql`${r}->'aplicar'->'atributos'`)}
+  + ${largo(sql`${r}->'sugerir'->'categorias'`)} + ${largo(sql`${r}->'sugerir'->'atributos'`)}
+) end) > 0`;
 
 /**
  * Consultas con más usos en los últimos 30 días y resultado no vacío (con al

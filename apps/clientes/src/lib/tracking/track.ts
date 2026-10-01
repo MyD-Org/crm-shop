@@ -8,7 +8,7 @@
  * la vacía y no sale nada. Nunca tira: un proveedor caído o bloqueado no puede
  * romper el agregar al carrito ni el checkout.
  */
-import { aGa4, aMeta, aPosthog, type EventoTracking } from "./eventos";
+import { aGa4, aMeta, aPosthog, esEventoBusqueda, type EventoShop } from "./eventos";
 import { limpiarUrl, rutaSinTracking } from "./url";
 
 /** Firmas de `fbq` y `gtag` (los globales de Meta y Google, ver stubs.ts). */
@@ -32,7 +32,7 @@ export interface DestinosTracking {
 
 interface Estado {
   destinos: DestinosTracking | null;
-  cola: EventoTracking[];
+  cola: EventoShop[];
 }
 
 /** Cola acotada: si el flag está apagado nadie la vacía. */
@@ -52,7 +52,15 @@ function intentar(fn: () => void) {
   }
 }
 
-function enviar(d: DestinosTracking, e: EventoTracking, href: string) {
+function enviar(d: DestinosTracking, e: EventoShop, href: string) {
+  // Los de la búsqueda no son de ecommerce: sólo PostHog.
+  if (esEventoBusqueda(e)) {
+    if (d.posthog) {
+      const p = aPosthog(e);
+      intentar(() => d.posthog!.capture(p.nombre, p.props));
+    }
+    return;
+  }
   if (d.fbq) {
     const m = aMeta(e);
     intentar(() => d.fbq!("track", m.nombre, m.params, m.opciones));
@@ -70,7 +78,7 @@ function enviar(d: DestinosTracking, e: EventoTracking, href: string) {
   }
 }
 
-export function track(e: EventoTracking): void {
+export function track(e: EventoShop): void {
   const loc = ubicacion();
   if (!loc || rutaSinTracking(loc.pathname)) return;
   if (!estado.destinos) {

@@ -115,6 +115,13 @@ export interface EstadoCatalogo {
 /** Valor de `?ia=` que pide ver la búsqueda tal cual, sin interpretarla. */
 export const IA_DESACTIVADA = "0";
 
+/**
+ * Valor de `?ia=` de una búsqueda entendida por la búsqueda v2 (`/buscar`): la consulta es el
+ * `q` de la URL y la página lee su plan (lo blando) de la caché. Los links viejos de la fase 1
+ * (`ia=<consulta>`) siguen resolviendo: muestran los filtros de la URL, sin plan.
+ */
+export const IA_PLAN = "1";
+
 /** Tope de largo de `?ia=` (igual que la consulta que se interpreta). */
 const LARGO_MAX_IA = 120;
 /**
@@ -123,8 +130,12 @@ const LARGO_MAX_IA = 120;
  */
 export const LARGO_MAX_Q = 200;
 
-/** La consulta original si el estado vino de interpretarla; si no, `undefined`. */
-export function consultaInterpretada(estado: Pick<EstadoCatalogo, "ia">): string | undefined {
+/**
+ * La consulta original si el estado vino de interpretarla; si no, `undefined`. Con `ia=1`
+ * (búsqueda v2) es el `q`; con un `ia=<consulta>` viejo (fase 1), ese texto.
+ */
+export function consultaInterpretada(estado: Pick<EstadoCatalogo, "ia" | "query">): string | undefined {
+  if (estado.ia === IA_PLAN) return estado.query;
   return estado.ia && estado.ia !== IA_DESACTIVADA ? estado.ia : undefined;
 }
 

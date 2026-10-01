@@ -37,6 +37,19 @@ describe("track", () => {
     expect(capture).toHaveBeenCalledTimes(2);
   });
 
+  it("los eventos de la búsqueda van sólo a PostHog (no son de ecommerce)", () => {
+    const fbq = vi.fn();
+    const gtag = vi.fn();
+    const capture = vi.fn();
+    activarTracking({ fbq, gtag, posthog: { capture } });
+    track({ tipo: "busqueda_chip_quitado", chip: "categoria", valor: "Reflectores" });
+    track({ tipo: "busqueda_conversar", origen: "pregunta" });
+    expect(fbq).not.toHaveBeenCalled();
+    expect(gtag).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledWith("busqueda_chip_quitado", { tipo: "categoria", valor: "Reflectores" });
+    expect(capture).toHaveBeenCalledWith("busqueda_conversar", { origen: "pregunta" });
+  });
+
   it("sin activar (flag apagado) no sale nada y la cola no crece sin límite", () => {
     for (let i = 0; i < 100; i++) track(evento);
     const capture = vi.fn();

@@ -37,4 +37,8 @@ describe("hrefBusqueda", () => {
   it("con todos los productos y el texto codificado", () => {
     expect(hrefBusqueda("  luz cálida ")).toBe("/catalogo?q=luz%20c%C3%A1lida&stock=todos");
   });
+
+  it("con el flag `busqueda-ia`, a /buscar (la búsqueda v2 entiende y redirige)", () => {
+    expect(hrefBusqueda("  luz cálida ", true)).toBe("/buscar?q=luz+c%C3%A1lida&stock=todos");
+  });
 });

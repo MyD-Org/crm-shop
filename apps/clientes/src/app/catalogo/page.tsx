@@ -1,10 +1,9 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { facetasPublicas, paginaCatalogoPublica } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
-  consultaInterpretada,
+  IA_PLAN,
   filtrosDeEstado,
   hrefCanonico,
   leerEstado,
@@ -20,13 +19,13 @@ import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servid
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
-import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
-import { interpretar } from "@/lib/busqueda-inteligente/servidor";
-import { decidirBusqueda } from "@/lib/busqueda-inteligente/flujo";
+import { getArbolCategorias, type FiltrosCatalogo } from "@/lib/catalog";
 import { chipsSugeridos } from "@/lib/busqueda-inteligente/url";
-import { getPaginaCatalogo } from "@/lib/catalog";
-import { FranjaSugerencias } from "@/components/catalogo/FranjaBusqueda";
-import { FranjaSugerenciasServidor } from "@/components/catalogo/FranjaSugerenciasServidor";
+import { pareceCodigo } from "@/lib/busqueda-inteligente/gate";
+import { criterioDe } from "@/lib/busqueda-v2/destino";
+import { hrefBuscar } from "@/lib/busqueda-v2/enlaces";
+import type { PlanBusqueda } from "@/lib/busqueda-v2/plan";
+import { planParaPagina } from "@/lib/busqueda-v2/servidor";
 
 type Props = {
   searchParams: Promise<{
@@ -118,10 +117,17 @@ async function CatalogoResultados({ searchParams }: Props) {
   // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
   // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
   const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
-  const filtros = {
+  // Búsqueda v2 (`?ia=1`, la URL a la que redirige `/buscar`): el plan de la consulta (caché o
+  // recálculo determinista, NUNCA Jev) aporta lo blando. Nunca se redirige desde acá.
+  const plan =
+    conBusquedaIa && estado.ia === IA_PLAN && estado.query
+      ? await planParaPagina(estado.query, { soloVisibles })
+      : null;
+  const filtros: FiltrosCatalogo = {
     ...filtrosDeEstado(estado),
     ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
     ...(estructurados ? { atributosEstructurados: true } : {}),
+    ...(plan && plan.intencion !== "codigo" ? { planBusqueda: criterioDe(plan, estado) } : {}),
   };
 
   // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
@@ -154,7 +160,7 @@ async function CatalogoResultados({ searchParams }: Props) {
   // búsqueda exacta vacía y sigue el camino de `filtrosSinBusqueda`.
   let pagina = exacta;
   let facetasBusqueda = facetasExactas;
-  if (exacta.total === 0 && filtros.busqueda?.trim()) {
+  if (exacta.total === 0 && filtros.busqueda?.trim() && !filtros.planBusqueda) {
     const tolerantes = { ...filtros, busquedaTolerante: true };
     const segundo = await Promise.all([
       paginaCatalogoPublica({
@@ -178,12 +184,19 @@ async function CatalogoResultados({ searchParams }: Props) {
   const filtrosSinBusqueda =
     pagina.total === 0 && Boolean(filtros.busqueda?.trim());
   const facetas = filtrosSinBusqueda
-    ? await facetasPublicas({ ...filtros, busqueda: undefined }, soloVisibles, disp)
+    ? // Sin la búsqueda ni su plan: tocar un filtro quita la búsqueda (y con ella `ia`).
+      await facetasPublicas({ ...filtros, busqueda: undefined, planBusqueda: undefined }, soloVisibles, disp)
     : facetasBusqueda;
 
-  // Búsqueda inteligente (flag `busqueda-ia`). Puede redirigir: va afuera de
-  // todo try/catch (`redirect` tira).
-  const busquedaIa = conBusquedaIa ? await busquedaInteligente(estado, pagina.total, disp) : undefined;
+  // Búsqueda inteligente (flag `busqueda-ia`): franja del plan y salidas del "sin resultados".
+  const busquedaIa = conBusquedaIa
+    ? await busquedaInteligente(estado, pagina.total, plan, {
+        soloVisibles,
+        disp,
+        // Sólo se sugiere lo que deja productos dentro de esta búsqueda (las facetas ya lo cuentan).
+        conProductos: new Set([...facetas.categorias, ...facetas.atributos].filter((f) => f.count > 0).map((f) => f.label)),
+      })
+    : undefined;
 
   return (
     <>
@@ -204,76 +217,67 @@ async function CatalogoResultados({ searchParams }: Props) {
 }
 
 /**
- * Flujo de la búsqueda inteligente sobre el resultado de la búsqueda clásica
- * (spec catálogo asistido, §4). La clásica ya corrió y se muestra igual; esto
- * sólo se suma.
+ * Lo que la búsqueda inteligente suma a la grilla (búsqueda v2, spec 2026-10-01). La página
+ * NUNCA redirige ni llama a Jev: eso lo hace `/buscar` antes de llegar acá.
  *
- * - Los usos de la caché (búsquedas frecuentes) sólo se cuentan en la página 1
- *   sin `ia=`: paginar o recargar una página interpretada no es otra búsqueda.
- * - Con `ia=` en la URL (ya interpretada, o `ia=0` "tal cual") NUNCA se vuelve
- *   a interpretar: es el freno contra el bucle de redirecciones. Si la URL
- *   interpretada no trajo nada, se buscan las alternativas (caché, sin sumar
- *   un uso) para el "sin resultados".
- * - `debeInterpretar` y 0–3 resultados: se interpreta en ESTE request y, si
- *   hay algo para aplicar, `redirect` a la URL interpretada (`ia=<consulta>`):
- *   el primer render ya llega rescatado. Si quedó texto que importa
- *   ("pecera"), sólo si ese estado trae algo; si no, la interpretación se
- *   ofrece como sugerencias (ver `decidirBusqueda`). Dentro del `<Suspense>` de la página
- *   Next lo resuelve como redirección del lado del cliente.
- * - `debeInterpretar` con resultados: la grilla sale ya y la franja llega por
- *   streaming con los filtros propuestos como chips (nada se aplica solo).
+ * - Con plan (`ia=1`): las sugerencias "+ Afinar" (categorías y atributos blandos que todavía no
+ *   son filtro; aplicarlas las vuelve duras vía URL) y la intención (una pregunta destaca al
+ *   asesor). Si aun así no hay resultados (los duros solos dan 0), las mismas como alternativas
+ *   que reemplazan la búsqueda.
+ * - Búsqueda clásica sin resultados (`/catalogo?q=` directo, o `ia=0`): alternativas del plan
+ *   determinista (sin Jev, sin escribir nada) y "Ver productos relacionados" → `/buscar`.
  */
-/**
- * Cuántos productos trae un estado del catálogo (el interpretado, antes de
- * redirigir). Si la base falla, 0: no se redirige a ciegas.
- */
-async function contarResultados(
-  estado: EstadoCatalogo,
-  disp: ContextoDisponibilidad | undefined,
-): Promise<number> {
-  const [{ soloVisibles }, estructurados] = await Promise.all([
-    flagsPublicos(),
-    atributosEstructuradosDisponibles(),
-  ]);
-  // Mismo criterio que la página que se va a mostrar (sólo corre con el flag `busqueda-ia`).
-  const filtros = { ...filtrosDeEstado(estado), ...(estructurados ? { atributosEstructurados: true } : {}) };
-  return getPaginaCatalogo({ filtros, pagina: 1, porPagina: 1, soloVisibles, disp })
-    .then((p) => p.total)
-    .catch((err: unknown) => {
-      console.error(`[catalogo] no se pudo contar la búsqueda interpretada: ${err instanceof Error ? err.name : "desconocido"}`);
-      return 0;
-    });
-}
-
 async function busquedaInteligente(
   estado: EstadoCatalogo,
   total: number,
-  disp: ContextoDisponibilidad | undefined,
+  plan: PlanBusqueda | null,
+  opciones: { soloVisibles: boolean; disp: ContextoDisponibilidad | undefined; conProductos: Set<string> },
 ) {
-  const q = estado.query;
-  if (!estado.ia && q && debeInterpretar(q, total)) {
-    if (total >= POCOS_RESULTADOS) {
-      return {
-        alternativas: [],
-        franja: (
-          <Suspense fallback={null}>
-            <FranjaSugerenciasServidor estado={estado} consulta={q} />
-          </Suspense>
-        ),
-      };
-    }
-    const interpretacion = await interpretar(q, { sumarUso: estado.pagina === 1 });
-    const decision = await decidirBusqueda(estado, total, interpretacion, (destino) => contarResultados(destino, disp));
-    if (decision.redirigir) redirect(decision.redirigir);
+  const blandos = (p: PlanBusqueda) => ({
+    categorias: p.blandos.categorias.slice(0, MAX_SUGERENCIAS).map((c) => c.nombre),
+    atributos: p.blandos.atributos.map((a) => a.id),
+  });
+  if (plan) {
+    // Un "+ Afinar" que lleva a 0 productos (una categoría vacía) no se ofrece, ni una raíz
+    // ("ELECTRICIDAD" no afina nada).
+    const raices = new Set((await getArbolCategorias().catch(() => [])).filter((n) => !n.parentId).map((n) => n.nombre));
+    const b = blandos(plan);
+    const filtros = [
+      {
+        // Con resultados, las facetas cuentan dentro de la búsqueda; sin ellos, el catálogo sin la
+        // búsqueda (donde caen las alternativas, que la reemplazan).
+        // Una raíz sí sirve como salida de un "sin resultados".
+        categorias: b.categorias.filter((c) => opciones.conProductos.has(c) && (total === 0 || !raices.has(c))),
+        atributos: b.atributos.filter((a) => opciones.conProductos.has(a)),
+      },
+    ];
     return {
-      alternativas: decision.alternativas,
-      franja: total > 0 ? <FranjaSugerencias consulta={q} chips={decision.chipsFranja} /> : undefined,
+      intencion: plan.intencion,
+      sugerencias: total > 0 ? chipsSugeridos(estado, filtros).slice(0, MAX_SUGERENCIAS) : [],
+      alternativas: total === 0 ? chipsSugeridos(estado, filtros, "reemplazar") : [],
     };
   }
-  const consulta = consultaInterpretada(estado);
-  if (consulta && total === 0) {
-    const interpretacion = await interpretar(consulta, { soloLectura: true });
-    return { alternativas: interpretacion ? chipsSugeridos(estado, [interpretacion.sugerir], "reemplazar") : [] };
-  }
-  return { alternativas: [] };
+  const q = estado.query;
+  if (!q || total > 0 || pareceCodigo(q)) return { sugerencias: [], alternativas: [] };
+  const deterministico = await planParaPagina(q, { soloVisibles: opciones.soloVisibles });
+  return {
+    sugerencias: [],
+    alternativas: deterministico
+      ? chipsSugeridos(
+          estado,
+          [
+            {
+              categorias: blandos(deterministico).categorias.filter((c) => opciones.conProductos.has(c)),
+              atributos: blandos(deterministico).atributos.filter((a) => opciones.conProductos.has(a)),
+            },
+          ],
+          "reemplazar",
+        )
+      : [],
+    // Una búsqueda que no pasó por `/buscar` (o se pidió tal cual) puede entenderse ahora.
+    ...(estado.ia ? {} : { relacionadosHref: hrefBuscar(q, estado.soloStock) }),
+  };
 }
+
+/** Tope de chips "+ Afinar" en la franja. */
+const MAX_SUGERENCIAS = 4;

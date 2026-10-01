@@ -144,4 +144,22 @@ describe("cotizar", () => {
     const [linea] = (await cotizar([{ id: "10", qty: 1 }])).lineas;
     expect(linea.problema).toBe("inactivo");
   });
+
+  describe('productos despublicados (flag catalogo-solo-visibles)', () => {
+    it('con soloVisibles consulta el overlay y marca la línea oculta como no disponible', async () => {
+      // La grabadora no evalúa SQL: la fila trae inactive, como la vista para un oculto.
+      filas = [['10', 'COD-10', null, null, precios, '5', '21', 'inactive', null]];
+      const c = await cotizar([{ id: '10', qty: 1 }], { soloVisibles: true });
+      expect(grabadora.consultas[0].sql).toContain('coalesce("public"."catalog_overlay"."visible", false)');
+      expect(c.lineas[0]).toMatchObject({ problema: 'inactivo', detalle: 'Este producto ya no está disponible.' });
+      expect(c).toMatchObject({ hayProblemas: true, subtotal: 0, total: 0 });
+    });
+
+    it('sin el flag no mira la visibilidad', async () => {
+      filas = [['10', 'COD-10', null, null, precios, '5', '21', 'active', null]];
+      const c = await cotizar([{ id: '10', qty: 1 }]);
+      expect(grabadora.consultas[0].sql).not.toContain('"visible"');
+      expect(c.hayProblemas).toBe(false);
+    });
+  });
 });

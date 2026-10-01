@@ -240,7 +240,11 @@ export function itemDesdeEspejo(fila: FilaEspejo): AlegraItem {
  * esta misma cotización (y revalida el disponible dentro de la transacción del
  * pedido, ver `crearPedido`).
  */
-async function leerEspejo(ids: string[], disp?: ContextoDisponibilidad): Promise<Map<string, AlegraItem>> {
+async function leerEspejo(
+  ids: string[],
+  disp?: ContextoDisponibilidad,
+  soloVisibles = false,
+): Promise<Map<string, AlegraItem>> {
   if (ids.length === 0) return new Map();
   const filas: FilaEspejo[] = await getDb()
     .select({
@@ -255,9 +259,15 @@ async function leerEspejo(ids: string[], disp?: ContextoDisponibilidad): Promise
       // La decisión por modalidad (retiro en un local, respaldo) la toma `asignarSucursal`.
       stock: disp ? stockSucursalSql(disp) : stockSql,
       ivaPorcentaje: crmCatalogo.ivaPorcentaje,
-      status: disp
-        ? sql<string>`(case when ${activoSql} and ${visibleEnSucursalSql(disp)} then 'active' else 'inactive' end)`
-        : estadoSql,
+      // Con `soloVisibles` (flag `catalogo-solo-visibles`) un producto despublicado en el overlay
+      // del CRM también queda "inactivo": mismo criterio que el catálogo (`visible = true`, sin
+      // fila de overlay = oculto), para que un carrito viejo no lo compre.
+      status:
+        disp || soloVisibles
+          ? sql<string>`(case when ${activoSql}${
+              disp ? sql` and ${visibleEnSucursalSql(disp)}` : sql``
+            }${soloVisibles ? sql` and coalesce(${crmOverlay.visible}, false)` : sql``} then 'active' else 'inactive' end)`
+          : estadoSql,
       categoryName: crmCategoriasAlegra.name,
       mostrarMarca: crmOverlay.mostrarMarca,
     })
@@ -287,11 +297,14 @@ export async function cotizar(
      * (retiro en un local, respaldo) la toma `asignarSucursal` al crear el pedido.
      */
     disp?: ContextoDisponibilidad;
+    /** Flag `catalogo-solo-visibles`: los productos despublicados en el overlay no se pueden comprar. */
+    soloVisibles?: boolean;
   } = {},
 ): Promise<Cotizacion> {
   const items = await leerEspejo(
     pedidas.map((p) => p.id),
     opts.disp,
+    opts.soloVisibles,
   );
   const lineas = pedidas.map((pedida) => {
     const item = items.get(pedida.id);

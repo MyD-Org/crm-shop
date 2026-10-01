@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual, idPriceListCliente } from "@/lib/auth";
+import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, pagosDisponibles, type EntregaTipo } from "@/lib/envio";
 import { pagosHabilitados } from "@/lib/pagos-flag";
@@ -106,6 +107,7 @@ export async function POST(req: Request) {
     const provincia = provinciaTexto ? claveProvincia(provinciaTexto) : "";
     const disp = base ? await contextoParaProvincia(base, provincia || null) : undefined;
     const cotizacion = await cotizar(lineas, {
+      soloVisibles: await catalogoSoloVisibles(),
       idPriceList,
       entregaTipo,
       disp: disp ? contextoUnion(disp) : undefined,

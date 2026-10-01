@@ -24,7 +24,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { stockReservado } from "@/db/schema";
-import { crmCatalogo } from "@/db/crm";
+import { crmCatalogo, crmOverlay } from "@/db/crm";
 import { enTenantCatalogo } from "./catalogo-fuente";
 import { shopTenantId } from "./tenant";
 
@@ -90,4 +90,31 @@ export class StockInsuficienteError extends Error {
     super(`Stock insuficiente para ${ids.length} ítem(s)`);
     this.name = "StockInsuficienteError";
   }
+}
+
+/**
+ * Con el flag `catalogo-solo-visibles`, alguna línea es de un producto despublicado en el overlay
+ * del CRM (o sin fila de overlay: fail-closed, igual que el catálogo). Un carrito viejo no lo puede
+ * comprar. El `message` se muestra tal cual al cliente.
+ */
+export class ProductoNoDisponibleError extends Error {
+  constructor(readonly ids: string[]) {
+    super("Uno de los productos de su carrito ya no está disponible. Revise su carrito.");
+    this.name = "ProductoNoDisponibleError";
+  }
+}
+
+/** Ids de `ids` que NO están visibles en el overlay (mismo criterio que el catálogo: `visible = true`). */
+export async function noVisiblesEnTx(tx: Lector, ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const filas = await tx
+    .select({ alegraId: crmCatalogo.alegraId })
+    .from(crmCatalogo)
+    .innerJoin(
+      crmOverlay,
+      and(eq(crmOverlay.alegraId, crmCatalogo.alegraId), eq(crmOverlay.tenantId, shopTenantId())),
+    )
+    .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, ids), eq(crmOverlay.visible, true)));
+  const visibles = new Set(filas.map((f) => f.alegraId));
+  return ids.filter((id) => !visibles.has(id));
 }

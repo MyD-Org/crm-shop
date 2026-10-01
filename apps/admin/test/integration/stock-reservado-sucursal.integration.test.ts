@@ -112,7 +112,7 @@ describe("shop.stock_reservado_sucursal (0025 del Shop) y reservaStock() del CRM
     expect(await vista(T2)).toEqual({ "igz:A": 5 })
   })
 
-  it("un pedido con sucursal NULL no entra en la vista por sucursal; reservaStock() sigue la 0012", async () => {
+  it("un pedido con sucursal NULL no entra en la vista por sucursal; reservaStock() sigue la vista sin sucursal", async () => {
     const vigente = await seedShopOrder(T1, { estado: "confirmado" })
     await seedShopOrderItem(vigente.id, { alegraItemId: "sin-suc-confirmado", qty: "1.000" })
     const vencido = await seedShopOrder(T1, { createdAt: new Date(ahora() - 25 * HORA) })

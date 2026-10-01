@@ -5,6 +5,7 @@ import {
   MOTIVO_MAX,
   MOTIVO_MIN,
   esEstadoPedido,
+  mensajeNoCancelable,
   mensajeTransicionInvalida,
   puedeTransicionar,
 } from "@/lib/pedidos-transiciones"
@@ -27,7 +28,9 @@ import { canSeeCosts } from "@/lib/roles"
 //                              entrega_tipo leído en el paso 3); no mira el `estado` ACTUAL de
 //                              la fila, así que un par prohibido es 422 aunque esté desactualizado
 //   5. motivo (sólo cancelar)→ 422 reason_required / reason_too_long
-//   6. UPDATE condicional    → 409 conflict · 200
+//   6. cambiarEstado         → 422 not_cancelable (cancelar un pedido pagado, facturado, con
+//                              pago online en curso o que estuvo entregado; se decide dentro de la
+//                              transacción) · 409 conflict · 200
 // Tras un 200 se le manda un mail al cliente si la transición es un avance o una cancelación
 // (pedido-estado-email.ts). Un mail que no sale no cambia la respuesta: el estado ya quedó.
 
@@ -116,6 +119,9 @@ export async function PATCH(req: Request, { params }: IdParams) {
   }
 
   if (result.kind === "not_found") return adminNotFoundResponse()
+  if (result.kind === "no_cancelable") {
+    return fail(422, "not_cancelable", mensajeNoCancelable(result.motivo), { motivo: result.motivo })
+  }
   if (result.kind === "conflict") {
     return fail(
       409,

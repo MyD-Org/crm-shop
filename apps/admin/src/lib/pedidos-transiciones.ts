@@ -93,3 +93,44 @@ export function mensajeTransicionInvalida(desde: EstadoPedido, hacia: EstadoPedi
   if (desde === "entregado" && hacia === "cancelado") return "Un pedido entregado no se puede cancelar."
   return `No es posible cambiar el pedido de «${ESTADO_PEDIDO_LABEL[desde]}» a «${ESTADO_PEDIDO_LABEL[hacia]}».`
 }
+
+/**
+ * Por qué un pedido NO se puede cancelar aunque la tabla de transiciones lo permita. Lo decide
+ * el servidor (`cambiarEstado`, dentro de la transacción); la UI usa `motivoNoCancelable` sólo
+ * para no ofrecer la opción.
+ *  - pagado: cobrado (online o registrado a mano); cancelar dejaría plata sin devolver.
+ *  - facturado: tiene factura vinculada o una emisión en curso (`facturado_en` no nulo).
+ *  - pago_en_curso: hay un intento de pago online pendiente (`shop.pago_intentos`).
+ *  - entregado: estuvo entregado alguna vez (aunque se lo haya devuelto a otro estado).
+ */
+export type MotivoNoCancelable = "pagado" | "facturado" | "pago_en_curso" | "entregado"
+
+export interface DatosCancelacion {
+  pagoEstado: string
+  /** `facturado_en` no nulo (factura real o reserva de emisión). */
+  facturado: boolean
+  intentoPagoPendiente: boolean
+  estuvoEntregado: boolean
+}
+
+/** `null` = se puede cancelar. Orden de prioridad = orden del mensaje más útil para el operador. */
+export function motivoNoCancelable(d: DatosCancelacion): MotivoNoCancelable | null {
+  if (d.pagoEstado === "pagado") return "pagado"
+  if (d.facturado) return "facturado"
+  if (d.intentoPagoPendiente) return "pago_en_curso"
+  if (d.estuvoEntregado) return "entregado"
+  return null
+}
+
+export function mensajeNoCancelable(motivo: MotivoNoCancelable): string {
+  switch (motivo) {
+    case "pagado":
+      return "No se puede cancelar un pedido pagado. Anule el pago o gestione la devolución antes de cancelarlo."
+    case "facturado":
+      return "No se puede cancelar un pedido facturado. Desvincule la factura antes de cancelarlo."
+    case "pago_en_curso":
+      return "No se puede cancelar un pedido con un pago de Mercado Pago en curso. Espere a que el pago se resuelva e inténtelo nuevamente."
+    case "entregado":
+      return "No se puede cancelar un pedido que ya fue entregado."
+  }
+}

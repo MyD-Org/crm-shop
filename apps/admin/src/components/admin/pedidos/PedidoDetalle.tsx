@@ -16,7 +16,7 @@ import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
 import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
-import { opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
+import { ofreceCancelar, opcionesOtroEstado, pasosPedido, siguientePaso, verboSiguientePaso } from "./logica"
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
@@ -469,8 +469,16 @@ function EstadoAcciones({
     state: i < idx ? "done" : i === idx ? "current" : "pending",
   }))
   const siguiente = siguientePaso(pedido.estado, entregaTipo)
-  const otrosDestinos = opcionesOtroEstado(pedido.estado, entregaTipo)
   const tieneFactura = pedido.factura !== null
+  const otrosDestinos = opcionesOtroEstado(
+    pedido.estado,
+    entregaTipo,
+    ofreceCancelar({
+      pagoEstado: pedido.pagoEstado,
+      facturado: tieneFactura || pedido.facturadoEn !== null,
+      historial: pedido.historial,
+    }),
+  )
 
   function elegirOtro(valor: string) {
     setOtro(valor)

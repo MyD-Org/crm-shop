@@ -10,7 +10,7 @@ import Link from "next/link"
 import { Badge, Board, Button, Dialog, DropdownMenu, Field, Textarea, type BoardColumn, type DropdownMenuEntry } from "@myd-org/ui"
 import type { PedidoListaDto } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL, MOTIVO_MAX, puedeTransicionar, type EntregaTipo, type EstadoPedido } from "@/lib/pedidos-transiciones"
-import { esSinFactura, opcionesDeDestino, type OpcionSelect } from "./logica"
+import { esSinFactura, ofreceCancelar, opcionesDeDestino, type OpcionSelect } from "./logica"
 import { PAGO_REVISION_INFO, entregaLabel, fmtFechaRelativa, fmtMoneda, tituloRevision } from "./format"
 import { MotivosFrecuentes } from "./MotivosFrecuentes"
 import { AVISO_SIN_FACTURA, useCambiarEstado } from "./useCambiarEstado"
@@ -112,7 +112,11 @@ function opcionesMenu(opciones: OpcionSelect[], onElegir: (destino: EstadoPedido
 }
 
 function Tarjeta({ pedido: p, onElegir }: { pedido: PedidoListaDto; onElegir: (destino: EstadoPedido) => void }) {
-  const opciones = opcionesDeDestino(p.estado, p.entregaTipo as EntregaTipo)
+  const opciones = opcionesDeDestino(
+    p.estado,
+    p.entregaTipo as EntregaTipo,
+    ofreceCancelar({ pagoEstado: p.pagoEstado, facturado: p.facturado }),
+  )
   return (
     <article className="flex flex-col gap-1.5 rounded-lg border p-2.5 text-sm" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
       <div className="flex items-baseline justify-between gap-2">

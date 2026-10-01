@@ -596,6 +596,62 @@ describe("admin: pedidos del Shop", () => {
       expect((await rowById(pedido.id)).estado).toBe("entregado")
     })
 
+    describe("guardas de cancelación", () => {
+      const cancelar = (id: string, estadoEsperado: EstadoPedido) =>
+        patch(id, { estado: "cancelado", estadoEsperado, motivo: "Prueba" })
+
+      async function sinCambios(id: string, estado: EstadoPedido) {
+        const fila = await rowById(id)
+        expect(fila.estado).toBe(estado)
+        expect(fila.cancelacionMotivo).toBeNull()
+      }
+
+      it("pagado: 422 not_cancelable y el pedido no cambia", async () => {
+        const pedido = await seedEn("confirmado", TENANT_A, { pagoEstado: "pagado" })
+        const res = await cancelar(pedido.id, "confirmado")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "pagado" })
+        await sinCambios(pedido.id, "confirmado")
+      })
+
+      it("facturado (facturado_en no nulo): 422 not_cancelable", async () => {
+        const pedido = await seedEn("pendiente", TENANT_A, { facturadoEn: new Date() })
+        const res = await cancelar(pedido.id, "pendiente")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "facturado" })
+        await sinCambios(pedido.id, "pendiente")
+      })
+
+      it("intento de Mercado Pago pendiente: 422; resuelto (fallido) deja cancelar", async () => {
+        const pedido = await seedEn("pendiente", TENANT_A, { pagoMetodo: "mercadopago", pagoProveedor: "mercadopago" })
+        await getDb().execute(
+          sql`insert into shop.pago_intentos (tenant_id, order_id, proveedor, estado) values (${TENANT_A}, ${pedido.id}, 'mercadopago', 'pendiente')`,
+        )
+        const res = await cancelar(pedido.id, "pendiente")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "pago_en_curso" })
+        await sinCambios(pedido.id, "pendiente")
+
+        await getDb().execute(sql`update shop.pago_intentos set estado = 'fallido' where order_id = ${pedido.id}`)
+        expect((await cancelar(pedido.id, "pendiente")).status).toBe(200)
+      })
+
+      it("entregado → confirmado → cancelado ya no se puede (estuvo entregado)", async () => {
+        const pedido = await seedEn("confirmado")
+        expect((await patch(pedido.id, { estado: "entregado", estadoEsperado: "confirmado" })).status).toBe(200)
+        expect((await patch(pedido.id, { estado: "confirmado", estadoEsperado: "entregado" })).status).toBe(200)
+        const res = await cancelar(pedido.id, "confirmado")
+        expect(res.status).toBe(422)
+        expect(await res.json()).toMatchObject({ code: "not_cancelable", motivo: "entregado" })
+        await sinCambios(pedido.id, "confirmado")
+      })
+
+      it("un pedido libre sigue cancelándose", async () => {
+        const pedido = await seedEn("pendiente")
+        expect((await cancelar(pedido.id, "pendiente")).status).toBe(200)
+      })
+    })
+
     it("mensajes canónicos de los casos con regla propia", async () => {
       const entregado = await seedEn("entregado")
       const r1 = await patch(entregado.id, { estado: "cancelado", estadoEsperado: "entregado", motivo: "x" })

@@ -5,6 +5,8 @@ import {
   MOTIVO_MAX,
   MOTIVO_MIN,
   esEstadoPedido,
+  mensajeNoCancelable,
+  motivoNoCancelable,
   mensajeTransicionInvalida,
   puedeTransicionar,
   transicionesDesde,
@@ -162,5 +164,35 @@ describe("pedidos-transiciones", () => {
         "No es posible cambiar el pedido de «En preparación» a «En camino».",
       )
     })
+  })
+})
+
+describe("motivoNoCancelable / mensajeNoCancelable", () => {
+  const libre = { pagoEstado: "pendiente", facturado: false, intentoPagoPendiente: false, estuvoEntregado: false }
+
+  it("sin pago, factura, intento ni entrega previa se puede cancelar", () => {
+    expect(motivoNoCancelable(libre)).toBeNull()
+    expect(motivoNoCancelable({ ...libre, pagoEstado: "fallido" })).toBeNull()
+  })
+
+  it("cada bloqueo se detecta por separado", () => {
+    expect(motivoNoCancelable({ ...libre, pagoEstado: "pagado" })).toBe("pagado")
+    expect(motivoNoCancelable({ ...libre, facturado: true })).toBe("facturado")
+    expect(motivoNoCancelable({ ...libre, intentoPagoPendiente: true })).toBe("pago_en_curso")
+    expect(motivoNoCancelable({ ...libre, estuvoEntregado: true })).toBe("entregado")
+  })
+
+  it("con varios bloqueos gana el pago, después la factura, el intento y la entrega", () => {
+    const todo = { pagoEstado: "pagado", facturado: true, intentoPagoPendiente: true, estuvoEntregado: true }
+    expect(motivoNoCancelable(todo)).toBe("pagado")
+    expect(motivoNoCancelable({ ...todo, pagoEstado: "pendiente" })).toBe("facturado")
+    expect(motivoNoCancelable({ ...todo, pagoEstado: "pendiente", facturado: false })).toBe("pago_en_curso")
+  })
+
+  it("los mensajes están en usted", () => {
+    expect(mensajeNoCancelable("pagado")).toMatch(/^No se puede cancelar un pedido pagado\./)
+    expect(mensajeNoCancelable("facturado")).toContain("Desvincule")
+    expect(mensajeNoCancelable("pago_en_curso")).toContain("inténtelo")
+    expect(mensajeNoCancelable("entregado")).toContain("entregado")
   })
 })

@@ -74,8 +74,7 @@ describe("enviarFacturaPedido: cuenta con la que se pide el PDF", () => {
     expect(getDocumentPdf.mock.calls[0].slice(1)).toEqual(["factura", "7040"])
   })
 
-  // bug conocido: usa la cuenta principal
-  it.fails("pedido de MDP → credenciales de MDP", async () => {
+  it("pedido de MDP → credenciales de MDP", async () => {
     await enviarFacturaPedido({ tenantId: TENANT, pedido: pedido("mdp") })
     expect(tokenUsado()).toBe(TOKEN_MDP)
   })

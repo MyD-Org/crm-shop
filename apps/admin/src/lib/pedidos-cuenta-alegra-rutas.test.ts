@@ -4,11 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 // cuenta principal si el pedido sale de la sucursal principal, las de la segunda cuenta (MDP) si
 // sale de MDP. Alegra, la DB, el guard y el tenant están simulados: se mira con qué config se
 // llama al cliente de Alegra. Datos inventados.
-//
-// Hoy sólo "emitir" (factura y remito) respeta la cuenta de la sucursal. Vincular factura, vincular
-// remito y el PDF del remito usan siempre la cuenta principal (`getTenantByIdFromDb`): esos casos
-// MDP van como `it.fails` con el comportamiento esperado; al arreglarlo, vitest avisa que
-// "pasaron" y hay que sacarles el `.fails`.
 
 const TENANT = "tenant-a"
 const PRINCIPAL_ID = "11111111-1111-4111-8111-111111111111"
@@ -169,8 +164,7 @@ describe("vincular factura (POST): lee la factura en Alegra", () => {
     expect(tokenUsado(getFacturaPorId)).toBe(TOKEN_PRINCIPAL)
   })
 
-  // bug conocido: usa la cuenta principal
-  it.fails("pedido de MDP → credenciales de MDP", async () => {
+  it("pedido de MDP → credenciales de MDP", async () => {
     getPedido.mockResolvedValue(encontrado(pedido("mdp")))
     getFacturaPorId.mockResolvedValue(null)
     await vincular()
@@ -189,8 +183,7 @@ describe("vincular remito (POST): lee el remito en Alegra", () => {
     expect(tokenUsado(getRemisionPorId)).toBe(TOKEN_PRINCIPAL)
   })
 
-  // bug conocido: usa la cuenta principal
-  it.fails("pedido de MDP → credenciales de MDP", async () => {
+  it("pedido de MDP → credenciales de MDP", async () => {
     getPedido.mockResolvedValue(encontrado(pedido("mdp")))
     getRemisionPorId.mockResolvedValue(null)
     await vincular()
@@ -212,8 +205,7 @@ describe("PDF del remito", () => {
     expect(getDocumentPdf.mock.calls[0].slice(1)).toEqual(["remision", "800"])
   })
 
-  // bug conocido: usa la cuenta principal
-  it.fails("pedido de MDP → credenciales de MDP", async () => {
+  it("pedido de MDP → credenciales de MDP", async () => {
     getPedido.mockResolvedValue(encontrado(pedido("mdp"), { remito }))
     getDocumentPdf.mockResolvedValue({ pdfUrl: null })
     await pdf()

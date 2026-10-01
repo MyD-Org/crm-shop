@@ -8,10 +8,6 @@ import { precioCuenta } from "./precio-cuenta";
  * propia. El catálogo (`precioCuenta`) sólo la usa si es MÁS BARATA que la
  * general y mayor a 0. La cotización (`cotizarItem` → `resolverPrecio`) tiene
  * que cobrar lo mismo que el catálogo mostró.
- *
- * Los casos donde la cotización hoy diverge del catálogo están con `it.fails`:
- * pasan mientras el bug exista y avisan (fallan) cuando se arregle, para
- * convertirlos en `it` comunes.
  */
 
 const GENERAL: AlegraPrice = { idPriceList: "1", price: 1000, main: true };
@@ -107,14 +103,12 @@ describe("precio de la lista propia en la cotización (cotizarItem)", () => {
     expect(l.problema).toBeUndefined();
   });
 
-  // bug conocido: cotización usa lista propia más cara/0
-  it.fails("lista propia más cara → cobra el precio general, como el catálogo", () => {
+  it("lista propia más cara → cobra el precio general, como el catálogo", () => {
     const l = cotizarItem(linea, item(casosConBug[0].precios), PROPIA);
     expect(l.precioUnitario).toBe(1000);
   });
 
-  // bug conocido: cotización usa lista propia más cara/0
-  it.fails("lista propia en 0 → cobra el precio general, no 'sin_precio'", () => {
+  it("lista propia en 0 → cobra el precio general, no 'sin_precio'", () => {
     const l = cotizarItem(linea, item(casosConBug[1].precios), PROPIA);
     expect(l.precioUnitario).toBe(1000);
     expect(l.problema).toBeUndefined();

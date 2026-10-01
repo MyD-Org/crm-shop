@@ -47,6 +47,7 @@ export const MOTIVOS = [
   "producto_no_ubicado",
   "valor_en_otra_pagina",
   "valor_invalido",
+  "tono_sin_rotulo_de_luz",
   "valor_no_en_texto",
   "unidad_no_en_texto",
   "contradice_nombre",
@@ -314,10 +315,21 @@ function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, citaCruda: st
   const v = a.valorTexto ?? ""
   switch (clave) {
     case "tono": {
+      // Tipo de luz: blanca (cálida/neutra/fría), de color (roja/rojo, amarilla/amarillo…) o RGB/RGBW.
+      const palabra = (src: string) => new RegExp(`(?<![A-Z0-9])(?:${src})(?![A-Z0-9])`)
       const sin: Record<string, RegExp> = {
         calido: /CALID[OA]|WARM/,
         neutro: /NEUTR[OA]|NEUTRAL/,
         frio: /FRI[OA]|COOL|DAYLIGHT|LUZ DE DIA/,
+        rojo: palabra("ROJ[OA]S?|RED"),
+        verde: palabra("VERDES?|GREEN"),
+        azul: palabra("AZUL(?:ES)?|BLUE"),
+        amarillo: palabra("AMARILL[OA]S?|YELLOW"),
+        naranja: palabra("NARANJAS?|ORANGE"),
+        violeta: palabra("VIOLETAS?|PURPLE"),
+        rosa: palabra("ROSAS?|ROSAD[OA]S?|PINK"),
+        rgb: palabra("RGB"),
+        rgbw: palabra("RGBW"),
       }
       return sin[v]?.test(cita) ? "ok" : "valor_no_en_texto"
     }
@@ -408,6 +420,14 @@ interface Candidato {
   y: number
   texto: string
 }
+
+/** Tonos que son un color (rojo, verde…): sólo valen bajo un rótulo de luz. RGB/RGBW no son color de producto. */
+const TONOS_COLOR_DE_LUZ = new Set(["rojo", "verde", "azul", "amarillo", "naranja", "violeta", "rosa"])
+const RE_ROTULO_DE_LUZ = /(?<![A-Z0-9])(?:LUZ|TONO|LIGHT)(?![A-Z0-9])/
+
+/** ¿La celda (o su rótulo de fila/columna) habla de la luz ("Tipo de luz", "Color de luz", "Tono")? */
+const bajoRotuloDeLuz = (c: { celda: Celda | null; texto: string }): boolean =>
+  RE_ROTULO_DE_LUZ.test(c.texto) || (!!c.celda?.rotulo && RE_ROTULO_DE_LUZ.test(c.celda.rotulo.norm))
 
 /** Dónde aparece el valor: celdas (con rótulo) y, si ninguna lo tiene entero, líneas completas. */
 function candidatos(a: AtributoExtraido, doc: Doc): Candidato[] {
@@ -661,6 +681,14 @@ export function verificarLectura(lectura: LecturaCruda, ctx: ContextoVerificacio
       const hayNumero = valido.valorNum != null && doc.celdas.some((c) => numerosDe(c.norm).has(valido.valorNum!))
       descartar(clave, hayNumero ? "unidad_no_en_texto" : "valor_no_en_texto", entrada)
       continue
+    }
+    // 1-bis. Un color como tipo de luz exige un rótulo de luz: "Color: Verde" o "Carcasa: Roja" es el producto.
+    if (clave === "tono" && TONOS_COLOR_DE_LUZ.has(valido.valorTexto ?? "")) {
+      cands = cands.filter(bajoRotuloDeLuz)
+      if (cands.length === 0) {
+        descartar(clave, "tono_sin_rotulo_de_luz", entrada)
+        continue
+      }
     }
     // 1a. Potencia, corriente y flujo "por metro" no son el valor del producto.
     if (valido.valorNum != null && cands.every((c) => esPorMetro(clave, valido.valorNum!, c.texto))) {

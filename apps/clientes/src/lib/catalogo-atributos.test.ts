@@ -83,7 +83,7 @@ describe("diccionario", () => {
 
   it("valida, ordena y agrupa ids", () => {
     expect(esAtributo("tono-calido")).toBe(true);
-    expect(esAtributo("tono-violeta")).toBe(false);
+    expect(esAtributo("tono-fucsia")).toBe(false);
     expect(atributosValidos(["zocalo-e27", "basura", "tono-frio", "tono-frio"])).toEqual([
       "tono-frio",
       "zocalo-e27",
@@ -145,5 +145,42 @@ describe("fase 2: dato estructurado O patrón del nombre (la cobertura sólo sub
 
   it("todo atributo del diccionario declara su criterio estructurado", () => {
     for (const a of ATRIBUTOS) expect(a.estructurado, a.id).toBeDefined();
+  });
+});
+
+describe("tipo de luz de color y RGB (tono)", () => {
+  it.each([
+    ["TIRA LED 5M LUZ VERDE", ["tono-verde"]],
+    ["LAMPARA 9W E27 LUZ ROJA", ["tono-rojo", "zocalo-e27"]],
+    ["FOCO LUZ AZUL", ["tono-azul"]],
+    ["FOCO LUZ AMARILLA", ["tono-amarillo"]],
+    ["FOCO LUZ NARANJA", ["tono-naranja"]],
+    ["FOCO LUZ VIOLETA", ["tono-violeta"]],
+    ["FOCO LUZ ROSA", ["tono-rosa"]],
+    ["TIRA LED 5050 RGB IP20", ["tono-rgb"]],
+    ["TIRA LED 5050 RGBW", ["tono-rgbw"]],
+  ])("%s", (nombre, esperados) => {
+    expect(ids(nombre)).toEqual(esperados);
+  });
+
+  it("un color suelto no es tipo de luz", () => {
+    expect(ids("CABLE UNIPOLAR VERDE")).toEqual([]);
+    expect(ids("CINTA AISLADORA ROJA")).toEqual([]);
+  });
+
+  it("nombres del filtro y grupo tono", () => {
+    expect(["tono-rojo", "tono-verde", "tono-azul", "tono-amarillo", "tono-rgb", "tono-rgbw"].map(nombreAtributo)).toEqual([
+      "Luz roja", "Luz verde", "Luz azul", "Luz amarilla", "RGB", "RGBW",
+    ]);
+    expect(atributoPorId("tono-rgbw")?.grupo).toBe("tono");
+  });
+
+  it("el dato estructurado de tono suma el filtro", () => {
+    expect(atributosDeProducto("TIRA LED 5M", { tono: { n: null, t: "azul" } }).map((a) => a.id)).toEqual(["tono-azul"]);
+  });
+
+  it("los sinónimos de búsqueda llevan a esos filtros", () => {
+    expect(atributoPorId("tono-verde")?.sinonimos).toContain("luz verde");
+    expect(atributoPorId("tono-rgb")?.sinonimos).toContain("rgb");
   });
 });

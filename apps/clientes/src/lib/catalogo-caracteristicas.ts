@@ -89,7 +89,7 @@ export function leerAtributosEstructurados(crudo: unknown): AtributosEstructurad
 export const ETIQUETA: Record<ClaveEstructurada, string> = {
   potencia_w: "Potencia",
   temperatura_k: "Temperatura de color",
-  tono: "Tono de luz",
+  tono: "Tipo de luz",
   ip: "Protección",
   flujo_lm: "Flujo luminoso",
   tension_v: "Tensión",
@@ -98,7 +98,7 @@ export const ETIQUETA: Record<ClaveEstructurada, string> = {
   polos: "Polos",
   seccion_mm2: "Sección",
   medidas_mm: "Medidas",
-  color: "Color",
+  color: "Color del producto",
   poder_corte_ka: "Poder de corte",
   curva: "Curva",
   sensibilidad_ma: "Sensibilidad",
@@ -107,7 +107,21 @@ export const ETIQUETA: Record<ClaveEstructurada, string> = {
   angulo_grados: "Ángulo",
 };
 
-const TONO: Record<string, string> = { calido: "Cálida", neutro: "Neutra", frio: "Fría" };
+/** Tipo de luz (clave `tono`): blanca, de color o RGB. Mismo vocabulario que el CRM. */
+const TONO: Record<string, string> = {
+  calido: "Cálida",
+  neutro: "Neutra",
+  frio: "Fría",
+  rojo: "Roja",
+  verde: "Verde",
+  azul: "Azul",
+  amarillo: "Amarilla",
+  naranja: "Naranja",
+  violeta: "Violeta",
+  rosa: "Rosa",
+  rgb: "RGB",
+  rgbw: "RGBW",
+};
 
 /** Vocabulario cerrado de color y montaje (el mismo del CRM); lo que no está acá se omite. */
 const COLOR: Record<string, string> = {

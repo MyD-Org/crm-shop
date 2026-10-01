@@ -32,7 +32,7 @@ describe("filtros del agente → URL del catálogo", () => {
   it("descarta lo inválido: atributos desconocidos, precios negativos, orden raro", () => {
     expect(
       hrefDeFiltros({
-        attributes: ["tono-violeta", "zocalo-e27"],
+        attributes: ["tono-fucsia", "zocalo-e27"],
         price_min: -5,
         sort: "cualquiera" as never,
       }),

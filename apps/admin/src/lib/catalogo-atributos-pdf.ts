@@ -35,7 +35,8 @@ const TOKENS_PROMPT = 1600
 export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
   potencia_w: "Potencia nominal en watts (número). Si hay varias variantes, null.",
   temperatura_k: "Temperatura de color en kelvin (número, p. ej. 3000). Si es regulable o hay varias, null.",
-  tono: 'Tono de luz: "calido", "neutro" o "frio". null si no aplica o no se indica.',
+  tono:
+    'Tipo de luz: "calido", "neutro" o "frio" (luz blanca), o el color de la luz: "rojo", "verde", "azul", "amarillo", "naranja", "violeta" o "rosa" (p. ej. "Tipo de luz: Verde"), o "rgb" / "rgbw". null si no aplica o no se indica. No es el color del producto.',
   ip: "Grado de protección IP como número de dos cifras (IP65 → 65). null si no se indica.",
   flujo_lm: "Flujo luminoso en lúmenes (número).",
   tension_v: 'Tensión de alimentación: un número ("220") o un rango ("85-265"). null si no se indica.',
@@ -45,7 +46,7 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
   seccion_mm2: "Sección del conductor en mm2 (número), no la cantidad de conductores.",
   medidas_mm: 'Dimensiones externas en mm como "AxB" o "AxBxC" (p. ej. "300x1200"); null si no hay.',
   color:
-    "Color del producto: blanco, negro, gris, rojo, azul, verde, amarillo, marron, naranja, transparente, plateado o dorado. La luz blanca/cálida/fría NO es color.",
+    "Color del cuerpo o carcasa del producto (no el de la luz): blanco, negro, gris, rojo, azul, verde, amarillo, marron, naranja, transparente, plateado o dorado. La luz blanca/cálida/fría NO es color.",
   poder_corte_ka: "Poder de corte en kA (número).",
   curva: 'Curva de disparo: "B", "C" o "D".',
   sensibilidad_ma: "Sensibilidad diferencial en mA (número), p. ej. 30.",

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { requireAdminPlus } from "@/lib/admin-route-guard"
-import { cleanupStale, listAdmin, toAdminDto } from "@/lib/payment-receipts"
+import { cleanupStale, listAdmin, toAdminDtos } from "@/lib/payment-receipts"
 import { r2Config } from "@/lib/r2"
 
 // GET /api/admin/comprobantes — listado del backoffice. Solo ve `pending`/`loaded`
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
 
   return Response.json(
     {
-      items: items.map((row) => toAdminDto(row, now)),
+      items: await toAdminDtos(guard.tenantId, items, now),
       total,
       receiptsEmailConfigured: (tenant?.receiptsEmail ?? "") !== "",
       storageConfigured: r2Config() !== null,

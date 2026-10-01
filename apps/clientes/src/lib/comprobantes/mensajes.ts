@@ -13,3 +13,13 @@ export const LIMITE_DIARIO = `Llegó al límite de ${RECEIPTS_DAILY_LIMIT} compr
 export const INIT_CAIDO = "No pudimos preparar la subida del comprobante. Inténtelo de nuevo en unos minutos.";
 export const CONFIRM_CAIDO = "No pudimos procesar el comprobante. Inténtelo de nuevo en unos minutos.";
 export const HISTORIAL_CAIDO = "No pudimos obtener sus comprobantes. Inténtelo de nuevo en unos minutos.";
+
+// Comprobante por pedido (comprador con o sin cuenta corriente).
+export const PEDIDO_NO_ENCONTRADO = "No encontramos el pedido.";
+export const LIMITE_PEDIDO = "Superó el límite de comprobantes. Inténtelo más tarde.";
+export const PEDIDO_NO_INFORMABLE = {
+  cancelado: "Este pedido está cancelado: no puede informar un pago.",
+  no_transferencia: "Este pedido no se paga por transferencia.",
+  pagado: "Este pedido ya figura como pagado.",
+  no_pendiente: "Este pedido no tiene un pago pendiente.",
+} as const;

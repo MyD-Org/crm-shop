@@ -284,7 +284,12 @@ export const crmAvisos = publico.table("notification_log", {
 export const crmComprobantes = publico.table("payment_receipts", {
   id: uuid("id").primaryKey(),
   tenantId: text("tenant_id").notNull(),
-  codigocliente: text("codigocliente").notNull(),
+  /** NULL (0056 del CRM) = comprador sin cuenta corriente: entonces hay `shopOrderId` + `clerkUserId`. */
+  codigocliente: text("codigocliente"),
+  /** Pedido de la tienda (`shop.orders.id`) al que corresponde; sin FK (otro esquema). */
+  shopOrderId: uuid("shop_order_id"),
+  /** Quién lo subió; dueño del comprobante cuando no hay `codigocliente`. */
+  clerkUserId: text("clerk_user_id"),
   razonsocial: text("razonsocial").notNull(),
   cuit: text("cuit").notNull(),
   clientEmail: text("client_email"),

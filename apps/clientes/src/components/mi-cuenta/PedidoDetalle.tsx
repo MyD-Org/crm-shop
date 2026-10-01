@@ -9,6 +9,8 @@ import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
+import { puedeSubirComprobante } from "@/lib/comprobantes/pedido";
+import { InformarPagoPedido } from "./InformarPagoPedido";
 import { CancelarPedido } from "./CancelarPedido";
 import { PedidoAcciones } from "./PedidoAcciones";
 import { PedidoLinea } from "./PedidoLinea";
@@ -77,6 +79,11 @@ export function PedidoDetalle({
           {verEstadoPago && <p className="mt-1 text-sm text-text">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</p>}
           {cuentaVisible.mostrar && (
             <CuentaTransferencia cuenta={cuentaVisible.cuenta} importe={cuentaVisible.cuenta ? pedido.total : undefined} className="mt-3" />
+          )}
+          {puedeSubirComprobante(pedido) && (
+            <div className="mt-3">
+              <InformarPagoPedido pedido={{ id: pedido.id, numero: pedido.numero, total: pedido.total }} />
+            </div>
           )}
         </Card>
       </div>

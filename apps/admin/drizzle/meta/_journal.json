@@ -393,6 +393,13 @@
       "when": 1791200700000,
       "tag": "0055_cuentas_bancarias_shop",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791287100000,
+      "tag": "0056_payment_receipts_pedido",
+      "breakpoints": true
     }
   ]
 }

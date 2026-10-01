@@ -86,6 +86,8 @@
     "id": "uuid",
     "tenant_id": "text",
     "codigocliente": "text",
+    "shop_order_id": "uuid",
+    "clerk_user_id": "text",
     "razonsocial": "text",
     "cuit": "text",
     "client_email": "text",

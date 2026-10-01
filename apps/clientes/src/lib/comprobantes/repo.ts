@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmComprobantes } from "@/db/crm";
+import type { Duenio } from "./duenio";
 import { CONFIRM_LEASE_SECONDS, EMAIL_LEASE_SECONDS } from "./validacion";
 
 export type ComprobanteFila = typeof crmComprobantes.$inferSelect;
@@ -42,7 +43,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // ---------------------------------------------------------------------------
 
 export interface AltaComprobante {
-  codigocliente: string;
+  /** null = comprador sin cuenta corriente: entonces van `shopOrderId` y `clerkUserId` (CHECK de la 0056). */
+  codigocliente: string | null;
+  /** Pedido al que corresponde (`shop.orders.id`); sin FK, lo valida la app. */
+  shopOrderId?: string | null;
+  /** Quién lo sube; dueño del comprobante cuando no hay `codigocliente`. */
+  clerkUserId?: string | null;
   razonsocial: string;
   cuit: string;
   clientEmail: string | null;
@@ -80,19 +86,44 @@ export async function crearSubiendo(tenantId: string, input: AltaComprobante, no
   return row;
 }
 
-/** Filas no-`uploading` del cliente en las últimas 24 h (tope diario; incluye
+/**
+ * Condición de pertenencia: del tenant Y de su dueño (código de cliente o, sin cuenta
+ * corriente, usuario de Clerk). TODA lectura o escritura por identidad pasa por acá: un
+ * comprobante ajeno se comporta como inexistente.
+ */
+export function condicionDuenio(tenantId: string, duenio: Duenio) {
+  return and(
+    eq(crmComprobantes.tenantId, tenantId),
+    typeof duenio === "string"
+      ? eq(crmComprobantes.codigocliente, duenio)
+      : eq(crmComprobantes.clerkUserId, duenio.clerkUserId),
+  );
+}
+
+/** Filas no-`uploading` del dueño en las últimas 24 h (tope diario; incluye
  * `rejected`, que cuenta contra la cuota). */
-export async function contarRecientes(tenantId: string, codigocliente: string, now: Date): Promise<number> {
+export async function contarRecientes(tenantId: string, duenio: Duenio, now: Date): Promise<number> {
   const since = new Date(now.getTime() - DAY_MS);
+  const [row] = await getDb()
+    .select({ count: sql<number>`count(*)::int` })
+    .from(crmComprobantes)
+    .where(and(condicionDuenio(tenantId, duenio), ne(crmComprobantes.status, "uploading"), gte(crmComprobantes.createdAt, since)));
+  return row?.count ?? 0;
+}
+
+/**
+ * Comprobantes ya informados para un pedido (tope por pedido). No cuenta los `uploading`
+ * (subidas sin confirmar, que el hora/día ya frenan); sí los `rejected`, como el tope diario.
+ */
+export async function contarDelPedido(tenantId: string, pedidoId: string): Promise<number> {
   const [row] = await getDb()
     .select({ count: sql<number>`count(*)::int` })
     .from(crmComprobantes)
     .where(
       and(
         eq(crmComprobantes.tenantId, tenantId),
-        eq(crmComprobantes.codigocliente, codigocliente),
+        eq(crmComprobantes.shopOrderId, pedidoId),
         ne(crmComprobantes.status, "uploading"),
-        gte(crmComprobantes.createdAt, since),
       ),
     );
   return row?.count ?? 0;
@@ -105,7 +136,7 @@ export async function contarRecientes(tenantId: string, codigocliente: string, n
 /** CLAIM: `uploading → processing` (o retoma un `processing` con el lease vencido). */
 export async function tomarParaConfirmar(
   tenantId: string,
-  codigocliente: string,
+  duenio: Duenio,
   id: string,
   now: Date,
 ): Promise<ComprobanteFila | null> {
@@ -115,8 +146,7 @@ export async function tomarParaConfirmar(
     .set({ status: "processing", processingStartedAt: now, updatedAt: now })
     .where(
       and(
-        eq(crmComprobantes.tenantId, tenantId),
-        eq(crmComprobantes.codigocliente, codigocliente),
+        condicionDuenio(tenantId, duenio),
         eq(crmComprobantes.id, id),
         or(
           eq(crmComprobantes.status, "uploading"),
@@ -131,19 +161,13 @@ export async function tomarParaConfirmar(
 /** Lectura tras un claim fallido (para decidir idempotente / en curso / rechazo). */
 export async function buscarDelCliente(
   tenantId: string,
-  codigocliente: string,
+  duenio: Duenio,
   id: string,
 ): Promise<ComprobanteFila | null> {
   const [row] = await getDb()
     .select()
     .from(crmComprobantes)
-    .where(
-      and(
-        eq(crmComprobantes.tenantId, tenantId),
-        eq(crmComprobantes.codigocliente, codigocliente),
-        eq(crmComprobantes.id, id),
-      ),
-    );
+    .where(and(condicionDuenio(tenantId, duenio), eq(crmComprobantes.id, id)));
   return row ?? null;
 }
 
@@ -211,7 +235,7 @@ export async function publicar(
  * id. No bloquea: el confirm y el mail lo informan. */
 export async function buscarDuplicado(
   tenantId: string,
-  codigocliente: string,
+  duenio: Duenio,
   sha256: string,
   excludeId: string,
 ): Promise<{ id: string; submittedAt: Date } | null> {
@@ -220,8 +244,7 @@ export async function buscarDuplicado(
     .from(crmComprobantes)
     .where(
       and(
-        eq(crmComprobantes.tenantId, tenantId),
-        eq(crmComprobantes.codigocliente, codigocliente),
+        condicionDuenio(tenantId, duenio),
         eq(crmComprobantes.fileSha256, sha256),
         ne(crmComprobantes.id, excludeId),
         inArray(crmComprobantes.status, [...ESTADOS_VISIBLES]),

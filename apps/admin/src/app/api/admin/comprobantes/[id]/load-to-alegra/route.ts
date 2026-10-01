@@ -5,7 +5,8 @@ import {
   listOpenInvoicesByContact,
 } from "@/lib/alegra"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { getAdmin, markLoadedFromAlegra, toAdminDto } from "@/lib/payment-receipts"
+import { getAdmin, markLoadedFromAlegra, toAdminDtoConPedido } from "@/lib/payment-receipts"
+import { sinCuentaCorrienteResponse } from "@/lib/receipt-sin-cuenta"
 import { parseLoadBody, validateAllocations } from "@/lib/receipt-alegra-load"
 import { getR2 } from "@/lib/r2"
 import { getTenantByIdFromDb } from "@/lib/tenants"
@@ -52,6 +53,9 @@ export async function POST(req: Request, { params }: IdParams) {
   const { id } = await params
   const row = await getAdmin(guard.tenantId, id)
   if (!row) return adminNotFoundResponse()
+  // Comprador de la tienda sin cuenta corriente: Alegra no se carga sin cliente (gestión manual).
+  const codigocliente = row.codigocliente
+  if (codigocliente === null) return sinCuentaCorrienteResponse()
   if (row.alegraPaymentId !== null) {
     return Response.json(
       { error: "Este comprobante ya fue cargado en Alegra", code: "already_loaded" },
@@ -70,7 +74,7 @@ export async function POST(req: Request, { params }: IdParams) {
 
   let openInvoices
   try {
-    openInvoices = await listOpenInvoicesByContact(config, row.codigocliente)
+    openInvoices = await listOpenInvoicesByContact(config, codigocliente)
   } catch (err) {
     console.error(`[admin/comprobantes] Alegra respondió mal listando facturas de ${id}:`, err)
     return Response.json(
@@ -88,7 +92,7 @@ export async function POST(req: Request, { params }: IdParams) {
   let created
   try {
     created = await createPayment(config, {
-      contactAlegraId: row.codigocliente,
+      contactAlegraId: codigocliente,
       date: finalPaidOn,
       paymentMethod: parsed.value.method,
       bankAccountId: parsed.value.bankAccountId ?? undefined,
@@ -180,5 +184,5 @@ export async function POST(req: Request, { params }: IdParams) {
   )
 
   const fresh = await getAdmin(guard.tenantId, id)
-  return Response.json(toAdminDto(fresh ?? updated, now), { headers: NO_STORE })
+  return Response.json(await toAdminDtoConPedido(guard.tenantId, fresh ?? updated, now), { headers: NO_STORE })
 }

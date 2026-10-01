@@ -321,8 +321,10 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
 
   // Con pago real en Alegra no hay deshacer ni re-carga (la guarda es alegra_payment_id).
   const cargadoEnAlegra = !!receipt?.alegra
+  // Sin cuenta corriente (comprador de la tienda) no hay contacto de Alegra: se gestiona a mano.
+  const sinCuenta = !!receipt && receipt.codigocliente === null
   const puedeCargarEnAlegra =
-    !!receipt && (receipt.status === "pending" || (receipt.status === "loaded" && !cargadoEnAlegra))
+    !!receipt && !sinCuenta && (receipt.status === "pending" || (receipt.status === "loaded" && !cargadoEnAlegra))
 
   return (
     <>
@@ -420,6 +422,8 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged }: Props) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               <Fila label="Cliente" value={receipt.razonsocial} />
               {receipt.cuit && <Fila label="CUIT" value={receipt.cuit} />}
+              {sinCuenta && <Fila label="Cuenta" value="Sin cuenta vinculada" />}
+              {receipt.pedido && <Fila label="Pedido" value={receipt.pedido.numero ?? "Pedido de la tienda"} />}
               <Fila label="Monto" value={<span className="font-semibold">{fmtMonto(receipt.amount)}</span>} />
               <Fila label="Fecha del pago" value={fmtFecha(receipt.paidOn)} />
               <Fila label="Medio" value={methodLabel(receipt.method, receipt.methodOther)} />

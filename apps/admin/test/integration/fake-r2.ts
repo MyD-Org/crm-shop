@@ -105,7 +105,7 @@ type ReceiptInsert = typeof paymentReceipts.$inferInsert
  */
 export async function seedReceipt(
   tenantId: string,
-  codigocliente: string,
+  codigocliente: string | null,
   overrides: Partial<ReceiptInsert> = {},
 ): Promise<typeof paymentReceipts.$inferSelect> {
   const id = randomUUID()

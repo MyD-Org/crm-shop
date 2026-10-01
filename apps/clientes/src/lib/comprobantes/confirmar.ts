@@ -17,20 +17,21 @@ import { createHash } from "node:crypto";
 import { R2TooLargeError, type R2Client } from "../r2";
 import { extFor, procesarArchivo, sniffMime } from "./archivo";
 import { claves, esUuid } from "./claves";
+import type { Duenio } from "./duenio";
 import { ReceiptImageError } from "./imagen";
 import type { CamposPublicacion, ComprobanteFila } from "./repo";
 import { MAX_FILE_BYTES } from "./validacion";
 
 /** Subconjunto del repo que usa el confirm: cualquier fake con estas firmas sirve. */
 export interface RepoConfirmar {
-  tomarParaConfirmar(tenantId: string, codigocliente: string, id: string, now: Date): Promise<ComprobanteFila | null>;
-  buscarDelCliente(tenantId: string, codigocliente: string, id: string): Promise<ComprobanteFila | null>;
+  tomarParaConfirmar(tenantId: string, duenio: Duenio, id: string, now: Date): Promise<ComprobanteFila | null>;
+  buscarDelCliente(tenantId: string, duenio: Duenio, id: string): Promise<ComprobanteFila | null>;
   liberar(tenantId: string, id: string, now: Date): Promise<boolean>;
   rechazar(tenantId: string, id: string, reason: string, now: Date): Promise<void>;
   publicar(tenantId: string, id: string, fields: CamposPublicacion, at: Date): Promise<ComprobanteFila | null>;
   buscarDuplicado(
     tenantId: string,
-    codigocliente: string,
+    duenio: Duenio,
     sha256: string,
     excludeId: string,
   ): Promise<{ id: string; submittedAt: Date } | null>;
@@ -38,7 +39,8 @@ export interface RepoConfirmar {
 
 export interface EntradaConfirmar {
   tenantId: string;
-  codigocliente: string;
+  /** Código de cliente o, sin cuenta corriente, usuario de Clerk (ver `Duenio`). */
+  duenio: Duenio;
   id: string;
 }
 
@@ -82,7 +84,7 @@ export async function confirmarComprobante(
   entrada: EntradaConfirmar,
   deps: DepsConfirmar,
 ): Promise<ResultadoConfirmar> {
-  const { tenantId, codigocliente, id } = entrada;
+  const { tenantId, duenio, id } = entrada;
   const { repo, r2, avisar } = deps;
   const now = deps.now ?? (() => new Date());
 
@@ -93,9 +95,9 @@ export async function confirmarComprobante(
   if (!esUuid(id)) return fail("not_found");
 
   // 2. Claim atómico del lease. 0 filas ⇒ mirar la fila para decidir.
-  const claimed = await repo.tomarParaConfirmar(tenantId, codigocliente, id, now());
+  const claimed = await repo.tomarParaConfirmar(tenantId, duenio, id, now());
   if (!claimed) {
-    const row = await repo.buscarDelCliente(tenantId, codigocliente, id);
+    const row = await repo.buscarDelCliente(tenantId, duenio, id);
     if (!row) return fail("not_found");
     if (row.status === "pending" || row.status === "loaded") return { ok: true, status: row.status };
     if (row.status === "processing" || row.status === "uploading") return fail("in_progress");
@@ -188,7 +190,7 @@ export async function confirmarComprobante(
     if (!publicado) return fail("in_progress");
 
     // Aviso de duplicado (no bloquea): el mismo cliente ya había publicado estos bytes.
-    const duplicadoDe = await repo.buscarDuplicado(tenantId, codigocliente, sha256, id);
+    const duplicadoDe = await repo.buscarDuplicado(tenantId, duenio, sha256, id);
 
     // 11. DELETE tmp best-effort: la lifecycle rule (1 día) cubre lo que falle.
     await r2.delete(tmpKey).catch((err) => console.warn(`[comprobantes] delete tmp ${tmpKey}:`, err));

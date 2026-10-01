@@ -1,5 +1,5 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { getAdmin, setLoaded, toAdminDto } from "@/lib/payment-receipts"
+import { getAdmin, setLoaded, toAdminDtoConPedido } from "@/lib/payment-receipts"
 
 // GET /api/admin/comprobantes/[id] — detalle (solo `pending`/`loaded`; cualquier otro
 // estado o id ajeno responde EL MISMO 404 que adminNotFoundResponse, igual que el guard
@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: IdParams) {
   const row = await getAdmin(guard.tenantId, id)
   if (!row) return adminNotFoundResponse()
 
-  return Response.json(toAdminDto(row, new Date()), { headers: NO_STORE })
+  return Response.json(await toAdminDtoConPedido(guard.tenantId, row, new Date()), { headers: NO_STORE })
 }
 
 export async function PATCH(req: Request, { params }: IdParams) {
@@ -55,5 +55,5 @@ export async function PATCH(req: Request, { params }: IdParams) {
     }),
   )
 
-  return Response.json(toAdminDto(result.row, now), { headers: NO_STORE })
+  return Response.json(await toAdminDtoConPedido(guard.tenantId, result.row, now), { headers: NO_STORE })
 }

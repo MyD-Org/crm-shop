@@ -616,6 +616,7 @@ export function CheckoutClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idempotencyKey: claveIntento.current ?? undefined,
+          totalVisto: cotizacion?.total,
           items: items.map((i) => ({ id: i.id, qty: i.qty })),
           contactoNombre: nombre,
           contactoTelefono: telefono,

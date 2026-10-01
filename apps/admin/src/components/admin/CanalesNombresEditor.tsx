@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Pencil } from "lucide-react"
-import { Button, Dialog, Field, Input, useToast } from "@myd-org/ui"
+import { Button, Dialog, Field, Input, Tooltip, useToast } from "@myd-org/ui"
 import {
   NOMBRE_MAX,
   canalesEditables,
@@ -64,10 +64,11 @@ export function CanalesNombresEditor({ contacts, nombres, onSaved }: Props) {
 
   return (
     <>
-      <Button variant="secondary" size="sm" onClick={abrir}>
-        <Pencil className="w-4 h-4 mr-1.5" />
-        Nombres de los canales
-      </Button>
+      <Tooltip content="Nombres de los canales">
+        <Button variant="ghost" size="icon" aria-label="Nombres de los canales" onClick={abrir}>
+          <Pencil className="w-4 h-4" />
+        </Button>
+      </Tooltip>
 
       <Dialog
         open={open}

@@ -3,6 +3,7 @@ import {
   CANAL_TODAS,
   buildCanalTabs,
   canalKey,
+  canalLineLabel,
   canalesEditables,
   filterByCanal,
   parseNombresBody,
@@ -108,5 +109,21 @@ describe("parseNombresBody", () => {
     expect(parseNombresBody({ nombres: [] }).ok).toBe(false)
     expect(parseNombresBody({ nombres: { a: 1 } }).ok).toBe(false)
     expect(parseNombresBody({ nombres: { a: "x".repeat(61) } }).ok).toBe(false)
+  })
+})
+
+describe("canalLineLabel", () => {
+  it("usa el nombre definido con el teléfono del negocio", () => {
+    const x = c({ channel_account_id: "a1", business_phone: "+54 11 5555-0001" })
+    expect(canalLineLabel(x, { a1: " Sucursal Centro " })).toBe("Sucursal Centro · a +54 11 5555-0001")
+  })
+  it("sin nombre cae al rótulo del canal", () => {
+    const x = c({ channel_account_id: "a1", business_phone: "+54 11 5555-0001" })
+    expect(canalLineLabel(x, {})).toBe("WhatsApp · a +54 11 5555-0001")
+    expect(canalLineLabel(x, { a1: "  " })).toBe("WhatsApp · a +54 11 5555-0001")
+  })
+  it("sin teléfono muestra solo el nombre o el canal", () => {
+    expect(canalLineLabel(c({ channel: "instagram", channel_account_id: "i1" }), { i1: "Tienda" })).toBe("Tienda")
+    expect(canalLineLabel(c({ channel: "instagram" }), {})).toBe("Instagram")
   })
 })

@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { MessageSquare, Clock, Bot, User, MessageCircleWarning, AlertTriangle } from "lucide-react"
-import { Tabs, Badge, EmptyState } from "@myd-org/ui"
-import { channelLabel, contactRowKey, contactThreadHref, type InboxContact } from "@/lib/inbox-api"
+import { Tabs, Badge, Checkbox, EmptyState } from "@myd-org/ui"
+import { contactRowKey, contactThreadHref, type InboxContact } from "@/lib/inbox-api"
 import { previewText } from "@/lib/message-text"
 import { useVisiblePoll } from "@/lib/use-visible-poll"
 import { markVisited } from "@/lib/admin-last-visit"
 import {
   CANAL_TODAS,
   buildCanalTabs,
+  canalLineLabel,
   filterByCanal,
   guardarSeleccion,
   leerSeleccion,
@@ -19,7 +20,6 @@ import {
 import { CanalesNombresEditor } from "@/components/admin/CanalesNombresEditor"
 
 type Tab = "active" | "history"
-type Scope = "all" | "mine"
 
 // Cada cuánto el poll pide además reconciliar la cola (?reconcile=1). Ver el comentario en
 // src/app/api/admin/inbox/contacts/route.ts: leer es barato, reconciliar escribe en la DB.
@@ -39,7 +39,7 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
   const [contacts, setContacts] = useState(initialContacts)
   const [botEnabled, setBotEnabled] = useState(initialBotEnabled)
   const [tab, setTab] = useState<Tab>("active")
-  const [scope, setScope] = useState<Scope>("all")
+  const [soloMias, setSoloMias] = useState(false)
   const [canalNombres, setCanalNombres] = useState(initialCanalNombres)
   // Canal elegido: se lee de localStorage recién tras montar (el SSR no lo tiene) y se
   // guarda por navegador. Sin storage arranca en "Todas".
@@ -146,66 +146,28 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
   const pendingCount = contacts.filter((c) => c.awaiting_reply).length
   const canalTabs = buildCanalTabs(contacts, canalNombres)
   const canalActivo = resolveSelected(canalSel, canalTabs)
-  const visible = filterByCanal(scope === "mine" ? mine : contacts, canalActivo)
+  const visible = filterByCanal(soloMias ? mine : contacts, canalActivo)
+
+  const editor = canEditCanales && (
+    <CanalesNombresEditor contacts={contacts} nombres={canalNombres} onSaved={setCanalNombres} />
+  )
+  const variasCanales = canalTabs.length > 1
 
   return (
     <div className="flex flex-col gap-3">
-      <Tabs
-        variant="underline"
-        value={tab}
-        onValueChange={(v) => setTab(v as Tab)}
-        items={[
-          {
-            value: "active",
-            label: (
-              <span className="flex items-center gap-1.5">
-                Activas
-                {pendingCount > 0 && tab === "active" && (
-                  <Badge tone="warning" className="text-[10px] px-1.5 py-0">
-                    {pendingCount}
-                  </Badge>
-                )}
-              </span>
-            ),
-          },
-          { value: "history", label: "Históricas" },
-        ]}
-      />
-
-      <Tabs
-        variant="pill"
-        value={scope}
-        onValueChange={(v) => setScope(v as Scope)}
-        items={[
-          { value: "all", label: "Todas" },
-          {
-            value: "mine",
-            label: (
-              <span className="flex items-center gap-1.5">
-                Mis conversaciones
-                {mine.length > 0 && (
-                  <Badge tone="info" className="text-[10px] px-1.5 py-0">
-                    {mine.length}
-                  </Badge>
-                )}
-              </span>
-            ),
-          },
-        ]}
-      />
-
-      {(canalTabs.length > 1 || canEditCanales) && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {canalTabs.length > 1 && (
+      {variasCanales && (
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 overflow-x-auto">
             <Tabs
-              variant="pill"
+              variant="underline"
+              ariaLabel="Canal"
               value={canalActivo}
               onValueChange={(v) => {
                 setCanalSel(v)
                 guardarSeleccion(v)
               }}
               items={[
-                { value: CANAL_TODAS, label: "Todas" },
+                { value: CANAL_TODAS, label: "Todos" },
                 ...canalTabs.map((t) => ({
                   value: t.key,
                   label: (
@@ -221,18 +183,51 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
                 })),
               ]}
             />
-          )}
-          {canEditCanales && (
-            <CanalesNombresEditor contacts={contacts} nombres={canalNombres} onSaved={setCanalNombres} />
-          )}
+          </div>
+          {editor}
         </div>
       )}
+
+      <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
+        <Tabs
+          variant="pill"
+          ariaLabel="Estado"
+          value={tab}
+          onValueChange={(v) => setTab(v as Tab)}
+          items={[
+            {
+              value: "active",
+              label: (
+                <span className="flex items-center gap-1.5">
+                  Activas
+                  {pendingCount > 0 && tab === "active" && (
+                    <Badge tone="warning" className="text-[10px] px-1.5 py-0">
+                      {pendingCount}
+                    </Badge>
+                  )}
+                </span>
+              ),
+            },
+            { value: "history", label: "Históricas" },
+          ]}
+        />
+        <label htmlFor="inbox-solo-mias" className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--ink)" }}>
+          <Checkbox id="inbox-solo-mias" checked={soloMias} onCheckedChange={setSoloMias} />
+          Solo mis conversaciones
+          {mine.length > 0 && (
+            <Badge tone="info" className="text-[10px] px-1.5 py-0">
+              {mine.length}
+            </Badge>
+          )}
+        </label>
+        {!variasCanales && editor}
+      </div>
 
       {!visible.length ? (
         <EmptyState
           icon={<MessageSquare size={28} strokeWidth={1.2} />}
           title={
-            scope === "mine" ? "No tiene contactos asignados"
+            soloMias ? "No tiene contactos asignados"
               : tab === "history" ? "No hay contactos en el historial"
                 : "No hay conversaciones activas"
           }
@@ -294,8 +289,7 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
                 {/* Canal y número del negocio siempre a la vista: con varios canales y números
                     (una sucursal por número) el operador tiene que saber por dónde responde. */}
                 <p className="mt-0.5 text-xs truncate" style={{ color: "var(--ink-faint)" }}>
-                  {channelLabel(c.channel)}
-                  {c.business_phone ? ` · a ${c.business_phone}` : ""}
+                  {canalLineLabel(c, canalNombres)}
                 </p>
               </div>
 

@@ -11,6 +11,7 @@ import { CuentaFacturaInfo } from "./CuentaFacturaInfo"
 import { ContactoControl } from "./ContactoControl"
 import { EmitirFacturaControl } from "./EmitirFacturaControl"
 import { ReservaControl } from "./ReservaControl"
+import { PagosComprobantes } from "./PagosComprobantes"
 import { RegistrarPagoControl } from "./RegistrarPagoControl"
 import { RemitoControl } from "./RemitoControl"
 import { VincularFacturaControl } from "./VincularFacturaControl"
@@ -303,6 +304,13 @@ export function PedidoDetalle({
               )}
             </dl>
           </Seccion>
+
+          <PagosComprobantes
+            pedidoId={pedido.id}
+            cuentaPago={pedido.cuentaPago}
+            comprobantes={pedido.comprobantes}
+            pagos={pedido.pagos}
+          />
 
           <Seccion titulo="Historial">
             {pedido.historial.length === 0 ? (

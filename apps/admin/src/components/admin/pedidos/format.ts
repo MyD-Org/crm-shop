@@ -270,7 +270,13 @@ export function textoEvento(evento: EventoHistorialDto): string {
     case "pago": {
       const estado = detalleString(detalle, "estado")
       const etiqueta = estado ? pagoEstadoLabel(estado) : null
-      return `Pago: ${etiqueta ?? "actualizado"}, por ${actorTexto(actorNombre)}`
+      const monto = detalleString(detalle, "monto")
+      const referencia = detalleString(detalle, "referencia")
+      const montoNum = monto === null ? NaN : Number(monto)
+      const datos = Number.isFinite(montoNum)
+        ? ` (${[fmtMoneda(montoNum), referencia ? `ref. ${referencia}` : null].filter(Boolean).join(", ")})`
+        : ""
+      return `Pago: ${etiqueta ?? "actualizado"}${datos}, por ${actorTexto(actorNombre)}`
     }
     case "factura_vinculada": {
       const numero = detalleString(detalle, "numero")

@@ -274,6 +274,15 @@ describe("textoEvento", () => {
     )
   })
 
+  it("'pago' con monto lo muestra, y la referencia si la hay", () => {
+    expect(textoEvento(evento({ tipo: "pago", detalle: { estado: "pagado", monto: "1210.00" }, actorNombre: "Ana" }))).toBe(
+      `Pago: Pagado (${fmtMoneda(1210)}), por Ana`,
+    )
+    expect(
+      textoEvento(evento({ tipo: "pago", detalle: { estado: "pagado", monto: "1210.00", referencia: "Op. 99" }, actorNombre: "Ana" })),
+    ).toBe(`Pago: Pagado (${fmtMoneda(1210)}, ref. Op. 99), por Ana`)
+  })
+
   it("factura_vinculada / desvinculada / emitida incluyen el número", () => {
     expect(textoEvento(evento({ tipo: "factura_vinculada", detalle: { numero: "0001-00000012" }, actorNombre: "Ana" }))).toBe(
       "Factura 0001-00000012 vinculada por Ana",

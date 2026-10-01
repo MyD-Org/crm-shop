@@ -633,3 +633,62 @@ describe("tono = tipo de luz: luces de color", () => {
     expect(motivos(verificarLectura(lectura(null, { tono: { valor: "verde" } }), solo))).toEqual(["tono:valor_no_en_texto"])
   })
 })
+
+describe("montaje: el término tiene que salir del rótulo de instalación", () => {
+  const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "PANEL LED", code: "PL-001-XYZ" })
+  const montaje = (valor: string, celdas: Celda[]) => verificarLectura(lectura(null, { montaje: { valor } }), ficha(celdas))
+
+  it("'Corte embutido' no es evidencia de montaje (con guion, con medida o en una sola celda)", () => {
+    expect(motivos(montaje("embutir", [["Tipo de instalación", 40, 700], ["Plafón", 150, 700], ["Corte embutido", 40, 680], ["-", 150, 680]]))).toEqual(["montaje:montaje_fuera_de_rotulo"])
+    expect(motivos(montaje("embutir", [["Tipo de instalación", 40, 700], ["Plafón", 150, 700], ["Corte embutido", 40, 680], ["108x108mm", 150, 680]]))).toEqual(["montaje:montaje_fuera_de_rotulo"])
+    expect(motivos(montaje("embutir", [["Corte embutido: 108x108mm", 40, 680]]))).toEqual(["montaje:montaje_fuera_de_rotulo"])
+  })
+  it("'Compatible con … embutir' y 'para embutir paneles' tampoco cuentan", () => {
+    expect(motivos(montaje("embutir", [["Compatible con marcos para embutir", 40, 680]]))).toEqual(["montaje:montaje_fuera_de_rotulo"])
+    expect(motivos(montaje("embutir", [["Marco para embutir paneles", 40, 680]]))).toEqual(["montaje:montaje_fuera_de_rotulo"])
+  })
+  it("si el rótulo de instalación dice otra cosa, se descarta embutir", () => {
+    expect(motivos(montaje("embutir", [["Instalación", 40, 700], ["Aplicar", 150, 700], ["Marco para embutir paneles", 40, 680]]))).toEqual(["montaje:montaje_fuera_de_rotulo"])
+    expect(motivos(montaje("embutir", [["Montaje: Aplicar", 40, 700], ["Embutir", 300, 600]]))).toEqual(["montaje:montaje_fuera_de_rotulo"])
+  })
+  it("el valor del rótulo de instalación se acepta (celda, línea o columna)", () => {
+    expect(aceptados(montaje("embutir", [["Tipo de instalación", 40, 700], ["Embutir", 150, 700], ["Corte embutido", 40, 680], ["-", 150, 680]]))).toEqual([["montaje", "embutir"]])
+    expect(aceptados(montaje("embutir", [["Montaje: Embutido", 40, 700]]))).toEqual([["montaje", "embutir"]])
+    expect(aceptados(montaje("aplicar", [["Aplicación", 40, 700], ["Aplicar", 40, 680]]))).toEqual([["montaje", "aplicar"]])
+  })
+  it("sin rótulo de instalación, un término suelto sigue valiendo", () => {
+    expect(aceptados(montaje("embutir", [["Montura", 40, 700], ["Embutir", 150, 700]]))).toEqual([["montaje", "embutir"]])
+  })
+})
+
+describe("tono rgb/rgbw: no en accesorios", () => {
+  const rgb = (nombre: string) =>
+    verificarLectura(lectura(null, { tono: { valor: "rgb" } }), ctx([RELLENO, ["Modelo", 40, 700], ["RGB", 150, 700]], { unicoProducto: true, nombre, code: "AC-001-XYZ" }))
+  it.each(["CONECTOR RGB 4 PINES", "CONTROLADORA RGB", "CONTROL REMOTO RGB", "CABLE RGB", "FUENTE RGB 12V", "AMPLIFICADOR RGB", "EMPALME RGB", "CLIP RGB", "PERFIL RGB", "DIFUSOR RGB", "CONTROLADOR RGB"])(
+    "%s",
+    (nombre) => expect(motivos(rgb(nombre))).toEqual(["tono:tono_en_accesorio"]),
+  )
+  it("la tira RGB sí", () => expect(aceptados(rgb("TIRA LED RGB 5M"))).toEqual([["tono", "rgb"]]))
+})
+
+describe("angulo_grados: sólo el ángulo de luz", () => {
+  const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "SPOT LED", code: "SP-001-XYZ" })
+  const ang = (valor: number, celdas: Celda[]) => verificarLectura(lectura(null, { angulo_grados: { valor } }), ficha(celdas))
+  it.each(["Ángulo de apertura", "Ángulo de haz", "Beam angle", "Apertura", "Ángulo"])("acepta bajo '%s'", (r) => {
+    expect(aceptados(ang(60, [[r, 40, 700], ["60°", 150, 700]]))).toEqual([["angulo_grados", 60]])
+  })
+  it("acepta con el rótulo en la misma celda", () => {
+    expect(aceptados(ang(60, [["Ángulo de apertura: 60°", 40, 700]]))).toEqual([["angulo_grados", 60]])
+  })
+  it.each(["Ángulo de giro", "Rotación", "Ángulo de inclinación", "Orientable", "Basculante"])("descarta bajo '%s'", (r) => {
+    expect(motivos(ang(350, [[r, 40, 700], ["350°", 150, 700]]))).toEqual(["angulo_grados:angulo_no_es_de_luz"])
+    expect(motivos(ang(350, [[`${r}: 350°`, 40, 700]]))).toEqual(["angulo_grados:angulo_no_es_de_luz"])
+  })
+  it("sin rótulo de ángulo, no", () => {
+    expect(motivos(ang(60, [["Modelo", 40, 700], ["60°", 150, 700]]))).toEqual(["angulo_grados:angulo_no_es_de_luz"])
+  })
+  it("tabla transpuesta: el rótulo está en el encabezado de la columna", () => {
+    expect(aceptados(ang(60, [["Apertura", 150, 720], ["60°", 150, 700]]))).toEqual([["angulo_grados", 60]])
+    expect(motivos(ang(350, [["Giro", 150, 720], ["350°", 150, 700]]))).toEqual(["angulo_grados:angulo_no_es_de_luz"])
+  })
+})

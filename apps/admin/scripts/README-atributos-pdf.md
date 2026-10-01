@@ -58,6 +58,14 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    (`color_de_luz`): es el color de la luz, no del producto. Si el producto es una fuente de luz de color
    (RGB, tira, cinta, lámpara), el color sólo se acepta con rótulo carcasa, cuerpo, terminación, acabado o
    "color"; ante la duda, se descarta.
+   **Montaje**: si el PDF tiene un rótulo "Tipo de instalación", "Instalación", "Montaje" o "Aplicación",
+   el valor tiene que ser el de esa celda/fila; "Corte embutido", "Compatible con … embutir" y "para
+   embutir paneles" no son evidencia de montaje (`montaje_fuera_de_rotulo`).
+   **Tono RGB/RGBW**: no se acepta si el nombre es un accesorio (conector, controlador/a, control remoto,
+   cable, fuente, amplificador, empalme, clip, perfil, difusor): `tono_en_accesorio`.
+   **Ángulo**: sólo si el rótulo de su fila/columna o su celda habla de ángulo, apertura o haz ("Beam
+   angle"); "giro", "rotación", "inclinación", "orientable" y "basculante" se descartan
+   (`angulo_no_es_de_luz`).
 5. PDF sin capa de texto: `sin_texto`. Rangos y vocabularios de `normalizarAtributos`: `valor_invalido`.
 
 Dos lecturas distintas del mismo (producto, clave) se descartan (`conflicto_entre_lecturas`).

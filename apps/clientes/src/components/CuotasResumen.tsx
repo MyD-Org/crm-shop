@@ -33,7 +33,7 @@ export function CuotasResumen({
       )}
       {mejor && (
         <p className="text-xs text-muted">
-          {TEXTOS_CUOTAS.linea(mejor.cuotas, mejor.montoCuota, mejor.sinInteres)}
+          {TEXTOS_CUOTAS.linea(mejor.cuotas, mejor.montoCuota, mejor.sinInteres, mejor.total)}
         </p>
       )}
       {accion}

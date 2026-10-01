@@ -438,7 +438,7 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
 });
 
 /**
- * Atributos técnicos estructurados por producto (`public.catalog_atributos`, migración 0048 del
+ * Atributos técnicos estructurados por producto (`public.catalog_atributos`, migración 0049 del
  * CRM; catálogo asistido fase 2). SELECT POR COLUMNA: `fuente` y `updated_at` NO se conceden (la
  * precedencia manual > pdf > nombre la resuelve el CRM al escribir; el Shop lee el valor que
  * quedó). Una fila por (tenant, producto, clave); `alegraId` es el de `crmCatalogo`. La migración

@@ -94,7 +94,8 @@ export function InformarPago({
   const [abierto, setAbierto] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [monto, setMonto] = useState(pedido ? montoPrecargado(pedido.total) : "");
-  const [paidOn, setPaidOn] = useState("");
+  // Por defecto, hoy (en Argentina): lo más común es informar la transferencia el mismo día.
+  const [paidOn, setPaidOn] = useState(() => arYmd(new Date()));
   const [method, setMethod] = useState("");
   const [methodOther, setMethodOther] = useState("");
   const [notes, setNotes] = useState("");
@@ -121,7 +122,7 @@ export function InformarPago({
   function reiniciar() {
     setFile(null);
     setMonto(pedido ? montoPrecargado(pedido.total) : "");
-    setPaidOn("");
+    setPaidOn(arYmd(new Date()));
     setMethod("");
     setMethodOther("");
     setNotes("");

@@ -117,3 +117,19 @@ describe("textos de disponibilidad", () => {
     ).toEqual([]);
   });
 });
+
+describe("estados sin prefijo (lista de locales de la ficha)", () => {
+  it("retiro: hoy, con plazo, a coordinar y no disponible", async () => {
+    const { estadoRetiroLocal } = await import("./disponibilidad-textos");
+    expect(estadoRetiroLocal({ estado: "disponible", desde: null, demoraDias: null })).toEqual({ texto: "Disponible hoy", tono: "ok" });
+    expect(estadoRetiroLocal({ estado: "con_demora", desde: "b", demoraDias: 3 }).texto).toBe("Disponible en 3 días");
+    expect(estadoRetiroLocal({ estado: "con_demora", desde: "b", demoraDias: 0 }).texto).toBe("A coordinar");
+    expect(estadoRetiroLocal({ estado: "sin_stock", desde: null, demoraDias: null }).tono).toBe("no");
+  });
+
+  it("envío: disponible y con plazo", async () => {
+    const { estadoEnvio } = await import("./disponibilidad-textos");
+    expect(estadoEnvio({ estado: "disponible", origen: "a", demoraDias: null }).texto).toBe("Disponible");
+    expect(estadoEnvio({ estado: "a_traer", origen: "b", demoraDias: 1 }).texto).toBe("Disponible en 1 día");
+  });
+});

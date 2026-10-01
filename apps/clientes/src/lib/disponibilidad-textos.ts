@@ -20,6 +20,9 @@ export type DisponibilidadVista = DisponibilidadProducto;
 export interface LocalDisponibilidad {
   slug: string;
   nombre: string;
+  /** Para la lista de locales de la ficha ("Catamarca 1865, Mar del Plata"). */
+  direccion?: string;
+  ciudad?: string;
 }
 
 /** Plazo cuando hay que traerlo de otra sucursal: "en 3 días"; 0 o sin dato = "a coordinar". */
@@ -92,6 +95,30 @@ export function lineasDisponibilidad(
   if (conEnvio && d.envio)
     lineas.push({ texto: textoEnvio(d.envio), tono: tonoEnvio(d.envio) });
   return lineas;
+}
+
+const mayuscula = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+
+/** Estado del retiro sin el "Retiro en <local>:" (la ficha lo pone bajo el nombre del local). */
+export function estadoRetiroLocal(d: DisponibilidadRetiro): LineaDisponibilidad {
+  const texto =
+    d.estado === "disponible"
+      ? "Disponible hoy"
+      : d.estado === "con_demora"
+        ? mayuscula(plazo(d.demoraDias))
+        : "No disponible";
+  return { texto, tono: tonoRetiro(d) };
+}
+
+/** Estado del envío a domicilio sin el prefijo (fila de envío de la ficha). */
+export function estadoEnvio(d: DisponibilidadEnvio): LineaDisponibilidad {
+  const texto =
+    d.estado === "disponible"
+      ? "Disponible"
+      : d.estado === "a_traer"
+        ? mayuscula(plazo(d.demoraDias))
+        : "No disponible";
+  return { texto, tono: tonoEnvio(d) };
 }
 
 /** Sólo los textos (ver `lineasDisponibilidad`). */

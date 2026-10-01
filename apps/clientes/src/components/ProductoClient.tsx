@@ -18,7 +18,6 @@ import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
 import { GaleriaProducto } from "@/components/GaleriaProducto";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
-import { DisponibilidadLineas } from "@/components/producto/DisponibilidadLineas";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 import { EspecificacionesProducto } from "@/components/producto/EspecificacionesProducto";
 import { DudasProducto } from "@/components/producto/DudasProducto";
@@ -307,15 +306,7 @@ export function ProductoClient({
               <BotonFavorito productId={producto.id} />
             </div>
 
-            {disponibilidad && (
-              <DisponibilidadLineas
-                disponibilidad={disponibilidad.producto}
-                locales={disponibilidad.locales}
-                envio={envio}
-              />
-            )}
-
-            <EntregaProducto envio={envio} />
+            <EntregaProducto envio={envio} disponibilidad={disponibilidad} />
 
             {/* Preguntas sugeridas al asesor: sólo con el chat montado. */}
             <DudasProducto producto={producto} />

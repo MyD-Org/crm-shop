@@ -22,6 +22,8 @@ function fila(overrides: Partial<ComprobanteFila> = {}): ComprobanteFila {
     id: ID,
     tenantId: TENANT.id,
     codigocliente: "12345",
+    shopOrderId: null,
+    clerkUserId: null,
     razonsocial: "Cliente <Demo> SRL",
     cuit: "30123456780",
     clientEmail: "cliente@empresa.cliente.example",

@@ -46,6 +46,7 @@ import {
   type CuentaPagoSnapshot,
 } from "./cuentas-bancarias";
 import { leerCuentasBancariasEnTx } from "./cuentas-bancarias-repo";
+import type { PedidoParaComprobante } from "./comprobantes/pedido";
 
 /** Formato visible del número correlativo. */
 export function formatearNumero(numero: number): string {
@@ -776,6 +777,49 @@ export async function getPedidoParaPago(
     estado: fila.estado as OrderEstado,
     creadoEn: fila.createdAt,
   };
+}
+
+/**
+ * Trae un pedido para informar el pago de su transferencia (comprobante), SOLO si es de quien
+ * lo pide (`esDeSuDueno`: del tenant y de su usuario o su cuenta corriente). Un pedido ajeno
+ * responde igual que uno inexistente. El monto precargado sale de acá (total congelado).
+ */
+export async function getPedidoParaComprobante(
+  id: string,
+  dueno: DuenoPedidos,
+): Promise<PedidoParaComprobante | null> {
+  const [fila] = await getDb()
+    .select()
+    .from(orders)
+    .where(and(eq(orders.id, id), esDeSuDueno(dueno)))
+    .limit(1);
+
+  if (!fila) return null;
+
+  return {
+    id: fila.id,
+    numero: formatearNumero(fila.numero),
+    total: num(fila.total),
+    pagoMetodo: fila.pagoMetodo,
+    pagoEstado: fila.pagoEstado,
+    estado: fila.estado,
+    clienteRazonSocial: fila.clienteRazonSocial,
+    facturacionRazonSocial: fila.facturacionRazonSocial,
+    contactoNombre: fila.contactoNombre,
+    clienteCuit: fila.clienteCuit,
+    facturacionNroDoc: fila.facturacionNroDoc,
+    clienteEmail: fila.clienteEmail,
+  };
+}
+
+/** "PED-00000042" de un pedido del tenant, o null si no existe (para el mail del comprobante). */
+export async function numeroDePedido(tenantId: string, id: string): Promise<string | null> {
+  const [fila] = await getDb()
+    .select({ numero: orders.numero })
+    .from(orders)
+    .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)))
+    .limit(1);
+  return fila ? formatearNumero(fila.numero) : null;
 }
 
 /** Lo que se persiste de un intento de cobro, venga de la ruta o del webhook. */

@@ -180,6 +180,19 @@ no carguen.
   con el número de recibo de Alegra si lo hay), de a 10 con "Cargar más"
   (`GET /api/mi-cuenta/comprobantes?start`). Los estados internos no se ven.
 
+- "Subir comprobante" (change `pago-transferencia-comprobante`): en el detalle de un
+  pedido por transferencia con el pago pendiente, CUALQUIER comprador logueado (con o sin
+  cuenta corriente, de contado o corriente) puede subir el comprobante. Es el mismo
+  formulario con el medio fijo en transferencia y el monto precargado con el total del
+  pedido (editable); el init manda `pedidoId` a `POST /api/mi-cuenta/comprobantes`, que
+  valida que el pedido sea suyo (404 si no), de transferencia y con el pago pendiente
+  (409 si no), el tope de 5 comprobantes por pedido y los límites de hora/día por
+  comprador. La fila lleva `shop_order_id` y `clerk_user_id` y, sin cuenta corriente,
+  `codigocliente` NULL (migración 0056 del CRM; el CHECK exige pedido y usuario). El
+  confirm lo hace su dueño (código de cliente o, sin él, su usuario). El mail dice "Sin
+  cuenta corriente · Pedido PED-…" y el backoffice lo gestiona a mano (Alegra no se carga
+  sin cliente).
+
 ### Presupuestos (`/mi-cuenta/presupuestos`)
 
 - De a 30, primera página del servidor; "Cargar más" y los filtros van a

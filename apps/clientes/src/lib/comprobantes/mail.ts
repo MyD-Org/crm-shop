@@ -97,7 +97,10 @@ export interface DatosMailComprobante {
     id: string;
     razonsocial: string;
     cuit: string;
-    codigocliente: string;
+    /** null = comprador sin cuenta corriente (0056 del CRM): el mail lo indica y muestra el pedido. */
+    codigocliente: string | null;
+    /** "PED-00000042" del pedido al que corresponde el comprobante, si lo hay y se conoce. */
+    pedidoNumero?: string | null;
     /** Decimal string ("150000.50"): sólo se formatea. */
     amount: string;
     paidOn: string;
@@ -142,6 +145,17 @@ export function armarMailComprobante(input: DatosMailComprobante): { subject: st
   const dupNote = input.duplicateOf
     ? `Posible duplicado de un comprobante del ${formatSubmittedAt(input.duplicateOf.submittedAt)} (mismo archivo, ya informado).`
     : "";
+  // Cuenta del cliente: el código de Alegra o, sin cuenta corriente, el aviso con el pedido.
+  const sinCuenta = r.codigocliente === null;
+  const cuentaEtiqueta = sinCuenta ? "Cuenta" : "Código";
+  const cuentaValor = sinCuenta
+    ? `Sin cuenta corriente${r.pedidoNumero ? ` · Pedido ${r.pedidoNumero}` : ""}`
+    : (r.codigocliente as string);
+  // Con cuenta corriente Y pedido, el pedido va en su propia fila.
+  const pedidoFila =
+    !sinCuenta && r.pedidoNumero
+      ? `<tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Pedido</td><td style="padding:6px 0">${e(r.pedidoNumero)}</td></tr>`
+      : "";
   const convertedNote = r.convertedFrom ? ` (convertido de ${e(r.convertedFrom)})` : "";
   const archivo = `${e(r.fileMime)} · ${formatMb(r.fileSize)}${convertedNote}`;
   const pie = `Enviado automáticamente desde Mi cuenta de la tienda de ${tenantName}.`;
@@ -162,7 +176,8 @@ export function armarMailComprobante(input: DatosMailComprobante): { subject: st
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:14px">
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top;width:130px">Cliente</td><td style="padding:6px 0">${e(r.razonsocial)}</td></tr>
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">CUIT</td><td style="padding:6px 0">${e(r.cuit)}</td></tr>
-          <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Código</td><td style="padding:6px 0">${e(r.codigocliente)}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">${cuentaEtiqueta}</td><td style="padding:6px 0">${e(cuentaValor)}</td></tr>
+          ${pedidoFila}
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Monto</td><td style="padding:6px 0">${e(formatAmountAr(r.amount))}</td></tr>
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Fecha del pago</td><td style="padding:6px 0">${formatDate(r.paidOn)}</td></tr>
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Medio</td><td style="padding:6px 0">${e(methodLabel)}</td></tr>
@@ -191,7 +206,8 @@ export function armarMailComprobante(input: DatosMailComprobante): { subject: st
     ``,
     `Cliente: ${r.razonsocial}`,
     `CUIT: ${r.cuit}`,
-    `Código: ${r.codigocliente}`,
+    `${cuentaEtiqueta}: ${cuentaValor}`,
+    ...(!sinCuenta && r.pedidoNumero ? [`Pedido: ${r.pedidoNumero}`] : []),
     `Monto: ${formatAmountAr(r.amount)}`,
     `Fecha del pago: ${formatDate(r.paidOn)}`,
     `Medio: ${methodLabel}`,
@@ -232,6 +248,9 @@ export interface EntradaAviso {
 
 export interface DepsAviso {
   repo: RepoMail;
+  /** Número legible del pedido de un comprobante por pedido ("PED-…"). Informativo: si falla o
+   * falta, el mail sale sin él. */
+  numeroPedido?: (tenantId: string, pedidoId: string) => Promise<string | null>;
   env?: Record<string, string | undefined>;
   enviar?: typeof enviarEmail;
   now?: () => Date;
@@ -290,6 +309,10 @@ export async function enviarAvisoComprobante(entrada: EntradaAviso, deps: DepsAv
     buffer.length <= ATTACH_MAX_BYTES ? { filename, content: buffer, contentType: row.fileMime } : undefined;
 
   // 4. Armado + envío.
+  let pedidoNumero: string | null = null;
+  if (row.shopOrderId && deps.numeroPedido) {
+    pedidoNumero = await deps.numeroPedido(tenant.id, row.shopOrderId).catch(() => null);
+  }
   const clientEmail = looksLikeEmail(row.clientEmail) ? row.clientEmail : null;
   const email = armarMailComprobante({
     tenantName: tenant.nombre,
@@ -298,6 +321,7 @@ export async function enviarAvisoComprobante(entrada: EntradaAviso, deps: DepsAv
       razonsocial: row.razonsocial,
       cuit: row.cuit,
       codigocliente: row.codigocliente,
+      pedidoNumero,
       amount: row.amount,
       paidOn: row.paidOn,
       method: row.method,

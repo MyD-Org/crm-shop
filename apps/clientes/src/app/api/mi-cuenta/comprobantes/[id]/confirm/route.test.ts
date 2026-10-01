@@ -15,11 +15,13 @@ const getR2 = vi.fn();
 const confirmar = vi.fn();
 const avisar = vi.fn();
 const datosTenant = vi.fn();
+const numeroDePedido = vi.fn();
 
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
 vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/r2", () => ({ getComprobantesR2: () => getR2() }));
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-a" }));
+vi.mock("@/lib/pedidos", () => ({ numeroDePedido: (...a: unknown[]) => numeroDePedido(...a) }));
 vi.mock("@/lib/cuenta-corriente/tenant-cc", () => ({ datosTenant: () => datosTenant() }));
 vi.mock("@/lib/comprobantes/repo", () => ({}));
 vi.mock("@/lib/comprobantes/mail", () => ({ enviarAvisoComprobante: (...a: unknown[]) => avisar(...a) }));
@@ -35,7 +37,7 @@ const pedir = (id = ID) =>
   });
 
 beforeEach(() => {
-  for (const f of [identidad, getR2, confirmar, avisar, datosTenant]) f.mockReset();
+  for (const f of [identidad, getR2, confirmar, avisar, datosTenant, numeroDePedido]) f.mockReset();
   identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
   getR2.mockReturnValue({});
   datosTenant.mockResolvedValue({
@@ -52,12 +54,9 @@ describe("POST /api/mi-cuenta/comprobantes/[id]/confirm", () => {
     expect(maxDuration).toBe(60);
   });
 
-  it("anónimo 401 / contado 404 / sin R2 503, sin confirmar", async () => {
+  it("anónimo 401 / sin R2 503, sin confirmar", async () => {
     identidad.mockResolvedValue({ clerkUserId: null, cliente: null });
     expect((await pedir()).status).toBe(401);
-    acceso.mockResolvedValueOnce(false);
-    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
-    expect((await pedir()).status).toBe(404);
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
     getR2.mockReturnValue(null);
     expect((await pedir()).status).toBe(503);
@@ -75,13 +74,42 @@ describe("POST /api/mi-cuenta/comprobantes/[id]/confirm", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Cache-Control")).toBe("private, no-store");
     expect(await res.json()).toEqual({ id: ID, status: "pending" });
-    expect(confirmar.mock.calls[0]?.[0]).toEqual({ tenantId: "tenant-a", codigocliente: "42", id: ID });
+    expect(confirmar.mock.calls[0]?.[0]).toEqual({ tenantId: "tenant-a", duenio: "42", id: ID });
     expect(avisar.mock.calls[0]?.[0]).toMatchObject({
       tenant: { id: "tenant-a", nombre: "Tienda Demo", mailComprobantes: "pagos@tienda.cliente.example" },
       id: ID,
     });
     // El link del mail nunca sale del request: el aviso no recibe origin.
     expect(avisar.mock.calls[0]?.[0]).not.toHaveProperty("origin");
+  });
+
+  it("comprador SIN cuenta corriente (o de contado): confirma su comprobante con su usuario como dueño", async () => {
+    identidad.mockResolvedValue({ clerkUserId: "user_9", cliente: null });
+    confirmar.mockResolvedValue({ ok: true, status: "pending" });
+    const res = await pedir();
+    expect(res.status).toBe(200);
+    expect(confirmar.mock.calls[0]?.[0]).toEqual({ tenantId: "tenant-a", duenio: { clerkUserId: "user_9" }, id: ID });
+
+    // De contado (vinculado, sin cuenta corriente): su código sigue siendo el dueño y ya no hay 404.
+    acceso.mockResolvedValueOnce(false);
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "42", origen: "vinculacion" } });
+    expect((await pedir()).status).toBe(200);
+    expect(confirmar.mock.calls[1]?.[0]).toMatchObject({ duenio: "42" });
+  });
+
+  it("el aviso resuelve el número del pedido con el tenant del Shop", async () => {
+    numeroDePedido.mockResolvedValue("PED-00000042");
+    identidad.mockResolvedValue({ clerkUserId: "user_9", cliente: null });
+    confirmar.mockImplementation(
+      async (_e, deps: { avisar: (id: string, b: Uint8Array, d: null) => Promise<unknown> }) => {
+        await deps.avisar(ID, new Uint8Array([1]), null);
+        return { ok: true, status: "pending" };
+      },
+    );
+    await pedir();
+    const deps = avisar.mock.calls[0]?.[1] as { numeroPedido: (t: string, id: string) => Promise<string | null> };
+    expect(await deps.numeroPedido("tenant-a", "p-1")).toBe("PED-00000042");
+    expect(numeroDePedido).toHaveBeenCalledWith("tenant-a", "p-1");
   });
 
   it("id ajeno o inexistente ⇒ 404; archivo falso ⇒ 415 con el mensaje de CMP-1", async () => {

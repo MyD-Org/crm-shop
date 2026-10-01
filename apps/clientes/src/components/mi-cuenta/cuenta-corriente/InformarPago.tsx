@@ -15,6 +15,7 @@ import {
   useToast,
 } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
+import { montoPrecargado } from "@/lib/comprobantes/pedido";
 import {
   MAX_FILE_BYTES,
   MAX_METHOD_OTHER_CHARS,
@@ -76,16 +77,23 @@ const ULTIMOS_INFORMADOS = 5;
 export function InformarPago({
   ultimos,
   onInformado,
+  pedido,
 }: {
   /** Los últimos comprobantes enviados, para no duplicar. */
   ultimos: ComprobanteCliente[];
   /** Se llama tras un comprobante recibido (para refrescar la lista). */
   onInformado: () => void;
+  /**
+   * Comprobante de la transferencia de UN pedido (también para compradores sin cuenta
+   * corriente): el medio queda fijo en transferencia, el monto se precarga con el total y el
+   * pedido viaja en el init como `pedidoId`.
+   */
+  pedido?: { id: string; numero: string; total: number };
 }) {
   const { toast } = useToast();
   const [abierto, setAbierto] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [monto, setMonto] = useState("");
+  const [monto, setMonto] = useState(pedido ? montoPrecargado(pedido.total) : "");
   const [paidOn, setPaidOn] = useState("");
   const [method, setMethod] = useState("");
   const [methodOther, setMethodOther] = useState("");
@@ -112,7 +120,7 @@ export function InformarPago({
 
   function reiniciar() {
     setFile(null);
-    setMonto("");
+    setMonto(pedido ? montoPrecargado(pedido.total) : "");
     setPaidOn("");
     setMethod("");
     setMethodOther("");
@@ -146,9 +154,10 @@ export function InformarPago({
     const normalizado = normalizarMonto(monto);
     if (!normalizado || !parseAmount(normalizado)) errores.amount = MENSAJES_CAMPO.amount;
     if (!isValidPaidOn(paidOn, new Date())) errores.paidOn = MENSAJES_CAMPO.paidOn;
-    if (!method) errores.method = MENSAJES_CAMPO.method;
-    if (method === "otro" && methodOther.trim().length === 0) errores.methodOther = MENSAJES_CAMPO.methodOther;
-    else if (methodOther.trim().length > MAX_METHOD_OTHER_CHARS) errores.methodOther = MENSAJES_CAMPO.methodOtherLargo;
+    // Con pedido el medio es siempre transferencia: no se pide.
+    if (!pedido && !method) errores.method = MENSAJES_CAMPO.method;
+    if (!pedido && method === "otro" && methodOther.trim().length === 0) errores.methodOther = MENSAJES_CAMPO.methodOther;
+    else if (!pedido && methodOther.trim().length > MAX_METHOD_OTHER_CHARS) errores.methodOther = MENSAJES_CAMPO.methodOtherLargo;
     if (notes.length > MAX_NOTES_CHARS) errores.notes = MENSAJES_CAMPO.notes;
     setFieldErrors(errores);
     return Object.keys(errores).length === 0;
@@ -164,10 +173,11 @@ export function InformarPago({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          ...(pedido ? { pedidoId: pedido.id } : {}),
           amount: normalizarMonto(monto),
           paidOn,
-          method,
-          methodOther: method === "otro" ? methodOther.trim() : undefined,
+          method: pedido ? "transferencia" : method,
+          methodOther: !pedido && method === "otro" ? methodOther.trim() : undefined,
           notes: notes.trim() || undefined,
           file: { name: file.name, size: file.size, contentType: tipoDeclarado(file) },
         }),
@@ -307,7 +317,7 @@ export function InformarPago({
   return (
     <>
       <Button onClick={() => setAbierto(true)}>
-        <IconoSubir /> Informar pago
+        <IconoSubir /> {pedido ? "Subir comprobante" : "Informar pago"}
       </Button>
 
       <Dialog
@@ -315,8 +325,12 @@ export function InformarPago({
         onOpenChange={(o) => {
           if (!o) cerrar();
         }}
-        title="Informar pago"
-        description="Adjunte el comprobante de su pago. Lo revisaremos y lo registraremos en su cuenta."
+        title={pedido ? "Subir comprobante" : "Informar pago"}
+        description={
+          pedido
+            ? `Adjunte el comprobante de su transferencia del pedido ${pedido.numero}. Lo revisaremos y registraremos su pago.`
+            : "Adjunte el comprobante de su pago. Lo revisaremos y lo registraremos en su cuenta."
+        }
         size="md"
         footer={
           <>
@@ -375,21 +389,23 @@ export function InformarPago({
             </Field>
           </div>
 
-          <Field label="Medio de pago" error={fieldErrors.method || undefined}>
-            <Select
-              options={[...OPCIONES_MEDIO]}
-              value={method}
-              placeholder="Seleccione el medio"
-              disabled={ocupado}
-              aria-invalid={Boolean(fieldErrors.method)}
-              onValueChange={(v) => {
-                setMethod(v);
-                limpiarCampo("method");
-              }}
-            />
-          </Field>
+          {!pedido && (
+            <Field label="Medio de pago" error={fieldErrors.method || undefined}>
+              <Select
+                options={[...OPCIONES_MEDIO]}
+                value={method}
+                placeholder="Seleccione el medio"
+                disabled={ocupado}
+                aria-invalid={Boolean(fieldErrors.method)}
+                onValueChange={(v) => {
+                  setMethod(v);
+                  limpiarCampo("method");
+                }}
+              />
+            </Field>
+          )}
 
-          {method === "otro" && (
+          {!pedido && method === "otro" && (
             <Field label="Especifique el medio" error={fieldErrors.methodOther || undefined}>
               <Input
                 placeholder="Ej.: Mercado Pago, link de pago"

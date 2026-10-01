@@ -5,7 +5,7 @@ const acceso = vi.fn();
 vi.mock("../auth", () => ({ identidadActual: () => identidad() }));
 vi.mock("../acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 
-import { jsonNoStore, NO_DISPONIBLE, requerirCuentaCorriente, SIN_SESION } from "./guard";
+import { jsonNoStore, NO_DISPONIBLE, requerirComprador, requerirCuentaCorriente, SIN_SESION, SIN_SESION_COMPRADOR } from "./guard";
 
 beforeEach(() => {
   identidad.mockReset();
@@ -51,5 +51,38 @@ describe("jsonNoStore", () => {
     const r = jsonNoStore({ ok: true }, { status: 400 });
     expect(r.status).toBe(400);
     expect(r.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+});
+
+describe("requerirComprador (comprobante por pedido: con o sin cuenta corriente)", () => {
+  it("anónimo: 401 en usted y no-store", async () => {
+    identidad.mockResolvedValue({ clerkUserId: null, cliente: null });
+    const { error } = await requerirComprador();
+    expect(error?.status).toBe(401);
+    expect(error?.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(await error?.json()).toEqual({ error: SIN_SESION_COMPRADOR });
+  });
+
+  it("logueado sin vínculo: pasa, y el dueño es su usuario de Clerk (sin leer el espejo)", async () => {
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
+    const r = await requerirComprador();
+    expect(r.error).toBeUndefined();
+    expect(r.comprador).toMatchObject({ clerkUserId: "user_1", cliente: null, duenio: { clerkUserId: "user_1" } });
+    expect(acceso).not.toHaveBeenCalled();
+  });
+
+  it("vinculado (aunque sea de contado): pasa, y el dueño es su código de cliente", async () => {
+    const cliente = { codigocliente: "42", origen: "vinculacion" };
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente });
+    acceso.mockResolvedValue(false);
+    const r = await requerirComprador();
+    expect(r.comprador).toMatchObject({ clerkUserId: "user_1", cliente, duenio: "42" });
+  });
+
+  it("cookie heredada del portal (sin Clerk): el dueño es su código de cliente", async () => {
+    const cliente = { codigocliente: "42", origen: "cookie_crm" };
+    identidad.mockResolvedValue({ clerkUserId: null, cliente });
+    const r = await requerirComprador();
+    expect(r.comprador).toMatchObject({ clerkUserId: null, cliente, duenio: "42" });
   });
 });

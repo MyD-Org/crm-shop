@@ -52,6 +52,8 @@ function row(overrides: Partial<ComprobanteFila> = {}): ComprobanteFila {
     id: RECEIPT_ID,
     tenantId: TENANT.id,
     codigocliente: CLIENT.codigocliente,
+    shopOrderId: null,
+    clerkUserId: null,
     razonsocial: "Cliente Demo SRL",
     cuit: "30123456780",
     clientEmail: "cliente@cliente.example",
@@ -152,7 +154,7 @@ function setup(repoOpts: RepoOptions = {}, r2Opts: R2Options = {}) {
   const deliver = vi.fn<(receiptId: string, buffer: Uint8Array) => Promise<void>>(async () => {});
   const run = (id: string = RECEIPT_ID) =>
     confirmarComprobante(
-      { tenantId: TENANT.id, codigocliente: CLIENT.codigocliente, id },
+      { tenantId: TENANT.id, duenio: CLIENT.codigocliente, id },
       { repo: repo as RepoConfirmar, r2: r2 as unknown as R2Client, avisar: deliver, now: () => NOW },
     );
   return { repo, r2, deliver, run };
@@ -203,6 +205,26 @@ describe("confirmarComprobante", () => {
     expect(deliver).toHaveBeenCalledTimes(1);
     expect(deliver.mock.calls[0]?.[0]).toBe(RECEIPT_ID);
     expect(deliver.mock.calls[0]?.[1]).toBe(PDF);
+  });
+
+  it("comprador sin cuenta corriente: el dueño (usuario de Clerk) llega tal cual a claim, lectura y duplicado", async () => {
+    const duenio = { clerkUserId: "user_1" };
+    const repo = makeRepo({ claimed: null, found: null });
+    const r2 = makeR2({});
+    const result = await confirmarComprobante(
+      { tenantId: TENANT.id, duenio, id: RECEIPT_ID },
+      { repo: repo as RepoConfirmar, r2: r2 as unknown as R2Client, avisar: vi.fn(), now: () => NOW },
+    );
+    expect(result).toMatchObject({ ok: false, status: 404, code: "not_found" });
+    expect(repo.tomarParaConfirmar).toHaveBeenCalledWith(TENANT.id, duenio, RECEIPT_ID, NOW);
+    expect(repo.buscarDelCliente).toHaveBeenCalledWith(TENANT.id, duenio, RECEIPT_ID);
+
+    const ok = makeRepo({});
+    await confirmarComprobante(
+      { tenantId: TENANT.id, duenio, id: RECEIPT_ID },
+      { repo: ok as RepoConfirmar, r2: makeR2({}) as unknown as R2Client, avisar: vi.fn(), now: () => NOW },
+    );
+    expect(ok.buscarDuplicado).toHaveBeenCalledWith(TENANT.id, duenio, expect.any(String), RECEIPT_ID);
   });
 
   it("id que no es UUID ⇒ 404 not_found sin tocar repo ni R2", async () => {

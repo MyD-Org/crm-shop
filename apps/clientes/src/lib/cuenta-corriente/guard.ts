@@ -11,8 +11,10 @@
  */
 import { accesoFacturacion } from "../acceso-facturacion";
 import { identidadActual, type ClienteComercial } from "../auth";
+import { duenioDe, type Duenio } from "../comprobantes/duenio";
 
 export const SIN_SESION = "Inicie sesión para ver su cuenta corriente.";
+export const SIN_SESION_COMPRADOR = "Inicie sesión para continuar.";
 export const NO_DISPONIBLE = "Esta sección no está disponible para su cuenta.";
 
 const NO_STORE = "private, no-store";
@@ -39,4 +41,27 @@ export async function requerirCuentaCorriente(): Promise<ResultadoGuard> {
   if (!clerkUserId && !cliente) return { error: jsonNoStore({ error: SIN_SESION }, { status: 401 }) };
   if (cliente?.codigocliente && (await accesoFacturacion())) return { cliente };
   return { error: jsonNoStore({ error: NO_DISPONIBLE }, { status: 404 }) };
+}
+
+export interface Comprador {
+  clerkUserId: string | null;
+  /** null = comprador sin cuenta corriente vinculada. */
+  cliente: ClienteComercial | null;
+  /** Quién es el dueño de sus comprobantes (ver `Duenio`). */
+  duenio: Duenio;
+}
+
+export type ResultadoCompradorGuard = { comprador: Comprador; error?: undefined } | { comprador?: undefined; error: Response };
+
+/**
+ * Para lo que puede hacer CUALQUIER comprador logueado sobre su propio pedido (subir el
+ * comprobante de su transferencia): con o sin cuenta corriente, de contado o corriente. No
+ * pasa por `accesoFacturacion`: lo que se toca es el pedido, no la cuenta corriente. Anónimo ⇒
+ * 401; la pertenencia del pedido la valida cada ruta con el `duenio`.
+ */
+export async function requerirComprador(): Promise<ResultadoCompradorGuard> {
+  const identidad = await identidadActual();
+  const duenio = duenioDe(identidad);
+  if (!duenio) return { error: jsonNoStore({ error: SIN_SESION_COMPRADOR }, { status: 401 }) };
+  return { comprador: { clerkUserId: identidad.clerkUserId, cliente: identidad.cliente, duenio } };
 }

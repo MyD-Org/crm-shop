@@ -7,6 +7,8 @@ import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
 import { getBotStatus, type InboxContact } from "@/lib/inbox-api"
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
+import { listarNombres } from "@/lib/inbox-canales-repo"
+import { roleRank } from "@/lib/roles"
 import { InboxList } from "@/components/admin/InboxList"
 import { BotKillSwitch } from "@/components/admin/BotKillSwitch"
 
@@ -19,6 +21,7 @@ export default async function InboxPage() {
   let contacts: InboxContact[] = []
   let botEnabled = true
   let configError = ""
+  const canalNombres = await listarNombres(session.tenantId).catch(() => ({}) as Record<string, string>)
 
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     configError = "El inbox no está configurado. Complete AI_TENANT_ID y AI_API_URL en la config del tenant."
@@ -59,7 +62,10 @@ export default async function InboxPage() {
           {configError}
         </div>
       ) : (
-        <InboxList initialContacts={contacts} currentUserId={session.userId} initialBotEnabled={botEnabled} />
+        <InboxList initialContacts={contacts} currentUserId={session.userId} initialBotEnabled={botEnabled}
+          initialCanalNombres={canalNombres}
+          canEditCanales={roleRank(session.role) >= 1}
+        />
       )}
     </div>
   )

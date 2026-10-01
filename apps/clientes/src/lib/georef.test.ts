@@ -114,7 +114,7 @@ describe("buscarLocalidades", () => {
     expect(url.pathname).toBe("/georef/api/localidades");
     expect(url.searchParams.get("nombre")).toBe("coronel vid");
     expect(url.searchParams.get("max")).toBe("8");
-    expect(url.searchParams.get("campos")).toBe("id,nombre,provincia.nombre,municipio.nombre");
+    expect(url.searchParams.get("campos")).toBe("id,nombre,categoria,provincia.nombre,municipio.nombre,departamento.nombre");
   });
 
   it("menos de 4 caracteres no llama a Georef", async () => {
@@ -157,5 +157,23 @@ describe("localidadPorId", () => {
   });
   it("id inexistente = null", async () => {
     await expect(localidadPorId("999", json({ localidades: [] }))).resolves.toBeNull();
+  });
+});
+
+describe("localidades duplicadas y homónimas", () => {
+  it("una sola por nombre, provincia y partido, prefiriendo la que no es Entidad", async () => {
+    const { depurarLocalidades, etiquetaLocalidad } = await import("./georef");
+    const base = { localidad: "Ciudad Ejemplo", provincia: "buenosaires", provinciaNombre: "Buenos Aires", partido: "Partido Uno" };
+    const lista = depurarLocalidades([
+      { ...base, id: "1", categoria: "Entidad" },
+      { ...base, id: "2", categoria: "Localidad simple" },
+      { ...base, id: "3", partido: "Partido Dos", categoria: "Localidad simple" },
+    ]);
+    expect(lista.map((s) => s.id)).toEqual(["2", "3"]);
+    expect(lista.map((s) => etiquetaLocalidad(s, lista))).toEqual([
+      "Ciudad Ejemplo (Partido Uno) — Buenos Aires",
+      "Ciudad Ejemplo (Partido Dos) — Buenos Aires",
+    ]);
+    expect(etiquetaLocalidad(lista[0], [lista[0]])).toBe("Ciudad Ejemplo — Buenos Aires");
   });
 });

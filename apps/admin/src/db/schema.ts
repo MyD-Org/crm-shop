@@ -976,6 +976,11 @@ export const sucursales = pgTable(
     // D). NULL = sin asignar. FK compuesta (tenant_id, cuenta_alegra_id): no cruza tenants. NO la
     // lee el Shop (GRANT por columna de 0041).
     cuentaAlegraId: uuid("cuenta_alegra_id"),
+    // Horario semanal y excepciones PROPIOS de la sucursal (0051), mismo shape que `tenants`.
+    // '{}' = sin horario configurado. Los lee el Shop (GRANT por columna de 0051) y el endpoint
+    // interno business-hours; los edita Admin → Horarios. `horario` (texto libre) queda deprecado.
+    schedule: jsonb("schedule").$type<WeeklySchedule>().notNull().default(sql`'{}'::jsonb`),
+    scheduleExceptions: jsonb("schedule_exceptions").$type<ScheduleException[]>().notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

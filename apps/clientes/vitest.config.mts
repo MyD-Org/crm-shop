@@ -1,28 +1,46 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { TEST_DATABASE_URL } from "./test/integration/db-url";
 
 /**
- * Tests de la lógica pura del shop.
+ * Dos proyectos:
+ *  - unit:        lógica pura del shop, sin DB. `environment: node` a propósito: nada de DOM.
+ *                 Los flags de Vercel Flags se leen de un estado en memoria (src/test/flags.ts).
+ *  - integration: contra una Postgres LOCAL de test (`shop_test`) que el globalSetup crea y migra
+ *                 con las migraciones reales de las dos apps. Nunca toca una base remota
+ *                 (guarda en db-url.ts).
  *
- * `environment: node` a propósito: lo que se testea acá son módulos sin DOM
- * —cálculo de IVA, validación de CUIT, reglas de envío, rate limit—. El día que
- * haya tests de componentes van a necesitar jsdom, y conviene que sea una
- * decisión explícita y no algo que ya venía puesto.
+ * `npm test` corre solo unit; `npm run test:integration` los de DB; `npm run test:all` ambos.
  *
- * El alias `@/` se resuelve a mano en vez de sumar `vite-tsconfig-paths`: es
- * una línea contra una dependencia más que auditar. Si algún día tsconfig gana
- * más paths, ahí sí conviene el plugin.
+ * El alias `@/` se resuelve a mano en vez de sumar `vite-tsconfig-paths`.
  */
+const alias = { "@": fileURLToPath(new URL("./src", import.meta.url)) };
+
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
-  },
+  resolve: { alias },
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
-    // Los flags de Vercel Flags se leen de un estado en memoria (src/test/flags.ts).
-    setupFiles: ["src/test/setup-flags.ts"],
+    projects: [
+      {
+        resolve: { alias },
+        test: {
+          name: "unit",
+          environment: "node",
+          include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+          setupFiles: ["src/test/setup-flags.ts"],
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "integration",
+          environment: "node",
+          include: ["test/integration/**/*.test.ts"],
+          env: { DATABASE_URL: TEST_DATABASE_URL, SHOP_TENANT_ID: "tenant-test" },
+          globalSetup: ["./test/integration/global-setup.ts"],
+          // Comparten la misma DB de test: sin paralelismo entre archivos.
+          fileParallelism: false,
+        },
+      },
+    ],
   },
 });

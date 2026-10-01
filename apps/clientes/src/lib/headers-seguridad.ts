@@ -149,7 +149,8 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
       ...(ga4 ? [GTM, ...GA] : []),
       ...(dev ? ["ws:", VERCEL_SCRIPTS_DEV] : []),
     ],
-    "frame-src": ["'self'", CLOUDFLARE_CHALLENGES, ...MERCADO_PAGO],
+    // Mapa del local (popup "Ver local"): embed de Google Maps sin clave.
+    "frame-src": ["'self'", CLOUDFLARE_CHALLENGES, ...MERCADO_PAGO, "https://www.google.com"],
     "worker-src": ["'self'", "blob:"],
     "form-action": ["'self'", ...MERCADO_PAGO],
     "frame-ancestors": ["'none'"],

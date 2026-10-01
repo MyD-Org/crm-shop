@@ -31,6 +31,16 @@ export function canalLabel(
   return nombres[key]?.trim() || fallback.business_phone?.trim() || channelLabel(fallback.channel)
 }
 
+/** Línea del canal en cada fila: "<nombre> · a <teléfono>" o, sin nombre, "<canal> · a <teléfono>". */
+export function canalLineLabel(
+  c: Pick<InboxContact, "channel" | "channel_account_id" | "business_phone">,
+  nombres: Record<string, string>,
+): string {
+  const nombre = nombres[canalKey(c)]?.trim() || channelLabel(c.channel)
+  const phone = c.business_phone?.trim()
+  return phone ? `${nombre} · a ${phone}` : nombre
+}
+
 /** Una solapa por canal presente en los contactos, en orden de aparición. */
 export function buildCanalTabs(contacts: CanalContacto[], nombres: Record<string, string>): CanalTab[] {
   const tabs = new Map<string, CanalTab & { phone: string | null; channel: string }>()

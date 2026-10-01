@@ -392,6 +392,9 @@ export function CarritoClient({
                               {item.qty} × {fmtPrecio(precio.unitario)}
                             </p>
                           )}
+                          {!linea?.problema && linea?.stockDisponible != null && item.qty >= linea.stockDisponible && (
+                            <p className="text-xs font-semibold text-muted">Stock máximo disponible</p>
+                          )}
                           {linea?.problema && (
                             <p className="flex items-center gap-1.5 rounded-xl bg-warning-soft px-3 py-2 text-[12.5px] font-bold text-warning">
                               <AlertIcon />
@@ -463,7 +466,7 @@ export function CarritoClient({
           {/* Resumen */}
           <aside
             ref={resumenRef}
-            className={`h-fit space-y-5 rounded-[22px] bg-surface p-5 shadow-[var(--shadow-1)] transition-[opacity,translate] duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:sticky lg:top-24 lg:translate-y-0 lg:p-6 lg:opacity-100 ${
+            className={`h-fit space-y-5 rounded-[22px] bg-surface p-5 shadow-[var(--shadow-1)] transition-[opacity,translate] duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:sticky lg:top-24 lg:max-h-[calc(100dvh-12rem)] lg:translate-y-0 lg:overflow-y-auto lg:p-6 lg:opacity-100 ${
               resumenALaVista ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
             }`}
           >

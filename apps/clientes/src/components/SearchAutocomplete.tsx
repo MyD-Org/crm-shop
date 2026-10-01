@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/data/products";
-import { fmtMonto } from "@/lib/cuotas-textos";
+import { fmtPrecio } from "@/lib/format";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { LightbulbIcon } from "@/components/catalogo/iconos";
@@ -242,7 +242,7 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
                       <span className="block truncate text-xs text-muted">{marca}</span>
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
-                      {fmtMonto(p.precioFinal ?? p.price)}
+                      {fmtPrecio(p.precioFinal ?? p.price)}
                     </span>
                   </button>
                 </li>

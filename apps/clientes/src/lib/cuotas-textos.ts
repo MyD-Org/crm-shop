@@ -5,14 +5,7 @@
  *
  * Módulo puro: lo usan componentes de cliente y de servidor.
  */
-
-/** Montos, siempre con dos decimales: "$20.000,00" o "$10.333,33". Sin espacio, igual que PrecioConImpuestos. */
-export function fmtMonto(n: number): string {
-  return `$${n.toLocaleString("es-AR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+import { fmtPrecio } from "./format";
 
 /** Porcentajes: "45,67%". */
 export function fmtPct(n: number): string {
@@ -24,7 +17,7 @@ const cuotasDe = (n: number) => (n === 1 ? "1 cuota" : `${n} cuotas`);
 export const TEXTOS_CUOTAS = {
   verMediosDePago: "Ver medios de pago",
   tituloModal: "Medios de pago",
-  descripcionModal: (precio: number) => `Opciones de pago para ${fmtMonto(precio)}`,
+  descripcionModal: (precio: number) => `Opciones de pago para ${fmtPrecio(precio)}`,
   unPago: "1 pago",
   precioContado: "Precio contado",
   total: "Total",
@@ -39,11 +32,11 @@ export const TEXTOS_CUOTAS = {
   /** "6 cuotas sin interés de $20.000" / "12 cuotas de $13.500". */
   linea: (cuotas: number, montoCuota: number, sinInteres: boolean) =>
     sinInteres
-      ? `${cuotasDe(cuotas)} sin interés de ${fmtMonto(montoCuota)}`
-      : `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,
+      ? `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}`
+      : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
 
   /** Cuotas de una fila del modal: "6 cuotas de $20.000". */
-  filaCuotas: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtMonto(montoCuota)}`,
+  filaCuotas: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
 
   /** "Hasta 6 cuotas sin interés" / "Hasta 12 cuotas". */
   hasta: (cuotas: number, sinInteres: boolean) =>
@@ -51,7 +44,7 @@ export const TEXTOS_CUOTAS = {
 
   /** "Le faltan $30.000 para hasta 6 cuotas". */
   teFaltan: (faltante: number, cuotas: number) =>
-    `Le faltan ${fmtMonto(faltante)} para hasta ${cuotasDe(cuotas)}`,
+    `Le faltan ${fmtPrecio(faltante)} para hasta ${cuotasDe(cuotas)}`,
 
   progresoEscalon: "Progreso hacia el próximo plan de cuotas",
   checkoutTitulo: "Cuotas para este pedido",

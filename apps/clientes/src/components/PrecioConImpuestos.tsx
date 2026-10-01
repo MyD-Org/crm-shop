@@ -12,7 +12,7 @@
  * tachado arriba y abajo el aviso de que es el precio de su cuenta.
  */
 
-import { fmtMonto as fmt } from "@/lib/cuotas-textos";
+import { fmtPrecio as fmt } from "@/lib/format";
 
 interface Props {
   /** Precio neto (sin IVA) de la lista del visitante. */

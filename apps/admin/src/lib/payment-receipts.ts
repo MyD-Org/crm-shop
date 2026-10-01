@@ -9,6 +9,7 @@
 import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, paymentReceipts } from "@/db/schema"
+import { shopOrders } from "@/db/shop-schema"
 import { CONFIRM_LEASE_SECONDS, EMAIL_LEASE_SECONDS } from "@/lib/receipt-validation"
 
 export type PaymentReceiptRow = typeof paymentReceipts.$inferSelect
@@ -474,7 +475,10 @@ export async function recordEmailResult(
 export interface AdminReceiptDto {
   id: string
   submittedAt: string
-  codigocliente: string
+  /** null = comprador de la tienda sin cuenta corriente (0056): Alegra no aplica. */
+  codigocliente: string | null
+  /** Pedido de la tienda al que corresponde; `numero` null si no se pudo resolver. */
+  pedido: { id: string; numero: string | null } | null
   razonsocial: string
   cuit: string
   clientEmail: string | null
@@ -502,7 +506,7 @@ export interface AdminReceiptDto {
 
 /** Serializa una fila (pending/loaded) al DTO del backoffice. Sin file_key, file_sha256 ni
  *  URLs firmadas: el archivo se ve por la ruta /file (302), nunca por datos en el listado. */
-export function toAdminDto(row: PaymentReceiptRow, now: Date): AdminReceiptDto {
+export function toAdminDto(row: PaymentReceiptRow, now: Date, pedidoNumero: string | null = null): AdminReceiptDto {
   const submittedAt = row.submittedAt
   const stale =
     row.emailStatus === "pending" &&
@@ -512,6 +516,7 @@ export function toAdminDto(row: PaymentReceiptRow, now: Date): AdminReceiptDto {
     id: row.id,
     submittedAt: submittedAt ? submittedAt.toISOString() : "",
     codigocliente: row.codigocliente,
+    pedido: row.shopOrderId ? { id: row.shopOrderId, numero: pedidoNumero } : null,
     razonsocial: row.razonsocial,
     cuit: row.cuit,
     clientEmail: row.clientEmail,
@@ -542,6 +547,52 @@ export function toAdminDto(row: PaymentReceiptRow, now: Date): AdminReceiptDto {
         ? { amount: row.declaredAmount, paidOn: row.declaredPaidOn }
         : null,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Pedido asociado (comprobantes por pedido, 0056)
+// ---------------------------------------------------------------------------
+
+/** "PED-00000042": mismo formato que `formatearNumero` del Shop y que pedidos-repo. */
+function formatearNumeroPedido(numero: number): string {
+  return `PED-${String(numero).padStart(8, "0")}`
+}
+
+/**
+ * Números legibles de los pedidos de la tienda a los que apuntan estos comprobantes, en UNA
+ * consulta y filtrada por tenant (un `shop_order_id` de otro tenant no resuelve). Sin pedidos no
+ * consulta. Sólo lee `numero`: el esquema `shop` es del Shop.
+ */
+export async function numerosDePedidos(
+  tenantId: string,
+  rows: readonly PaymentReceiptRow[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(rows.map((r) => r.shopOrderId).filter((v): v is string => v !== null))]
+  if (ids.length === 0) return new Map()
+  const filas = await getDb()
+    .select({ id: shopOrders.id, numero: shopOrders.numero })
+    .from(shopOrders)
+    .where(and(eq(shopOrders.tenantId, tenantId), inArray(shopOrders.id, ids)))
+  return new Map(filas.map((f) => [f.id, formatearNumeroPedido(f.numero)]))
+}
+
+/** DTO de varias filas con el número de su pedido (una sola consulta extra). */
+export async function toAdminDtos(
+  tenantId: string,
+  rows: readonly PaymentReceiptRow[],
+  now: Date,
+): Promise<AdminReceiptDto[]> {
+  const numeros = await numerosDePedidos(tenantId, rows)
+  return rows.map((r) => toAdminDto(r, now, r.shopOrderId ? (numeros.get(r.shopOrderId) ?? null) : null))
+}
+
+/** DTO de una fila con el número de su pedido. */
+export async function toAdminDtoConPedido(
+  tenantId: string,
+  row: PaymentReceiptRow,
+  now: Date,
+): Promise<AdminReceiptDto> {
+  return (await toAdminDtos(tenantId, [row], now))[0]
 }
 
 // ---------------------------------------------------------------------------

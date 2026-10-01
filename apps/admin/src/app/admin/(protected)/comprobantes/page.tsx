@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { getGuardedAdminSession } from "@/lib/admin-session"
-import { ADMIN_LIST_DEFAULT_LIMIT, listAdmin, toAdminDto } from "@/lib/payment-receipts"
+import { ADMIN_LIST_DEFAULT_LIMIT, listAdmin, toAdminDtos } from "@/lib/payment-receipts"
 import { r2Config } from "@/lib/r2"
 import { roleRank } from "@/lib/roles"
 import { ComprobantesShell } from "@/components/admin/comprobantes/ComprobantesShell"
@@ -43,7 +43,7 @@ export default async function ComprobantesPage({
         </p>
       </div>
       <ComprobantesShell
-        initialItems={items.map((row) => toAdminDto(row, now))}
+        initialItems={await toAdminDtos(guard.tenantId, items, now)}
         initialTotal={total}
         initialReceiptsEmailConfigured={(tenant?.receiptsEmail ?? "") !== ""}
         initialReceiptsEmail={tenant?.receiptsEmail ?? ""}

@@ -816,8 +816,13 @@ export const paymentReceipts = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: text("tenant_id").notNull().references(() => tenants.id),
-    // Id de contacto en Alegra, de la SESIÓN del portal (nunca del body).
-    codigocliente: text("codigocliente").notNull(),
+    // Id de contacto en Alegra, de la SESIÓN del portal (nunca del body). NULL (0056) = comprador
+    // de la tienda sin cuenta corriente: entonces hay `shopOrderId` + `clerkUserId` (CHECK).
+    codigocliente: text("codigocliente"),
+    // Pedido de la tienda (`shop.orders.id`) al que corresponde; sin FK (otro esquema).
+    shopOrderId: uuid("shop_order_id"),
+    // Quién lo subió en el Shop; dueño del comprobante cuando no hay `codigocliente`.
+    clerkUserId: text("clerk_user_id"),
     // Snapshot al informar: el backoffice no le pega a Alegra para listar.
     razonsocial: text("razonsocial").notNull(),
     cuit: text("cuit").notNull().default(""),
@@ -878,6 +883,12 @@ export const paymentReceipts = pgTable(
     index("payment_receipts_tenant_cliente_created_idx").on(
       t.tenantId,
       t.codigocliente,
+      sql`${t.createdAt} desc`,
+    ),
+    index("payment_receipts_tenant_pedido_idx").on(t.tenantId, t.shopOrderId),
+    index("payment_receipts_tenant_clerk_created_idx").on(
+      t.tenantId,
+      t.clerkUserId,
       sql`${t.createdAt} desc`,
     ),
   ],

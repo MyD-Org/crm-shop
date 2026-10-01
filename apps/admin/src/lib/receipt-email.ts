@@ -76,7 +76,10 @@ export interface ReceiptEmailInput {
     id: string
     razonsocial: string
     cuit: string
-    codigocliente: string
+    /** null = comprador de la tienda sin cuenta corriente (0056): el mail lo indica y muestra el pedido. */
+    codigocliente: string | null
+    /** "PED-00000042" del pedido al que corresponde el comprobante, si lo hay y se conoce. */
+    pedidoNumero?: string | null
     /** Decimal string ("150000.50"), no parseFloat para guardar — esto es solo formato. */
     amount: string
     /** "YYYY-MM-DD" (paid_on). */
@@ -116,6 +119,16 @@ export function buildReceiptEmail(input: ReceiptEmailInput): { subject: string; 
   const dupNote = input.duplicateOf
     ? `Posible duplicado de un comprobante del ${formatSubmittedAt(input.duplicateOf.submittedAt)} (mismo archivo, ya informado).`
     : ""
+  // Cuenta del cliente: el código de Alegra o, sin cuenta corriente, el aviso con el pedido.
+  const sinCuenta = r.codigocliente === null
+  const cuentaEtiqueta = sinCuenta ? "Cuenta" : "Código"
+  const cuentaValor = sinCuenta
+    ? `Sin cuenta corriente${r.pedidoNumero ? ` · Pedido ${r.pedidoNumero}` : ""}`
+    : (r.codigocliente as string)
+  // Con cuenta corriente Y pedido, el pedido va en su propia fila.
+  const pedidoFila = !sinCuenta && r.pedidoNumero
+    ? `<tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Pedido</td><td style="padding:6px 0">${e(r.pedidoNumero)}</td></tr>`
+    : ""
   const convertedNote = r.convertedFrom ? ` (convertido de ${e(r.convertedFrom)})` : ""
   const archivo = `${e(r.fileMime)} · ${formatMb(r.fileSize)}${convertedNote}`
   const replyNote = input.clientEmail
@@ -137,7 +150,8 @@ export function buildReceiptEmail(input: ReceiptEmailInput): { subject: string; 
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-size:14px">
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top;width:130px">Cliente</td><td style="padding:6px 0">${e(r.razonsocial)}</td></tr>
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">CUIT</td><td style="padding:6px 0">${e(r.cuit)}</td></tr>
-          <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Código</td><td style="padding:6px 0">${e(r.codigocliente)}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">${cuentaEtiqueta}</td><td style="padding:6px 0">${e(cuentaValor)}</td></tr>
+          ${pedidoFila}
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Monto</td><td style="padding:6px 0">${e(formatAmountAr(r.amount))}</td></tr>
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Fecha del pago</td><td style="padding:6px 0">${formatDate(r.paidOn)}</td></tr>
           <tr><td style="padding:6px 0;color:#6b7280;vertical-align:top">Medio</td><td style="padding:6px 0">${e(methodLabel)}</td></tr>
@@ -166,7 +180,8 @@ export function buildReceiptEmail(input: ReceiptEmailInput): { subject: string; 
     ``,
     `Cliente: ${r.razonsocial}`,
     `CUIT: ${r.cuit}`,
-    `Código: ${r.codigocliente}`,
+    `${cuentaEtiqueta}: ${cuentaValor}`,
+    ...(!sinCuenta && r.pedidoNumero ? [`Pedido: ${r.pedidoNumero}`] : []),
     `Monto: ${formatAmountAr(r.amount)}`,
     `Fecha del pago: ${formatDate(r.paidOn)}`,
     `Medio: ${methodLabel}`,

@@ -46,6 +46,8 @@ function row(overrides: Partial<PaymentReceiptRow> = {}): PaymentReceiptRow {
     id: RECEIPT_ID,
     tenantId: TENANT.id,
     codigocliente: CLIENT.codigocliente,
+    shopOrderId: null,
+    clerkUserId: null,
     razonsocial: "Cliente Demo SRL",
     cuit: "30123456780",
     clientEmail: "cliente@example.com",

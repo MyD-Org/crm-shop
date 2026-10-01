@@ -199,6 +199,17 @@ re-carga — la guarda anti-duplicados es el UPDATE condicional `alegra_payment_
 Alegra por fuera (solo cambia el status, como antes); los comprobantes marcados así antes
 también ofrecen "Cargar en Alegra" después.
 
+**Comprobante por pedido, sin cuenta corriente** (migración 0056, change
+`pago-transferencia-comprobante`): un comprador de la tienda sin cuenta corriente vinculada también
+puede subir el comprobante de su transferencia desde su pedido en Mi cuenta del Shop.
+`payment_receipts.codigocliente` admite NULL y la fila lleva `shop_order_id` (pedido de
+`shop.orders`, sin FK entre esquemas) y `clerk_user_id` (quién lo subió); un CHECK exige
+`codigocliente` o ambos. El backoffice lo lista como "Sin cuenta vinculada" con el número del
+pedido, el mail de aviso dice "Sin cuenta corriente · Pedido PED-…" y "Cargar en Alegra" no se
+ofrece: `load-context` y `load-to-alegra` responden 409 en usted (Alegra necesita un contacto).
+"Ya lo cargué a mano" sigue disponible. `shop_app` ya tenía SELECT/INSERT de tabla (0032): no hay
+GRANT nuevo y el UPDATE no incluye las columnas nuevas.
+
 **Historial del cliente**: el historial de comprobantes informados vive dentro del modal
 "Informar pago": la sección "Últimos comprobantes enviados" muestra los últimos 5 (fecha,
 monto y estado Pendiente/Cargado) contra `GET /api/portal/comprobantes`, para frenar

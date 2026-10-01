@@ -1,6 +1,7 @@
 import { listBankAccounts, listOpenInvoicesByContact } from "@/lib/alegra"
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
 import { getAdmin } from "@/lib/payment-receipts"
+import { sinCuentaCorrienteResponse } from "@/lib/receipt-sin-cuenta"
 import { getTenantByIdFromDb } from "@/lib/tenants"
 
 // GET /api/admin/comprobantes/[id]/load-context — contexto del formulario "Cargar en
@@ -22,6 +23,9 @@ export async function GET(req: Request, { params }: IdParams) {
   const { id } = await params
   const row = await getAdmin(guard.tenantId, id)
   if (!row) return adminNotFoundResponse()
+  // Comprador de la tienda sin cuenta corriente: no hay contacto de Alegra del que listar facturas.
+  const codigocliente = row.codigocliente
+  if (codigocliente === null) return sinCuentaCorrienteResponse()
 
   const config = await getTenantByIdFromDb(guard.tenantId)
   if (!config) {
@@ -34,7 +38,7 @@ export async function GET(req: Request, { params }: IdParams) {
 
   try {
     const [openInvoices, bankAccounts] = await Promise.all([
-      listOpenInvoicesByContact(config, row.codigocliente),
+      listOpenInvoicesByContact(config, codigocliente),
       listBankAccounts(config),
     ])
     openInvoices.sort((a, b) => a.date.localeCompare(b.date))

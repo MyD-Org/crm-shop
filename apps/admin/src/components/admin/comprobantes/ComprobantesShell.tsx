@@ -157,6 +157,11 @@ export function ComprobantesShell({
         <>
           <div className="font-medium" style={{ color: "var(--ink)" }}>{r.razonsocial}</div>
           {r.cuit && <div className="text-xs" style={{ color: "var(--ink-faint)" }}>CUIT {r.cuit}</div>}
+          {r.codigocliente === null && (
+            <div className="text-xs" style={{ color: "var(--ink-faint)" }}>
+              Sin cuenta vinculada{r.pedido?.numero ? ` · Pedido ${r.pedido.numero}` : ""}
+            </div>
+          )}
         </>
       ),
     },

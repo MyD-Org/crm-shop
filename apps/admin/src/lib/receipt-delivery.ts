@@ -94,7 +94,11 @@ export async function deliverReceiptEmail(
     attachment = { filename, content: Buffer.from(bytes), contentType: row.fileMime }
   }
 
-  // 4. Build + send.
+  // 4. Build + send. El número del pedido (comprobantes por pedido, 0056) es informativo: si la
+  // consulta falla el mail sale igual, sin él.
+  const pedidoNumero = row.shopOrderId
+    ? ((await repo.numerosDePedidos(tenant.id, [row]).catch(() => new Map<string, string>())).get(row.shopOrderId) ?? null)
+    : null
   const clientEmail = looksLikeEmail(row.clientEmail) ? row.clientEmail : null
   const email = buildReceiptEmail({
     tenantName: tenant.name,
@@ -103,6 +107,7 @@ export async function deliverReceiptEmail(
       razonsocial: row.razonsocial,
       cuit: row.cuit,
       codigocliente: row.codigocliente,
+      pedidoNumero,
       amount: row.amount,
       paidOn: row.paidOn,
       method: row.method,

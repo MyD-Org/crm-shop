@@ -192,7 +192,6 @@ const SECCIONES: readonly DefinicionSeccion[] = [
     visible: (_, d) => d.direcciones,
   },
   { id: "seguridad", label: "Seguridad", grupo: "perfil", visible: (c) => c.clerk },
-  { id: "salir", label: "Cerrar sesión", tone: "danger", visible: (c) => c.clerk },
 ];
 
 /**

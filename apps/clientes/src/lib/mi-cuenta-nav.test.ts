@@ -63,12 +63,11 @@ describe("seccionesVisibles", () => {
       "datos",
       "direcciones",
       "seguridad",
-      "salir",
     ]);
-    expect(s.filter((x) => x.tone === "danger").map((x) => x.id)).toEqual(["salir"]);
-    // Seguridad y Cerrar sesión son acciones, no rutas.
+    // Cerrar sesión no va en Mi cuenta: sólo en el menú del usuario.
+    expect(s.some((x) => x.id === "salir")).toBe(false);
+    // Seguridad es una acción, no una ruta.
     expect(s.find((x) => x.id === "seguridad")?.href).toBeUndefined();
-    expect(s.find((x) => x.id === "salir")?.href).toBeUndefined();
     expect(s.find((x) => x.id === "pedidos")?.href).toBe(RUTAS_MI_CUENTA.pedidos);
     expect(s.find((x) => x.id === "datos")?.href).toBe(RUTAS_MI_CUENTA.datos);
     expect(s.find((x) => x.id === "pagos")?.href).toBe("/mi-cuenta/pagos");
@@ -97,7 +96,7 @@ describe("seccionesVisibles", () => {
   it("contado vinculado: ninguna sección de Facturación, aunque todo esté desplegado", () => {
     const s = ids(seccionesVisibles(cap(true, true, false), TODO));
     for (const id of ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]) expect(s).not.toContain(id);
-    expect(s).toEqual(["pedidos", "favoritos", "datos", "direcciones", "seguridad", "salir"]);
+    expect(s).toEqual(["pedidos", "favoritos", "datos", "direcciones", "seguridad"]);
   });
 
   it("sin vínculo: ninguna sección de Facturación, aunque se pasara cuenta corriente", () => {
@@ -112,7 +111,7 @@ describe("seccionesVisibles", () => {
 
   it("sin Facturación desplegada: 5 entradas para Clerk", () => {
     const s = seccionesVisibles(cap(true, true), NADA);
-    expect(ids(s)).toEqual(["pedidos", "datos", "direcciones", "seguridad", "salir"]);
+    expect(ids(s)).toEqual(["pedidos", "datos", "direcciones", "seguridad"]);
   });
 
   it("la función es total: sin identidad quedan las secciones públicas", () => {
@@ -146,7 +145,6 @@ describe("seccionesVisibles", () => {
       "Mis datos",
       "Direcciones y envíos",
       "Seguridad",
-      "Cerrar sesión",
     ]);
   });
 
@@ -160,14 +158,14 @@ describe("seccionesVisibles", () => {
 });
 
 describe("agruparSecciones", () => {
-  it("Compras online · Facturación · Mi perfil, con Cerrar sesión suelto", () => {
+  it("Compras online · Facturación · Mi perfil, sin Cerrar sesión", () => {
     const { grupos, sueltas } = agruparSecciones(seccionesVisibles(cap(true, true, true), TODO));
     expect(grupos.map((g) => [g.label, ids(g.items)])).toEqual([
       ["Compras online", ["pedidos", "favoritos"]],
       ["Facturas", ["facturas", "pagos", "presupuestos", "condiciones", "avisos"]],
       ["Mi perfil", ["datos", "direcciones", "seguridad"]],
     ]);
-    expect(ids(sueltas)).toEqual(["salir"]);
+    expect(ids(sueltas)).toEqual([]);
   });
 
   it("un grupo sin secciones no figura", () => {

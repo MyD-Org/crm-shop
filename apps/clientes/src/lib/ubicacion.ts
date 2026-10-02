@@ -2,9 +2,13 @@
  * Ubicación del visitante (change `envio-gratis-configurable`, rebanada C). Módulo PURO: sin Next,
  * sin red. Lo importan el server (cookie, páginas) y la UI.
  *
- * Precedencia: cookie `shop_ubicacion` (elección explícita: localidad elegida a mano o
- * geolocalización con permiso) → dirección guardada (con sesión) → sin ubicación. Nunca se inventa una por default ni se usa
- * la IP. No hay código postal: la unidad es la localidad y de ahí sale la provincia.
+ * Precedencia: cookie `shop_ubicacion` (elección explícita: localidad elegida a mano, dirección
+ * guardada, local de retiro o geolocalización con permiso) → dirección guardada (con sesión) → sin
+ * ubicación. Nunca se inventa una por default ni se usa la IP. La unidad es la localidad y de ahí
+ * sale la provincia; el código postal (opcional) sólo se guarda y se muestra, no cotiza.
+ *
+ * Cookie compatible hacia atrás: sin `tipo` (formato viejo) = envío. La validación de este módulo es
+ * ESTRUCTURAL; que la dirección sea del usuario o que el local exista lo valida el servidor.
  */
 import { PROVINCIAS_AR } from "./provincias";
 import { claveProvincia } from "./sucursales";
@@ -21,6 +25,48 @@ export interface UbicacionVisitante {
   provincia: string;
   /** Id de Georef, si la localidad se eligió de la lista. */
   id?: string;
+  /** Código postal normalizado (4 dígitos o CPA), si se conoce. */
+  cp?: string;
+}
+
+export type TipoEntrega = "envio" | "retiro";
+
+/** Lo que se serializa en la cookie (y lo que devuelve su validación estructural). */
+export type EleccionCruda =
+  | { tipo: "envio"; localidad: string; provincia: string; id?: string; cp?: string; direccionId?: string }
+  | { tipo: "retiro"; /** Slug del local; ausente = local único (flag `sucursales` apagado). */ sucursal?: string };
+
+export type CookieUbicacion = EleccionCruda;
+
+/** Elección ya resuelta y validada contra el dueño / las sucursales (ver `ubicacion-servidor`). */
+export type EleccionUbicacion =
+  | {
+      tipo: "envio";
+      direccion?: { id: string; calle: string; ciudad: string; cp: string | null; etiqueta: string | null };
+      localidad: string;
+      provincia: string | null;
+      cp?: string;
+    }
+  | {
+      tipo: "retiro";
+      /** null = local único de la empresa (flag `sucursales` apagado). */
+      sucursal: { slug: string; nombre: string; ciudad: string; provincia: string } | null;
+    }
+  | { tipo: "ninguna" };
+
+const SLUG_SUCURSAL = /^[a-z0-9-]{1,60}$/;
+const ID_DIRECCION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** CP de 4 dígitos o CPA (letra de provincia + 4 dígitos + 3 letras). */
+const CP_VALIDO = /^(?:\d{4}|[A-Z]\d{4}[A-Z]{3})$/;
+
+/**
+ * Normaliza un código postal: sin espacios ni guiones, en mayúsculas. null si no es de 4 dígitos
+ * ni un CPA válido.
+ */
+export function normalizarCp(cp: unknown): string | null {
+  if (typeof cp !== "string") return null;
+  const n = cp.replace(/[\s-]+/g, "").toUpperCase();
+  return CP_VALIDO.test(n) ? n : null;
 }
 
 export type OrigenUbicacion = "direccion" | "cookie" | "ninguna";
@@ -48,10 +94,49 @@ export function armarUbicacion(entrada: {
 }
 
 /**
- * Valida el valor crudo de la cookie. JSON roto, tipos raros o una provincia fuera del catálogo =
- * null (sin ubicación), sin error.
+ * Arma una elección a guardar desde datos sueltos (cuerpo de la API o cookie). Estructural: null si
+ * no sirve. El `cp` inválido se descarta (la API lo valida aparte para responder 400).
  */
-export function validarCookieUbicacion(raw: string | null | undefined): UbicacionVisitante | null {
+export function armarEleccion(entrada: {
+  tipo?: unknown;
+  localidad?: unknown;
+  provincia?: unknown;
+  id?: unknown;
+  cp?: unknown;
+  direccionId?: unknown;
+  sucursal?: unknown;
+}): EleccionCruda | null {
+  const tipo = entrada.tipo === undefined ? "envio" : entrada.tipo;
+  if (tipo === "retiro") {
+    if (entrada.sucursal === undefined || entrada.sucursal === null) return { tipo: "retiro" };
+    const slug = entrada.sucursal;
+    if (typeof slug !== "string" || !SLUG_SUCURSAL.test(slug)) return null;
+    return { tipo: "retiro", sucursal: slug };
+  }
+  if (tipo !== "envio") return null;
+  const u = armarUbicacion({ localidad: entrada.localidad, provincia: entrada.provincia, id: entrada.id });
+  if (!u) return null;
+  let direccionId: string | undefined;
+  if (entrada.direccionId !== undefined && entrada.direccionId !== null) {
+    if (typeof entrada.direccionId !== "string" || !ID_DIRECCION.test(entrada.direccionId)) return null;
+    direccionId = entrada.direccionId;
+  }
+  const cp = normalizarCp(entrada.cp);
+  return {
+    tipo: "envio",
+    localidad: u.localidad,
+    provincia: u.provincia,
+    ...(u.id ? { id: u.id } : {}),
+    ...(cp ? { cp } : {}),
+    ...(direccionId ? { direccionId } : {}),
+  };
+}
+
+/**
+ * Valida el valor crudo de la cookie. JSON roto, tipos raros, un tipo desconocido o una provincia
+ * fuera del catálogo = null (sin elección), sin error.
+ */
+export function validarCookieUbicacion(raw: string | null | undefined): EleccionCruda | null {
   if (!raw) return null;
   let v: unknown;
   try {
@@ -60,12 +145,23 @@ export function validarCookieUbicacion(raw: string | null | undefined): Ubicacio
     return null;
   }
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  const o = v as Record<string, unknown>;
-  return armarUbicacion({ localidad: o.localidad, provincia: o.provincia, id: o.id });
+  return armarEleccion(v as Record<string, unknown>);
 }
 
-export function serializarCookieUbicacion(u: UbicacionVisitante): string {
-  return JSON.stringify(u);
+/**
+ * Serializa reemplazando POR COMPLETO la elección: sólo viajan los campos de su tipo (un retiro no
+ * arrastra localidad ni direccionId; un envío no arrastra sucursal).
+ */
+export function serializarCookieUbicacion(c: CookieUbicacion): string {
+  if (c.tipo === "retiro") return JSON.stringify(c.sucursal ? { tipo: "retiro", sucursal: c.sucursal } : { tipo: "retiro" });
+  return JSON.stringify({
+    tipo: "envio",
+    localidad: c.localidad,
+    provincia: c.provincia,
+    ...(c.id ? { id: c.id } : {}),
+    ...(c.cp ? { cp: c.cp } : {}),
+    ...(c.direccionId ? { direccionId: c.direccionId } : {}),
+  });
 }
 
 /** Dirección guardada → ubicación; null si la ciudad o la provincia no sirven. */
@@ -85,9 +181,9 @@ export function resolverUbicacion(entrada: {
   return { ubicacion: null, origen: "ninguna" };
 }
 
-/** "Estás en <localidad>, <provincia>". */
+/** "Usted está en <localidad>, <provincia>". */
 export function textoUbicacion(u: UbicacionVisitante): string {
-  return `Estás en ${u.localidad}, ${nombreProvincia(u.provincia)}`;
+  return `Usted está en ${u.localidad}, ${nombreProvincia(u.provincia)}`;
 }
 
 /**
@@ -125,4 +221,11 @@ export const TEXTOS_UBICACION = {
   invalida: "Ubicación inválida.",
   demasiadas: "Demasiadas consultas. Espere un momento e inténtelo nuevamente.",
   quitar: "Quitar ubicación",
+  cpInvalido: "Ingrese un código postal válido: 4 dígitos o formato CPA, por ejemplo 5000 o C1425ABC.",
+  cpRequerido: "Ingrese su código postal.",
+  direccionInvalida: "Seleccione una dirección guardada válida.",
+  localInvalido: "Seleccione un local de retiro válido.",
+  sinSesion: "Inicie sesión para elegir una dirección guardada.",
+  direccionNoEncontrada: "No encontramos esa dirección.",
+  localNoEncontrado: "No encontramos ese local de retiro.",
 } as const;

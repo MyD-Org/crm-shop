@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import { claveProvincia } from "./sucursales";
 import type { ConfigEnvio } from "./envio";
 import {
+  armarEleccion,
   armarUbicacion,
   envioFichaSegunUbicacion,
+  normalizarCp,
   resolverUbicacion,
   serializarCookieUbicacion,
+  TEXTOS_UBICACION,
   textoUbicacion,
   validarCookieUbicacion,
 } from "./ubicacion";
@@ -15,8 +18,11 @@ const BA = { localidad: "Coronel Vidal", provincia: claveProvincia("Buenos Aires
 
 describe("validarCookieUbicacion", () => {
   it("cookie válida (ida y vuelta)", () => {
-    expect(validarCookieUbicacion(serializarCookieUbicacion(BA))).toEqual(BA);
-    expect(validarCookieUbicacion(serializarCookieUbicacion(MISIONES))).toEqual(MISIONES);
+    expect(validarCookieUbicacion(serializarCookieUbicacion({ tipo: "envio", ...BA }))).toEqual({ tipo: "envio", ...BA });
+    expect(validarCookieUbicacion(serializarCookieUbicacion({ tipo: "envio", ...MISIONES }))).toEqual({
+      tipo: "envio",
+      ...MISIONES,
+    });
   });
 
   it("manipulada o rota se ignora sin error", () => {
@@ -74,9 +80,9 @@ describe("resolverUbicacion", () => {
 });
 
 describe("textoUbicacion", () => {
-  it("Estás en <localidad>, <provincia> con el nombre de la provincia", () => {
-    expect(textoUbicacion(MISIONES)).toBe("Estás en Posadas, Misiones");
-    expect(textoUbicacion(BA)).toBe("Estás en Coronel Vidal, Buenos Aires");
+  it("Usted está en <localidad>, <provincia> con el nombre de la provincia", () => {
+    expect(textoUbicacion(MISIONES)).toBe("Usted está en Posadas, Misiones");
+    expect(textoUbicacion(BA)).toBe("Usted está en Coronel Vidal, Buenos Aires");
   });
 });
 
@@ -113,5 +119,117 @@ describe("envioFichaSegunUbicacion (fila de envío de la ficha)", () => {
 
   it("con ubicación fuera de alcance: costo a coordinar", () => {
     expect(texto(envioFichaSegunUbicacion(gratisMisiones(null), BA))).toBe("Costo de envío a coordinar");
+  });
+});
+
+const DIR_ID = "0b8f7d1e-7c55-4a38-9d0e-2c1f7f6b9a10";
+
+describe("validarCookieUbicacion: formato nuevo y compatibilidad", () => {
+  it("formato viejo {localidad, provincia, id} => tipo envío sin cp", () => {
+    const v = validarCookieUbicacion(JSON.stringify({ localidad: "Coronel Vidal", provincia: BA.provincia, id: "06518010" }));
+    expect(v).toEqual({ tipo: "envio", ...BA });
+    expect(v).not.toHaveProperty("cp");
+  });
+
+  it("JSON inválido o forma inesperada => null sin lanzar", () => {
+    for (const raw of ["{no", "[]", "5", '"x"', "null", JSON.stringify({ tipo: "retiro", sucursal: 5 })]) {
+      expect(() => validarCookieUbicacion(raw)).not.toThrow();
+    }
+    expect(validarCookieUbicacion("{no")).toBeNull();
+    expect(validarCookieUbicacion("[]")).toBeNull();
+  });
+
+  it("campos extra se ignoran", () => {
+    const v = validarCookieUbicacion(JSON.stringify({ ...MISIONES, x: 1, tipo: "envio" }));
+    expect(v).toEqual({ tipo: "envio", ...MISIONES });
+  });
+
+  it("tipo desconocido => null", () => {
+    expect(validarCookieUbicacion(JSON.stringify({ ...MISIONES, tipo: "paloma" }))).toBeNull();
+  });
+
+  it("retiro con slug válido", () => {
+    expect(validarCookieUbicacion(JSON.stringify({ tipo: "retiro", sucursal: "sucursal-a" }))).toEqual({
+      tipo: "retiro",
+      sucursal: "sucursal-a",
+    });
+  });
+
+  it("retiro sin sucursal (local único)", () => {
+    expect(validarCookieUbicacion(JSON.stringify({ tipo: "retiro" }))).toEqual({ tipo: "retiro" });
+  });
+
+  it("retiro con slug basura o inyección: el slug se descarta (no se acepta algo parecido)", () => {
+    for (const sucursal of ["../etc", "A B", "<script>", "x".repeat(61), "MAYUS", "a;b"]) {
+      expect(validarCookieUbicacion(JSON.stringify({ tipo: "retiro", sucursal }))).toBeNull();
+    }
+  });
+
+  it("envío con direccionId guarda además el snapshot localidad/provincia/cp", () => {
+    const v = validarCookieUbicacion(
+      JSON.stringify({ tipo: "envio", ...MISIONES, cp: "3300", direccionId: DIR_ID }),
+    );
+    expect(v).toEqual({ tipo: "envio", ...MISIONES, cp: "3300", direccionId: DIR_ID });
+  });
+
+  it("direccionId con forma rara => cookie inválida", () => {
+    expect(validarCookieUbicacion(JSON.stringify({ tipo: "envio", ...MISIONES, direccionId: "1; drop" }))).toBeNull();
+  });
+
+  it("cp inválido en la cookie se descarta pero la localidad se conserva", () => {
+    expect(validarCookieUbicacion(JSON.stringify({ tipo: "envio", ...MISIONES, cp: "12" }))).toEqual({
+      tipo: "envio",
+      ...MISIONES,
+    });
+  });
+});
+
+describe("normalizarCp", () => {
+  it("normaliza", () => {
+    expect(normalizarCp(" 5000 ")).toBe("5000");
+    expect(normalizarCp("c1425abc")).toBe("C1425ABC");
+    expect(normalizarCp("c 1425 abc")).toBe("C1425ABC");
+    expect(normalizarCp("C-1425-ABC")).toBe("C1425ABC");
+  });
+  it("rechaza lo inválido", () => {
+    for (const cp of ["12", "ABCDE", "50000", "", "   ", "1425ABC", "C1425AB", "50 0!", "<b>5000", null, undefined, 5000]) {
+      expect(normalizarCp(cp as never)).toBeNull();
+    }
+  });
+});
+
+describe("serializarCookieUbicacion reemplaza por completo", () => {
+  it("retiro no arrastra campos de envío", () => {
+    const json = JSON.parse(
+      serializarCookieUbicacion({ tipo: "retiro", sucursal: "sucursal-a", ...MISIONES, direccionId: DIR_ID } as never),
+    );
+    expect(json).toEqual({ tipo: "retiro", sucursal: "sucursal-a" });
+  });
+  it("envío no arrastra sucursal", () => {
+    const json = JSON.parse(
+      serializarCookieUbicacion({ tipo: "envio", ...MISIONES, cp: "3300", sucursal: "sucursal-a" } as never),
+    );
+    expect(json).toEqual({ tipo: "envio", ...MISIONES, cp: "3300" });
+  });
+});
+
+describe("armarEleccion", () => {
+  it("construye envío validando localidad/provincia y normalizando cp", () => {
+    expect(armarEleccion({ tipo: "envio", ...MISIONES, cp: " 3300 " })).toEqual({ tipo: "envio", ...MISIONES, cp: "3300" });
+  });
+  it("envío con provincia inválida => null", () => {
+    expect(armarEleccion({ tipo: "envio", localidad: "X", provincia: "atlantis" })).toBeNull();
+  });
+});
+
+describe("TEXTOS_UBICACION: registro de usted", () => {
+  it("ningún texto usa tuteo, voseo ni coloquialismos", () => {
+    const todo = Object.values(TEXTOS_UBICACION).join("\n");
+    expect(todo).not.toMatch(/\b(tu|tus|te|vos|ojo|che|dale)\b/i);
+  });
+  it("el error de CP indica el formato", () => {
+    expect(TEXTOS_UBICACION.cpInvalido).toBe(
+      "Ingrese un código postal válido: 4 dígitos o formato CPA, por ejemplo 5000 o C1425ABC.",
+    );
   });
 });

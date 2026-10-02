@@ -39,7 +39,7 @@ describe("mensajes", () => {
       "RC-1 del 10/09/2026 (Transferencia)",
     );
     expect(mensajePresupuestos("avanzar", DATOS, [{ id: "P-1", fecha: "01/09/2026", total: 10 }])).toContain(
-      "Queremos avanzar",
+      "Quiero avanzar",
     );
   });
 

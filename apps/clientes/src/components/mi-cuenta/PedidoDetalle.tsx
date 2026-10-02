@@ -58,7 +58,17 @@ export function PedidoDetalle({
           <Badge tone={pill.tone}>{pill.label}</Badge>
         </div>
 
-        {pasos && <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" />}
+        {/* En el celular los cinco pasos no entran en una fila: vertical hasta `sm`. */}
+        {pasos && (
+          <>
+            <div className="mt-4 sm:hidden">
+              <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" orientation="vertical" />
+            </div>
+            <div className="hidden sm:block">
+              <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" />
+            </div>
+          </>
+        )}
       </Card>
 
       <div className="flex flex-col gap-4">

@@ -148,6 +148,28 @@ describe("sección whatsapp (home-editable B1)", () => {
   });
 });
 
+describe("sección busquedaAsistida", () => {
+  it("el default valida y es editable", () => {
+    expect(SECCIONES_HOME).toContain("busquedaAsistida");
+    expect(erroresSeccion("busquedaAsistida", DEFAULTS_HOME.busquedaAsistida)).toEqual([]);
+  });
+
+  it("textos opcionales; los ejemplos tienen que traer texto", () => {
+    expect(erroresSeccion("busquedaAsistida", { ejemplos: [] })).toEqual([]);
+    expect(erroresSeccion("busquedaAsistida", { ejemplos: [{ texto: "" }] }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("busquedaAsistida", { ejemplos: [{ texto: "x".repeat(121) }] }).length).toBeGreaterThan(0);
+    expect(erroresSeccion("busquedaAsistida", {}).length).toBeGreaterThan(0);
+  });
+
+  it("la fila guardada pisa al default", () => {
+    const out = combinarContenidoHome([
+      { key: "busquedaAsistida", payload: { titulo: "¿Qué *busca*?", ejemplos: [{ texto: "panel 60x60" }] } },
+    ]);
+    expect(out.busquedaAsistida.titulo).toBe("¿Qué *busca*?");
+    expect(out.busquedaAsistida.ejemplos).toEqual([{ texto: "panel 60x60" }]);
+  });
+});
+
 describe("esHref", () => {
   it("acepta rutas internas y URLs https", () => {
     for (const v of ["/", "/catalogo?categorias=ILUMINACION", "https://wa.me/5491100000000", "https://cliente.example/p"]) {

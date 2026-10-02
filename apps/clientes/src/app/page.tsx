@@ -5,7 +5,7 @@ import { EdicionSiAdmin } from "@/components/home/EdicionSiAdmin";
 import { CuentenosSiBusquedaIa } from "@/components/home/CuentenosQueNecesita";
 import { ModoEdicionProvider } from "@/components/home/ModoEdicion";
 import { getContenidoHome } from "@/lib/home-datos";
-import { sinCamposOcultos, sinMarcasDeAcento } from "@/data/home-defaults";
+import { sinCamposOcultos, sinMarcasDeAcento, visibilidadDe } from "@/data/home-defaults";
 import { jsonLdSitioHtml } from "@/lib/sitio-jsonld";
 
 /**
@@ -49,7 +49,10 @@ export default async function Home() {
         }
         busquedaAsistida={
           <Suspense fallback={null}>
-            <CuentenosSiBusquedaIa />
+            <CuentenosSiBusquedaIa
+              contenido={contenido.busquedaAsistida}
+              visibilidad={visibilidadDe(contenido.visibilidad, "busquedaAsistida")}
+            />
           </Suspense>
         }
       />

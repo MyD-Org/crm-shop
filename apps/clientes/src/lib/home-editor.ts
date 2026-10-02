@@ -53,6 +53,7 @@ export const TITULOS_SECCION: Record<SeccionHome, string> = {
   servicios: "Servicios",
   navBadge: "Badge del menú",
   whatsapp: "Contacto por WhatsApp",
+  busquedaAsistida: "Búsqueda asistida",
 };
 
 /** Texto plano + qué caracteres van en acento. El contrato guarda `*marcas*`;
@@ -186,6 +187,10 @@ export function normalizarPayload(seccion: SeccionHome, borrador: unknown): unkn
 
   if ((seccion === "ambientes" || seccion === "decoGrid") && Array.isArray(o.chips)) {
     o.chips = (o.chips as unknown[]).filter((c) => !sinEtiqueta(c));
+  }
+
+  if (seccion === "busquedaAsistida" && Array.isArray(o.ejemplos)) {
+    o.ejemplos = (o.ejemplos as { texto?: unknown }[]).filter((e) => esTextoNoVacio(e?.texto));
   }
 
   if (seccion === "servicios" && Array.isArray(o.items)) {

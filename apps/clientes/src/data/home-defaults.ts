@@ -109,6 +109,16 @@ export type WhatsappContent = {
   visibilidadTextos?: VisibilidadTextos<CampoWhatsapp>;
 };
 
+/** "Cuéntenos qué necesita": textos del bloque y los ejemplos que se tocan
+ *  (cada uno busca esa frase). El campo y el botón no se editan. */
+export type ItemEjemplo = { texto: string; visibilidad?: SoloEn };
+export type BusquedaAsistidaContent = TextosSeccion & {
+  eyebrow?: string;
+  placeholder?: string;
+  ejemplosTitulo?: string;
+  ejemplos: ItemEjemplo[];
+};
+
 export type HomeContent = {
   anuncio: { texto?: string };
   hero: HeroContent;
@@ -121,6 +131,7 @@ export type HomeContent = {
   /** null = la categoría del nav no lleva badge. */
   navBadge: NavBadgeContent | null;
   whatsapp: WhatsappContent;
+  busquedaAsistida: BusquedaAsistidaContent;
   /** Dónde se ve cada sección que el admin restringió desde el editor (las
    *  que no figuran se ven siempre). Se guarda en su propia fila de
    *  home_content (`ocultas`), así no pisa el contenido de la sección. */
@@ -147,6 +158,7 @@ export const SECCIONES_HOME = [
   "servicios",
   "navBadge",
   "whatsapp",
+  "busquedaAsistida",
 ] as const;
 
 export type SeccionHome = (typeof SECCIONES_HOME)[number];
@@ -249,6 +261,19 @@ export const DEFAULTS_HOME: HomeContent = {
     // El número real vive en el contenido editable (home_content): acá sólo un
     // enlace neutro que pasa la validación, sin datos de la tienda (repo público).
     href: "https://wa.me/",
+  },
+  busquedaAsistida: {
+    eyebrow: "Búsqueda asistida",
+    titulo: "Cuéntenos qué *necesita*",
+    bajada: "Descríbalo con sus palabras y le mostramos los productos que le sirven.",
+    placeholder: "Por ejemplo: luz cálida para el living",
+    ejemplosTitulo: "Pruebe con",
+    // Una necesidad, un ambiente y un uso.
+    ejemplos: [
+      { texto: "luz cálida para el living" },
+      { texto: "reflector para el patio" },
+      { texto: "tira led para la cocina" },
+    ],
   },
   // El anuncio en mobile ocupa varias filas: arranca solo en desktop hasta que
   // sea un carrusel de mensajes. El admin lo puede cambiar desde el editor.
@@ -470,6 +495,22 @@ export function erroresSeccion(key: string, payload: unknown, hosts: readonly st
       if (!esVisibilidadTextos(o.visibilidadTextos, CAMPOS_WHATSAPP))
         errores.push(`visibilidadTextos debe indicar desktop, mobile o nunca para ${CAMPOS_WHATSAPP.join(", ")}`);
       if (!esHref(o.href)) errores.push("href debe ser una ruta interna (/) o una URL https");
+      break;
+    case "busquedaAsistida":
+      texto("eyebrow", true);
+      textosTitulo();
+      texto("placeholder", true);
+      texto("ejemplosTitulo", true);
+      lista(
+        "ejemplos",
+        (v) =>
+          !!v &&
+          typeof v === "object" &&
+          esTexto((v as ItemEjemplo).texto) &&
+          (v as ItemEjemplo).texto.length <= 120 &&
+          esSoloEnOpcional((v as ItemEjemplo).visibilidad),
+        "{ texto (hasta 120 caracteres), visibilidad? }",
+      );
       break;
   }
   return errores;

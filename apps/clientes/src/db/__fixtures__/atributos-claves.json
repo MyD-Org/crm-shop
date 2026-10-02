@@ -19,7 +19,8 @@
     "montaje",
     "angulo_grados",
     "leds_m",
-    "potencia_w_m"
+    "potencia_w_m",
+    "leds_rollo"
   ],
   "tipos": {
     "potencia_w": "num",
@@ -41,6 +42,7 @@
     "montaje": "texto",
     "angulo_grados": "num",
     "leds_m": "num",
-    "potencia_w_m": "num"
+    "potencia_w_m": "num",
+    "leds_rollo": "num"
   }
 }

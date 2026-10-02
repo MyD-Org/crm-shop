@@ -106,23 +106,23 @@ describe("catalog_atributos: precedencia", () => {
   })
 })
 
-describe("catalog_atributos: CHECK de clave ampliado (0053)", () => {
+describe("catalog_atributos: CHECK de clave ampliado (0053, 0058, 0059)", () => {
   const fixture = JSON.parse(
     readFileSync(fileURLToPath(new URL("../../../clientes/src/db/__fixtures__/atributos-claves.json", import.meta.url)), "utf8"),
   ) as { claves: string[]; tipos: Record<string, "num" | "texto"> }
   const NUEVAS = fixture.claves.slice(7)
 
-  it("la base migrada admite exactamente las 18 claves del fixture", async () => {
+  it("la base migrada admite exactamente las 21 claves del fixture", async () => {
     const filas = await getDb().execute<{ def: string }>(
       dsql`SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'catalog_atributos_clave_check' AND conrelid = 'public.catalog_atributos'::regclass`,
     )
     const claves = [...String(filas[0].def).matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1])
     expect(new Set(claves)).toEqual(new Set(fixture.claves))
-    expect(claves).toHaveLength(18)
+    expect(claves).toHaveLength(21)
   })
 
-  it("acepta una fila por cada una de las 11 claves nuevas", async () => {
-    expect(NUEVAS).toHaveLength(11)
+  it("acepta una fila por cada una de las 14 claves nuevas", async () => {
+    expect(NUEVAS).toHaveLength(14)
     for (const clave of NUEVAS) {
       const num = fixture.tipos[clave] === "num"
       await getDb().execute(

@@ -414,6 +414,13 @@
       "when": 1791459900000,
       "tag": "0058_atributos_por_metro",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791546300000,
+      "tag": "0059_atributo_leds_rollo",
+      "breakpoints": true
     }
   ]
 }

@@ -70,6 +70,9 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    "Leds/Mts", "14.4 W/m", "9,6 W/Mt", "por metro"); "60 LED" o "14 W" sin "/m" se descartan
    (`unidad_no_en_texto`). La potencia por metro nunca es `potencia_w`: ahí se sigue descartando
    (`valor_por_metro`).
+   **LED por rollo** (`leds_rollo`): el total de LED del rollo o tira; el número tiene que ir con "LED"/"LEDs" ("300 LED",
+   "300 LEDs", y la forma "300 LEDs xm" que usan algunos fabricantes para el total); "60 LED/m" es `leds_m`, no esta
+   clave, y un número sin "LED" se descarta (`unidad_no_en_texto`).
    Una potencia o corriente "máxima" (carga admitida de un riel, controlador o tecla: "200W Máx", "Carga máxima 200W",
    "Potencia máxima de lámpara: 60W", "hasta 60W") no es la del producto: si "máx", "máximo/a", "maximum" o "hasta" está en su
    celda, en el rótulo de su fila o columna o en la celda pegada de la misma línea, se descarta (`valor_maximo`).

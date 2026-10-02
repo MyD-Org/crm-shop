@@ -732,6 +732,17 @@ describe("leds_m y potencia_w_m: el /m tiene que estar en el texto", () => {
   })
 })
 
+describe("leds_rollo: el total de LED, con la palabra LED", () => {
+  const una = (txt: string, valor = 300) =>
+    verificarLectura(lectura(null, { leds_rollo: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "TIRA LED" }))
+  it.each(["300 LED", "300 LEDs", "300LED", "300 LEDs xm"])("acepta %s", (txt) => {
+    expect(aceptados(una(txt))).toEqual([["leds_rollo", 300]])
+  })
+  it.each(["300", "Cantidad 300", "300 LED/m", "300 LEDs por metro", "300 LED x m"])("rechaza %s", (txt) => {
+    expect(motivos(una(txt))).toEqual(["leds_rollo:unidad_no_en_texto"])
+  })
+})
+
 describe("angulo_grados: sólo el ángulo de luz", () => {
   const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "SPOT LED", code: "SP-001-XYZ" })
   const ang = (valor: number, celdas: Celda[]) => verificarLectura(lectura(null, { angulo_grados: { valor } }), ficha(celdas))

@@ -38,12 +38,13 @@ const MUESTRA: Record<ClaveEstructurada, { n: number | null; t: string | null }>
   angulo_grados: n(60),
   leds_m: n(120),
   potencia_w_m: n(14.4),
+  leds_rollo: n(300),
 };
 
 describe("paridad con el contrato de claves (fixture compartido con el CRM)", () => {
   it("CLAVES_ESTRUCTURADAS = fixture.claves, en el mismo orden", () => {
     expect([...CLAVES_ESTRUCTURADAS]).toEqual(fixture.claves);
-    expect(CLAVES_ESTRUCTURADAS).toHaveLength(20);
+    expect(CLAVES_ESTRUCTURADAS).toHaveLength(21);
   });
 
   it("ETIQUETA y TIPO cubren exactamente las claves del fixture, con el tipo del fixture", () => {
@@ -132,6 +133,8 @@ describe("formato de las claves ampliadas (es-AR)", () => {
     expect(formatoValor("leds_m", n(60))).toBe("60 LED/m");
     expect(formatoValor("potencia_w_m", n(14.4))).toBe("14,4 W/m");
     expect(formatoValor("potencia_w_m", n(4.8))).toBe("4,8 W/m");
+    expect(formatoValor("leds_rollo", n(300))).toBe("300 LED por rollo");
+    expect(formatoValor("leds_rollo", n(1200))).toBe("1.200 LED por rollo");
   });
 
   it("polos: singular, plural y fuera de 1–4 o no entero sin fila", () => {
@@ -202,7 +205,7 @@ describe("solo se muestra lo que el producto tiene", () => {
 
   it("ningún texto tiene null, undefined, guion ni 'No informado'", () => {
     const filas = caracteristicasDe(MUESTRA);
-    expect(filas).toHaveLength(20);
+    expect(filas).toHaveLength(21);
     for (const f of filas) {
       expect(`${f.etiqueta} ${f.valor}`).not.toMatch(/null|undefined|No informado/i);
       expect(f.valor.trim()).not.toBe("-");

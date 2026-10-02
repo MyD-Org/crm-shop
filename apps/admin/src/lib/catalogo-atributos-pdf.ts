@@ -57,6 +57,8 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
     'Cantidad de LED por metro de una tira o manguera (entero, p. ej. 60 o 120). SOLO si el texto lo dice por metro ("60 LED/m", "120 LEDs/m"); no la cantidad total de LED ni de un módulo.',
   potencia_w_m:
     'Potencia por metro de una tira o manguera en W/m (número, p. ej. 4.8 o 14.4). SOLO si el texto la da por metro ("14.4 W/m"); la potencia total va en potencia_w, nunca acá.',
+  leds_rollo:
+    'Cantidad TOTAL de LED del rollo o tira (entero, p. ej. 300 o 600), no por metro. Va acá si el texto da el total del rollo ("300 LED", "300 LEDs"); si lo da por metro ("60 LED/m") va en leds_m.',
 }
 
 /**

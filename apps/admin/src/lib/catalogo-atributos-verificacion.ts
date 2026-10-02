@@ -335,6 +335,7 @@ function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, citaCruda: st
         azul: palabra("AZUL(?:ES)?|BLUE"),
         amarillo: palabra("AMARILL[OA]S?|YELLOW"),
         naranja: palabra("NARANJAS?|ORANGE"),
+        ambar: palabra("[AÁ]MBAR(?:ES)?|AMBER"),
         violeta: palabra("VIOLETAS?|PURPLE"),
         rosa: palabra("ROSAS?|ROSAD[OA]S?|PINK"),
         rgb: palabra("RGB"),
@@ -457,7 +458,7 @@ function esValorMaximo(cand: Candidato, doc: Doc): boolean {
 }
 
 /** Tonos que son un color (rojo, verde…): sólo valen bajo un rótulo de luz. RGB/RGBW no son color de producto. */
-const TONOS_COLOR_DE_LUZ = new Set(["rojo", "verde", "azul", "amarillo", "naranja", "violeta", "rosa"])
+const TONOS_COLOR_DE_LUZ = new Set(["rojo", "verde", "azul", "amarillo", "naranja", "ambar", "violeta", "rosa"])
 const RE_ROTULO_DE_LUZ = /(?<![A-Z0-9])(?:LUZ|TONO|LIGHT)(?![A-Z0-9])/
 
 /** ¿La celda (o su rótulo de fila/columna) habla de la luz ("Tipo de luz", "Color de luz", "Tono")? */

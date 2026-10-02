@@ -263,8 +263,8 @@ describe("tipo de luz (tono) y color del producto", () => {
 
   it("formato de las luces de color y RGB", () => {
     const f = (t: string) => formatoValor("tono", { n: null, t });
-    expect(["calido", "neutro", "frio", "rojo", "verde", "azul", "amarillo", "naranja", "violeta", "rosa", "rgb", "rgbw"].map(f)).toEqual([
-      "Cálida", "Neutra", "Fría", "Roja", "Verde", "Azul", "Amarilla", "Naranja", "Violeta", "Rosa", "RGB", "RGBW",
+    expect(["calido", "neutro", "frio", "rojo", "verde", "azul", "amarillo", "naranja", "ambar", "violeta", "rosa", "rgb", "rgbw"].map(f)).toEqual([
+      "Cálida", "Neutra", "Fría", "Roja", "Verde", "Azul", "Amarilla", "Naranja", "Ámbar", "Violeta", "Rosa", "RGB", "RGBW",
     ]);
     expect(f("turquesa")).toBeNull();
   });

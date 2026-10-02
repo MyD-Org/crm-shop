@@ -500,6 +500,8 @@ describe("tono = tipo de luz (luces de color y RGB)", () => {
     expect(extraer("FOCO 7W LUZ AMARILLA")).toEqual({ potencia_w: 7, tono: "amarillo" })
     expect(extraer("FOCO 7W LUZ AZUL")).toEqual({ potencia_w: 7, tono: "azul" })
     expect(extraer("FOCO 7W LUZ NARANJA")).toEqual({ potencia_w: 7, tono: "naranja" })
+    expect(extraer("FOCO 7W LUZ AMBAR")).toEqual({ potencia_w: 7, tono: "ambar" })
+    expect(extraer("FOCO 7W LUZ ÁMBAR")).toEqual({ potencia_w: 7, tono: "ambar" })
     expect(extraer("FOCO 7W LUZ VIOLETA")).toEqual({ potencia_w: 7, tono: "violeta" })
     expect(extraer("FOCO 7W LUZ ROSA")).toEqual({ potencia_w: 7, tono: "rosa" })
   })
@@ -521,7 +523,7 @@ describe("tono = tipo de luz (luces de color y RGB)", () => {
 
   it("el valor externo acepta sinónimos con y sin género", () => {
     for (const [entrada, esperado] of [
-      ["Roja", "rojo"], ["amarilla", "amarillo"], ["Luz verde", "verde"], ["Violeta", "violeta"], ["RGB", "rgb"], ["RGBW", "rgbw"],
+      ["Roja", "rojo"], ["amarilla", "amarillo"], ["Luz verde", "verde"], ["Violeta", "violeta"], ["Ámbar", "ambar"], ["ambar", "ambar"], ["RGB", "rgb"], ["RGBW", "rgbw"],
     ] as const) {
       expect(comoMapa(normalizarAtributos({ tono: entrada }))).toEqual({ tono: esperado })
     }
@@ -536,6 +538,6 @@ describe("tono = tipo de luz (luces de color y RGB)", () => {
     })
     expect(DEFINICION_ATRIBUTOS.tono.etiqueta).toBe("Tipo de luz")
     expect(DEFINICION_ATRIBUTOS.color.etiqueta).toBe("Color del producto")
-    expect(TONOS).toEqual(["calido", "neutro", "frio", "rojo", "verde", "azul", "amarillo", "naranja", "violeta", "rosa", "rgb", "rgbw"])
+    expect(TONOS).toEqual(["calido", "neutro", "frio", "rojo", "verde", "azul", "amarillo", "naranja", "ambar", "violeta", "rosa", "rgb", "rgbw"])
   })
 })

@@ -11,6 +11,9 @@ import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
 import type { DireccionEnvio } from "@/lib/direcciones-envio";
 import { opcionesCheckoutDelVisitante } from "@/lib/zona-servidor";
+import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
+import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
+import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfrecibles } from "@/lib/medios-pago-datos";
 import { SLUG_MERCADOPAGO } from "@/lib/medios-pago";
 
@@ -31,6 +34,15 @@ async function direccionesParaCheckout(
     );
     return [];
   }
+}
+
+/** Solo identificadores: la elección de «Enviar a» ya validada contra el dueño y los locales. */
+function eleccionParaCheckout(e: EleccionUbicacion): EleccionInicialCheckout {
+  if (e.tipo === "retiro") return { tipo: "retiro", sucursal: e.sucursal?.slug };
+  if (e.tipo === "envio") {
+    return { tipo: "envio", direccionId: e.direccion?.id, provincia: e.provincia ?? undefined };
+  }
+  return { tipo: "ninguna" };
 }
 
 /**
@@ -68,6 +80,13 @@ export default async function CheckoutPage() {
       return null;
     },
   );
+  // Sin la elección el checkout arranca como siempre: una falla al leerla no frena la compra.
+  const eleccion = await ubicacionDelVisitante()
+    .then((u) => eleccionParaCheckout(u.eleccion))
+    .catch((err: unknown) => {
+      console.error("[checkout] no se pudo leer la ubicación elegida:", err);
+      return null;
+    });
   const [dc, oferta, direcciones] = await Promise.all([
     datosDelContacto({ clerkUserId, cliente }),
     mediosPago.some((m) => m.slug === SLUG_MERCADOPAGO) ? getOfertaCuotasSinCache() : null,
@@ -121,6 +140,7 @@ export default async function CheckoutPage() {
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}
         mediosPago={mediosPago}
+        eleccionInicial={eleccion}
       />
     </>
   );

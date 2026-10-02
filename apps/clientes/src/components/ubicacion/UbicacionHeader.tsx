@@ -1,16 +1,21 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { TEXTOS_UBICACION } from "@/lib/ubicacion";
+import { lineasEnviarA, opcionVigente } from "@/lib/enviar-a";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
+import { EnviarAContenido } from "./EnviarAContenido";
 import { SelectorUbicacion } from "./SelectorUbicacion";
 
 /**
- * Indicador de ubicación bajo el logo del encabezado: pin + localidad + chevron; al tocarlo abre el
- * modal para cambiarla. Se pasa al Header del DS por su slot `brandExtra`. Va en el shell estático
- * con un hueco por request: mientras llega, reserva su alto (sin texto) para que no salte.
+ * "Enviar a" bajo el logo del encabezado (slot `brandExtra` del Header del DS): dos líneas
+ * ("Enviar a {nombre}" / "{calle altura}", "Enviar a" / "{localidad} ({CP})", "Enviar a" /
+ * "Indique su ubicación" o, en retiro, ícono de local + "Retirar en" / "{local}"). Al tocarlo abre
+ * el modal "Seleccione dónde recibir su compra", que se descarga recién en ese momento.
+ *
+ * Va en el shell estático con un hueco por request: mientras llega reserva el alto de las dos
+ * líneas (`h-8`) para que no salte. El header no trae la lista de direcciones: la pide el modal.
  */
-const BOTON = "inline-flex max-w-full items-center gap-1 text-xs text-muted transition-colors hover:text-text";
-const ALTO = "h-4";
+const BOTON = "inline-flex max-w-48 items-center rounded-sm text-left transition-colors hover:text-text sm:max-w-64";
+const ALTO = "h-8";
 
 export function UbicacionHeader() {
   return (
@@ -23,17 +28,20 @@ export function UbicacionHeader() {
 async function UbicacionDinamica() {
   // Lee cookie e identidad: hueco por request.
   await connection();
-  const { ubicacion, origen } = await ubicacionDelVisitante();
+  const { ubicacion, origen, eleccion, nombrePila } = await ubicacionDelVisitante();
+  // Envío a una localidad de Georef (sin dirección guardada): el modal la ofrece precargada.
+  const localidadActual =
+    eleccion.tipo === "envio" && !eleccion.direccion && ubicacion?.id
+      ? { id: ubicacion.id, etiqueta: ubicacion.localidad, cp: ubicacion.cp }
+      : undefined;
   return (
-    <SelectorUbicacion conUbicacion={origen === "cookie"} className={BOTON}>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-        <path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z" />
-        <circle cx="12" cy="10" r="3" />
-      </svg>
-      <span className="min-w-0 truncate">{ubicacion ? ubicacion.localidad : TEXTOS_UBICACION.pedir}</span>
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
+    <SelectorUbicacion
+      conUbicacion={origen === "cookie"}
+      vigente={opcionVigente(eleccion)}
+      localidadActual={localidadActual}
+      className={BOTON}
+    >
+      <EnviarAContenido lineas={lineasEnviarA(eleccion, nombrePila)} />
     </SelectorUbicacion>
   );
 }

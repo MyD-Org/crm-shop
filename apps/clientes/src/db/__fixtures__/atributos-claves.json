@@ -17,7 +17,9 @@
     "sensibilidad_ma",
     "largo_m",
     "montaje",
-    "angulo_grados"
+    "angulo_grados",
+    "leds_m",
+    "potencia_w_m"
   ],
   "tipos": {
     "potencia_w": "num",
@@ -37,6 +39,8 @@
     "sensibilidad_ma": "num",
     "largo_m": "num",
     "montaje": "texto",
-    "angulo_grados": "num"
+    "angulo_grados": "num",
+    "leds_m": "num",
+    "potencia_w_m": "num"
   }
 }

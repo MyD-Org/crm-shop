@@ -230,6 +230,9 @@ export function tokensDelNombre(nombre: string): { token: string; re: RegExp }[]
 
 // ───────────────────────── valor dentro de la cita ─────────────────────────
 
+/** "/m", " x m", " por metro" tras una unidad (para las claves por metro). */
+const POR_METRO = "\\s?(?:/|X|POR)\\s?(?:M|MT|MTS|MTRS|METROS?)(?![A-Z0-9²])"
+
 /** Sufijo de unidad y palabras del campo que aceptamos junto al número, por clave numérica. */
 const EVIDENCIA_NUM: Partial<Record<ClaveAtributo, { unidad: string; palabra: string }>> = {
   potencia_w: { unidad: "\\s?(?:W|WATTS?)(?![A-Z])", palabra: "POTENCIA" },
@@ -243,6 +246,10 @@ const EVIDENCIA_NUM: Partial<Record<ClaveAtributo, { unidad: string; palabra: st
   sensibilidad_ma: { unidad: "\\s?MA(?![A-Z])", palabra: "SENSIBILIDAD|IDN" },
   largo_m: { unidad: "\\s?(?:M|MT|MTS|MTRS|METROS?)(?![A-Z0-9])", palabra: "LARGO|LONGITUD" },
   angulo_grados: { unidad: "\\s?(?:°|º|GRADOS?|DEG)", palabra: "ANGULO|APERTURA|HAZ" },
+  // Por metro: el "/m" TIENE que estar en el texto. Sin palabra clave que lo reemplace: "60 LED" o
+  // "14 W" sueltos no alcanzan (el LED total o la potencia total no son la densidad ni la potencia por metro).
+  leds_m: { unidad: `\\s?LEDS?${POR_METRO}`, palabra: "(?!)" },
+  potencia_w_m: { unidad: `\\s?(?:W|WATTS?)${POR_METRO}`, palabra: "(?!)" },
 }
 
 const POLOS_PALABRA: Record<string, number> = { UNIPOLAR: 1, MONOPOLAR: 1, BIPOLAR: 2, TRIPOLAR: 3, TETRAPOLAR: 4 }

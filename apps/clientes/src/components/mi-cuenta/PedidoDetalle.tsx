@@ -61,7 +61,7 @@ export function PedidoDetalle({
         {pasos && <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" />}
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex flex-col gap-4">
         <Card title="Pago">
           <p className="text-sm text-muted">{medioPago?.nombre ?? pedido.metodoPago}</p>
           {medioPago?.instrucciones && pedido.estado === "pendiente" && (

@@ -55,7 +55,7 @@ export function enlaceWhatsApp(numero: string | null | undefined, mensaje: strin
 
 function encabezado({ empresa, razonsocial, cuit }: DatosMensaje): string {
   const id = cuit ? ` (CUIT ${cuit})` : "";
-  return `Hola, ${empresa}. Les escribimos de ${razonsocial}${id}.`;
+  return `Hola, ${empresa}. Les escribo de parte de ${razonsocial}${id}.`;
 }
 
 type FacturaMensaje = Pick<Factura, "id" | "emision" | "importe" | "estado" | "pagado">;
@@ -68,8 +68,8 @@ function saldoDe(f: FacturaMensaje): number {
 export function mensajeFacturas(intencion: IntencionFacturas, datos: DatosMensaje, facturas: FacturaMensaje[]): string {
   const intro =
     intencion === "pagar"
-      ? "Queremos coordinar el pago de las siguientes facturas:"
-      : "Tenemos una consulta sobre las siguientes facturas:";
+      ? "Quiero coordinar el pago de las siguientes facturas:"
+      : "Tengo una consulta sobre las siguientes facturas:";
   const lineas = facturas
     .map((f) => {
       const parcial = f.pagado !== undefined && f.pagado > 0 && f.pagado < f.importe;
@@ -86,7 +86,7 @@ export function mensajePagos(datos: DatosMensaje, pagos: Pick<Pago, "id" | "fech
   const lineas = pagos
     .map((p) => `• ${p.id} del ${p.fecha}${p.medio ? ` (${p.medio})` : ""}: ${fmtPrecio(p.monto)}`)
     .join("\n");
-  return `${encabezado(datos)}\n\nTenemos una consulta sobre los siguientes pagos:\n${lineas}\n\nConsulta: `;
+  return `${encabezado(datos)}\n\nTengo una consulta sobre los siguientes pagos:\n${lineas}\n\nConsulta: `;
 }
 
 export function mensajePresupuestos(
@@ -96,8 +96,8 @@ export function mensajePresupuestos(
 ): string {
   const intro =
     intencion === "avanzar"
-      ? "Queremos avanzar con los siguientes presupuestos:"
-      : "Tenemos una consulta sobre los siguientes presupuestos:";
+      ? "Quiero avanzar con los siguientes presupuestos:"
+      : "Tengo una consulta sobre los siguientes presupuestos:";
   const lineas = presupuestos.map((p) => `• ${p.id} del ${p.fecha}: ${fmtPrecio(p.total)}`).join("\n");
   const cierre = intencion === "consultar" ? "\n\nConsulta: " : "";
   return `${encabezado(datos)}\n\n${intro}\n${lineas}${cierre}`;

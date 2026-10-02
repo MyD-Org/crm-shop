@@ -143,6 +143,13 @@ describe("política de privacidad", () => {
     expect(t).not.toMatch(/\btu\b|\bvos\b/i);
   });
 
+  it("indica cómo quitar la elección con el rótulo actual del header («Enviar a»)", () => {
+    const t = texto([bloquesPrivacidad({}).find((b) => b.titulo === "Su ubicación")!]);
+    expect(t).not.toContain("Cambiar ubicación");
+    expect(t).toContain("«Enviar a»");
+    expect(t).toContain("«Quitar ubicación»");
+  });
+
   it("informa las cookies y herramientas de análisis que carga el flag `tracking`", () => {
     const bloques = bloquesPrivacidad({});
     const cookies = bloques.find((b) => b.titulo === "Cookies y herramientas de análisis");

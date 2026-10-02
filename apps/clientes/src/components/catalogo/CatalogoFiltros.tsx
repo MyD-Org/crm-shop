@@ -61,9 +61,9 @@ export function CatalogoFiltros({
           // Las subcategorías van debajo de su madre, corridas un nivel.
           depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
           count: c.count,
+          // Van todas las del catálogo y todas se pueden tildar, aunque con los filtros
+          // de ahora no tengan resultados (se ven con su 0, sin atenuar).
           checked: c.checked,
-          // Van todas las del catálogo: las que no tienen resultados acá se ven pero no se tildan.
-          disabled: c.count === 0 && !c.checked,
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) =>

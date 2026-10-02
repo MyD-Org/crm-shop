@@ -46,24 +46,16 @@ export function PedidoDetalle({
   return (
     <div className="flex flex-col gap-6">
       <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="font-display text-xl font-medium tracking-tight text-text">Pedido {pedido.numero}</h2>
-            <p className="mt-1 text-sm text-muted">{fmtFecha(pedido.fecha)}</p>
-          </div>
+        <h2 className="font-display text-xl font-medium tracking-tight text-text">Pedido {pedido.numero}</h2>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted">{fmtFecha(pedido.fecha)}</p>
           <Badge tone={pill.tone}>{pill.label}</Badge>
         </div>
 
-        {/* En el celular los cinco pasos no entran en una fila: vertical hasta `sm`. */}
         {pasos && (
-          <>
-            <div className="mt-4 sm:hidden">
-              <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" orientation="vertical" />
-            </div>
-            <div className="hidden sm:block">
-              <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" />
-            </div>
-          </>
+          <div className="mt-5">
+            <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="sm" />
+          </div>
         )}
       </Card>
 

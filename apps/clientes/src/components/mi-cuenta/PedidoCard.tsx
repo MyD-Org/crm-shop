@@ -3,7 +3,6 @@ import type { Order } from "@/data/orders";
 import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
-import { etiquetaUnidades, unidadesPedido } from "@/lib/pedido-vista";
 import { avisoComprobante } from "@/lib/comprobantes/aviso-card";
 import { AvisoComprobante } from "./AvisoComprobante";
 import { PedidoAcciones } from "./PedidoAcciones";
@@ -18,18 +17,13 @@ import { PedidoLinea } from "./PedidoLinea";
 export function PedidoCard({ pedido }: { pedido: Order }) {
   const pill = estadoPedidoPill(pedido);
   const pasos = seguimientoPedido(pedido);
-  const unidades = unidadesPedido(pedido.items);
   const aviso = avisoComprobante(pedido);
 
   return (
     <Card>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-semibold text-text">Pedido {pedido.numero}</h3>
-          <p className="text-sm text-muted">
-            {fmtFecha(pedido.fecha)} · {etiquetaUnidades(unidades)}
-          </p>
-        </div>
+      <h3 className="text-base font-semibold text-text">Pedido {pedido.numero}</h3>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted">{fmtFecha(pedido.fecha)}</p>
         <Badge tone={pill.tone}>{pill.label}</Badge>
       </div>
 

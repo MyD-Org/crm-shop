@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Button, DocumentViewer, useToast } from "@myd-org/ui";
+import { Button, DocumentViewer, Tooltip, useToast } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useCart } from "@/context/CartContext";
 import type { OrderItem } from "@/data/orders";
@@ -77,7 +77,7 @@ export function PedidoAcciones({
 
   const contenedor = alPie
     ? "mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center"
-    : "flex flex-wrap gap-3";
+    : "flex flex-wrap items-center gap-2";
 
   return (
     <div className={contenedor}>
@@ -86,9 +86,24 @@ export function PedidoAcciones({
           Ver detalle <IconoFlecha />
         </Button>
       )}
-      <Button variant="outline" loading={agregando} onClick={volverAComprar}>
-        <IconoRefresh /> Volver a comprar
-      </Button>
+      {alPie ? (
+        <Button variant="outline" loading={agregando} onClick={volverAComprar}>
+          <IconoRefresh /> Volver a comprar
+        </Button>
+      ) : (
+        // En la card de la lista, sólo el ícono (el nombre va en el tooltip y en aria-label).
+        <Tooltip content="Volver a comprar">
+          <Button
+            size="icon-lg"
+            variant="outline"
+            loading={agregando}
+            onClick={volverAComprar}
+            aria-label="Volver a comprar"
+          >
+            <IconoRefresh />
+          </Button>
+        </Tooltip>
+      )}
       {facturaId && (
         <>
           <Button variant="outline" onClick={() => setVerFactura(true)}>

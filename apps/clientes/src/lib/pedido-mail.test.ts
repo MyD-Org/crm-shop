@@ -94,13 +94,14 @@ describe("armarMailPedido: contacto del pedido a confirmar", () => {
     whatsappUrl: "https://wa.me/5491155550100?text=Hola",
   };
 
-  it("recibido: incluye el plazo y el enlace de WhatsApp (escapados)", () => {
+  it("recibido: incluye el plazo y el enlace de WhatsApp (escapados), sin mostrar el número", () => {
     const m = armarMailPedido({ ...base, aviso: "recibido", contacto });
     expect(m.html).toContain("Nos comunicaremos dentro de las 24 horas hábiles.");
     expect(m.html).toContain('href="https://wa.me/5491155550100?text=Hola"');
-    expect(m.html).toContain("+54 9 11 5555-0100");
+    expect(m.html).toContain("Escribir por WhatsApp");
+    expect(m.html).not.toContain("+54 9 11 5555-0100");
     expect(m.text).toContain("Nos comunicaremos dentro de las 24 horas hábiles.");
-    expect(m.text).toContain("https://wa.me/5491155550100?text=Hola");
+    expect(m.text).toContain("Escríbanos por WhatsApp: https://wa.me/5491155550100?text=Hola");
   });
 
   it("sin WhatsApp: sólo el plazo, sin enlace", () => {

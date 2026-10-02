@@ -72,9 +72,8 @@ export function armarContactoPedido(e: EntradaContacto): ContactoPedidoVista {
   const mensaje = propio
     ? propio
         .replaceAll("{plazo}", plazoTexto(e.horasHabiles))
-        .replaceAll("{whatsapp}", whatsapp?.visible ?? "")
-        // Sin número, un "{whatsapp}" reemplazado por vacío deja espacios dobles.
-        .replace(/[ \t]{2,}/g, " ")
+        .replaceAll("{whatsapp}", "WhatsApp")
+        // Sin número, espacios no quedan dobles con "WhatsApp".
         .trim()
     : mensajePorDefecto(e.horasHabiles);
   return { mensaje, horasHabiles: e.horasHabiles, whatsapp };

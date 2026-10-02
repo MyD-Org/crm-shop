@@ -144,7 +144,7 @@ export function textosDisponibilidad(
 
 /** Cuánto "pesa" un estado: manda el producto más lento. "A coordinar" (0/null días) va al final. */
 const pesoDemora = (dias: number | null): number => (dias === null || dias <= 0 ? 10_000 : dias);
-const pesoRetiro = (d: DisponibilidadRetiro): number =>
+export const pesoRetiro =(d: DisponibilidadRetiro): number =>
   d.estado === "disponible" ? 0 : d.estado === "con_demora" ? pesoDemora(d.demoraDias) : 100_000;
 const pesoEnvio = (d: DisponibilidadEnvio): number =>
   d.estado === "disponible" ? 0 : d.estado === "a_traer" ? pesoDemora(d.demoraDias) : 100_000;

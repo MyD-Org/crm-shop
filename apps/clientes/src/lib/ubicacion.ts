@@ -254,7 +254,14 @@ export const TEXTOS_UBICACION = {
   placeholderCp: "Por ejemplo, 5000 o C1425ABC",
   elegirLocalidad: "Seleccione su localidad de la lista.",
   // Ficha (PR3): retiro en el local elegido.
-  retiroEn: (local: string) => `Retiro en ${local}`,
+  retiroGratisEn: (local: string) => `Retiro gratis en ${local}`,
+  envioA: (destino: string) => `Envío a ${destino}`,
+  tambienEnvio: "También puede pedirlo con envío a domicilio",
+  oRetirelo: "O retírelo gratis en el local",
+  disponibleEn: (estado: string, local: string) => `${estado} en ${local}`,
+  cambiarLocal: "Cambiar",
+  verOtrosLocales: "Ver otros locales",
+  ocultarOtrosLocales: "Ocultar otros locales",
   sinStockEn: (local: string) => `No disponible en ${local}`,
   completarCp: "Confirme su localidad en la lista e ingrese su código postal.",
 } as const;

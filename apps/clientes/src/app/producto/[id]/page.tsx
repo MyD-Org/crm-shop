@@ -60,6 +60,8 @@ export default async function ProductoPage({ params }: Props) {
   // Local de retiro elegido en "Enviar a" (si la lectura falla, sin local elegido).
   const eleccion = (await ubicacionDelVisitante().catch(() => null))?.eleccion;
   const localElegido = eleccion?.tipo === "retiro" ? (eleccion.sucursal?.slug ?? null) : null;
+  // Envío elegido: la dirección guardada (calle y altura) o, si es una localidad, su nombre.
+  const envioElegido = eleccion?.tipo === "envio" ? (eleccion.direccion?.calle || eleccion.localidad || null) : null;
 
   if (!producto) notFound();
   // "Retiro en <local>: ..." por cada local y "Envío a domicilio: ..." (sólo con el flag
@@ -83,6 +85,7 @@ export default async function ProductoPage({ params }: Props) {
         oferta={oferta}
         configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
         localElegido={localElegido}
+        envioElegido={envioElegido}
         envioUbicacion={
           // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
           // fallback, para que la ficha siga con su shell estático.

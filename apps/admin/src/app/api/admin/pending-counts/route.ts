@@ -4,6 +4,7 @@ import { tenants } from "@/db/schema"
 import { getGuardedAdminSession } from "@/lib/admin-session"
 import { listConversations, type InboxConversation } from "@/lib/inbox-api"
 import { listPendingSubmittedAt } from "@/lib/payment-receipts"
+import { listPendientesCreatedAt } from "@/lib/pedidos-repo"
 import { roleRank } from "@/lib/roles"
 
 // GET /api/admin/pending-counts — contadores para los badges de "novedades" del sidebar del
@@ -17,8 +18,10 @@ import { roleRank } from "@/lib/roles"
 //     cuenta cuando hay since (no hay "entrada reciente" medible); sin since sí cuenta.
 //   - comprobantes: payment_receipts pending con submittedAt > since (o todos sin since).
 //     "Pendiente" deja de contar al visitar la sección aunque el admin ya lo haya abierto.
-//   - parámetros: `?since=` aplica a AMBOS (atajo), y `sinceInbox` / `sinceComprobantes`
-//     filtran por sección (lo que manda el cliente: cada sección tiene su propio last-visit).
+//   - pedidos: pedidos del Shop sin confirmar (estado pendiente) con createdAt > since (o todos
+//     sin since). Lo ve cualquier rol: el operador también confirma pedidos.
+//   - parámetros: `?since=` aplica a TODAS (atajo), y `sinceInbox` / `sinceComprobantes` /
+//     `sincePedidos` filtran por sección (lo que manda el cliente: cada sección tiene su propio last-visit).
 //     Inválido o ausente = sin filtro (primer uso: backlog completo, razonable).
 //
 // Responde CUALQUIER rol autenticado (operador incluido). `comprobantes` va en null para
@@ -36,6 +39,7 @@ interface Raw {
   /** null = tenant sin inbox configurado (inbox 0, no es error). */
   conversations: InboxConversation[] | null
   pendingSubmittedAt: Date[]
+  pedidosCreatedAt: Date[]
 }
 
 const cache = new Map<string, { at: number; value: Raw }>()
@@ -60,7 +64,11 @@ async function loadRaw(tenantId: string): Promise<Raw> {
     conversations = await listConversations(tenant.aiApiUrl, tenant.aiTenantId)
   }
 
-  return { conversations, pendingSubmittedAt: await listPendingSubmittedAt(tenantId) }
+  const [pendingSubmittedAt, pedidosCreatedAt] = await Promise.all([
+    listPendingSubmittedAt(tenantId),
+    listPendientesCreatedAt(tenantId),
+  ])
+  return { conversations, pendingSubmittedAt, pedidosCreatedAt }
 }
 
 export async function GET(req: Request) {
@@ -74,6 +82,7 @@ export async function GET(req: Request) {
   const sinceAmbos = parseSince(url.searchParams.get("since"))
   const sinceInbox = parseSince(url.searchParams.get("sinceInbox")) ?? sinceAmbos
   const sinceComprobantes = parseSince(url.searchParams.get("sinceComprobantes")) ?? sinceAmbos
+  const sincePedidos = parseSince(url.searchParams.get("sincePedidos")) ?? sinceAmbos
 
   const cached = cache.get(guarded.tenantId)
   let value: Raw
@@ -104,9 +113,11 @@ export async function GET(req: Request) {
 
   const comprobantes = value.pendingSubmittedAt.filter((d) => !sinceComprobantes || d > sinceComprobantes).length
 
+  const pedidos = value.pedidosCreatedAt.filter((d) => !sincePedidos || d > sincePedidos).length
+
   const esAdmin = roleRank(guarded.user.role) >= roleRank("admin")
   return Response.json(
-    { inbox, comprobantes: esAdmin ? comprobantes : null },
+    { inbox, comprobantes: esAdmin ? comprobantes : null, pedidos },
     { headers: { "Cache-Control": "private, no-store" } },
   )
 }

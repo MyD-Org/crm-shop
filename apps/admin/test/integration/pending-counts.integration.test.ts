@@ -5,7 +5,7 @@ import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import { listConversations, type InboxConversation } from "@/lib/inbox-api"
-import { seedOperator, seedTenant, truncateAll } from "./helpers"
+import { seedOperator, seedShopOrder, seedTenant, truncateAll } from "./helpers"
 import { seedReceipt } from "./fake-r2"
 
 // Tests de integración de GET /api/admin/pending-counts (badges de "novedades" del sidebar).
@@ -101,7 +101,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
     expect(res.status).toBe(200)
     // c1, c2 y c5 (activa sin last_inbound_at, sin since sí cuenta); c3 no (sin awaiting) y
     // c4 no (cerrada).
-    expect(await res.json()).toEqual({ inbox: 3, comprobantes: 2 })
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: 2, pedidos: 0 })
   })
 
   it("?since= filtra inbox por last_inbound_at y comprobantes por submittedAt", async () => {
@@ -112,7 +112,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
     const res = await pendingCountsRoute(req(`?since=${encodeURIComponent(since)}`))
     expect(res.status).toBe(200)
     // c1 (14/09 > since) sí; c2 (10/09) no; c5 (last_inbound_at null) no cuando hay since.
-    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 1 })
+    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 1, pedidos: 0 })
   })
 
   it("parámetros por sección: sinceInbox filtra solo inbox, sinceComprobantes solo comprobantes", async () => {
@@ -125,7 +125,22 @@ describe("admin: pending-counts (badges de novedades)", () => {
     const res = await pendingCountsRoute(req(qs))
     expect(res.status).toBe(200)
     // inbox filtrado por el 13 (solo c1); comprobantes con since más viejo (ambos recibos).
-    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 2 })
+    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 2, pedidos: 0 })
+  })
+
+  it("pedidos: solo los sin confirmar del tenant, filtrados por sincePedidos; los ve también el operador", async () => {
+    await seedShopOrder(TENANT_A, { createdAt: new Date("2026-09-13T10:00:00.000Z") }) // nuevo
+    await seedShopOrder(TENANT_A, { createdAt: new Date("2026-09-01T10:00:00.000Z") }) // viejo
+    await seedShopOrder(TENANT_A, { estado: "confirmado", createdAt: new Date("2026-09-14T10:00:00.000Z") }) // no cuenta
+    await seedShopOrder(TENANT_B, { createdAt: new Date("2026-09-14T10:00:00.000Z") }) // otro tenant
+    login(operatorA)
+
+    const sinFiltro = await pendingCountsRoute(req())
+    expect((await sinFiltro.json()).pedidos).toBe(2)
+
+    clearPendingCountsCache()
+    const res = await pendingCountsRoute(req(`?sincePedidos=${encodeURIComponent("2026-09-13T00:00:00.000Z")}`))
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 1 })
   })
 
   it("since inválido = sin filtro (backlog completo)", async () => {
@@ -140,7 +155,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
 
     const res = await pendingCountsRoute(req())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null })
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 0 })
   })
 
   it("tenant sin inbox configurado ⇒ inbox 0 (no es error)", async () => {
@@ -148,7 +163,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
 
     const res = await pendingCountsRoute(req())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ inbox: 0, comprobantes: 0 })
+    expect(await res.json()).toEqual({ inbox: 0, comprobantes: 0, pedidos: 0 })
     expect(listConversations).not.toHaveBeenCalled()
   })
 

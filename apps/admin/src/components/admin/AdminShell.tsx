@@ -38,6 +38,7 @@ interface AdminShellProps {
 interface PendingCounts {
   inbox: number
   comprobantes: number | null
+  pedidos: number
 }
 
 const POLL_MS = 30_000
@@ -84,17 +85,22 @@ function usePendingCounts(): PendingCounts | null {
   const [counts, setCounts] = useState<PendingCounts | null>(null)
   // Last-visit por sección. Lazy (se lee en el primer load, no durante el render) y en ref:
   // no es estado, no debe re-renderizar ni re-inicializar.
-  const sinceRef = useRef<{ inbox: string | null; comprobantes: string | null } | null>(null)
+  const sinceRef = useRef<Record<BadgeSection, string | null> | null>(null)
 
   const load = useCallback(async () => {
     try {
       // Primer load: lectura lazy de localStorage (window no existe durante el render).
       if (!sinceRef.current) {
-        sinceRef.current = { inbox: getLastVisit("inbox"), comprobantes: getLastVisit("comprobantes") }
+        sinceRef.current = {
+          inbox: getLastVisit("inbox"),
+          comprobantes: getLastVisit("comprobantes"),
+          pedidos: getLastVisit("pedidos"),
+        }
       }
       const params = new URLSearchParams()
       if (sinceRef.current.inbox) params.set("sinceInbox", sinceRef.current.inbox)
       if (sinceRef.current.comprobantes) params.set("sinceComprobantes", sinceRef.current.comprobantes)
+      if (sinceRef.current.pedidos) params.set("sincePedidos", sinceRef.current.pedidos)
       const qs = params.toString()
       const res = await fetch(`/api/admin/pending-counts${qs ? `?${qs}` : ""}`, { cache: "no-store" })
       if (!res.ok) return
@@ -121,12 +127,12 @@ function usePendingCounts(): PendingCounts | null {
     return () => window.removeEventListener("focus", onFocus)
   }, [load])
 
-  // Visitar una sección (InboxList/ComprobantesShell marcan en cada load) actualiza su
+  // Visitar una sección (InboxList/ComprobantesShell/PedidosShell marcan en cada load) actualiza su
   // last-visit y recarga al instante: el badge se va en el momento, sin esperar el poll.
   useEffect(() => {
     const onVisited = (e: Event) => {
       const section = (e as CustomEvent<{ section: BadgeSection }>).detail?.section
-      if (section !== "inbox" && section !== "comprobantes") return
+      if (section !== "inbox" && section !== "comprobantes" && section !== "pedidos") return
       if (sinceRef.current) sinceRef.current[section] = getLastVisit(section)
       void load()
     }
@@ -153,7 +159,7 @@ function roleLabel(role: AdminRole): string {
 const NAV = [
   { href: "/admin/inbox", label: "Mensajes", group: "Operación", icon: <MessageSquare size={16} strokeWidth={1.6} />, badge: "inbox" as const },
   // Sin `minRole`: los pedidos del Shop los ve y los mueve también el operador (operator es el piso).
-  { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} /> },
+  { href: "/admin/pedidos", label: "Pedidos", group: "Operación", icon: <ShoppingBag size={16} strokeWidth={1.6} />, badge: "pedidos" as const },
   { href: "/admin/comprobantes", label: "Comprobantes", group: "Operación", icon: <Receipt size={16} strokeWidth={1.6} />, minRole: "admin" as const, badge: "comprobantes" as const },
   { href: "/admin/catalogo", label: "Catálogo", group: "Datos", icon: <Package size={16} strokeWidth={1.6} />, minRole: "admin" as const },
   // Sin `minRole`: el listado de usuarios de la tienda es de sólo lectura y lo ve el operador.

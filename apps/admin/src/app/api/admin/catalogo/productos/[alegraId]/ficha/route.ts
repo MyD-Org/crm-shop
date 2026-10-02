@@ -6,6 +6,7 @@ import { borrarFichaSiHuerfana, contarReferenciasFicha } from "@/lib/catalogo-fi
 import { detalleProducto, guardarOverlay } from "@/lib/catalogo-overlay-repo"
 import { fichaContenidoKey, fichaKey, getShopMediaR2, shaDeFichaContenidoKey } from "@/lib/shop-media"
 
+// GET    /api/admin/catalogo/productos/[alegraId]/ficha — el PDF, para el visor del admin.
 // POST   /api/admin/catalogo/productos/[alegraId]/ficha — firma la subida del PDF.
 // PUT    /api/admin/catalogo/productos/[alegraId]/ficha — persiste la ficha ya subida.
 // DELETE /api/admin/catalogo/productos/[alegraId]/ficha — quita la ficha (overlay y R2).
@@ -33,6 +34,49 @@ interface Params {
 const TTL_FIRMA_S = 600
 
 const SHA256_RE = /^[0-9a-f]{64}$/
+
+/**
+ * El PDF de la ficha, PROXEADO desde R2 para el `DocumentViewer` del DS: el visor lo baja con
+ * `fetch` y necesita mismo origen (la URL pública de R2 es otro origen). `?download=1` lo baja
+ * como archivo; sin eso se sirve inline.
+ */
+export async function GET(req: Request, { params }: Params) {
+  const guard = await requireAdminPlus(req)
+  if (!guard.ok) return guard.response
+
+  const { alegraId } = await params
+  const producto = await detalleProducto(guard.tenantId, alegraId)
+  if (!producto?.fichaTecnica) return adminNotFoundResponse()
+
+  const r2 = getShopMediaR2()
+  if (!r2) {
+    return Response.json(
+      { error: "El almacenamiento de archivos no está configurado. Avise al administrador." },
+      { status: 503, headers: NO_STORE },
+    )
+  }
+
+  let pdf: Uint8Array | null
+  try {
+    pdf = await r2.getObject(producto.fichaTecnica.key, { maxBytes: MAX_BYTES_FICHA })
+  } catch (err) {
+    console.error(`[admin/catalogo/ficha] tenant=${guard.tenantId} R2: ${err instanceof Error ? err.name : "error"}`)
+    return Response.json({ error: "No se pudo obtener la ficha técnica. Inténtelo de nuevo." }, { status: 502, headers: NO_STORE })
+  }
+  if (!pdf) {
+    return Response.json({ error: "No se encontró el archivo de la ficha técnica. Vuelva a subirlo." }, { status: 404, headers: NO_STORE })
+  }
+
+  const download = new URL(req.url).searchParams.get("download") === "1"
+  const nombre = producto.fichaTecnica.nombre.replace(/[^\w.-]+/g, "-") || "ficha-tecnica.pdf"
+  return new Response(pdf as BodyInit, {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${nombre}"`,
+      "Cache-Control": "private, no-store",
+    },
+  })
+}
 
 export async function POST(req: Request, { params }: Params) {
   const guard = await requireAdminPlus(req)

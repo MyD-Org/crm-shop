@@ -18,6 +18,10 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
  * "mobile" se ocultan por CSS en el otro tamaño. El admin fuera del modo
  * edición la ve igual que un cliente; en modo edición se ve siempre, atenuada
  * y marcada donde el visitante no la ve, para poder cambiarlo desde el Dialog.
+ *
+ * `apagada`: la sección no se pinta para el visitante por algo ajeno al
+ * editor (un flag). En modo edición se ve igual, atenuada y marcada, para
+ * poder editarla y elegir dónde se muestra antes de prenderla.
  */
 const ATENUADA: Record<Visibilidad, string> = {
   siempre: "",
@@ -41,11 +45,13 @@ function ComoVisitante({ visibilidad, children }: { visibilidad: Visibilidad; ch
 export function SeccionEditable({
   seccion,
   visibilidad = "siempre",
+  apagada = false,
   className,
   children,
 }: {
   seccion: SeccionHome;
   visibilidad?: Visibilidad;
+  apagada?: boolean;
   className?: string;
   children: ReactNode;
 }) {
@@ -54,12 +60,15 @@ export function SeccionEditable({
   // Al salir de la home el editor se cierra: al volver no reaparece abierto.
   useAlOcultar(() => setOpen(false));
 
-  if (!puedeEditar || !activo) return <ComoVisitante visibilidad={visibilidad}>{children}</ComoVisitante>;
-  const marca = MARCA[visibilidad];
+  if (!puedeEditar || !activo) {
+    return apagada ? null : <ComoVisitante visibilidad={visibilidad}>{children}</ComoVisitante>;
+  }
+  const marca = apagada ? "Desactivada en la tienda" : MARCA[visibilidad];
+  const atenuada = apagada ? ATENUADA.nunca : ATENUADA[visibilidad];
 
   return (
     <div data-editor="" className={cn("relative", className)}>
-      {marca ? <div className={ATENUADA[visibilidad]}>{children}</div> : children}
+      {marca ? <div className={atenuada}>{children}</div> : children}
       <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
         {marca ? <Badge tone="warning">{marca}</Badge> : null}
         <Button size="sm" variant="secondary" aria-label="Editar sección" onClick={() => setOpen(true)}>

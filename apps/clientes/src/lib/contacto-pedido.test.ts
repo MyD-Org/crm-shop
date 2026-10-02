@@ -69,16 +69,23 @@ describe("armarContactoPedido", () => {
       whatsapp: TEL,
       mensajeConfirmacion: "Le responderemos dentro de {plazo}. Consultas: {whatsapp}. {plazo}",
     });
-    expect(c.mensaje).toBe(`Le responderemos dentro de 24 horas hábiles. Consultas: ${TEL}. 24 horas hábiles`);
+    expect(c.mensaje).toBe("Le responderemos dentro de 24 horas hábiles. Consultas: WhatsApp. 24 horas hábiles");
   });
 
-  it("mensaje propio sin sucursal: {whatsapp} queda vacío sin dejar espacios dobles", () => {
-    const c = armarContactoPedido({
+  it("mensaje propio con {whatsapp}: siempre lo reemplaza por 'WhatsApp', con o sin número", () => {
+    const c1 = armarContactoPedido({
+      horasHabiles: 24,
+      whatsapp: TEL,
+      mensajeConfirmacion: "Escriba a {whatsapp} o espere {plazo}.",
+    });
+    expect(c1.mensaje).toBe("Escriba a WhatsApp o espere 24 horas hábiles.");
+
+    const c2 = armarContactoPedido({
       horasHabiles: 24,
       whatsapp: null,
-      mensajeConfirmacion: "Escriba al {whatsapp} o espere {plazo}.",
+      mensajeConfirmacion: "Escriba a {whatsapp} o espere {plazo}.",
     });
-    expect(c.mensaje).toBe("Escriba al o espere 24 horas hábiles.");
+    expect(c2.mensaje).toBe("Escriba a WhatsApp o espere 24 horas hábiles.");
   });
 
   it("mensaje vacío o en blanco = el por defecto", () => {

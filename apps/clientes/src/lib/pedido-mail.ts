@@ -209,7 +209,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
           contacto
             ? `<p style="margin:12px 0 0;font-size:15px;line-height:1.55;white-space:pre-line">${e(contacto.mensaje)}</p>${
                 whatsappOk
-                  ? `<p style="margin:8px 0 0;font-size:14px;line-height:1.55;color:#77808a">También puede escribirnos por WhatsApp al <a href="${e(contacto.whatsappUrl!)}" style="color:#1e5aa8">${e(contacto.whatsappVisible!)}</a>.</p>`
+                  ? `<p style="margin:12px 0 0;font-size:14px;line-height:1.55"><a href="${e(contacto.whatsappUrl!)}" style="display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:8px 16px;border-radius:6px">Escribir por WhatsApp</a></p>`
                   : ""
               }`
             : ""
@@ -248,7 +248,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     bajada,
     ...(contacto ? ["", contacto.mensaje] : []),
     ...(contacto && whatsappOk
-      ? [`También puede escribirnos por WhatsApp al ${contacto.whatsappVisible}: ${contacto.whatsappUrl}`]
+      ? [`Escríbanos por WhatsApp: ${contacto.whatsappUrl}`]
       : []),
     "",
     `Pedido ${d.numero}`,

@@ -30,9 +30,7 @@ export function PedidoContacto({
       {mostrarPlazo && <p className="whitespace-pre-line text-sm text-text">{contacto.mensaje}</p>}
       {whatsapp && (
         <div className={`flex flex-col gap-2 ${centrado ? "items-center" : ""}`}>
-          <p className="text-sm text-muted">
-            Si lo prefiere, escríbanos por WhatsApp al {whatsapp.visible}.
-          </p>
+          <p className="text-sm text-muted">Si lo prefiere, escríbanos por WhatsApp.</p>
           <a
             href={whatsapp.url}
             target="_blank"

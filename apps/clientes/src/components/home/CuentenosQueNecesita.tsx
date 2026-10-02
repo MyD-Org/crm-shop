@@ -148,9 +148,9 @@ export async function CuentenosSiBusquedaIa({
 }) {
   await connection();
   const habilitada = await busquedaIaHabilitada().catch(() => false);
-  if (!habilitada) return null;
+  // Con el flag apagado el visitante no la ve, pero el admin la edita igual.
   return (
-    <SeccionEditable seccion="busquedaAsistida" visibilidad={visibilidad}>
+    <SeccionEditable seccion="busquedaAsistida" visibilidad={visibilidad} apagada={!habilitada}>
       <CuentenosQueNecesita contenido={contenido} />
     </SeccionEditable>
   );

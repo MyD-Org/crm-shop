@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import { Button, Chip } from "@myd-org/ui";
 import { useChatIa } from "@/hooks/useChatIa";
 import { chipsActivos } from "@/lib/catalogo-vista";
-import type { EstadoCatalogo } from "@/lib/catalogo-url";
+import { ordenPorDefecto, type EstadoCatalogo } from "@/lib/catalogo-url";
 import { interpretacionVigente } from "@/lib/catalogo-vista";
 import { cerrarPista, pistaDeEstaCarga } from "@/lib/busqueda-inteligente/pista";
 import { TEXTOS_FRANJA, TEXTOS_SIN_RESULTADOS } from "@/lib/busqueda-inteligente/textos";
@@ -186,6 +186,14 @@ export function FranjaInterpretada({
         </>
       }
     >
+      {/* El texto buscado también se quita: queda lo entendido (p. ej. la categoría) completo. */}
+      <Chip
+        variant="removable"
+        removeLabel={TEXTOS_FRANJA.quitarTexto(consulta)}
+        onRemove={() => ir({ query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 })}
+      >
+        {TEXTOS_FRANJA.texto(consulta)}
+      </Chip>
       {filtros.map((c) => (
         <Chip
           key={c.clave}

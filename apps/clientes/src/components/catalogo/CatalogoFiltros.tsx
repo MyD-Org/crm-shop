@@ -15,6 +15,7 @@ import {
   fmtPesos,
   hayFiltros,
   itemsDeFaceta,
+  categoriasDeLaBusqueda,
   limpiarFiltros,
 } from "@/lib/catalogo-vista";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
@@ -55,14 +56,14 @@ export function CatalogoFiltros({
     <div className="flex flex-col gap-5">
       <FacetGroup
         title="Categorías"
-        items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
+        items={categoriasDeLaBusqueda(itemsDeFaceta(facetas.categorias, estado.categorias), !!estado.query).map((c) => ({
           value: c.label,
           label: formatRubro(c.label),
           // Las subcategorías van debajo de su madre, corridas un nivel.
           depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
           count: c.count,
-          // Van todas las del catálogo y todas se pueden tildar, aunque con los filtros
-          // de ahora no tengan resultados (se ven con su 0, sin atenuar).
+          // Sin búsqueda van todas las del catálogo (las de 0 se ven con su 0);
+          // con búsqueda, sólo las que tienen resultados (categoriasDeLaBusqueda).
           checked: c.checked,
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.

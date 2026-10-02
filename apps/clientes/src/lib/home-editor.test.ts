@@ -260,3 +260,14 @@ describe("normalizarPayload: textos opcionales", () => {
     }
   });
 });
+
+describe("normalizarPayload busquedaAsistida", () => {
+  it("descarta los ejemplos vacíos", () => {
+    const out = normalizarPayload("busquedaAsistida", {
+      titulo: " Hola ",
+      ejemplos: [{ texto: " living " }, { texto: "  " }],
+    }) as { titulo: string; ejemplos: unknown[] };
+    expect(out.titulo).toBe("Hola");
+    expect(out.ejemplos).toEqual([{ texto: "living" }]);
+  });
+});

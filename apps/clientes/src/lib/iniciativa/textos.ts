@@ -19,17 +19,11 @@ export const TEXTOS_DUDAS_PRODUCTO = {
   preguntar: (pregunta: string) => `Preguntar al asesor: ${pregunta}`,
 } as const;
 
+/** Lo fijo de "Cuéntenos qué necesita"; los textos y ejemplos se editan desde
+ *  la home (sección `busquedaAsistida` de `home-defaults.ts`). */
 export const TEXTOS_CUENTENOS = {
-  eyebrow: "Búsqueda asistida",
-  /** Entre asteriscos, la palabra en el color de acento (`AccentText`, como los títulos de la home). */
-  titulo: "Cuéntenos qué *necesita*",
-  bajada: "Descríbalo con sus palabras y le mostramos los productos que le sirven.",
   etiqueta: "Qué necesita",
-  placeholder: "Por ejemplo: luz cálida para el living",
   buscar: "Buscar",
-  ejemplosTitulo: "Pruebe con",
-  /** Tres ejemplos que se tocan: una necesidad, un ambiente y un uso. */
-  ejemplos: ["luz cálida para el living", "reflector para el patio", "tira led para la cocina"],
   buscarEjemplo: (ejemplo: string) => `Buscar ${ejemplo}`,
 } as const;
 

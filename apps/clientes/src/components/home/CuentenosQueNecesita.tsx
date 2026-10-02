@@ -8,6 +8,14 @@ import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { STOCK_INCLUYE_SIN_STOCK } from "@/lib/catalogo-url";
 import { RUTA_BUSCAR, hrefBuscar } from "@/lib/busqueda-v2/enlaces";
 import { TEXTOS_CUENTENOS } from "@/lib/iniciativa/textos";
+import {
+  clasesVisibilidad,
+  sinCamposOcultos,
+  sinItemsOcultos,
+  type BusquedaAsistidaContent,
+  type Visibilidad,
+} from "@/data/home-defaults";
+import { SeccionEditable } from "./SeccionEditable";
 
 /**
  * "Cuéntenos qué necesita" (spec catálogo asistido fase 2, §3): un campo que
@@ -19,12 +27,21 @@ import { TEXTOS_CUENTENOS } from "@/lib/iniciativa/textos";
  * productos, no sólo los con stock), así la home y el header muestran lo
  * mismo. `next/form`: el envío navega del lado del cliente (el router sigue
  * el 307 de `/buscar`) y sin JS es un `<form method="get">` común.
+ *
+ * Textos y ejemplos editables desde la home (sección `busquedaAsistida`); la
+ * etiqueta y el botón quedan fijos en `TEXTOS_CUENTENOS`.
  */
-export function CuentenosQueNecesita() {
+export function CuentenosQueNecesita({ contenido }: { contenido: BusquedaAsistidaContent }) {
+  const { eyebrow, titulo, tituloMobile, bajada, bajadaMobile, placeholder, ejemplosTitulo, visibilidadTextos } =
+    sinCamposOcultos(contenido);
+  const ejemplos = sinItemsOcultos(contenido.ejemplos);
   // Con `Reveal` como el resto de las secciones de la home.
   return (
     <Reveal>
-      <section aria-labelledby="cuentenos-titulo" className="pt-[clamp(56px,7vw,96px)]">
+      <section
+        aria-labelledby={titulo || tituloMobile ? "cuentenos-titulo" : undefined}
+        aria-label={titulo || tituloMobile ? undefined : TEXTOS_CUENTENOS.etiqueta}
+        className="pt-[clamp(56px,7vw,96px)]">
         <div className="relative overflow-hidden rounded-[28px] bg-elevated px-[clamp(20px,4vw,56px)] py-[clamp(28px,4.5vw,60px)]">
           {/* Destello decorativo, en el tono de acento del sitio. */}
           <div
@@ -33,17 +50,30 @@ export function CuentenosQueNecesita() {
           />
           <div className="relative grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center lg:gap-14">
             <div>
-              <p className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-accent">
-                <ChispaIcon className="h-4 w-4 shrink-0" />
-                {TEXTOS_CUENTENOS.eyebrow}
-              </p>
-              <h2
-                id="cuentenos-titulo"
-                className="mt-3 font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text"
-              >
-                <AccentText text={TEXTOS_CUENTENOS.titulo} accentClassName="not-italic text-accent" />
-              </h2>
-              <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.6] text-muted">{TEXTOS_CUENTENOS.bajada}</p>
+              {eyebrow ? (
+                <p
+                  className={`mb-3 flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-accent ${clasesVisibilidad(visibilidadTextos?.eyebrow)}`}
+                >
+                  <ChispaIcon className="h-4 w-4 shrink-0" />
+                  {eyebrow}
+                </p>
+              ) : null}
+              {/* Sin título visible, el nombre accesible de la sección queda en la etiqueta del campo. */}
+              {titulo || tituloMobile ? (
+                <h2
+                  id="cuentenos-titulo"
+                  className={`font-display text-[clamp(28px,3.2vw,42px)] font-bold leading-[1.12] tracking-[-0.02em] text-text ${clasesVisibilidad(visibilidadTextos?.titulo)}`}
+                >
+                  <AccentText text={titulo ?? ""} mobileText={tituloMobile} accentClassName="not-italic text-accent" />
+                </h2>
+              ) : null}
+              {bajada || bajadaMobile ? (
+                <p
+                  className={`mt-3 max-w-[46ch] text-[15px] leading-[1.6] text-muted ${clasesVisibilidad(visibilidadTextos?.bajada)}`}
+                >
+                  <AccentText text={bajada ?? ""} mobileText={bajadaMobile} />
+                </p>
+              ) : null}
             </div>
 
             <div className="min-w-0">
@@ -64,7 +94,7 @@ export function CuentenosQueNecesita() {
                   maxLength={120}
                   enterKeyHint="search"
                   autoComplete="off"
-                  placeholder={TEXTOS_CUENTENOS.placeholder}
+                  placeholder={placeholder}
                   className="min-w-0 flex-1 bg-transparent py-2 text-base text-text outline-none placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
                 />
                 <input type="hidden" name="stock" value={STOCK_INCLUYE_SIN_STOCK} />
@@ -76,23 +106,25 @@ export function CuentenosQueNecesita() {
                 </button>
               </Form>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2 pl-1">
-                <span className="text-sm font-semibold text-muted">{TEXTOS_CUENTENOS.ejemplosTitulo}</span>
-                <ul className="flex min-w-0 flex-wrap gap-2">
-                  {TEXTOS_CUENTENOS.ejemplos.map((ejemplo) => (
-                    <li key={ejemplo} className="min-w-0 max-w-full">
-                      <Link
-                        href={hrefBuscar(ejemplo)}
-                        prefetch={false}
-                        aria-label={TEXTOS_CUENTENOS.buscarEjemplo(ejemplo)}
-                        className="block max-w-full truncate whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-sm text-text transition-colors hover:border-primary hover:text-primary"
-                      >
-                        {ejemplo}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {ejemplos.length > 0 ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2 pl-1">
+                  {ejemplosTitulo ? <span className="text-sm font-semibold text-muted">{ejemplosTitulo}</span> : null}
+                  <ul className="flex min-w-0 flex-wrap gap-2">
+                    {ejemplos.map(({ texto: ejemplo, visibilidad }, i) => (
+                      <li key={`${i}-${ejemplo}`} className={`min-w-0 max-w-full ${clasesVisibilidad(visibilidad)}`}>
+                        <Link
+                          href={hrefBuscar(ejemplo)}
+                          prefetch={false}
+                          aria-label={TEXTOS_CUENTENOS.buscarEjemplo(ejemplo)}
+                          className="block max-w-full truncate whitespace-nowrap rounded-full border border-border bg-surface px-3 py-1 text-sm text-text transition-colors hover:border-primary hover:text-primary"
+                        >
+                          {ejemplo}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -107,8 +139,19 @@ export function CuentenosQueNecesita() {
  * header: en el prerender no se lee el flag. Si el flag no responde, la home
  * de siempre.
  */
-export async function CuentenosSiBusquedaIa() {
+export async function CuentenosSiBusquedaIa({
+  contenido,
+  visibilidad,
+}: {
+  contenido: BusquedaAsistidaContent;
+  visibilidad: Visibilidad;
+}) {
   await connection();
   const habilitada = await busquedaIaHabilitada().catch(() => false);
-  return habilitada ? <CuentenosQueNecesita /> : null;
+  if (!habilitada) return null;
+  return (
+    <SeccionEditable seccion="busquedaAsistida" visibilidad={visibilidad}>
+      <CuentenosQueNecesita contenido={contenido} />
+    </SeccionEditable>
+  );
 }

@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { SeccionHome } from "@/data/home-defaults";
 import { EditorAnuncio } from "./EditorAnuncio";
+import { EditorBusquedaAsistida } from "./EditorBusquedaAsistida";
 import { EditorBannerDeco } from "./EditorBannerDeco";
 import { EditorDestacados } from "./EditorDestacados";
 import { EditorHero } from "./EditorHero";
@@ -16,7 +17,7 @@ export interface EditorProps<T> {
 }
 
 /**
- * Registro de editores por sección. Con B2 quedan las 10 `SECCIONES_HOME`
+ * Registro de editores por sección. Quedan todas las `SECCIONES_HOME`
  * cubiertas: `ambientes`/`decoGrid` comparten `EditorTiles` (mismo
  * contrato `SeccionTilesContent`, `decoGrid` además con `chips`).
  */
@@ -32,4 +33,5 @@ export const EDITORES: Record<SeccionHome, ComponentType<EditorProps<any>>> = {
   servicios: EditorServicios,
   navBadge: EditorNavBadge,
   whatsapp: EditorWhatsapp,
+  busquedaAsistida: EditorBusquedaAsistida,
 };

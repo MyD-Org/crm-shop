@@ -5,11 +5,12 @@
 // es "qué viste en ESTA máquina"). Marcar una visita avisa al resto de la app con un evento
 // de window, así el badge se limpia al instante sin esperar el próximo poll.
 
-export type BadgeSection = "inbox" | "comprobantes"
+export type BadgeSection = "inbox" | "comprobantes" | "pedidos"
 
 const KEYS: Record<BadgeSection, string> = {
   inbox: "crm:last-visit:inbox",
   comprobantes: "crm:last-visit:comprobantes",
+  pedidos: "crm:last-visit:pedidos",
 }
 
 /** Nombre del evento que dispara markVisited (AdminShell escucha para recargar los badges). */

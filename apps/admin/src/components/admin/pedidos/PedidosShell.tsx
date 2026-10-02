@@ -15,6 +15,7 @@ import {
   type TableColumn,
 } from "@myd-org/ui"
 import type { Cola, ColasCounts, PedidoListaDto } from "@/lib/pedidos-repo"
+import { markVisited } from "@/lib/admin-last-visit"
 import { ESTADO_PEDIDO_LABEL } from "@/lib/pedidos-transiciones"
 import { SIN_SUCURSAL } from "@/lib/sucursales-texto"
 import { PedidosTablero } from "./PedidosTablero"
@@ -148,6 +149,8 @@ export function PedidosShell({ initialItems, initialTotal, pageSize, sucursales 
       setColas(data.colas ?? COLAS_VACIAS)
       setAvisoContacto(data.contacto ?? { umbralHoras: 0 })
       setError("")
+      // Está parado en la sección (load exitoso): marca la visita y el badge del sidebar se va.
+      markVisited("pedidos")
     } else {
       // Red caída o respuesta !ok: no se borra lo que ya está en pantalla, sólo se avisa.
       setError(ERROR_CARGA)

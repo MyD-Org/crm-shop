@@ -1663,3 +1663,12 @@ export function toPedidoDetalleDto(
     historial,
   }
 }
+
+/** Fecha de alta de los pedidos sin confirmar (estado `pendiente`), para el badge del sidebar. */
+export async function listPendientesCreatedAt(tenantId: string): Promise<Date[]> {
+  const rows = await getDb()
+    .select({ createdAt: shopOrders.createdAt })
+    .from(shopOrders)
+    .where(and(eq(shopOrders.tenantId, tenantId), eq(shopOrders.estado, "pendiente")))
+  return rows.map((r) => r.createdAt)
+}

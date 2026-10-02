@@ -36,7 +36,7 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
   potencia_w: "Potencia nominal en watts (número). Si hay varias variantes, null.",
   temperatura_k: "Temperatura de color en kelvin (número, p. ej. 3000). Si es regulable o hay varias, null.",
   tono:
-    'Tipo de luz: "calido", "neutro" o "frio" (luz blanca), o el color de la luz: "rojo", "verde", "azul", "amarillo", "naranja", "violeta" o "rosa" (p. ej. "Tipo de luz: Verde"), o "rgb" / "rgbw". null si no aplica o no se indica. No es el color del producto.',
+    'Tipo de luz: "calido", "neutro" o "frio" (luz blanca), o el color de la luz: "rojo", "verde", "azul", "amarillo", "naranja", "ambar", "violeta" o "rosa" (p. ej. "Tipo de luz: Verde"), o "rgb" / "rgbw". null si no aplica o no se indica. No es el color del producto.',
   ip: "Grado de protección IP como número de dos cifras (IP65 → 65). null si no se indica.",
   flujo_lm: "Flujo luminoso en lúmenes (número).",
   tension_v: 'Tensión de alimentación: un número ("220") o un rango ("85-265"). null si no se indica.',

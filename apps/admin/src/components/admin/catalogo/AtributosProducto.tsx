@@ -60,6 +60,7 @@ const ETIQUETA_TONO: Record<(typeof TONOS)[number], string> = {
   azul: "Azul",
   amarillo: "Amarilla",
   naranja: "Naranja",
+  ambar: "Ámbar",
   violeta: "Violeta",
   rosa: "Rosa",
   rgb: "RGB",

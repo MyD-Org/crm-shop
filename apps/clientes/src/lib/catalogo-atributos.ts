@@ -154,6 +154,15 @@ export const ATRIBUTOS: readonly Atributo[] = [
     estructurado: { clave: "tono", textos: ["naranja"] },
   },
   {
+    id: "tono-ambar",
+    grupo: "tono",
+    nombre: "Luz ámbar",
+    // Sólo con "luz" delante: "CABLE AMBAR" es el color del producto, no el tipo de luz.
+    patron: `${INI}luz ([aá]mbar(?:es)?)${FIN}`,
+    sinonimos: ["luz ambar"],
+    estructurado: { clave: "tono", textos: ["ambar"] },
+  },
+  {
     id: "tono-violeta",
     grupo: "tono",
     nombre: "Luz violeta",

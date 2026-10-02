@@ -117,6 +117,7 @@ const TONO: Record<string, string> = {
   azul: "Azul",
   amarillo: "Amarilla",
   naranja: "Naranja",
+  ambar: "Ámbar",
   violeta: "Violeta",
   rosa: "Rosa",
   rgb: "RGB",

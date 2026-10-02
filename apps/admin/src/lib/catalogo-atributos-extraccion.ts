@@ -66,6 +66,7 @@ export const TONOS = [
   "azul",
   "amarillo",
   "naranja",
+  "ambar",
   "violeta",
   "rosa",
   "rgb",
@@ -183,6 +184,7 @@ const PALABRAS_LUZ_COLOR: Record<string, string> = {
   azul: "azul(?:es)?",
   amarillo: "amarill[oa]s?",
   naranja: "naranjas?",
+  ambar: "[aá]mbar(?:es)?",
   violeta: "violetas?",
   rosa: "rosas?|rosad[oa]s?",
 }

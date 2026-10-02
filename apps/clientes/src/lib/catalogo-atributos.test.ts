@@ -155,6 +155,8 @@ describe("tipo de luz de color y RGB (tono)", () => {
     ["FOCO LUZ AZUL", ["tono-azul"]],
     ["FOCO LUZ AMARILLA", ["tono-amarillo"]],
     ["FOCO LUZ NARANJA", ["tono-naranja"]],
+    ["FOCO LUZ AMBAR", ["tono-ambar"]],
+    ["FOCO LUZ ÁMBAR", ["tono-ambar"]],
     ["FOCO LUZ VIOLETA", ["tono-violeta"]],
     ["FOCO LUZ ROSA", ["tono-rosa"]],
     ["TIRA LED 5050 RGB IP20", ["tono-rgb"]],

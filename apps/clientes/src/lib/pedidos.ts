@@ -1331,6 +1331,7 @@ const MOTIVO_CANCELADO_POR_CLIENTE = "Cancelado por el cliente.";
  * ninguno): quién fue se lee en `estado_actualizado_por_nombre`.
  *
  *  - No tiene un intento de cobro abierto (`pago_en_curso`).
+ *  - No tiene un comprobante de pago informado (`pago_informado`).
  *
  * Devuelve `"cancelado"` solo si efectivamente cambió algo. Quien llama no
  * distingue el porqué del `null` a propósito: "no existe", "no es suyo" y "ya no
@@ -1339,7 +1340,7 @@ const MOTIVO_CANCELADO_POR_CLIENTE = "Cancelado por el cliente.";
 export async function cancelarPedidoPendiente(
   id: string,
   dueno: DuenoPedidos,
-): Promise<"cancelado" | "pago_en_curso" | null> {
+): Promise<"cancelado" | "pago_en_curso" | "pago_informado" | null> {
   return getDb().transaction(async (tx) => {
     // Mismo lock que `reservarIntento`: un intento de cobro y la cancelación
     // del mismo pedido no pueden correr a la vez.
@@ -1379,6 +1380,11 @@ export async function cancelarPedidoPendiente(
       )
       .limit(1);
     if (abierto) return "pago_en_curso";
+
+    // Con un comprobante informado (pending o loaded) el cliente ya declaró el pago: la
+    // cancelación pasa por el equipo, no por la tienda. Misma condición que `comprobanteInformado`.
+    const informados = await pedidosConComprobanteInformado(shopTenantId(), [id], tx);
+    if (informados.has(id)) return "pago_informado";
 
     const ahora = new Date();
     await tx

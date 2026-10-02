@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button, DocumentViewer, useToast } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
@@ -24,12 +24,18 @@ export function PedidoAcciones({
   facturaId,
   facturaNumero,
   mostrarDetalle = true,
+  alPie = false,
+  extra,
 }: {
   pedidoId: string;
   items: OrderItem[];
   facturaId?: string;
   facturaNumero?: string;
   mostrarDetalle?: boolean;
+  /** Al pie de una card (con separador): una fila en escritorio, apiladas a lo ancho en mobile. */
+  alPie?: boolean;
+  /** Acción a la derecha de la fila (p. ej. cancelar el pedido); sólo con `alPie`. */
+  extra?: ReactNode;
 }) {
   const { addItems } = useCart();
   const { toast } = useToast();
@@ -69,8 +75,12 @@ export function PedidoAcciones({
     router.push("/carrito");
   }
 
+  const contenedor = alPie
+    ? "mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center"
+    : "flex flex-wrap gap-3";
+
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className={contenedor}>
       {mostrarDetalle && (
         <Button href={hrefPedido(pedidoId)} renderLink={linkNext}>
           Ver detalle <IconoFlecha />
@@ -94,6 +104,7 @@ export function PedidoAcciones({
           />
         </>
       )}
+      {alPie && extra && <div className="flex flex-col sm:ml-auto">{extra}</div>}
     </div>
   );
 }

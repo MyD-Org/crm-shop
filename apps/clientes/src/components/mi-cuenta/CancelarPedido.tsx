@@ -6,7 +6,7 @@ import { Alert, Button, Dialog, useToast } from "@myd-org/ui";
 
 /**
  * Cancelar un pedido pendiente desde Mi cuenta, con confirmación. El servidor
- * decide: si el pedido ya se pagó, se facturó o tiene un pago en curso, la
+ * decide: si el pedido ya se pagó, tiene un pago informado, se facturó o tiene un pago en curso, la
  * respuesta lo explica y se muestra acá.
  */
 export function CancelarPedido({ pedidoId, numero }: { pedidoId: string; numero: string }) {

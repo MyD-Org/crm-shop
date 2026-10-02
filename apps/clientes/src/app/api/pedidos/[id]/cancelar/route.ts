@@ -54,6 +54,16 @@ export async function POST(
   const resultado = await cancelarPedidoPendiente(id, dueno);
   // Se abrió un intento entre el chequeo de arriba y la cancelación.
   if (resultado === "pago_en_curso") return pagoEnCurso();
+  if (resultado === "pago_informado") {
+    return NextResponse.json(
+      {
+        error:
+          "Este pedido ya tiene un pago informado y no se puede cancelar desde la tienda. Si necesita cancelarlo, comuníquese con nosotros.",
+        motivo: "pago_informado",
+      },
+      { status: 409 },
+    );
+  }
 
   if (!resultado) {
     // Puede ser que no exista, no sea del user, o ya se haya pagado. No

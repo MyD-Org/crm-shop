@@ -679,7 +679,7 @@ describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
     expect([params[Number(pago![1]) - 1], params[Number(pago![2]) - 1]]).toEqual(["pendiente", "fallido"]);
     expect(where).toContain('"orders"."factura_alegra_id" is null');
 
-    const update = grabadora.consultas[2];
+    const update = grabadora.consultas[3];
     expect(update.sql).toMatch(/^update "shop"\."orders"/);
     esperaTenant(update);
   });
@@ -688,7 +688,7 @@ describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
     grabadora = conPedido();
     const antes = Date.now();
     await cancelarPedidoPendiente(ID, DUENO);
-    const { sql, params } = grabadora.consultas[2];
+    const { sql, params } = grabadora.consultas[3];
     const set = sql.slice(0, sql.indexOf(" where "));
 
     const valorDe = (columna: string) => {
@@ -715,6 +715,16 @@ describe("cancelarPedidoPendiente (lo dispara el cliente)", () => {
     grabadora = conPedido(true);
     expect(await cancelarPedidoPendiente(ID, DUENO)).toBe("pago_en_curso");
     expect(grabadora.consultas[1].sql).toContain('"pago_intentos"."tenant_id" =');
+    expect(grabadora.consultas.some((c) => c.sql.startsWith("update"))).toBe(false);
+  });
+
+  it("con un comprobante informado no cancela: pago_informado", async () => {
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.includes("for update")) return [[ID]];
+      if (c.sql.includes('"payment_receipts"') || c.sql.includes("comprobante")) return [[ID]];
+      return [];
+    });
+    expect(await cancelarPedidoPendiente(ID, DUENO)).toBe("pago_informado");
     expect(grabadora.consultas.some((c) => c.sql.startsWith("update"))).toBe(false);
   });
 

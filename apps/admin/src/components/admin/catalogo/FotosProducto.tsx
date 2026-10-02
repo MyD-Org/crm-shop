@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { ImagePlus, Loader2, Star, Trash2 } from "lucide-react"
-import { Badge, Button } from "@myd-org/ui"
+import { Badge, Button, Dialog } from "@myd-org/ui"
 import { api, ErrorApi, type FotoDto } from "./tipos"
 import { generarVariantes, ImagenInvalida, MAX_BYTES_ORIGINAL, TIPOS_ACEPTADOS } from "./redimensionar"
 
@@ -35,6 +35,7 @@ interface VarianteFirmada {
 export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState("")
+  const [ampliada, setAmpliada] = useState<Grupo | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   /** Las fotos se agrupan por foto lógica: las tres variantes comparten el prefijo de la key. */
@@ -143,14 +144,22 @@ export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
               className="relative overflow-hidden rounded-[var(--radius)]"
               style={{ border: "1px solid var(--border)", width: 116 }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element -- el host es R2, fuera de los dominios de next/image */}
-              <img
-                src={g.miniatura ?? ""}
-                alt={g.alt ?? ""}
-                width={116}
-                height={116}
-                style={{ width: 116, height: 116, objectFit: "cover", display: "block" }}
-              />
+              <button
+                type="button"
+                title="Ver foto"
+                className="block cursor-zoom-in"
+                disabled={!g.grande}
+                onClick={() => setAmpliada(g)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- el host es R2, fuera de los dominios de next/image */}
+                <img
+                  src={g.miniatura ?? ""}
+                  alt={g.alt ?? ""}
+                  width={116}
+                  height={116}
+                  style={{ width: 116, height: 116, objectFit: "cover", display: "block" }}
+                />
+              </button>
               {i === 0 && (
                 <span className="absolute left-1 top-1">
                   <Badge tone="neutral">Principal</Badge>
@@ -174,6 +183,22 @@ export function FotosProducto({ alegraId, fotos, onCambio }: Props) {
           ))}
         </ul>
       )}
+
+      <Dialog
+        open={ampliada !== null}
+        onOpenChange={(open) => { if (!open) setAmpliada(null) }}
+        title="Foto del producto"
+        size="lg"
+      >
+        {ampliada?.grande && (
+          // eslint-disable-next-line @next/next/no-img-element -- el host es R2, fuera de los dominios de next/image
+          <img
+            src={ampliada.grande}
+            alt={ampliada.alt ?? ""}
+            style={{ width: "100%", maxHeight: "70vh", objectFit: "contain", display: "block" }}
+          />
+        )}
+      </Dialog>
 
       {error && (
         <p className="text-xs" role="alert" style={{ color: "var(--red)" }}>
@@ -201,6 +226,8 @@ export function contarFotos(fotos: Pick<FotoDto, "key">[]): number {
 interface Grupo {
   prefijo: string
   miniatura: string | null
+  /** La variante más grande, para verla ampliada. */
+  grande: string | null
   alt?: string
 }
 
@@ -221,6 +248,7 @@ function agrupar(fotos: FotoDto[]): Grupo[] {
     // la de 320 no exista.
     const elegida =
       variantes.find((v) => v.w === ANCHO_MINIATURA) ?? [...variantes].sort((a, b) => a.w - b.w)[0]
-    return { prefijo, miniatura: elegida?.url ?? null, alt: elegida?.alt }
+    const grande = [...variantes].sort((a, b) => b.w - a.w)[0]
+    return { prefijo, miniatura: elegida?.url ?? null, grande: grande?.url ?? null, alt: elegida?.alt }
   })
 }

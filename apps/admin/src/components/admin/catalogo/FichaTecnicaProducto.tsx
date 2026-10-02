@@ -1,8 +1,8 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { FileText, Loader2, Trash2, Upload } from "lucide-react"
-import { Button } from "@myd-org/ui"
+import { Eye, FileText, Loader2, Trash2, Upload } from "lucide-react"
+import { Button, DocumentViewer } from "@myd-org/ui"
 import { api, ErrorApi, formatBytes, type FichaDto } from "./tipos"
 
 /**
@@ -29,6 +29,7 @@ const MAX_MB = MAX_BYTES / 1024 / 1024
 export function FichaTecnicaProducto({ alegraId, ficha, onCambio }: Props) {
   const [subiendo, setSubiendo] = useState(false)
   const [error, setError] = useState("")
+  const [viendo, setViendo] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function subir(files: FileList | null) {
@@ -90,6 +91,8 @@ export function FichaTecnicaProducto({ alegraId, ficha, onCambio }: Props) {
     }
   }
 
+  const base = `/api/admin/catalogo/productos/${encodeURIComponent(alegraId)}/ficha`
+
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -115,22 +118,24 @@ export function FichaTecnicaProducto({ alegraId, ficha, onCambio }: Props) {
           className="flex items-center justify-between gap-2 rounded-[var(--radius)] p-2 text-sm"
           style={{ background: "var(--bg)", border: "1px solid var(--border)" }}
         >
-          <a
-            href={ficha.url ?? undefined}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex min-w-0 items-center gap-2 underline"
+          <button
+            type="button"
+            onClick={() => setViendo(true)}
+            className="flex min-w-0 items-center gap-2 text-left underline"
             style={{ color: "var(--ink)" }}
           >
             <FileText size={14} className="shrink-0" />
             <span className="truncate" title={ficha.nombre}>
               {ficha.nombre}
             </span>
-          </a>
+          </button>
           <div className="flex shrink-0 items-center gap-2">
             <span className="text-xs" style={{ color: "var(--ink-faint)" }}>
               {formatBytes(ficha.bytes)}
             </span>
+            <Button variant="ghost" size="sm" title="Ver" onClick={() => setViendo(true)}>
+              <Eye size={12} />
+            </Button>
             <Button variant="ghost" size="sm" title="Quitar" onClick={() => void quitar()}>
               <Trash2 size={12} />
             </Button>
@@ -143,6 +148,17 @@ export function FichaTecnicaProducto({ alegraId, ficha, onCambio }: Props) {
         >
           Este producto no tiene ficha técnica. Puede publicarlo igual: no es condición para que la tienda lo muestre.
         </p>
+      )}
+
+      {ficha && (
+        <DocumentViewer
+          open={viendo}
+          onOpenChange={setViendo}
+          title={ficha.nombre}
+          src={base}
+          downloadHref={`${base}?download=1`}
+          hint={null}
+        />
       )}
 
       {error && (

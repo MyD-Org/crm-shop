@@ -129,6 +129,20 @@ describe("política de privacidad", () => {
     expect(t).not.toMatch(/\btu\b|\bvos\b/i);
   });
 
+  it("la cookie de ubicación declara el código postal y la dirección o local elegidos, sin coordenadas", () => {
+    const ubicacion = bloquesPrivacidad({}).find((b) => b.titulo === "Su ubicación");
+    const t = texto([ubicacion!]);
+    // Regresión: el texto no puede volver a negar el código postal.
+    expect(t).not.toMatch(/sin (coordenadas ni )?código postal/i);
+    expect(t).not.toMatch(/ni código postal/i);
+    expect(t).toMatch(/código postal/i);
+    expect(t).toMatch(/dirección guardada/);
+    expect(t).toMatch(/local de retiro/);
+    expect(t).toMatch(/identificadores/);
+    expect(t).toMatch(/nunca coordenadas/);
+    expect(t).not.toMatch(/\btu\b|\bvos\b/i);
+  });
+
   it("informa las cookies y herramientas de análisis que carga el flag `tracking`", () => {
     const bloques = bloquesPrivacidad({});
     const cookies = bloques.find((b) => b.titulo === "Cookies y herramientas de análisis");

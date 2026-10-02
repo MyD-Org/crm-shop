@@ -83,13 +83,15 @@ export function PedidoDetalle({
           )}
           {puedeSubirComprobante(pedido) && (
             <div id="comprobante" className="mt-3 scroll-mt-24">
-              {pedido.comprobanteInformado && (
-                <div className="mb-3">
-                  <AvisoComprobante aviso="en_revision" pedidoId={pedido.id} conEnlace={false} />
-                </div>
+              {/* Con el comprobante ya recibido solo queda el aviso: no se ofrece subir otro. */}
+              {pedido.comprobanteInformado ? (
+                <AvisoComprobante aviso="en_revision" pedidoId={pedido.id} conEnlace={false} />
+              ) : (
+                <>
+                  <p className="mb-2 text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
+                  <InformarPagoPedido pedido={{ id: pedido.id, numero: pedido.numero, total: pedido.total }} />
+                </>
               )}
-              <p className="mb-2 text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
-              <InformarPagoPedido pedido={{ id: pedido.id, numero: pedido.numero, total: pedido.total }} />
             </div>
           )}
         </Card>

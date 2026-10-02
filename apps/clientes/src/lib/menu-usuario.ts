@@ -10,7 +10,7 @@ import {
 } from "./mi-cuenta-nav";
 
 /** Adónde lleva "Mis pedidos". */
-export const HREF_MIS_PEDIDOS = "/mi-cuenta";
+export const HREF_MIS_PEDIDOS = RUTAS_MI_CUENTA.pedidos;
 
 /** Sección "Mis datos" de Mi cuenta: ahí vive el formulario de facturación. */
 export const HREF_MIS_DATOS = RUTAS_MI_CUENTA.datos;

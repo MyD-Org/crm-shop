@@ -28,9 +28,19 @@ export function UbicacionHeader() {
 async function UbicacionDinamica() {
   // Lee cookie e identidad: hueco por request.
   await connection();
-  const { origen, eleccion, nombrePila } = await ubicacionDelVisitante();
+  const { ubicacion, origen, eleccion, nombrePila } = await ubicacionDelVisitante();
+  // Envío a una localidad de Georef (sin dirección guardada): el modal la ofrece precargada.
+  const localidadActual =
+    eleccion.tipo === "envio" && !eleccion.direccion && ubicacion?.id
+      ? { id: ubicacion.id, etiqueta: ubicacion.localidad, cp: ubicacion.cp }
+      : undefined;
   return (
-    <SelectorUbicacion conUbicacion={origen === "cookie"} vigente={opcionVigente(eleccion)} className={BOTON}>
+    <SelectorUbicacion
+      conUbicacion={origen === "cookie"}
+      vigente={opcionVigente(eleccion)}
+      localidadActual={localidadActual}
+      className={BOTON}
+    >
       <EnviarAContenido lineas={lineasEnviarA(eleccion, nombrePila)} />
     </SelectorUbicacion>
   );

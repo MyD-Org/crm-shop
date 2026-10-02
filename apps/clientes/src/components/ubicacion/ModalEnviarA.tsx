@@ -46,11 +46,13 @@ export default function ModalEnviarA({
   abierto,
   onOpenChange,
   vigente,
+  localidadActual,
   conUbicacion,
 }: {
   abierto: boolean;
   onOpenChange: (abierto: boolean) => void;
   vigente: string | undefined;
+  localidadActual?: LocalidadElegida & { cp?: string };
   conUbicacion: boolean;
 }) {
   const router = useRouter();
@@ -58,9 +60,13 @@ export default function ModalEnviarA({
   const [direcciones, setDirecciones] = useState<CargaDirecciones | null>(null);
   const [locales, setLocales] = useState<OpcionesRetiro | null | undefined>(undefined);
   const [recarga, setRecarga] = useState(0);
-  const [valor, setValor] = useState(vigente ?? "");
-  const [localidad, setLocalidad] = useState<LocalidadElegida | null>(null);
-  const [cp, setCp] = useState("");
+  // La localidad vigente (si vino de Georef) arranca cargada y marcada: así figura como opción
+  // aunque no haya direcciones guardadas, como "Ubicación actual" en otras tiendas.
+  const [valor, setValor] = useState(vigente ?? (localidadActual ? LOCALIDAD : ""));
+  const [localidad, setLocalidad] = useState<LocalidadElegida | null>(
+    localidadActual ? { id: localidadActual.id, etiqueta: localidadActual.etiqueta } : null,
+  );
+  const [cp, setCp] = useState(localidadActual?.cp ?? "");
   const [errorCp, setErrorCp] = useState<string | null>(null);
   const [errorLocalidad, setErrorLocalidad] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

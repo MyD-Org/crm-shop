@@ -81,11 +81,17 @@ describe("VistaEnviarA (contenido del modal)", () => {
     expect(marcado(h, vig)).toBe(true);
   });
 
-  it("con sesión y sin direcciones: sin sección de direcciones vacía; locales y Agregar", () => {
-    const t = texto(render({ direcciones: { estado: "ok", direcciones: [] } }));
+  it("con sesión y sin direcciones: sin sección de direcciones vacía; localidad + CP, locales y Agregar", () => {
+    const h = render({ direcciones: { estado: "ok", direcciones: [] } });
+    const t = texto(h);
     expect(t).not.toContain(T.legendDirecciones);
+    expect(h).toContain("data-formulario-localidad");
     expect(t).toContain("Local A");
     expect(t).toContain(T.agregarDireccion);
+  });
+
+  it("con direcciones guardadas no muestra el formulario de localidad", () => {
+    expect(render({ direcciones: { estado: "ok", direcciones: [dir(1)] } })).not.toContain("data-formulario-localidad");
   });
 
   it("cargando: indicador accesible, sin listas", () => {

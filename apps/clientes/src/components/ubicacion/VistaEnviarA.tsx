@@ -25,7 +25,7 @@ export interface VistaEnviarAProps {
   onEditar: (d: DireccionEnvio) => void;
   onAgregar: () => void;
   onReintentar: () => void;
-  /** Sin sesión: búsqueda de localidad + código postal. */
+  /** Sin sesión, o con sesión y sin direcciones: búsqueda de localidad + código postal. */
   formularioLocalidad: ReactNode;
   error: string | null;
   enviando: boolean;
@@ -90,7 +90,8 @@ export function VistaEnviarA(p: VistaEnviarAProps) {
         </div>
       )}
 
-      {p.direcciones.estado === "sinSesion" && p.formularioLocalidad}
+      {(p.direcciones.estado === "sinSesion" || (p.direcciones.estado === "ok" && dirs.length === 0)) &&
+        p.formularioLocalidad}
 
       {p.locales === null && <p className="text-sm text-muted">{T.errorLocales}</p>}
       {opcionesRetiro.length > 0 && (

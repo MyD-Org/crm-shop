@@ -39,7 +39,7 @@ export function FormularioLocalidad({
   onGeolocalizada: () => void;
   deshabilitado: boolean;
 }) {
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto] = useState(elegida?.etiqueta ?? "");
   const [opciones, setOpciones] = useState<LocalidadElegida[] | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [ubicando, setUbicando] = useState(false);
@@ -136,7 +136,7 @@ export function FormularioLocalidad({
   }
 
   return (
-    <fieldset className="m-0 min-w-0 space-y-3 border-0 p-0" disabled={deshabilitado}>
+    <fieldset className="min-w-0 space-y-3 border-0 p-0" disabled={deshabilitado}>
       <legend className="mb-2 p-0 text-sm font-medium text-text">{T.legendLocalidad}</legend>
 
       <Button type="button" variant="outline" onClick={usarMiUbicacion} loading={ubicando} disabled={ubicando}>

@@ -203,11 +203,11 @@ describe("normalizarAtributos: claves ampliadas (0053)", () => {
     expect(
       n({
         corriente_a: 25, polos: 2, seccion_mm2: 2.5, medidas_mm: "300x1200", color: "Blanca", poder_corte_ka: 6,
-        curva: "C", sensibilidad_ma: 30, largo_m: 100, montaje: "Embutir", angulo_grados: 60,
+        curva: "C", sensibilidad_ma: 30, largo_m: 100, montaje: "Embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4,
       }),
     ).toEqual({
       corriente_a: 25, polos: 2, seccion_mm2: 2.5, medidas_mm: "300x1200", color: "blanco", poder_corte_ka: 6,
-      curva: "c", sensibilidad_ma: 30, largo_m: 100, montaje: "embutir", angulo_grados: 60,
+      curva: "c", sensibilidad_ma: 30, largo_m: 100, montaje: "embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4,
     })
   })
 
@@ -215,13 +215,14 @@ describe("normalizarAtributos: claves ampliadas (0053)", () => {
     ["corriente_a", 0.05], ["corriente_a", 7000], ["polos", 6], ["polos", 0], ["polos", 2.5], ["seccion_mm2", 0.1],
     ["seccion_mm2", 2000], ["poder_corte_ka", 0.5], ["poder_corte_ka", 150], ["sensibilidad_ma", 2], ["sensibilidad_ma", 5000],
     ["largo_m", 0.01], ["largo_m", 5000], ["angulo_grados", 0], ["angulo_grados", 400], ["angulo_grados", 12.5],
+    ["leds_m", 0], ["leds_m", 2000], ["leds_m", 60.5], ["potencia_w_m", 0.01], ["potencia_w_m", 5000],
   ])("%s = %s fuera de rango (o no entero) se descarta", (clave, valor) => {
     expect(n({ [clave]: valor })).toEqual({})
   })
 
   it("límites del rango se aceptan", () => {
-    expect(n({ corriente_a: 0.1, polos: 1, seccion_mm2: 1000, poder_corte_ka: 100, sensibilidad_ma: 5, largo_m: 1000, angulo_grados: 360 })).toEqual({
-      corriente_a: 0.1, polos: 1, seccion_mm2: 1000, poder_corte_ka: 100, sensibilidad_ma: 5, largo_m: 1000, angulo_grados: 360,
+    expect(n({ corriente_a: 0.1, polos: 1, seccion_mm2: 1000, poder_corte_ka: 100, sensibilidad_ma: 5, largo_m: 1000, angulo_grados: 360, leds_m: 1000, potencia_w_m: 0.1 })).toEqual({
+      corriente_a: 0.1, polos: 1, seccion_mm2: 1000, poder_corte_ka: 100, sensibilidad_ma: 5, largo_m: 1000, angulo_grados: 360, leds_m: 1000, potencia_w_m: 0.1,
     })
   })
 
@@ -281,7 +282,7 @@ describe("parsearEdicionManual: claves ampliadas", () => {
 })
 
 /** Tabla de casos de extracción desde el nombre (ejemplos ficticios): [nombre, esperado (solo claves nuevas)]. */
-const NUEVAS = ["corriente_a", "polos", "seccion_mm2", "medidas_mm", "color", "poder_corte_ka", "curva", "sensibilidad_ma", "largo_m", "montaje", "angulo_grados"]
+const NUEVAS = ["corriente_a", "polos", "seccion_mm2", "medidas_mm", "color", "poder_corte_ka", "curva", "sensibilidad_ma", "largo_m", "montaje", "angulo_grados", "leds_m", "potencia_w_m"]
 function nuevas(nombre: string): Record<string, number | string> {
   return Object.fromEntries(Object.entries(extraer(nombre)).filter(([k]) => NUEVAS.includes(k)))
 }
@@ -393,11 +394,31 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["CAJA 100MM", {}],
       ["CINTA 100MM", {}],
       ["TERMICA 25A M", { corriente_a: 25 }],
-      ["TIRA 14W/M", {}],
+      ["TIRA 14W/M", { potencia_w_m: 14 }],
       ["CONTACTOR NCH8-25M/20", {}],
       ["PORTALAMPARA GUIR-10MT-E27", {}],
       ["TIRA NEON LARGO 5M", { largo_m: 5 }],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
+  })
+
+  describe("leds_m y potencia_w_m (por metro)", () => {
+    it.each([
+      ["TIRA LED 60 LED/m", { leds_m: 60 }],
+      ["TIRA LED 60 LEDs/m", { leds_m: 60 }],
+      ["TIRA 2835 120LED/M", { leds_m: 120 }],
+      ["TIRA 60 LEDS POR METRO", { leds_m: 60 }],
+      ["TIRA 14.4W/m", { potencia_w_m: 14.4 }],
+      ["TIRA 4,8 W/M", { potencia_w_m: 4.8 }],
+      ["TIRA 60 LED/m 14.4W/m 5M", { leds_m: 60, potencia_w_m: 14.4, largo_m: 5 }],
+      ["TIRA 60 LED/m 120 LED/m", {}],
+      ["TIRA 60 LED 5M", { largo_m: 5 }],
+      ["PANEL 100 W/m²", {}],
+    ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
+
+    it("la potencia por metro no es potencia_w", () => {
+      expect(extraer("TIRA LED 14.4W/m")).toEqual({ potencia_w_m: 14.4 })
+      expect(extraer("TIRA LED 24W 14.4W/m")).toEqual({ potencia_w: 24, potencia_w_m: 14.4 })
+    })
   })
 
   describe("angulo_grados", () => {
@@ -478,13 +499,13 @@ describe("eficiencia y magnitudes por metro no son flujo, potencia ni corriente"
   })
 
   it("TIRA 14,4W/m 1200lm/m: por metro, ni flujo ni potencia", () => {
-    expect(extraer("TIRA 14,4W/m 1200lm/m")).toEqual({})
+    expect(extraer("TIRA 14,4W/m 1200lm/m")).toEqual({ potencia_w_m: 14.4 })
   })
 
   it("corriente por metro (A/m) y por m² (W/m²) no se extraen", () => {
     expect(extraer("CABLE 5A/m")).toEqual({})
     expect(extraer("PANEL 100 W/m² SOLAR")).toEqual({})
-    expect(extraer("TIRA 12W/mt 3000K")).toEqual({ temperatura_k: 3000, tono: "calido" })
+    expect(extraer("TIRA 12W/mt 3000K")).toEqual({ temperatura_k: 3000, tono: "calido", potencia_w_m: 12 })
   })
 
   it("no rompe lo que no es una relación", () => {

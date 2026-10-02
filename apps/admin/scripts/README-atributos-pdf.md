@@ -66,6 +66,10 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    **Ángulo**: sólo si el rótulo de su fila/columna o su celda habla de ángulo, apertura o haz ("Beam
    angle"); "giro", "rotación", "inclinación", "orientable" y "basculante" se descartan
    (`angulo_no_es_de_luz`).
+   **Por metro** (`leds_m`, `potencia_w_m`): el "/m" tiene que estar en el texto ("60 LED/m", "120 LEDs/m",
+   "Leds/Mts", "14.4 W/m", "9,6 W/Mt", "por metro"); "60 LED" o "14 W" sin "/m" se descartan
+   (`unidad_no_en_texto`). La potencia por metro nunca es `potencia_w`: ahí se sigue descartando
+   (`valor_por_metro`).
    Una potencia o corriente "máxima" (carga admitida de un riel, controlador o tecla: "200W Máx", "Carga máxima 200W",
    "Potencia máxima de lámpara: 60W", "hasta 60W") no es la del producto: si "máx", "máximo/a", "maximum" o "hasta" está en su
    celda, en el rótulo de su fila o columna o en la celda pegada de la misma línea, se descarta (`valor_maximo`).

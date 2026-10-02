@@ -21,7 +21,9 @@
  * - `zocalo`: E10/E12/E14/E27/E40, GU10, GU5.3, MR11/MR16, G4/G9/G13/G24, GX53, R7S.
  *
  * Claves ampliadas (migración 0053): corriente_a, polos, seccion_mm2, medidas_mm, color,
- * poder_corte_ka, curva, sensibilidad_ma, largo_m, montaje, angulo_grados. Se leen en un pipeline
+ * poder_corte_ka, curva, sensibilidad_ma, largo_m, montaje, angulo_grados. Migración 0058: leds_m
+ * ("60 LED/m") y potencia_w_m ("14,4 W/m"), que se leen ANTES de descartar lo "por metro" (la potencia
+ * por metro nunca es `potencia_w`). Se leen en un pipeline
  * CON CONSUMO (cada regla borra lo que leyó para que la siguiente no lo reinterprete: "10kA" no es
  * corriente, "3X1.5MM2" no son medidas). Ante la duda no devuelven nada; dos valores distintos de
  * la misma clave en el nombre = ninguno. Los vocabularios cerrados (color, montaje, curva) viven
@@ -50,6 +52,8 @@ export const CLAVES_ATRIBUTO = [
   "largo_m",
   "montaje",
   "angulo_grados",
+  "leds_m",
+  "potencia_w_m",
 ] as const
 export type ClaveAtributo = (typeof CLAVES_ATRIBUTO)[number]
 
@@ -134,6 +138,8 @@ export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
   largo_m: { tipo: "num", etiqueta: "Largo (m)", rango: [0.1, 1000], pista: "100" },
   montaje: { tipo: "texto", etiqueta: "Montaje", pista: MONTAJES.join(", ") },
   angulo_grados: { tipo: "num", etiqueta: "Ángulo (°)", rango: [1, 360], entero: true, pista: "60" },
+  leds_m: { tipo: "num", etiqueta: "LED por metro (LED/m)", rango: [1, 1000], entero: true, pista: "60 o 120" },
+  potencia_w_m: { tipo: "num", etiqueta: "Potencia por metro (W/m)", rango: [0.1, 1000], pista: "4,8 o 14,4" },
 }
 
 /** Etiquetas para el admin (el Shop tiene las suyas). Derivado de `DEFINICION_ATRIBUTOS`. */
@@ -544,6 +550,25 @@ const RE_POR_UNIDAD = new RegExp(
   "g",
 )
 
+/** "60 LED/m", "60 LEDs/m", "60LED/M", "60 leds por metro" (sólo enteros: es una densidad de chips). */
+const RE_LEDS_M = new RegExp(`${INIC}(\\d{1,4}) ?leds? ?(?:/|por|x) ?(?:m|mt|mts|metros?)(?![0-9a-z²])`)
+/** "14.4W/m", "4,8 W/M", "9,6 watts por metro". No toma W/m² ni W/mm. */
+const RE_POTENCIA_M = new RegExp(`${INIC}(\\d{1,4}(?:[.,]\\d{1,2})?) ?(?:w|watts?) ?(?:/|por) ?(?:m|mt|mts|metros?)(?![0-9a-z²])`)
+
+/** Valores por metro, leídos del texto completo (antes de `sinRelaciones`). Dos distintos = ninguno. */
+function porMetro(t: string): AtributoExtraido[] {
+  const out: AtributoExtraido[] = []
+  const hallar = (re: RegExp, convertir: (x: string) => number): number | null => {
+    const g = new RegExp(re.source, "g")
+    return unico([...t.matchAll(g)].map((m) => convertir(m[2])))
+  }
+  const leds = enRango("leds_m", hallar(RE_LEDS_M, Number))
+  if (leds != null) out.push({ clave: "leds_m", valorNum: leds, valorTexto: null })
+  const w = enRango("potencia_w_m", hallar(RE_POTENCIA_M, numero))
+  if (w != null) out.push({ clave: "potencia_w_m", valorNum: w, valorTexto: null })
+  return out
+}
+
 function sinRelaciones(t: string): string {
   return t.replace(RE_EFICIENCIA, "$1 ").replace(RE_POR_UNIDAD, "$1 ")
 }
@@ -553,9 +578,10 @@ function sinRelaciones(t: string): string {
  * `CLAVES_ATRIBUTO`. Nunca tira.
  */
 export function extraerAtributosDeNombre(nombre: string, descripcion?: string | null): AtributoExtraido[] {
-  const t = sinRelaciones(normalizar(`${nombre ?? ""} ${descripcion ?? ""}`)).replace(/\s+/g, " ").trim()
-  if (!t) return []
-  const out: AtributoExtraido[] = []
+  const completo = normalizar(`${nombre ?? ""} ${descripcion ?? ""}`).replace(/\s+/g, " ").trim()
+  const t = sinRelaciones(completo).replace(/\s+/g, " ").trim()
+  if (!completo) return []
+  const out: AtributoExtraido[] = [...porMetro(completo)]
   const num = (clave: ClaveAtributo, v: number | null) => {
     if (v != null) out.push({ clave, valorNum: v, valorTexto: null })
   }

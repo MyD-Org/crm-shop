@@ -407,6 +407,13 @@
       "when": 1791373500000,
       "tag": "0057_medio_pago_mercadopago",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791459900000,
+      "tag": "0058_atributos_por_metro",
+      "breakpoints": true
     }
   ]
 }

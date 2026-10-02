@@ -705,6 +705,33 @@ describe("tono rgb/rgbw: no en accesorios", () => {
   it("la tira RGB sí", () => expect(aceptados(rgb("TIRA LED RGB 5M"))).toEqual([["tono", "rgb"]]))
 })
 
+describe("leds_m y potencia_w_m: el /m tiene que estar en el texto", () => {
+  const una = (txt: string, clave: string, valor: number) =>
+    verificarLectura(lectura(null, { [clave]: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "TIRA LED" }))
+  it.each([
+    ["60 LED/m", "leds_m", 60],
+    ["60 LEDs/m", "leds_m", 60],
+    ["120 Leds/Mts", "leds_m", 120],
+    ["60 LED por metro", "leds_m", 60],
+    ["14.4W/m", "potencia_w_m", 14.4],
+    ["14,4 W/Mt", "potencia_w_m", 14.4],
+    ["4.8 W/m", "potencia_w_m", 4.8],
+  ])("acepta %s", (txt, clave, valor) => {
+    expect(aceptados(una(txt, clave, valor))).toEqual([[clave, valor]])
+  })
+  it.each([
+    ["60 LED", "leds_m", 60],
+    ["Cantidad de LED 60", "leds_m", 60],
+    ["14.4 W", "potencia_w_m", 14.4],
+    ["Potencia por metro 14.4", "potencia_w_m", 14.4],
+  ])("rechaza %s (sin /m)", (txt, clave, valor) => {
+    expect(motivos(una(txt, clave, valor))).toEqual([`${clave}:unidad_no_en_texto`])
+  })
+  it("la potencia por metro sigue sin ser potencia_w", () => {
+    expect(motivos(una("14.4W/m", "potencia_w", 14.4))).toEqual(["potencia_w:valor_por_metro"])
+  })
+})
+
 describe("angulo_grados: sólo el ángulo de luz", () => {
   const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "SPOT LED", code: "SP-001-XYZ" })
   const ang = (valor: number, celdas: Celda[]) => verificarLectura(lectura(null, { angulo_grados: { valor } }), ficha(celdas))

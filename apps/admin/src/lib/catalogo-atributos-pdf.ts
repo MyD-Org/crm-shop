@@ -53,6 +53,10 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
   largo_m: "Largo en metros (número) de cable, rollo, tira o tubo.",
   montaje: 'Tipo de montaje: "embutir", "aplicar", "colgante", "riel" o "din".',
   angulo_grados: "Ángulo de apertura o haz en grados (número).",
+  leds_m:
+    'Cantidad de LED por metro de una tira o manguera (entero, p. ej. 60 o 120). SOLO si el texto lo dice por metro ("60 LED/m", "120 LEDs/m"); no la cantidad total de LED ni de un módulo.',
+  potencia_w_m:
+    'Potencia por metro de una tira o manguera en W/m (número, p. ej. 4.8 o 14.4). SOLO si el texto la da por metro ("14.4 W/m"); la potencia total va en potencia_w, nunca acá.',
 }
 
 /**

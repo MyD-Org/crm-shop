@@ -1286,7 +1286,8 @@ export const pedidoFacturaCuenta = pgTable(
 // a `shop_app` (tenant_id, alegra_id, clave, valor_num, valor_texto). Migración 0049; la 0053
 // amplió el CHECK de `clave` a 18: potencia_w, temperatura_k, tono, ip, flujo_lm, tension_v,
 // zocalo, corriente_a, polos, seccion_mm2, medidas_mm, color, poder_corte_ka, curva,
-// sensibilidad_ma, largo_m, montaje, angulo_grados. Textuales: tono, zocalo, medidas_mm, color,
+// sensibilidad_ma, largo_m, montaje, angulo_grados; la 0058 sumó leds_m y potencia_w_m (20 claves).
+// Textuales: tono, zocalo, medidas_mm, color,
 // curva, montaje; el resto va en `valorNum`.
 export const catalogAtributos = pgTable(
   "catalog_atributos",

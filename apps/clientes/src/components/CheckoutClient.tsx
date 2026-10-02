@@ -11,7 +11,14 @@ import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
 import { PROVINCIAS_SELECTOR, type OpcionesCheckoutSucursales } from "@/lib/zona";
 import { VincularClient } from "@/components/VincularClient";
-import { eleccionInicial, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
+import { entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
+import {
+  cuerpoDeSincronizacion,
+  estadoInicialCheckout,
+  sincronizarUbicacion,
+  type EleccionInicialCheckout,
+  type OpcionEntregaCheckout,
+} from "@/lib/checkout-ubicacion";
 import { fmtPrecio } from "@/lib/format";
 import { CompletarFacturacionDialog } from "@/components/checkout/CompletarFacturacionDialog";
 import { FacturacionForm, type PerfilFacturacionUI } from "@/components/FacturacionForm";
@@ -287,6 +294,11 @@ interface Props {
    * ninguno el pedido sale "a_coordinar". `mercadopago` dispara el cobro en línea.
    */
   mediosPago?: MedioPago[];
+  /**
+   * Elección de «Enviar a» del visitante (ya validada en el server): el checkout arranca con esa
+   * entrega, local y dirección. null = como siempre.
+   */
+  eleccionInicial?: EleccionInicialCheckout | null;
 }
 
 export function CheckoutClient({
@@ -302,6 +314,7 @@ export function CheckoutClient({
   sugerirVincular = false,
   sucursales = null,
   mediosPago = [],
+  eleccionInicial = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready } = useCart();
 
@@ -317,21 +330,30 @@ export function CheckoutClient({
   const [medioSlug, setMedioSlug] = useState("");
   // Dos opciones: retiro en local o envío a domicilio. El "envío a coordinar" aparte se fusionó
   // con el domicilio: si el envío no es gratis, su costo se coordina después (src/lib/envio.ts).
-  const [opcionEntrega, setOpcionEntrega] = useState<"retiro" | "domicilio">("retiro");
+  // Los valores iniciales salen de la elección de «Enviar a» (cookie ya validada en el server).
+  const [inicial] = useState(() =>
+    estadoInicialCheckout({
+      eleccion: eleccionInicial,
+      direcciones: direccionesGuardadas,
+      envioOfrecido: configEnvio.domicilioActivo && admiteEnvio,
+      locales: sucursales?.locales.map((l) => l.slug) ?? [],
+      localInicial: sucursales?.localInicial ?? null,
+      provinciaInicial: sucursales?.provinciaInicial ?? null,
+    }),
+  );
+  const [opcionEntrega, setOpcionEntrega] = useState<OpcionEntregaCheckout>(inicial.opcionEntrega);
   const entrega: EntregaTipo = opcionEntrega === "retiro" ? "retiro" : "envio";
   const aDomicilio = opcionEntrega === "domicilio";
   const envioOfrecido = configEnvio.domicilioActivo && admiteEnvio;
-  const [localRetiro, setLocalRetiro] = useState(sucursales?.localInicial ?? "");
+  const [localRetiro, setLocalRetiro] = useState(inicial.localRetiro);
   // Provincia de "otra dirección": la de la zona vigente si la hay. Con una dirección guardada o el
   // domicilio fiscal, la provincia sale de ellos (ver `provinciaEntrega` más abajo).
-  const [provinciaManual, setProvinciaManual] = useState(sucursales?.provinciaInicial ?? "");
+  const [provinciaManual, setProvinciaManual] = useState(inicial.provinciaManual);
   const [ciudad, setCiudad] = useState("");
   const [direccion, setDireccion] = useState("");
   // Envío a domicilio arranca con la predeterminada. `ciudad` y `direccion`
   // quedan para "otra dirección para esta compra", que no toca las guardadas.
-  const [eleccionDireccion, setEleccionDireccion] = useState(() =>
-    eleccionInicial(direccionesGuardadas),
-  );
+  const [eleccionDireccion, setEleccionDireccion] = useState(inicial.eleccionDireccion);
   // Ciudad y dirección que viajan a la cotización y al pedido. Si el envío es gratis o a
   // coordinar lo decide `evaluarEnvio` (src/lib/envio.ts) con la provincia de la dirección.
   const {
@@ -396,6 +418,33 @@ export function CheckoutClient({
     : guardada
       ? (provinciaCanonica(guardada.provincia) ?? "")
       : (provinciaCanonica(provinciaManual) ?? "");
+
+  // Mantiene la elección de «Enviar a» al día: sin esperar, sin avisar de errores y sin refrescar la
+  // página (el encabezado se pone al día en la próxima navegación). Lo que cuenta para el pedido es
+  // el estado de este formulario, no la cookie.
+  const cuerpoSync = cuerpoDeSincronizacion({
+    opcionEntrega,
+    localRetiro,
+    eleccionDireccion,
+    direcciones: direccionesGuardadas,
+    conSucursales: !!sucursales && sucursales.locales.length > 0,
+    usarFiscal,
+  });
+  const claveSync = cuerpoSync ? JSON.stringify(cuerpoSync) : null;
+  const ultimaSync = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    // La primera pasada es el estado inicial: ya es la elección vigente, no hay nada que escribir.
+    if (ultimaSync.current === undefined) {
+      ultimaSync.current = claveSync;
+      return;
+    }
+    if (!claveSync || claveSync === ultimaSync.current) return;
+    const t = setTimeout(() => {
+      ultimaSync.current = claveSync;
+      void sincronizarUbicacion(fetch, JSON.parse(claveSync));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [claveSync]);
 
   // Pasos del checkout: Sus datos (facturación o contacto) → Entrega (con el
   // domicilio fiscal si se está cargando) → Pago.

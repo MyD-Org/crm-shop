@@ -21,7 +21,9 @@ describe("selector Enviar a: registro de usted", () => {
   });
 
   it("sin voseo/tuteo en TEXTOS_UBICACION", () => {
-    const malos = Object.entries(TEXTOS_UBICACION).filter(([, v]) => REGISTRO.test(v));
+    const malos = Object.entries(TEXTOS_UBICACION).filter(([, v]) =>
+      REGISTRO.test(typeof v === "function" ? (v as (...a: string[]) => string)("Local Ejemplo", "Local Ejemplo") : v),
+    );
     expect(malos).toEqual([]);
   });
 

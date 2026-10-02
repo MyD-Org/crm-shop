@@ -77,6 +77,8 @@ export function ProductoClient({
   oferta = null,
   configEnvio = CONFIG_ENVIO_DEFAULT,
   envioUbicacion,
+  localElegido,
+  envioElegido,
   relacionados = null,
   rutaCategorias = [],
   disponibilidad,
@@ -93,6 +95,10 @@ export function ProductoClient({
   configEnvio?: ConfigEnvio;
   /** Texto del envío según la ubicación del visitante (componente de servidor en su propio Suspense). */
   envioUbicacion?: ReactNode;
+  /** Local de retiro elegido en "Enviar a" (slug): la ficha lo muestra primero. */
+  localElegido?: string | null;
+  /** Destino del envío elegido en "Enviar a" (calle o localidad): la ficha lo muestra primero. */
+  envioElegido?: string | null;
   /** "Más de <categoría>", armado en el server (va en su propio Suspense). */
   relacionados?: ReactNode;
   /** Categoría del admin con sus padres (raíz → hoja), para las migas. Vacío = la de Alegra. */
@@ -310,7 +316,13 @@ export function ProductoClient({
               <BotonFavorito productId={producto.id} />
             </div>
 
-            <EntregaProducto configEnvio={configEnvio} envioUbicacion={envioUbicacion} disponibilidad={disponibilidad} />
+            <EntregaProducto
+              configEnvio={configEnvio}
+              envioUbicacion={envioUbicacion}
+              disponibilidad={disponibilidad}
+              localElegido={localElegido}
+              envioElegido={envioElegido}
+            />
 
             {/* Preguntas sugeridas al asesor: sólo con el chat montado. */}
             <DudasProducto producto={producto} />

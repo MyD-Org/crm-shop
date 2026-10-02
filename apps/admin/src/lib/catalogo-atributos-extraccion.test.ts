@@ -412,7 +412,7 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["TIRA 4,8 W/M", { potencia_w_m: 4.8 }],
       ["TIRA 60 LED/m 14.4W/m 5M", { leds_m: 60, potencia_w_m: 14.4, largo_m: 5 }],
       ["TIRA 60 LED/m 120 LED/m", {}],
-      ["TIRA 60 LED 5M", { largo_m: 5, leds_rollo: 60 }],
+      ["TIRA 60 LED 5M", { largo_m: 5 }],
       ["PANEL 100 W/m²", {}],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
 
@@ -424,14 +424,16 @@ describe("extracción de claves nuevas desde el nombre", () => {
 
   describe("leds_rollo (total del rollo)", () => {
     it.each([
-      ["TIRA LED 300 LED ROLLO", { leds_rollo: 300 }],
-      ["ROLLO 600 LEDS", { leds_rollo: 600 }],
-      ["TIRA 300 LED 5M", { leds_rollo: 300, largo_m: 5 }],
-      ["TIRA 300LED 5 METROS", { leds_rollo: 300, largo_m: 5 }],
+      ["TIRA LED 300 LED POR ROLLO", { leds_rollo: 300 }],
+      ["TIRA 600 LED X ROLLO 5M", { leds_rollo: 600, largo_m: 5 }],
+      ["TIRA 300 LED TOTALES", { leds_rollo: 300 }],
+      ["TIRA 300 LED TOTAL", { leds_rollo: 300 }],
+      ["TIRA 300 LED ROLLO", {}],
+      ["TIRA 300 LED 5M", { largo_m: 5 }],
       ["TIRA 60 LED/m 5M", { leds_m: 60, largo_m: 5 }],
-      ["TIRA 60 LEDs por metro rollo", { leds_m: 60 }],
+      ["TIRA 60 LEDs por metro por rollo", { leds_m: 60 }],
       ["TIRA 300 LED", {}],
-      ["TIRA 300 LED 600 LED ROLLO", {}],
+      ["TIRA 300 LED 600 LED TOTAL", {}],
       ["ROLLO 5M", { largo_m: 5 }],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
   })

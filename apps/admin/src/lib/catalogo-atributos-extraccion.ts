@@ -23,8 +23,8 @@
  * Claves ampliadas (migración 0053): corriente_a, polos, seccion_mm2, medidas_mm, color,
  * poder_corte_ka, curva, sensibilidad_ma, largo_m, montaje, angulo_grados. Migración 0058: leds_m
  * ("60 LED/m") y potencia_w_m ("14,4 W/m"), que se leen ANTES de descartar lo "por metro" (la potencia
- * por metro nunca es `potencia_w`). Migración 0059: leds_rollo ("300 LED", total del rollo; sólo con "rollo" o un
- * largo en el nombre). Se leen en un pipeline
+ * por metro nunca es `potencia_w`). Migración 0059: leds_rollo ("300 LED", total del rollo; sólo si el nombre dice "por rollo",
+ * "x rollo", "totales" o "total"). Se leen en un pipeline
  * CON CONSUMO (cada regla borra lo que leyó para que la siguiente no lo reinterprete: "10kA" no es
  * corriente, "3X1.5MM2" no son medidas). Ante la duda no devuelven nada; dos valores distintos de
  * la misma clave en el nombre = ninguno. Los vocabularios cerrados (color, montaje, curva) viven
@@ -559,13 +559,13 @@ const RE_LEDS_M = new RegExp(`${INIC}(\\d{1,4}) ?leds? ?(?:/|por|x) ?(?:m|mt|mts
 const RE_POTENCIA_M = new RegExp(`${INIC}(\\d{1,4}(?:[.,]\\d{1,2})?) ?(?:w|watts?) ?(?:/|por) ?(?:m|mt|mts|metros?)(?![0-9a-z²])`)
 
 /**
- * "300 LED" (total del rollo): sólo si el nombre además habla de rollo o de un largo ("5M", "5 metros"),
- * y nunca si el "LED" es por metro ("60 LED/m", "60 LEDs por metro").
+ * "300 LED POR ROLLO" (total del rollo): sólo si el nombre lo dice explícito ("por rollo", "x rollo",
+ * "LED totales", "total"). "60 LED 5M" suele ser 60 LED/m en un rollo de 5 m: no se extrae nada.
  */
 const RE_LEDS_ROLLO = new RegExp(
   `${INIC}(\\d{1,5}) ?leds?(?![0-9a-z²])(?! ?(?:/|por|x) ?(?:m|mt|mts|metros?)(?![0-9a-z²]))`,
 )
-const RE_ROLLO_O_LARGO = new RegExp(`(?:^|[^0-9a-z])rollos?(?![a-z])|${INIC}\\d{1,4}(?:[.,]\\d{1,2})? ?(?:m|mt|mts|metros?)(?![0-9a-z²/])`)
+const RE_TOTAL_EXPLICITO = /(?:^|[^0-9a-z])(?:(?:por|x) ?rollo|total(?:es)?)(?![a-z])/
 
 /** Valores por metro, leídos del texto completo (antes de `sinRelaciones`). Dos distintos = ninguno. */
 function porMetro(t: string): AtributoExtraido[] {
@@ -578,7 +578,7 @@ function porMetro(t: string): AtributoExtraido[] {
   if (leds != null) out.push({ clave: "leds_m", valorNum: leds, valorTexto: null })
   const w = enRango("potencia_w_m", hallar(RE_POTENCIA_M, numero))
   if (w != null) out.push({ clave: "potencia_w_m", valorNum: w, valorTexto: null })
-  if (RE_ROLLO_O_LARGO.test(t)) {
+  if (RE_TOTAL_EXPLICITO.test(t)) {
     const g = new RegExp(RE_LEDS_ROLLO.source, "g")
     const rollo = enRango("leds_rollo", unico([...t.matchAll(g)].map((m) => Number(m[2]))))
     if (rollo != null) out.push({ clave: "leds_rollo", valorNum: rollo, valorTexto: null })

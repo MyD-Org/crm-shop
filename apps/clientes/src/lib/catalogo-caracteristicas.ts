@@ -28,6 +28,7 @@ export const CLAVES_ESTRUCTURADAS = [
   "angulo_grados",
   "leds_m",
   "potencia_w_m",
+  "leds_rollo",
 ] as const;
 export type ClaveEstructurada = (typeof CLAVES_ESTRUCTURADAS)[number];
 
@@ -57,6 +58,7 @@ export const TIPO: Record<ClaveEstructurada, "num" | "texto"> = {
   angulo_grados: "num",
   leds_m: "num",
   potencia_w_m: "num",
+  leds_rollo: "num",
 };
 
 /** Un valor tal como viaja en la consulta: `n` = valor_num, `t` = valor_texto. */
@@ -111,6 +113,7 @@ export const ETIQUETA: Record<ClaveEstructurada, string> = {
   angulo_grados: "Ángulo",
   leds_m: "LED por metro",
   potencia_w_m: "Potencia por metro",
+  leds_rollo: "LED por rollo",
 };
 
 /** Tipo de luz (clave `tono`): blanca, de color o RGB. Mismo vocabulario que el CRM. */
@@ -206,6 +209,8 @@ export function formatoValor(clave: ClaveEstructurada, v: ValorEstructurado | un
       return v.n != null ? `${num2(v.n)} LED/m` : null;
     case "potencia_w_m":
       return v.n != null ? `${num2(v.n)} W/m` : null;
+    case "leds_rollo":
+      return v.n != null ? `${num2(v.n)} LED por rollo` : null;
   }
 }
 
@@ -257,6 +262,7 @@ const CLAVES_CHIP = [
   "angulo_grados",
   "leds_m",
   "potencia_w_m",
+  "leds_rollo",
 ] as const;
 const TOPE_CHIPS = 6;
 

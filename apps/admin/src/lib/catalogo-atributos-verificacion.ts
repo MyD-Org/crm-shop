@@ -250,6 +250,9 @@ const EVIDENCIA_NUM: Partial<Record<ClaveAtributo, { unidad: string; palabra: st
   // "14 W" sueltos no alcanzan (el LED total o la potencia total no son la densidad ni la potencia por metro).
   leds_m: { unidad: `\\s?LEDS?${POR_METRO}`, palabra: "(?!)" },
   potencia_w_m: { unidad: `\\s?(?:W|WATTS?)${POR_METRO}`, palabra: "(?!)" },
+  // Total del rollo: "300 LED", "300 LEDs" y la forma "300 LEDs xm" de algunos fabricantes. Con "/m", "por
+  // metro" o "x m" separado es por metro (leds_m), no el total.
+  leds_rollo: { unidad: "\\s?LEDS?(?!\\s?(?:/|POR)\\s?M)(?!\\s+X\\s+M)(?![A-Z0-9²])", palabra: "(?!)" },
 }
 
 const POLOS_PALABRA: Record<string, number> = { UNIPOLAR: 1, MONOPOLAR: 1, BIPOLAR: 2, TRIPOLAR: 3, TETRAPOLAR: 4 }

@@ -79,6 +79,17 @@ describe("POST /api/pedidos/:id/cancelar", () => {
     expect(r.status).toBe(409);
   });
 
+  it("con un pago informado (comprobante): 409 con el aviso y motivo pago_informado", async () => {
+    cancelarPedidoPendiente.mockResolvedValue("pago_informado");
+    const r = await cancelar();
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({
+      error:
+        "Este pedido ya tiene un pago informado y no se puede cancelar desde la tienda. Si necesita cancelarlo, comuníquese con nosotros.",
+      motivo: "pago_informado",
+    });
+  });
+
   it("pedido que no califica: el 404 genérico de siempre", async () => {
     cancelarPedidoPendiente.mockResolvedValue(null);
     expect((await cancelar()).status).toBe(404);

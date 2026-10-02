@@ -4,6 +4,11 @@ import { puedeCancelarPedido } from "./pedido-cancelable";
 const base = { estado: "pendiente", pagoEstado: "pendiente" } as const;
 
 describe("puedeCancelarPedido", () => {
+  it("con un comprobante informado: no, aunque el pago siga pendiente", () => {
+    expect(puedeCancelarPedido({ ...base, comprobanteInformado: true })).toBe(false);
+    expect(puedeCancelarPedido({ ...base, comprobanteInformado: false })).toBe(true);
+  });
+
   it("pendiente y sin pagar: se puede, cualquiera sea el medio de pago", () => {
     expect(puedeCancelarPedido(base)).toBe(true);
     expect(puedeCancelarPedido({ ...base, pagoEstado: "fallido" })).toBe(true);

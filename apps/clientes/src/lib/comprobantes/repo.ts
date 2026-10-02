@@ -104,9 +104,14 @@ export function condicionDuenio(tenantId: string, duenio: Duenio) {
  * Ids de los pedidos (de los pasados) que ya tienen al menos un comprobante informado
  * (`pending` o `loaded`) en el tenant. UNA consulta agrupada, sin N+1; sin ids no consulta.
  */
-export async function pedidosConComprobanteInformado(tenantId: string, pedidoIds: string[]): Promise<Set<string>> {
+export async function pedidosConComprobanteInformado(
+  tenantId: string,
+  pedidoIds: string[],
+  /** Transacción en curso (p. ej. la de la cancelación, con el pedido bloqueado). */
+  db: Pick<ReturnType<typeof getDb>, "select"> = getDb(),
+): Promise<Set<string>> {
   if (pedidoIds.length === 0) return new Set();
-  const filas = await getDb()
+  const filas = await db
     .select({ pedidoId: crmComprobantes.shopOrderId })
     .from(crmComprobantes)
     .where(

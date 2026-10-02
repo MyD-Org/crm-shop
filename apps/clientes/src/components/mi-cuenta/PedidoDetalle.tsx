@@ -1,11 +1,10 @@
-import { Badge, Card, Stepper } from "@myd-org/ui";
+import { Badge, Button, Card, Stepper } from "@myd-org/ui";
 import { PAGO_ESTADO_LABEL, type Order } from "@/data/orders";
 import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
 import { ocultarEstadoPago } from "@/lib/pago-estado-visible";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
-import { PedidoContacto } from "@/components/PedidoContacto";
-import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
+import { mensajePorDefecto, type ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
@@ -50,26 +49,19 @@ export function PedidoDetalle({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-display text-xl font-medium tracking-tight text-text">Pedido {pedido.numero}</h2>
-          <p className="mt-1 text-sm text-muted">{fmtFecha(pedido.fecha)}</p>
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-xl font-medium tracking-tight text-text">Pedido {pedido.numero}</h2>
+            <p className="mt-1 text-sm text-muted">{fmtFecha(pedido.fecha)}</p>
+          </div>
+          <Badge tone={pill.tone}>{pill.label}</Badge>
         </div>
-        <Badge tone={pill.tone}>{pill.label}</Badge>
-      </div>
 
-      {pasos && <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" />}
+        {pasos && <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="md" />}
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card title="Entrega">
-          <p className="text-sm text-muted">{pedido.metodoEntrega}</p>
-          {pedido.entregaDireccion && (
-            <p className="mt-1 text-sm text-text">
-              {pedido.entregaDireccion}
-              {pedido.entregaCiudad ? `, ${pedido.entregaCiudad}` : ""}
-            </p>
-          )}
-        </Card>
         <Card title="Pago">
           <p className="text-sm text-muted">{medioPago?.nombre ?? pedido.metodoPago}</p>
           {medioPago?.instrucciones && pedido.estado === "pendiente" && (
@@ -91,12 +83,31 @@ export function PedidoDetalle({
             </div>
           )}
         </Card>
+        <Card title="Entrega">
+          <p className="text-sm text-muted">{pedido.metodoEntrega}</p>
+          {pedido.entregaDireccion && (
+            <p className="mt-1 text-sm text-text">
+              {pedido.entregaDireccion}
+              {pedido.entregaCiudad ? `, ${pedido.entregaCiudad}` : ""}
+            </p>
+          )}
+        </Card>
       </div>
 
       {contacto && (pedido.estado === "pendiente" || contacto.whatsapp) && (
-        <Card title="Contacto">
-          <PedidoContacto contacto={contacto} mostrarPlazo={pedido.estado === "pendiente"} />
-        </Card>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm text-muted">
+          <p>
+            {pedido.estado === "pendiente" ? `${mensajePorDefecto(contacto.horasHabiles)} ` : ""}
+            {contacto.whatsapp ? "¿Dudas con su pedido?" : ""}
+          </p>
+          {contacto.whatsapp && (
+            <a href={contacto.whatsapp.url} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="secondary">
+                Escribir por WhatsApp
+              </Button>
+            </a>
+          )}
+        </div>
       )}
 
       <Card title="Productos">
@@ -111,21 +122,16 @@ export function PedidoDetalle({
           {pedido.costoEnvio > 0 && <Fila label="Envío" valor={fmtPrecio(pedido.costoEnvio)} />}
           <Fila label="Total" valor={fmtPrecio(pedido.total)} fuerte />
         </dl>
+        <PedidoAcciones
+          pedidoId={pedido.id}
+          items={pedido.items}
+          facturaId={pedido.facturaId}
+          facturaNumero={pedido.facturaNumero}
+          mostrarDetalle={false}
+          alPie
+          extra={puedeCancelarPedido(pedido) ? <CancelarPedido pedidoId={pedido.id} numero={pedido.numero} /> : undefined}
+        />
       </Card>
-
-      <PedidoAcciones
-        pedidoId={pedido.id}
-        items={pedido.items}
-        facturaId={pedido.facturaId}
-        facturaNumero={pedido.facturaNumero}
-        mostrarDetalle={false}
-      />
-
-      {puedeCancelarPedido(pedido) && (
-        <div>
-          <CancelarPedido pedidoId={pedido.id} numero={pedido.numero} />
-        </div>
-      )}
     </div>
   );
 }

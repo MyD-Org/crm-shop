@@ -253,5 +253,8 @@ export const TEXTOS_UBICACION = {
   etiquetaCp: "Código postal",
   placeholderCp: "Por ejemplo, 5000 o C1425ABC",
   elegirLocalidad: "Seleccione su localidad de la lista.",
+  // Ficha (PR3): retiro en el local elegido.
+  retiroEn: (local: string) => `Retiro en ${local}`,
+  sinStockEn: (local: string) => `No disponible en ${local}`,
   completarCp: "Confirme su localidad en la lista e ingrese su código postal.",
 } as const;

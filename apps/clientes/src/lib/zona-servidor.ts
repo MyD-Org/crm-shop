@@ -16,6 +16,7 @@ import {
 } from "./disponibilidad-contexto";
 import { reglasVentaCacheadas, sucursalesCacheadas } from "./sucursales-datos";
 import {
+  aplicarRetiro,
   opcionesCheckout,
   zonaVigente,
   type OpcionesCheckoutSucursales,
@@ -30,8 +31,11 @@ export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
   // La cookie `shop_zona` del selector de zona viejo (sacado en #279) ya no se lee: muchos
   // navegadores la conservan y pisaba la ubicación. La zona sale de la ubicación del visitante (la
   // que eligió a mano o su dirección guardada) y, si no hay, de la provincia del perfil.
-  const { ubicacion } = await ubicacionDelVisitante();
-  if (ubicacion) return zonaVigente({ perfilProvincia: ubicacion.provincia, datos });
+  const { ubicacion, eleccion } = await ubicacionDelVisitante();
+  // Retiro elegido: la sucursal elegida manda sobre la de la provincia (por request; el catálogo
+  // cacheado no se entera: `dispCatalogo` no lee la elección).
+  const retiro = eleccion.tipo === "retiro" ? (eleccion.sucursal?.slug ?? null) : null;
+  if (ubicacion) return aplicarRetiro(zonaVigente({ perfilProvincia: ubicacion.provincia, datos }), retiro, datos);
   let perfilProvincia: string | null = null;
   try {
     const { clerkUserId } = await identidadActual();
@@ -41,7 +45,7 @@ export const zonaDelVisitante = cache(async (): Promise<ZonaVigente | null> => {
   } catch (err) {
     console.error("[zona] no se pudo leer la provincia del perfil:", err);
   }
-  return zonaVigente({ perfilProvincia, datos });
+  return aplicarRetiro(zonaVigente({ perfilProvincia, datos }), retiro, datos);
 });
 
 /** Opciones del checkout (locales de retiro y provincia inicial). null = flag apagado o sin sucursales. */

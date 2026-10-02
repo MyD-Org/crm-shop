@@ -7,7 +7,7 @@ import { rutaIngreso } from "@/lib/ingreso";
 import { Button, QuantityStepper } from "@myd-org/ui";
 import type { CartItem } from "@/lib/carrito-cliente";
 import { AvisoQuitado } from "@/components/AvisoQuitado";
-import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio } from "@/lib/envio";
+import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio, type EntregaTipo } from "@/lib/envio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { useCart } from "@/context/CartContext";
 import { resumenDisponibilidadCarrito, sinEntregaPosible } from "@/lib/disponibilidad-textos";
@@ -83,13 +83,22 @@ export function CarritoClient({
   conSesion,
   configEnvio = CONFIG_ENVIO_DEFAULT,
   provincia = null,
+  entregaTipo = "retiro",
+  ubicacionConocida,
 }: {
   oferta: OfertaCuotas | null;
   conSesion: boolean;
   /** Configuración de envío del CRM (cacheada: sólo para mostrar; el servidor decide al pedir). */
   configEnvio?: ConfigEnvio;
-  /** Provincia conocida del visitante (dirección guardada predeterminada). null = sin ubicación. */
+  /** Provincia de la elección de envío. null = sin ubicación o con retiro elegido (sin envío). */
   provincia?: string | null;
+  /**
+   * Cómo cotiza el carrito: "retiro" (por defecto y con retiro elegido) o "envío" a `provincia`.
+   * Con retiro NO se manda provincia: pisaría la sucursal del local elegido.
+   */
+  entregaTipo?: EntregaTipo;
+  /** Hay elección (retiro o envío con provincia): no se pide la localidad. Por defecto, hay provincia. */
+  ubicacionConocida?: boolean;
 }) {
   const { items, updateQty, removeItem: remove, restoreItem, ready } = useCart();
   // "¿Le falta algo?": sólo con el chat montado (spec catálogo asistido fase 2, §3).
@@ -186,9 +195,10 @@ export function CarritoClient({
     />
   );
 
-  // El carrito siempre cotiza como "retiro": la entrega se elige en el checkout.
+  // Cotiza según la elección "Enviar a" (retiro por defecto): el detalle se confirma en el checkout.
   const { cotizacion, estado, error, recotizar, ultimasLineas } = useCotizacion({
-    entregaTipo: "retiro",
+    entregaTipo,
+    ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
   });
 
   // Los precios de cada línea salen de la cotización, con IVA como en la ficha
@@ -583,7 +593,7 @@ export function CarritoClient({
               provincia={provincia}
               disponibilidad={resumenEntrega ? { producto: resumenEntrega.producto, locales: cotizacion!.disponibilidad!.locales } : undefined}
               detallePorLocal={resumenEntrega?.detallePorLocal}
-              ubicacionConocida={provincia !== null}
+              ubicacionConocida={ubicacionConocida ?? provincia !== null}
             />
           </aside>
         </div>

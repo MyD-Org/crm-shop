@@ -11,6 +11,7 @@ import { CONFIG_ENVIO_DEFAULT, textoEnvioFicha } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
 import { dispCatalogo, dispDelVisitante } from "@/lib/zona-servidor";
+import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { disponibilidadParaMostrar } from "@/lib/disponibilidad-vista";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { estadoEnvio } from "@/lib/disponibilidad-textos";
@@ -56,6 +57,9 @@ export default async function ProductoPage({ params }: Props) {
     dispCatalogo(),
     dispDelVisitante(),
   ]);
+  // Local de retiro elegido en "Enviar a" (si la lectura falla, sin local elegido).
+  const eleccion = (await ubicacionDelVisitante().catch(() => null))?.eleccion;
+  const localElegido = eleccion?.tipo === "retiro" ? (eleccion.sucursal?.slug ?? null) : null;
 
   if (!producto) notFound();
   // "Retiro en <local>: ..." por cada local y "Envío a domicilio: ..." (sólo con el flag
@@ -78,6 +82,7 @@ export default async function ProductoPage({ params }: Props) {
         producto={producto}
         oferta={oferta}
         configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
+        localElegido={localElegido}
         envioUbicacion={
           // La ubicación sale de la cookie: va en un hueco por request, con la regla general de
           // fallback, para que la ficha siga con su shell estático.

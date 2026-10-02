@@ -61,6 +61,28 @@ export function zonaVigente(entrada: {
   return { provinciaClave, origen, sucursal, resolucion: r };
 }
 
+/**
+ * Retiro elegido en "Enviar a": la sucursal elegida PREVALECE sobre la que atiende la provincia
+ * (la disponibilidad y el local del checkout siguen al local donde retira). Sólo vale un local
+ * activo que acepta retiro; si no, la zona queda como está. Sin zona previa arma una sintética.
+ * No toca el catálogo: la zona sólo decide la sucursal.
+ */
+export function aplicarRetiro(
+  zona: ZonaVigente | null,
+  slug: string | null | undefined,
+  datos: DatosSucursales,
+): ZonaVigente | null {
+  if (!slug) return zona;
+  const sucursal = datos.sucursales.find((s) => s.slug === slug && s.activa && s.aceptaRetiro);
+  if (!sucursal) return zona;
+  return {
+    provinciaClave: zona?.provinciaClave ?? null,
+    resolucion: zona?.resolucion ?? null,
+    origen: "cookie",
+    sucursal,
+  };
+}
+
 /** Lo que el checkout necesita con el flag `sucursales` prendido. */
 export interface OpcionesCheckoutSucursales {
   locales: {

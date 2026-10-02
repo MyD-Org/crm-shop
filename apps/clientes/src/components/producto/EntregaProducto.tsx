@@ -1,12 +1,12 @@
 import { textoEnvioFicha, type ConfigEnvio } from "@/lib/envio";
 import { TEXTOS_UBICACION } from "@/lib/ubicacion";
 import { tieneHorario } from "@/lib/horario-agrupado";
+import { retiroDeFicha } from "@/lib/entrega-eleccion";
 import { SelectorUbicacion } from "@/components/ubicacion/SelectorUbicacion";
 import { VerLocal } from "@/components/producto/VerLocal";
 import {
   estadoEnvio,
   estadoRetiroLocal,
-  localesPorConveniencia,
   type EstadoProductoLocal,
   type DisponibilidadVista,
   type LocalDisponibilidad,
@@ -66,6 +66,7 @@ export function EntregaProducto({
   disponibilidad,
   detallePorLocal,
   ubicacionConocida = true,
+  localElegido = null,
 }: {
   configEnvio: ConfigEnvio;
   provincia?: string | null;
@@ -81,15 +82,23 @@ export function EntregaProducto({
   detallePorLocal?: Record<string, EstadoProductoLocal[]>;
   /** Carrito: sin ubicación no se muestra plazo; se pide la localidad. (La ficha lo resuelve en el slot.) */
   ubicacionConocida?: boolean;
+  /**
+   * Local de retiro elegido en "Enviar a" (slug). Se muestra primero, con su estado, aunque no tenga
+   * stock; los demás locales siguen visibles. Sin él, el orden es por conveniencia.
+   */
+  localElegido?: string | null;
 }) {
   const retiro = disponibilidad?.producto.retiro;
-  // Primero el local que mejor sirve: lo primero que se lee es la opción que funciona.
-  const locales = retiro ? localesPorConveniencia(disponibilidad?.locales ?? [], retiro) : [];
+  // Primero el local elegido y, después, el que mejor sirve: lo primero que se lee es lo que importa.
+  const { elegido, otros } = retiro
+    ? retiroDeFicha(disponibilidad?.locales ?? [], retiro, localElegido)
+    : { elegido: null, otros: [] };
+  const locales = elegido ? [elegido, ...otros] : otros;
   const envioDomicilio = disponibilidad?.producto.envio ? estadoEnvio(disponibilidad.producto.envio) : null;
   const textoEnvio = textoEnvioFicha(configEnvio, provincia, localidad);
   return (
     <ul className="space-y-4 border-t border-border pt-5">
-      <Fila icono={<IconoLocal />} titulo="Retiro gratis en el local">
+      <Fila icono={<IconoLocal />} titulo={elegido ? TEXTOS_UBICACION.retiroEn(elegido.nombre) : "Retiro gratis en el local"}>
         {locales.length === 0 ? (
           <span className="text-muted">Sin cargo, en nuestros locales.</span>
         ) : (
@@ -98,12 +107,15 @@ export function EntregaProducto({
               const estado = estadoRetiroLocal(retiro![l.slug]);
               // En el carrito, "No disponible" es para el pedido completo, no para el local.
               const texto = detallePorLocal && estado.tono === "no" ? "No disponible para este pedido" : estado.texto;
+              const esElegido = l === elegido;
               return (
-                <li key={l.slug} className="flex items-baseline justify-between gap-3">
+                <li key={l.slug} className="flex items-baseline justify-between gap-3" data-local-elegido={esElegido || undefined}>
                   <span>
-                    <span className="text-text">{l.nombre}</span>
+                    <span className={esElegido ? "font-semibold text-text" : "text-text"}>{l.nombre}</span>
                     {" · "}
-                    <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>{texto}</span>
+                    <span className={`font-semibold ${CLASE_TONO[estado.tono]}`}>
+                      {esElegido && estado.tono === "no" && !detallePorLocal ? TEXTOS_UBICACION.sinStockEn(l.nombre) : texto}
+                    </span>
                   </span>
                   {(l.direccion || tieneHorario(l)) && <VerLocal local={l} productos={detallePorLocal?.[l.slug]} />}
                 </li>

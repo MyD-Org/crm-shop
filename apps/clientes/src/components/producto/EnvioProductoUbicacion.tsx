@@ -14,6 +14,7 @@ import type { LineaDisponibilidad } from "@/lib/disponibilidad-textos";
  * - Sin ubicación y con envío gratis por provincias: "Ingrese su localidad" (abre el modal).
  * - Sin envío gratis o gratis en todo el país: la regla general (la ubicación no cambia nada).
  * - Con ubicación: el texto de `textoEnvioFicha` para su provincia.
+ * - Con retiro elegido: la regla general (sin plazo).
  * Si la lectura falla, la regla general: la ficha no se rompe.
  */
 export async function EnvioProductoUbicacion({
@@ -32,6 +33,9 @@ export async function EnvioProductoUbicacion({
     console.error("[ficha] no se pudo leer la ubicación:", err);
     return <>{textoEnvioFicha(configEnvio)}</>;
   }
+  // Con retiro elegido la fila de envío sigue la regla general: la ubicación derivada del local no
+  // es un destino de envío y el plazo (de la zona del local) tampoco aplica.
+  if (resuelta.eleccion.tipo === "retiro") return <>{textoEnvioFicha(configEnvio)}</>;
   const envio = envioFichaSegunUbicacion(configEnvio, resuelta.ubicacion);
   if (!envio) return null;
   if (envio.tipo === "texto")

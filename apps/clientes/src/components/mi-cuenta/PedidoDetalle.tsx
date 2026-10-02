@@ -1,10 +1,9 @@
-import { Badge, Button, Card, Stepper } from "@myd-org/ui";
+import { Badge, Card, Stepper } from "@myd-org/ui";
 import { PAGO_ESTADO_LABEL, type Order } from "@/data/orders";
 import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
 import { ocultarEstadoPago } from "@/lib/pago-estado-visible";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
-import { mensajePorDefecto, type ContactoPedidoVista } from "@/lib/contacto-pedido";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
@@ -32,13 +31,10 @@ function Fila({ label, valor, fuerte = false }: { label: string; valor: string; 
 export function PedidoDetalle({
   pedido,
   medioPago,
-  contacto,
 }: {
   pedido: Order;
   /** Medio del CRM que eligió el comprador (nombre e instrucciones). */
   medioPago?: { nombre: string; instrucciones: string | null };
-  /** Plazo de contacto y WhatsApp de la sucursal asignada. */
-  contacto?: ContactoPedidoVista;
 }) {
   const pill = estadoPedidoPill(pedido);
   const pasos = seguimientoPedido(pedido);
@@ -105,22 +101,6 @@ export function PedidoDetalle({
           )}
         </Card>
       </div>
-
-      {contacto && (pedido.estado === "pendiente" || contacto.whatsapp) && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm text-muted">
-          <p>
-            {pedido.estado === "pendiente" ? `${mensajePorDefecto(contacto.horasHabiles)} ` : ""}
-            {contacto.whatsapp ? "¿Dudas con su pedido?" : ""}
-          </p>
-          {contacto.whatsapp && (
-            <a href={contacto.whatsapp.url} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" variant="secondary">
-                Escribir por WhatsApp
-              </Button>
-            </a>
-          )}
-        </div>
-      )}
 
       <Card title="Productos">
         <ul className="flex flex-col gap-3">

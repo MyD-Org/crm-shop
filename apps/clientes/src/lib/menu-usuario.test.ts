@@ -37,8 +37,8 @@ describe("menu del usuario", () => {
     expect(ENTRADAS_MENU.at(-1)).toMatchObject({ id: "salir", tone: "danger" });
   });
 
-  it("Mis pedidos lleva al resumen y Mis datos a su sección", () => {
-    expect(HREF_MIS_PEDIDOS).toBe("/mi-cuenta");
+  it("Mis pedidos lleva a Pedidos y Mis datos a su sección", () => {
+    expect(HREF_MIS_PEDIDOS).toBe("/mi-cuenta/pedidos");
     expect(HREF_MIS_DATOS).toBe("/mi-cuenta/datos");
   });
 
@@ -99,6 +99,6 @@ describe("Favoritos en el menú, detrás de la capacidad de despliegue", () => {
 
   it("Favoritos lleva a su sección; Mis pedidos sigue en el resumen", () => {
     expect(HREF_FAVORITOS).toBe("/mi-cuenta/favoritos");
-    expect(HREF_MIS_PEDIDOS).toBe("/mi-cuenta");
+    expect(HREF_MIS_PEDIDOS).toBe("/mi-cuenta/pedidos");
   });
 });

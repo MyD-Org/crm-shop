@@ -2,8 +2,8 @@
  * Redirects de las URLs viejas de Mi cuenta a las rutas por sección.
  *
  * - `/mi-cuenta?tab=datos` → `/mi-cuenta/datos`, temporal (307). Cualquier
- *   otra pestaña (`compras`, vacía, desconocida) no redirige: muestra el
- *   resumen. Next pasa la query al destino (`/mi-cuenta/datos?tab=datos`), que
+ *   otra pestaña (`compras`, vacía, desconocida) no redirige aquí:
+ *   `/mi-cuenta` la lleva a Pedidos. Next pasa la query al destino (`/mi-cuenta/datos?tab=datos`), que
  *   la ignora.
  * - `/mi-cuenta/pedido/:id` → `/mi-cuenta/pedidos/:id`, permanente (308), sin
  *   consultar la base: el dueño se valida en el destino.

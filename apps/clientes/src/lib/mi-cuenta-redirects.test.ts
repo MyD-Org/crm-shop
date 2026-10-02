@@ -32,7 +32,7 @@ describe("REDIRECTS_MI_CUENTA", () => {
     expect(r?.has).toBeUndefined();
   });
 
-  it("ninguna otra pestaña redirige (compras, vacía o desconocida muestran el resumen)", () => {
+  it("ninguna otra pestaña redirige (compras, vacía o desconocida no se redirigen aquí)", () => {
     const porTab = REDIRECTS_MI_CUENTA.flatMap((x) => x.has ?? []).filter((h) => h.key === "tab");
     expect(porTab.map((h) => h.value)).toEqual(["datos"]);
   });

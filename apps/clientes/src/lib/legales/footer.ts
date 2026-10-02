@@ -29,7 +29,7 @@ export function columnasFooter(ctx: { arrepentimiento: boolean; footer?: DatosFo
     {
       title: "Mi cuenta",
       links: [
-        { label: "Mis pedidos", href: "/mi-cuenta" },
+        { label: "Mis pedidos", href: "/mi-cuenta/pedidos" },
         { label: "Facturas", href: "/mi-cuenta" },
       ],
     },

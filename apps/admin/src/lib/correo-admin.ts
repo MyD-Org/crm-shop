@@ -36,6 +36,12 @@ export function respuestaErrorResend(e: unknown): Response {
   return errorJson("No se pudo completar la operación. Inténtelo nuevamente.", 500, "servidor")
 }
 
+/** Error de Resend en una ruta de lectura: "no encontrado" es el mismo 404 de siempre. */
+export function errorLectura(e: unknown): Response {
+  if (e instanceof CorreoResendError && e.code === "no_encontrado") return adminNotFoundResponse()
+  return respuestaErrorResend(e)
+}
+
 export interface CasillaAdminVista {
   id: string
   email: string

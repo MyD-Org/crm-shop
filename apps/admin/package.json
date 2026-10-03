@@ -26,6 +26,7 @@
     "@myd-org/ai-widget": "file:vendor/myd-org-ai-widget-0.1.12.tgz",
     "@myd-org/ui": "^0.39.0",
     "@sentry/nextjs": "^10.65.0",
+    "@types/sanitize-html": "^2.16.2",
     "@vercel/flags": "^3.1.1",
     "aws4fetch": "1.0.20",
     "drizzle-orm": "^0.45.2",
@@ -39,6 +40,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^6.12.4",
+    "sanitize-html": "^2.18.0",
     "sharp": "^0.34.5",
     "web-push": "^3.6.7",
     "xlsx": "^0.18.5"

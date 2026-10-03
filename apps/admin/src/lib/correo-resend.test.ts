@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import inboxesJson from "./__fixtures__/resend-inboxes/inboxes.json"
 import threadsJson from "./__fixtures__/resend-inboxes/threads.json"
+import threadJson from "./__fixtures__/resend-inboxes/thread.json"
 import threadEmailsJson from "./__fixtures__/resend-inboxes/thread-emails.json"
 import emailJson from "./__fixtures__/resend-inboxes/email.json"
 import emailMinimoJson from "./__fixtures__/resend-inboxes/email-minimo.json"
@@ -101,13 +102,26 @@ describe("normalizadores (contrato con fixtures)", () => {
     expect(r.hilos[1]).toMatchObject({ conAdjuntos: false, cc: [], leido: true, mensajes: 1 })
   })
 
-  it("listThreadEmails", async () => {
-    fetchMock.mockResolvedValueOnce(json(threadEmailsJson))
+  it("listThreadEmails une el hilo (GET /threads/{id}) con sus mensajes (GET /threads/{id}/emails)", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      json(new URL(String(url)).pathname.endsWith("/emails") ? threadEmailsJson : threadJson),
+    )
     const r = await listThreadEmails("i", "thread_0001")
-    expect(new URL(String(fetchMock.mock.calls[0][0])).pathname).toBe("/inboxes/i/threads/thread_0001")
-    expect(r.asunto).toBe("Consulta de precios")
+    const paths = fetchMock.mock.calls.map((c) => new URL(String(c[0])).pathname).sort()
+    expect(paths).toEqual(["/inboxes/i/threads/thread_0001", "/inboxes/i/threads/thread_0001/emails"])
+    expect(r).toMatchObject({ id: "thread_0001", asunto: "Consulta de precios", carpeta: "inbox", leido: false })
     expect(r.mensajes).toHaveLength(2)
-    expect(r.mensajes[0]).toMatchObject({ id: "email_0001", direccion: "inbound", cc: [], replyTo: [], messageId: null, adjuntosCount: 1 })
+    expect(r.mensajes[0]).toMatchObject({
+      id: "email_0001",
+      direccion: "inbound",
+      cc: [],
+      replyTo: [],
+      messageId: "<abc123@clientes.example>",
+      adjuntosCount: 2,
+      adjuntos: [{ id: "att_0001", nombre: "lista.pdf", tamano: 120400 }, { id: "att_0002" }],
+    })
+    // La lista trae html/text completos: el detalle de metadatos NO los arrastra.
+    expect(JSON.stringify(r)).not.toContain("necesito precios")
     expect(r.mensajes[1]).toMatchObject({ direccion: "outbound", cc: ["jefe@clientes.example"], adjuntosCount: 0 })
   })
 

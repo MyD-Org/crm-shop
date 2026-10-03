@@ -39,6 +39,15 @@ interface PendingCounts {
   inbox: number
   comprobantes: number | null
   pedidos: number
+  /** No leídos de las casillas de correo a las que tiene acceso (0 con el flag apagado). Va en la solapa de Mensajes. */
+  correo?: number
+}
+
+/** El badge de Mensajes suma las conversaciones nuevas y los correos sin leer. */
+function badgeCount(counts: PendingCounts | null, badge: BadgeSection): number | null {
+  if (!counts) return null
+  if (badge === "inbox") return counts.inbox + (counts.correo ?? 0)
+  return counts[badge]
 }
 
 const POLL_MS = 30_000
@@ -316,7 +325,7 @@ function AdminShellInner({ name, email, role, logoSrc, iconSrc, tenantName, avai
         href: item.href,
         label: item.label,
         group: item.group,
-        icon: item.badge ? <BadgeIcon icon={item.icon} count={pendingCounts ? pendingCounts[item.badge] : null} /> : item.icon,
+        icon: item.badge ? <BadgeIcon icon={item.icon} count={badgeCount(pendingCounts, item.badge)} /> : item.icon,
         active: pathname.startsWith(item.href),
       }))}
       user={{

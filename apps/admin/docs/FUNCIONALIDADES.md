@@ -1093,6 +1093,16 @@ nunca en el repo.
 
 ---
 
+## Correo compartido (lectura)
+
+Detrás del flag `correo` (Vercel Flags). Las casillas de Resend Inboxes son **solapas dentro de Mensajes** (`/admin/inbox`), junto a las de canal; `/admin/correo` solo redirige. Con el flag apagado Mensajes queda idéntico.
+
+- **Acceso**: admin y superadmin ven todas las casillas activas; un operador, solo las que se le tildaron en "Administrar casillas" (botón junto a las solapas, solo admin+). Sin acceso, 404 idéntico al de una casilla inexistente.
+- **Lectura**: carpetas Recibidos/Archivados/Spam/Enviados/Papelera, búsqueda por asunto, "Cargar más" por cursor. Cada cuerpo se pide al abrir el mensaje. Marcar leído/no leído y mover de carpeta (PATCH a Resend + espejo `correo_hilos`); "Eliminar" solo manda a la papelera.
+- **HTML**: saneado en el servidor (`sanitize-html`) y mostrado en un iframe sandbox sin scripts, con CSP que bloquea imágenes remotas hasta "Mostrar imágenes".
+- **Adjuntos**: `GET /api/admin/correo/adjuntos/[eid]/[aid]?casilla=&hilo=` verifica acceso y que el mensaje sea de esa casilla, y responde 302 a la URL firmada de Resend (no se persiste ni viaja en JSON). Tope 40 MB.
+- **Badge**: `pending-counts` devuelve `correo` (no leídos de Recibidos de las casillas accesibles) y se suma al badge de Mensajes.
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):

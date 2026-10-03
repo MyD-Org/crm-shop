@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm"
+import { and, asc, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, correoCasillaAccesos, correoCasillas, correoEventos, correoHilos } from "@/db/schema"
 import type { CorreoCarpeta } from "./correo-resend"
@@ -141,4 +141,117 @@ export async function contarNoLeidos(casillaIds: string[]): Promise<number> {
     .from(correoHilos)
     .where(and(inArray(correoHilos.casillaId, casillaIds), eq(correoHilos.folder, "inbox"), eq(correoHilos.leido, false)))
   return r?.n ?? 0
+}
+
+// ── Accesos y administración de casillas (R3) ───────────────────────────────────────────────
+
+/** Casillas del tenant (orden manual y luego nombre). `soloActivas` para lo que ve un lector. */
+export async function listarCasillas(tenantId: string, opts: { soloActivas?: boolean } = {}): Promise<CasillaRow[]> {
+  return getDb()
+    .select()
+    .from(correoCasillas)
+    .where(and(eq(correoCasillas.tenantId, tenantId), opts.soloActivas ? eq(correoCasillas.activa, true) : undefined))
+    .orderBy(asc(correoCasillas.orden), asc(correoCasillas.nombre), asc(correoCasillas.id))
+}
+
+/** Casillas ACTIVAS del tenant a las que el usuario tiene acceso explícito (operadores). */
+export async function casillasDeUsuario(tenantId: string, userId: string): Promise<CasillaRow[]> {
+  const filas = await getDb()
+    .select({ casilla: correoCasillas })
+    .from(correoCasillaAccesos)
+    .innerJoin(correoCasillas, eq(correoCasillas.id, correoCasillaAccesos.casillaId))
+    .where(
+      and(
+        eq(correoCasillaAccesos.adminUserId, userId),
+        eq(correoCasillas.tenantId, tenantId),
+        eq(correoCasillas.activa, true),
+      ),
+    )
+    .orderBy(asc(correoCasillas.orden), asc(correoCasillas.nombre), asc(correoCasillas.id))
+  return filas.map((f) => f.casilla)
+}
+
+/** Una casilla del tenant (activa o no); null si no existe o es de otro tenant. */
+export async function casillaDelTenant(tenantId: string, casillaId: string): Promise<CasillaRow | null> {
+  const [fila] = await getDb()
+    .select()
+    .from(correoCasillas)
+    .where(and(eq(correoCasillas.id, casillaId), eq(correoCasillas.tenantId, tenantId)))
+    .limit(1)
+  return fila ?? null
+}
+
+/** Edita nombre/activa/orden de una casilla del tenant. null si no existe o es de otro tenant. */
+export async function actualizarCasilla(
+  tenantId: string,
+  casillaId: string,
+  cambios: { nombre?: string; activa?: boolean; orden?: number },
+): Promise<CasillaRow | null> {
+  const set: Partial<typeof correoCasillas.$inferInsert> = {}
+  if (cambios.nombre !== undefined) set.nombre = cambios.nombre
+  if (cambios.activa !== undefined) set.activa = cambios.activa
+  if (cambios.orden !== undefined) set.orden = cambios.orden
+  if (Object.keys(set).length === 0) return casillaDelTenant(tenantId, casillaId)
+  const [fila] = await getDb()
+    .update(correoCasillas)
+    .set(set)
+    .where(and(eq(correoCasillas.id, casillaId), eq(correoCasillas.tenantId, tenantId)))
+    .returning()
+  return fila ?? null
+}
+
+/** Operadores del tenant que se pueden tildar (admin y superadmin ya ven todas las casillas). */
+export async function usuariosParaAcceso(tenantId: string): Promise<{ id: string; name: string; email: string }[]> {
+  return getDb()
+    .select({ id: adminUsers.id, name: adminUsers.name, email: adminUsers.email })
+    .from(adminUsers)
+    .where(and(eq(adminUsers.tenantId, tenantId), eq(adminUsers.role, "operator")))
+    .orderBy(asc(adminUsers.name), asc(adminUsers.id))
+}
+
+/** Filas de acceso de todas las casillas del tenant (para armar la pantalla de una vez). */
+export async function accesosDelTenant(tenantId: string): Promise<{ casillaId: string; adminUserId: string }[]> {
+  return getDb()
+    .select({ casillaId: correoCasillaAccesos.casillaId, adminUserId: correoCasillaAccesos.adminUserId })
+    .from(correoCasillaAccesos)
+    .innerJoin(correoCasillas, eq(correoCasillas.id, correoCasillaAccesos.casillaId))
+    .where(eq(correoCasillas.tenantId, tenantId))
+}
+
+/**
+ * Reemplaza, en una transacción, el conjunto de usuarios con acceso a una casilla. Rechaza (sin
+ * escribir nada) una casilla ajena o ids que no sean operadores del tenant: `invalidos` lista los
+ * ids rechazados (vacío si lo ajeno es la casilla).
+ */
+export async function reemplazarAccesos(
+  tenantId: string,
+  casillaId: string,
+  userIds: string[],
+): Promise<{ ok: true } | { ok: false; invalidos: string[] }> {
+  const ids = [...new Set(userIds)]
+  return getDb().transaction(async (tx) => {
+    const [casilla] = await tx
+      .select({ id: correoCasillas.id })
+      .from(correoCasillas)
+      .where(and(eq(correoCasillas.id, casillaId), eq(correoCasillas.tenantId, tenantId)))
+      .limit(1)
+    if (!casilla) return { ok: false as const, invalidos: [] }
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const malFormados = ids.filter((id) => !UUID.test(id))
+    if (malFormados.length > 0) return { ok: false as const, invalidos: malFormados }
+    if (ids.length > 0) {
+      const validos = await tx
+        .select({ id: adminUsers.id })
+        .from(adminUsers)
+        .where(and(inArray(adminUsers.id, ids), eq(adminUsers.tenantId, tenantId), eq(adminUsers.role, "operator")))
+      const setValidos = new Set(validos.map((v) => v.id))
+      const invalidos = ids.filter((id) => !setValidos.has(id))
+      if (invalidos.length > 0) return { ok: false as const, invalidos }
+    }
+    await tx.delete(correoCasillaAccesos).where(eq(correoCasillaAccesos.casillaId, casillaId))
+    if (ids.length > 0) {
+      await tx.insert(correoCasillaAccesos).values(ids.map((adminUserId) => ({ casillaId, adminUserId })))
+    }
+    return { ok: true as const }
+  })
 }

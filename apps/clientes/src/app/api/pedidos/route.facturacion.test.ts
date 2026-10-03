@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContactoFacturacion } from "@/lib/contacto-alegra";
+import { setFlag } from "@/test/flags";
 
 /**
  * POST /api/pedidos con la lectura única de facturación (Dominio 4 de
@@ -223,6 +224,7 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
   });
 
   it("no vinculado sin perfil ⇒ 409; con perfil ⇒ como siempre", async () => {
+    setFlag("precio-especial-cuenta", true);
     identidad = { clerkUserId: "user_1", cliente: null };
     expect((await post()).status).toBe(409);
 
@@ -262,6 +264,7 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
   });
 
   it("no vinculado: contacto coincidente con la MISMA lista que la general ⇒ sin revisión", async () => {
+    setFlag("precio-especial-cuenta", true);
     identidad = { clerkUserId: "user_1", cliente: null };
     perfil = { ...PERFIL, coincideConAlegra: "77" };
     coincidente = { id: "77", priceList: { id: "1", name: "General", status: "active" } };
@@ -270,6 +273,7 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
   });
 
   it("no vinculado: contacto coincidente con OTRA lista ⇒ otra_lista_precios", async () => {
+    setFlag("precio-especial-cuenta", true);
     identidad = { clerkUserId: "user_1", cliente: null };
     perfil = { ...PERFIL, coincideConAlegra: "77" };
     coincidente = { id: "77", priceList: { id: "5", name: "Mayorista", status: "active" } };
@@ -279,6 +283,7 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
   });
 
   it("no vinculado: la lista del contacto está dada de baja ⇒ cuenta como la general, sin revisión", async () => {
+    setFlag("precio-especial-cuenta", true);
     identidad = { clerkUserId: "user_1", cliente: null };
     perfil = { ...PERFIL, coincideConAlegra: "77" };
     coincidente = { id: "77", priceList: { id: "5", name: "NO USAR", status: "inactive" } };
@@ -286,7 +291,23 @@ describe("POST /api/pedidos — facturación desde la lectura única", () => {
     expect(datosDelPedido()).toMatchObject({ requiereRevision: false, motivoRevision: null });
   });
 
+  it("flag precio-especial-cuenta apagado: otra lista del contacto NO marca revisión y no consulta el espejo", async () => {
+    identidad = { clerkUserId: "user_1", cliente: null };
+    perfil = { ...PERFIL, coincideConAlegra: "77" };
+    coincidente = { id: "77", priceList: { id: "5", name: "Mayorista", status: "active" } };
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: false, motivoRevision: null });
+    expect(vinculablePorId).not.toHaveBeenCalled();
+  });
+
+  it("flag apagado: los otros motivos de revisión siguen intactos", async () => {
+    espejo = fila({ identificationType: "DNI", identificationNumber: "12345678", identification: "12345678", identificationNorm: "12345678" });
+    expect((await post()).status).toBe(201);
+    expect(datosDelPedido()).toMatchObject({ requiereRevision: true, motivoRevision: "documento_incompatible" });
+  });
+
   it("no vinculado: el espejo no responde ⇒ el pedido sale igual, sin revisión", async () => {
+    setFlag("precio-especial-cuenta", true);
     identidad = { clerkUserId: "user_1", cliente: null };
     perfil = { ...PERFIL, coincideConAlegra: "77" };
     vinculablePorId.mockRejectedValue(Object.assign(new Error("x"), { code: "57P01" }));

@@ -43,6 +43,7 @@ function responder(c: ConsultaGrabada): unknown[][] | undefined {
 let grabadora = dbGrabadora(responder);
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
+import { setFlag } from "@/test/flags";
 import { identidadActual, idPriceListCliente } from "./auth";
 
 function filaEspejo(tipo: "corriente" | "contado", lista: string | null, estadoLista = "active") {
@@ -102,7 +103,18 @@ describe("identidadActual: tipo de cuenta y lista del vínculo", () => {
   });
 });
 
-describe("idPriceListCliente (carrito y pedidos)", () => {
+describe("idPriceListCliente con el flag precio-especial-cuenta apagado", () => {
+  it("devuelve undefined aunque el cliente tenga lista propia, sin tocar la base", async () => {
+    vinculo = { tipoCuenta: null, idPriceList: "3" };
+    espejo = [filaEspejo("corriente", "7")];
+    expect(await idPriceListCliente("42")).toBeUndefined();
+    expect(grabadora.consultas).toHaveLength(0);
+  });
+});
+
+describe("idPriceListCliente (carrito y pedidos, flag precio-especial-cuenta prendido)", () => {
+  beforeEach(() => setFlag("precio-especial-cuenta", true));
+
   it("lista activa en el espejo ⇒ su id, 0 llamadas a Alegra y sin leer el snapshot", async () => {
     vinculo = { tipoCuenta: null, idPriceList: "3" };
     espejo = [filaEspejo("corriente", "7")];

@@ -69,6 +69,14 @@ describe("cotizar", () => {
     expect(c.lineas[0].precioUnitario).toBe(800);
   });
 
+  it("idListaMedio manda sobre la lista del cliente y no marca lista preferencial", async () => {
+    const conMedio = [...precios, { idPriceList: "9", name: "Medio", price: 700, main: false }];
+    filas = [["10", "COD-10", null, null, conMedio, "5", "21", "active", null]];
+    const c = await cotizar([{ id: "10", qty: 1 }], { idPriceList: "7", idListaMedio: "9" });
+    expect(c.lineas[0].precioUnitario).toBe(700);
+    expect(c.listaPreferencial).toBe(false);
+  });
+
   it("IVA null en el espejo → IVA por defecto", async () => {
     filas = [["10", "COD-10", null, null, precios, null, null, "active", null]];
     const c = await cotizar([{ id: "10", qty: 1 }]);

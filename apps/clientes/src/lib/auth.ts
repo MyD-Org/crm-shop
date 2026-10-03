@@ -21,6 +21,7 @@ import { getDb } from "@/db";
 import { clientLinks } from "@/db/schema";
 import { intentarVinculacionPorEmail } from "./vinculacion";
 import { comercialEspejo } from "./contactos-espejo";
+import { precioEspecialCuenta } from "./precio-especial-flag";
 import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
 import { sessionOptions, type SessionData } from "./session";
@@ -300,6 +301,10 @@ export async function claveSolicitante(): Promise<string | null> {
 export async function idPriceListCliente(
   codigocliente: string,
 ): Promise<string | undefined> {
+  // Corte único del precio especial (#219): con el flag `precio-especial-cuenta` apagado (default)
+  // el precio depende sólo del medio de pago y ningún caller usa la lista propia del cliente.
+  if (!(await precioEspecialCuenta())) return undefined;
+
   const espejo = await comercialDelEspejo(codigocliente);
   if (espejo) return espejo.idPriceList;
 

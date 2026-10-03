@@ -13,6 +13,9 @@ import { cuentasBancariasCacheadas } from "@/lib/cuentas-bancarias-datos";
 import { cuentaParaVistaPrevia } from "@/lib/cuenta-transferencia";
 import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
+import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import { idListaDelMedio } from "@/lib/lista-medio";
+import { precioEspecialCuenta } from "@/lib/precio-especial-flag";
 
 /**
  * Techo por usuario.
@@ -38,7 +41,10 @@ function ipDe(req: Request): string | null {
 
 /**
  * POST /api/carrito/cotizar
- * Body: { items: [{ id, qty }], entregaTipo?, provincia? }
+ * Body: { items: [{ id, qty }], entregaTipo?, provincia?, pagoMetodo? }
+ * `pagoMetodo`: slug del medio de pago elegido. La lista de precios sale SOLO de ahí (medio activo que
+ * aplica a la modalidad, releído sin caché); el body nunca trae lista ni precios. Con el flag
+ * `precio-especial-cuenta` prendido se ignora y rige la lista propia del cliente.
  * `provincia`: la de entrega (checkout) o la de la ubicación del cliente; con ella y la
  * configuración de envío releída SIN caché (`leerConfigEnvio`) se evalúa `envio` (gratis, a
  * coordinar, cuánto falta). Con el flag `disponibilidad-sucursal` también define la sucursal de la
@@ -75,6 +81,7 @@ export async function POST(req: Request) {
     provincia?: unknown;
     conCuenta?: unknown;
     sucursalRetiro?: unknown;
+    pagoMetodo?: unknown;
   };
   try {
     body = await req.json();
@@ -110,6 +117,13 @@ export async function POST(req: Request) {
     const idPriceList = cliente
       ? await idPriceListCliente(cliente.codigocliente)
       : undefined;
+    // Lista del medio elegido (servidor, desde el slug). Sin medio, o con el flag del precio
+    // especial prendido, no hay lista de medio: carrito y retiro cotizan como siempre.
+    const pagoMetodo = typeof body.pagoMetodo === "string" ? body.pagoMetodo.trim().slice(0, 40) : "";
+    const idListaMedio =
+      pagoMetodo && !(await precioEspecialCuenta())
+        ? idListaDelMedio(await leerMediosPagoTolerante(), entregaTipo, pagoMetodo)
+        : undefined;
     // Flag `disponibilidad-sucursal`: stock por sucursal (unión) y disponibilidad por modalidad.
     const base = await dispDelVisitante();
     const provincia = provinciaTexto ? claveProvincia(provinciaTexto) : "";
@@ -117,6 +131,7 @@ export async function POST(req: Request) {
     const cotizacion = await cotizar(lineas, {
       soloVisibles: await catalogoSoloVisibles(),
       idPriceList,
+      idListaMedio,
       entregaTipo,
       disp: disp ? contextoUnion(disp) : undefined,
     });

@@ -18,6 +18,7 @@ import {
   validarAdjuntoCliente,
 } from "@/lib/correo-envio-cliente"
 import { tamanoLegible } from "@/lib/correo-formato"
+import { sugerirCorreccion } from "@/lib/correo-validacion"
 import type { CorreoMensaje } from "@/lib/correo-resend"
 
 interface AdjuntoUI {
@@ -98,6 +99,8 @@ export function Composer({ casilla, modo, mensaje, hiloId, onCerrar, onEnviado }
   const [reenviarAdjuntos, setReenviarAdjuntos] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Problema de las direcciones (typo o dominio sin correo): se muestra junto a los campos.
+  const [errorDestinatario, setErrorDestinatario] = useState<{ mensaje: string; sugerencia: string | null } | null>(null)
   const [confirmarSinAsunto, setConfirmarSinAsunto] = useState(false)
   const [claves] = useState(() => crearClavesIdempotencia())
 
@@ -139,6 +142,7 @@ export function Composer({ casilla, modo, mensaje, hiloId, onCerrar, onEnviado }
   const ejecutar = async () => {
     setEnviando(true)
     setError(null)
+    setErrorDestinatario(null)
     const cuerpo = {
       casillaId: casilla.id,
       modo,
@@ -155,7 +159,8 @@ export function Composer({ casilla, modo, mensaje, hiloId, onCerrar, onEnviado }
     const r = await enviarCorreo(fetch, { ...cuerpo, claveIdempotencia: claves(JSON.stringify(cuerpo)) })
     setEnviando(false)
     if (!r.ok) {
-      setError(r.error)
+      if (r.destinatario) setErrorDestinatario({ mensaje: r.error, sugerencia: r.sugerencia ?? null })
+      else setError(r.error)
       return
     }
     claves.reiniciar()
@@ -171,6 +176,16 @@ export function Composer({ casilla, modo, mensaje, hiloId, onCerrar, onEnviado }
     ejecutarRef.current = ejecutar
   })
   const enviarUnicoRef = useRef<(() => Promise<void>) | null>(null)
+
+  // Reemplaza en Para/CC/CCO las direcciones cuyo dominio tiene la corrección sugerida.
+  const aplicarSugerencia = (sugerencia: string) => {
+    const corregir = (texto: string) =>
+      parseDestinatarios(texto).map((d) => (sugerirCorreccion(d) === sugerencia ? sugerencia : d)).join(", ")
+    setPara(corregir)
+    setCc(corregir)
+    setCco(corregir)
+    setErrorDestinatario(null)
+  }
 
   const intentarEnviar = () => {
     if (enviando || subiendo || !hayDestinatario) return
@@ -215,9 +230,24 @@ export function Composer({ casilla, modo, mensaje, hiloId, onCerrar, onEnviado }
           </Alert>
         )}
 
-        <Field label="Para" hint="Separe las direcciones con coma.">
-          <Input value={para} onChange={(e) => setPara(e.target.value)} disabled={enviando} autoComplete="off" />
+        <Field label="Para" hint="Separe las direcciones con coma." error={errorDestinatario?.mensaje}>
+          <Input
+            value={para}
+            onChange={(e) => {
+              setPara(e.target.value)
+              setErrorDestinatario(null)
+            }}
+            disabled={enviando}
+            autoComplete="off"
+          />
         </Field>
+        {errorDestinatario?.sugerencia && (
+          <div>
+            <Button size="sm" variant="outline" onClick={() => aplicarSugerencia(errorDestinatario.sugerencia!)}>
+              Usar {errorDestinatario.sugerencia}
+            </Button>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="CC">
             <Input value={cc} onChange={(e) => setCc(e.target.value)} disabled={enviando} autoComplete="off" />

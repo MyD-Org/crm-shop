@@ -18,8 +18,10 @@ const resend = vi.hoisted(() => ({
   getThreadEmail: vi.fn(),
   getAttachmentDownloadUrl: vi.fn(),
   listReceivedAttachments: vi.fn(),
-  sendEmail: vi.fn(),
+  sendDraft: vi.fn(),
+  replyInThread: vi.fn(),
 }))
+const dominio = vi.hoisted(() => ({ dominioRecibeCorreo: vi.fn() }))
 const r2 = vi.hoisted(() => ({ presignPut: vi.fn(), presignGet: vi.fn(), head: vi.fn(), delete: vi.fn() }))
 
 vi.mock("@/lib/admin-session", () => ({ getGuardedAdminSession: async () => state.sesion }))
@@ -34,6 +36,7 @@ vi.mock("@/lib/correo-acceso", async () => {
   }
 })
 vi.mock("@/lib/correo-repo", () => repo)
+vi.mock("@/lib/correo-dominio", () => dominio)
 vi.mock("@/lib/correo-resend", async (orig) => ({ ...(await orig<typeof import("@/lib/correo-resend")>()), ...resend }))
 vi.mock("@/lib/r2", async (orig) => ({ ...(await orig<typeof import("@/lib/r2")>()), getR2: () => (state.r2 ? r2 : null) }))
 
@@ -75,7 +78,9 @@ beforeEach(() => {
   repo.marcarHilo.mockResolvedValue(undefined)
   resend.getThreadEmail.mockResolvedValue(original)
   resend.getAttachmentDownloadUrl.mockResolvedValue({ url: "https://descargas.resend.example/a?sig=1", nombre: "lista.pdf", tamano: 1000, tipo: "application/pdf" })
-  resend.sendEmail.mockResolvedValue({ id: "sent_1" })
+  resend.sendDraft.mockResolvedValue({ id: "sent_1" })
+  resend.replyInThread.mockResolvedValue({ id: "reply_1" })
+  dominio.dominioRecibeCorreo.mockResolvedValue(true)
   r2.presignPut.mockResolvedValue({ url: "https://r2.example/put?sig=1", headers: { "content-type": "application/pdf" }, expiresAt: new Date() })
   r2.presignGet.mockResolvedValue("https://r2.example/get?sig=2")
   r2.head.mockResolvedValue({ size: 5 * MB, contentType: "application/pdf", etag: "x" })
@@ -110,14 +115,14 @@ describe("guardas comunes", () => {
   it.each(rutas)("%s: flag apagado 404", async (_n, run, body) => {
     state.flag = false
     expect((await run(body)).status).toBe(404)
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
   it.each(rutas)("%s: sin acceso a la casilla 404 idéntico al de inexistente", async (_n, run, body) => {
     state.accesibles = []
     const r = await run(body)
     expect(r.status).toBe(404)
     expect(await r.json()).toEqual({ error: "No encontrado", code: "not_found" })
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
     expect(r2.presignPut).not.toHaveBeenCalled()
   })
 })
@@ -154,41 +159,46 @@ describe("POST adjuntos/subida", () => {
 })
 
 describe("POST enviar", () => {
-  it("responde: from forzado a la casilla, headers de hilado, idempotency key y espejo", async () => {
+  it("responde: usa /reply del mensaje (sin from ni to), idempotency key y espejo", async () => {
     const r = await enviar(post({ ...envioBody, from: "Jefe <jefe@otro.example>" }))
     expect(r.status).toBe(200)
-    expect(await r.json()).toMatchObject({ ok: true, id: "sent_1" })
+    expect(await r.json()).toMatchObject({ ok: true, id: "reply_1" })
     expect(resend.getThreadEmail).toHaveBeenCalledWith("inbox_secreta_1", "thread_1", "email_1")
-    const [payload, opts] = resend.sendEmail.mock.calls[0]
-    expect(payload.from).toBe("Ventas Cliente <ventas@cliente.example>")
-    expect(payload.to).toEqual(["ana@clientes.example"])
+    expect(resend.sendDraft).not.toHaveBeenCalled()
+    const [inbox, hilo, mensaje, payload, opts] = resend.replyInThread.mock.calls[0]
+    expect([inbox, hilo, mensaje]).toEqual(["inbox_secreta_1", "thread_1", "email_1"])
+    expect(payload).not.toHaveProperty("from")
+    expect(payload).not.toHaveProperty("to")
     expect(payload.subject).toBe("Re: Consulta de precios")
-    expect(payload.headers).toEqual({ "In-Reply-To": "<abc123@clientes.example>", References: "<abc123@clientes.example>" })
     expect(payload.attachments).toBeUndefined()
     expect(opts).toEqual({ idempotencyKey: "clave-unica-1" })
     expect(repo.marcarHilo).toHaveBeenCalledWith(ID, "thread_1", { leido: true })
   })
 
-  it("redactar nuevo: sin headers y sin leer ningún mensaje", async () => {
+  it("redactar nuevo: draft standalone con `to`, sin leer ningún mensaje", async () => {
     const r = await enviar(post({ ...envioBody, modo: "nuevo", hiloId: undefined, mensajeId: undefined, asunto: "Hola" }))
     expect(r.status).toBe(200)
     expect(resend.getThreadEmail).not.toHaveBeenCalled()
-    expect(resend.sendEmail.mock.calls[0][0].headers).toBeUndefined()
+    const [inbox, payload] = resend.sendDraft.mock.calls[0]
+    expect(inbox).toBe("inbox_secreta_1")
+    expect(payload.to).toEqual(["ana@clientes.example"])
+    expect(payload.subject).toBe("Hola")
+    expect(resend.replyInThread).not.toHaveBeenCalled()
     expect(repo.marcarHilo).not.toHaveBeenCalled()
   })
 
   it("responder sin hilo/mensaje -> 400", async () => {
     const r = await enviar(post({ ...envioBody, hiloId: undefined }))
     expect(r.status).toBe(400)
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
 
-  it("adjunto subido a R2: verifica key del tenant y tamaño real, y manda presignGet como path", async () => {
+  it("adjunto subido a R2 al responder: verifica key del tenant y tamaño real, y pasa presignGet como path al reply", async () => {
     const r = await enviar(post({ ...envioBody, adjuntos: [{ key: keyTmp, nombre: "Informe final.pdf", tamano: 1 }] }))
     expect(r.status).toBe(200)
     expect(r2.head).toHaveBeenCalledWith(keyTmp)
     expect(r2.presignGet).toHaveBeenCalledWith(keyTmp, { ttlSeconds: 900 })
-    expect(resend.sendEmail.mock.calls[0][0].attachments).toEqual([{ filename: "Informe final.pdf", path: "https://r2.example/get?sig=2" }])
+    expect(resend.replyInThread.mock.calls[0][3].attachments).toEqual([{ filename: "Informe final.pdf", path: "https://r2.example/get?sig=2" }])
   })
 
   it("key de otro tenant o fuera del prefijo -> 400 sin enviar", async () => {
@@ -196,7 +206,7 @@ describe("POST enviar", () => {
       const r = await enviar(post({ ...envioBody, adjuntos: [{ key, nombre: "a.pdf", tamano: 1 }] }))
       expect(r.status).toBe(400)
     }
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
 
   it("adjunto que ya no está en R2 -> 400 en usted", async () => {
@@ -204,7 +214,7 @@ describe("POST enviar", () => {
     const r = await enviar(post({ ...envioBody, adjuntos: [{ key: keyTmp, nombre: "a.pdf", tamano: 1 }] }))
     expect(r.status).toBe(400)
     expect((await r.json()).error).toContain("Vuelva a adjuntar")
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
 
   it("el tope de 40 MB se valida en el servidor con el tamaño de R2, sin llamar a Resend", async () => {
@@ -212,14 +222,14 @@ describe("POST enviar", () => {
     const r = await enviar(post({ ...envioBody, adjuntos: [{ key: keyTmp, nombre: "a.zip", tamano: 1 }] }))
     expect(r.status).toBe(400)
     expect(await r.json()).toMatchObject({ error: "Los adjuntos superan el máximo de 40 MB." })
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
 
   it("destinatario inválido -> 400 sin enviar", async () => {
     const r = await enviar(post({ ...envioBody, para: ["xx"] }))
     expect(r.status).toBe(400)
     expect(await r.json()).toMatchObject({ error: "Revise las direcciones de correo ingresadas." })
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
 
   it("reenviar con adjuntos originales: resuelve la download_url recién y la pasa como path", async () => {
@@ -228,8 +238,8 @@ describe("POST enviar", () => {
     )
     expect(r.status).toBe(200)
     expect(resend.getAttachmentDownloadUrl).toHaveBeenCalledWith("email_1", "att_1")
-    const payload = resend.sendEmail.mock.calls[0][0]
-    expect(payload.headers).toBeUndefined()
+    const payload = resend.sendDraft.mock.calls[0][1]
+    expect(payload.to).toEqual(["jefe@cliente.example"])
     expect(payload.attachments).toEqual([{ filename: "lista.pdf", path: "https://descargas.resend.example/a?sig=1" }])
     expect(payload.text).toContain("---------- Mensaje reenviado ----------")
     // Reenviar no marca el hilo como respondido ni toca el espejo.
@@ -239,7 +249,7 @@ describe("POST enviar", () => {
   it("reenviar sin tildar adjuntos no los pide", async () => {
     await enviar(post({ ...envioBody, modo: "reenviar", para: ["jefe@cliente.example"], asunto: "Fwd: x", reenviarAdjuntos: false }))
     expect(resend.getAttachmentDownloadUrl).not.toHaveBeenCalled()
-    expect(resend.sendEmail.mock.calls[0][0].attachments).toBeUndefined()
+    expect(resend.sendDraft.mock.calls[0][1].attachments).toBeUndefined()
   })
 
   it("reenviar con adjuntos que superan el tope no llama a Resend ni resuelve URLs", async () => {
@@ -247,16 +257,33 @@ describe("POST enviar", () => {
     const r = await enviar(post({ ...envioBody, modo: "reenviar", para: ["jefe@cliente.example"], asunto: "Fwd: x", reenviarAdjuntos: true }))
     expect(r.status).toBe(400)
     expect(resend.getAttachmentDownloadUrl).not.toHaveBeenCalled()
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
 
   it("error 5xx de Resend: 502 en usted, sin cuerpo crudo ni la clave", async () => {
-    resend.sendEmail.mockRejectedValue(new CorreoResendError("servidor", 503))
+    resend.replyInThread.mockRejectedValue(new CorreoResendError("servidor", 503))
     const r = await enviar(post(envioBody))
     expect(r.status).toBe(502)
     const b = await r.json()
     expect(b.error).toBe("El servicio de correo no está disponible. Inténtelo nuevamente en unos instantes.")
     expect(repo.marcarHilo).not.toHaveBeenCalled()
+  })
+
+  it("dominio con typo -> 422 con sugerencia, sin enviar", async () => {
+    const r = await enviar(post({ ...envioBody, para: ["ana@gmial.com"] }))
+    expect(r.status).toBe(422)
+    expect(await r.json()).toEqual({ error: "¿Quiso decir ana@gmail.com?", code: "destinatario", sugerencia: "ana@gmail.com" })
+    expect(resend.replyInThread).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
+  })
+
+  it("dominio sin MX -> 422 en usted, sin enviar ni firmar adjuntos", async () => {
+    dominio.dominioRecibeCorreo.mockResolvedValue(false)
+    const r = await enviar(post({ ...envioBody, adjuntos: [{ key: keyTmp, nombre: "a.pdf", tamano: 1 }] }))
+    expect(r.status).toBe(422)
+    expect((await r.json()).error).toBe("El dominio clientes.example no recibe correo. Revise la dirección.")
+    expect(r2.presignGet).not.toHaveBeenCalled()
+    expect(resend.replyInThread).not.toHaveBeenCalled()
   })
 
   it("si falla el espejo igual informa éxito (el webhook lo reconcilia)", async () => {
@@ -269,7 +296,7 @@ describe("POST enviar", () => {
     resend.getThreadEmail.mockRejectedValue(new CorreoResendError("no_encontrado", 404))
     const r = await enviar(post(envioBody))
     expect(r.status).toBe(404)
-    expect(resend.sendEmail).not.toHaveBeenCalled()
+    expect(resend.sendDraft).not.toHaveBeenCalled()
   })
 
   it("cuerpo inválido -> 400", async () => {

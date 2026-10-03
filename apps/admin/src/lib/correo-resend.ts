@@ -8,6 +8,8 @@
 // Límite de Resend: 10 req/s por team (compartido con OTP y cobranza). Mitigación acá: máx. 4
 // requests en vuelo por instancia y reintento con backoff ante 429/5xx respetando Retry-After.
 
+import type { AvisoEntrega } from "./correo-entrega"
+
 const BASE_URL = "https://api.resend.com"
 const MAX_REINTENTOS = 3
 const MAX_EN_VUELO = 4
@@ -74,6 +76,8 @@ export interface CorreoHiloDetalle {
   carpeta: CorreoCarpeta | null
   leido: boolean
   mensajes: CorreoMensaje[]
+  /** Avisos de entrega con problema de los mensajes salientes, por id de mensaje (lo agrega el servidor). */
+  entregas?: Record<string, AvisoEntrega>
 }
 
 export interface CorreoEnvioPayload {
@@ -346,3 +350,70 @@ export async function sendEmail(payload: CorreoEnvioPayload, opts: { idempotency
   const r = obj(await pedir("POST", "/emails", payload, { "Idempotency-Key": clave }))
   return { id: str(r.id) }
 }
+
+export interface CorreoNativoPayload {
+  to?: string[]
+  cc?: string[]
+  bcc?: string[]
+  subject: string
+  html?: string
+  text?: string
+  /** Hoy Resend descarta los adjuntos en la vía nativa de la inbox; se pasan igual (path = URL). */
+  attachments?: { filename: string; path: string }[]
+}
+
+/**
+ * Responde dentro de un hilo (POST /inboxes/{i}/threads/{t}/emails/{e}/reply). Los destinatarios
+ * son los participantes del hilo: la API no recibe `to`.
+ */
+export async function replyInThread(
+  inboxId: string,
+  threadId: string,
+  emailId: string,
+  payload: Omit<CorreoNativoPayload, "to">,
+  opts: { idempotencyKey?: string } = {},
+): Promise<{ id: string }> {
+  const clave = opts.idempotencyKey || crypto.randomUUID()
+  const ruta = `/inboxes/${seg(inboxId)}/threads/${seg(threadId)}/emails/${seg(emailId)}/reply`
+  const r = obj(await pedir("POST", ruta, payload, { "Idempotency-Key": clave }))
+  return { id: str(r.email_id) || str(r.id) }
+}
+
+/** Mensaje nuevo desde la inbox (redactar, reenviar): draft standalone + envío del draft. */
+export async function sendDraft(
+  inboxId: string,
+  payload: CorreoNativoPayload,
+  opts: { idempotencyKey?: string } = {},
+): Promise<{ id: string }> {
+  const clave = opts.idempotencyKey || crypto.randomUUID()
+  const base = `/inboxes/${seg(inboxId)}/drafts`
+  const draft = obj(await pedir("POST", base, payload, { "Idempotency-Key": `${clave}-draft` }))
+  const draftId = str(draft.id)
+  if (!draftId) throw new CorreoResendError("servidor")
+  const r = obj(await pedir("POST", `${base}/${seg(draftId)}/send`, undefined, { "Idempotency-Key": `${clave}-send` }))
+  return { id: str(r.email_id) || str(r.id) }
+}
+
+const TTL_EVENTO_MS = 60_000
+const cacheEventos = new Map<string, { evento: string | null; hasta: number }>()
+
+/**
+ * `last_event` de un email saliente (GET /emails/{id}). Cache corto en memoria (también de los
+ * fallos, para no insistir ante 404 o límite). Nunca lanza: sin dato devuelve null.
+ */
+export async function getEmailLastEvent(emailId: string, ahora = Date.now()): Promise<string | null> {
+  const hit = cacheEventos.get(emailId)
+  if (hit && hit.hasta > ahora) return hit.evento
+  let evento: string | null = null
+  try {
+    evento = str(obj(await pedir("GET", `/emails/${seg(emailId)}`)).last_event) || null
+  } catch {
+    evento = null
+  }
+  if (cacheEventos.size > 500) cacheEventos.clear()
+  cacheEventos.set(emailId, { evento, hasta: ahora + TTL_EVENTO_MS })
+  return evento
+}
+
+/** Solo para tests. */
+export const _limpiarCacheEventos = (): void => cacheEventos.clear()

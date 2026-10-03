@@ -30,6 +30,20 @@ describe("crearEnvioUnico (sin doble envío)", () => {
   })
 })
 
+describe("enviarCorreo: validación de destinatarios (422)", () => {
+  it("marca el error como de destinatario y conserva la sugerencia", async () => {
+    const f = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "¿Quiso decir ana@gmail.com?", code: "destinatario", sugerencia: "ana@gmail.com" }), { status: 422 }),
+    )
+    expect(await enviarCorreo(f as unknown as typeof fetch, {})).toEqual({
+      ok: false,
+      error: "¿Quiso decir ana@gmail.com?",
+      destinatario: true,
+      sugerencia: "ana@gmail.com",
+    })
+  })
+})
+
 describe("crearClavesIdempotencia", () => {
   it("misma intención -> misma clave; si cambia el contenido, otra", () => {
     let n = 0

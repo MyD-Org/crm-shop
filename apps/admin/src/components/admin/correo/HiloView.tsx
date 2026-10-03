@@ -9,6 +9,7 @@ import { fechaCompletaCorreo, nombreRemitente, tamanoLegible } from "@/lib/corre
 import { MensajeHtml } from "@/components/admin/correo/MensajeHtml"
 import { Composer } from "@/components/admin/correo/Composer"
 import type { ModoEnvio } from "@/lib/correo-compose"
+import type { AvisoEntrega } from "@/lib/correo-entrega"
 
 type Destino = "inbox" | "archive" | "spam" | "trash"
 
@@ -190,6 +191,7 @@ export function HiloView({ casillaId, casilla, hiloId, onVolver, onCambio, onEnv
             onAlternar={() => alternar(m.id)}
             casillaId={casillaId}
             hiloId={hiloId}
+            entrega={hilo.entregas?.[m.id]}
           />
         ))}
       </div>
@@ -219,13 +221,16 @@ function MensajeCard({
   onAlternar,
   casillaId,
   hiloId,
+  entrega,
 }: {
+  entrega?: AvisoEntrega
   mensaje: CorreoMensaje
   abierto: boolean
   onAlternar: () => void
   casillaId: string
   hiloId: string
 }) {
+  const aviso = m.direccion === "outbound" ? entrega : undefined
   return (
     <article className="rounded-[var(--radius)] overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <button type="button" onClick={onAlternar} aria-expanded={abierto} className="w-full text-left px-3 py-2.5 flex items-start gap-2">
@@ -244,6 +249,12 @@ function MensajeCard({
         </div>
         <span className="text-xs shrink-0" style={{ color: "var(--ink-soft)" }}>{fechaCompletaCorreo(m.recibidoEn)}</span>
       </button>
+
+      {aviso && (
+        <div className="px-3 pb-2.5">
+          <Alert tone={aviso.tono}>{aviso.texto}</Alert>
+        </div>
+      )}
 
       {abierto && (
         <div className="px-3 pb-3 flex flex-col gap-3">

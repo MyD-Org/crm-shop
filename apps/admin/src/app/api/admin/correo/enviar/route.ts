@@ -2,16 +2,19 @@ import { adminNotFoundResponse } from "@/lib/admin-route-guard"
 import { errorJson, errorLectura } from "@/lib/correo-admin"
 import { armarEnvio, type AdjuntoParaEnviar, type MensajeOriginal } from "@/lib/correo-compose"
 import { parseEnvioBody } from "@/lib/correo-envio-body"
+import { dominioRecibeCorreo } from "@/lib/correo-dominio"
 import { requireCorreoLector } from "@/lib/correo-lectura"
 import { marcarHilo } from "@/lib/correo-repo"
 import {
   getAttachmentDownloadUrl,
   getThreadEmail,
   listReceivedAttachments,
-  sendEmail,
+  replyInThread,
+  sendDraft,
   type CorreoAdjunto,
   type CorreoMensajeConCuerpo,
 } from "@/lib/correo-resend"
+import { validarDestinatarios } from "@/lib/correo-validacion"
 import { correoKeys, getR2 } from "@/lib/r2"
 
 // Segundos que la URL GET de un adjunto de R2 sigue vigente para que Resend la baje.
@@ -34,10 +37,10 @@ function originalDe(m: CorreoMensajeConCuerpo): MensajeOriginal {
 // POST /api/admin/correo/enviar — responder, responder a todos, reenviar o redactar.
 //
 // El `from` sale SIEMPRE de la casilla autorizada (cualquier otro valor del cliente se ignora).
-// Todo sale por POST /emails de Resend (el endpoint /reply y los drafts descartan adjuntos) con
-// In-Reply-To/References del mensaje respondido, para que Resend lo sume al thread y Gmail lo
-// hile. Idempotency-Key evita el doble envío. Los adjuntos nuevos viajan por URL de R2 y los del
-// reenvío con la download_url recién resuelta del adjunto recibido: nada pasa por esta función.
+// Sale siempre por la vía nativa de la inbox (reply del hilo, o draft + send), así queda
+// registrado en la casilla. Idempotency-Key evita el doble envío. Los adjuntos nuevos viajan por URL
+// de R2 y los del reenvío con la download_url recién resuelta del adjunto recibido: nada pasa por esta función.
+// Antes de enviar se validan los destinatarios (typos de dominio y MX): 422 con mensaje en usted.
 //
 // Los objetos de correo/tmp/ no se borran acá: no hay garantía de que Resend termine de bajarlos
 // antes de responder, y los limpia la regla de ciclo de vida de 1 día del bucket.
@@ -90,6 +93,15 @@ export async function POST(req: Request) {
     const prueba = armarEnvio({ ...entrada, adjuntosNuevos: nuevos.map(relleno), adjuntosReenvio: reenviados.map(relleno) })
     if (!prueba.ok) return errorJson(prueba.error, 400)
 
+    const destinatarios = [...prueba.payload.to, ...(prueba.payload.cc ?? []), ...(prueba.payload.bcc ?? [])]
+    const validacion = await validarDestinatarios(destinatarios, dominioRecibeCorreo)
+    if (!validacion.ok) {
+      return Response.json(
+        { error: validacion.error, code: "destinatario", ...(validacion.sugerencia ? { sugerencia: validacion.sugerencia } : {}) },
+        { status: 422, headers: { "Cache-Control": "private, no-store" } },
+      )
+    }
+
     const adjuntosNuevos: AdjuntoParaEnviar[] = []
     for (const a of nuevos) {
       adjuntosNuevos.push({ nombre: a.nombre, tamano: a.tamano, url: await r2!.presignGet(a.key, { ttlSeconds: TTL_DESCARGA_S }) })
@@ -103,15 +115,32 @@ export async function POST(req: Request) {
     const armado = armarEnvio({ ...entrada, adjuntosNuevos, adjuntosReenvio })
     if (!armado.ok) return errorJson(armado.error, 400)
 
-    const enviado = await sendEmail(armado.payload, { idempotencyKey: e.claveIdempotencia })
+    // Vía nativa de la inbox, siempre: responder -> /reply del mensaje (a los participantes del
+    // hilo); redactar y reenviar -> draft standalone + envío. Los adjuntos se pasan igual (path):
+    // hoy Resend los descarta en esta vía; cuando lo corrija funcionarán sin tocar nada acá.
+    const responde = (e.modo === "responder" || e.modo === "responderATodos") && !!e.hiloId && !!e.mensajeId
+    const p = armado.payload
+    const enviado = responde
+      ? await replyInThread(
+          casilla.resendInboxId,
+          e.hiloId!,
+          e.mensajeId!,
+          { cc: p.cc, bcc: p.bcc, subject: p.subject, html: p.html, text: p.text, attachments: p.attachments as { filename: string; path: string }[] | undefined },
+          { idempotencyKey: e.claveIdempotencia },
+        )
+      : await sendDraft(
+          casilla.resendInboxId,
+          { to: p.to, cc: p.cc, bcc: p.bcc, subject: p.subject, html: p.html, text: p.text, attachments: p.attachments as { filename: string; path: string }[] | undefined },
+          { idempotencyKey: e.claveIdempotencia },
+        )
 
     // Resend ya sumó el mensaje al thread (y el webhook de enviados también llega): el espejo se
     // toca solo al responder, y si falla no se le informa error a la persona.
-    if ((e.modo === "responder" || e.modo === "responderATodos") && e.hiloId) {
-      await marcarHilo(casilla.id, e.hiloId, { leido: true }).catch(() => console.error("[correo] no se pudo actualizar el espejo del hilo"))
+    if (responde) {
+      await marcarHilo(casilla.id, e.hiloId!, { leido: true }).catch(() => console.error("[correo] no se pudo actualizar el espejo del hilo"))
     }
     return Response.json(
-      { ok: true, id: enviado.id, ...(armado.aviso ? { aviso: armado.aviso } : {}) },
+      { ok: true, id: enviado.id },
       { headers: { "Cache-Control": "private, no-store" } },
     )
   } catch (err) {

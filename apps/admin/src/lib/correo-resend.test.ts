@@ -19,6 +19,10 @@ import {
   listThreads,
   patchThread,
   sendEmail,
+  sendDraft,
+  replyInThread,
+  getEmailLastEvent,
+  _limpiarCacheEventos,
 } from "./correo-resend"
 
 const CLAVE = "re_clave_de_prueba_no_real"
@@ -259,6 +263,57 @@ describe("rate limit", () => {
     expect(esperas).toHaveLength(3)
     expect(esperas[1]).toBeGreaterThan(esperas[0])
     expect(esperas[2]).toBeGreaterThan(esperas[1])
+  })
+
+  it("responder: POST .../reply con cc/bcc/subject/attachments y sin `to`", async () => {
+    fetchMock.mockResolvedValueOnce(json({ id: "re_1", email_id: "em_1" }))
+    const r = await replyInThread(
+      "inbox_x", "th_9", "em_9",
+      { cc: ["b@x.example"], subject: "Re: Hola", html: "<p>Hi</p>", text: "Hi", attachments: [{ filename: "a.pdf", path: "https://r2.example/a" }] },
+      { idempotencyKey: "clave-1" },
+    )
+    expect(r).toEqual({ id: "em_1" })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toBe("https://api.resend.com/inboxes/inbox_x/threads/th_9/emails/em_9/reply")
+    expect(init.method).toBe("POST")
+    expect(init.headers["Idempotency-Key"]).toBe("clave-1")
+    expect(JSON.parse(init.body)).toEqual({
+      cc: ["b@x.example"], subject: "Re: Hola", html: "<p>Hi</p>", text: "Hi", attachments: [{ filename: "a.pdf", path: "https://r2.example/a" }],
+    })
+  })
+
+  it("redactar/reenviar: crea el draft standalone y lo envía", async () => {
+    fetchMock.mockResolvedValueOnce(json({ id: "dr_1" })).mockResolvedValueOnce(json({ id: "sd_1", thread_id: "th_2", email_id: "em_2" }))
+    const r = await sendDraft("inbox_x", { to: ["a@x.example"], subject: "Hola", html: "<p>Hi</p>", text: "Hi" })
+    expect(r).toEqual({ id: "em_2" })
+    const [url1, init1] = fetchMock.mock.calls[0]
+    expect(String(url1)).toBe("https://api.resend.com/inboxes/inbox_x/drafts")
+    const body = JSON.parse(init1.body)
+    expect(body.thread_id).toBeUndefined()
+    expect(body.to).toEqual(["a@x.example"])
+    const [url2, init2] = fetchMock.mock.calls[1]
+    expect(String(url2)).toBe("https://api.resend.com/inboxes/inbox_x/drafts/dr_1/send")
+    expect(init2.method).toBe("POST")
+  })
+
+  it("si el draft no devuelve id lanza error de servidor", async () => {
+    fetchMock.mockResolvedValueOnce(json({}))
+    await expect(sendDraft("inbox_x", { to: ["a@x.example"], subject: "s", text: "t" })).rejects.toMatchObject({ code: "servidor" })
+  })
+
+  it("getEmailLastEvent: lee last_event, cachea y no lanza ante errores", async () => {
+    _limpiarCacheEventos()
+    fetchMock.mockResolvedValueOnce(json({ id: "em_1", last_event: "bounced" }))
+    expect(await getEmailLastEvent("em_1", 1000)).toBe("bounced")
+    expect(await getEmailLastEvent("em_1", 2000)).toBe("bounced")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://api.resend.com/emails/em_1")
+    // vencido el TTL se vuelve a pedir
+    fetchMock.mockResolvedValueOnce(json({ last_event: "delivered" }))
+    expect(await getEmailLastEvent("em_1", 1000 + 61_000)).toBe("delivered")
+    // 404 -> null
+    fetchMock.mockResolvedValueOnce(json({ error: "x" }, 404))
+    expect(await getEmailLastEvent("em_x", 1000)).toBeNull()
   })
 
   it("concurrencia máxima 4 en vuelo", async () => {

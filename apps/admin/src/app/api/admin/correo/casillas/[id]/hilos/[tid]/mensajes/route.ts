@@ -1,7 +1,10 @@
 import { adminNotFoundResponse } from "@/lib/admin-route-guard"
 import { NO_STORE, errorLectura } from "@/lib/correo-admin"
 import { esIdResend, requireCorreoLector } from "@/lib/correo-lectura"
-import { listThreadEmails } from "@/lib/correo-resend"
+import { avisoDeEntrega, type AvisoEntrega } from "@/lib/correo-entrega"
+import { getEmailLastEvent, listThreadEmails } from "@/lib/correo-resend"
+
+const MAX_SALIENTES_CONSULTADOS = 10
 
 type Params = { params: Promise<{ id: string; tid: string }> }
 
@@ -17,7 +20,17 @@ export async function GET(req: Request, { params }: Params) {
   try {
     const hilo = await listThreadEmails(guard.casilla.resendInboxId, tid)
     const mensajes = [...hilo.mensajes].sort((a, b) => a.recibidoEn.localeCompare(b.recibidoEn))
-    return Response.json({ ...hilo, mensajes }, { headers: NO_STORE })
+    // Estado de entrega de los salientes, en vivo contra Resend (GET /emails/{id}, con cache
+    // corto). Solo los últimos para respetar el rate limit; sin dato el hilo se muestra igual.
+    const salientes = mensajes.filter((m) => m.direccion === "outbound").slice(-MAX_SALIENTES_CONSULTADOS)
+    const entregas: Record<string, AvisoEntrega> = {}
+    await Promise.all(
+      salientes.map(async (m) => {
+        const aviso = avisoDeEntrega(await getEmailLastEvent(m.id))
+        if (aviso) entregas[m.id] = aviso
+      }),
+    )
+    return Response.json({ ...hilo, mensajes, entregas }, { headers: NO_STORE })
   } catch (e) {
     return errorLectura(e)
   }

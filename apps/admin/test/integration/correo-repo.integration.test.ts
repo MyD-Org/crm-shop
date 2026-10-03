@@ -47,6 +47,15 @@ describe("casillas", () => {
     expect(todas).toHaveLength(1)
   })
 
+  it("completa el nombre de Resend si el actual es el de relleno (== email); uno editado no se pisa", async () => {
+    const c1 = (await upsertCasilla(A, { resendInboxId: "inbox_1", email: "ventas@cliente.example" }))!
+    expect(c1.nombre).toBe("ventas@cliente.example")
+    const c2 = await upsertCasilla(A, { resendInboxId: "inbox_1", email: "ventas@cliente.example", nombre: "Ventas Cliente" })
+    expect(c2?.nombre).toBe("Ventas Cliente")
+    const c3 = await upsertCasilla(A, { resendInboxId: "inbox_1", email: "ventas@cliente.example", nombre: "Otro nombre" })
+    expect(c3?.nombre).toBe("Ventas Cliente")
+  })
+
   it("una inbox de otro tenant no se pisa ni se roba", async () => {
     await upsertCasilla(A, { resendInboxId: "inbox_1", email: "ventas@cliente.example" })
     const robo = await upsertCasilla(B, { resendInboxId: "inbox_1", email: "otro@cliente.example" })

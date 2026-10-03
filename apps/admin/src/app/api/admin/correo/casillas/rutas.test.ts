@@ -111,7 +111,7 @@ describe("POST sincronizar", () => {
     state.inboxes = [{ id: "inbox_1", email: "ventas@cliente.example", nombre: "ventas" }]
     const r = await sincronizar(req(undefined, "POST"))
     expect(r.status).toBe(200)
-    expect(repo.upsertCasilla).toHaveBeenCalledWith("t1", { resendInboxId: "inbox_1", email: "ventas@cliente.example", activa: false })
+    expect(repo.upsertCasilla).toHaveBeenCalledWith("t1", { resendInboxId: "inbox_1", email: "ventas@cliente.example", nombre: "ventas", activa: false })
     expect((await r.json()).casillas).toHaveLength(1)
   })
 

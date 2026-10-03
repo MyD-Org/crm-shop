@@ -10,7 +10,7 @@ export type CasillaRow = typeof correoCasillas.$inferSelect
 export type HiloEspejoRow = typeof correoHilos.$inferSelect
 
 /**
- * Alta o refresco de una casilla por (tenant, resend_inbox_id). Si ya existe NO pisa `nombre`,
+ * Alta o refresco de una casilla por (tenant, resend_inbox_id). Si ya existe NO pisa `nombre` editado,
  * `activa` ni `orden` (los edita el admin): solo refresca el email. Una inbox que ya pertenece
  * a OTRO tenant no se toca (devuelve null): `resend_inbox_id` es único global.
  */
@@ -31,7 +31,13 @@ export async function upsertCasilla(
     })
     .onConflictDoUpdate({
       target: correoCasillas.resendInboxId,
-      set: { email: datos.email },
+      // El nombre solo se completa si todavía es el de relleno (== email): uno editado no se pisa.
+      set: {
+        email: datos.email,
+        ...(datos.nombre && datos.nombre !== datos.email
+          ? { nombre: sql`CASE WHEN ${correoCasillas.nombre} = ${correoCasillas.email} THEN ${datos.nombre} ELSE ${correoCasillas.nombre} END` }
+          : {}),
+      },
       setWhere: eq(correoCasillas.tenantId, tenantId),
     })
     .returning()

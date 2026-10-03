@@ -40,7 +40,9 @@ export function crearClavesIdempotencia(generar: () => string = () => crypto.ran
   return f
 }
 
-export type ResultadoEnviar = { ok: true; aviso?: string } | { ok: false; error: string }
+export type ResultadoEnviar =
+  | { ok: true; aviso?: string }
+  | { ok: false; error: string; /** El problema es de las direcciones (se muestra junto al campo "Para"). */ destinatario?: boolean; sugerencia?: string }
 
 /** POST al servidor. Nunca lanza: devuelve el error en usted para que el borrador se conserve. */
 export async function enviarCorreo(fetchFn: typeof fetch, cuerpo: unknown): Promise<ResultadoEnviar> {
@@ -54,9 +56,13 @@ export async function enviarCorreo(fetchFn: typeof fetch, cuerpo: unknown): Prom
   } catch {
     return { ok: false, error: "No se pudo enviar el mensaje. Revise su conexión e inténtelo nuevamente." }
   }
-  const data = (await res.json().catch(() => null)) as { error?: unknown; aviso?: unknown } | null
+  const data = (await res.json().catch(() => null)) as { error?: unknown; aviso?: unknown; code?: unknown; sugerencia?: unknown } | null
   if (!res.ok) {
-    return { ok: false, error: typeof data?.error === "string" && data.error ? data.error : "No se pudo enviar el mensaje. Inténtelo nuevamente." }
+    const error = typeof data?.error === "string" && data.error ? data.error : "No se pudo enviar el mensaje. Inténtelo nuevamente."
+    if (res.status === 422 && data?.code === "destinatario") {
+      return { ok: false, error, destinatario: true, ...(typeof data.sugerencia === "string" ? { sugerencia: data.sugerencia } : {}) }
+    }
+    return { ok: false, error }
   }
   return { ok: true, ...(typeof data?.aviso === "string" ? { aviso: data.aviso } : {}) }
 }

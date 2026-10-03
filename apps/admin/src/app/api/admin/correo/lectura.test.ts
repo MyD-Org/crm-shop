@@ -20,6 +20,7 @@ const resend = vi.hoisted(() => ({
   listThreads: vi.fn(),
   listThreadEmails: vi.fn(),
   getThreadEmail: vi.fn(),
+  getEmailLastEvent: vi.fn(),
   patchThread: vi.fn(),
   getAttachmentDownloadUrl: vi.fn(),
 }))
@@ -191,6 +192,25 @@ describe("GET mensajes y cuerpo", () => {
     const body = await (await listarMensajes(get("/m"), ctx())).json()
     expect(body.mensajes.map((m: { id: string }) => m.id)).toEqual(["email_1", "email_2"])
     expect(JSON.stringify(body)).not.toMatch(/inbox_secreta_1|html|download_url/)
+  })
+
+  it("avisa la entrega con problema de los salientes consultando Resend en vivo", async () => {
+    resend.listThreadEmails.mockResolvedValue({
+      id: "thread_1", asunto: "Consulta", carpeta: "sent", leido: true,
+      mensajes: [
+        { id: "email_in", direccion: "inbound", recibidoEn: "2026-10-01T10:00:00.000Z", adjuntos: [] },
+        { id: "email_ok", direccion: "outbound", recibidoEn: "2026-10-01T11:00:00.000Z", adjuntos: [] },
+        { id: "email_mal", direccion: "outbound", recibidoEn: "2026-10-01T12:00:00.000Z", adjuntos: [] },
+        { id: "email_demora", direccion: "outbound", recibidoEn: "2026-10-01T13:00:00.000Z", adjuntos: [] },
+      ],
+    })
+    resend.getEmailLastEvent.mockImplementation(async (id: string) => ({ email_ok: "delivered", email_mal: "bounced", email_demora: "delivery_delayed" })[id] ?? null)
+    const body = await (await listarMensajes(get("/m"), ctx())).json()
+    expect(body.entregas).toEqual({
+      email_mal: { tono: "danger", texto: "No entregado: la dirección no existe o rechazó el mensaje." },
+      email_demora: { tono: "warning", texto: "Entrega demorada." },
+    })
+    expect(resend.getEmailLastEvent).not.toHaveBeenCalledWith("email_in")
   })
 
   it("el cuerpo llega saneado, con imágenes bloqueadas y Cache-Control privado de 5 min", async () => {

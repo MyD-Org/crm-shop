@@ -36,7 +36,7 @@ function guard() {
 export async function truncateAll(): Promise<void> {
   guard()
   await getDb().execute(
-    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, ${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks} restart identity cascade`,
+    sql`truncate table ${tenants}, ${adminUsers}, ${paymentReceipts}, conversation_assignments, push_subscriptions, correo_eventos,${shopOrderEventos}, ${shopOrderRemitos}, ${shopOrderItems}, ${shopOrders}, ${shopClientes}, ${shopClientLinks} restart identity cascade`,
   )
 }
 

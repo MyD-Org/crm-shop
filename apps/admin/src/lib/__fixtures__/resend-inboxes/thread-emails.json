@@ -1,0 +1,5 @@
+{ "id": "thread_0001", "subject": "Consulta de precios", "folder": "inbox", "read": false, "has_more": false,
+  "emails": [
+    { "id": "email_0001", "direction": "inbound", "from": "Ana Prueba <ana@clientes.example>", "to": ["ventas@cliente.example"], "subject": "Consulta de precios", "received_at": "2026-09-30T15:00:00.000Z", "read": false, "attachments_count": 1 },
+    { "id": "email_0002", "direction": "outbound", "from": "Ventas <ventas@cliente.example>", "to": ["ana@clientes.example"], "cc": ["jefe@clientes.example"], "subject": "Re: Consulta de precios", "received_at": "2026-09-30T16:00:00.000Z", "read": true }
+  ] }

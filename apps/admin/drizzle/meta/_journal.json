@@ -421,6 +421,13 @@
       "when": 1791546300000,
       "tag": "0059_atributo_leds_rollo",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791632700000,
+      "tag": "0060_correo",
+      "breakpoints": true
     }
   ]
 }

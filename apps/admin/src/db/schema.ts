@@ -1318,3 +1318,57 @@ export const inboxCanales = pgTable(
   },
   (t) => [uniqueIndex("inbox_canales_tenant_cuenta_uniq").on(t.tenantId, t.channelAccountId)],
 )
+
+// Correo compartido (Resend Inboxes). Los mensajes, asuntos, remitentes y adjuntos viven en
+// Resend: acá solo hay casillas, quién accede a cada una y un espejo mínimo (ids, carpeta,
+// leído) para el badge y el push sin pegarle a Resend. Sin PII de cuerpos.
+//
+// `resend_inbox_id` es único global: el webhook resuelve el tenant por la inbox del evento.
+export const correoCasillas = pgTable(
+  "correo_casillas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    resendInboxId: text("resend_inbox_id").notNull().unique(),
+    email: text("email").notNull(),
+    nombre: text("nombre").notNull(),
+    activa: boolean("activa").notNull().default(true),
+    orden: integer("orden").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("correo_casillas_tenant_idx").on(t.tenantId)],
+)
+
+// Usuarios con acceso explícito a una casilla. Admin y superadmin ven todas las activas del
+// tenant sin necesidad de fila acá.
+export const correoCasillaAccesos = pgTable(
+  "correo_casilla_accesos",
+  {
+    casillaId: uuid("casilla_id").notNull().references(() => correoCasillas.id, { onDelete: "cascade" }),
+    adminUserId: uuid("admin_user_id").notNull().references(() => adminUsers.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ name: "correo_casilla_accesos_pk", columns: [t.casillaId, t.adminUserId] })],
+)
+
+// Espejo mínimo por hilo: carpeta y leído para el badge. `folder`: inbox | archive | spam | sent | trash.
+export const correoHilos = pgTable(
+  "correo_hilos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    casillaId: uuid("casilla_id").notNull().references(() => correoCasillas.id, { onDelete: "cascade" }),
+    resendThreadId: text("resend_thread_id").notNull(),
+    folder: text("folder").notNull().default("inbox"),
+    leido: boolean("leido").notNull().default(false),
+    ultimoEventoAt: timestamp("ultimo_evento_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("correo_hilos_casilla_thread_uniq").on(t.casillaId, t.resendThreadId),
+    index("correo_hilos_casilla_folder_leido_idx").on(t.casillaId, t.folder, t.leido),
+  ],
+)
+
+// Idempotencia del webhook: un svix-id procesado no se reprocesa. Se limpia a los 30 días.
+export const correoEventos = pgTable("correo_eventos", {
+  svixId: text("svix_id").primaryKey(),
+  recibidoAt: timestamp("recibido_at", { withTimezone: true }).notNull().defaultNow(),
+})

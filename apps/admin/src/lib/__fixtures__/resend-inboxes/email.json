@@ -1,0 +1,3 @@
+{ "id": "email_0001", "direction": "inbound", "from": "Ana Prueba <ana@clientes.example>", "to": ["ventas@cliente.example", "otro@cliente.example"], "cc": ["copia@clientes.example"], "bcc": [], "reply_to": ["respuestas@clientes.example"], "subject": "Consulta de precios", "message_id": "<abc123@clientes.example>", "read": false, "received_at": "2026-09-30T15:00:00.000Z",
+  "html": "<p>Hola, necesito precios.</p>", "text": "Hola, necesito precios.",
+  "attachments": [ { "id": "att_0001", "filename": "lista.pdf", "size": 120400, "content_type": "application/pdf" } ] }

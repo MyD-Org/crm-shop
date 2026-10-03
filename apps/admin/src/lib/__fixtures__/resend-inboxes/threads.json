@@ -1,0 +1,4 @@
+{ "object": "list", "has_more": true, "data": [
+  { "id": "thread_0001", "subject": "Consulta de precios", "from": "Ana Prueba <ana@clientes.example>", "to": ["ventas@cliente.example"], "labels": [], "message_count": 2, "has_attachment": true, "has_draft": false, "read": false, "folder": "inbox", "received_at": "2026-09-30T15:00:00.000Z" },
+  { "id": "thread_0002", "subject": "Factura pendiente", "from": "beto@clientes.example", "to": ["ventas@cliente.example"], "message_count": 1, "read": true, "received_at": "2026-09-29T10:00:00.000Z" }
+] }

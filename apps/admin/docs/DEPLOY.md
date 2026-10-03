@@ -63,6 +63,8 @@ actualizalos también allá.
 | `MP_PUBLIC_KEY` | Opcional. Public key de Mercado Pago **del mismo entorno que el Shop** (TEST en Preview/dev, productiva en Production). Sólo se usa para mostrar en Configuración → Medios de pago / Cuotas las tasas reales por cantidad de cuotas (`GET api.mercadopago.com/v1/payment_methods/installments`, caché 1 h). Es pública (no es secreto). Sin la var el panel de tasas muestra un aviso; si Mercado Pago falla, la página carga igual. |
 | `ANTHROPIC_API_KEY` | Opcional. Lector de fichas técnicas del catálogo (botón "Leer ficha técnica", Claude Haiku). Sin la var el botón queda deshabilitado y la ruta responde 503. |
 | `RESEND_API_KEY` | Envío de emails (el `RESEND_FROM` debe ser un dominio verificado en Resend) |
+| `RESEND_API_KEY_EMAILS` | Correo compartido (Resend Inboxes, beta): clave propia, distinta de `RESEND_API_KEY`. Solo servidor. Sin ella el módulo de correo responde "no configurado" y no hace requests |
+| `RESEND_INBOXES_WEBHOOK_SECRET` | Signing secret del webhook de Resend Inboxes (se carga al registrar el endpoint en Resend). Sin él el webhook falla cerrado |
 | `ADMIN_EMAIL` | Login del backoffice |
 | `ADMIN_PASSWORD` | Login del backoffice — usar una contraseña fuerte en prod |
 

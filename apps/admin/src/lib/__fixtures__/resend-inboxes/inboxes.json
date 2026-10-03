@@ -1,4 +1,4 @@
 { "object": "list", "has_more": false, "data": [
-  { "id": "inbox_ventas_0001", "address": "ventas@cliente.example", "name": "Ventas", "created_at": "2026-01-10T12:00:00.000Z" },
-  { "id": "inbox_soporte_0002", "address": "soporte@cliente.example", "created_at": "2026-01-11T12:00:00.000Z", "campo_extra": true }
+  { "id": "inbox_ventas_0001", "email_address": "ventas@cliente.example", "name": "Ventas", "from_name": "Ventas", "unread": 0, "created_at": "2026-01-10T12:00:00.000Z" },
+  { "id": "inbox_soporte_0002", "email_address": "soporte@cliente.example", "created_at": "2026-01-11T12:00:00.000Z", "campo_extra": true }
 ] }

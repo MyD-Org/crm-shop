@@ -1103,6 +1103,15 @@ Detrás del flag `correo` (Vercel Flags). Las casillas de Resend Inboxes son **s
 - **Adjuntos**: `GET /api/admin/correo/adjuntos/[eid]/[aid]?casilla=&hilo=` verifica acceso y que el mensaje sea de esa casilla, y responde 302 a la URL firmada de Resend (no se persiste ni viaja en JSON). Tope 40 MB.
 - **Badge**: `pending-counts` devuelve `correo` (no leídos de Recibidos de las casillas accesibles) y se suma al badge de Mensajes.
 
+### Envío
+
+Botones **Responder / Responder a todos / Reenviar** en la conversación y **Redactar** en la barra de la casilla (Dialog `Composer`). Texto plano (se envía también como html escapado), Para/CC/CCO, asunto y adjuntos.
+
+- **Un solo camino**: `POST /api/admin/correo/enviar` arma todo con `src/lib/correo-compose.ts` (puro) y manda `POST https://api.resend.com/emails` con `from` forzado a la casilla autorizada (el del cliente se ignora). Responder agrega `In-Reply-To` y `References` = `message_id` del mensaje respondido (Resend lo suma al thread, Gmail lo hila); sin `message_id` se envía igual y se avisa. No se usa `/reply` ni drafts: descartan los adjuntos.
+- **Destinatarios**: responder = `reply_to` o remitente; responder a todos = remitente + to + cc menos la propia casilla, sin duplicados (case-insensitive), máx. 50. Reenviar = vacío, con cabecera de cita y, si se tilda, los adjuntos originales (`download_url` firmada resuelta en el momento).
+- **Adjuntos nuevos**: el navegador pide `POST /api/admin/correo/adjuntos/subida` y sube directo a R2 (`correo/tmp/{tenant}/{uuid}/{nombre}`, PUT prefirmado con tipo y tamaño en la firma); al enviar, el servidor verifica la key del tenant y el tamaño real (`head`) y pasa una URL GET de 15 min como `path`. Nada pasa por la función (límite de 4,5 MB de Vercel). Tope 40 MB por mail contando el base64 (x1,37); tipos ejecutables bloqueados. Los temporales caducan por la regla de ciclo de vida de 1 día del prefijo `correo/tmp/` del bucket.
+- **Sin doble envío**: botón deshabilitado y envío único en el cliente + `Idempotency-Key` (estable por contenido) en Resend. Ante error, el borrador y los adjuntos se conservan.
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):

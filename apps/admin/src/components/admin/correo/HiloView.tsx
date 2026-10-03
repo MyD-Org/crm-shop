@@ -1,21 +1,27 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowLeft, Download, Paperclip } from "lucide-react"
+import { ArrowLeft, Download, Forward, Paperclip, Reply, ReplyAll } from "lucide-react"
 import { Alert, Badge, Button, Skeleton, useToast } from "@myd-org/ui"
 import type { CorreoCarpeta, CorreoHiloDetalle, CorreoMensaje } from "@/lib/correo-resend"
 import { SECTION_VISITED_EVENT } from "@/lib/admin-last-visit"
 import { fechaCompletaCorreo, nombreRemitente, tamanoLegible } from "@/lib/correo-formato"
 import { MensajeHtml } from "@/components/admin/correo/MensajeHtml"
+import { Composer } from "@/components/admin/correo/Composer"
+import type { ModoEnvio } from "@/lib/correo-compose"
 
 type Destino = "inbox" | "archive" | "spam" | "trash"
 
 interface Props {
   casillaId: string
+  /** Datos de la casilla para el `from` y la cita al responder (el servidor igual los fuerza). */
+  casilla: { id: string; nombre: string; email: string }
   hiloId: string
   onVolver: () => void
   /** El hilo cambió de estado: la lista lo refleja sin volver a pedirse. */
   onCambio: (hiloId: string, cambio: { leido?: boolean; carpeta?: Destino }) => void
+  /** Se envió una respuesta o un reenvío: la lista se refresca. */
+  onEnviado: () => void
 }
 
 interface Accion {
@@ -40,12 +46,13 @@ function accionesDe(carpeta: CorreoCarpeta | null): Accion[] {
   }
 }
 
-export function HiloView({ casillaId, hiloId, onVolver, onCambio }: Props) {
+export function HiloView({ casillaId, casilla, hiloId, onVolver, onCambio, onEnviado }: Props) {
   const [hilo, setHilo] = useState<CorreoHiloDetalle | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [intento, setIntento] = useState(0)
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
   const [trabajando, setTrabajando] = useState(false)
+  const [redactando, setRedactando] = useState<ModoEnvio | null>(null)
   const { toast } = useToast()
   // El padre pasa una función nueva en cada render: va en un ref para no relanzar la carga.
   const onCambioRef = useRef(onCambio)
@@ -155,6 +162,15 @@ export function HiloView({ casillaId, hiloId, onVolver, onCambio }: Props) {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
+        <Button size="sm" disabled={trabajando || hilo.mensajes.length === 0} onClick={() => setRedactando("responder")}>
+          <Reply size={14} /> Responder
+        </Button>
+        <Button size="sm" variant="outline" disabled={trabajando || hilo.mensajes.length === 0} onClick={() => setRedactando("responderATodos")}>
+          <ReplyAll size={14} /> Responder a todos
+        </Button>
+        <Button size="sm" variant="outline" disabled={trabajando || hilo.mensajes.length === 0} onClick={() => setRedactando("reenviar")}>
+          <Forward size={14} /> Reenviar
+        </Button>
         {accionesDe(hilo.carpeta).map((a) => (
           <Button key={a.destino} size="sm" variant={a.destino === "trash" ? "danger" : "outline"} disabled={trabajando} onClick={() => void mover(a.destino)}>
             {a.etiqueta}
@@ -177,6 +193,22 @@ export function HiloView({ casillaId, hiloId, onVolver, onCambio }: Props) {
           />
         ))}
       </div>
+
+      {redactando && (
+        <Composer
+          key={redactando}
+          casilla={casilla}
+          modo={redactando}
+          hiloId={hiloId}
+          mensaje={hilo.mensajes.at(-1)}
+          onCerrar={() => setRedactando(null)}
+          onEnviado={() => {
+            // Resend suma el mensaje enviado al hilo: se vuelve a pedir y se refresca la lista.
+            setIntento((n) => n + 1)
+            onEnviado()
+          }}
+        />
+      )}
     </div>
   )
 }

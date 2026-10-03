@@ -108,6 +108,36 @@ export const receiptKeys = {
   },
 }
 
+/** Nombre apto para una key de R2: sin carpetas, solo [A-Za-z0-9._-], largo acotado conservando
+ * la extensión. El nombre original viaja aparte (es el que ve el destinatario). */
+export function nombreKeySeguro(nombre: string): string {
+  const base = nombre.split(/[\\/]/).pop() ?? ""
+  let limpio = base.replace(/[^A-Za-z0-9._-]/g, "_").replace(/_+/g, "_").replace(/^[._]+/, "")
+  if (limpio.length > 100) {
+    const i = limpio.lastIndexOf(".")
+    const ext = i > 0 && limpio.length - i <= 10 ? limpio.slice(i) : ""
+    limpio = limpio.slice(0, 100 - ext.length) + ext
+  }
+  return limpio || "archivo"
+}
+
+/** Adjuntos temporales del correo: el navegador sube directo a `correo/tmp/{tenant}/{uuid}/{nombre}`
+ * y Resend los baja por una URL GET firmada corta al enviar. Retención: lifecycle de 1 día sobre
+ * `correo/tmp/` (regla manual del bucket). */
+export const correoKeys = {
+  tmp: (tenantId: string, id: string, nombre: string): string => {
+    assertKeyPart("tenantId", tenantId, TENANT_ID_RE)
+    assertKeyPart("id", id, UUID_RE)
+    return `correo/tmp/${tenantId}/${id}/${nombreKeySeguro(nombre)}`
+  },
+  /** La key viene del navegador: solo vale si es del prefijo del propio tenant y sin `..`. */
+  esDelTenant: (tenantId: string, key: string): boolean => {
+    if (!TENANT_ID_RE.test(tenantId) || key.includes("..")) return false
+    const m = key.match(/^correo\/tmp\/([a-z0-9-]+)\/([0-9a-f-]{36})\/([A-Za-z0-9._-]{1,100})$/i)
+    return !!m && m[1] === tenantId && UUID_RE.test(m[2])
+  },
+}
+
 function endpointFor(cfg: R2Config, key: string): string {
   return `https://${cfg.accountId}.r2.cloudflarestorage.com/${cfg.bucket}/${key}`
 }

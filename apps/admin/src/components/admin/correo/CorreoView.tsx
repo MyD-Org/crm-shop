@@ -1,15 +1,19 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Mail, RefreshCw } from "lucide-react"
+import { Mail, PenSquare, RefreshCw } from "lucide-react"
 import { Alert, Button, EmptyState, SearchInput, SegmentedControl, Skeleton } from "@myd-org/ui"
 import type { CorreoCarpeta, CorreoHilo, CorreoPaginaHilos } from "@/lib/correo-resend"
 import { CARPETAS_UI, fusionarHilos } from "@/lib/correo-formato"
 import { HiloList } from "@/components/admin/correo/HiloList"
 import { HiloView } from "@/components/admin/correo/HiloView"
+import { Composer } from "@/components/admin/correo/Composer"
 
 interface Props {
   casillaId: string
+  /** Nombre y dirección de la casilla (para "Redactar" y las respuestas). */
+  casillaNombre: string
+  casillaEmail: string
   /** Hilo a abrir al entrar (viene del aviso push: ?hilo=). */
   initialHiloId?: string | null
   /** Cambió la cantidad de no leídos de Recibidos de esta casilla (para el número de la solapa). */
@@ -21,7 +25,7 @@ const TAMANO_PAGINA = 25
 // Contenido de una solapa de casilla dentro de Mensajes: carpetas, búsqueda por asunto, lista de
 // hilos con "Cargar más" por cursor y el detalle del hilo al costado (en pantallas chicas, en
 // lugar de la lista). Todo se pide a /api/admin/correo/...; los cuerpos, al abrir cada mensaje.
-export function CorreoView({ casillaId, initialHiloId = null, onNoLeidosDelta }: Props) {
+export function CorreoView({ casillaId, casillaNombre, casillaEmail, initialHiloId = null, onNoLeidosDelta }: Props) {
   const [carpeta, setCarpeta] = useState<CorreoCarpeta>("inbox")
   const [busqueda, setBusqueda] = useState("")
   const [consulta, setConsulta] = useState("")
@@ -33,6 +37,8 @@ export function CorreoView({ casillaId, initialHiloId = null, onNoLeidosDelta }:
   const [error, setError] = useState<string | null>(null)
   const [hiloAbierto, setHiloAbierto] = useState<string | null>(initialHiloId)
   const [recarga, setRecarga] = useState(0)
+  const [redactando, setRedactando] = useState(false)
+  const casilla = { id: casillaId, nombre: casillaNombre, email: casillaEmail }
   // La respuesta de un fetch que quedó en vuelo cuando cambió la carpeta/búsqueda se descarta.
   const pedidoActual = useRef(0)
 
@@ -150,6 +156,9 @@ export function CorreoView({ casillaId, initialHiloId = null, onNoLeidosDelta }:
         <Button variant="ghost" size="sm" onClick={() => setRecarga((n) => n + 1)} aria-label="Actualizar">
           <RefreshCw size={14} /> Actualizar
         </Button>
+        <Button size="sm" onClick={() => setRedactando(true)}>
+          <PenSquare size={14} /> Redactar
+        </Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
@@ -190,15 +199,26 @@ export function CorreoView({ casillaId, initialHiloId = null, onNoLeidosDelta }:
             <HiloView
               key={hiloAbierto}
               casillaId={casillaId}
+              casilla={casilla}
               hiloId={hiloAbierto}
               onVolver={() => abrirHilo(null)}
               onCambio={onCambio}
+              onEnviado={() => setRecarga((n) => n + 1)}
             />
           ) : (
             <EmptyState icon={<Mail size={28} strokeWidth={1.2} />} title="Seleccione una conversación" />
           )}
         </div>
       </div>
+
+      {redactando && (
+        <Composer
+          casilla={casilla}
+          modo="nuevo"
+          onCerrar={() => setRedactando(false)}
+          onEnviado={() => setRecarga((n) => n + 1)}
+        />
+      )}
     </div>
   )
 }

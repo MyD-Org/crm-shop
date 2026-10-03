@@ -174,6 +174,24 @@ describe("normalizadores (contrato con fixtures)", () => {
     expect(init.method).toBe("POST")
     expect(r).toEqual({ id: "sent_1" })
   })
+
+  it("sendEmail manda Idempotency-Key (el recibido, o uno propio) y los headers de hilado", async () => {
+    fetchMock.mockResolvedValue(json({ id: "sent_1" }))
+    const payload = { from: "Ventas <ventas@cliente.example>", to: ["a@clientes.example"], subject: "Re: x", text: "x", headers: { "In-Reply-To": "<a@x.example>" } }
+    await sendEmail(payload, { idempotencyKey: "clave-1" })
+    await sendEmail(payload)
+    const [, init1] = fetchMock.mock.calls[0]
+    const [, init2] = fetchMock.mock.calls[1]
+    expect(init1.headers["Idempotency-Key"]).toBe("clave-1")
+    expect(init2.headers["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
+    expect(JSON.parse(init1.body).headers).toEqual({ "In-Reply-To": "<a@x.example>" })
+  })
+
+  it("el reintento de un envío por 5xx reusa la misma Idempotency-Key", async () => {
+    fetchMock.mockResolvedValueOnce(json({}, 503)).mockResolvedValueOnce(json({ id: "sent_2" }))
+    await sendEmail({ from: "a <a@x.example>", to: ["b@x.example"], subject: "x", text: "x" })
+    expect(fetchMock.mock.calls[0][1].headers["Idempotency-Key"]).toBe(fetchMock.mock.calls[1][1].headers["Idempotency-Key"])
+  })
 })
 
 describe("errores normalizados", () => {

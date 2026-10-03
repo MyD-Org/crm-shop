@@ -3,18 +3,22 @@ import { getIronSession } from "iron-session"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
-import { adminSessionOptions, type AdminSessionData } from "@/lib/admin-session"
+import { adminSessionOptions, getGuardedAdminSession, type AdminSessionData } from "@/lib/admin-session"
 import { getBotStatus, type InboxContact } from "@/lib/inbox-api"
 import { assignPendingConversations } from "@/lib/assignment"
 import { listEnrichedContacts } from "@/lib/inbox-contacts"
 import { listarNombres } from "@/lib/inbox-canales-repo"
 import { roleRank } from "@/lib/roles"
+import { casillasAccesibles } from "@/lib/correo-acceso"
+import { correoHabilitado } from "@/lib/correo-flag"
+import { contarNoLeidosPorCasilla } from "@/lib/correo-repo"
 import { InboxList } from "@/components/admin/InboxList"
 import { BotKillSwitch } from "@/components/admin/BotKillSwitch"
 
 export const dynamic = "force-dynamic"
 
-export default async function InboxPage() {
+export default async function InboxPage({ searchParams }: { searchParams: Promise<{ casilla?: string; hilo?: string }> }) {
+  const { casilla: casillaParam, hilo: hiloParam } = await searchParams
   const session = await getIronSession<AdminSessionData>(await cookies(), adminSessionOptions)
   const [tenant] = await getDb().select().from(tenants).where(eq(tenants.id, session.tenantId))
 
@@ -22,6 +26,24 @@ export default async function InboxPage() {
   let botEnabled = true
   let configError = ""
   const canalNombres = await listarNombres(session.tenantId).catch(() => ({}) as Record<string, string>)
+
+  // Casillas de correo como solapas de Mensajes. Con el flag `correo` apagado (o ante un error)
+  // la pantalla queda idéntica a la de siempre. El rol sale de la fila fresca de admin_users.
+  const correoOn = await correoHabilitado()
+  let casillas: { id: string; nombre: string; email: string; noLeidos: number }[] = []
+  if (correoOn) {
+    try {
+      const guard = await getGuardedAdminSession()
+      if (guard.ok) {
+        const accesibles = await casillasAccesibles(session.tenantId, { id: guard.user.id, role: guard.user.role })
+        const conteo = await contarNoLeidosPorCasilla(accesibles.map((c) => c.id))
+        casillas = accesibles.map((c) => ({ id: c.id, nombre: c.nombre, email: c.email, noLeidos: conteo[c.id] ?? 0 }))
+      }
+    } catch {
+      casillas = []
+    }
+  }
+  const casillaInicial = casillas.some((c) => c.id === casillaParam) ? (casillaParam ?? null) : null
 
   if (!tenant?.aiTenantId || !tenant?.aiApiUrl) {
     configError = "El inbox no está configurado. Complete AI_TENANT_ID y AI_API_URL en la config del tenant."
@@ -65,6 +87,10 @@ export default async function InboxPage() {
         <InboxList initialContacts={contacts} currentUserId={session.userId} initialBotEnabled={botEnabled}
           initialCanalNombres={canalNombres}
           canEditCanales={roleRank(session.role) >= 1}
+          casillas={casillas}
+          correoHabilitado={correoOn}
+          initialCasillaId={casillaInicial}
+          initialHiloId={casillaInicial ? (hiloParam ?? null) : null}
         />
       )}
     </div>

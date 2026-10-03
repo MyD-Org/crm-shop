@@ -46,7 +46,7 @@ async function aplicar(evento: EventoCorreo, casilla: { id: string; tenantId: st
         await sendPushToCasilla(casilla.tenantId, casilla.id, {
           title: `Correo nuevo en ${casilla.nombre}`,
           body: evento.asunto ? truncar(evento.asunto, ASUNTO_PUSH_MAX) : "Nuevo mensaje",
-          url: `/admin/correo?casilla=${casilla.id}&hilo=${encodeURIComponent(evento.threadId)}`,
+          url: `/admin/inbox?casilla=${casilla.id}&hilo=${encodeURIComponent(evento.threadId)}`,
           tag: `correo-${evento.threadId}`,
         })
         return "hilo_nuevo_con_push"

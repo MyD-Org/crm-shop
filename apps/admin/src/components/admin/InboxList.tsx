@@ -15,9 +15,11 @@ import {
   filterByCanal,
   guardarSeleccion,
   leerSeleccion,
-  resolveSelected,
 } from "@/lib/inbox-canales"
 import { CanalesNombresEditor } from "@/components/admin/CanalesNombresEditor"
+import { CasillasAccesoEditor } from "@/components/admin/correo/CasillasAccesoEditor"
+import { CorreoView } from "@/components/admin/correo/CorreoView"
+import { buildCasillaTabs, casillaIdDeTab, casillaTabKey, resolveSelectedConCasillas } from "@/lib/correo-tabs"
 
 type Tab = "active" | "history"
 
@@ -33,9 +35,26 @@ interface Props {
   initialCanalNombres: Record<string, string>
   /** Admin o superadmin: puede editar los nombres de los canales. */
   canEditCanales: boolean
+  /** Casillas de correo accesibles para el usuario (vacío con el flag `correo` apagado). */
+  casillas?: { id: string; nombre: string; email: string; noLeidos: number }[]
+  /** Flag `correo` prendido: habilita "Administrar casillas" (admin+) aunque aún no haya casillas. */
+  correoHabilitado?: boolean
+  /** Casilla/hilo a abrir al entrar (?casilla=&hilo=, p. ej. desde el aviso push). */
+  initialCasillaId?: string | null
+  initialHiloId?: string | null
 }
 
-export function InboxList({ initialContacts, currentUserId, initialBotEnabled, initialCanalNombres, canEditCanales }: Props) {
+export function InboxList({
+  initialContacts,
+  currentUserId,
+  initialBotEnabled,
+  initialCanalNombres,
+  canEditCanales,
+  casillas = [],
+  correoHabilitado = false,
+  initialCasillaId = null,
+  initialHiloId = null,
+}: Props) {
   const [contacts, setContacts] = useState(initialContacts)
   const [botEnabled, setBotEnabled] = useState(initialBotEnabled)
   const [tab, setTab] = useState<Tab>("active")
@@ -43,11 +62,17 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
   const [canalNombres, setCanalNombres] = useState(initialCanalNombres)
   // Canal elegido: se lee de localStorage recién tras montar (el SSR no lo tiene) y se
   // guarda por navegador. Sin storage arranca en "Todas".
-  const [canalSel, setCanalSel] = useState(CANAL_TODAS)
+  const [canalSel, setCanalSel] = useState(initialCasillaId ? casillaTabKey(initialCasillaId) : CANAL_TODAS)
   useEffect(() => {
+    // Un enlace con ?casilla= (aviso push) manda sobre lo guardado.
+    if (initialCasillaId) return
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage solo existe en el cliente
     setCanalSel(leerSeleccion())
-  }, [])
+  }, [initialCasillaId])
+  // No leídos de Recibidos por casilla: parten del server y se ajustan al leer/mover hilos.
+  const [noLeidos, setNoLeidos] = useState<Record<string, number>>(() =>
+    Object.fromEntries(casillas.map((c) => [c.id, c.noLeidos])),
+  )
   // Los valores dependientes de "ahora" (color de urgencia, "hace 5m") se rendean solo
   // despues del mount para evitar mismatch server/cliente: el SSR corre en Vercel (UTC) y
   // el navegador en -03, ademas de que Date.now() difiere entre ambos. Un mismatch acá
@@ -145,13 +170,18 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
   const mine = contacts.filter((c) => c.assigned_operator_id === currentUserId)
   const pendingCount = contacts.filter((c) => c.awaiting_reply).length
   const canalTabs = buildCanalTabs(contacts, canalNombres)
-  const canalActivo = resolveSelected(canalSel, canalTabs)
+  const casillaTabs = buildCasillaTabs(casillas, noLeidos)
+  const seleccion = resolveSelectedConCasillas(canalSel, canalTabs, casillaTabs)
+  const casillaActiva = casillaIdDeTab(seleccion)
+  const canalActivo = casillaActiva ? CANAL_TODAS : seleccion
   const visible = filterByCanal(soloMias ? mine : contacts, canalActivo)
 
   const editor = canEditCanales && (
     <CanalesNombresEditor contacts={contacts} nombres={canalNombres} onSaved={setCanalNombres} />
   )
-  const variasCanales = canalTabs.length > 1
+  const variasCanales = canalTabs.length > 1 || casillaTabs.length > 0
+  // "Administrar casillas" (admin+) con el flag prendido: vive junto a las solapas.
+  const editorCasillas = correoHabilitado && canEditCanales && <CasillasAccesoEditor />
 
   return (
     <div className="flex flex-col gap-3">
@@ -161,10 +191,21 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
             <Tabs
               variant="underline"
               ariaLabel="Canal"
-              value={canalActivo}
+              value={seleccion}
               onValueChange={(v) => {
                 setCanalSel(v)
                 guardarSeleccion(v)
+                // La URL refleja la casilla elegida (o la limpia) sin recargar la página.
+                try {
+                  const url = new URL(window.location.href)
+                  const id = casillaIdDeTab(v)
+                  if (id) url.searchParams.set("casilla", id)
+                  else url.searchParams.delete("casilla")
+                  url.searchParams.delete("hilo")
+                  window.history.replaceState(null, "", url)
+                } catch {
+                  // Sin history: la selección vale solo para esta sesión.
+                }
               }}
               items={[
                 { value: CANAL_TODAS, label: "Todos" },
@@ -181,12 +222,36 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
                     </span>
                   ),
                 })),
+                ...casillaTabs.map((t) => ({
+                  value: t.key,
+                  label: (
+                    <span className="flex items-center gap-1.5">
+                      {t.label}
+                      {t.noLeidos > 0 && (
+                        <Badge tone="info" className="text-[10px] px-1.5 py-0">
+                          {t.noLeidos}
+                        </Badge>
+                      )}
+                    </span>
+                  ),
+                })),
               ]}
             />
           </div>
           {editor}
+          {editorCasillas}
         </div>
       )}
+
+      {casillaActiva ? (
+        <CorreoView
+          key={casillaActiva}
+          casillaId={casillaActiva}
+          initialHiloId={casillaActiva === initialCasillaId ? initialHiloId : null}
+          onNoLeidosDelta={(d) => setNoLeidos((prev) => ({ ...prev, [casillaActiva]: Math.max(0, (prev[casillaActiva] ?? 0) + d) }))}
+        />
+      ) : (
+      <>
 
       <div className="flex items-center gap-x-4 gap-y-2 flex-wrap">
         <Tabs
@@ -221,6 +286,7 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
           )}
         </label>
         {!variasCanales && editor}
+        {!variasCanales && editorCasillas}
       </div>
 
       {!visible.length ? (
@@ -297,6 +363,8 @@ export function InboxList({ initialContacts, currentUserId, initialBotEnabled, i
             </Link>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   )

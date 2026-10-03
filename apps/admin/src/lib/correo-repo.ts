@@ -143,6 +143,79 @@ export async function contarNoLeidos(casillaIds: string[]): Promise<number> {
   return r?.n ?? 0
 }
 
+/**
+ * Cambio propio de un operador (leído/no leído y/o carpeta), tras aplicarlo en Resend. Solo toca
+ * lo informado y marca el instante. Si el espejo no conocía el hilo lo crea LEÍDO (lo está
+ * tocando alguien que lo vio): así no infla el badge con un hilo viejo.
+ */
+export async function marcarHilo(
+  casillaId: string,
+  resendThreadId: string,
+  cambios: { leido?: boolean; carpeta?: CorreoCarpeta },
+): Promise<void> {
+  const ahora = new Date()
+  await getDb()
+    .insert(correoHilos)
+    .values({
+      casillaId,
+      resendThreadId,
+      folder: cambios.carpeta ?? "inbox",
+      leido: cambios.leido ?? true,
+      ultimoEventoAt: ahora,
+    })
+    .onConflictDoUpdate({
+      target: [correoHilos.casillaId, correoHilos.resendThreadId],
+      set: {
+        ultimoEventoAt: sql`GREATEST(${correoHilos.ultimoEventoAt}, ${ahora.toISOString()}::timestamptz)`,
+        ...(cambios.carpeta !== undefined ? { folder: cambios.carpeta } : {}),
+        ...(cambios.leido !== undefined ? { leido: cambios.leido } : {}),
+      },
+    })
+}
+
+/** No leídos de Recibidos por casilla (el número de cada solapa). Una sola query. */
+export async function contarNoLeidosPorCasilla(casillaIds: string[]): Promise<Record<string, number>> {
+  if (casillaIds.length === 0) return {}
+  const filas = await getDb()
+    .select({ casillaId: correoHilos.casillaId, n: sql<number>`count(*)::int` })
+    .from(correoHilos)
+    .where(and(inArray(correoHilos.casillaId, casillaIds), eq(correoHilos.folder, "inbox"), eq(correoHilos.leido, false)))
+    .groupBy(correoHilos.casillaId)
+  return Object.fromEntries(filas.map((f) => [f.casillaId, f.n]))
+}
+
+/**
+ * Reconcilia el espejo con una página de hilos que acaba de devolver Resend (casillas con
+ * histórico previo al webhook, o eventos perdidos). En una sola query: crea los que faltan y
+ * actualiza carpeta/leído SOLO si el dato de Resend es igual o más nuevo que el último evento
+ * visto (`recibidoEn` >= ultimo_evento_at), así un PATCH o un webhook reciente no se pisa.
+ */
+export async function reconciliarHilos(
+  casillaId: string,
+  folder: CorreoCarpeta,
+  hilos: { threadId: string; leido: boolean; recibidoEn: Date }[],
+): Promise<void> {
+  if (hilos.length === 0) return
+  const valores = hilos.map((h) => ({
+    casillaId,
+    resendThreadId: h.threadId,
+    folder,
+    leido: h.leido,
+    ultimoEventoAt: Number.isNaN(h.recibidoEn.getTime()) ? new Date(0) : h.recibidoEn,
+  }))
+  await getDb()
+    .insert(correoHilos)
+    .values(valores)
+    .onConflictDoUpdate({
+      target: [correoHilos.casillaId, correoHilos.resendThreadId],
+      set: {
+        ultimoEventoAt: sql`GREATEST(${correoHilos.ultimoEventoAt}, excluded.ultimo_evento_at)`,
+        folder: sql`CASE WHEN excluded.ultimo_evento_at >= ${correoHilos.ultimoEventoAt} THEN excluded.folder ELSE ${correoHilos.folder} END`,
+        leido: sql`CASE WHEN excluded.ultimo_evento_at >= ${correoHilos.ultimoEventoAt} THEN excluded.leido ELSE ${correoHilos.leido} END`,
+      },
+    })
+}
+
 // ── Accesos y administración de casillas (R3) ───────────────────────────────────────────────
 
 /** Casillas del tenant (orden manual y luego nombre). `soloActivas` para lo que ve un lector. */

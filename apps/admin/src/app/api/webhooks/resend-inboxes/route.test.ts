@@ -143,7 +143,7 @@ describe("email recibido", () => {
     expect(state.pushes[0]).toMatchObject({
       tenantId: "tenant-a",
       casillaId: "casilla-1",
-      payload: { title: "Correo nuevo en Ventas", body: "Consulta de precios", url: "/admin/correo?casilla=casilla-1&hilo=thread_0001", tag: "correo-thread_0001" },
+      payload: { title: "Correo nuevo en Ventas", body: "Consulta de precios", url: "/admin/inbox?casilla=casilla-1&hilo=thread_0001", tag: "correo-thread_0001" },
     })
   })
 

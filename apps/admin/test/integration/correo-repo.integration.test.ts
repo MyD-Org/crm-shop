@@ -6,8 +6,11 @@ import {
   borrarEvento,
   casillaPorInbox,
   contarNoLeidos,
+  contarNoLeidosPorCasilla,
   destinatariosCasilla,
   limpiarEventosViejos,
+  marcarHilo,
+  reconciliarHilos,
   registrarEvento,
   upsertCasilla,
   upsertHilo,
@@ -133,6 +136,71 @@ describe("contarNoLeidos", () => {
     expect(await contarNoLeidos([a.id])).toBe(3)
     expect(await contarNoLeidos([a.id, b.id])).toBe(8)
     expect(await contarNoLeidos([])).toBe(0)
+  })
+})
+
+describe("lectura (R4): conteo por casilla y reconciliación del listado", () => {
+  it("contarNoLeidosPorCasilla agrupa los no leídos de Recibidos por casilla", async () => {
+    const a = (await upsertCasilla(A, { resendInboxId: "inbox_a", email: "a@cliente.example" }))!
+    const b = (await upsertCasilla(A, { resendInboxId: "inbox_b", email: "b@cliente.example" }))!
+    for (const t of ["t1", "t2"]) await upsertHilo(a.id, t, { folder: "inbox", leido: false })
+    await upsertHilo(a.id, "t3", { folder: "inbox", leido: true })
+    await upsertHilo(b.id, "t1", { folder: "inbox", leido: false })
+    await upsertHilo(b.id, "t2", { folder: "trash", leido: false })
+    expect(await contarNoLeidosPorCasilla([a.id, b.id])).toEqual({ [a.id]: 2, [b.id]: 1 })
+    expect(await contarNoLeidosPorCasilla([])).toEqual({})
+  })
+
+  it("reconciliarHilos crea los hilos que el webhook no vio y no pisa un estado más nuevo", async () => {
+    const c = (await upsertCasilla(A, { resendInboxId: "inbox_a", email: "a@cliente.example" }))!
+    // Hilo conocido por el webhook, ya leído, con un evento reciente.
+    await upsertHilo(c.id, "t_vivo", { folder: "inbox", leido: true, eventoAt: new Date("2026-10-03T12:00:00Z") })
+    await reconciliarHilos(c.id, "inbox", [
+      { threadId: "t_nuevo", leido: false, recibidoEn: new Date("2026-10-01T10:00:00Z") },
+      // Resend lo trae viejo y sin leer: el espejo más nuevo manda.
+      { threadId: "t_vivo", leido: false, recibidoEn: new Date("2026-10-01T10:00:00Z") },
+    ])
+    const filas = await getDb().select().from(correoHilos).where(eq(correoHilos.casillaId, c.id))
+    const por = Object.fromEntries(filas.map((f) => [f.resendThreadId, f]))
+    expect(por.t_nuevo).toMatchObject({ folder: "inbox", leido: false })
+    expect(por.t_vivo).toMatchObject({ folder: "inbox", leido: true })
+    expect(await contarNoLeidos([c.id])).toBe(1)
+  })
+
+  it("reconciliarHilos corrige un hilo viejo del espejo con el estado de Resend si este es más nuevo", async () => {
+    const c = (await upsertCasilla(A, { resendInboxId: "inbox_a", email: "a@cliente.example" }))!
+    await upsertHilo(c.id, "t1", { folder: "inbox", leido: false, eventoAt: new Date("2026-09-01T00:00:00Z") })
+    await reconciliarHilos(c.id, "archive", [{ threadId: "t1", leido: true, recibidoEn: new Date("2026-10-02T00:00:00Z") }])
+    const [f] = await getDb().select().from(correoHilos).where(eq(correoHilos.casillaId, c.id))
+    expect(f).toMatchObject({ folder: "archive", leido: true })
+  })
+})
+
+describe("marcarHilo (PATCH propio de leído/carpeta)", () => {
+  it("solo toca lo informado: mover de carpeta no cambia leído, marcar leído no cambia carpeta", async () => {
+    const c = (await upsertCasilla(A, { resendInboxId: "inbox_a", email: "a@cliente.example" }))!
+    await upsertHilo(c.id, "t1", { folder: "inbox", leido: false })
+    await marcarHilo(c.id, "t1", { carpeta: "archive" })
+    let [f] = await getDb().select().from(correoHilos).where(eq(correoHilos.casillaId, c.id))
+    expect(f).toMatchObject({ folder: "archive", leido: false })
+    await marcarHilo(c.id, "t1", { leido: true })
+    ;[f] = await getDb().select().from(correoHilos).where(eq(correoHilos.casillaId, c.id))
+    expect(f).toMatchObject({ folder: "archive", leido: true })
+  })
+
+  it("un hilo que el espejo no conocía se crea leído (lo está tocando un operador) y no infla el badge", async () => {
+    const c = (await upsertCasilla(A, { resendInboxId: "inbox_a", email: "a@cliente.example" }))!
+    await marcarHilo(c.id, "t_nuevo", { carpeta: "trash" })
+    await marcarHilo(c.id, "t_nuevo2", { leido: true })
+    expect(await contarNoLeidos([c.id])).toBe(0)
+    expect(await getDb().select().from(correoHilos)).toHaveLength(2)
+  })
+
+  it("marcar no leído un hilo en Recibidos sube el contador", async () => {
+    const c = (await upsertCasilla(A, { resendInboxId: "inbox_a", email: "a@cliente.example" }))!
+    await upsertHilo(c.id, "t1", { folder: "inbox", leido: true })
+    await marcarHilo(c.id, "t1", { leido: false })
+    expect(await contarNoLeidos([c.id])).toBe(1)
   })
 })
 

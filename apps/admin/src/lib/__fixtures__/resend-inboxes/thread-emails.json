@@ -1,5 +1,7 @@
-{ "id": "thread_0001", "subject": "Consulta de precios", "folder": "inbox", "read": false, "has_more": false,
-  "emails": [
-    { "id": "email_0001", "direction": "inbound", "from": "Ana Prueba <ana@clientes.example>", "to": ["ventas@cliente.example"], "subject": "Consulta de precios", "received_at": "2026-09-30T15:00:00.000Z", "read": false, "attachments_count": 1 },
-    { "id": "email_0002", "direction": "outbound", "from": "Ventas <ventas@cliente.example>", "to": ["ana@clientes.example"], "cc": ["jefe@clientes.example"], "subject": "Re: Consulta de precios", "received_at": "2026-09-30T16:00:00.000Z", "read": true }
-  ] }
+{ "object": "list", "has_more": false, "data": [
+  { "id": "email_0001", "direction": "inbound", "from": "Ana Prueba <ana@clientes.example>", "to": ["ventas@cliente.example"], "cc": [], "bcc": [], "reply_to": [], "subject": "Consulta de precios", "message_id": "<abc123@clientes.example>", "html": "<p>Hola, necesito precios.</p>", "text": "Hola, necesito precios.",
+    "attachments": [ { "id": "att_0001", "filename": "lista.pdf", "size": 120400 }, { "id": "att_0002", "filename": "foto.jpeg", "size": 1365037 } ],
+    "read": false, "received_at": "2026-09-30T15:00:00.000Z" },
+  { "id": "email_0002", "direction": "outbound", "from": "Ventas <ventas@cliente.example>", "to": ["ana@clientes.example"], "cc": ["jefe@clientes.example"], "bcc": [], "reply_to": [], "subject": "Re: Consulta de precios", "message_id": "<resp456@cliente.example>", "html": null, "text": "Gracias, le enviamos la lista.",
+    "attachments": [], "read": true, "received_at": "2026-09-30T16:00:00.000Z" }
+] }

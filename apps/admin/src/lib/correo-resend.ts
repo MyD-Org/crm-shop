@@ -290,8 +290,12 @@ export async function listThreads(
 }
 
 export async function listThreadEmails(inboxId: string, threadId: string): Promise<CorreoHiloDetalle> {
-  const r = obj(await pedir("GET", `/inboxes/${seg(inboxId)}/threads/${seg(threadId)}`))
-  const emails = Array.isArray(r.emails) ? r.emails : r.data
+  // El hilo (asunto, carpeta, leído) y sus mensajes son dos endpoints distintos de Resend:
+  // GET /threads/{id} no trae los emails. La lista de mensajes sí trae html/text completos de
+  // cada uno; normMensaje los descarta (los cuerpos se piden de a uno con getThreadEmail).
+  const base = `/inboxes/${seg(inboxId)}/threads/${seg(threadId)}`
+  const [hilo, emails] = await Promise.all([pedir("GET", base), pedir("GET", `${base}/emails`)])
+  const r = obj(hilo)
   return {
     id: str(r.id, threadId),
     asunto: str(r.subject),

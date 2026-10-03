@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { NextRequest } from "next/server"
 import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
-import { tenants } from "@/db/schema"
+import { correoCasillaAccesos, tenants } from "@/db/schema"
+import { upsertCasilla, upsertHilo } from "@/lib/correo-repo"
 import { invalidateTenantRegistry } from "@/lib/tenants"
 import { listConversations, type InboxConversation } from "@/lib/inbox-api"
 import { seedOperator, seedShopOrder, seedTenant, truncateAll } from "./helpers"
@@ -16,6 +17,8 @@ import { seedReceipt } from "./fake-r2"
 
 let session: Record<string, unknown>
 
+const correoFlag = vi.hoisted(() => ({ on: false }))
+vi.mock("@/lib/correo-flag", () => ({ correoHabilitado: async () => correoFlag.on }))
 vi.mock("next/headers", () => ({
   cookies: async () => ({}),
   headers: async () => new Headers({ "x-tenant-id": "tenant-a" }),
@@ -101,7 +104,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
     expect(res.status).toBe(200)
     // c1, c2 y c5 (activa sin last_inbound_at, sin since sí cuenta); c3 no (sin awaiting) y
     // c4 no (cerrada).
-    expect(await res.json()).toEqual({ inbox: 3, comprobantes: 2, pedidos: 0 })
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: 2, pedidos: 0, correo: 0 })
   })
 
   it("?since= filtra inbox por last_inbound_at y comprobantes por submittedAt", async () => {
@@ -112,7 +115,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
     const res = await pendingCountsRoute(req(`?since=${encodeURIComponent(since)}`))
     expect(res.status).toBe(200)
     // c1 (14/09 > since) sí; c2 (10/09) no; c5 (last_inbound_at null) no cuando hay since.
-    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 1, pedidos: 0 })
+    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 1, pedidos: 0, correo: 0 })
   })
 
   it("parámetros por sección: sinceInbox filtra solo inbox, sinceComprobantes solo comprobantes", async () => {
@@ -125,7 +128,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
     const res = await pendingCountsRoute(req(qs))
     expect(res.status).toBe(200)
     // inbox filtrado por el 13 (solo c1); comprobantes con since más viejo (ambos recibos).
-    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 2, pedidos: 0 })
+    expect(await res.json()).toEqual({ inbox: 1, comprobantes: 2, pedidos: 0, correo: 0 })
   })
 
   it("pedidos: solo los sin confirmar del tenant, filtrados por sincePedidos; los ve también el operador", async () => {
@@ -140,7 +143,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
 
     clearPendingCountsCache()
     const res = await pendingCountsRoute(req(`?sincePedidos=${encodeURIComponent("2026-09-13T00:00:00.000Z")}`))
-    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 1 })
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 1, correo: 0 })
   })
 
   it("since inválido = sin filtro (backlog completo)", async () => {
@@ -155,7 +158,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
 
     const res = await pendingCountsRoute(req())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 0 })
+    expect(await res.json()).toEqual({ inbox: 3, comprobantes: null, pedidos: 0, correo: 0 })
   })
 
   it("tenant sin inbox configurado ⇒ inbox 0 (no es error)", async () => {
@@ -163,7 +166,7 @@ describe("admin: pending-counts (badges de novedades)", () => {
 
     const res = await pendingCountsRoute(req())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ inbox: 0, comprobantes: 0, pedidos: 0 })
+    expect(await res.json()).toEqual({ inbox: 0, comprobantes: 0, pedidos: 0, correo: 0 })
     expect(listConversations).not.toHaveBeenCalled()
   })
 
@@ -187,6 +190,43 @@ describe("admin: pending-counts (badges de novedades)", () => {
     login(adminB, { tenantId: TENANT_B })
     const resB = await pendingCountsRoute(req("", TENANT_B))
     expect((await resB.json()).comprobantes).toBe(2)
+  })
+
+  describe("correo (no leídos por casillas accesibles)", () => {
+    async function sembrarCorreo() {
+      const a = (await upsertCasilla(TENANT_A, { resendInboxId: "inbox_a", email: "a@cliente.example" }))!
+      const b = (await upsertCasilla(TENANT_A, { resendInboxId: "inbox_b", email: "b@cliente.example" }))!
+      for (const t of ["t1", "t2", "t3"]) await upsertHilo(a.id, t, { folder: "inbox", leido: false })
+      for (const t of ["t1", "t2", "t3", "t4", "t5"]) await upsertHilo(b.id, t, { folder: "inbox", leido: false })
+      await getDb().insert(correoCasillaAccesos).values({ casillaId: a.id, adminUserId: operatorA })
+    }
+
+    it("3 sin leer en A (con acceso) y 5 en B (sin acceso) => el operador ve 3", async () => {
+      correoFlag.on = true
+      await sembrarCorreo()
+      login(operatorA)
+      expect((await (await pendingCountsRoute(req())).json()).correo).toBe(3)
+    })
+
+    it("admin ve las de todas las casillas activas del tenant", async () => {
+      correoFlag.on = true
+      await sembrarCorreo()
+      expect((await (await pendingCountsRoute(req())).json()).correo).toBe(8)
+    })
+
+    it("con el flag apagado el contador es 0 aunque haya hilos sin leer", async () => {
+      correoFlag.on = false
+      await sembrarCorreo()
+      expect((await (await pendingCountsRoute(req())).json()).correo).toBe(0)
+    })
+
+    it("no queda en el cache de 15 s: cambia con cada usuario", async () => {
+      correoFlag.on = true
+      await sembrarCorreo()
+      expect((await (await pendingCountsRoute(req())).json()).correo).toBe(8)
+      login(operatorA)
+      expect((await (await pendingCountsRoute(req())).json()).correo).toBe(3)
+    })
   })
 
   it("cache raw: dos consultas seguidas del mismo tenant pegan una sola vez a la ai-api", async () => {

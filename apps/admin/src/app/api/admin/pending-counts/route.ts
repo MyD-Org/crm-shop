@@ -2,6 +2,9 @@ import { eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { tenants } from "@/db/schema"
 import { getGuardedAdminSession } from "@/lib/admin-session"
+import { casillasAccesibles } from "@/lib/correo-acceso"
+import { correoHabilitado } from "@/lib/correo-flag"
+import { contarNoLeidos } from "@/lib/correo-repo"
 import { listConversations, type InboxConversation } from "@/lib/inbox-api"
 import { listPendingSubmittedAt } from "@/lib/payment-receipts"
 import { listPendientesCreatedAt } from "@/lib/pedidos-repo"
@@ -115,9 +118,22 @@ export async function GET(req: Request) {
 
   const pedidos = value.pedidosCreatedAt.filter((d) => !sincePedidos || d > sincePedidos).length
 
+  // Correo: no leídos de Recibidos de las casillas a las que ESTE usuario tiene acceso. Depende
+  // del usuario, así que va fuera del cache por tenant. Solo con el flag `correo` prendido; un
+  // fallo no rompe el resto de los badges. Es un contador absoluto (no usa last-visit).
+  let correo = 0
+  if (await correoHabilitado()) {
+    try {
+      const casillas = await casillasAccesibles(guarded.tenantId, { id: guarded.user.id, role: guarded.user.role })
+      correo = await contarNoLeidos(casillas.map((c) => c.id))
+    } catch (err) {
+      console.error("[pending-counts] no se pudo contar el correo:", err)
+    }
+  }
+
   const esAdmin = roleRank(guarded.user.role) >= roleRank("admin")
   return Response.json(
-    { inbox, comprobantes: esAdmin ? comprobantes : null, pedidos },
+    { inbox, comprobantes: esAdmin ? comprobantes : null, pedidos, correo },
     { headers: { "Cache-Control": "private, no-store" } },
   )
 }

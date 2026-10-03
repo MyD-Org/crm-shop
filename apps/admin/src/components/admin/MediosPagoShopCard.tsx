@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Table, Textarea, useToast } from "@myd-org/ui"
-import type { MedioPagoDto } from "@/lib/medios-pago-shop-repo"
+import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Switch, Table, Textarea, useToast } from "@myd-org/ui"
+import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
+import { LISTA_POR_DEFECTO, aplicarMedioGuardado, cuerpoDePrecios } from "@/lib/medios-pago-shop-form"
 import { normalizarIdentificador } from "@/lib/identificador"
 import { SLUG_MERCADOPAGO, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
@@ -21,9 +22,26 @@ type Form = {
   aplicaRetiro: boolean
   aplicaEnvio: boolean
   activo: boolean
+  idListaPrecios: string
+  destacarEnCatalogo: boolean
+  mostrarEnFicha: boolean
 }
 
-const formVacio: Form = { editandoSlug: null, slug: "", nombre: "", instrucciones: "", aplicaRetiro: true, aplicaEnvio: true, activo: true }
+type Lista = { idPriceList: string; name: string }
+type MedioPagoDto = MedioPagoConAvisos
+
+const formVacio: Form = {
+  editandoSlug: null,
+  slug: "",
+  nombre: "",
+  instrucciones: "",
+  aplicaRetiro: true,
+  aplicaEnvio: true,
+  activo: true,
+  idListaPrecios: LISTA_POR_DEFECTO,
+  destacarEnCatalogo: false,
+  mostrarEnFicha: false,
+}
 
 const desdeDto = (m: MedioPagoDto): Form => ({
   editandoSlug: m.slug,
@@ -33,10 +51,14 @@ const desdeDto = (m: MedioPagoDto): Form => ({
   aplicaRetiro: m.aplicaRetiro,
   aplicaEnvio: m.aplicaEnvio,
   activo: m.activo,
+  idListaPrecios: m.idListaPrecios ?? LISTA_POR_DEFECTO,
+  destacarEnCatalogo: m.destacarEnCatalogo,
+  mostrarEnFicha: m.mostrarEnFicha,
 })
 
+// La lista, el destacado y la ficha se configuran sólo editando un medio ya creado.
 const cuerpo = (f: Form) => ({
-  ...(f.editandoSlug ? {} : { slug: f.slug }),
+  ...(f.editandoSlug ? { ...cuerpoDePrecios(f) } : { slug: f.slug }),
   nombre: f.nombre,
   instrucciones: f.instrucciones,
   aplicaRetiro: f.aplicaRetiro,
@@ -45,6 +67,10 @@ const cuerpo = (f: Form) => ({
 })
 
 const porOrden = (a: MedioPagoDto, b: MedioPagoDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
+
+/** Nombre a mostrar de la lista enlazada (el snapshot si ya no existe en Alegra). */
+const nombreDeLista = (m: MedioPagoDto, listas: Lista[]) =>
+  m.idListaPrecios === null ? null : (listas.find((l) => l.idPriceList === m.idListaPrecios)?.name ?? m.listaPreciosNombre ?? m.idListaPrecios)
 
 async function enviar(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
@@ -75,6 +101,7 @@ function CheckboxLabel(props: { id: string; checked: boolean; onChange: (v: bool
 
 export function MediosPagoShopCard() {
   const [medios, setMedios] = useState<MedioPagoDto[] | null>(null)
+  const [listas, setListas] = useState<Lista[]>([])
   const [errorCarga, setErrorCarga] = useState(false)
   const [form, setForm] = useState<Form | null>(null)
   const [borrar, setBorrar] = useState<MedioPagoDto | null>(null)
@@ -88,13 +115,26 @@ export function MediosPagoShopCard() {
       .then(({ res, json }) => {
         if (!vivo) return
         if (!res.ok || !json?.medios) setErrorCarga(true)
-        else setMedios((json.medios as MedioPagoDto[]).slice().sort(porOrden))
+        else {
+          setMedios((json.medios as MedioPagoDto[]).slice().sort(porOrden))
+          setListas(Array.isArray(json.listas) ? (json.listas as Lista[]) : [])
+        }
       })
       .catch(() => vivo && setErrorCarga(true))
     return () => {
       vivo = false
     }
   }, [])
+
+  /** Recarga los avisos tras un cambio que puede afectarlos (otro medio dejó de estar destacado). */
+  async function recargarAvisos() {
+    try {
+      const { res, json } = await enviar("/api/admin/medios-pago-shop", "GET")
+      if (res.ok && json?.medios) setMedios((json.medios as MedioPagoDto[]).slice().sort(porOrden))
+    } catch {
+      // Los avisos son informativos: si la recarga falla se conservan los que hay.
+    }
+  }
 
   const avisar = (titulo: string, propagado: unknown) => {
     if (propagado === true) toast({ title: titulo, tone: "success" })
@@ -133,8 +173,9 @@ export function MediosPagoShopCard() {
           })
       if (!res.ok || !json) return manejarError(res.status, json)
       const nuevo = json.medio as MedioPagoDto
-      setMedios((prev) => [...(prev ?? []).filter((m) => m.slug !== nuevo.slug), nuevo].sort(porOrden))
+      setMedios((prev) => aplicarMedioGuardado(prev ?? [], nuevo))
       setForm(null)
+      if (nuevo.destacarEnCatalogo) void recargarAvisos()
       avisar(form.editandoSlug ? "Medio de pago actualizado" : "Medio de pago agregado", json.propagado)
     } catch {
       setErrores({ general: "Error de conexión. Inténtelo nuevamente." })
@@ -251,6 +292,26 @@ export function MediosPagoShopCard() {
                 ),
               },
               {
+                key: "precios",
+                header: "Precio",
+                render: (m) => {
+                  const lista = nombreDeLista(m, listas)
+                  return (
+                    <div className="flex flex-col gap-0.5">
+                      <span>{lista ?? "Lista por defecto"}</span>
+                      {m.destacarEnCatalogo && <Badge tone="info">Destacado en catálogo</Badge>}
+                      {m.mostrarEnFicha && <span className="text-xs" style={{ color: "var(--ink-soft)" }}>Se muestra en la ficha</span>}
+                      {m.avisos.map((a) => (
+                        <span key={a} className="text-xs" role="note" style={{ color: "var(--amber, var(--ink-soft))" }}>
+                          {a}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                },
+                hideBelow: "sm",
+              },
+              {
                 key: "aplica",
                 header: "Aplica a",
                 render: (m) => [m.aplicaRetiro ? "Retiro" : null, m.aplicaEnvio ? "Envío" : null].filter(Boolean).join(" y "),
@@ -337,6 +398,53 @@ export function MediosPagoShopCard() {
             >
               <Textarea rows={4} value={form.instrucciones} onChange={(e) => cambiar({ instrucciones: e.target.value })} aria-invalid={Boolean(errores.instrucciones)} />
             </Field>
+            {form.editandoSlug && (
+              <div className="flex flex-col gap-3">
+                <Field
+                  label="Lista de precios"
+                  hint="Si el cliente elige este medio, se le cobra el precio de esta lista de Alegra cuando es menor que el de la lista por defecto. No se cobra nunca más que la lista por defecto."
+                  error={errores.idListaPrecios}
+                >
+                  <Select
+                    aria-label="Lista de precios"
+                    value={form.idListaPrecios}
+                    onValueChange={(v) => {
+                      // Sin lista no hay precio distinto: se apagan el destacado y la ficha.
+                      cambiar(v === LISTA_POR_DEFECTO ? { idListaPrecios: v, destacarEnCatalogo: false, mostrarEnFicha: false } : { idListaPrecios: v })
+                    }}
+                    options={[
+                      { value: LISTA_POR_DEFECTO, label: "Lista por defecto" },
+                      ...listas.map((l) => ({ value: l.idPriceList, label: l.name })),
+                      // Una lista ya dada de baja en Alegra se sigue viendo hasta que se elija otra.
+                      ...(form.idListaPrecios !== LISTA_POR_DEFECTO && !listas.some((l) => l.idPriceList === form.idListaPrecios)
+                        ? [{ value: form.idListaPrecios, label: `${medios?.find((m) => m.slug === form.editandoSlug)?.listaPreciosNombre ?? form.idListaPrecios} (ya no existe)` }]
+                        : []),
+                    ]}
+                  />
+                </Field>
+                <Switch
+                  id="medio-destacar"
+                  label="Destacar en catálogo"
+                  checked={form.destacarEnCatalogo}
+                  disabled={form.idListaPrecios === LISTA_POR_DEFECTO}
+                  onCheckedChange={(v) => cambiar({ destacarEnCatalogo: v })}
+                />
+                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                  Las tarjetas del catálogo muestran &quot;con {form.nombre || "este medio"}&quot; bajo el precio. Sólo un medio puede estar destacado: si destaca este, se quita del anterior.
+                </p>
+                <Switch
+                  id="medio-ficha"
+                  label="Mostrar en ficha"
+                  checked={form.mostrarEnFicha}
+                  disabled={form.idListaPrecios === LISTA_POR_DEFECTO}
+                  onCheckedChange={(v) => cambiar({ mostrarEnFicha: v })}
+                />
+                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                  La ficha del producto muestra una línea con el precio de este medio. Puede marcar todos los que quiera.
+                </p>
+                {errores.destacarEnCatalogo && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.destacarEnCatalogo}</p>}
+              </div>
+            )}
             <div className="flex flex-col gap-2">
               <CheckboxLabel id="medio-retiro" checked={form.aplicaRetiro} onChange={(v) => cambiar({ aplicaRetiro: v })} label="Disponible para retiro en el local" />
               <CheckboxLabel id="medio-envio" checked={form.aplicaEnvio} onChange={(v) => cambiar({ aplicaEnvio: v })} label="Disponible para envío" />

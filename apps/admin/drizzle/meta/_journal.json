@@ -428,6 +428,13 @@
       "when": 1791632700000,
       "tag": "0060_correo",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1791719100000,
+      "tag": "0061_medios_pago_lista_precios",
+      "breakpoints": true
     }
   ]
 }

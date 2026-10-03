@@ -1112,10 +1112,20 @@ export const mediosPagoShop = pgTable(
     aplicaEnvio: boolean("aplica_envio").notNull().default(true),
     cobroOnline: boolean("cobro_online").notNull().default(false),
     orden: integer("orden").notNull().default(0),
+    // Lista de precios de Alegra (cuenta principal) enlazada al medio; NULL = lista por defecto.
+    // `listaPreciosNombre` es un snapshot para avisar si la lista se da de baja en Alegra.
+    idListaPrecios: text("id_lista_precios"),
+    listaPreciosNombre: text("lista_precios_nombre"),
+    // A lo sumo un medio por tenant (índice único parcial); `mostrarEnFicha` no tiene límite.
+    destacarEnCatalogo: boolean("destacar_en_catalogo").notNull().default(false),
+    mostrarEnFicha: boolean("mostrar_en_ficha").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("medios_pago_shop_tenant_slug_uniq").on(t.tenantId, t.slug)],
+  (t) => [
+    uniqueIndex("medios_pago_shop_tenant_slug_uniq").on(t.tenantId, t.slug),
+    uniqueIndex("medios_pago_shop_tenant_destacado_uniq").on(t.tenantId).where(sql`${t.destacarEnCatalogo} = true`),
+  ],
 )
 
 // ── Cuentas bancarias del Shop (change `pago-transferencia-comprobante`, rebanada A) ─────────

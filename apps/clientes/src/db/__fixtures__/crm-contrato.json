@@ -205,6 +205,10 @@
     "aplica_envio": "boolean",
     "cobro_online": "boolean",
     "orden": "integer",
+    "id_lista_precios": "text",
+    "lista_precios_nombre": "text",
+    "destacar_en_catalogo": "boolean",
+    "mostrar_en_ficha": "boolean",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
   },

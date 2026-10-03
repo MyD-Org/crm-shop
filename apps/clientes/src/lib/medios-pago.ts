@@ -20,6 +20,15 @@ export interface MedioPago {
   /** Sólo la fila fija `mercadopago`: dispara el cobro en línea. */
   cobroOnline: boolean;
   orden: number;
+  /**
+   * Lista de precios de Alegra enlazada al medio (id, no secreto); `null` = lista por defecto. La
+   * resuelve el servidor desde el slug: el cliente nunca manda una lista.
+   */
+  idListaPrecios: string | null;
+  /** El catálogo muestra "$X con <Medio>" bajo el precio (a lo sumo un medio por tenant). */
+  destacarEnCatalogo: boolean;
+  /** La ficha del producto muestra una línea "$X con <Medio>" (cualquier cantidad de medios). */
+  mostrarEnFicha: boolean;
 }
 
 /** Slug de la fila fija que dispara el cobro en línea con Mercado Pago. */

@@ -26,7 +26,7 @@ const dbQueTira = (mensaje: string) => ({
 
 describe("leerMediosPago", () => {
   it("pide sólo columnas declaradas, del tenant, ordenadas, contra public.medios_pago_shop", async () => {
-    const g = dbGrabadora(() => [["efectivo", "Efectivo", "", true, true, false, false, 1]]);
+    const g = dbGrabadora(() => [["efectivo", "Efectivo", "", true, true, false, false, 1, "3", true, false]]);
     const r = await leerMediosPago(g.db as never);
     expect(r).toEqual([
       {
@@ -38,13 +38,65 @@ describe("leerMediosPago", () => {
         aplicaEnvio: false,
         cobroOnline: false,
         orden: 1,
+        idListaPrecios: "3",
+        destacarEnCatalogo: true,
+        mostrarEnFicha: false,
       },
     ]);
     const { sql, params } = g.consultas[0];
     expect(sql).toContain('"public"."medios_pago_shop"');
     expect(sql).toContain('"tenant_id" = $1');
     expect(sql).toContain("order by");
+    expect(sql).toContain('"id_lista_precios"');
+    expect(sql).not.toContain('"lista_precios_nombre"'); // el Shop no lee el snapshot del nombre
     expect(params).toContain("tenant-ejemplo");
+  });
+
+  it("migración 0061 pendiente (42703): reintenta con las columnas viejas y degrada lista, destacado y ficha", async () => {
+    const g = dbGrabadora((c) => {
+      if (c.sql.includes('"id_lista_precios"')) {
+        throw Object.assign(new Error('column "id_lista_precios" does not exist'), { code: "42703" });
+      }
+      return [["transferencia", "Transferencia", "", true, true, true, false, 0]];
+    });
+    const r = await leerMediosPago(g.db as never);
+    expect(r).toEqual([
+      {
+        slug: "transferencia",
+        nombre: "Transferencia",
+        instrucciones: "",
+        activo: true,
+        aplicaRetiro: true,
+        aplicaEnvio: true,
+        cobroOnline: false,
+        orden: 0,
+        idListaPrecios: null,
+        destacarEnCatalogo: false,
+        mostrarEnFicha: false,
+      },
+    ]);
+    expect(g.consultas).toHaveLength(2);
+    expect(g.consultas[1].sql).not.toContain('"id_lista_precios"');
+  });
+
+  it("el checkout no cae a a_coordinar con la migración pendiente: la variante tolerante devuelve los medios", async () => {
+    const g = dbGrabadora((c) => {
+      if (c.sql.includes('"destacar_en_catalogo"')) {
+        throw Object.assign(new Error('column "destacar_en_catalogo" does not exist'), { code: "42703" });
+      }
+      return [["efectivo", "Efectivo", "", true, true, false, false, 1]];
+    });
+    const r = await leerMediosPagoTolerante(g.db as never);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ slug: "efectivo", idListaPrecios: null, destacarEnCatalogo: false, mostrarEnFicha: false });
+  });
+
+  it("otros errores (tabla inexistente) no se confunden con la columna ausente: no reintenta", async () => {
+    const g = dbGrabadora(() => {
+      throw Object.assign(new Error('relation "public.medios_pago_shop" does not exist'), { code: "42P01" });
+    });
+    await expect(leerMediosPago(g.db as never)).rejects.toThrow();
+    expect(g.consultas).toHaveLength(1);
   });
 
   it("tira si la tabla no existe (lo tolera la variante tolerante)", async () => {

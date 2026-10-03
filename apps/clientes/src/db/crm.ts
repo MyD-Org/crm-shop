@@ -440,6 +440,13 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
   aplicaEnvio: boolean("aplica_envio").notNull(),
   cobroOnline: boolean("cobro_online").notNull(),
   orden: integer("orden").notNull(),
+  // Migración 0061 del CRM (change `listas-por-medio-de-pago`). Puede no estar aplicada: la
+  // lectura reintenta sin estas columnas ante 42703 (`medios-pago-repo.ts`). El Shop NO lee
+  // `lista_precios_nombre` (snapshot para el admin); se declara por contrato.
+  idListaPrecios: text("id_lista_precios"),
+  listaPreciosNombre: text("lista_precios_nombre"),
+  destacarEnCatalogo: boolean("destacar_en_catalogo").notNull(),
+  mostrarEnFicha: boolean("mostrar_en_ficha").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

@@ -24,6 +24,9 @@ const medio = (o: Partial<MedioPago> & { slug: string }): MedioPago => ({
   aplicaEnvio: true,
   cobroOnline: false,
   orden: 0,
+  idListaPrecios: null,
+  destacarEnCatalogo: false,
+  mostrarEnFicha: false,
   ...o,
 });
 

@@ -1,9 +1,12 @@
 import { and, asc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { mediosPagoShop } from "@/db/schema"
+import { listasDeLaPrincipal } from "@/lib/catalogo-union-repo"
+import { avisosDeMedio } from "@/lib/medios-pago-shop-avisos"
 import {
   MSG_SIN_ENTREGA,
   SLUG_MERCADOPAGO,
+  resolverListaDelMedio,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
   type CambiosMedioPago,
@@ -26,7 +29,14 @@ export interface MedioPagoDto {
   aplicaEnvio: boolean
   cobroOnline: boolean
   orden: number
+  /** Lista de Alegra enlazada (null = lista por defecto) y snapshot de su nombre. */
+  idListaPrecios: string | null
+  listaPreciosNombre: string | null
+  destacarEnCatalogo: boolean
+  mostrarEnFicha: boolean
 }
+
+export type MedioPagoConAvisos = MedioPagoDto & { avisos: string[] }
 
 export const toMedioPagoDto = (r: Fila): MedioPagoDto => ({
   slug: r.slug,
@@ -37,6 +47,10 @@ export const toMedioPagoDto = (r: Fila): MedioPagoDto => ({
   aplicaEnvio: r.aplicaEnvio,
   cobroOnline: r.cobroOnline,
   orden: r.orden,
+  idListaPrecios: r.idListaPrecios,
+  listaPreciosNombre: r.listaPreciosNombre,
+  destacarEnCatalogo: r.destacarEnCatalogo,
+  mostrarEnFicha: r.mostrarEnFicha,
 })
 
 export type ResultadoMedio =
@@ -62,6 +76,58 @@ export async function listarMediosPago(tenantId: string): Promise<MedioPagoDto[]
     .where(eq(mediosPagoShop.tenantId, tenantId))
     .orderBy(asc(mediosPagoShop.orden), asc(mediosPagoShop.nombre))
   return filas.map(toMedioPagoDto)
+}
+
+/** Listas de precios de la cuenta principal de Alegra del tenant (para el selector de cada medio). */
+export const listasDisponiblesParaMedios = listasDeLaPrincipal
+
+/**
+ * Ids de listas que en general cuestan MÁS que la lista por defecto: más productos con precio mayor
+ * que con precio menor. Es un aviso informativo; si la consulta falla se omite (no bloquea nada).
+ */
+async function listasMasCaras(tenantId: string, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set()
+  try {
+    const filas = (await getDb().execute(sql`
+      WITH base AS (
+        SELECT p.prices,
+          coalesce(
+            (SELECT (e->>'price')::numeric FROM jsonb_array_elements(p.prices) e WHERE e->>'main' = 'true' LIMIT 1),
+            (p.prices->0->>'price')::numeric
+          ) AS general
+        FROM catalog_products p
+        WHERE p.tenant_id = ${tenantId} AND p.cuenta_id IS NULL AND jsonb_typeof(p.prices) = 'array'
+      )
+      SELECT e->>'idPriceList' AS id,
+        count(*) FILTER (WHERE (e->>'price')::numeric > base.general) AS caras,
+        count(*) FILTER (WHERE (e->>'price')::numeric > 0 AND (e->>'price')::numeric < base.general) AS baratas
+      FROM base, jsonb_array_elements(base.prices) e
+      WHERE e->>'idPriceList' IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
+      GROUP BY 1
+    `)) as unknown as { id: string; caras: string | number; baratas: string | number }[]
+    return new Set(filas.filter((f) => Number(f.caras) > Number(f.baratas)).map((f) => f.id))
+  } catch {
+    return new Set()
+  }
+}
+
+/** Calcula los avisos no bloqueantes de cada medio (lista huérfana, más cara, destacado/ficha sin efecto). */
+export async function conAvisos(tenantId: string, medios: MedioPagoDto[]): Promise<MedioPagoConAvisos[]> {
+  const listas = await listasDeLaPrincipal(tenantId)
+  const enlazadas = [...new Set(medios.map((m) => m.idListaPrecios).filter((x): x is string => x !== null))]
+  const ctx = {
+    listasExistentes: new Set(listas.map((l) => l.idPriceList)),
+    listasMasCaras: await listasMasCaras(tenantId, enlazadas),
+  }
+  return medios.map((m) => ({ ...m, avisos: avisosDeMedio(m, ctx) }))
+}
+
+export async function listarMediosPagoConAvisos(
+  tenantId: string,
+): Promise<{ medios: MedioPagoConAvisos[]; listas: { idPriceList: string; name: string }[] }> {
+  const medios = await listarMediosPago(tenantId)
+  const [listas, conAv] = await Promise.all([listasDeLaPrincipal(tenantId), conAvisos(tenantId, medios)])
+  return { medios: conAv, listas }
 }
 
 /** `slug -> nombre` de los medios del tenant (activos o no), para mostrar el elegido en un pedido. */
@@ -97,6 +163,32 @@ export async function actualizarMedioPago(tenantId: string, slug: string, body: 
   const cambios: CambiosMedioPago = { ...v.cambios }
   delete cambios.cobroOnline
 
+  // Las listas se leen FUERA de la transacción (otra consulta, sin lock) y sólo si hace falta.
+  const listas = typeof cambios.idListaPrecios === "string" ? await listasDeLaPrincipal(tenantId) : []
+
+  try {
+    return await actualizarEnTx(tenantId, slug, cambios, listas)
+  } catch (err) {
+    // Dos destacados simultáneos: el índice único parcial rechaza al segundo. No es un 500.
+    if (codigoPg(err) === "23505" && cambios.destacarEnCatalogo === true) {
+      return {
+        kind: "conflict",
+        campo: "destacarEnCatalogo",
+        error: "Otro medio de pago se destacó al mismo tiempo. Actualice la página e inténtelo nuevamente.",
+      }
+    }
+    throw err
+  }
+}
+
+type CambiosConLista = CambiosMedioPago & { listaPreciosNombre?: string | null }
+
+async function actualizarEnTx(
+  tenantId: string,
+  slug: string,
+  cambios: CambiosMedioPago,
+  listas: { idPriceList: string; name: string }[],
+): Promise<ResultadoMedio> {
   return getDb().transaction(async (tx): Promise<ResultadoMedio> => {
     const [actual] = await tx
       .select()
@@ -105,13 +197,40 @@ export async function actualizarMedioPago(tenantId: string, slug: string, body: 
       .for("update")
     if (!actual) return { kind: "not_found" }
 
+    const set: CambiosConLista = { ...cambios }
+    if (cambios.idListaPrecios !== undefined) {
+      if (cambios.idListaPrecios !== null && cambios.idListaPrecios === actual.idListaPrecios) {
+        // Mismo id que ya tenía (aunque la lista ya no exista en Alegra): se conserva el snapshot.
+        delete set.listaPreciosNombre
+      } else {
+        const l = resolverListaDelMedio(cambios.idListaPrecios, listas)
+        if (!l.ok) return { kind: "invalid", campo: l.campo, error: l.error }
+        set.idListaPrecios = l.id
+        set.listaPreciosNombre = l.nombre
+      }
+    }
+
     const retiro = cambios.aplicaRetiro ?? actual.aplicaRetiro
     const envio = cambios.aplicaEnvio ?? actual.aplicaEnvio
     if (!retiro && !envio) return { kind: "invalid", campo: "aplicaRetiro", error: MSG_SIN_ENTREGA }
 
+    // Un solo destacado por tenant: se desmarca el anterior en la MISMA transacción.
+    if (cambios.destacarEnCatalogo === true) {
+      await tx
+        .update(mediosPagoShop)
+        .set({ destacarEnCatalogo: false, updatedAt: new Date() })
+        .where(
+          and(
+            eq(mediosPagoShop.tenantId, tenantId),
+            eq(mediosPagoShop.destacarEnCatalogo, true),
+            sql`${mediosPagoShop.slug} <> ${slug}`,
+          ),
+        )
+    }
+
     const [fila] = await tx
       .update(mediosPagoShop)
-      .set({ ...cambios, updatedAt: new Date() })
+      .set({ ...set, updatedAt: new Date() })
       .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.slug, slug)))
       .returning()
     return { kind: "ok", medio: toMedioPagoDto(fila) }

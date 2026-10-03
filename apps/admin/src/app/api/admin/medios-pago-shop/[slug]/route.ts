@@ -1,10 +1,12 @@
 import { adminNotFoundResponse, requireAdminPlus } from "@/lib/admin-route-guard"
-import { actualizarMedioPago, eliminarMedioPago } from "@/lib/medios-pago-shop-repo"
+import { actualizarMedioPago, conAvisos, eliminarMedioPago } from "@/lib/medios-pago-shop-repo"
 import { errorDeMedio } from "@/lib/medios-pago-shop-respuestas"
 import { pingShopRevalidarSucursales } from "@/lib/shop-revalidar"
 import { NO_STORE } from "@/lib/sucursales-respuestas"
 
-// PATCH  /api/admin/medios-pago-shop/[slug] — cambios parciales (el slug no se modifica).
+// PATCH  /api/admin/medios-pago-shop/[slug] — cambios parciales (el slug no se modifica): datos del
+//        medio, `idListaPrecios` (null = lista por defecto), `destacarEnCatalogo` (uno por tenant:
+//        destacar otro lo mueve) y `mostrarEnFicha`. Cualquier cambio avisa al Shop.
 // DELETE /api/admin/medios-pago-shop/[slug] — sólo si ningún pedido lo eligió; si no, desactivar.
 // Admin o superadmin. Tras persistir se avisa al Shop (best-effort).
 
@@ -20,7 +22,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (r.kind !== "ok") return errorDeMedio(r)
 
   const { propagado } = await pingShopRevalidarSucursales()
-  return Response.json({ ok: true, propagado, medio: r.medio }, { headers: NO_STORE })
+  const [medio] = await conAvisos(guard.tenantId, [r.medio])
+  return Response.json({ ok: true, propagado, medio }, { headers: NO_STORE })
 }
 
 export async function DELETE(req: Request, { params }: Ctx) {

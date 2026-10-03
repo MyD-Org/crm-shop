@@ -26,6 +26,9 @@ const medio = (slug: string, nombre: string, extra: Partial<MedioPago> = {}): Me
   aplicaEnvio: true,
   cobroOnline: slug === "mercadopago",
   orden: 0,
+  idListaPrecios: null,
+  destacarEnCatalogo: false,
+  mostrarEnFicha: false,
   ...extra,
 });
 

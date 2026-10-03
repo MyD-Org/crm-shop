@@ -16,6 +16,9 @@ const medio = (slug: string): MedioPago => ({
   aplicaEnvio: true,
   cobroOnline: slug === "mercadopago",
   orden: 0,
+  idListaPrecios: null,
+  destacarEnCatalogo: false,
+  mostrarEnFicha: false,
 });
 
 afterEach(() => vi.unstubAllEnvs());

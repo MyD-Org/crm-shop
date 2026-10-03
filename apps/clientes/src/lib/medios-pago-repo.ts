@@ -20,23 +20,54 @@ import type { MedioPago } from "./medios-pago";
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
 type Ejecutor = Pick<ReturnType<typeof getDb>, "select">;
 
-/** Lectura que TIRA si la tabla no existe. La usa la lectura cacheada (que elige su perfil de caché). */
+/** ¿El error es Postgres 42703 (columna inexistente)? Mira también `cause` (drizzle envuelve el error). */
+function esColumnaInexistente(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && i < 4; e = (e as { cause?: unknown }).cause, i++) {
+    if ((e as { code?: unknown }).code === "42703") return true;
+  }
+  return false;
+}
+
+/**
+ * Lectura que TIRA si la tabla no existe. La usa la lectura cacheada (que elige su perfil de caché).
+ *
+ * Tolera que la migración 0061 del CRM (lista de precios, destacado y ficha) no esté aplicada: ante
+ * 42703 reintenta con las columnas de siempre y devuelve `idListaPrecios: null`, destacado y ficha en
+ * `false`. Así el checkout sigue ofreciendo los medios (con la lista por defecto) y no cae a
+ * "a_coordinar" por un deploy adelantado a la migración.
+ */
 export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[]> {
-  const filas = await db
-    .select({
-      slug: crmMediosPagoShop.slug,
-      nombre: crmMediosPagoShop.nombre,
-      instrucciones: crmMediosPagoShop.instrucciones,
-      activo: crmMediosPagoShop.activo,
-      aplicaRetiro: crmMediosPagoShop.aplicaRetiro,
-      aplicaEnvio: crmMediosPagoShop.aplicaEnvio,
-      cobroOnline: crmMediosPagoShop.cobroOnline,
-      orden: crmMediosPagoShop.orden,
-    })
-    .from(crmMediosPagoShop)
-    .where(eq(crmMediosPagoShop.tenantId, shopTenantId()))
-    .orderBy(asc(crmMediosPagoShop.orden), asc(crmMediosPagoShop.nombre));
-  return filas;
+  const columnasBase = {
+    slug: crmMediosPagoShop.slug,
+    nombre: crmMediosPagoShop.nombre,
+    instrucciones: crmMediosPagoShop.instrucciones,
+    activo: crmMediosPagoShop.activo,
+    aplicaRetiro: crmMediosPagoShop.aplicaRetiro,
+    aplicaEnvio: crmMediosPagoShop.aplicaEnvio,
+    cobroOnline: crmMediosPagoShop.cobroOnline,
+    orden: crmMediosPagoShop.orden,
+  };
+  try {
+    return await db
+      .select({
+        ...columnasBase,
+        idListaPrecios: crmMediosPagoShop.idListaPrecios,
+        destacarEnCatalogo: crmMediosPagoShop.destacarEnCatalogo,
+        mostrarEnFicha: crmMediosPagoShop.mostrarEnFicha,
+      })
+      .from(crmMediosPagoShop)
+      .where(eq(crmMediosPagoShop.tenantId, shopTenantId()))
+      .orderBy(asc(crmMediosPagoShop.orden), asc(crmMediosPagoShop.nombre));
+  } catch (err) {
+    if (!esColumnaInexistente(err)) throw err;
+    console.warn("[medios-pago] la migración 0061 del CRM no está aplicada; se usa la lista por defecto.");
+    const filas = await db
+      .select(columnasBase)
+      .from(crmMediosPagoShop)
+      .where(eq(crmMediosPagoShop.tenantId, shopTenantId()))
+      .orderBy(asc(crmMediosPagoShop.orden), asc(crmMediosPagoShop.nombre));
+    return filas.map((f) => ({ ...f, idListaPrecios: null, destacarEnCatalogo: false, mostrarEnFicha: false }));
+  }
 }
 
 /** Lo mismo, pero con la tabla ausente (o cualquier falla) devuelve `[]`: el pago sale "a_coordinar". */

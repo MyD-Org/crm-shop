@@ -12,15 +12,37 @@
 import { cache } from "react";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { cuotasHabilitadas } from "./cuotas-flag";
+import { mediosOfrecibles } from "./medios-pago-datos";
+import { SIN_MEDIOS_PRECIO, seleccionarMediosPrecio, type MediosPrecio } from "./medios-precio";
+import { precioEspecialCuenta } from "./precio-especial-flag";
 
 export interface FlagsPublicos {
   /** `catalogo-solo-visibles`: los listados públicos sólo con lo curado en el CRM. */
   soloVisibles: boolean;
   /** `cuotas`: se exhibe la oferta de cuotas. */
   cuotas: boolean;
+  /**
+   * "$X con <Medio>": el medio destacado de las cards y los de la ficha. Vacío con el flag
+   * `precio-especial-cuenta` encendido o si los medios no se pueden leer (degrada sin romper).
+   */
+  mediosPrecio: MediosPrecio;
+}
+
+async function leerMediosPrecio(): Promise<MediosPrecio> {
+  try {
+    if (await precioEspecialCuenta()) return SIN_MEDIOS_PRECIO;
+    return seleccionarMediosPrecio(await mediosOfrecibles(), false);
+  } catch (err) {
+    console.warn("[flags-publicos] medios con precio no disponibles:", err instanceof Error ? err.message : err);
+    return SIN_MEDIOS_PRECIO;
+  }
 }
 
 export const flagsPublicos = cache(async (): Promise<FlagsPublicos> => {
-  const [soloVisibles, cuotas] = await Promise.all([catalogoSoloVisibles(), cuotasHabilitadas()]);
-  return { soloVisibles, cuotas };
+  const [soloVisibles, cuotas, mediosPrecio] = await Promise.all([
+    catalogoSoloVisibles(),
+    cuotasHabilitadas(),
+    leerMediosPrecio(),
+  ]);
+  return { soloVisibles, cuotas, mediosPrecio };
 });

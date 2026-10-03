@@ -6,6 +6,7 @@ import { ProductCard } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
+import { PrecioMedioCard } from "@/components/PrecioMedio";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
 import { etiquetaStock, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
@@ -95,7 +96,12 @@ export function TarjetaProductoCarrusel({
             product={{ id: p.id, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }}
           />
         }
-        installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
+        installments={
+          <>
+            <PrecioMedioCard medio={p.precioMedio} />
+            <CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />
+          </>
+        }
       />
     </Link>
   );

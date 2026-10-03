@@ -40,10 +40,10 @@ export async function DestacadosHome({
   await connection();
   // Si el catálogo falla, `destacadosHome` degrada a destacados vacíos (la
   // sección ya renderiza la grilla vacía) en vez de tumbar la página entera.
-  const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
+  const [{ soloVisibles, mediosPrecio }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
   const [oferta, destacados] = await Promise.all([
     getOfertaCuotas(),
-    destacadosHome({ skus, cantidad, soloVisibles, disp }),
+    destacadosHome({ skus, cantidad, soloVisibles, disp, destacado: mediosPrecio?.destacado }),
   ]);
 
   return (

@@ -10,6 +10,7 @@ import { getDb } from "@/db";
 import { favorites } from "@/db/schema";
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
+import type { MediosPrecio } from "./medios-precio";
 import { shopTenantId } from "./tenant";
 
 /** Tope de favoritos por usuario. Lo aplica `agregarFavorito`. */
@@ -92,11 +93,11 @@ export async function quitarFavorito(clerkUserId: string, alegraItemId: string):
  */
 export async function listarFavoritos(
   clerkUserId: string,
-  opts?: { limite?: number; idPriceList?: string },
+  opts?: { limite?: number; idPriceList?: string; mediosPrecio?: MediosPrecio },
 ): Promise<Product[]> {
   const ids = await idsFavoritos(clerkUserId, opts?.limite);
   if (ids.length === 0) return [];
-  const productos = await getProductosPorIds(ids, { idPriceList: opts?.idPriceList });
+  const productos = await getProductosPorIds(ids, { idPriceList: opts?.idPriceList, mediosPrecio: opts?.mediosPrecio });
   return ids.flatMap((id) => {
     const p = productos.get(id);
     return p ? [p] : [];

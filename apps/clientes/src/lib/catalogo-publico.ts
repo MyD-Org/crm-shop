@@ -51,6 +51,7 @@ import { TAG_CATALOGO } from "./cache-tags";
 import type { OrdenCatalogo } from "./catalogo-url";
 import { elegirDestacados } from "./destacados";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
+import { SIN_MEDIOS_PRECIO, type MedioPrecio } from "./medios-precio";
 
 /** Categoría de Alegra que alimenta los destacados de la home. */
 const CATEGORIA_DESTACADOS = "ILUMINACION";
@@ -82,6 +83,11 @@ export interface ArgsPaginaPublica {
   soloVisibles: boolean;
   /** Flag `disponibilidad-sucursal` (ver `ContextoDisponibilidad`). */
   disp?: ContextoDisponibilidad;
+  /**
+   * Medio destacado ("$X con <Medio>" en las cards). Argumento y no lectura adentro: es parte de la
+   * clave de la caché, así cambiar el enlace o el destacado se ve aunque el ping falle.
+   */
+  destacado?: MedioPrecio | null;
 }
 
 async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> {
@@ -89,7 +95,13 @@ async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> 
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] catalogo-pagina miss");
-  return getPaginaCatalogo(args);
+  return getPaginaCatalogo(conMedios(args));
+}
+
+/** Los medios que dibujan las cards: sólo el destacado (la ficha va aparte). */
+function conMedios<T extends { destacado?: MedioPrecio | null }>(args: T): Omit<T, "destacado"> & { mediosPrecio?: { destacado: MedioPrecio | null; ficha: MedioPrecio[] } } {
+  const { destacado, ...resto } = args;
+  return destacado ? { ...resto, mediosPrecio: { ...SIN_MEDIOS_PRECIO, destacado } } : resto;
 }
 
 /**
@@ -97,7 +109,7 @@ async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> 
  * cachea): la página muestra su error en vez de un catálogo vacío.
  */
 export function paginaCatalogoPublica(args: ArgsPaginaPublica): Promise<PaginaCatalogo> {
-  return filtrosCacheables(args.filtros) ? paginaCacheada(args) : getPaginaCatalogo(args);
+  return filtrosCacheables(args.filtros) ? paginaCacheada(args) : getPaginaCatalogo(conMedios(args));
 }
 
 async function facetasCacheadas(
@@ -131,12 +143,19 @@ async function productoCacheado(
   disp?: ContextoDisponibilidad,
   /** Con características estructuradas (va en la clave de la caché). */
   estructurados = false,
+  /** Medios de la ficha ("$X con <Medio>"): argumento, es parte de la clave de la caché. */
+  ficha: readonly MedioPrecio[] = [],
 ): Promise<Product | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] producto miss");
-  return getProducto(id, { soloVisibles, disp, ...(estructurados ? { atributosEstructurados: true } : {}) });
+  return getProducto(id, {
+    soloVisibles,
+    disp,
+    ...(estructurados ? { atributosEstructurados: true } : {}),
+    ...(ficha.length ? { mediosPrecio: { destacado: null, ficha: [...ficha] } } : {}),
+  });
 }
 
 /**
@@ -154,8 +173,11 @@ export function productoPublico(
    * `atributosEstructuradosDisponibles`). Sin él, el producto de siempre.
    */
   estructurados = false,
+  /** Medios de la ficha (`flagsPublicos().mediosPrecio.ficha`): "$X con <Medio>" por cada uno. */
+  ficha: readonly MedioPrecio[] = [],
 ): Promise<Product | null> {
   if (!esIdAlegra(id)) return Promise.resolve(null);
+  if (ficha.length) return productoCacheado(id, soloVisibles, disp, estructurados, ficha);
   return estructurados ? productoCacheado(id, soloVisibles, disp, true) : productoCacheado(id, soloVisibles, disp);
 }
 
@@ -209,25 +231,28 @@ export async function destacadosHome(args: {
   cantidad: number;
   soloVisibles: boolean;
   disp?: ContextoDisponibilidad;
+  /** Medio destacado de las cards (argumento: parte de la clave de la caché). */
+  destacado?: MedioPrecio | null;
 }): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] destacados miss");
   const { skus, cantidad, soloVisibles, disp } = args;
+  const { mediosPrecio } = conMedios(args);
   let fallo = false;
   const registrar = (err: unknown) => {
     fallo = true;
     console.error("[catalogo-publico] no se pudieron cargar los destacados:", err);
   };
   const [iluminacion, general] = await Promise.all([
-    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, pagina: 1, soloVisibles, disp }).catch(
+    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, pagina: 1, soloVisibles, disp, mediosPrecio }).catch(
       (err: unknown): { productos: Product[] } => {
         registrar(err);
         return { productos: [] };
       },
     ),
     skus.length
-      ? getCatalogo({ limit: LIMITE_RESPALDO_DESTACADOS, soloVisibles, disp }).catch((err: unknown): Product[] => {
+      ? getCatalogo({ limit: LIMITE_RESPALDO_DESTACADOS, soloVisibles, disp, mediosPrecio }).catch((err: unknown): Product[] => {
           registrar(err);
           return [];
         })
@@ -245,12 +270,19 @@ async function primeraPaginaCategoria(
   categoria: string,
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  destacado: MedioPrecio | null = null,
 ): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] categoria-relacionados miss");
   try {
-    const { productos } = await getPaginaCatalogo({ filtros: { categorias: [categoria] }, pagina: 1, soloVisibles, disp });
+    const { productos } = await getPaginaCatalogo({
+      filtros: { categorias: [categoria] },
+      pagina: 1,
+      soloVisibles,
+      disp,
+      ...conMedios({ destacado }),
+    });
     cacheLife("catalogo");
     return productos;
   } catch (err) {
@@ -267,12 +299,19 @@ async function categoriaExacta(
   categoriaId: string,
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
+  destacado: MedioPrecio | null = null,
 ): Promise<{ nombre: string; productos: Product[] } | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] categoria-exacta miss");
   try {
-    const r = await getCategoriaExacta({ categoriaId, limit: TOPE_CATEGORIA_EXACTA, soloVisibles, disp });
+    const r = await getCategoriaExacta({
+      categoriaId,
+      limit: TOPE_CATEGORIA_EXACTA,
+      soloVisibles,
+      disp,
+      ...conMedios({ destacado }),
+    });
     cacheLife("catalogo");
     return r;
   } catch (err) {
@@ -305,16 +344,18 @@ export async function relacionadosProducto(args: {
   cantidad: number;
   soloVisibles: boolean;
   disp?: ContextoDisponibilidad;
+  /** Medio destacado de las cards (argumento: parte de la clave de la caché). */
+  destacado?: MedioPrecio | null;
 }): Promise<Relacionados | null> {
   const recortar = (productos: Product[]) =>
     productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);
 
   if (args.categoriaPropiaId) {
-    const exacta = await categoriaExacta(args.categoriaPropiaId, args.soloVisibles, args.disp);
+    const exacta = await categoriaExacta(args.categoriaPropiaId, args.soloVisibles, args.disp, args.destacado ?? null);
     if (exacta) return { categoria: exacta.nombre, productos: recortar(exacta.productos) };
   }
   if (!args.categoria) return null;
-  const productos = await primeraPaginaCategoria(args.categoria, args.soloVisibles, args.disp);
+  const productos = await primeraPaginaCategoria(args.categoria, args.soloVisibles, args.disp, args.destacado ?? null);
   return { categoria: args.categoria, productos: recortar(productos) };
 }
 

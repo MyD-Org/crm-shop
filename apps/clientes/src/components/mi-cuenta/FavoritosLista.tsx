@@ -5,6 +5,7 @@ import { EmptyState, ProductCard } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
+import { PrecioMedioCard } from "@/components/PrecioMedio";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
@@ -85,7 +86,12 @@ export function FavoritosLista({
               <IconoLampara size={40} />
             )
           }
-          installments={<CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />}
+          installments={
+            <>
+              <PrecioMedioCard medio={p.precioMedio} />
+              <CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />
+            </>
+          }
           cornerAction={<BotonFavorito productId={p.id} size="sm" />}
           action={
             <AddToCartButton

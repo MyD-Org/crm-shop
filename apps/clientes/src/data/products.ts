@@ -22,6 +22,19 @@ export interface ProductImage {
  * Alegra: son concepto del shop y hoy nadie los completa. Se mantienen en el
  * tipo para cuando exista esa capa (ver docs/arquitectura-integraciones.md).
  */
+/**
+ * Precio del producto con un medio de pago que tiene lista propia ("$X con <Medio>"). Sólo existe si
+ * es MENOR que el de la lista por defecto (ver src/lib/medios-precio.ts).
+ */
+export interface PrecioMedio {
+  slug: string;
+  nombre: string;
+  /** Neto (sin IVA) de la lista del medio. */
+  price: number;
+  /** Con IVA, si se conoce. */
+  precioFinal?: number;
+}
+
 /** Una fila de la tabla de especificaciones de la ficha. */
 export interface EspecificacionProducto {
   etiqueta: string;
@@ -69,6 +82,10 @@ export interface Product {
    * consulta los pidió. Los usan los filtros del chat y la card `spec`.
    */
   atributosEstructurados?: AtributosEstructurados;
+  /** Medio destacado en el catálogo ("$X con <Medio>" en cards). undefined = no corresponde. */
+  precioMedio?: PrecioMedio;
+  /** Medios de la ficha, en orden. Vacío/undefined = ninguno califica. */
+  preciosMedios?: PrecioMedio[];
   oldPrice?: number;
   /** Precio de la lista propia del cliente (ver `conPrecioCuenta`). */
   precioEspecial?: boolean;

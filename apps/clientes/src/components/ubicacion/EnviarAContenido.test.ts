@@ -10,6 +10,14 @@ const render = (lineas: { retiro: boolean; etiqueta: string; valor: string }) =>
   renderToStaticMarkup(createElement(EnviarAContenido, { lineas }));
 
 describe("EnviarAContenido (dos líneas del header)", () => {
+  it("en línea (mobile, bajo el buscador): etiqueta y valor en la misma fila", () => {
+    const h = renderToStaticMarkup(
+      createElement(EnviarAContenido, { lineas: { retiro: true, etiqueta: "Retirar en", valor: "Local A" }, enLinea: true }),
+    );
+    expect(texto(h)).toBe("Retirar en Local A");
+    expect(h).not.toContain("flex-col");
+  });
+
   it("envío: etiqueta arriba, valor abajo, con pin y sin ícono de local", () => {
     const h = render({ retiro: false, etiqueta: "Enviar a Ana", valor: "Calle Ejemplo 123" });
     expect(texto(h)).toBe("Enviar a Ana Calle Ejemplo 123");
@@ -34,9 +42,10 @@ describe("UbicacionHeader y SelectorUbicacion (guardas de fuente)", () => {
   const header = readFileSync(join(__dirname, "UbicacionHeader.tsx"), "utf8");
   const selector = readFileSync(join(__dirname, "SelectorUbicacion.tsx"), "utf8");
 
-  it("el fallback del Suspense reserva el alto de dos líneas (h-8, sin CLS)", () => {
+  it("el fallback del Suspense reserva el alto de dos líneas (h-8) o de una en mobile (h-4), sin CLS", () => {
     expect(header).toMatch(/const ALTO = "h-8"/);
-    expect(header).toContain("<Suspense fallback={<div aria-hidden className={ALTO} />}>");
+    expect(header).toMatch(/const ALTO_EN_LINEA = "h-4"/);
+    expect(header).toContain("<Suspense fallback={<div aria-hidden className={enLinea ? ALTO_EN_LINEA : ALTO} />}>");
   });
 
   it("la cookie y la identidad se leen dentro del hueco por request; el header no carga direcciones", () => {

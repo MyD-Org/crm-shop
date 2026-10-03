@@ -102,7 +102,16 @@ const ICONOS: Record<IdEntradaMenu, React.ReactNode> = {
  * `esCuentaCorriente` lo resuelve el servidor (HeaderServer, espejo del CRM):
  * viene en el mismo HTML que se hidrata, así que el menú no cambia al hidratar.
  */
-export function MenuUsuario({ nombre, esCuentaCorriente }: { nombre: string | null; esCuentaCorriente: boolean }) {
+export function MenuUsuario({
+  nombre,
+  esCuentaCorriente,
+  alinear = "end",
+}: {
+  nombre: string | null;
+  esCuentaCorriente: boolean;
+  /** Hacia dónde abre el menú: `start` cuando el avatar va a la izquierda (mobile). */
+  alinear?: "start" | "end";
+}) {
   const router = useRouter();
   const clerk = useClerk();
   // En el hueco del header Clerk puede haber cargado antes de hidratar: el
@@ -152,7 +161,7 @@ export function MenuUsuario({ nombre, esCuentaCorriente }: { nombre: string | nu
   });
 
   return (
-    <DropdownMenu items={items} align="end" className="min-w-[14rem] max-w-[18rem]">
+    <DropdownMenu items={items} align={alinear} className="min-w-[14rem] max-w-[18rem]">
       <button
         type="button"
         aria-label={etiquetaBotonMenu(nombreVisible)}

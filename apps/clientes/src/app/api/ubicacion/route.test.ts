@@ -241,11 +241,11 @@ describe("POST /api/ubicacion: {id, cp}", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("cp ausente sin sesión: 400 pidiendo el código postal", async () => {
+  it("cp ausente sin sesión: ok (el Shop ya no pide el código postal)", async () => {
+    georefOk(fixtures.localidades);
     const res = await post({ id: "06518010" });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("Ingrese su código postal.");
-    sinCookie(res);
+    expect(res.status).toBe(200);
+    expect(cookieGuardada(res).valor).not.toHaveProperty("cp");
   });
 
   it("cp ausente con sesión: ok", async () => {
@@ -401,7 +401,7 @@ describe("GET /api/ubicacion/opciones", () => {
 });
 
 describe("POST /api/ubicacion/coordenadas: no regresión", () => {
-  it("la localidad queda sin cp (el modal lo pide)", async () => {
+  it("la localidad queda sin cp", async () => {
     georefOk(fixtures.ubicacion);
     const res = await coordenadas(pedido("/api/ubicacion/coordenadas", { method: "POST", body: { lat: -25.6, lon: -54.57 } }));
     expect(res.status).toBe(200);

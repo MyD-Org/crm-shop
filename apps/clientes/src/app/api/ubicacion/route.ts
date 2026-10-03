@@ -19,7 +19,8 @@ import { retiroValido } from "@/lib/ubicacion-retiro";
 /**
  * POST: el visitante elige DÓNDE recibir su compra. El cuerpo es UNO de (excluyentes):
  *  - `{ id, cp? }`: una localidad de Georef. El servidor la vuelve a resolver por id (no confía en
- *    la provincia que mande el cliente). Sin sesión el código postal es obligatorio.
+ *    la provincia que mande el cliente). El código postal es opcional (el
+ *    Shop ya no lo pide; si llega, se valida y se guarda).
  *  - `{ direccionId }`: una dirección guardada. Exige sesión y que sea del usuario.
  *  - `{ tipo: "retiro", sucursal? }`: retiro en un local (sin `sucursal` sólo con el flag
  *    `sucursales` apagado: local único).
@@ -92,10 +93,6 @@ async function elegirLocalidad(id: unknown, cpEntrada: unknown): Promise<NextRes
     const n = normalizarCp(cpEntrada);
     if (!n) return errorUbicacion(TEXTOS_UBICACION.cpInvalido, 400);
     cp = n;
-  } else {
-    // Con sesión el código postal sale de la dirección guardada: no se pide aparte. Sin sesión, sí.
-    const { userId } = await auth();
-    if (!userId) return errorUbicacion(TEXTOS_UBICACION.cpRequerido, 400);
   }
 
   try {

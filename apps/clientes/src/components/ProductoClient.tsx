@@ -235,7 +235,7 @@ export function ProductoClient({
         {/* Grilla con áreas: en mobile galería → compra → detalle; desde lg el
             detalle sube debajo de la galería y la compra ocupa la columna
             derecha entera (así puede quedar fija con sticky). */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-x-12 lg:gap-y-10">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-12 lg:gap-y-10">
           <div className="min-w-0 lg:col-start-1 lg:row-start-1">
             <GaleriaProducto
               fotos={producto.images}

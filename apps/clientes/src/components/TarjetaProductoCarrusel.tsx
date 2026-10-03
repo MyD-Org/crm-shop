@@ -50,7 +50,9 @@ export function TarjetaProductoCarrusel({
   return (
     <Link
       href={`/producto/${p.id}`}
-      className="block transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 motion-reduce:hover:translate-y-0"
+      // h-full: el slide del carrusel se estira al alto de la card más alta; sin esto la card
+      // (h-full) se queda en su alto propio y las de nombre corto quedan más bajas.
+      className="block h-full transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 motion-reduce:hover:translate-y-0"
     >
       <ProductCard
         variant="soft"

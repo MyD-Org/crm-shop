@@ -6,10 +6,10 @@ import { MIN_CARACTERES_LOCALIDAD } from "@/lib/georef";
 import { TEXTOS_UBICACION as T } from "@/lib/ubicacion";
 
 /**
- * Sin sesión: localidad (Georef, autocompletado o "Usar mi ubicación") + código postal. No guarda
- * nada por su cuenta: avisa al modal qué localidad se eligió y el modal manda `{ id, cp }` al
- * confirmar (el CP es obligatorio sin sesión). La geolocalización ya deja la localidad aplicada
- * (sin CP) y precarga la búsqueda para que el visitante confirme la localidad e ingrese el CP.
+ * Sin sesión: la localidad (Georef, autocompletado o "Usar mi ubicación"). No se pide código
+ * postal: la zona, la disponibilidad y el envío salen de la provincia de la localidad. No guarda
+ * nada por su cuenta: avisa al modal qué localidad se eligió y el modal manda `{ id }` al
+ * confirmar. La geolocalización ya deja la localidad aplicada: el modal se cierra.
  * El navegador nunca llama a Georef: todo pasa por `/api/ubicacion/*`.
  */
 const DEBOUNCE_MS = 400;
@@ -22,20 +22,14 @@ export interface LocalidadElegida {
 export function FormularioLocalidad({
   elegida,
   onElegir,
-  cp,
-  onCp,
-  errorCp,
   errorLocalidad,
   onGeolocalizada,
   deshabilitado,
 }: {
   elegida: LocalidadElegida | null;
   onElegir: (l: LocalidadElegida) => void;
-  cp: string;
-  onCp: (cp: string) => void;
-  errorCp: string | null;
   errorLocalidad: string | null;
-  /** La geolocalización aplicó una localidad (sin CP): refrescar el header. */
+  /** La geolocalización aplicó una localidad: cerrar el modal y refrescar el header. */
   onGeolocalizada: () => void;
   deshabilitado: boolean;
 }) {
@@ -43,7 +37,6 @@ export function FormularioLocalidad({
   const [opciones, setOpciones] = useState<LocalidadElegida[] | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [ubicando, setUbicando] = useState(false);
-  const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -93,7 +86,6 @@ export function FormularioLocalidad({
     onElegir(op);
     setTexto(op.etiqueta);
     setOpciones(null);
-    setAviso(null);
   }
 
   function usarMiUbicacion() {
@@ -116,10 +108,8 @@ export function FormularioLocalidad({
             setError(data?.error ?? T.errorUbicacion);
             return;
           }
-          // La localidad quedó aplicada sin CP: se confirma en la lista y se pide el CP.
+          // La localidad ya quedó aplicada (cookie): no hay nada más que pedir.
           onGeolocalizada();
-          setAviso(T.completarCp);
-          buscar(data.localidad);
         } catch {
           setError(T.errorUbicacion);
         } finally {
@@ -165,8 +155,6 @@ export function FormularioLocalidad({
           <p className="text-danger">{error}</p>
         ) : opciones && opciones.length === 0 && !buscando ? (
           <p className="text-muted">{T.sinResultados}</p>
-        ) : aviso ? (
-          <p className="text-muted">{aviso}</p>
         ) : null}
       </div>
 
@@ -186,16 +174,6 @@ export function FormularioLocalidad({
           ))}
         </ul>
       )}
-
-      <Field label={T.etiquetaCp} error={errorCp ?? undefined}>
-        <Input
-          value={cp}
-          onChange={(e) => onCp(e.target.value)}
-          placeholder={T.placeholderCp}
-          autoComplete="postal-code"
-          maxLength={12}
-        />
-      </Field>
     </fieldset>
   );
 }

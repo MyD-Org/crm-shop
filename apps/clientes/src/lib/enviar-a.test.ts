@@ -171,19 +171,12 @@ describe("opciones del modal", () => {
   });
 });
 
-describe("cuerpoLocalidad (sin sesión: localidad + CP)", () => {
+describe("cuerpoLocalidad (sin sesión: sólo la localidad, sin CP)", () => {
   it("exige localidad elegida de la lista", () => {
-    expect(cuerpoLocalidad(null, "5000")).toEqual({ ok: false, campo: "localidad", error: TEXTOS_UBICACION.elegirLocalidad });
+    expect(cuerpoLocalidad(null)).toEqual({ ok: false, error: TEXTOS_UBICACION.elegirLocalidad });
   });
-  it("CP vacío: pide el código postal", () => {
-    expect(cuerpoLocalidad("123", "  ")).toEqual({ ok: false, campo: "cp", error: TEXTOS_UBICACION.cpRequerido });
-  });
-  it("CP inválido: error en usted y no envía", () => {
-    expect(cuerpoLocalidad("123", "12")).toEqual({ ok: false, campo: "cp", error: TEXTOS_UBICACION.cpInvalido });
-  });
-  it("CP válido (4 dígitos o CPA): normalizado", () => {
-    expect(cuerpoLocalidad("123", " 5000 ")).toEqual({ ok: true, cuerpo: { id: "123", cp: "5000" } });
-    expect(cuerpoLocalidad("123", "c 1425 abc")).toEqual({ ok: true, cuerpo: { id: "123", cp: "C1425ABC" } });
+  it("con localidad manda sólo el id", () => {
+    expect(cuerpoLocalidad("123")).toEqual({ ok: true, cuerpo: { id: "123" } });
   });
 });
 

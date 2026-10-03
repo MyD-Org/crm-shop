@@ -9,7 +9,7 @@
  */
 import type { RadioOption } from "@myd-org/ui";
 import { MAX_DIRECCIONES, type DireccionEnvio } from "./direcciones-envio";
-import { TEXTOS_UBICACION, normalizarCp, type EleccionUbicacion } from "./ubicacion";
+import { TEXTOS_UBICACION, type EleccionUbicacion } from "./ubicacion";
 
 export interface LineasEnviarA {
   /** Retiro en un local: el header muestra el ícono de local. */
@@ -54,7 +54,7 @@ export function opcionVigente(eleccion: EleccionUbicacion): string | undefined {
   return undefined;
 }
 
-export type CuerpoEleccion = { direccionId: string } | { tipo: "retiro"; sucursal?: string } | { id: string; cp: string };
+export type CuerpoEleccion = { direccionId: string } | { tipo: "retiro"; sucursal?: string } | { id: string };
 
 export function cuerpoDeOpcion(valor: string): CuerpoEleccion | null {
   if (valor.startsWith(PREFIJO_DIR)) {
@@ -118,18 +118,12 @@ export function idNuevo(antes: DireccionEnvio[], despues: DireccionEnvio[]): str
   return despues.find((d) => !previos.has(d.id))?.id ?? null;
 }
 
-/** Sin sesión: localidad de Georef + código postal obligatorio, validado antes de enviar. */
+/** Sin sesión: la localidad de Georef (sin código postal: la zona sale de la provincia). */
 export function cuerpoLocalidad(
   id: string | null,
-  cp: string,
-):
-  | { ok: true; cuerpo: { id: string; cp: string } }
-  | { ok: false; campo: "localidad" | "cp"; error: string } {
-  if (!id) return { ok: false, campo: "localidad", error: TEXTOS_UBICACION.elegirLocalidad };
-  if (!cp.trim()) return { ok: false, campo: "cp", error: TEXTOS_UBICACION.cpRequerido };
-  const n = normalizarCp(cp);
-  if (!n) return { ok: false, campo: "cp", error: TEXTOS_UBICACION.cpInvalido };
-  return { ok: true, cuerpo: { id, cp: n } };
+): { ok: true; cuerpo: { id: string } } | { ok: false; error: string } {
+  if (!id) return { ok: false, error: TEXTOS_UBICACION.elegirLocalidad };
+  return { ok: true, cuerpo: { id } };
 }
 
 const esAbort = (err: unknown, signal: AbortSignal) => signal.aborted || (err as Error)?.name === "AbortError";

@@ -219,7 +219,6 @@ export const TEXTOS_UBICACION = {
   demasiadas: "Demasiadas consultas. Espere un momento e inténtelo nuevamente.",
   quitar: "Quitar ubicación",
   cpInvalido: "Ingrese un código postal válido: 4 dígitos o formato CPA, por ejemplo 5000 o C1425ABC.",
-  cpRequerido: "Ingrese su código postal.",
   direccionInvalida: "Seleccione una dirección guardada válida.",
   localInvalido: "Seleccione un local de retiro válido.",
   sinSesion: "Inicie sesión para elegir una dirección guardada.",
@@ -250,8 +249,6 @@ export const TEXTOS_UBICACION = {
   errorGuardar: "No pudimos guardar su elección. Inténtelo nuevamente.",
   elegirOpcion: "Seleccione una opción.",
   legendLocalidad: "Enviar a una localidad",
-  etiquetaCp: "Código postal",
-  placeholderCp: "Por ejemplo, 5000 o C1425ABC",
   elegirLocalidad: "Seleccione su localidad de la lista.",
   // Ficha (PR3): retiro en el local elegido.
   retiroGratisEn: (local: string) => `Retiro gratis en ${local}`,
@@ -263,5 +260,4 @@ export const TEXTOS_UBICACION = {
   verOtrosLocales: "Ver otros locales",
   ocultarOtrosLocales: "Ocultar otros locales",
   sinStockEn: (local: string) => `No disponible en ${local}`,
-  completarCp: "Confirme su localidad en la lista e ingrese su código postal.",
 } as const;

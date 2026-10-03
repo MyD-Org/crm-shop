@@ -41,12 +41,19 @@ export function canalLineLabel(
   return phone ? `${nombre} · a ${phone}` : nombre
 }
 
-/** Una solapa por canal presente en los contactos, en orden de aparición. */
+/**
+ * Una solapa por canal: primero los que nombró el admin (quedan fijos aunque no tengan
+ * conversaciones), después los que aparecen en los contactos, en orden de aparición.
+ */
 export function buildCanalTabs(contacts: CanalContacto[], nombres: Record<string, string>): CanalTab[] {
   const tabs = new Map<string, CanalTab & { phone: string | null; channel: string }>()
+  for (const [key, nombre] of Object.entries(nombres)) {
+    if (nombre.trim()) tabs.set(key, { key, label: "", pending: 0, phone: null, channel: "" })
+  }
   for (const c of contacts) {
     const key = canalKey(c)
     const t = tabs.get(key) ?? { key, label: "", pending: 0, phone: null, channel: c.channel }
+    if (!t.channel) t.channel = c.channel
     if (!t.phone && c.business_phone) t.phone = c.business_phone
     if (c.awaiting_reply) t.pending++
     tabs.set(key, t)

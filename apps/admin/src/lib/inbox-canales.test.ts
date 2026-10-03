@@ -48,6 +48,14 @@ describe("buildCanalTabs", () => {
     expect(tabs.map((t) => t.label)).toEqual(["Sucursal Centro", "+54 9 11 0000-0001", "Instagram"])
   })
 
+  it("un canal nombrado sigue como solapa aunque no tenga conversaciones", () => {
+    const tabs = buildCanalTabs([c({ channel_account_id: "b" })], { a: "Sucursal Centro", vacio: " " })
+    expect(tabs).toEqual([
+      { key: "a", label: "Sucursal Centro", pending: 0 },
+      { key: "b", label: "WhatsApp", pending: 0 },
+    ])
+  })
+
   it("un solo canal da una sola solapa (la UI oculta la fila)", () => {
     expect(buildCanalTabs([c({ channel_account_id: "a" })], {})).toHaveLength(1)
   })

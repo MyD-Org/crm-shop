@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm"
 import { getDb } from "@/db"
 import { adminUsers, pushSubscriptions } from "@/db/schema"
 import { availableOperators } from "@/lib/assignment"
+import { destinatariosCasilla } from "@/lib/correo-repo"
 
 // ── Web Push ────────────────────────────────────────────────────────────────
 // El CRM es dueño de las suscripciones (los operadores son usuarios del CRM) y el único que
@@ -90,6 +91,18 @@ export async function sendPushToDepartment(
   if (!ensureConfigured()) return 0
   const operators = await availableOperators(tenantId, department)
   const counts = await Promise.all(operators.map((op) => sendPushToOperator(tenantId, op.id, payload)))
+  return counts.reduce((a, b) => a + b, 0)
+}
+
+/**
+ * Envía un push a quienes tienen acceso a una casilla de correo (lista de accesos + admin y
+ * superadmin del tenant). Sin filtro de disponibilidad: el correo no tiene asignación ni
+ * presencia. Best-effort como el resto.
+ */
+export async function sendPushToCasilla(tenantId: string, casillaId: string, payload: PushPayload): Promise<number> {
+  if (!ensureConfigured()) return 0
+  const ids = await destinatariosCasilla(tenantId, casillaId)
+  const counts = await Promise.all(ids.map((id) => sendPushToOperator(tenantId, id, payload)))
   return counts.reduce((a, b) => a + b, 0)
 }
 

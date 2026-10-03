@@ -1,0 +1,12 @@
+{
+  "type": "inbox.email.sent",
+  "created_at": "2026-09-29T12:10:00.000Z",
+  "data": {
+    "source": "system",
+    "inbox_id": "inbox_0001",
+    "thread_id": "thread_0001",
+    "email_id": "email_0002",
+    "thread": { "object": "inbox_thread", "id": "thread_0001", "subject": "Re: Consulta de precios", "folder": "inbox", "labels": [], "read": true },
+    "email": { "id": "email_0002", "direction": "outbound", "from": "ventas@cliente.example", "to": ["ana@clientes.example"], "cc": [], "bcc": [], "reply_to": [], "subject": "Re: Consulta de precios", "message_id": "<def456@cliente.example>", "attachments": [], "read": true, "received_at": "2026-09-29T12:10:00.000Z" }
+  }
+}

@@ -6,6 +6,7 @@ import {
   borrarEvento,
   casillaPorInbox,
   contarNoLeidos,
+  destinatariosCasilla,
   limpiarEventosViejos,
   registrarEvento,
   upsertCasilla,
@@ -159,5 +160,37 @@ describe("estructura", () => {
     )
     const cols = (r as unknown as { column_name: string }[]).map((x) => x.column_name)
     expect(cols).toEqual(["casilla_id", "folder", "id", "leido", "resend_thread_id", "ultimo_evento_at"])
+  })
+})
+
+describe("destinatariosCasilla (push)", () => {
+  it("usuarios con acceso + admin/superadmin del tenant; no el operador sin acceso ni otro tenant", async () => {
+    const c = (await upsertCasilla(A, { resendInboxId: "inbox_1", email: "ventas@cliente.example" }))!
+    const ana = await seedOperator(A, { name: "Ana" })
+    const beto = await seedOperator(A, { name: "Beto" })
+    const carla = await seedOperator(A, { name: "Carla" })
+    const admin = await seedOperator(A, { role: "admin" })
+    const sup = await seedOperator(A, { role: "superadmin" })
+    const ajeno = await seedOperator(B, { role: "admin" })
+    await getDb().insert(correoCasillaAccesos).values([
+      { casillaId: c.id, adminUserId: ana },
+      { casillaId: c.id, adminUserId: beto },
+      // un admin con fila de acceso no se duplica
+      { casillaId: c.id, adminUserId: admin },
+    ])
+    const ids = await destinatariosCasilla(A, c.id)
+    expect(ids.sort()).toEqual([ana, beto, admin, sup].sort())
+    expect(ids).not.toContain(carla)
+    expect(ids).not.toContain(ajeno)
+  })
+
+  it("el acceso a otra casilla no cuenta; casilla de otro tenant o inexistente = nadie", async () => {
+    const c1 = (await upsertCasilla(A, { resendInboxId: "inbox_1", email: "ventas@cliente.example" }))!
+    const c2 = (await upsertCasilla(A, { resendInboxId: "inbox_2", email: "soporte@cliente.example" }))!
+    const ana = await seedOperator(A, { name: "Ana" })
+    await getDb().insert(correoCasillaAccesos).values({ casillaId: c2.id, adminUserId: ana })
+    expect(await destinatariosCasilla(A, c1.id)).toEqual([])
+    expect(await destinatariosCasilla(B, c2.id)).toEqual([])
+    expect(await destinatariosCasilla(A, "00000000-0000-0000-0000-000000000000")).toEqual([])
   })
 })

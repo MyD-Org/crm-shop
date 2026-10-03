@@ -1,0 +1,25 @@
+{
+  "type": "inbox.email.received",
+  "created_at": "2026-09-29T12:00:00.000Z",
+  "data": {
+    "source": "system",
+    "inbox_id": "inbox_0001",
+    "thread_id": "thread_0001",
+    "email_id": "email_0001",
+    "thread": { "object": "inbox_thread", "id": "thread_0001", "subject": "Consulta de precios", "folder": "inbox", "labels": [], "read": false },
+    "email": {
+      "id": "email_0001",
+      "direction": "inbound",
+      "from": "Ana Prueba <ana@clientes.example>",
+      "to": ["ventas@cliente.example"],
+      "cc": [],
+      "bcc": [],
+      "reply_to": [],
+      "subject": "Consulta de precios",
+      "message_id": "<abc123@clientes.example>",
+      "attachments": [{ "id": "att_0001", "filename": "lista.pdf", "size": 48213 }],
+      "read": false,
+      "received_at": "2026-09-29T12:00:00.000Z"
+    }
+  }
+}

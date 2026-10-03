@@ -1,6 +1,6 @@
-import { and, eq, inArray, lt, sql } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, lt, or, sql } from "drizzle-orm"
 import { getDb } from "@/db"
-import { correoCasillas, correoEventos, correoHilos } from "@/db/schema"
+import { adminUsers, correoCasillaAccesos, correoCasillas, correoEventos, correoHilos } from "@/db/schema"
 import type { CorreoCarpeta } from "./correo-resend"
 
 // SQL del espejo mínimo del correo (casillas, hilos, idempotencia del webhook). Sin red: Resend
@@ -101,6 +101,36 @@ export async function limpiarEventosViejos(dias = 30, ahora = new Date()): Promi
   const corte = new Date(ahora.getTime() - dias * 86_400_000)
   const filas = await getDb().delete(correoEventos).where(lt(correoEventos.recibidoAt, corte)).returning({ s: correoEventos.svixId })
   return filas.length
+}
+
+/**
+ * Ids de los usuarios a quienes avisar de un correo en la casilla: los que figuran en
+ * correo_casilla_accesos MÁS los admin/superadmin del tenant (ven todas las casillas activas sin
+ * necesidad de fila de acceso). Sin duplicados. Una casilla de otro tenant o inexistente no
+ * devuelve a nadie.
+ */
+export async function destinatariosCasilla(tenantId: string, casillaId: string): Promise<string[]> {
+  const db = getDb()
+  const [casilla] = await db
+    .select({ id: correoCasillas.id })
+    .from(correoCasillas)
+    .where(and(eq(correoCasillas.id, casillaId), eq(correoCasillas.tenantId, tenantId)))
+    .limit(1)
+  if (!casilla) return []
+  const filas = await db
+    .select({ id: adminUsers.id })
+    .from(adminUsers)
+    .leftJoin(
+      correoCasillaAccesos,
+      and(eq(correoCasillaAccesos.adminUserId, adminUsers.id), eq(correoCasillaAccesos.casillaId, casillaId)),
+    )
+    .where(
+      and(
+        eq(adminUsers.tenantId, tenantId),
+        or(inArray(adminUsers.role, ["admin", "superadmin"]), isNotNull(correoCasillaAccesos.casillaId)),
+      ),
+    )
+  return [...new Set(filas.map((f) => f.id))]
 }
 
 /** Hilos sin leer en Recibidos de las casillas dadas (el badge). Una sola query. */

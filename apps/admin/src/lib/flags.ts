@@ -1,4 +1,6 @@
 import { flag } from "@vercel/flags/next"
+import { flag as flagVercel } from "flags/next"
+import { vercelAdapter } from "@flags-sdk/vercel"
 
 // ── Feature flags ──────────────────────────────────────────────────────────
 // Proveedor actual: Vercel Flags
@@ -31,4 +33,14 @@ export const botUsagePanelEnabled = flag<boolean>({
   description: "Muestra el panel de gasto/uso del bot en el admin (migrará a ia-dashboard)",
   origin: "https://vercel.com/docs/workflow-collaboration/feature-flags",
   decide: () => process.env.BOT_USAGE_PANEL_ENABLED === "true",
+})
+
+// Correo compartido (Resend Inboxes) en el admin. Vive en Vercel Flags (key `correo`): se
+// prende y apaga desde el dashboard o con `vercel flags enable correo --environment <env>`, sin
+// redeploy. Falla hacia apagado. Nadie lo llama directo: ver lib/correo-flag.ts.
+export const correoFlag = flagVercel<boolean>({
+  key: "correo",
+  description: "Correo compartido en el admin: webhook de recepción, menú, páginas y rutas de Correo",
+  defaultValue: false,
+  adapter: vercelAdapter,
 })

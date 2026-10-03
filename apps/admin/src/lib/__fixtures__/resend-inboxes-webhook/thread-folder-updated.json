@@ -1,0 +1,12 @@
+{
+  "type": "inbox.thread.folder.updated",
+  "created_at": "2026-09-29T12:05:00.000Z",
+  "data": {
+    "from": "inbox",
+    "to": "archive",
+    "source": "dashboard",
+    "inbox_id": "inbox_0001",
+    "thread_id": "thread_0001",
+    "thread": { "object": "inbox_thread", "id": "thread_0001", "subject": "Consulta de precios", "folder": "archive", "labels": [], "read": true }
+  }
+}

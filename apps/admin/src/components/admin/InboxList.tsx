@@ -247,6 +247,8 @@ export function InboxList({
         <CorreoView
           key={casillaActiva}
           casillaId={casillaActiva}
+          casillaNombre={casillas.find((c) => c.id === casillaActiva)?.nombre ?? ""}
+          casillaEmail={casillas.find((c) => c.id === casillaActiva)?.email ?? ""}
           initialHiloId={casillaActiva === initialCasillaId ? initialHiloId : null}
           onNoLeidosDelta={(d) => setNoLeidos((prev) => ({ ...prev, [casillaActiva]: Math.max(0, (prev[casillaActiva] ?? 0) + d) }))}
         />

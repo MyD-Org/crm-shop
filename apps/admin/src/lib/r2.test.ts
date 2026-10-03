@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest"
-import { createR2, r2Config, receiptKeys, R2Error, R2TooLargeError, type R2Config } from "@/lib/r2"
+import { correoKeys, createR2, r2Config, receiptKeys, R2Error, R2TooLargeError, type R2Config } from "@/lib/r2"
 
 const CFG: R2Config = {
   accountId: "fake-account-id",
@@ -227,5 +227,24 @@ describe("put y delete", () => {
     await expect(r2404.delete("tmp/receipts/tenant-a/abc")).resolves.toBeUndefined()
     const r2err = makeR2(vi.fn<(input: Request) => Promise<Response>>(async () => new Response("boom", { status: 500 })))
     await expect(r2err.delete("tmp/receipts/tenant-a/abc")).rejects.toBeInstanceOf(R2Error)
+  })
+})
+
+describe("correoKeys (adjuntos temporales del correo)", () => {
+  const ID = "11111111-1111-4111-8111-111111111111"
+  it("arma la key bajo correo/tmp/{tenant}/{uuid}/ con el nombre saneado", () => {
+    expect(correoKeys.tmp("tenant-a", ID, "Lista de precios (final).pdf")).toBe(`correo/tmp/tenant-a/${ID}/Lista_de_precios_final_.pdf`)
+    expect(correoKeys.tmp("tenant-a", ID, "../../etc/passwd")).toBe(`correo/tmp/tenant-a/${ID}/passwd`)
+  })
+  it("rechaza tenant o id inválidos", () => {
+    expect(() => correoKeys.tmp("../x", ID, "a.pdf")).toThrow()
+    expect(() => correoKeys.tmp("tenant-a", "no-uuid", "a.pdf")).toThrow()
+  })
+  it("esDelTenant solo acepta el prefijo propio, sin salirse", () => {
+    expect(correoKeys.esDelTenant("tenant-a", `correo/tmp/tenant-a/${ID}/a.pdf`)).toBe(true)
+    expect(correoKeys.esDelTenant("tenant-b", `correo/tmp/tenant-a/${ID}/a.pdf`)).toBe(false)
+    expect(correoKeys.esDelTenant("tenant-a", `correo/tmp/tenant-a/../tenant-b/${ID}/a.pdf`)).toBe(false)
+    expect(correoKeys.esDelTenant("tenant-a", `receipts/tenant-a/${ID}/a.pdf`)).toBe(false)
+    expect(correoKeys.esDelTenant("tenant-a", `correo/tmp/tenant-a/a.pdf`)).toBe(false)
   })
 })

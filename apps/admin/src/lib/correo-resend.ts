@@ -163,7 +163,7 @@ function esperaMs(intento: number, retryAfter: number | null): number {
   return retryAfter != null ? Math.max(retryAfter * 1000, backoff) : backoff
 }
 
-async function pedir(method: string, path: string, body?: unknown): Promise<unknown> {
+async function pedir(method: string, path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<unknown> {
   const clave = process.env.RESEND_API_KEY_EMAILS
   if (!clave) throw new CorreoResendError("no_configurado")
 
@@ -177,6 +177,7 @@ async function pedir(method: string, path: string, body?: unknown): Promise<unkn
         headers: {
           Authorization: `Bearer ${clave}`,
           "Content-Type": "application/json",
+          ...extraHeaders,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         cache: "no-store",
@@ -335,7 +336,13 @@ export async function getAttachmentDownloadUrl(
   return { url, nombre: a.nombre, tamano: a.tamano, tipo: a.tipo }
 }
 
-export async function sendEmail(payload: CorreoEnvioPayload): Promise<{ id: string }> {
-  const r = obj(await pedir("POST", "/emails", payload))
+/**
+ * Envía por POST /emails (único camino que conserva los adjuntos). Siempre con Idempotency-Key:
+ * el mismo valor se reusa en los reintentos por 5xx/429 y en un reenvío de la misma intención,
+ * así un doble clic o un corte de red no duplica el mail.
+ */
+export async function sendEmail(payload: CorreoEnvioPayload, opts: { idempotencyKey?: string } = {}): Promise<{ id: string }> {
+  const clave = opts.idempotencyKey || crypto.randomUUID()
+  const r = obj(await pedir("POST", "/emails", payload, { "Idempotency-Key": clave }))
   return { id: str(r.id) }
 }

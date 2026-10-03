@@ -271,7 +271,7 @@ const seg = encodeURIComponent
 
 export async function listInboxes(): Promise<CorreoCasilla[]> {
   const r = await pedir("GET", "/inboxes")
-  return filas(r).map((i) => ({ id: str(i.id), email: str(i.address) || str(i.email), nombre: str(i.name) }))
+  return filas(r).map((i) => ({ id: str(i.id), email: str(i.email_address) || str(i.address) || str(i.email), nombre: str(i.name) }))
 }
 
 export async function listThreads(

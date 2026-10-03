@@ -21,7 +21,8 @@ import { VisorFotos } from "@/components/VisorFotos";
  * fuente de verdad para el dedo, el trackpad, las flechas y las miniaturas.
  *
  * En el celular la foto es 4:3 (así el precio entra en la primera pantalla) y
- * las miniaturas van abajo; desde lg la foto es cuadrada y las miniaturas
+ * las miniaturas van abajo; desde lg la foto es cuadrada con un tope de alto
+ * (36rem, o menos en pantallas bajas: no puede taparse la ficha) y las miniaturas
  * forman una columna a la izquierda. `acciones` (compartir, favorito) flota
  * arriba a la derecha de la foto.
  *
@@ -67,7 +68,7 @@ export function GaleriaProducto({
 
   return (
     <div className="flex min-w-0 flex-col gap-3 lg:flex-row-reverse lg:gap-4">
-      <div className="relative aspect-[4/3] min-w-0 flex-1 overflow-hidden rounded-[24px] border border-border bg-surface lg:aspect-square">
+      <div className="relative aspect-[4/3] min-w-0 flex-1 overflow-hidden rounded-[24px] border border-border bg-surface lg:aspect-square lg:max-h-[min(36rem,calc(100dvh-14rem))]">
         {lista.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <LightbulbIcon className="h-28 w-28 text-muted/20 lg:h-44 lg:w-44" />
@@ -97,8 +98,8 @@ export function GaleriaProducto({
                   src={f.url}
                   alt={f.alt || nombre}
                   fill
-                  // La galería ocupa ~7/12 del contenido desde lg; debajo, todo el ancho.
-                  sizes="(min-width: 1024px) 55vw, 100vw"
+                  // La galería ocupa ~la mitad del contenido desde lg; debajo, todo el ancho.
+                  sizes="(min-width: 1024px) 50vw, 100vw"
                   className="object-contain p-6"
                   // La portada es el elemento más grande de la ficha (LCP).
                   preload={i === 0}

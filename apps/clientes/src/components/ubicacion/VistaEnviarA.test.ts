@@ -162,8 +162,9 @@ describe("ModalEnviarA (guardas de fuente del flujo)", () => {
     expect(modal).toMatch(/if \(!r\.ok\) \{\s*setError\(r\.error\);/);
   });
 
-  it("sin sesión manda siempre el CP (cuerpoLocalidad) y no envía si es inválido", () => {
-    expect(modal).toContain("cuerpoLocalidad(");
+  it("sin sesión valida la localidad con cuerpoLocalidad y no pide código postal", () => {
+    expect(modal).toContain("cuerpoLocalidad(localidad?.id ?? null)");
+    expect(modal).not.toMatch(/\bsetCp\b|errorCp/);
   });
 
   it("alta y edición inline con DireccionForm embebida; el alta queda elegida", () => {

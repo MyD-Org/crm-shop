@@ -32,8 +32,10 @@ export async function Header() {
     categorias: null,
     navBadge,
     navBadgeVisibleOn,
-    // Localidad bajo el logo (slot del DS); trae su propio hueco por request.
+    // "Enviar a" (desktop en las acciones, mobile bajo el buscador); cada uno trae su propio hueco
+    // por request y comparten la lectura (`ubicacionDelVisitante` está cacheada por request).
     ubicacion: <UbicacionHeader />,
+    ubicacionEnLinea: <UbicacionHeader enLinea />,
   }
 
   // Fallback de dos pisos: con la ruta (rutas sin parámetros, que se conocen
@@ -47,7 +49,12 @@ export async function Header() {
         </Suspense>
       }
     >
-      <HeaderDinamico navBadge={navBadge} navBadgeVisibleOn={navBadgeVisibleOn} ubicacion={pendiente.ubicacion} />
+      <HeaderDinamico
+        navBadge={navBadge}
+        navBadgeVisibleOn={navBadgeVisibleOn}
+        ubicacion={pendiente.ubicacion}
+        ubicacionEnLinea={pendiente.ubicacionEnLinea}
+      />
     </Suspense>
   )
 }
@@ -57,10 +64,12 @@ async function HeaderDinamico({
   navBadge,
   navBadgeVisibleOn,
   ubicacion,
+  ubicacionEnLinea,
 }: {
   navBadge: NavBadgeContent | null
   navBadgeVisibleOn?: VisibleOn
   ubicacion: ReactNode
+  ubicacionEnLinea: ReactNode
 }) {
   // Las categorias del menu salen del catalogo real, cacheadas y compartidas
   // (`categoriasNav`, tag `catalogo`). Si la lectura falla, el header se
@@ -108,6 +117,7 @@ async function HeaderDinamico({
       navBadgeVisibleOn={navBadgeVisibleOn}
       busquedaIa={busquedaIa}
       ubicacion={ubicacion}
+      ubicacionEnLinea={ubicacionEnLinea}
     />
   )
 }

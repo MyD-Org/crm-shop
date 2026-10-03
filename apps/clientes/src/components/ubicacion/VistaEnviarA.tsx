@@ -60,7 +60,9 @@ export function VistaEnviarA(p: VistaEnviarAProps) {
   return (
     <div className="space-y-5">
       {p.direcciones.estado === "ok" && (
-        <div className="space-y-3">
+        // flex + gap y no space-y: el margen de space-y no le gana al m-0 del fieldset del
+        // RadioGroup, y "Agregar nueva dirección" quedaba pegado a la última opción.
+        <div className="flex flex-col items-start gap-4">
           {dirs.length > 0 && (
             <RadioGroup
               legend={T.legendDirecciones}

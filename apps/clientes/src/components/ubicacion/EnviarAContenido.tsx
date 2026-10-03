@@ -1,16 +1,17 @@
 import type { LineasEnviarA } from "@/lib/enviar-a";
 
 /**
- * Contenido del botón "Enviar a" del header: ícono + dos líneas (etiqueta / valor). Cada línea es
- * `text-xs leading-4`, así el bloque mide lo mismo que el fallback `h-8` (sin CLS). La segunda
- * línea se trunca con elipsis (mobile). Presentacional: sin estado ni datos.
+ * Contenido del botón "Enviar a" del header: ícono + etiqueta + valor. En desktop va en dos líneas
+ * (`text-xs leading-4` cada una: el bloque mide lo mismo que el fallback `h-8`, sin CLS); en la
+ * línea de mobile (bajo el buscador), en una sola ("Retirar en Mar del Plata"). El valor se trunca con elipsis.
+ * Presentacional: sin estado ni datos.
  */
-export function EnviarAContenido({ lineas }: { lineas: LineasEnviarA }) {
+export function EnviarAContenido({ lineas, enLinea = false }: { lineas: LineasEnviarA; enLinea?: boolean }) {
   return (
     <span className="flex min-w-0 max-w-full items-center gap-1.5 text-left">
       {lineas.retiro ? <IconoLocal /> : <IconoPin />}
-      <span className="flex min-w-0 flex-col">
-        <span className="block truncate text-xs leading-4 text-muted">{lineas.etiqueta}</span>
+      <span className={enLinea ? "flex min-w-0 items-baseline gap-1" : "flex min-w-0 flex-col"}>
+        <span className="block shrink-0 truncate text-xs font-normal leading-4 text-muted">{lineas.etiqueta}</span>
         <span className="flex min-w-0 items-center gap-0.5 text-xs font-semibold leading-4 text-text">
           <span className="truncate">{lineas.valor}</span>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">

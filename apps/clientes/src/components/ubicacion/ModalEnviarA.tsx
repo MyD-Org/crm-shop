@@ -66,8 +66,6 @@ export default function ModalEnviarA({
   const [localidad, setLocalidad] = useState<LocalidadElegida | null>(
     localidadActual ? { id: localidadActual.id, etiqueta: localidadActual.etiqueta } : null,
   );
-  const [cp, setCp] = useState(localidadActual?.cp ?? "");
-  const [errorCp, setErrorCp] = useState<string | null>(null);
   const [errorLocalidad, setErrorLocalidad] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -110,9 +108,8 @@ export default function ModalEnviarA({
 
   async function confirmar() {
     if (valor === LOCALIDAD) {
-      const c = cuerpoLocalidad(localidad?.id ?? null, cp);
-      setErrorCp(!c.ok && c.campo === "cp" ? c.error : null);
-      setErrorLocalidad(!c.ok && c.campo === "localidad" ? c.error : null);
+      const c = cuerpoLocalidad(localidad?.id ?? null);
+      setErrorLocalidad(c.ok ? null : c.error);
       if (!c.ok) return;
       await aplicar(c.cuerpo);
       return;
@@ -207,7 +204,6 @@ export default function ModalEnviarA({
           valor={valor}
           onValor={(v) => {
             elegirValor(v);
-            setErrorCp(null);
             setErrorLocalidad(null);
           }}
           onEditar={(d) => setVista({ tipo: "editar", d })}
@@ -225,15 +221,11 @@ export default function ModalEnviarA({
                 elegirValor(LOCALIDAD);
                 setErrorLocalidad(null);
               }}
-              cp={cp}
-              onCp={(v) => {
-                setCp(v);
-                setErrorCp(null);
-                elegirValor(LOCALIDAD);
-              }}
-              errorCp={errorCp}
               errorLocalidad={errorLocalidad}
-              onGeolocalizada={() => router.refresh()}
+              onGeolocalizada={() => {
+                onOpenChange(false);
+                router.refresh();
+              }}
               deshabilitado={enviando}
             />
           }

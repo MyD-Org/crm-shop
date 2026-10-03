@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
+import { pagoParaCotizar } from "@/lib/lista-medio";
 import { COPY_CARRITO } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
@@ -582,6 +583,9 @@ export function CheckoutClient({
     // Con Transferencia también pide la cuenta; cambiar el local de retiro la recalcula.
     conCuenta,
     sucursalRetiro: localParaCuenta,
+    // El precio depende del medio (lista de precios enlazada): cambiar a un medio con otra lista
+    // recotiza; entre medios sin lista o con la misma lista no se pide nada.
+    ...pagoParaCotizar(mediosPago, entrega, medioSel),
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
@@ -1293,6 +1297,7 @@ export function CheckoutClient({
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
                 {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
+                <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>
                 {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
               </>
             ) : (

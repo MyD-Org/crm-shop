@@ -141,9 +141,14 @@ export function cotizarItem(
   pedida: LineaPedida,
   item: AlegraItem,
   idPriceList?: string,
+  /**
+   * Lista del medio de pago elegido (la resuelve el servidor desde el slug, ver `lista-medio.ts`).
+   * Manda sobre la lista del cliente y NO marca precio especial de la cuenta.
+   */
+  idListaMedio?: string,
 ): LineaCotizada {
   const categoria = item.itemCategory as { name?: string } | undefined;
-  const precioUnitario = redondear(resolverPrecio(item, idPriceList));
+  const precioUnitario = redondear(resolverPrecio(item, idListaMedio ?? idPriceList));
   const ivaPorcentaje = ivaDeItem(item);
   const disponible = item.inventory?.availableQuantity;
   const stockDisponible = disponible == null ? null : Number(disponible);
@@ -165,7 +170,7 @@ export function cotizarItem(
     stockDisponible,
   };
 
-  if (Array.isArray(item.price) && precioCuenta(item.price, ivaPorcentaje, idPriceList)) {
+  if (!idListaMedio && Array.isArray(item.price) && precioCuenta(item.price, ivaPorcentaje, idPriceList)) {
     linea.precioEspecial = true;
   }
 
@@ -289,7 +294,10 @@ async function leerEspejo(
 export async function cotizar(
   pedidas: LineaPedida[],
   opts: {
+    /** Lista propia del cliente (precio especial de la cuenta; sólo con el flag `precio-especial-cuenta`). */
     idPriceList?: string;
+    /** Lista del medio de pago elegido; si viene, manda sobre `idPriceList`. */
+    idListaMedio?: string;
     entregaTipo?: EntregaTipo;
     /**
      * Flag `disponibilidad-sucursal`: contexto para cotizar el stock por sucursal. Se pasa el de la
@@ -309,7 +317,7 @@ export async function cotizar(
   const lineas = pedidas.map((pedida) => {
     const item = items.get(pedida.id);
     return item
-      ? cotizarItem(pedida, item, opts.idPriceList)
+      ? cotizarItem(pedida, item, opts.idPriceList, opts.idListaMedio)
       : lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
   });
 

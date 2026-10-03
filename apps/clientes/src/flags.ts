@@ -63,3 +63,11 @@ export const trackingFlag = flag<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 });
+
+export const precioEspecialCuentaFlag = flag<boolean>({
+  key: "precio-especial-cuenta",
+  description:
+    "Precio especial de la cuenta (lista propia del cliente, #219). Apagado: el precio depende solo del medio de pago elegido; prendido: se restaura la lista del cliente y se ignora la del medio",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});

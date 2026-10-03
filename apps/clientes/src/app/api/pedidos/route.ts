@@ -23,6 +23,8 @@ import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { idPriceListUsable } from "@/lib/alegra";
 import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
+import { idListaDelMedio } from "@/lib/lista-medio";
+import { precioEspecialCuenta } from "@/lib/precio-especial-flag";
 import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
 import { avisarOperadorPedidoNuevo, avisarPedidoRecibido } from "@/lib/pedido-avisos";
 import { permitir } from "@/lib/rate-limit";
@@ -371,7 +373,13 @@ export async function POST(req: Request) {
       : undefined;
     const dispCotizacion = disp ? contextoUnion(disp) : undefined;
     const soloVisibles = await catalogoSoloVisibles();
-    const cotizacion = await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion, soloVisibles });
+    // Precio por medio de pago: la lista sale del slug ya validado (medios releídos sin caché más
+    // arriba), nunca del body. Con el flag `precio-especial-cuenta` prendido rige la lista del
+    // cliente, como antes, y la del medio se ignora.
+    const especial = await precioEspecialCuenta();
+    const idListaMedio = especial ? undefined : idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo);
+    const opcionesCotizar = { idPriceList, idListaMedio, entregaTipo, disp: dispCotizacion, soloVisibles };
+    const cotizacion = await cotizar(lineas, opcionesCotizar);
 
     // Nada se persiste si hay una sola línea con problema: se devuelve la
     // cotización entera para que el checkout marque exactamente cuál falla.
@@ -427,7 +435,9 @@ export async function POST(req: Request) {
       motivoContacto: dc.motivoRevision,
       complementoUsado,
       vinculado: Boolean(cliente),
-      ...(cliente
+      // Con el flag apagado el precio ya no depende de la lista del contacto: marcar "otra lista de
+      // precios" sería una revisión espuria.
+      ...(cliente || !especial
         ? { listaContacto: null, idListaGeneral: null }
         : await listaDelContactoCoincidente(dc.perfil?.coincideConAlegra)),
     });
@@ -450,7 +460,8 @@ export async function POST(req: Request) {
            * "Params Error" sin decir cuál falta.
            */
           email: cliente?.email ?? email,
-          idPriceList,
+          // La lista efectivamente usada para cotizar (la del medio o la del cliente).
+          idPriceList: idListaMedio ?? idPriceList,
         },
         {
           contactoNombre,
@@ -483,14 +494,14 @@ export async function POST(req: Request) {
       }
       if (err instanceof ProductoNoDisponibleError) {
         // Se despublicó entre la cotización y el pedido: se re-cotiza para marcar la línea.
-        const recotizada = await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion, soloVisibles });
+        const recotizada = await cotizar(lineas, opcionesCotizar);
         return NextResponse.json({ error: err.message, cotizacion: recotizada, ids: err.ids }, { status: 409 });
       }
       if (!(err instanceof StockInsuficienteError)) throw err;
       // Otro checkout se llevó las unidades entre la cotización y el pedido (la
       // transacción ya se deshizo). Se re-cotiza, que ya descuenta su reserva,
       // para que el checkout marque qué línea no alcanza.
-      return productosCambiaron(await cotizar(lineas, { idPriceList, entregaTipo, disp: dispCotizacion, soloVisibles }));
+      return productosCambiaron(await cotizar(lineas, opcionesCotizar));
     }
 
     // El pedido reservó stock: el listado cacheado se renueva en la próxima

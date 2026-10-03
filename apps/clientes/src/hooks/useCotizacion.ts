@@ -69,6 +69,8 @@ interface Resultado {
   provincia: string;
   conCuenta: boolean;
   sucursalRetiro: string;
+  listaKey: string;
+  pagoMetodo: string;
   data: CotizacionResponse | null;
   error: string | null;
   noAuth: boolean;
@@ -89,6 +91,13 @@ export function useCotizacion(opts: {
   conCuenta?: boolean;
   /** Local de retiro elegido (slug); sólo cuenta con `conCuenta` y retiro. */
   sucursalRetiro?: string;
+  /**
+   * Lista de precios del medio de pago elegido ('' si no tiene). Es lo que dispara el refetch al
+   * cambiar de medio (no el slug): medios sin lista o con la misma lista comparten cotización.
+   */
+  listaKey?: string;
+  /** Slug canónico del medio para esa lista (ver `pagoParaCotizar`); el servidor resuelve la lista desde él. */
+  pagoMetodo?: string;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -101,6 +110,8 @@ export function useCotizacion(opts: {
   const provincia = opts.provincia ?? "";
   const conCuenta = opts.conCuenta ?? false;
   const sucursalRetiro = conCuenta && opts.entregaTipo === "retiro" ? (opts.sucursalRetiro ?? "") : "";
+  const listaKey = opts.listaKey ?? "";
+  const pagoMetodo = listaKey ? (opts.pagoMetodo ?? "") : "";
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -129,7 +140,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -146,6 +157,7 @@ export function useCotizacion(opts: {
             provincia: provincia || undefined,
             conCuenta: conCuenta || undefined,
             sucursalRetiro: sucursalRetiro || undefined,
+            pagoMetodo: pagoMetodo || undefined,
           }),
         });
 
@@ -199,7 +211,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -212,7 +224,9 @@ export function useCotizacion(opts: {
     res.ciudad === ciudad &&
     res.provincia === provincia &&
     res.conCuenta === conCuenta &&
-    res.sucursalRetiro === sucursalRetiro;
+    res.sucursalRetiro === sucursalRetiro &&
+    res.listaKey === listaKey &&
+    res.pagoMetodo === pagoMetodo;
 
   let estado: EstadoCotizacion;
   if (vacio) estado = "vacio";

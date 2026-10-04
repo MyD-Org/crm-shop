@@ -69,6 +69,7 @@ const aProveedorFila = (r: ProveedorRow): ProveedorFila => ({
   nombre: r.nombre,
   activo: r.activo,
   orden: r.orden,
+  cuotasCatalogo: r.cuotasCatalogo,
   updatedAt: r.updatedAt,
 })
 
@@ -87,6 +88,7 @@ export const toProveedorDto = (r: ProveedorRow): ProveedorDto => ({
   nombre: r.nombre,
   activo: r.activo,
   orden: r.orden,
+  cuotasCatalogo: r.cuotasCatalogo,
 })
 
 export const toEscalonDto = (r: EscalonRow): EscalonDto => ({ id: r.id, ...escalonValido(r), updatedAt: r.updatedAt.toISOString() })

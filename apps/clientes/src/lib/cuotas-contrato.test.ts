@@ -19,6 +19,26 @@ describe("parsearContratoCuotasV2", () => {
     expect(parsearContratoCuotasV2(valido)).toEqual(valido);
   });
 
+  describe("cuotasCatalogo (opcional, aditivo)", () => {
+    const conValor = (v: unknown) => {
+      const p = clon(valido);
+      (p.proveedores[0] as Record<string, unknown>).cuotasCatalogo = v;
+      return parsearContratoCuotasV2(p).proveedores[0].cuotasCatalogo;
+    };
+
+    it("entero 2..24 se conserva", () => {
+      expect(conValor(2)).toBe(2);
+      expect(conValor(24)).toBe(24);
+    });
+
+    it("null, ausente o inválido → null, sin rechazar el payload", () => {
+      const p = clon(valido);
+      delete (p.proveedores[0] as Record<string, unknown>).cuotasCatalogo;
+      expect(parsearContratoCuotasV2(p).proveedores[0].cuotasCatalogo).toBeNull();
+      for (const v of [null, 1, 25, 6.5, "6", true]) expect(conValor(v)).toBeNull();
+    });
+  });
+
   it("vacío válido (sin proveedores) → se acepta", () => {
     expect(parsearContratoCuotasV2(vacioValido)).toEqual(vacioValido);
   });

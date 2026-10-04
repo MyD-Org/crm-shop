@@ -78,11 +78,14 @@ function proveedor(v: unknown, i: number): ProveedorConfigurado {
     activo: booleano(v, "activo", ruta),
     orden: entero(v, "orden", ruta),
   };
+  // Aditivo y opcional: ausente o inválido → null (Automático), nunca rompe el todo-o-nada.
+  const cc = v.cuotasCatalogo;
+  const cuotasCatalogo = typeof cc === "number" && Number.isInteger(cc) && cc >= 2 && cc <= 24 ? cc : null;
   const escalones = lista(v, "escalones", ruta)
     .map((e, j) => escalon(e, `${ruta}.escalones[${j}]`))
     // El CRM ya los manda ordenados; se reordena por defensa (sort estable).
     .sort((a, b) => a.montoMinimo - b.montoMinimo);
-  return { ...base, escalones };
+  return { ...base, cuotasCatalogo, escalones };
 }
 
 export function parsearContratoCuotasV2(crudo: unknown): ContratoCuotasV2 {

@@ -133,6 +133,7 @@ export function armarOferta(proveedores: ProveedorConfigurado[], planes: PlanDeC
         proveedor: p.proveedor,
         nombre: p.nombre,
         orden: p.orden,
+        cuotasCatalogo: p.cuotasCatalogo ?? null,
         escalones: (Array.isArray(p.escalones) ? p.escalones : [])
           .filter(escalonValido)
           .map((e) => ({ cuotasMax: e.cuotasMax, montoMinimo: e.montoMinimo }))

@@ -39,3 +39,12 @@ export function sinMpSiNoConfigurado(medios: readonly MedioPago[]): MedioPago[] 
 export async function mediosOfrecibles(): Promise<MedioPago[]> {
   return sinMpSiNoConfigurado(await mediosPagoCacheados());
 }
+
+/**
+ * Lo mismo que `mediosOfrecibles` pero leyendo la base directo. Respaldo de `flagsPublicos` cuando
+ * la lectura cacheada falla (en prod tiró "Connection closed." al decodificar la entrada remota y
+ * el catálogo salía sin "$X con <Medio>").
+ */
+export async function mediosOfreciblesSinCache(): Promise<MedioPago[]> {
+  return sinMpSiNoConfigurado(await leerMediosPago());
+}

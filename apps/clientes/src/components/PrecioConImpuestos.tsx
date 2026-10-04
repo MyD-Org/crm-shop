@@ -41,7 +41,7 @@ export function PrecioConImpuestos({ price, precioFinal, precioLista, preciosMed
       <span
         className={
           conMedios
-            ? "text-[20px] font-semibold leading-none text-text tabular-nums lg:text-[22px]"
+            ? "text-[18px] font-semibold leading-none text-text tabular-nums"
             : "font-display text-[34px] font-bold leading-none tracking-tight text-text tabular-nums lg:text-[38px]"
         }
       >
@@ -55,7 +55,7 @@ export function PrecioConImpuestos({ price, precioFinal, precioLista, preciosMed
       {conMedios ? (
         <ul className="mt-4 space-y-1.5">
           {preciosMedios!.map((m) => (
-            <li key={m.slug} className="font-display text-[28px] font-bold leading-tight tracking-tight text-accent tabular-nums lg:text-[32px]">
+            <li key={m.slug} className="font-display text-[22px] font-bold leading-tight tracking-tight text-accent tabular-nums lg:text-[24px]">
               {textoConMedio(m)}
             </li>
           ))}

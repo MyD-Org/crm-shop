@@ -60,6 +60,7 @@ export function FavoritosLista({
         <ProductCard
           key={p.id}
           variant="soft"
+          priceSize={p.precioMedio ? "sm" : "md"}
           layout="list"
           href={`/producto/${p.id}`}
           renderLink={linkNext}

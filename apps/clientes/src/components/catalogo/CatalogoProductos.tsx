@@ -76,6 +76,7 @@ export function CatalogoProductos({
         <ProductCard
           key={p.id}
           variant="soft"
+          priceSize={p.precioMedio ? "sm" : "md"}
           layout={vista === "lista" ? "list" : "grid"}
           className="h-full"
           href={`/producto/${p.id}`}

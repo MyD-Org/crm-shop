@@ -5,6 +5,7 @@ import { ProductCard, cn } from "@myd-org/ui";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
+import { PrecioMedioCard } from "@/components/PrecioMedio";
 import type { Product } from "@/data/products";
 import type { VistaCatalogo } from "@/lib/catalogo-url";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
@@ -40,6 +41,8 @@ export function CatalogoProductos({
   // cuotas: así el precio no baila entre cards de una fila, y sin cuotas en
   // ninguno las cards no cargan una línea vacía.
   const reservarCuotas = productos.some((p) => cuotasPorProducto.has(p.id));
+  // Igual con "$X con <Medio>": se reserva sólo si algún producto de la página lo muestra.
+  const reservarMedio = productos.some((p) => p.precioMedio);
   return (
     <div
       // 2/3/4 columnas: 24 productos por página entran justo en las tres
@@ -108,10 +111,19 @@ export function CatalogoProductos({
               : [<LightbulbIcon key="sin-foto" className="h-12 w-12 text-muted/40" />]
           }
           installments={
-            reservarCuotas ? (
-              <span className="block min-h-4.5">
-                <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
-              </span>
+            reservarCuotas || reservarMedio ? (
+              <>
+                {reservarMedio && (
+                  <span className="block min-h-4">
+                    <PrecioMedioCard medio={p.precioMedio} />
+                  </span>
+                )}
+                {reservarCuotas && (
+                  <span className="block min-h-4.5">
+                    <CuotasCard opcion={cuotasPorProducto.get(p.id) ?? null} />
+                  </span>
+                )}
+              </>
             ) : undefined
           }
           action={

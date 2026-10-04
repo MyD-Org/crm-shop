@@ -67,6 +67,7 @@ import {
 } from "./catalogo-busqueda";
 import type { Product } from "@/data/products";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
+import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
 import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import {
   columnasConteoAtributos,
@@ -153,9 +154,12 @@ export function mapFilaToProduct(
   hostsMedios: readonly string[] = hostsDeMedios(),
   /** Ver `basePublicaMedios()`. Parámetro para testear sin tocar `process.env`. */
   baseMedios: string | null = basePublicaMedios(),
+  /** Medios con "$X con <Medio>" (ver `flagsPublicos().mediosPrecio`). Sin él, el producto de siempre. */
+  mediosPrecio?: MediosPrecio,
 ): Product {
   const qty = fila.stock != null ? Number(fila.stock) : null;
-  const price = precioDeLista(mapPrecios(fila.prices), idPriceList);
+  const precios = mapPrecios(fila.prices);
+  const price = precioDeLista(precios, idPriceList);
   const atributosEstructurados = leerAtributosEstructurados(fila.atributos);
   const especificaciones = caracteristicasDe(atributosEstructurados);
   return {
@@ -167,6 +171,7 @@ export function mapFilaToProduct(
     name: nombreExhibido(fila),
     price,
     ...camposIva(price, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null),
+    ...armarPreciosMedios(precios, fila.ivaPorcentaje != null ? Number(fila.ivaPorcentaje) : null, mediosPrecio),
     stock: derivarStock(qty),
     stockQty: qty ?? undefined,
     // `reference` de Alegra; si falta, `name`, que en esta cuenta ES el
@@ -454,6 +459,8 @@ export async function getCatalogo(opts: {
   /** Flag `catalogo-solo-visibles` (ver `soloVisiblesSql`). */
   soloVisibles: boolean;
   idPriceList?: string;
+  /** "$X con <Medio>" (ver `mapFilaToProduct`). */
+  mediosPrecio?: MediosPrecio;
   limit?: number;
   offset?: number;
   busqueda?: string;
@@ -501,7 +508,7 @@ export async function getCatalogo(opts: {
   if (opts.offset != null) query = query.offset(opts.offset);
 
   const filas = await query;
-  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList));
+  return filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio));
 }
 
 /**
@@ -519,6 +526,8 @@ export async function getCategoriaExacta(opts: {
    * productos ocultos por sucursal. Ausente = stock único, como siempre.
    */
   disp?: ContextoDisponibilidad;
+  /** "$X con <Medio>" (ver `mapFilaToProduct`). */
+  mediosPrecio?: MediosPrecio;
 }): Promise<{ nombre: string; productos: Product[] } | null> {
   const [categoria] = await getDb()
     .select({ nombre: crmCategorias.nombre })
@@ -553,7 +562,7 @@ export async function getCategoriaExacta(opts: {
     .orderBy(asc(crmCatalogo.name))
     .limit(opts.limit);
 
-  return { nombre: categoria.nombre, productos: filas.map((f) => mapFilaToProduct(f)) };
+  return { nombre: categoria.nombre, productos: filas.map((f) => mapFilaToProduct(f, undefined, undefined, undefined, opts.mediosPrecio)) };
 }
 
 /**
@@ -581,6 +590,8 @@ export async function getProductosPorIds(
     disp?: ContextoDisponibilidad;
     /** Sumar los atributos estructurados (sólo con la tabla disponible). */
     atributosEstructurados?: boolean;
+    /** "$X con <Medio>" (ver `mapFilaToProduct`). */
+    mediosPrecio?: MediosPrecio;
   },
 ): Promise<Map<string, Product>> {
   if (alegraIds.length === 0) return new Map();
@@ -602,7 +613,7 @@ export async function getProductosPorIds(
     );
 
   return new Map(
-    filas.map((f) => [f.alegraId, mapFilaToProduct(f, opts?.idPriceList)]),
+    filas.map((f) => [f.alegraId, mapFilaToProduct(f, opts?.idPriceList, undefined, undefined, opts?.mediosPrecio)]),
   );
 }
 
@@ -1045,6 +1056,8 @@ export async function getPaginaCatalogo(opts: {
    * productos ocultos por sucursal. Ausente = stock único, como siempre.
    */
   disp?: ContextoDisponibilidad;
+  /** "$X con <Medio>" (ver `mapFilaToProduct`). */
+  mediosPrecio?: MediosPrecio;
 }): Promise<PaginaCatalogo> {
   const filtros = opts.filtros ?? {};
   const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
@@ -1076,7 +1089,7 @@ export async function getPaginaCatalogo(opts: {
     : [];
 
   return {
-    productos: filas.map((f) => mapFilaToProduct(f, opts.idPriceList)),
+    productos: filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio)),
     total,
     pagina,
     paginas,
@@ -1120,6 +1133,8 @@ export async function getProducto(
     disp?: ContextoDisponibilidad;
     /** Sumar características estructuradas (flag `busqueda-ia` + tabla disponible). */
     atributosEstructurados?: boolean;
+    /** "$X con <Medio>" (ver `mapFilaToProduct`). */
+    mediosPrecio?: MediosPrecio;
   },
 ): Promise<Product | null> {
   // Un id que no es de Alegra no es un producto: ni se consulta.
@@ -1130,6 +1145,7 @@ export async function getProducto(
     soloVisibles: opts.soloVisibles,
     disp: opts.disp,
     atributosEstructurados: opts.atributosEstructurados,
+    mediosPrecio: opts.mediosPrecio,
   });
   return productos.get(id) ?? null;
 }

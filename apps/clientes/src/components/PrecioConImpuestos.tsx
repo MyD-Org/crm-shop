@@ -12,7 +12,9 @@
  * tachado arriba y abajo el aviso de que es el precio de su cuenta.
  */
 
+import type { PrecioMedio } from "@/data/products";
 import { fmtPrecio as fmt } from "@/lib/format";
+import { textoConMedio } from "@/components/PrecioMedio";
 
 interface Props {
   /** Precio neto (sin IVA) de la lista del visitante. */
@@ -21,9 +23,11 @@ interface Props {
   precioFinal?: number;
   /** Precio de lista general (final si se conoce) para tachar. */
   precioLista?: number;
+  /** Medios con lista propia más barata (ya filtrados y ordenados): una línea "$X con <Medio>" cada uno. */
+  preciosMedios?: PrecioMedio[];
 }
 
-export function PrecioConImpuestos({ price, precioFinal, precioLista }: Props) {
+export function PrecioConImpuestos({ price, precioFinal, precioLista, preciosMedios }: Props) {
   return (
     <div>
       {precioLista != null && (
@@ -38,6 +42,15 @@ export function PrecioConImpuestos({ price, precioFinal, precioLista }: Props) {
           precio sin impuestos nacionales {fmt(price)}
         </p>
       )}
+      {preciosMedios?.length ? (
+        <ul className="mt-3 space-y-1">
+          {preciosMedios.map((m) => (
+            <li key={m.slug} className="text-[15px] font-semibold text-accent tabular-nums">
+              {textoConMedio(m)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {precioLista != null && (
         <p className="mt-2 text-[13px] font-semibold text-accent">Precio exclusivo para su cuenta</p>
       )}

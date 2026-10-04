@@ -3,6 +3,9 @@ import { setFlag, type FlagDeTest } from "@/test/flags";
 import { validarCuotasPago } from "./pagos/cuotas-validacion";
 import { cuotasHabilitadas } from "./cuotas-flag";
 import { catalogoSoloVisibles } from "./catalogo-flag";
+// Los medios con precio no son parte de esta tabla: se fijan sin base.
+vi.mock("./medios-pago-datos", () => ({ mediosOfrecibles: async () => [] }));
+
 import { flagsPublicos } from "./flags-publicos";
 import { sucursalesHabilitadas } from "./sucursales-flag";
 import { disponibilidadSucursalHabilitada } from "./disponibilidad-sucursal-flag";
@@ -46,7 +49,7 @@ describe("visibilidad del catálogo y cuotas públicas", () => {
     f({ "catalogo-solo-visibles": solo, cuotas });
     expect(await catalogoSoloVisibles()).toBe(solo);
     expect(await cuotasHabilitadas()).toBe(cuotas);
-    expect(await flagsPublicos()).toEqual({ soloVisibles: solo, cuotas });
+    expect(await flagsPublicos()).toMatchObject({ soloVisibles: solo, cuotas });
   });
 });
 

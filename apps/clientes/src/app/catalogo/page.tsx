@@ -94,7 +94,7 @@ async function CatalogoResultados({ searchParams }: Props) {
   // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
   // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
   // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
-  const [params, { soloVisibles }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
+  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
     searchParams,
     flagsPublicos(),
     dispCatalogo(),
@@ -150,6 +150,7 @@ async function CatalogoResultados({ searchParams }: Props) {
       pagina: estado.pagina,
       soloVisibles,
       disp,
+      destacado: mediosPrecio?.destacado,
     }),
     facetasPublicas(filtros, soloVisibles, disp),
     getOfertaCuotas(),
@@ -169,6 +170,7 @@ async function CatalogoResultados({ searchParams }: Props) {
         pagina: estado.pagina,
         soloVisibles,
         disp,
+        destacado: mediosPrecio?.destacado,
       }),
       facetasPublicas(tolerantes, soloVisibles, disp),
     ]).catch((err: unknown) => {

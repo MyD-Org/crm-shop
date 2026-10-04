@@ -289,6 +289,7 @@ export function ProductoClient({
                   price={producto.price}
                   precioFinal={producto.precioFinal}
                   precioLista={producto.precioEspecial ? producto.oldPrice : undefined}
+                  preciosMedios={producto.preciosMedios}
                 />
               )}
               {!sinPrecio && mejorCuota && oferta && producto.precioFinal != null && (

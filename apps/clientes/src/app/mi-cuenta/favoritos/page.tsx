@@ -4,6 +4,7 @@ import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FavoritosLista } from "@/components/mi-cuenta/FavoritosLista";
 import { identidadActual } from "@/lib/auth";
 import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
+import { flagsPublicos } from "@/lib/flags-publicos";
 import { listarFavoritos } from "@/lib/favoritos";
 import { rutaIngreso } from "@/lib/ingreso";
 import { RUTAS_MI_CUENTA } from "@/lib/mi-cuenta-nav";
@@ -30,8 +31,10 @@ export default async function FavoritosPage() {
     );
   }
 
+  // "$X con <Medio>" sólo del destacado (las cards no muestran los de la ficha).
+  const { mediosPrecio } = await flagsPublicos();
   const [productos, oferta] = await Promise.all([
-    listarFavoritos(clerkUserId),
+    listarFavoritos(clerkUserId, { mediosPrecio: { destacado: mediosPrecio.destacado, ficha: [] } }),
     getOfertaCuotasSinCache(),
   ]);
 

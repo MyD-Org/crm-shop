@@ -31,12 +31,12 @@ const productoDe = cache(async (id: string) => {
   // cualquier local, sin lo que ninguna sucursal ofrece). Sin flag: undefined.
   // Tabla "Características" (fichas estructuradas, fase 2): sólo con el flag `busqueda-ia` y con
   // `catalog_atributos` legible; si no, la ficha de siempre (sin la tabla).
-  const [{ soloVisibles }, disp, estructurados] = await Promise.all([
+  const [{ soloVisibles, mediosPrecio }, disp, estructurados] = await Promise.all([
     flagsPublicos(),
     dispCatalogo(),
     usarAtributosEstructurados(),
   ]);
-  return productoPublico(id, soloVisibles, disp, estructurados);
+  return productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha);
 });
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
@@ -49,7 +49,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductoPage({ params }: Props) {
   const { id } = await params;
   // En paralelo: la oferta de cuotas no depende del producto (motor sólo-monto).
-  const [producto, oferta, reglas, { soloVisibles }, disp, dispEntrega] = await Promise.all([
+  const [producto, oferta, reglas, { soloVisibles, mediosPrecio }, disp, dispEntrega] = await Promise.all([
     productoDe(id),
     getOfertaCuotas(),
     reglasVentaCacheadas(),
@@ -111,6 +111,7 @@ export default async function ProductoPage({ params }: Props) {
                 productoId={producto.id}
                 soloVisibles={soloVisibles}
                 disp={disp}
+                destacado={mediosPrecio?.destacado}
                 oferta={oferta}
               />
             </Suspense>

@@ -5,6 +5,7 @@ import { relacionadosProducto } from "@/lib/catalogo-publico";
 import { formatRubro } from "@/lib/formato-rubro";
 import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
+import type { MedioPrecio } from "@/lib/medios-precio";
 
 const CANTIDAD = 8;
 
@@ -19,6 +20,7 @@ export async function RelacionadosProducto({
   productoId,
   soloVisibles,
   disp,
+  destacado,
   oferta,
 }: {
   categoriaPropiaId?: string;
@@ -27,6 +29,8 @@ export async function RelacionadosProducto({
   soloVisibles: boolean;
   /** Flag `disponibilidad-sucursal`: contexto de la zona del visitante (undefined = apagado). */
   disp?: ContextoDisponibilidad;
+  /** Medio destacado de las cards ("$X con <Medio>"). */
+  destacado?: MedioPrecio | null;
   oferta: OfertaCuotas | null;
 }) {
   const relacionados = await relacionadosProducto({
@@ -36,6 +40,7 @@ export async function RelacionadosProducto({
     cantidad: CANTIDAD,
     soloVisibles,
     disp,
+    destacado,
   });
   if (!relacionados || relacionados.productos.length === 0) return null;
 

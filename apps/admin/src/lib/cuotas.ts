@@ -42,6 +42,8 @@ export interface ProveedorValido {
   nombre: string
   activo: boolean
   orden: number
+  /** Cantidad a mostrar en card y ficha del Shop (2..24); null = Automático. */
+  cuotasCatalogo: number | null
 }
 
 export function validarProveedor(body: unknown, actual?: ProveedorValido): Resultado<ProveedorValido> {
@@ -58,7 +60,17 @@ export function validarProveedor(body: unknown, actual?: ProveedorValido): Resul
     return fail("orden", "El orden tiene que ser un entero entre 0 y 9999")
   }
 
-  return { ok: true, value: { proveedor, nombre, activo, orden } }
+  const bruto = tomar(body, "cuotasCatalogo", actual?.cuotasCatalogo ?? null)
+  let cuotasCatalogo: number | null = null
+  if (bruto !== null && bruto !== "") {
+    const n = typeof bruto === "string" && /^\d+$/.test(bruto.trim()) ? Number(bruto) : bruto
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 2 || n > CUOTAS_MAX) {
+      return fail("cuotasCatalogo", `Las cuotas a mostrar tienen que ser un entero entre 2 y ${CUOTAS_MAX}, o Automático`)
+    }
+    cuotasCatalogo = n
+  }
+
+  return { ok: true, value: { proveedor, nombre, activo, orden, cuotasCatalogo } }
 }
 
 // ─── Escalones ───────────────────────────────────────────────────────────────────────────
@@ -152,6 +164,8 @@ export interface ProveedorV2 {
   nombre: string
   activo: boolean
   orden: number
+  /** Cantidad elegida para card y ficha (2..24); null = Automático. */
+  cuotasCatalogo: number | null
   escalones: EscalonV2[]
 }
 
@@ -193,6 +207,7 @@ export function armarContratoCuotasV2(input: {
       nombre: p.nombre,
       activo: true,
       orden: p.orden,
+      cuotasCatalogo: p.cuotasCatalogo,
       escalones: input.escalones
         .filter((e) => e.activo && e.proveedorId === p.id)
         .map((e) => ({ id: e.id, cuotasMax: e.cuotasMax, montoMinimo: Number(e.montoMinimo) }))

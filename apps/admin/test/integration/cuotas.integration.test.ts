@@ -137,7 +137,7 @@ describe("cuotas v2: rutas admin e interna", () => {
       expect(json).toEqual({
         ok: true,
         propagado: false,
-        proveedor: { id: expect.any(String), proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0 },
+        proveedor: { id: expect.any(String), proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, cuotasCatalogo: null },
       })
 
       const [row] = await getDb().select().from(paymentMethods)
@@ -168,6 +168,38 @@ describe("cuotas v2: rutas admin e interna", () => {
       const patch = await proveedorId.PATCH(req(`/api/admin/cuotas/proveedores/${legacy}`, { method: "PATCH", body: { activo: false } }), idParams(legacy))
       expect(patch.status).toBe(404)
       expect((await (await escalones.GET(req("/api/admin/cuotas/escalones"))).json()).escalones).toEqual([])
+    })
+
+    it("cuotasCatalogo: se guarda, viaja en el contrato, se conserva en PATCH parcial, 24 y 1 se validan, null vuelve a Automático", async () => {
+      const { json } = await crearProveedor({ proveedor: "mercadopago", cuotasCatalogo: 6 })
+      const id = json.proveedor.id as string
+      expect(json.proveedor.cuotasCatalogo).toBe(6)
+      const [row] = await getDb().select().from(paymentMethods).where(eq(paymentMethods.id, id))
+      expect(row?.cuotasCatalogo).toBe(6)
+      expect((await contrato()).json.proveedores[0].cuotasCatalogo).toBe(6)
+
+      const patch = (body: Record<string, unknown>) =>
+        proveedorId.PATCH(req(`/api/admin/cuotas/proveedores/${id}`, { method: "PATCH", body }), idParams(id))
+
+      expect((await (await patch({ activo: true })).json()).proveedor.cuotasCatalogo).toBe(6)
+
+      const malo = await patch({ cuotasCatalogo: 1 })
+      expect(malo.status).toBe(422)
+      expect(await malo.json()).toMatchObject({ code: "invalid", campo: "cuotasCatalogo" })
+      expect((await patch({ cuotasCatalogo: 25 })).status).toBe(422)
+
+      expect((await (await patch({ cuotasCatalogo: 24 })).json()).proveedor.cuotasCatalogo).toBe(24)
+      const auto = await (await patch({ cuotasCatalogo: null })).json()
+      expect(auto.proveedor.cuotasCatalogo).toBeNull()
+      const contratoFinal = (await contrato()).json
+      expect(validarJsonSchema(schema, contratoFinal)).toEqual([])
+      expect(contratoFinal.proveedores[0].cuotasCatalogo).toBeNull()
+    })
+
+    it("la base rechaza cuotas_catalogo fuera de 2..24 (CHECK de la 0062)", async () => {
+      const { json } = await crearProveedor({ proveedor: "mercadopago" })
+      const id = json.proveedor.id as string
+      await expect(getDb().update(paymentMethods).set({ cuotasCatalogo: 1 }).where(eq(paymentMethods.id, id))).rejects.toThrow()
     })
 
     it("PATCH desactiva; de otro tenant o id basura → 404", async () => {
@@ -358,6 +390,7 @@ describe("cuotas v2: rutas admin e interna", () => {
           nombre: "Mercado Pago",
           activo: true,
           orden: 0,
+          cuotasCatalogo: null,
           escalones: [
             { id: e3, cuotasMax: 3, montoMinimo: 0 },
             { id: e6, cuotasMax: 6, montoMinimo: 180000 },

@@ -43,6 +43,11 @@ export interface ProveedorConfigurado {
   nombre: string;
   activo: boolean;
   orden: number;
+  /**
+   * Cantidad de cuotas que el admin eligió exhibir en card y ficha (2..24). null o ausente =
+   * Automático (regla de `mejorOpcion`). Campo aditivo del contrato v2: cachés viejas no lo traen.
+   */
+  cuotasCatalogo?: number | null;
   /** Ordenados por `montoMinimo` ascendente. */
   escalones: EscalonCuotas[];
 }
@@ -74,6 +79,8 @@ export interface OfertaCuotas {
     proveedor: string;
     nombre: string;
     orden: number;
+    /** Cantidad elegida en el admin para card y ficha; null/ausente = Automático. */
+    cuotasCatalogo?: number | null;
     /** Válidos, ordenados por monto mínimo ascendente. */
     escalones: { cuotasMax: number; montoMinimo: number }[];
     /** Cantidades de 2 a 24 del snapshot, ascendentes. "1 pago" siempre existe. */

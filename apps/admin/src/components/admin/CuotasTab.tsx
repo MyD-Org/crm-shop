@@ -104,7 +104,14 @@ function TasasMercadoPago({ tasasMP }: { tasasMP: TasasMP }) {
 
 // ─── Formularios ─────────────────────────────────────────────────────────────────────────
 
-type ProveedorForm = { id?: string; proveedor: string; orden: string; activo: boolean }
+type ProveedorForm = { id?: string; proveedor: string; orden: string; activo: boolean; cuotasCatalogo: string }
+
+/** "auto" = Automático; si no, la cantidad (2..24). Sin "" porque el Select no admite valor vacío. */
+const AUTOMATICO = "auto"
+const OPCIONES_CATALOGO = [
+  { value: AUTOMATICO, label: "Automático" },
+  ...Array.from({ length: 23 }, (_, i) => ({ value: String(i + 2), label: `${i + 2} cuotas` })),
+]
 type EscalonForm = { id?: string; proveedorId: string; cuotasMax: string; montoMinimo: string; activo: boolean }
 
 const escalonVacio = (proveedorId: string): EscalonForm => ({ proveedorId, cuotasMax: "3", montoMinimo: "", activo: true })
@@ -150,6 +157,7 @@ export function CuotasTab({ initialProveedores, initialEscalones, tasasMP }: Pro
         proveedor: proveedorForm.proveedor,
         orden: proveedorForm.orden.trim() === "" ? 0 : Number(proveedorForm.orden),
         activo: proveedorForm.activo,
+        cuotasCatalogo: proveedorForm.cuotasCatalogo === AUTOMATICO ? null : Number(proveedorForm.cuotasCatalogo),
       }
       const { res, json } = proveedorForm.id
         ? await enviar(`/api/admin/cuotas/proveedores/${proveedorForm.id}`, "PATCH", body)
@@ -266,6 +274,7 @@ export function CuotasTab({ initialProveedores, initialEscalones, tasasMP }: Pro
               columns={[
                 { key: "nombre", header: "Proveedor", render: (p) => p.nombre },
                 { key: "orden", header: "Orden", render: (p) => p.orden, align: "right", hideBelow: "sm" },
+                { key: "catalogo", header: "En el catálogo", render: (p) => (p.cuotasCatalogo === null ? "Automático" : `${p.cuotasCatalogo} cuotas`), hideBelow: "sm" },
                 { key: "estado", header: "Estado", render: (p) => <EstadoBadge activo={p.activo} /> },
                 {
                   key: "acciones",
@@ -273,7 +282,7 @@ export function CuotasTab({ initialProveedores, initialEscalones, tasasMP }: Pro
                   align: "right",
                   render: (p) => (
                     <div className="flex gap-1 justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => abrirProveedor({ id: p.id, proveedor: p.proveedor, orden: String(p.orden), activo: p.activo })}>
+                      <Button size="sm" variant="ghost" onClick={() => abrirProveedor({ id: p.id, proveedor: p.proveedor, orden: String(p.orden), activo: p.activo, cuotasCatalogo: p.cuotasCatalogo === null ? AUTOMATICO : String(p.cuotasCatalogo) })}>
                         Editar
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => alternarActivo("proveedores", p.id, !p.activo)}>
@@ -288,7 +297,7 @@ export function CuotasTab({ initialProveedores, initialEscalones, tasasMP }: Pro
               <div>
                 <Button
                   variant="secondary"
-                  onClick={() => abrirProveedor({ proveedor: disponibles[0]?.id ?? "", orden: String(proveedores.length), activo: true })}
+                  onClick={() => abrirProveedor({ proveedor: disponibles[0]?.id ?? "", orden: String(proveedores.length), activo: true, cuotasCatalogo: AUTOMATICO })}
                 >
                   Agregar proveedor
                 </Button>
@@ -396,6 +405,19 @@ export function CuotasTab({ initialProveedores, initialEscalones, tasasMP }: Pro
             </Field>
             <Field label="Orden" hint="Menor primero." error={errores.orden}>
               <Input type="number" min={0} step={1} value={proveedorForm.orden} onChange={(e) => setP({ orden: e.target.value })} aria-invalid={Boolean(errores.orden)} />
+            </Field>
+            <Field
+              label="Cuotas a mostrar en el catálogo"
+              hint="Es la cantidad que se ve bajo el precio de cada producto y en su ficha, aunque tenga interés. Si el precio no alcanza esa cantidad, se muestra la mejor opción disponible. Automático: la mayor cantidad sin interés."
+              error={errores.cuotasCatalogo}
+            >
+              <Select
+                options={OPCIONES_CATALOGO}
+                value={proveedorForm.cuotasCatalogo}
+                onValueChange={(cuotasCatalogo) => setP({ cuotasCatalogo })}
+                aria-label="Cuotas a mostrar en el catálogo"
+                aria-invalid={Boolean(errores.cuotasCatalogo)}
+              />
             </Field>
             <CheckboxLabel id="proveedor-activo" checked={proveedorForm.activo} onChange={(activo) => setP({ activo })} label="Activo" />
             {errores.general && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.general}</p>}

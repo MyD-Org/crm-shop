@@ -6,6 +6,7 @@ import valido from "../../test/contracts/cuotas/v2/fixtures/valido.json"
 import vacioValido from "../../test/contracts/cuotas/v2/fixtures/vacio-valido.json"
 import sinEscalonesValido from "../../test/contracts/cuotas/v2/fixtures/sin-escalones-valido.json"
 import invalido from "../../test/contracts/cuotas/v2/fixtures/invalido.json"
+import invalidoCatalogo from "../../test/contracts/cuotas/v2/fixtures/invalido-cuotas-catalogo.json"
 import invalidoEscalones from "../../test/contracts/cuotas/v2/fixtures/invalido-escalones.json"
 
 // El payload que arma el CRM tiene que validar contra el contrato publicado
@@ -36,6 +37,21 @@ describe("contrato cuotas v2: fixtures", () => {
   })
 })
 
+describe("contrato cuotas v2: cuotasCatalogo (opcional, aditivo)", () => {
+  it("el fixture válido lo trae y valida; sin el campo sigue validando", () => {
+    expect(valido.proveedores[0]).toHaveProperty("cuotasCatalogo", 6)
+    expect(validarJsonSchema(schema, valido)).toEqual([])
+    expect(validarJsonSchema(schema, sinEscalonesValido)).toEqual([])
+  })
+
+  it("fuera de 2..24, decimal o no numérico se rechaza; null se acepta", () => {
+    const errores = validarJsonSchema(schema, invalidoCatalogo)
+    expect(errores.length).toBeGreaterThanOrEqual(invalidoCatalogo.proveedores.length)
+    const conNull = { ...valido, proveedores: [{ ...valido.proveedores[0], cuotasCatalogo: null }] }
+    expect(validarJsonSchema(schema, conNull)).toEqual([])
+  })
+})
+
 describe("contrato cuotas v2: armarContratoCuotasV2 valida", () => {
   const t = new Date("2026-09-17T18:00:00.000Z")
 
@@ -45,8 +61,8 @@ describe("contrato cuotas v2: armarContratoCuotasV2 valida", () => {
       ahora: t,
       configActualizadaEn: t,
       proveedores: [
-        { id: "p1", proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, updatedAt: t },
-        { id: "p2", proveedor: "mercadopago", nombre: "Mercado Pago", activo: false, orden: 1, updatedAt: t },
+        { id: "p1", proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, cuotasCatalogo: null, updatedAt: t },
+        { id: "p2", proveedor: "mercadopago", nombre: "Mercado Pago", activo: false, orden: 1, cuotasCatalogo: null, updatedAt: t },
       ],
       escalones: [
         { id: "e1", proveedorId: "p1", cuotasMax: 1, montoMinimo: "0.00", activo: true, updatedAt: t },
@@ -57,6 +73,21 @@ describe("contrato cuotas v2: armarContratoCuotasV2 valida", () => {
     expect(validarJsonSchema(schema, c)).toEqual([])
     expect(c.proveedores).toHaveLength(1)
     expect(c.proveedores[0]?.escalones).toHaveLength(2)
+  })
+
+  it("incluye cuotasCatalogo del proveedor (null = Automático) y valida", () => {
+    const c = armarContratoCuotasV2({
+      tenant: "central-led",
+      ahora: t,
+      configActualizadaEn: t,
+      proveedores: [
+        { id: "p1", proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, cuotasCatalogo: 6, updatedAt: t },
+        { id: "p2", proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 1, cuotasCatalogo: null, updatedAt: t },
+      ],
+      escalones: [],
+    })
+    expect(c.proveedores.map((p) => p.cuotasCatalogo)).toEqual([6, null])
+    expect(validarJsonSchema(schema, c)).toEqual([])
   })
 
   it("vacío", () => {

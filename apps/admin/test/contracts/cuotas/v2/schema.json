@@ -31,6 +31,13 @@
         "nombre": { "description": "Nombre para mostrar, ej. \"Mercado Pago\".", "type": "string", "minLength": 1 },
         "activo": { "description": "Siempre true (sólo viajan activos).", "type": "boolean" },
         "orden": { "type": "integer", "minimum": 0 },
+        "cuotasCatalogo": {
+          "description": "Opcional (aditivo, sigue v2). Cantidad de cuotas que el admin eligió mostrar en card y ficha del Shop; `null` o ausente = Automático (mayor cantidad sin interés disponible, o la mayor con interés si no hay). Si esa cantidad no se ofrece para un precio (escalón o rango de montos del plan), el Shop usa Automático. No afecta carrito ni checkout.",
+          "oneOf": [
+            { "type": "integer", "minimum": 2, "maximum": 24 },
+            { "type": "null" }
+          ]
+        },
         "escalones": {
           "description": "Sólo activos, ordenados por `montoMinimo` ascendente. Sin dos escalones con el mismo `montoMinimo`.",
           "type": "array",

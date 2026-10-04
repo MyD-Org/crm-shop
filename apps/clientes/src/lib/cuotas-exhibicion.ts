@@ -14,13 +14,24 @@ import type { OfertaCuotas, OpcionCuotas } from "./pagos/cuotas-tipos";
 const montoValido = (n: number | null | undefined): n is number =>
   typeof n === "number" && Number.isFinite(n) && n > 0;
 
-/** Mejor opción para un precio final unitario (card y ficha). */
+/**
+ * Opción para un precio final unitario (card y ficha). Si el admin eligió una cantidad para el
+ * proveedor y esa cantidad se ofrece a este precio (respeta escalón y rango de montos), se muestra
+ * esa, aunque sea con interés. Si no, regla automática (`mejorOpcion`).
+ */
 export function mejorOpcionPara(
   precioFinal: number | null | undefined,
   oferta: OfertaCuotas | null,
 ): OpcionCuotas | null {
   if (!oferta || !montoValido(precioFinal)) return null;
-  return mejorOpcion(opcionesPara(precioFinal, oferta));
+  const opciones = opcionesPara(precioFinal, oferta);
+  for (const p of oferta.proveedores) {
+    const n = p.cuotasCatalogo;
+    if (typeof n !== "number") continue;
+    const elegida = opciones.find((o) => o.proveedor === p.proveedor && o.cuotas === n);
+    if (elegida) return elegida;
+  }
+  return mejorOpcion(opciones);
 }
 
 export interface ResumenCuotas {

@@ -33,7 +33,7 @@ describe("validarProveedor", () => {
   it("alta: proveedor de la lista, nombre derivado, defaults activo/orden", () => {
     expect(validarProveedor({ proveedor: "mercadopago" })).toEqual({
       ok: true,
-      value: { proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0 },
+      value: { proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, cuotasCatalogo: null },
     })
   })
 
@@ -49,7 +49,7 @@ describe("validarProveedor", () => {
   })
 
   it("PATCH parcial conserva lo actual", () => {
-    const actual = { proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 2 }
+    const actual = { proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 2, cuotasCatalogo: null }
     expect(validarProveedor({ activo: false }, actual)).toEqual({ ok: true, value: { ...actual, activo: false } })
   })
 
@@ -60,6 +60,33 @@ describe("validarProveedor", () => {
     [{ orden: 10000 }, "orden"],
   ])("%j → error en %s", (extra, campo) => {
     expect(campoDe(validarProveedor({ proveedor: "mercadopago", ...extra }))).toBe(campo)
+  })
+
+  describe("cuotasCatalogo (cantidad a mostrar en card y ficha)", () => {
+    const val = (cuotasCatalogo: unknown) => validarProveedor({ proveedor: "mercadopago", cuotasCatalogo })
+
+    it.each([2, 6, 24, "12"])("%s → ok", (v) => {
+      const r = val(v)
+      expect(r.ok && r.value.cuotasCatalogo).toBe(Number(v))
+    })
+
+    it.each([null, ""])("%j → Automático (null)", (v) => {
+      const r = val(v)
+      expect(r.ok && r.value.cuotasCatalogo).toBeNull()
+    })
+
+    it.each([1, 0, 25, -3, 2.5, "abc", true, []])("%j → error en cuotasCatalogo, mensaje en usted", (v) => {
+      const r = val(v)
+      expect(campoDe(r)).toBe("cuotasCatalogo")
+      expect(!r.ok && r.error).toMatch(/entre 2 y 24/)
+    })
+
+    it("sin la clave: alta → null; PATCH conserva el actual", () => {
+      expect(validarProveedor({ proveedor: "mercadopago" })).toMatchObject({ value: { cuotasCatalogo: null } })
+      const actual = { proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, cuotasCatalogo: 6 }
+      expect(validarProveedor({ activo: false }, actual)).toMatchObject({ value: { cuotasCatalogo: 6 } })
+      expect(validarProveedor({ cuotasCatalogo: null }, actual)).toMatchObject({ value: { cuotasCatalogo: null } })
+    })
   })
 
   it("body no objeto → error", () => {
@@ -160,7 +187,7 @@ describe("armarContratoCuotasV2", () => {
   const t2 = new Date("2026-09-17T12:00:00.000Z")
   const ahora = new Date("2026-09-17T18:00:00.000Z")
 
-  const mp: ProveedorFila = { id: "p1", proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, updatedAt: t0 }
+  const mp: ProveedorFila = { id: "p1", proveedor: "mercadopago", nombre: "Mercado Pago", activo: true, orden: 0, cuotasCatalogo: null, updatedAt: t0 }
   const esc = (o: Partial<EscalonFila> & { id: string }): EscalonFila => ({
     proveedorId: "p1",
     cuotasMax: 3,
@@ -195,6 +222,7 @@ describe("armarContratoCuotasV2", () => {
           nombre: "Mercado Pago",
           activo: true,
           orden: 0,
+          cuotasCatalogo: null,
           escalones: [
             { id: "e1", cuotasMax: 3, montoMinimo: 0 },
             { id: "e2", cuotasMax: 6, montoMinimo: 180000 },

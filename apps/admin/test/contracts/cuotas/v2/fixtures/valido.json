@@ -9,6 +9,7 @@
       "nombre": "Mercado Pago",
       "activo": true,
       "orden": 0,
+      "cuotasCatalogo": 6,
       "escalones": [
         { "id": "9c2e1d8f-0000-4000-8000-000000000001", "cuotasMax": 3, "montoMinimo": 0 },
         { "id": "9c2e1d8f-0000-4000-8000-000000000002", "cuotasMax": 6, "montoMinimo": 180000 },

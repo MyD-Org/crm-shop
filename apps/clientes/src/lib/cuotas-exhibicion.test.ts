@@ -90,6 +90,41 @@ describe("mejorOpcionPara", () => {
   it("unitario que no alcanza ningún escalón → nada", () => {
     expect(mejorOpcionPara(100000, oferta(esc([6, 150000]), [op({ cuotas: 6 })]))).toBeNull();
   });
+
+  describe("cuotasCatalogo elegida en el admin", () => {
+    const conCatalogo = (n: number | null | undefined, escalones = esc([12, 0])): OfertaCuotas => {
+      const base = oferta(escalones, [op({ cuotas: 3 }), op({ cuotas: 6 }), op({ cuotas: 12, tasaPct: 30 })]);
+      base.proveedores[0].cuotasCatalogo = n;
+      return base;
+    };
+
+    it("muestra esa cantidad aunque haya una mayor sin interés", () => {
+      expect(mejorOpcionPara(120000, conCatalogo(3))).toMatchObject({ cuotas: 3, sinInteres: true });
+    });
+
+    it("muestra esa cantidad aunque sea con interés", () => {
+      expect(mejorOpcionPara(120000, conCatalogo(12))).toMatchObject({ cuotas: 12, sinInteres: false, montoCuota: 13000 });
+    });
+
+    it("null o ausente → regla automática", () => {
+      expect(mejorOpcionPara(120000, conCatalogo(null))).toMatchObject({ cuotas: 6 });
+      expect(mejorOpcionPara(120000, conCatalogo(undefined))).toMatchObject({ cuotas: 6 });
+    });
+
+    it("cantidad que no existe en el snapshot → regla automática", () => {
+      expect(mejorOpcionPara(120000, conCatalogo(9))).toMatchObject({ cuotas: 6 });
+    });
+
+    it("cantidad fuera del escalón para ese precio → regla automática", () => {
+      expect(mejorOpcionPara(120000, conCatalogo(12, esc([6, 0], [12, 500000])))).toMatchObject({ cuotas: 6 });
+    });
+
+    it("cantidad fuera del rango de montos del plan → regla automática", () => {
+      const o = oferta(esc([12, 0]), [op({ cuotas: 6 }), op({ cuotas: 12, montoMin: 200000 })]);
+      o.proveedores[0].cuotasCatalogo = 12;
+      expect(mejorOpcionPara(120000, o)).toMatchObject({ cuotas: 6 });
+    });
+  });
 });
 
 describe("resumenCuotas (carrito / checkout)", () => {

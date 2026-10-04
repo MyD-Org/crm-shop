@@ -910,6 +910,9 @@ export const paymentMethods = pgTable(
     nombre: text("nombre").notNull(),
     activo: boolean("activo").notNull().default(true),
     orden: integer("orden").notNull().default(0),
+    // Cantidad de cuotas a mostrar en card y ficha del Shop (2..24, CHECK en la migración 0062).
+    // NULL = Automático (mayor sin interés; si no hay, la mayor con interés).
+    cuotasCatalogo: smallint("cuotas_catalogo"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

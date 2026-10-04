@@ -28,6 +28,8 @@ interface Props {
 }
 
 export function PrecioConImpuestos({ price, precioFinal, precioLista, preciosMedios }: Props) {
+  // Con precio por medio, el protagonista es "$X con <Medio>" y el de lista baja de tamaño.
+  const conMedios = Boolean(preciosMedios?.length);
   return (
     <div>
       {precioLista != null && (
@@ -36,16 +38,24 @@ export function PrecioConImpuestos({ price, precioFinal, precioLista, preciosMed
           <s>{fmt(precioLista)}</s>
         </p>
       )}
-      <span className="font-display text-[34px] font-bold leading-none tracking-tight text-text tabular-nums lg:text-[38px]">{fmt(precioFinal ?? price)}</span>
+      <span
+        className={
+          conMedios
+            ? "text-[20px] font-semibold leading-none text-text tabular-nums lg:text-[22px]"
+            : "font-display text-[34px] font-bold leading-none tracking-tight text-text tabular-nums lg:text-[38px]"
+        }
+      >
+        {fmt(precioFinal ?? price)}
+      </span>
       {precioFinal != null && (
         <p className="mt-2 text-[13px] text-muted">
           precio sin impuestos nacionales {fmt(price)}
         </p>
       )}
-      {preciosMedios?.length ? (
-        <ul className="mt-3 space-y-1">
-          {preciosMedios.map((m) => (
-            <li key={m.slug} className="text-[15px] font-semibold text-accent tabular-nums">
+      {conMedios ? (
+        <ul className="mt-4 space-y-1.5">
+          {preciosMedios!.map((m) => (
+            <li key={m.slug} className="font-display text-[28px] font-bold leading-tight tracking-tight text-accent tabular-nums lg:text-[32px]">
               {textoConMedio(m)}
             </li>
           ))}

@@ -13,5 +13,5 @@ export function textoConMedio(m: PrecioMedio): string {
  */
 export function PrecioMedioCard({ medio }: { medio?: PrecioMedio | null }) {
   if (!medio) return null;
-  return <span className="block text-xs font-semibold text-accent tabular-nums">{textoConMedio(medio)}</span>;
+  return <span className="block text-[15px] font-bold leading-snug text-accent tabular-nums">{textoConMedio(medio)}</span>;
 }

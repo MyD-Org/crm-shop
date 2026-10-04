@@ -57,6 +57,7 @@ export function TarjetaProductoCarrusel({
     >
       <ProductCard
         variant="soft"
+        priceSize={p.precioMedio ? "sm" : "md"}
         className="h-full overflow-hidden"
         name={nombreParaMostrar}
         brand={marca}

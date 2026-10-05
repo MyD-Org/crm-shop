@@ -46,6 +46,8 @@ function manejaLaHoja(e: EstadoCatalogo): Partial<EstadoCatalogo> {
     atributos: e.atributos,
     precioMin: e.precioMin,
     precioMax: e.precioMax,
+    potenciaMin: e.potenciaMin,
+    potenciaMax: e.potenciaMax,
     soloStock: e.soloStock,
     retiroEn: e.retiroEn,
     orden: e.orden,
@@ -59,6 +61,8 @@ function sinCambios(a: EstadoCatalogo, b: EstadoCatalogo): boolean {
     mismaLista(a.atributos, b.atributos) &&
     a.precioMin === b.precioMin &&
     a.precioMax === b.precioMax &&
+    a.potenciaMin === b.potenciaMin &&
+    a.potenciaMax === b.potenciaMax &&
     a.soloStock === b.soloStock &&
     a.retiroEn === b.retiroEn &&
     a.orden === b.orden

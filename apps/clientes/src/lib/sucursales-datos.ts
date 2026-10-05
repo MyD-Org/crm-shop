@@ -7,9 +7,11 @@
  * (`leerSucursalesYZonas`, en `crearPedido`).
  *
  * Si la lectura falla devuelve vacío con el perfil `degradado` (minutos): el selector no se
- * muestra y nada más se rompe. La lectura filtra por `tenant_id = shopTenantId()`.
+ * muestra y nada más se rompe. La lectura filtra por `tenant_id = shopTenantId()`. Si falla la caché
+ * misma, se lee sin caché (`conRespaldoSinCache`).
  */
 import { cacheLife, cacheTag } from "next/cache";
+import { conRespaldoSinCache } from "./cache-respaldo";
 import { TAG_SUCURSALES } from "./cache-tags";
 import {
   REGLAS_VENTA_DEFAULT,
@@ -20,7 +22,13 @@ import {
   type ReglasVentaTenant,
 } from "./sucursales-repo";
 
-export async function sucursalesCacheadas(): Promise<DatosSucursales> {
+export function sucursalesCacheadas(): Promise<DatosSucursales> {
+  return conRespaldoSinCache("sucursales", sucursalesDeCache, () =>
+    leerSucursalesYZonas().catch(() => ({ sucursales: [], zonas: [] })),
+  );
+}
+
+async function sucursalesDeCache(): Promise<DatosSucursales> {
   "use cache: remote";
   cacheTag(TAG_SUCURSALES);
   try {
@@ -43,7 +51,15 @@ export async function sucursalesCacheadas(): Promise<DatosSucursales> {
  * defaults con el perfil `degradado`. La decisión que escribe un pedido relee sin caché. Incluye la
  * configuración de envío (`envio`, con el default si esa lectura aparte falla).
  */
-export async function reglasVentaCacheadas(): Promise<ReglasVentaTenant> {
+export function reglasVentaCacheadas(): Promise<ReglasVentaTenant> {
+  return conRespaldoSinCache("reglas-venta", reglasVentaDeCache, () =>
+    Promise.all([leerReglasVenta(), leerConfigEnvio()])
+      .then(([reglas, envio]) => ({ ...reglas, envio }))
+      .catch(() => REGLAS_VENTA_DEFAULT),
+  );
+}
+
+async function reglasVentaDeCache(): Promise<ReglasVentaTenant> {
   "use cache: remote";
   cacheTag(TAG_SUCURSALES);
   try {

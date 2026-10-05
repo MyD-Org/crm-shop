@@ -165,9 +165,9 @@ export const getOfertaCuotas = cache(async (): Promise<OfertaCuotas | null> => {
     if (requiereSync) programarSyncLazy();
     return oferta;
   } catch (e) {
-    // `leerOfertaCuotas` no tira; esto cubre una falla de la caché misma. La
-    // página sigue sin cuotas, como con la base caída.
-    console.error("[cuotas-datos] no se pudo leer la oferta cacheada:", e);
-    return null;
+    // `leerOfertaCuotas` no tira; esto cubre una falla de la caché misma: se lee sin caché
+    // (programa la sync lazy si hace falta).
+    console.warn("[cache] cuotas: falló la lectura cacheada, se lee sin caché:", e instanceof Error ? e.message : e);
+    return leerOfertaCuotas(depsPorDefecto());
   }
 });

@@ -12,7 +12,7 @@
 import { cache } from "react";
 import { catalogoSoloVisibles } from "./catalogo-flag";
 import { cuotasHabilitadas } from "./cuotas-flag";
-import { mediosOfrecibles, mediosOfreciblesSinCache } from "./medios-pago-datos";
+import { mediosOfrecibles } from "./medios-pago-datos";
 import { SIN_MEDIOS_PRECIO, seleccionarMediosPrecio, type MediosPrecio } from "./medios-precio";
 import { precioEspecialCuenta } from "./precio-especial-flag";
 
@@ -30,20 +30,10 @@ export interface FlagsPublicos {
 
 const mensaje = (err: unknown) => (err instanceof Error ? err.message : err);
 
-/** Medios cacheados; si esa lectura falla, la base directo (una consulta chica). */
-async function mediosParaPrecio() {
-  try {
-    return await mediosOfrecibles();
-  } catch (err) {
-    console.warn("[flags-publicos] falló la lectura cacheada de medios, se relee sin caché:", mensaje(err));
-    return mediosOfreciblesSinCache();
-  }
-}
-
 async function leerMediosPrecio(): Promise<MediosPrecio> {
   try {
     if (await precioEspecialCuenta()) return SIN_MEDIOS_PRECIO;
-    return seleccionarMediosPrecio(await mediosParaPrecio(), false);
+    return seleccionarMediosPrecio(await mediosOfrecibles(), false);
   } catch (err) {
     console.warn("[flags-publicos] medios con precio no disponibles:", mensaje(err));
     return SIN_MEDIOS_PRECIO;

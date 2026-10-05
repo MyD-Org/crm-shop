@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "categorias": ["Categoria Ejemplo A", "Categoria Ejemplo B"],
+  "busquedas": [
+    {
+      "q": "producto ejemplo uno",
+      "peso": 12,
+      "perfil": "desconocido",
+      "tipo": "producto",
+      "categoria": ["Categoria Ejemplo A"],
+      "debeIncluirEnTop24": ["ejemplo"],
+      "etiquetado": "revisado"
+    },
+    {
+      "q": "producto ejemplo dos",
+      "peso": 3,
+      "intencion": "necesidad",
+      "categoria": ["Categoria Ejemplo B"],
+      "etiquetado": "propuesto"
+    },
+    {
+      "q": "consulta ejemplo descartada",
+      "peso": 1,
+      "etiquetado": "descartado"
+    }
+  ]
+}

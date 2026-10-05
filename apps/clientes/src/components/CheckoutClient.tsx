@@ -821,7 +821,7 @@ export function CheckoutClient({
             disabled={cancelando}
             className="text-sm text-muted underline disabled:opacity-50"
           >
-            {cancelando ? "Cancelando…" : "Modificar el carrito y armar otro pedido"}
+            {cancelando ? "Cancelando…" : "Volver al carrito"}
           </button>
           {errorCancelar && (
             <p role="alert" className="text-center text-sm text-danger">

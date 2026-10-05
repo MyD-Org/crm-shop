@@ -1198,8 +1198,28 @@ function mapRawSubscription(raw: Record<string, unknown>): AlegraWebhookSubscrip
 
 export async function listWebhookSubscriptions(config: TenantConfig): Promise<AlegraWebhookSubscription[]> {
   const res = (await alegraFetch(config, "/webhooks/subscriptions")) as unknown
-  // Según la cuenta viene como lista o envuelto en { data: [...] }.
-  const filas = Array.isArray(res) ? res : Array.isArray((res as { data?: unknown })?.data) ? (res as { data: unknown[] }).data : []
+  // Según la cuenta viene como lista, o envuelto en { data: [...] } o { subscriptions: [...] }.
+  const envuelta = res as { data?: unknown; subscriptions?: unknown } | null
+  // Una cuenta sin suscripciones puede devolver { subscriptions: null }: es una lista vacía.
+  if (envuelta && typeof envuelta === "object" && "subscriptions" in envuelta && envuelta.subscriptions == null) return []
+  const filas = Array.isArray(res)
+    ? res
+    : Array.isArray(envuelta?.subscriptions)
+      ? envuelta.subscriptions
+      : Array.isArray(envuelta?.data)
+        ? envuelta.data
+        : null
+  if (!filas) {
+    // Forma desconocida: se avisa con las claves (nunca los valores) en vez de devolver [] callado.
+    const describir = (v: unknown) =>
+      v === null ? "null" : Array.isArray(v) ? "lista" : typeof v === "object" ? `{${Object.keys(v as object).join(", ")}}` : typeof v
+    const claves =
+      res && typeof res === "object"
+        ? Object.entries(res as Record<string, unknown>).map(([k, v]) => `${k}: ${describir(v)}`).join(", ")
+        : typeof res
+    console.warn(`[alegra] /webhooks/subscriptions con forma desconocida (claves: ${claves || "ninguna"})`)
+    return []
+  }
   return (filas as Record<string, unknown>[]).map(mapRawSubscription)
 }
 

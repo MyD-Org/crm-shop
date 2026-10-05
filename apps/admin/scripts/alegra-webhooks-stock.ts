@@ -33,6 +33,8 @@
  *   - Las URLs apuntan a /api/webhooks/alegra/stock-cuenta/<cuentaId>/<evento>/<token>; el token
  *     (HMAC del id de la cuenta, dominio `alegra-stock-cuenta`) es distinto del de la principal.
  *   - listar / borrar tocan SOLO las suscripciones de esa cuenta.
+ * - `listar --todas`: muestra TODAS las suscripciones de la cuenta (también las que no apuntan a
+ *   este CRM o tienen otra ruta), con el token tapado. Sirve para diagnosticar.
  * - Si Alegra rechaza un evento al crear, lo informa y sigue con los demás.
  */
 import { createInterface } from "node:readline/promises"
@@ -74,6 +76,7 @@ function argumentos() {
     tenant: valor("--tenant")?.trim(),
     cuenta: valor("--cuenta")?.trim(),
     baseUrl: valor("--base-url")?.trim().replace(/\/+$/, ""),
+    todas: args.includes("--todas"),
     accion,
   }
 }
@@ -94,7 +97,7 @@ function motivo(err: unknown): string {
 }
 
 async function main() {
-  const { tenant, cuenta: cuentaSlug, baseUrl, accion } = argumentos()
+  const { tenant, cuenta: cuentaSlug, baseUrl, todas: verTodas, accion } = argumentos()
   if (!tenant || !accion || (accion === "crear" && !baseUrl)) {
     console.error("Uso: ... scripts/alegra-webhooks-stock.ts --tenant <id> [--cuenta <slug>] --base-url <https://…> crear|listar|borrar")
     console.error("(--base-url sólo hace falta para crear; con él, listar marca las desactualizadas)")
@@ -158,6 +161,17 @@ async function main() {
         : planSuscripcionesStock(tenant, baseUrl, token, todas)
       : null
   const vieja = (id: string) => plan?.viejas.some((v) => v.id === id) ?? false
+
+  if (accion === "listar" && verTodas) {
+    // Diagnóstico: TODAS las suscripciones de la cuenta, reconocidas o no, con el último tramo
+    // de la ruta (el token) tapado.
+    console.log(`Suscripciones en la cuenta: ${todas.length}`)
+    for (const s of todas) {
+      const url = s.url.replace(/[^/]+$/, "***")
+      console.log(`- ${s.event.padEnd(15)} id=${s.id}  ${url}${esNuestra(s) ? "" : "  (NO reconocida)"}`)
+    }
+    return
+  }
 
   if (accion === "listar") {
     if (actuales.length === 0) console.log("No hay suscripciones de stock de este tenant.")

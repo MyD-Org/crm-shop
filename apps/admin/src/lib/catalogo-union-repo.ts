@@ -24,19 +24,32 @@ const ACTIVA_PRINCIPAL = (alias: string) =>
  * cuenta es la principal (`item_id_cuenta` = `alegra_id`). Sale de `catalog_products.stock`, que ya
  * respeta la frescura por fila: un webhook más nuevo que la sync no se pisa. Un par forzado a mano
  * (`origen='manual'`) no se toca. Sin sucursales asignadas a la principal no hace nada.
+ *
+ * La sync la llama al final para todo el catálogo; el drenador de webhooks, con `alegraIds`
+ * (los ítems que acaba de re-leer) y `origen: 'webhook'`, para que la sucursal no espere a la
+ * próxima sync completa.
  */
-export async function escribirStockPrincipal(tenantId: string, ej: Ejecutor = getDb()): Promise<void> {
+export async function escribirStockPrincipal(
+  tenantId: string,
+  ej: Ejecutor = getDb(),
+  opts: { alegraIds?: string[]; origen?: "sync" | "webhook" } = {},
+): Promise<void> {
+  const origen = opts.origen ?? "sync"
+  if (opts.alegraIds && opts.alegraIds.length === 0) return
+  const filtro = opts.alegraIds
+    ? sql`AND p.alegra_id IN (${sql.join(opts.alegraIds.map((id) => sql`${id}`), sql`, `)})`
+    : sql``
   await ej.execute(sql`
     INSERT INTO catalog_stock_sucursal AS css (tenant_id, sucursal, alegra_id, item_id_cuenta, stock, origen, leido_at, synced_at)
-    SELECT p.tenant_id, s.slug, p.alegra_id, p.alegra_id, coalesce(p.stock, 0), 'sync', p.alegra_leido_at, now()
+    SELECT p.tenant_id, s.slug, p.alegra_id, p.alegra_id, coalesce(p.stock, 0), ${origen}, p.alegra_leido_at, now()
     FROM catalog_products p
     JOIN alegra_cuentas c ON c.tenant_id = p.tenant_id AND c.principal
     JOIN sucursales s ON s.tenant_id = p.tenant_id AND s.cuenta_alegra_id = c.id
-    WHERE p.tenant_id = ${tenantId} AND p.cuenta_id IS NULL
+    WHERE p.tenant_id = ${tenantId} AND p.cuenta_id IS NULL ${filtro}
     ON CONFLICT (tenant_id, sucursal, alegra_id) DO UPDATE SET
       item_id_cuenta = excluded.item_id_cuenta,
       stock = excluded.stock,
-      origen = 'sync',
+      origen = excluded.origen,
       leido_at = excluded.leido_at,
       synced_at = excluded.synced_at
     WHERE css.origen <> 'manual'

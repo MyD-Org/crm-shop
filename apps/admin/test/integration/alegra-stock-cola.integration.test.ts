@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest"
 import { and, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
-import { alegraItemRefresh, alegraStockDrenaje, catalogProducts } from "@/db/schema"
+import { alegraItemRefresh, alegraStockDrenaje, catalogProducts, catalogStockSucursal } from "@/db/schema"
 import type { AlegraProduct } from "@/lib/alegra"
 import { drenarTenant, encolar, purgarCola } from "@/lib/alegra-stock-cola"
 import { registrarAviso } from "@/lib/alegra-stock-webhook"
 import { upsertProductos } from "@/lib/catalog-products-repo"
+import { crearSucursal } from "@/lib/sucursales-repo"
 import type { TenantConfig } from "@/lib/tenants"
 import { seedTenant, truncateAll } from "./helpers"
 
@@ -285,5 +286,45 @@ describe("tenantsParaDrenar", () => {
       { tenant: A, ultimoAvisoMin: null },
       { tenant: "tenant-b", ultimoAvisoMin: 2880 },
     ])
+  })
+})
+
+describe("drenarTenant: stock por sucursal de la principal", () => {
+  async function conSucursales() {
+    await getDb().execute(sql`truncate table catalog_stock_sucursal, alegra_cuentas restart identity cascade`)
+    await getDb().execute(sql`INSERT INTO alegra_cuentas (tenant_id, slug, nombre, principal) VALUES (${A}, 'principal', 'Iguazú', true)`)
+    await getDb().execute(sql`INSERT INTO alegra_cuentas (tenant_id, slug, nombre, alegra_email, alegra_token) VALUES (${A}, 'mdp', 'Mar del Plata', 'mdp@cliente.example', 'tok-mdp')`)
+    await crearSucursal(A, { slug: "igz", nombre: "Iguazú" })
+    await crearSucursal(A, { slug: "mdp", nombre: "Mar del Plata" })
+    await getDb().execute(sql`UPDATE sucursales SET cuenta_alegra_id = (SELECT id FROM alegra_cuentas WHERE tenant_id = ${A} AND principal) WHERE tenant_id = ${A} AND slug = 'igz'`)
+    await getDb().execute(sql`UPDATE sucursales SET cuenta_alegra_id = (SELECT id FROM alegra_cuentas WHERE tenant_id = ${A} AND slug = 'mdp') WHERE tenant_id = ${A} AND slug = 'mdp'`)
+  }
+
+  async function stockSucursal(alegraId: string) {
+    return getDb()
+      .select({ sucursal: catalogStockSucursal.sucursal, stock: catalogStockSucursal.stock, origen: catalogStockSucursal.origen })
+      .from(catalogStockSucursal)
+      .where(and(eq(catalogStockSucursal.tenantId, A), eq(catalogStockSucursal.alegraId, alegraId)))
+  }
+
+  it("ítem nuevo de la principal: escribe el stock de las sucursales que usan la principal (no las otras)", async () => {
+    await conSucursales()
+    await encolarIds(["7"])
+    alegraTiene({ "7": 4 })
+    await drenarTenant(config, { deadline: Date.now() + 30_000, ritmoMs: 0 })
+    expect(await stockSucursal("7")).toEqual([{ sucursal: "igz", stock: "4", origen: "webhook" }])
+  })
+
+  it("ítem existente: el webhook actualiza la fila de la sucursal y no pisa un par manual", async () => {
+    await conSucursales()
+    await getDb().insert(catalogStockSucursal).values([
+      { tenantId: A, sucursal: "igz", alegraId: "7", itemIdCuenta: "7", stock: "9", origen: "sync", leidoAt: new Date(Date.now() - 60_000) },
+      { tenantId: A, sucursal: "igz", alegraId: "8", itemIdCuenta: "8", stock: "2", origen: "manual", leidoAt: new Date(Date.now() - 60_000) },
+    ])
+    await encolarIds(["7", "8"])
+    alegraTiene({ "7": 1, "8": 5 })
+    await drenarTenant(config, { deadline: Date.now() + 30_000, ritmoMs: 0 })
+    expect(await stockSucursal("7")).toEqual([{ sucursal: "igz", stock: "1", origen: "webhook" }])
+    expect(await stockSucursal("8")).toEqual([{ sucursal: "igz", stock: "2", origen: "manual" }])
   })
 })

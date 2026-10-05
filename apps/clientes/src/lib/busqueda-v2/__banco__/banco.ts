@@ -9,31 +9,15 @@
  * fase 1 (línea de base) y la v2 se miden con la misma vara.
  */
 import banco from "./banco.json";
+import { parsearBanco } from "./cargar-banco";
+import type { BusquedaBanco, TipoConsulta } from "./modelo";
+import { tipoDe } from "./modelo";
+import { cortarPor, resumenNumerico, type ResumenNum } from "./metricas";
 
-export type IntencionBanco = "codigo" | "producto" | "necesidad" | "pregunta";
+export * from "./modelo";
 
-export interface BusquedaBanco {
-  q: string;
-  perfil: "particular" | "profesional" | "codigo";
-  /** Una de las 15 búsquedas del diagnóstico del 2026-09-30. */
-  diagnostico?: boolean;
-  intencion?: IntencionBanco;
-  /** Nombres de categoría aceptables: alcanza con que la entendida sea una. */
-  categoria?: string[];
-  /** Atributos que el usuario pidió explícitamente (deberían quedar duros). */
-  atributosDuros?: string[];
-  /** Términos del catálogo que deberían aparecer como expansión (sinónimos). */
-  expande?: string[];
-  /** Comienzo de palabra que algún producto de la primera página tiene que tener. */
-  debeIncluirEnTop24?: string[];
-  /** Alguna categoría (o descendiente) que algún producto de la primera página tiene que tener. */
-  categoriaEnTop24?: string[];
-  /** Ninguna categoría dura (preguntas y códigos). */
-  sinDuros?: boolean;
-  nuncaSinResultados?: boolean;
-}
-
-export const BANCO: BusquedaBanco[] = (banco as { busquedas: BusquedaBanco[] }).busquedas;
+/** Banco versionado: pasa por el mismo esquema (`parsearBanco`) que un banco externo (`--banco`). */
+export const BANCO: BusquedaBanco[] = parsearBanco(banco, { origen: "embebido" }).casos;
 
 /** Producto tal como lo necesita la evaluación (un recorte de `Product`). */
 export interface ProductoBanco {
@@ -75,6 +59,24 @@ export interface EvaluacionBusqueda {
   posibles: number;
   categoriaEntendida?: string;
   total: number;
+  perfil: string;
+  /** Tipo de consulta (explícito o derivado, ver `tipoDe`). */
+  tipo: TipoConsulta;
+  intencionEsperada?: string;
+  /** 1/posición del primer esperado (0 si no está); `null` = el caso no tiene expectativa de producto. */
+  rr: number | null;
+  /** precision@24 proxy, fracción 0..1; `null` = el caso no tiene criterio de relevancia. */
+  precision: number | null;
+  /** La tubería devolvió 0 resultados (con o sin `nuncaSinResultados`). */
+  zero: boolean;
+  /** Hits de la consulta (banco real); ausente = sin ponderar. */
+  peso?: number;
+  /** Latencia de la primera repetición (ms). */
+  ms?: number;
+  /** Latencias de todas las repeticiones (ms), para p50/p95. */
+  muestrasMs?: number[];
+  /** Jev grabado sin respuesta para este caso: se excluye de las métricas (lo cuenta la corrida). */
+  sinGrabacion?: boolean;
 }
 
 const normalizar = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -148,6 +150,14 @@ export function evaluar(
   sumar(top24Ok, PESOS.top24);
   sumar(conExpectativa ? indice >= 0 && indice < 3 : null, PESOS.top3);
 
+  // precision@24 (proxy): relevante = el esperado de arriba o un producto de la categoría propia buscada.
+  const idsPropia = b.categoria?.length ? idsConDescendientes(arbol, b.categoria) : null;
+  const conCriterioPrecision = conExpectativa || !!idsPropia?.size;
+  const relevante = (p: ProductoBanco) =>
+    esperado(p) || (!!idsPropia && !!p.categoriaPropiaId && idsPropia.has(p.categoriaPropiaId));
+  const precision = conCriterioPrecision ? (top.length ? top.filter(relevante).length / top.length : 0) : null;
+  const rr = conExpectativa ? (indice >= 0 ? 1 / (indice + 1) : 0) : null;
+
   const sinResultadosIndebido = !!b.nuncaSinResultados && r.total === 0;
   sumar(b.nuncaSinResultados ? !sinResultadosIndebido : null, PESOS.noVacio);
 
@@ -164,6 +174,14 @@ export function evaluar(
     posibles,
     categoriaEntendida,
     total: r.total,
+    perfil: b.perfil,
+    tipo: tipoDe(b),
+    ...(b.intencion ? { intencionEsperada: b.intencion } : {}),
+    rr,
+    precision,
+    zero: r.total === 0,
+    ...(b.peso !== undefined ? { peso: b.peso } : {}),
+    ...(r.ms !== undefined ? { ms: r.ms } : {}),
   };
 }
 
@@ -233,5 +251,60 @@ export function reporte(titulo: string, evs: EvaluacionBusqueda[], conIntencion:
     fila("total", resumir(evs, conIntencion)),
     fila("diagnóstico", resumir(evs.filter((e) => e.diagnostico), conIntencion)),
   );
+  return lineas.join("\n");
+}
+
+const pctNum = (x: number | null) => (x === null ? "n/a" : `${(100 * x).toFixed(1)}%`);
+const dec = (x: number | null, d: number) => (x === null ? "n/a" : x.toFixed(d));
+
+const ENCABEZADO_AMPLIADO =
+  "n | hit@24 | hit@3 | MRR | precision@24 | zero total | zero indebido | p50 ms | p95 ms";
+
+function filaAmpliada(nombre: string, r: ResumenNum): string {
+  return [
+    nombre.padEnd(18),
+    r.n,
+    pctNum(r.hit24),
+    pctNum(r.hit3),
+    dec(r.mrr, 3),
+    pctNum(r.precision24),
+    `${r.zeroTotal} (${pctNum(r.n ? r.zeroRate : null)})`,
+    `${r.zeroIndebido} (${pctNum(r.n ? r.zeroIndebidoRate : null)})`,
+    r.latencia.n ? r.latencia.p50 : "n/a",
+    r.latencia.n ? r.latencia.p95 : "n/a",
+  ].join(" | ");
+}
+
+/**
+ * Bloque adicional del reporte (línea base): hit@24, hit@3, MRR, precision@24
+ * (proxy), zero-result y latencia, en total y por perfil / intención / tipo.
+ * Va DEBAJO de `reporte()`, que no cambia (la tabla y el resumen de siempre).
+ * Sólo agregados: sin consultas ni nombres de productos.
+ */
+export function reporteAmpliado(evs: EvaluacionBusqueda[], conIntencion: boolean): string {
+  const total = resumenNumerico(evs, conIntencion);
+  const lineas = [
+    "## Métricas ampliadas",
+    "(precision@24 es un proxy: esperados o de la categoría buscada sobre los productos devueltos; MRR 0..1)",
+    "",
+    `corte              | ${ENCABEZADO_AMPLIADO}`,
+    filaAmpliada("total", total),
+  ];
+  if (total.precisionExcluidos) lineas.push("", `precision@24: ${total.precisionExcluidos} caso(s) sin criterio de relevancia, excluidos del promedio.`);
+  if (total.ponderado) {
+    lineas.push(
+      "",
+      `ponderado por peso (hits): hit@24 ${pctNum(total.ponderado.hit24)} | MRR ${dec(total.ponderado.mrr, 3)} | zero ${pctNum(total.ponderado.zeroRate)}`,
+    );
+  }
+  const cortes: [string, "perfil" | "intencionEsperada" | "tipo"][] = [
+    ["por perfil", "perfil"],
+    ["por intención esperada", "intencionEsperada"],
+    ["por tipo de consulta", "tipo"],
+  ];
+  for (const [titulo, clave] of cortes) {
+    lineas.push("", `### ${titulo}`, `corte              | ${ENCABEZADO_AMPLIADO}`);
+    for (const [valor, r] of Object.entries(cortarPor(evs, clave, conIntencion))) lineas.push(filaAmpliada(valor, r));
+  }
   return lineas.join("\n");
 }

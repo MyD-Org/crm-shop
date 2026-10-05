@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "origen": "real",
+  "notas": "EJEMPLO público y sintético del formato de un banco real local (se carga con `npm run banco:busqueda -- --banco=<ruta>`). Un banco real vive SIEMPRE fuera del repo o bajo tmp/ (ignorado por git) y nunca se commitea. `etiquetado`: pendiente | propuesto | revisado | descartado; sólo `revisado` (o sin campo) entra a la medición. `peso` = veces que se buscó.",
+  "extraidoEl": "2026-01-01",
+  "categorias": ["Lamparas", "Cables"],
+  "busquedas": [
+    { "q": "lampara generica", "perfil": "desconocido", "tipo": "producto", "peso": 10, "etiquetado": "revisado", "categoria": ["Lamparas"], "debeIncluirEnTop24": ["lampara"], "nuncaSinResultados": true },
+    { "q": "cable generico", "perfil": "desconocido", "tipo": "producto", "peso": 4, "etiquetado": "revisado", "categoria": ["Cables"], "debeIncluirEnTop24": ["cable"], "nuncaSinResultados": true },
+    { "q": "lampra generica", "perfil": "desconocido", "tipo": "typo", "peso": 1, "etiquetado": "revisado", "categoria": ["Lamparas"], "debeIncluirEnTop24": ["lampara"], "nuncaSinResultados": true }
+  ]
+}

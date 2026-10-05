@@ -2,11 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setFlag } from "@/test/flags";
 import type { MedioPago } from "./medios-pago";
 
-const { mediosOfrecibles, mediosOfreciblesSinCache } = vi.hoisted(() => ({
-  mediosOfrecibles: vi.fn(),
-  mediosOfreciblesSinCache: vi.fn(),
-}));
-vi.mock("./medios-pago-datos", () => ({ mediosOfrecibles, mediosOfreciblesSinCache }));
+const { mediosOfrecibles } = vi.hoisted(() => ({ mediosOfrecibles: vi.fn() }));
+vi.mock("./medios-pago-datos", () => ({ mediosOfrecibles }));
 
 import { flagsPublicos } from "./flags-publicos";
 
@@ -29,8 +26,6 @@ describe("flagsPublicos", () => {
   beforeEach(() => {
     mediosOfrecibles.mockReset();
     mediosOfrecibles.mockResolvedValue([]);
-    mediosOfreciblesSinCache.mockReset();
-    mediosOfreciblesSinCache.mockResolvedValue([]);
   });
 
   it("apagados por defecto (igual que el defaultValue de Vercel Flags)", async () => {
@@ -66,15 +61,8 @@ describe("flagsPublicos", () => {
     expect((await flagsPublicos()).mediosPrecio).toEqual({ destacado: null, ficha: [] });
   });
 
-  it("si falla la lectura cacheada, relee los medios sin caché", async () => {
-    mediosOfrecibles.mockRejectedValue(new Error("Connection closed."));
-    mediosOfreciblesSinCache.mockResolvedValue([medio("aa", { destacarEnCatalogo: true })]);
-    expect((await flagsPublicos()).mediosPrecio.destacado?.slug).toBe("aa");
-  });
-
   it("medios ilegibles: degrada a vacío sin romper", async () => {
     mediosOfrecibles.mockRejectedValue(new Error("base caída"));
-    mediosOfreciblesSinCache.mockRejectedValue(new Error("base caída"));
     expect((await flagsPublicos()).mediosPrecio).toEqual({ destacado: null, ficha: [] });
   });
 });

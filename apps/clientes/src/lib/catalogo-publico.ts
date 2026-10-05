@@ -28,6 +28,9 @@
  * - Cada función loguea `[cache] <nombre> miss` en su cuerpo: sólo corre
  *   cuando no hubo acierto. Es la forma de verificar la caché en los logs.
  *
+ * - Si la lectura cacheada misma falla (la Runtime Cache tiró "Connection
+ *   closed." en prod), se lee lo mismo sin caché (`conRespaldoSinCache`).
+ *
  * Plan B (cuota de Runtime Cache): cambiar `'use cache: remote'` por
  * `'use cache'` en este archivo (y en src/lib/cuotas-datos.ts). Sigue siendo
  * correcto; sólo baja el acierto entre instancias.
@@ -47,6 +50,7 @@ import {
   type FiltrosCatalogo,
   type PaginaCatalogo,
 } from "./catalog";
+import { conRespaldoSinCache } from "./cache-respaldo";
 import { TAG_CATALOGO } from "./cache-tags";
 import type { OrdenCatalogo } from "./catalogo-url";
 import { elegirDestacados } from "./destacados";
@@ -109,7 +113,10 @@ function conMedios<T extends { destacado?: MedioPrecio | null }>(args: T): Omit<
  * cachea): la página muestra su error en vez de un catálogo vacío.
  */
 export function paginaCatalogoPublica(args: ArgsPaginaPublica): Promise<PaginaCatalogo> {
-  return filtrosCacheables(args.filtros) ? paginaCacheada(args) : getPaginaCatalogo(conMedios(args));
+  const directa = () => getPaginaCatalogo(conMedios(args));
+  return filtrosCacheables(args.filtros)
+    ? conRespaldoSinCache("catalogo-pagina", () => paginaCacheada(args), directa)
+    : directa();
 }
 
 async function facetasCacheadas(
@@ -130,11 +137,10 @@ export function facetasPublicas(
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
 ): Promise<Facetas> {
+  const directa = () => (disp ? getFacetas(filtros, soloVisibles, disp) : getFacetas(filtros, soloVisibles));
   return filtrosCacheables(filtros)
-    ? facetasCacheadas(filtros, soloVisibles, disp)
-    : disp
-      ? getFacetas(filtros, soloVisibles, disp)
-      : getFacetas(filtros, soloVisibles);
+    ? conRespaldoSinCache("catalogo-facetas", () => facetasCacheadas(filtros, soloVisibles, disp), directa)
+    : directa();
 }
 
 async function productoCacheado(
@@ -150,6 +156,16 @@ async function productoCacheado(
   cacheTag(TAG_CATALOGO);
   cacheLife("catalogo");
   console.info("[cache] producto miss");
+  return leerProducto(id, soloVisibles, disp, estructurados, ficha);
+}
+
+function leerProducto(
+  id: string,
+  soloVisibles: boolean,
+  disp: ContextoDisponibilidad | undefined,
+  estructurados: boolean,
+  ficha: readonly MedioPrecio[],
+): Promise<Product | null> {
   return getProducto(id, {
     soloVisibles,
     disp,
@@ -177,8 +193,13 @@ export function productoPublico(
   ficha: readonly MedioPrecio[] = [],
 ): Promise<Product | null> {
   if (!esIdAlegra(id)) return Promise.resolve(null);
-  if (ficha.length) return productoCacheado(id, soloVisibles, disp, estructurados, ficha);
-  return estructurados ? productoCacheado(id, soloVisibles, disp, true) : productoCacheado(id, soloVisibles, disp);
+  const cacheada = () =>
+    ficha.length
+      ? productoCacheado(id, soloVisibles, disp, estructurados, ficha)
+      : estructurados
+        ? productoCacheado(id, soloVisibles, disp, true)
+        : productoCacheado(id, soloVisibles, disp);
+  return conRespaldoSinCache("producto", cacheada, () => leerProducto(id, soloVisibles, disp, estructurados, ficha));
 }
 
 /**
@@ -186,7 +207,15 @@ export function productoPublico(
  * contienen (raíz → hoja). Si la base falla, vacío (la ficha cae a la
  * categoría de Alegra) y guardado sólo con el perfil `degradado`.
  */
-export async function rutaCategoriaPublica(categoriaId: string): Promise<string[]> {
+export function rutaCategoriaPublica(categoriaId: string): Promise<string[]> {
+  return conRespaldoSinCache(
+    "ruta-categoria",
+    () => rutaCategoriaCacheada(categoriaId),
+    () => getRutaCategoriaPropia(categoriaId).catch(() => []),
+  );
+}
+
+async function rutaCategoriaCacheada(categoriaId: string): Promise<string[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] ruta-categoria miss");
@@ -205,7 +234,15 @@ export async function rutaCategoriaPublica(categoriaId: string): Promise<string[
  * Categorías del menú del header. Si la base falla, vacío (el header se
  * renderiza igual) y guardado sólo con el perfil `degradado` (minutos).
  */
-export async function categoriasNav(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<string[]> {
+export function categoriasNav(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<string[]> {
+  return conRespaldoSinCache(
+    "categorias-nav",
+    () => categoriasNavCacheadas(soloVisibles, disp),
+    () => (disp ? getCategorias(soloVisibles, disp) : getCategorias(soloVisibles)).catch(() => []),
+  );
+}
+
+async function categoriasNavCacheadas(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<string[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] categorias-nav miss");
@@ -226,17 +263,34 @@ export async function categoriasNav(soloVisibles: boolean, disp?: ContextoDispon
  * falla, la home degrada a lo que se pudo leer (o a la grilla vacía) y ese
  * resultado se guarda sólo con el perfil `degradado`.
  */
-export async function destacadosHome(args: {
+interface ArgsDestacados {
   skus: string[];
   cantidad: number;
   soloVisibles: boolean;
   disp?: ContextoDisponibilidad;
   /** Medio destacado de las cards (argumento: parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
-}): Promise<Product[]> {
+}
+
+export function destacadosHome(args: ArgsDestacados): Promise<Product[]> {
+  return conRespaldoSinCache(
+    "destacados",
+    () => destacadosCacheados(args),
+    async () => (await leerDestacados(args)).productos,
+  );
+}
+
+async function destacadosCacheados(args: ArgsDestacados): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] destacados miss");
+  const { productos, fallo } = await leerDestacados(args);
+  if (fallo) cacheLife("degradado");
+  else cacheLife("catalogo");
+  return productos;
+}
+
+async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Product[]; fallo: boolean }> {
   const { skus, cantidad, soloVisibles, disp } = args;
   const { mediosPrecio } = conMedios(args);
   let fallo = false;
@@ -258,12 +312,9 @@ export async function destacadosHome(args: {
         })
       : Promise.resolve([] as Product[]),
   ]);
-  if (fallo) cacheLife("degradado");
-  else cacheLife("catalogo");
-
   const vistos = new Set(iluminacion.productos.map((p) => p.id));
   const pool = [...iluminacion.productos, ...general.filter((p) => !vistos.has(p.id))];
-  return elegirDestacados(pool, skus, cantidad);
+  return { productos: elegirDestacados(pool, skus, cantidad), fallo };
 }
 
 async function primeraPaginaCategoria(
@@ -351,11 +402,33 @@ export async function relacionadosProducto(args: {
     productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);
 
   if (args.categoriaPropiaId) {
-    const exacta = await categoriaExacta(args.categoriaPropiaId, args.soloVisibles, args.disp, args.destacado ?? null);
+    const { categoriaPropiaId, soloVisibles, disp } = args;
+    const destacado = args.destacado ?? null;
+    const exacta = await conRespaldoSinCache(
+      "categoria-exacta",
+      () => categoriaExacta(categoriaPropiaId, soloVisibles, disp, destacado),
+      () =>
+        getCategoriaExacta({
+          categoriaId: categoriaPropiaId,
+          limit: TOPE_CATEGORIA_EXACTA,
+          soloVisibles,
+          disp,
+          ...conMedios({ destacado }),
+        }).catch(() => null),
+    );
     if (exacta) return { categoria: exacta.nombre, productos: recortar(exacta.productos) };
   }
   if (!args.categoria) return null;
-  const productos = await primeraPaginaCategoria(args.categoria, args.soloVisibles, args.disp, args.destacado ?? null);
+  const { categoria, soloVisibles, disp } = args;
+  const destacado = args.destacado ?? null;
+  const productos = await conRespaldoSinCache(
+    "categoria-relacionados",
+    () => primeraPaginaCategoria(categoria, soloVisibles, disp, destacado),
+    () =>
+      getPaginaCatalogo({ filtros: { categorias: [categoria] }, pagina: 1, soloVisibles, disp, ...conMedios({ destacado }) })
+        .then((r) => r.productos)
+        .catch(() => []),
+  );
   return { categoria: args.categoria, productos: recortar(productos) };
 }
 
@@ -364,7 +437,18 @@ export async function relacionadosProducto(args: {
  * (el sitemap sale con las páginas fijas) y guardado sólo con el perfil
  * `degradado`.
  */
-export async function idsProductosPublicos(soloVisibles: boolean): Promise<string[]> {
+export function idsProductosPublicos(soloVisibles: boolean): Promise<string[]> {
+  return conRespaldoSinCache(
+    "ids-productos",
+    () => idsProductosCacheados(soloVisibles),
+    () =>
+      getCatalogo({ soloVisibles })
+        .then((ps) => ps.map((p) => p.id))
+        .catch(() => []),
+  );
+}
+
+async function idsProductosCacheados(soloVisibles: boolean): Promise<string[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
   console.info("[cache] ids-productos miss");

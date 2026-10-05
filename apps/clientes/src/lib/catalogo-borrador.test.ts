@@ -138,3 +138,19 @@ describe("atributos en la hoja", () => {
     expect(limpiarBorrador(conAtr).atributos).toEqual([]);
   });
 });
+
+describe("potencia en la hoja", () => {
+  it("el rango de potencia del borrador viaja al aplicar", () => {
+    const b = cambiarBorrador(base, { potenciaMin: 10, potenciaMax: 50 });
+    expect(hrefAlAplicar(base, b)).toBe("/catalogo?potencia_min=10&potencia_max=50");
+  });
+
+  it("cambiar sólo la potencia ya es un cambio: no devuelve null", () => {
+    expect(hrefAlAplicar(base, cambiarBorrador(base, { potenciaMax: 100 }))).not.toBeNull();
+  });
+
+  it("limpiar en el borrador y aplicar borra la potencia de la URL", () => {
+    const conPotencia = { ...base, potenciaMin: 10, potenciaMax: 50 };
+    expect(hrefAlAplicar(conPotencia, limpiarBorrador(conPotencia))).toBe("/catalogo");
+  });
+});

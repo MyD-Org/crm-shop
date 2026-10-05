@@ -172,6 +172,11 @@ describe("revisionInfo (motivo_revision del Shop, 0010)", () => {
     )
   })
 
+  it("otra_lista_precios con varias cuentas ⇒ nombra la sucursal donde está el contacto", () => {
+    const r = revisionInfo({ ...base, motivo: "otra_lista_precios", listaPrecios: "Mayorista", sucursalContacto: "Centro" })
+    expect(r.detalle).toContain("ya está registrado en Alegra (sucursal Centro) con la lista de precios Mayorista, pero")
+  })
+
   it("otra_lista_precios sin nombre de lista ⇒ 'con otra lista de precios'", () => {
     expect(revisionInfo({ ...base, motivo: "otra_lista_precios" }).detalle).toContain(
       "ya está registrado en Alegra con otra lista de precios, pero",

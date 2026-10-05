@@ -174,9 +174,25 @@ describe("puedeEmitir", () => {
   })
 
   it("el bloqueo trae motivo y detalle", () => {
-    const { bloqueo } = puedeEmitir(pedido({ requiereRevision: true }), null)
+    const { bloqueo } = puedeEmitir(pedido({ requiereRevision: true, motivoRevision: "documento_incompatible" }), null)
     expect(bloqueo).toMatchObject({ motivo: "documento_incompatible" })
     expect(bloqueo?.detalle).toMatch(/IVA/)
+  })
+
+  it('"otra lista de precios" es un aviso: no bloquea la emisión', () => {
+    const p = pedido({ requiereRevision: true, motivoRevision: "otra_lista_precios" })
+    expect(puedeEmitir(p, { subDocumentType: "INVOICE_B" }).bloqueo).toBeNull()
+  })
+
+  it("cada motivo que bloquea explica SU problema, no el del documento", () => {
+    const motivo = (m: string | null) =>
+      puedeEmitir(pedido({ requiereRevision: true, motivoRevision: m }), { subDocumentType: "INVOICE_B" }).bloqueo
+    expect(motivo("condicion_iva_desconocida")).toMatchObject({ motivo: "condicion_iva_desconocida" })
+    expect(motivo("condicion_iva_desconocida")?.detalle).not.toMatch(/Documento incompatible/)
+    expect(motivo("facturacion_en_pedido")).toMatchObject({ motivo: "facturacion_en_pedido" })
+    expect(motivo("facturacion_en_pedido")?.detalle).not.toMatch(/Documento incompatible/)
+    expect(motivo(null)).toMatchObject({ motivo: "requiere_revision" })
+    expect(motivo(null)?.detalle).not.toMatch(/Documento incompatible/)
   })
 })
 

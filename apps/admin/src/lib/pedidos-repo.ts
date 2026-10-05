@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
-import { alegraContacts, catalogProducts, mediosPagoShop, paymentReceipts } from "@/db/schema"
+import { alegraContacts, alegraCuentas, catalogProducts, mediosPagoShop, paymentReceipts, sucursales } from "@/db/schema"
 import {
   shopOrderEventos,
   shopOrderPayments,
@@ -340,12 +340,22 @@ async function historialDe(tenantId: string, orderId: string, creadoEnPedido: Da
   ]
 }
 
+/** Contacto de Alegra con el documento del pedido, para el texto de `otra_lista_precios`. */
+export interface RevisionContacto {
+  /** Nombre de la lista de precios del contacto; `null` si no tiene nombre. */
+  lista: string | null
+  /**
+   * Dónde está registrado: nombres de las sucursales de la cuenta principal (el espejo de
+   * contactos sólo tiene esa cuenta). `null` con una sola cuenta de Alegra: no hace falta decirlo.
+   */
+  sucursal: string | null
+}
+
 /**
- * Nombre de la lista de precios del contacto de Alegra con ese documento (sólo espejo, 0
- * requests; mismo desempate que el Shop: cliente primero, id numérico menor). Sólo para el
- * texto de `otra_lista_precios`; `null` si no hay fila o la lista no tiene nombre.
+ * Contacto de Alegra con ese documento (sólo espejo, 0 requests; mismo desempate que el Shop:
+ * cliente primero, id numérico menor). `null` si no hay fila.
  */
-export async function listaPreciosPorDocumento(tenantId: string, nroDoc: string | null): Promise<string | null> {
+export async function contactoPorDocumento(tenantId: string, nroDoc: string | null): Promise<RevisionContacto | null> {
   const doc = (nroDoc ?? "").replace(/\D/g, "")
   if (!doc) return null
   const [fila] = await getDb()
@@ -365,25 +375,45 @@ export async function listaPreciosPorDocumento(tenantId: string, nroDoc: string 
       asc(alegraContacts.alegraId),
     )
     .limit(1)
-  return fila?.priceListName?.trim() || null
+  if (!fila) return null
+  return { lista: fila.priceListName?.trim() || null, sucursal: await sucursalDeCuentaPrincipal(tenantId) }
 }
 
-/** Lo que el detalle suma a la fila: la lista del contacto, sólo si el motivo la nombra. */
-async function listaParaRevision(tenantId: string, pedido: PedidoRow): Promise<string | null> {
+/**
+ * Nombre de la sucursal (o sucursales) de la cuenta de Alegra principal, o el de la cuenta si no
+ * tiene sucursales asignadas. `null` si el tenant tiene una sola cuenta activa.
+ */
+async function sucursalDeCuentaPrincipal(tenantId: string): Promise<string | null> {
+  const cuentas = await getDb()
+    .select({ id: alegraCuentas.id, nombre: alegraCuentas.nombre, principal: alegraCuentas.principal })
+    .from(alegraCuentas)
+    .where(and(eq(alegraCuentas.tenantId, tenantId), eq(alegraCuentas.activa, true)))
+  const principal = cuentas.find((c) => c.principal)
+  if (cuentas.length < 2 || !principal) return null
+  const filas = await getDb()
+    .select({ nombre: sucursales.nombre })
+    .from(sucursales)
+    .where(and(eq(sucursales.tenantId, tenantId), eq(sucursales.cuentaAlegraId, principal.id), eq(sucursales.activa, true)))
+    .orderBy(asc(sucursales.orden), asc(sucursales.nombre))
+  return filas.length > 0 ? filas.map((f) => f.nombre).join(" y ") : principal.nombre
+}
+
+/** Lo que el detalle suma a la fila: el contacto de Alegra, sólo si el motivo lo nombra. */
+async function listaParaRevision(tenantId: string, pedido: PedidoRow): Promise<RevisionContacto | null> {
   if (pedido.motivoRevision !== "otra_lista_precios") return null
   try {
-    return await listaPreciosPorDocumento(tenantId, pedido.facturacionNroDoc)
+    return await contactoPorDocumento(tenantId, pedido.facturacionNroDoc)
   } catch (err) {
-    // Es un adorno del texto: sin la lista, el aviso sale igual ("con otra lista de precios").
+    // Es un adorno del texto: sin el contacto, el aviso sale igual ("con otra lista de precios").
     const codigo = (err as { code?: unknown })?.code
-    console.error(`[pedidos] no se pudo leer la lista del contacto (${codigo ?? "sin código"})`)
+    console.error(`[pedidos] no se pudo leer el contacto de la revisión (${codigo ?? "sin código"})`)
     return null
   }
 }
 
 export interface DetalleExtras {
   items: PedidoItemConCatalogo[]
-  listaPrecios: string | null
+  listaPrecios: RevisionContacto | null
   historial: EventoHistorialDto[]
   /** Remito único del pedido (0021 del Shop), o `null` si todavía no tiene. */
   remito: RemitoRow | null
@@ -1508,6 +1538,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   actualizadoEn: string
   /** Lista de precios del contacto de Alegra con ese documento; sólo con `otra_lista_precios`. */
   revisionListaPrecios: string | null
+  /** Sucursal donde está registrado ese contacto (ver `RevisionContacto.sucursal`). */
+  revisionSucursalContacto: string | null
   /** Factura de Alegra vinculada (copia de cuando se vinculó), o null. Un sentinel de reserva de
    *  emisión (ver `emisionReserva`) NUNCA aparece acá: no es una factura real. */
   factura: { alegraId: string; numero: string | null; fecha: string | null; total: number | null } | null
@@ -1604,7 +1636,7 @@ export interface DetalleDtoOpciones {
 export function toPedidoDetalleDto(
   row: PedidoRow,
   items: ItemParaDto[],
-  listaPrecios: string | null = null,
+  listaPrecios: RevisionContacto | null = null,
   historial: EventoHistorialDto[] = [],
   remito: RemitoRow | null = null,
   { incluirCosto = false, pagoManual, pagos = [], comprobantes = [] }: DetalleDtoOpciones = {},
@@ -1637,7 +1669,8 @@ export function toPedidoDetalleDto(
     estadoActualizadoPor: row.estadoActualizadoPor,
     estadoActualizadoPorNombre: row.estadoActualizadoPorNombre,
     actualizadoEn: row.updatedAt.toISOString(),
-    revisionListaPrecios: listaPrecios,
+    revisionListaPrecios: listaPrecios?.lista ?? null,
+    revisionSucursalContacto: listaPrecios?.sucursal ?? null,
     factura:
       row.facturaAlegraId && row.facturaAlegraId !== RESERVA_EMISION_SENTINEL
         ? {

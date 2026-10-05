@@ -108,6 +108,7 @@ export function PedidoDetalle({
         tipoDoc: pedido.facturacion.tipoDoc,
         nroDoc: pedido.facturacion.nroDoc,
         listaPrecios: pedido.revisionListaPrecios,
+        sucursalContacto: pedido.revisionSucursalContacto,
       })
     : null
 

@@ -4,20 +4,29 @@
  * no gasta). Usa `JEV_API_KEY` del entorno; el árbol de categorías sale de la
  * base de `.env.local`, en solo lectura.
  *
+ * `npm run banco:grabar -- --solo-faltantes` — graba SÓLO las consultas del
+ * banco que todavía no tienen respuesta y las MEZCLA en `jev-grabado.json` sin
+ * tocar lo existente. NO usa la base ni escribe `arbol-grabado.json` (las
+ * preguntas se arman con ese árbol, los mismos nombres de las grabaciones
+ * previas): sólo necesita `JEV_API_KEY`. Si el modelo de Jev cambió, aborta
+ * (hay que regrabar todo, sin este flag).
+ *
  * A Jev viaja sólo lo mismo que en producción: la consulta normalizada (todas
  * sintéticas, escritas a mano) y los nombres públicos de las categorías. Los
  * códigos no se preguntan (nunca llegan a Jev). Volver a grabar sólo hace
  * falta si cambian las preguntas, el modelo o el árbol.
  */
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { getPaginaCatalogo, getArbolCategorias } from "@/lib/catalog";
 import { JEV_MODELO, consultarJev } from "@/lib/busqueda-inteligente/jev";
 import { pareceCodigo } from "@/lib/busqueda-inteligente/gate";
 import { normalizarConsulta } from "@/lib/busqueda-inteligente/normalizar";
+import type { NodoArbol } from "@/lib/busqueda-inteligente/tipos";
 import { UMBRAL_SUB, opcionesRaiz, preguntaSub, preguntasPrincipales } from "../entender/preguntas";
 import { BANCO } from "./banco";
-import type { JevGrabado } from "./jev-grabado";
+import arbolGrabado from "./arbol-grabado.json";
+import { faltantes, mezclar, type JevGrabado } from "./jev-grabado";
 import { cerrar, enLectura } from "./lectura";
 
 const DESTINO = fileURLToPath(new URL("./jev-grabado.json", import.meta.url));
@@ -46,8 +55,64 @@ async function grabarArbol(arbol: Awaited<ReturnType<typeof getArbolCategorias>>
   writeFileSync(DESTINO_ARBOL, `${JSON.stringify(salida, null, 2)}\n`);
 }
 
+type Entrada = JevGrabado["respuestas"][string];
+
+/** Pregunta a Jev por una consulta ya normalizada (la principal y, si la raíz sale firme, la subcategoría). */
+async function preguntarUna(
+  norm: string,
+  arbol: NodoArbol[],
+  principales: ReturnType<typeof preguntasPrincipales>,
+  raices: ReturnType<typeof opcionesRaiz>,
+): Promise<Entrada | null> {
+  const r1 = await consultarJev(norm, principales, { timeoutMs: 10_000 });
+  if (!r1) {
+    console.error(`[grabar] sin respuesta para «${norm}»`);
+    return null;
+  }
+  const entrada: Entrada = { principal: r1 };
+  const raiz = r1.raiz && raices?.porClave.get(r1.raiz.choice);
+  if (raiz && r1.raiz!.confidence >= UMBRAL_SUB) {
+    const sub = preguntaSub(arbol, raiz);
+    if (sub) {
+      const r2 = await consultarJev(norm, sub.preguntas, { timeoutMs: 10_000 });
+      if (r2) entrada.sub = r2;
+    }
+  }
+  console.info(`[grabar] ${norm} → ${r1.intencion?.choice ?? "-"} / ${r1.raiz?.choice ?? "-"} ${entrada.sub?.sub?.choice ?? ""}`);
+  return entrada;
+}
+
+/** Sólo la base se abre en el modo completo: `--solo-faltantes` no la toca. */
+let usaBase = false;
+
+async function grabarFaltantes() {
+  const actual = JSON.parse(readFileSync(DESTINO, "utf8")) as JevGrabado;
+  if (actual.modelo !== JEV_MODELO) {
+    throw new Error(`El modelo de Jev cambió (${actual.modelo} → ${JEV_MODELO}): regrabe todo con banco:grabar, sin --solo-faltantes.`);
+  }
+  const pendientes = faltantes(BANCO, actual);
+  if (!pendientes.length) {
+    console.info("[grabar] no hay consultas sin grabar: nada para hacer.");
+    return;
+  }
+  console.info(`[grabar] ${pendientes.length} consulta(s) sin grabar (sintéticas del banco versionado; sólo nombres de categorías viajan junto a ellas)`);
+  const arbol = (arbolGrabado as { arbol: NodoArbol[] }).arbol;
+  const principales = preguntasPrincipales(arbol);
+  const raices = opcionesRaiz(arbol);
+  const nuevas: JevGrabado["respuestas"] = {};
+  for (const norm of pendientes) {
+    const entrada = await preguntarUna(norm, arbol, principales, raices);
+    if (entrada) nuevas[norm] = entrada;
+  }
+  const mezcla = mezclar(actual, nuevas, new Date().toISOString().slice(0, 10));
+  writeFileSync(DESTINO, `${JSON.stringify(mezcla, null, 2)}\n`);
+  console.info(`[grabar] ${Object.keys(nuevas).length}/${pendientes.length} grabadas; el archivo tiene ${Object.keys(mezcla.respuestas).length} búsquedas`);
+}
+
 async function main() {
   if (!process.env.JEV_API_KEY?.trim()) throw new Error("Falta JEV_API_KEY en el entorno.");
+  if (process.argv.includes("--solo-faltantes")) return grabarFaltantes();
+  usaBase = true;
   const arbol = await enLectura(() => getArbolCategorias());
   await grabarArbol(arbol);
   if (process.argv.includes("--solo-arbol")) return;
@@ -57,22 +122,8 @@ async function main() {
   for (const b of BANCO) {
     const norm = normalizarConsulta(b.q);
     if (!norm || pareceCodigo(b.q)) continue;
-    const r1 = await consultarJev(norm, principales, { timeoutMs: 10_000 });
-    if (!r1) {
-      console.error(`[grabar] sin respuesta para «${norm}»`);
-      continue;
-    }
-    const entrada: JevGrabado["respuestas"][string] = { principal: r1 };
-    const raiz = r1.raiz && raices?.porClave.get(r1.raiz.choice);
-    if (raiz && r1.raiz!.confidence >= UMBRAL_SUB) {
-      const sub = preguntaSub(arbol, raiz);
-      if (sub) {
-        const r2 = await consultarJev(norm, sub.preguntas, { timeoutMs: 10_000 });
-        if (r2) entrada.sub = r2;
-      }
-    }
-    grabado.respuestas[norm] = entrada;
-    console.info(`[grabar] ${norm} → ${r1.intencion?.choice ?? "-"} / ${r1.raiz?.choice ?? "-"} ${entrada.sub?.sub?.choice ?? ""}`);
+    const entrada = await preguntarUna(norm, arbol, principales, raices);
+    if (entrada) grabado.respuestas[norm] = entrada;
   }
   writeFileSync(DESTINO, `${JSON.stringify(grabado, null, 2)}\n`);
   console.info(`[grabar] ${Object.keys(grabado.respuestas).length} búsquedas grabadas`);
@@ -83,4 +134,4 @@ main()
     console.error(`[grabar] ${err instanceof Error ? err.message : "error"}`);
     process.exitCode = 1;
   })
-  .finally(() => cerrar());
+  .finally(() => (usaBase ? cerrar() : undefined));

@@ -48,3 +48,7 @@ next-env.d.ts
 
 # banco de búsquedas: los reportes se generan en local (repo público, ver AGENTS.md)
 /src/lib/busqueda-v2/__banco__/reportes/
+
+# banco de búsquedas: archivos con consultas reales o salidas de corridas (nunca al repo)
+*.local.json
+/tmp/

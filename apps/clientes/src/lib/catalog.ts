@@ -753,13 +753,13 @@ const precioExhibidoSql = sql<string>`${precioSql} * (1 + coalesce(${crmCatalogo
  * saldría a precio cero. El control de fondo es la visibilidad del overlay del
  * CRM; esto es la red de seguridad del Shop para todo listado público.
  */
-const conPrecioSql = sql`${precioSql} > 0`;
+export const conPrecioSql = sql`${precioSql} > 0`;
 
 /**
  * "Solo con stock", en SQL. Replica `derivarStock`: null = no inventariable
  * = disponible; `<= 0` = sin stock.
  */
-const conStock = (disp?: ContextoDisponibilidad) => {
+export const conStock = (disp?: ContextoDisponibilidad) => {
   const stock = disp ? stockSucursalSql(disp) : stockSql;
   return sql`(${stock} is null or ${stock} > 0)`;
 };

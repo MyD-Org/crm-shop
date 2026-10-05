@@ -10,37 +10,41 @@
  *    `decidirBusqueda`: si redirige, la página interpretada.
  */
 import { getPaginaCatalogo, type FiltrosCatalogo, type PaginaCatalogo } from "@/lib/catalog";
-import { filtrosDeEstado, leerEstado, type EstadoCatalogo } from "@/lib/catalogo-url";
+import { filtrosDeEstado, type EstadoCatalogo } from "@/lib/catalogo-url";
 import { POCOS_RESULTADOS, debeInterpretar } from "@/lib/busqueda-inteligente/gate";
 import { interpretarCon, type Dependencias } from "@/lib/busqueda-inteligente/interpretar";
 import { decidirBusqueda } from "@/lib/busqueda-inteligente/flujo";
 import { estadoInterpretado } from "@/lib/busqueda-inteligente/url";
 import type { NodoArbol } from "@/lib/busqueda-inteligente/tipos";
 import type { ResultadoBanco } from "./banco";
+import { VISTA_ACTUAL, estadoBase, type VistaBanco } from "./vista";
 
 export interface ContextoFase1 {
   arbol: NodoArbol[];
   jev: Dependencias["jev"];
   estructurados: boolean;
+  /** Visibilidad y stock con que se mide. Por defecto `VISTA_ACTUAL` (la variante de siempre del banco). */
+  vista?: VistaBanco;
 }
 
-async function pagina(estado: EstadoCatalogo, estructurados: boolean): Promise<PaginaCatalogo> {
+async function pagina(estado: EstadoCatalogo, estructurados: boolean, vista: VistaBanco): Promise<PaginaCatalogo> {
   const filtros: FiltrosCatalogo = { ...filtrosDeEstado(estado), ...(estructurados ? { atributosEstructurados: true } : {}) };
-  const exacta = await getPaginaCatalogo({ filtros, orden: estado.orden, pagina: 1, soloVisibles: false });
+  const exacta = await getPaginaCatalogo({ filtros, orden: estado.orden, pagina: 1, soloVisibles: vista.soloVisibles });
   if (exacta.total > 0 || !filtros.busqueda?.trim()) return exacta;
   const tolerante = await getPaginaCatalogo({
     filtros: { ...filtros, busquedaTolerante: true },
     orden: estado.orden,
     pagina: 1,
-    soloVisibles: false,
+    soloVisibles: vista.soloVisibles,
   });
   return tolerante.total > 0 ? tolerante : exacta;
 }
 
 export async function ejecutarFase1(q: string, ctx: ContextoFase1): Promise<ResultadoBanco> {
   const inicio = Date.now();
-  const estado = leerEstado({ q, stock: "todos" });
-  const clasica = await pagina(estado, ctx.estructurados);
+  const vista = ctx.vista ?? VISTA_ACTUAL;
+  const estado = estadoBase(q, vista);
+  const clasica = await pagina(estado, ctx.estructurados, vista);
   const vacio = { intencion: undefined, categoriasDuras: [], categoriasBlandas: [], atributosDuros: [], expansiones: [] };
   if (!debeInterpretar(q, clasica.total)) {
     return { ...vacio, productos: clasica.productos, total: clasica.total, ms: Date.now() - inicio };
@@ -71,7 +75,7 @@ export async function ejecutarFase1(q: string, ctx: ContextoFase1): Promise<Resu
     };
   }
   const decision = await decidirBusqueda(estado, clasica.total, interpretacion, async (destino) =>
-    (await pagina(destino, ctx.estructurados)).total,
+    (await pagina(destino, ctx.estructurados, vista)).total,
   );
   if (!decision.redirigir || !interpretacion) {
     return {
@@ -84,6 +88,6 @@ export async function ejecutarFase1(q: string, ctx: ContextoFase1): Promise<Resu
       ms: Date.now() - inicio,
     };
   }
-  const final = await pagina(estadoInterpretado(estado, interpretacion), ctx.estructurados);
+  const final = await pagina(estadoInterpretado(estado, interpretacion), ctx.estructurados, vista);
   return { ...entendido, productos: final.productos, total: final.total, ms: Date.now() - inicio };
 }

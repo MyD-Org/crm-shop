@@ -200,6 +200,7 @@ export function Composer({ casilla, modo, mensaje, hiloId, onCerrar, onEnviado }
 
   return (
     <Dialog
+      dismissible={false}
       open
       onOpenChange={(abierto) => {
         if (!abierto && !enviando) onCerrar()

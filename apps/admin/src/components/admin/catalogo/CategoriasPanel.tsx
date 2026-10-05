@@ -254,6 +254,7 @@ export function CategoriasPanel({ categorias, onCambio }: Props) {
 
       {edicion && (
         <Dialog
+          dismissible={false}
           open
           size="sm"
           onOpenChange={(abierto) => {

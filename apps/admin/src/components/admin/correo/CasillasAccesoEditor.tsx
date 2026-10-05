@@ -106,6 +106,7 @@ export function CasillasAccesoEditor() {
       </Button>
 
       <Dialog
+        dismissible={false}
         open={open}
         onOpenChange={setOpen}
         title="Administrar casillas"

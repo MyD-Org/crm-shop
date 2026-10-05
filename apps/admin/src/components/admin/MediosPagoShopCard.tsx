@@ -362,6 +362,7 @@ export function MediosPagoShopCard() {
       )}
 
       <Dialog
+        dismissible={false}
         open={form !== null}
         onOpenChange={(open) => {
           if (!open) setForm(null)

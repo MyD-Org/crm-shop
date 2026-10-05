@@ -346,6 +346,7 @@ export function InformarPagoModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog
+      dismissible={false}
       open
       onOpenChange={(open) => { if (!open) cerrar() }}
       title="Informar pago"

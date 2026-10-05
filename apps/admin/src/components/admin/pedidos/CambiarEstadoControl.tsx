@@ -83,6 +83,7 @@ export function CambiarEstadoControl({ pedidoId, estado, entregaTipo, tieneFactu
       </div>
 
       <Dialog
+        dismissible={false}
         open={intencion?.tipo === "motivo"}
         onOpenChange={(open) => { if (!open && !guardando) cerrarTodo() }}
         title="Cancelar pedido"

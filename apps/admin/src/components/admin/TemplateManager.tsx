@@ -172,6 +172,7 @@ export function TemplateManager() {
       )}
 
       <Dialog
+        dismissible={false}
         open={open}
         onOpenChange={(o) => { if (!o) setOpen(false) }}
         title="Nueva plantilla"

@@ -536,6 +536,7 @@ function EstadoAcciones({
       )}
 
       <Dialog
+        dismissible={false}
         open={intencion?.tipo === "forzado"}
         onOpenChange={(open) => { if (!open && !guardando) cerrar() }}
         title="Cancelar con devolución"
@@ -567,6 +568,7 @@ function EstadoAcciones({
       </Dialog>
 
       <Dialog
+        dismissible={false}
         open={intencion?.tipo === "motivo"}
         onOpenChange={(open) => { if (!open && !guardando) cerrar() }}
         title="Cancelar pedido"

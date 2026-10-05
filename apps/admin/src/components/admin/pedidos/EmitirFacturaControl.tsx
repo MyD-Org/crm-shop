@@ -160,6 +160,7 @@ export function EmitirFacturaControl({ pedido, onChanged, onConflicto, esAdminPl
       </p>
 
       <Dialog
+        dismissible={false}
         open={abierto}
         onOpenChange={(open) => { if (!open) cerrar() }}
         title="Emitir factura"

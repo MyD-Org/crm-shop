@@ -562,6 +562,7 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
       <ReglasVentaCard />
 
       <Dialog
+        dismissible={false}
         open={sucursalForm !== null}
         onOpenChange={(open) => {
           if (!open) setSucursalForm(null)
@@ -655,6 +656,7 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
       </Dialog>
 
       <Dialog
+        dismissible={false}
         open={zonaForm !== null}
         onOpenChange={(open) => {
           if (!open) setZonaForm(null)
@@ -713,6 +715,7 @@ export function SucursalesTab({ initialSucursales, initialZonas, initialCuentas,
       </Dialog>
 
       <Dialog
+        dismissible={false}
         open={cuentaForm !== null}
         onOpenChange={(open) => {
           if (!open) setCuentaForm(null)

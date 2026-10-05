@@ -9,7 +9,9 @@
 import { describe, expect, it } from "vitest";
 import { entender } from "../entender/entender";
 import type { PlanBusqueda } from "../plan";
-import { BANCO } from "./banco";
+import { pareceCodigo } from "../../busqueda-inteligente/gate";
+import { normalizarConsulta, pareceDatoPersonal } from "../../busqueda-inteligente/normalizar";
+import { BANCO, TIPOS_CONSULTA, tipoDe } from "./banco";
 import arbolGrabado from "./arbol-grabado.json";
 import grabado from "./jev-grabado.json";
 import { jevGrabado, type JevGrabado } from "./jev-grabado";
@@ -68,5 +70,138 @@ describe("banco offline (Entender con Jev grabado)", async () => {
 
   it("una categoría dura siempre tiene productos (nunca una vacía)", () => {
     for (const p of porQ.values()) for (const c of p.duros.categorias) expect(vacias).not.toContain(c);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Casos sintéticos de la línea base (typos y medidas). Sólo lógica pura sobre el banco versionado.
+// ---------------------------------------------------------------------------------------------
+
+type Patron = "omision" | "duplicado" | "transposicion" | "tilde" | "sustitucion";
+
+/** Cómo se erró `typo` respecto de `correcta` (o `null` si no es un error de un solo paso). */
+function patronDeTypo(typo: string, correcta: string): Patron | null {
+  const sinTildes = (x: string) => x.normalize("NFD").replace(/\p{M}/gu, "");
+  if (typo === correcta) return null;
+  if (sinTildes(typo) === sinTildes(correcta)) return "tilde";
+  const sacar = (x: string, i: number) => x.slice(0, i) + x.slice(i + 1);
+  if (typo.length === correcta.length - 1 && [...correcta].some((_, i) => sacar(correcta, i) === typo)) return "omision";
+  if (typo.length === correcta.length + 1 && [...typo].some((c, i) => sacar(typo, i) === correcta && (typo[i - 1] === c || typo[i + 1] === c))) return "duplicado";
+  if (typo.length === correcta.length) {
+    const dif = [...typo].map((c, i) => (c === correcta[i] ? -1 : i)).filter((i) => i >= 0);
+    if (dif.length === 2 && dif[1] === dif[0] + 1 && typo[dif[0]] === correcta[dif[1]] && typo[dif[1]] === correcta[dif[0]]) return "transposicion";
+    if (dif.length === 1) return "sustitucion";
+  }
+  return null;
+}
+
+/** Cada typo del banco: la palabra mal escrita, la correcta y el patrón que ejemplifica. */
+const TYPOS: Record<string, [typo: string, correcta: string, patron: Patron]> = {
+  "lampra led e27": ["lampra", "lampara", "omision"],
+  "termomagentico 2x20": ["termomagentico", "termomagnetico", "transposicion"],
+  "extarctor de aire para cocina": ["extarctor", "extractor", "transposicion"],
+  "reflecotr led exterior": ["reflecotr", "reflector", "transposicion"],
+  "ventialdor de techo": ["ventialdor", "ventilador", "transposicion"],
+  "contacor tripolar": ["contacor", "contactor", "omision"],
+  "disyuntro diferencial": ["disyuntro", "disyuntor", "transposicion"],
+  "panle led para embutir": ["panle", "panel", "transposicion"],
+  "cable unipollar": ["unipollar", "unipolar", "duplicado"],
+  "tira ledd para la cocina": ["ledd", "led", "duplicado"],
+  "fotocelula para exterior": ["fotocelula", "fotocélula", "tilde"],
+  "camara wifi interior": ["camara", "cámara", "tilde"],
+  "zapatila con enchufes": ["zapatila", "zapatilla", "omision"],
+  "luminaria de emerjencia": ["emerjencia", "emergencia", "sustitucion"],
+  "calefactro para el baño": ["calefactro", "calefactor", "transposicion"],
+};
+
+const MEDIDAS: Record<string, RegExp> = {
+  "NxM (2x20)": /\b\d+x\d+\b/,
+  "amperes (20A)": /\b\d+\s?(a|amperes)\b/,
+  "vatios (9W)": /\b\d+\s?w\b/,
+  "kelvin (4000K)": /\b\d+\s?k\b/,
+  "fracción (3/4)": /\b\d+\/\d+\b/,
+  "largo en metros (5m)": /\b\d+(?:[.,]\d+)?\s?m\b/,
+};
+
+/** Fabricantes conocidos: el banco público es genérico (sin marcas ni nombres de productos reales). */
+const MARCAS_PROHIBIDAS = /\b(philips|osram|schneider|siemens|legrand|bosch|makita|dewalt|stanley|samsung|xiaomi|tp-?link|hikvision|dahua)\b/i;
+
+describe("banco versionado: casos de la línea base", () => {
+  const porTipo = (t: string) => BANCO.filter((b) => tipoDe(b) === t);
+
+  it("al menos 15 typos y 15 medidas", () => {
+    expect(porTipo("typo").length).toBeGreaterThanOrEqual(15);
+    expect(porTipo("medida").length).toBeGreaterThanOrEqual(15);
+  });
+
+  it("todo `tipo` explícito es válido y las consultas no se repiten", () => {
+    for (const b of BANCO) if (b.tipo) expect(TIPOS_CONSULTA).toContain(b.tipo);
+    const qs = BANCO.map((b) => normalizarConsulta(b.q) ?? b.q);
+    expect(new Set(qs).size).toBe(qs.length);
+  });
+
+  describe("typos", () => {
+    const typos = porTipo("typo");
+
+    it.each(typos.map((b) => [b.q]))("«%s»: tiene su error de tipeo declarado y verificable", (q) => {
+      const fila = TYPOS[q];
+      expect(fila, `falta el caso en la tabla TYPOS del test`).toBeDefined();
+      const [typo, correcta, patron] = fila;
+      expect(q.toLowerCase()).toContain(typo);
+      expect(q.toLowerCase()).not.toMatch(new RegExp(`(^|\\s)${correcta}(\\s|$)`));
+      expect(patronDeTypo(typo, correcta)).toBe(patron);
+    });
+
+    it("cubre omisión, letra duplicada, transposición y tilde faltante", () => {
+      const patrones = new Set(typos.map((b) => TYPOS[b.q]?.[2]));
+      for (const p of ["omision", "duplicado", "transposicion", "tilde"]) expect(patrones).toContain(p);
+    });
+
+    it("todos esperan un resultado (nuncaSinResultados) y tienen expectativa de producto", () => {
+      for (const b of typos) {
+        expect(b.nuncaSinResultados).toBe(true);
+        expect(b.debeIncluirEnTop24?.length || b.categoriaEnTop24?.length).toBeTruthy();
+      }
+    });
+  });
+
+  describe("medidas", () => {
+    const medidas = porTipo("medida");
+
+    it.each(Object.entries(MEDIDAS))("hay al menos un caso con %s", (_nombre, regex) => {
+      expect(medidas.some((b) => regex.test(b.q.toLowerCase()))).toBe(true);
+    });
+
+    it("todas esperan un resultado", () => {
+      for (const b of medidas) expect(b.nuncaSinResultados).toBe(true);
+    });
+  });
+
+  it("higiene (repo público): ninguna consulta con @, 7+ dígitos seguidos ni marcas conocidas", () => {
+    for (const b of BANCO) {
+      expect(b.q, "arroba").not.toContain("@");
+      expect(pareceDatoPersonal(b.q), "dato personal").toBe(false);
+      expect(b.q).not.toMatch(MARCAS_PROHIBIDAS);
+    }
+  });
+
+  it("los nombres de categoría esperados existen en el árbol grabado", () => {
+    const nombres = new Set(arbol.map((n) => n.nombre));
+    for (const b of BANCO) for (const c of [...(b.categoria ?? []), ...(b.categoriaEnTop24 ?? [])]) expect(nombres, c).toContain(c);
+  });
+});
+
+/**
+ * REQUIERE el paso manual U1: `npm run banco:grabar -- --solo-faltantes` (necesita JEV_API_KEY) y commitear
+ * `jev-grabado.json`. Hasta entonces este bloque FALLA a propósito: los casos nuevos no tienen la respuesta de
+ * Jev grabada y las mediciones offline de intención/categoría no los pueden evaluar.
+ */
+describe("Jev grabado cubre todo el banco (U1: banco:grabar --solo-faltantes)", () => {
+  it("toda consulta que no es un código tiene su respuesta grabada", () => {
+    const sinGrabar = BANCO.filter((b) => {
+      const norm = normalizarConsulta(b.q);
+      return !!norm && !pareceCodigo(b.q) && !(norm in (grabado as JevGrabado).respuestas);
+    });
+    expect(sinGrabar.length, `${sinGrabar.length} consulta(s) sin grabar: corra «npm run banco:grabar -- --solo-faltantes»`).toBe(0);
   });
 });

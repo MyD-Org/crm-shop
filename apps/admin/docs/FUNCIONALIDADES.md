@@ -768,9 +768,22 @@ stock, nunca las de contactos) y deshabilitar el workflow *admin · Drenar cola 
 Alegra*. El espejo vuelve a depender de la sync diaria. Con la cola vacía, ruta y cron son
 inertes.
 
-**Rotar `ALEGRA_WEBHOOK_SECRET`** invalida las URLs de contactos **y** de stock: cambiar el
-secreto en Vercel, redeploy, y correr `crear` de los dos scripts (detectan las URLs viejas;
-bórrelas con `borrar` antes).
+**Rotar `ALEGRA_WEBHOOK_SECRET`** invalida las URLs de contactos **y** de stock de TODAS las
+cuentas (principal y secundarias). Orden seguro (aprendido en la rotación del 2026-10-05):
+
+1. Generar el secreto nuevo en un archivo local y **guardarlo en el gestor de contraseñas**: en
+   Vercel es *Sensitive* y `vercel env pull` lo devuelve vacío. Si se pierde la copia, hay que
+   rotar de nuevo.
+2. Reemplazarlo en Vercel (Production).
+3. Desplegar con un commit que toque `apps/admin`: `vercel redeploy` del mismo commit lo cancela
+   el `ignoreCommand` de `vercel.json`.
+4. Con el deploy *Ready*, comprobar que una URL armada con el secreto nuevo NO dé 404 antes de
+   borrar nada: Alegra rechaza crear una suscripción cuyo destino responde 404 ("La URL ingresada
+   no es válida"). Borrar primero y crear después con el deploy viejo deja la cuenta sin webhooks.
+5. Por cada cuenta (sin y con `--cuenta <slug>`), `borrar` y `crear` en los dos scripts, y
+   verificar con `listar --todas` (12 suscripciones: 9 de stock y 3 de contactos).
+
+Desde el `!` del chat no se puede tipear el `SI` de confirmación: pasarlo con `echo SI | …`.
 
 **Cuentas secundarias (sucursal con cuenta de Alegra propia; change `sucursales-igz-mdp`, D2)**.
 La cuenta de cada sucursal secundaria (p. ej. Mar del Plata) tiene su PROPIA ruta y su PROPIO

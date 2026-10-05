@@ -121,6 +121,7 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
 
   return (
     <Dialog
+      dismissible={false}
       open
       size="lg"
       onOpenChange={(abierto) => {

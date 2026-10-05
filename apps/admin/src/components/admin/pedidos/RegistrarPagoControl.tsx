@@ -75,6 +75,7 @@ export function RegistrarPagoControl({ pedido, onChanged }: Props) {
       </div>
 
       <Dialog
+        dismissible={false}
         open={confirmar !== null}
         onOpenChange={(open) => { if (!open && !guardando) setConfirmar(null) }}
         title={confirmar === "anular" ? "Anular pago" : "Registrar pago"}

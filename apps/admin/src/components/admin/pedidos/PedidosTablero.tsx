@@ -62,6 +62,7 @@ export function PedidosTablero({ items, onRecargar }: Props) {
       </p>
 
       <Dialog
+        dismissible={false}
         open={intencion?.tipo === "motivo"}
         onOpenChange={(open) => { if (!open && !guardando) cerrar() }}
         title="Cancelar pedido"

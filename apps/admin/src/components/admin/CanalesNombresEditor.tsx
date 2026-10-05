@@ -71,6 +71,7 @@ export function CanalesNombresEditor({ contacts, nombres, onSaved }: Props) {
       </Tooltip>
 
       <Dialog
+        dismissible={false}
         open={open}
         onOpenChange={setOpen}
         title="Nombres de los canales"

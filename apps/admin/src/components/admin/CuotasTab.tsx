@@ -381,6 +381,7 @@ export function CuotasTab({ initialProveedores, initialEscalones, tasasMP }: Pro
       <TasasMercadoPago tasasMP={tasasMP} />
 
       <Dialog
+        dismissible={false}
         open={proveedorForm !== null}
         onOpenChange={(open) => { if (!open) setProveedorForm(null) }}
         title={proveedorForm?.id ? "Editar proveedor" : "Agregar proveedor"}
@@ -426,6 +427,7 @@ export function CuotasTab({ initialProveedores, initialEscalones, tasasMP }: Pro
       </Dialog>
 
       <Dialog
+        dismissible={false}
         open={escalonForm !== null}
         onOpenChange={(open) => { if (!open) setEscalonForm(null) }}
         title={escalonForm?.id ? "Editar escalón" : "Agregar escalón"}

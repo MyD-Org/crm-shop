@@ -614,6 +614,7 @@ function CopiarASucursales({
         <Copy size={14} strokeWidth={1.6} /> Copiar a las otras sucursales
       </Button>
       <Dialog
+        dismissible={false}
         open={open}
         onOpenChange={(v) => {
           if (!copiando) setOpen(v)

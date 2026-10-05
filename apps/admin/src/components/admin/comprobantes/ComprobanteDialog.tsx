@@ -529,6 +529,7 @@ export function ComprobanteDialog({ id, initial, onClose, onChanged, pedidoId, s
       </Dialog>
 
       <Dialog
+        dismissible={false}
         open={formAbierto}
         onOpenChange={(open) => { if (!open) setFormAbierto(false) }}
         title="Cargar en Alegra"

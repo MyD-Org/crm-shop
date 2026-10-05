@@ -330,16 +330,6 @@ export function PagoMercadoPago({
         onReady={onReady}
         onError={onError}
       />
-
-      {/*
-        Aviso previo de doc §6: "sin redirección" es literal para tarjeta, pero
-        con dinero en cuenta MP abre una ventana para iniciar sesión. Anticiparlo
-        evita que el comprador crea que perdió el formulario.
-      */}
-      <p className="mt-3 text-xs text-muted">
-        Si paga con dinero en cuenta de Mercado Pago, se abrirá una ventana
-        para que inicie sesión.
-      </p>
     </div>
   );
 }

@@ -33,6 +33,7 @@ import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { anotarBusqueda } from "@/lib/iniciativa/motor";
 import { useChatIa } from "@/hooks/useChatIa";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { olvidarLocalRecordado } from "@/lib/local-recordado";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
 /**
@@ -153,13 +154,21 @@ export function CatalogoClient({
     return () => fijarCatalogoParaChat(null);
   }, [estado, total, productos]);
 
-  const navegar = (href: string) => startTransition(() => router.push(href));
+  // Sin `retiro` en el destino, el cliente quitó el filtro de local: se olvida el local
+  // recordado para que el proxy no lo vuelva a poner (src/lib/local-recordado.ts).
+  const navegar = (href: string) =>
+    startTransition(() => {
+      olvidarLocalRecordado(href);
+      router.push(href);
+    });
   const ir = (cambios: Partial<EstadoCatalogo>) =>
     startTransition(() => {
       const siguiente = estadoConCambios(estadoVisibleRef.current, cambios);
       estadoVisibleRef.current = siguiente;
       marcar(cambios);
-      router.push(hrefCatalogo(siguiente));
+      const href = hrefCatalogo(siguiente);
+      olvidarLocalRecordado(href);
+      router.push(href);
     });
 
   // Precio especial de la cuenta, si el cliente tiene lista propia más barata.

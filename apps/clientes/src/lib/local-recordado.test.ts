@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+import { decidirLocal } from "./local-recordado";
+
+const d = (pathname: string, qs: string, cookie?: string) =>
+  decidirLocal({ pathname, search: new URLSearchParams(qs), cookie });
+
+describe("decidirLocal", () => {
+  it("el enlace a la home guarda el local sin redirigir", () => {
+    expect(d("/", "retiro=mdp")).toEqual({ cookie: { accion: "guardar", local: "mdp" } });
+  });
+
+  it("normaliza mayúsculas y no reescribe la cookie si es la misma", () => {
+    expect(d("/", "retiro=MDP", "mdp")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+
+  it("elegir otro local en el catálogo lo recuerda", () => {
+    expect(d("/catalogo", "retiro=igz", "mdp")).toEqual({
+      cookie: { accion: "guardar", local: "igz" },
+    });
+  });
+
+  it("entrar al catálogo sin retiro con local recordado redirige agregándolo", () => {
+    expect(d("/catalogo", "categoria=paneles&q=led", "mdp")).toEqual({
+      cookie: { accion: "ninguna" },
+      redirigirA: "categoria=paneles&q=led&retiro=mdp",
+    });
+  });
+
+  it("fuera del catálogo no redirige", () => {
+    expect(d("/producto/1", "", "mdp")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+
+  it("sin cookie no hace nada", () => {
+    expect(d("/catalogo", "q=led")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+
+  it("retiro=todos borra la cookie y en el catálogo limpia la URL", () => {
+    expect(d("/catalogo", "q=led&retiro=todos", "mdp")).toEqual({
+      cookie: { accion: "borrar" },
+      redirigirA: "q=led",
+    });
+    expect(d("/", "retiro=todos", "mdp")).toEqual({ cookie: { accion: "borrar" } });
+  });
+
+  it("un valor inválido no se guarda", () => {
+    expect(d("/", "retiro=<script>")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+
+  it("una cookie inválida no redirige", () => {
+    expect(d("/catalogo", "", "../x")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+});

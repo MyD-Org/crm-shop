@@ -805,15 +805,6 @@ export function CheckoutClient({
           <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
         </div>
 
-        {/*
-          Plan del pedido sobre su total real, recortado al máximo congelado:
-          nunca se promete más de lo que el Brick y la ruta de pago aceptan.
-        */}
-        <CuotasResumen
-          resumen={resumenCuotas(confirmado.total, oferta, { cuotasMax: confirmado.cuotasMax })}
-          titulo={TEXTOS_CUOTAS.checkoutTitulo}
-        />
-
         <PagoMercadoPago
           pedidoId={confirmado.id}
           numero={confirmado.numero}
@@ -824,17 +815,13 @@ export function CheckoutClient({
         />
 
         <div className="flex flex-col items-center gap-2">
-          <p className="text-center text-sm text-muted">{COPY_CARRITO.pagoPendiente}</p>
-          <Link href="/mi-cuenta" className="text-sm text-muted underline">
-            Prefiero pagarlo después
-          </Link>
           <button
             type="button"
             onClick={cancelarYVolver}
             disabled={cancelando}
             className="text-sm text-muted underline disabled:opacity-50"
           >
-            {cancelando ? "Cancelando…" : "Modificar el carrito y armar otro pedido"}
+            {cancelando ? "Cancelando…" : "Volver al carrito"}
           </button>
           {errorCancelar && (
             <p role="alert" className="text-center text-sm text-danger">

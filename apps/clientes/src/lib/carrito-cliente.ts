@@ -69,7 +69,6 @@ export const COPY_CARRITO = {
   cantidad: "Se ajustó la cantidad al máximo permitido.",
   errorGuardar: "No pudimos guardar su carrito. Inténtelo de nuevo.",
   otroDispositivo: "Su carrito se actualizó desde otro dispositivo.",
-  pagoPendiente: "Puede completar el pago desde Mis pedidos.",
 } as const;
 
 /**

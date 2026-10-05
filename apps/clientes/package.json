@@ -15,6 +15,8 @@
     "test:watch": "vitest --project unit",
     "medir:js": "tsx scripts/medir-js.ts",
     "clientes:backfill": "tsx --env-file-if-exists=.env.local scripts/backfill-clientes-clerk.ts",
+    "busqueda:extraer": "tsx --env-file-if-exists=.env.local scripts/extraer-consultas-reales.ts",
+    "busqueda:compilar-banco": "tsx scripts/compilar-banco-real.ts",
     "banco:grabar": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/grabar.ts",
     "banco:busqueda": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/busqueda.ts",
     "banco:linea-base": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/linea-base.ts"

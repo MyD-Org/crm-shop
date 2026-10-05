@@ -115,4 +115,18 @@ describe("listNumberTemplates — caché por tenant, TTL 60s", () => {
     await listNumberTemplates({ ...tenant, id: "cache-3b" } as TenantConfig)
     expect(f).toHaveBeenCalledTimes(2)
   })
+
+  it("dos cuentas de Alegra del mismo tenant (sucursales) no comparten caché", async () => {
+    const f = responde(Response.json(numberTemplatesFixture.data), Response.json(numberTemplatesFixture.data))
+    await listNumberTemplates({ ...tenant, id: "cache-4", alegraEmail: "igz@plataforma.example" } as TenantConfig)
+    await listNumberTemplates({ ...tenant, id: "cache-4", alegraEmail: "mdp@plataforma.example" } as TenantConfig)
+    expect(f).toHaveBeenCalledTimes(2)
+  })
+
+  it("la cuenta mock no comparte caché con la real del mismo tenant", async () => {
+    const f = responde(Response.json(numberTemplatesFixture.data))
+    await listNumberTemplates({ ...tenant, id: "cache-5", alegraMock: true } as TenantConfig)
+    await listNumberTemplates({ ...tenant, id: "cache-5" } as TenantConfig)
+    expect(f).toHaveBeenCalledTimes(1)
+  })
 })

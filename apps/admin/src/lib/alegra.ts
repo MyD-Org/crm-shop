@@ -1249,12 +1249,21 @@ export async function listSellers(config: TenantConfig): Promise<AlegraSeller[]>
 }
 
 /**
- * Caché en memoria del proceso, TTL 60s por tenant — mismo patrón que `listNumberTemplates`:
+ * Caché en memoria del proceso, TTL 60s por cuenta (`claveCuenta`) — mismo patrón que `listNumberTemplates`:
  * `/taxes` no cambia seguido (dar de alta/baja un impuesto es un evento raro de la cuenta) y
  * "Emitir factura" (rebanada C) puede reabrir el preview varias veces sobre el mismo pedido
  * mientras el operador decide, además de volver a leerlos al confirmar (revalidación
  * server-side): no vale gastar cuota de la cuenta real por algo casi estático.
  */
+/**
+ * Clave de las cachés de lecturas de Alegra: tenant + CUENTA. Un tenant con sucursales factura
+ * con varias cuentas (`configParaCuenta` conserva el `id` del tenant y cambia las credenciales):
+ * con el id solo, MDP veía las numeraciones e impuestos de IGZ durante el TTL.
+ */
+function claveCuenta(config: TenantConfig): string {
+  return `${config.id}:${config.alegraMock ? "mock" : config.alegraEmail}`
+}
+
 const TAXES_TTL_MS = 60_000
 const taxesCache = new Map<string, { data: AlegraTax[]; at: number }>()
 
@@ -1264,7 +1273,7 @@ export function __clearTaxesCache(): void {
 }
 
 export async function listTaxes(config: TenantConfig): Promise<AlegraTax[]> {
-  const cached = taxesCache.get(config.id)
+  const cached = taxesCache.get(claveCuenta(config))
   if (cached && Date.now() - cached.at < TAXES_TTL_MS) return cached.data
 
   let data: AlegraTax[]
@@ -1274,7 +1283,7 @@ export async function listTaxes(config: TenantConfig): Promise<AlegraTax[]> {
     const page = (await alegraFetch(config, "/taxes")) as Record<string, unknown>[]
     data = Array.isArray(page) ? page.map(mapRawTax) : []
   }
-  taxesCache.set(config.id, { data, at: Date.now() })
+  taxesCache.set(claveCuenta(config), { data, at: Date.now() })
   return data
 }
 
@@ -1304,7 +1313,7 @@ function mapRawNumberTemplate(raw: Record<string, unknown>): AlegraNumberTemplat
 }
 
 /**
- * Caché en memoria del proceso, TTL 60s por tenant. `/number-templates` no cambia seguido
+ * Caché en memoria del proceso, TTL 60s por cuenta (`claveCuenta`). `/number-templates` no cambia seguido
  * (alta de numeración es un evento raro en Alegra) y el preview de "Emitir factura" puede
  * reabrirse varias veces sobre el mismo pedido mientras el operador decide: no vale gastar
  * cuota de la cuenta real ni exponerse a más 429 por algo casi estático. Sigue el mismo patrón
@@ -1319,9 +1328,9 @@ export function __clearNumberTemplatesCache(): void {
   numberTemplatesCache.clear()
 }
 
-/** Numeraciones de tipo factura de la cuenta (activas e inactivas), con caché de 60s por tenant. */
+/** Numeraciones de tipo factura de la cuenta (activas e inactivas), con caché de 60s por cuenta. */
 export async function listNumberTemplates(config: TenantConfig): Promise<AlegraNumberTemplate[]> {
-  const cached = numberTemplatesCache.get(config.id)
+  const cached = numberTemplatesCache.get(claveCuenta(config))
   if (cached && Date.now() - cached.at < NUMBER_TEMPLATES_TTL_MS) return cached.data
 
   let data: AlegraNumberTemplate[]
@@ -1342,7 +1351,7 @@ export async function listNumberTemplates(config: TenantConfig): Promise<AlegraN
       ? page.filter((raw) => raw.documentType === "invoice").map(mapRawNumberTemplate)
       : []
   }
-  numberTemplatesCache.set(config.id, { data, at: Date.now() })
+  numberTemplatesCache.set(claveCuenta(config), { data, at: Date.now() })
   return data
 }
 

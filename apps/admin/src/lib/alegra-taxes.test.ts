@@ -70,4 +70,18 @@ describe("listTaxes — caché por tenant, TTL 60s", () => {
     await listTaxes({ ...tenant, id: "tax-cache-3b" } as TenantConfig)
     expect(f).toHaveBeenCalledTimes(2)
   })
+
+  it("dos cuentas de Alegra del mismo tenant (sucursales) no comparten caché", async () => {
+    const f = responde(Response.json([]), Response.json([]))
+    await listTaxes({ ...tenant, id: "tax-cache-4", alegraEmail: "igz@plataforma.example" } as TenantConfig)
+    await listTaxes({ ...tenant, id: "tax-cache-4", alegraEmail: "mdp@plataforma.example" } as TenantConfig)
+    expect(f).toHaveBeenCalledTimes(2)
+  })
+
+  it("la cuenta mock no comparte caché con la real del mismo tenant", async () => {
+    const f = responde(Response.json([]))
+    await listTaxes({ ...tenant, id: "tax-cache-5", alegraMock: true } as TenantConfig)
+    await listTaxes({ ...tenant, id: "tax-cache-5" } as TenantConfig)
+    expect(f).toHaveBeenCalledTimes(1)
+  })
 })

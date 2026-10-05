@@ -9,6 +9,7 @@ import {
   paginaDeContactos,
 } from "./alegra"
 import {
+  CUENTA_ALEGRA_PRINCIPAL,
   abrirCorrida,
   avanzarPasada,
   cerrarCorrida,
@@ -53,6 +54,8 @@ export const PASADA_VENCE_MS = 8 * 24 * 60 * 60 * 1000
 export const UMBRAL_CORRIDA_COMPLETA = 0.8
 
 export interface ContactsSyncResult {
+  /** Slug de la cuenta de Alegra que se sincronizó ('principal' o la de una sucursal). */
+  cuenta: string
   ok: boolean
   skipped?: boolean
   /**
@@ -97,12 +100,14 @@ function sleep(ms: number) {
 export async function syncContacts(
   config: TenantConfig,
   trigger: "cron" | "manual",
-  opts: { deadline?: number; intervaloMs?: number } = {},
+  opts: { deadline?: number; intervaloMs?: number; cuenta?: string } = {},
 ): Promise<ContactsSyncResult> {
-  const vacio = { contactsSynced: 0, totalPasada: 0, markedInactive: 0, requests: 0 }
+  // `config` ya es el de la cuenta (el que llama usa configParaCuenta); `cuenta` es su slug.
+  const cuenta = opts.cuenta ?? CUENTA_ALEGRA_PRINCIPAL
+  const vacio = { cuenta, contactsSynced: 0, totalPasada: 0, markedInactive: 0, requests: 0 }
 
   if (!config.alegraMock && !config.alegraToken) {
-    await registrarSalteo(config.id, trigger, "sin_credenciales")
+    await registrarSalteo(config.id, trigger, "sin_credenciales", cuenta)
     return { ok: true, skipped: true, done: true, ...vacio, error: "sin_credenciales" }
   }
 
@@ -112,28 +117,30 @@ export async function syncContacts(
   // conexión y liberar en otra. La transacción solo sostiene el candado; el trabajo va por el
   // pool. Con la sync de un tirón esto dejaba una transacción ociosa 2–3 min; por tramos es
   // corta y el candado sigue siendo lo más simple que no necesita migración.
-  const clave = `alegra_contacts:${config.id}`
+  // La clave de la principal es la de siempre; cada cuenta secundaria tiene la suya, así dos cuentas
+  // del mismo tenant pueden avanzar a la vez (cada una tiene su propio cupo de /contacts en Alegra).
+  const clave = cuenta === CUENTA_ALEGRA_PRINCIPAL ? `alegra_contacts:${config.id}` : `alegra_contacts:${config.id}:${cuenta}`
   let resultado: ContactsSyncResult | null = null
   try {
     await getDb().transaction(async (tx) => {
       const r = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(hashtext(${clave})) AS tomado`)
       if (!r[0]?.tomado) return
-      resultado = await tramo(config, trigger, opts)
+      resultado = await tramo(config, trigger, cuenta, opts)
     })
   } catch (err) {
     // Solo llega acá si falla la transacción del candado (el tramo no tira).
-    console.error(`alegra-contacts-sync: ${config.id}: ${motivoDeError(err)}`)
+    console.error(`alegra-contacts-sync: ${config.id}/${cuenta}: ${motivoDeError(err)}`)
     return { ok: false, done: true, ...vacio, error: motivoDeError(err) }
   }
   if (resultado) return resultado
 
-  await registrarSalteo(config.id, trigger, "corrida_en_curso")
+  await registrarSalteo(config.id, trigger, "corrida_en_curso", cuenta)
   return { ok: true, skipped: true, done: false, ...vacio, error: "corrida_en_curso" }
 }
 
 /** La pasada en curso, o una nueva si no hay (o si la que había quedó abandonada). */
-async function pasadaParaSeguir(config: TenantConfig, trigger: "cron" | "manual"): Promise<PasadaEnCurso> {
-  const abierta = await pasadaEnCurso(config.id)
+async function pasadaParaSeguir(config: TenantConfig, trigger: "cron" | "manual", cuenta: string): Promise<PasadaEnCurso> {
+  const abierta = await pasadaEnCurso(config.id, cuenta)
   if (abierta && Date.now() - abierta.ultimoAvance.getTime() <= PASADA_VENCE_MS) return abierta
   if (abierta) {
     // Sin bajas: lo que alcanzó a leer ya quedó upserteado y eso es todo.
@@ -146,13 +153,14 @@ async function pasadaParaSeguir(config: TenantConfig, trigger: "cron" | "manual"
     })
   }
   const startedAt = new Date()
-  const id = await abrirCorrida(config.id, trigger, startedAt)
+  const id = await abrirCorrida(config.id, trigger, startedAt, cuenta)
   return { id, startedAt, cursor: 0, requests: 0, ultimoAvance: startedAt }
 }
 
 async function tramo(
   config: TenantConfig,
   trigger: "cron" | "manual",
+  cuenta: string,
   opts: { deadline?: number; intervaloMs?: number },
 ): Promise<ContactsSyncResult> {
   const intervaloMs = opts.intervaloMs ?? 700
@@ -162,6 +170,7 @@ async function tramo(
   let leidos = 0
   const acumuladas = () => (pasada?.requests ?? 0) + requests
   const parcial = (cortado?: ContactsSyncResult["cortado"]): ContactsSyncResult => ({
+    cuenta,
     ok: true,
     done: false,
     contactsSynced: leidos,
@@ -172,7 +181,7 @@ async function tramo(
   })
 
   try {
-    pasada = await pasadaParaSeguir(config, trigger)
+    pasada = await pasadaParaSeguir(config, trigger, cuenta)
     cursor = pasada.cursor
 
     for (let i = 0; i < PAGINAS_POR_TRAMO; i++) {
@@ -195,12 +204,12 @@ async function tramo(
       }
 
       // Se guarda EN EL MOMENTO: si la invocación muere después, lo leído no se pierde.
-      if (page.length > 0) await upsertContactos(config.id, page.map(mapRawContactRow), "sync")
+      if (page.length > 0) await upsertContactos(config.id, page.map(mapRawContactRow), "sync", { cuenta })
       cursor += page.length
       leidos += page.length
       await avanzarPasada(pasada.id, { cursor, requests: acumuladas() })
 
-      if (page.length < ALEGRA_PAGE_SIZE) return await cerrarPasada(config, pasada, cursor, leidos, requests, acumuladas())
+      if (page.length < ALEGRA_PAGE_SIZE) return await cerrarPasada(config, cuenta, pasada, cursor, leidos, requests, acumuladas())
 
       const espera = intervaloMs - (Date.now() - inicio)
       if (espera > 0 && i < PAGINAS_POR_TRAMO - 1) await sleep(espera)
@@ -208,7 +217,7 @@ async function tramo(
     return parcial()
   } catch (err) {
     const error = motivoDeError(err)
-    console.error(`alegra-contacts-sync: ${config.id}: ${error}`)
+    console.error(`alegra-contacts-sync: ${config.id}/${cuenta}: ${error}`)
     // La pasada se cierra en error, sin bajas: la próxima arranca otra desde cero.
     if (pasada) {
       try {
@@ -217,13 +226,14 @@ async function tramo(
         // La bitácora no puede tapar el resultado.
       }
     }
-    return { ok: false, done: true, contactsSynced: leidos, totalPasada: cursor, markedInactive: 0, requests, error }
+    return { cuenta, ok: false, done: true, contactsSynced: leidos, totalPasada: cursor, markedInactive: 0, requests, error }
   }
 }
 
 /** Última página leída: guarda del 80 %, bajas soft y cierre de la bitácora. */
 async function cerrarPasada(
   config: TenantConfig,
+  cuenta: string,
   pasada: PasadaEnCurso,
   cursor: number,
   leidos: number,
@@ -232,15 +242,15 @@ async function cerrarPasada(
 ): Promise<ContactsSyncResult> {
   // "Vistos" = filas escritas desde que arrancó la pasada; "no vistos" = activas que se darían
   // de baja. Si las bajas pasaran del 20 % del padrón, la pasada vio de menos: sospechosa.
-  const { vistos, activosNoVistos } = await contarVistosDesde(config.id, pasada.startedAt)
-  const base = { contactsSynced: leidos, totalPasada: cursor, requests }
+  const { vistos, activosNoVistos } = await contarVistosDesde(config.id, pasada.startedAt, cuenta)
+  const base = { cuenta, contactsSynced: leidos, totalPasada: cursor, requests }
   if (activosNoVistos > 0 && vistos < UMBRAL_CORRIDA_COMPLETA * (vistos + activosNoVistos)) {
     const error = "corrida_sospechosa"
     await cerrarCorrida(pasada.id, { status: "error", contactsSynced: cursor, markedInactive: 0, requests: requestsPasada, error })
     return { ok: false, done: true, ...base, markedInactive: 0, error }
   }
 
-  const markedInactive = await marcarNoVistos(config.id, pasada.startedAt)
+  const markedInactive = await marcarNoVistos(config.id, pasada.startedAt, cuenta)
   await cerrarCorrida(pasada.id, { status: "ok", contactsSynced: cursor, markedInactive, requests: requestsPasada })
   return { ok: true, done: true, ...base, markedInactive }
 }

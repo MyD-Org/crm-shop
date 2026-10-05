@@ -1,8 +1,10 @@
 # Sync del espejo de contactos de Alegra (tabla alegra_contacts del CRM), por tramos.
-# Llama a /api/cron/alegra-contactos-sync con CRON_SECRET una vez por minuto mientras algún
-# tenant tenga padrón por leer (`done: false`). Cada llamada lee a lo sumo 3 páginas por
-# tenant: /contacts admite ~5 requests por minuto por cuenta y el login del portal y el bot
-# comparten ese cupo.
+# Llama a /api/cron/alegra-contactos-sync con CRON_SECRET una vez por minuto mientras alguna
+# cuenta tenga padrón por leer (`done: false`). Cada llamada lee a lo sumo 3 páginas por
+# (tenant, cuenta): /contacts admite ~5 requests por minuto por cuenta y el login del portal y
+# el bot comparten ese cupo. Cada tenant tiene su cuenta principal y, si las hay, cuentas
+# secundarias (sucursales con Alegra propio): se siguen, resumen y reintentan por clave
+# tenant:cuenta, así la falla de una cuenta no marca fallida a la otra.
 # Ver apps/admin/docs/FUNCIONALIDADES.md, "Espejo de contactos de Alegra".
 
 name: admin · Sync contactos Alegra
@@ -15,11 +17,16 @@ on:
     # páginas) tarda ~70 min, así que termina antes de las 06:00 UTC (catálogo del Shop) y de
     # las 07:00 UTC (catálogo del CRM), que usan la misma cuenta de Alegra.
     - cron: "15 3 * * 0"
-  # A mano desde la pestaña Actions; `tenant` vacío = todos los tenants con Alegra.
+  # A mano desde la pestaña Actions; `tenant` vacío = todos los tenants con Alegra y `cuenta`
+  # vacío = todas las cuentas (principal y secundarias).
   workflow_dispatch:
     inputs:
       tenant:
         description: "Id de un tenant puntual (vacío = todos)"
+        required: false
+        default: ""
+      cuenta:
+        description: "Slug de una cuenta puntual, p. ej. mdp (vacío = todas)"
         required: false
         default: ""
 
@@ -43,6 +50,7 @@ jobs:
           EVENTO: ${{ github.event_name }}
           # Por env y no interpolado en el script: el input lo escribe una persona.
           TENANT: ${{ github.event.inputs.tenant }}
+          CUENTA: ${{ github.event.inputs.cuenta }}
           # Segundos entre el inicio de una ronda de llamadas y el de la siguiente.
           PAUSA_SEG: "60"
           # Tope del loop, por debajo de timeout-minutes para cerrar con resumen. Lo que no
@@ -70,10 +78,10 @@ jobs:
               "$BASE_URL/api/cron/alegra-contactos-sync$1" || true
           }
 
-          # Resumen para logs públicos: solo identificador de tenant, estado y conteos.
+          # Resumen para logs públicos: solo identificador de tenant y cuenta, estado y conteos.
           # Nunca el campo "error" ni datos de contactos.
           resumir() {
-            jq -c '.tenants[] | {tenant, ok, skipped, done, contactsSynced, totalPasada, markedInactive, requests}' response.json \
+            jq -c '.tenants[] | {tenant, cuenta: (.cuenta // "principal"), ok, skipped, done, contactsSynced, totalPasada, markedInactive, requests}' response.json \
               || echo "(respuesta no resumible)"
           }
 
@@ -83,24 +91,23 @@ jobs:
             jq -e '.tenants | type == "array"' response.json > /dev/null 2>&1
           }
 
-          # Tenants que fallaron (ok:false sin skipped). Un tenant salteado no es una falla.
+          # Claves tenant:cuenta que fallaron (ok:false sin skipped). Una cuenta salteada (p. ej.
+          # sin_credenciales) no es una falla. Una respuesta sin `cuenta` es de la principal.
           fallidos=""
           anotar_fallidos() {
-            for t in $(jq -r '.tenants[] | select(.ok == false and (.skipped != true)) | .tenant' response.json); do
-              fallidos="$fallidos $t"
+            for k in $(jq -r '.tenants[] | select(.ok == false and (.skipped != true)) | "\(.tenant):\(.cuenta // "principal")"' response.json); do
+              fallidos="$fallidos $k"
             done
           }
-          # Tenants con padrón por leer: se los vuelve a llamar en la próxima ronda.
+          # Claves con padrón por leer: se las vuelve a llamar en la próxima ronda.
           pendientes_de() {
-            jq -r '.tenants[] | select(.done == false and (.ok == true)) | .tenant' response.json
+            jq -r '.tenants[] | select(.done == false and (.ok == true)) | "\(.tenant):\(.cuenta // "principal")"' response.json
           }
 
-          # Primera ronda: todos los tenants (o el del input) en una sola llamada.
-          if [ -n "$TENANT" ]; then
-            query="?tenant=$(uri "$TENANT")&trigger=$trigger"
-          else
-            query="?trigger=$trigger"
-          fi
+          # Primera ronda: todos los tenants y cuentas (o los del input) en una sola llamada.
+          query="?trigger=$trigger"
+          if [ -n "$TENANT" ]; then query="?tenant=$(uri "$TENANT")&trigger=$trigger"; fi
+          if [ -n "$CUENTA" ]; then query="$query&cuenta=$(uri "$CUENTA")"; fi
           inicio=$(date +%s)
           ronda=$inicio
           http_code=$(llamar "$query")
@@ -113,8 +120,8 @@ jobs:
           anotar_fallidos
           pendientes=$(pendientes_de)
 
-          # Rondas siguientes: un tramo por tenant pendiente, de a uno con ?tenant=, cada
-          # PAUSA_SEG. Un tenant que falla sale del loop; los demás siguen.
+          # Rondas siguientes: un tramo por (tenant, cuenta) pendiente, de a uno con
+          # ?tenant=&cuenta=, cada PAUSA_SEG. Una clave que falla sale del loop; las demás siguen.
           while [ -n "$pendientes" ]; do
             if [ $(( $(date +%s) - inicio )) -ge "$TOPE_SEG" ]; then
               echo "::warning::Tope de tiempo con pasadas sin terminar ($(echo $pendientes)). La próxima corrida las retoma."
@@ -125,21 +132,24 @@ jobs:
             ronda=$(date +%s)
 
             siguientes=""
-            for t in $pendientes; do
-              http_code=$(llamar "?tenant=$(uri "$t")&trigger=$trigger")
+            for k in $pendientes; do
+              # La cuenta es lo que sigue al último ":"; el tenant, lo anterior.
+              t="${k%:*}"
+              c="${k##*:}"
+              http_code=$(llamar "?tenant=$(uri "$t")&cuenta=$(uri "$c")&trigger=$trigger")
               if [ "$http_code" != "200" ] || ! respuesta_valida; then
-                echo "{\"tenant\":\"$t\",\"http\":\"$http_code\"}"
-                fallidos="$fallidos $t"
+                echo "{\"tenant\":\"$t\",\"cuenta\":\"$c\",\"http\":\"$http_code\"}"
+                fallidos="$fallidos $k"
                 continue
               fi
               resumir
               anotar_fallidos
-              if [ -n "$(pendientes_de)" ]; then siguientes="$siguientes $t"; fi
+              if [ -n "$(pendientes_de)" ]; then siguientes="$siguientes $k"; fi
             done
             pendientes=$(echo $siguientes)
           done
 
           if [ -n "$fallidos" ]; then
-            echo "::error::Fallaron:$fallidos. Ver el detalle de arriba y alegra_contacts_sync_log."
+            echo "::error::Fallaron (tenant:cuenta):$fallidos. Ver el detalle de arriba y alegra_contacts_sync_log."
             exit 1
           fi

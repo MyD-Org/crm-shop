@@ -6,7 +6,19 @@ const d = (pathname: string, qs: string, cookie?: string) =>
 
 describe("decidirLocal", () => {
   it("el enlace a la home guarda el local sin redirigir", () => {
+    expect(d("/", "sucursal=mdp")).toEqual({ cookie: { accion: "guardar", local: "mdp" } });
     expect(d("/", "retiro=mdp")).toEqual({ cookie: { accion: "guardar", local: "mdp" } });
+  });
+
+  it("en el catálogo, sucursal se traduce a retiro", () => {
+    expect(d("/catalogo", "q=led&sucursal=mdp")).toEqual({
+      cookie: { accion: "guardar", local: "mdp" },
+      redirigirA: "q=led&retiro=mdp",
+    });
+  });
+
+  it("sucursal=todos en la home borra la cookie", () => {
+    expect(d("/", "sucursal=todos", "mdp")).toEqual({ cookie: { accion: "borrar" } });
   });
 
   it("normaliza mayúsculas y no reescribe la cookie si es la misma", () => {

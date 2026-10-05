@@ -1,7 +1,8 @@
 /**
- * Local recordado: el enlace especial `/?retiro=<local>` (o cualquier página con ese parámetro)
- * guarda el local en una cookie, y desde ahí todo ingreso al catálogo llega con el filtro
- * "Con stock en <local>" puesto y visible (chip y panel). `?retiro=todos` lo olvida.
+ * Local recordado: el enlace especial `/?sucursal=<local>` (o cualquier página con ese parámetro;
+ * `?retiro=` también vale, es el que usa el catálogo) guarda el local en una cookie, y desde ahí
+ * todo ingreso al catálogo llega con el filtro "Con stock en <local>" puesto y visible (chip y
+ * panel). `?sucursal=todos` lo olvida. En `/catalogo`, `sucursal` se traduce a `retiro`.
  *
  * La regla es pura: el proxy la aplica (cookie + redirect de `/catalogo`) y el catálogo, al
  * quitar el filtro, borra la cookie del lado del cliente (`olvidarLocalRecordado`) para que el
@@ -10,7 +11,7 @@
  */
 
 export const LOCAL_COOKIE = "local_retiro";
-/** Valor de `?retiro=` que borra el local recordado. */
+/** Valor de `?sucursal=` / `?retiro=` que borra el local recordado. */
 export const LOCAL_TODOS = "todos";
 export const LOCAL_MAX_AGE = 60 * 60 * 24 * 30;
 
@@ -36,31 +37,34 @@ export function decidirLocal({
   search: URLSearchParams;
   cookie: string | undefined;
 }): DecisionLocal {
-  const param = search.get("retiro");
+  const param = search.get("sucursal") ?? search.get("retiro");
   const previa = comoSlug(cookie);
   const esCatalogo = pathname === "/catalogo";
-
-  if (param?.trim().toLowerCase() === LOCAL_TODOS) {
-    const sin = new URLSearchParams(search);
-    sin.delete("retiro");
-    return {
-      cookie: cookie ? { accion: "borrar" } : { accion: "ninguna" },
-      ...(esCatalogo ? { redirigirA: sin.toString() } : {}),
-    };
-  }
-
+  const todos = param?.trim().toLowerCase() === LOCAL_TODOS;
   const local = comoSlug(param);
-  if (local) {
-    return { cookie: local === previa ? { accion: "ninguna" } : { accion: "guardar", local } };
-  }
 
-  if (param == null && previa && esCatalogo) {
-    const con = new URLSearchParams(search);
-    con.set("retiro", previa);
-    return { cookie: { accion: "ninguna" }, redirigirA: con.toString() };
-  }
+  const decision: DecisionLocal = todos
+    ? { cookie: cookie ? { accion: "borrar" } : { accion: "ninguna" } }
+    : local
+      ? { cookie: local === previa ? { accion: "ninguna" } : { accion: "guardar", local } }
+      : { cookie: { accion: "ninguna" } };
+  if (!esCatalogo) return decision;
 
-  return { cookie: { accion: "ninguna" } };
+  // En el catálogo el filtro viaja como `retiro`: se traduce `sucursal`, se saca `todos` y,
+  // sin parámetro, se agrega el local recordado.
+  if (search.has("sucursal") || todos) {
+    const sp = new URLSearchParams(search);
+    sp.delete("sucursal");
+    sp.delete("retiro");
+    if (local) sp.set("retiro", local);
+    return { ...decision, redirigirA: sp.toString() };
+  }
+  if (param == null && previa) {
+    const sp = new URLSearchParams(search);
+    sp.set("retiro", previa);
+    return { ...decision, redirigirA: sp.toString() };
+  }
+  return decision;
 }
 
 /**

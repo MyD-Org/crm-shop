@@ -9,6 +9,7 @@ import { marcarItemInactivo, upsertProductos } from "./catalog-products-repo"
 import { avisarShop } from "./aviso-shop"
 import { sincronizarAtributosDeNombre } from "./catalogo-atributos-repo"
 import { partirIdDeCola, refrescarItemDeCuenta } from "./alegra-stock-cuenta"
+import { escribirStockPrincipal } from "./catalogo-union-repo"
 
 // Cola de ítems a re-leer de Alegra (tabla alegra_item_refresh) y su drenador.
 //
@@ -261,6 +262,8 @@ export async function drenarTenant(
               })
               if (producto) {
                 await upsertProductos(tenantId, [producto], { leidoAt, leidoPor: "webhook" })
+                // Y el stock de las sucursales que usan la principal (si no, esperan a la sync).
+                await escribirStockPrincipal(tenantId, getDb(), { alegraIds: [f.alegraId], origen: "webhook" })
                 // Un cambio de nombre llega por acá en minutos: sus atributos también (tolerante).
                 await sincronizarAtributosDeNombre(tenantId, [producto], "webhook")
                 r.leidos++

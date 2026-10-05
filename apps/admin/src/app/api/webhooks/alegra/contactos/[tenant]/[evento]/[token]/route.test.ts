@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   pendientes: [] as (() => Promise<void>)[],
   tenant: null as Record<string, unknown> | null,
   procesados: [] as { tenant: string; evento: string; payload: unknown }[],
+  opts: [] as unknown[],
 }))
 
 vi.mock("next/server", () => ({
@@ -21,7 +22,8 @@ vi.mock("@/lib/tenants", () => ({
 
 vi.mock("@/lib/alegra-contacts-webhook", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/alegra-contacts-webhook")>()),
-  procesarAvisoContacto: async (config: { id: string }, evento: string, payload: unknown) => {
+  procesarAvisoContacto: async (config: { id: string }, evento: string, payload: unknown, opts?: unknown) => {
+    state.opts.push(opts)
     state.procesados.push({ tenant: config.id, evento, payload })
     return { accion: "upsert_directo", id: "42", requests: 0 }
   },
@@ -48,6 +50,7 @@ beforeEach(() => {
   vi.stubEnv("ALEGRA_WEBHOOK_SECRET", SECRETO)
   state.pendientes = []
   state.procesados = []
+  state.opts = []
   state.tenant = { id: "tenant-a", alegraMock: false, alegraToken: "token-de-prueba" }
 })
 
@@ -69,6 +72,8 @@ describe("POST /api/webhooks/alegra/contactos/[tenant]/[evento]/[token]", () => 
 
     await correrAfter()
     expect(state.procesados).toEqual([{ tenant: "tenant-a", evento: "edit-client", payload: JSON.parse(body) }])
+    // La ruta de IGZ no manda `cuenta`: el aviso solo puede afectar a la principal.
+    expect(state.opts).toEqual([undefined])
   })
 
   it("nunca loguea valores del cuerpo", async () => {

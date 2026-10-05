@@ -1,6 +1,7 @@
 import type { TenantConfig } from "./tenants"
 import { AlegraHttpError, AlegraRateLimitError, getContactRaw, mapRawContactRow } from "./alegra"
-import { darDeBajaContacto, upsertContactos } from "./alegra-contacts-repo"
+import { CUENTA_ALEGRA_PRINCIPAL, darDeBajaContacto, upsertContactos } from "./alegra-contacts-repo"
+import type { SuscripcionAlegra } from "./alegra-stock-webhook"
 import {
   clavesDelPayload,
   idDe,
@@ -59,6 +60,82 @@ export function tokenWebhookValido(
 /** Ruta pública de los avisos (sin el host). La usan la ruta y el script de suscripciones. */
 export function rutaWebhookContactos(tenantId: string, evento: EventoContacto, token: string): string {
   return `/api/webhooks/alegra/contactos/${encodeURIComponent(tenantId)}/${evento}/${token}`
+}
+
+/** Suscripción de contactos de la PRINCIPAL de un tenant (no las de `contactos-cuenta/<cuenta>/`). */
+export function esSuscripcionContactos(tenantId: string, s: SuscripcionAlegra): boolean {
+  return esEventoContacto(s.event) && s.url.includes(`/api/webhooks/alegra/contactos/${encodeURIComponent(tenantId)}/`)
+}
+
+// ── Avisos de contactos de una cuenta SECUNDARIA ──
+//
+// Ruta: /api/webhooks/alegra/contactos-cuenta/<cuentaId>/<evento>/<token>. Token = HMAC del id de
+// la CUENTA (uuid) con el dominio `alegra-contactos-cuenta`: no abre la ruta de otra cuenta, ni la
+// de contactos de la principal (`/contactos/<tenant>/`), ni la de stock. Mismo procesamiento que la
+// principal, pero escribiendo con `alegra_account = <slug>`.
+
+export function tokenWebhookContactosCuenta(
+  cuentaId: string,
+  secreto: string | undefined = process.env.ALEGRA_WEBHOOK_SECRET,
+): string | null {
+  return tokenWebhook("alegra-contactos-cuenta", cuentaId, secreto)
+}
+
+export function tokenWebhookContactosCuentaValido(
+  cuentaId: string,
+  token: string,
+  secreto: string | undefined = process.env.ALEGRA_WEBHOOK_SECRET,
+): boolean {
+  return tokenValido("alegra-contactos-cuenta", cuentaId, token, secreto)
+}
+
+export function rutaWebhookContactosCuenta(cuentaId: string, evento: EventoContacto, token: string): string {
+  return `/api/webhooks/alegra/contactos-cuenta/${encodeURIComponent(cuentaId)}/${evento}/${token}`
+}
+
+/** Suscripción de contactos de ESTA cuenta (no las de otra cuenta, ni las de la principal). */
+export function esSuscripcionContactosCuenta(cuentaId: string, s: SuscripcionAlegra): boolean {
+  return (
+    esEventoContacto(s.event) &&
+    s.url.includes(`/api/webhooks/alegra/contactos-cuenta/${encodeURIComponent(cuentaId)}/`)
+  )
+}
+
+const mismaUrl = (a: string, b: string) => a.replace(/^https?:\/\//i, "") === b.replace(/^https?:\/\//i, "")
+
+export interface PlanSuscripcionesContactos {
+  /** Eventos que ya están registrados con la URL esperada. */
+  vigentes: EventoContacto[]
+  faltan: { event: EventoContacto; url: string }[]
+  /** Suscripciones de esta cuenta con otra URL (otro host o secreto viejo): no se tocan. */
+  viejas: SuscripcionAlegra[]
+}
+
+export function planSuscripcionesContactosCuenta(
+  cuentaId: string,
+  baseUrl: string,
+  token: string,
+  actuales: SuscripcionAlegra[],
+): PlanSuscripcionesContactos {
+  const nuestras = actuales.filter((s) => esSuscripcionContactosCuenta(cuentaId, s))
+  const plan = EVENTOS_CONTACTOS.map((event) => ({
+    event,
+    url: `${baseUrl}${rutaWebhookContactosCuenta(cuentaId, event, token)}`,
+  }))
+  const existe = (p: { event: EventoContacto; url: string }) => nuestras.some((s) => s.event === p.event && mismaUrl(s.url, p.url))
+  return {
+    vigentes: plan.filter(existe).map((p) => p.event),
+    faltan: plan.filter((p) => !existe(p)),
+    viejas: nuestras.filter((s) => !plan.some((p) => p.event === s.event && mismaUrl(s.url, p.url))),
+  }
+}
+
+/** La URL de una cuenta con el token tapado. */
+export function enmascararUrlContactosCuenta(url: string): string {
+  return url.replace(
+    /(\/api\/webhooks\/alegra\/contactos-cuenta\/[^/]+\/[^/]+\/)([^/?#]+)/,
+    (_, pre: string, tok: string) => `${pre}${tok.slice(0, 4)}…`,
+  )
 }
 
 // ── Lectura defensiva del cuerpo ──
@@ -147,32 +224,37 @@ function motivo(err: unknown): string {
  */
 const REINTENTOS_429 = 2
 
-/** Aplica un aviso al espejo. Nunca tira: todo termina en el resultado. */
+/**
+ * Aplica un aviso al espejo. Nunca tira: todo termina en el resultado. `opts.cuenta` = slug de la
+ * cuenta de Alegra que avisó (default 'principal'); `config` ya trae las credenciales de esa cuenta.
+ */
 export async function procesarAvisoContacto(
   config: TenantConfig,
   evento: EventoContacto,
   payload: unknown,
+  opts: { cuenta?: string } = {},
 ): Promise<ResultadoAviso> {
+  const cuenta = opts.cuenta ?? CUENTA_ALEGRA_PRINCIPAL
   const { id, contacto, idSeguro } = leerAvisoContacto(payload)
   if (!id) return { accion: "sin_id", requests: 0 }
   let requests = 0
   try {
     if (evento === "delete-client" && idSeguro) {
-      await darDeBajaContacto(config.id, id)
+      await darDeBajaContacto(config.id, id, cuenta)
       return { accion: "baja", id, requests }
     }
     if (contacto && evento !== "delete-client") {
-      await upsertContactos(config.id, [mapRawContactRow(contacto)], "webhook")
+      await upsertContactos(config.id, [mapRawContactRow(contacto)], "webhook", { cuenta })
       return { accion: "upsert_directo", id, requests }
     }
     requests++
     const raw = await getContactRaw(config, id, { reintentos429: REINTENTOS_429 })
     if (!raw) {
       // Baja confirmada, o avisó un alta/edición de algo que ya no existe (lo borraron enseguida).
-      await darDeBajaContacto(config.id, id)
+      await darDeBajaContacto(config.id, id, cuenta)
       return { accion: "baja_404", id, requests }
     }
-    await upsertContactos(config.id, [mapRawContactRow(raw)], "webhook")
+    await upsertContactos(config.id, [mapRawContactRow(raw)], "webhook", { cuenta })
     return { accion: "upsert_leido", id, requests }
   } catch (err) {
     return { accion: "error", id, error: motivo(err), requests }

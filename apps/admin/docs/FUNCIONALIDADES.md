@@ -650,6 +650,51 @@ CRM_DATABASE_URL="<conexión de prod>" ALEGRA_WEBHOOK_SECRET="<el mismo de Verce
   --tenant <TENANT_ID> --base-url https://<tenant>.plataforma.example crear
 ```
 
+**Espejo por cuenta (cuentas secundarias, p. ej. Mar del Plata)** (change
+`espejo-contactos-por-cuenta`, rebanada A). El espejo ya distinguía la cuenta
+(`alegra_account`); ahora la sync y los webhooks también llenan las filas de las cuentas
+secundarias (`alegra_cuentas` con `activa = true` y `principal = false`; para Central Led,
+slug `mdp`). **En esta rebanada ningún lector lee esas filas**: el buscador del admin, el
+portal, el bot y el Shop siguen viendo solo `'principal'`, igual que antes. La unión de
+clientes por documento llega en rebanadas posteriores, detrás de un flag.
+
+- Sync: `syncContacts(config, trigger, { cuenta })` corre con las credenciales de la cuenta
+  (`configParaCuenta`) y escribe, da de baja y cuenta con `alegra_account = <slug>`. Cada cuenta
+  tiene su propia pasada en la bitácora, su guarda del 80 % y su candado: `alegra_contacts:<tenant>`
+  para la principal (clave de siempre) y `alegra_contacts:<tenant>:<slug>` para las demás, así dos
+  cuentas del mismo tenant avanzan a la vez. El resultado trae `cuenta`.
+- Cron `/api/cron/alegra-contactos-sync`: por tenant itera la principal y cada cuenta secundaria
+  activa; filtra con `?tenant=` y `?cuenta=<slug>`. Una cuenta activa sin credenciales queda
+  como salteo `sin_credenciales` en su bitácora y no frena a las demás. La respuesta
+  (`{ tenants: [...] }`, nombre conservado) lleva `cuenta` en cada item. Armado de objetivos en
+  `src/lib/alegra-contacts-objetivos.ts`.
+- Workflow `admin-alegra-contactos-sync`: resume, reintenta y marca fallidas las claves
+  `tenant:cuenta` (una cuenta salteada no es una falla); input opcional `cuenta` en el disparo a
+  mano.
+- Webhooks por cuenta: `POST /api/webhooks/alegra/contactos-cuenta/<cuentaId>/<evento>/<token>`.
+  Token = HMAC del **uuid de la cuenta** con el dominio `alegra-contactos-cuenta` (no abre ni la
+  ruta de contactos de la principal ni la de stock). 404 uniforme ante cuenta inexistente,
+  inactiva, principal, sin credenciales, evento inválido o token de otra cuenta. Aplica el aviso
+  con las credenciales de esa cuenta y escribe solo su fila. Log:
+  `[alegra-contactos-cuenta] tenant=… cuenta=… evento=… accion=… id=…` (nunca el cuerpo). La ruta
+  vieja `/contactos/<tenant>/` sigue afectando solo a la principal.
+- Script: `scripts/alegra-webhooks-contactos.ts --tenant <id> --cuenta <slug> --base-url … crear|listar|borrar`
+  opera solo las suscripciones de esa cuenta (no toca las de la principal, ni al revés).
+- Procedimiento tras el deploy (paso manual, una vez por cuenta): **la ruta tiene que estar
+  desplegada ANTES de crear los webhooks**: Alegra valida la URL al registrarla y rechaza las que
+  dan 404. `ALEGRA_WEBHOOK_SECRET` es Sensitive en Vercel (no sale con `vercel env pull`): se pasa
+  por el entorno al correr el script, con el mismo valor de producción. Después `listar --cuenta
+  <slug>` (deben verse los tres eventos y los de la principal intactos) y disparar la sync de la
+  cuenta (`workflow_dispatch` con `cuenta`, o `?tenant=<id>&cuenta=<slug>`); verificar filas con
+  `alegra_account = '<slug>'`.
+- Carga inicial: el padrón de la cuenta se baja con el mismo ritmo que el de la principal
+  (`PAGINAS_POR_TRAMO` = 3 páginas por invocación; ~5 req/min por cuenta). No se midió el padrón de
+  MDP: si resultara muy grande, la pasada se retoma en varias corridas (vence a los 8 días) y no se
+  da de baja nada hasta cerrar una pasada completa.
+- Rollback: desactivar la cuenta (`activa = false`) o borrar los webhooks con el script
+  (`borrar --cuenta`); el espejo se limpia con `DELETE FROM alegra_contacts WHERE
+  alegra_account = '<slug>'` (nadie lo lee en esta rebanada).
+
 ---
 
 ## Stock casi en tiempo real (webhooks de Alegra)
@@ -1159,8 +1204,9 @@ DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):
 | POST/GET | `/api/cron/notifications` | `CRON_SECRET` | Disparo automático (Vercel Cron) |
 | POST/GET | `/api/cron/alegra-sync` | `CRON_SECRET` | Sync del catálogo por tramos (botón del admin / a mano; `?tenant=` opcional; `?aceptar_baja=1` sólo con tenant, ver [Sync incompleta](#sync-incompleta)) |
 | POST | `/api/cron/alegra-sync/post-sync` | `CRON_SECRET` | Aviso al Shop tras la sync del runner (`?tenant=` obligatorio) |
-| POST/GET | `/api/cron/alegra-contactos-sync` | `CRON_SECRET` | Sync del espejo de contactos (`?tenant=` opcional, `?trigger=manual`) |
+| POST/GET | `/api/cron/alegra-contactos-sync` | `CRON_SECRET` | Sync del espejo de contactos (`?tenant=` y `?cuenta=<slug>` opcionales, `?trigger=manual`) |
 | POST/GET | `/api/webhooks/alegra/contactos/<tenant>/<evento>/<token>` | token HMAC (`ALEGRA_WEBHOOK_SECRET`) | Avisos de contactos de Alegra → espejo (GET solo verifica la URL) |
+| POST/GET | `/api/webhooks/alegra/contactos-cuenta/<cuentaId>/<evento>/<token>` | token HMAC del uuid de la cuenta | Avisos de contactos de una cuenta secundaria → su fila del espejo |
 | POST/GET | `/api/cron/alegra-stock-drenar` | `CRON_SECRET` | Drena la cola de re-lectura de stock (`?tenant=` opcional) |
 | POST/GET | `/api/webhooks/alegra/stock/<tenant>/<evento>/<token>` | token HMAC (`ALEGRA_WEBHOOK_SECRET`) | Avisos de facturas, compras e ítems → cola de re-lectura (GET solo verifica la URL) |
 | POST | `/api/ai-token` | sesión | Token de sesión para el chat IA |

@@ -147,3 +147,53 @@ describe("procesarAvisoContacto", () => {
     }
   })
 })
+
+describe("procesarAvisoContacto de una cuenta secundaria (mdp)", () => {
+  const filaDe = async (cuenta: string, alegraId: string) => {
+    const [row] = await getDb()
+      .select()
+      .from(alegraContacts)
+      .where(and(eq(alegraContacts.tenantId, TENANT), eq(alegraContacts.alegraAccount, cuenta), eq(alegraContacts.alegraId, alegraId)))
+    return row
+  }
+
+  it("edit-client de 'mdp' actualiza ('mdp', 7) y NO toca ('principal', 7)", async () => {
+    await upsertContactos(TENANT, [mapRawContactRow(contacto(7, { name: "IGZ Original" }))], "sync")
+    await upsertContactos(TENANT, [mapRawContactRow(contacto(7, { name: "MDP Viejo" }))], "sync", { cuenta: "mdp" })
+    const principalAntes = await filaDe("principal", "7")
+
+    const aviso = { message: { client: contacto(7, { name: "MDP Nuevo" }) } }
+    expect(await procesarAvisoContacto(config, "edit-client", aviso, { cuenta: "mdp" })).toMatchObject({ accion: "upsert_directo", id: "7" })
+
+    expect(await filaDe("mdp", "7")).toMatchObject({ name: "MDP Nuevo", origen: "webhook" })
+    expect(await filaDe("principal", "7")).toMatchObject({ name: "IGZ Original" })
+    expect((await filaDe("principal", "7")).syncedAt).toEqual(principalAntes.syncedAt)
+  })
+
+  it("delete-client de 'mdp' da de baja solo ('mdp', 7)", async () => {
+    await upsertContactos(TENANT, [mapRawContactRow(contacto(7))], "sync")
+    await upsertContactos(TENANT, [mapRawContactRow(contacto(7))], "sync", { cuenta: "mdp" })
+
+    expect(await procesarAvisoContacto(config, "delete-client", { message: { client: { id: 7 } } }, { cuenta: "mdp" })).toMatchObject({ accion: "baja" })
+    expect((await filaDe("mdp", "7")).status).toBe("inactive")
+    expect((await filaDe("principal", "7")).status).toBe("active")
+  })
+
+  it("new-client de 'mdp' con solo el id: lo lee y lo inserta en 'mdp', sin fila 'principal'", async () => {
+    alegraTiene({ "9": contacto(9, { name: "Solo MDP" }) })
+    expect(await procesarAvisoContacto(config, "new-client", { id: 9 }, { cuenta: "mdp" })).toMatchObject({ accion: "upsert_leido" })
+    expect(await filaDe("mdp", "9")).toMatchObject({ name: "Solo MDP" })
+    expect(await filaDe("principal", "9")).toBeUndefined()
+  })
+
+  it("sin `cuenta` sigue escribiendo la principal (comportamiento actual)", async () => {
+    await procesarAvisoContacto(config, "new-client", { message: { client: contacto(3) } })
+    expect(await filaDe("principal", "3")).toBeDefined()
+    expect(await filaDe("mdp", "3")).toBeUndefined()
+  })
+
+  it("el resultado no incluye el cuerpo", async () => {
+    const r = await procesarAvisoContacto(config, "edit-client", { message: { client: contacto(7, { name: "Dato Reservado" }) } }, { cuenta: "mdp" })
+    expect(JSON.stringify(r)).not.toContain("Dato Reservado")
+  })
+})

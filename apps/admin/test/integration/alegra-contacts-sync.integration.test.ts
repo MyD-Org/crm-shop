@@ -112,13 +112,13 @@ describe("syncContacts por tramos (DB real, Alegra mockeado)", () => {
     alegraSirve(padronDe(100))
 
     const t1 = await sync()
-    expect(t1).toEqual({ ok: true, done: false, contactsSynced: 90, totalPasada: 90, markedInactive: 0, requests: 3 })
+    expect(t1).toEqual({ cuenta: "principal", ok: true, done: false, contactsSynced: 90, totalPasada: 90, markedInactive: 0, requests: 3 })
     // Guardado en el momento, y la pasada abierta con el cursor.
     expect(await activos()).toBe(90)
     expect(await ultimaCorrida()).toMatchObject({ status: "running", contactsSynced: 90, requests: 3 })
 
     const t2 = await sync()
-    expect(t2).toEqual({ ok: true, done: true, contactsSynced: 10, totalPasada: 100, markedInactive: 0, requests: 1 })
+    expect(t2).toEqual({ cuenta: "principal", ok: true, done: true, contactsSynced: 10, totalPasada: 100, markedInactive: 0, requests: 1 })
     expect(starts).toEqual([0, 30, 60, 90])
     expect(await activos()).toBe(100)
 
@@ -185,6 +185,7 @@ describe("syncContacts por tramos (DB real, Alegra mockeado)", () => {
     alegraSirve(padronDe(100), { limiteEnStart: 30 })
     const t1 = await sync()
     expect(t1).toEqual({
+      cuenta: "principal",
       ok: true,
       done: false,
       cortado: "alegra_429",
@@ -352,4 +353,139 @@ describe("syncContacts por tramos (DB real, Alegra mockeado)", () => {
 
 afterAll(() => {
   vi.unstubAllGlobals()
+})
+
+describe("syncContacts por cuenta (mdp) — el espejo de una cuenta no toca el de la otra", () => {
+  const configMdp = { ...config, alegraEmail: "mdp@plataforma.example", alegraToken: "token-mdp" } as unknown as TenantConfig
+  const syncMdp = (trigger: "cron" | "manual" = "cron") => syncContacts(configMdp, trigger, { intervaloMs: 0, cuenta: "mdp" })
+  const syncPrincipal = () => syncContacts(config, "cron", { intervaloMs: 0 })
+
+  async function pasadaDe(cuenta: "principal" | "mdp") {
+    for (let i = 0; i < 50; i++) {
+      const r = await (cuenta === "mdp" ? syncMdp() : syncPrincipal())
+      if (r.done) return r
+    }
+    throw new Error("la pasada no terminó en 50 tramos")
+  }
+
+  const filasDe = (cuenta: string) =>
+    getDb()
+      .select()
+      .from(alegraContacts)
+      .where(and(eq(alegraContacts.tenantId, TENANT), eq(alegraContacts.alegraAccount, cuenta)))
+      .orderBy(alegraContacts.alegraId)
+
+  const corridasDe = (cuenta: string) =>
+    getDb()
+      .select()
+      .from(alegraContactsSyncLog)
+      .where(and(eq(alegraContactsSyncLog.tenantId, TENANT), eq(alegraContactsSyncLog.alegraAccount, cuenta)))
+      .orderBy(alegraContactsSyncLog.startedAt)
+
+  it("sync de 'mdp': 2 filas 'mdp' y las 3 'principal' quedan intactas (incluido synced_at)", async () => {
+    alegraSirve(padronDe(3))
+    await pasadaDe("principal")
+    const antes = await filasDe("principal")
+    expect(antes).toHaveLength(3)
+
+    alegraSirve([contacto(101), contacto(102)])
+    const r = await pasadaDe("mdp")
+    expect(r).toMatchObject({ ok: true, done: true, cuenta: "mdp", totalPasada: 2 })
+
+    expect((await filasDe("mdp")).map((f) => f.alegraId)).toEqual(["101", "102"])
+    const despues = await filasDe("principal")
+    expect(despues.map((f) => [f.alegraId, f.status, f.syncedAt.getTime()])).toEqual(
+      antes.map((f) => [f.alegraId, f.status, f.syncedAt.getTime()]),
+    )
+    expect((await corridasDe("mdp")).map((c) => c.status)).toEqual(["ok"])
+    expect((await corridasDe("principal")).map((c) => c.status)).toEqual(["ok"])
+  })
+
+  it("el mismo id 15 en ambas cuentas son dos filas independientes con datos propios", async () => {
+    alegraSirve([contacto(15, { name: "Cliente A", email: "a@cliente-a.example" })])
+    await pasadaDe("principal")
+    alegraSirve([contacto(15, { name: "Cliente B", email: "b@cliente-b.example" })])
+    await pasadaDe("mdp")
+
+    const [p] = await filasDe("principal")
+    const [m] = await filasDe("mdp")
+    expect(p).toMatchObject({ alegraId: "15", name: "Cliente A" })
+    expect(m).toMatchObject({ alegraId: "15", name: "Cliente B" })
+    expect(p.id).not.toBe(m.id)
+  })
+
+  it("un contacto 'principal' que Alegra-MDP no devuelve NO se da de baja al cerrar la pasada de 'mdp'; la baja solo afecta filas 'mdp'", async () => {
+    alegraSirve(padronDe(5))
+    await pasadaDe("principal")
+    alegraSirve(padronDe(5))
+    await pasadaDe("mdp")
+    alegraSirve(padronDe(4))
+    expect(await pasadaDe("mdp")).toMatchObject({ ok: true, markedInactive: 1 })
+    expect((await filasDe("mdp")).filter((f) => f.status === "inactive").map((f) => f.alegraId)).toEqual(["5"])
+    expect((await filasDe("principal")).every((f) => f.status === "active")).toBe(true)
+  })
+
+  it("guarda del 80 % por cuenta: 'mdp' con 100 filas y una pasada de 10 → corrida_sospechosa; 'principal' no se afecta", async () => {
+    alegraSirve(padronDe(100))
+    await pasadaDe("mdp")
+    alegraSirve(padronDe(10))
+    await pasadaDe("principal")
+
+    alegraSirve(padronDe(10))
+    const r = await pasadaDe("mdp")
+    expect(r).toMatchObject({ ok: false, done: true, markedInactive: 0, error: "corrida_sospechosa", cuenta: "mdp" })
+    expect((await filasDe("mdp")).filter((f) => f.status === "active")).toHaveLength(100)
+    expect((await filasDe("principal")).filter((f) => f.status === "active")).toHaveLength(10)
+    expect((await corridasDe("mdp")).at(-1)).toMatchObject({ status: "error", error: "corrida_sospechosa" })
+    expect((await corridasDe("principal")).at(-1)).toMatchObject({ status: "ok" })
+  })
+
+  it("candado por cuenta: con el de 'mdp' tomado, 'mdp' se saltea y 'principal' avanza", async () => {
+    alegraSirve(padronDe(3))
+    const otra = postgres(process.env.DATABASE_URL!, { max: 1 })
+    try {
+      const [mdp, principal] = await otra.begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(hashtext(${`alegra_contacts:${TENANT}:mdp`}))`
+        return [await syncMdp(), await syncPrincipal()]
+      })
+      expect(mdp).toMatchObject({ ok: true, skipped: true, done: false, error: "corrida_en_curso", cuenta: "mdp" })
+      expect(principal).toMatchObject({ ok: true, done: true, cuenta: "principal", totalPasada: 3 })
+    } finally {
+      await otra.end()
+    }
+    expect((await corridasDe("mdp")).map((c) => [c.status, c.error])).toEqual([["skipped", "corrida_en_curso"]])
+  })
+
+  it("la clave del candado de 'principal' sigue siendo `alegra_contacts:<tenant>` (no se pisa con la de 'mdp')", async () => {
+    alegraSirve(padronDe(3))
+    const otra = postgres(process.env.DATABASE_URL!, { max: 1 })
+    try {
+      const [principal, mdp] = await otra.begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(hashtext(${`alegra_contacts:${TENANT}`}))`
+        return [await syncPrincipal(), await syncMdp()]
+      })
+      expect(principal).toMatchObject({ skipped: true, error: "corrida_en_curso", cuenta: "principal" })
+      expect(mdp).toMatchObject({ ok: true, done: true, cuenta: "mdp" })
+    } finally {
+      await otra.end()
+    }
+  })
+
+  it("cuenta sin credenciales: salteo 'sin_credenciales' registrado en ESA cuenta", async () => {
+    const r = await syncContacts({ ...config, alegraToken: "" }, "manual", { cuenta: "mdp" })
+    expect(r).toMatchObject({ ok: true, skipped: true, done: true, error: "sin_credenciales", cuenta: "mdp" })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect((await corridasDe("mdp")).map((c) => c.error)).toEqual(["sin_credenciales"])
+    expect(await corridasDe("principal")).toHaveLength(0)
+  })
+
+  it("las pasadas en curso son independientes: el cursor de 'mdp' no se mezcla con el de 'principal'", async () => {
+    alegraSirve(padronDe(100))
+    expect(await syncMdp()).toMatchObject({ done: false, totalPasada: 90, cuenta: "mdp" })
+    starts = []
+    expect(await syncPrincipal()).toMatchObject({ done: false, totalPasada: 90, cuenta: "principal" })
+    expect(starts).toEqual([0, 30, 60])
+    expect((await corridasDe("mdp")).filter((c) => c.status === "running")).toHaveLength(1)
+    expect((await corridasDe("principal")).filter((c) => c.status === "running")).toHaveLength(1)
+  })
 })

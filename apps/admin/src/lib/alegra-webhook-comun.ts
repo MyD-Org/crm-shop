@@ -15,7 +15,11 @@ import { secureCompare } from "./secure-compare"
 // `alegra-stock-cuenta`: avisos de stock de una cuenta SECUNDARIA (change `sucursales-igz-mdp`,
 // D2). El "id" que se firma es el de la CUENTA (uuid), no el del tenant: el token de una cuenta no
 // abre la ruta de otra ni la del stock de la principal.
-export type DominioWebhook = "alegra-contactos" | "alegra-stock" | "alegra-stock-cuenta"
+//
+// `alegra-contactos-cuenta`: avisos de contactos de una cuenta SECUNDARIA (change
+// `espejo-contactos-por-cuenta`, rebanada A). Igual que el de stock-cuenta, el id que se firma es el
+// uuid de la CUENTA.
+export type DominioWebhook = "alegra-contactos" | "alegra-contactos-cuenta" | "alegra-stock" | "alegra-stock-cuenta"
 
 /** Largo mínimo del secreto: uno corto se adivina y abre la escritura del espejo. */
 const SECRETO_MIN = 32

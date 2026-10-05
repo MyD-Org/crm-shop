@@ -1,6 +1,7 @@
 {
   "modelo": "jev-1.13.0",
   "grabadoEl": "2026-10-01",
+  "ampliadoEl": "2026-10-05",
   "respuestas": {
     "algo para sacar el olor del bano": {
       "principal": {
@@ -1671,6 +1672,786 @@
         "sub": {
           "choice": "reflectores",
           "confidence": 0.63
+        }
+      }
+    },
+    "lampra led e27": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 1
+        }
+      }
+    },
+    "termomagentico 2x20": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.98
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.95
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.9
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.98
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "interruptores_termomagneticos",
+          "confidence": 0.91
+        }
+      }
+    },
+    "extarctor de aire para cocina": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "extractores_de_aire",
+          "confidence": 0.47
+        }
+      }
+    },
+    "reflecotr led exterior": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.98
+        }
+      }
+    },
+    "ventialdor de techo": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.3
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "ventiladores_de_techo",
+          "confidence": 1
+        }
+      }
+    },
+    "contacor tripolar": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "contactores",
+          "confidence": 1
+        }
+      }
+    },
+    "disyuntro diferencial": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "protecciones_electricas",
+          "confidence": 0.64
+        }
+      }
+    },
+    "panle led para embutir": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.37
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "paneles",
+          "confidence": 0.9
+        }
+      }
+    },
+    "cable unipollar": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 0.95
+        }
+      }
+    },
+    "tira ledd para la cocina": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.98
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "neones_y_tiras_de_led",
+          "confidence": 1
+        }
+      }
+    },
+    "fotocelula para exterior": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.97
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "sensores_y_fotocelulas",
+          "confidence": 1
+        }
+      }
+    },
+    "camara wifi interior": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "seguridad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "camara_wifi",
+          "confidence": 0.94
+        }
+      }
+    },
+    "zapatila con enchufes": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.96
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.93
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.8
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "llaves_tomas_y_accesorios",
+          "confidence": 0.71
+        }
+      }
+    },
+    "luminaria de emerjencia": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.86
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "luces_de_emergencia",
+          "confidence": 1
+        }
+      }
+    },
+    "calefactro para el bano": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.98
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 0.73
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "calefaccion_y_cortinas_de_aire",
+          "confidence": 0.98
+        }
+      }
+    },
+    "termica 2x20": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.69
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.91
+        }
+      }
+    },
+    "termomagnetica bipolar 20a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.96
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "interruptores_termomagneticos",
+          "confidence": 0.65
+        }
+      }
+    },
+    "lampara 9w e27": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 1
+        }
+      }
+    },
+    "tira led 12v 5m": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "neones_y_tiras_de_led",
+          "confidence": 1
+        }
+      }
+    },
+    "tubo led 18w 120cm": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "tubos",
+          "confidence": 1
+        }
+      }
+    },
+    "cable 4mm2": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 1
+        }
+      }
+    },
+    "cable 2x1.5": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 1
+        }
+      }
+    },
+    "reflector led 50w": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 1
+        }
+      }
+    },
+    "panel led 18w 30x30": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.87
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "paneles",
+          "confidence": 1
+        }
+      }
+    },
+    "foco 4000k": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "neutro",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.94
+        }
+      }
+    },
+    "dicroica 7w gu10": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.82
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.99
+        }
+      }
+    },
+    "contactor 25a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "contactores",
+          "confidence": 1
+        }
+      }
+    },
+    "diferencial 40a 30ma": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "protecciones_electricas",
+          "confidence": 0.95
+        }
+      }
+    },
+    "fuente 24v 10a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "fuentes_y_drivers",
+          "confidence": 1
+        }
+      }
+    },
+    "gabinete ip66 40x30": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.85
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "cajas_y_gabinetes",
+          "confidence": 1
         }
       }
     }

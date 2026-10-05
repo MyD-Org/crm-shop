@@ -41,6 +41,8 @@ export interface ResultadoBanco {
   total: number;
   /** Milisegundos de la búsqueda entera (entender + página). */
   ms?: number;
+  /** `--jev=cache`: no había plan cacheado y se usó el determinista (sin Jev). */
+  sinPlanCacheado?: boolean;
 }
 
 export interface EvaluacionBusqueda {

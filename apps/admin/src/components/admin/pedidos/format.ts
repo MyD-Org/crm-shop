@@ -183,6 +183,8 @@ export interface DatosRevision {
   nroDoc: string | null
   /** Lista de precios del contacto de Alegra (sólo `otra_lista_precios`). */
   listaPrecios: string | null
+  /** Sucursal donde está registrado ese contacto (sólo con más de una cuenta de Alegra). */
+  sucursalContacto?: string | null
 }
 
 /**
@@ -221,6 +223,7 @@ export function revisionInfo(d: DatosRevision): { titulo: string; detalle: strin
         titulo,
         detalle:
           `El documento ${documento || "de facturación"} ya está registrado en Alegra ` +
+          `${d.sucursalContacto ? `(sucursal ${d.sucursalContacto}) ` : ""}` +
           `${d.listaPrecios ? `con la lista de precios ${d.listaPrecios}` : "con otra lista de precios"}, ` +
           "pero el comprador compró a la lista general. Facture a ese contacto existente en lugar " +
           "de crear uno nuevo, y verifique si corresponde aplicarle su lista.",

@@ -172,28 +172,52 @@ const DIFERENCIA_TOTAL_MAXIMA = 1
 
 // ───────────────────────── Bloqueo por condición de IVA ─────────────────────────
 
+/** Salida que ofrecen todos los bloqueos: "Presupuesto X" no es fiscal y no exime el problema. */
+const O_PRESUPUESTO_X = 'o elija la numeración "Presupuesto X" (no fiscal) si corresponde.'
+
+/** Texto del bloqueo según el motivo de revisión que guardó el Shop (`motivo_revision`, 0010). */
+const BLOQUEO_POR_MOTIVO: Record<string, string> = {
+  documento_incompatible:
+    'El pedido tiene el aviso "Documento incompatible con la condición de IVA". Corrija el documento del ' +
+    `contacto en Alegra antes de emitir, ${O_PRESUPUESTO_X}`,
+  condicion_iva_desconocida:
+    'El pedido tiene el aviso "Condición de IVA no reconocida". Revise la condición de IVA del contacto ' +
+    `en Alegra antes de emitir, ${O_PRESUPUESTO_X}`,
+  facturacion_en_pedido:
+    "Los datos de facturación que cargó el comprador no llegaron a Alegra. Cárguelos en el contacto " +
+    `antes de emitir, ${O_PRESUPUESTO_X}`,
+}
+
+/** Motivos que son sólo un aviso para el operador: no impiden emitir. */
+const MOTIVOS_QUE_NO_BLOQUEAN = new Set(["otra_lista_precios"])
+
 /**
- * ¿Se puede emitir la factura? Bloquea si el pedido tiene el aviso "Documento incompatible con
- * la condición de IVA" (`requiereRevision`).
+ * ¿Se puede emitir la factura? Bloquea si el pedido requiere revisión por un problema de los datos
+ * fiscales del contacto (`requiereRevision` + `motivoRevision`), con el texto de ESE motivo.
+ * "Cliente con otra lista de precios" es sólo un aviso: no bloquea. Un pedido con revisión pero
+ * sin motivo (anterior a la 0010) bloquea con un texto genérico.
  *
  * Excepción (decisión de la usuaria, 2026-09-26, ver `sdd/admin-emitir-factura-pedido/decision-x-iva`
  * en engram): con la numeración "Presupuesto X" (`subDocumentType === "INVOICE_X"`, no fiscal)
- * SÍ se puede emitir aunque el pedido tenga ese aviso. Para A/B/C el bloqueo sigue siempre. El
+ * SÍ se puede emitir aunque el pedido tenga el aviso. Para A/B/C el bloqueo sigue siempre. El
  * día que se decida ampliar la excepción a otro tipo no fiscal, esta es la ÚNICA condición a
  * tocar — el resto del flujo no cambia.
  */
 export function puedeEmitir(
-  pedido: Pick<PedidoRow, "requiereRevision">,
+  pedido: Pick<PedidoRow, "requiereRevision" | "motivoRevision">,
   numeracion: Pick<AlegraNumberTemplate, "subDocumentType"> | null,
 ): { bloqueo: AvisoBloqueante | null } {
   if (!pedido.requiereRevision) return { bloqueo: null }
+  const motivo = pedido.motivoRevision
+  if (motivo && MOTIVOS_QUE_NO_BLOQUEAN.has(motivo)) return { bloqueo: null }
   if (numeracion?.subDocumentType === "INVOICE_X") return { bloqueo: null }
+  if (motivo && Object.hasOwn(BLOQUEO_POR_MOTIVO, motivo)) {
+    return { bloqueo: { motivo, detalle: BLOQUEO_POR_MOTIVO[motivo] } }
+  }
   return {
     bloqueo: {
-      motivo: "documento_incompatible",
-      detalle:
-        'El pedido tiene el aviso "Documento incompatible con la condición de IVA". Corrija el documento del ' +
-        'contacto en Alegra antes de emitir, o elija la numeración "Presupuesto X" (no fiscal) si corresponde.',
+      motivo: "requiere_revision",
+      detalle: `El pedido requiere revisión. Revise el contacto en Alegra antes de emitir, ${O_PRESUPUESTO_X}`,
     },
   }
 }
@@ -210,7 +234,7 @@ export interface PreviewEmisionFactura {
   numeraciones: AlegraNumberTemplate[]
   numeracionSugeridaId: string | null
   contacto: { alegraId: string | null; esNuevo: boolean; nombre: string }
-  /** Bloqueo por condición de IVA (`puedeEmitir`, con la numeración sugerida). `null` = no bloquea. */
+  /** Bloqueo por revisión del contacto (`puedeEmitir`, con la numeración sugerida). `null` = no bloquea. */
   bloqueo: AvisoBloqueante | null
   /** Otros avisos bloqueantes: ítems sin `alegra_item_id`, descuadre de total > $1. */
   avisos: AvisoBloqueante[]

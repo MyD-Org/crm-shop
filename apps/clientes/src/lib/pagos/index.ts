@@ -7,9 +7,11 @@
 
 import type { ProveedorPago } from "./tipos";
 import { mercadoPago } from "./mercadopago";
+import { payway } from "./payway";
 
 const PROVEEDORES: Record<string, ProveedorPago> = {
   [mercadoPago.id]: mercadoPago,
+  [payway.id]: payway,
 };
 
 /** Proveedor online por defecto del shop. */

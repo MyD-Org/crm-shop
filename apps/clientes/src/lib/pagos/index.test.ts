@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mercadoPago } from "./mercadopago";
-import { procesadorConfigurado, proveedorPago } from "./index";
+import { payway } from "./payway";
+import { idsProveedores, procesadorConfigurado, proveedorPago } from "./index";
 
 describe("registro de proveedores de pago", () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -28,7 +29,23 @@ describe("registro de proveedores de pago", () => {
   });
 
   it("procesadorConfigurado: un procesador que no está registrado nunca está configurado", () => {
-    expect(procesadorConfigurado("payway")).toBe(false);
+    expect(procesadorConfigurado("desconocido")).toBe(false);
     expect(procesadorConfigurado("")).toBe(false);
+  });
+
+  it("payway está registrado, junto a mercadopago", () => {
+    expect(proveedorPago("payway")).toBe(payway);
+    expect(idsProveedores()).toEqual(["mercadopago", "payway"]);
+  });
+
+  it("procesadorConfigurado('payway') es false sin credenciales (el medio no se ofrece) y true con todas", () => {
+    expect(procesadorConfigurado("payway")).toBe(false);
+    vi.stubEnv("PAYWAY_PRIVATE_KEY", "clave-privada-de-prueba");
+    vi.stubEnv("PAYWAY_PUBLIC_KEY", "clave-publica-de-prueba");
+    expect(procesadorConfigurado("payway")).toBe(false); // falta la base
+    vi.stubEnv("PAYWAY_BASE_URL", "https://payway.example");
+    expect(procesadorConfigurado("payway")).toBe(true);
+    vi.stubEnv("PAYWAY_PRIVATE_KEY", "");
+    expect(procesadorConfigurado("payway")).toBe(false);
   });
 });

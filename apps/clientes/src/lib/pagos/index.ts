@@ -22,7 +22,20 @@ export const PROVEEDOR_ACTIVO = mercadoPago.id;
  */
 export function proveedorPago(id: string | null | undefined): ProveedorPago | null {
   if (!id) return null;
-  return PROVEEDORES[id] ?? null;
+  return Object.hasOwn(PROVEEDORES, id) ? PROVEEDORES[id] : null;
+}
+
+/** Ids de todos los proveedores registrados. */
+export function idsProveedores(): string[] {
+  return Object.keys(PROVEEDORES);
+}
+
+/**
+ * ¿El procesador está registrado y con credenciales? Es lo que decide si un medio con cobro en línea
+ * se ofrece: un procesador sin adaptador o sin credenciales no se muestra en el checkout.
+ */
+export function procesadorConfigurado(slug: string | null | undefined): boolean {
+  return proveedorPago(slug)?.configurado() ?? false;
 }
 
 export * from "./tipos";

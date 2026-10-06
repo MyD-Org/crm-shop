@@ -37,6 +37,7 @@ vi.mock("@/lib/pagos/mercadopago", () => {
   const mercadoPago = {
     id: "mercadopago",
     configurado: () => configurado,
+    urlNotificacion: (origen: string) => `${origen}/api/pagos/mercadopago/webhook`,
     crearPago: (...a: unknown[]) => crearPago(...a),
   };
   return {

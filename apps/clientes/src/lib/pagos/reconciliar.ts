@@ -21,7 +21,8 @@
  * caso es dos updates iguales, no un doble cobro.
  */
 
-import { mercadoPago } from "./mercadopago";
+import { idsProveedores, proveedorPago } from "./index";
+import type { ProveedorPago } from "./tipos";
 import { intentosPendientesDeReconciliar, registrarCobro } from "@/lib/pedidos";
 
 /**
@@ -53,19 +54,37 @@ interface Opciones {
 }
 
 /**
- * Recorre los pendientes vivos y les pregunta al proveedor cómo terminaron.
- * Devuelve el conteo para el log del cron.
+ * Recorre los pendientes vivos de cada proveedor registrado (o sólo del indicado) y les pregunta al
+ * proveedor de cada intento cómo terminaron. Un proveedor que no está en el registro se omite sin
+ * romper el lote. Devuelve el conteo para el log del cron.
  */
 export async function reconciliarPagosPendientes(
   opciones: Opciones = {},
 ): Promise<ResultadoReconciliacion> {
-  const { limite = 100, proveedor = mercadoPago.id } = opciones;
+  const { limite = 100, proveedor } = opciones;
+  const ids = proveedor ? [proveedor] : idsProveedores();
+  const total: ResultadoReconciliacion = { revisados: 0, actualizados: 0, errores: 0 };
+  for (const id of ids) {
+    const p = proveedorPago(id);
+    if (!p) continue;
+    const r = await reconciliarProveedor(p, limite);
+    total.revisados += r.revisados;
+    total.actualizados += r.actualizados;
+    total.errores += r.errores;
+  }
+  return total;
+}
+
+async function reconciliarProveedor(
+  proveedor: ProveedorPago,
+  limite: number,
+): Promise<ResultadoReconciliacion> {
   const ahora = Date.now();
   const corteWebhook = new Date(ahora - ESPERA_WEBHOOK_MS);
   const corteAntiguedad = new Date(ahora - VENTANA_MS);
 
   const candidatos = await intentosPendientesDeReconciliar({
-    proveedor,
+    proveedor: proveedor.id,
     quietosDesde: corteWebhook,
     creadosDesde: corteAntiguedad,
     limite,
@@ -75,16 +94,16 @@ export async function reconciliarPagosPendientes(
   let errores = 0;
 
   /**
-   * Secuencial a propósito: en paralelo saturaríamos a MP con ráfagas que
+   * Secuencial a propósito: en paralelo saturaríamos al proveedor con ráfagas que
    * dispararían su rate limit y no hay motivo para apurar — el cron corre en
    * background. Un pedido lento no debe frenar al siguiente, así que va con
    * try/catch por item.
    */
   for (const c of candidatos) {
     try {
-      const estado = await mercadoPago.consultarPago(c.referencia);
+      const estado = await proveedor.consultarPago(c.referencia);
       const cambio = await registrarCobro(c.orderId, {
-        proveedor,
+        proveedor: proveedor.id,
         referencia: c.referencia,
         estado: estado.estado,
         detalle: estado.detalle,

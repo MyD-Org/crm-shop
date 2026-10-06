@@ -231,11 +231,11 @@ describe("tokenizarConSdk", () => {
     }
   });
 
-  it("401/403 -> configuracion; otros estados (0, 5xx) -> red", async () => {
+  it("401/403 -> configuracion; 5xx -> red; sin respuesta (0: red o CORS) -> null para el respaldo", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [401, {}] }).entorno)).toMatchObject({ motivo: "configuracion" });
     expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [403, {}] }).entorno)).toMatchObject({ motivo: "configuracion" });
-    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [0, {}] }).entorno)).toMatchObject({ motivo: "red" });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [0, {}] }).entorno)).toBeNull();
     expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [503, {}] }).entorno)).toMatchObject({ motivo: "red" });
   });
 
@@ -272,6 +272,14 @@ describe("tokenizar (SDK primero, fetch directo de respaldo)", () => {
   it("si el SDK no carga (bloqueado, sin red) cae al fetch directo a /tokens", async () => {
     const f = vi.fn().mockResolvedValue(respuesta(201, TOKEN_OK));
     const e = entornoFalso({ sinSdk: true });
+    const r = await tokenizar(SOLICITUD, CONFIG, { entorno: e.entorno, fetch: f });
+    expect(r).toEqual({ ok: true, token: TOKEN_OK.id, bin: "450799" });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("si el SDK no obtiene respuesta (CORS del sandbox con x-consumer-username) cae al fetch directo", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta(201, TOKEN_OK));
+    const e = entornoFalso({ respuesta: [0, null] });
     const r = await tokenizar(SOLICITUD, CONFIG, { entorno: e.entorno, fetch: f });
     expect(r).toEqual({ ok: true, token: TOKEN_OK.id, bin: "450799" });
     expect(f).toHaveBeenCalledTimes(1);

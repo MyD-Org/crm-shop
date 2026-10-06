@@ -72,6 +72,13 @@ export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
     !filtros.busqueda?.trim() &&
     // El plan de la búsqueda v2 sale de una consulta libre: tantas claves como búsquedas.
     !filtros.planBusqueda &&
+    !filtros.busquedaTolerante &&
+    // El texto único (`texto`) es la misma consulta libre, en cualquiera de sus formas. Se mira
+    // acá y no con `textoDe` (de catalog.ts) para no depender de ese módulo.
+    !filtros.texto?.q.trim() &&
+    !filtros.texto?.plan &&
+    !filtros.texto?.tolerante &&
+    !filtros.texto?.codigo &&
     filtros.precioMin == null &&
     filtros.precioMax == null &&
     // La potencia es un rango libre como el precio: multiplicaría las claves de la caché.

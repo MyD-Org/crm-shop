@@ -57,6 +57,30 @@ describe("filtrosCacheables", () => {
   });
 });
 
+describe("filtrosCacheables: ningún texto de búsqueda cae en la Runtime Cache", () => {
+  const plan = { consulta: "foco", blandos: { categorias: [], atributos: [], terminos: [{ texto: "foco", peso: 1 }] } };
+
+  it.each([
+    ["texto.q", { texto: { q: "foco" } }],
+    ["texto.q con espacios alrededor", { texto: { q: "  foco " } }],
+    ["texto.plan", { texto: { q: "foco", plan } }],
+    ["texto.plan sin q", { texto: { q: "", plan } }],
+    ["texto.tolerante", { texto: { q: "lampra", tolerante: true } }],
+    ["texto.codigo", { texto: { q: "DL-18W", codigo: true } }],
+    ["campo viejo busqueda", { busqueda: "foco" }],
+    ["campo viejo planBusqueda", { planBusqueda: plan }],
+    ["campo viejo busquedaTolerante", { busquedaTolerante: true }],
+  ])("%s => false", (_nombre, filtros) => {
+    expect(filtrosCacheables(filtros)).toBe(false);
+  });
+
+  it("sin texto, o con texto vacío, sí se cachea", () => {
+    expect(filtrosCacheables({})).toBe(true);
+    expect(filtrosCacheables({ texto: { q: "" } })).toBe(true);
+    expect(filtrosCacheables({ texto: { q: "   " }, categorias: ["ILUMINACION"] })).toBe(true);
+  });
+});
+
 describe("paginaCatalogoPublica / facetasPublicas", () => {
   const pagina = { productos: [prod("1", "A")], total: 1, pagina: 1, paginas: 1 };
 

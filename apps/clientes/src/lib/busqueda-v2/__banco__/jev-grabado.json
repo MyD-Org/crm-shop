@@ -3118,6 +3118,188 @@
           "confidence": 0.38
         }
       }
+    },
+    "20a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.38
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.85
+        }
+      }
+    },
+    "9w": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.81
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.96
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.84
+        }
+      }
+    },
+    "e27": {
+      "principal": {
+        "intencion": {
+          "choice": "codigo_o_modelo",
+          "confidence": 0.47
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.98
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "portalamparas_y_zocalos",
+          "confidence": 0.48
+        }
+      }
+    },
+    "ip65": {
+      "principal": {
+        "intencion": {
+          "choice": "codigo_o_modelo",
+          "confidence": 0.64
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.92
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.86
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "luminarias_exteriores",
+          "confidence": 0.92
+        }
+      }
+    },
+    "6ka": {
+      "principal": {
+        "intencion": {
+          "choice": "codigo_o_modelo",
+          "confidence": 0.8
+        },
+        "tono": {
+          "choice": "frio",
+          "confidence": 0.97
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.93
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.58
+        }
+      }
+    },
+    "4000k": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.56
+        },
+        "tono": {
+          "choice": "neutro",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.84
+        }
+      }
+    },
+    "2x20": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.46
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.84
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "tubos",
+          "confidence": 0.44
+        }
+      }
     }
   }
 }

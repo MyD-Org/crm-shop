@@ -35,6 +35,19 @@ describe("armarMailPedido", () => {
     expect(m.text).toContain("Si todavía no completó el pago");
   });
 
+  it("recibido de una cuenta corriente: informa con qué medio paga, sin cobro", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido", pago: "Efectivo o cheque", pagoCuentaCorriente: true });
+    expect(m.text).toContain("Pagará con Efectivo o cheque.");
+    expect(m.text).not.toContain("completó el pago");
+    expect(m.html).toContain("Pagará con Efectivo o cheque.");
+    expect(infracciones(m.text, REGISTRO)).toEqual([]);
+  });
+
+  it("recibido sin la marca de cuenta corriente no cambia", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido", pago: "Efectivo o cheque" });
+    expect(m.text).not.toContain("Pagará con");
+  });
+
   it("pago recibido y rechazado, sin resumen", () => {
     const ok = armarMailPedido({ ...base, aviso: "pago_recibido", lineas: [{ nombre: "X", cantidad: 1 }] });
     expect(ok.subject).toContain("pago recibido");

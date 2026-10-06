@@ -60,6 +60,7 @@ import {
   medioElegido,
   mediosParaModalidad,
   pieDelMedio,
+  textoPagaConMedio,
   type MedioPago,
 } from "@/lib/medios-pago";
 import { DisponibilidadLineas, ListaLineas } from "@/components/producto/DisponibilidadLineas";
@@ -293,6 +294,12 @@ interface Props {
    */
   mediosPago?: MedioPago[];
   /**
+   * El comprador tiene cuenta corriente (lo resuelve el server). Su único medio es el de audiencia
+   * `cuenta_corriente`: sin elegir, sin cuotas ni cobro en línea; el pedido queda "a confirmar". El
+   * servidor lo vuelve a validar en `POST /api/pedidos`.
+   */
+  esCuentaCorriente?: boolean;
+  /**
    * Elección de «Enviar a» del visitante (ya validada en el server): el checkout arranca con esa
    * entrega, local y dirección. null = como siempre.
    */
@@ -311,6 +318,7 @@ export function CheckoutClient({
   sugerirVincular = false,
   sucursales = null,
   mediosPago = [],
+  esCuentaCorriente = false,
   eleccionInicial = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready } = useCart();
@@ -565,8 +573,9 @@ export function CheckoutClient({
   // pedido sale "a_coordinar": un asesor coordina el pago. Si el medio elegido deja de aplicar (pasó
   // de retiro a envío), se corrige DERIVÁNDOLO en el render, sin efecto: sin un frame con una opción
   // que el servidor rechazaría.
-  const mediosParaElegir = mediosParaModalidad(mediosPago, entrega);
-  const medioSel = medioElegido(mediosPago, entrega, medioSlug);
+  const opcionesMedios = { esCuentaCorriente };
+  const mediosParaElegir = mediosParaModalidad(mediosPago, entrega, opcionesMedios);
+  const medioSel = medioElegido(mediosPago, entrega, medioSlug, opcionesMedios);
   const pagoParaEnviar: string = medioSel?.slug ?? "a_coordinar";
   const pagaEnLinea = esPagoEnLinea(pagoParaEnviar);
   // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
@@ -593,7 +602,8 @@ export function CheckoutClient({
     // El precio depende del medio (lista de precios enlazada): cambiar a un medio con otra lista
     // recotiza; entre medios sin lista o con la misma lista no se pide nada.
     ...(() => {
-      const base = pagoParaCotizar(mediosPago, entrega, medioSel);
+      // Cuenta corriente: ni lista ni cuotas por medio (el servidor tampoco las aplica).
+      const base = pagoParaCotizar(mediosPago, entrega, esCuentaCorriente ? null : medioSel);
       // Con cuotas la cotización depende también de la cantidad: el slug viaja siempre y la clave de
       // refetch incluye la lista (o el medio, si no tiene lista de pago único).
       return pideCuotas && medioSel ? { listaKey: base.listaKey || medioSel.slug, pagoMetodo: medioSel.slug } : base;
@@ -877,6 +887,10 @@ export function CheckoutClient({
               <>
                 Ya cobramos su pedido. Nos comunicaremos con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"}.
+              </>
+            ) : medioSel && esCuentaCorriente ? (
+              <>
+                Su pedido quedó a confirmar; todavía no se realizó ningún cobro. {textoPagaConMedio(medioSel.nombre)}
               </>
             ) : medioSel ? (
               <>
@@ -1296,17 +1310,22 @@ export function CheckoutClient({
             {medioSel ? (
               <>
                 <h2 className="mb-4 font-display text-2xl font-medium text-text">Medio de pago</h2>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {mediosParaElegir.map((m) => (
-                    <RadioCard
-                      key={m.slug}
-                      selected={medioSel.slug === m.slug}
-                      onClick={() => setMedioSlug(m.slug)}
-                      title={m.nombre}
-                      description={esPagoEnLinea(m.slug) ? DESCRIPCION_PAGO_EN_LINEA : undefined}
-                    />
-                  ))}
-                </div>
+                {esCuentaCorriente ? (
+                  // Cuenta corriente: un único medio, sin elección.
+                  <p className="text-sm font-semibold text-text">{textoPagaConMedio(medioSel.nombre)}</p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {mediosParaElegir.map((m) => (
+                      <RadioCard
+                        key={m.slug}
+                        selected={medioSel.slug === m.slug}
+                        onClick={() => setMedioSlug(m.slug)}
+                        title={m.nombre}
+                        description={esPagoEnLinea(m.slug) ? DESCRIPCION_PAGO_EN_LINEA : undefined}
+                      />
+                    ))}
+                  </div>
+                )}
                 {medioSel.instrucciones.trim() && (
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
@@ -1337,7 +1356,7 @@ export function CheckoutClient({
                   </p>
                 )}
                 {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
-                <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>
+                {!esCuentaCorriente && <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>}
                 {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
               </>
             ) : (

@@ -52,6 +52,22 @@ export function esMedioCuentaCorriente(m: Pick<MedioPago, "audiencia">): boolean
   return m.audiencia === "cuenta_corriente";
 }
 
+/** ¿El comprador tiene cuenta corriente? Sólo `tipoCuenta === "corriente"` (lo resuelve el servidor). */
+export function esCompradorCuentaCorriente(
+  cliente: { tipoCuenta?: string | null } | null | undefined,
+): boolean {
+  return cliente?.tipoCuenta === "corriente";
+}
+
+/**
+ * Lo que puede viajar al navegador (props del checkout): el comprador con cuenta corriente recibe
+ * SÓLO el medio de su audiencia; el resto (público, contado) nunca recibe ese medio, ni su nombre ni
+ * sus instrucciones. Es la contraparte de `mediosParaModalidad` para los datos, no sólo la lista.
+ */
+export function mediosVisiblesPara(medios: readonly MedioPago[], esCuentaCorriente: boolean): MedioPago[] {
+  return medios.filter((m) => esMedioCuentaCorriente(m) === esCuentaCorriente);
+}
+
 /** Slug de la fila fija que dispara el cobro en línea con Mercado Pago. */
 export const SLUG_MERCADOPAGO = "mercadopago";
 
@@ -131,9 +147,15 @@ export const PIE_EN_LINEA_GENERICO = "Al confirmar el pedido, pasará a pagar en
 export const PIE_A_COORDINAR = "No se le cobrará nada ahora. Un asesor coordinará el pago con usted.";
 export const PIE_GENERICO = "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido.";
 
+/** Qué medio usa el comprador con cuenta corriente (el nombre sale del medio cargado en el CRM). */
+export function textoPagaConMedio(nombre: string): string {
+  return `Pagará con ${nombre}.`;
+}
+
 /** Pie para el medio elegido; `null` = no hay medio aplicable (el pedido sale "a_coordinar"). */
 export function pieDelMedio(medio: MedioPago | null): string {
   if (!medio) return PIE_A_COORDINAR;
+  if (esMedioCuentaCorriente(medio)) return `${textoPagaConMedio(medio.nombre)} No se le cobra nada ahora.`;
   const procesador = procesadorDeMedio(medio.slug);
   if (procesador === null) return PIE_GENERICO;
   return PIE_EN_LINEA[procesador] ?? PIE_EN_LINEA_GENERICO;

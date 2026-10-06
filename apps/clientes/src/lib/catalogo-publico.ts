@@ -43,9 +43,11 @@ import {
   getCategoriaExacta,
   getCategorias,
   getFacetas,
+  getFacetaCategorias,
   getPaginaCatalogo,
   getProducto,
   getRutaCategoriaPropia,
+  type Faceta,
   type Facetas,
   type FiltrosCatalogo,
   type PaginaCatalogo,
@@ -53,7 +55,7 @@ import {
 import { conRespaldoSinCache } from "./cache-respaldo";
 import { TAG_CATALOGO } from "./cache-tags";
 import { esMedidaId } from "./catalogo-atributos-medida";
-import type { OrdenCatalogo } from "./catalogo-url";
+import { SOLO_STOCK_DEFAULT, type OrdenCatalogo } from "./catalogo-url";
 import { elegirDestacados } from "./destacados";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import type { MedioCuotas } from "./cuotas-sin-interes";
@@ -160,6 +162,32 @@ export function facetasPublicas(
   return filtrosCacheables(filtros)
     ? conRespaldoSinCache("catalogo-facetas", () => facetasCacheadas(filtros, soloVisibles, disp), directa)
     : directa();
+}
+
+async function categoriasTotalesCacheadas(
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<Faceta[]> {
+  "use cache: remote";
+  cacheTag(TAG_CATALOGO);
+  cacheLife("catalogo");
+  console.info("[cache] catalogo-categorias-totales miss");
+  const filtros = { soloStock: SOLO_STOCK_DEFAULT };
+  return disp ? getFacetaCategorias(filtros, soloVisibles, disp) : getFacetaCategorias(filtros, soloVisibles);
+}
+
+/**
+ * El árbol de categorías del panel de filtros con el TOTAL FIJO de cada una: el del catálogo sin
+ * búsqueda ni otros filtros (sólo visibilidad y el default de stock). No depende de lo que el
+ * visitante busca ni filtre, así que es una sola clave de la caché compartida (tag `catalogo`) y
+ * no suma consultas por request. Si la base falla, TIRA (no se cachea).
+ */
+export function categoriasTotalesPublicas(soloVisibles: boolean, disp?: ContextoDisponibilidad): Promise<Faceta[]> {
+  const directa = () =>
+    disp
+      ? getFacetaCategorias({ soloStock: SOLO_STOCK_DEFAULT }, soloVisibles, disp)
+      : getFacetaCategorias({ soloStock: SOLO_STOCK_DEFAULT }, soloVisibles);
+  return conRespaldoSinCache("catalogo-categorias-totales", () => categoriasTotalesCacheadas(soloVisibles, disp), directa);
 }
 
 async function productoCacheado(

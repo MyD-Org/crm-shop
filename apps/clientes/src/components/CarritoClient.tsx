@@ -8,16 +8,11 @@ import { Button, QuantityStepper } from "@myd-org/ui";
 import type { CartItem } from "@/lib/carrito-cliente";
 import { AvisoQuitado } from "@/components/AvisoQuitado";
 import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio, type EntregaTipo } from "@/lib/envio";
-import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { useCart } from "@/context/CartContext";
 import { resumenDisponibilidadCarrito, sinEntregaPosible } from "@/lib/disponibilidad-textos";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { fmtPrecio } from "@/lib/format";
-import { CuotasResumen } from "@/components/CuotasResumen";
-import { MediosDePagoModal } from "@/components/MediosDePagoModal";
-import { baseCarrito, resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import { EntregaProducto } from "@/components/producto/EntregaProducto";
@@ -65,9 +60,8 @@ function AlertIcon() {
 }
 
 /**
- * Carrito. `oferta` llega resuelta desde el Server Component `carrito/page.tsx`
- * (null = sin cuotas). Las cuotas se recalculan en el cliente con cada cambio
- * de cantidad, sin roundtrip.
+ * Carrito. Sin cuotas: el total en cuotas sin interés depende de la lista de cada cantidad
+ * (precio del medio), así que el selector vive en el checkout, donde se cotiza con el servidor.
  *
  * Sin sesión también se cotiza (lista L1, ver /api/carrito/cotizar): el aviso
  * de iniciar sesión depende de `conSesion`, no de la cotización.
@@ -79,14 +73,12 @@ function AlertIcon() {
  * mobile, una barra abajo con el total y el botón.
  */
 export function CarritoClient({
-  oferta,
   conSesion,
   configEnvio = CONFIG_ENVIO_DEFAULT,
   provincia = null,
   entregaTipo = "retiro",
   ubicacionConocida,
 }: {
-  oferta: OfertaCuotas | null;
   conSesion: boolean;
   /** Configuración de envío del CRM (cacheada: sólo para mostrar; el servidor decide al pedir). */
   configEnvio?: ConfigEnvio;
@@ -258,11 +250,6 @@ export function CarritoClient({
    * Cuando sí la hay, se cuentan solo las líneas sin problema — que son las que
    * `cotizar` incluye en los totales.
    */
-  // Base de cuotas = total con IVA. Confirmado → el de la cotización; mientras
-  // recotiza → estimado con los precios/IVA ya conocidos y las cantidades nuevas.
-  const baseCuotas = baseCarrito({ items, totalConfirmado: confirmado ? cotizacion.total : null, ultimasLineas });
-  const resumen = resumenCuotas(baseCuotas, oferta);
-
   const unidadesCotizadas = confirmado
     ? cotizacion.lineas.filter((l) => !l.problema).reduce((a, l) => a + l.qty, 0)
     : items.reduce((a, i) => a + i.qty, 0);
@@ -547,19 +534,6 @@ export function CarritoClient({
               )}
             </div>
 
-            <CuotasResumen
-              resumen={resumen}
-              accion={
-                resumen?.mejor && oferta && baseCuotas != null ? (
-                  <MediosDePagoModal
-                    precioFinal={baseCuotas}
-                    oferta={oferta}
-                    className="mt-1 text-xs text-accent transition-colors hover:text-primary"
-                  />
-                ) : null
-              }
-            />
-
             {cotizacion?.hayProblemas && (
               <p className="rounded-lg bg-danger/5 p-3 text-xs text-danger">
                 Revise los productos marcados antes de continuar.
@@ -614,11 +588,6 @@ export function CarritoClient({
               <p className="font-display text-lg font-bold text-muted">{textoTotal}</p>
             ) : (
               <p className="font-display text-lg font-bold tabular-nums text-text">{fmtPrecio(total)}</p>
-            )}
-            {resumen?.mejor && (
-              <p className={`text-xs font-bold ${resumen.mejor.sinInteres ? "text-success" : "text-muted"}`}>
-                {TEXTOS_CUOTAS.linea(resumen.mejor.cuotas, resumen.mejor.montoCuota, resumen.mejor.sinInteres)}
-              </p>
             )}
           </div>
           <div className="min-w-0 flex-1">

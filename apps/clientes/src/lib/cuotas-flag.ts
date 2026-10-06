@@ -1,15 +1,17 @@
 /**
- * Flag del cambio cuotas-configurables. Se lee sólo en el server (route
- * handlers y Server Components): al cliente llega la oferta o null, nunca el env.
+ * Flag `cuotas-cobro` (change listas-precio-online, rebanada D). Se lee sólo en el server (route
+ * handlers y Server Components): al cliente llegan las opciones o nada, nunca el flag.
  *
- * Apagado (default): no se muestran cuotas ni barra, el Brick no recibe máximo y
- * la ruta de pago vuelve al clamp 1..24. Precio final con IVA y neto NO dependen
- * de este flag. Cron, ping y congelado del plan en el pedido siguen corriendo.
+ * Apagado (default): no hay cuotas en la tienda. No se exhiben ("N cuotas sin interés" promete un
+ * cobro), el checkout no ofrece el selector, el pedido no congela cuotas y el cobro con Mercado
+ * Pago queda como estaba. Los pedidos que ya congelaron cuotas conservan su validación.
  *
- * Vive en Vercel Flags (key `cuotas`, ver src/flags.ts): se cambia sin redeploy.
+ * Vive en Vercel Flags (key `cuotas-cobro`, ver src/flags.ts): se cambia sin redeploy. Se prende
+ * sólo con el gate cumplido: prueba en el sandbox de Mercado Pago, cuotas sin interés activadas en
+ * su panel y validación del contador/abogado.
  */
-import { cuotasFlag } from "@/flags";
+import { cuotasCobroFlag } from "@/flags";
 
 export async function cuotasHabilitadas(): Promise<boolean> {
-  return cuotasFlag();
+  return cuotasCobroFlag();
 }

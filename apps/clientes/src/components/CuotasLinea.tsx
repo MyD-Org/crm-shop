@@ -1,15 +1,12 @@
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
+import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 
 /**
- * Una línea con la mejor opción: "6 cuotas sin interés de $20.000" o
- * "12 cuotas de $13.500 con interés (total $162.000)". En "sm" (card del
- * catálogo) va sin el total, por espacio. Sin opción → nada.
+ * Una línea con la mejor opción: "6 cuotas sin interés de $20.000". Sin opción → nada.
  *
- * `tono="oscuro"` queda para cards de fondo oscuro (la ficha usa "claro"
- * desde el reskin editorial).
- * `tamano`: "sm" dentro de la card del catálogo (debajo del precio, secundaria),
- * "md" por defecto, "lg" para la ficha de producto.
+ * `tono="oscuro"` queda para cards de fondo oscuro (la ficha usa "claro" desde el reskin editorial).
+ * `tamano`: "sm" dentro de la card del catálogo (debajo del precio, secundaria), "md" por defecto,
+ * "lg" para la ficha de producto.
  */
 const TAMANOS = {
   sm: "text-xs font-medium",
@@ -29,21 +26,10 @@ export function CuotasLinea({
   className?: string;
 }) {
   if (!opcion) return null;
-  const color = opcion.sinInteres
-    ? tono === "oscuro"
-      ? "text-success-sobre-oscuro"
-      : "text-success"
-    : tono === "oscuro"
-      ? "text-white"
-      : "text-text";
+  const color = tono === "oscuro" ? "text-success-sobre-oscuro" : "text-success";
   return (
     <span className={`${TAMANOS[tamano]} ${color} ${className}`}>
-      {TEXTOS_CUOTAS.linea(
-        opcion.cuotas,
-        opcion.montoCuota,
-        opcion.sinInteres,
-        tamano === "sm" ? undefined : opcion.total,
-      )}
+      {TEXTOS_CUOTAS.linea(opcion.cuotas, opcion.montoCuota)}
     </span>
   );
 }

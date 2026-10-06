@@ -7,12 +7,11 @@ import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
-import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { useCart } from "@/context/CartContext";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { BotonCompartir } from "@/components/BotonCompartir";
@@ -74,7 +73,6 @@ const LARGO_NOMBRE_EXTENSO = 32;
  */
 export function ProductoClient({
   producto: productoLista,
-  oferta = null,
   configEnvio = CONFIG_ENVIO_DEFAULT,
   envioUbicacion,
   localElegido,
@@ -89,8 +87,6 @@ export function ProductoClient({
    * Ausente = flag apagado (la ficha se ve como siempre).
    */
   disponibilidad?: { producto: DisponibilidadVista; locales: LocalDisponibilidad[] };
-  /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
-  oferta?: OfertaCuotas | null;
   /** Configuración de envío del CRM (reglas de venta): qué se anuncia del envío a domicilio. */
   configEnvio?: ConfigEnvio;
   /** Texto del envío según la ubicación del visitante (componente de servidor en su propio Suspense). */
@@ -136,7 +132,8 @@ export function ProductoClient({
   }
 
   // Cuotas sobre el precio final unitario: sin IVA conocido no se calcula nada.
-  const mejorCuota = mejorOpcionPara(producto.precioFinal, oferta);
+  const cuotas = producto.cuotasSinInteres;
+  const mejorCuota = mejorOpcionCuotas(cuotas?.opciones);
 
   const estado = ESTADO_STOCK[producto.stock];
   const agotado = producto.stock === "out";
@@ -292,12 +289,12 @@ export function ProductoClient({
                   preciosMedios={producto.preciosMedios}
                 />
               )}
-              {!sinPrecio && mejorCuota && oferta && producto.precioFinal != null && (
+              {!sinPrecio && mejorCuota && cuotas && producto.precioFinal != null && (
                 <div className="mt-3">
                   <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />
                   <MediosDePagoModal
                     precioFinal={producto.precioFinal}
-                    oferta={oferta}
+                    cuotas={cuotas}
                     className="mt-0.5 text-accent transition-colors hover:text-primary"
                   />
                 </div>

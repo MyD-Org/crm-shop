@@ -1,64 +1,54 @@
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
+import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { fmtPrecio } from "@/lib/format";
-import type { BloqueProveedor } from "@/lib/cuotas-exhibicion";
 
 /**
- * Contenido del modal "Ver medios de pago": un bloque por proveedor ("Tarjetas
- * de crédito (Mercado Pago)") con 1 pago (precio contado) y cada cantidad de
- * cuotas con valor de cuota y total. Con interés: CFT destacado y TEA
- * secundaria. Sin interés (tasa 0 del proveedor): sin recargo, sin CFT.
+ * Contenido del modal "Ver medios de pago": un bloque con el medio que cobra en cuotas ("Tarjetas
+ * de crédito (Mercado Pago)"), con 1 pago (precio contado) y cada cantidad de cuotas SIN INTERÉS con
+ * el valor de la cuota y el total de la lista de esa cantidad.
  *
  * Separado del diálogo para poder testearlo con render estático.
  */
-export function MediosDePagoDetalle({ bloques }: { bloques: BloqueProveedor[] }) {
+export function MediosDePagoDetalle({
+  medio,
+  precioContado,
+  opciones,
+}: {
+  /** Nombre del medio ("Mercado Pago"). */
+  medio: string;
+  precioContado: number;
+  opciones: OpcionCuotas[];
+}) {
   return (
     <div className="space-y-5">
-      {bloques.map((b) => (
-        <section key={b.proveedor} aria-labelledby={`proveedor-${b.proveedor}`}>
-          <h3 id={`proveedor-${b.proveedor}`} className="mb-2 text-sm font-bold text-text">
-            {b.titulo}
-          </h3>
-          <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-            <li className="flex items-center justify-between gap-4 px-3 py-2.5">
+      <section aria-labelledby="medio-cuotas">
+        <h3 id="medio-cuotas" className="mb-2 text-sm font-bold text-text">
+          {TEXTOS_CUOTAS.tituloMedio(medio)}
+        </h3>
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+          <li className="flex items-center justify-between gap-4 px-3 py-2.5">
+            <span className="text-sm text-text">
+              {TEXTOS_CUOTAS.unPago}
+              <span className="block text-xs text-muted">{TEXTOS_CUOTAS.precioContado}</span>
+            </span>
+            <span className="text-sm font-semibold text-text">{fmtPrecio(precioContado)}</span>
+          </li>
+          {opciones.map((o) => (
+            <li key={o.cuotas} className="flex items-start justify-between gap-4 px-3 py-2.5">
               <span className="text-sm text-text">
-                {TEXTOS_CUOTAS.unPago}
-                <span className="block text-xs text-muted">{TEXTOS_CUOTAS.precioContado}</span>
+                {TEXTOS_CUOTAS.filaCuotas(o.cuotas, o.montoCuota, o.primeraCuota)}
+                <span className="ml-2 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+                  {TEXTOS_CUOTAS.sinInteres}
+                </span>
               </span>
-              <span className="text-sm font-semibold text-text">{fmtPrecio(b.precioContado)}</span>
+              <span className="shrink-0 text-right text-xs text-muted">
+                {TEXTOS_CUOTAS.total}
+                <span className="block text-sm font-semibold text-text">{fmtPrecio(o.total)}</span>
+              </span>
             </li>
-            {b.opciones.map((o) => (
-              <li key={o.cuotas} className="flex items-start justify-between gap-4 px-3 py-2.5">
-                <span className="text-sm text-text">
-                  {TEXTOS_CUOTAS.filaCuotas(o.cuotas, o.montoCuota)}
-                  {o.sinInteres ? (
-                    <span className="ml-2 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
-                      {TEXTOS_CUOTAS.sinInteres}
-                    </span>
-                  ) : (
-                    (o.cftPct !== null || o.teaPct !== null) && (
-                      <span className="mt-0.5 block">
-                        {o.cftPct !== null && (
-                          <span className="text-sm font-bold text-text">{TEXTOS_CUOTAS.cft(o.cftPct)}</span>
-                        )}
-                        {o.teaPct !== null && (
-                          <span className="ml-2 text-xs text-muted">{TEXTOS_CUOTAS.tea(o.teaPct)}</span>
-                        )}
-                      </span>
-                    )
-                  )}
-                </span>
-                <span className="shrink-0 text-right text-xs text-muted">
-                  {TEXTOS_CUOTAS.total}
-                  <span className="block text-sm font-semibold text-text">{fmtPrecio(o.total)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          {b.opciones.length === 0 && (
-            <p className="mt-1.5 text-xs text-muted">{TEXTOS_CUOTAS.sinOpcionesMedio}</p>
-          )}
-        </section>
-      ))}
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

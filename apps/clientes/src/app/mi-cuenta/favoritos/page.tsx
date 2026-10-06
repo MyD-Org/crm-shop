@@ -3,7 +3,6 @@ import { EmptyState } from "@myd-org/ui";
 import { BotonEnlace } from "@/components/mi-cuenta/BotonEnlace";
 import { FavoritosLista } from "@/components/mi-cuenta/FavoritosLista";
 import { identidadActual } from "@/lib/auth";
-import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { listarFavoritos } from "@/lib/favoritos";
 import { rutaIngreso } from "@/lib/ingreso";
@@ -33,10 +32,9 @@ export default async function FavoritosPage() {
 
   // "$X con <Medio>" sólo del destacado (las cards no muestran los de la ficha).
   const { mediosPrecio } = await flagsPublicos();
-  const [productos, oferta] = await Promise.all([
-    listarFavoritos(clerkUserId, { mediosPrecio: { destacado: mediosPrecio.destacado, ficha: [] } }),
-    getOfertaCuotasSinCache(),
-  ]);
+  const productos = await listarFavoritos(clerkUserId, {
+    mediosPrecio: { destacado: mediosPrecio.destacado, ficha: [], ...(mediosPrecio.cuotas ? { cuotas: mediosPrecio.cuotas } : {}) },
+  });
 
   return (
     <section>
@@ -46,7 +44,7 @@ export default async function FavoritosPage() {
           action={<BotonEnlace href="/catalogo">Ir al catálogo</BotonEnlace>}
         />
       ) : (
-        <FavoritosLista productos={productos} oferta={oferta} />
+        <FavoritosLista productos={productos} />
       )}
     </section>
   );

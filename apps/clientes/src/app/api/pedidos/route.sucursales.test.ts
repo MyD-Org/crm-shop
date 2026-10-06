@@ -60,9 +60,6 @@ vi.mock("@/lib/facturacion-db", () => ({
   perfilCompleto: () => true,
   guardarTelefonoSiFalta: async () => {},
 }));
-vi.mock("@/lib/cuotas-datos", () => ({
-  getOfertaCuotasParaPedido: async () => null,
-}));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: async () => false }));
 // Sin medios cargados: el único pago válido es "a_coordinar".
 vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => [] }));
@@ -95,7 +92,7 @@ beforeEach(() => {
     id: "p1",
     numero: "PED-1",
     repetido: false,
-    cuotasMax: null,
+    cuotas: null,
   });
   cotizar.mockReset();
   cotizar.mockResolvedValue({

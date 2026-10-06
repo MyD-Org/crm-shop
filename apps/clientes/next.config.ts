@@ -29,8 +29,6 @@ const nextConfig: NextConfig = {
     // 15 minutos por si ese aviso se pierde; revalidate 600 lo refresca en
     // segundo plano con tráfico.
     catalogo: { stale: 60, revalidate: 600, expire: 900 },
-    // Oferta de cuotas: la renuevan el ping del CRM y el cron (tag `cuotas`).
-    cuotas: { stale: 300, revalidate: 900, expire: 3600 },
     // Sucursales y zonas (para mostrar el selector de zona): las renueva el ping del CRM al
     // guardar (tag `sucursales`); si se pierde, vencen solas a los 5 minutos. expire no baja de
     // 300 (ver `degradado`).

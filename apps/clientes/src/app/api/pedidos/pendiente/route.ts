@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
 import { pedidoPendienteMasReciente } from "@/lib/pedidos";
 
@@ -31,11 +30,7 @@ export async function GET() {
     clienteCodigo: cliente?.codigocliente,
   });
 
-  // `cuotasMax` sólo con el flag prendido: con el flag apagado el Brick no
-  // recibe máximo y el cobro vuelve al clamp 1..24.
-  return NextResponse.json({
-    pedido: pedido
-      ? { ...pedido, cuotasMax: (await cuotasHabilitadas()) ? pedido.cuotasMax : null }
-      : null,
-  });
+  // `cuotas` es lo congelado al crear el pedido (null = sin cuotas elegidas): el formulario de pago se
+  // limita a esa cantidad, igual con el flag apagado después.
+  return NextResponse.json({ pedido: pedido ?? null });
 }

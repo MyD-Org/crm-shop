@@ -52,7 +52,6 @@ describe("proxy: RUTAS_PUBLICAS", () => {
   it("incluye cada endpoint interno de revalidación", () => {
     const texto = readFileSync(PROXY, "utf8");
     const rutas = rutasRevalidar();
-    expect(rutas).toContain("/api/internal/cuotas/revalidar");
     for (const ruta of rutas) expect(texto).toContain(`"${ruta}"`);
   });
 

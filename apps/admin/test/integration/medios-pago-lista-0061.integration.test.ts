@@ -168,3 +168,56 @@ describe("avisos", () => {
     expect(aviso("sinlista")).toHaveLength(2)
   })
 })
+
+describe("cuotas sin interés (rebanada D): condiciones con cantidad de cuotas", () => {
+  async function cambiar(cambios: { op: "setCondicion"; medioSlug: string; cuotas: number | null; listaId: string | null }[]) {
+    const previa = await previsualizar(A, cambios)
+    await aplicarCambios(A, USUARIO, { cambios, baseVersion: previa.baseVersion, huella: previa.huella })
+  }
+
+  it("el DTO del medio lleva sus condiciones de cuotas, ascendentes, sin mezclarlas con el pago único", async () => {
+    await crearMedioPago(A, { slug: "tarjeta", nombre: "Tarjeta" })
+    await cambiar([
+      { op: "setCondicion", medioSlug: "tarjeta", cuotas: null, listaId: listaRef },
+      { op: "setCondicion", medioSlug: "tarjeta", cuotas: 6, listaId: listaTransf },
+      { op: "setCondicion", medioSlug: "tarjeta", cuotas: 3, listaId: listaRef },
+    ])
+    const [mp] = (await listarMediosPago(A)).filter((m) => m.slug === "tarjeta")
+    expect(mp.listaOnlineId).toBe(listaRef)
+    expect(mp.condicionesCuotas).toEqual([
+      { cuotas: 3, listaId: listaRef, listaNombre: "Lista A", listaActiva: true },
+      { cuotas: 6, listaId: listaTransf, listaNombre: "Lista transferencia", listaActiva: true },
+    ])
+  })
+
+  it("cambiar la lista de una cantidad y quitar otra, en un solo cambio, queda en el DTO", async () => {
+    await crearMedioPago(A, { slug: "tarjeta", nombre: "Tarjeta" })
+    await cambiar([
+      { op: "setCondicion", medioSlug: "tarjeta", cuotas: 3, listaId: listaRef },
+      { op: "setCondicion", medioSlug: "tarjeta", cuotas: 6, listaId: listaRef },
+    ])
+    await cambiar([
+      { op: "setCondicion", medioSlug: "tarjeta", cuotas: 3, listaId: listaTransf },
+      { op: "setCondicion", medioSlug: "tarjeta", cuotas: 6, listaId: null },
+    ])
+    const [mp] = await listarMediosPago(A)
+    expect(mp.condicionesCuotas.map((c) => [c.cuotas, c.listaId])).toEqual([[3, listaTransf]])
+  })
+
+  it("una cantidad no puede repetirse para el mismo medio (una condición, una lista)", async () => {
+    await crearMedioPago(A, { slug: "tarjeta", nombre: "Tarjeta" })
+    await cambiar([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 3, listaId: listaRef }])
+    await cambiar([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 3, listaId: listaTransf }])
+    const [mp] = await listarMediosPago(A)
+    expect(mp.condicionesCuotas).toHaveLength(1)
+    expect(mp.condicionesCuotas[0].listaId).toBe(listaTransf)
+  })
+
+  it("las condiciones de otro tenant no aparecen", async () => {
+    await crearMedioPago(A, { slug: "tarjeta", nombre: "Tarjeta" })
+    await crearMedioPago(B, { slug: "tarjeta", nombre: "Tarjeta" })
+    await cambiar([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 3, listaId: listaRef }])
+    const [mpB] = await listarMediosPago(B)
+    expect(mpB.condicionesCuotas).toEqual([])
+  })
+})

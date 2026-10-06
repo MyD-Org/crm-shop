@@ -11,7 +11,7 @@ import type { VistaCatalogo } from "@/lib/catalogo-url";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
-import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
+import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { badgeProducto } from "@/components/badge-producto";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";

@@ -14,7 +14,6 @@ import {
 import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
-import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
@@ -137,9 +136,8 @@ async function CatalogoResultados({ searchParams }: Props) {
   // - las facetas cruzan los grupos: las marcas se cuentan dentro de las categorías tildadas y
   //   las categorías dentro de las marcas tildadas, para que la lista no ofrezca marcas ajenas a
   //   lo que se está viendo; el rango de precio sale del conjunto filtrado sin el propio rango;
-  // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos o error) ⇒ el
-  //   catálogo sale sin cuotas.
-  const [pagina, oferta, categoriasTotales] = await Promise.all([
+  // - las cuotas sin interés viajan en cada producto (flag `cuotas-cobro`; sin él, ninguna).
+  const [pagina, categoriasTotales] = await Promise.all([
     buscarEnShop(
       {
         consulta: estado.query,
@@ -160,13 +158,13 @@ async function CatalogoResultados({ searchParams }: Props) {
         soloVisibles,
         disp,
         destacado: mediosPrecio?.destacado,
+        cuotas: mediosPrecio?.cuotas,
         conPlanDeUrl: estado.ia === IA_PLAN,
         conFacetas: true,
         busquedaIa: conBusquedaIa,
         motorUnico: conMotorUnico,
       },
     ),
-    getOfertaCuotas(),
     // El número de cada categoría del panel: el total del catálogo, no el de la búsqueda ni los
     // filtros. Una sola clave de la caché compartida, para todos los visitantes.
     categoriasTotalesPublicas(soloVisibles, dispGeneral),
@@ -208,7 +206,6 @@ async function CatalogoResultados({ searchParams }: Props) {
         // El filtro "Con stock en <local>" sólo tiene sentido con más de un local.
         facetas={{ ...facetas, categorias: categoriasTotales, ...(locales.length > 1 ? { locales } : {}) }}
         filtrosSinBusqueda={filtrosSinBusqueda}
-        oferta={oferta}
         busquedaIa={busquedaIa}
         etapa={pagina.etapa}
       />

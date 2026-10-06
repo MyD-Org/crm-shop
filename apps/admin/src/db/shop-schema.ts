@@ -75,7 +75,7 @@ export const shopOrders = shop.table("orders", {
   // Operador que registró/anuló el último pago offline (0017 del Shop). Sin FK, como estadoActualizado*.
   pagoRegistradoPor: uuid("pago_registrado_por"),
   pagoRegistradoPorNombre: text("pago_registrado_por_nombre"),
-  // 'cobro_duplicado' | 'pagado_cancelado' | null. Lo escribe el Shop al registrar cada cobro.
+  // 'cobro_duplicado' | 'pagado_cancelado' | 'cuotas_distintas' | 'monto_distinto' | null. Lo escribe el Shop al registrar cada cobro.
   pagoRevision: text("pago_revision"),
 
   // --- Estado + auditoría del último cambio ---

@@ -34,8 +34,20 @@ export interface MedioPagoDto {
   listaOnlineId: string | null
   listaOnlineNombre: string | null
   listaOnlineActiva: boolean
+  /**
+   * Cuotas sin interés (rebanada D): una condición por cantidad N >= 2, con la lista online cuyo
+   * precio se divide en N. Ascendentes. Sólo tienen efecto en el Shop para un medio con cobro en línea.
+   */
+  condicionesCuotas: CondicionCuotasDto[]
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
+}
+
+export interface CondicionCuotasDto {
+  cuotas: number
+  listaId: string
+  listaNombre: string
+  listaActiva: boolean
 }
 
 export type MedioPagoConAvisos = MedioPagoDto & { avisos: string[] }
@@ -46,7 +58,11 @@ export interface CondicionMedio {
   listaActiva: boolean
 }
 
-export const toMedioPagoDto = (r: Fila, cond: CondicionMedio | null = null): MedioPagoDto => ({
+export const toMedioPagoDto = (
+  r: Fila,
+  cond: CondicionMedio | null = null,
+  condicionesCuotas: CondicionCuotasDto[] = [],
+): MedioPagoDto => ({
   slug: r.slug,
   nombre: r.nombre,
   instrucciones: r.instrucciones,
@@ -58,6 +74,7 @@ export const toMedioPagoDto = (r: Fila, cond: CondicionMedio | null = null): Med
   listaOnlineId: cond?.listaId ?? null,
   listaOnlineNombre: cond?.listaNombre ?? null,
   listaOnlineActiva: cond?.listaActiva ?? false,
+  condicionesCuotas,
   destacarEnCatalogo: r.destacarEnCatalogo,
   mostrarEnFicha: r.mostrarEnFicha,
 })
@@ -85,7 +102,8 @@ export async function listarMediosPago(tenantId: string): Promise<MedioPagoDto[]
     .where(eq(mediosPagoShop.tenantId, tenantId))
     .orderBy(asc(mediosPagoShop.orden), asc(mediosPagoShop.nombre))
   const conds = await condicionesDePagoUnico(tenantId)
-  return filas.map((f) => toMedioPagoDto(f, conds.get(f.slug) ?? null))
+  const cuotas = await condicionesDeCuotas(tenantId)
+  return filas.map((f) => toMedioPagoDto(f, conds.get(f.slug) ?? null, cuotas.get(f.slug) ?? []))
 }
 
 /** Condición de pago único (cuotas NULL) de cada medio: slug -> lista enlazada. */
@@ -101,6 +119,30 @@ async function condicionesDePagoUnico(tenantId: string, ej: Pick<ReturnType<type
     .innerJoin(listasPrecioOnline, eq(listasPrecioOnline.id, listaPrecioCondiciones.listaId))
     .where(and(eq(listaPrecioCondiciones.tenantId, tenantId), sql`${listaPrecioCondiciones.cuotas} IS NULL`))
   return new Map<string, CondicionMedio>(filas.map((f) => [f.slug, f]))
+}
+
+/** Condiciones de cuotas (N >= 2) de cada medio: slug -> condiciones ascendentes. */
+async function condicionesDeCuotas(tenantId: string, ej: Pick<ReturnType<typeof getDb>, "select"> = getDb()) {
+  const filas = await ej
+    .select({
+      slug: listaPrecioCondiciones.medioSlug,
+      cuotas: listaPrecioCondiciones.cuotas,
+      listaId: listasPrecioOnline.id,
+      listaNombre: listasPrecioOnline.nombre,
+      listaActiva: listasPrecioOnline.activa,
+    })
+    .from(listaPrecioCondiciones)
+    .innerJoin(listasPrecioOnline, eq(listasPrecioOnline.id, listaPrecioCondiciones.listaId))
+    .where(and(eq(listaPrecioCondiciones.tenantId, tenantId), sql`${listaPrecioCondiciones.cuotas} IS NOT NULL`))
+    .orderBy(asc(listaPrecioCondiciones.cuotas))
+  const porMedio = new Map<string, CondicionCuotasDto[]>()
+  for (const f of filas) {
+    if (f.cuotas === null) continue
+    const arr = porMedio.get(f.slug) ?? []
+    arr.push({ cuotas: f.cuotas, listaId: f.listaId, listaNombre: f.listaNombre, listaActiva: f.listaActiva })
+    porMedio.set(f.slug, arr)
+  }
+  return porMedio
 }
 
 /** Listas de precio online activas del tenant (para el selector de cada medio). */
@@ -235,7 +277,8 @@ async function actualizarEnTx(
       .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.slug, slug)))
       .returning()
     const cond = (await condicionesDePagoUnico(tenantId, tx)).get(slug) ?? null
-    return { kind: "ok", medio: toMedioPagoDto(fila, cond) }
+    const cuotas = (await condicionesDeCuotas(tenantId, tx)).get(slug) ?? []
+    return { kind: "ok", medio: toMedioPagoDto(fila, cond, cuotas) }
   })
 }
 

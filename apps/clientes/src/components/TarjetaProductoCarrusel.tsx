@@ -7,11 +7,10 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
-import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { etiquetaStock, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
@@ -35,11 +34,9 @@ function LightbulbIcon({ className }: { className?: string }) {
  */
 export function TarjetaProductoCarrusel({
   producto,
-  oferta,
   imagenDecorativa,
 }: {
   producto: Product;
-  oferta: OfertaCuotas | null;
   imagenDecorativa?: string;
 }) {
   // Precio especial de la cuenta: todas las tarjetas se piden en una sola tanda.
@@ -100,7 +97,7 @@ export function TarjetaProductoCarrusel({
         installments={
           <>
             <PrecioMedioCard medio={p.precioMedio} />
-            <CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />
+            <CuotasCard opcion={mejorOpcionCuotas(p.cuotasSinInteres?.opciones)} />
           </>
         }
       />

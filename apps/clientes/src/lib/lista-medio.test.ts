@@ -74,3 +74,45 @@ describe("pagoParaCotizar", () => {
     expect(pagoParaCotizar(todos, "retiro", A).listaKey).not.toBe("5");
   });
 });
+
+describe("idListaDelMedio con cuotas sin interés (rebanada D)", () => {
+  const mp = medio({
+    slug: "mercadopago",
+    cobroOnline: true,
+    idListaPrecios: "L1",
+    condicionesCuotas: [
+      { cuotas: 3, idListaPrecios: "L3" },
+      { cuotas: 6, idListaPrecios: "L6" },
+    ],
+  });
+
+  it("N cuotas toma la lista de ESA condición, no la del pago único", () => {
+    expect(idListaDelMedio([mp], "retiro", "mercadopago", undefined, 6)).toBe("L6");
+    expect(idListaDelMedio([mp], "retiro", "mercadopago", undefined, 3)).toBe("L3");
+  });
+
+  it("un pago (1 o sin cuotas) usa la lista del pago único", () => {
+    expect(idListaDelMedio([mp], "retiro", "mercadopago", undefined, 1)).toBe("L1");
+    expect(idListaDelMedio([mp], "retiro", "mercadopago")).toBe("L1");
+    expect(idListaDelMedio([mp], "retiro", "mercadopago", undefined, null)).toBe("L1");
+  });
+
+  it("una cantidad sin condición no inventa lista: undefined (rige la referencia)", () => {
+    expect(idListaDelMedio([mp], "retiro", "mercadopago", undefined, 12)).toBeUndefined();
+  });
+
+  it("sin lista de pago único pero con condiciones: un pago rige la referencia, N cuotas su lista", () => {
+    const sinUnico = { ...mp, idListaPrecios: null };
+    expect(idListaDelMedio([sinUnico], "retiro", "mercadopago", undefined, 1)).toBeUndefined();
+    expect(idListaDelMedio([sinUnico], "retiro", "mercadopago", undefined, 6)).toBe("L6");
+  });
+
+  it("sólo cuenta si el medio aplica a la modalidad y está activo", () => {
+    expect(idListaDelMedio([{ ...mp, activo: false }], "retiro", "mercadopago", undefined, 6)).toBeUndefined();
+    expect(idListaDelMedio([{ ...mp, aplicaEnvio: false }], "envio", "mercadopago", undefined, 6)).toBeUndefined();
+  });
+
+  it("sin credenciales de Mercado Pago el medio no aplica: sin lista", () => {
+    expect(idListaDelMedio([mp], "retiro", "mercadopago", { mpDisponible: false }, 6)).toBeUndefined();
+  });
+});

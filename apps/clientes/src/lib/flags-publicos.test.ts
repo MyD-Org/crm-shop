@@ -38,7 +38,7 @@ describe("flagsPublicos", () => {
 
   it("refleja catalogo-solo-visibles y cuotas", async () => {
     setFlag("catalogo-solo-visibles", true);
-    setFlag("cuotas", true);
+    setFlag("cuotas-cobro", true);
     const f = await flagsPublicos();
     expect(f.soloVisibles).toBe(true);
     expect(f.cuotas).toBe(true);
@@ -53,6 +53,25 @@ describe("flagsPublicos", () => {
     const { mediosPrecio } = await flagsPublicos();
     expect(mediosPrecio.destacado?.slug).toBe("aa");
     expect(mediosPrecio.ficha.map((m) => m.slug)).toEqual(["cc", "bb"]);
+  });
+
+  it("mediosPrecio.cuotas: sólo con el flag cuotas-cobro y un medio de cobro en línea con condiciones", async () => {
+    const mp = medio("mercadopago", {
+      cobroOnline: true,
+      idListaPrecios: null,
+      condicionesCuotas: [{ cuotas: 6, idListaPrecios: "L6" }],
+    });
+    mediosOfrecibles.mockResolvedValue([mp]);
+    expect((await flagsPublicos()).mediosPrecio.cuotas).toBeUndefined();
+    setFlag("cuotas-cobro", true);
+    // La lectura se deduplica por request (`cache` de React): se reimporta para un request nuevo.
+    vi.resetModules();
+    const { flagsPublicos: nuevo } = await import("./flags-publicos");
+    expect((await nuevo()).mediosPrecio.cuotas).toEqual({
+      slug: "mercadopago",
+      nombre: "MERCADOPAGO",
+      condiciones: [{ cuotas: 6, idListaPrecios: "L6" }],
+    });
   });
 
   it("con precio-especial-cuenta encendido: sin líneas 'con X'", async () => {

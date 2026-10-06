@@ -1,24 +1,18 @@
 /**
- * Tipos neutrales de cuotas (v2: config por proveedor).
+ * Tipos LEGADOS del plan de cuotas por proveedor (cuotas v2: escalones + planes de Mercado Pago).
  *
- * Ningún campo es propio de un proveedor: los adaptadores (Mercado Pago hoy)
- * normalizan a `PlanDeCuotas` y el CRM publica `ProveedorConfigurado` según el
- * contrato v2 (espejo en MyD-Org/platform/contracts/cuotas/v2).
- *
- * Sin imports de server ni de proveedor: lo usan el motor puro
- * (src/lib/cuotas.ts) y componentes de cliente.
+ * El motor, el contrato v2, la sync y el cron se retiraron con `listas-precio-online` (rebanada D):
+ * las cuotas ahora son sin interés por lista (`src/lib/cuotas-sin-interes.ts`). Estos tipos quedan
+ * SÓLO porque tipan columnas jsonb que siguen en la base y que los pedidos históricos conservan
+ * (`orders.cuotas_plan`, `payment_plan_snapshots.planes`): se leen igual, nadie las escribe.
  */
 
-/**
- * Plan real del proveedor para una marca y una cantidad de cuotas. El snapshot
- * se guarda por marca (visa, master), pero la oferta es por proveedor: el motor
- * junta las marcas quedándose con la tasa más alta.
- */
+/** Plan real del proveedor para una marca y una cantidad de cuotas (snapshot histórico). */
 export interface PlanDeCuotas {
   proveedor: string;
   medio: string;
   cuotas: number;
-  /** Recargo % sobre el precio contado. 0 = sin interés (lo define el proveedor). */
+  /** Recargo % sobre el precio contado. 0 = sin interés. */
   tasaPct: number;
   cftPct: number | null;
   teaPct: number | null;
@@ -26,72 +20,8 @@ export interface PlanDeCuotas {
   montoMax: number | null;
 }
 
-/** Escalón configurado en el CRM: desde `montoMinimo` (con IVA) se ofrece hasta `cuotasMax`. */
-export interface EscalonCuotas {
-  id: string;
-  /** 1..24. */
-  cuotasMax: number;
-  /** ≥ 0, ARS con IVA. */
-  montoMinimo: number;
-}
-
-/** Proveedor de pagos configurado en el CRM. Aplica a todas las tarjetas de crédito. */
-export interface ProveedorConfigurado {
-  id: string;
-  /** Id del proveedor: 'mercadopago'. Coincide con `ProveedorCuotas.id`. */
-  proveedor: string;
-  nombre: string;
-  activo: boolean;
-  orden: number;
-  /**
-   * Cantidad de cuotas que el admin eligió exhibir en card y ficha (2..24). null o ausente =
-   * Automático (regla de `mejorOpcion`). Campo aditivo del contrato v2: cachés viejas no lo traen.
-   */
-  cuotasCatalogo?: number | null;
-  /** Ordenados por `montoMinimo` ascendente. */
-  escalones: EscalonCuotas[];
-}
-
-/** Payload de GET {CRM}/api/internal/shop/cuotas?tenant=… */
-export interface ContratoCuotasV2 {
-  version: "v2";
-  tenant: string;
-  /** ISO 8601. */
-  actualizadoEn: string;
-  proveedores: ProveedorConfigurado[];
-}
-
-/** Cantidad de cuotas del snapshot del proveedor (ya juntadas las marcas). */
-export interface OpcionOfertada {
-  cuotas: number;
-  /** Tasa 0 del proveedor. */
-  sinInteres: boolean;
-  tasaPct: number;
-  cftPct: number | null;
-  teaPct: number | null;
-  montoMin: number | null;
-  montoMax: number | null;
-}
-
-/** Oferta compacta y serializable: viaja como prop al cliente. */
-export interface OfertaCuotas {
-  proveedores: {
-    proveedor: string;
-    nombre: string;
-    orden: number;
-    /** Cantidad elegida en el admin para card y ficha; null/ausente = Automático. */
-    cuotasCatalogo?: number | null;
-    /** Válidos, ordenados por monto mínimo ascendente. */
-    escalones: { cuotasMax: number; montoMinimo: number }[];
-    /** Cantidades de 2 a 24 del snapshot, ascendentes. "1 pago" siempre existe. */
-    opciones: OpcionOfertada[];
-  }[];
-  planesFetchedAt: string | null;
-  configVersion: string | null;
-}
-
-/** Opción calculada para un monto base concreto. */
-export interface OpcionCuotas {
+/** Opción calculada del plan congelado en un pedido histórico. */
+export interface OpcionPlanLegado {
   proveedor: string;
   proveedorNombre: string;
   cuotas: number;
@@ -103,15 +33,6 @@ export interface OpcionCuotas {
   sinInteres: boolean;
 }
 
-/** Próximo escalón ("Le faltan $X para hasta N cuotas"). */
-export interface Escalon {
-  /** Cantidad efectiva que se habilita (la mayor del snapshot ≤ cuotasMax). */
-  cuotas: number;
-  montoMinimo: number;
-  /** montoMinimo − base, redondeado hacia arriba al centavo. */
-  faltante: number;
-}
-
 /** Plan congelado en el pedido (orders.cuotas_plan). Filas viejas pueden traer v1. */
 export interface PlanPedido {
   version: "v2";
@@ -120,5 +41,5 @@ export interface PlanPedido {
   planesFetchedAt: string | null;
   totalBase: number;
   cuotasMax: number;
-  opciones: OpcionCuotas[];
+  opciones: OpcionPlanLegado[];
 }

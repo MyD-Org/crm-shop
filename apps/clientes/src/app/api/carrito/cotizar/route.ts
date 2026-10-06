@@ -14,7 +14,11 @@ import { cuentaParaVistaPrevia } from "@/lib/cuenta-transferencia";
 import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
+import { cuotasHabilitadas } from "@/lib/cuotas-flag";
+import { cuotasElegidas, repartirCuotas } from "@/lib/cuotas-sin-interes";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
+import { mediosParaModalidad } from "@/lib/medios-pago";
 import { precioEspecialCuenta } from "@/lib/precio-especial-flag";
 
 /**
@@ -42,6 +46,10 @@ function ipDe(req: Request): string | null {
 /**
  * POST /api/carrito/cotizar
  * Body: { items: [{ id, qty }], entregaTipo?, provincia?, pagoMetodo? }
+ * `cuotas` (flag `cuotas-cobro`, sólo medio con cobro en línea): cuotas sin interés elegidas; cotiza con
+ * la lista de esa condición y se rechaza (422) una cantidad sin condición. `conCuotas: true` (checkout)
+ * suma `cuotasOpciones`: total y cuota de cada cantidad (1 pago incluido), cada una con la lista de SU
+ * condición.
  * `pagoMetodo`: slug del medio de pago elegido. La lista de precios sale SOLO de ahí (medio activo que
  * aplica a la modalidad, releído sin caché); el body nunca trae lista ni precios. Con el flag
  * `precio-especial-cuenta` prendido se ignora y rige la lista propia del cliente.
@@ -82,6 +90,8 @@ export async function POST(req: Request) {
     conCuenta?: unknown;
     sucursalRetiro?: unknown;
     pagoMetodo?: unknown;
+    cuotas?: unknown;
+    conCuotas?: unknown;
   };
   try {
     body = await req.json();
@@ -120,21 +130,56 @@ export async function POST(req: Request) {
     // Lista del medio elegido (servidor, desde el slug). Sin medio, o con el flag del precio
     // especial prendido, no hay lista de medio: carrito y retiro cotizan como siempre.
     const pagoMetodo = typeof body.pagoMetodo === "string" ? body.pagoMetodo.trim().slice(0, 40) : "";
-    const idListaMedio =
-      pagoMetodo && !(await precioEspecialCuenta())
-        ? idListaDelMedio(await leerMediosPagoTolerante(), entregaTipo, pagoMetodo)
-        : undefined;
+    const sinMedioEspecial = pagoMetodo && !(await precioEspecialCuenta());
+    const mediosCrm = sinMedioEspecial ? await leerMediosPagoTolerante() : [];
+    // Cuotas sin interés: sólo con el flag y un medio con cobro en línea. Cada cantidad es otra lista.
+    const medioCobro = mediosParaModalidad(mediosCrm, entregaTipo).find((m) => m.slug === pagoMetodo);
+    const conCuotas = Boolean(sinMedioEspecial && medioCobro?.cobroOnline && (await cuotasHabilitadas()));
+    let cuotas = 1;
+    if (conCuotas) {
+      const elegidas = cuotasElegidas(body.cuotas, medioCobro?.condicionesCuotas);
+      if (!elegidas.ok) {
+        return NextResponse.json(
+          { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },
+          { status: 422 },
+        );
+      }
+      cuotas = elegidas.cuotas;
+    }
+    const idListaMedio = sinMedioEspecial ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotas) : undefined;
     // Flag `disponibilidad-sucursal`: stock por sucursal (unión) y disponibilidad por modalidad.
     const base = await dispDelVisitante();
     const provincia = provinciaTexto ? claveProvincia(provinciaTexto) : "";
     const disp = base ? await contextoParaProvincia(base, provincia || null) : undefined;
-    const cotizacion = await cotizar(lineas, {
-      soloVisibles: await catalogoSoloVisibles(),
-      idPriceList,
-      idListaMedio,
-      entregaTipo,
-      disp: disp ? contextoUnion(disp) : undefined,
-    });
+    const soloVisibles = await catalogoSoloVisibles();
+    const opcionesCotizar = { soloVisibles, idPriceList, entregaTipo, disp: disp ? contextoUnion(disp) : undefined };
+    const cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio });
+    // Selector del checkout: el total de cada cantidad de cuotas es el de SU lista (varias cotizaciones
+    // en paralelo, sólo con `conCuotas`). Los montos salen del servidor, nunca del navegador.
+    const cuotasOpciones =
+      conCuotas && body.conCuotas === true && medioCobro
+        ? (
+            await Promise.all(
+              [
+                // Un pago: la lista del pago único del medio (o la de referencia si no tiene).
+                { cuotas: 1, idListaPrecios: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1) },
+                ...(medioCobro.condicionesCuotas ?? []),
+              ].map(async (c) => {
+                const q = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: c.idListaPrecios });
+                if (q.hayProblemas || !(q.total > 0)) return null;
+                const partes = repartirCuotas(q.total, c.cuotas);
+                return {
+                  cuotas: c.cuotas,
+                  total: q.total,
+                  montoCuota: partes[partes.length - 1],
+                  primeraCuota: partes[0],
+                };
+              }),
+            )
+          )
+            .filter((o): o is NonNullable<typeof o> => o !== null)
+            .sort((a, b) => a.cuotas - b.cuotas)
+        : undefined;
     const disponibilidad = await disponibilidadParaMostrar(
       lineas.map((l) => l.id),
       disp,
@@ -170,6 +215,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ...cotizacion,
+      ...(cuotasOpciones ? { cuotasOpciones } : {}),
       ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
       envio: evaluarEnvio(cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),

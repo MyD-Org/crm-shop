@@ -38,7 +38,7 @@ const tx = {
       return {
         onConflictDoNothing: () => ({
           returning: async () => [
-            { id: "ped-1", numero: 1000, cuotasMax: null },
+            { id: "ped-1", numero: 1000, cuotas: null },
           ],
         }),
       };
@@ -296,7 +296,7 @@ describe("crearPedido con disponibilidad por sucursal", () => {
   });
 
   it("reintento idempotente: devuelve el pedido existente sin bloquear ni asignar", async () => {
-    existente = [{ id: "ped-0", numero: 999, cuotasMax: null }];
+    existente = [{ id: "ped-0", numero: 999, cuotas: null }];
     const r = await crear({
       idempotencyKey: "0b1b0b1b-0b1b-4b1b-8b1b-0b1b0b1b0b1b",
     });

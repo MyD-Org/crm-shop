@@ -29,6 +29,8 @@ export type MotivoRechazo =
   | "fondos"
   | "limite"
   | "cuotas_no_disponibles"
+  /** La cantidad de cuotas del pago no es la congelada en el pedido (otra lista de precios). */
+  | "cuotas_distintas"
   /** Se resuelve rehaciendo el intento, sin cambiar nada. */
   | "desafio_vencido"
   /** Requiere que el cliente hable con su banco. */
@@ -58,6 +60,8 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
     "El monto supera el límite de su tarjeta. Pruebe con otra, en cuotas, o por transferencia.",
   cuotas_no_disponibles:
     "Esa cantidad de cuotas no está disponible para su tarjeta. Elija otra opción de cuotas.",
+  cuotas_distintas:
+    "La cantidad de cuotas no coincide con la seleccionada. Vuelva a elegir su medio de pago.",
   desafio_vencido:
     "Se venció el tiempo para validar el pago con su banco. Vuelva a intentarlo y complete la validación apenas se la pida.",
   banco_rechazo:

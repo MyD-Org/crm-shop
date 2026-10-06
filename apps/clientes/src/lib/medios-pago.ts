@@ -7,6 +7,7 @@
  * confirmar" sin cobro, salvo `mercadopago` (fila fija con `cobroOnline`), que dispara el cobro en
  * línea. Esa fila sólo se ofrece si hay credenciales: el servidor lo resuelve (`mpDisponible`).
  */
+import type { CondicionCuotas } from "./cuotas-sin-interes";
 import { PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
 
 export interface MedioPago {
@@ -25,6 +26,11 @@ export interface MedioPago {
    * resuelve el servidor desde el slug: el cliente nunca manda una lista.
    */
   idListaPrecios: string | null;
+  /**
+   * Cuotas sin interés del medio (rebanada D): una condición por cantidad N >= 2, con la lista online
+   * cuyo precio se divide en N. Sólo se usa en el medio de cobro en línea. Ausente = sin cuotas.
+   */
+  condicionesCuotas?: CondicionCuotas[];
   /** El catálogo muestra "$X con <Medio>" bajo el precio (a lo sumo un medio por tenant). */
   destacarEnCatalogo: boolean;
   /** La ficha del producto muestra una línea "$X con <Medio>" (cualquier cantidad de medios). */
@@ -37,9 +43,24 @@ export const SLUG_MERCADOPAGO = "mercadopago";
 /** Slug que el admin no puede usar: es el valor de respaldo cuando ningún medio aplica. */
 export const SLUGS_RESERVADOS: readonly string[] = ["a_coordinar"];
 
+/**
+ * Qué procesador de cobro atiende a cada medio de pago con cobro en línea (id del registro de
+ * `pagos/index.ts`). El procesador se elige POR MEDIO, no es global: pueden convivir varios activos
+ * (cada medio apunta al suyo). Sumar otro procesador = su adaptador + una línea acá. La lógica de
+ * cuotas (condiciones, cuota, congelado, validación, reconciliación) no depende de esta tabla.
+ */
+export const PROCESADOR_DE_MEDIO: Readonly<Record<string, string>> = {
+  [SLUG_MERCADOPAGO]: "mercadopago",
+};
+
+/** Id del procesador que cobra este medio; null = el medio no se cobra en línea. */
+export function procesadorDeMedio(slug: string): string | null {
+  return Object.hasOwn(PROCESADOR_DE_MEDIO, slug) ? PROCESADOR_DE_MEDIO[slug] : null;
+}
+
 /** ¿Este `pago_metodo` se cobra en línea? */
 export function esPagoEnLinea(slug: string): boolean {
-  return slug === SLUG_MERCADOPAGO;
+  return procesadorDeMedio(slug) !== null;
 }
 
 export interface OpcionesMedios {

@@ -8,6 +8,7 @@
  * que el general), no este módulo.
  */
 import type { EntregaTipo } from "./envio";
+import { idListaDeCuotas } from "./cuotas-sin-interes";
 import { mediosParaModalidad, type MedioPago, type OpcionesMedios } from "./medios-pago";
 
 export function idListaDelMedio(
@@ -15,10 +16,18 @@ export function idListaDelMedio(
   entrega: EntregaTipo,
   slug: string | null | undefined,
   opts?: OpcionesMedios,
+  /**
+   * Cuotas sin interés elegidas (rebanada D). N >= 2 toma la lista de la condición (medio, N); 1 o
+   * ausente, la del pago único. Una cantidad sin condición no inventa lista (rige la referencia):
+   * quien acepta la cantidad la valida antes con `cuotasElegidas`.
+   */
+  cuotas?: number | null,
 ): string | undefined {
   if (!slug) return undefined;
   const medio = mediosParaModalidad(medios, entrega, opts).find((m) => m.slug === slug);
-  return medio?.idListaPrecios || undefined;
+  if (!medio) return undefined;
+  if (typeof cuotas === "number" && cuotas >= 2) return idListaDeCuotas(medio.condicionesCuotas, cuotas);
+  return medio.idListaPrecios || undefined;
 }
 
 /**

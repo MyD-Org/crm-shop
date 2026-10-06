@@ -20,7 +20,7 @@ import { GET } from "./route";
 
 beforeEach(() => {
   pendiente.mockReset();
-  pendiente.mockResolvedValue({ id: "p1", numero: "PED-1", total: 1000, cuotasMax: 6 });
+  pendiente.mockResolvedValue({ id: "p1", numero: "PED-1", total: 1000, cuotas: 6 });
   vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
   vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-key");
 });
@@ -39,7 +39,7 @@ describe("GET /api/pedidos/pendiente", () => {
   it("con credenciales: devuelve el pendiente", async () => {
     const r = await GET();
     expect(await r.json()).toEqual({
-      pedido: { id: "p1", numero: "PED-1", total: 1000, cuotasMax: 6 },
+      pedido: { id: "p1", numero: "PED-1", total: 1000, cuotas: 6 },
     });
     expect(pendiente).toHaveBeenCalledTimes(1);
   });

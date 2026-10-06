@@ -29,6 +29,7 @@ type ColumnaDeAlegra =
   | "alegra_status"
   | "brand"
   | "iva_porcentaje"
+  | "costo"
   | "raw"
   | "images"
   | "alegra_leido_at"
@@ -52,6 +53,8 @@ const SET_POR_FRESCURA = {
   alegraStatus: segunFrescura("alegra_status"),
   brand: segunFrescura("brand"),
   ivaPorcentaje: segunFrescura("iva_porcentaje"),
+  // `costo_aplicado` NO está acá a propósito: lo gobierna la retención por variación de costo.
+  costo: segunFrescura("costo"),
   raw: segunFrescura("raw"),
   images: segunFrescura("images"),
   alegraLeidoAt: segunFrescura("alegra_leido_at"),
@@ -76,6 +79,7 @@ function fila(tenantId: string, it: AlegraProduct, leidoAt: Date, leidoPor: Leid
     alegraStatus: it.status,
     brand: it.brand,
     ivaPorcentaje: it.ivaPorcentaje != null ? String(it.ivaPorcentaje) : null,
+    costo: it.costo != null ? String(it.costo) : null,
     raw: it.raw,
     images: it.images,
     syncedAt: ahora,

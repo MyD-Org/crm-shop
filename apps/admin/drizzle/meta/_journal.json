@@ -442,6 +442,13 @@
       "when": 1791805500000,
       "tag": "0062_cuotas_catalogo",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1791892000000,
+      "tag": "0063_costo_espejo",
+      "breakpoints": true
     }
   ]
 }

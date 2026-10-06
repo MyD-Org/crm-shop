@@ -156,6 +156,19 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
     ])
   })
 
+  it("shop_app no puede pedir costo por la vista: la columna no existe", async () => {
+    expect(await comoShopApp("SELECT costo FROM public.catalog_products_shop")).toEqual({ ok: false, code: "42703" })
+    expect(await comoShopApp("SELECT costo_aplicado FROM public.catalog_products_shop")).toEqual({ ok: false, code: "42703" })
+  })
+
+  it("la vista no expone el costo (0063): ninguna columna costo*", async () => {
+    const cols = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'catalog_products_shop' AND column_name LIKE 'costo%'
+    `
+    expect(cols).toHaveLength(0)
+  })
+
   it("catalog_categories_shop tiene exactamente 5 columnas, en orden", async () => {
     const cols = await sql`
       SELECT column_name, data_type FROM information_schema.columns
@@ -247,6 +260,9 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
   it.each([
     "SELECT 1 FROM public.catalog_products LIMIT 1",
     "SELECT raw FROM public.catalog_products",
+    // 0063: el costo vive solo en el CRM; shop_app no lo ve ni por la tabla ni por la vista.
+    "SELECT costo FROM public.catalog_products",
+    "SELECT costo_aplicado FROM public.catalog_products",
     "UPDATE public.catalog_products SET stock = 0",
     "SELECT 1 FROM public.catalog_categories LIMIT 1",
     "UPDATE public.catalog_categories SET name = 'x'",

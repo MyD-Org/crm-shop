@@ -580,16 +580,12 @@ export function medidasDeConsulta(consultaCruda: string): Medida[] {
 // Gate
 // ---------------------------------------------------------------------------------------------
 
-/** `2x20`, `4x16a`: lexical, sin contexto. */
-const RE_NXM_TOKEN = /^\d{1,2}x\d{1,3}a?$/;
-/** `60x60`, `120x240`. */
-const RE_AXB_TOKEN = /^\d{2,4}x\d{2,4}$/;
-
 /**
- * ¿Este token suelto ES una medida y no un código de producto? ("20a", "ip65", "e27", "9w", "2x20").
- * Forma léxica + validación de rango con el parser: "12000k", "ip70" y "9999999w" siguen siendo
- * código. `NxM` es puramente léxico (no hay contexto en una palabra sola). Lo que tiene guion,
- * barra o un prefijo de letras ("DL-18W", "TM-2x16", "XQ-4471B", "c16") nunca es medida.
+ * ¿Este token suelto ES una medida y no un código de producto? ("20a", "ip65", "e27", "9w").
+ * Lo decide el parser (forma + rango): "12000k", "ip70" y "9999999w" siguen siendo código. "2x20" y
+ * "60x60" también: sin contexto ("termica", "panel") el parser no emite medida, así que una palabra
+ * sola de ese estilo queda como código. Lo que tiene guion, barra o un prefijo de letras ("DL-18W",
+ * "TM-2x16", "XQ-4471B", "c16") nunca es medida.
  *
  * Lo usa `pareceCodigo` (gate.ts): un token que es medida deja de contar como código.
  */
@@ -597,6 +593,5 @@ export function esTokenMedida(token: string): boolean {
   if (typeof token !== "string") return false;
   const t = preparar(token);
   if (!t || t.length > 24 || /\s/.test(t)) return false;
-  if (RE_NXM_TOKEN.test(t) || RE_AXB_TOKEN.test(t)) return true;
   return medidasDeConsulta(t).length > 0;
 }

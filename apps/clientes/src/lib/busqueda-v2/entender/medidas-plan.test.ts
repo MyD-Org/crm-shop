@@ -503,3 +503,33 @@ describe("coberturaConContar", () => {
     expect(contar.mock.calls.filter(([f]) => !f.conClaves)).toHaveLength(1);
   });
 });
+
+describe("consulta de SOLO medida: la medida también viaja como id dinámico (para que recupere y ordene)", () => {
+  it("'ip65' (Jev/diccionario ya puso apto-exterior): suma ip:65 al diccionario", async () => {
+    const base = plan("ip65", [], { blandos: { categorias: [{ nombre: "Reflectores", peso: 0.5 }], atributos: [{ id: "apto-exterior", peso: 0.9 }], terminos: [] } });
+    const { plan: r, ids } = await aplicarMedidasConIds(base, "ip65", deps());
+    expect(blandosDe(r)).toMatchObject({ "apto-exterior": 0.9, "ip:65": PESO_MEDIDA_BLANDA });
+    expect(ids).toEqual(expect.arrayContaining(["apto-exterior", "ip:65"]));
+  });
+
+  it("'e27' y '12v' sin otro término: el id del diccionario y el dinámico", async () => {
+    const e27 = await aplicarMedidas(plan("e27", []), "e27", deps());
+    expect(blandosDe(e27)).toMatchObject({ "zocalo-e27": PESO_MEDIDA_BLANDA, "zocalo:e27": PESO_MEDIDA_BLANDA });
+    const v12 = await aplicarMedidas(plan("12v", [], {}, ["12v"]), "12v", deps());
+    expect(blandosDe(v12)).toMatchObject({ "tension-12v": PESO_MEDIDA_BLANDA, "tension_v:12": PESO_MEDIDA_BLANDA });
+  });
+
+  it("con un término que recupera ('lampara e27', 'tira 12v') sigue SIN id dinámico duplicado (R6.8)", async () => {
+    const r = await aplicarMedidas(plan("lampara e27", ["lampara"]), "lampara e27", deps());
+    expect(r.blandos.atributos.some((a) => a.id === "zocalo:e27")).toBe(false);
+    const t = await aplicarMedidas(plan("tira 12v", ["tira"], {}, ["12v"]), "tira 12v", deps());
+    expect(t.blandos.atributos.some((a) => a.id === "tension_v:12")).toBe(false);
+  });
+
+  it("'6ka' y '9w': ya traen su id dinámico (blando) y el plan los deja listos para recuperar", async () => {
+    const ka = await aplicarMedidas(plan("6ka", [], {}, ["6ka"]), "6ka", deps());
+    expect(blandosDe(ka)).toEqual({ "poder_corte_ka:6": PESO_MEDIDA_BLANDA });
+    const w = await aplicarMedidas(plan("9w", [], {}, ["9w"]), "9w", deps());
+    expect(blandosDe(w)).toEqual({ "potencia_w:9": PESO_POTENCIA_EXACTA, "potencia_w:8-10": PESO_POTENCIA_BANDA });
+  });
+});

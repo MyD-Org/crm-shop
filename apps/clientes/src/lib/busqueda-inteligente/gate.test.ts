@@ -11,14 +11,14 @@ describe("pareceCodigo", () => {
   });
 
   describe("un token que es una medida pura no es código (busqueda-medidas, R2.1)", () => {
-    it.each(["20a", "ip65", "e27", "9w", "6ka", "4000k", "24v", "30ma", "gu10", "2x20", "60x60", "20A", "E27", "IP65", "9,5w", "2.5mm2"])(
+    it.each(["20a", "ip65", "e27", "9w", "6ka", "4000k", "24v", "30ma", "gu10", "20A", "E27", "IP65", "9,5w", "2.5mm2"])(
       "%s no es código",
       (q) => {
         expect(pareceCodigo(q)).toBe(false);
       },
     );
 
-    it.each(["DL-18W", "TM-2x16", "XQ-4471B", "C479056476B7", "NXB-125", "c16", "100", "7791234567890", "4471b", "220/12"])(
+    it.each(["DL-18W", "TM-2x16", "XQ-4471B", "C479056476B7", "NXB-125", "c16", "100", "7791234567890", "4471b", "220/12", "2x20", "60x60", "4x16a"])(
       "%s sigue siendo código",
       (q) => {
         expect(pareceCodigo(q)).toBe(true);
@@ -27,6 +27,10 @@ describe("pareceCodigo", () => {
 
     it.each(["12000k", "ip70", "ip6", "9999999w", "e2", "e99"])("%s tiene la forma de una medida pero fuera de rango: sigue siendo código", (q) => {
       expect(pareceCodigo(q)).toBe(true);
+    });
+
+    it("NxM sin contexto ('2x20', '60x60') no es medida: el parser no la emite, así que sigue siendo código", () => {
+      for (const q of ["2x20", "60x60", "4x16a"]) expect(pareceCodigo(q), q).toBe(true);
     });
 
     it("un número de 3 o más cifras sin unidad es código aunque sea un valor posible", () => {

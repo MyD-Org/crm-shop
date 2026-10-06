@@ -216,6 +216,9 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
   const ids: string[] = [];
   const blandos: { id: string; peso: number }[] = [];
   const candidatasDuras: Candidata[] = [];
+  // Consulta de SOLO medida (ningún término recupera): la medida también viaja como id dinámico, que es
+  // lo que recupera (`esSoloMedida`); el del diccionario (e27, 12 V, apto exterior) sólo ordena.
+  const soloMedida = terminosQueRecuperan(base).length === 0;
   const yaEnElPlan = (id: string) => base.duros.atributos.includes(id) || base.blandos.atributos.some((a) => a.id === id);
   const registrar = (id: string) => {
     if (!ids.includes(id)) ids.push(id);
@@ -229,6 +232,11 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
     if (dic) {
       registrar(dic);
       if (!yaEnElPlan(dic)) blandos.push({ id: dic, peso: PESO_MEDIDA_BLANDA });
+      const dinamico = soloMedida ? idDeMedida({ clave: m.clave, op: m.op, valor: m.valor, min: m.min, max: m.max }) : null;
+      if (dinamico) {
+        registrar(dinamico);
+        blandos.push({ id: dinamico, peso: PESO_MEDIDA_BLANDA });
+      }
       continue;
     }
 

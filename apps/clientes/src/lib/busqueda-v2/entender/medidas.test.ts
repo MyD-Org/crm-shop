@@ -329,12 +329,12 @@ describe("R1.8 pureza y robustez", () => {
   });
 });
 
-describe("esTokenMedida (forma léxica + rango; NxM puro léxico)", () => {
-  it.each(["20a", "ip65", "e27", "9w", "6ka", "4000k", "24v", "30ma", "gu10", "2x20", "60x60", "20A", "E27", "9,5w", "2.5mm2", "5m"])("%s es medida", (t) => {
+describe("esTokenMedida (lo decide el parser: forma + rango; NxM sin contexto no es medida)", () => {
+  it.each(["20a", "ip65", "e27", "9w", "6ka", "4000k", "24v", "30ma", "gu10", "20A", "E27", "9,5w", "2.5mm2", "5m"])("%s es medida", (t) => {
     expect(esTokenMedida(t)).toBe(true);
   });
 
-  it.each(["DL-18W", "TM-2x16", "XQ-4471B", "C479056476B7", "NXB-125", "c16", "100", "7791234567890", "12000k", "ip70", "9999999w", "4471b", "220/12", "", "  ", "termica", "9w/m", "lampara 9w"])("%s sigue siendo código o texto", (t) => {
+  it.each(["DL-18W", "TM-2x16", "XQ-4471B", "C479056476B7", "NXB-125", "c16", "100", "7791234567890", "12000k", "ip70", "9999999w", "4471b", "2x20", "60x60", "4x16a", "220/12", "", "  ", "termica", "9w/m", "lampara 9w"])("%s sigue siendo código o texto", (t) => {
     expect(esTokenMedida(t)).toBe(false);
   });
 

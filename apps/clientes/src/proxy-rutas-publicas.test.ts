@@ -101,6 +101,37 @@ describe("proxy: RUTAS_PUBLICAS", () => {
   });
 });
 
+describe("proxy: webhook de pagos (caracterización MP)", () => {
+  afterEach(() => {
+    delete process.env.SITE_AUTH_USER;
+    delete process.env.SITE_AUTH_PASSWORD;
+    clerk.mockReset();
+  });
+
+  it("el webhook de Mercado Pago llega al handler con el gate activo", async () => {
+    process.env.SITE_AUTH_USER = "equipo";
+    process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";
+    const { proxy } = await import("./proxy");
+    const r = await proxy(
+      new NextRequest("https://tienda.example/api/pagos/mercadopago/webhook", { method: "POST", body: "{}" }),
+      {} as never,
+    );
+    expect(r.headers.get("x-middleware-next")).toBe("1");
+    expect(clerk).not.toHaveBeenCalled();
+  });
+
+  it("control: la ruta de cobro (con sesión) sí pasa por el gate", async () => {
+    process.env.SITE_AUTH_USER = "equipo";
+    process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";
+    const { proxy } = await import("./proxy");
+    const r = await proxy(
+      new NextRequest("https://tienda.example/api/pagos/mercadopago", { method: "POST", body: "{}" }),
+      {} as never,
+    );
+    expect(r.headers.get("content-type")).toContain("text/html");
+  });
+});
+
 /**
  * El logo de los mails se sirve desde public/images: si el proxy corre sobre
  * esa ruta, con el gate puesto la URL devuelve la página de "Próximamente" y el

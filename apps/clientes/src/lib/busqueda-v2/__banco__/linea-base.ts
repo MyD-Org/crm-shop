@@ -30,7 +30,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getArbolCategorias } from "@/lib/catalog";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
-import { cargarBancoDeArgs } from "./args";
+import { cargarBancoDeArgs, estadoMedidas } from "./args";
 import { compararMatrices, leerSnapshot } from "./comparar";
 import { correr, gitInfo } from "./corrida";
 import { crearEjecutor, resolverJev } from "./ejecutores";
@@ -51,7 +51,7 @@ function leeme(a: ArgsLinea, sha: { sha: string; sucio: boolean }, fecha: string
     `Generada el ${fecha} sobre el commit ${sha.sha}${sha.sucio ? " (con cambios sin commitear)" : ""}.`,
     "",
     "Para reproducirla (en apps/clientes, mismo commit, mismo banco y misma base):",
-    `  npm run banco:linea-base -- --solo-visibles=${a.soloVisibles ? "si" : "no"}${flags ? ` --flags=${flags}` : ""}${a.bancoReal ? ` --banco-real=${a.bancoReal}` : ""} --repeticiones=${a.repeticiones} --calentar=${a.calentar}${a.jevVivo ? " --jev=vivo" : ""}${a.motor ? " --motor" : ""}`,
+    `  npm run banco:linea-base -- --solo-visibles=${a.soloVisibles ? "si" : "no"}${flags ? ` --flags=${flags}` : ""}${a.bancoReal ? ` --banco-real=${a.bancoReal}` : ""} --repeticiones=${a.repeticiones} --calentar=${a.calentar}${a.jevVivo ? " --jev=vivo" : ""}${a.motor ? " --motor" : ""}${a.medidas ? "" : " --medidas=no"}`,
     "",
     "Contenido:",
     "  matriz.json  todas las corridas con su cabecera (banco real: consultas enmascaradas)",
@@ -89,7 +89,7 @@ async function main(a: ArgsLinea) {
   for (const [i, e] of plan.entries()) {
     const vista = e.vista === "banco" ? VISTA_ACTUAL : vistaProduccion(a.soloVisibles);
     const jev = resolverJev(e.jev, false);
-    const ejecutor = crearEjecutor({ tuberia: e.tuberia, jev, vista, arbol, estructurados, soloVisiblesDelPlan: a.soloVisibles, politica: e.politica, superficie: e.superficie });
+    const ejecutor = crearEjecutor({ tuberia: e.tuberia, jev, vista, arbol, estructurados, soloVisiblesDelPlan: a.soloVisibles, politica: e.politica, superficie: e.superficie, medidas: a.medidas });
     const banco = e.banco === "real" && real ? real.banco : sintetico;
     const { json } = await correr(
       {
@@ -104,6 +104,7 @@ async function main(a: ArgsLinea) {
         repeticiones: a.repeticiones,
         calentar: a.calentar,
         flagsDeclarados: a.flags,
+        busquedaMedidas: estadoMedidas(e.tuberia, a.medidas),
         verConsultas: false,
         tenantAlias: a.tenantAlias,
       },

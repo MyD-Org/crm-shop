@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cargarBancoDeArgs, parsearArgs } from "./args";
+import { cargarBancoDeArgs, estadoMedidas, parsearArgs } from "./args";
 import { BANCO } from "./banco";
 import { hashBanco } from "./cargar-banco";
 
@@ -40,6 +40,36 @@ describe("parsearArgs: defaults (sin flags nuevos == comportamiento actual)", ()
   it("flags legados: --salida, --solo=diagnostico, --ver", () => {
     const a = parsearArgs(["--umbral=70", "--salida=reporte.txt", "--solo=diagnostico", "--ver=3"]);
     expect(a).toMatchObject({ umbral: 70, salida: "reporte.txt", solo: "diagnostico", ver: 3 });
+  });
+});
+
+describe("parsearArgs: --medidas (busqueda-medidas)", () => {
+  it("por defecto el banco aplica las medidas (el estado queda declarado en la cabecera)", () => {
+    expect(parsearArgs([]).medidas).toBe(true);
+  });
+
+  it("--medidas=si|no", () => {
+    expect(parsearArgs(["--medidas=si"]).medidas).toBe(true);
+    expect(parsearArgs(["--medidas=no"]).medidas).toBe(false);
+  });
+
+  it("un valor inválido falla", () => {
+    expect(() => parsearArgs(["--medidas=tal"])).toThrow(/--medidas debe ser si\|no/);
+    expect(() => parsearArgs(["--medidas"])).toThrow(/--medidas debe ser si\|no/);
+  });
+
+  it("no cambia los demás defaults", () => {
+    expect(parsearArgs(["--medidas=no"])).toMatchObject({ tuberia: "v2", jev: "grabado", umbral: 85 });
+  });
+});
+
+describe("estadoMedidas (cabecera de la corrida)", () => {
+  it("v2 y motor declaran on/off; las demás tuberías no usan el plan: no aplica", () => {
+    expect(estadoMedidas("v2", true)).toBe("on");
+    expect(estadoMedidas("v2", false)).toBe("off");
+    expect(estadoMedidas("motor", true)).toBe("on");
+    expect(estadoMedidas("motor", false)).toBe("off");
+    for (const t of ["clasica", "tolerante", "fase1"] as const) expect(estadoMedidas(t, true)).toBe("no aplica");
   });
 });
 

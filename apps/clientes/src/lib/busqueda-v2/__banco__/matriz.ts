@@ -109,9 +109,11 @@ export interface ArgsLinea {
   tenantAlias: string;
   /** `--comparar=<ruta>`: matriz.json (o carpeta que lo contiene) de una línea base congelada, para imprimir el delta. */
   comparar?: string;
+  /** `--medidas=si|no` (por defecto si): aplicar las medidas al plan en v2 y motor (ver `ArgsBanco.medidas`). */
+  medidas: boolean;
 }
 
-const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias", "motor", "comparar"]);
+const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias", "motor", "comparar", "medidas"]);
 
 const entero = (nombre: string, v: string | undefined, min: number, def: number): number => {
   if (v === undefined) return def;
@@ -144,8 +146,12 @@ export function parsearArgsLinea(argv: readonly string[]): ArgsLinea {
   const etiquetas = (mapa.get("etiquetas") ?? "revisado") as ModoEtiquetas;
   if (etiquetas !== "revisado" && etiquetas !== "todas") throw new Error("--etiquetas debe ser revisado|todas.");
 
+  const medidas = mapa.get("medidas");
+  if (medidas !== undefined && medidas !== "si" && medidas !== "no") throw new Error("--medidas debe ser si|no.");
+
   return {
     soloVisibles: sv === "si",
+    medidas: medidas !== "no",
     flags,
     ...(mapa.has("banco-real") ? { bancoReal: mapa.get("banco-real") } : {}),
     etiquetas,
@@ -209,6 +215,10 @@ export function formatearMatriz(corridas: readonly CorridaDeMatriz[]): string {
     `repeticiones ${primera.repeticiones}, calentamiento ${primera.calentar}`,
     `snapshot: ${JSON.stringify(primera.snapshot)}`,
   ];
+
+  // Lo que aplicó la tubería con plan (`--medidas=si|no`); el flag de arriba es lo que se declaró de Vercel.
+  const aplicadas = corridas.find((c) => c.tuberia === "v2" || c.tuberia === "motor")?.reporte.cabecera.busquedaMedidas;
+  if (aplicadas && aplicadas !== "no aplica") lineas.push(`medidas aplicadas (v2/motor): ${aplicadas}`);
 
   const bancos = [...new Set(corridas.map((c) => c.banco))];
   for (const banco of bancos) {

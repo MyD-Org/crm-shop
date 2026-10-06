@@ -8,7 +8,7 @@
  * sobreviva a `vi.resetModules()` (los tests que reimportan con `await import`).
  */
 export type FlagDeTest = "cuotas" | "catalogo-solo-visibles" | "chat-ia" | "sucursales" | "disponibilidad-sucursal" | "busqueda-ia" | "tracking" | "precio-especial-cuenta"
-  | "busqueda-motor-unico";
+  | "busqueda-motor-unico" | "busqueda-medidas";
 
 type Estado = Record<FlagDeTest, boolean>;
 
@@ -20,7 +20,7 @@ export function estadoFlags(): Estado {
 }
 
 export function apagados(): Estado {
-  return { cuotas: false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, tracking: false, "precio-especial-cuenta": false, "busqueda-motor-unico": false };
+  return { cuotas: false, "catalogo-solo-visibles": false, "chat-ia": false, sucursales: false, "disponibilidad-sucursal": false, "busqueda-ia": false, tracking: false, "precio-especial-cuenta": false, "busqueda-motor-unico": false, "busqueda-medidas": false };
 }
 
 export function setFlag(flag: FlagDeTest, valor: boolean) {

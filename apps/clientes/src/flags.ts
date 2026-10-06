@@ -79,3 +79,11 @@ export const busquedaMotorUnicoFlag = flag<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 });
+
+export const busquedaMedidasFlag = flag<boolean>({
+  key: "busqueda-medidas",
+  description:
+    "Búsqueda por medidas: la consulta ('termica 2x20', 'lampara 9w e27') suma filtros y orden por medida técnica al plan. Apagado: la búsqueda queda como antes (sin ids de medida)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});

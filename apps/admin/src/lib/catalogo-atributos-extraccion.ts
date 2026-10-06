@@ -649,9 +649,9 @@ const RE_TUBO =
   /(?:^|[^0-9a-z])(?:canos?|tubos?|corrugad[oa]s?|(?:cablecanal|cable canal|canaleta)s? redond[oa]s?)(?![0-9a-z])/
 /** Accesorios de caño: con la palabra de caño/tubo, o sin ella sólo si el diámetro viene marcado ("ø25"). */
 const RE_ACCESORIO_TUBO = /(?:^|[^0-9a-z])(?:conector(?:es)?|union(?:es)?|curvas?|grampas?|cuplas?|codos?|boquillas?)(?![0-9a-z])/
-/** Lo que lleva "tubo" o "mm" pero no es un caño con diámetro: luces, herramientas, conductores, perfiles. */
+/** Lo que lleva "tubo" o "mm" pero no es un caño con diámetro: luces, herramientas, conductores, perfiles, medidas en cm. */
 const NO_DIAMETRO =
-  /(?:^|[^0-9a-z])(?:leds?|vidrio|nano|estanco|liston|fluorescentes?|lamparas?|llaves?|hexagonal(?:es)?|kits?|mangueras?|abrazaderas?|conductor(?:es)?|empalmes?|perfil(?:es)?|cuadrad[oa]s?|rectangulares?)(?![0-9a-z])|\d ?(?:w|watts?)(?![0-9a-z])|mm ?2|mm²/
+  /(?:^|[^0-9a-z])(?:leds?|vidrio|nano|estanco|liston|fluorescentes?|lamparas?|llaves?|hexagonal(?:es)?|kits?|mangueras?|abrazaderas?|conductor(?:es)?|empalmes?|perfil(?:es)?|cuadrad[oa]s?|rectangulares?|colgantes?|tijeras?|alargador(?:es)?)(?![0-9a-z])|\d ?(?:w|watts?|cm)(?![0-9a-z])|mm ?2|mm²/
 const NUM_DIAMETRO = "\\d{1,3}(?:[.,]\\d+)?"
 /** "ø25", "Ø 25mm", "diámetro 25", "D:50mm": el diámetro dicho explícito. */
 const RE_DIAMETRO_EXPLICITO = new RegExp(
@@ -679,7 +679,7 @@ const RE_BANDEJA = /(?:^|[^0-9a-z])bandejas?(?![0-9a-z])/
 /** "Articulada" sin la palabra bandeja ("CURVA ARTICULADA 250/50"): sólo con el par ancho/alto y un ancho de la serie. */
 const RE_ARTICULADA = /(?:^|[^0-9a-z])articulad[oa]s?(?![0-9a-z])/
 const NO_BANDEJA =
-  /(?:^|[^0-9a-z])(?:magnetic[oa]s?|pintura|rodillo|horno|cocina|desayuno|asado|parrilla|escritorio|organizador|cubiertos|herramientas?|lamparas?|brazos?|leds?|soportes?)(?![0-9a-z])|\d ?(?:w|watts?|v)(?![0-9a-z])/
+  /(?:^|[^0-9a-z])(?:magnetic[oa]s?|pintura|rodillo|horno|cocina|desayuno|asado|parrilla|escritorio|organizador|cubiertos|herramientas?|lamparas?|brazos?|leds?|soportes?|rack)(?![0-9a-z])|\d ?(?:w|watts?|v|u)(?![0-9a-z])|19 ?(?:"|pulgadas?)|(?:^|[^0-9a-z])p\. ?\d/
 /** Anchos comerciales de bandeja portacables, en mm. */
 const ANCHOS_BANDEJA = new Set([50, 75, 100, 150, 200, 250, 300, 400, 450, 500, 600])
 /** "100/50": ancho/alto. Un "1200/5A" (relación de transformador) no entra: la unidad pegada lo descarta. */

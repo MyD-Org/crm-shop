@@ -549,6 +549,9 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["TUBO 300 MM", {}],
       ["LAMPARA 120CM", {}],
       ["CAÑO DOS DIAMETROS 20MM Y 25MM", {}],
+      ["Colgante globo caño 10x1 Ø 60 cm, 3 luces", {}],
+      ["TIJERA PARA CAÑO DE PVC HASTA 42mm", {}],
+      ["ALARGADOR DE 125MM PARA TUBOS DE 1/2\"", {}],
     ])("%s", (nombre, esperado) => expect(diaAncho(nombre as string)).toEqual(esperado))
 
     it("la descripción no aporta diámetro (solo el nombre)", () => {
@@ -581,6 +584,9 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["LAMPARA ARTICULADA 12W", {}],
       ["BRAZO ARTICULADO 100", {}],
       ["CABLE 1200/5A", {}],
+      // Bandejas de rack de 19": "P." es la profundidad, no un ancho de bandeja portacables.
+      ["Bandeja fija ciega 19\" regulable P. 600/800 mm", {}],
+      ["Bandeja fija ventilada 19\" x 1U P. 300 mm", {}],
     ])("%s", (nombre, esperado) => expect(diaAncho(nombre as string)).toEqual(esperado))
   })
 

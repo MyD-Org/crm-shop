@@ -120,6 +120,28 @@ describe("proxy: webhook de pagos (caracterización MP)", () => {
     expect(clerk).not.toHaveBeenCalled();
   });
 
+  it("el webhook genérico de cualquier procesador llega al handler con el gate activo", async () => {
+    process.env.SITE_AUTH_USER = "equipo";
+    process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";
+    const { proxy } = await import("./proxy");
+    const r = await proxy(
+      new NextRequest("https://tienda.example/api/pagos/payway/webhook", { method: "POST", body: "{}" }),
+      {} as never,
+    );
+    expect(r.headers.get("x-middleware-next")).toBe("1");
+    expect(clerk).not.toHaveBeenCalled();
+  });
+
+  it("control: el cobro genérico (con sesión) y rutas parecidas siguen pasando por el gate", async () => {
+    process.env.SITE_AUTH_USER = "equipo";
+    process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";
+    const { proxy } = await import("./proxy");
+    for (const ruta of ["/api/pagos/payway", "/api/pagos/payway/otra/webhook", "/api/pagos/webhook"]) {
+      const r = await proxy(new NextRequest(`https://tienda.example${ruta}`, { method: "POST", body: "{}" }), {} as never);
+      expect(r.headers.get("content-type"), ruta).toContain("text/html");
+    }
+  });
+
   it("control: la ruta de cobro (con sesión) sí pasa por el gate", async () => {
     process.env.SITE_AUTH_USER = "equipo";
     process.env.SITE_AUTH_PASSWORD = "clave-de-prueba";

@@ -20,6 +20,7 @@ export type PagoMetodo =
   | "efectivo"
   | "cuenta_corriente"
   | "mercadopago"
+  | "payway"
   // Sin medio de pago: un asesor lo coordina después de confirmado el pedido.
   // Es el único método válido cuando ningún medio de `medios_pago_shop` aplica a la entrega.
   | "a_coordinar";
@@ -66,6 +67,7 @@ export const PAGO_LABEL: Record<PagoMetodo, string> = {
   efectivo: "Efectivo en el local",
   cuenta_corriente: "Cuenta corriente",
   mercadopago: "Tarjeta o Mercado Pago",
+  payway: "Tarjeta (Payway)",
   a_coordinar: "A coordinar con un asesor",
 };
 

@@ -4,7 +4,7 @@ vi.mock("next/cache", () => ({ cacheLife: () => {}, cacheTag: () => {} }));
 vi.mock("./medios-pago-repo", () => ({ leerMediosPago: vi.fn() }));
 
 import { leerMediosPago } from "./medios-pago-repo";
-import { mediosOfrecibles, sinMpSiNoConfigurado } from "./medios-pago-datos";
+import { mediosOfrecibles, sinProcesadoresNoConfigurados } from "./medios-pago-datos";
 import type { MedioPago } from "./medios-pago";
 
 const medio = (slug: string): MedioPago => ({
@@ -36,10 +36,10 @@ describe("mediosOfrecibles", () => {
     vi.mocked(leerMediosPago).mockResolvedValue([medio("transferencia"), medio("mercadopago")]);
     expect((await mediosOfrecibles()).map((m) => m.slug)).toEqual(["transferencia"]);
   });
-  it("sinMpSiNoConfigurado no muta la lista de entrada", () => {
+  it("sinProcesadoresNoConfigurados no muta la lista de entrada", () => {
     vi.stubEnv("MP_ACCESS_TOKEN", "");
     const entrada = [medio("mercadopago")];
-    expect(sinMpSiNoConfigurado(entrada)).toEqual([]);
+    expect(sinProcesadoresNoConfigurados(entrada)).toEqual([]);
     expect(entrada).toHaveLength(1);
   });
 });

@@ -15,7 +15,7 @@ import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { enviarEmail } from "./email";
 import { etiquetaEntrega } from "./envio";
 import { contactoDeSucursal } from "./contacto-pedido-repo";
-import { nombreDelPago } from "./medios-pago";
+import { esPagoEnLinea, nombreDelPago } from "./medios-pago";
 import { leerMediosPagoTolerante } from "./medios-pago-repo";
 import { urlSitioMail } from "./mail-layout";
 import {
@@ -108,7 +108,7 @@ async function enviarAviso(
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
-      pagoPendienteEnLinea: pedido.pagoMetodo === "mercadopago" && pedido.pagoEstado !== "pagado",
+      pagoPendienteEnLinea: esPagoEnLinea(pedido.pagoMetodo) && pedido.pagoEstado !== "pagado",
       // Transferencia: la cuenta congelada en el pedido (nunca se vuelve a resolver).
       ...(aviso === "recibido" && transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta)
         ? { transferencia: transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta) }

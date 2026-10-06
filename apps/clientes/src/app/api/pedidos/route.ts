@@ -18,7 +18,7 @@ import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { mediosParaModalidad, pagoValidoConMedios } from "@/lib/medios-pago";
-import { mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
+import { procesadorConfigurado } from "@/lib/pagos";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { idPriceListUsable } from "@/lib/alegra";
 import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
@@ -252,12 +252,12 @@ export async function POST(req: Request) {
   }
   // Se valida contra lo de ESTE momento, no contra lo que ofreció la pantalla: el método es el
   // `slug` de un medio activo del CRM que aplica a la modalidad (releídos SIN caché: la decisión
-  // que escribe un pedido no usa lo cacheado). `mercadopago` además exige credenciales en el Shop.
+  // que escribe un pedido no usa lo cacheado). un medio con cobro en línea además exige credenciales de su procesador en el Shop.
   // Si ningún medio aplica (tabla ausente, vacía o sin medios para la modalidad) sólo vale
   // "a_coordinar"; con medios aplicables, "a_coordinar" no entra.
   const mediosCrm = await leerMediosPagoTolerante();
   const pagoValido = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, {
-    mpDisponible: mercadoPagoConfigurado(),
+    procesadorDisponible: procesadorConfigurado,
   });
   if (!pagoValido) {
     return NextResponse.json(
@@ -378,7 +378,7 @@ export async function POST(req: Request) {
     // se acepta únicamente si el medio tiene una condición para ella; cada cantidad es una lista de
     // precios distinta, y esa lista cotiza el pedido. Con el flag apagado (o el precio especial
     // prendido) no hay cuotas: el pedido no las congela y el cobro sigue como siempre.
-    const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, { mpDisponible: mercadoPagoConfigurado() }).find(
+    const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, { procesadorDisponible: procesadorConfigurado }).find(
       (m) => m.slug === pagoMetodo,
     );
     let cuotasPedido: number | null = null;

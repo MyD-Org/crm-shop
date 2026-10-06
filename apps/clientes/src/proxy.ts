@@ -25,6 +25,8 @@ const GATE_PATH = "/__gate";
  * falla que se descubre cuando un cliente reclama que pagó y no le llegó nada.
  */
 const RUTAS_PUBLICAS = [
+  // Webhook de Mercado Pago (URL registrada en su panel). Los de otros procesadores, por
+  // `/api/pagos/<proveedor>/webhook`, entran por `esWebhookDePago`.
   "/api/pagos/mercadopago/webhook",
   // El aviso del CRM de que el catálogo cambió (Bearer SHOP_CRM_SECRET): no tiene cookie de
   // gate. Sin esto la cortina responde 200 con HTML, el CRM lo toma por éxito y el aviso se
@@ -42,6 +44,15 @@ const RUTAS_PUBLICAS = [
   // y responde 404 con el flag `chat-ia` apagado.
   "/api/chat-ia/buscar",
 ];
+
+/**
+ * Webhook genérico de un procesador de pago: `/api/pagos/<proveedor>/webhook`. Lo llama el servidor
+ * del procesador, sin cookie de gate ni sesión; mismo motivo que `RUTAS_PUBLICAS`. La ruta responde
+ * 404 si el proveedor no existe o no avisa por webhook, así que abrirlas todas no expone nada.
+ */
+function esWebhookDePago(pathname: string): boolean {
+  return /^\/api\/pagos\/[a-z0-9_-]+\/webhook$/.test(pathname);
+}
 
 /**
  * Next 16 admite UNA sola función proxy por proyecto, así que el gate del sitio
@@ -67,7 +78,7 @@ function safeEqual(a: string, b: string) {
 export async function proxy(request: NextRequest, event: NextFetchEvent) {
   // Antes que nada, y antes del gate: estas rutas las llama un servidor externo
   // que no tiene cookies ni sesión. Ver RUTAS_PUBLICAS.
-  if (RUTAS_PUBLICAS.includes(request.nextUrl.pathname)) {
+  if (RUTAS_PUBLICAS.includes(request.nextUrl.pathname) || esWebhookDePago(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
 

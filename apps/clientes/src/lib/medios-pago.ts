@@ -5,7 +5,8 @@
  *
  * El paso Pago ofrece estos medios y `orders.pago_metodo` guarda el `slug`. Todos quedan "a
  * confirmar" sin cobro, salvo `mercadopago` (fila fija con `cobroOnline`), que dispara el cobro en
- * línea. Esa fila sólo se ofrece si hay credenciales: el servidor lo resuelve (`mpDisponible`).
+ * línea. Ese medio sólo se ofrece si su procesador tiene credenciales: el servidor lo resuelve
+ * (`procesadorDisponible`).
  */
 import type { CondicionCuotas } from "./cuotas-sin-interes";
 import { PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
@@ -18,7 +19,7 @@ export interface MedioPago {
   activo: boolean;
   aplicaRetiro: boolean;
   aplicaEnvio: boolean;
-  /** Sólo la fila fija `mercadopago`: dispara el cobro en línea. */
+  /** Sólo las filas fijas de cobro en línea (`mercadopago`, `payway`): disparan el cobro. */
   cobroOnline: boolean;
   orden: number;
   /**
@@ -58,6 +59,11 @@ export function procesadorDeMedio(slug: string): string | null {
   return Object.hasOwn(PROCESADOR_DE_MEDIO, slug) ? PROCESADOR_DE_MEDIO[slug] : null;
 }
 
+/** Slugs de los medios que se cobran en línea (los que tienen procesador). */
+export function slugsPagoEnLinea(): string[] {
+  return Object.keys(PROCESADOR_DE_MEDIO);
+}
+
 /** ¿Este `pago_metodo` se cobra en línea? */
 export function esPagoEnLinea(slug: string): boolean {
   return procesadorDeMedio(slug) !== null;
@@ -65,10 +71,24 @@ export function esPagoEnLinea(slug: string): boolean {
 
 export interface OpcionesMedios {
   /**
-   * ¿Hay credenciales de Mercado Pago en el Shop? Por defecto sí (la lógica es pura: el servidor
-   * decide). Con `false` la fila `mercadopago` no se ofrece ni se acepta aunque esté activa.
+   * ¿El procesador de cobro (id del registro de `pagos/index.ts`) tiene credenciales en el Shop? La
+   * lógica es pura: el servidor pasa `procesadorConfigurado`. Un medio con cobro en línea cuyo
+   * procesador no está disponible no se ofrece ni se acepta aunque esté activo. Por defecto, todos.
+   */
+  procesadorDisponible?: (procesadorId: string) => boolean;
+  /**
+   * Atajo heredado: `false` oculta el procesador del medio `mercadopago`. Lo pisa
+   * `procesadorDisponible` si viene. Los llamadores nuevos usan `procesadorDisponible`.
    */
   mpDisponible?: boolean;
+}
+
+/** ¿Se puede ofrecer este medio con las credenciales que hay? Los medios manuales siempre. */
+function medioOfrecible(slug: string, opts: OpcionesMedios): boolean {
+  const procesador = procesadorDeMedio(slug);
+  if (procesador === null) return true;
+  if (opts.procesadorDisponible) return opts.procesadorDisponible(procesador);
+  return slug === SLUG_MERCADOPAGO ? (opts.mpDisponible ?? true) : true;
 }
 
 /** Nota del paso Pago: con los medios manuales el pedido queda "a confirmar", sin cobro. */
@@ -77,18 +97,25 @@ export const NOTA_PAGO_A_CONFIRMAR =
 
 /** Pie bajo "Confirmar pedido" según el medio elegido (la transferencia lo arma el checkout). */
 export const PIE_MERCADOPAGO = "Al confirmar el pedido, pasará a pagar con Mercado Pago.";
+/** Pie del medio con cobro en línea, por procesador; sin entrada propia, el genérico. */
+const PIE_EN_LINEA: Readonly<Record<string, string>> = {
+  mercadopago: PIE_MERCADOPAGO,
+};
+export const PIE_EN_LINEA_GENERICO = "Al confirmar el pedido, pasará a pagar en línea.";
 export const PIE_A_COORDINAR = "No se le cobrará nada ahora. Un asesor coordinará el pago con usted.";
 export const PIE_GENERICO = "No se le cobra nada ahora. Coordinamos el pago al confirmar el pedido.";
 
 /** Pie para el medio elegido; `null` = no hay medio aplicable (el pedido sale "a_coordinar"). */
 export function pieDelMedio(medio: MedioPago | null): string {
   if (!medio) return PIE_A_COORDINAR;
-  return esPagoEnLinea(medio.slug) ? PIE_MERCADOPAGO : PIE_GENERICO;
+  const procesador = procesadorDeMedio(medio.slug);
+  if (procesador === null) return PIE_GENERICO;
+  return PIE_EN_LINEA[procesador] ?? PIE_EN_LINEA_GENERICO;
 }
 
 /**
  * Medios que se ofrecen para la modalidad: activos, que aplican a ella y sin slugs reservados (y sin
- * Mercado Pago si faltan credenciales), en el orden que fijó el operador (empate: por nombre, para
+ * el medio cuyo procesador no tiene credenciales), en el orden que fijó el operador (empate: por nombre, para
  * que el resultado sea estable).
  */
 export function mediosParaModalidad(
@@ -96,13 +123,12 @@ export function mediosParaModalidad(
   entrega: EntregaTipo,
   opts: OpcionesMedios = {},
 ): MedioPago[] {
-  const mpDisponible = opts.mpDisponible ?? true;
   return medios
     .filter(
       (m) =>
         m.activo &&
         !SLUGS_RESERVADOS.includes(m.slug) &&
-        (mpDisponible || m.slug !== SLUG_MERCADOPAGO) &&
+        medioOfrecible(m.slug, opts) &&
         (entrega === "retiro" ? m.aplicaRetiro : m.aplicaEnvio),
     )
     .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, "es"));

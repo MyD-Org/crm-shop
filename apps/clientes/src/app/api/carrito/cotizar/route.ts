@@ -18,7 +18,7 @@ import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { condicionesAplicables, cuotasElegidas, proximoEscalon, repartirCuotas } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
-import { mediosParaModalidad } from "@/lib/medios-pago";
+import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
 import { precioEspecialCuenta } from "@/lib/precio-especial-flag";
 
 /**
@@ -130,7 +130,9 @@ export async function POST(req: Request) {
     // Lista del medio elegido (servidor, desde el slug). Sin medio, o con el flag del precio
     // especial prendido, no hay lista de medio: carrito y retiro cotizan como siempre.
     const pagoMetodo = typeof body.pagoMetodo === "string" ? body.pagoMetodo.trim().slice(0, 40) : "";
-    const sinMedioEspecial = pagoMetodo && !(await precioEspecialCuenta());
+    // Cuenta corriente: su único medio es el de su audiencia, sin cuotas ni lista por medio.
+    const esCuentaCorriente = esCompradorCuentaCorriente(cliente);
+    const sinMedioEspecial = pagoMetodo && !esCuentaCorriente && !(await precioEspecialCuenta());
     const mediosCrm = sinMedioEspecial ? await leerMediosPagoTolerante() : [];
     // Cuotas sin interés: sólo con el flag y un medio con cobro en línea. Cada cantidad es otra lista.
     const medioCobro = mediosParaModalidad(mediosCrm, entregaTipo).find((m) => m.slug === pagoMetodo);
@@ -210,7 +212,7 @@ export async function POST(req: Request) {
     // sesión). Se resuelve con lecturas cacheadas y el total cotizado; el pedido la vuelve a
     // resolver sin caché y la congela.
     let cuentaTransferencia: Awaited<ReturnType<typeof cuentaParaVistaPrevia>> | undefined;
-    if (body.conCuenta === true && (clerkUserId || cliente)) {
+    if (body.conCuenta === true && !esCuentaCorriente && (clerkUserId || cliente)) {
       const [cuentas, datos, sucursalesActivas] = await Promise.all([
         cuentasBancariasCacheadas(),
         sucursalesCacheadas(),

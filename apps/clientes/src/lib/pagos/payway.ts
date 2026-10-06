@@ -60,8 +60,21 @@ function baseUrl(): string | null {
  */
 export function paywayConfigurado(): boolean {
   return (
-    Boolean(process.env.PAYWAY_PRIVATE_KEY) && Boolean(process.env.PAYWAY_PUBLIC_KEY) && baseUrl() !== null
+    Boolean(process.env.PAYWAY_API_PRIVATE_KEY) && Boolean(process.env.PAYWAY_API_PUBLIC_KEY) && baseUrl() !== null
   );
+}
+
+/**
+ * Lo que el navegador necesita para tokenizar la tarjeta: la key PÚBLICA (sirve sólo para
+ * `POST /tokens`) y la base de la API. Sale del servidor en runtime, así no hace falta una variable
+ * `NEXT_PUBLIC_*` aparte (que además se hornea en el build). null si el medio no está configurado.
+ * La key privada NUNCA sale de acá.
+ */
+export function paywayConfigPublica(): { publicKey: string; baseUrl: string } | null {
+  const baseUrlOk = baseUrl();
+  const publicKey = process.env.PAYWAY_API_PUBLIC_KEY?.trim();
+  if (!paywayConfigurado() || !baseUrlOk || !publicKey) return null;
+  return { publicKey, baseUrl: baseUrlOk };
 }
 
 interface Deps {
@@ -88,8 +101,8 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
   /** Request a la API. Tira `ErrorProveedor(504)` si no hay respuesta (timeout o red). */
   async function pedir(ruta: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<Respuesta> {
     const base = baseUrl();
-    const key = process.env.PAYWAY_PRIVATE_KEY;
-    if (!base || !key) throw new Error("Falta la configuración de Payway (PAYWAY_PRIVATE_KEY, PAYWAY_BASE_URL).");
+    const key = process.env.PAYWAY_API_PRIVATE_KEY;
+    if (!base || !key) throw new Error("Falta la configuración de Payway (PAYWAY_API_PRIVATE_KEY, PAYWAY_BASE_URL).");
 
     let res: Response;
     try {

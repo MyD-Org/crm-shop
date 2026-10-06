@@ -31,6 +31,19 @@ export interface EnvCsp {
   CSP_REPORT_URI?: string;
   META_PIXEL_ID?: string;
   GA4_MEASUREMENT_ID?: string;
+  /** Payway: sólo si están las dos, y sólo en las páginas de checkout (ver `OpcionesCsp`). */
+  PAYWAY_API_PUBLIC_KEY?: string;
+  PAYWAY_BASE_URL?: string;
+}
+
+export interface OpcionesCsp {
+  /**
+   * Política de las páginas de checkout: suma el host de la API de Payway a `connect-src` (el
+   * formulario de tarjeta tokeniza desde el navegador, `POST {base}/api/v2/tokens`) y el script del SDK
+   * oficial (`decidir.js`) a `script-src`. Sin `frame-src`: el formulario es propio, no hay iframe (y
+   * la huella Cybersource del SDK está desactivada). El resto del sitio no lo recibe.
+   */
+  checkout?: boolean;
 }
 
 /**
@@ -69,6 +82,9 @@ function origenesDeHosts(valor: string | undefined): string[] {
     .map((h) => `https://${h}`);
 }
 
+/** Host que sirve el SDK de front de Payway (`decidir.js`); ver `URL_SDK_PAYWAY` en pagos/payway-token.ts. */
+const PAYWAY_SDK = "https://ventasonline.payway.com.ar";
+
 const MERCADO_PAGO = [
   "https://sdk.mercadopago.com",
   "https://*.mercadopago.com",
@@ -92,7 +108,7 @@ const VERCEL_SCRIPTS_DEV = "https://va.vercel-scripts.com";
 const CLOUDFLARE_CHALLENGES = "https://challenges.cloudflare.com";
 
 /** Arma la política. Sin duplicados y en orden estable. */
-export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
+export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: OpcionesCsp = {}): string {
   const dev = env.NODE_ENV === "development";
 
   // Clerk: su Frontend API (derivada de la key) o, con proxy (`/__clerk`),
@@ -109,6 +125,9 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
     ...(origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL) ? [origenHttps(env.R2_SHOP_MEDIA_PUBLIC_URL)!] : []),
   ];
 
+  const payway =
+    opciones.checkout && env.PAYWAY_API_PUBLIC_KEY?.trim() ? origenHttps(env.PAYWAY_BASE_URL) : null;
+
   const meta = Boolean(env.META_PIXEL_ID?.trim());
   const ga4 = Boolean(env.GA4_MEASUREMENT_ID?.trim());
 
@@ -121,6 +140,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
       ...clerk,
       CLOUDFLARE_CHALLENGES,
       ...MERCADO_PAGO,
+      ...(payway ? [PAYWAY_SDK] : []),
       ...(meta ? [META_SCRIPT] : []),
       ...(ga4 ? [GTM] : []),
       ...(dev ? [VERCEL_SCRIPTS_DEV] : []),
@@ -145,6 +165,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
       ...MERCADO_PAGO,
       // Subidas firmadas (comprobantes de pago, imágenes de la home) directo a R2.
       "https://*.r2.cloudflarestorage.com",
+      ...(payway ? [payway] : []),
       ...(meta ? [META_PIXEL, META_SCRIPT] : []),
       ...(ga4 ? [GTM, ...GA] : []),
       ...(dev ? ["ws:", VERCEL_SCRIPTS_DEV] : []),
@@ -167,7 +188,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp): string {
 }
 
 /** Headers para `headers()` de next.config.ts (todas las rutas). */
-export function headersDeSeguridad(env: EnvCsp = process.env as EnvCsp) {
+export function headersDeSeguridad(env: EnvCsp = process.env as EnvCsp, opciones: OpcionesCsp = {}) {
   return [
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -180,6 +201,6 @@ export function headersDeSeguridad(env: EnvCsp = process.env as EnvCsp) {
     // Sin includeSubDomains ni preload: el dominio raíz puede tener subdominios
     // que no son del Shop y no se decide eso desde acá.
     { key: "Strict-Transport-Security", value: "max-age=63072000" },
-    { key: "Content-Security-Policy-Report-Only", value: politicaCsp(env) },
+    { key: "Content-Security-Policy-Report-Only", value: politicaCsp(env, opciones) },
   ];
 }

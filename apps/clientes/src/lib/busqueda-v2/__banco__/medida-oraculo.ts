@@ -17,6 +17,23 @@ import type { ValorEstructurado } from "@/lib/catalogo-caracteristicas";
 import type { ResultadoBanco } from "./banco";
 import type { BusquedaBanco, MedidaBanco } from "./modelo";
 
+/**
+ * Detalle de UNA medida esperada del caso sobre el top 24 (sólo conteos; los ids de producto son opcionales
+ * y el reporte los escribe únicamente con `--ids`). `duras` = `contradice` si la medida es `dura: true`, si no 0.
+ */
+export interface DetalleMedida {
+  clave: string;
+  /** Valor esperado en texto ("20", "e27", "10-20", "<=50", ">=20"). */
+  valor: string;
+  dura: boolean;
+  con: number;
+  cumple: number;
+  contradice: number;
+  duras: number;
+  /** Ids de los productos del top 24 que contradicen (los que traen id). */
+  contradicen: string[];
+}
+
 export interface EvaluacionMedida {
   /**
    * El plan produjo todas las medidas esperadas (por su id; con `dura` también entre los duros) y ninguna
@@ -36,6 +53,12 @@ export interface EvaluacionMedida {
    * `null` = el caso no es negativo o la tubería no produce medidas.
    */
   falsoPositivo: boolean | null;
+  /** Ids de medida que el plan produjo; ausente = la tubería no produce medidas. */
+  emitidas?: string[];
+  /** De `emitidas`, las que quedaron como filtro duro del plan (`atributosDuros`); ausente junto con `emitidas`. */
+  emitidasDuras?: string[];
+  /** Una entrada por medida esperada (vacío en los casos negativos). */
+  detalle: DetalleMedida[];
 }
 
 const EPSILON = 1e-9;
@@ -77,7 +100,14 @@ const CLAVE_DE_DICCIONARIO: readonly [RegExp, string][] = [
 ];
 
 /** Clave de un id de medida, dinámico (`clave:valor`) o del diccionario equivalente. */
-const claveDeId = (id: string): string | undefined => leerIdMedida(id)?.clave ?? CLAVE_DE_DICCIONARIO.find(([re]) => re.test(id))?.[1];
+export const claveDeId = (id: string): string | undefined => leerIdMedida(id)?.clave ?? CLAVE_DE_DICCIONARIO.find(([re]) => re.test(id))?.[1];
+
+/** Valor esperado como texto: igual, rango o un solo extremo. */
+function valorEsperado(m: MedidaBanco): string {
+  if (m.valor !== undefined) return String(m.valor);
+  if (m.min !== undefined && m.max !== undefined) return `${m.min}-${m.max}`;
+  return m.min !== undefined ? `>=${m.min}` : `<=${m.max}`;
+}
 
 export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionMedida | undefined {
   const esperadas = b.medidas ?? [];
@@ -104,8 +134,10 @@ export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionM
     if (conId.length || sinDe.length) hit = !faltante && !prohibida;
   }
 
+  const trazaPlan = emitidas ? { emitidas: [...emitidas], emitidasDuras: emitidas.filter((id) => r.atributosDuros.includes(id)) } : {};
+
   if (!esperadas.length) {
-    return { hit: null, precision: null, contradicciones: null, cobertura: null, contradiccionesDuras: null, falsoPositivo };
+    return { hit: null, precision: null, contradicciones: null, cobertura: null, contradiccionesDuras: null, falsoPositivo, ...trazaPlan, detalle: [] };
   }
 
   const top = r.productos.slice(0, 24);
@@ -113,17 +145,28 @@ export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionM
   let cumplen = 0;
   let contradicciones = 0;
   let contradiccionesDuras = 0;
+  const detalle: DetalleMedida[] = [];
   for (const m of esperadas) {
+    const d: DetalleMedida = { clave: m.clave, valor: valorEsperado(m), dura: !!m.dura, con: 0, cumple: 0, contradice: 0, duras: 0, contradicen: [] };
     for (const p of top) {
       const ok = cumpleMedida(m, p.atributosEstructurados?.[m.clave as keyof NonNullable<typeof p.atributosEstructurados>]);
       if (ok === null) continue;
       con++;
-      if (ok) cumplen++;
-      else {
+      d.con++;
+      if (ok) {
+        cumplen++;
+        d.cumple++;
+      } else {
         contradicciones++;
-        if (m.dura) contradiccionesDuras++;
+        d.contradice++;
+        if (p.id !== undefined) d.contradicen.push(p.id);
+        if (m.dura) {
+          contradiccionesDuras++;
+          d.duras++;
+        }
       }
     }
+    detalle.push(d);
   }
   const pares = esperadas.length * top.length;
   return {
@@ -133,5 +176,7 @@ export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionM
     cobertura: pares ? con / pares : null,
     contradiccionesDuras: esperadas.some((m) => m.dura) ? contradiccionesDuras : null,
     falsoPositivo,
+    ...trazaPlan,
+    detalle,
   };
 }

@@ -12,6 +12,7 @@ const medida = (p: Partial<EvaluacionMedida> = {}): EvaluacionMedida => ({
   cobertura: 0,
   contradiccionesDuras: null,
   falsoPositivo: null,
+  detalle: [],
   ...p,
 });
 

@@ -374,3 +374,60 @@ describe("correr: estado de busqueda-medidas (R5.6)", () => {
     expect(sonComparables(a, b).ok).toBe(true);
   });
 });
+
+describe("correr: detalle de medidas por caso (CasoJson.medida)", () => {
+  const num = (n: number) => ({ n, t: null });
+  const casosMedida: BusquedaBanco[] = [
+    { q: "termica 2x20", perfil: "particular", tipo: "medida", medidas: [{ clave: "polos", valor: 2, dura: true }, { clave: "corriente_a", valor: 20 }] },
+    { q: "lampara generica", perfil: "particular" },
+  ];
+  const conAtributos = (id: string, polos: number, corriente: number) => ({ id, name: "nombre del producto", atributosEstructurados: { polos: num(polos), corriente_a: num(corriente) } });
+  const rMedida: Record<string, ResultadoBanco> = {
+    "termica 2x20": {
+      ...vacio,
+      medidas: ["polos:2", "corriente_a:20"],
+      atributosDuros: ["polos:2"],
+      productos: [conAtributos("a", 2, 20), conAtributos("b", 1, 20), conAtributos("c", 2, 25)],
+      total: 3,
+    },
+    "lampara generica": { ...vacio, productos: [prod("x")], total: 1 },
+  };
+  const d = () => deps({ ejecutar: vi.fn(async (q: string) => rMedida[q]) });
+  const o = (p: Partial<OpcionesCorrida> = {}) => opciones({ banco: { origen: "versionado", local: false, privado: false, casos: casosMedida, hash: "0123456789ab" }, ...p });
+
+  it("el caso con medidas esperadas trae `medida` con plan, duros y conteos por medida; el otro no", async () => {
+    const { json } = await correr(o(), d());
+    expect(json.casos[1].medida).toBeUndefined();
+    expect(json.casos[0].medida).toEqual({
+      hit: true,
+      falsoPositivo: null,
+      pagina: 3,
+      plan: ["polos:2", "corriente_a:20"],
+      duros: ["polos:2"],
+      esperadas: [
+        { clave: "polos", valor: "2", dura: true, con: 3, cumple: 2, contradice: 1, duras: 1 },
+        { clave: "corriente_a", valor: "20", dura: false, con: 3, cumple: 2, contradice: 1, duras: 0 },
+      ],
+    });
+  });
+
+  it("sin --ids no hay ids de producto; con --ids van los que contradicen", async () => {
+    expect(JSON.stringify((await correr(o(), d())).json)).not.toContain('"contradicen"');
+    const { json } = await correr(o({ ids: true }), d());
+    expect(json.casos[0].medida?.esperadas.map((e) => e.contradicen)).toEqual([["b"], ["c"]]);
+  });
+
+  it("banco local enmascarado: sin consulta ni valores, el plan en claves", async () => {
+    const { json } = await correr(o({ banco: { origen: "real.local.json", local: true, privado: true, casos: casosMedida, hash: "0123456789ab" } }), d());
+    const m = json.casos[0].medida!;
+    expect(json.casos[0].q).toBeUndefined();
+    expect(m.plan).toEqual(["polos", "corriente_a"]);
+    expect(m.esperadas.every((e) => e.valor === undefined)).toBe(true);
+  });
+
+  it("el esquema sigue en 1 y el resto del caso no cambia", async () => {
+    const { json } = await correr(o(), d());
+    expect(json.esquema).toBe(1);
+    expect(Object.keys(json.casos[1])).not.toContain("medida");
+  });
+});

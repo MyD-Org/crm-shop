@@ -19,6 +19,7 @@
     "busqueda:compilar-banco": "tsx scripts/compilar-banco-real.ts",
     "banco:grabar": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/grabar.ts",
     "banco:busqueda": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/busqueda.ts",
+    "banco:analizar-medidas": "tsx src/lib/busqueda-v2/__banco__/analizar-medidas.ts",
     "banco:linea-base": "tsx --env-file-if-exists=.env.local src/lib/busqueda-v2/__banco__/linea-base.ts",
     "busqueda:cobertura": "tsx --env-file-if-exists=.env.local scripts/cobertura-atributos.ts"
   },

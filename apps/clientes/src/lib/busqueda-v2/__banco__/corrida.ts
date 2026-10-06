@@ -20,6 +20,7 @@ import {
   type EvaluacionBusqueda,
   type ResultadoBanco,
 } from "./banco";
+import { medidaParaJson, type MedidaJson } from "./medida-json";
 import { cortarPor, resumenNumerico, type Latencia, type ResumenNum } from "./metricas";
 import type { SnapshotCatalogo } from "./universo";
 import type { VistaBanco } from "./vista";
@@ -144,6 +145,8 @@ export interface CasoJson {
   etapa?: string;
   /** `--ids`: ids de lo devuelto, en orden. Nunca van a consola. */
   ids?: string[];
+  /** Sólo en casos con medidas esperadas o negativos (`medidas`/`sinMedidasDe`): plan, hit y conteos por medida (aditivo, ver `MedidaJson`). */
+  medida?: MedidaJson;
 }
 
 export interface ReporteJson {
@@ -199,6 +202,8 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
   }
 
   const todas: EvaluacionBusqueda[] = [];
+  /** Productos que miró la evaluación de medidas por caso (la primera página, hasta 24). */
+  const paginas: number[] = [];
   const primerasMs: number[] = [];
   let sinPlanCacheado = 0;
   for (const [idx, caso] of casos.entries()) {
@@ -228,6 +233,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
       ev.muestrasMs = muestras;
     }
     if (deps.sinGrabacion?.(caso)) ev.sinGrabacion = true;
+    paginas.push(Math.min(resultado.productos.length, 24));
     todas.push(ev);
   }
 
@@ -297,6 +303,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
       ...(e.sinGrabacion ? { sinGrabacion: true } : {}),
       ...(e.etapa ? { etapa: e.etapa } : {}),
       ...(e.ids ? { ids: e.ids } : {}),
+      ...(e.medida ? { medida: medidaParaJson(e.medida, { enmascarar, ids: !!o.ids, pagina: paginas[idx] }) } : {}),
     })),
     ...(o.jev === "cache" ? { sinPlanCacheado } : {}),
     ...(Object.keys(porEtapa).length ? { etapas: porEtapa } : {}),

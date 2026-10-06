@@ -3,7 +3,10 @@
 import Image from "next/image";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Skeleton } from "@myd-org/ui";
 import type { Product } from "@/data/products";
+import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { fmtPrecio } from "@/lib/format";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
@@ -67,6 +70,8 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
 
   const debouncedQuery = useDebounced(query, 250);
   const [results, setResults] = useState<Product[]>([]);
+  // Precio de la lista privada de la cuenta (si la tiene) en las sugerencias.
+  const preciosCuenta = usePreciosCuenta(results.map((p) => p.id));
   const [loading, setLoading] = useState(false);
 
   // Búsqueda server-side sobre el catálogo del CRM (misma regla que /catalogo:
@@ -222,7 +227,8 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
             </div>
           ) : (
             <ul>
-              {results.map((p) => {
+              {results.map((original) => {
+                const p = aplicarEstadoPrecio(original, preciosCuenta.get(original.id));
                 // Sólo para mostrar: `p.name` no se toca.
                 const marca = p.brand ? formatMarca(p.brand) : undefined;
                 const { nombre: nombreParaMostrar } = nombreConMarca(p.name, marca);
@@ -250,7 +256,13 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
                       <span className="block truncate text-xs text-muted">{marca}</span>
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-text">
-                      {fmtPrecio(p.precioFinal ?? p.price)}
+                      {p.precioCuenta === "pendiente" ? (
+                        <Skeleton className="h-4 w-14" aria-label="Cargando su precio" />
+                      ) : p.precioCuenta === "consulte" ? (
+                        "Consulte"
+                      ) : (
+                        fmtPrecio(p.precioFinal ?? p.price)
+                      )}
                     </span>
                   </button>
                 </li>

@@ -30,7 +30,7 @@ function responder(c: ConsultaGrabada): unknown[][] | undefined {
     return espejo;
   }
   if (c.sql.includes('"client_links"') && vinculo) {
-    // `idPriceListCliente` selecciona sólo la lista; `vinculacionDe`, la fila entera.
+    // `vinculacionDe` selecciona la fila entera.
     if (c.sql.startsWith('select "id_price_list"')) return [[vinculo.idPriceList]];
     return [[
       "00000000-0000-0000-0000-000000000001", "user_1", "42", "Cliente 42 SA", "20-12345678-9",

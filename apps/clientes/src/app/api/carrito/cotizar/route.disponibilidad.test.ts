@@ -17,7 +17,6 @@ const disp = {
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: null, cliente: null }),
-  idPriceListCliente: async () => undefined,
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),

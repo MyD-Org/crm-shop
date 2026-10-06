@@ -17,7 +17,6 @@ let identidad: { clerkUserId: string | null; cliente: Record<string, unknown> | 
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => identidad,
-  idPriceListCliente: async () => undefined,
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),

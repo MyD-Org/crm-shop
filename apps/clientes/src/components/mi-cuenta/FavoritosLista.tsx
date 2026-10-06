@@ -10,7 +10,9 @@ import { linkNext } from "@/components/catalogo/link-next";
 import { useFavoritos } from "@/context/FavoritosContext";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
-import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
+import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
@@ -29,7 +31,7 @@ export function FavoritosLista({ productos }: { productos: Product[] }) {
   const { ready, esFavorito } = useFavoritos();
   const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));
   const visibles = visiblesEnLista(productos, ready, esFavorito).map((p) =>
-    conPrecioCuenta(p, preciosCuenta.get(p.id)),
+    aplicarEstadoPrecio(p, preciosCuenta.get(p.id)),
   );
 
   // Quitó el último desde esta misma página.
@@ -48,6 +50,31 @@ export function FavoritosLista({ productos }: { productos: Product[] }) {
         // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
         const marca = p.brand ? formatMarca(p.brand) : undefined;
         const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
+        if (p.precioCuenta === "pendiente") return <TarjetaPrecioPendiente key={p.id} layout="list" />;
+        if (p.precioCuenta === "consulte") {
+          return (
+            <TarjetaConsulte
+              key={p.id}
+              layout="list"
+              href={`/producto/${p.id}`}
+              nombre={nombreParaMostrar}
+              marca={marca}
+              imagen={
+                p.images?.[0] ? (
+                  <Image
+                    src={p.images[0].url}
+                    alt={p.images[0].alt ?? nombreParaMostrar}
+                    fill
+                    sizes="96px"
+                    className="object-contain p-2"
+                  />
+                ) : (
+                  <IconoLampara size={40} />
+                )
+              }
+            />
+          );
+        }
         return (
         <ProductCard
           key={p.id}

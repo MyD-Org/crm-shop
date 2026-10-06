@@ -13,6 +13,7 @@ import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { badgeProducto } from "@/components/badge-producto";
+import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { LightbulbIcon } from "./iconos";
 import { linkNext } from "./link-next";
 
@@ -72,6 +73,33 @@ export function CatalogoProductos({
         // Sólo para mostrar: `p.name` (buscar, ordenar, carrito) no se toca.
         const marca = p.brand ? formatMarca(p.brand) : undefined;
         const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
+        const layout = vista === "lista" ? "list" : "grid";
+        // Precio de su cuenta: marcador mientras llega, o "Consulte" sin precio en su lista.
+        if (p.precioCuenta === "pendiente") return <TarjetaPrecioPendiente key={p.id} layout={layout} />;
+        if (p.precioCuenta === "consulte") {
+          return (
+            <TarjetaConsulte
+              key={p.id}
+              layout={layout}
+              href={`/producto/${p.id}`}
+              nombre={nombreParaMostrar}
+              marca={marca}
+              imagen={
+                p.images?.[0] ? (
+                  <Image
+                    src={p.images[0].url}
+                    alt={p.images[0].alt ?? nombreParaMostrar}
+                    fill
+                    sizes="(min-width: 1280px) 25vw, (min-width: 768px) 33vw, 50vw"
+                    className="object-contain p-4"
+                  />
+                ) : (
+                  <LightbulbIcon className="absolute inset-0 m-auto h-12 w-12 text-muted/40" />
+                )
+              }
+            />
+          );
+        }
         return (
         <ProductCard
           key={p.id}

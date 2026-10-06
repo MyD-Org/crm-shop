@@ -7,9 +7,6 @@
  *
  * Va sólo en la ficha del producto: en la card del catálogo el precio lo dibuja
  * `ProductCard` de @myd-org/ui sin el neto.
- *
- * Con `precioLista` (cliente con lista propia más barata) el de lista va
- * tachado arriba y abajo el aviso de que es el precio de su cuenta.
  */
 
 import type { PrecioMedio } from "@/data/products";
@@ -21,23 +18,15 @@ interface Props {
   price: number;
   /** Precio final con IVA. undefined = sin IVA conocido. */
   precioFinal?: number;
-  /** Precio de lista general (final si se conoce) para tachar. */
-  precioLista?: number;
   /** Medios con lista propia más barata (ya filtrados y ordenados): una línea "$X con <Medio>" cada uno. */
   preciosMedios?: PrecioMedio[];
 }
 
-export function PrecioConImpuestos({ price, precioFinal, precioLista, preciosMedios }: Props) {
+export function PrecioConImpuestos({ price, precioFinal, preciosMedios }: Props) {
   // Con precio por medio, el protagonista es "$X con <Medio>" y el de lista baja de tamaño.
   const conMedios = Boolean(preciosMedios?.length);
   return (
     <div>
-      {precioLista != null && (
-        <p className="mb-1.5 text-[15px] text-muted tabular-nums">
-          <span className="sr-only">Precio de lista: </span>
-          <s>{fmt(precioLista)}</s>
-        </p>
-      )}
       <span
         className={
           conMedios
@@ -61,9 +50,6 @@ export function PrecioConImpuestos({ price, precioFinal, precioLista, preciosMed
           ))}
         </ul>
       ) : null}
-      {precioLista != null && (
-        <p className="mt-2 text-[13px] font-semibold text-accent">Precio exclusivo para su cuenta</p>
-      )}
     </div>
   );
 }

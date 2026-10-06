@@ -13,7 +13,9 @@ import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
-import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
+import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 
 function LightbulbIcon({ className }: { className?: string }) {
   return (
@@ -39,12 +41,35 @@ export function TarjetaProductoCarrusel({
   producto: Product;
   imagenDecorativa?: string;
 }) {
-  // Precio especial de la cuenta: todas las tarjetas se piden en una sola tanda.
-  const p = conPrecioCuenta(producto, usePreciosCuenta([producto.id]).get(producto.id));
+  // Precio de la lista privada de la cuenta: todas las tarjetas se piden en una sola tanda.
+  const p = aplicarEstadoPrecio(producto, usePreciosCuenta([producto.id]).get(producto.id));
   const fotoReal = p.images?.[0];
   // Sólo para mostrar: `p.name` (carrito, orden) no se toca.
   const marca = p.brand ? formatMarca(p.brand) : undefined;
   const { nombre: nombreParaMostrar, esCodigo } = nombreConMarca(p.name, marca);
+  if (p.precioCuenta === "pendiente") return <TarjetaPrecioPendiente />;
+  if (p.precioCuenta === "consulte") {
+    return (
+      <TarjetaConsulte
+        href={`/producto/${p.id}`}
+        nombre={nombreParaMostrar}
+        marca={marca}
+        imagen={
+          fotoReal ? (
+            <Image
+              src={fotoReal.url}
+              alt={fotoReal.alt || nombreParaMostrar}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              className="object-contain p-4"
+            />
+          ) : (
+            <LightbulbIcon className="absolute inset-0 m-auto h-12 w-12 text-muted/40" />
+          )
+        }
+      />
+    );
+  }
   return (
     <Link
       href={`/producto/${p.id}`}

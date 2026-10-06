@@ -20,7 +20,6 @@ vi.mock("next/server", async (orig) => ({
 }));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "ana@cliente.example" }),
-  idPriceListCliente: async () => undefined,
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),

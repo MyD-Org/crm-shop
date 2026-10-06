@@ -121,3 +121,14 @@ describe("preciosPrivados", () => {
     expect((await preciosPrivados(privada, [])).size).toBe(0);
   });
 });
+
+describe("el catálogo público no filtra precios privados", () => {
+  it("la vista pública (la que lee el catálogo cacheado) no trae la lista privada ni su precio", async () => {
+    const filas = await q(sql`select to_jsonb(v)::text as fila from public.catalog_products_shop v where v.tenant_id = ${TENANT}`);
+    expect(filas.length).toBeGreaterThan(0);
+    const texto = filas.map((f) => String(f.fila)).join("\n");
+    expect(texto).not.toContain(privada);
+    expect(texto).not.toContain("precios_online_privados");
+    expect(texto).not.toContain("Lista privada A");
+  });
+});

@@ -23,7 +23,6 @@ vi.mock("next/server", async (orig) => ({
 }));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@b.com" }),
-  idPriceListCliente: async () => undefined,
 }));
 const COTIZACION_OK = {
   lineas: [{ id: "1", qty: 1 }],

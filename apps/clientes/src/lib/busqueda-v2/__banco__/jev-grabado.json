@@ -3046,6 +3046,78 @@
           "confidence": 1
         }
       }
+    },
+    "lampara de escritorio": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.94
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.66
+        }
+      }
+    },
+    "lampara de pie": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.29
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.84
+        }
+      }
+    },
+    "escritorio": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.69
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.52
+        },
+        "raiz": {
+          "choice": "hogar",
+          "confidence": 0.38
+        }
+      }
     }
   }
 }

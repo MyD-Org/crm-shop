@@ -203,11 +203,11 @@ describe("normalizarAtributos: claves ampliadas (0053)", () => {
     expect(
       n({
         corriente_a: 25, polos: 2, seccion_mm2: 2.5, medidas_mm: "300x1200", color: "Blanca", poder_corte_ka: 6,
-        curva: "C", sensibilidad_ma: 30, largo_m: 100, montaje: "Embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300,
+        curva: "C", sensibilidad_ma: 30, largo_m: 100, montaje: "Embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300, diametro_mm: 25, ancho_mm: 150,
       }),
     ).toEqual({
       corriente_a: 25, polos: 2, seccion_mm2: 2.5, medidas_mm: "300x1200", color: "blanco", poder_corte_ka: 6,
-      curva: "c", sensibilidad_ma: 30, largo_m: 100, montaje: "embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300,
+      curva: "c", sensibilidad_ma: 30, largo_m: 100, montaje: "embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300, diametro_mm: 25, ancho_mm: 150,
     })
   })
 
@@ -217,6 +217,7 @@ describe("normalizarAtributos: claves ampliadas (0053)", () => {
     ["largo_m", 0.01], ["largo_m", 5000], ["angulo_grados", 0], ["angulo_grados", 400], ["angulo_grados", 12.5],
     ["leds_m", 0], ["leds_m", 2000], ["leds_m", 60.5], ["potencia_w_m", 0.01], ["potencia_w_m", 5000],
     ["leds_rollo", 0], ["leds_rollo", 20000], ["leds_rollo", 300.5],
+    ["diametro_mm", 4], ["diametro_mm", 250], ["ancho_mm", 20], ["ancho_mm", 1200], ["ancho_mm", 150.5],
   ])("%s = %s fuera de rango (o no entero) se descarta", (clave, valor) => {
     expect(n({ [clave]: valor })).toEqual({})
   })
@@ -286,6 +287,11 @@ describe("parsearEdicionManual: claves ampliadas", () => {
 const NUEVAS = ["corriente_a", "polos", "seccion_mm2", "medidas_mm", "color", "poder_corte_ka", "curva", "sensibilidad_ma", "largo_m", "montaje", "angulo_grados", "leds_m", "potencia_w_m", "leds_rollo"]
 function nuevas(nombre: string): Record<string, number | string> {
   return Object.fromEntries(Object.entries(extraer(nombre)).filter(([k]) => NUEVAS.includes(k)))
+}
+
+/** Sólo diámetro y ancho: lo que lean las otras claves del mismo nombre se prueba en sus propios casos. */
+function diaAncho(nombre: string): Record<string, number | string> {
+  return Object.fromEntries(Object.entries(extraer(nombre)).filter(([k]) => k === "diametro_mm" || k === "ancho_mm"))
 }
 
 describe("extracción de claves nuevas desde el nombre", () => {
@@ -504,6 +510,78 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["TIRA 300 LED 600 LED TOTAL", {}],
       ["ROLLO 5M", { largo_m: 5 }],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
+  })
+
+  describe("diametro_mm (caños, tubos y accesorios de caño)", () => {
+    it.each([
+      ["TUBO RIGIDO MARCA X 20MM X METRO", { diametro_mm: 20 }],
+      ["Tubo rígido Marca X SD ø25mm x metro", { diametro_mm: 25 }],
+      ["Caño semipesado D:50mm x 3 Mtrs (1.2mm", { diametro_mm: 50 }],
+      ["CAÑO CORRUGADO 32 MM", { diametro_mm: 32 }],
+      ["Conector para tubo rígido y corrugado 32mm", { diametro_mm: 32 }],
+      ["Curva para tubo rígido 25mm", { diametro_mm: 25 }],
+      ["Unión para tubo Marca X 20mm", { diametro_mm: 20 }],
+      ["Grampa p/fijar tubo rígido 22mm", { diametro_mm: 22 }],
+      ["Cupla para caño Ø 40 mm", { diametro_mm: 40 }],
+      ["CABLECANAL REDONDO 16MM", { diametro_mm: 16 }],
+      ["CAÑO PVC 12,5MM", { diametro_mm: 12.5 }],
+      ["Caño Ø20mm ESP 1,5mm", { diametro_mm: 20 }],
+      // Una cupla o un conector SIN palabra de caño/tubo solo valen con el diámetro explícito.
+      ["Conector 25mm", {}],
+      ["Conector ø25mm", { diametro_mm: 25 }],
+      // Negativos: otras magnitudes con "mm", espesores, tubos de luz, herramientas, conductores.
+      ["Conector de empalme de 2 conductores de hasta 4mm²", {}],
+      ["Conector de empalme de 2 conductores de hasta 4mm2", {}],
+      ["Conector para tubo de 2 conductores 4mm", {}],
+      ["CABLE 3X2,5MM", {}],
+      ["CABLE UNIPOLAR 2,5MM2", {}],
+      ["TUBO LED T8 18W 120CM", {}],
+      ["TUBO VIDRIO 18W AC185-265V 120CM CALIDO 3000K", {}],
+      ["ESTANCO TUBO 2 TUBOS LED 18W 25MM", {}],
+      ["LLAVE DE TUBO EN T 12MM", {}],
+      ["KIT DE TUBOS HEXAGONALES 10MM", {}],
+      ["ABRAZADERA DE MANGUERA 20MM", {}],
+      ["TORNILLO 4MM X 40MM", {}],
+      ["TUBO CUADRADO 20X20MM", {}],
+      ["TUBO PERFIL 20 x 10mm", {}],
+      ["TUBO 3/4 PULGADAS", {}],
+      ["TUBO 2 MM", {}],
+      ["TUBO 300 MM", {}],
+      ["LAMPARA 120CM", {}],
+      ["CAÑO DOS DIAMETROS 20MM Y 25MM", {}],
+    ])("%s", (nombre, esperado) => expect(diaAncho(nombre as string)).toEqual(esperado))
+
+    it("la descripción no aporta diámetro (solo el nombre)", () => {
+      expect(extraer("TUBO RIGIDO", "Caño de 25mm de diámetro")).toEqual({})
+    })
+  })
+
+  describe("ancho_mm (bandejas portacables)", () => {
+    it.each([
+      ["BANDEJA PERFORADA 100/50", { ancho_mm: 100 }],
+      ["BANDEJA PORTACABLE PERFORADA 300/50 3M", { ancho_mm: 300 }],
+      ["CURVA ARTICULADA 250/50", { ancho_mm: 250 }],
+      ["ARTICULADA 250/50", { ancho_mm: 250 }],
+      ["TAPA BANDEJA 150", { ancho_mm: 150 }],
+      ["TAPA BANDEJA PORTACABLE 450 MM", { ancho_mm: 450 }],
+      ["TEE BANDEJA 200/50", { ancho_mm: 200 }],
+      ["UNION BANDEJA PERFORADA 150/50", { ancho_mm: 150 }],
+      ["BANDEJA PERFORADA 100 / 50", { ancho_mm: 100 }],
+      // Negativos: relaciones, otras bandejas, sin palabra de bandeja, valores de otra magnitud.
+      ["TRANSFORMADOR DE CORRIENTE 1200/5A", {}],
+      ["TRANSFORMADOR DE CORRIENTE 100/5", {}],
+      ["TERMICA 2P 100/50", {}],
+      ["BANDEJA MAGNETICA RECTANGULAR", {}],
+      ["BANDEJA MAGNETICA 150", {}],
+      ["BANDEJA PARA PINTURA 250", {}],
+      ["BANDEJA PERFORADA 100/50 y 200/50", {}],
+      ["BANDEJA PERFORADA 3M", {}],
+      ["BANDEJA PERFORADA 20W 150", {}],
+      ["BANDEJA PERFORADA 2000/50", {}],
+      ["LAMPARA ARTICULADA 12W", {}],
+      ["BRAZO ARTICULADO 100", {}],
+      ["CABLE 1200/5A", {}],
+    ])("%s", (nombre, esperado) => expect(diaAncho(nombre as string)).toEqual(esperado))
   })
 
   describe("angulo_grados", () => {

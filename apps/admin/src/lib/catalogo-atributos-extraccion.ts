@@ -24,7 +24,9 @@
  * poder_corte_ka, curva, sensibilidad_ma, largo_m, montaje, angulo_grados. Migración 0058: leds_m
  * ("60 LED/m") y potencia_w_m ("14,4 W/m"), que se leen ANTES de descartar lo "por metro" (la potencia
  * por metro nunca es `potencia_w`). Migración 0059: leds_rollo ("300 LED", total del rollo; sólo si el nombre dice "por rollo",
- * "x rollo", "totales" o "total"). Se leen en un pipeline
+ * "x rollo", "totales" o "total"). Migración 0070: diametro_mm (caños, tubos y sus accesorios: "ø25mm", "tubo 20mm") y
+ * ancho_mm (bandejas portacables: "BANDEJA PERFORADA 100/50", "TAPA BANDEJA 150"); se leen sólo del NOMBRE y sólo con la palabra
+ * de caño/tubo o de bandeja (`diametroDeNombre`, `anchoDeNombre`), fuera del pipeline con consumo. Se leen en un pipeline
  * CON CONSUMO (cada regla borra lo que leyó para que la siguiente no lo reinterprete: "10kA" no es
  * corriente, "3X1.5MM2" no son medidas). `seccion_mm2` también se lee sin "mm2" ("2,5MM", "3X2,5", "UNIPOLAR 2.5")
  * pero SOLO en un cable por el nombre y con valores de la serie comercial (`seccionDeCable`). Ante la duda no devuelven nada; dos valores distintos de
@@ -57,6 +59,8 @@ export const CLAVES_ATRIBUTO = [
   "leds_m",
   "potencia_w_m",
   "leds_rollo",
+  "diametro_mm",
+  "ancho_mm",
 ] as const
 export type ClaveAtributo = (typeof CLAVES_ATRIBUTO)[number]
 
@@ -144,6 +148,8 @@ export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
   leds_m: { tipo: "num", etiqueta: "LED por metro (LED/m)", rango: [1, 1000], entero: true, pista: "60 o 120" },
   potencia_w_m: { tipo: "num", etiqueta: "Potencia por metro (W/m)", rango: [0.1, 1000], pista: "4,8 o 14,4" },
   leds_rollo: { tipo: "num", etiqueta: "LED por rollo", rango: [1, 10000], entero: true, pista: "300" },
+  diametro_mm: { tipo: "num", etiqueta: "Diámetro (mm)", rango: [5, 200], pista: "25" },
+  ancho_mm: { tipo: "num", etiqueta: "Ancho (mm)", rango: [30, 1000], entero: true, pista: "150" },
 }
 
 /** Etiquetas para el admin (el Shop tiene las suyas). Derivado de `DEFINICION_ATRIBUTOS`. */
@@ -633,6 +639,66 @@ const RE_LEDS_ROLLO = new RegExp(
 )
 const RE_TOTAL_EXPLICITO = /(?:^|[^0-9a-z])(?:(?:por|x) ?rollo|total(?:es)?)(?![a-z])/
 
+// ---------------------------------------------------------------------------------------------
+// diametro_mm y ancho_mm (0070). Sólo del NOMBRE (la descripción trae medidas de otras cosas) y sólo
+// con la palabra del producto: un "20mm" suelto es un tornillo, un espesor o un diámetro de otra cosa.
+// ---------------------------------------------------------------------------------------------
+
+/** Caño, tubo o cablecanal redondo: el producto cuyo diámetro se lee. */
+const RE_TUBO =
+  /(?:^|[^0-9a-z])(?:canos?|tubos?|corrugad[oa]s?|(?:cablecanal|cable canal|canaleta)s? redond[oa]s?)(?![0-9a-z])/
+/** Accesorios de caño: con la palabra de caño/tubo, o sin ella sólo si el diámetro viene marcado ("ø25"). */
+const RE_ACCESORIO_TUBO = /(?:^|[^0-9a-z])(?:conector(?:es)?|union(?:es)?|curvas?|grampas?|cuplas?|codos?|boquillas?)(?![0-9a-z])/
+/** Lo que lleva "tubo" o "mm" pero no es un caño con diámetro: luces, herramientas, conductores, perfiles. */
+const NO_DIAMETRO =
+  /(?:^|[^0-9a-z])(?:leds?|vidrio|nano|estanco|liston|fluorescentes?|lamparas?|llaves?|hexagonal(?:es)?|kits?|mangueras?|abrazaderas?|conductor(?:es)?|empalmes?|perfil(?:es)?|cuadrad[oa]s?|rectangulares?)(?![0-9a-z])|\d ?(?:w|watts?)(?![0-9a-z])|mm ?2|mm²/
+const NUM_DIAMETRO = "\\d{1,3}(?:[.,]\\d+)?"
+/** "ø25", "Ø 25mm", "diámetro 25", "D:50mm": el diámetro dicho explícito. */
+const RE_DIAMETRO_EXPLICITO = new RegExp(
+  `(?:^|[^0-9a-z])(?:[øǿ⌀]|(?:diametro|diam)\\.? ?:?|d ?:) ?(${NUM_DIAMETRO})(?: ?mm)?(?![0-9a-z²³.,])`,
+  "g",
+)
+/** "25mm" suelto, sin ser una dimensión ("20 x 10mm"), un espesor ("esp 1,5mm") ni una sección ("mm2"). */
+const RE_DIAMETRO_PLANO = new RegExp(
+  `(?<![0-9a-z.,])(?<!\\d ?[x×] ?)(?<!esp(?:esor)?\\.? ?:? ?)(${NUM_DIAMETRO}) ?mm(?![0-9a-z²³])(?! ?[x×] ?\\d)`,
+  "g",
+)
+
+/** Diámetro en mm de un caño, tubo o accesorio de caño según el NOMBRE; null si dudoso. */
+export function diametroDeNombre(nombre: string): number | null {
+  const t = normalizar(nombre ?? "").replace(/\s+/g, " ").trim()
+  if (!t || NO_DIAMETRO.test(t)) return null
+  const explicitos = [...t.matchAll(RE_DIAMETRO_EXPLICITO)].map((m) => numero(m[1]))
+  if (!RE_TUBO.test(t) && !(RE_ACCESORIO_TUBO.test(t) && explicitos.length > 0)) return null
+  const crudos = explicitos.length > 0 ? explicitos : [...t.matchAll(RE_DIAMETRO_PLANO)].map((m) => numero(m[1]))
+  return enRango("diametro_mm", unico(crudos.filter((n) => enRango("diametro_mm", n) != null)))
+}
+
+/** Bandeja portacables (y sus tapas y accesorios: "TAPA BANDEJA", "TEE BANDEJA"). */
+const RE_BANDEJA = /(?:^|[^0-9a-z])bandejas?(?![0-9a-z])/
+/** "Articulada" sin la palabra bandeja ("CURVA ARTICULADA 250/50"): sólo con el par ancho/alto y un ancho de la serie. */
+const RE_ARTICULADA = /(?:^|[^0-9a-z])articulad[oa]s?(?![0-9a-z])/
+const NO_BANDEJA =
+  /(?:^|[^0-9a-z])(?:magnetic[oa]s?|pintura|rodillo|horno|cocina|desayuno|asado|parrilla|escritorio|organizador|cubiertos|herramientas?|lamparas?|brazos?|leds?|soportes?)(?![0-9a-z])|\d ?(?:w|watts?|v)(?![0-9a-z])/
+/** Anchos comerciales de bandeja portacables, en mm. */
+const ANCHOS_BANDEJA = new Set([50, 75, 100, 150, 200, 250, 300, 400, 450, 500, 600])
+/** "100/50": ancho/alto. Un "1200/5A" (relación de transformador) no entra: la unidad pegada lo descarta. */
+const RE_ANCHO_ALTO = /(?<![0-9a-z.,/])(\d{2,4}) ?\/ ?(\d{2,3})(?![0-9a-z/.,])/g
+const RE_ANCHO_SUELTO = /(?<![0-9a-z.,/-])(\d{2,4})(?: ?mm)?(?![0-9a-z²/.,-])/g
+
+/** Ancho en mm de una bandeja portacables (o su tapa o accesorio) según el NOMBRE; null si dudoso. */
+export function anchoDeNombre(nombre: string): number | null {
+  const t = normalizar(nombre ?? "").replace(/\s+/g, " ").trim()
+  if (!t || NO_BANDEJA.test(t)) return null
+  const pares = [...t.matchAll(RE_ANCHO_ALTO)].map((m) => Number(m[1]))
+  if (RE_BANDEJA.test(t)) {
+    const crudos = pares.length > 0 ? pares : [...t.matchAll(RE_ANCHO_SUELTO)].map((m) => Number(m[1]))
+    return enRango("ancho_mm", unico(crudos.filter((n) => enRango("ancho_mm", n) != null)))
+  }
+  if (RE_ARTICULADA.test(t)) return enRango("ancho_mm", unico(pares.filter((n) => ANCHOS_BANDEJA.has(n))))
+  return null
+}
+
 /** Valores por metro, leídos del texto completo (antes de `sinRelaciones`). Dos distintos = ninguno. */
 function porMetro(t: string): AtributoExtraido[] {
   const out: AtributoExtraido[] = []
@@ -710,6 +776,8 @@ export function extraerAtributosDeNombre(nombre: string, descripcion?: string | 
   if (z) out.push({ clave: "zocalo", valorNum: null, valorTexto: z })
 
   out.push(...extraerAmpliadas(t))
+  num("diametro_mm", diametroDeNombre(nombre))
+  num("ancho_mm", anchoDeNombre(nombre))
 
   const fuera = clavesDescartadasPorNombre(nombre)
   const orden = (c: ClaveAtributo) => CLAVES_ATRIBUTO.indexOf(c)

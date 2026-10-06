@@ -20,7 +20,9 @@
     "angulo_grados",
     "leds_m",
     "potencia_w_m",
-    "leds_rollo"
+    "leds_rollo",
+    "diametro_mm",
+    "ancho_mm"
   ],
   "tipos": {
     "potencia_w": "num",
@@ -43,6 +45,8 @@
     "angulo_grados": "num",
     "leds_m": "num",
     "potencia_w_m": "num",
-    "leds_rollo": "num"
+    "leds_rollo": "num",
+    "diametro_mm": "num",
+    "ancho_mm": "num"
   }
 }

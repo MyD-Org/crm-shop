@@ -4,6 +4,8 @@ import {
   cablesSinSeccion,
   contarFueraDeRango,
   fueraDeRango,
+  CLAVES_BACKFILL_NOMBRE,
+  planearBackfillClave,
   planearBackfillSeccion,
   seccionDeNombre,
   type FilaAuditada,
@@ -144,5 +146,55 @@ describe("planearBackfillSeccion", () => {
 
   it("seccionDeNombre lee la descripción también", () => {
     expect(seccionDeNombre("CABLE UNIPOLAR", "Sección 2,5MM")).toBe(2.5)
+  })
+})
+
+describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => {
+  const prod = (alegraId: string, name: string, description: string | null = null) => ({ alegraId, name, description })
+
+  it("las claves que admite el backfill por nombre", () => {
+    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm"])
+  })
+
+  it("diametro_mm: sólo esa clave, fuente nombre, nunca pisa pdf/manual", () => {
+    const plan = planearBackfillClave(
+      "diametro_mm",
+      [
+        prod("1", "Tubo rígido Marca X ø25mm x metro"), // nueva
+        prod("2", "Curva para tubo rígido 32mm"), // igual
+        prod("3", "Grampa p/fijar tubo rígido 20mm"), // protegida (pdf con otro valor)
+        prod("4", "CABLE UNIPOLAR 2,5MM"), // sin lectura de diámetro
+        prod("5", "TORNILLO 4MM"), // sin lectura
+        prod("6", "Caño 40mm"), // cambia (nombre guardado 50)
+      ],
+      new Map([
+        ["2", { fuente: "nombre" as const, valorNum: 32 }],
+        ["3", { fuente: "pdf" as const, valorNum: 22 }],
+        ["6", { fuente: "nombre" as const, valorNum: 50 }],
+      ]),
+    )
+    expect(plan).toMatchObject({ nuevas: 1, cambian: 1, iguales: 1, protegidas: 1, protegidasDistintas: 1 })
+    expect(plan.filas).toEqual([
+      { alegraId: "1", clave: "diametro_mm", valorNum: 25, valorTexto: null },
+      { alegraId: "6", clave: "diametro_mm", valorNum: 40, valorTexto: null },
+    ])
+  })
+
+  it("ancho_mm: bandejas, y es idempotente", () => {
+    const productos = [prod("1", "BANDEJA PERFORADA 100/50"), prod("2", "TAPA BANDEJA 150"), prod("3", "TRANSFORMADOR 1200/5A")]
+    const p1 = planearBackfillClave("ancho_mm", productos, new Map())
+    expect(p1.filas).toEqual([
+      { alegraId: "1", clave: "ancho_mm", valorNum: 100, valorTexto: null },
+      { alegraId: "2", clave: "ancho_mm", valorNum: 150, valorTexto: null },
+    ])
+    const guardadas = new Map(p1.filas.map((f) => [f.alegraId, { fuente: "nombre" as const, valorNum: f.valorNum }]))
+    const p2 = planearBackfillClave("ancho_mm", productos, guardadas)
+    expect(p2.filas).toEqual([])
+    expect(p2.iguales).toBe(2)
+  })
+
+  it("planearBackfillSeccion sigue siendo planearBackfillClave('seccion_mm2')", () => {
+    const productos = [prod("1", "CABLE 4MM")]
+    expect(planearBackfillSeccion(productos, new Map())).toEqual(planearBackfillClave("seccion_mm2", productos, new Map()))
   })
 })

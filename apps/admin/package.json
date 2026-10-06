@@ -21,6 +21,7 @@
     "catalogo:atributos-backfill": "tsx --env-file-if-exists=.env.local scripts/backfill-catalogo-atributos.ts",
     "catalogo:atributos-auditoria": "tsx scripts/atributos-auditoria.ts",
     "catalogo:seccion-cables-backfill": "tsx scripts/backfill-seccion-cables.ts",
+    "catalogo:atributo-nombre-backfill": "tsx scripts/backfill-seccion-cables.ts",
     "catalogo:leer-fichas": "tsx --env-file-if-exists=.env.local scripts/leer-fichas-catalogo.ts"
   },
   "dependencies": {

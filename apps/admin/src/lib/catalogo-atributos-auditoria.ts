@@ -6,7 +6,7 @@ import {
 import type { FilaAtributo, FuenteAtributo } from "./catalogo-atributos-repo"
 
 /**
- * Auditoría y backfill de `seccion_mm2` (lógica PURA, sin DB): la usan los scripts
+ * Auditoría y backfill por nombre de `seccion_mm2`, `diametro_mm` y `ancho_mm` (lógica PURA, sin DB): la usan los scripts
  * `atributos-auditoria.ts` y `backfill-seccion-cables.ts`.
  *
  * Los rangos de abajo son PLAUSIBLES, más angostos que los cerrados de `DEFINICION_ATRIBUTOS` (esos
@@ -30,6 +30,8 @@ export const RANGOS_PLAUSIBLES: Partial<Record<ClaveAtributo, [number, number]>>
   leds_m: [1, 1000],
   potencia_w_m: [0.1, 100],
   leds_rollo: [1, 5000],
+  diametro_mm: [10, 160],
+  ancho_mm: [50, 600],
 }
 
 export interface FilaAuditada {
@@ -103,7 +105,17 @@ export interface FilaGuardada {
   valorNum: number | null
 }
 
-export interface PlanBackfillSeccion {
+/** Claves que el backfill por nombre sabe escribir (`scripts/backfill-seccion-cables.ts --clave <clave>`). */
+export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm"] as const
+export type ClaveBackfillNombre = (typeof CLAVES_BACKFILL_NOMBRE)[number]
+
+/** Valor numérico que lee el extractor del nombre (+ descripción) para una clave; null si no lee ninguno. */
+export function valorDeNombre(clave: ClaveAtributo, nombre: string, descripcion?: string | null): number | null {
+  const a = extraerAtributosDeNombre(nombre, descripcion).find((x) => x.clave === clave)
+  return a?.valorNum ?? null
+}
+
+export interface PlanBackfill {
   /** Filas a escribir con fuente 'nombre' (nuevas + las `nombre` que cambian de valor). */
   filas: FilaAtributo[]
   nuevas: number
@@ -115,18 +127,20 @@ export interface PlanBackfillSeccion {
   /** De las protegidas, las que el nombre diría OTRO valor (sólo informativo). */
   protegidasDistintas: number
 }
+export type PlanBackfillSeccion = PlanBackfill
 
 /**
- * Qué escribiría el backfill: sólo `seccion_mm2`, sólo fuente 'nombre', nunca sobre pdf/manual.
- * `existentes` = fila actual de `seccion_mm2` por alegraId (ausente = no hay).
+ * Qué escribiría el backfill de UNA clave numérica: sólo esa clave, sólo fuente 'nombre', nunca sobre
+ * pdf/manual y sin borrar nada. `existentes` = fila actual de la clave por alegraId (ausente = no hay).
  */
-export function planearBackfillSeccion(
+export function planearBackfillClave(
+  clave: ClaveBackfillNombre,
   productos: readonly { alegraId: string; name: string; description: string | null }[],
   existentes: ReadonlyMap<string, FilaGuardada>,
-): PlanBackfillSeccion {
-  const plan: PlanBackfillSeccion = { filas: [], nuevas: 0, cambian: 0, iguales: 0, protegidas: 0, protegidasDistintas: 0 }
+): PlanBackfill {
+  const plan: PlanBackfill = { filas: [], nuevas: 0, cambian: 0, iguales: 0, protegidas: 0, protegidasDistintas: 0 }
   for (const p of productos) {
-    const valor = seccionDeNombre(p.name, p.description)
+    const valor = valorDeNombre(clave, p.name, p.description)
     if (valor == null) continue
     const actual = existentes.get(p.alegraId)
     if (actual && actual.fuente !== "nombre") {
@@ -140,7 +154,15 @@ export function planearBackfillSeccion(
     }
     if (actual) plan.cambian += 1
     else plan.nuevas += 1
-    plan.filas.push({ alegraId: p.alegraId, clave: "seccion_mm2", valorNum: valor, valorTexto: null })
+    plan.filas.push({ alegraId: p.alegraId, clave, valorNum: valor, valorTexto: null })
   }
   return plan
+}
+
+/** El backfill de `seccion_mm2` (la primera clave que tuvo backfill propio). */
+export function planearBackfillSeccion(
+  productos: readonly { alegraId: string; name: string; description: string | null }[],
+  existentes: ReadonlyMap<string, FilaGuardada>,
+): PlanBackfill {
+  return planearBackfillClave("seccion_mm2", productos, existentes)
 }

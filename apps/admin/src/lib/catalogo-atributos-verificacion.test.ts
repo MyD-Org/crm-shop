@@ -743,6 +743,23 @@ describe("leds_rollo: el total de LED, con la palabra LED", () => {
   })
 })
 
+describe("diametro_mm y ancho_mm: en milímetros", () => {
+  const una = (clave: "diametro_mm" | "ancho_mm", txt: string, valor: number) =>
+    verificarLectura(lectura(null, { [clave]: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "TUBO" }))
+  it.each(["25 mm", "ø25mm", "Diámetro 25", "Diámetro: 25 mm"])("diámetro: acepta %s", (txt) => {
+    expect(aceptados(una("diametro_mm", txt, 25))).toEqual([["diametro_mm", 25]])
+  })
+  it.each(["25 mm²", "25 m", "25 A", "25 kg"])("diámetro: rechaza %s", (txt) => {
+    expect(motivos(una("diametro_mm", txt, 25))).toEqual(["diametro_mm:unidad_no_en_texto"])
+  })
+  it.each(["150 mm", "Ancho 150", "Ancho: 150 mm"])("ancho: acepta %s", (txt) => {
+    expect(aceptados(una("ancho_mm", txt, 150))).toEqual([["ancho_mm", 150]])
+  })
+  it("ancho: un número solo no alcanza", () => {
+    expect(motivos(una("ancho_mm", "150", 150))).toEqual(["ancho_mm:unidad_no_en_texto"])
+  })
+})
+
 describe("angulo_grados: sólo el ángulo de luz", () => {
   const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "SPOT LED", code: "SP-001-XYZ" })
   const ang = (valor: number, celdas: Celda[]) => verificarLectura(lectura(null, { angulo_grados: { valor } }), ficha(celdas))

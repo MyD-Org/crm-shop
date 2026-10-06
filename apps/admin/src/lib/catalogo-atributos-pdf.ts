@@ -59,6 +59,10 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
     'Potencia por metro de una tira o manguera en W/m (número, p. ej. 4.8 o 14.4). SOLO si el texto la da por metro ("14.4 W/m"); la potencia total va en potencia_w, nunca acá.',
   leds_rollo:
     'Cantidad TOTAL de LED del rollo o tira (entero, p. ej. 300 o 600), no por metro. Va acá si el texto da el total del rollo ("300 LED", "300 LEDs"); si lo da por metro ("60 LED/m") va en leds_m.',
+  diametro_mm:
+    'Diámetro en milímetros (número, p. ej. 20 o 32) de un caño, tubo, conector, unión, curva, grampa de caño o cablecanal redondo. SOLO el diámetro exterior o nominal del caño; no la sección de un cable ni un espesor.',
+  ancho_mm:
+    'Ancho en milímetros (entero, p. ej. 100 o 300) de una bandeja portacables o de su tapa o accesorio. SOLO el ancho (el primer número de "100/50"); no el alto ni el largo.',
 }
 
 /**

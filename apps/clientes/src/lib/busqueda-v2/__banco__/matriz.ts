@@ -8,8 +8,13 @@
  * que sirvió la caché de producción (`--jev=cache`): el Jev grabado sólo cubre
  * las consultas sintéticas. Jev vivo (gasta) sólo con `--jev=vivo` explícito
  * y únicamente sobre el banco sintético.
+ *
+ * Con `--motor` (aditivo) la matriz suma las filas de la tubería `motor`: por banco y vista, el
+ * motor con política `legado` (la cascada se agrega cuando exista) en la superficie catálogo
+ * (ambas vistas) y en autocompletar y chat (sólo la vista de producción, que es la que ven).
+ * Los ids de las filas de siempre no cambian.
  */
-import { sonComparables, type ModoJev, type ReporteJson, type Tuberia } from "./corrida";
+import { sonComparables, type ModoJev, type PoliticaBanco, type ReporteJson, type SuperficieBanco, type Tuberia } from "./corrida";
 import type { ResumenNum } from "./metricas";
 import type { ModoEtiquetas } from "./cargar-banco";
 
@@ -22,6 +27,9 @@ export interface EntradaMatriz {
   vista: VistaDeMatriz;
   tuberia: Tuberia;
   jev: ModoJev;
+  /** Sólo filas de la tubería `motor`. */
+  politica?: PoliticaBanco;
+  superficie?: SuperficieBanco;
 }
 
 export interface CorridaDeMatriz {
@@ -30,6 +38,8 @@ export interface CorridaDeMatriz {
   vista: VistaDeMatriz;
   tuberia: Tuberia;
   jev: ModoJev;
+  politica?: PoliticaBanco;
+  superficie?: SuperficieBanco;
   reporte: ReporteJson;
 }
 
@@ -49,13 +59,36 @@ function motoresDe(banco: BancoDeMatriz, jevVivo: boolean): { tuberia: Tuberia; 
 
 const sufijoJev = (jev: ModoJev) => (jev === "no aplica" ? "" : `-${jev === "no" ? "sinjev" : jev}`);
 
+/** Políticas del motor que miden las filas `--motor` (la cascada se suma cuando exista). */
+const POLITICAS_MOTOR: readonly PoliticaBanco[] = ["legado"];
+
+/** Superficies del motor por vista: la de producción es la que ven autocompletar y chat. */
+const SUPERFICIES_POR_VISTA: Record<VistaDeMatriz, readonly SuperficieBanco[]> = {
+  banco: ["catalogo"],
+  produccion: ["catalogo", "autocompletar", "chat"],
+};
+
 /** Las corridas de la matriz, en orden estable: banco, vista y motor. */
-export function planDeMatriz({ bancoReal, jevVivo }: { bancoReal: boolean; jevVivo: boolean }): EntradaMatriz[] {
+export function planDeMatriz({ bancoReal, jevVivo, motor = false }: { bancoReal: boolean; jevVivo: boolean; motor?: boolean }): EntradaMatriz[] {
   const bancos: BancoDeMatriz[] = bancoReal ? ["sintetico", "real"] : ["sintetico"];
   return bancos.flatMap((banco) =>
-    VISTAS.flatMap((vista) =>
-      motoresDe(banco, jevVivo).map(({ tuberia, jev }) => ({ id: `${banco}-${vista}-${tuberia}${sufijoJev(jev)}`, banco, vista, tuberia, jev })),
-    ),
+    VISTAS.flatMap((vista): EntradaMatriz[] => [
+      ...motoresDe(banco, jevVivo).map(({ tuberia, jev }) => ({ id: `${banco}-${vista}-${tuberia}${sufijoJev(jev)}`, banco, vista, tuberia, jev })),
+      ...(motor
+        ? POLITICAS_MOTOR.flatMap((politica) =>
+            SUPERFICIES_POR_VISTA[vista].map((superficie) => ({
+              id: `${banco}-${vista}-motor-${politica}-${superficie}`,
+              banco,
+              vista,
+              tuberia: "motor" as const,
+              // Como v2: el banco real usa el plan que sirvió la caché de producción; el sintético, el Jev grabado.
+              jev: banco === "real" ? ("cache" as const) : ("grabado" as const),
+              politica,
+              superficie,
+            })),
+          )
+        : []),
+    ]),
   );
 }
 
@@ -69,12 +102,14 @@ export interface ArgsLinea {
   calentar: number;
   dir?: string;
   jevVivo: boolean;
+  /** `--motor`: suma las filas de la tubería `motor`. */
+  motor: boolean;
   tenantAlias: string;
   /** `--comparar=<ruta>`: matriz.json (o carpeta que lo contiene) de una línea base congelada, para imprimir el delta. */
   comparar?: string;
 }
 
-const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias", "comparar"]);
+const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias", "motor", "comparar"]);
 
 const entero = (nombre: string, v: string | undefined, min: number, def: number): number => {
   if (v === undefined) return def;
@@ -116,6 +151,7 @@ export function parsearArgsLinea(argv: readonly string[]): ArgsLinea {
     calentar: entero("calentar", mapa.get("calentar"), 0, 3),
     ...(mapa.has("dir") ? { dir: mapa.get("dir") } : {}),
     jevVivo: jev === "vivo",
+    motor: mapa.has("motor"),
     tenantAlias: mapa.get("tenant-alias") ?? "shop",
     ...(mapa.has("comparar") ? { comparar: mapa.get("comparar") } : {}),
   };
@@ -128,6 +164,8 @@ const dec = (x: number | null, d = 3) => (x === null ? "n/a" : x.toFixed(d));
 const num = (n: number, hay: boolean) => (hay ? String(n) : "n/a");
 
 function motor(c: CorridaDeMatriz): string {
+  // Cada fila del motor dice su política, su superficie y el K con que se evalúa.
+  if (c.tuberia === "motor") return `motor ${c.politica ?? c.reporte.cabecera.politica}/${c.superficie ?? c.reporte.cabecera.superficie?.nombre} K=${c.reporte.cabecera.superficie?.k ?? 24}`;
   if (c.tuberia !== "v2") return c.tuberia;
   return `v2 (${c.jev === "no" ? "sin Jev" : c.jev})`;
 }
@@ -164,6 +202,8 @@ export function formatearMatriz(corridas: readonly CorridaDeMatriz[]): string {
     "",
     `fecha ${primera.fecha} | git ${primera.gitSha}${primera.sucio ? " (árbol con cambios)" : ""} | alias ${primera.tenantAlias}`,
     `flags declarados: ${Object.entries(primera.flags).map(([k, v]) => `${k}=${v}`).join(", ") || "(ninguno)"}`,
+    // Las filas del motor se leen con el estado de las medidas declarado (flag `busqueda-medidas`).
+    `medidas: ${primera.flags["busqueda-medidas"] ?? "no declarado"}`,
     `repeticiones ${primera.repeticiones}, calentamiento ${primera.calentar}`,
     `snapshot: ${JSON.stringify(primera.snapshot)}`,
   ];
@@ -175,7 +215,7 @@ export function formatearMatriz(corridas: readonly CorridaDeMatriz[]): string {
     lineas.push("", `## Banco ${banco}: ${b.origen}, n=${b.n}, hash ${b.hash}`);
     const [base, ...resto] = delBanco;
     for (const c of resto) {
-      const { ok, motivos } = sonComparables(base.reporte.cabecera, c.reporte.cabecera, { ignorar: ["vista", "jev"] });
+      const { ok, motivos } = sonComparables(base.reporte.cabecera, c.reporte.cabecera, { ignorar: ["vista", "jev", "superficie", "politica"] });
       if (!ok) lineas.push(`ADVERTENCIA: ${base.id} y ${c.id} no son comparables: ${motivos.join("; ")}.`);
     }
     for (const vista of VISTAS) {
@@ -188,6 +228,10 @@ export function formatearMatriz(corridas: readonly CorridaDeMatriz[]): string {
         "motor          | n | hit@24 | hit@3 | MRR | precision@24 | zero total | zero indebido | p50 ms | p95 ms | puntaje",
         ...grupo.map((c) => fila(motor(c), c.reporte.resumen)),
       );
+      // Qué etapa resolvió cada búsqueda del motor (sólo conteos).
+      for (const c of grupo.filter((x) => x.tuberia === "motor" && x.reporte.etapas)) {
+        lineas.push(`etapas ${motor(c).replace(/ K=\d+$/, "")}: ${Object.entries(c.reporte.etapas!).map(([e, n]) => `${e} ${n}`).join(", ")}`);
+      }
       const sinJev = grupo.find((c) => c.tuberia === "v2" && c.jev === "no");
       for (const conJev of grupo.filter((c) => c.tuberia === "v2" && (c.jev === "grabado" || c.jev === "cache" || c.jev === "vivo"))) {
         if (!sinJev) continue;

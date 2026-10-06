@@ -35,19 +35,36 @@ async function primera(estado: EstadoCatalogo, estructurados: boolean, vista: Vi
   return getPaginaCatalogo({ filtros, orden: estado.orden, pagina: 1, soloVisibles: vista.soloVisibles });
 }
 
-export async function ejecutarV2(q: string, ctx: ContextoV2): Promise<ResultadoBanco> {
-  const inicio = Date.now();
-  const vista = ctx.vista ?? VISTA_ACTUAL;
-  const base = estadoBase(q, vista);
+/**
+ * El ÚNICO punto del banco que adquiere el plan de una consulta (caché de producción con `planDe`,
+ * si no Entender con el Jev elegido). Lo usan `ejecutarV2`, el motor del banco y el oráculo
+ * legado: así miden el MISMO plan. Cuando la búsqueda de medidas se aplique sobre el plan,
+ * se agrega acá, una sola vez, y las tres tuberías la heredan.
+ *
+ * `plan: null` = Entender no pudo armar un plan (la búsqueda sigue clásica).
+ */
+export async function obtenerPlan(
+  q: string,
+  ctx: ContextoV2,
+  vista: VistaBanco = ctx.vista ?? VISTA_ACTUAL,
+): Promise<{ plan: PlanBusqueda | null; sinPlanCacheado: boolean }> {
   // Como `servidor.ts`: la decisión duro/blando cuenta sobre el catálogo entero (con y sin stock).
   const contar = contador({ soloVisibles: vista.soloVisibles, soloStock: false, estructurados: ctx.estructurados });
   const cacheado = ctx.planDe ? await ctx.planDe(q) : null;
   const entendido = cacheado ? { plan: cacheado } : await entender(q, { arbol: ctx.arbol, jev: ctx.jev, contar });
-  const sinPlanCacheado = !!ctx.planDe && !cacheado ? { sinPlanCacheado: true } : {};
-  if (!entendido || entendido.plan.intencion === "codigo") {
+  return { plan: entendido?.plan ?? null, sinPlanCacheado: !!ctx.planDe && !cacheado };
+}
+
+export async function ejecutarV2(q: string, ctx: ContextoV2): Promise<ResultadoBanco> {
+  const inicio = Date.now();
+  const vista = ctx.vista ?? VISTA_ACTUAL;
+  const base = estadoBase(q, vista);
+  const { plan, sinPlanCacheado: sinPlan } = await obtenerPlan(q, ctx, vista);
+  const sinPlanCacheado = sinPlan ? { sinPlanCacheado: true } : {};
+  if (!plan || plan.intencion === "codigo") {
     const p = await primera(base, ctx.estructurados, vista);
     return {
-      intencion: entendido?.plan.intencion,
+      intencion: plan?.intencion,
       categoriasDuras: [],
       categoriasBlandas: [],
       atributosDuros: [],
@@ -58,7 +75,6 @@ export async function ejecutarV2(q: string, ctx: ContextoV2): Promise<ResultadoB
       ...sinPlanCacheado,
     };
   }
-  const { plan } = entendido;
   const p = await primera(estadoConPlan(base, plan), ctx.estructurados, vista, plan);
   return {
     intencion: plan.intencion,

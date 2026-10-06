@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { updateTag } from "next/cache";
 import { TAG_HOME } from "@/lib/cache-tags";
 import { esAdmin } from "@/lib/auth";
-import { getCatalogo } from "@/lib/catalog";
+import { buscarEnShop } from "@/lib/busqueda-v2/motor-servidor";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   KEY_LEGAL,
@@ -263,7 +263,11 @@ export async function buscarProductosHome(q: string): Promise<ResultadoBusquedaP
     // Mismo criterio de visibilidad que la home pública: un SKU que el
     // visitante no vería no sirve como destacado.
     const { soloVisibles } = await flagsPublicos();
-    const productos = await getCatalogo({ busqueda, limit: LIMITE_BUSQUEDA_PRODUCTOS, soloVisibles });
+    // Búsqueda del motor único (superficie `admin`): sólo la exacta, sin conteo.
+    const { productos } = await buscarEnShop(
+      { consulta: busqueda, filtros: {}, orden: "relevancia", pagina: 1, porPagina: LIMITE_BUSQUEDA_PRODUCTOS },
+      { superficie: "admin", soloVisibles },
+    );
     return {
       ok: true,
       productos: productos

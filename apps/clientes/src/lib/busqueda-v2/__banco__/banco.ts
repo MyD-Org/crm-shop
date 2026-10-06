@@ -24,6 +24,8 @@ export const BANCO: BusquedaBanco[] = parsearBanco(banco, { origen: "embebido" }
 
 /** Producto tal como lo necesita la evaluación (un recorte de `Product`). */
 export interface ProductoBanco {
+  /** Para comparar corridas por ids (`--ids`, `--paridad`). Ausente en las tuberías viejas. */
+  id?: string;
   name: string;
   description?: string;
   sku?: string;
@@ -48,6 +50,10 @@ export interface ResultadoBanco {
   ms?: number;
   /** `--jev=cache`: no había plan cacheado y se usó el determinista (sin Jev). */
   sinPlanCacheado?: boolean;
+  /** Tubería `motor`: ids de los productos devueltos, en orden (paridad entre corridas). */
+  ids?: string[];
+  /** Tubería `motor`: la etapa que resolvió la búsqueda (`plan`, `exacta`, `tolerante`…). */
+  etapa?: string;
   /**
    * Ids de medida que el plan produjo: dinámicos (`clave:valor`) o, cuando existe equivalente, los del
    * diccionario (`zocalo-e27`, `tension-12v`, `apto-exterior`). Ausente = la tubería no produce medidas
@@ -90,6 +96,9 @@ export interface EvaluacionBusqueda {
   muestrasMs?: number[];
   /** Jev grabado sin respuesta para este caso: se excluye de las métricas (lo cuenta la corrida). */
   sinGrabacion?: boolean;
+  /** Tubería `motor`: ids de lo devuelto y etapa que resolvió (sólo se escriben en el JSON con `--ids` / aparte). */
+  ids?: string[];
+  etapa?: string;
   /** Sólo en casos con `medidas`/`sinMedidasDe`: ver `evaluarMedidas`. El puntaje y `PESOS` no la incluyen. */
   medida?: EvaluacionMedida;
 }
@@ -124,10 +133,16 @@ function idsConDescendientes(arbol: { id: string; parentId: string | null; nombr
   return ids;
 }
 
+/**
+ * `k` = cuántos productos mira la evaluación: 24 (la primera página del catálogo, la de siempre),
+ * 8 (autocompletar) o 10 (chat). Los nombres `top24Ok`/`hit24` se conservan por compatibilidad con
+ * los JSON congelados: con otra superficie significan "en los primeros K".
+ */
 export function evaluar(
   b: BusquedaBanco,
   r: ResultadoBanco,
   arbol: { id: string; parentId: string | null; nombre: string }[],
+  { k = 24 }: { k?: number } = {},
 ): EvaluacionBusqueda {
   let puntos = 0;
   let posibles = 0;
@@ -153,7 +168,7 @@ export function evaluar(
   const atributosOk = b.atributosDuros?.length ? b.atributosDuros.every((a) => r.atributosDuros.includes(a)) : null;
   sumar(atributosOk, PESOS.atributos);
 
-  const top = r.productos.slice(0, 24);
+  const top = r.productos.slice(0, k);
   const idsCat = b.categoriaEnTop24?.length ? idsConDescendientes(arbol, b.categoriaEnTop24) : null;
   const esperado = (p: ProductoBanco) =>
     (b.debeIncluirEnTop24 ?? []).some((e) => tienePalabra(`${p.name} ${p.description ?? ""} ${p.sku ?? ""}`, e)) ||
@@ -244,7 +259,7 @@ export function resumir(evs: EvaluacionBusqueda[], conIntencion: boolean, banco:
 const marca = (v: boolean | null) => (v === null ? "·" : v ? "✓" : "✗");
 
 /** Reporte en texto: una línea por búsqueda y el resumen (total y diagnóstico). Sin nombres de productos. */
-export function reporte(titulo: string, evs: EvaluacionBusqueda[], conIntencion: boolean): string {
+export function reporte(titulo: string, evs: EvaluacionBusqueda[], conIntencion: boolean, k = 24): string {
   const lineas = [`# ${titulo}`, "", "int cat atr top pos  total  consulta → categoría entendida"];
   for (const e of evs) {
     lineas.push(
@@ -265,7 +280,7 @@ export function reporte(titulo: string, evs: EvaluacionBusqueda[], conIntencion:
     "",
     "(* = diagnóstico 2026-09-30)",
     "",
-    "conjunto     | n | intención | categoría | atributos | top 24 | top 3 | pos. media | sin resultados indebidos | puntaje %",
+    `conjunto     | n | intención | categoría | atributos | top ${k} | top 3 | pos. media | sin resultados indebidos | puntaje %`,
     fila("total", resumir(evs, conIntencion)),
     fila("diagnóstico", resumir(evs.filter((e) => e.diagnostico), conIntencion)),
   );
@@ -277,6 +292,9 @@ const dec = (x: number | null, d: number) => (x === null ? "n/a" : x.toFixed(d))
 
 const ENCABEZADO_AMPLIADO =
   "n | hit@24 | hit@3 | MRR | precision@24 | zero total | zero indebido | p50 ms | p95 ms";
+
+/** El texto de las métricas con el K de la superficie (24 = el de siempre, sin cambios). */
+const conK = (texto: string, k: number) => (k === 24 ? texto : texto.replaceAll("@24", `@${k}`));
 
 function filaAmpliada(nombre: string, r: ResumenNum): string {
   return [
@@ -299,20 +317,21 @@ function filaAmpliada(nombre: string, r: ResumenNum): string {
  * Va DEBAJO de `reporte()`, que no cambia (la tabla y el resumen de siempre).
  * Sólo agregados: sin consultas ni nombres de productos.
  */
-export function reporteAmpliado(evs: EvaluacionBusqueda[], conIntencion: boolean): string {
+export function reporteAmpliado(evs: EvaluacionBusqueda[], conIntencion: boolean, k = 24): string {
   const total = resumenNumerico(evs, conIntencion);
+  const encabezado = conK(ENCABEZADO_AMPLIADO, k);
   const lineas = [
     "## Métricas ampliadas",
-    "(precision@24 es un proxy: esperados o de la categoría buscada sobre los productos devueltos; MRR 0..1)",
+    conK("(precision@24 es un proxy: esperados o de la categoría buscada sobre los productos devueltos; MRR 0..1)", k),
     "",
-    `corte              | ${ENCABEZADO_AMPLIADO}`,
+    `corte              | ${encabezado}`,
     filaAmpliada("total", total),
   ];
-  if (total.precisionExcluidos) lineas.push("", `precision@24: ${total.precisionExcluidos} caso(s) sin criterio de relevancia, excluidos del promedio.`);
+  if (total.precisionExcluidos) lineas.push("", conK(`precision@24: ${total.precisionExcluidos} caso(s) sin criterio de relevancia, excluidos del promedio.`, k));
   if (total.ponderado) {
     lineas.push(
       "",
-      `ponderado por peso (hits): hit@24 ${pctNum(total.ponderado.hit24)} | MRR ${dec(total.ponderado.mrr, 3)} | zero ${pctNum(total.ponderado.zeroRate)}`,
+      conK(`ponderado por peso (hits): hit@24 ${pctNum(total.ponderado.hit24)} | MRR ${dec(total.ponderado.mrr, 3)} | zero ${pctNum(total.ponderado.zeroRate)}`, k),
     );
   }
   const cortes: [string, "perfil" | "intencionEsperada" | "tipo"][] = [
@@ -321,7 +340,7 @@ export function reporteAmpliado(evs: EvaluacionBusqueda[], conIntencion: boolean
     ["por tipo de consulta", "tipo"],
   ];
   for (const [titulo, clave] of cortes) {
-    lineas.push("", `### ${titulo}`, `corte              | ${ENCABEZADO_AMPLIADO}`);
+    lineas.push("", `### ${titulo}`, `corte              | ${encabezado}`);
     for (const [valor, r] of Object.entries(cortarPor(evs, clave, conIntencion))) lineas.push(filaAmpliada(valor, r));
   }
   const medidas = bloqueMedidas(evs);

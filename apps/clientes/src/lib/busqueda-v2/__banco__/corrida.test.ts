@@ -281,6 +281,75 @@ describe("sonComparables", () => {
   });
 });
 
+describe("correr: tubería motor (política, superficie, ids, etapa)", () => {
+  const muchos = Array.from({ length: 30 }, (_, i) => ({ id: `id${i}`, name: i === 20 ? "lampara buscada" : `otro ${i}` }));
+  const motor = (extra: Partial<ResultadoBanco> = {}): ResultadoBanco => ({
+    ...vacio,
+    intencion: "producto",
+    productos: muchos,
+    ids: muchos.map((p) => p.id!),
+    total: 30,
+    etapa: "exacta",
+    ms: 4,
+    ...extra,
+  });
+  const caso: BusquedaBanco[] = [{ q: "lampara buscada", perfil: "particular", debeIncluirEnTop24: ["lampara buscada"] }];
+  const base = (p: Partial<OpcionesCorrida> = {}) =>
+    opciones({ tuberia: "motor", politica: "legado", superficie: "chat", banco: { origen: "versionado", local: false, privado: false, casos: caso, hash: "abcdef012345" }, ...p });
+
+  it("la superficie fija el K de la evaluación: el 21.º producto cuenta en el catálogo y no en el chat", async () => {
+    const d = deps({ ejecutar: vi.fn(async () => motor()) });
+    const catalogo = await correr(base({ superficie: "catalogo" }), d);
+    const chat = await correr(base({ superficie: "chat" }), d);
+    expect(catalogo.json.casos[0].top24Ok).toBe(true);
+    expect(chat.json.casos[0].top24Ok).toBe(false);
+    expect(chat.texto).toContain("top 10");
+    expect(chat.texto).toContain("hit@10");
+    expect(catalogo.texto).toContain("top 24");
+  });
+
+  it("la cabecera declara política y superficie (con su K y si cuenta)", async () => {
+    const { json } = await correr(base({ superficie: "autocompletar" }), deps({ ejecutar: vi.fn(async () => motor()) }));
+    expect(json.cabecera.politica).toBe("legado");
+    expect(json.cabecera.superficie).toEqual({ nombre: "autocompletar", k: 8, conteo: false });
+    expect(json.cabecera.tuberia).toBe("motor");
+  });
+
+  it("las tuberías viejas no suman política ni superficie a la cabecera", async () => {
+    const { json } = await correr(opciones(), deps());
+    expect("politica" in json.cabecera).toBe(false);
+    expect("superficie" in json.cabecera).toBe(false);
+  });
+
+  it("etapa por caso y histograma de etapas (sólo agregados)", async () => {
+    const { json, texto } = await correr(base(), deps({ ejecutar: vi.fn(async () => motor({ etapa: "tolerante" })) }));
+    expect(json.casos[0].etapa).toBe("tolerante");
+    expect(json.etapas).toEqual({ tolerante: 1 });
+    expect(texto).toContain("etapas: tolerante 1");
+  });
+
+  it("los ids sólo van al JSON con --ids, recortados al K de la superficie", async () => {
+    const d = deps({ ejecutar: vi.fn(async () => motor()) });
+    const sin = await correr(base(), d);
+    expect(sin.json.casos[0].ids).toBeUndefined();
+    const con = await correr(base({ ids: true }), d);
+    expect(con.json.casos[0].ids).toEqual(muchos.slice(0, 10).map((p) => p.id));
+    expect(con.texto).not.toContain("id0");
+  });
+
+  it("sonComparables: otra superficie u otra política no se comparan salvo que se ignoren", async () => {
+    const d = deps({ ejecutar: vi.fn(async () => motor()) });
+    const chat = (await correr(base({ superficie: "chat" }), d)).json.cabecera;
+    const catalogo = (await correr(base({ superficie: "catalogo" }), d)).json.cabecera;
+    const cascada = (await correr(base({ politica: "cascada" }), d)).json.cabecera;
+    expect(sonComparables(chat, catalogo).ok).toBe(false);
+    expect(sonComparables(chat, catalogo).motivos.join(" ")).toMatch(/superficie/);
+    expect(sonComparables(chat, cascada).motivos.join(" ")).toMatch(/pol[ií]tica/);
+    expect(sonComparables(chat, cascada, { ignorar: ["politica"] }).ok).toBe(true);
+    expect(sonComparables(chat, catalogo, { ignorar: ["superficie"] }).ok).toBe(true);
+  });
+});
+
 describe("correr: estado de busqueda-medidas (R5.6)", () => {
   it("por defecto la cabecera y la consola dicen «no aplica» (la tubería todavía no usa el flag)", async () => {
     const { json, texto } = await correr(opciones(), deps());

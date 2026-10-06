@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { facetasPublicas, paginaCatalogoPublica } from "@/lib/catalogo-publico";
+import { facetasPublicas } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   IA_PLAN,
@@ -19,11 +19,12 @@ import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servid
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
-import { getArbolCategorias, type FiltrosCatalogo } from "@/lib/catalog";
+import { PRODUCTOS_POR_PAGINA, getArbolCategorias } from "@/lib/catalog";
 import { chipsSugeridos } from "@/lib/busqueda-inteligente/url";
 import { pareceCodigo } from "@/lib/busqueda-inteligente/gate";
-import { criterioDe } from "@/lib/busqueda-v2/destino";
 import { hrefBuscar } from "@/lib/busqueda-v2/enlaces";
+import { sinTexto } from "@/lib/busqueda-v2/motor";
+import { buscarEnShop } from "@/lib/busqueda-v2/motor-servidor";
 import type { PlanBusqueda } from "@/lib/busqueda-v2/plan";
 import { planParaPagina } from "@/lib/busqueda-v2/servidor";
 
@@ -117,78 +118,60 @@ async function CatalogoResultados({ searchParams }: Props) {
   // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
   // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
   const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
-  // Búsqueda v2 (`?ia=1`, la URL a la que redirige `/buscar`): el plan de la consulta (caché o
-  // recálculo determinista, NUNCA Jev) aporta lo blando. Nunca se redirige desde acá.
-  const plan =
-    conBusquedaIa && estado.ia === IA_PLAN && estado.query
-      ? await planParaPagina(estado.query, { soloVisibles })
-      : null;
-  const filtros: FiltrosCatalogo = {
-    ...filtrosDeEstado(estado),
-    ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
-    ...(estructurados ? { atributosEstructurados: true } : {}),
-    ...(plan && plan.intencion !== "codigo" ? { planBusqueda: criterioDe(plan, estado) } : {}),
-  };
-
-  // Sólo viaja al browser la página pedida. Filtros, orden y conteos se
-  // resuelven en Postgres: filtrar u ordenar después de paginar daría
-  // resultados incompletos. Página y facetas salen de la caché compartida
-  // (src/lib/catalogo-publico.ts, tag `catalogo`) salvo búsqueda por texto o
+  // Una sola búsqueda para las cuatro superficies (`busqueda-v2/motor.ts`): el motor decide las
+  // etapas (con `?ia=1`, la URL a la que redirige `/buscar`, el plan de la consulta —caché o
+  // recálculo determinista, NUNCA Jev— aporta lo blando; sin resultados, un segundo intento
+  // tolerante a errores de tipeo: "lampra" → "lámpara") y devuelve los filtros EFECTIVOS de la
+  // etapa que resolvió, para que las facetas cuenten el mismo conjunto que se ve. Nunca se
+  // redirige desde acá.
+  //
+  // Sólo viaja al browser la página pedida. Filtros, orden y conteos se resuelven en Postgres:
+  // filtrar u ordenar después de paginar daría resultados incompletos. Página y facetas salen de
+  // la caché compartida (src/lib/catalogo-publico.ts, tag `catalogo`) salvo búsqueda por texto o
   // rango de precio, que van directo a la base.
   //
-  // Las tres lecturas son independientes entre sí:
-  // - las facetas cruzan los grupos: las marcas se cuentan dentro de las
-  //   categorías tildadas y las categorías dentro de las marcas tildadas, para
-  //   que la lista no ofrezca marcas ajenas a lo que se está viendo; el rango
-  //   de precio sale del conjunto filtrado sin el propio rango;
-  // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos
-  //   o error) ⇒ el catálogo sale sin cuotas.
-  const [exacta, facetasExactas, oferta] = await Promise.all([
-    paginaCatalogoPublica({
-      filtros,
-      orden: estado.orden,
-      pagina: estado.pagina,
-      soloVisibles,
-      disp,
-      destacado: mediosPrecio?.destacado,
-    }),
-    facetasPublicas(filtros, soloVisibles, disp),
-    getOfertaCuotas(),
-  ]);
-  // Búsqueda sin resultados: segundo intento tolerante a errores de tipeo
-  // ("lampra" → "lámpara"). Página y facetas con los MISMOS filtros, para que
-  // cuenten el conjunto que se ve. Si falla (p. ej. falta pg_trgm), queda la
-  // búsqueda exacta vacía y sigue el camino de `filtrosSinBusqueda`.
-  let pagina = exacta;
-  let facetasBusqueda = facetasExactas;
-  if (exacta.total === 0 && filtros.busqueda?.trim() && !filtros.planBusqueda) {
-    const tolerantes = { ...filtros, busquedaTolerante: true };
-    const segundo = await Promise.all([
-      paginaCatalogoPublica({
-        filtros: tolerantes,
+  // Las lecturas son independientes entre sí:
+  // - las facetas cruzan los grupos: las marcas se cuentan dentro de las categorías tildadas y
+  //   las categorías dentro de las marcas tildadas, para que la lista no ofrezca marcas ajenas a
+  //   lo que se está viendo; el rango de precio sale del conjunto filtrado sin el propio rango;
+  // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos o error) ⇒ el
+  //   catálogo sale sin cuotas.
+  const [pagina, oferta] = await Promise.all([
+    buscarEnShop(
+      {
+        consulta: estado.query,
+        filtros: {
+          ...sinTexto(filtrosDeEstado(estado)),
+          ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
+          ...(estructurados ? { atributosEstructurados: true } : {}),
+        },
         orden: estado.orden,
         pagina: estado.pagina,
+        porPagina: PRODUCTOS_POR_PAGINA,
+      },
+      {
+        superficie: "catalogo",
         soloVisibles,
         disp,
         destacado: mediosPrecio?.destacado,
-      }),
-      facetasPublicas(tolerantes, soloVisibles, disp),
-    ]).catch((err: unknown) => {
-      console.error("[catalogo] falló la búsqueda tolerante:", err);
-      return null;
-    });
-    if (segundo && segundo[0].total > 0) [pagina, facetasBusqueda] = segundo;
-  }
+        conPlanDeUrl: estado.ia === IA_PLAN,
+        conFacetas: true,
+        busquedaIa: conBusquedaIa,
+      },
+    ),
+    getOfertaCuotas(),
+  ]);
+  const plan = pagina.plan;
   // Una búsqueda sin resultados dejaba el panel de filtros vacío ("Sin
   // categorías…"): sin nada para tocar, la única salida era borrar el texto.
   // En ese caso el panel muestra los filtros sin la búsqueda, y tocar uno la
   // quita (ver `filtrosSinBusqueda` en CatalogoClient).
-  const filtrosSinBusqueda =
-    pagina.total === 0 && Boolean(filtros.busqueda?.trim());
-  const facetas = filtrosSinBusqueda
-    ? // Sin la búsqueda ni su plan: tocar un filtro quita la búsqueda (y con ella `ia`).
-      await facetasPublicas({ ...filtros, busqueda: undefined, planBusqueda: undefined }, soloVisibles, disp)
-    : facetasBusqueda;
+  const filtrosSinBusqueda = pagina.total === 0 && Boolean(estado.query?.trim());
+  const facetas =
+    filtrosSinBusqueda || !pagina.facetas
+      ? // Sin la búsqueda ni su plan: tocar un filtro quita la búsqueda (y con ella `ia`).
+        await facetasPublicas(sinTexto(pagina.filtrosEfectivos), soloVisibles, disp)
+      : pagina.facetas;
 
   // Búsqueda inteligente (flag `busqueda-ia`): franja del plan y salidas del "sin resultados".
   const busquedaIa = conBusquedaIa

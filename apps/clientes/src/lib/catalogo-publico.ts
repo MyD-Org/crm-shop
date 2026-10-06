@@ -73,6 +73,13 @@ export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
     !filtros.busqueda?.trim() &&
     // El plan de la búsqueda v2 sale de una consulta libre: tantas claves como búsquedas.
     !filtros.planBusqueda &&
+    !filtros.busquedaTolerante &&
+    // El texto único (`texto`) es la misma consulta libre, en cualquiera de sus formas. Se mira
+    // acá y no con `textoDe` (de catalog.ts) para no depender de ese módulo.
+    !filtros.texto?.q.trim() &&
+    !filtros.texto?.plan &&
+    !filtros.texto?.tolerante &&
+    !filtros.texto?.codigo &&
     // Una medida (`corriente_a:20`) tiene tantos valores posibles como el precio: una clave por cada uno.
     !filtros.atributos?.some(esMedidaId) &&
     filtros.precioMin == null &&

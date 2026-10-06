@@ -685,8 +685,29 @@ export async function preciosCuentaPorIds(
 /** Cuántos productos entran en una página del catálogo. Múltiplo de la grilla (1/2/3 columnas). */
 export const PRODUCTOS_POR_PAGINA = 24;
 
+/**
+ * El texto de una búsqueda, ya decidido por quien la pide (el motor, `busqueda-v2/motor.ts`):
+ * una sola forma en lugar de `busqueda` + `busquedaTolerante` + `planBusqueda` (que se retiran
+ * cuando todo pase por el motor).
+ */
+export interface TextoBusqueda {
+  /** La consulta (recortada). Puede ser "" si sólo hay plan. */
+  q: string;
+  /** Con plan: recupera por OR y ordena con el puntaje del plan; sin plan, AND de LIKE. */
+  plan?: CriterioPlan;
+  /** Suma el parecido por trigramas por término de 4 letras o más. */
+  tolerante?: boolean;
+  /** Reservado: coincidencia por código normalizado, sin separadores. Todavía no hace nada. */
+  codigo?: boolean;
+}
+
 /** Filtros que aplica el servidor. Categorías y marcas son OR dentro del grupo. */
 export interface FiltrosCatalogo {
+  /**
+   * El texto de la búsqueda (ver `TextoBusqueda`). Gana sobre `busqueda`, `busquedaTolerante` y
+   * `planBusqueda`, que siguen valiendo mientras migran los llamadores.
+   */
+  texto?: TextoBusqueda;
   busqueda?: string;
   /**
    * Segundo intento de la búsqueda, tolerante a errores de tipeo (ver
@@ -750,6 +771,20 @@ export interface PaginaCatalogo {
   pagina: number;
   /** Cantidad de páginas. 0 productos ⇒ 1 página (la vacía). */
   paginas: number;
+  /**
+   * `false` si se pidió `sinConteo`: `total` es sólo lo que trajo la consulta (una cota inferior).
+   * Ausente en los resultados que no lo informan.
+   */
+  totalExacto?: boolean;
+}
+
+/**
+ * El texto efectivo de unos filtros: `texto` si viene; si no, lo que dicen los campos viejos
+ * (`busqueda` recortada, `busquedaTolerante`, `planBusqueda`). Siempre un objeto: sin texto, `q` es "".
+ */
+export function textoDe(f: Pick<FiltrosCatalogo, "texto" | "busqueda" | "busquedaTolerante" | "planBusqueda">): TextoBusqueda {
+  if (f.texto) return { ...f.texto, q: f.texto.q.trim() };
+  return { q: f.busqueda?.trim() ?? "", tolerante: f.busquedaTolerante, plan: f.planBusqueda };
 }
 
 /**
@@ -979,13 +1014,13 @@ const APLICAR_TODOS: AplicarFiltros = {
  * palabras eran contexto: "luz cálida para el living" son las lámparas cálidas); sin ellos,
  * cualquiera de sus términos aunque sean de contexto (`condicionAmplia`). Sin plan, la clásica.
  */
-function textoSinPlan(filtros: FiltrosCatalogo, q: string | undefined, disp?: ContextoDisponibilidad) {
-  if (filtros.planBusqueda) {
+function textoSinPlan(filtros: FiltrosCatalogo, texto: TextoBusqueda, disp?: ContextoDisponibilidad) {
+  if (texto.plan) {
     if (filtros.categorias?.length || filtros.atributos?.length) return undefined;
-    const amplia = condicionAmplia(filtros.planBusqueda, piezasBusqueda(filtros, disp));
+    const amplia = condicionAmplia(texto.plan, piezasBusqueda(filtros, disp));
     if (amplia) return amplia;
   }
-  return q ? coincideTexto(q, filtros.busquedaTolerante) : undefined;
+  return texto.q ? coincideTexto(texto.q, texto.tolerante) : undefined;
 }
 
 /**
@@ -1017,16 +1052,16 @@ function condicionesDe(
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
 ) {
-  const q = filtros.busqueda?.trim();
+  const texto = textoDe(filtros);
   // Con plan (búsqueda v2) el texto recupera en vez de filtrar; sin nada que recupere, la clásica.
-  const recuperar = filtros.planBusqueda ? condicionRecuperar(filtros.planBusqueda, piezasBusqueda(filtros, disp)) : undefined;
+  const recuperar = texto.plan ? condicionRecuperar(texto.plan, piezasBusqueda(filtros, disp)) : undefined;
   return and(
     enTenantCatalogo(),
     activoSql,
     conPrecioSql,
     soloVisiblesSql(soloVisibles),
     visibleEnZonaSql(disp),
-    recuperar ?? textoSinPlan(filtros, q, disp),
+    recuperar ?? textoSinPlan(filtros, texto, disp),
     aplicar.categorias && filtros.categorias?.length
       ? filtroCategoriasSql(filtros.categorias)
       : undefined,
@@ -1057,13 +1092,13 @@ function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: Contexto
   switch (orden) {
     case "relevancia": {
       // Búsqueda v2: el puntaje del plan, aunque no quede texto filtrando.
-      if (filtros.planBusqueda) {
-        return [sql`${puntajeBusqueda(filtros.planBusqueda, piezasBusqueda(filtros, disp))} desc`, asc(crmCatalogo.name)];
+      const texto = textoDe(filtros);
+      if (texto.plan) {
+        return [sql`${puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp))} desc`, asc(crmCatalogo.name)];
       }
-      const q = filtros.busqueda?.trim();
       // Sin términos útiles no hay con qué puntuar: alfabético.
-      if (!q || !terminosBusqueda(q).length) return [asc(crmCatalogo.name)];
-      return [sql`${relevanciaSql(q, !!filtros.busquedaTolerante)} desc`, asc(crmCatalogo.name)];
+      if (!texto.q || !terminosBusqueda(texto.q).length) return [asc(crmCatalogo.name)];
+      return [sql`${relevanciaSql(texto.q, !!texto.tolerante)} desc`, asc(crmCatalogo.name)];
     }
     case "precio-asc":
       return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];
@@ -1103,24 +1138,32 @@ export async function getPaginaCatalogo(opts: {
   disp?: ContextoDisponibilidad;
   /** "$X con <Medio>" (ver `mapFilaToProduct`). */
   mediosPrecio?: MediosPrecio;
+  /**
+   * No contar el total (el autocompletar, el chat y el selector del admin no lo muestran): una
+   * consulta menos. `total` pasa a ser lo que trajo la consulta, `pagina` y `paginas` valen 1 y
+   * el resultado dice `totalExacto: false`.
+   */
+  sinConteo?: boolean;
 }): Promise<PaginaCatalogo> {
   const filtros = opts.filtros ?? {};
   const porPagina = opts.porPagina ?? PRODUCTOS_POR_PAGINA;
   const where = condicionesDe(filtros, APLICAR_TODOS, opts.soloVisibles, opts.disp);
 
-  const [conteo] = await getDb()
-    .select({ total: sql<number>`count(*)::int` })
-    .from(crmCatalogo)
-    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
-    .where(where);
+  const [conteo] = opts.sinConteo
+    ? []
+    : await getDb()
+        .select({ total: sql<number>`count(*)::int` })
+        .from(crmCatalogo)
+        .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+        .leftJoin(crmOverlay, joinOverlay())
+        .leftJoin(stockReservado, joinReserva())
+        .where(where);
 
   const total = conteo?.total ?? 0;
   const paginas = Math.max(Math.ceil(total / porPagina), 1);
-  const pagina = acotarPagina(opts.pagina ?? 1, paginas);
+  const pagina = opts.sinConteo ? 1 : acotarPagina(opts.pagina ?? 1, paginas);
 
-  const filas = total
+  const filas = total || opts.sinConteo
     ? await getDb()
         .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados))
         .from(crmCatalogo)
@@ -1133,12 +1176,9 @@ export async function getPaginaCatalogo(opts: {
         .offset((pagina - 1) * porPagina)
     : [];
 
-  return {
-    productos: filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio)),
-    total,
-    pagina,
-    paginas,
-  };
+  const productos = filas.map((f) => mapFilaToProduct(f, opts.idPriceList, undefined, undefined, opts.mediosPrecio));
+  if (opts.sinConteo) return { productos, total: productos.length, pagina: 1, paginas: 1, totalExacto: false };
+  return { productos, total, pagina, paginas, totalExacto: true };
 }
 
 /**

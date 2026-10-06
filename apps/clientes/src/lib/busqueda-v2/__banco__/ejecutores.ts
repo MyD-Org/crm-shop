@@ -1,6 +1,6 @@
 /**
  * Arma el ejecutor de cada tubería del banco (`clasica`, `tolerante`, `fase1`,
- * `v2` con Jev grabado / vivo / sin Jev / plan de la caché). Lo comparten
+ * `v2` y `motor` con Jev grabado / vivo / sin Jev / plan de la caché) y el oráculo `legado`. Lo comparten
  * `banco:busqueda` y `banco:linea-base`. SOLO scripts; no abre conexiones por
  * su cuenta (el que lo usa envuelve cada llamada en `enLectura`).
  */
@@ -13,11 +13,13 @@ import { leerPlan } from "../cache";
 import { clavePlan } from "../servidor";
 import type { BusquedaBanco, ResultadoBanco } from "./banco";
 import { ejecutarClasica } from "./clasica";
-import type { ModoJev, Tuberia } from "./corrida";
+import type { ModoJev, PoliticaBanco, SuperficieBanco, Tuberia } from "./corrida";
 import { ejecutarFase1 } from "./fase1";
 import grabado from "./jev-grabado.json";
 import { jevGrabado, type JevGrabado } from "./jev-grabado";
-import { ejecutarV2 } from "./v2";
+import { ejecutarLegado } from "./legado";
+import { ejecutarMotor } from "./motor";
+import { ejecutarV2, type ContextoV2 } from "./v2";
 import type { VistaBanco } from "./vista";
 
 export interface ConfigEjecutor {
@@ -32,6 +34,9 @@ export interface ConfigEjecutor {
    * el de la vista; en la línea base es el de producción, que es el que sirvió el plan al cliente.
    */
   soloVisiblesDelPlan?: boolean;
+  /** Sólo tubería `motor` y oráculo `legado`: política (por defecto `legado`) y superficie (por defecto `catalogo`). */
+  politica?: PoliticaBanco;
+  superficie?: SuperficieBanco;
 }
 
 export interface Ejecutor {
@@ -49,6 +54,33 @@ export function resolverJev(jev: ModoJev | "segun-entorno", conClave: boolean): 
   return jev === "segun-entorno" ? (conClave ? "vivo" : "no") : jev;
 }
 
+/** Cómo se adquiere el plan según el modo de Jev (lo comparten `v2`, `motor` y el oráculo `legado`). */
+function contextoDePlan(cfg: ConfigEjecutor): { ctx: ContextoV2; jevMeta?: Ejecutor["jevMeta"]; sinGrabacion?: Ejecutor["sinGrabacion"] } {
+  const { vista, arbol, estructurados } = cfg;
+  if (cfg.jev === "cache") {
+    const soloVisibles = cfg.soloVisiblesDelPlan ?? vista.soloVisibles;
+    const hash = clavePlan(arbol, soloVisibles);
+    // Lectura sin sumar uso (la tx es read only): el plan que vio el cliente, sin Jev ni costo.
+    const planDe = async (q: string) => {
+      const norm = normalizarConsulta(q);
+      return norm ? leerPlan(shopTenantId(), norm, hash, false) : null;
+    };
+    return { ctx: { arbol, jev: null, estructurados, vista, planDe } };
+  }
+  if (cfg.jev === "vivo") {
+    return { ctx: { arbol, jev: jevVivo, estructurados, vista }, jevMeta: { modelo: JEV_MODELO, grabadoEl: null } };
+  }
+  if (cfg.jev === "no") return { ctx: { arbol, jev: null, estructurados, vista } };
+  return {
+    ctx: { arbol, jev: jevGrabado(grabaciones), estructurados, vista },
+    jevMeta: { modelo: grabaciones.modelo, grabadoEl: grabaciones.grabadoEl },
+    sinGrabacion: (c) => {
+      const norm = normalizarConsulta(c.q);
+      return !!norm && !pareceCodigo(c.q) && !(norm in grabaciones.respuestas);
+    },
+  };
+}
+
 export function crearEjecutor(cfg: ConfigEjecutor): Ejecutor {
   const { vista, arbol, estructurados } = cfg;
   switch (cfg.tuberia) {
@@ -64,28 +96,23 @@ export function crearEjecutor(cfg: ConfigEjecutor): Ejecutor {
       };
     }
     case "v2": {
-      if (cfg.jev === "cache") {
-        const soloVisibles = cfg.soloVisiblesDelPlan ?? vista.soloVisibles;
-        const hash = clavePlan(arbol, soloVisibles);
-        // Lectura sin sumar uso (la tx es read only): el plan que vio el cliente, sin Jev ni costo.
-        const planDe = async (q: string) => {
-          const norm = normalizarConsulta(q);
-          return norm ? leerPlan(shopTenantId(), norm, hash, false) : null;
-        };
-        return { ejecutar: (q) => ejecutarV2(q, { arbol, jev: null, estructurados, vista, planDe }) };
-      }
-      if (cfg.jev === "vivo") {
-        return { ejecutar: (q) => ejecutarV2(q, { arbol, jev: jevVivo, estructurados, vista }), jevMeta: { modelo: JEV_MODELO, grabadoEl: null } };
-      }
-      if (cfg.jev === "no") return { ejecutar: (q) => ejecutarV2(q, { arbol, jev: null, estructurados, vista }) };
-      return {
-        ejecutar: (q) => ejecutarV2(q, { arbol, jev: jevGrabado(grabaciones), estructurados, vista }),
-        jevMeta: { modelo: grabaciones.modelo, grabadoEl: grabaciones.grabadoEl },
-        sinGrabacion: (c) => {
-          const norm = normalizarConsulta(c.q);
-          return !!norm && !pareceCodigo(c.q) && !(norm in grabaciones.respuestas);
-        },
-      };
+      const { ctx, jevMeta, sinGrabacion } = contextoDePlan(cfg);
+      return { ejecutar: (q) => ejecutarV2(q, ctx), ...(jevMeta ? { jevMeta } : {}), ...(sinGrabacion ? { sinGrabacion } : {}) };
+    }
+    case "motor": {
+      const { ctx, jevMeta, sinGrabacion } = contextoDePlan(cfg);
+      const motor = { ...ctx, politica: cfg.politica ?? "legado", superficie: cfg.superficie ?? "catalogo" } as const;
+      return { ejecutar: (q) => ejecutarMotor(q, motor), ...(jevMeta ? { jevMeta } : {}), ...(sinGrabacion ? { sinGrabacion } : {}) };
     }
   }
+}
+
+/**
+ * El oráculo `legado` (lo que hacía cada superficie antes de la fachada, con las funciones viejas de
+ * la capa del catálogo) con el MISMO plan que el motor del banco. Se borra con la política `legado`.
+ */
+export function crearOraculoLegado(cfg: ConfigEjecutor): Ejecutor {
+  const { ctx, jevMeta, sinGrabacion } = contextoDePlan(cfg);
+  const legado = { ...ctx, superficie: cfg.superficie ?? "catalogo" } as const;
+  return { ejecutar: (q) => ejecutarLegado(q, legado), ...(jevMeta ? { jevMeta } : {}), ...(sinGrabacion ? { sinGrabacion } : {}) };
 }

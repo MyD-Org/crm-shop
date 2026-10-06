@@ -1,10 +1,11 @@
 import { after, connection, NextResponse, type NextRequest } from "next/server";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
-import { contarCatalogo } from "@/lib/catalog";
 import { filtrosDeEstado } from "@/lib/catalogo-url";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { destinoDeBusqueda } from "@/lib/busqueda-v2/buscar";
+import { sinTexto } from "@/lib/busqueda-v2/motor";
+import { contarConsulta } from "@/lib/busqueda-v2/motor-servidor";
 import { COOKIE_RESUMEN, valorCookieResumen } from "@/lib/busqueda-v2/resumen";
 import { planParaBuscar } from "@/lib/busqueda-v2/servidor";
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
       },
       contarClasica: async (base) => {
         const [{ soloVisibles }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
-        return contarCatalogo({ soloVisibles, disp, filtros: filtrosDeEstado(base) });
+        return contarConsulta({ consulta: base.query ?? "", filtros: sinTexto(filtrosDeEstado(base)), soloVisibles, disp });
       },
     },
   );

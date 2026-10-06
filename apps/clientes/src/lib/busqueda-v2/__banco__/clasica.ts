@@ -26,7 +26,7 @@ export async function ejecutarClasica(
   const vista = ctx.vista ?? VISTA_ACTUAL;
   const estado = estadoBase(q, vista);
   const p = await getPaginaCatalogo({
-    filtros: { ...filtrosDeEstado(estado), ...(tolerante ? { busquedaTolerante: true } : {}) },
+    filtros: { ...filtrosDeEstado(estado), texto: { q: estado.query ?? "", ...(tolerante ? { tolerante: true } : {}) } },
     orden: estado.orden,
     pagina: 1,
     soloVisibles: vista.soloVisibles,

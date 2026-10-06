@@ -16,7 +16,8 @@ describe("contador", () => {
     expect(n).toBe(7);
     const { filtros } = contarCatalogo.mock.calls[0][0] as { filtros: Record<string, unknown> };
     expect(filtros).toMatchObject({ categorias: ["Termomagnéticas"], atributos: ["polos:2"], atributosEstructurados: true });
-    expect(filtros.planBusqueda).toBeDefined();
+    expect(filtros.texto).toMatchObject({ q: "", plan: { blandos: { terminos: [{ texto: "termica", peso: 1 }] } } });
+    expect(filtros).not.toHaveProperty("planBusqueda");
     expect(filtros).not.toHaveProperty("medidasPositivas");
     expect(filtros).not.toHaveProperty("conClaves");
   });

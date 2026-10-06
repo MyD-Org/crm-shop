@@ -36,7 +36,7 @@ describe("join al overlay", () => {
     expect(pagina.sql).toContain('"catalog_overlay"."fotos"');
   });
 
-  it("getCatalogo (home y autocompletado) también", async () => {
+  it("getCatalogo (home) también", async () => {
     await getCatalogo({ soloVisibles: false, limit: 10 });
     expect(grabadora.consultas[0].sql).toMatch(JOIN_OVERLAY);
     expect(grabadora.consultas[0].sql).toContain('"catalog_overlay"."nombre"');
@@ -85,8 +85,8 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
     for (const c of grabadora.consultas) exigeVisible(c);
   });
 
-  it("encendido: getCatalogo (home y autocompletado) exige visible = true", async () => {
-    await getCatalogo({ soloVisibles: true, busqueda: "led", limit: 10 });
+  it("encendido: la lectura de texto sin conteo (autocompletado y chat) exige visible = true", async () => {
+    await getPaginaCatalogo({ soloVisibles: true, filtros: { texto: { q: "led" } }, orden: "relevancia", porPagina: 10, sinConteo: true });
     exigeVisible(grabadora.consultas[0]);
   });
 

@@ -24,7 +24,7 @@
  */
 import type { Product } from "@/data/products";
 import { pareceCodigo } from "../busqueda-inteligente/gate";
-import type { Facetas, FiltrosCatalogo, PaginaCatalogo, TextoBusqueda } from "../catalog";
+import type { Facetas, FiltrosCatalogo, FiltrosSinTexto, PaginaCatalogo, TextoBusqueda } from "../catalog";
 import { normalizarCodigo, terminosBusqueda } from "../catalogo-busqueda";
 import type { OrdenCatalogo } from "../catalogo-url";
 import { aportaAlgo } from "./buscar";
@@ -34,13 +34,12 @@ import type { PlanBusqueda } from "./plan";
 export type Superficie = "catalogo" | "autocompletar" | "chat" | "admin";
 export type Etapa = "sin-texto" | "codigo" | "plan" | "exacta" | "tolerante" | "vacio";
 
-/** Filtros sin ningún campo de texto: el motor es el único que arma `texto`. */
-export type FiltrosSinTexto = Omit<FiltrosCatalogo, "texto" | "busqueda" | "busquedaTolerante" | "planBusqueda">;
+export type { FiltrosSinTexto };
 
-/** Los mismos filtros sin los campos de texto (todo lo demás pasa intacto). */
+/** Los mismos filtros sin el texto (todo lo demás pasa intacto): el motor es el único que arma `texto`. */
 export function sinTexto(f: FiltrosCatalogo): FiltrosSinTexto {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { texto, busqueda, busquedaTolerante, planBusqueda, ...resto } = f;
+  const { texto, ...resto } = f;
   return resto;
 }
 

@@ -34,19 +34,19 @@ export interface ContextoV2 {
 }
 
 async function primera(estado: EstadoCatalogo, estructurados: boolean, vista: VistaBanco, plan?: PlanBusqueda) {
+  const criterio = plan ? criterioDe(plan, estado) : undefined;
   const filtros: FiltrosCatalogo = {
     ...filtrosDeEstado(estado),
+    texto: { q: estado.query ?? "", ...(criterio ? { plan: criterio } : {}) },
     ...(estructurados ? { atributosEstructurados: true } : {}),
-    ...(plan ? { planBusqueda: criterioDe(plan, estado) } : {}),
   };
   return getPaginaCatalogo({ filtros, orden: estado.orden, pagina: 1, soloVisibles: vista.soloVisibles });
 }
 
 /**
  * El ÚNICO punto del banco que adquiere el plan de una consulta (caché de producción con `planDe`,
- * si no Entender con el Jev elegido). Lo usan `ejecutarV2`, el motor del banco y el oráculo
- * legado: así miden el MISMO plan. Las medidas (`--medidas=si`) se aplican acá, una sola vez, y las
- * tres tuberías las heredan.
+ * si no Entender con el Jev elegido). Lo usan `ejecutarV2` y el motor del banco: así miden el MISMO
+ * plan. Las medidas (`--medidas=si`) se aplican acá, una sola vez, y las dos tuberías las heredan.
  *
  * `plan: null` = Entender no pudo armar un plan (la búsqueda sigue clásica).
  */

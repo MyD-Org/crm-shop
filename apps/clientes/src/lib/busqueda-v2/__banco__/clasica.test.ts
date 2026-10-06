@@ -27,17 +27,14 @@ describe("ejecutarClasica", () => {
     expect(getPaginaCatalogo).toHaveBeenCalledTimes(1);
     const opts = getPaginaCatalogo.mock.calls[0][0];
     expect(opts).toMatchObject({ soloVisibles: false, orden: "relevancia", pagina: 1 });
-    expect(opts.filtros.busqueda).toBe("cinta ledd");
+    expect(opts.filtros.texto).toEqual({ q: "cinta ledd" });
     expect(opts.filtros.soloStock).toBe(false);
-    expect(opts.filtros.busquedaTolerante).toBeUndefined();
-    expect(opts.filtros.planBusqueda).toBeUndefined();
   });
 
-  it("tolerante: agrega sólo busquedaTolerante y sigue sin plan", async () => {
+  it("tolerante: agrega sólo `tolerante` al texto y sigue sin plan", async () => {
     await ejecutarClasica("cinta ledd", {}, { tolerante: true });
     const { filtros } = getPaginaCatalogo.mock.calls[0][0];
-    expect(filtros.busquedaTolerante).toBe(true);
-    expect(filtros.planBusqueda).toBeUndefined();
+    expect(filtros.texto).toEqual({ q: "cinta ledd", tolerante: true });
     expect(getPaginaCatalogo).toHaveBeenCalledTimes(1);
   });
 

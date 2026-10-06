@@ -47,11 +47,11 @@ describe("filtrosCacheables", () => {
   it("sin búsqueda ni rango de precio: sí", () => {
     expect(filtrosCacheables({})).toBe(true);
     expect(filtrosCacheables({ categorias: ["ILUMINACION"], marcas: ["X"], soloStock: true })).toBe(true);
-    expect(filtrosCacheables({ busqueda: "   " })).toBe(true);
+    expect(filtrosCacheables({ texto: { q: "   " } })).toBe(true);
   });
 
   it("con búsqueda por texto o rango de precio: no", () => {
-    expect(filtrosCacheables({ busqueda: "led" })).toBe(false);
+    expect(filtrosCacheables({ texto: { q: "led" } })).toBe(false);
     expect(filtrosCacheables({ precioMin: 0 })).toBe(false);
     expect(filtrosCacheables({ precioMax: 5000 })).toBe(false);
     expect(filtrosCacheables({ potenciaMin: 10 })).toBe(false);
@@ -69,9 +69,6 @@ describe("filtrosCacheables: ningún texto de búsqueda cae en la Runtime Cache"
     ["texto.plan sin q", { texto: { q: "", plan } }],
     ["texto.tolerante", { texto: { q: "lampra", tolerante: true } }],
     ["texto.codigo", { texto: { q: "DL-18W", codigo: true } }],
-    ["campo viejo busqueda", { busqueda: "foco" }],
-    ["campo viejo planBusqueda", { planBusqueda: plan }],
-    ["campo viejo busquedaTolerante", { busquedaTolerante: true }],
   ])("%s => false", (_nombre, filtros) => {
     expect(filtrosCacheables(filtros)).toBe(false);
   });
@@ -102,7 +99,7 @@ describe("paginaCatalogoPublica / facetasPublicas", () => {
   it("búsqueda por texto: va directo a la base, sin caché", async () => {
     cat.getPaginaCatalogo.mockResolvedValue(pagina);
     cat.getFacetas.mockResolvedValue({ categorias: [], marcas: [], precio: null });
-    const filtros = { busqueda: "led" };
+    const filtros = { texto: { q: "led" } };
     await paginaCatalogoPublica({ filtros, orden: "nombre", pagina: 1, soloVisibles: false });
     await facetasPublicas(filtros, false);
     expect(cat.getPaginaCatalogo).toHaveBeenCalled();

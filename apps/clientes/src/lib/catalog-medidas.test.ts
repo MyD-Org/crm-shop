@@ -42,7 +42,7 @@ describe("filtro por una medida dinámica", () => {
   });
 
   it("con búsqueda clásica: sin contradicción", async () => {
-    await pagina({ busqueda: "termica", atributos: ["polos:2"] });
+    await pagina({ texto: { q: "termica" }, atributos: ["polos:2"] });
     expect(cuenta(conteo().sql, NOT_EXISTS)).toBe(1);
   });
 
@@ -62,11 +62,22 @@ describe("filtro por una medida dinámica", () => {
       consulta: "bipolar 20a",
       blandos: { categorias: [], atributos: [], terminos },
     });
-    await pagina({ busqueda: "bipolar 20a", planBusqueda: plan([{ texto: "20a", peso: 0.4 }]), atributos: ["polos:2", "corriente_a:20"] });
+    await pagina({ texto: { q: "bipolar 20a", plan: plan([{ texto: "20a", peso: 0.4 }]) }, atributos: ["polos:2", "corriente_a:20"] });
     expect(cuenta(conteo().sql, NOT_EXISTS)).toBe(0);
     grabadora = dbGrabadora(conConteo);
-    await pagina({ busqueda: "termica 20a", planBusqueda: plan([{ texto: "termica", peso: 1 }]), atributos: ["polos:2", "corriente_a:20"] });
+    await pagina({ texto: { q: "termica 20a", plan: plan([{ texto: "termica", peso: 1 }]) }, atributos: ["polos:2", "corriente_a:20"] });
     expect(cuenta(conteo().sql, NOT_EXISTS)).toBe(2);
+  });
+
+  it("en cualquier etapa el texto acota el universo (la de código y la tolerante también): sin contradicción", async () => {
+    await pagina({ texto: { q: "DL-18W", codigo: true }, atributos: ["polos:2"] });
+    expect(cuenta(conteo().sql, NOT_EXISTS)).toBe(1);
+    grabadora = dbGrabadora(conConteo);
+    await pagina({ texto: { q: "termica", tolerante: true }, atributos: ["polos:2"] });
+    expect(cuenta(conteo().sql, NOT_EXISTS)).toBe(1);
+    grabadora = dbGrabadora(conConteo);
+    await pagina({ texto: { q: "   " }, atributos: ["polos:2"] });
+    expect(cuenta(conteo().sql, NOT_EXISTS)).toBe(0);
   });
 
   it("`medidasPositivas` fuerza el modo (lo usa el conteo de positivos)", async () => {
@@ -131,7 +142,7 @@ describe("boost y recuperación (siempre en positivo)", () => {
     await getPaginaCatalogo({
       soloVisibles: false,
       orden: "relevancia",
-      filtros: { atributosEstructurados: true, categorias: ["Termomagnéticas"], planBusqueda: plan, atributos: ["polos:2"] },
+      filtros: { atributosEstructurados: true, categorias: ["Termomagnéticas"], texto: { q: "", plan }, atributos: ["polos:2"] },
     });
     const filas = grabadora.consultas[1];
     const order = filas.sql.slice(filas.sql.indexOf("order by"));

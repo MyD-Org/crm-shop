@@ -139,7 +139,7 @@ async function CatalogoResultados({ searchParams }: Props) {
       {
         consulta: estado.query,
         filtros: {
-          ...sinTexto(filtrosDeEstado(estado)),
+          ...filtrosDeEstado(estado),
           ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
           // Las categorías del panel traen su total fijo (`categoriasTotales`). Sólo con la búsqueda
           // inteligente se siguen contando dentro de la búsqueda, para las sugerencias "+ Afinar".

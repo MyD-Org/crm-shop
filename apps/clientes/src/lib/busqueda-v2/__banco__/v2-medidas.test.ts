@@ -110,7 +110,7 @@ describe("ejecutarV2 con medidas", () => {
     const filtros = getPaginaCatalogo.mock.calls[0][0].filtros;
     // `estadoConPlan` los ordena (atributosValidos: orden de las claves de medida).
     expect([...filtros.atributos].sort()).toEqual(["corriente_a:20", "polos:2"]);
-    expect(filtros.planBusqueda.blandos.atributos).toEqual(expect.arrayContaining([{ id: "polos:2", peso: 1 }]));
+    expect(filtros.texto.plan.blandos.atributos).toEqual(expect.arrayContaining([{ id: "polos:2", peso: 1 }]));
   });
 
   it("sin `medidas`: ResultadoBanco no trae `medidas` (la tubería no las produce: hit = null)", async () => {

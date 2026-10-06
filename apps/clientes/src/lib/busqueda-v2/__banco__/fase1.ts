@@ -28,11 +28,12 @@ export interface ContextoFase1 {
 }
 
 async function pagina(estado: EstadoCatalogo, estructurados: boolean, vista: VistaBanco): Promise<PaginaCatalogo> {
-  const filtros: FiltrosCatalogo = { ...filtrosDeEstado(estado), ...(estructurados ? { atributosEstructurados: true } : {}) };
+  const q = estado.query?.trim() ?? "";
+  const filtros: FiltrosCatalogo = { ...filtrosDeEstado(estado), texto: { q }, ...(estructurados ? { atributosEstructurados: true } : {}) };
   const exacta = await getPaginaCatalogo({ filtros, orden: estado.orden, pagina: 1, soloVisibles: vista.soloVisibles });
-  if (exacta.total > 0 || !filtros.busqueda?.trim()) return exacta;
+  if (exacta.total > 0 || !q) return exacta;
   const tolerante = await getPaginaCatalogo({
-    filtros: { ...filtros, busquedaTolerante: true },
+    filtros: { ...filtros, texto: { q, tolerante: true } },
     orden: estado.orden,
     pagina: 1,
     soloVisibles: vista.soloVisibles,

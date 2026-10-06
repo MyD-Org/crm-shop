@@ -305,13 +305,13 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
   };
 
   const ordenadas = [...primerasMs].sort((a, b) => a - b);
-  const p50Legado = ordenadas[Math.floor(ordenadas.length / 2)] ?? 0;
+  const p50Ms = ordenadas[Math.floor(ordenadas.length / 2)] ?? 0;
   const lineas = [
     `[banco] tubería ${o.tuberia}${o.tuberia === "motor" ? ` (superficie ${o.superficie ?? "catalogo"}, K=${k})` : ""}; banco ${o.banco.origen} (n=${casos.length}, hash ${o.banco.hash}); vista ${cabecera.vista.variante} (soloVisibles ${o.vista.soloVisibles}, soloStock ${o.vista.soloStock}); Jev ${o.jev}${o.jevMeta?.modelo ? ` (${o.jevMeta.modelo}, grabado ${o.jevMeta.grabadoEl ?? "?"})` : ""}; busqueda-medidas: ${cabecera.busquedaMedidas}`,
     "",
     reporte(`Banco de búsquedas — tubería ${o.tuberia}`, incluidas, conIntencion, k),
     "",
-    `ms p50 por búsqueda: ${p50Legado}`,
+    `ms p50 por búsqueda: ${p50Ms}`,
     "",
     reporteAmpliado(incluidas, conIntencion, k),
   ];

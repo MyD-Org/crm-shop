@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dbGrabadora, sinLecturaDelArbol, type ConsultaGrabada } from "@/db/__fixtures__/db-grabadora";
 
 /**
- * Texto único de la búsqueda (`FiltrosCatalogo.texto`): el shim `textoDe` traduce los campos viejos
- * (`busqueda`, `busquedaTolerante`, `planBusqueda`) y, sin cambiar una coma de SQL, ambas formas
- * generan la MISMA consulta. Sin base: `dbGrabadora` anota SQL y parámetros.
+ * Texto único de la búsqueda (`FiltrosCatalogo.texto`): la ÚNICA forma de pedirle texto al catálogo
+ * (los campos `busqueda`, `busquedaTolerante` y `planBusqueda` y el shim que los traducía se
+ * retiraron). Sin base: `dbGrabadora` anota SQL y parámetros.
  */
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { contarCatalogo, getCatalogo, getPaginaCatalogo, textoDe, type FiltrosCatalogo } from "./catalog";
+import { getPaginaCatalogo, type FiltrosCatalogo } from "./catalog";
 import type { CriterioPlan } from "./busqueda-v2/piezas";
 
 const conConteo = (c: ConsultaGrabada) => (c.sql.startsWith("select count(*)::int") ? [[1]] : undefined);
@@ -32,74 +32,46 @@ const plan: CriterioPlan = {
   },
 };
 
-describe("textoDe", () => {
-  it("traduce los campos viejos al texto único", () => {
-    expect(textoDe({ busqueda: "  foco  ", busquedaTolerante: true, planBusqueda: plan })).toEqual({
-      q: "foco",
-      tolerante: true,
-      plan,
-    });
-    expect(textoDe({ busqueda: "foco" })).toEqual({ q: "foco", tolerante: undefined, plan: undefined });
+/** Las consultas de la página para unos filtros (sin las lecturas del árbol de categorías). */
+async function sqlDe(filtros: FiltrosCatalogo) {
+  grabadora = dbGrabadora(conConteo);
+  await getPaginaCatalogo({ soloVisibles: true, filtros, orden: "relevancia" });
+  return sinLecturaDelArbol(grabadora.consultas);
+}
+
+describe("texto único: forma de pedirle texto al catálogo", () => {
+  it("los campos de texto viejos ya no existen (ni el shim que los traducía)", () => {
+    // @ts-expect-error `busqueda` se retiró: el texto va en `texto.q`.
+    const viejoBusqueda: FiltrosCatalogo = { busqueda: "foco" };
+    // @ts-expect-error `busquedaTolerante` se retiró: va en `texto.tolerante`.
+    const viejoTolerante: FiltrosCatalogo = { busquedaTolerante: true };
+    // @ts-expect-error `planBusqueda` se retiró: va en `texto.plan`.
+    const viejoPlan: FiltrosCatalogo = { planBusqueda: plan };
+    expect([viejoBusqueda, viejoTolerante, viejoPlan]).toHaveLength(3);
   });
 
-  it("sin nada, texto vacío", () => {
-    expect(textoDe({})).toEqual({ q: "", tolerante: undefined, plan: undefined });
-    expect(textoDe({ busqueda: "   " }).q).toBe("");
+  it("`q` se recorta: con espacios o sin ellos, la misma consulta", async () => {
+    const recortada = await sqlDe({ texto: { q: "foco led" } });
+    expect(await sqlDe({ texto: { q: "  foco led  " } })).toEqual(recortada);
   });
 
-  it("`texto` explícito gana sobre los campos viejos", () => {
-    const t = textoDe({ texto: { q: " panel " }, busqueda: "foco", busquedaTolerante: true, planBusqueda: plan });
-    expect(t).toEqual({ q: "panel" });
-  });
-});
-
-const VARIANTES: { nombre: string; viejos: FiltrosCatalogo; nuevo: FiltrosCatalogo }[] = [
-  { nombre: "sólo q", viejos: { busqueda: "foco led" }, nuevo: { texto: { q: "foco led" } } },
-  {
-    nombre: "q + plan",
-    viejos: { busqueda: "foco calido", planBusqueda: plan, categorias: ["Lámparas"] },
-    nuevo: { texto: { q: "foco calido", plan }, categorias: ["Lámparas"] },
-  },
-  {
-    nombre: "q + tolerante",
-    viejos: { busqueda: "lampra", busquedaTolerante: true },
-    nuevo: { texto: { q: "lampra", tolerante: true } },
-  },
-  { nombre: "vacío", viejos: { categorias: ["Lámparas"] }, nuevo: { categorias: ["Lámparas"] } },
-];
-
-describe.each(VARIANTES)("equivalencia de SQL: $nombre", ({ viejos, nuevo }) => {
-  it("getPaginaCatalogo emite lo mismo con campos viejos y con `texto`", async () => {
-    await getPaginaCatalogo({ soloVisibles: true, filtros: viejos, orden: "relevancia" });
-    const antes = sinLecturaDelArbol(grabadora.consultas);
-    grabadora = dbGrabadora(conConteo);
-    await getPaginaCatalogo({ soloVisibles: true, filtros: nuevo, orden: "relevancia" });
-    const despues = sinLecturaDelArbol(grabadora.consultas);
-    expect(antes.length).toBeGreaterThan(0);
-    expect(despues).toEqual(antes);
+  it("sin texto (o con q vacía) no hay condición de texto: el SQL es el del filtro solo", async () => {
+    const sinTexto = await sqlDe({ categorias: ["Lámparas"] });
+    expect(await sqlDe({ categorias: ["Lámparas"], texto: { q: "   " } })).toEqual(sinTexto);
+    const conTexto = await sqlDe({ categorias: ["Lámparas"], texto: { q: "foco led" } });
+    expect(conTexto).not.toEqual(sinTexto);
+    expect(conTexto.some((c) => c.params.some((p) => typeof p === "string" && p.includes("foco")))).toBe(true);
+    expect(sinTexto.some((c) => c.params.some((p) => typeof p === "string" && p.includes("foco")))).toBe(false);
   });
 
-  it("contarCatalogo emite lo mismo", async () => {
-    await contarCatalogo({ soloVisibles: false, filtros: viejos });
-    const antes = grabadora.consultas;
-    grabadora = dbGrabadora(conConteo);
-    await contarCatalogo({ soloVisibles: false, filtros: nuevo });
-    expect(grabadora.consultas).toEqual(antes);
-  });
-});
-
-describe("getPaginaCatalogo con sinConteo = lo que hoy lee getCatalogo (autocompletar, chat, selector del admin)", () => {
-  it.each<[string, { q: string; tolerante?: boolean }]>([
-    ["exacta", { q: "foco led" }],
-    ["tolerante", { q: "lampra", tolerante: true }],
-    ["sin términos", { q: "!!" }],
-  ])("la consulta de %s es idéntica (SQL y parámetros)", async (_n, texto) => {
-    await getCatalogo({ soloVisibles: true, busqueda: texto.q, tolerante: texto.tolerante, limit: 8 });
-    const viejo = grabadora.consultas[0];
-    grabadora = dbGrabadora(conConteo);
-    await getPaginaCatalogo({ soloVisibles: true, filtros: { texto }, orden: "relevancia", porPagina: 8, sinConteo: true });
-    expect(grabadora.consultas).toHaveLength(1);
-    expect(grabadora.consultas[0]).toEqual(viejo);
+  it("cada forma del texto (exacta, plan, tolerante) emite su propia consulta", async () => {
+    const exacta = await sqlDe({ texto: { q: "foco calido" } });
+    const conPlan = await sqlDe({ texto: { q: "foco calido", plan }, categorias: ["Lámparas"] });
+    const tolerante = await sqlDe({ texto: { q: "foco calido", tolerante: true } });
+    expect(conPlan).not.toEqual(exacta);
+    expect(tolerante).not.toEqual(exacta);
+    expect(tolerante.some((c) => c.sql.includes("word_similarity"))).toBe(true);
+    expect(exacta.some((c) => c.sql.includes("word_similarity"))).toBe(false);
   });
 });
 

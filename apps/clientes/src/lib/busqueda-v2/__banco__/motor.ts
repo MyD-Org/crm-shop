@@ -19,7 +19,7 @@
 import { PRODUCTOS_POR_PAGINA, contarCatalogo, getPaginaCatalogo } from "@/lib/catalog";
 import { IA_PLAN, filtrosDeEstado } from "@/lib/catalogo-url";
 import { PESO_MINIMO_RECUPERAR, type PlanBusqueda } from "../plan";
-import { buscar, sinTexto, type DepsMotor, type FiltrosSinTexto } from "../motor";
+import { buscar, type DepsMotor, type FiltrosSinTexto } from "../motor";
 import type { ResultadoBanco } from "./banco";
 import { SUPERFICIES_BANCO, type SuperficieBanco } from "./corrida";
 import { estadoDeBusqueda } from "./destino-banco";
@@ -59,14 +59,14 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
     const estado = await estadoDeBusqueda(q, vista, plan, (base) =>
       contarCatalogo({
         soloVisibles: vista.soloVisibles,
-        filtros: { ...sinTexto(filtrosDeEstado(base)), texto: { q: base.query ?? "" } },
+        filtros: { ...filtrosDeEstado(base), texto: { q: base.query ?? "" } },
       }),
     );
     const conPlanDeUrl = estado.ia === IA_PLAN && !!plan;
     const r = await buscar(
       {
         consulta: estado.query,
-        filtros: { ...sinTexto(filtrosDeEstado(estado)), ...estructurados },
+        filtros: { ...filtrosDeEstado(estado), ...estructurados },
         orden: estado.orden,
         pagina: 1,
         porPagina: PRODUCTOS_POR_PAGINA,

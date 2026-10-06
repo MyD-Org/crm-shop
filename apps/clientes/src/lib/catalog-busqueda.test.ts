@@ -11,7 +11,11 @@ import { dbGrabadora } from "@/db/__fixtures__/db-grabadora";
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { getCatalogo } from "./catalog";
+import { getPaginaCatalogo } from "./catalog";
+
+/** La lectura de texto del autocompletar, el chat y el selector del admin: una página sin conteo. */
+const buscar = (q: string, texto: { tolerante?: boolean } = {}) =>
+  getPaginaCatalogo({ soloVisibles: false, filtros: { texto: { q, ...texto } }, orden: "relevancia", porPagina: 8, sinConteo: true });
 
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
@@ -20,7 +24,7 @@ beforeEach(() => {
 
 describe("búsqueda del catálogo", () => {
   it('llama a "shop".immutable_unaccent, nunca a la función sin calificar', async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: "lampara" });
+    await buscar("lampara");
 
     const { sql, params } = grabadora.consultas[0];
     expect(sql).toContain('"shop".immutable_unaccent(');
@@ -34,7 +38,7 @@ describe("búsqueda del catálogo", () => {
 
 
   it("busca sobre la vista del CRM, en nombre curado, nombre, código, descripción, marca y categoría", async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: "lampara" });
+    await buscar("lampara");
     const { sql } = grabadora.consultas[0];
     expect(sql).toContain('from "public"."catalog_products_shop"');
     expect(sql).toContain(
@@ -46,7 +50,7 @@ describe("búsqueda del catálogo", () => {
   });
 
   it("cada término es su propia condición (en cualquier orden), con plurales reducidos", async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: "Lámparas LED" });
+    await buscar("Lámparas LED");
     const { sql, params } = grabadora.consultas[0];
     expect(params).toContain("%lampara%");
     expect(params).toContain("%led%");
@@ -56,24 +60,24 @@ describe("búsqueda del catálogo", () => {
   });
 
   it("un plural busca también el término tal cual: \"luces\" sigue encontrando \"50 LUCES\"", async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: "luces" });
+    await buscar("luces");
     const { params } = grabadora.consultas[0];
     expect(params).toContain("%luces%");
     expect(params).toContain("%luz%");
   });
 
   it("con búsqueda ordena por relevancia (y desempata por nombre)", async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: "foco" });
+    await buscar("foco");
     const { sql } = grabadora.consultas[0];
     const orden = sql.slice(sql.indexOf(" order by "));
     expect(orden).toMatch(/^ order by \(case when /);
     expect(orden).toContain("then 4 when");
     expect(orden).toContain("then 20 else 0 end");
-    expect(orden).toMatch(/ desc, "catalog_products_shop"\."name" asc$/);
+    expect(orden).toMatch(/ desc, "catalog_products_shop"\."name" asc/);
   });
 
   it("la búsqueda tolerante suma el parecido por trigramas, calificado en public", async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: "lampra", tolerante: true });
+    await buscar("lampra", { tolerante: true });
     const { sql } = grabadora.consultas[0];
     const total = sql.match(/word_similarity\(/g)?.length ?? 0;
     const calificadas = sql.match(/public\.word_similarity\(/g)?.length ?? 0;
@@ -82,12 +86,12 @@ describe("búsqueda del catálogo", () => {
   });
 
   it("sin términos útiles no filtra por texto", async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: " ,, " });
+    await buscar(" ,, ");
     const { sql } = grabadora.consultas[0];
     expect(sql).not.toContain(" LIKE ");
   });
   it("en la tolerante, empezar con las primeras 4 letras cuenta como prefijo", async () => {
-    await getCatalogo({ soloVisibles: false, busqueda: "lamparita", tolerante: true });
+    await buscar("lamparita", { tolerante: true });
     expect(grabadora.consultas[0].params).toContain("lamp%");
   });
 });

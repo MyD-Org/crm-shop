@@ -166,7 +166,7 @@ describe("facetas de categorías", () => {
       if (esConteoPorCategoria(c)) return ++conteos === 1 ? [[ILUMINACION, 3], [FOCOS, 2], [ELECTRICIDAD, 4]] : [[FOCOS, 1]];
       return [];
     });
-    const { categorias } = await getFacetas({ busqueda: "foco" }, false);
+    const { categorias } = await getFacetas({ texto: { q: "foco" } }, false);
     expect(categorias).toEqual([
       { label: "ILUMINACION", count: 1, nivel: 1 },
       { label: "Focos led", count: 1, nivel: 2 },
@@ -182,7 +182,7 @@ describe("facetas de categorías", () => {
       }
       return [];
     });
-    const { categorias } = await getFacetas({ busqueda: "foco" }, false);
+    const { categorias } = await getFacetas({ texto: { q: "foco" } }, false);
     expect(categorias).toEqual([
       { label: "ILUMINACION", count: 1 },
       { label: "ELECTRICIDAD", count: 0 },
@@ -191,7 +191,7 @@ describe("facetas de categorías", () => {
 
   it("sinFacetaCategorias: no se cuentan categorías (las pone el total fijo de la caché) y sale vacía", async () => {
     grabadora = conArbol();
-    const f = await getFacetas({ busqueda: "foco", sinFacetaCategorias: true }, false);
+    const f = await getFacetas({ texto: { q: "foco" }, sinFacetaCategorias: true }, false);
     expect(f.categorias).toEqual([]);
     expect(grabadora.consultas.some(esConteoPorCategoria)).toBe(false);
   });
@@ -206,7 +206,7 @@ describe("facetas de categorías", () => {
     // El panel pide siempre lo mismo (sólo el default de stock), sin importar lo que se busque.
     expect(fijo).toEqual(await consulta({ soloStock: true }));
     // Y con la búsqueda y la marca puestas, la consulta es otra: por eso la página no la usa.
-    expect(fijo).not.toEqual(await consulta({ soloStock: true, busqueda: "foco", marcas: ["X"] }));
+    expect(fijo).not.toEqual(await consulta({ soloStock: true, texto: { q: "foco" }, marcas: ["X"] }));
   });
 
   it("sin árbol, siguen agrupando por la categoría de Alegra", async () => {

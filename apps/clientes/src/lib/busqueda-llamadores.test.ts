@@ -5,11 +5,9 @@ import { describe, expect, it } from "vitest";
 /**
  * Test de arquitectura del motor único de búsqueda: el texto de una búsqueda lo arma SÓLO el motor
  * (`busqueda-v2/motor.ts`). Las superficies (página del catálogo, autocompletar, chat, selector del
- * admin, `/buscar`) llaman a `buscarEnShop`/`contarConsulta` y no a la capa del catálogo con
- * `busqueda`/`busquedaTolerante`/`planBusqueda` armados a mano: cada copia propia era una copia más
- * del reintento tolerante.
- *
- * La lista de excepciones se achica cuando se retiran los campos viejos de `FiltrosCatalogo`.
+ * admin, `/buscar`) llaman a `buscarEnShop`/`contarConsulta` y no a la capa del catálogo con un
+ * `texto` armado a mano: cada copia propia era una copia más del reintento tolerante. Hay UNA sola
+ * implementación de la cascada (código, plan, exacta, tolerante), la del motor.
  */
 const SRC = join(__dirname, "..");
 
@@ -31,18 +29,18 @@ function codigo(ruta: string): string {
 
 const rel = (ruta: string) => relative(SRC, ruta).split(sep).join("/");
 
-/** Quien PUEDE hablar con la capa del catálogo con texto: ella misma, la caché pública, el conteo de Entender, el cableado del motor, el parser de la URL y el banco. */
+/** Quien PUEDE hablar con la capa del catálogo con texto: ella misma, la caché pública, el conteo de Entender, el cableado del motor y el banco. */
 const PERMITIDOS = [
   /^lib\/catalog\.ts$/,
   /^lib\/catalogo-publico\.ts$/,
-  /^lib\/catalogo-url\.ts$/,
   /^lib\/busqueda-v2\/conteo\.ts$/,
   /^lib\/busqueda-v2\/motor-servidor\.ts$/,
   /^lib\/busqueda-v2\/__banco__\//,
 ];
 
 const LECTURAS_DEL_CATALOGO = /\b(getCatalogo|getPaginaCatalogo|contarCatalogo|paginaCatalogoPublica)\b/;
-const CAMPOS_DE_TEXTO = /\b(busqueda|busquedaTolerante|planBusqueda|tolerante)\s*:/;
+/** Armar un `texto` (o sus partes) a mano: sólo lo hace el motor. */
+const TEXTO_A_MANO = /\btexto\s*:\s*\{|\b(busqueda|busquedaTolerante|planBusqueda|tolerante)\s*:/;
 
 describe("el texto de la búsqueda sólo lo arma el motor", () => {
   const todos = archivos(SRC).map((ruta) => ({ ruta, nombre: rel(ruta) }));
@@ -58,10 +56,19 @@ describe("el texto de la búsqueda sólo lo arma el motor", () => {
     expect(infractores).toEqual([]);
   });
 
-  it("ni la página, ni las rutas, ni el selector del admin arman `busqueda`/`tolerante`/`planBusqueda`", () => {
+  it("ni la página, ni las rutas, ni el selector del admin arman un `texto` a mano", () => {
     const superficies = todos.filter(({ nombre }) => nombre.startsWith("app/") || nombre === "lib/home-acciones.ts");
     expect(superficies.length).toBeGreaterThan(20);
-    const infractores = superficies.filter(({ ruta }) => CAMPOS_DE_TEXTO.test(codigo(ruta))).map(({ nombre }) => nombre);
+    const infractores = superficies.filter(({ ruta }) => TEXTO_A_MANO.test(codigo(ruta))).map(({ nombre }) => nombre);
+    expect(infractores).toEqual([]);
+  });
+
+  it("el reintento tolerante tiene una sola implementación: la etapa del motor", () => {
+    // `tolerante: true` en un `texto` sólo aparece en motor.ts (y en el banco, que mide con otras lecturas).
+    const infractores = todos
+      .filter(({ nombre }) => !/^lib\/busqueda-v2\/motor\.ts$/.test(nombre) && !/^lib\/busqueda-v2\/__banco__\//.test(nombre))
+      .filter(({ ruta }) => /\btolerante\s*:\s*true\b/.test(codigo(ruta)))
+      .map(({ nombre }) => nombre);
     expect(infractores).toEqual([]);
   });
 

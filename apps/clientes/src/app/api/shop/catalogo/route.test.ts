@@ -25,10 +25,8 @@ function leer(etapa: Etapa): Product[] {
 
 type Texto = { q?: string; tolerante?: boolean; plan?: unknown; codigo?: boolean };
 vi.mock("@/lib/catalog", () => ({
-  getCatalogo: async (o: { tolerante?: boolean }) => leer(o.tolerante ? "tolerante" : "exacta"),
-  getPaginaCatalogo: async (o: { filtros?: { texto?: Texto; busqueda?: string; busquedaTolerante?: boolean; planBusqueda?: unknown } }) => {
-    const f = o.filtros ?? {};
-    const t: Texto = f.texto ?? { q: f.busqueda, tolerante: f.busquedaTolerante, plan: f.planBusqueda };
+  getPaginaCatalogo: async (o: { filtros?: { texto?: Texto } }) => {
+    const t: Texto = o.filtros?.texto ?? {};
     textos.push(t);
     // Con la cascada la tolerante puede llevar plan y código: manda `tolerante`.
     const productos = leer(t.tolerante ? "tolerante" : t.plan ? "plan" : t.codigo ? "codigo" : "exacta");

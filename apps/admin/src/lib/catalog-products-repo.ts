@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { catalogProducts } from "@/db/schema"
 import type { AlegraProduct } from "./alegra"
+import { recalcularTrasSync } from "./precios-online-costos"
 
 // Escritura del espejo de productos (tabla catalog_products). La usan la sync completa
 // (lib/alegra-sync.ts) y el drenador de avisos de stock (lib/alegra-stock-cola.ts).
@@ -108,6 +109,9 @@ export async function upsertProductos(
       .values(unicos.slice(i, i + LOTE).map((it) => fila(tenantId, it, opts.leidoAt, opts.leidoPor, ahora)))
       .onConflictDoUpdate({ target: [catalogProducts.tenantId, catalogProducts.alegraId], set: SET_POR_FRESCURA })
   }
+  // Listas de precio online (0064): el costo nuevo se aplica o se retiene. Cubre la sync de la
+  // principal y el webhook (ambos escriben por acá). Best-effort: nunca tumba la escritura.
+  await recalcularTrasSync(tenantId, unicos.map((it) => it.alegraId), opts.leidoPor)
 }
 
 export interface ProductoSecundaria {
@@ -156,6 +160,8 @@ export async function upsertProductosSecundaria(
         },
       })
   }
+  // Ídem `upsertProductos`: las filas solo-secundaria también reciben su precio online.
+  await recalcularTrasSync(tenantId, unicos.map((it) => it.producto.alegraId), opts.leidoPor)
 }
 
 /**

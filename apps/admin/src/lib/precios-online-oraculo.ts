@@ -47,26 +47,31 @@ export interface ResultadoOraculo {
   precio: string | null
 }
 
-const ESCALA = 4n
+const ESCALA = 4
+const B0 = BigInt(0)
+const B10 = BigInt(10)
+const U4 = B10 ** BigInt(4) // 10^4
+const U6 = B10 ** BigInt(6)
+const MEDIO_CENTAVO = BigInt(5) * B10 ** BigInt(5)
 
 /** "1.2500" | "1,25" no: solo punto. Devuelve el valor escalado x10^4 como bigint. */
 function aEscalado(n: string): bigint {
   const m = /^(\d+)(?:\.(\d+))?$/.exec(n.trim())
   if (!m) throw new Error(`decimal inválido: ${n}`)
-  const dec = (m[2] ?? "").padEnd(Number(ESCALA), "0").slice(0, Number(ESCALA))
-  return BigInt(m[1]) * 10n ** ESCALA + BigInt(dec || "0")
+  const dec = (m[2] ?? "").padEnd(ESCALA, "0").slice(0, ESCALA)
+  return BigInt(m[1]) * U4 + BigInt(dec || "0")
 }
 
 /** Normaliza un coeficiente a su forma canónica de 4 decimales ("1.5" -> "1.5000"). */
 export function coefCanonico(n: string): string {
   const v = aEscalado(n)
-  return `${v / 10n ** ESCALA}.${(v % 10n ** ESCALA).toString().padStart(Number(ESCALA), "0")}`
+  return `${v / U4}.${(v % U4).toString().padStart(ESCALA, "0")}`
 }
 
 /** round_half_up(costo x coef, 2) con aritmética exacta. */
 export function precioNeto(costo: string, coef: string): string {
   const prod = aEscalado(costo) * aEscalado(coef) // escala 10^8
-  const centavos = (prod + 5n * 10n ** 5n) / 10n ** 6n
+  const centavos = (prod + MEDIO_CENTAVO) / U6
   const s = centavos.toString().padStart(3, "0")
   return `${s.slice(0, -2)}.${s.slice(-2)}`
 }
@@ -88,7 +93,7 @@ export function calcularOraculo(
       cur = cur.parentId ? porId.get(cur.parentId) : undefined
     }
   }
-  const tieneCosto = producto.costo != null && aEscalado(producto.costo) > 0n
+  const tieneCosto = producto.costo != null && aEscalado(producto.costo) > B0
   return listas
     .filter((l) => l.activa)
     .map((l) => {

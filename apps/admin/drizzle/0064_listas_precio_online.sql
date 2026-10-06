@@ -214,7 +214,10 @@ BEGIN
 		SELECT coalesce((SELECT c.umbral_retencion_pct FROM precios_online_config c WHERE c.tenant_id = p_tenant), 10)
 		INTO v_umbral;
 
-		DROP TABLE IF EXISTS _po_cand;
+		-- to_regclass y no DROP ... IF EXISTS: éste emite un NOTICE en cada llamada (ruido en los logs).
+		IF to_regclass('pg_temp._po_cand') IS NOT NULL THEN
+			DROP TABLE _po_cand;
+		END IF;
 		CREATE TEMP TABLE _po_cand ON COMMIT DROP AS
 		SELECT p.id, p.alegra_id, p.costo, p.costo_aplicado,
 		       CASE

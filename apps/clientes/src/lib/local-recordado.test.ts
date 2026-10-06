@@ -32,9 +32,36 @@ describe("decidirLocal", () => {
   });
 
   it("entrar al catálogo sin retiro con local recordado redirige agregándolo", () => {
-    expect(d("/catalogo", "categoria=paneles&q=led", "mdp")).toEqual({
+    expect(d("/catalogo", "categoria=paneles", "mdp")).toEqual({
       cookie: { accion: "ninguna" },
-      redirigirA: "categoria=paneles&q=led&retiro=mdp",
+      redirigirA: "categoria=paneles&retiro=mdp",
+    });
+    expect(d("/catalogo", "", "mdp")).toEqual({
+      cookie: { accion: "ninguna" },
+      redirigirA: "retiro=mdp",
+    });
+  });
+
+  it("una búsqueda (con q) arranca limpia: no recibe el local recordado y la cookie se conserva", () => {
+    expect(d("/catalogo", "q=led&ia=1", "mdp")).toEqual({ cookie: { accion: "ninguna" } });
+    expect(d("/catalogo", "q=led&stock=todos", "mdp")).toEqual({ cookie: { accion: "ninguna" } });
+    expect(d("/catalogo", "categoria=paneles&q=led", "mdp")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+
+  it("una búsqueda con retiro o sucursal explícito sigue aplicándolo", () => {
+    expect(d("/catalogo", "q=led&retiro=igz", "mdp")).toEqual({
+      cookie: { accion: "guardar", local: "igz" },
+    });
+    expect(d("/catalogo", "q=led&sucursal=igz", "mdp")).toEqual({
+      cookie: { accion: "guardar", local: "igz" },
+      redirigirA: "q=led&retiro=igz",
+    });
+  });
+
+  it("una q vacía no cuenta como búsqueda", () => {
+    expect(d("/catalogo", "q=", "mdp")).toEqual({
+      cookie: { accion: "ninguna" },
+      redirigirA: "q=&retiro=mdp",
     });
   });
 

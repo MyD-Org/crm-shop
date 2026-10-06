@@ -33,6 +33,7 @@ import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { anotarBusqueda } from "@/lib/iniciativa/motor";
 import { useChatIa } from "@/hooks/useChatIa";
 import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { sinResultadosPorLocal } from "@/lib/catalogo-sin-resultados";
 import { olvidarLocalRecordado } from "@/lib/local-recordado";
 import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
@@ -203,6 +204,11 @@ export function CatalogoClient({
   const interpretada = busquedaIa ? interpretacionVigente(estadoVisible) : undefined;
   const consultaVacia = interpretacionVigente(estado) ?? estado.query;
 
+  // Con el filtro de local activo (también el recordado por cookie), el sin resultados lo dice
+  // y ofrece quitarlo: `ir` también olvida la cookie, igual que el chip y el panel.
+  const sinLocal = sinResultadosPorLocal(estado, facetas.locales ?? [], consultaVacia);
+  const quitarLocal = () => ir({ retiroEn: undefined });
+
   // Señales de la invitación proactiva del asesor (src/lib/iniciativa/): cada
   // búsqueda distinta y si terminó sin resultados (después del rescate de la
   // búsqueda inteligente, que ya corrió en el servidor). Sin chat no hace nada;
@@ -241,8 +247,9 @@ export function CatalogoClient({
         }
       />
 
-      {/* Los filtros puestos, debajo del encabezado y sólo en mobile: en
-          desktop el panel lateral ya muestra los tildes. */}
+      {/* Los filtros puestos, debajo del encabezado: en mobile son lo único que
+          dice qué está aplicado; en desktop destacan el local, que en el panel
+          queda al pie. */}
       <CatalogoChips
         estado={estadoVisible}
         rango={facetas.precio}
@@ -309,26 +316,37 @@ export function CatalogoClient({
               talCualHref={interpretacionVigente(estado) ? hrefTalCual(estado, consultaVacia) : undefined}
               relacionadosHref={busquedaIa.relacionadosHref}
               verTodos={() => ir({ ...limpiarFiltros(), query: undefined, ia: undefined })}
+              local={sinLocal ? { ...sinLocal, quitar: quitarLocal } : undefined}
             />
           ) : productos.length === 0 ? (
             // Sin culpar al visitante ("revise la ortografía"): se dice qué
             // pasó y se ofrece por dónde seguir.
             estado.query ? (
               <EmptyState
-                title={`No hay resultados para "${estado.query}"`}
-                description="Puede buscar con otras palabras o elegir una categoría de la lista."
+                title={sinLocal?.titulo ?? `No hay resultados para "${estado.query}"`}
+                description={sinLocal?.descripcion ?? "Puede buscar con otras palabras o elegir una categoría de la lista."}
                 action={
-                  <Button variant="secondary" onClick={() => ir({ ...limpiarFiltros(), query: undefined })}>
-                    Ver todos los productos
-                  </Button>
+                  sinLocal ? (
+                    <Button variant="primary" onClick={quitarLocal}>
+                      {sinLocal.accion}
+                    </Button>
+                  ) : (
+                    <Button variant="secondary" onClick={() => ir({ ...limpiarFiltros(), query: undefined })}>
+                      Ver todos los productos
+                    </Button>
+                  )
                 }
               />
             ) : (
               <EmptyState
-                title="No hay productos con estos filtros"
-                description="Quite alguno para ver más opciones."
+                title={sinLocal?.titulo ?? "No hay productos con estos filtros"}
+                description={sinLocal?.descripcion ?? "Quite alguno para ver más opciones."}
                 action={
-                  conFiltros ? (
+                  sinLocal ? (
+                    <Button variant="primary" onClick={quitarLocal}>
+                      {sinLocal.accion}
+                    </Button>
+                  ) : conFiltros ? (
                     <Button variant="secondary" onClick={() => ir(limpiarFiltros())}>
                       Limpiar filtros
                     </Button>

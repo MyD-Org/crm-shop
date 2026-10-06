@@ -100,6 +100,13 @@ export function opcionesCuotas(
   return salida;
 }
 
+/** Las cuotas de un producto: el medio que las cobra y una opción por cantidad. Viaja con el `Product`. */
+export interface CuotasProducto {
+  /** Nombre del medio ("Mercado Pago"), para los textos. */
+  medio: string;
+  opciones: OpcionCuotas[];
+}
+
 /** La de mayor cantidad de cuotas (la que se destaca en la card). */
 export function mejorOpcionCuotas(opciones: readonly OpcionCuotas[] | null | undefined): OpcionCuotas | null {
   let mejor: OpcionCuotas | null = null;

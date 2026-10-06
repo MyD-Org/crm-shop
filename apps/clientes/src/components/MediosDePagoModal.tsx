@@ -3,9 +3,8 @@
 import { useRef, useState } from "react";
 import { Dialog } from "@myd-org/ui";
 import { MediosDePagoDetalle } from "@/components/MediosDePagoDetalle";
-import { bloquesMediosDePago } from "@/lib/cuotas-exhibicion";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
+import type { CuotasProducto } from "@/lib/cuotas-sin-interes";
 
 /**
  * Botón "Ver medios de pago" + modal. El `Dialog` de @myd-org/ui es Radix:
@@ -17,11 +16,12 @@ import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
  */
 export function MediosDePagoModal({
   precioFinal,
-  oferta,
+  cuotas,
   className = "",
 }: {
+  /** Precio contado del producto (1 pago), con IVA. */
   precioFinal: number;
-  oferta: OfertaCuotas;
+  cuotas: CuotasProducto;
   className?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -51,7 +51,7 @@ export function MediosDePagoModal({
         description={TEXTOS_CUOTAS.descripcionModal(precioFinal)}
         size="md"
       >
-        {abierto && <MediosDePagoDetalle bloques={bloquesMediosDePago(precioFinal, oferta)} />}
+        {abierto && <MediosDePagoDetalle medio={cuotas.medio} precioContado={precioFinal} opciones={cuotas.opciones} />}
       </Dialog>
     </>
   );

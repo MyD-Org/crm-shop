@@ -1,16 +1,14 @@
 /**
- * Textos de exhibición de cuotas. TODOS en un solo lugar: están sujetos a la
- * revisión del contador (tarea 0.4 de cuotas-configurables), así que cambiar
- * un texto no tiene que obligar a recorrer componentes.
+ * Textos de exhibición de las cuotas sin interés. TODOS en un solo lugar: están sujetos a la
+ * revisión del contador/abogado (gate de la rebanada D), así que cambiar un texto no tiene que
+ * obligar a recorrer componentes. Registro: usted / neutro, sin coloquialismos.
+ *
+ * Las cuotas son SIEMPRE sin interés (el costo financiero lo absorbe la tienda y ya está en el
+ * precio de la lista): no hay recargo, ni CFT/TEA, ni "total con recargo".
  *
  * Módulo puro: lo usan componentes de cliente y de servidor.
  */
 import { fmtPrecio } from "./format";
-
-/** Porcentajes: "45,67%". */
-export function fmtPct(n: number): string {
-  return `${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-}
 
 const cuotasDe = (n: number) => (n === 1 ? "1 cuota" : `${n} cuotas`);
 
@@ -22,36 +20,31 @@ export const TEXTOS_CUOTAS = {
   precioContado: "Precio contado",
   total: "Total",
   sinInteres: "Sin interés",
-  sinOpcionesMedio: "Para este precio sólo 1 pago.",
-  /** Encabezado de cada bloque del modal: "Tarjetas de crédito (Mercado Pago)". */
-  tituloProveedor: (nombre: string) => `Tarjetas de crédito (${nombre})`,
+  /** Encabezado del bloque del modal: "Tarjetas de crédito (Mercado Pago)". */
+  tituloMedio: (nombre: string) => `Tarjetas de crédito (${nombre})`,
 
-  cft: (pct: number) => `CFT ${fmtPct(pct)}`,
-  tea: (pct: number) => `TEA ${fmtPct(pct)}`,
+  /** "6 cuotas sin interés de $20.000". */
+  linea: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}`,
 
   /**
-   * "6 cuotas sin interés de $20.000" / "12 cuotas de $13.500 con interés
-   * (total $162.000)". Con interés siempre lo dice; el total financiado se suma
-   * si se pasa (la card del catálogo y la barra mobile lo omiten por espacio).
+   * Cuotas de una fila del modal: "6 cuotas de $20.000". Si el total no divide exacto, la primera
+   * absorbe el resto de centavos y se dice: "3 cuotas de $33,33 (la primera, $33,34)".
    */
-  linea: (cuotas: number, montoCuota: number, sinInteres: boolean, total?: number) =>
-    sinInteres
-      ? `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}`
-      : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)} con interés${
-          total !== undefined ? ` (total ${fmtPrecio(total)})` : ""
-        }`,
+  filaCuotas: (cuotas: number, montoCuota: number, primeraCuota: number = montoCuota) =>
+    primeraCuota === montoCuota
+      ? `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`
+      : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)} (la primera, ${fmtPrecio(primeraCuota)})`,
 
-  /** Cuotas de una fila del modal: "6 cuotas de $20.000". */
-  filaCuotas: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
+  /** "Hasta 6 cuotas sin interés". */
+  hasta: (cuotas: number) => `Hasta ${cuotasDe(cuotas)} sin interés`,
 
-  /** "Hasta 6 cuotas sin interés" / "Hasta 12 cuotas". */
-  hasta: (cuotas: number, sinInteres: boolean) =>
-    `Hasta ${cuotasDe(cuotas)}${sinInteres ? " sin interés" : ""}`,
-
-  /** "Le faltan $30.000 para hasta 6 cuotas". */
-  teFaltan: (faltante: number, cuotas: number) =>
-    `Le faltan ${fmtPrecio(faltante)} para hasta ${cuotasDe(cuotas)}`,
-
-  progresoEscalon: "Progreso hacia el próximo plan de cuotas",
-  checkoutTitulo: "Cuotas para este pedido",
+  // --- Checkout ---
+  checkoutTitulo: "Cantidad de cuotas",
+  checkoutAyuda: (medio: string) => `Se pagan con tarjeta de crédito en ${medio}, sin interés.`,
+  checkoutUnPago: (total: number) => `1 pago de ${fmtPrecio(total)}`,
+  checkoutCuotas: (cuotas: number, montoCuota: number, total: number) =>
+    `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)} (total ${fmtPrecio(total)})`,
+  /** Rechazos del servidor por la cantidad de cuotas. */
+  cuotasNoCoinciden: "La cantidad de cuotas no coincide con la seleccionada. Vuelva a elegir su medio de pago.",
+  cuotasNoDisponibles: "La cantidad de cuotas elegida ya no está disponible. Seleccione otra.",
 } as const;

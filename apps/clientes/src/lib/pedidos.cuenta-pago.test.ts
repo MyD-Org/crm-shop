@@ -18,7 +18,7 @@ const tx = {
       if ("tenantId" in v && "contactoNombre" in v) valoresPedido.push(v);
       return {
         onConflictDoNothing: () => ({
-          returning: async () => [{ id: "ped-1", numero: 1000, cuotasMax: null }],
+          returning: async () => [{ id: "ped-1", numero: 1000, cuotas: null }],
         }),
         then: (ok: (v: unknown) => void) => ok(undefined),
       };

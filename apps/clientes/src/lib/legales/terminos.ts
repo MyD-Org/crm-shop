@@ -33,7 +33,7 @@ export function bloquesTerminos(d: DatosLegales, ctx: { cuotas: boolean }): Bloq
       parrafos: [
         "Los medios de pago disponibles se informan durante la compra y en la página Envíos y pagos.",
         ...(ctx.cuotas
-          ? ["Cuando se ofrezca el pago en cuotas, el costo financiero total (CFT) se informa antes de confirmar la compra."]
+          ? ["Cuando se ofrezca el pago en cuotas sin interés, la cantidad de cuotas y su valor se informan antes de confirmar la compra."]
           : []),
       ],
     },

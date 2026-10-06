@@ -91,9 +91,9 @@ describe("términos y condiciones", () => {
     expect(bloques.flatMap((b) => b.parrafos).join("\n")).not.toContain("/arrepentimiento");
   });
 
-  it("CFT solo con cuotas; link a Defensa del Consumidor", () => {
-    expect(texto(bloquesTerminos({}, { cuotas: false }))).not.toContain("CFT");
-    expect(texto(bloquesTerminos({}, { cuotas: true }))).toContain("CFT");
+  it("aviso de cuotas solo con el flag; link a Defensa del Consumidor", () => {
+    expect(texto(bloquesTerminos({}, { cuotas: false }))).not.toContain("cuotas sin interés");
+    expect(texto(bloquesTerminos({}, { cuotas: true }))).toContain("cuotas sin interés");
     const enlaces = bloquesTerminos({}, { cuotas: false }).flatMap((b) => b.enlaces ?? []);
     expect(enlaces).toContainEqual(expect.objectContaining({ href: URL_DEFENSA_CONSUMIDOR, external: true }));
   });
@@ -195,14 +195,14 @@ describe("envíos y pagos", () => {
     expect(t).not.toContain("100.000");
   });
 
-  it("sin medios aplicables se coordina con un asesor; con medios los lista; cuotas informa el CFT", () => {
+  it("sin medios aplicables se coordina con un asesor; con medios los lista; cuotas informa las cuotas sin interés", () => {
     expect(texto(bloquesEnviosYPagos({ envio: ENVIO_INACTIVO, medios: [], cuotas: false }))).toContain("A coordinar con un asesor");
     const medios = [medio("transferencia", "Transferencia bancaria"), medio("mercadopago", "Mercado Pago")];
     const prendido = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: true }));
     expect(prendido).toContain("Transferencia bancaria");
     expect(prendido).toContain("Mercado Pago");
-    expect(prendido).toContain("CFT");
-    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: false }))).not.toContain("CFT");
+    expect(prendido).toContain("cuotas sin interés");
+    expect(texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios, cuotas: false }))).not.toContain("cuotas sin interés");
   });
 
   it("cada modalidad lista los medios que le aplican", () => {
@@ -222,9 +222,9 @@ describe("envíos y pagos", () => {
     expect(t).toContain("Con envío a domicilio: el pago se coordina con un asesor");
   });
 
-  it("sin Mercado Pago en la lista no menciona el CFT aunque el flag de cuotas esté prendido", () => {
+  it("sin Mercado Pago en la lista no menciona las cuotas aunque el flag de cuotas esté prendido", () => {
     const t = texto(bloquesEnviosYPagos({ envio: ENVIO_GRATIS, medios: [medio("transferencia", "Transferencia bancaria")], cuotas: true }));
-    expect(t).not.toContain("CFT");
+    expect(t).not.toContain("cuotas sin interés");
   });
 
   it("no ofrece medios inactivos", () => {

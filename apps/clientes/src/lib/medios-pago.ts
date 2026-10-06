@@ -43,9 +43,24 @@ export const SLUG_MERCADOPAGO = "mercadopago";
 /** Slug que el admin no puede usar: es el valor de respaldo cuando ningún medio aplica. */
 export const SLUGS_RESERVADOS: readonly string[] = ["a_coordinar"];
 
+/**
+ * Qué procesador de cobro atiende a cada medio de pago con cobro en línea (id del registro de
+ * `pagos/index.ts`). El procesador se elige POR MEDIO, no es global: pueden convivir varios activos
+ * (cada medio apunta al suyo). Sumar otro procesador = su adaptador + una línea acá. La lógica de
+ * cuotas (condiciones, cuota, congelado, validación, reconciliación) no depende de esta tabla.
+ */
+export const PROCESADOR_DE_MEDIO: Readonly<Record<string, string>> = {
+  [SLUG_MERCADOPAGO]: "mercadopago",
+};
+
+/** Id del procesador que cobra este medio; null = el medio no se cobra en línea. */
+export function procesadorDeMedio(slug: string): string | null {
+  return Object.hasOwn(PROCESADOR_DE_MEDIO, slug) ? PROCESADOR_DE_MEDIO[slug] : null;
+}
+
 /** ¿Este `pago_metodo` se cobra en línea? */
 export function esPagoEnLinea(slug: string): boolean {
-  return slug === SLUG_MERCADOPAGO;
+  return procesadorDeMedio(slug) !== null;
 }
 
 export interface OpcionesMedios {

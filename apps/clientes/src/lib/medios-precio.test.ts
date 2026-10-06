@@ -192,7 +192,8 @@ describe("cuotas sin interés (rebanada D)", () => {
 
     it("suma cuotasSinInteres con el total de cada lista", () => {
       const r = armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas });
-      expect(r.cuotasSinInteres?.map((o) => [o.cuotas, o.total, o.montoCuota])).toEqual([
+      expect(r.cuotasSinInteres?.medio).toBe("Mercado Pago");
+      expect(r.cuotasSinInteres?.opciones.map((o) => [o.cuotas, o.total, o.montoCuota])).toEqual([
         [3, 1089, 363],
         [6, 1161.6, 193.6],
       ]);
@@ -200,7 +201,7 @@ describe("cuotas sin interés (rebanada D)", () => {
 
     it("sin IVA conocido o sin cuotas: no suma el campo", () => {
       expect(armarPreciosMedios(prices, null, { destacado: null, ficha: [], cuotas })).toEqual({ preciosMedios: [] });
-      expect(armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas: null })).toEqual({ preciosMedios: [] });
+      expect(armarPreciosMedios(prices, 21, { destacado: null, ficha: [] })).toEqual({ preciosMedios: [] });
     });
   });
 });

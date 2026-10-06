@@ -62,7 +62,7 @@ export function bloquesEnviosYPagos(ctx: { envio: ConfigEnvio; medios: readonly 
             return lista ? `${cuando}: ${lista}.` : `${cuando}: el pago se coordina con un asesor una vez confirmado el pedido.`;
           }),
           ...(ctx.cuotas && conMp
-            ? ["Cuando elija pagar en cuotas, el costo financiero total (CFT) se informa antes de confirmar la compra."]
+            ? ["Las cuotas sin interés disponibles con tarjeta de crédito se informan antes de confirmar la compra."]
             : []),
         ],
       }

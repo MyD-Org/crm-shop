@@ -30,6 +30,12 @@ export interface CotizacionResponse extends Cotizacion {
    * entrega y al total (null = sin cuenta aplicable). El pedido la vuelve a resolver y la congela.
    */
   cuentaTransferencia?: CuentaPagoSnapshot | null;
+  /**
+   * Sólo si se pidió `conCuotas` (flag `cuotas-cobro`, medio con cobro en línea y condiciones): el total
+   * y la cuota de cada cantidad de cuotas sin interés (1 = un pago), cada una con la lista de su
+   * condición. Ausente = no hay cuotas que ofrecer.
+   */
+  cuotasOpciones?: { cuotas: number; total: number; montoCuota: number; primeraCuota: number }[];
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
@@ -71,6 +77,8 @@ interface Resultado {
   sucursalRetiro: string;
   listaKey: string;
   pagoMetodo: string;
+  cuotas: number;
+  conCuotas: boolean;
   data: CotizacionResponse | null;
   error: string | null;
   noAuth: boolean;
@@ -98,6 +106,10 @@ export function useCotizacion(opts: {
   listaKey?: string;
   /** Slug canónico del medio para esa lista (ver `pagoParaCotizar`); el servidor resuelve la lista desde él. */
   pagoMetodo?: string;
+  /** Cuotas sin interés elegidas (1 = un pago). Cambiarlas recotiza: cada cantidad es otra lista. */
+  cuotas?: number;
+  /** Pide también el total y la cuota de cada cantidad (selector de cuotas del checkout). */
+  conCuotas?: boolean;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -112,6 +124,8 @@ export function useCotizacion(opts: {
   const sucursalRetiro = conCuenta && opts.entregaTipo === "retiro" ? (opts.sucursalRetiro ?? "") : "";
   const listaKey = opts.listaKey ?? "";
   const pagoMetodo = listaKey ? (opts.pagoMetodo ?? "") : "";
+  const cuotas = opts.cuotas ?? 1;
+  const conCuotas = opts.conCuotas ?? false;
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -140,7 +154,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -158,6 +172,8 @@ export function useCotizacion(opts: {
             conCuenta: conCuenta || undefined,
             sucursalRetiro: sucursalRetiro || undefined,
             pagoMetodo: pagoMetodo || undefined,
+            cuotas: cuotas > 1 ? cuotas : undefined,
+            conCuotas: conCuotas || undefined,
           }),
         });
 
@@ -211,7 +227,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -226,7 +242,9 @@ export function useCotizacion(opts: {
     res.conCuenta === conCuenta &&
     res.sucursalRetiro === sucursalRetiro &&
     res.listaKey === listaKey &&
-    res.pagoMetodo === pagoMetodo;
+    res.pagoMetodo === pagoMetodo &&
+    res.cuotas === cuotas &&
+    res.conCuotas === conCuotas;
 
   let estado: EstadoCotizacion;
   if (vacio) estado = "vacio";
@@ -245,6 +263,11 @@ export function useCotizacion(opts: {
      * carrito); nunca para mostrar un total como confirmado.
      */
     ultimasLineas: res?.data?.lineas ?? null,
+    /**
+     * Últimas opciones de cuotas recibidas, aunque se esté recotizando: el selector no parpadea al
+     * cambiar de cantidad. Los montos que valen son los de la cotización vigente.
+     */
+    ultimasCuotasOpciones: res?.data?.cuotasOpciones ?? null,
     /** Fuerza una recotización (botón "reintentar", o antes de confirmar). */
     recotizar: () => setNonce((n) => n + 1),
   };

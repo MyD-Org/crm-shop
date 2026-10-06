@@ -43,7 +43,7 @@ describe("CheckoutClient con medios de pago de la tabla", () => {
   it("Mercado Pago salta al cobro en línea (también al rescatar un pendiente)", () => {
     expect(fuente).toContain("confirmado && confirmado.pagoEnLinea && !pagado");
     expect(fuente).toContain("<PagoMercadoPago");
-    expect(fuente).toContain("pagoEnLinea: pagoParaEnviar === SLUG_MERCADOPAGO,");
+    expect(fuente).toContain("pagoEnLinea: esPagoEnLinea(pagoParaEnviar),");
     expect(fuente).toContain("pagoEnLinea: true,");
   });
 

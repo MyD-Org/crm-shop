@@ -21,7 +21,7 @@ const tx = {
     values: (v: unknown) => {
       inserts.push(v);
       return {
-        onConflictDoNothing: () => ({ returning: async () => [{ id: "ped-1", numero: 1000, cuotasMax: null }] }),
+        onConflictDoNothing: () => ({ returning: async () => [{ id: "ped-1", numero: 1000, cuotas: null }] }),
         then: (ok: (v: unknown) => void) => ok(undefined),
       };
     },

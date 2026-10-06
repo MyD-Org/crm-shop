@@ -1,0 +1,14 @@
+-- Cuotas sin interés congeladas en el pedido (change `listas-precio-online`, rebanada D).
+-- ADITIVA: una columna nullable; nada existente cambia.
+--   - 1 = un pago; N >= 2 = N cuotas sin interés. El pedido ya cotizó con la lista de esa cantidad
+--     (`id_price_list`), así que `total` es el total en cuotas. El cobro tiene que coincidir.
+--   - NULL = pedido anterior a esta migración o creado con el flag `cuotas-cobro` apagado: el cobro
+--     sigue con el clamp de siempre. Los pedidos con plan congelado (`cuotas_max`, `cuotas_plan`) se
+--     leen igual: esas columnas quedan.
+--
+-- El código la escribe en cada pedido con cobro en línea y el flag prendido: esta migración tiene que
+-- correr ANTES de desplegar el código (db:migrate no corre en el deploy).
+--
+-- Reversa (a mano, en una migración nueva, append-only; nunca editar ésta):
+--   ALTER TABLE "shop"."orders" DROP COLUMN "cuotas";
+ALTER TABLE "shop"."orders" ADD COLUMN "cuotas" integer;

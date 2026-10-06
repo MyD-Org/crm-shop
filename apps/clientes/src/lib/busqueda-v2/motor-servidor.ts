@@ -16,6 +16,7 @@ import { facetasPublicas, paginaCatalogoPublica } from "../catalogo-publico";
 import { busquedaIaHabilitada } from "../busqueda-ia-flag";
 import { busquedaMotorUnico } from "../busqueda-motor-flag";
 import type { ContextoDisponibilidad } from "../disponibilidad-contexto";
+import type { MedioCuotas } from "../cuotas-sin-interes";
 import type { MedioPrecio } from "../medios-precio";
 import { buscar, type DepsMotor, type FiltrosSinTexto, type PedidoBuscar, type Politica, type ResultadoBuscar, type Superficie } from "./motor";
 import { planParaPagina } from "./servidor";
@@ -27,6 +28,8 @@ export interface ContextoShop {
   disp?: ContextoDisponibilidad;
   /** Sólo la página: medio destacado de las cards (parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
+  /** Sólo la página: cuotas sin interés de las cards (flag `cuotas-cobro`; parte de la clave de la caché). */
+  cuotas?: MedioCuotas | null;
   /** Sólo la página: la URL trae `ia=1`, así que el plan de la consulta aporta lo blando. */
   conPlanDeUrl?: boolean;
   /** Sólo la página: leer las facetas de cada etapa junto con la página. */
@@ -65,12 +68,12 @@ async function leerMotorUnico(c: ContextoShop): Promise<boolean> {
 }
 
 function depsDe(c: ContextoShop): DepsMotor {
-  const { superficie, soloVisibles, disp, destacado } = c;
+  const { superficie, soloVisibles, disp, destacado, cuotas } = c;
   return {
     pagina: ({ filtros, orden, pagina, porPagina, sinConteo }) =>
       superficie === "catalogo"
         ? // La página del catálogo siempre cuenta y pagina de a PRODUCTOS_POR_PAGINA (su caché lo asume).
-          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, disp, destacado })
+          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, disp, destacado, cuotas })
         : getPaginaCatalogo({ soloVisibles, filtros, orden, pagina, porPagina, disp, sinConteo }),
     facetas: (filtros) => facetasPublicas(filtros, soloVisibles, disp),
     log: (mensaje) => console.error(mensaje),

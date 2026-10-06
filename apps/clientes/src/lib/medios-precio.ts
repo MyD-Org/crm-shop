@@ -9,7 +9,7 @@
  */
 import { precioDeLista, precioGeneral, type AlegraPrice } from "./alegra";
 import type { PrecioMedio } from "@/data/products";
-import { opcionesCuotas, type MedioCuotas, type OpcionCuotas } from "./cuotas-sin-interes";
+import { opcionesCuotas, type CuotasProducto, type MedioCuotas } from "./cuotas-sin-interes";
 import { SLUGS_RESERVADOS, type MedioPago } from "./medios-pago";
 import { precioFinal } from "./precio-final";
 
@@ -92,14 +92,14 @@ export function armarPreciosMedios(
   prices: AlegraPrice[],
   iva: number | null,
   medios: MediosPrecio | undefined,
-): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[]; cuotasSinInteres?: OpcionCuotas[] } {
+): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[]; cuotasSinInteres?: CuotasProducto } {
   if (!medios) return {};
   const precioMedio = medios.destacado ? precioDelMedio(prices, iva, medios.destacado) : null;
   const preciosMedios = medios.ficha.flatMap((m) => precioDelMedio(prices, iva, m) ?? []);
-  const cuotasSinInteres = opcionesCuotas(prices, iva, medios.cuotas);
+  const opciones = opcionesCuotas(prices, iva, medios.cuotas);
   return {
     ...(precioMedio ? { precioMedio } : {}),
     preciosMedios,
-    ...(cuotasSinInteres.length > 0 ? { cuotasSinInteres } : {}),
+    ...(medios.cuotas && opciones.length > 0 ? { cuotasSinInteres: { medio: medios.cuotas.nombre, opciones } } : {}),
   };
 }

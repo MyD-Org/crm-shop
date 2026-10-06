@@ -12,11 +12,10 @@ import type { Product } from "@/data/products";
 import { badgeProducto } from "@/components/badge-producto";
 import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
-import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { BotonEnlace } from "./BotonEnlace";
 import { IconoLampara } from "./iconos";
 
@@ -26,14 +25,7 @@ import { IconoLampara } from "./iconos";
  * instante; si la API no guarda, vuelve (el provider revierte). Si no queda
  * ninguno, el estado vacío.
  */
-export function FavoritosLista({
-  productos,
-  oferta,
-}: {
-  productos: Product[];
-  /** null = sin línea de cuotas (el resumen no la consulta). */
-  oferta: OfertaCuotas | null;
-}) {
+export function FavoritosLista({ productos }: { productos: Product[] }) {
   const { ready, esFavorito } = useFavoritos();
   const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));
   const visibles = visiblesEnLista(productos, ready, esFavorito).map((p) =>
@@ -90,7 +82,7 @@ export function FavoritosLista({
           installments={
             <>
               <PrecioMedioCard medio={p.precioMedio} />
-              <CuotasCard opcion={mejorOpcionPara(p.precioFinal, oferta)} />
+              <CuotasCard opcion={mejorOpcionCuotas(p.cuotasSinInteres?.opciones)} />
             </>
           }
           cornerAction={<BotonFavorito productId={p.id} size="sm" />}

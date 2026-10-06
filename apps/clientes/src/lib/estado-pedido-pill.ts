@@ -6,7 +6,8 @@
  * el del `Badge` del DS: el Shop no define colores por estado. Precedencia:
  * 1. cancelado            → "Cancelado"       (danger)
  * 2. pago fallido         → "Pago rechazado"  (danger)
- * 3. pendiente + pendiente → "Pago pendiente" (warning)
+ * 3. pendiente + pendiente → "Pago pendiente" (warning), o "Pago en proceso" (info) con el cobro ya
+ *    enviado al procesador
  * 4. pendiente + pagado   → "Pago confirmado" (info)
  * 5. confirmado / preparacion / en_camino → su nombre (info)
  * 6. entregado            → "Retirado" o "Entregado" según la entrega (success)
@@ -31,7 +32,7 @@ const EN_CURSO: Record<"confirmado" | "preparacion" | "en_camino", string> = {
 };
 
 export function estadoPedidoPill(
-  o: Pick<Order, "estado" | "pagoEstado" | "entregaTipo" | "pagoMetodoSlug">,
+  o: Pick<Order, "estado" | "pagoEstado" | "entregaTipo" | "pagoMetodoSlug" | "pagoEnProceso">,
 ): PillEstado {
   if (o.estado === "cancelado") return { label: "Cancelado", tone: "danger" };
   if (o.pagoEstado === "fallido") return { label: "Pago rechazado", tone: "danger" };
@@ -39,8 +40,10 @@ export function estadoPedidoPill(
     if (ocultarEstadoPago(o.pagoEstado, o.pagoMetodoSlug)) {
       return { label: "Pendiente", tone: "neutral" };
     }
-    return o.pagoEstado === "pagado"
-      ? { label: "Pago confirmado", tone: "info" }
+    if (o.pagoEstado === "pagado") return { label: "Pago confirmado", tone: "info" };
+    // El cobro ya está en manos del procesador: no es "falta pagar", es "se está confirmando".
+    return o.pagoEnProceso
+      ? { label: "Pago en proceso", tone: "info" }
       : { label: "Pago pendiente", tone: "warning" };
   }
   if (o.estado === "entregado") {

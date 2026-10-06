@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
 import { Button } from "@myd-org/ui";
+import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { customizacionBrick } from "./pago-brick";
 
@@ -52,6 +53,10 @@ interface Props {
   onPagado: () => void;
   /** Se llama cuando el procesador todavía no confirmó el cobro (queda "Estamos confirmando"). */
   onPendiente?: () => void;
+  /** Mientras se confirmaba, el procesador lo rechazó: vuelve el formulario para pagar este mismo pedido. */
+  onRechazado?: () => void;
+  /** El pedido ya tiene un cobro en curso (se retomó): arranca en "Estamos confirmando su pago". */
+  iniciarEnConfirmacion?: boolean;
 }
 
 interface RespuestaPago {
@@ -71,8 +76,10 @@ export function PagoMercadoPago({
   maxCuotas,
   onPagado,
   onPendiente,
+  onRechazado,
+  iniciarEnConfirmacion = false,
 }: Props) {
-  const [estado, setEstado] = useState<Estado>({ fase: "cargando" });
+  const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "cargando" });
   const [intento, setIntento] = useState(0);
 
   useEffect(() => {
@@ -293,13 +300,19 @@ export function PagoMercadoPago({
   // ------------------------------------------------------------- pendiente
   if (estado.fase === "pendiente") {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5">
-        <p className="text-sm font-bold text-text">Estamos confirmando su pago</p>
-        <p className="mt-1 text-sm text-muted">
-          Mercado Pago todavía lo está procesando. Le avisaremos apenas se acredite;
-          no hace falta que pague de nuevo.
-        </p>
-      </div>
+      <PagoEnConfirmacion
+        pedidoId={pedidoId}
+        onPagado={() => {
+          setEstado({ fase: "pagado" });
+          onPagado();
+        }}
+        onRechazado={(mensaje) => {
+          // Se vuelve al formulario sobre el mismo pedido: remontar el brick (el token es de un solo uso).
+          setIntento((n) => n + 1);
+          setEstado({ fase: "rechazado", mensaje, reintentable: true });
+          onRechazado?.();
+        }}
+      />
     );
   }
 

@@ -144,7 +144,7 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
       d.pagoCuentaCorriente && d.pago
         ? `Registramos su pedido. ${textoPagaConMedio(d.pago)} Le avisaremos por este medio cada vez que avance.`
         : d.pagoPendienteEnLinea
-        ? "Registramos su pedido. Si todavía no completó el pago, puede hacerlo desde Mis pedidos. Le avisaremos por este medio cada vez que avance."
+        ? "Registramos su pedido. Si ya realizó el pago, se está procesando y le avisaremos por este medio cuando se confirme. Si todavía no lo completó, puede hacerlo desde Mis pedidos."
         : "Registramos su pedido. Le avisaremos por este medio cada vez que avance.",
   },
   pago_recibido: {

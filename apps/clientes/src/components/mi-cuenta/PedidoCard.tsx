@@ -27,6 +27,12 @@ export function PedidoCard({ pedido }: { pedido: Order }) {
         <Badge tone={pill.tone}>{pill.label}</Badge>
       </div>
 
+      {pedido.pagoEnProceso && pedido.estado === "pendiente" && pedido.pagoEstado === "pendiente" && (
+        <p className="mt-2 text-sm text-muted">
+          Estamos confirmando su pago. Le enviaremos un correo cuando se resuelva.
+        </p>
+      )}
+
       {pasos && (
         <div className="mt-5">
           <Stepper ariaLabel={`Seguimiento del pedido ${pedido.numero}`} steps={pasos} size="sm" />

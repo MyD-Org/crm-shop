@@ -134,3 +134,15 @@ describe("estadoPedidoPill según el medio de pago del pedido", () => {
     }
   });
 });
+
+describe("estadoPedidoPill — pago en proceso", () => {
+  const base = { estado: "pendiente", pagoEstado: "pendiente", entregaTipo: "retiro", pagoMetodoSlug: "payway" } as const;
+
+  it("con el cobro ya enviado al procesador dice 'Pago en proceso'", () => {
+    expect(estadoPedidoPill({ ...base, pagoEnProceso: true })).toEqual({ label: "Pago en proceso", tone: "info" });
+  });
+
+  it("sin cobro enviado sigue 'Pago pendiente'", () => {
+    expect(estadoPedidoPill(base)).toEqual({ label: "Pago pendiente", tone: "warning" });
+  });
+});

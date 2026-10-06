@@ -16,7 +16,7 @@ import { getDb } from "@/db";
 import { crmListaPrecioCondiciones, crmMediosPagoShop } from "@/db/crm";
 import { shopTenantId } from "./tenant";
 import type { CondicionCuotas } from "./cuotas-sin-interes";
-import type { MedioPago } from "./medios-pago";
+import type { AudienciaMedio, MedioPago } from "./medios-pago";
 
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
 type Ejecutor = Pick<ReturnType<typeof getDb>, "select">;
@@ -100,6 +100,7 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
       orden: crmMediosPagoShop.orden,
       destacarEnCatalogo: crmMediosPagoShop.destacarEnCatalogo,
       mostrarEnFicha: crmMediosPagoShop.mostrarEnFicha,
+      audiencia: crmMediosPagoShop.audiencia,
     })
     .from(crmMediosPagoShop)
     .where(eq(crmMediosPagoShop.tenantId, shopTenantId()))
@@ -107,6 +108,8 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
   const condiciones = await condicionesDeLosMedios(db);
   return filas.map((f) => ({
     ...f,
+    // Lo desconocido se trata como público: sólo el valor exacto restringe el medio.
+    audiencia: (f.audiencia === "cuenta_corriente" ? "cuenta_corriente" : "publico") as AudienciaMedio,
     idListaPrecios: condiciones.get(f.slug)?.idListaPrecios ?? null,
     condicionesCuotas: condiciones.get(f.slug)?.condicionesCuotas ?? [],
   }));

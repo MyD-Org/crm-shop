@@ -134,6 +134,18 @@ describe("POST /api/pedidos — medios de la tabla", () => {
     expect(crearPedido).not.toHaveBeenCalled();
   });
 
+  it("un comprador sin cuenta corriente no puede pagar con el medio de audiencia cuenta_corriente", async () => {
+    medios = [medio("transferencia"), medio("efectivo-cheque", { audiencia: "cuenta_corriente" })];
+    const r = await post({ pagoMetodo: "efectivo-cheque" });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: NO_DISPONIBLE });
+    expect(crearPedido).not.toHaveBeenCalled();
+    // Y si ese es el único medio cargado, sólo vale a_coordinar (no se filtra con su slug).
+    medios = [medio("efectivo-cheque", { audiencia: "cuenta_corriente" })];
+    expect((await post({ pagoMetodo: "efectivo-cheque" })).status).toBe(400);
+    expect((await post({ pagoMetodo: "a_coordinar" })).status).toBe(201);
+  });
+
   it("método faltante, vacío o basura: 400", async () => {
     medios = [medio("transferencia")];
     for (const extra of [{}, { pagoMetodo: "" }, { pagoMetodo: 7 }]) {

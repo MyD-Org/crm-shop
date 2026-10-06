@@ -447,6 +447,8 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
   // vive acá: la migración 0065 borró `id_lista_precios` y la lleva `lista_precio_condiciones`.
   destacarEnCatalogo: boolean("destacar_en_catalogo").notNull(),
   mostrarEnFicha: boolean("mostrar_en_ficha").notNull(),
+  // Migración 0069 del CRM: 'publico' | 'cuenta_corriente' (el medio de las cuentas corrientes).
+  audiencia: text("audiencia").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

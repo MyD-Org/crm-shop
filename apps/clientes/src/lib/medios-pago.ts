@@ -36,6 +36,20 @@ export interface MedioPago {
   destacarEnCatalogo: boolean;
   /** La ficha del producto muestra una línea "$X con <Medio>" (cualquier cantidad de medios). */
   mostrarEnFicha: boolean;
+  /**
+   * Quién puede pagar con el medio (migración 0069 del CRM). Ausente o `publico` = cualquiera;
+   * `cuenta_corriente` = SOLO clientes con cuenta corriente: el público no lo ve en el checkout, ni
+   * en "con medio" ni en la ficha, y el servidor lo rechaza. A lo sumo uno por tenant. Se identifica
+   * siempre por este campo, nunca por el nombre ni el slug.
+   */
+  audiencia?: AudienciaMedio;
+}
+
+export type AudienciaMedio = "publico" | "cuenta_corriente";
+
+/** ¿El medio es el de las cuentas corrientes? */
+export function esMedioCuentaCorriente(m: Pick<MedioPago, "audiencia">): boolean {
+  return m.audiencia === "cuenta_corriente";
 }
 
 /** Slug de la fila fija que dispara el cobro en línea con Mercado Pago. */
@@ -87,6 +101,12 @@ export interface OpcionesMedios {
    * `procesadorDisponible` si viene. Los llamadores nuevos usan `procesadorDisponible`.
    */
   mpDisponible?: boolean;
+  /**
+   * El comprador tiene cuenta corriente: sólo se ofrece (y acepta) el medio de audiencia
+   * `cuenta_corriente`. Sin esto (público) ese medio jamás aparece. Lo resuelve el servidor, nunca
+   * el navegador (rebanada D del change `listas-cuenta-corriente`).
+   */
+  esCuentaCorriente?: boolean;
 }
 
 /** ¿Se puede ofrecer este medio con las credenciales que hay? Los medios manuales siempre. */
@@ -135,6 +155,7 @@ export function mediosParaModalidad(
         m.activo &&
         !SLUGS_RESERVADOS.includes(m.slug) &&
         medioOfrecible(m.slug, opts) &&
+        esMedioCuentaCorriente(m) === (opts.esCuentaCorriente === true) &&
         (entrega === "retiro" ? m.aplicaRetiro : m.aplicaEnvio),
     )
     .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre, "es"));

@@ -31,7 +31,7 @@ describe("leerMediosPago", () => {
     const g = dbGrabadora((c) =>
       c.sql.includes("lista_precio_condiciones")
         ? [["efectivo", UUID_LISTA, null]]
-        : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false]],
+        : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false, "publico"]],
     );
     const r = await leerMediosPago(g.db as never);
     expect(r).toEqual([
@@ -48,6 +48,7 @@ describe("leerMediosPago", () => {
         condicionesCuotas: [],
         destacarEnCatalogo: true,
         mostrarEnFicha: false,
+        audiencia: "publico",
       },
     ]);
     const medios = g.consultas[0];
@@ -63,11 +64,21 @@ describe("leerMediosPago", () => {
     expect(cond.params).toContain("tenant-ejemplo");
   });
 
+  it("la audiencia viene de la columna; lo desconocido se trata como público", async () => {
+    const g = dbGrabadora(() => [
+      ["efectivo-cheque", "Efectivo o cheque", "", true, true, true, false, 0, false, false, "cuenta_corriente"],
+      ["raro", "Raro", "", true, true, true, false, 1, false, false, "otra-cosa"],
+    ]);
+    const r = await leerMediosPago(g.db as never);
+    expect(r.map((m) => m.audiencia)).toEqual(["cuenta_corriente", "publico"]);
+    expect(g.consultas[0].sql).toContain('"audiencia"');
+  });
+
   it("un medio sin condición no tiene lista: rige la de referencia", async () => {
     const g = dbGrabadora((c) =>
       c.sql.includes("lista_precio_condiciones")
         ? [["otro", UUID_LISTA, null]]
-        : [["efectivo", "Efectivo", "", true, true, true, false, 0, false, false]],
+        : [["efectivo", "Efectivo", "", true, true, true, false, 0, false, false, "publico"]],
     );
     expect((await leerMediosPago(g.db as never))[0]).toMatchObject({ slug: "efectivo", idListaPrecios: null });
   });
@@ -83,7 +94,7 @@ describe("leerMediosPago", () => {
             ["mercadopago", L3, 3, null],
             ["efectivo", L3, null, null],
           ]
-        : [["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false]],
+        : [["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false, "publico"]],
     );
     const [mp] = await leerMediosPago(g.db as never);
     expect(mp.idListaPrecios).toBe(UUID_LISTA);
@@ -98,7 +109,7 @@ describe("leerMediosPago", () => {
     for (const code of ["42P01", "42501"]) {
       const g = dbGrabadora((c) => {
         if (c.sql.includes("lista_precio_condiciones")) throw Object.assign(new Error("no hay condiciones"), { code });
-        return [["transferencia", "Transferencia", "", true, true, true, false, 0, true, true]];
+        return [["transferencia", "Transferencia", "", true, true, true, false, 0, true, true, "publico"]];
       });
       const r = await leerMediosPagoTolerante(g.db as never);
       expect(r).toHaveLength(1);
@@ -111,7 +122,7 @@ describe("leerMediosPago", () => {
   it("otro error al leer las condiciones no se disfraza: tira", async () => {
     const g = dbGrabadora((c) => {
       if (c.sql.includes("lista_precio_condiciones")) throw Object.assign(new Error("boom"), { code: "XX000" });
-      return [["efectivo", "Efectivo", "", true, true, false, false, 1, false, false]];
+      return [["efectivo", "Efectivo", "", true, true, false, false, 1, false, false, "publico"]];
     });
     await expect(leerMediosPago(g.db as never)).rejects.toThrow(/lista_precio_condiciones/);
   });

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
-import { sembrarMedioMercadoPago } from "@/db/medios-pago-semilla"
+import { sembrarMedioMercadoPago, sembrarMedioPayway } from "@/db/medios-pago-semilla"
 import { crearMedioPago, listarMediosPago } from "@/lib/medios-pago-shop-repo"
 import { seedTenant, truncateAll } from "./helpers"
 
@@ -40,5 +40,22 @@ describe("sembrarMedioMercadoPago", () => {
     const filas = (await listarMediosPago(A)).filter((m) => m.slug === "mercadopago")
     expect(filas).toHaveLength(1)
     expect(filas[0]).toMatchObject({ activo: true, orden: 9 })
+  })
+})
+
+describe("sembrarMedioPayway", () => {
+  it("crea payway inactivo, con cobro online, después de mercadopago, y es idempotente", async () => {
+    await sembrarMedioMercadoPago(getDb(), A)
+    await sembrarMedioPayway(getDb(), A)
+    await sembrarMedioPayway(getDb(), A)
+    const medios = await listarMediosPago(A)
+    expect(medios.map((m) => [m.slug, m.orden])).toEqual([["mercadopago", 0], ["payway", 1]])
+    expect(medios[1]).toMatchObject({
+      nombre: "Tarjeta de crédito o débito - Payway",
+      activo: false,
+      cobroOnline: true,
+      aplicaRetiro: true,
+      aplicaEnvio: true,
+    })
   })
 })

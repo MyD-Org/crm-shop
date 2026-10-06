@@ -41,6 +41,9 @@ export interface MedioPago {
 /** Slug de la fila fija que dispara el cobro en línea con Mercado Pago. */
 export const SLUG_MERCADOPAGO = "mercadopago";
 
+/** Slug de la fila fija de Payway (cobro en línea; el adaptador llega en otra rebanada). */
+export const SLUG_PAYWAY = "payway";
+
 /** Slug que el admin no puede usar: es el valor de respaldo cuando ningún medio aplica. */
 export const SLUGS_RESERVADOS: readonly string[] = ["a_coordinar"];
 
@@ -52,6 +55,9 @@ export const SLUGS_RESERVADOS: readonly string[] = ["a_coordinar"];
  */
 export const PROCESADOR_DE_MEDIO: Readonly<Record<string, string>> = {
   [SLUG_MERCADOPAGO]: "mercadopago",
+  // Fila fija sembrada por la 0067 del CRM. Hasta que exista el adaptador (`pagos/payway.ts`) y las
+  // credenciales, `procesadorConfigurado("payway")` es false y el medio no se ofrece.
+  [SLUG_PAYWAY]: "payway",
 };
 
 /** Id del procesador que cobra este medio; null = el medio no se cobra en línea. */

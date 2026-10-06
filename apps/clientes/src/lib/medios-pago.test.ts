@@ -13,8 +13,11 @@ import {
   nombreDelPago,
   pagoValidoConMedios,
   pieDelMedio,
+  procesadorDeMedio,
+  slugsPagoEnLinea,
   type MedioPago,
 } from "./medios-pago";
+import { procesadorConfigurado } from "./pagos";
 
 const medio = (o: Partial<MedioPago> & { slug: string }): MedioPago => ({
   nombre: o.slug,
@@ -82,6 +85,36 @@ describe("mediosParaModalidad", () => {
   it("esPagoEnLinea sólo para mercadopago", () => {
     expect(esPagoEnLinea("mercadopago")).toBe(true);
     expect(esPagoEnLinea("transferencia")).toBe(false);
+  });
+
+  it("payway es un medio de cobro en línea con su propio procesador", () => {
+    expect(esPagoEnLinea("payway")).toBe(true);
+    expect(procesadorDeMedio("payway")).toBe("payway");
+    expect(procesadorDeMedio("mercadopago")).toBe("mercadopago");
+    expect(slugsPagoEnLinea()).toEqual(["mercadopago", "payway"]);
+  });
+
+  it("payway sin adaptador o sin credenciales no se ofrece ni se acepta aunque esté activo; mercadopago sí", () => {
+    const conPayway = [
+      medio({ slug: "mercadopago", cobroOnline: true, orden: 0 }),
+      medio({ slug: "payway", cobroOnline: true, orden: 1 }),
+      medio({ slug: "efectivo", orden: 2 }),
+    ];
+    const soloMp = { procesadorDisponible: (id: string) => id === "mercadopago" };
+    for (const e of ["retiro", "envio"] as const) {
+      expect(mediosParaModalidad(conPayway, e, soloMp).map((m) => m.slug)).toEqual(["mercadopago", "efectivo"]);
+    }
+    expect(pagoValidoConMedios(conPayway, "retiro", "payway", soloMp)).toBe(false);
+    expect(pagoValidoConMedios(conPayway, "retiro", "mercadopago", soloMp)).toBe(true);
+    // Con credenciales de los dos, conviven.
+    const ambos = { procesadorDisponible: () => true };
+    expect(mediosParaModalidad(conPayway, "retiro", ambos).map((m) => m.slug)).toEqual(["mercadopago", "payway", "efectivo"]);
+  });
+
+  it("con el registro real (sin adaptador de Payway) payway nunca está disponible", () => {
+    const real = { procesadorDisponible: (id: string) => procesadorConfigurado(id) };
+    const medios = [medio({ slug: "payway", cobroOnline: true })];
+    expect(mediosParaModalidad(medios, "retiro", real)).toEqual([]);
   });
 
   it("cobro online se trata como manual: se ofrece igual que cualquier otro", () => {

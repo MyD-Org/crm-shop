@@ -13,7 +13,7 @@ import {
   type FilaCuotasForm,
 } from "@/lib/medios-pago-shop-form"
 import { normalizarIdentificador } from "@/lib/identificador"
-import { SLUG_MERCADOPAGO, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
+import { esSlugCobro, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
 // Configuración → Sucursales y ventas: medios de pago que el checkout del Shop ofrece. Cada
 // guardado avisa al Shop (best-effort): si el aviso no llegó, el cambio igual quedó guardado y la
@@ -344,9 +344,9 @@ export function MediosPagoShopCard() {
                   <div className="flex flex-col">
                     <span>{m.nombre}</span>
                     <span className="text-xs" style={{ color: "var(--ink-soft)" }}>{m.slug}</span>
-                    {m.slug === SLUG_MERCADOPAGO && (
+                    {esSlugCobro(m.slug) && (
                       <span className="text-xs" role="note" style={{ color: "var(--ink-soft)" }}>
-                        Mercado Pago solo se ofrece si las credenciales están cargadas en la tienda.
+                        {m.slug === "payway" ? "Payway" : "Mercado Pago"} solo se ofrece si las credenciales están cargadas en la tienda.
                       </span>
                     )}
                   </div>
@@ -403,7 +403,7 @@ export function MediosPagoShopCard() {
                       <Button size="sm" variant="ghost" onClick={() => void alternarActivo(m)}>
                         {m.activo ? "Desactivar" : "Activar"}
                       </Button>
-                      {m.slug !== SLUG_MERCADOPAGO && (
+                      {!esSlugCobro(m.slug) && (
                         <Button size="sm" variant="ghost" onClick={() => setBorrar(m)}>
                           Eliminar
                         </Button>

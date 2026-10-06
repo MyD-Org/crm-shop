@@ -7,6 +7,17 @@ export const MAX_INSTRUCCIONES = 1000
 export const MAX_ORDEN = 999
 /** Fila fija sembrada por la migración 0057: se edita, pero no se crea, no se elimina ni cambia su slug. */
 export const SLUG_MERCADOPAGO = "mercadopago"
+/** Fila fija sembrada por la migración 0067 (misma regla que Mercado Pago). */
+export const SLUG_PAYWAY = "payway"
+/**
+ * Filas fijas de cobro en línea: no se crean ni se eliminan desde el admin y `cobro_online` no se
+ * edita. Cada una tiene su procesador (credenciales en la tienda) y sus propias condiciones de cuotas.
+ */
+export const SLUGS_COBRO: readonly string[] = [SLUG_MERCADOPAGO, SLUG_PAYWAY]
+
+export function esSlugCobro(slug: string): boolean {
+  return SLUGS_COBRO.includes(slug)
+}
 
 export type Invalido = { ok: false; campo: string; error: string }
 
@@ -88,7 +99,7 @@ export function validarMedioPagoNuevo(body: unknown): { ok: true; valor: MedioPa
   if (!SLUG_MEDIO_RE.test(slug)) {
     return invalido("slug", "El identificador debe tener de 2 a 30 caracteres: minúsculas, números o guiones.")
   }
-  if (slug === SLUG_MERCADOPAGO) return invalido("slug", "Ese identificador está reservado.")
+  if (esSlugCobro(slug)) return invalido("slug", "Ese identificador está reservado.")
   if (typeof body.nombre !== "string" || body.nombre.trim() === "") return invalido("nombre", "Ingrese el nombre.")
 
   const c = validarCampos(body)

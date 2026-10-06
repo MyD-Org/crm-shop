@@ -218,7 +218,13 @@ describe("cancelar con devolución", () => {
     expect(avisoCancelarConDevolucion({ pagado: false, facturado: false })).toBe("")
   })
 
-  it("pagado con cualquier medio que no es Mercado Pago: devolución al cliente", () => {
+  it("pagado con Payway: la devolución se gestiona en Payway", () => {
+    expect(avisoCancelarConDevolucion({ pagado: true, facturado: false, pagoMetodo: "payway" })).toBe(
+      "Antes de cancelarlo, gestione la devolución en Payway.",
+    )
+  })
+
+  it("pagado con cualquier medio sin cobro en línea: devolución al cliente", () => {
     const otro = "Antes de cancelarlo, gestione la devolución del pago al cliente."
     for (const pagoMetodo of ["transferencia", "efectivo", "a_coordinar", "cuenta_corriente", undefined]) {
       expect(avisoCancelarConDevolucion({ pagado: true, facturado: false, pagoMetodo })).toBe(otro)

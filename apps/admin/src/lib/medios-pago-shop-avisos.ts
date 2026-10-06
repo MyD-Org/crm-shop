@@ -2,6 +2,8 @@
 // calcula los conjuntos y acá se arman los textos. Todo en usted. Nunca impiden guardar.
 
 export interface MedioParaAvisos {
+  /** Identificador del medio; sólo se usa para los avisos de cobro en línea. */
+  slug?: string
   nombre: string
   activo: boolean
   listaOnlineId: string | null
@@ -18,6 +20,12 @@ export interface ContextoAvisos {
 
 export function avisosDeMedio(m: MedioParaAvisos, ctx: ContextoAvisos): string[] {
   const avisos: string[] = []
+  // El admin no ve las credenciales de la tienda: sólo puede recordar que el medio las necesita.
+  if (m.slug === "payway" && m.activo) {
+    avisos.push(
+      "Payway solo se ofrece en la tienda si las credenciales de Payway están cargadas. Sin ellas, este medio no aparece en el checkout aunque esté activo.",
+    )
+  }
   const nombreLista = m.listaOnlineNombre ?? "enlazada"
   const sinLista = m.listaOnlineId === null || !m.listaOnlineActiva
 

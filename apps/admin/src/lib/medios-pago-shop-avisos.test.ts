@@ -13,6 +13,23 @@ const base: MedioParaAvisos = {
 const enlazada = { listaOnlineId: "l1", listaOnlineNombre: "Lista A", listaOnlineActiva: true }
 const ctx = (caras: string[] = []) => ({ listasMasCaras: new Set(caras) })
 
+describe("avisosDeMedio: cobro en línea", () => {
+  it("payway activo avisa que depende de las credenciales de la tienda", () => {
+    const a = avisosDeMedio({ ...base, slug: "payway", nombre: "Payway" }, ctx())
+    expect(a).toHaveLength(1)
+    expect(a[0]).toContain("Payway")
+    expect(a[0]).toContain("credenciales")
+  })
+
+  it("payway inactivo no avisa", () => {
+    expect(avisosDeMedio({ ...base, slug: "payway", activo: false }, ctx())).toEqual([])
+  })
+
+  it("un medio sin cobro en línea no avisa", () => {
+    expect(avisosDeMedio({ ...base, slug: "transferencia" }, ctx())).toEqual([])
+  })
+})
+
 describe("avisosDeMedio", () => {
   it("un medio sin nada configurado no avisa", () => {
     expect(avisosDeMedio(base, ctx())).toEqual([])

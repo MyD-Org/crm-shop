@@ -67,6 +67,6 @@ describe("pie del medio y slugs en línea", () => {
   });
 
   it("slugsPagoEnLinea lista los medios con procesador", () => {
-    expect(slugsPagoEnLinea()).toEqual(["mercadopago"]);
+    expect(slugsPagoEnLinea()).toEqual(["mercadopago", "payway"]);
   });
 });

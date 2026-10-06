@@ -295,6 +295,11 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
     }
     case "setCondicion": {
       const { medioSlug, cuotas, listaId } = c
+      // Ausente = sin mínimo. Sólo las filas de cuotas pueden tenerlo (CHECK de la migración 0066).
+      const montoMinimo = c.montoMinimo ?? null
+      if (montoMinimo !== null && cuotas === null) {
+        throw new PreciosOnlineError(422, "monto_minimo_invalido", "El monto mínimo sólo aplica a las cuotas.")
+      }
       const [medio] = await tx
         .select({ slug: mediosPagoShop.slug })
         .from(mediosPagoShop)
@@ -313,22 +318,32 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
         )
       const objeto = `condicion:${medioSlug}:${cuotas ?? 0}`
       const snap = (x: typeof previo | undefined) =>
-        x ? { medioSlug: x.medioSlug, cuotas: x.cuotas, listaId: x.listaId } : { medioSlug: medioSlug, cuotas: cuotas, listaId: null }
+        x
+          ? { medioSlug: x.medioSlug, cuotas: x.cuotas, listaId: x.listaId, montoMinimo: x.montoMinimo }
+          : { medioSlug: medioSlug, cuotas: cuotas, listaId: null, montoMinimo: null }
       if (listaId === null) {
         if (!previo) throw new PreciosOnlineError(422, "sin_cambios", "Ese medio de pago no tiene una lista enlazada.")
         await tx.delete(listaPrecioCondiciones).where(eq(listaPrecioCondiciones.id, previo.id))
         return [{ tipo: "condicion", objeto, listaId: previo.listaId, antes: snap(previo), despues: snap(undefined) }]
       }
-      if (previo?.listaId === listaId) {
+      // Mismo monto aunque el texto difiera ("50000" vs "50000.00"): se compara como número.
+      const mismoMonto =
+        previo !== undefined &&
+        (previo.montoMinimo === null
+          ? montoMinimo === null
+          : montoMinimo !== null && Number(previo.montoMinimo) === Number(montoMinimo))
+      if (previo?.listaId === listaId && mismoMonto) {
         throw new PreciosOnlineError(422, "sin_cambios", "Ese medio de pago ya usa esa lista.")
       }
       if (previo) {
         await tx
           .update(listaPrecioCondiciones)
-          .set({ listaId: listaId, updatedAt: sql`now()` })
+          .set({ listaId: listaId, montoMinimo: montoMinimo, updatedAt: sql`now()` })
           .where(eq(listaPrecioCondiciones.id, previo.id))
       } else {
-        await tx.insert(listaPrecioCondiciones).values({ tenantId, listaId: listaId, medioSlug: medioSlug, cuotas: cuotas })
+        await tx
+          .insert(listaPrecioCondiciones)
+          .values({ tenantId, listaId: listaId, medioSlug: medioSlug, cuotas: cuotas, montoMinimo: montoMinimo })
       }
       return [
         {
@@ -336,7 +351,7 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           objeto,
           listaId: listaId,
           antes: snap(previo),
-          despues: { medioSlug: medioSlug, cuotas: cuotas, listaId: listaId },
+          despues: { medioSlug: medioSlug, cuotas: cuotas, listaId: listaId, montoMinimo: montoMinimo },
         },
       ]
     }
@@ -800,6 +815,8 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
           medioSlug: String(a.medioSlug),
           cuotas: a.cuotas === null || a.cuotas === undefined ? null : Number(a.cuotas),
           listaId: (a.listaId as string | null) ?? null,
+          // Entradas anteriores a la 0066 no guardaron el mínimo: restauran "sin mínimo".
+          montoMinimo: a.montoMinimo === null || a.montoMinimo === undefined ? null : String(a.montoMinimo),
         },
       ]
       break

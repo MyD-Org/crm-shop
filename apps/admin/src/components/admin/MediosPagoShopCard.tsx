@@ -9,6 +9,7 @@ import {
   cambiosDeCuotas,
   cuerpoDePrecios,
   validarFilasCuotas,
+  type CondicionCuotasForm,
   type FilaCuotasForm,
 } from "@/lib/medios-pago-shop-form"
 import { normalizarIdentificador } from "@/lib/identificador"
@@ -62,7 +63,11 @@ const desdeDto = (m: MedioPagoDto): Form => ({
   aplicaEnvio: m.aplicaEnvio,
   activo: m.activo,
   listaOnlineId: m.listaOnlineId ?? LISTA_POR_DEFECTO,
-  cuotasFilas: m.condicionesCuotas.map((c) => ({ cuotas: String(c.cuotas), listaId: c.listaId })),
+  cuotasFilas: m.condicionesCuotas.map((c) => ({
+    cuotas: String(c.cuotas),
+    listaId: c.listaId,
+    montoMinimo: c.montoMinimo === null ? "" : String(Number(c.montoMinimo)),
+  })),
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
 })
@@ -189,7 +194,7 @@ export function MediosPagoShopCard() {
     if (!v.ok) return setErrores({ [v.campo === "body" ? "general" : v.campo]: v.error })
 
     // Cuotas sin interés: sólo un medio con cobro en línea las tiene; se validan antes de guardar nada.
-    let cuotasDeseadas: { cuotas: number; listaId: string }[] | null = null
+    let cuotasDeseadas: CondicionCuotasForm[] | null = null
     if (form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline) {
       const v2 = validarFilasCuotas(form.cuotasFilas)
       if (!v2.ok) return setErrores({ cuotas: v2.error })
@@ -217,7 +222,7 @@ export function MediosPagoShopCard() {
         cambiosPrecios.push(
           ...cambiosDeCuotas(
             nuevo.slug,
-            nuevo.condicionesCuotas.map((c) => ({ cuotas: c.cuotas, listaId: c.listaId })),
+            nuevo.condicionesCuotas.map((c) => ({ cuotas: c.cuotas, listaId: c.listaId, montoMinimo: c.montoMinimo })),
             cuotasDeseadas,
           ),
         )
@@ -508,8 +513,9 @@ export function MediosPagoShopCard() {
                 <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
                   Cada cantidad de cuotas cobra el precio de la lista elegida dividido en esa cantidad, sin recargo: el costo
                   financiero queda dentro del coeficiente de la lista. La tienda las ofrece sólo con el cobro en cuotas
-                  habilitado, y tienen que estar activadas en su cuenta del procesador de cobro. El cambio queda en el
-                  historial de Precios online.
+                  habilitado, y tienen que estar activadas en su cuenta del procesador de cobro. Con «Desde $» la tienda
+                  ofrece esa cantidad de cuotas sólo si el total del pedido, con impuestos y al precio de pago único, alcanza
+                  ese monto; vacío significa sin mínimo. El cambio queda en el historial de Precios online.
                 </p>
                 {form.cuotasFilas.map((f, i) => (
                   <div key={i} className="flex flex-wrap items-end gap-2">
@@ -541,6 +547,16 @@ export function MediosPagoShopCard() {
                         ]}
                       />
                     </Field>
+                    <Field label="Desde $ (con impuestos, opcional)">
+                      <Input
+                        inputMode="decimal"
+                        value={f.montoMinimo ?? ""}
+                        aria-label={`Monto mínimo de la fila ${i + 1}`}
+                        onChange={(e) =>
+                          cambiar({ cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, montoMinimo: e.target.value } : x)) })
+                        }
+                      />
+                    </Field>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -554,7 +570,7 @@ export function MediosPagoShopCard() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => cambiar({ cuotasFilas: [...form.cuotasFilas, { cuotas: "", listaId: "" }] })}
+                    onClick={() => cambiar({ cuotasFilas: [...form.cuotasFilas, { cuotas: "", listaId: "", montoMinimo: "" }] })}
                   >
                     Agregar cantidad de cuotas
                   </Button>

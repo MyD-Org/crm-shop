@@ -1,5 +1,5 @@
 /**
- * Arma el ejecutor de cada tubería del banco (`clasica`, `tolerante`, `fase1`,
+ * Arma el ejecutor de cada tubería del banco (`clasica`, `tolerante`,
  * `v2` y `motor` con Jev grabado / vivo / sin Jev / plan de la caché). Lo comparten
  * `banco:busqueda` y `banco:linea-base`. SOLO scripts; no abre conexiones por
  * su cuenta (el que lo usa envuelve cada llamada en `enLectura`).
@@ -14,7 +14,6 @@ import { clavePlan } from "../servidor";
 import type { BusquedaBanco, ResultadoBanco } from "./banco";
 import { ejecutarClasica } from "./clasica";
 import type { ModoJev, SuperficieBanco, Tuberia } from "./corrida";
-import { ejecutarFase1 } from "./fase1";
 import grabado from "./jev-grabado.json";
 import { jevGrabado, type JevGrabado } from "./jev-grabado";
 import { ejecutarMotor } from "./motor";
@@ -23,7 +22,6 @@ import type { VistaBanco } from "./vista";
 
 export interface ConfigEjecutor {
   tuberia: Tuberia;
-  /** Modo efectivo (ya resuelto: nunca "segun-entorno"). */
   jev: ModoJev;
   vista: VistaBanco;
   arbol: NodoArbol[];
@@ -48,11 +46,6 @@ export interface Ejecutor {
 
 const grabaciones = grabado as JevGrabado;
 const jevVivo = (consulta: string, preguntas: Parameters<typeof consultarJev>[1], timeoutMs: number) => consultarJev(consulta, preguntas, { timeoutMs });
-
-/** `segun-entorno` (fase1 sin --jev): Jev vivo sólo si hay JEV_API_KEY, como siempre. */
-export function resolverJev(jev: ModoJev | "segun-entorno", conClave: boolean): ModoJev {
-  return jev === "segun-entorno" ? (conClave ? "vivo" : "no") : jev;
-}
 
 /** Cómo se adquiere el plan según el modo de Jev (lo comparten `v2` y `motor`), más las medidas si se piden. */
 function contextoDePlan(cfg: ConfigEjecutor): ReturnType<typeof contextoBase> {
@@ -87,19 +80,12 @@ function contextoBase(cfg: ConfigEjecutor): { ctx: ContextoV2; jevMeta?: Ejecuto
 }
 
 export function crearEjecutor(cfg: ConfigEjecutor): Ejecutor {
-  const { vista, arbol, estructurados } = cfg;
+  const { vista } = cfg;
   switch (cfg.tuberia) {
     case "clasica":
       return { ejecutar: (q) => ejecutarClasica(q, { vista }, { tolerante: false }) };
     case "tolerante":
       return { ejecutar: (q) => ejecutarClasica(q, { vista }, { tolerante: true }) };
-    case "fase1": {
-      const vivo = cfg.jev === "vivo";
-      return {
-        ejecutar: (q) => ejecutarFase1(q, { arbol, jev: vivo ? jevVivo : null, estructurados, vista }),
-        ...(vivo ? { jevMeta: { modelo: JEV_MODELO, grabadoEl: null } } : {}),
-      };
-    }
     case "v2": {
       const { ctx, jevMeta, sinGrabacion } = contextoDePlan(cfg);
       return { ejecutar: (q) => ejecutarV2(q, ctx), ...(jevMeta ? { jevMeta } : {}), ...(sinGrabacion ? { sinGrabacion } : {}) };

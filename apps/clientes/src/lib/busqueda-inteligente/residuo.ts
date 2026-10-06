@@ -9,8 +9,8 @@
  * - los tokens SIGNIFICATIVOS: los que ninguna categoría ni atributo aplicado
  *   absorbió y que no son palabras vacías ni contexto (ambientes, usos o
  *   palabras genéricas que la interpretación ya tradujo o que no filtran).
- * La page verifica que la búsqueda interpretada con ese residual traiga algo
- * antes de redirigir (ver `decidirBusqueda` en flujo.ts).
+ * Quien lo usa verifica que la búsqueda con ese residual traiga algo antes de
+ * redirigir.
  */
 import { raizPlural } from "../catalogo-busqueda";
 import { palabrasCategoria, tokensDe } from "./deterministico";

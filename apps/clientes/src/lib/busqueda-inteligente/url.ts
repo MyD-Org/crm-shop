@@ -1,5 +1,5 @@
 /**
- * De una interpretación a URLs del catálogo. Módulo puro: todo pasa por
+ * De una interpretación a URLs del catálogo (chips y "tal cual"). Módulo puro: todo pasa por
  * `lib/catalogo-url.ts`, que descarta lo inválido (un atributo desconocido no
  * llega a la URL). Ni Jev ni el agente tocan la UI: proponen un estado y el
  * Shop lo valida y navega.
@@ -12,32 +12,7 @@ import {
   type EstadoCatalogo,
 } from "../catalogo-url";
 import { formatRubro } from "../formato-rubro";
-import type { FiltrosInterpretados, Interpretacion } from "./tipos";
-
-const union = (a: string[], b: string[]) => [...new Set([...a, ...b])];
-
-/**
- * URL con la interpretación aplicada: suma sus categorías y atributos a los
- * filtros vigentes, reemplaza la búsqueda por el texto residual (o la quita) y
- * deja `ia=<consulta original>` (la franja "Entendimos" y el freno contra
- * volver a interpretar).
- */
-export function hrefInterpretada(estado: EstadoCatalogo, i: Pick<Interpretacion, "consulta" | "aplicar">): string {
-  return hrefCatalogo(estadoInterpretado(estado, i));
-}
-
-/** El estado al que lleva `hrefInterpretada` (para contar sus resultados antes de ir). */
-export function estadoInterpretado(
-  estado: EstadoCatalogo,
-  i: Pick<Interpretacion, "consulta" | "aplicar">,
-): EstadoCatalogo {
-  return estadoConCambios(estado, {
-    query: i.aplicar.q,
-    categorias: union(estado.categorias, i.aplicar.categorias),
-    atributos: union(estado.atributos, i.aplicar.atributos),
-    ia: i.consulta,
-  });
-}
+import type { FiltrosInterpretados } from "./tipos";
 
 /**
  * "Ver resultados de «consulta» tal cual": la búsqueda original, sin los

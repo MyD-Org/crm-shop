@@ -20,16 +20,16 @@ const evs = casos.map((b, i) => evaluar(b, resultados[i], arbol));
 // resumen existentes no pueden cambiar (spec A1).
 const BASE_V2 =
   "# Banco de búsquedas — tubería v2\n\nint cat atr top pos  total  consulta → categoría entendida\n ✓   ✓   ·   ✓    2      2  *foco calido → Lamparas\n ✗   ·   ·   ✗    -      0   cable raro → -  [SIN RESULTADOS]\n ✓   ✓   ·   ·    -      1   XQ-1 → -\n\n(* = diagnóstico 2026-09-30)\n\nconjunto     | n | intención | categoría | atributos | top 24 | top 3 | pos. media | sin resultados indebidos | puntaje %\ntotal        | 3 | 2/3 (67%) | 2/2 (100%) | n/a | 1/2 (50%) | 1/2 (50%) | 2.0 | 1 | 61.5\ndiagnóstico  | 1 | 1/1 (100%) | 1/1 (100%) | n/a | 1/1 (100%) | 1/1 (100%) | 2.0 | 0 | 100";
-const BASE_FASE1 =
-  "# Banco de búsquedas — tubería fase1\n\nint cat atr top pos  total  consulta → categoría entendida\n ·   ✓   ·   ✓    2      2  *foco calido → Lamparas\n ·   ·   ·   ✗    -      0   cable raro → -  [SIN RESULTADOS]\n ·   ✓   ·   ·    -      1   XQ-1 → -\n\n(* = diagnóstico 2026-09-30)\n\nconjunto     | n | intención | categoría | atributos | top 24 | top 3 | pos. media | sin resultados indebidos | puntaje %\ntotal        | 3 | n/a (0/0) | 2/2 (100%) | n/a | 1/2 (50%) | 1/2 (50%) | 2.0 | 1 | 61.5\ndiagnóstico  | 1 | n/a (0/0) | 1/1 (100%) | n/a | 1/1 (100%) | 1/1 (100%) | 2.0 | 0 | 100";
+const BASE_PREVIA =
+  "# Banco de búsquedas — tubería v2\n\nint cat atr top pos  total  consulta → categoría entendida\n ·   ✓   ·   ✓    2      2  *foco calido → Lamparas\n ·   ·   ·   ✗    -      0   cable raro → -  [SIN RESULTADOS]\n ·   ✓   ·   ·    -      1   XQ-1 → -\n\n(* = diagnóstico 2026-09-30)\n\nconjunto     | n | intención | categoría | atributos | top 24 | top 3 | pos. media | sin resultados indebidos | puntaje %\ntotal        | 3 | n/a (0/0) | 2/2 (100%) | n/a | 1/2 (50%) | 1/2 (50%) | 2.0 | 1 | 61.5\ndiagnóstico  | 1 | n/a (0/0) | 1/1 (100%) | n/a | 1/1 (100%) | 1/1 (100%) | 2.0 | 0 | 100";
 
 describe("reporte (tabla y resumen de siempre)", () => {
   it("es idéntico al texto previo a la línea base (v2)", () => {
     expect(reporte("Banco de búsquedas — tubería v2", evs, true)).toBe(BASE_V2);
   });
 
-  it("es idéntico al texto previo a la línea base (fase1, sin intención)", () => {
-    expect(reporte("Banco de búsquedas — tubería fase1", evs, false)).toBe(BASE_FASE1);
+  it("es idéntico al texto previo a la línea base (sin intención)", () => {
+    expect(reporte("Banco de búsquedas — tubería v2", evs, false)).toBe(BASE_PREVIA);
   });
 });
 

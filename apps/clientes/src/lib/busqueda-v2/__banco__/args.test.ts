@@ -27,10 +27,6 @@ describe("parsearArgs: defaults (sin flags nuevos == comportamiento actual)", ()
     expect(a.solo).toBeUndefined();
   });
 
-  it("la tubería fase1 mantiene umbral 0", () => {
-    expect(parsearArgs(["--tuberia=fase1"]).umbral).toBe(0);
-  });
-
   it("las demás tuberías de medición no tienen umbral (0); un --umbral explícito manda", () => {
     expect(parsearArgs(["--tuberia=clasica"]).umbral).toBe(0);
     expect(parsearArgs(["--tuberia=tolerante"]).umbral).toBe(0);
@@ -69,17 +65,17 @@ describe("estadoMedidas (cabecera de la corrida)", () => {
     expect(estadoMedidas("v2", false)).toBe("off");
     expect(estadoMedidas("motor", true)).toBe("on");
     expect(estadoMedidas("motor", false)).toBe("off");
-    for (const t of ["clasica", "tolerante", "fase1"] as const) expect(estadoMedidas(t, true)).toBe("no aplica");
+    for (const t of ["clasica", "tolerante"] as const) expect(estadoMedidas(t, true)).toBe("no aplica");
   });
 });
 
 describe("parsearArgs: --tuberia", () => {
-  it.each(["clasica", "tolerante", "fase1", "v2", "motor"])("acepta %s", (t) => {
+  it.each(["clasica", "tolerante", "v2", "motor"])("acepta %s", (t) => {
     expect(parsearArgs([`--tuberia=${t}`]).tuberia).toBe(t);
   });
 
   it("una tubería inválida falla enumerando los valores válidos", () => {
-    expect(() => parsearArgs(["--tuberia=semantica"])).toThrow(/clasica\|tolerante\|fase1\|v2/);
+    expect(() => parsearArgs(["--tuberia=semantica"])).toThrow(/clasica\|tolerante\|v2/);
   });
 });
 
@@ -140,16 +136,8 @@ describe("parsearArgs: --jev", () => {
     expect(parsearArgs(["--tuberia=tolerante"]).jev).toBe("no aplica");
   });
 
-  it("fase1: --jev=no apaga Jev; --jev=vivo lo pide; grabado/cache no aplican", () => {
-    expect(parsearArgs(["--tuberia=fase1", "--jev=no"]).jev).toBe("no");
-    expect(parsearArgs(["--tuberia=fase1", "--jev=vivo"]).jev).toBe("vivo");
-    expect(() => parsearArgs(["--tuberia=fase1", "--jev=grabado"])).toThrow(/fase1/);
-    expect(() => parsearArgs(["--tuberia=fase1", "--jev=cache"])).toThrow(/fase1/);
-  });
-
-  it("fase1 sin --jev conserva el comportamiento de siempre (Jev si hay JEV_API_KEY, lo decide el llamador)", () => {
-    const a = parsearArgs(["--tuberia=fase1"]);
-    expect(a.jev).toBe("segun-entorno");
+  it("la tubería fase1 ya no existe", () => {
+    expect(() => parsearArgs(["--tuberia=fase1"])).toThrow(/--tuberia inválida/);
   });
 });
 

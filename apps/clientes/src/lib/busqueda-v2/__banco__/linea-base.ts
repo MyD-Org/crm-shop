@@ -30,7 +30,7 @@ import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disp
 import { cargarBancoDeArgs, estadoMedidas } from "./args";
 import { compararMatrices, leerSnapshot } from "./comparar";
 import { correr, gitInfo } from "./corrida";
-import { crearEjecutor, resolverJev } from "./ejecutores";
+import { crearEjecutor } from "./ejecutores";
 import { cerrar, enLectura } from "./lectura";
 import { formatearMatriz, parsearArgsLinea, planDeMatriz, type ArgsLinea, type CorridaDeMatriz } from "./matriz";
 import { resolverSalida } from "./ruta-salida";
@@ -85,7 +85,7 @@ async function main(a: ArgsLinea) {
   const corridas: CorridaDeMatriz[] = [];
   for (const [i, e] of plan.entries()) {
     const vista = e.vista === "banco" ? VISTA_ACTUAL : vistaProduccion(a.soloVisibles);
-    const jev = resolverJev(e.jev, false);
+    const jev = e.jev;
     const ejecutor = crearEjecutor({ tuberia: e.tuberia, jev, vista, arbol, estructurados, soloVisiblesDelPlan: a.soloVisibles, superficie: e.superficie, medidas: a.medidas });
     const banco = e.banco === "real" && real ? real.banco : sintetico;
     const { json } = await correr(

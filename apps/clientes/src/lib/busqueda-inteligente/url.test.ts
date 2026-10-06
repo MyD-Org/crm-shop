@@ -1,38 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { leerEstado } from "../catalogo-url";
-import { chipsSugeridos, hrefInterpretada, hrefTalCual } from "./url";
-
-describe("hrefInterpretada", () => {
-  it("aplica categorías y atributos, deja el residual y la consulta original en ia", () => {
-    const estado = leerEstado({ q: "Reflector LED 50W cálido", stock: "todos" });
-    const href = hrefInterpretada(estado, {
-      consulta: "Reflector LED 50W cálido",
-      aplicar: { categorias: ["Reflectores"], atributos: ["tono-calido"], q: "50w" },
-    });
-    expect(href).toBe(
-      "/catalogo?q=50w&categoria=Reflectores&atr=tono-calido&stock=todos&ia=Reflector+LED+50W+c%C3%A1lido",
-    );
-  });
-
-  it("sin residual quita la búsqueda (y el orden por relevancia)", () => {
-    const estado = leerEstado({ q: "luz para el patio" });
-    const href = hrefInterpretada(estado, {
-      consulta: "luz para el patio",
-      aplicar: { categorias: [], atributos: ["apto-exterior"] },
-    });
-    expect(href).toBe("/catalogo?atr=apto-exterior&ia=luz+para+el+patio");
-    // La página a la que llega no vuelve a interpretar: trae ia.
-    expect(leerEstado({ atr: "apto-exterior", ia: "luz para el patio" }).ia).toBe("luz para el patio");
-  });
-
-  it("descarta atributos inválidos (los valida catalogo-url)", () => {
-    const href = hrefInterpretada(leerEstado({ q: "x y z" }), {
-      consulta: "x y z",
-      aplicar: { categorias: [], atributos: ["tono-fucsia"] },
-    });
-    expect(href).toBe("/catalogo?ia=x+y+z");
-  });
-});
+import { chipsSugeridos, hrefTalCual } from "./url";
 
 describe("hrefTalCual", () => {
   it("vuelve a la consulta original sin los filtros interpretados, con ia=0", () => {

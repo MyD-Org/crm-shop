@@ -1,5 +1,5 @@
 /**
- * fase1 y v2 con la `vista` nueva: sin ella (default VISTA_ACTUAL) se comportan
+ * v2 con la `vista` nueva: sin ella (default VISTA_ACTUAL) se comportan
  * exactamente como antes del cambio (soloVisibles false, stock = todos); con
  * `vistaProduccion` pasan lo que ve el cliente. v2 con `planDe` (--jev=cache).
  */
@@ -13,7 +13,6 @@ vi.mock("../entender/entender", () => ({ entender: (...a: unknown[]) => entender
 vi.mock("../conteo", () => ({ contador: (...a: unknown[]) => contador(...a) }));
 
 import { planVacio } from "../plan";
-import { ejecutarFase1 } from "./fase1";
 import { ejecutarV2, obtenerPlan } from "./v2";
 import { vistaProduccion } from "./vista";
 
@@ -24,25 +23,6 @@ beforeEach(() => {
   for (const m of [getPaginaCatalogo, entender, contador]) m.mockReset();
   getPaginaCatalogo.mockResolvedValue(pagina(3));
   entender.mockImplementation(async (q: string) => entendido(q));
-});
-
-describe("fase1", () => {
-  const ctx = { arbol: [], jev: null, estructurados: false };
-
-  it("sin vista: soloVisibles false y stock = todos (comportamiento previo)", async () => {
-    await ejecutarFase1("DL-18W", ctx);
-    const opts = getPaginaCatalogo.mock.calls[0][0];
-    expect(opts.soloVisibles).toBe(false);
-    expect(opts.filtros.soloStock).toBe(false);
-    expect(opts.filtros.texto).toEqual({ q: "DL-18W" });
-  });
-
-  it("con vistaProduccion(true): soloVisibles y stock por defecto", async () => {
-    await ejecutarFase1("DL-18W", { ...ctx, vista: vistaProduccion(true) });
-    const opts = getPaginaCatalogo.mock.calls[0][0];
-    expect(opts.soloVisibles).toBe(true);
-    expect(opts.filtros.soloStock).toBe(true);
-  });
 });
 
 describe("v2", () => {

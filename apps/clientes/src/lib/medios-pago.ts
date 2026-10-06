@@ -7,6 +7,7 @@
  * confirmar" sin cobro, salvo `mercadopago` (fila fija con `cobroOnline`), que dispara el cobro en
  * línea. Esa fila sólo se ofrece si hay credenciales: el servidor lo resuelve (`mpDisponible`).
  */
+import type { CondicionCuotas } from "./cuotas-sin-interes";
 import { PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
 
 export interface MedioPago {
@@ -25,6 +26,11 @@ export interface MedioPago {
    * resuelve el servidor desde el slug: el cliente nunca manda una lista.
    */
   idListaPrecios: string | null;
+  /**
+   * Cuotas sin interés del medio (rebanada D): una condición por cantidad N >= 2, con la lista online
+   * cuyo precio se divide en N. Sólo se usa en el medio de cobro en línea. Ausente = sin cuotas.
+   */
+  condicionesCuotas?: CondicionCuotas[];
   /** El catálogo muestra "$X con <Medio>" bajo el precio (a lo sumo un medio por tenant). */
   destacarEnCatalogo: boolean;
   /** La ficha del producto muestra una línea "$X con <Medio>" (cualquier cantidad de medios). */

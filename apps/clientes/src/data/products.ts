@@ -1,4 +1,5 @@
 import type { AtributosEstructurados } from "@/lib/catalogo-caracteristicas";
+import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import type { ProductStock } from "@myd-org/ui";
 
 /**
@@ -86,6 +87,11 @@ export interface Product {
   precioMedio?: PrecioMedio;
   /** Medios de la ficha, en orden. Vacío/undefined = ninguno califica. */
   preciosMedios?: PrecioMedio[];
+  /**
+   * Cuotas sin interés del medio de cobro en línea (ascendentes), con el total de la lista de cada
+   * cantidad. Sólo con el flag `cuotas-cobro` y si hay condiciones (src/lib/cuotas-sin-interes.ts).
+   */
+  cuotasSinInteres?: OpcionCuotas[];
   oldPrice?: number;
   /** Precio de la lista propia del cliente (ver `conPrecioCuenta`). */
   precioEspecial?: boolean;

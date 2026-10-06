@@ -24,14 +24,14 @@ afterEach(() => {
 
 describe("getOfertaCuotas", () => {
   it("flag apagado → null sin leer la DB", async () => {
-    setFlag("cuotas", false);
+    setFlag("cuotas-cobro", false);
     const { getOfertaCuotas } = await import("./cuotas-datos");
     expect(await getOfertaCuotas()).toBeNull();
     expect(leerConfig).not.toHaveBeenCalled();
   });
 
   it("flag prendido y DB que tira → null, sin propagar", async () => {
-    setFlag("cuotas", true);
+    setFlag("cuotas-cobro", true);
     vi.stubEnv("SHOP_TENANT_ID", "central-led");
     vi.spyOn(console, "error").mockImplementation(() => {});
     leerConfig.mockRejectedValue(new Error("db caída"));

@@ -80,7 +80,7 @@ describe("ofertaCuotasCacheada", () => {
 
 describe("getOfertaCuotas (exhibir)", () => {
   it("con copia vieja programa la sync lazy afuera de la caché", async () => {
-    setFlag("cuotas", true);
+    setFlag("cuotas-cobro", true);
     leerConfig.mockResolvedValue({ payload: valido, fetchedAt: vieja() });
     leerPlanes.mockResolvedValue(planesFrescos());
     vi.resetModules();

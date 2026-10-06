@@ -13,7 +13,11 @@ import type { BreadcrumbItem } from "@myd-org/ui";
 import type { Product } from "@/data/products";
 import { fmtPesosEnteros } from "@/lib/format";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
-import { nombreAtributo } from "@/lib/catalogo-atributos";
+import {
+  GRUPOS_ATRIBUTO,
+  atributoPorId,
+  nombreAtributo,
+} from "@/lib/catalogo-atributos";
 import { esMedidaId } from "@/lib/catalogo-atributos-medida";
 import {
   ORDEN_DEFAULT,
@@ -360,20 +364,79 @@ export function itemsDeFaceta<F extends { label: string; count: number }>(
 }
 
 /**
- * Ítems del grupo "Características" del panel: las facetas del diccionario con su tilde y su
- * nombre. Una medida activa (`corriente_a:20`) no tiene faceta —no hay un conteo que mostrar—:
- * aparece tildada y sin número, para poder destildarla desde el panel además del chip.
+ * Regla única de ceros del panel (categorías, marcas y características): un ítem con conteo 0 se
+ * oculta, salvo que esté tildado (`itemsDeFaceta` lo antepone, con su 0, para poder destildarlo) o
+ * sea madre de un ítem que se ve (en el árbol de categorías una madre sin productos directos sigue
+ * mostrándose si alguna descendiente cuenta). Un ítem sin conteo (medida activa) no se oculta.
+ * `depth` es el nivel del árbol (0 = raíz); los ítems van en orden de lectura.
  */
-export function itemsDeCaracteristicas(
+export function itemsVisibles<T extends { count?: number; checked: boolean; depth?: number }>(
+  items: T[],
+): T[] {
+  const seVe = (i: T) => i.checked || i.count !== 0;
+  return items.filter((item, i) => {
+    if (seVe(item)) return true;
+    const nivel = item.depth ?? 0;
+    for (let j = i + 1; j < items.length && (items[j].depth ?? 0) > nivel; j++) {
+      if (seVe(items[j])) return true;
+    }
+    return false;
+  });
+}
+
+/** Un ítem del grupo "Características" del panel. */
+export interface ItemCaracteristica {
+  value: string;
+  label: string;
+  count: number | undefined;
+  checked: boolean;
+}
+
+/** Un subgrupo de "Características": su subtítulo y sus ítems visibles. */
+export interface GrupoCaracteristicas {
+  grupo: (typeof GRUPOS_ATRIBUTO)[number] | "medidas";
+  /** Subtítulo en español neutro. */
+  titulo: string;
+  items: ItemCaracteristica[];
+}
+
+const TITULO_GRUPO: Record<(typeof GRUPOS_ATRIBUTO)[number] | "medidas", string> = {
+  tono: "Tono de luz",
+  ambiente: "Ambiente",
+  zocalo: "Zócalo",
+  tension: "Tensión",
+  medidas: "Medidas",
+};
+
+/**
+ * Subgrupos de "Características" del panel, en el orden del diccionario (tono → ambiente →
+ * zócalo → tensión) y con la regla de ceros (`itemsVisibles`): un grupo sin ítems visibles no
+ * aparece. Una medida activa (`corriente_a:20`) no tiene faceta —no hay un conteo que mostrar—:
+ * va tildada y sin número en un grupo "Medidas" al final, para poder destildarla desde el panel
+ * además del chip.
+ */
+export function itemsDeCaracteristicasAgrupados(
   facetas: { label: string; count: number }[],
   tildados: string[],
-): { value: string; label: string; count: number | undefined; checked: boolean }[] {
-  return itemsDeFaceta(facetas, tildados).map((a) => ({
-    value: a.label,
-    label: nombreAtributo(a.label),
-    count: esMedidaId(a.label) ? undefined : a.count,
-    checked: a.checked,
-  }));
+): GrupoCaracteristicas[] {
+  const porGrupo = new Map<GrupoCaracteristicas["grupo"], ItemCaracteristica[]>();
+  for (const a of itemsDeFaceta(facetas, tildados)) {
+    const resuelto = atributoPorId(a.label);
+    if (!resuelto) continue;
+    const grupo = "medida" in resuelto ? "medidas" : resuelto.grupo;
+    const lista = porGrupo.get(grupo) ?? [];
+    lista.push({
+      value: a.label,
+      label: nombreAtributo(a.label),
+      count: esMedidaId(a.label) ? undefined : a.count,
+      checked: a.checked,
+    });
+    porGrupo.set(grupo, lista);
+  }
+  return [...GRUPOS_ATRIBUTO, "medidas" as const].flatMap((grupo) => {
+    const items = itemsVisibles(porGrupo.get(grupo) ?? []);
+    return items.length ? [{ grupo, titulo: TITULO_GRUPO[grupo], items }] : [];
+  });
 }
 
 /** Índices de las hijas directas de `facetas[i]` (orden de lectura). */

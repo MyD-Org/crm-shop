@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { Fragment, useId, useState } from "react";
 import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Select, Switch } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
 import {
@@ -14,8 +14,9 @@ import {
   alternarCategoria,
   fmtPesos,
   hayFiltros,
-  itemsDeCaracteristicas,
+  itemsDeCaracteristicasAgrupados,
   itemsDeFaceta,
+  itemsVisibles,
   limpiarFiltros,
 } from "@/lib/catalogo-vista";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
@@ -32,7 +33,8 @@ const alternar = (lista: string[], valor: string, tildado: boolean) =>
 
 /**
  * Panel de filtros: categorías, marcas, características (atributos del
- * diccionario, ver catalogo-atributos.ts), precio y disponibilidad. Puro: todo
+ * diccionario agrupados por tono, ambiente, zócalo y tensión, ver catalogo-atributos.ts),
+ * precio y disponibilidad. Los ítems con conteo 0 se ocultan (ver `itemsVisibles`). Puro: todo
  * lo que toca el visitante sale por `ir` como cambios de estado (que el
  * padre convierte en URL). Sin `dentroDeSheet` va dentro de una `Card` con
  * "Limpiar" en el encabezado (aside de desktop); con `dentroDeSheet` se
@@ -55,16 +57,16 @@ export function CatalogoFiltros({
     <div className="flex flex-col gap-5">
       <FacetGroup
         title="Categorías"
-        items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
-          value: c.label,
-          label: formatRubro(c.label),
-          // Las subcategorías van debajo de su madre, corridas un nivel.
-          depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
-          count: c.count,
-          // Va siempre el árbol completo, con o sin búsqueda: las de 0 se ven con su 0,
-          // sin atenuar, y se pueden tildar igual.
-          checked: c.checked,
-        }))}
+        items={itemsVisibles(
+          itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
+            value: c.label,
+            label: formatRubro(c.label),
+            // Las subcategorías van debajo de su madre, corridas un nivel.
+            depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
+            count: c.count,
+            checked: c.checked,
+          })),
+        )}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) =>
           ir({ categorias: alternarCategoria(facetas.categorias, estado.categorias, valor, tildado) })
@@ -74,12 +76,14 @@ export function CatalogoFiltros({
       <Divider />
       <FacetGroup
         title="Marcas"
-        items={itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
-          value: m.label,
-          label: formatMarca(m.label),
-          count: m.count,
-          checked: m.checked,
-        }))}
+        items={itemsVisibles(
+          itemsDeFaceta(facetas.marcas, estado.marcas).map((m) => ({
+            value: m.label,
+            label: formatMarca(m.label),
+            count: m.count,
+            checked: m.checked,
+          })),
+        )}
         onToggle={(valor, tildado) => ir({ marcas: alternar(estado.marcas, valor, tildado) })}
         searchable
         searchPlaceholder="Buscar marca…"
@@ -89,20 +93,21 @@ export function CatalogoFiltros({
         emptyText="Sin marcas para estos filtros"
         searchEmptyText="No hay marcas que coincidan con su búsqueda."
       />
-      {/* Sólo con algo para ofrecer: los atributos salen del nombre del
-          producto y en muchas categorías (herramientas, cables) no hay
-          ninguno. Uno tildado que ya no cuenta sigue apareciendo (itemsDeFaceta). */}
-      {(facetas.atributos.length > 0 || estado.atributos.length > 0) && (
-        <>
+      {/* Características: un grupo por subtítulo (tono, ambiente, zócalo, tensión), sólo con algo
+          para ofrecer. Los atributos salen del nombre del producto y en muchas categorías
+          (herramientas, cables) no hay ninguno. Uno tildado que ya no cuenta sigue apareciendo
+          (itemsDeFaceta); los que cuentan 0 se ocultan (itemsVisibles). */}
+      {itemsDeCaracteristicasAgrupados(facetas.atributos, estado.atributos).map((g) => (
+        <Fragment key={g.grupo}>
           <Divider />
           <FacetGroup
-            title="Características"
-            items={itemsDeCaracteristicas(facetas.atributos, estado.atributos)}
+            title={g.titulo}
+            items={g.items}
             onToggle={(valor, tildado) => ir({ atributos: alternar(estado.atributos, valor, tildado) })}
             emptyText="Sin características para estos filtros"
           />
-        </>
-      )}
+        </Fragment>
+      ))}
       {/* Potencia (fase 2): sólo con datos estructurados (flag `busqueda-ia` y la tabla del CRM),
           y sobre los productos que tienen potencia cargada. */}
       {facetas.potencia && (

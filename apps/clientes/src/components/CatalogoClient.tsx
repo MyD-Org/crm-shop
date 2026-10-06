@@ -246,7 +246,13 @@ export function CatalogoClient({
         acciones={
           <div className="flex items-center gap-3 max-lg:w-full max-lg:justify-between">
             <div className="lg:hidden">
-              <CatalogoFiltrosSheet facetas={facetas} estado={estadoFiltros} navegar={navegar} />
+              <CatalogoFiltrosSheet
+                facetas={facetas}
+                estado={estadoFiltros}
+                navegar={navegar}
+                conFacetasPorTipo={conFacetasPorTipo}
+                navegando={navegando || desfasado}
+              />
             </div>
             <CatalogoControles estado={estadoVisible} ir={ir} />
           </div>

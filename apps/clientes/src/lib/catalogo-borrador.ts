@@ -8,6 +8,10 @@
  * Los conteos y el rango que muestra la hoja son los de la URL vigente: no se
  * recalculan con el borrador.
  *
+ * Una excepción, con las facetas por tipo prendidas: elegir o quitar una
+ * categoría se aplica en el acto (`hrefAlElegirCategoria`), porque los filtros
+ * por tipo de producto dependen de ella y hay que traerlos para mostrarlos.
+ *
  * Módulo puro (sin React): el Shop no tiene tests de render.
  */
 import { hrefCon, type EstadoCatalogo } from "@/lib/catalogo-url";
@@ -83,4 +87,29 @@ export function hrefAlAplicar(estado: EstadoCatalogo, borrador: EstadoCatalogo):
   // Las características son de ESTA categoría: si el borrador la cambió, no viajan.
   if (!mismaLista(estado.categorias, borrador.categorias)) cambios.caracteristicas = [];
   return hrefCon(estado, cambios);
+}
+
+/**
+ * Borrador después de elegir (o quitar) categorías en la hoja: cambia las
+ * categorías, descarta las características (son de la categoría anterior) y
+ * conserva el resto de lo que ya estaba en el borrador.
+ */
+export function borradorAlElegirCategoria(
+  borrador: EstadoCatalogo,
+  categorias: string[]
+): EstadoCatalogo {
+  return cambiarBorrador(borrador, { categorias, caracteristicas: [] });
+}
+
+/**
+ * URL a la que navega la hoja al elegir una categoría, sin esperar "Aplicar":
+ * lleva el borrador COMPLETO (precio, marcas, orden, etc.) con la categoría
+ * nueva y sin características. `null` si no hay nada que aplicar.
+ */
+export function hrefAlElegirCategoria(
+  estado: EstadoCatalogo,
+  borrador: EstadoCatalogo,
+  categorias: string[]
+): string | null {
+  return hrefAlAplicar(estado, borradorAlElegirCategoria(borrador, categorias));
 }

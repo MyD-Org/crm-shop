@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react"
 import { Badge, Button, Card, Checkbox, Dialog, Field, Input, Select, Switch, Table, Textarea, useToast } from "@myd-org/ui"
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
-import { LISTA_POR_DEFECTO, aplicarMedioGuardado, cuerpoDePrecios } from "@/lib/medios-pago-shop-form"
+import {
+  LISTA_POR_DEFECTO,
+  aplicarMedioGuardado,
+  cambiosDeCuotas,
+  cuerpoDePrecios,
+  validarFilasCuotas,
+  type FilaCuotasForm,
+} from "@/lib/medios-pago-shop-form"
 import { normalizarIdentificador } from "@/lib/identificador"
 import { SLUG_MERCADOPAGO, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
@@ -23,6 +30,8 @@ type Form = {
   aplicaEnvio: boolean
   activo: boolean
   listaOnlineId: string
+  /** Cuotas sin interés (medio con cobro en línea): cantidad y lista de cada condición. */
+  cuotasFilas: FilaCuotasForm[]
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
 }
@@ -39,6 +48,7 @@ const formVacio: Form = {
   aplicaEnvio: true,
   activo: true,
   listaOnlineId: LISTA_POR_DEFECTO,
+  cuotasFilas: [],
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
 }
@@ -52,6 +62,7 @@ const desdeDto = (m: MedioPagoDto): Form => ({
   aplicaEnvio: m.aplicaEnvio,
   activo: m.activo,
   listaOnlineId: m.listaOnlineId ?? LISTA_POR_DEFECTO,
+  cuotasFilas: m.condicionesCuotas.map((c) => ({ cuotas: String(c.cuotas), listaId: c.listaId })),
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
 })
@@ -130,8 +141,7 @@ export function MediosPagoShopCard() {
    * Enlaza (o desenlaza con null) la lista de precio online del medio por el camino de cualquier
    * cambio de precios: vista previa, aplicar y entrada en el historial. Devuelve el error, si hay.
    */
-  async function enlazarLista(slug: string, listaId: string | null): Promise<string | null> {
-    const cambios = [{ op: "setCondicion", medioSlug: slug, cuotas: null, listaId }]
+  async function aplicarCambiosDePrecios(cambios: unknown[]): Promise<string | null> {
     const previa = await enviar("/api/admin/precios-online/previsualizar", "POST", { cambios })
     if (!previa.res.ok || !previa.json?.previa) {
       return typeof previa.json?.error === "string" ? previa.json.error : "No pudimos enlazar la lista de precios."
@@ -178,6 +188,14 @@ export function MediosPagoShopCard() {
     const v = form.editandoSlug ? validarMedioPagoCambios(c) : validarMedioPagoNuevo(c)
     if (!v.ok) return setErrores({ [v.campo === "body" ? "general" : v.campo]: v.error })
 
+    // Cuotas sin interés: sólo un medio con cobro en línea las tiene; se validan antes de guardar nada.
+    let cuotasDeseadas: { cuotas: number; listaId: string }[] | null = null
+    if (form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline) {
+      const v2 = validarFilasCuotas(form.cuotasFilas)
+      if (!v2.ok) return setErrores({ cuotas: v2.error })
+      cuotasDeseadas = v2.filas
+    }
+
     setGuardando(true)
     try {
       const { res, json } = form.editandoSlug
@@ -192,16 +210,28 @@ export function MediosPagoShopCard() {
       setMedios((prev) => aplicarMedioGuardado(prev ?? [], nuevo))
       const listaElegida = form.listaOnlineId === LISTA_POR_DEFECTO ? null : form.listaOnlineId
       const cambioLista = form.editandoSlug !== null && listaElegida !== nuevo.listaOnlineId
-      if (cambioLista) {
-        const falla = await enlazarLista(nuevo.slug, listaElegida)
+      // Un solo cambio de precios (previa + aplicar + historial) con la lista del pago único y las cuotas.
+      const cambiosPrecios: unknown[] = []
+      if (cambioLista) cambiosPrecios.push({ op: "setCondicion", medioSlug: nuevo.slug, cuotas: null, listaId: listaElegida })
+      if (cuotasDeseadas) {
+        cambiosPrecios.push(
+          ...cambiosDeCuotas(
+            nuevo.slug,
+            nuevo.condicionesCuotas.map((c) => ({ cuotas: c.cuotas, listaId: c.listaId })),
+            cuotasDeseadas,
+          ),
+        )
+      }
+      if (cambiosPrecios.length > 0) {
+        const falla = await aplicarCambiosDePrecios(cambiosPrecios)
         if (falla) {
-          setErrores({ listaOnlineId: `Los datos del medio se guardaron, pero no se pudo cambiar la lista. ${falla}` })
+          setErrores({ listaOnlineId: `Los datos del medio se guardaron, pero no se pudo cambiar la lista ni las cuotas. ${falla}` })
           void recargarAvisos()
           return
         }
       }
       setForm(null)
-      if (nuevo.destacarEnCatalogo || cambioLista) void recargarAvisos()
+      if (nuevo.destacarEnCatalogo || cambiosPrecios.length > 0) void recargarAvisos()
       avisar(form.editandoSlug ? "Medio de pago actualizado" : "Medio de pago agregado", json.propagado)
     } catch {
       setErrores({ general: "Error de conexión. Inténtelo nuevamente." })
@@ -470,6 +500,66 @@ export function MediosPagoShopCard() {
                   La ficha del producto muestra una línea con el precio de este medio. Puede marcar todos los que quiera.
                 </p>
                 {errores.destacarEnCatalogo && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.destacarEnCatalogo}</p>}
+              </div>
+            )}
+            {form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline && (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-semibold" style={{ color: "var(--ink)" }}>Cuotas sin interés</p>
+                <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                  Cada cantidad de cuotas cobra el precio de la lista elegida dividido en esa cantidad, sin recargo: el costo
+                  financiero queda dentro del coeficiente de la lista. La tienda las ofrece sólo con el cobro en cuotas
+                  habilitado, y tienen que estar activadas en su cuenta del procesador de cobro. El cambio queda en el
+                  historial de Precios online.
+                </p>
+                {form.cuotasFilas.map((f, i) => (
+                  <div key={i} className="flex flex-wrap items-end gap-2">
+                    <Field label="Cuotas">
+                      <Input
+                        inputMode="numeric"
+                        value={f.cuotas}
+                        aria-label={`Cantidad de cuotas ${i + 1}`}
+                        onChange={(e) =>
+                          cambiar({ cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, cuotas: e.target.value } : x)) })
+                        }
+                      />
+                    </Field>
+                    <Field label="Lista de precios">
+                      <Select
+                        aria-label={`Lista de precios de la fila ${i + 1}`}
+                        value={f.listaId || LISTA_POR_DEFECTO}
+                        onValueChange={(v) =>
+                          cambiar({
+                            cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, listaId: v === LISTA_POR_DEFECTO ? "" : v } : x)),
+                          })
+                        }
+                        options={[
+                          { value: LISTA_POR_DEFECTO, label: "Seleccione una lista" },
+                          ...listas.map((l) => ({ value: l.id, label: l.nombre })),
+                          ...(f.listaId && !listas.some((l) => l.id === f.listaId)
+                            ? [{ value: f.listaId, label: "Lista desactivada" }]
+                            : []),
+                        ]}
+                      />
+                    </Field>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => cambiar({ cuotasFilas: form.cuotasFilas.filter((_, j) => j !== i) })}
+                    >
+                      Quitar
+                    </Button>
+                  </div>
+                ))}
+                <div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => cambiar({ cuotasFilas: [...form.cuotasFilas, { cuotas: "", listaId: "" }] })}
+                  >
+                    Agregar cantidad de cuotas
+                  </Button>
+                </div>
+                {errores.cuotas && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.cuotas}</p>}
               </div>
             )}
             <div className="flex flex-col gap-2">

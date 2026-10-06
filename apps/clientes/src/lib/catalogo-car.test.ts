@@ -12,6 +12,9 @@ describe("leerIdCar", () => {
     ["tono:calido", { clave: "tono", op: "valor", valor: "calido" }],
     ["flujo_lm:800-1200", { clave: "flujo_lm", op: "rango", min: 800, max: 1200 }],
     ["largo_m:1.5-10", { clave: "largo_m", op: "rango", min: 1.5, max: 10 }],
+    ["diametro_mm:25", { clave: "diametro_mm", op: "valor", valor: "25" }],
+    ["diametro_mm:12.5", { clave: "diametro_mm", op: "valor", valor: "12.5" }],
+    ["ancho_mm:150", { clave: "ancho_mm", op: "valor", valor: "150" }],
   ])("%s es válido", (id, esperado) => {
     expect(leerIdCar(id)).toEqual(esperado);
   });
@@ -30,6 +33,12 @@ describe("leerIdCar", () => {
     "desconocida:1",
     "medidas_mm:10x10", // clave fuera del registro
     "leds_m:30",
+    "diametro_mm:4", // fuera de 5-200
+    "diametro_mm:201",
+    "diametro_mm:025", // no canónico
+    "diametro_mm:20-25", // clave de lista: sólo valor exacto
+    "ancho_mm:20", // fuera de 30-1000
+    "ancho_mm:1001",
     "potencia_w:10-50", // la potencia usa potencia_min/max
     "potencia_w:10",
     "flujo_lm:800", // una clave de rango solo admite rango

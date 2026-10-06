@@ -19,6 +19,9 @@ let filas: Fila[] = [];
 let grabadora = dbGrabadora(() => filas);
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
+const preciosPrivados = vi.fn();
+vi.mock("./precios-privados-repo", () => ({ preciosPrivados: (...a: unknown[]) => preciosPrivados(...a) }));
+
 import { cotizar } from "./cotizacion";
 
 const precios = [
@@ -29,6 +32,7 @@ const precios = [
 beforeEach(() => {
   vi.stubEnv("SHOP_TENANT_ID", "tenant-test");
   getItem.mockReset();
+  preciosPrivados.mockReset();
   filas = [];
   grabadora = dbGrabadora(() => filas);
 });
@@ -63,18 +67,38 @@ describe("cotizar", () => {
     expect(c).toMatchObject({ subtotal: 3000, iva: 525, total: 3525, hayProblemas: false });
   });
 
-  it("usa la lista de precios pedida", async () => {
-    filas = [["10", "COD-10", null, null, precios, "5", "21", "active", null]];
-    const c = await cotizar([{ id: "10", qty: 1 }], { idPriceList: "7" });
-    expect(c.lineas[0].precioUnitario).toBe(800);
+  it("con lista privada cotiza a su precio neto, lo lee UNA vez y marca listaPrivada", async () => {
+    filas = [
+      ["10", "COD-10", null, null, precios, "5", "21", "active", null],
+      ["20", "COD-20", null, null, precios, "5", "21", "active", null],
+    ];
+    preciosPrivados.mockResolvedValue(new Map([["10", 1300], ["20", null]]));
+    const c = await cotizar([{ id: "10", qty: 1 }, { id: "20", qty: 1 }], { idListaPrivada: "lista-privada-a" });
+    expect(preciosPrivados).toHaveBeenCalledTimes(1);
+    expect(preciosPrivados).toHaveBeenCalledWith("lista-privada-a", ["10", "20"]);
+    // Mayor que el público: se muestra igual. Sin precio: Consulte, y bloquea.
+    expect(c.lineas[0]).toMatchObject({ precioUnitario: 1300, subtotal: 1300 });
+    expect(c.lineas[1]).toMatchObject({ problema: "sin_precio", sinPrecio: true });
+    expect(c.hayProblemas).toBe(true);
+    expect(c.listaPrivada).toBe(true);
+    expect(c.subtotal).toBe(1300);
   });
 
-  it("idListaMedio manda sobre la lista del cliente y no marca lista preferencial", async () => {
+  it("idListaPrivada manda sobre idListaMedio", async () => {
     const conMedio = [...precios, { idPriceList: "9", name: "Medio", price: 700, main: false }];
     filas = [["10", "COD-10", null, null, conMedio, "5", "21", "active", null]];
-    const c = await cotizar([{ id: "10", qty: 1 }], { idPriceList: "7", idListaMedio: "9" });
+    preciosPrivados.mockResolvedValue(new Map([["10", 900]]));
+    const c = await cotizar([{ id: "10", qty: 1 }], { idListaPrivada: "lista-privada-a", idListaMedio: "9" });
+    expect(c.lineas[0].precioUnitario).toBe(900);
+  });
+
+  it("sin lista privada no lee la vista privada y rige el medio", async () => {
+    const conMedio = [...precios, { idPriceList: "9", name: "Medio", price: 700, main: false }];
+    filas = [["10", "COD-10", null, null, conMedio, "5", "21", "active", null]];
+    const c = await cotizar([{ id: "10", qty: 1 }], { idListaMedio: "9" });
+    expect(preciosPrivados).not.toHaveBeenCalled();
     expect(c.lineas[0].precioUnitario).toBe(700);
-    expect(c.listaPreferencial).toBe(false);
+    expect(c.listaPrivada).toBe(false);
   });
 
   it("IVA null en el espejo → IVA por defecto", async () => {
@@ -135,14 +159,14 @@ describe("cotizar", () => {
     expect(c.lineas[0].name).toBe("Abrazadera");
   });
 
-  it("precios crudos de Alegra (los del CRM) resuelven la lista del cliente y la principal", async () => {
+  it("precios crudos de Alegra (los del CRM) resuelven la lista del medio y la principal", async () => {
     const crudos = [
       { idPriceList: 1, name: "General", price: "1000", main: true },
-      { idPriceList: 7, name: "Mayorista", price: 800 },
+      { idPriceList: 7, name: "Medio", price: 800 },
     ];
     filas = [["10", "COD-10", null, null, crudos, "8", "21", "active", null]];
     const [principal] = (await cotizar([{ id: "10", qty: 1 }])).lineas;
-    const [mayorista] = (await cotizar([{ id: "10", qty: 1 }], { idPriceList: "7" })).lineas;
+    const [mayorista] = (await cotizar([{ id: "10", qty: 1 }], { idListaMedio: "7" })).lineas;
     expect(principal).toMatchObject({ precioUnitario: 1000, stockDisponible: 8 });
     expect(mayorista.precioUnitario).toBe(800);
   });

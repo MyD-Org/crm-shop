@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setFlag } from "@/test/flags";
 
 const identidad = vi.fn();
-const idPriceListCliente = vi.fn();
+const listaPrivadaDelComprador = vi.fn();
+const preciosPrivados = vi.fn();
 const getProductosPorIds = vi.fn();
 const permitir = vi.fn();
-vi.mock("@/lib/auth", () => ({
-  identidadActual: () => identidad(),
-  idPriceListCliente: (...a: unknown[]) => idPriceListCliente(...a),
-}));
+vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
+vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: () => listaPrivadaDelComprador() }));
+vi.mock("@/lib/precios-privados-repo", () => ({ preciosPrivados: (...a: unknown[]) => preciosPrivados(...a) }));
 vi.mock("@/lib/catalog", () => ({ getProductosPorIds: (...a: unknown[]) => getProductosPorIds(...a) }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
 const disponibles = vi.fn(async () => false);
@@ -18,14 +18,15 @@ vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisib
 import { GET } from "./route";
 
 const pedir = (qs: string) => GET(new Request(`http://localhost/api/chat-ia/productos${qs}`));
-const prod = (id: string, precioFinal = 121) => ({ id, name: `P${id}`, brand: "", price: 100, precioFinal, stock: "in" });
+const prod = (id: string, precioFinal = 121): Record<string, unknown> => ({ id, name: `P${id}`, brand: "", price: 100, precioFinal, stock: "in" });
 
 beforeEach(() => {
   vi.stubEnv("AI_API_URL", "https://ai.plataforma.example");
   vi.stubEnv("AI_API_KEY", "clave");
   vi.stubEnv("AI_AGENT_ID", "agente-1");
   identidad.mockReset();
-  idPriceListCliente.mockReset();
+  listaPrivadaDelComprador.mockReset().mockResolvedValue(null);
+  preciosPrivados.mockReset();
   getProductosPorIds.mockReset();
   permitir.mockReset();
   permitir.mockReturnValue(true);
@@ -45,27 +46,26 @@ describe("GET /api/chat-ia/productos", () => {
     expect(getProductosPorIds).not.toHaveBeenCalled();
   });
 
-  it("visitante ⇒ lista general; respeta el orden pedido y omite los que faltan", async () => {
+  it("visitante ⇒ precio público; respeta el orden pedido y omite los que faltan", async () => {
     getProductosPorIds.mockResolvedValue(new Map([["2", prod("2")], ["1", prod("1")]]));
     const res = await pedir("?ids=1,3,2,1");
     expect(getProductosPorIds).toHaveBeenCalledWith(["1", "3", "2"], {
-      idPriceList: undefined,
       soloActivos: true,
       soloVisibles: false,
     });
     expect((await res.json()).map((p: { id: string }) => p.id)).toEqual(["1", "2"]);
-    expect(idPriceListCliente).not.toHaveBeenCalled();
+    expect(listaPrivadaDelComprador).not.toHaveBeenCalled();
+    expect(preciosPrivados).not.toHaveBeenCalled();
   });
 
   it("atributos estructurados sólo con busqueda-ia Y la tabla disponible", async () => {
     getProductosPorIds.mockResolvedValue(new Map([["1", prod("1")]]));
     disponibles.mockResolvedValue(true);
     await pedir("?ids=1");
-    expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], { idPriceList: undefined, soloActivos: true, soloVisibles: false });
+    expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], { soloActivos: true, soloVisibles: false });
     setFlag("busqueda-ia", true);
     await pedir("?ids=1");
     expect(getProductosPorIds).toHaveBeenLastCalledWith(["1"], {
-      idPriceList: undefined,
       soloActivos: true,
       soloVisibles: false,
       atributosEstructurados: true,
@@ -73,13 +73,18 @@ describe("GET /api/chat-ia/productos", () => {
     disponibles.mockResolvedValue(false);
   });
 
-  it("cliente vinculado ⇒ su lista de precios, sacada de la sesión", async () => {
+  it("cliente con lista privada ⇒ su precio, sacado de la sesión; sin precio en su lista no se resuelve", async () => {
     identidad.mockResolvedValue({ clerkUserId: "u", cliente: { codigocliente: "42" } });
-    idPriceListCliente.mockResolvedValue("lista-7");
-    getProductosPorIds.mockResolvedValue(new Map());
-    await pedir("?ids=1&idPriceList=otra");
-    expect(idPriceListCliente).toHaveBeenCalledWith("42");
-    expect(getProductosPorIds.mock.calls[0][1]).toMatchObject({ idPriceList: "lista-7" });
+    listaPrivadaDelComprador.mockResolvedValue("lista-privada-a");
+    preciosPrivados.mockResolvedValue(new Map([["1", 500], ["2", null]]));
+    getProductosPorIds.mockResolvedValue(
+      new Map([["1", { ...prod("1"), ivaPorcentaje: 21, precioMedio: { slug: "t" } }], ["2", prod("2")]]),
+    );
+    const res = await pedir("?ids=1,2&idPriceList=otra&lista=otra");
+    expect(preciosPrivados).toHaveBeenCalledWith("lista-privada-a", ["1", "2"]);
+    const salida = (await res.json()) as { id: string; price?: number; precioFinal?: number }[];
+    expect(salida.map((p) => p.id)).toEqual(["1"]);
+    expect(JSON.stringify(salida)).not.toContain('"price":100');
     expect(permitir).toHaveBeenCalledWith("chat-ia-productos:42", 60, 60_000);
   });
 

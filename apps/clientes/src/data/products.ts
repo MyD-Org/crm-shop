@@ -93,8 +93,12 @@ export interface Product {
    */
   cuotasSinInteres?: CuotasProducto;
   oldPrice?: number;
-  /** Precio de la lista propia del cliente (ver `conPrecioCuenta`). */
-  precioEspecial?: boolean;
+  /**
+   * Estado del precio de la cuenta superpuesto en el navegador (ver `aplicarEstadoPrecio`):
+   * "privado" = precio de su lista privada; "consulte" = sin precio en su lista; "pendiente" = el
+   * overlay todavía no llegó (se muestra un marcador). Ausente = precio público.
+   */
+  precioCuenta?: "privado" | "consulte" | "pendiente";
   discount?: string;
   badgeTone?: "danger" | "info" | "warning" | "neutral";
   badgeText?: string;

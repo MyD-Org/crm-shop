@@ -21,7 +21,6 @@ import { getDb } from "@/db";
 import { clientLinks } from "@/db/schema";
 import { intentarVinculacionPorEmail } from "./vinculacion";
 import { comercialEspejo } from "./contactos-espejo";
-import { precioEspecialCuenta } from "./precio-especial-flag";
 import { nombrePila } from "./nombre-pila";
 import { esRolAdmin } from "./rol-admin";
 import { sessionOptions, type SessionData } from "./session";
@@ -283,41 +282,4 @@ export async function claveSolicitante(): Promise<string | null> {
 
   const crm = await sesionCrm();
   return crm?.codigocliente ? `crm:${crm.codigocliente}` : null;
-}
-
-/**
- * Lista de precios del cliente, SIN tocar Alegra (0 requests). La usan el
- * carrito y la confirmación del pedido, así que el cliente paga lo que vio.
- *
- * 1. Espejo de contactos del CRM: la lista asignada hoy, si es usable (una
- *    lista dada de baja ⇒ `undefined` = principal, ver `idPriceListUsable`).
- * 2. Sin fila en el espejo (o la vista no responde): el snapshot de
- *    `client_links` que se congeló al vincular.
- * 3. Sin nada → `undefined` = lista principal.
- *
- * No hay control en vivo al confirmar: la tienda respeta sus propios precios
- * (decisión 2026-09-23).
- */
-export async function idPriceListCliente(
-  codigocliente: string,
-): Promise<string | undefined> {
-  // Corte único del precio especial (#219): con el flag `precio-especial-cuenta` apagado (default)
-  // el precio depende sólo del medio de pago y ningún caller usa la lista propia del cliente.
-  if (!(await precioEspecialCuenta())) return undefined;
-
-  const espejo = await comercialDelEspejo(codigocliente);
-  if (espejo) return espejo.idPriceList;
-
-  const [fila] = await getDb()
-    .select({ idPriceList: clientLinks.idPriceList })
-    .from(clientLinks)
-    .where(
-      and(
-        eq(clientLinks.alegraContactId, codigocliente),
-        eq(clientLinks.estado, "activa"),
-      ),
-    )
-    .limit(1);
-
-  return fila?.idPriceList ?? undefined;
 }

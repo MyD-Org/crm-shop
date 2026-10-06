@@ -2,13 +2,14 @@
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Button, QuantityStepper } from "@myd-org/ui";
+import { Button, QuantityStepper, Skeleton } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
-import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { maxCantidad, textoUnidadesDisponibles } from "@/lib/catalogo-vista";
@@ -100,12 +101,13 @@ export function ProductoClient({
   /** Categoría del admin con sus padres (raíz → hoja), para las migas. Vacío = la de Alegra. */
   rutaCategorias?: string[];
 }) {
-  // La ficha viene cacheada con la lista general; si el cliente tiene lista
-  // propia más barata, se pisa acá (precio, cuotas y el aviso de su cuenta).
-  const producto = conPrecioCuenta(
+  // La ficha viene cacheada con el precio público; si el visitante tiene una lista privada, se pisa
+  // acá (precio, sin "con medio" ni cuotas). Con sesión, hasta que llega se muestra un marcador.
+  const producto = aplicarEstadoPrecio(
     productoLista,
     usePreciosCuenta([productoLista.id]).get(productoLista.id),
   );
+  const precioPendiente = producto.precioCuenta === "pendiente";
   const [qty, setQty] = useState(1);
   const { addItem } = useCart();
   // Una vista por producto (no por cada cambio de precio de cuenta).
@@ -144,6 +146,8 @@ export function ProductoClient({
   // `conPrecioSql` en src/lib/catalog.ts). La ficha se lee en vivo, así que el
   // filtro de los listados no la cubre y hay que cortar acá también.
   const sinPrecio = !(producto.price > 0);
+  // Mientras llega el precio de su cuenta no se puede agregar (el precio real todavía no se conoce).
+  const noComprable = sinPrecio || precioPendiente;
   // Sólo para mostrar: el nombre real (para buscar, ordenar, SEO/JSON-LD)
   // sigue siendo `producto.name` tal como lo resolvió el servidor.
   const { nombre: nombreParaMostrar } = nombreConMarca(
@@ -163,7 +167,7 @@ export function ProductoClient({
     <Button
       size="lg"
       onClick={agregar}
-      disabled={agotado || sinPrecio}
+      disabled={agotado || noComprable}
       className="flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap"
     >
       <span className="grid">
@@ -277,7 +281,12 @@ export function ProductoClient({
             </div>
 
             <div>
-              {sinPrecio ? (
+              {precioPendiente ? (
+                <div aria-busy="true" aria-label="Cargando su precio" className="space-y-2">
+                  <Skeleton className="h-10 w-44" />
+                  <Skeleton className="h-4 w-56" />
+                </div>
+              ) : sinPrecio ? (
                 <p className="text-lg font-semibold text-muted">
                   Precio no disponible. Consulte por WhatsApp o por teléfono.
                 </p>
@@ -285,7 +294,6 @@ export function ProductoClient({
                 <PrecioConImpuestos
                   price={producto.price}
                   precioFinal={producto.precioFinal}
-                  precioLista={producto.precioEspecial ? producto.oldPrice : undefined}
                   preciosMedios={producto.preciosMedios}
                 />
               )}

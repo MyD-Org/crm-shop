@@ -7,13 +7,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let identidad: { clerkUserId: string | null; cliente: { codigocliente: string } | null };
 const cotizar = vi.fn();
-const idPriceListCliente = vi.fn();
+const listaPrivadaDelComprador = vi.fn();
 let configEnvio: ConfigEnvio = CONFIG_ENVIO_DEFAULT;
 
-vi.mock("@/lib/auth", () => ({
-  identidadActual: async () => identidad,
-  idPriceListCliente: (...a: unknown[]) => idPriceListCliente(...a),
-}));
+vi.mock("@/lib/auth", () => ({ identidadActual: async () => identidad }));
+vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: () => listaPrivadaDelComprador() }));
 vi.mock("@/lib/cotizacion", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/cotizacion")>()),
   cotizar: (...a: unknown[]) => cotizar(...a),
@@ -47,31 +45,55 @@ beforeEach(() => {
     total: 1210,
     hayProblemas: false,
   });
-  idPriceListCliente.mockReset();
-  idPriceListCliente.mockResolvedValue("7");
+  listaPrivadaDelComprador.mockReset();
+  listaPrivadaDelComprador.mockResolvedValue("lista-privada-a");
 });
 
 describe("POST /api/carrito/cotizar", () => {
-  it("sin sesión cotiza con la lista principal (sin idPriceList)", async () => {
+  it("sin sesión cotiza a precio público (sin lista privada) y ni la consulta", async () => {
     const r = await POST(pedido());
     expect(r.status).toBe(200);
     expect((await r.json()).total).toBe(1210);
     expect(cotizar).toHaveBeenCalledWith([{ id: "1", qty: 2 }], {
-      idPriceList: undefined,
+      idListaPrivada: null,
       entregaTipo: "retiro",
       soloVisibles: false,
     });
-    expect(idPriceListCliente).not.toHaveBeenCalled();
+    expect(listaPrivadaDelComprador).not.toHaveBeenCalled();
   });
 
-  it("con cliente vinculado cotiza con su lista", async () => {
+  it("con cliente de cuenta corriente con lista enlazada cotiza con su lista privada", async () => {
     identidad = { clerkUserId: "user_1", cliente: { codigocliente: "C1" } };
     await POST(pedido());
     expect(cotizar).toHaveBeenCalledWith(expect.any(Array), {
-      idPriceList: "7",
+      idListaPrivada: "lista-privada-a",
       entregaTipo: "retiro",
       soloVisibles: false,
     });
+  });
+
+  it("con cliente sin lista privada (contado, sin enlace) cotiza a precio público", async () => {
+    identidad = { clerkUserId: "user_1", cliente: { codigocliente: "C2" } };
+    listaPrivadaDelComprador.mockResolvedValue(null);
+    await POST(pedido());
+    expect(cotizar).toHaveBeenCalledWith(expect.any(Array), {
+      idListaPrivada: null,
+      entregaTipo: "retiro",
+      soloVisibles: false,
+    });
+  });
+
+  it("el body no puede traer la lista privada", async () => {
+    identidad = { clerkUserId: "user_1", cliente: { codigocliente: "C2" } };
+    listaPrivadaDelComprador.mockResolvedValue(null);
+    await POST(
+      new Request("https://tienda.example/api/carrito/cotizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.9" },
+        body: JSON.stringify({ items: [{ id: "1", qty: 1 }], idListaPrivada: "lista-privada-a", listaId: "lista-privada-a" }),
+      }),
+    );
+    expect((cotizar.mock.calls[0][1] as { idListaPrivada: unknown }).idListaPrivada).toBeNull();
   });
 
   it("sin sesión el techo es por IP (frena bots)", async () => {

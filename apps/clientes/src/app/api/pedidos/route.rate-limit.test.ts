@@ -15,7 +15,6 @@ let identidad: {
 
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => identidad,
-  idPriceListCliente: async () => undefined,
 }));
 vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
 

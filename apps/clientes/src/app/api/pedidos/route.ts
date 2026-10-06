@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { identidadActual, idPriceListCliente } from "@/lib/auth";
+import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS, type Cotizacion } from "@/lib/cotizacion";
 import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
@@ -20,11 +20,9 @@ import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { esCompradorCuentaCorriente, mediosParaModalidad, pagoValidoConMedios } from "@/lib/medios-pago";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
-import { idPriceListUsable } from "@/lib/alegra";
-import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
 import { idListaDelMedio } from "@/lib/lista-medio";
-import { precioEspecialCuenta } from "@/lib/precio-especial-flag";
-import { motivoRevisionPedido, type EntradaMotivo } from "@/lib/motivo-revision";
+import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
+import { motivoRevisionPedido } from "@/lib/motivo-revision";
 import { avisarOperadorPedidoNuevo, avisarPedidoRecibido } from "@/lib/pedido-avisos";
 import { permitir } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
@@ -109,31 +107,6 @@ const productosCambiaron = (cotizacion: Cotizacion) =>
     },
     { status: 409 },
   );
-
-/**
- * Comprador NO vinculado cuyo documento ya es de un contacto de Alegra (lo
- * anotó el perfil al guardarse, `coincideConAlegra`): la lista de precios
- * usable de ese contacto y la general, para ver si compró a otra lista que la
- * suya. Sólo espejo. Sin contacto, o si el espejo no responde ⇒ `null` (comprar
- * a precio de lista está bien: no se marca por eso).
- */
-async function listaDelContactoCoincidente(
-  alegraId: string | null | undefined,
-): Promise<Pick<EntradaMotivo, "listaContacto" | "idListaGeneral">> {
-  const sinDatos = { listaContacto: null, idListaGeneral: null };
-  if (!alegraId) return sinDatos;
-  try {
-    const c = await vinculablePorId(alegraId);
-    if (!c) return sinDatos;
-    const id = idPriceListUsable(c);
-    // Sin lista propia usable no hace falta saber cuál es la general.
-    return { listaContacto: { id }, idListaGeneral: id ? await idListaGeneral() : null };
-  } catch (err) {
-    const codigo = (err as { code?: unknown })?.code;
-    console.error(`[/api/pedidos] no se pudo leer el contacto coincidente (${codigo ?? "sin código"})`);
-    return sinDatos;
-  }
-}
 
 const texto = (v: unknown, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
@@ -346,10 +319,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Sin cuenta corriente vinculada no hay lista propia: cotiza a la principal.
-    const idPriceList = cliente
-      ? await idPriceListCliente(cliente.codigocliente)
-      : undefined;
+    // Lista PRIVADA del comprador (cuenta corriente con lista enlazada): sólo desde su sesión, jamás
+    // del body. Sin ella (contado, sin enlace, sin vincular) rige el precio público o el del medio.
+    const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
     // Con el flag `sucursales`: los datos con los que `crearPedido` asigna la sucursal. Provincia
     // de entrega: la del body, si no la zona elegida (cookie), si no la del domicilio de facturación.
     // Apagado = undefined y el pedido queda sin sucursal, como siempre.
@@ -377,18 +349,17 @@ export async function POST(req: Request) {
     const dispCotizacion = disp ? contextoUnion(disp) : undefined;
     const soloVisibles = await catalogoSoloVisibles();
     // Precio por medio de pago: la lista sale del slug ya validado (medios releídos sin caché más
-    // arriba), nunca del body. Con el flag `precio-especial-cuenta` prendido rige la lista del
-    // cliente, como antes, y la del medio se ignora.
-    const especial = await precioEspecialCuenta();
+    // arriba), nunca del body. Con lista privada el precio ya no depende del medio: se ignora.
+    const conMedio = !idListaPrivada;
     // Cuotas sin interés (flag `cuotas-cobro`): sólo con cobro en línea. La cantidad sale del body pero
     // se acepta únicamente si el medio tiene una condición para ella; cada cantidad es una lista de
-    // precios distinta, y esa lista cotiza el pedido. Con el flag apagado (o el precio especial
-    // prendido) no hay cuotas: el pedido no las congela y el cobro sigue como siempre.
+    // precios distinta, y esa lista cotiza el pedido. Con el flag apagado (o con lista privada) no hay
+    // cuotas: el pedido no las congela y el cobro sigue como siempre.
     const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, opcionesMedios).find(
       (m) => m.slug === pagoMetodo,
     );
     let cuotasPedido: number | null = null;
-    if (!especial && medioDelPedido?.cobroOnline && (await cuotasHabilitadas())) {
+    if (conMedio && medioDelPedido?.cobroOnline && (await cuotasHabilitadas())) {
       // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
       // del medio, cotizado acá en el servidor. Sólo se cotiza si hay algún mínimo y se pidieron cuotas;
       // el mínimo no se congela en el pedido (sólo `cuotas`), pero se deja la base en el log.
@@ -396,7 +367,6 @@ export async function POST(req: Request) {
       let totalBase: number | undefined;
       if (hayMinimos && typeof body.cuotas === "number" && body.cuotas >= 2) {
         const cotBase = await cotizar(lineas, {
-          idPriceList,
           idListaMedio: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1),
           entregaTipo,
           disp: dispCotizacion,
@@ -414,8 +384,8 @@ export async function POST(req: Request) {
       }
       cuotasPedido = elegidas.cuotas;
     }
-    const idListaMedio = especial ? undefined : idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotasPedido);
-    const opcionesCotizar = { idPriceList, idListaMedio, entregaTipo, disp: dispCotizacion, soloVisibles };
+    const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotasPedido) : undefined;
+    const opcionesCotizar = { idListaPrivada, idListaMedio, entregaTipo, disp: dispCotizacion, soloVisibles };
     const cotizacion = await cotizar(lineas, opcionesCotizar);
 
     // Nada se persiste si hay una sola línea con problema: se devuelve la
@@ -426,6 +396,17 @@ export async function POST(req: Request) {
       // clave ya tiene pedido, es ése y no un 409.
       const creadoEnElMedio = await pedidoYaCreado();
       if (creadoEnElMedio) return creadoEnElMedio;
+      // Con lista privada, un producto sin precio en ella ("Consulte") no se puede confirmar.
+      if (cotizacion.lineas.some((l) => l.sinPrecio)) {
+        return NextResponse.json(
+          {
+            error: "Hay productos sin precio para su cuenta. Quítelos o consulte con un asesor.",
+            motivo: "sin_precio_cuenta",
+            cotizacion,
+          },
+          { status: 409 },
+        );
+      }
       return productosCambiaron(cotizacion);
     }
 
@@ -451,17 +432,14 @@ export async function POST(req: Request) {
 
 
     // Para revisión de un operador antes de facturar, con el motivo más
-    // importante (ver motivo-revision.ts). Comprar a la lista general NO es un
-    // motivo: sólo si el documento es de un contacto con OTRA lista.
+    // importante (ver motivo-revision.ts). El precio ya no depende de la lista del contacto de
+    // Alegra (la lista privada se resuelve aparte), así que "otra lista de precios" no es motivo.
     const motivoRevision = motivoRevisionPedido({
       motivoContacto: dc.motivoRevision,
       complementoUsado,
       vinculado: Boolean(cliente),
-      // Con el flag apagado el precio ya no depende de la lista del contacto: marcar "otra lista de
-      // precios" sería una revisión espuria.
-      ...(cliente || !especial
-        ? { listaContacto: null, idListaGeneral: null }
-        : await listaDelContactoCoincidente(dc.perfil?.coincideConAlegra)),
+      listaContacto: null,
+      idListaGeneral: null,
     });
 
     let pedido: Awaited<ReturnType<typeof crearPedido>>;
@@ -482,8 +460,9 @@ export async function POST(req: Request) {
            * "Params Error" sin decir cuál falta.
            */
           email: cliente?.email ?? email,
-          // La lista efectivamente usada para cotizar (la del medio o la del cliente).
-          idPriceList: idListaMedio ?? idPriceList,
+          // La lista efectivamente usada para cotizar, congelada con el pedido: la privada del comprador
+          // (uuid de la lista online) o, sin ella, la del medio.
+          idPriceList: idListaPrivada ?? idListaMedio,
         },
         {
           contactoNombre,

@@ -13,6 +13,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { carts } from "@/db/schema";
 import { getProductosPorIds } from "./catalog";
+import { preciosPrivados } from "./precios-privados-repo";
 import {
   mergeMax,
   normalizarCarrito,
@@ -151,24 +152,34 @@ export async function vaciarCarritoTx(tx: Tx | Db, clerkUserId: string): Promise
 }
 
 /**
- * Nombre, marca y precio referencial del espejo del catálogo (con la lista de
- * precios del cliente). Sin `soloActivos`: un producto despublicado sigue en el
- * carrito y la cotización lo marca. Los que ya no están en el espejo se
- * devuelven con `faltante: true`, no desaparecen en silencio.
+ * Nombre, marca y precio referencial del espejo del catálogo. Con `idListaPrivada` (comprador de
+ * cuenta corriente con lista enlazada, resuelta en el servidor) el precio es el NETO de su lista
+ * privada, o 0 si el producto no tiene precio en ella (la cotización lo marca "Consulte"); sin ella,
+ * el público. Sin `soloActivos`: un producto despublicado sigue en el carrito y la cotización lo
+ * marca. Los que ya no están en el espejo se devuelven con `faltante: true`, no desaparecen en
+ * silencio.
  */
 export async function enriquecer(
   lineas: readonly LineaCarrito[],
-  idPriceList: string | undefined,
+  idListaPrivada?: string | null,
 ): Promise<CartItem[]> {
   if (lineas.length === 0) return [];
-  const productos = await getProductosPorIds(
-    lineas.map((l) => l.id),
-    { idPriceList },
-  );
+  const ids = lineas.map((l) => l.id);
+  const [productos, privados] = await Promise.all([
+    getProductosPorIds(ids),
+    idListaPrivada ? preciosPrivados(idListaPrivada, ids) : Promise.resolve(null),
+  ]);
   return lineas.map(({ id, qty }) => {
     const p = productos.get(id);
     return p
-      ? { id, qty, name: p.name, brand: p.brand, price: p.price, image: p.images?.[0]?.url }
+      ? {
+          id,
+          qty,
+          name: p.name,
+          brand: p.brand,
+          price: privados ? (privados.get(id) ?? 0) : p.price,
+          image: p.images?.[0]?.url,
+        }
       : { id, qty, name: "", brand: "", price: 0, faltante: true };
   });
 }

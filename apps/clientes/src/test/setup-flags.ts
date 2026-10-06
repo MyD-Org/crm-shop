@@ -9,8 +9,15 @@ vi.mock("@/flags", () => ({
   chatIaFlag: async () => estadoFlags()["chat-ia"],
   busquedaIaFlag: async () => estadoFlags()["busqueda-ia"],
   trackingFlag: async () => estadoFlags().tracking,
-  precioEspecialCuentaFlag: async () => estadoFlags()["precio-especial-cuenta"],
   busquedaMedidasFlag: async () => estadoFlags()["busqueda-medidas"],
+}));
+
+// Por defecto nadie tiene lista privada: los tests de rutas no dependen de la DB ni de la sesión para
+// resolverla. Los que la necesitan vuelven a mockear este módulo con su propia fábrica.
+vi.mock("@/lib/lista-cuenta-repo", () => ({
+  listaPrivadaDelComprador: async () => null,
+  listaPrivadaDeContacto: async () => null,
+  listaMapeada: async () => null,
 }));
 
 beforeEach(() => {

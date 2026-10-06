@@ -48,7 +48,6 @@ vi.mock("@/lib/auth", () => ({
     cliente: null,
     email: "a@b.example",
   }),
-  idPriceListCliente: async () => undefined,
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),

@@ -35,7 +35,7 @@ import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { joinOverlay, nombreExhibidoSql } from "./nombre-exhibido";
 import { costoEnvio, type EntregaTipo } from "./envio";
-import { precioCuenta } from "./precio-cuenta";
+import { preciosPrivados } from "./precios-privados-repo";
 import { MAX_LINEAS, QTY_MAX } from "./carrito-cliente";
 
 /** Lo único que el cliente tiene derecho a elegir. */
@@ -65,8 +65,11 @@ export interface LineaCotizada {
   total: number;
   /** null = ítem no inventariable (servicio): siempre disponible. */
   stockDisponible: number | null;
-  /** true = el unitario sale de la lista propia de la cuenta y es más barato que el de la general. */
-  precioEspecial?: boolean;
+  /**
+   * true = el comprador tiene lista privada y este producto no tiene precio en ella ("Consulte"):
+   * la línea no se puede agregar al carrito ni confirmar (siempre acompaña a `problema: "sin_precio"`).
+   */
+  sinPrecio?: boolean;
   problema?: ProblemaLinea;
   /** Texto listo para mostrar cuando hay `problema`. */
   detalle?: string;
@@ -80,8 +83,8 @@ export interface Cotizacion {
   total: number;
   /** true si alguna línea tiene `problema`: bloquea la confirmación. */
   hayProblemas: boolean;
-  /** true si alguna línea usa un precio de la lista propia de la cuenta. */
-  listaPreferencial: boolean;
+  /** true si el comprador cotizó con una lista privada (cuenta corriente con lista enlazada). */
+  listaPrivada: boolean;
 }
 
 // Máximo de unidades por línea y techo de líneas por pedido: los mismos del
@@ -140,15 +143,24 @@ function lineaRota(
 export function cotizarItem(
   pedida: LineaPedida,
   item: AlegraItem,
-  idPriceList?: string,
   /**
    * Lista del medio de pago elegido (la resuelve el servidor desde el slug, ver `lista-medio.ts`).
-   * Manda sobre la lista del cliente y NO marca precio especial de la cuenta.
+   * Se ignora si el comprador tiene lista privada.
    */
   idListaMedio?: string,
+  /**
+   * Precio NETO del producto en la lista privada del comprador. `undefined` = el comprador no tiene
+   * lista privada (rige el público o el del medio). `null` = la tiene pero este producto no tiene
+   * precio en ella: queda `sin_precio` ("Consulte") y NUNCA cae al precio público. Un precio privado
+   * se cobra tal cual aunque sea mayor que el público.
+   */
+  precioPrivado?: number | null,
 ): LineaCotizada {
   const categoria = item.itemCategory as { name?: string } | undefined;
-  const precioUnitario = redondear(resolverPrecio(item, idListaMedio ?? idPriceList));
+  const conListaPrivada = precioPrivado !== undefined;
+  const precioUnitario = redondear(
+    conListaPrivada ? (precioPrivado ?? 0) : resolverPrecio(item, idListaMedio),
+  );
   const ivaPorcentaje = ivaDeItem(item);
   const disponible = item.inventory?.availableQuantity;
   const stockDisponible = disponible == null ? null : Number(disponible);
@@ -170,13 +182,13 @@ export function cotizarItem(
     stockDisponible,
   };
 
-  if (!idListaMedio && Array.isArray(item.price) && precioCuenta(item.price, ivaPorcentaje, idPriceList)) {
-    linea.precioEspecial = true;
-  }
-
   if (item.status === "inactive") {
     linea.problema = "inactivo";
     linea.detalle = "Este producto ya no está disponible.";
+  } else if (conListaPrivada && !(precioUnitario > 0)) {
+    linea.problema = "sin_precio";
+    linea.sinPrecio = true;
+    linea.detalle = "Este producto no tiene precio para su cuenta. Consúltenos.";
   } else if (precioUnitario <= 0) {
     // Precio 0 no es "gratis": es un ítem sin precio cargado en la lista.
     linea.problema = "sin_precio";
@@ -294,9 +306,12 @@ async function leerEspejo(
 export async function cotizar(
   pedidas: LineaPedida[],
   opts: {
-    /** Lista propia del cliente (precio especial de la cuenta; sólo con el flag `precio-especial-cuenta`). */
-    idPriceList?: string;
-    /** Lista del medio de pago elegido; si viene, manda sobre `idPriceList`. */
+    /**
+     * Lista PRIVADA del comprador (`listaPrivadaDelComprador()`, siempre resuelta en el servidor).
+     * Si viene, manda sobre la lista del medio y sobre cuotas: se cotiza a su precio neto.
+     */
+    idListaPrivada?: string | null;
+    /** Lista del medio de pago elegido. Se ignora con `idListaPrivada`. */
     idListaMedio?: string;
     entregaTipo?: EntregaTipo;
     /**
@@ -314,10 +329,19 @@ export async function cotizar(
     opts.disp,
     opts.soloVisibles,
   );
+  // Una sola lectura de la vista privada para todas las líneas (nunca desde caché compartida).
+  const privados = opts.idListaPrivada
+    ? await preciosPrivados(opts.idListaPrivada, pedidas.map((p) => p.id))
+    : undefined;
   const lineas = pedidas.map((pedida) => {
     const item = items.get(pedida.id);
     return item
-      ? cotizarItem(pedida, item, opts.idPriceList, opts.idListaMedio)
+      ? cotizarItem(
+          pedida,
+          item,
+          opts.idListaMedio,
+          privados ? (privados.get(pedida.id) ?? null) : undefined,
+        )
       : lineaRota(pedida, "no_encontrado", "Este producto ya no existe.");
   });
 
@@ -333,6 +357,6 @@ export async function cotizar(
     costoEnvio: envio,
     total: redondear(subtotal + iva + envio),
     hayProblemas: lineas.some((l) => l.problema),
-    listaPreferencial: lineas.some((l) => l.precioEspecial),
+    listaPrivada: Boolean(opts.idListaPrivada),
   };
 }

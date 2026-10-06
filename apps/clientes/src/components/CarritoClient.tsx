@@ -301,7 +301,7 @@ export function CarritoClient({
           </div>
         )}
 
-        {cotizacion?.listaPreferencial && (
+        {cotizacion?.listaPrivada && (
           <div className="mb-6 flex items-start gap-3 rounded-[20px] border border-accent/30 bg-accent/5 p-4 text-sm">
             <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent text-white" aria-hidden="true">
               <CheckIcon />

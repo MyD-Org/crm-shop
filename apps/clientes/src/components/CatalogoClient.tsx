@@ -13,7 +13,8 @@ import { CatalogoSinResultados } from "@/components/catalogo/CatalogoSinResultad
 import { FranjaInterpretada } from "@/components/catalogo/FranjaBusqueda";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
-import { conPrecioCuenta, usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
+import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import type { Facetas } from "@/lib/catalog";
 import {
   IA_PLAN,
@@ -171,10 +172,11 @@ export function CatalogoClient({
       router.push(href);
     });
 
-  // Precio especial de la cuenta, si el cliente tiene lista propia más barata.
+  // Precio de la lista privada de la cuenta (cuenta corriente con lista enlazada), superpuesto
+  // sobre el catálogo público. Con sesión, un marcador hasta que llega.
   const preciosCuenta = usePreciosCuenta(productos.map((p) => p.id));
   const productosCuenta = useMemo(
-    () => productos.map((p) => conPrecioCuenta(p, preciosCuenta.get(p.id))),
+    () => productos.map((p) => aplicarEstadoPrecio(p, preciosCuenta.get(p.id))),
     [productos, preciosCuenta],
   );
 

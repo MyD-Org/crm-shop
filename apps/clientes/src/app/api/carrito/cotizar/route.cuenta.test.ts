@@ -12,10 +12,7 @@ let cuentas: CuentaBancaria[] = [];
 let sucursalesOn = true;
 let datos: DatosSucursales;
 
-vi.mock("@/lib/auth", () => ({
-  identidadActual: async () => identidad,
-  idPriceListCliente: async () => "7",
-}));
+vi.mock("@/lib/auth", () => ({ identidadActual: async () => identidad }));
 vi.mock("@/lib/cotizacion", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/cotizacion")>()),
   cotizar: async () => ({

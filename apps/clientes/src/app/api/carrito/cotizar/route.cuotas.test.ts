@@ -10,10 +10,10 @@ import type { MedioPago } from "@/lib/medios-pago";
 let medios: MedioPago[];
 const cotizar = vi.fn();
 
-vi.mock("@/lib/auth", () => ({
-  identidadActual: async () => ({ clerkUserId: null, cliente: null }),
-  idPriceListCliente: async () => "7",
-}));
+let cliente: { codigocliente: string } | null = null;
+let listaPrivada: string | null = null;
+vi.mock("@/lib/auth", () => ({ identidadActual: async () => ({ clerkUserId: null, cliente }) }));
+vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: async () => listaPrivada }));
 vi.mock("@/lib/cotizacion", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/cotizacion")>()),
   cotizar: (...a: unknown[]) => cotizar(...a),
@@ -61,6 +61,8 @@ const listaUsada = (i = 0) => (cotizar.mock.calls[i][1] as { idListaMedio?: stri
 const TOTALES: Record<string, number> = { L1: 1210, L3: 1089, L6: 1161.6 };
 
 beforeEach(() => {
+  cliente = null;
+  listaPrivada = null;
   medios = [mp()];
   cotizar.mockReset();
   cotizar.mockImplementation(async (_l: unknown, o: { idListaMedio?: string }) => ({
@@ -132,8 +134,9 @@ describe("POST /api/carrito/cotizar con cuotas", () => {
     ]);
   });
 
-  it("con precio-especial-cuenta prendido no hay cuotas", async () => {
-    setFlag("precio-especial-cuenta", true);
+  it("con lista privada no hay cuotas", async () => {
+    cliente = { codigocliente: "42" };
+    listaPrivada = "lista-privada-a";
     const r = await pedir({ cuotas: 6, conCuotas: true });
     expect(r.status).toBe(200);
     expect((await r.json()).cuotasOpciones).toBeUndefined();

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { identidadActual, idPriceListCliente } from "@/lib/auth";
+import { identidadActual } from "@/lib/auth";
+import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import {
   COPY_CARRITO,
   validarItemsBody,
@@ -57,14 +58,14 @@ async function leerBody(req: Request): Promise<unknown | undefined> {
 }
 
 /**
- * Nombre, marca y precio con la lista de precios del cliente: misma resolución
+ * Nombre, marca y precio con la lista privada del comprador (si la tiene): misma resolución
  * que `api/carrito/cotizar` (el carrito muestra lo mismo que después cotiza).
  */
 async function pintar(lineas: readonly LineaCarrito[]) {
   if (lineas.length === 0) return [];
   const { cliente } = await identidadActual();
-  const idPriceList = cliente ? await idPriceListCliente(cliente.codigocliente) : undefined;
-  return enriquecer(lineas, idPriceList);
+  const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
+  return enriquecer(lineas, idListaPrivada);
 }
 
 /** GET /api/carrito → `{ items, version }` (sin carrito: `{ items: [], version: 0 }`). */

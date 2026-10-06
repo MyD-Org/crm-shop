@@ -82,8 +82,10 @@ Reglas del lado del Shop:
   (`joinCategoriasAlegra`), ver `src/lib/catalogo-fuente.ts`. Lo exige
   `src/lib/catalogo-tenant.test.ts`.
 - IVA = `iva_porcentaje` de la vista: la SUMA de los impuestos del ítem en
-  Alegra (regla única del CRM). Precios = `precios_alegra` crudos, normalizados
-  con `mapPrecios`. Marca = `brand` (regla del CRM) o, si viene vacía, el nombre
+  Alegra (regla única del CRM). Precios = `precios_alegra` de la vista (desde la
+  migración 0065 del CRM son los precios ONLINE por lista, con `main` en la de referencia; los de
+  Alegra no llegan al Shop), normalizados con `mapPrecios`. La lista de cada medio de pago sale de
+  `public.lista_precio_condiciones` (`crmListaPrecioCondiciones`). Marca = `brand` (regla del CRM) o, si viene vacía, el nombre
   de la categoría de Alegra.
 - El stock que se muestra y se valida es el disponible: el de la vista menos lo
   reservado por pedidos vivos del Shop (`shop.stock_reservado`).

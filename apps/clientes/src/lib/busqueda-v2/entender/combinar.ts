@@ -7,8 +7,10 @@
  *
  * - Categoría DURA sólo si Jev la elige con confianza ≥ 0,9 Y (el diccionario
  *   la tenía como candidata O la subcategoría también sale ≥ 0,9) Y el conteo
- *   con ese filtro (más los atributos duros) es > 0. Si no, blanda con
- *   peso = confianza.
+ *   con ese filtro (más los atributos duros) es > 0 Y no deja afuera productos
+ *   cuyo nombre contiene todas las palabras de la frase pedida (una frase de
+ *   dos palabras o más: "lampara de escritorio" no puede quedar en "Lámparas" si
+ *   esos productos están en "Veladores"). Si no, blanda con peso = confianza.
  * - Atributo DURO sólo si el usuario lo pidió explícitamente y el conteo con
  *   él es ≥ 3. Tono y ambiente inferidos por Jev, siempre blandos.
  * - Intención `pregunta` (≥ 0,7): sin duros.
@@ -19,7 +21,7 @@ import { pareceLenguajeNatural } from "../../busqueda-inteligente/gate";
 import type { NodoArbol } from "../../busqueda-inteligente/tipos";
 import { PESO_MINIMO_RECUPERAR, type Intencion, type PlanBusqueda } from "../plan";
 import type { CandidatosDiccionario } from "./diccionario";
-import type { Termino } from "./terminos";
+import { PESO_CONTEXTO, terminosDeFrase, type Termino } from "./terminos";
 
 /** Confianza desde la que una categoría (o la subcategoría que la confirma) pasa a dura. */
 export const UMBRAL_DURO = 0.9;
@@ -63,7 +65,13 @@ export interface AporteJev {
  * existir ("térmica 20 amperes" no puede quedar en una categoría donde ningún producto es una
  * térmica).
  */
-export type Contar = (filtros: { categorias: string[]; atributos: string[]; terminos?: string[] }) => Promise<number>;
+export type Contar = (filtros: {
+  categorias: string[];
+  atributos: string[];
+  terminos?: string[];
+  /** Además, que el NOMBRE del producto tenga TODAS estas palabras (al comienzo de palabra). */
+  nombreConTodos?: string[];
+}) => Promise<number>;
 
 /** Arranque de pregunta: interrogativos y "sirve", "conviene", "se puede". */
 const PREGUNTA = /^(que|como|cuanto|cuantos|cuanta|cuantas|cual|cuales|donde|cuando|sirve|conviene|puedo|se puede|es mejor|hay)( |$)/;
@@ -115,7 +123,20 @@ export interface EntradaCombinar {
   contar: Contar;
 }
 
-export async function combinar(e: EntradaCombinar): Promise<PlanBusqueda> {
+/**
+ * Una consulta de UNA sola palabra, y de contexto ("patio", "cocina"): sin nada fuerte que recupere
+ * caería a lo débil (toda la raíz de Jev). Si hay productos con esa palabra en el nombre, la palabra
+ * pasa a significativa (peso 1): recuperan ésos. Si no, queda como estaba.
+ */
+async function promoverContextoSolo(terminos: Termino[], contar: Contar): Promise<Termino[]> {
+  const [unico] = terminos;
+  if (terminos.length !== 1 || unico.peso !== PESO_CONTEXTO) return terminos;
+  const hay = (await contar({ categorias: [], atributos: [], nombreConTodos: [unico.texto] })) > 0;
+  return hay ? [{ texto: unico.texto, peso: 1 }] : terminos;
+}
+
+export async function combinar(entrada: EntradaCombinar): Promise<PlanBusqueda> {
+  const e = { ...entrada, terminos: await promoverContextoSolo(entrada.terminos, entrada.contar) };
   const { arbol, diccionario: dic, jev } = e;
   const intencion = intencionFinal(e.consulta, e.consultaNorm, jev, e.terminos);
   const pregunta = intencion === "pregunta";
@@ -152,7 +173,19 @@ export async function combinar(e: EntradaCombinar): Promise<PlanBusqueda> {
             ? raiz.nombre
             : undefined;
     const terminos = e.terminos.filter((t) => t.peso >= PESO_MINIMO_RECUPERAR).map((t) => t.texto);
-    if (candidata && (await e.contar({ categorias: [candidata], atributos: atributosDuros, terminos })) > 0) dura = candidata;
+    if (candidata) {
+      // Frase de dos palabras o más: ¿hay productos que se llaman así FUERA de la categoría? Si el
+      // total (sin categoría) supera al de la categoría, el filtro los excluiría: queda blanda.
+      const frase = terminosDeFrase(e.terminos);
+      const conFrase = (categorias: string[]) =>
+        frase.length >= 2 ? e.contar({ categorias, atributos: atributosDuros, nombreConTodos: frase }) : Promise.resolve(0);
+      const [enCategoria, conFraseEnTodos, conFraseEnCategoria] = await Promise.all([
+        e.contar({ categorias: [candidata], atributos: atributosDuros, terminos }),
+        conFrase([]),
+        conFrase([candidata]),
+      ]);
+      if (enCategoria > 0 && conFraseEnTodos <= conFraseEnCategoria) dura = candidata;
+    }
   }
 
   // Categorías blandas, de más a menos confianza.

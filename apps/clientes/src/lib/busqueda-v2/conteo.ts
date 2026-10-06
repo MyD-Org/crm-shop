@@ -24,7 +24,7 @@ export function contador(base: {
    */
   positivos?: boolean;
 }): ContarConClaves {
-  return ({ categorias, atributos, terminos, conClaves }) =>
+  return ({ categorias, atributos, terminos, nombreConTodos, conClaves }) =>
     contarCatalogo({
       soloVisibles: base.soloVisibles,
       disp: base.disp,
@@ -35,6 +35,7 @@ export function contador(base: {
         ...(base.estructurados ? { atributosEstructurados: true } : {}),
         ...(base.positivos ? { medidasPositivas: true } : {}),
         ...(conClaves?.length ? { conClaves } : {}),
+        ...(nombreConTodos?.length ? { nombreConTodos } : {}),
         // Los términos recuperan como en la página (comienzo de palabra, OR).
         ...(terminos?.length
           ? { planBusqueda: { consulta: terminos.join(" "), blandos: { categorias: [], atributos: [], terminos: terminos.map((texto) => ({ texto, peso: 1 })) } } }

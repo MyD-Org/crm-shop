@@ -135,6 +135,9 @@
     { "q": "NXB-125", "perfil": "codigo", "tipo": "codigo", "intencion": "codigo", "sinDuros": true, "medidas": [] },
     { "q": "2x20", "perfil": "profesional", "tipo": "medida", "debeIncluirEnTop24": ["termomagnet", "cable", "interruptor"], "nuncaSinResultados": true, "medidas": [] },
     { "q": "tira led 14w/m", "perfil": "particular", "tipo": "medida", "intencion": "producto", "categoria": ["Neones y tiras de led", "ILUMINACION"], "debeIncluirEnTop24": ["tira"], "nuncaSinResultados": true, "medidas": [] },
-    { "q": "caño 20mm", "perfil": "profesional", "tipo": "medida", "intencion": "producto", "categoria": ["Caños y cablecanal", "ELECTRICIDAD"], "debeIncluirEnTop24": ["caño", "cano"], "nuncaSinResultados": true, "medidas": [] }
+    { "q": "caño 20mm", "perfil": "profesional", "tipo": "medida", "intencion": "producto", "categoria": ["Caños y cablecanal", "ELECTRICIDAD"], "debeIncluirEnTop24": ["caño", "cano"], "nuncaSinResultados": true, "medidas": [] },
+    { "q": "lampara de escritorio", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas"], "debeIncluirEnTop24": ["lampara de escritorio"], "categoriaEnTop24": ["Veladores"], "nuncaSinResultados": true },
+    { "q": "lampara de pie", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas"], "debeIncluirEnTop24": ["lampara de pie"], "nuncaSinResultados": true },
+    { "q": "escritorio", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas", "ILUMINACION"], "debeIncluirEnTop24": ["escritorio"], "categoriaEnTop24": ["Veladores"], "nuncaSinResultados": true }
   ]
 }

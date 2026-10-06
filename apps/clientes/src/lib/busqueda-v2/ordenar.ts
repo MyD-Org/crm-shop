@@ -12,12 +12,15 @@
  * - nombre que empieza con el primer término original +2;
  * - todos los términos originales significativos presentes +3 (con dos o
  *   más): lo que la búsqueda clásica encontraba sigue arriba;
+ * - frase: el nombre contiene los términos originales significativos en orden y
+ *   juntos ("lampara de escritorio") +10: un producto que se llama como se lo
+ *   pidió va antes que uno que sólo comparte alguna palabra o la categoría;
  * - categoría blanda +6 × peso; atributo blando +3 × peso;
  * - con stock +1.
  */
 import { sql, type SQL } from "drizzle-orm";
 import { normalizarConsulta } from "../busqueda-inteligente/normalizar";
-import { patronInicio, patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
+import { patronFrase, patronInicio, patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
 export const PUNTOS = {
   nombre: 4,
@@ -27,6 +30,7 @@ export const PUNTOS = {
   codigoExacto: 20,
   prefijo: 2,
   todos: 3,
+  frase: 10,
   categoria: 6,
   atributo: 3,
   stock: 1,
@@ -55,6 +59,8 @@ export function puntajeBusqueda(plan: CriterioPlan, p: PiezasBusqueda): SQL {
   if (originales.length >= 2) {
     partes.push(si(sql.join(originales.map((t) => sql`${p.texto} ~ ${patronTermino(t)}`), sql` and `), n(PUNTOS.todos)));
   }
+  const frase = patronFrase(originales);
+  if (frase) partes.push(si(sql`${p.nombre} ~ ${frase}`, n(PUNTOS.frase)));
   for (const c of plan.blandos.categorias) {
     partes.push(si(p.enCategorias([c.nombre]), decimal(PUNTOS.categoria * c.peso)));
   }

@@ -85,7 +85,7 @@ import { caracteristicasDe, leerAtributosEstructurados, type ClaveEstructurada }
 import { universoAcotado } from "./busqueda-v2/universo-acotado";
 import { condicionAmplia, condicionRecuperar, terminosQueRecuperan } from "./busqueda-v2/recuperar";
 import { puntajeBusqueda } from "./busqueda-v2/ordenar";
-import type { CriterioPlan, PiezasBusqueda } from "./busqueda-v2/piezas";
+import { patronTermino, type CriterioPlan, type PiezasBusqueda } from "./busqueda-v2/piezas";
 
 /** Debajo de esta cantidad, el stock se muestra como "bajo". */
 const STOCK_BAJO = 5;
@@ -799,6 +799,12 @@ export interface FiltrosCatalogo {
    */
   conClaves?: ClaveEstructurada[];
   /**
+   * Sólo conteos de la búsqueda v2: el NOMBRE exhibido tiene TODAS estas palabras (al comienzo de
+   * palabra). Para saber si un filtro duro de categoría deja afuera productos que se llaman como
+   * se pidió (busqueda-v2/entender/combinar.ts).
+   */
+  nombreConTodos?: string[];
+  /**
    * Sólo facetas: no calcular la de atributos (flag `busqueda-ia` apagado: el
    * panel queda como siempre y no se paga esa consulta). Sale `atributos: []`.
    */
@@ -1122,6 +1128,7 @@ function condicionesDe(
   const recuperarPlan = texto.plan && piezas ? condicionRecuperar(texto.plan, piezas) : undefined;
   // Segundo intento con plan: lo que recupera el plan o se le parece (los duros siguen siendo filtros).
   const recuperar = texto.plan && texto.tolerante && piezas ? recuperarTolerante(texto.plan, recuperarPlan, piezas) : recuperarPlan;
+  const nombre = filtros.nombreConTodos?.length ? (piezas ?? piezasBusqueda(filtros, disp)).nombre : undefined;
   return and(
     enTenantCatalogo(),
     activoSql,
@@ -1137,6 +1144,7 @@ function condicionesDe(
       : undefined,
     aplicar.atributos ? filtroAtributosSql(contextoAtributos(filtros), filtros.atributos) : undefined,
     aplicar.atributos ? filtroConClavesSql(filtros) : undefined,
+    nombre && filtros.nombreConTodos ? and(...filtros.nombreConTodos.map((t) => sql`${nombre} ~ ${patronTermino(t)}`)) : undefined,
     aplicar.potencia && filtros.atributosEstructurados
       ? filtroPotenciaSql(filtros.potenciaMin, filtros.potenciaMax)
       : undefined,

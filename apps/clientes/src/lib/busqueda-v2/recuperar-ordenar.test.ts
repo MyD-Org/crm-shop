@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { condicionRecuperar, terminosQueRecuperan } from "./recuperar";
 import { PUNTOS, puntajeBusqueda } from "./ordenar";
-import { patronInicio, patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
+import { patronFrase, patronInicio, patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
 const dialecto = new PgDialect();
 const render = (s: SQL) => dialecto.sqlToQuery(s);
@@ -33,6 +33,29 @@ describe("patrones de término", () => {
     expect(re.test("extractor de olor")).toBe(true);
     expect(re.test("color blanco")).toBe(false);
     expect(new RegExp(patronTermino("toma")).test("automatismo")).toBe(false);
+  });
+});
+
+describe("patrón de frase", () => {
+  const cumple = (terminos: string[], texto: string) => new RegExp(patronFrase(terminos)!).test(texto);
+
+  it("los términos en orden y juntos, con palabras de enlace entre ellos", () => {
+    expect(cumple(["lampara", "escritorio"], "lampara de escritorio articulada blanca 40w")).toBe(true);
+    expect(cumple(["lampara", "escritorio"], "lamparas para escritorio")).toBe(true);
+    expect(cumple(["ventilador", "techo"], "ventilador de techo 52 con luz")).toBe(true);
+    expect(cumple(["lampara", "escritorio"], "lampara escritorio")).toBe(true);
+  });
+
+  it("no encuentra otro orden, palabras de relleno ni una palabra que sólo contiene al término", () => {
+    expect(cumple(["lampara", "escritorio"], "escritorio con lampara")).toBe(false);
+    expect(cumple(["lampara", "escritorio"], "lampara led de escritorio")).toBe(false);
+    expect(cumple(["lampara", "escritorio"], "lampara de microescritorio")).toBe(false);
+    expect(cumple(["lampara", "escritorio"], "portalampara de escritorio")).toBe(false);
+  });
+
+  it("con menos de dos términos no es una frase", () => {
+    expect(patronFrase(["lampara"])).toBeNull();
+    expect(patronFrase([])).toBeNull();
   });
 });
 
@@ -115,6 +138,21 @@ describe("ordenar", () => {
     expect(params).toContain(3); // 6 × 0,5
     expect(params).toContain(2.7); // 3 × 0,9
     expect(params).toContain(0.7);
+  });
+
+  it("frase: el nombre con los originales en orden y juntos suma 10 (con dos o más originales)", () => {
+    const p = plan({ terminos: [{ texto: "lampara", peso: 1 }, { texto: "escritorio", peso: 1 }, { texto: "luz", peso: 0.3 }, { texto: "velador", peso: 0.7 }] }, "lampara de escritorio");
+    const { sql: texto, params } = render(puntajeBusqueda(p, piezas));
+    expect(texto).toContain(`(case when NOMBRE ~ $`);
+    expect(texto).toMatch(new RegExp(`\\(case when NOMBRE ~ \\$\\d+ then ${PUNTOS.frase} else 0 end\\)`));
+    expect(params).toContain(patronFrase(["lampara", "escritorio"]));
+    // Una frase de verdad pesa más que lo que suman una categoría blanda y un prefijo.
+    expect(PUNTOS.frase).toBeGreaterThan(PUNTOS.categoria);
+  });
+
+  it("con un solo original no hay frase", () => {
+    const { sql: texto } = render(puntajeBusqueda(plan({ terminos: [{ texto: "lampara", peso: 1 }, { texto: "luz", peso: 0.3 }] }, "lampara luz"), piezas));
+    expect(texto).not.toContain(`then ${PUNTOS.frase} else 0 end`);
   });
 
   it("sin términos originales: sin prefijo ni «todos»", () => {

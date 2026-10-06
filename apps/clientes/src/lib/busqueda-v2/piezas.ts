@@ -43,6 +43,24 @@ export function patronInicio(termino: string): string {
   return `^(${formasEscapadas(termino)})`;
 }
 
+/** Palabras de enlace que pueden ir entre dos términos de una frase ("lampara DE escritorio"). */
+const ENLACES = "de|del|la|las|el|los|para|con|en|y|un|una";
+
+/**
+ * Los términos en ORDEN y juntos (con a lo sumo palabras de enlace entre ellos), cada uno al comienzo
+ * de palabra: "lampara", "escritorio" encuentra "lampara de escritorio articulada" y "lampara para
+ * escritorio", pero no "escritorio con lampara" ni "lampara led de escritorio". Con menos de dos
+ * términos no es una frase: `null`.
+ */
+export function patronFrase(terminos: readonly string[]): string | null {
+  if (terminos.length < 2) return null;
+  const [primero, ...resto] = terminos;
+  const union = `(?:[^a-z0-9]+(?:${ENLACES}))*[^a-z0-9]+`;
+  // Un término que no es el último puede venir en plural ("lamparas de escritorio").
+  const plural = "(?:e?s)?";
+  return `(^|[^a-z0-9])(${formasEscapadas(primero)})${resto.map((t) => `${plural}${union}(${formasEscapadas(t)})`).join("")}`;
+}
+
 const formasEscapadas = (termino: string) =>
   formasTermino(termino)
     .map((f) => f.replace(ESPECIALES_REGEX, "\\$&"))

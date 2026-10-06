@@ -27,15 +27,26 @@
  * palabra se escribe `(^|[^a-z0-9])` sobre el texto ya normalizado.
  */
 
+import {
+  CLAVES_MEDIDA,
+  criterioDeMedida,
+  formatoEtiqueta,
+  grupoDeMedida,
+  leerIdMedida,
+  patronDeMedida,
+  type GrupoMedida,
+  type MedidaId,
+} from "./catalogo-atributos-medida";
 import type { AtributosEstructurados, ClaveEstructurada, ValorEstructurado } from "./catalogo-caracteristicas";
 
 export const GRUPOS_ATRIBUTO = ["tono", "ambiente", "zocalo", "tension"] as const;
-export type GrupoAtributo = (typeof GRUPOS_ATRIBUTO)[number];
+/** Grupo de un atributo del diccionario o de una medida (`medida:<clave>`, ver `AtributoMedida`). */
+export type GrupoAtributo = (typeof GRUPOS_ATRIBUTO)[number] | GrupoMedida;
 
 export interface Atributo {
   /** Slug, lo que viaja en la URL: "tono-calido". */
   id: string;
-  grupo: GrupoAtributo;
+  grupo: (typeof GRUPOS_ATRIBUTO)[number];
   /** Lo que ve el usuario: "Luz cálida". */
   nombre: string;
   /** Regex para Postgres `~*` (y JS) sobre nombre + descripción normalizados. */
@@ -66,6 +77,31 @@ export interface CriterioEstructurado {
   hasta?: number;
   enRango?: number;
 }
+
+/**
+ * Atributo dinámico: una medida técnica como id (`corriente_a:20`, `polos:2`, `potencia_w:8-10`),
+ * validada por la gramática cerrada de catalogo-atributos-medida.ts. Se sintetiza al resolver el
+ * id (no está en `ATRIBUTOS`): no tiene faceta propia en el panel, solo chip y filtro. Un grupo
+ * por clave (`medida:corriente_a`): AND entre claves, OR dentro de la misma. Se distingue del
+ * atributo del diccionario con `"medida" in a`.
+ */
+export interface AtributoMedida {
+  id: string;
+  grupo: GrupoMedida;
+  /** "Corriente: 20 A", "Polos: 2", "IP54 o superior". */
+  nombre: string;
+  medida: MedidaId;
+  estructurado: CriterioEstructurado;
+  /** Regex sobre nombre + descripción normalizados; undefined cuando el texto no distingue la medida. */
+  patron?: string;
+  sinonimos: [];
+}
+
+/** Lo que devuelve resolver un id: un atributo del diccionario o una medida. */
+export type AtributoResuelto = Atributo | AtributoMedida;
+
+/** Tope de ids dinámicos por request (anti-abuso de SQL desde la URL). */
+export const TOPE_IDS_MEDIDA = 8;
 
 /** Inicio de palabra sobre texto normalizado. */
 const INI = "(^|[^a-z0-9])";
@@ -266,38 +302,75 @@ export const ATRIBUTOS: readonly Atributo[] = [
 
 const POR_ID = new Map(ATRIBUTOS.map((a) => [a.id, a]));
 
-/** Atributo por id, o `undefined` si no está en el diccionario. */
-export function atributoPorId(id: string): Atributo | undefined {
-  return POR_ID.get(id);
+function sintetizar(id: string, m: MedidaId): AtributoMedida {
+  return {
+    id,
+    grupo: grupoDeMedida(m.clave),
+    nombre: formatoEtiqueta(m),
+    medida: m,
+    estructurado: criterioDeMedida(m),
+    patron: patronDeMedida(m),
+    sinonimos: [],
+  };
 }
 
-/** ¿Es un id del diccionario? (la URL descarta los que no). */
+/** Atributo por id: del diccionario, o una medida válida (`clave:valor`); `undefined` si ninguno. */
+export function atributoPorId(id: string): AtributoResuelto | undefined {
+  const estatico = POR_ID.get(id);
+  if (estatico) return estatico;
+  const m = leerIdMedida(id);
+  return m ? sintetizar(id, m) : undefined;
+}
+
+/** ¿Es un id del diccionario o una medida válida? (la URL descarta los que no). */
 export function esAtributo(id: string): boolean {
-  return POR_ID.has(id);
+  return POR_ID.has(id) || leerIdMedida(id) !== null;
 }
 
 /** Nombre visible de un atributo; el id tal cual si no existe. */
 export function nombreAtributo(id: string): string {
-  return POR_ID.get(id)?.nombre ?? id;
+  const estatico = POR_ID.get(id);
+  if (estatico) return estatico.nombre;
+  const m = leerIdMedida(id);
+  return m ? formatoEtiqueta(m) : id;
+}
+
+/** Orden de los dinámicos: por clave (orden de `CLAVES_MEDIDA`), luego por valor numérico y, al final, por id. */
+function compararMedidas(a: { id: string; m: MedidaId }, b: { id: string; m: MedidaId }): number {
+  const porClave = CLAVES_MEDIDA.indexOf(a.m.clave) - CLAVES_MEDIDA.indexOf(b.m.clave);
+  if (porClave) return porClave;
+  const na = a.m.min ?? (typeof a.m.valor === "number" ? a.m.valor : undefined);
+  const nb = b.m.min ?? (typeof b.m.valor === "number" ? b.m.valor : undefined);
+  if (na !== undefined && nb !== undefined && na !== nb) return na - nb;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 /**
- * Ids válidos, sin repetidos, en el orden del diccionario (así dos URLs con
- * los mismos atributos tildados en otro orden dan la misma URL).
+ * Ids válidos, sin repetidos: primero los del diccionario en su orden (así dos URLs con los mismos
+ * atributos tildados en otro orden dan la misma URL) y después las medidas, por clave y valor, con
+ * un tope de `TOPE_IDS_MEDIDA`. Lo inválido se descarta sin error.
  */
 export function atributosValidos(ids: readonly string[]): string[] {
   const pedidos = new Set(ids);
-  return ATRIBUTOS.filter((a) => pedidos.has(a.id)).map((a) => a.id);
+  const estaticos = ATRIBUTOS.filter((a) => pedidos.has(a.id)).map((a) => a.id);
+  const medidas: { id: string; m: MedidaId }[] = [];
+  for (const id of pedidos) {
+    if (POR_ID.has(id)) continue;
+    const m = leerIdMedida(id);
+    if (m) medidas.push({ id, m });
+  }
+  medidas.sort(compararMedidas);
+  return [...estaticos, ...medidas.slice(0, TOPE_IDS_MEDIDA).map((x) => x.id)];
 }
 
 /**
  * Ids agrupados por grupo, para el SQL: AND entre grupos, OR dentro del grupo.
  * Sólo grupos con algún id válido.
  */
-export function atributosPorGrupo(ids: readonly string[]): Map<GrupoAtributo, Atributo[]> {
-  const grupos = new Map<GrupoAtributo, Atributo[]>();
+export function atributosPorGrupo(ids: readonly string[]): Map<GrupoAtributo, AtributoResuelto[]> {
+  const grupos = new Map<GrupoAtributo, AtributoResuelto[]>();
   for (const id of atributosValidos(ids)) {
-    const a = POR_ID.get(id)!;
+    const a = atributoPorId(id)!;
     grupos.set(a.grupo, [...(grupos.get(a.grupo) ?? []), a]);
   }
   return grupos;

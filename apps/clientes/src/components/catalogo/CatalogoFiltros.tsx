@@ -14,12 +14,12 @@ import {
   alternarCategoria,
   fmtPesos,
   hayFiltros,
+  itemsDeCaracteristicas,
   itemsDeFaceta,
   categoriasDeLaBusqueda,
   limpiarFiltros,
 } from "@/lib/catalogo-vista";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
-import { nombreAtributo } from "@/lib/catalogo-atributos";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
 type Ir = (cambios: Partial<EstadoCatalogo>) => void;
@@ -98,12 +98,7 @@ export function CatalogoFiltros({
           <Divider />
           <FacetGroup
             title="Características"
-            items={itemsDeFaceta(facetas.atributos, estado.atributos).map((a) => ({
-              value: a.label,
-              label: nombreAtributo(a.label),
-              count: a.count,
-              checked: a.checked,
-            }))}
+            items={itemsDeCaracteristicas(facetas.atributos, estado.atributos)}
             onToggle={(valor, tildado) => ir({ atributos: alternar(estado.atributos, valor, tildado) })}
             emptyText="Sin características para estos filtros"
           />

@@ -18,10 +18,27 @@
  *   conteo arma UNA vez por fila (ver `atributosFilaSql` en catalog.ts).
  * Sin ninguna de las dos (flag apagado o tabla sin migrar) el SQL es el de la fase 1.
  *
+ * Medidas (ids dinámicos `corriente_a:20`, ver `AtributoMedida`): dos semánticas sobre el mismo
+ * dato. En el FILTRO, por defecto, "sin contradicción" (`sinContradiccionSql`): pasa el producto
+ * que no tiene dato de esa clave o cuyo dato cumple; solo queda afuera el que tiene la clave con
+ * OTRO valor (un termomagnético sin la corriente cargada no desaparece por eso). Con
+ * `medidaPositiva` (consulta de puras medidas, sin categoría ni términos que acoten), "positivo":
+ * solo el que cumple (dato O patrón del nombre), porque sin universo "sin contradicción"
+ * devolvería el catálogo entero. El BOOST y la recuperación usan siempre el positivo
+ * (`cumpleAtributoSql`). Todo valor viaja como parámetro; la clave sale de la lista cerrada.
+ *
  * SOLO servidor (lo importa catalog.ts).
  */
 import { and, or, sql, type SQL } from "drizzle-orm";
-import { ATRIBUTOS, atributosPorGrupo, type Atributo, type CriterioEstructurado } from "./catalogo-atributos";
+import {
+  ATRIBUTOS,
+  atributoPorId,
+  atributosPorGrupo,
+  type Atributo,
+  type AtributoMedida,
+  type CriterioEstructurado,
+  type GrupoAtributo,
+} from "./catalogo-atributos";
 import type { ClaveEstructurada } from "./catalogo-caracteristicas";
 
 /** Lo que necesita cada condición: el texto normalizado y, si hay, cómo leer los estructurados. */
@@ -34,6 +51,18 @@ export interface ContextoAtributos {
    * criterio (lo arma catalog.ts, que conoce la tabla y el producto). Para el WHERE.
    */
   existe?: (c: CriterioEstructurado) => SQL;
+  /**
+   * `EXISTS` de una fila de `catalog_atributos` del producto con esa clave que tiene dato y NO
+   * cumple el criterio (se arma con `contradiccionSql`). Para el WHERE de las medidas.
+   */
+  contradice?: (c: CriterioEstructurado) => SQL;
+  /** `EXISTS` de una fila del producto con esa clave, con cualquier valor (cobertura). Para el WHERE. */
+  tiene?: (clave: ClaveEstructurada) => SQL;
+  /**
+   * Las medidas filtran en modo positivo (solo lo que cumple) en vez de "sin contradicción".
+   * Lo decide quien arma el contexto (catalog.ts, ver `universoAcotado`).
+   */
+  medidaPositiva?: boolean;
 }
 
 /**
@@ -41,7 +70,7 @@ export interface ContextoAtributos {
  * operador de texto y el de índice). Sale de una lista cerrada en código; igual se valida.
  */
 function valorDe(attrs: SQL, clave: ClaveEstructurada): SQL {
-  if (!/^[a-z_]+$/.test(clave)) throw new Error(`clave inválida: ${clave}`);
+  if (!/^[a-z][a-z0-9_]*$/.test(clave)) throw new Error(`clave inválida: ${clave}`);
   return sql`(${attrs} -> ${sql.raw(`'${clave}'`)})`;
 }
 
@@ -94,6 +123,60 @@ function cumple(ctx: ContextoAtributos, a: Atributo): SQL {
 }
 
 /**
+ * La fila CONTRADICE el criterio: tiene dato de la clave (número, texto o cualquiera de los dos, según
+ * el criterio) y ese dato no lo cumple. Nunca NULL (`coalesce` a falso): su negación tampoco.
+ */
+export function contradiccionSql(c: CriterioEstructurado, n: SQL, t: SQL): SQL {
+  const usaNumero = Boolean(c.numeros?.length) || c.desde != null || c.hasta != null;
+  const usaTexto = Boolean(c.textos?.length) || c.enRango != null;
+  const hayDato = usaNumero && usaTexto ? sql`(${n} is not null or ${t} is not null)` : usaTexto ? sql`${t} is not null` : sql`${n} is not null`;
+  return sql`(${hayDato} and not coalesce(${criterioSql(c, n, t)}, false))`;
+}
+
+/**
+ * El producto NO contradice el criterio: no tiene dato de la clave, o el que tiene lo cumple. En el
+ * WHERE con `contradice` (un `NOT EXISTS` contra la PK de la tabla), en las facetas con el jsonb.
+ * `undefined` sin datos estructurados: no hay con qué contradecir y el filtro no restringe.
+ */
+export function sinContradiccionSql(ctx: ContextoAtributos, c: CriterioEstructurado): SQL | undefined {
+  if (ctx.contradice) return sql`not ${ctx.contradice(c)}`;
+  if (ctx.attrs) return sql`not ${contradiccionSql(c, numeroDe(ctx.attrs, c.clave), textoDe(ctx.attrs, c.clave))}`;
+  return undefined;
+}
+
+/** El producto tiene dato de la clave (cualquiera). `undefined` sin datos estructurados. */
+export function tieneClaveSql(ctx: ContextoAtributos, clave: ClaveEstructurada): SQL | undefined {
+  if (ctx.tiene) return ctx.tiene(clave);
+  if (ctx.attrs) return sql`${valorDe(ctx.attrs, clave)} is not null`;
+  return undefined;
+}
+
+/** Una medida cumple en positivo: el dato estructurado O el patrón del nombre (el que haya). */
+function cumpleMedida(ctx: ContextoAtributos, a: AtributoMedida): SQL | undefined {
+  const patron = a.patron ? sql`${ctx.texto} ~* ${a.patron}` : undefined;
+  const estructurado = estructuradoSql(ctx, a.estructurado);
+  return estructurado && patron ? sql`(${estructurado} or ${patron})` : (estructurado ?? patron);
+}
+
+/** Una medida como condición del filtro: positiva o sin contradicción (ver el encabezado). */
+function condicionMedida(ctx: ContextoAtributos, a: AtributoMedida): SQL | undefined {
+  // Sin datos estructurados las medidas no filtran: no hay contra qué comparar.
+  if (!ctx.existe && !ctx.attrs) return undefined;
+  return ctx.medidaPositiva ? cumpleMedida(ctx, a) : sinContradiccionSql(ctx, a.estructurado);
+}
+
+/**
+ * El producto cumple el atributo en POSITIVO (dato estructurado O patrón), sea cual sea el modo del
+ * contexto: es lo que ordena (el boost) y recupera. `undefined` si el id no existe. Para un id del
+ * diccionario es el mismo SQL que filtrarlo.
+ */
+export function cumpleAtributoSql(ctx: ContextoAtributos, id: string): SQL | undefined {
+  const a = atributoPorId(id);
+  if (!a) return undefined;
+  return "medida" in a ? cumpleMedida(ctx, a) : filtroAtributosSql(ctx, [id]);
+}
+
+/**
  * Filtro por atributos: AND entre grupos, OR dentro del grupo (como
  * categorías y marcas). `excluirGrupo` deja afuera un grupo entero: lo usa la
  * faceta de ese grupo, que cuenta con los filtros de los OTROS. Sin ids
@@ -102,12 +185,12 @@ function cumple(ctx: ContextoAtributos, a: Atributo): SQL {
 export function filtroAtributosSql(
   ctx: ContextoAtributos,
   ids: readonly string[] | undefined,
-  excluirGrupo?: Atributo["grupo"],
+  excluirGrupo?: GrupoAtributo,
 ): SQL | undefined {
   if (!ids?.length) return undefined;
   const condiciones = [...atributosPorGrupo(ids)]
     .filter(([grupo]) => grupo !== excluirGrupo)
-    .map(([, atributos]) => or(...atributos.map((a) => cumple(ctx, a))));
+    .map(([, atributos]) => or(...atributos.map((a) => ("medida" in a ? condicionMedida(ctx, a) : cumple(ctx, a)))));
   return condiciones.length ? and(...condiciones) : undefined;
 }
 

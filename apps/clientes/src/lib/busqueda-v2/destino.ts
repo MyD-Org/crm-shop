@@ -9,6 +9,7 @@
  * blando. Todo pasa por `lib/catalogo-url.ts`, que descarta lo inválido.
  */
 import { atributosValidos } from "../catalogo-atributos";
+import { esMedidaId } from "../catalogo-atributos-medida";
 import { IA_PLAN, hrefCatalogo, type EstadoCatalogo } from "../catalogo-url";
 import type { CriterioPlan } from "./piezas";
 import type { PlanBusqueda } from "./plan";
@@ -35,14 +36,15 @@ export function hrefConPlan(base: EstadoCatalogo, plan: PlanBusqueda): string {
 /**
  * Lo blando del plan que usan Recuperar y Ordenar, sin lo que el estado ya
  * tiene como filtro duro: un "+ Afinar" aplicado (ahora en la URL) no suma
- * dos veces.
+ * dos veces. Las medidas (`corriente_a:20`) quedan: su filtro duro es "sin
+ * contradicción" y no puntúa, el blando sube a los que SÍ tienen el dato.
  */
 export function criterioDe(plan: PlanBusqueda, estado: Pick<EstadoCatalogo, "categorias" | "atributos">): CriterioPlan {
   return {
     consulta: plan.consulta,
     blandos: {
       categorias: plan.blandos.categorias.filter((c) => !estado.categorias.includes(c.nombre)),
-      atributos: plan.blandos.atributos.filter((a) => !estado.atributos.includes(a.id)),
+      atributos: plan.blandos.atributos.filter((a) => esMedidaId(a.id) || !estado.atributos.includes(a.id)),
       terminos: plan.blandos.terminos,
     },
   };

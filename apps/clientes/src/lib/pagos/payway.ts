@@ -64,6 +64,19 @@ export function paywayConfigurado(): boolean {
   );
 }
 
+/**
+ * Lo que el navegador necesita para tokenizar la tarjeta: la key PÚBLICA (sirve sólo para
+ * `POST /tokens`) y la base de la API. Sale del servidor en runtime, así no hace falta una variable
+ * `NEXT_PUBLIC_*` aparte (que además se hornea en el build). null si el medio no está configurado.
+ * La key privada NUNCA sale de acá.
+ */
+export function paywayConfigPublica(): { publicKey: string; baseUrl: string } | null {
+  const baseUrlOk = baseUrl();
+  const publicKey = process.env.PAYWAY_API_PUBLIC_KEY?.trim();
+  if (!paywayConfigurado() || !baseUrlOk || !publicKey) return null;
+  return { publicKey, baseUrl: baseUrlOk };
+}
+
 interface Deps {
   fetch?: typeof fetch;
   pausa?: (ms: number) => Promise<void>;

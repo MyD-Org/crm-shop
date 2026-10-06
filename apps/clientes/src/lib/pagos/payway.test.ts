@@ -8,7 +8,7 @@ import error400 from "./__fixtures__/payway/error-400.json";
 import error401 from "./__fixtures__/payway/error-401.json";
 import error403 from "./__fixtures__/payway/error-403.json";
 import error404 from "./__fixtures__/payway/error-404.json";
-import { crearPayway } from "./payway";
+import { crearPayway, paywayConfigPublica } from "./payway";
 import { ErrorProveedor, type DatosPago } from "./tipos";
 import { referenciaDeIntento } from "./payway-estados";
 
@@ -62,6 +62,27 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+describe("paywayConfigPublica()", () => {
+  it("entrega la key PÚBLICA y la base (para tokenizar en el navegador), nunca la privada", () => {
+    const c = paywayConfigPublica();
+    expect(c).toEqual({ publicKey: KEY_PUBLICA, baseUrl: BASE });
+    expect(JSON.stringify(c)).not.toContain(KEY_PRIVADA);
+  });
+
+  it("normaliza la base (sin barra final ni /api/v2)", () => {
+    vi.stubEnv("PAYWAY_BASE_URL", `${BASE}/api/v2/`);
+    expect(paywayConfigPublica()?.baseUrl).toBe(BASE);
+  });
+
+  it("null si el medio no está configurado (falta cualquiera de las tres)", () => {
+    for (const nombre of ["PAYWAY_API_PRIVATE_KEY", "PAYWAY_API_PUBLIC_KEY", "PAYWAY_BASE_URL"]) {
+      vi.stubEnv(nombre, "");
+      expect(paywayConfigPublica()).toBeNull();
+      vi.stubEnv(nombre, nombre.includes("BASE") ? BASE : "placeholder");
+    }
+  });
 });
 
 describe("configurado()", () => {

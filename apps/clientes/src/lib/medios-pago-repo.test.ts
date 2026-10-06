@@ -24,9 +24,15 @@ const dbQueTira = (mensaje: string) => ({
   }),
 });
 
+const UUID_LISTA = "5b0c0a7e-1d6e-4c1b-8e2a-6c1f4d9a0b11";
+
 describe("leerMediosPago", () => {
-  it("pide sólo columnas declaradas, del tenant, ordenadas, contra public.medios_pago_shop", async () => {
-    const g = dbGrabadora(() => [["efectivo", "Efectivo", "", true, true, false, false, 1, "3", true, false]]);
+  it("pide sólo columnas declaradas, del tenant, ordenadas; la lista sale de las condiciones (pago único)", async () => {
+    const g = dbGrabadora((c) =>
+      c.sql.includes("lista_precio_condiciones")
+        ? [["efectivo", UUID_LISTA]]
+        : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false]],
+    );
     const r = await leerMediosPago(g.db as never);
     expect(r).toEqual([
       {
@@ -38,60 +44,57 @@ describe("leerMediosPago", () => {
         aplicaEnvio: false,
         cobroOnline: false,
         orden: 1,
-        idListaPrecios: "3",
+        idListaPrecios: UUID_LISTA,
         destacarEnCatalogo: true,
         mostrarEnFicha: false,
       },
     ]);
-    const { sql, params } = g.consultas[0];
-    expect(sql).toContain('"public"."medios_pago_shop"');
-    expect(sql).toContain('"tenant_id" = $1');
-    expect(sql).toContain("order by");
-    expect(sql).toContain('"id_lista_precios"');
-    expect(sql).not.toContain('"lista_precios_nombre"'); // el Shop no lee el snapshot del nombre
-    expect(params).toContain("tenant-ejemplo");
+    const medios = g.consultas[0];
+    expect(medios.sql).toContain('"public"."medios_pago_shop"');
+    expect(medios.sql).toContain('"tenant_id" = $1');
+    expect(medios.sql).toContain("order by");
+    expect(medios.sql).not.toContain("id_lista_precios"); // columna borrada por la 0065
+    expect(medios.params).toContain("tenant-ejemplo");
+    const cond = g.consultas[1];
+    expect(cond.sql).toContain('"public"."lista_precio_condiciones"');
+    expect(cond.sql).toContain('"tenant_id" = $1');
+    expect(cond.sql).toContain('"cuotas" is null'); // sólo la condición de pago único
+    expect(cond.params).toContain("tenant-ejemplo");
   });
 
-  it("migración 0061 pendiente (42703): reintenta con las columnas viejas y degrada lista, destacado y ficha", async () => {
+  it("un medio sin condición no tiene lista: rige la de referencia", async () => {
+    const g = dbGrabadora((c) =>
+      c.sql.includes("lista_precio_condiciones")
+        ? [["otro", UUID_LISTA]]
+        : [["efectivo", "Efectivo", "", true, true, true, false, 0, false, false]],
+    );
+    expect((await leerMediosPago(g.db as never))[0]).toMatchObject({ slug: "efectivo", idListaPrecios: null });
+  });
+
+  it("migración 0065 pendiente (tabla inexistente o sin permiso): los medios siguen, sin lista", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const code of ["42P01", "42501"]) {
+      const g = dbGrabadora((c) => {
+        if (c.sql.includes("lista_precio_condiciones")) throw Object.assign(new Error("no hay condiciones"), { code });
+        return [["transferencia", "Transferencia", "", true, true, true, false, 0, true, true]];
+      });
+      const r = await leerMediosPagoTolerante(g.db as never);
+      expect(r).toHaveLength(1);
+      expect(r[0]).toMatchObject({ slug: "transferencia", idListaPrecios: null, destacarEnCatalogo: true, mostrarEnFicha: true });
+    }
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
+  });
+
+  it("otro error al leer las condiciones no se disfraza: tira", async () => {
     const g = dbGrabadora((c) => {
-      if (c.sql.includes('"id_lista_precios"')) {
-        throw Object.assign(new Error('column "id_lista_precios" does not exist'), { code: "42703" });
-      }
-      return [["transferencia", "Transferencia", "", true, true, true, false, 0]];
+      if (c.sql.includes("lista_precio_condiciones")) throw Object.assign(new Error("boom"), { code: "XX000" });
+      return [["efectivo", "Efectivo", "", true, true, false, false, 1, false, false]];
     });
-    const r = await leerMediosPago(g.db as never);
-    expect(r).toEqual([
-      {
-        slug: "transferencia",
-        nombre: "Transferencia",
-        instrucciones: "",
-        activo: true,
-        aplicaRetiro: true,
-        aplicaEnvio: true,
-        cobroOnline: false,
-        orden: 0,
-        idListaPrecios: null,
-        destacarEnCatalogo: false,
-        mostrarEnFicha: false,
-      },
-    ]);
-    expect(g.consultas).toHaveLength(2);
-    expect(g.consultas[1].sql).not.toContain('"id_lista_precios"');
+    await expect(leerMediosPago(g.db as never)).rejects.toThrow(/lista_precio_condiciones/);
   });
 
-  it("el checkout no cae a a_coordinar con la migración pendiente: la variante tolerante devuelve los medios", async () => {
-    const g = dbGrabadora((c) => {
-      if (c.sql.includes('"destacar_en_catalogo"')) {
-        throw Object.assign(new Error('column "destacar_en_catalogo" does not exist'), { code: "42703" });
-      }
-      return [["efectivo", "Efectivo", "", true, true, false, false, 1]];
-    });
-    const r = await leerMediosPagoTolerante(g.db as never);
-    expect(r).toHaveLength(1);
-    expect(r[0]).toMatchObject({ slug: "efectivo", idListaPrecios: null, destacarEnCatalogo: false, mostrarEnFicha: false });
-  });
-
-  it("otros errores (tabla inexistente) no se confunden con la columna ausente: no reintenta", async () => {
+  it("tira si la tabla de medios no existe (lo tolera la variante tolerante)", async () => {
     const g = dbGrabadora(() => {
       throw Object.assign(new Error('relation "public.medios_pago_shop" does not exist'), { code: "42P01" });
     });
@@ -99,7 +102,7 @@ describe("leerMediosPago", () => {
     expect(g.consultas).toHaveLength(1);
   });
 
-  it("tira si la tabla no existe (lo tolera la variante tolerante)", async () => {
+  it("tira si la tabla no existe (variante con db que rechaza)", async () => {
     await expect(leerMediosPago(dbQueTira('relation "public.medios_pago_shop" does not exist') as never)).rejects.toThrow();
   });
 });

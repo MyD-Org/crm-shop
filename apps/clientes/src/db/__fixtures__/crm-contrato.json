@@ -205,10 +205,17 @@
     "aplica_envio": "boolean",
     "cobro_online": "boolean",
     "orden": "integer",
-    "id_lista_precios": "text",
-    "lista_precios_nombre": "text",
     "destacar_en_catalogo": "boolean",
     "mostrar_en_ficha": "boolean",
+    "created_at": "timestamp with time zone",
+    "updated_at": "timestamp with time zone"
+  },
+  "public.lista_precio_condiciones": {
+    "id": "uuid",
+    "tenant_id": "text",
+    "lista_id": "uuid",
+    "medio_slug": "text",
+    "cuotas": "integer",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
   },

@@ -105,7 +105,7 @@ export const TEXTOS = {
       }Dejará de ser exclusiva de los clientes con cuenta corriente. Se mostrará una vista previa antes de aplicar el cambio.`,
     enlaces: "Corresponde a la lista de Alegra",
     enlacesAyuda:
-      "Los clientes con cuenta corriente cuya lista en Alegra sea una de estas verán los precios de esta lista. Las listas se toman de los clientes ya sincronizados.",
+      "Los clientes con cuenta corriente cuya lista en Alegra sea una de estas verán los precios de esta lista. Se ofrecen todas las listas de precios de cada cuenta de Alegra.",
     sinEnlaces: "Esta lista privada todavía no está enlazada a ninguna lista de Alegra: ningún cliente la ve.",
     agregarEnlace: "Enlazar lista de Alegra",
     quitarEnlace: "Quitar enlace",
@@ -113,7 +113,9 @@ export const TEXTOS = {
     listaAlegra: "Lista de Alegra",
     seleccioneCuenta: "Seleccione la cuenta",
     seleccioneListaAlegra: "Seleccione la lista de Alegra",
-    sinListasAlegra: "Todavía no hay clientes sincronizados con una lista de precios en Alegra.",
+    sinListasAlegra: "No hay listas de precios de Alegra disponibles para enlazar.",
+    avisoListasAlegra: (cuentas: string[]) =>
+      `No se pudieron obtener todas las listas de Alegra de ${cuentas.length === 1 ? "la cuenta" : "las cuentas"} ${cuentas.join(", ")}: de ${cuentas.length === 1 ? "esa cuenta" : "esas cuentas"} solo se muestran las listas de sus clientes ya sincronizados. Inténtelo nuevamente en unos minutos.`,
     contactos: (n: number) => (n === 0 ? "sin clientes" : `${n} cliente${n === 1 ? "" : "s"}`),
     cuentaPrincipal: "Cuenta principal",
   },

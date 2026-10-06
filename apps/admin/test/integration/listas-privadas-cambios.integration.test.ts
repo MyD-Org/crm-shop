@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest"
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest"
 import { eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { listaPrecioAlegraMapeo, listasPrecioOnline, preciosOnlineCambios } from "@/db/schema"
@@ -14,8 +14,16 @@ import {
   previsualizar,
   previsualizarReversion,
 } from "@/lib/precios-online-repo"
+import { leerListasDeAlegra } from "@/lib/listas-alegra-selector"
 import { seedTenant, truncateAll } from "./helpers"
 import { aplicar as recalcular, seedLista, seedProducto } from "./precios-online-helpers"
+
+// La API de Alegra no se llama en tests: cada caso fija qué devuelve /price-lists por cuenta.
+vi.mock("@/lib/listas-alegra-selector", async (orig) => ({
+  ...(await orig<typeof import("@/lib/listas-alegra-selector")>()),
+  leerListasDeAlegra: vi.fn(),
+}))
+const sinApi = { porCuenta: {}, cuentasFallidas: [] as string[] }
 
 // Admin de las listas privadas (change `listas-cuenta-corriente`, rebanada A): marcar privada, enlazar
 // con la lista de Alegra, validaciones en usted, auditoría y reversa; todo por el camino real
@@ -278,7 +286,8 @@ describe("lecturas del admin", () => {
              (${T}, 'mdp', 'c1', 'Cliente MDP', '5', 'Lista cinco MDP', 'active'),
              (${OTRO}, 'principal', 'c1', 'Ajeno', '88', 'Ajena', 'active')
     `)
-    const r = await listarListasAlegra(T)
+    vi.mocked(leerListasDeAlegra).mockResolvedValue(sinApi)
+    const { listas: r } = await listarListasAlegra(T)
     expect(r.filter((x) => x.alegraAccount === "principal").map((x) => [x.alegraPriceListId, x.nombre, x.contactos])).toEqual([
       ["5", "Mayorista L5", 2],
       ["7", "Distribuidor", 1],
@@ -290,6 +299,32 @@ describe("lecturas del admin", () => {
   it("listarListasAlegra suma los enlaces cuya lista de Alegra ya no tiene contactos (para poder quitarlos)", async () => {
     const priv = await seedLista(T, "Lista L5", "1.2", { orden: 2, privada: true })
     await aplicar([{ op: "setMapeo", alegraAccount: "principal", alegraPriceListId: "42", listaId: priv }])
-    expect(await listarListasAlegra(T)).toEqual([expect.objectContaining({ alegraAccount: "principal", alegraPriceListId: "42", contactos: 0 })])
+    vi.mocked(leerListasDeAlegra).mockResolvedValue(sinApi)
+    expect((await listarListasAlegra(T)).listas).toEqual([expect.objectContaining({ alegraAccount: "principal", alegraPriceListId: "42", contactos: 0 })])
+  })
+
+  it("listarListasAlegra: ofrece TODAS las listas de la API por cuenta (0 clientes incluido) y avisa de la cuenta que falló", async () => {
+    await getDb().execute(sql`
+      INSERT INTO alegra_contacts (tenant_id, alegra_account, alegra_id, name, price_list_id, price_list_name, status)
+      VALUES (${T}, 'principal', 'c1', 'Cliente Uno', '5', 'Mayorista L5', 'active'),
+             (${T}, 'mdp', 'c1', 'Cliente MDP', '8', 'Lista ocho MDP', 'active')
+    `)
+    vi.mocked(leerListasDeAlegra).mockResolvedValue({
+      porCuenta: {
+        principal: [
+          { alegraId: "1", name: "General", type: null, status: "active" },
+          { alegraId: "5", name: "Mayorista", type: null, status: "active" },
+        ],
+      },
+      cuentasFallidas: ["mdp"],
+    })
+    const r = await listarListasAlegra(T)
+    expect(r.listas.filter((x) => x.alegraAccount === "principal").map((x) => [x.alegraPriceListId, x.nombre, x.contactos])).toEqual([
+      ["1", "General", 0],
+      ["5", "Mayorista", 1],
+    ])
+    // mdp cayó a lo derivado de sus contactos.
+    expect(r.listas.filter((x) => x.alegraAccount === "mdp").map((x) => [x.alegraPriceListId, x.contactos])).toEqual([["8", 1]])
+    expect(r.cuentasConAviso).toEqual(["mdp"])
   })
 })

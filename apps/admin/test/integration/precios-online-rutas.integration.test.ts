@@ -57,7 +57,7 @@ beforeEach(async () => {
   adminB = await seedOperator(B, { role: "admin", email: "b@example.com" })
   operador = await seedOperator(A, { role: "operator", email: "op@example.com" })
   login(adminA)
-})
+}, 60_000) // la limpieza tras la grilla de 10.000 productos pasa los 10 s del CI
 afterAll(async () => {
   await truncateAll()
 })
@@ -267,7 +267,9 @@ describe("retenciones por la ruta", () => {
   })
 })
 
-describe("grilla de precios online", () => {
+// La grilla carga 10.000 productos sintéticos: en el runner del CI el test y la limpieza del
+// beforeEach pasan los 5 s / 10 s por defecto y el timeout deja la base sucia para los siguientes.
+describe("grilla de precios online", { timeout: 60_000 }, () => {
   const grilla = async (query = "") => json(await grillaRuta.GET(req(`/api/admin/catalogo/precios-online${query}`)))
 
   it("10.000 productos sintéticos: pagina en el servidor (máx. 100), cuenta y ordena por SQL", async () => {

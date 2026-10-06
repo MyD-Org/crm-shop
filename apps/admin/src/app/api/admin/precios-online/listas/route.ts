@@ -4,17 +4,17 @@ import { leerConfig, listarListas, listarListasAlegra } from "@/lib/precios-onli
 
 // GET /api/admin/precios-online/listas — listas de precio online del tenant con sus ajustes por
 // marca y por categoría, su condición de privada y sus enlaces con la lista de Alegra; las listas de
-// Alegra disponibles para enlazar (de los contactos del espejo, por cuenta); y la configuración
+// Alegra disponibles para enlazar (todas las de cada cuenta, con su cantidad de clientes); y la configuración
 // (versión y umbrales). Los cambios NO se hacen acá: pasan por previsualizar -> aplicar.
 // admin+ (requireAdminPlus: operator -> 404). Tenant = el del guard.
 
 export async function GET(req: Request) {
   const guard = await requireAdminPlus(req)
   if (!guard.ok) return guard.response
-  const [listas, listasAlegra, config] = await Promise.all([
+  const [listas, alegra, config] = await Promise.all([
     listarListas(guard.tenantId),
     listarListasAlegra(guard.tenantId),
     leerConfig(guard.tenantId),
   ])
-  return Response.json({ listas, listasAlegra, config }, { headers: NO_STORE })
+  return Response.json({ listas, listasAlegra: alegra.listas, cuentasConAviso: alegra.cuentasConAviso, config }, { headers: NO_STORE })
 }

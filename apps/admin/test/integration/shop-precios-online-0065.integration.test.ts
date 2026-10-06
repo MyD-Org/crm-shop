@@ -110,9 +110,12 @@ describe("lista_precio_condiciones: restricciones", () => {
 
   it("no se borra una lista con condiciones (RESTRICT) y el medio borrado arrastra su condición (CASCADE)", async () => {
     await getDb().insert(listaPrecioCondiciones).values({ tenantId: T, listaId: listaTransf, medioSlug: "transferencia" })
-    await expect(getDb().delete(listasPrecioOnline).where(eq(listasPrecioOnline.id, listaTransf))).rejects.toMatchObject({
-      cause: { code: "23001" },
-    })
+    // ON DELETE RESTRICT: Postgres 16 (CI) responde 23503 y versiones más nuevas 23001.
+    const err = await getDb()
+      .delete(listasPrecioOnline)
+      .where(eq(listasPrecioOnline.id, listaTransf))
+      .then(() => null, (e: { cause?: { code?: string } }) => e)
+    expect(["23001", "23503"]).toContain(err?.cause?.code)
     await getDb().execute(sql`delete from medios_pago_shop where tenant_id = ${T} and slug = 'transferencia'`)
     expect(await condiciones()).toHaveLength(0)
   })

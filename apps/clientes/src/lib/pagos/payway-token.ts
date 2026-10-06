@@ -152,7 +152,8 @@ export function camposSdk(s: SolicitudToken): Record<string, string> {
 }
 
 /**
- * Tokeniza con el SDK oficial. null = el SDK no se pudo cargar (el llamador puede probar el respaldo).
+ * Tokeniza con el SDK oficial. null = el SDK no se pudo cargar o no obtuvo respuesta (red/CORS): el
+ * llamador puede probar el respaldo.
  * Cualquier otro resultado es definitivo.
  */
 export async function tokenizarConSdk(
@@ -200,6 +201,9 @@ export async function tokenizarConSdk(
       console.error(`[payway] el SDK respondió ${status}: revisar la key pública y las habilitaciones.`);
       return falla("configuracion");
     }
+    // Sin respuesta (0): red o CORS. El sandbox no admite el header `x-consumer-username` que manda
+    // el SDK y el navegador corta el preflight; sin token no hubo cobro, así que se prueba el respaldo.
+    if (status === 0) return null;
     console.error(`[payway] el SDK respondió ${status}.`);
     return falla("red");
   } finally {
@@ -216,7 +220,7 @@ export async function tokenizar(
   if (deps.entorno) {
     const r = await tokenizarConSdk(solicitud, config, deps.entorno);
     if (r) return r;
-    console.error("[payway] el SDK no cargó; se tokeniza con la API directa.");
+    console.error("[payway] el SDK no cargó o no obtuvo respuesta; se tokeniza con la API directa.");
   }
   return tokenizarTarjeta(solicitud, config, deps);
 }

@@ -421,8 +421,8 @@
           "confianza": "media"
         }
       ],
-      "paridad": false,
-      "nota": "El admin no lee mm sin mm2 ni conductores x sección sin unidad; el Shop los lee con confianza media en contexto cable."
+      "paridad": true,
+      "nota": "El admin también lo lee: en un nombre de cable acepta secciones de la serie comercial sin mm2."
     },
     {
       "id": "G16",
@@ -629,7 +629,7 @@
         }
       ],
       "paridad": false,
-      "nota": "En contexto cable 'unipolar' es el tipo de cable: no emite polos. En un cable 'unipolar' es el tipo de conductor: el Shop no emite polos; el admin sí (polos=1)."
+      "nota": "La sección coincide (el admin la lee). Diverge en polos: en un cable 'unipolar' es el tipo de conductor; el Shop no emite polos, el admin sí (polos=1)."
     },
     {
       "id": "G31",
@@ -910,8 +910,8 @@
           "confianza": "media"
         }
       ],
-      "paridad": false,
-      "nota": "Sin polos ni corriente: los conductores no son una clave. El admin no lee mm sin mm2 ni conductores x sección sin unidad; el Shop los lee con confianza media en contexto cable."
+      "paridad": true,
+      "nota": "Sin polos ni corriente: los conductores no son una clave. El admin también lee la sección (serie comercial, nombre de cable)."
     },
     {
       "id": "E05",
@@ -930,8 +930,8 @@
           "confianza": "media"
         }
       ],
-      "paridad": false,
-      "nota": "El admin no lee mm sin mm2 ni conductores x sección sin unidad; el Shop los lee con confianza media en contexto cable."
+      "paridad": true,
+      "nota": "El admin también lo lee: en un nombre de cable acepta secciones de la serie comercial sin mm2."
     },
     {
       "id": "E07",

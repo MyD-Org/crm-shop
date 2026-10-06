@@ -107,28 +107,28 @@ async function CatalogoResultados({ searchParams }: Props) {
   ]);
   // Flag `busqueda-ia` apagado: igual que antes del cambio (sin `atr` ni `ia`).
   const leido = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
+  // Fichas estructuradas (fase 2): con el flag `busqueda-ia` y `catalog_atributos` legible (la migración del CRM
+  // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
+  // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
+  const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
+  // Facetas por tipo (flag `catalogo-facetas-por-tipo`, change catalogo-filtros-ux): el flag y la tabla
+  // legible, por request y fuera de `use cache` (viajan en los filtros: parte de la clave). Apagado, `?car=`
+  // se ignora (el estado no lo trae: ni filtra, ni viaja en las URLs que arma el panel) y nada cambia.
+  // Prendido, las facetas suman `porClave` (el panel las dibuja) y `car` filtra en forma estricta.
+  const conCar = conFacetasPorTipo && (estructurados || (await atributosEstructuradosDisponibles()));
   // Un local desconocido (o el flag apagado) se descarta: el filtro vuelve a "cualquier local".
   const dispLocal = leido.retiroEn ? await dispConStockEn(leido.retiroEn) : undefined;
-  const estado = dispLocal ? leido : { ...leido, retiroEn: undefined };
+  const estado = {
+    ...(dispLocal ? leido : { ...leido, retiroEn: undefined }),
+    ...(conCar ? {} : { caracteristicas: [] }),
+  };
   const disp = dispLocal ?? dispGeneral;
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).
   // Sin el flag `busqueda-ia`, el panel queda como siempre: sin la faceta de
   // características (ni su consulta).
-  //
-  // Fichas estructuradas (fase 2): con el flag y `catalog_atributos` legible (la migración del CRM
-  // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
-  // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
-  const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
-  // Facetas por tipo (flag `catalogo-facetas-por-tipo`, change catalogo-filtros-ux): el flag y la tabla
-  // legible, por request y fuera de `use cache` (viajan en los filtros: parte de la clave). Apagado, `?car=`
-  // se ignora y nada cambia. Prendido, las facetas suman `porClave` (el panel todavía no lo dibuja) y `car`
-  // filtra en forma estricta.
-  const porTipo = filtrosPorTipo(
-    conFacetasPorTipo && (estructurados || (await atributosEstructuradosDisponibles())),
-    params.car,
-  );
+  const porTipo = filtrosPorTipo(conCar, estado.caracteristicas);
   // Una sola búsqueda para las cuatro superficies (`busqueda-v2/motor.ts`): el motor decide las
   // etapas (con `?ia=1`, la URL a la que redirige `/buscar`, el plan de la consulta —caché o
   // recálculo determinista, NUNCA Jev— aporta lo blando; sin resultados, un segundo intento
@@ -217,6 +217,7 @@ async function CatalogoResultados({ searchParams }: Props) {
         filtrosSinBusqueda={filtrosSinBusqueda}
         busquedaIa={busquedaIa}
         etapa={pagina.etapa}
+        conFacetasPorTipo={conCar}
       />
     </>
   );

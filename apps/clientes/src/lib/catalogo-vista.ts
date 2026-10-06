@@ -19,6 +19,8 @@ import {
   nombreAtributo,
 } from "@/lib/catalogo-atributos";
 import { esMedidaId } from "@/lib/catalogo-atributos-medida";
+import { carDeClave, etiquetaCar } from "@/lib/catalogo-car";
+import { etiquetaValor, type FacetaClave } from "@/lib/catalogo-facetas-registro";
 import {
   ORDEN_DEFAULT,
   SOLO_STOCK_DEFAULT,
@@ -227,7 +229,7 @@ export interface LocalFiltro {
 
 /**
  * Chips de filtros activos, en el orden del panel: categorías → marcas →
- * características (atributos) → potencia → precio → stock.
+ * características (atributos y `car` por tipo) → potencia → precio → stock.
  * `locales` pone el nombre del local en el chip de "Con stock en"; sin él se muestra el slug.
  */
 export function chipsActivos(
@@ -252,6 +254,9 @@ export function chipsActivos(
     ),
     ...estado.atributos.map((a) =>
       chip(`atributo:${a}`, nombreAtributo(a), { atributos: estado.atributos.filter((x) => x !== a) })
+    ),
+    ...estado.caracteristicas.map((c) =>
+      chip(`car:${c}`, etiquetaCar(c), { caracteristicas: estado.caracteristicas.filter((x) => x !== c) })
     ),
     ...(hayPotencia(estado)
       ? [chip("potencia", etiquetaPotencia(estado), { potenciaMin: undefined, potenciaMax: undefined })]
@@ -288,6 +293,7 @@ export function limpiarFiltros(): Partial<EstadoCatalogo> {
     categorias: [],
     marcas: [],
     atributos: [],
+    caracteristicas: [],
     precioMin: undefined,
     precioMax: undefined,
     potenciaMin: undefined,
@@ -308,6 +314,7 @@ export function contarFiltrosActivos(estado: EstadoCatalogo): number {
     estado.categorias.length +
     estado.marcas.length +
     estado.atributos.length +
+    estado.caracteristicas.length +
     (hayPrecio(estado) ? 1 : 0) +
     (hayPotencia(estado) ? 1 : 0) +
     (estado.retiroEn || stockFueraDeDefault(estado) ? 1 : 0)
@@ -335,6 +342,7 @@ export function indexable(estado: EstadoCatalogo): boolean {
     !estado.ia &&
     estado.marcas.length === 0 &&
     estado.atributos.length === 0 &&
+    estado.caracteristicas.length === 0 &&
     !hayPrecio(estado) &&
     !hayPotencia(estado) &&
     !stockFueraDeDefault(estado) &&
@@ -509,4 +517,63 @@ export function alternarCategoria(
     }
   }
   return [...seleccion.filter((x) => x !== valor && !hijas.has(x)), valor];
+}
+
+/** Avisos del panel con las facetas por tipo prendidas (español neutro: son rótulos del panel). */
+export const AVISO_ELEGIR_CATEGORIA = "Elija una categoría para ver más filtros";
+export const AVISO_ELEGIR_CATEGORIA_ESPECIFICA = "Elija una categoría más específica para ver más filtros";
+
+/**
+ * Qué muestra el panel entre Disponibilidad y Precio (flag `catalogo-facetas-por-tipo`):
+ * - `actual`: `porClave` ausente (flag apagado, tabla ilegible o la consulta falló): el panel de siempre
+ *   (Características planas y slider de potencia);
+ * - `grupos`: las facetas elegidas para el conjunto (sin el grupo plano ni el slider viejo);
+ * - `aviso`: no hay grupos pero conviene decir por qué: sin categoría ni búsqueda ("Elija una
+ *   categoría..."), o una categoría raíz (o una búsqueda) sin ninguna clave elegible ("...más específica...");
+ * - `vacio`: una categoría hoja sin claves elegibles: no hay nada que decir.
+ * Un `car` activo mantiene sus grupos aunque no haya categoría ni búsqueda: hay que poder quitarlo.
+ */
+export type PanelPorTipo =
+  | { modo: "actual" }
+  | { modo: "grupos"; grupos: FacetaClave[] }
+  | { modo: "aviso"; texto: string }
+  | { modo: "vacio" };
+
+export function panelPorTipo(
+  porClave: FacetaClave[] | undefined,
+  estado: Pick<EstadoCatalogo, "categorias" | "query" | "caracteristicas">,
+  categorias: { label: string; nivel?: number }[],
+): PanelPorTipo {
+  if (porClave === undefined) return { modo: "actual" };
+  if (porClave.length > 0) return { modo: "grupos", grupos: porClave };
+  if (estado.categorias.length === 0 && !estado.query) return { modo: "aviso", texto: AVISO_ELEGIR_CATEGORIA };
+  // Con categorías elegidas, "más específica" sólo tiene sentido si alguna tiene subcategorías.
+  const conHijas = estado.categorias.some((c) => {
+    const i = categorias.findIndex((f) => f.label === c);
+    return i >= 0 && (categorias[i + 1]?.nivel ?? 1) > (categorias[i].nivel ?? 1);
+  });
+  return estado.categorias.length === 0 || conHijas
+    ? { modo: "aviso", texto: AVISO_ELEGIR_CATEGORIA_ESPECIFICA }
+    : { modo: "vacio" };
+}
+
+/**
+ * Ítems de una faceta por tipo de lista con su tilde (`car` de esa clave). Un valor tildado que la faceta
+ * ya no trae (cruzado con los otros filtros cuenta 0) se antepone con 0, como en el resto del panel.
+ */
+export function itemsDeFacetaClave(
+  faceta: Extract<FacetaClave, { control: "lista" }>,
+  car: readonly string[],
+): { value: string; label: string; count: number; checked: boolean }[] {
+  const tildados = carDeClave(car, faceta.clave);
+  const items = itemsDeFaceta(
+    faceta.items.map((i) => ({ label: i.valor, count: i.count, etiqueta: i.etiqueta })),
+    tildados,
+  );
+  return items.map((i) => ({
+    value: i.label,
+    label: "etiqueta" in i ? i.etiqueta : etiquetaValor(faceta.clave, i.label),
+    count: i.count,
+    checked: i.checked,
+  }));
 }

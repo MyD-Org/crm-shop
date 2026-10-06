@@ -7,6 +7,7 @@ const base: EstadoCatalogo = {
   categorias: [],
   marcas: [],
   atributos: [],
+  caracteristicas: [],
   orden: "nombre",
   pagina: 1,
   soloStock: true,
@@ -154,6 +155,29 @@ describe("medidas (ids dinámicos de atributo) en la hoja (R6.11)", () => {
 
   it("limpiar el borrador saca también las medidas", () => {
     expect(limpiarBorrador({ ...base, atributos: ["corriente_a:20", "tono-frio"] }).atributos).toEqual([]);
+  });
+});
+
+describe("características por tipo en la hoja (la categoría en el acto llega en el cambio de mobile)", () => {
+  const conCategoria = { ...base, categorias: ["TERMICAS"] };
+
+  it("las características del borrador viajan al aplicar", () => {
+    const b = cambiarBorrador(conCategoria, { caracteristicas: ["polos:2"] });
+    expect(hrefAlAplicar(conCategoria, b)).toBe("/catalogo?categoria=TERMICAS&car=polos%3A2");
+  });
+
+  it("cambiar sólo una característica ya es un cambio", () => {
+    expect(hrefAlAplicar(conCategoria, cambiarBorrador(conCategoria, { caracteristicas: ["polos:2"] }))).not.toBeNull();
+  });
+
+  it("si en el borrador cambió la categoría, las características del estado no viajan", () => {
+    const estado = { ...conCategoria, caracteristicas: ["polos:2"] };
+    expect(hrefAlAplicar(estado, cambiarBorrador(estado, { categorias: ["LLAVES"] }))).toBe("/catalogo?categoria=LLAVES");
+  });
+
+  it("limpiar en el borrador y aplicar borra las características de la URL", () => {
+    const estado = { ...conCategoria, caracteristicas: ["polos:2"] };
+    expect(hrefAlAplicar(estado, limpiarBorrador(estado))).toBe("/catalogo");
   });
 });
 

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   alternarCategoria,
   itemsDeFaceta,
-  categoriasDeLaBusqueda,
   anuncioResultados,
   chipsActivos,
   contadorProductos,
@@ -447,30 +446,6 @@ describe("filtro 'Con stock en <local>' en chips y contadores", () => {
     expect(contarFiltrosActivos({ ...base, retiroEn: "igz" })).toBe(contarFiltrosActivos(base) + 1);
     expect(hayFiltros({ ...base, retiroEn: "igz" })).toBe(true);
     expect(limpiarFiltros()).toMatchObject({ retiroEn: undefined });
-  });
-});
-
-describe("categoriasDeLaBusqueda", () => {
-  const items = [
-    { label: "ILUMINACION", nivel: 1, count: 9, checked: true },
-    { label: "APLIQUES", nivel: 2, count: 9, checked: false },
-    { label: "EMBUTIDOS", nivel: 2, count: 0, checked: false },
-    { label: "HOGAR", nivel: 1, count: 0, checked: false },
-    { label: "SEGURIDAD", nivel: 1, count: 0, checked: false },
-    { label: "CAMARAS", nivel: 2, count: 0, checked: true },
-  ];
-
-  it("sin búsqueda deja todas", () => {
-    expect(categoriasDeLaBusqueda(items, false)).toEqual(items);
-  });
-
-  it("con búsqueda saca las de 0, salvo tildadas y madres de lo que queda", () => {
-    expect(categoriasDeLaBusqueda(items, true).map((c) => c.label)).toEqual([
-      "ILUMINACION",
-      "APLIQUES",
-      "SEGURIDAD",
-      "CAMARAS",
-    ]);
   });
 });
 

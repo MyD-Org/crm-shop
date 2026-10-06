@@ -40,8 +40,9 @@ const cuenta = (sql: string, re: RegExp) => sql.match(re)?.length ?? 0;
 
 /** Separa las tres consultas de `getFacetas` por lo que agrupan/calculan. */
 function facetas(consultas: ConsultaGrabada[]) {
+  // La última: con filtros, el conteo de categorías va precedido del de todo el catálogo.
   const buscar = (pred: (sql: string) => boolean) => {
-    const c = consultas.find((c) => pred(c.sql));
+    const c = consultas.findLast((c) => pred(c.sql));
     if (!c) throw new Error("consulta no encontrada");
     return c;
   };
@@ -298,7 +299,8 @@ describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
   it("facetas: una consulta más con el rango de potencia, sin el propio filtro de potencia", async () => {
     await getFacetas({ atributosEstructurados: true, potenciaMin: 10 }, false);
     const consultas = sinLecturaDelArbol(grabadora.consultas);
-    expect(consultas).toHaveLength(5);
+    // Con el filtro de potencia, el conteo de categorías va precedido del de todo el catálogo.
+    expect(consultas).toHaveLength(6);
     const potencia = consultas.find((c) => c.sql.includes('floor(min((select "public"."catalog_atributos"."valor_num"'));
     expect(potencia).toBeDefined();
     expect(potencia!.sql).toMatch(/'potencia_w'\) is not null/);

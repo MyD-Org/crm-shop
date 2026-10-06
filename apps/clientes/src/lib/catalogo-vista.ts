@@ -376,33 +376,6 @@ export function itemsDeCaracteristicas(
   }));
 }
 
-/**
- * Categorías del panel durante una búsqueda de texto: sólo las que tienen
- * resultados para esa búsqueda, como en las tiendas grandes. Se quedan las
- * tildadas aunque cuenten 0 (para poder destildarlas) y las madres de algo
- * que se queda (el árbol no pierde su rama). Sin búsqueda van todas.
- */
-export function categoriasDeLaBusqueda<F extends { count: number; checked: boolean; nivel?: number }>(
-  items: F[],
-  hayBusqueda: boolean,
-): F[] {
-  if (!hayBusqueda) return items;
-  const quedan = items.map((it) => it.count > 0 || it.checked);
-  // De atrás para adelante: una hija que queda sostiene a todas sus madres.
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (!quedan[i]) continue;
-    let nivel = items[i].nivel ?? 1;
-    for (let j = i - 1; j >= 0 && nivel > 1; j--) {
-      const n = items[j].nivel ?? 1;
-      if (n < nivel) {
-        quedan[j] = true;
-        nivel = n;
-      }
-    }
-  }
-  return items.filter((_, i) => quedan[i]);
-}
-
 /** Índices de las hijas directas de `facetas[i]` (orden de lectura). */
 function hijasDirectas(facetas: { label: string; nivel?: number }[], i: number): number[] {
   const nivel = facetas[i].nivel ?? 1;

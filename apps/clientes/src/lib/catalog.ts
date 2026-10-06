@@ -1054,6 +1054,32 @@ async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>)
   return new Map(filas.map((f) => [f.id as string, Number(f.count)]));
 }
 
+/**
+ * Sin árbol propio: las categorías de Alegra del catálogo sin filtros (`base`, ya ordenadas),
+ * cada una con lo que cuenta dentro de la búsqueda y los demás filtros (`filtrado`), 0 incluido.
+ * Igual que `arbolCompletoConConteo`: el panel siempre lista todas y se puede tildar cualquiera.
+ */
+export function categoriasPlanasConConteo(base: Faceta[], filtrado: Faceta[]): Faceta[] {
+  const conteo = new Map(filtrado.map((c) => [c.label, c.count]));
+  return base.map((c) => ({ ...c, count: conteo.get(c.label) ?? 0 }));
+}
+
+/** Productos por categoría de Alegra, de más a menos y por nombre (sin árbol propio). */
+async function conteoPorCategoriaAlegra(where: ReturnType<typeof condicionesDe>): Promise<Faceta[]> {
+  return getDb()
+    .select({
+      label: sql<string>`${crmCategoriasAlegra.name}`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(crmCatalogo)
+    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+    .leftJoin(crmOverlay, joinOverlay())
+    .leftJoin(stockReservado, joinReserva())
+    .where(and(where, sql`nullif(${crmCategoriasAlegra.name}, '') is not null`))
+    .groupBy(crmCategoriasAlegra.name)
+    .orderBy(sql`count(*) desc`, asc(crmCategoriasAlegra.name));
+}
+
 /** Qué grupos de filtros entran en un WHERE (ver `condicionesDe`). */
 interface AplicarFiltros {
   categorias: boolean;
@@ -1424,6 +1450,15 @@ export async function getFacetas(
     : undefined;
 
   const arbol = await getArbolCategorias();
+  // `sinFacetaAtributos` y `atributosEstructurados` no acotan el conjunto: sólo cambian qué se calcula.
+  const sinFiltros = Object.entries(filtros).every(
+    ([k, v]) =>
+      k === "sinFacetaAtributos" ||
+      k === "atributosEstructurados" ||
+      v === undefined ||
+      v === false ||
+      (Array.isArray(v) && v.length === 0),
+  );
 
   const [categorias, marcas, [rango], [conteoAtributos], rangoPotencia] = await Promise.all([
     arbol.length
@@ -1431,18 +1466,11 @@ export async function getFacetas(
           conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
           conteoPorCategoriaPropia(whereCategorias),
         ]).then(([base, filtrado]) => arbolCompletoConConteo(arbol, base, filtrado))
-      : getDb()
-      .select({
-        label: sql<string>`${crmCategoriasAlegra.name}`,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(crmCatalogo)
-      .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-      .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(stockReservado, joinReserva())
-      .where(and(whereCategorias, sql`nullif(${crmCategoriasAlegra.name}, '') is not null`))
-      .groupBy(crmCategoriasAlegra.name)
-      .orderBy(sql`count(*) desc`, asc(crmCategoriasAlegra.name)),
+      : Promise.all([
+          // Sin filtros el conteo ya es el del catálogo entero: no hace falta la segunda consulta.
+          sinFiltros ? null : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
+          conteoPorCategoriaAlegra(whereCategorias),
+        ]).then(([base, filtrado]) => (base ? categoriasPlanasConConteo(base, filtrado) : filtrado)),
     getDb()
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
       .from(crmCatalogo)

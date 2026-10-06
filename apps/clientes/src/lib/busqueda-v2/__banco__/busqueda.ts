@@ -43,7 +43,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { getArbolCategorias } from "@/lib/catalog";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
-import { cargarBancoDeArgs, parsearArgs, type ArgsBanco } from "./args";
+import { cargarBancoDeArgs, estadoMedidas, parsearArgs, type ArgsBanco } from "./args";
 import { validarBanco } from "./cargar-banco";
 import { SUPERFICIES_BANCO, correr, sonComparables, type ReporteJson } from "./corrida";
 import { crearEjecutor, crearOraculoLegado, resolverJev, type Ejecutor } from "./ejecutores";
@@ -86,7 +86,7 @@ async function main(args: ArgsBanco) {
   }
 
   const vista = args.produccion ? vistaProduccion(args.soloVisibles ?? false) : VISTA_ACTUAL;
-  const config = { tuberia: args.tuberia, jev, vista, arbol, estructurados, politica: args.politica, superficie: args.superficie } as const;
+  const config = { tuberia: args.tuberia, jev, vista, arbol, estructurados, politica: args.politica, superficie: args.superficie, medidas: args.medidas } as const;
   const ejecutor = crearEjecutor(config);
   const enmascarar = (elegido.banco.privado || elegido.banco.local) && !args.verConsultas;
   const snapshot = await snapshotCatalogo(arbol, estructurados, () => enLectura(() => cargarFilasUniverso()));
@@ -103,6 +103,7 @@ async function main(args: ArgsBanco) {
         repeticiones: args.repeticiones,
         calentar: args.calentar,
         flagsDeclarados: args.flags,
+        busquedaMedidas: estadoMedidas(args.tuberia, args.medidas),
         verConsultas: args.verConsultas,
         tenantAlias: args.tenantAlias,
         umbral: args.umbral,

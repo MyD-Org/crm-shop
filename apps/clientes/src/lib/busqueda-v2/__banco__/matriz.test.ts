@@ -86,6 +86,18 @@ describe("planDeMatriz con --motor", () => {
   });
 });
 
+describe("parsearArgsLinea: --medidas", () => {
+  it("por defecto las aplica; --medidas=no las apaga", () => {
+    expect(parsearArgsLinea(["--solo-visibles=no"]).medidas).toBe(true);
+    expect(parsearArgsLinea(["--solo-visibles=no", "--medidas=no"]).medidas).toBe(false);
+    expect(parsearArgsLinea(["--solo-visibles=no", "--medidas=si"]).medidas).toBe(true);
+  });
+
+  it("un valor inválido falla", () => {
+    expect(() => parsearArgsLinea(["--solo-visibles=no", "--medidas=tal"])).toThrow(/--medidas debe ser si\|no/);
+  });
+});
+
 describe("parsearArgsLinea", () => {
   it("exige --solo-visibles=si|no (el valor del flag en producción)", () => {
     expect(() => parsearArgsLinea([])).toThrow(/--solo-visibles=si\|no/);
@@ -226,6 +238,24 @@ describe("formatearMatriz con filas del motor", () => {
     const r = motorRep("catalogo", 24, { exacta: 1 });
     r.cabecera.flags = { "busqueda-medidas": "on" };
     expect(formatearMatriz([{ ...corrida("b", "sintetico", "produccion", "motor", "grabado", r), politica: "legado", superficie: "catalogo" }])).toMatch(/medidas: on/);
+  });
+});
+
+describe("formatearMatriz: medidas aplicadas por la tubería (--medidas)", () => {
+  const conEstado = (estado: string | undefined) => {
+    const r = reporte();
+    if (estado) r.cabecera.busquedaMedidas = estado;
+    return formatearMatriz([corrida("a", "sintetico", "banco", "clasica", "no aplica"), corrida("b", "sintetico", "banco", "v2", "no", r)]);
+  };
+
+  it("declara on/off de las filas v2/motor", () => {
+    expect(conEstado("on")).toMatch(/medidas aplicadas \(v2\/motor\): on/);
+    expect(conEstado("off")).toMatch(/medidas aplicadas \(v2\/motor\): off/);
+  });
+
+  it("sin el dato (snapshots anteriores) o 'no aplica': no agrega la línea", () => {
+    expect(conEstado(undefined)).not.toMatch(/medidas aplicadas/);
+    expect(conEstado("no aplica")).not.toMatch(/medidas aplicadas/);
   });
 });
 

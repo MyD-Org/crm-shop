@@ -657,6 +657,28 @@ function sinRelaciones(t: string): string {
 }
 
 /**
+ * Productos cuyo texto trae magnitudes que NO son las suyas. Se decide por el NOMBRE (la descripción
+ * es justo la que trae los números engañosos):
+ * - un instrumento de medición lista sus rangos ("200mV/2V/20V…", "2A/10A"): no es su tensión ni su
+ *   corriente de trabajo;
+ * - una caja vacía o un gabinete dice para qué equipo es ("para contactor de 11kW"): no es su potencia.
+ */
+const INSTRUMENTO_MEDICION =
+  /(?:^|[^0-9a-z])(?:multimetros?|testers?|pinzas? (?:amperimetric|voltamperimetric|de corriente)[a-z]*|amperimetros?|voltimetros?|megometros?|megohmetros?|telurimetros?)(?![0-9a-z])/
+const CAJA_VACIA = /(?:^|[^0-9a-z])(?:cajas? vacias?|gabinetes?)(?![0-9a-z])/
+
+function clavesDescartadasPorNombre(nombre: string): Set<ClaveAtributo> {
+  const n = normalizar(nombre ?? "")
+  const fuera = new Set<ClaveAtributo>()
+  if (INSTRUMENTO_MEDICION.test(n)) {
+    fuera.add("tension_v")
+    fuera.add("corriente_a")
+  }
+  if (CAJA_VACIA.test(n)) fuera.add("potencia_w")
+  return fuera
+}
+
+/**
  * Atributos que se leen del nombre (+ descripción). A lo sumo uno por clave, en el orden de
  * `CLAVES_ATRIBUTO`. Nunca tira.
  */
@@ -689,8 +711,9 @@ export function extraerAtributosDeNombre(nombre: string, descripcion?: string | 
 
   out.push(...extraerAmpliadas(t))
 
+  const fuera = clavesDescartadasPorNombre(nombre)
   const orden = (c: ClaveAtributo) => CLAVES_ATRIBUTO.indexOf(c)
-  return out.sort((a, b) => orden(a.clave) - orden(b.clave))
+  return out.filter((a) => !fuera.has(a.clave)).sort((a, b) => orden(a.clave) - orden(b.clave))
 }
 
 function comoNumero(v: unknown): number | null {

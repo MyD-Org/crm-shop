@@ -647,3 +647,50 @@ describe("tono = tipo de luz (luces de color y RGB)", () => {
     expect(TONOS).toEqual(["calido", "neutro", "frio", "rojo", "verde", "azul", "amarillo", "naranja", "ambar", "violeta", "rosa", "rgb", "rgbw"])
   })
 })
+
+describe("magnitudes de la descripción que no son del producto (se decide por el nombre)", () => {
+  const RANGOS = "Rangos: 200mV/2V/20V/200V/600V CC y CA, corriente 200uA/2mA/20mA/200mA/10A, 2 V"
+
+  it("MULTÍMETRO DIGITAL: los rangos de medición no son tensión ni corriente", () => {
+    const a = extraer("MULTÍMETRO DIGITAL, TRUE RMS 2000 CUENTAS", RANGOS)
+    expect(a.tension_v).toBeUndefined()
+    expect(a.corriente_a).toBeUndefined()
+  })
+
+  it("PINZA AMPERIMÉTRICA DIGITAL DE CA", () => {
+    const a = extraer("PINZA AMPERIMÉTRICA DIGITAL DE CA", "Mide hasta 400A AC y 2 V a 600V")
+    expect(a.tension_v).toBeUndefined()
+    expect(a.corriente_a).toBeUndefined()
+  })
+
+  it("LAPIZ MULTÍMETRO DIGITAL", () => {
+    const a = extraer("LAPIZ MULTÍMETRO DIGITAL", "Rango 4 V / 40V / 400V, 10 A")
+    expect(a.tension_v).toBeUndefined()
+    expect(a.corriente_a).toBeUndefined()
+  })
+
+  it("TESTER y VOLTÍMETRO también son instrumentos", () => {
+    expect(extraer("TESTER DE TENSION", "12-1000V").tension_v).toBeUndefined()
+    expect(extraer("VOLTIMETRO DIGITAL RIEL DIN", "80-500V").tension_v).toBeUndefined()
+  })
+
+  it("un instrumento conserva lo demás (IP)", () => {
+    expect(extraer("MULTIMETRO DIGITAL IP67", "Rango 2V/20V")).toEqual({ ip: 67 })
+  })
+
+  it("CAJA VACÍA para contactor: la potencia del contactor no es la de la caja", () => {
+    expect(extraer("CAJA VACÍA NQ3-11P para contactor NXC", "Para contactor de 11kW").potencia_w).toBeUndefined()
+    expect(extraer("GABINETE ESTANCO", "Para contactor de 11kW").potencia_w).toBeUndefined()
+  })
+
+  it("la palabra en la DESCRIPCIÓN no descarta nada", () => {
+    expect(extraer("FUENTE 12V 5A", "Compatible con multímetro").tension_v).toBe(12)
+    expect(extraer("REFLECTOR LED 50W", "Se monta en gabinete").potencia_w).toBe(50)
+  })
+
+  it("guardamotor: sigue dando potencia y tensión", () => {
+    const a = extraer("GUARDAMOTOR TM 0,37kW-400V")
+    expect(a.potencia_w).toBe(370)
+    expect(a.tension_v).toBe(400)
+  })
+})

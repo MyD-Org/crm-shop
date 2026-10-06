@@ -326,3 +326,32 @@ Los pasos 1 a 8 no requieren nada de Fede. El 9 sí.
 | `MP_WEBHOOK_SECRET` | server | Firma del webhook. Secreto. |
 
 Se cargan con `vercel env`, no en un `.env` commiteado.
+
+## Cuotas sin interés por lista (flag `cuotas-cobro`)
+
+Change `listas-precio-online`, rebanada D. Reemplaza al motor de cuotas por proveedor (escalones, planes
+de Mercado Pago, sync y cron, ya retirados).
+
+- **Modelo**: la tienda absorbe el costo financiero. Una condición del CRM (medio de pago + N cuotas)
+  apunta a una lista de precios online; la cuota es el total de esa lista (con IVA) dividido N, sin
+  recargo. Reparto: el resto de centavos va a la primera cuota (`repartirCuotas`). El precio principal
+  sigue siendo el de la lista de referencia.
+- **Código independiente del procesador** (`src/lib/cuotas-sin-interes.ts`,
+  `src/lib/pagos/cuotas-validacion.ts`): condiciones, cálculo de la cuota, selector, congelado en el
+  pedido, igualdad estricta de cuotas y reconciliación de cuotas y monto. Nada de eso nombra a un
+  procesador.
+- **Lo específico de cada procesador** vive en su adaptador (`src/lib/pagos/mercadopago*.ts`) y en su
+  formulario de pago (`PagoMercadoPago.tsx`: Brick con `amount` = total del pedido y
+  `maxInstallments` = cuotas congeladas). El procesador se elige **por medio de pago**
+  (`PROCESADOR_DE_MEDIO` en `src/lib/medios-pago.ts`): pueden convivir varios activos. Sumar uno es su
+  adaptador y una línea en esa tabla.
+- **Flujo**: el checkout pide `cuotasOpciones` a `/api/carrito/cotizar` (`conCuotas`); cada cantidad se
+  cotiza con la lista de su condición. `POST /api/pedidos` valida la cantidad contra las condiciones del
+  medio (si no hay condición, 422), cotiza con esa lista y congela `orders.cuotas` (1 = un pago).
+- **Cobro**: `POST /api/pagos/mercadopago` exige `cuotas === pedido.cuotas` (422 `cuotas_distintas` sin
+  llamar al procesador) y cobra siempre `pedido.total` leído de la base. Un pedido sin cuotas
+  congeladas (flag apagado o anterior) mantiene el clamp 1..24 de siempre.
+- **Reconciliación**: al registrar un cobro acreditado, si el procesador informó otras cuotas u otro
+  monto, `orders.pago_revision` queda en `cuotas_distintas` / `monto_distinto` (el CRM lo muestra).
+  No bloquea ni revierte el cobro.
+- **Flag apagado**: sin cuotas en la tienda, el pedido no congela cuotas y el cobro queda como estaba.

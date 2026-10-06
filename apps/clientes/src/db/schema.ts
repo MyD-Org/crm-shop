@@ -534,7 +534,7 @@ export const orders = shop.table(
     ),
     check(
       "orders_pago_revision_check",
-      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado')`,
+      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado','cuotas_distintas','monto_distinto')`,
     ),
     // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
     check(

@@ -1,5 +1,5 @@
 {
-  "id": "29d73e62-1b24-491e-a3be-7e346f2f0e22",
+  "id": "5321f48a-5f6d-4a13-9ee6-0e72c2814f12",
   "prevId": "dec83c1a-aadf-4db4-8be5-5abbd0e4a172",
   "version": "7",
   "dialect": "postgresql",
@@ -2062,7 +2062,7 @@
         },
         "orders_pago_revision_check": {
           "name": "orders_pago_revision_check",
-          "value": "\"shop\".\"orders\".\"pago_revision\" is null or \"shop\".\"orders\".\"pago_revision\" in ('cobro_duplicado','pagado_cancelado')"
+          "value": "\"shop\".\"orders\".\"pago_revision\" is null or \"shop\".\"orders\".\"pago_revision\" in ('cobro_duplicado','pagado_cancelado','cuotas_distintas','monto_distinto')"
         },
         "orders_cancelacion_motivo_check": {
           "name": "orders_cancelacion_motivo_check",

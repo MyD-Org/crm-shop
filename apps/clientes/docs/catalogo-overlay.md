@@ -46,7 +46,7 @@ overlay que la card del catálogo (nada del tráfico público llama a Alegra).
 compartida con el tag `catalogo` (`src/lib/catalogo-publico.ts`). Un cambio en
 el overlay o en las categorías se ve en la visita siguiente porque el CRM
 avisa a `/api/internal/catalogo/revalidar`; si el aviso se pierde, a los 15
-minutos como máximo. Ver "Caché de datos del catálogo y de las cuotas" en
+minutos como máximo. Ver "Caché de datos del catálogo" en
 [`arquitectura-integraciones.md`](./arquitectura-integraciones.md).
 
 ## Flag `catalogo-solo-visibles` (apagado por defecto)

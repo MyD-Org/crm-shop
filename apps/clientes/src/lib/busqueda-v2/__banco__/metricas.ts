@@ -14,6 +14,7 @@
  * - latencia: p50 y p95 por rango más cercano sobre todas las muestras.
  */
 import type { EvaluacionBusqueda } from "./banco";
+import { resumenMedidas, type ResumenMedida } from "./metricas-medida";
 
 export interface Latencia {
   n: number;
@@ -42,6 +43,8 @@ export interface ResumenNum {
   latencia: Latencia;
   /** Sólo si algún caso trae `peso` (banco real: hits de la consulta). */
   ponderado?: { hit24: number | null; mrr: number | null; zeroRate: number };
+  /** Sólo si algún caso trae expectativa de medidas (ver `metricas-medida.ts`). */
+  medida?: ResumenMedida;
 }
 
 /** Percentil por rango más cercano (nearest-rank). Sin muestras: 0. */
@@ -105,6 +108,8 @@ export function resumenNumerico(evs: readonly EvaluacionBusqueda[], conIntencion
   };
   const ponderado = ponderadoDe(evs);
   if (ponderado) resumen.ponderado = ponderado;
+  const medida = resumenMedidas(evs);
+  if (medida) resumen.medida = medida;
   return resumen;
 }
 

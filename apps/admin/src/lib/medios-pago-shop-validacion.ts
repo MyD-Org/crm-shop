@@ -19,6 +19,10 @@ export function esSlugCobro(slug: string): boolean {
   return SLUGS_COBRO.includes(slug)
 }
 
+/** Quién puede pagar con el medio. `cuenta_corriente` = solo clientes con cuenta corriente (migración 0069). */
+export type AudienciaMedio = "publico" | "cuenta_corriente"
+export const AUDIENCIA_CUENTA_CORRIENTE: AudienciaMedio = "cuenta_corriente"
+
 export type Invalido = { ok: false; campo: string; error: string }
 
 export interface MedioPagoValido {
@@ -30,6 +34,8 @@ export interface MedioPagoValido {
   aplicaEnvio: boolean
   cobroOnline: boolean
   orden: number
+  /** Ausente en el alta = rige el default de la base ('publico'). */
+  audiencia?: AudienciaMedio
 }
 
 /** Cambios parciales: además de los campos del medio, destacado y ficha. La lista se enlaza por Precios online. */
@@ -47,6 +53,11 @@ const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 const MSG_BODY = "Los datos indicados no son válidos."
 const MSG_BOOL = "El valor indicado no es válido."
 export const MSG_SIN_ENTREGA = "Seleccione al menos una forma de entrega: retiro o envío."
+export const MSG_CC_ENTREGA = "El medio solo para cuentas corrientes debe aplicar a retiro y a envío."
+export const MSG_CC_COBRO_ONLINE = "Un medio de cobro en línea no puede ser solo para cuentas corrientes."
+export const MSG_CC_PRECIOS =
+  "El medio solo para cuentas corrientes no puede destacarse en el catálogo ni mostrarse en la ficha. Quite esas opciones primero."
+export const MSG_CC_OTRO = "Ya hay otro medio solo para cuentas corrientes. Quite esa opción del otro medio antes de marcar éste."
 export const MSG_COBRO_ONLINE = "El cobro online todavía no está disponible."
 
 function validarCampos(body: Record<string, unknown>): { ok: true; cambios: CambiosMedioPago } | Invalido {
@@ -76,6 +87,11 @@ function validarCampos(body: Record<string, unknown>): { ok: true; cambios: Camb
     cambios[campo] = v
   }
   if (cambios.cobroOnline === true) return invalido("cobroOnline", MSG_COBRO_ONLINE)
+
+  if (body.audiencia !== undefined) {
+    if (body.audiencia !== "publico" && body.audiencia !== "cuenta_corriente") return invalido("audiencia", MSG_BOOL)
+    cambios.audiencia = body.audiencia
+  }
 
   if (body.orden !== undefined) {
     const v = body.orden
@@ -118,6 +134,9 @@ export function validarMedioPagoNuevo(body: unknown): { ok: true; valor: MedioPa
     ...c.cambios,
   }
   if (!valor.aplicaRetiro && !valor.aplicaEnvio) return invalido("aplicaRetiro", MSG_SIN_ENTREGA)
+  if (valor.audiencia === AUDIENCIA_CUENTA_CORRIENTE && !(valor.aplicaRetiro && valor.aplicaEnvio)) {
+    return invalido("aplicaRetiro", MSG_CC_ENTREGA)
+  }
   return { ok: true, valor }
 }
 

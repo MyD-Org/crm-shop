@@ -17,6 +17,7 @@ const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPago
   condicionesCuotas: [],
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
+  audiencia: "publico",
   avisos: [],
   ...extra,
 })

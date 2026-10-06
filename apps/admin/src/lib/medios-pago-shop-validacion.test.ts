@@ -133,3 +133,34 @@ describe("destacado y ficha", () => {
     }
   })
 })
+
+describe("audiencia del medio (solo cuentas corrientes)", () => {
+  it("acepta 'publico' y 'cuenta_corriente' en los cambios y rechaza cualquier otro valor, en usted", () => {
+    expect(validarMedioPagoCambios({ audiencia: "cuenta_corriente" })).toEqual({ ok: true, cambios: { audiencia: "cuenta_corriente" } })
+    expect(validarMedioPagoCambios({ audiencia: "publico" })).toEqual({ ok: true, cambios: { audiencia: "publico" } })
+    for (const malo of ["todos", "", 1, true, null]) {
+      expect(validarMedioPagoCambios({ audiencia: malo })).toEqual({
+        ok: false,
+        campo: "audiencia",
+        error: "El valor indicado no es válido.",
+      })
+    }
+  })
+
+  it("el alta puede nacer solo para cuentas corrientes; sin el campo no lo manda (rige el default de la base)", () => {
+    const r = validarMedioPagoNuevo({ slug: "efectivo-cheque", nombre: "Efectivo o cheque", audiencia: "cuenta_corriente" })
+    expect(r).toMatchObject({ ok: true, valor: { audiencia: "cuenta_corriente" } })
+    const sin = validarMedioPagoNuevo({ slug: "otro", nombre: "Otro" })
+    if (sin.ok) expect(sin.valor).not.toHaveProperty("audiencia")
+  })
+
+  it("un medio solo para cuentas corrientes aplica a retiro y a envío", () => {
+    expect(
+      validarMedioPagoNuevo({ slug: "cc", nombre: "CC", audiencia: "cuenta_corriente", aplicaEnvio: false }),
+    ).toEqual({
+      ok: false,
+      campo: "aplicaRetiro",
+      error: "El medio solo para cuentas corrientes debe aplicar a retiro y a envío.",
+    })
+  })
+})

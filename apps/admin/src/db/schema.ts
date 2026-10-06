@@ -1143,12 +1143,17 @@ export const mediosPagoShop = pgTable(
     // A lo sumo un medio por tenant (índice único parcial); `mostrarEnFicha` no tiene límite.
     destacarEnCatalogo: boolean("destacar_en_catalogo").notNull().default(false),
     mostrarEnFicha: boolean("mostrar_en_ficha").notNull().default(false),
+    // Quién puede pagar con el medio: 'publico' o 'cuenta_corriente' (migración 0069). A lo sumo uno
+    // de cuenta corriente por tenant (índice único parcial). Drift solo en SQL: los CHECK del valor
+    // y de que el medio de cuenta corriente no cobre en línea ni se destaque.
+    audiencia: text("audiencia").notNull().default("publico"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("medios_pago_shop_tenant_slug_uniq").on(t.tenantId, t.slug),
     uniqueIndex("medios_pago_shop_tenant_destacado_uniq").on(t.tenantId).where(sql`${t.destacarEnCatalogo} = true`),
+    uniqueIndex("medios_pago_shop_tenant_cc_uniq").on(t.tenantId).where(sql`${t.audiencia} = 'cuenta_corriente'`),
   ],
 )
 

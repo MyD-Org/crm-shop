@@ -1123,6 +1123,16 @@ Shop ofrece salen de esta tabla; ya no existen los flags `pagos` ni `pedido-a-co
 - **Credenciales**: el Shop sólo ofrece Mercado Pago si tiene `MP_ACCESS_TOKEN` y
   `NEXT_PUBLIC_MP_PUBLIC_KEY`; con el medio activo y sin credenciales no se muestra ni se acepta.
 - **Sin medios aplicables** a la modalidad elegida, el pedido queda "a coordinar".
+- **Solo cuentas corrientes** (change `listas-cuenta-corriente`, rebanada B, migración `0069`):
+  `medios_pago_shop.audiencia` (`publico` por defecto, o `cuenta_corriente`). Al editar un medio, el
+  switch "Solo cuentas corrientes" lo marca. A lo sumo UNO por tenant (índice único parcial), no
+  puede ser de cobro en línea, ni destacado, ni ir en la ficha, y aplica a retiro y a envío (CHECK
+  en la base y validación en usted en el admin). El público NO lo ve en el checkout, en "con medio"
+  ni en la ficha, y `POST /api/pedidos` lo rechaza; lo usarán los clientes con cuenta corriente
+  (rebanada D). El medio se identifica por esa columna, nunca por su nombre ni su slug. Con el medio
+  inactivo, el pedido de una cuenta corriente queda "a coordinar". Drift solo en SQL: los dos CHECK
+  (`medios_pago_shop_audiencia_chk`, `_audiencia_cc_chk`). Tras aplicar la migración, marcar el
+  medio en esta pantalla (el "Mayorista" actual, renombrado "Efectivo o cheque").
 
 ## Cuentas bancarias del Shop
 

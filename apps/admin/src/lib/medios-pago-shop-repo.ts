@@ -3,7 +3,13 @@ import { getDb } from "@/db"
 import { listaPrecioCondiciones, listasPrecioOnline, mediosPagoShop } from "@/db/schema"
 import { avisosDeMedio } from "@/lib/medios-pago-shop-avisos"
 import {
+  AUDIENCIA_CUENTA_CORRIENTE,
+  MSG_CC_COBRO_ONLINE,
+  MSG_CC_ENTREGA,
+  MSG_CC_OTRO,
+  MSG_CC_PRECIOS,
   MSG_SIN_ENTREGA,
+  type AudienciaMedio,
   esSlugCobro,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
@@ -41,6 +47,8 @@ export interface MedioPagoDto {
   condicionesCuotas: CondicionCuotasDto[]
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
+  /** `cuenta_corriente` = solo lo ofrece el Shop a clientes con cuenta corriente (a lo sumo uno por tenant). */
+  audiencia: AudienciaMedio
 }
 
 export interface CondicionCuotasDto {
@@ -79,6 +87,7 @@ export const toMedioPagoDto = (
   condicionesCuotas,
   destacarEnCatalogo: r.destacarEnCatalogo,
   mostrarEnFicha: r.mostrarEnFicha,
+  audiencia: r.audiencia === AUDIENCIA_CUENTA_CORRIENTE ? AUDIENCIA_CUENTA_CORRIENTE : "publico",
 })
 
 export type ResultadoMedio =
@@ -95,6 +104,14 @@ function codigoPg(err: unknown): string | undefined {
     if (typeof code === "string") return code
   }
   return undefined
+}
+
+/** ¿La violación de unicidad es la del índice del medio de cuenta corriente (0069)? */
+function esConflictoCuentaCorriente(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && i < 3; e = (e as { cause?: unknown }).cause, i++) {
+    if ((e as { constraint_name?: unknown }).constraint_name === "medios_pago_shop_tenant_cc_uniq") return true
+  }
+  return false
 }
 
 export async function listarMediosPago(tenantId: string): Promise<MedioPagoDto[]> {
@@ -215,6 +232,7 @@ export async function crearMedioPago(tenantId: string, body: unknown): Promise<R
     return { kind: "ok", medio: toMedioPagoDto(fila) }
   } catch (err) {
     if (codigoPg(err) === "23505") {
+      if (esConflictoCuentaCorriente(err)) return { kind: "conflict", campo: "audiencia", error: MSG_CC_OTRO }
       return { kind: "conflict", campo: "slug", error: "Ya existe un medio de pago con ese identificador." }
     }
     throw err
@@ -232,6 +250,9 @@ export async function actualizarMedioPago(tenantId: string, slug: string, body: 
     return await actualizarEnTx(tenantId, slug, cambios)
   } catch (err) {
     // Dos destacados simultáneos: el índice único parcial rechaza al segundo. No es un 500.
+    if (codigoPg(err) === "23505" && (esConflictoCuentaCorriente(err) || cambios.audiencia === AUDIENCIA_CUENTA_CORRIENTE)) {
+      return { kind: "conflict", campo: "audiencia", error: MSG_CC_OTRO }
+    }
     if (codigoPg(err) === "23505" && cambios.destacarEnCatalogo === true) {
       return {
         kind: "conflict",
@@ -259,6 +280,29 @@ async function actualizarEnTx(
     const retiro = cambios.aplicaRetiro ?? actual.aplicaRetiro
     const envio = cambios.aplicaEnvio ?? actual.aplicaEnvio
     if (!retiro && !envio) return { kind: "invalid", campo: "aplicaRetiro", error: MSG_SIN_ENTREGA }
+
+    // Medio solo para cuentas corrientes: se valida contra el estado RESULTANTE (también al editar uno ya marcado).
+    const audiencia = cambios.audiencia ?? actual.audiencia
+    if (audiencia === AUDIENCIA_CUENTA_CORRIENTE) {
+      if (esSlugCobro(slug) || actual.cobroOnline) return { kind: "invalid", campo: "audiencia", error: MSG_CC_COBRO_ONLINE }
+      if (!(retiro && envio)) return { kind: "invalid", campo: "aplicaRetiro", error: MSG_CC_ENTREGA }
+      if ((cambios.destacarEnCatalogo ?? actual.destacarEnCatalogo) || (cambios.mostrarEnFicha ?? actual.mostrarEnFicha)) {
+        return { kind: "invalid", campo: "audiencia", error: MSG_CC_PRECIOS }
+      }
+      if (cambios.audiencia === AUDIENCIA_CUENTA_CORRIENTE) {
+        const [otro] = await tx
+          .select({ slug: mediosPagoShop.slug })
+          .from(mediosPagoShop)
+          .where(
+            and(
+              eq(mediosPagoShop.tenantId, tenantId),
+              eq(mediosPagoShop.audiencia, AUDIENCIA_CUENTA_CORRIENTE),
+              sql`${mediosPagoShop.slug} <> ${slug}`,
+            ),
+          )
+        if (otro) return { kind: "conflict", campo: "audiencia", error: MSG_CC_OTRO }
+      }
+    }
 
     // Un solo destacado por tenant: se desmarca el anterior en la MISMA transacción.
     if (cambios.destacarEnCatalogo === true) {

@@ -70,6 +70,13 @@ export interface OpcionesBuscar {
   conteo?: boolean;
   /** Leer también las facetas de cada etapa (sólo la página del catálogo). */
   conFacetas?: boolean;
+  /**
+   * Ignora el presupuesto de tiempo y el tope de espera del plan de la política `cascada`. Lo usa el
+   * banco: mide CALIDAD (qué etapa resuelve, qué trae), no relojes, y corre lejos de la base (cada
+   * lectura tarda órdenes de magnitud más que en el servidor), así que unos topes pensados para el
+   * servidor lo harían medir otra cosa. En producción nunca se pasa.
+   */
+  sinTopes?: boolean;
 }
 
 export interface LecturaPagina {
@@ -134,9 +141,18 @@ const admiteParecido = (termino: string) => termino.length >= 4;
 
 /** Presupuesto de la política `cascada` por superficie (valores iniciales: se calibran con el banco). */
 export interface PresupuestoCascada {
-  /** No se INICIA una etapa nueva pasado este tiempo desde el inicio (la DB no se cancela). `null` = sin tope. */
+  /**
+   * No se INICIA una etapa nueva pasado este tiempo desde que llegó el plan (la DB no se cancela).
+   * Acota las lecturas que la cascada suma; la espera del plan no cuenta (ver `planTimeoutMs`).
+   * `null` = sin tope.
+   */
   presupuestoMs: number | null;
-  /** Si el plan no responde en este tiempo se sigue sin plan. `null` = se espera. */
+  /**
+   * Si el plan no responde en este tiempo se sigue sin plan. `null` = se espera, como el legado.
+   * Descartar el plan deja a la consulta sólo con la AND de todas sus palabras: una frase en lenguaje
+   * natural o una medida ("tira led para la cocina", "panel led 60x60") no encuentra nada. Un plan
+   * recién calculado (miss de la caché) tarda más que un tope corto, así que el autocompletar lo espera.
+   */
   planTimeoutMs: number | null;
   /** Etapas como máximo. */
   etapasMax: number;
@@ -144,7 +160,8 @@ export interface PresupuestoCascada {
 
 export const PRESUPUESTOS_CASCADA: Record<Superficie, PresupuestoCascada> = {
   catalogo: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 3 },
-  autocompletar: { presupuestoMs: 450, planTimeoutMs: 250, etapasMax: 3 },
+  // Espera al plan sin tope, igual que el legado: un tope corto lo descartaba y la búsqueda caía en la exacta.
+  autocompletar: { presupuestoMs: 450, planTimeoutMs: null, etapasMax: 3 },
   chat: { presupuestoMs: 1500, planTimeoutMs: 600, etapasMax: 3 },
   admin: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 2 },
 };
@@ -162,9 +179,9 @@ interface Reglas {
   planTimeoutMs: number | null;
 }
 
-function reglasDe(politica: Politica, superficie: Superficie): Reglas {
+function reglasDe(politica: Politica, superficie: Superficie, sinTopes: boolean): Reglas {
   if (politica === "cascada") {
-    const { presupuestoMs, planTimeoutMs } = PRESUPUESTOS_CASCADA[superficie];
+    const { presupuestoMs, planTimeoutMs } = sinTopes ? { presupuestoMs: null, planTimeoutMs: null } : PRESUPUESTOS_CASCADA[superficie];
     return { conteo: CONTEO[superficie], degradaEn: DEGRADA_CASCADA, estructuradosEn: "todas", presupuestoMs, planTimeoutMs };
   }
   const { conteo, degradaEn, estructuradosEn } = LEGADO[superficie];
@@ -246,12 +263,14 @@ export async function buscar(p: PedidoBuscar, o: OpcionesBuscar, d: DepsMotor): 
   const ahora = d.ahora ?? Date.now;
   const inicio = ahora();
   const q = p.consulta?.trim() ?? "";
-  const reglas = reglasDe(o.politica, o.superficie);
+  const reglas = reglasDe(o.politica, o.superficie, !!o.sinTopes);
   const entrada: EntradaPlan = { politica: o.politica, superficie: o.superficie, consulta: q, conPlan: o.conPlan };
 
   // Perezoso: sólo si alguna etapa lo va a usar.
   const plan = o.planDe && necesitaPlan(entrada) ? await resolverPlan(o.planDe, q, reglas.planTimeoutMs) : null;
 
+  // El presupuesto acota las lecturas que suma la cascada, no la espera del plan (que el legado también hace).
+  const inicioEtapas = ahora();
   const etapas = etapasDe({ ...entrada, plan });
   const conteo = o.conteo ?? reglas.conteo;
   // En cascada la tolerante conserva el plan (y con él los duros y los términos), si hubo etapa plan.
@@ -290,7 +309,7 @@ export async function buscar(p: PedidoBuscar, o: OpcionesBuscar, d: DepsMotor): 
 
   for (const etapa of etapas) {
     // Presupuesto: no se INICIA una etapa nueva pasado el tiempo (la primera siempre corre).
-    if (reglas.presupuestoMs != null && intentos.length > 0 && ahora() - inicio >= reglas.presupuestoMs) {
+    if (reglas.presupuestoMs != null && intentos.length > 0 && ahora() - inicioEtapas >= reglas.presupuestoMs) {
       truncado = true;
       d.log?.(`[busqueda] presupuesto agotado antes de la etapa ${etapa}`);
       break;

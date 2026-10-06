@@ -634,16 +634,84 @@ describe("buscar: política cascada", () => {
     expect(llamadas.every((l) => l.filtros.soloStock === undefined)).toBe(true);
   });
 
-  it("autocompletar: el plan que no responde a tiempo (250 ms) se descarta: sigue con la exacta, sin plan", async () => {
+  it("autocompletar: ESPERA al plan lento (como el legado) en vez de descartarlo a los 250 ms", async () => {
     vi.useFakeTimers();
-    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 1 : 0));
-    const planDe = () => new Promise<PlanBusqueda | null>(() => {});
+    // La búsqueda del banco y la de un miss real recomputan el plan con varios COUNT: tarda más que 250 ms.
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.plan ? 3 : 0));
+    const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => resolver(planProducto()), 3000));
     const promesa = buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe }), deps);
-    await vi.advanceTimersByTimeAsync(PRESUPUESTOS_CASCADA.autocompletar.planTimeoutMs!);
+    await vi.advanceTimersByTimeAsync(3000);
     const r = await promesa;
-    expect(r.plan).toBeNull();
-    expect(r.intentos).toEqual(["exacta", "tolerante"]);
-    expect(llamadas.some((l) => l.filtros.texto?.plan)).toBe(false);
+    expect(r.plan).not.toBeNull();
+    expect(r).toMatchObject({ etapa: "plan", intentos: ["plan"], total: 3 });
+    expect(llamadas[0].filtros.texto?.plan).toBeDefined();
+  });
+
+  describe("autocompletar con el plan LENTO: la cascada nunca queda peor que el legado", () => {
+    // Cada escenario dice qué devuelve cada tipo de lectura. Con el plan más lento que cualquier tope,
+    // la cascada tiene que encontrar algo siempre que el legado lo encuentre.
+    const escenarios: { nombre: string; consulta: string; plan: PlanBusqueda; tabla: { plan?: number; exacta?: number; tolerante?: number } }[] = [
+      { nombre: "lenguaje natural: la AND de todas las palabras no encuentra, el plan sí", consulta: "tira led para la cocina", plan: planProducto(), tabla: { plan: 5 } },
+      { nombre: "medida: la exacta no encuentra, el plan sí", consulta: "panel led 60x60", plan: planProducto(), tabla: { plan: 4 } },
+      { nombre: "typo: sólo la tolerante encuentra", consulta: "lampra led e27", plan: planProducto(), tabla: { tolerante: 2 } },
+      { nombre: "el plan no trae nada y la exacta sí", consulta: "panel led", plan: planProducto(), tabla: { exacta: 3 } },
+      { nombre: "el plan no aporta y la exacta ya trae", consulta: "panel led", plan: planQueNoAporta(), tabla: { exacta: 3, plan: 1 } },
+      { nombre: "nada en ninguna etapa", consulta: "xyzzy inexistente", plan: planProducto(), tabla: {} },
+    ];
+
+    async function correr(politica: "legado" | "cascada", e: (typeof escenarios)[number]) {
+      vi.useFakeTimers();
+      const { deps } = crearDeps((a) => {
+        const t = a.filtros.texto;
+        return (t?.tolerante ? e.tabla.tolerante : t?.plan ? e.tabla.plan : e.tabla.exacta) ?? 0;
+      });
+      // El plan tarda 5 s en el reloj de los temporizadores y 5 s en el reloj inyectado.
+      let reloj = 0;
+      const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => ((reloj += 5000), resolver(e.plan)), 5000));
+      const promesa = buscar(pedido({ consulta: e.consulta, porPagina: 8 }), { superficie: "autocompletar", politica, conPlan: true, planDe }, { ...deps, ahora: () => reloj });
+      await vi.advanceTimersByTimeAsync(5000);
+      return promesa;
+    }
+
+    for (const e of escenarios) {
+      it(e.nombre, async () => {
+        const legadoR = await correr("legado", e);
+        const cascadaR = await correr("cascada", e);
+        expect(cascadaR.total > 0).toBe(legadoR.total > 0);
+        expect(cascadaR.total).toBeGreaterThanOrEqual(legadoR.total);
+        expect(cascadaR.truncado).toBeUndefined();
+      });
+    }
+  });
+
+  it("un plan lento no consume el presupuesto de las etapas: el reloj de las etapas arranca cuando llega el plan", async () => {
+    let t = 0;
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 2 : 0));
+    const lenta: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 100; return deps.pagina(a); } };
+    const planLento = async () => {
+      t += 600; // ya más que el presupuesto (450) del autocompletar
+      return planProducto();
+    };
+    const r = await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: planLento }), lenta);
+    expect(llamadas).toHaveLength(3);
+    expect(r).toMatchObject({ etapa: "tolerante", intentos: ["plan", "exacta", "tolerante"], total: 2 });
+    expect(r.truncado).toBeUndefined();
+  });
+
+  it("sinTopes: el banco mide calidad, no relojes: ni presupuesto ni tope de plan", async () => {
+    vi.useFakeTimers();
+    let t = 0;
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 2 : 0));
+    const lenta: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 5000; return deps.pagina(a); } };
+    // Chat tiene tope de plan (600 ms) y presupuesto (1500 ms): sin topes no rige ninguno.
+    const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => resolver(planProducto()), 10_000));
+    const promesa = buscar(pedido({ porPagina: 10 }), cascada("chat", { planDe, sinTopes: true }), lenta);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const r = await promesa;
+    expect(r.plan).not.toBeNull();
+    expect(llamadas).toHaveLength(3);
+    expect(r).toMatchObject({ etapa: "tolerante", total: 2 });
+    expect(r.truncado).toBeUndefined();
   });
 
   it("chat: usa el plan en cascada y su tope de plan es 600 ms; el catálogo no tiene tope de plan", async () => {
@@ -658,7 +726,7 @@ describe("buscar: política cascada", () => {
   it("los presupuestos por superficie son los del diseño", () => {
     expect(PRESUPUESTOS_CASCADA).toEqual({
       catalogo: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 3 },
-      autocompletar: { presupuestoMs: 450, planTimeoutMs: 250, etapasMax: 3 },
+      autocompletar: { presupuestoMs: 450, planTimeoutMs: null, etapasMax: 3 },
       chat: { presupuestoMs: 1500, planTimeoutMs: 600, etapasMax: 3 },
       admin: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 2 },
     });
@@ -674,23 +742,13 @@ describe("buscar: política cascada", () => {
     expect(r).toMatchObject({ etapa: "vacio", truncado: true, total: 0, productos: [], intentos: ["plan"] });
   });
 
-  it("presupuesto: dentro del tiempo corren todas las etapas; la primera siempre corre", async () => {
+  it("presupuesto: dentro del tiempo corren todas las etapas", async () => {
     let t = 0;
     const { deps, llamadas } = crearDeps();
     const rapida: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 100; return deps.pagina(a); } };
     const r = await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => planProducto() }), rapida);
     expect(llamadas).toHaveLength(3);
     expect(r.truncado).toBeUndefined();
-    // Aun con el tiempo ya agotado por el plan, la primera lectura se hace (y ahí se corta).
-    t = 0;
-    llamadas.length = 0;
-    const planLento = async () => {
-      t += 5000;
-      return planProducto();
-    };
-    const r2 = await buscar(pedido(), cascada("catalogo", { planDe: planLento }), { ...deps, ahora: () => t });
-    expect(llamadas).toHaveLength(1);
-    expect(r2).toMatchObject({ etapa: "vacio", truncado: true, intentos: ["plan"] });
   });
 
   it("presupuesto del catálogo: 3000 ms", async () => {

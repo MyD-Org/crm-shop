@@ -10,6 +10,12 @@
  *   filtro de stock y sin duros del plan (como en producción).
  *
  * El plan sale de `obtenerPlan` (v2.ts), el MISMO punto que usan `ejecutarV2` y el oráculo legado.
+ *
+ * Corre SIN los topes de tiempo de la cascada (`sinTopes`): el banco mide calidad (hit@K,
+ * zero-result, etapas), no relojes. Sin caché de planes y lejos de la base, el plan (con sus COUNT)
+ * y cada lectura tardan mucho más que en el servidor; con los topes de producción la cascada
+ * descartaba el plan o dejaba de probar etapas y el banco medía un resultado que no existe en
+ * producción. La latencia se mira aparte (`ms`), y el límite de tiempo se prueba en motor.test.ts.
  */
 import { PRODUCTOS_POR_PAGINA, contarCatalogo, getPaginaCatalogo } from "@/lib/catalog";
 import { IA_PLAN, filtrosDeEstado } from "@/lib/catalogo-url";
@@ -67,7 +73,7 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
         pagina: 1,
         porPagina: PRODUCTOS_POR_PAGINA,
       },
-      { superficie: "catalogo", politica: ctx.politica, conPlan: true, conteo, planDe: conPlanDeUrl ? async () => plan : undefined },
+      { superficie: "catalogo", politica: ctx.politica, conPlan: true, conteo, planDe: conPlanDeUrl ? async () => plan : undefined, sinTopes: true },
       deps,
     );
     return {
@@ -89,7 +95,7 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
   };
   const r = await buscar(
     { consulta: q, filtros: estructurados, orden: "relevancia", pagina: 1, porPagina: k },
-    { superficie: ctx.superficie, politica: ctx.politica, conPlan: true, conteo, planDe },
+    { superficie: ctx.superficie, politica: ctx.politica, conPlan: true, conteo, planDe, sinTopes: true },
     deps,
   );
   return {

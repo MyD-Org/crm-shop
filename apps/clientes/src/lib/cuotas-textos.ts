@@ -37,9 +37,15 @@ export const TEXTOS_CUOTAS = {
   // --- Checkout ---
   checkoutTitulo: "Cantidad de cuotas",
   checkoutAyuda: (medio: string) => `Se pagan con tarjeta de crédito en ${medio}, sin interés.`,
-  /** "Le faltan $790 para pagar en 6 cuotas sin interés." */
+  /** "Le faltan $790 para 6 cuotas sin interés." */
   faltaParaCuotas: (falta: number, cuotas: number) =>
-    `Le faltan ${fmtPrecio(falta)} para pagar en ${cuotasDe(cuotas)} sin interés.`,
+    `Le faltan ${fmtPrecio(falta)} para ${cuotasDe(cuotas)} sin interés.`,
+  /** Estado lleno de la barra: "Su compra ya tiene 12 cuotas sin interés." */
+  cuotasCompletas: (cuotas: number) => `Su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
+  barraAria: "Progreso hacia más cuotas sin interés",
+  /** Fila atenuada del modal: "6 cuotas sin interés en compras desde $90.000". */
+  filaNoAlcanzada: (cuotas: number, minimo: number) =>
+    `${cuotasDe(cuotas)} sin interés en compras desde ${fmtPrecio(minimo)}`,
   checkoutUnPago: (total: number) => `1 pago de ${fmtPrecio(total)}`,
   checkoutCuotas: (cuotas: number, montoCuota: number, total: number) =>
     `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)} (total ${fmtPrecio(total)})`,

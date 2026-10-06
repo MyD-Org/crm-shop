@@ -9,7 +9,7 @@
  */
 import { precioDeLista, precioGeneral, type AlegraPrice } from "./alegra";
 import type { PrecioMedio } from "@/data/products";
-import { opcionesCuotas, type CuotasProducto, type MedioCuotas } from "./cuotas-sin-interes";
+import { cuotasNoAlcanzadas, opcionesCuotas, type CuotasProducto, type MedioCuotas } from "./cuotas-sin-interes";
 import { SLUGS_RESERVADOS, esMedioCuentaCorriente, type MedioPago } from "./medios-pago";
 import { precioFinal } from "./precio-final";
 
@@ -103,7 +103,10 @@ export function armarPreciosMedios(
   // Mínimos por medio: cada uno compara contra la lista del pago único del suyo.
   const cuotasMedios = (medios.cuotas ?? []).flatMap((m) => {
     const opciones = opcionesCuotas(prices, iva, m);
-    return opciones.length > 0 ? [{ slug: m.slug, medio: m.nombre, opciones }] : [];
+    const noAlcanzadas = cuotasNoAlcanzadas(prices, iva, m);
+    return opciones.length > 0 || noAlcanzadas.length > 0
+      ? [{ slug: m.slug, medio: m.nombre, opciones, ...(noAlcanzadas.length > 0 ? { noAlcanzadas } : {}) }]
+      : [];
   });
   return {
     ...(precioMedio ? { precioMedio } : {}),

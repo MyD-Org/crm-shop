@@ -6,6 +6,7 @@ import type { Cotizacion } from "@/lib/cotizacion";
 import type { EntregaTipo, EnvioEvaluado } from "@/lib/envio";
 import type { DisponibilidadVista, LocalDisponibilidad } from "@/lib/disponibilidad-textos";
 import type { CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
+import type { ProgresoCuotas } from "@/lib/cuotas-sin-interes";
 
 /**
  * Cotización del carrito contra el servidor.
@@ -41,6 +42,8 @@ export interface CotizacionResponse extends Cotizacion {
    * cuánto falta del total (con impuestos, al precio de pago único). Ausente = nada que informar.
    */
   proximoEscalon?: { cuotas: number; falta: number };
+  /** Barra de cuotas del carrito (`conProgresoCuotas`) o del medio elegido (`conCuotas`): ver `progresoCuotas`. */
+  progresoCuotas?: ProgresoCuotas;
 }
 
 export type EstadoCotizacion = "vacio" | "cargando" | "ok" | "error" | "no_auth";
@@ -84,6 +87,7 @@ interface Resultado {
   pagoMetodo: string;
   cuotas: number;
   conCuotas: boolean;
+  conProgresoCuotas: boolean;
   data: CotizacionResponse | null;
   error: string | null;
   noAuth: boolean;
@@ -115,6 +119,8 @@ export function useCotizacion(opts: {
   cuotas?: number;
   /** Pide también el total y la cuota de cada cantidad (selector de cuotas del checkout). */
   conCuotas?: boolean;
+  /** Pide el progreso combinado hacia más cuotas sin interés (barra del carrito; sin medio elegido). */
+  conProgresoCuotas?: boolean;
   /** false para no cotizar todavía (ej. el carrito aún no se hidrató). */
   activo?: boolean;
 }) {
@@ -131,6 +137,7 @@ export function useCotizacion(opts: {
   const pagoMetodo = listaKey ? (opts.pagoMetodo ?? "") : "";
   const cuotas = opts.cuotas ?? 1;
   const conCuotas = opts.conCuotas ?? false;
+  const conProgresoCuotas = opts.conProgresoCuotas ?? false;
   const { entregaTipo } = opts;
 
   // Solo `id` y `qty` disparan una recotización. Sin esta clave, cualquier
@@ -159,7 +166,7 @@ export function useCotizacion(opts: {
 
     const lineas = JSON.parse(clave) as [string, number][];
     const ctrl = new AbortController();
-    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas };
+    const etiqueta = { clave, nonce, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas, conProgresoCuotas };
     let reintento: ReturnType<typeof setTimeout> | undefined;
 
     const timer = setTimeout(async () => {
@@ -179,6 +186,7 @@ export function useCotizacion(opts: {
             pagoMetodo: pagoMetodo || undefined,
             cuotas: cuotas > 1 ? cuotas : undefined,
             conCuotas: conCuotas || undefined,
+            progresoCuotas: conProgresoCuotas || undefined,
           }),
         });
 
@@ -232,7 +240,7 @@ export function useCotizacion(opts: {
       clearTimeout(reintento);
       ctrl.abort();
     };
-  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas, nonce]);
+  }, [clave, ready, activo, vacio, entregaTipo, ciudad, provincia, conCuenta, sucursalRetiro, listaKey, pagoMetodo, cuotas, conCuotas, conProgresoCuotas, nonce]);
 
   // Estado DERIVADO de los inputs actuales vs. los del último resultado. Nada
   // de esto vive en useState: setear estado desde un efecto para algo que ya se
@@ -249,7 +257,8 @@ export function useCotizacion(opts: {
     res.listaKey === listaKey &&
     res.pagoMetodo === pagoMetodo &&
     res.cuotas === cuotas &&
-    res.conCuotas === conCuotas;
+    res.conCuotas === conCuotas &&
+    res.conProgresoCuotas === conProgresoCuotas;
 
   let estado: EstadoCotizacion;
   if (vacio) estado = "vacio";
@@ -273,6 +282,8 @@ export function useCotizacion(opts: {
      * cambiar de cantidad. Los montos que valen son los de la cotización vigente.
      */
     ultimasCuotasOpciones: res?.data?.cuotasOpciones ?? null,
+    /** Último progreso de cuotas recibido, aunque se esté recotizando (la barra no parpadea). */
+    ultimoProgresoCuotas: res?.data?.progresoCuotas ?? null,
     /** Fuerza una recotización (botón "reintentar", o antes de confirmar). */
     recotizar: () => setNonce((n) => n + 1),
   };

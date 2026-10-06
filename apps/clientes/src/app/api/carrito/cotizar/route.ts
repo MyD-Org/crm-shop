@@ -15,9 +15,10 @@ import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { condicionesAplicables, cuotasElegidas, montoPorCuota, proximoEscalon } from "@/lib/cuotas-sin-interes";
+import { condicionesAplicables, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
+import { procesadorConfigurado } from "@/lib/pagos";
 import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 
@@ -93,6 +94,7 @@ export async function POST(req: Request) {
     sucursalRetiro?: unknown;
     pagoMetodo?: unknown;
     cuotas?: unknown;
+    progresoCuotas?: unknown;
     conCuotas?: unknown;
   };
   try {
@@ -198,6 +200,29 @@ export async function POST(req: Request) {
       conCuotas && body.conCuotas === true && totalBase !== undefined
         ? proximoEscalon(medioCobro?.condicionesCuotas, totalBase)
         : null;
+    // Barra del carrito: sin medio elegido, el progreso combinado entre los medios de cobro en línea
+    // elegibles (cada uno con su base). Sin cuenta corriente, lista privada ni flag: nada.
+    let progreso: ReturnType<typeof progresoCuotas> = null;
+    if (body.progresoCuotas === true && !conMedio && !esCuentaCorriente && !idListaPrivada && (await cuotasHabilitadas())) {
+      const todos = await leerMediosPagoTolerante();
+      const medios = mediosParaModalidad(todos, entregaTipo, { procesadorDisponible: procesadorConfigurado }).filter(
+        (m) => m.cobroOnline && (m.condicionesCuotas ?? []).some((c) => c.montoMinimo != null),
+      );
+      if (medios.length > 0) {
+        const bases = await Promise.all(
+          medios.map(async (m) => {
+            const q = await cotizar(lineas, {
+              ...opcionesCotizar,
+              idListaMedio: idListaDelMedio(todos, entregaTipo, m.slug, undefined, 1),
+            });
+            return { condiciones: m.condicionesCuotas, base: q.hayProblemas ? 0 : q.total };
+          }),
+        );
+        progreso = progresoCuotas(bases);
+      }
+    } else if (conCuotas && body.conCuotas === true && totalBase !== undefined) {
+      progreso = progresoCuotas([{ condiciones: medioCobro?.condicionesCuotas, base: totalBase }]);
+    }
     const disponibilidad = await disponibilidadParaMostrar(
       lineas.map((l) => l.id),
       disp,
@@ -235,6 +260,7 @@ export async function POST(req: Request) {
       ...cotizacion,
       ...(cuotasOpciones ? { cuotasOpciones } : {}),
       ...(escalon ? { proximoEscalon: escalon } : {}),
+      ...(progreso ? { progresoCuotas: progreso } : {}),
       ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
       envio: evaluarEnvio(cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),

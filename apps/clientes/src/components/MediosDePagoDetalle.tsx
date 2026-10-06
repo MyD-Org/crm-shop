@@ -1,5 +1,5 @@
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
+import type { CuotaNoAlcanzada, OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { fmtPrecio } from "@/lib/format";
 
 /**
@@ -9,7 +9,16 @@ import { fmtPrecio } from "@/lib/format";
  *
  * Separado del diálogo para poder testearlo con render estático.
  */
-export function MediosDePagoDetalle({ opciones, precioContado }: { opciones: OpcionCuotas[]; precioContado: number }) {
+export function MediosDePagoDetalle({
+  opciones,
+  precioContado,
+  noAlcanzadas = [],
+}: {
+  opciones: OpcionCuotas[];
+  precioContado: number;
+  /** Cantidades que el producto no alcanza por mínimo: filas secundarias, sin monto por cuota. */
+  noAlcanzadas?: CuotaNoAlcanzada[];
+}) {
   return (
     <div className="space-y-5">
       <section aria-labelledby="medio-cuotas">
@@ -36,6 +45,11 @@ export function MediosDePagoDetalle({ opciones, precioContado }: { opciones: Opc
                 {TEXTOS_CUOTAS.total}
                 <span className="block text-sm font-semibold text-text">{fmtPrecio(o.total)}</span>
               </span>
+            </li>
+          ))}
+          {noAlcanzadas.map((n) => (
+            <li key={`min-${n.cuotas}`} data-no-alcanzada className="px-3 py-2.5 text-xs text-muted">
+              {TEXTOS_CUOTAS.filaNoAlcanzada(n.cuotas, n.minimo)}
             </li>
           ))}
         </ul>

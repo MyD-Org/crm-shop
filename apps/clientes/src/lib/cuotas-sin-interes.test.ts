@@ -9,6 +9,10 @@ import {
   montoPorCuota,
   mejorCuotaProducto,
   opcionesCombinadas,
+  cuotasNoAlcanzadas,
+  filasNoAlcanzadas,
+  progresoCuotas,
+  hayCuotasParaModal,
   type MedioCuotas,
 } from "./cuotas-sin-interes";
 import type { AlegraPrice } from "./alegra";
@@ -301,5 +305,105 @@ describe("proximoEscalon (cuánto falta para la próxima cantidad de cuotas)", (
 
   it("sin ruido de coma flotante", () => {
     expect(proximoEscalon([cond(6, 0.3)], 0.1 + 0.1)).toEqual({ cuotas: 6, falta: 0.1 });
+  });
+});
+
+describe("cuotasNoAlcanzadas (por producto, informativo)", () => {
+  const precios = prices({ REF: 1200, L1: 1000, L3: 1050, L6: 1100 }, "REF");
+  const m: MedioCuotas = {
+    slug: "mp",
+    nombre: "MP",
+    idListaPagoUnico: "L1",
+    condiciones: [
+      { cuotas: 3, idListaPrecios: "L3" },
+      { cuotas: 6, idListaPrecios: "L6", montoMinimo: 2000 },
+    ],
+  };
+
+  it("las que el mínimo deja afuera, con el mínimo", () => {
+    expect(cuotasNoAlcanzadas(precios, 21, m)).toEqual([{ cuotas: 6, minimo: 2000 }]);
+  });
+
+  it("las alcanzadas no figuran", () => {
+    expect(cuotasNoAlcanzadas(precios, 21, { ...m, condiciones: [{ cuotas: 6, idListaPrecios: "L6", montoMinimo: 1210 }] })).toEqual([]);
+  });
+
+  it("sin precios o sin medio, vacío", () => {
+    expect(cuotasNoAlcanzadas([], 21, m)).toEqual([]);
+    expect(cuotasNoAlcanzadas(precios, 21, null)).toEqual([]);
+  });
+});
+
+describe("filasNoAlcanzadas (combinadas entre medios)", () => {
+  const op = (cuotas: number) => ({ cuotas, total: 100, montoCuota: 10, sinInteres: true as const });
+  it("por cantidad, el menor mínimo; ascendentes; sin las que algún medio ya ofrece", () => {
+    const c = {
+      medios: [
+        { slug: "a", medio: "A", opciones: [op(3)], noAlcanzadas: [{ cuotas: 6, minimo: 90000 }, { cuotas: 12, minimo: 200000 }] },
+        { slug: "b", medio: "B", opciones: [], noAlcanzadas: [{ cuotas: 6, minimo: 70000 }, { cuotas: 3, minimo: 10000 }, { cuotas: 18, minimo: 300000 }] },
+      ],
+    };
+    expect(filasNoAlcanzadas(c)).toEqual([
+      { cuotas: 6, minimo: 70000 },
+      { cuotas: 12, minimo: 200000 },
+      { cuotas: 18, minimo: 300000 },
+    ]);
+  });
+  it("vacío sin datos", () => {
+    expect(filasNoAlcanzadas(undefined)).toEqual([]);
+    expect(filasNoAlcanzadas({ medios: [{ slug: "a", medio: "A", opciones: [] }] })).toEqual([]);
+  });
+});
+
+describe("progresoCuotas (barra del carrito, combinado entre medios)", () => {
+  const cond = (cuotas: number, montoMinimo?: number | null) => ({ cuotas, idListaPrecios: `L${cuotas}`, montoMinimo });
+
+  it("null si ningún medio tiene mínimos", () => {
+    expect(progresoCuotas([{ condiciones: [cond(3), cond(6)], base: 100 }])).toBeNull();
+    expect(progresoCuotas([])).toBeNull();
+  });
+
+  it("próximo escalón: el de menor falta, por encima de lo ya alcanzado; pct = base/mínimo", () => {
+    const r = progresoCuotas([{ condiciones: [cond(3), cond(6, 60000), cond(12, 120000)], base: 45000 }]);
+    expect(r).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 15000, minimo: 60000 }, pct: 75 });
+  });
+
+  it("combinado: cada medio con su base; gana la menor falta", () => {
+    const r = progresoCuotas([
+      { condiciones: [cond(6, 60000)], base: 30000 },
+      { condiciones: [cond(12, 100000)], base: 90000 },
+    ]);
+    expect(r?.proximo).toEqual({ cuotas: 12, falta: 10000, minimo: 100000 });
+    expect(r?.pct).toBe(90);
+  });
+
+  it("ignora escalones con igual o menos cuotas que lo ya alcanzado por otro medio", () => {
+    const r = progresoCuotas([
+      { condiciones: [cond(6, 50000)], base: 60000 },
+      { condiciones: [cond(3, 80000)], base: 60000 },
+    ]);
+    expect(r).toEqual({ cuotasActuales: 6, proximo: null, pct: 100 });
+  });
+
+  it("en el escalón más alto: lleno, con las cuotas actuales", () => {
+    const r = progresoCuotas([{ condiciones: [cond(6, 60000), cond(12, 120000)], base: 130000 }]);
+    expect(r).toEqual({ cuotasActuales: 12, proximo: null, pct: 100 });
+  });
+
+  it("sin cuotas alcanzadas todavía: cuotasActuales null", () => {
+    const r = progresoCuotas([{ condiciones: [cond(6, 60000)], base: 0 }]);
+    expect(r).toEqual({ cuotasActuales: null, proximo: { cuotas: 6, falta: 60000, minimo: 60000 }, pct: 0 });
+  });
+});
+
+describe("hayCuotasParaModal (ficha)", () => {
+  const op = { cuotas: 3, total: 100, montoCuota: 34, sinInteres: true as const };
+  it("con opción alcanzada o sólo con filas no alcanzadas", () => {
+    expect(hayCuotasParaModal({ medios: [{ slug: "a", medio: "A", opciones: [op] }] })).toBe(true);
+    expect(hayCuotasParaModal({ medios: [{ slug: "a", medio: "A", opciones: [], noAlcanzadas: [{ cuotas: 6, minimo: 9 }] }] })).toBe(true);
+  });
+  it("sin nada, no", () => {
+    expect(hayCuotasParaModal({ medios: [{ slug: "a", medio: "A", opciones: [] }] })).toBe(false);
+    expect(hayCuotasParaModal(undefined)).toBe(false);
   });
 });

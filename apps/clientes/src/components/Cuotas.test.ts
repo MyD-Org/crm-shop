@@ -82,3 +82,26 @@ describe("MediosDePagoDetalle (modal de la ficha)", () => {
     expect(html).toContain('id="medio-cuotas"');
   });
 });
+
+describe("MediosDePagoDetalle con cuotas que el producto no alcanza", () => {
+  const html = renderToStaticMarkup(
+    createElement(MediosDePagoDetalle, {
+      precioContado: 121000,
+      opciones: [opcion({ cuotas: 3, total: 100, montoCuota: 33.34 })],
+      noAlcanzadas: [
+        { cuotas: 6, minimo: 90000 },
+        { cuotas: 12, minimo: 200000 },
+      ],
+    }),
+  );
+  const t = texto(html);
+
+  it("texto con el mínimo y sin monto por cuota, atenuadas y después de las alcanzadas", () => {
+    expect(t).toContain("6 cuotas sin interés en compras desde $ 90.000,00");
+    expect(t).toContain("12 cuotas sin interés en compras desde $ 200.000,00");
+    expect(t).not.toMatch(/6 cuotas de/);
+    expect(html.match(/data-no-alcanzada/g)).toHaveLength(2);
+    expect(html.indexOf("3 cuotas de")).toBeLessThan(html.indexOf("data-no-alcanzada"));
+    expect(html).toContain("text-muted");
+  });
+});

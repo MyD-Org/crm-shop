@@ -1,14 +1,17 @@
 import { Badge, Card, Stepper } from "@myd-org/ui";
-import { PAGO_ESTADO_LABEL, type Order } from "@/data/orders";
+import type { Order } from "@/data/orders";
 import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
-import { ocultarEstadoPago } from "@/lib/pago-estado-visible";
+import { esPagoEnLinea } from "@/lib/medios-pago";
+import { pagoEstadoVista } from "@/lib/pago-estado-visible";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { cuentaDelPedido } from "@/lib/pedido-cuenta-vista";
 import { TEXTO_PLAZO_COMPROBANTE, puedeSubirComprobante } from "@/lib/comprobantes/pedido";
+import { ActualizarPagoPedido } from "./ActualizarPagoPedido";
 import { AvisoComprobante } from "./AvisoComprobante";
+import { BotonEnlace } from "./BotonEnlace";
 import { InformarPagoPedido } from "./InformarPagoPedido";
 import { CancelarPedido } from "./CancelarPedido";
 import { PedidoAcciones } from "./PedidoAcciones";
@@ -38,8 +41,12 @@ export function PedidoDetalle({
 }) {
   const pill = estadoPedidoPill(pedido);
   const pasos = seguimientoPedido(pedido);
-  // "Pago pendiente" sólo se muestra en un pedido que se cobra en línea (Mercado Pago).
-  const verEstadoPago = !ocultarEstadoPago(pedido.pagoEstado, pedido.pagoMetodoSlug);
+  // "Pago pendiente" sólo se muestra en un pedido que se cobra en línea (Mercado Pago, Payway).
+  const estadoPago = pagoEstadoVista(pedido);
+  const enLinea = esPagoEnLinea(pedido.pagoMetodoSlug ?? "");
+  // Con el pago en línea pendiente se consulta al procesador, por si ya se resolvió.
+  const consultarPago = enLinea && pedido.estado === "pendiente" && pedido.pagoEstado === "pendiente";
+  const puedeReintentar = enLinea && pedido.estado === "pendiente" && pedido.pagoEstado === "fallido";
   // Transferencia pendiente: la cuenta congelada al pedir (sin snapshot, el mensaje neutro).
   const cuentaVisible = cuentaDelPedido(pedido);
 
@@ -65,7 +72,20 @@ export function PedidoDetalle({
           {medioPago?.instrucciones && pedido.estado === "pendiente" && (
             <p className="mt-1 whitespace-pre-line text-sm text-text">{medioPago.instrucciones}</p>
           )}
-          {verEstadoPago && <p className="mt-1 text-sm text-text">{PAGO_ESTADO_LABEL[pedido.pagoEstado]}</p>}
+          {estadoPago && (
+            <div role="status" className="mt-1">
+              <p className="text-sm font-semibold text-text">{estadoPago.label}</p>
+              {estadoPago.detalle && <p className="mt-1 text-sm text-muted">{estadoPago.detalle}</p>}
+            </div>
+          )}
+          {consultarPago && <ActualizarPagoPedido pedidoId={pedido.id} />}
+          {puedeReintentar && (
+            <div className="mt-3">
+              <BotonEnlace size="sm" href="/checkout">
+                Reintentar el pago
+              </BotonEnlace>
+            </div>
+          )}
           {cuentaVisible.mostrar && (
             <CuentaTransferencia cuenta={cuentaVisible.cuenta} importe={cuentaVisible.cuenta ? pedido.total : undefined} className="mt-3" />
           )}

@@ -20,6 +20,7 @@ import {
 import { crearSesionSdk, precargarSdk, tokenizar, type ConfigPayway } from "@/lib/pagos/payway-token";
 import { entornoSdkNavegador } from "@/lib/pagos/payway-sdk-navegador";
 import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
+import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 
 /**
  * Cobro con tarjeta de crédito o débito con Payway, dentro del sitio.
@@ -51,6 +52,10 @@ interface Props {
   onPagado: () => void;
   /** Se llama cuando el procesador todavía no confirmó el cobro (queda "Estamos confirmando"). */
   onPendiente?: () => void;
+  /** Mientras se confirmaba, el procesador lo rechazó: el formulario vuelve para pagar este mismo pedido. */
+  onRechazado?: () => void;
+  /** El pedido ya tiene un cobro en curso (se retomó): arranca en "Estamos confirmando su pago". */
+  iniciarEnConfirmacion?: boolean;
 }
 
 type Errores = Partial<Record<"pan" | "venc" | "cvv" | "titular" | "doc" | "marca" | "modalidad", string>>;
@@ -64,8 +69,17 @@ function formatearVenc(s: string): string {
   return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
 }
 
-export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado, onPendiente }: Props) {
-  const [estado, setEstado] = useState<Estado>({ fase: "formulario" });
+export function PagoPayway({
+  pedidoId,
+  numero,
+  monto,
+  cuotas = 1,
+  onPagado,
+  onPendiente,
+  onRechazado,
+  iniciarEnConfirmacion = false,
+}: Props) {
+  const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "formulario" });
   const [config, setConfig] = useState<ConfigPayway | null | "error">(null);
 
   const [pan, setPan] = useState("");
@@ -194,12 +208,17 @@ export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado, onPe
 
   if (estado.fase === "pendiente") {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5">
-        <p className="text-sm font-bold text-text">Estamos confirmando su pago</p>
-        <p className="mt-1 text-sm text-muted">
-          El procesador todavía lo está confirmando. Le avisaremos apenas se acredite; no hace falta que pague de nuevo.
-        </p>
-      </div>
+      <PagoEnConfirmacion
+        pedidoId={pedidoId}
+        onPagado={() => {
+          setEstado({ fase: "pagado" });
+          onPagado();
+        }}
+        onRechazado={(mensaje) => {
+          setEstado({ fase: "rechazado", mensaje });
+          onRechazado?.();
+        }}
+      />
     );
   }
 

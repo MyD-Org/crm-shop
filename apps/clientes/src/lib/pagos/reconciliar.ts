@@ -23,8 +23,8 @@
 
 import { idsProveedores, proveedorPago } from "./index";
 import type { ProveedorPago } from "./tipos";
-import { intentosPendientesDeReconciliar, registrarCobro } from "@/lib/pedidos";
-import { darPorPerdidoSiCorresponde } from "./intento-abierto";
+import { intentosPendientesDeReconciliar } from "@/lib/pedidos";
+import { conciliarIntento } from "./conciliar-intento";
 
 /**
  * Antigüedad mínima desde el último toque al pago antes de re-consultar. Menos
@@ -105,21 +105,7 @@ async function reconciliarProveedor(
    */
   for (const c of candidatos) {
     try {
-      // Un proveedor que no conoce el pago (Payway) lo deja `pendiente` hasta que el intento es
-      // lo bastante viejo como para darlo por "no llegó".
-      const estado = darPorPerdidoSiCorresponde(
-        await proveedor.consultarPago(c.referencia),
-        c.creadoEn,
-      );
-      const cambio = await registrarCobro(c.orderId, {
-        proveedor: proveedor.id,
-        referencia: c.referencia,
-        estado: estado.estado,
-        detalle: estado.detalle,
-        reversion: estado.reversion,
-        cuotas: estado.cuotasPagadas,
-        totalPagado: estado.totalPagado,
-      });
+      const { cambio } = await conciliarIntento(proveedor, c);
       if (cambio) actualizados++;
     } catch (err) {
       errores++;

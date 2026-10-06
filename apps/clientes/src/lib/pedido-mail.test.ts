@@ -28,10 +28,12 @@ describe("armarMailPedido", () => {
     expect(m.text).toContain("- Lámpara <LED> × 2");
     expect(m.text).toContain("Pago: Transferencia bancaria");
     expect(m.text).not.toContain("todavía no completó el pago");
+    expect(m.text).not.toContain("se está procesando");
   });
 
   it("recibido con Mercado Pago sin pagar: invita a completar el pago", () => {
     const m = armarMailPedido({ ...base, aviso: "recibido", pagoPendienteEnLinea: true });
+    expect(m.text).toContain("Su pago se está procesando. Le avisaremos por este medio cuando se confirme.");
     expect(m.text).toContain("Si todavía no completó el pago");
   });
 

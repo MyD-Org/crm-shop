@@ -529,6 +529,7 @@ export function armarOrder(
   items: FilaItem[],
   productos: ReadonlyMap<string, Product> = new Map(),
   comprobanteInformado = false,
+  pagoEnProceso = false,
 ): Order {
   return {
     id: fila.id,
@@ -556,6 +557,7 @@ export function armarOrder(
       : {}),
     ...(fila.facturaNumero ? { facturaNumero: fila.facturaNumero } : {}),
     ...(comprobanteInformado ? { comprobanteInformado: true } : {}),
+    ...(pagoEnProceso ? { pagoEnProceso: true } : {}),
     items: items.map((i): OrderItem => {
       const producto = productos.get(i.alegraItemId);
       const imagen = producto?.images?.[0];
@@ -641,6 +643,34 @@ async function comprobantesInformadosDe(filas: FilaOrder[]): Promise<Set<string>
 }
 
 /**
+ * Ids de los pedidos con un cobro en línea YA enviado al procesador y sin resolver (un intento
+ * `pendiente` con referencia): una consulta agrupada, sólo para los pedidos que pueden estar así. Si la
+ * lectura falla, la vista se arma igual, como "pago pendiente".
+ */
+async function pagosEnProcesoDe(filas: FilaOrder[]): Promise<Set<string>> {
+  const ids = filas
+    .filter((f) => f.estado === "pendiente" && f.pagoEstado === "pendiente" && esPagoEnLinea(f.pagoMetodo))
+    .map((f) => f.id);
+  if (ids.length === 0) return new Set();
+  try {
+    const abiertos = await getDb()
+      .selectDistinct({ orderId: pagoIntentos.orderId })
+      .from(pagoIntentos)
+      .where(
+        and(
+          inArray(pagoIntentos.orderId, ids),
+          eq(pagoIntentos.estado, "pendiente"),
+          sql`${pagoIntentos.referencia} is not null`,
+          intentoDeEsteTenant(),
+        ),
+      );
+    return new Set(abiertos.map((a) => a.orderId));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
  * Pedidos de un cliente, del más nuevo al más viejo.
  *
  * Dos queries y un agrupado en memoria en vez de un join: con el join, un pedido
@@ -681,7 +711,10 @@ export async function listarPedidos(
 
   const productos = await productosDeLineas(items);
   const conComprobante = await comprobantesInformadosDe(filas);
-  return filas.map((f) => armarOrder(f, porPedido.get(f.id) ?? [], productos, conComprobante.has(f.id)));
+  const enProceso = await pagosEnProcesoDe(filas);
+  return filas.map((f) =>
+    armarOrder(f, porPedido.get(f.id) ?? [], productos, conComprobante.has(f.id), enProceso.has(f.id)),
+  );
 }
 
 /**
@@ -710,7 +743,8 @@ const getPedidoCacheado = cache(async function getPedidoCacheado(
     .where(eq(orderItems.orderId, fila.id));
 
   const conComprobante = await comprobantesInformadosDe([fila]);
-  return armarOrder(fila, items, await productosDeLineas(items), conComprobante.has(fila.id));
+  const enProceso = await pagosEnProcesoDe([fila]);
+  return armarOrder(fila, items, await productosDeLineas(items), conComprobante.has(fila.id), enProceso.has(fila.id));
 });
 
 /**
@@ -1218,6 +1252,14 @@ async function registrarCobroTx(
     if (nuevo === "pagado" && actual !== "pagado" && fila.clerkUserId) {
       await vaciarCarritoTx(tx, fila.clerkUserId);
     }
+    // También cuando el cobro YA SE ENVIÓ al procesador y éste lo dejó pendiente (tarda, o lo revisa):
+    // la compra está hecha, el carrito no tiene que seguir con los productos. Sólo lo hace la ruta de
+    // cobro (la única que pasa `intentoId`): el webhook, la conciliación y la consulta del comprador no,
+    // porque para entonces puede haber armado otro carrito. Si el pago se rechaza, se reintenta sobre
+    // este mismo pedido (el rescate del pendiente) y "Volver al carrito" devuelve sus líneas.
+    else if (intentoId && cobro.estado === "pendiente" && nuevo === "pendiente" && fila.clerkUserId) {
+      await vaciarCarritoTx(tx, fila.clerkUserId);
+    }
 
     return {
       cambio: intento.nuevo || cambiaIntento || nuevo !== actual,
@@ -1393,6 +1435,8 @@ export async function pedidoPendienteMasReciente(
   pagoMetodo: string;
   /** Lo que compra el pedido, para compararlo con el carrito (que sigue lleno hasta el cobro). */
   lineas: { id: string; qty: number }[];
+  /** Hay un cobro ya enviado al procesador y sin resolver: el checkout retoma "Estamos confirmando su pago". */
+  pagoEnCurso: boolean;
 } | null> {
   if (slugsPagoLinea.length === 0) return null;
   const desde = new Date(Date.now() - VENTANA_PAGO_MS);
@@ -1422,6 +1466,18 @@ export async function pedidoPendienteMasReciente(
     .select({ id: orderItems.alegraItemId, qty: orderItems.qty })
     .from(orderItems)
     .where(eq(orderItems.orderId, fila.id));
+  const [enCurso] = await getDb()
+    .select({ id: pagoIntentos.id })
+    .from(pagoIntentos)
+    .where(
+      and(
+        eq(pagoIntentos.orderId, fila.id),
+        eq(pagoIntentos.estado, "pendiente"),
+        sql`${pagoIntentos.referencia} is not null`,
+        intentoDeEsteTenant(),
+      ),
+    )
+    .limit(1);
   return {
     id: fila.id,
     numero: formatearNumero(fila.numero),
@@ -1429,6 +1485,7 @@ export async function pedidoPendienteMasReciente(
     cuotas: fila.cuotas,
     pagoMetodo: fila.pagoMetodo,
     lineas: lineas.map((l) => ({ id: l.id, qty: num(l.qty) })),
+    pagoEnCurso: Boolean(enCurso),
   };
 }
 

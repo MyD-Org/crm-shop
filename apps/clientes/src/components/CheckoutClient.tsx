@@ -315,6 +315,8 @@ type PedidoRescatado = {
   cuotas: number | null;
   pagoMetodo?: string;
   lineas?: { id: string; qty: number }[];
+  /** Ya hay un cobro enviado al procesador y sin resolver: se retoma en "Estamos confirmando su pago". */
+  pagoEnCurso?: boolean;
 };
 
 export function CheckoutClient({
@@ -565,6 +567,7 @@ export function CheckoutClient({
       // El servidor manda el medio del pedido; sin él (respuesta anterior) era Mercado Pago.
       procesador: procesadorDeMedio(pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
     });
+    setPagoEnConfirmacion(Boolean(pedido.pagoEnCurso));
   }
   // Mismo carrito (o vacío): se retoma en el render, sin un frame del formulario.
   if (rescate && ready && !rescateDistinto) retomarRescate(rescate);
@@ -814,8 +817,8 @@ export function CheckoutClient({
       // El pedido ya existe. Sin pago en línea es una compra: el carrito se
       // vacía (con sesión de Clerk el servidor ya vació el suyo en la misma
       // transacción, `crearPedido`; acá sólo se limpia el local). Con pago en
-      // línea el carrito sigue lleno hasta que se cobre (`onPagado` acá y
-      // `registrarCobroTx` en el servidor): quien vuelve sin pagar lo encuentra
+      // línea el carrito sigue lleno hasta que el cobro se envía al procesador
+      // (`alQuedarPendiente` / `onPagado` acá y `registrarCobroTx` en el servidor): quien vuelve sin pagar lo encuentra
       // igual. Volviendo al checkout el `useEffect` de arriba retoma el pedido,
       // sin duplicarlo, o lo cancela si el carrito cambió.
       const total = json.cotizacion?.total ?? cotizacion?.total ?? 0;
@@ -894,6 +897,16 @@ export function CheckoutClient({
     vaciarTrasPedido();
   }
 
+  /**
+   * El cobro ya está en manos del procesador y todavía no responde: la compra está hecha, así que el
+   * carrito se vacía (el servidor ya vació el suyo al registrar el intento). Si se rechaza, el reintento
+   * es sobre este mismo pedido y "Volver al carrito" devuelve sus líneas.
+   */
+  function alQuedarPendiente() {
+    setPagoEnConfirmacion(true);
+    vaciarTrasPedido();
+  }
+
   if (confirmado && confirmado.pagoEnLinea && !pagado) {
     return (
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
@@ -912,7 +925,9 @@ export function CheckoutClient({
             monto={confirmado.total}
             cuotas={confirmado.cuotas ?? undefined}
             onPagado={alPagar}
-            onPendiente={() => setPagoEnConfirmacion(true)}
+            onPendiente={alQuedarPendiente}
+            onRechazado={() => setPagoEnConfirmacion(false)}
+            iniciarEnConfirmacion={pagoEnConfirmacion}
           />
         ) : confirmado.procesador === "mercadopago" ? (
           <PagoMercadoPago
@@ -922,7 +937,9 @@ export function CheckoutClient({
             emailComprador={emailCliente}
             maxCuotas={confirmado.cuotas ?? undefined}
             onPagado={alPagar}
-            onPendiente={() => setPagoEnConfirmacion(true)}
+            onPendiente={alQuedarPendiente}
+            onRechazado={() => setPagoEnConfirmacion(false)}
+            iniciarEnConfirmacion={pagoEnConfirmacion}
           />
         ) : (
           <p role="alert" className="text-center text-sm text-danger">
@@ -932,8 +949,8 @@ export function CheckoutClient({
 
         <div className="flex flex-col items-center gap-2">
           {pagoEnConfirmacion ? (
-            // Con el cobro en confirmación no se cancela (el pago puede acreditarse): el
-            // carrito queda como está y se vacía solo si se cobra.
+            // Con el cobro en confirmación no se cancela (el pago puede acreditarse). Si se
+            // rechaza, vuelve el formulario y reaparece "Volver al carrito".
             <Link href="/" className="text-sm text-muted underline">
               Volver a la tienda
             </Link>

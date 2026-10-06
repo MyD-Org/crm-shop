@@ -93,6 +93,11 @@ export interface Order {
    * loaded). Lo usa el aviso de la card; undefined = ninguno o no consultado.
    */
   comprobanteInformado?: boolean;
+  /**
+   * true si el pago en línea ya se envió al procesador y todavía no se resolvió (un intento
+   * pendiente con referencia): se muestra "Pago en proceso" en vez de "Pago pendiente".
+   */
+  pagoEnProceso?: boolean;
 }
 
 export interface OrderSummary {

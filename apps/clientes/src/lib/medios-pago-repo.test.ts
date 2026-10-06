@@ -78,18 +78,18 @@ describe("leerMediosPago", () => {
     const g = dbGrabadora((c) =>
       c.sql.includes("lista_precio_condiciones")
         ? [
-            ["mercadopago", L6, 6],
-            ["mercadopago", UUID_LISTA, null],
-            ["mercadopago", L3, 3],
-            ["efectivo", L3, null],
+            ["mercadopago", L6, 6, "60000.00"],
+            ["mercadopago", UUID_LISTA, null, null],
+            ["mercadopago", L3, 3, null],
+            ["efectivo", L3, null, null],
           ]
         : [["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false]],
     );
     const [mp] = await leerMediosPago(g.db as never);
     expect(mp.idListaPrecios).toBe(UUID_LISTA);
     expect(mp.condicionesCuotas).toEqual([
-      { cuotas: 3, idListaPrecios: L3 },
-      { cuotas: 6, idListaPrecios: L6 },
+      { cuotas: 3, idListaPrecios: L3, montoMinimo: null },
+      { cuotas: 6, idListaPrecios: L6, montoMinimo: 60000 },
     ]);
   });
 

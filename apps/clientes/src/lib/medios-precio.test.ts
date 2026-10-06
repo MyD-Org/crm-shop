@@ -157,10 +157,23 @@ describe("cuotas sin interés (rebanada D)", () => {
     expect(r.cuotas).toEqual({
       slug: "mercadopago",
       nombre: "MERCADOPAGO",
+      idListaPagoUnico: null,
       condiciones: [
         { cuotas: 3, idListaPrecios: "L3" },
         { cuotas: 6, idListaPrecios: "L6" },
       ],
+    });
+  });
+
+  it("`cuotas` lleva la lista del pago único del medio y el mínimo de cada condición", () => {
+    const r = seleccionarMediosPrecio(
+      [mp({ idListaPrecios: "LU", condicionesCuotas: [{ cuotas: 6, idListaPrecios: "L6", montoMinimo: 60000 }] })],
+      false,
+      true,
+    );
+    expect(r.cuotas).toMatchObject({
+      idListaPagoUnico: "LU",
+      condiciones: [{ cuotas: 6, idListaPrecios: "L6", montoMinimo: 60000 }],
     });
   });
 

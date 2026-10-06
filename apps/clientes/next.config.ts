@@ -88,7 +88,12 @@ const nextConfig: NextConfig = {
   // el paso a enforcing se hace después de mirar los reportes (ver
   // src/lib/headers-seguridad.ts). Se evalúa en build: cambiar las variables
   // que la alimentan exige redeploy.
-  headers: async () => [{ source: "/:path*", headers: headersDeSeguridad() }],
+  // El checkout lleva además el host de Payway en connect-src (tokenización de la tarjeta en el
+  // navegador); si dos reglas fijan el mismo header gana la última, por eso va después.
+  headers: async () => [
+    { source: "/:path*", headers: headersDeSeguridad() },
+    { source: "/checkout", headers: headersDeSeguridad(undefined, { checkout: true }) },
+  ],
   // Chat con el agente: el widget habla con ai-api por el mismo origen (sin
   // CORS). Sólo existe si AI_API_URL está definida; que el chat se muestre lo
   // decide el flag `chat-ia` (src/lib/chat-ia-flag.ts), no esta regla.

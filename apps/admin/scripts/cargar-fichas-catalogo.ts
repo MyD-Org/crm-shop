@@ -24,12 +24,12 @@
  */
 import { existsSync, appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { dirname } from "node:path"
-import { randomUUID } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { getDb } from "../src/db"
 import { avisarShop } from "../src/lib/aviso-shop"
 import { detalleProducto, guardarOverlay, leerOverlay } from "../src/lib/catalogo-overlay-repo"
-import { fichaKey, getShopMediaR2 } from "../src/lib/shop-media"
+import { sha256Hex } from "../src/lib/catalogo-ficha-contenido"
+import { fichaContenidoKey, getShopMediaR2 } from "../src/lib/shop-media"
 import type { FichaTecnicaOverlay } from "../src/db/schema"
 
 const MAX_BYTES_FICHA = 10 * 1024 * 1024
@@ -82,6 +82,7 @@ async function cargar(a: Args): Promise<void> {
 
   const cuenta = { cargados: 0, yaTenian: 0, noExisten: 0, sinArchivo: 0, invalidos: 0 }
   let procesados = 0
+  const subidas = new Set<string>()
   for (const [alegraId, rutaCruda] of Object.entries(entrada)) {
     if (a.limite !== undefined && procesados >= a.limite) break
     const ruta = typeof rutaCruda === "string" ? rutaCruda : ""
@@ -115,14 +116,19 @@ async function cargar(a: Args): Promise<void> {
     }
     procesados++
 
-    const id = randomUUID()
-    const key = fichaKey(a.tenant, alegraId, id)
+    // Por contenido, igual que la subida desde el admin: el mismo PDF se guarda UNA vez y todos los
+    // productos que lo usan apuntan a la misma key (antes quedaba una copia por producto).
+    const key = fichaContenidoKey(a.tenant, sha256Hex(bytes))
     const nombre = ruta.split("/").pop() ?? "ficha.pdf"
     const ficha: FichaTecnicaOverlay = { key, nombre, bytes: bytes.byteLength }
 
-    if (r2) {
-      await r2.put(key, bytes, { contentType: "application/pdf" })
-      log(a.log, { alegraId, estado: "subido", key })
+    if (r2 && !subidas.has(key)) {
+      if (await r2.head(key)) log(a.log, { alegraId, estado: "ya-en-r2", key })
+      else {
+        await r2.put(key, bytes, { contentType: "application/pdf" })
+        log(a.log, { alegraId, estado: "subido", key })
+      }
+      subidas.add(key)
     }
     console.log(`  ${alegraId}: ${nombre} → ${Math.round(bytes.byteLength / 1024)}KB`)
     if (!r2) continue

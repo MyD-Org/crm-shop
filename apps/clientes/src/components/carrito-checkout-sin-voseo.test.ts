@@ -17,7 +17,6 @@ const ARCHIVOS = [
   "components/CartPreview.tsx",
   "components/CheckoutClient.tsx",
   "components/PagoMercadoPago.tsx",
-  "components/CuotasResumen.tsx",
   "components/carrito/BotonCompartirCarrito.tsx",
   "components/carrito/CargarCompartido.tsx",
   "app/carrito/compartido/page.tsx",

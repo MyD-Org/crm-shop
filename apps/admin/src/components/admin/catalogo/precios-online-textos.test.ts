@@ -79,3 +79,13 @@ describe("formato", () => {
     expect(textoOrigen({ tipo: "categoria", categoriaNombre: "Luminarias", heredado: true })).toBe("Categoría Luminarias (heredado)")
   })
 })
+
+describe("ajustes avanzados (umbrales)", () => {
+  it("los rótulos y los tooltips explican en usted, con el ejemplo pedido", () => {
+    expect(TEXTOS.listas.ajustesAvanzados).toBe("Ajustes avanzados")
+    expect(TEXTOS.listas.umbralConfirmacionInfo).toContain("segunda confirmación")
+    expect(TEXTOS.listas.umbralConfirmacionInfo).toContain("16 en vez de 1,6")
+    expect(TEXTOS.listas.umbralRetencionInfo).toContain("Retenidos")
+    expect(TEXTOS.listas.umbralRetencionInfo).toContain("usted lo apruebe")
+  })
+})

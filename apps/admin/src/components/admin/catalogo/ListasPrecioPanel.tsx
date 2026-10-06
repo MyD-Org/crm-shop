@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Alert, Badge, Button, Dialog, EmptyState, Field, Input, Select } from "@myd-org/ui"
+import { Info, Settings } from "lucide-react"
+import { Alert, Badge, Button, Dialog, EmptyState, Field, Input, Select, Tooltip } from "@myd-org/ui"
 import type { CambioPrecios } from "@/lib/precios-online-cambios"
 import type { ConfigPrecios, ListaDto } from "@/lib/precios-online-repo"
 import { VistaPreviaDialog } from "./VistaPreviaDialog"
@@ -87,11 +88,24 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
     pedirPrevia([cambio], TEXTOS.listas.nuevoAjuste, lista?.nombre)
   }
 
-  const guardarUmbrales = () =>
+  const [avanzados, setAvanzados] = useState(false)
+
+  /** Ícono de información con la explicación del umbral (tooltip del DS; accesible con teclado). */
+  const info = (texto: string) => (
+    <Tooltip content={texto} side="top">
+      <span tabIndex={0} role="img" aria-label={`${TEXTOS.listas.masInformacion}: ${texto}`} className="inline-flex">
+        <Info size={14} aria-hidden="true" />
+      </span>
+    </Tooltip>
+  )
+
+  const guardarUmbrales = () => {
+    setAvanzados(false)
     pedirPrevia(
       [{ op: "setUmbrales", confirmacionPct: aPunto(umbrales.confirmacion), retencionPct: aPunto(umbrales.retencion) }],
       TEXTOS.listas.umbrales,
     )
+  }
 
   const [confirmarBaja, setConfirmarBaja] = useState<ListaDto | null>(null)
 
@@ -164,22 +178,47 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
       ))}
 
       {config && (
-        <section className="flex flex-col gap-3 rounded-[var(--radius)] border p-4" style={{ borderColor: "var(--line)" }}>
-          <h3 className="text-sm font-medium">{TEXTOS.listas.umbrales}</h3>
-          <p className="text-sm" style={{ color: "var(--ink-soft)" }}>{TEXTOS.listas.umbralAyuda}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={TEXTOS.listas.umbralConfirmacion}>
-              <Input inputMode="decimal" value={umbrales.confirmacion} onChange={(e) => setUmbrales((u) => ({ ...u, confirmacion: e.target.value }))} />
-            </Field>
-            <Field label={TEXTOS.listas.umbralRetencion}>
-              <Input inputMode="decimal" value={umbrales.retencion} onChange={(e) => setUmbrales((u) => ({ ...u, retencion: e.target.value }))} />
-            </Field>
-          </div>
-          <div>
-            <Button variant="outline" onClick={guardarUmbrales}>{TEXTOS.listas.guardar}</Button>
-          </div>
-        </section>
+        <div>
+          <Button variant="ghost" size="sm" onClick={() => setAvanzados(true)}>
+            <Settings size={14} aria-hidden="true" />
+            {TEXTOS.listas.ajustesAvanzados}
+          </Button>
+        </div>
       )}
+
+      <Dialog
+        open={avanzados}
+        onOpenChange={setAvanzados}
+        title={TEXTOS.listas.ajustesAvanzados}
+        description={TEXTOS.listas.umbralAyuda}
+        dismissible={false}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setAvanzados(false)}>{TEXTOS.listas.cerrar}</Button>
+            <Button onClick={guardarUmbrales}>{TEXTOS.listas.revisarCambio}</Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          {/* Field.label del DS es solo texto: el ícono de información va junto al campo. */}
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Field label={TEXTOS.listas.umbralConfirmacion}>
+                <Input inputMode="decimal" value={umbrales.confirmacion} onChange={(e) => setUmbrales((u) => ({ ...u, confirmacion: e.target.value }))} />
+              </Field>
+            </div>
+            {info(TEXTOS.listas.umbralConfirmacionInfo)}
+          </div>
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Field label={TEXTOS.listas.umbralRetencion}>
+                <Input inputMode="decimal" value={umbrales.retencion} onChange={(e) => setUmbrales((u) => ({ ...u, retencion: e.target.value }))} />
+              </Field>
+            </div>
+            {info(TEXTOS.listas.umbralRetencionInfo)}
+          </div>
+        </div>
+      </Dialog>
 
       <Dialog
         open={form !== null}

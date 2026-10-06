@@ -18,6 +18,7 @@ import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { condicionesAplicables, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
+import { procesadorConfigurado } from "@/lib/pagos";
 import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 
@@ -204,7 +205,7 @@ export async function POST(req: Request) {
     let progreso: ReturnType<typeof progresoCuotas> = null;
     if (body.progresoCuotas === true && !conMedio && !esCuentaCorriente && !idListaPrivada && (await cuotasHabilitadas())) {
       const todos = await leerMediosPagoTolerante();
-      const medios = mediosParaModalidad(todos, entregaTipo).filter(
+      const medios = mediosParaModalidad(todos, entregaTipo, { procesadorDisponible: procesadorConfigurado }).filter(
         (m) => m.cobroOnline && (m.condicionesCuotas ?? []).some((c) => c.montoMinimo != null),
       );
       if (medios.length > 0) {

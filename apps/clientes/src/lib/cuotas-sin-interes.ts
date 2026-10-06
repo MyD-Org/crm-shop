@@ -227,6 +227,11 @@ export function filasNoAlcanzadas(cuotas: CuotasProducto | null | undefined): Cu
   return [...porCantidad.entries()].map(([c, minimo]) => ({ cuotas: c, minimo })).sort((a, b) => a.cuotas - b.cuotas);
 }
 
+/** ¿El modal de medios de pago tiene algo que mostrar? Alguna opción alcanzada o alguna fila atenuada. */
+export function hayCuotasParaModal(cuotas: CuotasProducto | null | undefined): boolean {
+  return mejorCuotaProducto(cuotas) !== null || filasNoAlcanzadas(cuotas).length > 0;
+}
+
 /** Progreso hacia la próxima cantidad de cuotas (barra del carrito). Serializable. */
 export interface ProgresoCuotas {
   /** La mayor cantidad de cuotas que la compra ya tiene (cualquier medio); null si ninguna. */

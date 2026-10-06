@@ -12,6 +12,7 @@ import {
   cuotasNoAlcanzadas,
   filasNoAlcanzadas,
   progresoCuotas,
+  hayCuotasParaModal,
   type MedioCuotas,
 } from "./cuotas-sin-interes";
 import type { AlegraPrice } from "./alegra";
@@ -392,5 +393,17 @@ describe("progresoCuotas (barra del carrito, combinado entre medios)", () => {
   it("sin cuotas alcanzadas todavía: cuotasActuales null", () => {
     const r = progresoCuotas([{ condiciones: [cond(6, 60000)], base: 0 }]);
     expect(r).toEqual({ cuotasActuales: null, proximo: { cuotas: 6, falta: 60000, minimo: 60000 }, pct: 0 });
+  });
+});
+
+describe("hayCuotasParaModal (ficha)", () => {
+  const op = { cuotas: 3, total: 100, montoCuota: 34, sinInteres: true as const };
+  it("con opción alcanzada o sólo con filas no alcanzadas", () => {
+    expect(hayCuotasParaModal({ medios: [{ slug: "a", medio: "A", opciones: [op] }] })).toBe(true);
+    expect(hayCuotasParaModal({ medios: [{ slug: "a", medio: "A", opciones: [], noAlcanzadas: [{ cuotas: 6, minimo: 9 }] }] })).toBe(true);
+  });
+  it("sin nada, no", () => {
+    expect(hayCuotasParaModal({ medios: [{ slug: "a", medio: "A", opciones: [] }] })).toBe(false);
+    expect(hayCuotasParaModal(undefined)).toBe(false);
   });
 });

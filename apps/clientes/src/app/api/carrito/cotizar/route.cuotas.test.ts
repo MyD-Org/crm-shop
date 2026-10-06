@@ -22,6 +22,8 @@ vi.mock("@/lib/sucursales-repo", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/sucursales-repo")>()),
   leerConfigEnvio: async () => (await import("@/lib/envio")).CONFIG_ENVIO_DEFAULT,
 }));
+let procesadoresOk = true;
+vi.mock("@/lib/pagos", () => ({ procesadorConfigurado: () => procesadoresOk }));
 vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => medios }));
 
 import { POST } from "./route";
@@ -246,6 +248,21 @@ describe("POST /api/carrito/cotizar: progreso de cuotas (barra del carrito)", ()
     expect((await (await carrito()).json()).progresoCuotas).toBeUndefined();
     listaPrivada = null;
     cliente = null;
+  });
+
+  it("un medio con mínimos pero sin credenciales del procesador no cuenta", async () => {
+    medios = [conMinimo(2420)];
+    procesadoresOk = false;
+    try {
+      expect((await (await carrito()).json()).progresoCuotas).toBeUndefined();
+    } finally {
+      procesadoresOk = true;
+    }
+  });
+
+  it("un medio inactivo no cuenta", async () => {
+    medios = [conMinimo(2420, { activo: false })];
+    expect((await (await carrito()).json()).progresoCuotas).toBeUndefined();
   });
 
   it("el checkout (medio elegido) también informa el progreso de su medio", async () => {

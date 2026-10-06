@@ -7,7 +7,7 @@ import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
-import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
+import { hayCuotasParaModal, mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
@@ -297,9 +297,9 @@ export function ProductoClient({
                   preciosMedios={producto.preciosMedios}
                 />
               )}
-              {!sinPrecio && mejorCuota && cuotas && producto.precioFinal != null && (
+              {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
-                  <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />
+                  {mejorCuota && <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />}
                   <MediosDePagoModal
                     precioFinal={producto.precioFinal}
                     cuotas={cuotas}

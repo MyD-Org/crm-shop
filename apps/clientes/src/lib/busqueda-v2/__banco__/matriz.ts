@@ -70,9 +70,11 @@ export interface ArgsLinea {
   dir?: string;
   jevVivo: boolean;
   tenantAlias: string;
+  /** `--comparar=<ruta>`: matriz.json (o carpeta que lo contiene) de una línea base congelada, para imprimir el delta. */
+  comparar?: string;
 }
 
-const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias"]);
+const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias", "comparar"]);
 
 const entero = (nombre: string, v: string | undefined, min: number, def: number): number => {
   if (v === undefined) return def;
@@ -115,6 +117,7 @@ export function parsearArgsLinea(argv: readonly string[]): ArgsLinea {
     ...(mapa.has("dir") ? { dir: mapa.get("dir") } : {}),
     jevVivo: jev === "vivo",
     tenantAlias: mapa.get("tenant-alias") ?? "shop",
+    ...(mapa.has("comparar") ? { comparar: mapa.get("comparar") } : {}),
   };
 }
 

@@ -204,3 +204,103 @@ describe("banco-real.ejemplo.json (guarda de esquema, público)", () => {
     expect(JSON.stringify(ejemplo)).not.toMatch(/@|\d{7,}/);
   });
 });
+
+describe("parsearBanco: expectativa `medidas` y `sinMedidasDe`", () => {
+  const carga = (p: Record<string, unknown>) => parsearBanco(archivo([caso(p)]), { origen: "embebido" }).casos[0];
+  const falla = (p: Record<string, unknown>) => () => parsearBanco(archivo([caso(), caso({ q: "otra consulta sintetica", ...p })]), { origen: "embebido" });
+
+  it("acepta medidas con valor, con rango y con `dura`", () => {
+    const c = carga({
+      medidas: [
+        { clave: "polos", valor: 2, dura: true },
+        { clave: "corriente_a", valor: 20, dura: true },
+        { clave: "zocalo", valor: "e27" },
+        { clave: "potencia_w", min: 10, max: 20 },
+        { clave: "potencia_w", max: 50 },
+        { clave: "ip", valor: 65 },
+      ],
+    });
+    expect(c.medidas).toHaveLength(6);
+  });
+
+  it("`medidas: []` es válido y se conserva distinto de ausente (negativo: el plan no debe producir ninguna)", () => {
+    expect(carga({ medidas: [] }).medidas).toEqual([]);
+    expect(carga({}).medidas).toBeUndefined();
+  });
+
+  it("acepta `sinMedidasDe` con claves del contrato", () => {
+    expect(carga({ medidas: [{ clave: "seccion_mm2", valor: 2.5 }], sinMedidasDe: ["polos"] }).sinMedidasDe).toEqual(["polos"]);
+  });
+
+  it("clave fuera de atributos-claves.json: error con el índice del caso, campo y sin el valor", () => {
+    try {
+      falla({ medidas: [{ clave: "clave_inventada_xyz", valor: 2 }] })();
+      throw new Error("debía fallar");
+    } catch (e) {
+      const m = (e as Error).message;
+      expect(m).toMatch(/caso #1/);
+      expect(m).toMatch(/medidas\[0\]\.clave/);
+      expect(m).not.toContain("clave_inventada_xyz");
+    }
+  });
+
+  it("valor fuera de rango, de vocabulario o de tipo", () => {
+    for (const medidas of [
+      [{ clave: "polos", valor: 5 }],
+      [{ clave: "polos", valor: 2.5 }],
+      [{ clave: "corriente_a", valor: 0 }],
+      [{ clave: "corriente_a", valor: 7000 }],
+      [{ clave: "temperatura_k", valor: 12000 }],
+      [{ clave: "ip", valor: 70 }],
+      [{ clave: "zocalo", valor: "e99" }],
+      [{ clave: "curva", valor: "z" }],
+      [{ clave: "corriente_a", valor: "20" }],
+      [{ clave: "zocalo", valor: 27 }],
+      [{ clave: "corriente_a", valor: Number.NaN }],
+      [{ clave: "medidas_mm", valor: "600 por 600" }],
+    ]) {
+      expect(falla({ medidas }), JSON.stringify(medidas)).toThrow(/caso #1/);
+    }
+  });
+
+  it("rango fuera de rango o invertido", () => {
+    for (const medidas of [
+      [{ clave: "potencia_w", min: 20, max: 10 }],
+      [{ clave: "potencia_w", min: -1, max: 10 }],
+      [{ clave: "potencia_w", min: 10, max: 1_000_000 }],
+    ]) {
+      expect(falla({ medidas }), JSON.stringify(medidas)).toThrow(/caso #1/);
+    }
+  });
+
+  it("exactamente una forma: valor, o min/max (nunca las dos ni ninguna)", () => {
+    for (const medidas of [[{ clave: "potencia_w" }], [{ clave: "potencia_w", valor: 9, min: 5 }], [{ clave: "potencia_w", valor: 9, max: 12 }]]) {
+      expect(falla({ medidas }), JSON.stringify(medidas)).toThrow(/caso #1/);
+    }
+  });
+
+  it("`dura` sólo en claves discretas y sólo con valor", () => {
+    expect(falla({ medidas: [{ clave: "potencia_w", valor: 9, dura: true }] })).toThrow(/dura/);
+    expect(falla({ medidas: [{ clave: "temperatura_k", valor: 4000, dura: true }] })).toThrow(/dura/);
+    expect(falla({ medidas: [{ clave: "polos", min: 1, max: 2, dura: true }] })).toThrow(/dura/);
+    expect(falla({ medidas: [{ clave: "polos", valor: 2, dura: "si" }] })).toThrow(/dura/);
+  });
+
+  it("tipos inválidos: medidas no es lista, elemento no es objeto, sinMedidasDe con clave desconocida", () => {
+    expect(falla({ medidas: "polos" })).toThrow(/medidas/);
+    expect(falla({ medidas: ["polos"] })).toThrow(/medidas\[0\]/);
+    expect(falla({ sinMedidasDe: "polos" })).toThrow(/sinMedidasDe/);
+    expect(falla({ sinMedidasDe: ["clave_inventada_xyz"] })).toThrow(/sinMedidasDe/);
+  });
+
+  it("un caso con medidas (aun vacías) tiene expectativa: no sale en el aviso de casos sin expectativa", () => {
+    const sin = { q: "consulta sin nada", perfil: "particular" } as const;
+    expect(validarBanco([sin]).sinExpectativa).toBe(1);
+    expect(validarBanco([{ ...sin, medidas: [] }]).sinExpectativa).toBe(0);
+    expect(validarBanco([{ ...sin, sinMedidasDe: ["polos"] }]).sinExpectativa).toBe(0);
+  });
+
+  it("los casos actuales del banco versionado siguen cargando sin cambios", () => {
+    expect(() => parsearBanco(versionado, { origen: "embebido" })).not.toThrow();
+  });
+});

@@ -13,6 +13,9 @@ import { parsearBanco } from "./cargar-banco";
 import type { BusquedaBanco, TipoConsulta } from "./modelo";
 import { tipoDe } from "./modelo";
 import { cortarPor, resumenNumerico, type ResumenNum } from "./metricas";
+import type { AtributosEstructurados } from "@/lib/catalogo-caracteristicas";
+import { evaluarMedidas, type EvaluacionMedida } from "./medida-oraculo";
+import { bloqueMedidas } from "./metricas-medida";
 
 export * from "./modelo";
 
@@ -25,6 +28,8 @@ export interface ProductoBanco {
   description?: string;
   sku?: string;
   categoriaPropiaId?: string;
+  /** Atributos estructurados del producto (`Product` los trae con `atributosEstructurados: true`); ausente = sin dato. */
+  atributosEstructurados?: AtributosEstructurados;
 }
 
 /** Lo que devolvió una tubería para una búsqueda. */
@@ -43,6 +48,12 @@ export interface ResultadoBanco {
   ms?: number;
   /** `--jev=cache`: no había plan cacheado y se usó el determinista (sin Jev). */
   sinPlanCacheado?: boolean;
+  /**
+   * Ids de medida que el plan produjo: dinámicos (`clave:valor`) o, cuando existe equivalente, los del
+   * diccionario (`zocalo-e27`, `tension-12v`, `apto-exterior`). Ausente = la tubería no produce medidas
+   * (todavía): el `hit` de medidas queda en `null`, no en fallo.
+   */
+  medidas?: string[];
 }
 
 export interface EvaluacionBusqueda {
@@ -79,6 +90,8 @@ export interface EvaluacionBusqueda {
   muestrasMs?: number[];
   /** Jev grabado sin respuesta para este caso: se excluye de las métricas (lo cuenta la corrida). */
   sinGrabacion?: boolean;
+  /** Sólo en casos con `medidas`/`sinMedidasDe`: ver `evaluarMedidas`. El puntaje y `PESOS` no la incluyen. */
+  medida?: EvaluacionMedida;
 }
 
 const normalizar = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -163,6 +176,8 @@ export function evaluar(
   const sinResultadosIndebido = !!b.nuncaSinResultados && r.total === 0;
   sumar(b.nuncaSinResultados ? !sinResultadosIndebido : null, PESOS.noVacio);
 
+  const medida = evaluarMedidas(b, r);
+
   return {
     q: b.q,
     diagnostico: !!b.diagnostico,
@@ -184,6 +199,7 @@ export function evaluar(
     zero: r.total === 0,
     ...(b.peso !== undefined ? { peso: b.peso } : {}),
     ...(r.ms !== undefined ? { ms: r.ms } : {}),
+    ...(medida ? { medida } : {}),
   };
 }
 
@@ -239,7 +255,7 @@ export function reporte(titulo: string, evs: EvaluacionBusqueda[], conIntencion:
         ` ${marca(e.top24Ok)} `,
         String(e.posicion ?? "-").padStart(3),
         String(e.total).padStart(6),
-        ` ${e.diagnostico ? "*" : " "}${e.q} → ${e.categoriaEntendida ?? "-"}${e.sinResultadosIndebido ? "  [SIN RESULTADOS]" : ""}`,
+        ` ${e.diagnostico ? "*" : " "}${e.q} → ${e.categoriaEntendida ?? "-"}${e.sinResultadosIndebido ? "  [SIN RESULTADOS]" : ""}${e.medida?.falsoPositivo ? "  [MEDIDA INDEBIDA]" : ""}`,
       ].join(" "),
     );
   }
@@ -308,5 +324,7 @@ export function reporteAmpliado(evs: EvaluacionBusqueda[], conIntencion: boolean
     lineas.push("", `### ${titulo}`, `corte              | ${ENCABEZADO_AMPLIADO}`);
     for (const [valor, r] of Object.entries(cortarPor(evs, clave, conIntencion))) lineas.push(filaAmpliada(valor, r));
   }
+  const medidas = bloqueMedidas(evs);
+  if (medidas.length) lineas.push("", ...medidas);
   return lineas.join("\n");
 }

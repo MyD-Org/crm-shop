@@ -4,7 +4,7 @@
  * para toda la matriz (tuberías x vistas x bancos, ver matriz.ts). SOLO
  * LECTURA (cada búsqueda en una transacción `read only`).
  *
- *   npm run banco:linea-base -- --solo-visibles=<si|no> \
+ *   npm run banco:linea-base -- --solo-visibles=<si|no> [--comparar=<matriz.json|carpeta>] \
  *     --flags=busqueda-ia:on,catalogo-solo-visibles:<on|off>,disponibilidad-sucursal:<on|off> \
  *     --banco-real=tmp/busqueda/banco-real.local.json --repeticiones=3 \
  *     --dir=tmp/busqueda/linea-base-<fecha>
@@ -14,6 +14,8 @@
  *   matriz.txt   tabla motor x métricas, SÓLO agregados (apta para pegar)
  *   LEEME.txt    cómo se generó y cómo reproducirla
  * Una carpeta con matriz.json ya escrito NO se pisa: queda congelada.
+ * `--comparar` lee ANTES de abrir la base una línea base congelada y, al final, imprime el delta de hit@24,
+ * medida-precision@24, contradicciones@24, zero-result y p95 por corrida y por tipo (y lo guarda en comparacion.txt).
  * Sale 0 siempre (es medición, no hay umbral). Jev vivo sólo con `--jev=vivo`
  * explícito (gasta; sólo sobre el banco sintético).
  */
@@ -22,6 +24,7 @@ import { join } from "node:path";
 import { getArbolCategorias } from "@/lib/catalog";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
 import { cargarBancoDeArgs } from "./args";
+import { compararMatrices, leerSnapshot } from "./comparar";
 import { correr, gitInfo } from "./corrida";
 import { crearEjecutor, resolverJev } from "./ejecutores";
 import { cerrar, enLectura } from "./lectura";
@@ -54,6 +57,8 @@ function leeme(a: ArgsLinea, sha: { sha: string; sucio: boolean }, fecha: string
 }
 
 async function main(a: ArgsLinea) {
+  // Antes de abrir la base: un snapshot inexistente o inválido falla acá.
+  const anterior = a.comparar ? leerSnapshot(a.comparar) : undefined;
   const sintetico = cargarBancoDeArgs({ etiquetas: "revisado" }).banco;
   // Antes de abrir la base: un banco real inexistente o inválido falla acá.
   const real = a.bancoReal ? cargarBancoDeArgs({ banco: a.bancoReal, etiquetas: a.etiquetas }) : undefined;
@@ -112,6 +117,11 @@ async function main(a: ArgsLinea) {
   writeFileSync(join(dir, "matriz.txt"), texto);
   writeFileSync(join(dir, "LEEME.txt"), leeme(a, git, fecha));
   console.log(texto);
+  if (anterior) {
+    const comparacion = compararMatrices(anterior, { esquema: 1, generadoEl: fecha, corridas });
+    writeFileSync(join(dir, "comparacion.txt"), comparacion);
+    console.log(comparacion);
+  }
   console.info(`[linea-base] escrito en ${dir}`);
 }
 

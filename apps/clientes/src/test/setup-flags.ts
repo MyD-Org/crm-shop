@@ -10,6 +10,7 @@ vi.mock("@/flags", () => ({
   busquedaIaFlag: async () => estadoFlags()["busqueda-ia"],
   trackingFlag: async () => estadoFlags().tracking,
   precioEspecialCuentaFlag: async () => estadoFlags()["precio-especial-cuenta"],
+  busquedaMedidasFlag: async () => estadoFlags()["busqueda-medidas"],
 }));
 
 beforeEach(() => {

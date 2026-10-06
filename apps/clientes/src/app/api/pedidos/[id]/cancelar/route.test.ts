@@ -18,7 +18,9 @@ vi.mock("@/lib/cache-invalidar", () => ({ marcarStockCambiado: () => {} }));
 vi.mock("@/lib/pedidos", () => ({
   cancelarPedidoPendiente: (...a: unknown[]) => cancelarPedidoPendiente(...a),
   intentoAbiertoDelPedido: (...a: unknown[]) => intentoAbiertoDelPedido(...a),
+  lineasDelPedidoParaCarrito: async () => LINEAS,
 }));
+const LINEAS = [{ id: "12", name: "Lámpara", brand: "Marca", price: 1210, qty: 2 }];
 vi.mock("@/lib/pagos", () => ({
   proveedorPago: (id: string) => (id === "mercadopago" ? { id } : null),
 }));
@@ -45,7 +47,7 @@ beforeEach(() => {
 describe("POST /api/pedidos/:id/cancelar", () => {
   it("sin pagos abiertos: cancela", async () => {
     const r = await cancelar();
-    expect(await r.json()).toEqual({ ok: true });
+    expect(await r.json()).toEqual({ ok: true, items: LINEAS });
     expect(resolverIntentoAbierto).not.toHaveBeenCalled();
   });
 

@@ -154,6 +154,17 @@ export async function avisarCobro(
   const aviso = avisoDelCobro(cambio.antes, cambio.despues, cambio.reversion);
   if (!aviso) return;
   await enviarAviso(pedidoId, aviso, `pedido/${pedidoId}/${aviso}/${cambio.referencia || "sin-ref"}`);
+  // El pedido con pago en línea recién le llega al local cuando se aprueba el pago
+  // (ver `avisoOperadorAlCrear`). La clave del mail evita duplicarlo.
+  if (aviso === "pago_recibido") await avisarOperadorPedidoNuevo(pedidoId);
+}
+
+/**
+ * ¿Se avisa al local al crear el pedido? Con pago en línea no: el aviso sale cuando se aprueba
+ * el cobro (`avisarCobro`), para no anunciar pedidos que nunca se pagan.
+ */
+export function avisoOperadorAlCrear(pagoMetodo: string): boolean {
+  return !esPagoEnLinea(pagoMetodo);
 }
 
 /** `CRM_ADMIN_URL` + ruta del pedido en el administrador; null sin la variable. */

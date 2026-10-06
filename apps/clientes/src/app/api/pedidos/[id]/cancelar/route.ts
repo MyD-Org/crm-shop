@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { cancelarPedidoPendiente, intentoAbiertoDelPedido } from "@/lib/pedidos";
+import { cancelarPedidoPendiente, intentoAbiertoDelPedido, lineasDelPedidoParaCarrito } from "@/lib/pedidos";
 import { proveedorPago } from "@/lib/pagos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { marcarStockCambiado } from "@/lib/cache-invalidar";
@@ -9,7 +9,8 @@ import { marcarStockCambiado } from "@/lib/cache-invalidar";
  * POST /api/pedidos/:id/cancelar — cancela un pedido pendiente propio.
  *
  * Se llama desde el checkout cuando el comprador quiere abandonar el pedido
- * que dejó a medias y armar uno nuevo. El backend filtra por dueño y por
+ * que dejó a medias y armar uno nuevo. Devuelve sus líneas (`items`) para que
+ * vuelvan al carrito. El backend filtra por dueño y por
  * estado `pendiente`: sin esos filtros alguien podría adivinar ids ajenos, y
  * un pedido ya pagado no se cancela por acá — para eso está la devolución.
  *
@@ -78,7 +79,8 @@ export async function POST(
   // La cancelación liberó la reserva: el listado cacheado se renueva en la
   // próxima vista. Nunca tira.
   marcarStockCambiado("cancelar un pedido");
-  return NextResponse.json({ ok: true });
+  // Las líneas vuelven al carrito: cancelar desde el checkout no puede dejarlo vacío.
+  return NextResponse.json({ ok: true, items: await lineasDelPedidoParaCarrito(id) });
 }
 
 function pagoEnCurso() {

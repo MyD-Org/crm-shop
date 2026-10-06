@@ -24,7 +24,7 @@ vi.mock("./cuenta-corriente/tenant-cc", () => ({ datosTenant: async () => ({ nom
 const enviarEmail = vi.fn();
 vi.mock("./email", () => ({ enviarEmail: (o: unknown) => enviarEmail(o) }));
 
-import { avisarOperadorPedidoNuevo } from "./pedido-avisos";
+import { avisarCobro, avisarOperadorPedidoNuevo, avisoOperadorAlCrear } from "./pedido-avisos";
 
 const PEDIDO = {
   id: "p1",
@@ -89,5 +89,38 @@ describe("avisarOperadorPedidoNuevo", () => {
     await expect(avisarOperadorPedidoNuevo("p1")).resolves.toBeUndefined();
     colas.length = 0;
     await expect(avisarOperadorPedidoNuevo("p1")).resolves.toBeUndefined();
+  });
+});
+
+describe("aviso al local con pago en línea", () => {
+  it("al crear el pedido se avisa salvo con pago en línea", () => {
+    expect(avisoOperadorAlCrear("transferencia")).toBe(true);
+    expect(avisoOperadorAlCrear("efectivo")).toBe(true);
+    expect(avisoOperadorAlCrear("mercadopago")).toBe(false);
+  });
+
+  it("cuando se aprueba el cobro sale el mail al comprador y después el del local", async () => {
+    const enLinea = { ...PEDIDO, pagoMetodo: "mercadopago", pagoEstado: "pagado" };
+    colas.length = 0;
+    colas.push(
+      [enLinea], // mail al comprador
+      [enLinea],
+      [{ nombre: "Centro", emailPedidos: "centro@tienda.cliente.example" }],
+      [{ receiptsEmail: "" }],
+      [{ nombre: "Lámpara", cantidad: "2" }],
+    );
+    await avisarCobro("p1", { antes: "pendiente", despues: "pagado", reversion: false, referencia: "r1" });
+    expect(enviarEmail).toHaveBeenCalledTimes(2);
+    expect(enviarEmail.mock.calls[0][0].to).toBe("ana@cliente.example");
+    expect(enviarEmail.mock.calls[1][0].to).toBe("centro@tienda.cliente.example");
+    expect(enviarEmail.mock.calls[1][0].idempotencyKey).toBe("pedido/p1/operador");
+  });
+
+  it("un cobro rechazado no avisa al local", async () => {
+    colas.length = 0;
+    colas.push([{ ...PEDIDO, pagoMetodo: "mercadopago", pagoEstado: "fallido" }]);
+    await avisarCobro("p1", { antes: "pendiente", despues: "fallido", reversion: false, referencia: "r1" });
+    expect(enviarEmail).toHaveBeenCalledTimes(1);
+    expect(enviarEmail.mock.calls[0][0].to).toBe("ana@cliente.example");
   });
 });

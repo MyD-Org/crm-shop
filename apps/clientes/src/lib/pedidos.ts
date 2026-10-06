@@ -22,6 +22,7 @@ import {
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
 import { vaciarCarritoTx } from "./carrito-db";
+import type { CartItem } from "./carrito-cliente";
 import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
 import type { Cotizacion } from "./cotizacion";
 import { revisionDeCuotas, type RevisionDeCuotas } from "./pagos/cuotas-validacion";
@@ -413,8 +414,9 @@ export async function crearPedido(
     // se crea, el carrito queda como estaba. Sólo en esta rama (pedido nuevo):
     // el reintento idempotente de arriba ya volvió sin tocarlo, así que no vacía
     // un carrito que el usuario haya llenado después. Sin Clerk (cookie del
-    // CRM) no hay carrito del servidor.
-    if (cliente.clerkUserId) await vaciarCarritoTx(tx, cliente.clerkUserId);
+    // CRM) no hay carrito del servidor. Con pago en línea no: el pedido todavía
+    // no es una compra; se vacía al cobrarse (`registrarCobroTx`).
+    if (cliente.clerkUserId && !esPagoEnLinea(datos.pagoMetodo)) await vaciarCarritoTx(tx, cliente.clerkUserId);
 
     return {
       id: pedido.id,
@@ -1065,7 +1067,13 @@ async function registrarCobroTx(
      * El lock es sobre el PEDIDO, así que también serializa intentos distintos.
      */
     const [fila] = await tx
-      .select({ estado: orders.pagoEstado, pedidoEstado: orders.estado, cuotas: orders.cuotas, total: orders.total })
+      .select({
+        estado: orders.pagoEstado,
+        pedidoEstado: orders.estado,
+        cuotas: orders.cuotas,
+        total: orders.total,
+        clerkUserId: orders.clerkUserId,
+      })
       .from(orders)
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
       .limit(1)
@@ -1164,6 +1172,12 @@ async function registrarCobroTx(
         updatedAt: new Date(),
       })
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()));
+
+    // Pago en línea: el carrito se vacía recién acá, al cobrarse (ver `crearPedido`). En la misma
+    // transacción: si el cobro no se guarda, el carrito queda como estaba.
+    if (nuevo === "pagado" && actual !== "pagado" && fila.clerkUserId) {
+      await vaciarCarritoTx(tx, fila.clerkUserId);
+    }
 
     return {
       cambio: intento.nuevo || cambiaIntento || nuevo !== actual,
@@ -1318,8 +1332,8 @@ export async function descartarReserva(intentoId: string, detalle: string): Prom
 /**
  * Pedido pendiente de pago más reciente del comprador.
  *
- * Existe porque el carrito NO se vacía al confirmar el pedido (se vacía recién
- * al pagar), y sin este chequeo un comprador que reintenta el checkout crearía
+ * Existe porque con pago en línea el carrito NO se vacía al confirmar el pedido
+ * (se vacía recién al cobrarse, en `registrarCobroTx`), y sin este chequeo un comprador que reintenta el checkout crearía
  * un pedido-fantasma nuevo cada vez. Al montar el checkout, se busca acá; si
  * hay algo se salta directo al brick con ese pedido en vez de crear otro.
  *
@@ -1331,7 +1345,15 @@ export async function pedidoPendienteMasReciente(
   dueno: DuenoPedidos,
   /** Medios (slugs) cuyo cobro se retoma; por defecto todos los de cobro en línea. */
   slugsPagoLinea: readonly string[] = slugsPagoEnLinea(),
-): Promise<{ id: string; numero: string; total: number; cuotas: number | null; pagoMetodo: string } | null> {
+): Promise<{
+  id: string;
+  numero: string;
+  total: number;
+  cuotas: number | null;
+  pagoMetodo: string;
+  /** Lo que compra el pedido, para compararlo con el carrito (que sigue lleno hasta el cobro). */
+  lineas: { id: string; qty: number }[];
+} | null> {
   if (slugsPagoLinea.length === 0) return null;
   const desde = new Date(Date.now() - VENTANA_PAGO_MS);
   const [fila] = await getDb()
@@ -1356,12 +1378,17 @@ export async function pedidoPendienteMasReciente(
     .limit(1);
 
   if (!fila) return null;
+  const lineas = await getDb()
+    .select({ id: orderItems.alegraItemId, qty: orderItems.qty })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, fila.id));
   return {
     id: fila.id,
     numero: formatearNumero(fila.numero),
     total: num(fila.total),
     cuotas: fila.cuotas,
     pagoMetodo: fila.pagoMetodo,
+    lineas: lineas.map((l) => ({ id: l.id, qty: num(l.qty) })),
   };
 }
 
@@ -1462,6 +1489,36 @@ export async function cancelarPedidoPendiente(
       .where(and(eq(orders.id, id), esDeEsteTenant()));
     return "cancelado";
   });
+}
+
+/**
+ * Las líneas de un pedido como ítems del carrito, para devolverlas al cancelarlo desde el checkout
+ * ("Volver al carrito" con el pago en línea sin hacer). El precio es referencial (con IVA): el
+ * carrito recotiza. Sólo se llama tras `cancelarPedidoPendiente`, que ya validó al dueño. Nunca
+ * lanza: sin líneas, el carrito queda como estaba.
+ */
+export async function lineasDelPedidoParaCarrito(id: string): Promise<CartItem[]> {
+  try {
+    const filas = await getDb()
+      .select({
+        id: orderItems.alegraItemId,
+        name: orderItems.name,
+        brand: orderItems.brand,
+        qty: orderItems.qty,
+        total: orderItems.total,
+      })
+      .from(orderItems)
+      .where(eq(orderItems.orderId, id))
+      .orderBy(asc(orderItems.id));
+    return filas.flatMap((f) => {
+      const qty = Number(f.qty);
+      if (!(qty > 0)) return [];
+      return [{ id: f.id, name: f.name, brand: f.brand ?? "", price: Number(f.total) / qty, qty }];
+    });
+  } catch (err) {
+    console.error(`[pedidos] ${id}: no se pudieron leer las líneas para el carrito`, err);
+    return [];
+  }
 }
 
 /**

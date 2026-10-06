@@ -283,6 +283,12 @@ describe("crearPedido vacía el carrito del servidor", () => {
     expect(vaciados()).toEqual([]);
   });
 
+  it("pago en línea: NO lo vacía (se vacía al cobrarse)", async () => {
+    grabadora = dbGrabadora(nuevo);
+    await crearPedido({ clerkUserId: "user_1" }, { ...datos, pagoMetodo: "mercadopago" }, cotizacion);
+    expect(vaciados()).toEqual([]);
+  });
+
   it("cookie del CRM sin Clerk: no hay carrito del servidor que vaciar", async () => {
     grabadora = dbGrabadora(nuevo);
     await crearPedido({ clerkUserId: null }, datos, cotizacion);
@@ -409,12 +415,14 @@ describe("escrituras del flujo de pago", () => {
     (r: {
       lock?: string;
       pedido?: string;
+      clerk?: string;
       porReferencia?: unknown[];
       reserva?: unknown[];
       todos?: unknown[][];
     }) =>
     (c: ConsultaGrabada) => {
-      if (c.sql.includes("for update")) return r.lock ? [[r.lock, r.pedido ?? "pendiente"]] : [];
+      if (c.sql.includes("for update"))
+        return r.lock ? [[r.lock, r.pedido ?? "pendiente", null, "1000.00", r.clerk ?? null]] : [];
       if (c.sql.startsWith('insert into "shop"."pago_intentos"')) return [["nuevo", "ref-1", "pendiente"]];
       if (!c.sql.startsWith('select') || !c.sql.includes('from "shop"."pago_intentos"')) return [];
       if (c.sql.includes('"pago_intentos"."referencia" = ')) return r.porReferencia ? [r.porReferencia] : [];
@@ -441,6 +449,42 @@ describe("escrituras del flujo de pago", () => {
     // Pago que la base no conocía: se anota como intento nuevo, con tenant.
     const insert = grabadora.consultas.find((c) => c.sql.startsWith('insert into "shop"."pago_intentos"'))!;
     expect(valoresInsertados(insert).tenant_id).toBe("tenant-a");
+  });
+
+  it("registrarCobro: al pasar a pagado vacía el carrito del comprador (pago en línea)", async () => {
+    grabadora = dbGrabadora(
+      responder({
+        lock: "pendiente",
+        clerk: "user_1",
+        todos: [["nuevo", "ref-1", "pagado", "mercadopago", "accredited", null, null, null]],
+      }),
+    );
+    await registrarCobro(ID, cobro);
+    const u = updateDe("carts");
+    expect(u).toBeDefined();
+    expect(u.params).toContain("user_1");
+  });
+
+  it("registrarCobro: un rechazo o un pedido ya pagado no tocan el carrito", async () => {
+    grabadora = dbGrabadora(
+      responder({
+        lock: "pendiente",
+        clerk: "user_1",
+        todos: [["nuevo", "ref-1", "fallido", "mercadopago", "cc_rejected", null, null, null]],
+      }),
+    );
+    await registrarCobro(ID, { ...cobro, estado: "fallido" });
+    expect(updateDe("carts")).toBeUndefined();
+
+    grabadora = dbGrabadora(
+      responder({
+        lock: "pagado",
+        clerk: "user_1",
+        todos: [["nuevo", "ref-1", "pagado", "mercadopago", "accredited", null, null, null]],
+      }),
+    );
+    await registrarCobro(ID, cobro);
+    expect(updateDe("carts")).toBeUndefined();
   });
 
   it("registrarCobro: un intento viejo que se aprueba después del reintento deja el pedido pagado", async () => {

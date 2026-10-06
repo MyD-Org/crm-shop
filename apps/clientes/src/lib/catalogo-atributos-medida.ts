@@ -56,6 +56,26 @@ export const RANGOS: Readonly<Partial<Record<ClaveMedida, readonly [number, numb
   angulo_grados: [1, 360],
 };
 
+/**
+ * Claves DISCRETAS cuyo orden es estricto: un producto que cumple la medida va SIEMPRE antes que uno cuyo dato la
+ * contradice (con el dato de otro valor), y el que no tiene dato queda en el medio. Sólo ordena: nunca excluye.
+ * Las blandas (potencia, temperatura, flujo...) quedan afuera: un valor cercano no es una contradicción.
+ */
+export const CLAVES_DISCRETAS: readonly ClaveMedida[] = ["polos", "corriente_a", "sensibilidad_ma", "zocalo"];
+
+/**
+ * Peso con que el plan marca una medida discreta de confianza alta para el orden estricto. Es el contrato entre
+ * `aplicarMedidas` (emite) y `puntajeBusqueda` (ordena): una medida discreta con este peso o más (los de confianza
+ * media o los ids de Jev quedan en 0,9 o menos) premia al que cumple y penaliza al que contradice.
+ */
+export const PESO_ORDEN_ESTRICTO = 1;
+
+/** ¿El id es una medida discreta (valor exacto) del orden estricto? */
+export function esMedidaDiscreta(id: string): boolean {
+  const m = leerIdMedida(id);
+  return m !== null && m.op === "eq" && (CLAVES_DISCRETAS as readonly string[]).includes(m.clave);
+}
+
 /** Claves cuyo valor es un entero. */
 export const CLAVES_ENTERAS: readonly ClaveMedida[] = ["ip", "polos", "angulo_grados"];
 

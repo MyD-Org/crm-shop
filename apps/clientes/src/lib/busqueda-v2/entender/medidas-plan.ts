@@ -10,6 +10,10 @@
  * Política (tabla `POLITICA`, en código: cambiarla es un deploy y se mide con el banco):
  * - confianza baja: no se emite; media: sólo ordena (blando, 0,9); alta: puede ser filtro duro;
  * - duras (por clave): polos, corriente_a, sensibilidad_ma, zócalo. Todo lo demás ordena;
+ * - ORDEN ESTRICTO de las discretas (polos, corriente, sensibilidad, zócalo): toda medida discreta de confianza
+ *   ALTA viaja como blando de peso `PESO_ORDEN_ESTRICTO` (1), sea o no filtro duro (también cuando el guard o la
+ *   cobertura la degradan): `puntajeBusqueda` pone al que la cumple siempre antes que al que tiene el dato de otro
+ *   valor, y los sin dato en el medio. Sólo ordena, nunca excluye; la confianza media queda en 0,9 (ordena poco);
  * - potencia NUNCA es dura: un par exacto + banda (±1 W bajo 10 W, si no ±10 %) que ordena;
  * - lo que el diccionario ya tiene (12/24/220 V, E27/E14/GU10/MR16, IP65-68 = apto exterior) se
  *   emite con el id del diccionario; los ids dinámicos (`clave:valor`) cubren el resto.
@@ -26,7 +30,7 @@
  */
 import type { ClaveEstructurada } from "../../catalogo-caracteristicas";
 import { atributoPorId, type AtributoResuelto } from "../../catalogo-atributos";
-import { esMedidaId, idDeMedida, RANGOS, type ClaveMedida } from "../../catalogo-atributos-medida";
+import { CLAVES_DISCRETAS, esMedidaId, idDeMedida, PESO_ORDEN_ESTRICTO, RANGOS, type ClaveMedida } from "../../catalogo-atributos-medida";
 import type { PlanBusqueda } from "../plan";
 import { terminosQueRecuperan } from "../recuperar";
 import { universoAcotado } from "../universo-acotado";
@@ -40,6 +44,8 @@ export const MINIMO_PRODUCTOS_COBERTURA = 20;
 export const MINIMO_MEDIDA_DURA = 3;
 /** ...y, con ancla, al menos esto cumpliendo de verdad (si nadie la cumple, el filtro sólo muestra productos sin dato). */
 export const MINIMO_QUE_CUMPLEN = 1;
+/** Medida discreta de confianza alta: orden estricto (ver `PESO_ORDEN_ESTRICTO`). */
+export const PESO_MEDIDA_ESTRICTA = PESO_ORDEN_ESTRICTO;
 /** Medida blanda (confianza media o clave no dura): ordena como un atributo explícito del plan. */
 export const PESO_MEDIDA_BLANDA = 0.9;
 /** Boost de una medida dura: los que SÍ tienen el dato suben sobre los que no lo tienen. */
@@ -135,6 +141,8 @@ function idDeDiccionario(m: Medida): string | undefined {
   return undefined;
 }
 
+const esDiscreta = (clave: string) => (CLAVES_DISCRETAS as readonly string[]).includes(clave);
+
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
 /** Banda de potencia alrededor de `v`: ±1 W bajo 10 W, si no ±10 %; dentro del rango válido de la clave. */
@@ -215,6 +223,12 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
 
   const ids: string[] = [];
   const blandos: { id: string; peso: number }[] = [];
+  // Un id una sola vez (gana el mayor peso): el orden estricto (1) pisa al 0,9 de la misma medida.
+  const poner = (id: string, peso: number) => {
+    const ya = blandos.find((b) => b.id === id);
+    if (ya) ya.peso = Math.max(ya.peso, peso);
+    else blandos.push({ id, peso });
+  };
   const candidatasDuras: Candidata[] = [];
   // Consulta de SOLO medida (ningún término recupera): la medida también viaja como id dinámico, que es
   // lo que recupera (`esSoloMedida`); el del diccionario (e27, 12 V, apto exterior) sólo ordena.
@@ -231,11 +245,11 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
     const dic = idDeDiccionario(m);
     if (dic) {
       registrar(dic);
-      if (!yaEnElPlan(dic)) blandos.push({ id: dic, peso: PESO_MEDIDA_BLANDA });
+      if (!yaEnElPlan(dic)) poner(dic, PESO_MEDIDA_BLANDA);
       const dinamico = soloMedida ? idDeMedida({ clave: m.clave, op: m.op, valor: m.valor, min: m.min, max: m.max }) : null;
       if (dinamico) {
         registrar(dinamico);
-        blandos.push({ id: dinamico, peso: PESO_MEDIDA_BLANDA });
+        poner(dinamico, PESO_MEDIDA_BLANDA);
       }
       continue;
     }
@@ -247,17 +261,17 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
         const banda = idDeMedida({ clave: m.clave, op: "entre", min, max });
         if (exacta) {
           registrar(exacta);
-          blandos.push({ id: exacta, peso: PESO_POTENCIA_EXACTA });
+          poner(exacta, PESO_POTENCIA_EXACTA);
         }
         if (banda) {
           registrar(banda);
-          blandos.push({ id: banda, peso: PESO_POTENCIA_BANDA });
+          poner(banda, PESO_POTENCIA_BANDA);
         }
       } else if (m.op === "entre") {
         const banda = idDeMedida({ clave: m.clave, op: "entre", min: m.min, max: m.max });
         if (banda) {
           registrar(banda);
-          blandos.push({ id: banda, peso: PESO_POTENCIA_BANDA });
+          poner(banda, PESO_POTENCIA_BANDA);
         }
       }
       continue;
@@ -271,11 +285,11 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
       const idAlt = idDeMedida({ clave: m.clave, op: "eq", valor: alternativa });
       if (idAlt) {
         registrar(idAlt);
-        blandos.push({ id: idAlt, peso: PESO_MEDIDA_BLANDA });
+        poner(idAlt, PESO_MEDIDA_BLANDA);
       }
     }
     if (m.op === "eq" && m.confianza === "alta" && POLITICA[m.clave].duro) candidatasDuras.push({ medida: m, id });
-    else blandos.push({ id, peso: PESO_MEDIDA_BLANDA });
+    else poner(id, PESO_MEDIDA_BLANDA);
   }
 
   // 3. ¿Cuáles de las candidatas pueden ser filtro duro?
@@ -283,11 +297,13 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
   if (candidatasDuras.length && deps.estructurados && base.intencion !== "pregunta") {
     duras = await decidirDuras(base, candidatasDuras, deps);
   }
-  for (const c of candidatasDuras) if (!duras.includes(c)) blandos.push({ id: c.id, peso: PESO_MEDIDA_BLANDA });
+  // Las que no quedaron como filtro (guard, cobertura, pregunta) igual ordenan estricto: la confianza es alta.
+  for (const c of candidatasDuras) if (!duras.includes(c)) poner(c.id, esDiscreta(c.medida.clave) ? PESO_MEDIDA_ESTRICTA : PESO_MEDIDA_BLANDA);
 
   // 4. Emisión: las duras van a los duros y, con peso 1, a los blandos (suben los que sí tienen el dato).
   const boosts = duras.map((c) => ({ id: c.id, peso: PESO_MEDIDA_DURA }));
-  const emitidos = [...boosts, ...blandos.filter((b) => !boosts.some((x) => x.id === b.id))];
+  // El orden estricto primero: el tope de blandos de medida no puede dejarlo afuera.
+  const emitidos = [...boosts, ...blandos.filter((b) => !boosts.some((x) => x.id === b.id)).sort((a, b) => b.peso - a.peso)];
   const conTope = emitidos.filter((b) => esMedidaId(b.id)).slice(0, TOPE_BLANDOS_MEDIDA);
   const delDiccionario = emitidos.filter((b) => !esMedidaId(b.id));
 

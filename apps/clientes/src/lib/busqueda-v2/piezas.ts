@@ -19,6 +19,11 @@ export interface PiezasBusqueda {
   enCategorias: (nombres: string[]) => SQL;
   /** El producto cumple el atributo (dato estructurado o patrón), o `undefined` si el id no existe. */
   cumpleAtributo: (id: string) => SQL | undefined;
+  /**
+   * El producto tiene dato estructurado del atributo y es OTRO valor (la contradicción). Ordena, nunca filtra.
+   * Opcional: sin ella (o `undefined` para el id) no hay orden estricto de medidas.
+   */
+  contradiceAtributo?: (id: string) => SQL | undefined;
   /** El producto tiene disponibilidad (según el contexto de sucursal). */
   conStock: SQL;
 }

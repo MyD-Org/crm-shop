@@ -74,6 +74,7 @@ import {
   columnasConteoAtributos,
   contradiccionSql,
   cumpleAtributoSql,
+  contradiceAtributoSql as contradiceIdAtributoSql,
   facetasDeConteos,
   filtroAtributosSql,
   criterioSql,
@@ -1174,6 +1175,7 @@ function piezasBusqueda(filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad)
     marcaCategoria: sinTildes(sql`concat_ws(' ', ${marcaSql}, ${crmCategoriasAlegra.name})`),
     enCategorias: filtroCategoriasSql,
     cumpleAtributo: (id) => cumpleAtributoSql(ctx, id),
+    contradiceAtributo: (id) => contradiceIdAtributoSql(ctx, id),
     conStock: conStock(disp),
   };
 }

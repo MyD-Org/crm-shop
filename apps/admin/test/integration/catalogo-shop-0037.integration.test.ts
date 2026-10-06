@@ -130,7 +130,8 @@ describe("0037 (c): precios_alegra generada", () => {
     await upsertProductos(TENANT, [item("p", { price: precios })], { leidoAt: new Date(), leidoPor: "webhook" })
     expect(await leer()).toEqual(precios)
     const [vista] = await sql`SELECT precios_alegra FROM public.catalog_products_shop WHERE tenant_id = ${TENANT} AND alegra_id = 'p'`
-    expect(vista.precios_alegra).toEqual(precios)
+    // Desde 0065 la vista llama `precios_alegra` a los precios ONLINE: los de Alegra no salen.
+    expect(vista.precios_alegra).toEqual([])
   })
 })
 

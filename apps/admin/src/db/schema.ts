@@ -1132,10 +1132,8 @@ export const mediosPagoShop = pgTable(
     aplicaEnvio: boolean("aplica_envio").notNull().default(true),
     cobroOnline: boolean("cobro_online").notNull().default(false),
     orden: integer("orden").notNull().default(0),
-    // Lista de precios de Alegra (cuenta principal) enlazada al medio; NULL = lista por defecto.
-    // `listaPreciosNombre` es un snapshot para avisar si la lista se da de baja en Alegra.
-    idListaPrecios: text("id_lista_precios"),
-    listaPreciosNombre: text("lista_precios_nombre"),
+    // La lista de precio que rige para el medio vive en `lista_precio_condiciones` (migración
+    // 0065); las columnas con el id de una lista de Alegra se eliminaron.
     // A lo sumo un medio por tenant (índice único parcial); `mostrarEnFicha` no tiene límite.
     destacarEnCatalogo: boolean("destacar_en_catalogo").notNull().default(false),
     mostrarEnFicha: boolean("mostrar_en_ficha").notNull().default(false),
@@ -1454,6 +1452,34 @@ export const listaPrecioOverrides = pgTable(
       .on(t.listaId, t.categoriaId)
       .where(sql`${t.tipo} = 'categoria'`),
     index("lista_precio_overrides_tenant_idx").on(t.tenantId, t.tipo),
+  ],
+)
+
+// Qué lista de precio online rige para un medio de pago (migración 0065, rebanada C). `cuotas`
+// NULL = pago único; con valor (>= 2, CHECK en la migración) lo usa la rebanada D. Una condición
+// apunta a UNA lista (FK RESTRICT: no se borra una lista con condiciones). El Shop la lee
+// (SELECT para shop_app). Drift solo-SQL: el CHECK de cuotas y el índice único con coalesce.
+export const listaPrecioCondiciones = pgTable(
+  "lista_precio_condiciones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    listaId: uuid("lista_id")
+      .notNull()
+      .references(() => listasPrecioOnline.id, { onDelete: "restrict" }),
+    medioSlug: text("medio_slug").notNull(),
+    cuotas: integer("cuotas"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "lista_precio_condiciones_medio_fk",
+      columns: [t.tenantId, t.medioSlug],
+      foreignColumns: [mediosPagoShop.tenantId, mediosPagoShop.slug],
+    }).onDelete("cascade"),
+    uniqueIndex("lista_precio_condiciones_uniq").on(t.tenantId, t.medioSlug, sql`coalesce(${t.cuotas}, 0)`),
+    index("lista_precio_condiciones_lista_idx").on(t.listaId),
   ],
 )
 

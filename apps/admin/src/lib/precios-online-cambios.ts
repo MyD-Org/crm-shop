@@ -4,6 +4,7 @@
 // Un "cambio" es una operación sobre las listas, sus overrides o los umbrales. La vista previa y
 // el aplicar reciben el MISMO arreglo, así lo que se previsualizó es exactamente lo que se aplica.
 
+const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 export const MAX_CAMBIOS = 50
 export const MAX_NOMBRE_LISTA = 60
 export const MAX_MARCA = 80
@@ -26,6 +27,11 @@ export type CambioPrecios =
   | { op: "upsertOverride"; listaId: string; tipo: "categoria"; categoriaId: string; coeficiente: string }
   | { op: "borrarOverride"; overrideId: string }
   | { op: "setUmbrales"; confirmacionPct?: string; retencionPct?: string }
+  /**
+   * Qué lista rige para un medio de pago (y cantidad de cuotas, desde la rebanada D). `listaId` null
+   * quita la condición: el medio vuelve a la lista de referencia.
+   */
+  | { op: "setCondicion"; medioSlug: string; cuotas: number | null; listaId: string | null }
   /** SOLO armado por el servidor al revertir una baja; nunca se acepta desde el cliente. */
   | {
       op: "restaurarLista"
@@ -194,6 +200,20 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
       }
       if (out.confirmacionPct === undefined && out.retencionPct === undefined) return invalido(campo, MSG_BODY)
       return { ok: true, cambio: out }
+    }
+    case "setCondicion": {
+      if (typeof raw.medioSlug !== "string" || !SLUG_MEDIO_RE.test(raw.medioSlug)) {
+        return invalido(`${campo}.medioSlug`, "El medio de pago indicado no es válido.")
+      }
+      let cuotas: number | null = null
+      if (raw.cuotas !== undefined && raw.cuotas !== null) {
+        if (typeof raw.cuotas !== "number" || !Number.isInteger(raw.cuotas) || raw.cuotas < 2 || raw.cuotas > 24) {
+          return invalido(`${campo}.cuotas`, "La cantidad de cuotas debe ser un número entero entre 2 y 24.")
+        }
+        cuotas = raw.cuotas
+      }
+      if (raw.listaId !== null && !esUuid(raw.listaId)) return invalido(`${campo}.listaId`, "Seleccione la lista de precios.")
+      return { ok: true, cambio: { op: "setCondicion", medioSlug: raw.medioSlug, cuotas, listaId: raw.listaId } }
     }
     default:
       return invalido(campo, MSG_BODY)

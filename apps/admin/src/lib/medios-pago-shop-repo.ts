@@ -1,12 +1,10 @@
 import { and, asc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
-import { mediosPagoShop } from "@/db/schema"
-import { listasDeLaPrincipal } from "@/lib/catalogo-union-repo"
+import { listaPrecioCondiciones, listasPrecioOnline, mediosPagoShop } from "@/db/schema"
 import { avisosDeMedio } from "@/lib/medios-pago-shop-avisos"
 import {
   MSG_SIN_ENTREGA,
   SLUG_MERCADOPAGO,
-  resolverListaDelMedio,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
   type CambiosMedioPago,
@@ -29,16 +27,26 @@ export interface MedioPagoDto {
   aplicaEnvio: boolean
   cobroOnline: boolean
   orden: number
-  /** Lista de Alegra enlazada (null = lista por defecto) y snapshot de su nombre. */
-  idListaPrecios: string | null
-  listaPreciosNombre: string | null
+  /**
+   * Lista de precio online enlazada por la condición de pago único (null = rige la lista de
+   * referencia). El enlace se cambia desde Precios online (vista previa + historial), no por PATCH.
+   */
+  listaOnlineId: string | null
+  listaOnlineNombre: string | null
+  listaOnlineActiva: boolean
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
 }
 
 export type MedioPagoConAvisos = MedioPagoDto & { avisos: string[] }
 
-export const toMedioPagoDto = (r: Fila): MedioPagoDto => ({
+export interface CondicionMedio {
+  listaId: string
+  listaNombre: string
+  listaActiva: boolean
+}
+
+export const toMedioPagoDto = (r: Fila, cond: CondicionMedio | null = null): MedioPagoDto => ({
   slug: r.slug,
   nombre: r.nombre,
   instrucciones: r.instrucciones,
@@ -47,8 +55,9 @@ export const toMedioPagoDto = (r: Fila): MedioPagoDto => ({
   aplicaEnvio: r.aplicaEnvio,
   cobroOnline: r.cobroOnline,
   orden: r.orden,
-  idListaPrecios: r.idListaPrecios,
-  listaPreciosNombre: r.listaPreciosNombre,
+  listaOnlineId: cond?.listaId ?? null,
+  listaOnlineNombre: cond?.listaNombre ?? null,
+  listaOnlineActiva: cond?.listaActiva ?? false,
   destacarEnCatalogo: r.destacarEnCatalogo,
   mostrarEnFicha: r.mostrarEnFicha,
 })
@@ -75,34 +84,49 @@ export async function listarMediosPago(tenantId: string): Promise<MedioPagoDto[]
     .from(mediosPagoShop)
     .where(eq(mediosPagoShop.tenantId, tenantId))
     .orderBy(asc(mediosPagoShop.orden), asc(mediosPagoShop.nombre))
-  return filas.map(toMedioPagoDto)
+  const conds = await condicionesDePagoUnico(tenantId)
+  return filas.map((f) => toMedioPagoDto(f, conds.get(f.slug) ?? null))
 }
 
-/** Listas de precios de la cuenta principal de Alegra del tenant (para el selector de cada medio). */
-export const listasDisponiblesParaMedios = listasDeLaPrincipal
+/** Condición de pago único (cuotas NULL) de cada medio: slug -> lista enlazada. */
+async function condicionesDePagoUnico(tenantId: string, ej: Pick<ReturnType<typeof getDb>, "select"> = getDb()) {
+  const filas = await ej
+    .select({
+      slug: listaPrecioCondiciones.medioSlug,
+      listaId: listasPrecioOnline.id,
+      listaNombre: listasPrecioOnline.nombre,
+      listaActiva: listasPrecioOnline.activa,
+    })
+    .from(listaPrecioCondiciones)
+    .innerJoin(listasPrecioOnline, eq(listasPrecioOnline.id, listaPrecioCondiciones.listaId))
+    .where(and(eq(listaPrecioCondiciones.tenantId, tenantId), sql`${listaPrecioCondiciones.cuotas} IS NULL`))
+  return new Map<string, CondicionMedio>(filas.map((f) => [f.slug, f]))
+}
+
+/** Listas de precio online activas del tenant (para el selector de cada medio). */
+export async function listasDisponiblesParaMedios(tenantId: string): Promise<{ id: string; nombre: string }[]> {
+  return getDb()
+    .select({ id: listasPrecioOnline.id, nombre: listasPrecioOnline.nombre })
+    .from(listasPrecioOnline)
+    .where(and(eq(listasPrecioOnline.tenantId, tenantId), eq(listasPrecioOnline.activa, true)))
+    .orderBy(asc(listasPrecioOnline.orden), asc(listasPrecioOnline.nombre))
+}
 
 /**
- * Ids de listas que en general cuestan MÁS que la lista por defecto: más productos con precio mayor
- * que con precio menor. Es un aviso informativo; si la consulta falla se omite (no bloquea nada).
+ * Ids de listas online que en general cuestan MÁS que la de referencia: más productos con precio
+ * mayor que con precio menor. Es un aviso informativo (DC2: avisar, no bloquear); si la consulta
+ * falla se omite.
  */
 async function listasMasCaras(tenantId: string, ids: string[]): Promise<Set<string>> {
   if (ids.length === 0) return new Set()
   try {
     const filas = (await getDb().execute(sql`
-      WITH base AS (
-        SELECT p.prices,
-          coalesce(
-            (SELECT (e->>'price')::numeric FROM jsonb_array_elements(p.prices) e WHERE e->>'main' = 'true' LIMIT 1),
-            (p.prices->0->>'price')::numeric
-          ) AS general
-        FROM catalog_products p
-        WHERE p.tenant_id = ${tenantId} AND p.cuenta_id IS NULL AND jsonb_typeof(p.prices) = 'array'
-      )
       SELECT e->>'idPriceList' AS id,
-        count(*) FILTER (WHERE (e->>'price')::numeric > base.general) AS caras,
-        count(*) FILTER (WHERE (e->>'price')::numeric > 0 AND (e->>'price')::numeric < base.general) AS baratas
-      FROM base, jsonb_array_elements(base.prices) e
-      WHERE e->>'idPriceList' IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
+        count(*) FILTER (WHERE (e->>'price')::numeric > p.precio_online_ref) AS caras,
+        count(*) FILTER (WHERE (e->>'price')::numeric < p.precio_online_ref) AS baratas
+      FROM catalog_products p, jsonb_array_elements(p.precios_online) e
+      WHERE p.tenant_id = ${tenantId} AND p.precio_online_ref IS NOT NULL
+        AND e->>'idPriceList' IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
       GROUP BY 1
     `)) as unknown as { id: string; caras: string | number; baratas: string | number }[]
     return new Set(filas.filter((f) => Number(f.caras) > Number(f.baratas)).map((f) => f.id))
@@ -111,22 +135,18 @@ async function listasMasCaras(tenantId: string, ids: string[]): Promise<Set<stri
   }
 }
 
-/** Calcula los avisos no bloqueantes de cada medio (lista huérfana, más cara, destacado/ficha sin efecto). */
+/** Calcula los avisos no bloqueantes de cada medio (lista desactivada, más cara, destacado/ficha sin efecto). */
 export async function conAvisos(tenantId: string, medios: MedioPagoDto[]): Promise<MedioPagoConAvisos[]> {
-  const listas = await listasDeLaPrincipal(tenantId)
-  const enlazadas = [...new Set(medios.map((m) => m.idListaPrecios).filter((x): x is string => x !== null))]
-  const ctx = {
-    listasExistentes: new Set(listas.map((l) => l.idPriceList)),
-    listasMasCaras: await listasMasCaras(tenantId, enlazadas),
-  }
+  const enlazadas = [...new Set(medios.map((m) => m.listaOnlineId).filter((x): x is string => x !== null))]
+  const ctx = { listasMasCaras: await listasMasCaras(tenantId, enlazadas) }
   return medios.map((m) => ({ ...m, avisos: avisosDeMedio(m, ctx) }))
 }
 
 export async function listarMediosPagoConAvisos(
   tenantId: string,
-): Promise<{ medios: MedioPagoConAvisos[]; listas: { idPriceList: string; name: string }[] }> {
+): Promise<{ medios: MedioPagoConAvisos[]; listas: { id: string; nombre: string }[] }> {
   const medios = await listarMediosPago(tenantId)
-  const [listas, conAv] = await Promise.all([listasDeLaPrincipal(tenantId), conAvisos(tenantId, medios)])
+  const [listas, conAv] = await Promise.all([listasDisponiblesParaMedios(tenantId), conAvisos(tenantId, medios)])
   return { medios: conAv, listas }
 }
 
@@ -163,11 +183,8 @@ export async function actualizarMedioPago(tenantId: string, slug: string, body: 
   const cambios: CambiosMedioPago = { ...v.cambios }
   delete cambios.cobroOnline
 
-  // Las listas se leen FUERA de la transacción (otra consulta, sin lock) y sólo si hace falta.
-  const listas = typeof cambios.idListaPrecios === "string" ? await listasDeLaPrincipal(tenantId) : []
-
   try {
-    return await actualizarEnTx(tenantId, slug, cambios, listas)
+    return await actualizarEnTx(tenantId, slug, cambios)
   } catch (err) {
     // Dos destacados simultáneos: el índice único parcial rechaza al segundo. No es un 500.
     if (codigoPg(err) === "23505" && cambios.destacarEnCatalogo === true) {
@@ -181,13 +198,10 @@ export async function actualizarMedioPago(tenantId: string, slug: string, body: 
   }
 }
 
-type CambiosConLista = CambiosMedioPago & { listaPreciosNombre?: string | null }
-
 async function actualizarEnTx(
   tenantId: string,
   slug: string,
   cambios: CambiosMedioPago,
-  listas: { idPriceList: string; name: string }[],
 ): Promise<ResultadoMedio> {
   return getDb().transaction(async (tx): Promise<ResultadoMedio> => {
     const [actual] = await tx
@@ -196,19 +210,6 @@ async function actualizarEnTx(
       .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.slug, slug)))
       .for("update")
     if (!actual) return { kind: "not_found" }
-
-    const set: CambiosConLista = { ...cambios }
-    if (cambios.idListaPrecios !== undefined) {
-      if (cambios.idListaPrecios !== null && cambios.idListaPrecios === actual.idListaPrecios) {
-        // Mismo id que ya tenía (aunque la lista ya no exista en Alegra): se conserva el snapshot.
-        delete set.listaPreciosNombre
-      } else {
-        const l = resolverListaDelMedio(cambios.idListaPrecios, listas)
-        if (!l.ok) return { kind: "invalid", campo: l.campo, error: l.error }
-        set.idListaPrecios = l.id
-        set.listaPreciosNombre = l.nombre
-      }
-    }
 
     const retiro = cambios.aplicaRetiro ?? actual.aplicaRetiro
     const envio = cambios.aplicaEnvio ?? actual.aplicaEnvio
@@ -230,10 +231,11 @@ async function actualizarEnTx(
 
     const [fila] = await tx
       .update(mediosPagoShop)
-      .set({ ...set, updatedAt: new Date() })
+      .set({ ...cambios, updatedAt: new Date() })
       .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.slug, slug)))
       .returning()
-    return { kind: "ok", medio: toMedioPagoDto(fila) }
+    const cond = (await condicionesDePagoUnico(tenantId, tx)).get(slug) ?? null
+    return { kind: "ok", medio: toMedioPagoDto(fila, cond) }
   })
 }
 

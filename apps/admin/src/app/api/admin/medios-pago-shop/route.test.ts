@@ -20,9 +20,9 @@ vi.mock("@/lib/shop-revalidar", () => ({
   },
 }))
 vi.mock("@/lib/medios-pago-shop-repo", () => ({
-  listarMediosPagoConAvisos: async () => ({ medios: [{ slug: "efectivo", avisos: ["aviso"] }], listas: [{ idPriceList: "3", name: "Lista" }] }),
+  listarMediosPagoConAvisos: async () => ({ medios: [{ slug: "efectivo", avisos: ["aviso"] }], listas: [{ id: "l1", nombre: "Lista" }] }),
   conAvisos: async (_t: string, medios: Record<string, unknown>[]) => medios.map((m) => ({ ...m, avisos: [] })),
-  listasDisponiblesParaMedios: async () => [{ idPriceList: "3", name: "Lista" }],
+  listasDisponiblesParaMedios: async () => [{ id: "l1", nombre: "Lista" }],
   crearMedioPago: async () => state.resultado,
   actualizarMedioPago: async () => state.resultado,
   eliminarMedioPago: async () => state.resultado,
@@ -101,24 +101,24 @@ describe("/api/admin/medios-pago-shop", () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
       medios: [{ slug: "efectivo", avisos: ["aviso"] }],
-      listas: [{ idPriceList: "3", name: "Lista" }],
+      listas: [{ id: "l1", nombre: "Lista" }],
     })
   })
 
-  it("PATCH de lista, destacado o ficha avisa al Shop una vez cada uno", async () => {
+  it("PATCH de destacado, ficha o activo avisa al Shop una vez cada uno", async () => {
     const { PATCH } = await import("@/app/api/admin/medios-pago-shop/[slug]/route")
-    for (const cambio of [{ idListaPrecios: "3" }, { destacarEnCatalogo: true }, { mostrarEnFicha: true }]) {
+    for (const cambio of [{ activo: false }, { destacarEnCatalogo: true }, { mostrarEnFicha: true }]) {
       expect((await PATCH(req("PATCH", cambio), ctx)).status).toBe(200)
     }
     expect(state.ping).toBe(3)
   })
 
-  it("PATCH inválido (lista inexistente) → 400 con el campo y sin aviso al Shop", async () => {
+  it("PATCH inválido → 400 con el campo y sin aviso al Shop", async () => {
     const { PATCH } = await import("@/app/api/admin/medios-pago-shop/[slug]/route")
-    state.resultado = { kind: "invalid", campo: "idListaPrecios", error: "La lista de precios elegida no existe en Alegra. Seleccione otra." }
-    const res = await PATCH(req("PATCH", { idListaPrecios: "99" }), ctx)
+    state.resultado = { kind: "invalid", campo: "nombre", error: "Ingrese el nombre." }
+    const res = await PATCH(req("PATCH", { nombre: "" }), ctx)
     expect(res.status).toBe(400)
-    expect(await res.json()).toMatchObject({ code: "invalid", campo: "idListaPrecios" })
+    expect(await res.json()).toMatchObject({ code: "invalid", campo: "nombre" })
     expect(state.ping).toBe(0)
   })
 
@@ -129,19 +129,5 @@ describe("/api/admin/medios-pago-shop", () => {
     expect(res.status).toBe(409)
     expect(await res.json()).toMatchObject({ code: "conflict", campo: "destacarEnCatalogo" })
     expect(state.ping).toBe(0)
-  })
-})
-
-describe("/api/admin/medios-pago-shop-listas", () => {
-  it("sin sesión → 401, operador → 404, admin → listas", async () => {
-    const { GET } = await import("@/app/api/admin/medios-pago-shop-listas/route")
-    state.guarded = { ok: false, reason: "no-session" }
-    expect((await GET(req("GET"))).status).toBe(401)
-    state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u2", name: "Op", email: "op@cliente.example", role: "operator" } }
-    expect((await GET(req("GET"))).status).toBe(404)
-    state.guarded = { ok: true, tenantId: "tenant-a", user: { id: "u1", name: "Ana", email: "ana@cliente.example", role: "admin" } }
-    const res = await GET(req("GET"))
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ listas: [{ idPriceList: "3", name: "Lista" }] })
   })
 })

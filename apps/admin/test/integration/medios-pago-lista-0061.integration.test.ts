@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest"
 import { sql } from "drizzle-orm"
 import { getDb } from "@/db"
-import { catalogProducts } from "@/db/schema"
 import {
   actualizarMedioPago,
   crearMedioPago,
@@ -9,46 +8,49 @@ import {
   listarMediosPagoConAvisos,
   listasDisponiblesParaMedios,
 } from "@/lib/medios-pago-shop-repo"
+import { aplicarCambios, previsualizar } from "@/lib/precios-online-repo"
+import { seedLista, seedProducto } from "./precios-online-helpers"
 import { seedTenant, truncateAll } from "./helpers"
 
 /**
- * Migración 0061 (change `listas-por-medio-de-pago`, rebanada A) contra la base real de test:
- * columnas nuevas con sus defaults, índice único parcial del destacado (uno por tenant), N medios
- * en ficha, y el repo (enlazar/desenlazar con snapshot, destacar atómico, concurrencia).
- * Datos inventados.
+ * Migración 0061 (destacado y ficha por medio) y su evolución en 0065: la lista que rige para un
+ * medio ya no es una lista de Alegra sino una lista de precio online (condición de pago único).
+ * Columnas, índice único del destacado, N medios en ficha, destacar atómico y avisos. Datos
+ * inventados.
  */
 
 const A = "tenant-a"
 const B = "tenant-b"
+const USUARIO = { id: "u1", name: "Ana", email: "ana@cliente.example" }
 
-const PRECIOS = (extra: { id: string; name: string; price: number }[]) => [
-  { idPriceList: "1", name: "General", price: 100, main: true },
-  ...extra.map((e) => ({ idPriceList: e.id, name: e.name, price: e.price, main: false })),
-]
-
-async function seedProducto(tenantId: string, alegraId: string, prices: unknown) {
-  await getDb()
-    .insert(catalogProducts)
-    .values({ tenantId, alegraId, name: `COD-${alegraId}`, description: "x", prices: prices as never, status: "active" })
-}
+let listaRef: string
+let listaTransf: string
 
 beforeEach(async () => {
   await truncateAll()
   await seedTenant(A)
   await seedTenant(B)
-  await seedProducto(A, "p1", PRECIOS([{ id: "3", name: "Lista transferencia", price: 90 }, { id: "4", name: "Lista cara", price: 120 }]))
-  await seedProducto(A, "p2", PRECIOS([{ id: "3", name: "Lista transferencia", price: 80 }, { id: "4", name: "Lista cara", price: 130 }]))
+  listaRef = await seedLista(A, "Lista A", "1.2", { esReferencia: true, orden: 1 })
+  listaTransf = await seedLista(A, "Lista transferencia", "1.1", { orden: 2 })
+  await seedProducto(A, { alegraId: "p1", costo: "100" })
 })
 afterAll(async () => {
   await truncateAll()
 })
+
+/** Enlaza la lista al medio por el camino real: vista previa + aplicar. */
+async function enlazar(slug: string, listaId: string | null) {
+  const cambios = [{ op: "setCondicion" as const, medioSlug: slug, cuotas: null, listaId }]
+  const previa = await previsualizar(A, cambios)
+  await aplicarCambios(A, USUARIO, { cambios, baseVersion: previa.baseVersion, huella: previa.huella })
+}
 
 describe("migración 0061: columnas e índice", () => {
   it("los medios nuevos quedan con lista NULL, destacar=false y mostrar_en_ficha=false", async () => {
     const r = await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia" })
     expect(r).toMatchObject({
       kind: "ok",
-      medio: { idListaPrecios: null, listaPreciosNombre: null, destacarEnCatalogo: false, mostrarEnFicha: false },
+      medio: { listaOnlineId: null, listaOnlineNombre: null, destacarEnCatalogo: false, mostrarEnFicha: false },
     })
     const cols = (await getDb().execute(sql`
       select column_name, is_nullable, column_default from information_schema.columns
@@ -57,8 +59,6 @@ describe("migración 0061: columnas e índice", () => {
     `)) as unknown as { column_name: string; is_nullable: string; column_default: string | null }[]
     expect(cols.map((c) => [c.column_name, c.is_nullable])).toEqual([
       ["destacar_en_catalogo", "NO"],
-      ["id_lista_precios", "YES"],
-      ["lista_precios_nombre", "YES"],
       ["mostrar_en_ficha", "NO"],
     ])
   })
@@ -83,35 +83,36 @@ describe("migración 0061: columnas e índice", () => {
   })
 })
 
-describe("enlazar y desenlazar la lista", () => {
-  it("enlazar guarda el id y el snapshot del nombre; desenlazar limpia ambos", async () => {
+describe("enlazar y desenlazar la lista online", () => {
+  it("enlazar muestra la lista en el medio; desenlazar la quita", async () => {
     await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia" })
-    const e = await actualizarMedioPago(A, "transferencia", { idListaPrecios: "3" })
-    expect(e).toMatchObject({ kind: "ok", medio: { idListaPrecios: "3", listaPreciosNombre: "Lista transferencia" } })
-    const d = await actualizarMedioPago(A, "transferencia", { idListaPrecios: null })
-    expect(d).toMatchObject({ kind: "ok", medio: { idListaPrecios: null, listaPreciosNombre: null } })
+    await enlazar("transferencia", listaTransf)
+    expect((await listarMediosPago(A))[0]).toMatchObject({
+      listaOnlineId: listaTransf,
+      listaOnlineNombre: "Lista transferencia",
+      listaOnlineActiva: true,
+    })
+    await enlazar("transferencia", null)
+    expect((await listarMediosPago(A))[0]).toMatchObject({ listaOnlineId: null, listaOnlineNombre: null })
   })
 
-  it("un id que no está en la principal → invalid (400) y no modifica el medio", async () => {
-    await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia" })
-    const r = await actualizarMedioPago(A, "transferencia", { idListaPrecios: "99", nombre: "Otro nombre" })
-    expect(r).toMatchObject({ kind: "invalid", campo: "idListaPrecios" })
-    expect((await listarMediosPago(A))[0]).toMatchObject({ nombre: "Transferencia", idListaPrecios: null })
+  it("las listas disponibles son las activas de ESTE tenant", async () => {
+    await seedLista(B, "Lista de B", "1.5", { esReferencia: true })
+    await seedLista(A, "Lista apagada", "1.3", { activa: false })
+    expect((await listasDisponiblesParaMedios(A)).map((l) => l.nombre)).toEqual(["Lista A", "Lista transferencia"])
   })
 
-  it("las listas son las de ESTE tenant: la de otro no se puede enlazar", async () => {
-    await seedProducto(B, "b1", PRECIOS([{ id: "7", name: "Lista de B", price: 50 }]))
+  it("el PATCH del medio ya no cambia la lista (el campo se ignora)", async () => {
     await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia" })
-    expect(await actualizarMedioPago(A, "transferencia", { idListaPrecios: "7" })).toMatchObject({ kind: "invalid" })
-    expect((await listasDisponiblesParaMedios(A)).map((l) => l.idPriceList)).toEqual(["1", "3", "4"])
+    const r = await actualizarMedioPago(A, "transferencia", { idListaPrecios: "3", activo: false } as never)
+    expect(r).toMatchObject({ kind: "ok", medio: { activo: false, listaOnlineId: null } })
   })
 
-  it("una lista ya enlazada que se dio de baja no bloquea otros cambios si el id no cambia", async () => {
+  it("un medio con la lista desactivada conserva el enlace y lo informa", async () => {
     await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia" })
-    await actualizarMedioPago(A, "transferencia", { idListaPrecios: "3" })
-    await getDb().execute(sql`truncate table catalog_products`)
-    const r = await actualizarMedioPago(A, "transferencia", { idListaPrecios: "3", activo: false })
-    expect(r).toMatchObject({ kind: "ok", medio: { idListaPrecios: "3", listaPreciosNombre: "Lista transferencia", activo: false } })
+    await enlazar("transferencia", listaTransf)
+    await getDb().execute(sql`update listas_precio_online set activa = false where id = ${listaTransf}`)
+    expect((await listarMediosPago(A))[0]).toMatchObject({ listaOnlineId: listaTransf, listaOnlineActiva: false })
   })
 })
 
@@ -145,28 +146,25 @@ describe("destacar en catálogo", () => {
 })
 
 describe("avisos", () => {
-  it("lista huérfana (con el nombre guardado), lista más cara y destacado sin lista", async () => {
-    await crearMedioPago(A, { slug: "huerfano", nombre: "Huérfano" })
+  it("lista desactivada, lista más cara que la referencia y destacado sin lista", async () => {
+    const listaCara = await seedLista(A, "Lista cara", "1.9", { orden: 3 })
+    await crearMedioPago(A, { slug: "apagado", nombre: "Apagado" })
     await crearMedioPago(A, { slug: "caro", nombre: "Caro" })
     await crearMedioPago(A, { slug: "barato", nombre: "Barato" })
     await crearMedioPago(A, { slug: "sinlista", nombre: "Sin lista" })
-    await actualizarMedioPago(A, "huerfano", { idListaPrecios: "3" })
-    await actualizarMedioPago(A, "caro", { idListaPrecios: "4" })
-    await actualizarMedioPago(A, "barato", { idListaPrecios: "3" })
+    await enlazar("apagado", listaTransf)
+    await enlazar("caro", listaCara)
+    await enlazar("barato", listaRef)
     await actualizarMedioPago(A, "sinlista", { destacarEnCatalogo: true, mostrarEnFicha: true })
-    // La lista 3 se da de baja sólo para "huerfano": simulamos sacándola de los productos y
-    // enlazando otro medio antes. Más simple: borramos el id 3 de los precios.
-    await getDb().execute(sql`
-      update catalog_products set prices = (
-        select coalesce(jsonb_agg(e), '[]'::jsonb) from jsonb_array_elements(prices) e where e->>'idPriceList' <> '3'
-      )
-    `)
+    // Con los precios online calculados (referencia 120, transferencia 110, cara 190).
+    await getDb().execute(sql`select * from aplicar_precios_online(${A}, NULL::text[], 'config')`)
+    await getDb().execute(sql`update listas_precio_online set activa = false where id = ${listaTransf}`)
     const { medios, listas } = await listarMediosPagoConAvisos(A)
-    expect(listas.map((l) => l.idPriceList)).toEqual(["1", "4"])
+    expect(listas.map((l) => l.nombre)).toEqual(["Lista A", "Lista cara"])
     const aviso = (slug: string) => medios.find((m) => m.slug === slug)!.avisos
-    expect(aviso("huerfano")[0]).toContain("Lista transferencia")
+    expect(aviso("apagado")[0]).toContain("desactivada")
     expect(aviso("caro")[0]).toContain("más cara")
-    expect(aviso("barato")[0]).toContain("ya no existe")
+    expect(aviso("barato")).toEqual([])
     expect(aviso("sinlista")).toHaveLength(2)
   })
 })

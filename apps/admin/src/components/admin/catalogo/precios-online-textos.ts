@@ -152,6 +152,7 @@ export const TEXTOS = {
     override_edicion: "Ajuste modificado",
     override_baja: "Ajuste quitado",
     umbral: "Umbrales",
+    condicion: "Lista de un medio de pago",
     revertir: "Reversión",
     costo_aprobado: "Costo aprobado",
     costo_rechazado: "Costo rechazado",

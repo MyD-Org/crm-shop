@@ -2,13 +2,16 @@ import { createHash } from "node:crypto"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
 import {
+  listaPrecioCondiciones,
   listaPrecioOverrides,
   listasPrecioOnline,
+  mediosPagoShop,
   preciosOnlineCambios,
   preciosOnlineConfig,
   shopCategories,
 } from "@/db/schema"
 import { avisarShop } from "./aviso-shop"
+import { pingShopRevalidarSucursales } from "./shop-revalidar"
 import { normalizarMarca, type CambioPrecios } from "./precios-online-cambios"
 
 // Capa de aplicación de las listas de precio online (change `listas-precio-online`, rebanada B).
@@ -167,6 +170,17 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           "No puede eliminarse la lista de referencia. Elija otra lista como referencia antes.",
         )
       }
+      const usos = await tx
+        .select({ medio: listaPrecioCondiciones.medioSlug })
+        .from(listaPrecioCondiciones)
+        .where(eq(listaPrecioCondiciones.listaId, l.id))
+      if (usos.length > 0) {
+        throw new PreciosOnlineError(
+          422,
+          "lista_en_uso",
+          "No puede eliminarse una lista enlazada a un medio de pago. Quite el enlace primero.",
+        )
+      }
       const ovs = await tx.select().from(listaPrecioOverrides).where(eq(listaPrecioOverrides.listaId, l.id))
       await tx.delete(listasPrecioOnline).where(eq(listasPrecioOnline.id, l.id)) // los overrides caen por cascada
       return [
@@ -276,6 +290,53 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           listaId: null,
           antes: { confirmacionPct: previo.umbralConfirmacionPct, retencionPct: previo.umbralRetencionPct },
           despues: { confirmacionPct: n.umbralConfirmacionPct, retencionPct: n.umbralRetencionPct },
+        },
+      ]
+    }
+    case "setCondicion": {
+      const { medioSlug, cuotas, listaId } = c
+      const [medio] = await tx
+        .select({ slug: mediosPagoShop.slug })
+        .from(mediosPagoShop)
+        .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.slug, medioSlug)))
+      if (!medio) throw new PreciosOnlineError(404, "medio_no_existe", "El medio de pago indicado no existe.")
+      if (listaId !== null) await cargarLista(tx, tenantId, listaId)
+      const [previo] = await tx
+        .select()
+        .from(listaPrecioCondiciones)
+        .where(
+          and(
+            eq(listaPrecioCondiciones.tenantId, tenantId),
+            eq(listaPrecioCondiciones.medioSlug, medioSlug),
+            cuotas === null ? sql`${listaPrecioCondiciones.cuotas} IS NULL` : eq(listaPrecioCondiciones.cuotas, cuotas),
+          ),
+        )
+      const objeto = `condicion:${medioSlug}:${cuotas ?? 0}`
+      const snap = (x: typeof previo | undefined) =>
+        x ? { medioSlug: x.medioSlug, cuotas: x.cuotas, listaId: x.listaId } : { medioSlug: medioSlug, cuotas: cuotas, listaId: null }
+      if (listaId === null) {
+        if (!previo) throw new PreciosOnlineError(422, "sin_cambios", "Ese medio de pago no tiene una lista enlazada.")
+        await tx.delete(listaPrecioCondiciones).where(eq(listaPrecioCondiciones.id, previo.id))
+        return [{ tipo: "condicion", objeto, listaId: previo.listaId, antes: snap(previo), despues: snap(undefined) }]
+      }
+      if (previo?.listaId === listaId) {
+        throw new PreciosOnlineError(422, "sin_cambios", "Ese medio de pago ya usa esa lista.")
+      }
+      if (previo) {
+        await tx
+          .update(listaPrecioCondiciones)
+          .set({ listaId: listaId, updatedAt: sql`now()` })
+          .where(eq(listaPrecioCondiciones.id, previo.id))
+      } else {
+        await tx.insert(listaPrecioCondiciones).values({ tenantId, listaId: listaId, medioSlug: medioSlug, cuotas: cuotas })
+      }
+      return [
+        {
+          tipo: "condicion",
+          objeto,
+          listaId: listaId,
+          antes: snap(previo),
+          despues: { medioSlug: medioSlug, cuotas: cuotas, listaId: listaId },
         },
       ]
     }
@@ -534,6 +595,8 @@ export interface ResultadoAplicar {
   version: number
   resultado: ResultadoPrevia
   entradas: number
+  /** Hubo cambios de condiciones de medios de pago (hay que invalidar la caché de medios del Shop). */
+  condiciones: boolean
 }
 
 async function aplicarEnTx(
@@ -589,14 +652,25 @@ async function aplicarEnTx(
     .update(preciosOnlineConfig)
     .set({ version, updatedAt: sql`now()`, updatedBy: usuario.email || usuario.id })
     .where(eq(preciosOnlineConfig.tenantId, tenantId))
-  return { version, resultado, entradas: entradas.length }
+  return { version, resultado, entradas: entradas.length, condiciones: entradas.some((e) => e.tipo === "condicion") }
 }
 
-async function avisarTrasCommit(tenantId: string): Promise<void> {
+/**
+ * Avisos al Shop DESPUÉS del commit (si fallan, se registra y el cambio ya está guardado; el Shop
+ * lo toma al vencer su caché). Un cambio de condiciones además invalida la caché de los medios.
+ */
+async function avisarTrasCommit(tenantId: string, hubo: { condiciones?: boolean } = {}): Promise<void> {
   try {
     await avisarShop(tenantId)
   } catch (err) {
     console.warn(`[precios-online] aviso al Shop falló: ${err instanceof Error ? err.name : "error"}`)
+  }
+  if (hubo.condiciones) {
+    try {
+      await pingShopRevalidarSucursales()
+    } catch (err) {
+      console.warn(`[precios-online] aviso de condiciones al Shop falló: ${err instanceof Error ? err.name : "error"}`)
+    }
   }
 }
 
@@ -614,7 +688,7 @@ export async function aplicarCambios(
     await lockTenant(tx, tenantId)
     return aplicarEnTx(tx, tenantId, usuario, entrada)
   })
-  await avisarTrasCommit(tenantId)
+  await avisarTrasCommit(tenantId, { condiciones: r.condiciones })
   return r
 }
 
@@ -719,6 +793,16 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
       ]
       break
     }
+    case "condicion":
+      cambios = [
+        {
+          op: "setCondicion",
+          medioSlug: String(a.medioSlug),
+          cuotas: a.cuotas === null || a.cuotas === undefined ? null : Number(a.cuotas),
+          listaId: (a.listaId as string | null) ?? null,
+        },
+      ]
+      break
     case "umbral":
       cambios = [{ op: "setUmbrales", confirmacionPct: String(a.confirmacionPct), retencionPct: String(a.retencionPct) }]
       break
@@ -748,7 +832,7 @@ export async function aplicarReversion(
     const { cambios } = await inversosDe(tx, tenantId, entradaId)
     return aplicarEnTx(tx, tenantId, usuario, { ...entrada, cambios, revertidoDe: entradaId })
   })
-  await avisarTrasCommit(tenantId)
+  await avisarTrasCommit(tenantId, { condiciones: r.condiciones })
   return r
 }
 

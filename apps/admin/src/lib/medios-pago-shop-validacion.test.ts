@@ -3,7 +3,6 @@ import {
   MSG_COBRO_ONLINE,
   SLUG_MERCADOPAGO,
   MSG_SIN_ENTREGA,
-  resolverListaDelMedio,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
 } from "@/lib/medios-pago-shop-validacion"
@@ -83,59 +82,36 @@ describe("fila fija Mercado Pago", () => {
   })
 })
 
-describe("lista de precios, destacado y ficha", () => {
-  it("acepta idListaPrecios (texto o null), destacarEnCatalogo y mostrarEnFicha", () => {
-    expect(validarMedioPagoCambios({ idListaPrecios: " 12 ", destacarEnCatalogo: true, mostrarEnFicha: false })).toEqual({
+describe("destacado y ficha", () => {
+  it("acepta destacarEnCatalogo y mostrarEnFicha", () => {
+    expect(validarMedioPagoCambios({ destacarEnCatalogo: true, mostrarEnFicha: false })).toEqual({
       ok: true,
-      cambios: { idListaPrecios: "12", destacarEnCatalogo: true, mostrarEnFicha: false },
+      cambios: { destacarEnCatalogo: true, mostrarEnFicha: false },
     })
-    expect(validarMedioPagoCambios({ idListaPrecios: null })).toEqual({ ok: true, cambios: { idListaPrecios: null } })
-    // "Lista por defecto" en un select llega como cadena vacía.
-    expect(validarMedioPagoCambios({ idListaPrecios: "" })).toEqual({ ok: true, cambios: { idListaPrecios: null } })
   })
 
-  it("rechaza booleanos y listas con tipo inválido, en usted", () => {
+  it("la lista ya no se enlaza por este camino: idListaPrecios se ignora", () => {
+    expect(validarMedioPagoCambios({ idListaPrecios: "12", destacarEnCatalogo: true })).toEqual({
+      ok: true,
+      cambios: { destacarEnCatalogo: true },
+    })
+  })
+
+  it("rechaza booleanos con tipo inválido, en usted", () => {
     expect(validarMedioPagoCambios({ mostrarEnFicha: "si" })).toEqual({
       ok: false,
       campo: "mostrarEnFicha",
       error: "El valor indicado no es válido.",
     })
     expect(validarMedioPagoCambios({ destacarEnCatalogo: 1 })).toMatchObject({ ok: false, campo: "destacarEnCatalogo" })
-    expect(validarMedioPagoCambios({ idListaPrecios: 12 })).toEqual({
-      ok: false,
-      campo: "idListaPrecios",
-      error: "La lista de precios indicada no es válida.",
-    })
-    expect(validarMedioPagoCambios({ idListaPrecios: "x".repeat(101) })).toMatchObject({ ok: false, campo: "idListaPrecios" })
   })
 
-  it("el alta ignora lista, destacado y ficha (se configuran editando el medio)", () => {
-    const r = validarMedioPagoNuevo({ slug: "ok", nombre: "x", idListaPrecios: "3", destacarEnCatalogo: true, mostrarEnFicha: true })
+  it("el alta ignora destacado y ficha (se configuran editando el medio)", () => {
+    const r = validarMedioPagoNuevo({ slug: "ok", nombre: "x", destacarEnCatalogo: true, mostrarEnFicha: true })
     expect(r).toMatchObject({ ok: true })
     if (r.ok) {
-      expect(r.valor).not.toHaveProperty("idListaPrecios")
       expect(r.valor).not.toHaveProperty("destacarEnCatalogo")
       expect(r.valor).not.toHaveProperty("mostrarEnFicha")
     }
-  })
-})
-
-describe("resolverListaDelMedio", () => {
-  const listas = [
-    { idPriceList: "3", name: "Lista transferencia" },
-    { idPriceList: "4", name: "Lista mayorista" },
-  ]
-  it("enlazar guarda el id y el snapshot del nombre", () => {
-    expect(resolverListaDelMedio("3", listas)).toEqual({ ok: true, id: "3", nombre: "Lista transferencia" })
-  })
-  it("desenlazar (null) limpia id y nombre", () => {
-    expect(resolverListaDelMedio(null, listas)).toEqual({ ok: true, id: null, nombre: null })
-  })
-  it("un id que no está en la principal es inválido y habla de usted", () => {
-    expect(resolverListaDelMedio("99", listas)).toEqual({
-      ok: false,
-      campo: "idListaPrecios",
-      error: "La lista de precios elegida no existe en Alegra. Seleccione otra.",
-    })
   })
 })

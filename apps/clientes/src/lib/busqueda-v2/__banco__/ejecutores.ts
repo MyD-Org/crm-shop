@@ -37,6 +37,8 @@ export interface ConfigEjecutor {
   /** Sólo tubería `motor` y oráculo `legado`: política (por defecto `legado`) y superficie (por defecto `catalogo`). */
   politica?: PoliticaBanco;
   superficie?: SuperficieBanco;
+  /** `--medidas=si`: las tuberías con plan (`v2`, `motor` y el oráculo `legado`) aplican `aplicarMedidas` sobre el plan. */
+  medidas?: boolean;
 }
 
 export interface Ejecutor {
@@ -54,8 +56,13 @@ export function resolverJev(jev: ModoJev | "segun-entorno", conClave: boolean): 
   return jev === "segun-entorno" ? (conClave ? "vivo" : "no") : jev;
 }
 
-/** Cómo se adquiere el plan según el modo de Jev (lo comparten `v2`, `motor` y el oráculo `legado`). */
-function contextoDePlan(cfg: ConfigEjecutor): { ctx: ContextoV2; jevMeta?: Ejecutor["jevMeta"]; sinGrabacion?: Ejecutor["sinGrabacion"] } {
+/** Cómo se adquiere el plan según el modo de Jev (lo comparten `v2`, `motor` y el oráculo `legado`), más las medidas si se piden. */
+function contextoDePlan(cfg: ConfigEjecutor): ReturnType<typeof contextoBase> {
+  const r = contextoBase(cfg);
+  return cfg.medidas ? { ...r, ctx: { ...r.ctx, medidas: true } } : r;
+}
+
+function contextoBase(cfg: ConfigEjecutor): { ctx: ContextoV2; jevMeta?: Ejecutor["jevMeta"]; sinGrabacion?: Ejecutor["sinGrabacion"] } {
   const { vista, arbol, estructurados } = cfg;
   if (cfg.jev === "cache") {
     const soloVisibles = cfg.soloVisiblesDelPlan ?? vista.soloVisibles;

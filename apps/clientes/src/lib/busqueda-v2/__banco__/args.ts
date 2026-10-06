@@ -19,6 +19,7 @@ const FLAGS_CONOCIDOS = new Set([
   "tuberia", "jev", "umbral", "salida", "solo", "ver", "banco", "etiquetas", "produccion", "solo-visibles",
   "flags", "json", "repeticiones", "calentar", "ver-consultas", "tenant-alias",
   "politica", "superficie", "paridad", "paridad-con", "ids",
+  "medidas",
 ]);
 
 export interface ArgsBanco {
@@ -51,7 +52,21 @@ export interface ArgsBanco {
   paridadCon?: string;
   /** `--ids`: guardar en el JSON los ids de lo devuelto (archivo local; nunca a consola). */
   ids: boolean;
+  /**
+   * `--medidas=si|no` (por defecto si): aplicar las medidas de la consulta al plan (`aplicarMedidas`) en las
+   * tuberías que usan plan (v2, motor). `no` reproduce la corrida de antes con el mismo código. El flag de
+   * Vercel `busqueda-medidas` NO se lee acá: el banco lo fuerza con este argumento.
+   */
+  medidas: boolean;
   avisos: string[];
+}
+
+/**
+ * Estado de las medidas que declara la cabecera de la corrida: sólo las tuberías con plan v2 (v2 y motor)
+ * las aplican; clasica, tolerante y fase1 no usan el plan de la v2 ("no aplica").
+ */
+export function estadoMedidas(tuberia: Tuberia, medidas: boolean): "no aplica" | "on" | "off" {
+  return tuberia === "v2" || tuberia === "motor" ? (medidas ? "on" : "off") : "no aplica";
 }
 
 const entero = (nombre: string, v: string | undefined, min: number, def: number): number => {
@@ -129,6 +144,9 @@ export function parsearArgs(argv: readonly string[]): ArgsBanco {
   if (paridad && paridadCon !== undefined) throw new Error("--paridad y --paridad-con no se combinan: elija uno.");
   if (paridad && politica !== "legado") throw new Error("--paridad compara la política legado contra el oráculo: no admite --politica=cascada.");
 
+  const medidasPedido = mapa.get("medidas");
+  if (medidasPedido !== undefined && medidasPedido !== "si" && medidasPedido !== "no") throw new Error("--medidas debe ser si|no.");
+
   return {
     tuberia,
     jev,
@@ -140,6 +158,7 @@ export function parsearArgs(argv: readonly string[]): ArgsBanco {
     ...(paridadCon !== undefined ? { paridadCon } : {}),
     // `--paridad-con` compara contra ids: la corrida actual tiene que guardarlos.
     ids: mapa.has("ids") || paridadCon !== undefined,
+    medidas: medidasPedido !== "no",
     ...(mapa.has("salida") ? { salida: mapa.get("salida") } : {}),
     ...(mapa.has("json") ? { json: mapa.get("json") } : {}),
     ...(solo ? { solo: "diagnostico" as const } : {}),

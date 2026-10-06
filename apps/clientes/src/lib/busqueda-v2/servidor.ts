@@ -14,6 +14,7 @@
  */
 import { getArbolCategorias } from "../catalog";
 import { atributosEstructuradosDisponibles } from "../catalogo-atributos-disponibles";
+import { busquedaMedidasHabilitada } from "../busqueda-medidas-flag";
 import { shopTenantId } from "../tenant";
 import { createHash } from "node:crypto";
 import { hashArbol } from "../busqueda-inteligente/cache";
@@ -21,9 +22,10 @@ import { consultarJev } from "../busqueda-inteligente/jev";
 import { dentroDelTope, jevConTope } from "../busqueda-inteligente/limite";
 import { normalizarConsulta } from "../busqueda-inteligente/normalizar";
 import type { NodoArbol } from "../busqueda-inteligente/tipos";
-import { claveLru, guardarPlan, leerPlan, lru } from "./cache";
+import { Lru, claveLru, guardarPlan, leerPlan, lru } from "./cache";
 import { contador } from "./conteo";
 import { entender, type ClienteJev } from "./entender/entender";
+import { calcularMedidas, coberturaConContar } from "./entender/medidas-plan";
 import type { PlanBusqueda } from "./plan";
 
 /**
@@ -59,19 +61,90 @@ async function arbolSeguro(): Promise<NodoArbol[]> {
   });
 }
 
-async function obtener(
+/** Cómo se obtiene el plan (ver `planParaBuscar` y `planParaPagina`). */
+interface ModoObtener {
+  jev: ClienteJev | null;
+  sumarUso: boolean;
+  guardar: boolean;
+  /** Cupo para escribir en la base (la memoria no se topea). */
+  puedeEscribir?: () => boolean;
+}
+
+/**
+ * Las medidas de la consulta (flag `busqueda-medidas`) se suman al plan YA resuelto, en un solo lugar
+ * (`obtener`): lo que se guarda en la caché (memoria y base) sigue siendo el plan sin medidas.
+ * Se leen del flag en cada request; un flag que no se puede evaluar cuenta como apagado.
+ */
+const MEDIDAS_LRU_MAXIMO = 500;
+const MEDIDAS_LRU_TTL_MS = 60 * 60_000;
+
+/** Lo que decidió `aplicarMedidas` (no el plan): los atributos duros y blandos con las medidas ya mergeadas. */
+interface DecisionMedidas {
+  duros: string[];
+  blandos: { id: string; peso: number }[];
+}
+
+const gm = globalThis as unknown as { busquedaV2MedidasLru?: Lru<DecisionMedidas> };
+/** En `globalThis`: el hot-reload de dev no la vacía en cada guardado (como la de planes). */
+let medidasLru: Lru<DecisionMedidas> = (gm.busquedaV2MedidasLru ??= new Lru<DecisionMedidas>(MEDIDAS_LRU_MAXIMO, MEDIDAS_LRU_TTL_MS));
+
+/** Solo tests. */
+export function reiniciarMemoMedidas() {
+  medidasLru = gm.busquedaV2MedidasLru = new Lru<DecisionMedidas>(MEDIDAS_LRU_MAXIMO, MEDIDAS_LRU_TTL_MS);
+}
+
+/** Huella corta de lo que el plan base decidió (intención, duros y blandos): dos planes distintos no comparten memo. */
+const huellaPlan = (plan: PlanBusqueda) =>
+  createHash("sha1").update(JSON.stringify([plan.intencion, plan.duros, plan.blandos])).digest("hex").slice(0, 16);
+
+async function conMedidas(
+  plan: PlanBusqueda,
+  consultaCruda: string,
+  c: { tenant: string; hash: string; soloVisibles: boolean; estructurados: boolean },
+): Promise<PlanBusqueda> {
+  const clave = [c.tenant, c.hash, consultaCruda.trim().toLowerCase(), c.estructurados ? 1 : 0, huellaPlan(plan)].join("\u0000");
+  const decidido = medidasLru.get(clave);
+  if (decidido) return { ...plan, duros: { ...plan.duros, atributos: decidido.duros }, blandos: { ...plan.blandos, atributos: decidido.blandos } };
+  try {
+    // El plan es el mismo para todos: la decisión cuenta sobre el catálogo entero (con y sin stock).
+    const base = { soloVisibles: c.soloVisibles, soloStock: false, estructurados: c.estructurados };
+    const contar = contador(base);
+    const { plan: conMedidas } = await calcularMedidas(plan, consultaCruda, {
+      activo: true,
+      estructurados: c.estructurados,
+      contar,
+      contarPositivo: contador({ ...base, positivos: true }),
+      cobertura: coberturaConContar(contar),
+    });
+    medidasLru.set(clave, { duros: conMedidas.duros.atributos, blandos: conMedidas.blandos.atributos });
+    return conMedidas;
+  } catch (err) {
+    // Una falla de medidas nunca rompe la búsqueda: sale el plan sin ellas (y no se memoiza, se reintenta).
+    console.error(`[busqueda-medidas] no se pudieron aplicar las medidas: ${err instanceof Error ? err.name : "desconocido"}`);
+    return plan;
+  }
+}
+
+async function obtener(q: string, opciones: OpcionesPlan, modo: ModoObtener): Promise<PlanObtenido | null> {
+  const [arbol, estructurados, medidas] = await Promise.all([
+    arbolSeguro(),
+    atributosEstructuradosDisponibles(),
+    busquedaMedidasHabilitada().catch(() => false),
+  ]);
+  const obtenido = await obtenerBase(q, opciones, modo, arbol, estructurados);
+  if (!obtenido || !medidas) return obtenido;
+  const plan = await conMedidas(obtenido.plan, q, { tenant: shopTenantId(), hash: clavePlan(arbol, opciones.soloVisibles), soloVisibles: opciones.soloVisibles, estructurados });
+  return { ...obtenido, plan };
+}
+
+async function obtenerBase(
   q: string,
   opciones: OpcionesPlan,
-  modo: {
-    jev: ClienteJev | null;
-    sumarUso: boolean;
-    guardar: boolean;
-    /** Cupo para escribir en la base (la memoria no se topea). */
-    puedeEscribir?: () => boolean;
-  },
+  modo: ModoObtener,
+  arbol: NodoArbol[],
+  estructurados: boolean,
 ): Promise<PlanObtenido | null> {
   const tenant = shopTenantId();
-  const [arbol, estructurados] = await Promise.all([arbolSeguro(), atributosEstructuradosDisponibles()]);
   const norm = normalizarConsulta(q);
   const hash = clavePlan(arbol, opciones.soloVisibles);
   const clave = norm ? claveLru(tenant, hash, norm) : null;

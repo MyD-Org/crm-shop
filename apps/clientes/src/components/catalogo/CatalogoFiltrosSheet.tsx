@@ -3,8 +3,13 @@
 import { useState } from "react";
 import { Badge, Button, Dialog, Divider, Select } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
-import { cambiarBorrador, hrefAlAplicar, limpiarBorrador } from "@/lib/catalogo-borrador";
-import type { EstadoCatalogo, OrdenCatalogo } from "@/lib/catalogo-url";
+import {
+  cambiarBorrador,
+  hrefAlAplicar,
+  hrefAlElegirCategoria,
+  limpiarBorrador,
+} from "@/lib/catalogo-borrador";
+import { hrefCatalogo, type EstadoCatalogo, type OrdenCatalogo } from "@/lib/catalogo-url";
 import { ordenesPara, contarFiltrosActivos, etiquetaBotonFiltros } from "@/lib/catalogo-vista";
 import { CatalogoFiltros } from "./CatalogoFiltros";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
@@ -21,6 +26,12 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
  * o el fondo descarta el borrador. Los conteos y el rango son los de la URL
  * vigente.
  *
+ * Con las facetas por tipo prendidas, elegir o quitar una categoría SÍ se aplica en el acto: los
+ * filtros por tipo de producto dependen de ella y hay que traerlos. Navega con el borrador completo
+ * (sin las características de la categoría anterior), la hoja sigue abierta con `aria-busy` y, cuando
+ * llega el estado nuevo, el borrador se vuelve a sembrar para mostrar los filtros de la categoría
+ * nueva sin reabrirla. Con el flag apagado queda como siempre.
+ *
  * El foco queda atrapado en la hoja y vuelve a este botón al cerrar (lo
  * resuelve el `Dialog` del DS). En el celular también se cierra arrastrándola
  * hacia abajo (lo trae la hoja del DS desde 0.27.0), igual que con la X.
@@ -29,15 +40,30 @@ export function CatalogoFiltrosSheet({
   facetas,
   estado,
   navegar,
+  conFacetasPorTipo = false,
+  navegando = false,
 }: {
   facetas: Facetas;
   /** Estado vigente (la URL). */
   estado: EstadoCatalogo;
   /** Navega a una URL del catálogo (el padre la envuelve en una transición). */
   navegar: (href: string) => void;
+  /** Facetas por tipo prendidas (flag `catalogo-facetas-por-tipo`): la categoría se aplica en el acto. */
+  conFacetasPorTipo?: boolean;
+  /** Hay una navegación en curso (la categoría recién elegida está cargando). */
+  navegando?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [borrador, setBorrador] = useState(estado);
+  // Cuando llega una URL nueva (la de la categoría recién elegida), el borrador se vuelve a sembrar:
+  // ya incluye todo lo que se había tocado en la hoja, y ahora con los filtros de la categoría nueva.
+  // Ajuste de estado durante el render (patrón de React), no en un efecto: sin un cuadro con lo viejo.
+  const claveEstado = hrefCatalogo(estado);
+  const [claveSembrada, setClaveSembrada] = useState(claveEstado);
+  if (claveSembrada !== claveEstado) {
+    setClaveSembrada(claveEstado);
+    setBorrador(estado);
+  }
   // Al salir del catálogo la hoja se cierra (y el borrador se descarta, igual
   // que con la X): al volver, los filtros son los de la URL.
   useAlOcultar(() => setAbierto(false));
@@ -53,6 +79,14 @@ export function CatalogoFiltrosSheet({
     const href = hrefAlAplicar(estado, borrador);
     if (href) navegar(href);
   };
+
+  // La hoja sigue abierta: sólo navega (si hay algo que aplicar) y espera la respuesta.
+  const alElegirCategoria = conFacetasPorTipo
+    ? (categorias: string[]) => {
+        const href = hrefAlElegirCategoria(estado, borrador, categorias);
+        if (href) navegar(href);
+      }
+    : undefined;
 
   return (
     <>
@@ -77,13 +111,18 @@ export function CatalogoFiltrosSheet({
             <Button variant="ghost" onClick={() => setBorrador(limpiarBorrador(borrador))}>
               Limpiar filtros
             </Button>
-            <Button variant="primary" onClick={aplicar}>
+            <Button variant="primary" onClick={aplicar} disabled={navegando}>
               Aplicar
             </Button>
           </>
         }
       >
-        <div className="flex flex-col gap-5">
+        {/* Mientras carga la categoría elegida el contenido se atenúa y no recibe toques: lo que se
+            tocara se perdería al resembrar el borrador. */}
+        <div
+          className="flex flex-col gap-5 transition-opacity aria-busy:pointer-events-none aria-busy:opacity-60"
+          aria-busy={navegando}
+        >
           {/* El orden vive acá y no afuera: en un teléfono no hay lugar para
               tenerlo al lado de la vista, y cambia los resultados igual que un
               filtro, así que entra en la misma tanda de "Aplicar". No suma al
@@ -107,6 +146,7 @@ export function CatalogoFiltrosSheet({
             facetas={facetas}
             estado={borrador}
             ir={(cambios) => setBorrador((b) => cambiarBorrador(b, cambios))}
+            alElegirCategoria={alElegirCategoria}
           />
         </div>
       </Dialog>

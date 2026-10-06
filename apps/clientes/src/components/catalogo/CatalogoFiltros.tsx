@@ -54,11 +54,17 @@ export function CatalogoFiltros({
   estado,
   ir,
   dentroDeSheet = false,
+  alElegirCategoria,
 }: {
   facetas: Facetas;
   estado: EstadoCatalogo;
   ir: Ir;
   dentroDeSheet?: boolean;
+  /**
+   * Si se pasa, elegir o quitar una categoría llama a esto (con la selección nueva) en vez de `ir`.
+   * La hoja de mobile lo usa, con las facetas por tipo, para aplicar la categoría en el acto.
+   */
+  alElegirCategoria?: (categorias: string[]) => void;
 }) {
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
@@ -110,9 +116,11 @@ export function CatalogoFiltros({
           checked: c.checked,
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
-        onToggle={(valor, tildado) =>
-          ir({ categorias: alternarCategoria(facetas.categorias, estado.categorias, valor, tildado) })
-        }
+        onToggle={(valor, tildado) => {
+          const categorias = alternarCategoria(facetas.categorias, estado.categorias, valor, tildado);
+          if (alElegirCategoria) alElegirCategoria(categorias);
+          else ir({ categorias });
+        }}
         emptyText="Sin categorías para estos filtros"
       />
       <Divider />

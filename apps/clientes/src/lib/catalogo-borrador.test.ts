@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cambiarBorrador, hrefAlAplicar, limpiarBorrador } from "./catalogo-borrador";
+import {
+  borradorAlElegirCategoria,
+  cambiarBorrador,
+  hrefAlAplicar,
+  hrefAlElegirCategoria,
+  limpiarBorrador,
+} from "./catalogo-borrador";
 import { STOCK_INCLUYE_SIN_STOCK, type EstadoCatalogo } from "./catalogo-url";
 
 const base: EstadoCatalogo = {
@@ -194,5 +200,60 @@ describe("potencia en la hoja", () => {
   it("limpiar en el borrador y aplicar borra la potencia de la URL", () => {
     const conPotencia = { ...base, potenciaMin: 10, potenciaMax: 50 };
     expect(hrefAlAplicar(conPotencia, limpiarBorrador(conPotencia))).toBe("/catalogo");
+  });
+});
+
+describe("categoría en el acto en la hoja (spec R13)", () => {
+  const estado: EstadoCatalogo = {
+    ...base,
+    marcas: ["GENROD"],
+    caracteristicas: ["polos:2"],
+    categorias: ["TERMICAS"],
+    orden: "precio-asc",
+    pagina: 3,
+  };
+
+  it("borradorAlElegirCategoria cambia la categoría, descarta las características y conserva el resto", () => {
+    const b = cambiarBorrador(estado, { precioMin: 500, soloStock: false });
+    expect(borradorAlElegirCategoria(b, ["LLAVES"])).toEqual({
+      ...b,
+      categorias: ["LLAVES"],
+      caracteristicas: [],
+    });
+  });
+
+  it("no muta el borrador anterior", () => {
+    const antes = { ...estado };
+    borradorAlElegirCategoria(estado, ["LLAVES"]);
+    expect(estado).toEqual(antes);
+  });
+
+  it("scenario elegir categoría: navega con esa categoría y sin car", () => {
+    expect(hrefAlElegirCategoria(estado, estado, ["LLAVES"])).toBe(
+      "/catalogo?categoria=LLAVES&marca=GENROD&orden=precio-asc"
+    );
+  });
+
+  it("scenario borrador con otros cambios: se aplican categoría y borrador juntos, sin car", () => {
+    const sinCategoria = { ...base };
+    const b = cambiarBorrador(cambiarBorrador(sinCategoria, { precioMin: 500, precioMax: 9000 }), {
+      marcas: ["DCK"],
+    });
+    expect(hrefAlElegirCategoria(sinCategoria, b, ["TERMICAS"])).toBe(
+      "/catalogo?categoria=TERMICAS&marca=DCK&precio_min=500&precio_max=9000"
+    );
+  });
+
+  it("quitar la última categoría también se aplica en el acto", () => {
+    expect(hrefAlElegirCategoria(estado, estado, [])).toBe("/catalogo?marca=GENROD&orden=precio-asc");
+  });
+
+  it("scenario sin cambios: la misma categoría y borrador igual a la URL no navega", () => {
+    const sinCar = { ...estado, caracteristicas: [] };
+    expect(hrefAlElegirCategoria(sinCar, sinCar, ["TERMICAS"])).toBeNull();
+  });
+
+  it("\"Limpiar filtros\" de la hoja también limpia las características", () => {
+    expect(limpiarBorrador(estado).caracteristicas).toEqual([]);
   });
 });

@@ -181,7 +181,7 @@ const RE_NUMERO = /^(?:0|[1-9]\d{0,6})(?:\.\d{1,2})?$/;
 const RE_DIM = /^[1-9]\d{0,3}(?:x[1-9]\d{0,3}){1,2}$/;
 
 /** Número canónico del texto, o null (se re-serializa y tiene que dar lo mismo). */
-function numeroCanonico(texto: string): number | null {
+export function numeroCanonico(texto: string): number | null {
   if (!RE_NUMERO.test(texto)) return null;
   const n = Number(texto);
   return Number.isFinite(n) && String(n) === texto ? n : null;

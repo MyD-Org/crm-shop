@@ -134,6 +134,12 @@ export interface EstadoPago {
   cuotasPagadas?: number;
   /** Total que paga el comprador, con interés. Nunca reemplaza el total del pedido. */
   totalPagado?: number;
+  /**
+   * El proveedor no conoce ese pago (consulta sin resultado). No significa "fallido": el request pudo
+   * no haber llegado o seguir en vuelo. Quien reconcilia decide, según la antigüedad del intento,
+   * cuándo darlo por perdido (ver `RESERVA_NO_LLEGO_MS`).
+   */
+  noEncontrado?: boolean;
 }
 
 /** Lo que hace falta para crear un pago. El monto NUNCA sale del browser. */
@@ -150,6 +156,13 @@ export interface DatosPago {
   metodoPagoId?: string;
   tipoDocumento?: string;
   numeroDocumento?: string;
+  /**
+   * Id del intento de cobro (`pago_intentos`). Un proveedor que arma su propio id de operación a
+   * partir de él (ver `referenciaDeIntento`) lo necesita; los demás lo ignoran.
+   */
+  intentoId?: string;
+  /** Primeros 6 dígitos de la tarjeta (los informa la tokenización). Sólo para proveedores que lo exigen. */
+  bin?: string;
   /**
    * URL del webhook del entorno que crea el pago. Ver `urlNotificacion()` en
    * mercadopago.ts: sin esto MP usa la URL del panel, que depende del modo de
@@ -169,6 +182,18 @@ export interface ProveedorPago {
    * acepta, aunque esté activo en el CRM.
    */
   configurado(): boolean;
+  /**
+   * El proveedor exige el BIN de la tarjeta (6 dígitos) en el cobro. La ruta lo valida ANTES de
+   * reservar el intento.
+   */
+  readonly requiereBin?: boolean;
+  /**
+   * Referencia que va a tener el pago, conocida ANTES de crearlo. Si el proveedor la implementa, la
+   * ruta la graba en el intento antes de llamarlo: así un timeout (el pago pudo crearse igual) deja un
+   * intento que se puede consultar y reconciliar, en vez de una reserva sin referencia que a los
+   * 2 minutos se da por abandonada y habilita un segundo cobro.
+   */
+  referenciaDeIntento?(intentoId: string): string;
   /**
    * URL a la que el proveedor avisa los cambios de estado, armada con el dominio por el que entró el
    * comprador. Opcional: un proveedor que no notifica por webhook no la implementa.

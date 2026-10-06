@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
 import {
+  cerrarIntentoSinPago,
+  fijarReferenciaIntento,
   getPedidoParaPago,
   motivoNoCobrable,
   registrarCobro,
@@ -23,6 +25,7 @@ interface Body {
   cuotas?: unknown;
   metodoPagoId?: unknown;
   medio?: unknown;
+  bin?: unknown;
 }
 
 /** Pedido cancelado, tomado por un operador o vencido. Ver `motivoNoCobrable`. */
@@ -92,6 +95,16 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
   const token = texto(body.token, 200);
   if (medio === "tarjeta" && !token) {
     return NextResponse.json({ error: "Falta el token de la tarjeta." }, { status: 400 });
+  }
+
+  // El BIN lo informa la tokenización del navegador. Se valida antes de reservar nada: sin él un
+  // procesador que lo exige rechazaría el request.
+  const bin = typeof body.bin === "string" && /^\d{6}$/.test(body.bin) ? body.bin : undefined;
+  if (proveedor.requiereBin && !bin) {
+    return NextResponse.json(
+      { error: "Faltan datos de la tarjeta. Vuelva a ingresarla.", motivo: "datos_invalidos" },
+      { status: 400 },
+    );
   }
 
   // Ownership: `getPedidoParaPago` filtra por dueño, así que un pedido ajeno
@@ -180,6 +193,31 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
   }
   const { intentoId } = reserva;
 
+  /**
+   * Un procesador que conoce la referencia del pago de antemano la deja anotada en el intento ANTES
+   * de cobrar. Si el cobro da timeout, el pago pudo crearse igual: con la referencia en el intento,
+   * la consulta y la conciliación lo encuentran, y `resolverIntentoAbierto` no lo da por abandonado
+   * (una reserva sin referencia se descarta a los 2 minutos y habilitaría un segundo cobro).
+   * Si no se puede anotar, NO se cobra.
+   */
+  const referenciaPrevia = proveedor.referenciaDeIntento?.(intentoId);
+  if (referenciaPrevia) {
+    try {
+      await fijarReferenciaIntento(intentoId, referenciaPrevia);
+    } catch (err) {
+      console.error(`[/api/pagos/${proveedor.id}] no se pudo anotar la referencia del intento:`, err);
+      await registrarIntentoFallido(
+        pedido.id,
+        err instanceof Error ? err.message : String(err),
+        intentoId,
+      ).catch((e) => console.error(`[/api/pagos/${proveedor.id}] no se pudo registrar el intento:`, e));
+      return NextResponse.json(
+        { error: "No pudimos procesar el pago. Inténtelo de nuevo en un momento." },
+        { status: 502 },
+      );
+    }
+  }
+
   try {
     const resultado = await proveedor.crearPago({
       pedidoId: pedido.id,
@@ -192,6 +230,9 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
       token: token || undefined,
       cuotas,
       metodoPagoId,
+      // Sólo a quien los usa: el resto del contrato (y el cuerpo que arma Mercado Pago) no cambia.
+      ...(referenciaPrevia ? { intentoId } : {}),
+      ...(proveedor.requiereBin ? { bin } : {}),
       /**
        * Mercado Pago EXIGE `payer.email`: sin él responde 400 "Params Error",
        * sin decir cuál parámetro falta.
@@ -256,8 +297,16 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
     await registrarIntentoFallido(
       pedido.id,
       err instanceof Error ? err.message : String(err),
-      sinPago ? intentoId : undefined,
+      sinPago && !referenciaPrevia ? intentoId : undefined,
     ).catch((e) => console.error(`[/api/pagos/${proveedor.id}] no se pudo registrar el intento:`, e));
+    // Con referencia ya anotada `descartarReserva` no cierra nada: se cierra aparte, y sólo cuando es
+    // seguro que no hay pago (4xx).
+    if (sinPago && referenciaPrevia) {
+      await cerrarIntentoSinPago(
+        intentoId,
+        `error_proveedor: ${err instanceof Error ? err.message : String(err)}`,
+      ).catch((e) => console.error(`[/api/pagos/${proveedor.id}] no se pudo cerrar el intento:`, e));
+    }
 
     return NextResponse.json(
       { error: "No pudimos procesar el pago. Inténtelo de nuevo en un momento." },

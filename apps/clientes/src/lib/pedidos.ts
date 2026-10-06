@@ -1265,6 +1265,39 @@ export async function registrarIntentoFallido(
 }
 
 /**
+ * Graba la referencia de un intento ANTES de llamar al proveedor (los que la conocen de antemano,
+ * ver `ProveedorPago.referenciaDeIntento`). Sólo si el intento todavía no tiene una: no pisa la que
+ * ya reclamó un webhook o una consulta.
+ */
+export async function fijarReferenciaIntento(intentoId: string, referencia: string): Promise<void> {
+  await getDb()
+    .update(pagoIntentos)
+    .set({ referencia, updatedAt: new Date() })
+    .where(
+      and(
+        eq(pagoIntentos.id, intentoId),
+        isNull(pagoIntentos.referencia),
+        eq(pagoIntentos.estado, "pendiente"),
+        intentoDeEsteTenant(),
+      ),
+    );
+}
+
+/**
+ * Cierra un intento pendiente aunque ya tenga referencia, cuando es SEGURO que no hay pago (el
+ * proveedor rechazó el request con un 4xx). `descartarReserva` no sirve para esto: sólo cierra
+ * reservas sin referencia, por si un webhook la reclamó.
+ */
+export async function cerrarIntentoSinPago(intentoId: string, detalle: string): Promise<void> {
+  await getDb()
+    .update(pagoIntentos)
+    .set({ estado: "fallido", detalle: detalle.slice(0, 300), updatedAt: new Date() })
+    .where(
+      and(eq(pagoIntentos.id, intentoId), eq(pagoIntentos.estado, "pendiente"), intentoDeEsteTenant()),
+    );
+}
+
+/**
  * Cierra una reserva que nunca obtuvo referencia del proveedor. Si ya la tiene
  * (el webhook la reclamó mientras tanto), no la toca: ahí hay un pago real.
  */
@@ -1535,9 +1568,9 @@ export async function intentosPendientesDeReconciliar(opciones: {
   /** Creados después de esto. */
   creadosDesde: Date;
   limite: number;
-}): Promise<{ orderId: string; referencia: string }[]> {
+}): Promise<{ orderId: string; referencia: string; creadoEn: Date }[]> {
   const filas = await getDb()
-    .select({ orderId: pagoIntentos.orderId, referencia: pagoIntentos.referencia })
+    .select({ orderId: pagoIntentos.orderId, referencia: pagoIntentos.referencia, creadoEn: pagoIntentos.createdAt })
     .from(pagoIntentos)
     .where(
       and(
@@ -1553,7 +1586,7 @@ export async function intentosPendientesDeReconciliar(opciones: {
     )
     .orderBy(asc(pagoIntentos.createdAt))
     .limit(opciones.limite);
-  return filas.filter((f): f is { orderId: string; referencia: string } => f.referencia != null);
+  return filas.filter((f): f is { orderId: string; referencia: string; creadoEn: Date } => f.referencia != null);
 }
 
 /**

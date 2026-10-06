@@ -7,6 +7,10 @@
  *   tiene el dato) se excluyen del promedio y se cuentan aparte, nunca valen 0.
  * - contradicciones@24: total de pares (producto x medida) con dato que NO cumplen; entre paréntesis las
  *   de medidas `dura: true` (objetivo 0).
+ * - inversiones@24: total de pares (contradice, cumple) con el que contradice por encima del que cumple, en
+ *   las claves discretas (polos, corriente, sensibilidad, zócalo); objetivo 0. Entre paréntesis, los casos
+ *   que tienen alguna. Importa el ORDEN, no cuántos contradicen: una contradicción debajo de todos los que
+ *   cumplen no cuenta.
  * - cobertura@24: media por caso de la fracción de la página con dato.
  * - hit: % de casos donde el plan produjo la medida; sólo cuenta si la tubería produce medidas.
  * - falsos positivos: % de los casos negativos (`medidas: []` / `sinMedidasDe`) donde el plan produjo una
@@ -24,6 +28,12 @@ export interface ResumenMedida {
   precisionExcluidos: number;
   contradicciones: number;
   contradiccionesDuras: number;
+  /** Total de inversiones de orden en las claves discretas (objetivo 0). */
+  inversiones: number;
+  /** Casos con alguna inversión. */
+  casosConInversion: number;
+  /** Productos que contradicen por encima del último que cumple (total). */
+  contradicenArriba: number;
   cobertura: number | null;
   /** Casos negativos evaluables (la tubería produce medidas). */
   negativos: number;
@@ -50,6 +60,9 @@ export function resumenMedidas(evs: readonly EvaluacionBusqueda[]): ResumenMedid
     precisionExcluidos: esperadas.length - precisiones.length,
     contradicciones: suma(esperadas.map((m) => m.contradicciones)),
     contradiccionesDuras: suma(esperadas.map((m) => m.contradiccionesDuras)),
+    inversiones: suma(esperadas.map((m) => m.inversiones)),
+    casosConInversion: esperadas.filter((m) => (m.inversiones ?? 0) > 0).length,
+    contradicenArriba: suma(esperadas.map((m) => m.contradicenArriba)),
     cobertura: promedio(esperadas.flatMap((m) => (m.cobertura === null ? [] : [m.cobertura]))),
     negativos: negativos.length,
     falsosPositivos: negativos.filter(Boolean).length,
@@ -59,16 +72,17 @@ export function resumenMedidas(evs: readonly EvaluacionBusqueda[]): ResumenMedid
 
 const pct = (x: number | null) => (x === null ? "n/a" : `${(100 * x).toFixed(1)}%`);
 
-const ENCABEZADO = "casos | medida-hit | medida-precision@24 | contradicciones@24 (duras) | cobertura@24 | precisión n/a | falsos positivos";
+const ENCABEZADO = "casos | medida-hit | medida-precision@24 | contradicciones@24 (duras) | inversiones@24 (casos) | cobertura@24 | precisión n/a | falsos positivos";
 
 function fila(nombre: string, r: ResumenMedida | undefined): string {
-  if (!r) return `${nombre.padEnd(18)} | 0 | n/a | n/a | n/a | n/a | n/a | n/a`;
+  if (!r) return `${nombre.padEnd(18)} | 0 | n/a | n/a | n/a | n/a | n/a | n/a | n/a`;
   return [
     nombre.padEnd(18),
     r.n,
     r.hitN ? pct(r.hitRate) : "n/a",
     pct(r.precision),
     `${r.contradicciones} (${r.contradiccionesDuras})`,
+    `${r.inversiones} (${r.casosConInversion})`,
     pct(r.cobertura),
     r.precisionExcluidos,
     r.negativos ? `${r.falsosPositivos}/${r.negativos} (${pct(r.falsosPositivosRate)})` : "n/a",

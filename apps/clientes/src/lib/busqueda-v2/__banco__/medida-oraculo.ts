@@ -11,6 +11,10 @@
  * - cumple / contradice: con dato que cumple / que no cumple. Sin dato no cumple ni contradice.
  * - precisión = cumple / con (null si nadie tiene dato: "n/a", no 0); contradicciones = cuántos contradicen;
  *   cobertura = con / pares; contradiccionesDuras = contradicciones de las medidas con `dura: true`.
+ * - ORDEN (claves discretas con valor exacto: polos, corriente, sensibilidad, zócalo): `inversiones` = pares
+ *   (contradice, cumple) donde el que contradice está ANTES en el ranking; `contradicenArriba` = cuántos
+ *   contradicen por encima del último que cumple. Los que no tienen dato no cuentan. Objetivo: 0 (el que
+ *   cumple va siempre antes que el que contradice; no importa cuántos contradigan si quedan debajo).
  */
 import { idDeMedida, leerIdMedida } from "@/lib/catalogo-atributos-medida";
 import type { ValorEstructurado } from "@/lib/catalogo-caracteristicas";
@@ -30,6 +34,10 @@ export interface DetalleMedida {
   cumple: number;
   contradice: number;
   duras: number;
+  /** Pares (contradice, cumple) con el que contradice por encima; 0 si la clave no es discreta o la medida no es un valor exacto. */
+  inversiones: number;
+  /** Productos que contradicen por encima del último que cumple (misma salvedad). */
+  arriba: number;
   /** Ids de los productos del top 24 que contradicen (los que traen id). */
   contradicen: string[];
 }
@@ -48,6 +56,10 @@ export interface EvaluacionMedida {
   cobertura: number | null;
   /** Contradicciones de las medidas `dura: true`; `null` si el caso no tiene ninguna. */
   contradiccionesDuras: number | null;
+  /** Suma de `inversiones` de las medidas discretas esperadas; `null` si el caso no tiene ninguna. Objetivo 0. */
+  inversiones: number | null;
+  /** Suma de `arriba` de esas mismas medidas; `null` si no tiene ninguna. */
+  contradicenArriba: number | null;
   /**
    * Casos negativos (`medidas: []` o `sinMedidasDe`): el plan produjo una medida que no debía.
    * `null` = el caso no es negativo o la tubería no produce medidas.
@@ -62,6 +74,34 @@ export interface EvaluacionMedida {
 }
 
 const EPSILON = 1e-9;
+
+/**
+ * Claves discretas cuyo ORDEN se mide: el producto que cumple va antes que el que contradice. Se espeja a mano
+ * (no se importa de producción) para que el banco valide el resultado y no se auto-valide. Las blandas (potencia,
+ * temperatura, flujo) no se miden acá: una potencia cercana no es una contradicción.
+ */
+export const CLAVES_ORDEN_DISCRETO: readonly string[] = ["polos", "corriente_a", "sensibilidad_ma", "zocalo"];
+
+/** ¿Se mide el orden de esta medida? Discreta y con un valor exacto (un rango no tiene "el que contradice" nítido). */
+const mideOrden = (m: MedidaBanco) => CLAVES_ORDEN_DISCRETO.includes(m.clave) && m.valor !== undefined;
+
+/**
+ * Inversiones y contradicciones por encima del último que cumple, sobre los veredictos del top en orden de ranking
+ * (`true` cumple, `false` contradice, `null` sin dato).
+ */
+export function ordenDeVeredictos(veredictos: readonly (boolean | null)[]): { inversiones: number; arriba: number } {
+  let contradicenAntes = 0;
+  let inversiones = 0;
+  let arriba = 0;
+  for (const v of veredictos) {
+    if (v === false) contradicenAntes++;
+    else if (v === true) {
+      inversiones += contradicenAntes;
+      arriba = contradicenAntes;
+    }
+  }
+  return { inversiones, arriba };
+}
 
 /** ¿El valor estructurado cumple la medida? `null` = sin dato del tipo que la medida pide. */
 export function cumpleMedida(m: MedidaBanco, v: ValorEstructurado | undefined): boolean | null {
@@ -137,7 +177,7 @@ export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionM
   const trazaPlan = emitidas ? { emitidas: [...emitidas], emitidasDuras: emitidas.filter((id) => r.atributosDuros.includes(id)) } : {};
 
   if (!esperadas.length) {
-    return { hit: null, precision: null, contradicciones: null, cobertura: null, contradiccionesDuras: null, falsoPositivo, ...trazaPlan, detalle: [] };
+    return { hit: null, precision: null, contradicciones: null, cobertura: null, contradiccionesDuras: null, inversiones: null, contradicenArriba: null, falsoPositivo, ...trazaPlan, detalle: [] };
   }
 
   const top = r.productos.slice(0, 24);
@@ -147,9 +187,11 @@ export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionM
   let contradiccionesDuras = 0;
   const detalle: DetalleMedida[] = [];
   for (const m of esperadas) {
-    const d: DetalleMedida = { clave: m.clave, valor: valorEsperado(m), dura: !!m.dura, con: 0, cumple: 0, contradice: 0, duras: 0, contradicen: [] };
+    const d: DetalleMedida = { clave: m.clave, valor: valorEsperado(m), dura: !!m.dura, con: 0, cumple: 0, contradice: 0, duras: 0, inversiones: 0, arriba: 0, contradicen: [] };
+    const veredictos: (boolean | null)[] = [];
     for (const p of top) {
       const ok = cumpleMedida(m, p.atributosEstructurados?.[m.clave as keyof NonNullable<typeof p.atributosEstructurados>]);
+      veredictos.push(ok);
       if (ok === null) continue;
       con++;
       d.con++;
@@ -166,8 +208,14 @@ export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionM
         }
       }
     }
+    if (mideOrden(m)) {
+      const orden = ordenDeVeredictos(veredictos);
+      d.inversiones = orden.inversiones;
+      d.arriba = orden.arriba;
+    }
     detalle.push(d);
   }
+  const conOrden = esperadas.some(mideOrden);
   const pares = esperadas.length * top.length;
   return {
     hit,
@@ -175,6 +223,8 @@ export function evaluarMedidas(b: BusquedaBanco, r: ResultadoBanco): EvaluacionM
     contradicciones,
     cobertura: pares ? con / pares : null,
     contradiccionesDuras: esperadas.some((m) => m.dura) ? contradiccionesDuras : null,
+    inversiones: conOrden ? detalle.reduce((t, d) => t + d.inversiones, 0) : null,
+    contradicenArriba: conOrden ? detalle.reduce((t, d) => t + d.arriba, 0) : null,
     falsoPositivo,
     ...trazaPlan,
     detalle,

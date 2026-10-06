@@ -405,8 +405,8 @@ describe("correr: detalle de medidas por caso (CasoJson.medida)", () => {
       plan: ["polos:2", "corriente_a:20"],
       duros: ["polos:2"],
       esperadas: [
-        { clave: "polos", valor: "2", dura: true, con: 3, cumple: 2, contradice: 1, duras: 1 },
-        { clave: "corriente_a", valor: "20", dura: false, con: 3, cumple: 2, contradice: 1, duras: 0 },
+        { clave: "polos", valor: "2", dura: true, con: 3, cumple: 2, contradice: 1, duras: 1, inversiones: 1, arriba: 1 },
+        { clave: "corriente_a", valor: "20", dura: false, con: 3, cumple: 2, contradice: 1, duras: 0, inversiones: 0, arriba: 0 },
       ],
     });
   });

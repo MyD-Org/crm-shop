@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CasoJson } from "./corrida";
 import type { MedidaEsperadaJson, MedidaJson } from "./medida-json";
-import { entradasDeReporte, formatearAnalisis, impactoPorClave, parsearArgsAnalisis, parsearReporteMedidas, rankingContradicciones, totalesPorClave, type ReporteMedidas } from "./analisis-medidas";
+import { entradasDeReporte, formatearAnalisis, impactoPorClave, parsearArgsAnalisis, parsearReporteMedidas, rankingContradicciones, rankingInversiones, totalesPorClave, type ReporteMedidas } from "./analisis-medidas";
 
 const esp = (clave: string, p: Partial<MedidaEsperadaJson> = {}): MedidaEsperadaJson => ({ clave, valor: "1", dura: false, con: 0, cumple: 0, contradice: 0, duras: 0, ...p });
 const medida = (esperadas: MedidaEsperadaJson[], p: Partial<MedidaJson> = {}): MedidaJson => ({ hit: true, falsoPositivo: null, pagina: 24, esperadas, ...p });
@@ -88,6 +88,54 @@ describe("rankingContradicciones", () => {
 
   it("filtra por clave", () => {
     expect(rankingContradicciones(entradas, { soloDuras: false, clave: "corriente_a" }).map((e) => e.idx)).toEqual([2]);
+  });
+});
+
+describe("rankingInversiones (orden: contradicciones por encima de lo que cumple)", () => {
+  const conOrden = [
+    caso(0, medida([esp("polos", { dura: true, con: 10, cumple: 7, contradice: 3, duras: 3, inversiones: 12, arriba: 3 })], { plan: ["polos:2"], duros: [] })),
+    caso(1, medida([esp("corriente_a", { con: 12, cumple: 11, contradice: 1, inversiones: 5, arriba: 1 }), esp("polos", { con: 5, cumple: 5 })], { plan: ["corriente_a:20"], duros: [] })),
+    caso(2, medida([esp("zocalo", { con: 12, cumple: 11, contradice: 1, inversiones: 0, arriba: 0 })], { plan: ["zocalo:e27"], duros: [] })),
+    // JSON anterior a la métrica: sin inversiones (no se cuentan como 0 en el ranking, no aparecen)
+    caso(3, medida([esp("polos", { con: 5, cumple: 4, contradice: 1 })], { plan: [], duros: [] })),
+  ];
+  const { entradas } = entradasDeReporte(reporte(conOrden));
+
+  it("entradas traen inversiones y arriba (0 si el JSON no los trae)", () => {
+    expect(entradas.map((e) => [e.idx, e.clave, e.inversiones, e.arriba])).toEqual([
+      [0, "polos", 12, 3],
+      [1, "corriente_a", 5, 1],
+      [1, "polos", 0, 0],
+      [2, "zocalo", 0, 0],
+      [3, "polos", 0, 0],
+    ]);
+  });
+
+  it("ordena por inversiones desc y sólo incluye las que tienen", () => {
+    expect(rankingInversiones(entradas).map((e) => [e.idx, e.clave, e.inversiones])).toEqual([
+      [0, "polos", 12],
+      [1, "corriente_a", 5],
+    ]);
+    expect(rankingInversiones(entradas, { top: 1 })).toHaveLength(1);
+    expect(rankingInversiones(entradas, { clave: "corriente_a" }).map((e) => e.idx)).toEqual([1]);
+  });
+
+  it("totalesPorClave suma inversiones y casos con inversión", () => {
+    const t = totalesPorClave(entradas);
+    expect(t.find((x) => x.clave === "polos")).toMatchObject({ inversiones: 12, casosConInversion: 1, arriba: 3 });
+    expect(t.find((x) => x.clave === "zocalo")).toMatchObject({ inversiones: 0, casosConInversion: 0 });
+  });
+
+  it("formatearAnalisis imprime la sección de orden y el total", () => {
+    const t = formatearAnalisis(reporte(conOrden), {});
+    expect(t).toContain("## Orden: contradicciones por encima de lo que cumple");
+    expect(t).toMatch(/consulta 0 \| polos:2 \| polos \| 12 inversiones \(3 arriba\)/);
+    expect(t).toContain("Total: 17 inversiones en 2 casos");
+  });
+
+  it("sin inversiones lo dice", () => {
+    const t = formatearAnalisis(reporte([caso(0, medida([esp("polos", { con: 3, cumple: 3, inversiones: 0, arriba: 0 })], { plan: [], duros: [] }))]), {});
+    expect(t).toContain("Ninguna inversión de orden");
   });
 });
 

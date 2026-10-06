@@ -8,7 +8,7 @@ import type { Cabecera, ReporteJson } from "./corrida";
 import { cortarPor, resumenNumerico } from "./metricas";
 import type { EvaluacionMedida } from "./medida-oraculo";
 
-const medida = (p: Partial<EvaluacionMedida>): EvaluacionMedida => ({ hit: null, precision: null, contradicciones: 0, cobertura: 0, contradiccionesDuras: null, falsoPositivo: null, detalle: [], ...p });
+const medida = (p: Partial<EvaluacionMedida>): EvaluacionMedida => ({ hit: null, precision: null, contradicciones: 0, cobertura: 0, contradiccionesDuras: null, inversiones: null, contradicenArriba: null, falsoPositivo: null, detalle: [], ...p });
 
 function ev(i: number, p: Partial<EvaluacionBusqueda> = {}): EvaluacionBusqueda {
   return {
@@ -40,8 +40,8 @@ const matriz = (corridas: Record<string, ReporteJson>): MatrizJson => ({
 
 const antes = matriz({
   "sintetico-banco-v2-sinjev": reporte([
-    ev(0, { tipo: "medida", top24Ok: false, posicion: null, rr: 0, zero: true, total: 0, ms: 100, medida: medida({ precision: 0.5, contradicciones: 4, cobertura: 0.4 }) }),
-    ev(1, { tipo: "medida", ms: 120, medida: medida({ precision: 0.7, contradicciones: 2, cobertura: 0.4 }) }),
+    ev(0, { tipo: "medida", top24Ok: false, posicion: null, rr: 0, zero: true, total: 0, ms: 100, medida: medida({ precision: 0.5, contradicciones: 4, inversiones: 3, cobertura: 0.4 }) }),
+    ev(1, { tipo: "medida", ms: 120, medida: medida({ precision: 0.7, contradicciones: 2, inversiones: 2, cobertura: 0.4 }) }),
     ev(2, { tipo: "producto", ms: 90 }),
     ev(3, { tipo: "producto", ms: 90 }),
   ], { medidas: "off" }),
@@ -82,8 +82,22 @@ describe("compararMatrices", () => {
     expect(texto).toContain("120 → 130 ms (+10)");
   });
 
+  it("delta de inversiones@24 (orden): 5 -> 0", () => {
+    expect(texto).toContain("5 → 0 (-5)");
+  });
+
+  it("un snapshot anterior a la métrica de orden (sin inversiones) queda n/a, no 0", () => {
+    const rViejo = reporte([ev(0, { tipo: "medida", medida: medida({ precision: 0.5, contradicciones: 4 }) })], { medidas: "off" });
+    // Un snapshot viejo no trae el campo (ni en el total ni en el corte): se lo saca para reproducirlo.
+    for (const r of [rViejo.resumen, rViejo.cortes.tipo.medida]) delete (r.medida as { inversiones?: number }).inversiones;
+    const viejo = matriz({ "sintetico-banco-v2-sinjev": rViejo });
+    const nuevo = matriz({ "sintetico-banco-v2-sinjev": reporte([ev(0, { tipo: "medida", medida: medida({ precision: 0.5, contradicciones: 4, inversiones: 2 }) })], { medidas: "on" }) });
+    const fila = compararMatrices(viejo, nuevo).split("\n").find((l) => /^medida\s+\|/.test(l))!;
+    expect(fila.split(" | ")[4]).toBe("n/a");
+  });
+
   it("encabezado de columnas con los nombres de las métricas", () => {
-    for (const nombre of ["hit@24", "medida-precision@24", "contradicciones@24", "zero-result", "p95"]) expect(texto).toContain(nombre);
+    for (const nombre of ["hit@24", "medida-precision@24", "contradicciones@24", "inversiones@24", "zero-result", "p95"]) expect(texto).toContain(nombre);
   });
 
   it("un tipo sin medidas en alguno de los lados queda n/a, no 0", () => {

@@ -8,12 +8,14 @@ const ev = (p: Partial<EvaluacionMedida> = {}): EvaluacionMedida => ({
   contradicciones: 2,
   cobertura: 0.5,
   contradiccionesDuras: 2,
+  inversiones: 3,
+  contradicenArriba: 2,
   falsoPositivo: null,
   emitidas: ["polos:2", "corriente_a:20"],
   emitidasDuras: ["polos:2"],
   detalle: [
-    { clave: "polos", valor: "2", dura: true, con: 10, cumple: 8, contradice: 2, duras: 2, contradicen: ["p1", "p2"] },
-    { clave: "corriente_a", valor: "20", dura: false, con: 4, cumple: 4, contradice: 0, duras: 0, contradicen: [] },
+    { clave: "polos", valor: "2", dura: true, con: 10, cumple: 8, contradice: 2, duras: 2, inversiones: 3, arriba: 2, contradicen: ["p1", "p2"] },
+    { clave: "corriente_a", valor: "20", dura: false, con: 4, cumple: 4, contradice: 0, duras: 0, inversiones: 0, arriba: 0, contradicen: [] },
   ],
   ...p,
 });
@@ -28,8 +30,8 @@ describe("medidaParaJson", () => {
       plan: ["polos:2", "corriente_a:20"],
       duros: ["polos:2"],
       esperadas: [
-        { clave: "polos", valor: "2", dura: true, con: 10, cumple: 8, contradice: 2, duras: 2 },
-        { clave: "corriente_a", valor: "20", dura: false, con: 4, cumple: 4, contradice: 0, duras: 0 },
+        { clave: "polos", valor: "2", dura: true, con: 10, cumple: 8, contradice: 2, duras: 2, inversiones: 3, arriba: 2 },
+        { clave: "corriente_a", valor: "20", dura: false, con: 4, cumple: 4, contradice: 0, duras: 0, inversiones: 0, arriba: 0 },
       ],
     });
     expect(JSON.stringify(j)).not.toContain("p1");

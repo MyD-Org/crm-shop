@@ -7,6 +7,10 @@ on:
       # Los tests de integración aplican la baseline del Shop (esquema `shop`) y el test de
       # contrato compara contra ella: un cambio ahí tiene que disparar este CI.
       - "apps/clientes/drizzle/**"
+      # Fixtures del Shop que el admin lee en sus tests de paridad (claves de catalog_atributos y
+      # medidas de la búsqueda): un cambio ahí tiene que disparar este CI.
+      - "apps/clientes/src/db/__fixtures__/atributos-claves.json"
+      - "apps/clientes/src/db/__fixtures__/medidas-dorados.json"
       - ".github/workflows/admin-ci.yml"
   push:
     branches: [main]
@@ -15,6 +19,10 @@ on:
       # Los tests de integración aplican la baseline del Shop (esquema `shop`) y el test de
       # contrato compara contra ella: un cambio ahí tiene que disparar este CI.
       - "apps/clientes/drizzle/**"
+      # Fixtures del Shop que el admin lee en sus tests de paridad (claves de catalog_atributos y
+      # medidas de la búsqueda): un cambio ahí tiene que disparar este CI.
+      - "apps/clientes/src/db/__fixtures__/atributos-claves.json"
+      - "apps/clientes/src/db/__fixtures__/medidas-dorados.json"
       - ".github/workflows/admin-ci.yml"
 
 permissions:

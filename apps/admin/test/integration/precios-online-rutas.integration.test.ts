@@ -249,7 +249,12 @@ describe("grilla de precios online", () => {
       SELECT ${A}, 'g' || i, 'REF-' || i, 'Producto ' || lpad(i::text, 5, '0'), 'active', (10 + i % 500), (10 + i % 500)
       FROM generate_series(1, 10000) i
     `)
+    // Medición del UPDATE masivo (10.000 productos x 1 lista): referencia para el ensayo U3.
+    const t0 = Date.now()
     await getDb().execute(sql`SELECT * FROM aplicar_precios_online(${A}, NULL::text[], 'config')`)
+    const ms = Date.now() - t0
+    console.info(`[medicion] aplicar_precios_online config, 10000 productos x 1 lista: ${ms} ms`)
+    expect(ms).toBeLessThan(10_000)
     const p1 = await grilla("?limit=50")
     expect(p1.total).toBe(10000)
     expect(p1.items).toHaveLength(50)

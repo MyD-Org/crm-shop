@@ -15,7 +15,7 @@ import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { condicionesAplicables, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
+import { baseParaCuotas, condicionesAplicables, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
 import { procesadorConfigurado } from "@/lib/pagos";
@@ -151,13 +151,29 @@ export async function POST(req: Request) {
     // del medio. Sólo se cotiza si hay algún mínimo cargado y se pidieron cuotas u opciones.
     const hayMinimos = (medioCobro?.condicionesCuotas ?? []).some((c) => c.montoMinimo != null);
     const pideCuotas = typeof body.cuotas === "number" && body.cuotas >= 2;
+    // Base de un medio: cotización a la lista de su pago único y, si esa lista no sirve (el medio no
+    // tiene o un producto no tiene precio en ella), a la de referencia. null = no se pudo calcular:
+    // nunca se promete con base 0.
+    const baseDelMedio = async (medios: typeof mediosCrm, slug: string): Promise<number | null> => {
+      const lista = idListaDelMedio(medios, entregaTipo, slug, undefined, 1);
+      for (const idListaMedio of lista ? [lista, undefined] : [undefined]) {
+        try {
+          const b = baseParaCuotas(await cotizar(lineas, { ...opcionesCotizar, idListaMedio }));
+          if (b !== null) return b;
+        } catch (err) {
+          console.error("[/api/carrito/cotizar] base de cuotas:", err);
+        }
+      }
+      return null;
+    };
+    // `totalBase` valida el mínimo (0 si no se pudo: sólo las cantidades sin mínimo); `baseValida`
+    // habilita barra y "sume": sólo con una base real.
     let totalBase: number | undefined;
+    let baseValida = false;
     if (conCuotas && hayMinimos && (pideCuotas || body.conCuotas === true)) {
-      const cotBase = await cotizar(lineas, {
-        ...opcionesCotizar,
-        idListaMedio: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1),
-      });
-      totalBase = cotBase.hayProblemas ? 0 : cotBase.total;
+      const b = await baseDelMedio(mediosCrm, pagoMetodo);
+      totalBase = b ?? 0;
+      baseValida = b !== null;
     }
     let cuotas = 1;
     if (conCuotas) {
@@ -197,7 +213,7 @@ export async function POST(req: Request) {
         : undefined;
     // "Le faltan $X para N cuotas": sólo con las opciones pedidas (checkout) y algún mínimo sin alcanzar.
     const escalon =
-      conCuotas && body.conCuotas === true && totalBase !== undefined
+      conCuotas && body.conCuotas === true && baseValida && totalBase !== undefined
         ? proximoEscalon(medioCobro?.condicionesCuotas, totalBase)
         : null;
     // Barra del carrito: sin medio elegido, el progreso combinado entre los medios de cobro en línea
@@ -209,18 +225,14 @@ export async function POST(req: Request) {
         (m) => m.cobroOnline && (m.condicionesCuotas ?? []).some((c) => c.montoMinimo != null),
       );
       if (medios.length > 0) {
-        const bases = await Promise.all(
-          medios.map(async (m) => {
-            const q = await cotizar(lineas, {
-              ...opcionesCotizar,
-              idListaMedio: idListaDelMedio(todos, entregaTipo, m.slug, undefined, 1),
-            });
-            return { condiciones: m.condicionesCuotas, base: q.hayProblemas ? 0 : q.total };
-          }),
-        );
-        progreso = progresoCuotas(bases);
+        const bases = (
+          await Promise.all(
+            medios.map(async (m) => ({ condiciones: m.condicionesCuotas, base: await baseDelMedio(todos, m.slug) })),
+          )
+        ).filter((b): b is { condiciones: typeof b.condiciones; base: number } => b.base !== null);
+        if (bases.length > 0) progreso = progresoCuotas(bases);
       }
-    } else if (conCuotas && body.conCuotas === true && totalBase !== undefined) {
+    } else if (conCuotas && body.conCuotas === true && baseValida && totalBase !== undefined) {
       progreso = progresoCuotas([{ condiciones: medioCobro?.condicionesCuotas, base: totalBase }]);
     }
     const disponibilidad = await disponibilidadParaMostrar(

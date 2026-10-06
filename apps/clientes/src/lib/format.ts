@@ -28,6 +28,14 @@ const ARS_ENTERO = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0,
 });
 
+/**
+ * Monto para frases ("Sume $ 30.000 más…"): sin centavos cuando son ,00 y con dos decimales cuando
+ * los hay. Para precios de producto sigue `fmtPrecio` (siempre dos decimales).
+ */
+export function fmtPrecioCorto(n: number): string {
+  return Number.isInteger(Math.round(n * 100) / 100) ? ARS_ENTERO.format(n) : ARS.format(n);
+}
+
 export function fmtPesosEnteros(n: number): string {
   return ARS_ENTERO.format(n);
 }

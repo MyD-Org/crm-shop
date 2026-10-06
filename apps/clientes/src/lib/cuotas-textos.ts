@@ -8,7 +8,7 @@
  *
  * Módulo puro: lo usan componentes de cliente y de servidor.
  */
-import { fmtPrecio } from "./format";
+import { fmtPrecio, fmtPrecioCorto } from "./format";
 
 const cuotasDe = (n: number) => (n === 1 ? "1 cuota" : `${n} cuotas`);
 
@@ -37,11 +37,16 @@ export const TEXTOS_CUOTAS = {
   // --- Checkout ---
   checkoutTitulo: "Cantidad de cuotas",
   checkoutAyuda: (medio: string) => `Se pagan con tarjeta de crédito en ${medio}, sin interés.`,
-  /** "Le faltan $790 para 6 cuotas sin interés." */
+  /**
+   * Barra y checkout, faltante: "Sume $790 más y pague en 6 cuotas sin interés." El monto va en
+   * negrita: la vista parte el texto con `montoFaltante` (mismo formato, sin ,00).
+   */
   faltaParaCuotas: (falta: number, cuotas: number) =>
-    `Le faltan ${fmtPrecio(falta)} para ${cuotasDe(cuotas)} sin interés.`,
-  /** Estado lleno de la barra: "Su compra ya tiene 12 cuotas sin interés." */
-  cuotasCompletas: (cuotas: number) => `Su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
+    `Sume ${fmtPrecioCorto(falta)} más y pague en ${cuotasDe(cuotas)} sin interés.`,
+  /** El fragmento del texto de `faltaParaCuotas` que va en negrita. */
+  montoFaltante: (falta: number) => fmtPrecioCorto(falta),
+  /** Estado lleno de la barra: "¡Listo! Su compra ya tiene 12 cuotas sin interés." */
+  cuotasCompletas: (cuotas: number) => `¡Listo! Su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
   barraAria: "Progreso hacia más cuotas sin interés",
   /** Fila atenuada del modal: "6 cuotas sin interés en compras desde $90.000". */
   filaNoAlcanzada: (cuotas: number, minimo: number) =>

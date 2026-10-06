@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtFecha } from "./format";
+import { fmtFecha, fmtPrecioCorto } from "./format";
 
 describe("fmtFecha", () => {
   it("formatea una fecha ISO en español argentino", () => {
@@ -13,5 +13,16 @@ describe("fmtFecha", () => {
     // Sin timeZone sería 26 de septiembre, con timeZone es 25
     const result = fmtFecha("2026-09-26T02:30:00Z");
     expect(result).toContain("25");
+  });
+});
+
+describe("fmtPrecioCorto", () => {
+  const sinEspecial = (t: string) => t.replace(/[\u00a0\u202f]/g, " ");
+  it("sin centavos cuando son ,00", () => {
+    expect(sinEspecial(fmtPrecioCorto(30000))).toBe("$ 30.000");
+    expect(sinEspecial(fmtPrecioCorto(1210))).toBe("$ 1.210");
+  });
+  it("con centavos cuando los hay", () => {
+    expect(sinEspecial(fmtPrecioCorto(1161.6))).toBe("$ 1.161,60");
   });
 });

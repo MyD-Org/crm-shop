@@ -12,6 +12,7 @@
  */
 import { precioDeLista, type AlegraPrice } from "./alegra";
 import { precioFinal } from "./precio-final";
+import type { Cotizacion } from "./cotizacion";
 
 export const CUOTAS_MIN = 2;
 export const CUOTAS_MAX = 24;
@@ -309,4 +310,19 @@ export function idListaDeCuotas(
 ): string | undefined {
   if (typeof cuotas !== "number" || cuotas < CUOTAS_MIN) return undefined;
   return condicionesValidas(condiciones).find((c) => c.cuotas === cuotas)?.idListaPrecios;
+}
+
+/**
+ * Base para los mínimos de cuotas a partir de una cotización: el total con impuestos de las líneas
+ * con precio. Un problema de STOCK no la anula (el carrito sigue teniendo precio; el bloqueo de la
+ * compra es otro tema), pero una línea sin precio, inactiva o inexistente la vuelve incalculable:
+ * null. Nunca devuelve 0: con base desconocida no se promete nada (sin barra).
+ */
+export function baseParaCuotas(c: Pick<Cotizacion, "lineas" | "hayProblemas" | "total" | "costoEnvio">): number | null {
+  let total = c.total;
+  if (c.hayProblemas) {
+    if (c.lineas.some((l) => l.problema && l.problema !== "sin_stock" && l.problema !== "stock_insuficiente")) return null;
+    total = deCentavos(c.lineas.reduce((a, l) => a + aCentavos(l.total), 0) + aCentavos(c.costoEnvio));
+  }
+  return Number.isFinite(total) && total > 0 ? total : null;
 }

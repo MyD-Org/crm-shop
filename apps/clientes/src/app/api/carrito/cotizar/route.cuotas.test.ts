@@ -270,4 +270,69 @@ describe("POST /api/carrito/cotizar: progreso de cuotas (barra del carrito)", ()
     const j = await (await pedir({ conCuotas: true })).json();
     expect(j.progresoCuotas.proximo).toEqual({ cuotas: 6, falta: 1210, minimo: 2420 });
   });
+
+  describe("la base nunca es 0 con un carrito con precio", () => {
+    const linea = (o: Record<string, unknown> = {}) => ({
+      id: "1", qty: 1, precioUnitario: 1000, ivaPorcentaje: 21, subtotal: 1000, iva: 210, total: 1210, stockDisponible: 5, ...o,
+    });
+    const respuesta = (lineas: ReturnType<typeof linea>[], total: number, problema = false) => ({
+      lineas, subtotal: 0, iva: 0, costoEnvio: 0, total, hayProblemas: problema,
+    });
+
+    it("el medio sin lista de pago único (idListaPrecios null): base con la lista de referencia", async () => {
+      medios = [conMinimo(2420, { idListaPrecios: null })];
+      const j = await (await carrito()).json();
+      expect(listaUsada()).toBeUndefined();
+      expect(j.progresoCuotas).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 1210, minimo: 2420 }, pct: 50 });
+    });
+
+    it("la lista del pago único no tiene precio de un producto: cae a la referencia y no promete con base 0", async () => {
+      medios = [conMinimo(2420)];
+      cotizar.mockImplementation(async (_l: unknown, o: { idListaMedio?: string }) =>
+        o.idListaMedio === "L1"
+          ? respuesta([linea({ problema: "sin_precio", total: 0 })], 0, true)
+          : respuesta([linea()], 1210),
+      );
+      const j = await (await carrito()).json();
+      expect(j.progresoCuotas.proximo).toEqual({ cuotas: 6, falta: 1210, minimo: 2420 });
+    });
+
+    it("un producto con stock insuficiente no anula la base", async () => {
+      medios = [conMinimo(2420)];
+      cotizar.mockImplementation(async () =>
+        respuesta([linea({ problema: "stock_insuficiente" }), linea({ id: "2", problema: "sin_stock" })], 0, true),
+      );
+      const j = await (await carrito()).json();
+      expect(j.progresoCuotas).toEqual({ cuotasActuales: 6, proximo: null, pct: 100 });
+    });
+
+    it("sin precio ni en la referencia: sin barra (nunca se promete con base 0)", async () => {
+      medios = [conMinimo(2420)];
+      cotizar.mockImplementation(async () => respuesta([linea({ problema: "sin_precio", total: 0 })], 0, true));
+      const r = await carrito();
+      expect(r.status).toBe(200);
+      expect((await r.json()).progresoCuotas).toBeUndefined();
+    });
+
+    it("si la cotización de la base falla: sin barra, la cotización principal sigue", async () => {
+      medios = [conMinimo(2420)];
+      let llamadas = 0;
+      cotizar.mockImplementation(async () => {
+        // La primera es la principal (sin medio); las siguientes, las de la base.
+        if (llamadas++ > 0) throw new Error("base caída");
+        return respuesta([linea()], 1210);
+      });
+      const r = await carrito();
+      expect(r.status).toBe(200);
+      expect((await r.json()).progresoCuotas).toBeUndefined();
+    });
+
+    it("checkout: base sin precio ni en la referencia no informa progreso ni próximo escalón", async () => {
+      medios = [conMinimo(2420)];
+      cotizar.mockImplementation(async () => respuesta([linea({ problema: "sin_precio", total: 0 })], 0, true));
+      const j = await (await pedir({ conCuotas: true })).json();
+      expect(j.progresoCuotas).toBeUndefined();
+      expect(j.proximoEscalon).toBeUndefined();
+    });
+  });
 });

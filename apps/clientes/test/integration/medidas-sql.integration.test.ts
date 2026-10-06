@@ -7,21 +7,15 @@ import { assertLocalTestDb } from "./db-url";
 /**
  * Medidas (ids dinámicos de atributo `corriente_a:20`) contra Postgres REAL local: "sin
  * contradicción" (NOT EXISTS), positivo y boost sobre `public.catalog_atributos`. Datos inventados.
- *
- * OPT-IN: se escribió sin poder correrlo contra una base (la sesión que lo armó no tenía DB), así
- * que no corre por defecto. Para activarlo (paso U6 de busqueda-medidas):
- *
- *   MEDIDAS_SQL=1 npm run test:integration -- medidas-sql
- *
- * Si el sembrado no encaja con el esquema actual de `public` (vista `catalog_products_shop`),
- * ajustar `sembrar` y sacar el `skipIf`.
+ * La siembra sigue a la vista `catalog_products_shop`: precios en `precios_online` y
+ * `alegra_status = 'active'` (con `raw->price` la vista no devuelve el producto).
  */
 
 const TENANT = process.env.SHOP_TENANT_ID!; // lo fija vitest.config.mts (proyecto integration)
 
 type Atributo = [clave: string, valorNum: number | null, valorTexto?: string];
 
-/** id → { nombre, atributos estructurados }. Los precios del espejo viven en `raw->price` (la vista). */
+/** id → { nombre, atributos estructurados }. La vista toma los precios de `precios_online`. */
 const PRODUCTOS: Record<string, { nombre: string; atributos: Atributo[] }> = {
   t1: { nombre: "Termica bipolar uno", atributos: [["polos", 2], ["corriente_a", 20]] },
   t2: { nombre: "Termica bipolar dos", atributos: [["polos", 2], ["corriente_a", 25]] },
@@ -49,13 +43,13 @@ async function sembrar() {
   );
   for (const [id, p] of Object.entries(PRODUCTOS)) {
     await db.execute(
-      sql`insert into public.catalog_products (tenant_id, alegra_id, name, stock, status, raw)
-          values (${TENANT}, ${id}, ${p.nombre}, 10, 'active', ${JSON.stringify({ price: [{ price: 100, main: true }] })}::jsonb)`,
+      sql`insert into public.catalog_products (tenant_id, alegra_id, name, stock, status, alegra_status, precios_online)
+          values (${TENANT}, ${id}, ${p.nombre}, 10, 'active', 'active', ${JSON.stringify([{ price: 100, main: true }])}::jsonb)`,
     );
     for (const [clave, num, texto] of p.atributos) {
       await db.execute(
         sql`insert into public.catalog_atributos (tenant_id, alegra_id, clave, valor_num, valor_texto, fuente)
-            values (${TENANT}, ${id}, ${clave}, ${num}, ${texto ?? null}, 'manual')`,
+            values (${TENANT}, ${id}, ${clave}, ${num}::numeric, ${texto ?? null}, 'manual')`,
       );
     }
   }
@@ -70,7 +64,7 @@ const ids = async (filtros: FiltrosCatalogo, orden?: "relevancia") => {
   return pagina.productos.map((p) => p.id);
 };
 
-describe.skipIf(process.env.MEDIDAS_SQL !== "1")("medidas dinámicas sobre catalog_atributos", () => {
+describe("medidas dinámicas sobre catalog_atributos", () => {
   beforeAll(async () => {
     await limpiar();
     await sembrar();

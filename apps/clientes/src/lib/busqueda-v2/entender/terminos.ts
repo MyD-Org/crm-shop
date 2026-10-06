@@ -25,15 +25,28 @@ import { PESO_EXPANSION, expansiones } from "./sinonimos";
 export const PESO_CONTEXTO = 0.3;
 export const PESO_MEDIDA = 0.4;
 
-/** Contexto: no identifica un producto. En singular normalizado. */
-export const CONTEXTO = new Set([
-  // Lugares y ambientes.
+/**
+ * Lugares y ambientes: dónde va el producto, no qué es. Un lugar escrito junto a un producto
+ * ("lampara de jardin") ordena con peso de contexto; para decidir si una categoría puede ser dura
+ * (`terminosDeFrase`) cuenta como parte de la frase del producto.
+ *
+ * Quedan AFUERA las palabras que suelen nombrar un tipo de producto ("lámpara de escritorio",
+ * "ventilador de techo", "aplique de pared", "lámpara de mesa", "lámpara de piso"): `escritorio`,
+ * `mesa`, `techo`, `pared` y `piso` son términos significativos (peso 1). Tratarlas como contexto
+ * hacía que "lampara de escritorio" se resolviera sólo por "lampara".
+ */
+export const LUGARES = new Set([
   "patio", "jardin", "living", "comedor", "cocina", "bano", "dormitorio", "habitacion", "cuarto", "pieza",
   "oficina", "local", "comercio", "negocio", "galpon", "deposito", "taller", "garage", "garaje", "cochera",
   "pileta", "piscina", "vereda", "fachada", "frente", "entrada", "escalera", "pasillo", "balcon", "terraza",
-  "quincho", "parrilla", "casa", "departamento", "techo", "pared", "piso", "mesa", "escritorio", "noche",
+  "quincho", "parrilla", "casa", "departamento", "noche",
   "calle", "cancha", "padel", "futbol", "tenis", "reja", "parque", "auto", "exterior", "interior", "afuera",
   "adentro", "lugar", "ambiente",
+]);
+
+/** Contexto: no identifica un producto. En singular normalizado. */
+export const CONTEXTO = new Set([
+  ...LUGARES,
   // Luz en general: casi todo el catálogo es luz o LED.
   "led", "luz", "iluminacion", "iluminar", "ilumine", "alumbrar", "alumbre", "alumbrado",
   // Pedido, uso y preguntas.
@@ -50,6 +63,19 @@ export const CONTEXTO = new Set([
   // Unidades escritas como palabra.
   "amper", "ampere", "amperes", "watt", "watts", "volt", "volts", "metro", "metros", "mm", "cm", "mts",
 ]);
+
+/** ¿Es un lugar o ambiente (en singular normalizado, o plural)? */
+export const esLugar = (texto: string): boolean => LUGARES.has(texto) || LUGARES.has(raizPlural(texto));
+
+/**
+ * Las palabras de la consulta que forman "la frase del producto": las significativas (peso 1) y los
+ * lugares ("lampara de jardin"); no las expansiones, las medidas ni el contexto de pedido ("quiero",
+ * "luz"). En el orden de la consulta. Con ellas se comprueba que una categoría dura no deje afuera
+ * un producto que se llama exactamente como se pidió.
+ */
+export function terminosDeFrase(terminos: readonly Termino[]): string[] {
+  return terminos.filter((t) => t.peso >= 1 || (t.peso === PESO_CONTEXTO && esLugar(t.texto))).map((t) => t.texto);
+}
 
 /** Verbos cuyo objeto es lo que se ilumina o se mira, no lo que se compra ("iluminar un cartel"). */
 const VERBOS_DE_OBJETO = new Set(["iluminar", "ilumine", "alumbrar", "alumbre", "ver", "mirar"]);

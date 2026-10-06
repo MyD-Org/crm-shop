@@ -95,6 +95,140 @@ describe("combinar: categorías", () => {
   });
 });
 
+describe("combinar: la categoría dura no deja afuera lo que se llama como se pidió", () => {
+  // «lampara de escritorio»: Jev elige Lámparas (≥ 0,9) y el diccionario también, pero los veladores
+  // de escritorio están en otra categoría.
+  const consulta = {
+    consulta: "lampara de escritorio",
+    consultaNorm: "lampara de escritorio",
+    terminos: [
+      { texto: "lampara", peso: 1 },
+      { texto: "escritorio", peso: 1 },
+    ],
+    diccionario: { categorias: ["Lámparas"], atributosExplicitos: [], atributosContexto: [], absorbidos: new Set<string>() },
+    jev: jev({ raiz: { nombre: "ILUMINACION", confianza: 0.99 }, sub: { nombre: "Lámparas", confianza: 0.95 } }),
+  };
+  /** Cuántos productos se llaman «lampara de escritorio»: `fuera` afuera de Lámparas y `dentro` adentro. */
+  const conteo = (dentro: number, fuera: number) =>
+    vi.fn(async (f: { categorias: string[]; nombreConTodos?: string[] }) => {
+      if (!f.nombreConTodos) return 40;
+      return f.categorias.includes("Lámparas") ? dentro : dentro + fuera;
+    });
+
+  it("hay productos con la frase completa afuera de la categoría: queda blanda (con su peso)", async () => {
+    const p = await combinar(base({ ...consulta, contar: conteo(0, 7) }));
+    expect(p.duros.categorias).toEqual([]);
+    expect(p.blandos.categorias[0]).toEqual({ nombre: "Lámparas", peso: 0.95 });
+  });
+
+  it("aunque también haya adentro: si hay alguno afuera, el filtro lo excluiría", async () => {
+    const p = await combinar(base({ ...consulta, contar: conteo(3, 4) }));
+    expect(p.duros.categorias).toEqual([]);
+  });
+
+  it("todos los que se llaman así están adentro (o no hay ninguno): sigue dura", async () => {
+    expect((await combinar(base({ ...consulta, contar: conteo(5, 0) }))).duros.categorias).toEqual(["Lámparas"]);
+    expect((await combinar(base({ ...consulta, contar: conteo(0, 0) }))).duros.categorias).toEqual(["Lámparas"]);
+  });
+
+  it("cuenta con la frase y los atributos duros, sin categoría y con ella (3 conteos en paralelo)", async () => {
+    const contar = conteo(0, 7);
+    await combinar(base({ ...consulta, contar }));
+    expect(contar).toHaveBeenCalledWith({ categorias: ["Lámparas"], atributos: [], terminos: ["lampara", "escritorio"] });
+    expect(contar).toHaveBeenCalledWith({ categorias: [], atributos: [], nombreConTodos: ["lampara", "escritorio"] });
+    expect(contar).toHaveBeenCalledWith({ categorias: ["Lámparas"], atributos: [], nombreConTodos: ["lampara", "escritorio"] });
+    expect(contar).toHaveBeenCalledTimes(3);
+  });
+
+  it("una sola palabra significativa no es una frase: no se hacen los conteos de más", async () => {
+    const contar = conteo(0, 7);
+    const p = await combinar(base({ ...consulta, consulta: "lampara", terminos: [{ texto: "lampara", peso: 1 }], contar }));
+    expect(p.duros.categorias).toEqual(["Lámparas"]);
+    expect(contar).toHaveBeenCalledTimes(1);
+  });
+
+  it("el contexto de pedido no cuenta como parte de la frase; un lugar sí", async () => {
+    const pedido = [
+      { texto: "lampara", peso: 1 },
+      { texto: "quiero", peso: 0.3 },
+    ];
+    const contar = conteo(0, 7);
+    expect((await combinar(base({ ...consulta, terminos: pedido, contar }))).duros.categorias).toEqual(["Lámparas"]);
+    const lugar = [
+      { texto: "lampara", peso: 1 },
+      { texto: "jardin", peso: 0.3 },
+    ];
+    expect((await combinar(base({ ...consulta, terminos: lugar, contar: conteo(0, 7) }))).duros.categorias).toEqual([]);
+  });
+
+  it("sin la categoría candidata (o con Jev dudoso) ni se cuenta", async () => {
+    const contar = conteo(0, 7);
+    await combinar(base({ ...consulta, diccionario: { ...consulta.diccionario, categorias: [] }, jev: jev({ raiz: { nombre: "ILUMINACION", confianza: 0.99 } }), contar }));
+    expect(contar).not.toHaveBeenCalled();
+  });
+
+  it("con conteo 0 en la categoría sigue blanda, como antes", async () => {
+    const contar = vi.fn(async (f: { categorias: string[]; nombreConTodos?: string[] }) => (f.nombreConTodos || !f.categorias.length ? 0 : 0));
+    const p = await combinar(base({ ...consulta, contar }));
+    expect(p.duros.categorias).toEqual([]);
+  });
+});
+
+describe("combinar: una palabra de contexto sola recupera si nombra productos", () => {
+  // «patio» solo: contexto (peso 0,3), nada fuerte que recupere. Si hay productos con «patio» en el
+  // nombre, recuperan ellos; si no, queda como estaba (la raíz débil).
+  const solo = { consulta: "patio", consultaNorm: "patio", terminos: [{ texto: "patio", peso: 0.3 }] };
+  const conNombres = (n: number) => vi.fn(async (f: { nombreConTodos?: string[] }) => (f.nombreConTodos ? n : 10));
+
+  it("hay productos con la palabra en el nombre: pasa a peso 1 (recupera y ordena)", async () => {
+    const contar = conNombres(12);
+    const p = await combinar(base({ ...solo, contar }));
+    expect(p.blandos.terminos).toEqual([{ texto: "patio", peso: 1 }]);
+    expect(contar).toHaveBeenCalledWith({ categorias: [], atributos: [], nombreConTodos: ["patio"] });
+  });
+
+  it("ningún nombre la tiene: sigue como contexto", async () => {
+    const p = await combinar(base({ ...solo, contar: conNombres(0) }));
+    expect(p.blandos.terminos).toEqual([{ texto: "patio", peso: 0.3 }]);
+  });
+
+  it("con Jev: la categoría dura exige además que esos productos existan en ella", async () => {
+    const contar = vi.fn(async (f: { categorias: string[]; terminos?: string[]; nombreConTodos?: string[] }) =>
+      f.nombreConTodos ? 5 : f.terminos?.includes("patio") ? 0 : 10,
+    );
+    const p = await combinar(
+      base({
+        ...solo,
+        diccionario: { categorias: ["Reflectores"], atributosExplicitos: [], atributosContexto: [], absorbidos: new Set() },
+        jev: jev({ raiz: { nombre: "ILUMINACION", confianza: 0.99 }, sub: { nombre: "Reflectores", confianza: 0.95 } }),
+        contar,
+      }),
+    );
+    expect(contar).toHaveBeenCalledWith({ categorias: ["Reflectores"], atributos: [], terminos: ["patio"] });
+    expect(p.duros.categorias).toEqual([]);
+  });
+
+  it("sólo si la palabra está sola: «luz para el patio» y «iluminar un cartel de noche» no cambian", async () => {
+    const contar = conNombres(12);
+    const luzPatio = await combinar(
+      base({ consulta: "luz para el patio", terminos: [{ texto: "luz", peso: 0.3 }, { texto: "patio", peso: 0.3 }], contar }),
+    );
+    expect(luzPatio.blandos.terminos.every((t) => t.peso === 0.3)).toBe(true);
+    const cartel = await combinar(
+      base({ consulta: "iluminar un cartel de noche", terminos: [{ texto: "iluminar", peso: 0.3 }, { texto: "cartel", peso: 0.3 }, { texto: "noche", peso: 0.3 }], contar }),
+    );
+    expect(cartel.blandos.terminos.every((t) => t.peso === 0.3)).toBe(true);
+    expect(contar).not.toHaveBeenCalledWith(expect.objectContaining({ nombreConTodos: expect.anything() }));
+  });
+
+  it("una palabra significativa o una medida sola no entra en esta regla", async () => {
+    const contar = conNombres(12);
+    await combinar(base({ terminos: [{ texto: "reflector", peso: 1 }], contar }));
+    await combinar(base({ terminos: [{ texto: "20", peso: 0.4 }], contar }));
+    expect(contar).not.toHaveBeenCalledWith(expect.objectContaining({ nombreConTodos: expect.anything() }));
+  });
+});
+
 describe("combinar: atributos e intención", () => {
   it("explícito con conteo ≥ 3 es duro; con menos, blando", async () => {
     const dic = { categorias: [], atributosExplicitos: ["tono-calido", "zocalo-e27"], atributosContexto: [], absorbidos: new Set<string>() };

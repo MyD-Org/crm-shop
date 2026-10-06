@@ -49,9 +49,17 @@ export interface PlanObtenido {
   msJev: number | null;
 }
 
-/** Clave del plan en la caché: el árbol activo y el flag `catalogo-solo-visibles` (≤ 64 caracteres). */
+/**
+ * Versión de las reglas que deciden el plan (la categoría dura y los términos). Entra en la clave de
+ * la caché: al cambiarlas se sube, y los planes viejos (que se guardan sin vencimiento en
+ * `shop.busqueda_interpretaciones`) dejan de leerse en vez de seguir sirviendo una decisión que ya
+ * no se toma. v2: la categoría dura no puede dejar afuera productos que se llaman como se pidió.
+ */
+export const VERSION_REGLAS_PLAN = 2;
+
+/** Clave del plan en la caché: el árbol activo, el flag `catalogo-solo-visibles` y la versión de las reglas (≤ 64 caracteres). */
 export function clavePlan(arbol: readonly NodoArbol[], soloVisibles: boolean): string {
-  return createHash("sha256").update(`${hashArbol(arbol)}:${soloVisibles ? 1 : 0}`).digest("hex").slice(0, 32);
+  return createHash("sha256").update(`${hashArbol(arbol)}:${soloVisibles ? 1 : 0}:v${VERSION_REGLAS_PLAN}`).digest("hex").slice(0, 32);
 }
 
 async function arbolSeguro(): Promise<NodoArbol[]> {

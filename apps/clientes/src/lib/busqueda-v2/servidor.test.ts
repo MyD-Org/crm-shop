@@ -27,6 +27,8 @@ vi.mock("./cache", async (original) => {
   return { ...real, guardarPlan: (...a: unknown[]) => guardarPlan(...(a as [])), leerPlan: (...a: unknown[]) => leerPlan(...(a as [])), lru: new real.Lru(10, 60_000) };
 });
 
+import { createHash } from "node:crypto";
+import { hashArbol } from "../busqueda-inteligente/cache";
 import { JEV_POR_IP_POR_MINUTO } from "../busqueda-inteligente/limite";
 import { clavePlan, planParaBuscar, planParaPagina } from "./servidor";
 
@@ -84,6 +86,9 @@ describe("clave y cupo de la caché", () => {
     const arbol = [{ id: "i", parentId: null, nombre: "ILUMINACION", orden: 1 }];
     expect(clavePlan(arbol, true)).not.toBe(clavePlan(arbol, false));
     expect(clavePlan(arbol, false)).toHaveLength(32);
+    // Los planes guardados con las reglas anteriores (sin versión en la clave) no se vuelven a leer.
+    const antes = createHash("sha256").update(`${hashArbol(arbol)}:0`).digest("hex").slice(0, 32);
+    expect(clavePlan(arbol, false)).not.toBe(antes);
     await planParaPagina("velador", { soloVisibles: true });
     await planParaPagina("velador", { soloVisibles: false });
     const hashes = leerPlan.mock.calls.map((c) => (c as unknown[])[2]);

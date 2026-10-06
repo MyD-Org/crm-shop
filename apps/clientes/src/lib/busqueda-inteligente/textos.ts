@@ -27,6 +27,13 @@ export const TEXTOS_SIN_RESULTADOS = {
   conversar: "Conversar",
   verTodos: "Ver todos los productos",
   relacionados: "Ver productos relacionados",
+  /** Con el filtro "Con stock en <local>" activo: el 0 puede venir de ese filtro. */
+  tituloLocal: (local: string, consulta?: string) =>
+    consulta
+      ? `No hay productos con stock en ${local} para «${consulta}»`
+      : `No hay productos con stock en ${local}`,
+  descripcionLocal: "Puede ver los productos de todos los locales.",
+  verEnTodosLosLocales: "Ver en todos los locales",
 } as const;
 
 /**

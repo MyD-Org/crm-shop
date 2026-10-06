@@ -6,7 +6,8 @@
  *
  * La regla es pura: el proxy la aplica (cookie + redirect de `/catalogo`) y el catálogo, al
  * quitar el filtro, borra la cookie del lado del cliente (`olvidarLocalRecordado`) para que el
- * redirect no lo vuelva a poner. El slug no se valida contra las sucursales: uno desconocido lo
+ * redirect no lo vuelva a poner. Una búsqueda (`?q=`) no recibe el local recordado: arranca
+ * limpia, sin filtros previos (un `?retiro=` explícito en esa URL sí se respeta). El slug no se valida contra las sucursales: uno desconocido lo
  * descarta el catálogo como siempre (filtro en "cualquier local").
  */
 
@@ -59,7 +60,10 @@ export function decidirLocal({
     if (local) sp.set("retiro", local);
     return { ...decision, redirigirA: sp.toString() };
   }
-  if (param == null && previa) {
+  // Una búsqueda (`q` con texto) arranca limpia: no hereda el local recordado. La cookie queda,
+  // así que al volver a navegar el catálogo sin buscar el filtro sigue puesto.
+  const buscando = Boolean(search.get("q")?.trim());
+  if (param == null && previa && !buscando) {
     const sp = new URLSearchParams(search);
     sp.set("retiro", previa);
     return { ...decision, redirigirA: sp.toString() };

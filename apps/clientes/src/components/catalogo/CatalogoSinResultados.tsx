@@ -20,6 +20,8 @@ import { track } from "@/lib/tracking/track";
  *   relacionados": la entiende la búsqueda v2.
  * - Si hay chat: "¿Quiere que un asesor le ayude a elegir? · Conversar", que
  *   abre el chat con la consulta como primer mensaje.
+ * - Con el filtro "Con stock en <local>" activo, el título lo dice y se ofrece
+ *   "Ver en todos los locales" (quita sólo ese filtro).
  * - Siempre, "Ver todos los productos".
  */
 export function CatalogoSinResultados({
@@ -28,20 +30,31 @@ export function CatalogoSinResultados({
   talCualHref,
   relacionadosHref,
   verTodos,
+  local,
 }: {
   consulta: string;
   alternativas: ChipSugerido[];
   talCualHref?: string;
   relacionadosHref?: string;
   verTodos: () => void;
+  /** Copy y salida cuando el filtro de local está activo (`sinResultadosPorLocal`). */
+  local?: { titulo: string; descripcion: string; accion: string; quitar: () => void };
 }) {
   const chat = useChatIa();
   return (
     <EmptyState
-      title={TEXTOS_SIN_RESULTADOS.titulo(consulta)}
-      description={alternativas.length ? TEXTOS_SIN_RESULTADOS.conAlternativas : TEXTOS_SIN_RESULTADOS.sinAlternativas}
+      title={local?.titulo ?? TEXTOS_SIN_RESULTADOS.titulo(consulta)}
+      description={
+        local?.descripcion ??
+        (alternativas.length ? TEXTOS_SIN_RESULTADOS.conAlternativas : TEXTOS_SIN_RESULTADOS.sinAlternativas)
+      }
       action={
         <div className="flex flex-col items-center gap-5">
+          {local && (
+            <Button variant="primary" onClick={local.quitar}>
+              {local.accion}
+            </Button>
+          )}
           {alternativas.length > 0 && (
             <div className="flex flex-col items-center gap-2">
               <p className="text-sm font-medium text-muted">{TEXTOS_SIN_RESULTADOS.alternativas}</p>

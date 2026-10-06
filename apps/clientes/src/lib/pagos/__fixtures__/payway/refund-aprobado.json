@@ -1,0 +1,11 @@
+{
+  "id": 9001,
+  "tid": null,
+  "error": null,
+  "amount": 1000,
+  "status": "approved",
+  "sub_payments": null,
+  "status_details": {
+    "ticket": "1570"
+  }
+}

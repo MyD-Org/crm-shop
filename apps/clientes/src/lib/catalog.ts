@@ -82,6 +82,16 @@ import {
 } from "./catalogo-atributos-sql";
 import type { CriterioEstructurado } from "./catalogo-atributos";
 import { caracteristicasDe, leerAtributosEstructurados, type ClaveEstructurada } from "./catalogo-caracteristicas";
+import {
+  columnasCumpleSql,
+  condicionesPorClave,
+  consultaFacetasPorTipoSql,
+  entradaDeFilas,
+  filtroCaracteristicasSql,
+  type ContextoCar,
+  type FilaFacetasPorTipo,
+} from "./catalogo-facetas-sql";
+import { elegirFacetas, type FacetaClave } from "./catalogo-facetas-registro";
 import { universoAcotado } from "./busqueda-v2/universo-acotado";
 import { condicionAmplia, condicionRecuperar, terminosQueRecuperan } from "./busqueda-v2/recuperar";
 import { puntajeBusqueda } from "./busqueda-v2/ordenar";
@@ -353,6 +363,19 @@ const filtroConClavesSql = (filtros: FiltrosCatalogo): SQL | undefined => {
   const ctx = contextoAtributos(filtros);
   return and(...filtros.conClaves.map((clave) => tieneClaveSql(ctx, clave)));
 };
+
+/**
+ * Contexto del filtro estricto `?car=` y de las facetas por tipo (catalogo-facetas-sql.ts): el `EXISTS`
+ * de la fila de una clave del producto de la fila, contra la PK de `catalog_atributos`.
+ */
+const contextoCar: ContextoCar = {
+  num: sql`${crmAtributos.valorNum}`,
+  texto: sql`${crmAtributos.valorTexto}`,
+  existe: (clave, condicion) => sql`exists (${filaAtributoSql(clave, condicion)})`,
+};
+
+/** Facetas por tipo y filtro `car` (ver `FiltrosCatalogo.facetasPorTipo`). */
+const conFacetasPorTipo = (filtros: Pick<FiltrosCatalogo, "facetasPorTipo">): boolean => Boolean(filtros.facetasPorTipo);
 
 /** Filtro de potencia en UN `EXISTS` (los dos extremos sobre la misma fila). */
 const filtroPotenciaSql = (min?: number, max?: number) =>
@@ -772,6 +795,17 @@ export interface FiltrosCatalogo {
    * Sin él, todo como en la fase 1 (y `potenciaMin`/`potenciaMax` se ignoran).
    */
   atributosEstructurados?: boolean;
+  /**
+   * Flag `catalogo-facetas-por-tipo` Y `catalog_atributos` legible (lo decide la page por request, con
+   * `atributosEstructuradosDisponibles`; no depende de `busqueda-ia`). Con él, las facetas suman
+   * `porClave` y `caracteristicas` filtra; sin él, `caracteristicas` se ignora y todo queda como siempre.
+   */
+  facetasPorTipo?: boolean;
+  /**
+   * Ids `?car=` (catalogo-car.ts, ya validados): filtro ESTRICTO por característica (solo productos con el
+   * dato y que lo cumplen). OR dentro de la clave, AND entre claves. Distinto de `atributos` (`?atr=`).
+   */
+  caracteristicas?: string[];
   /** Extremos inclusivos de la potencia en watts (sólo productos con `potencia_w`). */
   potenciaMin?: number;
   potenciaMax?: number;
@@ -1076,6 +1110,8 @@ interface AplicarFiltros {
   atributos: boolean;
   precio: boolean;
   potencia: boolean;
+  /** El filtro estricto `?car=` (facetas por tipo). */
+  car: boolean;
   stock: boolean;
 }
 
@@ -1085,6 +1121,7 @@ const APLICAR_TODOS: AplicarFiltros = {
   atributos: true,
   precio: true,
   potencia: true,
+  car: true,
   stock: true,
 };
 
@@ -1158,6 +1195,7 @@ function condicionesDe(
     aplicar.potencia && filtros.atributosEstructurados
       ? filtroPotenciaSql(filtros.potenciaMin, filtros.potenciaMax)
       : undefined,
+    aplicar.car && conFacetasPorTipo(filtros) ? filtroCaracteristicasSql(contextoCar, filtros.caracteristicas) : undefined,
     aplicar.precio && filtros.precioMin != null
       ? sql`${precioExhibidoSql} >= ${filtros.precioMin}`
       : undefined,
@@ -1357,6 +1395,13 @@ export interface Facetas {
    */
   potencia?: RangoPrecio | null;
   /**
+   * Facetas por tipo de producto (flag `catalogo-facetas-por-tipo` + `catalog_atributos` legible): qué
+   * características ofrecer para el conjunto (`elegirFacetas`). Ausente = no se calculó (flag apagado,
+   * tabla ausente o la consulta falló: el panel queda como siempre); `[]` = nada elegible o sin
+   * categoría ni búsqueda.
+   */
+  porClave?: FacetaClave[];
+  /**
    * Locales para el filtro "Con stock en <local>" (activos y con retiro). No salen de Postgres: los
    * agrega la page del catálogo cuando hay más de uno. Ausente = el filtro no se muestra.
    */
@@ -1413,6 +1458,55 @@ function consultaRangoPotencia(where: ReturnType<typeof condicionesDe>) {
 }
 
 /**
+ * Facetas por tipo de producto (catalogo-facetas-sql.ts) en UNA consulta: el conjunto de la página sin
+ * ningún `car` ni potencia, con una columna por clave activa que dice si el producto la cumple; los
+ * conteos y denominadores salen de una pasada sobre ese conjunto, y `elegirFacetas` decide qué ofrecer.
+ * Si la consulta falla, `undefined` (y un log): el panel degrada al de siempre sin romper la página.
+ */
+async function consultaFacetasPorTipo(
+  filtros: FiltrosCatalogo,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<FacetaClave[] | undefined> {
+  try {
+    const condiciones = condicionesPorClave(contextoCar, filtros.caracteristicas, {
+      min: filtros.potenciaMin,
+      max: filtros.potenciaMax,
+    });
+    const activas = [...condiciones.keys()];
+    const cumple = Object.fromEntries(
+      Object.entries(columnasCumpleSql(contextoCar, condiciones)).map(([k, c]) => [k, sql<boolean>`${c}`.as(k)]),
+    );
+    const base = getDb()
+      .select({ id: sql<string>`${crmCatalogo.alegraId}`.as("id"), ...cumple })
+      .from(crmCatalogo)
+      .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
+      .leftJoin(crmOverlay, joinOverlay())
+      .leftJoin(stockReservado, joinReserva())
+      .where(condicionesDe(filtros, { ...APLICAR_TODOS, car: false, potencia: false }, soloVisibles, disp));
+    const filas = (await getDb().execute(
+      consultaFacetasPorTipoSql({ base: base.getSQL(), activas, tenant: shopTenantId() }),
+    )) as unknown as FilaFacetasPorTipo[];
+    const categoria = filtros.categorias?.length === 1 ? filtros.categorias[0] : undefined;
+    return elegirFacetas(entradaDeFilas(filas, activas, categoria));
+  } catch (err) {
+    console.error("[catalogo] no se pudieron calcular las facetas por tipo:", err);
+    return undefined;
+  }
+}
+
+/**
+ * Las facetas por tipo se calculan con categoría, búsqueda o algún `car` activo; sin nada de eso (la
+ * entrada al catálogo) no se ofrecen (`[]`, sin consulta) y el panel pide elegir una categoría.
+ */
+function facetasPorTipoDe(filtros: FiltrosCatalogo, soloVisibles: boolean, disp?: ContextoDisponibilidad) {
+  if (!conFacetasPorTipo(filtros)) return Promise.resolve(undefined);
+  const texto = textoDe(filtros);
+  const enContexto = Boolean(filtros.categorias?.length || texto.q || texto.plan || filtros.caracteristicas?.length);
+  return enContexto ? consultaFacetasPorTipo(filtros, soloVisibles, disp) : Promise.resolve([] as FacetaClave[]);
+}
+
+/**
  * Facetas con sus conteos, calculadas en Postgres.
  *
  * Cada faceta cuenta sobre lo que matchea la búsqueda MÁS los filtros de los
@@ -1440,7 +1534,7 @@ export async function getFacetas(
     ? condicionesDe(filtros, { ...APLICAR_TODOS, potencia: false }, soloVisibles, disp)
     : undefined;
 
-  const [categorias, marcas, [rango], [conteoAtributos], rangoPotencia] = await Promise.all([
+  const [categorias, marcas, [rango], [conteoAtributos], rangoPotencia, porClave] = await Promise.all([
     filtros.sinFacetaCategorias ? Promise.resolve([]) : getFacetaCategorias(filtros, soloVisibles, disp),
     getDb()
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
@@ -1467,6 +1561,7 @@ export async function getFacetas(
       ? Promise.resolve([])
       : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros)),
     conPotencia ? consultaRangoPotencia(wherePotencia).then(([r]) => r) : Promise.resolve(undefined),
+    facetasPorTipoDe(filtros, soloVisibles, disp),
   ]);
 
   const precio =
@@ -1486,6 +1581,7 @@ export async function getFacetas(
     atributos: facetasDeConteos(conteoAtributos),
     precio,
     ...(potencia !== undefined ? { potencia } : {}),
+    ...(porClave !== undefined ? { porClave } : {}),
   };
 }
 

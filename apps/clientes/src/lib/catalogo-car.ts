@@ -102,6 +102,19 @@ export function leerCar(ids: readonly string[]): string[] {
   return validos.sort((a, b) => comparar(a.leido, b.leido)).map((v) => v.id);
 }
 
+/**
+ * Lo que la page del catálogo suma a los filtros según el flag `catalogo-facetas-por-tipo` (y la tabla
+ * legible): apagado, nada (`?car=` se ignora); prendido, el flag y los `car` válidos de la URL.
+ */
+export function filtrosPorTipo(
+  habilitada: boolean,
+  car: string | string[] | undefined,
+): { facetasPorTipo?: true; caracteristicas?: string[] } {
+  if (!habilitada) return {};
+  const crudos = car == null ? [] : Array.isArray(car) ? car : [car];
+  return { facetasPorTipo: true, caracteristicas: leerCar(crudos.map((c) => c.trim()).filter(Boolean)) };
+}
+
 const formatoNumero = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 2, useGrouping: false });
 
 /** Texto del chip: "Polos: 2", "Curva: C", "Corriente: 20 A", "Flujo luminoso: 800 – 1200 lm". El id inválido se devuelve tal cual. */

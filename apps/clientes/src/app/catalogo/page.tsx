@@ -18,6 +18,8 @@ import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servid
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
+import { catalogoFacetasPorTipoHabilitada } from "@/lib/catalogo-facetas-flag";
+import { filtrosPorTipo } from "@/lib/catalogo-car";
 import { PRODUCTOS_POR_PAGINA, getArbolCategorias } from "@/lib/catalog";
 import { chipsSugeridos } from "@/lib/busqueda-inteligente/url";
 import { pareceCodigo } from "@/lib/busqueda-inteligente/gate";
@@ -43,6 +45,7 @@ type Props = {
     retiro?: ParamCrudo;
     vista?: ParamCrudo;
     ia?: ParamCrudo;
+    car?: ParamCrudo;
   }>;
 };
 
@@ -94,12 +97,13 @@ async function CatalogoResultados({ searchParams }: Props) {
   // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
   // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
   // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
-  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
+  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa, conFacetasPorTipo] = await Promise.all([
     searchParams,
     flagsPublicos(),
     dispCatalogo(),
     localesDeRetiro(),
     busquedaIaHabilitada(),
+    catalogoFacetasPorTipoHabilitada(),
   ]);
   // Flag `busqueda-ia` apagado: igual que antes del cambio (sin `atr` ni `ia`).
   const leido = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
@@ -117,6 +121,14 @@ async function CatalogoResultados({ searchParams }: Props) {
   // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
   // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
   const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
+  // Facetas por tipo (flag `catalogo-facetas-por-tipo`, change catalogo-filtros-ux): el flag y la tabla
+  // legible, por request y fuera de `use cache` (viajan en los filtros: parte de la clave). Apagado, `?car=`
+  // se ignora y nada cambia. Prendido, las facetas suman `porClave` (el panel todavía no lo dibuja) y `car`
+  // filtra en forma estricta.
+  const porTipo = filtrosPorTipo(
+    conFacetasPorTipo && (estructurados || (await atributosEstructuradosDisponibles())),
+    params.car,
+  );
   // Una sola búsqueda para las cuatro superficies (`busqueda-v2/motor.ts`): el motor decide las
   // etapas (con `?ia=1`, la URL a la que redirige `/buscar`, el plan de la consulta —caché o
   // recálculo determinista, NUNCA Jev— aporta lo blando; sin resultados, un segundo intento
@@ -145,6 +157,7 @@ async function CatalogoResultados({ searchParams }: Props) {
           // inteligente se siguen contando dentro de la búsqueda, para las sugerencias "+ Afinar".
           ...(conBusquedaIa ? {} : { sinFacetaCategorias: true }),
           ...(estructurados ? { atributosEstructurados: true } : {}),
+          ...porTipo,
         },
         orden: estado.orden,
         pagina: estado.pagina,

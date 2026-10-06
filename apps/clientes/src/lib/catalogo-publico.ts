@@ -55,6 +55,7 @@ import {
 import { conRespaldoSinCache } from "./cache-respaldo";
 import { TAG_CATALOGO } from "./cache-tags";
 import { esMedidaId } from "./catalogo-atributos-medida";
+import { leerIdCar } from "./catalogo-car";
 import { SOLO_STOCK_DEFAULT, type OrdenCatalogo } from "./catalogo-url";
 import { elegirDestacados } from "./destacados";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
@@ -85,7 +86,10 @@ export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
     filtros.precioMax == null &&
     // La potencia es un rango libre como el precio: multiplicaría las claves de la caché.
     filtros.potenciaMin == null &&
-    filtros.potenciaMax == null
+    filtros.potenciaMax == null &&
+    // Un `car` de rango (`flujo_lm:800-1200`) es un rango libre; los de lista (`polos:2`) son pocos
+    // valores por categoría y entran en la clave con el resto de los filtros (y el flag `facetasPorTipo`).
+    !filtros.caracteristicas?.some((id) => leerIdCar(id)?.op === "rango")
   );
 }
 
@@ -143,9 +147,11 @@ async function facetasCacheadas(
 ): Promise<Facetas> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
-  cacheLife("catalogo");
   console.info("[cache] catalogo-facetas miss");
-  return disp ? getFacetas(filtros, soloVisibles, disp) : getFacetas(filtros, soloVisibles);
+  const facetas = disp ? await getFacetas(filtros, soloVisibles, disp) : await getFacetas(filtros, soloVisibles);
+  // Facetas por tipo pedidas que no salieron (la consulta falló y degradó): no se guardan por el TTL del catálogo.
+  cacheLife(filtros.facetasPorTipo && facetas.porClave === undefined ? "degradado" : "catalogo");
+  return facetas;
 }
 
 /** Facetas del catálogo público (mismo criterio de cacheo que la página). */

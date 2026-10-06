@@ -8,8 +8,8 @@
  *  - `elegirFacetas`: dada la distribución de valores del conjunto que se está viendo, decide QUÉ
  *    claves mostrar (cobertura suficiente, más de un valor, tope de grupos) y con qué valores.
  *
- * El conteo y los denominadores los calcula la consulta (change aparte); acá solo se decide. Los
- * umbrales (40 % de cobertura, 2 valores, 6 grupos) son provisorios: se calibran con el banco.
+ * El conteo y los denominadores los calcula la consulta (catalogo-facetas-sql.ts); acá solo se decide.
+ * Umbrales: 30 % de cobertura (calibrado en P3), 2 valores y 6 grupos.
  */
 import { RANGOS, ESPECIFICACION, CURVAS, ZOCALOS, CLAVES_ENTERAS, numeroCanonico, type ClaveMedida } from "./catalogo-atributos-medida";
 import { normalizarTexto } from "./catalogo-atributos";
@@ -22,7 +22,7 @@ export interface ClaveFacetable {
   control: "lista" | "rango";
   /** Orden de aparición en el panel (menor = primero). Único en el registro. */
   orden: number;
-  /** Cobertura mínima sobre el conjunto (sin el filtro de la propia clave). Default 0,4. */
+  /** Cobertura mínima sobre el conjunto (sin el filtro de la propia clave). Default `UMBRAL_COBERTURA`. */
   umbral?: number;
   /** Valores distintos mínimos para ofrecer una lista. Default 2. */
   minValores?: number;
@@ -35,7 +35,13 @@ export interface ClaveFacetable {
   grupo: "electricas" | "iluminacion" | "fisicas";
 }
 
-export const UMBRAL_COBERTURA = 0.4;
+/**
+ * Calibrado en P3 con la cobertura real (2026-10-06): con 40 % quedaban afuera claves útiles con datos
+ * a medio cargar (corriente en llaves y tomas ~33 %, flujo en paneles ~36 %, temperatura en tiras ~38 %)
+ * y las búsquedas mezcladas ("termica 2x20": ~32 % con dato) se quedaban sin ningún grupo. Con 30 % no se
+ * suma ruido: el mínimo de 2 valores sigue descartando las claves de un solo valor.
+ */
+export const UMBRAL_COBERTURA = 0.3;
 export const MIN_VALORES = 2;
 export const VISIBLES = 6;
 /** Tope de grupos por tipo que se muestran a la vez. */

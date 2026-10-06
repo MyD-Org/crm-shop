@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { atributoPorId } from "./catalogo-atributos";
-import { MAX_CAR, claveDeCar, etiquetaCar, idCar, leerCar, leerIdCar } from "./catalogo-car";
+import { MAX_CAR, claveDeCar, etiquetaCar, filtrosPorTipo, idCar, leerCar, leerIdCar } from "./catalogo-car";
 
 describe("leerIdCar", () => {
   it.each([
@@ -137,5 +137,21 @@ describe("etiquetaCar", () => {
 
   it("un id inválido se devuelve tal cual", () => {
     expect(etiquetaCar("desconocida:1")).toBe("desconocida:1");
+  });
+});
+
+describe("filtrosPorTipo (lo que la page suma a los filtros)", () => {
+  it("apagado (flag o tabla): nada, y car en la URL se ignora", () => {
+    expect(filtrosPorTipo(false, ["polos:2"])).toEqual({});
+    expect(filtrosPorTipo(false, undefined)).toEqual({});
+  });
+
+  it("prendido: el flag y los car válidos en orden canónico (un valor suelto o repetido)", () => {
+    expect(filtrosPorTipo(true, undefined)).toEqual({ facetasPorTipo: true, caracteristicas: [] });
+    expect(filtrosPorTipo(true, "polos:2")).toEqual({ facetasPorTipo: true, caracteristicas: ["polos:2"] });
+    expect(filtrosPorTipo(true, ["curva:c", " polos:2 ", "basura", ""])).toEqual({
+      facetasPorTipo: true,
+      caracteristicas: ["polos:2", "curva:c"],
+    });
   });
 });

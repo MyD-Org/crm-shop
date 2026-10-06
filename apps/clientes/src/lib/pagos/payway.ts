@@ -25,6 +25,7 @@ import {
   type EstadoPago,
   type ProveedorPago,
 } from "./tipos";
+import { armarFraudDetection } from "./payway-antifraude";
 import {
   centavos,
   esDebito,
@@ -34,11 +35,17 @@ import {
   type RespuestaPayway,
 } from "./payway-estados";
 
-/** El nominal de una transacción es ~6 s; 15 s deja margen sin colgar la ruta. */
-const TIMEOUT_MS = 15_000;
-/** Consultas para recuperarse de un timeout, con una pausa corta entre una y otra. */
-const CONSULTAS_TRAS_TIMEOUT = 2;
-const PAUSA_MS = 1_500;
+/**
+ * `POST /payments`: con el control de fraude (Cybersource) activo el sandbox llegó a tardar más de
+ * 15 s en responder (y después igual resolvió el pago), así que se espera hasta 30 s. La ruta de cobro
+ * declara `maxDuration` de sobra para el peor caso (ver `app/api/pagos/[proveedor]/route.ts`).
+ */
+const TIMEOUT_PAGO_MS = 30_000;
+/** Consultas (GET): rápidas. */
+const TIMEOUT_CONSULTA_MS = 15_000;
+/** Consultas para recuperarse de un timeout, con una pausa entre una y otra. */
+const CONSULTAS_TRAS_TIMEOUT = 3;
+const PAUSA_MS = 3_000;
 
 /** Base de la API (sin barra final ni `/api/v2`), o null si falta o no es https. */
 function baseUrl(): string | null {
@@ -92,11 +99,12 @@ const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const sinPago = (mensaje: string) => new ErrorProveedor(mensaje, 400);
 
-export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: true } {
+export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: true; requiereAntifraude: true } {
   // Se resuelve en cada llamada: así un `fetch` global reemplazado después (tests) también se respeta.
   const doFetch: typeof fetch = (...a) => (deps.fetch ?? fetch)(...a);
   const pausa = deps.pausa ?? dormir;
-  const timeoutMs = deps.timeoutMs ?? TIMEOUT_MS;
+  const timeoutPago = deps.timeoutMs ?? TIMEOUT_PAGO_MS;
+  const timeoutConsulta = deps.timeoutMs ?? TIMEOUT_CONSULTA_MS;
 
   /** Request a la API. Tira `ErrorProveedor(504)` si no hay respuesta (timeout o red). */
   async function pedir(ruta: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<Respuesta> {
@@ -110,7 +118,7 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
         method: init.method,
         headers: { "Content-Type": "application/json", apikey: key },
         ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(init.method === "POST" ? timeoutPago : timeoutConsulta),
       });
     } catch (err) {
       // Sin el mensaje de la causa: a veces trae la URL o headers.
@@ -193,6 +201,17 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
       throw sinPago("Monto inválido.");
     }
 
+    // Control de fraude (Cybersource): sólo si la ruta de cobro armó los datos del pedido.
+    let fraud_detection: unknown;
+    if (datos.antifraude) {
+      try {
+        fraud_detection = armarFraudDetection(datos.antifraude, datos.monto);
+      } catch (err) {
+        // Sin el detalle de los datos del comprador: sólo qué faltó.
+        throw sinPago(err instanceof Error ? err.message : "Datos de control de fraude inválidos.");
+      }
+    }
+
     return {
       bin: datos.bin,
       token: datos.token,
@@ -204,12 +223,14 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
       sub_payments: [],
       payment_method_id: metodo,
       site_transaction_id: referencia,
+      ...(fraud_detection ? { fraud_detection } : {}),
     };
   }
 
   return {
     id: "payway",
     requiereBin: true,
+    requiereAntifraude: true,
     configurado: paywayConfigurado,
     referenciaDeIntento,
 

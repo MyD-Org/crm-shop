@@ -236,6 +236,56 @@ describe("crearPago — respuestas", () => {
   });
 });
 
+describe("crearPago — control de fraude (Cybersource)", () => {
+  const antifraude = {
+    clienteId: "user_sintetico123",
+    email: "comprador@cliente.example",
+    nombre: "Ana Gomez",
+    telefono: "2235550100",
+    entrega: { tipo: "retiro" as const },
+    items: [{ sku: "LED-9W", nombre: "Lampara LED", cantidad: 2, total: 20 }],
+  };
+
+  it("el proveedor pide los datos del pedido", () => {
+    expect(payway.requiereAntifraude).toBe(true);
+  });
+
+  it("manda fraud_detection con el monto en centavos y los items del pedido", async () => {
+    fetchMock.mockImplementation(async () => json(201, aprobado));
+    await payway.crearPago(datos({ monto: 20, antifraude }));
+    const fd = llamadas()[0].body.fraud_detection;
+    expect(fd).toMatchObject({
+      send_to_cs: true,
+      channel: "Web",
+      purchase_totals: { currency: "ARS", amount: 2000 },
+      bill_to: { customer_id: "user_sintetico123", email: "comprador@cliente.example", country: "AR" },
+    });
+    expect(fd.retail_transaction_data.items).toEqual([
+      expect.objectContaining({ sku: "LED-9W", quantity: 2, unit_price: 1000, total_amount: 2000 }),
+    ]);
+  });
+
+  it("sin datos de antifraude no manda el bloque", async () => {
+    fetchMock.mockImplementation(async () => json(201, aprobado));
+    await payway.crearPago(datos());
+    expect(llamadas()[0].body.fraud_detection).toBeUndefined();
+  });
+
+  it("si falta un dato obligatorio corta antes de la red, sin pago (4xx)", async () => {
+    const e = await payway.crearPago(datos({ antifraude: { ...antifraude, email: "" } })).catch((x) => x);
+    expect(e).toBeInstanceOf(ErrorProveedor);
+    expect(e.status).toBeLessThan(500);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rechazo del control de fraude (cybersource_error): fallido con motivo propio", async () => {
+    fetchMock.mockResolvedValueOnce(
+      json(402, { ...rechazado51, status_details: { error: { type: "cybersource_error", reason: { id: -1 } } } }),
+    );
+    expect(await payway.crearPago(datos())).toMatchObject({ estado: "fallido", motivo: "control_seguridad" });
+  });
+});
+
 describe("crearPago — timeout: se consulta antes de cualquier otra cosa, nunca se reintenta el POST", () => {
   it("timeout y la consulta por siteOperationId encuentra el pago aprobado: pagado", async () => {
     fetchMock
@@ -268,16 +318,39 @@ describe("crearPago — timeout: se consulta antes de cualquier otra cosa, nunca
     expect(await payway.crearPago(datos())).toMatchObject({ estado: "fallido", motivo: "fondos" });
   });
 
-  it("la consulta no encuentra nada (dos veces, con pausa): pendiente con la referencia, sin tirar y sin segundo POST", async () => {
+  it("la consulta no encuentra nada (tres veces, con pausa de 3 s): pendiente con la referencia, sin tirar y sin segundo POST", async () => {
     fetchMock
       .mockRejectedValueOnce(abortError())
+      .mockResolvedValueOnce(json(200, listadoVacio))
       .mockResolvedValueOnce(json(200, listadoVacio))
       .mockResolvedValueOnce(json(200, listadoVacio));
     const e = await payway.crearPago(datos());
     expect(e).toMatchObject({ estado: "pendiente", referencia: REF });
     expect(llamadas().filter((x) => x.metodo === "POST")).toHaveLength(1);
-    expect(llamadas().filter((x) => x.metodo === "GET")).toHaveLength(2);
-    expect(pausa).toHaveBeenCalled();
+    expect(llamadas().filter((x) => x.metodo === "GET")).toHaveLength(3);
+    expect(pausa).toHaveBeenCalledTimes(2);
+    expect(pausa).toHaveBeenCalledWith(3_000);
+  });
+
+  it("el pago aparece recién en la tercera consulta: se resuelve sin tocar el POST", async () => {
+    fetchMock
+      .mockRejectedValueOnce(abortError())
+      .mockResolvedValueOnce(json(200, listadoVacio))
+      .mockResolvedValueOnce(json(200, listadoVacio))
+      .mockResolvedValueOnce(json(200, listadoUnPago));
+    expect((await payway.crearPago(datos())).estado).toBe("pagado");
+    expect(llamadas().filter((x) => x.metodo === "POST")).toHaveLength(1);
+  });
+
+  it("espera hasta 30 s por el POST y 15 s por las consultas", async () => {
+    const espiado = vi.spyOn(AbortSignal, "timeout");
+    const real = crearPayway({ fetch: fetchMock as unknown as typeof fetch, pausa });
+    fetchMock.mockResolvedValueOnce(json(201, aprobado));
+    await real.crearPago(datos());
+    expect(espiado).toHaveBeenLastCalledWith(30_000);
+    fetchMock.mockResolvedValueOnce(json(200, listadoUnPago));
+    await real.consultarPago(REF);
+    expect(espiado).toHaveBeenLastCalledWith(15_000);
   });
 
   it("la consulta también falla: pendiente con la referencia (el cron lo reconcilia)", async () => {

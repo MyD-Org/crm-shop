@@ -41,6 +41,8 @@ export type MotivoRechazo =
   | "demasiados_intentos"
   /** Antifraude. Nunca se explica el motivo real. */
   | "riesgo"
+  /** El control de seguridad del procesador (Cybersource) rechazó el pago: sirve otra tarjeta u otro medio. */
+  | "control_seguridad"
   | "desconocido";
 
 /**
@@ -74,6 +76,8 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
     "Demasiados intentos con esta tarjeta. Espere unos minutos o use otra.",
   riesgo:
     "No pudimos procesar el pago. Pruebe con otro medio o escríbanos y lo resolvemos.",
+  control_seguridad:
+    "El pago no pasó el control de seguridad del procesador. Inténtelo con otra tarjeta o elija otro medio de pago.",
   desconocido:
     "No pudimos procesar el pago. Inténtelo de nuevo o elija transferencia.",
 };
@@ -142,6 +146,26 @@ export interface EstadoPago {
   noEncontrado?: boolean;
 }
 
+/**
+ * Datos del pedido y del comprador para el control de fraude del procesador. Salen SIEMPRE del pedido
+ * congelado y de la sesión del servidor, nunca del navegador. Sólo los pide un proveedor con
+ * `requiereAntifraude`.
+ */
+export interface DatosAntifraude {
+  /** Identificador estable del comprador en el sitio (no un email). */
+  clienteId: string;
+  email: string;
+  /** Nombre de contacto del pedido, completo. */
+  nombre: string;
+  telefono: string;
+  /** Días desde que el comprador se registró, si se conoce. */
+  diasEnSitio?: number;
+  facturacionDomicilio?: string | null;
+  entrega: { tipo: "retiro" | "envio"; ciudad?: string | null; direccion?: string | null };
+  /** `total` = total de la línea en pesos, con IVA. */
+  items: { sku: string; nombre: string; cantidad: number; total: number }[];
+}
+
 /** Lo que hace falta para crear un pago. El monto NUNCA sale del browser. */
 export interface DatosPago {
   pedidoId: string;
@@ -163,6 +187,8 @@ export interface DatosPago {
   intentoId?: string;
   /** Primeros 6 dígitos de la tarjeta (los informa la tokenización). Sólo para proveedores que lo exigen. */
   bin?: string;
+  /** Datos para el control de fraude. Sólo para proveedores con `requiereAntifraude`. */
+  antifraude?: DatosAntifraude;
   /**
    * URL del webhook del entorno que crea el pago. Ver `urlNotificacion()` en
    * mercadopago.ts: sin esto MP usa la URL del panel, que depende del modo de
@@ -187,6 +213,11 @@ export interface ProveedorPago {
    * reservar el intento.
    */
   readonly requiereBin?: boolean;
+  /**
+   * El proveedor manda los datos del pedido a un control de fraude. La ruta de cobro los arma (pedido +
+   * sesión) y los pasa en `DatosPago.antifraude`, ANTES de reservar el intento.
+   */
+  readonly requiereAntifraude?: boolean;
   /**
    * Referencia que va a tener el pago, conocida ANTES de crearlo. Si el proveedor la implementa, la
    * ruta la graba en el intento antes de llamarlo: así un timeout (el pago pudo crearse igual) deja un

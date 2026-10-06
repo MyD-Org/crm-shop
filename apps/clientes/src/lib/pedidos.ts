@@ -738,6 +738,13 @@ export interface PedidoParaPago {
   /** Estado del pedido (no del pago): sólo se cobra uno `pendiente`. */
   estado: OrderEstado;
   creadoEn: Date;
+  /** Contacto y entrega congelados (opcionales en el tipo: los dobles de prueba de Mercado Pago no los traen): alimentan el control de fraude del procesador (Payway). */
+  contactoNombre?: string;
+  contactoTelefono?: string;
+  entregaTipo?: string;
+  entregaCiudad?: string | null;
+  entregaDireccion?: string | null;
+  facturacionDomicilio?: string | null;
 }
 
 /**
@@ -798,7 +805,40 @@ export async function getPedidoParaPago(
     cuotas: fila.cuotas,
     estado: fila.estado as OrderEstado,
     creadoEn: fila.createdAt,
+    contactoNombre: fila.contactoNombre,
+    contactoTelefono: fila.contactoTelefono,
+    entregaTipo: fila.entregaTipo,
+    entregaCiudad: fila.entregaCiudad,
+    entregaDireccion: fila.entregaDireccion,
+    facturacionDomicilio: fila.facturacionDomicilio,
   };
+}
+
+/**
+ * Líneas del pedido para el control de fraude del procesador: código o id de Alegra como SKU, nombre,
+ * cantidad y total de la línea (con IVA, en pesos). Sólo se llama con un pedido que ya pasó por
+ * `getPedidoParaPago` (dueño verificado).
+ */
+export async function getItemsParaAntifraude(
+  pedidoId: string,
+): Promise<{ sku: string; nombre: string; cantidad: number; total: number }[]> {
+  const filas = await getDb()
+    .select({
+      alegraItemId: orderItems.alegraItemId,
+      code: orderItems.code,
+      name: orderItems.name,
+      qty: orderItems.qty,
+      total: orderItems.total,
+    })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, pedidoId))
+    .orderBy(asc(orderItems.name));
+  return filas.map((f) => ({
+    sku: f.code?.trim() || f.alegraItemId,
+    nombre: f.name,
+    cantidad: num(f.qty),
+    total: num(f.total),
+  }));
 }
 
 /**

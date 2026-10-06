@@ -108,6 +108,16 @@ describe("interpretarPago", () => {
     expect(interpretarPago(sinStatus).estado).toBe("pendiente");
   });
 
+  it("rechazo del control de fraude (cybersource_error): motivo propio, aunque el reason sea -1", () => {
+    const e = interpretarPago({
+      ...rechazado51,
+      status_details: { error: { type: "cybersource_error", reason: { id: -1 } } },
+    });
+    expect(e.estado).toBe("fallido");
+    expect(e.motivo).toBe("control_seguridad");
+    expect(e.detalle).toContain("error=cybersource");
+  });
+
   it("rechazado sin código de motivo: desconocido", () => {
     const e = interpretarPago({ ...rechazado51, status_details: { error: null } });
     expect(e.motivo).toBe("desconocido");

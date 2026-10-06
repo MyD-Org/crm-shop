@@ -52,6 +52,8 @@ export interface Identidad {
   cliente: ClienteComercial | null;
   /** Rol admin (Clerk publicMetadata.role). La cookie del CRM NUNCA lo otorga. */
   esAdmin: boolean;
+  /** Alta de la cuenta de Clerk (ms desde epoch). Sólo alimenta el control de fraude del cobro. */
+  registradoEn?: number;
 }
 
 /** Sesión heredada del CRM (cookie compartida en .cliente.example). */
@@ -203,6 +205,7 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
         origen: "vinculacion",
       },
       esAdmin: esRolAdmin(user?.publicMetadata),
+      registradoEn: user?.createdAt ?? undefined,
     };
   }
 
@@ -229,6 +232,7 @@ export const identidadActual = cache(async function identidadActual(): Promise<I
         }
       : null,
     esAdmin: esRolAdmin(user?.publicMetadata),
+    registradoEn: user?.createdAt ?? undefined,
   };
 });
 

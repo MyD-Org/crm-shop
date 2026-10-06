@@ -16,9 +16,17 @@
  * igual que una caída de red: `motivo: "red"`, el comprador ve "no se realizó ningún cobro" y NO se
  * cobra nada (sin token no hay cobro). Probar con las keys de sandbox desde el dominio del Preview.
  *
- * Cybersource (huella del dispositivo) del SDK: DESACTIVADO (`INHABILITAR_CYBERSOURCE`). El adaptador
- * del servidor no manda `fraud_detection` y no está confirmado que el site tenga antifraude activo;
- * encenderlo sin reenviar el identificador sólo sumaría scripts de terceros. Ver el reporte.
+ * Cybersource (huella del dispositivo) del SDK: HABILITADO. El site de Payway tiene el control de fraude
+ * activo (un pago de prueba volvió `cybersource_error`). El SDK, al recibir la key pública, genera un
+ * `device_unique_identifier` (UUID), pide `GET {base}/api/v2/frauddetectionconf` y carga
+ * `https://h.online-metrix.net/fp/tags.js?org_id=…&session_id=<merchant_id><uuid>` (la huella). Ese UUID
+ * viaja DENTRO del request de tokenización (`fraud_detection.device_unique_identifier`, lo arma el SDK) y
+ * Payway lo asocia al pago por el token: el servidor no lo necesita. Para que la huella tenga tiempo de
+ * registrarse, el SDK se instancia al mostrar el formulario (`precargarSdk`), no al tocar "Pagar", y se
+ * REUTILIZA la misma instancia (misma sesión de huella) al tokenizar.
+ *
+ * Respaldo por `fetch` directo: NO hay huella ni identificador de dispositivo. Con el control de fraude
+ * activo, el pago de ese camino puede ser rechazado por el antifraude (`control_seguridad`).
  *
  * NUNCA se loguea el cuerpo del request, el de la respuesta ni la key: sólo el estado HTTP.
  */
@@ -54,8 +62,8 @@ const TIMEOUT_MS = 15_000;
 
 /** Script oficial del SDK de front de Payway (versión fijada). Sólo se carga en el checkout. */
 export const URL_SDK_PAYWAY = "https://ventasonline.payway.com.ar/static/v2.6.4/decidir.js";
-/** Ver el comentario del módulo: sin huella de dispositivo hasta confirmar el antifraude con Payway. */
-const INHABILITAR_CYBERSOURCE = true;
+/** Ver el comentario del módulo: la huella de dispositivo de Cybersource va encendida. */
+const INHABILITAR_CYBERSOURCE = false;
 
 const falla = (motivo: MotivoToken): ResultadoToken => ({ ok: false, motivo, mensaje: MENSAJE_TOKEN[motivo] });
 
@@ -152,6 +160,60 @@ export function camposSdk(s: SolicitudToken): Record<string, string> {
 }
 
 /**
+ * Instancia del SDK compartida entre `precargarSdk` y `tokenizarConSdk`: una sola sesión de huella de
+ * dispositivo por formulario. `iniciando` evita dos instancias si el comprador toca "Pagar" mientras
+ * todavía se está precargando.
+ */
+export interface SesionSdk {
+  instancia: SdkDecidir | null;
+  iniciando: Promise<SdkDecidir | null> | null;
+}
+
+export const crearSesionSdk = (): SesionSdk => ({ instancia: null, iniciando: null });
+
+/** Carga el script y crea la instancia (que dispara la huella de Cybersource). null si no hay SDK. */
+function iniciarSdk(config: ConfigPayway, raiz: string, entorno: EntornoSdk, sesion?: SesionSdk): Promise<SdkDecidir | null> {
+  if (sesion?.instancia) return Promise.resolve(sesion.instancia);
+  if (sesion?.iniciando) return sesion.iniciando;
+  const trabajo = (async () => {
+    const Decidir = await entorno.cargarSdk();
+    if (!Decidir) return null;
+    const decidir = new Decidir(`${raiz}/api/v2`, INHABILITAR_CYBERSOURCE);
+    decidir.setPublishableKey(config.publicKey);
+    decidir.setTimeout(TIMEOUT_MS);
+    if (sesion) sesion.instancia = decidir;
+    return decidir;
+  })();
+  if (sesion) {
+    sesion.iniciando = trabajo;
+    // Si no se pudo (script bloqueado), la próxima vez se vuelve a intentar.
+    trabajo.then(
+      (d) => {
+        if (!d) sesion.iniciando = null;
+      },
+      () => {
+        sesion.iniciando = null;
+      },
+    );
+  }
+  return trabajo;
+}
+
+/**
+ * Prepara el SDK apenas se muestra el formulario, para que la huella de dispositivo de Cybersource se
+ * registre ANTES del pago. Nunca tira: si falla, `tokenizar` cae al respaldo.
+ */
+export async function precargarSdk(config: ConfigPayway, entorno: EntornoSdk, sesion: SesionSdk): Promise<void> {
+  const raiz = base(config.baseUrl);
+  if (!raiz || !config.publicKey) return;
+  try {
+    await iniciarSdk(config, raiz, entorno, sesion);
+  } catch (err) {
+    console.error("[payway] no se pudo precargar el SDK:", (err as Error)?.name ?? "error");
+  }
+}
+
+/**
  * Tokeniza con el SDK oficial. null = el SDK no se pudo cargar o no obtuvo respuesta (red/CORS): el
  * llamador puede probar el respaldo.
  * Cualquier otro resultado es definitivo.
@@ -160,20 +222,24 @@ export async function tokenizarConSdk(
   solicitud: SolicitudToken,
   config: ConfigPayway,
   entorno: EntornoSdk,
+  sesion?: SesionSdk,
 ): Promise<ResultadoToken | null> {
   const raiz = base(config.baseUrl);
   if (!raiz || !config.publicKey) {
     console.error("[payway] tokenización sin configuración válida (URL base o key pública).");
     return falla("configuracion");
   }
-  const Decidir = await entorno.cargarSdk();
-  if (!Decidir) return null;
+  let decidir: SdkDecidir | null;
+  try {
+    decidir = await iniciarSdk(config, raiz, entorno, sesion);
+  } catch (err) {
+    console.error("[payway] el SDK de tokenización no se pudo iniciar:", (err as Error)?.name ?? "error");
+    return null;
+  }
+  if (!decidir) return null;
 
   const montado = entorno.montarFormulario(camposSdk(solicitud));
   try {
-    const decidir = new Decidir(`${raiz}/api/v2`, INHABILITAR_CYBERSOURCE);
-    decidir.setPublishableKey(config.publicKey);
-    decidir.setTimeout(TIMEOUT_MS);
 
     const [status, respuesta] = await new Promise<[number, unknown]>((resolver) => {
       try {
@@ -217,10 +283,10 @@ export async function tokenizarConSdk(
 export async function tokenizar(
   solicitud: SolicitudToken,
   config: ConfigPayway,
-  deps: Deps & { entorno?: EntornoSdk } = {},
+  deps: Deps & { entorno?: EntornoSdk; sesion?: SesionSdk } = {},
 ): Promise<ResultadoToken> {
   if (deps.entorno) {
-    const r = await tokenizarConSdk(solicitud, config, deps.entorno);
+    const r = await tokenizarConSdk(solicitud, config, deps.entorno, deps.sesion);
     if (r) return r;
     console.error("[payway] el SDK no cargó o no obtuvo respuesta; se tokeniza con la API directa.");
   }

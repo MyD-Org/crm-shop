@@ -3,13 +3,20 @@ import { identidadActual } from "@/lib/auth";
 import {
   cerrarIntentoSinPago,
   fijarReferenciaIntento,
+  getItemsParaAntifraude,
   getPedidoParaPago,
   motivoNoCobrable,
   registrarCobro,
   registrarIntentoFallido,
   reservarIntento,
 } from "@/lib/pedidos";
-import { ErrorProveedor, MENSAJE_RECHAZO, convieneReintentar, type ProveedorPago } from "@/lib/pagos/tipos";
+import {
+  ErrorProveedor,
+  MENSAJE_RECHAZO,
+  convieneReintentar,
+  type DatosAntifraude,
+  type ProveedorPago,
+} from "@/lib/pagos/tipos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitir } from "@/lib/rate-limit";
@@ -49,7 +56,7 @@ const texto = (v: unknown, max = 200) =>
  * total congelado en la transacción que lo creó.
  */
 export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Promise<Response> {
-  const { clerkUserId, cliente, email } = await identidadActual();
+  const { clerkUserId, cliente, email, registradoEn } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -163,6 +170,55 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
   const cuotas = validacion.cuotas;
 
   /**
+   * Datos para el control de fraude del procesador (sólo si lo pide). Salen del pedido congelado y de la
+   * sesión del servidor, nunca del body. Se leen ANTES de reservar el intento: si fallan no queda una
+   * reserva abierta. Un dato que no se puede leer corta sin cobrar.
+   */
+  let antifraude: DatosAntifraude | undefined;
+  if (proveedor.requiereAntifraude) {
+    try {
+      const items = await getItemsParaAntifraude(pedido.id);
+      const emailComprador = pedido.clienteEmail ?? cliente?.email ?? email;
+      const identificador = clerkUserId ?? cliente?.codigocliente;
+      if (!emailComprador || !identificador || items.length === 0) {
+        // Sin esto el procesador rechazaría el request (o el control de fraude lo frenaría).
+        console.error(`[/api/pagos/${proveedor.id}] faltan datos del comprador o del pedido para el control de fraude.`);
+        return NextResponse.json(
+          {
+            error:
+              "No pudimos procesar el pago con los datos de su cuenta. Revise su correo electrónico en Mi cuenta o elija otro medio de pago.",
+            motivo: "datos_comprador",
+          },
+          { status: 422 },
+        );
+      }
+      antifraude = {
+        clienteId: identificador,
+        email: emailComprador,
+        nombre: pedido.contactoNombre ?? "",
+        telefono: pedido.contactoTelefono ?? "",
+        diasEnSitio:
+          typeof registradoEn === "number" && registradoEn > 0
+            ? Math.max(0, Math.floor((Date.now() - registradoEn) / 86_400_000))
+            : undefined,
+        facturacionDomicilio: pedido.facturacionDomicilio,
+        entrega: {
+          tipo: pedido.entregaTipo === "envio" ? "envio" : "retiro",
+          ciudad: pedido.entregaCiudad,
+          direccion: pedido.entregaDireccion,
+        },
+        items,
+      };
+    } catch (err) {
+      console.error(`[/api/pagos/${proveedor.id}] no se pudieron leer los datos del pedido:`, err);
+      return NextResponse.json(
+        { error: "No pudimos procesar el pago. Inténtelo de nuevo en un momento." },
+        { status: 502 },
+      );
+    }
+  }
+
+  /**
    * Un intento a la vez. Si hay otro abierto se intenta cerrarlo (cancelándolo
    * en Mercado Pago); si no se puede, el comprador espera. Dos pagos abiertos
    * pueden aprobarse los dos.
@@ -233,6 +289,7 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
       // Sólo a quien los usa: el resto del contrato (y el cuerpo que arma Mercado Pago) no cambia.
       ...(referenciaPrevia ? { intentoId } : {}),
       ...(proveedor.requiereBin ? { bin } : {}),
+      ...(antifraude ? { antifraude } : {}),
       /**
        * Mercado Pago EXIGE `payer.email`: sin él responde 400 "Params Error",
        * sin decir cuál parámetro falta.

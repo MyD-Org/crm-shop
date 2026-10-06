@@ -13,7 +13,7 @@ vi.mock("@/lib/pagos", () => ({
   proveedorPago: (id: string) => ({ sinwebhook: sinWebhook, conwebhook: conWebhook })[id] ?? null,
 }));
 
-import { POST as cobrar } from "./route";
+import { POST as cobrar, maxDuration } from "./route";
 import { POST as webhook } from "./webhook/route";
 
 const req = (ruta: string) => new Request(`https://tienda.example${ruta}`, { method: "POST", body: "{}" });
@@ -27,6 +27,10 @@ beforeEach(() => {
 });
 
 describe("POST /api/pagos/[proveedor]", () => {
+  it("la función dura lo que el peor caso de Payway (POST 30 s + 3 consultas)", () => {
+    expect(maxDuration).toBeGreaterThanOrEqual(90);
+  });
+
   it("delega en cobrarPedido con el proveedor de la URL", async () => {
     const r = await cobrar(req("/api/pagos/conwebhook"), ctx("conwebhook"));
     expect(await r.text()).toBe("cobro");

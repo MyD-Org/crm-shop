@@ -17,7 +17,7 @@ import {
   type Marca,
   type ModalidadTarjeta,
 } from "@/lib/pagos/payway-tarjeta";
-import { tokenizar, type ConfigPayway } from "@/lib/pagos/payway-token";
+import { crearSesionSdk, precargarSdk, tokenizar, type ConfigPayway } from "@/lib/pagos/payway-token";
 import { entornoSdkNavegador } from "@/lib/pagos/payway-sdk-navegador";
 import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
 
@@ -76,6 +76,9 @@ export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado }: Pr
   const [marcaElegida, setMarcaElegida] = useState<Marca | null>(null);
   const [errores, setErrores] = useState<Errores>({});
   const formRef = useRef<HTMLFormElement>(null);
+  // Una sola instancia del SDK por formulario: su huella de dispositivo (Cybersource) tiene que
+  // registrarse ANTES de pagar y es la misma con la que se tokeniza.
+  const sesionSdk = useRef(crearSesionSdk());
 
   // La key pública sale del servidor (no hay variable NEXT_PUBLIC_*).
   useEffect(() => {
@@ -92,6 +95,11 @@ export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado }: Pr
       cancelado = true;
     };
   }, []);
+
+  // Con la configuración a mano, se prepara el SDK mientras el comprador completa los datos.
+  useEffect(() => {
+    if (config && config !== "error") void precargarSdk(config, entornoSdkNavegador, sesionSdk.current);
+  }, [config]);
 
   const sugerida = marcaPorPrefijo(pan);
   const marca = marcaElegida ?? sugerida;
@@ -148,7 +156,7 @@ export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado }: Pr
       nroDoc: doc,
     });
 
-    const token = await tokenizar(solicitud, config, { entorno: entornoSdkNavegador });
+    const token = await tokenizar(solicitud, config, { entorno: entornoSdkNavegador, sesion: sesionSdk.current });
     if (!token.ok) {
       // Sin token no se cobró nada: se conserva lo tipeado para que corrija.
       setEstado({ fase: "rechazado", mensaje: token.mensaje });
@@ -301,8 +309,14 @@ export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado }: Pr
       </Field>
 
       <Button type="submit" disabled={procesando || config === null}>
-        {procesando ? "Procesando…" : `Pagar ${fmtPrecio(monto)}`}
+        {procesando ? "Procesando su pago…" : `Pagar ${fmtPrecio(monto)}`}
       </Button>
+
+      {procesando && (
+        <p role="status" className="text-sm text-muted">
+          Estamos procesando su pago. Puede demorar hasta un minuto; no cierre ni recargue esta página.
+        </p>
+      )}
 
       <p className="text-xs text-muted">
         Los datos de su tarjeta se envían de forma segura al procesador de pagos; este sitio no los guarda.

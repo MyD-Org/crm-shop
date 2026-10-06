@@ -4,6 +4,8 @@ import {
   tokenizarConSdk,
   tokenizar,
   camposSdk,
+  crearSesionSdk,
+  precargarSdk,
   MENSAJE_TOKEN,
   type EntornoSdk,
   type SdkDecidir,
@@ -195,13 +197,13 @@ describe("camposSdk", () => {
 });
 
 describe("tokenizarConSdk", () => {
-  it("usa el SDK con la key pública y la URL /api/v2, sin Cybersource, y devuelve token y bin", async () => {
+  it("usa el SDK con la key pública y la URL /api/v2, CON Cybersource (huella de dispositivo), y devuelve token y bin", async () => {
     const e = entornoFalso();
     const r = await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno);
     expect(r).toEqual({ ok: true, token: TOKEN_OK.id, bin: "450799" });
     expect(e.instancias[0]).toMatchObject({
       url: "https://payway.example/api/v2",
-      inhabilitarCS: true,
+      inhabilitarCS: false,
       key: "clave-publica-de-prueba",
     });
     expect(e.montados[0]?.card_number).toBe("4507990000004905");
@@ -259,6 +261,53 @@ describe("tokenizarConSdk", () => {
     const t = JSON.stringify(log.mock.calls);
     expect(t).not.toContain("4507990000004905");
     expect(t).not.toContain("clave-publica-de-prueba");
+  });
+});
+
+describe("sesión del SDK (huella de dispositivo precargada)", () => {
+  it("precargar crea la instancia una sola vez y tokenizar la reutiliza (misma huella)", async () => {
+    const e = entornoFalso();
+    const sesion = crearSesionSdk();
+    await precargarSdk(CONFIG, e.entorno, sesion);
+    expect(e.instancias).toHaveLength(1);
+    expect(e.instancias[0].inhabilitarCS).toBe(false);
+
+    const r = await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno, sesion);
+    expect(r).toMatchObject({ ok: true });
+    await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno, sesion);
+    expect(e.instancias).toHaveLength(1);
+  });
+
+  it("precargar y tokenizar a la vez no crean dos instancias", async () => {
+    const e = entornoFalso();
+    const sesion = crearSesionSdk();
+    await Promise.all([precargarSdk(CONFIG, e.entorno, sesion), tokenizarConSdk(SOLICITUD, CONFIG, e.entorno, sesion)]);
+    expect(e.instancias).toHaveLength(1);
+  });
+
+  it("si el script no carga, precargar no tira y la próxima vez reintenta", async () => {
+    const sin = entornoFalso({ sinSdk: true });
+    const sesion = crearSesionSdk();
+    await expect(precargarSdk(CONFIG, sin.entorno, sesion)).resolves.toBeUndefined();
+    expect(sesion.instancia).toBeNull();
+    const con = entornoFalso();
+    await precargarSdk(CONFIG, con.entorno, sesion);
+    expect(con.instancias).toHaveLength(1);
+  });
+
+  it("sin configuración válida no precarga nada", async () => {
+    const e = entornoFalso();
+    await precargarSdk({ baseUrl: "http://inseguro.example", publicKey: "k" }, e.entorno, crearSesionSdk());
+    expect(e.instancias).toHaveLength(0);
+  });
+
+  it("tokenizar() acepta la sesión", async () => {
+    const e = entornoFalso();
+    const sesion = crearSesionSdk();
+    await precargarSdk(CONFIG, e.entorno, sesion);
+    const r = await tokenizar(SOLICITUD, CONFIG, { entorno: e.entorno, sesion });
+    expect(r.ok).toBe(true);
+    expect(e.instancias).toHaveLength(1);
   });
 });
 

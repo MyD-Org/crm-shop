@@ -3,6 +3,12 @@ import { cobrarPedido } from "@/lib/pagos/cobrar";
 import { proveedorPago } from "@/lib/pagos";
 
 /**
+ * Tiempo máximo de la función. Peor caso de Payway: POST con hasta 30 s de espera + 3 consultas de
+ * hasta 15 s con pausas de 3 s (~81 s). 120 s alcanza, igual que el cron de conciliación.
+ */
+export const maxDuration = 120;
+
+/**
  * POST /api/pagos/[proveedor] — cobra un pedido ya creado con el procesador de la URL.
  *
  * Es la ruta genérica: `/api/pagos/mercadopago` sigue siendo su propio archivo (URL histórica del

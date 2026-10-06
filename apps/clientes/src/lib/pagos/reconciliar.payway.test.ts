@@ -36,8 +36,8 @@ const candidato = (minutos: number) => ({
 beforeEach(() => {
   for (const f of [fetchMock, intentosPendientesDeReconciliar, registrarCobro]) f.mockReset();
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("PAYWAY_PRIVATE_KEY", "clave-privada-de-prueba");
-  vi.stubEnv("PAYWAY_PUBLIC_KEY", "clave-publica-de-prueba");
+  vi.stubEnv("PAYWAY_API_PRIVATE_KEY", "clave-privada-de-prueba");
+  vi.stubEnv("PAYWAY_API_PUBLIC_KEY", "clave-publica-de-prueba");
   vi.stubEnv("PAYWAY_BASE_URL", "https://payway.example");
   vi.spyOn(console, "error").mockImplementation(() => {});
   registrarCobro.mockResolvedValue(true);
@@ -98,7 +98,7 @@ describe("reconciliarPagosPendientes — payway", () => {
   });
 
   it("sin credenciales de Payway se omite: no consulta la base ni la red", async () => {
-    vi.stubEnv("PAYWAY_PRIVATE_KEY", "");
+    vi.stubEnv("PAYWAY_API_PRIVATE_KEY", "");
     const r = await correr();
     expect(r).toEqual({ revisados: 0, actualizados: 0, errores: 0 });
     expect(intentosPendientesDeReconciliar).not.toHaveBeenCalled();

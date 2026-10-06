@@ -53,8 +53,8 @@ const llamadas = () =>
 beforeEach(() => {
   fetchMock.mockReset();
   pausa.mockClear();
-  vi.stubEnv("PAYWAY_PRIVATE_KEY", KEY_PRIVADA);
-  vi.stubEnv("PAYWAY_PUBLIC_KEY", KEY_PUBLICA);
+  vi.stubEnv("PAYWAY_API_PRIVATE_KEY", KEY_PRIVADA);
+  vi.stubEnv("PAYWAY_API_PUBLIC_KEY", KEY_PUBLICA);
   vi.stubEnv("PAYWAY_BASE_URL", BASE);
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -68,8 +68,8 @@ describe("configurado()", () => {
   it("sólo con la key pública, la privada y una base https", () => {
     expect(payway.configurado()).toBe(true);
     for (const [nombre, valor] of [
-      ["PAYWAY_PRIVATE_KEY", ""],
-      ["PAYWAY_PUBLIC_KEY", ""],
+      ["PAYWAY_API_PRIVATE_KEY", ""],
+      ["PAYWAY_API_PUBLIC_KEY", ""],
       ["PAYWAY_BASE_URL", ""],
       ["PAYWAY_BASE_URL", "http://payway.example"],
       ["PAYWAY_BASE_URL", "no es una url"],

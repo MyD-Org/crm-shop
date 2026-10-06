@@ -60,7 +60,7 @@ function baseUrl(): string | null {
  */
 export function paywayConfigurado(): boolean {
   return (
-    Boolean(process.env.PAYWAY_PRIVATE_KEY) && Boolean(process.env.PAYWAY_PUBLIC_KEY) && baseUrl() !== null
+    Boolean(process.env.PAYWAY_API_PRIVATE_KEY) && Boolean(process.env.PAYWAY_API_PUBLIC_KEY) && baseUrl() !== null
   );
 }
 
@@ -88,8 +88,8 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
   /** Request a la API. Tira `ErrorProveedor(504)` si no hay respuesta (timeout o red). */
   async function pedir(ruta: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<Respuesta> {
     const base = baseUrl();
-    const key = process.env.PAYWAY_PRIVATE_KEY;
-    if (!base || !key) throw new Error("Falta la configuración de Payway (PAYWAY_PRIVATE_KEY, PAYWAY_BASE_URL).");
+    const key = process.env.PAYWAY_API_PRIVATE_KEY;
+    if (!base || !key) throw new Error("Falta la configuración de Payway (PAYWAY_API_PRIVATE_KEY, PAYWAY_BASE_URL).");
 
     let res: Response;
     try {

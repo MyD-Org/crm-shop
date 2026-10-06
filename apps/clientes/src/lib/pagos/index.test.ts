@@ -40,12 +40,12 @@ describe("registro de proveedores de pago", () => {
 
   it("procesadorConfigurado('payway') es false sin credenciales (el medio no se ofrece) y true con todas", () => {
     expect(procesadorConfigurado("payway")).toBe(false);
-    vi.stubEnv("PAYWAY_PRIVATE_KEY", "clave-privada-de-prueba");
-    vi.stubEnv("PAYWAY_PUBLIC_KEY", "clave-publica-de-prueba");
+    vi.stubEnv("PAYWAY_API_PRIVATE_KEY", "clave-privada-de-prueba");
+    vi.stubEnv("PAYWAY_API_PUBLIC_KEY", "clave-publica-de-prueba");
     expect(procesadorConfigurado("payway")).toBe(false); // falta la base
     vi.stubEnv("PAYWAY_BASE_URL", "https://payway.example");
     expect(procesadorConfigurado("payway")).toBe(true);
-    vi.stubEnv("PAYWAY_PRIVATE_KEY", "");
+    vi.stubEnv("PAYWAY_API_PRIVATE_KEY", "");
     expect(procesadorConfigurado("payway")).toBe(false);
   });
 });

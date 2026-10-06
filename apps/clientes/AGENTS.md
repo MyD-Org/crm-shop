@@ -25,6 +25,6 @@ Adaptador en `src/lib/pagos/payway.ts` (HTTP) y `payway-estados.ts` (puro: estad
 - Sin respuesta (timeout, 5xx, red) se consulta por `siteOperationId` y NUNCA se reintenta el POST. Un pago que Payway no conoce queda `pendiente` y se da por "no llegó" a los 10 minutos.
 - No hay webhooks: la conciliación es el cron (`consultarPago`). `cancelarPago` sólo consulta; no reembolsa nunca (devolver es manual, en el backoffice de Payway).
 - El `payment_method_id` depende de marca y de crédito/débito (el débito va en 1 cuota).
-- Variables: `PAYWAY_PRIVATE_KEY`, `PAYWAY_PUBLIC_KEY`, `PAYWAY_BASE_URL` (host de la API, https; sin las tres el medio no se ofrece). No se cargan en Vercel hasta que exista el formulario de pago del navegador.
+- Variables: `PAYWAY_API_PRIVATE_KEY`, `PAYWAY_API_PUBLIC_KEY`, `PAYWAY_BASE_URL` (host de la API, https; sin las tres el medio no se ofrece). No se cargan en Vercel hasta que exista el formulario de pago del navegador.
 - Tests con `fetch` simulado y fixtures sintéticos en `src/lib/pagos/__fixtures__/payway/` (nada de keys ni llamadas reales).
 

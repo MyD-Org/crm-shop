@@ -7,7 +7,7 @@ import { Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-o
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { pagoParaCotizar } from "@/lib/lista-medio";
-import { COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
+import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { PagoPayway } from "@/components/PagoPayway";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
@@ -307,6 +307,16 @@ interface Props {
   eleccionInicial?: EleccionInicialCheckout | null;
 }
 
+/** Respuesta de `/api/pedidos/pendiente`. */
+type PedidoRescatado = {
+  id: string;
+  numero: string;
+  total: number;
+  cuotas: number | null;
+  pagoMetodo?: string;
+  lineas?: { id: string; qty: number }[];
+};
+
 export function CheckoutClient({
   nombreSugerido,
   telefonoSugerido = "",
@@ -492,12 +502,14 @@ export function CheckoutClient({
   const [cancelando, setCancelando] = useState(false);
   const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   /**
-   * Mientras se busca un pedido pendiente para retomar. Como el carrito se
-   * vacía al crear el pedido (también con Mercado Pago impago), quien vuelve a
-   * pagar llega con el carrito vacío: sin esta espera vería "carrito vacío"
-   * un instante antes de la pantalla de pago.
+   * Mientras se busca un pedido pendiente para retomar. Quien vuelve a pagar un
+   * pedido anterior a este cambio (o desde otro dispositivo) puede llegar con el
+   * carrito vacío: sin esta espera vería "carrito vacío" un instante antes de la
+   * pantalla de pago.
    */
   const [buscandoPendiente, setBuscandoPendiente] = useState(true);
+  /** Pedido pendiente encontrado al montar, a decidir cuando cargue el carrito. */
+  const [rescate, setRescate] = useState<PedidoRescatado | null>(null);
   /**
    * Al montar, se chequea si hay un pedido pendiente reciente de este comprador
    * (ver `pedidoPendienteMasReciente` en pedidos.ts). Sin este atajo, quien
@@ -512,28 +524,68 @@ export function CheckoutClient({
     fetch("/api/pedidos/pendiente")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (cancelado || !data?.pedido) return;
-        setConfirmado({
-          numero: data.pedido.numero,
-          id: data.pedido.id,
-          total: data.pedido.total,
-          cuotas: typeof data.pedido.cuotas === "number" ? data.pedido.cuotas : null,
-          pagoEnLinea: true,
-          // El servidor manda el medio del pedido; sin él (respuesta anterior) era Mercado Pago.
-          procesador: procesadorDeMedio(data.pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
-        });
+        if (cancelado) return;
+        if (data?.pedido) setRescate(data.pedido);
+        else setBuscandoPendiente(false);
       })
       .catch(() => {
         // Silencioso: fallar en la detección solo lleva al flujo normal, no
         // rompe nada.
-      })
-      .finally(() => {
         if (!cancelado) setBuscandoPendiente(false);
       });
     return () => {
       cancelado = true;
     };
   }, []);
+
+  /**
+   * Con el carrito cargado se decide qué hacer con el pendiente. El carrito sigue
+   * lleno hasta el cobro: si es el mismo (o está vacío), se retoma el pago; si
+   * cambió, el pendiente ya no es esta compra y se cancela (libera la reserva)
+   * para seguir con el checkout normal. Si no se puede cancelar (pago en curso),
+   * se retoma.
+   */
+  const rescateDistinto =
+    rescate !== null &&
+    ready &&
+    items.length > 0 &&
+    Array.isArray(rescate.lineas) &&
+    contenidoDistinto(items, rescate.lineas);
+  function retomarRescate(pedido: PedidoRescatado) {
+    setRescate(null);
+    setBuscandoPendiente(false);
+    setConfirmado({
+      numero: pedido.numero,
+      id: pedido.id,
+      total: pedido.total,
+      cuotas: typeof pedido.cuotas === "number" ? pedido.cuotas : null,
+      pagoEnLinea: true,
+      // El servidor manda el medio del pedido; sin él (respuesta anterior) era Mercado Pago.
+      procesador: procesadorDeMedio(pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
+    });
+  }
+  // Mismo carrito (o vacío): se retoma en el render, sin un frame del formulario.
+  if (rescate && ready && !rescateDistinto) retomarRescate(rescate);
+  const rescateACancelar = rescateDistinto ? rescate : null;
+  useEffect(() => {
+    if (!rescateACancelar) return;
+    let vigente = true;
+    fetch(`/api/pedidos/${rescateACancelar.id}/cancelar`, { method: "POST" })
+      .then((r) => {
+        if (!vigente) return;
+        // 409 = no se puede cancelar (pago en curso o informado): se retoma. Cancelado o ya
+        // inexistente (404): sigue el checkout normal.
+        if (r.status === 409) return retomarRescate(rescateACancelar);
+        setRescate(null);
+        setBuscandoPendiente(false);
+      })
+      .catch(() => {
+        if (vigente) retomarRescate(rescateACancelar);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [rescateACancelar]);
 
   /**
    * Clave del intento de compra. Se genera en el PRIMER confirmar y se reusa en
@@ -756,13 +808,13 @@ export function CheckoutClient({
         return;
       }
 
-      // El pedido ya existe: el carrito se vacía para TODOS los medios de
-      // pago, también Mercado Pago impago. Con sesión de Clerk el servidor ya
-      // vació el suyo en la misma transacción que creó el pedido
-      // (`crearPedido`); acá sólo se limpia el local. Un pedido de Mercado Pago
-      // sin pagar se retoma desde Mis pedidos o volviendo al checkout (el
-      // `useEffect` de arriba lo rescata), sin duplicarlo. Cancelarlo ("Volver al
-      // carrito") devuelve sus líneas al carrito.
+      // El pedido ya existe. Sin pago en línea es una compra: el carrito se
+      // vacía (con sesión de Clerk el servidor ya vació el suyo en la misma
+      // transacción, `crearPedido`; acá sólo se limpia el local). Con pago en
+      // línea el carrito sigue lleno hasta que se cobre (`onPagado` acá y
+      // `registrarCobroTx` en el servidor): quien vuelve sin pagar lo encuentra
+      // igual. Volviendo al checkout el `useEffect` de arriba retoma el pedido,
+      // sin duplicarlo, o lo cancela si el carrito cambió.
       const total = json.cotizacion?.total ?? cotizacion?.total ?? 0;
       setConfirmado({
         numero: json.numero,
@@ -782,7 +834,7 @@ export function CheckoutClient({
         total,
         items: items.map((i) => itemDe(i, i.qty)),
       });
-      vaciarTrasPedido();
+      if (!esPagoEnLinea(pagoParaEnviar)) vaciarTrasPedido();
     } catch {
       setErrorEnvio("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
     } finally {
@@ -793,8 +845,8 @@ export function CheckoutClient({
   // ------------------------------------------------------- pedido creado, a pagar
   //
   // El pedido YA existe cuando se llega acá (recién creado o rescatado por el
-  // useEffect que busca pendientes) y el carrito ya está vacío: esta pantalla
-  // no depende de `items`. Si el cobro falla o el comprador se va, el
+  // useEffect que busca pendientes) y el carrito sigue lleno hasta el cobro:
+  // esta pantalla no depende de `items`. Si el cobro falla o el comprador se va, el
   // pendiente se reutiliza en vez de crear uno nuevo.
   async function cancelarYVolver() {
     if (!confirmado) return;
@@ -805,10 +857,11 @@ export function CheckoutClient({
         method: "POST",
       });
       if (res.ok) {
-        // Las líneas del pedido cancelado vuelven al carrito (se vació al crearlo).
+        // El carrito sigue lleno hasta el cobro. Vacío (pedido creado antes de este
+        // cambio, o retomado desde otro dispositivo): vuelven las líneas del pedido.
         const json = (await res.json().catch(() => null)) as { items?: CartItem[] } | null;
         const lineas = Array.isArray(json?.items) ? json.items : [];
-        if (lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
+        if (items.length === 0 && lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
         setConfirmado(null);
         // La `claveIntento` era del pedido cancelado: sin resetearla, el
         // próximo confirmar reutilizaría la clave y traería el pedido viejo.
@@ -831,6 +884,12 @@ export function CheckoutClient({
     }
   }
 
+  /** Cobro aprobado: el servidor ya vació su carrito (`registrarCobroTx`); acá se limpia el local. */
+  function alPagar() {
+    setPagado(true);
+    vaciarTrasPedido();
+  }
+
   if (confirmado && confirmado.pagoEnLinea && !pagado) {
     return (
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
@@ -848,7 +907,7 @@ export function CheckoutClient({
             numero={confirmado.numero}
             monto={confirmado.total}
             cuotas={confirmado.cuotas ?? undefined}
-            onPagado={() => setPagado(true)}
+            onPagado={alPagar}
           />
         ) : confirmado.procesador === "mercadopago" ? (
           <PagoMercadoPago
@@ -857,7 +916,7 @@ export function CheckoutClient({
             monto={confirmado.total}
             emailComprador={emailCliente}
             maxCuotas={confirmado.cuotas ?? undefined}
-            onPagado={() => setPagado(true)}
+            onPagado={alPagar}
           />
         ) : (
           <p role="alert" className="text-center text-sm text-danger">

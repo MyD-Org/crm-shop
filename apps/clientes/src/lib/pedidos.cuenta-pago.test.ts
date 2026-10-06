@@ -38,7 +38,8 @@ vi.mock("./stock-disponible", async (orig) => ({
   ...(await orig<typeof import("./stock-disponible")>()),
   disponiblesEnTx: async () => new Map([["1", null]]),
 }));
-vi.mock("./carrito-db", () => ({ vaciarCarritoTx: async () => {} }));
+const vaciarCarritoTx = vi.fn(async () => {});
+vi.mock("./carrito-db", () => ({ vaciarCarritoTx: (...a: unknown[]) => vaciarCarritoTx(...(a as [])) }));
 vi.mock("./catalog", () => ({ getProductosPorIds: async () => [] }));
 vi.mock("./tenant", () => ({ shopTenantId: () => "tenant-ejemplo" }));
 Object.assign(tx, { execute: async () => {} });
@@ -109,6 +110,7 @@ const sucursal = (slug: string, predeterminada: boolean, orden: number) => ({
 
 beforeEach(() => {
   valoresPedido.length = 0;
+  vaciarCarritoTx.mockClear();
   leerCuentas.mockClear();
   cuentas = [];
   reglas = {
@@ -189,5 +191,17 @@ describe("crearPedido: cuenta de la transferencia", () => {
     expect(leerCuentas).not.toHaveBeenCalled();
     expect(valoresPedido[0].pagoCuenta).toBeNull();
     expect(r.cuentaPago).toBeNull();
+  });
+});
+
+describe("crearPedido: carrito del servidor", () => {
+  it("sin pago en línea lo vacía en la misma transacción", async () => {
+    await crear();
+    expect(vaciarCarritoTx).toHaveBeenCalledWith(tx, "user_1");
+  });
+
+  it("con pago en línea no: se vacía al cobrarse", async () => {
+    await crear({ pagoMetodo: "mercadopago" });
+    expect(vaciarCarritoTx).not.toHaveBeenCalled();
   });
 });

@@ -9,7 +9,7 @@ import { dbGrabadora, sinLecturaDelArbol, type ConsultaGrabada } from "@/db/__fi
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { contarCatalogo, getPaginaCatalogo, textoDe, type FiltrosCatalogo } from "./catalog";
+import { contarCatalogo, getCatalogo, getPaginaCatalogo, textoDe, type FiltrosCatalogo } from "./catalog";
 import type { CriterioPlan } from "./busqueda-v2/piezas";
 
 const conConteo = (c: ConsultaGrabada) => (c.sql.startsWith("select count(*)::int") ? [[1]] : undefined);
@@ -88,11 +88,23 @@ describe.each(VARIANTES)("equivalencia de SQL: $nombre", ({ viejos, nuevo }) => 
   });
 });
 
-describe("getPaginaCatalogo con sinConteo", () => {
-  const filas = (c: ConsultaGrabada) => (c.sql.startsWith("select count(*)::int") ? [[1]] : undefined);
+describe("getPaginaCatalogo con sinConteo = lo que hoy lee getCatalogo (autocompletar, chat, selector del admin)", () => {
+  it.each([
+    ["exacta", { q: "foco led" }],
+    ["tolerante", { q: "lampra", tolerante: true }],
+    ["sin términos", { q: "!!" }],
+  ])("la consulta de %s es idéntica (SQL y parámetros)", async (_n, texto) => {
+    await getCatalogo({ soloVisibles: true, busqueda: texto.q, tolerante: texto.tolerante, limit: 8 });
+    const viejo = grabadora.consultas[0];
+    grabadora = dbGrabadora(conConteo);
+    await getPaginaCatalogo({ soloVisibles: true, filtros: { texto }, orden: "relevancia", porPagina: 8, sinConteo: true });
+    expect(grabadora.consultas).toHaveLength(1);
+    expect(grabadora.consultas[0]).toEqual(viejo);
+  });
+});
 
+describe("getPaginaCatalogo con sinConteo", () => {
   it("no emite count(*), devuelve total = filas.length, pagina 1 y totalExacto false", async () => {
-    grabadora = dbGrabadora(filas);
     const r = await getPaginaCatalogo({
       soloVisibles: false,
       filtros: { texto: { q: "foco" } },

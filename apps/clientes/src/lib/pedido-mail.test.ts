@@ -33,8 +33,8 @@ describe("armarMailPedido", () => {
 
   it("recibido con Mercado Pago sin pagar: invita a completar el pago", () => {
     const m = armarMailPedido({ ...base, aviso: "recibido", pagoPendienteEnLinea: true });
-    expect(m.text).toContain("Su pago se está procesando. Le avisaremos por este medio cuando se confirme.");
-    expect(m.text).toContain("Si todavía no completó el pago");
+    expect(m.text).toContain("Si ya realizó el pago, se está procesando y le avisaremos por este medio cuando se confirme.");
+    expect(m.text).toContain("Si todavía no lo completó, puede hacerlo desde Mis pedidos.");
   });
 
   it("recibido de una cuenta corriente: informa con qué medio paga, sin cobro", () => {

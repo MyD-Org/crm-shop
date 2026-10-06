@@ -501,6 +501,8 @@ export function CheckoutClient({
     cuentaPago?: CuentaPagoSnapshot | null;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
+  /** El carrito es el de este pedido y todavía no se envió ningún cobro: recién ahí se vacía. */
+  const [carritoDelPedido, setCarritoDelPedido] = useState(false);
   /** El procesador todavía no confirmó el cobro: no se ofrece cancelar, sólo volver a la tienda. */
   const [pagoEnConfirmacion, setPagoEnConfirmacion] = useState(false);
   const [cancelando, setCancelando] = useState(false);
@@ -568,6 +570,7 @@ export function CheckoutClient({
       procesador: procesadorDeMedio(pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
     });
     setPagoEnConfirmacion(Boolean(pedido.pagoEnCurso));
+    setCarritoDelPedido(false);
   }
   // Mismo carrito (o vacío): se retoma en el render, sin un frame del formulario.
   if (rescate && ready && !rescateDistinto) retomarRescate(rescate);
@@ -822,6 +825,7 @@ export function CheckoutClient({
       // igual. Volviendo al checkout el `useEffect` de arriba retoma el pedido,
       // sin duplicarlo, o lo cancela si el carrito cambió.
       const total = json.cotizacion?.total ?? cotizacion?.total ?? 0;
+      setCarritoDelPedido(esPagoEnLinea(pagoParaEnviar));
       setConfirmado({
         numero: json.numero,
         id: json.id,
@@ -904,7 +908,10 @@ export function CheckoutClient({
    */
   function alQuedarPendiente() {
     setPagoEnConfirmacion(true);
-    vaciarTrasPedido();
+    // Sólo con el carrito de ESTE pedido y en su primer cobro: tras un rechazo o con un pedido retomado
+    // el comprador pudo armar otro carrito, y no se le borra (igual que el servidor).
+    if (carritoDelPedido) vaciarTrasPedido();
+    setCarritoDelPedido(false);
   }
 
   if (confirmado && confirmado.pagoEnLinea && !pagado) {
@@ -926,7 +933,10 @@ export function CheckoutClient({
             cuotas={confirmado.cuotas ?? undefined}
             onPagado={alPagar}
             onPendiente={alQuedarPendiente}
-            onRechazado={() => setPagoEnConfirmacion(false)}
+            onRechazado={() => {
+              setPagoEnConfirmacion(false);
+              setCarritoDelPedido(false);
+            }}
             iniciarEnConfirmacion={pagoEnConfirmacion}
           />
         ) : confirmado.procesador === "mercadopago" ? (
@@ -938,7 +948,10 @@ export function CheckoutClient({
             maxCuotas={confirmado.cuotas ?? undefined}
             onPagado={alPagar}
             onPendiente={alQuedarPendiente}
-            onRechazado={() => setPagoEnConfirmacion(false)}
+            onRechazado={() => {
+              setPagoEnConfirmacion(false);
+              setCarritoDelPedido(false);
+            }}
             iniciarEnConfirmacion={pagoEnConfirmacion}
           />
         ) : (

@@ -1257,7 +1257,15 @@ async function registrarCobroTx(
     // cobro (la única que pasa `intentoId`): el webhook, la conciliación y la consulta del comprador no,
     // porque para entonces puede haber armado otro carrito. Si el pago se rechaza, se reintenta sobre
     // este mismo pedido (el rescate del pendiente) y "Volver al carrito" devuelve sus líneas.
-    else if (intentoId && cobro.estado === "pendiente" && nuevo === "pendiente" && fila.clerkUserId) {
+    // Sólo la PRIMERA vez (un único intento en el pedido): si ya hubo uno antes (rechazado) y se reintenta,
+    // el comprador pudo armar otro carrito y no se le borra.
+    else if (
+      intentoId &&
+      cobro.estado === "pendiente" &&
+      nuevo === "pendiente" &&
+      intentos.length === 1 &&
+      fila.clerkUserId
+    ) {
       await vaciarCarritoTx(tx, fila.clerkUserId);
     }
 

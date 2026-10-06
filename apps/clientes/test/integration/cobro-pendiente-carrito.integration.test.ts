@@ -95,6 +95,15 @@ describe("carrito tras un cobro en línea pendiente", () => {
     expect((await getPedidoParaPago(pedidoId, { clerkUserId: "user_1" }))?.pagoEstado).toBe("pendiente");
   });
 
+  it("un reintento (segundo intento) que vuelve a quedar pendiente NO borra el carrito nuevo", async () => {
+    const { pedidoId, intentoId } = await pedidoConCarrito();
+    await registrarCobro(pedidoId, cobro("fallido"), { intentoId, avisar: false });
+    const r = await reservarIntento(pedidoId, "payway", "tarjeta");
+    if (!r || !("intentoId" in r)) throw new Error("sin intento");
+    await registrarCobro(pedidoId, { ...cobro("pendiente"), referencia: "ref-2" }, { intentoId: r.intentoId });
+    expect((await leerCarrito("user_1")).items).toEqual([{ id: "item-1", qty: 1 }]);
+  });
+
   it("la conciliación o la consulta del comprador (sin intentoId) no tocan el carrito", async () => {
     const { pedidoId } = await pedidoConCarrito();
     await registrarCobro(pedidoId, cobro("pendiente"));

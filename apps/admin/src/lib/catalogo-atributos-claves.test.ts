@@ -18,6 +18,8 @@ const DRIZZLE = fileURLToPath(new URL("../../drizzle", import.meta.url))
 const fixture = JSON.parse(readFileSync(FIXTURE, "utf8")) as {
   claves: string[]
   tipos: Record<string, "num" | "texto">
+  /** Claves que el Shop sólo filtra y muestra: su rango válido es el de DEFINICION_ATRIBUTOS. */
+  rangos_solo_faceta: Record<string, [number, number]>
 }
 
 function literalesDelUltimoCheck(): { archivo: string; claves: string[] } {
@@ -49,6 +51,13 @@ describe("paridad de claves de catalog_atributos", () => {
     expect(Object.keys(DEFINICION_ATRIBUTOS).sort()).toEqual([...fixture.claves].sort())
     for (const c of CLAVES_ATRIBUTO) expect(DEFINICION_ATRIBUTOS[c].tipo).toBe(fixture.tipos[c])
     expect(Object.keys(ETIQUETA_ATRIBUTO).sort()).toEqual([...fixture.claves].sort())
+  })
+
+  it("rangos_solo_faceta del fixture == rango de DEFINICION_ATRIBUTOS (diámetro y ancho)", () => {
+    expect(Object.keys(fixture.rangos_solo_faceta).sort()).toEqual(["ancho_mm", "diametro_mm"])
+    for (const [c, rango] of Object.entries(fixture.rangos_solo_faceta)) {
+      expect(DEFINICION_ATRIBUTOS[c as keyof typeof DEFINICION_ATRIBUTOS].rango, c).toEqual(rango)
+    }
   })
 
   it("la herramienta del PDF (esquema cerrado) tiene exactamente las claves del fixture, todas requeridas", () => {

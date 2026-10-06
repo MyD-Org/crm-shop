@@ -48,5 +48,9 @@
     "leds_rollo": "num",
     "diametro_mm": "num",
     "ancho_mm": "num"
+  },
+  "rangos_solo_faceta": {
+    "diametro_mm": [5, 200],
+    "ancho_mm": [30, 1000]
   }
 }

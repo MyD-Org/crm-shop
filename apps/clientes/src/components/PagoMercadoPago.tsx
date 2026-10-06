@@ -50,6 +50,8 @@ interface Props {
   maxCuotas?: number;
   /** Se llama cuando el cobro quedó confirmado. */
   onPagado: () => void;
+  /** Se llama cuando el procesador todavía no confirmó el cobro (queda "Estamos confirmando"). */
+  onPendiente?: () => void;
 }
 
 interface RespuestaPago {
@@ -68,6 +70,7 @@ export function PagoMercadoPago({
   emailComprador,
   maxCuotas,
   onPagado,
+  onPendiente,
 }: Props) {
   const [estado, setEstado] = useState<Estado>({ fase: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -188,6 +191,7 @@ export function PagoMercadoPago({
       }
 
       setEstado({ fase: "pendiente" });
+      onPendiente?.();
     } catch {
       setEstado({
         fase: "rechazado",

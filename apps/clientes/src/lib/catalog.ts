@@ -804,6 +804,11 @@ export interface FiltrosCatalogo {
    */
   sinFacetaAtributos?: boolean;
   /**
+   * Sólo facetas: no calcular la de categorías, que sale `[]`. El panel del Shop muestra el total
+   * fijo de cada categoría (`getFacetaCategorias`, de la caché compartida), no el de la búsqueda.
+   */
+  sinFacetaCategorias?: boolean;
+  /**
    * `public.catalog_atributos` se puede leer (flag `busqueda-ia` + tabla disponible, lo decide la
    * page con `atributosEstructuradosDisponibles`). Con él, `atributos` mira primero el dato
    * estructurado, hay filtro y faceta de potencia, y los productos traen sus características.
@@ -1078,6 +1083,43 @@ async function conteoPorCategoriaAlegra(where: ReturnType<typeof condicionesDe>)
     .where(and(where, sql`nullif(${crmCategoriasAlegra.name}, '') is not null`))
     .groupBy(crmCategoriasAlegra.name)
     .orderBy(sql`count(*) desc`, asc(crmCategoriasAlegra.name));
+}
+
+/**
+ * Faceta de categorías: el árbol completo del catálogo (sin filtros), cada nodo con lo que cuenta
+ * dentro de `filtros` (0 incluido). El panel la pide siempre con el default de stock y nada más,
+ * así el número de cada categoría es un total fijo (ver `categoriasTotalesPublicas`).
+ */
+export async function getFacetaCategorias(
+  filtros: FiltrosCatalogo,
+  soloVisibles: boolean,
+  disp?: ContextoDisponibilidad,
+): Promise<Faceta[]> {
+  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles, disp);
+  const arbol = await getArbolCategorias();
+  // Lo que no acota el conjunto sólo cambia qué se calcula.
+  const sinFiltros = Object.entries(filtros).every(
+    ([k, v]) =>
+      k === "sinFacetaAtributos" ||
+      k === "sinFacetaCategorias" ||
+      k === "atributosEstructurados" ||
+      v === undefined ||
+      v === false ||
+      (Array.isArray(v) && v.length === 0),
+  );
+  if (arbol.length) {
+    const [base, filtrado] = await Promise.all([
+      conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
+      conteoPorCategoriaPropia(whereCategorias),
+    ]);
+    return arbolCompletoConConteo(arbol, base, filtrado);
+  }
+  const [base, filtrado] = await Promise.all([
+    // Sin filtros el conteo ya es el del catálogo entero: no hace falta la segunda consulta.
+    sinFiltros ? null : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
+    conteoPorCategoriaAlegra(whereCategorias),
+  ]);
+  return base ? categoriasPlanasConConteo(base, filtrado) : filtrado;
 }
 
 /** Qué grupos de filtros entran en un WHERE (ver `condicionesDe`). */
@@ -1439,7 +1481,6 @@ export async function getFacetas(
   /** Flag `disponibilidad-sucursal` (ver `ContextoDisponibilidad`). */
   disp?: ContextoDisponibilidad,
 ): Promise<Facetas> {
-  const whereCategorias = condicionesDe(filtros, { ...APLICAR_TODOS, categorias: false }, soloVisibles, disp);
   const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, disp);
   const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, disp);
   const whereAtributos = condicionesDe(filtros, { ...APLICAR_TODOS, atributos: false }, soloVisibles, disp);
@@ -1449,28 +1490,8 @@ export async function getFacetas(
     ? condicionesDe(filtros, { ...APLICAR_TODOS, potencia: false }, soloVisibles, disp)
     : undefined;
 
-  const arbol = await getArbolCategorias();
-  // `sinFacetaAtributos` y `atributosEstructurados` no acotan el conjunto: sólo cambian qué se calcula.
-  const sinFiltros = Object.entries(filtros).every(
-    ([k, v]) =>
-      k === "sinFacetaAtributos" ||
-      k === "atributosEstructurados" ||
-      v === undefined ||
-      v === false ||
-      (Array.isArray(v) && v.length === 0),
-  );
-
   const [categorias, marcas, [rango], [conteoAtributos], rangoPotencia] = await Promise.all([
-    arbol.length
-      ? Promise.all([
-          conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
-          conteoPorCategoriaPropia(whereCategorias),
-        ]).then(([base, filtrado]) => arbolCompletoConConteo(arbol, base, filtrado))
-      : Promise.all([
-          // Sin filtros el conteo ya es el del catálogo entero: no hace falta la segunda consulta.
-          sinFiltros ? null : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
-          conteoPorCategoriaAlegra(whereCategorias),
-        ]).then(([base, filtrado]) => (base ? categoriasPlanasConConteo(base, filtrado) : filtrado)),
+    filtros.sinFacetaCategorias ? Promise.resolve([]) : getFacetaCategorias(filtros, soloVisibles, disp),
     getDb()
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
       .from(crmCatalogo)

@@ -10,7 +10,7 @@ import { dbGrabadora, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fix
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { arbolCompletoConConteo, categoriasPlanasConConteo, enArbolConConteo, getCategorias, rutaEnArbol, getFacetas, getPaginaCatalogo } from "./catalog";
+import { arbolCompletoConConteo, getFacetaCategorias, categoriasPlanasConConteo, enArbolConConteo, getCategorias, rutaEnArbol, getFacetas, getPaginaCatalogo } from "./catalog";
 
 const ILUMINACION = "11111111-1111-4111-8111-111111111111";
 const FOCOS = "22222222-2222-4222-8222-222222222222";
@@ -187,6 +187,26 @@ describe("facetas de categorías", () => {
       { label: "ILUMINACION", count: 1 },
       { label: "ELECTRICIDAD", count: 0 },
     ]);
+  });
+
+  it("sinFacetaCategorias: no se cuentan categorías (las pone el total fijo de la caché) y sale vacía", async () => {
+    grabadora = conArbol();
+    const f = await getFacetas({ busqueda: "foco", sinFacetaCategorias: true }, false);
+    expect(f.categorias).toEqual([]);
+    expect(grabadora.consultas.some(esConteoPorCategoria)).toBe(false);
+  });
+
+  it("el total fijo de cada categoría no depende de la búsqueda, la marca ni el precio", async () => {
+    const consulta = async (filtros: Parameters<typeof getFacetaCategorias>[0]) => {
+      grabadora = conArbol();
+      await getFacetaCategorias(filtros, false);
+      return grabadora.consultas.filter(esConteoPorCategoria).map((c) => c.sql + JSON.stringify(c.params));
+    };
+    const fijo = await consulta({ soloStock: true });
+    // El panel pide siempre lo mismo (sólo el default de stock), sin importar lo que se busque.
+    expect(fijo).toEqual(await consulta({ soloStock: true }));
+    // Y con la búsqueda y la marca puestas, la consulta es otra: por eso la página no la usa.
+    expect(fijo).not.toEqual(await consulta({ soloStock: true, busqueda: "foco", marcas: ["X"] }));
   });
 
   it("sin árbol, siguen agrupando por la categoría de Alegra", async () => {

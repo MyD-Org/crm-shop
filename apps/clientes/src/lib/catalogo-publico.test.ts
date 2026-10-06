@@ -13,6 +13,7 @@ const { cat, cacheTagMock, cacheLifeMock } = vi.hoisted(() => ({
     getCatalogo: vi.fn(),
     getCategorias: vi.fn(),
     getFacetas: vi.fn(),
+    getFacetaCategorias: vi.fn(),
     getPaginaCatalogo: vi.fn(),
     getProducto: vi.fn(),
   },
@@ -25,6 +26,7 @@ vi.mock("next/cache", () => ({ cacheTag: cacheTagMock, cacheLife: cacheLifeMock 
 
 import {
   categoriasNav,
+  categoriasTotalesPublicas,
   destacadosHome,
   facetasPublicas,
   filtrosCacheables,
@@ -197,5 +199,15 @@ describe("con `disp` (flag disponibilidad-sucursal): la sucursal viaja como argu
     expect(cat.getFacetas).toHaveBeenCalledWith({}, false, disp);
     expect(cat.getProducto).toHaveBeenCalledWith("42", { soloVisibles: false, disp });
     expect(cat.getCategorias).toHaveBeenCalledWith(false, disp);
+  });
+});
+
+describe("categoriasTotalesPublicas (total fijo de cada categoría del panel)", () => {
+  it("sale de la caché compartida (tag catalogo) con el default de stock y sin otro filtro", async () => {
+    cat.getFacetaCategorias.mockResolvedValue([{ label: "ILUMINACION", count: 7, nivel: 1 }]);
+    expect(await categoriasTotalesPublicas(true)).toEqual([{ label: "ILUMINACION", count: 7, nivel: 1 }]);
+    expect(cat.getFacetaCategorias).toHaveBeenCalledWith({ soloStock: true }, true);
+    expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
+    expect(cacheLifeMock).toHaveBeenCalledWith("catalogo");
   });
 });

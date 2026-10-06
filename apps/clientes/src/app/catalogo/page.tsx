@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { facetasPublicas } from "@/lib/catalogo-publico";
+import { categoriasTotalesPublicas, facetasPublicas } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import {
   IA_PLAN,
@@ -139,13 +139,16 @@ async function CatalogoResultados({ searchParams }: Props) {
   //   lo que se está viendo; el rango de precio sale del conjunto filtrado sin el propio rango;
   // - la oferta de cuotas es una lectura chica; null (flag apagado, sin datos o error) ⇒ el
   //   catálogo sale sin cuotas.
-  const [pagina, oferta] = await Promise.all([
+  const [pagina, oferta, categoriasTotales] = await Promise.all([
     buscarEnShop(
       {
         consulta: estado.query,
         filtros: {
           ...sinTexto(filtrosDeEstado(estado)),
           ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
+          // Las categorías del panel traen su total fijo (`categoriasTotales`). Sólo con la búsqueda
+          // inteligente se siguen contando dentro de la búsqueda, para las sugerencias "+ Afinar".
+          ...(conBusquedaIa ? {} : { sinFacetaCategorias: true }),
           ...(estructurados ? { atributosEstructurados: true } : {}),
         },
         orden: estado.orden,
@@ -164,6 +167,9 @@ async function CatalogoResultados({ searchParams }: Props) {
       },
     ),
     getOfertaCuotas(),
+    // El número de cada categoría del panel: el total del catálogo, no el de la búsqueda ni los
+    // filtros. Una sola clave de la caché compartida, para todos los visitantes.
+    categoriasTotalesPublicas(soloVisibles, dispGeneral),
   ]);
   const plan = pagina.plan;
   // Una búsqueda sin resultados dejaba el panel de filtros vacío ("Sin
@@ -174,7 +180,11 @@ async function CatalogoResultados({ searchParams }: Props) {
   const facetas =
     filtrosSinBusqueda || !pagina.facetas
       ? // Sin la búsqueda ni su plan: tocar un filtro quita la búsqueda (y con ella `ia`).
-        await facetasPublicas(sinTexto(pagina.filtrosEfectivos), soloVisibles, disp)
+        await facetasPublicas(
+          { ...sinTexto(pagina.filtrosEfectivos), ...(conBusquedaIa ? {} : { sinFacetaCategorias: true }) },
+          soloVisibles,
+          disp,
+        )
       : pagina.facetas;
 
   // Búsqueda inteligente (flag `busqueda-ia`): franja del plan y salidas del "sin resultados".
@@ -196,7 +206,7 @@ async function CatalogoResultados({ searchParams }: Props) {
         // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
         estado={{ ...estado, pagina: pagina.pagina }}
         // El filtro "Con stock en <local>" sólo tiene sentido con más de un local.
-        facetas={locales.length > 1 ? { ...facetas, locales } : facetas}
+        facetas={{ ...facetas, categorias: categoriasTotales, ...(locales.length > 1 ? { locales } : {}) }}
         filtrosSinBusqueda={filtrosSinBusqueda}
         oferta={oferta}
         busquedaIa={busquedaIa}

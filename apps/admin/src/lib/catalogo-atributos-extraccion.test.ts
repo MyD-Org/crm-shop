@@ -57,6 +57,21 @@ describe("extraerAtributosDeNombre: nombres reales del catálogo", () => {
   it("CONTACTOR con bobina de 24 VCA → tensión 24 (9A es corriente)", () => {
     expect(extraer("CONTACTOR 3P 9A 1NA Bob: 24VCA")).toEqual({ tension_v: 24, corriente_a: 9, polos: 3 })
   })
+
+  it.each([
+    ["INTERRUPTOR DIFERENCIAL 2 POLOS", 2],
+    ["SECCIONADOR 4 POLOS", 4],
+    ["INTERRUPTOR 1 POLO", 1],
+    ["CONTACTOR 3POLOS", 3],
+  ])("polos en letras: %s", (nombre, polos) => {
+    expect(extraer(nombre as string).polos).toBe(polos)
+  })
+
+  it("polos en letras: no con neutro aparte ni fuera de 1 a 4", () => {
+    expect(extraer("TERMICA 3 POLOS + N").polos).toBeUndefined()
+    expect(extraer("BORNERA 12 POLOS").polos).toBeUndefined()
+    expect(extraer("FICHA 6 POLOS").polos).toBeUndefined()
+  })
 })
 
 describe("extraerAtributosDeNombre: bordes", () => {

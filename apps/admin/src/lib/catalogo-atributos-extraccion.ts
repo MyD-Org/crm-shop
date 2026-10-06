@@ -398,6 +398,8 @@ const RE_CURVA_EXPLICITA = new RegExp(`${INIC}curva ?([a-z])${FIN}`)
 const RE_CURVA_COMBINADA = new RegExp(`${INIC}([bcd]) ?-?(\\d{1,3})(?: ?a)?${FIN}`)
 const RE_POLOS = new RegExp(`${INIC}([1-4]) ?p${FIN}(?! ?\\+)`)
 const RE_POLOS_PALABRA = new RegExp(`${INIC}(uni|bi|tri|tetra)polar(?:es)?${FIN}`)
+/** "2 POLOS", "1 POLO" (en letras). "3 POLOS + N" no: el neutro aparte cambia la cuenta. */
+const RE_POLOS_EN_LETRAS = new RegExp(`${INIC}([1-4]) ?polos?${FIN}(?! ?\\+)`)
 // "5A" / "5 A" / "5 amperes"; "1 A 10V" (rango) no: una "a" suelta seguida de otro número no es unidad.
 // Un número pegado a otro por "-" o "/" es un rango ("13-18A") o una relación ("1200/5A"), no una corriente.
 const RE_CORRIENTE = new RegExp(`${INIC}(?<![0-9][-/])(${NUM})(?: ?(?:amperes?|amperios?|amps?)| a(?! ?\\d)|a)${FIN}`)
@@ -569,13 +571,16 @@ function extraerAmpliadas(t: string): AtributoExtraido[] {
   }
   texto("curva", unico(curvas))
 
-  // 7. polos: "3P" y las palabras (monofásico/trifásico NO son polos)
+  // 7. polos: "3P", las palabras y "2 POLOS" (monofásico/trifásico NO son polos)
   c = consumir(resto, RE_POLOS)
   resto = c.resto
   for (const m of c.hallados) polos.push(Number(m[2]))
   c = consumir(resto, RE_POLOS_PALABRA)
   resto = c.resto
   for (const m of c.hallados) polos.push(POLOS_DE_PALABRA[m[2]])
+  c = consumir(resto, RE_POLOS_EN_LETRAS)
+  resto = c.resto
+  for (const m of c.hallados) polos.push(Number(m[2]))
 
   // 8. corriente_a
   c = consumir(resto, RE_CORRIENTE)

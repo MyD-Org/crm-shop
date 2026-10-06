@@ -106,7 +106,7 @@ export interface FilaGuardada {
 }
 
 /** Claves que el backfill por nombre sabe escribir (`scripts/backfill-seccion-cables.ts --clave <clave>`). */
-export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm"] as const
+export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm", "polos"] as const
 export type ClaveBackfillNombre = (typeof CLAVES_BACKFILL_NOMBRE)[number]
 
 /** Valor numérico que lee el extractor del nombre (+ descripción) para una clave; null si no lee ninguno. */

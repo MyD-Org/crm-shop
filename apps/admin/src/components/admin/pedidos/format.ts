@@ -110,6 +110,7 @@ const PAGO_METODO_LABEL: Record<string, string> = {
   efectivo: "Efectivo en el local",
   cuenta_corriente: "Cuenta corriente",
   mercadopago: "Tarjeta o Mercado Pago",
+  payway: "Tarjeta (Payway)",
 }
 
 export function pagoMetodoLabel(metodo: string): string {
@@ -153,11 +154,11 @@ export function textoUltimoCambio(nombre: string | null, iso: string | null): st
 export const PAGO_REVISION_INFO: Record<PagoRevision, { label: string; detalle: string }> = {
   cobro_duplicado: {
     label: "Cobro duplicado",
-    detalle: "Este pedido se cobró más de una vez. Revise los pagos en Mercado Pago y devuelva el excedente.",
+    detalle: "Este pedido se cobró más de una vez. Revise los pagos en el procesador de cobro y devuelva el excedente.",
   },
   pagado_cancelado: {
     label: "Pagado y cancelado",
-    detalle: "Se aprobó un pago de este pedido cancelado. Devuelva el pago en Mercado Pago o reactive el pedido.",
+    detalle: "Se aprobó un pago de este pedido cancelado. Devuelva el pago en el procesador de cobro o reactive el pedido.",
   },
   cuotas_distintas: {
     label: "Cuotas distintas",

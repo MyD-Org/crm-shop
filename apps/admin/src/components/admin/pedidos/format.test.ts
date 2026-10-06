@@ -85,6 +85,8 @@ describe("etiquetas", () => {
   it("medio de pago: a_coordinar con la etiqueta del Shop; lo desconocido, crudo", () => {
     expect(pagoMetodoLabel("a_coordinar")).toBe("A coordinar con un asesor")
     expect(pagoMetodoLabel("transferencia")).toBe("Transferencia bancaria")
+    expect(pagoMetodoLabel("mercadopago")).toBe("Tarjeta o Mercado Pago")
+    expect(pagoMetodoLabel("payway")).toBe("Tarjeta (Payway)")
     expect(pagoMetodoLabel("cripto")).toBe("cripto")
     // Una clave heredada de Object.prototype no es un medio de pago.
     expect(pagoMetodoLabel("toString")).toBe("toString")

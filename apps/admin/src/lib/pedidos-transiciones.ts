@@ -135,7 +135,7 @@ export function mensajeNoCancelable(motivo: MotivoNoCancelable): string {
     case "facturado":
       return "No se puede cancelar un pedido facturado. Desvincule la factura antes de cancelarlo."
     case "pago_en_curso":
-      return "No se puede cancelar un pedido con un pago de Mercado Pago en curso. Espere a que el pago se resuelva e inténtelo nuevamente."
+      return "No se puede cancelar un pedido con un pago en línea en curso. Espere a que el pago se resuelva e inténtelo nuevamente."
     case "entregado":
       return "No se puede cancelar un pedido que ya fue entregado."
   }
@@ -148,6 +148,12 @@ export function mensajeNoCancelable(motivo: MotivoNoCancelable): string {
  */
 export const VENTANA_PAGO_MS = 24 * 60 * 60_000
 
+/** Dónde se devuelve un pago cobrado en línea, según el medio (`pago_metodo`) del pedido. */
+const PROCESADOR_DEVOLUCION: Readonly<Record<string, string>> = Object.freeze({
+  mercadopago: "Mercado Pago",
+  payway: "Payway",
+})
+
 /**
  * Texto del aviso del diálogo "Cancelar con devolución" (sólo admin y superadmin): qué hay que
  * resolver FUERA del CRM antes de cancelar. Se combinan los que apliquen.
@@ -155,14 +161,15 @@ export const VENTANA_PAGO_MS = 24 * 60 * 60_000
 export function avisoCancelarConDevolucion(p: {
   pagado: boolean
   facturado: boolean
-  /** `pago_metodo` del pedido; "mercadopago" cambia el texto de la devolución. */
+  /** `pago_metodo` del pedido; "mercadopago" y "payway" cambian el texto de la devolución. */
   pagoMetodo?: string
 }): string {
   const partes: string[] = []
   if (p.pagado) {
+    const procesador = p.pagoMetodo ? PROCESADOR_DEVOLUCION[p.pagoMetodo] : undefined
     partes.push(
-      p.pagoMetodo === "mercadopago"
-        ? "Antes de cancelarlo, gestione la devolución en Mercado Pago."
+      procesador
+        ? `Antes de cancelarlo, gestione la devolución en ${procesador}.`
         : "Antes de cancelarlo, gestione la devolución del pago al cliente.",
     )
   }

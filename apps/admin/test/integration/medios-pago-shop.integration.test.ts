@@ -135,3 +135,45 @@ describe("fila fija mercadopago (migración 0057)", () => {
     expect(await actualizarMedioPago(A, "mercadopago", { cobroOnline: false })).toMatchObject({ kind: "ok", medio: { cobroOnline: true } })
   })
 })
+
+describe("fila fija payway (migración 0067)", () => {
+  const sqlMigracion = readFileSync(new URL("../../drizzle/0067_medio_pago_payway.sql", import.meta.url), "utf8")
+  const correrMigracion = async () => {
+    for (const parte of sqlMigracion.split("--> statement-breakpoint")) await getDb().execute(sql.raw(parte))
+  }
+
+  it("siembra una fila inactiva por tenant, al final del orden, y es idempotente", async () => {
+    await crearMedioPago(A, { slug: "transferencia", nombre: "Transferencia", orden: 0 })
+    await crearMedioPago(A, { slug: "efectivo", nombre: "Efectivo", orden: 5 })
+
+    await correrMigracion()
+    await correrMigracion()
+
+    const a = await listarMediosPago(A)
+    expect(a.filter((m) => m.slug === "payway")).toEqual([
+      { slug: "payway", nombre: "Tarjeta de crédito o débito - Payway", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, condicionesCuotas: [], destacarEnCatalogo: false, mostrarEnFicha: false },
+    ])
+    expect((await listarMediosPago(B)).filter((m) => m.slug === "payway")).toHaveLength(1)
+  })
+
+  it("no pisa una fila que ya existe (ni su nombre editado)", async () => {
+    await getDb().execute(
+      sql`insert into medios_pago_shop (tenant_id, slug, nombre, activo, cobro_online, orden) values (${A}, 'payway', 'Tarjetas', true, true, 0)`,
+    )
+    await correrMigracion()
+    expect((await listarMediosPago(A)).find((m) => m.slug === "payway")).toMatchObject({ nombre: "Tarjetas", activo: true, orden: 0 })
+  })
+
+  it("convive con mercadopago: no se elimina, pero sí se activa, renombra y reordena", async () => {
+    await correrMigracion()
+    expect(await eliminarMedioPago(A, "payway")).toEqual({
+      kind: "conflict",
+      error: "Este medio de pago no se puede eliminar; desactívelo.",
+    })
+    expect(await actualizarMedioPago(A, "payway", { activo: true, orden: 3, nombre: "Tarjetas" })).toMatchObject({
+      kind: "ok",
+      medio: { slug: "payway", activo: true, orden: 3, nombre: "Tarjetas", cobroOnline: true },
+    })
+    expect(await actualizarMedioPago(A, "payway", { cobroOnline: false })).toMatchObject({ kind: "ok", medio: { cobroOnline: true } })
+  })
+})

@@ -470,6 +470,13 @@
       "when": 1792151600000,
       "tag": "0066_cuotas_monto_minimo",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1792238000000,
+      "tag": "0067_medio_pago_payway",
+      "breakpoints": true
     }
   ]
 }

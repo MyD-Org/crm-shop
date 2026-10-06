@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest"
 import {
   MSG_COBRO_ONLINE,
   SLUG_MERCADOPAGO,
+  SLUGS_COBRO,
+  esSlugCobro,
   MSG_SIN_ENTREGA,
   validarMedioPagoCambios,
   validarMedioPagoNuevo,
@@ -79,6 +81,22 @@ describe("fila fija Mercado Pago", () => {
       cambios: { activo: true, orden: 4, aplicaEnvio: false },
     })
     expect(validarMedioPagoCambios({ cobroOnline: true })).toMatchObject({ ok: false, campo: "cobroOnline" })
+  })
+})
+
+describe("filas fijas de cobro en línea", () => {
+  it("SLUGS_COBRO incluye mercadopago y payway", () => {
+    expect(SLUGS_COBRO).toEqual(["mercadopago", "payway"])
+    expect(esSlugCobro("payway")).toBe(true)
+    expect(esSlugCobro("transferencia")).toBe(false)
+  })
+
+  it("no se puede crear un medio con el slug payway", () => {
+    expect(validarMedioPagoNuevo({ slug: "payway", nombre: "Payway" })).toEqual({
+      ok: false,
+      campo: "slug",
+      error: "Ese identificador está reservado.",
+    })
   })
 })
 

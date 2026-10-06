@@ -37,7 +37,7 @@ describe("catálogo con plan de búsqueda v2", () => {
   it("el texto recupera con OR (regex de comienzo de palabra) y no con el LIKE AND clásico", async () => {
     await getPaginaCatalogo({
       soloVisibles: false,
-      filtros: { busqueda: "foco cálido e27", planBusqueda: plan, categorias: ["Lámparas"], atributos: ["tono-calido"] },
+      filtros: { texto: { q: "foco cálido e27", plan }, categorias: ["Lámparas"], atributos: ["tono-calido"] },
       orden: "relevancia",
     });
     expect(grabadora.consultas).toHaveLength(2);
@@ -55,12 +55,12 @@ describe("catálogo con plan de búsqueda v2", () => {
   });
 
   it("sin plan, la búsqueda clásica de siempre (LIKE por término)", async () => {
-    await getPaginaCatalogo({ soloVisibles: false, filtros: { busqueda: "foco" }, orden: "relevancia" });
+    await getPaginaCatalogo({ soloVisibles: false, filtros: { texto: { q: "foco" } }, orden: "relevancia" });
     for (const { params } of grabadora.consultas) expect(params).toContain("%foco%");
   });
 
   it("con plan no se cachea (una clave por búsqueda)", () => {
-    expect(filtrosCacheables({ planBusqueda: plan })).toBe(false);
+    expect(filtrosCacheables({ texto: { q: "", plan } })).toBe(false);
     expect(filtrosCacheables({ categorias: ["Lámparas"] })).toBe(true);
   });
 });

@@ -81,17 +81,17 @@ describe.skipIf(process.env.MEDIDAS_SQL !== "1")("medidas dinámicas sobre catal
   });
 
   it("con universo (búsqueda): pasan el que cumple y el que no tiene dato; no el que contradice", async () => {
-    const r = await ids({ busqueda: "termica", atributos: ["corriente_a:20"] });
+    const r = await ids({ texto: { q: "termica" }, atributos: ["corriente_a:20"] });
     expect(r.sort()).toEqual(["t1", "t3", "t4"]);
   });
 
   it("dos claves: AND entre ellas (t2 contradice la corriente aunque tenga los polos)", async () => {
-    const r = await ids({ busqueda: "termica", atributos: ["polos:2", "corriente_a:20"] });
+    const r = await ids({ texto: { q: "termica" }, atributos: ["polos:2", "corriente_a:20"] });
     expect(r.sort()).toEqual(["t1", "t3", "t4"]);
   });
 
   it("dos valores de una misma clave: OR (corriente 20 o 25)", async () => {
-    const r = await ids({ busqueda: "termica", atributos: ["corriente_a:20", "corriente_a:25"] });
+    const r = await ids({ texto: { q: "termica" }, atributos: ["corriente_a:20", "corriente_a:25"] });
     expect(r.sort()).toEqual(["t1", "t2", "t3", "t4"]);
   });
 
@@ -101,22 +101,24 @@ describe.skipIf(process.env.MEDIDAS_SQL !== "1")("medidas dinámicas sobre catal
   });
 
   it("ip: pedido o superior; el sin dato pasa en el modo sin contradicción", async () => {
-    const r = await ids({ busqueda: "foco", atributos: ["ip:65"] });
+    const r = await ids({ texto: { q: "foco" }, atributos: ["ip:65"] });
     expect(r.sort()).toEqual(["f2", "f3", "f4"]);
   });
 
   it("el boost sube a los que SÍ tienen el dato (estructurado o nombre) sobre los que no", async () => {
     const r = await ids(
       {
-        busqueda: "termica",
         categorias: [],
         atributos: [],
-        planBusqueda: {
-          consulta: "termica 20a",
-          blandos: {
-            categorias: [],
-            atributos: [{ id: "corriente_a:20", peso: 1 }],
-            terminos: [{ texto: "termica", peso: 1 }],
+        texto: {
+          q: "termica",
+          plan: {
+            consulta: "termica 20a",
+            blandos: {
+              categorias: [],
+              atributos: [{ id: "corriente_a:20", peso: 1 }],
+              terminos: [{ texto: "termica", peso: 1 }],
+            },
           },
         },
       },
@@ -127,7 +129,7 @@ describe.skipIf(process.env.MEDIDAS_SQL !== "1")("medidas dinámicas sobre catal
   });
 
   it("conClaves: sólo productos con dato de la clave (cobertura)", async () => {
-    expect((await ids({ busqueda: "termica", conClaves: ["polos"] })).sort()).toEqual(["t1", "t2", "t5"]);
+    expect((await ids({ texto: { q: "termica" }, conClaves: ["polos"] })).sort()).toEqual(["t1", "t2", "t5"]);
   });
 
   // R4.8 (p95 <= 1.25x contra el mismo filtro con ids del diccionario, sobre 3000 productos

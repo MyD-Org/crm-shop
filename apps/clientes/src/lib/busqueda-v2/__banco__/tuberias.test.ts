@@ -34,7 +34,7 @@ describe("fase1", () => {
     const opts = getPaginaCatalogo.mock.calls[0][0];
     expect(opts.soloVisibles).toBe(false);
     expect(opts.filtros.soloStock).toBe(false);
-    expect(opts.filtros.busqueda).toBe("DL-18W");
+    expect(opts.filtros.texto).toEqual({ q: "DL-18W" });
   });
 
   it("con vistaProduccion(true): soloVisibles y stock por defecto", async () => {
@@ -87,7 +87,7 @@ describe("v2", () => {
     entender.mockResolvedValue({ ...entendido("DL-18W"), plan: planVacio("DL-18W", "codigo") });
     const r = await ejecutarV2("DL-18W", ctx);
     expect(r.intencion).toBe("codigo");
-    expect(getPaginaCatalogo.mock.calls[0][0].filtros.planBusqueda).toBeUndefined();
+    expect(getPaginaCatalogo.mock.calls[0][0].filtros.texto).toEqual({ q: "DL-18W" });
   });
 });
 

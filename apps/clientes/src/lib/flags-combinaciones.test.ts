@@ -10,14 +10,8 @@ import { flagsPublicos } from "./flags-publicos";
 import { sucursalesHabilitadas } from "./sucursales-flag";
 import { disponibilidadSucursalHabilitada } from "./disponibilidad-sucursal-flag";
 import { busquedaIaHabilitada } from "./busqueda-ia-flag";
-import { busquedaMotorUnico } from "./busqueda-motor-flag";
 import { etapasDe } from "./busqueda-v2/motor";
 import { planVacio, type PlanBusqueda } from "./busqueda-v2/plan";
-// El cableado del motor lee catálogo y flags: acá sólo se necesita `politicaDe` (pura).
-vi.mock("./catalog", () => ({ PRODUCTOS_POR_PAGINA: 24, getPaginaCatalogo: vi.fn(), contarCatalogo: vi.fn() }));
-vi.mock("./catalogo-publico", () => ({ paginaCatalogoPublica: vi.fn(), facetasPublicas: vi.fn() }));
-vi.mock("./busqueda-v2/servidor", () => ({ planParaPagina: vi.fn() }));
-import { politicaDe } from "./busqueda-v2/motor-servidor";
 
 /**
  * Tablas de combinaciones de los interruptores del Shop (Vercel Flags, mockeados
@@ -93,59 +87,32 @@ describe("sucursales y reserva por sucursal", () => {
   });
 });
 
-describe("búsqueda: motor único x búsqueda inteligente", () => {
+describe("búsqueda: kill switch busqueda-ia sobre el motor único", () => {
   const plan: PlanBusqueda = {
     ...planVacio("panel led"),
     blandos: { categorias: [{ nombre: "Paneles", peso: 0.9 }], atributos: [], terminos: [{ texto: "panel", peso: 1 }] },
   };
 
   it.each([
-    // busqueda-motor-unico, busqueda-ia, política, etapas del autocompletar con un plan que aporta
-    { motor: false, ia: false, politica: "legado", etapas: ["exacta", "tolerante"] },
-    { motor: false, ia: true, politica: "legado", etapas: ["plan", "exacta", "tolerante"] },
-    { motor: true, ia: false, politica: "cascada", etapas: ["exacta", "tolerante"] }, // busqueda-ia apagado manda: sin plan
-    { motor: true, ia: true, politica: "cascada", etapas: ["plan", "exacta", "tolerante"] },
-  ])("motor=$motor, busqueda-ia=$ia => política $politica, etapas $etapas", async ({ motor, ia, politica, etapas }) => {
-    f({ "busqueda-motor-unico": motor, "busqueda-ia": ia });
-    const conMotor = await busquedaMotorUnico();
+    // busqueda-ia, etapas con un plan que aporta (en todas las superficies que usan plan)
+    { ia: false, etapas: ["exacta", "tolerante"] }, // apagado: sin plan en ninguna superficie
+    { ia: true, etapas: ["plan", "exacta", "tolerante"] },
+  ])("busqueda-ia=$ia => etapas $etapas en catálogo, autocompletar y chat", async ({ ia, etapas }) => {
+    f({ "busqueda-ia": ia });
     const conIa = await busquedaIaHabilitada();
-    expect([conMotor, conIa]).toEqual([motor, ia]);
-    expect(politicaDe("autocompletar", conMotor)).toBe(politica);
-    expect(etapasDe({ politica: politicaDe("autocompletar", conMotor), superficie: "autocompletar", consulta: "panel led", plan: conIa ? plan : null, conPlan: conIa })).toEqual(etapas);
-  });
-
-  it.each([
-    // busqueda-motor-unico, busqueda-ia, política, etapas del chat con un plan que aporta
-    { motor: false, ia: false, politica: "legado", etapas: ["exacta", "tolerante"] },
-    { motor: false, ia: true, politica: "legado", etapas: ["exacta", "tolerante"] }, // el legado del chat nunca usó plan
-    { motor: true, ia: false, politica: "cascada", etapas: ["exacta", "tolerante"] }, // busqueda-ia apagado manda: sin plan
-    { motor: true, ia: true, politica: "cascada", etapas: ["plan", "exacta", "tolerante"] },
-  ])("chat: motor=$motor, busqueda-ia=$ia => política $politica, etapas $etapas (un solo interruptor)", async ({ motor, ia, politica, etapas }) => {
-    f({ "busqueda-motor-unico": motor, "busqueda-ia": ia });
-    const conMotor = await busquedaMotorUnico();
-    const conIa = await busquedaIaHabilitada();
-    expect(politicaDe("chat", conMotor)).toBe(politica);
-    expect(etapasDe({ politica: politicaDe("chat", conMotor), superficie: "chat", consulta: "panel led", plan: conIa ? plan : null, conPlan: conIa })).toEqual(etapas);
-  });
-
-  it("con el motor prendido las cuatro superficies corren la cascada; apagado, todas el legado", () => {
-    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
-      expect(politicaDe(superficie, true)).toBe("cascada");
-      expect(politicaDe(superficie, false)).toBe("legado");
+    expect(conIa).toBe(ia);
+    for (const superficie of ["catalogo", "autocompletar", "chat"] as const) {
+      expect(etapasDe({ superficie, consulta: "panel led", plan: conIa ? plan : null, conPlan: conIa })).toEqual(etapas);
     }
   });
 
-  it("si Vercel Flags tira, el motor cae a apagado (legado)", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.resetModules();
-    vi.doMock("@/flags", () => ({
-      busquedaMotorUnicoFlag: async () => {
-        throw new Error("flags caído");
-      },
-    }));
-    const motor = await import("./busqueda-motor-flag");
-    expect(await motor.busquedaMotorUnico()).toBe(false);
-    vi.doUnmock("@/flags");
-    vi.restoreAllMocks();
+  it("el selector del admin nunca usa plan, con busqueda-ia prendido o apagado", () => {
+    for (const conPlan of [false, true]) {
+      expect(etapasDe({ superficie: "admin", consulta: "panel led", plan, conPlan })).toEqual(["exacta", "tolerante"]);
+    }
+  });
+
+  it("busqueda-ia apagado: un código sigue yendo a la etapa de código (no depende del plan)", () => {
+    expect(etapasDe({ superficie: "catalogo", consulta: "DL-18W", plan: null, conPlan: false })).toEqual(["codigo", "tolerante"]);
   });
 });

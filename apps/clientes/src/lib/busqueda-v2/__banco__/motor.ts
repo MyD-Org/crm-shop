@@ -1,7 +1,6 @@
 /**
- * Tubería `motor` del banco: la búsqueda del Shop por la fachada `buscar()` (busqueda-v2/motor.ts),
- * con la política (`legado` | `cascada`) y la superficie (`catalogo` | `autocompletar` | `chat`) que
- * se quieran medir. SOLO scripts.
+ * Tubería `motor` del banco: la búsqueda del Shop por la fachada `buscar()` (busqueda-v2/motor.ts)
+ * y su cascada, con la superficie (`catalogo` | `autocompletar` | `chat`) que se quiera medir. SOLO scripts.
  *
  * - catálogo: lo que hace el sitio. `/buscar` (la función REAL, `destinoDeBusqueda`) decide entre
  *   la clásica y `ia=1` con los duros del plan; la página lee esa URL y llama al motor con
@@ -9,7 +8,7 @@
  * - autocompletar (8) y chat (10): el motor con el plan perezoso de la corrida, sin conteo, sin
  *   filtro de stock y sin duros del plan (como en producción).
  *
- * El plan sale de `obtenerPlan` (v2.ts), el MISMO punto que usan `ejecutarV2` y el oráculo legado.
+ * El plan sale de `obtenerPlan` (v2.ts), el MISMO punto que usa `ejecutarV2`.
  *
  * Corre SIN los topes de tiempo de la cascada (`sinTopes`): el banco mide calidad (hit@K,
  * zero-result, etapas), no relojes. Sin caché de planes y lejos de la base, el plan (con sus COUNT)
@@ -20,15 +19,14 @@
 import { PRODUCTOS_POR_PAGINA, contarCatalogo, getPaginaCatalogo } from "@/lib/catalog";
 import { IA_PLAN, filtrosDeEstado } from "@/lib/catalogo-url";
 import { PESO_MINIMO_RECUPERAR, type PlanBusqueda } from "../plan";
-import { buscar, sinTexto, type DepsMotor, type FiltrosSinTexto } from "../motor";
+import { buscar, type DepsMotor, type FiltrosSinTexto } from "../motor";
 import type { ResultadoBanco } from "./banco";
-import { SUPERFICIES_BANCO, type PoliticaBanco, type SuperficieBanco } from "./corrida";
+import { SUPERFICIES_BANCO, type SuperficieBanco } from "./corrida";
 import { estadoDeBusqueda } from "./destino-banco";
 import { obtenerPlan, type ContextoV2 } from "./v2";
 import { VISTA_ACTUAL, type VistaBanco } from "./vista";
 
 export interface ContextoMotor extends ContextoV2 {
-  politica: PoliticaBanco;
   superficie: SuperficieBanco;
 }
 
@@ -61,19 +59,19 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
     const estado = await estadoDeBusqueda(q, vista, plan, (base) =>
       contarCatalogo({
         soloVisibles: vista.soloVisibles,
-        filtros: { ...sinTexto(filtrosDeEstado(base)), texto: { q: base.query ?? "" } },
+        filtros: { ...filtrosDeEstado(base), texto: { q: base.query ?? "" } },
       }),
     );
     const conPlanDeUrl = estado.ia === IA_PLAN && !!plan;
     const r = await buscar(
       {
         consulta: estado.query,
-        filtros: { ...sinTexto(filtrosDeEstado(estado)), ...estructurados },
+        filtros: { ...filtrosDeEstado(estado), ...estructurados },
         orden: estado.orden,
         pagina: 1,
         porPagina: PRODUCTOS_POR_PAGINA,
       },
-      { superficie: "catalogo", politica: ctx.politica, conPlan: true, conteo, planDe: conPlanDeUrl ? async () => plan : undefined, sinTopes: true },
+      { superficie: "catalogo", conPlan: true, conteo, planDe: conPlanDeUrl ? async () => plan : undefined, sinTopes: true },
       deps,
     );
     return {
@@ -89,7 +87,7 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
     };
   }
 
-  // Autocompletar y chat: el plan se pide sólo si la política lo usa (perezoso, una vez por caso).
+  // Autocompletar y chat: el plan se pide sólo si la cascada lo usa (perezoso, una vez por caso).
   const memo: { plan?: Awaited<ReturnType<typeof obtenerPlan>> } = {};
   const planDe = async () => {
     memo.plan ??= await obtenerPlan(q, ctx, vista);
@@ -97,7 +95,7 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
   };
   const r = await buscar(
     { consulta: q, filtros: estructurados, orden: "relevancia", pagina: 1, porPagina: k },
-    { superficie: ctx.superficie, politica: ctx.politica, conPlan: true, conteo, planDe, sinTopes: true },
+    { superficie: ctx.superficie, conPlan: true, conteo, planDe, sinTopes: true },
     deps,
   );
   return {
@@ -108,7 +106,7 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
     etapa: r.etapa,
     ids: r.productos.map((p) => p.id),
     ...(memo.plan?.sinPlanCacheado ? { sinPlanCacheado: true } : {}),
-    // El plan es perezoso: si la política no lo pidió no hay medidas que informar.
+    // El plan es perezoso: si la cascada no lo pidió no hay medidas que informar.
     ...(memo.plan?.medidas ? { medidas: memo.plan.medidas } : {}),
   };
 }

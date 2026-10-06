@@ -96,9 +96,9 @@ async function conGuarda(fn: () => Promise<unknown>, minimo = 1) {
 }
 
 describe("toda consulta del catálogo filtra por el tenant del Shop", () => {
-  it("getCatalogo (con y sin búsqueda)", async () => {
+  it("getCatalogo y la lectura de texto sin conteo (autocompletar, chat)", async () => {
     await conGuarda(() => getCatalogo({ soloVisibles: false, limit: 5 }));
-    await conGuarda(() => getCatalogo({ soloVisibles: false, busqueda: "lampara" }));
+    await conGuarda(() => getPaginaCatalogo({ soloVisibles: false, filtros: { texto: { q: "lampara" } }, orden: "relevancia", porPagina: 5, sinConteo: true }));
   });
 
   it("getProductosPorIds y getProducto", async () => {
@@ -112,7 +112,7 @@ describe("toda consulta del catálogo filtra por el tenant del Shop", () => {
       () =>
         getPaginaCatalogo({
           soloVisibles: false,
-          filtros: { busqueda: "x", categorias: ["A"], marcas: ["M"], precioMin: 1, precioMax: 9, soloStock: true },
+          filtros: { texto: { q: "x" }, categorias: ["A"], marcas: ["M"], precioMin: 1, precioMax: 9, soloStock: true },
           orden: "precio-desc",
         }),
       2,

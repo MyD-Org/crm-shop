@@ -9,12 +9,9 @@
  *     --banco-real=tmp/busqueda/banco-real.local.json --repeticiones=3 \
  *     --dir=tmp/busqueda/linea-base-<fecha>
  *
- * Con `--motor` suma las filas de la tubería `motor` (el motor único de búsqueda, política `legado`
- * y política `cascada`: catálogo en las dos vistas; autocompletar y chat en producción). Sus filas
- * legado tienen que igualar las de la corrida congelada (misma cabecera); `matriz.txt` evalúa cada
- * fila cascada contra los criterios de aceptación (hit@K, MRR, zero-result, precision, cortes,
- * hit -> miss, latencia, planes sin caché y mejora de typos) y de ahí sale la matriz de cada cambio.
- * Declare el estado de `busqueda-medidas` con `--flags=busqueda-medidas:on|off` (queda en la cabecera).
+ * Con `--motor` suma las filas de la tubería `motor` (el motor único de búsqueda, cascada: catálogo
+ * en las dos vistas; autocompletar y chat en producción); con `--comparar` sale su delta contra una
+ * corrida congelada. Declare el estado de `busqueda-medidas` con `--flags=busqueda-medidas:on|off` (queda en la cabecera).
  *
  * Escribe en `--dir` (por defecto `tmp/busqueda/linea-base-<fecha>/`, ignorado por git):
  *   matriz.json  todas las corridas con su cabecera (el banco real va enmascarado)
@@ -89,7 +86,7 @@ async function main(a: ArgsLinea) {
   for (const [i, e] of plan.entries()) {
     const vista = e.vista === "banco" ? VISTA_ACTUAL : vistaProduccion(a.soloVisibles);
     const jev = resolverJev(e.jev, false);
-    const ejecutor = crearEjecutor({ tuberia: e.tuberia, jev, vista, arbol, estructurados, soloVisiblesDelPlan: a.soloVisibles, politica: e.politica, superficie: e.superficie, medidas: a.medidas });
+    const ejecutor = crearEjecutor({ tuberia: e.tuberia, jev, vista, arbol, estructurados, soloVisiblesDelPlan: a.soloVisibles, superficie: e.superficie, medidas: a.medidas });
     const banco = e.banco === "real" && real ? real.banco : sintetico;
     const { json } = await correr(
       {
@@ -98,7 +95,6 @@ async function main(a: ArgsLinea) {
         jevMeta: ejecutor.jevMeta,
         vista,
         produccion: e.vista === "produccion",
-        ...(e.politica ? { politica: e.politica } : {}),
         ...(e.superficie ? { superficie: e.superficie } : {}),
         banco,
         repeticiones: a.repeticiones,
@@ -117,7 +113,7 @@ async function main(a: ArgsLinea) {
         ejecutar: (q) => enLectura(() => ejecutor.ejecutar(q)),
       },
     );
-    corridas.push({ id: e.id, banco: e.banco, vista: e.vista, tuberia: e.tuberia, jev, ...(e.politica ? { politica: e.politica } : {}), ...(e.superficie ? { superficie: e.superficie } : {}), reporte: json });
+    corridas.push({ id: e.id, banco: e.banco, vista: e.vista, tuberia: e.tuberia, jev, ...(e.superficie ? { superficie: e.superficie } : {}), reporte: json });
     console.info(`[linea-base] ${i + 1}/${plan.length} ${e.id} (${json.cabecera.duracionMs} ms)`);
   }
 

@@ -17,7 +17,6 @@ import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
 import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servidor";
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
-import { busquedaMotorUnico } from "@/lib/busqueda-motor-flag";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
 import { PRODUCTOS_POR_PAGINA, getArbolCategorias } from "@/lib/catalog";
 import { chipsSugeridos } from "@/lib/busqueda-inteligente/url";
@@ -95,14 +94,12 @@ async function CatalogoResultados({ searchParams }: Props) {
   // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
   // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
   // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
-  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa, conMotorUnico] = await Promise.all([
+  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
     searchParams,
     flagsPublicos(),
     dispCatalogo(),
     localesDeRetiro(),
     busquedaIaHabilitada(),
-    // Flag `busqueda-motor-unico` (apagado = política legado); si no se puede evaluar, apagado.
-    busquedaMotorUnico(),
   ]);
   // Flag `busqueda-ia` apagado: igual que antes del cambio (sin `atr` ni `ia`).
   const leido = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
@@ -142,7 +139,7 @@ async function CatalogoResultados({ searchParams }: Props) {
       {
         consulta: estado.query,
         filtros: {
-          ...sinTexto(filtrosDeEstado(estado)),
+          ...filtrosDeEstado(estado),
           ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
           // Las categorías del panel traen su total fijo (`categoriasTotales`). Sólo con la búsqueda
           // inteligente se siguen contando dentro de la búsqueda, para las sugerencias "+ Afinar".
@@ -162,7 +159,6 @@ async function CatalogoResultados({ searchParams }: Props) {
         conPlanDeUrl: estado.ia === IA_PLAN,
         conFacetas: true,
         busquedaIa: conBusquedaIa,
-        motorUnico: conMotorUnico,
       },
     ),
     // El número de cada categoría del panel: el total del catálogo, no el de la búsqueda ni los

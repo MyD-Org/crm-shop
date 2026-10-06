@@ -24,7 +24,7 @@ export const BANCO: BusquedaBanco[] = parsearBanco(banco, { origen: "embebido" }
 
 /** Producto tal como lo necesita la evaluación (un recorte de `Product`). */
 export interface ProductoBanco {
-  /** Para comparar corridas por ids (`--ids`, `--paridad`). Ausente en las tuberías viejas. */
+  /** Para comparar corridas por ids (`--ids`, `--paridad-con`). Ausente en las tuberías viejas. */
   id?: string;
   name: string;
   description?: string;

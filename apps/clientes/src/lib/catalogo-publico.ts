@@ -73,12 +73,8 @@ const LIMITE_RESPALDO_DESTACADOS = 300;
  */
 export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
   return (
-    !filtros.busqueda?.trim() &&
-    // El plan de la búsqueda v2 sale de una consulta libre: tantas claves como búsquedas.
-    !filtros.planBusqueda &&
-    !filtros.busquedaTolerante &&
-    // El texto único (`texto`) es la misma consulta libre, en cualquiera de sus formas. Se mira
-    // acá y no con `textoDe` (de catalog.ts) para no depender de ese módulo.
+    // El texto (`texto`) es una consulta libre, en cualquiera de sus formas (y el plan de la búsqueda
+    // v2 sale de ella): tantas claves como búsquedas.
     !filtros.texto?.q.trim() &&
     !filtros.texto?.plan &&
     !filtros.texto?.tolerante &&

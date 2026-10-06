@@ -12,7 +12,7 @@
  */
 // Sólo el tipo: `import type` se borra al compilar y no arrastra el driver
 // de Postgres al bundle del browser.
-import type { FiltrosCatalogo } from "@/lib/catalog";
+import type { FiltrosSinTexto } from "@/lib/catalog";
 import { atributosValidos } from "@/lib/catalogo-atributos";
 
 /**
@@ -450,12 +450,12 @@ export function hrefCanonico(estado: EstadoCatalogo): string {
 
 /**
  * Filtros que la page le pasa a la consulta (`getPaginaCatalogo` /
- * `getFacetas`). Vive acá, puro, para que el default de "Solo con stock"
+ * `getFacetas`), SIN texto: la consulta (`estado.query`) se la pasa la page al motor, que arma el
+ * `texto` de cada etapa. Vive acá, puro, para que el default de "Solo con stock"
  * llegue al SQL con test: sin parámetros, `soloStock` es `true`.
  */
-export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosCatalogo {
+export function filtrosDeEstado(estado: EstadoCatalogo): FiltrosSinTexto {
   return {
-    busqueda: estado.query,
     categorias: estado.categorias,
     marcas: estado.marcas,
     atributos: estado.atributos,

@@ -38,7 +38,7 @@ export function contador(base: {
         ...(nombreConTodos?.length ? { nombreConTodos } : {}),
         // Los términos recuperan como en la página (comienzo de palabra, OR).
         ...(terminos?.length
-          ? { planBusqueda: { consulta: terminos.join(" "), blandos: { categorias: [], atributos: [], terminos: terminos.map((texto) => ({ texto, peso: 1 })) } } }
+          ? { texto: { q: "", plan: { consulta: terminos.join(" "), blandos: { categorias: [], atributos: [], terminos: terminos.map((texto) => ({ texto, peso: 1 })) } } } }
           : {}),
       },
     });

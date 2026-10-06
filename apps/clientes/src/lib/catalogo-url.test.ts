@@ -405,19 +405,19 @@ describe("filtrosDeEstado", () => {
     ).toBe(false);
   });
 
-  it("pasa búsqueda, categorías, marcas y precio tal cual", () => {
-    expect(
-      filtrosDeEstado(
-        leerEstado({
-          q: "led",
-          categoria: "ILUMINACION",
-          marca: "GENROD",
-          precio_min: "500",
-          precio_max: "900",
-        })
-      )
-    ).toEqual({
-      busqueda: "led",
+  it("pasa categorías, marcas y precio tal cual y NUNCA el texto (la consulta se la pasa la page al motor)", () => {
+    const filtros = filtrosDeEstado(
+      leerEstado({
+        q: "led",
+        categoria: "ILUMINACION",
+        marca: "GENROD",
+        precio_min: "500",
+        precio_max: "900",
+      })
+    );
+    expect(filtros).not.toHaveProperty("busqueda");
+    expect(filtros).not.toHaveProperty("texto");
+    expect(filtros).toEqual({
       categorias: ["ILUMINACION"],
       marcas: ["GENROD"],
       atributos: [],

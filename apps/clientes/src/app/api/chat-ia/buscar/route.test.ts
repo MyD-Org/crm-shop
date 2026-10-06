@@ -172,13 +172,8 @@ describe("GET /api/chat-ia/buscar?facetas=1", () => {
   });
 });
 
-/**
- * El contrato de errores no depende del interruptor del motor: con `busqueda-motor-unico` apagado y
- * prendido el chat responde lo mismo (los textos de `{error}` van en el registro formal del producto).
- */
-describe.each([false, true])("GET /api/chat-ia/buscar: errores con busqueda-motor-unico=%s", (motor) => {
-  beforeEach(() => setFlag("busqueda-motor-unico", motor));
-
+/** Contrato de errores del chat (los textos de `{error}` van en el registro formal del producto). */
+describe("GET /api/chat-ia/buscar: errores", () => {
   it("404 {error} con el chat apagado y el motor no se invoca", async () => {
     setFlag("chat-ia", false);
     const res = await pedir("?q=lampara");

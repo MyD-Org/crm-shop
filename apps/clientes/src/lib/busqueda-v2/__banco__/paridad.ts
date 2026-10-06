@@ -1,8 +1,6 @@
 /**
  * Paridad entre dos corridas del banco: ¿devuelven lo mismo, caso por caso? Se usa para probar que
- * la fachada del motor con política `legado` no cambia nada (frente al oráculo `legado.ts`) y, más
- * adelante, que una limpieza no cambia nada (frente a una corrida guardada con `--ids`). Módulo
- * PURO.
+ * una limpieza no cambia nada (frente a una corrida guardada con `--json` y `--ids`). Módulo PURO.
  *
  * Privacidad (repo público): el resultado sólo habla de índices y motivos; ni consultas de un banco
  * privado ni ids de productos llegan a la consola.

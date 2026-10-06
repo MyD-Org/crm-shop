@@ -1,11 +1,9 @@
 /**
  * Lo que decide `/buscar` para el banco, con la función REAL (`destinoDeBusqueda`): ¿la búsqueda
  * clásica o `ia=1` con los duros del plan en la URL? Después se lee esa URL como la lee la página
- * del catálogo. Lo comparten la tubería `motor` y el oráculo `legado`, así los dos parten del mismo
- * estado. SOLO scripts.
+ * del catálogo. SOLO scripts.
  */
-import { contarCatalogo } from "@/lib/catalog";
-import { filtrosDeEstado, leerEstado, type EstadoCatalogo } from "@/lib/catalogo-url";
+import { leerEstado, type EstadoCatalogo } from "@/lib/catalogo-url";
 import { destinoDeBusqueda } from "../buscar";
 import type { PlanBusqueda } from "../plan";
 import type { VistaBanco } from "./vista";
@@ -33,7 +31,3 @@ export async function estadoDeBusqueda(
   }
   return leerEstado(params);
 }
-
-/** El conteo clásico de hoy: los campos viejos (`busqueda`) de `filtrosDeEstado`. */
-export const contarClasicaViejo = (vista: VistaBanco) => (base: EstadoCatalogo) =>
-  contarCatalogo({ soloVisibles: vista.soloVisibles, filtros: filtrosDeEstado(base) });

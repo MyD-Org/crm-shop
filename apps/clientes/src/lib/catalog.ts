@@ -329,17 +329,15 @@ const contradiceAtributoSql = (c: CriterioEstructurado) =>
 /** `EXISTS` de una fila de la clave, con cualquier valor (cobertura). */
 const tieneAtributoSql = (clave: ClaveEstructurada) => sql`exists (${filaAtributoSql(clave)})`;
 
-type FiltrosDeAtributos = Pick<
-  FiltrosCatalogo,
-  "atributosEstructurados" | "medidasPositivas" | "categorias" | "busqueda" | "planBusqueda"
->;
+type FiltrosDeAtributos = Pick<FiltrosCatalogo, "atributosEstructurados" | "medidasPositivas" | "categorias" | "texto">;
 
 /**
  * Modo de las medidas (ids dinámicos de atributo) como filtro: positivo si la consulta no tiene
  * universo acotado ("20a", `?atr=corriente_a:20` a mano), sin contradicción si lo tiene. Lo fuerza
  * `medidasPositivas`. Los ids del diccionario no dependen de esto.
  */
-const medidasPositivasDe = (filtros: FiltrosDeAtributos): boolean => filtros.medidasPositivas ?? !universoAcotado(filtros);
+const medidasPositivasDe = (filtros: FiltrosDeAtributos): boolean =>
+  filtros.medidasPositivas ?? !universoAcotado({ categorias: filtros.categorias, busqueda: filtros.texto?.q, planBusqueda: filtros.texto?.plan });
 
 /** Contexto de las condiciones de atributos: el texto buscable y, si se pueden leer, los estructurados. */
 const contextoAtributos = (filtros: FiltrosDeAtributos): ContextoAtributos => ({
@@ -557,9 +555,6 @@ export async function getCatalogo(opts: {
   mediosPrecio?: MediosPrecio;
   limit?: number;
   offset?: number;
-  busqueda?: string;
-  /** Segundo intento con parecido por trigramas (ver `coincideTexto`). */
-  tolerante?: boolean;
   /**
    * Contexto de disponibilidad por sucursal (flag `disponibilidad-sucursal`): stock por sucursal y
    * productos ocultos por sucursal. Ausente = stock único, como siempre.
@@ -571,9 +566,6 @@ export async function getCatalogo(opts: {
    */
   atributosEstructurados?: boolean;
 }): Promise<Product[]> {
-  const q = opts.busqueda?.trim();
-  const conTerminos = terminosBusqueda(q).length > 0;
-
   let query = getDb()
     .select(columnasCatalogo(opts.disp, opts.atributosEstructurados))
     .from(crmCatalogo)
@@ -587,15 +579,9 @@ export async function getCatalogo(opts: {
         conPrecioSql,
         soloVisiblesSql(opts.soloVisibles),
         visibleEnZonaSql(opts.disp),
-        q ? coincideTexto(q, opts.tolerante) : undefined
       )
     )
-    // Con búsqueda (el autocomplete), lo más relevante primero.
-    .orderBy(
-      ...(q && conTerminos
-        ? [sql`${relevanciaSql(q, !!opts.tolerante)} desc`, asc(crmCatalogo.name)]
-        : [asc(crmCatalogo.name)]),
-    )
+    .orderBy(asc(crmCatalogo.name))
     .$dynamic();
 
   if (opts.limit != null) query = query.limit(opts.limit);
@@ -747,9 +733,8 @@ export async function preciosCuentaPorIds(
 export const PRODUCTOS_POR_PAGINA = 24;
 
 /**
- * El texto de una búsqueda, ya decidido por quien la pide (el motor, `busqueda-v2/motor.ts`):
- * una sola forma en lugar de `busqueda` + `busquedaTolerante` + `planBusqueda` (que se retiran
- * cuando todo pase por el motor).
+ * El texto de una búsqueda, ya decidido por quien la pide (el motor, `busqueda-v2/motor.ts`): la
+ * ÚNICA forma de pedirle texto al catálogo.
  */
 export interface TextoBusqueda {
   /** La consulta (recortada). Puede ser "" si sólo hay plan. */
@@ -769,18 +754,12 @@ export interface TextoBusqueda {
 /** Filtros que aplica el servidor. Categorías y marcas son OR dentro del grupo. */
 export interface FiltrosCatalogo {
   /**
-   * El texto de la búsqueda (ver `TextoBusqueda`). Gana sobre `busqueda`, `busquedaTolerante` y
-   * `planBusqueda`, que siguen valiendo mientras migran los llamadores.
+   * El texto de la búsqueda (ver `TextoBusqueda`): la consulta, el plan de la búsqueda v2 (lo blando;
+   * los duros viajan como siempre en `categorias` y `atributos`) y si es la etapa tolerante o de
+   * código. Va en los MISMOS filtros de la página y de las facetas: así cuentan el mismo conjunto que
+   * se ve.
    */
   texto?: TextoBusqueda;
-  busqueda?: string;
-  /**
-   * Segundo intento de la búsqueda, tolerante a errores de tipeo (ver
-   * `coincideTexto`). Lo decide la page cuando la exacta no trajo nada, y va
-   * en los MISMOS filtros de la página y de las facetas: así cuentan el
-   * mismo conjunto que se ve.
-   */
-  busquedaTolerante?: boolean;
   categorias?: string[];
   marcas?: string[];
   /**
@@ -830,14 +809,10 @@ export interface FiltrosCatalogo {
   precioMax?: number;
   /** Sólo productos con disponibilidad (ver `condicionesDe`). */
   soloStock?: boolean;
-  /**
-   * Búsqueda v2 (`?ia=1`, flag `busqueda-ia`): lo blando del plan. Con él, el texto ya no filtra
-   * con AND: recupera candidatos (OR de términos, categorías y atributos blandos, ver
-   * busqueda-v2/recuperar.ts) y `relevancia` ordena con el puntaje del plan (busqueda-v2/ordenar.ts).
-   * Los duros viajan como siempre en `categorias` y `atributos`.
-   */
-  planBusqueda?: CriterioPlan;
 }
+
+/** Los mismos filtros sin texto: lo único que un llamador le pasa al motor (que arma el `texto` de cada etapa). */
+export type FiltrosSinTexto = Omit<FiltrosCatalogo, "texto">;
 
 export interface PaginaCatalogo {
   productos: Product[];
@@ -854,14 +829,8 @@ export interface PaginaCatalogo {
   totalExacto?: boolean;
 }
 
-/**
- * El texto efectivo de unos filtros: `texto` si viene; si no, lo que dicen los campos viejos
- * (`busqueda` recortada, `busquedaTolerante`, `planBusqueda`). Siempre un objeto: sin texto, `q` es "".
- */
-export function textoDe(f: Pick<FiltrosCatalogo, "texto" | "busqueda" | "busquedaTolerante" | "planBusqueda">): TextoBusqueda {
-  if (f.texto) return { ...f.texto, q: f.texto.q.trim() };
-  return { q: f.busqueda?.trim() ?? "", tolerante: f.busquedaTolerante, plan: f.planBusqueda };
-}
+/** El texto efectivo de unos filtros. Siempre un objeto y con `q` recortada: sin texto, `q` es "". */
+const textoDe = (f: Pick<FiltrosCatalogo, "texto">): TextoBusqueda => ({ ...f.texto, q: f.texto?.q.trim() ?? "" });
 
 /**
  * Marca efectiva del producto, en SQL. Tiene que replicar el fallback de

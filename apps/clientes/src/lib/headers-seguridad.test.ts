@@ -86,6 +86,10 @@ describe("Payway: connect-src sólo en las páginas de checkout", () => {
     // El SDK oficial (decidir.js) se sirve desde el host de Payway; sin frame-src: no hay iframe.
     expect(csp).toMatch(/script-src [^;]*https:\/\/ventasonline\.payway\.com\.ar/);
     expect(csp).not.toMatch(/frame-src [^;]*payway/);
+    // Huella de dispositivo de Cybersource (el SDK la carga: ver CYBERSOURCE_FINGERPRINT).
+    for (const d of ["script-src", "frame-src", "img-src", "connect-src"]) {
+      expect(csp).toMatch(new RegExp(`${d} [^;]*https://h\\.online-metrix\\.net`));
+    }
     // Sólo el origen: ni ruta ni la key.
     expect(csp).not.toContain("/api/v2");
     expect(csp).not.toContain("clave-publica-de-prueba");
@@ -93,6 +97,7 @@ describe("Payway: connect-src sólo en las páginas de checkout", () => {
 
   it("el resto del sitio no lo incluye", () => {
     expect(politicaCsp(env)).not.toContain("payway");
+    expect(politicaCsp(env)).not.toContain("online-metrix");
     expect(politicaCsp(env, { checkout: false })).not.toContain("payway");
   });
 

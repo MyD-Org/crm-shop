@@ -40,8 +40,9 @@ export interface OpcionesCsp {
   /**
    * Política de las páginas de checkout: suma el host de la API de Payway a `connect-src` (el
    * formulario de tarjeta tokeniza desde el navegador, `POST {base}/api/v2/tokens`) y el script del SDK
-   * oficial (`decidir.js`) a `script-src`. Sin `frame-src`: el formulario es propio, no hay iframe (y
-   * la huella Cybersource del SDK está desactivada). El resto del sitio no lo recibe.
+   * oficial (`decidir.js`) a `script-src`. El formulario es propio (sin iframe de Payway); la huella de
+   * Cybersource (`h.online-metrix.net`) entra en `script-src`, `frame-src`, `img-src` y `connect-src`.
+   * El resto del sitio no lo recibe.
    */
   checkout?: boolean;
 }
@@ -84,6 +85,13 @@ function origenesDeHosts(valor: string | undefined): string[] {
 
 /** Host que sirve el SDK de front de Payway (`decidir.js`); ver `URL_SDK_PAYWAY` en pagos/payway-token.ts. */
 const PAYWAY_SDK = "https://ventasonline.payway.com.ar";
+/**
+ * Huella de dispositivo de Cybersource (ThreatMetrix): el SDK de Payway carga
+ * `https://h.online-metrix.net/fp/tags.js` (script), que a su vez arma un iframe, pide recursos
+ * (imágenes, XHR) del mismo host y los reporta. Verificado en `decidir.js` v2.6.4 (`_addCSJs`): ése es el
+ * único host de terceros que agrega. Sólo en las páginas de checkout.
+ */
+const CYBERSOURCE_FINGERPRINT = "https://h.online-metrix.net";
 
 const MERCADO_PAGO = [
   "https://sdk.mercadopago.com",
@@ -140,7 +148,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       ...clerk,
       CLOUDFLARE_CHALLENGES,
       ...MERCADO_PAGO,
-      ...(payway ? [PAYWAY_SDK] : []),
+      ...(payway ? [PAYWAY_SDK, CYBERSOURCE_FINGERPRINT] : []),
       ...(meta ? [META_SCRIPT] : []),
       ...(ga4 ? [GTM] : []),
       ...(dev ? [VERCEL_SCRIPTS_DEV] : []),
@@ -154,6 +162,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       "https://img.clerk.com",
       ...medios,
       ...MERCADO_PAGO,
+      ...(payway ? [CYBERSOURCE_FINGERPRINT] : []),
       ...(meta ? [META_PIXEL] : []),
       ...(ga4 ? [GTM, ...GA] : []),
     ],
@@ -165,13 +174,19 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       ...MERCADO_PAGO,
       // Subidas firmadas (comprobantes de pago, imágenes de la home) directo a R2.
       "https://*.r2.cloudflarestorage.com",
-      ...(payway ? [payway] : []),
+      ...(payway ? [payway, CYBERSOURCE_FINGERPRINT] : []),
       ...(meta ? [META_PIXEL, META_SCRIPT] : []),
       ...(ga4 ? [GTM, ...GA] : []),
       ...(dev ? ["ws:", VERCEL_SCRIPTS_DEV] : []),
     ],
     // Mapa del local (popup "Ver local"): embed de Google Maps sin clave.
-    "frame-src": ["'self'", CLOUDFLARE_CHALLENGES, ...MERCADO_PAGO, "https://www.google.com"],
+    "frame-src": [
+      "'self'",
+      CLOUDFLARE_CHALLENGES,
+      ...MERCADO_PAGO,
+      "https://www.google.com",
+      ...(payway ? [CYBERSOURCE_FINGERPRINT] : []),
+    ],
     "worker-src": ["'self'", "blob:"],
     "form-action": ["'self'", ...MERCADO_PAGO],
     "frame-ancestors": ["'none'"],

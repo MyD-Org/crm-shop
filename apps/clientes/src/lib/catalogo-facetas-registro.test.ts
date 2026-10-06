@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CLAVES_ESTRUCTURADAS } from "./catalogo-caracteristicas";
 import { RANGOS } from "./catalogo-atributos-medida";
-import { REGISTRO, VISIBLES, claveFacetable, elegirFacetas, etiquetaValor, type EntradaFacetas } from "./catalogo-facetas-registro";
+import { REGISTRO, UMBRAL_COBERTURA, VISIBLES, claveFacetable, elegirFacetas, etiquetaValor, type EntradaFacetas } from "./catalogo-facetas-registro";
 
 /** Distribuciones sintéticas: ningún dato real de clientes. */
 const entrada = (parcial: Partial<EntradaFacetas> = {}): EntradaFacetas => ({
@@ -86,10 +86,11 @@ describe("elegirFacetas: cobertura y valores", () => {
     expect(r).toEqual([]);
   });
 
-  it("el umbral es inclusivo: 40 de 100 alcanza", () => {
-    const r = elegirFacetas(entrada({ filas: filas("polos", { "1": 20, "2": 20 }), denominadores: { polos: 100 } }));
+  it("el umbral (30 %, calibrado con la cobertura real en P3) es inclusivo: 30 de 100 alcanza", () => {
+    expect(UMBRAL_COBERTURA).toBe(0.3);
+    const r = elegirFacetas(entrada({ filas: filas("polos", { "1": 15, "2": 15 }), denominadores: { polos: 100 } }));
     expect(claves(r)).toEqual(["polos"]);
-    const justo = elegirFacetas(entrada({ filas: filas("polos", { "1": 20, "2": 19 }), denominadores: { polos: 100 } }));
+    const justo = elegirFacetas(entrada({ filas: filas("polos", { "1": 15, "2": 14 }), denominadores: { polos: 100 } }));
     expect(justo).toEqual([]);
   });
 

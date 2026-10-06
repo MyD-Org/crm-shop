@@ -59,6 +59,17 @@ describe("filtrosCacheables", () => {
   });
 });
 
+describe("filtrosCacheables: facetas por tipo (?car=)", () => {
+  it("car de lista y el flag: sí (van en la clave de la caché como parte de los filtros)", () => {
+    expect(filtrosCacheables({ categorias: ["X"], facetasPorTipo: true, caracteristicas: ["polos:2", "curva:c"] })).toBe(true);
+  });
+
+  it("car de rango: no (valores libres, como el precio)", () => {
+    expect(filtrosCacheables({ categorias: ["X"], facetasPorTipo: true, caracteristicas: ["flujo_lm:800-1200"] })).toBe(false);
+    expect(filtrosCacheables({ caracteristicas: ["polos:2", "largo_m:1-5"] })).toBe(false);
+  });
+});
+
 describe("filtrosCacheables: ningún texto de búsqueda cae en la Runtime Cache", () => {
   const plan = { consulta: "foco", blandos: { categorias: [], atributos: [], terminos: [{ texto: "foco", peso: 1 }] } };
 
@@ -94,6 +105,20 @@ describe("paginaCatalogoPublica / facetasPublicas", () => {
     expect(cacheTagMock).toHaveBeenCalledTimes(2);
     expect(cacheTagMock).toHaveBeenCalledWith("catalogo");
     expect(cacheLifeMock.mock.calls).toEqual([["catalogo"], ["catalogo"]]);
+  });
+
+  it("flag y car de lista viajan en la clave (los filtros son argumento)", async () => {
+    cat.getFacetas.mockResolvedValue({ categorias: [], marcas: [], precio: null, porClave: [] });
+    const filtros = { categorias: ["X"], facetasPorTipo: true, atributosEstructurados: true, caracteristicas: ["polos:2"] };
+    await facetasPublicas(filtros, true);
+    expect(cat.getFacetas).toHaveBeenCalledWith(filtros, true);
+    expect(cacheLifeMock.mock.calls).toEqual([["catalogo"]]);
+  });
+
+  it("facetas por tipo pedidas que no se pudieron calcular: se guardan sólo con el perfil degradado", async () => {
+    cat.getFacetas.mockResolvedValue({ categorias: [], marcas: [], precio: null });
+    await facetasPublicas({ categorias: ["X"], facetasPorTipo: true }, true);
+    expect(cacheLifeMock.mock.calls).toEqual([["degradado"]]);
   });
 
   it("búsqueda por texto: va directo a la base, sin caché", async () => {

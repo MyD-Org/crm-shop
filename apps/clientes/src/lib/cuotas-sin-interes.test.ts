@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   condicionesAplicables,
+  proximoEscalon,
   cuotasElegidas,
   idListaDeCuotas,
   mejorOpcionCuotas,
@@ -256,5 +257,25 @@ describe("opcionesCuotas con mínimo (informativo, precio unitario)", () => {
     // REF 1200 * 1,21 = 1452
     expect(opcionesCuotas(precios, 21, sin).map((o) => o.cuotas)).toEqual([6]);
     expect(opcionesCuotas(precios, 21, { ...sin, condiciones: [{ cuotas: 6, idListaPrecios: "L6", montoMinimo: 1452.01 }] })).toEqual([]);
+  });
+});
+
+describe("proximoEscalon (cuánto falta para la próxima cantidad de cuotas)", () => {
+  const cond = (cuotas: number, montoMinimo?: number | null) => ({ cuotas, idListaPrecios: `L${cuotas}`, montoMinimo });
+
+  it("la condición no alcanzada con el menor mínimo, y cuánto falta (2 decimales)", () => {
+    const c = [cond(3), cond(6, 60000), cond(12, 120000)];
+    expect(proximoEscalon(c, 45000.5)).toEqual({ cuotas: 6, falta: 14999.5 });
+    expect(proximoEscalon(c, 60000)).toEqual({ cuotas: 12, falta: 60000 });
+  });
+
+  it("null si ya alcanza todas o no hay mínimos", () => {
+    expect(proximoEscalon([cond(3), cond(6, 60000)], 60000)).toBeNull();
+    expect(proximoEscalon([cond(3), cond(6)], 10)).toBeNull();
+    expect(proximoEscalon(null, 10)).toBeNull();
+  });
+
+  it("sin ruido de coma flotante", () => {
+    expect(proximoEscalon([cond(6, 0.3)], 0.1 + 0.1)).toEqual({ cuotas: 6, falta: 0.1 });
   });
 });

@@ -15,7 +15,7 @@ import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { condicionesAplicables, cuotasElegidas, repartirCuotas } from "@/lib/cuotas-sin-interes";
+import { condicionesAplicables, cuotasElegidas, proximoEscalon, repartirCuotas } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
 import { mediosParaModalidad } from "@/lib/medios-pago";
@@ -195,6 +195,11 @@ export async function POST(req: Request) {
             .filter((o): o is NonNullable<typeof o> => o !== null)
             .sort((a, b) => a.cuotas - b.cuotas)
         : undefined;
+    // "Le faltan $X para N cuotas": sólo con las opciones pedidas (checkout) y algún mínimo sin alcanzar.
+    const escalon =
+      conCuotas && body.conCuotas === true && totalBase !== undefined
+        ? proximoEscalon(medioCobro?.condicionesCuotas, totalBase)
+        : null;
     const disponibilidad = await disponibilidadParaMostrar(
       lineas.map((l) => l.id),
       disp,
@@ -231,6 +236,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ...cotizacion,
       ...(cuotasOpciones ? { cuotasOpciones } : {}),
+      ...(escalon ? { proximoEscalon: escalon } : {}),
       ...(cuentaTransferencia !== undefined ? { cuentaTransferencia } : {}),
       ...(disponibilidad ? { disponibilidad } : {}),
       envio: evaluarEnvio(cotizacion.subtotal, provinciaTexto, await leerConfigEnvio()),

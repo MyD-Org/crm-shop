@@ -101,6 +101,25 @@ export function condicionesAplicables(
 }
 
 /**
+ * La próxima cantidad de cuotas que se habilitaría subiendo la compra: entre las condiciones con
+ * mínimo que la `base` todavía no alcanza, la de menor mínimo, y cuánto falta (a dos decimales).
+ * null si no queda ninguna.
+ */
+export function proximoEscalon(
+  condiciones: readonly CondicionCuotas[] | null | undefined,
+  base: number,
+): { cuotas: number; falta: number } | null {
+  const baseCentavos = Number.isFinite(base) && base > 0 ? aCentavos(base) : 0;
+  let mejor: { cuotas: number; minimo: number } | null = null;
+  for (const c of condicionesValidas(condiciones)) {
+    if (c.montoMinimo == null) continue;
+    const minimo = aCentavos(c.montoMinimo);
+    if (minimo > baseCentavos && (!mejor || minimo < mejor.minimo)) mejor = { cuotas: c.cuotas, minimo };
+  }
+  return mejor ? { cuotas: mejor.cuotas, falta: deCentavos(mejor.minimo - baseCentavos) } : null;
+}
+
+/**
  * Opciones de cuotas de UN producto: una por condición, con el total de la lista enlazada. Sin IVA
  * conocido, sin medio o sin precio válido en la lista no hay opción: nunca se inventa un monto.
  * El mínimo se compara contra el precio UNITARIO con impuestos a la lista del pago único del medio:

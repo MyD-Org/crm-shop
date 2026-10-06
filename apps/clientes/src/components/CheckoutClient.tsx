@@ -1318,6 +1318,11 @@ export function CheckoutClient({
                     <p className="mt-2 text-xs text-muted">{TEXTOS_CUOTAS.checkoutAyuda(medioSel?.nombre ?? "")}</p>
                   </fieldset>
                 )}
+                {pagaEnLinea && cotizacion?.proximoEscalon && (
+                  <p className="mt-2 text-xs text-muted">
+                    {TEXTOS_CUOTAS.faltaParaCuotas(cotizacion.proximoEscalon.falta, cotizacion.proximoEscalon.cuotas)}
+                  </p>
+                )}
                 {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
                 <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>
                 {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}

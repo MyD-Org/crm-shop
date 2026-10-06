@@ -183,3 +183,24 @@ describe("POST /api/carrito/cotizar con monto mínimo por cuotas", () => {
     expect(cotizar).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("POST /api/carrito/cotizar: próximo escalón de cuotas", () => {
+  const conMinimo = (minimo: number) =>
+    mp({
+      condicionesCuotas: [
+        { cuotas: 3, idListaPrecios: "L3", montoMinimo: null },
+        { cuotas: 6, idListaPrecios: "L6", montoMinimo: minimo },
+      ],
+    });
+
+  it("con conCuotas informa cuántas cuotas se habilitan y cuánto falta", async () => {
+    medios = [conMinimo(2000)];
+    const j = await (await pedir({ conCuotas: true })).json();
+    expect(j.proximoEscalon).toEqual({ cuotas: 6, falta: 790 });
+  });
+
+  it("si ya alcanza todos los mínimos, no hay próximo escalón", async () => {
+    medios = [conMinimo(1000)];
+    expect((await (await pedir({ conCuotas: true })).json()).proximoEscalon).toBeUndefined();
+  });
+});

@@ -17,7 +17,7 @@ import { cuotasElegidas } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
-import { mediosParaModalidad, pagoValidoConMedios } from "@/lib/medios-pago";
+import { esCompradorCuentaCorriente, mediosParaModalidad, pagoValidoConMedios } from "@/lib/medios-pago";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { idPriceListUsable } from "@/lib/alegra";
@@ -255,10 +255,16 @@ export async function POST(req: Request) {
   // que escribe un pedido no usa lo cacheado). un medio con cobro en línea además exige credenciales de su procesador en el Shop.
   // Si ningún medio aplica (tabla ausente, vacía o sin medios para la modalidad) sólo vale
   // "a_coordinar"; con medios aplicables, "a_coordinar" no entra.
+  //
+  // Cuenta corriente: la identidad sale del servidor (nunca del body). Quien la tiene SÓLO puede
+  // pagar con el medio de audiencia `cuenta_corriente` (sin cobro en línea ni cuotas); si ese medio
+  // no está activo, el pedido sale "a_coordinar". Quien no la tiene no puede usar ese medio.
   const mediosCrm = await leerMediosPagoTolerante();
-  const pagoValido = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, {
+  const opcionesMedios = {
     procesadorDisponible: procesadorConfigurado,
-  });
+    esCuentaCorriente: esCompradorCuentaCorriente(cliente),
+  };
+  const pagoValido = pagoValidoConMedios(mediosCrm, entregaTipo, pagoMetodo, opcionesMedios);
   if (!pagoValido) {
     return NextResponse.json(
       { error: "Ese medio de pago no está disponible para la entrega elegida." },
@@ -378,7 +384,7 @@ export async function POST(req: Request) {
     // se acepta únicamente si el medio tiene una condición para ella; cada cantidad es una lista de
     // precios distinta, y esa lista cotiza el pedido. Con el flag apagado (o el precio especial
     // prendido) no hay cuotas: el pedido no las congela y el cobro sigue como siempre.
-    const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, { procesadorDisponible: procesadorConfigurado }).find(
+    const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, opcionesMedios).find(
       (m) => m.slug === pagoMetodo,
     );
     let cuotasPedido: number | null = null;

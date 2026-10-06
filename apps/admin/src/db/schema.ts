@@ -242,6 +242,13 @@ export const catalogProducts = pgTable(
      * 0037): la escribe el mapper de la sync y del webhook; no es generada a propósito.
      */
     ivaPorcentaje: numeric("iva_porcentaje", { precision: 5, scale: 2 }),
+    /**
+     * Costo unitario SIN IVA (inventory.unitCost de Alegra; 0063). NULL = sin costo. Lo escribe la
+     * sync/webhook con frescura por fila. NUNCA lo lee shop_app (no está en la vista del Shop).
+     */
+    costo: numeric("costo", { precision: 14, scale: 4 }),
+    /** Costo sobre el que se calculó el precio vigente (0063). Lo gobierna la retención (rebanada B). */
+    costoAplicado: numeric("costo_aplicado", { precision: 14, scale: 4 }),
     /** El ítem COMPLETO como lo devuelve Alegra. Nada se descarta. ~2,5 KB por ítem. */
     raw: jsonb("raw").$type<Record<string, unknown>>(),
     /**

@@ -30,6 +30,19 @@ describe("getItemParaEspejo", () => {
     expect(new URL(String((f.mock.calls[0] as unknown[])[0])).pathname).toMatch(/\/items\/5$/)
   })
 
+  it("pide fields=inventory (suma el costo) y devuelve costo desde inventory.unitCost", async () => {
+    const f = responde(new Response(JSON.stringify({ ...item, inventory: { availableQuantity: 8, unitCost: 120.5 } }), { status: 200 }))
+    const r = await getItemParaEspejo(tenant, "5")
+    expect(r?.costo).toBe(120.5)
+    expect(r?.stock).toBe(8)
+    expect(new URL(String((f.mock.calls[0] as unknown[])[0])).searchParams.get("fields")).toBe("inventory")
+  })
+
+  it("sin unitCost → costo null", async () => {
+    responde(new Response(JSON.stringify(item), { status: 200 }))
+    expect((await getItemParaEspejo(tenant, "5"))?.costo).toBeNull()
+  })
+
   it("404 → null", async () => {
     responde(new Response('{"message":"no existe"}', { status: 404 }))
     expect(await getItemParaEspejo(tenant, "5")).toBeNull()

@@ -66,6 +66,8 @@ export interface AlegraProduct {
   brand: string | null
   /** Alícuota de IVA del ítem, para el precio final. */
   ivaPorcentaje: number | null
+  /** Costo unitario SIN IVA (inventory.unitCost). null/ausente = sin costo (0 o inválido). Nunca viaja al Shop. */
+  costo?: number | null
   /** El ítem COMPLETO tal cual vino. Nada se descarta. */
   raw: Record<string, unknown>
 }
@@ -515,6 +517,19 @@ function codigoDeItem(ref: unknown): string | null {
   return valor ? valor : null
 }
 
+/**
+ * Costo unitario del ítem (promedio móvil de Alegra), de `raw.inventory.unitCost`. Solo cuenta un
+ * número finito > 0 (número o string numérico); cualquier otra cosa es "sin costo" (null), nunca 0.
+ * Requiere `fields=inventory` en el pedido a Alegra.
+ */
+export function costoDeItem(raw: Record<string, unknown>): number | null {
+  const inv = raw.inventory
+  if (inv === null || typeof inv !== "object") return null
+  const v = (inv as { unitCost?: unknown }).unitCost
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
 function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
   const priceRaw = Array.isArray(raw.price) ? (raw.price as Record<string, unknown>[]) : []
   const prices: AlegraPrice[] = priceRaw.map((p) => ({
@@ -538,6 +553,7 @@ function mapRawItem(raw: Record<string, unknown>): AlegraProduct {
     brand: marcaDeCustomFields(raw),
     // SUMA de los impuestos (regla única: alegra-impuestos.ts = public.alegra_suma_impuestos).
     ivaPorcentaje: sumaImpuestos(raw.tax),
+    costo: costoDeItem(raw),
     // Se guarda entero: cada vez que hizo falta un campo que el mapper no leía hubo que tocarlo
     // y re-sincronizar. Con el crudo, se resuelve con una query.
     raw,
@@ -831,10 +847,13 @@ export async function listAllCategories(config: TenantConfig): Promise<AlegraCat
   return fetchAllPages(config, "/item-categories", mapRawCategory)
 }
 
+/** Orden estable por id; `fields=inventory` es ADITIVO (suma inventory.unitCost, el resto de los campos sigue igual). */
+export const PARAMS_ITEMS = { order_field: "id", order_direction: "ASC", fields: "inventory" } as const
+
 /** Todos los productos del tenant (modo advanced: trae categoría, inventario, precios). Para la sync. */
 export async function listAllItems(config: TenantConfig): Promise<AlegraProduct[]> {
   if (config.alegraMock) return mockItems
-  return fetchAllPages(config, "/items", mapRawItem, { order_field: "id", order_direction: "ASC" })
+  return fetchAllPages(config, "/items", mapRawItem, PARAMS_ITEMS)
 }
 
 export interface LoteItems {
@@ -854,7 +873,7 @@ export async function listItemsLote(config: TenantConfig, start: number): Promis
   if (config.alegraMock) {
     return start === 0 ? { items: mockItems, siguiente: mockItems.length, fin: true } : { items: [], siguiente: start, fin: true }
   }
-  const g = await fetchGrupo(config, "/items", mapRawItem, { order_field: "id", order_direction: "ASC" }, start)
+  const g = await fetchGrupo(config, "/items", mapRawItem, PARAMS_ITEMS, start)
   return { items: g.rows, siguiente: g.siguiente, fin: g.fin }
 }
 
@@ -916,7 +935,7 @@ export async function getItemParaEspejo(
 ): Promise<AlegraProduct | null> {
   if (config.alegraMock) return getMockItemLive(alegraId)
   try {
-    const raw = (await alegraFetch(config, `/items/${encodeURIComponent(alegraId)}`, undefined, undefined, {
+    const raw = (await alegraFetch(config, `/items/${encodeURIComponent(alegraId)}`, { fields: "inventory" }, undefined, {
       reintentos429: opts.reintentos429,
       onRequest: opts.onRequest,
     })) as Record<string, unknown>

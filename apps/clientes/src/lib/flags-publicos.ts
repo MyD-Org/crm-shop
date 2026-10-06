@@ -1,6 +1,6 @@
 /**
  * Flags que cambian lo que ve CUALQUIER visitante (no dependen de quién es):
- * `catalogo-solo-visibles` y `cuotas`. Se evalúan por request, afuera de los
+ * `catalogo-solo-visibles` y `cuotas-cobro`. Se evalúan por request, afuera de los
  * scopes cacheados, y viajan como argumento a las funciones de
  * src/lib/catalogo-publico.ts: así el valor del flag es parte de la clave de
  * la caché (prenderlo o apagarlo se ve en la vista siguiente, sin esperar a
@@ -19,7 +19,7 @@ import { precioEspecialCuenta } from "./precio-especial-flag";
 export interface FlagsPublicos {
   /** `catalogo-solo-visibles`: los listados públicos sólo con lo curado en el CRM. */
   soloVisibles: boolean;
-  /** `cuotas`: se exhibe la oferta de cuotas. */
+  /** `cuotas-cobro`: se exhiben las cuotas sin interés y se cobra en cuotas. */
   cuotas: boolean;
   /**
    * "$X con <Medio>": el medio destacado de las cards y los de la ficha. Vacío con el flag
@@ -30,10 +30,10 @@ export interface FlagsPublicos {
 
 const mensaje = (err: unknown) => (err instanceof Error ? err.message : err);
 
-async function leerMediosPrecio(): Promise<MediosPrecio> {
+async function leerMediosPrecio(cuotasEncendido: boolean): Promise<MediosPrecio> {
   try {
     if (await precioEspecialCuenta()) return SIN_MEDIOS_PRECIO;
-    return seleccionarMediosPrecio(await mediosOfrecibles(), false);
+    return seleccionarMediosPrecio(await mediosOfrecibles(), false, cuotasEncendido);
   } catch (err) {
     console.warn("[flags-publicos] medios con precio no disponibles:", mensaje(err));
     return SIN_MEDIOS_PRECIO;
@@ -41,10 +41,7 @@ async function leerMediosPrecio(): Promise<MediosPrecio> {
 }
 
 export const flagsPublicos = cache(async (): Promise<FlagsPublicos> => {
-  const [soloVisibles, cuotas, mediosPrecio] = await Promise.all([
-    catalogoSoloVisibles(),
-    cuotasHabilitadas(),
-    leerMediosPrecio(),
-  ]);
+  const [soloVisibles, cuotas] = await Promise.all([catalogoSoloVisibles(), cuotasHabilitadas()]);
+  const mediosPrecio = await leerMediosPrecio(cuotas);
   return { soloVisibles, cuotas, mediosPrecio };
 });

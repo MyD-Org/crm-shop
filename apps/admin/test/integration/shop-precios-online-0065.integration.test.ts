@@ -39,7 +39,6 @@ vi.mock("@/lib/shop-revalidar", () => ({
     pings.catalogo++
     return { propagado: true }
   },
-  pingShopRevalidarCuotas: async () => ({ propagado: true }),
 }))
 
 const T = "tenant-c"

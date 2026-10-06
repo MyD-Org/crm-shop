@@ -28,7 +28,7 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
 /**
  * Los únicos módulos con scopes cacheados. Todo lo que se sirve a cualquier
  * visitante y nada del visitante: contenido de la home, año del footer, el
- * catálogo público, la oferta de cuotas para exhibir y los archivos de la
+ * catálogo público y los archivos de la
  * imagen OG del sitio. También las búsquedas frecuentes de la guía del
  * buscador (iguales para todos; salen de la caché de interpretaciones).
  */
@@ -37,7 +37,6 @@ const CON_CACHE = [
   "lib/home-datos.ts",
   "components/SiteFooter.tsx",
   "lib/catalogo-publico.ts",
-  "lib/cuotas-datos.ts",
   "lib/sucursales-datos.ts",
   "lib/busqueda-inteligente/frecuentes.ts",
   "lib/medios-pago-datos.ts",
@@ -71,7 +70,6 @@ describe("guardas de caché", () => {
     expect(cotizan.length).toBeGreaterThan(5);
     for (const { ruta, src } of cotizan) {
       expect(src, ruta).not.toMatch(/catalogo-publico/);
-      expect(src, ruta).not.toMatch(/ofertaCuotasCacheada|getOfertaCuotas\(/);
     }
   });
 

@@ -11,10 +11,11 @@
  * (`mediosParaModalidad`), y el nombre de un medio ya desactivado sigue haciendo falta para mostrar
  * pedidos viejos.
  */
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmListaPrecioCondiciones, crmMediosPagoShop } from "@/db/crm";
 import { shopTenantId } from "./tenant";
+import type { CondicionCuotas } from "./cuotas-sin-interes";
 import type { MedioPago } from "./medios-pago";
 
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
@@ -29,21 +30,42 @@ function esTablaAusenteOSinPermiso(err: unknown): boolean {
   return false;
 }
 
+/** Lo que enlazan las condiciones del CRM para un medio: la lista del pago único y las de cuotas. */
+interface CondicionesDelMedio {
+  /** uuid de la lista del pago único (`cuotas` NULL); null = rige la de referencia. */
+  idListaPrecios: string | null;
+  /** Condiciones de N >= 2 cuotas sin interés, ascendentes. */
+  condicionesCuotas: CondicionCuotas[];
+}
+
 /**
- * Lista de precio online de cada medio por su condición de PAGO ÚNICO (`cuotas` NULL): slug -> uuid
- * de la lista. Es el mismo uuid que trae `idPriceList` en los precios de la vista del catálogo, así
- * que el resto del Shop resuelve "precio con este medio" como siempre (`precioDeLista`).
+ * Condiciones (medio, cuotas) -> lista de precio ONLINE, de todos los medios: slug -> lo que enlazan.
+ * El uuid de la lista es el mismo que trae `idPriceList` en los precios de la vista del catálogo, así
+ * que el resto del Shop resuelve "precio con este medio" como siempre (`precioDeLista`). `cuotas`
+ * NULL es el pago único; N >= 2 son las cuotas sin interés (rebanada D).
  *
  * Tolera que la migración 0065 del CRM no esté aplicada (tabla inexistente o sin permiso): ningún
  * medio tiene lista y rige la de referencia, que es lo correcto antes de enlazar nada.
  */
-async function listasDeLosMedios(db: Ejecutor): Promise<Map<string, string>> {
+async function condicionesDeLosMedios(db: Ejecutor): Promise<Map<string, CondicionesDelMedio>> {
+  const porMedio = new Map<string, CondicionesDelMedio>();
   try {
     const filas = await db
-      .select({ medioSlug: crmListaPrecioCondiciones.medioSlug, listaId: crmListaPrecioCondiciones.listaId })
+      .select({
+        medioSlug: crmListaPrecioCondiciones.medioSlug,
+        listaId: crmListaPrecioCondiciones.listaId,
+        cuotas: crmListaPrecioCondiciones.cuotas,
+      })
       .from(crmListaPrecioCondiciones)
-      .where(and(eq(crmListaPrecioCondiciones.tenantId, shopTenantId()), isNull(crmListaPrecioCondiciones.cuotas)));
-    return new Map(filas.map((f) => [f.medioSlug, f.listaId]));
+      .where(eq(crmListaPrecioCondiciones.tenantId, shopTenantId()));
+    for (const f of filas) {
+      const m = porMedio.get(f.medioSlug) ?? { idListaPrecios: null, condicionesCuotas: [] };
+      if (f.cuotas === null) m.idListaPrecios = f.listaId;
+      else m.condicionesCuotas.push({ cuotas: f.cuotas, idListaPrecios: f.listaId });
+      porMedio.set(f.medioSlug, m);
+    }
+    for (const m of porMedio.values()) m.condicionesCuotas.sort((a, b) => a.cuotas - b.cuotas);
+    return porMedio;
   } catch (err) {
     if (!esTablaAusenteOSinPermiso(err)) throw err;
     console.warn("[medios-pago] la migración 0065 del CRM no está aplicada; los medios usan la lista de referencia.");
@@ -53,8 +75,8 @@ async function listasDeLosMedios(db: Ejecutor): Promise<Map<string, string>> {
 
 /**
  * Lectura que TIRA si la tabla de medios no existe. La usa la lectura cacheada (que elige su perfil
- * de caché). `idListaPrecios` sale de las condiciones de la migración 0065 (uuid de la lista online
- * enlazada; `null` = rige la lista de referencia).
+ * de caché). `idListaPrecios` y `condicionesCuotas` salen de las condiciones de la migración 0065
+ * (uuid de la lista online enlazada; `null` = rige la lista de referencia).
  */
 export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[]> {
   const filas = await db
@@ -73,8 +95,12 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
     .from(crmMediosPagoShop)
     .where(eq(crmMediosPagoShop.tenantId, shopTenantId()))
     .orderBy(asc(crmMediosPagoShop.orden), asc(crmMediosPagoShop.nombre));
-  const listas = await listasDeLosMedios(db);
-  return filas.map((f) => ({ ...f, idListaPrecios: listas.get(f.slug) ?? null }));
+  const condiciones = await condicionesDeLosMedios(db);
+  return filas.map((f) => ({
+    ...f,
+    idListaPrecios: condiciones.get(f.slug)?.idListaPrecios ?? null,
+    condicionesCuotas: condiciones.get(f.slug)?.condicionesCuotas ?? [],
+  }));
 }
 
 /** Lo mismo, pero con la tabla ausente (o cualquier falla) devuelve `[]`: el pago sale "a_coordinar". */

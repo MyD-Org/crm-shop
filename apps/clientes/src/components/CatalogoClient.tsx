@@ -32,10 +32,9 @@ import { enviarBusquedaEnviada, enviarClickResultado } from "@/lib/busqueda-v2/t
 import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { anotarBusqueda } from "@/lib/iniciativa/motor";
 import { useChatIa } from "@/hooks/useChatIa";
-import { mejorOpcionPara } from "@/lib/cuotas-exhibicion";
+import { mejorOpcionCuotas, type OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { sinResultadosPorLocal } from "@/lib/catalogo-sin-resultados";
 import { olvidarLocalRecordado } from "@/lib/local-recordado";
-import type { OfertaCuotas, OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
 
 /**
  * UI del catálogo: encabezado, filtros, productos y paginación, todo
@@ -52,7 +51,6 @@ export function CatalogoClient({
   estado,
   total,
   paginas,
-  oferta = null,
   filtrosSinBusqueda = false,
   busquedaIa,
   etapa,
@@ -65,8 +63,6 @@ export function CatalogoClient({
   /** Productos que cumplen los filtros, más allá de esta página. */
   total: number;
   paginas: number;
-  /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
-  oferta?: OfertaCuotas | null;
   /**
    * La búsqueda no encontró nada y `facetas` son las del catálogo sin ella
    * (ver catalogo/page.tsx): tocar un filtro también quita la búsqueda.
@@ -182,16 +178,15 @@ export function CatalogoClient({
     [productos, preciosCuenta],
   );
 
-  // Mejor opción de cuotas por producto, sobre su precio final unitario.
+  // Mejor opción de cuotas sin interés por producto (viene armada del servidor, con flag).
   const cuotasPorProducto = useMemo(() => {
     const m = new Map<string, OpcionCuotas>();
-    if (!oferta) return m;
     for (const p of productosCuenta) {
-      const mejor = mejorOpcionPara(p.precioFinal, oferta);
+      const mejor = mejorOpcionCuotas(p.cuotasSinInteres?.opciones);
       if (mejor) m.set(p.id, mejor);
     }
     return m;
-  }, [productosCuenta, oferta]);
+  }, [productosCuenta]);
 
   const conFiltros = hayFiltros(estado);
 

@@ -140,7 +140,7 @@ beforeEach(() => {
   sincronizar.mockReset();
   getContacto.mockReset().mockResolvedValue(null);
   guardarTelefonoSiFalta.mockReset().mockResolvedValue(undefined);
-  crearPedido.mockReset().mockResolvedValue({ id: "p1", numero: "PED-1", repetido: false, cuotasMax: null });
+  crearPedido.mockReset().mockResolvedValue({ id: "p1", numero: "PED-1", repetido: false, cuotas: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -346,7 +346,7 @@ describe("POST /api/pedidos — teléfono desde el espejo (0036 del CRM)", () =>
     perfil = null;
     getContacto.mockReset();
     crearPedido.mockReset();
-    crearPedido.mockResolvedValue({ id: "p-1", repetido: false, cuotasMax: null });
+    crearPedido.mockResolvedValue({ id: "p-1", repetido: false, cuotas: null });
     guardarTelefonoSiFalta.mockReset();
     sincronizar.mockReset();
     tareasAfter = [];
@@ -419,7 +419,7 @@ describe("POST /api/pedidos — teléfono desde el espejo (0036 del CRM)", () =>
 
   it("pedido repetido (misma clave) ⇒ no se sube nada", async () => {
     espejo = fila();
-    crearPedido.mockResolvedValue({ id: "p-1", repetido: true, cuotasMax: null });
+    crearPedido.mockResolvedValue({ id: "p-1", repetido: true, cuotas: null });
     await post();
     expect(tareasAfter).toHaveLength(0);
   });

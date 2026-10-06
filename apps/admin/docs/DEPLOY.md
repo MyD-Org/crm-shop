@@ -57,10 +57,9 @@ actualizalos también allá.
 | Var | Nota |
 |---|---|
 | `INTERNAL_SECRET` | Compartido con ai-api. **No** dárselo al Shop: también abre `/api/agent/*` |
-| `SHOP_CRM_SECRET` | Llave propia Shop↔CRM, mismo valor en el proyecto del Shop. Protege GET `/api/internal/shop/cuotas` y la manda el ping de cuotas. Sin la var el endpoint rechaza todo y el ping es no-op |
+| `SHOP_CRM_SECRET` | Llave propia Shop↔CRM, mismo valor en el proyecto del Shop. La manda el ping de revalidación al Shop. Sin la var el ping es no-op |
 | `STAFF_TOKEN_SECRET` | Compartido con ai-api |
-| `SHOP_INTERNAL_URL` | Opcional. Base URL del Shop del mismo entorno (ej. `https://dev.cliente.example`). Al guardar Medios de pago / Cuotas el CRM hace `POST {SHOP_INTERNAL_URL}/api/internal/cuotas/revalidar`; sin la var el ping es no-op y el Shop toma los cambios en su próximo cron. Contrato: `platform/contracts/cuotas/v2`. |
-| `MP_PUBLIC_KEY` | Opcional. Public key de Mercado Pago **del mismo entorno que el Shop** (TEST en Preview/dev, productiva en Production). Sólo se usa para mostrar en Configuración → Medios de pago / Cuotas las tasas reales por cantidad de cuotas (`GET api.mercadopago.com/v1/payment_methods/installments`, caché 1 h). Es pública (no es secreto). Sin la var el panel de tasas muestra un aviso; si Mercado Pago falla, la página carga igual. |
+| `SHOP_INTERNAL_URL` | Opcional. Base URL del Shop del mismo entorno (ej. `https://dev.cliente.example`). Al guardar Medios de pago el CRM hace `POST {SHOP_INTERNAL_URL}/api/internal/sucursales/revalidar`; sin la var el ping es no-op y el Shop toma los cambios al vencer su caché. |
 | `ANTHROPIC_API_KEY` | Opcional. Lector de fichas técnicas del catálogo (botón "Leer ficha técnica", Claude Haiku). Sin la var el botón queda deshabilitado y la ruta responde 503. |
 | `RESEND_API_KEY` | Envío de emails (el `RESEND_FROM` debe ser un dominio verificado en Resend) |
 | `RESEND_API_KEY_EMAILS` | Correo compartido (Resend Inboxes, beta): clave propia, distinta de `RESEND_API_KEY`. Solo servidor. Sin ella el módulo de correo responde "no configurado" y no hace requests |
@@ -176,20 +175,11 @@ del merge no rompe nada.
 - **Apagar la feature sin revertir**: quitar las env vars `R2_*` y redeployar — el portal
   deja de mostrar el botón y las rutas responden 503; el resto no cambia.
 
-## Cuotas por proveedor (v2)
+## Cuotas sin interés por lista (reemplaza a cuotas por proveedor v2)
 
-Configuración → Medios de pago / Cuotas pasa a configurarse por proveedor (Mercado Pago) con
-escalones `{ monto mínimo, hasta N cuotas }`. Contrato con el Shop: `platform/contracts/cuotas/v2`
-(el GET `/api/internal/shop/cuotas` deja de servir v1: **deployar junto con el Shop que lee v2**).
-
-### Orden de la entrega (IMPORTANTE)
-1. **Antes de mergear**: aplicar `drizzle/0026_cuotas_por_proveedor.sql` en cada base
-   (`DATABASE_URL=… npm run db:migrate`). Relaja el CHECK de cuotas a 1..24 y crea
-   `payment_config_versions`; sin la tabla, guardar cuotas da 500. Es compatible con el código
-   anterior.
-2. Cargar `MP_PUBLIC_KEY` (opcional) en Production y Preview.
-3. Mergear junto con el PR del Shop. Los medios v1 por marca (visa, master) quedan en la tabla
-   pero se ignoran: hay que agregar el proveedor Mercado Pago y cargar los escalones de nuevo.
-
-### Rollback
-- Revertir el PR (y el del Shop). La migración `0026` no se revierte.
+Las cuotas salen de las condiciones (medio de pago + N cuotas) enlazadas a una lista de precios online:
+cuota = precio de esa lista / N, sin recargo. Se configuran en Pagos y cuotas → Medios de pago →
+Editar (medio con cobro en línea). Se retiraron los escalones, los proveedores, la card de tasas de
+Mercado Pago, el endpoint `/api/internal/shop/cuotas` y su contrato v2. Las tablas viejas
+(`payment_methods`, `installment_options`, `payment_config_versions`) quedan sin uso y sin borrar.
+El Shop cobra en cuotas sólo con el flag `cuotas-cobro` (Vercel Flags, apagado por defecto).

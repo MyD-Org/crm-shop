@@ -1,5 +1,5 @@
 import { CuotasLinea } from "@/components/CuotasLinea";
-import type { OpcionCuotas } from "@/lib/pagos/cuotas-tipos";
+import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 
 /**
  * Cuotas dentro de la card del catálogo / home: a lo sumo una línea con la

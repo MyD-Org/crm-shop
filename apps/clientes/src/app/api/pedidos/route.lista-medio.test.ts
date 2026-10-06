@@ -33,7 +33,6 @@ vi.mock("@/lib/facturacion-db", () => ({
   getPerfilFacturacion: async () => ({ pais: "AR", tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF" }),
   perfilCompleto: () => true,
 }));
-vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: async () => null }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
 vi.mock("@/lib/contacto-pedido-repo", () => ({ contactoDelPedido: async () => null }));
 
@@ -87,7 +86,7 @@ beforeEach(() => {
     total: totalCotizado,
   }));
   crearPedido.mockReset();
-  crearPedido.mockImplementation(async () => ({ id: "p1", numero: "PED-1", repetido: false, cuotasMax: null }));
+  crearPedido.mockImplementation(async () => ({ id: "p1", numero: "PED-1", repetido: false, cuotas: null }));
 });
 
 describe("POST /api/pedidos — lista del medio de pago", () => {

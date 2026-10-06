@@ -159,6 +159,16 @@ export const PAGO_REVISION_INFO: Record<PagoRevision, { label: string; detalle: 
     label: "Pagado y cancelado",
     detalle: "Se aprobó un pago de este pedido cancelado. Devuelva el pago en Mercado Pago o reactive el pedido.",
   },
+  cuotas_distintas: {
+    label: "Cuotas distintas",
+    detalle:
+      "El pago se hizo en una cantidad de cuotas distinta de la que eligió el cliente. Revise el pago en el procesador de cobro antes de facturar.",
+  },
+  monto_distinto: {
+    label: "Monto distinto",
+    detalle:
+      "El monto cobrado no coincide con el total del pedido. Revise el pago en el procesador de cobro antes de facturar.",
+  },
 }
 
 /** Título por motivo de revisión (`motivo_revision` del Shop, 0010). */

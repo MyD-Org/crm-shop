@@ -30,7 +30,7 @@ describe("leerMediosPago", () => {
   it("pide sólo columnas declaradas, del tenant, ordenadas; la lista sale de las condiciones (pago único)", async () => {
     const g = dbGrabadora((c) =>
       c.sql.includes("lista_precio_condiciones")
-        ? [["efectivo", UUID_LISTA]]
+        ? [["efectivo", UUID_LISTA, null]]
         : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false]],
     );
     const r = await leerMediosPago(g.db as never);
@@ -45,6 +45,7 @@ describe("leerMediosPago", () => {
         cobroOnline: false,
         orden: 1,
         idListaPrecios: UUID_LISTA,
+        condicionesCuotas: [],
         destacarEnCatalogo: true,
         mostrarEnFicha: false,
       },
@@ -58,17 +59,38 @@ describe("leerMediosPago", () => {
     const cond = g.consultas[1];
     expect(cond.sql).toContain('"public"."lista_precio_condiciones"');
     expect(cond.sql).toContain('"tenant_id" = $1');
-    expect(cond.sql).toContain('"cuotas" is null'); // sólo la condición de pago único
+    expect(cond.sql).not.toContain('"cuotas" is null'); // trae también las condiciones de cuotas
     expect(cond.params).toContain("tenant-ejemplo");
   });
 
   it("un medio sin condición no tiene lista: rige la de referencia", async () => {
     const g = dbGrabadora((c) =>
       c.sql.includes("lista_precio_condiciones")
-        ? [["otro", UUID_LISTA]]
+        ? [["otro", UUID_LISTA, null]]
         : [["efectivo", "Efectivo", "", true, true, true, false, 0, false, false]],
     );
     expect((await leerMediosPago(g.db as never))[0]).toMatchObject({ slug: "efectivo", idListaPrecios: null });
+  });
+
+  it("las condiciones con cuotas (N >= 2) salen como condicionesCuotas, ascendentes; el pago único no se mezcla", async () => {
+    const L3 = "00000000-0000-4000-8000-000000000003";
+    const L6 = "00000000-0000-4000-8000-000000000006";
+    const g = dbGrabadora((c) =>
+      c.sql.includes("lista_precio_condiciones")
+        ? [
+            ["mercadopago", L6, 6],
+            ["mercadopago", UUID_LISTA, null],
+            ["mercadopago", L3, 3],
+            ["efectivo", L3, null],
+          ]
+        : [["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false]],
+    );
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.idListaPrecios).toBe(UUID_LISTA);
+    expect(mp.condicionesCuotas).toEqual([
+      { cuotas: 3, idListaPrecios: L3 },
+      { cuotas: 6, idListaPrecios: L6 },
+    ]);
   });
 
   it("migración 0065 pendiente (tabla inexistente o sin permiso): los medios siguen, sin lista", async () => {
@@ -80,7 +102,7 @@ describe("leerMediosPago", () => {
       });
       const r = await leerMediosPagoTolerante(g.db as never);
       expect(r).toHaveLength(1);
-      expect(r[0]).toMatchObject({ slug: "transferencia", idListaPrecios: null, destacarEnCatalogo: true, mostrarEnFicha: true });
+      expect(r[0]).toMatchObject({ slug: "transferencia", idListaPrecios: null, condicionesCuotas: [], destacarEnCatalogo: true, mostrarEnFicha: true });
     }
     expect(aviso).toHaveBeenCalled();
     aviso.mockRestore();

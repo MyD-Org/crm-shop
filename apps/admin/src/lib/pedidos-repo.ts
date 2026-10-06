@@ -1431,10 +1431,12 @@ export function formatearNumeroPedido(numero: number): string {
   return `PED-${String(numero).padStart(8, "0")}`
 }
 
-export type PagoRevision = "cobro_duplicado" | "pagado_cancelado"
+// `cuotas_distintas` y `monto_distinto`: el cobro en cuotas no coincide con lo congelado en el pedido
+// (change `listas-precio-online`, rebanada D). Los escribe el Shop al registrar el cobro.
+export type PagoRevision = "cobro_duplicado" | "pagado_cancelado" | "cuotas_distintas" | "monto_distinto"
 
-const esPagoRevision = (v: string | null): v is PagoRevision =>
-  v === "cobro_duplicado" || v === "pagado_cancelado"
+const PAGO_REVISION: readonly string[] = ["cobro_duplicado", "pagado_cancelado", "cuotas_distintas", "monto_distinto"]
+const esPagoRevision = (v: string | null): v is PagoRevision => v !== null && PAGO_REVISION.includes(v)
 
 export interface PedidoListaDto {
   id: string

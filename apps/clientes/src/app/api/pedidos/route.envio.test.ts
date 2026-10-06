@@ -42,7 +42,6 @@ vi.mock("@/lib/facturacion-db", () => ({
   getPerfilFacturacion: async () => ({ pais: "AR", tipoDoc: "DNI", nroDoc: "1", razonSocial: "X", condicionIva: "CF" }),
   perfilCompleto: () => true,
 }));
-vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: async () => null }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
 // Medios del CRM (`medios_pago_shop`): los tres de siempre; mercadopago es la fila fija con cobro online.
 const mediosCrm = ["transferencia", "efectivo", "mercadopago"].map((slug, orden) => ({
@@ -97,7 +96,7 @@ beforeEach(() => {
   config = CONFIG_ENVIO_DEFAULT;
   subtotal = 120_000;
   crearPedido.mockReset();
-  crearPedido.mockImplementation(async () => ({ id: "p1", numero: "PED-1", repetido: false, cuotasMax: null }));
+  crearPedido.mockImplementation(async () => ({ id: "p1", numero: "PED-1", repetido: false, cuotas: null }));
 });
 
 describe("POST /api/pedidos — envío a domicilio configurable", () => {

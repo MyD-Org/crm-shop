@@ -1,8 +1,7 @@
 import { Skeleton } from "@myd-org/ui";
 
 /**
- * Silueta del carrito mientras el servidor resuelve la identidad y la oferta
- * de cuotas (`getOfertaCuotasSinCache`, sin caché: siempre en vivo). Misma
+ * Silueta del carrito mientras el servidor resuelve la identidad. Misma
  * grilla que `CarritoClient` (ítems + resumen) para que no salte al llegar.
  */
 export default function CargandoCarrito() {

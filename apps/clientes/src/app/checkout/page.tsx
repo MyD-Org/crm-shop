@@ -5,7 +5,6 @@ import { identidadActual } from "@/lib/auth";
 import { admiteEnvio } from "@/lib/facturacion";
 import { datosDelContacto, paraElCliente } from "@/lib/datos-del-contacto";
 import { telefonoDelCheckout } from "@/lib/contacto-alegra";
-import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { listarDirecciones } from "@/lib/direcciones-envio-db";
@@ -15,7 +14,6 @@ import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfrecibles } from "@/lib/medios-pago-datos";
-import { SLUG_MERCADOPAGO } from "@/lib/medios-pago";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -67,11 +65,10 @@ export default async function CheckoutPage() {
   // avisa arriba de todo, en vez de dejar que llene el formulario entero y
   // recién rebote contra el 409 al apretar "Confirmar". Misma lectura que
   // `POST /api/pedidos` (`datosDelContacto`): vinculado ⇒ espejo de Alegra.
-  // En paralelo con la oferta de cuotas (null = sin cuotas: flag off, sin datos o error).
   //
-  // Los medios de pago son los del CRM, sin Mercado Pago si faltan las credenciales en el Shop. La
-  // oferta de cuotas sólo se consulta si Mercado Pago está entre ellos (activo o no: un pedido de
-  // Mercado Pago pendiente se retoma aunque se haya desactivado el medio).
+  // Los medios de pago son los del CRM, sin Mercado Pago si faltan las credenciales en el Shop. Las
+  // cuotas sin interés viajan en cada medio (`condicionesCuotas`); el servidor sólo las ofrece con el
+  // flag `cuotas-cobro` prendido.
   const [reglas, mediosPago] = await Promise.all([reglasPromise, mediosPromise]);
   // Con el flag `sucursales`: locales de retiro y zona vigente. null = como siempre.
   const sucursales = await opcionesCheckoutDelVisitante().catch(
@@ -87,9 +84,8 @@ export default async function CheckoutPage() {
       console.error("[checkout] no se pudo leer la ubicación elegida:", err);
       return null;
     });
-  const [dc, oferta, direcciones] = await Promise.all([
+  const [dc, direcciones] = await Promise.all([
     datosDelContacto({ clerkUserId, cliente }),
-    mediosPago.some((m) => m.slug === SLUG_MERCADOPAGO) ? getOfertaCuotasSinCache() : null,
     // Sólo con Clerk: la cookie del CRM sin Clerk no guarda direcciones.
     clerkUserId ? direccionesParaCheckout(clerkUserId) : [],
   ]);
@@ -134,7 +130,6 @@ export default async function CheckoutPage() {
         facturacion={paraElCliente(dc)}
         perfilFacturacion={perfilUI}
         admiteEnvio={admiteEnvio(dc.datos.pais)}
-        oferta={oferta}
         configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
         direccionesGuardadas={direcciones}
         sugerirVincular={sugerirVincular}

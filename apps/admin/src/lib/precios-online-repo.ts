@@ -14,6 +14,8 @@ import {
   shopCategories,
 } from "@/db/schema"
 import { avisarShop } from "./aviso-shop"
+import { combinarListasAlegra, leerListasDeAlegra, type ListaAlegraSelector } from "./listas-alegra-selector"
+import { getTenantByIdFromDb } from "./tenants"
 import { pingShopRevalidarSucursales } from "./shop-revalidar"
 import { normalizarMarca, type CambioPrecios } from "./precios-online-cambios"
 
@@ -1046,24 +1048,22 @@ export async function listarListas(tenantId: string): Promise<ListaDto[]> {
   }))
 }
 
-export interface ListaAlegraDto {
-  /** Slug de la cuenta de Alegra (`alegra_contacts.alegra_account`). */
-  alegraAccount: string
-  /** Nombre de la cuenta, si está dada de alta en `alegra_cuentas`. */
-  cuentaNombre: string | null
-  alegraPriceListId: string
-  nombre: string
-  /** Contactos activos del espejo que usan esa lista (0 = el enlace quedó sin contactos). */
-  contactos: number
+export type ListaAlegraDto = ListaAlegraSelector
+
+export interface ListasAlegraResultado {
+  listas: ListaAlegraDto[]
+  /** Nombres de las cuentas cuyas listas no se pudieron leer de Alegra (se muestran solo las de sus clientes). */
+  cuentasConAviso: string[]
 }
 
 /**
- * Listas de precio de Alegra que se pueden enlazar, por cuenta. No hay una tabla de listas de
- * Alegra (`price_lists` es de las planillas Excel, no de Alegra ni por cuenta): salen de los valores
- * distintos de `alegra_contacts.price_list_id` de los contactos activos de cada cuenta, más los
- * enlaces ya cargados cuya lista de Alegra quedó sin contactos (para poder quitarlos).
+ * Listas de precio de Alegra que se pueden enlazar, por cuenta: TODAS las que existen en Alegra
+ * (GET /price-lists de cada cuenta, con caché; ver listas-alegra-selector.ts), con la cantidad de
+ * contactos activos del espejo (`alegra_contacts.price_list_id`) que la tienen, y los enlaces ya
+ * cargados aunque la lista ya no exista. Si Alegra falla en una cuenta, esa cuenta cae a las listas
+ * derivadas de sus contactos y se avisa.
  */
-export async function listarListasAlegra(tenantId: string): Promise<ListaAlegraDto[]> {
+export async function listarListasAlegra(tenantId: string): Promise<ListasAlegraResultado> {
   const db = getDb()
   const filas = await db
     .select({
@@ -1083,29 +1083,24 @@ export async function listarListasAlegra(tenantId: string): Promise<ListaAlegraD
     .select({ slug: alegraCuentas.slug, nombre: alegraCuentas.nombre })
     .from(alegraCuentas)
     .where(eq(alegraCuentas.tenantId, tenantId))
-  const nombreCuenta = new Map(cuentas.map((c) => [c.slug, c.nombre]))
-  const out: ListaAlegraDto[] = filas.map((f) => ({
-    alegraAccount: f.alegraAccount,
-    cuentaNombre: nombreCuenta.get(f.alegraAccount) ?? null,
-    alegraPriceListId: f.alegraPriceListId,
-    nombre: f.nombre?.trim() || `Lista ${f.alegraPriceListId}`,
-    contactos: Number(f.contactos),
-  }))
-  for (const e of enlaces) {
-    if (out.some((o) => o.alegraAccount === e.alegraAccount && o.alegraPriceListId === e.alegraPriceListId)) continue
-    out.push({
-      alegraAccount: e.alegraAccount,
-      cuentaNombre: nombreCuenta.get(e.alegraAccount) ?? null,
-      alegraPriceListId: e.alegraPriceListId,
-      nombre: `Lista ${e.alegraPriceListId}`,
-      contactos: 0,
-    })
-  }
-  return out.sort(
-    (a, b) =>
-      a.alegraAccount.localeCompare(b.alegraAccount) ||
-      a.alegraPriceListId.localeCompare(b.alegraPriceListId, undefined, { numeric: true }),
-  )
+  const nombresCuenta = new Map(cuentas.map((c) => [c.slug, c.nombre]))
+
+  const base = await getTenantByIdFromDb(tenantId)
+  const api = base ? await leerListasDeAlegra(base) : { porCuenta: {}, cuentasFallidas: [] as string[] }
+
+  const listas = combinarListasAlegra({
+    derivadas: filas.map((f) => ({
+      alegraAccount: f.alegraAccount,
+      alegraPriceListId: f.alegraPriceListId,
+      nombre: f.nombre,
+      contactos: Number(f.contactos),
+    })),
+    enlaces,
+    api: api.porCuenta,
+    nombresCuenta,
+  })
+  const nombreDe = (slug: string) => nombresCuenta.get(slug) ?? (slug === "principal" ? "Cuenta principal" : slug)
+  return { listas, cuentasConAviso: api.cuentasFallidas.map(nombreDe).sort() }
 }
 
 export interface HistorialDto {

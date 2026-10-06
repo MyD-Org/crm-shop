@@ -32,6 +32,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
   const [listas, setListas] = useState<ListaDto[] | null>(null)
   const [config, setConfig] = useState<ConfigPrecios | null>(null)
   const [listasAlegra, setListasAlegra] = useState<ListaAlegraDto[]>([])
+  const [cuentasConAviso, setCuentasConAviso] = useState<string[]>([])
   const [enlace, setEnlace] = useState<FormEnlace | null>(null)
   const [confirmarPublica, setConfirmarPublica] = useState<ListaDto | null>(null)
   const [error, setError] = useState("")
@@ -43,9 +44,10 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
 
   const cargar = useCallback(async () => {
     try {
-      const r = await api<{ listas: ListaDto[]; listasAlegra: ListaAlegraDto[]; config: ConfigPrecios }>("/api/admin/precios-online/listas")
+      const r = await api<{ listas: ListaDto[]; listasAlegra: ListaAlegraDto[]; cuentasConAviso?: string[]; config: ConfigPrecios }>("/api/admin/precios-online/listas")
       setListas(r.listas)
       setListasAlegra(r.listasAlegra)
+      setCuentasConAviso(r.cuentasConAviso ?? [])
       setConfig(r.config)
       setUmbrales({ confirmacion: r.config.umbralConfirmacionPct.replace(".", ","), retencion: r.config.umbralRetencionPct.replace(".", ",") })
       setError("")
@@ -343,6 +345,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
           </div>
         }
       >
+        {enlace && cuentasConAviso.length > 0 && <Alert tone="warning">{TEXTOS.listas.avisoListasAlegra(cuentasConAviso)}</Alert>}
         {enlace &&
           (alegraLibres.length === 0 ? (
             <Alert tone="warning">{TEXTOS.listas.sinListasAlegra}</Alert>

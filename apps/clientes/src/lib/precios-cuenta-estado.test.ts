@@ -12,7 +12,7 @@ const producto = {
   discount: "-20%",
   precioMedio: { slug: "transf", nombre: "Transferencia", price: 900 },
   preciosMedios: [{ slug: "transf", nombre: "Transferencia", price: 900 }],
-  cuotasSinInteres: { medio: "Tarjeta", opciones: [] },
+  cuotasSinInteres: { medios: [{ slug: "t", medio: "Tarjeta", opciones: [] }] },
   stock: "in",
 } as unknown as Product;
 

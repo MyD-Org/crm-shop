@@ -152,17 +152,43 @@ describe("cuotas sin interés (rebanada D)", () => {
       ...extra,
     });
 
-  it("con el flag prendido, el medio de cobro en línea con condiciones arma `cuotas` (ascendentes)", () => {
+  it("con el flag prendido, los medios de cobro en línea con condiciones arman `cuotas` (ascendentes)", () => {
     const r = seleccionarMediosPrecio([medio("aa"), mp()], false, true);
-    expect(r.cuotas).toEqual({
-      slug: "mercadopago",
-      nombre: "MERCADOPAGO",
-      idListaPagoUnico: null,
-      condiciones: [
-        { cuotas: 3, idListaPrecios: "L3" },
-        { cuotas: 6, idListaPrecios: "L6" },
+    expect(r.cuotas).toEqual([
+      {
+        slug: "mercadopago",
+        nombre: "MERCADOPAGO",
+        idListaPagoUnico: null,
+        condiciones: [
+          { cuotas: 3, idListaPrecios: "L3" },
+          { cuotas: 6, idListaPrecios: "L6" },
+        ],
+      },
+    ]);
+  });
+
+  it("conviven varios medios: todos, en el orden del admin", () => {
+    const r = seleccionarMediosPrecio(
+      [mp({ slug: "payway", nombre: "Payway", orden: 2 }), mp({ orden: 1, nombre: "Mercado Pago" })],
+      false,
+      true,
+    );
+    expect(r.cuotas?.map((m) => m.slug)).toEqual(["mercadopago", "payway"]);
+  });
+
+  it("un medio inactivo, sin condiciones, sin cobro en línea o de cuenta corriente no se exhibe", () => {
+    const r = seleccionarMediosPrecio(
+      [
+        mp({ slug: "a", activo: false }),
+        mp({ slug: "b", condicionesCuotas: [] }),
+        mp({ slug: "c", cobroOnline: false }),
+        mp({ slug: "d", audiencia: "cuenta_corriente" }),
+        mp({ slug: "e" }),
       ],
-    });
+      false,
+      true,
+    );
+    expect(r.cuotas?.map((m) => m.slug)).toEqual(["e"]);
   });
 
   it("`cuotas` lleva la lista del pago único del medio y el mínimo de cada condición", () => {
@@ -171,7 +197,7 @@ describe("cuotas sin interés (rebanada D)", () => {
       false,
       true,
     );
-    expect(r.cuotas).toMatchObject({
+    expect(r.cuotas?.[0]).toMatchObject({
       idListaPagoUnico: "LU",
       condiciones: [{ cuotas: 6, idListaPrecios: "L6", montoMinimo: 60000 }],
     });
@@ -201,14 +227,24 @@ describe("cuotas sin interés (rebanada D)", () => {
       { idPriceList: "L3", name: "Lista B", price: 900, main: false },
       { idPriceList: "L6", name: "Lista C", price: 960, main: false },
     ];
-    const cuotas = { slug: "mercadopago", nombre: "Mercado Pago", condiciones: [{ cuotas: 3, idListaPrecios: "L3" }, { cuotas: 6, idListaPrecios: "L6" }] };
+    const mpCuotas = { slug: "mercadopago", nombre: "Mercado Pago", condiciones: [{ cuotas: 3, idListaPrecios: "L3" }, { cuotas: 6, idListaPrecios: "L6" }] };
+    const cuotas = [mpCuotas];
 
     it("suma cuotasSinInteres con el total de cada lista", () => {
       const r = armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas });
-      expect(r.cuotasSinInteres?.medio).toBe("Mercado Pago");
-      expect(r.cuotasSinInteres?.opciones.map((o) => [o.cuotas, o.total, o.montoCuota])).toEqual([
+      expect(r.cuotasSinInteres?.medios.map((m) => m.medio)).toEqual(["Mercado Pago"]);
+      expect(r.cuotasSinInteres?.medios[0].opciones.map((o) => [o.cuotas, o.total, o.montoCuota])).toEqual([
         [3, 1089, 363],
         [6, 1161.6, 193.6],
+      ]);
+    });
+
+    it("cada medio con sus condiciones y su mínimo; uno sin opciones no aparece", () => {
+      const pw = { slug: "payway", nombre: "Payway", condiciones: [{ cuotas: 12, idListaPrecios: "L6", montoMinimo: 999999 }, { cuotas: 9, idListaPrecios: "L6" }] };
+      const r = armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas: [mpCuotas, pw, { ...pw, slug: "otro", condiciones: [{ cuotas: 6, idListaPrecios: "L6", montoMinimo: 999999 }] }] });
+      expect(r.cuotasSinInteres?.medios.map((m) => [m.slug, m.opciones.map((o) => o.cuotas)])).toEqual([
+        ["mercadopago", [3, 6]],
+        ["payway", [9]],
       ]);
     });
 

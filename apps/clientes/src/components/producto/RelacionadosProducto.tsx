@@ -32,7 +32,7 @@ export async function RelacionadosProducto({
   /** Medio destacado de las cards ("$X con <Medio>"). */
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
-  cuotas?: MedioCuotas | null;
+  cuotas?: MedioCuotas[] | null;
 }) {
   const relacionados = await relacionadosProducto({
     categoriaPropiaId,

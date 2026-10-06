@@ -7,7 +7,7 @@ import { AddToCartButton } from "@/components/AddToCartButton";
 import { BotonFavorito } from "@/components/BotonFavorito";
 import { CuotasCard } from "@/components/CuotasCard";
 import { PrecioMedioCard } from "@/components/PrecioMedio";
-import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
+import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { etiquetaStock, mostrarStockEnCard } from "@/lib/catalogo-vista";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
@@ -122,7 +122,7 @@ export function TarjetaProductoCarrusel({
         installments={
           <>
             <PrecioMedioCard medio={p.precioMedio} />
-            <CuotasCard opcion={mejorOpcionCuotas(p.cuotasSinInteres?.opciones)} />
+            <CuotasCard opcion={mejorCuotaProducto(p.cuotasSinInteres)} />
           </>
         }
       />

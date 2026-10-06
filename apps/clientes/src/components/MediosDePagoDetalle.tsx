@@ -3,27 +3,18 @@ import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { fmtPrecio } from "@/lib/format";
 
 /**
- * Contenido del modal "Ver medios de pago": un bloque con el medio que cobra en cuotas ("Tarjetas
- * de crédito (Mercado Pago)"), con 1 pago (precio contado) y cada cantidad de cuotas SIN INTERÉS con
- * el valor de la cuota y el total de la lista de esa cantidad.
+ * Contenido del modal "Ver medios de pago": UN bloque "Tarjeta de crédito o débito" con 1 pago
+ * (precio contado) y una fila por cada cantidad de cuotas SIN INTERÉS ofrecida por cualquiera de los
+ * medios (ya combinadas con `opcionesCombinadas`). No nombra al procesador: eso queda para el checkout.
  *
  * Separado del diálogo para poder testearlo con render estático.
  */
-export function MediosDePagoDetalle({
-  medio,
-  precioContado,
-  opciones,
-}: {
-  /** Nombre del medio ("Mercado Pago"). */
-  medio: string;
-  precioContado: number;
-  opciones: OpcionCuotas[];
-}) {
+export function MediosDePagoDetalle({ opciones, precioContado }: { opciones: OpcionCuotas[]; precioContado: number }) {
   return (
     <div className="space-y-5">
       <section aria-labelledby="medio-cuotas">
         <h3 id="medio-cuotas" className="mb-2 text-sm font-bold text-text">
-          {TEXTOS_CUOTAS.tituloMedio(medio)}
+          {TEXTOS_CUOTAS.tituloTarjeta}
         </h3>
         <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
           <li className="flex items-center justify-between gap-4 px-3 py-2.5">
@@ -36,7 +27,7 @@ export function MediosDePagoDetalle({
           {opciones.map((o) => (
             <li key={o.cuotas} className="flex items-start justify-between gap-4 px-3 py-2.5">
               <span className="text-sm text-text">
-                {TEXTOS_CUOTAS.filaCuotas(o.cuotas, o.montoCuota, o.primeraCuota)}
+                {TEXTOS_CUOTAS.filaCuotas(o.cuotas, o.montoCuota)}
                 <span className="ml-2 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
                   {TEXTOS_CUOTAS.sinInteres}
                 </span>

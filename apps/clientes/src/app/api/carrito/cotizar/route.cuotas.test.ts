@@ -128,9 +128,9 @@ describe("POST /api/carrito/cotizar con cuotas", () => {
   it("con conCuotas devuelve el total y la cuota de cada cantidad (un pago incluido), de la lista de cada una", async () => {
     const r = await pedir({ conCuotas: true });
     expect((await r.json()).cuotasOpciones).toEqual([
-      { cuotas: 1, total: 1210, montoCuota: 1210, primeraCuota: 1210 },
-      { cuotas: 3, total: 1089, montoCuota: 363, primeraCuota: 363 },
-      { cuotas: 6, total: 1161.6, montoCuota: 193.6, primeraCuota: 193.6 },
+      { cuotas: 1, total: 1210, montoCuota: 1210 },
+      { cuotas: 3, total: 1089, montoCuota: 363 },
+      { cuotas: 6, total: 1161.6, montoCuota: 193.6 },
     ]);
   });
 

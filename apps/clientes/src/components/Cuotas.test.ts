@@ -13,7 +13,6 @@ const opcion = (p: Partial<OpcionCuotas> = {}): OpcionCuotas => ({
   cuotas: 6,
   total: 120000,
   montoCuota: 20000,
-  primeraCuota: 20000,
   sinInteres: true,
   ...p,
 });
@@ -50,18 +49,19 @@ describe("CuotasCard (slot installments de ProductCard)", () => {
 describe("MediosDePagoDetalle (modal de la ficha)", () => {
   const html = renderToStaticMarkup(
     createElement(MediosDePagoDetalle, {
-      medio: "Mercado Pago",
       precioContado: 121000,
       opciones: [
-        opcion({ cuotas: 3, total: 100, montoCuota: 33.33, primeraCuota: 33.34 }),
+        opcion({ cuotas: 3, total: 100, montoCuota: 33.34 }),
         opcion({ cuotas: 6, total: 120000, montoCuota: 20000 }),
       ],
     }),
   );
   const t = texto(html);
 
-  it("un bloque titulado con el medio y 1 pago a precio contado", () => {
-    expect(t).toContain("Tarjetas de crédito (Mercado Pago)");
+  it("un solo bloque \"Tarjeta de crédito o débito\", sin nombrar al procesador, y 1 pago a precio contado", () => {
+    expect(t).toContain("Tarjeta de crédito o débito");
+    expect(t).not.toMatch(/Mercado Pago|Payway/);
+    expect(html.match(/<section/g)).toHaveLength(1);
     expect(t.match(/1 pago Precio contado/g)).toHaveLength(1);
     expect(t).toContain("$ 121.000,00");
   });
@@ -72,8 +72,9 @@ describe("MediosDePagoDetalle (modal de la ficha)", () => {
     expect(t).not.toMatch(/CFT|TEA|recargo|con interés/i);
   });
 
-  it("si el total no divide exacto, aclara la primera cuota", () => {
-    expect(t).toContain("3 cuotas de $ 33,33 (la primera, $ 33,34)");
+  it("el monto por cuota va redondeado hacia arriba, sin aclarar la primera cuota", () => {
+    expect(t).toContain("3 cuotas de $ 33,34");
+    expect(t).not.toContain("la primera");
   });
 
   it("sección con encabezado accesible", () => {

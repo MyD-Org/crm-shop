@@ -102,7 +102,7 @@ export interface ArgsPaginaPublica {
    */
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`): también parte de la clave de la caché. */
-  cuotas?: MedioCuotas | null;
+  cuotas?: MedioCuotas[] | null;
 }
 
 async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> {
@@ -114,14 +114,14 @@ async function paginaCacheada(args: ArgsPaginaPublica): Promise<PaginaCatalogo> 
 }
 
 /** Los medios que dibujan las cards: el destacado y las cuotas sin interés (la ficha va aparte). */
-function conMedios<T extends { destacado?: MedioPrecio | null; cuotas?: MedioCuotas | null }>(
+function conMedios<T extends { destacado?: MedioPrecio | null; cuotas?: MedioCuotas[] | null }>(
   args: T,
 ): Omit<T, "destacado" | "cuotas"> & {
-  mediosPrecio?: { destacado: MedioPrecio | null; ficha: MedioPrecio[]; cuotas?: MedioCuotas };
+  mediosPrecio?: { destacado: MedioPrecio | null; ficha: MedioPrecio[]; cuotas?: MedioCuotas[] };
 } {
   const { destacado, cuotas, ...resto } = args;
-  return destacado || cuotas
-    ? { ...resto, mediosPrecio: { ...SIN_MEDIOS_PRECIO, destacado: destacado ?? null, ...(cuotas ? { cuotas } : {}) } }
+  return destacado || cuotas?.length
+    ? { ...resto, mediosPrecio: { ...SIN_MEDIOS_PRECIO, destacado: destacado ?? null, ...(cuotas?.length ? { cuotas } : {}) } }
     : resto;
 }
 
@@ -195,7 +195,7 @@ async function productoCacheado(
   /** Medios de la ficha ("$X con <Medio>"): argumento, es parte de la clave de la caché. */
   ficha: readonly MedioPrecio[] = [],
   /** Cuotas sin interés de la ficha (flag `cuotas-cobro`): también parte de la clave. */
-  cuotas: MedioCuotas | null = null,
+  cuotas: MedioCuotas[] | null = null,
 ): Promise<Product | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
@@ -210,13 +210,13 @@ function leerProducto(
   disp: ContextoDisponibilidad | undefined,
   estructurados: boolean,
   ficha: readonly MedioPrecio[],
-  cuotas: MedioCuotas | null,
+  cuotas: MedioCuotas[] | null,
 ): Promise<Product | null> {
   return getProducto(id, {
     soloVisibles,
     disp,
     ...(estructurados ? { atributosEstructurados: true } : {}),
-    ...(ficha.length || cuotas ? { mediosPrecio: { destacado: null, ficha: [...ficha], ...(cuotas ? { cuotas } : {}) } } : {}),
+    ...(ficha.length || cuotas?.length ? { mediosPrecio: { destacado: null, ficha: [...ficha], ...(cuotas?.length ? { cuotas } : {}) } } : {}),
   });
 }
 
@@ -238,11 +238,11 @@ export function productoPublico(
   /** Medios de la ficha (`flagsPublicos().mediosPrecio.ficha`): "$X con <Medio>" por cada uno. */
   ficha: readonly MedioPrecio[] = [],
   /** Cuotas sin interés (`flagsPublicos().mediosPrecio.cuotas`): la ficha muestra la línea y el modal. */
-  cuotas: MedioCuotas | null = null,
+  cuotas: MedioCuotas[] | null = null,
 ): Promise<Product | null> {
   if (!esIdAlegra(id)) return Promise.resolve(null);
   const cacheada = () =>
-    ficha.length || cuotas
+    ficha.length || cuotas?.length
       ? productoCacheado(id, soloVisibles, disp, estructurados, ficha, cuotas)
       : estructurados
         ? productoCacheado(id, soloVisibles, disp, true)
@@ -319,7 +319,7 @@ interface ArgsDestacados {
   /** Medio destacado de las cards (argumento: parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
-  cuotas?: MedioCuotas | null;
+  cuotas?: MedioCuotas[] | null;
 }
 
 export function destacadosHome(args: ArgsDestacados): Promise<Product[]> {
@@ -372,7 +372,7 @@ async function primeraPaginaCategoria(
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
   destacado: MedioPrecio | null = null,
-  cuotas: MedioCuotas | null = null,
+  cuotas: MedioCuotas[] | null = null,
 ): Promise<Product[]> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
@@ -402,7 +402,7 @@ async function categoriaExacta(
   soloVisibles: boolean,
   disp?: ContextoDisponibilidad,
   destacado: MedioPrecio | null = null,
-  cuotas: MedioCuotas | null = null,
+  cuotas: MedioCuotas[] | null = null,
 ): Promise<{ nombre: string; productos: Product[] } | null> {
   "use cache: remote";
   cacheTag(TAG_CATALOGO);
@@ -450,7 +450,7 @@ export async function relacionadosProducto(args: {
   /** Medio destacado de las cards (argumento: parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
   /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
-  cuotas?: MedioCuotas | null;
+  cuotas?: MedioCuotas[] | null;
 }): Promise<Relacionados | null> {
   const recortar = (productos: Product[]) =>
     productos.filter((p) => p.id !== args.excluirId && p.stock !== "out").slice(0, args.cantidad);

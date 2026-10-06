@@ -35,7 +35,7 @@ export interface CotizacionResponse extends Cotizacion {
    * y la cuota de cada cantidad de cuotas sin interés (1 = un pago), cada una con la lista de su
    * condición. Ausente = no hay cuotas que ofrecer.
    */
-  cuotasOpciones?: { cuotas: number; total: number; montoCuota: number; primeraCuota: number }[];
+  cuotasOpciones?: { cuotas: number; total: number; montoCuota: number }[];
   /**
    * Con `conCuotas` y un monto mínimo sin alcanzar: la próxima cantidad de cuotas que se habilita y
    * cuánto falta del total (con impuestos, al precio de pago único). Ausente = nada que informar.

@@ -45,10 +45,8 @@ export interface OpcionCuotas {
   cuotas: number;
   /** Total de la lista de esa cantidad de cuotas, con IVA: lo que se cobra en total. */
   total: number;
-  /** Cuota común (la de las últimas N-1 cuotas). */
+  /** Monto por cuota: total / N redondeado al centavo HACIA ARRIBA (ver `montoPorCuota`). */
   montoCuota: number;
-  /** Primera cuota: absorbe el resto de centavos. Igual a `montoCuota` si el total divide exacto. */
-  primeraCuota: number;
   /** Siempre true: el modelo no tiene cuotas con interés. */
   sinInteres: true;
 }
@@ -60,16 +58,14 @@ const esCuotasValidas = (n: unknown): n is number =>
   typeof n === "number" && Number.isInteger(n) && n >= CUOTAS_MIN && n <= CUOTAS_MAX;
 
 /**
- * Reparte `total` en `cuotas` partes SIN recargo. La suma es exactamente el total y el resto de
- * centavos va a la PRIMERA cuota (100,00 en 3 = 33,34 + 33,33 + 33,33). Cantidad inválida o 1 = un
- * solo pago.
+ * Monto por cuota que se EXHIBE: total / N redondeado al centavo hacia arriba (100,00 en 3 = 33,34).
+ * Es sólo informativo: el cobro es el total congelado y el banco decide dónde van los centavos. Se
+ * calcula en centavos enteros. Cantidad inválida o 1 = el total.
  */
-export function repartirCuotas(total: number, cuotas: number | null): number[] {
+export function montoPorCuota(total: number, cuotas: number | null): number {
   const centavos = Number.isFinite(total) && total > 0 ? aCentavos(total) : 0;
-  if (centavos === 0 || cuotas === null || !Number.isInteger(cuotas) || cuotas < 2) return [deCentavos(centavos)];
-  const base = Math.floor(centavos / cuotas);
-  const resto = centavos - base * cuotas;
-  return Array.from({ length: cuotas }, (_, i) => deCentavos(i === 0 ? base + resto : base));
+  if (centavos === 0 || cuotas === null || !Number.isInteger(cuotas) || cuotas < 2) return deCentavos(centavos);
+  return deCentavos(Math.ceil(centavos / cuotas));
 }
 
 /** Condiciones utilizables: 2..24 cuotas, con lista y sin repetir cantidad (gana la primera), ascendentes. */
@@ -136,30 +132,53 @@ export function opcionesCuotas(
   for (const c of condicionesAplicables(medio.condiciones, baseUnitaria)) {
     const total = precioFinal(precioDeLista(prices, c.idListaPrecios), ivaPorcentaje);
     if (total === undefined) continue;
-    const partes = repartirCuotas(total, c.cuotas);
-    salida.push({
-      cuotas: c.cuotas,
-      total,
-      montoCuota: partes[partes.length - 1],
-      primeraCuota: partes[0],
-      sinInteres: true,
-    });
+    salida.push({ cuotas: c.cuotas, total, montoCuota: montoPorCuota(total, c.cuotas), sinInteres: true });
   }
   return salida;
 }
 
-/** Las cuotas de un producto: el medio que las cobra y una opción por cantidad. Viaja con el `Product`. */
-export interface CuotasProducto {
-  /** Nombre del medio ("Mercado Pago"), para los textos. */
+/** Las opciones de UN medio de cobro para un producto. */
+export interface CuotasDeMedio {
+  slug: string;
+  /** Nombre del medio tal cual lo carga el operador en el admin ("Mercado Pago"). */
   medio: string;
   opciones: OpcionCuotas[];
 }
 
-/** La de mayor cantidad de cuotas (la que se destaca en la card). */
+/** Las cuotas de un producto: un bloque por medio elegible, en el orden del admin. Viaja con el `Product`. */
+export interface CuotasProducto {
+  medios: CuotasDeMedio[];
+}
+
+/** La de mayor cantidad de cuotas; a igual cantidad, la de menor cuota. */
 export function mejorOpcionCuotas(opciones: readonly OpcionCuotas[] | null | undefined): OpcionCuotas | null {
   let mejor: OpcionCuotas | null = null;
-  for (const o of opciones ?? []) if (!mejor || o.cuotas > mejor.cuotas) mejor = o;
+  for (const o of opciones ?? []) {
+    if (!mejor || o.cuotas > mejor.cuotas || (o.cuotas === mejor.cuotas && o.montoCuota < mejor.montoCuota)) mejor = o;
+  }
   return mejor;
+}
+
+/** La mejor opción entre TODOS los medios (card y línea de la ficha). */
+export function mejorCuotaProducto(cuotas: CuotasProducto | null | undefined): OpcionCuotas | null {
+  return mejorOpcionCuotas((cuotas?.medios ?? []).flatMap((m) => m.opciones));
+}
+
+/**
+ * Las filas del modal: una por cada cantidad de cuotas ofrecida por CUALQUIER medio, ascendentes.
+ * Si dos medios ofrecen la misma cantidad se queda la de menor total (y, a igual total, menor cuota).
+ */
+export function opcionesCombinadas(cuotas: CuotasProducto | null | undefined): OpcionCuotas[] {
+  const porCantidad = new Map<number, OpcionCuotas>();
+  for (const m of cuotas?.medios ?? []) {
+    for (const o of m.opciones) {
+      const actual = porCantidad.get(o.cuotas);
+      if (!actual || o.total < actual.total || (o.total === actual.total && o.montoCuota < actual.montoCuota)) {
+        porCantidad.set(o.cuotas, o);
+      }
+    }
+  }
+  return [...porCantidad.values()].sort((a, b) => a.cuotas - b.cuotas);
 }
 
 /**

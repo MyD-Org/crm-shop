@@ -7,7 +7,7 @@ import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
-import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
+import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { formatDescripcionProducto, nombreConMarca } from "@/lib/formato-nombre";
@@ -135,7 +135,7 @@ export function ProductoClient({
 
   // Cuotas sobre el precio final unitario: sin IVA conocido no se calcula nada.
   const cuotas = producto.cuotasSinInteres;
-  const mejorCuota = mejorOpcionCuotas(cuotas?.opciones);
+  const mejorCuota = mejorCuotaProducto(cuotas);
 
   const estado = ESTADO_STOCK[producto.stock];
   const agotado = producto.stock === "out";

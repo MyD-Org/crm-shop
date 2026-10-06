@@ -27,7 +27,7 @@ export interface ContextoShop {
   /** Sólo la página: medio destacado de las cards (parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
   /** Sólo la página: cuotas sin interés de las cards (flag `cuotas-cobro`; parte de la clave de la caché). */
-  cuotas?: MedioCuotas | null;
+  cuotas?: MedioCuotas[] | null;
   /** Sólo la página: la URL trae `ia=1`, así que el plan de la consulta aporta lo blando. */
   conPlanDeUrl?: boolean;
   /** Sólo la página: leer las facetas de cada etapa junto con la página. */

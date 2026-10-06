@@ -226,11 +226,11 @@ describe("banco versionado: casos de medidas (busqueda-medidas, M1b)", () => {
     for (const b of negativos) expect(b.medidas).toEqual([]);
   });
 
-  it("entran a la matriz de la línea base: el banco sintético lo corren clasica, tolerante, fase1 y v2", () => {
+  it("entran a la matriz de la línea base: el banco sintético lo corren clasica, tolerante y v2", () => {
     const { casos } = cargarBancoDeArgs({ etiquetas: "revisado" }).banco;
     expect(casos.filter((c) => c.medidas !== undefined)).toHaveLength(conMedidas.length);
     const tuberias = new Set(planDeMatriz({ bancoReal: false, jevVivo: false }).filter((e) => e.banco === "sintetico").map((e) => e.tuberia));
-    expect([...tuberias].sort()).toEqual(["clasica", "fase1", "tolerante", "v2"]);
+    expect([...tuberias].sort()).toEqual(["clasica", "tolerante", "v2"]);
   });
 
   it("los 97 casos anteriores no cambian (mismo orden y mismas expectativas, salvo `medidas`/`sinMedidasDe`): sus métricas previas no se mueven", () => {

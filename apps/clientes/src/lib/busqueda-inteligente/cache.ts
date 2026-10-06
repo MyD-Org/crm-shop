@@ -1,25 +1,17 @@
 /**
- * Caché de interpretaciones (`shop.busqueda_interpretaciones`, migración
- * 0026) y búsquedas frecuentes. SOLO servidor.
+ * Hash del árbol de categorías y búsquedas frecuentes sobre las interpretaciones
+ * guardadas (`shop.busqueda_interpretaciones`, migración 0026). SOLO servidor.
  *
  * Todo acceso va envuelto: si la tabla no existe (el código se desplegó antes
- * que la migración) o la base falla, la interpretación sigue sin caché y las
- * búsquedas frecuentes salen vacías. Nunca rompe la búsqueda. En los errores
- * no se loguea la consulta, sólo el tipo de error.
+ * que la migración) o la base falla, las búsquedas frecuentes salen vacías.
+ * Nunca rompe la búsqueda. En los errores no se loguea la consulta, sólo el
+ * tipo de error.
  */
 import { createHash } from "node:crypto";
 import { and, desc, eq, gt, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/db";
 import { busquedaInterpretaciones } from "@/db/schema";
-import type { FiltrosInterpretados, Interpretacion, NodoArbol } from "./tipos";
-
-/** Lo que se guarda: la interpretación sin la consulta original ni la fuente. */
-export type ResultadoGuardado = Pick<Interpretacion, "aplicar" | "sugerir">;
-
-export interface Guardado {
-  resultado: ResultadoGuardado;
-  fuente: Exclude<Interpretacion["fuente"], "cache">;
-}
+import type { NodoArbol } from "./tipos";
 
 /**
  * Hash del árbol de categorías activo: ids y nombres, ordenados. Si el tenant
@@ -31,25 +23,9 @@ export function hashArbol(arbol: readonly NodoArbol[]): string {
   return createHash("sha256").update(partes.join("\n")).digest("hex").slice(0, 32);
 }
 
-const lista = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-const filtros = (v: unknown): FiltrosInterpretados => {
-  const o = (v ?? {}) as Record<string, unknown>;
-  return { categorias: lista(o.categorias), atributos: lista(o.atributos) };
-};
-
-/** Resultado guardado → forma segura (una fila vieja o rota no rompe nada). */
-export function comoResultado(v: unknown): ResultadoGuardado {
-  const o = (v ?? {}) as Record<string, unknown>;
-  const aplicar = (o.aplicar ?? {}) as Record<string, unknown>;
-  return {
-    aplicar: { ...filtros(aplicar), ...(typeof aplicar.q === "string" && aplicar.q ? { q: aplicar.q } : {}) },
-    sugerir: filtros(o.sugerir),
-  };
-}
-
 /**
- * Mientras la migración 0026 no esté aplicada, CADA búsqueda falla contra la
- * caché: un `console.error` por búsqueda llenaba los logs (y el overlay de
+ * Mientras la migración 0026 no esté aplicada, CADA lectura falla contra la
+ * tabla: un `console.error` por búsqueda llenaba los logs (y el overlay de
  * errores de Next en dev). Se avisa UNA vez por proceso, como advertencia: la
  * búsqueda sigue igual sin caché.
  */
@@ -64,77 +40,6 @@ const registrarFallo = (que: string) => (err: unknown) => {
   }
   return null;
 };
-
-/** Solo tests: vuelve a avisar el próximo fallo. */
-export function reiniciarAvisoCache() {
-  avisado = false;
-}
-
-/**
- * Busca una interpretación y, si está y `sumarUso`, le suma un uso (una sola
- * consulta: `update … returning`). Sin `sumarUso` sólo lee: lo usa la página
- * ya interpretada (`?ia=`), que no es una búsqueda nueva. `null` si no está o
- * si la caché no responde.
- */
-export async function leerInterpretacion(
-  tenantId: string,
-  consultaNorm: string,
-  arbolHash: string,
-  sumarUso = true,
-): Promise<Guardado | null> {
-  try {
-    const clave = and(
-      eq(busquedaInterpretaciones.tenantId, tenantId),
-      eq(busquedaInterpretaciones.consultaNorm, consultaNorm),
-      eq(busquedaInterpretaciones.arbolHash, arbolHash),
-    );
-    const columnas = { resultado: busquedaInterpretaciones.resultado, fuente: busquedaInterpretaciones.fuente };
-    const [fila] = sumarUso
-      ? await getDb()
-          .update(busquedaInterpretaciones)
-          .set({ hits: sql`${busquedaInterpretaciones.hits} + 1`, lastUsedAt: sql`now()` })
-          .where(clave)
-          .returning(columnas)
-      : await getDb().select(columnas).from(busquedaInterpretaciones).where(clave).limit(1);
-    if (!fila) return null;
-    return {
-      resultado: comoResultado(fila.resultado),
-      fuente: fila.fuente === "jev" ? "jev" : "deterministico",
-    };
-  } catch (err) {
-    return registrarFallo("lectura")(err);
-  }
-}
-
-/** Guarda (o pisa) una interpretación. Silencioso si la caché no responde. */
-export async function guardarInterpretacion(
-  tenantId: string,
-  consultaNorm: string,
-  arbolHash: string,
-  guardado: Guardado,
-): Promise<void> {
-  try {
-    await getDb()
-      .insert(busquedaInterpretaciones)
-      .values({
-        tenantId,
-        consultaNorm,
-        arbolHash,
-        resultado: guardado.resultado as unknown as Record<string, unknown>,
-        fuente: guardado.fuente,
-      })
-      .onConflictDoUpdate({
-        target: [busquedaInterpretaciones.tenantId, busquedaInterpretaciones.consultaNorm, busquedaInterpretaciones.arbolHash],
-        set: {
-          resultado: guardado.resultado as unknown as Record<string, unknown>,
-          fuente: guardado.fuente,
-          lastUsedAt: sql`now()`,
-        },
-      });
-  } catch (err) {
-    registrarFallo("escritura")(err);
-  }
-}
 
 /** Días hacia atrás que cuentan para las búsquedas frecuentes. */
 export const DIAS_FRECUENTES = 30;

@@ -25,7 +25,7 @@ import { cortarPor, resumenNumerico, type Latencia, type ResumenNum } from "./me
 import type { SnapshotCatalogo } from "./universo";
 import type { VistaBanco } from "./vista";
 
-export type Tuberia = "clasica" | "tolerante" | "fase1" | "v2" | "motor";
+export type Tuberia = "clasica" | "tolerante" | "v2" | "motor";
 export type ModoJev = "grabado" | "vivo" | "no" | "cache" | "no aplica";
 
 /** Superficie que mide la tubería `motor`. */

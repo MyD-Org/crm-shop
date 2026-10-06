@@ -3,13 +3,12 @@
  * `.env.local` (cada búsqueda en una transacción `read only`, ver lectura.ts).
  *
  *   npm run banco:busqueda                       # v2, Jev grabado, umbral 85 (como siempre)
- *   npm run banco:busqueda -- --tuberia=fase1    # línea de base (fase 1, Jev en vivo si hay JEV_API_KEY)
  *   npm run banco:busqueda -- --umbral=70 --salida=reporte.txt --solo=diagnostico
  *   npm run banco:busqueda -- --jev=vivo         # v2 con Jev en vivo (por defecto, las respuestas grabadas)
  *   npm run banco:busqueda -- --jev=no           # v2 sólo determinista (como la página sin caché)
  *
  * Línea base de la búsqueda (todo aditivo; sin estos flags nada cambia):
- *   --tuberia=clasica|tolerante|fase1|v2   la búsqueda sola, sin plan ni Jev (clasica = AND de LIKE;
+ *   --tuberia=clasica|tolerante|v2        la búsqueda sola, sin plan ni Jev (clasica = AND de LIKE;
  *                                          tolerante = contiene OR similitud de trigramas)
  *   --jev=grabado|vivo|no|cache            cache = el plan que sirvió la caché de producción (sin costo)
  *   --produccion --solo-visibles=si|no     lo que ve el cliente (valor de `catalogo-solo-visibles`)
@@ -43,7 +42,7 @@ import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disp
 import { cargarBancoDeArgs, estadoMedidas, parsearArgs, type ArgsBanco } from "./args";
 import { validarBanco } from "./cargar-banco";
 import { SUPERFICIES_BANCO, correr, sonComparables, type ReporteJson } from "./corrida";
-import { crearEjecutor, resolverJev } from "./ejecutores";
+import { crearEjecutor } from "./ejecutores";
 import { cerrar, enLectura } from "./lectura";
 import { compararParidad, formatearParidad, idsDeReporte } from "./paridad";
 import { resolverSalida } from "./ruta-salida";
@@ -72,8 +71,7 @@ async function main(args: ArgsBanco) {
     // Sin la tabla, la consulta falla y la transacción no puede confirmar: también es "no".
     enLectura(() => atributosEstructuradosDisponibles()).catch(() => false),
   ]);
-  const conClave = !!process.env.JEV_API_KEY?.trim();
-  const jev = resolverJev(args.jev, conClave);
+  const jev = args.jev;
   console.info(`[banco] tubería ${args.tuberia}; ${arbol.length} categorías; estructurados ${estructurados}; Jev ${jev === "no aplica" ? "no aplica" : jev === "no" ? "no" : jev}`);
   if (elegido.banco.local) {
     const { excluidos } = elegido;

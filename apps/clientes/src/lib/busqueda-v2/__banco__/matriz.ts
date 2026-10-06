@@ -48,8 +48,6 @@ function motoresDe(banco: BancoDeMatriz, jevVivo: boolean): { tuberia: Tuberia; 
   return [
     { tuberia: "clasica", jev: "no aplica" },
     { tuberia: "tolerante", jev: "no aplica" },
-    // La corrida congelada no gasta: fase1 nunca llama a Jev.
-    { tuberia: "fase1", jev: "no" },
     { tuberia: "v2", jev: "no" },
     banco === "real" ? { tuberia: "v2", jev: "cache" } : { tuberia: "v2", jev: "grabado" },
     ...(banco === "sintetico" && jevVivo ? [{ tuberia: "v2" as const, jev: "vivo" as const }] : []),

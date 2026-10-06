@@ -8,14 +8,13 @@ import { cortarPor, resumenNumerico } from "./metricas";
 describe("planDeMatriz", () => {
   const clave = (e: { banco: string; vista: string; tuberia: string; jev: string }) => `${e.banco}/${e.vista}/${e.tuberia}/${e.jev}`;
 
-  it("sintético: clasica, tolerante, fase1 sin Jev, v2 sin Jev y v2 con Jev grabado, en las dos vistas", () => {
+  it("sintético: clasica, tolerante, v2 sin Jev y v2 con Jev grabado, en las dos vistas", () => {
     const p = planDeMatriz({ bancoReal: false, jevVivo: false });
-    expect(p).toHaveLength(10);
+    expect(p).toHaveLength(8);
     for (const vista of ["banco", "produccion"]) {
       expect(p.filter((e) => e.vista === vista).map(clave)).toEqual([
         `sintetico/${vista}/clasica/no aplica`,
         `sintetico/${vista}/tolerante/no aplica`,
-        `sintetico/${vista}/fase1/no`,
         `sintetico/${vista}/v2/no`,
         `sintetico/${vista}/v2/grabado`,
       ]);
@@ -24,14 +23,14 @@ describe("planDeMatriz", () => {
 
   it("real: la misma matriz pero con v2 sobre el plan cacheado en vez del Jev grabado (que no cubre consultas reales)", () => {
     const p = planDeMatriz({ bancoReal: true, jevVivo: false }).filter((e) => e.banco === "real");
-    expect(p).toHaveLength(10);
-    expect(p.map((e) => `${e.tuberia}/${e.jev}`).slice(0, 5)).toEqual(["clasica/no aplica", "tolerante/no aplica", "fase1/no", "v2/no", "v2/cache"]);
+    expect(p).toHaveLength(8);
+    expect(p.map((e) => `${e.tuberia}/${e.jev}`).slice(0, 4)).toEqual(["clasica/no aplica", "tolerante/no aplica", "v2/no", "v2/cache"]);
     expect(p.some((e) => e.jev === "grabado")).toBe(false);
   });
 
   it("sin banco real, no hay entradas reales", () => {
     expect(planDeMatriz({ bancoReal: false, jevVivo: false }).some((e) => e.banco === "real")).toBe(false);
-    expect(planDeMatriz({ bancoReal: true, jevVivo: false })).toHaveLength(20);
+    expect(planDeMatriz({ bancoReal: true, jevVivo: false })).toHaveLength(16);
   });
 
   it("v2 vivo sólo con el flag explícito y sólo sobre el banco sintético", () => {
@@ -40,8 +39,8 @@ describe("planDeMatriz", () => {
     expect(conVivo.map(clave)).toEqual(["sintetico/banco/v2/vivo", "sintetico/produccion/v2/vivo"]);
   });
 
-  it("fase1 nunca usa Jev en la matriz (la corrida congelada no gasta)", () => {
-    for (const e of planDeMatriz({ bancoReal: true, jevVivo: true }).filter((x) => x.tuberia === "fase1")) expect(e.jev).toBe("no");
+  it("la matriz ya no tiene filas de la tubería fase1", () => {
+    expect(planDeMatriz({ bancoReal: true, jevVivo: true }).some((x) => (x.tuberia as string) === "fase1")).toBe(false);
   });
 
   it("ids únicos y sin texto de consultas", () => {

@@ -1,19 +1,9 @@
 /**
- * Qué queda de la consulta después de interpretarla. Módulo puro.
- *
- * Aplicar una interpretación reemplaza la búsqueda por filtros. Si en ese paso
- * se pierde una palabra que importa ("lampara para PECERA de agua salada" →
- * todas las Lámparas), el visitante ve 770 productos que no pidió. Por eso el
- * texto residual se queda con:
- * - los tokens con dígitos que ningún atributo absorbió ("50w");
- * - los tokens SIGNIFICATIVOS: los que ninguna categoría ni atributo aplicado
- *   absorbió y que no son palabras vacías ni contexto (ambientes, usos o
- *   palabras genéricas que la interpretación ya tradujo o que no filtran).
- * La page verifica que la búsqueda interpretada con ese residual traiga algo
- * antes de redirigir (ver `decidirBusqueda` en flujo.ts).
+ * Vocabularios de la búsqueda inteligente: palabras vacías y léxico de
+ * contexto (ambientes, usos y palabras genéricas que no identifican un
+ * producto). Módulo puro; lo usan `publicable.ts`, `deterministico.ts` y la
+ * búsqueda v2 (`entender/terminos.ts`).
  */
-import { raizPlural } from "../catalogo-busqueda";
-import { palabrasCategoria, tokensDe } from "./deterministico";
 
 /** Palabras vacías del español que aparecen en una búsqueda escrita como frase. */
 export const PALABRAS_VACIAS = new Set([
@@ -48,41 +38,3 @@ export const LEXICO_CONTEXTO = new Set([
   "chico", "chica", "pequeno", "pequena", "lindo", "linda", "moderno", "moderna", "mejor", "tipo", "modelo",
   "producto", "nuevo", "nueva", "comun",
 ]);
-
-/** Largo mínimo de un token significativo (menos es ruido: "tv", "x"). */
-const LARGO_MINIMO = 3;
-
-/**
- * Tokens significativos que la interpretación NO absorbió, en el orden de la
- * consulta. `absorbidos`: los que tomó un atributo; `categorias`: las
- * categorías aplicadas (sus palabras, en singular, también quedan absorbidas).
- */
-export function tokensSignificativos(
-  consultaNorm: string,
-  absorbidos: ReadonlySet<string>,
-  categorias: readonly string[],
-): string[] {
-  const deCategorias = new Set(categorias.flatMap(palabrasCategoria));
-  return tokensDe(consultaNorm).filter((t) => {
-    if (/\d/.test(t) || t.length < LARGO_MINIMO || absorbidos.has(t)) return false;
-    const raiz = raizPlural(t);
-    return !PALABRAS_VACIAS.has(t) && !LEXICO_CONTEXTO.has(t) && !LEXICO_CONTEXTO.has(raiz) && !deCategorias.has(raiz);
-  });
-}
-
-/**
- * Texto residual al aplicar una interpretación: tokens con dígitos no
- * absorbidos por un atributo ("50w") y tokens significativos ("pecera"), en
- * el orden de la consulta. `undefined` si no queda nada.
- */
-export function residuoDeBusqueda(
-  consultaNorm: string,
-  absorbidos: ReadonlySet<string>,
-  categorias: readonly string[],
-): string | undefined {
-  const significativos = new Set(tokensSignificativos(consultaNorm, absorbidos, categorias));
-  const quedan = tokensDe(consultaNorm).filter(
-    (t) => significativos.has(t) || (/\d/.test(t) && !absorbidos.has(t)),
-  );
-  return quedan.length ? [...new Set(quedan)].join(" ") : undefined;
-}

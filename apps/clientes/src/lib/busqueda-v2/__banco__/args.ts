@@ -11,7 +11,7 @@ import { BANCO } from "./banco";
 import { cargarBancoDeArchivo, filtrarEtiquetas, hashBanco, type CasosFiltrados, type ModoEtiquetas, validarBanco } from "./cargar-banco";
 import type { BancoDeCorrida, ModoJev, SuperficieBanco, Tuberia } from "./corrida";
 
-export const TUBERIAS: readonly Tuberia[] = ["clasica", "tolerante", "fase1", "v2", "motor"];
+export const TUBERIAS: readonly Tuberia[] = ["clasica", "tolerante", "v2", "motor"];
 export const SUPERFICIES: readonly SuperficieBanco[] = ["catalogo", "autocompletar", "chat"];
 const MODOS_JEV = ["grabado", "vivo", "no", "cache"] as const;
 const FLAGS_CONOCIDOS = new Set([
@@ -23,8 +23,7 @@ const FLAGS_CONOCIDOS = new Set([
 
 export interface ArgsBanco {
   tuberia: Tuberia;
-  /** `segun-entorno` (sólo fase1 sin --jev): Jev si hay JEV_API_KEY, como siempre. */
-  jev: ModoJev | "segun-entorno";
+  jev: ModoJev;
   umbral: number;
   /** Reporte de texto (flag histórico). */
   salida?: string;
@@ -59,7 +58,7 @@ export interface ArgsBanco {
 
 /**
  * Estado de las medidas que declara la cabecera de la corrida: sólo las tuberías con plan v2 (v2 y motor)
- * las aplican; clasica, tolerante y fase1 no usan el plan de la v2 ("no aplica").
+ * las aplican; clasica y tolerante no usan el plan de la v2 ("no aplica").
  */
 export function estadoMedidas(tuberia: Tuberia, medidas: boolean): "no aplica" | "on" | "off" {
   return tuberia === "v2" || tuberia === "motor" ? (medidas ? "on" : "off") : "no aplica";
@@ -92,9 +91,6 @@ export function parsearArgs(argv: readonly string[]): ArgsBanco {
   let jev: ArgsBanco["jev"];
   if (tuberia === "clasica" || tuberia === "tolerante") {
     jev = "no aplica";
-  } else if (tuberia === "fase1") {
-    if (jevPedido === "grabado" || jevPedido === "cache") throw new Error(`--jev=${jevPedido} no aplica a la tubería fase1 (sólo vivo|no).`);
-    jev = jevPedido === undefined ? "segun-entorno" : (jevPedido as ModoJev);
   } else {
     jev = (jevPedido ?? "grabado") as ModoJev;
   }

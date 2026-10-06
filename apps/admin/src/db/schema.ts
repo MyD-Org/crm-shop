@@ -254,6 +254,12 @@ export const catalogProducts = pgTable(
      * `aplicar_precios_online` (0064). '[]' = sin precio online. shop_app todavía no los lee.
      */
     preciosOnline: jsonb("precios_online").notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Precios de las listas PRIVADAS [{idPriceList,name,price}] (neto sin IVA; 0068, change
+     * `listas-cuenta-corriente`). NUNCA va en `precios_online` ni en la vista pública
+     * `catalog_products_shop`: shop_app solo la lee por `catalog_products_shop_privados`.
+     */
+    preciosOnlinePrivados: jsonb("precios_online_privados").notNull().default(sql`'[]'::jsonb`),
     /** Precio online de la lista de referencia (para ordenar y filtrar en el admin). */
     precioOnlineRef: numeric("precio_online_ref", { precision: 14, scale: 2 }),
     preciosOnlineAt: timestamp("precios_online_at", { withTimezone: true }),
@@ -1420,12 +1426,45 @@ export const listasPrecioOnline = pgTable(
     esReferencia: boolean("es_referencia").notNull().default(false),
     orden: integer("orden").notNull().default(0),
     activa: boolean("activa").notNull().default(true),
+    // Lista privada (0068): solo la ven los clientes con cuenta corriente cuya lista de Alegra esté
+    // enlazada (lista_precio_alegra_mapeo). No puede ser la referencia ni tener condiciones de medio
+    // (CHECK + trigger solo en SQL). Sus precios van a catalog_products.precios_online_privados.
+    privada: boolean("privada").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("listas_precio_online_nombre_uniq").on(t.tenantId, sql`lower(${t.nombre})`),
     uniqueIndex("listas_precio_online_ref_uniq").on(t.tenantId).where(sql`${t.esReferencia}`),
+    // Auxiliar de la FK compuesta del mapeo: así solo se puede enlazar una lista privada del mismo tenant.
+    uniqueIndex("listas_precio_online_tenant_id_privada_uniq").on(t.tenantId, t.id, t.privada),
+  ],
+)
+
+// Enlace "lista de Alegra del contacto -> lista online privada" (0068), por cuenta de Alegra. La
+// clave (tenant, cuenta, lista de Alegra) es única: una lista de Alegra apunta a UNA lista online.
+// `privada` es siempre true (CHECK) y la FK (tenant, lista, privada) hace que solo se pueda enlazar
+// una privada; borrar la lista borra sus enlaces. El Shop lo lee por `lista_precio_alegra_mapeo_shop`.
+export const listaPrecioAlegraMapeo = pgTable(
+  "lista_precio_alegra_mapeo",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraAccount: text("alegra_account").notNull(),
+    alegraPriceListId: text("alegra_price_list_id").notNull(),
+    listaId: uuid("lista_id").notNull(),
+    privada: boolean("privada").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      name: "lista_precio_alegra_mapeo_lista_fk",
+      columns: [t.tenantId, t.listaId, t.privada],
+      foreignColumns: [listasPrecioOnline.tenantId, listasPrecioOnline.id, listasPrecioOnline.privada],
+    }).onDelete("cascade"),
+    uniqueIndex("lista_precio_alegra_mapeo_uniq").on(t.tenantId, t.alegraAccount, t.alegraPriceListId),
+    index("lista_precio_alegra_mapeo_lista_idx").on(t.listaId),
   ],
 )
 

@@ -27,7 +27,7 @@ export async function seedLista(
   tenantId: string,
   nombre: string,
   coeficiente: string,
-  opts: { esReferencia?: boolean; orden?: number; activa?: boolean } = {},
+  opts: { esReferencia?: boolean; orden?: number; activa?: boolean; privada?: boolean } = {},
 ): Promise<string> {
   const [l] = await getDb()
     .insert(listasPrecioOnline)
@@ -38,6 +38,7 @@ export async function seedLista(
       esReferencia: opts.esReferencia ?? false,
       orden: opts.orden ?? 0,
       activa: opts.activa ?? true,
+      privada: opts.privada ?? false,
     })
     .returning({ id: listasPrecioOnline.id })
   return l.id

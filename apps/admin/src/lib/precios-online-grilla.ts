@@ -189,7 +189,7 @@ export async function listarGrilla(
   const [{ total }] = (await db.execute(sql`SELECT count(*)::int AS total ${desde} WHERE ${where}`)) as unknown as { total: number }[]
 
   const precioLista = filtros.lista
-    ? sql`(SELECT (e->>'price')::numeric FROM jsonb_array_elements(p.precios_online) e WHERE e->>'idPriceList' = ${filtros.lista} LIMIT 1)`
+    ? sql`(SELECT (e->>'price')::numeric FROM jsonb_array_elements(p.precios_online || p.precios_online_privados) e WHERE e->>'idPriceList' = ${filtros.lista} LIMIT 1)`
     : sql`p.precio_online_ref`
   const orden =
     pag.orden === "precio"

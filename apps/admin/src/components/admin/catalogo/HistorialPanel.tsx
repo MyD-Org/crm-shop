@@ -23,8 +23,20 @@ function detalle(h: HistorialDto): string {
     case "lista_alta":
     case "lista_baja":
       return nombre
-    case "lista_edicion":
-      return `${nombre}: ${a.coeficiente ?? "—"} → ${d.coeficiente ?? "—"}`
+    case "lista_edicion": {
+      const visibilidad =
+        typeof a.privada === "boolean" && typeof d.privada === "boolean" && a.privada !== d.privada
+          ? d.privada
+            ? "; ahora es privada"
+            : "; ahora es pública"
+          : ""
+      return `${nombre}: ${a.coeficiente ?? "—"} → ${d.coeficiente ?? "—"}${visibilidad}`
+    }
+    case "mapeo": {
+      const o = (h.despues ?? h.antes ?? {}) as Record<string, unknown>
+      const estado = (x: Record<string, unknown>) => (x.listaId ? "enlazada" : "sin enlace")
+      return `Lista de Alegra ${o.alegraPriceListId ?? ""} (cuenta ${o.alegraAccount ?? ""}): ${estado(a)} → ${estado(d)}`
+    }
     case "override_alta":
     case "override_edicion":
     case "override_baja": {

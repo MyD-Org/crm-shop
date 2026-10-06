@@ -80,6 +80,20 @@ describe("formato", () => {
   })
 })
 
+describe("listas privadas", () => {
+  it("la ayuda y los avisos explican en usted quién ve la lista y qué pasa al quitar enlaces", () => {
+    expect(TEXTOS.listas.privadaAyuda).toContain("clientes con cuenta corriente")
+    expect(TEXTOS.listas.enlaces).toBe("Corresponde a la lista de Alegra")
+    expect(TEXTOS.listas.confirmarPublica("L5", 2)).toContain("Se quitarán sus 2 enlaces con listas de Alegra")
+    expect(TEXTOS.listas.confirmarPublica("L5", 1)).toContain("Se quitará su enlace con listas de Alegra")
+    expect(TEXTOS.listas.confirmarPublica("L5", 0)).not.toContain("enlace")
+    expect(TEXTOS.listas.confirmarEliminar("L5", 1)).toContain("También se quitará su enlace")
+    expect(TEXTOS.listas.confirmarEliminar("L5")).not.toContain("enlace")
+    expect(TEXTOS.listas.contactos(0)).toBe("sin clientes")
+    expect(TEXTOS.tipoCambio.mapeo).toBe("Enlace con lista de Alegra")
+  })
+})
+
 describe("ajustes avanzados (umbrales)", () => {
   it("los rótulos y los tooltips explican en usted, con el ejemplo pedido", () => {
     expect(TEXTOS.listas.ajustesAvanzados).toBe("Ajustes avanzados")

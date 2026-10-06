@@ -133,6 +133,34 @@ describe("previsualizar y aplicar", () => {
     expect(await json(res)).toMatchObject({ error: "El coeficiente debe ser mayor o igual a 1.", code: "invalid" })
   })
 
+  it("lista privada y enlace por la API: previa + aplicar, y GET /listas trae `listasAlegra` del espejo de contactos", async () => {
+    await getDb().execute(sql`
+      INSERT INTO alegra_contacts (tenant_id, alegra_account, alegra_id, name, price_list_id, price_list_name, status)
+      VALUES (${A}, 'principal', 'c1', 'Cliente Uno', '5', 'Mayorista L5', 'active')
+    `)
+    await previaYAplicar([crear("Lista A", 1.5)])
+    await previaYAplicar([{ op: "crearLista", nombre: "Lista L5", coeficiente: 1.2, privada: true }])
+    const antes = await json(await listasRuta.GET(req("/api/admin/precios-online/listas")))
+    const privada = antes.listas.find((l: { nombre: string }) => l.nombre === "Lista L5")
+    expect(privada).toMatchObject({ privada: true, mapeos: [] })
+    const { res } = await previaYAplicar([{ op: "setMapeo", alegraAccount: "principal", alegraPriceListId: "5", listaId: privada.id }])
+    expect(res.status).toBe(200)
+    const d = await json(await listasRuta.GET(req("/api/admin/precios-online/listas")))
+    expect(d.listas.find((l: { nombre: string }) => l.nombre === "Lista L5").mapeos).toMatchObject([
+      { alegraAccount: "principal", alegraPriceListId: "5" },
+    ])
+    expect(d.listasAlegra).toMatchObject([{ alegraAccount: "principal", alegraPriceListId: "5", nombre: "Mayorista L5", contactos: 1 }])
+    // Una lista pública no se enlaza: error de usted, 422.
+    const pub = d.listas.find((l: { nombre: string }) => l.nombre === "Lista A")
+    const pr = await previa.POST(
+      req("/api/admin/precios-online/previsualizar", {
+        body: { cambios: [{ op: "setMapeo", alegraAccount: "principal", alegraPriceListId: "9", listaId: pub.id }] },
+      }),
+    )
+    expect(pr.status).toBe(422)
+    expect((await json(pr)).error).toBe("Solo una lista privada puede enlazarse con una lista de Alegra.")
+  })
+
   it("flujo completo: previa sin efectos, aplicar, historial", async () => {
     await seedProducto(A, { alegraId: "1", costo: "100" })
     const pr = await json(await previa.POST(req("/api/admin/precios-online/previsualizar", { body: { cambios: [crear("Lista A", 1.5)] } })))

@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Info, Settings } from "lucide-react"
-import { Alert, Badge, Button, Dialog, EmptyState, Field, Input, Select, Tooltip } from "@myd-org/ui"
+import { Alert, Badge, Button, Checkbox, Dialog, EmptyState, Field, Input, Select, Tooltip } from "@myd-org/ui"
 import type { CambioPrecios } from "@/lib/precios-online-cambios"
-import type { ConfigPrecios, ListaDto } from "@/lib/precios-online-repo"
+import type { ConfigPrecios, ListaAlegraDto, ListaDto } from "@/lib/precios-online-repo"
 import { VistaPreviaDialog } from "./VistaPreviaDialog"
 import { TEXTOS, fmtCoef } from "./precios-online-textos"
 import { api, ErrorApi, type CategoriaDto } from "./tipos"
@@ -16,7 +16,8 @@ interface Props {
 }
 
 type Previa = { cambios: CambioPrecios[]; titulo: string; nombre: string }
-type FormLista = { id: string | null; nombre: string; coeficiente: string; orden: string }
+type FormLista = { id: string | null; nombre: string; coeficiente: string; orden: string; privada: boolean }
+type FormEnlace = { listaId: string; clave: string }
 type FormAjuste = { listaId: string; tipo: "marca" | "categoria"; marca: string; categoriaId: string; coeficiente: string }
 
 /** "1,6" -> "1.6": el servidor valida el formato. */
@@ -30,6 +31,9 @@ const aPunto = (v: string) => v.trim().replace(",", ".")
 export function ListasPrecioPanel({ categorias, onCambio }: Props) {
   const [listas, setListas] = useState<ListaDto[] | null>(null)
   const [config, setConfig] = useState<ConfigPrecios | null>(null)
+  const [listasAlegra, setListasAlegra] = useState<ListaAlegraDto[]>([])
+  const [enlace, setEnlace] = useState<FormEnlace | null>(null)
+  const [confirmarPublica, setConfirmarPublica] = useState<ListaDto | null>(null)
   const [error, setError] = useState("")
   const [form, setForm] = useState<FormLista | null>(null)
   const [ajuste, setAjuste] = useState<FormAjuste | null>(null)
@@ -39,8 +43,9 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
 
   const cargar = useCallback(async () => {
     try {
-      const r = await api<{ listas: ListaDto[]; config: ConfigPrecios }>("/api/admin/precios-online/listas")
+      const r = await api<{ listas: ListaDto[]; listasAlegra: ListaAlegraDto[]; config: ConfigPrecios }>("/api/admin/precios-online/listas")
       setListas(r.listas)
+      setListasAlegra(r.listasAlegra)
       setConfig(r.config)
       setUmbrales({ confirmacion: r.config.umbralConfirmacionPct.replace(".", ","), retencion: r.config.umbralRetencionPct.replace(".", ",") })
       setError("")
@@ -69,8 +74,8 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
       return
     }
     const cambio: CambioPrecios = form.id
-      ? { op: "editarLista", listaId: form.id, nombre: form.nombre, coeficiente, ...(orden !== undefined ? { orden } : {}) }
-      : { op: "crearLista", nombre: form.nombre, coeficiente, ...(orden !== undefined ? { orden } : {}) }
+      ? { op: "editarLista", listaId: form.id, nombre: form.nombre, coeficiente, privada: form.privada, ...(orden !== undefined ? { orden } : {}) }
+      : { op: "crearLista", nombre: form.nombre, coeficiente, privada: form.privada, ...(orden !== undefined ? { orden } : {}) }
     setErrorForm("")
     setForm(null)
     pedirPrevia([cambio], form.id ? `${TEXTOS.listas.editar}: ${form.nombre}` : TEXTOS.listas.nueva, form.nombre)
@@ -109,11 +114,31 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
 
   const [confirmarBaja, setConfirmarBaja] = useState<ListaDto | null>(null)
 
+  /** "cuenta|id" -> la opción de la lista de Alegra elegida. */
+  const claveAlegra = (x: { alegraAccount: string; alegraPriceListId: string }) => `${x.alegraAccount}|${x.alegraPriceListId}`
+  const nombreCuenta = (x: ListaAlegraDto) => x.cuentaNombre ?? (x.alegraAccount === "principal" ? TEXTOS.listas.cuentaPrincipal : x.alegraAccount)
+  const etiquetaAlegra = (x: ListaAlegraDto) => `${nombreCuenta(x)} · ${x.nombre} (${TEXTOS.listas.contactos(x.contactos)})`
+  const nombreDelEnlace = (m: { alegraAccount: string; alegraPriceListId: string }) => {
+    const x = listasAlegra.find((o) => claveAlegra(o) === claveAlegra(m))
+    return x ? etiquetaAlegra(x) : `${m.alegraAccount} · Lista ${m.alegraPriceListId}`
+  }
+  /** Las listas de Alegra todavía libres (una lista de Alegra apunta a una sola lista online). */
+  const alegraLibres = (listas ?? []).length === 0 ? listasAlegra : listasAlegra.filter((x) => !listas?.some((l) => l.mapeos.some((m) => claveAlegra(m) === claveAlegra(x))))
+
+  const guardarEnlace = () => {
+    if (!enlace || !enlace.clave) return
+    const [alegraAccount, ...resto] = enlace.clave.split("|")
+    const lista = listas?.find((l) => l.id === enlace.listaId)
+    const cambio: CambioPrecios = { op: "setMapeo", alegraAccount, alegraPriceListId: resto.join("|"), listaId: enlace.listaId }
+    setEnlace(null)
+    pedirPrevia([cambio], TEXTOS.listas.agregarEnlace, lista?.nombre)
+  }
+
   return (
     <section className="flex flex-col gap-6" aria-label={TEXTOS.listas.titulo}>
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-medium">{TEXTOS.listas.titulo}</h2>
-        <Button onClick={() => setForm({ id: null, nombre: "", coeficiente: "", orden: "" })}>{TEXTOS.listas.nueva}</Button>
+        <Button onClick={() => setForm({ id: null, nombre: "", coeficiente: "", orden: "", privada: false })}>{TEXTOS.listas.nueva}</Button>
       </div>
       {error && <Alert tone="danger">{error}</Alert>}
       {listas && listas.length === 0 && <EmptyState title={TEXTOS.listas.sinListas} description={TEXTOS.ayudaGeneral} />}
@@ -124,11 +149,25 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
             <h3 className="text-sm font-medium">{l.nombre}</h3>
             <span className="text-sm tabular-nums">× {fmtCoef(l.coeficiente)}</span>
             {l.esReferencia && <Badge tone="info">{TEXTOS.listas.referencia}</Badge>}
+            {l.privada && <Badge tone="warning">{TEXTOS.listas.privada}</Badge>}
             {!l.activa && <Badge tone="neutral">{TEXTOS.listas.inactiva}</Badge>}
             <span className="flex-1" />
-            <Button size="sm" variant="outline" onClick={() => setForm({ id: l.id, nombre: l.nombre, coeficiente: fmtCoef(l.coeficiente), orden: String(l.orden) })}>
+            <Button size="sm" variant="outline" onClick={() => setForm({ id: l.id, nombre: l.nombre, coeficiente: fmtCoef(l.coeficiente), orden: String(l.orden), privada: l.privada })}>
               {TEXTOS.listas.editar}
             </Button>
+            {!l.esReferencia && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  l.privada
+                    ? setConfirmarPublica(l)
+                    : pedirPrevia([{ op: "editarLista", listaId: l.id, privada: true }], TEXTOS.listas.hacerPrivada, l.nombre)
+                }
+              >
+                {l.privada ? TEXTOS.listas.hacerPublica : TEXTOS.listas.hacerPrivada}
+              </Button>
+            )}
             {!l.esReferencia && l.activa && (
               <Button size="sm" variant="outline" onClick={() => pedirPrevia([{ op: "setReferencia", listaId: l.id }], TEXTOS.listas.marcarReferencia, l.nombre)}>
                 {TEXTOS.listas.marcarReferencia}
@@ -149,6 +188,42 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
               </Button>
             )}
           </header>
+
+          {l.privada && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm" style={{ color: "var(--ink-soft)" }}>{TEXTOS.listas.enlaces}</h4>
+                <Button size="sm" variant="ghost" onClick={() => setEnlace({ listaId: l.id, clave: "" })}>
+                  {TEXTOS.listas.agregarEnlace}
+                </Button>
+              </div>
+              {l.mapeos.length === 0 ? (
+                <p className="text-sm" style={{ color: "var(--ink-faint)" }}>{TEXTOS.listas.sinEnlaces}</p>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {l.mapeos.map((m) => (
+                    <li key={m.id} className="flex items-center gap-2 text-sm">
+                      <span>{nombreDelEnlace(m)}</span>
+                      <span className="flex-1" />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          pedirPrevia(
+                            [{ op: "setMapeo", alegraAccount: m.alegraAccount, alegraPriceListId: m.alegraPriceListId, listaId: null }],
+                            TEXTOS.listas.quitarEnlace,
+                            l.nombre,
+                          )
+                        }
+                      >
+                        {TEXTOS.listas.quitarEnlace}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
@@ -244,9 +319,66 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
             <Field label={TEXTOS.listas.orden}>
               <Input inputMode="numeric" value={form.orden} onChange={(e) => setForm({ ...form, orden: e.target.value })} />
             </Field>
+            <div className="flex flex-col gap-0.5">
+              <label htmlFor="lista-privada" className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: "var(--ink)" }}>
+                <Checkbox id="lista-privada" checked={form.privada} onCheckedChange={(v) => setForm({ ...form, privada: v === true })} />
+                {TEXTOS.listas.privadaCampo}
+              </label>
+              <p className="text-xs pl-6" style={{ color: "var(--ink-soft)" }}>{TEXTOS.listas.privadaAyuda}</p>
+            </div>
           </div>
         )}
       </Dialog>
+
+      <Dialog
+        open={enlace !== null}
+        onOpenChange={(v) => !v && setEnlace(null)}
+        title={TEXTOS.listas.agregarEnlace}
+        description={TEXTOS.listas.enlacesAyuda}
+        dismissible={false}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEnlace(null)}>{TEXTOS.listas.cancelar}</Button>
+            <Button onClick={guardarEnlace} disabled={!enlace?.clave}>{TEXTOS.listas.guardar}</Button>
+          </div>
+        }
+      >
+        {enlace &&
+          (alegraLibres.length === 0 ? (
+            <Alert tone="warning">{TEXTOS.listas.sinListasAlegra}</Alert>
+          ) : (
+            <Field label={TEXTOS.listas.listaAlegra}>
+              <Select
+                value={enlace.clave}
+                onValueChange={(v) => setEnlace({ ...enlace, clave: v })}
+                placeholder={TEXTOS.listas.seleccioneListaAlegra}
+                options={alegraLibres.map((x) => ({ value: claveAlegra(x), label: etiquetaAlegra(x) }))}
+              />
+            </Field>
+          ))}
+      </Dialog>
+
+      <Dialog
+        open={confirmarPublica !== null}
+        onOpenChange={(v) => !v && setConfirmarPublica(null)}
+        title={TEXTOS.listas.hacerPublica}
+        description={confirmarPublica ? TEXTOS.listas.confirmarPublica(confirmarPublica.nombre, confirmarPublica.mapeos.length) : undefined}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setConfirmarPublica(null)}>{TEXTOS.listas.cancelar}</Button>
+            <Button
+              onClick={() => {
+                if (!confirmarPublica) return
+                const l = confirmarPublica
+                setConfirmarPublica(null)
+                pedirPrevia([{ op: "editarLista", listaId: l.id, privada: false }], TEXTOS.listas.hacerPublica, l.nombre)
+              }}
+            >
+              {TEXTOS.listas.hacerPublica}
+            </Button>
+          </div>
+        }
+      />
 
       <Dialog
         open={ajuste !== null}
@@ -298,7 +430,7 @@ export function ListasPrecioPanel({ categorias, onCambio }: Props) {
         open={confirmarBaja !== null}
         onOpenChange={(v) => !v && setConfirmarBaja(null)}
         title={TEXTOS.listas.eliminar}
-        description={confirmarBaja ? TEXTOS.listas.confirmarEliminar(confirmarBaja.nombre) : undefined}
+        description={confirmarBaja ? TEXTOS.listas.confirmarEliminar(confirmarBaja.nombre, confirmarBaja.mapeos.length) : undefined}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setConfirmarBaja(null)}>{TEXTOS.listas.cancelar}</Button>

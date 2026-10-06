@@ -191,7 +191,10 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
       </div>
 
       {guiaAbierta && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">
+        // Mismo caso que las sugerencias (ver abajo).
+        <div
+          onMouseDown={(e) => e.preventDefault()}
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">
           <GuiaBusqueda
             ref={guiaRef}
             id={idGuia}
@@ -203,7 +206,12 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
       )}
 
       {showDropdown && (
-        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">
+        // En mobile (iOS) tocar un botón no le da foco: el input pierde el foco
+        // con relatedTarget null, el onBlur cierra el desplegable antes del
+        // click y el toque no navega. preventDefault deja el foco en el input.
+        <div
+          onMouseDown={(e) => e.preventDefault()}
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-lg border border-border bg-surface shadow-2">
           {results.length === 0 ? (
             <div className="px-4 py-3 text-sm text-muted">
               {loading ? (

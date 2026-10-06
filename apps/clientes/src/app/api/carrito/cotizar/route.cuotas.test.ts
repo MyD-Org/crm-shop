@@ -139,3 +139,47 @@ describe("POST /api/carrito/cotizar con cuotas", () => {
     expect((await r.json()).cuotasOpciones).toBeUndefined();
   });
 });
+
+describe("POST /api/carrito/cotizar con monto mínimo por cuotas", () => {
+  const conMinimo = (minimo: number | null) =>
+    mp({
+      condicionesCuotas: [
+        { cuotas: 3, idListaPrecios: "L3", montoMinimo: null },
+        { cuotas: 6, idListaPrecios: "L6", montoMinimo: minimo },
+      ],
+    });
+  const cuotasDe = async (r: Response) =>
+    ((await r.json()).cuotasOpciones as { cuotas: number }[]).map((o) => o.cuotas);
+
+  it("las opciones sólo incluyen las cantidades cuyo mínimo alcanza el total del pago único", async () => {
+    medios = [conMinimo(1210.01)];
+    expect(await cuotasDe(await pedir({ conCuotas: true }))).toEqual([1, 3]);
+  });
+
+  it("justo en el mínimo la cantidad se ofrece", async () => {
+    medios = [conMinimo(1210)];
+    expect(await cuotasDe(await pedir({ conCuotas: true }))).toEqual([1, 3, 6]);
+  });
+
+  it("elegir una cantidad bajo el mínimo se rechaza (422) y la base se cotiza con la lista del pago único", async () => {
+    medios = [conMinimo(5000)];
+    const r = await pedir({ cuotas: 6 });
+    expect(r.status).toBe(422);
+    expect((await r.json()).motivo).toBe("cuotas_no_disponibles");
+    expect(listaUsada()).toBe("L1");
+  });
+
+  it("elegir una cantidad que alcanza el mínimo cotiza con su lista", async () => {
+    medios = [conMinimo(1000)];
+    const r = await pedir({ cuotas: 6 });
+    expect(r.status).toBe(200);
+    expect(cotizar.mock.calls.map((c) => (c[1] as { idListaMedio?: string }).idListaMedio)).toEqual(["L1", "L6"]);
+    expect((await r.json()).total).toBe(1161.6);
+  });
+
+  it("sin mínimos no se agrega ninguna cotización (comportamiento de siempre)", async () => {
+    medios = [conMinimo(null)];
+    await pedir({ cuotas: 6 });
+    expect(cotizar).toHaveBeenCalledTimes(1);
+  });
+});

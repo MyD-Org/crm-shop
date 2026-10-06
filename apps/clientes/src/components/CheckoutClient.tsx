@@ -30,10 +30,7 @@ import {
   type Complemento,
 } from "@/lib/contacto-alegra";
 import type { DatosDelContactoPublico } from "@/lib/datos-del-contacto";
-import { CuotasResumen } from "@/components/CuotasResumen";
-import { resumenCuotas } from "@/lib/cuotas-exhibicion";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import {
@@ -58,6 +55,7 @@ import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import {
   NOTA_PAGO_A_CONFIRMAR,
   SLUG_MERCADOPAGO,
+  esPagoEnLinea,
   medioElegido,
   mediosParaModalidad,
   pieDelMedio,
@@ -270,8 +268,6 @@ interface Props {
    * local, sin importar `admiteEnvio`. Si el envío es gratis o a coordinar lo dice `cotizacion.envio`.
    */
   configEnvio: ConfigEnvio;
-  /** Oferta de cuotas resuelta en el server. null = no se muestran cuotas. */
-  oferta?: OfertaCuotas | null;
   /**
    * Direcciones de envío guardadas en Mi cuenta (sólo con Clerk; la
    * predeterminada primero). Vacío = el checkout de siempre: anónimos no
@@ -310,7 +306,6 @@ export function CheckoutClient({
   perfilFacturacion = null,
   admiteEnvio,
   configEnvio,
-  oferta = null,
   direccionesGuardadas = [],
   sugerirVincular = false,
   sucursales = null,
@@ -472,8 +467,8 @@ export function CheckoutClient({
     numero: string;
     id: string;
     total: number;
-    /** Máximo de cuotas congelado en el pedido. null = sin límite propio (flag off o legacy). */
-    cuotasMax: number | null;
+    /** Cuotas sin interés congeladas en el pedido (1 = un pago). null = sin cuotas elegidas (flag apagado o anterior). */
+    cuotas: number | null;
     /** El pedido se paga en línea (Mercado Pago): salta al cobro. */
     pagoEnLinea?: boolean;
     /** Plazo y WhatsApp de la sucursal. */
@@ -510,7 +505,7 @@ export function CheckoutClient({
           numero: data.pedido.numero,
           id: data.pedido.id,
           total: data.pedido.total,
-          cuotasMax: typeof data.pedido.cuotasMax === "number" ? data.pedido.cuotasMax : null,
+          cuotas: typeof data.pedido.cuotas === "number" ? data.pedido.cuotas : null,
           pagoEnLinea: true,
         });
       })
@@ -568,13 +563,20 @@ export function CheckoutClient({
   const mediosParaElegir = mediosParaModalidad(mediosPago, entrega);
   const medioSel = medioElegido(mediosPago, entrega, medioSlug);
   const pagoParaEnviar: string = medioSel?.slug ?? "a_coordinar";
-  const pagaEnLinea = pagoParaEnviar === SLUG_MERCADOPAGO;
+  const pagaEnLinea = esPagoEnLinea(pagoParaEnviar);
+  // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
+  // devuelve opciones con el flag `cuotas-cobro` prendido. Sin opciones no hay selector ni cuotas.
+  const pideCuotas = Boolean(medioSel?.cobroOnline && (medioSel.condicionesCuotas?.length ?? 0) > 0);
 
   // Transferencia: el servidor devuelve la cuenta que corresponde a la entrega, el local y el total.
   const conCuenta = pagoParaEnviar === SLUG_TRANSFERENCIA;
   const localParaCuenta = sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined;
 
-  const { cotizacion, estado, error, recotizar } = useCotizacion({
+  // La elección se valida contra las opciones vigentes (derivado en el render, sin efecto): si la
+  // cantidad elegida deja de existir se vuelve a un pago.
+  const [cuotasSel, setCuotasSel] = useState(1);
+
+  const { cotizacion, estado, error, recotizar, ultimasCuotasOpciones } = useCotizacion({
     entregaTipo: entrega,
     ciudad: aDomicilio ? ciudadEntrega : undefined,
     // La provincia de entrega define si el envío es gratis y, con el flag de sucursales, la zona:
@@ -585,10 +587,20 @@ export function CheckoutClient({
     sucursalRetiro: localParaCuenta,
     // El precio depende del medio (lista de precios enlazada): cambiar a un medio con otra lista
     // recotiza; entre medios sin lista o con la misma lista no se pide nada.
-    ...pagoParaCotizar(mediosPago, entrega, medioSel),
+    ...(() => {
+      const base = pagoParaCotizar(mediosPago, entrega, medioSel);
+      // Con cuotas la cotización depende también de la cantidad: el slug viaja siempre y la clave de
+      // refetch incluye la lista (o el medio, si no tiene lista de pago único).
+      return pideCuotas && medioSel ? { listaKey: base.listaKey || medioSel.slug, pagoMetodo: medioSel.slug } : base;
+    })(),
+    cuotas: pideCuotas ? cuotasSel : 1,
+    conCuotas: pideCuotas,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
+
+  const opcionesCuotas = pideCuotas ? (cotizacion?.cuotasOpciones ?? ultimasCuotasOpciones ?? []) : [];
+  const cuotasElegidas = opcionesCuotas.some((o) => o.cuotas === cuotasSel) ? cuotasSel : 1;
 
   // Flag `disponibilidad-sucursal`: de la disponibilidad por modalidad que devolvió la cotización,
   // sólo lo de la modalidad elegida (el envío, o el local de retiro seleccionado).
@@ -683,6 +695,8 @@ export function CheckoutClient({
           entregaCiudad: aDomicilio ? ciudadEntrega : undefined,
           entregaDireccion: aDomicilio ? direccionEntrega : undefined,
           pagoMetodo: pagoParaEnviar,
+          // Sólo si el servidor ofreció cuotas: la cantidad elegida (1 = un pago). El monto no viaja.
+          cuotas: pideCuotas && opcionesCuotas.length > 0 ? cuotasElegidas : undefined,
           notas,
           complementoFacturacion: complementoFacturacion ?? undefined,
           // Sólo con el flag `sucursales` (props presentes): local de retiro y provincia de entrega.
@@ -738,8 +752,8 @@ export function CheckoutClient({
         numero: json.numero,
         id: json.id,
         total,
-        cuotasMax: typeof json.cuotasMax === "number" ? json.cuotasMax : null,
-        pagoEnLinea: pagoParaEnviar === SLUG_MERCADOPAGO,
+        cuotas: typeof json.cuotas === "number" ? json.cuotas : null,
+        pagoEnLinea: esPagoEnLinea(pagoParaEnviar),
         contacto: json.contacto ?? null,
         cuentaPago: json.cuentaPago ?? null,
       });
@@ -810,7 +824,7 @@ export function CheckoutClient({
           numero={confirmado.numero}
           monto={confirmado.total}
           emailComprador={emailCliente}
-          maxCuotas={confirmado.cuotasMax ?? undefined}
+          maxCuotas={confirmado.cuotas ?? undefined}
           onPagado={() => setPagado(true)}
         />
 
@@ -1283,6 +1297,27 @@ export function CheckoutClient({
                 {medioSel.instrucciones.trim() && (
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
+                {pagaEnLinea && opcionesCuotas.length > 1 && (
+                  <fieldset className="mt-4" aria-label={TEXTOS_CUOTAS.checkoutTitulo}>
+                    <legend className="mb-2 text-sm font-semibold text-text">{TEXTOS_CUOTAS.checkoutTitulo}</legend>
+                    <div className="grid gap-3">
+                      {opcionesCuotas.map((o) => (
+                        <RadioCard
+                          key={o.cuotas}
+                          selected={cuotasElegidas === o.cuotas}
+                          disabled={estado === "cargando"}
+                          onClick={() => setCuotasSel(o.cuotas)}
+                          title={
+                            o.cuotas === 1
+                              ? TEXTOS_CUOTAS.checkoutUnPago(o.total)
+                              : TEXTOS_CUOTAS.checkoutCuotas(o.cuotas, o.montoCuota, o.total)
+                          }
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-muted">{TEXTOS_CUOTAS.checkoutAyuda(medioSel?.nombre ?? "")}</p>
+                  </fieldset>
+                )}
                 {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
                 <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>
                 {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
@@ -1404,16 +1439,6 @@ export function CheckoutClient({
               Precio sin impuestos {fmtPrecio(cotizacion?.subtotal ?? 0)}
             </p>
           </div>
-
-          {pagaEnLinea && estado === "ok" && cotizacion && (
-            // Referencia sobre el total cotizado. El máximo definitivo se congela
-            // al confirmar, sobre el total real del pedido.
-            <CuotasResumen
-              resumen={resumenCuotas(cotizacion.total, oferta, { cuotasMax: null })}
-              titulo={TEXTOS_CUOTAS.checkoutTitulo}
-              className="mt-4"
-            />
-          )}
 
           {errorEnvio && estado !== "no_auth" && (
             <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>

@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const crearPedido = vi.fn();
-const getOferta = vi.fn();
 
 // El límite por comprador se prueba en route.rate-limit.test.ts: acá los
 // casos repiten el mismo usuario muchas veces.
@@ -42,7 +41,6 @@ vi.mock("@/lib/facturacion-db", () => ({
   perfilCompleto: () => true,
 }));
 // `@/lib/facturacion` es la real (`admiteEnvio` incluida): mockearla sería testear el mock.
-vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: () => getOferta() }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => true }));
 
 let medios: unknown[] = [];
@@ -101,14 +99,12 @@ beforeEach(() => {
     whatsapp: { visible: "+54 9 11 5555-0100", url: "https://wa.me/5491155550100" },
   });
   crearPedido.mockReset();
-  crearPedido.mockImplementation(async (_c, _d, _cot, plan) => ({
+  crearPedido.mockImplementation(async (_c, datos) => ({
     id: "p1",
     numero: "PED-00000001",
     repetido: false,
-    cuotasMax: plan?.cuotasMax ?? null,
+    cuotas: datos.cuotas ?? null,
   }));
-  getOferta.mockReset();
-  getOferta.mockResolvedValue(null);
 });
 
 afterEach(() => vi.unstubAllEnvs());
@@ -119,8 +115,7 @@ describe("POST /api/pedidos — medios de la tabla", () => {
     const r = await post({ pagoMetodo: "efectivo" });
     expect(r.status).toBe(201);
     expect(crearPedido.mock.calls[0][1].pagoMetodo).toBe("efectivo");
-    expect(crearPedido.mock.calls[0][3]).toBeNull();
-    expect(getOferta).not.toHaveBeenCalled();
+    expect(crearPedido.mock.calls[0][1].cuotas ?? null).toBeNull();
   });
 
   it("siempre relee los medios (sin caché)", async () => {
@@ -154,9 +149,9 @@ describe("POST /api/pedidos — medios de la tabla", () => {
     expect((await post({ pagoMetodo: "efectivo", ...ENVIO })).status).toBe(400);
     const ok = await post({ pagoMetodo: "a_coordinar", ...ENVIO });
     expect(ok.status).toBe(201);
-    const [, datos, , plan] = crearPedido.mock.calls[0];
+    const [, datos] = crearPedido.mock.calls[0];
     expect(datos.pagoMetodo).toBe("a_coordinar");
-    expect(plan).toBeNull();
+    expect(datos.cuotas ?? null).toBeNull();
     expect(datos).not.toHaveProperty("pagoProveedor");
   });
 
@@ -178,23 +173,22 @@ describe("POST /api/pedidos — medios de la tabla", () => {
       pagoProveedor: "mercadopago",
       pagoReferencia: "123",
       pagoEstado: "pagado",
-      cuotasMax: 12,
+      cuotas: 12,
     });
-    const [, datos, , plan] = crearPedido.mock.calls[0];
+    const [, datos] = crearPedido.mock.calls[0];
     expect(datos).not.toHaveProperty("pagoProveedor");
     expect(datos).not.toHaveProperty("pagoReferencia");
     expect(datos).not.toHaveProperty("pagoEstado");
-    expect(plan).toBeNull();
+    expect(datos.cuotas ?? null).toBeNull();
   });
 });
 
 describe("POST /api/pedidos — Mercado Pago", () => {
-  it("activo, con credenciales y que aplica: se crea el pedido y se consulta la oferta de cuotas", async () => {
+  it("activo, con credenciales y que aplica: se crea el pedido", async () => {
     medios = [medio("transferencia"), medio("mercadopago")];
     const r = await post({ pagoMetodo: "mercadopago" });
     expect(r.status).toBe(201);
     expect(crearPedido.mock.calls[0][1].pagoMetodo).toBe("mercadopago");
-    expect(getOferta).toHaveBeenCalledTimes(1);
   });
 
   it("inactivo: 400 aunque haya credenciales", async () => {

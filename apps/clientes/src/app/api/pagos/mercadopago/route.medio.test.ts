@@ -61,7 +61,7 @@ beforeEach(() => {
   pedido = {
     id: "p1", numero: "PED-1", total: 120000, pagoEstado: "pendiente", pagoMetodo: "mercadopago",
     clienteEmail: "ana@cliente.example", facturacionTipoDoc: null, facturacionNroDoc: null,
-    cuotasMax: null, estado: "pendiente", creadoEn: new Date(),
+    cuotas: null, estado: "pendiente", creadoEn: new Date(),
   };
   getPedidoParaPago.mockReset();
   getPedidoParaPago.mockImplementation(async () => pedido);

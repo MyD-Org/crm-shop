@@ -3,8 +3,8 @@ import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
 import { relacionadosProducto } from "@/lib/catalogo-publico";
 import { formatRubro } from "@/lib/formato-rubro";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
+import type { MedioCuotas } from "@/lib/cuotas-sin-interes";
 import type { MedioPrecio } from "@/lib/medios-precio";
 
 const CANTIDAD = 8;
@@ -21,7 +21,7 @@ export async function RelacionadosProducto({
   soloVisibles,
   disp,
   destacado,
-  oferta,
+  cuotas,
 }: {
   categoriaPropiaId?: string;
   categoria?: string;
@@ -31,7 +31,8 @@ export async function RelacionadosProducto({
   disp?: ContextoDisponibilidad;
   /** Medio destacado de las cards ("$X con <Medio>"). */
   destacado?: MedioPrecio | null;
-  oferta: OfertaCuotas | null;
+  /** Cuotas sin interés de las cards (flag `cuotas-cobro`). */
+  cuotas?: MedioCuotas | null;
 }) {
   const relacionados = await relacionadosProducto({
     categoriaPropiaId,
@@ -41,6 +42,7 @@ export async function RelacionadosProducto({
     soloVisibles,
     disp,
     destacado,
+    cuotas,
   });
   if (!relacionados || relacionados.productos.length === 0) return null;
 
@@ -64,7 +66,7 @@ export async function RelacionadosProducto({
       </div>
       <ProductosCarrusel label={`Productos similares de ${rubro}`}>
         {relacionados.productos.map((p) => (
-          <TarjetaProductoCarrusel key={p.id} producto={p} oferta={oferta} />
+          <TarjetaProductoCarrusel key={p.id} producto={p} />
         ))}
       </ProductosCarrusel>
     </section>

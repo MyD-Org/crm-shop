@@ -162,7 +162,9 @@ export const PRESUPUESTOS_CASCADA: Record<Superficie, PresupuestoCascada> = {
   catalogo: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 3 },
   // Espera al plan sin tope, igual que el legado: un tope corto lo descartaba y la búsqueda caía en la exacta.
   autocompletar: { presupuestoMs: 450, planTimeoutMs: null, etapasMax: 3 },
-  chat: { presupuestoMs: 1500, planTimeoutMs: 600, etapasMax: 3 },
+  // Como el autocompletar: espera al plan (el legado del chat no usaba plan, así que sin él "tira led para la
+  // cocina" o una medida no encuentra nada). El presupuesto cuenta desde que llega el plan.
+  chat: { presupuestoMs: 1500, planTimeoutMs: null, etapasMax: 3 },
   admin: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 2 },
 };
 

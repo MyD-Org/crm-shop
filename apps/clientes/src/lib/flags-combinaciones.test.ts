@@ -30,21 +30,19 @@ const f = (flags: Partial<Record<FlagDeTest, boolean>>) => {
   for (const [k, v] of Object.entries(flags)) setFlag(k as FlagDeTest, v);
 };
 
-describe("cuotas: validación del cobro según el flag", () => {
+describe("cuotas: validación del cobro según lo congelado en el pedido", () => {
   it.each([
-    // [cuotas flag, medio, cuotasMax, cuotas pedidas, resultado]
-    [false, "tarjeta", 6, 12, { ok: true, cuotas: 12 }], // apagado: clamp legacy 1..24
-    [false, "tarjeta", 6, 30, { ok: true, cuotas: 1 }], // apagado: fuera de 1..24 → 1
-    [true, "tarjeta", 6, 12, { ok: false, motivo: "cuotas_no_disponibles" }],
-    [true, "tarjeta", 6, 6, { ok: true, cuotas: 6 }],
-    [true, "tarjeta", 6, undefined, { ok: true, cuotas: 1 }],
-    [true, "tarjeta", 6, 1.5, { ok: false, motivo: "cuotas_no_disponibles" }],
-    [true, "tarjeta", null, 12, { ok: true, cuotas: 12 }], // pedido legacy sin tope
-    [true, "efectivo", 6, 12, { ok: true, cuotas: 12 }], // medio offline no se valida
-  ] as const)("cuotas=%s medio=%s max=%s pide=%s → %j", async (flag, medio, cuotasMax, cuotas, esperado) => {
-    f({ cuotas: flag });
-    const r = validarCuotasPago({ cuotas, medio: medio as never, cuotasMax, habilitado: await cuotasHabilitadas() });
-    expect(r).toEqual(esperado);
+    // [cuotas congeladas, cuotas pedidas, resultado]
+    [null, 12, { ok: true, cuotas: 12 }], // sin congelar (flag apagado al crear o anterior): clamp 1..24
+    [null, 30, { ok: true, cuotas: 1 }],
+    [6, 6, { ok: true, cuotas: 6 }],
+    [6, 12, { ok: false, motivo: "cuotas_distintas" }], // igualdad estricta
+    [6, 3, { ok: false, motivo: "cuotas_distintas" }],
+    [6, undefined, { ok: false, motivo: "cuotas_distintas" }],
+    [1, undefined, { ok: true, cuotas: 1 }],
+    [6, 1.5, { ok: false, motivo: "cuotas_distintas" }],
+  ] as const)("congeladas=%s pide=%s → %j", (cuotasPedido, cuotas, esperado) => {
+    expect(validarCuotasPago({ cuotas, medio: "tarjeta", cuotasPedido })).toEqual(esperado);
   });
 });
 
@@ -55,7 +53,7 @@ describe("visibilidad del catálogo y cuotas públicas", () => {
     { solo: false, cuotas: true },
     { solo: true, cuotas: true },
   ])("catalogo-solo-visibles=$solo, cuotas=$cuotas", async ({ solo, cuotas }) => {
-    f({ "catalogo-solo-visibles": solo, cuotas });
+    f({ "catalogo-solo-visibles": solo, "cuotas-cobro": cuotas });
     expect(await catalogoSoloVisibles()).toBe(solo);
     expect(await cuotasHabilitadas()).toBe(cuotas);
     expect(await flagsPublicos()).toMatchObject({ soloVisibles: solo, cuotas });
@@ -116,9 +114,25 @@ describe("búsqueda: motor único x búsqueda inteligente", () => {
     expect(etapasDe({ politica: politicaDe("autocompletar", conMotor), superficie: "autocompletar", consulta: "panel led", plan: conIa ? plan : null, conPlan: conIa })).toEqual(etapas);
   });
 
-  it("el chat y el admin siguen en legado con el motor prendido (hasta el cambio siguiente)", () => {
-    expect(politicaDe("chat", true)).toBe("legado");
-    expect(politicaDe("admin", true)).toBe("legado");
+  it.each([
+    // busqueda-motor-unico, busqueda-ia, política, etapas del chat con un plan que aporta
+    { motor: false, ia: false, politica: "legado", etapas: ["exacta", "tolerante"] },
+    { motor: false, ia: true, politica: "legado", etapas: ["exacta", "tolerante"] }, // el legado del chat nunca usó plan
+    { motor: true, ia: false, politica: "cascada", etapas: ["exacta", "tolerante"] }, // busqueda-ia apagado manda: sin plan
+    { motor: true, ia: true, politica: "cascada", etapas: ["plan", "exacta", "tolerante"] },
+  ])("chat: motor=$motor, busqueda-ia=$ia => política $politica, etapas $etapas (un solo interruptor)", async ({ motor, ia, politica, etapas }) => {
+    f({ "busqueda-motor-unico": motor, "busqueda-ia": ia });
+    const conMotor = await busquedaMotorUnico();
+    const conIa = await busquedaIaHabilitada();
+    expect(politicaDe("chat", conMotor)).toBe(politica);
+    expect(etapasDe({ politica: politicaDe("chat", conMotor), superficie: "chat", consulta: "panel led", plan: conIa ? plan : null, conPlan: conIa })).toEqual(etapas);
+  });
+
+  it("con el motor prendido las cuatro superficies corren la cascada; apagado, todas el legado", () => {
+    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
+      expect(politicaDe(superficie, true)).toBe("cascada");
+      expect(politicaDe(superficie, false)).toBe("legado");
+    }
   });
 
   it("si Vercel Flags tira, el motor cae a apagado (legado)", async () => {

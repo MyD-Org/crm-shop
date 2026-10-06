@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 
 /**
- * Plan de cuotas congelado al crear el pedido (L8): lo resuelve el server con
- * el total re-cotizado y la oferta de la DB. Nada de cuotas se lee del body.
+ * Cuotas sin interés congeladas al crear el pedido (rebanada D): la cantidad sale del body pero el
+ * servidor sólo la acepta si el medio (con cobro en línea) tiene una condición para ella; la lista de
+ * esa condición cotiza el pedido. Nada de montos ni listas se lee del body.
  */
 
 const crearPedido = vi.fn();
-const getOferta = vi.fn();
 const guardarTelefonoSiFalta = vi.fn();
 let flag = true;
 let pais = "AR";
@@ -53,7 +52,6 @@ vi.mock("@/lib/facturacion-db", () => ({
   guardarTelefonoSiFalta: (...a: unknown[]) => guardarTelefonoSiFalta(...a),
 }));
 // `@/lib/facturacion` es la real (`admiteEnvio` incluida): mockearla sería testear el mock.
-vi.mock("@/lib/cuotas-datos", () => ({ getOfertaCuotasParaPedido: () => getOferta() }));
 vi.mock("@/lib/cuotas-flag", () => ({ cuotasHabilitadas: () => flag }));
 // Medios del CRM (`medios_pago_shop`): los tres de siempre; mercadopago es la fila fija con cobro online.
 const mediosCrm = ["transferencia", "efectivo", "mercadopago"].map((slug, orden) => ({
@@ -65,24 +63,20 @@ const mediosCrm = ["transferencia", "efectivo", "mercadopago"].map((slug, orden)
   aplicaEnvio: slug !== "efectivo",
   cobroOnline: slug === "mercadopago",
   orden,
+  idListaPrecios: slug === "mercadopago" ? "L1" : null,
+  condicionesCuotas:
+    slug === "mercadopago"
+      ? [
+          { cuotas: 3, idListaPrecios: "L3" },
+          { cuotas: 6, idListaPrecios: "L6" },
+        ]
+      : [],
 }));
 vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => mediosCrm }));
 // Con credenciales de Mercado Pago (sin ellas el medio se rechaza: route.medios.test.ts).
 
 import { POST } from "./route";
 import { StockInsuficienteError } from "@/lib/stock-disponible";
-
-const ofertaCon6Desde150k: OfertaCuotas = {
-  planesFetchedAt: null,
-  configVersion: null,
-  proveedores: [
-    {
-      proveedor: "mercadopago", nombre: "Mercado Pago", orden: 0,
-      escalones: [{ cuotasMax: 6, montoMinimo: 150000 }],
-      opciones: [{ cuotas: 6, sinInteres: true, tasaPct: 0, cftPct: null, teaPct: null, montoMin: null, montoMax: null }],
-    },
-  ],
-};
 
 const post = (extra: Record<string, unknown> = {}) =>
   POST(
@@ -99,7 +93,8 @@ const post = (extra: Record<string, unknown> = {}) =>
     }),
   );
 
-const planGuardado = () => crearPedido.mock.calls[0][3];
+const datosGuardados = () => crearPedido.mock.calls[0][1] as { cuotas?: number | null };
+const listaCotizada = () => (cotizar.mock.calls[0][1] as { idListaMedio?: string }).idListaMedio;
 
 beforeEach(() => {
   vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
@@ -111,57 +106,68 @@ beforeEach(() => {
   guardarTelefonoSiFalta.mockReset();
   guardarTelefonoSiFalta.mockResolvedValue(undefined);
   crearPedido.mockReset();
-  crearPedido.mockImplementation(async (_c, _d, _cot, plan) => ({
-    id: "p1", numero: "PED-1", repetido: false, cuotasMax: plan?.cuotasMax ?? null,
+  crearPedido.mockImplementation(async (_c, datos) => ({
+    id: "p1", numero: "PED-1", repetido: false, cuotas: datos.cuotas ?? null,
   }));
-  getOferta.mockReset();
   cotizar.mockReset();
   cotizar.mockResolvedValue(COTIZACION_OK);
   getPedidoPorClave.mockReset();
   getPedidoPorClave.mockResolvedValue(null);
 });
 
-describe("POST /api/pedidos — plan de cuotas congelado", () => {
-  it("calcula sobre el total del server e ignora cuotas del body", async () => {
-    getOferta.mockResolvedValue(ofertaCon6Desde150k);
-    const r = await post({ cuotasMax: 24, cuotas_max: 24, cuotasPlan: { cuotasMax: 24 } });
+describe("POST /api/pedidos — cuotas sin interés congeladas", () => {
+  it("N cuotas con condición: cotiza con la lista de esa condición y congela N", async () => {
+    const r = await post({ cuotas: 6 });
     expect(r.status).toBe(201);
-    expect(planGuardado()).toMatchObject({ version: "v2", proveedor: "mercadopago", cuotasMax: 6, totalBase: 200000 });
-    expect(await r.json()).toMatchObject({ cuotasMax: 6 });
+    expect(listaCotizada()).toBe("L6");
+    expect(datosGuardados().cuotas).toBe(6);
+    expect(await r.json()).toMatchObject({ cuotas: 6 });
   });
 
-  it("oferta leíble sin escalón alcanzado para el total → cuotasMax 1", async () => {
-    getOferta.mockResolvedValue({ ...ofertaCon6Desde150k, proveedores: [{ ...ofertaCon6Desde150k.proveedores[0], escalones: [{ cuotasMax: 6, montoMinimo: 300000 }] }] });
+  it("sin cuotas en el body: un pago (1), con la lista del pago único", async () => {
     await post();
-    expect(planGuardado()).toMatchObject({ cuotasMax: 1 });
+    expect(listaCotizada()).toBe("L1");
+    expect(datosGuardados().cuotas).toBe(1);
   });
 
-  it("oferta ilegible (null) → plan null (cuotas_max null, legacy)", async () => {
-    getOferta.mockResolvedValue(null);
-    await post();
-    expect(planGuardado()).toBeNull();
+  it("una cantidad sin condición se rechaza (422) y no crea ni cotiza", async () => {
+    const r = await post({ cuotas: 12 });
+    expect(r.status).toBe(422);
+    expect((await r.json()).error).toBe("La cantidad de cuotas elegida ya no está disponible. Seleccione otra.");
+    expect(crearPedido).not.toHaveBeenCalled();
+    expect(cotizar).not.toHaveBeenCalled();
   });
 
-  it("getOferta que tira → plan null y el pedido se crea igual", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    getOferta.mockRejectedValue(new Error("db"));
-    const r = await post();
-    expect(r.status).toBe(201);
-    expect(planGuardado()).toBeNull();
+  it.each(["6", 3.5, 0, -1, {}])("cuotas %j inválidas: 422", async (cuotas) => {
+    expect((await post({ cuotas })).status).toBe(422);
   });
 
-  it("medio offline → no consulta la oferta ni congela plan", async () => {
-    await post({ pagoMetodo: "transferencia" });
-    expect(getOferta).not.toHaveBeenCalled();
-    expect(planGuardado()).toBeNull();
+  it("ignora la lista, el monto y el plan viejo que vengan en el body", async () => {
+    await post({ cuotas: 3, idListaMedio: "X", idPriceList: "Y", total: 1, cuotasMax: 24, cuotasPlan: { cuotasMax: 24 } });
+    expect(listaCotizada()).toBe("L3");
+    expect(datosGuardados().cuotas).toBe(3);
   });
 
-  it("flag apagado: congela igual, pero no expone cuotasMax al cliente", async () => {
+  it("flag apagado: no hay cuotas (null), se ignora el body y rige la lista del pago único", async () => {
     flag = false;
-    getOferta.mockResolvedValue(ofertaCon6Desde150k);
-    const r = await post();
-    expect(planGuardado()).toMatchObject({ cuotasMax: 6 });
-    expect((await r.json()).cuotasMax).toBeNull();
+    const r = await post({ cuotas: 6 });
+    expect(r.status).toBe(201);
+    expect(datosGuardados().cuotas).toBeNull();
+    expect(listaCotizada()).toBe("L1");
+    expect((await r.json()).cuotas).toBeNull();
+  });
+
+  it("medio sin cobro en línea: sin cuotas aunque el body las pida", async () => {
+    const r = await post({ pagoMetodo: "transferencia", cuotas: 6 });
+    expect(r.status).toBe(201);
+    expect(datosGuardados().cuotas).toBeNull();
+  });
+
+  it("totalVisto distinto del recotizado con esa cantidad de cuotas: 409 precio_cambio y no crea", async () => {
+    const r = await post({ cuotas: 6, totalVisto: 100000 });
+    expect(r.status).toBe(409);
+    expect((await r.json()).motivo).toBe("precio_cambio");
+    expect(crearPedido).not.toHaveBeenCalled();
   });
 });
 

@@ -2,7 +2,6 @@ import { connection } from "next/server";
 import { ProductCardSkeleton } from "@myd-org/ui";
 import { ProductosCarrusel } from "@/components/ProductosCarrusel";
 import { TarjetaProductoCarrusel } from "@/components/TarjetaProductoCarrusel";
-import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { destacadosHome } from "@/lib/catalogo-publico";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { flagsPublicos } from "@/lib/flags-publicos";
@@ -41,16 +40,20 @@ export async function DestacadosHome({
   // Si el catálogo falla, `destacadosHome` degrada a destacados vacíos (la
   // sección ya renderiza la grilla vacía) en vez de tumbar la página entera.
   const [{ soloVisibles, mediosPrecio }, disp] = await Promise.all([flagsPublicos(), dispCatalogo()]);
-  const [oferta, destacados] = await Promise.all([
-    getOfertaCuotas(),
-    destacadosHome({ skus, cantidad, soloVisibles, disp, destacado: mediosPrecio?.destacado }),
-  ]);
+  const destacados = await destacadosHome({
+    skus,
+    cantidad,
+    soloVisibles,
+    disp,
+    destacado: mediosPrecio?.destacado,
+    cuotas: mediosPrecio?.cuotas,
+  });
 
   return (
     <ProductosCarrusel label={label}>
       {destacados.map((p, i) => (
         // La imagen decorativa de la sección es por posición (ver home-defaults.ts).
-        <TarjetaProductoCarrusel key={p.id} producto={p} oferta={oferta} imagenDecorativa={imagenes[i]} />
+        <TarjetaProductoCarrusel key={p.id} producto={p} imagenDecorativa={imagenes[i]} />
       ))}
     </ProductosCarrusel>
   );

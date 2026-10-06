@@ -10,7 +10,7 @@ import { dbGrabadora, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fix
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { arbolCompletoConConteo, enArbolConConteo, getCategorias, rutaEnArbol, getFacetas, getPaginaCatalogo } from "./catalog";
+import { arbolCompletoConConteo, categoriasPlanasConConteo, enArbolConConteo, getCategorias, rutaEnArbol, getFacetas, getPaginaCatalogo } from "./catalog";
 
 const ILUMINACION = "11111111-1111-4111-8111-111111111111";
 const FOCOS = "22222222-2222-4222-8222-222222222222";
@@ -115,6 +115,17 @@ describe("arbolCompletoConConteo", () => {
   });
 });
 
+describe("categoriasPlanasConConteo", () => {
+  it("conserva el orden y las categorías del catálogo; las que el filtro deja afuera cuentan 0", () => {
+    const base = [{ label: "A", count: 5 }, { label: "B", count: 3 }, { label: "C", count: 1 }];
+    expect(categoriasPlanasConConteo(base, [{ label: "C", count: 1 }, { label: "A", count: 2 }])).toEqual([
+      { label: "A", count: 2 },
+      { label: "B", count: 0 },
+      { label: "C", count: 1 },
+    ]);
+  });
+});
+
 describe("filtro por categoría", () => {
   it("con árbol, busca en el subárbol de la categoría por la clasificación del CRM", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
@@ -145,6 +156,37 @@ describe("facetas de categorías", () => {
       { label: "ELECTRICIDAD", count: 4, nivel: 1 },
     ]);
     expect(grabadora.consultas.some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(false);
+  });
+
+  it("con búsqueda, el árbol sigue completo: lo que la búsqueda deja afuera cuenta 0", async () => {
+    // Primero el conteo del catálogo sin filtros, después el de la búsqueda (sólo 1 foco).
+    let conteos = 0;
+    grabadora = dbGrabadora((c) => {
+      if (esLecturaDelArbol(c)) return ARBOL;
+      if (esConteoPorCategoria(c)) return ++conteos === 1 ? [[ILUMINACION, 3], [FOCOS, 2], [ELECTRICIDAD, 4]] : [[FOCOS, 1]];
+      return [];
+    });
+    const { categorias } = await getFacetas({ busqueda: "foco" }, false);
+    expect(categorias).toEqual([
+      { label: "ILUMINACION", count: 1, nivel: 1 },
+      { label: "Focos led", count: 1, nivel: 2 },
+      { label: "ELECTRICIDAD", count: 0, nivel: 1 },
+    ]);
+  });
+
+  it("sin árbol y con búsqueda, siguen todas las categorías de Alegra, con 0 las que no cuentan", async () => {
+    let conteos = 0;
+    grabadora = dbGrabadora((c) => {
+      if (c.sql.includes('group by "catalog_categories_shop"."name"')) {
+        return ++conteos === 1 ? [["ILUMINACION", 5], ["ELECTRICIDAD", 4]] : [["ILUMINACION", 1]];
+      }
+      return [];
+    });
+    const { categorias } = await getFacetas({ busqueda: "foco" }, false);
+    expect(categorias).toEqual([
+      { label: "ILUMINACION", count: 1 },
+      { label: "ELECTRICIDAD", count: 0 },
+    ]);
   });
 
   it("sin árbol, siguen agrupando por la categoría de Alegra", async () => {

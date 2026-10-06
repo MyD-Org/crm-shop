@@ -37,10 +37,10 @@ de las vistas del CRM (`public.catalog_products_shop` y
 | `DATABASE_URL` | Conexión de la app en tiempo de ejecución. Pooled, rol `shop_app`. Es la única variable que lee el runtime. |
 | `MIGRATE_DATABASE_URL` | Solo para `npm run db:migrate`. Conexión directa (sin pooler), rol dueño del esquema `shop`. El runtime nunca la usa. |
 | `SHOP_TENANT_ID` | Obligatoria: el Shop no arranca sin ella (falla en `src/instrumentation.ts`, salvo durante `next build`). Tiene que ser un valor de `public.tenants.id` del CRM. |
-| `CRON_SECRET` | Protege `/api/cron/cuotas-sync` y `/api/cron/pagos-reconciliar`. Sin esta variable el endpoint rechaza todo. |
+| `CRON_SECRET` | Protege `/api/cron/pagos-reconciliar`. Sin esta variable el endpoint rechaza todo. |
 | `ALEGRA_EMAIL` / `ALEGRA_TOKEN` | Auth Basic contra la API de Alegra. `ALEGRA_BASE_URL` es opcional (default: producción). |
-| `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. La sync de cuotas lee `GET /api/internal/shop/cuotas` (contrato v2: escalones por proveedor). |
-| `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de `POST /api/internal/cuotas/revalidar`. |
+| `CRM_INTERNAL_URL` | Base URL del CRM del mismo entorno. |
+| `SHOP_CRM_SECRET` | Llave propia Shop↔CRM (mismo valor en el proyecto del CRM; NO es el `INTERNAL_SECRET` de ai-api): Bearer hacia el CRM y protección de los `POST /api/internal/*/revalidar`. |
 | `SHOP_MEDIA_HOSTS` | Hosts de las fotos del overlay, separados por coma (ej. `media.plataforma.example`). Alimenta `images.remotePatterns`; sin ella las cards muestran el placeholder. Debe incluir el host de `R2_SHOP_MEDIA_PUBLIC_URL`; si no, el editor de la home rechaza las imágenes subidas. Se lee en el build y en runtime: un cambio requiere redesplegar. |
 | `R2_SHOP_MEDIA_ACCOUNT_ID` (o `R2_ACCOUNT_ID`) | Cuenta de Cloudflare del bucket público `shop-media`. Mismo par que el proyecto del CRM (rotarlo implica actualizar los dos proyectos de Vercel). |
 | `R2_SHOP_MEDIA_ACCESS_KEY_ID` | Llave de acceso para firmar las subidas a `shop-media`. Mismo par que el CRM. |
@@ -71,7 +71,7 @@ sirven apagados.
 | Flag | Prendido |
 |---|---|
 | `pagos` | El checkout muestra "Forma de pago" (transferencia, Mercado Pago, efectivo). Apagado: sólo "a coordinar", sin cobros. |
-| `cuotas` | Muestra cuotas y aplica el límite de cuotas en el pago. Apagado: checkout sin cuotas, clamp 1..24. |
+| `cuotas-cobro` | Cuotas sin interés por lista de precios: se exhiben (card, ficha, modal), el checkout ofrece el selector y el pedido congela las cuotas; el cobro exige la misma cantidad y el mismo monto. Apagado (default): nada de cuotas y el cobro como siempre. Se prende sólo con el gate cumplido (sandbox del procesador, cuotas sin interés activas en su panel, contador/abogado). |
 | `catalogo-solo-visibles` | Sólo productos publicados (`visible`) en el overlay del CRM. Fail-closed: encenderlo sin curaduría vacía la tienda. Ver `docs/catalogo-overlay.md`. |
 | `envio` | El checkout ofrece envío a domicilio (ciudades y mínimo de `src/lib/envio.ts`) y Mi cuenta lo anuncia. Apagado: sólo retiro / entrega a coordinar; `POST /api/pedidos` rechaza el envío. |
 | `chat-ia` | Burbuja del chat con el agente en todas las páginas (requiere las envs `AI_*`). Cliente vinculado: el agente puede consultar su cuenta (`crm_token`). Sin vínculo o anónimo: visitante sin datos de cuenta, sólo preventa. Apagado: no hay widget y `POST /api/ai-token` responde 404. Ver `src/lib/chat-ia-flag.ts`. |
@@ -121,18 +121,10 @@ local contra la misma base (botón del admin, o
 `curl -H "Authorization: Bearer $CRON_SECRET" localhost:<puerto>/api/cron/alegra-sync`
 desde `apps/admin`). Ver `docs/una-base-esquema-shop.md`, "Catálogo desde el CRM".
 
-Sync de cuotas (planes de Mercado Pago + config del CRM; cada fuente conserva
-su última copia buena si falla):
-
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron/cuotas-sync
-```
-
 ## Tareas programadas
 
 | Tarea | Dónde corre | Cuándo |
 |---|---|---|
-| Sync de cuotas | Vercel Cron — `vercel.json` → `/api/cron/cuotas-sync` | 12:00 UTC, diaria |
 | Reconciliar pagos MP | GitHub Actions — `.github/workflows/clientes-pagos-reconciliar.yml` | cada 15 min |
 
 El catálogo no tiene tarea propia: lo sincroniza el CRM (`admin-alegra-sync`).

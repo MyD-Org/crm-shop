@@ -13,14 +13,13 @@ import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
 import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
 import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
 import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
-import { getOfertaCuotasParaPedido } from "@/lib/cuotas-datos";
+import { cuotasElegidas } from "@/lib/cuotas-sin-interes";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
-import { pagoValidoConMedios } from "@/lib/medios-pago";
+import { mediosParaModalidad, pagoValidoConMedios } from "@/lib/medios-pago";
 import { mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
-import { planParaPedido } from "@/lib/pagos/cuotas-validacion";
-import type { OfertaCuotas } from "@/lib/pagos/cuotas-tipos";
 import { idPriceListUsable } from "@/lib/alegra";
 import { idListaGeneral, vinculablePorId } from "@/lib/contactos-espejo";
 import { idListaDelMedio } from "@/lib/lista-medio";
@@ -89,6 +88,8 @@ interface BodyPedido {
   sucursalRetiro?: unknown;
   /** Total que el comprador vio en el checkout. Opcional: sin él se crea al precio actual. */
   totalVisto?: unknown;
+  /** Cuotas sin interés elegidas (flag `cuotas-cobro`); ausente = un pago. Sólo cobro en línea. */
+  cuotas?: unknown;
 }
 
 /**
@@ -98,10 +99,6 @@ interface BodyPedido {
  * distintos colisionaran entre sí.
  */
 const CLAVE_VALIDA = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** El Brick sólo recibe el máximo con el flag prendido (D13). */
-const cuotasParaCliente = async (cuotasMax: number | null) =>
-  (await cuotasHabilitadas()) ? cuotasMax : null;
 
 /** 409 con la cotización para que el checkout marque qué línea cambió. */
 const productosCambiaron = (cotizacion: Cotizacion) =>
@@ -206,7 +203,7 @@ export async function POST(req: Request) {
     });
     return yaCreado
       ? NextResponse.json(
-          { ...yaCreado, cuotasMax: await cuotasParaCliente(yaCreado.cuotasMax), repetido: true },
+          { ...yaCreado, repetido: true },
           { status: 200 },
         )
       : null;
@@ -377,7 +374,25 @@ export async function POST(req: Request) {
     // arriba), nunca del body. Con el flag `precio-especial-cuenta` prendido rige la lista del
     // cliente, como antes, y la del medio se ignora.
     const especial = await precioEspecialCuenta();
-    const idListaMedio = especial ? undefined : idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo);
+    // Cuotas sin interés (flag `cuotas-cobro`): sólo con cobro en línea. La cantidad sale del body pero
+    // se acepta únicamente si el medio tiene una condición para ella; cada cantidad es una lista de
+    // precios distinta, y esa lista cotiza el pedido. Con el flag apagado (o el precio especial
+    // prendido) no hay cuotas: el pedido no las congela y el cobro sigue como siempre.
+    const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, { mpDisponible: mercadoPagoConfigurado() }).find(
+      (m) => m.slug === pagoMetodo,
+    );
+    let cuotasPedido: number | null = null;
+    if (!especial && medioDelPedido?.cobroOnline && (await cuotasHabilitadas())) {
+      const elegidas = cuotasElegidas(body.cuotas, medioDelPedido.condicionesCuotas);
+      if (!elegidas.ok) {
+        return NextResponse.json(
+          { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },
+          { status: 422 },
+        );
+      }
+      cuotasPedido = elegidas.cuotas;
+    }
+    const idListaMedio = especial ? undefined : idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotasPedido);
     const opcionesCotizar = { idPriceList, idListaMedio, entregaTipo, disp: dispCotizacion, soloVisibles };
     const cotizacion = await cotizar(lineas, opcionesCotizar);
 
@@ -412,21 +427,6 @@ export async function POST(req: Request) {
     const envioGratis =
       aDomicilio && configEnvio ? evaluarEnvio(cotizacion.subtotal, entregaProvincia, configEnvio).gratis : null;
 
-    /**
-     * Plan de cuotas congelado sobre el total RE-COTIZADO, con la oferta de la
-     * DB del Shop. Nada de cuotas sale del body. Se congela también con el flag
-     * apagado (así prenderlo no deja pedidos a medias). Sin oferta leíble →
-     * null: el cobro usa el clamp legacy, no se bloquea la venta.
-     */
-    let oferta: OfertaCuotas | null = null;
-    if (pagoMetodo === "mercadopago") {
-      try {
-        oferta = await getOfertaCuotasParaPedido();
-      } catch (err) {
-        console.error("[/api/pedidos] oferta de cuotas ilegible:", err);
-      }
-    }
-    const plan = planParaPedido(pagoMetodo, cotizacion.total, oferta);
 
     // Para revisión de un operador antes de facturar, con el motivo más
     // importante (ver motivo-revision.ts). Comprar a la lista general NO es un
@@ -471,6 +471,7 @@ export async function POST(req: Request) {
           entregaDireccion: entregaDireccion || undefined,
           envioGratis,
           pagoMetodo,
+          cuotas: cuotasPedido,
           notas: texto(body.notas, 500) || undefined,
           // Congelado desde la lectura única: la condición real (exento, o el
           // valor de Alegra si no mapea) y el documento tal como está.
@@ -483,7 +484,6 @@ export async function POST(req: Request) {
           soloVisibles,
         },
         cotizacion,
-        plan,
       );
     } catch (err) {
       if (err instanceof SucursalPedidoError) {
@@ -561,7 +561,7 @@ export async function POST(req: Request) {
     const contacto = await contactoDelPedido(pedido.id, pedido.numero);
 
     return NextResponse.json(
-      { ...pedido, cuotasMax: await cuotasParaCliente(pedido.cuotasMax), cotizacion, ...(contacto ? { contacto } : {}) },
+      { ...pedido, cotizacion, ...(contacto ? { contacto } : {}) },
       { status: pedido.repetido ? 200 : 201 },
     );
   } catch (err) {

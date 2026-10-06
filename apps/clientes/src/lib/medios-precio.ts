@@ -9,6 +9,7 @@
  */
 import { precioDeLista, precioGeneral, type AlegraPrice } from "./alegra";
 import type { PrecioMedio } from "@/data/products";
+import { opcionesCuotas, type CuotasProducto, type MedioCuotas } from "./cuotas-sin-interes";
 import { SLUGS_RESERVADOS, type MedioPago } from "./medios-pago";
 import { precioFinal } from "./precio-final";
 
@@ -24,6 +25,11 @@ export interface MediosPrecio {
   destacado: MedioPrecio | null;
   /** Medios de la ficha, ya ordenados. */
   ficha: MedioPrecio[];
+  /**
+   * Cuotas sin interés (rebanada D, con el flag `cuotas-cobro`): el medio de cobro en línea y sus
+   * condiciones. Ausente = no hay cuotas que mostrar. Es parte de la clave de las cachés.
+   */
+  cuotas?: MedioCuotas;
 }
 
 export const SIN_MEDIOS_PRECIO: MediosPrecio = { destacado: null, ficha: [] };
@@ -36,17 +42,37 @@ function porOrden(a: MedioPago, b: MedioPago): number {
  * Qué medios exhibir. Con el flag `precio-especial-cuenta` ENCENDIDO el precio vuelve a depender de
  * la lista del cliente y no conviven las líneas "con X": vacío.
  */
-export function seleccionarMediosPrecio(medios: readonly MedioPago[], especialEncendido: boolean): MediosPrecio {
+export function seleccionarMediosPrecio(
+  medios: readonly MedioPago[],
+  especialEncendido: boolean,
+  /** Flag `cuotas-cobro`: sin él no se exhiben cuotas. */
+  cuotasEncendido = false,
+): MediosPrecio {
   if (especialEncendido) return SIN_MEDIOS_PRECIO;
   const elegibles = medios
     .filter((m) => m.activo && Boolean(m.idListaPrecios) && !SLUGS_RESERVADOS.includes(m.slug))
     .sort(porOrden);
   const aMedio = (m: MedioPago): MedioPrecio => ({ slug: m.slug, nombre: m.nombre, idListaPrecios: m.idListaPrecios as string });
   const destacado = elegibles.find((m) => m.destacarEnCatalogo);
+  const cuotas = cuotasEncendido ? medioCuotas(medios) : null;
   return {
     destacado: destacado ? aMedio(destacado) : null,
     ficha: elegibles.filter((m) => m.mostrarEnFicha).map(aMedio),
+    ...(cuotas ? { cuotas } : {}),
   };
+}
+
+/**
+ * El medio que cobra en cuotas: el activo con cobro en línea y condiciones de 2..24 cuotas (el
+ * primero por orden). Sin condiciones no hay nada que ofrecer.
+ */
+function medioCuotas(medios: readonly MedioPago[]): MedioCuotas | null {
+  const m = medios
+    .filter((x) => x.activo && x.cobroOnline && !SLUGS_RESERVADOS.includes(x.slug) && (x.condicionesCuotas?.length ?? 0) > 0)
+    .sort(porOrden)[0];
+  if (!m) return null;
+  const condiciones = [...(m.condicionesCuotas ?? [])].sort((a, b) => a.cuotas - b.cuotas);
+  return { slug: m.slug, nombre: m.nombre, condiciones };
 }
 
 function precioDelMedio(prices: AlegraPrice[], iva: number | null, medio: MedioPrecio): PrecioMedio | null {
@@ -66,9 +92,14 @@ export function armarPreciosMedios(
   prices: AlegraPrice[],
   iva: number | null,
   medios: MediosPrecio | undefined,
-): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[] } {
+): { precioMedio?: PrecioMedio; preciosMedios?: PrecioMedio[]; cuotasSinInteres?: CuotasProducto } {
   if (!medios) return {};
   const precioMedio = medios.destacado ? precioDelMedio(prices, iva, medios.destacado) : null;
   const preciosMedios = medios.ficha.flatMap((m) => precioDelMedio(prices, iva, m) ?? []);
-  return { ...(precioMedio ? { precioMedio } : {}), preciosMedios };
+  const opciones = opcionesCuotas(prices, iva, medios.cuotas);
+  return {
+    ...(precioMedio ? { precioMedio } : {}),
+    preciosMedios,
+    ...(medios.cuotas && opciones.length > 0 ? { cuotasSinInteres: { medio: medios.cuotas.nombre, opciones } } : {}),
+  };
 }

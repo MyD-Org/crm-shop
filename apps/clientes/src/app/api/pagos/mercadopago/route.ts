@@ -11,7 +11,6 @@ import { ErrorProveedor, MENSAJE_RECHAZO, convieneReintentar } from "@/lib/pagos
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { mercadoPago, mercadoPagoConfigurado, urlNotificacion } from "@/lib/pagos/mercadopago";
 import { permitir } from "@/lib/rate-limit";
-import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { validarCuotasPago } from "@/lib/pagos/cuotas-validacion";
 
 /** Intentos de cobro por usuario. Alto para no molestar a quien reintenta bien. */
@@ -129,21 +128,20 @@ export async function POST(req: Request) {
   const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
 
   /**
-   * Cuotas contra el máximo congelado en el pedido (por proveedor, igual para
-   * todas las tarjetas). Un rechazo corta ACÁ, sin llamar a Mercado Pago: el
-   * browser no decide cuántas cuotas se pueden. Flag apagado o pedido legacy
-   * (cuotas_max null) → clamp 1..24 de siempre. `metodoPagoId` sólo viaja a
-   * Mercado Pago, no participa de la validación.
+   * Cuotas contra lo congelado en el pedido: IGUALDAD estricta (cada cantidad es una lista de precios
+   * distinta, así que no se puede cobrar otra). Un rechazo corta ACÁ, sin llamar al procesador: el
+   * navegador no decide cuántas cuotas se cobran. El monto cobrado es siempre `pedido.total` (leído de
+   * la base, nunca del body). Pedido sin cuotas congeladas (flag apagado o anterior) → clamp 1..24 de
+   * siempre. `metodoPagoId` sólo viaja al procesador, no participa de la validación.
    */
   const validacion = validarCuotasPago({
     cuotas: body.cuotas,
     medio,
-    cuotasMax: pedido.cuotasMax,
-    habilitado: await cuotasHabilitadas(),
+    cuotasPedido: pedido.cuotas,
   });
   if (!validacion.ok) {
     return NextResponse.json(
-      { error: MENSAJE_RECHAZO.cuotas_no_disponibles, motivo: "cuotas_no_disponibles" },
+      { error: MENSAJE_RECHAZO[validacion.motivo], motivo: validacion.motivo },
       { status: 422 },
     );
   }

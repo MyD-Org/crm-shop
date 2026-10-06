@@ -415,6 +415,13 @@ export const orders = shop.table(
      * cuotas v2 pueden traer el shape v1 (con `maxPorMedio`).
      */
     cuotasPlan: jsonb("cuotas_plan").$type<PlanPedido>(),
+    /**
+     * Cuotas sin interés congeladas al crear el pedido (change `listas-precio-online`, rebanada D):
+     * 1 = un pago, N >= 2 = N cuotas. El pedido ya cotizó con la lista de esa cantidad
+     * (`id_price_list`), así que `total` es el total en cuotas. null = pedido anterior o creado con
+     * el flag `cuotas-cobro` apagado (rige el clamp de siempre). El cobro tiene que coincidir.
+     */
+    cuotas: integer("cuotas"),
     /** Cuotas reales que informó el proveedor al confirmar el pago. */
     pagoCuotas: integer("pago_cuotas"),
     /** Total pagado real (con interés) según el proveedor. `total` no cambia. */
@@ -527,7 +534,7 @@ export const orders = shop.table(
     ),
     check(
       "orders_pago_revision_check",
-      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado')`,
+      sql`${t.pagoRevision} is null or ${t.pagoRevision} in ('cobro_duplicado','pagado_cancelado','cuotas_distintas','monto_distinto')`,
     ),
     // Cancelado ⇒ motivo. Vale para el CRM y para el Shop por igual.
     check(

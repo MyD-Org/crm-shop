@@ -3,64 +3,26 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CuotasCard } from "./CuotasCard";
 import { CuotasLinea } from "./CuotasLinea";
-import { CuotasResumen } from "./CuotasResumen";
 import { MediosDePagoDetalle } from "./MediosDePagoDetalle";
-import { resumenCuotas, bloquesMediosDePago } from "@/lib/cuotas-exhibicion";
-import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import type { OfertaCuotas, OpcionCuotas, OpcionOfertada } from "@/lib/pagos/cuotas-tipos";
+import type { OpcionCuotas } from "@/lib/cuotas-sin-interes";
 
 /** Render estático (sin jsdom, ver vitest.config.ts): verifica QUÉ se muestra. */
 const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
-const opcion = (p: Partial<OpcionCuotas>): OpcionCuotas => ({
-  proveedor: "mercadopago",
-  proveedorNombre: "Mercado Pago",
+const opcion = (p: Partial<OpcionCuotas> = {}): OpcionCuotas => ({
   cuotas: 6,
-  montoCuota: 20000,
   total: 120000,
-  precioContado: 120000,
-  cftPct: null,
-  teaPct: null,
+  montoCuota: 20000,
+  primeraCuota: 20000,
   sinInteres: true,
   ...p,
 });
 
-const ofertada = (p: Partial<OpcionOfertada> & { cuotas: number }): OpcionOfertada => ({
-  sinInteres: (p.tasaPct ?? 0) === 0,
-  tasaPct: 0,
-  cftPct: null,
-  teaPct: null,
-  montoMin: null,
-  montoMax: null,
-  ...p,
-});
-
-const oferta = (
-  escalones: OfertaCuotas["proveedores"][number]["escalones"],
-  opciones: OpcionOfertada[],
-): OfertaCuotas => ({
-  proveedores: [{ proveedor: "mercadopago", nombre: "Mercado Pago", orden: 0, escalones, opciones }],
-  planesFetchedAt: null,
-  configVersion: null,
-});
-
 describe("CuotasLinea (card y ficha)", () => {
-  it("sin interés", () => {
-    const t = texto(renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion({}) })));
-    expect(t).toBe("6 cuotas sin interés de $ 20.000,00");
-  });
-
-  it("con interés: lo dice y muestra el total financiado", () => {
-    const conInteres = opcion({ cuotas: 12, montoCuota: 13500, total: 162000, sinInteres: false });
-    const t = texto(renderToStaticMarkup(createElement(CuotasLinea, { opcion: conInteres })));
-    expect(t).toBe("12 cuotas de $ 13.500,00 con interés (total $ 162.000,00)");
-    expect(t).not.toContain("sin interés");
-  });
-
-  it("con interés en la card del catálogo (sm): sin el total, para no alargar la línea", () => {
-    const conInteres = opcion({ cuotas: 12, montoCuota: 13500, total: 162000, sinInteres: false });
-    const t = texto(renderToStaticMarkup(createElement(CuotasLinea, { opcion: conInteres, tamano: "sm" })));
-    expect(t).toBe("12 cuotas de $ 13.500,00 con interés");
+  it("siempre sin interés", () => {
+    expect(texto(renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion() })))).toBe(
+      "6 cuotas sin interés de $ 20.000,00",
+    );
   });
 
   it("sin opción → nada", () => {
@@ -68,18 +30,15 @@ describe("CuotasLinea (card y ficha)", () => {
   });
 
   it("tamaño sm (card) es más chico que el default", () => {
-    const sm = renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion({}), tamano: "sm" }));
-    const md = renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion({}) }));
-    expect(sm).toContain("text-xs");
-    expect(md).toContain("text-sm");
+    expect(renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion(), tamano: "sm" }))).toContain("text-xs");
+    expect(renderToStaticMarkup(createElement(CuotasLinea, { opcion: opcion() }))).toContain("text-sm");
   });
 });
 
 describe("CuotasCard (slot installments de ProductCard)", () => {
   it("sólo la línea de cuotas, sin bloque propio", () => {
-    const html = renderToStaticMarkup(createElement(CuotasCard, { opcion: opcion({}) }));
+    const html = renderToStaticMarkup(createElement(CuotasCard, { opcion: opcion() }));
     expect(texto(html)).toBe("6 cuotas sin interés de $ 20.000,00");
-    // Va adentro de la card: sólo spans, nada que rompa el layout del slot.
     expect(html.startsWith("<span")).toBe(true);
   });
 
@@ -89,102 +48,36 @@ describe("CuotasCard (slot installments de ProductCard)", () => {
 });
 
 describe("MediosDePagoDetalle (modal de la ficha)", () => {
-  const o = oferta(
-    [{ cuotasMax: 12, montoMinimo: 0 }],
-    [
-      ofertada({ cuotas: 6 }),
-      ofertada({ cuotas: 12, tasaPct: 40, cftPct: 55.5, teaPct: 42.1 }),
-      ofertada({ cuotas: 18, tasaPct: 60, cftPct: 90, teaPct: 70 }),
-    ],
-  );
-
   const html = renderToStaticMarkup(
-    createElement(MediosDePagoDetalle, { bloques: bloquesMediosDePago(120000, o) }),
+    createElement(MediosDePagoDetalle, {
+      medio: "Mercado Pago",
+      precioContado: 121000,
+      opciones: [
+        opcion({ cuotas: 3, total: 100, montoCuota: 33.33, primeraCuota: 33.34 }),
+        opcion({ cuotas: 6, total: 120000, montoCuota: 20000 }),
+      ],
+    }),
   );
   const t = texto(html);
 
-  it("un bloque por proveedor titulado 'Tarjetas de crédito (Mercado Pago)' con 1 pago", () => {
+  it("un bloque titulado con el medio y 1 pago a precio contado", () => {
     expect(t).toContain("Tarjetas de crédito (Mercado Pago)");
     expect(t.match(/1 pago Precio contado/g)).toHaveLength(1);
-    expect(t).toContain("$ 120.000,00");
+    expect(t).toContain("$ 121.000,00");
   });
 
-  it("todas las cantidades hasta el máximo; con interés CFT destacado y TEA, sin interés sin CFT", () => {
+  it("cada cantidad sin interés con su total; no hay CFT, TEA ni recargo", () => {
     expect(t).toContain("6 cuotas de $ 20.000,00 Sin interés");
-    expect(t).toContain("12 cuotas de $ 14.000,00");
-    expect(t).toContain("CFT 55,50%");
-    expect(t).toContain("TEA 42,10%");
-    expect(html).toMatch(/font-bold[^>]*>CFT 55,50%/);
-    expect(t).not.toContain("18 cuotas");
-    expect(t.match(/CFT/g)).toHaveLength(1);
+    expect(t).toContain("$ 120.000,00");
+    expect(t).not.toMatch(/CFT|TEA|recargo|con interés/i);
   });
 
-  it("proveedor sin opciones para el precio: sólo 1 pago", () => {
-    const soloUnPago = texto(
-      renderToStaticMarkup(
-        createElement(MediosDePagoDetalle, {
-          bloques: bloquesMediosDePago(1000, oferta([{ cuotasMax: 6, montoMinimo: 50000 }], [ofertada({ cuotas: 6 })])),
-        }),
-      ),
-    );
-    expect(soloUnPago).toContain(TEXTOS_CUOTAS.sinOpcionesMedio);
+  it("si el total no divide exacto, aclara la primera cuota", () => {
+    expect(t).toContain("3 cuotas de $ 33,33 (la primera, $ 33,34)");
   });
 
-  it("secciones con encabezado accesible", () => {
-    expect(html).toContain('aria-labelledby="proveedor-mercadopago"');
-    expect(html).toContain('id="proveedor-mercadopago"');
-  });
-});
-
-describe("CuotasResumen (carrito)", () => {
-  const o = oferta(
-    [{ cuotasMax: 3, montoMinimo: 0 }, { cuotasMax: 6, montoMinimo: 150000 }],
-    [ofertada({ cuotas: 3 }), ofertada({ cuotas: 6 })],
-  );
-
-  it("máximo, te faltan y barra al 80%", () => {
-    const html = renderToStaticMarkup(createElement(CuotasResumen, { resumen: resumenCuotas(120000, o) }));
-    const t = texto(html);
-    expect(t).toContain("Hasta 3 cuotas sin interés");
-    expect(t).toContain("Le faltan $ 30.000,00 para hasta 6 cuotas");
-    expect(html).toContain('role="progressbar"');
-    expect(html).toContain('aria-valuenow="80"');
-    expect(html).toContain("width:80%");
-  });
-
-  it("sin resumen (carrito vacío, flag off, sin datos) → nada", () => {
-    expect(renderToStaticMarkup(createElement(CuotasResumen, { resumen: null }))).toBe("");
-  });
-
-  it("muestra la acción (Ver medios de pago) debajo de la línea de cuotas", () => {
-    const html = renderToStaticMarkup(
-      createElement(CuotasResumen, {
-        resumen: resumenCuotas(120000, o),
-        accion: createElement("button", { type: "button" }, TEXTOS_CUOTAS.verMediosDePago),
-      }),
-    );
-    const t = texto(html);
-    expect(t).toContain(TEXTOS_CUOTAS.verMediosDePago);
-    expect(t.indexOf("3 cuotas de")).toBeLessThan(t.indexOf(TEXTOS_CUOTAS.verMediosDePago));
-  });
-
-  it("con interés: la tarjeta lo aclara con el total financiado", () => {
-    const conInteres = oferta([{ cuotasMax: 3, montoMinimo: 0 }], [ofertada({ cuotas: 3, tasaPct: 20, cftPct: 25, teaPct: 21 })]);
-    const r = resumenCuotas(120000, conInteres);
-    const t = texto(renderToStaticMarkup(createElement(CuotasResumen, { resumen: r })));
-    expect(t).toContain("con interés (total");
-    expect(t).not.toContain("sin interés");
-  });
-
-  it("checkout: plan del pedido con título y sin barra", () => {
-    const html = renderToStaticMarkup(
-      createElement(CuotasResumen, {
-        resumen: resumenCuotas(200000, o, { cuotasMax: 6 }),
-        titulo: TEXTOS_CUOTAS.checkoutTitulo,
-      }),
-    );
-    const t = texto(html);
-    expect(t).toContain("Hasta 6 cuotas sin interés");
-    expect(html).not.toContain("progressbar");
+  it("sección con encabezado accesible", () => {
+    expect(html).toContain('aria-labelledby="medio-cuotas"');
+    expect(html).toContain('id="medio-cuotas"');
   });
 });

@@ -6,7 +6,6 @@ import { flagsPublicos } from "@/lib/flags-publicos";
 import { metadataProducto } from "@/lib/producto-metadata";
 import { jsonLdProductoHtml } from "@/lib/producto-jsonld";
 import { ProductoClient } from "@/components/ProductoClient";
-import { getOfertaCuotas } from "@/lib/cuotas-datos";
 import { CONFIG_ENVIO_DEFAULT, textoEnvioFicha } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 import { RelacionadosProducto } from "@/components/producto/RelacionadosProducto";
@@ -36,7 +35,7 @@ const productoDe = cache(async (id: string) => {
     dispCatalogo(),
     usarAtributosEstructurados(),
   ]);
-  return productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha);
+  return productoPublico(id, soloVisibles, disp, estructurados, mediosPrecio?.ficha, mediosPrecio?.cuotas);
 });
 
 /** Vista previa del link (WhatsApp, Google…). Ver src/lib/producto-metadata.ts. */
@@ -48,10 +47,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductoPage({ params }: Props) {
   const { id } = await params;
-  // En paralelo: la oferta de cuotas no depende del producto (motor sólo-monto).
-  const [producto, oferta, reglas, { soloVisibles, mediosPrecio }, disp, dispEntrega] = await Promise.all([
+  const [producto, reglas, { soloVisibles, mediosPrecio }, disp, dispEntrega] = await Promise.all([
     productoDe(id),
-    getOfertaCuotas(),
     reglasVentaCacheadas(),
     flagsPublicos(),
     dispCatalogo(),
@@ -82,7 +79,6 @@ export default async function ProductoPage({ params }: Props) {
       />
       <ProductoClient
         producto={producto}
-        oferta={oferta}
         configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
         localElegido={localElegido}
         envioElegido={envioElegido}
@@ -112,7 +108,7 @@ export default async function ProductoPage({ params }: Props) {
                 soloVisibles={soloVisibles}
                 disp={disp}
                 destacado={mediosPrecio?.destacado}
-                oferta={oferta}
+                cuotas={mediosPrecio?.cuotas}
               />
             </Suspense>
           ) : null

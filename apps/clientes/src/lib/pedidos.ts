@@ -24,8 +24,8 @@ import { getProductosPorIds } from "./catalog";
 import { vaciarCarritoTx } from "./carrito-db";
 import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
 import type { Cotizacion } from "./cotizacion";
+import { revisionDeCuotas, type RevisionDeCuotas } from "./pagos/cuotas-validacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
-import type { PlanPedido } from "./pagos/cuotas-tipos";
 import {
   etiquetaEntrega,
   PAGO_LABEL,
@@ -83,6 +83,12 @@ export interface DatosPedido {
    * `medios_pago_shop`. Sin CHECK en la base: es texto.
    */
   pagoMetodo: PagoMetodo | (string & {});
+  /**
+   * Cuotas sin interés elegidas (1 = un pago), ya validadas por el servidor contra las condiciones
+   * del medio. El pedido se cotizó con la lista de esa cantidad. null/ausente = flag `cuotas-cobro`
+   * apagado o medio sin cobro en línea.
+   */
+  cuotas?: number | null;
   notas?: string;
   /** Copia congelada del perfil de facturación al momento de comprar. */
   facturacion?: {
@@ -171,16 +177,11 @@ export async function crearPedido(
   cliente: DatosCliente,
   datos: DatosPedido,
   cotizacion: Cotizacion,
-  /**
-   * Plan de cuotas resuelto por el server sobre `cotizacion.total`. null = sin
-   * oferta leíble o medio offline → cuotas_max null (legacy 1..24).
-   */
-  plan: PlanPedido | null = null,
 ): Promise<{
   id: string;
   numero: string;
   repetido: boolean;
-  cuotasMax: number | null;
+  cuotas: number | null;
   /** Cuenta congelada de la transferencia; null = sin cuenta aplicable u otro medio de pago. */
   cuentaPago: CuentaPagoSnapshot | null;
 }> {
@@ -209,7 +210,7 @@ export async function crearPedido(
           .select({
             id: orders.id,
             numero: orders.numero,
-            cuotasMax: orders.cuotasMax,
+            cuotas: orders.cuotas,
             pagoCuenta: orders.pagoCuenta,
           })
           .from(orders)
@@ -220,7 +221,7 @@ export async function crearPedido(
             id: existente.id,
             numero: formatearNumero(existente.numero),
             repetido: true,
-            cuotasMax: existente.cuotasMax,
+            cuotas: existente.cuotas,
             cuentaPago: existente.pagoCuenta ?? null,
           };
         }
@@ -317,8 +318,9 @@ export async function crearPedido(
         iva: String(cotizacion.iva),
         costoEnvio: String(cotizacion.costoEnvio),
         total: String(cotizacion.total),
-        cuotasMax: plan?.cuotasMax ?? null,
-        cuotasPlan: plan,
+        // Cuotas sin interés congeladas (1 = un pago; null = flag apagado o medio sin cobro en línea).
+        // El plan viejo (`cuotas_max`, `cuotas_plan`) ya no se escribe: los pedidos históricos lo conservan.
+        cuotas: datos.cuotas ?? null,
         sucursal: asignacion?.sucursal ?? null,
         sucursalRegla: asignacion?.regla ?? null,
         sucursalAsignadaEn: asignacion ? new Date() : null,
@@ -332,7 +334,7 @@ export async function crearPedido(
         target: orders.idempotencyKey,
         where: sql`${orders.idempotencyKey} is not null`,
       })
-      .returning({ id: orders.id, numero: orders.numero, cuotasMax: orders.cuotasMax });
+      .returning({ id: orders.id, numero: orders.numero, cuotas: orders.cuotas });
 
     // Sin fila devuelta, la clave ya existía: es un reintento del mismo intento
     // de compra. Se devuelve el pedido original y NO se escriben las líneas de
@@ -342,7 +344,7 @@ export async function crearPedido(
         .select({
           id: orders.id,
           numero: orders.numero,
-          cuotasMax: orders.cuotasMax,
+          cuotas: orders.cuotas,
           pagoCuenta: orders.pagoCuenta,
         })
         .from(orders)
@@ -365,7 +367,7 @@ export async function crearPedido(
         id: existente.id,
         numero: formatearNumero(existente.numero),
         repetido: true,
-        cuotasMax: existente.cuotasMax,
+        cuotas: existente.cuotas,
         cuentaPago: existente.pagoCuenta ?? null,
       };
     }
@@ -417,7 +419,7 @@ export async function crearPedido(
       id: pedido.id,
       numero: formatearNumero(pedido.numero),
       repetido: false,
-      cuotasMax: pedido.cuotasMax,
+      cuotas: pedido.cuotas,
       cuentaPago,
     };
   });
@@ -472,14 +474,14 @@ export async function getPedidoPorClave(
 ): Promise<{
   id: string;
   numero: string;
-  cuotasMax: number | null;
+  cuotas: number | null;
   cuentaPago: CuentaPagoSnapshot | null;
 } | null> {
   const [fila] = await getDb()
     .select({
       id: orders.id,
       numero: orders.numero,
-      cuotasMax: orders.cuotasMax,
+      cuotas: orders.cuotas,
       pagoCuenta: orders.pagoCuenta,
     })
     .from(orders)
@@ -490,7 +492,7 @@ export async function getPedidoPorClave(
     ? {
         id: fila.id,
         numero: formatearNumero(fila.numero),
-        cuotasMax: fila.cuotasMax,
+        cuotas: fila.cuotas,
         cuentaPago: fila.pagoCuenta ?? null,
       }
     : null;
@@ -729,7 +731,7 @@ export interface PedidoParaPago {
   facturacionTipoDoc: string | null;
   facturacionNroDoc: string | null;
   /** Congelado al crear el pedido. null = legacy / sin oferta leíble. */
-  cuotasMax: number | null;
+  cuotas: number | null;
   /** Estado del pedido (no del pago): sólo se cobra uno `pendiente`. */
   estado: OrderEstado;
   creadoEn: Date;
@@ -790,7 +792,7 @@ export async function getPedidoParaPago(
     clienteEmail: fila.clienteEmail,
     facturacionTipoDoc: fila.facturacionTipoDoc,
     facturacionNroDoc: fila.facturacionNroDoc,
-    cuotasMax: fila.cuotasMax,
+    cuotas: fila.cuotas,
     estado: fila.estado as OrderEstado,
     creadoEn: fila.createdAt,
   };
@@ -993,7 +995,7 @@ export function estadoDelPedido(estados: PagoEstado[]): PagoEstado | null {
 }
 
 /** Motivo por el que un operador tiene que revisar el pago. Ver `orders.pago_revision`. */
-export type PagoRevision = "cobro_duplicado" | "pagado_cancelado";
+export type PagoRevision = "cobro_duplicado" | "pagado_cancelado" | RevisionDeCuotas;
 
 /**
  * ¿Hay que revisar este pago? Se recalcula en cada evento, así que una
@@ -1062,7 +1064,7 @@ async function registrarCobroTx(
      * El lock es sobre el PEDIDO, así que también serializa intentos distintos.
      */
     const [fila] = await tx
-      .select({ estado: orders.pagoEstado, pedidoEstado: orders.estado })
+      .select({ estado: orders.pagoEstado, pedidoEstado: orders.estado, cuotas: orders.cuotas, total: orders.total })
       .from(orders)
       .where(and(eq(orders.id, pedidoId), esDeEsteTenant()))
       .limit(1)
@@ -1126,6 +1128,22 @@ async function registrarCobroTx(
       coinciden.find((i) => i.id === intento.id) ??
       coinciden[coinciden.length - 1];
 
+    // Cobro en cuotas: lo que informó el procesador contra lo congelado en el pedido. Una
+    // discrepancia NO bloquea ni revierte el cobro: lo deja marcado para que un operador lo revise.
+    const revisionCuotas =
+      nuevo === "pagado" && decisivo
+        ? revisionDeCuotas(
+            { cuotas: fila.cuotas, total: Number(fila.total) },
+            {
+              cuotas: decisivo.cuotas ?? undefined,
+              totalPagado: decisivo.totalPagado != null ? Number(decisivo.totalPagado) : undefined,
+            },
+          )
+        : null;
+    if (revisionCuotas) {
+      console.error(`[pagos] ${revisionCuotas} pedido=${pedidoId}`);
+    }
+
     await tx
       .update(orders)
       .set({
@@ -1140,7 +1158,7 @@ async function registrarCobroTx(
             }
           : {}),
         ...(nuevo !== actual ? { pagoEstado: nuevo } : {}),
-        pagoRevision: revision,
+        pagoRevision: revision ?? revisionCuotas,
         pagoActualizadoEn: new Date(),
         updatedAt: new Date(),
       })
@@ -1277,10 +1295,10 @@ export async function descartarReserva(intentoId: string, detalle: string): Prom
  */
 export async function pedidoPendienteMasReciente(
   dueno: DuenoPedidos,
-): Promise<{ id: string; numero: string; total: number; cuotasMax: number | null } | null> {
+): Promise<{ id: string; numero: string; total: number; cuotas: number | null } | null> {
   const desde = new Date(Date.now() - VENTANA_PAGO_MS);
   const [fila] = await getDb()
-    .select({ id: orders.id, numero: orders.numero, total: orders.total, cuotasMax: orders.cuotasMax })
+    .select({ id: orders.id, numero: orders.numero, total: orders.total, cuotas: orders.cuotas })
     .from(orders)
     .where(
       and(
@@ -1299,7 +1317,7 @@ export async function pedidoPendienteMasReciente(
     id: fila.id,
     numero: formatearNumero(fila.numero),
     total: num(fila.total),
-    cuotasMax: fila.cuotasMax,
+    cuotas: fila.cuotas,
   };
 }
 

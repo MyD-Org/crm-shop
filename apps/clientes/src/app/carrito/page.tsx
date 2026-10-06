@@ -1,5 +1,4 @@
 import { CarritoClient } from "@/components/CarritoClient";
-import { getOfertaCuotasSinCache } from "@/lib/cuotas-datos";
 import { identidadActual } from "@/lib/auth";
 import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import { entregaDelCarrito } from "@/lib/entrega-eleccion";
@@ -7,8 +6,7 @@ import { CONFIG_ENVIO_DEFAULT } from "@/lib/envio";
 import { reglasVentaCacheadas } from "@/lib/sucursales-datos";
 
 export default async function CarritoPage() {
-  const [oferta, { clerkUserId, cliente }, reglas] = await Promise.all([
-    getOfertaCuotasSinCache(),
+  const [{ clerkUserId, cliente }, reglas] = await Promise.all([
     identidadActual(),
     reglasVentaCacheadas(),
   ]);
@@ -18,7 +16,6 @@ export default async function CarritoPage() {
   const { entregaTipo, provincia, ubicacionConocida } = entregaDelCarrito(eleccion);
   return (
     <CarritoClient
-      oferta={oferta}
       conSesion={!!(clerkUserId || cliente)}
       configEnvio={reglas.envio ?? CONFIG_ENVIO_DEFAULT}
       entregaTipo={entregaTipo}

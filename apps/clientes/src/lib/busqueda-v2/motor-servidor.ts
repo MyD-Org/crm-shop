@@ -16,6 +16,7 @@ import { facetasPublicas, paginaCatalogoPublica } from "../catalogo-publico";
 import { busquedaIaHabilitada } from "../busqueda-ia-flag";
 import { busquedaMotorUnico } from "../busqueda-motor-flag";
 import type { ContextoDisponibilidad } from "../disponibilidad-contexto";
+import type { MedioCuotas } from "../cuotas-sin-interes";
 import type { MedioPrecio } from "../medios-precio";
 import { buscar, type DepsMotor, type FiltrosSinTexto, type PedidoBuscar, type Politica, type ResultadoBuscar, type Superficie } from "./motor";
 import { planParaPagina } from "./servidor";
@@ -27,6 +28,8 @@ export interface ContextoShop {
   disp?: ContextoDisponibilidad;
   /** Sólo la página: medio destacado de las cards (parte de la clave de la caché). */
   destacado?: MedioPrecio | null;
+  /** Sólo la página: cuotas sin interés de las cards (flag `cuotas-cobro`; parte de la clave de la caché). */
+  cuotas?: MedioCuotas | null;
   /** Sólo la página: la URL trae `ia=1`, así que el plan de la consulta aporta lo blando. */
   conPlanDeUrl?: boolean;
   /** Sólo la página: leer las facetas de cada etapa junto con la página. */
@@ -38,11 +41,11 @@ export interface ContextoShop {
 }
 
 /**
- * Superficies que corren la cascada cuando el flag `busqueda-motor-unico` está prendido. El chat y
- * el selector del admin se suman en el cambio siguiente (con un solo interruptor): hasta entonces
- * siguen en `legado` aunque el flag esté prendido.
+ * Superficies que corren la cascada cuando el flag `busqueda-motor-unico` está prendido: las cuatro,
+ * con un solo interruptor (apagado, todas vuelven a `legado`). El chat del vendedor y el selector
+ * del admin se sumaron después del catálogo y el autocompletar, una vez medidos con el banco.
  */
-export const SUPERFICIES_EN_CASCADA: ReadonlySet<Superficie> = new Set<Superficie>(["catalogo", "autocompletar"]);
+export const SUPERFICIES_EN_CASCADA: ReadonlySet<Superficie> = new Set<Superficie>(["catalogo", "autocompletar", "chat", "admin"]);
 
 /** Flag apagado = `legado` en todas; prendido = `cascada` sólo en las superficies habilitadas. */
 export const politicaDe = (superficie: Superficie, motorUnico: boolean): Politica =>
@@ -50,8 +53,9 @@ export const politicaDe = (superficie: Superficie, motorUnico: boolean): Politic
 
 async function leerBusquedaIa(c: ContextoShop): Promise<boolean> {
   if (c.busquedaIa !== undefined) return c.busquedaIa;
-  // Chat y selector del admin nunca usan plan: no hace falta leer el flag.
-  if (c.superficie === "chat" || c.superficie === "admin") return false;
+  // El selector del admin nunca usa plan: no hace falta leer el flag. El chat sólo lo usa en cascada
+  // (en `legado` el motor ignora `conPlan`), así que leerlo es inofensivo con el motor apagado.
+  if (c.superficie === "admin") return false;
   // Fail-safe: si no se puede leer el flag, se busca sin plan (la clásica).
   return busquedaIaHabilitada().catch(() => false);
 }
@@ -65,12 +69,12 @@ async function leerMotorUnico(c: ContextoShop): Promise<boolean> {
 }
 
 function depsDe(c: ContextoShop): DepsMotor {
-  const { superficie, soloVisibles, disp, destacado } = c;
+  const { superficie, soloVisibles, disp, destacado, cuotas } = c;
   return {
     pagina: ({ filtros, orden, pagina, porPagina, sinConteo }) =>
       superficie === "catalogo"
         ? // La página del catálogo siempre cuenta y pagina de a PRODUCTOS_POR_PAGINA (su caché lo asume).
-          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, disp, destacado })
+          paginaCatalogoPublica({ filtros, orden, pagina, soloVisibles, disp, destacado, cuotas })
         : getPaginaCatalogo({ soloVisibles, filtros, orden, pagina, porPagina, disp, sinConteo }),
     facetas: (filtros) => facetasPublicas(filtros, soloVisibles, disp),
     log: (mensaje) => console.error(mensaje),

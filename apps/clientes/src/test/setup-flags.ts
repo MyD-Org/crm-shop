@@ -2,7 +2,7 @@ import { beforeEach, vi } from "vitest";
 import { estadoFlags, reiniciarFlags } from "./flags";
 
 vi.mock("@/flags", () => ({
-  cuotasFlag: async () => estadoFlags().cuotas,
+  cuotasCobroFlag: async () => estadoFlags()["cuotas-cobro"],
   catalogoSoloVisiblesFlag: async () => estadoFlags()["catalogo-solo-visibles"],
   sucursalesFlag: async () => estadoFlags().sucursales,
   disponibilidadSucursalFlag: async () => estadoFlags()["disponibilidad-sucursal"],

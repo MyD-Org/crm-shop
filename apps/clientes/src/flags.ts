@@ -12,9 +12,10 @@ import { vercelAdapter } from "@flags-sdk/vercel";
  * explicación de qué cambia prendido/apagado, y los tests mockean ese módulo.
  */
 
-export const cuotasFlag = flag<boolean>({
-  key: "cuotas",
-  description: "Muestra cuotas y limita el Brick de Mercado Pago a la oferta vigente",
+export const cuotasCobroFlag = flag<boolean>({
+  key: "cuotas-cobro",
+  description:
+    "Cuotas sin interés por lista de precios: se exhiben (card, ficha, modal), el checkout ofrece el selector y el cobro con Mercado Pago se congela y valida por cantidad de cuotas. Apagado: nada de cuotas en la tienda y el cobro como siempre",
   defaultValue: false,
   adapter: vercelAdapter,
 });

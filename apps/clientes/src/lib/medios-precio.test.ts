@@ -139,3 +139,69 @@ describe("precios online (0065): la lista del medio es un uuid de lista online",
     expect(armarPreciosMedios([], 21, sel(TRANSF))).toEqual({ preciosMedios: [] });
   });
 });
+
+describe("cuotas sin interés (rebanada D)", () => {
+  const mp = (extra: Partial<MedioPago> = {}) =>
+    medio("mercadopago", {
+      cobroOnline: true,
+      idListaPrecios: null,
+      condicionesCuotas: [
+        { cuotas: 6, idListaPrecios: "L6" },
+        { cuotas: 3, idListaPrecios: "L3" },
+      ],
+      ...extra,
+    });
+
+  it("con el flag prendido, el medio de cobro en línea con condiciones arma `cuotas` (ascendentes)", () => {
+    const r = seleccionarMediosPrecio([medio("aa"), mp()], false, true);
+    expect(r.cuotas).toEqual({
+      slug: "mercadopago",
+      nombre: "MERCADOPAGO",
+      condiciones: [
+        { cuotas: 3, idListaPrecios: "L3" },
+        { cuotas: 6, idListaPrecios: "L6" },
+      ],
+    });
+  });
+
+  it("flag apagado, medio inactivo, sin condiciones o sin cobro en línea: sin `cuotas`", () => {
+    expect(seleccionarMediosPrecio([mp()], false, false).cuotas).toBeUndefined();
+    expect(seleccionarMediosPrecio([mp()], false).cuotas).toBeUndefined();
+    expect(seleccionarMediosPrecio([mp({ activo: false })], false, true).cuotas).toBeUndefined();
+    expect(seleccionarMediosPrecio([mp({ condicionesCuotas: [] })], false, true).cuotas).toBeUndefined();
+    expect(seleccionarMediosPrecio([mp({ cobroOnline: false })], false, true).cuotas).toBeUndefined();
+  });
+
+  it("con precio-especial-cuenta encendido tampoco hay cuotas", () => {
+    expect(seleccionarMediosPrecio([mp()], true, true)).toEqual({ destacado: null, ficha: [] });
+  });
+
+  it("no pisa el destacado ni la ficha de los demás medios", () => {
+    const r = seleccionarMediosPrecio([medio("aa", { destacarEnCatalogo: true, mostrarEnFicha: true }), mp()], false, true);
+    expect(r.destacado?.slug).toBe("aa");
+    expect(r.ficha.map((m) => m.slug)).toEqual(["aa"]);
+  });
+
+  describe("armarPreciosMedios: opciones por producto", () => {
+    const prices = [
+      { idPriceList: "REF", name: "Lista A", price: 1000, main: true },
+      { idPriceList: "L3", name: "Lista B", price: 900, main: false },
+      { idPriceList: "L6", name: "Lista C", price: 960, main: false },
+    ];
+    const cuotas = { slug: "mercadopago", nombre: "Mercado Pago", condiciones: [{ cuotas: 3, idListaPrecios: "L3" }, { cuotas: 6, idListaPrecios: "L6" }] };
+
+    it("suma cuotasSinInteres con el total de cada lista", () => {
+      const r = armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas });
+      expect(r.cuotasSinInteres?.medio).toBe("Mercado Pago");
+      expect(r.cuotasSinInteres?.opciones.map((o) => [o.cuotas, o.total, o.montoCuota])).toEqual([
+        [3, 1089, 363],
+        [6, 1161.6, 193.6],
+      ]);
+    });
+
+    it("sin IVA conocido o sin cuotas: no suma el campo", () => {
+      expect(armarPreciosMedios(prices, null, { destacado: null, ficha: [], cuotas })).toEqual({ preciosMedios: [] });
+      expect(armarPreciosMedios(prices, 21, { destacado: null, ficha: [] })).toEqual({ preciosMedios: [] });
+    });
+  });
+});

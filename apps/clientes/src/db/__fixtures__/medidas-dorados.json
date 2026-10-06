@@ -1,0 +1,1434 @@
+{
+  "version": 1,
+  "vocabulario": {
+    "claves": [
+      "potencia_w",
+      "temperatura_k",
+      "ip",
+      "flujo_lm",
+      "tension_v",
+      "zocalo",
+      "corriente_a",
+      "polos",
+      "seccion_mm2",
+      "medidas_mm",
+      "poder_corte_ka",
+      "curva",
+      "sensibilidad_ma",
+      "largo_m",
+      "angulo_grados"
+    ],
+    "rangos": {
+      "potencia_w": [
+        0.1,
+        100000
+      ],
+      "temperatura_k": [
+        1800,
+        10000
+      ],
+      "ip": [
+        10,
+        69
+      ],
+      "flujo_lm": [
+        1,
+        1000000
+      ],
+      "tension_v": [
+        1,
+        1000
+      ],
+      "corriente_a": [
+        0.1,
+        6300
+      ],
+      "polos": [
+        1,
+        4
+      ],
+      "seccion_mm2": [
+        0.5,
+        1000
+      ],
+      "poder_corte_ka": [
+        1,
+        100
+      ],
+      "sensibilidad_ma": [
+        5,
+        1000
+      ],
+      "largo_m": [
+        0.1,
+        1000
+      ],
+      "angulo_grados": [
+        1,
+        360
+      ]
+    },
+    "enteros": [
+      "ip",
+      "polos",
+      "angulo_grados"
+    ],
+    "dimension_mm": [
+      1,
+      9999
+    ],
+    "zocalos": [
+      "e10",
+      "e12",
+      "e14",
+      "e27",
+      "e40",
+      "gu10",
+      "gu5.3",
+      "mr11",
+      "mr16",
+      "gx53",
+      "g4",
+      "g9",
+      "g13",
+      "g24",
+      "r7s"
+    ],
+    "curvas": [
+      "b",
+      "c",
+      "d"
+    ],
+    "serie_iec": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      10,
+      13,
+      16,
+      20,
+      25,
+      32,
+      40,
+      50,
+      63,
+      80,
+      100,
+      125
+    ],
+    "contexto": {
+      "proteccion": [
+        "termic",
+        "termomagnetic",
+        "disyuntor",
+        "diferencial",
+        "llave",
+        "interruptor",
+        "contactor",
+        "automatic",
+        "mcb",
+        "breaker",
+        "din",
+        "curva",
+        "icn"
+      ],
+      "cable": [
+        "cable",
+        "conductor",
+        "cordon"
+      ],
+      "panel": [
+        "panel",
+        "gabinete",
+        "caja",
+        "bandeja",
+        "marco"
+      ],
+      "luminaria": [
+        "lampara",
+        "lamparita",
+        "foco",
+        "bulbo",
+        "dicroica"
+      ]
+    },
+    "notas": {
+      "ip": "El admin declara 0-69; el Shop solo acepta 10-69 (ids y parser): IP00 a IP09 no son una proteccion buscable.",
+      "medidas_mm": "El admin acepta hasta 20000 mm por lado; el Shop acota a 1-9999 en los ids.",
+      "contexto": "Raices: el parser admite sufijos de genero y numero (termica, termicas, termico, disyuntores...)."
+    }
+  },
+  "casos": [
+    {
+      "id": "G01",
+      "consulta": "termica 2x20",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El extractor del admin no lee NxM de protección sin la 'A' final; el Shop lo lee por contexto en la consulta."
+    },
+    {
+      "id": "G02",
+      "consulta": "termomagnetica 3 x 32",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 3,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 32,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El extractor del admin no lee NxM de protección sin la 'A' final; el Shop lo lee por contexto en la consulta."
+    },
+    {
+      "id": "G03",
+      "consulta": "disyuntor 4x40",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 4,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 40,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El extractor del admin no lee NxM de protección sin la 'A' final; el Shop lo lee por contexto en la consulta."
+    },
+    {
+      "id": "G04",
+      "consulta": "bipolar 20a",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G05",
+      "consulta": "unipolar 16a",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 1,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 16,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G06",
+      "consulta": "termica 2p 25a",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 25,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G07",
+      "consulta": "lampara 9w e27",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 9,
+          "confianza": "alta"
+        },
+        {
+          "clave": "zocalo",
+          "op": "eq",
+          "valor": "e27",
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G08",
+      "consulta": "lampara 9,5w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 9.5,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G09",
+      "consulta": "lampara 1,5kw",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 1500,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G10",
+      "consulta": "4000k",
+      "esperado": [
+        {
+          "clave": "temperatura_k",
+          "op": "eq",
+          "valor": 4000,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G11",
+      "consulta": "dicroica 7w gu10",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 7,
+          "confianza": "alta"
+        },
+        {
+          "clave": "zocalo",
+          "op": "eq",
+          "valor": "gu10",
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G12",
+      "consulta": "tira led 12v 5m",
+      "esperado": [
+        {
+          "clave": "tension_v",
+          "op": "eq",
+          "valor": 12,
+          "confianza": "alta"
+        },
+        {
+          "clave": "largo_m",
+          "op": "eq",
+          "valor": 5,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G13",
+      "consulta": "diferencial 40a 30ma",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 40,
+          "confianza": "alta"
+        },
+        {
+          "clave": "sensibilidad_ma",
+          "op": "eq",
+          "valor": 30,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G14",
+      "consulta": "panel 60x60",
+      "esperado": [
+        {
+          "clave": "medidas_mm",
+          "op": "eq",
+          "valor": "600x600",
+          "confianza": "media",
+          "alternativas": [
+            "60x60"
+          ]
+        }
+      ],
+      "paridad": false,
+      "nota": "Sin unidad, AxB con ambos < 100 se lee como centimetros; la lectura literal queda como alternativa. El admin no lee AxB de panel sin unidad (ambiguo cm/mm); el Shop lo lee con contexto de panel, confianza media."
+    },
+    {
+      "id": "G15",
+      "consulta": "cable 2,5mm",
+      "esperado": [
+        {
+          "clave": "seccion_mm2",
+          "op": "eq",
+          "valor": 2.5,
+          "confianza": "media"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no lee mm sin mm2 ni conductores x sección sin unidad; el Shop los lee con confianza media en contexto cable."
+    },
+    {
+      "id": "G16",
+      "consulta": "cable 3x2,5mm2",
+      "esperado": [
+        {
+          "clave": "seccion_mm2",
+          "op": "eq",
+          "valor": 2.5,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G17",
+      "consulta": "ip65",
+      "esperado": [
+        {
+          "clave": "ip",
+          "op": "eq",
+          "valor": 65,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G18",
+      "consulta": "proyector ip 66",
+      "esperado": [
+        {
+          "clave": "ip",
+          "op": "eq",
+          "valor": 66,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G19",
+      "consulta": "termica curva c",
+      "esperado": [
+        {
+          "clave": "curva",
+          "op": "eq",
+          "valor": "c",
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G20",
+      "consulta": "termica c16",
+      "esperado": [
+        {
+          "clave": "curva",
+          "op": "eq",
+          "valor": "c",
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 16,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G21",
+      "consulta": "6ka",
+      "esperado": [
+        {
+          "clave": "poder_corte_ka",
+          "op": "eq",
+          "valor": 6,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G22",
+      "consulta": "20a",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G23",
+      "consulta": "9w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 9,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G24",
+      "consulta": "e-27",
+      "esperado": [
+        {
+          "clave": "zocalo",
+          "op": "eq",
+          "valor": "e27",
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G25",
+      "consulta": "gu 5,3",
+      "esperado": [
+        {
+          "clave": "zocalo",
+          "op": "eq",
+          "valor": "gu5.3",
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G26",
+      "consulta": "hasta 50w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "lte",
+          "valor": 50,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce comparadores: devuelve el número como valor exacto; el Shop emite lte/gte."
+    },
+    {
+      "id": "G27",
+      "consulta": "lampara de 10 a 20w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "entre",
+          "min": 10,
+          "max": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "La 'a' seguida de un numero es preposicion, no amperes. El admin no conoce rangos: devuelve el último número; el Shop emite un rango entre [a, b]."
+    },
+    {
+      "id": "G28",
+      "consulta": "mas de 800 lm",
+      "esperado": [
+        {
+          "clave": "flujo_lm",
+          "op": "gte",
+          "valor": 800,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce comparadores: devuelve el número como valor exacto; el Shop emite lte/gte."
+    },
+    {
+      "id": "G29",
+      "consulta": "hasta 32a",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "lte",
+          "valor": 32,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce comparadores: devuelve el número como valor exacto; el Shop emite lte/gte."
+    },
+    {
+      "id": "G30",
+      "consulta": "cable unipolar 2.5mm",
+      "esperado": [
+        {
+          "clave": "seccion_mm2",
+          "op": "eq",
+          "valor": 2.5,
+          "confianza": "media"
+        }
+      ],
+      "paridad": false,
+      "nota": "En contexto cable 'unipolar' es el tipo de cable: no emite polos. En un cable 'unipolar' es el tipo de conductor: el Shop no emite polos; el admin sí (polos=1)."
+    },
+    {
+      "id": "G31",
+      "consulta": "DL-18W",
+      "esperado": [],
+      "paridad": false,
+      "nota": "El admin lee 18 W del código con guion de un nombre de producto; en una consulta el Shop no lo toma como medida."
+    },
+    {
+      "id": "G32",
+      "consulta": "TM-2x16",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "G33",
+      "consulta": "XQ-4471B",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "G34",
+      "consulta": "2x20",
+      "esperado": [],
+      "paridad": true,
+      "nota": "NxM sin contexto queda como texto."
+    },
+    {
+      "id": "G35",
+      "consulta": "60x60",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "G36",
+      "consulta": "termica 2x7",
+      "esperado": [],
+      "paridad": true,
+      "nota": "7 no pertenece a la serie IEC de corrientes nominales."
+    },
+    {
+      "id": "G37",
+      "consulta": "20a 25a",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Dos valores distintos de la misma clave: ninguno."
+    },
+    {
+      "id": "G38",
+      "consulta": "termica 2x20 25a",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El conflicto de corriente (20 vs 25) descarta solo esa clave. El admin no lee 2x20 sin la 'A' final y deja corriente=25; el Shop descarta la corriente por conflicto y conserva los polos."
+    },
+    {
+      "id": "G39",
+      "consulta": "12000k",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "G40",
+      "consulta": "4000",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "G41",
+      "consulta": "tira led 14w/m",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Lo 'por metro' no es la potencia del producto."
+    },
+    {
+      "id": "G42",
+      "consulta": "2,5mm",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "G43",
+      "consulta": "lampara 9",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 9,
+          "confianza": "baja"
+        }
+      ],
+      "paridad": false,
+      "nota": "Hipótesis de baja confianza (número suelto junto a 'lámpara'): el admin no la lee."
+    },
+    {
+      "id": "G44",
+      "consulta": "termica 20",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 20,
+          "confianza": "media"
+        }
+      ],
+      "paridad": false,
+      "nota": "Número suelto en contexto de protección (confianza media): el admin no lo lee."
+    },
+    {
+      "id": "G45",
+      "consulta": "monofasico 20a",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true,
+      "nota": "Monofasico/trifasico no son polos."
+    },
+    {
+      "id": "G46",
+      "consulta": "tubo led 120cm",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Sin clave de largo en centimetros (hueco de datos)."
+    },
+    {
+      "id": "G47",
+      "consulta": "lampara 9 5w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 5,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true,
+      "nota": "Es lo que produce normalizarConsulta('lampara 9,5w'): el wiring debe pasar la consulta cruda."
+    },
+    {
+      "id": "G48",
+      "consulta": "ip70",
+      "esperado": [],
+      "paridad": false,
+      "nota": "El admin devuelve ip=70 (no valida el primer dígito); el Shop exige IP de 10 a 69."
+    },
+    {
+      "id": "G49",
+      "consulta": "ip6",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "G50",
+      "consulta": "3000k 4000k",
+      "esperado": [],
+      "paridad": false,
+      "nota": "El admin se queda con el primer valor de kelvin; el Shop descarta la clave por conflicto."
+    },
+    {
+      "id": "G51",
+      "consulta": "mr16 gu10",
+      "esperado": [],
+      "paridad": false,
+      "nota": "El admin se queda con el primer zócalo; el Shop descarta la clave por conflicto."
+    },
+    {
+      "id": "G52",
+      "consulta": "bipolar de 10 a 20w",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        },
+        {
+          "clave": "potencia_w",
+          "op": "entre",
+          "min": 10,
+          "max": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce rangos: devuelve el último número; el Shop emite un rango entre [a, b]."
+    },
+    {
+      "id": "G53",
+      "consulta": "lampara 220v",
+      "esperado": [
+        {
+          "clave": "tension_v",
+          "op": "eq",
+          "valor": 220,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "G54",
+      "consulta": "24vcc",
+      "esperado": [
+        {
+          "clave": "tension_v",
+          "op": "eq",
+          "valor": 24,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E01",
+      "consulta": "lampara 9 w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 9,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E02",
+      "consulta": "lampara 9W",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 9,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E03",
+      "consulta": "termica 2 x 20",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El extractor del admin no lee NxM de protección sin la 'A' final; el Shop lo lee por contexto en la consulta."
+    },
+    {
+      "id": "E04",
+      "consulta": "cable 2x1,5",
+      "esperado": [
+        {
+          "clave": "seccion_mm2",
+          "op": "eq",
+          "valor": 1.5,
+          "confianza": "media"
+        }
+      ],
+      "paridad": false,
+      "nota": "Sin polos ni corriente: los conductores no son una clave. El admin no lee mm sin mm2 ni conductores x sección sin unidad; el Shop los lee con confianza media en contexto cable."
+    },
+    {
+      "id": "E05",
+      "consulta": "2x7 en termica",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E06",
+      "consulta": "cable 3x2,5mm",
+      "esperado": [
+        {
+          "clave": "seccion_mm2",
+          "op": "eq",
+          "valor": 2.5,
+          "confianza": "media"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no lee mm sin mm2 ni conductores x sección sin unidad; el Shop los lee con confianza media en contexto cable."
+    },
+    {
+      "id": "E07",
+      "consulta": "termica 20 a",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true,
+      "nota": "'a' al final de la consulta es la unidad."
+    },
+    {
+      "id": "E08",
+      "consulta": "panel 60x60cm",
+      "esperado": [
+        {
+          "clave": "medidas_mm",
+          "op": "eq",
+          "valor": "600x600",
+          "confianza": "media"
+        }
+      ],
+      "paridad": true,
+      "nota": "Con cm explicito no hay alternativa."
+    },
+    {
+      "id": "E09",
+      "consulta": "panel 60x60mm",
+      "esperado": [
+        {
+          "clave": "medidas_mm",
+          "op": "eq",
+          "valor": "60x60",
+          "confianza": "media"
+        }
+      ],
+      "paridad": true,
+      "nota": "Con mm explicito se toma literal."
+    },
+    {
+      "id": "E10",
+      "consulta": "panel 120x120",
+      "esperado": [
+        {
+          "clave": "medidas_mm",
+          "op": "eq",
+          "valor": "120x120",
+          "confianza": "media"
+        }
+      ],
+      "paridad": true,
+      "nota": "Ambos >= 100: milimetros literales."
+    },
+    {
+      "id": "E11",
+      "consulta": "panel 30x120",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Mezcla de magnitudes: ambiguo, no se emite."
+    },
+    {
+      "id": "E12",
+      "consulta": "entre 10 y 20w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "entre",
+          "min": 10,
+          "max": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce rangos: devuelve el último número; el Shop emite un rango entre [a, b]."
+    },
+    {
+      "id": "E13",
+      "consulta": "desde 20w",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "gte",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce comparadores: devuelve el número como valor exacto; el Shop emite lte/gte."
+    },
+    {
+      "id": "E14",
+      "consulta": "minimo 20a",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "gte",
+          "valor": 20,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce comparadores: devuelve el número como valor exacto; el Shop emite lte/gte."
+    },
+    {
+      "id": "E15",
+      "consulta": "menos de 12v",
+      "esperado": [
+        {
+          "clave": "tension_v",
+          "op": "lte",
+          "valor": 12,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": false,
+      "nota": "El admin no conoce comparadores: devuelve el número como valor exacto; el Shop emite lte/gte."
+    },
+    {
+      "id": "E16",
+      "consulta": "lampara 9w 12w",
+      "esperado": [],
+      "paridad": false,
+      "nota": "Dos potencias distintas: ninguna. El admin se queda con la primera potencia; el Shop descarta la clave por conflicto."
+    },
+    {
+      "id": "E17",
+      "consulta": "caño 20mm",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E18",
+      "consulta": "120cm",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E19",
+      "consulta": "lampara led 12W E27 alta potencia",
+      "esperado": [
+        {
+          "clave": "potencia_w",
+          "op": "eq",
+          "valor": 12,
+          "confianza": "alta"
+        },
+        {
+          "clave": "zocalo",
+          "op": "eq",
+          "valor": "e27",
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true,
+      "nota": "Mayusculas y tildes se normalizan."
+    },
+    {
+      "id": "E20",
+      "consulta": "e 27",
+      "esperado": [
+        {
+          "clave": "zocalo",
+          "op": "eq",
+          "valor": "e27",
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E21",
+      "consulta": "interruptor 2x25a",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 25,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E22",
+      "consulta": "tripolar 63a",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 3,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 63,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E23",
+      "consulta": "contactor 4p 40a",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 4,
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 40,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E24",
+      "consulta": "ip 54",
+      "esperado": [
+        {
+          "clave": "ip",
+          "op": "eq",
+          "valor": 54,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E25",
+      "consulta": "ip650",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E26",
+      "consulta": "lampara 1700k",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E27",
+      "consulta": "spot 3000 k",
+      "esperado": [
+        {
+          "clave": "temperatura_k",
+          "op": "eq",
+          "valor": 3000,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E28",
+      "consulta": "lampara 800 lm",
+      "esperado": [
+        {
+          "clave": "flujo_lm",
+          "op": "eq",
+          "valor": 800,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E29",
+      "consulta": "1.200 lm",
+      "esperado": [
+        {
+          "clave": "flujo_lm",
+          "op": "eq",
+          "valor": 1200,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E30",
+      "consulta": "proyector 60 grados",
+      "esperado": [
+        {
+          "clave": "angulo_grados",
+          "op": "eq",
+          "valor": 60,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E31",
+      "consulta": "lampara 10 a",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 10,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true,
+      "nota": "Sin contexto, '10 a' al final se lee como amperes (misma regla que el admin)."
+    },
+    {
+      "id": "E32",
+      "consulta": "2x36w",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Dos tubos de 36 W: ambiguo."
+    },
+    {
+      "id": "E33",
+      "consulta": "tira led 4,8w/m 5m",
+      "esperado": [
+        {
+          "clave": "largo_m",
+          "op": "eq",
+          "valor": 5,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E34",
+      "consulta": "110 lm/w",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E35",
+      "consulta": "diferencial 25a 300ma",
+      "esperado": [
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 25,
+          "confianza": "alta"
+        },
+        {
+          "clave": "sensibilidad_ma",
+          "op": "eq",
+          "valor": 300,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E36",
+      "consulta": "30ma",
+      "esperado": [
+        {
+          "clave": "sensibilidad_ma",
+          "op": "eq",
+          "valor": 30,
+          "confianza": "media"
+        }
+      ],
+      "paridad": false,
+      "nota": "Sin contexto de diferencial la sensibilidad es heuristica. El admin exige contexto de diferencial para leer 'ma'; el Shop lo lee con confianza media."
+    },
+    {
+      "id": "E37",
+      "consulta": "termica c 16",
+      "esperado": [
+        {
+          "clave": "curva",
+          "op": "eq",
+          "valor": "c",
+          "confianza": "alta"
+        },
+        {
+          "clave": "corriente_a",
+          "op": "eq",
+          "valor": 16,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E38",
+      "consulta": "c16",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Sin contexto de proteccion es un codigo."
+    },
+    {
+      "id": "E39",
+      "consulta": "lampara 9 12",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Dos numeros sueltos distintos: ninguno."
+    },
+    {
+      "id": "E40",
+      "consulta": "termica 20 25",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Dos numeros sueltos distintos: ninguno."
+    },
+    {
+      "id": "E41",
+      "consulta": "",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E42",
+      "consulta": "   ",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E43",
+      "consulta": "bipolar",
+      "esperado": [
+        {
+          "clave": "polos",
+          "op": "eq",
+          "valor": 2,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    },
+    {
+      "id": "E44",
+      "consulta": "cable tripolar 3x2,5mm2",
+      "esperado": [
+        {
+          "clave": "seccion_mm2",
+          "op": "eq",
+          "valor": 2.5,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true,
+      "nota": "En contexto cable no se emiten polos."
+    },
+    {
+      "id": "E45",
+      "consulta": "utp cat 6a",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Telecom: '6a' no son amperes."
+    },
+    {
+      "id": "E46",
+      "consulta": "lampara 0w",
+      "esperado": [],
+      "paridad": true
+    },
+    {
+      "id": "E47",
+      "consulta": "interruptor 5x20",
+      "esperado": [],
+      "paridad": true,
+      "nota": "Solo 1 a 4 polos."
+    },
+    {
+      "id": "E48",
+      "consulta": "tira led 24v 10 metros",
+      "esperado": [
+        {
+          "clave": "tension_v",
+          "op": "eq",
+          "valor": 24,
+          "confianza": "alta"
+        },
+        {
+          "clave": "largo_m",
+          "op": "eq",
+          "valor": 10,
+          "confianza": "alta"
+        }
+      ],
+      "paridad": true
+    }
+  ]
+}

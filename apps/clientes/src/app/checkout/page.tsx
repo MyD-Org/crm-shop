@@ -14,6 +14,7 @@ import { ubicacionDelVisitante } from "@/lib/ubicacion-servidor";
 import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfrecibles } from "@/lib/medios-pago-datos";
+import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -69,7 +70,11 @@ export default async function CheckoutPage() {
   // Los medios de pago son los del CRM, sin Mercado Pago si faltan las credenciales en el Shop. Las
   // cuotas sin interés viajan en cada medio (`condicionesCuotas`); el servidor sólo las ofrece con el
   // flag `cuotas-cobro` prendido.
-  const [reglas, mediosPago] = await Promise.all([reglasPromise, mediosPromise]);
+  const [reglas, mediosOfrecidos] = await Promise.all([reglasPromise, mediosPromise]);
+  // Cuenta corriente: al navegador sólo viaja el medio de su audiencia; al resto, nunca ese medio
+  // (ni su nombre ni sus instrucciones). El servidor vuelve a validar en `POST /api/pedidos`.
+  const esCuentaCorriente = esCompradorCuentaCorriente(cliente);
+  const mediosPago = mediosVisiblesPara(mediosOfrecidos, esCuentaCorriente);
   // Con el flag `sucursales`: locales de retiro y zona vigente. null = como siempre.
   const sucursales = await opcionesCheckoutDelVisitante().catch(
     (err: unknown) => {
@@ -135,6 +140,7 @@ export default async function CheckoutPage() {
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}
         mediosPago={mediosPago}
+        esCuentaCorriente={esCuentaCorriente}
         eleccionInicial={eleccion}
       />
     </>

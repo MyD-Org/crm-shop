@@ -10,6 +10,7 @@
  */
 import { escapeHtml as e } from "./escape-html";
 import { FUENTE_MAIL, pieTexto, tarjetaMail } from "./mail-layout";
+import { textoPagaConMedio } from "./medios-pago";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "./cuentas-bancarias";
 import { TEXTO_PLAZO_COMPROBANTE } from "./comprobantes/pedido";
 
@@ -46,6 +47,8 @@ export interface DatosMailPedido {
   pago?: string;
   /** Sólo "recibido": el pago en línea todavía no se completó. */
   pagoPendienteEnLinea?: boolean;
+  /** Sólo "recibido": el pedido es de una cuenta corriente y `pago` es el nombre de su medio. */
+  pagoCuentaCorriente?: boolean;
   /**
    * Sólo "recibido": plazo de contacto (mensaje ya resuelto) y
    * WhatsApp de la sucursal asignada. Sin `whatsappUrl` va sólo el mensaje.
@@ -138,7 +141,9 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
     asunto: "recibido",
     titulo: "Recibimos su pedido",
     bajada: (d) =>
-      d.pagoPendienteEnLinea
+      d.pagoCuentaCorriente && d.pago
+        ? `Registramos su pedido. ${textoPagaConMedio(d.pago)} Le avisaremos por este medio cada vez que avance.`
+        : d.pagoPendienteEnLinea
         ? "Registramos su pedido. Si todavía no completó el pago, puede hacerlo desde Mis pedidos. Le avisaremos por este medio cada vez que avance."
         : "Registramos su pedido. Le avisaremos por este medio cada vez que avance.",
   },

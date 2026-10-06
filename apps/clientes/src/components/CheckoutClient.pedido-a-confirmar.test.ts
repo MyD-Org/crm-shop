@@ -21,7 +21,7 @@ function archivos(dir: string): string[] {
 
 describe("CheckoutClient con medios de pago de la tabla", () => {
   it("el paso Pago ofrece los medios aplicables a la modalidad y trae la nota para los manuales", () => {
-    expect(fuente).toContain("const mediosParaElegir = mediosParaModalidad(mediosPago, entrega);");
+    expect(fuente).toContain("const mediosParaElegir = mediosParaModalidad(mediosPago, entrega, opcionesMedios);");
     expect(fuente).toContain(">Medio de pago</h2>");
     expect(fuente).toContain("{!pagaEnLinea && <p");
     expect(fuente).toContain("{NOTA_PAGO_A_CONFIRMAR}");
@@ -72,5 +72,22 @@ describe("los flags no salen del server", () => {
         return /^\s*["']use client["']/.test(t) && /from\s+["'](?:[^"']*-flag|@\/flags)["']/.test(t);
       });
     expect(culpables).toEqual([]);
+  });
+});
+
+describe("CheckoutClient con cuenta corriente", () => {
+  it("recibe el flag del server y lo usa para elegir los medios (sin decidirlo en el navegador)", () => {
+    expect(fuente).toContain("esCuentaCorriente = false,");
+    expect(fuente).toContain("const opcionesMedios = { esCuentaCorriente };");
+    expect(fuente).toContain("medioElegido(mediosPago, entrega, medioSlug, opcionesMedios)");
+  });
+
+  it("muestra el único medio como texto informativo y no ofrece cuotas ni lista por medio", () => {
+    expect(fuente).toContain("{textoPagaConMedio(medioSel.nombre)}");
+    expect(fuente).toContain("pagoParaCotizar(mediosPago, entrega, esCuentaCorriente ? null : medioSel)");
+  });
+
+  it("el pedido a confirmar informa con qué medio paga, en usted", () => {
+    expect(fuente).toContain("todavía no se realizó ningún cobro. {textoPagaConMedio(medioSel.nombre)}");
   });
 });

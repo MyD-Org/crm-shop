@@ -13,7 +13,10 @@
  * - `legado`: reproduce EXACTO lo que cada superficie hacía por su cuenta (catálogo: plan, o
  *   exacta y reintento tolerante; autocompletar: plan, exacta, tolerante; chat: exacta, tolerante;
  *   admin: exacta). Conducta nula: la fachada sólo junta las copias del reintento tolerante.
- * - `cascada`: todavía no está implementada.
+ * - `cascada`: código (si la consulta parece un código) -> plan (si aporta) -> exacta -> tolerante
+ *   CONSERVANDO el plan y los duros; corta en la primera etapa con resultados y tiene un
+ *   presupuesto de tiempo y un tope de espera del plan por superficie (`PRESUPUESTOS_CASCADA`).
+ *   Qué superficies la corren y cuándo (flag `busqueda-motor-unico`) lo decide `motor-servidor.ts`.
  *
  * Reglas que no se rompen (spec `busqueda-motor-unico`):
  * - El motor NO reimplementa `pareceCodigo` (lo importa de gate.ts) ni edita ese módulo.
@@ -25,8 +28,9 @@
 import type { Product } from "@/data/products";
 import { pareceCodigo } from "../busqueda-inteligente/gate";
 import type { Facetas, FiltrosCatalogo, PaginaCatalogo, TextoBusqueda } from "../catalog";
-import { terminosBusqueda } from "../catalogo-busqueda";
+import { normalizarCodigo, terminosBusqueda } from "../catalogo-busqueda";
 import type { OrdenCatalogo } from "../catalogo-url";
+import { aportaAlgo } from "./buscar";
 import { criterioDe } from "./destino";
 import type { PlanBusqueda } from "./plan";
 
@@ -99,6 +103,8 @@ export interface ResultadoBuscar {
   /** Filtros (con `texto`) de la etapa con resultados o, si ninguna, los de la primera etapa corrida. */
   filtrosEfectivos: FiltrosCatalogo;
   facetas?: Facetas;
+  /** Se agotó el presupuesto de tiempo antes de probar una etapa más (sólo política `cascada`). */
+  truncado?: boolean;
   ms: number;
 }
 
@@ -126,6 +132,45 @@ const LEGADO: Record<Superficie, ReglasLegado> = {
 
 const admiteParecido = (termino: string) => termino.length >= 4;
 
+/** Presupuesto de la política `cascada` por superficie (valores iniciales: se calibran con el banco). */
+export interface PresupuestoCascada {
+  /** No se INICIA una etapa nueva pasado este tiempo desde el inicio (la DB no se cancela). `null` = sin tope. */
+  presupuestoMs: number | null;
+  /** Si el plan no responde en este tiempo se sigue sin plan. `null` = se espera. */
+  planTimeoutMs: number | null;
+  /** Etapas como máximo. */
+  etapasMax: number;
+}
+
+export const PRESUPUESTOS_CASCADA: Record<Superficie, PresupuestoCascada> = {
+  catalogo: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 3 },
+  autocompletar: { presupuestoMs: 450, planTimeoutMs: 250, etapasMax: 3 },
+  chat: { presupuestoMs: 1500, planTimeoutMs: 600, etapasMax: 3 },
+  admin: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 2 },
+};
+
+/** Conteo por superficie (igual en las dos políticas) y etapas cuyo error pasa a la siguiente en `cascada`. */
+const CONTEO: Record<Superficie, boolean> = { catalogo: true, autocompletar: false, chat: false, admin: false };
+const DEGRADA_CASCADA: readonly Etapa[] = ["plan", "tolerante"];
+
+/** Lo que la política le impone a una búsqueda (se resuelve una vez por llamada). */
+interface Reglas {
+  conteo: boolean;
+  degradaEn: readonly Etapa[];
+  estructuradosEn: "todas" | readonly Etapa[];
+  presupuestoMs: number | null;
+  planTimeoutMs: number | null;
+}
+
+function reglasDe(politica: Politica, superficie: Superficie): Reglas {
+  if (politica === "cascada") {
+    const { presupuestoMs, planTimeoutMs } = PRESUPUESTOS_CASCADA[superficie];
+    return { conteo: CONTEO[superficie], degradaEn: DEGRADA_CASCADA, estructuradosEn: "todas", presupuestoMs, planTimeoutMs };
+  }
+  const { conteo, degradaEn, estructuradosEn } = LEGADO[superficie];
+  return { conteo, degradaEn, estructuradosEn, presupuestoMs: null, planTimeoutMs: null };
+}
+
 interface EntradaPlan {
   politica: Politica;
   superficie: Superficie;
@@ -135,7 +180,8 @@ interface EntradaPlan {
 
 /** ¿Esta búsqueda va a necesitar el plan? Evita pedirlo (y gastar) cuando ninguna etapa lo usa. */
 export function necesitaPlan({ politica, superficie, consulta, conPlan }: EntradaPlan): boolean {
-  if (politica !== "legado" || !conPlan || terminosBusqueda(consulta).length === 0) return false;
+  if (!conPlan || terminosBusqueda(consulta).length === 0) return false;
+  if (politica === "cascada") return superficie !== "admin" && !pareceCodigo(consulta);
   const { plan } = LEGADO[superficie];
   return plan === "si" || (plan === "si-sin-codigo" && !pareceCodigo(consulta));
 }
@@ -143,11 +189,24 @@ export function necesitaPlan({ politica, superficie, consulta, conPlan }: Entrad
 /**
  * Las etapas que corre una búsqueda, en orden (pura). `plan` es el plan ya resuelto (o null);
  * un plan de intención "codigo" cuenta como sin plan.
+ *
+ * Cascada: G (parece un código, o el plan lo dice, con 3 o más caracteres) => [codigo, tolerante];
+ * con plan que aporta => [plan, exacta, tolerante]; con plan que no aporta => [exacta, plan,
+ * tolerante]; sin plan => [exacta, tolerante]. La `exacta` tras el `plan` es una red de seguridad
+ * (el plan recupera por comienzo de palabra y la clásica por «contiene»): sólo corre si el plan dio 0.
  */
 export function etapasDe({ politica, superficie, consulta, plan, conPlan }: EntradaPlan & { plan: PlanBusqueda | null }): Etapa[] {
-  if (politica !== "legado") throw new Error("La política cascada todavía no está implementada.");
   const terminos = terminosBusqueda(consulta);
   if (terminos.length === 0) return ["sin-texto"];
+  const conParecido = terminos.some(admiteParecido);
+  if (politica === "cascada") {
+    const esCodigo = !!normalizarCodigo(consulta) && (pareceCodigo(consulta) || (conPlan && plan?.intencion === "codigo"));
+    if (esCodigo) return ["codigo", "tolerante"];
+    const conPlanUsable = conPlan && !!plan && plan.intencion !== "codigo" && superficie !== "admin";
+    const etapas: Etapa[] = conPlanUsable ? (aportaAlgo(plan) ? ["plan", "exacta"] : ["exacta", "plan"]) : ["exacta"];
+    if (conParecido) etapas.push("tolerante");
+    return etapas.slice(0, PRESUPUESTOS_CASCADA[superficie].etapasMax);
+  }
   const reglas = LEGADO[superficie];
   const etapas: Etapa[] = [];
   const conPlanUsable = conPlan && !!plan && plan.intencion !== "codigo" && necesitaPlan({ politica, superficie, consulta, conPlan });
@@ -156,44 +215,64 @@ export function etapasDe({ politica, superficie, consulta, plan, conPlan }: Entr
     if (reglas.planSolo) return etapas;
   }
   etapas.push("exacta");
-  if (reglas.tolerante && terminos.some(admiteParecido)) etapas.push("tolerante");
+  if (reglas.tolerante && conParecido) etapas.push("tolerante");
   return etapas;
 }
 
 const nombreDe = (err: unknown) => (err instanceof Error ? err.name : "desconocido");
 
+/** El plan, perezoso: un plan que falla es "sin plan" y, con tope, uno que tarda demasiado también. */
+async function resolverPlan(planDe: NonNullable<OpcionesBuscar["planDe"]>, q: string, topeMs: number | null): Promise<PlanBusqueda | null> {
+  const pedido = (async () => {
+    try {
+      return await planDe(q);
+    } catch {
+      return null;
+    }
+  })();
+  if (topeMs == null) return pedido;
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  const tope = new Promise<null>((resolver) => {
+    temporizador = setTimeout(() => resolver(null), topeMs);
+  });
+  try {
+    return await Promise.race([pedido, tope]);
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
 export async function buscar(p: PedidoBuscar, o: OpcionesBuscar, d: DepsMotor): Promise<ResultadoBuscar> {
-  if (o.politica !== "legado") throw new Error("La política cascada todavía no está implementada.");
   const ahora = d.ahora ?? Date.now;
   const inicio = ahora();
   const q = p.consulta?.trim() ?? "";
-  const reglas = LEGADO[o.superficie];
+  const reglas = reglasDe(o.politica, o.superficie);
   const entrada: EntradaPlan = { politica: o.politica, superficie: o.superficie, consulta: q, conPlan: o.conPlan };
 
-  // Perezoso: sólo si alguna etapa lo va a usar. Un plan que falla es "sin plan", no un error.
-  let plan: PlanBusqueda | null = null;
-  if (o.planDe && necesitaPlan(entrada)) {
-    try {
-      plan = await o.planDe(q);
-    } catch {
-      plan = null;
-    }
-  }
+  // Perezoso: sólo si alguna etapa lo va a usar.
+  const plan = o.planDe && necesitaPlan(entrada) ? await resolverPlan(o.planDe, q, reglas.planTimeoutMs) : null;
 
+  const etapas = etapasDe({ ...entrada, plan });
   const conteo = o.conteo ?? reglas.conteo;
+  // En cascada la tolerante conserva el plan (y con él los duros y los términos), si hubo etapa plan.
+  const toleranteConPlan = o.politica === "cascada" && etapas.includes("plan");
+  const esCodigo = etapas.includes("codigo");
   const filtrosDe = (etapa: Etapa): FiltrosCatalogo => {
     const base: FiltrosCatalogo = { ...p.filtros };
     if (reglas.estructuradosEn !== "todas" && !reglas.estructuradosEn.includes(etapa)) delete base.atributosEstructurados;
+    const criterio = () => criterioDe(plan!, { categorias: base.categorias ?? [], atributos: base.atributos ?? [] });
     let texto: TextoBusqueda | undefined;
     if (etapa === "exacta") texto = { q };
-    else if (etapa === "tolerante") texto = { q, tolerante: true };
-    else if (etapa === "plan") texto = { q, plan: criterioDe(plan!, { categorias: base.categorias ?? [], atributos: base.atributos ?? [] }) };
+    else if (etapa === "codigo") texto = { q, codigo: true };
+    else if (etapa === "tolerante") texto = { q, tolerante: true, ...(toleranteConPlan ? { plan: criterio() } : {}), ...(esCodigo ? { codigo: true } : {}) };
+    else if (etapa === "plan") texto = { q, plan: criterio() };
     return texto ? { ...base, texto } : base;
   };
 
   const intentos: Etapa[] = [];
   let primera: { filtros: FiltrosCatalogo; pagina: PaginaCatalogo; facetas?: Facetas } | null = null;
   let ultimoError: unknown;
+  let truncado = false;
   const armar = (etapa: Etapa, e: NonNullable<typeof primera>, vacio: boolean): ResultadoBuscar => ({
     productos: vacio ? [] : e.pagina.productos,
     total: vacio ? 0 : e.pagina.total,
@@ -205,10 +284,17 @@ export async function buscar(p: PedidoBuscar, o: OpcionesBuscar, d: DepsMotor): 
     plan,
     filtrosEfectivos: e.filtros,
     ...(e.facetas ? { facetas: e.facetas } : {}),
+    ...(truncado ? { truncado: true } : {}),
     ms: ahora() - inicio,
   });
 
-  for (const etapa of etapasDe({ ...entrada, plan })) {
+  for (const etapa of etapas) {
+    // Presupuesto: no se INICIA una etapa nueva pasado el tiempo (la primera siempre corre).
+    if (reglas.presupuestoMs != null && intentos.length > 0 && ahora() - inicio >= reglas.presupuestoMs) {
+      truncado = true;
+      d.log?.(`[busqueda] presupuesto agotado antes de la etapa ${etapa}`);
+      break;
+    }
     intentos.push(etapa);
     const filtros = filtrosDe(etapa);
     let leida: { filtros: FiltrosCatalogo; pagina: PaginaCatalogo; facetas?: Facetas };

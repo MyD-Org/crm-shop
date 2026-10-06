@@ -21,10 +21,15 @@ function leerCookie(nombre: string, cookies: string): string | undefined {
   return par?.slice(nombre.length + 1);
 }
 
-/** Dispara `busqueda_enviada` si `/buscar` dejó su resumen, y lo borra. `doc` se inyecta en los tests. */
+/**
+ * Dispara `busqueda_enviada` si `/buscar` dejó su resumen, y lo borra. `etapa` es la del motor que
+ * resolvió la búsqueda (código, plan, exacta, tolerante…; aditivo: sin ella el payload es el de
+ * siempre). `doc` se inyecta en los tests.
+ */
 export function enviarBusquedaEnviada(
   consulta: string,
   total: number,
+  etapa?: string,
   doc: { cookie: string } | undefined = typeof document === "undefined" ? undefined : document,
 ): boolean {
   if (!doc) return false;
@@ -32,7 +37,7 @@ export function enviarBusquedaEnviada(
   if (!resumen) return false;
   doc.cookie = `${COOKIE_RESUMEN}=; path=/; max-age=0; samesite=lax`;
   const norm = normalizarConsulta(consulta);
-  track({ tipo: "busqueda_enviada", ...resumen, total, ...(norm ? { consulta: norm } : {}) });
+  track({ tipo: "busqueda_enviada", ...resumen, total, ...(norm ? { consulta: norm } : {}), ...(etapa ? { etapa } : {}) });
   return true;
 }
 

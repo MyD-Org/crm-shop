@@ -72,6 +72,14 @@ export const precioEspecialCuentaFlag = flag<boolean>({
   adapter: vercelAdapter,
 });
 
+export const busquedaMotorUnicoFlag = flag<boolean>({
+  key: "busqueda-motor-unico",
+  description:
+    "Motor de búsqueda único (cascada código/plan/exacta/tolerante) para el catálogo y el autocompletar. Apagado: comportamiento previo (política legado)",
+  defaultValue: false,
+  adapter: vercelAdapter,
+});
+
 export const busquedaMedidasFlag = flag<boolean>({
   key: "busqueda-medidas",
   description:

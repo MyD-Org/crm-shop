@@ -84,9 +84,10 @@ describe("parsearArgs: --tuberia", () => {
 });
 
 describe("parsearArgs: tubería motor (--politica, --superficie, --paridad, --paridad-con, --ids)", () => {
-  it("--tuberia=motor: Jev como v2 (grabado por defecto), sin umbral, política legado y superficie catálogo", () => {
+  it("--tuberia=motor: Jev como v2 (grabado por defecto), sin umbral, política cascada y superficie catálogo", () => {
     const a = parsearArgs(["--tuberia=motor"]);
-    expect(a).toMatchObject({ tuberia: "motor", jev: "grabado", umbral: 0, politica: "legado", superficie: "catalogo", paridad: false, ids: false });
+    expect(a).toMatchObject({ tuberia: "motor", jev: "grabado", umbral: 0, politica: "cascada", superficie: "catalogo", paridad: false, ids: false });
+    expect(parsearArgs(["--tuberia=motor", "--politica=legado"]).politica).toBe("legado");
     expect(a.paridadCon).toBeUndefined();
     expect(parsearArgs(["--tuberia=motor", "--jev=cache"]).jev).toBe("cache");
     expect(parsearArgs(["--tuberia=motor", "--jev=no"]).jev).toBe("no");
@@ -111,7 +112,7 @@ describe("parsearArgs: tubería motor (--politica, --superficie, --paridad, --pa
     expect(() => parsearArgs(["--tuberia=v2", "--superficie=chat"])).toThrow(/--tuberia=motor/);
   });
 
-  it("--paridad exige --tuberia=motor y política legado", () => {
+  it("--paridad exige --tuberia=motor y política legado (que es su default)", () => {
     expect(parsearArgs(["--tuberia=motor", "--paridad"])).toMatchObject({ paridad: true, politica: "legado" });
     expect(() => parsearArgs(["--paridad"])).toThrow(/--tuberia=motor/);
     expect(() => parsearArgs(["--tuberia=motor", "--politica=cascada", "--paridad"])).toThrow(/legado/);

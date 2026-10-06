@@ -15,7 +15,7 @@ describe("telemetría de la búsqueda", () => {
     const doc = {
       cookie: `otra=1; ${COOKIE_RESUMEN}=${encodeURIComponent(valorCookieResumen({ intencion: "necesidad", fuente: "jev", duros: 1, blandos: 2, ms_jev: 480 }))}`,
     };
-    expect(enviarBusquedaEnviada("Algo para el BAÑO", 42, doc)).toBe(true);
+    expect(enviarBusquedaEnviada("Algo para el BAÑO", 42, undefined, doc)).toBe(true);
     expect(track).toHaveBeenCalledWith({
       tipo: "busqueda_enviada",
       intencion: "necesidad",
@@ -29,10 +29,33 @@ describe("telemetría de la búsqueda", () => {
     expect(doc.cookie).toContain("max-age=0");
   });
 
+  it("suma la etapa del motor que resolvió la búsqueda, sin tocar el resto del payload", () => {
+    const resumen = valorCookieResumen({ intencion: "producto", fuente: "cache", duros: 0, blandos: 1, ms_jev: null });
+    const doc = { cookie: `${COOKIE_RESUMEN}=${encodeURIComponent(resumen)}` };
+    expect(enviarBusquedaEnviada("panel led", 5, "tolerante", doc)).toBe(true);
+    expect(track).toHaveBeenCalledWith({
+      tipo: "busqueda_enviada",
+      intencion: "producto",
+      fuente: "cache",
+      duros: 0,
+      blandos: 1,
+      ms_jev: null,
+      total: 5,
+      consulta: "panel led",
+      etapa: "tolerante",
+    });
+  });
+
+  it("sin etapa el payload es el de siempre (no aparece la clave)", () => {
+    const resumen = valorCookieResumen({ intencion: "producto", fuente: "cache", duros: 0, blandos: 1, ms_jev: null });
+    enviarBusquedaEnviada("panel led", 5, undefined, { cookie: `${COOKIE_RESUMEN}=${encodeURIComponent(resumen)}` });
+    expect(track.mock.calls[0][0]).not.toHaveProperty("etapa");
+  });
+
   it("sin cookie (recarga, paginar, link compartido) no hay evento; un dato personal no viaja", () => {
-    expect(enviarBusquedaEnviada("x", 1, { cookie: "otra=1" })).toBe(false);
+    expect(enviarBusquedaEnviada("x", 1, undefined, { cookie: "otra=1" })).toBe(false);
     const doc = { cookie: `${COOKIE_RESUMEN}=${encodeURIComponent(valorCookieResumen({ intencion: "producto", fuente: "cache", duros: 0, blandos: 0, ms_jev: null }))}` };
-    enviarBusquedaEnviada("juan@correo.example", 3, doc);
+    enviarBusquedaEnviada("juan@correo.example", 3, undefined, doc);
     expect(track.mock.calls[0][0]).not.toHaveProperty("consulta");
   });
 

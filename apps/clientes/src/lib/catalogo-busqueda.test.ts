@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formasTermino, patronLike, raizPlural, terminosBusqueda } from "./catalogo-busqueda";
+import { formasTermino, normalizarCodigo, patronLike, raizPlural, terminosBusqueda } from "./catalogo-busqueda";
 
 describe("terminosBusqueda", () => {
   it("parte por palabras: el orden en que se escriben no importa", () => {
@@ -69,5 +69,22 @@ describe("formasTermino", () => {
     expect(formasTermino("lamparas")).toEqual(["lamparas", "lampara"]);
     expect(formasTermino("led")).toEqual(["led"]);
     expect(formasTermino("e27")).toEqual(["e27"]);
+  });
+});
+
+describe("normalizarCodigo", () => {
+  it("minúsculas, sin tildes y sólo letras y dígitos: DL-18W, DL18W y «dl 18 w» son el mismo código", () => {
+    expect(normalizarCodigo("DL-18W")).toBe("dl18w");
+    expect(normalizarCodigo("DL18W")).toBe("dl18w");
+    expect(normalizarCodigo("dl 18 w")).toBe("dl18w");
+    expect(normalizarCodigo("  TM/2x16_ñ ")).toBe("tm2x16n");
+  });
+
+  it("menos de 3 caracteres no alcanza para una etapa de código: vacío", () => {
+    expect(normalizarCodigo("e2")).toBe("");
+    expect(normalizarCodigo("--")).toBe("");
+    expect(normalizarCodigo("")).toBe("");
+    expect(normalizarCodigo(undefined)).toBe("");
+    expect(normalizarCodigo("e27")).toBe("e27");
   });
 });

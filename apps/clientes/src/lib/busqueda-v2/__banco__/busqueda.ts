@@ -22,7 +22,7 @@
  *
  * Motor único de búsqueda (todo aditivo):
  *   --tuberia=motor                        la búsqueda del Shop por la fachada `buscar()` (jev como v2: grabado|vivo|no|cache)
- *   --politica=legado|cascada              política del motor (por defecto legado: lo que hacen hoy las superficies)
+ *   --politica=legado|cascada              política del motor (por defecto cascada; con --paridad, legado: lo que hacen hoy las superficies)
  *   --superficie=catalogo|autocompletar|chat  qué superficie se mide: K = 24 | 8 | 10, con o sin conteo del total
  *   --paridad                              el motor legado contra el oráculo legado (`legado.ts`), caso por caso: top-K de ids,
  *                                          orden y, en el catálogo, el total. Exit 1 si hay alguna diferencia (se corre en

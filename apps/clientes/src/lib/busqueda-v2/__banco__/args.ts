@@ -128,7 +128,8 @@ export function parsearArgs(argv: readonly string[]): ArgsBanco {
   const solo = mapa.get("solo");
   if (solo !== undefined && solo !== "diagnostico") throw new Error("--solo sólo admite diagnostico.");
 
-  // Tubería `motor`: política y superficie (el default de política es `legado` hasta que la cascada exista).
+  // Tubería `motor`: política y superficie. La política por defecto es `cascada`; `--paridad` mide el motor
+  // legado contra el oráculo, así que ahí el default es `legado`.
   const esMotor = tuberia === "motor";
   for (const flag of ["politica", "superficie", "paridad", "paridad-con"]) {
     if (mapa.has(flag) && !esMotor) throw new Error(`--${flag} sólo vale con --tuberia=motor.`);
@@ -137,9 +138,9 @@ export function parsearArgs(argv: readonly string[]): ArgsBanco {
   if (politicaPedida !== undefined && !POLITICAS.includes(politicaPedida as PoliticaBanco)) throw new Error(`--politica inválida: use ${POLITICAS.join("|")}.`);
   const superficiePedida = mapa.get("superficie");
   if (superficiePedida !== undefined && !SUPERFICIES.includes(superficiePedida as SuperficieBanco)) throw new Error(`--superficie inválida: use ${SUPERFICIES.join("|")}.`);
-  const politica = esMotor ? ((politicaPedida ?? "legado") as PoliticaBanco) : undefined;
-  const superficie = esMotor ? ((superficiePedida ?? "catalogo") as SuperficieBanco) : undefined;
   const paridad = mapa.has("paridad");
+  const politica = esMotor ? ((politicaPedida ?? (paridad ? "legado" : "cascada")) as PoliticaBanco) : undefined;
+  const superficie = esMotor ? ((superficiePedida ?? "catalogo") as SuperficieBanco) : undefined;
   const paridadCon = mapa.get("paridad-con");
   if (paridad && paridadCon !== undefined) throw new Error("--paridad y --paridad-con no se combinan: elija uno.");
   if (paridad && politica !== "legado") throw new Error("--paridad compara la política legado contra el oráculo: no admite --politica=cascada.");

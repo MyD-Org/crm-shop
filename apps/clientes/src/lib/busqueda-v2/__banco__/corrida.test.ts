@@ -95,6 +95,11 @@ describe("correr: armado del reporte", () => {
     expect(json.latencia).toEqual(json.resumen.latencia);
   });
 
+  it("cada caso lleva su intención esperada (para los cortes de los criterios de la cascada)", async () => {
+    const { json } = await correr(opciones(), deps());
+    expect(json.casos.map((c) => c.intencion)).toEqual(["producto", undefined, "codigo"]);
+  });
+
   it("el JSON es válido, estable (mismo orden de claves) y reproducible", async () => {
     const a = JSON.stringify((await correr(opciones(), deps())).json);
     const b = JSON.stringify((await correr(opciones(), deps())).json);

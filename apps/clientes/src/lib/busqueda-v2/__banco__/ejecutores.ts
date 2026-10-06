@@ -34,7 +34,7 @@ export interface ConfigEjecutor {
    * el de la vista; en la línea base es el de producción, que es el que sirvió el plan al cliente.
    */
   soloVisiblesDelPlan?: boolean;
-  /** Sólo tubería `motor` y oráculo `legado`: política (por defecto `legado`) y superficie (por defecto `catalogo`). */
+  /** Sólo tubería `motor` y oráculo `legado`: política (por defecto `cascada`) y superficie (por defecto `catalogo`). */
   politica?: PoliticaBanco;
   superficie?: SuperficieBanco;
   /** `--medidas=si`: las tuberías con plan (`v2`, `motor` y el oráculo `legado`) aplican `aplicarMedidas` sobre el plan. */
@@ -108,7 +108,7 @@ export function crearEjecutor(cfg: ConfigEjecutor): Ejecutor {
     }
     case "motor": {
       const { ctx, jevMeta, sinGrabacion } = contextoDePlan(cfg);
-      const motor = { ...ctx, politica: cfg.politica ?? "legado", superficie: cfg.superficie ?? "catalogo" } as const;
+      const motor = { ...ctx, politica: cfg.politica ?? "cascada", superficie: cfg.superficie ?? "catalogo" } as const;
       return { ejecutar: (q) => ejecutarMotor(q, motor), ...(jevMeta ? { jevMeta } : {}), ...(sinGrabacion ? { sinGrabacion } : {}) };
     }
   }

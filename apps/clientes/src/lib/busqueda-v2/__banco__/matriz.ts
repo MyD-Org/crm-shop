@@ -10,13 +10,15 @@
  * y únicamente sobre el banco sintético.
  *
  * Con `--motor` (aditivo) la matriz suma las filas de la tubería `motor`: por banco y vista, el
- * motor con política `legado` (la cascada se agrega cuando exista) en la superficie catálogo
- * (ambas vistas) y en autocompletar y chat (sólo la vista de producción, que es la que ven).
- * Los ids de las filas de siempre no cambian.
+ * motor con política `legado` y con política `cascada` en la superficie catálogo (ambas vistas) y
+ * en autocompletar y chat (sólo la vista de producción, que es la que ven). Los ids de las filas
+ * de siempre no cambian. `matriz.txt` agrega, por cada fila cascada, los criterios de aceptación
+ * contra R_s (ver `criterios.ts`).
  */
 import { sonComparables, type ModoJev, type PoliticaBanco, type ReporteJson, type SuperficieBanco, type Tuberia } from "./corrida";
 import type { ResumenNum } from "./metricas";
 import type { ModoEtiquetas } from "./cargar-banco";
+import { formatearCriterios } from "./criterios";
 
 export type BancoDeMatriz = "sintetico" | "real";
 export type VistaDeMatriz = "banco" | "produccion";
@@ -59,8 +61,8 @@ function motoresDe(banco: BancoDeMatriz, jevVivo: boolean): { tuberia: Tuberia; 
 
 const sufijoJev = (jev: ModoJev) => (jev === "no aplica" ? "" : `-${jev === "no" ? "sinjev" : jev}`);
 
-/** Políticas del motor que miden las filas `--motor` (la cascada se suma cuando exista). */
-const POLITICAS_MOTOR: readonly PoliticaBanco[] = ["legado"];
+/** Políticas del motor que miden las filas `--motor`: la de hoy y la cascada, en la misma corrida (D-4: una sola matriz). */
+const POLITICAS_MOTOR: readonly PoliticaBanco[] = ["legado", "cascada"];
 
 /** Superficies del motor por vista: la de producción es la que ven autocompletar y chat. */
 const SUPERFICIES_POR_VISTA: Record<VistaDeMatriz, readonly SuperficieBanco[]> = {
@@ -253,6 +255,8 @@ export function formatearMatriz(corridas: readonly CorridaDeMatriz[]): string {
       }
     }
   }
+  // Criterios de aceptación de la cascada (sólo si la matriz trae filas `motor/cascada`).
+  lineas.push(...formatearCriterios(corridas));
   lineas.push("", "Notas: precision@24 es un proxy (esperados o de la categoría buscada sobre los productos devueltos). Disponibilidad por sucursal no se modela (se asume stock único).");
   return `${lineas.join("\n")}\n`;
 }

@@ -16,6 +16,10 @@ export interface MedidaEsperadaJson {
   cumple: number;
   contradice: number;
   duras: number;
+  /** Pares (contradice, cumple) con el que contradice por encima, en las claves discretas (ver `evaluarMedidas`). Ausente en JSON anteriores. */
+  inversiones?: number;
+  /** Productos que contradicen por encima del último que cumple. Ausente en JSON anteriores. */
+  arriba?: number;
   /** `--ids`: ids de los productos del top 24 que contradicen. */
   contradicen?: string[];
 }
@@ -58,6 +62,8 @@ export function medidaParaJson(m: EvaluacionMedida, { enmascarar, ids, pagina }:
       cumple: d.cumple,
       contradice: d.contradice,
       duras: d.duras,
+      inversiones: d.inversiones,
+      arriba: d.arriba,
       ...(ids && d.contradicen.length ? { contradicen: d.contradicen } : {}),
     })),
   };

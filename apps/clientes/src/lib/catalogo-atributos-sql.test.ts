@@ -5,6 +5,7 @@ import { atributoPorId, type CriterioEstructurado } from "./catalogo-atributos";
 import {
   columnasConteoAtributos,
   contradiccionSql,
+  contradiceAtributoSql,
   cumpleAtributoSql,
   filtroAtributosSql,
   sinContradiccionSql,
@@ -240,5 +241,38 @@ describe("facetas con un id dinámico activo", () => {
     const { sql: texto } = render(columnas["zocalo-e27"]);
     expect(texto).not.toContain("not (");
     expect(texto).toContain("TEXTO ~* ");
+  });
+});
+
+describe("contradiceAtributoSql (el negativo del orden: tiene dato de la clave y es otro)", () => {
+  it("dinámico en el WHERE: el EXISTS de la contradicción, con el valor como parámetro", () => {
+    const { sql: texto, params } = render(contradiceAtributoSql(ctxWhere(), "corriente_a:20")!);
+    expect(texto).toContain("exists (");
+    expect(texto).toContain("VN is not null");
+    expect(texto).not.toContain("not exists");
+    expect(params).toContain(20);
+  });
+
+  it("de texto (zócalo) y del diccionario (zocalo-e27): lee el valor_texto", () => {
+    expect(render(contradiceAtributoSql(ctxWhere(), "zocalo:e14")!).sql).toContain("VT is not null");
+    expect(render(contradiceAtributoSql(ctxWhere(), "zocalo-e27")!).sql).toContain("VT is not null");
+  });
+
+  it("en las facetas usa el jsonb", () => {
+    expect(render(contradiceAtributoSql(ctxFacetas, "polos:2")!).sql).toContain("ATTRS");
+  });
+
+  it("sin datos estructurados, sin criterio estructurado o con un id inexistente: undefined", () => {
+    expect(contradiceAtributoSql(ctxSinEstructurados, "corriente_a:20")).toBeUndefined();
+    expect(contradiceAtributoSql(ctxWhere(), "no-existe")).toBeUndefined();
+    expect(contradiceAtributoSql(ctxWhere(), "corriente_a:99999")).toBeUndefined();
+  });
+
+  it("es la negación exacta de sin contradicción (misma pieza)", () => {
+    const ctx = ctxWhere();
+    const neg = render(sinContradiccionSql(ctx, crit("corriente_a:20"))!);
+    const pos = render(contradiceAtributoSql(ctx, "corriente_a:20")!);
+    expect(neg.sql).toBe(`not ${pos.sql}`);
+    expect(neg.params).toEqual(pos.params);
   });
 });

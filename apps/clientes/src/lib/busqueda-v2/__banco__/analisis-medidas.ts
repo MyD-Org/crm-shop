@@ -34,6 +34,10 @@ export interface EntradaMedida {
   cumple: number;
   contradice: number;
   duras: number;
+  /** Pares (contradice, cumple) con el que contradice por encima, en las claves discretas; 0 si el JSON no lo trae. */
+  inversiones: number;
+  /** Productos que contradicen por encima del último que cumple. */
+  arriba: number;
   pagina: number;
   plan: string[] | undefined;
   estado: EstadoClave;
@@ -55,7 +59,7 @@ export function entradasDeReporte(r: ReporteMedidas): { entradas: EntradaMedida[
     const duras = new Set((m.duros ?? []).map(claveDePlan));
     for (const e of m.esperadas) {
       const estado: EstadoClave = !emitidas ? "sin-plan" : duras.has(e.clave) ? "dura" : emitidas.has(e.clave) ? "blanda" : "ausente";
-      entradas.push({ idx: c.idx, q: c.q ?? `#${c.idx}`, clave: e.clave, dura: e.dura, con: e.con, cumple: e.cumple, contradice: e.contradice, duras: e.duras, pagina: m.pagina, plan: m.plan, estado });
+      entradas.push({ idx: c.idx, q: c.q ?? `#${c.idx}`, clave: e.clave, dura: e.dura, con: e.con, cumple: e.cumple, contradice: e.contradice, duras: e.duras, inversiones: e.inversiones ?? 0, arriba: e.arriba ?? 0, pagina: m.pagina, plan: m.plan, estado });
     }
   }
   return { entradas, casosConMedida, casosEvaluables };
@@ -77,6 +81,14 @@ export function rankingContradicciones(entradas: readonly EntradaMedida[], { top
   return top === undefined ? filas : filas.slice(0, top);
 }
 
+/** Casos con contradicciones por encima de lo que cumple, ordenados por inversiones (desc), luego idx. */
+export function rankingInversiones(entradas: readonly EntradaMedida[], { top, clave }: Pick<OpcionesRanking, "top" | "clave"> = {}): EntradaMedida[] {
+  const filas = entradas
+    .filter((e) => (clave === undefined || e.clave === clave) && e.inversiones > 0)
+    .sort((a, b) => b.inversiones - a.inversiones || b.arriba - a.arriba || a.idx - b.idx || a.clave.localeCompare(b.clave));
+  return top === undefined ? filas : filas.slice(0, top);
+}
+
 export interface TotalClave {
   clave: string;
   casos: number;
@@ -87,6 +99,11 @@ export interface TotalClave {
   duras: number;
   /** `contradice - duras`. */
   blandas: number;
+  /** Inversiones de orden (contradice por encima de cumple) y casos que las tienen. */
+  inversiones: number;
+  casosConInversion: number;
+  /** Productos que contradicen por encima del último que cumple. */
+  arriba: number;
   casosConContradiccion: number;
   /** cumple / con; null si nadie tenía el dato. */
   precision: number | null;
@@ -102,7 +119,9 @@ function sumar(es: readonly EntradaMedida[]) {
   const contradice = es.reduce((s, e) => s + e.contradice, 0);
   const duras = es.reduce((s, e) => s + e.duras, 0);
   const pagina = es.reduce((s, e) => s + e.pagina, 0);
-  return { casos: es.length, con, cumple, contradice, duras, casosConContradiccion: es.filter((e) => e.contradice > 0).length, precision: ratio(cumple, con), cobertura: ratio(con, pagina) };
+  const inversiones = es.reduce((s, e) => s + e.inversiones, 0);
+  const arriba = es.reduce((s, e) => s + e.arriba, 0);
+  return { casos: es.length, con, cumple, contradice, duras, inversiones, arriba, casosConInversion: es.filter((e) => e.inversiones > 0).length, casosConContradiccion: es.filter((e) => e.contradice > 0).length, precision: ratio(cumple, con), cobertura: ratio(con, pagina) };
 }
 
 function porClave(entradas: readonly EntradaMedida[]): Map<string, EntradaMedida[]> {
@@ -205,9 +224,21 @@ export function formatearAnalisis(r: ReporteMedidas, { top, clave }: OpcionesAna
     if (total > ranking.length) lineas.push(`… ${total - ranking.length} más (use --top=N).`);
   }
 
+  // (a2) Orden
+  lineas.push("", "## Orden: contradicciones por encima de lo que cumple", "(inversión = un producto con dato que contradice la medida rankeado antes que uno que la cumple, en polos, corriente, sensibilidad y zócalo; objetivo 0; arriba = cuántos contradicen por encima del último que cumple)");
+  const inv = rankingInversiones(entradas, { top: top ?? (clave ? 50 : 20) });
+  const invTotal = rankingInversiones(entradas);
+  if (!inv.length) lineas.push("Ninguna inversión de orden.");
+  else {
+    lineas.push("idx | consulta | plan | clave | inversiones | estado");
+    for (const e of inv) lineas.push(`${e.idx} | ${cortar(e.q)} | ${e.plan ? (e.plan.length ? e.plan.join(", ") : "(sin medidas)") : "(la tubería no produce medidas)"} | ${e.clave} | ${e.inversiones} inversiones (${e.arriba} arriba) | ${e.estado}`);
+    if (invTotal.length > inv.length) lineas.push(`… ${invTotal.length - inv.length} más (use --top=N).`);
+    lineas.push(`Total: ${invTotal.reduce((s, e) => s + e.inversiones, 0)} inversiones en ${new Set(invTotal.map((e) => e.idx)).size} casos.`);
+  }
+
   // (b) Totales por clave
-  lineas.push("", "## Totales por clave", "clave | casos | contradicciones duras | blandas | con dato | precisión | cobertura");
-  for (const t of totalesPorClave(entradas)) lineas.push(`${t.clave} | ${t.casos} | ${t.duras} | ${t.blandas} | ${t.con} | ${pct(t.precision)} | ${pct(t.cobertura)}`);
+  lineas.push("", "## Totales por clave", "clave | casos | contradicciones duras | blandas | inversiones | con dato | precisión | cobertura");
+  for (const t of totalesPorClave(entradas)) lineas.push(`${t.clave} | ${t.casos} | ${t.duras} | ${t.blandas} | ${t.inversiones} | ${t.con} | ${pct(t.precision)} | ${pct(t.cobertura)}`);
 
   // (c) Impacto de la política
   const impacto = impactoPorClave(entradas);

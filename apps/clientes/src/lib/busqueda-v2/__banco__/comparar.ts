@@ -1,7 +1,7 @@
 /**
  * `banco:linea-base --comparar=<snapshot>`: compara la corrida actual contra una línea base congelada (el
  * `matriz.json` de una corrida anterior) y muestra el delta por corrida y por tipo de consulta de hit@24,
- * medida-precision@24, contradicciones@24, zero-result y p95 (spec busqueda-medidas R5.5). Módulo PURO salvo
+ * medida-precision@24, contradicciones@24, inversiones@24 (orden), zero-result y p95 (spec busqueda-medidas R5.5). Módulo PURO salvo
  * `leerSnapshot` (lee un archivo; nunca toca la base). SÓLO agregados: ni consultas ni nombres de productos.
  *
  * La comparación se imprime aunque el banco o el snapshot del catálogo difieran, con una ADVERTENCIA: el
@@ -78,6 +78,7 @@ interface Metricas {
   hit24: number | null;
   medidaPrecision: number | null;
   contradicciones: number | null;
+  inversiones: number | null;
   zeroRate: number | null;
   p95: number | null;
 }
@@ -88,6 +89,8 @@ function metricasDe(r: ResumenNum | undefined): Metricas | undefined {
     hit24: r.hit24,
     medidaPrecision: r.medida?.precision ?? null,
     contradicciones: r.medida ? r.medida.contradicciones : null,
+    // Un snapshot anterior a la métrica de orden no la trae: n/a, no 0.
+    inversiones: r.medida?.inversiones ?? null,
     zeroRate: r.n ? r.zeroRate : null,
     p95: r.latencia.n ? r.latencia.p95 : null,
   };
@@ -101,6 +104,7 @@ function fila(nombre: string, a: ResumenNum | undefined, b: ResumenNum | undefin
     tasa(x?.hit24, y?.hit24),
     tasa(x?.medidaPrecision, y?.medidaPrecision),
     entero(x?.contradicciones, y?.contradicciones),
+    entero(x?.inversiones, y?.inversiones),
     tasa(x?.zeroRate, y?.zeroRate),
     entero(x?.p95, y?.p95, " ms"),
   ].join(" | ");
@@ -136,7 +140,7 @@ export function compararMatrices(anterior: MatrizJson, actual: MatrizJson): stri
     lineas.push(
       "",
       `## ${c.id}`,
-      "corte              | hit@24 | medida-precision@24 | contradicciones@24 | zero-result | p95",
+      "corte              | hit@24 | medida-precision@24 | contradicciones@24 | inversiones@24 | zero-result | p95",
       fila("total", antes.reporte.resumen, c.reporte.resumen),
       ...tipos.map((t) => fila(t, antes.reporte.cortes.tipo[t], c.reporte.cortes.tipo[t])),
     );

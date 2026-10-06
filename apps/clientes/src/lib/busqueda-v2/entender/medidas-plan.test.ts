@@ -8,6 +8,7 @@ import {
   MINIMO_MEDIDA_DURA,
   MINIMO_PRODUCTOS_COBERTURA,
   PESO_MEDIDA_BLANDA,
+  PESO_MEDIDA_ESTRICTA,
   PESO_MEDIDA_DURA,
   PESO_POTENCIA_BANDA,
   PESO_POTENCIA_EXACTA,
@@ -96,15 +97,16 @@ describe("aplicarMedidas: lo que no toca", () => {
   it("pregunta: sin duros (las blandas sí)", async () => {
     const r = await aplicarMedidas(plan("sirve una termica 2x20?", ["termica"], { intencion: "pregunta" as Intencion }, ["2x20"]), "sirve una termica 2x20?", deps());
     expect(r.duros.atributos).toEqual([]);
-    expect(blandosDe(r)["polos:2"]).toBe(0.9);
-    expect(blandosDe(r)["corriente_a:20"]).toBe(0.9);
+    // Confianza alta: aunque no sea filtro (pregunta), ordena estricto.
+    expect(blandosDe(r)["polos:2"]).toBe(PESO_MEDIDA_ESTRICTA);
+    expect(blandosDe(r)["corriente_a:20"]).toBe(PESO_MEDIDA_ESTRICTA);
   });
 
   it("sin atributos estructurados: sin duros", async () => {
     const d = deps({ estructurados: false });
     const r = await aplicarMedidas(plan("termica 2x20", ["termica"], {}, ["2x20"]), "termica 2x20", d);
     expect(r.duros.atributos).toEqual([]);
-    expect(blandosDe(r)["polos:2"]).toBe(0.9);
+    expect(blandosDe(r)["polos:2"]).toBe(PESO_MEDIDA_ESTRICTA);
     expect(d.contar).not.toHaveBeenCalled();
   });
 
@@ -171,7 +173,7 @@ describe("aplicarMedidas: política por clave (R6.2)", () => {
     const d = deps({ cobertura: vi.fn(async () => ({ con: 305, total: 1000 })) });
     const r = await aplicarMedidas(plan("lampara g9", ["lampara"], { duros: { categorias: ["ILUMINACION"], atributos: [] } }, ["g9"]), "lampara g9", d);
     expect(r.duros.atributos).toEqual([]);
-    expect(blandosDe(r)).toMatchObject({ "zocalo:g9": 0.9 });
+    expect(blandosDe(r)).toMatchObject({ "zocalo:g9": PESO_MEDIDA_ESTRICTA });
   });
 
   it.each([
@@ -184,7 +186,7 @@ describe("aplicarMedidas: política por clave (R6.2)", () => {
     const d = deps({ cobertura: vi.fn(async () => ({ con, total })) });
     const r = await aplicarMedidas(plan("termica 20a", ["termica"], {}, ["20a"]), "termica 20a", d);
     expect(r.duros.atributos).toEqual(dura ? ["corriente_a:20"] : []);
-    expect(blandosDe(r)["corriente_a:20"]).toBe(dura ? PESO_MEDIDA_DURA : PESO_MEDIDA_BLANDA);
+    expect(blandosDe(r)["corriente_a:20"]).toBe(dura ? PESO_MEDIDA_DURA : PESO_MEDIDA_ESTRICTA);
   });
 
   it("la cobertura se mide sobre el universo del plan (categoría dura + términos fuertes), sin las medidas", async () => {
@@ -199,7 +201,7 @@ describe("aplicarMedidas: política por clave (R6.2)", () => {
     const d = deps({ cobertura: vi.fn(async (_u, clave) => (clave === "polos" ? { con: 10, total: 100 } : { con: 94, total: 100 })) });
     const r = await aplicarMedidas(plan("termica 2x20", ["termica"], {}, ["2x20"]), "termica 2x20", d);
     expect(r.duros.atributos).toEqual(["corriente_a:20"]);
-    expect(blandosDe(r)).toMatchObject({ "polos:2": 0.9, "corriente_a:20": 1 });
+    expect(blandosDe(r)).toMatchObject({ "polos:2": PESO_MEDIDA_ESTRICTA, "corriente_a:20": 1 });
   });
 
   it("tensión e IP son blandas en esta etapa", async () => {
@@ -245,7 +247,7 @@ describe("aplicarMedidas: semántica y guard (C1, C14)", () => {
     const d = deps({ contar: vi.fn(async () => 2) });
     const r = await aplicarMedidas(plan("termica 2x20", ["termica"], {}, ["2x20"]), "termica 2x20", d);
     expect(r.duros.atributos).toEqual([]);
-    expect(blandosDe(r)).toEqual({ "polos:2": 0.9, "corriente_a:20": 0.9 });
+    expect(blandosDe(r)).toEqual({ "polos:2": PESO_MEDIDA_ESTRICTA, "corriente_a:20": PESO_MEDIDA_ESTRICTA });
   });
 
   it("con ancla: n1 = 3 alcanza", async () => {
@@ -258,7 +260,7 @@ describe("aplicarMedidas: semántica y guard (C1, C14)", () => {
     const d = deps({ contarPositivo: vi.fn(async () => 0) });
     const r = await aplicarMedidas(plan("termica 2x20", ["termica"], {}, ["2x20"]), "termica 2x20", d);
     expect(r.duros.atributos).toEqual([]);
-    expect(blandosDe(r)).toEqual({ "polos:2": 0.9, "corriente_a:20": 0.9 });
+    expect(blandosDe(r)).toEqual({ "polos:2": PESO_MEDIDA_ESTRICTA, "corriente_a:20": PESO_MEDIDA_ESTRICTA });
   });
 
   it("con ancla: n2 = 1 alcanza", async () => {
@@ -287,7 +289,7 @@ describe("aplicarMedidas: semántica y guard (C1, C14)", () => {
     const d = deps({ contarPositivo: vi.fn(async () => 2) });
     const r = await aplicarMedidas(plan("bipolar 20a", [], {}, ["20a"]), "bipolar 20a", d);
     expect(r.duros.atributos).toEqual([]);
-    expect(blandosDe(r)).toEqual({ "polos:2": 0.9, "corriente_a:20": 0.9 });
+    expect(blandosDe(r)).toEqual({ "polos:2": PESO_MEDIDA_ESTRICTA, "corriente_a:20": PESO_MEDIDA_ESTRICTA });
   });
 
   it("la ancla es la misma que la de la página: categoría dura o términos fuertes (universoAcotado)", async () => {
@@ -531,5 +533,54 @@ describe("consulta de SOLO medida: la medida también viaja como id dinámico (p
     expect(blandosDe(ka)).toEqual({ "poder_corte_ka:6": PESO_MEDIDA_BLANDA });
     const w = await aplicarMedidas(plan("9w", [], {}, ["9w"]), "9w", deps());
     expect(blandosDe(w)).toEqual({ "potencia_w:9": PESO_POTENCIA_EXACTA, "potencia_w:8-10": PESO_POTENCIA_BANDA });
+  });
+});
+
+describe("orden estricto de las discretas de confianza alta (el que cumple, antes que el que contradice)", () => {
+  const sinCobertura = () => deps({ cobertura: vi.fn(async () => ({ con: 10, total: 100 })) });
+  const CASOS: [string, string[], string[]][] = [
+    ["diferencial bipolar 25a 30ma", ["diferencial", "bipolar"], ["polos:2", "corriente_a:25", "sensibilidad_ma:30"]],
+    ["disyuntor diferencial 2x40", ["disyuntor", "diferencial"], ["polos:2", "corriente_a:40"]],
+    ["diferencial 40a 30ma", ["diferencial"], ["corriente_a:40", "sensibilidad_ma:30"]],
+    ["termica unipolar 16a", ["termica", "unipolar"], ["polos:1", "corriente_a:16"]],
+    ["termica 2x20", ["termica"], ["polos:2", "corriente_a:20"]],
+  ];
+
+  it.each(CASOS)("%s: todas viajan con peso estricto aunque no queden como filtro (cobertura baja)", async (q, fuertes, ids) => {
+    const r = await aplicarMedidas(plan(q, fuertes), q, sinCobertura());
+    expect(r.duros.atributos).toEqual([]);
+    for (const id of ids) expect(blandosDe(r)[id]).toBe(PESO_MEDIDA_ESTRICTA);
+  });
+
+  it.each(CASOS)("%s: y también cuando sí quedan como filtro duro (el filtro no reemplaza al orden)", async (q, fuertes, ids) => {
+    const r = await aplicarMedidas(plan(q, fuertes), q, deps());
+    expect([...r.duros.atributos].sort()).toEqual([...ids].sort());
+    for (const id of ids) expect(blandosDe(r)[id]).toBe(PESO_MEDIDA_ESTRICTA);
+  });
+
+  it("no excluye más: lo que degrada a blando nunca se vuelve filtro", async () => {
+    const r = await aplicarMedidas(plan("termica 2x20", ["termica"]), "termica 2x20", sinCobertura());
+    expect(r.duros).toEqual({ categorias: [], atributos: [] });
+  });
+
+  it("confianza media (30ma sin contexto de diferencial) NO entra al orden estricto", async () => {
+    const r = await aplicarMedidas(plan("interruptor 30ma", ["interruptor"]), "interruptor 30ma", sinCobertura());
+    expect(blandosDe(r)["sensibilidad_ma:30"]).toBe(PESO_MEDIDA_BLANDA);
+  });
+
+  it("las blandas (potencia, temperatura, flujo, tensión, ip) no cambian", async () => {
+    const r = await aplicarMedidas(plan("lampara 9w 4000k", ["lampara"]), "lampara 9w 4000k", deps());
+    expect(blandosDe(r)).toMatchObject({ "temperatura_k:4000": PESO_MEDIDA_BLANDA, "potencia_w:9": PESO_POTENCIA_EXACTA });
+    const t = await aplicarMedidas(plan("tira 48v", ["tira"]), "tira 48v", deps());
+    expect(blandosDe(t)).toEqual({ "tension_v:48": PESO_MEDIDA_BLANDA });
+  });
+
+  it("el tope de blandos de medida deja primero a las estrictas", async () => {
+    // 6 blandas de menor peso + estrictas: ninguna estricta se pierde por el tope.
+    const r = await aplicarMedidas(plan("termica 2x20 9w 4000k 800lm 12v ip54 5m", ["termica"]), "termica 2x20 9w 4000k 800lm 12v ip54 5m", sinCobertura());
+    const dinamicos = r.blandos.atributos.filter((a) => esMedidaId(a.id));
+    expect(dinamicos.length).toBeLessThanOrEqual(TOPE_BLANDOS_MEDIDA);
+    expect(blandosDe(r)["polos:2"]).toBe(PESO_MEDIDA_ESTRICTA);
+    expect(blandosDe(r)["corriente_a:20"]).toBe(PESO_MEDIDA_ESTRICTA);
   });
 });

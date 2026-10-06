@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProductoBanco, ResultadoBanco } from "./banco";
 import type { BusquedaBanco, MedidaBanco } from "./modelo";
-import { claveDeId, cumpleMedida, evaluarMedidas } from "./medida-oraculo";
+import { claveDeId, cumpleMedida, evaluarMedidas, ordenDeVeredictos } from "./medida-oraculo";
 
 type Atributos = NonNullable<ProductoBanco["atributosEstructurados"]>;
 
@@ -253,8 +253,8 @@ describe("evaluarMedidas: detalle por medida esperada (con / cumple / contradice
       resultado(productos),
     )!;
     expect(m.detalle).toEqual([
-      { clave: "polos", valor: "2", dura: true, con: 3, cumple: 2, contradice: 1, duras: 1, contradicen: [] },
-      { clave: "corriente_a", valor: "20", dura: false, con: 4, cumple: 3, contradice: 1, duras: 0, contradicen: [] },
+      { clave: "polos", valor: "2", dura: true, con: 3, cumple: 2, contradice: 1, duras: 1, inversiones: 0, arriba: 0, contradicen: [] },
+      { clave: "corriente_a", valor: "20", dura: false, con: 4, cumple: 3, contradice: 1, duras: 0, inversiones: 1, arriba: 1, contradicen: [] },
     ]);
   });
 
@@ -304,6 +304,82 @@ describe("evaluarMedidas: detalle por medida esperada (con / cumple / contradice
     expect(m.detalle).toEqual([]);
     expect(m.emitidas).toEqual(["potencia_w:18"]);
     expect(m.falsoPositivo).toBe(true);
+  });
+});
+
+describe("ordenDeVeredictos: inversiones y contradicciones por encima del último que cumple", () => {
+  it("todos los que cumplen primero: 0 inversiones, aunque contradigan varios después", () => {
+    expect(ordenDeVeredictos([true, true, null, false, false])).toEqual({ inversiones: 0, arriba: 0 });
+  });
+
+  it("cuenta pares (contradice antes, cumple después)", () => {
+    // F T T F T: el 1.º F está antes de 3 que cumplen; el 2.º F antes de 1.
+    expect(ordenDeVeredictos([false, true, true, false, true])).toEqual({ inversiones: 4, arriba: 2 });
+  });
+
+  it("los sin dato no cuentan ni como el que cumple ni como el que contradice", () => {
+    expect(ordenDeVeredictos([null, false, null, true])).toEqual({ inversiones: 1, arriba: 1 });
+    expect(ordenDeVeredictos([null, null])).toEqual({ inversiones: 0, arriba: 0 });
+    expect(ordenDeVeredictos([])).toEqual({ inversiones: 0, arriba: 0 });
+  });
+
+  it("si nadie cumple no hay inversión: no hay a quién haber superado", () => {
+    expect(ordenDeVeredictos([false, false, false])).toEqual({ inversiones: 0, arriba: 0 });
+  });
+});
+
+describe("evaluarMedidas: orden (inversiones en las claves discretas)", () => {
+  it("el caso de la usuaria: contradicciones entre los que cumplen se cuentan; debajo de todos, no", () => {
+    const orden = [prod({ corriente_a: num(40) }), prod({ corriente_a: num(25) }), prod({ corriente_a: num(25) }), prod(), prod({ corriente_a: num(16) })];
+    const m = evaluarMedidas(caso([{ clave: "corriente_a", valor: 25 }]), resultado(orden))!;
+    expect(m.contradicciones).toBe(2);
+    // sólo el 40 A está por encima de los que cumplen: 2 inversiones (contra los dos 25 A); el 16 A queda debajo.
+    expect(m.inversiones).toBe(2);
+    expect(m.contradicenArriba).toBe(1);
+    expect(m.detalle[0]).toMatchObject({ inversiones: 2, arriba: 1 });
+  });
+
+  it("orden perfecto (cumplen, sin dato, contradicen): 0", () => {
+    const m = evaluarMedidas(caso([{ clave: "polos", valor: 2 }]), resultado([prod({ polos: num(2) }), prod(), prod({ polos: num(1) })]))!;
+    expect(m.contradicciones).toBe(1);
+    expect(m.inversiones).toBe(0);
+    expect(m.contradicenArriba).toBe(0);
+  });
+
+  it("suma por medida; cada medida se ordena por separado", () => {
+    const productos = [prod({ polos: num(1), corriente_a: num(20) }), prod({ polos: num(2), corriente_a: num(25) })];
+    const m = evaluarMedidas(
+      caso([
+        { clave: "polos", valor: 2 },
+        { clave: "corriente_a", valor: 20 },
+      ]),
+      resultado(productos),
+    )!;
+    // polos: el 1 va antes que el 2 (1 inversión); corriente: el 20 A va primero (0).
+    expect(m.detalle.map((d) => d.inversiones)).toEqual([1, 0]);
+    expect(m.inversiones).toBe(1);
+  });
+
+  it("sólo las claves discretas con valor exacto: potencia, rangos y claves blandas dan null", () => {
+    const productos = [prod({ potencia_w: num(5) }), prod({ potencia_w: num(9) })];
+    const m = evaluarMedidas(caso([{ clave: "potencia_w", valor: 9 }]), resultado(productos))!;
+    expect(m.contradicciones).toBe(1);
+    expect(m.inversiones).toBeNull();
+    expect(m.contradicenArriba).toBeNull();
+    expect(m.detalle[0].inversiones).toBe(0);
+    const rango = evaluarMedidas(caso([{ clave: "corriente_a", min: 10, max: 20 }]), resultado([prod({ corriente_a: num(40) }), prod({ corriente_a: num(15) })]))!;
+    expect(rango.inversiones).toBeNull();
+  });
+
+  it("zócalo (texto) también: E14 por encima de E27", () => {
+    const m = evaluarMedidas(caso([{ clave: "zocalo", valor: "e27" }]), resultado([prod({ zocalo: txt("e14") }), prod({ zocalo: txt("e27") })]))!;
+    expect(m.inversiones).toBe(1);
+  });
+
+  it("sin medidas esperadas (negativo): null", () => {
+    const m = evaluarMedidas(caso([]), resultado([prod({ polos: num(1) })]))!;
+    expect(m.inversiones).toBeNull();
+    expect(m.contradicenArriba).toBeNull();
   });
 });
 

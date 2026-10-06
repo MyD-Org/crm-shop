@@ -11,6 +11,8 @@ const medida = (p: Partial<EvaluacionMedida> = {}): EvaluacionMedida => ({
   contradicciones: 0,
   cobertura: 0,
   contradiccionesDuras: null,
+  inversiones: null,
+  contradicenArriba: null,
   falsoPositivo: null,
   detalle: [],
   ...p,
@@ -72,6 +74,18 @@ describe("resumenMedidas", () => {
     expect(r.contradiccionesDuras).toBe(3);
   });
 
+  it("inversiones: suma el orden de los casos que las tienen y cuenta los casos", () => {
+    const r = resumenMedidas([
+      ev({ precision: 1, cobertura: 1, inversiones: 4, contradicenArriba: 2 }),
+      ev({ precision: 1, cobertura: 1, inversiones: 0, contradicenArriba: 0 }),
+      ev({ precision: 1, cobertura: 1, inversiones: 1, contradicenArriba: 1 }),
+      ev({ precision: 1, cobertura: 1 }),
+    ])!;
+    expect(r.inversiones).toBe(5);
+    expect(r.casosConInversion).toBe(2);
+    expect(r.contradicenArriba).toBe(3);
+  });
+
   it("falsos positivos: sobre los negativos evaluables (los null no cuentan)", () => {
     const r = resumenMedidas([
       ev({ falsoPositivo: true, contradicciones: null, cobertura: null }),
@@ -117,5 +131,7 @@ describe("bloque «Medidas» del reporte ampliado", () => {
     const con = bloqueMedidas([ev({ precision: 0.75, cobertura: 0.5, contradicciones: 3, contradiccionesDuras: 1, hit: true })]).join("\n");
     expect(con).toContain("75.0%");
     expect(con).toContain("3 (1)");
+    expect(bloqueMedidas([ev({ precision: 1, cobertura: 1, inversiones: 5 })]).join("\n")).toContain("inversiones@24");
+    expect(bloqueMedidas([ev({ precision: 1, cobertura: 1, inversiones: 5 })]).join("\n")).toContain("5 (1)");
   });
 });

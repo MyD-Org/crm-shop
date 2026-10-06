@@ -56,7 +56,7 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
   const deps = depsDelBanco(vista);
 
   if (ctx.superficie === "catalogo") {
-    const { plan, sinPlanCacheado } = await obtenerPlan(q, ctx, vista);
+    const { plan, sinPlanCacheado, medidas } = await obtenerPlan(q, ctx, vista);
     // La decisión de `/buscar` cuenta la clásica con el mismo armado de texto que el motor.
     const estado = await estadoDeBusqueda(q, vista, plan, (base) =>
       contarCatalogo({
@@ -84,6 +84,8 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
       etapa: r.etapa,
       ids: r.productos.map((p) => p.id),
       ...(sinPlanCacheado ? { sinPlanCacheado: true } : {}),
+      // Sólo si la corrida pide `--medidas=si` (y hay plan): ausente = la tubería no las produce.
+      ...(medidas ? { medidas } : {}),
     };
   }
 
@@ -106,5 +108,7 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
     etapa: r.etapa,
     ids: r.productos.map((p) => p.id),
     ...(memo.plan?.sinPlanCacheado ? { sinPlanCacheado: true } : {}),
+    // El plan es perezoso: si la política no lo pidió no hay medidas que informar.
+    ...(memo.plan?.medidas ? { medidas: memo.plan.medidas } : {}),
   };
 }

@@ -151,6 +151,19 @@ export function tieneClaveSql(ctx: ContextoAtributos, clave: ClaveEstructurada):
   return undefined;
 }
 
+/**
+ * El producto CONTRADICE el atributo: tiene dato estructurado de la clave y es otro valor. Es el negativo del orden
+ * estricto de las medidas discretas (`puntajeBusqueda`); nunca filtra. Misma pieza que `sinContradiccionSql` sin
+ * negar. `undefined` si el id no existe, no tiene criterio estructurado o no hay datos estructurados.
+ */
+export function contradiceAtributoSql(ctx: ContextoAtributos, id: string): SQL | undefined {
+  const c = atributoPorId(id)?.estructurado;
+  if (!c) return undefined;
+  if (ctx.contradice) return ctx.contradice(c);
+  if (ctx.attrs) return contradiccionSql(c, numeroDe(ctx.attrs, c.clave), textoDe(ctx.attrs, c.clave));
+  return undefined;
+}
+
 /** Una medida cumple en positivo: el dato estructurado O el patrón del nombre (el que haya). */
 function cumpleMedida(ctx: ContextoAtributos, a: AtributoMedida): SQL | undefined {
   const patron = a.patron ? sql`${ctx.texto} ~* ${a.patron}` : undefined;

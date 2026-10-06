@@ -15,6 +15,7 @@ const piezas: PiezasBusqueda = {
   marcaCategoria: sql`MARCA`,
   enCategorias: (nombres) => sql`EN_CATEGORIAS(${sql.join(nombres.map((n) => sql`${n}`), sql`, `)})`,
   cumpleAtributo: (id) => (id === "desconocido" ? undefined : sql.raw(`ATRIBUTO_${id.replace(/-/g, "_")}`)),
+  contradiceAtributo: (id) => (id === "desconocido" ? undefined : sql.raw(`CONTRADICE_${id.replace(/[-:]/g, "_")}`)),
   conStock: sql`CON_STOCK`,
 };
 
@@ -226,5 +227,53 @@ describe("ordenar", () => {
     const { sql: texto } = render(puntajeBusqueda(plan({ terminos: [{ texto: "taller", peso: 0.3 }] }, "luz fria para el taller"), piezas));
     expect(texto).not.toMatch(/then 2 else 0 end/);
     expect(texto).not.toMatch(/then 3 else 0 end/);
+  });
+});
+
+describe("orden de las medidas discretas: el que cumple, antes que el que contradice", () => {
+  const puntaje = (atributos: { id: string; peso: number }[], p: PiezasBusqueda = piezas) => render(puntajeBusqueda(plan({ atributos }, "diferencial 25a"), p)).sql;
+
+  it("una medida discreta de peso 1 suma +medidaDiscreta si cumple y resta si contradice (contradice manda)", () => {
+    const sqlTexto = puntaje([{ id: "corriente_a:25", peso: 1 }]);
+    expect(sqlTexto).toContain(`case when CONTRADICE_corriente_a_25 then -${PUNTOS.medidaDiscreta} when ATRIBUTO_corriente_a:25 then ${PUNTOS.medidaDiscreta} else 0 end`);
+    // además del boost de siempre
+    expect(sqlTexto).toContain("(case when ATRIBUTO_corriente_a:25 then $");
+  });
+
+  it("la penalidad y el premio superan por mucho cualquier otra parte del puntaje", () => {
+    const otras = Object.entries(PUNTOS).filter(([k]) => k !== "medidaDiscreta").reduce((t, [, v]) => t + v, 0);
+    expect(PUNTOS.medidaDiscreta).toBeGreaterThan(10 * otras);
+  });
+
+  it("las cuatro claves discretas: polos, corriente, sensibilidad y zócalo", () => {
+    for (const id of ["polos:2", "corriente_a:25", "sensibilidad_ma:30", "zocalo:e27"]) {
+      expect(puntaje([{ id, peso: 1 }])).toContain(`when CONTRADICE_${id.replace(":", "_")} then -${PUNTOS.medidaDiscreta}`);
+    }
+  });
+
+  it("confianza media (peso 0,9), claves blandas, ids del diccionario y rangos NO entran al orden estricto", () => {
+    for (const a of [
+      { id: "corriente_a:25", peso: 0.9 },
+      { id: "potencia_w:9", peso: 1 },
+      { id: "temperatura_k:4000", peso: 1 },
+      { id: "tension_v:12", peso: 1 },
+      { id: "zocalo-e27", peso: 1 },
+      { id: "corriente_a:10-20", peso: 1 },
+      { id: "tono-calido", peso: 1 },
+    ]) {
+      expect(puntaje([a])).not.toContain("CONTRADICE_");
+    }
+  });
+
+  it("sin la pieza (el contexto sin estructurados) o si no se puede decidir el SQL: no hay orden estricto", () => {
+    const { contradiceAtributo: _quitada, ...sinPieza } = piezas;
+    void _quitada;
+    expect(puntaje([{ id: "corriente_a:25", peso: 1 }], sinPieza)).not.toContain(`${PUNTOS.medidaDiscreta}`);
+    expect(puntaje([{ id: "corriente_a:25", peso: 1 }], { ...piezas, contradiceAtributo: () => undefined })).not.toContain(`${PUNTOS.medidaDiscreta}`);
+  });
+
+  it("dos medidas discretas suman cada una por separado", () => {
+    const sqlTexto = puntaje([{ id: "polos:2", peso: 1 }, { id: "corriente_a:25", peso: 1 }]);
+    expect(sqlTexto.match(new RegExp(`then -${PUNTOS.medidaDiscreta}`, "g"))).toHaveLength(2);
   });
 });

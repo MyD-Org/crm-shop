@@ -16,10 +16,14 @@
  *   juntos ("lampara de escritorio") +10: un producto que se llama como se lo
  *   pidió va antes que uno que sólo comparte alguna palabra o la categoría;
  * - categoría blanda +6 × peso; atributo blando +3 × peso;
+ * - medida DISCRETA de confianza alta (polos, corriente, sensibilidad, zócalo; peso 1): el que la cumple +1000, el
+ *   que tiene el dato de OTRO valor -1000 y el que no tiene dato 0. Es un escalón por encima de todo lo demás: el
+ *   que cumple va siempre antes que el que contradice (los sin dato, en el medio). Sólo ordena, nunca excluye;
  * - con stock +1.
  */
 import { sql, type SQL } from "drizzle-orm";
 import { normalizarConsulta } from "../busqueda-inteligente/normalizar";
+import { PESO_ORDEN_ESTRICTO, esMedidaDiscreta } from "../catalogo-atributos-medida";
 import { patronFrase, patronInicio, patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
 export const PUNTOS = {
@@ -34,6 +38,8 @@ export const PUNTOS = {
   categoria: 6,
   atributo: 3,
   stock: 1,
+  /** Escalón del orden estricto de las medidas discretas: mayor que toda la suma de las demás partes, con holgura. */
+  medidaDiscreta: 1000,
 } as const;
 
 /** Entero literal (constante de código): como parámetro, el CASE no sabría su tipo. */
@@ -67,6 +73,11 @@ export function puntajeBusqueda(plan: CriterioPlan, p: PiezasBusqueda): SQL {
   for (const a of plan.blandos.atributos) {
     const cumple = p.cumpleAtributo(a.id);
     if (cumple) partes.push(si(cumple, decimal(PUNTOS.atributo * a.peso)));
+    // Orden estricto: contradecir (dato de otro valor) manda sobre cumplir por el nombre.
+    if (cumple && p.contradiceAtributo && a.peso >= PESO_ORDEN_ESTRICTO && esMedidaDiscreta(a.id)) {
+      const contradice = p.contradiceAtributo(a.id);
+      if (contradice) partes.push(sql`(case when ${contradice} then -${n(PUNTOS.medidaDiscreta)} when ${cumple} then ${n(PUNTOS.medidaDiscreta)} else 0 end)`);
+    }
   }
   partes.push(si(p.conStock, n(PUNTOS.stock)));
   return sql.join(partes, sql` + `);

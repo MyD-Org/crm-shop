@@ -3,6 +3,8 @@ import { eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { listaPrecioAlegraMapeo, listasPrecioOnline, preciosOnlineCambios } from "@/db/schema"
 import type { CambioPrecios } from "@/lib/precios-online-cambios"
+import { listarGrilla } from "@/lib/precios-online-grilla"
+import { listasDisponiblesParaMedios } from "@/lib/medios-pago-shop-repo"
 import {
   PreciosOnlineError,
   aplicarCambios,
@@ -239,6 +241,20 @@ describe("enlazar con la lista de Alegra (setMapeo)", () => {
 })
 
 describe("lecturas del admin", () => {
+  it("las listas que se ofrecen a los medios de pago excluyen las privadas", async () => {
+    await seedLista(T, "Lista L5", "1.2", { orden: 2, privada: true })
+    await seedLista(T, "Lista B", "1.3", { orden: 3 })
+    expect((await listasDisponiblesParaMedios(T)).map((l) => l.nombre)).toEqual(["Lista A", "Lista B"])
+  })
+
+  it("la grilla filtra y ordena por una lista privada (sus precios no viven en precios_online)", async () => {
+    const priv = await seedLista(T, "Lista L5", "1.2", { orden: 2, privada: true })
+    await seedProducto(T, { alegraId: "2", costo: "50" })
+    await recalcular(T, null, "config")
+    const r = await listarGrilla(T, { lista: priv }, { start: 0, limit: 10, orden: "precio" })
+    expect(r.items.map((i) => i.alegraId)).toEqual(["2", "1"])
+  })
+
   it("listarListas trae `privada` y sus enlaces", async () => {
     const priv = await seedLista(T, "Lista L5", "1.2", { orden: 2, privada: true })
     await aplicar([{ op: "setMapeo", alegraAccount: "principal", alegraPriceListId: "5", listaId: priv }])

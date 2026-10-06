@@ -153,7 +153,7 @@ export async function listasDisponiblesParaMedios(tenantId: string): Promise<{ i
   return getDb()
     .select({ id: listasPrecioOnline.id, nombre: listasPrecioOnline.nombre })
     .from(listasPrecioOnline)
-    .where(and(eq(listasPrecioOnline.tenantId, tenantId), eq(listasPrecioOnline.activa, true)))
+    .where(and(eq(listasPrecioOnline.tenantId, tenantId), eq(listasPrecioOnline.activa, true), eq(listasPrecioOnline.privada, false)))
     .orderBy(asc(listasPrecioOnline.orden), asc(listasPrecioOnline.nombre))
 }
 

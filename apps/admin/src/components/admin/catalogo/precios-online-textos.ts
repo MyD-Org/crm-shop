@@ -85,7 +85,37 @@ export const TEXTOS = {
     masInformacion: "Más información",
     revisarCambio: "Revisar cambio",
     cerrar: "Cerrar",
-    confirmarEliminar: (n: string) => `¿Desea eliminar la lista ${n}? Se mostrará una vista previa antes de aplicar el cambio.`,
+    confirmarEliminar: (n: string, enlaces = 0) =>
+      `¿Desea eliminar la lista ${n}? ${
+        enlaces > 0
+          ? `También se ${enlaces === 1 ? "quitará su enlace" : `quitarán sus ${enlaces} enlaces`} con listas de Alegra. `
+          : ""
+      }Se mostrará una vista previa antes de aplicar el cambio.`,
+    privada: "Privada",
+    privadaCampo: "Lista privada",
+    privadaAyuda:
+      "Solo la ven los clientes con cuenta corriente cuya lista de Alegra esté enlazada. No puede ser la lista de referencia ni usarse en un medio de pago.",
+    hacerPrivada: "Hacer privada",
+    hacerPublica: "Hacer pública",
+    confirmarPublica: (n: string, enlaces: number) =>
+      `¿Desea hacer pública la lista ${n}? ${
+        enlaces > 0
+          ? `${enlaces === 1 ? "Se quitará su enlace" : `Se quitarán sus ${enlaces} enlaces`} con listas de Alegra. `
+          : ""
+      }Dejará de ser exclusiva de los clientes con cuenta corriente. Se mostrará una vista previa antes de aplicar el cambio.`,
+    enlaces: "Corresponde a la lista de Alegra",
+    enlacesAyuda:
+      "Los clientes con cuenta corriente cuya lista en Alegra sea una de estas verán los precios de esta lista. Las listas se toman de los clientes ya sincronizados.",
+    sinEnlaces: "Esta lista privada todavía no está enlazada a ninguna lista de Alegra: ningún cliente la ve.",
+    agregarEnlace: "Enlazar lista de Alegra",
+    quitarEnlace: "Quitar enlace",
+    cuentaAlegra: "Cuenta de Alegra",
+    listaAlegra: "Lista de Alegra",
+    seleccioneCuenta: "Seleccione la cuenta",
+    seleccioneListaAlegra: "Seleccione la lista de Alegra",
+    sinListasAlegra: "Todavía no hay clientes sincronizados con una lista de precios en Alegra.",
+    contactos: (n: number) => (n === 0 ? "sin clientes" : `${n} cliente${n === 1 ? "" : "s"}`),
+    cuentaPrincipal: "Cuenta principal",
   },
   previa: {
     titulo: "Vista previa del cambio",
@@ -161,6 +191,7 @@ export const TEXTOS = {
     override_baja: "Ajuste quitado",
     umbral: "Umbrales",
     condicion: "Lista de un medio de pago",
+    mapeo: "Enlace con lista de Alegra",
     revertir: "Reversión",
     costo_aprobado: "Costo aprobado",
     costo_rechazado: "Costo rechazado",

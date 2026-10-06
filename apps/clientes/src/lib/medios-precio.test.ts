@@ -239,13 +239,25 @@ describe("cuotas sin interés (rebanada D)", () => {
       ]);
     });
 
-    it("cada medio con sus condiciones y su mínimo; uno sin opciones no aparece", () => {
+    it("cada medio con sus condiciones y su mínimo; las no alcanzadas viajan aparte, sin monto", () => {
       const pw = { slug: "payway", nombre: "Payway", condiciones: [{ cuotas: 12, idListaPrecios: "L6", montoMinimo: 999999 }, { cuotas: 9, idListaPrecios: "L6" }] };
       const r = armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas: [mpCuotas, pw, { ...pw, slug: "otro", condiciones: [{ cuotas: 6, idListaPrecios: "L6", montoMinimo: 999999 }] }] });
       expect(r.cuotasSinInteres?.medios.map((m) => [m.slug, m.opciones.map((o) => o.cuotas)])).toEqual([
         ["mercadopago", [3, 6]],
         ["payway", [9]],
+        ["otro", []],
       ]);
+      expect(r.cuotasSinInteres?.medios.map((m) => m.noAlcanzadas ?? [])).toEqual([
+        [],
+        [{ cuotas: 12, minimo: 999999 }],
+        [{ cuotas: 6, minimo: 999999 }],
+      ]);
+    });
+
+    it("un medio sin opciones ni mínimos pendientes no aparece", () => {
+      const vacio = { slug: "x", nombre: "X", condiciones: [] };
+      const r = armarPreciosMedios(prices, 21, { destacado: null, ficha: [], cuotas: [vacio] });
+      expect(r.cuotasSinInteres).toBeUndefined();
     });
 
     it("sin IVA conocido o sin cuotas: no suma el campo", () => {

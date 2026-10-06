@@ -207,3 +207,50 @@ describe("POST /api/carrito/cotizar: próximo escalón de cuotas", () => {
     expect((await (await pedir({ conCuotas: true })).json()).proximoEscalon).toBeUndefined();
   });
 });
+
+describe("POST /api/carrito/cotizar: progreso de cuotas (barra del carrito)", () => {
+  const conMinimo = (minimo: number, o: Partial<MedioPago> = {}) =>
+    mp({
+      condicionesCuotas: [
+        { cuotas: 3, idListaPrecios: "L3", montoMinimo: null },
+        { cuotas: 6, idListaPrecios: "L6", montoMinimo: minimo },
+      ],
+      ...o,
+    });
+  // Sin pagoMetodo: el carrito todavía no eligió medio.
+  const carrito = (extra: Record<string, unknown> = {}) => pedir({ pagoMetodo: undefined, progresoCuotas: true, ...extra });
+
+  it("sin medio elegido, el progreso combinado entre los medios de cobro en línea", async () => {
+    medios = [conMinimo(2420)];
+    const j = await (await carrito()).json();
+    expect(j.progresoCuotas).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 1210, minimo: 2420 }, pct: 50 });
+  });
+
+  it("en el escalón más alto, lleno", async () => {
+    medios = [conMinimo(1000)];
+    const j = await (await carrito()).json();
+    expect(j.progresoCuotas).toEqual({ cuotasActuales: 6, proximo: null, pct: 100 });
+  });
+
+  it("sin mínimos o sin pedirlo, no hay progreso", async () => {
+    medios = [mp()];
+    expect((await (await carrito()).json()).progresoCuotas).toBeUndefined();
+    medios = [conMinimo(2420)];
+    expect((await (await pedir({ pagoMetodo: undefined })).json()).progresoCuotas).toBeUndefined();
+  });
+
+  it("cuenta corriente o lista privada: sin barra", async () => {
+    medios = [conMinimo(2420)];
+    listaPrivada = "LP";
+    cliente = { codigocliente: "C1" };
+    expect((await (await carrito()).json()).progresoCuotas).toBeUndefined();
+    listaPrivada = null;
+    cliente = null;
+  });
+
+  it("el checkout (medio elegido) también informa el progreso de su medio", async () => {
+    medios = [conMinimo(2420)];
+    const j = await (await pedir({ conCuotas: true })).json();
+    expect(j.progresoCuotas.proximo).toEqual({ cuotas: 6, falta: 1210, minimo: 2420 });
+  });
+});

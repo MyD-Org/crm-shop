@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { Dialog } from "@myd-org/ui";
 import { MediosDePagoDetalle } from "@/components/MediosDePagoDetalle";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import { opcionesCombinadas, type CuotasProducto } from "@/lib/cuotas-sin-interes";
+import { filasNoAlcanzadas, opcionesCombinadas, type CuotasProducto } from "@/lib/cuotas-sin-interes";
 
 /**
  * Botón "Ver medios de pago" + modal. El `Dialog` de @myd-org/ui es Radix:
@@ -51,7 +51,13 @@ export function MediosDePagoModal({
         description={TEXTOS_CUOTAS.descripcionModal(precioFinal)}
         size="md"
       >
-        {abierto && <MediosDePagoDetalle opciones={opcionesCombinadas(cuotas)} precioContado={precioFinal} />}
+        {abierto && (
+          <MediosDePagoDetalle
+            opciones={opcionesCombinadas(cuotas)}
+            noAlcanzadas={filasNoAlcanzadas(cuotas)}
+            precioContado={precioFinal}
+          />
+        )}
       </Dialog>
     </>
   );

@@ -11,6 +11,8 @@ import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio, type Entre
 import { useCart } from "@/context/CartContext";
 import { resumenDisponibilidadCarrito, sinEntregaPosible } from "@/lib/disponibilidad-textos";
 import { useCotizacion } from "@/hooks/useCotizacion";
+import { MetasCarrito } from "@/components/carrito/MetasCarrito";
+import { metaCuotas, metaEnvio, ordenarMetas } from "@/lib/metas-carrito";
 import { fmtPrecio } from "@/lib/format";
 import { precioLineaCarrito, totalesEstimados } from "@/lib/carrito-precios";
 import { nombreConMarca } from "@/lib/formato-nombre";
@@ -188,8 +190,9 @@ export function CarritoClient({
   );
 
   // Cotiza según la elección "Enviar a" (retiro por defecto): el detalle se confirma en el checkout.
-  const { cotizacion, estado, error, recotizar, ultimasLineas } = useCotizacion({
+  const { cotizacion, estado, error, recotizar, ultimasLineas, ultimoProgresoCuotas } = useCotizacion({
     entregaTipo,
+    conProgresoCuotas: true,
     ...(entregaTipo === "envio" && provincia ? { provincia } : {}),
   });
 
@@ -262,8 +265,8 @@ export function CarritoClient({
   // aparece si el envío está activo, el gratis está encendido con un mínimo, y la provincia
   // conocida está en el alcance (sin ubicación o fuera de alcance no se promete nada).
   const progresoEnvio = progresoEnvioGratis(subtotal, provincia, configEnvio);
-  const faltaEnvio = progresoEnvio ? progresoEnvio.faltante : null;
-  const pctEnvio = progresoEnvio?.pct ?? 0;
+  // Metas apiladas en un solo bloque, la más cercana primero (envío gratis y más cuotas sin interés).
+  const metas = ordenarMetas([metaEnvio(progresoEnvio), metaCuotas(ultimoProgresoCuotas)]);
 
   const lineasConProblema = cotizacion?.lineas.filter((l) => l.problema).length ?? 0;
 
@@ -467,36 +470,7 @@ export function CarritoClient({
               resumenALaVista ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
             }`}
           >
-            {faltaEnvio !== null && (
-              <div className="space-y-2.5 rounded-2xl bg-bg p-4" aria-live="polite">
-                <p className="flex items-center gap-2 text-sm font-bold text-text">
-                  <span
-                    className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success text-white transition-[scale,opacity] duration-[240ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none ${
-                      faltaEnvio === 0 ? "scale-100 opacity-100" : "scale-[0.6] opacity-0"
-                    }`}
-                    aria-hidden="true"
-                  >
-                    <CheckIcon />
-                  </span>
-                  {faltaEnvio === 0
-                    ? "Su compra tiene envío a domicilio gratis"
-                    : `Le faltan ${fmtPrecio(faltaEnvio)} sin impuestos para el envío gratis`}
-                </p>
-                <div
-                  role="progressbar"
-                  aria-label="Progreso hacia el envío gratis"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={pctEnvio}
-                  className="h-2 overflow-hidden rounded-full bg-elevated"
-                >
-                  <div
-                    className="h-full rounded-full bg-success transition-[width] duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none"
-                    style={{ width: `${pctEnvio}%` }}
-                  />
-                </div>
-              </div>
-            )}
+            <MetasCarrito metas={metas} />
 
             <h2 className="font-display text-lg font-semibold text-text">Resumen del pedido</h2>
 

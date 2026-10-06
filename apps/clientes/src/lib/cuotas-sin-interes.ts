@@ -137,12 +137,41 @@ export function opcionesCuotas(
   return salida;
 }
 
+/** Una cantidad de cuotas que el producto NO alcanza por el monto mínimo, con ese mínimo (con impuestos). */
+export interface CuotaNoAlcanzada {
+  cuotas: number;
+  minimo: number;
+}
+
+/**
+ * Las cantidades de cuotas de UN medio que el precio unitario del producto no alcanza por mínimo
+ * (informativo). Misma base que `opcionesCuotas`; sin precio válido en la lista no se inventan.
+ */
+export function cuotasNoAlcanzadas(
+  prices: AlegraPrice[] | undefined,
+  ivaPorcentaje: number | null | undefined,
+  medio: MedioCuotas | null | undefined,
+): CuotaNoAlcanzada[] {
+  if (!medio || !Array.isArray(prices) || prices.length === 0) return [];
+  const baseUnitaria = precioFinal(precioDeLista(prices, medio.idListaPagoUnico ?? undefined), ivaPorcentaje) ?? 0;
+  const aplican = new Set(condicionesAplicables(medio.condiciones, baseUnitaria).map((c) => c.cuotas));
+  const salida: CuotaNoAlcanzada[] = [];
+  for (const c of condicionesValidas(medio.condiciones)) {
+    if (aplican.has(c.cuotas) || c.montoMinimo == null) continue;
+    if (precioFinal(precioDeLista(prices, c.idListaPrecios), ivaPorcentaje) === undefined) continue;
+    salida.push({ cuotas: c.cuotas, minimo: c.montoMinimo });
+  }
+  return salida;
+}
+
 /** Las opciones de UN medio de cobro para un producto. */
 export interface CuotasDeMedio {
   slug: string;
   /** Nombre del medio tal cual lo carga el operador en el admin ("Mercado Pago"). */
   medio: string;
   opciones: OpcionCuotas[];
+  /** Cantidades que el producto no alcanza por mínimo (el modal las muestra atenuadas). */
+  noAlcanzadas?: CuotaNoAlcanzada[];
 }
 
 /** Las cuotas de un producto: un bloque por medio elegible, en el orden del admin. Viaja con el `Product`. */
@@ -179,6 +208,71 @@ export function opcionesCombinadas(cuotas: CuotasProducto | null | undefined): O
     }
   }
   return [...porCantidad.values()].sort((a, b) => a.cuotas - b.cuotas);
+}
+
+/**
+ * Filas atenuadas del modal: cantidades que ningún medio ofrece para el producto, con el menor
+ * mínimo entre medios. Ascendentes.
+ */
+export function filasNoAlcanzadas(cuotas: CuotasProducto | null | undefined): CuotaNoAlcanzada[] {
+  const ofrecidas = new Set(opcionesCombinadas(cuotas).map((o) => o.cuotas));
+  const porCantidad = new Map<number, number>();
+  for (const m of cuotas?.medios ?? []) {
+    for (const n of m.noAlcanzadas ?? []) {
+      if (ofrecidas.has(n.cuotas)) continue;
+      const actual = porCantidad.get(n.cuotas);
+      if (actual === undefined || n.minimo < actual) porCantidad.set(n.cuotas, n.minimo);
+    }
+  }
+  return [...porCantidad.entries()].map(([c, minimo]) => ({ cuotas: c, minimo })).sort((a, b) => a.cuotas - b.cuotas);
+}
+
+/** Progreso hacia la próxima cantidad de cuotas (barra del carrito). Serializable. */
+export interface ProgresoCuotas {
+  /** La mayor cantidad de cuotas que la compra ya tiene (cualquier medio); null si ninguna. */
+  cuotasActuales: number | null;
+  /** El escalón más cercano por encima de la compra; null = ya está en el más alto. */
+  proximo: { cuotas: number; falta: number; minimo: number } | null;
+  /** 0..100: base / mínimo del próximo escalón (100 si no hay próximo). */
+  pct: number;
+}
+
+/**
+ * Progreso combinado entre medios elegibles: cada uno con su `base` (total con impuestos a la lista
+ * del pago único del medio). El próximo escalón es el de menor falta entre los que mejoran la mayor
+ * cantidad ya alcanzada. null = ningún medio tiene mínimos: no hay barra que mostrar.
+ */
+export function progresoCuotas(
+  medios: readonly { condiciones: readonly CondicionCuotas[] | null | undefined; base: number }[],
+): ProgresoCuotas | null {
+  let hayMinimos = false;
+  let actuales = 0;
+  for (const m of medios) {
+    if (condicionesValidas(m.condiciones).some((c) => c.montoMinimo != null)) hayMinimos = true;
+    for (const c of condicionesAplicables(m.condiciones, m.base)) actuales = Math.max(actuales, c.cuotas);
+  }
+  if (!hayMinimos) return null;
+  let mejor: { cuotas: number; minimo: number; falta: number } | null = null;
+  for (const m of medios) {
+    const baseC = Number.isFinite(m.base) && m.base > 0 ? aCentavos(m.base) : 0;
+    for (const c of condicionesValidas(m.condiciones)) {
+      if (c.montoMinimo == null || c.cuotas <= actuales) continue;
+      const minimo = aCentavos(c.montoMinimo);
+      if (minimo <= baseC) continue;
+      const falta = minimo - baseC;
+      if (!mejor || falta < mejor.falta || (falta === mejor.falta && c.cuotas > mejor.cuotas)) {
+        mejor = { cuotas: c.cuotas, minimo, falta };
+      }
+    }
+  }
+  const cuotasActuales = actuales > 0 ? actuales : null;
+  if (!mejor) return { cuotasActuales, proximo: null, pct: 100 };
+  const baseDelMejor = mejor.minimo - mejor.falta;
+  return {
+    cuotasActuales,
+    proximo: { cuotas: mejor.cuotas, falta: deCentavos(mejor.falta), minimo: deCentavos(mejor.minimo) },
+    pct: Math.max(0, Math.min(100, Math.floor((baseDelMejor / mejor.minimo) * 100))),
+  };
 }
 
 /**

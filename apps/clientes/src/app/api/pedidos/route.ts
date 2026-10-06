@@ -23,7 +23,7 @@ import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { idListaDelMedio } from "@/lib/lista-medio";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { motivoRevisionPedido } from "@/lib/motivo-revision";
-import { avisarOperadorPedidoNuevo, avisarPedidoRecibido } from "@/lib/pedido-avisos";
+import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
 import { permitir } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { SucursalPedidoError } from "@/lib/sucursales-pedido";
@@ -535,10 +535,12 @@ export async function POST(req: Request) {
     if (!pedido.repetido) {
       const pedidoId = pedido.id;
       // Y el aviso al local (sucursal del pedido, o el email de la empresa), en el mismo after():
-      // ninguno de los dos lanza, y el del comprador sale primero.
+      // ninguno de los dos lanza, y el del comprador sale primero. Con pago en línea el del local
+      // espera a que se apruebe el cobro (lo manda `avisarCobro`).
+      const avisarLocal = avisoOperadorAlCrear(pagoMetodo);
       after(async () => {
         await avisarPedidoRecibido(pedidoId);
-        await avisarOperadorPedidoNuevo(pedidoId);
+        if (avisarLocal) await avisarOperadorPedidoNuevo(pedidoId);
       });
     }
 

@@ -7,7 +7,7 @@ import { Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-o
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { pagoParaCotizar } from "@/lib/lista-medio";
-import { COPY_CARRITO } from "@/lib/carrito-cliente";
+import { COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { PagoPayway } from "@/components/PagoPayway";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
@@ -322,7 +322,7 @@ export function CheckoutClient({
   esCuentaCorriente = false,
   eleccionInicial = null,
 }: Props) {
-  const { items, vaciarTrasPedido, ready } = useCart();
+  const { items, vaciarTrasPedido, ready, addItems } = useCart();
 
   // Inicio de checkout: una vez por visita, cuando el carrito ya cargó con algo.
   const checkoutMedido = useRef(false);
@@ -761,8 +761,8 @@ export function CheckoutClient({
       // vació el suyo en la misma transacción que creó el pedido
       // (`crearPedido`); acá sólo se limpia el local. Un pedido de Mercado Pago
       // sin pagar se retoma desde Mis pedidos o volviendo al checkout (el
-      // `useEffect` de arriba lo rescata), sin duplicarlo. Cancelarlo NO
-      // vuelve a llenar el carrito (decisión 2026-09-24).
+      // `useEffect` de arriba lo rescata), sin duplicarlo. Cancelarlo ("Volver al
+      // carrito") devuelve sus líneas al carrito.
       const total = json.cotizacion?.total ?? cotizacion?.total ?? 0;
       setConfirmado({
         numero: json.numero,
@@ -805,10 +805,15 @@ export function CheckoutClient({
         method: "POST",
       });
       if (res.ok) {
+        // Las líneas del pedido cancelado vuelven al carrito (se vació al crearlo).
+        const json = (await res.json().catch(() => null)) as { items?: CartItem[] } | null;
+        const lineas = Array.isArray(json?.items) ? json.items : [];
+        if (lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
         setConfirmado(null);
         // La `claveIntento` era del pedido cancelado: sin resetearla, el
         // próximo confirmar reutilizaría la clave y traería el pedido viejo.
         claveIntento.current = null;
+        router.push("/carrito");
         return;
       }
       // Un 409 dice por qué no se puede (pago en curso, ya pagado): se muestra.

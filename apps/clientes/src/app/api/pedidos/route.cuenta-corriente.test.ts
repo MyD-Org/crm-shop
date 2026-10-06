@@ -12,7 +12,7 @@ const cotizar = vi.fn();
 const cuotasHabilitadas = vi.fn(async () => true);
 
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
-vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn(), avisarOperadorPedidoNuevo: vi.fn() }));
+vi.mock("@/lib/pedido-avisos", () => ({ avisoOperadorAlCrear: () => true, avisarPedidoRecibido: vi.fn(), avisarOperadorPedidoNuevo: vi.fn() }));
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),
   after: () => {},

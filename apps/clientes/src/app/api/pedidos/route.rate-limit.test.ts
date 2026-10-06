@@ -16,7 +16,7 @@ let identidad: {
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => identidad,
 }));
-vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
+vi.mock("@/lib/pedido-avisos", () => ({ avisoOperadorAlCrear: () => true, avisarPedidoRecibido: vi.fn() }));
 
 import { POST } from "./route";
 

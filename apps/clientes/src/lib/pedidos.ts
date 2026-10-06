@@ -22,6 +22,7 @@ import {
 import type { Product } from "@/data/products";
 import { getProductosPorIds } from "./catalog";
 import { vaciarCarritoTx } from "./carrito-db";
+import type { CartItem } from "./carrito-cliente";
 import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsuficienteError } from "./stock-disponible";
 import type { Cotizacion } from "./cotizacion";
 import { revisionDeCuotas, type RevisionDeCuotas } from "./pagos/cuotas-validacion";
@@ -1462,6 +1463,36 @@ export async function cancelarPedidoPendiente(
       .where(and(eq(orders.id, id), esDeEsteTenant()));
     return "cancelado";
   });
+}
+
+/**
+ * Las líneas de un pedido como ítems del carrito, para devolverlas al cancelarlo desde el checkout
+ * ("Volver al carrito" con el pago en línea sin hacer). El precio es referencial (con IVA): el
+ * carrito recotiza. Sólo se llama tras `cancelarPedidoPendiente`, que ya validó al dueño. Nunca
+ * lanza: sin líneas, el carrito queda como estaba.
+ */
+export async function lineasDelPedidoParaCarrito(id: string): Promise<CartItem[]> {
+  try {
+    const filas = await getDb()
+      .select({
+        id: orderItems.alegraItemId,
+        name: orderItems.name,
+        brand: orderItems.brand,
+        qty: orderItems.qty,
+        total: orderItems.total,
+      })
+      .from(orderItems)
+      .where(eq(orderItems.orderId, id))
+      .orderBy(asc(orderItems.id));
+    return filas.flatMap((f) => {
+      const qty = Number(f.qty);
+      if (!(qty > 0)) return [];
+      return [{ id: f.id, name: f.name, brand: f.brand ?? "", price: Number(f.total) / qty, qty }];
+    });
+  } catch (err) {
+    console.error(`[pedidos] ${id}: no se pudieron leer las líneas para el carrito`, err);
+    return [];
+  }
 }
 
 /**

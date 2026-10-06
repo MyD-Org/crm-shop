@@ -12,7 +12,7 @@ let minimo6: number | null = 60000;
 const TOTAL_POR_LISTA: Record<string, number> = { L1: 60000, L3: 60500, L6: 61000 };
 
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
-vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoRecibido: vi.fn() }));
+vi.mock("@/lib/pedido-avisos", () => ({ avisoOperadorAlCrear: () => true, avisarPedidoRecibido: vi.fn() }));
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),
   after: () => {},

@@ -2,15 +2,29 @@ import { fileURLToPath } from "node:url"
 import postgres from "postgres"
 import { drizzle } from "drizzle-orm/postgres-js"
 import { migrate } from "drizzle-orm/postgres-js/migrator"
-import { TEST_DATABASE_URL, ADMIN_DATABASE_URL, assertLocalTestDb } from "./db-url"
+import {
+  TEMPLATE_DATABASE_URL,
+  ADMIN_DATABASE_URL,
+  TEST_WORKERS,
+  workerDatabaseUrl,
+  assertLocalTestDb,
+} from "./db-url"
 
-// globalSetup de los tests de integración (corre UNA vez): asegura que exista la DB de test
-// y le aplica todas las migraciones de drizzle. Así el `npm run test:integration` se
-// bootstrapea solo, sin pasos manuales.
+// Roles que los tests de permisos usan con SET LOCAL ROLE. Los roles son del SERVIDOR, no de
+// una base: si cada archivo los creara y borrara, dos workers en paralelo se pisarían. Se crean
+// acá una vez (después de migrar la plantilla, para que las migraciones corran sin el rol, como
+// antes) y los tests los encuentran ya creados, así que no los borran.
+const ROLES_DE_TEST = ["shop_app", "crm_test_sin_execute", "crm_test_sin_execute_sc"]
+
+const nombreBase = (url: string) => new URL(url).pathname.replace(/^\//, "")
+
+// globalSetup de los tests de integración (corre UNA vez): asegura que exista la DB plantilla,
+// le aplica todas las migraciones de drizzle y la clona una vez por worker. Así el
+// `npm run test:integration` se bootstrapea solo, sin pasos manuales.
 export default async function setup() {
-  assertLocalTestDb(TEST_DATABASE_URL)
+  assertLocalTestDb(TEMPLATE_DATABASE_URL)
 
-  const dbName = new URL(TEST_DATABASE_URL).pathname.replace(/^\//, "")
+  const dbName = nombreBase(TEMPLATE_DATABASE_URL)
 
   // 1. Crear la DB de test si no existe (conectando a la base "postgres").
   const admin = postgres(ADMIN_DATABASE_URL, { max: 1 })
@@ -25,7 +39,7 @@ export default async function setup() {
   //    CREATE EXTENSION pide superusuario). `unaccent` la usan las búsquedas por texto del
   //    catálogo: sin esto los tests que las tocan fallan con "function unaccent does not exist"
   //    aunque el código sea correcto.
-  const client = postgres(TEST_DATABASE_URL, { max: 1 })
+  const client = postgres(TEMPLATE_DATABASE_URL, { max: 1 })
   try {
     await client.unsafe("CREATE EXTENSION IF NOT EXISTS unaccent")
     // 3. Aplicar migraciones sobre la DB de test.
@@ -52,5 +66,51 @@ export default async function setup() {
     await migrate(drizzle(client), { migrationsFolder: shopMigrations, migrationsSchema: "shop" })
   } finally {
     await client.end()
+  }
+
+  // 5. Roles compartidos y un clon de la plantilla por worker. CREATE DATABASE ... TEMPLATE
+  //    exige que nadie esté conectado a la plantilla (cerrar un psql abierto contra crm_test).
+  //    WITH (FORCE) corta conexiones colgadas de una corrida anterior a los clones.
+  const rolesCreados: string[] = []
+  const clones = Array.from({ length: TEST_WORKERS }, (_, i) => workerDatabaseUrl(i + 1))
+  const server = postgres(ADMIN_DATABASE_URL, { max: 1, onnotice: () => {} })
+  try {
+    for (const rol of ROLES_DE_TEST) {
+      const existe = await server`select 1 from pg_roles where rolname = ${rol}`
+      if (existe.length === 0) {
+        await server.unsafe(`CREATE ROLE "${rol}" NOLOGIN`)
+        rolesCreados.push(rol)
+      }
+    }
+    for (const url of clones) {
+      assertLocalTestDb(url)
+      await server.unsafe(`DROP DATABASE IF EXISTS "${nombreBase(url)}" WITH (FORCE)`)
+      await server.unsafe(`CREATE DATABASE "${nombreBase(url)}" TEMPLATE "${dbName}"`)
+    }
+  } finally {
+    await server.end()
+  }
+
+  // Teardown: se borran los clones (y con ellos lo concedido a los roles ahí) y los roles que
+  // creó esta corrida. Antes de borrar un rol hay que revocarle lo que tenga en la plantilla.
+  return async () => {
+    const admin = postgres(ADMIN_DATABASE_URL, { max: 1, onnotice: () => {} })
+    try {
+      for (const url of clones) {
+        await admin.unsafe(`DROP DATABASE IF EXISTS "${nombreBase(url)}" WITH (FORCE)`)
+      }
+    } finally {
+      await admin.end()
+    }
+    if (rolesCreados.length === 0) return
+    const plantilla = postgres(TEMPLATE_DATABASE_URL, { max: 1, onnotice: () => {} })
+    try {
+      for (const rol of rolesCreados) {
+        await plantilla.unsafe(`DROP OWNED BY "${rol}"`)
+        await plantilla.unsafe(`DROP ROLE "${rol}"`)
+      }
+    } finally {
+      await plantilla.end()
+    }
   }
 }

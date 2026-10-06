@@ -12,6 +12,7 @@ import {
   PreciosOnlineError,
   aplicarCambios,
   aplicarReversion,
+  previsualizarReversion,
   listarHistorial,
   previsualizar,
   type UsuarioActor,
@@ -273,8 +274,8 @@ describe("setCondicion: vista previa, aplicar e historial", () => {
     await previaYAplicar([set("transferencia", listaRef)])
     const h = await listarHistorial(T, { start: 0, limit: 10 })
     const ultima = h.items[0]
-    const inversos = [set("transferencia", listaTransf)]
-    const previa = await previsualizar(T, inversos)
+    // Los cambios inversos los arma el servidor (incluyen el monto mínimo, 0066): la vista previa sale de ahí.
+    const { resultado: previa } = await previsualizarReversion(T, ultima.id)
     await aplicarReversion(T, ANA, ultima.id, { baseVersion: previa.baseVersion, huella: previa.huella })
     expect(await condiciones()).toMatchObject([{ listaId: listaTransf }])
     const filas = await getDb().select().from(preciosOnlineCambios).where(eq(preciosOnlineCambios.tenantId, T))

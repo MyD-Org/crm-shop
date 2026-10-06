@@ -499,6 +499,8 @@ export function CheckoutClient({
     cuentaPago?: CuentaPagoSnapshot | null;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
+  /** El procesador todavía no confirmó el cobro: no se ofrece cancelar, sólo volver a la tienda. */
+  const [pagoEnConfirmacion, setPagoEnConfirmacion] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   /**
@@ -613,6 +615,7 @@ export function CheckoutClient({
     if (!confirmado) return;
     setConfirmado(null);
     setPagado(false);
+    setPagoEnConfirmacion(false);
     setComprobanteInformado(false);
     setErrorCancelar(null);
     setErrorEnvio(null);
@@ -856,7 +859,9 @@ export function CheckoutClient({
       const res = await fetch(`/api/pedidos/${confirmado.id}/cancelar`, {
         method: "POST",
       });
-      if (res.ok) {
+      // 404: el pedido ya no está pendiente (lo canceló otra pestaña o ya se
+      // cobró). No hay nada que cancelar: se vuelve al carrito sin error.
+      if (res.ok || res.status === 404) {
         // El carrito sigue lleno hasta el cobro. Vacío (pedido creado antes de este
         // cambio, o retomado desde otro dispositivo): vuelven las líneas del pedido.
         const json = (await res.json().catch(() => null)) as { items?: CartItem[] } | null;
@@ -870,7 +875,6 @@ export function CheckoutClient({
         return;
       }
       // Un 409 dice por qué no se puede (pago en curso, ya pagado): se muestra.
-      // El 404 no desglosa motivos a propósito, así que va el genérico.
       const json = (await res.json().catch(() => null)) as { error?: string } | null;
       setErrorCancelar(
         res.status === 409 && json?.error
@@ -908,6 +912,7 @@ export function CheckoutClient({
             monto={confirmado.total}
             cuotas={confirmado.cuotas ?? undefined}
             onPagado={alPagar}
+            onPendiente={() => setPagoEnConfirmacion(true)}
           />
         ) : confirmado.procesador === "mercadopago" ? (
           <PagoMercadoPago
@@ -917,6 +922,7 @@ export function CheckoutClient({
             emailComprador={emailCliente}
             maxCuotas={confirmado.cuotas ?? undefined}
             onPagado={alPagar}
+            onPendiente={() => setPagoEnConfirmacion(true)}
           />
         ) : (
           <p role="alert" className="text-center text-sm text-danger">
@@ -925,14 +931,22 @@ export function CheckoutClient({
         )}
 
         <div className="flex flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={cancelarYVolver}
-            disabled={cancelando}
-            className="text-sm text-muted underline disabled:opacity-50"
-          >
-            {cancelando ? "Cancelando…" : "Volver al carrito"}
-          </button>
+          {pagoEnConfirmacion ? (
+            // Con el cobro en confirmación no se cancela (el pago puede acreditarse): el
+            // carrito queda como está y se vacía solo si se cobra.
+            <Link href="/" className="text-sm text-muted underline">
+              Volver a la tienda
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={cancelarYVolver}
+              disabled={cancelando}
+              className="text-sm text-muted underline disabled:opacity-50"
+            >
+              {cancelando ? "Cancelando…" : "Volver al carrito"}
+            </button>
+          )}
           {errorCancelar && (
             <p role="alert" className="text-center text-sm text-danger">
               {errorCancelar}

@@ -49,6 +49,8 @@ interface Props {
   cuotas?: number;
   /** Se llama cuando el cobro quedó confirmado. */
   onPagado: () => void;
+  /** Se llama cuando el procesador todavía no confirmó el cobro (queda "Estamos confirmando"). */
+  onPendiente?: () => void;
 }
 
 type Errores = Partial<Record<"pan" | "venc" | "cvv" | "titular" | "doc" | "marca" | "modalidad", string>>;
@@ -62,7 +64,7 @@ function formatearVenc(s: string): string {
   return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
 }
 
-export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado }: Props) {
+export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado, onPendiente }: Props) {
   const [estado, setEstado] = useState<Estado>({ fase: "formulario" });
   const [config, setConfig] = useState<ConfigPayway | null | "error">(null);
 
@@ -173,6 +175,7 @@ export function PagoPayway({ pedidoId, numero, monto, cuotas = 1, onPagado }: Pr
       onPagado();
     } else if (r.fase === "pendiente") {
       setEstado({ fase: "pendiente" });
+      onPendiente?.();
     } else {
       setEstado({ fase: "rechazado", mensaje: r.mensaje });
     }

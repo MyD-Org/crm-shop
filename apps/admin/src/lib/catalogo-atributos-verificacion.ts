@@ -253,6 +253,10 @@ const EVIDENCIA_NUM: Partial<Record<ClaveAtributo, { unidad: string; palabra: st
   // Total del rollo: "300 LED", "300 LEDs" y la forma "300 LEDs xm" de algunos fabricantes. Con "/m", "por
   // metro" o "x m" separado es por metro (leds_m), no el total.
   leds_rollo: { unidad: "\\s?LEDS?(?!\\s?(?:/|POR)\\s?M)(?!\\s+X\\s+M)(?![A-Z0-9²])", palabra: "(?!)" },
+  // Diámetro y ancho en mm (0070): "ø25 mm", "25 mm", o la palabra del campo con el número ("Diámetro 25"). Una sección
+  // ("4 mm²") no es un diámetro: la unidad no admite el ² ni un dígito pegado.
+  diametro_mm: { unidad: "\\s?(?:MM|MILIMETROS?)(?![A-Z0-9²])", palabra: "DIAMETRO|DIAM\\b|Ø" },
+  ancho_mm: { unidad: "\\s?(?:MM|MILIMETROS?)(?![A-Z0-9²])", palabra: "ANCHO" },
 }
 
 const POLOS_PALABRA: Record<string, number> = { UNIPOLAR: 1, MONOPOLAR: 1, BIPOLAR: 2, TRIPOLAR: 3, TETRAPOLAR: 4 }

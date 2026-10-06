@@ -231,12 +231,14 @@ describe("tokenizarConSdk", () => {
     }
   });
 
-  it("401/403 -> configuracion; 5xx -> red; sin respuesta (0: red o CORS) -> null para el respaldo", async () => {
+  it("401/403 -> configuracion; 502 -> red; sin respuesta (0, o 503/504 del SDK: red, CORS o timeout) -> null para el respaldo", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [401, {}] }).entorno)).toMatchObject({ motivo: "configuracion" });
     expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [403, {}] }).entorno)).toMatchObject({ motivo: "configuracion" });
     expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [0, {}] }).entorno)).toBeNull();
-    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [503, {}] }).entorno)).toMatchObject({ motivo: "red" });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [503, {}] }).entorno)).toBeNull();
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [504, {}] }).entorno)).toBeNull();
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [502, {}] }).entorno)).toMatchObject({ motivo: "red" });
   });
 
   it("éxito sin id utilizable -> configuracion", async () => {
@@ -277,9 +279,9 @@ describe("tokenizar (SDK primero, fetch directo de respaldo)", () => {
     expect(f).toHaveBeenCalledTimes(1);
   });
 
-  it("si el SDK no obtiene respuesta (CORS del sandbox con x-consumer-username) cae al fetch directo", async () => {
+  it("si el SDK no obtiene respuesta (CORS del sandbox: el SDK lo reporta como 503) cae al fetch directo", async () => {
     const f = vi.fn().mockResolvedValue(respuesta(201, TOKEN_OK));
-    const e = entornoFalso({ respuesta: [0, null] });
+    const e = entornoFalso({ respuesta: [503, { status: 503, statusText: "Service Unavailable" }] });
     const r = await tokenizar(SOLICITUD, CONFIG, { entorno: e.entorno, fetch: f });
     expect(r).toEqual({ ok: true, token: TOKEN_OK.id, bin: "450799" });
     expect(f).toHaveBeenCalledTimes(1);

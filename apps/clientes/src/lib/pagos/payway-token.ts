@@ -203,7 +203,9 @@ export async function tokenizarConSdk(
     }
     // Sin respuesta (0): red o CORS. El sandbox no admite el header `x-consumer-username` que manda
     // el SDK y el navegador corta el preflight; sin token no hubo cobro, así que se prueba el respaldo.
-    if (status === 0) return null;
+    // El SDK no expone el error de red: ante un `error` del XHR (CORS incluido) responde 503, y ante
+    // su timeout, 504. Sin token no hubo cobro: en esos casos también se prueba el respaldo.
+    if (status === 0 || status === 503 || status === 504) return null;
     console.error(`[payway] el SDK respondió ${status}.`);
     return falla("red");
   } finally {

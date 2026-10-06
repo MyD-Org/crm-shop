@@ -459,7 +459,7 @@ describe("buscar: filtrosEfectivos y facetas", () => {
 describe("costura de imports del motor", () => {
   const dir = join(__dirname);
   const imports = (archivo: string) =>
-    [...readFileSync(join(dir, archivo), "utf8").matchAll(/^import\s+(type\s+)?[^;]*?from\s+["']([^"']+)["']/gms)].map((m) => ({
+    [...readFileSync(join(dir, archivo), "utf8").matchAll(/^import\s+(type\s+)?[^;]*?from\s+["']([^"']+)["']/gm)].map((m) => ({
       soloTipo: !!m[1],
       especificador: m[2],
     }));

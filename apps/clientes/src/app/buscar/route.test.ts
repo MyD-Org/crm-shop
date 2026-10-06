@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
  */
 const habilitada = vi.fn(async () => true);
 const planParaBuscar = vi.fn();
-const contarCatalogo = vi.fn(async () => 0);
+const contarConsulta = vi.fn<(a: unknown) => Promise<number>>(async () => 0);
 const despues: (() => unknown)[] = [];
 
 vi.mock("next/server", async (original) => ({
@@ -17,7 +17,7 @@ vi.mock("next/server", async (original) => ({
   after: (fn: () => unknown) => despues.push(fn),
 }));
 vi.mock("@/lib/busqueda-ia-flag", () => ({ busquedaIaHabilitada: () => habilitada() }));
-vi.mock("@/lib/catalog", () => ({ contarCatalogo: () => contarCatalogo() }));
+vi.mock("@/lib/busqueda-v2/motor-servidor", () => ({ contarConsulta: (a: unknown) => contarConsulta(a) }));
 vi.mock("@/lib/flags-publicos", () => ({ flagsPublicos: async () => ({ soloVisibles: false }) }));
 vi.mock("@/lib/zona-servidor", () => ({ dispCatalogo: async () => undefined }));
 vi.mock("@/lib/busqueda-v2/servidor", () => ({ planParaBuscar: (...a: unknown[]) => planParaBuscar(...a) }));
@@ -30,6 +30,8 @@ const pedir = (qs: string, headers: Record<string, string> = {}) =>
 beforeEach(() => {
   habilitada.mockResolvedValue(true);
   planParaBuscar.mockReset();
+  contarConsulta.mockReset();
+  contarConsulta.mockResolvedValue(0);
   despues.length = 0;
 });
 
@@ -69,5 +71,16 @@ describe("GET /buscar", () => {
     const r = await pedir("q=DL-18W");
     expect(r.headers.get("location")).toBe("https://tienda.example/catalogo?q=DL-18W");
     expect(planParaBuscar).not.toHaveBeenCalled();
+  });
+
+  it("el conteo clásico sale del motor: la consulta y los filtros del estado, sin texto", async () => {
+    planParaBuscar.mockResolvedValue(null);
+    await pedir("q=reflector+exterior&stock=todos");
+    expect(contarConsulta).toHaveBeenCalledWith({
+      consulta: "reflector exterior",
+      filtros: expect.not.objectContaining({ busqueda: expect.anything(), texto: expect.anything() }),
+      soloVisibles: false,
+      disp: undefined,
+    });
   });
 });

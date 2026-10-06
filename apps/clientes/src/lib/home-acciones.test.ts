@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { esAdminMock, guardarMock, borrarMock, leerMock, revalidateMock, r2Mock, getCatalogoMock } = vi.hoisted(() => ({
+const { esAdminMock, guardarMock, borrarMock, leerMock, revalidateMock, r2Mock, buscarEnShopMock } = vi.hoisted(() => ({
   esAdminMock: vi.fn(),
   guardarMock: vi.fn(),
   borrarMock: vi.fn(),
   leerMock: vi.fn(),
   revalidateMock: vi.fn(),
   r2Mock: vi.fn(),
-  getCatalogoMock: vi.fn(),
+  buscarEnShopMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -34,8 +34,8 @@ vi.mock("@/lib/tenant", () => ({
   shopTenantId: () => "central-led",
 }));
 
-vi.mock("@/lib/catalog", () => ({
-  getCatalogo: getCatalogoMock,
+vi.mock("@/lib/busqueda-v2/motor-servidor", () => ({
+  buscarEnShop: buscarEnShopMock,
 }));
 
 import {
@@ -241,11 +241,11 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
       const r = await buscarProductosHome("lampara");
 
       expect(r).toEqual({ ok: false, errores: ["No tiene permisos para editar la página de inicio."] });
-      expect(getCatalogoMock).not.toHaveBeenCalled();
+      expect(buscarEnShopMock).not.toHaveBeenCalled();
     });
 
     it("Admin: devuelve hasta 20 resultados del catálogo con sku, nombre y foto", async () => {
-      getCatalogoMock.mockResolvedValue([
+      buscarEnShopMock.mockResolvedValue({ productos: [
         {
           id: "1",
           name: "Lámpara colgante",
@@ -255,11 +255,14 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
           images: [{ url: "/a.webp", w: 800 }],
         },
         { id: "2", name: "Lámpara de mesa", sku: "ADM-D9-BCO-CO", price: 900, stock: "in", images: [] },
-      ]);
+      ] });
 
       const r = await buscarProductosHome("lampara");
 
-      expect(getCatalogoMock).toHaveBeenCalledWith({ busqueda: "lampara", limit: 20, soloVisibles: false });
+      expect(buscarEnShopMock).toHaveBeenCalledWith(
+        { consulta: "lampara", filtros: {}, orden: "relevancia", pagina: 1, porPagina: 20 },
+        { superficie: "admin", soloVisibles: false },
+      );
       expect(r).toEqual({
         ok: true,
         productos: [
@@ -272,12 +275,12 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
     it("Query vacía: no llama al catálogo y devuelve lista vacía", async () => {
       const r = await buscarProductosHome("   ");
 
-      expect(getCatalogoMock).not.toHaveBeenCalled();
+      expect(buscarEnShopMock).not.toHaveBeenCalled();
       expect(r).toEqual({ ok: true, productos: [] });
     });
 
     it("Productos sin sku se descartan (no se pueden curar)", async () => {
-      getCatalogoMock.mockResolvedValue([{ id: "1", name: "Sin código", price: 1000, stock: "in" }]);
+      buscarEnShopMock.mockResolvedValue({ productos: [{ id: "1", name: "Sin código", price: 1000, stock: "in" }] });
 
       const r = await buscarProductosHome("x");
 
@@ -285,7 +288,7 @@ describe("guardarSeccion / restablecerSeccion / firmarSubidaImagenHome", () => {
     });
 
     it("Error del catálogo no se propaga como excepción", async () => {
-      getCatalogoMock.mockRejectedValue(new Error("db down"));
+      buscarEnShopMock.mockRejectedValue(new Error("db down"));
 
       const r = await buscarProductosHome("x");
 

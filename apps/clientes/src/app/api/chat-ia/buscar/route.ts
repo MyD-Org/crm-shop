@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getArbolCategorias, getCatalogo } from "@/lib/catalog";
+import { getArbolCategorias } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoAgente, facetasDeProductos, limiteBusqueda } from "@/lib/chat-ia-productos";
+import { buscarEnShop } from "@/lib/busqueda-v2/motor-servidor";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { dispCatalogo } from "@/lib/zona-servidor";
@@ -63,16 +64,18 @@ export async function GET(req: Request) {
       // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
       usarAtributosEstructurados(),
     ]);
-    const conAtributos = estructurados ? { atributosEstructurados: true } : {};
-    let productos = await getCatalogo({ busqueda: q, limit, soloVisibles, disp, ...conAtributos });
-    // Mismo criterio que el buscador del Shop: si lo exacto no trae nada, se
-    // reintenta tolerando typos. Si ese intento falla, queda lo exacto (vacío).
-    if (productos.length === 0) {
-      productos = await getCatalogo({ busqueda: q, limit, soloVisibles, tolerante: true, disp, ...conAtributos }).catch((err: unknown) => {
-        console.error(`[chat-ia/buscar] falló la búsqueda tolerante: ${err instanceof Error ? err.name : "desconocido"}`);
-        return productos;
-      });
-    }
+    // Búsqueda del motor único (superficie `chat`): exacta y, si no trae nada, tolerante a typos.
+    // Sin filtro de stock (el agente puede mencionar lo agotado) y sin contar el total.
+    const { productos } = await buscarEnShop(
+      {
+        consulta: q,
+        filtros: estructurados ? { atributosEstructurados: true } : {},
+        orden: "relevancia",
+        pagina: 1,
+        porPagina: limit,
+      },
+      { superficie: "chat", soloVisibles, disp },
+    );
     if (params.get("facetas") !== "1") return json(productos.map(aProductoAgente));
     // Nombres de las categorías propias (lo que viaja en `?categoria=`). Si el
     // árbol no se puede leer, las facetas salen con la categoría de Alegra.

@@ -14,11 +14,11 @@ import { planVacio, type PlanBusqueda } from "./plan";
 const prod = (id: string) => ({ id, name: id }) as unknown as Product;
 const pagina = (n: number): PaginaCatalogo => ({ productos: Array.from({ length: n }, (_, i) => prod(`p${i}`)), total: n, pagina: 1, paginas: 1 });
 
-const getPaginaCatalogo = vi.fn(async (_a: unknown): Promise<PaginaCatalogo> => pagina(0));
-const contarCatalogo = vi.fn(async (_a: unknown) => 7);
-const paginaCatalogoPublica = vi.fn(async (_a: unknown): Promise<PaginaCatalogo> => pagina(0));
-const facetasPublicas = vi.fn(async (..._a: unknown[]) => ({ categorias: [], marcas: [], atributos: [] }));
-const planParaPagina = vi.fn(async (_q: string, _o: unknown): Promise<PlanBusqueda | null> => null);
+const getPaginaCatalogo = vi.fn<(a: unknown) => Promise<PaginaCatalogo>>(async () => pagina(0));
+const contarCatalogo = vi.fn<(a: unknown) => Promise<number>>(async () => 7);
+const paginaCatalogoPublica = vi.fn<(a: unknown) => Promise<PaginaCatalogo>>(async () => pagina(0));
+const facetasPublicas = vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({ categorias: [], marcas: [], atributos: [] }));
+const planParaPagina = vi.fn<(q: string, o: unknown) => Promise<PlanBusqueda | null>>(async () => null);
 const busquedaIaHabilitada = vi.fn(async () => true);
 
 vi.mock("../catalog", () => ({

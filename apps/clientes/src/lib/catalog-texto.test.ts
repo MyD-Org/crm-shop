@@ -89,7 +89,7 @@ describe.each(VARIANTES)("equivalencia de SQL: $nombre", ({ viejos, nuevo }) => 
 });
 
 describe("getPaginaCatalogo con sinConteo = lo que hoy lee getCatalogo (autocompletar, chat, selector del admin)", () => {
-  it.each([
+  it.each<[string, { q: string; tolerante?: boolean }]>([
     ["exacta", { q: "foco led" }],
     ["tolerante", { q: "lampra", tolerante: true }],
     ["sin términos", { q: "!!" }],

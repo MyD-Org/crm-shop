@@ -482,6 +482,22 @@ describe("etapasDe: política cascada", () => {
     expect(etapasC({ consulta: CODIGO.replace("-", "") })).toEqual(["codigo", "tolerante"]);
   });
 
+  it("un token que es una medida pura ('20a', 'e27', 'ip65') ya no es G: usa el plan como cualquier consulta (M1c)", () => {
+    for (const consulta of ["20a", "e27", "ip65", "9w", "6ka", "4000k"]) {
+      expect(pareceCodigo(consulta)).toBe(false);
+      expect(etapasC({ consulta })).not.toContain("codigo");
+      expect(etapasC({ consulta, plan: planProducto() })).toContain("plan");
+      expect(necesitaPlan({ politica: "cascada", superficie: "catalogo", consulta, conPlan: true })).toBe(true);
+    }
+  });
+
+  it("lo que tiene la forma de una medida pero cae fuera de rango sigue siendo G ('12000k', 'ip70')", () => {
+    for (const consulta of ["12000k", "ip70"]) {
+      expect(etapasC({ consulta, plan: planProducto() })).toEqual(["codigo", "tolerante"]);
+      expect(necesitaPlan({ politica: "cascada", superficie: "catalogo", consulta, conPlan: true })).toBe(false);
+    }
+  });
+
   it("un plan de intención código también es G (aunque la consulta no parezca un código)", () => {
     expect(etapasC({ consulta: "conector rapido", plan: planProducto({ intencion: "codigo" }) })).toEqual(["codigo", "tolerante"]);
   });

@@ -4,12 +4,10 @@
  * Mide el lado del PLAN (qué ids de medida produce); la precisión y las contradicciones sobre productos
  * reales las mide el banco en vivo (`--medidas=si|no`). Con las medidas apagadas el plan es idéntico.
  *
- * Los casos de UN solo token ("20a", "9w", "e27"...) todavía los corta `pareceCodigo` antes de llegar al
- * plan: no producen medidas hasta que el gate cambie (M1c, PR aparte). Está declarado acá para que ese
- * cambio actualice este test a propósito.
+ * Los casos de UN solo token ("20a", "9w", "e27"...) ya no los corta `pareceCodigo` (M1c): llegan al
+ * plan y producen sus medidas como cualquier otra consulta.
  */
 import { describe, expect, it } from "vitest";
-import { pareceCodigo } from "../../busqueda-inteligente/gate";
 import { entender } from "../entender/entender";
 import { aplicarMedidasConIds, type DepsMedidas } from "../entender/medidas-plan";
 import type { PlanBusqueda } from "../plan";
@@ -49,19 +47,20 @@ describe("banco offline: medidas (el plan produce lo esperado)", () => {
     }
   });
 
-  it("todo caso con medidas esperadas las produce (con `dura:true` entre los duros), salvo los que corta el gate", async () => {
+  it("todo caso con medidas esperadas las produce (con `dura:true` entre los duros), también los de un solo token", async () => {
     const falla: string[] = [];
-    const cortadosPorElGate: string[] = [];
     for (const b of conExpectativa.filter((c) => c.medidas?.some((m) => m.valor !== undefined || (m.min !== undefined && m.max !== undefined)))) {
       const base = await planDe(b.q);
       const { plan, ids } = await aplicarMedidasConIds(base, b.q, deps(true));
       const ev = evaluarMedidas(b, { intencion: plan.intencion, categoriasDuras: plan.duros.categorias, categoriasBlandas: [], atributosDuros: plan.duros.atributos, expansiones: [], productos: [], total: 0, medidas: ids });
       if (ev?.hit === true) continue;
-      (pareceCodigo(b.q) ? cortadosPorElGate : falla).push(b.q);
+      falla.push(b.q);
     }
     expect(falla).toEqual([]);
-    // M1c (gate): "20a", "9w", "e27", "ip65", "6ka", "4000k" todavía son códigos para el motor.
-    expect(cortadosPorElGate.sort()).toEqual(["20a", "4000k", "6ka", "9w", "e27", "ip65"]);
+    // M1c (gate): los tokens-medida puros ya llegan al plan.
+    for (const q of ["20a", "9w", "e27", "ip65", "6ka", "4000k"]) {
+      expect(conExpectativa.some((b) => b.q === q), q).toBe(true);
+    }
   });
 
   it("'cable unipolar 2.5 mm' y 'cable 3x2,5mm2' no emiten polos ni corriente (sinMedidasDe)", async () => {

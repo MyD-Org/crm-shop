@@ -8,6 +8,7 @@
  * producto, no una categoría.
  */
 import { normalizarTexto } from "../catalogo-atributos";
+import { esTokenMedida } from "../busqueda-v2/entender/medidas";
 
 /** Palabras que delatan una frase y no una lista de términos. */
 const PALABRAS_DE_RELACION = new Set([
@@ -32,12 +33,17 @@ const palabras = (q: string) => normalizarTexto(q).trim().split(/\s+/).filter(Bo
  * Un solo token con letras y dígitos, o con guiones/barras entre caracteres
  * (`DL-18W`, `NXB-125`, `C479056476B7`, `TM-2x16`). También un número suelto
  * de 3 o más cifras (código interno o EAN): no hay nada que interpretar ahí.
+ *
+ * Excepción: un token que es una medida pura ("20a", "ip65", "e27", "9w", "2x20") NO es un
+ * código: quien lo escribe busca por esa medida. Se exige además que el valor caiga en el rango
+ * de la clave, así que "12000k" o "ip70" siguen siendo códigos.
  */
 export function pareceCodigo(q: string): boolean {
   const tokens = palabras(q);
   if (tokens.length !== 1) return false;
   const t = tokens[0];
   if (/^\d{3,}$/.test(t)) return true;
+  if (esTokenMedida(t)) return false;
   const conLetrasYDigitos = /\p{L}/u.test(t) && /\d/.test(t);
   const conSeparador = /[\p{L}\d][-/][\p{L}\d]/u.test(t);
   return conLetrasYDigitos || conSeparador;

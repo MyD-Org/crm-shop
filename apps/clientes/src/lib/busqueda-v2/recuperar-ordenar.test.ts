@@ -96,6 +96,73 @@ describe("recuperar", () => {
     expect(render(condicionRecuperar(p, piezas)!).sql).toBe("(EN_CATEGORIAS($1, $2) or ATRIBUTO_apto_exterior)");
   });
 
+  describe("consulta de SOLO medida (sin términos que recuperen): recupera la medida, nunca la categoría de Jev", () => {
+    const categoriasDeJev = [
+      { nombre: "Electricidad", peso: 0.5 },
+      { nombre: "Interruptores", peso: 0.95 },
+    ];
+
+    it("'6ka': los que tienen el valor o lo nombran; la categoría (débil o fuerte) sólo ordena", () => {
+      const p = plan(
+        { terminos: [{ texto: "6ka", peso: 0.4 }], categorias: categoriasDeJev, atributos: [{ id: "poder_corte_ka:6", peso: 0.9 }] },
+        "6ka",
+      );
+      const { sql: texto, params } = render(condicionRecuperar(p, piezas)!);
+      expect(texto).toBe("(TEXTO ~ $1 or ATRIBUTO_poder_corte_ka:6)");
+      expect(params).toEqual(["(^|[^a-z0-9])(6ka)"]);
+      expect(texto).not.toContain("EN_CATEGORIAS");
+      // ...y la categoría sigue ordenando.
+      expect(render(puntajeBusqueda(p, piezas)).sql).toContain("EN_CATEGORIAS");
+    });
+
+    it("'ip65': recupera por ip >= 65 (el id dinámico); el atributo del diccionario y la categoría sólo ordenan", () => {
+      const p = plan(
+        {
+          categorias: categoriasDeJev,
+          atributos: [
+            { id: "apto-exterior", peso: 0.9 },
+            { id: "ip:65", peso: 0.9 },
+          ],
+        },
+        "ip65",
+      );
+      expect(render(condicionRecuperar(p, piezas)!).sql).toBe("ATRIBUTO_ip:65");
+    });
+
+    it("recupera por TODAS las medidas del plan (potencia exacta y banda) y por los términos de orden", () => {
+      const p = plan(
+        {
+          terminos: [{ texto: "9w", peso: 0.4 }],
+          categorias: categoriasDeJev,
+          atributos: [
+            { id: "potencia_w:9", peso: 0.5 },
+            { id: "potencia_w:8-10", peso: 0.5 },
+            { id: "tono-calido", peso: 0.9 },
+          ],
+        },
+        "9w",
+      );
+      expect(render(condicionRecuperar(p, piezas)!).sql).toBe("(TEXTO ~ $1 or ATRIBUTO_potencia_w:9 or ATRIBUTO_potencia_w:8_10)");
+    });
+
+    it("con un término que recupera ('termica 6ka') no cambia nada: la categoría fuerte sigue trayendo candidatos", () => {
+      const p = plan(
+        {
+          terminos: [{ texto: "termica", peso: 1 }, { texto: "6ka", peso: 0.4 }],
+          categorias: [{ nombre: "Interruptores", peso: 0.95 }],
+          atributos: [{ id: "poder_corte_ka:6", peso: 0.9 }],
+        },
+        "termica 6ka",
+      );
+      expect(render(condicionRecuperar(p, piezas)!).sql).toBe("(TEXTO ~ $1 or EN_CATEGORIAS($2))");
+    });
+
+    it("sin medida en el plan, las categorías débiles siguen recuperando (el caso 'farol para la entrada')", () => {
+      const p = plan({ categorias: [{ nombre: "Reflectores", peso: 0.52 }], atributos: [{ id: "apto-exterior", peso: 1 }] }, "entrada");
+      expect(render(condicionRecuperar(p, piezas)!).sql).toBe("(EN_CATEGORIAS($1) or ATRIBUTO_apto_exterior)");
+    });
+  });
+
   it("sin nada que recupere (sólo contexto y medidas): undefined, vale la clásica", () => {
     expect(condicionRecuperar(plan({ terminos: [{ texto: "patio", peso: 0.3 }] }), piezas)).toBeUndefined();
   });

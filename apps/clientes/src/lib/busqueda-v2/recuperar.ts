@@ -19,9 +19,16 @@
  *   traer cada producto IP65 (cajas estancas incluidas) para ordenar los
  *   faroles exteriores arriba. Débiles o no, todos ORDENAN (ordenar.ts).
  *
+ * CONSULTA DE SOLO MEDIDA ("6ka", "ip65", "9w": ningún término recupera y el plan trae ids de
+ * medida): recupera la MEDIDA y nada más. Los productos con el valor (dato estructurado o el texto
+ * que lo nombra, `cumpleAtributo`) y los que nombran los términos de la consulta. Las categorías
+ * (la raíz que eligió Jev, "Electricidad" entera) y los demás atributos sólo ORDENAN: "6ka" no
+ * puede traer todo lo eléctrico.
+ *
  * Sin nada que recupere, `undefined` (ver `condicionesDe`).
  */
 import { or, sql, type SQL } from "drizzle-orm";
+import { esMedidaId } from "../catalogo-atributos-medida";
 import { PESO_MINIMO_RECUPERAR } from "./plan";
 import { patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
@@ -40,7 +47,28 @@ export function condicionAmplia(plan: CriterioPlan, p: PiezasBusqueda): SQL | un
   return partes.length === 1 ? partes[0] : or(...partes);
 }
 
+/** Los ids de medida (dinámicos) que trae el plan como atributos blandos. */
+export function medidasDelPlan(plan: CriterioPlan): string[] {
+  return plan.blandos.atributos.filter((a) => esMedidaId(a.id)).map((a) => a.id);
+}
+
+/** ¿Es una consulta de sólo medida? Ningún término recupera y el plan trae al menos una medida. */
+export function esSoloMedida(plan: CriterioPlan): boolean {
+  return terminosQueRecuperan(plan).length === 0 && medidasDelPlan(plan).length > 0;
+}
+
+function recuperarMedida(plan: CriterioPlan, p: PiezasBusqueda): SQL | undefined {
+  const partes: SQL[] = plan.blandos.terminos.map((t) => sql`${p.texto} ~ ${patronTermino(t.texto)}`);
+  for (const id of medidasDelPlan(plan)) {
+    const cumple = p.cumpleAtributo(id);
+    if (cumple) partes.push(cumple);
+  }
+  if (!partes.length) return undefined;
+  return partes.length === 1 ? partes[0] : or(...partes);
+}
+
 export function condicionRecuperar(plan: CriterioPlan, p: PiezasBusqueda): SQL | undefined {
+  if (esSoloMedida(plan)) return recuperarMedida(plan, p);
   const fuertes: SQL[] = terminosQueRecuperan(plan).map((t) => sql`${p.texto} ~ ${patronTermino(t)}`);
   const categoriasFuertes = plan.blandos.categorias.filter((c) => c.peso >= PESO_MINIMO_RECUPERAR).map((c) => c.nombre);
   if (categoriasFuertes.length) fuertes.push(p.enCategorias(categoriasFuertes));

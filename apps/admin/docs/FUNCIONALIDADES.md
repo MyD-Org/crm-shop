@@ -1170,6 +1170,18 @@ Botones **Responder / Responder a todos / Reenviar** en la conversación y **Red
 - **Adjuntos nuevos**: el navegador pide `POST /api/admin/correo/adjuntos/subida` y sube directo a R2 (`correo/tmp/{tenant}/{uuid}/{nombre}`, PUT prefirmado con tipo y tamaño en la firma); al enviar, el servidor verifica la key del tenant y el tamaño real (`head`) y pasa una URL GET de 15 min como `path`. Nada pasa por la función (límite de 4,5 MB de Vercel). Tope 40 MB por mail contando el base64 (x1,37); tipos ejecutables bloqueados. Los temporales caducan por la regla de ciclo de vida de 1 día del prefijo `correo/tmp/` del bucket.
 - **Sin doble envío**: botón deshabilitado y envío único en el cliente + `Idempotency-Key` (estable por contenido) en Resend. Ante error, el borrador y los adjuntos se conservan.
 
+## Precios online (listas por coeficiente)
+
+Change `listas-precio-online`, rebanada B (migración `0064`). **Precio = costo sin IVA × coeficiente**, definido en el admin: Catálogo → solapa **Precios online**. Las listas de precio de Alegra nunca participan del cálculo (solo se muestran como referencia informativa, por cuenta, en la grilla). El Shop todavía NO lee estos precios (lo hace la rebanada C).
+
+- **Cálculo en SQL**: `calcular_precios_online(tenant, ids)` (no escribe) y `aplicar_precios_online(tenant, ids, modo)` (escribe solo lo que difiere; modo `config` o `costo`). Neto, `round` half-up a 2 decimales sobre `costo_aplicado`. Precedencia: override de marca > override de categoría (la más profunda entre la categoría del producto y sus ancestros; empate = mayor coeficiente) > general de la lista. Sin costo no hay precio (nunca 0). El oráculo en TypeScript (`lib/precios-online-oraculo.ts`) solo lo usan los tests.
+- **Listas y ajustes**: tablas `listas_precio_online` (coeficiente ≥ 1; una sola referencia activa por tenant) y `lista_precio_overrides`. Resultado materializado en `catalog_products.precios_online` (+ `precio_online_ref`).
+- **Cambios controlados**: todo cambio pasa por `POST /api/admin/precios-online/previsualizar` (transacción + ROLLBACK) y `.../aplicar` (versión + huella; 409 si la previa quedó vieja). Si alguna variación entre el precio online anterior y el nuevo SUPERA el umbral de confirmación (20 %, configurable) se exige `confirmaExtra`. Historial inmutable y revertir (solo la última entrada vigente de cada objeto).
+- **Retención por costo**: la sync y el webhook (`catalog-products-repo`) recalculan por ítem; si el costo varía más que el umbral de retención (10 %, configurable) el precio vigente se mantiene y el cambio queda en `precios_online_retenciones` hasta que un admin lo apruebe o rechace. Ambos umbrales actúan solo al SUPERAR el número.
+- **Alertas**: sin costo, sin precio online, nuevos sin revisar (sin overlay = ocultos) y retenidos.
+- **Script**: `npx tsx scripts/recalcular-precios-online.ts --tenant <id>` es un ensayo (se deshace) que mide el UPDATE masivo; `--ejecutar` escribe.
+- Las rutas son `requireAdminPlus` (operator → 404) y filtran por el tenant del guard.
+
 ## Base de datos
 
 DB propia del CRM (Postgres). Schema en **`src/db/schema.ts`** (Drizzle):

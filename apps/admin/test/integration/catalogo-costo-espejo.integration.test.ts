@@ -74,13 +74,11 @@ describe("costo en el espejo: upsert", () => {
     for (const id of ["1", "2", "3", "4"]) expect((await fila(id)).costo).toBeNull()
   })
 
-  it("no toca costo_aplicado (lo gobierna la rebanada B)", async () => {
+  it("costo_aplicado lo gobierna la retención (rebanada B): el upsert no lo pisa con un costo que la supera", async () => {
+    // El primer costo se aplica (hook de B, tras el upsert); el espejo guarda siempre el último.
     await upsertProductos(TENANT, [item("1", 100)], { leidoAt: seg(0), leidoPor: "sync" })
-    expect((await fila("1")).costoAplicado).toBeNull()
-    await getDb()
-      .update(catalogProducts)
-      .set({ costoAplicado: "100" })
-      .where(and(eq(catalogProducts.tenantId, TENANT), eq(catalogProducts.alegraId, "1")))
+    expect(Number((await fila("1")).costoAplicado)).toBe(100)
+    // +50 % supera el umbral de retención (10 %): `costo` se actualiza, `costo_aplicado` no.
     await upsertProductos(TENANT, [item("1", 150)], { leidoAt: seg(1), leidoPor: "webhook" })
     const f = await fila("1")
     expect(Number(f.costo)).toBe(150)

@@ -7,6 +7,7 @@ import { upsertProductos } from "./catalog-products-repo"
 import { abrirCorrida, baseDeCorrida, evaluarCorrida, MSG_SYNC_EN_CURSO, type Conteo } from "./alegra-sync-guarda"
 import { absorberSoloSecundaria, escribirStockPrincipal } from "./catalogo-union-repo"
 import { avisarShop } from "./aviso-shop"
+import { recalcularTrasSync } from "./precios-online-costos"
 import { sincronizarAtributosDeNombre } from "./catalogo-atributos-repo"
 
 // Sincroniza el catálogo de Alegra a la cache local (upsert por alegraId). Lo que no se ve en la
@@ -252,6 +253,10 @@ async function cerrarPasada(
       finishedAt: new Date(),
     })
     .where(eq(catalogSyncLog.id, log.id))
+
+  // Barrido de precios online del tenant (idempotente): recupera lo que un recálculo por lote haya
+  // dejado pendiente. Best-effort (ver `recalcularTrasSync`).
+  await recalcularTrasSync(config.id, null, "sync-barrido")
 
   // Blindado: un fallo acá no puede convertir una sync OK en 'error'.
   try {

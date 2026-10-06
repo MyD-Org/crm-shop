@@ -90,10 +90,11 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
     exigeVisible(grabadora.consultas[0]);
   });
 
-  it("encendido: las cuatro facetas exigen visible = true", async () => {
+  it("encendido: las facetas exigen visible = true (también el conteo de todo el catálogo)", async () => {
     await getFacetas({ marcas: ["GENROD"] }, true);
     const consultas = sinLecturaDelArbol(grabadora.consultas);
-    expect(consultas).toHaveLength(4);
+    // Categorías (catálogo entero y filtrado), marcas, precio y atributos.
+    expect(consultas).toHaveLength(5);
     for (const c of consultas) exigeVisible(c);
   });
 

@@ -127,6 +127,8 @@ export interface CasoJson {
   q?: string;
   tipo: string;
   perfil: string;
+  /** Intención esperada del caso, si el banco la declara (corte de los criterios de la cascada). */
+  intencion?: string;
   posicion: number | null;
   rr: number | null;
   precision: number | null;
@@ -281,6 +283,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
       ...(enmascarar ? {} : { q: e.q }),
       tipo: e.tipo,
       perfil: e.perfil,
+      ...(e.intencionEsperada ? { intencion: e.intencionEsperada } : {}),
       posicion: e.posicion,
       rr: e.rr,
       precision: e.precision,

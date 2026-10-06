@@ -126,8 +126,19 @@ describe("ejecutarMotor: lo que informa", () => {
     expect(entender).toHaveBeenCalledTimes(1);
   });
 
-  it("la política cascada, todavía sin implementar, falla con un mensaje claro", async () => {
-    await expect(ejecutarMotor("panel", { ...ctxBase, superficie: "chat", politica: "cascada" })).rejects.toThrow(/cascada/);
+  it("la política cascada corre en el banco: el plan resuelve primero y la etapa se informa", async () => {
+    entender.mockImplementation(async (q: string) => ({ plan: planConCategoria(q), msJev: null, jevFallo: false, consultaNorm: q }));
+    tabla.plan = ["a", "b"];
+    tabla.exacta = ["z"];
+    const r = await ejecutarMotor("panel de interior", { ...ctxBase, superficie: "autocompletar", politica: "cascada" });
+    expect(r).toMatchObject({ etapa: "plan", ids: ["a", "b"] });
+  });
+
+  it("la política cascada corre en el banco: un código se resuelve en la etapa código, sin pedir plan", async () => {
+    tabla.exacta = ["c1"];
+    const r = await ejecutarMotor("DL-18W", { ...ctxBase, superficie: "chat", politica: "cascada" });
+    expect(r).toMatchObject({ etapa: "codigo", ids: ["c1"] });
+    expect(entender).not.toHaveBeenCalled();
   });
 
   it("respeta el K de la superficie como límite de lectura", async () => {

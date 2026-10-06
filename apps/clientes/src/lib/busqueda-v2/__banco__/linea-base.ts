@@ -9,9 +9,12 @@
  *     --banco-real=tmp/busqueda/banco-real.local.json --repeticiones=3 \
  *     --dir=tmp/busqueda/linea-base-<fecha>
  *
- * Con `--motor` suma las filas de la tubería `motor` (el motor único de búsqueda, política `legado`:
- * catálogo en las dos vistas; autocompletar y chat en producción). Sus filas legado tienen que
- * igualar las de la corrida congelada (misma cabecera) y de ahí sale la matriz de cada cambio.
+ * Con `--motor` suma las filas de la tubería `motor` (el motor único de búsqueda, política `legado`
+ * y política `cascada`: catálogo en las dos vistas; autocompletar y chat en producción). Sus filas
+ * legado tienen que igualar las de la corrida congelada (misma cabecera); `matriz.txt` evalúa cada
+ * fila cascada contra los criterios de aceptación (hit@K, MRR, zero-result, precision, cortes,
+ * hit -> miss, latencia, planes sin caché y mejora de typos) y de ahí sale la matriz de cada cambio.
+ * Declare el estado de `busqueda-medidas` con `--flags=busqueda-medidas:on|off` (queda en la cabecera).
  *
  * Escribe en `--dir` (por defecto `tmp/busqueda/linea-base-<fecha>/`, ignorado por git):
  *   matriz.json  todas las corridas con su cabecera (el banco real va enmascarado)

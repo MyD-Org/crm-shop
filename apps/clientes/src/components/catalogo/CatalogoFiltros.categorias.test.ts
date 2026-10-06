@@ -25,18 +25,12 @@ const renderizar = (params: Parameters<typeof leerEstado>[0]) =>
   renderToStaticMarkup(createElement(CatalogoFiltros, { facetas, estado: leerEstado(params), ir: () => {} }));
 
 describe("CatalogoFiltros: categorías", () => {
-  it("con búsqueda lista las categorías con productos y su madre; las de 0 no se muestran", () => {
+  it("con búsqueda lista el árbol completo, también las categorías sin resultados", () => {
     const html = renderizar({ q: "foco" });
     const t = texto(html);
-    expect(t).toContain("Iluminación 1");
+    // Las raíces se ven con su conteo (0 incluido); las subcategorías están plegadas bajo su madre.
+    for (const nombre of ["Iluminación 1", "Electricidad 0", "Seguridad 0"]) expect(t).toContain(nombre);
     expect(html).toContain("Ver subcategorías de Iluminación");
-    for (const nombre of ["Electricidad", "Seguridad"]) expect(t).not.toContain(nombre);
-  });
-
-  it("una categoría tildada que cuenta 0 se sigue mostrando, con su 0", () => {
-    const t = texto(renderizar({ categoria: "ELECTRICIDAD" }));
-    expect(t).toContain("Electricidad 0");
-    expect(t).not.toContain("Seguridad");
   });
 
   it("las categorías con 0 no quedan deshabilitadas", () => {

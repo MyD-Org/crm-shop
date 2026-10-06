@@ -34,7 +34,8 @@ const alternar = (lista: string[], valor: string, tildado: boolean) =>
 /**
  * Panel de filtros: categorías, marcas, características (atributos del
  * diccionario agrupados por tono, ambiente, zócalo y tensión, ver catalogo-atributos.ts),
- * precio y disponibilidad. Los ítems con conteo 0 se ocultan (ver `itemsVisibles`). Puro: todo
+ * precio y disponibilidad. En marcas y características los ítems con conteo 0 se ocultan
+ * (ver `itemsVisibles`); categorías muestra siempre el árbol completo. Puro: todo
  * lo que toca el visitante sale por `ir` como cambios de estado (que el
  * padre convierte en URL). Sin `dentroDeSheet` va dentro de una `Card` con
  * "Limpiar" en el encabezado (aside de desktop); con `dentroDeSheet` se
@@ -57,16 +58,16 @@ export function CatalogoFiltros({
     <div className="flex flex-col gap-5">
       <FacetGroup
         title="Categorías"
-        items={itemsVisibles(
-          itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
-            value: c.label,
-            label: formatRubro(c.label),
-            // Las subcategorías van debajo de su madre, corridas un nivel.
-            depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
-            count: c.count,
-            checked: c.checked,
-          })),
-        )}
+        items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
+          value: c.label,
+          label: formatRubro(c.label),
+          // Las subcategorías van debajo de su madre, corridas un nivel.
+          depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
+          count: c.count,
+          // Va siempre el árbol completo, con o sin búsqueda: las de 0 se ven con su 0,
+          // sin atenuar, y se pueden tildar igual (la regla de ceros no aplica acá).
+          checked: c.checked,
+        }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.
         onToggle={(valor, tildado) =>
           ir({ categorias: alternarCategoria(facetas.categorias, estado.categorias, valor, tildado) })

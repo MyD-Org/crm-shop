@@ -111,7 +111,8 @@ describe("buscarEnShop: el plan", () => {
     expect(planParaPagina).not.toHaveBeenCalled();
   });
 
-  it("autocompletar pide plan siempre que haya texto y busqueda-ia; chat y admin nunca", async () => {
+  it("autocompletar pide plan siempre que haya texto y busqueda-ia; el admin nunca; el chat sólo con el motor prendido", async () => {
+    // Flag apagado: el chat corre el legado (exacta y tolerante), que no usa plan.
     for (const superficie of ["chat", "admin"] as const) {
       await buscarEnShop(pedido(), { superficie, soloVisibles: false, busquedaIa: true });
     }
@@ -137,9 +138,11 @@ describe("buscarEnShop: el plan", () => {
     expect(planParaPagina).not.toHaveBeenCalled();
   });
 
-  it("chat y admin no leen el flag (no usan plan)", async () => {
-    for (const superficie of ["chat", "admin"] as const) await buscarEnShop(pedido(), { superficie, soloVisibles: false });
+  it("el admin nunca lee el flag (no usa plan); el chat sí (en cascada usa el plan)", async () => {
+    await buscarEnShop(pedido(), { superficie: "admin", soloVisibles: false });
     expect(busquedaIaHabilitada).not.toHaveBeenCalled();
+    await buscarEnShop(pedido(), { superficie: "chat", soloVisibles: false });
+    expect(busquedaIaHabilitada).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -150,12 +153,9 @@ describe("politicaDe", () => {
     for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) expect(politicaDe(superficie, false)).toBe("legado");
   });
 
-  it("flag prendido: cascada sólo en las superficies habilitadas (catálogo y autocompletar; el chat y el admin siguen en legado)", () => {
-    expect([...SUPERFICIES_EN_CASCADA].sort()).toEqual(["autocompletar", "catalogo"]);
-    expect(politicaDe("catalogo", true)).toBe("cascada");
-    expect(politicaDe("autocompletar", true)).toBe("cascada");
-    expect(politicaDe("chat", true)).toBe("legado");
-    expect(politicaDe("admin", true)).toBe("legado");
+  it("flag prendido: cascada en las cuatro superficies (catálogo, autocompletar, chat y selector del admin)", () => {
+    expect([...SUPERFICIES_EN_CASCADA].sort()).toEqual(["admin", "autocompletar", "catalogo", "chat"]);
+    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) expect(politicaDe(superficie, true)).toBe("cascada");
   });
 });
 
@@ -185,14 +185,69 @@ describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
     expect(planParaPagina).not.toHaveBeenCalled();
   });
 
-  it("flag prendido: chat y admin siguen en legado y ni siquiera leen el flag", async () => {
-    setFlag("busqueda-motor-unico", true);
+  it("un solo interruptor: apagado, el chat y el admin vuelven al legado (sin plan); prendido, corren la cascada", async () => {
+    // Apagado.
+    planParaPagina.mockImplementation(async () => planConAporte);
     for (const superficie of ["chat", "admin"] as const) {
       getPaginaCatalogo.mockClear();
-      await buscarEnShop(pedido(), { superficie, soloVisibles: false, busquedaIa: true });
+      const r = await buscarEnShop(pedido({ porPagina: 10 }), { superficie, soloVisibles: false, busquedaIa: true });
+      expect(r.intentos).toEqual(superficie === "chat" ? ["exacta", "tolerante"] : ["exacta"]);
       expect(textos()).toEqual(superficie === "chat" ? [{ q: "panel led" }, { q: "panel led", tolerante: true }] : [{ q: "panel led" }]);
     }
     expect(planParaPagina).not.toHaveBeenCalled();
+    // Prendido.
+    setFlag("busqueda-motor-unico", true);
+    getPaginaCatalogo.mockClear();
+    const chat = await buscarEnShop(pedido({ porPagina: 10 }), { superficie: "chat", soloVisibles: true, busquedaIa: true });
+    expect(chat.intentos).toEqual(["plan", "exacta", "tolerante"]);
+    expect(planParaPagina).toHaveBeenCalledWith("panel led", { soloVisibles: true });
+    getPaginaCatalogo.mockClear();
+    const admin = await buscarEnShop(pedido({ porPagina: 20 }), { superficie: "admin", soloVisibles: true, busquedaIa: true });
+    expect(admin.intentos).toEqual(["exacta", "tolerante"]);
+    expect(planParaPagina).toHaveBeenCalledTimes(1);
+  });
+
+  it("chat con el motor prendido: sin filtro de stock ni conteo, el límite como porPagina y el plan sólo como blando (sin duros)", async () => {
+    setFlag("busqueda-motor-unico", true);
+    planParaPagina.mockImplementation(async () => ({
+      ...planConAporte,
+      duros: { categorias: ["Paneles"], atributos: [{ id: "tono-calido" }] },
+    }) as unknown as PlanBusqueda);
+    await buscarEnShop(
+      pedido({ porPagina: 10, filtros: { atributosEstructurados: true } }),
+      { superficie: "chat", soloVisibles: true, busquedaIa: true },
+    );
+    const primera = getPaginaCatalogo.mock.calls[0][0] as { sinConteo: boolean; porPagina: number; filtros: Record<string, unknown> };
+    expect(primera).toMatchObject({ sinConteo: true, porPagina: 10, pagina: 1 });
+    expect(primera.filtros.soloStock).toBeUndefined();
+    expect(primera.filtros.categorias).toBeUndefined();
+    expect(primera.filtros.atributos).toBeUndefined();
+    expect(primera.filtros.atributosEstructurados).toBe(true);
+  });
+
+  it("chat con el motor prendido y busqueda-ia apagado: sin plan (exacta y tolerante)", async () => {
+    setFlag("busqueda-motor-unico", true);
+    planParaPagina.mockImplementation(async () => planConAporte);
+    const r = await buscarEnShop(pedido({ porPagina: 10 }), { superficie: "chat", soloVisibles: false, busquedaIa: false });
+    expect(r.intentos).toEqual(["exacta", "tolerante"]);
+    expect(planParaPagina).not.toHaveBeenCalled();
+  });
+
+  it("chat con el motor prendido: ESPERA al plan (sin tope de tiempo) y un typo con plan se resuelve en la tolerante con el plan", async () => {
+    vi.useFakeTimers();
+    setFlag("busqueda-motor-unico", true);
+    planParaPagina.mockImplementation(() => new Promise((resolver) => setTimeout(() => resolver(planConAporte), 5000)));
+    getPaginaCatalogo.mockImplementation(async (a) => {
+      const t = (a as { filtros: { texto?: { tolerante?: boolean } } }).filtros.texto;
+      return pagina(t?.tolerante ? 2 : 0);
+    });
+    const promesa = buscarEnShop(pedido({ consulta: "panle led", porPagina: 10 }), { superficie: "chat", soloVisibles: false, busquedaIa: true });
+    await vi.advanceTimersByTimeAsync(5000);
+    const r = await promesa;
+    vi.useRealTimers();
+    expect(r.intentos).toEqual(["plan", "exacta", "tolerante"]);
+    expect(r).toMatchObject({ etapa: "tolerante", total: 2 });
+    expect(r.plan).not.toBeNull();
   });
 
   it("busqueda-ia apagado manda: con el motor prendido no hay plan ni etapa plan", async () => {

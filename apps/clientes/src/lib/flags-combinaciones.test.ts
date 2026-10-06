@@ -116,9 +116,25 @@ describe("búsqueda: motor único x búsqueda inteligente", () => {
     expect(etapasDe({ politica: politicaDe("autocompletar", conMotor), superficie: "autocompletar", consulta: "panel led", plan: conIa ? plan : null, conPlan: conIa })).toEqual(etapas);
   });
 
-  it("el chat y el admin siguen en legado con el motor prendido (hasta el cambio siguiente)", () => {
-    expect(politicaDe("chat", true)).toBe("legado");
-    expect(politicaDe("admin", true)).toBe("legado");
+  it.each([
+    // busqueda-motor-unico, busqueda-ia, política, etapas del chat con un plan que aporta
+    { motor: false, ia: false, politica: "legado", etapas: ["exacta", "tolerante"] },
+    { motor: false, ia: true, politica: "legado", etapas: ["exacta", "tolerante"] }, // el legado del chat nunca usó plan
+    { motor: true, ia: false, politica: "cascada", etapas: ["exacta", "tolerante"] }, // busqueda-ia apagado manda: sin plan
+    { motor: true, ia: true, politica: "cascada", etapas: ["plan", "exacta", "tolerante"] },
+  ])("chat: motor=$motor, busqueda-ia=$ia => política $politica, etapas $etapas (un solo interruptor)", async ({ motor, ia, politica, etapas }) => {
+    f({ "busqueda-motor-unico": motor, "busqueda-ia": ia });
+    const conMotor = await busquedaMotorUnico();
+    const conIa = await busquedaIaHabilitada();
+    expect(politicaDe("chat", conMotor)).toBe(politica);
+    expect(etapasDe({ politica: politicaDe("chat", conMotor), superficie: "chat", consulta: "panel led", plan: conIa ? plan : null, conPlan: conIa })).toEqual(etapas);
+  });
+
+  it("con el motor prendido las cuatro superficies corren la cascada; apagado, todas el legado", () => {
+    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
+      expect(politicaDe(superficie, true)).toBe("cascada");
+      expect(politicaDe(superficie, false)).toBe("legado");
+    }
   });
 
   it("si Vercel Flags tira, el motor cae a apagado (legado)", async () => {

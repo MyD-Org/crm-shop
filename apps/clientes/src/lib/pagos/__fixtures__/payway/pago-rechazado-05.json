@@ -1,0 +1,33 @@
+{
+  "id": 15403388,
+  "bin": "450799",
+  "pan": "hash-sintetico",
+  "date": "2026-10-06T12:00:00Z",
+  "amount": 1000,
+  "currency": "ars",
+  "card_brand": "Visa",
+  "installments": 1,
+  "payment_type": "single",
+  "confirmed": null,
+  "site_id": "00000000",
+  "fraud_detection": null,
+  "payment_method_id": 1,
+  "authenticated_token": null,
+  "establishment_name": null,
+  "first_installment_expiration_date": null,
+  "site_transaction_id": "0123456789abcdef0123456789abcdef",
+  "status": "rejected",
+  "status_details": {
+    "error": {
+      "type": "invalid_card",
+      "reason": {
+        "id": 5,
+        "description": "NO APROBADA",
+        "additional_description": ""
+      }
+    },
+    "ticket": "1561",
+    "address_validation_code": null,
+    "card_authorization_code": ""
+  }
+}

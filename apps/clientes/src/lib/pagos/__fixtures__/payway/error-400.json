@@ -1,0 +1,9 @@
+{
+  "error_type": "invalid_request_error",
+  "validation_errors": [
+    {
+      "code": "invalid_param",
+      "param": "currency"
+    }
+  ]
+}

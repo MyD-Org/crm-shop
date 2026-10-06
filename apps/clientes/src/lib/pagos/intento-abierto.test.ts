@@ -9,7 +9,7 @@ vi.mock("@/lib/pedidos", () => ({
   descartarReserva: (...a: unknown[]) => descartarReserva(...a),
 }));
 
-import { RESERVA_ABANDONADA_MS, resolverIntentoAbierto } from "./intento-abierto";
+import { NO_LLEGO_MS, RESERVA_ABANDONADA_MS, resolverIntentoAbierto } from "./intento-abierto";
 
 const cancelarPago = vi.fn();
 const consultarPago = vi.fn();
@@ -73,5 +73,32 @@ describe("resolverIntentoAbierto", () => {
     consultarPago.mockRejectedValue(new Error("timeout"));
     expect(await resolverIntentoAbierto("p1", conReferencia, proveedor, AHORA)).toBe("en_curso");
     expect(registrarCobro).not.toHaveBeenCalled();
+  });
+
+  describe("proveedor que no conoce el pago (consulta sin resultado)", () => {
+    const noEncontrado: EstadoPago = { estado: "pendiente", referencia: "r1", detalle: "no_encontrado", noEncontrado: true };
+
+    it("intento reciente: puede seguir en vuelo, hay que esperar", async () => {
+      cancelarPago.mockResolvedValue(noEncontrado);
+      expect(await resolverIntentoAbierto("p1", conReferencia, proveedor, AHORA)).toBe("en_curso");
+      expect(registrarCobro).not.toHaveBeenCalledWith("p1", expect.objectContaining({ estado: "fallido" }), expect.anything());
+    });
+
+    it("intento viejo que Payway nunca conoció: no llegó, se cierra y se libera", async () => {
+      cancelarPago.mockResolvedValue(noEncontrado);
+      const viejo = { ...conReferencia, creadoEn: new Date(AHORA - NO_LLEGO_MS - 1) };
+      expect(await resolverIntentoAbierto("p1", viejo, proveedor, AHORA)).toBe("libre");
+      expect(registrarCobro).toHaveBeenCalledWith(
+        "p1",
+        expect.objectContaining({ referencia: "r1", estado: "fallido", detalle: "no_llego" }),
+        { avisar: false },
+      );
+    });
+
+    it("un pendiente real (en revisión) NO se da por perdido por viejo que sea", async () => {
+      cancelarPago.mockResolvedValue({ estado: "pendiente", referencia: "r1", detalle: "status=review" });
+      const viejo = { ...conReferencia, creadoEn: new Date(AHORA - NO_LLEGO_MS * 10) };
+      expect(await resolverIntentoAbierto("p1", viejo, proveedor, AHORA)).toBe("en_curso");
+    });
   });
 });

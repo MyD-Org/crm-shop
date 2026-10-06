@@ -27,6 +27,27 @@ import type { EstadoPago, ProveedorPago } from "./tipos";
  */
 export const RESERVA_ABANDONADA_MS = 2 * 60_000;
 
+/**
+ * Un intento con referencia que el proveedor NUNCA conoció (consulta sin resultado, ver
+ * `EstadoPago.noEncontrado`) se da por "no llegó" pasado este margen: el request pudo no haberse
+ * enviado (la referencia se anota antes de llamar). Mucho más que lo que tarda una operación
+ * (~6 s) y que el timeout de la ruta (15 s).
+ */
+export const NO_LLEGO_MS = 10 * 60_000;
+
+/**
+ * Si el proveedor no conoce el pago y el intento ya es viejo, el estado real es "fallido: no llegó".
+ * Un pendiente que el proveedor SÍ conoce (p. ej. en revisión) nunca se descarta por antigüedad.
+ */
+export function darPorPerdidoSiCorresponde(
+  estado: EstadoPago,
+  creadoEn: Date | undefined,
+  ahora = Date.now(),
+): EstadoPago {
+  if (!estado.noEncontrado || !creadoEn || ahora - creadoEn.getTime() < NO_LLEGO_MS) return estado;
+  return { ...estado, estado: "fallido", detalle: "no_llego", noEncontrado: false };
+}
+
 export type Resolucion =
   /** El intento anterior quedó cerrado: se puede abrir otro. */
   | "libre"
@@ -61,6 +82,8 @@ export async function resolverIntentoAbierto(
       return "en_curso";
     }
   }
+
+  estado = darPorPerdidoSiCorresponde(estado, abierto.creadoEn, ahora);
 
   await registrarCobro(pedidoId, {
     proveedor: proveedor.id,

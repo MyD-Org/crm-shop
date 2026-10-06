@@ -1,6 +1,6 @@
 /**
  * Arma el ejecutor de cada tubería del banco (`clasica`, `tolerante`, `fase1`,
- * `v2` y `motor` con Jev grabado / vivo / sin Jev / plan de la caché) y el oráculo `legado`. Lo comparten
+ * `v2` y `motor` con Jev grabado / vivo / sin Jev / plan de la caché). Lo comparten
  * `banco:busqueda` y `banco:linea-base`. SOLO scripts; no abre conexiones por
  * su cuenta (el que lo usa envuelve cada llamada en `enLectura`).
  */
@@ -13,11 +13,10 @@ import { leerPlan } from "../cache";
 import { clavePlan } from "../servidor";
 import type { BusquedaBanco, ResultadoBanco } from "./banco";
 import { ejecutarClasica } from "./clasica";
-import type { ModoJev, PoliticaBanco, SuperficieBanco, Tuberia } from "./corrida";
+import type { ModoJev, SuperficieBanco, Tuberia } from "./corrida";
 import { ejecutarFase1 } from "./fase1";
 import grabado from "./jev-grabado.json";
 import { jevGrabado, type JevGrabado } from "./jev-grabado";
-import { ejecutarLegado } from "./legado";
 import { ejecutarMotor } from "./motor";
 import { ejecutarV2, type ContextoV2 } from "./v2";
 import type { VistaBanco } from "./vista";
@@ -34,10 +33,9 @@ export interface ConfigEjecutor {
    * el de la vista; en la línea base es el de producción, que es el que sirvió el plan al cliente.
    */
   soloVisiblesDelPlan?: boolean;
-  /** Sólo tubería `motor` y oráculo `legado`: política (por defecto `cascada`) y superficie (por defecto `catalogo`). */
-  politica?: PoliticaBanco;
+  /** Sólo tubería `motor`: superficie (por defecto `catalogo`). */
   superficie?: SuperficieBanco;
-  /** `--medidas=si`: las tuberías con plan (`v2`, `motor` y el oráculo `legado`) aplican `aplicarMedidas` sobre el plan. */
+  /** `--medidas=si`: las tuberías con plan (`v2` y `motor`) aplican `aplicarMedidas` sobre el plan. */
   medidas?: boolean;
 }
 
@@ -56,7 +54,7 @@ export function resolverJev(jev: ModoJev | "segun-entorno", conClave: boolean): 
   return jev === "segun-entorno" ? (conClave ? "vivo" : "no") : jev;
 }
 
-/** Cómo se adquiere el plan según el modo de Jev (lo comparten `v2`, `motor` y el oráculo `legado`), más las medidas si se piden. */
+/** Cómo se adquiere el plan según el modo de Jev (lo comparten `v2` y `motor`), más las medidas si se piden. */
 function contextoDePlan(cfg: ConfigEjecutor): ReturnType<typeof contextoBase> {
   const r = contextoBase(cfg);
   return cfg.medidas ? { ...r, ctx: { ...r.ctx, medidas: true } } : r;
@@ -108,18 +106,8 @@ export function crearEjecutor(cfg: ConfigEjecutor): Ejecutor {
     }
     case "motor": {
       const { ctx, jevMeta, sinGrabacion } = contextoDePlan(cfg);
-      const motor = { ...ctx, politica: cfg.politica ?? "cascada", superficie: cfg.superficie ?? "catalogo" } as const;
+      const motor = { ...ctx, superficie: cfg.superficie ?? "catalogo" } as const;
       return { ejecutar: (q) => ejecutarMotor(q, motor), ...(jevMeta ? { jevMeta } : {}), ...(sinGrabacion ? { sinGrabacion } : {}) };
     }
   }
-}
-
-/**
- * El oráculo `legado` (lo que hacía cada superficie antes de la fachada, con las funciones viejas de
- * la capa del catálogo) con el MISMO plan que el motor del banco. Se borra con la política `legado`.
- */
-export function crearOraculoLegado(cfg: ConfigEjecutor): Ejecutor {
-  const { ctx, jevMeta, sinGrabacion } = contextoDePlan(cfg);
-  const legado = { ...ctx, superficie: cfg.superficie ?? "catalogo" } as const;
-  return { ejecutar: (q) => ejecutarLegado(q, legado), ...(jevMeta ? { jevMeta } : {}), ...(sinGrabacion ? { sinGrabacion } : {}) };
 }

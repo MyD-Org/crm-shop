@@ -6,9 +6,9 @@ import { planVacio, type PlanBusqueda } from "@/lib/busqueda-v2/plan";
 
 /**
  * CONTRATO del chat con ai-api (platform ADR 0014), con el motor REAL y las lecturas falsas: la
- * respuesta no cambia de forma, de límites ni de garantías con el motor de búsqueda prendido o apagado
- * (`busqueda-motor-unico`). Lo que se mockea es lo que está AFUERA del motor: la lectura de la página
- * del catálogo, el plan, los flags públicos y la disponibilidad por sucursal.
+ * respuesta conserva forma, límites y garantías con la cascada del motor de búsqueda. Lo que se mockea
+ * es lo que está AFUERA del motor: la lectura de la página del catálogo, el plan, los flags públicos y
+ * la disponibilidad por sucursal.
  *
  * Fixtures con nombres y marcas inventados (repo público).
  */
@@ -111,12 +111,7 @@ beforeEach(() => {
   setFlag("busqueda-ia", true);
 });
 
-describe.each([
-  { motor: false, politica: "legado" },
-  { motor: true, politica: "cascada" },
-])("contrato del chat con busqueda-motor-unico=$motor ($politica)", ({ motor }) => {
-  beforeEach(() => setFlag("busqueda-motor-unico", motor));
-
+describe("contrato del chat", () => {
   it("sin facetas: un array de ProductoAgente cuyas claves son un subconjunto de las permitidas, sin `etapa`", async () => {
     const res = await pedir("?q=lampara%20led&limit=5");
     expect(res.status).toBe(200);
@@ -206,56 +201,33 @@ describe.each([
   });
 });
 
-describe("el flag cambia la semántica de la búsqueda, no el contrato", () => {
-  it("apagado: el chat busca exacta y tolerante y NO pide plan; prendido: pide el plan (cascada)", async () => {
-    setFlag("busqueda-motor-unico", false);
-    await pedir("?q=lampara");
-    expect(planParaPagina).not.toHaveBeenCalled();
-    expect(lecturas.map((l) => Object.keys(l.filtros.texto ?? {}).sort().join())).toEqual(["q"]);
-
-    lecturas.length = 0;
-    setFlag("busqueda-motor-unico", true);
+describe("la cascada del chat", () => {
+  it("pide el plan con la consulta cruda y lo usa en la primera lectura", async () => {
     await pedir("?q=lampara");
     expect(planParaPagina).toHaveBeenCalledTimes(1);
     expect(planParaPagina.mock.calls[0][0]).toBe("lampara");
     expect(lecturas[0].filtros.texto?.plan).toBeDefined();
   });
 
-  it("prendido pero busqueda-ia apagado: sin plan (la clásica), con la misma forma de respuesta", async () => {
-    setFlag("busqueda-motor-unico", true);
+  it("busqueda-ia apagado: sin plan (la clásica), con la misma forma de respuesta", async () => {
     setFlag("busqueda-ia", false);
     const cuerpo = await (await pedir("?q=lampara&limit=3")).json();
     expect(planParaPagina).not.toHaveBeenCalled();
     expect(cuerpo).toHaveLength(3);
   });
 
-  it("prendido: una frase que la AND de todas las palabras no encuentra se resuelve por el plan", async () => {
+  it("una frase que la AND de todas las palabras no encuentra se resuelve por el plan", async () => {
     // "algo de lampara para la cocina": la exacta pide TODAS las palabras y da 0; el plan recupera por "lampara".
     const q = "algo%20de%20lampara%20para%20la%20cocina";
-    setFlag("busqueda-motor-unico", false);
-    const antes = await (await pedir(`?q=${q}&limit=4`)).json();
-    setFlag("busqueda-motor-unico", true);
-    const despues = await (await pedir(`?q=${q}&limit=4`)).json();
-    expect(despues.length).toBeGreaterThan(0);
-    expect(despues.length).toBeGreaterThanOrEqual(antes.length);
-    expect(despues.every((p: { id: string }) => p.id !== "3")).toBe(true);
+    const cuerpo = await (await pedir(`?q=${q}&limit=4`)).json();
+    expect(cuerpo.length).toBeGreaterThan(0);
+    expect(cuerpo.every((p: { id: string }) => p.id !== "3")).toBe(true);
   });
 
   it("si el plan falla, el chat sigue respondiendo (sin plan) y no devuelve 5xx", async () => {
-    setFlag("busqueda-motor-unico", true);
     planParaPagina.mockRejectedValue(new Error("plan caído"));
     const res = await pedir("?q=lampara&limit=3");
     expect(res.status).toBe(200);
     expect(await res.json()).toHaveLength(3);
-  });
-
-  it("si el flag no se puede evaluar, el chat responde con la búsqueda de siempre (sin 5xx)", async () => {
-    vi.resetModules();
-    vi.doMock("@/lib/busqueda-motor-flag", () => ({ busquedaMotorUnico: async () => Promise.reject(new Error("flags caído")) }));
-    const { GET: aislada } = await import("./route");
-    const res = await aislada(new Request("http://localhost/api/chat-ia/buscar?q=lampara&limit=3"));
-    expect(res.status).toBe(200);
-    expect(planParaPagina).not.toHaveBeenCalled();
-    vi.doUnmock("@/lib/busqueda-motor-flag");
   });
 });

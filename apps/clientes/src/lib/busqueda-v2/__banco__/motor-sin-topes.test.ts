@@ -1,7 +1,7 @@
 /**
  * El motor del banco corre la cascada SIN los topes de tiempo de producción: con un plan lento (el
  * banco no tiene caché de planes y está lejos de la base) tiene que usarlo igual, no caer en la
- * exacta. Regresión de la medición de autocompletar (hit@8 39 % con la cascada vs 88,6 % legado).
+ * exacta. Regresión de la medición de autocompletar (hit@8 39 % con la cascada vs 88,6 % antes de la cascada).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Product } from "@/data/products";
@@ -46,7 +46,7 @@ afterEach(() => vi.useRealTimers());
 describe("ejecutarMotor: cascada con plan lento", () => {
   for (const superficie of ["autocompletar", "chat", "catalogo"] as const) {
     it(`${superficie}: usa el plan aunque tarde, no cae en la exacta`, async () => {
-      const promesa = ejecutarMotor("tira led para la cocina", { arbol: [], jev: null, estructurados: false, politica: "cascada", superficie });
+      const promesa = ejecutarMotor("tira led para la cocina", { arbol: [], jev: null, estructurados: false, superficie });
       await vi.advanceTimersByTimeAsync(5000);
       const r = await promesa;
       if (superficie === "catalogo") {

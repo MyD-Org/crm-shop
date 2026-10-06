@@ -28,8 +28,6 @@ import type { VistaBanco } from "./vista";
 export type Tuberia = "clasica" | "tolerante" | "fase1" | "v2" | "motor";
 export type ModoJev = "grabado" | "vivo" | "no" | "cache" | "no aplica";
 
-/** Política del motor de búsqueda (tubería `motor`): lo de hoy (`legado`) o la cascada. */
-export type PoliticaBanco = "legado" | "cascada";
 /** Superficie que mide la tubería `motor`. */
 export type SuperficieBanco = "catalogo" | "autocompletar" | "chat";
 
@@ -77,8 +75,7 @@ export interface OpcionesCorrida {
   umbral?: number;
   /** `--solo=...`: corrida parcial declarada en la cabecera. */
   parcial?: string;
-  /** Sólo tubería `motor`: política y superficie que se miden (declaradas en la cabecera). */
-  politica?: PoliticaBanco;
+  /** Sólo tubería `motor`: superficie que se mide (declarada en la cabecera). */
   superficie?: SuperficieBanco;
   /** `--ids`: escribir en el JSON los ids de lo devuelto por caso (paridad entre corridas; archivo local). */
   ids?: boolean;
@@ -114,7 +111,6 @@ export interface Cabecera {
   calentar: number;
   parcial?: string;
   /** Sólo tubería `motor`. */
-  politica?: PoliticaBanco;
   superficie?: DatosSuperficie;
   tenantAlias: string;
   duracionMs: number;
@@ -128,7 +124,7 @@ export interface CasoJson {
   q?: string;
   tipo: string;
   perfil: string;
-  /** Intención esperada del caso, si el banco la declara (corte de los criterios de la cascada). */
+  /** Intención esperada del caso, si el banco la declara (corte de las métricas por intención). */
   intencion?: string;
   posicion: number | null;
   rr: number | null;
@@ -263,7 +259,6 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
     repeticiones,
     calentar: o.calentar,
     ...(o.parcial ? { parcial: o.parcial } : {}),
-    ...(o.politica ? { politica: o.politica } : {}),
     ...(superficie ? { superficie } : {}),
     tenantAlias: o.tenantAlias,
     duracionMs,
@@ -312,7 +307,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
   const ordenadas = [...primerasMs].sort((a, b) => a - b);
   const p50Legado = ordenadas[Math.floor(ordenadas.length / 2)] ?? 0;
   const lineas = [
-    `[banco] tubería ${o.tuberia}${o.politica ? ` (política ${o.politica}, superficie ${o.superficie ?? "catalogo"}, K=${k})` : ""}; banco ${o.banco.origen} (n=${casos.length}, hash ${o.banco.hash}); vista ${cabecera.vista.variante} (soloVisibles ${o.vista.soloVisibles}, soloStock ${o.vista.soloStock}); Jev ${o.jev}${o.jevMeta?.modelo ? ` (${o.jevMeta.modelo}, grabado ${o.jevMeta.grabadoEl ?? "?"})` : ""}; busqueda-medidas: ${cabecera.busquedaMedidas}`,
+    `[banco] tubería ${o.tuberia}${o.tuberia === "motor" ? ` (superficie ${o.superficie ?? "catalogo"}, K=${k})` : ""}; banco ${o.banco.origen} (n=${casos.length}, hash ${o.banco.hash}); vista ${cabecera.vista.variante} (soloVisibles ${o.vista.soloVisibles}, soloStock ${o.vista.soloStock}); Jev ${o.jev}${o.jevMeta?.modelo ? ` (${o.jevMeta.modelo}, grabado ${o.jevMeta.grabadoEl ?? "?"})` : ""}; busqueda-medidas: ${cabecera.busquedaMedidas}`,
     "",
     reporte(`Banco de búsquedas — tubería ${o.tuberia}`, incluidas, conIntencion, k),
     "",
@@ -329,7 +324,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
   return { json, texto: `${lineas.join("\n")}\n`, evaluaciones: incluidas, conIntencion, puntaje: resumir(incluidas, conIntencion).puntaje };
 }
 
-export type ClaveComparable = "vista" | "jev" | "superficie" | "politica";
+export type ClaveComparable = "vista" | "jev" | "superficie";
 
 /**
  * ¿Dos corridas se pueden comparar? Mismo banco (hash), mismo snapshot del
@@ -344,6 +339,5 @@ export function sonComparables(a: Cabecera, b: Cabecera, { ignorar = [] }: { ign
   if (!ignorar.includes("vista") && JSON.stringify(a.vista) !== JSON.stringify(b.vista)) motivos.push("la vista es distinta (banco/producción, visibles, stock)");
   if (!ignorar.includes("jev") && JSON.stringify(a.jev) !== JSON.stringify(b.jev)) motivos.push("el modo o la grabación de Jev es distinta");
   if (!ignorar.includes("superficie") && JSON.stringify(a.superficie) !== JSON.stringify(b.superficie)) motivos.push("la superficie es distinta");
-  if (!ignorar.includes("politica") && a.politica !== b.politica) motivos.push("la política del motor es distinta");
   return { ok: motivos.length === 0, motivos };
 }

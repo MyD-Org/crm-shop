@@ -95,7 +95,7 @@ describe("correr: armado del reporte", () => {
     expect(json.latencia).toEqual(json.resumen.latencia);
   });
 
-  it("cada caso lleva su intención esperada (para los cortes de los criterios de la cascada)", async () => {
+  it("cada caso lleva su intención esperada (para los cortes por intención)", async () => {
     const { json } = await correr(opciones(), deps());
     expect(json.casos.map((c) => c.intencion)).toEqual(["producto", undefined, "codigo"]);
   });
@@ -300,7 +300,7 @@ describe("correr: tubería motor (política, superficie, ids, etapa)", () => {
   });
   const caso: BusquedaBanco[] = [{ q: "lampara buscada", perfil: "particular", debeIncluirEnTop24: ["lampara buscada"] }];
   const base = (p: Partial<OpcionesCorrida> = {}) =>
-    opciones({ tuberia: "motor", politica: "legado", superficie: "chat", banco: { origen: "versionado", local: false, privado: false, casos: caso, hash: "abcdef012345" }, ...p });
+    opciones({ tuberia: "motor", superficie: "chat", banco: { origen: "versionado", local: false, privado: false, casos: caso, hash: "abcdef012345" }, ...p });
 
   it("la superficie fija el K de la evaluación: el 21.º producto cuenta en el catálogo y no en el chat", async () => {
     const d = deps({ ejecutar: vi.fn(async () => motor()) });
@@ -313,16 +313,14 @@ describe("correr: tubería motor (política, superficie, ids, etapa)", () => {
     expect(catalogo.texto).toContain("top 24");
   });
 
-  it("la cabecera declara política y superficie (con su K y si cuenta)", async () => {
+  it("la cabecera declara la superficie (con su K y si cuenta)", async () => {
     const { json } = await correr(base({ superficie: "autocompletar" }), deps({ ejecutar: vi.fn(async () => motor()) }));
-    expect(json.cabecera.politica).toBe("legado");
     expect(json.cabecera.superficie).toEqual({ nombre: "autocompletar", k: 8, conteo: false });
     expect(json.cabecera.tuberia).toBe("motor");
   });
 
-  it("las tuberías viejas no suman política ni superficie a la cabecera", async () => {
+  it("las tuberías sin superficie no la suman a la cabecera", async () => {
     const { json } = await correr(opciones(), deps());
-    expect("politica" in json.cabecera).toBe(false);
     expect("superficie" in json.cabecera).toBe(false);
   });
 
@@ -342,15 +340,12 @@ describe("correr: tubería motor (política, superficie, ids, etapa)", () => {
     expect(con.texto).not.toContain("id0");
   });
 
-  it("sonComparables: otra superficie u otra política no se comparan salvo que se ignoren", async () => {
+  it("sonComparables: otra superficie no se compara salvo que se ignore", async () => {
     const d = deps({ ejecutar: vi.fn(async () => motor()) });
     const chat = (await correr(base({ superficie: "chat" }), d)).json.cabecera;
     const catalogo = (await correr(base({ superficie: "catalogo" }), d)).json.cabecera;
-    const cascada = (await correr(base({ politica: "cascada" }), d)).json.cabecera;
     expect(sonComparables(chat, catalogo).ok).toBe(false);
     expect(sonComparables(chat, catalogo).motivos.join(" ")).toMatch(/superficie/);
-    expect(sonComparables(chat, cascada).motivos.join(" ")).toMatch(/pol[ií]tica/);
-    expect(sonComparables(chat, cascada, { ignorar: ["politica"] }).ok).toBe(true);
     expect(sonComparables(chat, catalogo, { ignorar: ["superficie"] }).ok).toBe(true);
   });
 });

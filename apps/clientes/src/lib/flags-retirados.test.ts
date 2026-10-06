@@ -4,8 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * Guarda de los flags `pagos` y `pedido-a-confirmar` (change `medios-pago-desde-admin`): los medios
- * de pago salen de la tabla del CRM y nada del código decide por esos interruptores. Los símbolos
+ * Guarda de los flags retirados: `pagos` y `pedido-a-confirmar` (change `medios-pago-desde-admin`:
+ * los medios de pago salen de la tabla del CRM) y `busqueda-motor-unico` (change `busqueda-motor-unico`:
+ * la cascada es la única política). Nada del código decide por esos interruptores. Los símbolos
  * se arman por partes para que este archivo no se detecte a sí mismo.
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url));
@@ -17,6 +18,10 @@ const RETIRADOS = [
   ["pagos", "Disponibles"],
   ["pagos", "-flag"],
   ["pedido-a-confirmar", ""],
+  // Flag `busqueda-motor-unico`: la cascada es la única política del motor de búsqueda.
+  ["busqueda", "MotorUnico"],
+  ['"busqueda-motor', '-unico"'],
+  ["busqueda-motor", "-flag"],
 ].map(([a, b]) => a + b);
 
 function archivos(dir: string): string[] {

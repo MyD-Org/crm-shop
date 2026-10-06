@@ -9,16 +9,15 @@
 import { basename } from "node:path";
 import { BANCO } from "./banco";
 import { cargarBancoDeArchivo, filtrarEtiquetas, hashBanco, type CasosFiltrados, type ModoEtiquetas, validarBanco } from "./cargar-banco";
-import type { BancoDeCorrida, ModoJev, PoliticaBanco, SuperficieBanco, Tuberia } from "./corrida";
+import type { BancoDeCorrida, ModoJev, SuperficieBanco, Tuberia } from "./corrida";
 
 export const TUBERIAS: readonly Tuberia[] = ["clasica", "tolerante", "fase1", "v2", "motor"];
-export const POLITICAS: readonly PoliticaBanco[] = ["legado", "cascada"];
 export const SUPERFICIES: readonly SuperficieBanco[] = ["catalogo", "autocompletar", "chat"];
 const MODOS_JEV = ["grabado", "vivo", "no", "cache"] as const;
 const FLAGS_CONOCIDOS = new Set([
   "tuberia", "jev", "umbral", "salida", "solo", "ver", "banco", "etiquetas", "produccion", "solo-visibles",
   "flags", "json", "repeticiones", "calentar", "ver-consultas", "tenant-alias",
-  "politica", "superficie", "paridad", "paridad-con", "ids",
+  "superficie", "paridad-con", "ids",
   "medidas",
 ]);
 
@@ -43,12 +42,9 @@ export interface ArgsBanco {
   calentar: number;
   verConsultas: boolean;
   tenantAlias: string;
-  /** Sólo `--tuberia=motor`: política del motor (por defecto `legado`) y superficie (por defecto `catalogo`). */
-  politica?: PoliticaBanco;
+  /** Sólo `--tuberia=motor`: superficie (por defecto `catalogo`). */
   superficie?: SuperficieBanco;
-  /** `--paridad`: el motor `legado` contra el oráculo legado, caso por caso (exit 1 si difieren). */
-  paridad: boolean;
-  /** `--paridad-con=<json>`: contra los ids de una corrida previa (misma cabecera). */
+  /** `--paridad-con=<json>`: el motor contra los ids de una corrida previa (misma cabecera); exit 1 si difieren. */
   paridadCon?: string;
   /** `--ids`: guardar en el JSON los ids de lo devuelto (archivo local; nunca a consola). */
   ids: boolean;
@@ -128,22 +124,15 @@ export function parsearArgs(argv: readonly string[]): ArgsBanco {
   const solo = mapa.get("solo");
   if (solo !== undefined && solo !== "diagnostico") throw new Error("--solo sólo admite diagnostico.");
 
-  // Tubería `motor`: política y superficie. La política por defecto es `cascada`; `--paridad` mide el motor
-  // legado contra el oráculo, así que ahí el default es `legado`.
+  // Tubería `motor`: superficie y paridad con una corrida previa.
   const esMotor = tuberia === "motor";
-  for (const flag of ["politica", "superficie", "paridad", "paridad-con"]) {
+  for (const flag of ["superficie", "paridad-con"]) {
     if (mapa.has(flag) && !esMotor) throw new Error(`--${flag} sólo vale con --tuberia=motor.`);
   }
-  const politicaPedida = mapa.get("politica");
-  if (politicaPedida !== undefined && !POLITICAS.includes(politicaPedida as PoliticaBanco)) throw new Error(`--politica inválida: use ${POLITICAS.join("|")}.`);
   const superficiePedida = mapa.get("superficie");
   if (superficiePedida !== undefined && !SUPERFICIES.includes(superficiePedida as SuperficieBanco)) throw new Error(`--superficie inválida: use ${SUPERFICIES.join("|")}.`);
-  const paridad = mapa.has("paridad");
-  const politica = esMotor ? ((politicaPedida ?? (paridad ? "legado" : "cascada")) as PoliticaBanco) : undefined;
   const superficie = esMotor ? ((superficiePedida ?? "catalogo") as SuperficieBanco) : undefined;
   const paridadCon = mapa.get("paridad-con");
-  if (paridad && paridadCon !== undefined) throw new Error("--paridad y --paridad-con no se combinan: elija uno.");
-  if (paridad && politica !== "legado") throw new Error("--paridad compara la política legado contra el oráculo: no admite --politica=cascada.");
 
   const medidasPedido = mapa.get("medidas");
   if (medidasPedido !== undefined && medidasPedido !== "si" && medidasPedido !== "no") throw new Error("--medidas debe ser si|no.");
@@ -153,9 +142,7 @@ export function parsearArgs(argv: readonly string[]): ArgsBanco {
     jev,
     // Sólo v2 tiene umbral (los demás miden, no aprueban); un --umbral explícito manda.
     umbral: Number(mapa.get("umbral") ?? (tuberia === "v2" ? 85 : 0)),
-    ...(politica ? { politica } : {}),
     ...(superficie ? { superficie } : {}),
-    paridad,
     ...(paridadCon !== undefined ? { paridadCon } : {}),
     // `--paridad-con` compara contra ids: la corrida actual tiene que guardarlos.
     ids: mapa.has("ids") || paridadCon !== undefined,

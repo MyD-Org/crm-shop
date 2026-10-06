@@ -58,23 +58,25 @@ const planProducto = (extra: Partial<PlanBusqueda> = {}): PlanBusqueda => ({
   ...extra,
 });
 
-const legado = (superficie: OpcionesBuscar["superficie"], extra: Partial<OpcionesBuscar> = {}): OpcionesBuscar => ({
+const cascada = (superficie: OpcionesBuscar["superficie"], extra: Partial<OpcionesBuscar> = {}): OpcionesBuscar => ({
   superficie,
-  politica: "legado",
   conPlan: true,
   ...extra,
 });
 
-const etapas = (a: Partial<Parameters<typeof etapasDe>[0]>) =>
-  etapasDe({ politica: "legado", superficie: "catalogo", consulta: CONSULTA, plan: null, conPlan: true, ...a });
+const etapasC = (a: Partial<Parameters<typeof etapasDe>[0]>) =>
+  etapasDe({ superficie: "catalogo", consulta: CONSULTA, plan: null, conPlan: true, ...a });
+
+/** Un plan que NO aporta nada a la clásica: sin duros ni blandos, sólo el término original. */
+const planQueNoAporta = (): PlanBusqueda => ({
+  ...planVacio(CONSULTA),
+  blandos: { categorias: [], atributos: [], terminos: [{ texto: "panel", peso: 1 }] },
+});
 
 describe("sinTexto", () => {
   it("omite los campos de texto y conserva el resto", () => {
     const f: FiltrosCatalogo = {
       texto: { q: "a" },
-      busqueda: "a",
-      busquedaTolerante: true,
-      planBusqueda: { consulta: "a", blandos: { categorias: [], atributos: [], terminos: [] } },
       categorias: ["Lámparas"],
       marcas: ["Marca X"],
       atributos: ["tono-calido"],
@@ -95,86 +97,11 @@ describe("sinTexto", () => {
   });
 });
 
-describe("etapasDe: política legado (reproduce las secuencias de hoy)", () => {
-  it("precondición: el código de los fixtures lo es", () => {
-    expect(pareceCodigo(CODIGO)).toBe(true);
-    expect(pareceCodigo(CONSULTA)).toBe(false);
-  });
-
-  it("catálogo: con plan usable, sólo el plan (la tolerante no corre con plan)", () => {
-    expect(etapas({ plan: planProducto() })).toEqual(["plan"]);
-  });
-
-  it("catálogo: un plan de intención código cuenta como sin plan", () => {
-    expect(etapas({ plan: planProducto({ intencion: "codigo" }) })).toEqual(["exacta", "tolerante"]);
-  });
-
-  it("catálogo: sin plan o con conPlan apagado, exacta y tolerante", () => {
-    expect(etapas({})).toEqual(["exacta", "tolerante"]);
-    expect(etapas({ plan: planProducto(), conPlan: false })).toEqual(["exacta", "tolerante"]);
-  });
-
-  it("autocompletar: plan, exacta, tolerante (el plan sólo si la consulta no parece un código)", () => {
-    expect(etapas({ superficie: "autocompletar", plan: planProducto() })).toEqual(["plan", "exacta", "tolerante"]);
-    expect(etapas({ superficie: "autocompletar", plan: planProducto(), consulta: CODIGO })).toEqual(["exacta", "tolerante"]);
-    expect(etapas({ superficie: "autocompletar", plan: planProducto({ intencion: "codigo" }) })).toEqual(["exacta", "tolerante"]);
-    expect(etapas({ superficie: "autocompletar" })).toEqual(["exacta", "tolerante"]);
-    expect(etapas({ superficie: "autocompletar", plan: planProducto(), conPlan: false })).toEqual(["exacta", "tolerante"]);
-  });
-
-  it("chat: exacta y tolerante, nunca plan", () => {
-    expect(etapas({ superficie: "chat", plan: planProducto() })).toEqual(["exacta", "tolerante"]);
-  });
-
-  it("admin: sólo exacta", () => {
-    expect(etapas({ superficie: "admin", plan: planProducto() })).toEqual(["exacta"]);
-  });
-
-  it("sin texto o sin términos tras terminosBusqueda: una lectura sin texto", () => {
-    for (const consulta of ["", "   ", "!!!", "- ."]) {
-      for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
-        expect(etapas({ consulta, superficie, plan: planProducto() })).toEqual(["sin-texto"]);
-      }
-    }
-  });
-
-  it("la tolerante se omite si ningún término tiene 4 letras o más", () => {
-    expect(etapas({ consulta: "9w" })).toEqual(["exacta"]);
-    expect(etapas({ consulta: "9w e27", superficie: "chat" })).toEqual(["exacta"]);
-    expect(etapas({ consulta: "9w lampara", superficie: "chat" })).toEqual(["exacta", "tolerante"]);
-  });
-
-  it("conPlan=false nunca produce `plan`", () => {
-    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
-      expect(etapas({ superficie, plan: planProducto(), conPlan: false })).not.toContain("plan");
-    }
-  });
-});
-
-describe("necesitaPlan: el plan es perezoso", () => {
-  const n = (a: Partial<Parameters<typeof necesitaPlan>[0]>) =>
-    necesitaPlan({ politica: "legado", superficie: "catalogo", consulta: CONSULTA, conPlan: true, ...a });
-
-  it("sólo catálogo y autocompletar lo piden, y sólo con texto y conPlan", () => {
-    expect(n({})).toBe(true);
-    expect(n({ superficie: "autocompletar" })).toBe(true);
-    expect(n({ superficie: "chat" })).toBe(false);
-    expect(n({ superficie: "admin" })).toBe(false);
-    expect(n({ conPlan: false })).toBe(false);
-    expect(n({ consulta: "" })).toBe(false);
-    expect(n({ consulta: "!!!" })).toBe(false);
-  });
-
-  it("autocompletar no lo pide para algo que parece un código", () => {
-    expect(n({ superficie: "autocompletar", consulta: CODIGO })).toBe(false);
-  });
-});
-
-describe("buscar: caracterización de los argumentos que cada superficie le pasa hoy a la lectura", () => {
+describe("buscar: los argumentos que cada superficie le pasa a la lectura", () => {
   it("catálogo sin plan: exacta con conteo, la página pedida y los filtros tal cual", async () => {
     const { deps, llamadas } = crearDeps(() => 3);
     const filtros = { categorias: ["Lámparas"], marcas: ["Marca X"], soloStock: true, atributosEstructurados: true };
-    const r = await buscar(pedido({ filtros, pagina: 2, porPagina: 24, orden: "precio-asc" }), legado("catalogo"), deps);
+    const r = await buscar(pedido({ filtros, pagina: 2, porPagina: 24, orden: "precio-asc" }), cascada("catalogo"), deps);
     expect(llamadas).toEqual([
       { filtros: { ...filtros, texto: { q: CONSULTA } }, orden: "precio-asc", pagina: 2, porPagina: 24, sinConteo: false },
     ]);
@@ -192,7 +119,7 @@ describe("buscar: caracterización de los argumentos que cada superficie le pasa
     });
     const { deps, llamadas } = crearDeps(() => 5);
     const filtros = { categorias: ["Lámparas"] };
-    const r = await buscar(pedido({ filtros }), legado("catalogo", { planDe: async () => plan }), deps);
+    const r = await buscar(pedido({ filtros }), cascada("catalogo", { planDe: async () => plan }), deps);
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].filtros.texto).toEqual({ q: CONSULTA, plan: criterioDe(plan, { categorias: ["Lámparas"], atributos: [] }) });
     expect(llamadas[0].filtros.categorias).toEqual(["Lámparas"]);
@@ -200,16 +127,9 @@ describe("buscar: caracterización de los argumentos que cada superficie le pasa
     expect(r.plan).toBe(plan);
   });
 
-  it("catálogo: plan con 0 resultados => vacío, SIN reintento tolerante (como hoy)", async () => {
-    const { deps, llamadas } = crearDeps(() => 0);
-    const r = await buscar(pedido(), legado("catalogo", { planDe: async () => planProducto() }), deps);
-    expect(llamadas).toHaveLength(1);
-    expect(r).toMatchObject({ etapa: "vacio", total: 0, productos: [], intentos: ["plan"] });
-  });
-
   it("catálogo: exacta 0 => tolerante (sin plan, con los mismos filtros y página)", async () => {
     const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 2 : 0));
-    const r = await buscar(pedido({ pagina: 3, filtros: { marcas: ["Marca X"] } }), legado("catalogo"), deps);
+    const r = await buscar(pedido({ pagina: 3, filtros: { marcas: ["Marca X"] } }), cascada("catalogo"), deps);
     expect(llamadas.map((l) => l.filtros.texto)).toEqual([{ q: CONSULTA }, { q: CONSULTA, tolerante: true }]);
     expect(llamadas[1]).toMatchObject({ pagina: 3, orden: "relevancia", porPagina: 24, sinConteo: false });
     expect(r).toMatchObject({ etapa: "tolerante", total: 2, intentos: ["exacta", "tolerante"] });
@@ -217,55 +137,44 @@ describe("buscar: caracterización de los argumentos que cada superficie le pasa
     expect(r.filtrosEfectivos.marcas).toEqual(["Marca X"]);
   });
 
-  it("autocompletar: plan => exacta => tolerante, sin conteo, porPagina = límite, estructurados sólo en el plan", async () => {
-    const { deps, llamadas } = crearDeps(() => 0);
-    const r = await buscar(
-      pedido({ porPagina: 8, filtros: { atributosEstructurados: true } }),
-      legado("autocompletar", { planDe: async () => planProducto() }),
-      deps,
-    );
-    expect(llamadas.map((l) => Object.keys(l.filtros.texto ?? {}).sort())).toEqual([["plan", "q"], ["q"], ["q", "tolerante"]]);
-    expect(llamadas.every((l) => l.sinConteo && l.porPagina === 8 && l.pagina === 1)).toBe(true);
-    expect(llamadas.map((l) => l.filtros.atributosEstructurados)).toEqual([true, undefined, undefined]);
-    expect(r).toMatchObject({ etapa: "vacio", intentos: ["plan", "exacta", "tolerante"], totalExacto: false });
-  });
-
   it("autocompletar: sale en la primera etapa con resultados (salida temprana)", async () => {
     const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.plan ? 4 : 9));
-    const r = await buscar(pedido({ porPagina: 8 }), legado("autocompletar", { planDe: async () => planProducto() }), deps);
+    const r = await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => planProducto() }), deps);
     expect(llamadas).toHaveLength(1);
     expect(r).toMatchObject({ etapa: "plan", total: 4 });
   });
 
-  it("chat: exacta => tolerante, estructurados siempre, el plan no se consulta aunque haya planDe", async () => {
-    const planDe = vi.fn(async () => planProducto());
+  it("chat: plan => exacta => tolerante, estructurados siempre, sin conteo y con el límite como porPagina", async () => {
     const { deps, llamadas } = crearDeps(() => 0);
-    const r = await buscar(pedido({ porPagina: 10, filtros: { atributosEstructurados: true } }), legado("chat", { planDe }), deps);
-    expect(planDe).not.toHaveBeenCalled();
-    expect(llamadas.map((l) => l.filtros.texto)).toEqual([{ q: CONSULTA }, { q: CONSULTA, tolerante: true }]);
-    expect(llamadas.every((l) => l.filtros.atributosEstructurados === true && l.sinConteo && l.porPagina === 10)).toBe(true);
+    const r = await buscar(
+      pedido({ porPagina: 10, filtros: { atributosEstructurados: true } }),
+      cascada("chat", { planDe: async () => planProducto() }),
+      deps,
+    );
+    expect(llamadas.map((l) => Object.keys(l.filtros.texto ?? {}).sort())).toEqual([["plan", "q"], ["q"], ["plan", "q", "tolerante"]]);
+    expect(llamadas.every((l) => l.filtros.atributosEstructurados === true && l.sinConteo && l.porPagina === 10 && l.pagina === 1)).toBe(true);
     expect(r.etapa).toBe("vacio");
   });
 
-  it("admin: una sola lectura exacta", async () => {
+  it("admin: exacta y tolerante, nunca plan aunque haya planDe", async () => {
     const planDe = vi.fn(async () => planProducto());
     const { deps, llamadas } = crearDeps(() => 0);
-    const r = await buscar(pedido({ porPagina: 20 }), legado("admin", { planDe }), deps);
+    const r = await buscar(pedido({ porPagina: 20 }), cascada("admin", { planDe }), deps);
     expect(planDe).not.toHaveBeenCalled();
-    expect(llamadas).toHaveLength(1);
-    expect(r).toMatchObject({ etapa: "vacio", intentos: ["exacta"] });
+    expect(llamadas.map((l) => l.filtros.texto)).toEqual([{ q: CONSULTA }, { q: CONSULTA, tolerante: true }]);
+    expect(r).toMatchObject({ etapa: "vacio", intentos: ["exacta", "tolerante"] });
   });
 
   it("`conteo` se puede forzar y la página sólo vale con conteo", async () => {
     const { deps, llamadas } = crearDeps(() => 1);
-    await buscar(pedido({ pagina: 4 }), legado("chat", { conteo: true }), deps);
-    await buscar(pedido({ pagina: 4 }), legado("catalogo", { conteo: false }), deps);
+    await buscar(pedido({ pagina: 4 }), cascada("chat", { conteo: true }), deps);
+    await buscar(pedido({ pagina: 4 }), cascada("catalogo", { conteo: false }), deps);
     expect(llamadas.map((l) => [l.sinConteo, l.pagina])).toEqual([[false, 4], [true, 1]]);
   });
 
   it("una exacta con resultados corta ahí: la tolerante no corre", async () => {
     const { deps, llamadas } = crearDeps(() => 1);
-    await buscar(pedido(), legado("chat"), deps);
+    await buscar(pedido(), cascada("chat"), deps);
     expect(llamadas).toHaveLength(1);
   });
 });
@@ -274,7 +183,7 @@ describe("buscar: el plan", () => {
   it("planDe recibe la consulta CRUDA (sólo trim), nunca una normalizada", async () => {
     const planDe = vi.fn(async () => null);
     const { deps } = crearDeps(() => 1);
-    await buscar(pedido({ consulta: "  bipolar 9,5w " }), legado("catalogo", { planDe }), deps);
+    await buscar(pedido({ consulta: "  bipolar 9,5w " }), cascada("catalogo", { planDe }), deps);
     expect(planDe).toHaveBeenCalledTimes(1);
     expect(planDe).toHaveBeenCalledWith("bipolar 9,5w");
   });
@@ -282,7 +191,7 @@ describe("buscar: el plan", () => {
   it("una consulta sin términos hace una lectura sin texto y no pide plan", async () => {
     const planDe = vi.fn(async () => planProducto());
     const { deps, llamadas } = crearDeps(() => 5);
-    const r = await buscar(pedido({ consulta: "!!!", filtros: { categorias: ["Lámparas"] } }), legado("catalogo", { planDe }), deps);
+    const r = await buscar(pedido({ consulta: "!!!", filtros: { categorias: ["Lámparas"] } }), cascada("catalogo", { planDe }), deps);
     expect(planDe).not.toHaveBeenCalled();
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].filtros).toEqual({ categorias: ["Lámparas"] });
@@ -292,24 +201,15 @@ describe("buscar: el plan", () => {
 
   it("sin consulta, igual", async () => {
     const { deps, llamadas } = crearDeps(() => 5);
-    const r = await buscar(pedido({ consulta: undefined }), legado("autocompletar", { planDe: async () => planProducto() }), deps);
+    const r = await buscar(pedido({ consulta: undefined }), cascada("autocompletar", { planDe: async () => planProducto() }), deps);
     expect(llamadas[0].filtros.texto).toBeUndefined();
     expect(r.etapa).toBe("sin-texto");
-  });
-
-  it("conPlan apagado: planDe no se llama y no hay etapa plan", async () => {
-    const planDe = vi.fn(async () => planProducto());
-    const { deps, llamadas } = crearDeps(() => 0);
-    const r = await buscar(pedido(), legado("autocompletar", { conPlan: false, planDe }), deps);
-    expect(planDe).not.toHaveBeenCalled();
-    expect(llamadas.some((l) => l.filtros.texto?.plan)).toBe(false);
-    expect(r.plan).toBeNull();
   });
 
   it("autocompletar: una consulta que parece código no pide plan", async () => {
     const planDe = vi.fn(async () => planProducto());
     const { deps } = crearDeps(() => 1);
-    await buscar(pedido({ consulta: CODIGO }), legado("autocompletar", { planDe }), deps);
+    await buscar(pedido({ consulta: CODIGO }), cascada("autocompletar", { planDe }), deps);
     expect(planDe).not.toHaveBeenCalled();
   });
 
@@ -317,17 +217,18 @@ describe("buscar: el plan", () => {
     const { deps, llamadas } = crearDeps(() => 0);
     for (const planDe of [async () => null, async () => Promise.reject(new Error("plan roto"))]) {
       llamadas.length = 0;
-      const r = await buscar(pedido(), legado("catalogo", { planDe }), deps);
+      const r = await buscar(pedido(), cascada("catalogo", { planDe }), deps);
       expect(llamadas.map((l) => l.filtros.texto)).toEqual([{ q: CONSULTA }, { q: CONSULTA, tolerante: true }]);
       expect(r.plan).toBeNull();
     }
   });
 
-  it("el plan resuelto vuelve en el resultado aunque no haya intervenido (intención código)", async () => {
+  it("el plan resuelto vuelve en el resultado aunque no haya intervenido (intención código: va a la etapa código)", async () => {
     const plan = planProducto({ intencion: "codigo" });
     const { deps, llamadas } = crearDeps(() => 2);
-    const r = await buscar(pedido(), legado("catalogo", { planDe: async () => plan }), deps);
-    expect(llamadas[0].filtros.texto).toEqual({ q: CONSULTA });
+    const r = await buscar(pedido(), cascada("catalogo", { planDe: async () => plan }), deps);
+    expect(llamadas[0].filtros.texto).toEqual({ q: CONSULTA, codigo: true });
+    expect(r).toMatchObject({ etapa: "codigo" });
     expect(r.plan).toBe(plan);
   });
 
@@ -346,7 +247,7 @@ describe("buscar: el plan", () => {
     // duro es "sin contradicción" y no puntúa, así que el blando sigue subiendo a los que tienen el
     // dato. Lo blando restante pasa sin que el motor lo interprete.
     const filtros = { atributos: ["corriente_a:20", "id-fuera-del-diccionario"] };
-    await buscar(pedido({ filtros }), legado("catalogo", { planDe: async () => plan }), deps);
+    await buscar(pedido({ filtros }), cascada("catalogo", { planDe: async () => plan }), deps);
     expect(llamadas[0].filtros.atributos).toEqual(filtros.atributos);
     expect(llamadas[0].filtros.texto?.plan?.blandos).toEqual({
       categorias: [],
@@ -355,7 +256,7 @@ describe("buscar: el plan", () => {
     });
     // Sin duros en la URL (autocompletar), todos los blandos llegan, ids arbitrarios incluidos.
     llamadas.length = 0;
-    await buscar(pedido({ porPagina: 8 }), legado("autocompletar", { planDe: async () => plan }), deps);
+    await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => plan }), deps);
     expect(llamadas[0].filtros.texto?.plan?.blandos).toEqual(plan.blandos);
   });
 });
@@ -363,9 +264,9 @@ describe("buscar: el plan", () => {
 describe("buscar: degradación y errores", () => {
   const roto = new Error("pg_trgm no está");
 
-  it("catálogo: si la tolerante falla, queda la exacta vacía (no se propaga)", async () => {
+  it("si la tolerante falla, queda la exacta vacía (no se propaga)", async () => {
     const { deps } = crearDeps((a) => (a.filtros.texto?.tolerante ? roto : 0));
-    const r = await buscar(pedido(), legado("catalogo"), deps);
+    const r = await buscar(pedido(), cascada("catalogo"), deps);
     expect(r).toMatchObject({ etapa: "vacio", total: 0, intentos: ["exacta", "tolerante"] });
     expect(deps.log).toHaveBeenCalledTimes(1);
   });
@@ -373,57 +274,47 @@ describe("buscar: degradación y errores", () => {
   it("el aviso de la etapa que falló no incluye la consulta", async () => {
     const consulta = "consulta-secreta";
     const { deps } = crearDeps((a) => (a.filtros.texto?.tolerante ? new Error(`falló con ${consulta}`) : 0));
-    await buscar(pedido({ consulta }), legado("catalogo"), deps);
+    await buscar(pedido({ consulta }), cascada("catalogo"), deps);
     const mensajes = vi.mocked(deps.log!).mock.calls.map((c) => c[0]).join(" ");
     expect(mensajes).not.toContain(consulta);
     expect(mensajes).toContain("tolerante");
   });
 
-  it("catálogo: si la exacta falla, se propaga", async () => {
-    const { deps } = crearDeps(() => roto);
-    await expect(buscar(pedido(), legado("catalogo"), deps)).rejects.toBe(roto);
+  it("si la exacta falla, se propaga (en las cuatro superficies)", async () => {
+    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
+      const { deps } = crearDeps(() => roto);
+      await expect(buscar(pedido(), cascada(superficie), deps)).rejects.toBe(roto);
+    }
   });
 
-  it("catálogo: si el plan falla, se propaga (la página muestra su error como hoy)", async () => {
-    const { deps } = crearDeps((a) => (a.filtros.texto?.plan ? roto : 1));
-    await expect(buscar(pedido(), legado("catalogo", { planDe: async () => planProducto() }), deps)).rejects.toBe(roto);
-  });
-
-  it("autocompletar: si el plan falla, sigue con la exacta", async () => {
+  it("si el plan falla, sigue con la exacta", async () => {
     const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.plan ? roto : 2));
-    const r = await buscar(pedido({ porPagina: 8 }), legado("autocompletar", { planDe: async () => planProducto() }), deps);
+    const r = await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => planProducto() }), deps);
     expect(r).toMatchObject({ etapa: "exacta", total: 2, intentos: ["plan", "exacta"] });
     expect(llamadas).toHaveLength(2);
   });
 
-  it("autocompletar: si la exacta falla, se propaga", async () => {
+  it("si el plan da 0 y la exacta falla, se propaga", async () => {
     const { deps } = crearDeps((a) => (a.filtros.texto?.plan ? 0 : roto));
-    await expect(buscar(pedido({ porPagina: 8 }), legado("autocompletar", { planDe: async () => planProducto() }), deps)).rejects.toBe(roto);
+    await expect(buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => planProducto() }), deps)).rejects.toBe(roto);
   });
 
-  it("chat: si la tolerante falla queda lo exacto (vacío); si falla la exacta, 502 (se propaga)", async () => {
-    const a = crearDeps((args) => (args.filtros.texto?.tolerante ? roto : 0));
-    expect(await buscar(pedido(), legado("chat"), a.deps)).toMatchObject({ etapa: "vacio", total: 0 });
-    const b = crearDeps(() => roto);
-    await expect(buscar(pedido(), legado("chat"), b.deps)).rejects.toBe(roto);
-  });
-
-  it("admin: no degrada nada", async () => {
+  it("si ninguna etapa llegó a leer, se relanza el último error", async () => {
     const { deps } = crearDeps(() => roto);
-    await expect(buscar(pedido(), legado("admin"), deps)).rejects.toBe(roto);
+    await expect(buscar(pedido({ consulta: CODIGO }), cascada("catalogo"), deps)).rejects.toBe(roto);
   });
 });
 
 describe("buscar: filtrosEfectivos y facetas", () => {
   it("son los filtros (con texto) de la etapa ganadora", async () => {
     const { deps } = crearDeps((a) => (a.filtros.texto?.tolerante ? 1 : 0));
-    const r = await buscar(pedido({ filtros: { categorias: ["Lámparas"] } }), legado("catalogo"), deps);
+    const r = await buscar(pedido({ filtros: { categorias: ["Lámparas"] } }), cascada("catalogo"), deps);
     expect(r.filtrosEfectivos).toEqual({ categorias: ["Lámparas"], texto: { q: CONSULTA, tolerante: true } });
   });
 
   it("si ninguna etapa trae nada, son los de la PRIMERA etapa corrida", async () => {
     const { deps } = crearDeps(() => 0);
-    const r = await buscar(pedido(), legado("catalogo"), deps);
+    const r = await buscar(pedido(), cascada("catalogo"), deps);
     expect(r.etapa).toBe("vacio");
     expect(r.filtrosEfectivos.texto).toEqual({ q: CONSULTA });
     // La página sigue de pie: pagina/paginas de esa etapa.
@@ -432,7 +323,7 @@ describe("buscar: filtrosEfectivos y facetas", () => {
 
   it("con conFacetas, cada etapa lee página y facetas con los MISMOS filtros y vuelven las de la ganadora", async () => {
     const { deps, llamadas, facetas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 1 : 0));
-    const r = await buscar(pedido(), legado("catalogo", { conFacetas: true }), deps);
+    const r = await buscar(pedido(), cascada("catalogo", { conFacetas: true }), deps);
     expect(facetas).toEqual(llamadas.map((l) => l.filtros));
     expect(facetas).toHaveLength(2);
     expect(r.facetas).toBeDefined();
@@ -440,7 +331,7 @@ describe("buscar: filtrosEfectivos y facetas", () => {
 
   it("sin conFacetas no se leen facetas", async () => {
     const { deps, facetas } = crearDeps(() => 1);
-    const r = await buscar(pedido(), legado("catalogo"), deps);
+    const r = await buscar(pedido(), cascada("catalogo"), deps);
     expect(facetas).toHaveLength(0);
     expect(r.facetas).toBeUndefined();
   });
@@ -448,33 +339,17 @@ describe("buscar: filtrosEfectivos y facetas", () => {
   it("`ms` sale del reloj inyectado", async () => {
     const tiempos = [1000, 1250];
     const { deps } = crearDeps(() => 1);
-    const r = await buscar(pedido(), legado("chat"), { ...deps, ahora: () => tiempos.shift() ?? 1250 });
+    const r = await buscar(pedido(), cascada("chat"), { ...deps, ahora: () => tiempos.shift() ?? 1250 });
     expect(r.ms).toBe(250);
   });
 });
 
+describe("etapasDe: la cascada", () => {
+  it("precondición: el código de los fixtures lo es", () => {
+    expect(pareceCodigo(CODIGO)).toBe(true);
+    expect(pareceCodigo(CONSULTA)).toBe(false);
+  });
 
-// ---------------------------------------------------------------------------------------------
-// Política `cascada` (PR2): código -> plan -> exacta -> tolerante, con presupuestos por etapa.
-// ---------------------------------------------------------------------------------------------
-
-const cascada = (superficie: OpcionesBuscar["superficie"], extra: Partial<OpcionesBuscar> = {}): OpcionesBuscar => ({
-  superficie,
-  politica: "cascada",
-  conPlan: true,
-  ...extra,
-});
-
-const etapasC = (a: Partial<Parameters<typeof etapasDe>[0]>) =>
-  etapasDe({ politica: "cascada", superficie: "catalogo", consulta: CONSULTA, plan: null, conPlan: true, ...a });
-
-/** Un plan que NO aporta nada a la clásica: sin duros ni blandos, sólo el término original. */
-const planQueNoAporta = (): PlanBusqueda => ({
-  ...planVacio(CONSULTA),
-  blandos: { categorias: [], atributos: [], terminos: [{ texto: "panel", peso: 1 }] },
-});
-
-describe("etapasDe: política cascada", () => {
   it("consulta que parece código (G): código y tolerante sobre el código, sin plan", () => {
     expect(etapasC({ consulta: CODIGO })).toEqual(["codigo", "tolerante"]);
     expect(etapasC({ consulta: CODIGO, plan: planProducto() })).toEqual(["codigo", "tolerante"]);
@@ -487,14 +362,14 @@ describe("etapasDe: política cascada", () => {
       expect(pareceCodigo(consulta)).toBe(false);
       expect(etapasC({ consulta })).not.toContain("codigo");
       expect(etapasC({ consulta, plan: planProducto() })).toContain("plan");
-      expect(necesitaPlan({ politica: "cascada", superficie: "catalogo", consulta, conPlan: true })).toBe(true);
+      expect(necesitaPlan({ superficie: "catalogo", consulta, conPlan: true })).toBe(true);
     }
   });
 
   it("lo que tiene la forma de una medida pero cae fuera de rango sigue siendo G ('12000k', 'ip70')", () => {
     for (const consulta of ["12000k", "ip70"]) {
       expect(etapasC({ consulta, plan: planProducto() })).toEqual(["codigo", "tolerante"]);
-      expect(necesitaPlan({ politica: "cascada", superficie: "catalogo", consulta, conPlan: true })).toBe(false);
+      expect(necesitaPlan({ superficie: "catalogo", consulta, conPlan: true })).toBe(false);
     }
   });
 
@@ -535,13 +410,17 @@ describe("etapasDe: política cascada", () => {
     expect(etapasC({ consulta: "9w lampara" })).toEqual(["exacta", "tolerante"]);
   });
 
-  it("sin texto o sin términos: una lectura sin texto", () => {
-    for (const consulta of ["", "   ", "!!!"]) expect(etapasC({ consulta, plan: planProducto() })).toEqual(["sin-texto"]);
+  it("sin texto o sin términos: una lectura sin texto, en todas las superficies", () => {
+    for (const consulta of ["", "   ", "!!!", "- ."]) {
+      for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
+        expect(etapasC({ consulta, superficie, plan: planProducto() })).toEqual(["sin-texto"]);
+      }
+    }
   });
 
-  it("necesitaPlan en cascada: con texto y busqueda-ia, salvo admin y lo que parece un código", () => {
+  it("necesitaPlan: con texto y busqueda-ia, salvo admin y lo que parece un código", () => {
     const n = (a: Partial<Parameters<typeof necesitaPlan>[0]>) =>
-      necesitaPlan({ politica: "cascada", superficie: "catalogo", consulta: CONSULTA, conPlan: true, ...a });
+      necesitaPlan({ superficie: "catalogo", consulta: CONSULTA, conPlan: true, ...a });
     expect(n({})).toBe(true);
     expect(n({ superficie: "autocompletar" })).toBe(true);
     expect(n({ superficie: "chat" })).toBe(true);
@@ -552,7 +431,7 @@ describe("etapasDe: política cascada", () => {
   });
 });
 
-describe("buscar: política cascada", () => {
+describe("buscar: la cascada", () => {
   it("salida temprana: si el plan trae resultados no corren ni exacta ni tolerante", async () => {
     const { deps, llamadas } = crearDeps(() => 4);
     const r = await buscar(pedido(), cascada("catalogo", { planDe: async () => planProducto() }), deps);
@@ -650,7 +529,7 @@ describe("buscar: política cascada", () => {
     expect(llamadas.every((l) => l.filtros.soloStock === undefined)).toBe(true);
   });
 
-  it("autocompletar: ESPERA al plan lento (como el legado) en vez de descartarlo a los 250 ms", async () => {
+  it("autocompletar: ESPERA al plan lento en vez de descartarlo a los 250 ms", async () => {
     vi.useFakeTimers();
     // La búsqueda del banco y la de un miss real recomputan el plan con varios COUNT: tarda más que 250 ms.
     const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.plan ? 3 : 0));
@@ -663,9 +542,9 @@ describe("buscar: política cascada", () => {
     expect(llamadas[0].filtros.texto?.plan).toBeDefined();
   });
 
-  describe("autocompletar con el plan LENTO: la cascada nunca queda peor que el legado", () => {
+  describe("autocompletar con el plan LENTO: la cascada lo espera y encuentra lo que pueda", () => {
     // Cada escenario dice qué devuelve cada tipo de lectura. Con el plan más lento que cualquier tope,
-    // la cascada tiene que encontrar algo siempre que el legado lo encuentre.
+    // la cascada tiene que seguir encontrando: frase en lenguaje natural, medida, typo, exacta.
     const escenarios: { nombre: string; consulta: string; plan: PlanBusqueda; tabla: { plan?: number; exacta?: number; tolerante?: number } }[] = [
       { nombre: "lenguaje natural: la AND de todas las palabras no encuentra, el plan sí", consulta: "tira led para la cocina", plan: planProducto(), tabla: { plan: 5 } },
       { nombre: "medida: la exacta no encuentra, el plan sí", consulta: "panel led 60x60", plan: planProducto(), tabla: { plan: 4 } },
@@ -675,27 +554,21 @@ describe("buscar: política cascada", () => {
       { nombre: "nada en ninguna etapa", consulta: "xyzzy inexistente", plan: planProducto(), tabla: {} },
     ];
 
-    async function correr(politica: "legado" | "cascada", e: (typeof escenarios)[number]) {
-      vi.useFakeTimers();
-      const { deps } = crearDeps((a) => {
-        const t = a.filtros.texto;
-        return (t?.tolerante ? e.tabla.tolerante : t?.plan ? e.tabla.plan : e.tabla.exacta) ?? 0;
-      });
-      // El plan tarda 5 s en el reloj de los temporizadores y 5 s en el reloj inyectado.
-      let reloj = 0;
-      const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => ((reloj += 5000), resolver(e.plan)), 5000));
-      const promesa = buscar(pedido({ consulta: e.consulta, porPagina: 8 }), { superficie: "autocompletar", politica, conPlan: true, planDe }, { ...deps, ahora: () => reloj });
-      await vi.advanceTimersByTimeAsync(5000);
-      return promesa;
-    }
-
     for (const e of escenarios) {
       it(e.nombre, async () => {
-        const legadoR = await correr("legado", e);
-        const cascadaR = await correr("cascada", e);
-        expect(cascadaR.total > 0).toBe(legadoR.total > 0);
-        expect(cascadaR.total).toBeGreaterThanOrEqual(legadoR.total);
-        expect(cascadaR.truncado).toBeUndefined();
+        vi.useFakeTimers();
+        const { deps } = crearDeps((a) => {
+          const t = a.filtros.texto;
+          return (t?.tolerante ? e.tabla.tolerante : t?.plan ? e.tabla.plan : e.tabla.exacta) ?? 0;
+        });
+        // El plan tarda 5 s en el reloj de los temporizadores y 5 s en el reloj inyectado.
+        let reloj = 0;
+        const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => ((reloj += 5000), resolver(e.plan)), 5000));
+        const promesa = buscar(pedido({ consulta: e.consulta, porPagina: 8 }), { superficie: "autocompletar", conPlan: true, planDe }, { ...deps, ahora: () => reloj });
+        await vi.advanceTimersByTimeAsync(5000);
+        const r = await promesa;
+        expect(r.total > 0).toBe(Object.values(e.tabla).some((n) => n > 0));
+        expect(r.truncado).toBeUndefined();
       });
     }
   });
@@ -755,36 +628,29 @@ describe("buscar: política cascada", () => {
     expect(r.truncado).toBeUndefined();
   });
 
-  describe("chat con el plan LENTO: la cascada nunca queda peor que el legado del chat (exacta y tolerante, sin plan)", () => {
+  describe("chat con el plan LENTO: la cascada lo espera y encuentra lo que pueda", () => {
     const escenarios: { nombre: string; consulta: string; plan: PlanBusqueda; tabla: { plan?: number; exacta?: number; tolerante?: number }; encuentra: boolean }[] = [
-      { nombre: "lenguaje natural: sólo el plan encuentra (el legado del chat no)", consulta: "tira led para la cocina", plan: planProducto(), tabla: { plan: 5 }, encuentra: true },
+      { nombre: "lenguaje natural: sólo el plan encuentra", consulta: "tira led para la cocina", plan: planProducto(), tabla: { plan: 5 }, encuentra: true },
       { nombre: "medida: sólo el plan encuentra", consulta: "panel led 60x60", plan: planProducto(), tabla: { plan: 4 }, encuentra: true },
       { nombre: "typo: sólo la tolerante encuentra (con o sin plan)", consulta: "lampra led e27", plan: planProducto(), tabla: { tolerante: 2 }, encuentra: true },
       { nombre: "el plan no trae nada y la exacta sí", consulta: "panel led", plan: planProducto(), tabla: { exacta: 3 }, encuentra: true },
       { nombre: "nada en ninguna etapa", consulta: "xyzzy inexistente", plan: planProducto(), tabla: {}, encuentra: false },
     ];
 
-    async function correr(politica: "legado" | "cascada", e: (typeof escenarios)[number]) {
-      vi.useFakeTimers();
-      const { deps } = crearDeps((a) => {
-        const t = a.filtros.texto;
-        return (t?.tolerante ? e.tabla.tolerante : t?.plan ? e.tabla.plan : e.tabla.exacta) ?? 0;
-      });
-      let reloj = 0;
-      const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => ((reloj += 5000), resolver(e.plan)), 5000));
-      const promesa = buscar(pedido({ consulta: e.consulta, porPagina: 10 }), { superficie: "chat", politica, conPlan: true, planDe }, { ...deps, ahora: () => reloj });
-      await vi.advanceTimersByTimeAsync(5000);
-      return promesa;
-    }
-
     for (const e of escenarios) {
       it(e.nombre, async () => {
-        const legadoR = await correr("legado", e);
-        const cascadaR = await correr("cascada", e);
-        expect(cascadaR.total).toBeGreaterThanOrEqual(legadoR.total);
-        expect(legadoR.total > 0 && cascadaR.total === 0).toBe(false);
-        expect(cascadaR.total > 0).toBe(e.encuentra);
-        expect(cascadaR.truncado).toBeUndefined();
+        vi.useFakeTimers();
+        const { deps } = crearDeps((a) => {
+          const t = a.filtros.texto;
+          return (t?.tolerante ? e.tabla.tolerante : t?.plan ? e.tabla.plan : e.tabla.exacta) ?? 0;
+        });
+        let reloj = 0;
+        const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => ((reloj += 5000), resolver(e.plan)), 5000));
+        const promesa = buscar(pedido({ consulta: e.consulta, porPagina: 10 }), { superficie: "chat", conPlan: true, planDe }, { ...deps, ahora: () => reloj });
+        await vi.advanceTimersByTimeAsync(5000);
+        const r = await promesa;
+        expect(r.total > 0).toBe(e.encuentra);
+        expect(r.truncado).toBeUndefined();
       });
     }
   });
@@ -827,15 +693,6 @@ describe("buscar: política cascada", () => {
     expect(r.truncado).toBeUndefined();
   });
 
-  it("el legado NO tiene presupuesto: corre todas las etapas aunque tarden", async () => {
-    let t = 0;
-    const { deps, llamadas } = crearDeps();
-    const lenta: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 99_999; return deps.pagina(a); } };
-    const r = await buscar(pedido({ porPagina: 8 }), legado("autocompletar", { planDe: async () => planProducto() }), lenta);
-    expect(llamadas).toHaveLength(3);
-    expect(r.truncado).toBeUndefined();
-  });
-
   it("errores: el plan y la tolerante degradan; la exacta, la de código y la sin texto se propagan", async () => {
     const roto = new Error("pg caído");
     const a = crearDeps((args) => (args.filtros.texto?.plan ? roto : 2));
@@ -846,13 +703,6 @@ describe("buscar: política cascada", () => {
     await expect(buscar(pedido(), cascada("catalogo"), c.deps)).rejects.toBe(roto);
     const d = crearDeps(() => roto);
     await expect(buscar(pedido({ consulta: CODIGO }), cascada("catalogo"), d.deps)).rejects.toBe(roto);
-  });
-
-  it("planDe recibe la consulta CRUDA (sólo trim) también en cascada", async () => {
-    const planDe = vi.fn(async () => null);
-    const { deps } = crearDeps(() => 1);
-    await buscar(pedido({ consulta: "  bipolar 9,5w " }), cascada("catalogo", { planDe }), deps);
-    expect(planDe).toHaveBeenCalledWith("bipolar 9,5w");
   });
 
   it("conPlan apagado: planDe no se llama y no hay etapa plan, con cualquier superficie", async () => {

@@ -21,13 +21,10 @@
  *   --tenant-alias=demo                    alias del tenant en la cabecera (nunca el id real)
  *
  * Motor único de búsqueda (todo aditivo):
- *   --tuberia=motor                        la búsqueda del Shop por la fachada `buscar()` (jev como v2: grabado|vivo|no|cache)
- *   --politica=legado|cascada              política del motor (por defecto cascada; con --paridad, legado: lo que hacen hoy las superficies)
+ *   --tuberia=motor                        la búsqueda del Shop por la fachada `buscar()` y su cascada (jev como v2: grabado|vivo|no|cache)
  *   --superficie=catalogo|autocompletar|chat  qué superficie se mide: K = 24 | 8 | 10, con o sin conteo del total
- *   --paridad                              el motor legado contra el oráculo legado (`legado.ts`), caso por caso: top-K de ids,
- *                                          orden y, en el catálogo, el total. Exit 1 si hay alguna diferencia (se corre en
- *                                          banco embebido y real, en las 3 superficies, antes de mergear la fachada)
- *   --paridad-con=<json>                   el motor contra los ids de una corrida previa (`--json`+`--ids`); exige la misma cabecera
+ *   --paridad-con=<json>                   el motor contra los ids de una corrida previa (`--json`+`--ids`), caso por caso: top-K de ids,
+ *                                          orden y, en el catálogo, el total. Exige la misma cabecera; exit 1 si hay alguna diferencia
  *   --ids                                  guarda en el JSON los ids de lo devuelto por caso (archivo local ignorado por git; nunca a consola)
  *
  * Reporta por búsqueda y en total: intención, categoría, atributos explícitos,
@@ -46,7 +43,7 @@ import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disp
 import { cargarBancoDeArgs, estadoMedidas, parsearArgs, type ArgsBanco } from "./args";
 import { validarBanco } from "./cargar-banco";
 import { SUPERFICIES_BANCO, correr, sonComparables, type ReporteJson } from "./corrida";
-import { crearEjecutor, crearOraculoLegado, resolverJev, type Ejecutor } from "./ejecutores";
+import { crearEjecutor, resolverJev } from "./ejecutores";
 import { cerrar, enLectura } from "./lectura";
 import { compararParidad, formatearParidad, idsDeReporte } from "./paridad";
 import { resolverSalida } from "./ruta-salida";
@@ -86,63 +83,52 @@ async function main(args: ArgsBanco) {
   }
 
   const vista = args.produccion ? vistaProduccion(args.soloVisibles ?? false) : VISTA_ACTUAL;
-  const config = { tuberia: args.tuberia, jev, vista, arbol, estructurados, politica: args.politica, superficie: args.superficie, medidas: args.medidas } as const;
+  const config = { tuberia: args.tuberia, jev, vista, arbol, estructurados, superficie: args.superficie, medidas: args.medidas } as const;
   const ejecutor = crearEjecutor(config);
   const enmascarar = (elegido.banco.privado || elegido.banco.local) && !args.verConsultas;
   const snapshot = await snapshotCatalogo(arbol, estructurados, () => enLectura(() => cargarFilasUniverso()));
 
-  const correrCon = (ej: Ejecutor, mostrar: boolean) =>
-    correr(
-      {
-        tuberia: args.tuberia,
-        jev,
-        jevMeta: ej.jevMeta,
-        vista,
-        produccion: args.produccion,
-        banco: elegido.banco,
-        repeticiones: args.repeticiones,
-        calentar: args.calentar,
-        flagsDeclarados: args.flags,
-        busquedaMedidas: estadoMedidas(args.tuberia, args.medidas),
-        verConsultas: args.verConsultas,
-        tenantAlias: args.tenantAlias,
-        umbral: args.umbral,
-        ...(args.solo ? { parcial: args.solo } : {}),
-        ...(args.politica ? { politica: args.politica } : {}),
-        ...(args.superficie ? { superficie: args.superficie } : {}),
-        // La paridad compara ids: las dos corridas los guardan (en el JSON sólo si se pidió `--ids`).
-        ids: args.ids || args.paridad,
+  const resultado = await correr(
+    {
+      tuberia: args.tuberia,
+      jev,
+      jevMeta: ejecutor.jevMeta,
+      vista,
+      produccion: args.produccion,
+      banco: elegido.banco,
+      repeticiones: args.repeticiones,
+      calentar: args.calentar,
+      flagsDeclarados: args.flags,
+      busquedaMedidas: estadoMedidas(args.tuberia, args.medidas),
+      verConsultas: args.verConsultas,
+      tenantAlias: args.tenantAlias,
+      umbral: args.umbral,
+      ...(args.solo ? { parcial: args.solo } : {}),
+      ...(args.superficie ? { superficie: args.superficie } : {}),
+      ids: args.ids,
+    },
+    {
+      arbol,
+      snapshot,
+      sinGrabacion: ejecutor.sinGrabacion,
+      log: (m) => console.error(m),
+      ejecutar: async (q) => {
+        const r = await enLectura(() => ejecutor.ejecutar(q));
+        // `--ver=N`: sólo consola, nunca en el reporte guardado. Un banco privado no muestra la consulta.
+        if (args.ver) console.info(`  ${enmascarar ? "(consulta oculta)" : `«${q}»`} → ${r.productos.slice(0, args.ver).map((p) => p.name.slice(0, 50)).join(" | ")}`);
+        return r;
       },
-      {
-        arbol,
-        snapshot,
-        sinGrabacion: ej.sinGrabacion,
-        log: (m) => console.error(m),
-        ejecutar: async (q) => {
-          const r = await enLectura(() => ej.ejecutar(q));
-          // `--ver=N`: sólo consola, nunca en el reporte guardado. Un banco privado no muestra la consulta.
-          if (mostrar && args.ver) console.info(`  ${enmascarar ? "(consulta oculta)" : `«${q}»`} → ${r.productos.slice(0, args.ver).map((p) => p.name.slice(0, 50)).join(" | ")}`);
-          return r;
-        },
-      },
-    );
-
-  const resultado = await correrCon(ejecutor, true);
+    },
+  );
   console.log(resultado.texto);
   if (args.salida) escribirSalida(args.salida, resultado.texto);
   if (args.json) escribirSalida(args.json, `${JSON.stringify(resultado.json, null, 2)}\n`);
 
-  if (args.paridad || args.paridadCon) {
+  if (args.paridadCon) {
     const superficie = SUPERFICIES_BANCO[args.superficie ?? "catalogo"];
-    let otra: ReporteJson;
-    if (args.paridad) {
-      // El oráculo: lo que hacía cada superficie antes de la fachada, con el mismo plan y la misma vista.
-      otra = (await correrCon(crearOraculoLegado(config), false)).json;
-    } else {
-      otra = JSON.parse(readFileSync(args.paridadCon!, "utf8")) as ReporteJson;
-      if (otra.esquema !== 1 || !Array.isArray(otra.casos) || otra.cabecera?.tuberia !== "motor") {
-        throw new Error("--paridad-con espera el --json de una corrida previa con --tuberia=motor y --ids.");
-      }
+    const otra = JSON.parse(readFileSync(args.paridadCon, "utf8")) as ReporteJson;
+    if (otra.esquema !== 1 || !Array.isArray(otra.casos) || otra.cabecera?.tuberia !== "motor") {
+      throw new Error("--paridad-con espera el --json de una corrida previa con --tuberia=motor y --ids.");
     }
     const comparables = sonComparables(otra.cabecera, resultado.json.cabecera);
     if (!comparables.ok) {

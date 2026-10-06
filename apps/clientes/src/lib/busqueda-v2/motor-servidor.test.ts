@@ -1,16 +1,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setFlag } from "@/test/flags";
 import type { Product } from "@/data/products";
 import type { PaginaCatalogo } from "../catalog";
 import { planVacio, type PlanBusqueda } from "./plan";
 
 /**
  * Cableado del motor con las dependencias de verdad (sin base: se espían las lecturas). Lo que se
- * fija: de dónde sale cada lectura, que el ÚNICO plan es `planParaPagina` (jamás Jev), qué política
- * corre cada superficie según el flag `busqueda-motor-unico` (apagado = `legado`) y que
- * `contarConsulta` reproduce el conteo clásico de `/buscar`.
+ * fija: de dónde sale cada lectura, que el ÚNICO plan es `planParaPagina` (jamás Jev), que las
+ * cuatro superficies corren la cascada (con `busqueda-ia` como kill switch) y que `contarConsulta`
+ * reproduce el conteo clásico de `/buscar`.
  */
 const prod = (id: string) => ({ id, name: id }) as unknown as Product;
 const pagina = (n: number): PaginaCatalogo => ({ productos: Array.from({ length: n }, (_, i) => prod(`p${i}`)), total: n, pagina: 1, paginas: 1 });
@@ -33,7 +32,7 @@ vi.mock("../catalogo-publico", () => ({
 vi.mock("./servidor", () => ({ planParaPagina: (q: string, o: unknown) => planParaPagina(q, o) }));
 vi.mock("../busqueda-ia-flag", () => ({ busquedaIaHabilitada: () => busquedaIaHabilitada() }));
 
-import { SUPERFICIES_EN_CASCADA, buscarEnShop, contarConsulta, politicaDe } from "./motor-servidor";
+import { buscarEnShop, contarConsulta } from "./motor-servidor";
 
 const planConAporte: PlanBusqueda = {
   ...planVacio("panel led"),
@@ -96,7 +95,7 @@ describe("buscarEnShop: de dónde sale cada lectura", () => {
 });
 
 describe("buscarEnShop: el plan", () => {
-  const plan: PlanBusqueda = { ...planVacio("panel led"), blandos: { categorias: [], atributos: [], terminos: [{ texto: "panel", peso: 1 }] } };
+  const plan = planConAporte;
 
   it("el único plan es planParaPagina(consulta cruda, { soloVisibles })", async () => {
     planParaPagina.mockImplementation(async () => plan);
@@ -111,14 +110,14 @@ describe("buscarEnShop: el plan", () => {
     expect(planParaPagina).not.toHaveBeenCalled();
   });
 
-  it("autocompletar pide plan siempre que haya texto y busqueda-ia; el admin nunca; el chat sólo con el motor prendido", async () => {
-    // Flag apagado: el chat corre el legado (exacta y tolerante), que no usa plan.
-    for (const superficie of ["chat", "admin"] as const) {
-      await buscarEnShop(pedido(), { superficie, soloVisibles: false, busquedaIa: true });
-    }
+  it("autocompletar y chat piden plan siempre que haya texto y busqueda-ia; el admin nunca", async () => {
+    await buscarEnShop(pedido(), { superficie: "admin", soloVisibles: false, busquedaIa: true });
     expect(planParaPagina).not.toHaveBeenCalled();
-    await buscarEnShop(pedido(), { superficie: "autocompletar", soloVisibles: false, busquedaIa: true });
-    expect(planParaPagina).toHaveBeenCalledTimes(1);
+    for (const superficie of ["autocompletar", "chat"] as const) {
+      planParaPagina.mockClear();
+      await buscarEnShop(pedido(), { superficie, soloVisibles: false, busquedaIa: true });
+      expect(planParaPagina).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("busqueda-ia ya evaluado por el llamador no se vuelve a leer; si falta, se lee el flag", async () => {
@@ -138,7 +137,7 @@ describe("buscarEnShop: el plan", () => {
     expect(planParaPagina).not.toHaveBeenCalled();
   });
 
-  it("el admin nunca lee el flag (no usa plan); el chat sí (en cascada usa el plan)", async () => {
+  it("el admin nunca lee el flag (no usa plan); el chat sí (usa el plan)", async () => {
     await buscarEnShop(pedido(), { superficie: "admin", soloVisibles: false });
     expect(busquedaIaHabilitada).not.toHaveBeenCalled();
     await buscarEnShop(pedido(), { superficie: "chat", soloVisibles: false });
@@ -148,26 +147,8 @@ describe("buscarEnShop: el plan", () => {
 
 const textos = () => getPaginaCatalogo.mock.calls.map((c) => (c[0] as { filtros: { texto?: unknown } }).filtros.texto);
 
-describe("politicaDe", () => {
-  it("flag apagado: legado en todas las superficies", () => {
-    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) expect(politicaDe(superficie, false)).toBe("legado");
-  });
-
-  it("flag prendido: cascada en las cuatro superficies (catálogo, autocompletar, chat y selector del admin)", () => {
-    expect([...SUPERFICIES_EN_CASCADA].sort()).toEqual(["admin", "autocompletar", "catalogo", "chat"]);
-    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) expect(politicaDe(superficie, true)).toBe("cascada");
-  });
-});
-
-describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
-  it("flag apagado (default): autocompletar corre el legado de siempre (plan, exacta, tolerante), sin leer nada nuevo", async () => {
-    planParaPagina.mockImplementation(async () => planConAporte);
-    await buscarEnShop(pedido(), { superficie: "autocompletar", soloVisibles: false, busquedaIa: true });
-    expect(textos().map((t) => Object.keys(t as object).sort().join())).toEqual(["plan,q", "q", "q,tolerante"]);
-  });
-
-  it("flag prendido: el catálogo con plan corre la cascada (plan, exacta, tolerante con el plan)", async () => {
-    setFlag("busqueda-motor-unico", true);
+describe("buscarEnShop: la cascada en las cuatro superficies", () => {
+  it("el catálogo con plan corre plan, exacta y tolerante con el plan", async () => {
     planParaPagina.mockImplementation(async () => planConAporte);
     const r = await buscarEnShop(pedido({ porPagina: 24 }), { superficie: "catalogo", soloVisibles: true, conPlanDeUrl: true, busquedaIa: true });
     expect(r.intentos).toEqual(["plan", "exacta", "tolerante"]);
@@ -176,8 +157,13 @@ describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
     expect(tolerante.plan).toBeDefined();
   });
 
-  it("flag prendido: un código se busca en la etapa código y no pide plan", async () => {
-    setFlag("busqueda-motor-unico", true);
+  it("autocompletar con plan: plan, exacta, tolerante con el plan", async () => {
+    planParaPagina.mockImplementation(async () => planConAporte);
+    await buscarEnShop(pedido(), { superficie: "autocompletar", soloVisibles: false, busquedaIa: true });
+    expect(textos().map((t) => Object.keys(t as object).sort().join())).toEqual(["plan,q", "q", "plan,q,tolerante"]);
+  });
+
+  it("un código se busca en la etapa código y no pide plan", async () => {
     getPaginaCatalogo.mockImplementation(async () => pagina(1));
     const r = await buscarEnShop(pedido({ consulta: "DL-18W" }), { superficie: "autocompletar", soloVisibles: false, busquedaIa: true });
     expect(r.etapa).toBe("codigo");
@@ -185,19 +171,8 @@ describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
     expect(planParaPagina).not.toHaveBeenCalled();
   });
 
-  it("un solo interruptor: apagado, el chat y el admin vuelven al legado (sin plan); prendido, corren la cascada", async () => {
-    // Apagado.
+  it("el chat usa el plan y el selector del admin nunca: exacta y tolerante", async () => {
     planParaPagina.mockImplementation(async () => planConAporte);
-    for (const superficie of ["chat", "admin"] as const) {
-      getPaginaCatalogo.mockClear();
-      const r = await buscarEnShop(pedido({ porPagina: 10 }), { superficie, soloVisibles: false, busquedaIa: true });
-      expect(r.intentos).toEqual(superficie === "chat" ? ["exacta", "tolerante"] : ["exacta"]);
-      expect(textos()).toEqual(superficie === "chat" ? [{ q: "panel led" }, { q: "panel led", tolerante: true }] : [{ q: "panel led" }]);
-    }
-    expect(planParaPagina).not.toHaveBeenCalled();
-    // Prendido.
-    setFlag("busqueda-motor-unico", true);
-    getPaginaCatalogo.mockClear();
     const chat = await buscarEnShop(pedido({ porPagina: 10 }), { superficie: "chat", soloVisibles: true, busquedaIa: true });
     expect(chat.intentos).toEqual(["plan", "exacta", "tolerante"]);
     expect(planParaPagina).toHaveBeenCalledWith("panel led", { soloVisibles: true });
@@ -207,8 +182,7 @@ describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
     expect(planParaPagina).toHaveBeenCalledTimes(1);
   });
 
-  it("chat con el motor prendido: sin filtro de stock ni conteo, el límite como porPagina y el plan sólo como blando (sin duros)", async () => {
-    setFlag("busqueda-motor-unico", true);
+  it("chat: sin filtro de stock ni conteo, el límite como porPagina y el plan sólo como blando (sin duros)", async () => {
     planParaPagina.mockImplementation(async () => ({
       ...planConAporte,
       duros: { categorias: ["Paneles"], atributos: [{ id: "tono-calido" }] },
@@ -225,17 +199,15 @@ describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
     expect(primera.filtros.atributosEstructurados).toBe(true);
   });
 
-  it("chat con el motor prendido y busqueda-ia apagado: sin plan (exacta y tolerante)", async () => {
-    setFlag("busqueda-motor-unico", true);
+  it("chat con busqueda-ia apagado: sin plan (exacta y tolerante)", async () => {
     planParaPagina.mockImplementation(async () => planConAporte);
     const r = await buscarEnShop(pedido({ porPagina: 10 }), { superficie: "chat", soloVisibles: false, busquedaIa: false });
     expect(r.intentos).toEqual(["exacta", "tolerante"]);
     expect(planParaPagina).not.toHaveBeenCalled();
   });
 
-  it("chat con el motor prendido: ESPERA al plan (sin tope de tiempo) y un typo con plan se resuelve en la tolerante con el plan", async () => {
+  it("chat: ESPERA al plan (sin tope de tiempo) y un typo con plan se resuelve en la tolerante con el plan", async () => {
     vi.useFakeTimers();
-    setFlag("busqueda-motor-unico", true);
     planParaPagina.mockImplementation(() => new Promise((resolver) => setTimeout(() => resolver(planConAporte), 5000)));
     getPaginaCatalogo.mockImplementation(async (a) => {
       const t = (a as { filtros: { texto?: { tolerante?: boolean } } }).filtros.texto;
@@ -250,51 +222,21 @@ describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
     expect(r.plan).not.toBeNull();
   });
 
-  it("busqueda-ia apagado manda: con el motor prendido no hay plan ni etapa plan", async () => {
-    setFlag("busqueda-motor-unico", true);
+  it("busqueda-ia apagado manda: no hay plan ni etapa plan", async () => {
     planParaPagina.mockImplementation(async () => planConAporte);
     await buscarEnShop(pedido(), { superficie: "autocompletar", soloVisibles: false, busquedaIa: false });
     expect(planParaPagina).not.toHaveBeenCalled();
     expect(textos()).toEqual([{ q: "panel led" }, { q: "panel led", tolerante: true }]);
   });
 
-  it("el flag ya evaluado por el llamador no se vuelve a leer", async () => {
-    setFlag("busqueda-motor-unico", false);
-    getPaginaCatalogo.mockImplementation(async () => pagina(1));
-    const r = await buscarEnShop(pedido({ consulta: "DL-18W" }), { superficie: "autocompletar", soloVisibles: false, busquedaIa: true, motorUnico: true });
-    expect(r.etapa).toBe("codigo");
-    getPaginaCatalogo.mockClear();
-    setFlag("busqueda-motor-unico", true);
-    const r2 = await buscarEnShop(pedido({ consulta: "DL-18W" }), { superficie: "autocompletar", soloVisibles: false, busquedaIa: true, motorUnico: false });
-    expect(r2.etapa).toBe("exacta");
-  });
-
-  it("si el flag no se puede evaluar: legado y ningún error", async () => {
-    vi.resetModules();
-    vi.doMock("../busqueda-motor-flag", () => ({ busquedaMotorUnico: async () => Promise.reject(new Error("flags caído")) }));
-    const { buscarEnShop: aislada } = await import("./motor-servidor");
-    getPaginaCatalogo.mockImplementation(async () => pagina(1));
-    const r = await aislada(pedido({ consulta: "DL-18W" }), { superficie: "autocompletar", soloVisibles: false, busquedaIa: true });
-    expect(r.etapa).toBe("exacta");
-    vi.doUnmock("../busqueda-motor-flag");
-  });
-
-  it("en cascada deja un aviso `[busqueda] superficie=… etapa=… ms=…` SIN la consulta", async () => {
-    setFlag("busqueda-motor-unico", true);
+  it("deja un aviso `[busqueda] superficie=… etapa=… ms=…` SIN la consulta", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     getPaginaCatalogo.mockImplementation(async () => pagina(1));
     await buscarEnShop(pedido({ consulta: "consulta secreta" }), { superficie: "autocompletar", soloVisibles: false, busquedaIa: false });
     expect(info).toHaveBeenCalledTimes(1);
     const mensaje = String(info.mock.calls[0][0]);
-    expect(mensaje).toMatch(/^\[busqueda\] superficie=autocompletar politica=cascada etapa=exacta ms=\d+$/);
+    expect(mensaje).toMatch(/^\[busqueda\] superficie=autocompletar etapa=exacta ms=\d+$/);
     expect(mensaje).not.toContain("secreta");
-    info.mockRestore();
-  });
-
-  it("en legado no hay aviso nuevo (conducta idéntica a la de hoy)", async () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
-    await buscarEnShop(pedido(), { superficie: "autocompletar", soloVisibles: false, busquedaIa: false });
-    expect(info).not.toHaveBeenCalled();
     info.mockRestore();
   });
 
@@ -306,10 +248,11 @@ describe("buscarEnShop: política y flag busqueda-motor-unico", () => {
     expect(fuente).toMatch(/planParaPagina/);
   });
 
-  it("la página evalúa el flag junto con los demás (Promise.all inicial), nunca dentro de `use cache`", () => {
-    const pagina = readFileSync(join(__dirname, "../../app/catalogo/page.tsx"), "utf8");
-    expect(pagina).toMatch(/busquedaMotorUnico\(\)/);
-    expect(pagina).toMatch(/motorUnico:/);
+  it("ni el cableado ni la página leen un flag de política: el motor corre siempre la cascada", () => {
+    const servidor = readFileSync(join(__dirname, "motor-servidor.ts"), "utf8");
+    const paginaFuente = readFileSync(join(__dirname, "../../app/catalogo/page.tsx"), "utf8");
+    expect(servidor).not.toMatch(/politica|SUPERFICIES_EN_CASCADA|motorUnico/i);
+    expect(paginaFuente).not.toMatch(/motorUnico|busquedaMotor/);
   });
 });
 

@@ -31,7 +31,7 @@ beforeEach(() => {
   entender.mockImplementation(async (q: string) => ({ plan: plan(q), msJev: null, jevFallo: false, consultaNorm: q }));
 });
 
-const ctx = { arbol: [], jev: null, estructurados: true, politica: "cascada" as const };
+const ctx = { arbol: [], jev: null, estructurados: true };
 
 describe("ejecutarMotor con medidas", () => {
   it("catálogo: informa los ids del plan y cuáles quedaron duros", async () => {

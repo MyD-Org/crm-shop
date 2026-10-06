@@ -59,13 +59,9 @@ describe("planDeMatriz con --motor", () => {
     expect(con.filter((e) => e.tuberia !== "motor")).toEqual(sin);
   });
 
-  it("agrega por banco/vista las filas del motor, legado y cascada: catálogo en ambas vistas; autocompletar y chat sólo en producción", () => {
+  it("agrega por banco/vista las filas del motor (cascada): catálogo en ambas vistas; autocompletar y chat sólo en producción", () => {
     expect(motor().map((e) => e.id)).toEqual([
-      "sintetico-banco-motor-legado-catalogo",
       "sintetico-banco-motor-cascada-catalogo",
-      "sintetico-produccion-motor-legado-catalogo",
-      "sintetico-produccion-motor-legado-autocompletar",
-      "sintetico-produccion-motor-legado-chat",
       "sintetico-produccion-motor-cascada-catalogo",
       "sintetico-produccion-motor-cascada-autocompletar",
       "sintetico-produccion-motor-cascada-chat",
@@ -75,16 +71,15 @@ describe("planDeMatriz con --motor", () => {
   it("el banco real mide el motor con el plan cacheado; el sintético, con el Jev grabado", () => {
     expect(new Set(motor().map((e) => e.jev))).toEqual(new Set(["grabado"]));
     const real = planDeMatriz({ bancoReal: true, jevVivo: false, motor: true }).filter((e) => e.tuberia === "motor" && e.banco === "real");
-    expect(real).toHaveLength(8);
+    expect(real).toHaveLength(4);
     expect(new Set(real.map((e) => e.jev))).toEqual(new Set(["cache"]));
   });
 
-  it("cada fila declara su política y su superficie, y los ids no se repiten", () => {
+  it("cada fila declara su superficie, y los ids no se repiten", () => {
     const todas = planDeMatriz({ bancoReal: true, jevVivo: true, motor: true });
     for (const e of todas.filter((x) => x.tuberia === "motor")) {
-      expect(["legado", "cascada"]).toContain(e.politica);
       expect(["catalogo", "autocompletar", "chat"]).toContain(e.superficie);
-      expect(e.id).toContain(`motor-${e.politica}-${e.superficie}`);
+      expect(e.id).toContain(`motor-cascada-${e.superficie}`);
     }
     expect(new Set(todas.map((e) => e.id)).size).toBe(todas.length);
   });
@@ -210,9 +205,9 @@ describe("formatearMatriz", () => {
 });
 
 describe("formatearMatriz con filas del motor", () => {
-  const motorRep = (superficie: "catalogo" | "autocompletar" | "chat", k: number, etapas: Record<string, number>, politica: "legado" | "cascada" = "legado") => {
+  const motorRep = (superficie: "catalogo" | "autocompletar" | "chat", k: number, etapas: Record<string, number>) => {
     const r = reporte();
-    r.cabecera = { ...r.cabecera, tuberia: "motor", politica, superficie: { nombre: superficie, k, conteo: superficie === "catalogo" }, vista: { variante: "produccion", soloVisibles: true, soloStock: true } };
+    r.cabecera = { ...r.cabecera, tuberia: "motor", superficie: { nombre: superficie, k, conteo: superficie === "catalogo" }, vista: { variante: "produccion", soloVisibles: true, soloStock: true } };
     r.etapas = etapas;
     return r;
   };
@@ -220,20 +215,20 @@ describe("formatearMatriz con filas del motor", () => {
     corrida("a", "sintetico", "produccion", "v2", "no"),
     corrida("b", "sintetico", "produccion", "motor", "grabado", motorRep("catalogo", 24, { plan: 3, exacta: 1 })),
     corrida("c", "sintetico", "produccion", "motor", "grabado", motorRep("chat", 10, { exacta: 3, tolerante: 1 })),
-  ].map((c, i) => (i === 0 ? c : { ...c, politica: "legado" as const, superficie: i === 1 ? ("catalogo" as const) : ("chat" as const) }));
+  ].map((c, i) => (i === 0 ? c : { ...c, superficie: i === 1 ? ("catalogo" as const) : ("chat" as const) }));
   const texto = formatearMatriz(corridas);
 
-  it("etiqueta cada fila del motor con política, superficie y K", () => {
-    expect(texto).toContain("motor legado/catalogo K=24");
-    expect(texto).toContain("motor legado/chat K=10");
+  it("etiqueta cada fila del motor con superficie y K", () => {
+    expect(texto).toContain("motor cascada/catalogo K=24");
+    expect(texto).toContain("motor cascada/chat K=10");
   });
 
   it("suma el histograma de etapas (sólo agregados)", () => {
-    expect(texto).toMatch(/etapas motor legado\/catalogo: plan 3, exacta 1/);
-    expect(texto).toMatch(/etapas motor legado\/chat: exacta 3, tolerante 1/);
+    expect(texto).toMatch(/etapas motor cascada\/catalogo: plan 3, exacta 1/);
+    expect(texto).toMatch(/etapas motor cascada\/chat: exacta 3, tolerante 1/);
   });
 
-  it("no advierte falta de comparabilidad entre filas de otra superficie o política (difieren a propósito)", () => {
+  it("no advierte falta de comparabilidad entre filas de otra superficie (difieren a propósito)", () => {
     expect(texto).not.toMatch(/no son comparables/i);
   });
 
@@ -241,36 +236,7 @@ describe("formatearMatriz con filas del motor", () => {
     expect(texto).toMatch(/medidas: no declarado/);
     const r = motorRep("catalogo", 24, { exacta: 1 });
     r.cabecera.flags = { "busqueda-medidas": "on" };
-    expect(formatearMatriz([{ ...corrida("b", "sintetico", "produccion", "motor", "grabado", r), politica: "legado", superficie: "catalogo" }])).toMatch(/medidas: on/);
-  });
-});
-
-describe("formatearMatriz: criterios de la cascada", () => {
-  const motorRep = (superficie: "catalogo" | "chat", k: number, politica: "legado" | "cascada") => {
-    const r = reporte();
-    r.cabecera = { ...r.cabecera, tuberia: "motor", politica, superficie: { nombre: superficie, k, conteo: superficie === "catalogo" }, vista: { variante: "produccion", soloVisibles: true, soloStock: true } };
-    return r;
-  };
-  const fila = (id: string, politica: "legado" | "cascada", superficie: "catalogo" | "chat", k: number) => ({
-    ...corrida(id, "sintetico", "produccion", "motor", "grabado", motorRep(superficie, k, politica)),
-    politica,
-    superficie,
-  });
-
-  it("con filas legado y cascada de la misma superficie agrega la sección de criterios (sólo agregados)", () => {
-    const texto = formatearMatriz([fila("l", "legado", "catalogo", 24), fila("c", "cascada", "catalogo", 24)]);
-    expect(texto).toMatch(/Criterios de aceptación de la cascada/);
-    expect(texto).toMatch(/superficie catalogo/);
-    expect(texto).toMatch(/mejora de typos/i);
-    expect(texto).not.toMatch(/«/);
-  });
-
-  it("una cascada sin su fila legado avisa que no hay con qué comparar", () => {
-    expect(formatearMatriz([fila("c", "cascada", "chat", 10)])).toMatch(/no hay con qué comparar/);
-  });
-
-  it("sin filas cascada la matriz no cambia", () => {
-    expect(formatearMatriz([fila("l", "legado", "catalogo", 24)])).not.toMatch(/Criterios de aceptación/);
+    expect(formatearMatriz([{ ...corrida("b", "sintetico", "produccion", "motor", "grabado", r), superficie: "catalogo" }])).toMatch(/medidas: on/);
   });
 });
 

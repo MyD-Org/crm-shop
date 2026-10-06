@@ -9,16 +9,15 @@
  * las consultas sintéticas. Jev vivo (gasta) sólo con `--jev=vivo` explícito
  * y únicamente sobre el banco sintético.
  *
- * Con `--motor` (aditivo) la matriz suma las filas de la tubería `motor`: por banco y vista, el
- * motor con política `legado` y con política `cascada` en la superficie catálogo (ambas vistas) y
- * en autocompletar y chat (sólo la vista de producción, que es la que ven). Los ids de las filas
- * de siempre no cambian. `matriz.txt` agrega, por cada fila cascada, los criterios de aceptación
- * contra R_s (ver `criterios.ts`).
+ * Con `--motor` (aditivo) la matriz suma las filas de la tubería `motor` (el motor único, cascada):
+ * por banco y vista, la superficie catálogo (ambas vistas) y autocompletar y chat (sólo la vista de
+ * producción, que es la que ven). Los ids de las filas de siempre no cambian y los de las filas del
+ * motor (`…-motor-cascada-<superficie>`) tampoco, para que `--comparar` siga leyendo matrices ya
+ * congeladas.
  */
-import { sonComparables, type ModoJev, type PoliticaBanco, type ReporteJson, type SuperficieBanco, type Tuberia } from "./corrida";
+import { sonComparables, type ModoJev, type ReporteJson, type SuperficieBanco, type Tuberia } from "./corrida";
 import type { ResumenNum } from "./metricas";
 import type { ModoEtiquetas } from "./cargar-banco";
-import { formatearCriterios } from "./criterios";
 
 export type BancoDeMatriz = "sintetico" | "real";
 export type VistaDeMatriz = "banco" | "produccion";
@@ -30,7 +29,6 @@ export interface EntradaMatriz {
   tuberia: Tuberia;
   jev: ModoJev;
   /** Sólo filas de la tubería `motor`. */
-  politica?: PoliticaBanco;
   superficie?: SuperficieBanco;
 }
 
@@ -40,7 +38,6 @@ export interface CorridaDeMatriz {
   vista: VistaDeMatriz;
   tuberia: Tuberia;
   jev: ModoJev;
-  politica?: PoliticaBanco;
   superficie?: SuperficieBanco;
   reporte: ReporteJson;
 }
@@ -61,9 +58,6 @@ function motoresDe(banco: BancoDeMatriz, jevVivo: boolean): { tuberia: Tuberia; 
 
 const sufijoJev = (jev: ModoJev) => (jev === "no aplica" ? "" : `-${jev === "no" ? "sinjev" : jev}`);
 
-/** Políticas del motor que miden las filas `--motor`: la de hoy y la cascada, en la misma corrida (D-4: una sola matriz). */
-const POLITICAS_MOTOR: readonly PoliticaBanco[] = ["legado", "cascada"];
-
 /** Superficies del motor por vista: la de producción es la que ven autocompletar y chat. */
 const SUPERFICIES_POR_VISTA: Record<VistaDeMatriz, readonly SuperficieBanco[]> = {
   banco: ["catalogo"],
@@ -77,18 +71,15 @@ export function planDeMatriz({ bancoReal, jevVivo, motor = false }: { bancoReal:
     VISTAS.flatMap((vista): EntradaMatriz[] => [
       ...motoresDe(banco, jevVivo).map(({ tuberia, jev }) => ({ id: `${banco}-${vista}-${tuberia}${sufijoJev(jev)}`, banco, vista, tuberia, jev })),
       ...(motor
-        ? POLITICAS_MOTOR.flatMap((politica) =>
-            SUPERFICIES_POR_VISTA[vista].map((superficie) => ({
-              id: `${banco}-${vista}-motor-${politica}-${superficie}`,
-              banco,
-              vista,
-              tuberia: "motor" as const,
-              // Como v2: el banco real usa el plan que sirvió la caché de producción; el sintético, el Jev grabado.
-              jev: banco === "real" ? ("cache" as const) : ("grabado" as const),
-              politica,
-              superficie,
-            })),
-          )
+        ? SUPERFICIES_POR_VISTA[vista].map((superficie) => ({
+            id: `${banco}-${vista}-motor-cascada-${superficie}`,
+            banco,
+            vista,
+            tuberia: "motor" as const,
+            // Como v2: el banco real usa el plan que sirvió la caché de producción; el sintético, el Jev grabado.
+            jev: banco === "real" ? ("cache" as const) : ("grabado" as const),
+            superficie,
+          }))
         : []),
     ]),
   );
@@ -172,8 +163,8 @@ const dec = (x: number | null, d = 3) => (x === null ? "n/a" : x.toFixed(d));
 const num = (n: number, hay: boolean) => (hay ? String(n) : "n/a");
 
 function motor(c: CorridaDeMatriz): string {
-  // Cada fila del motor dice su política, su superficie y el K con que se evalúa.
-  if (c.tuberia === "motor") return `motor ${c.politica ?? c.reporte.cabecera.politica}/${c.superficie ?? c.reporte.cabecera.superficie?.nombre} K=${c.reporte.cabecera.superficie?.k ?? 24}`;
+  // Cada fila del motor dice su superficie y el K con que se evalúa.
+  if (c.tuberia === "motor") return `motor cascada/${c.superficie ?? c.reporte.cabecera.superficie?.nombre} K=${c.reporte.cabecera.superficie?.k ?? 24}`;
   if (c.tuberia !== "v2") return c.tuberia;
   return `v2 (${c.jev === "no" ? "sin Jev" : c.jev})`;
 }
@@ -227,7 +218,7 @@ export function formatearMatriz(corridas: readonly CorridaDeMatriz[]): string {
     lineas.push("", `## Banco ${banco}: ${b.origen}, n=${b.n}, hash ${b.hash}`);
     const [base, ...resto] = delBanco;
     for (const c of resto) {
-      const { ok, motivos } = sonComparables(base.reporte.cabecera, c.reporte.cabecera, { ignorar: ["vista", "jev", "superficie", "politica"] });
+      const { ok, motivos } = sonComparables(base.reporte.cabecera, c.reporte.cabecera, { ignorar: ["vista", "jev", "superficie"] });
       if (!ok) lineas.push(`ADVERTENCIA: ${base.id} y ${c.id} no son comparables: ${motivos.join("; ")}.`);
     }
     for (const vista of VISTAS) {
@@ -255,8 +246,6 @@ export function formatearMatriz(corridas: readonly CorridaDeMatriz[]): string {
       }
     }
   }
-  // Criterios de aceptación de la cascada (sólo si la matriz trae filas `motor/cascada`).
-  lineas.push(...formatearCriterios(corridas));
   lineas.push("", "Notas: precision@24 es un proxy (esperados o de la categoría buscada sobre los productos devueltos). Disponibilidad por sucursal no se modela (se asume stock único).");
   return `${lineas.join("\n")}\n`;
 }

@@ -26,6 +26,7 @@ import { TEST_DATABASE_URL, assertLocalTestDb } from "./db-url"
 const MIGRACION = fileURLToPath(new URL("../../drizzle/0035_catalog_products_shop.sql", import.meta.url))
 const MIGRACION_0037 = fileURLToPath(new URL("../../drizzle/0037_catalogo_shop_desde_crm.sql", import.meta.url))
 const MIGRACION_0038 = fileURLToPath(new URL("../../drizzle/0038_grants_overlay_shop.sql", import.meta.url))
+const MIGRACION_0065 = fileURLToPath(new URL("../../drizzle/0065_shop_precios_online.sql", import.meta.url))
 
 /** El bloque de GRANTs tal cual está en la migración (último statement). */
 function bloqueDeGrants(archivo = MIGRACION): string {
@@ -83,12 +84,14 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
       await sql.unsafe(bloqueDeGrants())
       await sql.unsafe(bloqueDeGrants(MIGRACION_0037))
       await sql.unsafe(bloqueDeGrants(MIGRACION_0038))
+      await sql.unsafe(bloqueDeGrants(MIGRACION_0065))
       await sql.unsafe("CREATE ROLE shop_app NOLOGIN")
       rolCreadoAca = true
     }
     await sql.unsafe(bloqueDeGrants())
     await sql.unsafe(bloqueDeGrants(MIGRACION_0037))
     await sql.unsafe(bloqueDeGrants(MIGRACION_0038))
+    await sql.unsafe(bloqueDeGrants(MIGRACION_0065))
 
     await limpiar()
     await sql`
@@ -184,7 +187,11 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
     ])
   })
 
-  it("precios_alegra = raw->'price' (o []) y activo combina status con alegra_status", async () => {
+  it("precios_alegra emite los precios ONLINE (no raw->'price') y activo combina status con alegra_status", async () => {
+    await sql`
+      UPDATE catalog_products SET precios_online = '[{"idPriceList":"u1","name":"Lista A","price":120,"main":true}]'::jsonb
+      WHERE tenant_id = 'tenant-cps' AND alegra_id = '1'
+    `
     const filas = await sql`
       SELECT alegra_id, stock, precios_alegra, activo, alegra_leido_at
       FROM public.catalog_products_shop WHERE tenant_id = 'tenant-cps' ORDER BY alegra_id
@@ -201,7 +208,7 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
       {
         id: "1",
         stock: "8",
-        precios: [{ idPriceList: "1", name: "General", price: 100 }],
+        precios: [{ idPriceList: "u1", name: "Lista A", price: 120, main: true }],
         activo: true,
         leido: "2026-09-24T12:00:00.000Z",
       },
@@ -282,5 +289,6 @@ describe("migraciones 0035, 0037 y 0038: lo que shop_app lee del catálogo (DB r
     await expect(sql.unsafe(bloqueDeGrants())).resolves.toBeDefined()
     await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0037))).resolves.toBeDefined()
     await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0038))).resolves.toBeDefined()
+    await expect(sql.unsafe(bloqueDeGrants(MIGRACION_0065))).resolves.toBeDefined()
   })
 })

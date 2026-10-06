@@ -495,7 +495,8 @@ cualquier otro objeto de `public` le da 42501:
 | esquema `public` | esquema | USAGE | 0031 (repetido en cada bloque) |
 | `alegra_contacts_shop` | vista del espejo de contactos | SELECT (31 columnas desde 0039; sin `raw`, `phones_norm` ni `seller_id`) | 0031, re-concedido en 0032/0034/0036/0039 al recrear la vista |
 | `shop_contacto_write_through(text, text, text, jsonb)` | función `SECURITY DEFINER` | EXECUTE (PUBLIC revocado) | 0034 |
-| `catalog_products_shop` | vista del espejo de productos | SELECT (12 columnas; ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) | 0035, re-concedido en 0037 |
+| `catalog_products_shop` | vista del espejo de productos | SELECT (12 columnas; ver [Vista de catálogo para el Shop](#vista-de-catálogo-para-el-shop)) | 0035, re-concedido en 0037 y 0065 |
+| `lista_precio_condiciones` | tabla (qué lista online rige para un medio de pago y cuotas) | SELECT | 0065 |
 | `catalog_categories_shop` | vista del espejo de categorías de Alegra | SELECT (5 columnas) | 0037 |
 | `catalog_overlay` | tabla (overlay comercial por producto) | SELECT | 0038 (en prod estaba dado a mano) |
 | `shop_categories` | tabla (árbol de categorías de la tienda) | SELECT | 0038 (en prod estaba dado a mano) |
@@ -844,7 +845,7 @@ código, marca, categoría, IVA, stock, precio y estado) con el dato que el CRM 
 |---|---|
 | `tenant_id`, `alegra_id` | igual que en la tabla |
 | `stock` | `stock` (total de todos los depósitos; NULL = no inventariable) |
-| `precios_alegra` | columna generada de la tabla: `raw->'price'` tal cual lo manda Alegra (`[]` si no hay). No se usa `prices` porque no trae la lista principal; el Shop lo mapea con su propio mapper |
+| `precios_alegra` | **desde 0065 son los precios ONLINE** (`catalog_products.precios_online`): `[{ idPriceList, name, price, main }]` con el uuid de cada lista online activa y `main` en la de referencia; `[]` si el producto no tiene costo. El nombre de la columna es histórico y se conserva para no romper el contrato (antes era `raw->'price'` de Alegra, que ya no sale hacia el Shop). El Shop lo mapea con su propio mapper |
 | `activo` | `status = 'active'` (visto en la última sync) **y** `alegra_status` distinto de `'inactive'` |
 | `alegra_leido_at` | cuándo se le pidió el dato a Alegra |
 | `name`, `description`, `brand`, `category_alegra_id` | igual que en la tabla (la marca sale de los customFields) |
@@ -1172,7 +1173,7 @@ Botones **Responder / Responder a todos / Reenviar** en la conversación y **Red
 
 ## Precios online (listas por coeficiente)
 
-Change `listas-precio-online`, rebanada B (migración `0064`). **Precio = costo sin IVA × coeficiente**, definido en el admin: Catálogo → solapa **Precios online**. Las listas de precio de Alegra nunca participan del cálculo (solo se muestran como referencia informativa, por cuenta, en la grilla). El Shop todavía NO lee estos precios (lo hace la rebanada C).
+Change `listas-precio-online`, rebanada B (migración `0064`). **Precio = costo sin IVA × coeficiente**, definido en el admin: Catálogo → solapa **Precios online**. Las listas de precio de Alegra nunca participan del cálculo (solo se muestran como referencia informativa, por cuenta, en la grilla). Desde la rebanada C (migración `0065`) el Shop SÍ los lee: la vista `catalog_products_shop` emite los precios online en la columna `precios_alegra`, y la tabla `lista_precio_condiciones` dice qué lista rige para cada medio de pago (y, desde la rebanada D, cada cantidad de cuotas). El enlace se cambia desde **Configuración → Medios de pago** y pasa por la vista previa y el historial de Precios online (tipo `condicion`, se puede revertir). Una lista enlazada a un medio no se puede eliminar. Un medio sin enlace usa la lista de referencia.
 
 - **Cálculo en SQL**: `calcular_precios_online(tenant, ids)` (no escribe) y `aplicar_precios_online(tenant, ids, modo)` (escribe solo lo que difiere; modo `config` o `costo`). Neto, `round` half-up a 2 decimales sobre `costo_aplicado`. Precedencia: override de marca > override de categoría (la más profunda entre la categoría del producto y sus ancestros; empate = mayor coeficiente) > general de la lista. Sin costo no hay precio (nunca 0). El oráculo en TypeScript (`lib/precios-online-oraculo.ts`) solo lo usan los tests.
 - **Listas y ajustes**: tablas `listas_precio_online` (coeficiente ≥ 1; una sola referencia activa por tenant) y `lista_precio_overrides`. Resultado materializado en `catalog_products.precios_online` (+ `precio_online_ref`).

@@ -22,12 +22,12 @@ type Form = {
   aplicaRetiro: boolean
   aplicaEnvio: boolean
   activo: boolean
-  idListaPrecios: string
+  listaOnlineId: string
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
 }
 
-type Lista = { idPriceList: string; name: string }
+type Lista = { id: string; nombre: string }
 type MedioPagoDto = MedioPagoConAvisos
 
 const formVacio: Form = {
@@ -38,7 +38,7 @@ const formVacio: Form = {
   aplicaRetiro: true,
   aplicaEnvio: true,
   activo: true,
-  idListaPrecios: LISTA_POR_DEFECTO,
+  listaOnlineId: LISTA_POR_DEFECTO,
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
 }
@@ -51,12 +51,13 @@ const desdeDto = (m: MedioPagoDto): Form => ({
   aplicaRetiro: m.aplicaRetiro,
   aplicaEnvio: m.aplicaEnvio,
   activo: m.activo,
-  idListaPrecios: m.idListaPrecios ?? LISTA_POR_DEFECTO,
+  listaOnlineId: m.listaOnlineId ?? LISTA_POR_DEFECTO,
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
 })
 
-// La lista, el destacado y la ficha se configuran sólo editando un medio ya creado.
+// El destacado y la ficha se configuran sólo editando un medio ya creado; la lista se enlaza aparte
+// (Precios online: vista previa, aplicar e historial).
 const cuerpo = (f: Form) => ({
   ...(f.editandoSlug ? { ...cuerpoDePrecios(f) } : { slug: f.slug }),
   nombre: f.nombre,
@@ -68,9 +69,8 @@ const cuerpo = (f: Form) => ({
 
 const porOrden = (a: MedioPagoDto, b: MedioPagoDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
 
-/** Nombre a mostrar de la lista enlazada (el snapshot si ya no existe en Alegra). */
-const nombreDeLista = (m: MedioPagoDto, listas: Lista[]) =>
-  m.idListaPrecios === null ? null : (listas.find((l) => l.idPriceList === m.idListaPrecios)?.name ?? m.listaPreciosNombre ?? m.idListaPrecios)
+/** Nombre a mostrar de la lista enlazada (sin enlace rige la lista de referencia). */
+const nombreDeLista = (m: MedioPagoDto) => m.listaOnlineNombre
 
 async function enviar(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
@@ -126,6 +126,22 @@ export function MediosPagoShopCard() {
     }
   }, [])
 
+  /**
+   * Enlaza (o desenlaza con null) la lista de precio online del medio por el camino de cualquier
+   * cambio de precios: vista previa, aplicar y entrada en el historial. Devuelve el error, si hay.
+   */
+  async function enlazarLista(slug: string, listaId: string | null): Promise<string | null> {
+    const cambios = [{ op: "setCondicion", medioSlug: slug, cuotas: null, listaId }]
+    const previa = await enviar("/api/admin/precios-online/previsualizar", "POST", { cambios })
+    if (!previa.res.ok || !previa.json?.previa) {
+      return typeof previa.json?.error === "string" ? previa.json.error : "No pudimos enlazar la lista de precios."
+    }
+    const { baseVersion, huella } = previa.json.previa as { baseVersion: number; huella: string }
+    const r = await enviar("/api/admin/precios-online/aplicar", "POST", { cambios, baseVersion, huella })
+    if (!r.res.ok) return typeof r.json?.error === "string" ? r.json.error : "No pudimos enlazar la lista de precios."
+    return null
+  }
+
   /** Recarga los avisos tras un cambio que puede afectarlos (otro medio dejó de estar destacado). */
   async function recargarAvisos() {
     try {
@@ -174,8 +190,18 @@ export function MediosPagoShopCard() {
       if (!res.ok || !json) return manejarError(res.status, json)
       const nuevo = json.medio as MedioPagoDto
       setMedios((prev) => aplicarMedioGuardado(prev ?? [], nuevo))
+      const listaElegida = form.listaOnlineId === LISTA_POR_DEFECTO ? null : form.listaOnlineId
+      const cambioLista = form.editandoSlug !== null && listaElegida !== nuevo.listaOnlineId
+      if (cambioLista) {
+        const falla = await enlazarLista(nuevo.slug, listaElegida)
+        if (falla) {
+          setErrores({ listaOnlineId: `Los datos del medio se guardaron, pero no se pudo cambiar la lista. ${falla}` })
+          void recargarAvisos()
+          return
+        }
+      }
       setForm(null)
-      if (nuevo.destacarEnCatalogo) void recargarAvisos()
+      if (nuevo.destacarEnCatalogo || cambioLista) void recargarAvisos()
       avisar(form.editandoSlug ? "Medio de pago actualizado" : "Medio de pago agregado", json.propagado)
     } catch {
       setErrores({ general: "Error de conexión. Inténtelo nuevamente." })
@@ -295,10 +321,10 @@ export function MediosPagoShopCard() {
                 key: "precios",
                 header: "Precio",
                 render: (m) => {
-                  const lista = nombreDeLista(m, listas)
+                  const lista = nombreDeLista(m)
                   return (
                     <div className="flex flex-col gap-0.5">
-                      <span>{lista ?? "Lista por defecto"}</span>
+                      <span>{lista ?? "Lista de referencia"}</span>
                       {m.destacarEnCatalogo && <Badge tone="info">Destacado en catálogo</Badge>}
                       {m.mostrarEnFicha && <span className="text-xs" style={{ color: "var(--ink-soft)" }}>Se muestra en la ficha</span>}
                       {m.avisos.map((a) => (
@@ -403,22 +429,22 @@ export function MediosPagoShopCard() {
               <div className="flex flex-col gap-3">
                 <Field
                   label="Lista de precios"
-                  hint="Si el cliente elige este medio, se le cobra el precio de esta lista de Alegra cuando es menor que el de la lista por defecto. No se cobra nunca más que la lista por defecto."
-                  error={errores.idListaPrecios}
+                  hint="Si el cliente elige este medio, se le cobra el precio de esta lista de precios online cuando es menor que el de la lista de referencia. Sin lista rige la de referencia. El cambio queda en el historial de Precios online."
+                  error={errores.listaOnlineId}
                 >
                   <Select
                     aria-label="Lista de precios"
-                    value={form.idListaPrecios}
+                    value={form.listaOnlineId}
                     onValueChange={(v) => {
                       // Sin lista no hay precio distinto: se apagan el destacado y la ficha.
-                      cambiar(v === LISTA_POR_DEFECTO ? { idListaPrecios: v, destacarEnCatalogo: false, mostrarEnFicha: false } : { idListaPrecios: v })
+                      cambiar(v === LISTA_POR_DEFECTO ? { listaOnlineId: v, destacarEnCatalogo: false, mostrarEnFicha: false } : { listaOnlineId: v })
                     }}
                     options={[
-                      { value: LISTA_POR_DEFECTO, label: "Lista por defecto" },
-                      ...listas.map((l) => ({ value: l.idPriceList, label: l.name })),
-                      // Una lista ya dada de baja en Alegra se sigue viendo hasta que se elija otra.
-                      ...(form.idListaPrecios !== LISTA_POR_DEFECTO && !listas.some((l) => l.idPriceList === form.idListaPrecios)
-                        ? [{ value: form.idListaPrecios, label: `${medios?.find((m) => m.slug === form.editandoSlug)?.listaPreciosNombre ?? form.idListaPrecios} (ya no existe)` }]
+                      { value: LISTA_POR_DEFECTO, label: "Lista de referencia" },
+                      ...listas.map((l) => ({ value: l.id, label: l.nombre })),
+                      // Una lista desactivada se sigue viendo hasta que se elija otra.
+                      ...(form.listaOnlineId !== LISTA_POR_DEFECTO && !listas.some((l) => l.id === form.listaOnlineId)
+                        ? [{ value: form.listaOnlineId, label: `${medios?.find((m) => m.slug === form.editandoSlug)?.listaOnlineNombre ?? "Lista"} (desactivada)` }]
                         : []),
                     ]}
                   />
@@ -427,7 +453,7 @@ export function MediosPagoShopCard() {
                   id="medio-destacar"
                   label="Destacar en catálogo"
                   checked={form.destacarEnCatalogo}
-                  disabled={form.idListaPrecios === LISTA_POR_DEFECTO}
+                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO}
                   onCheckedChange={(v) => cambiar({ destacarEnCatalogo: v })}
                 />
                 <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
@@ -437,7 +463,7 @@ export function MediosPagoShopCard() {
                   id="medio-ficha"
                   label="Mostrar en ficha"
                   checked={form.mostrarEnFicha}
-                  disabled={form.idListaPrecios === LISTA_POR_DEFECTO}
+                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO}
                   onCheckedChange={(v) => cambiar({ mostrarEnFicha: v })}
                 />
                 <p className="text-xs" style={{ color: "var(--ink-soft)" }}>

@@ -91,3 +91,27 @@ describe("validarCambios: umbrales", () => {
     expect(validarCambios([{ op: "setUmbrales", retencionPct: -5 }])).toMatchObject({ ok: false })
   })
 })
+
+describe("validarCambios: condiciones de medios de pago", () => {
+  it("medio + lista (o null para quitar); cuotas null o entero 2..24", () => {
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "transferencia", cuotas: null, listaId: ID }])).toMatchObject({
+      ok: true,
+      cambios: [{ op: "setCondicion", medioSlug: "transferencia", cuotas: null, listaId: ID }],
+    })
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 6, listaId: null }])).toMatchObject({ ok: true })
+    // `cuotas` ausente = pago único.
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", listaId: ID }])).toMatchObject({
+      ok: true,
+      cambios: [{ cuotas: null }],
+    })
+  })
+
+  it("rechaza slug inválido, cuotas fuera de rango o no enteras y lista que no es uuid", () => {
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "Medio Pago", cuotas: null, listaId: ID }])).toMatchObject({ ok: false })
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 1, listaId: ID }])).toMatchObject({ ok: false })
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 25, listaId: ID }])).toMatchObject({ ok: false })
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 2.5, listaId: ID }])).toMatchObject({ ok: false })
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: null, listaId: "x" }])).toMatchObject({ ok: false })
+    expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: null }])).toMatchObject({ ok: false })
+  })
+})

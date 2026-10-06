@@ -167,8 +167,11 @@ export const crmContactos = publico
  * `src/lib/catalogo-fuente.ts`). `shop_app` tiene SELECT sobre la vista y nada
  * sobre la tabla (no ve `raw`).
  *
- * - `preciosAlegra` es `raw->'price'` TAL CUAL lo manda Alegra (ids numéricos,
- *   `main` incluido): se normaliza con `mapPrecios` antes de resolver una lista.
+ * - `preciosAlegra` son los precios ONLINE del CRM (migración 0065; el nombre de la columna es
+ *   histórico y se conserva para no romper el contrato): `[{ idPriceList, name, price, main }]`
+ *   con el uuid de cada lista online y `main` en la de referencia. Los precios de las listas de
+ *   Alegra NO llegan al Shop. Un producto sin costo no tiene precio (`[]`). Se normaliza con
+ *   `mapPrecios` antes de resolver una lista.
  * - `activo` = visto en la última sync del CRM y no inactivo en Alegra.
  * - `alegraLeidoAt` = cuándo se le pidió el dato a Alegra (frescura).
  * - `brand` sigue la regla del CRM (customField llamado "marca"/"brand").
@@ -440,13 +443,28 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
   aplicaEnvio: boolean("aplica_envio").notNull(),
   cobroOnline: boolean("cobro_online").notNull(),
   orden: integer("orden").notNull(),
-  // Migración 0061 del CRM (change `listas-por-medio-de-pago`). Puede no estar aplicada: la
-  // lectura reintenta sin estas columnas ante 42703 (`medios-pago-repo.ts`). El Shop NO lee
-  // `lista_precios_nombre` (snapshot para el admin); se declara por contrato.
-  idListaPrecios: text("id_lista_precios"),
-  listaPreciosNombre: text("lista_precios_nombre"),
+  // Migración 0061 del CRM (destacado y ficha). La lista de precio que rige para el medio ya no
+  // vive acá: la migración 0065 borró `id_lista_precios` y la lleva `lista_precio_condiciones`.
   destacarEnCatalogo: boolean("destacar_en_catalogo").notNull(),
   mostrarEnFicha: boolean("mostrar_en_ficha").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * Qué lista de precio ONLINE rige para un medio de pago (`public.lista_precio_condiciones`,
+ * migración 0065 del CRM, change `listas-precio-online`). SELECT de la tabla entera para
+ * `shop_app`; el Shop NO ve las listas ni sus coeficientes ni costos: sólo el uuid de la lista,
+ * que coincide con el `idPriceList` de los precios de la vista del catálogo. `cuotas` NULL = pago
+ * único (el Shop de hoy sólo usa esa; las cuotas llegan con la rebanada D). La migración puede no
+ * estar aplicada: toda lectura tolera que la tabla no exista (`medios-pago-repo.ts`).
+ */
+export const crmListaPrecioCondiciones = publico.table("lista_precio_condiciones", {
+  id: uuid("id").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  listaId: uuid("lista_id").notNull(),
+  medioSlug: text("medio_slug").notNull(),
+  cuotas: integer("cuotas"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

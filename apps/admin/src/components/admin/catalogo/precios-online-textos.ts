@@ -74,9 +74,17 @@ export const TEXTOS = {
     sinListas: "Todavía no hay listas de precio online.",
     sinAjustes: "Esta lista no tiene ajustes.",
     umbrales: "Umbrales de control",
-    umbralConfirmacion: "Confirmación adicional al cambiar un coeficiente (variación mayor a, en %)",
-    umbralRetencion: "Retención de cambios de costo desde Alegra (variación mayor a, en %)",
+    ajustesAvanzados: "Ajustes avanzados",
+    umbralConfirmacion: "Confirmación adicional (variación mayor a, en %)",
+    umbralRetencion: "Retención de costos de Alegra (variación mayor a, en %)",
     umbralAyuda: "Los umbrales actúan solo cuando la variación los supera.",
+    umbralConfirmacionInfo:
+      "Si un cambio de coeficiente mueve algún precio más que este porcentaje, se le pide una segunda confirmación antes de aplicar. Sirve para atajar errores de tipeo (por ejemplo, 16 en vez de 1,6).",
+    umbralRetencionInfo:
+      "Si el costo de un producto cambia en Alegra más que este porcentaje, su precio online no se actualiza solo: queda en Retenidos hasta que usted lo apruebe.",
+    masInformacion: "Más información",
+    revisarCambio: "Revisar cambio",
+    cerrar: "Cerrar",
     confirmarEliminar: (n: string) => `¿Desea eliminar la lista ${n}? Se mostrará una vista previa antes de aplicar el cambio.`,
   },
   previa: {
@@ -152,6 +160,7 @@ export const TEXTOS = {
     override_edicion: "Ajuste modificado",
     override_baja: "Ajuste quitado",
     umbral: "Umbrales",
+    condicion: "Lista de un medio de pago",
     revertir: "Reversión",
     costo_aprobado: "Costo aprobado",
     costo_rechazado: "Costo rechazado",

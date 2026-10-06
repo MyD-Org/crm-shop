@@ -5,7 +5,6 @@ export const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 export const MAX_NOMBRE = 60
 export const MAX_INSTRUCCIONES = 1000
 export const MAX_ORDEN = 999
-export const MAX_ID_LISTA = 100
 /** Fila fija sembrada por la migración 0057: se edita, pero no se crea, no se elimina ni cambia su slug. */
 export const SLUG_MERCADOPAGO = "mercadopago"
 
@@ -22,16 +21,14 @@ export interface MedioPagoValido {
   orden: number
 }
 
-/** Cambios parciales: además de los campos del medio, lista de precios, destacado y ficha. */
+/** Cambios parciales: además de los campos del medio, destacado y ficha. La lista se enlaza por Precios online. */
 export type CambiosMedioPago = Partial<Omit<MedioPagoValido, "slug">> & {
-  /** Id de la lista de Alegra (cuenta principal); `null` = lista por defecto. */
-  idListaPrecios?: string | null
   destacarEnCatalogo?: boolean
   mostrarEnFicha?: boolean
 }
 
 /** Campos que sólo se configuran editando un medio ya creado. */
-const CAMPOS_DE_PRECIO = ["idListaPrecios", "destacarEnCatalogo", "mostrarEnFicha"] as const
+const CAMPOS_DE_PRECIO = ["destacarEnCatalogo", "mostrarEnFicha"] as const
 
 const invalido = (campo: string, error: string): Invalido => ({ ok: false, campo, error })
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
@@ -69,14 +66,6 @@ function validarCampos(body: Record<string, unknown>): { ok: true; cambios: Camb
   }
   if (cambios.cobroOnline === true) return invalido("cobroOnline", MSG_COBRO_ONLINE)
 
-  if (body.idListaPrecios !== undefined) {
-    const v = body.idListaPrecios
-    if (v === null) cambios.idListaPrecios = null
-    else if (typeof v !== "string" || v.trim().length > MAX_ID_LISTA) {
-      return invalido("idListaPrecios", "La lista de precios indicada no es válida.")
-    } else cambios.idListaPrecios = v.trim() === "" ? null : v.trim()
-  }
-
   if (body.orden !== undefined) {
     const v = body.orden
     const n = typeof v === "string" && /^\d+$/.test(v.trim()) ? Number(v.trim()) : v
@@ -104,7 +93,7 @@ export function validarMedioPagoNuevo(body: unknown): { ok: true; valor: MedioPa
 
   const c = validarCampos(body)
   if (!c.ok) return c
-  // La lista, el destacado y la ficha se configuran editando el medio (hay que validar la lista contra Alegra).
+  // El destacado y la ficha se configuran editando el medio ya creado.
   for (const campo of CAMPOS_DE_PRECIO) delete c.cambios[campo]
   const valor: MedioPagoValido = {
     slug,
@@ -125,18 +114,4 @@ export function validarMedioPagoNuevo(body: unknown): { ok: true; valor: MedioPa
 export function validarMedioPagoCambios(body: unknown): { ok: true; cambios: CambiosMedioPago } | Invalido {
   if (!esObjeto(body)) return invalido("body", MSG_BODY)
   return validarCampos(body)
-}
-
-/**
- * Resuelve la lista elegida contra las listas de la cuenta principal de Alegra. Devuelve el id y un
- * snapshot del nombre (para avisar si la lista se da de baja). `null` desenlaza: limpia ambos.
- */
-export function resolverListaDelMedio(
-  id: string | null,
-  listas: readonly { idPriceList: string; name: string }[],
-): { ok: true; id: string | null; nombre: string | null } | Invalido {
-  if (id === null) return { ok: true, id: null, nombre: null }
-  const lista = listas.find((l) => l.idPriceList === id)
-  if (!lista) return invalido("idListaPrecios", "La lista de precios elegida no existe en Alegra. Seleccione otra.")
-  return { ok: true, id: lista.idPriceList, nombre: lista.name }
 }

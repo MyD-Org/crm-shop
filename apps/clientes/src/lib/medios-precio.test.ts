@@ -106,3 +106,36 @@ describe("armarPreciosMedios", () => {
     expect(armarPreciosMedios(prices, 21, undefined)).toEqual({});
   });
 });
+
+describe("precios online (0065): la lista del medio es un uuid de lista online", () => {
+  const REF = "0f5d0c52-0000-4000-8000-00000000000a";
+  const TRANSF = "0f5d0c52-0000-4000-8000-00000000000b";
+  const CARA = "0f5d0c52-0000-4000-8000-00000000000c";
+  // Lo que emite la vista: la referencia con `main`, y una entrada por lista online activa.
+  const precios = [
+    { idPriceList: REF, name: "Lista A", price: 120, main: true },
+    { idPriceList: TRANSF, name: "Lista B", price: 110, main: false },
+    { idPriceList: CARA, name: "Lista C", price: 190, main: false },
+  ];
+  const sel = (idLista: string) =>
+    seleccionarMediosPrecio([medio("transferencia", { idListaPrecios: idLista, destacarEnCatalogo: true, mostrarEnFicha: true })], false);
+
+  it("medio con una lista menor que la referencia: '$X con <Medio>'", () => {
+    const r = armarPreciosMedios(precios, 21, sel(TRANSF));
+    expect(r.precioMedio).toMatchObject({ slug: "transferencia", price: 110 });
+    expect(r.preciosMedios).toHaveLength(1);
+  });
+
+  it("medio con una lista mayor o igual a la referencia: sin descuento, sin línea", () => {
+    expect(armarPreciosMedios(precios, 21, sel(CARA))).toEqual({ preciosMedios: [] });
+    expect(armarPreciosMedios(precios, 21, sel(REF))).toEqual({ preciosMedios: [] });
+  });
+
+  it("lista desactivada o inexistente (ya no viene en los precios): rige la referencia, sin línea", () => {
+    expect(armarPreciosMedios(precios, 21, sel("0f5d0c52-0000-4000-8000-0000000000ff"))).toEqual({ preciosMedios: [] });
+  });
+
+  it("un producto sin precio online no muestra ninguna línea (nunca $0)", () => {
+    expect(armarPreciosMedios([], 21, sel(TRANSF))).toEqual({ preciosMedios: [] });
+  });
+});

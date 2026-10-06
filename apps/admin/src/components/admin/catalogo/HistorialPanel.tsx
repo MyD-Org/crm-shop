@@ -31,6 +31,11 @@ function detalle(h: HistorialDto): string {
       const o = (h.despues ?? h.antes ?? {}) as Record<string, unknown>
       return `${o.tipo === "marca" ? `Marca ${o.marca}` : "Categoría"}: ${a.coeficiente ?? "—"} → ${d.coeficiente ?? "—"}`
     }
+    case "condicion": {
+      const o = (h.despues ?? h.antes ?? {}) as Record<string, unknown>
+      const estado = (x: Record<string, unknown>) => (x.listaId ? "con lista" : "sin lista")
+      return `Medio ${o.medioSlug ?? ""}: ${estado(a)} → ${estado(d)}`
+    }
     case "umbral":
       return `Confirmación ${a.confirmacionPct ?? "—"} → ${d.confirmacionPct ?? "—"} %; retención ${a.retencionPct ?? "—"} → ${d.retencionPct ?? "—"} %`
     default:

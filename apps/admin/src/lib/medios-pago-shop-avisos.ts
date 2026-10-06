@@ -1,39 +1,37 @@
-// Avisos NO bloqueantes de un medio de pago con lista de precios (change
-// `listas-por-medio-de-pago`). Función pura: el repo calcula los conjuntos y acá se arman los
-// textos. Todo en usted. Nunca impiden guardar.
+// Avisos NO bloqueantes de un medio de pago con lista de precio online. Función pura: el repo
+// calcula los conjuntos y acá se arman los textos. Todo en usted. Nunca impiden guardar.
 
 export interface MedioParaAvisos {
   nombre: string
   activo: boolean
-  idListaPrecios: string | null
-  listaPreciosNombre: string | null
+  listaOnlineId: string | null
+  listaOnlineNombre: string | null
+  listaOnlineActiva: boolean
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
 }
 
 export interface ContextoAvisos {
-  /** Ids de las listas que hoy existen en la cuenta principal de Alegra. */
-  listasExistentes: ReadonlySet<string>
-  /** Ids de listas que, en general, cuestan más que la lista por defecto. */
+  /** Ids de listas online que, en general, cuestan más que la lista de referencia. */
   listasMasCaras: ReadonlySet<string>
 }
 
 export function avisosDeMedio(m: MedioParaAvisos, ctx: ContextoAvisos): string[] {
   const avisos: string[] = []
-  const nombreLista = m.listaPreciosNombre ?? "enlazada"
-  const huerfana = m.idListaPrecios !== null && !ctx.listasExistentes.has(m.idListaPrecios)
+  const nombreLista = m.listaOnlineNombre ?? "enlazada"
+  const sinLista = m.listaOnlineId === null || !m.listaOnlineActiva
 
-  if (huerfana) {
-    avisos.push(`La lista "${nombreLista}" ya no existe en Alegra. Este medio usa la lista por defecto hasta que seleccione otra.`)
-  } else if (m.idListaPrecios !== null && ctx.listasMasCaras.has(m.idListaPrecios)) {
+  if (m.listaOnlineId !== null && !m.listaOnlineActiva) {
+    avisos.push(`La lista "${nombreLista}" está desactivada. Este medio usa la lista de referencia hasta que la active o seleccione otra.`)
+  } else if (m.listaOnlineId !== null && ctx.listasMasCaras.has(m.listaOnlineId)) {
     avisos.push(
-      `La lista "${nombreLista}" es, en general, más cara que la lista por defecto: sólo se aplica en los productos donde cuesta menos.`,
+      `La lista "${nombreLista}" es, en general, más cara que la lista de referencia: sólo se aplica en los productos donde cuesta menos.`,
     )
   }
 
   const motivo = !m.activo
     ? "el medio está inactivo"
-    : m.idListaPrecios === null || huerfana
+    : sinLista
       ? "el medio no tiene una lista de precios enlazada"
       : null
   if (motivo) {

@@ -109,7 +109,7 @@ describe("fila fija mercadopago (migración 0057)", () => {
 
     const a = await listarMediosPago(A)
     expect(a.filter((m) => m.slug === "mercadopago")).toEqual([
-      { slug: "mercadopago", nombre: "Mercado Pago", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, idListaPrecios: null, listaPreciosNombre: null, destacarEnCatalogo: false, mostrarEnFicha: false },
+      { slug: "mercadopago", nombre: "Mercado Pago", instrucciones: "", activo: false, aplicaRetiro: true, aplicaEnvio: true, cobroOnline: true, orden: 6, listaOnlineId: null, listaOnlineNombre: null, listaOnlineActiva: false, destacarEnCatalogo: false, mostrarEnFicha: false },
     ])
     expect((await listarMediosPago(B)).filter((m) => m.slug === "mercadopago")).toHaveLength(1)
   })

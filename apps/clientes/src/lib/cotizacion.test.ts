@@ -239,3 +239,39 @@ describe("itemDesdeEspejo: mostrar marca", () => {
     expect(itemDesdeEspejo({ ...fila, mostrarMarca: null }).customFields).toEqual([{ name: "Marca", value: "Acme" }]);
   });
 });
+
+describe("cotizarItem con precios online (0065)", () => {
+  const REF = "0f5d0c52-0000-4000-8000-00000000000a";
+  const TRANSF = "0f5d0c52-0000-4000-8000-00000000000b";
+  const CARA = "0f5d0c52-0000-4000-8000-00000000000c";
+  const item = (price: unknown[]) =>
+    ({ id: "1", name: "Panel LED", status: "active", price, inventory: { availableQuantity: 50 } }) as unknown as AlegraItem;
+  const online = item([
+    { idPriceList: REF, name: "Lista A", price: 120, main: true },
+    { idPriceList: TRANSF, name: "Lista B", price: 110, main: false },
+    { idPriceList: CARA, name: "Lista C", price: 190, main: false },
+  ]);
+
+  it("sin medio elegido rige la referencia (el precio principal)", () => {
+    expect(cotizarItem({ id: "1", qty: 1 }, online, undefined).precioUnitario).toBe(120);
+  });
+
+  it("el medio con una lista menor cobra esa lista; con una mayor, la referencia", () => {
+    expect(cotizarItem({ id: "1", qty: 1 }, online, undefined, TRANSF).precioUnitario).toBe(110);
+    expect(cotizarItem({ id: "1", qty: 1 }, online, undefined, CARA).precioUnitario).toBe(120);
+  });
+
+  it("no regresión #219: una lista propia de Alegra no existe entre los precios online y queda inerte", () => {
+    const l = cotizarItem({ id: "1", qty: 2 }, online, "7");
+    expect(l.precioUnitario).toBe(120);
+    expect(l.subtotal).toBe(240);
+    expect(l.precioEspecial).toBeUndefined();
+    expect(l.problema).toBeUndefined();
+  });
+
+  it("un producto sin precio online no se cotiza a $0: queda sin_precio", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item([]), "7");
+    expect(l.precioUnitario).toBe(0);
+    expect(l.problema).toBe("sin_precio");
+  });
+});

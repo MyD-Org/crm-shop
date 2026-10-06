@@ -4,18 +4,16 @@ import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
 // cuerpo del PATCH y refleja en la lista local lo que el servidor ya hizo (destacar un medio
 // desmarca al anterior). Sin React ni DB, para poder probarla.
 
-/** Valor del selector para "Lista por defecto" (el select no admite cadena vacía como opción). */
+/** Valor del selector para "Lista de referencia" (el select no admite cadena vacía como opción). */
 export const LISTA_POR_DEFECTO = "__defecto__"
 
 export interface PreciosForm {
-  idListaPrecios: string
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
 }
 
 export function cuerpoDePrecios(f: PreciosForm) {
   return {
-    idListaPrecios: f.idListaPrecios === LISTA_POR_DEFECTO ? null : f.idListaPrecios,
     destacarEnCatalogo: f.destacarEnCatalogo,
     mostrarEnFicha: f.mostrarEnFicha,
   }

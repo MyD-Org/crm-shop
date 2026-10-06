@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
-import { LISTA_POR_DEFECTO, aplicarMedioGuardado, cuerpoDePrecios } from "@/lib/medios-pago-shop-form"
+import { aplicarMedioGuardado, cuerpoDePrecios } from "@/lib/medios-pago-shop-form"
 
 const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPagoConAvisos => ({
   slug,
@@ -11,8 +11,9 @@ const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPago
   aplicaEnvio: true,
   cobroOnline: false,
   orden: 0,
-  idListaPrecios: null,
-  listaPreciosNombre: null,
+  listaOnlineId: null,
+  listaOnlineNombre: null,
+  listaOnlineActiva: false,
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
   avisos: [],
@@ -20,18 +21,10 @@ const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPago
 })
 
 describe("cuerpoDePrecios", () => {
-  it("'Lista por defecto' viaja como null y conserva los flags", () => {
-    expect(cuerpoDePrecios({ idListaPrecios: LISTA_POR_DEFECTO, destacarEnCatalogo: true, mostrarEnFicha: true })).toEqual({
-      idListaPrecios: null,
+  it("viaja sólo el destacado y la ficha (la lista se enlaza por Precios online)", () => {
+    expect(cuerpoDePrecios({ destacarEnCatalogo: true, mostrarEnFicha: true })).toEqual({
       destacarEnCatalogo: true,
       mostrarEnFicha: true,
-    })
-  })
-  it("una lista elegida viaja con su id", () => {
-    expect(cuerpoDePrecios({ idListaPrecios: "3", destacarEnCatalogo: false, mostrarEnFicha: false })).toEqual({
-      idListaPrecios: "3",
-      destacarEnCatalogo: false,
-      mostrarEnFicha: false,
     })
   })
 })

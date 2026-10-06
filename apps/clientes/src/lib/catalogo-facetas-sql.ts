@@ -19,7 +19,7 @@
  */
 import { and, or, sql, type SQL } from "drizzle-orm";
 import { crmAtributos } from "@/db/crm";
-import { RANGOS, type ClaveMedida } from "./catalogo-atributos-medida";
+import { rangoDeClave } from "./catalogo-atributos-medida";
 import { TIPO, type ClaveEstructurada } from "./catalogo-caracteristicas";
 import { leerCar, leerIdCar } from "./catalogo-car";
 import { REGISTRO, RE_VALOR_CAR, claveFacetable, type EntradaFacetas } from "./catalogo-facetas-registro";
@@ -103,7 +103,7 @@ export function columnasCumpleSql(ctx: ContextoCar, condiciones: ReadonlyMap<str
 /** Claves de la consulta: las del registro, con su control, si son numéricas y su rango válido. */
 function registroValuesSql(): SQL {
   const filas = REGISTRO.map((c) => {
-    const rango = RANGOS[c.clave as ClaveMedida];
+    const rango = rangoDeClave(c.clave);
     const num = TIPO[c.clave] === "num";
     return sql`(${c.clave}::text, ${c.control}::text, ${num}::boolean, ${rango?.[0] ?? null}::numeric, ${rango?.[1] ?? null}::numeric)`;
   });

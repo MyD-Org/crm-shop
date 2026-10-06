@@ -29,6 +29,8 @@ export const CLAVES_ESTRUCTURADAS = [
   "leds_m",
   "potencia_w_m",
   "leds_rollo",
+  "diametro_mm",
+  "ancho_mm",
 ] as const;
 export type ClaveEstructurada = (typeof CLAVES_ESTRUCTURADAS)[number];
 
@@ -59,6 +61,8 @@ export const TIPO: Record<ClaveEstructurada, "num" | "texto"> = {
   leds_m: "num",
   potencia_w_m: "num",
   leds_rollo: "num",
+  diametro_mm: "num",
+  ancho_mm: "num",
 };
 
 /** Un valor tal como viaja en la consulta: `n` = valor_num, `t` = valor_texto. */
@@ -114,6 +118,8 @@ export const ETIQUETA: Record<ClaveEstructurada, string> = {
   leds_m: "LED por metro",
   potencia_w_m: "Potencia por metro",
   leds_rollo: "LED por rollo",
+  diametro_mm: "Diámetro",
+  ancho_mm: "Ancho",
 };
 
 /** Tipo de luz (clave `tono`): blanca, de color o RGB. Mismo vocabulario que el CRM. */
@@ -211,6 +217,10 @@ export function formatoValor(clave: ClaveEstructurada, v: ValorEstructurado | un
       return v.n != null ? `${num2(v.n)} W/m` : null;
     case "leds_rollo":
       return v.n != null ? `${num2(v.n)} LED por rollo` : null;
+    case "diametro_mm":
+      return v.n != null ? `${num2(v.n)} mm` : null;
+    case "ancho_mm":
+      return v.n != null ? `${num2(v.n)} mm` : null;
   }
 }
 
@@ -245,6 +255,7 @@ export function atributosParaAgente(a: AtributosEstructurados | undefined): Reco
  * Prioridad de los chips de la card `spec`: las cinco de siempre primero (los casos existentes no
  * cambian) y después las eléctricas/dimensionales. Color, curva y montaje no son chips: se leen en
  * la ficha; el tono y el zócalo ya salen como atributos del diccionario ("Luz cálida", "Rosca E27").
+ * Diámetro y ancho tampoco: "25 mm" suelto no dice de qué es; se leen en la tabla de la ficha y en el filtro.
  */
 const CLAVES_CHIP = [
   "potencia_w",

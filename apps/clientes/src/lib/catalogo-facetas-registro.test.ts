@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import fixture from "../db/__fixtures__/atributos-claves.json";
 import { CLAVES_ESTRUCTURADAS } from "./catalogo-caracteristicas";
-import { RANGOS } from "./catalogo-atributos-medida";
+import { RANGOS, RANGOS_SOLO_FACETA, rangoDeClave } from "./catalogo-atributos-medida";
 import { REGISTRO, UMBRAL_COBERTURA, VISIBLES, claveFacetable, elegirFacetas, etiquetaValor, type EntradaFacetas } from "./catalogo-facetas-registro";
 
 /** Distribuciones sintéticas: ningún dato real de clientes. */
@@ -20,7 +21,7 @@ describe("REGISTRO", () => {
   it("lista las claves facetables y deja afuera medidas_mm, leds_* y potencia_w_m", () => {
     const facetables = REGISTRO.map((c) => c.clave);
     expect(facetables).toEqual(
-      expect.arrayContaining(["polos", "curva", "corriente_a", "poder_corte_ka", "sensibilidad_ma", "tension_v", "ip", "temperatura_k", "zocalo", "tono", "color", "montaje", "angulo_grados", "seccion_mm2", "potencia_w", "flujo_lm", "largo_m"]),
+      expect.arrayContaining(["polos", "curva", "corriente_a", "poder_corte_ka", "sensibilidad_ma", "tension_v", "ip", "temperatura_k", "zocalo", "tono", "color", "montaje", "angulo_grados", "seccion_mm2", "potencia_w", "flujo_lm", "largo_m", "diametro_mm", "ancho_mm"]),
     );
     for (const fuera of ["medidas_mm", "leds_m", "potencia_w_m", "leds_rollo"]) expect(facetables).not.toContain(fuera);
   });
@@ -273,5 +274,57 @@ describe("elegirFacetas: overrides por categoría", () => {
   it("una clave activa se muestra aunque la categoría la oculte (para poder quitarla)", () => {
     const base = entrada({ filas: filas("color", { blanco: 50, negro: 50 }), denominadores: { color: 100 }, categoria: "X", activas: ["color"] });
     expect(claves(elegirFacetas(base, { x: { ocultar: ["color"] } }))).toEqual(["color"]);
+  });
+});
+
+describe("diametro_mm y ancho_mm (caños y bandejas)", () => {
+  it("son facetas de lista, en mm, con el título del producto", () => {
+    expect(claveFacetable("diametro_mm")).toMatchObject({ control: "lista", titulo: "Diámetro", unidad: "mm" });
+    expect(claveFacetable("ancho_mm")).toMatchObject({ control: "lista", titulo: "Ancho", unidad: "mm" });
+  });
+
+  it("su rango válido es el del CRM (el fixture de claves) y no contamina RANGOS del buscador", () => {
+    expect(RANGOS_SOLO_FACETA).toEqual(fixture.rangos_solo_faceta);
+    expect(rangoDeClave("diametro_mm")).toEqual([5, 200]);
+    expect(rangoDeClave("ancho_mm")).toEqual([30, 1000]);
+    expect(rangoDeClave("polos")).toEqual([1, 4]);
+    expect(rangoDeClave("tono")).toBeUndefined();
+    expect(rangoDeClave("constructor")).toBeUndefined();
+    expect(Object.keys(RANGOS)).not.toContain("diametro_mm");
+  });
+
+  it("etiquetas de valor: '25 mm', '12,5 mm', '150 mm'", () => {
+    expect(etiquetaValor("diametro_mm", "25")).toBe("25 mm");
+    expect(etiquetaValor("diametro_mm", "12.5")).toBe("12,5 mm");
+    expect(etiquetaValor("ancho_mm", "150")).toBe("150 mm");
+  });
+
+  it("se ofrecen con cobertura suficiente y más de un valor, en orden numérico", () => {
+    const r = elegirFacetas(
+      entrada({
+        filas: [...filas("diametro_mm", { "32": 10, "20": 20, "25": 15 }), ...filas("ancho_mm", { "300": 4, "100": 6, "150": 5 })],
+        denominadores: { diametro_mm: 50, ancho_mm: 15 },
+      }),
+    );
+    const por = Object.fromEntries(r.map((f) => [f.clave, f.control === "lista" ? f.items.map((i) => i.valor) : []]));
+    expect(por.diametro_mm).toEqual(["20", "25", "32"]);
+    expect(por.ancho_mm).toEqual(["100", "150", "300"]);
+  });
+
+  it("descarta valores fuera de rango (un 4 mm o un 2000 mm no es un diámetro ni un ancho)", () => {
+    const r = elegirFacetas(
+      entrada({
+        filas: [...filas("diametro_mm", { "4": 10, "20": 10, "250": 10 }), ...filas("ancho_mm", { "20": 10, "100": 10, "2000": 10 })],
+        denominadores: { diametro_mm: 30, ancho_mm: 30 },
+      }),
+    );
+    const por = Object.fromEntries(r.map((f) => [f.clave, f.control === "lista" ? f.items.map((i) => i.valor) : []]));
+    // Con un solo valor válido no hay faceta (mínimo 2 valores).
+    expect(por.diametro_mm).toBeUndefined();
+    expect(por.ancho_mm).toBeUndefined();
+  });
+
+  it("sin filas (la migración 0070 todavía no escribió nada) no se ofrece nada y no rompe", () => {
+    expect(elegirFacetas(entrada({ denominadores: { diametro_mm: 100, ancho_mm: 100 } }))).toEqual([]);
   });
 });

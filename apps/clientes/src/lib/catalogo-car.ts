@@ -11,7 +11,7 @@
  *
  * Módulo puro, sin IO.
  */
-import { RANGOS, numeroCanonico, type ClaveMedida } from "./catalogo-atributos-medida";
+import { numeroCanonico, rangoDeClave } from "./catalogo-atributos-medida";
 import { claveFacetable, etiquetaValor, valorDeListaValido, REGISTRO } from "./catalogo-facetas-registro";
 
 /** Ids `car` que se leen de una URL como máximo. */
@@ -32,7 +32,7 @@ export interface EntradaCar {
 function extremo(clave: string, texto: string): number | null {
   const n = numeroCanonico(texto);
   if (n === null) return null;
-  const valido = RANGOS[clave as ClaveMedida];
+  const valido = rangoDeClave(clave);
   return valido && (n < valido[0] || n > valido[1]) ? null : n;
 }
 
@@ -164,7 +164,7 @@ export function cambiosDeCarRango(
   limites: { min: number; max: number },
 ): string[] {
   const resto = car.filter((id) => claveDeCar(id) !== clave);
-  const valido = RANGOS[clave as ClaveMedida];
+  const valido = rangoDeClave(clave);
   // A lo sumo dos decimales: lo que admite la gramática (y lo que saca de cuenta el ruido del slider).
   const acotar = (n: number) => {
     const redondo = Math.round(n * 100) / 100;

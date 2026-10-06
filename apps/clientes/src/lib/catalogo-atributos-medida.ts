@@ -56,6 +56,26 @@ export const RANGOS: Readonly<Partial<Record<ClaveMedida, readonly [number, numb
   angulo_grados: [1, 360],
 };
 
+/** Claves que el Shop filtra y muestra pero que el buscador no lee de una consulta (no son `ClaveMedida`). */
+export type ClaveSoloFaceta = "diametro_mm" | "ancho_mm";
+
+/**
+ * Rango válido de las claves sólo facetables. Espejo de `DEFINICION_ATRIBUTOS.rango` del CRM (lo hace cumplir
+ * `db/__fixtures__/atributos-claves.json`, `rangos`). Va aparte de `RANGOS`: ése es el vocabulario del parser
+ * de consultas y se compara uno a uno con `medidas-dorados.json`.
+ */
+export const RANGOS_SOLO_FACETA: Readonly<Record<ClaveSoloFaceta, readonly [number, number]>> = {
+  diametro_mm: [5, 200],
+  ancho_mm: [30, 1000],
+};
+
+/** Rango válido de cualquier clave numérica que el Shop sabe validar (medidas del buscador y sólo facetables). */
+export function rangoDeClave(clave: string): readonly [number, number] | undefined {
+  if (Object.hasOwn(RANGOS, clave)) return RANGOS[clave as ClaveMedida];
+  if (Object.hasOwn(RANGOS_SOLO_FACETA, clave)) return RANGOS_SOLO_FACETA[clave as ClaveSoloFaceta];
+  return undefined;
+}
+
 /**
  * Claves DISCRETAS cuyo orden es estricto: un producto que cumple la medida va SIEMPRE antes que uno cuyo dato la
  * contradice (con el dato de otro valor), y el que no tiene dato queda en el medio. Sólo ordena: nunca excluye.

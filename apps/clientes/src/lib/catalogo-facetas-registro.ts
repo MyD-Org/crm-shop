@@ -4,14 +4,14 @@
  * Módulo puro, sin IO. Dos piezas:
  *  - `REGISTRO`: qué claves estructuradas (`catalog_atributos`) se pueden ofrecer como filtro, con su
  *    título, unidad, control (lista de valores o rango), orden y umbrales. Una clave que no está acá
- *    NUNCA se ofrece (medidas_mm, leds_*, potencia_w_m...).
+ *    NUNCA se ofrece (medidas_mm, leds_*, potencia_w_m...). diametro_mm y ancho_mm sí (migración 0070 del CRM).
  *  - `elegirFacetas`: dada la distribución de valores del conjunto que se está viendo, decide QUÉ
  *    claves mostrar (cobertura suficiente, más de un valor, tope de grupos) y con qué valores.
  *
  * El conteo y los denominadores los calcula la consulta (catalogo-facetas-sql.ts); acá solo se decide.
  * Umbrales: 30 % de cobertura (calibrado en P3), 2 valores y 6 grupos.
  */
-import { RANGOS, ESPECIFICACION, CURVAS, ZOCALOS, CLAVES_ENTERAS, numeroCanonico, type ClaveMedida } from "./catalogo-atributos-medida";
+import { ESPECIFICACION, CURVAS, ZOCALOS, CLAVES_ENTERAS, numeroCanonico, rangoDeClave, type ClaveMedida } from "./catalogo-atributos-medida";
 import { normalizarTexto } from "./catalogo-atributos";
 import { TIPO, type ClaveEstructurada } from "./catalogo-caracteristicas";
 
@@ -106,6 +106,9 @@ export const REGISTRO: readonly ClaveFacetable[] = [
   { clave: "poder_corte_ka", ...deMedida("poder_corte_ka"), control: "lista", orden: 50, grupo: "electricas" },
   { clave: "sensibilidad_ma", ...deMedida("sensibilidad_ma"), control: "lista", orden: 60, grupo: "electricas" },
   { clave: "seccion_mm2", ...deMedida("seccion_mm2"), control: "lista", orden: 70, grupo: "fisicas" },
+  // Caños, tubos y accesorios de caño (diámetro) y bandejas portacables (ancho): valores comerciales discretos, de ahí lista.
+  { clave: "diametro_mm", titulo: "Diámetro", unidad: "mm", control: "lista", orden: 72, grupo: "fisicas" },
+  { clave: "ancho_mm", titulo: "Ancho", unidad: "mm", control: "lista", orden: 74, grupo: "fisicas" },
   { clave: "tension_v", ...deMedida("tension_v"), control: "lista", orden: 80, grupo: "electricas" },
   { clave: "zocalo", ...deMedida("zocalo"), control: "lista", orden: 90, valores: mapa(ZOCALOS, mayuscula), grupo: "iluminacion" },
   { clave: "temperatura_k", ...deMedida("temperatura_k"), control: "lista", orden: 100, grupo: "iluminacion" },
@@ -166,7 +169,7 @@ export function valorDeListaValido(clave: string, valor: string): boolean {
   if (TIPO[clave as ClaveEstructurada] !== "num") return true;
   const n = numeroCanonico(valor);
   if (n === null) return false;
-  const rango = RANGOS[clave as ClaveMedida];
+  const rango = rangoDeClave(clave);
   if (rango && (n < rango[0] || n > rango[1])) return false;
   return !(CLAVES_ENTERAS as readonly string[]).includes(clave) || Number.isInteger(n);
 }
@@ -220,7 +223,7 @@ function facetaDeLista(def: ClaveFacetable, e: EntradaFacetas, activa: boolean):
 }
 
 function facetaDeRango(def: ClaveFacetable, e: EntradaFacetas, activa: boolean): FacetaClave | null {
-  const valido = RANGOS[def.clave as ClaveMedida];
+  const valido = rangoDeClave(def.clave);
   // Los extremos que vienen de la consulta se acotan al rango válido: un valor suelto (un 250000 W) no estira el slider.
   let min = Infinity;
   let max = -Infinity;

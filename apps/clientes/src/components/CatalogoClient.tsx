@@ -33,7 +33,7 @@ import { enviarBusquedaEnviada, enviarClickResultado } from "@/lib/busqueda-v2/t
 import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
 import { anotarBusqueda } from "@/lib/iniciativa/motor";
 import { useChatIa } from "@/hooks/useChatIa";
-import { mejorOpcionCuotas, type OpcionCuotas } from "@/lib/cuotas-sin-interes";
+import { mejorCuotaProducto, type OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { sinResultadosPorLocal } from "@/lib/catalogo-sin-resultados";
 import { olvidarLocalRecordado } from "@/lib/local-recordado";
 
@@ -184,7 +184,7 @@ export function CatalogoClient({
   const cuotasPorProducto = useMemo(() => {
     const m = new Map<string, OpcionCuotas>();
     for (const p of productosCuenta) {
-      const mejor = mejorOpcionCuotas(p.cuotasSinInteres?.opciones);
+      const mejor = mejorCuotaProducto(p.cuotasSinInteres);
       if (mejor) m.set(p.id, mejor);
     }
     return m;

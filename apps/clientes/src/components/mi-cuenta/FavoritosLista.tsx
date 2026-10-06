@@ -14,7 +14,7 @@ import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
 import { aplicarEstadoPrecio } from "@/lib/precios-cuenta-estado";
 import { TarjetaConsulte, TarjetaPrecioPendiente } from "@/components/TarjetasPrecioCuenta";
 import { etiquetaStock, maxCantidad, mostrarStockEnCard } from "@/lib/catalogo-vista";
-import { mejorOpcionCuotas } from "@/lib/cuotas-sin-interes";
+import { mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
 import { visiblesEnLista } from "@/lib/favoritos-cliente";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
@@ -109,7 +109,7 @@ export function FavoritosLista({ productos }: { productos: Product[] }) {
           installments={
             <>
               <PrecioMedioCard medio={p.precioMedio} />
-              <CuotasCard opcion={mejorOpcionCuotas(p.cuotasSinInteres?.opciones)} />
+              <CuotasCard opcion={mejorCuotaProducto(p.cuotasSinInteres)} />
             </>
           }
           cornerAction={<BotonFavorito productId={p.id} size="sm" />}

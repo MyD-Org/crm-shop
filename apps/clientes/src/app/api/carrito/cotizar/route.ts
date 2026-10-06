@@ -15,7 +15,7 @@ import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { condicionesAplicables, cuotasElegidas, proximoEscalon, repartirCuotas } from "@/lib/cuotas-sin-interes";
+import { condicionesAplicables, cuotasElegidas, montoPorCuota, proximoEscalon } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
 import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
@@ -186,13 +186,7 @@ export async function POST(req: Request) {
               ].map(async (c) => {
                 const q = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: c.idListaPrecios });
                 if (q.hayProblemas || !(q.total > 0)) return null;
-                const partes = repartirCuotas(q.total, c.cuotas);
-                return {
-                  cuotas: c.cuotas,
-                  total: q.total,
-                  montoCuota: partes[partes.length - 1],
-                  primeraCuota: partes[0],
-                };
+                return { cuotas: c.cuotas, total: q.total, montoCuota: montoPorCuota(q.total, c.cuotas) };
               }),
             )
           )

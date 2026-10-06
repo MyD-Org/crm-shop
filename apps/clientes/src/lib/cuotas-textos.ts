@@ -16,24 +16,20 @@ export const TEXTOS_CUOTAS = {
   verMediosDePago: "Ver medios de pago",
   tituloModal: "Medios de pago",
   descripcionModal: (precio: number) => `Opciones de pago para ${fmtPrecio(precio)}`,
+  /** Título del bloque único del modal (no nombra al procesador). */
+  tituloTarjeta: "Tarjeta de crédito o débito",
   unPago: "1 pago",
   precioContado: "Precio contado",
   total: "Total",
   sinInteres: "Sin interés",
-  /** Encabezado del bloque del modal: "Tarjetas de crédito (Mercado Pago)". */
-  tituloMedio: (nombre: string) => `Tarjetas de crédito (${nombre})`,
-
   /** "6 cuotas sin interés de $20.000". */
   linea: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}`,
 
   /**
-   * Cuotas de una fila del modal: "6 cuotas de $20.000". Si el total no divide exacto, la primera
-   * absorbe el resto de centavos y se dice: "3 cuotas de $33,33 (la primera, $33,34)".
+   * Cuotas de una fila del modal: "6 cuotas de $20.000". El monto va redondeado al centavo hacia
+   * arriba; el banco decide dónde van los centavos y el total exacto está al lado.
    */
-  filaCuotas: (cuotas: number, montoCuota: number, primeraCuota: number = montoCuota) =>
-    primeraCuota === montoCuota
-      ? `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`
-      : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)} (la primera, ${fmtPrecio(primeraCuota)})`,
+  filaCuotas: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
 
   /** "Hasta 6 cuotas sin interés". */
   hasta: (cuotas: number) => `Hasta ${cuotasDe(cuotas)} sin interés`,

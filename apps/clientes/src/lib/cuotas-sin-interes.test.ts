@@ -6,50 +6,41 @@ import {
   idListaDeCuotas,
   mejorOpcionCuotas,
   opcionesCuotas,
-  repartirCuotas,
+  montoPorCuota,
+  mejorCuotaProducto,
+  opcionesCombinadas,
   type MedioCuotas,
 } from "./cuotas-sin-interes";
 import type { AlegraPrice } from "./alegra";
 
-const suma = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) * 100) / 100;
-
-describe("repartirCuotas (cuota = total de la lista / N, sin recargo)", () => {
-  it("división exacta: 1.200,00 en 6 son seis cuotas de 200,00", () => {
-    expect(repartirCuotas(1200, 6)).toEqual([200, 200, 200, 200, 200, 200]);
+describe("montoPorCuota (total / N redondeado al centavo hacia arriba)", () => {
+  it("división exacta: 1.200,00 en 6 son 200,00", () => {
+    expect(montoPorCuota(1200, 6)).toBe(200);
   });
 
-  it("el resto de centavos va a la primera cuota: 100,00 en 3 = 33,34 + 33,33 + 33,33", () => {
-    expect(repartirCuotas(100, 3)).toEqual([33.34, 33.33, 33.33]);
+  it("redondea hacia arriba: 100,00 en 3 = 33,34 (no 33,33)", () => {
+    expect(montoPorCuota(100, 3)).toBe(33.34);
+    expect(montoPorCuota(121, 3)).toBe(40.34);
+    expect(montoPorCuota(0.1, 3)).toBe(0.04);
   });
 
-  it("resto de más de un centavo: todo a la primera", () => {
-    expect(repartirCuotas(100.02, 4)).toEqual([25.02, 25, 25, 25]);
-    expect(repartirCuotas(0.1, 3)).toEqual([0.04, 0.03, 0.03]);
-  });
-
-  it("la suma de las cuotas siempre iguala el total (sin ruido de coma flotante)", () => {
+  it("nunca queda por debajo del total / N ni lo pasa por un centavo o más", () => {
     for (const total of [0.01, 19.99, 99999.99, 123456.78, 1.1, 2.2]) {
       for (const n of [2, 3, 6, 9, 12, 18, 24]) {
-        const cuotas = repartirCuotas(total, n);
-        expect(cuotas).toHaveLength(n);
-        expect(suma(cuotas)).toBe(Math.round(total * 100) / 100);
-        // La primera nunca es menor que las demás y difieren a lo sumo en n-1 centavos.
-        expect(cuotas[0]).toBeGreaterThanOrEqual(cuotas[1]);
-        expect(Math.round((cuotas[0] - cuotas[1]) * 100)).toBeLessThan(n);
+        const m = montoPorCuota(total, n);
+        const exacto = Math.round(total * 100) / n;
+        expect(m * 100).toBeGreaterThanOrEqual(exacto - 1e-9);
+        expect(m * 100 - exacto).toBeLessThan(1);
       }
     }
   });
 
-  it("cuotas null o 1 = un pago", () => {
-    expect(repartirCuotas(100, 1)).toEqual([100]);
-    expect(repartirCuotas(100, null)).toEqual([100]);
-  });
-
-  it("valores inválidos no tiran: un pago", () => {
-    expect(repartirCuotas(100, 0)).toEqual([100]);
-    expect(repartirCuotas(100, -3)).toEqual([100]);
-    expect(repartirCuotas(100, 2.5)).toEqual([100]);
-    expect(repartirCuotas(Number.NaN, 3)).toEqual([0]);
+  it("cuotas null o 1 = el total; inválidos no tiran", () => {
+    expect(montoPorCuota(100, 1)).toBe(100);
+    expect(montoPorCuota(100, null)).toBe(100);
+    expect(montoPorCuota(100, 0)).toBe(100);
+    expect(montoPorCuota(100, 2.5)).toBe(100);
+    expect(montoPorCuota(Number.NaN, 3)).toBe(0);
   });
 });
 
@@ -72,18 +63,18 @@ describe("opcionesCuotas (por producto)", () => {
   it("arma una opción por condición, ascendente, con el total de SU lista con IVA", () => {
     const o = opcionesCuotas(precios, 21, medio);
     expect(o.map((x) => x.cuotas)).toEqual([3, 6]);
-    expect(o[0]).toMatchObject({ cuotas: 3, total: 1089, montoCuota: 363, primeraCuota: 363, sinInteres: true });
-    expect(o[1]).toMatchObject({ cuotas: 6, total: 1161.6, montoCuota: 193.6, primeraCuota: 193.6 });
+    expect(o[0]).toMatchObject({ cuotas: 3, total: 1089, montoCuota: 363, sinInteres: true });
+    expect(o[1]).toMatchObject({ cuotas: 6, total: 1161.6, montoCuota: 193.6 });
   });
 
-  it("si no divide exacto, montoCuota es la cuota común y primeraCuota la que absorbe el resto", () => {
+  it("si no divide exacto, montoCuota se redondea hacia arriba", () => {
     const o = opcionesCuotas(prices({ REF: 200, L3: 100 }, "REF"), 21, {
       slug: "mercadopago",
       nombre: "Mercado Pago",
       condiciones: [{ cuotas: 3, idListaPrecios: "L3" }],
     });
-    // 100,00 + 21 % = 121,00 → 40,34 + 40,33 + 40,33
-    expect(o[0]).toMatchObject({ total: 121, montoCuota: 40.33, primeraCuota: 40.34 });
+    // 100,00 + 21 % = 121,00 → 40,33333… → 40,34
+    expect(o[0]).toMatchObject({ total: 121, montoCuota: 40.34 });
   });
 
   it("una lista que no es MENOR que la general cae a la general (misma regla que la cotización)", () => {
@@ -135,6 +126,39 @@ describe("mejorOpcionCuotas", () => {
   it("sin opciones, null", () => {
     expect(mejorOpcionCuotas([])).toBeNull();
     expect(mejorOpcionCuotas(undefined)).toBeNull();
+  });
+});
+
+describe("mejor opción y opciones combinadas entre medios", () => {
+  const op = (cuotas: number, total: number) => ({ cuotas, total, montoCuota: montoPorCuota(total, cuotas), sinInteres: true as const });
+  const cuotas = {
+    medios: [
+      { slug: "mp", medio: "MP", opciones: [op(3, 900), op(6, 960)] },
+      { slug: "pw", medio: "PW", opciones: [op(3, 880), op(12, 1200)] },
+    ],
+  };
+
+  it("mejor: la de más cuotas entre todos los medios", () => {
+    expect(mejorCuotaProducto(cuotas)?.cuotas).toBe(12);
+  });
+
+  it("empate de cantidad: la de menor cuota", () => {
+    const e = { medios: [{ slug: "a", medio: "A", opciones: [op(6, 1200)] }, { slug: "b", medio: "B", opciones: [op(6, 1140)] }] };
+    expect(mejorCuotaProducto(e)?.montoCuota).toBe(190);
+  });
+
+  it("sin medios, null", () => {
+    expect(mejorCuotaProducto(undefined)).toBeNull();
+    expect(mejorCuotaProducto({ medios: [] })).toBeNull();
+  });
+
+  it("combinadas: una fila por cantidad, ascendentes; repetida = la de menor total", () => {
+    expect(opcionesCombinadas(cuotas).map((o) => [o.cuotas, o.total])).toEqual([
+      [3, 880],
+      [6, 960],
+      [12, 1200],
+    ]);
+    expect(opcionesCombinadas(undefined)).toEqual([]);
   });
 });
 

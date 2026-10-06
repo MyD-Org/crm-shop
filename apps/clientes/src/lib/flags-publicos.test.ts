@@ -67,12 +67,14 @@ describe("flagsPublicos", () => {
     // La lectura se deduplica por request (`cache` de React): se reimporta para un request nuevo.
     vi.resetModules();
     const { flagsPublicos: nuevo } = await import("./flags-publicos");
-    expect((await nuevo()).mediosPrecio.cuotas).toEqual({
-      slug: "mercadopago",
-      nombre: "MERCADOPAGO",
-      idListaPagoUnico: null,
-      condiciones: [{ cuotas: 6, idListaPrecios: "L6" }],
-    });
+    expect((await nuevo()).mediosPrecio.cuotas).toEqual([
+      {
+        slug: "mercadopago",
+        nombre: "MERCADOPAGO",
+        idListaPagoUnico: null,
+        condiciones: [{ cuotas: 6, idListaPrecios: "L6" }],
+      },
+    ]);
   });
 
   it("medios ilegibles: degrada a vacío sin romper", async () => {

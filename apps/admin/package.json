@@ -19,6 +19,8 @@
     "tenant:rename": "tsx --env-file-if-exists=.env.local scripts/rename-tenant.ts",
     "alegra:smoke": "tsx --env-file-if-exists=.env.local scripts/alegra-smoke.ts",
     "catalogo:atributos-backfill": "tsx --env-file-if-exists=.env.local scripts/backfill-catalogo-atributos.ts",
+    "catalogo:atributos-auditoria": "tsx scripts/atributos-auditoria.ts",
+    "catalogo:seccion-cables-backfill": "tsx scripts/backfill-seccion-cables.ts",
     "catalogo:leer-fichas": "tsx --env-file-if-exists=.env.local scripts/leer-fichas-catalogo.ts"
   },
   "dependencies": {

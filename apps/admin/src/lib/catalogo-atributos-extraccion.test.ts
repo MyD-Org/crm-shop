@@ -295,10 +295,78 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["CABLE 3X1.5MM2", { seccion_mm2: 1.5 }],
       ["CABLE 4 MM²", { seccion_mm2: 4 }],
       ["CABLE 3X1.5MM2 ROLLO 100M", { seccion_mm2: 1.5, largo_m: 100 }],
-      ["CABLE 2,5 MM", {}],
       ["CANO 20MM", {}],
-      ["CABLE 3X1.5", {}],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
+  })
+
+  // La sección sin "mm2" solo se lee en un CABLE (por el nombre) y dentro de la serie comercial.
+  describe("seccion_mm2 de un cable sin mm2 en el nombre", () => {
+    it.each([
+      ["CABLE 2,5MM", { seccion_mm2: 2.5 }],
+      ["CABLE 2,5 MM", { seccion_mm2: 2.5 }],
+      ["CABLE 2.5 MM2", { seccion_mm2: 2.5 }],
+      ["CABLE 2,5MM²", { seccion_mm2: 2.5 }],
+      ["CABLE 4MM", { seccion_mm2: 4 }],
+      ["CABLE 4MM2", { seccion_mm2: 4 }],
+      ["CABLE 3X2,5", { seccion_mm2: 2.5 }],
+      ["CABLE 3X2,5MM", { seccion_mm2: 2.5 }],
+      ["CABLE 2X1.5", { seccion_mm2: 1.5 }],
+      ["CABLE 3X1.5", { seccion_mm2: 1.5 }],
+      ["CABLE 2 X 1,5", { seccion_mm2: 1.5 }],
+      ["CABLE TIPO TALLER 2X0.75 ROLLO 100M", { seccion_mm2: 0.75, largo_m: 100 }],
+      ["CABLE SUBTERRANEO 4X6", { seccion_mm2: 6 }],
+      ["CABLE SUBTERRÁNEO 3X10MM", { seccion_mm2: 10 }],
+      ["CABLE UNIPOLAR 2.5", { polos: 1, seccion_mm2: 2.5 }],
+      ["CABLE UNIPOLAR 2.5MM", { polos: 1, seccion_mm2: 2.5 }],
+      ["UNIPOLAR 1,5 MM VERDE/AMARILLO", { polos: 1, seccion_mm2: 1.5 }],
+      ["BIPOLAR 1MM", { polos: 2, seccion_mm2: 1 }],
+      ["CONDUCTOR 16MM", { seccion_mm2: 16 }],
+      ["CORDON 2X1", { seccion_mm2: 1 }],
+      ["CABLE 2,5MM ROLLO 100M", { seccion_mm2: 2.5, largo_m: 100 }],
+    ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
+
+    it("con mm2 explícito vale lo de siempre (no se pisa con la lectura del cable)", () => {
+      expect(nuevas("CABLE 3X1.5MM2")).toEqual({ seccion_mm2: 1.5 })
+      expect(nuevas("CABLE 4 MM²")).toEqual({ seccion_mm2: 4 })
+    })
+
+    it.each([
+      // No es un cable: nunca hay sección.
+      ["CANO 20MM"],
+      ["CAÑO CORRUGADO 20MM"],
+      ["TORNILLO 4MM"],
+      ["TORNILLO PARKER 4X40"],
+      ["LAMPARA TUBO LED 120CM 18W"],
+      ["BROCA 6MM"],
+      ["PANEL LED 60X60"],
+      // Accesorios de cable: la medida es del accesorio.
+      ["PRENSACABLE 20MM"],
+      ["GRAMPA PARA CABLE 6MM"],
+      ["ABRAZADERA PARA CABLE 10MM"],
+      ["CABLE CANAL 20X10"],
+      ["CABLECANAL 40X25"],
+      ["TERMINAL PARA CABLE 4MM"],
+      ["BANDEJA PORTACABLE 100X50"],
+      // Cable pero no de cobre: el mm es un diámetro.
+      ["CABLE DE ACERO 4MM"],
+      ["CABLE GALVANIZADO 5MM"],
+      // Telecom: no hay sección.
+      ["CABLE UTP CAT 6 4X2X0.5"],
+      ["CABLE COAXIL RG6 7MM"],
+      // Fuera de la serie comercial o de los conductores plausibles.
+      ["CABLE 3MM"],
+      ["CABLE 7X9"],
+      ["CABLE 12X2,5"],
+      // Cantidades o largos que no son sección.
+      ["CABLE 10 METROS"],
+      ["CABLE UNIPOLAR 100 MTS"],
+      ["CABLE 25 PARES"],
+      // Dos secciones distintas: ante la duda, nada.
+      ["CABLE 3X2,5 + 1X1,5"],
+      ["CABLE 2,5MM / 4MM"],
+    ])("sin sección: %s", (nombre) => {
+      expect(extraer(nombre as string).seccion_mm2).toBeUndefined()
+    })
   })
 
   describe("medidas_mm", () => {
@@ -310,9 +378,9 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["GABINETE 30X40 CM", { medidas_mm: "300x400" }],
       ["TUBO 2X36W", {}],
       ["LAMPARA 4X10W", {}],
-      ["CABLE 3X1.5", {}],
+      ["CABLE 3X1.5", { seccion_mm2: 1.5 }],
       ["PANEL 60X60", {}],
-      ["CABLE 4X2,5 MM", {}],
+      ["CABLE 4X2,5 MM", { seccion_mm2: 2.5 }],
       ["CABLE 100X100X50MTS", {}],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
   })
@@ -340,7 +408,7 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["LLAVE D32", { curva: "d", corriente_a: 32 }],
       ["TERMICA C16 2P", { curva: "c", corriente_a: 16, polos: 2 }],
       ["TERMICA CURVA K", {}],
-      ["CABLE C 2X1", {}],
+      ["CABLE C 2X1", { seccion_mm2: 1 }],
       ["PERFIL D 20", {}],
       ["LAMPARA B22 9W", {}],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))

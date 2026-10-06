@@ -26,7 +26,8 @@
  * por metro nunca es `potencia_w`). Migración 0059: leds_rollo ("300 LED", total del rollo; sólo si el nombre dice "por rollo",
  * "x rollo", "totales" o "total"). Se leen en un pipeline
  * CON CONSUMO (cada regla borra lo que leyó para que la siguiente no lo reinterprete: "10kA" no es
- * corriente, "3X1.5MM2" no son medidas). Ante la duda no devuelven nada; dos valores distintos de
+ * corriente, "3X1.5MM2" no son medidas). `seccion_mm2` también se lee sin "mm2" ("2,5MM", "3X2,5", "UNIPOLAR 2.5")
+ * pero SOLO en un cable por el nombre y con valores de la serie comercial (`seccionDeCable`). Ante la duda no devuelven nada; dos valores distintos de
  * la misma clave en el nombre = ninguno. Los vocabularios cerrados (color, montaje, curva) viven
  * acá, en código, no en el CHECK de la base: ampliarlos no necesita migración.
  *
@@ -405,6 +406,64 @@ const SENSIBILIDAD_CONTEXTO = /diferencial|disyuntor|rcd|\bdif\b|sensibilidad/
 /** Telecom / cableado de datos: "4P" son pares y "CAT 6A" no son amperes. */
 const CONTEXTO_TELECOM = /(?:^|[^a-z0-9])(?:utp|ftp|sftp|rj ?\d+|cat ?[5-8]|coaxil|hdmi|usb|par(?:es)?(?![a-z]))/
 
+/**
+ * Sección de un CABLE cuando el nombre no dice "mm2" ("CABLE 2,5MM", "CABLE 3X2,5", "TIPO TALLER 2X1.5",
+ * "UNIPOLAR 2.5"). Es la lectura más riesgosa del extractor ("4MM" en un tornillo es un diámetro), así que
+ * pide TODO esto y, ante la duda, no devuelve nada:
+ * - el nombre dice que es un cable/conductor (`CONTEXTO_CABLE`) y no un accesorio, un cable de acero, de
+ *   datos o una protección (`NO_ES_CABLE`, `CONTEXTO_TELECOM`, protección/diferencial);
+ * - el valor está en la serie comercial (`SERIE_SECCION_MM2`) y la cantidad de conductores es 1 a 5;
+ * - todas las coincidencias dan el mismo valor (dos secciones distintas ⇒ nada) y ninguna cae fuera de la serie.
+ * Con "mm2" explícito no se llega acá (lo lee `RE_SECCION`).
+ */
+const CONTEXTO_CABLE =
+  /(?:^|[^0-9a-z])(?:cables?|conductor(?:es)?|cordon(?:es)?|(?:uni|bi|tri|tetra)polar(?:es)?|tipo taller|subterraneo)(?![0-9a-z])/
+const NO_ES_CABLE =
+  /(?:^|[^0-9a-z])(?:para|p) (?:cables?|conductor)|grampa|abrazadera|terminal|prensa|pasacable|portacable|canal|bandeja|cano|tubo|conector|ficha|precinto|zapata|borne|puntera|ojal|pinza|cortacable|pelacable|cinta|funda|acero|galvaniz|sintetic|guia|tensor|rele|contactor|fusible|guardamotor/
+/** Serie comercial (IEC 60228) de secciones, en mm². */
+const SERIE_SECCION_MM2 = new Set([0.5, 0.75, 1, 1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120, 150, 185, 240, 300, 400, 500, 630])
+/** Lo que no puede seguir a una sección: otra magnitud, un rango, una suma o más decimales. */
+const COLA_SECCION = "(?![0-9a-z²/+x×-]|[.,]\\d)"
+const RE_SECCION_CABLE_MM = new RegExp(`${INIC}(?:([1-5]) ?x ?)?(${NUM}) ?mm${COLA_SECCION}`)
+const RE_SECCION_CABLE_NXS = new RegExp(`${INIC}([1-5]) ?x ?(${NUM})${COLA_SECCION}`)
+// "UNIPOLAR 2.5": el número sin unidad pegado al tipo de cable (y sin otra unidad detrás: "UNIPOLAR 100 MTS").
+// Grupo 1 vacío (el borde que `consumir` conserva): sólo se consume el número, el "unipolar" queda para `polos`.
+const RE_SECCION_CABLE_TIPO = new RegExp(
+  `()(?<=(?:^|[^0-9a-z])(?:uni|bi|tri|tetra)polar(?:es)? )(${NUM})(?! ?(?:mm|m|mt|mts|metros?|a|amps?|v|w|kv|hilos?|cm|pares?|x)(?![a-z]))${COLA_SECCION}`,
+)
+
+/** ¿El NOMBRE es el de un cable/conductor (y no un accesorio, un cable de acero o de datos)? Lo usa la auditoría. */
+export function pareceCable(nombre: string, descripcion?: string | null): boolean {
+  const t = normalizar(`${nombre ?? ""} ${descripcion ?? ""}`).replace(/\s+/g, " ").trim()
+  return (
+    CONTEXTO_CABLE.test(t) &&
+    !NO_ES_CABLE.test(t) &&
+    !CONTEXTO_TELECOM.test(t) &&
+    !CONTEXTO_PROTECCION.test(t) &&
+    !SENSIBILIDAD_CONTEXTO.test(t)
+  )
+}
+
+function seccionDeCable(t: string, resto: string): { valor: number | null; resto: string } {
+  const sinCambios = { valor: null, resto }
+  if (!CONTEXTO_CABLE.test(t) || NO_ES_CABLE.test(t) || CONTEXTO_TELECOM.test(t)) return sinCambios
+  if (CONTEXTO_PROTECCION.test(t) || SENSIBILIDAD_CONTEXTO.test(t)) return sinCambios // protecciones: "bipolar 2x25" es una térmica
+  const valores: number[] = []
+  let r = resto
+  for (const [re, grupo] of [
+    [RE_SECCION_CABLE_MM, 3],
+    [RE_SECCION_CABLE_NXS, 3],
+    [RE_SECCION_CABLE_TIPO, 2],
+  ] as const) {
+    const c = consumir(r, re)
+    r = c.resto
+    for (const m of c.hallados) valores.push(numero(m[grupo]))
+  }
+  if (valores.length === 0) return sinCambios
+  const v = unico(valores)
+  return { valor: v != null && SERIE_SECCION_MM2.has(v) ? v : null, resto: r }
+}
+
 const POLOS_DE_PALABRA: Record<string, number> = { uni: 1, bi: 2, tri: 3, tetra: 4 }
 
 /** Dimensiones de una coincidencia de `RE_MEDIDAS` → "AxB[xC]" en mm, o null si la heurística duda. */
@@ -449,7 +508,14 @@ function extraerAmpliadas(t: string): AtributoExtraido[] {
   // 1. seccion_mm2: la sección, nunca la cantidad de conductores ("3X1.5MM2" → 1.5).
   let c = consumir(resto, RE_SECCION)
   resto = c.resto
-  num("seccion_mm2", unico(c.hallados.map((m) => numero(m[2]))))
+  if (c.hallados.length > 0) {
+    num("seccion_mm2", unico(c.hallados.map((m) => numero(m[2]))))
+  } else {
+    // Sin "mm2": sólo en un cable, y solo valores de la serie comercial.
+    const cable = seccionDeCable(t, resto)
+    resto = cable.resto
+    num("seccion_mm2", cable.valor)
+  }
 
   // 2. medidas_mm
   const medidas: string[] = []

@@ -463,6 +463,13 @@
       "when": 1792065200000,
       "tag": "0065_shop_precios_online",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1792151600000,
+      "tag": "0066_cuotas_monto_minimo",
+      "breakpoints": true
     }
   ]
 }

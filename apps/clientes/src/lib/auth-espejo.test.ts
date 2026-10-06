@@ -43,8 +43,7 @@ function responder(c: ConsultaGrabada): unknown[][] | undefined {
 let grabadora = dbGrabadora(responder);
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { setFlag } from "@/test/flags";
-import { identidadActual, idPriceListCliente } from "./auth";
+import { identidadActual } from "./auth";
 
 function filaEspejo(tipo: "corriente" | "contado", lista: string | null, estadoLista = "active") {
   return ["42", "Cliente 42 SA", "20-12345678-9", null, ["client"], lista, "Lista", estadoLista, tipo, tipo === "corriente"];
@@ -100,48 +99,5 @@ describe("identidadActual: tipo de cuenta y lista del vínculo", () => {
     espejo = Object.assign(new Error("permission denied"), { code: "42501" });
     const { cliente } = await identidadActual();
     expect(cliente).toMatchObject({ tipoCuenta: "corriente", idPriceList: "3" });
-  });
-});
-
-describe("idPriceListCliente con el flag precio-especial-cuenta apagado", () => {
-  it("devuelve undefined aunque el cliente tenga lista propia, sin tocar la base", async () => {
-    vinculo = { tipoCuenta: null, idPriceList: "3" };
-    espejo = [filaEspejo("corriente", "7")];
-    expect(await idPriceListCliente("42")).toBeUndefined();
-    expect(grabadora.consultas).toHaveLength(0);
-  });
-});
-
-describe("idPriceListCliente (carrito y pedidos, flag precio-especial-cuenta prendido)", () => {
-  beforeEach(() => setFlag("precio-especial-cuenta", true));
-
-  it("lista activa en el espejo ⇒ su id, 0 llamadas a Alegra y sin leer el snapshot", async () => {
-    vinculo = { tipoCuenta: null, idPriceList: "3" };
-    espejo = [filaEspejo("corriente", "7")];
-    expect(await idPriceListCliente("42")).toBe("7");
-    expect(getContacto).not.toHaveBeenCalled();
-    expect(grabadora.consultas.some((c) => c.sql.includes('"client_links"'))).toBe(false);
-  });
-
-  it("lista inactive en el espejo ⇒ principal (undefined)", async () => {
-    vinculo = { tipoCuenta: null, idPriceList: "3" };
-    espejo = [filaEspejo("corriente", "7", "inactive")];
-    expect(await idPriceListCliente("42")).toBeUndefined();
-  });
-
-  it("sin fila en el espejo ⇒ snapshot de client_links", async () => {
-    vinculo = { tipoCuenta: null, idPriceList: "3" };
-    expect(await idPriceListCliente("42")).toBe("3");
-    expect(getContacto).not.toHaveBeenCalled();
-  });
-
-  it("sin fila ni snapshot ⇒ undefined (lista principal)", async () => {
-    expect(await idPriceListCliente("42")).toBeUndefined();
-  });
-
-  it("el espejo falla ⇒ snapshot", async () => {
-    vinculo = { tipoCuenta: null, idPriceList: "3" };
-    espejo = new Error("timeout");
-    expect(await idPriceListCliente("42")).toBe("3");
   });
 });

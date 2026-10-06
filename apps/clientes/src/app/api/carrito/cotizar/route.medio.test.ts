@@ -1,19 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setFlag } from "@/test/flags";
 import type { MedioPago } from "@/lib/medios-pago";
 
 /**
  * La lista de precios del medio se resuelve en el servidor desde el slug (`pagoMetodo`); el body
- * nunca decide la lista ni el precio. Con el flag `precio-especial-cuenta` prendido se ignora.
+ * nunca decide la lista ni el precio. Con lista privada del comprador se ignora el medio.
  */
 let medios: MedioPago[];
 const leerMedios = vi.fn(async () => medios);
 const cotizar = vi.fn();
 
-vi.mock("@/lib/auth", () => ({
-  identidadActual: async () => ({ clerkUserId: null, cliente: null }),
-  idPriceListCliente: async () => "7",
-}));
+let cliente: { codigocliente: string } | null = null;
+let listaPrivada: string | null = null;
+vi.mock("@/lib/auth", () => ({ identidadActual: async () => ({ clerkUserId: null, cliente }) }));
+vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: async () => listaPrivada }));
 vi.mock("@/lib/cotizacion", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/cotizacion")>()),
   cotizar: (...a: unknown[]) => cotizar(...a),
@@ -51,9 +50,11 @@ const pedir = (extra: Record<string, unknown> = {}) =>
     }),
   );
 
-const opciones = (i = 0) => cotizar.mock.calls[i][1] as { idListaMedio?: string; idPriceList?: string };
+const opciones = (i = 0) => cotizar.mock.calls[i][1] as { idListaMedio?: string; idPriceList?: string; idListaPrivada?: string | null };
 
 beforeEach(() => {
+  cliente = null;
+  listaPrivada = null;
   medios = [medio({})];
   leerMedios.mockClear();
   cotizar.mockReset();
@@ -99,11 +100,20 @@ describe("POST /api/carrito/cotizar con pagoMetodo", () => {
     expect(opciones().idListaMedio).toBeUndefined();
   });
 
-  it("con el flag precio-especial-cuenta prendido se ignora la lista del medio", async () => {
-    setFlag("precio-especial-cuenta", true);
+  it("con lista privada se ignora la lista del medio y no se leen los medios", async () => {
+    cliente = { codigocliente: "42" };
+    listaPrivada = "lista-privada-a";
     await pedir({ pagoMetodo: "transferencia" });
     expect(opciones().idListaMedio).toBeUndefined();
+    expect(opciones().idListaPrivada).toBe("lista-privada-a");
     expect(leerMedios).not.toHaveBeenCalled();
+  });
+
+  it("un cliente sin lista privada conserva el precio por medio", async () => {
+    cliente = { codigocliente: "42" };
+    await pedir({ pagoMetodo: "transferencia" });
+    expect(opciones().idListaMedio).toBe("9");
+    expect(opciones().idListaPrivada).toBeNull();
   });
 
   it("sin pagoMetodo no lee medios (el carrito sin medio cotiza con la lista por defecto)", async () => {

@@ -19,6 +19,10 @@ const getProductosPorIds = vi.fn();
 vi.mock("./catalog", () => ({
   getProductosPorIds: (...args: unknown[]) => getProductosPorIds(...args),
 }));
+const preciosPrivados = vi.fn();
+vi.mock("./precios-privados-repo", () => ({
+  preciosPrivados: (...args: unknown[]) => preciosPrivados(...args),
+}));
 
 import {
   enriquecer,
@@ -31,6 +35,7 @@ import {
 beforeEach(() => {
   grabadora = dbGrabadora();
   getProductosPorIds.mockReset();
+  preciosPrivados.mockReset();
   vi.stubEnv("SHOP_TENANT_ID", "tenant-a");
 });
 
@@ -217,17 +222,30 @@ describe("enriquecer", () => {
         { id: "1", qty: 2 },
         { id: "2", qty: 1 },
       ],
-      "lista-7",
     );
-    expect(getProductosPorIds).toHaveBeenCalledWith(["1", "2"], { idPriceList: "lista-7" });
+    expect(getProductosPorIds).toHaveBeenCalledWith(["1", "2"]);
+    expect(preciosPrivados).not.toHaveBeenCalled();
     expect(r).toEqual([
       { id: "1", qty: 2, name: "Lámpara", brand: "Marca", price: 150 },
       { id: "2", qty: 1, name: "", brand: "", price: 0, faltante: true },
     ]);
   });
 
+  it("con lista privada el precio referencial es el de su lista (0 si no tiene: Consulte)", async () => {
+    getProductosPorIds.mockResolvedValue(
+      new Map([
+        ["1", { id: "1", name: "Lámpara", brand: "Marca", price: 150 }],
+        ["2", { id: "2", name: "Tubo", brand: "Marca", price: 90 }],
+      ]),
+    );
+    preciosPrivados.mockResolvedValue(new Map([["1", 175], ["2", null]]));
+    const r = await enriquecer([{ id: "1", qty: 1 }, { id: "2", qty: 1 }], "lista-privada-a");
+    expect(preciosPrivados).toHaveBeenCalledWith("lista-privada-a", ["1", "2"]);
+    expect(r.map((l) => l.price)).toEqual([175, 0]);
+  });
+
   it("carrito vacío no consulta", async () => {
-    expect(await enriquecer([], undefined)).toEqual([]);
+    expect(await enriquecer([])).toEqual([]);
     expect(getProductosPorIds).not.toHaveBeenCalled();
   });
 
@@ -246,7 +264,7 @@ describe("enriquecer", () => {
         ],
       ]),
     );
-    const r = await enriquecer([{ id: "1", qty: 2 }], undefined);
+    const r = await enriquecer([{ id: "1", qty: 2 }]);
     expect(r).toEqual([
       {
         id: "1",

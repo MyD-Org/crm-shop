@@ -75,12 +75,6 @@ describe("flagsPublicos", () => {
     });
   });
 
-  it("con precio-especial-cuenta encendido: sin líneas 'con X'", async () => {
-    mediosOfrecibles.mockResolvedValue([medio("aa", { destacarEnCatalogo: true, mostrarEnFicha: true })]);
-    setFlag("precio-especial-cuenta", true);
-    expect((await flagsPublicos()).mediosPrecio).toEqual({ destacado: null, ficha: [] });
-  });
-
   it("medios ilegibles: degrada a vacío sin romper", async () => {
     mediosOfrecibles.mockRejectedValue(new Error("base caída"));
     expect((await flagsPublicos()).mediosPrecio).toEqual({ destacado: null, ficha: [] });

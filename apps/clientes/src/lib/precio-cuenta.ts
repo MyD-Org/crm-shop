@@ -1,33 +1,28 @@
 /**
- * Precio especial de la cuenta: el de la lista de precios asignada al cliente,
- * cuando es MÁS BAJO que el de la lista general. Pura, sirve en server y cliente.
+ * Precio de la lista privada del comprador (change `listas-cuenta-corriente`), tal como lo
+ * superpone en el navegador el overlay `/api/precios-cuenta` sobre el catálogo cacheado (que
+ * siempre trae el precio público). Pura: sirve en server y cliente.
  *
- * El catálogo y la ficha salen de una caché compartida con la lista general;
- * este precio se superpone en el navegador (ver `usePreciosCuenta`). Si la
- * lista del cliente es igual o más cara, no hay nada que mostrar: tachar un
- * precio más bajo que el que se cobra confunde.
+ * A diferencia del precio especial #219 (retirado), el precio privado se muestra SIEMPRE, aunque
+ * sea mayor que el público: es el que se factura a esa cuenta. Sin precio en su lista ⇒ `null`
+ * ("Consulte"): nunca se cae al público.
  */
 
-import { precioDeLista, precioGeneral, type AlegraPrice } from "./alegra";
 import { precioFinal } from "./precio-final";
 
 export interface PrecioCuenta {
-  /** Neto (sin IVA) de la lista del cliente. */
+  /** Neto (sin IVA) de la lista privada. */
   price: number;
   /** Final con IVA. undefined = sin IVA conocido. */
   precioFinal?: number;
 }
 
-export function precioCuenta(
-  prices: AlegraPrice[] | undefined,
+/** `null` si el producto no tiene precio válido (> 0) en la lista privada. */
+export function precioPrivado(
+  neto: number | null | undefined,
   ivaPorcentaje: number | null | undefined,
-  idPriceList: string | undefined,
 ): PrecioCuenta | null {
-  if (!idPriceList || !Array.isArray(prices)) return null;
-  // Misma regla que el carrito y el pedido (`precioDeLista`).
-  const precio = precioDeLista(prices, idPriceList);
-  if (!(precio > 0) || !(precio < precioGeneral(prices))) return null;
-  const propia = { price: precio };
-  const final = precioFinal(propia.price, ivaPorcentaje);
-  return final != null ? { price: propia.price, precioFinal: final } : { price: propia.price };
+  if (neto == null || !Number.isFinite(neto) || !(neto > 0)) return null;
+  const final = precioFinal(neto, ivaPorcentaje);
+  return final != null ? { price: neto, precioFinal: final } : { price: neto };
 }

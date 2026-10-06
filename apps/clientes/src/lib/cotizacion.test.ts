@@ -128,38 +128,6 @@ describe("cotizarItem y el stock de Alegra", () => {
   });
 });
 
-describe("cotizarItem: precio efectivo de la cuenta", () => {
-  const item = (propia: number) =>
-    ({
-      id: "1",
-      name: "Panel LED",
-      status: "active",
-      price: [
-        { idPriceList: "1", price: 1000, main: true },
-        { idPriceList: "7", price: propia, main: false },
-      ],
-      inventory: { availableQuantity: 50 },
-    }) as unknown as AlegraItem;
-
-  it("propia más barata: cobra la propia y marca precio especial", () => {
-    const l = cotizarItem({ id: "1", qty: 1 }, item(800), "7");
-    expect(l.precioUnitario).toBe(800);
-    expect(l.precioEspecial).toBe(true);
-  });
-
-  it("propia más cara: cobra la general, no el cliente paga más de lo que vio", () => {
-    const l = cotizarItem({ id: "1", qty: 1 }, item(1200), "7");
-    expect(l.precioUnitario).toBe(1000);
-    expect(l.precioEspecial).toBeUndefined();
-  });
-
-  it("propia en 0: cobra la general y no queda sin_precio", () => {
-    const l = cotizarItem({ id: "1", qty: 1 }, item(0), "7");
-    expect(l.precioUnitario).toBe(1000);
-    expect(l.problema).toBeUndefined();
-  });
-});
-
 describe("cotizarItem: lista del medio de pago", () => {
   const item = (enMedio: number | null) =>
     ({
@@ -175,45 +143,30 @@ describe("cotizarItem: lista del medio de pago", () => {
     }) as unknown as AlegraItem;
 
   it("aplica la lista del medio si el precio existe, es > 0 y menor que el general", () => {
-    const l = cotizarItem({ id: "1", qty: 1 }, item(700), undefined, "9");
+    const l = cotizarItem({ id: "1", qty: 1 }, item(700), "9");
     expect(l.precioUnitario).toBe(700);
   });
 
   it("cae al general si el ítem no tiene precio en esa lista", () => {
-    expect(cotizarItem({ id: "1", qty: 1 }, item(null), undefined, "9").precioUnitario).toBe(1000);
+    expect(cotizarItem({ id: "1", qty: 1 }, item(null), "9").precioUnitario).toBe(1000);
   });
 
   it("cae al general si el precio en la lista es 0 o no es menor (nunca recargo)", () => {
-    expect(cotizarItem({ id: "1", qty: 1 }, item(0), undefined, "9").precioUnitario).toBe(1000);
-    expect(cotizarItem({ id: "1", qty: 1 }, item(1000), undefined, "9").precioUnitario).toBe(1000);
-    expect(cotizarItem({ id: "1", qty: 1 }, item(1300), undefined, "9").precioUnitario).toBe(1000);
+    expect(cotizarItem({ id: "1", qty: 1 }, item(0), "9").precioUnitario).toBe(1000);
+    expect(cotizarItem({ id: "1", qty: 1 }, item(1000), "9").precioUnitario).toBe(1000);
+    expect(cotizarItem({ id: "1", qty: 1 }, item(1300), "9").precioUnitario).toBe(1000);
   });
 
   it("coherencia con el catálogo: el unitario cotizado con el medio es precioDeLista de esa lista", () => {
     const it9 = item(700);
     const esperado = precioDeLista(it9.price as AlegraPrice[], "9");
-    expect(cotizarItem({ id: "1", qty: 1 }, it9, undefined, "9").precioUnitario).toBe(esperado);
+    expect(cotizarItem({ id: "1", qty: 1 }, it9, "9").precioUnitario).toBe(esperado);
     const caro = item(1300);
-    expect(cotizarItem({ id: "1", qty: 1 }, caro, undefined, "9").precioUnitario).toBe(
+    expect(cotizarItem({ id: "1", qty: 1 }, caro, "9").precioUnitario).toBe(
       precioDeLista(caro.price as AlegraPrice[], "9"),
     );
   });
 
-  it("la lista del medio NO marca precio especial de la cuenta", () => {
-    expect(cotizarItem({ id: "1", qty: 1 }, item(700), undefined, "9").precioEspecial).toBeUndefined();
-  });
-
-  it("con lista del medio, la lista propia del cliente no rige ni marca especial", () => {
-    const l = cotizarItem({ id: "1", qty: 1 }, item(null), "7", "9");
-    expect(l.precioUnitario).toBe(1000);
-    expect(l.precioEspecial).toBeUndefined();
-  });
-
-  it("sin lista del medio conserva el comportamiento previo con la lista del cliente", () => {
-    const l = cotizarItem({ id: "1", qty: 1 }, item(700), "7");
-    expect(l.precioUnitario).toBe(800);
-    expect(l.precioEspecial).toBe(true);
-  });
 });
 
 describe("itemDesdeEspejo: mostrar marca", () => {
@@ -257,21 +210,61 @@ describe("cotizarItem con precios online (0065)", () => {
   });
 
   it("el medio con una lista menor cobra esa lista; con una mayor, la referencia", () => {
-    expect(cotizarItem({ id: "1", qty: 1 }, online, undefined, TRANSF).precioUnitario).toBe(110);
-    expect(cotizarItem({ id: "1", qty: 1 }, online, undefined, CARA).precioUnitario).toBe(120);
-  });
-
-  it("no regresión #219: una lista propia de Alegra no existe entre los precios online y queda inerte", () => {
-    const l = cotizarItem({ id: "1", qty: 2 }, online, "7");
-    expect(l.precioUnitario).toBe(120);
-    expect(l.subtotal).toBe(240);
-    expect(l.precioEspecial).toBeUndefined();
-    expect(l.problema).toBeUndefined();
+    expect(cotizarItem({ id: "1", qty: 1 }, online, TRANSF).precioUnitario).toBe(110);
+    expect(cotizarItem({ id: "1", qty: 1 }, online, CARA).precioUnitario).toBe(120);
   });
 
   it("un producto sin precio online no se cotiza a $0: queda sin_precio", () => {
-    const l = cotizarItem({ id: "1", qty: 1 }, item([]), "7");
+    const l = cotizarItem({ id: "1", qty: 1 }, item([]));
     expect(l.precioUnitario).toBe(0);
     expect(l.problema).toBe("sin_precio");
+  });
+});
+
+describe("cotizarItem con lista privada (listas-cuenta-corriente)", () => {
+  const MEDIO = "0f5d0c52-0000-4000-8000-00000000000b";
+  const item = (price: unknown[] = [{ idPriceList: "1", price: 1000, main: true }]) =>
+    ({ id: "1", name: "Panel LED", status: "active", price, inventory: { availableQuantity: 50 } }) as unknown as AlegraItem;
+
+  it("cobra el precio privado neto y recalcula subtotal e IVA con él", () => {
+    const l = cotizarItem({ id: "1", qty: 2 }, item(), undefined, 700);
+    expect(l.precioUnitario).toBe(700);
+    expect(l.subtotal).toBe(1400);
+    expect(l.problema).toBeUndefined();
+    expect(l.sinPrecio).toBeUndefined();
+  });
+
+  it("un precio privado MAYOR que el público se muestra igual (sin regla del 'menor que el general')", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item(), undefined, 1300);
+    expect(l.precioUnitario).toBe(1300);
+    expect(l.problema).toBeUndefined();
+  });
+
+  it("sin precio en la lista privada (null): sin_precio y NO cae al público", () => {
+    const l = cotizarItem({ id: "1", qty: 1 }, item(), undefined, null);
+    expect(l.precioUnitario).toBe(0);
+    expect(l.problema).toBe("sin_precio");
+    expect(l.sinPrecio).toBe(true);
+    expect(l.detalle).toBe("Este producto no tiene precio para su cuenta. Consúltenos.");
+  });
+
+  it("ignora la lista del medio de pago (con lista privada no hay precio por medio)", () => {
+    const conMedio = item([
+      { idPriceList: "1", price: 1000, main: true },
+      { idPriceList: MEDIO, price: 500, main: false },
+    ]);
+    expect(cotizarItem({ id: "1", qty: 1 }, conMedio, MEDIO, 900).precioUnitario).toBe(900);
+    expect(cotizarItem({ id: "1", qty: 1 }, conMedio, MEDIO, null).problema).toBe("sin_precio");
+  });
+
+  it("sin lista privada (undefined) rige el comportamiento de siempre", () => {
+    expect(cotizarItem({ id: "1", qty: 1 }, item(), undefined, undefined).precioUnitario).toBe(1000);
+  });
+
+  it("mantiene los problemas de stock e inactivo con precio privado", () => {
+    const sinStock = { ...item(), inventory: { availableQuantity: 0 } } as unknown as AlegraItem;
+    expect(cotizarItem({ id: "1", qty: 1 }, sinStock, undefined, 700).problema).toBe("sin_stock");
+    const inactivo = { ...item(), status: "inactive" } as unknown as AlegraItem;
+    expect(cotizarItem({ id: "1", qty: 1 }, inactivo, undefined, 700).problema).toBe("inactivo");
   });
 });

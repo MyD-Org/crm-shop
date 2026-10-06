@@ -14,7 +14,6 @@ import { catalogoSoloVisibles } from "./catalogo-flag";
 import { cuotasHabilitadas } from "./cuotas-flag";
 import { mediosOfrecibles } from "./medios-pago-datos";
 import { SIN_MEDIOS_PRECIO, seleccionarMediosPrecio, type MediosPrecio } from "./medios-precio";
-import { precioEspecialCuenta } from "./precio-especial-flag";
 
 export interface FlagsPublicos {
   /** `catalogo-solo-visibles`: los listados públicos sólo con lo curado en el CRM. */
@@ -22,8 +21,8 @@ export interface FlagsPublicos {
   /** `cuotas-cobro`: se exhiben las cuotas sin interés y se cobra en cuotas. */
   cuotas: boolean;
   /**
-   * "$X con <Medio>": el medio destacado de las cards y los de la ficha. Vacío con el flag
-   * `precio-especial-cuenta` encendido o si los medios no se pueden leer (degrada sin romper).
+   * "$X con <Medio>": el medio destacado de las cards y los de la ficha. Vacío si los
+   * medios no se pueden leer (degrada sin romper).
    */
   mediosPrecio: MediosPrecio;
 }
@@ -32,7 +31,6 @@ const mensaje = (err: unknown) => (err instanceof Error ? err.message : err);
 
 async function leerMediosPrecio(cuotasEncendido: boolean): Promise<MediosPrecio> {
   try {
-    if (await precioEspecialCuenta()) return SIN_MEDIOS_PRECIO;
     return seleccionarMediosPrecio(await mediosOfrecibles(), false, cuotasEncendido);
   } catch (err) {
     console.warn("[flags-publicos] medios con precio no disponibles:", mensaje(err));

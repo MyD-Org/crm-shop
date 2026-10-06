@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { identidadActual, idPriceListCliente } from "@/lib/auth";
+import { identidadActual } from "@/lib/auth";
 import { catalogoSoloVisibles } from "@/lib/catalogo-flag";
 import { cotizar, normalizarLineas, MAX_LINEAS } from "@/lib/cotizacion";
 import { evaluarEnvio, type EntregaTipo } from "@/lib/envio";
@@ -19,7 +19,7 @@ import { condicionesAplicables, cuotasElegidas, proximoEscalon, repartirCuotas }
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
 import { esCompradorCuentaCorriente, mediosParaModalidad } from "@/lib/medios-pago";
-import { precioEspecialCuenta } from "@/lib/precio-especial-flag";
+import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 
 /**
  * Techo por usuario.
@@ -51,16 +51,18 @@ function ipDe(req: Request): string | null {
  * suma `cuotasOpciones`: total y cuota de cada cantidad (1 pago incluido), cada una con la lista de SU
  * condición.
  * `pagoMetodo`: slug del medio de pago elegido. La lista de precios sale SOLO de ahí (medio activo que
- * aplica a la modalidad, releído sin caché); el body nunca trae lista ni precios. Con el flag
- * `precio-especial-cuenta` prendido se ignora y rige la lista propia del cliente.
+ * aplica a la modalidad, releído sin caché); el body nunca trae lista ni precios. Si el comprador
+ * tiene LISTA PRIVADA (cuenta corriente con lista enlazada, resuelta en el servidor desde su sesión)
+ * se ignoran el medio y las cuotas: se cotiza a su precio neto; un producto sin precio en su lista
+ * sale como `sin_precio` ("Consulte") y bloquea la compra.
  * `provincia`: la de entrega (checkout) o la de la ubicación del cliente; con ella y la
  * configuración de envío releída SIN caché (`leerConfigEnvio`) se evalúa `envio` (gratis, a
  * coordinar, cuánto falta). Con el flag `disponibilidad-sucursal` también define la sucursal de la
  * zona con la que se calcula la disponibilidad; con el flag prendido la respuesta suma
  * `disponibilidad` (envío y retiro por local, por producto).
  *
- * Totales del carrito leídos del catálogo del CRM (vista `catalog_products_shop` + lista de precios
- * del snapshot de `client_links`), sin llamadas a Alegra. El carrito y el
+ * Totales del carrito leídos del catálogo del CRM (vista `catalog_products_shop` y, con lista
+ * privada, `catalog_products_shop_privados`), sin llamadas a Alegra. El carrito y el
  * checkout muestran lo que devuelve esta ruta, no lo que tienen en memoria, y
  * `POST /api/pedidos` registra el mismo número. Ver src/lib/cotizacion.ts.
  *
@@ -124,25 +126,25 @@ export async function POST(req: Request) {
   }
 
   try {
-    const idPriceList = cliente
-      ? await idPriceListCliente(cliente.codigocliente)
-      : undefined;
-    // Lista del medio elegido (servidor, desde el slug). Sin medio, o con el flag del precio
-    // especial prendido, no hay lista de medio: carrito y retiro cotizan como siempre.
+    // Lista privada del comprador: sólo desde su sesión. Anónimo o sin lista ⇒ null (precio público).
+    const idListaPrivada = cliente ? await listaPrivadaDelComprador() : null;
+    // Lista del medio elegido (servidor, desde el slug). Sin medio, o con lista privada (el precio ya
+    // no depende del medio), no hay lista de medio: carrito y retiro cotizan como siempre.
     const pagoMetodo = typeof body.pagoMetodo === "string" ? body.pagoMetodo.trim().slice(0, 40) : "";
-    // Cuenta corriente: su único medio es el de su audiencia, sin cuotas ni lista por medio.
+    // Cuenta corriente: su único medio es el de su audiencia, sin cuotas ni lista por medio. Con
+    // lista privada tampoco aplica la lista del medio ni las cuotas.
     const esCuentaCorriente = esCompradorCuentaCorriente(cliente);
-    const sinMedioEspecial = pagoMetodo && !esCuentaCorriente && !(await precioEspecialCuenta());
-    const mediosCrm = sinMedioEspecial ? await leerMediosPagoTolerante() : [];
+    const conMedio = Boolean(pagoMetodo) && !esCuentaCorriente && !idListaPrivada;
+    const mediosCrm = conMedio ? await leerMediosPagoTolerante() : [];
     // Cuotas sin interés: sólo con el flag y un medio con cobro en línea. Cada cantidad es otra lista.
     const medioCobro = mediosParaModalidad(mediosCrm, entregaTipo).find((m) => m.slug === pagoMetodo);
-    const conCuotas = Boolean(sinMedioEspecial && medioCobro?.cobroOnline && (await cuotasHabilitadas()));
+    const conCuotas = Boolean(conMedio && medioCobro?.cobroOnline && (await cuotasHabilitadas()));
     // Flag `disponibilidad-sucursal`: stock por sucursal (unión) y disponibilidad por modalidad.
     const base = await dispDelVisitante();
     const provincia = provinciaTexto ? claveProvincia(provinciaTexto) : "";
     const disp = base ? await contextoParaProvincia(base, provincia || null) : undefined;
     const soloVisibles = await catalogoSoloVisibles();
-    const opcionesCotizar = { soloVisibles, idPriceList, entregaTipo, disp: disp ? contextoUnion(disp) : undefined };
+    const opcionesCotizar = { soloVisibles, idListaPrivada, entregaTipo, disp: disp ? contextoUnion(disp) : undefined };
     // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
     // del medio. Sólo se cotiza si hay algún mínimo cargado y se pidieron cuotas u opciones.
     const hayMinimos = (medioCobro?.condicionesCuotas ?? []).some((c) => c.montoMinimo != null);
@@ -166,7 +168,7 @@ export async function POST(req: Request) {
       }
       cuotas = elegidas.cuotas;
     }
-    const idListaMedio = sinMedioEspecial ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotas) : undefined;
+    const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotas) : undefined;
     const cotizacion = await cotizar(lineas, { ...opcionesCotizar, idListaMedio });
     // Selector del checkout: el total de cada cantidad de cuotas es el de SU lista (varias cotizaciones
     // en paralelo, sólo con `conCuotas`). Los montos salen del servidor, nunca del navegador. Sólo las

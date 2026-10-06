@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { identidadActual, idPriceListCliente } from "@/lib/auth";
+import { identidadActual } from "@/lib/auth";
 import { esIdAlegra } from "@/lib/alegra";
 import { getProductosPorIds } from "@/lib/catalog";
 import { chatIaHabilitado } from "@/lib/chat-ia-flag";
 import { aProductoResuelto, MAX_IDS_RESOLVER } from "@/lib/chat-ia-productos";
 import { flagsPublicos } from "@/lib/flags-publicos";
+import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
+import { precioPrivado } from "@/lib/precio-cuenta";
+import { preciosPrivados } from "@/lib/precios-privados-repo";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { dispCatalogo } from "@/lib/zona-servidor";
 import { permitir } from "@/lib/rate-limit";
@@ -26,7 +29,7 @@ function ipDe(req: Request): string {
  * GET /api/chat-ia/productos?ids=1,2,3 → `ProductoResuelto[]`
  *
  * Completa las cards del chat (`resolveProducts` del widget): la card trae ids
- * y el precio sale de acá, con la lista de precios de quien mira — la misma que
+ * y el precio sale de acá, con la lista privada de quien mira (si la tiene) — la misma que
  * después aplica el carrito. La lista sale SIEMPRE de la sesión, nunca de la URL.
  * Sólo productos activos y publicados, en el orden pedido; un id que la tienda
  * no tiene no aparece (el widget muestra el texto de respaldo de la card).
@@ -46,24 +49,39 @@ export async function GET(req: Request) {
   if (ids.length === 0) return json([]);
 
   try {
-    const [{ soloVisibles }, disp, idPriceList, estructurados] = await Promise.all([
+    const [{ soloVisibles }, disp, idListaPrivada, estructurados] = await Promise.all([
       flagsPublicos(),
       dispCatalogo(),
-      identidad.cliente ? idPriceListCliente(identidad.cliente.codigocliente) : Promise.resolve(undefined),
+      identidad.cliente ? listaPrivadaDelComprador() : Promise.resolve(null),
       // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
       usarAtributosEstructurados(),
     ]);
     const productos = await getProductosPorIds(ids, {
-      idPriceList: idPriceList ?? undefined,
       soloActivos: true,
       soloVisibles,
       disp,
       // Card `spec`: valores técnicos estructurados si la tabla del CRM está disponible.
       ...(estructurados ? { atributosEstructurados: true } : {}),
     });
+    // Con lista privada: su precio (sin "con medio" ni cuotas). Sin precio en su lista, la card no
+    // se resuelve y el widget muestra su texto de respaldo ("Consulte"), nunca el precio público.
+    const privados = idListaPrivada ? await preciosPrivados(idListaPrivada, ids) : null;
     return json(ids.flatMap((id) => {
       const p = productos.get(id);
-      return p ? [aProductoResuelto(p)] : [];
+      if (!p) return [];
+      if (!privados) return [aProductoResuelto(p)];
+      const propio = precioPrivado(privados.get(id) ?? null, p.ivaPorcentaje ?? null);
+      if (!propio) return [];
+      return [
+        aProductoResuelto({
+          ...p,
+          price: propio.price,
+          precioFinal: propio.precioFinal,
+          precioMedio: undefined,
+          preciosMedios: undefined,
+          cuotasSinInteres: undefined,
+        }),
+      ];
     }));
   } catch (err) {
     console.error(`[chat-ia/productos] ${err instanceof Error ? err.name : "desconocido"}`);

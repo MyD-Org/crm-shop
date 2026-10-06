@@ -46,7 +46,7 @@ function linea(id: string, qty: number): LineaCotizada {
 function cotizacion(...lineas: LineaCotizada[]): Cotizacion {
   const subtotal = lineas.reduce((a, l) => a + l.subtotal, 0);
   const iva = lineas.reduce((a, l) => a + l.iva, 0);
-  return { lineas, subtotal, iva, costoEnvio: 0, total: subtotal + iva, hayProblemas: false, listaPreferencial: false };
+  return { lineas, subtotal, iva, costoEnvio: 0, total: subtotal + iva, hayProblemas: false, listaPrivada: false };
 }
 
 async function limpiar() {

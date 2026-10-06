@@ -51,7 +51,6 @@ import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
-import { precioCuenta, type PrecioCuenta } from "./precio-cuenta";
 import {
   descripcionExhibida,
   joinOverlay,
@@ -695,34 +694,6 @@ export async function getProductosPorIds(
   return new Map(
     filas.map((f) => [f.alegraId, mapFilaToProduct(f, opts?.idPriceList, undefined, undefined, opts?.mediosPrecio)]),
   );
-}
-
-/**
- * Precio especial de la cuenta (ver `precio-cuenta.ts`) de cada id que lo
- * tenga. Los ids sin lista propia más barata no aparecen. Sin filtros de
- * visibilidad: sólo pisa precios de productos que el visitante ya está viendo.
- */
-export async function preciosCuentaPorIds(
-  alegraIds: readonly string[],
-  idPriceList: string,
-): Promise<Record<string, PrecioCuenta>> {
-  if (alegraIds.length === 0) return {};
-  const filas = await getDb()
-    .select({
-      alegraId: crmCatalogo.alegraId,
-      prices: preciosSql,
-      ivaPorcentaje: crmCatalogo.ivaPorcentaje,
-    })
-    .from(crmCatalogo)
-    .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, [...alegraIds])));
-
-  const out: Record<string, PrecioCuenta> = {};
-  for (const f of filas) {
-    const iva = f.ivaPorcentaje != null ? Number(f.ivaPorcentaje) : null;
-    const p = precioCuenta(mapPrecios(f.prices), iva, idPriceList);
-    if (p) out[f.alegraId] = p;
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------

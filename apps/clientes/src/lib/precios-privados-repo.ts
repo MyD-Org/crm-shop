@@ -8,7 +8,9 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { crmPreciosPrivados } from "@/db/crm";
+import { crmCatalogo, crmPreciosPrivados } from "@/db/crm";
+import { enTenantCatalogo } from "./catalogo-fuente";
+import { precioPrivado, type PrecioCuenta } from "./precio-cuenta";
 import { shopTenantId } from "./tenant";
 
 /**
@@ -37,4 +39,27 @@ export async function preciosPrivados(
     salida.set(f.alegraId, Number.isFinite(n) && n > 0 ? n : null);
   }
   return salida;
+}
+
+/**
+ * Para el overlay `/api/precios-cuenta`: el precio de cada id en la lista privada, con el final con
+ * IVA (el IVA sale de la vista pública del catálogo). `null` = "Consulte". Un id que el catálogo no
+ * tiene queda `null`.
+ */
+export async function preciosCuentaPorIds(
+  listaId: string,
+  alegraIds: readonly string[],
+): Promise<Record<string, PrecioCuenta | null>> {
+  if (alegraIds.length === 0) return {};
+  const [privados, ivas] = await Promise.all([
+    preciosPrivados(listaId, alegraIds),
+    getDb()
+      .select({ alegraId: crmCatalogo.alegraId, ivaPorcentaje: crmCatalogo.ivaPorcentaje })
+      .from(crmCatalogo)
+      .where(and(enTenantCatalogo(), inArray(crmCatalogo.alegraId, [...alegraIds]))),
+  ]);
+  const ivaDe = new Map(ivas.map((f) => [f.alegraId, f.ivaPorcentaje != null ? Number(f.ivaPorcentaje) : null]));
+  return Object.fromEntries(
+    alegraIds.map((id) => [id, precioPrivado(privados.get(id) ?? null, ivaDe.get(id) ?? null)]),
+  );
 }

@@ -32,7 +32,7 @@ const mergearCarrito = vi.fn(async (_u: string, items: Linea[]) => ({
   version: 3,
   avisos: [] as string[],
 }));
-const enriquecer = vi.fn<(lineas: Linea[], lista: string | undefined) => Promise<unknown[]>>(
+const enriquecer = vi.fn<(lineas: Linea[], lista: string | null) => Promise<unknown[]>>(
   async (lineas) =>
     lineas.map((l) =>
       l.id === "999"
@@ -40,19 +40,17 @@ const enriquecer = vi.fn<(lineas: Linea[], lista: string | undefined) => Promise
         : { ...l, name: `Producto ${l.id}`, brand: "Marca", price: 100 },
     ),
 );
-const idPriceListCliente = vi.fn<(c: string) => Promise<string>>(async () => "7");
+const listaPrivadaDelComprador = vi.fn<() => Promise<string | null>>(async () => "lista-privada-a");
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: async () => ({ userId }) }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: (...a: unknown[]) => permitir(...a) }));
-vi.mock("@/lib/auth", () => ({
-  identidadActual: async () => ({ clerkUserId: userId, cliente }),
-  idPriceListCliente: (c: string) => idPriceListCliente(c),
-}));
+vi.mock("@/lib/auth", () => ({ identidadActual: async () => ({ clerkUserId: userId, cliente }) }));
+vi.mock("@/lib/lista-cuenta-repo", () => ({ listaPrivadaDelComprador: () => listaPrivadaDelComprador() }));
 vi.mock("@/lib/carrito-db", () => ({
   leerCarrito: (u: string) => leerCarrito(u),
   reemplazarCarrito: (u: string, v: number, i: Linea[]) => reemplazarCarrito(u, v, i),
   mergearCarrito: (u: string, i: Linea[]) => mergearCarrito(u, i),
-  enriquecer: (l: Linea[], p: string | undefined) => enriquecer(l, p),
+  enriquecer: (l: Linea[], p: string | null) => enriquecer(l, p),
 }));
 
 import { GET, POST, PUT } from "./route";
@@ -142,7 +140,7 @@ describe("GET", () => {
     expect(leerCarrito).toHaveBeenCalledWith("user_1");
   });
 
-  it("enriquece con la lista de precios del cliente y marca los faltantes", async () => {
+  it("enriquece con la lista privada del comprador y marca los faltantes", async () => {
     cliente = { codigocliente: "55" };
     leerCarrito.mockResolvedValueOnce({
       items: [
@@ -159,15 +157,14 @@ describe("GET", () => {
       ],
       version: 4,
     });
-    expect(idPriceListCliente).toHaveBeenCalledWith("55");
-    expect(enriquecer).toHaveBeenCalledWith(expect.any(Array), "7");
+    expect(enriquecer).toHaveBeenCalledWith(expect.any(Array), "lista-privada-a");
   });
 
-  it("sin cliente comercial, precio de lista general (idPriceList undefined)", async () => {
+  it("sin cliente comercial, precio público (sin lista privada) y ni la consulta", async () => {
     leerCarrito.mockResolvedValueOnce({ items: [{ id: "1", qty: 1 }], version: 1 });
     await GET();
-    expect(idPriceListCliente).not.toHaveBeenCalled();
-    expect(enriquecer).toHaveBeenCalledWith([{ id: "1", qty: 1 }], undefined);
+    expect(listaPrivadaDelComprador).not.toHaveBeenCalled();
+    expect(enriquecer).toHaveBeenCalledWith([{ id: "1", qty: 1 }], null);
   });
 });
 

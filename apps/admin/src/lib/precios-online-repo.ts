@@ -2,6 +2,9 @@ import { createHash } from "node:crypto"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { getDb, type Db } from "@/db"
 import {
+  alegraContacts,
+  alegraCuentas,
+  listaPrecioAlegraMapeo,
   listaPrecioCondiciones,
   listaPrecioOverrides,
   listasPrecioOnline,
@@ -38,6 +41,10 @@ export class PreciosOnlineError extends Error {
 export const MSG_PREVIA_VENCIDA = "La vista previa quedó desactualizada. Genere una nueva."
 const MSG_LISTA_NO_EXISTE = "La lista indicada no existe."
 const MSG_NOMBRE_DUPLICADO = "Ya existe una lista con ese nombre."
+const MSG_REFERENCIA_PRIVADA = "La lista de referencia no puede ser privada."
+const MSG_PRIVADA_CON_MEDIO = "Una lista enlazada a un medio de pago no puede ser privada. Quite el enlace primero."
+const MSG_PRIVADA_A_MEDIO = "Una lista privada no puede enlazarse a un medio de pago."
+const MSG_MAPEO_NO_PRIVADA = "Solo una lista privada puede enlazarse con una lista de Alegra."
 
 const lockKey = (tenantId: string) => `precios_online:${tenantId}`
 
@@ -93,6 +100,14 @@ const snapLista = (l: ListaRow) => ({
   orden: l.orden,
   activa: l.activa,
   esReferencia: l.esReferencia,
+  privada: l.privada,
+})
+
+type MapeoRow = typeof listaPrecioAlegraMapeo.$inferSelect
+const snapMapeo = (alegraAccount: string, alegraPriceListId: string, listaId: string | null) => ({
+  alegraAccount,
+  alegraPriceListId,
+  listaId,
 })
 
 async function cargarLista(tx: Tx, tenantId: string, listaId: string): Promise<ListaRow> {
@@ -129,10 +144,11 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
       const existentes = await tx.select().from(listasPrecioOnline).where(eq(listasPrecioOnline.tenantId, tenantId))
       // Siempre hay exactamente UNA referencia: la primera lista que se crea lo es.
       const esReferencia = !existentes.some((l) => l.esReferencia)
+      if (esReferencia && c.privada) throw new PreciosOnlineError(422, "referencia_privada", MSG_REFERENCIA_PRIVADA)
       const orden = c.orden ?? existentes.reduce((m, l) => Math.max(m, l.orden), 0) + 1
       const [l] = await tx
         .insert(listasPrecioOnline)
-        .values({ tenantId, nombre: c.nombre, coeficiente: c.coeficiente, orden, esReferencia })
+        .values({ tenantId, nombre: c.nombre, coeficiente: c.coeficiente, orden, esReferencia, privada: c.privada ?? false })
         .returning()
       return [{ tipo: "lista_alta", objeto: `lista:${l.id}`, listaId: l.id, antes: null, despues: snapLista(l) }]
     }
@@ -148,6 +164,32 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           "La lista de referencia no puede desactivarse. Elija otra lista como referencia antes.",
         )
       }
+      const entradas: EntradaHistorial[] = []
+      if (c.privada !== undefined && c.privada !== l.privada) {
+        if (c.privada) {
+          if (l.esReferencia) throw new PreciosOnlineError(422, "referencia_privada", MSG_REFERENCIA_PRIVADA)
+          const [uso] = await tx
+            .select({ id: listaPrecioCondiciones.id })
+            .from(listaPrecioCondiciones)
+            .where(eq(listaPrecioCondiciones.listaId, l.id))
+          if (uso) throw new PreciosOnlineError(422, "lista_en_uso", MSG_PRIVADA_CON_MEDIO)
+        } else {
+          // Volver pública quita sus enlaces con la lista de Alegra (la base no deja uno sin el otro).
+          const enlaces = await tx.select().from(listaPrecioAlegraMapeo).where(eq(listaPrecioAlegraMapeo.listaId, l.id))
+          if (enlaces.length > 0) {
+            await tx.delete(listaPrecioAlegraMapeo).where(eq(listaPrecioAlegraMapeo.listaId, l.id))
+            for (const m of enlaces) {
+              entradas.push({
+                tipo: "mapeo",
+                objeto: `mapeo:${m.alegraAccount}:${m.alegraPriceListId}`,
+                listaId: l.id,
+                antes: snapMapeo(m.alegraAccount, m.alegraPriceListId, l.id),
+                despues: snapMapeo(m.alegraAccount, m.alegraPriceListId, null),
+              })
+            }
+          }
+        }
+      }
       const [n] = await tx
         .update(listasPrecioOnline)
         .set({
@@ -155,11 +197,13 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           ...(c.coeficiente !== undefined ? { coeficiente: c.coeficiente } : {}),
           ...(c.orden !== undefined ? { orden: c.orden } : {}),
           ...(c.activa !== undefined ? { activa: c.activa } : {}),
+          ...(c.privada !== undefined ? { privada: c.privada } : {}),
           updatedAt: sql`now()`,
         })
         .where(eq(listasPrecioOnline.id, l.id))
         .returning()
-      return [{ tipo: "lista_edicion", objeto: `lista:${l.id}`, listaId: l.id, antes: snapLista(l), despues: snapLista(n) }]
+      entradas.push({ tipo: "lista_edicion", objeto: `lista:${l.id}`, listaId: l.id, antes: snapLista(l), despues: snapLista(n) })
+      return entradas
     }
     case "borrarLista": {
       const l = await cargarLista(tx, tenantId, c.listaId)
@@ -182,13 +226,18 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
         )
       }
       const ovs = await tx.select().from(listaPrecioOverrides).where(eq(listaPrecioOverrides.listaId, l.id))
-      await tx.delete(listasPrecioOnline).where(eq(listasPrecioOnline.id, l.id)) // los overrides caen por cascada
+      const enlaces = await tx.select().from(listaPrecioAlegraMapeo).where(eq(listaPrecioAlegraMapeo.listaId, l.id))
+      await tx.delete(listasPrecioOnline).where(eq(listasPrecioOnline.id, l.id)) // overrides y enlaces caen por cascada
       return [
         {
           tipo: "lista_baja",
           objeto: `lista:${l.id}`,
           listaId: l.id,
-          antes: { ...snapLista(l), overrides: ovs.map(snapOverride) },
+          antes: {
+            ...snapLista(l),
+            overrides: ovs.map(snapOverride),
+            mapeos: enlaces.map((m: MapeoRow) => ({ alegraAccount: m.alegraAccount, alegraPriceListId: m.alegraPriceListId })),
+          },
           despues: null,
         },
       ]
@@ -305,7 +354,10 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
         .from(mediosPagoShop)
         .where(and(eq(mediosPagoShop.tenantId, tenantId), eq(mediosPagoShop.slug, medioSlug)))
       if (!medio) throw new PreciosOnlineError(404, "medio_no_existe", "El medio de pago indicado no existe.")
-      if (listaId !== null) await cargarLista(tx, tenantId, listaId)
+      if (listaId !== null) {
+        const destino = await cargarLista(tx, tenantId, listaId)
+        if (destino.privada) throw new PreciosOnlineError(422, "lista_privada", MSG_PRIVADA_A_MEDIO)
+      }
       const [previo] = await tx
         .select()
         .from(listaPrecioCondiciones)
@@ -355,6 +407,57 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
         },
       ]
     }
+    case "setMapeo": {
+      const { alegraAccount, alegraPriceListId, listaId } = c
+      if (listaId !== null) {
+        const destino = await cargarLista(tx, tenantId, listaId)
+        if (!destino.privada) throw new PreciosOnlineError(422, "lista_no_privada", MSG_MAPEO_NO_PRIVADA)
+      }
+      const [previo] = await tx
+        .select()
+        .from(listaPrecioAlegraMapeo)
+        .where(
+          and(
+            eq(listaPrecioAlegraMapeo.tenantId, tenantId),
+            eq(listaPrecioAlegraMapeo.alegraAccount, alegraAccount),
+            eq(listaPrecioAlegraMapeo.alegraPriceListId, alegraPriceListId),
+          ),
+        )
+      const objeto = `mapeo:${alegraAccount}:${alegraPriceListId}`
+      if (listaId === null) {
+        if (!previo) throw new PreciosOnlineError(422, "sin_cambios", "Esa lista de Alegra no está enlazada a ninguna lista.")
+        await tx.delete(listaPrecioAlegraMapeo).where(eq(listaPrecioAlegraMapeo.id, previo.id))
+        return [
+          {
+            tipo: "mapeo",
+            objeto,
+            listaId: previo.listaId,
+            antes: snapMapeo(alegraAccount, alegraPriceListId, previo.listaId),
+            despues: snapMapeo(alegraAccount, alegraPriceListId, null),
+          },
+        ]
+      }
+      if (previo?.listaId === listaId) {
+        throw new PreciosOnlineError(422, "sin_cambios", "Esa lista de Alegra ya está enlazada a esa lista.")
+      }
+      if (previo) {
+        await tx
+          .update(listaPrecioAlegraMapeo)
+          .set({ listaId, updatedAt: sql`now()` })
+          .where(eq(listaPrecioAlegraMapeo.id, previo.id))
+      } else {
+        await tx.insert(listaPrecioAlegraMapeo).values({ tenantId, alegraAccount, alegraPriceListId, listaId })
+      }
+      return [
+        {
+          tipo: "mapeo",
+          objeto,
+          listaId,
+          antes: snapMapeo(alegraAccount, alegraPriceListId, previo?.listaId ?? null),
+          despues: snapMapeo(alegraAccount, alegraPriceListId, listaId),
+        },
+      ]
+    }
     case "restaurarLista": {
       // Solo al revertir una baja: la lista vuelve con su mismo id (el historial la sigue nombrando).
       await nombreLibre(tx, tenantId, c.lista.nombre)
@@ -372,8 +475,16 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           orden: c.lista.orden,
           activa: c.lista.activa,
           esReferencia: ref ? false : c.lista.esReferencia,
+          privada: c.lista.privada ?? false,
         })
         .returning()
+      // Los enlaces con la lista de Alegra vuelven si la clave (cuenta + lista de Alegra) sigue libre.
+      for (const m of c.lista.privada ? (c.mapeos ?? []) : []) {
+        await tx
+          .insert(listaPrecioAlegraMapeo)
+          .values({ tenantId, alegraAccount: m.alegraAccount, alegraPriceListId: m.alegraPriceListId, listaId: l.id })
+          .onConflictDoNothing()
+      }
       const existentes = new Set(
         (await tx.select({ id: shopCategories.id }).from(shopCategories).where(eq(shopCategories.tenantId, tenantId))).map((x) => x.id),
       )
@@ -471,7 +582,7 @@ async function simular(tx: Tx, tenantId: string, cambios: CambioPrecios[], cfg: 
     FROM _po_nuevo n
     FULL JOIN (
       SELECT p.alegra_id, e->>'idPriceList' AS lista_id, (e->>'price')::numeric AS precio
-      FROM catalog_products p CROSS JOIN LATERAL jsonb_array_elements(p.precios_online) e
+      FROM catalog_products p CROSS JOIN LATERAL jsonb_array_elements(p.precios_online || p.precios_online_privados) e
       WHERE p.tenant_id = ${tenantId}
     ) v ON v.alegra_id = n.alegra_id AND v.lista_id = n.lista_id
     WHERE n.precio IS DISTINCT FROM v.precio
@@ -761,6 +872,8 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
           coeficiente: String(a.coeficiente),
           orden: Number(a.orden),
           activa: Boolean(a.activa),
+          // Entradas anteriores a la 0068 no guardaron `privada`: no la tocan.
+          ...(typeof a.privada === "boolean" ? { privada: a.privada } : {}),
         },
       ]
       break
@@ -775,7 +888,12 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
             orden: Number(a.orden),
             activa: Boolean(a.activa),
             esReferencia: Boolean(a.esReferencia),
+            privada: Boolean(a.privada),
           },
+          mapeos: ((a.mapeos as Record<string, unknown>[] | undefined) ?? []).map((m) => ({
+            alegraAccount: String(m.alegraAccount),
+            alegraPriceListId: String(m.alegraPriceListId),
+          })),
           overrides: ((a.overrides as Record<string, unknown>[] | undefined) ?? []).map((o) => ({
             tipo: o.tipo as "marca" | "categoria",
             marca: (o.marca as string | null) ?? null,
@@ -817,6 +935,16 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
           listaId: (a.listaId as string | null) ?? null,
           // Entradas anteriores a la 0066 no guardaron el mínimo: restauran "sin mínimo".
           montoMinimo: a.montoMinimo === null || a.montoMinimo === undefined ? null : String(a.montoMinimo),
+        },
+      ]
+      break
+    case "mapeo":
+      cambios = [
+        {
+          op: "setMapeo",
+          alegraAccount: String(a.alegraAccount),
+          alegraPriceListId: String(a.alegraPriceListId),
+          listaId: (a.listaId as string | null) ?? null,
         },
       ]
       break
@@ -862,6 +990,10 @@ export interface ListaDto {
   esReferencia: boolean
   orden: number
   activa: boolean
+  /** Lista privada (0068): solo la ven las cuentas corrientes con la lista de Alegra enlazada. */
+  privada: boolean
+  /** Enlaces con la lista de Alegra del contacto (solo las privadas los tienen). */
+  mapeos: { id: string; alegraAccount: string; alegraPriceListId: string }[]
   overrides: {
     id: string
     tipo: "marca" | "categoria"
@@ -885,6 +1017,11 @@ export async function listarListas(tenantId: string): Promise<ListaDto[]> {
     .leftJoin(shopCategories, eq(shopCategories.id, listaPrecioOverrides.categoriaId))
     .where(eq(listaPrecioOverrides.tenantId, tenantId))
     .orderBy(asc(listaPrecioOverrides.tipo), asc(listaPrecioOverrides.marca))
+  const enlaces = await db
+    .select()
+    .from(listaPrecioAlegraMapeo)
+    .where(eq(listaPrecioAlegraMapeo.tenantId, tenantId))
+    .orderBy(asc(listaPrecioAlegraMapeo.alegraAccount), asc(listaPrecioAlegraMapeo.alegraPriceListId))
   return listas.map((l) => ({
     id: l.id,
     nombre: l.nombre,
@@ -892,6 +1029,10 @@ export async function listarListas(tenantId: string): Promise<ListaDto[]> {
     esReferencia: l.esReferencia,
     orden: l.orden,
     activa: l.activa,
+    privada: l.privada,
+    mapeos: enlaces
+      .filter((m) => m.listaId === l.id)
+      .map((m) => ({ id: m.id, alegraAccount: m.alegraAccount, alegraPriceListId: m.alegraPriceListId })),
     overrides: ovs
       .filter((x) => x.o.listaId === l.id)
       .map((x) => ({
@@ -903,6 +1044,68 @@ export async function listarListas(tenantId: string): Promise<ListaDto[]> {
         coeficiente: x.o.coeficiente,
       })),
   }))
+}
+
+export interface ListaAlegraDto {
+  /** Slug de la cuenta de Alegra (`alegra_contacts.alegra_account`). */
+  alegraAccount: string
+  /** Nombre de la cuenta, si está dada de alta en `alegra_cuentas`. */
+  cuentaNombre: string | null
+  alegraPriceListId: string
+  nombre: string
+  /** Contactos activos del espejo que usan esa lista (0 = el enlace quedó sin contactos). */
+  contactos: number
+}
+
+/**
+ * Listas de precio de Alegra que se pueden enlazar, por cuenta. No hay una tabla de listas de
+ * Alegra (`price_lists` es de las planillas Excel, no de Alegra ni por cuenta): salen de los valores
+ * distintos de `alegra_contacts.price_list_id` de los contactos activos de cada cuenta, más los
+ * enlaces ya cargados cuya lista de Alegra quedó sin contactos (para poder quitarlos).
+ */
+export async function listarListasAlegra(tenantId: string): Promise<ListaAlegraDto[]> {
+  const db = getDb()
+  const filas = await db
+    .select({
+      alegraAccount: alegraContacts.alegraAccount,
+      alegraPriceListId: sql<string>`${alegraContacts.priceListId}`,
+      nombre: sql<string | null>`max(${alegraContacts.priceListName})`,
+      contactos: sql<number>`count(*)::int`,
+    })
+    .from(alegraContacts)
+    .where(and(eq(alegraContacts.tenantId, tenantId), eq(alegraContacts.status, "active"), sql`${alegraContacts.priceListId} IS NOT NULL`))
+    .groupBy(alegraContacts.alegraAccount, alegraContacts.priceListId)
+  const enlaces = await db
+    .select({ alegraAccount: listaPrecioAlegraMapeo.alegraAccount, alegraPriceListId: listaPrecioAlegraMapeo.alegraPriceListId })
+    .from(listaPrecioAlegraMapeo)
+    .where(eq(listaPrecioAlegraMapeo.tenantId, tenantId))
+  const cuentas = await db
+    .select({ slug: alegraCuentas.slug, nombre: alegraCuentas.nombre })
+    .from(alegraCuentas)
+    .where(eq(alegraCuentas.tenantId, tenantId))
+  const nombreCuenta = new Map(cuentas.map((c) => [c.slug, c.nombre]))
+  const out: ListaAlegraDto[] = filas.map((f) => ({
+    alegraAccount: f.alegraAccount,
+    cuentaNombre: nombreCuenta.get(f.alegraAccount) ?? null,
+    alegraPriceListId: f.alegraPriceListId,
+    nombre: f.nombre?.trim() || `Lista ${f.alegraPriceListId}`,
+    contactos: Number(f.contactos),
+  }))
+  for (const e of enlaces) {
+    if (out.some((o) => o.alegraAccount === e.alegraAccount && o.alegraPriceListId === e.alegraPriceListId)) continue
+    out.push({
+      alegraAccount: e.alegraAccount,
+      cuentaNombre: nombreCuenta.get(e.alegraAccount) ?? null,
+      alegraPriceListId: e.alegraPriceListId,
+      nombre: `Lista ${e.alegraPriceListId}`,
+      contactos: 0,
+    })
+  }
+  return out.sort(
+    (a, b) =>
+      a.alegraAccount.localeCompare(b.alegraAccount) ||
+      a.alegraPriceListId.localeCompare(b.alegraPriceListId, undefined, { numeric: true }),
+  )
 }
 
 export interface HistorialDto {

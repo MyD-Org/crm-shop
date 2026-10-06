@@ -150,3 +150,38 @@ describe("validarCambios: condiciones de medios de pago", () => {
     expect(validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: null }])).toMatchObject({ ok: false })
   })
 })
+
+describe("validarCambios: lista privada y enlace con la lista de Alegra", () => {
+  it("crearLista y editarLista aceptan `privada` booleana; editarLista con solo `privada` es válido", () => {
+    expect(validarCambios([{ op: "crearLista", nombre: "L5", coeficiente: "1.2", privada: true }])).toMatchObject({
+      ok: true,
+      cambios: [{ op: "crearLista", nombre: "L5", coeficiente: "1.2000", privada: true }],
+    })
+    expect(validarCambios([{ op: "editarLista", listaId: ID, privada: true }])).toEqual({
+      ok: true,
+      cambios: [{ op: "editarLista", listaId: ID, privada: true }],
+    })
+    expect(validarCambios([{ op: "editarLista", listaId: ID, privada: false }])).toMatchObject({ ok: true })
+  })
+  it("rechaza `privada` que no es booleana", () => {
+    expect(validarCambios([{ op: "editarLista", listaId: ID, privada: "si" }])).toMatchObject({ ok: false, campo: "cambios[0].privada" })
+    expect(validarCambios([{ op: "crearLista", nombre: "L5", coeficiente: "1.2", privada: 1 }])).toMatchObject({ ok: false })
+  })
+  it("setMapeo: cuenta + lista de Alegra + lista online (o null para quitar el enlace)", () => {
+    expect(validarCambios([{ op: "setMapeo", alegraAccount: "principal", alegraPriceListId: "5", listaId: ID }])).toEqual({
+      ok: true,
+      cambios: [{ op: "setMapeo", alegraAccount: "principal", alegraPriceListId: "5", listaId: ID }],
+    })
+    expect(validarCambios([{ op: "setMapeo", alegraAccount: "mdp", alegraPriceListId: "5", listaId: null }])).toMatchObject({ ok: true })
+  })
+  it("setMapeo rechaza cuenta o lista de Alegra vacías o raras y lista que no es uuid", () => {
+    const m = (extra: Record<string, unknown>) =>
+      validarCambios([{ op: "setMapeo", alegraAccount: "principal", alegraPriceListId: "5", listaId: ID, ...extra }])
+    expect(m({ alegraAccount: "" })).toMatchObject({ ok: false, campo: "cambios[0].alegraAccount" })
+    expect(m({ alegraAccount: "a b" })).toMatchObject({ ok: false })
+    expect(m({ alegraPriceListId: "" })).toMatchObject({ ok: false, campo: "cambios[0].alegraPriceListId" })
+    expect(m({ alegraPriceListId: "x'; --" })).toMatchObject({ ok: false })
+    expect(m({ listaId: "no-uuid" })).toMatchObject({ ok: false, campo: "cambios[0].listaId" })
+    expect(m({ listaId: undefined })).toMatchObject({ ok: false })
+  })
+})

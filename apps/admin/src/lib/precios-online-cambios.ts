@@ -5,6 +5,9 @@
 // el aplicar reciben el MISMO arreglo, así lo que se previsualizó es exactamente lo que se aplica.
 
 const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
+// Cuenta de Alegra (slug de la cuenta) y id de la lista de Alegra: ids/slug simples, sin espacios.
+const CUENTA_ALEGRA_RE = /^[A-Za-z0-9_-]{1,60}$/
+const LISTA_ALEGRA_RE = /^[A-Za-z0-9_-]{1,40}$/
 export const MAX_CAMBIOS = 50
 export const MAX_NOMBRE_LISTA = 60
 export const MAX_MARCA = 80
@@ -19,8 +22,17 @@ export const MSG_SIN_CAMBIOS = "No hay cambios para aplicar."
 export const MSG_UMBRAL = "El umbral debe ser un número mayor que 0."
 
 export type CambioPrecios =
-  | { op: "crearLista"; nombre: string; coeficiente: string; orden?: number }
-  | { op: "editarLista"; listaId: string; nombre?: string; coeficiente?: string; orden?: number; activa?: boolean }
+  | { op: "crearLista"; nombre: string; coeficiente: string; orden?: number; privada?: boolean }
+  | {
+      op: "editarLista"
+      listaId: string
+      nombre?: string
+      coeficiente?: string
+      orden?: number
+      activa?: boolean
+      /** Lista privada (0068): solo la ven las cuentas corrientes con la lista de Alegra enlazada. */
+      privada?: boolean
+    }
   | { op: "borrarLista"; listaId: string }
   | { op: "setReferencia"; listaId: string }
   | { op: "upsertOverride"; listaId: string; tipo: "marca"; marca: string; coeficiente: string }
@@ -34,11 +46,25 @@ export type CambioPrecios =
    * null = sin mínimo.
    */
   | { op: "setCondicion"; medioSlug: string; cuotas: number | null; listaId: string | null; montoMinimo?: string | null }
+  /**
+   * Enlace "lista de Alegra del contacto -> lista online privada" por cuenta de Alegra (0068).
+   * `listaId` null quita el enlace; con valor lo crea o lo mueve a esa lista (que debe ser privada).
+   */
+  | { op: "setMapeo"; alegraAccount: string; alegraPriceListId: string; listaId: string | null }
   /** SOLO armado por el servidor al revertir una baja; nunca se acepta desde el cliente. */
   | {
       op: "restaurarLista"
-      lista: { id: string; nombre: string; coeficiente: string; orden: number; activa: boolean; esReferencia: boolean }
+      lista: {
+        id: string
+        nombre: string
+        coeficiente: string
+        orden: number
+        activa: boolean
+        esReferencia: boolean
+        privada?: boolean
+      }
       overrides: { tipo: "marca" | "categoria"; marca: string | null; categoriaId: string | null; coeficiente: string }[]
+      mapeos?: { alegraAccount: string; alegraPriceListId: string }[]
     }
 
 export type Invalido = { ok: false; campo: string; error: string }
@@ -134,11 +160,15 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
       if (!n.ok) return n
       const c = validarCoef(raw.coeficiente, `${campo}.coeficiente`)
       if (!c.ok) return c
-      const out: CambioPrecios = { op: "crearLista", nombre: n.nombre, coeficiente: c.coef }
+      const out: Extract<CambioPrecios, { op: "crearLista" }> = { op: "crearLista", nombre: n.nombre, coeficiente: c.coef }
       if (raw.orden !== undefined) {
         const o = validarOrden(raw.orden)
         if (!o.ok) return o
         out.orden = o.orden
+      }
+      if (raw.privada !== undefined) {
+        if (typeof raw.privada !== "boolean") return invalido(`${campo}.privada`, MSG_BODY)
+        out.privada = raw.privada
       }
       return { ok: true, cambio: out }
     }
@@ -164,7 +194,17 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
         if (typeof raw.activa !== "boolean") return invalido(`${campo}.activa`, MSG_BODY)
         out.activa = raw.activa
       }
-      if (out.nombre === undefined && out.coeficiente === undefined && out.orden === undefined && out.activa === undefined) {
+      if (raw.privada !== undefined) {
+        if (typeof raw.privada !== "boolean") return invalido(`${campo}.privada`, MSG_BODY)
+        out.privada = raw.privada
+      }
+      if (
+        out.nombre === undefined &&
+        out.coeficiente === undefined &&
+        out.orden === undefined &&
+        out.activa === undefined &&
+        out.privada === undefined
+      ) {
         return invalido(campo, MSG_BODY)
       }
       return { ok: true, cambio: out }
@@ -235,6 +275,19 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
         montoMinimo = m
       }
       return { ok: true, cambio: { op: "setCondicion", medioSlug: raw.medioSlug, cuotas, listaId: raw.listaId, montoMinimo } }
+    }
+    case "setMapeo": {
+      if (typeof raw.alegraAccount !== "string" || !CUENTA_ALEGRA_RE.test(raw.alegraAccount)) {
+        return invalido(`${campo}.alegraAccount`, "Seleccione la cuenta de Alegra.")
+      }
+      if (typeof raw.alegraPriceListId !== "string" || !LISTA_ALEGRA_RE.test(raw.alegraPriceListId)) {
+        return invalido(`${campo}.alegraPriceListId`, "Seleccione la lista de Alegra.")
+      }
+      if (raw.listaId !== null && !esUuid(raw.listaId)) return invalido(`${campo}.listaId`, "Seleccione la lista de precios.")
+      return {
+        ok: true,
+        cambio: { op: "setMapeo", alegraAccount: raw.alegraAccount, alegraPriceListId: raw.alegraPriceListId, listaId: raw.listaId },
+      }
     }
     default:
       return invalido(campo, MSG_BODY)

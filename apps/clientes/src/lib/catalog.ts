@@ -60,6 +60,7 @@ import {
 } from "./nombre-exhibido";
 import {
   formasTermino,
+  normalizarCodigo,
   patronLike,
   patronPrefijo,
   raizPlural,
@@ -82,7 +83,7 @@ import {
 import type { CriterioEstructurado } from "./catalogo-atributos";
 import { caracteristicasDe, leerAtributosEstructurados, type ClaveEstructurada } from "./catalogo-caracteristicas";
 import { universoAcotado } from "./busqueda-v2/universo-acotado";
-import { condicionAmplia, condicionRecuperar } from "./busqueda-v2/recuperar";
+import { condicionAmplia, condicionRecuperar, terminosQueRecuperan } from "./busqueda-v2/recuperar";
 import { puntajeBusqueda } from "./busqueda-v2/ordenar";
 import type { CriterioPlan, PiezasBusqueda } from "./busqueda-v2/piezas";
 
@@ -451,22 +452,81 @@ function coincideTexto(q: string, tolerante = false) {
 }
 
 /**
+ * Parecido mínimo (pg_trgm `word_similarity`) entre el código buscado, sin separadores, y el código
+ * del producto, también sin separadores: sólo en el segundo intento de la etapa de código
+ * (`texto.tolerante` + `texto.codigo`) y sólo con 4 caracteres o más. Valor inicial: se calibra con
+ * el corte `tipo=codigo` del banco.
+ */
+const UMBRAL_CODIGO = 0.6;
+
+/** El código del producto sin separadores (minúsculas, sin tildes, sólo letras y dígitos). */
+const codigoSinSeparadoresSql = () => sql`regexp_replace(${sinTildes(crmCatalogo.code)}, '[^a-z0-9]', '', 'g')`;
+
+/**
+ * Etapa de código: `qn` (el código buscado normalizado) está contenido en el código del producto
+ * sin separadores (`DL18W` encuentra `DL-18W`); con `tolerante` y 4 caracteres o más, también el
+ * que se parece por trigramas. Se une con la clásica de términos (superconjunto de la AND).
+ */
+function condicionCodigo(qn: string, tolerante: boolean) {
+  const codigo = codigoSinSeparadoresSql();
+  const partes = [sql`${codigo} LIKE ${patronLike(qn)}`];
+  if (tolerante && qn.length >= 4) partes.push(sql`public.word_similarity(${qn}, ${codigo}) >= ${UMBRAL_CODIGO}`);
+  return partes;
+}
+
+/**
+ * Condición de texto sin plan: la clásica de términos (`coincideTexto`) y, con `codigo`, también
+ * el código normalizado sin separadores. Un código de menos de 3 caracteres no activa la etapa.
+ */
+function textoClasico(texto: TextoBusqueda) {
+  const clasica = coincideTexto(texto.q, texto.tolerante);
+  const qn = texto.codigo ? normalizarCodigo(texto.q) : "";
+  if (!qn) return clasica;
+  const partes = condicionCodigo(qn, !!texto.tolerante);
+  if (clasica) partes.push(clasica);
+  return or(...partes);
+}
+
+/** Términos del plan a los que el segundo intento les suma el parecido: los que recuperan y tienen 4 letras o más. */
+const terminosParecidos = (plan: CriterioPlan) => terminosQueRecuperan(plan).filter(admiteParecido);
+
+/**
+ * Tolerante CON plan: lo que recupera el plan o, por cada término que recupera, su parecido por
+ * trigramas con el texto buscable (un typo no hace perder el resto del plan). Los duros no pasan
+ * por acá: siguen siendo filtros de `condicionesDe`.
+ */
+function recuperarTolerante(plan: CriterioPlan, recuperar: SQL | undefined, p: PiezasBusqueda) {
+  const parecidos = terminosParecidos(plan).map(
+    (t) => sql`public.word_similarity(${raizPlural(t)}, ${p.texto}) >= ${UMBRAL_PARECIDO}`,
+  );
+  const partes = [...(recuperar ? [recuperar] : []), ...parecidos];
+  if (!partes.length) return undefined;
+  return partes.length === 1 ? partes[0] : or(...partes);
+}
+
+/**
  * Puntaje de relevancia para el orden `relevancia`. Por término, pesa DÓNDE
  * aparece: en el nombre exhibido 4, en el código 3, en la marca o categoría
  * 2, en otro lado (descripción) 1. Encima: código exacto +20 (quien pega un
  * código quiere ESE producto) y nombre que empieza con el primer término +2.
  * En la búsqueda tolerante se suma el parecido de cada término con el nombre.
  */
-function relevanciaSql(q: string, tolerante: boolean) {
+function relevanciaSql(q: string, tolerante: boolean, codigo = "") {
   const terminos = terminosBusqueda(q);
   const nombre = sinTildes(nombreExhibidoSql);
-  const codigo = sinTildes(crmCatalogo.code);
+  const codigoCol = sinTildes(crmCatalogo.code);
   const marcaCategoria = sinTildes(sql`concat_ws(' ', ${marcaSql}, ${crmCategoriasAlegra.name})`);
   const partes = terminos.map(
     (t) =>
-      sql`(case when ${contiene(nombre, t)} then 4 when ${contiene(codigo, t)} then 3 when ${contiene(marcaCategoria, t)} then 2 else 1 end)`,
+      sql`(case when ${contiene(nombre, t)} then 4 when ${contiene(codigoCol, t)} then 3 when ${contiene(marcaCategoria, t)} then 2 else 1 end)`,
   );
-  partes.push(sql`(case when ${codigo} = ${terminos.join(" ")} then 20 else 0 end)`);
+  partes.push(sql`(case when ${codigoCol} = ${terminos.join(" ")} then 20 else 0 end)`);
+  // Etapa de código: el código sin separadores exacto arriba de todo, y después el que empieza con él.
+  if (codigo) {
+    const sinSeparadores = codigoSinSeparadoresSql();
+    partes.push(sql`(case when ${sinSeparadores} = ${codigo} then 20 else 0 end)`);
+    partes.push(sql`(case when ${sinSeparadores} LIKE ${patronPrefijo(codigo)} then 12 else 0 end)`);
+  }
   // En la tolerante el primer término puede no ser prefijo exacto de nada
   // ("lamparita" no lo es de "lámpara"): alcanza con que el nombre empiece
   // con sus primeras 4 letras. Sin esto, "Dimmer para lámparas" le ganaba a
@@ -697,7 +757,11 @@ export interface TextoBusqueda {
   plan?: CriterioPlan;
   /** Suma el parecido por trigramas por término de 4 letras o más. */
   tolerante?: boolean;
-  /** Reservado: coincidencia por código normalizado, sin separadores. Todavía no hace nada. */
+  /**
+   * Etapa de código: además de la clásica, coincide por el código normalizado sin separadores
+   * (`DL18W` encuentra `DL-18W`) y lo ordena arriba. Con `tolerante`, suma el parecido por
+   * trigramas sobre el código (4 caracteres o más). Un código de menos de 3 caracteres se ignora.
+   */
   codigo?: boolean;
 }
 
@@ -1020,7 +1084,7 @@ function textoSinPlan(filtros: FiltrosCatalogo, texto: TextoBusqueda, disp?: Con
     const amplia = condicionAmplia(texto.plan, piezasBusqueda(filtros, disp));
     if (amplia) return amplia;
   }
-  return texto.q ? coincideTexto(texto.q, texto.tolerante) : undefined;
+  return texto.q ? textoClasico(texto) : undefined;
 }
 
 /**
@@ -1054,7 +1118,10 @@ function condicionesDe(
 ) {
   const texto = textoDe(filtros);
   // Con plan (búsqueda v2) el texto recupera en vez de filtrar; sin nada que recupere, la clásica.
-  const recuperar = texto.plan ? condicionRecuperar(texto.plan, piezasBusqueda(filtros, disp)) : undefined;
+  const piezas = texto.plan ? piezasBusqueda(filtros, disp) : undefined;
+  const recuperarPlan = texto.plan && piezas ? condicionRecuperar(texto.plan, piezas) : undefined;
+  // Segundo intento con plan: lo que recupera el plan o se le parece (los duros siguen siendo filtros).
+  const recuperar = texto.plan && texto.tolerante && piezas ? recuperarTolerante(texto.plan, recuperarPlan, piezas) : recuperarPlan;
   return and(
     enTenantCatalogo(),
     activoSql,
@@ -1094,11 +1161,17 @@ function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: Contexto
       // Búsqueda v2: el puntaje del plan, aunque no quede texto filtrando.
       const texto = textoDe(filtros);
       if (texto.plan) {
-        return [sql`${puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp))} desc`, asc(crmCatalogo.name)];
+        const puntaje = puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp));
+        // Segundo intento con plan: el puntaje del plan más el parecido de cada término que recupera.
+        const parecido = texto.tolerante
+          ? terminosParecidos(texto.plan).map((t) => sql`public.word_similarity(${raizPlural(t)}, ${sinTildes(nombreExhibidoSql)}) * 4`)
+          : [];
+        return [sql`${parecido.length ? sql.join([puntaje, ...parecido], sql` + `) : puntaje} desc`, asc(crmCatalogo.name)];
       }
       // Sin términos útiles no hay con qué puntuar: alfabético.
       if (!texto.q || !terminosBusqueda(texto.q).length) return [asc(crmCatalogo.name)];
-      return [sql`${relevanciaSql(texto.q, !!texto.tolerante)} desc`, asc(crmCatalogo.name)];
+      const codigo = texto.codigo ? normalizarCodigo(texto.q) : "";
+      return [sql`${relevanciaSql(texto.q, !!texto.tolerante, codigo)} desc`, asc(crmCatalogo.name)];
     }
     case "precio-asc":
       return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];

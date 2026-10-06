@@ -79,3 +79,17 @@ export function patronLike(termino: string): string {
 export function patronPrefijo(termino: string): string {
   return `${escaparLike(termino)}%`;
 }
+
+/** Menos que esto no es un código: la etapa de código no corre (el parecido de 2 letras encuentra cualquier cosa). */
+const MIN_CODIGO = 3;
+
+/**
+ * El código de la consulta sin separadores: minúsculas, sin tildes y sólo letras y dígitos, para
+ * que `DL18W`, `DL-18W` y «dl 18 w» encuentren el mismo producto. Vacío si queda de menos de
+ * `MIN_CODIGO` caracteres (no hay etapa de código).
+ */
+export function normalizarCodigo(q: string | undefined): string {
+  if (!q) return "";
+  const n = normalizar(q).replace(/[^a-z0-9]/g, "");
+  return n.length >= MIN_CODIGO ? n : "";
+}

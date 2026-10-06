@@ -55,6 +55,7 @@ export function CatalogoClient({
   oferta = null,
   filtrosSinBusqueda = false,
   busquedaIa,
+  etapa,
 }: {
   /** Sólo la página actual, nunca el catálogo entero. */
   productos: Product[];
@@ -84,6 +85,8 @@ export function CatalogoClient({
     alternativas: ChipSugerido[];
     relacionadosHref?: string;
   };
+  /** Etapa del motor de búsqueda que resolvió el listado (sólo telemetría: `busqueda_enviada`). */
+  etapa?: string;
 }) {
   const router = useRouter();
   // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
@@ -226,8 +229,8 @@ export function CatalogoClient({
   // Telemetría (búsqueda v2): una búsqueda entendida recién llegada de `/buscar`.
   const conPlan = !!busquedaIa && estado.ia === IA_PLAN && estado.pagina === 1 && !!estado.query;
   useEffect(() => {
-    if (conPlan && estado.query) enviarBusquedaEnviada(estado.query, total);
-  }, [conPlan, estado.query, total]);
+    if (conPlan && estado.query) enviarBusquedaEnviada(estado.query, total, etapa);
+  }, [conPlan, estado.query, total, etapa]);
 
   return (
     <main className="mx-auto w-full max-w-contenido flex-1 px-4 py-8">

@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Product } from "@/data/products";
 import type { Facetas, FiltrosCatalogo, PaginaCatalogo } from "../catalog";
 import { pareceCodigo } from "../busqueda-inteligente/gate";
-import { buscar, etapasDe, necesitaPlan, sinTexto, type DepsMotor, type OpcionesBuscar, type PedidoBuscar } from "./motor";
+import { PRESUPUESTOS_CASCADA, buscar, etapasDe, necesitaPlan, sinTexto, type DepsMotor, type OpcionesBuscar, type PedidoBuscar } from "./motor";
 import { criterioDe } from "./destino";
 import { planVacio, type PlanBusqueda } from "./plan";
 
@@ -412,11 +412,6 @@ describe("buscar: degradación y errores", () => {
     const { deps } = crearDeps(() => roto);
     await expect(buscar(pedido(), legado("admin"), deps)).rejects.toBe(roto);
   });
-
-  it("la política cascada todavía no está implementada", async () => {
-    const { deps } = crearDeps();
-    await expect(buscar(pedido(), { ...legado("catalogo"), politica: "cascada" }, deps)).rejects.toThrow(/cascada/);
-  });
 });
 
 describe("buscar: filtrosEfectivos y facetas", () => {
@@ -457,6 +452,314 @@ describe("buscar: filtrosEfectivos y facetas", () => {
     expect(r.ms).toBe(250);
   });
 });
+
+
+// ---------------------------------------------------------------------------------------------
+// Política `cascada` (PR2): código -> plan -> exacta -> tolerante, con presupuestos por etapa.
+// ---------------------------------------------------------------------------------------------
+
+const cascada = (superficie: OpcionesBuscar["superficie"], extra: Partial<OpcionesBuscar> = {}): OpcionesBuscar => ({
+  superficie,
+  politica: "cascada",
+  conPlan: true,
+  ...extra,
+});
+
+const etapasC = (a: Partial<Parameters<typeof etapasDe>[0]>) =>
+  etapasDe({ politica: "cascada", superficie: "catalogo", consulta: CONSULTA, plan: null, conPlan: true, ...a });
+
+/** Un plan que NO aporta nada a la clásica: sin duros ni blandos, sólo el término original. */
+const planQueNoAporta = (): PlanBusqueda => ({
+  ...planVacio(CONSULTA),
+  blandos: { categorias: [], atributos: [], terminos: [{ texto: "panel", peso: 1 }] },
+});
+
+describe("etapasDe: política cascada", () => {
+  it("consulta que parece código (G): código y tolerante sobre el código, sin plan", () => {
+    expect(etapasC({ consulta: CODIGO })).toEqual(["codigo", "tolerante"]);
+    expect(etapasC({ consulta: CODIGO, plan: planProducto() })).toEqual(["codigo", "tolerante"]);
+    expect(etapasC({ consulta: CODIGO, conPlan: false })).toEqual(["codigo", "tolerante"]);
+    expect(etapasC({ consulta: CODIGO.replace("-", "") })).toEqual(["codigo", "tolerante"]);
+  });
+
+  it("un plan de intención código también es G (aunque la consulta no parezca un código)", () => {
+    expect(etapasC({ consulta: "conector rapido", plan: planProducto({ intencion: "codigo" }) })).toEqual(["codigo", "tolerante"]);
+  });
+
+  it("G necesita 3 o más caracteres normalizados: «e2» no tiene etapa de código", () => {
+    expect(pareceCodigo("e2")).toBe(true);
+    expect(etapasC({ consulta: "e2" })).toEqual(["exacta"]);
+  });
+
+  it("plan que aporta (P y A): plan, exacta, tolerante", () => {
+    expect(etapasC({ plan: planProducto() })).toEqual(["plan", "exacta", "tolerante"]);
+    expect(etapasC({ plan: planProducto(), superficie: "autocompletar" })).toEqual(["plan", "exacta", "tolerante"]);
+    expect(etapasC({ plan: planProducto(), superficie: "chat" })).toEqual(["plan", "exacta", "tolerante"]);
+  });
+
+  it("plan que no aporta (P y no A): exacta, plan, tolerante", () => {
+    expect(etapasC({ plan: planQueNoAporta() })).toEqual(["exacta", "plan", "tolerante"]);
+  });
+
+  it("sin plan, con conPlan apagado o con un plan de intención código: exacta y tolerante", () => {
+    expect(etapasC({})).toEqual(["exacta", "tolerante"]);
+    expect(etapasC({ plan: planProducto(), conPlan: false })).toEqual(["exacta", "tolerante"]);
+    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
+      expect(etapasC({ superficie, plan: planProducto(), conPlan: false })).not.toContain("plan");
+    }
+  });
+
+  it("el selector del admin nunca usa plan", () => {
+    expect(etapasC({ superficie: "admin", plan: planProducto() })).toEqual(["exacta", "tolerante"]);
+  });
+
+  it("la tolerante se omite sin términos de 4 letras o más (y sin ser código)", () => {
+    expect(etapasC({ consulta: "9w" })).toEqual(["exacta"]);
+    expect(etapasC({ consulta: "9w e27", plan: planProducto() })).toEqual(["plan", "exacta"]);
+    expect(etapasC({ consulta: "9w lampara" })).toEqual(["exacta", "tolerante"]);
+  });
+
+  it("sin texto o sin términos: una lectura sin texto", () => {
+    for (const consulta of ["", "   ", "!!!"]) expect(etapasC({ consulta, plan: planProducto() })).toEqual(["sin-texto"]);
+  });
+
+  it("necesitaPlan en cascada: con texto y busqueda-ia, salvo admin y lo que parece un código", () => {
+    const n = (a: Partial<Parameters<typeof necesitaPlan>[0]>) =>
+      necesitaPlan({ politica: "cascada", superficie: "catalogo", consulta: CONSULTA, conPlan: true, ...a });
+    expect(n({})).toBe(true);
+    expect(n({ superficie: "autocompletar" })).toBe(true);
+    expect(n({ superficie: "chat" })).toBe(true);
+    expect(n({ superficie: "admin" })).toBe(false);
+    expect(n({ conPlan: false })).toBe(false);
+    expect(n({ consulta: "" })).toBe(false);
+    expect(n({ consulta: CODIGO })).toBe(false);
+  });
+});
+
+describe("buscar: política cascada", () => {
+  it("salida temprana: si el plan trae resultados no corren ni exacta ni tolerante", async () => {
+    const { deps, llamadas } = crearDeps(() => 4);
+    const r = await buscar(pedido(), cascada("catalogo", { planDe: async () => planProducto() }), deps);
+    expect(llamadas).toHaveLength(1);
+    expect(r).toMatchObject({ etapa: "plan", intentos: ["plan"], total: 4 });
+  });
+
+  it("typo con plan en el catálogo: plan 0, exacta 0, tolerante CONSERVANDO el plan y los duros", async () => {
+    const plan = planProducto({
+      blandos: {
+        categorias: [{ nombre: "Plafones", peso: 0.9 }],
+        atributos: [{ id: "corriente_a:20", peso: 1 }, { id: "id-fuera-del-diccionario", peso: 0.8 }],
+        terminos: [{ texto: "plafon", peso: 1 }],
+      },
+    });
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 3 : 0));
+    const filtros = { categorias: ["Lámparas"], atributos: ["tono-calido"] };
+    const r = await buscar(pedido({ consulta: "plafom", filtros }), cascada("catalogo", { planDe: async () => plan }), deps);
+    expect(r).toMatchObject({ etapa: "tolerante", intentos: ["plan", "exacta", "tolerante"], total: 3 });
+    const criterio = criterioDe(plan, { categorias: ["Lámparas"], atributos: ["tono-calido"] });
+    expect(llamadas.map((l) => l.filtros.texto)).toEqual([
+      { q: "plafom", plan: criterio },
+      { q: "plafom" },
+      { q: "plafom", tolerante: true, plan: criterio },
+    ]);
+    // Los duros siguen siendo filtros en la etapa tolerante y el plan llega intacto (ids arbitrarios).
+    expect(llamadas[2].filtros.categorias).toEqual(["Lámparas"]);
+    expect(llamadas[2].filtros.atributos).toEqual(["tono-calido"]);
+    expect(llamadas[2].filtros.texto?.plan?.blandos.atributos).toEqual([
+      { id: "corriente_a:20", peso: 1 },
+      { id: "id-fuera-del-diccionario", peso: 0.8 },
+    ]);
+    expect(r.filtrosEfectivos.texto).toEqual({ q: "plafom", tolerante: true, plan: criterio });
+  });
+
+  it("plan que no aporta: `intentos` empieza por la exacta y el plan corre sólo si la exacta dio 0", async () => {
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.plan ? 2 : 0));
+    const r = await buscar(pedido(), cascada("catalogo", { planDe: async () => planQueNoAporta() }), deps);
+    expect(r.intentos).toEqual(["exacta", "plan"]);
+    expect(r.etapa).toBe("plan");
+    expect(llamadas[0].filtros.texto).toEqual({ q: CONSULTA });
+    // Y si la exacta ya trae resultados, ahí termina.
+    const otra = crearDeps(() => 5);
+    const r2 = await buscar(pedido(), cascada("catalogo", { planDe: async () => planQueNoAporta() }), otra.deps);
+    expect(r2).toMatchObject({ etapa: "exacta", intentos: ["exacta"] });
+  });
+
+  it("cero resultados en todas las etapas: etapa vacío, total 0 y sin productos", async () => {
+    const { deps } = crearDeps(() => 0);
+    const r = await buscar(pedido(), cascada("catalogo", { planDe: async () => planProducto() }), deps);
+    expect(r).toMatchObject({ etapa: "vacio", total: 0, productos: [], intentos: ["plan", "exacta", "tolerante"] });
+    expect(r.truncado).toBeUndefined();
+  });
+
+  it("código: DL-18W y DL18W resuelven en la etapa código, sin pedir plan ni correr la tolerante", async () => {
+    for (const consulta of [CODIGO, CODIGO.replace("-", "")]) {
+      const planDe = vi.fn(async () => planProducto());
+      const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.codigo && !a.filtros.texto.tolerante ? 1 : 0));
+      const r = await buscar(pedido({ consulta }), cascada("catalogo", { planDe }), deps);
+      expect(planDe).not.toHaveBeenCalled();
+      expect(llamadas).toHaveLength(1);
+      expect(llamadas[0].filtros.texto).toEqual({ q: consulta, codigo: true });
+      expect(r).toMatchObject({ etapa: "codigo", intentos: ["codigo"] });
+    }
+  });
+
+  it("código: el trigrama (tolerante sobre el código) corre SÓLO si no hubo coincidencia; sin plan", async () => {
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 2 : 0));
+    const r = await buscar(pedido({ consulta: CODIGO }), cascada("catalogo", { planDe: async () => planProducto() }), deps);
+    expect(llamadas.map((l) => l.filtros.texto)).toEqual([
+      { q: CODIGO, codigo: true },
+      { q: CODIGO, tolerante: true, codigo: true },
+    ]);
+    expect(r).toMatchObject({ etapa: "tolerante", total: 2 });
+  });
+
+  it("el motor decide G con el `pareceCodigo` real de gate (no lo reimplementa)", async () => {
+    const { deps, llamadas } = crearDeps(() => 1);
+    await buscar(pedido({ consulta: CONSULTA }), cascada("autocompletar"), deps);
+    expect(llamadas[0].filtros.texto?.codigo).toBeUndefined();
+    await buscar(pedido({ consulta: CODIGO }), cascada("autocompletar"), deps);
+    expect(llamadas[1].filtros.texto?.codigo).toBe(true);
+  });
+
+  it("autocompletar: plan, exacta, tolerante, sin conteo, porPagina = límite y estructurados en todas las etapas", async () => {
+    const { deps, llamadas } = crearDeps(() => 0);
+    const r = await buscar(
+      pedido({ porPagina: 8, filtros: { atributosEstructurados: true } }),
+      cascada("autocompletar", { planDe: async () => planProducto() }),
+      deps,
+    );
+    expect(r.intentos).toEqual(["plan", "exacta", "tolerante"]);
+    expect(llamadas.every((l) => l.sinConteo && l.porPagina === 8 && l.pagina === 1)).toBe(true);
+    expect(llamadas.every((l) => l.filtros.atributosEstructurados === true)).toBe(true);
+    expect(llamadas.every((l) => l.filtros.soloStock === undefined)).toBe(true);
+  });
+
+  it("autocompletar: el plan que no responde a tiempo (250 ms) se descarta: sigue con la exacta, sin plan", async () => {
+    vi.useFakeTimers();
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 1 : 0));
+    const planDe = () => new Promise<PlanBusqueda | null>(() => {});
+    const promesa = buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe }), deps);
+    await vi.advanceTimersByTimeAsync(PRESUPUESTOS_CASCADA.autocompletar.planTimeoutMs!);
+    const r = await promesa;
+    expect(r.plan).toBeNull();
+    expect(r.intentos).toEqual(["exacta", "tolerante"]);
+    expect(llamadas.some((l) => l.filtros.texto?.plan)).toBe(false);
+  });
+
+  it("chat: usa el plan en cascada y su tope de plan es 600 ms; el catálogo no tiene tope de plan", async () => {
+    expect(PRESUPUESTOS_CASCADA.chat.planTimeoutMs).toBe(600);
+    expect(PRESUPUESTOS_CASCADA.catalogo.planTimeoutMs).toBeNull();
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.plan ? 3 : 0));
+    const r = await buscar(pedido({ porPagina: 10 }), cascada("chat", { planDe: async () => planProducto() }), deps);
+    expect(r.etapa).toBe("plan");
+    expect(llamadas[0]).toMatchObject({ sinConteo: true, porPagina: 10 });
+  });
+
+  it("los presupuestos por superficie son los del diseño", () => {
+    expect(PRESUPUESTOS_CASCADA).toEqual({
+      catalogo: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 3 },
+      autocompletar: { presupuestoMs: 450, planTimeoutMs: 250, etapasMax: 3 },
+      chat: { presupuestoMs: 1500, planTimeoutMs: 600, etapasMax: 3 },
+      admin: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 2 },
+    });
+  });
+
+  it("presupuesto: pasado el tiempo no se INICIA una etapa nueva (truncado, etapa vacío)", async () => {
+    let t = 0;
+    const { deps, llamadas } = crearDeps();
+    // Cada lectura tarda 500 ms del reloj inyectado: el presupuesto del autocompletar es 450.
+    const lenta: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 500; return deps.pagina(a); } };
+    const r = await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => planProducto() }), lenta);
+    expect(llamadas).toHaveLength(1);
+    expect(r).toMatchObject({ etapa: "vacio", truncado: true, total: 0, productos: [], intentos: ["plan"] });
+  });
+
+  it("presupuesto: dentro del tiempo corren todas las etapas; la primera siempre corre", async () => {
+    let t = 0;
+    const { deps, llamadas } = crearDeps();
+    const rapida: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 100; return deps.pagina(a); } };
+    const r = await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => planProducto() }), rapida);
+    expect(llamadas).toHaveLength(3);
+    expect(r.truncado).toBeUndefined();
+    // Aun con el tiempo ya agotado por el plan, la primera lectura se hace (y ahí se corta).
+    t = 0;
+    llamadas.length = 0;
+    const planLento = async () => {
+      t += 5000;
+      return planProducto();
+    };
+    const r2 = await buscar(pedido(), cascada("catalogo", { planDe: planLento }), { ...deps, ahora: () => t });
+    expect(llamadas).toHaveLength(1);
+    expect(r2).toMatchObject({ etapa: "vacio", truncado: true, intentos: ["plan"] });
+  });
+
+  it("presupuesto del catálogo: 3000 ms", async () => {
+    let t = 0;
+    const { deps, llamadas } = crearDeps();
+    const medio: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 2000; return deps.pagina(a); } };
+    const r = await buscar(pedido(), cascada("catalogo"), medio);
+    // exacta (2000) y tolerante (arranca a los 2000 < 3000): las dos corren.
+    expect(llamadas).toHaveLength(2);
+    expect(r.truncado).toBeUndefined();
+  });
+
+  it("el legado NO tiene presupuesto: corre todas las etapas aunque tarden", async () => {
+    let t = 0;
+    const { deps, llamadas } = crearDeps();
+    const lenta: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 99_999; return deps.pagina(a); } };
+    const r = await buscar(pedido({ porPagina: 8 }), legado("autocompletar", { planDe: async () => planProducto() }), lenta);
+    expect(llamadas).toHaveLength(3);
+    expect(r.truncado).toBeUndefined();
+  });
+
+  it("errores: el plan y la tolerante degradan; la exacta, la de código y la sin texto se propagan", async () => {
+    const roto = new Error("pg caído");
+    const a = crearDeps((args) => (args.filtros.texto?.plan ? roto : 2));
+    expect(await buscar(pedido(), cascada("catalogo", { planDe: async () => planProducto() }), a.deps)).toMatchObject({ etapa: "exacta", intentos: ["plan", "exacta"] });
+    const b = crearDeps((args) => (args.filtros.texto?.tolerante ? roto : 0));
+    expect(await buscar(pedido(), cascada("catalogo"), b.deps)).toMatchObject({ etapa: "vacio", total: 0 });
+    const c = crearDeps(() => roto);
+    await expect(buscar(pedido(), cascada("catalogo"), c.deps)).rejects.toBe(roto);
+    const d = crearDeps(() => roto);
+    await expect(buscar(pedido({ consulta: CODIGO }), cascada("catalogo"), d.deps)).rejects.toBe(roto);
+  });
+
+  it("planDe recibe la consulta CRUDA (sólo trim) también en cascada", async () => {
+    const planDe = vi.fn(async () => null);
+    const { deps } = crearDeps(() => 1);
+    await buscar(pedido({ consulta: "  bipolar 9,5w " }), cascada("catalogo", { planDe }), deps);
+    expect(planDe).toHaveBeenCalledWith("bipolar 9,5w");
+  });
+
+  it("conPlan apagado: planDe no se llama y no hay etapa plan, con cualquier superficie", async () => {
+    for (const superficie of ["catalogo", "autocompletar", "chat", "admin"] as const) {
+      const planDe = vi.fn(async () => planProducto());
+      const { deps, llamadas } = crearDeps(() => 0);
+      const r = await buscar(pedido(), cascada(superficie, { conPlan: false, planDe }), deps);
+      expect(planDe).not.toHaveBeenCalled();
+      expect(r.plan).toBeNull();
+      expect(llamadas.some((l) => l.filtros.texto?.plan)).toBe(false);
+    }
+  });
+
+  it("el motor nunca llama a planParaBuscar ni a Jev: sólo consume el planDe inyectado", () => {
+    const fuente = readFileSync(join(__dirname, "motor.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    expect(fuente).not.toMatch(/planParaBuscar/);
+    expect(fuente).not.toMatch(/jev/i);
+  });
+
+  it("filtrosEfectivos y facetas: las de la etapa tolerante (con la condición tolerante y el plan)", async () => {
+    const { deps, facetas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 1 : 0));
+    const r = await buscar(pedido(), cascada("catalogo", { planDe: async () => planProducto(), conFacetas: true }), deps);
+    expect(r.etapa).toBe("tolerante");
+    expect(r.filtrosEfectivos.texto).toMatchObject({ q: CONSULTA, tolerante: true });
+    expect(r.filtrosEfectivos.texto?.plan).toBeDefined();
+    expect(facetas).toHaveLength(3);
+    expect(facetas[2]).toEqual(r.filtrosEfectivos);
+  });
+});
+
+afterEach(() => vi.useRealTimers());
 
 describe("costura de imports del motor", () => {
   const dir = join(__dirname);

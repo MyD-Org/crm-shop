@@ -46,6 +46,8 @@ export type EventoBusqueda =
       ms_jev: number | null;
       /** Normalizada; ausente si parecía un dato personal. */
       consulta?: string;
+      /** Etapa del motor de búsqueda que resolvió (codigo, plan, exacta, tolerante, vacio…); ausente en lectores viejos. */
+      etapa?: string;
     }
   /** `chip`: qué se quitó (en PostHog va como `tipo`). */
   | { tipo: "busqueda_chip_quitado"; chip: "categoria" | "atributo"; valor: string }

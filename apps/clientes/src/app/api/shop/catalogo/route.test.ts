@@ -10,9 +10,11 @@ import { setFlag } from "@/test/flags";
  */
 const prod = (id: string) => ({ id, name: `Producto ${id}`, price: 100, stock: "in" }) as unknown as Product;
 
-type Etapa = "plan" | "exacta" | "tolerante";
+type Etapa = "codigo" | "plan" | "exacta" | "tolerante";
 const secuencia: Etapa[] = [];
-const respuestas: Record<Etapa, Product[]> = { plan: [], exacta: [], tolerante: [] };
+const respuestas: Record<Etapa, Product[]> = { codigo: [], plan: [], exacta: [], tolerante: [] };
+/** El texto de cada lectura (para ver qué conserva la tolerante). */
+const textos: Texto[] = [];
 const fallan = new Set<Etapa>();
 
 function leer(etapa: Etapa): Product[] {
@@ -21,13 +23,15 @@ function leer(etapa: Etapa): Product[] {
   return respuestas[etapa];
 }
 
-type Texto = { q?: string; tolerante?: boolean; plan?: unknown };
+type Texto = { q?: string; tolerante?: boolean; plan?: unknown; codigo?: boolean };
 vi.mock("@/lib/catalog", () => ({
   getCatalogo: async (o: { tolerante?: boolean }) => leer(o.tolerante ? "tolerante" : "exacta"),
   getPaginaCatalogo: async (o: { filtros?: { texto?: Texto; busqueda?: string; busquedaTolerante?: boolean; planBusqueda?: unknown } }) => {
     const f = o.filtros ?? {};
     const t: Texto = f.texto ?? { q: f.busqueda, tolerante: f.busquedaTolerante, plan: f.planBusqueda };
-    const productos = leer(t.plan ? "plan" : t.tolerante ? "tolerante" : "exacta");
+    textos.push(t);
+    // Con la cascada la tolerante puede llevar plan y código: manda `tolerante`.
+    const productos = leer(t.tolerante ? "tolerante" : t.plan ? "plan" : t.codigo ? "codigo" : "exacta");
     return { productos, total: productos.length, pagina: 1, paginas: 1 };
   },
   contarCatalogo: async () => 0,
@@ -53,9 +57,11 @@ const pedir = (qs: string) => GET(new Request(`http://localhost/api/shop/catalog
 
 beforeEach(() => {
   secuencia.length = 0;
+  respuestas.codigo = [];
   respuestas.plan = [];
   respuestas.exacta = [];
   respuestas.tolerante = [];
+  textos.length = 0;
   fallan.clear();
   planParaPagina.mockClear();
   planParaPagina.mockResolvedValue(plan);
@@ -146,5 +152,64 @@ describe("GET /api/shop/catalogo", () => {
     const res = await pedir("?q=foco");
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "No se pudo cargar el catálogo" });
+  });
+});
+
+describe("GET /api/shop/catalogo con el flag busqueda-motor-unico (cascada)", () => {
+  beforeEach(() => setFlag("busqueda-motor-unico", true));
+
+  it("la forma del JSON no cambia: array de productos, sin `etapa`", async () => {
+    respuestas.plan = [prod("1"), prod("2")];
+    const res = await pedir("?q=panel+de+interior&limit=8");
+    expect(res.status).toBe(200);
+    const cuerpo = await res.json();
+    expect(cuerpo).toEqual(respuestas.plan);
+    expect(JSON.stringify(cuerpo)).not.toContain("etapa");
+  });
+
+  it("con plan: plan, exacta y tolerante CONSERVANDO el plan", async () => {
+    respuestas.tolerante = [prod("4")];
+    const res = await pedir("?q=panle+de+interior");
+    expect(secuencia).toEqual(["plan", "exacta", "tolerante"]);
+    expect(textos[2]).toMatchObject({ tolerante: true });
+    expect(textos[2].plan).toBeDefined();
+    expect(await res.json()).toEqual([prod("4")]);
+  });
+
+  it("un código se busca en la etapa código (sin pedir plan) y ahí termina", async () => {
+    respuestas.codigo = [prod("8")];
+    const res = await pedir("?q=DL18W");
+    expect(planParaPagina).not.toHaveBeenCalled();
+    expect(secuencia).toEqual(["codigo"]);
+    expect(textos[0]).toMatchObject({ q: "DL18W", codigo: true });
+    expect(await res.json()).toEqual([prod("8")]);
+  });
+
+  it("un código sin coincidencia exacta cae a la tolerante del código", async () => {
+    respuestas.tolerante = [prod("9")];
+    await pedir("?q=DL-18X");
+    expect(secuencia).toEqual(["codigo", "tolerante"]);
+    expect(textos[1]).toMatchObject({ tolerante: true, codigo: true });
+  });
+
+  it("si el plan falla, sigue con la exacta (sin 5xx)", async () => {
+    fallan.add("plan");
+    respuestas.exacta = [prod("5")];
+    const res = await pedir("?q=panel+de+interior");
+    expect(secuencia).toEqual(["plan", "exacta"]);
+    expect(await res.json()).toEqual([prod("5")]);
+  });
+
+  it("busqueda-ia apagado manda: sin plan, exacta y tolerante", async () => {
+    setFlag("busqueda-ia", false);
+    await pedir("?q=lampra");
+    expect(planParaPagina).not.toHaveBeenCalled();
+    expect(secuencia).toEqual(["exacta", "tolerante"]);
+  });
+
+  it("sin q: una sola lectura, igual que con el flag apagado", async () => {
+    respuestas.exacta = [prod("7")];
+    await pedir("?limit=5");
+    expect(secuencia).toEqual(["exacta"]);
   });
 });

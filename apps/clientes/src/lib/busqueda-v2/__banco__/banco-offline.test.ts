@@ -15,6 +15,9 @@ import { BANCO, TIPOS_CONSULTA, tipoDe } from "./banco";
 import arbolGrabado from "./arbol-grabado.json";
 import grabado from "./jev-grabado.json";
 import { jevGrabado, type JevGrabado } from "./jev-grabado";
+import { cargarBancoDeArgs } from "./args";
+import { hashBanco } from "./cargar-banco";
+import { planDeMatriz } from "./matriz";
 
 const { arbol, vacias } = arbolGrabado as {
   arbol: { id: string; parentId: string | null; nombre: string; orden: number }[];
@@ -188,6 +191,57 @@ describe("banco versionado: casos de la línea base", () => {
   it("los nombres de categoría esperados existen en el árbol grabado", () => {
     const nombres = new Set(arbol.map((n) => n.nombre));
     for (const b of BANCO) for (const c of [...(b.categoria ?? []), ...(b.categoriaEnTop24 ?? [])]) expect(nombres, c).toContain(c);
+  });
+});
+
+describe("banco versionado: casos de medidas (busqueda-medidas, M1b)", () => {
+  const conMedidas = BANCO.filter((b) => b.medidas !== undefined);
+  const negativos = BANCO.filter((b) => b.medidas?.length === 0);
+
+  it("carga al menos 120 casos", () => {
+    expect(BANCO.length).toBeGreaterThanOrEqual(120);
+  });
+
+  it("al menos 25 casos con expectativa de medidas y 6 negativos (medidas: [])", () => {
+    expect(conMedidas.length).toBeGreaterThanOrEqual(25);
+    expect(negativos.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it("cubre los ejemplos de la spec (R5.4), con su expectativa", () => {
+    const de = (q: string) => BANCO.find((b) => normalizarConsulta(b.q) === normalizarConsulta(q));
+    for (const q of [
+      "termica 2x20", "bipolar 20a", "lampara 9w e27", "lampara 9,5w", "4000k", "dicroica 7w gu10", "tira led 12v 5m", "diferencial 40a 30ma",
+      "panel 60x60", "cable 2,5mm", "ip65", "curva c", "6ka", "20a", "9w", "e27", "hasta 50w", "lampara de 10 a 20w",
+    ]) {
+      expect(de(q)?.medidas?.length, `falta el caso con medidas «${q}»`).toBeGreaterThan(0);
+    }
+    for (const q of ["DL-18W", "TM-2x16", "XQ-4471B", "2x20", "tira led 14w/m", "tubo led 120 cm"]) {
+      expect(de(q)?.medidas, `falta el negativo «${q}»`).toEqual([]);
+    }
+    expect(de("cable unipolar 2.5 mm")?.sinMedidasDe).toEqual(["polos"]);
+  });
+
+  it("los casos duros (dura:true) son de claves discretas con valor, y nunca de un caso negativo", () => {
+    for (const b of conMedidas) for (const m of b.medidas ?? []) if (m.dura) expect(m.valor, b.q).toBeDefined();
+    for (const b of negativos) expect(b.medidas).toEqual([]);
+  });
+
+  it("entran a la matriz de la línea base: el banco sintético lo corren clasica, tolerante, fase1 y v2", () => {
+    const { casos } = cargarBancoDeArgs({ etiquetas: "revisado" }).banco;
+    expect(casos.filter((c) => c.medidas !== undefined)).toHaveLength(conMedidas.length);
+    const tuberias = new Set(planDeMatriz({ bancoReal: false, jevVivo: false }).filter((e) => e.banco === "sintetico").map((e) => e.tuberia));
+    expect([...tuberias].sort()).toEqual(["clasica", "fase1", "tolerante", "v2"]);
+  });
+
+  it("los 97 casos anteriores no cambian (mismo orden y mismas expectativas, salvo `medidas`/`sinMedidasDe`): sus métricas previas no se mueven", () => {
+    const sinMedidas = BANCO.slice(0, 97).map((b) => {
+      const c = { ...b };
+      delete c.medidas;
+      delete c.sinMedidasDe;
+      return c;
+    });
+    // Hash del banco versionado ANTES de este cambio (97 casos). Si cambia, se tocó un caso que ya se medía.
+    expect(hashBanco(sinMedidas)).toBe("e12dbb8461b0");
   });
 });
 

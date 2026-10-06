@@ -73,3 +73,21 @@ describe("avisosDeMedio", () => {
     expect(a).toHaveLength(2)
   })
 })
+
+describe("avisosDeMedio: medio solo para cuentas corrientes", () => {
+  const cc = { ...base, audiencia: "cuenta_corriente" as const }
+
+  it("activo y sin lista: sin avisos", () => {
+    expect(avisosDeMedio(cc, ctx())).toEqual([])
+  })
+
+  it("inactivo: avisa que los pedidos de cuenta corriente quedarán a coordinar", () => {
+    const a = avisosDeMedio({ ...cc, activo: false }, ctx())
+    expect(a).toEqual(["Con este medio inactivo, los pedidos de las cuentas corrientes quedarán a coordinar."])
+  })
+
+  it("con lista enlazada: avisa que no se usa", () => {
+    const a = avisosDeMedio({ ...cc, ...enlazada }, ctx())
+    expect(a).toEqual(["Este medio es solo para cuentas corrientes: la lista enlazada no se usa."])
+  })
+})

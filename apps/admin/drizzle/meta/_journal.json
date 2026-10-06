@@ -484,6 +484,13 @@
       "when": 1792324400000,
       "tag": "0068_listas_privadas",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1792410800000,
+      "tag": "0069_medio_cuenta_corriente",
+      "breakpoints": true
     }
   ]
 }

@@ -35,6 +35,8 @@ type Form = {
   cuotasFilas: FilaCuotasForm[]
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
+  /** "Solo cuentas corrientes": el público no ve este medio (a lo sumo uno por tenant). */
+  soloCuentaCorriente: boolean
 }
 
 type Lista = { id: string; nombre: string }
@@ -52,6 +54,7 @@ const formVacio: Form = {
   cuotasFilas: [],
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
+  soloCuentaCorriente: false,
 }
 
 const desdeDto = (m: MedioPagoDto): Form => ({
@@ -70,6 +73,7 @@ const desdeDto = (m: MedioPagoDto): Form => ({
   })),
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
+  soloCuentaCorriente: m.audiencia === "cuenta_corriente",
 })
 
 // El destacado y la ficha se configuran sólo editando un medio ya creado; la lista se enlaza aparte
@@ -81,6 +85,7 @@ const cuerpo = (f: Form) => ({
   aplicaRetiro: f.aplicaRetiro,
   aplicaEnvio: f.aplicaEnvio,
   activo: f.activo,
+  audiencia: f.soloCuentaCorriente ? "cuenta_corriente" : "publico",
 })
 
 const porOrden = (a: MedioPagoDto, b: MedioPagoDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
@@ -344,6 +349,7 @@ export function MediosPagoShopCard() {
                   <div className="flex flex-col">
                     <span>{m.nombre}</span>
                     <span className="text-xs" style={{ color: "var(--ink-soft)" }}>{m.slug}</span>
+                    {m.audiencia === "cuenta_corriente" && <Badge tone="info">Solo cuentas corrientes</Badge>}
                     {esSlugCobro(m.slug) && (
                       <span className="text-xs" role="note" style={{ color: "var(--ink-soft)" }}>
                         {m.slug === "payway" ? "Payway" : "Mercado Pago"} solo se ofrece si las credenciales están cargadas en la tienda.
@@ -488,7 +494,7 @@ export function MediosPagoShopCard() {
                   id="medio-destacar"
                   label="Destacar en catálogo"
                   checked={form.destacarEnCatalogo}
-                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO}
+                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO || form.soloCuentaCorriente}
                   onCheckedChange={(v) => cambiar({ destacarEnCatalogo: v })}
                 />
                 <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
@@ -498,7 +504,7 @@ export function MediosPagoShopCard() {
                   id="medio-ficha"
                   label="Mostrar en ficha"
                   checked={form.mostrarEnFicha}
-                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO}
+                  disabled={form.listaOnlineId === LISTA_POR_DEFECTO || form.soloCuentaCorriente}
                   onCheckedChange={(v) => cambiar({ mostrarEnFicha: v })}
                 />
                 <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
@@ -578,9 +584,30 @@ export function MediosPagoShopCard() {
                 {errores.cuotas && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.cuotas}</p>}
               </div>
             )}
+            <div className="flex flex-col gap-1">
+              <Switch
+                id="medio-solo-cc"
+                label="Solo cuentas corrientes"
+                checked={form.soloCuentaCorriente}
+                disabled={Boolean(form.editandoSlug && medios?.find((m) => m.slug === form.editandoSlug)?.cobroOnline)}
+                onCheckedChange={(v) =>
+                  // Un medio solo para cuentas corrientes aplica a retiro y a envío y no se destaca ni va en la ficha.
+                  cambiar(
+                    v
+                      ? { soloCuentaCorriente: true, aplicaRetiro: true, aplicaEnvio: true, destacarEnCatalogo: false, mostrarEnFicha: false }
+                      : { soloCuentaCorriente: false },
+                  )
+                }
+              />
+              <p className="text-xs" style={{ color: "var(--ink-soft)" }}>
+                Solo lo ofrece la tienda a los clientes con cuenta corriente; el público no lo ve. Solo puede haber uno.
+                No se usa con cobro en línea, ni se destaca en el catálogo ni se muestra en la ficha.
+              </p>
+              {errores.audiencia && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.audiencia}</p>}
+            </div>
             <div className="flex flex-col gap-2">
-              <CheckboxLabel id="medio-retiro" checked={form.aplicaRetiro} onChange={(v) => cambiar({ aplicaRetiro: v })} label="Disponible para retiro en el local" />
-              <CheckboxLabel id="medio-envio" checked={form.aplicaEnvio} onChange={(v) => cambiar({ aplicaEnvio: v })} label="Disponible para envío" />
+              <CheckboxLabel id="medio-retiro" checked={form.aplicaRetiro} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaRetiro: v })} label="Disponible para retiro en el local" />
+              <CheckboxLabel id="medio-envio" checked={form.aplicaEnvio} disabled={form.soloCuentaCorriente} onChange={(v) => cambiar({ aplicaEnvio: v })} label="Disponible para envío" />
               {errores.aplicaRetiro && <p className="text-sm" style={{ color: "var(--red)" }}>{errores.aplicaRetiro}</p>}
               <CheckboxLabel id="medio-online" checked={false} disabled onChange={() => {}} label="Cobro online" hint="Próximamente." />
               <CheckboxLabel id="medio-activo" checked={form.activo} onChange={(v) => cambiar({ activo: v })} label="Activo" hint="Un medio inactivo no se ofrece en el checkout." />

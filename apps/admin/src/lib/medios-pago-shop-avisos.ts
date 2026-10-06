@@ -11,6 +11,8 @@ export interface MedioParaAvisos {
   listaOnlineActiva: boolean
   destacarEnCatalogo: boolean
   mostrarEnFicha: boolean
+  /** Ausente = público. */
+  audiencia?: "publico" | "cuenta_corriente"
 }
 
 export interface ContextoAvisos {
@@ -25,6 +27,12 @@ export function avisosDeMedio(m: MedioParaAvisos, ctx: ContextoAvisos): string[]
     avisos.push(
       "Payway solo se ofrece en la tienda si las credenciales de Payway están cargadas. Sin ellas, este medio no aparece en el checkout aunque esté activo.",
     )
+  }
+  if (m.audiencia === "cuenta_corriente") {
+    // Lo usan solo las cuentas corrientes: no entra en "con medio", ficha ni listas por medio.
+    if (!m.activo) avisos.push("Con este medio inactivo, los pedidos de las cuentas corrientes quedarán a coordinar.")
+    if (m.listaOnlineId !== null) avisos.push("Este medio es solo para cuentas corrientes: la lista enlazada no se usa.")
+    return avisos
   }
   const nombreLista = m.listaOnlineNombre ?? "enlazada"
   const sinLista = m.listaOnlineId === null || !m.listaOnlineActiva

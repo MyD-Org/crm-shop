@@ -243,5 +243,17 @@
     "activa": "boolean",
     "predeterminada": "boolean",
     "orden": "integer"
+  },
+  "public.catalog_products_shop_privados": {
+    "tenant_id": "text",
+    "alegra_id": "text",
+    "lista_id": "uuid",
+    "precio": "numeric"
+  },
+  "public.lista_precio_alegra_mapeo_shop": {
+    "tenant_id": "text",
+    "alegra_account": "text",
+    "alegra_price_list_id": "text",
+    "lista_id": "uuid"
   }
 }

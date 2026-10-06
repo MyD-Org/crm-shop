@@ -155,4 +155,17 @@ describe("contrato de columnas del CRM (crm.ts ↔ crm-contrato.json)", () => {
       ["id", "name", "receipts_email", "whatsapp_number"],
     );
   });
+
+  it("los precios de las listas privadas sólo llegan por su vista aparte (0068 del CRM)", () => {
+    const publica = esperado["public.catalog_products_shop"];
+    expect(Object.keys(publica).filter((c) => /priva/i.test(c))).toEqual([]);
+    expect(Object.keys(esperado["public.catalog_products_shop_privados"]).sort()).toEqual(
+      ["alegra_id", "lista_id", "precio", "tenant_id"],
+    );
+    // La tabla con la columna cruda de privados no se declara: shop_app no tiene SELECT.
+    expect(esperado["public.catalog_products"]).toBeUndefined();
+    expect(Object.keys(esperado["public.lista_precio_alegra_mapeo_shop"]).sort()).toEqual(
+      ["alegra_account", "alegra_price_list_id", "lista_id", "tenant_id"],
+    );
+  });
 });

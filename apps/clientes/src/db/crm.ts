@@ -197,6 +197,37 @@ export const crmCatalogo = publico
   .existing();
 
 /**
+ * Precios de las listas PRIVADAS (`public.catalog_products_shop_privados`, migración 0068 del CRM,
+ * change `listas-cuenta-corriente`): un renglón por (ítem activo, lista privada con precio). El
+ * precio es NETO (sin IVA). `shop_app` tiene SELECT sólo sobre esta vista: la tabla
+ * `catalog_products` y su columna `precios_online_privados` no se conceden, y la vista pública
+ * (`crmCatalogo`) nunca trae listas privadas. El id de la lista sale SIEMPRE del servidor
+ * (`lista-cuenta.ts`), jamás del navegador; esta vista no entra nunca en un `use cache`.
+ */
+export const crmPreciosPrivados = publico
+  .view("catalog_products_shop_privados", {
+    tenantId: text("tenant_id").notNull(),
+    alegraId: text("alegra_id").notNull(),
+    listaId: uuid("lista_id").notNull(),
+    precio: numeric("precio").notNull(),
+  })
+  .existing();
+
+/**
+ * Enlace "lista de Alegra del contacto → lista online privada"
+ * (`public.lista_precio_alegra_mapeo_shop`, migración 0068 del CRM). Clave única
+ * (tenant, cuenta de Alegra, id de la lista de Alegra). Sólo trae ids: ningún costo ni coeficiente.
+ */
+export const crmListaMapeo = publico
+  .view("lista_precio_alegra_mapeo_shop", {
+    tenantId: text("tenant_id").notNull(),
+    alegraAccount: text("alegra_account").notNull(),
+    alegraPriceListId: text("alegra_price_list_id").notNull(),
+    listaId: uuid("lista_id").notNull(),
+  })
+  .existing();
+
+/**
  * Categorías de Alegra según el CRM (`public.catalog_categories_shop`,
  * migración 0037 de apps/admin). No confundir con `crmCategorias`, que es el
  * árbol PROPIO de la tienda (`shop_categories`). Vista de todos los tenants: el

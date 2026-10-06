@@ -9,6 +9,7 @@ import { useCotizacion } from "@/hooks/useCotizacion";
 import { pagoParaCotizar } from "@/lib/lista-medio";
 import { COPY_CARRITO } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
+import { PagoPayway } from "@/components/PagoPayway";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
 import { PROVINCIAS_SELECTOR, type OpcionesCheckoutSucursales } from "@/lib/zona";
 import { VincularClient } from "@/components/VincularClient";
@@ -835,8 +836,16 @@ export function CheckoutClient({
           <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
         </div>
 
-        {/* Un componente de pago por procesador. Hoy sólo Mercado Pago: sumar otro es un caso más acá. */}
-        {confirmado.procesador === "mercadopago" ? (
+        {/* Un componente de pago por procesador: sumar otro es un caso más acá. */}
+        {confirmado.procesador === "payway" ? (
+          <PagoPayway
+            pedidoId={confirmado.id}
+            numero={confirmado.numero}
+            monto={confirmado.total}
+            cuotas={confirmado.cuotas ?? undefined}
+            onPagado={() => setPagado(true)}
+          />
+        ) : confirmado.procesador === "mercadopago" ? (
           <PagoMercadoPago
             pedidoId={confirmado.id}
             numero={confirmado.numero}

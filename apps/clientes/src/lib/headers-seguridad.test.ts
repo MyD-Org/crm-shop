@@ -83,8 +83,8 @@ describe("Payway: connect-src sólo en las páginas de checkout", () => {
   it("con key pública y base https, el checkout puede conectar con el host de Payway", () => {
     const csp = politicaCsp(env, { checkout: true });
     expect(csp).toMatch(/connect-src [^;]*https:\/\/payway\.example(?:[ ;]|$)/);
-    // Sin frame-src ni script-src: no hay SDK ni iframe, el formulario es propio.
-    expect(csp).not.toMatch(/script-src [^;]*payway/);
+    // El SDK oficial (decidir.js) se sirve desde el host de Payway; sin frame-src: no hay iframe.
+    expect(csp).toMatch(/script-src [^;]*https:\/\/ventasonline\.payway\.com\.ar/);
     expect(csp).not.toMatch(/frame-src [^;]*payway/);
     // Sólo el origen: ni ruta ni la key.
     expect(csp).not.toContain("/api/v2");

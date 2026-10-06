@@ -38,9 +38,10 @@ export interface EnvCsp {
 
 export interface OpcionesCsp {
   /**
-   * Política de las páginas de checkout: suma el host de la API de Payway a `connect-src`, porque el
-   * formulario de tarjeta tokeniza desde el navegador (`POST {base}/api/v2/tokens`). No hace falta
-   * `script-src` ni `frame-src`: no hay SDK ni iframe. El resto del sitio no lo recibe.
+   * Política de las páginas de checkout: suma el host de la API de Payway a `connect-src` (el
+   * formulario de tarjeta tokeniza desde el navegador, `POST {base}/api/v2/tokens`) y el script del SDK
+   * oficial (`decidir.js`) a `script-src`. Sin `frame-src`: el formulario es propio, no hay iframe (y
+   * la huella Cybersource del SDK está desactivada). El resto del sitio no lo recibe.
    */
   checkout?: boolean;
 }
@@ -80,6 +81,9 @@ function origenesDeHosts(valor: string | undefined): string[] {
     .filter((h) => /^[a-z0-9.*-]+$/i.test(h))
     .map((h) => `https://${h}`);
 }
+
+/** Host que sirve el SDK de front de Payway (`decidir.js`); ver `URL_SDK_PAYWAY` en pagos/payway-token.ts. */
+const PAYWAY_SDK = "https://ventasonline.payway.com.ar";
 
 const MERCADO_PAGO = [
   "https://sdk.mercadopago.com",
@@ -136,6 +140,7 @@ export function politicaCsp(env: EnvCsp = process.env as EnvCsp, opciones: Opcio
       ...clerk,
       CLOUDFLARE_CHALLENGES,
       ...MERCADO_PAGO,
+      ...(payway ? [PAYWAY_SDK] : []),
       ...(meta ? [META_SCRIPT] : []),
       ...(ga4 ? [GTM] : []),
       ...(dev ? [VERCEL_SCRIPTS_DEV] : []),

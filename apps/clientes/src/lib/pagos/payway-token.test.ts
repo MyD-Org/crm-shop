@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { tokenizarTarjeta, MENSAJE_TOKEN } from "./payway-token";
+import {
+  tokenizarTarjeta,
+  tokenizarConSdk,
+  tokenizar,
+  camposSdk,
+  MENSAJE_TOKEN,
+  type EntornoSdk,
+  type SdkDecidir,
+} from "./payway-token";
 import { armarSolicitudToken } from "./payway-tarjeta";
 
 const CONFIG = { baseUrl: "https://payway.example", publicKey: "clave-publica-de-prueba" };
@@ -127,5 +135,157 @@ describe("tokenizarTarjeta", () => {
     for (const m of Object.values(MENSAJE_TOKEN)) {
       expect(m).not.toMatch(/\b(tu|tus|vos|probá|revisá)\b/i);
     }
+  });
+});
+
+
+/* ───────────────────────── SDK oficial (decidir.js) ───────────────────────── */
+
+type Handler = (status: number, respuesta: unknown) => void;
+
+function entornoFalso(opts: { respuesta?: [number, unknown]; sinSdk?: boolean; lanza?: boolean } = {}) {
+  const desmontar = vi.fn();
+  const montados: Array<Record<string, string>> = [];
+  const instancias: Array<{ url: string; inhabilitarCS?: boolean; key?: string; timeout?: number }> = [];
+  let formVisto: unknown;
+  class Decidir implements SdkDecidir {
+    datos: { url: string; inhabilitarCS?: boolean; key?: string; timeout?: number };
+    constructor(url: string, inhabilitarCS?: boolean) {
+      this.datos = { url, inhabilitarCS };
+      instancias.push(this.datos);
+    }
+    setPublishableKey(k: string) {
+      this.datos.key = k;
+    }
+    setTimeout(ms: number) {
+      this.datos.timeout = ms;
+    }
+    createToken(form: unknown, cb: Handler) {
+      formVisto = form;
+      if (opts.lanza) throw new Error("boom");
+      const [st, resp] = opts.respuesta ?? [201, { id: TOKEN_OK.id, bin: "450799" }];
+      cb(st, resp);
+    }
+    getBin(pan: string) {
+      return pan.slice(0, 6);
+    }
+  }
+  const entorno: EntornoSdk = {
+    cargarSdk: async () => (opts.sinSdk ? null : (Decidir as never)),
+    montarFormulario: (campos) => {
+      montados.push(campos);
+      return { form: { campos }, desmontar };
+    },
+  };
+  return { entorno, desmontar, montados, instancias, formVisto: () => formVisto };
+}
+
+describe("camposSdk", () => {
+  it("traduce la solicitud a los data-decidir del SDK", () => {
+    expect(camposSdk(SOLICITUD)).toEqual({
+      card_number: "4507990000004905",
+      security_code: "123",
+      card_holder_name: "Juan Perez",
+      card_expiration_month: "08",
+      card_expiration_year: "30",
+      card_holder_doc_type: "dni",
+      card_holder_doc_number: "25123456",
+    });
+  });
+});
+
+describe("tokenizarConSdk", () => {
+  it("usa el SDK con la key pública y la URL /api/v2, sin Cybersource, y devuelve token y bin", async () => {
+    const e = entornoFalso();
+    const r = await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno);
+    expect(r).toEqual({ ok: true, token: TOKEN_OK.id, bin: "450799" });
+    expect(e.instancias[0]).toMatchObject({
+      url: "https://payway.example/api/v2",
+      inhabilitarCS: true,
+      key: "clave-publica-de-prueba",
+    });
+    expect(e.montados[0]?.card_number).toBe("4507990000004905");
+  });
+
+  it("desmonta el formulario con los datos de la tarjeta siempre, también si falla o lanza", async () => {
+    for (const opts of [{}, { respuesta: [400, {}] as [number, unknown] }, { lanza: true }]) {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const e = entornoFalso(opts);
+      await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno);
+      expect(e.desmontar).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("si la respuesta no trae bin lo toma de los 6 primeros dígitos", async () => {
+    const e = entornoFalso({ respuesta: [201, { id: TOKEN_OK.id }] });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno)).toEqual({ ok: true, token: TOKEN_OK.id, bin: "450799" });
+  });
+
+  it("errores de validación del SDK (response.error) y 400 -> datos_invalidos", async () => {
+    for (const respuesta of [
+      [0, { error: [{ isValid: false, error: { type: "invalid_card_number" }, param: "card_number" }] }],
+      [400, { error_type: "invalid_request_error" }],
+    ] as Array<[number, unknown]>) {
+      const e = entornoFalso({ respuesta });
+      expect(await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno)).toMatchObject({ ok: false, motivo: "datos_invalidos" });
+    }
+  });
+
+  it("401/403 -> configuracion; otros estados (0, 5xx) -> red", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [401, {}] }).entorno)).toMatchObject({ motivo: "configuracion" });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [403, {}] }).entorno)).toMatchObject({ motivo: "configuracion" });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [0, {}] }).entorno)).toMatchObject({ motivo: "red" });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [503, {}] }).entorno)).toMatchObject({ motivo: "red" });
+  });
+
+  it("éxito sin id utilizable -> configuracion", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const e = entornoFalso({ respuesta: [201, {}] });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno)).toMatchObject({ ok: false, motivo: "configuracion" });
+  });
+
+  it("devuelve null si el SDK no se pudo cargar", async () => {
+    const e = entornoFalso({ sinSdk: true });
+    expect(await tokenizarConSdk(SOLICITUD, CONFIG, e.entorno)).toBeNull();
+  });
+
+  it("no loguea datos de la tarjeta", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ lanza: true }).entorno);
+    await tokenizarConSdk(SOLICITUD, CONFIG, entornoFalso({ respuesta: [401, { id: "x" }] }).entorno);
+    const t = JSON.stringify(log.mock.calls);
+    expect(t).not.toContain("4507990000004905");
+    expect(t).not.toContain("clave-publica-de-prueba");
+  });
+});
+
+describe("tokenizar (SDK primero, fetch directo de respaldo)", () => {
+  it("con el SDK disponible no usa el fetch directo", async () => {
+    const f = vi.fn();
+    const e = entornoFalso();
+    const r = await tokenizar(SOLICITUD, CONFIG, { entorno: e.entorno, fetch: f });
+    expect(r.ok).toBe(true);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("si el SDK no carga (bloqueado, sin red) cae al fetch directo a /tokens", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta(201, TOKEN_OK));
+    const e = entornoFalso({ sinSdk: true });
+    const r = await tokenizar(SOLICITUD, CONFIG, { entorno: e.entorno, fetch: f });
+    expect(r).toEqual({ ok: true, token: TOKEN_OK.id, bin: "450799" });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin entorno de SDK (servidor, tests) usa el fetch directo", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta(201, TOKEN_OK));
+    expect((await tokenizar(SOLICITUD, CONFIG, { fetch: f })).ok).toBe(true);
+  });
+
+  it("si el fetch de respaldo también falla: mensaje en usted y sin cobro", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const r = await tokenizar(SOLICITUD, CONFIG, { entorno: entornoFalso({ sinSdk: true }).entorno, fetch: f });
+    expect(r).toEqual({ ok: false, motivo: "red", mensaje: MENSAJE_TOKEN.red });
   });
 });

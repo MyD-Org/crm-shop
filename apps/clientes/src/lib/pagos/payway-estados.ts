@@ -115,6 +115,7 @@ export function interpretarPago(pago: RespuestaPayway): EstadoPago {
   const partes = [
     pago.id != null ? `payment_id=${pago.id}` : null,
     `status=${status || "desconocido"}`,
+    pago.status_details?.error?.type === "cybersource_error" ? "error=cybersource" : null,
     razon?.id != null ? `reason=${razon.id}` : null,
     pago.status_details?.ticket ? `ticket=${pago.status_details.ticket}` : null,
   ].filter((p): p is string => p !== null);
@@ -127,7 +128,9 @@ export function interpretarPago(pago: RespuestaPayway): EstadoPago {
     // El id con el que reconocemos el pago es el que mandamos nosotros, no el payment_id numérico.
     referencia: pago.site_transaction_id ?? "",
     detalle: partes.join("; "),
-    ...(status === "rejected" ? { motivo: motivoDeRechazo(razon?.id) } : {}),
+    ...(status === "rejected"
+      ? { motivo: pago.status_details?.error?.type === "cybersource_error" ? "control_seguridad" : motivoDeRechazo(razon?.id) }
+      : {}),
     reversion: REVERTIDOS.has(status),
     cuotasPagadas: Number.isInteger(cuotas) && (cuotas as number) >= 1 ? cuotas : undefined,
     totalPagado:

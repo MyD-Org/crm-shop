@@ -10,6 +10,7 @@ import { ErrorProveedor, type ProveedorPago } from "./tipos";
 
 const registrarCobro = vi.fn();
 const getPedidoParaPago = vi.fn();
+const getItemsParaAntifraude = vi.fn();
 const crearPago = vi.fn();
 const fijarReferenciaIntento = vi.fn();
 const cerrarIntentoSinPago = vi.fn();
@@ -24,6 +25,7 @@ vi.mock("@/lib/pedidos", async (original) => ({
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
   reservarIntento: async () => ({ intentoId: "i1" }),
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
+  getItemsParaAntifraude: (...a: unknown[]) => getItemsParaAntifraude(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
   registrarIntentoFallido: (...a: unknown[]) => registrarIntentoFallido(...a),
   fijarReferenciaIntento: (...a: unknown[]) => fijarReferenciaIntento(...a),
@@ -59,11 +61,13 @@ const pedido = (pagoMetodo: string): PedidoParaPago => ({
   id: "p1", numero: "PED-1", total: 100, pagoEstado: "pendiente", pagoMetodo,
   clienteEmail: null, facturacionTipoDoc: null, facturacionNroDoc: null,
   cuotas: 1, estado: "pendiente", creadoEn: new Date(),
+  contactoNombre: "Ana Gomez", contactoTelefono: "2235550100", entregaTipo: "retiro",
+  entregaCiudad: null, entregaDireccion: null, facturacionDomicilio: null,
 });
 
 beforeEach(() => {
   configurado = true;
-  for (const f of [registrarCobro, getPedidoParaPago, crearPago, fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockReset();
+  for (const f of [registrarCobro, getPedidoParaPago, getItemsParaAntifraude, crearPago, fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockReset();
   orden.length = 0;
   for (const f of [fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockResolvedValue(undefined);
   crearPago.mockResolvedValue({ estado: "pagado", referencia: "r1", detalle: "ok" });
@@ -173,5 +177,55 @@ describe("cobrarPedido — bin", () => {
   it("si el procesador no lo requiere, el bin del body se ignora", async () => {
     await pagarCon(sinReferencia, { bin: "no-importa" });
     expect(crearPago).toHaveBeenCalledWith(expect.not.objectContaining({ bin: expect.anything() }));
+  });
+});
+
+describe("cobrarPedido — datos del control de fraude", () => {
+  const conAntifraude = (): ProveedorPago => ({ ...conReferencia(), requiereAntifraude: true });
+  const items = [{ sku: "LED-9W", nombre: "Lampara LED", cantidad: 2, total: 100 }];
+
+  beforeEach(() => {
+    getPedidoParaPago.mockResolvedValue({
+      ...pedido("payway"),
+      clienteEmail: "comprador@cliente.example",
+      entregaTipo: "envio",
+      entregaCiudad: "Mar del Plata",
+      entregaDireccion: "Calle Falsa 123",
+    });
+    getItemsParaAntifraude.mockResolvedValue(items);
+  });
+
+  it("arma los datos desde el pedido y la sesión (nunca del body) y se los pasa al procesador", async () => {
+    const r = await pagarCon(conAntifraude(), { antifraude: { email: "intruso@cliente.example" }, monto: 1 });
+    expect(r.status).toBe(200);
+    expect(getItemsParaAntifraude).toHaveBeenCalledWith("p1");
+    expect(crearPago).toHaveBeenCalledWith(
+      expect.objectContaining({
+        monto: 100,
+        antifraude: expect.objectContaining({
+          clienteId: "user_1",
+          email: "comprador@cliente.example",
+          nombre: "Ana Gomez",
+          telefono: "2235550100",
+          entrega: { tipo: "envio", ciudad: "Mar del Plata", direccion: "Calle Falsa 123" },
+          items,
+        }),
+      }),
+    );
+  });
+
+  it("sin productos o sin correo corta antes de reservar y de cobrar, con un mensaje en usted", async () => {
+    getItemsParaAntifraude.mockResolvedValue([]);
+    const r = await pagarCon(conAntifraude());
+    expect(r.status).toBe(422);
+    expect((await r.json()).error).toMatch(/Revise su correo/);
+    expect(fijarReferenciaIntento).not.toHaveBeenCalled();
+    expect(crearPago).not.toHaveBeenCalled();
+  });
+
+  it("un procesador que no lo pide (Mercado Pago) no lee los productos ni recibe el bloque", async () => {
+    await pagarCon(conReferencia());
+    expect(getItemsParaAntifraude).not.toHaveBeenCalled();
+    expect(crearPago.mock.calls[0][0]).not.toHaveProperty("antifraude");
   });
 });

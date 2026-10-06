@@ -342,13 +342,15 @@ describe("buscar: el plan", () => {
     });
     const { deps, llamadas } = crearDeps(() => 1);
     // Los duros viajan como filtros (así los lee la página de la URL): llegan tal cual y no se
-    // descuentan dos veces de lo blando. Lo blando restante pasa sin que el motor lo interprete.
+    // descuentan dos veces de lo blando, salvo las medidas (`criterioDe`, M2 de busqueda-medidas): su
+    // duro es "sin contradicción" y no puntúa, así que el blando sigue subiendo a los que tienen el
+    // dato. Lo blando restante pasa sin que el motor lo interprete.
     const filtros = { atributos: ["corriente_a:20", "id-fuera-del-diccionario"] };
     await buscar(pedido({ filtros }), legado("catalogo", { planDe: async () => plan }), deps);
     expect(llamadas[0].filtros.atributos).toEqual(filtros.atributos);
     expect(llamadas[0].filtros.texto?.plan?.blandos).toEqual({
       categorias: [],
-      atributos: [{ id: "tension_v:24", peso: 0.8 }],
+      atributos: [{ id: "corriente_a:20", peso: 1 }, { id: "tension_v:24", peso: 0.8 }],
       terminos: plan.blandos.terminos,
     });
     // Sin duros en la URL (autocompletar), todos los blandos llegan, ids arbitrarios incluidos.

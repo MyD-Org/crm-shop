@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluar, tipoDe, type BusquedaBanco, type ProductoBanco, type ResultadoBanco } from "./banco";
+import { evaluar, reporte, tipoDe, type BusquedaBanco, type ProductoBanco, type ResultadoBanco } from "./banco";
 
 const arbol = [
   { id: "c-raiz", parentId: null, nombre: "Raiz" },
@@ -113,5 +113,31 @@ describe("evaluar: campos nuevos", () => {
       arbol,
     );
     expect(e).toMatchObject({ top24Ok: true, posicion: 1, sinResultadosIndebido: false, puntos: 4, posibles: 4 });
+  });
+});
+
+describe("evaluar: medidas (el puntaje no cambia)", () => {
+  const conAtributos = (atributos: ProductoBanco["atributosEstructurados"]): ProductoBanco => ({ name: "producto generico", atributosEstructurados: atributos });
+
+  it("un caso con `medidas` trae la evaluación `medida`; sin ellas no hay campo", () => {
+    const productos = [conAtributos({ polos: { n: 2, t: null } }), conAtributos({ polos: { n: 1, t: null } })];
+    const e = evaluar(caso({ medidas: [{ clave: "polos", valor: 2 }] }), resultado(productos), arbol);
+    expect(e.medida).toMatchObject({ precision: 0.5, contradicciones: 1, hit: null });
+    expect(evaluar(caso(), resultado(productos), arbol)).not.toHaveProperty("medida");
+  });
+
+  it("`medidas` y `sinMedidasDe` no suman puntos ni posibles (PESOS intacto)", () => {
+    const base = caso({ debeIncluirEnTop24: ["lampara"], nuncaSinResultados: true });
+    const productos = [conAtributos({ polos: { n: 2, t: null } }), prod("lampara e27")];
+    const sin = evaluar(base, resultado(productos), arbol);
+    const con = evaluar({ ...base, medidas: [{ clave: "polos", valor: 2, dura: true }], sinMedidasDe: ["corriente_a"] }, resultado(productos, { medidas: ["polos:2"], atributosDuros: ["polos:2"] }), arbol);
+    expect({ puntos: con.puntos, posibles: con.posibles }).toEqual({ puntos: sin.puntos, posibles: sin.posibles });
+  });
+
+  it("la línea del reporte marca una medida indebida (negativo con un plan que emite polos)", () => {
+    const e = evaluar(caso({ q: "DL-18W", medidas: [] }), resultado([prod("x")], { medidas: ["polos:2"] }), arbol);
+    expect(reporte("t", [e], true)).toContain("[MEDIDA INDEBIDA]");
+    const ok = evaluar(caso({ q: "DL-18W", medidas: [] }), resultado([prod("x")], { medidas: [] }), arbol);
+    expect(reporte("t", [ok], true)).not.toContain("[MEDIDA INDEBIDA]");
   });
 });

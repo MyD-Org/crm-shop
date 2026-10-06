@@ -71,13 +71,17 @@ import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
 import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import {
   columnasConteoAtributos,
+  contradiccionSql,
+  cumpleAtributoSql,
   facetasDeConteos,
   filtroAtributosSql,
   criterioSql,
+  tieneClaveSql,
   type ContextoAtributos,
 } from "./catalogo-atributos-sql";
 import type { CriterioEstructurado } from "./catalogo-atributos";
-import { caracteristicasDe, leerAtributosEstructurados } from "./catalogo-caracteristicas";
+import { caracteristicasDe, leerAtributosEstructurados, type ClaveEstructurada } from "./catalogo-caracteristicas";
+import { universoAcotado } from "./busqueda-v2/universo-acotado";
 import { condicionAmplia, condicionRecuperar } from "./busqueda-v2/recuperar";
 import { puntajeBusqueda } from "./busqueda-v2/ordenar";
 import type { CriterioPlan, PiezasBusqueda } from "./busqueda-v2/piezas";
@@ -316,11 +320,40 @@ const filaAtributoSql = (clave: string, extra?: SQL) =>
 const existeAtributoSql = (c: CriterioEstructurado) =>
   sql`exists (${filaAtributoSql(c.clave, criterioSql(c, sql`${crmAtributos.valorNum}`, sql`${crmAtributos.valorTexto}`))})`;
 
+/** `EXISTS` de una fila de la clave con dato que NO cumple el criterio (las medidas "sin contradicción"). */
+const contradiceAtributoSql = (c: CriterioEstructurado) =>
+  sql`exists (${filaAtributoSql(c.clave, contradiccionSql(c, sql`${crmAtributos.valorNum}`, sql`${crmAtributos.valorTexto}`))})`;
+
+/** `EXISTS` de una fila de la clave, con cualquier valor (cobertura). */
+const tieneAtributoSql = (clave: ClaveEstructurada) => sql`exists (${filaAtributoSql(clave)})`;
+
+type FiltrosDeAtributos = Pick<
+  FiltrosCatalogo,
+  "atributosEstructurados" | "medidasPositivas" | "categorias" | "busqueda" | "planBusqueda"
+>;
+
+/**
+ * Modo de las medidas (ids dinámicos de atributo) como filtro: positivo si la consulta no tiene
+ * universo acotado ("20a", `?atr=corriente_a:20` a mano), sin contradicción si lo tiene. Lo fuerza
+ * `medidasPositivas`. Los ids del diccionario no dependen de esto.
+ */
+const medidasPositivasDe = (filtros: FiltrosDeAtributos): boolean => filtros.medidasPositivas ?? !universoAcotado(filtros);
+
 /** Contexto de las condiciones de atributos: el texto buscable y, si se pueden leer, los estructurados. */
-const contextoAtributos = (filtros: Pick<FiltrosCatalogo, "atributosEstructurados">): ContextoAtributos => ({
+const contextoAtributos = (filtros: FiltrosDeAtributos): ContextoAtributos => ({
   texto: textoBuscableSql(),
-  ...(filtros.atributosEstructurados ? { existe: existeAtributoSql } : {}),
+  ...(filtros.atributosEstructurados
+    ? { existe: existeAtributoSql, contradice: contradiceAtributoSql, tiene: tieneAtributoSql }
+    : {}),
+  medidaPositiva: medidasPositivasDe(filtros),
 });
+
+/** Sólo productos con dato de TODAS esas claves (la cobertura de una clave en un universo). Sin estructurados, no filtra. */
+const filtroConClavesSql = (filtros: FiltrosCatalogo): SQL | undefined => {
+  if (!filtros.conClaves?.length) return undefined;
+  const ctx = contextoAtributos(filtros);
+  return and(...filtros.conClaves.map((clave) => tieneClaveSql(ctx, clave)));
+};
 
 /** Filtro de potencia en UN `EXISTS` (los dos extremos sobre la misma fila). */
 const filtroPotenciaSql = (min?: number, max?: number) =>
@@ -691,6 +724,17 @@ export interface FiltrosCatalogo {
    */
   atributos?: string[];
   /**
+   * Medidas (ids dinámicos `corriente_a:20` dentro de `atributos`): fuerza el modo del filtro,
+   * `true` = positivo (sólo lo que cumple), `false` = sin contradicción. Ausente: se deriva del
+   * universo de la consulta (`universoAcotado`). Lo usa el conteo de positivos de la búsqueda.
+   */
+  medidasPositivas?: boolean;
+  /**
+   * Sólo productos con dato (cualquier valor) de TODAS estas claves estructuradas: mide la
+   * cobertura de una clave en un universo. Sin `atributosEstructurados` no filtra.
+   */
+  conClaves?: ClaveEstructurada[];
+  /**
    * Sólo facetas: no calcular la de atributos (flag `busqueda-ia` apagado: el
    * panel queda como siempre y no se paga esa consulta). Sale `atributos: []`.
    */
@@ -991,7 +1035,7 @@ function piezasBusqueda(filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad)
     codigo: sinTildes(crmCatalogo.code),
     marcaCategoria: sinTildes(sql`concat_ws(' ', ${marcaSql}, ${crmCategoriasAlegra.name})`),
     enCategorias: filtroCategoriasSql,
-    cumpleAtributo: (id) => filtroAtributosSql(ctx, [id]),
+    cumpleAtributo: (id) => cumpleAtributoSql(ctx, id),
     conStock: conStock(disp),
   };
 }
@@ -1025,6 +1069,7 @@ function condicionesDe(
       ? inArray(marcaSql, filtros.marcas)
       : undefined,
     aplicar.atributos ? filtroAtributosSql(contextoAtributos(filtros), filtros.atributos) : undefined,
+    aplicar.atributos ? filtroConClavesSql(filtros) : undefined,
     aplicar.potencia && filtros.atributosEstructurados
       ? filtroPotenciaSql(filtros.potenciaMin, filtros.potenciaMax)
       : undefined,
@@ -1240,6 +1285,8 @@ function consultaConteoAtributos(
   where: ReturnType<typeof condicionesDe>,
   atributos: string[] | undefined,
   estructurados = false,
+  /** Modo de las medidas dinámicas entre los filtros de los otros grupos (`medidasPositivasDe`). */
+  medidaPositiva = false,
 ) {
   // Con estructurados, el jsonb de cada producto también se lee UNA vez por fila.
   const filas = getDb()
@@ -1254,8 +1301,8 @@ function consultaConteoAtributos(
     .where(where)
     .as("filas_atributos");
   const ctx: ContextoAtributos = estructurados
-    ? { texto: sql`${filas.texto}`, attrs: sql`"filas_atributos"."attrs"` }
-    : { texto: sql`${filas.texto}` };
+    ? { texto: sql`${filas.texto}`, attrs: sql`"filas_atributos"."attrs"`, medidaPositiva }
+    : { texto: sql`${filas.texto}`, medidaPositiva };
   return getDb().select(columnasConteoAtributos(ctx, atributos)).from(filas);
 }
 
@@ -1346,7 +1393,7 @@ export async function getFacetas(
       .where(wherePrecio),
     filtros.sinFacetaAtributos
       ? Promise.resolve([])
-      : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados),
+      : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros)),
     conPotencia ? consultaRangoPotencia(wherePotencia).then(([r]) => r) : Promise.resolve(undefined),
   ]);
 

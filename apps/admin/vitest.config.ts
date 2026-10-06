@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config"
 import { fileURLToPath } from "node:url"
-import { TEST_DATABASE_URL } from "./test/integration/db-url"
+import { TEST_WORKERS } from "./test/integration/db-url"
 
 // Dos tipos de test, separados en "projects":
 //  - unit:        funciones puras, sin DB ni runtime de Next. Rápidos, corren en CI sin nada.
@@ -18,6 +18,9 @@ const BASE_FOTOS = "https://fotos.test"
 export default defineConfig({
   resolve: { alias },
   test: {
+    // Fijo y compartido con el global-setup, que crea un clon de la DB de test por worker
+    // (VITEST_POOL_ID va de 1 a maxWorkers).
+    maxWorkers: TEST_WORKERS,
     projects: [
       {
         resolve: { alias },
@@ -32,10 +35,10 @@ export default defineConfig({
         test: {
           name: "integration",
           include: ["test/integration/**/*.test.ts"],
-          env: { SESSION_SECRET, DATABASE_URL: TEST_DATABASE_URL, R2_SHOP_MEDIA_PUBLIC_URL: BASE_FOTOS },
+          // DATABASE_URL la fija setup-worker.ts: cada worker tiene su clon de crm_test.
+          env: { SESSION_SECRET, R2_SHOP_MEDIA_PUBLIC_URL: BASE_FOTOS },
           globalSetup: ["./test/integration/global-setup.ts"],
-          // Comparten la misma DB de test → sin paralelismo entre archivos para no pisarse.
-          fileParallelism: false,
+          setupFiles: ["./test/integration/setup-worker.ts"],
         },
       },
     ],

@@ -124,6 +124,11 @@ describe("parsearArgsLinea", () => {
     expect(parsearArgsLinea(["--solo-visibles=si", "--motor"]).motor).toBe(true);
   });
 
+  it("--comparar=<snapshot> se acepta y por defecto no hay comparación", () => {
+    expect(parsearArgsLinea(["--solo-visibles=si", "--comparar=tmp/busqueda/linea-base-x"]).comparar).toBe("tmp/busqueda/linea-base-x");
+    expect(parsearArgsLinea(["--solo-visibles=si"]).comparar).toBeUndefined();
+  });
+
   it("otros --jev y flags desconocidos fallan", () => {
     expect(() => parsearArgsLinea(["--solo-visibles=si", "--jev=no"])).toThrow(/--jev/);
     expect(() => parsearArgsLinea(["--solo-visibles=si", "--bancoreal=x"])).toThrow(/desconocido/i);

@@ -349,3 +349,23 @@ describe("correr: tubería motor (política, superficie, ids, etapa)", () => {
     expect(sonComparables(chat, catalogo, { ignorar: ["superficie"] }).ok).toBe(true);
   });
 });
+
+describe("correr: estado de busqueda-medidas (R5.6)", () => {
+  it("por defecto la cabecera y la consola dicen «no aplica» (la tubería todavía no usa el flag)", async () => {
+    const { json, texto } = await correr(opciones(), deps());
+    expect(json.cabecera.busquedaMedidas).toBe("no aplica");
+    expect(texto).toContain("busqueda-medidas: no aplica");
+  });
+
+  it("declara el estado que le pasan (on|off)", async () => {
+    const { json, texto } = await correr(opciones({ busquedaMedidas: "on" }), deps());
+    expect(json.cabecera.busquedaMedidas).toBe("on");
+    expect(texto).toContain("busqueda-medidas: on");
+  });
+
+  it("un snapshot con otro estado de busqueda-medidas sigue siendo comparable (justamente se compara on contra off)", async () => {
+    const a = (await correr(opciones({ busquedaMedidas: "off" }), deps())).json.cabecera;
+    const b = (await correr(opciones({ busquedaMedidas: "on" }), deps())).json.cabecera;
+    expect(sonComparables(a, b).ok).toBe(true);
+  });
+});

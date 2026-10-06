@@ -18,6 +18,22 @@ export type EtiquetadoBanco = "pendiente" | "propuesto" | "revisado" | "descarta
 
 export const INTENCIONES_BANCO: readonly IntencionBanco[] = ["codigo", "producto", "necesidad", "pregunta"];
 
+/**
+ * Medida que el plan de la búsqueda tiene que entender. Exactamente una forma: `valor` (igual; para `ip`
+ * significa "o superior"), o un rango con `min` y/o `max` (inclusivos). `dura`: la medida tiene que quedar
+ * como filtro duro del plan (sólo claves discretas, y sólo con `valor`).
+ */
+export interface MedidaBanco {
+  clave: string;
+  valor?: number | string;
+  min?: number;
+  max?: number;
+  dura?: boolean;
+}
+
+/** Claves en que "dura" tiene sentido: valores discretos que el producto cumple o contradice. */
+export const CLAVES_DISCRETAS_BANCO: readonly string[] = ["polos", "corriente_a", "sensibilidad_ma", "zocalo", "tension_v", "ip"];
+
 export interface BusquedaBanco {
   q: string;
   /** "desconocido": consultas reales todavía sin clasificar. */
@@ -43,6 +59,13 @@ export interface BusquedaBanco {
   /** Ninguna categoría dura (preguntas y códigos). */
   sinDuros?: boolean;
   nuncaSinResultados?: boolean;
+  /**
+   * Medidas que el plan tiene que producir. `[]` (distinto de ausente) = el plan NO debe producir ninguna
+   * medida (negativos: códigos como "DL-18W", "2x20" sin contexto).
+   */
+  medidas?: MedidaBanco[];
+  /** Claves que el plan NO debe producir aunque haya otras medidas ("cable unipolar 2.5mm" no es de polos). */
+  sinMedidasDe?: string[];
 }
 
 /**

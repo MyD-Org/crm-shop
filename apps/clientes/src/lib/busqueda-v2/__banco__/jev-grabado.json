@@ -1,7 +1,7 @@
 {
   "modelo": "jev-1.13.0",
   "grabadoEl": "2026-10-01",
-  "ampliadoEl": "2026-10-05",
+  "ampliadoEl": "2026-10-06",
   "respuestas": {
     "algo para sacar el olor del bano": {
       "principal": {
@@ -2451,6 +2451,598 @@
       "sub": {
         "sub": {
           "choice": "cajas_y_gabinetes",
+          "confidence": 1
+        }
+      }
+    },
+    "bipolar 20a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.91
+        }
+      }
+    },
+    "interruptor termomagnetico 3x32": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.92
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "interruptores_termomagneticos",
+          "confidence": 0.98
+        }
+      }
+    },
+    "termica unipolar 16a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.94
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.96
+        }
+      }
+    },
+    "tripolar 40a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.88
+        }
+      }
+    },
+    "diferencial bipolar 25a 30ma": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "protecciones_electricas",
+          "confidence": 0.92
+        }
+      }
+    },
+    "termica curva c 16": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.95
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.95
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.82
+        }
+      }
+    },
+    "lampara 9 5w": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.95
+        }
+      }
+    },
+    "lampara led 12w gu10": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.8
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.87
+        }
+      }
+    },
+    "vela led e14 5w": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.59
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 1
+        }
+      }
+    },
+    "foco 15w luz fria": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "frio",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.95
+        }
+      }
+    },
+    "dicroica mr16 12v": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.82
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 1
+        }
+      }
+    },
+    "tira led 24v ip65": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.86
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "neones_y_tiras_de_led",
+          "confidence": 1
+        }
+      }
+    },
+    "reflector led 100w ip66": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.99
+        }
+      }
+    },
+    "fuente 12v 5a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "fuentes_y_drivers",
+          "confidence": 1
+        }
+      }
+    },
+    "cable 2 5mm": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 1
+        }
+      }
+    },
+    "cable 3x2 5mm2": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "conductores_electricos",
+          "confidence": 1
+        }
+      }
+    },
+    "monofasico 20a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.9
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "termicas_y_disyuntores",
+          "confidence": 0.92
+        }
+      }
+    },
+    "panel 60x60": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.78
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "paneles",
+          "confidence": 1
+        }
+      }
+    },
+    "lampara de 10 a 20w": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.99
+        }
+      }
+    },
+    "hasta 50w": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.42
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.94
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.75
+        }
+      }
+    },
+    "curva c": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.35
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.6
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.54
+        }
+      }
+    },
+    "tira led 14w/m": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "neones_y_tiras_de_led",
+          "confidence": 1
+        }
+      }
+    },
+    "cano 20mm": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "canos_y_cablecanal",
           "confidence": 1
         }
       }

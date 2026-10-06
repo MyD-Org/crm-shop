@@ -105,9 +105,11 @@ export interface ArgsLinea {
   /** `--motor`: suma las filas de la tubería `motor`. */
   motor: boolean;
   tenantAlias: string;
+  /** `--comparar=<ruta>`: matriz.json (o carpeta que lo contiene) de una línea base congelada, para imprimir el delta. */
+  comparar?: string;
 }
 
-const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias", "motor"]);
+const CONOCIDOS = new Set(["solo-visibles", "flags", "banco-real", "etiquetas", "repeticiones", "calentar", "dir", "jev", "tenant-alias", "motor", "comparar"]);
 
 const entero = (nombre: string, v: string | undefined, min: number, def: number): number => {
   if (v === undefined) return def;
@@ -151,6 +153,7 @@ export function parsearArgsLinea(argv: readonly string[]): ArgsLinea {
     jevVivo: jev === "vivo",
     motor: mapa.has("motor"),
     tenantAlias: mapa.get("tenant-alias") ?? "shop",
+    ...(mapa.has("comparar") ? { comparar: mapa.get("comparar") } : {}),
   };
 }
 

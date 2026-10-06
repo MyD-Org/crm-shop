@@ -20,6 +20,7 @@ import {
   CANTIDAD_MAXIMA,
   tituloCatalogo,
   interpretacionVigente,
+  itemsDeCaracteristicas,
 } from "./catalogo-vista";
 import type { EstadoCatalogo } from "./catalogo-url";
 
@@ -207,6 +208,17 @@ describe("chipsActivos", () => {
     expect(chips.map((c) => c.etiqueta)).toEqual(["Marca: Genrod", "Luz cálida", "Apto exterior"]);
     expect(chips[1].cambios).toEqual({ atributos: ["apto-exterior"] });
     expect(chips[1].removeLabel).toBe("Quitar filtro Luz cálida");
+  });
+
+  it("una medida (id dinámico) aparece como chip con su etiqueta y quitarla saca solo ese id (R4.4)", () => {
+    const chips = chipsActivos({ ...base, atributos: ["tono-calido", "corriente_a:20", "polos:2"] }, rango);
+    expect(chips.map((c) => c.etiqueta)).toEqual(["Luz cálida", "Corriente: 20 A", "Polos: 2"]);
+    expect(chips[1].removeLabel).toBe("Quitar filtro Corriente: 20 A");
+    expect(chips[1].cambios).toEqual({ atributos: ["tono-calido", "polos:2"] });
+    expect(chips[2].cambios).toEqual({ atributos: ["tono-calido", "corriente_a:20"] });
+    expect(contarFiltrosActivos({ ...base, atributos: ["corriente_a:20", "polos:2"] })).toBe(2);
+    // Con un filtro de medidas la página no se indexa (como con cualquier atributo).
+    expect(indexable({ ...base, atributos: ["polos:2"] })).toBe(false);
   });
 
   it("las claves son únicas (sirven de key de React)", () => {
@@ -459,5 +471,32 @@ describe("categoriasDeLaBusqueda", () => {
       "SEGURIDAD",
       "CAMARAS",
     ]);
+  });
+});
+
+describe("itemsDeCaracteristicas (grupo Características del panel, R4.5)", () => {
+  const facetas = [
+    { label: "tono-calido", count: 12 },
+    { label: "zocalo-e27", count: 5 },
+  ];
+
+  it("sólo el diccionario tiene faceta: los ítems salen con nombre y conteo", () => {
+    expect(itemsDeCaracteristicas(facetas, ["zocalo-e27"])).toEqual([
+      { value: "tono-calido", label: "Luz cálida", count: 12, checked: false },
+      { value: "zocalo-e27", label: "Rosca E27", count: 5, checked: true },
+    ]);
+  });
+
+  it("una medida activa aparece tildada, sin conteo (no tiene faceta) y no suma un grupo nuevo", () => {
+    const items = itemsDeCaracteristicas(facetas, ["corriente_a:20", "zocalo-e27"]);
+    expect(items).toHaveLength(3);
+    expect(items[0]).toEqual({ value: "corriente_a:20", label: "Corriente: 20 A", count: undefined, checked: true });
+    expect(items.filter((i) => i.checked).map((i) => i.value)).toEqual(["corriente_a:20", "zocalo-e27"]);
+    // ni "zócalo" ni ninguna clave de medida se vuelve una faceta del diccionario
+    expect(items.map((i) => i.value)).not.toContain("zocalo:e14");
+  });
+
+  it("sin faceta ni tildados, nada", () => {
+    expect(itemsDeCaracteristicas([], [])).toEqual([]);
   });
 });

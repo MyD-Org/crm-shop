@@ -81,6 +81,8 @@ export interface OpcionesCorrida {
   superficie?: SuperficieBanco;
   /** `--ids`: escribir en el JSON los ids de lo devuelto por caso (paridad entre corridas; archivo local). */
   ids?: boolean;
+  /** Estado del flag `busqueda-medidas` con que se corrió (lo declara quien arma la corrida); por defecto "no aplica". */
+  busquedaMedidas?: "no aplica" | "on" | "off";
 }
 
 export interface DepsCorrida {
@@ -115,6 +117,8 @@ export interface Cabecera {
   superficie?: DatosSuperficie;
   tenantAlias: string;
   duracionMs: number;
+  /** Estado de `busqueda-medidas` ("no aplica" hasta que la tubería v2 lo use). Ausente en snapshots anteriores. */
+  busquedaMedidas?: string;
 }
 
 export interface CasoJson {
@@ -255,6 +259,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
     ...(superficie ? { superficie } : {}),
     tenantAlias: o.tenantAlias,
     duracionMs,
+    busquedaMedidas: o.busquedaMedidas ?? "no aplica",
   };
 
   const porEtapa: Record<string, number> = {};
@@ -297,7 +302,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
   const ordenadas = [...primerasMs].sort((a, b) => a - b);
   const p50Legado = ordenadas[Math.floor(ordenadas.length / 2)] ?? 0;
   const lineas = [
-    `[banco] tubería ${o.tuberia}${o.politica ? ` (política ${o.politica}, superficie ${o.superficie ?? "catalogo"}, K=${k})` : ""}; banco ${o.banco.origen} (n=${casos.length}, hash ${o.banco.hash}); vista ${cabecera.vista.variante} (soloVisibles ${o.vista.soloVisibles}, soloStock ${o.vista.soloStock}); Jev ${o.jev}${o.jevMeta?.modelo ? ` (${o.jevMeta.modelo}, grabado ${o.jevMeta.grabadoEl ?? "?"})` : ""}`,
+    `[banco] tubería ${o.tuberia}${o.politica ? ` (política ${o.politica}, superficie ${o.superficie ?? "catalogo"}, K=${k})` : ""}; banco ${o.banco.origen} (n=${casos.length}, hash ${o.banco.hash}); vista ${cabecera.vista.variante} (soloVisibles ${o.vista.soloVisibles}, soloStock ${o.vista.soloStock}); Jev ${o.jev}${o.jevMeta?.modelo ? ` (${o.jevMeta.modelo}, grabado ${o.jevMeta.grabadoEl ?? "?"})` : ""}; busqueda-medidas: ${cabecera.busquedaMedidas}`,
     "",
     reporte(`Banco de búsquedas — tubería ${o.tuberia}`, incluidas, conIntencion, k),
     "",

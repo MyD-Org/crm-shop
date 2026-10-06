@@ -139,6 +139,24 @@ describe("atributos en la hoja", () => {
   });
 });
 
+describe("medidas (ids dinámicos de atributo) en la hoja (R6.11)", () => {
+  it("el id dinámico activo se conserva al aplicar otros cambios y no agrega parámetros nuevos", () => {
+    const conMedida = { ...base, atributos: ["corriente_a:20", "polos:2"] };
+    const b = cambiarBorrador(conMedida, { marcas: ["GENROD"] });
+    expect(hrefAlAplicar(conMedida, b)).toBe("/catalogo?marca=GENROD&atr=corriente_a%3A20&atr=polos%3A2");
+  });
+
+  it("el orden en que se tildó no cuenta como cambio; quitar uno navega con el resto", () => {
+    const conMedida = { ...base, atributos: ["corriente_a:20", "polos:2"] };
+    expect(hrefAlAplicar(conMedida, { ...conMedida, atributos: ["polos:2", "corriente_a:20"] })).toBeNull();
+    expect(hrefAlAplicar(conMedida, cambiarBorrador(conMedida, { atributos: ["polos:2"] }))).toBe("/catalogo?atr=polos%3A2");
+  });
+
+  it("limpiar el borrador saca también las medidas", () => {
+    expect(limpiarBorrador({ ...base, atributos: ["corriente_a:20", "tono-frio"] }).atributos).toEqual([]);
+  });
+});
+
 describe("potencia en la hoja", () => {
   it("el rango de potencia del borrador viaja al aplicar", () => {
     const b = cambiarBorrador(base, { potenciaMin: 10, potenciaMax: 50 });

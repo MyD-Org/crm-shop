@@ -535,6 +535,45 @@ describe("atributos (`atr`) y búsqueda inteligente (`ia`)", () => {
   });
 });
 
+describe("medidas en la URL (?atr=corriente_a:20, ids dinámicos de atributo)", () => {
+  const sp = (qs: string) => new URLSearchParams(qs);
+
+  it("round-trip: se leen, quedan en orden canónico (diccionario, luego medidas) y vuelven a la URL", () => {
+    const e = leerEstado({ atr: ["polos:2", "tono-calido", "corriente_a:20"] });
+    expect(e.atributos).toEqual(["tono-calido", "corriente_a:20", "polos:2"]);
+    const href = hrefCatalogo(e);
+    expect(href).toBe("/catalogo?atr=tono-calido&atr=corriente_a%3A20&atr=polos%3A2");
+    const volver = new URLSearchParams(href.split("?")[1]).getAll("atr");
+    expect(leerEstado({ atr: volver }).atributos).toEqual(e.atributos);
+  });
+
+  it("un id inválido se descarta sin error (R6.10)", () => {
+    const e = leerEstado({ atr: ["corriente_a:20' OR 1=1--", "polos:9", "clave:1", "corriente_a:25"] });
+    expect(e.atributos).toEqual(["corriente_a:25"]);
+    expect(hrefCatalogo(e)).toBe("/catalogo?atr=corriente_a%3A25");
+  });
+
+  it("como mucho 8 medidas por request", () => {
+    const muchos = Array.from({ length: 12 }, (_, i) => `corriente_a:${i + 1}`);
+    expect(leerEstado({ atr: muchos }).atributos).toHaveLength(8);
+  });
+
+  it("pasan al SQL como filtros y no entran al canonical", () => {
+    const e = { ...base, categorias: ["Termomagnéticas"], atributos: ["corriente_a:20"] };
+    expect(filtrosDeEstado(e).atributos).toEqual(["corriente_a:20"]);
+    expect(hrefCanonico(e)).toBe("/catalogo?categoria=Termomagn%C3%A9ticas");
+  });
+
+  it("una medida que Next no volvió a pedir es un desfase; sin el flag no cuenta", () => {
+    const renderizado = { ...base, atributos: ["corriente_a:20", "polos:2"] };
+    expect(filtrosDesfasados(renderizado, sp("atr=polos%3A2"))).toBe(true);
+    expect(filtrosDesfasados(renderizado, sp("atr=polos%3A2&atr=corriente_a%3A20"))).toBe(false);
+    const apagado = sinBusquedaIa(renderizado);
+    expect(apagado.atributos).toEqual([]);
+    expect(filtrosDesfasados(apagado, sp("atr=polos%3A2"), false)).toBe(false);
+  });
+});
+
 describe("flag busqueda-ia apagado", () => {
   const sp = (qs: string) => new URLSearchParams(qs);
 

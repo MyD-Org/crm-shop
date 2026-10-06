@@ -9,6 +9,7 @@ import {
   atributosValidos,
   esAtributo,
   nombreAtributo,
+  TOPE_IDS_MEDIDA,
 } from "./catalogo-atributos";
 import type { AtributosEstructurados } from "./catalogo-caracteristicas";
 
@@ -184,5 +185,124 @@ describe("tipo de luz de color y RGB (tono)", () => {
   it("los sinónimos de búsqueda llevan a esos filtros", () => {
     expect(atributoPorId("tono-verde")?.sinonimos).toContain("luz verde");
     expect(atributoPorId("tono-rgb")?.sinonimos).toContain("rgb");
+  });
+});
+
+describe("ids dinámicos de medida (R4.1, R4.4, R4.6, R4.7)", () => {
+  it.each([
+    ["corriente_a:20", "medida:corriente_a", "Corriente: 20 A"],
+    ["polos:2", "medida:polos", "Polos: 2"],
+    ["potencia_w:8-10", "medida:potencia_w", "Potencia: 8 a 10 W"],
+    ["zocalo:e14", "medida:zocalo", "Zócalo: E14"],
+    ["curva:c", "medida:curva", "Curva: C"],
+    ["ip:65", "medida:ip", "IP65 o superior"],
+    ["tension_v:12", "medida:tension_v", "Tensión: 12 V"],
+    ["medidas_mm:600x600", "medida:medidas_mm", "Medidas: 600 x 600 mm"],
+  ])("%s se resuelve a un atributo sintetizado", (id, grupo, nombre) => {
+    const a = atributoPorId(id);
+    expect(a).toBeDefined();
+    expect(a!.id).toBe(id);
+    expect(a!.grupo).toBe(grupo);
+    expect(a!.nombre).toBe(nombre);
+    expect(esAtributo(id)).toBe(true);
+    expect(nombreAtributo(id)).toBe(nombre);
+    expect(a!.estructurado).toBeDefined();
+    expect(a!.sinonimos).toEqual([]);
+  });
+
+  it("el atributo sintetizado trae su medida, su criterio y su patrón", () => {
+    const a = atributoPorId("corriente_a:20")!;
+    expect("medida" in a && a.medida).toEqual({ clave: "corriente_a", op: "eq", valor: 20 });
+    expect(a.estructurado).toEqual({ clave: "corriente_a", numeros: [20] });
+    expect(a.patron).toBeDefined();
+    expect(new RegExp(a.patron!, "i").test("interruptor 2p 20a c")).toBe(true);
+    expect(new RegExp(a.patron!, "i").test("interruptor 2p 25a c")).toBe(false);
+    // Sin patrón sobre el texto: polos.
+    expect(atributoPorId("polos:2")!.patron).toBeUndefined();
+  });
+
+  it.each([
+    "corriente_a:0",
+    "corriente_a:-5",
+    "corriente_a:1e9",
+    "corriente_a:020",
+    "polos:5",
+    "polos:2.5",
+    "potencia_w:10-5",
+    "zocalo:E27",
+    "zocalo:e99",
+    "ip:70",
+    "curva:z",
+    "clave_falsa:1",
+    "corriente_a:20' OR 1=1--",
+    "polos:2;drop table x",
+    "corriente_a:",
+    "corriente_a:20:30",
+    "corriente_a:" + "1".repeat(40),
+  ])("%s se rechaza", (id) => {
+    expect(atributoPorId(id)).toBeUndefined();
+    expect(esAtributo(id)).toBe(false);
+    expect(nombreAtributo(id)).toBe(id);
+    expect(atributosValidos([id])).toEqual([]);
+  });
+
+  it("los ids y grupos del diccionario no cambian (R4.6)", () => {
+    expect(atributoPorId("zocalo-e27")?.grupo).toBe("zocalo");
+    expect(atributoPorId("tension-12v")?.grupo).toBe("tension");
+    expect(atributosValidos(["tension-24v", "zocalo-e27", "tono-frio"])).toEqual(["tono-frio", "zocalo-e27", "tension-24v"]);
+    // Un id dinámico NO pisa el grupo de un id del diccionario aunque hablen de lo mismo.
+    expect(atributoPorId("zocalo:e27")?.grupo).toBe("medida:zocalo");
+  });
+
+  it("atributosValidos: estáticos del diccionario y luego dinámicos por clave y valor, sin repetidos", () => {
+    expect(
+      atributosValidos(["polos:2", "tono-frio", "corriente_a:25", "basura", "corriente_a:20", "polos:2", "zocalo-e27"]),
+    ).toEqual(["tono-frio", "zocalo-e27", "corriente_a:20", "corriente_a:25", "polos:2"]);
+  });
+
+  it("el orden de los dinámicos no depende del orden de la URL (misma URL canónica)", () => {
+    const a = atributosValidos(["polos:2", "corriente_a:20", "zocalo:e14", "curva:c"]);
+    const b = atributosValidos(["curva:c", "zocalo:e14", "corriente_a:20", "polos:2"]);
+    expect(a).toEqual(b);
+  });
+
+  it("atributosValidos: tope de 8 dinámicos únicos; descarta lo inválido sin error (R4.7)", () => {
+    const pedidos = [
+      "corriente_a:10", "corriente_a:16", "corriente_a:20", "corriente_a:25", "corriente_a:32",
+      "corriente_a:40", "corriente_a:50", "corriente_a:63", "corriente_a:80", "corriente_a:100",
+      "corriente_a:10", "corriente_a:16", "polos:9", "x:1",
+    ];
+    const validos = atributosValidos(pedidos);
+    expect(TOPE_IDS_MEDIDA).toBe(8);
+    expect(validos).toHaveLength(8);
+    expect(new Set(validos).size).toBe(8);
+    expect(validos).toEqual(["corriente_a:10", "corriente_a:16", "corriente_a:20", "corriente_a:25", "corriente_a:32", "corriente_a:40", "corriente_a:50", "corriente_a:63"]);
+  });
+
+  it("el tope no toca a los ids del diccionario", () => {
+    const dinamicos = Array.from({ length: 12 }, (_, i) => `corriente_a:${i + 1}`);
+    const validos = atributosValidos([...dinamicos, "tono-frio", "zocalo-e27"]);
+    expect(validos.slice(0, 2)).toEqual(["tono-frio", "zocalo-e27"]);
+    expect(validos).toHaveLength(2 + 8);
+  });
+
+  it("atributosPorGrupo: AND entre grupos (uno por clave), OR dentro (dos corriente_a)", () => {
+    const grupos = atributosPorGrupo(["corriente_a:20", "corriente_a:25", "polos:2", "tono-frio"]);
+    expect([...grupos.keys()]).toEqual(["tono", "medida:corriente_a", "medida:polos"]);
+    expect(grupos.get("medida:corriente_a")!.map((a) => a.id)).toEqual(["corriente_a:20", "corriente_a:25"]);
+  });
+
+  it("fuzz: 5000 cadenas al azar nunca lanzan y todo lo aceptado vuelve igual", () => {
+    let semilla = 12345;
+    const azar = () => (semilla = (semilla * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const alfabeto = "abcdefghijklmnopqrstuvwxyz_:.-0123456789xX' ;%\u00e1";
+    for (let i = 0; i < 5000; i++) {
+      const largo = 1 + Math.floor(azar() * 44);
+      let id = "";
+      for (let j = 0; j < largo; j++) id += alfabeto[Math.floor(azar() * alfabeto.length)];
+      const a = atributoPorId(id);
+      if (a) expect(a.id).toBe(id);
+      expect(atributosValidos([id]).length).toBeLessThanOrEqual(1);
+    }
   });
 });

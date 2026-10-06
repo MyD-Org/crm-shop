@@ -52,6 +52,7 @@ import {
 } from "./catalog";
 import { conRespaldoSinCache } from "./cache-respaldo";
 import { TAG_CATALOGO } from "./cache-tags";
+import { esMedidaId } from "./catalogo-atributos-medida";
 import type { OrdenCatalogo } from "./catalogo-url";
 import { elegirDestacados } from "./destacados";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
@@ -79,6 +80,8 @@ export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
     !filtros.texto?.plan &&
     !filtros.texto?.tolerante &&
     !filtros.texto?.codigo &&
+    // Una medida (`corriente_a:20`) tiene tantos valores posibles como el precio: una clave por cada uno.
+    !filtros.atributos?.some(esMedidaId) &&
     filtros.precioMin == null &&
     filtros.precioMax == null &&
     // La potencia es un rango libre como el precio: multiplicaría las claves de la caché.

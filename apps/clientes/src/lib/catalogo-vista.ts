@@ -14,6 +14,7 @@ import type { Product } from "@/data/products";
 import { fmtPesosEnteros } from "@/lib/format";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { nombreAtributo } from "@/lib/catalogo-atributos";
+import { esMedidaId } from "@/lib/catalogo-atributos-medida";
 import {
   ORDEN_DEFAULT,
   SOLO_STOCK_DEFAULT,
@@ -356,6 +357,23 @@ export function itemsDeFaceta<F extends { label: string; count: number }>(
     ...ausentes,
     ...facetas.map((f) => ({ ...f, checked: tildados.includes(f.label) })),
   ];
+}
+
+/**
+ * Ítems del grupo "Características" del panel: las facetas del diccionario con su tilde y su
+ * nombre. Una medida activa (`corriente_a:20`) no tiene faceta —no hay un conteo que mostrar—:
+ * aparece tildada y sin número, para poder destildarla desde el panel además del chip.
+ */
+export function itemsDeCaracteristicas(
+  facetas: { label: string; count: number }[],
+  tildados: string[],
+): { value: string; label: string; count: number | undefined; checked: boolean }[] {
+  return itemsDeFaceta(facetas, tildados).map((a) => ({
+    value: a.label,
+    label: nombreAtributo(a.label),
+    count: esMedidaId(a.label) ? undefined : a.count,
+    checked: a.checked,
+  }));
 }
 
 /**

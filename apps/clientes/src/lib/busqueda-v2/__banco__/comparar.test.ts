@@ -8,7 +8,7 @@ import type { Cabecera, ReporteJson } from "./corrida";
 import { cortarPor, resumenNumerico } from "./metricas";
 import type { EvaluacionMedida } from "./medida-oraculo";
 
-const medida = (p: Partial<EvaluacionMedida>): EvaluacionMedida => ({ hit: null, precision: null, contradicciones: 0, cobertura: 0, contradiccionesDuras: null, falsoPositivo: null, ...p });
+const medida = (p: Partial<EvaluacionMedida>): EvaluacionMedida => ({ hit: null, precision: null, contradicciones: 0, cobertura: 0, contradiccionesDuras: null, falsoPositivo: null, detalle: [], ...p });
 
 function ev(i: number, p: Partial<EvaluacionBusqueda> = {}): EvaluacionBusqueda {
   return {

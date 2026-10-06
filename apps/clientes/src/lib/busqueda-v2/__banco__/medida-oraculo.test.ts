@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ProductoBanco, ResultadoBanco } from "./banco";
 import type { BusquedaBanco, MedidaBanco } from "./modelo";
-import { cumpleMedida, evaluarMedidas } from "./medida-oraculo";
+import { claveDeId, cumpleMedida, evaluarMedidas } from "./medida-oraculo";
 
 type Atributos = NonNullable<ProductoBanco["atributosEstructurados"]>;
 
@@ -232,5 +232,87 @@ describe("evaluarMedidas: ids del diccionario equivalentes (R6.8: e27, 12/24/220
     const c = caso([{ clave: "potencia_w", valor: 9 }], { sinMedidasDe: ["zocalo"] });
     expect(evaluarMedidas(c, resultado(productos, { medidas: ["potencia_w:9", "zocalo-e27"] }))!.hit).toBe(false);
     expect(evaluarMedidas(caso([]), resultado(productos, { medidas: ["tension-12v"] }))!.falsoPositivo).toBe(true);
+  });
+});
+
+describe("evaluarMedidas: detalle por medida esperada (con / cumple / contradice / duras)", () => {
+  const conId = (id: string, p: ProductoBanco): ProductoBanco => ({ ...p, id });
+
+  it("una entrada por medida esperada, con sus conteos sobre el top 24", () => {
+    const productos = [
+      prod({ polos: num(2), corriente_a: num(20) }),
+      prod({ polos: num(2), corriente_a: num(20) }),
+      prod({ polos: num(1), corriente_a: num(25) }),
+      prod({ corriente_a: num(20) }),
+    ];
+    const m = evaluarMedidas(
+      caso([
+        { clave: "polos", valor: 2, dura: true },
+        { clave: "corriente_a", valor: 20 },
+      ]),
+      resultado(productos),
+    )!;
+    expect(m.detalle).toEqual([
+      { clave: "polos", valor: "2", dura: true, con: 3, cumple: 2, contradice: 1, duras: 1, contradicen: [] },
+      { clave: "corriente_a", valor: "20", dura: false, con: 4, cumple: 3, contradice: 1, duras: 0, contradicen: [] },
+    ]);
+  });
+
+  it("el valor esperado se escribe como texto: igual, rango y extremos", () => {
+    const m = evaluarMedidas(
+      caso([
+        { clave: "zocalo", valor: "e27" },
+        { clave: "potencia_w", min: 10, max: 20 },
+        { clave: "potencia_w", max: 50 },
+        { clave: "potencia_w", min: 20 },
+      ]),
+      resultado([]),
+    )!;
+    expect(m.detalle.map((d) => d.valor)).toEqual(["e27", "10-20", "<=50", ">=20"]);
+  });
+
+  it("contradicen lleva los ids de los productos que contradicen (los que tengan id), sólo del top 24", () => {
+    const productos = [
+      conId("p1", prod({ polos: num(1) })),
+      conId("p2", prod({ polos: num(2) })),
+      prod({ polos: num(3) }),
+      ...veces(22, () => prod()),
+      conId("p-fuera", prod({ polos: num(4) })),
+    ];
+    const m = evaluarMedidas(caso([{ clave: "polos", valor: 2 }]), resultado(productos))!;
+    expect(m.detalle[0].contradice).toBe(2);
+    expect(m.detalle[0].contradicen).toEqual(["p1"]);
+  });
+
+  it("emitidas y emitidasDuras: ids del plan y, de ésos, los que quedaron como filtro duro", () => {
+    const m = evaluarMedidas(
+      caso([{ clave: "polos", valor: 2 }]),
+      resultado([], { medidas: ["polos:2", "corriente_a:20"], atributosDuros: ["polos:2", "otro-atributo"] }),
+    )!;
+    expect(m.emitidas).toEqual(["polos:2", "corriente_a:20"]);
+    expect(m.emitidasDuras).toEqual(["polos:2"]);
+  });
+
+  it("la tubería sin medidas: emitidas y emitidasDuras ausentes (no es lo mismo que vacías)", () => {
+    const m = evaluarMedidas(caso([{ clave: "polos", valor: 2 }]), resultado([]))!;
+    expect(m.emitidas).toBeUndefined();
+    expect(m.emitidasDuras).toBeUndefined();
+  });
+
+  it("caso negativo (medidas: []): detalle vacío pero con lo emitido", () => {
+    const m = evaluarMedidas(caso([]), resultado([], { medidas: ["potencia_w:18"] }))!;
+    expect(m.detalle).toEqual([]);
+    expect(m.emitidas).toEqual(["potencia_w:18"]);
+    expect(m.falsoPositivo).toBe(true);
+  });
+});
+
+describe("claveDeId", () => {
+  it("clave de un id dinámico o del diccionario equivalente; undefined si no es de medida", () => {
+    expect(claveDeId("corriente_a:20")).toBe("corriente_a");
+    expect(claveDeId("zocalo-e27")).toBe("zocalo");
+    expect(claveDeId("tension-12v")).toBe("tension_v");
+    expect(claveDeId("apto-exterior")).toBe("ip");
+    expect(claveDeId("otro-atributo")).toBeUndefined();
   });
 });

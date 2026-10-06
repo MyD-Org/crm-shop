@@ -703,7 +703,7 @@ describe("buscar: política cascada", () => {
     let t = 0;
     const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 2 : 0));
     const lenta: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 5000; return deps.pagina(a); } };
-    // Chat tiene tope de plan (600 ms) y presupuesto (1500 ms): sin topes no rige ninguno.
+    // Chat tiene presupuesto (1500 ms): sin topes no rige.
     const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => resolver(planProducto()), 10_000));
     const promesa = buscar(pedido({ porPagina: 10 }), cascada("chat", { planDe, sinTopes: true }), lenta);
     await vi.advanceTimersByTimeAsync(10_000);
@@ -714,8 +714,8 @@ describe("buscar: política cascada", () => {
     expect(r.truncado).toBeUndefined();
   });
 
-  it("chat: usa el plan en cascada y su tope de plan es 600 ms; el catálogo no tiene tope de plan", async () => {
-    expect(PRESUPUESTOS_CASCADA.chat.planTimeoutMs).toBe(600);
+  it("chat: usa el plan en cascada y, como el autocompletar, lo ESPERA (sin tope de plan: descartarlo dejaba la búsqueda vacía)", async () => {
+    expect(PRESUPUESTOS_CASCADA.chat.planTimeoutMs).toBeNull();
     expect(PRESUPUESTOS_CASCADA.catalogo.planTimeoutMs).toBeNull();
     const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.plan ? 3 : 0));
     const r = await buscar(pedido({ porPagina: 10 }), cascada("chat", { planDe: async () => planProducto() }), deps);
@@ -723,11 +723,61 @@ describe("buscar: política cascada", () => {
     expect(llamadas[0]).toMatchObject({ sinConteo: true, porPagina: 10 });
   });
 
+  it("chat: un plan LENTO (más que cualquier tope viejo) no se descarta y su espera no gasta el presupuesto de las etapas", async () => {
+    vi.useFakeTimers();
+    let t = 0;
+    const { deps, llamadas } = crearDeps((a) => (a.filtros.texto?.tolerante ? 2 : 0));
+    const reloj: DepsMotor = { ...deps, ahora: () => t, pagina: async (a) => { t += 100; return deps.pagina(a); } };
+    // 5 s de plan, más que los 600 ms del tope viejo y que los 1500 ms del presupuesto del chat.
+    const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => ((t += 5000), resolver(planProducto())), 5000));
+    const promesa = buscar(pedido({ consulta: "lampra led", porPagina: 10 }), cascada("chat", { planDe }), reloj);
+    await vi.advanceTimersByTimeAsync(5000);
+    const r = await promesa;
+    expect(r.plan).not.toBeNull();
+    expect(llamadas).toHaveLength(3);
+    expect(r).toMatchObject({ etapa: "tolerante", intentos: ["plan", "exacta", "tolerante"], total: 2 });
+    expect(r.truncado).toBeUndefined();
+  });
+
+  describe("chat con el plan LENTO: la cascada nunca queda peor que el legado del chat (exacta y tolerante, sin plan)", () => {
+    const escenarios: { nombre: string; consulta: string; plan: PlanBusqueda; tabla: { plan?: number; exacta?: number; tolerante?: number }; encuentra: boolean }[] = [
+      { nombre: "lenguaje natural: sólo el plan encuentra (el legado del chat no)", consulta: "tira led para la cocina", plan: planProducto(), tabla: { plan: 5 }, encuentra: true },
+      { nombre: "medida: sólo el plan encuentra", consulta: "panel led 60x60", plan: planProducto(), tabla: { plan: 4 }, encuentra: true },
+      { nombre: "typo: sólo la tolerante encuentra (con o sin plan)", consulta: "lampra led e27", plan: planProducto(), tabla: { tolerante: 2 }, encuentra: true },
+      { nombre: "el plan no trae nada y la exacta sí", consulta: "panel led", plan: planProducto(), tabla: { exacta: 3 }, encuentra: true },
+      { nombre: "nada en ninguna etapa", consulta: "xyzzy inexistente", plan: planProducto(), tabla: {}, encuentra: false },
+    ];
+
+    async function correr(politica: "legado" | "cascada", e: (typeof escenarios)[number]) {
+      vi.useFakeTimers();
+      const { deps } = crearDeps((a) => {
+        const t = a.filtros.texto;
+        return (t?.tolerante ? e.tabla.tolerante : t?.plan ? e.tabla.plan : e.tabla.exacta) ?? 0;
+      });
+      let reloj = 0;
+      const planDe = () => new Promise<PlanBusqueda | null>((resolver) => setTimeout(() => ((reloj += 5000), resolver(e.plan)), 5000));
+      const promesa = buscar(pedido({ consulta: e.consulta, porPagina: 10 }), { superficie: "chat", politica, conPlan: true, planDe }, { ...deps, ahora: () => reloj });
+      await vi.advanceTimersByTimeAsync(5000);
+      return promesa;
+    }
+
+    for (const e of escenarios) {
+      it(e.nombre, async () => {
+        const legadoR = await correr("legado", e);
+        const cascadaR = await correr("cascada", e);
+        expect(cascadaR.total).toBeGreaterThanOrEqual(legadoR.total);
+        expect(legadoR.total > 0 && cascadaR.total === 0).toBe(false);
+        expect(cascadaR.total > 0).toBe(e.encuentra);
+        expect(cascadaR.truncado).toBeUndefined();
+      });
+    }
+  });
+
   it("los presupuestos por superficie son los del diseño", () => {
     expect(PRESUPUESTOS_CASCADA).toEqual({
       catalogo: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 3 },
       autocompletar: { presupuestoMs: 450, planTimeoutMs: null, etapasMax: 3 },
-      chat: { presupuestoMs: 1500, planTimeoutMs: 600, etapasMax: 3 },
+      chat: { presupuestoMs: 1500, planTimeoutMs: null, etapasMax: 3 },
       admin: { presupuestoMs: 3000, planTimeoutMs: null, etapasMax: 2 },
     });
   });

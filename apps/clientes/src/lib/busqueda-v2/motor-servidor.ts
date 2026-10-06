@@ -38,11 +38,11 @@ export interface ContextoShop {
 }
 
 /**
- * Superficies que corren la cascada cuando el flag `busqueda-motor-unico` está prendido. El chat y
- * el selector del admin se suman en el cambio siguiente (con un solo interruptor): hasta entonces
- * siguen en `legado` aunque el flag esté prendido.
+ * Superficies que corren la cascada cuando el flag `busqueda-motor-unico` está prendido: las cuatro,
+ * con un solo interruptor (apagado, todas vuelven a `legado`). El chat del vendedor y el selector
+ * del admin se sumaron después del catálogo y el autocompletar, una vez medidos con el banco.
  */
-export const SUPERFICIES_EN_CASCADA: ReadonlySet<Superficie> = new Set<Superficie>(["catalogo", "autocompletar"]);
+export const SUPERFICIES_EN_CASCADA: ReadonlySet<Superficie> = new Set<Superficie>(["catalogo", "autocompletar", "chat", "admin"]);
 
 /** Flag apagado = `legado` en todas; prendido = `cascada` sólo en las superficies habilitadas. */
 export const politicaDe = (superficie: Superficie, motorUnico: boolean): Politica =>
@@ -50,8 +50,9 @@ export const politicaDe = (superficie: Superficie, motorUnico: boolean): Politic
 
 async function leerBusquedaIa(c: ContextoShop): Promise<boolean> {
   if (c.busquedaIa !== undefined) return c.busquedaIa;
-  // Chat y selector del admin nunca usan plan: no hace falta leer el flag.
-  if (c.superficie === "chat" || c.superficie === "admin") return false;
+  // El selector del admin nunca usa plan: no hace falta leer el flag. El chat sólo lo usa en cascada
+  // (en `legado` el motor ignora `conPlan`), así que leerlo es inofensivo con el motor apagado.
+  if (c.superficie === "admin") return false;
   // Fail-safe: si no se puede leer el flag, se busca sin plan (la clásica).
   return busquedaIaHabilitada().catch(() => false);
 }

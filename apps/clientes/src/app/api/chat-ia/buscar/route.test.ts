@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setFlag } from "@/test/flags";
+import { REGISTRO } from "@/test/registro-usted";
 
 /**
  * La ruta busca por el motor único (superficie `chat`): se mockea `motor-servidor` y se mira qué
@@ -168,5 +169,79 @@ describe("GET /api/chat-ia/buscar?facetas=1", () => {
     getArbolCategorias.mockRejectedValue(new Error("db"));
     const body = await (await pedir("?q=reflector&facetas=1")).json();
     expect(body.facetas.categorias).toEqual([{ id: "ILUMINACION", nombre: "Iluminación" }]);
+  });
+});
+
+/**
+ * El contrato de errores no depende del interruptor del motor: con `busqueda-motor-unico` apagado y
+ * prendido el chat responde lo mismo (los textos de `{error}` van en el registro formal del producto).
+ */
+describe.each([false, true])("GET /api/chat-ia/buscar: errores con busqueda-motor-unico=%s", (motor) => {
+  beforeEach(() => setFlag("busqueda-motor-unico", motor));
+
+  it("404 {error} con el chat apagado y el motor no se invoca", async () => {
+    setFlag("chat-ia", false);
+    const res = await pedir("?q=lampara");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "No encontrado." });
+    expect(buscarEnShop).not.toHaveBeenCalled();
+  });
+
+  it("400 {error} sin q, con q vacía o sin texto", async () => {
+    for (const qs of ["", "?q=", "?q=%20"]) {
+      const res = await pedir(qs);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Falta el texto a buscar (q)." });
+    }
+    expect(buscarEnShop).not.toHaveBeenCalled();
+  });
+
+  it("429 {error} al pasar el tope por IP (301ª request del minuto)", async () => {
+    permitir.mockReturnValue(false);
+    const res = await pedir("?q=lampara");
+    expect(res.status).toBe(429);
+    expect(permitir).toHaveBeenCalledWith(expect.stringMatching(/^chat-ia-buscar:/), 300, 60_000);
+    expect((await res.json()).error).toBe("Demasiadas búsquedas. Reintentar en un momento.");
+    expect(buscarEnShop).not.toHaveBeenCalled();
+  });
+
+  it("502 {error} sin detalles internos si el motor o el plan fallan", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const falla of [new Error("connection refused 10.0.0.1:5432"), Object.assign(new Error("plan: timeout"), { name: "PlanError" })]) {
+      buscarEnShop.mockRejectedValueOnce(falla);
+      const res = await pedir("?q=lampara");
+      expect(res.status).toBe(502);
+      const cuerpo = await res.json();
+      expect(cuerpo).toEqual({ error: "No se pudo buscar en el catálogo." });
+      expect(JSON.stringify(cuerpo)).not.toMatch(/10\.0\.0\.1|timeout|refused/);
+    }
+    // El log lleva sólo el nombre del error, nunca el mensaje ni la consulta.
+    expect(log.mock.calls.map((c) => String(c[0])).join(" ")).not.toMatch(/10\.0\.0\.1|lampara/);
+    log.mockRestore();
+  });
+
+  it("los mensajes {error} no usan voseo ni tuteo", async () => {
+    setFlag("chat-ia", false);
+    const mensajes = [(await (await pedir("?q=a")).json()).error];
+    setFlag("chat-ia", true);
+    mensajes.push((await (await pedir("")).json()).error);
+    permitir.mockReturnValue(false);
+    mensajes.push((await (await pedir("?q=a")).json()).error);
+    permitir.mockReturnValue(true);
+    buscarEnShop.mockRejectedValueOnce(new Error("x"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    mensajes.push((await (await pedir("?q=a")).json()).error);
+    log.mockRestore();
+    for (const m of mensajes) expect(m).not.toMatch(REGISTRO);
+  });
+
+  it("un typo (etapa tolerante del motor) llega con <= 10 productos, sin `etapa` y con el límite pedido al motor", async () => {
+    const muchos = Array.from({ length: 10 }, (_, i) => ({ ...producto, id: `p${i}` }));
+    buscarEnShop.mockResolvedValue({ productos: muchos, total: 10, etapa: "tolerante", intentos: ["exacta", "tolerante"], ms: 3 });
+    const res = await pedir("?q=lampra&limit=99");
+    const cuerpo = await res.json();
+    expect(cuerpo).toHaveLength(10);
+    expect(buscarEnShop.mock.calls[0][0]).toMatchObject({ consulta: "lampra", porPagina: 10 });
+    expect(JSON.stringify(cuerpo)).not.toMatch(/etapa|tolerante|intentos/);
   });
 });

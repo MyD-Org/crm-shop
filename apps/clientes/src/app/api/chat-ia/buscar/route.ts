@@ -30,9 +30,13 @@ function ipDe(req: Request): string {
  * GET /api/chat-ia/buscar?q=<texto>&limit=<n>[&facetas=1]
  *
  * Búsqueda del catálogo para el agente vendedor del chat. Es LA MISMA búsqueda
- * del Shop (términos, plurales, relevancia y el segundo intento tolerante a
- * typos): el agente no tiene una búsqueda propia, así que encuentra lo mismo
- * que el cliente en la tienda. Devuelve la forma compacta `ProductoAgente`.
+ * del Shop: pasa por el motor único (`buscarEnShop`, superficie `chat`), así
+ * que el agente no tiene una búsqueda propia y encuentra lo mismo que el
+ * cliente en la tienda. Con el flag `busqueda-motor-unico` prendido corre la
+ * cascada (código, plan, exacta y tolerante a typos con el plan); apagado, el
+ * legado (exacta y tolerante). La respuesta no cambia con el flag: la etapa
+ * que resolvió NO se expone (sólo el log `[busqueda] superficie=chat …`, sin
+ * la consulta). Devuelve la forma compacta `ProductoAgente`.
  *
  * Pública y de solo lectura, como /api/shop/catalogo: el catálogo ya es
  * público. Precios de la lista general (no hay sesión: llama ai-api).
@@ -64,7 +68,7 @@ export async function GET(req: Request) {
       // Misma regla que el catálogo y la ficha: flag `busqueda-ia` y tabla disponible.
       usarAtributosEstructurados(),
     ]);
-    // Búsqueda del motor único (superficie `chat`): exacta y, si no trae nada, tolerante a typos.
+    // Búsqueda del motor único (superficie `chat`; cascada o legado según el flag).
     // Sin filtro de stock (el agente puede mencionar lo agotado) y sin contar el total.
     const { productos } = await buscarEnShop(
       {

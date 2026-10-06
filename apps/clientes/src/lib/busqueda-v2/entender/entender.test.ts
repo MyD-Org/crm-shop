@@ -21,6 +21,29 @@ describe("entender", () => {
     expect(jev).not.toHaveBeenCalled();
   });
 
+  it("un token que es una medida pura ('20a') ya no es código: se interpreta, pero entender() no emite ids de medida", async () => {
+    for (const q of ["20a", "e27", "ip65", "9w"]) {
+      const r = await entender(q, { arbol, jev: null, contar });
+      expect(r?.plan.intencion, q).not.toBe("codigo");
+      // Las medidas las mezcla aplicarMedidas (post-cache); entender() solo conserva el texto, con peso 0.4.
+      expect(r?.plan.duros.atributos.some((id) => id.includes(":")), q).toBe(false);
+      expect(r?.plan.blandos.atributos.some((a) => a.id.includes(":")), q).toBe(false);
+    }
+    // Sin id del diccionario que lo absorba ("e27" y "ip65" sí tienen), queda como texto de orden.
+    for (const q of ["20a", "9w"]) {
+      const r = await entender(q, { arbol, jev: null, contar });
+      expect(r?.plan.blandos.terminos, q).toEqual([{ texto: q, peso: 0.4 }]);
+    }
+  });
+
+  it("lo que parece una medida pero cae fuera de rango sigue siendo código ('12000k', 'ip70')", async () => {
+    const jev = vi.fn<ClienteJev>();
+    for (const q of ["12000k", "ip70"]) {
+      expect((await entender(q, { arbol, jev, contar }))?.plan.intencion, q).toBe("codigo");
+    }
+    expect(jev).not.toHaveBeenCalled();
+  });
+
   it("un dato personal no se interpreta", async () => {
     expect(await entender("juan@correo.example", { arbol, jev: null, contar })).toBeNull();
     expect(await entender("   ", { arbol, jev: null, contar })).toBeNull();

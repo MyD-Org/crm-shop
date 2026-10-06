@@ -249,6 +249,8 @@ describe("banco versionado: casos de medidas (busqueda-medidas, M1b)", () => {
  * REQUIERE el paso manual U1: `npm run banco:grabar -- --solo-faltantes` (necesita JEV_API_KEY) y commitear
  * `jev-grabado.json`. Hasta entonces este bloque FALLA a propósito: los casos nuevos no tienen la respuesta de
  * Jev grabada y las mediciones offline de intención/categoría no los pueden evaluar.
+ * Desde M1c (gate) los casos de un solo token-medida ("20a", "9w", "e27", "ip65", "6ka", "4000k", "2x20")
+ * dejan de ser códigos y también necesitan su respuesta grabada.
  */
 describe("Jev grabado cubre todo el banco (U1: banco:grabar --solo-faltantes)", () => {
   it("toda consulta que no es un código tiene su respuesta grabada", () => {

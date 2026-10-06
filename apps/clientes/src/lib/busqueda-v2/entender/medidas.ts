@@ -591,7 +591,7 @@ const RE_AXB_TOKEN = /^\d{2,4}x\d{2,4}$/;
  * código. `NxM` es puramente léxico (no hay contexto en una palabra sola). Lo que tiene guion,
  * barra o un prefijo de letras ("DL-18W", "TM-2x16", "XQ-4471B", "c16") nunca es medida.
  *
- * Todavía no lo usa nadie en producción: el cambio del gate (`pareceCodigo`) va en su propio PR.
+ * Lo usa `pareceCodigo` (gate.ts): un token que es medida deja de contar como código.
  */
 export function esTokenMedida(token: string): boolean {
   if (typeof token !== "string") return false;

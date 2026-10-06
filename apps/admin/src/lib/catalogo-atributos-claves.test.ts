@@ -6,7 +6,7 @@ import { CLAVES_ATRIBUTO, DEFINICION_ATRIBUTOS, ETIQUETA_ATRIBUTO, normalizarAtr
 import { DESCRIPCION_PDF, HERRAMIENTA_ATRIBUTOS } from "./catalogo-atributos-pdf"
 
 /**
- * Paridad de claves de `catalog_atributos`. La lista de 21 vive en un fixture compartido con el
+ * Paridad de claves de `catalog_atributos`. La lista de 23 vive en un fixture compartido con el
  * Shop (`apps/clientes/src/db/__fixtures__/atributos-claves.json`) y el CHECK de la última
  * migración que lo toca tiene que listar exactamente esas claves. Tipo `num` ⇒ `valor_num`;
  * `texto` ⇒ `valor_texto`.
@@ -18,6 +18,8 @@ const DRIZZLE = fileURLToPath(new URL("../../drizzle", import.meta.url))
 const fixture = JSON.parse(readFileSync(FIXTURE, "utf8")) as {
   claves: string[]
   tipos: Record<string, "num" | "texto">
+  /** Claves que el Shop sólo filtra y muestra: su rango válido es el de DEFINICION_ATRIBUTOS. */
+  rangos_solo_faceta: Record<string, [number, number]>
 }
 
 function literalesDelUltimoCheck(): { archivo: string; claves: string[] } {
@@ -34,9 +36,9 @@ function literalesDelUltimoCheck(): { archivo: string; claves: string[] } {
 }
 
 describe("paridad de claves de catalog_atributos", () => {
-  it("el fixture tiene 21 claves únicas y un tipo por cada una", () => {
-    expect(fixture.claves).toHaveLength(21)
-    expect(new Set(fixture.claves).size).toBe(21)
+  it("el fixture tiene 23 claves únicas y un tipo por cada una", () => {
+    expect(fixture.claves).toHaveLength(23)
+    expect(new Set(fixture.claves).size).toBe(23)
     expect(Object.keys(fixture.tipos).sort()).toEqual([...fixture.claves].sort())
     for (const t of Object.values(fixture.tipos)) expect(["num", "texto"]).toContain(t)
   })
@@ -49,6 +51,13 @@ describe("paridad de claves de catalog_atributos", () => {
     expect(Object.keys(DEFINICION_ATRIBUTOS).sort()).toEqual([...fixture.claves].sort())
     for (const c of CLAVES_ATRIBUTO) expect(DEFINICION_ATRIBUTOS[c].tipo).toBe(fixture.tipos[c])
     expect(Object.keys(ETIQUETA_ATRIBUTO).sort()).toEqual([...fixture.claves].sort())
+  })
+
+  it("rangos_solo_faceta del fixture == rango de DEFINICION_ATRIBUTOS (diámetro y ancho)", () => {
+    expect(Object.keys(fixture.rangos_solo_faceta).sort()).toEqual(["ancho_mm", "diametro_mm"])
+    for (const [c, rango] of Object.entries(fixture.rangos_solo_faceta)) {
+      expect(DEFINICION_ATRIBUTOS[c as keyof typeof DEFINICION_ATRIBUTOS].rango, c).toEqual(rango)
+    }
   })
 
   it("la herramienta del PDF (esquema cerrado) tiene exactamente las claves del fixture, todas requeridas", () => {
@@ -69,7 +78,7 @@ describe("paridad de claves de catalog_atributos", () => {
       potencia_w: 50, temperatura_k: 3000, tono: "calido", ip: 65, flujo_lm: 1000, tension_v: 220, zocalo: "E27",
       corriente_a: 25, polos: 2, seccion_mm2: 2.5, medidas_mm: "300x1200", color: "blanco", poder_corte_ka: 6,
       curva: "C", sensibilidad_ma: 30, largo_m: 100, montaje: "embutir", angulo_grados: 60,
-      leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300,
+      leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300, diametro_mm: 25, ancho_mm: 150,
     }
     expect(Object.keys(muestras).sort()).toEqual([...fixture.claves].sort())
     for (const c of CLAVES_ATRIBUTO) {
@@ -81,8 +90,8 @@ describe("paridad de claves de catalog_atributos", () => {
 
   it("el CHECK de la última migración lista exactamente las claves del fixture", () => {
     const { archivo, claves } = literalesDelUltimoCheck()
-    expect(archivo).toBe("0059_atributo_leds_rollo.sql")
+    expect(archivo).toBe("0070_atributos_diametro_ancho.sql")
     expect(new Set(claves)).toEqual(new Set(fixture.claves))
-    expect(claves).toHaveLength(21)
+    expect(claves).toHaveLength(23)
   })
 })

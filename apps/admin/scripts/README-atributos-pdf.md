@@ -73,6 +73,9 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    **LED por rollo** (`leds_rollo`): el total de LED del rollo o tira; el número tiene que ir con "LED"/"LEDs" ("300 LED",
    "300 LEDs", y la forma "300 LEDs xm" que usan algunos fabricantes para el total); "60 LED/m" es `leds_m`, no esta
    clave, y un número sin "LED" se descarta (`unidad_no_en_texto`).
+   **Diámetro y ancho** (`diametro_mm`, `ancho_mm`, migración 0070): en milímetros ("ø25 mm", "Diámetro 25", "Ancho 150 mm"); el
+   diámetro es el de un caño, tubo o accesorio de caño, y el ancho el de una bandeja portacables (el primer número de "100/50").
+   Una sección ("4 mm²") no es un diámetro (`unidad_no_en_texto`).
    Una potencia o corriente "máxima" (carga admitida de un riel, controlador o tecla: "200W Máx", "Carga máxima 200W",
    "Potencia máxima de lámpara: 60W", "hasta 60W") no es la del producto: si "máx", "máximo/a", "maximum" o "hasta" está en su
    celda, en el rótulo de su fila o columna o en la celda pegada de la misma línea, se descarta (`valor_maximo`).

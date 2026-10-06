@@ -24,8 +24,26 @@ import { cortarPor, resumenNumerico, type Latencia, type ResumenNum } from "./me
 import type { SnapshotCatalogo } from "./universo";
 import type { VistaBanco } from "./vista";
 
-export type Tuberia = "clasica" | "tolerante" | "fase1" | "v2";
+export type Tuberia = "clasica" | "tolerante" | "fase1" | "v2" | "motor";
 export type ModoJev = "grabado" | "vivo" | "no" | "cache" | "no aplica";
+
+/** Política del motor de búsqueda (tubería `motor`): lo de hoy (`legado`) o la cascada. */
+export type PoliticaBanco = "legado" | "cascada";
+/** Superficie que mide la tubería `motor`. */
+export type SuperficieBanco = "catalogo" | "autocompletar" | "chat";
+
+/** Cuántos productos mira la evaluación (K) y si la superficie cuenta el total, por superficie. */
+export interface DatosSuperficie {
+  nombre: SuperficieBanco;
+  k: number;
+  conteo: boolean;
+}
+
+export const SUPERFICIES_BANCO: Record<SuperficieBanco, DatosSuperficie> = {
+  catalogo: { nombre: "catalogo", k: 24, conteo: true },
+  autocompletar: { nombre: "autocompletar", k: 8, conteo: false },
+  chat: { nombre: "chat", k: 10, conteo: false },
+};
 
 export interface BancoDeCorrida {
   /** "versionado" o el nombre del archivo (nunca su contenido). */
@@ -58,6 +76,11 @@ export interface OpcionesCorrida {
   umbral?: number;
   /** `--solo=...`: corrida parcial declarada en la cabecera. */
   parcial?: string;
+  /** Sólo tubería `motor`: política y superficie que se miden (declaradas en la cabecera). */
+  politica?: PoliticaBanco;
+  superficie?: SuperficieBanco;
+  /** `--ids`: escribir en el JSON los ids de lo devuelto por caso (paridad entre corridas; archivo local). */
+  ids?: boolean;
 }
 
 export interface DepsCorrida {
@@ -87,6 +110,9 @@ export interface Cabecera {
   repeticiones: number;
   calentar: number;
   parcial?: string;
+  /** Sólo tubería `motor`. */
+  politica?: PoliticaBanco;
+  superficie?: DatosSuperficie;
   tenantAlias: string;
   duracionMs: number;
 }
@@ -108,6 +134,10 @@ export interface CasoJson {
   atributosOk: boolean | null;
   zero: boolean;
   sinGrabacion?: boolean;
+  /** Tubería `motor`: etapa que resolvió (agregable, sin datos del caso). */
+  etapa?: string;
+  /** `--ids`: ids de lo devuelto, en orden. Nunca van a consola. */
+  ids?: string[];
 }
 
 export interface ReporteJson {
@@ -120,6 +150,8 @@ export interface ReporteJson {
   casos: CasoJson[];
   /** Sólo con `--jev=cache`: consultas sin plan cacheado (cayeron al determinista). */
   sinPlanCacheado?: number;
+  /** Tubería `motor`: cuántos casos resolvió cada etapa (sólo agregados). */
+  etapas?: Record<string, number>;
 }
 
 export interface ResultadoCorrida {
@@ -152,6 +184,8 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
   const { casos } = o.banco;
   const enmascarar = (o.banco.privado || o.banco.local) && !o.verConsultas;
   const repeticiones = Math.max(1, Math.floor(o.repeticiones));
+  const superficie = o.superficie ? SUPERFICIES_BANCO[o.superficie] : undefined;
+  const k = superficie?.k ?? 24;
 
   // Calentamiento: ejecuta consultas sin medirlas (conexión, caché de planes de Postgres).
   for (let i = 0; i < o.calentar && casos.length > 0; i++) {
@@ -180,7 +214,9 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
     const resultado = primero ?? vacio();
     if (resultado.sinPlanCacheado) sinPlanCacheado++;
     if (resultado.ms != null) primerasMs.push(resultado.ms);
-    const ev = evaluar({ ...caso, q: enmascarar ? `#${idx}` : caso.q }, resultado, deps.arbol);
+    const ev = evaluar({ ...caso, q: enmascarar ? `#${idx}` : caso.q }, resultado, deps.arbol, { k });
+    if (resultado.etapa) ev.etapa = resultado.etapa;
+    if (o.ids) ev.ids = (resultado.ids ?? []).slice(0, k);
     if (muestras.length) {
       ev.ms = muestras[0];
       ev.muestrasMs = muestras;
@@ -191,7 +227,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
 
   const incluidas = todas.filter((e) => !e.sinGrabacion);
   const sinGrabacion = todas.length - incluidas.length;
-  const conIntencion = o.tuberia === "v2";
+  const conIntencion = o.tuberia === "v2" || o.tuberia === "motor";
   const resumen = resumenNumerico(incluidas, conIntencion);
   const duracionMs = ahora() - inicio;
   const { sha, sucio } = (deps.git ?? gitInfo)();
@@ -215,9 +251,14 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
     repeticiones,
     calentar: o.calentar,
     ...(o.parcial ? { parcial: o.parcial } : {}),
+    ...(o.politica ? { politica: o.politica } : {}),
+    ...(superficie ? { superficie } : {}),
     tenantAlias: o.tenantAlias,
     duracionMs,
   };
+
+  const porEtapa: Record<string, number> = {};
+  for (const e of incluidas) if (e.etapa) porEtapa[e.etapa] = (porEtapa[e.etapa] ?? 0) + 1;
 
   const json: ReporteJson = {
     esquema: 1,
@@ -246,21 +287,25 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
       atributosOk: e.atributosOk,
       zero: e.zero,
       ...(e.sinGrabacion ? { sinGrabacion: true } : {}),
+      ...(e.etapa ? { etapa: e.etapa } : {}),
+      ...(e.ids ? { ids: e.ids } : {}),
     })),
     ...(o.jev === "cache" ? { sinPlanCacheado } : {}),
+    ...(Object.keys(porEtapa).length ? { etapas: porEtapa } : {}),
   };
 
   const ordenadas = [...primerasMs].sort((a, b) => a - b);
   const p50Legado = ordenadas[Math.floor(ordenadas.length / 2)] ?? 0;
   const lineas = [
-    `[banco] tubería ${o.tuberia}; banco ${o.banco.origen} (n=${casos.length}, hash ${o.banco.hash}); vista ${cabecera.vista.variante} (soloVisibles ${o.vista.soloVisibles}, soloStock ${o.vista.soloStock}); Jev ${o.jev}${o.jevMeta?.modelo ? ` (${o.jevMeta.modelo}, grabado ${o.jevMeta.grabadoEl ?? "?"})` : ""}`,
+    `[banco] tubería ${o.tuberia}${o.politica ? ` (política ${o.politica}, superficie ${o.superficie ?? "catalogo"}, K=${k})` : ""}; banco ${o.banco.origen} (n=${casos.length}, hash ${o.banco.hash}); vista ${cabecera.vista.variante} (soloVisibles ${o.vista.soloVisibles}, soloStock ${o.vista.soloStock}); Jev ${o.jev}${o.jevMeta?.modelo ? ` (${o.jevMeta.modelo}, grabado ${o.jevMeta.grabadoEl ?? "?"})` : ""}`,
     "",
-    reporte(`Banco de búsquedas — tubería ${o.tuberia}`, incluidas, conIntencion),
+    reporte(`Banco de búsquedas — tubería ${o.tuberia}`, incluidas, conIntencion, k),
     "",
     `ms p50 por búsqueda: ${p50Legado}`,
     "",
-    reporteAmpliado(incluidas, conIntencion),
+    reporteAmpliado(incluidas, conIntencion, k),
   ];
+  if (Object.keys(porEtapa).length) lineas.push("", `etapas: ${Object.entries(porEtapa).map(([e, n]) => `${e} ${n}`).join(", ")}`);
   if (sinGrabacion) lineas.push("", `${sinGrabacion} caso(s) sin grabación de Jev: excluidos de las métricas (no se llamó a Jev en vivo).`);
   if (o.jev === "cache") lineas.push("", `${sinPlanCacheado} consulta(s) sin plan cacheado: se usó el plan determinista.`);
   if (o.repeticiones > 1 || o.calentar) lineas.push("", `repeticiones ${repeticiones}, calentamiento ${o.calentar}: la relevancia sale de la 1ra repetición; p50/p95 de todas.`);
@@ -269,7 +314,7 @@ export async function correr(o: OpcionesCorrida, deps: DepsCorrida): Promise<Res
   return { json, texto: `${lineas.join("\n")}\n`, evaluaciones: incluidas, conIntencion, puntaje: resumir(incluidas, conIntencion).puntaje };
 }
 
-export type ClaveComparable = "vista" | "jev";
+export type ClaveComparable = "vista" | "jev" | "superficie" | "politica";
 
 /**
  * ¿Dos corridas se pueden comparar? Mismo banco (hash), mismo snapshot del
@@ -283,5 +328,7 @@ export function sonComparables(a: Cabecera, b: Cabecera, { ignorar = [] }: { ign
   if (JSON.stringify(a.snapshot) !== JSON.stringify(b.snapshot)) motivos.push("el snapshot del catálogo es distinto");
   if (!ignorar.includes("vista") && JSON.stringify(a.vista) !== JSON.stringify(b.vista)) motivos.push("la vista es distinta (banco/producción, visibles, stock)");
   if (!ignorar.includes("jev") && JSON.stringify(a.jev) !== JSON.stringify(b.jev)) motivos.push("el modo o la grabación de Jev es distinta");
+  if (!ignorar.includes("superficie") && JSON.stringify(a.superficie) !== JSON.stringify(b.superficie)) motivos.push("la superficie es distinta");
+  if (!ignorar.includes("politica") && a.politica !== b.politica) motivos.push("la política del motor es distinta");
   return { ok: motivos.length === 0, motivos };
 }

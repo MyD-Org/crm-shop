@@ -44,12 +44,62 @@ describe("parsearArgs: defaults (sin flags nuevos == comportamiento actual)", ()
 });
 
 describe("parsearArgs: --tuberia", () => {
-  it.each(["clasica", "tolerante", "fase1", "v2"])("acepta %s", (t) => {
+  it.each(["clasica", "tolerante", "fase1", "v2", "motor"])("acepta %s", (t) => {
     expect(parsearArgs([`--tuberia=${t}`]).tuberia).toBe(t);
   });
 
   it("una tubería inválida falla enumerando los valores válidos", () => {
     expect(() => parsearArgs(["--tuberia=semantica"])).toThrow(/clasica\|tolerante\|fase1\|v2/);
+  });
+});
+
+describe("parsearArgs: tubería motor (--politica, --superficie, --paridad, --paridad-con, --ids)", () => {
+  it("--tuberia=motor: Jev como v2 (grabado por defecto), sin umbral, política legado y superficie catálogo", () => {
+    const a = parsearArgs(["--tuberia=motor"]);
+    expect(a).toMatchObject({ tuberia: "motor", jev: "grabado", umbral: 0, politica: "legado", superficie: "catalogo", paridad: false, ids: false });
+    expect(a.paridadCon).toBeUndefined();
+    expect(parsearArgs(["--tuberia=motor", "--jev=cache"]).jev).toBe("cache");
+    expect(parsearArgs(["--tuberia=motor", "--jev=no"]).jev).toBe("no");
+  });
+
+  it("las demás tuberías no suman política ni superficie", () => {
+    const a = parsearArgs([]);
+    expect(a.politica).toBeUndefined();
+    expect(a.superficie).toBeUndefined();
+    expect(a.paridad).toBe(false);
+  });
+
+  it("--politica y --superficie: valores válidos y error enumerándolos", () => {
+    expect(parsearArgs(["--tuberia=motor", "--politica=cascada", "--superficie=chat"])).toMatchObject({ politica: "cascada", superficie: "chat" });
+    expect(parsearArgs(["--tuberia=motor", "--superficie=autocompletar"]).superficie).toBe("autocompletar");
+    expect(() => parsearArgs(["--tuberia=motor", "--politica=otra"])).toThrow(/legado\|cascada/);
+    expect(() => parsearArgs(["--tuberia=motor", "--superficie=admin"])).toThrow(/catalogo\|autocompletar\|chat/);
+  });
+
+  it("--politica y --superficie sólo valen con --tuberia=motor", () => {
+    expect(() => parsearArgs(["--politica=legado"])).toThrow(/--tuberia=motor/);
+    expect(() => parsearArgs(["--tuberia=v2", "--superficie=chat"])).toThrow(/--tuberia=motor/);
+  });
+
+  it("--paridad exige --tuberia=motor y política legado", () => {
+    expect(parsearArgs(["--tuberia=motor", "--paridad"])).toMatchObject({ paridad: true, politica: "legado" });
+    expect(() => parsearArgs(["--paridad"])).toThrow(/--tuberia=motor/);
+    expect(() => parsearArgs(["--tuberia=motor", "--politica=cascada", "--paridad"])).toThrow(/legado/);
+  });
+
+  it("--paridad-con=<json> exige --tuberia=motor y fuerza --ids (la corrida actual los necesita)", () => {
+    const a = parsearArgs(["--tuberia=motor", "--paridad-con=tmp/previa.json"]);
+    expect(a).toMatchObject({ paridadCon: "tmp/previa.json", ids: true });
+    expect(() => parsearArgs(["--paridad-con=tmp/previa.json"])).toThrow(/--tuberia=motor/);
+  });
+
+  it("--paridad y --paridad-con no se combinan", () => {
+    expect(() => parsearArgs(["--tuberia=motor", "--paridad", "--paridad-con=x.json"])).toThrow(/--paridad/);
+  });
+
+  it("--ids se pide solo", () => {
+    expect(parsearArgs(["--tuberia=motor", "--ids"]).ids).toBe(true);
+    expect(parsearArgs(["--ids"]).ids).toBe(true);
   });
 });
 

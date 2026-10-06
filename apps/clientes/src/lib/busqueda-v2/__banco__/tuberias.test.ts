@@ -14,7 +14,7 @@ vi.mock("../conteo", () => ({ contador: (...a: unknown[]) => contador(...a) }));
 
 import { planVacio } from "../plan";
 import { ejecutarFase1 } from "./fase1";
-import { ejecutarV2 } from "./v2";
+import { ejecutarV2, obtenerPlan } from "./v2";
 import { vistaProduccion } from "./vista";
 
 const pagina = (n: number) => ({ productos: Array.from({ length: n }, (_, i) => ({ name: `p${i}` })), total: n, pagina: 1, paginas: 1 });
@@ -88,5 +88,40 @@ describe("v2", () => {
     const r = await ejecutarV2("DL-18W", ctx);
     expect(r.intencion).toBe("codigo");
     expect(getPaginaCatalogo.mock.calls[0][0].filtros.planBusqueda).toBeUndefined();
+  });
+});
+
+describe("obtenerPlan: el único punto de adquisición del plan del banco", () => {
+  const ctx = { arbol: [], jev: null, estructurados: true };
+
+  it("sin planDe: Entender (con el contador de la vista) y no marca sinPlanCacheado", async () => {
+    const r = await obtenerPlan("lampara", ctx);
+    expect(entender).toHaveBeenCalledTimes(1);
+    expect(contador).toHaveBeenCalledWith({ soloVisibles: false, soloStock: false, estructurados: true });
+    expect(r).toEqual({ plan: planVacio("lampara"), sinPlanCacheado: false });
+  });
+
+  it("con planDe y plan cacheado: ese plan, sin Entender", async () => {
+    const plan = { ...planVacio("lampara"), fuente: "cache" as const };
+    const r = await obtenerPlan("lampara", { ...ctx, planDe: async () => plan });
+    expect(entender).not.toHaveBeenCalled();
+    expect(r).toEqual({ plan, sinPlanCacheado: false });
+  });
+
+  it("con planDe sin plan cacheado: Entender determinista y lo marca", async () => {
+    const r = await obtenerPlan("lampara", { ...ctx, planDe: async () => null });
+    expect(entender).toHaveBeenCalledTimes(1);
+    expect(r.sinPlanCacheado).toBe(true);
+    expect(r.plan?.consulta).toBe("lampara");
+  });
+
+  it("si Entender no arma un plan: plan null (la búsqueda sigue clásica)", async () => {
+    entender.mockResolvedValue(null);
+    expect(await obtenerPlan("lampara", ctx)).toEqual({ plan: null, sinPlanCacheado: false });
+  });
+
+  it("usa la vista que se le pasa para contar (producción: soloVisibles)", async () => {
+    await obtenerPlan("lampara", ctx, vistaProduccion(true));
+    expect(contador).toHaveBeenCalledWith({ soloVisibles: true, soloStock: false, estructurados: true });
   });
 });

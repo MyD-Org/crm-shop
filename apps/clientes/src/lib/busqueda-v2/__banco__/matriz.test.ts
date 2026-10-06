@@ -50,6 +50,42 @@ describe("planDeMatriz", () => {
   });
 });
 
+describe("planDeMatriz con --motor", () => {
+  const motor = (extra = {}) => planDeMatriz({ bancoReal: false, jevVivo: false, motor: true, ...extra }).filter((e) => e.tuberia === "motor");
+
+  it("sin --motor la matriz es la de siempre (mismos ids, mismo largo)", () => {
+    const sin = planDeMatriz({ bancoReal: true, jevVivo: true });
+    const con = planDeMatriz({ bancoReal: true, jevVivo: true, motor: true });
+    expect(con.filter((e) => e.tuberia !== "motor")).toEqual(sin);
+  });
+
+  it("agrega por banco/vista las filas del motor legado: catálogo en ambas vistas; autocompletar y chat sólo en producción", () => {
+    expect(motor().map((e) => e.id)).toEqual([
+      "sintetico-banco-motor-legado-catalogo",
+      "sintetico-produccion-motor-legado-catalogo",
+      "sintetico-produccion-motor-legado-autocompletar",
+      "sintetico-produccion-motor-legado-chat",
+    ]);
+  });
+
+  it("el banco real mide el motor con el plan cacheado; el sintético, con el Jev grabado", () => {
+    expect(new Set(motor().map((e) => e.jev))).toEqual(new Set(["grabado"]));
+    const real = planDeMatriz({ bancoReal: true, jevVivo: false, motor: true }).filter((e) => e.tuberia === "motor" && e.banco === "real");
+    expect(real).toHaveLength(4);
+    expect(new Set(real.map((e) => e.jev))).toEqual(new Set(["cache"]));
+  });
+
+  it("cada fila declara su política y su superficie, y los ids no se repiten", () => {
+    const todas = planDeMatriz({ bancoReal: true, jevVivo: true, motor: true });
+    for (const e of todas.filter((x) => x.tuberia === "motor")) {
+      expect(e.politica).toBe("legado");
+      expect(["catalogo", "autocompletar", "chat"]).toContain(e.superficie);
+      expect(e.id).toContain(`motor-${e.politica}-${e.superficie}`);
+    }
+    expect(new Set(todas.map((e) => e.id)).size).toBe(todas.length);
+  });
+});
+
 describe("parsearArgsLinea", () => {
   it("exige --solo-visibles=si|no (el valor del flag en producción)", () => {
     expect(() => parsearArgsLinea([])).toThrow(/--solo-visibles=si\|no/);
@@ -81,6 +117,11 @@ describe("parsearArgsLinea", () => {
       dir: "tmp/busqueda/linea-base-x",
       jevVivo: true,
     });
+  });
+
+  it("--motor agrega las filas del motor (apagado por defecto)", () => {
+    expect(parsearArgsLinea(["--solo-visibles=si"]).motor).toBe(false);
+    expect(parsearArgsLinea(["--solo-visibles=si", "--motor"]).motor).toBe(true);
   });
 
   it("otros --jev y flags desconocidos fallan", () => {
@@ -144,6 +185,42 @@ describe("formatearMatriz", () => {
     const snap = [corrida("a", "real", "banco", "clasica", "no aplica"), corrida("b", "real", "banco", "v2", "no", reporte({ arbolHash: "d".repeat(32) }))];
     expect(formatearMatriz(snap)).toMatch(/no son comparables/i);
     expect(texto).not.toMatch(/no son comparables/i);
+  });
+});
+
+describe("formatearMatriz con filas del motor", () => {
+  const motorRep = (superficie: "catalogo" | "autocompletar" | "chat", k: number, etapas: Record<string, number>, politica: "legado" | "cascada" = "legado") => {
+    const r = reporte();
+    r.cabecera = { ...r.cabecera, tuberia: "motor", politica, superficie: { nombre: superficie, k, conteo: superficie === "catalogo" }, vista: { variante: "produccion", soloVisibles: true, soloStock: true } };
+    r.etapas = etapas;
+    return r;
+  };
+  const corridas = [
+    corrida("a", "sintetico", "produccion", "v2", "no"),
+    corrida("b", "sintetico", "produccion", "motor", "grabado", motorRep("catalogo", 24, { plan: 3, exacta: 1 })),
+    corrida("c", "sintetico", "produccion", "motor", "grabado", motorRep("chat", 10, { exacta: 3, tolerante: 1 })),
+  ].map((c, i) => (i === 0 ? c : { ...c, politica: "legado" as const, superficie: i === 1 ? ("catalogo" as const) : ("chat" as const) }));
+  const texto = formatearMatriz(corridas);
+
+  it("etiqueta cada fila del motor con política, superficie y K", () => {
+    expect(texto).toContain("motor legado/catalogo K=24");
+    expect(texto).toContain("motor legado/chat K=10");
+  });
+
+  it("suma el histograma de etapas (sólo agregados)", () => {
+    expect(texto).toMatch(/etapas motor legado\/catalogo: plan 3, exacta 1/);
+    expect(texto).toMatch(/etapas motor legado\/chat: exacta 3, tolerante 1/);
+  });
+
+  it("no advierte falta de comparabilidad entre filas de otra superficie o política (difieren a propósito)", () => {
+    expect(texto).not.toMatch(/no son comparables/i);
+  });
+
+  it("declara el estado de las medidas (flag busqueda-medidas) en la cabecera", () => {
+    expect(texto).toMatch(/medidas: no declarado/);
+    const r = motorRep("catalogo", 24, { exacta: 1 });
+    r.cabecera.flags = { "busqueda-medidas": "on" };
+    expect(formatearMatriz([{ ...corrida("b", "sintetico", "produccion", "motor", "grabado", r), politica: "legado", superficie: "catalogo" }])).toMatch(/medidas: on/);
   });
 });
 

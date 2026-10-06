@@ -92,6 +92,41 @@ describe("validarCambios: umbrales", () => {
   })
 })
 
+describe("validarCambios: monto mínimo de cuotas", () => {
+  const cond = (extra: Record<string, unknown>) => [{ op: "setCondicion", medioSlug: "tarjeta", listaId: ID, ...extra }]
+
+  it("acepta un mínimo en filas de cuotas y lo normaliza a dos decimales", () => {
+    expect(validarCambios(cond({ cuotas: 6, montoMinimo: "60000" }))).toMatchObject({
+      ok: true,
+      cambios: [{ cuotas: 6, montoMinimo: "60000.00" }],
+    })
+    expect(validarCambios(cond({ cuotas: 6, montoMinimo: 80000.5 }))).toMatchObject({
+      ok: true,
+      cambios: [{ montoMinimo: "80000.50" }],
+    })
+    expect(validarCambios(cond({ cuotas: 6, montoMinimo: 0 }))).toMatchObject({ ok: true, cambios: [{ montoMinimo: "0.00" }] })
+  })
+
+  it("ausente o null = sin mínimo", () => {
+    expect(validarCambios(cond({ cuotas: 6 }))).toMatchObject({ ok: true, cambios: [{ montoMinimo: null }] })
+    expect(validarCambios(cond({ cuotas: 6, montoMinimo: null }))).toMatchObject({ ok: true, cambios: [{ montoMinimo: null }] })
+  })
+
+  it("rechaza negativo, no numérico, más de dos decimales y mínimo en pago único", () => {
+    for (const m of [-1, "-5", "abc", "10.123", NaN, Infinity, {}]) {
+      expect(validarCambios(cond({ cuotas: 6, montoMinimo: m }))).toMatchObject({ ok: false })
+    }
+    expect(validarCambios(cond({ cuotas: null, montoMinimo: "1000" }))).toMatchObject({ ok: false })
+    expect(validarCambios(cond({ montoMinimo: "1000" }))).toMatchObject({ ok: false })
+  })
+
+  it("una baja (listaId null) ignora el mínimo", () => {
+    expect(
+      validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 6, listaId: null, montoMinimo: "1000" }]),
+    ).toMatchObject({ ok: true, cambios: [{ listaId: null, montoMinimo: null }] })
+  })
+})
+
 describe("validarCambios: condiciones de medios de pago", () => {
   it("medio + lista (o null para quitar); cuotas null o entero 2..24", () => {
     expect(validarCambios([{ op: "setCondicion", medioSlug: "transferencia", cuotas: null, listaId: ID }])).toMatchObject({

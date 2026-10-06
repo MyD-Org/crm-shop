@@ -465,6 +465,9 @@ export const crmListaPrecioCondiciones = publico.table("lista_precio_condiciones
   listaId: uuid("lista_id").notNull(),
   medioSlug: text("medio_slug").notNull(),
   cuotas: integer("cuotas"),
+  // Mínimo CON impuestos para ofrecer esa cantidad de cuotas (migración 0066 del CRM, change
+  // `payway-cobro`). numeric -> string; NULL = sin mínimo. Aditiva: el SELECT es de tabla entera.
+  montoMinimo: numeric("monto_minimo", { precision: 14, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

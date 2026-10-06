@@ -37,11 +37,25 @@ export function aplicarMedioGuardado(medios: MedioPagoConAvisos[], nuevo: MedioP
 export interface FilaCuotasForm {
   cuotas: string
   listaId: string
+  /** "Desde $" (con impuestos), tal como se escribe; vacío o ausente = sin mínimo. */
+  montoMinimo?: string
 }
 
 export interface CondicionCuotasForm {
   cuotas: number
   listaId: string
+  /** Texto numérico con dos decimales; null = sin mínimo. */
+  montoMinimo: string | null
+}
+
+const MSG_MONTO = "Indique un monto válido, igual o mayor que cero, o deje 'Desde $' vacío."
+
+/** "60000", "60000,5" o "60000.50" -> "60000.50"; vacío -> null; cualquier otra cosa -> undefined. */
+function montoDeFila(texto: string | undefined): string | null | undefined {
+  const t = (texto ?? "").trim()
+  if (t === "") return null
+  if (!/^\d+([.,]\d{1,2})?$/.test(t)) return undefined
+  return Number(t.replace(",", ".")).toFixed(2)
 }
 
 /** Valida las filas del editor: cantidades enteras de 2 a 24, con lista y sin repetir. Errores en usted. */
@@ -57,7 +71,9 @@ export function validarFilasCuotas(
     }
     if (!f.listaId) return { ok: false, error: "Seleccione la lista de precios de cada cantidad de cuotas." }
     if (salida.some((x) => x.cuotas === n)) return { ok: false, error: `No puede repetir la cantidad de cuotas: ${n}.` }
-    salida.push({ cuotas: n, listaId: f.listaId })
+    const montoMinimo = montoDeFila(f.montoMinimo)
+    if (montoMinimo === undefined) return { ok: false, error: MSG_MONTO }
+    salida.push({ cuotas: n, listaId: f.listaId, montoMinimo })
   }
   return { ok: true, filas: salida.sort((a, b) => a.cuotas - b.cuotas) }
 }
@@ -71,10 +87,17 @@ export function cambiosDeCuotas(
   actuales: readonly CondicionCuotasForm[],
   deseadas: readonly CondicionCuotasForm[],
 ) {
-  const cambios: { op: "setCondicion"; medioSlug: string; cuotas: number; listaId: string | null }[] = []
+  const cambios: {
+    op: "setCondicion"
+    medioSlug: string
+    cuotas: number
+    listaId: string | null
+    montoMinimo?: string | null
+  }[] = []
   for (const d of deseadas) {
-    if (actuales.find((a) => a.cuotas === d.cuotas)?.listaId !== d.listaId) {
-      cambios.push({ op: "setCondicion", medioSlug, cuotas: d.cuotas, listaId: d.listaId })
+    const a = actuales.find((x) => x.cuotas === d.cuotas)
+    if (a?.listaId !== d.listaId || (a.montoMinimo ?? null) !== d.montoMinimo) {
+      cambios.push({ op: "setCondicion", medioSlug, cuotas: d.cuotas, listaId: d.listaId, montoMinimo: d.montoMinimo })
     }
   }
   for (const a of actuales) {

@@ -29,9 +29,11 @@ export type CambioPrecios =
   | { op: "setUmbrales"; confirmacionPct?: string; retencionPct?: string }
   /**
    * Qué lista rige para un medio de pago (y cantidad de cuotas, desde la rebanada D). `listaId` null
-   * quita la condición: el medio vuelve a la lista de referencia.
+   * quita la condición: el medio vuelve a la lista de referencia. `montoMinimo` (numeric como texto,
+   * con impuestos) sólo aplica a filas de cuotas: la cantidad se ofrece desde ese total; ausente o
+   * null = sin mínimo.
    */
-  | { op: "setCondicion"; medioSlug: string; cuotas: number | null; listaId: string | null }
+  | { op: "setCondicion"; medioSlug: string; cuotas: number | null; listaId: string | null; montoMinimo?: string | null }
   /** SOLO armado por el servidor al revertir una baja; nunca se acepta desde el cliente. */
   | {
       op: "restaurarLista"
@@ -41,6 +43,17 @@ export type CambioPrecios =
 
 export type Invalido = { ok: false; campo: string; error: string }
 const invalido = (campo: string, error: string): Invalido => ({ ok: false, campo, error })
+
+/** Monto >= 0 con hasta dos decimales (número o texto) -> texto con dos decimales; null si no es válido. */
+function normalizarMonto(v: unknown): string | null {
+  if (typeof v === "number") {
+    if (!Number.isFinite(v) || v < 0) return null
+    const c = Math.round(v * 100)
+    return Math.abs(c - v * 100) > 1e-6 ? null : (c / 100).toFixed(2)
+  }
+  if (typeof v === "string" && /^\d+(\.\d{1,2})?$/.test(v.trim())) return Number(v.trim()).toFixed(2)
+  return null
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export const esUuid = (v: unknown): v is string => typeof v === "string" && UUID_RE.test(v)
@@ -213,7 +226,15 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
         cuotas = raw.cuotas
       }
       if (raw.listaId !== null && !esUuid(raw.listaId)) return invalido(`${campo}.listaId`, "Seleccione la lista de precios.")
-      return { ok: true, cambio: { op: "setCondicion", medioSlug: raw.medioSlug, cuotas, listaId: raw.listaId } }
+      let montoMinimo: string | null = null
+      // Una baja no lleva mínimo: se ignora lo que venga.
+      if (raw.listaId !== null && raw.montoMinimo !== undefined && raw.montoMinimo !== null) {
+        const m = normalizarMonto(raw.montoMinimo)
+        if (m === null) return invalido(`${campo}.montoMinimo`, "Indique un monto válido, igual o mayor que cero.")
+        if (cuotas === null) return invalido(`${campo}.montoMinimo`, "El monto mínimo sólo aplica a las cuotas.")
+        montoMinimo = m
+      }
+      return { ok: true, cambio: { op: "setCondicion", medioSlug: raw.medioSlug, cuotas, listaId: raw.listaId, montoMinimo } }
     }
     default:
       return invalido(campo, MSG_BODY)

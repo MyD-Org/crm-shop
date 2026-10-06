@@ -72,7 +72,7 @@ function medioCuotas(medios: readonly MedioPago[]): MedioCuotas | null {
     .sort(porOrden)[0];
   if (!m) return null;
   const condiciones = [...(m.condicionesCuotas ?? [])].sort((a, b) => a.cuotas - b.cuotas);
-  return { slug: m.slug, nombre: m.nombre, condiciones };
+  return { slug: m.slug, nombre: m.nombre, condiciones, idListaPagoUnico: m.idListaPrecios };
 }
 
 function precioDelMedio(prices: AlegraPrice[], iva: number | null, medio: MedioPrecio): PrecioMedio | null {

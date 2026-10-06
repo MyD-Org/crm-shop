@@ -70,6 +70,7 @@ describe("flagsPublicos", () => {
     expect((await nuevo()).mediosPrecio.cuotas).toEqual({
       slug: "mercadopago",
       nombre: "MERCADOPAGO",
+      idListaPagoUnico: null,
       condiciones: [{ cuotas: 6, idListaPrecios: "L6" }],
     });
   });

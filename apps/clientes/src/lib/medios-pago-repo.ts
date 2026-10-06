@@ -55,13 +55,22 @@ async function condicionesDeLosMedios(db: Ejecutor): Promise<Map<string, Condici
         medioSlug: crmListaPrecioCondiciones.medioSlug,
         listaId: crmListaPrecioCondiciones.listaId,
         cuotas: crmListaPrecioCondiciones.cuotas,
+        montoMinimo: crmListaPrecioCondiciones.montoMinimo,
       })
       .from(crmListaPrecioCondiciones)
       .where(eq(crmListaPrecioCondiciones.tenantId, shopTenantId()));
     for (const f of filas) {
       const m = porMedio.get(f.medioSlug) ?? { idListaPrecios: null, condicionesCuotas: [] };
       if (f.cuotas === null) m.idListaPrecios = f.listaId;
-      else m.condicionesCuotas.push({ cuotas: f.cuotas, idListaPrecios: f.listaId });
+      else {
+        // numeric llega como texto; null = sin mínimo (columna de la migración 0066 del CRM).
+        const minimo = f.montoMinimo == null ? null : Number(f.montoMinimo);
+        m.condicionesCuotas.push({
+          cuotas: f.cuotas,
+          idListaPrecios: f.listaId,
+          montoMinimo: minimo !== null && Number.isFinite(minimo) ? minimo : null,
+        });
+      }
       porMedio.set(f.medioSlug, m);
     }
     for (const m of porMedio.values()) m.condicionesCuotas.sort((a, b) => a.cuotas - b.cuotas);

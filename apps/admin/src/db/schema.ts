@@ -1469,6 +1469,9 @@ export const listaPrecioCondiciones = pgTable(
       .references(() => listasPrecioOnline.id, { onDelete: "restrict" }),
     medioSlug: text("medio_slug").notNull(),
     cuotas: integer("cuotas"),
+    // Mínimo CON impuestos (a la lista del pago único) para ofrecer esa cantidad de cuotas (0066).
+    // NULL = sin mínimo. Drift solo-SQL: CHECK (null, o con cuotas y >= 0).
+    montoMinimo: numeric("monto_minimo", { precision: 14, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

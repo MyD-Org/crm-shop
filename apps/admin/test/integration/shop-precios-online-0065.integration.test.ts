@@ -12,6 +12,7 @@ import {
   PreciosOnlineError,
   aplicarCambios,
   aplicarReversion,
+  previsualizarReversion,
   listarHistorial,
   previsualizar,
   type UsuarioActor,
@@ -109,9 +110,12 @@ describe("lista_precio_condiciones: restricciones", () => {
 
   it("no se borra una lista con condiciones (RESTRICT) y el medio borrado arrastra su condición (CASCADE)", async () => {
     await getDb().insert(listaPrecioCondiciones).values({ tenantId: T, listaId: listaTransf, medioSlug: "transferencia" })
-    await expect(getDb().delete(listasPrecioOnline).where(eq(listasPrecioOnline.id, listaTransf))).rejects.toMatchObject({
-      cause: { code: "23001" },
-    })
+    // ON DELETE RESTRICT: Postgres 16 (CI) responde 23503 y versiones más nuevas 23001.
+    const err = await getDb()
+      .delete(listasPrecioOnline)
+      .where(eq(listasPrecioOnline.id, listaTransf))
+      .then(() => null, (e: { cause?: { code?: string } }) => e)
+    expect(["23001", "23503"]).toContain(err?.cause?.code)
     await getDb().execute(sql`delete from medios_pago_shop where tenant_id = ${T} and slug = 'transferencia'`)
     expect(await condiciones()).toHaveLength(0)
   })
@@ -273,8 +277,8 @@ describe("setCondicion: vista previa, aplicar e historial", () => {
     await previaYAplicar([set("transferencia", listaRef)])
     const h = await listarHistorial(T, { start: 0, limit: 10 })
     const ultima = h.items[0]
-    const inversos = [set("transferencia", listaTransf)]
-    const previa = await previsualizar(T, inversos)
+    // Los cambios inversos los arma el servidor (incluyen el monto mínimo, 0066): la vista previa sale de ahí.
+    const { resultado: previa } = await previsualizarReversion(T, ultima.id)
     await aplicarReversion(T, ANA, ultima.id, { baseVersion: previa.baseVersion, huella: previa.huella })
     expect(await condiciones()).toMatchObject([{ listaId: listaTransf }])
     const filas = await getDb().select().from(preciosOnlineCambios).where(eq(preciosOnlineCambios.tenantId, T))

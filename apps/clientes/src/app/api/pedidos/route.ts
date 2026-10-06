@@ -383,7 +383,23 @@ export async function POST(req: Request) {
     );
     let cuotasPedido: number | null = null;
     if (!especial && medioDelPedido?.cobroOnline && (await cuotasHabilitadas())) {
-      const elegidas = cuotasElegidas(body.cuotas, medioDelPedido.condicionesCuotas);
+      // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
+      // del medio, cotizado acá en el servidor. Sólo se cotiza si hay algún mínimo y se pidieron cuotas;
+      // el mínimo no se congela en el pedido (sólo `cuotas`), pero se deja la base en el log.
+      const hayMinimos = (medioDelPedido.condicionesCuotas ?? []).some((c) => c.montoMinimo != null);
+      let totalBase: number | undefined;
+      if (hayMinimos && typeof body.cuotas === "number" && body.cuotas >= 2) {
+        const cotBase = await cotizar(lineas, {
+          idPriceList,
+          idListaMedio: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1),
+          entregaTipo,
+          disp: dispCotizacion,
+          soloVisibles,
+        });
+        totalBase = cotBase.hayProblemas ? 0 : cotBase.total;
+        console.info(`[/api/pedidos] cuotas=${body.cuotas}: base del pago único ${totalBase} contra el mínimo de la condición`);
+      }
+      const elegidas = cuotasElegidas(body.cuotas, medioDelPedido.condicionesCuotas, totalBase);
       if (!elegidas.ok) {
         return NextResponse.json(
           { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },

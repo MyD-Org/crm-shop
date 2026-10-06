@@ -41,6 +41,9 @@ export const TEXTOS_CUOTAS = {
   // --- Checkout ---
   checkoutTitulo: "Cantidad de cuotas",
   checkoutAyuda: (medio: string) => `Se pagan con tarjeta de crédito en ${medio}, sin interés.`,
+  /** "Le faltan $790 para pagar en 6 cuotas sin interés." */
+  faltaParaCuotas: (falta: number, cuotas: number) =>
+    `Le faltan ${fmtPrecio(falta)} para pagar en ${cuotasDe(cuotas)} sin interés.`,
   checkoutUnPago: (total: number) => `1 pago de ${fmtPrecio(total)}`,
   checkoutCuotas: (cuotas: number, montoCuota: number, total: number) =>
     `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)} (total ${fmtPrecio(total)})`,

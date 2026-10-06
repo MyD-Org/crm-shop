@@ -21,6 +21,11 @@ export interface CondicionCuotas {
   cuotas: number;
   /** uuid de la lista online (coincide con `idPriceList` de los precios de la vista del catálogo). */
   idListaPrecios: string;
+  /**
+   * Mínimo CON impuestos (`monto_minimo` del CRM) desde el que se ofrece esta cantidad. Se compara
+   * contra la base: el total a la lista del PAGO ÚNICO del medio. null o ausente = sin mínimo.
+   */
+  montoMinimo?: number | null;
 }
 
 /** El medio de pago que cobra en cuotas, con sus condiciones. Serializable: viaja al cliente. */
@@ -28,6 +33,11 @@ export interface MedioCuotas {
   slug: string;
   nombre: string;
   condiciones: CondicionCuotas[];
+  /**
+   * Lista del pago único del medio (la base del mínimo). null o ausente: rige la de referencia,
+   * como en la cotización.
+   */
+  idListaPagoUnico?: string | null;
 }
 
 /** Una cantidad de cuotas ofrecida para un precio concreto. */
@@ -75,8 +85,45 @@ function condicionesValidas(condiciones: readonly CondicionCuotas[] | null | und
 }
 
 /**
+ * Las condiciones que se ofrecen para una `base`: la cotización del pedido (con impuestos) a la lista
+ * del PAGO ÚNICO del medio. Una condición con `montoMinimo` mayor que la base queda afuera; la
+ * igualdad aplica. Compara en centavos enteros (sin ruido de coma flotante). Una base inválida
+ * (NaN, negativa) cuenta como 0: las condiciones sin mínimo siguen, las que lo tienen no.
+ */
+export function condicionesAplicables(
+  condiciones: readonly CondicionCuotas[] | null | undefined,
+  base: number,
+): CondicionCuotas[] {
+  const baseCentavos = Number.isFinite(base) && base > 0 ? aCentavos(base) : 0;
+  return condicionesValidas(condiciones).filter(
+    (c) => c.montoMinimo == null || !(aCentavos(c.montoMinimo) > baseCentavos),
+  );
+}
+
+/**
+ * La próxima cantidad de cuotas que se habilitaría subiendo la compra: entre las condiciones con
+ * mínimo que la `base` todavía no alcanza, la de menor mínimo, y cuánto falta (a dos decimales).
+ * null si no queda ninguna.
+ */
+export function proximoEscalon(
+  condiciones: readonly CondicionCuotas[] | null | undefined,
+  base: number,
+): { cuotas: number; falta: number } | null {
+  const baseCentavos = Number.isFinite(base) && base > 0 ? aCentavos(base) : 0;
+  let mejor: { cuotas: number; minimo: number } | null = null;
+  for (const c of condicionesValidas(condiciones)) {
+    if (c.montoMinimo == null) continue;
+    const minimo = aCentavos(c.montoMinimo);
+    if (minimo > baseCentavos && (!mejor || minimo < mejor.minimo)) mejor = { cuotas: c.cuotas, minimo };
+  }
+  return mejor ? { cuotas: mejor.cuotas, falta: deCentavos(mejor.minimo - baseCentavos) } : null;
+}
+
+/**
  * Opciones de cuotas de UN producto: una por condición, con el total de la lista enlazada. Sin IVA
  * conocido, sin medio o sin precio válido en la lista no hay opción: nunca se inventa un monto.
+ * El mínimo se compara contra el precio UNITARIO con impuestos a la lista del pago único del medio:
+ * es informativo (el carrito, con cantidad, puede alcanzar más escalones que la ficha).
  */
 export function opcionesCuotas(
   prices: AlegraPrice[] | undefined,
@@ -85,7 +132,8 @@ export function opcionesCuotas(
 ): OpcionCuotas[] {
   if (!medio || !Array.isArray(prices) || prices.length === 0) return [];
   const salida: OpcionCuotas[] = [];
-  for (const c of condicionesValidas(medio.condiciones)) {
+  const baseUnitaria = precioFinal(precioDeLista(prices, medio.idListaPagoUnico ?? undefined), ivaPorcentaje) ?? 0;
+  for (const c of condicionesAplicables(medio.condiciones, baseUnitaria)) {
     const total = precioFinal(precioDeLista(prices, c.idListaPrecios), ivaPorcentaje);
     if (total === undefined) continue;
     const partes = repartirCuotas(total, c.cuotas);
@@ -122,11 +170,18 @@ export function mejorOpcionCuotas(opciones: readonly OpcionCuotas[] | null | und
 export function cuotasElegidas(
   entrada: unknown,
   condiciones: readonly CondicionCuotas[] | null | undefined,
+  /**
+   * Total con impuestos a la lista del pago único (ver `condicionesAplicables`). Si se pasa, una
+   * cantidad cuyo mínimo no alcanza se rechaza. Sin base (undefined) no se mira el mínimo: lo
+   * hacen valer los dos llamadores del servidor, que siempre la pasan.
+   */
+  base?: number,
 ): { ok: true; cuotas: number } | { ok: false } {
   if (entrada === undefined || entrada === null) return { ok: true, cuotas: 1 };
   if (typeof entrada !== "number" || !Number.isInteger(entrada) || entrada < 1) return { ok: false };
   if (entrada === 1) return { ok: true, cuotas: 1 };
-  return condicionesValidas(condiciones).some((c) => c.cuotas === entrada) ? { ok: true, cuotas: entrada } : { ok: false };
+  const ofrecidas = base === undefined ? condicionesValidas(condiciones) : condicionesAplicables(condiciones, base);
+  return ofrecidas.some((c) => c.cuotas === entrada) ? { ok: true, cuotas: entrada } : { ok: false };
 }
 
 /** La lista que rige para esa cantidad de cuotas; `undefined` para un pago o sin condición. */

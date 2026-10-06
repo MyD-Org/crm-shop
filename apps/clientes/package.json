@@ -52,6 +52,7 @@
     "sharp": "^0.34.5",
     "tailwind-merge": "^2.6.1"
   },
+  
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

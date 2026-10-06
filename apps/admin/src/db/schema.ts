@@ -249,6 +249,14 @@ export const catalogProducts = pgTable(
     costo: numeric("costo", { precision: 14, scale: 4 }),
     /** Costo sobre el que se calculó el precio vigente (0063). Lo gobierna la retención (rebanada B). */
     costoAplicado: numeric("costo_aplicado", { precision: 14, scale: 4 }),
+    /**
+     * Precios online vigentes [{idPriceList,name,price,main}] (neto sin IVA), materializados por
+     * `aplicar_precios_online` (0064). '[]' = sin precio online. shop_app todavía no los lee.
+     */
+    preciosOnline: jsonb("precios_online").notNull().default(sql`'[]'::jsonb`),
+    /** Precio online de la lista de referencia (para ordenar y filtrar en el admin). */
+    precioOnlineRef: numeric("precio_online_ref", { precision: 14, scale: 2 }),
+    preciosOnlineAt: timestamp("precios_online_at", { withTimezone: true }),
     /** El ítem COMPLETO como lo devuelve Alegra. Nada se descarta. ~2,5 KB por ítem. */
     raw: jsonb("raw").$type<Record<string, unknown>>(),
     /**
@@ -282,6 +290,8 @@ export const catalogProducts = pgTable(
     index("cp_tenant_cuenta").on(t.tenantId, t.cuentaId),
     index("cp_tenant_code").on(t.tenantId, t.code),
     index("cp_tenant_category").on(t.tenantId, t.categoryAlegraId),
+    index("cp_tenant_precio_ref").on(t.tenantId, t.precioOnlineRef),
+    index("cp_tenant_sin_costo").on(t.tenantId).where(sql`${t.costo} is null`),
   ],
 )
 
@@ -1392,3 +1402,119 @@ export const correoEventos = pgTable("correo_eventos", {
   svixId: text("svix_id").primaryKey(),
   recibidoAt: timestamp("recibido_at", { withTimezone: true }).notNull().defaultNow(),
 })
+
+// ── Listas de precio online (change `listas-precio-online`, rebanada B, migración 0064) ─────
+//
+// precio = costo x coeficiente, definido en el admin; Alegra solo informa el costo. El cálculo
+// vive en dos funciones SQL (calcular_precios_online / aplicar_precios_online) que NO se modelan
+// acá. Drift que vive solo en SQL: los CHECK (coeficiente >= 1, forma de los overrides, estados,
+// tipos) y las funciones. Nada de esto lo lee shop_app.
+
+export const listasPrecioOnline = pgTable(
+  "listas_precio_online",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    nombre: text("nombre").notNull(),
+    // Siempre >= 1 (CHECK en la migración).
+    coeficiente: numeric("coeficiente", { precision: 7, scale: 4 }).notNull(),
+    // Una sola por tenant (único parcial). Debe estar activa.
+    esReferencia: boolean("es_referencia").notNull().default(false),
+    orden: integer("orden").notNull().default(0),
+    activa: boolean("activa").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("listas_precio_online_nombre_uniq").on(t.tenantId, sql`lower(${t.nombre})`),
+    uniqueIndex("listas_precio_online_ref_uniq").on(t.tenantId).where(sql`${t.esReferencia}`),
+  ],
+)
+
+export const listaPrecioOverrides = pgTable(
+  "lista_precio_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    listaId: uuid("lista_id")
+      .notNull()
+      .references(() => listasPrecioOnline.id, { onDelete: "cascade" }),
+    // 'marca' | 'categoria' (CHECK de coherencia en la migración).
+    tipo: text("tipo").notNull(),
+    // Marca normalizada: lower(btrim(brand)).
+    marca: text("marca"),
+    categoriaId: uuid("categoria_id").references(() => shopCategories.id, { onDelete: "cascade" }),
+    coeficiente: numeric("coeficiente", { precision: 7, scale: 4 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("lista_precio_overrides_marca_uniq").on(t.listaId, t.marca).where(sql`${t.tipo} = 'marca'`),
+    uniqueIndex("lista_precio_overrides_categoria_uniq")
+      .on(t.listaId, t.categoriaId)
+      .where(sql`${t.tipo} = 'categoria'`),
+    index("lista_precio_overrides_tenant_idx").on(t.tenantId, t.tipo),
+  ],
+)
+
+// Fila perezosa por tenant (sin fila rigen los defaults 20 / 10). `version` sube con cada cambio
+// aplicado: la vista previa la guarda y aplicar la compara (409 si quedó vieja).
+export const preciosOnlineConfig = pgTable("precios_online_config", {
+  tenantId: text("tenant_id").primaryKey().references(() => tenants.id),
+  version: integer("version").notNull().default(0),
+  // Confirmación extra al SUPERAR esta variación entre el precio online anterior y el nuevo.
+  umbralConfirmacionPct: numeric("umbral_confirmacion_pct", { precision: 5, scale: 2 }).notNull().default("20"),
+  // Retención al SUPERAR esta variación de costo desde Alegra.
+  umbralRetencionPct: numeric("umbral_retencion_pct", { precision: 5, scale: 2 }).notNull().default("10"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: text("updated_by"),
+})
+
+// Historial inmutable (la UI no edita ni borra). `objeto` identifica sobre qué cayó el cambio
+// ('lista:<id>' | 'referencia' | 'override:<id>' | 'umbral' | 'costo:<alegra_id>') para revertir
+// solo la última entrada vigente de cada objeto.
+export const preciosOnlineCambios = pgTable(
+  "precios_online_cambios",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    tipo: text("tipo").notNull(),
+    objeto: text("objeto").notNull(),
+    listaId: uuid("lista_id"),
+    antes: jsonb("antes").$type<Record<string, unknown> | null>(),
+    despues: jsonb("despues").$type<Record<string, unknown> | null>(),
+    resumen: jsonb("resumen").$type<Record<string, unknown> | null>(),
+    usuario: text("usuario").notNull(),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    revertidoDe: uuid("revertido_de"),
+    versionConfig: integer("version_config").notNull().default(0),
+  },
+  (t) => [
+    index("precios_online_cambios_tenant_idx").on(t.tenantId, t.creadoAt),
+    index("precios_online_cambios_objeto_idx").on(t.tenantId, t.objeto, t.creadoAt),
+  ],
+)
+
+// Cambios de costo desde Alegra que superaron el umbral de retención y esperan aprobación.
+export const preciosOnlineRetenciones = pgTable(
+  "precios_online_retenciones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    alegraId: text("alegra_id").notNull(),
+    costoVigente: numeric("costo_vigente", { precision: 14, scale: 4 }),
+    costoPropuesto: numeric("costo_propuesto", { precision: 14, scale: 4 }),
+    variacionPct: numeric("variacion_pct", { precision: 9, scale: 2 }),
+    // 'pendiente' | 'aprobada' | 'rechazada' | 'resuelta' (CHECK en la migración).
+    estado: text("estado").notNull().default("pendiente"),
+    creadoAt: timestamp("creado_at", { withTimezone: true }).notNull().defaultNow(),
+    resueltoAt: timestamp("resuelto_at", { withTimezone: true }),
+    resueltoPor: text("resuelto_por"),
+  },
+  (t) => [
+    uniqueIndex("precios_online_retenciones_pendiente_uniq")
+      .on(t.tenantId, t.alegraId)
+      .where(sql`${t.estado} = 'pendiente'`),
+    index("precios_online_retenciones_alegra_idx").on(t.tenantId, t.alegraId, t.estado),
+  ],
+)

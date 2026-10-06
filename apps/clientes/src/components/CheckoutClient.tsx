@@ -55,6 +55,7 @@ import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import {
   NOTA_PAGO_A_CONFIRMAR,
   SLUG_MERCADOPAGO,
+  procesadorDeMedio,
   esPagoEnLinea,
   medioElegido,
   mediosParaModalidad,
@@ -207,8 +208,8 @@ function RadioCard({
   );
 }
 
-/** Descripción del medio que dispara el cobro en línea (los demás muestran sus instrucciones del CRM). */
-const DESCRIPCION_MERCADOPAGO = "Paga ahora con tarjeta, en cuotas si lo desea";
+/** Descripción de los medios que disparan el cobro en línea (los demás muestran sus instrucciones del CRM). */
+const DESCRIPCION_PAGO_EN_LINEA = "Paga ahora con tarjeta, en cuotas si lo desea";
 
 /**
  * Datos de la cuenta para transferir en el paso Pago. `undefined` = todavía no llegó la cotización
@@ -469,8 +470,10 @@ export function CheckoutClient({
     total: number;
     /** Cuotas sin interés congeladas en el pedido (1 = un pago). null = sin cuotas elegidas (flag apagado o anterior). */
     cuotas: number | null;
-    /** El pedido se paga en línea (Mercado Pago): salta al cobro. */
+    /** El pedido se paga en línea: salta al cobro. */
     pagoEnLinea?: boolean;
+    /** Procesador que cobra el pedido (id del registro de pagos); elige el componente de pago. */
+    procesador?: string | null;
     /** Plazo y WhatsApp de la sucursal. */
     contacto?: ContactoPedidoVista | null;
     /** Cuenta congelada en el pedido (transferencia); null = sin cuenta aplicable. */
@@ -507,6 +510,8 @@ export function CheckoutClient({
           total: data.pedido.total,
           cuotas: typeof data.pedido.cuotas === "number" ? data.pedido.cuotas : null,
           pagoEnLinea: true,
+          // El servidor manda el medio del pedido; sin él (respuesta anterior) era Mercado Pago.
+          procesador: procesadorDeMedio(data.pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
         });
       })
       .catch(() => {
@@ -754,6 +759,7 @@ export function CheckoutClient({
         total,
         cuotas: typeof json.cuotas === "number" ? json.cuotas : null,
         pagoEnLinea: esPagoEnLinea(pagoParaEnviar),
+        procesador: procesadorDeMedio(pagoParaEnviar),
         contacto: json.contacto ?? null,
         cuentaPago: json.cuentaPago ?? null,
       });
@@ -819,14 +825,21 @@ export function CheckoutClient({
           <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
         </div>
 
-        <PagoMercadoPago
-          pedidoId={confirmado.id}
-          numero={confirmado.numero}
-          monto={confirmado.total}
-          emailComprador={emailCliente}
-          maxCuotas={confirmado.cuotas ?? undefined}
-          onPagado={() => setPagado(true)}
-        />
+        {/* Un componente de pago por procesador. Hoy sólo Mercado Pago: sumar otro es un caso más acá. */}
+        {confirmado.procesador === "mercadopago" ? (
+          <PagoMercadoPago
+            pedidoId={confirmado.id}
+            numero={confirmado.numero}
+            monto={confirmado.total}
+            emailComprador={emailCliente}
+            maxCuotas={confirmado.cuotas ?? undefined}
+            onPagado={() => setPagado(true)}
+          />
+        ) : (
+          <p role="alert" className="text-center text-sm text-danger">
+            Este medio de pago no está disponible en este momento. Vuelva al carrito y elija otro.
+          </p>
+        )}
 
         <div className="flex flex-col items-center gap-2">
           <button
@@ -1290,7 +1303,7 @@ export function CheckoutClient({
                       selected={medioSel.slug === m.slug}
                       onClick={() => setMedioSlug(m.slug)}
                       title={m.nombre}
-                      description={m.slug === SLUG_MERCADOPAGO ? DESCRIPCION_MERCADOPAGO : undefined}
+                      description={esPagoEnLinea(m.slug) ? DESCRIPCION_PAGO_EN_LINEA : undefined}
                     />
                   ))}
                 </div>

@@ -164,6 +164,16 @@ export interface DatosPago {
  */
 export interface ProveedorPago {
   readonly id: string;
+  /**
+   * ¿Hay credenciales para cobrar? Sin ellas el medio que apunta a este proveedor no se ofrece ni se
+   * acepta, aunque esté activo en el CRM.
+   */
+  configurado(): boolean;
+  /**
+   * URL a la que el proveedor avisa los cambios de estado, armada con el dominio por el que entró el
+   * comprador. Opcional: un proveedor que no notifica por webhook no la implementa.
+   */
+  urlNotificacion?(origen: string | null | undefined): string | undefined;
   crearPago(datos: DatosPago): Promise<EstadoPago>;
   consultarPago(referencia: string): Promise<EstadoPago>;
   /**
@@ -175,9 +185,10 @@ export interface ProveedorPago {
   /**
    * Valida la firma del webhook y devuelve la referencia a consultar. Nunca
    * devuelve el estado: el payload no es fuente de verdad, solo dice qué ID
-   * mirar.
+   * mirar. OPCIONAL: un proveedor que no avisa por webhook (se concilia por cron) no la implementa y
+   * su ruta de webhook responde 404.
    */
-  verificarWebhook(
+  verificarWebhook?(
     req: Request,
     cuerpo: string,
   ): Promise<{ valido: boolean; referencia?: string }>;

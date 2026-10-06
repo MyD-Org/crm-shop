@@ -23,7 +23,7 @@ vi.mock("@/lib/pagos/intento-abierto", () => ({
   resolverIntentoAbierto: async () => "en_curso",
 }));
 vi.mock("@/lib/pagos/mercadopago", () => ({
-  mercadoPago: { id: "mercadopago", crearPago: (...a: unknown[]) => crearPago(...a) },
+  mercadoPago: { id: "mercadopago", configurado: () => true, crearPago: (...a: unknown[]) => crearPago(...a) },
   urlNotificacion: () => undefined,
   mercadoPagoConfigurado: () => true,
 }));

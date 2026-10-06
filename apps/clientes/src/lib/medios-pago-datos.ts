@@ -12,8 +12,8 @@ import { cacheLife, cacheTag } from "next/cache";
 import { conRespaldoSinCache } from "./cache-respaldo";
 import { TAG_SUCURSALES } from "./cache-tags";
 import { leerMediosPago } from "./medios-pago-repo";
-import { SLUG_MERCADOPAGO, type MedioPago } from "./medios-pago";
-import { mercadoPagoConfigurado } from "./pagos/mercadopago";
+import { procesadorDeMedio, type MedioPago } from "./medios-pago";
+import { procesadorConfigurado } from "./pagos";
 
 async function mediosPagoDeCache(): Promise<MedioPago[]> {
   "use cache: remote";
@@ -36,13 +36,16 @@ export function mediosPagoCacheados(): Promise<MedioPago[]> {
   return conRespaldoSinCache("medios-pago", mediosPagoDeCache, () => leerMediosPago().catch(() => []));
 }
 
-/** Quita `mercadopago` de la lista si el Shop no tiene credenciales para cobrar. */
-export function sinMpSiNoConfigurado(medios: readonly MedioPago[]): MedioPago[] {
-  return mercadoPagoConfigurado() ? [...medios] : medios.filter((m) => m.slug !== SLUG_MERCADOPAGO);
+/** Quita los medios con cobro en línea cuyo procesador no tiene credenciales en el Shop. */
+export function sinProcesadoresNoConfigurados(medios: readonly MedioPago[]): MedioPago[] {
+  return medios.filter((m) => {
+    const procesador = procesadorDeMedio(m.slug);
+    return procesador === null || procesadorConfigurado(procesador);
+  });
 }
 
-/** Medios para OFRECER (checkout, Envíos y pagos): los cacheados, sin MP si faltan credenciales. */
+/** Medios para OFRECER (checkout, Envíos y pagos): los cacheados, sin los procesadores sin credenciales. */
 export async function mediosOfrecibles(): Promise<MedioPago[]> {
-  return sinMpSiNoConfigurado(await mediosPagoCacheados());
+  return sinProcesadoresNoConfigurados(await mediosPagoCacheados());
 }
 

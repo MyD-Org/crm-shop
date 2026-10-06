@@ -202,6 +202,10 @@ async function pedir(
 export const mercadoPago: ProveedorPago = {
   id: "mercadopago",
 
+  configurado: mercadoPagoConfigurado,
+
+  urlNotificacion,
+
   /**
    * Crea el pago. El `monto` YA viene del pedido persistido — quien llama es
    * responsable de no tomarlo del browser (ver §2 del doc).

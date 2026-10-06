@@ -33,6 +33,7 @@ import {
   type PagoMetodo,
 } from "./envio";
 import { avisarCobro } from "./pedido-avisos";
+import { esPagoEnLinea, slugsPagoEnLinea } from "./medios-pago";
 import { shopTenantId } from "./tenant";
 import type { Asignacion, EntradaAsignacion } from "./sucursales";
 import { leerReglasVenta, leerSucursalesYZonas, type ReglasVentaTenant } from "./sucursales-repo";
@@ -133,7 +134,7 @@ const RESERVA_DIAS_DEFAULT = 7; // = REGLAS_VENTA_DEFAULT.reservaDias (sucursale
 
 /**
  * Hasta cuándo reserva un pedido pendiente (snapshot que se guarda en `orders.reserva_vence_en`).
- * Pago online (Mercado Pago): la ventana de siempre, 24 h. Sin cobro online: `reserva_dias` de las
+ * Pago online (cualquier procesador): la ventana de siempre, 24 h. Sin cobro online: `reserva_dias` de las
  * reglas de venta; 0 = nunca vence (`'infinity'`: las vistas `stock_reservado` y
  * `stock_reservado_sucursal` leen NULL como "24 h desde created_at", nunca como "no vence"). Sin reglas (null): el default de 7 días.
  */
@@ -142,7 +143,7 @@ export function calcularReservaVenceEn(
   reglas: Pick<ReglasVentaTenant, "reservaDias"> | null,
   ahora: Date = new Date(),
 ): ReservaVenceEn {
-  if (pagoMetodo === "mercadopago") return new Date(ahora.getTime() + VENTANA_PAGO_MS);
+  if (esPagoEnLinea(pagoMetodo)) return new Date(ahora.getTime() + VENTANA_PAGO_MS);
   const dias = reglas ? reglas.reservaDias : RESERVA_DIAS_DEFAULT;
   if (dias <= 0) return RESERVA_SIN_VENCIMIENTO;
   return new Date(ahora.getTime() + dias * 24 * 60 * 60_000);
@@ -1295,17 +1296,26 @@ export async function descartarReserva(intentoId: string, detalle: string): Prom
  */
 export async function pedidoPendienteMasReciente(
   dueno: DuenoPedidos,
-): Promise<{ id: string; numero: string; total: number; cuotas: number | null } | null> {
+  /** Medios (slugs) cuyo cobro se retoma; por defecto todos los de cobro en línea. */
+  slugsPagoLinea: readonly string[] = slugsPagoEnLinea(),
+): Promise<{ id: string; numero: string; total: number; cuotas: number | null; pagoMetodo: string } | null> {
+  if (slugsPagoLinea.length === 0) return null;
   const desde = new Date(Date.now() - VENTANA_PAGO_MS);
   const [fila] = await getDb()
-    .select({ id: orders.id, numero: orders.numero, total: orders.total, cuotas: orders.cuotas })
+    .select({
+      id: orders.id,
+      numero: orders.numero,
+      total: orders.total,
+      cuotas: orders.cuotas,
+      pagoMetodo: orders.pagoMetodo,
+    })
     .from(orders)
     .where(
       and(
         esDeSuDueno(dueno),
         eq(orders.pagoEstado, "pendiente"),
         eq(orders.estado, "pendiente"),
-        eq(orders.pagoMetodo, "mercadopago"),
+        inArray(orders.pagoMetodo, [...slugsPagoLinea]),
         gte(orders.createdAt, desde),
       ),
     )
@@ -1318,6 +1328,7 @@ export async function pedidoPendienteMasReciente(
     numero: formatearNumero(fila.numero),
     total: num(fila.total),
     cuotas: fila.cuotas,
+    pagoMetodo: fila.pagoMetodo,
   };
 }
 

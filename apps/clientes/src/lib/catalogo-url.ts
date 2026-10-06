@@ -14,6 +14,7 @@
 // de Postgres al bundle del browser.
 import type { FiltrosSinTexto } from "@/lib/catalog";
 import { atributosValidos } from "@/lib/catalogo-atributos";
+import { leerCar } from "@/lib/catalogo-car";
 
 /**
  * Criterios de orden que ofrece el catálogo. Viven ACÁ y no en `catalog.ts`
@@ -72,6 +73,12 @@ export interface EstadoCatalogo {
    * diccionario.
    */
   atributos: string[];
+  /**
+   * Características por tipo de producto (`?car=`, flag `catalogo-facetas-por-tipo`; ver
+   * catalogo-car.ts): ids `clave:valor` / `clave:min-max`, ya validados y en el orden de emisión.
+   * Son específicas del tipo de producto: cambiar la categoría o la búsqueda las descarta.
+   */
+  caracteristicas: string[];
   orden: OrdenCatalogo;
   /** 1-based. */
   pagina: number;
@@ -218,6 +225,7 @@ export function leerEstado(params: {
   categoria?: ParamCrudo;
   marca?: ParamCrudo;
   atr?: ParamCrudo;
+  car?: ParamCrudo;
   orden?: ParamCrudo;
   pagina?: ParamCrudo;
   precio_min?: ParamCrudo;
@@ -249,6 +257,7 @@ export function leerEstado(params: {
     categorias: comoLista(params.categoria),
     marcas: comoLista(params.marca),
     atributos: atributosValidos(comoLista(params.atr)),
+    caracteristicas: leerCar(comoLista(params.car)),
     orden: comoOrden(params.orden, q || undefined),
     pagina: comoPagina(params.pagina),
     precioMin,
@@ -273,6 +282,7 @@ export function estadoDeBusqueda(sp: URLSearchParams): EstadoCatalogo {
     categoria: param("categoria"),
     marca: param("marca"),
     atr: param("atr"),
+    car: param("car"),
     orden: param("orden"),
     pagina: param("pagina"),
     precio_min: param("precio_min"),
@@ -300,6 +310,14 @@ export function sinBusquedaIa(estado: EstadoCatalogo): EstadoCatalogo {
   return { ...resto, atributos: [] };
 }
 
+/**
+ * El estado sin las características por tipo: con el flag `catalogo-facetas-por-tipo` apagado (o la
+ * tabla de atributos ilegible) `?car=` se ignora y el catálogo queda como siempre.
+ */
+export function sinCar(estado: EstadoCatalogo): EstadoCatalogo {
+  return { ...estado, caracteristicas: [] };
+}
+
 /** Misma selección, sin importar el orden. */
 const mismoConjunto = (a: string[], b: string[]) =>
   a.length === b.length && a.every((x) => b.includes(x));
@@ -317,14 +335,21 @@ const mismoConjunto = (a: string[], b: string[]) =>
  * los parámetros repetibles; el resto no se compara (la página, por ejemplo,
  * llega recortada a la última que existe y no es un desfase).
  */
-export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams, conBusquedaIa = true): boolean {
+export function filtrosDesfasados(
+  estado: EstadoCatalogo,
+  sp: URLSearchParams,
+  conBusquedaIa = true,
+  conFacetasPorTipo = false,
+): boolean {
   // Sin el flag los atributos de la URL se ignoran: compararlos pediría la
-  // página una y otra vez.
-  const url = conBusquedaIa ? estadoDeBusqueda(sp) : sinBusquedaIa(estadoDeBusqueda(sp));
+  // página una y otra vez. Lo mismo con `car` sin el flag de facetas por tipo.
+  const leido = conBusquedaIa ? estadoDeBusqueda(sp) : sinBusquedaIa(estadoDeBusqueda(sp));
+  const url = conFacetasPorTipo ? leido : sinCar(leido);
   return (
     !mismoConjunto(estado.categorias, url.categorias) ||
     !mismoConjunto(estado.marcas, url.marcas) ||
-    !mismoConjunto(estado.atributos, url.atributos)
+    !mismoConjunto(estado.atributos, url.atributos) ||
+    !mismoConjunto(estado.caracteristicas, url.caracteristicas)
   );
 }
 
@@ -332,7 +357,7 @@ export function filtrosDesfasados(estado: EstadoCatalogo, sp: URLSearchParams, c
  * URL del catálogo para un estado dado. Omite lo que está en su default para
  * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=nombre&pagina=1`.
  *
- * El orden de los parámetros es fijo (`q, categoria*, marca*, atr*,
+ * El orden de los parámetros es fijo (`q, categoria*, marca*, atr*, car*,
  * precio_min, precio_max, potencia_min, potencia_max, stock, retiro, orden, vista,
  * pagina, ia`): dos estados
  * iguales dan la misma URL, que es lo que necesitan el canonical y los tests.
@@ -343,6 +368,7 @@ export function hrefCatalogo(estado: EstadoCatalogo): string {
   for (const c of estado.categorias) sp.append("categoria", c);
   for (const m of estado.marcas) sp.append("marca", m);
   for (const a of atributosValidos(estado.atributos)) sp.append("atr", a);
+  for (const c of leerCar(estado.caracteristicas)) sp.append("car", c);
   if (estado.precioMin != null) sp.set("precio_min", String(estado.precioMin));
   if (estado.precioMax != null) sp.set("precio_max", String(estado.precioMax));
   if (estado.potenciaMin != null) sp.set("potencia_min", String(estado.potenciaMin));
@@ -391,6 +417,13 @@ export function estadoConCambios(
   // Otra búsqueda ya no es la que se interpretó (ni la que se pidió ver tal
   // cual): `ia` sólo sigue si quien cambia la búsqueda lo pasa explícito.
   if ("query" in cambios && cambios.query !== estado.query && !("ia" in cambios)) delete nuevo.ia;
+  // Las características por tipo son de ESTE tipo de producto: otra categoría o otra búsqueda las
+  // descarta (marca, precio y stock se conservan). Quien cambia el conjunto y trae sus propias
+  // características (un link, un borrador) las pasa explícitas.
+  const cambiaConjunto =
+    ("categorias" in cambios && !mismoConjunto(cambios.categorias ?? [], estado.categorias)) ||
+    ("query" in cambios && cambios.query !== estado.query);
+  if (cambiaConjunto && !("caracteristicas" in cambios)) nuevo.caracteristicas = [];
   // Quitar la búsqueda deja sin sentido "Relevancia": vuelve al alfabético.
   if (nuevo.orden === "relevancia" && !nuevo.query) nuevo.orden = ORDEN_DEFAULT;
   return nuevo;
@@ -441,6 +474,7 @@ export function hrefCanonico(estado: EstadoCatalogo): string {
     categorias: estado.categorias.slice(0, 1),
     marcas: [],
     atributos: [],
+    caracteristicas: [],
     orden: ORDEN_DEFAULT,
     pagina: estado.pagina,
     soloStock: SOLO_STOCK_DEFAULT,

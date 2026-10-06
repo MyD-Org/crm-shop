@@ -126,3 +126,52 @@ export function etiquetaCar(id: string): string {
   const unidad = def.unidad ? (def.unidad === "°" ? "°" : ` ${def.unidad}`) : "";
   return `${def.titulo}: ${formatoNumero(c.min)} – ${formatoNumero(c.max)}${unidad}`;
 }
+
+/** Valores tildados de una clave de lista (`["polos:2", "polos:4"]` → `["2", "4"]`). */
+export function carDeClave(car: readonly string[], clave: string): string[] {
+  return car.flatMap((id) => {
+    const c = leerIdCar(id);
+    return c && c.clave === clave && c.op === "valor" ? [c.valor] : [];
+  });
+}
+
+/** Nueva lista de `car` al tildar o destildar un valor de una clave de lista. Un valor inválido no se agrega. */
+export function alternarCar(car: readonly string[], clave: string, valor: string, tildado: boolean): string[] {
+  const id = `${clave}:${valor}`;
+  if (!tildado) return car.filter((x) => x !== id);
+  return leerIdCar(id) ? leerCar([...car.filter((x) => x !== id), id]) : [...car];
+}
+
+/** Rango tildado de una clave de control rango (`flujo_lm:800-1200` → `[800, 1200]`), o `undefined`. */
+export function rangoDeCar(car: readonly string[], clave: string): [number, number] | undefined {
+  for (const id of car) {
+    const c = leerIdCar(id);
+    if (c && c.clave === clave && c.op === "rango") return [c.min, c.max];
+  }
+  return undefined;
+}
+
+/**
+ * Nueva lista de `car` al comprometer un rango en el slider de una clave. El rango que coincide con los
+ * límites reales del conjunto (o degenerado) es "sin filtro": se quita el car de esa clave. Los extremos
+ * se acotan al rango válido de la clave (el slider trabaja con enteros hacia afuera: un largo mínimo de
+ * 0,5 m se ofrece como 0). Reemplaza al rango anterior de la misma clave.
+ */
+export function cambiosDeCarRango(
+  car: readonly string[],
+  clave: string,
+  valor: readonly [number, number],
+  limites: { min: number; max: number },
+): string[] {
+  const resto = car.filter((id) => claveDeCar(id) !== clave);
+  const valido = RANGOS[clave as ClaveMedida];
+  // A lo sumo dos decimales: lo que admite la gramática (y lo que saca de cuenta el ruido del slider).
+  const acotar = (n: number) => {
+    const redondo = Math.round(n * 100) / 100;
+    return valido ? Math.min(Math.max(redondo, valido[0]), valido[1]) : redondo;
+  };
+  const [min, max] = [acotar(valor[0]), acotar(valor[1])];
+  if (min >= max || (valor[0] <= limites.min && valor[1] >= limites.max)) return resto;
+  const id = idCar({ clave, min, max });
+  return id ? leerCar([...resto, id]) : resto;
+}

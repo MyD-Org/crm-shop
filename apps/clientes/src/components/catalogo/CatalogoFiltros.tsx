@@ -3,12 +3,15 @@
 import { Fragment, useId, useState } from "react";
 import { Button, Card, Divider, FacetGroup, Field, Input, RangeSlider, Select, Switch } from "@myd-org/ui";
 import type { Facetas } from "@/lib/catalog";
+import { alternarCar, cambiosDeCarRango, rangoDeCar } from "@/lib/catalogo-car";
+import type { FacetaClave } from "@/lib/catalogo-facetas-registro";
 import {
   cambiosDePotencia,
   cambiosDeRango,
   rangoEfectivo,
   rangoEfectivoPotencia,
   type EstadoCatalogo,
+  type RangoPrecio,
 } from "@/lib/catalogo-url";
 import {
   alternarCategoria,
@@ -16,8 +19,10 @@ import {
   hayFiltros,
   itemsDeCaracteristicasAgrupados,
   itemsDeFaceta,
+  itemsDeFacetaClave,
   itemsVisibles,
   limpiarFiltros,
+  panelPorTipo,
 } from "@/lib/catalogo-vista";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
@@ -35,7 +40,10 @@ const alternar = (lista: string[], valor: string, tildado: boolean) =>
  * Panel de filtros: categorías, marcas, características (atributos del
  * diccionario agrupados por tono, ambiente, zócalo y tensión, ver catalogo-atributos.ts),
  * precio y disponibilidad. En marcas y características los ítems con conteo 0 se ocultan
- * (ver `itemsVisibles`); categorías muestra siempre el árbol completo. Puro: todo
+ * (ver `itemsVisibles`); categorías muestra siempre el árbol completo. Con las facetas por tipo
+ * prendidas (`facetas.porClave` presente, flag `catalogo-facetas-por-tipo`) las características
+ * salen por clave según el tipo de producto (`panelPorTipo`) y Disponibilidad sube debajo de Marcas.
+ * Puro: todo
  * lo que toca el visitante sale por `ir` como cambios de estado (que el
  * padre convierte en URL). Sin `dentroDeSheet` va dentro de una `Card` con
  * "Limpiar" en el encabezado (aside de desktop); con `dentroDeSheet` se
@@ -54,6 +62,39 @@ export function CatalogoFiltros({
 }) {
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
+  const panel = panelPorTipo(facetas.porClave, estado, facetas.categorias);
+  const conPorTipo = panel.modo !== "actual";
+  const disponibilidad = (
+    <section aria-labelledby={idDisponibilidad} className="flex flex-col gap-3">
+      <h3
+        id={idDisponibilidad}
+        className="text-xs font-semibold uppercase tracking-wide text-muted"
+      >
+        Disponibilidad
+      </h3>
+      <Switch
+        label="Solo con stock"
+        checked={estado.soloStock || Boolean(estado.retiroEn)}
+        // Apagarlo también quita "Con stock en <local>": sin stock no hay local que filtrar.
+        onCheckedChange={(v) => ir(v ? { soloStock: true } : { soloStock: false, retiroEn: undefined })}
+      />
+      {facetas.locales && facetas.locales.length > 1 && (
+        <Field label="Con stock en">
+          <Select
+            aria-label="Con stock en"
+            options={[
+              { value: TODOS_LOS_LOCALES, label: "Cualquier local" },
+              ...facetas.locales.map((l) => ({ value: l.slug, label: l.nombre })),
+            ]}
+            value={estado.retiroEn ?? TODOS_LOS_LOCALES}
+            onValueChange={(v) =>
+              ir(v === TODOS_LOS_LOCALES ? { retiroEn: undefined } : { retiroEn: v, soloStock: true })
+            }
+          />
+        </Field>
+      )}
+    </section>
+  );
   const grupos = (
     <div className="flex flex-col gap-5">
       <FacetGroup
@@ -94,27 +135,45 @@ export function CatalogoFiltros({
         emptyText="Sin marcas para estos filtros"
         searchEmptyText="No hay marcas que coincidan con su búsqueda."
       />
-      {/* Características: un grupo por subtítulo (tono, ambiente, zócalo, tensión), sólo con algo
-          para ofrecer. Los atributos salen del nombre del producto y en muchas categorías
-          (herramientas, cables) no hay ninguno. Uno tildado que ya no cuenta sigue apareciendo
-          (itemsDeFaceta); los que cuentan 0 se ocultan (itemsVisibles). */}
-      {itemsDeCaracteristicasAgrupados(facetas.atributos, estado.atributos).map((g) => (
-        <Fragment key={g.grupo}>
-          <Divider />
-          <FacetGroup
-            title={g.titulo}
-            items={g.items}
-            onToggle={(valor, tildado) => ir({ atributos: alternar(estado.atributos, valor, tildado) })}
-            emptyText="Sin características para estos filtros"
-          />
-        </Fragment>
-      ))}
-      {/* Potencia (fase 2): sólo con datos estructurados (flag `busqueda-ia` y la tabla del CRM),
-          y sobre los productos que tienen potencia cargada. */}
-      {facetas.potencia && (
+      {conPorTipo ? (
         <>
+          {/* Con las facetas por tipo, Disponibilidad sube debajo de Marcas: es lo primero que se
+              ajusta, y lo técnico (que depende de la categoría) queda abajo, junto al precio. */}
           <Divider />
-          <FiltroPotencia rango={facetas.potencia} estado={estado} ir={ir} />
+          {disponibilidad}
+          {panel.modo === "grupos" && <GruposPorTipo grupos={panel.grupos} estado={estado} ir={ir} />}
+          {panel.modo === "aviso" && (
+            <>
+              <Divider />
+              <p className="text-sm text-muted">{panel.texto}</p>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Características: un grupo por subtítulo (tono, ambiente, zócalo, tensión), sólo con algo
+              para ofrecer. Los atributos salen del nombre del producto y en muchas categorías
+              (herramientas, cables) no hay ninguno. Uno tildado que ya no cuenta sigue apareciendo
+              (itemsDeFaceta); los que cuentan 0 se ocultan (itemsVisibles). */}
+          {itemsDeCaracteristicasAgrupados(facetas.atributos, estado.atributos).map((g) => (
+            <Fragment key={g.grupo}>
+              <Divider />
+              <FacetGroup
+                title={g.titulo}
+                items={g.items}
+                onToggle={(valor, tildado) => ir({ atributos: alternar(estado.atributos, valor, tildado) })}
+                emptyText="Sin características para estos filtros"
+              />
+            </Fragment>
+          ))}
+          {/* Potencia (fase 2): sólo con datos estructurados (flag `busqueda-ia` y la tabla del CRM),
+              y sobre los productos que tienen potencia cargada. */}
+          {facetas.potencia && (
+            <>
+              <Divider />
+              <FiltroPotencia rango={facetas.potencia} estado={estado} ir={ir} />
+            </>
+          )}
         </>
       )}
       {facetas.precio && (
@@ -123,36 +182,12 @@ export function CatalogoFiltros({
           <FiltroPrecio facetas={facetas} estado={estado} ir={ir} />
         </>
       )}
-      <Divider />
-      <section aria-labelledby={idDisponibilidad} className="flex flex-col gap-3">
-        <h3
-          id={idDisponibilidad}
-          className="text-xs font-semibold uppercase tracking-wide text-muted"
-        >
-          Disponibilidad
-        </h3>
-        <Switch
-          label="Solo con stock"
-          checked={estado.soloStock || Boolean(estado.retiroEn)}
-          // Apagarlo también quita "Con stock en <local>": sin stock no hay local que filtrar.
-          onCheckedChange={(v) => ir(v ? { soloStock: true } : { soloStock: false, retiroEn: undefined })}
-        />
-        {facetas.locales && facetas.locales.length > 1 && (
-          <Field label="Con stock en">
-            <Select
-              aria-label="Con stock en"
-              options={[
-                { value: TODOS_LOS_LOCALES, label: "Cualquier local" },
-                ...facetas.locales.map((l) => ({ value: l.slug, label: l.nombre })),
-              ]}
-              value={estado.retiroEn ?? TODOS_LOS_LOCALES}
-              onValueChange={(v) =>
-                ir(v === TODOS_LOS_LOCALES ? { retiroEn: undefined } : { retiroEn: v, soloStock: true })
-              }
-            />
-          </Field>
-        )}
-      </section>
+      {!conPorTipo && (
+        <>
+          <Divider />
+          {disponibilidad}
+        </>
+      )}
     </div>
   );
 
@@ -315,35 +350,47 @@ function FiltroPrecio({
   );
 }
 
-const fmtWatts = (w: number) => `${w.toLocaleString("es-AR", { maximumFractionDigits: 1 })} W`;
+/** Número con separador de miles y a lo sumo un decimal, más la unidad ("1.200 lm", "12,5 W", "90°"). */
+function fmtConUnidad(n: number, unidad?: string): string {
+  const numero = n.toLocaleString("es-AR", { maximumFractionDigits: 1 });
+  return unidad ? (unidad === "°" ? `${numero}°` : `${numero} ${unidad}`) : numero;
+}
 
 /**
- * Slider de potencia en watts (misma escala logarítmica que el precio: la mayoría de los
- * productos tiene pocos watts y unos pocos llegan a miles). Navega al soltar.
+ * Slider de rango sobre una escala logarítmica (la misma que el precio: en potencia, flujo o largo la
+ * mayoría de los productos cae cerca del mínimo y unos pocos llegan muy lejos). Navega al soltar.
+ * Es el slider de potencia generalizado: el que lo usa pone el título, la unidad, el valor vigente
+ * (`valor`, recortado al rango) y qué cambio de estado sale al comprometer (`alComprometer`).
  */
-function FiltroPotencia({
+function FiltroRango({
+  titulo,
+  unidad,
   rango,
-  estado,
-  ir,
+  valor,
+  alComprometer,
+  etiquetasPulgares,
 }: {
-  rango: NonNullable<Facetas["potencia"]>;
-  estado: EstadoCatalogo;
-  ir: Ir;
+  titulo: string;
+  unidad?: string;
+  rango: RangoPrecio;
+  /** Extremos vigentes (los de la URL recortados al rango, o el rango entero). */
+  valor: [number, number];
+  alComprometer: (valor: [number, number]) => void;
+  etiquetasPulgares: [string, string];
 }) {
-  const idPotencia = useId();
-  const clave = `${estado.potenciaMin}|${estado.potenciaMax}|${rango.min}|${rango.max}`;
+  const idRango = useId();
+  const clave = `${valor[0]}|${valor[1]}|${rango.min}|${rango.max}`;
   const [arrastre, setArrastre] = useState<{ clave: string; posiciones: [number, number] } | null>(null);
-  const [min, max] = rangoEfectivoPotencia(estado, rango);
   const posiciones: [number, number] =
     arrastre?.clave === clave
       ? arrastre.posiciones
-      : [precioAPosicion(min, rango.min, rango.max), precioAPosicion(max, rango.min, rango.max)];
-  const aWatts = (p: number) => posicionAPrecio(p, rango.min, rango.max);
+      : [precioAPosicion(valor[0], rango.min, rango.max), precioAPosicion(valor[1], rango.min, rango.max)];
+  const aValor = (p: number) => posicionAPrecio(p, rango.min, rango.max);
 
   return (
-    <section aria-labelledby={idPotencia} className="flex flex-col gap-3">
-      <h3 id={idPotencia} className="text-xs font-semibold uppercase tracking-wide text-muted">
-        Potencia
+    <section aria-labelledby={idRango} className="flex flex-col gap-3">
+      <h3 id={idRango} className="text-xs font-semibold uppercase tracking-wide text-muted">
+        {titulo}
       </h3>
       <RangeSlider
         min={POSICION_MIN}
@@ -353,16 +400,92 @@ function FiltroPotencia({
         onValueChange={(v) => setArrastre({ clave, posiciones: v })}
         onValueCommit={(v) => {
           setArrastre(null);
-          ir(cambiosDePotencia([aWatts(v[0]), aWatts(v[1])], rango));
+          alComprometer([aValor(v[0]), aValor(v[1])]);
         }}
-        formatValue={(p) => fmtWatts(aWatts(p))}
-        thumbLabels={["Potencia mínima", "Potencia máxima"]}
+        formatValue={(p) => fmtConUnidad(aValor(p), unidad)}
+        thumbLabels={etiquetasPulgares}
         disabled={rango.min === rango.max}
-        aria-label="Potencia"
+        aria-label={titulo}
       />
       <p className="text-xs text-muted">
-        {fmtWatts(aWatts(posiciones[0]))} – {fmtWatts(aWatts(posiciones[1]))}
+        {fmtConUnidad(aValor(posiciones[0]), unidad)} – {fmtConUnidad(aValor(posiciones[1]), unidad)}
       </p>
     </section>
   );
+}
+
+/** Slider de potencia en watts del panel de siempre (`potencia_min`/`potencia_max`). */
+function FiltroPotencia({
+  rango,
+  estado,
+  ir,
+}: {
+  rango: NonNullable<Facetas["potencia"]>;
+  estado: EstadoCatalogo;
+  ir: Ir;
+}) {
+  return (
+    <FiltroRango
+      titulo="Potencia"
+      unidad="W"
+      rango={rango}
+      valor={rangoEfectivoPotencia(estado, rango)}
+      alComprometer={(v) => ir(cambiosDePotencia(v, rango))}
+      etiquetasPulgares={["Potencia mínima", "Potencia máxima"]}
+    />
+  );
+}
+
+/**
+ * Los grupos por tipo de producto (`Facetas.porClave`): una lista de casillas por clave de lista (con
+ * "Ver todas" pasado el tope de visibles) y un slider por clave de rango. La potencia sigue en
+ * `potencia_min`/`potencia_max` (una sola representación); el resto de los rangos, en `?car=`.
+ */
+function GruposPorTipo({ grupos, estado, ir }: { grupos: FacetaClave[]; estado: EstadoCatalogo; ir: Ir }) {
+  return (
+    <>
+      {grupos.map((g) => (
+        <Fragment key={g.clave}>
+          <Divider />
+          {g.control === "lista" ? (
+            <FacetGroup
+              title={g.titulo}
+              items={itemsDeFacetaClave(g, estado.caracteristicas)}
+              onToggle={(valor, tildado) =>
+                ir({ caracteristicas: alternarCar(estado.caracteristicas, g.clave, valor, tildado) })
+              }
+              initialVisible={g.visibles}
+              moreLabel="Ver todas ({n})"
+              lessLabel="Ver menos"
+              emptyText="Sin opciones para estos filtros"
+            />
+          ) : g.param === "potencia" ? (
+            <FiltroRango
+              titulo={g.titulo}
+              unidad={g.unidad}
+              rango={g.rango}
+              valor={rangoEfectivoPotencia(estado, g.rango)}
+              alComprometer={(v) => ir(cambiosDePotencia(v, g.rango))}
+              etiquetasPulgares={[`${g.titulo} mínima`, `${g.titulo} máxima`]}
+            />
+          ) : (
+            <FiltroRango
+              titulo={g.titulo}
+              unidad={g.unidad}
+              rango={g.rango}
+              valor={valorDeRangoCar(estado.caracteristicas, g.clave, g.rango)}
+              alComprometer={(v) => ir({ caracteristicas: cambiosDeCarRango(estado.caracteristicas, g.clave, v, g.rango) })}
+              etiquetasPulgares={[`${g.titulo}: mínimo`, `${g.titulo}: máximo`]}
+            />
+          )}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/** Extremos vigentes de un rango en `?car=`, recortados al rango real del conjunto (o el rango entero). */
+function valorDeRangoCar(car: readonly string[], clave: string, rango: RangoPrecio): [number, number] {
+  const [min, max] = rangoDeCar(car, clave) ?? [rango.min, rango.max];
+  return [Math.min(Math.max(min, rango.min), rango.max), Math.min(Math.max(max, rango.min), rango.max)];
 }

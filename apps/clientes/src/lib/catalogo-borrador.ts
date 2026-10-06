@@ -44,6 +44,7 @@ function manejaLaHoja(e: EstadoCatalogo): Partial<EstadoCatalogo> {
     categorias: e.categorias,
     marcas: e.marcas,
     atributos: e.atributos,
+    caracteristicas: e.caracteristicas,
     precioMin: e.precioMin,
     precioMax: e.precioMax,
     potenciaMin: e.potenciaMin,
@@ -59,6 +60,7 @@ function sinCambios(a: EstadoCatalogo, b: EstadoCatalogo): boolean {
     mismaLista(a.categorias, b.categorias) &&
     mismaLista(a.marcas, b.marcas) &&
     mismaLista(a.atributos, b.atributos) &&
+    mismaLista(a.caracteristicas, b.caracteristicas) &&
     a.precioMin === b.precioMin &&
     a.precioMax === b.precioMax &&
     a.potenciaMin === b.potenciaMin &&
@@ -77,5 +79,8 @@ function sinCambios(a: EstadoCatalogo, b: EstadoCatalogo): boolean {
  */
 export function hrefAlAplicar(estado: EstadoCatalogo, borrador: EstadoCatalogo): string | null {
   if (sinCambios(estado, borrador)) return null;
-  return hrefCon(estado, manejaLaHoja(borrador));
+  const cambios = manejaLaHoja(borrador);
+  // Las características son de ESTA categoría: si el borrador la cambió, no viajan.
+  if (!mismaLista(estado.categorias, borrador.categorias)) cambios.caracteristicas = [];
+  return hrefCon(estado, cambios);
 }

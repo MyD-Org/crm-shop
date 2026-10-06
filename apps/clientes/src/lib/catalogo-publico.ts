@@ -150,7 +150,9 @@ async function facetasCacheadas(
   console.info("[cache] catalogo-facetas miss");
   const facetas = disp ? await getFacetas(filtros, soloVisibles, disp) : await getFacetas(filtros, soloVisibles);
   // Facetas por tipo pedidas que no salieron (la consulta falló y degradó): no se guardan por el TTL del catálogo.
-  cacheLife(filtros.facetasPorTipo && facetas.porClave === undefined ? "degradado" : "catalogo");
+  // Dos llamadas con el perfil literal: `cacheLife` tipa cada perfil por overload y no acepta la unión.
+  if (filtros.facetasPorTipo && facetas.porClave === undefined) cacheLife("degradado");
+  else cacheLife("catalogo");
   return facetas;
 }
 

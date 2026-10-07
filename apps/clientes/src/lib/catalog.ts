@@ -19,8 +19,9 @@
  * - Curaduría (nombre, fotos, visibilidad, categoría propia) → overlay y árbol
  *   del CRM (`catalog_overlay`, `shop_categories`).
  * - El stock es el DISPONIBLE: se le resta lo reservado por pedidos vivos del
- *   Shop (ver src/lib/stock-disponible.ts). Toda consulta joinea
- *   `stockReservado` para eso.
+ *   Shop (ver src/lib/stock-disponible.ts). Toda consulta hace
+ *   `.leftJoin(...joinStock(disp))` para eso (la reserva, o con stock por
+ *   sucursal el disponible por sucursal; ver src/lib/stock-sucursal.ts).
  *
  * SOLO servidor: usa la DB y el cliente de Alegra. Consumir desde Server
  * Components o API routes, nunca desde el browser.
@@ -33,7 +34,6 @@ import { cache } from "react";
 import { and, asc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { ProductStock } from "@myd-org/ui";
 import { getDb } from "@/db";
-import { stockReservado } from "@/db/schema";
 import {
   crmAtributos,
   crmCatalogo,
@@ -44,7 +44,7 @@ import {
   type FotoCrm,
 } from "@/db/crm";
 import { esIdAlegra, mapPrecios, precioDeLista } from "./alegra";
-import { activoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible";
+import { activoSql, preciosSql, stockSql } from "./stock-disponible";
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
@@ -75,7 +75,7 @@ import {
 import type { Product } from "@/data/products";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
 import { armarPreciosMedios, type MediosPrecio } from "./medios-precio";
-import { stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
+import { disponibleSucursalSql, joinStock, stockSucursalSql, visibleEnSucursalSql } from "./stock-sucursal";
 import {
   columnasConteoAtributos,
   contradiccionSql,
@@ -282,7 +282,7 @@ function soloVisiblesSql(soloVisibles: boolean) {
 
 /**
  * Columnas del join, en un solo lugar para no repetirlas entre queries. El
- * stock, menos lo reservado (exige el join a `stockReservado`).
+ * stock, menos lo reservado (exige `.leftJoin(...joinStock(disp))`).
  */
 const COLUMNAS_CATALOGO_BASE = {
   alegraId: crmCatalogo.alegraId,
@@ -600,7 +600,7 @@ export async function getCatalogo(opts: {
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(opts.disp))
     .where(
       and(
         enTenantCatalogo(),
@@ -656,7 +656,7 @@ export async function getCategoriaExacta(opts: {
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(opts.disp))
     .where(
       and(
         enTenantCatalogo(),
@@ -710,7 +710,7 @@ export async function getProductosPorIds(
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(opts?.disp))
     .where(
       and(
         enTenantCatalogo(),
@@ -896,7 +896,8 @@ export const conPrecioSql = sql`${precioSql} > 0`;
  * = disponible; `<= 0` = sin stock.
  */
 export const conStock = (disp?: ContextoDisponibilidad) => {
-  const stock = disp ? stockSucursalSql(disp) : stockSql;
+  // Con `disp`, del join lateral (`joinStock`): calculado una vez por fila, no dos.
+  const stock = disp ? disponibleSucursalSql : stockSql;
   return sql`(${stock} is null or ${stock} > 0)`;
 };
 
@@ -1035,13 +1036,13 @@ export function arbolCompletoConConteo(
 }
 
 /** Productos por categoría propia (sólo la directa; `enArbolConConteo` suma hacia arriba). */
-async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>) {
+async function conteoPorCategoriaPropia(where: ReturnType<typeof condicionesDe>, disp?: ContextoDisponibilidad) {
   const filas = await getDb()
     .select({ id: crmOverlay.categoriaId, count: sql<number>`count(*)::int` })
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(disp))
     .where(and(where, sql`${crmOverlay.categoriaId} is not null`))
     .groupBy(crmOverlay.categoriaId);
   return new Map(filas.map((f) => [f.id as string, Number(f.count)]));
@@ -1058,7 +1059,10 @@ export function categoriasPlanasConConteo(base: Faceta[], filtrado: Faceta[]): F
 }
 
 /** Productos por categoría de Alegra, de más a menos y por nombre (sin árbol propio). */
-async function conteoPorCategoriaAlegra(where: ReturnType<typeof condicionesDe>): Promise<Faceta[]> {
+async function conteoPorCategoriaAlegra(
+  where: ReturnType<typeof condicionesDe>,
+  disp?: ContextoDisponibilidad,
+): Promise<Faceta[]> {
   return getDb()
     .select({
       label: sql<string>`${crmCategoriasAlegra.name}`,
@@ -1067,7 +1071,7 @@ async function conteoPorCategoriaAlegra(where: ReturnType<typeof condicionesDe>)
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(disp))
     .where(and(where, sql`nullif(${crmCategoriasAlegra.name}, '') is not null`))
     .groupBy(crmCategoriasAlegra.name)
     .orderBy(sql`count(*) desc`, asc(crmCategoriasAlegra.name));
@@ -1097,15 +1101,15 @@ export async function getFacetaCategorias(
   );
   if (arbol.length) {
     const [base, filtrado] = await Promise.all([
-      conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
-      conteoPorCategoriaPropia(whereCategorias),
+      conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp), disp),
+      conteoPorCategoriaPropia(whereCategorias, disp),
     ]);
     return arbolCompletoConConteo(arbol, base, filtrado);
   }
   const [base, filtrado] = await Promise.all([
     // Sin filtros el conteo ya es el del catálogo entero: no hace falta la segunda consulta.
-    sinFiltros ? null : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp)),
-    conteoPorCategoriaAlegra(whereCategorias),
+    sinFiltros ? null : conteoPorCategoriaAlegra(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp), disp),
+    conteoPorCategoriaAlegra(whereCategorias, disp),
   ]);
   return base ? categoriasPlanasConConteo(base, filtrado) : filtrado;
 }
@@ -1263,9 +1267,9 @@ const STOCK_HOLGADO = 3;
 function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilidad) {
   // Postgres calcula UNA vez las expresiones idénticas que se repiten (la clave del PARTITION BY y el
   // argumento de `first_value`), y dos parámetros ($6 y $9) no son idénticos. Por eso todo va como
-  // literal: las constantes propias con `literal` y el stock por sucursal con `inlineParams()`
-  // (su subconsulta por fila es lo más caro con `disp`).
-  const stock = disp ? stockSucursalSql(disp).inlineParams() : stockSql;
+  // literal: las constantes propias con `literal`. El stock por sucursal es la columna del join
+  // lateral (`joinStock`): ya calculado una vez por fila para el filtro "con stock", sin parámetros.
+  const stock = disp ? disponibleSucursalSql : stockSql;
   const holgado = sql.raw(String(STOCK_HOLGADO));
   // Stock en 0..STOCK_HOLGADO (null = no inventariable = holgado), evaluado una sola vez.
   const nivelStock = sql`greatest(least(coalesce(${stock}, ${holgado}), ${holgado}), 0)`;
@@ -1315,7 +1319,8 @@ function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilid
  */
 const desempateRelevancia = (disp?: ContextoDisponibilidad, categorias?: string[]) => [
   ...(categorias?.length ? [sql`(case when ${filtroCategoriasSql(categorias)} then 0 else 1 end) asc`] : []),
-  sql`${disp ? stockSucursalSql(disp) : stockSql} desc nulls last`,
+  // Con `disp`, la columna del join lateral (`joinStock`): una vez por fila, no una más para ordenar.
+  sql`${disp ? disponibleSucursalSql : stockSql} desc nulls last`,
   asc(crmCatalogo.name),
 ];
 
@@ -1400,7 +1405,7 @@ export async function getPaginaCatalogo(opts: {
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay())
-        .leftJoin(stockReservado, joinReserva())
+        .leftJoin(...joinStock(opts.disp))
         .where(where);
 
   const total = conteo?.total ?? 0;
@@ -1418,7 +1423,7 @@ export async function getPaginaCatalogo(opts: {
         .from(crmCatalogo)
         .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
         .leftJoin(crmOverlay, joinOverlay())
-        .leftJoin(stockReservado, joinReserva())
+        .leftJoin(...joinStock(opts.disp))
         .where(where)
         .orderBy(...ordenDe(orden, filtros, opts.disp, destacados))
         .limit(porPagina)
@@ -1444,7 +1449,7 @@ export async function contarCatalogo(opts: {
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(opts.disp))
     .where(condicionesDe(opts.filtros, APLICAR_TODOS, opts.soloVisibles, opts.disp));
   return conteo?.total ?? 0;
 }
@@ -1543,6 +1548,8 @@ function consultaConteoAtributos(
   estructurados = false,
   /** Modo de las medidas dinámicas entre los filtros de los otros grupos (`medidasPositivasDe`). */
   medidaPositiva = false,
+  /** El mismo contexto con el que se armó `where` (ver `joinStock`). */
+  disp?: ContextoDisponibilidad,
 ) {
   // Con estructurados, el jsonb de cada producto también se lee UNA vez por fila.
   const filas = getDb()
@@ -1553,7 +1560,7 @@ function consultaConteoAtributos(
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(disp))
     .where(where)
     .as("filas_atributos");
   const ctx: ContextoAtributos = estructurados
@@ -1563,7 +1570,7 @@ function consultaConteoAtributos(
 }
 
 /** Rango real de potencia (enteros hacia afuera) sobre los productos que tienen `potencia_w`. */
-function consultaRangoPotencia(where: ReturnType<typeof condicionesDe>) {
+function consultaRangoPotencia(where: ReturnType<typeof condicionesDe>, disp?: ContextoDisponibilidad) {
   const potencia = potenciaSql();
   return getDb()
     .select({
@@ -1573,7 +1580,7 @@ function consultaRangoPotencia(where: ReturnType<typeof condicionesDe>) {
     .from(crmCatalogo)
     .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
     .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(stockReservado, joinReserva())
+    .leftJoin(...joinStock(disp))
     .where(and(where, sql`${potencia} is not null`));
 }
 
@@ -1602,7 +1609,7 @@ async function consultaFacetasPorTipo(
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
       .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(stockReservado, joinReserva())
+      .leftJoin(...joinStock(disp))
       .where(condicionesDe(filtros, { ...APLICAR_TODOS, car: false, potencia: false }, soloVisibles, disp));
     const filas = (await getDb().execute(
       consultaFacetasPorTipoSql({ base: base.getSQL(), activas, tenant: shopTenantId() }),
@@ -1661,7 +1668,7 @@ export async function getFacetas(
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
       .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(stockReservado, joinReserva())
+      .leftJoin(...joinStock(disp))
       .where(and(whereMarcas, sql`nullif(${marcaSql}, '') is not null`))
       .groupBy(marcaSql)
       .orderBy(sql`count(*) desc`, sql`${marcaSql} asc`),
@@ -1675,12 +1682,12 @@ export async function getFacetas(
       .from(crmCatalogo)
       .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
       .leftJoin(crmOverlay, joinOverlay())
-      .leftJoin(stockReservado, joinReserva())
+      .leftJoin(...joinStock(disp))
       .where(wherePrecio),
     filtros.sinFacetaAtributos
       ? Promise.resolve([])
-      : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros)),
-    conPotencia ? consultaRangoPotencia(wherePotencia).then(([r]) => r) : Promise.resolve(undefined),
+      : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros), disp),
+    conPotencia ? consultaRangoPotencia(wherePotencia, disp).then(([r]) => r) : Promise.resolve(undefined),
     facetasPorTipoDe(filtros, soloVisibles, disp),
   ]);
 
@@ -1724,7 +1731,7 @@ export const getCategorias = cache(async function getCategorias(
   // lo que se publica de verdad (mismo WHERE que la grilla sin filtros).
   const arbol = await getArbolCategorias();
   if (arbol.length) {
-    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp));
+    const conteos = await conteoPorCategoriaPropia(condicionesDe({}, APLICAR_TODOS, soloVisibles, disp), disp);
     return enArbolConConteo(arbol, conteos)
       .filter((c) => c.nivel === 1)
       .map((c) => c.label);

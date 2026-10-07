@@ -445,9 +445,8 @@ function FiltroPotencia({
 }
 
 /**
- * Los grupos por tipo de producto (`Facetas.porClave`): una lista de casillas por clave de lista, con
- * todas sus opciones a la vista (sin "Ver todas": son pocas y comparar entre ellas es lo que se busca),
- * y un slider por clave de rango. La potencia sigue en
+ * Los grupos por tipo de producto (`Facetas.porClave`): una lista de casillas por clave de lista,
+ * plegada (sólo el título; al abrirla, todas sus opciones, sin "Ver todas") y un slider por clave de rango. La potencia sigue en
  * `potencia_min`/`potencia_max` (una sola representación); el resto de los rangos, en `?car=`.
  */
 function GruposPorTipo({ grupos, estado, ir }: { grupos: FacetaClave[]; estado: EstadoCatalogo; ir: Ir }) {
@@ -459,6 +458,8 @@ function GruposPorTipo({ grupos, estado, ir }: { grupos: FacetaClave[]; estado: 
           {g.control === "lista" ? (
             <FacetGroup
               title={g.titulo}
+              // Cerrado: sólo el título; se abre al tocarlo (y arranca abierto si tiene algo tildado).
+              collapsible
               items={itemsDeFacetaClave(g, estado.caracteristicas)}
               onToggle={(valor, tildado) =>
                 ir({ caracteristicas: alternarCar(estado.caracteristicas, g.clave, valor, tildado) })

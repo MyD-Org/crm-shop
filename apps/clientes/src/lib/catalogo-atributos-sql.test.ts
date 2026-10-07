@@ -36,15 +36,24 @@ const ctxFacetas: ContextoAtributos = { texto: sql`TEXTO`, attrs: sql`ATTRS` };
 const ctxSinEstructurados: ContextoAtributos = { texto: sql`TEXTO` };
 
 const crit = (id: string): CriterioEstructurado => atributoPorId(id)!.estructurado!;
+/** El patrón de rango "a-b" que `criterioSql` manda como parámetro. */
+const RANGO = "^[0-9]+([.][0-9]+)?-[0-9]+([.][0-9]+)?$";
 
 describe("contradiccionSql", () => {
   it("numérico: hay dato y NO cumple (coalesce a falso para que nunca sea NULL)", () => {
-    const { sql: texto, params } = render(contradiccionSql(crit("corriente_a:20"), sql`VN`, sql`VT`));
+    const { sql: texto, params } = render(contradiccionSql(crit("sensibilidad_ma:30"), sql`VN`, sql`VT`));
     expect(texto).toContain("VN is not null");
     expect(texto).not.toContain("VT is not null");
     expect(texto).toContain("not coalesce(");
     expect(texto).toContain(", false)");
-    expect(params).toEqual([20]);
+    expect(params).toEqual([30]);
+  });
+
+  it("corriente: el dato puede ser un número o el rango de regulación en texto (relé térmico 4-6)", () => {
+    const { sql: texto, params } = render(contradiccionSql(crit("corriente_a:5"), sql`VN`, sql`VT`));
+    expect(texto).toContain("VN is not null or VT is not null");
+    expect(texto).toContain("split_part(VT, '-', 1)::numeric <= $");
+    expect(params).toEqual([5, RANGO, 5, 5]);
   });
 
   it("de texto (zócalo): usa valor_texto", () => {
@@ -63,21 +72,22 @@ describe("contradiccionSql", () => {
 
 describe("sinContradiccionSql", () => {
   it("ruta existe: NOT EXISTS con la clave como parámetro y el valor en params", () => {
-    const { sql: texto, params } = render(sinContradiccionSql(ctxWhere(), crit("corriente_a:20"))!);
+    const { sql: texto, params } = render(sinContradiccionSql(ctxWhere(), crit("sensibilidad_ma:30"))!);
     expect(texto.startsWith("not exists (")).toBe(true);
     expect(texto).toContain("clave = $1");
     expect(texto).toContain("not coalesce(");
-    expect(params).toEqual(["corriente_a", 20]);
-    expect(texto).not.toMatch(/\b20\b/);
+    expect(params).toEqual(["sensibilidad_ma", 30]);
+    expect(texto).not.toMatch(/\b30\b/);
   });
 
   it("ruta attrs (jsonb): el mismo resultado booleano, sin tocar la tabla", () => {
     const { sql: texto, params } = render(sinContradiccionSql(ctxFacetas, crit("corriente_a:20"))!);
     expect(texto.startsWith("not (")).toBe(true);
     expect(texto).toContain("(ATTRS -> 'corriente_a') ->> 'n'");
+    expect(texto).toContain("(ATTRS -> 'corriente_a') ->> 't'");
     expect(texto).toContain("is not null");
     expect(texto).toContain("not coalesce(");
-    expect(params).toEqual([20]);
+    expect(params).toEqual([20, RANGO, 20, 20]);
   });
 
   it("ruta attrs con un zócalo lee el texto del jsonb", () => {
@@ -147,7 +157,7 @@ describe("filtroAtributosSql con ids dinámicos", () => {
     expect(texto.match(/not exists/g)).toHaveLength(3);
     // ((no contradice corriente 20 o no contradice corriente 25) y no contradice polos 2)
     expect(texto).toMatch(/^\(\(not exists \([^]*\) or not exists \([^]*\)\) and not exists \([^]*\)\)$/);
-    expect(params).toEqual(["corriente_a", 20, "corriente_a", 25, "polos", 2]);
+    expect(params).toEqual(["corriente_a", 20, RANGO, 20, 20, "corriente_a", 25, RANGO, 25, 25, "polos", 2]);
   });
 
   it("mezcla con el diccionario: el id estático sigue como antes (patrón o estructurado)", () => {

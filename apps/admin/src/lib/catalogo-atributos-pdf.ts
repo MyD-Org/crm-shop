@@ -64,6 +64,10 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
     'Diámetro en milímetros (número, p. ej. 20 o 32) de un caño, tubo, conector, unión, curva, grampa de caño o cablecanal redondo. SOLO el diámetro exterior o nominal del caño; no la sección de un cable ni un espesor.',
   ancho_mm:
     'Ancho en milímetros (entero, p. ej. 100 o 300) de una bandeja portacables o de su tapa o accesorio. SOLO el ancho (el primer número de "100/50"); no el alto ni el largo.',
+  dimerizable:
+    '"si" o "no": si la ficha dice que ESTE producto (lámpara, panel, tira LED o driver) es dimerizable ("Dimerizable: Sí", "Dimmable", "regulable con dimmer TRIAC") o que no lo es ("No dimerizable"). null si no lo dice. No lo de un dimmer ni "compatible con dimmer" de otro producto.',
+  modulos:
+    'Cantidad de módulos DIN (entero, p. ej. 12 o 36) de un gabinete, caja o tablero ("12 módulos DIN", "p/12 polos", "10 bocas"). null para cualquier otro producto; no son los módulos de una caja de teclas y tomas.',
 }
 
 /**

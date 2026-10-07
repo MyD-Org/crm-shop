@@ -3690,6 +3690,58 @@
           "confidence": 0.92
         }
       }
+    },
+    "rele termico 5a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reles_termicos",
+          "confidence": 1
+        }
+      }
+    },
+    "guardamotor 4a": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reles_termicos",
+          "confidence": 0.56
+        }
+      }
     }
   }
 }

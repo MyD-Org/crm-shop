@@ -261,7 +261,9 @@ describe("criterioDeMedida (CriterioEstructurado)", () => {
   const c = (id: string) => criterioDeMedida(leerIdMedida(id)!);
 
   it("eq numérica, tensión con rango nominal, IP mínimo, textos y banda", () => {
-    expect(c("corriente_a:20")).toEqual({ clave: "corriente_a", numeros: [20] });
+    // Corriente también con `enRango`: un relé térmico o guardamotor de regulación "a-b" cumple lo que cae adentro.
+    expect(c("corriente_a:20")).toEqual({ clave: "corriente_a", numeros: [20], enRango: 20 });
+    expect(c("corriente_a:1.6")).toEqual({ clave: "corriente_a", numeros: [1.6], enRango: 1.6 });
     expect(c("polos:2")).toEqual({ clave: "polos", numeros: [2] });
     expect(c("tension_v:110")).toEqual({ clave: "tension_v", numeros: [110], enRango: 110 });
     expect(c("ip:54")).toEqual({ clave: "ip", desde: 54 });

@@ -160,7 +160,10 @@ describe("facetas con una medida activa", () => {
     const marcas = consultas.find((c) => c.sql.includes("group by (case when"))!;
     expect(cuenta(marcas.sql, NOT_EXISTS)).toBe(1);
     const atributos = consultas.find((c) => c.sql.includes("count(*) filter"))!;
-    expect(atributos.sql).toMatch(/not \(\(\("filas_atributos"\."attrs" -> 'corriente_a'\) ->> 'n'\)::numeric is not null/);
+    // Hay dato si hay número o rango de regulación en texto (relé térmico "4-6").
+    expect(atributos.sql).toMatch(
+      /not \(\(\(\("filas_atributos"\."attrs" -> 'corriente_a'\) ->> 'n'\)::numeric is not null or \(\("filas_atributos"\."attrs" -> 'corriente_a'\) ->> 't'\) is not null\)/,
+    );
     expect(atributos.params).toContain(20);
     expect(f.atributos.every((a) => !a.label.includes(":"))).toBe(true);
   });

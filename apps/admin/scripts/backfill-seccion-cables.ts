@@ -1,9 +1,10 @@
 /**
  * Backfill por NOMBRE de UNA clave (fuente 'nombre'), elegida con `--clave`:
  * - numéricas: `seccion_mm2` (cables, por defecto), `diametro_mm` (caños y accesorios de caño), `ancho_mm`
- *   (bandejas y sus accesorios), `polos` ("2 POLOS"), `largo_m` (incluye "120CM" de tubos y listones);
- * - de texto (valor_texto): `montaje` (por familia: plafón/aplique/estanco → aplicar, araña → colgante) y
- *   `tono` (también desde WW/CW/NW);
+ *   (bandejas y sus accesorios), `polos` ("2 POLOS"), `largo_m` (incluye "120CM" de tubos y listones),
+ *   `modulos` (módulos DIN de gabinetes y cajas: "p/12 Mod DIN", "12 polos", "10 bocas");
+ * - de texto (valor_texto): `montaje` (por familia: plafón/aplique/estanco → aplicar, araña → colgante),
+ *   `tono` (también desde WW/CW/NW) y `dimerizable` ("si"/"no": "DIMERIZABLE", "DIMEABLE", "NO DIMERIZABLE");
  * - `corriente_a`: SÓLO el rango de regulación de relés térmicos y guardamotores ("4-6A" → valor_texto "4-6",
  *   valor_num 6). La corriente suelta no la toca (la escribe la sync).
  *
@@ -17,7 +18,7 @@
  *   DATABASE_URL="<conexión de la base>" npx tsx scripts/backfill-seccion-cables.ts --tenant <id> [--clave montaje]            # dry-run
  *   DATABASE_URL="<conexión de la base>" npx tsx scripts/backfill-seccion-cables.ts --tenant <id> [--clave montaje] --aplicar
  *
- * diametro_mm y ancho_mm exigen la migración 0070 en la base de destino (si no, el CHECK de `clave` rechaza el INSERT).
+ * diametro_mm y ancho_mm exigen la migración 0070, y modulos y dimerizable la 0072, en la base de destino (si no, el CHECK de `clave` rechaza el INSERT).
  *
  * Sin DATABASE_URL usa la base local. La próxima sync de Alegra escribe lo mismo sola (el extractor
  * es el mismo): este script sólo adelanta el resultado. Correrlo con --aplicar DESPUÉS de mergear el

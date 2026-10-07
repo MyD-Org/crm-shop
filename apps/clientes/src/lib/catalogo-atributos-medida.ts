@@ -57,7 +57,7 @@ export const RANGOS: Readonly<Partial<Record<ClaveMedida, readonly [number, numb
 };
 
 /** Claves que el Shop filtra y muestra pero que el buscador no lee de una consulta (no son `ClaveMedida`). */
-export type ClaveSoloFaceta = "diametro_mm" | "ancho_mm";
+export type ClaveSoloFaceta = "diametro_mm" | "ancho_mm" | "modulos";
 
 /**
  * Rango válido de las claves sólo facetables. Espejo de `DEFINICION_ATRIBUTOS.rango` del CRM (lo hace cumplir
@@ -67,6 +67,7 @@ export type ClaveSoloFaceta = "diametro_mm" | "ancho_mm";
 export const RANGOS_SOLO_FACETA: Readonly<Record<ClaveSoloFaceta, readonly [number, number]>> = {
   diametro_mm: [5, 200],
   ancho_mm: [30, 1000],
+  modulos: [1, 200],
 };
 
 /** Rango válido de cualquier clave numérica que el Shop sabe validar (medidas del buscador y sólo facetables). */
@@ -270,14 +271,15 @@ export function idDeMedida(m: EntradaMedida): string | null {
 
 /**
  * Qué valor de `catalog_atributos` cumple la medida (mismo tipo que usa el diccionario):
- * eq numérica ⇒ `numeros`; tensión ⇒ también `enRango` (un "85-265" cumple 110); ip ⇒ `desde`
+ * eq numérica ⇒ `numeros`; tensión y corriente ⇒ también `enRango` (un "85-265" cumple 110; un relé térmico
+ * o un guardamotor de regulación "4-6" cumple 5 A, aunque su `valor_num` sea el tope); ip ⇒ `desde`
  * (IP NN o superior); zócalo, curva y medidas ⇒ `textos`; banda ⇒ `desde`/`hasta`.
  */
 export function criterioDeMedida(m: MedidaId): CriterioEstructurado {
   if (m.op === "entre") return { clave: m.clave, desde: m.min, hasta: m.max };
   if (typeof m.valor === "string") return { clave: m.clave, textos: [m.valor] };
   if (m.clave === "ip") return { clave: m.clave, desde: m.valor };
-  if (m.clave === "tension_v") return { clave: m.clave, numeros: [m.valor!], enRango: m.valor };
+  if (m.clave === "tension_v" || m.clave === "corriente_a") return { clave: m.clave, numeros: [m.valor!], enRango: m.valor };
   return { clave: m.clave, numeros: [m.valor!] };
 }
 

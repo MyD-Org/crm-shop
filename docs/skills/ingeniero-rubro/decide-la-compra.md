@@ -8,7 +8,7 @@ Claves existentes (`DEFINICION_ATRIBUTOS` del admin; facetables las de `REGISTRO
 `potencia_w`, `temperatura_k`, `tono`, `ip`, `flujo_lm`, `tension_v`, `zocalo`, `corriente_a`,
 `polos`, `seccion_mm2`, `medidas_mm`, `color`, `poder_corte_ka`, `curva`, `sensibilidad_ma`,
 `largo_m`, `montaje`, `angulo_grados`, `leds_m`, `potencia_w_m`, `leds_rollo`, `diametro_mm`,
-`ancho_mm`. No facetables hoy: `medidas_mm`, `leds_m`, `potencia_w_m`, `leds_rollo`.
+`ancho_mm`, `dimerizable` (texto si/no), `modulos` (módulos DIN de gabinetes y cajas). No facetables hoy: `medidas_mm`, `leds_m`, `potencia_w_m`, `leds_rollo`.
 
 "Sin clave" = el dato importa pero no existe como atributo (va en el nombre o es candidato a clave
 nueva; una clave nueva es migración del CRM + contrato, no se agrega de paso).
@@ -25,7 +25,7 @@ nueva; una clave nueva es migración del CRM + contrato, no se agrega de paso).
 | Relé térmico | Rango en A | Va con el contactor del mismo tamaño |
 | Protector de tensión | `corriente_a` (o potencia admisible), `montaje` (din / enchufable) | |
 | Descargador | `polos`, corriente de descarga (kA, sin clave), `tension_v` | |
-| Gabinete / tablero | Cantidad de módulos/bocas (sin clave), `montaje` (embutir/aplicar), `ip`, `medidas_mm` | "Tablero 12 bocas" = capacidad |
+| Gabinete / tablero | `modulos` (módulos DIN = bocas = polos; no los "módulos" de una caja de teclas y tomas), `montaje` (embutir/aplicar), `ip`, `medidas_mm` | "Tablero 12 bocas" = capacidad |
 
 ## Llaves, tomas y conexión
 
@@ -57,7 +57,7 @@ nueva; una clave nueva es migración del CRM + contrato, no se agrega de paso).
 
 | Tipo | Decide | Notas |
 |---|---|---|
-| Lámpara (bulbo) | `zocalo` (E27 rosca común, E14 rosca fina), `potencia_w`, `tono`/`temperatura_k` | Equivalencia de la calle: "9 W LED ≈ 60 W de las viejas". Cálido ≤ 3500 K, neutro ≤ 5000 K, frío > 5000 K |
+| Lámpara (bulbo) | `zocalo` (E27 rosca común, E14 rosca fina), `potencia_w`, `tono`/`temperatura_k`, `dimerizable` (si lo va a usar con un dimmer) | Equivalencia de la calle: "9 W LED ≈ 60 W de las viejas". Cálido ≤ 3500 K, neutro ≤ 5000 K, frío > 5000 K |
 | Dicroica | `zocalo` (GU10 220 V / MR16 12 V), `potencia_w`, `tono`, `angulo_grados` | MR16 necesita trafo/driver de 12 V |
 | Tubo LED | Largo (60 / 120 cm: `largo_m` 0,6 / 1,2), `potencia_w` (9 / 18 W), `tono`, conexión (un/dos extremos — sin clave); zócalo G13 | Reemplaza al fluorescente de 18/36 W |
 | Panel / plafón | `potencia_w`, `medidas_mm` o diámetro, `montaje` (embutir/aplicar), `tono` | "60x60" = panel de 600 × 600 mm (cielorraso) |

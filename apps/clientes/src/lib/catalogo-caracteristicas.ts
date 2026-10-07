@@ -31,6 +31,8 @@ export const CLAVES_ESTRUCTURADAS = [
   "leds_rollo",
   "diametro_mm",
   "ancho_mm",
+  "dimerizable",
+  "modulos",
 ] as const;
 export type ClaveEstructurada = (typeof CLAVES_ESTRUCTURADAS)[number];
 
@@ -63,6 +65,8 @@ export const TIPO: Record<ClaveEstructurada, "num" | "texto"> = {
   leds_rollo: "num",
   diametro_mm: "num",
   ancho_mm: "num",
+  dimerizable: "texto",
+  modulos: "num",
 };
 
 /** Un valor tal como viaja en la consulta: `n` = valor_num, `t` = valor_texto. */
@@ -120,6 +124,8 @@ export const ETIQUETA: Record<ClaveEstructurada, string> = {
   leds_rollo: "LED por rollo",
   diametro_mm: "Diámetro",
   ancho_mm: "Ancho",
+  dimerizable: "Dimerizable",
+  modulos: "Módulos",
 };
 
 /** Tipo de luz (clave `tono`): blanca, de color o RGB. Mismo vocabulario que el CRM. */
@@ -221,6 +227,10 @@ export function formatoValor(clave: ClaveEstructurada, v: ValorEstructurado | un
       return v.n != null ? `${num2(v.n)} mm` : null;
     case "ancho_mm":
       return v.n != null ? `${num2(v.n)} mm` : null;
+    case "dimerizable":
+      return v.t === "si" ? "Sí" : v.t === "no" ? "No" : null;
+    case "modulos":
+      return v.n != null && Number.isInteger(v.n) && v.n >= 1 ? (v.n === 1 ? "1 módulo" : `${num(v.n)} módulos`) : null;
   }
 }
 

@@ -95,6 +95,7 @@ export async function POST(req: Request) {
     pagoMetodo?: unknown;
     cuotas?: unknown;
     progresoCuotas?: unknown;
+    precioLineas?: unknown;
     conCuotas?: unknown;
   };
   try {
@@ -248,7 +249,14 @@ export async function POST(req: Request) {
         try {
           const q = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: alcanzada.idListaPrecios });
           if (!q.hayProblemas && q.total > 0) {
-            progreso = { ...progreso, montoCuota: montoPorCuota(q.total, alcanzada.cuotas) };
+            progreso = {
+              ...progreso,
+              montoCuota: montoPorCuota(q.total, alcanzada.cuotas),
+              // La ficha pide los totales por línea para calcular la cuota de su producto.
+              ...(body.precioLineas === true
+                ? { lineasAlcanzada: q.lineas.map((l) => ({ id: l.id, qty: l.qty, total: l.total })) }
+                : {}),
+            };
           }
         } catch (err) {
           console.error("[/api/carrito/cotizar] monto de la cuota alcanzada:", err);

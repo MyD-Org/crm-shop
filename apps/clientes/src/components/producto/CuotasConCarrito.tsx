@@ -48,7 +48,7 @@ export function useProgresoCuotasCarrito(productoId: string, qty: number, activo
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: ctrl.signal,
-          body: JSON.stringify({ items: lineas, entregaTipo: "retiro", progresoCuotas: true }),
+          body: JSON.stringify({ items: lineas, entregaTipo: "retiro", progresoCuotas: true, precioLineas: true }),
         });
         if (!r.ok) {
           // 429 o error: es un dato accesorio, no se muestra nada ni se avisa.

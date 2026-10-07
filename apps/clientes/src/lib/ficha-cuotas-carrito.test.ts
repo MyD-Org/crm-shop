@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cuotasHastaFicha, lineasConProducto, metaCuotasFicha } from "./ficha-cuotas-carrito";
+import { cuotasFichaConCarrito, cuotasHastaFicha, lineasConProducto, metaCuotasFicha } from "./ficha-cuotas-carrito";
 import { TEXTOS_CUOTAS } from "./cuotas-textos";
 
 const sinNbsp = (s: string | undefined) => s?.replace(/[  ]/g, " ");
@@ -28,43 +28,64 @@ describe("lineasConProducto", () => {
   });
 });
 
-describe("metaCuotasFicha", () => {
-  it("llega al nivel más alto: una línea sin monto, barra llena y énfasis en las cuotas", () => {
-    for (const montoCuota of [undefined, 10000]) {
-      const m = metaCuotasFicha({ cuotasActuales: 12, proximo: null, pct: 100, montoCuota });
-      expect(m).toMatchObject({ id: "cuotas", alcanzada: true, pct: 100 });
-      expect(m?.texto).toBe("Con su carrito, su compra ya tiene 12 cuotas sin interés.");
-      expect(m?.enfasis).toBe("12 cuotas sin interés");
-      expect(m?.textoAlcanzado).toBeUndefined();
-    }
+const solo6 = { cuotas: 6, total: 11335.38, montoCuota: 1889.23, sinInteres: true as const };
+
+describe("cuotasFichaConCarrito", () => {
+  it("nivel mayor que el del producto solo: el monto es el de ESTE producto a la lista alcanzada, por la cantidad", () => {
+    const p = { cuotasActuales: 8, proximo: null, pct: 100, montoCuota: 9999, lineasAlcanzada: [{ id: "1", qty: 3, total: 90000 }, { id: "10", qty: 2, total: 20000 }] };
+    expect(cuotasFichaConCarrito(p, "10", 2, solo6)).toEqual({ cuotas: 8, total: 20000, montoCuota: 2500 });
+    // la cantidad elegida manda: unitario 10.000 × 3 ÷ 8 = 3.750
+    expect(cuotasFichaConCarrito(p, "10", 3, solo6)).toEqual({ cuotas: 8, total: 30000, montoCuota: 3750 });
   });
-  it("llega a un nivel y hay otro más alto: lo que ya tiene (sin el monto de la compra) y cuánto falta", () => {
-    const m = metaCuotasFicha({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 15000, minimo: 60000 }, pct: 75, montoCuota: 4299.16 });
-    expect(m).toMatchObject({ alcanzada: false, pct: 75 });
-    expect(m?.textoAlcanzado).toBe("Con su carrito, ya tiene 8 cuotas sin interés.");
-    expect(m?.enfasisAlcanzado).toBe("8 cuotas sin interés");
+  it("redondea la cuota como montoPorCuota (centavo hacia arriba)", () => {
+    const p = { cuotasActuales: 3, proximo: null, pct: 100, lineasAlcanzada: [{ id: "10", qty: 1, total: 100 }] };
+    expect(cuotasFichaConCarrito(p, "10", 1, null)?.montoCuota).toBe(33.34);
+  });
+  it("sin la línea del producto usa el precio de la lista que ya muestra la línea", () => {
+    const p = { cuotasActuales: 8, proximo: null, pct: 100 };
+    expect(cuotasFichaConCarrito(p, "10", 1, solo6)).toEqual({ cuotas: 8, total: 11335.38, montoCuota: 1416.93 });
+  });
+  it("sin precio por ningún lado: null (no se inventa un monto)", () => {
+    expect(cuotasFichaConCarrito({ cuotasActuales: 8, proximo: null, pct: 100 }, "10", 1, null)).toBeNull();
+  });
+  it("mismo nivel que el producto solo, menor, sin nivel o sin progreso: null", () => {
+    expect(cuotasFichaConCarrito({ cuotasActuales: 6, proximo: null, pct: 100 }, "10", 1, solo6)).toBeNull();
+    expect(cuotasFichaConCarrito({ cuotasActuales: null, proximo: null, pct: 100 }, "10", 1, solo6)).toBeNull();
+    expect(cuotasFichaConCarrito(null, "10", 1, solo6)).toBeNull();
+  });
+});
+
+describe("metaCuotasFicha", () => {
+  it("la línea ya dice el nivel y hay uno más alto: sólo cuánto falta, con la barra y sin 'ya tiene'", () => {
+    const m = metaCuotasFicha({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 15000, minimo: 60000 }, pct: 75 }, true);
+    expect(m).toMatchObject({ id: "cuotas", alcanzada: false, pct: 75 });
     expect(sinNbsp(m?.texto)).toBe("Sume $ 15.000 más y pague en 12 cuotas sin interés.");
     expect(sinNbsp(m?.enfasis)).toBe("$ 15.000");
-    expect(JSON.stringify(m)).not.toContain("4.299");
+    expect(m?.textoAlcanzado).toBeUndefined();
   });
-  it("no llega: cuánto falta, con la barra", () => {
-    const m = metaCuotasFicha({ cuotasActuales: null, proximo: { cuotas: 6, falta: 15000, minimo: 60000 }, pct: 75 });
-    expect(m).toMatchObject({ id: "cuotas", alcanzada: false, pct: 75 });
-    expect(sinNbsp(m?.texto)).toBe("Con su carrito y este producto, sume $ 15.000 más y pague en 6 cuotas sin interés.");
-    expect(sinNbsp(m?.enfasis)).toBe("$ 15.000");
+  it("la línea ya dice el nivel y no hay más: sin recuadro (no repetir ni contradecir)", () => {
+    expect(metaCuotasFicha({ cuotasActuales: 12, proximo: null, pct: 100 }, true)).toBeNull();
+  });
+  it("sin nivel mayor: cuánto falta con su carrito y este producto", () => {
+    for (const actuales of [null, 6]) {
+      const m = metaCuotasFicha({ cuotasActuales: actuales, proximo: { cuotas: 8, falta: 15000, minimo: 60000 }, pct: 75 });
+      expect(sinNbsp(m?.texto)).toBe("Con su carrito y este producto, sume $ 15.000 más y pague en 8 cuotas sin interés.");
+      expect(sinNbsp(m?.enfasis)).toBe("$ 15.000");
+    }
   });
   it("sin progreso o sin nada que informar: null", () => {
     expect(metaCuotasFicha(null)).toBeNull();
     expect(metaCuotasFicha(undefined)).toBeNull();
     expect(metaCuotasFicha({ cuotasActuales: null, proximo: null, pct: 100 })).toBeNull();
+    expect(metaCuotasFicha({ cuotasActuales: 6, proximo: null, pct: 100 })).toBeNull();
   });
   it("textos en usted, sin voseo", () => {
     const textos = [
-      metaCuotasFicha({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 1, minimo: 2 }, pct: 50 }),
-      metaCuotasFicha({ cuotasActuales: 8, proximo: null, pct: 100 }),
+      metaCuotasFicha({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 1, minimo: 2 }, pct: 50 }, true),
       metaCuotasFicha({ cuotasActuales: null, proximo: { cuotas: 6, falta: 1, minimo: 2 }, pct: 50 }),
-    ].flatMap((m) => [m?.texto, m?.textoAlcanzado]).filter(Boolean).join(" ");
+    ].map((m) => m?.texto).join(" ") + TEXTOS_CUOTAS.conSuCarrito + TEXTOS_CUOTAS.conSuCarritoAlcanza;
     expect(textos).not.toMatch(/\b(tu|tus|te|vos|sumá|pagá|tenés)\b/i);
+    expect(TEXTOS_CUOTAS.conSuCarrito).toBe("Con su carrito.");
   });
 });
 

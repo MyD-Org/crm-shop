@@ -42,7 +42,7 @@ Confianza: **alta** puede filtrar duro (los que cumplen primero, sin excluir); *
 | **"multimetro 600v"**, "pinza 400a" | rango de medición | tension_v=600 / corriente_a=400 (alta) ✘ lectura equivocada |
 | **"contactor 25a bobina 220v"** | 25 A AC-3, bobina 220 V | corriente_a=25 ✔, tension_v=220 ✘ (es la bobina) |
 | "rack 600x600 P.450" | ancho × alto × profundidad (mm) | nada (sin contexto de panel) — aceptable |
-| "gabinete 12 modulos" | capacidad | nada — aceptable (sin clave) |
+| "gabinete 12 modulos" | capacidad | nada — aceptable (la clave `modulos` existe en datos; la búsqueda no la lee todavía) |
 | "utp cat6 4p" | 4 pares | nada ✔ (contexto telecom) |
 
 Los ✘ son **candidatos**, no órdenes: cada uno se trata con el proceso del `SKILL.md` (hipótesis →

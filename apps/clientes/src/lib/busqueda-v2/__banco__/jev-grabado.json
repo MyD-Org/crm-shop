@@ -3301,6 +3301,162 @@
         }
       }
     },
+    "tira de led": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "neones_y_tiras_de_led",
+          "confidence": 1
+        }
+      }
+    },
+    "luz decorativa": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.84
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.95
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.35
+        }
+      }
+    },
+    "luz de mesa": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.82
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "veladores",
+          "confidence": 0.95
+        }
+      }
+    },
+    "algo para ajustar un tornillo": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "herramientas_de_electricista",
+          "confidence": 0.52
+        }
+      }
+    },
+    "foco para usar desde el celular": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.53
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.95
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.93
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.96
+        }
+      }
+    },
+    "foco para usar desde el celu": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.63
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.89
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.94
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.8
+        }
+      }
+    },
     "proyector para patio": {
       "principal": {
         "intencion": {

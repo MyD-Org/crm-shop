@@ -48,6 +48,13 @@ import { activoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
+import {
+  PATRON_CATEGORIA_ACCESORIO,
+  PATRON_NOMBRE_ACCESORIO,
+  idsCategoriasAccesorio,
+  literalUuids,
+  ordenIntercaladoArbol,
+} from "./catalogo-destacados";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
@@ -1208,7 +1215,91 @@ function condicionesDe(
 }
 
 /**
- * ORDER BY según el criterio elegido. El default (`nombre`) es el alfabético.
+ * Lo que el orden "destacados" necesita del árbol de categorías propias, ya calculado en TS
+ * (catalogo-destacados.ts): el orden en que se intercalan las categorías (alternando raíces) y
+ * las categorías de accesorios.
+ */
+interface ContextoDestacados {
+  intercalado: string[];
+  accesorio: string[];
+}
+
+/** Contexto de destacados a partir del árbol (vacío = el tenant no armó árbol). */
+function contextoDestacados(arbol: NodoCategoria[]): ContextoDestacados {
+  return { intercalado: ordenIntercaladoArbol(arbol), accesorio: idsCategoriasAccesorio(arbol) };
+}
+
+/**
+ * ORDER BY de "Destacados" (default sin búsqueda), claves lexicográficas sobre TODO el conjunto
+ * filtrado (no sólo la página, así la paginación queda estable):
+ * 1. (pendiente: destacados a mano del admin, `catalog_overlay.orden`, cuando el Shop declare la
+ *    columna en crm.ts) — hoy no se lee;
+ * 2. escalón: con stock → con foto → no accesorio → stock holgado (≥ STOCK_HOLGADO o no
+ *    inventariable). Accesorio = categoría propia o ancestra, o de Alegra, que arranca con
+ *    accesorios/repuestos, o nombre que arranca por una palabra de accesorio (catalogo-destacados.ts);
+ * 3. ronda: el puesto del producto dentro de su escalón y su subcategoría. Ordenar por la ronda
+ *    intercala las subcategorías (el 1.º de cada una, después el 2.º…). Dentro de la subcategoría el
+ *    puesto NO sale del stock bruto (premiaba consumibles de miles de unidades) sino del precio en
+ *    tramos (×√10, de mayor a menor: el producto "principal" suele valer más que sus consumibles);
+ * 4. dentro de la ronda, la subcategoría según `ordenIntercaladoArbol`: alterna raíces (la 1.ª
+ *    subcategoría de cada raíz, después la 2.ª…), así la vidriera general mezcla rubros; con una
+ *    categoría elegida es el orden de lectura de su subárbol. Sin árbol, la categoría de Alegra;
+ * 5. nombre y `alegra_id`: desempate estable.
+ * Sólo ordena: no saca a nadie del resultado.
+ */
+/**
+ * Literal de texto de SQL para constantes PROPIAS (patrones de catalogo-destacados.ts y literales
+ * de uuids ya validados): nunca para datos de afuera. Tira si trae una comilla.
+ */
+function literal(texto: string) {
+  if (texto.includes("'") || texto.includes("\\")) throw new Error("literal: texto no apto");
+  return sql.raw(`'${texto}'`);
+}
+
+/** Unidades desde las que el stock de un destacado se considera holgado (ver `ordenDestacadosSql`). */
+const STOCK_HOLGADO = 3;
+
+function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilidad) {
+  // Postgres calcula UNA vez las expresiones idénticas que se repiten (la clave del PARTITION BY y el
+  // argumento de `first_value`), y dos parámetros ($6 y $9) no son idénticos. Por eso todo va como
+  // literal: las constantes propias con `literal` y el stock por sucursal con `inlineParams()`
+  // (su subconsulta por fila es lo más caro con `disp`).
+  const stock = disp ? stockSucursalSql(disp).inlineParams() : stockSql;
+  const holgado = sql.raw(String(STOCK_HOLGADO));
+  // Stock en 0..STOCK_HOLGADO (null = no inventariable = holgado), evaluado una sola vez.
+  const nivelStock = sql`greatest(least(coalesce(${stock}, ${holgado}), ${holgado}), 0)`;
+  const sinFoto = sql`(case when jsonb_typeof(${crmOverlay.fotos}) = 'array' and jsonb_array_length(${crmOverlay.fotos}) > 0 then 0 else 1 end)`;
+  const accesorio = sql`(case when ${crmOverlay.categoriaId} = any(${literal(literalUuids(ctx.accesorio))}::uuid[])
+      or coalesce(btrim(${sinTildes(crmCategoriasAlegra.name)}) ~ ${literal(PATRON_CATEGORIA_ACCESORIO)}, false)
+      or btrim(lower(${nombreExhibidoSql})) ~ ${literal(PATRON_NOMBRE_ACCESORIO)}
+    then 1 else 0 end)`;
+  const grupo = sql`coalesce(${crmOverlay.categoriaId}::text, ${crmCategoriasAlegra.name}, '')`;
+  // Precio aproximado y barato (el primero de la lista, sin IVA): para tramos de ×√10 alcanza, y
+  // evita el `jsonb_array_elements` por fila de `precioSql`.
+  const precioAprox = sql`(case when jsonb_typeof(${preciosSql}) = 'array' then (${preciosSql}->0->>'price')::numeric end)`;
+  // En float8: `log` de numeric es de precisión arbitraria y costaba ~15 µs por fila.
+  const tramoPrecio = sql`floor(log(greatest(coalesce(${precioAprox}, 1), 1)::float8) * 2)`;
+  // Escalón como UNA clave: sin stock (8) > sin foto (4) > accesorio (2) > stock corto (1). La
+  // ventana lo calcula una vez por fila y el ORDER BY lo lee de ella (`first_value`): repetir las
+  // expresiones afuera hacía que Postgres las evaluara de nuevo.
+  const escalon = sql`((case ${nivelStock} when 0 then 8 when ${holgado} then 0 else 1 end) + ${sinFoto} * 4 + ${accesorio} * 2)`;
+  const ventana = sql`over (
+    partition by ${escalon}, ${grupo}
+    order by ${tramoPrecio} desc, ${crmCatalogo.name}, ${crmCatalogo.alegraId})`;
+  const posicionGrupo = sql`array_position(${literal(literalUuids(ctx.intercalado))}::uuid[], ${crmOverlay.categoriaId})`;
+  return [
+    sql`first_value(${escalon}) ${ventana} asc`,
+    sql`row_number() ${ventana} asc`,
+    sql`${posicionGrupo} asc nulls last`,
+    sql`${grupo} asc`,
+    asc(crmCatalogo.name),
+    asc(crmCatalogo.alegraId),
+  ];
+}
+
+/**
+ * ORDER BY según el criterio elegido. Sin búsqueda el default es `destacados`
+ * (ver `ordenDestacadosSql`); `nombre` es el alfabético.
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
  *
@@ -1225,7 +1316,12 @@ const desempateRelevancia = (disp?: ContextoDisponibilidad, categorias?: string[
   asc(crmCatalogo.name),
 ];
 
-function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad) {
+function ordenDe(
+  orden: OrdenCatalogo,
+  filtros: FiltrosCatalogo,
+  disp?: ContextoDisponibilidad,
+  destacados?: ContextoDestacados,
+) {
   switch (orden) {
     case "relevancia": {
       // Búsqueda v2: el puntaje del plan, aunque no quede texto filtrando.
@@ -1247,6 +1343,8 @@ function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: Contexto
       return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];
     case "precio-desc":
       return [sql`${precioExhibidoSql} desc`, asc(crmCatalogo.name)];
+    case "destacados":
+      return ordenDestacadosSql(destacados ?? contextoDestacados([]), disp);
     default:
       return [asc(crmCatalogo.name)];
   }
@@ -1305,8 +1403,13 @@ export async function getPaginaCatalogo(opts: {
   const total = conteo?.total ?? 0;
   const paginas = Math.max(Math.ceil(total / porPagina), 1);
   const pagina = opts.sinConteo ? 1 : acotarPagina(opts.pagina ?? 1, paginas);
+  const orden = opts.orden ?? ORDEN_DEFAULT;
+  const hayFilas = Boolean(total || opts.sinConteo);
+  // El árbol sólo hace falta para "destacados" (y sólo si hay algo que ordenar).
+  const destacados =
+    hayFilas && orden === "destacados" ? contextoDestacados(await getArbolCategorias()) : undefined;
 
-  const filas = total || opts.sinConteo
+  const filas = hayFilas
     ? await getDb()
         .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados))
         .from(crmCatalogo)
@@ -1314,7 +1417,7 @@ export async function getPaginaCatalogo(opts: {
         .leftJoin(crmOverlay, joinOverlay())
         .leftJoin(stockReservado, joinReserva())
         .where(where)
-        .orderBy(...ordenDe(opts.orden ?? ORDEN_DEFAULT, filtros, opts.disp))
+        .orderBy(...ordenDe(orden, filtros, opts.disp, destacados))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];

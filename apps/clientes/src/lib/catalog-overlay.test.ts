@@ -29,7 +29,7 @@ const JOIN_OVERLAY =
 describe("join al overlay", () => {
   it("la página del catálogo trae nombre y fotos del overlay", async () => {
     await getPaginaCatalogo({ soloVisibles: false });
-    const [conteo, pagina] = grabadora.consultas;
+    const [conteo, pagina] = sinLecturaDelArbol(grabadora.consultas);
     expect(conteo.sql).toMatch(JOIN_OVERLAY);
     expect(pagina.sql).toMatch(JOIN_OVERLAY);
     expect(pagina.sql).toContain('"catalog_overlay"."nombre"');
@@ -38,8 +38,8 @@ describe("join al overlay", () => {
 
   it("getCatalogo (home) también", async () => {
     await getCatalogo({ soloVisibles: false, limit: 10 });
-    expect(grabadora.consultas[0].sql).toMatch(JOIN_OVERLAY);
-    expect(grabadora.consultas[0].sql).toContain('"catalog_overlay"."nombre"');
+    expect(sinLecturaDelArbol(grabadora.consultas)[0].sql).toMatch(JOIN_OVERLAY);
+    expect(sinLecturaDelArbol(grabadora.consultas)[0].sql).toContain('"catalog_overlay"."nombre"');
   });
 
   it("las facetas joinean el overlay (para poder filtrar por visible)", async () => {
@@ -49,7 +49,7 @@ describe("join al overlay", () => {
 
   it("getCategorias no se toca", async () => {
     await getCategorias(false);
-    for (const c of grabadora.consultas) expect(c.sql).not.toContain("catalog_overlay");
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(c.sql).not.toContain("catalog_overlay");
   });
 });
 
@@ -67,7 +67,7 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
     // podría quedar con el valor de otro momento.
     setFlag("catalogo-solo-visibles", true);
     await getPaginaCatalogo({ soloVisibles: false });
-    for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(c.sql).not.toContain('"visible"');
   });
 
   it("apagado (default): ninguna consulta filtra por visible", async () => {
@@ -75,19 +75,19 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
     await getCatalogo({ soloVisibles: false, limit: 10 });
     await getFacetas({}, false);
     expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(7);
-    for (const c of grabadora.consultas) expect(c.sql).not.toContain('"visible"');
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(c.sql).not.toContain('"visible"');
   });
 
 
   it("encendido: conteo y página exigen visible = true", async () => {
     await getPaginaCatalogo({ soloVisibles: true, filtros: { categorias: ["ILUMINACION"] } });
-    expect(grabadora.consultas).toHaveLength(2);
-    for (const c of grabadora.consultas) exigeVisible(c);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(2);
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) exigeVisible(c);
   });
 
   it("encendido: la lectura de texto sin conteo (autocompletado y chat) exige visible = true", async () => {
     await getPaginaCatalogo({ soloVisibles: true, filtros: { texto: { q: "led" } }, orden: "relevancia", porPagina: 10, sinConteo: true });
-    exigeVisible(grabadora.consultas[0]);
+    exigeVisible(sinLecturaDelArbol(grabadora.consultas)[0]);
   });
 
   it("encendido: las facetas exigen visible = true (también el conteo de todo el catálogo)", async () => {
@@ -100,13 +100,13 @@ describe("soloVisibles (flag catalogo-solo-visibles, lo evalúa quien llama)", (
 
   it("encendido: el predicado de precio positivo se mantiene", async () => {
     await getPaginaCatalogo({ soloVisibles: true });
-    for (const c of grabadora.consultas) {
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) {
       expect(c.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
     }
   });
 
   it("encendido: getCategorias sigue sin tocar el overlay", async () => {
     await getCategorias(true);
-    for (const c of grabadora.consultas) expect(c.sql).not.toContain("catalog_overlay");
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) expect(c.sql).not.toContain("catalog_overlay");
   });
 });

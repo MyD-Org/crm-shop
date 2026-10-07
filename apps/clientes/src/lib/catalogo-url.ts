@@ -24,16 +24,21 @@ import { leerCar } from "@/lib/catalogo-car";
  * "Más vendidos" (`ventas`) ya no se ofrece: nunca tuvo un dato de ventas
  * detrás, ordenaba por nombre. Los links viejos con `orden=ventas` siguen
  * resolviendo (ver `comoOrden`).
+ *
+ * `destacados` es el orden automático sin búsqueda (con stock, con foto, no
+ * accesorios, subcategorías intercaladas; ver `ordenDestacadosSql` en catalog.ts).
+ * `nombre` sigue disponible a mano y en los links viejos que lo traen explícito.
  */
-export const ORDENES = ["relevancia", "nombre", "precio-asc", "precio-desc"] as const;
+export const ORDENES = ["relevancia", "destacados", "nombre", "precio-asc", "precio-desc"] as const;
 export type OrdenCatalogo = (typeof ORDENES)[number];
 /** Default SIN búsqueda. Con búsqueda es `relevancia` (ver `ordenPorDefecto`). */
-export const ORDEN_DEFAULT: OrdenCatalogo = "nombre";
+export const ORDEN_DEFAULT: OrdenCatalogo = "destacados";
 
 /**
  * El default depende de si hay texto buscado: con búsqueda, lo más parecido
- * primero; sin búsqueda, alfabético. "Relevancia" sin búsqueda no significa
- * nada, así que nunca es el orden de un estado sin `query`.
+ * primero; sin búsqueda, destacados. "Relevancia" sin búsqueda no significa
+ * nada, y "Destacados" con búsqueda taparía la relevancia: cada uno es sólo
+ * de su caso.
  */
 export function ordenPorDefecto(query: string | undefined): OrdenCatalogo {
   return query ? "relevancia" : ORDEN_DEFAULT;
@@ -177,13 +182,15 @@ export function comoPagina(v: ParamCrudo): number {
 /**
  * Valida un orden que viene de la URL. Cualquier cosa rara cae al default
  * (que depende de si hay búsqueda, ver `ordenPorDefecto`); `ventas` (links
- * viejos) también. `relevancia` sin búsqueda cae al alfabético.
+ * viejos) también. `relevancia` sin búsqueda cae a destacados y `destacados`
+ * con búsqueda, a relevancia.
  */
 export function comoOrden(v: ParamCrudo, query?: string): OrdenCatalogo {
   const s = primero(v);
   const porDefecto = ordenPorDefecto(query);
   if (s === ORDEN_ALIAS_VIEJO) return porDefecto;
   if (s === "relevancia" && !query) return ORDEN_DEFAULT;
+  if (s === "destacados" && query) return "relevancia";
   return (ORDENES as readonly string[]).includes(s ?? "")
     ? (s as OrdenCatalogo)
     : porDefecto;
@@ -355,7 +362,7 @@ export function filtrosDesfasados(
 
 /**
  * URL del catálogo para un estado dado. Omite lo que está en su default para
- * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=nombre&pagina=1`.
+ * que `/catalogo` siga siendo `/catalogo` y no `/catalogo?orden=destacados&pagina=1`.
  *
  * El orden de los parámetros es fijo (`q, categoria*, marca*, atr*, car*,
  * precio_min, precio_max, potencia_min, potencia_max, stock, retiro, orden, vista,
@@ -424,8 +431,10 @@ export function estadoConCambios(
     ("categorias" in cambios && !mismoConjunto(cambios.categorias ?? [], estado.categorias)) ||
     ("query" in cambios && cambios.query !== estado.query);
   if (cambiaConjunto && !("caracteristicas" in cambios)) nuevo.caracteristicas = [];
-  // Quitar la búsqueda deja sin sentido "Relevancia": vuelve al alfabético.
+  // Quitar la búsqueda deja sin sentido "Relevancia": vuelve a destacados. Y al revés: una
+  // búsqueda nueva sobre "Destacados" pasa a relevancia (destacados no ordena búsquedas).
   if (nuevo.orden === "relevancia" && !nuevo.query) nuevo.orden = ORDEN_DEFAULT;
+  if (nuevo.orden === "destacados" && nuevo.query) nuevo.orden = "relevancia";
   return nuevo;
 }
 

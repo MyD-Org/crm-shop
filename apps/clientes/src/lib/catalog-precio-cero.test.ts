@@ -28,14 +28,14 @@ const exigePrecioPositivo = (sql: string) =>
 describe("productos sin precio (precio 0)", () => {
   it("getCatalogo los excluye", async () => {
     await getCatalogo({ soloVisibles: false, limit: 10 });
-    expect(grabadora.consultas).toHaveLength(1);
-    exigePrecioPositivo(grabadora.consultas[0].sql);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(1);
+    exigePrecioPositivo(sinLecturaDelArbol(grabadora.consultas)[0].sql);
   });
 
   it("getPaginaCatalogo los excluye del conteo y de la página", async () => {
     await getPaginaCatalogo({ soloVisibles: false, pagina: 1 });
-    expect(grabadora.consultas).toHaveLength(2);
-    for (const c of grabadora.consultas) exigePrecioPositivo(c.sql);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(2);
+    for (const c of sinLecturaDelArbol(grabadora.consultas)) exigePrecioPositivo(c.sql);
   });
 
   it("getFacetas no los cuenta en categorías, marcas, rango de precio ni atributos", async () => {

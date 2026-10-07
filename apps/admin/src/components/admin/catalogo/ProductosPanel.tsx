@@ -17,10 +17,12 @@ import {
 } from "@myd-org/ui"
 import { ProductoDialog, caminoCategoria } from "./ProductoDialog"
 import { contarFotos } from "./FotosProducto"
+import { ORDEN_DESTACADO_SIN_POSICION } from "./destacado"
 import { SincronizarAlegra } from "./SincronizarAlegra"
 import { AyudaTooltip } from "../AyudaTooltip"
 import {
   AYUDA_CUENTA_ORIGEN,
+  AYUDA_DESTACADO,
   AYUDA_ESTADO,
   AYUDA_OCULTAR,
   AYUDA_OCULTO_EN,
@@ -84,7 +86,7 @@ interface Pendiente {
 const TODOS = "todos"
 
 /** Filtros que no son la búsqueda: cuentan para "Limpiar filtros". */
-const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "tag", "cuenta", "sucursal", "stockEn"] as const
+const CLAVES_FILTRO = ["categoria", "estado", "foto", "alegra", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn"] as const
 
 /** SKU con un botón para copiarlo sin abrir el producto (la fila entera abre el diálogo). */
 function Sku({ sku }: { sku: string }) {
@@ -286,8 +288,17 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
           <div className="text-xs" style={{ color: "var(--ink-faint)" }}>
             <Sku sku={p.sku} />
           </div>
-          {(p.cuenta || (hayVariasSucursales && p.ocultoEnSucursales.length > 0)) && (
+          {(p.orden !== null || p.cuenta || (hayVariasSucursales && p.ocultoEnSucursales.length > 0)) && (
             <div className="mt-1 flex flex-wrap gap-1">
+              {p.orden !== null && (
+                <Tooltip content={AYUDA_DESTACADO}>
+                  <span>
+                    <Badge tone="info">
+                      Destacado{p.orden !== ORDEN_DESTACADO_SIN_POSICION ? ` · posición ${p.orden}` : ""}
+                    </Badge>
+                  </span>
+                </Tooltip>
+              )}
               {p.cuenta && (
                 <Tooltip content={AYUDA_SOLO_EN}>
                   <span>
@@ -429,7 +440,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9">
         <Select
           aria-label="Filtrar por categoría"
           value={filtros.categoria ?? TODOS}
@@ -521,6 +532,15 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
             ]}
           />
         )}
+        <Select
+          aria-label="Filtrar por destacados"
+          value={filtros.destacado ?? TODOS}
+          onValueChange={(v) => cambiarFiltro("destacado", v)}
+          options={[
+            { value: TODOS, label: "Destacados: todos" },
+            { value: "si", label: "Destacados: solo destacados" },
+          ]}
+        />
         <Select
           aria-label="Filtrar por etiqueta"
           value={filtros.tag ?? TODOS}

@@ -240,7 +240,7 @@ export function validarCamposOverlay(body: unknown): Resultado<CamposOverlayVali
   if (presente(body, "orden")) {
     if (body.orden === null || body.orden === "") campos.orden = null
     else if (typeof body.orden !== "number" || !Number.isInteger(body.orden) || body.orden < 0 || body.orden > 9999) {
-      return fail("orden", "El orden tiene que ser un número entero entre 0 y 9999")
+      return fail("orden", "Ingrese un número entero entre 0 y 9999.")
     } else campos.orden = body.orden
   }
 

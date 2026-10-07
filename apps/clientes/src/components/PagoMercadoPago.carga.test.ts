@@ -22,16 +22,6 @@ function renderPago(maxCuotas = 6) {
 }
 
 describe("carga inicial del formulario de Mercado Pago", () => {
-  it("muestra el loader mientras espera la preferencia, antes de montar el Brick", () => {
-    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-public-key");
-    const html = renderPago(1);
-
-    expect(html).toContain("Cargando los medios de pago");
-    expect(html).toContain('aria-busy="true"');
-    expect(html).not.toContain('id="paymentBrick_container"');
-    expect(html).not.toContain("Elija transferencia");
-  });
-
   it("muestra un loader y mantiene el Brick montado pero no visible hasta onReady", () => {
     vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-public-key");
     const html = renderPago();
@@ -42,6 +32,15 @@ describe("carga inicial del formulario de Mercado Pago", () => {
     expect(html).toContain('id="paymentBrick_container"');
     expect(html).not.toContain("No se pudo completar el pago");
     expect(html).not.toContain("Elija transferencia");
+  });
+
+  it("ofrece la cuenta de Mercado Pago aparte, con un botón que dice a dónde lleva", () => {
+    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-public-key");
+    for (const cuotas of [1, 6]) {
+      const html = renderPago(cuotas);
+      expect(html).toContain("Ir a Mercado Pago");
+      expect(html).toContain("Lo llevamos a Mercado Pago");
+    }
   });
 
   it("no deja un loader infinito cuando falta la configuración", () => {

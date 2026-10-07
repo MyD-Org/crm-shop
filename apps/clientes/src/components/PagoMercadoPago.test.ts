@@ -64,25 +64,22 @@ describe("customizacionBrick", () => {
     expect(customizacionBrick(3).paymentMethods.maxInstallments).toBe(3);
   });
 
-  it("sin maxCuotas → no existe la clave (Brick como hoy)", () => {
-    const c = customizacionBrick(undefined);
-    expect("maxInstallments" in c.paymentMethods).toBe(false);
-    expect(c).toEqual({
-      paymentMethods: { creditCard: "all", debitCard: "all", mercadoPago: "all" },
+  it("sin maxCuotas → sólo tarjetas, sin tope ni textos", () => {
+    expect(customizacionBrick(undefined)).toEqual({
+      paymentMethods: { creditCard: "all", debitCard: "all" },
       visual: { style: { theme: "default" } },
     });
   });
 
-  it("dinero en cuenta sólo en un pago: con 2 o más cuotas la tarjeta de crédito queda sola", () => {
-    expect(customizacionBrick(3).paymentMethods).toEqual({ creditCard: "all", debitCard: "all", maxInstallments: 3 });
-    expect(customizacionBrick(1).paymentMethods.mercadoPago).toBe("all");
-    expect(customizacionBrick(undefined).paymentMethods.mercadoPago).toBe("all");
+  it("con cuotas: exactamente esas (mínimo = máximo) y el texto de la tarjeta de crédito las dice", () => {
+    const c = customizacionBrick(6);
+    expect(c.paymentMethods).toEqual({ creditCard: "all", debitCard: "all", minInstallments: 6, maxInstallments: 6 });
+    expect(c.visual.texts?.paymentMethods.creditCardValueProp).toBe("En 6 cuotas");
+    expect(customizacionBrick(1).visual.texts?.paymentMethods.creditCardValueProp).toBe("En un pago");
   });
 
-  it("sin preferencia (cuentaMp=false) no se ofrece la cuenta aunque sea en un pago", () => {
-    expect(customizacionBrick(undefined, false).paymentMethods).toEqual({ creditCard: "all", debitCard: "all" });
-    expect(customizacionBrick(1, false).paymentMethods.mercadoPago).toBeUndefined();
-    expect(customizacionBrick(undefined, false)).toBe(customizacionBrick(undefined, false));
+  it("nunca ofrece la cuenta ni el crédito de Mercado Pago dentro del Brick (van con su propio botón)", () => {
+    for (const n of [undefined, 1, 6]) expect("mercadoPago" in customizacionBrick(n).paymentMethods).toBe(false);
   });
 
   it("misma identidad para el mismo maxCuotas (re-renders del padre)", () => {
@@ -109,7 +106,7 @@ describe("customizacionBrick", () => {
 describe("PagoMercadoPago usa la customization estable", () => {
   it("memoiza con deps [maxCuotas] y pasa esa instancia al Brick", () => {
     expect(fuente).toMatch(
-      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(maxCuotas, Boolean\(preferenceId\)\),\s*\[maxCuotas, preferenceId\]\s*,?\s*\)/,
+      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(maxCuotas\) as CustomizacionSdk,\s*\[maxCuotas\]\s*,?\s*\)/,
     );
     expect(fuente).toMatch(/customization=\{customization\}/);
   });

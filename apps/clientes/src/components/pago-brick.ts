@@ -6,35 +6,53 @@
  * del componente, garantiza la misma instancia para el mismo `maxCuotas`
  * incluso entre remontes, y permite testearlo sin DOM.
  *
- * `mercadoPago: "all"` habilita dinero en cuenta dentro del mismo Brick (ver
- * comentario en PagoMercadoPago.tsx).
+ * Sólo tarjetas: la cuenta de Mercado Pago va fuera del Brick, con su propio
+ * botón "Ir a Mercado Pago" (el Brick no deja cambiar el texto del botón según
+ * la opción elegida ni avisar que se sale del sitio). Así tampoco aparece
+ * "Crédito de Mercado Pago".
  *
  * No se congela con `Object.freeze`: el objeto se lo pasamos a un SDK remoto
  * que podría mutarlo, y un TypeError ahí rompería el checkout incluso con
  * flag `cuotas` apagado. La inmutabilidad queda a nivel de tipos.
  */
 
+import type { ComponentProps } from "react";
+import type { Payment } from "@mercadopago/sdk-react";
+
+/**
+ * Lo que espera el SDK. Sus tipos no traen `visual.texts.paymentMethods`, aunque la documentación del
+ * Payment Brick sí lo admite ("Cambiar textos"): por eso el componente convierte con este tipo.
+ */
+export type CustomizacionSdk = ComponentProps<typeof Payment>["customization"];
+
 export interface CustomizacionBrick {
   readonly paymentMethods: {
     readonly creditCard: "all";
     readonly debitCard: "all";
-    readonly mercadoPago?: "all";
+    readonly minInstallments?: number;
     readonly maxInstallments?: number;
   };
-  readonly visual: { readonly style: { readonly theme: "default" } };
+  readonly visual: {
+    readonly style: { readonly theme: "default" };
+    readonly texts?: { readonly paymentMethods: { readonly creditCardValueProp: string } };
+  };
 }
 
 const cache = new Map<string, CustomizacionBrick>();
 
+/** Lo que dice la tarjeta de crédito debajo del título, en vez de "Cuotas disponibles". */
+export function textoCuotas(cuotas: number): string {
+  return cuotas === 1 ? "En un pago" : `En ${cuotas} cuotas`;
+}
+
 /**
- * `cuentaMp` (por defecto, sí): ofrecer "Cuenta de Mercado Pago". Sólo se ofrece en un pago (con 2 o más
- * cuotas congeladas es sólo tarjeta de crédito) y el componente lo apaga si no pudo crear la preferencia
- * (`initialization.preferenceId`, que la opción exige).
+ * Con cuotas congeladas en el pedido, el Brick ofrece exactamente esas (mínimo = máximo): el comprador
+ * ya las eligió en la tienda y el precio las incluye. El selector aparece al cargar el número de
+ * tarjeta, porque Mercado Pago necesita saber qué tarjeta es.
  */
-export function customizacionBrick(maxCuotas: number | undefined, cuentaMp = true): CustomizacionBrick {
+export function customizacionBrick(maxCuotas: number | undefined): CustomizacionBrick {
   const valido = typeof maxCuotas === "number" && Number.isInteger(maxCuotas) && maxCuotas >= 1;
-  const conCuenta = cuentaMp && (!valido || maxCuotas === 1);
-  const clave = `${valido ? maxCuotas : "sin"}|${conCuenta ? "cuenta" : "tarjeta"}`;
+  const clave = valido ? String(maxCuotas) : "sin";
   const previa = cache.get(clave);
   if (previa) return previa;
 
@@ -42,10 +60,12 @@ export function customizacionBrick(maxCuotas: number | undefined, cuentaMp = tru
     paymentMethods: {
       creditCard: "all",
       debitCard: "all",
-      ...(conCuenta ? { mercadoPago: "all" as const } : {}),
-      ...(valido ? { maxInstallments: maxCuotas } : {}),
+      ...(valido ? { minInstallments: maxCuotas, maxInstallments: maxCuotas } : {}),
     },
-    visual: { style: { theme: "default" } },
+    visual: {
+      style: { theme: "default" },
+      ...(valido ? { texts: { paymentMethods: { creditCardValueProp: textoCuotas(maxCuotas) } } } : {}),
+    },
   };
   cache.set(clave, nueva);
   return nueva;

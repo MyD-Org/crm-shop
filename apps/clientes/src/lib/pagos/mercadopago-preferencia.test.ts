@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarPreferencia, cuentaMpDisponible, urlRetorno } from "./mercadopago-preferencia";
+import { armarPreferencia, cuotasPreferencia, urlRetorno } from "./mercadopago-preferencia";
 
 const base = {
   pedidoId: "ped-1",
@@ -8,15 +8,14 @@ const base = {
   origen: "https://tienda.example",
 };
 
-describe("cuentaMpDisponible", () => {
-  it("sólo en un pago: sin cuotas congeladas o con 1", () => {
-    expect(cuentaMpDisponible(null)).toBe(true);
-    expect(cuentaMpDisponible(undefined)).toBe(true);
-    expect(cuentaMpDisponible(1)).toBe(true);
-  });
-  it("con 2 o más cuotas no se ofrece", () => {
-    expect(cuentaMpDisponible(2)).toBe(false);
-    expect(cuentaMpDisponible(12)).toBe(false);
+describe("cuotasPreferencia", () => {
+  it("las cuotas del pedido; sin cuotas o inválidas, un pago", () => {
+    expect(cuotasPreferencia(6)).toBe(6);
+    expect(cuotasPreferencia(1)).toBe(1);
+    expect(cuotasPreferencia(null)).toBe(1);
+    expect(cuotasPreferencia(undefined)).toBe(1);
+    expect(cuotasPreferencia(0)).toBe(1);
+    expect(cuotasPreferencia(2.5)).toBe(1);
   });
 });
 
@@ -35,13 +34,21 @@ describe("urlRetorno", () => {
 });
 
 describe("armarPreferencia", () => {
-  it("un ítem con el total del pedido en ARS, una cuota y propósito wallet", () => {
+  it("un ítem con el total del pedido en ARS, un pago, sin Crédito de Mercado Pago y propósito wallet", () => {
     const p = armarPreferencia(base);
     expect(p.purpose).toBe("wallet_purchase");
     expect(p.items).toEqual([
       { id: "ped-1", title: "Pedido 000123 — Central LED", quantity: 1, unit_price: 1500.5, currency_id: "ARS" },
     ]);
-    expect(p.payment_methods).toEqual({ installments: 1 });
+    expect(p.payment_methods).toEqual({ installments: 1, excluded_payment_methods: [{ id: "consumer_credits" }] });
+  });
+
+  it("con cuotas en el pedido: tope y cuotas sugeridas = las elegidas", () => {
+    expect(armarPreferencia({ ...base, cuotas: 6 }).payment_methods).toEqual({
+      installments: 6,
+      default_installments: 6,
+      excluded_payment_methods: [{ id: "consumer_credits" }],
+    });
   });
 
   it("external_reference = id del pedido (la conciliación lo usa)", () => {

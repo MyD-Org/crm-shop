@@ -21,10 +21,12 @@ vi.mock("@/db", () => ({
 }));
 vi.mock("./tenant", () => ({ shopTenantId: () => "tenant-a" }));
 vi.mock("./cuenta-corriente/tenant-cc", () => ({ datosTenant: async () => ({ nombre: "Tienda Demo" }) }));
+vi.mock("./medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => [] }));
+vi.mock("./contacto-pedido-repo", () => ({ contactoDeSucursal: async () => null }));
 const enviarEmail = vi.fn();
 vi.mock("./email", () => ({ enviarEmail: (o: unknown) => enviarEmail(o) }));
 
-import { avisarCobro, avisarOperadorPedidoNuevo, avisoOperadorAlCrear } from "./pedido-avisos";
+import { avisarCobro, avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisoOperadorAlCrear } from "./pedido-avisos";
 
 const PEDIDO = {
   id: "p1",
@@ -103,8 +105,9 @@ describe("aviso al local con pago en línea", () => {
     const enLinea = { ...PEDIDO, pagoMetodo: "mercadopago", pagoEstado: "pagado" };
     colas.length = 0;
     colas.push(
-      [enLinea], // mail al comprador
-      [enLinea],
+      [enLinea], // mail al comprador: pedido
+      [{ nombre: "Lámpara", cantidad: "2" }], // sus líneas
+      [enLinea], // mail al local: pedido
       [{ nombre: "Centro", emailPedidos: "centro@tienda.cliente.example" }],
       [{ receiptsEmail: "" }],
       [{ nombre: "Lámpara", cantidad: "2" }],
@@ -112,6 +115,9 @@ describe("aviso al local con pago en línea", () => {
     await avisarCobro("p1", { antes: "pendiente", despues: "pagado", reversion: false, referencia: "r1" });
     expect(enviarEmail).toHaveBeenCalledTimes(2);
     expect(enviarEmail.mock.calls[0][0].to).toBe("ana@cliente.example");
+    expect(enviarEmail.mock.calls[0][0].subject).toContain("y pago recibidos");
+    expect(enviarEmail.mock.calls[0][0].text).toContain("Lámpara");
+    expect(enviarEmail.mock.calls[0][0].idempotencyKey).toBe("pedido/p1/pago_recibido");
     expect(enviarEmail.mock.calls[1][0].to).toBe("centro@tienda.cliente.example");
     expect(enviarEmail.mock.calls[1][0].idempotencyKey).toBe("pedido/p1/operador");
   });
@@ -122,5 +128,38 @@ describe("aviso al local con pago en línea", () => {
     await avisarCobro("p1", { antes: "pendiente", despues: "fallido", reversion: false, referencia: "r1" });
     expect(enviarEmail).toHaveBeenCalledTimes(1);
     expect(enviarEmail.mock.calls[0][0].to).toBe("ana@cliente.example");
+  });
+
+  it("dos aprobaciones con otra referencia usan la misma clave: un solo mail de confirmación", async () => {
+    for (const referencia of ["r1", "r2"]) {
+      colas.length = 0;
+      colas.push([{ ...PEDIDO, pagoMetodo: "mercadopago" }], [], [{ ...PEDIDO, pagoMetodo: "mercadopago" }], [], [], []);
+      await avisarCobro("p1", { antes: "pendiente", despues: "pagado", reversion: false, referencia });
+    }
+    const claves = enviarEmail.mock.calls.map((c) => c[0].idempotencyKey).filter((k: string) => k.includes("pago_recibido"));
+    expect(new Set(claves).size).toBe(1);
+  });
+
+  it("el pago rechazado lleva el enlace para reintentar", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://tienda.cliente.example";
+    colas.length = 0;
+    colas.push([{ ...PEDIDO, pagoMetodo: "mercadopago", pagoEstado: "fallido" }]);
+    await avisarCobro("p1", { antes: "pendiente", despues: "fallido", reversion: false, referencia: "r1" });
+    expect(enviarEmail.mock.calls[0][0].html).toContain("https://tienda.cliente.example/checkout");
+  });
+
+  it("al crear un pedido con cobro en línea no sale el mail de pedido recibido", async () => {
+    colas.length = 0;
+    colas.push([{ ...PEDIDO, pagoMetodo: "mercadopago" }]);
+    await avisarPedidoRecibido("p1");
+    expect(enviarEmail).not.toHaveBeenCalled();
+  });
+
+  it("sin cobro en línea sí sale al crear", async () => {
+    colas.length = 0;
+    colas.push([PEDIDO], [{ nombre: "Lámpara", cantidad: "2" }]);
+    await avisarPedidoRecibido("p1");
+    expect(enviarEmail).toHaveBeenCalledTimes(1);
+    expect(enviarEmail.mock.calls[0][0].idempotencyKey).toBe("pedido/p1/recibido");
   });
 });

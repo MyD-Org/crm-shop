@@ -29,15 +29,16 @@ import { shopTenantId } from "./tenant";
 import { urlLogoMail } from "./vinculacion-mail";
 
 const RUTA_PEDIDOS = "/mi-cuenta/pedidos";
+const RUTA_CHECKOUT = "/checkout";
 
 function looksLikeEmail(s: string | null): s is string {
   return typeof s === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s);
 }
 
-function urlPedidos(sitio = process.env.NEXT_PUBLIC_SITE_URL): string | null {
+function urlPedidos(sitio = process.env.NEXT_PUBLIC_SITE_URL, ruta = RUTA_PEDIDOS): string | null {
   if (!sitio) return null;
   try {
-    return new URL(RUTA_PEDIDOS, sitio).toString();
+    return new URL(ruta, sitio).toString();
   } catch {
     return null;
   }
@@ -80,8 +81,12 @@ async function enviarAviso(
       console.error("[avisos pedido] no se pudieron leer los datos del tenant:", err);
     }
 
+    // Con cobro en línea el "recibido" no existe: su confirmación es "pago_recibido".
+    if (aviso === "recibido" && esPagoEnLinea(pedido.pagoMetodo)) return;
+
+    const confirma = aviso !== "pago_rechazado";
     const lineas =
-      aviso === "recibido"
+      confirma
         ? await getDb()
             .select({ nombre: orderItems.name, cantidad: orderItems.qty })
             .from(orderItems)
@@ -89,12 +94,12 @@ async function enviarAviso(
             .orderBy(asc(orderItems.id))
         : [];
 
-    // En el "recibido": el pago con el nombre del medio del CRM y el plazo + WhatsApp de la
-    // sucursal. Lecturas que no tiran.
+    // En los mails que confirman el pedido ("recibido" y "pago_recibido"): el pago con el nombre
+    // del medio del CRM y el plazo + WhatsApp de la sucursal. Lecturas que no tiran.
     const numero = `PED-${String(pedido.numero).padStart(8, "0")}`;
     const recibido = aviso === "recibido";
-    const medios = recibido ? await leerMediosPagoTolerante() : null;
-    const contacto = recibido ? await contactoDeSucursal(pedido.sucursal, numero) : null;
+    const medios = confirma ? await leerMediosPagoTolerante() : null;
+    const contacto = confirma ? await contactoDeSucursal(pedido.sucursal, numero) : null;
 
     const mail = armarMailPedido({
       aviso,
@@ -103,17 +108,17 @@ async function enviarAviso(
       comercio: comercio || "Su pedido",
       logoUrl: urlLogoMail(),
       pedidosUrl: urlPedidos(),
+      checkoutUrl: aviso === "pago_rechazado" ? urlPedidos(undefined, RUTA_CHECKOUT) : null,
       sitioUrl: urlSitioMail(),
       lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
-      pagoPendienteEnLinea: esPagoEnLinea(pedido.pagoMetodo) && pedido.pagoEstado !== "pagado",
       // Cuenta corriente: el medio del pedido es el de audiencia `cuenta_corriente` (por el campo,
       // nunca por el nombre ni el slug).
       pagoCuentaCorriente: Boolean(medios?.some((m) => m.slug === pedido.pagoMetodo && esMedioCuentaCorriente(m))),
       // Transferencia: la cuenta congelada en el pedido (nunca se vuelve a resolver).
-      ...(aviso === "recibido" && transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta)
+      ...(recibido && transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta)
         ? { transferencia: transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta) }
         : {}),
       ...(contacto
@@ -141,7 +146,10 @@ async function enviarAviso(
   }
 }
 
-/** "Recibimos su pedido", al crearlo. Quien llama descarta los pedidos repetidos. */
+/**
+ * "Recibimos su pedido", al crearlo. Quien llama descarta los pedidos repetidos. Con cobro en
+ * línea no sale (no hace nada): el comprador recibe un solo mail al aprobarse el pago.
+ */
 export function avisarPedidoRecibido(pedidoId: string): Promise<void> {
   return enviarAviso(pedidoId, "recibido", `pedido/${pedidoId}/recibido`);
 }
@@ -153,15 +161,21 @@ export async function avisarCobro(
 ): Promise<void> {
   const aviso = avisoDelCobro(cambio.antes, cambio.despues, cambio.reversion);
   if (!aviso) return;
-  await enviarAviso(pedidoId, aviso, `pedido/${pedidoId}/${aviso}/${cambio.referencia || "sin-ref"}`);
+  // "pago_recibido" sin referencia en la clave: un solo mail de confirmación por pedido, aunque
+  // lo aprueben dos caminos (respuesta directa, consulta, conciliación, webhook) con otra referencia.
+  const clave =
+    aviso === "pago_recibido"
+      ? `pedido/${pedidoId}/pago_recibido`
+      : `pedido/${pedidoId}/${aviso}/${cambio.referencia || "sin-ref"}`;
+  await enviarAviso(pedidoId, aviso, clave);
   // El pedido con pago en línea recién le llega al local cuando se aprueba el pago
   // (ver `avisoOperadorAlCrear`). La clave del mail evita duplicarlo.
   if (aviso === "pago_recibido") await avisarOperadorPedidoNuevo(pedidoId);
 }
 
 /**
- * ¿Se avisa al local al crear el pedido? Con pago en línea no: el aviso sale cuando se aprueba
- * el cobro (`avisarCobro`), para no anunciar pedidos que nunca se pagan.
+ * ¿Se avisa al crear el pedido (al comprador y al local)? Con pago en línea no: los dos avisos
+ * salen cuando se aprueba el cobro (`avisarCobro`), para no anunciar pedidos que nunca se pagan.
  */
 export function avisoOperadorAlCrear(pagoMetodo: string): boolean {
   return !esPagoEnLinea(pagoMetodo);

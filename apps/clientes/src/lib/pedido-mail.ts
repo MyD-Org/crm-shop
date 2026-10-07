@@ -1,6 +1,7 @@
 /**
- * Mails al comprador sobre su pedido: "Recibimos su pedido" (al crearlo) y los del cobro en
- * línea ("Recibimos su pago" / "No pudimos procesar su pago"). Puros (sin red ni base): los
+ * Mails al comprador sobre su pedido: "Recibimos su pedido" (al crearlo, sólo en medios sin cobro
+ * en línea) y los del cobro en línea: "Recibimos su pedido y su pago" (al aprobarse, es el único
+ * mail de confirmación de esos pedidos) y "No pudimos procesar su pago". Puros (sin red ni base): los
  * arma `pedido-avisos.ts` y los manda.
  *
  * Los cambios de estado y el pago offline los avisa el CRM, que es donde el operador los hace
@@ -38,19 +39,19 @@ export interface DatosMailPedido {
   logoUrl?: string | null;
   /** Link absoluto a "Mis pedidos". Sin él, el mail no lleva botón. */
   pedidosUrl?: string | null;
+  /** Sólo "pago_rechazado": link absoluto al checkout para reintentar el pago o elegir otro medio. */
+  checkoutUrl?: string | null;
   /** `urlSitioMail()`: si está, el pie lleva un link al sitio. */
   sitioUrl?: string | null;
-  /** Sólo "recibido": resumen del pedido. */
+  /** "recibido" y "pago_recibido": resumen del pedido. */
   lineas?: LineaMail[];
   total?: number;
   entrega?: string;
   pago?: string;
-  /** Sólo "recibido": el pago en línea todavía no se completó. */
-  pagoPendienteEnLinea?: boolean;
   /** Sólo "recibido": el pedido es de una cuenta corriente y `pago` es el nombre de su medio. */
   pagoCuentaCorriente?: boolean;
   /**
-   * Sólo "recibido": plazo de contacto (mensaje ya resuelto) y
+   * "recibido" y "pago_recibido": plazo de contacto (mensaje ya resuelto) y
    * WhatsApp de la sucursal asignada. Sin `whatsappUrl` va sólo el mensaje.
    */
   contacto?: { mensaje: string; whatsappVisible?: string; whatsappUrl?: string };
@@ -143,20 +144,19 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
     bajada: (d) =>
       d.pagoCuentaCorriente && d.pago
         ? `Registramos su pedido. ${textoPagaConMedio(d.pago)} Le avisaremos por este medio cada vez que avance.`
-        : d.pagoPendienteEnLinea
-        ? "Registramos su pedido. Si ya realizó el pago, se está procesando y le avisaremos por este medio cuando se confirme. Si todavía no lo completó, puede hacerlo desde Mis pedidos."
         : "Registramos su pedido. Le avisaremos por este medio cada vez que avance.",
   },
   pago_recibido: {
-    asunto: "pago recibido",
-    titulo: "Recibimos su pago",
-    bajada: () => "Su pago fue aprobado. Le avisaremos cuando confirmemos su pedido.",
+    asunto: "y pago recibidos",
+    titulo: "Recibimos su pedido y su pago",
+    bajada: () =>
+      "Registramos su pedido y su pago fue aprobado. Le avisaremos por este medio cada vez que avance.",
   },
   pago_rechazado: {
     asunto: "pago no procesado",
     titulo: "No pudimos procesar su pago",
     bajada: () =>
-      "El pago de su pedido no se pudo completar y no se le cobró. Puede intentarlo nuevamente, con otra tarjeta o medio de pago, desde Mis pedidos.",
+      "El pago de su pedido no se pudo completar y no se le cobró. Puede reintentar el pago o elegir otro medio de pago; su pedido sigue registrado.",
   },
 };
 
@@ -200,10 +200,11 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   const nombre = d.contactoNombre.trim();
   const saludo = nombre ? `Hola, ${nombre}:` : "Hola:";
   const subject = `${oneLine(d.comercio)} — Pedido ${d.numero} ${copy.asunto}`.slice(0, 200);
-  const conResumen = d.aviso === "recibido" && (d.lineas?.length ?? 0) > 0;
-  const contacto = d.aviso === "recibido" ? d.contacto : undefined;
+  const conResumen = d.aviso !== "pago_rechazado" && (d.lineas?.length ?? 0) > 0;
+  const contacto = d.aviso !== "pago_rechazado" ? d.contacto : undefined;
   const whatsappOk = Boolean(contacto?.whatsappUrl && contacto.whatsappVisible);
   const transferencia = d.aviso === "recibido" ? d.transferencia : undefined;
+  const reintento = d.aviso === "pago_rechazado" ? d.checkoutUrl : undefined;
 
   const cuerpoHtml = `
       <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
@@ -223,7 +224,13 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
       </td></tr>${conResumen ? resumen(d) : ""}${transferencia ? bloqueTransferenciaHtml(transferencia, d.total) : ""}
       <tr><td style="padding:24px 32px 28px;font-family:${FUENTE_MAIL}">
         ${
-          d.pedidosUrl
+          reintento
+            ? `<a href="${e(reintento)}" style="display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px">Reintentar el pago</a>${
+                d.pedidosUrl
+                  ? ` <a href="${e(d.pedidosUrl)}" style="display:inline-block;color:#1e5aa8;text-decoration:underline;font-size:14px;font-weight:600;padding:10px 12px">Ver mis pedidos</a>`
+                  : ""
+              }`
+            : d.pedidosUrl
             ? `<a href="${e(d.pedidosUrl)}" style="display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px">Ver mis pedidos</a>`
             : ""
         }
@@ -259,6 +266,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     `Pedido ${d.numero}`,
     ...lineasTexto,
     ...(transferencia ? bloqueTransferenciaTexto(transferencia, d.total) : []),
+    ...(reintento ? ["", `Reintentar el pago: ${reintento}`] : []),
     ...(d.pedidosUrl ? ["", `Ver mis pedidos: ${d.pedidosUrl}`] : []),
     "",
     ...pieTexto(d.comercio, d.sitioUrl),

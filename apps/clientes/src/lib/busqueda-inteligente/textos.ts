@@ -6,7 +6,6 @@
  */
 
 export const TEXTOS_FRANJA = {
-  talCual: (consulta: string) => `Ver resultados de «${consulta}» tal cual`,
   quitarTexto: (texto: string) => `Quitar la búsqueda «${texto}»`,
   texto: (texto: string) => `Búsqueda: «${texto}»`,
 } as const;
@@ -16,9 +15,11 @@ export const TEXTOS_SIN_RESULTADOS = {
   conAlternativas: "Pruebe con alguna de estas opciones o elija una categoría de la lista.",
   sinAlternativas: "Puede buscar con otras palabras o elegir una categoría de la lista.",
   alternativas: "Quizás le sirva:",
-  asesor: "¿Quiere que un asesor le ayude a elegir?",
-  conversar: "Conversar",
   verTodos: "Ver todos los productos",
+  /** Hay filtros puestos: la búsqueda sola, sin ellos. */
+  sinFiltros: (consulta: string) => `Buscar «${consulta}» sin filtros`,
+  /** La combinación de búsqueda y filtros es la que da 0. */
+  conFiltros: "Ningún producto cumple la búsqueda junto con los filtros elegidos. Puede quitar los filtros o la búsqueda.",
   relacionados: "Ver productos relacionados",
   /** Con el filtro "Con stock en <local>" activo: el 0 puede venir de ese filtro. */
   tituloLocal: (local: string, consulta?: string) =>

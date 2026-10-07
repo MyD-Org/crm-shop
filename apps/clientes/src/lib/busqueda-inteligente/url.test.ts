@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { leerEstado } from "../catalogo-url";
-import { chipsSugeridos, hrefTalCual } from "./url";
-
-describe("hrefTalCual", () => {
-  it("vuelve a la consulta original sin los filtros interpretados, con ia=0", () => {
-    const estado = leerEstado({ q: "50w", categoria: "Reflectores", atr: "tono-calido", marca: "GENROD", ia: "reflector 50w calido" });
-    expect(hrefTalCual(estado, "reflector 50w calido")).toBe("/catalogo?q=reflector+50w+calido&marca=GENROD&ia=0");
-  });
-});
+import { chipsSugeridos } from "./url";
 
 describe("chipsSugeridos", () => {
   const estado = leerEstado({ q: "luz para el patio grande", atr: "tono-calido" });

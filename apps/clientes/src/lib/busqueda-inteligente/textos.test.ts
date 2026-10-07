@@ -29,7 +29,8 @@ describe("copy de la búsqueda inteligente", () => {
   });
 
   it("los textos con la consulta la citan", () => {
-    expect(TEXTOS_FRANJA.talCual("luz patio")).toBe("Ver resultados de «luz patio» tal cual");
+    expect(TEXTOS_FRANJA.texto("luz patio")).toBe("Búsqueda: «luz patio»");
+    expect(TEXTOS_SIN_RESULTADOS.sinFiltros("luz patio")).toBe("Buscar «luz patio» sin filtros");
     expect(TEXTOS_SIN_RESULTADOS.titulo("x")).toContain('"x"');
   });
 });

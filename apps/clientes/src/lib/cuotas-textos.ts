@@ -36,7 +36,8 @@ export const TEXTOS_CUOTAS = {
 
   // --- Checkout ---
   checkoutTitulo: "Cantidad de cuotas",
-  checkoutAyuda: (medio: string) => `Se pagan con tarjeta de crédito en ${medio}, sin interés.`,
+  /** Aclaración del selector del checkout: las cuotas no aplican al débito. */
+  soloCredito: "Solo con tarjeta de crédito.",
   /**
    * Barra y checkout, faltante: "Sume $790 más y pague en 6 cuotas sin interés." El monto va en
    * negrita: la vista parte el texto con `montoFaltante` (mismo formato, sin ,00).
@@ -51,9 +52,10 @@ export const TEXTOS_CUOTAS = {
   /** Fila atenuada del modal: "6 cuotas sin interés en compras desde $90.000". */
   filaNoAlcanzada: (cuotas: number, minimo: number) =>
     `${cuotasDe(cuotas)} sin interés en compras desde ${fmtPrecio(minimo)}`,
-  checkoutUnPago: (total: number) => `1 pago de ${fmtPrecio(total)}`,
-  checkoutCuotas: (cuotas: number, montoCuota: number, total: number) =>
-    `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)} (total ${fmtPrecio(total)})`,
+  /** Fila del selector del checkout: "1 pago" / "6 cuotas de $20.000" (el total va aparte). */
+  checkoutOpcion: (cuotas: number, montoCuota: number) =>
+    cuotas === 1 ? "1 pago" : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,
+  checkoutTotal: (total: number) => `Total ${fmtPrecio(total)}`,
   /** Rechazos del servidor por la cantidad de cuotas. */
   cuotasNoCoinciden: "La cantidad de cuotas no coincide con la seleccionada. Vuelva a elegir su medio de pago.",
   cuotasNoDisponibles: "La cantidad de cuotas elegida ya no está disponible. Seleccione otra.",

@@ -1,13 +1,13 @@
 "use client";
 
-import { TextoConEnfasis } from "@/components/carrito/TextoConEnfasis";
+import { OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
-import { pagoParaCotizar } from "@/lib/lista-medio";
+import { pagoParaCotizar, totalVariaSegunMedio } from "@/lib/lista-medio";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { PagoPayway } from "@/components/PagoPayway";
@@ -32,7 +32,6 @@ import {
   type Complemento,
 } from "@/lib/contacto-alegra";
 import type { DatosDelContactoPublico } from "@/lib/datos-del-contacto";
-import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import {
@@ -1489,36 +1488,16 @@ export function CheckoutClient({
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
                 {pagaEnLinea && opcionesCuotas.length > 1 && (
-                  <fieldset className="mt-4" aria-label={TEXTOS_CUOTAS.checkoutTitulo}>
-                    <legend className="mb-2 text-sm font-semibold text-text">{TEXTOS_CUOTAS.checkoutTitulo}</legend>
-                    <div className="grid gap-3">
-                      {opcionesCuotas.map((o) => (
-                        <RadioCard
-                          key={o.cuotas}
-                          selected={cuotasElegidas === o.cuotas}
-                          disabled={estado === "cargando"}
-                          onClick={() => setCuotasSel(o.cuotas)}
-                          title={
-                            o.cuotas === 1
-                              ? TEXTOS_CUOTAS.checkoutUnPago(o.total)
-                              : TEXTOS_CUOTAS.checkoutCuotas(o.cuotas, o.montoCuota, o.total)
-                          }
-                        />
-                      ))}
-                    </div>
-                    <p className="mt-2 text-xs text-muted">{TEXTOS_CUOTAS.checkoutAyuda(medioSel?.nombre ?? "")}</p>
-                  </fieldset>
-                )}
-                {pagaEnLinea && cotizacion?.proximoEscalon && (
-                  <p className="mt-2 text-xs text-muted">
-                    <TextoConEnfasis
-                      texto={TEXTOS_CUOTAS.faltaParaCuotas(cotizacion.proximoEscalon.falta, cotizacion.proximoEscalon.cuotas)}
-                      enfasis={TEXTOS_CUOTAS.montoFaltante(cotizacion.proximoEscalon.falta)}
-                    />
-                  </p>
+                  <OpcionesCuotas
+                    opciones={opcionesCuotas}
+                    elegida={cuotasElegidas}
+                    onElegir={setCuotasSel}
+                    deshabilitado={estado === "cargando"}
+                    progreso={cotizacion?.progresoCuotas}
+                  />
                 )}
                 {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
-                {!esCuentaCorriente && <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>}
+                {!esCuentaCorriente && totalVariaSegunMedio(mediosParaElegir) && <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>}
                 {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
               </>
             ) : (

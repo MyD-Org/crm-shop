@@ -787,6 +787,17 @@ describe("dimerizable: sí/no del producto", () => {
   it("sin la palabra no hay evidencia", () => {
     expect(motivos(una("Regulable", "si"))).toEqual(["dimerizable:valor_no_en_texto"])
   })
+  it("el rótulo solo no es evidencia de que sí: un 'No' al lado no se lee como sí", () => {
+    const tabla = (valor: string, leida: string) =>
+      verificarLectura(
+        lectura(null, { dimerizable: { valor } }),
+        ctx([RELLENO, ["Dimerizable", 40, 700], [leida, 150, 700]], { unicoProducto: true, nombre: "LAMPARA LED" }),
+      )
+    expect(aceptados(tabla("no", "No"))).toEqual([["dimerizable", "no"]])
+    expect(aceptados(tabla("si", "Si"))).toEqual([["dimerizable", "si"]])
+    expect(aceptados(tabla("si", "No"))).toEqual([])
+    expect(aceptados(tabla("si", "-"))).toEqual([])
+  })
 })
 
 describe("angulo_grados: sólo el ángulo de luz", () => {

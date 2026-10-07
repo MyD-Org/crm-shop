@@ -340,6 +340,8 @@ const sinonimosDePdf = (clave: ClaveAtributo, t: string): string =>
 function dimerizableDeCelda(citaNorm: string): "si" | "no" | null {
   const campo = /(?<![A-Z])DIM{1,2}(?:ER(?:IZ)?|E)?ABLE(?![A-Z])\W{0,3}(SI|YES|NO|NOT)(?![A-Z])/.exec(citaNorm)
   if (campo) return campo[1] === "NO" || campo[1] === "NOT" ? "no" : "si"
+  // El rótulo solo ("Dimerizable" | "Función dimerizable") no dice nada: el valor está en la celda de al lado.
+  if (/^(?:(?:FUNCION|CARACTERISTICA)\W*)?DIM{1,2}(?:ER(?:IZ)?|E)?ABLES?\W*$/.test(citaNorm.trim())) return null
   return dimerizableDeTexto(citaNorm)
 }
 

@@ -37,8 +37,9 @@ const conflicto = (error: string, motivo: string, extra: Record<string, unknown>
   NextResponse.json({ error, motivo, ...extra }, { status: 409 });
 
 /**
- * GET /api/pedidos/:id/medio — las líneas del pedido pendiente propio, para devolverlas al carrito
- * cuando el comprador vuelve a elegir el medio con el carrito ya vaciado por el cobro.
+ * GET /api/pedidos/:id/medio — las líneas del pedido pendiente propio (para devolverlas al carrito
+ * cuando el cobro ya lo vació), su entrega y su contacto (para precargar el checkout y volver directo
+ * al paso Pago con un pedido retomado).
  */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { clerkUserId, cliente } = await identidadActual();
@@ -46,7 +47,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const pedido = id ? await pedidoParaCambiarMedio(id, { clerkUserId, clienteCodigo: cliente?.codigocliente }) : null;
   if (!pedido) return NextResponse.json({ error: "No se pudo cambiar el medio de pago" }, { status: 404 });
-  return NextResponse.json({ items: await lineasDelPedidoParaCarrito(id) });
+  return NextResponse.json({
+    items: await lineasDelPedidoParaCarrito(id),
+    entrega: { tipo: pedido.entregaTipo, ...pedido.entrega },
+    contacto: pedido.contacto,
+  });
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {

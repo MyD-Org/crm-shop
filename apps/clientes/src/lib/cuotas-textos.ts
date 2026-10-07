@@ -37,7 +37,7 @@ export const TEXTOS_CUOTAS = {
   // --- Checkout ---
   checkoutTitulo: "Cantidad de cuotas",
   /** Aclaración del selector del checkout: las cuotas no aplican al débito. */
-  soloCredito: "Solo con tarjeta de crédito.",
+  soloCredito: "En cuotas, sólo con tarjeta de crédito. Con débito, elija 1 pago.",
   /**
    * Barra y checkout, faltante: "Sume $790 más y pague en 6 cuotas sin interés." El monto va en
    * negrita: la vista parte el texto con `montoFaltante` (mismo formato, sin ,00).

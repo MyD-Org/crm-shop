@@ -44,7 +44,8 @@ export function OpcionesCuotas({
           ...(o.cuotas > 1 ? { badge: { label: TEXTOS_CUOTAS.sinInteres, tone: "success" as const } } : {}),
         }))}
       />
-      <p className="text-xs text-muted">{TEXTOS_CUOTAS.soloCredito}</p>
+      {/* Sólo con cuotas: en 1 pago también sirve el débito y el aviso confundía. */}
+      {elegida > 1 && <p className="text-xs text-muted">{TEXTOS_CUOTAS.soloCredito}</p>}
       {meta && !meta.alcanzada && <MetasCarrito metas={[meta]} compacta />}
     </div>
   );

@@ -70,7 +70,7 @@ vi.mock("@/lib/medios-pago-repo", () => ({
       : [],
 }));
 
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const COT = {
   lineas: [{ id: "1", qty: 2, subtotal: 100, iva: 21, total: 121 }],
@@ -225,5 +225,24 @@ describe("POST /api/pedidos/:id/medio", () => {
     identidadActual.mockResolvedValue({ clerkUserId: null, cliente: null });
     expect((await llamar({ pagoMetodo: "transferencia" })).status).toBe(401);
     expect(pedidoParaCambiarMedio).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/pedidos/:id/medio", () => {
+  it("devuelve las líneas, la entrega y el contacto del pedido para precargar el checkout", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue({
+      entregaTipo: "retiro",
+      pagoMetodo: "mercadopago",
+      lineas: [],
+      entrega: { local: "igz", ciudad: null, direccion: null },
+      contacto: { nombre: "Ana", telefono: "3755000000" },
+    });
+    const r = await GET(new Request("https://tienda.example/api/pedidos/p1/medio"), { params: Promise.resolve({ id: "p1" }) });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({
+      items: [],
+      entrega: { tipo: "retiro", local: "igz", ciudad: null, direccion: null },
+      contacto: { nombre: "Ana", telefono: "3755000000" },
+    });
   });
 });

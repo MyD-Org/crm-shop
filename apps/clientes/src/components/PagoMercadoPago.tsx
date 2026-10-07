@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
+import { Button, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { customizacionBrick, textoCuotas, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
 import { AvisoProcesador } from "./AvisoProcesador";
+import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
@@ -126,8 +127,8 @@ export function PagoMercadoPago({
    */
   const tipoTarjeta: TipoTarjeta = opcion === "debito" ? "debito" : "credito";
   const customization = useMemo(
-    () => customizacionBrick(tipoTarjeta, maxCuotas, monto) as CustomizacionSdk,
-    [tipoTarjeta, maxCuotas, monto],
+    () => customizacionBrick(tipoTarjeta, maxCuotas) as CustomizacionSdk,
+    [tipoTarjeta, maxCuotas],
   );
 
   /**
@@ -272,6 +273,24 @@ export function PagoMercadoPago({
     setEstado({ fase: "cargando" });
   }
 
+  /**
+   * "Pagar $ X" es nuestro `Button` (el Brick va con `hidePaymentButton`): le pide al Brick los datos
+   * de la tarjeta ya tokenizados. Si falta o está mal un campo, el Brick lo marca y no devuelve nada.
+   */
+  async function pagarConTarjeta() {
+    if (estado.fase === "procesando") return;
+    const controlador = (window as { cardPaymentBrickController?: { getFormData: () => Promise<unknown> } })
+      .cardPaymentBrickController;
+    if (!controlador) return;
+    let datos: unknown;
+    try {
+      datos = await controlador.getFormData();
+    } catch {
+      return;
+    }
+    if (datos) await enviarRef.current(datos);
+  }
+
   /** Otra opción: una tarjeta monta su Brick de cero; la cuenta no tiene nada que cargar. */
   function elegir(nueva: Opcion) {
     if (nueva === opcion || estado.fase === "procesando") return;
@@ -363,6 +382,14 @@ export function PagoMercadoPago({
           onError={onError}
         />
       </div>
+      {estado.fase !== "cargando" && (
+        <div className="mt-4 flex flex-col">
+          <Button size="lg" onClick={pagarConTarjeta} loading={procesando} disabled={procesando}>
+            <IconoCandado />
+            {procesando ? "Procesando su pago…" : `Pagar ${fmtPrecio(monto)}`}
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -371,6 +398,7 @@ export function PagoMercadoPago({
       value: "credito",
       label: "Tarjeta de crédito",
       description: "Visa, Mastercard, American Express y más",
+      icon: <IconoTarjeta />,
       ...(maxCuotas !== undefined
         ? { badge: { label: textoCuotas(maxCuotas), tone: maxCuotas > 1 ? ("success" as const) : ("neutral" as const) } }
         : {}),
@@ -381,6 +409,7 @@ export function PagoMercadoPago({
       value: "debito",
       label: "Tarjeta de débito",
       description: debitoDisponible ? "Visa Débito, Maestro y más" : "Para pagar con débito, pase su compra a un pago.",
+      icon: <IconoTarjetaDebito />,
       ...(debitoDisponible ? {} : { badge: { label: "Sólo en un pago" } }),
       content: formularioTarjeta,
       disabled: !debitoDisponible || (procesando && opcion !== "debito"),
@@ -389,6 +418,7 @@ export function PagoMercadoPago({
       value: "cuenta",
       label: "Cuenta de Mercado Pago",
       description: "Dinero disponible o tarjetas guardadas en su cuenta",
+      icon: <IconoBilletera />,
       content: <PagoCuentaMercadoPago pedidoId={pedidoId} cuotas={maxCuotas} />,
       disabled: procesando,
     },
@@ -405,7 +435,14 @@ export function PagoMercadoPago({
         />
       )}
 
-      <RadioGroup legend="¿Cómo quiere pagar?" options={opciones} value={opcion} onValueChange={(v) => elegir(v as Opcion)} />
+      <TituloComoPagar />
+      <RadioGroup
+        legend="¿Cómo quiere pagar?"
+        hideLegend
+        options={opciones}
+        value={opcion}
+        onValueChange={(v) => elegir(v as Opcion)}
+      />
 
       <AvisoProcesador>Mercado Pago procesa el pago. Los datos de su tarjeta no pasan por nuestro sitio.</AvisoProcesador>
     </div>

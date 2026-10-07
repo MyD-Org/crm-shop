@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { puedeCambiarMedioPago, pasoAlCambiarMedio } from "./cambiar-medio-pago";
+import { precargaDeEntrega, puedeCambiarMedioPago } from "./cambiar-medio-pago";
 
 describe("puedeCambiarMedioPago", () => {
   it("con el formulario de pago sin enviar o tras un rechazo, sí", () => {
@@ -13,11 +13,25 @@ describe("puedeCambiarMedioPago", () => {
   });
 });
 
-describe("pasoAlCambiarMedio", () => {
-  it("con el estado cargado en esta visita vuelve al paso Pago", () => {
-    expect(pasoAlCambiarMedio({ estadoCargado: true })).toBe("pago");
+describe("precargaDeEntrega", () => {
+  const direcciones = [{ id: "d1", ciudad: "Posadas", direccion: "Av. Siempre Viva 742" }];
+  const locales = ["igz", "mdp"];
+
+  it("retiro: el local del pedido si el checkout lo ofrece", () => {
+    expect(precargaDeEntrega({ tipo: "retiro", local: "igz", ciudad: null, direccion: null }, direcciones, locales)).toMatchObject({
+      opcion: "retiro",
+      local: "igz",
+    });
+    expect(precargaDeEntrega({ tipo: "retiro", local: "otro", ciudad: null, direccion: null }, direcciones, locales).local).toBeNull();
   });
-  it("con un pedido retomado (sin el estado del formulario) vuelve al inicio del checkout", () => {
-    expect(pasoAlCambiarMedio({ estadoCargado: false })).toBe("datos");
+
+  it("envío: la dirección guardada que coincide (sin importar mayúsculas ni espacios)", () => {
+    const p = precargaDeEntrega({ tipo: "envio", local: null, ciudad: "posadas ", direccion: "av. siempre viva 742" }, direcciones, locales);
+    expect(p).toMatchObject({ opcion: "domicilio", direccionGuardada: "d1" });
+  });
+
+  it("envío a una dirección no guardada: otra dirección con lo tipeado en el pedido", () => {
+    const p = precargaDeEntrega({ tipo: "envio", local: null, ciudad: "Oberá", direccion: "Calle Falsa 123" }, direcciones, locales);
+    expect(p).toEqual({ opcion: "domicilio", local: null, direccionGuardada: null, tipeada: { ciudad: "Oberá", direccion: "Calle Falsa 123" } });
   });
 });

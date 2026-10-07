@@ -6,8 +6,8 @@ const opciones = [
   { cuotas: 1, total: 100000, montoCuota: 100000 },
   { cuotas: 3, total: 110000, montoCuota: 36666.67 },
 ];
-const html = (progreso?: Parameters<typeof OpcionesCuotas>[0]["progreso"]) =>
-  renderToStaticMarkup(<OpcionesCuotas opciones={opciones} elegida={1} onElegir={() => {}} progreso={progreso} />);
+const html = (progreso?: Parameters<typeof OpcionesCuotas>[0]["progreso"], elegida = 1) =>
+  renderToStaticMarkup(<OpcionesCuotas opciones={opciones} elegida={elegida} onElegir={() => {}} progreso={progreso} />);
 
 describe("OpcionesCuotas", () => {
   it("una fila por opción con monto por cuota, etiqueta y total", () => {
@@ -17,8 +17,11 @@ describe("OpcionesCuotas", () => {
     expect(h.match(/Sin interés/g)).toHaveLength(1);
     expect(h).toMatch(/Total \$\s?110\.000/);
     expect(h).not.toContain("(total");
-    expect(h).toContain("Solo con tarjeta de crédito.");
     expect(h).not.toContain("Se pagan con tarjeta");
+  });
+  it("el aviso de sólo crédito aparece únicamente con cuotas elegidas", () => {
+    expect(html(undefined, 1)).not.toContain("sólo con tarjeta de crédito");
+    expect(html(undefined, 3)).toContain("En cuotas, sólo con tarjeta de crédito. Con débito, elija 1 pago.");
   });
   it("muestra la meta compacta con énfasis cuando falta para el próximo escalón", () => {
     const h = html({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 15000, minimo: 90000 }, pct: 83 });

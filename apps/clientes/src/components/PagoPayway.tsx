@@ -23,6 +23,7 @@ import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { AvisoProcesador } from "@/components/AvisoProcesador";
 import { textoCuotas } from "@/components/pago-brick";
+import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "@/components/PagoIconos";
 
 /**
  * Cobro con tarjeta de crédito o débito con Payway, dentro del sitio: "¿Cómo quiere pagar?" con las dos
@@ -125,7 +126,9 @@ export function PagoPayway({
   const sugerida = marcaPorPrefijo(pan);
   const marca = marcaElegida ?? sugerida;
   const debitoEnCuotas = modalidad === "debito" && cuotas > 1;
-  const mostrarSelectorMarca = cambiarMarca || !sugerida || marcaElegida !== null || Boolean(errores.marca);
+  // Con 6 dígitos ya se reconoce la marca: antes no se pregunta (con el número vacío confundía).
+  const sinReconocer = normalizarPan(pan).replace(/\D/g, "").length >= 6 && !sugerida;
+  const mostrarSelectorMarca = cambiarMarca || sinReconocer || marcaElegida !== null || Boolean(errores.marca);
 
   function validar(): Errores {
     const e: Errores = {};
@@ -336,7 +339,8 @@ export function PagoPayway({
         </div>
       )}
 
-      <Button type="submit" disabled={procesando || config === null}>
+      <Button type="submit" size="lg" loading={procesando} disabled={procesando || config === null}>
+        <IconoCandado />
         {procesando ? "Procesando su pago…" : `Pagar ${fmtPrecio(monto)}`}
       </Button>
 
@@ -353,6 +357,7 @@ export function PagoPayway({
       value: "credito",
       label: "Tarjeta de crédito",
       description: "Visa, Mastercard, American Express, Cabal, Naranja y Diners",
+      icon: <IconoTarjeta />,
       badge: { label: textoCuotas(cuotas), tone: cuotas > 1 ? "success" : "neutral" },
       content: campos,
       disabled: procesando && modalidad !== "credito",
@@ -361,6 +366,7 @@ export function PagoPayway({
       value: "debito",
       label: "Tarjeta de débito",
       description: cuotas > 1 ? "Para pagar con débito, pase su compra a un pago." : "Visa, Mastercard, Maestro y Cabal de débito",
+      icon: <IconoTarjetaDebito />,
       ...(cuotas > 1 ? { badge: { label: "Sólo en un pago" } } : {}),
       content: campos,
       disabled: cuotas > 1 || (procesando && modalidad !== "debito"),
@@ -376,8 +382,10 @@ export function PagoPayway({
       )}
       {errores.modalidad && <Alert tone="danger">{errores.modalidad}</Alert>}
 
+      <TituloComoPagar />
       <RadioGroup
         legend="¿Cómo quiere pagar?"
+        hideLegend
         options={opciones}
         value={modalidad}
         onValueChange={(v) => setModalidad(v as ModalidadTarjeta)}

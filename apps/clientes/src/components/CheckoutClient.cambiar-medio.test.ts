@@ -14,11 +14,14 @@ describe("CheckoutClient: cambiar medio de pago", () => {
     expect(fuente.split(': "Cambiar medio de pago"}')).toHaveLength(2);
   });
 
-  it("no cancela: confirma sobre el mismo pedido con POST /api/pedidos/:id/medio y vuelve al paso que dice pasoAlCambiarMedio", () => {
+  it("no cancela: confirma sobre el mismo pedido con POST /api/pedidos/:id/medio y vuelve siempre al paso Pago", () => {
     expect(fuente).not.toContain("/cancelar?para=cambiar-medio");
     expect(fuente).toContain("`/api/pedidos/${previo.id}/medio`");
     expect(fuente).toContain("if (pedidoACambiar) {");
-    expect(fuente).toContain("irAPaso(pasoAlCambiarMedio({ estadoCargado }))");
+    expect(fuente).toContain('irAPaso("pago");');
+    // Un pedido retomado se precarga con su entrega y su contacto.
+    expect(fuente).toContain("if (!estadoCargado && json?.entrega) precargarDelPedido(json.entrega, json.contacto);");
+    expect(fuente).toContain("(pedidoACambiar !== null || (datosCompletos && facturacionCompleta && (!aDomicilio || envioDisponible)))");
   });
 
   it("no crea otro pedido al cambiar: la rama del cambio sale antes de POST /api/pedidos", () => {

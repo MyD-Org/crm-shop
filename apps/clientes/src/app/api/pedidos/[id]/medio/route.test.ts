@@ -7,7 +7,7 @@ import type { IntentoAbierto } from "@/lib/pedidos";
  */
 
 const pedidoParaCambiarMedio = vi.fn();
-const avisarPedidoSiFalta = vi.fn(async () => true);
+const avisarPedidoSiFalta = vi.fn(async (_id: string) => true);
 const cambiarMedioPedido = vi.fn();
 const intentoAbiertoDelPedido = vi.fn();
 const resolverIntentoAbierto = vi.fn();
@@ -41,7 +41,7 @@ vi.mock("@/lib/pedido-avisos", () => ({
   avisoOperadorAlCrear: (m: string) => m !== "mercadopago" && m !== "payway",
   avisarPedidoRecibido: (...a: unknown[]) => avisarPedidoRecibido(...a),
   avisarOperadorPedidoNuevo: (...a: unknown[]) => avisarOperadorPedidoNuevo(...a),
-  avisarPedidoSiFalta: (...a: unknown[]) => avisarPedidoSiFalta(...a),
+  avisarPedidoSiFalta: (id: string) => avisarPedidoSiFalta(id),
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),

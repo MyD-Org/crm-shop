@@ -531,17 +531,20 @@ export async function POST(req: Request) {
     }
 
     // "Recibimos su pedido", sin demorar la respuesta. Un pedido repetido (mismo
-    // idempotencyKey) ya tuvo su mail.
+    // idempotencyKey) ya tuvo su mail. Con cobro en línea no se manda acá: el comprador recibe un
+    // solo mail ("pedido y pago") cuando se aprueba el cobro.
     if (!pedido.repetido) {
       const pedidoId = pedido.id;
       // Y el aviso al local (sucursal del pedido, o el email de la empresa), en el mismo after():
-      // ninguno de los dos lanza, y el del comprador sale primero. Con pago en línea el del local
-      // espera a que se apruebe el cobro (lo manda `avisarCobro`).
-      const avisarLocal = avisoOperadorAlCrear(pagoMetodo);
-      after(async () => {
-        await avisarPedidoRecibido(pedidoId);
-        if (avisarLocal) await avisarOperadorPedidoNuevo(pedidoId);
-      });
+      // ninguno de los dos lanza, y el del comprador sale primero. Con pago en línea ambos
+      // esperan a que se apruebe el cobro (los manda `avisarCobro`).
+      const avisarAlCrear = avisoOperadorAlCrear(pagoMetodo);
+      if (avisarAlCrear) {
+        after(async () => {
+          await avisarPedidoRecibido(pedidoId);
+          await avisarOperadorPedidoNuevo(pedidoId);
+        });
+      }
     }
 
     // El perfil aprende el teléfono del primer pedido, para no pedirlo en la

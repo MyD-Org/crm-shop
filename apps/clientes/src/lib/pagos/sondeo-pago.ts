@@ -52,7 +52,7 @@ export async function consultarPagoDelPedido(
   if (json.estado === "pagado") return { fase: "pagado" };
   if (json.estado === "fallido") {
     const cobrable = json.cobrable !== false;
-    const mensaje = json.mensaje ?? "No pudimos procesar el pago. Inténtelo de nuevo o elija transferencia.";
+    const mensaje = json.mensaje ?? "No pudimos procesar el pago. Inténtelo de nuevo o elija otro medio de pago.";
     return { fase: "rechazado", mensaje: cobrable ? mensaje : `${mensaje} ${MENSAJE_NO_COBRABLE}`, cobrable };
   }
   return { fase: "pendiente" };

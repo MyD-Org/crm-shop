@@ -31,10 +31,10 @@ describe("armarMailPedido", () => {
     expect(m.text).not.toContain("se está procesando");
   });
 
-  it("recibido con Mercado Pago sin pagar: invita a completar el pago", () => {
-    const m = armarMailPedido({ ...base, aviso: "recibido", pagoPendienteEnLinea: true });
-    expect(m.text).toContain("Si ya realizó el pago, se está procesando y le avisaremos por este medio cuando se confirme.");
-    expect(m.text).toContain("Si todavía no lo completó, puede hacerlo desde Mis pedidos.");
+  it("recibido ya no lleva el párrafo del pago en proceso", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido" });
+    expect(m.text).not.toContain("Si ya realizó el pago");
+    expect(m.text).not.toContain("Si todavía no lo completó");
   });
 
   it("recibido de una cuenta corriente: informa con qué medio paga, sin cobro", () => {
@@ -50,13 +50,42 @@ describe("armarMailPedido", () => {
     expect(m.text).not.toContain("Pagará con");
   });
 
-  it("pago recibido y rechazado, sin resumen", () => {
-    const ok = armarMailPedido({ ...base, aviso: "pago_recibido", lineas: [{ nombre: "X", cantidad: 1 }] });
-    expect(ok.subject).toContain("pago recibido");
-    expect(ok.text).not.toContain("- X");
-    const mal = armarMailPedido({ ...base, aviso: "pago_rechazado" });
+  it("pago recibido: confirma pedido y pago, con el detalle del pedido", () => {
+    const ok = armarMailPedido({
+      ...base,
+      aviso: "pago_recibido",
+      lineas: [{ nombre: "X", cantidad: 1 }],
+      total: 100,
+      entrega: "Retiro en local",
+      pago: "Mercado Pago",
+    });
+    expect(ok.subject).toBe("Tienda <Demo> — Pedido PED-00000042 y pago recibidos");
+    expect(ok.text).toContain("Recibimos su pedido y su pago");
+    expect(ok.text).toContain("- X × 1");
+    expect(ok.text).toContain("Pago: Mercado Pago");
+    expect(ok.html).toContain("Ver mis pedidos");
+  });
+
+  it("pago rechazado: sin resumen, con enlace para reintentar el pago", () => {
+    const mal = armarMailPedido({
+      ...base,
+      aviso: "pago_rechazado",
+      lineas: [{ nombre: "X", cantidad: 1 }],
+      checkoutUrl: "https://tienda.cliente.example/checkout",
+    });
     expect(mal.subject).toContain("pago no procesado");
     expect(mal.text).toContain("no se le cobró");
+    expect(mal.text).toContain("elegir otro medio de pago");
+    expect(mal.text).not.toContain("- X");
+    expect(mal.html).toContain('href="https://tienda.cliente.example/checkout"');
+    expect(mal.html).toContain("Reintentar el pago");
+    expect(mal.text).toContain("Reintentar el pago: https://tienda.cliente.example/checkout");
+  });
+
+  it("pago rechazado sin checkoutUrl cae al botón de Mis pedidos", () => {
+    const mal = armarMailPedido({ ...base, aviso: "pago_rechazado" });
+    expect(mal.html).not.toContain("Reintentar el pago</a>");
+    expect(mal.html).toContain("Ver mis pedidos");
   });
 
   it("sin link no lleva botón, y el asunto va en una línea", () => {
@@ -80,9 +109,10 @@ describe("armarMailPedido", () => {
       ...base,
       aviso: "recibido",
       lineas: [{ nombre: "Lámpara", cantidad: 1 }],
-      pagoPendienteEnLinea: true,
     });
-    for (const parte of [m.subject, m.html, m.text]) {
+    const ok = armarMailPedido({ ...base, aviso: "pago_recibido", lineas: [{ nombre: "Lámpara", cantidad: 1 }] });
+    const mal = armarMailPedido({ ...base, aviso: "pago_rechazado", checkoutUrl: "https://tienda.cliente.example/checkout" });
+    for (const parte of [m.subject, m.html, m.text, ok.subject, ok.html, ok.text, mal.subject, mal.html, mal.text]) {
       expect(infracciones(parte, REGISTRO)).toEqual([]);
     }
   });
@@ -126,9 +156,9 @@ describe("armarMailPedido: contacto del pedido a confirmar", () => {
     expect(m.text).not.toContain("WhatsApp");
   });
 
-  it("los avisos de pago no llevan el bloque de contacto", () => {
-    const m = armarMailPedido({ ...base, aviso: "pago_recibido", contacto });
-    expect(m.html).not.toContain("wa.me");
+  it("pago recibido lleva el contacto; el rechazo no", () => {
+    expect(armarMailPedido({ ...base, aviso: "pago_recibido", contacto }).html).toContain("wa.me");
+    expect(armarMailPedido({ ...base, aviso: "pago_rechazado", contacto }).html).not.toContain("wa.me");
   });
 
   it("sin contacto (flag apagado) el mail queda como siempre", () => {

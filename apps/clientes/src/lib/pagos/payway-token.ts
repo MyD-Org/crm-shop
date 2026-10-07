@@ -38,7 +38,7 @@ export type MotivoToken = "datos_invalidos" | "configuracion" | "red";
 /** Textos al comprador, en usted. */
 export const MENSAJE_TOKEN: Record<MotivoToken, string> = {
   datos_invalidos: "Revise el número, la fecha de vencimiento y el código de seguridad.",
-  configuracion: "No pudimos procesar el pago. Inténtelo de nuevo o elija transferencia.",
+  configuracion: "No pudimos procesar el pago. Inténtelo de nuevo o elija otro medio de pago.",
   red: "No pudimos comunicarnos con el procesador de pagos; no se realizó ningún cobro. Revise su conexión e inténtelo de nuevo.",
 };
 

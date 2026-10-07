@@ -360,3 +360,31 @@ export async function cotizar(
     listaPrivada: Boolean(opts.idListaPrivada),
   };
 }
+
+/**
+ * La cotización de un pedido que YA reserva sus unidades (cambio de medio de pago): el disponible que
+ * lee `cotizar` ya descuenta la reserva de ese mismo pedido, así que un "sin stock" o "stock
+ * insuficiente" sería falso. Se descartan esos dos problemas (las cantidades no cambian) y los totales
+ * se rehacen con todas las líneas; el resto de los problemas (inactivo, inexistente, sin precio) siguen
+ * bloqueando.
+ */
+export function ignorarProblemasDeStock(c: Cotizacion): Cotizacion {
+  const lineas = c.lineas.map((l): LineaCotizada => {
+    if (l.problema !== "sin_stock" && l.problema !== "stock_insuficiente") return l;
+    const resto = { ...l };
+    delete resto.problema;
+    delete resto.detalle;
+    return resto;
+  });
+  const validas = lineas.filter((l) => !l.problema);
+  const subtotal = redondear(validas.reduce((a, l) => a + l.subtotal, 0));
+  const iva = redondear(validas.reduce((a, l) => a + l.iva, 0));
+  return {
+    ...c,
+    lineas,
+    subtotal,
+    iva,
+    total: redondear(subtotal + iva + c.costoEnvio),
+    hayProblemas: lineas.some((l) => l.problema),
+  };
+}

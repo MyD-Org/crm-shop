@@ -494,6 +494,8 @@ export function CheckoutClient({
     cuentaPago?: CuentaPagoSnapshot | null;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
+  /** Pedido pendiente al que se le está cambiando el medio de pago: "Confirmar" lo actualiza en vez de crear otro. */
+  const [pedidoACambiar, setPedidoACambiar] = useState<typeof confirmado>(null);
   /** El pedido salió de este formulario (entrega, medio y cuotas siguen cargados): "Cambiar medio de pago" cae en el paso Pago. */
   const [estadoCargado, setEstadoCargado] = useState(false);
   /** El carrito es el de este pedido y todavía no se envió ningún cobro: recién ahí se vacía. */
@@ -633,6 +635,7 @@ export function CheckoutClient({
     setModalFacturacion(false);
     if (!confirmado) return;
     setConfirmado(null);
+    setPedidoACambiar(null);
     setPagado(false);
     setPagoEnConfirmacion(false);
     setComprobanteInformado(false);
@@ -757,6 +760,64 @@ export function CheckoutClient({
     pasoActual === "pago" &&
     !enviando;
 
+  /** El pedido ya existe: se le cambia el medio (y cuotas) y sigue el flujo normal con ese mismo número. */
+  async function confirmarCambioDeMedio(previo: NonNullable<typeof confirmado>) {
+    try {
+      const res = await fetch(`/api/pedidos/${previo.id}/medio`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pagoMetodo: pagoParaEnviar,
+          cuotas: pideCuotas && opcionesCuotas.length > 0 ? cuotasElegidas : undefined,
+          totalVisto: cotizacion?.total,
+        }),
+      });
+      if (res.status === 401) {
+        setErrorEnvio(TEXTO_SESION_VENCIDA);
+        recotizar();
+        return;
+      }
+      const json = await res.json().catch(() => null);
+      if (res.ok && json) {
+        const enLinea = esPagoEnLinea(pagoParaEnviar);
+        setPedidoACambiar(null);
+        setCarritoDelPedido(enLinea);
+        setEstadoCargado(true);
+        setConfirmado({
+          numero: json.numero,
+          id: json.id,
+          total: json.total ?? json.cotizacion?.total ?? cotizacion?.total ?? 0,
+          cuotas: typeof json.cuotas === "number" ? json.cuotas : null,
+          pagoEnLinea: enLinea,
+          procesador: procesadorDeMedio(pagoParaEnviar),
+          contacto: json.contacto ?? null,
+          cuentaPago: json.cuentaPago ?? null,
+        });
+        // Sin cobro en línea es una compra (el servidor ya vació su carrito): se limpia el local.
+        if (!enLinea) vaciarTrasPedido();
+        return;
+      }
+      const motivo = json?.motivo as string | undefined;
+      if (res.status === 404 || motivo === "pagado" || motivo === "pago_en_curso" || motivo === "pago_informado" || motivo === "no_cambia") {
+        // Ya no se puede cambiar: se vuelve a la pantalla del pedido con el motivo.
+        setPedidoACambiar(null);
+        setConfirmado(previo);
+        setErrorCancelar(json?.error ?? "No se pudo cambiar el medio de pago.");
+        return;
+      }
+      if (res.status === 409 || res.status === 422) {
+        setErrorEnvio(json?.error ?? "El pedido cambió. Revíselo.");
+        recotizar();
+        return;
+      }
+      setErrorEnvio(json?.error ?? "No pudimos cambiar el medio de pago.");
+    } catch {
+      setErrorEnvio("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function confirmar() {
     setEnviando(true);
     setErrorEnvio(null);
@@ -769,6 +830,11 @@ export function CheckoutClient({
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
           : null;
+    }
+
+    if (pedidoACambiar) {
+      await confirmarCambioDeMedio(pedidoACambiar);
+      return;
     }
 
     try {
@@ -910,37 +976,34 @@ export function CheckoutClient({
   }
 
   /**
-   * "Cambiar medio de pago": se cancela el pedido pendiente (el servidor valida dueño, estado y que
-   * no haya un cobro en vuelo ni pago informado) y se vuelve al paso Pago con lo cargado. El pedido
-   * nuevo se crea al confirmar, por el camino normal. Ver `lib/cambiar-medio-pago.ts`.
+   * "Cambiar medio de pago": se vuelve al paso Pago con lo cargado y el pedido pendiente queda anotado en
+   * `pedidoACambiar`. Nada se cancela ni se crea: al confirmar, `POST /api/pedidos/:id/medio` le cambia
+   * el medio al MISMO pedido (mismo número). Con el carrito vacío (el cobro ya lo había vaciado) se
+   * traen las líneas del pedido para poder cotizar. Ver `lib/cambiar-medio-pago.ts`.
    */
   async function cambiarMedio() {
     if (!confirmado) return;
     setCancelando(true);
     setErrorCancelar(null);
     try {
-      const res = await fetch(`/api/pedidos/${confirmado.id}/cancelar?para=cambiar-medio`, { method: "POST" });
-      // 404: ya no está pendiente (otra pestaña lo canceló): igual se vuelve a elegir.
-      if (res.ok || res.status === 404) {
+      if (items.length === 0) {
+        const res = await fetch(`/api/pedidos/${confirmado.id}/medio`);
+        if (!res.ok) {
+          const json = (await res.json().catch(() => null)) as { error?: string } | null;
+          setErrorCancelar(json?.error ?? "No se pudo cambiar el medio de pago. Inténtelo de nuevo en un momento.");
+          return;
+        }
         const json = (await res.json().catch(() => null)) as { items?: CartItem[] } | null;
         const lineas = Array.isArray(json?.items) ? json.items : [];
-        if (items.length === 0 && lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
-        setConfirmado(null);
-        setPagado(false);
-        setPagoEnConfirmacion(false);
-        setCarritoDelPedido(false);
-        setErrorEnvio(null);
-        // La clave era del pedido cancelado: sin resetearla, confirmar traería el pedido viejo.
-        claveIntento.current = null;
-        irAPaso(pasoAlCambiarMedio({ estadoCargado }));
-        return;
+        if (lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
       }
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      setErrorCancelar(
-        res.status === 409 && json?.error
-          ? json.error
-          : "No se pudo cambiar el medio de pago. Inténtelo de nuevo en un momento.",
-      );
+      setPedidoACambiar(confirmado);
+      setConfirmado(null);
+      setPagado(false);
+      setPagoEnConfirmacion(false);
+      setCarritoDelPedido(false);
+      setErrorEnvio(null);
+      irAPaso(pasoAlCambiarMedio({ estadoCargado }));
     } catch {
       setErrorCancelar("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
     } finally {

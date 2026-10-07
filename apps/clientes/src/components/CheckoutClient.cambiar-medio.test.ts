@@ -14,15 +14,17 @@ describe("CheckoutClient: cambiar medio de pago", () => {
     expect(fuente.split(': "Cambiar medio de pago"}')).toHaveLength(2);
   });
 
-  it("cancela con ?para=cambiar-medio y vuelve al paso que dice pasoAlCambiarMedio", () => {
-    expect(fuente).toContain("/cancelar?para=cambiar-medio");
+  it("no cancela: confirma sobre el mismo pedido con POST /api/pedidos/:id/medio y vuelve al paso que dice pasoAlCambiarMedio", () => {
+    expect(fuente).not.toContain("/cancelar?para=cambiar-medio");
+    expect(fuente).toContain("`/api/pedidos/${previo.id}/medio`");
+    expect(fuente).toContain("if (pedidoACambiar) {");
     expect(fuente).toContain("irAPaso(pasoAlCambiarMedio({ estadoCargado }))");
   });
 
-  it("reinicia la clave de idempotencia (el pedido nuevo no puede traer el viejo)", () => {
-    const cuerpo = fuente.slice(fuente.indexOf("async function cambiarMedio"), fuente.indexOf("/** Cobro aprobado"));
-    expect(cuerpo).toContain("claveIntento.current = null");
-    expect(cuerpo).toContain("setConfirmado(null)");
+  it("no crea otro pedido al cambiar: la rama del cambio sale antes de POST /api/pedidos", () => {
+    const cuerpo = fuente.slice(fuente.indexOf("async function confirmar()"));
+    expect(cuerpo.indexOf("confirmarCambioDeMedio(pedidoACambiar)")).toBeGreaterThan(0);
+    expect(cuerpo.indexOf("confirmarCambioDeMedio(pedidoACambiar)")).toBeLessThan(cuerpo.indexOf('fetch("/api/pedidos"'));
   });
 
   it('"Volver al carrito" queda como acción secundaria chica', () => {

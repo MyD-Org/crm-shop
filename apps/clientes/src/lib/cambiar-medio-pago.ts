@@ -1,13 +1,12 @@
 /**
  * "Cambiar medio de pago" desde la pantalla de cobro en línea.
  *
- * Diseño: se CANCELA el pedido pendiente (`POST /api/pedidos/:id/cancelar?para=cambiar-medio`, con su
- * lock, el chequeo del intento abierto y del comprobante informado) y se vuelve al paso Pago, donde
- * "Confirmar" crea un pedido nuevo por el camino normal (`POST /api/pedidos`): medio ofrecible, lista
- * de precios, cuotas, total congelado y reserva de stock se revalidan sin duplicar esa lógica. El
- * carrito sigue lleno (o el cancelar devuelve las líneas), así que un fallo a mitad de camino nunca
- * deja un pedido colgado ni al comprador sin carrito. El mail de "pedido recibido" sale sólo al
- * crear el pedido nuevo y sólo si su medio es sin cobro en línea (el cobro en línea avisa al pagarse).
+ * Diseño: el MISMO pedido (mismo id y número). El botón vuelve al paso Pago con lo cargado y, al
+ * confirmar, el cliente llama a `POST /api/pedidos/:id/medio` en vez de crear un pedido. El servidor
+ * (`cambiarMedioPedido`, una transacción con el lock del pedido) valida dueño, estado pendiente, que no
+ * haya cobro en vuelo, pago aprobado ni comprobante informado (409 en usted), revalida que el medio sea
+ * ofrecible y recotiza con las mismas funciones que crear (`cotizarConMedio`). Las cantidades no cambian:
+ * la reserva se mantiene. El mail de "pedido recibido" sale sólo si el medio nuevo es sin cobro en línea.
  */
 
 export type PasoDestino = "datos" | "pago";

@@ -21,7 +21,7 @@ describe("REGISTRO", () => {
   it("lista las claves facetables y deja afuera medidas_mm, leds_* y potencia_w_m", () => {
     const facetables = REGISTRO.map((c) => c.clave);
     expect(facetables).toEqual(
-      expect.arrayContaining(["polos", "curva", "corriente_a", "poder_corte_ka", "sensibilidad_ma", "tension_v", "ip", "temperatura_k", "zocalo", "tono", "color", "montaje", "angulo_grados", "seccion_mm2", "potencia_w", "flujo_lm", "largo_m", "diametro_mm", "ancho_mm"]),
+      expect.arrayContaining(["polos", "curva", "corriente_a", "poder_corte_ka", "sensibilidad_ma", "tension_v", "ip", "temperatura_k", "zocalo", "tono", "color", "montaje", "angulo_grados", "seccion_mm2", "potencia_w", "flujo_lm", "largo_m", "diametro_mm", "ancho_mm", "modulos", "dimerizable"]),
     );
     for (const fuera of ["medidas_mm", "leds_m", "potencia_w_m", "leds_rollo"]) expect(facetables).not.toContain(fuera);
   });
@@ -321,5 +321,46 @@ describe("diametro_mm y ancho_mm (caños y bandejas)", () => {
 
   it("sin filas (la migración 0070 todavía no escribió nada) no se ofrece nada y no rompe", () => {
     expect(elegirFacetas(entrada({ denominadores: { diametro_mm: 100, ancho_mm: 100 } }))).toEqual([]);
+  });
+});
+
+describe("modulos y dimerizable (gabinetes y lámparas)", () => {
+  it("modulos: lista en 'módulos' (capacidad DIN), con rango válido 1–200 del fixture", () => {
+    expect(claveFacetable("modulos")).toMatchObject({ control: "lista", titulo: "Módulos", unidad: "módulos" });
+    expect(rangoDeClave("modulos")).toEqual([1, 200]);
+    expect(RANGOS_SOLO_FACETA).toEqual(fixture.rangos_solo_faceta);
+    expect(Object.keys(RANGOS)).not.toContain("modulos");
+    expect(etiquetaValor("modulos", "12")).toBe("12 módulos");
+    expect(etiquetaValor("modulos", "1")).toBe("1 módulo");
+  });
+
+  it("modulos: se ofrece con cobertura suficiente, en orden numérico, y descarta lo fuera de rango", () => {
+    const r = elegirFacetas(
+      entrada({ filas: [...filas("modulos", { "24": 5, "4": 8, "12": 10, "0": 3, "300": 2 })], denominadores: { modulos: 28 } }),
+    );
+    const f = r.find((x) => x.clave === "modulos");
+    expect(f && f.control === "lista" ? f.items.map((i) => [i.valor, i.etiqueta]) : null).toEqual([
+      ["4", "4 módulos"],
+      ["12", "12 módulos"],
+      ["24", "24 módulos"],
+    ]);
+  });
+
+  it("dimerizable: lista Sí / No con la cobertura de siempre (30 %) y al menos dos valores", () => {
+    expect(claveFacetable("dimerizable")).toMatchObject({ control: "lista", titulo: "Dimerizable", valores: { si: "Sí", no: "No" } });
+    expect(etiquetaValor("dimerizable", "si")).toBe("Sí");
+    expect(etiquetaValor("dimerizable", "no")).toBe("No");
+    const ofrece = (denominador: number) =>
+      elegirFacetas(entrada({ filas: filas("dimerizable", { si: 6, no: 2 }), denominadores: { dimerizable: denominador } })).some((f) => f.clave === "dimerizable");
+    expect(ofrece(20)).toBe(true); // 8 de 20 = 40 %
+    expect(ofrece(40)).toBe(false); // 8 de 40 = 20 %: con poca cobertura no se ofrece
+    const solo = elegirFacetas(entrada({ filas: filas("dimerizable", { si: 10 }), denominadores: { dimerizable: 10 } }));
+    expect(solo.some((f) => f.clave === "dimerizable")).toBe(false); // un solo valor no es filtro
+  });
+
+  it("dimerizable: orden Sí antes que No y un valor que no es del vocabulario se muestra capitalizado, no se rompe", () => {
+    const r = elegirFacetas(entrada({ filas: filas("dimerizable", { no: 4, si: 6 }), denominadores: { dimerizable: 10 } }));
+    const f = r.find((x) => x.clave === "dimerizable");
+    expect(f && f.control === "lista" ? f.items.map((i) => i.valor) : null).toEqual(["si", "no"]);
   });
 });

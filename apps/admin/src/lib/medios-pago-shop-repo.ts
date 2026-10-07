@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm"
 import { getDb } from "@/db"
 import { listaPrecioCondiciones, listasPrecioOnline, mediosPagoShop } from "@/db/schema"
+import { leerChips, type ChipMedio } from "@/lib/medios-pago-shop-chips"
 import { avisosDeMedio } from "@/lib/medios-pago-shop-avisos"
 import {
   AUDIENCIA_CUENTA_CORRIENTE,
@@ -49,6 +50,8 @@ export interface MedioPagoDto {
   mostrarEnFicha: boolean
   /** `cuenta_corriente` = solo lo ofrece el Shop a clientes con cuenta corriente (a lo sumo uno por tenant). */
   audiencia: AudienciaMedio
+  /** Etiquetas que el checkout muestra sobre este medio (hasta 3, en este orden). */
+  chips: ChipMedio[]
 }
 
 export interface CondicionCuotasDto {
@@ -88,6 +91,7 @@ export const toMedioPagoDto = (
   destacarEnCatalogo: r.destacarEnCatalogo,
   mostrarEnFicha: r.mostrarEnFicha,
   audiencia: r.audiencia === AUDIENCIA_CUENTA_CORRIENTE ? AUDIENCIA_CUENTA_CORRIENTE : "publico",
+  chips: leerChips(r.chips),
 })
 
 export type ResultadoMedio =

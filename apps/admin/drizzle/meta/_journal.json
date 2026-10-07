@@ -498,6 +498,13 @@
       "when": 1792497200000,
       "tag": "0070_atributos_diametro_ancho",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792583600000,
+      "tag": "0071_medios_pago_chips",
+      "breakpoints": true
     }
   ]
 }

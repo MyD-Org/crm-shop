@@ -1133,6 +1133,12 @@ Shop ofrece salen de esta tabla; ya no existen los flags `pagos` ni `pedido-a-co
   inactivo, el pedido de una cuenta corriente queda "a coordinar". Drift solo en SQL: los dos CHECK
   (`medios_pago_shop_audiencia_chk`, `_audiencia_cc_chk`). Tras aplicar la migración, marcar el
   medio en esta pantalla (el "Mayorista" actual, renombrado "Efectivo o cheque").
+- **Etiquetas** (change `chips-medios-pago`, migración `0071`): `medios_pago_shop.chips` (jsonb,
+  `[]` por defecto, CHECK de array). Al agregar o editar un medio, el editor "Etiquetas" permite
+  hasta 3, cada una con texto (1 a 30 caracteres, sin HTML) y tono (Destacado, Éxito, Informativo),
+  con vista previa y orden. Se guardan junto con el medio y el Shop las muestra resaltadas sobre la
+  opción de ese medio en el checkout (mismo aviso/revalidación que el resto de los datos del medio).
+  La validación fina vive en `medios-pago-shop-chips.ts`; el Shop lee de forma tolerante.
 
 ## Cuentas bancarias del Shop
 

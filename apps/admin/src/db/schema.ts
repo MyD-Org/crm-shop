@@ -1147,6 +1147,9 @@ export const mediosPagoShop = pgTable(
     // de cuenta corriente por tenant (índice único parcial). Drift solo en SQL: los CHECK del valor
     // y de que el medio de cuenta corriente no cobre en línea ni se destaque.
     audiencia: text("audiencia").notNull().default("publico"),
+    // Etiquetas del medio en el checkout (migración 0071): [{texto, tono}], hasta 3. Drift solo en
+    // SQL: el CHECK de que sea un array; la validación fina vive en medios-pago-shop-chips.ts.
+    chips: jsonb("chips").notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

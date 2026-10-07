@@ -18,6 +18,7 @@ const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPago
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
   audiencia: "publico",
+  chips: [],
   avisos: [],
   ...extra,
 })

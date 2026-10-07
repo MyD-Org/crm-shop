@@ -13,6 +13,8 @@ import {
   type FilaCuotasForm,
 } from "@/lib/medios-pago-shop-form"
 import { normalizarIdentificador } from "@/lib/identificador"
+import { EditorChipsMedio } from "@/components/admin/EditorChipsMedio"
+import { TONO_BADGE_DE_CHIP, type ChipMedio } from "@/lib/medios-pago-shop-chips"
 import { esSlugCobro, validarMedioPagoCambios, validarMedioPagoNuevo } from "@/lib/medios-pago-shop-validacion"
 
 // Configuración → Sucursales y ventas: medios de pago que el checkout del Shop ofrece. Cada
@@ -37,6 +39,8 @@ type Form = {
   mostrarEnFicha: boolean
   /** "Solo cuentas corrientes": el público no ve este medio (a lo sumo uno por tenant). */
   soloCuentaCorriente: boolean
+  /** Etiquetas del medio en el checkout (hasta 3), en el orden en que se muestran. */
+  chips: ChipMedio[]
 }
 
 type Lista = { id: string; nombre: string }
@@ -55,6 +59,7 @@ const formVacio: Form = {
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
   soloCuentaCorriente: false,
+  chips: [],
 }
 
 const desdeDto = (m: MedioPagoDto): Form => ({
@@ -74,6 +79,7 @@ const desdeDto = (m: MedioPagoDto): Form => ({
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
   soloCuentaCorriente: m.audiencia === "cuenta_corriente",
+  chips: m.chips ?? [],
 })
 
 // El destacado y la ficha se configuran sólo editando un medio ya creado; la lista se enlaza aparte
@@ -86,6 +92,7 @@ const cuerpo = (f: Form) => ({
   aplicaEnvio: f.aplicaEnvio,
   activo: f.activo,
   audiencia: f.soloCuentaCorriente ? "cuenta_corriente" : "publico",
+  chips: f.chips,
 })
 
 const porOrden = (a: MedioPagoDto, b: MedioPagoDto) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
@@ -350,6 +357,13 @@ export function MediosPagoShopCard() {
                     <span>{m.nombre}</span>
                     <span className="text-xs" style={{ color: "var(--ink-soft)" }}>{m.slug}</span>
                     {m.audiencia === "cuenta_corriente" && <Badge tone="info">Solo cuentas corrientes</Badge>}
+                    {(m.chips ?? []).length > 0 && (
+                      <div className="flex flex-wrap gap-1" aria-label="Etiquetas del checkout">
+                        {m.chips.map((c, i) => (
+                          <Badge key={i} tone={TONO_BADGE_DE_CHIP[c.tono]}>{c.texto}</Badge>
+                        ))}
+                      </div>
+                    )}
                     {esSlugCobro(m.slug) && (
                       <span className="text-xs" role="note" style={{ color: "var(--ink-soft)" }}>
                         {m.slug === "payway" ? "Payway" : "Mercado Pago"} solo se ofrece si las credenciales están cargadas en la tienda.
@@ -466,6 +480,7 @@ export function MediosPagoShopCard() {
             >
               <Textarea rows={4} value={form.instrucciones} onChange={(e) => cambiar({ instrucciones: e.target.value })} aria-invalid={Boolean(errores.instrucciones)} />
             </Field>
+            <EditorChipsMedio chips={form.chips} onChange={(chips) => cambiar({ chips })} error={errores.chips} />
             {form.editandoSlug && (
               <div className="flex flex-col gap-3">
                 <Field

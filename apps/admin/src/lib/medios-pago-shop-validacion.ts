@@ -1,6 +1,8 @@
 // Validación pura de los medios de pago del checkout (sin DB, sin Next): la comparten la API y el
 // formulario de Configuración → Sucursales y ventas. Textos en usted.
 
+import { validarChips, type ChipMedio } from "@/lib/medios-pago-shop-chips"
+
 export const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 export const MAX_NOMBRE = 60
 export const MAX_INSTRUCCIONES = 1000
@@ -36,6 +38,8 @@ export interface MedioPagoValido {
   orden: number
   /** Ausente en el alta = rige el default de la base ('publico'). */
   audiencia?: AudienciaMedio
+  /** Etiquetas del medio en el checkout (migración 0071). Ausente en el alta = [] (default de la base). */
+  chips?: ChipMedio[]
 }
 
 /** Cambios parciales: además de los campos del medio, destacado y ficha. La lista se enlaza por Precios online. */
@@ -91,6 +95,12 @@ function validarCampos(body: Record<string, unknown>): { ok: true; cambios: Camb
   if (body.audiencia !== undefined) {
     if (body.audiencia !== "publico" && body.audiencia !== "cuenta_corriente") return invalido("audiencia", MSG_BOOL)
     cambios.audiencia = body.audiencia
+  }
+
+  if (body.chips !== undefined) {
+    const r = validarChips(body.chips)
+    if (!r.ok) return invalido("chips", r.error)
+    cambios.chips = r.chips
   }
 
   if (body.orden !== undefined) {

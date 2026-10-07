@@ -63,26 +63,26 @@ const sinTema = () => ({});
 
 describe("customizacionBrick", () => {
   it("crédito con cuotas: exactamente esas (mínimo = máximo), sólo tarjeta de crédito", () => {
-    const c = customizacionBrick("credito", 6, 1000, sinTema);
+    const c = customizacionBrick("credito", 6, sinTema);
     expect(c.paymentMethods).toEqual({ types: { included: ["credit_card"] }, minInstallments: 6, maxInstallments: 6 });
   });
 
   it("débito: sólo tarjeta de débito y sin cuotas, aunque el pedido tenga", () => {
-    expect(customizacionBrick("debito", 6, 1000, sinTema).paymentMethods).toEqual({ types: { included: ["debit_card"] } });
+    expect(customizacionBrick("debito", 6, sinTema).paymentMethods).toEqual({ types: { included: ["debit_card"] } });
   });
 
   it("sin cuotas congeladas: sin tope (lo que ofrezca Mercado Pago)", () => {
-    expect("maxInstallments" in customizacionBrick("credito", undefined, 1000, sinTema).paymentMethods).toBe(false);
+    expect("maxInstallments" in customizacionBrick("credito", undefined, sinTema).paymentMethods).toBe(false);
   });
 
-  it("sin título propio y el botón dice el monto", () => {
-    const c = customizacionBrick("credito", 1, 245300, sinTema);
+  it("sin título ni botón propios (el botón es un Button del DS)", () => {
+    const c = customizacionBrick("credito", 1, sinTema);
     expect(c.visual.hideFormTitle).toBe(true);
-    expect(c.visual.texts.formSubmit).toMatch(/^Pagar \$\s?245\.300(,00)?$/);
+    expect(c.visual.hidePaymentButton).toBe(true);
   });
 
   it("toma los colores del tema que le pasan", () => {
-    const c = customizacionBrick("credito", 3, 777, () => ({ baseColor: "#16283f" }));
+    const c = customizacionBrick("credito", 3, () => ({ baseColor: "#16283f" }));
     expect(c.visual.style.customVariables).toEqual({ baseColor: "#16283f" });
   });
 
@@ -92,30 +92,29 @@ describe("customizacionBrick", () => {
   });
 
   it("misma identidad para los mismos valores (re-renders del padre)", () => {
-    expect(customizacionBrick("credito", 6, 500, sinTema)).toBe(customizacionBrick("credito", 6, 500, sinTema));
+    expect(customizacionBrick("credito", 6, sinTema)).toBe(customizacionBrick("credito", 6, sinTema));
   });
 
-  it("identidad distinta si cambia la tarjeta, las cuotas o el monto", () => {
-    const base = customizacionBrick("credito", 6, 500, sinTema);
-    expect(customizacionBrick("debito", 6, 500, sinTema)).not.toBe(base);
-    expect(customizacionBrick("credito", 3, 500, sinTema)).not.toBe(base);
-    expect(customizacionBrick("credito", 6, 501, sinTema)).not.toBe(base);
+  it("identidad distinta si cambia la tarjeta o las cuotas", () => {
+    const base = customizacionBrick("credito", 6, sinTema);
+    expect(customizacionBrick("debito", 6, sinTema)).not.toBe(base);
+    expect(customizacionBrick("credito", 3, sinTema)).not.toBe(base);
   });
 
   it("cuotas inválidas se tratan como sin tope", () => {
-    expect(customizacionBrick("credito", 0, 90, sinTema)).toBe(customizacionBrick("credito", undefined, 90, sinTema));
-    expect(customizacionBrick("credito", 2.5, 90, sinTema)).toBe(customizacionBrick("credito", undefined, 90, sinTema));
+    expect(customizacionBrick("credito", 0, sinTema)).toBe(customizacionBrick("credito", undefined, sinTema));
+    expect(customizacionBrick("credito", 2.5, sinTema)).toBe(customizacionBrick("credito", undefined, sinTema));
   });
 
   it("no se congela: el SDK del Brick puede mutarla sin romper el checkout", () => {
-    expect(Object.isFrozen(customizacionBrick("credito", 6, 1000, sinTema))).toBe(false);
+    expect(Object.isFrozen(customizacionBrick("credito", 6, sinTema))).toBe(false);
   });
 });
 
 describe("PagoMercadoPago usa la customization estable", () => {
-  it("memoiza con deps [tipoTarjeta, maxCuotas, monto] y pasa esa instancia al Brick", () => {
+  it("memoiza con deps [tipoTarjeta, maxCuotas] y pasa esa instancia al Brick", () => {
     expect(fuente).toMatch(
-      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(tipoTarjeta, maxCuotas, monto\) as CustomizacionSdk,\s*\[tipoTarjeta, maxCuotas, monto\]\s*,?\s*\)/,
+      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(tipoTarjeta, maxCuotas\) as CustomizacionSdk,\s*\[tipoTarjeta, maxCuotas\]\s*,?\s*\)/,
     );
     expect(fuente).toMatch(/customization=\{customization\}/);
   });

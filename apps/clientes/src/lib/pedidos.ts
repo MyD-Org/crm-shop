@@ -1660,10 +1660,25 @@ export async function cancelarPedidoPendiente(
 export async function pedidoParaCambiarMedio(
   id: string,
   dueno: DuenoPedidos,
-): Promise<{ entregaTipo: EntregaTipo; pagoMetodo: string; lineas: { id: string; qty: number }[] } | null> {
+): Promise<{
+  entregaTipo: EntregaTipo;
+  pagoMetodo: string;
+  lineas: { id: string; qty: number }[];
+  /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
+  entrega: { local: string | null; ciudad: string | null; direccion: string | null };
+  contacto: { nombre: string; telefono: string };
+} | null> {
   const db = getDb();
   const [p] = await db
-    .select({ entregaTipo: orders.entregaTipo, pagoMetodo: orders.pagoMetodo })
+    .select({
+      entregaTipo: orders.entregaTipo,
+      pagoMetodo: orders.pagoMetodo,
+      sucursal: orders.sucursal,
+      entregaCiudad: orders.entregaCiudad,
+      entregaDireccion: orders.entregaDireccion,
+      contactoNombre: orders.contactoNombre,
+      contactoTelefono: orders.contactoTelefono,
+    })
     .from(orders)
     .where(and(eq(orders.id, id), esDeSuDueno(dueno), eq(orders.estado, "pendiente")))
     .limit(1);
@@ -1677,6 +1692,13 @@ export async function pedidoParaCambiarMedio(
     entregaTipo: p.entregaTipo as EntregaTipo,
     pagoMetodo: p.pagoMetodo,
     lineas: items.map((i) => ({ id: i.id, qty: Number(i.qty) })),
+    entrega: {
+      // Con retiro, la sucursal del pedido es el local elegido.
+      local: p.entregaTipo === "retiro" ? (p.sucursal ?? null) : null,
+      ciudad: p.entregaCiudad ?? null,
+      direccion: p.entregaDireccion ?? null,
+    },
+    contacto: { nombre: p.contactoNombre, telefono: p.contactoTelefono },
   };
 }
 

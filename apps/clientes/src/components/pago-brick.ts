@@ -8,7 +8,9 @@
  *
  * Es el formulario de UNA tarjeta (crédito o débito): la elección del medio
  * (crédito, débito, cuenta de Mercado Pago) es nuestra, con el `RadioGroup` del
- * DS, y el Brick va adentro de la opción elegida. Por eso sin título propio.
+ * DS, y el Brick va adentro de la opción elegida. Por eso sin título propio y sin
+ * su botón: "Pagar $ X" es un `Button` del DS que pide los datos con
+ * `cardPaymentBrickController.getFormData()` (ver PagoMercadoPago.tsx).
  *
  * No se congela con `Object.freeze`: el objeto se lo pasamos a un SDK remoto
  * que podría mutarlo, y un TypeError ahí rompería el checkout. La
@@ -17,7 +19,6 @@
 
 import type { ComponentProps } from "react";
 import type { CardPayment } from "@mercadopago/sdk-react";
-import { fmtPrecio } from "@/lib/format";
 
 /** Lo que espera el SDK: sus tipos son más laxos (`visual: object`) y con arrays mutables. */
 export type CustomizacionSdk = ComponentProps<typeof CardPayment>["customization"];
@@ -35,7 +36,7 @@ export interface CustomizacionBrick {
   };
   readonly visual: {
     readonly hideFormTitle: true;
-    readonly texts: { readonly formSubmit: string };
+    readonly hidePaymentButton: true;
     readonly style: { readonly theme: "default"; readonly customVariables: VariablesBrick };
   };
 }
@@ -57,6 +58,7 @@ export function variablesDelTema(): VariablesBrick {
   const token = (n: string) => css.getPropertyValue(n).trim();
   const pares: [string, string][] = [
     ["baseColor", token("--color-primary")],
+    ["baseColorFirstVariant", token("--color-primary-hover")],
     ["buttonTextColor", token("--color-on-primary")],
     ["textPrimaryColor", token("--color-text")],
     ["textSecondaryColor", token("--color-muted")],
@@ -64,10 +66,12 @@ export function variablesDelTema(): VariablesBrick {
     ["inputBackgroundColor", token("--color-surface")],
     ["errorColor", token("--color-danger")],
     ["successColor", token("--color-success")],
-    ["outlinePrimaryColor", token("--color-ring")],
+    // Borde de los campos: el gris de los Input del DS (con el color de marca quedaban todos azules).
+    ["outlinePrimaryColor", token("--color-border-strong")],
+    ["outlineSecondaryColor", token("--color-border")],
     ["borderRadiusSmall", token("--radius-sm")],
     ["borderRadiusMedium", token("--radius-sm")],
-    ["borderRadiusLarge", token("--radius")],
+    ["borderRadiusLarge", token("--radius-sm")],
   ];
   return Object.fromEntries([...pares.filter(([, v]) => v !== ""), ["formPadding", "0px"]]);
 }
@@ -80,11 +84,10 @@ export function variablesDelTema(): VariablesBrick {
 export function customizacionBrick(
   tipo: TipoTarjeta,
   maxCuotas: number | undefined,
-  monto: number,
   leerVariables: () => VariablesBrick = variablesDelTema,
 ): CustomizacionBrick {
   const valido = tipo === "credito" && typeof maxCuotas === "number" && Number.isInteger(maxCuotas) && maxCuotas >= 1;
-  const clave = `${tipo}|${valido ? maxCuotas : "sin"}|${monto}`;
+  const clave = `${tipo}|${valido ? maxCuotas : "sin"}`;
   const previa = cache.get(clave);
   if (previa) return previa;
 
@@ -95,7 +98,7 @@ export function customizacionBrick(
     },
     visual: {
       hideFormTitle: true,
-      texts: { formSubmit: `Pagar ${fmtPrecio(monto)}` },
+      hidePaymentButton: true,
       style: { theme: "default", customVariables: leerVariables() },
     },
   };

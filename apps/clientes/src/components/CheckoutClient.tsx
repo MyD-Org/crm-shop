@@ -14,7 +14,7 @@ import { PagoPayway } from "@/components/PagoPayway";
 import { SelectorDireccionEnvio } from "@/components/SelectorDireccionEnvio";
 import { PROVINCIAS_SELECTOR, type OpcionesCheckoutSucursales } from "@/lib/zona";
 import { VincularClient } from "@/components/VincularClient";
-import { entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
+import { OTRA_DIRECCION, entregaDesdeGuardada, entregaElegida, type DireccionEnvio } from "@/lib/direcciones-envio";
 import {
   cuerpoDeSincronizacion,
   estadoInicialCheckout,
@@ -77,7 +77,7 @@ import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { PasoNumerado } from "@/components/PasoNumerado";
 import { PIE_TRANSFERENCIA } from "@/lib/pie-pago-transferencia";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
-import { pasoAlCambiarMedio, puedeCambiarMedioPago } from "@/lib/cambiar-medio-pago";
+import { precargaDeEntrega, puedeCambiarMedioPago, type EntregaDelPedido } from "@/lib/cambiar-medio-pago";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -759,9 +759,9 @@ export function CheckoutClient({
     !!cotizacion &&
     !cotizacion.hayProblemas &&
     cotizacion.lineas.length > 0 &&
-    datosCompletos &&
-    facturacionCompleta &&
-    (!aDomicilio || envioDisponible) &&
+    // Al cambiarle el medio a un pedido que ya existe, el servidor usa sus datos y su entrega: sólo
+    // cuentan el medio y las cuotas (ver `lib/cambiar-medio-pago.ts`).
+    (pedidoACambiar !== null || (datosCompletos && facturacionCompleta && (!aDomicilio || envioDisponible))) &&
     pasoActual === "pago" &&
     !enviando;
 
@@ -981,26 +981,52 @@ export function CheckoutClient({
   }
 
   /**
-   * "Cambiar medio de pago": se vuelve al paso Pago con lo cargado y el pedido pendiente queda anotado en
+   * "Cambiar medio de pago": se vuelve SIEMPRE al paso Pago y el pedido pendiente queda anotado en
    * `pedidoACambiar`. Nada se cancela ni se crea: al confirmar, `POST /api/pedidos/:id/medio` le cambia
-   * el medio al MISMO pedido (mismo número). Con el carrito vacío (el cobro ya lo había vaciado) se
-   * traen las líneas del pedido para poder cotizar. Ver `lib/cambiar-medio-pago.ts`.
+   * el medio al MISMO pedido (mismo número). Con un pedido retomado (sin el formulario cargado) se traen
+   * su entrega y su contacto para precargarlo, y con el carrito vacío (el cobro ya lo había vaciado),
+   * sus líneas para poder cotizar. Ver `lib/cambiar-medio-pago.ts`.
    */
+  function precargarDelPedido(entrega: EntregaDelPedido, contacto?: { nombre?: string; telefono?: string }) {
+    const p = precargaDeEntrega(
+      entrega,
+      direccionesGuardadas.map((d) => ({ id: d.id, ...entregaDesdeGuardada(d) })),
+      sucursales?.locales.map((l) => l.slug) ?? [],
+    );
+    setOpcionEntrega(p.opcion);
+    if (p.local) setLocalRetiro(p.local);
+    if (p.opcion === "domicilio") {
+      setAOtraDireccion(true);
+      setEleccionDireccion(p.direccionGuardada ?? OTRA_DIRECCION);
+      if (!p.direccionGuardada) {
+        setCiudad(p.tipeada.ciudad);
+        setDireccion(p.tipeada.direccion);
+      }
+    }
+    if (contacto?.nombre && !nombre.trim()) setNombre(contacto.nombre);
+    if (contacto?.telefono && !telefono.trim()) setTelefono(contacto.telefono);
+  }
+
   async function cambiarMedio() {
     if (!confirmado) return;
     setCancelando(true);
     setErrorCancelar(null);
     try {
-      if (items.length === 0) {
+      if (items.length === 0 || !estadoCargado) {
         const res = await fetch(`/api/pedidos/${confirmado.id}/medio`);
         if (!res.ok) {
           const json = (await res.json().catch(() => null)) as { error?: string } | null;
           setErrorCancelar(json?.error ?? "No se pudo cambiar el medio de pago. Inténtelo de nuevo en un momento.");
           return;
         }
-        const json = (await res.json().catch(() => null)) as { items?: CartItem[] } | null;
+        const json = (await res.json().catch(() => null)) as {
+          items?: CartItem[];
+          entrega?: EntregaDelPedido;
+          contacto?: { nombre?: string; telefono?: string };
+        } | null;
         const lineas = Array.isArray(json?.items) ? json.items : [];
-        if (lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
+        if (items.length === 0 && lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
+        if (!estadoCargado && json?.entrega) precargarDelPedido(json.entrega, json.contacto);
       }
       setPedidoACambiar(confirmado);
       setConfirmado(null);
@@ -1008,7 +1034,7 @@ export function CheckoutClient({
       setPagoEnConfirmacion(false);
       setCarritoDelPedido(false);
       setErrorEnvio(null);
-      irAPaso(pasoAlCambiarMedio({ estadoCargado }));
+      irAPaso("pago");
     } catch {
       setErrorCancelar("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
     } finally {

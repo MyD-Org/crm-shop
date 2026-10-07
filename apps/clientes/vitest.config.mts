@@ -4,7 +4,8 @@ import { TEST_DATABASE_URL } from "./test/integration/db-url";
 
 /**
  * Dos proyectos:
- *  - unit:        lógica pura del shop, sin DB. `environment: node` a propósito: nada de DOM.
+ *  - unit:        lógica pura del shop, sin DB. `environment: node` a propósito: nada de DOM
+ *                 (los .test.tsx renderizan con renderToStaticMarkup, no necesitan jsdom).
  *                 Los flags de Vercel Flags se leen de un estado en memoria (src/test/flags.ts).
  *  - integration: contra una Postgres LOCAL de test (`shop_test`) que el globalSetup crea y migra
  *                 con las migraciones reales de las dos apps. Nunca toca una base remota
@@ -25,7 +26,7 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+          include: ["src/**/*.test.ts", "src/**/*.test.tsx", "scripts/**/*.test.ts"],
           setupFiles: ["src/test/setup-flags.ts"],
         },
       },

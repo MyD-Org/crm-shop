@@ -3,10 +3,11 @@
  * y su cascada, con la superficie (`catalogo` | `autocompletar` | `chat`) que se quiera medir. SOLO scripts.
  *
  * - catálogo: lo que hace el sitio. `/buscar` (la función REAL, `destinoDeBusqueda`) decide entre
- *   la clásica y `ia=1` con los duros del plan; la página lee esa URL y llama al motor con
+ *   la clásica y `ia=1` (sin filtros deducidos: lo duro del plan ordena); la página lee esa URL y llama al motor con
  *   `conPlanDeUrl`. Primera página, 24 productos, con conteo.
- * - autocompletar (8) y chat (10): el motor con el plan perezoso de la corrida, sin conteo, sin
- *   filtro de stock y sin duros del plan (como en producción).
+ * - autocompletar (8) y chat (10): el motor con el plan perezoso de la corrida, sin conteo y sin
+ *   duros del plan como filtro (como en producción). El autocompletar filtra el stock como la vista
+ *   (en producción, "Solo con stock", igual que el Enter); el chat, no.
  *
  * El plan sale de `obtenerPlan` (v2.ts), el MISMO punto que usa `ejecutarV2`.
  *
@@ -94,7 +95,13 @@ export async function ejecutarMotor(q: string, ctx: ContextoMotor): Promise<Resu
     return memo.plan.plan;
   };
   const r = await buscar(
-    { consulta: q, filtros: estructurados, orden: "relevancia", pagina: 1, porPagina: k },
+    {
+      consulta: q,
+      filtros: { ...estructurados, ...(ctx.superficie === "autocompletar" ? { soloStock: vista.soloStock } : {}) },
+      orden: "relevancia",
+      pagina: 1,
+      porPagina: k,
+    },
     { superficie: ctx.superficie, conPlan: true, conteo, planDe, sinTopes: true },
     deps,
   );

@@ -241,7 +241,8 @@ describe("banco versionado: casos de medidas (busqueda-medidas, M1b)", () => {
       return c;
     });
     // Hash del banco versionado ANTES de este cambio (97 casos). Si cambia, se tocó un caso que ya se medía.
-    expect(hashBanco(sinMedidas)).toBe("e12dbb8461b0");
+    // 2026-10-07: sólo cambió el NOMBRE de categorías renombradas en el árbol (mismas categorías y slugs).
+    expect(hashBanco(sinMedidas)).toBe("2588aa86766b");
   });
 });
 

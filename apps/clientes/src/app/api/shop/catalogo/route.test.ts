@@ -15,6 +15,8 @@ const secuencia: Etapa[] = [];
 const respuestas: Record<Etapa, Product[]> = { codigo: [], plan: [], exacta: [], tolerante: [] };
 /** El texto de cada lectura (para ver qué conserva la tolerante). */
 const textos: Texto[] = [];
+/** El filtro de stock de cada lectura. */
+const stocks: (boolean | undefined)[] = [];
 const fallan = new Set<Etapa>();
 
 function leer(etapa: Etapa): Product[] {
@@ -25,9 +27,10 @@ function leer(etapa: Etapa): Product[] {
 
 type Texto = { q?: string; tolerante?: boolean; plan?: unknown; codigo?: boolean };
 vi.mock("@/lib/catalog", () => ({
-  getPaginaCatalogo: async (o: { filtros?: { texto?: Texto } }) => {
+  getPaginaCatalogo: async (o: { filtros?: { texto?: Texto; soloStock?: boolean } }) => {
     const t: Texto = o.filtros?.texto ?? {};
     textos.push(t);
+    stocks.push(o.filtros?.soloStock);
     // Con la cascada la tolerante puede llevar plan y código: manda `tolerante`.
     const productos = leer(t.tolerante ? "tolerante" : t.plan ? "plan" : t.codigo ? "codigo" : "exacta");
     return { productos, total: productos.length, pagina: 1, paginas: 1 };
@@ -60,6 +63,7 @@ beforeEach(() => {
   respuestas.exacta = [];
   respuestas.tolerante = [];
   textos.length = 0;
+  stocks.length = 0;
   fallan.clear();
   planParaPagina.mockClear();
   planParaPagina.mockResolvedValue(plan);
@@ -68,6 +72,12 @@ beforeEach(() => {
 });
 
 describe("GET /api/shop/catalogo", () => {
+  it("sólo con stock, como el Enter (el catálogo llega con su default): el desplegable y el Enter dan el mismo conjunto", async () => {
+    respuestas.plan = [prod("1")];
+    await pedir("?q=panel+de+interior&limit=8");
+    expect(stocks).toEqual([true]);
+  });
+
   it("devuelve el array de productos tal cual, sin envoltorio", async () => {
     respuestas.plan = [prod("1"), prod("2")];
     const res = await pedir("?q=panel+de+interior&limit=8");

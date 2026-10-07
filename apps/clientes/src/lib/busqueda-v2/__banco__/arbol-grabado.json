@@ -45,7 +45,7 @@
     {
       "id": "cat-008",
       "parentId": "cat-063",
-      "nombre": "Herramientas manuales y electricas",
+      "nombre": "Manuales y eléctricas",
       "orden": 0
     },
     {
@@ -69,7 +69,7 @@
     {
       "id": "cat-012",
       "parentId": "cat-063",
-      "nombre": "Herramientas de electricista",
+      "nombre": "De electricista",
       "orden": 0
     },
     {
@@ -81,7 +81,7 @@
     {
       "id": "cat-014",
       "parentId": "cat-063",
-      "nombre": "Herramientas neumaticas",
+      "nombre": "Neumáticas",
       "orden": 0
     },
     {
@@ -123,7 +123,7 @@
     {
       "id": "cat-021",
       "parentId": "cat-047",
-      "nombre": "Senalizacion y medicion",
+      "nombre": "Señalización y medición",
       "orden": 0
     },
     {
@@ -159,7 +159,7 @@
     {
       "id": "cat-027",
       "parentId": "cat-047",
-      "nombre": "Transformadores de corriente",
+      "nombre": "Transf. de corriente",
       "orden": 0
     },
     {
@@ -213,13 +213,13 @@
     {
       "id": "cat-036",
       "parentId": "cat-063",
-      "nombre": "Herramientas de medicion",
+      "nombre": "De medición",
       "orden": 0
     },
     {
       "id": "cat-037",
       "parentId": "cat-063",
-      "nombre": "Herramientas para el auto",
+      "nombre": "Para el auto",
       "orden": 0
     },
     {
@@ -237,7 +237,7 @@
     {
       "id": "cat-040",
       "parentId": "cat-063",
-      "nombre": "Organizadores y almacenamiento",
+      "nombre": "Organizadores",
       "orden": 0
     },
     {
@@ -255,7 +255,7 @@
     {
       "id": "cat-043",
       "parentId": "cat-047",
-      "nombre": "Precintos y sujecion de cables",
+      "nombre": "Precintos y sujeción",
       "orden": 0
     },
     {
@@ -357,13 +357,13 @@
     {
       "id": "cat-060",
       "parentId": "cat-065",
-      "nombre": "Campanas y purificadores de cocina",
+      "nombre": "Campanas de cocina",
       "orden": 0
     },
     {
       "id": "cat-061",
       "parentId": "cat-065",
-      "nombre": "Calefaccion y cortinas de aire",
+      "nombre": "Calefacción y cortinas de aire",
       "orden": 0
     },
     {
@@ -483,7 +483,7 @@
     {
       "id": "cat-081",
       "parentId": "cat-064",
-      "nombre": "Portalamparas y Zocalos",
+      "nombre": "Portalámparas y zócalos",
       "orden": 0
     }
   ],

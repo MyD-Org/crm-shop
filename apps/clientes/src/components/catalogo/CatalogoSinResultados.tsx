@@ -19,6 +19,8 @@ import Link from "next/link";
  *   relacionados": la entiende la búsqueda v2.
  * - Con el filtro "Con stock en <local>" activo, el título lo dice y se ofrece
  *   "Ver en todos los locales" (quita sólo ese filtro).
+ * - Si sólo hay coincidencias sin stock ("Solo con stock" es el default y la búsqueda no lo
+ *   apaga sola): lo dice y ofrece verlas (apagarlo queda como elección de la persona).
  * - Siempre, "Ver todos los productos".
  */
 export function CatalogoSinResultados({
@@ -28,6 +30,7 @@ export function CatalogoSinResultados({
   sinFiltros,
   verTodos,
   local,
+  sinStock,
 }: {
   consulta: string;
   alternativas: ChipSugerido[];
@@ -37,13 +40,17 @@ export function CatalogoSinResultados({
   verTodos: () => void;
   /** Copy y salida cuando el filtro de local está activo (`sinResultadosPorLocal`). */
   local?: { titulo: string; descripcion: string; accion: string; quitar: () => void };
+  /** Productos sin stock que coinciden (con "Solo con stock" puesto) y cómo verlos. */
+  sinStock?: { total: number; ver: () => void };
 }) {
   return (
     <EmptyState
       title={local?.titulo ?? TEXTOS_SIN_RESULTADOS.titulo(consulta)}
       description={
         local?.descripcion ??
-        (sinFiltros
+        (sinStock
+          ? TEXTOS_SIN_RESULTADOS.sinStock(sinStock.total)
+          : sinFiltros
           ? TEXTOS_SIN_RESULTADOS.conFiltros
           : alternativas.length
             ? TEXTOS_SIN_RESULTADOS.conAlternativas
@@ -56,7 +63,12 @@ export function CatalogoSinResultados({
               {local.accion}
             </Button>
           )}
-          {!local && sinFiltros && (
+          {!local && sinStock && (
+            <Button variant="primary" onClick={sinStock.ver}>
+              {TEXTOS_SIN_RESULTADOS.verSinStock}
+            </Button>
+          )}
+          {!local && !sinStock && sinFiltros && (
             <Button variant="primary" onClick={sinFiltros}>
               {TEXTOS_SIN_RESULTADOS.sinFiltros(consulta)}
             </Button>

@@ -100,7 +100,7 @@ import {
 } from "./catalogo-facetas-sql";
 import { elegirFacetas, type FacetaClave } from "./catalogo-facetas-registro";
 import { universoAcotado } from "./busqueda-v2/universo-acotado";
-import { condicionAmplia, condicionRecuperar, terminosQueRecuperan } from "./busqueda-v2/recuperar";
+import { acotarPorDeducidas, condicionAmplia, condicionRecuperar, terminosQueRecuperan } from "./busqueda-v2/recuperar";
 import { puntajeBusqueda } from "./busqueda-v2/ordenar";
 import { patronTermino, type CriterioPlan, type PiezasBusqueda } from "./busqueda-v2/piezas";
 
@@ -1079,8 +1079,9 @@ async function conteoPorCategoriaAlegra(
 
 /**
  * Faceta de categorías: el árbol completo del catálogo (sin filtros), cada nodo con lo que cuenta
- * dentro de `filtros` (0 incluido). El panel la pide siempre con el default de stock y nada más,
- * así el número de cada categoría es un total fijo (ver `categoriasTotalesPublicas`).
+ * dentro de `filtros` (0 incluido). Sin búsqueda, el panel la pide con el default de stock y nada
+ * más, así el número de cada categoría es un total fijo (ver `categoriasTotalesPublicas`); con texto
+ * buscado, la page usa la de la búsqueda (`Facetas.categoriasEnBusqueda`).
  */
 export async function getFacetaCategorias(
   filtros: FiltrosCatalogo,
@@ -1186,7 +1187,9 @@ function condicionesDe(
   const piezas = texto.plan ? piezasBusqueda(filtros, disp) : undefined;
   const recuperarPlan = texto.plan && piezas ? condicionRecuperar(texto.plan, piezas) : undefined;
   // Segundo intento con plan: lo que recupera el plan o se le parece (los duros siguen siendo filtros).
-  const recuperar = texto.plan && texto.tolerante && piezas ? recuperarTolerante(texto.plan, recuperarPlan, piezas) : recuperarPlan;
+  const recuperarSinAcotar = texto.plan && texto.tolerante && piezas ? recuperarTolerante(texto.plan, recuperarPlan, piezas) : recuperarPlan;
+  // Lo que el plan dedujo como categoría acota (sin chip): ver `acotarPorDeducidas`.
+  const recuperar = texto.plan && piezas ? acotarPorDeducidas(texto.plan, piezas, recuperarSinAcotar) : recuperarSinAcotar;
   const nombre = filtros.nombreConTodos?.length ? (piezas ?? piezasBusqueda(filtros, disp)).nombre : undefined;
   return and(
     enTenantCatalogo(),
@@ -1335,7 +1338,9 @@ function ordenDe(
       // Búsqueda v2: el puntaje del plan, aunque no quede texto filtrando.
       const texto = textoDe(filtros);
       if (texto.plan) {
-        const puntaje = puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp), { categoriasFiltro: filtros.categorias });
+        // Las deducidas también "cubren" lo que nombran (como cuando eran filtro): en "Lámparas", todo es un foco.
+        const categoriasFiltro = [...(filtros.categorias ?? []), ...(texto.plan.deducidas ?? [])];
+        const puntaje = puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp), { categoriasFiltro });
         // Segundo intento con plan: el puntaje del plan más el parecido de cada término que recupera.
         const parecido = texto.tolerante
           ? terminosParecidos(texto.plan).map((t) => sql`public.word_similarity(${raizPlural(t)}, ${sinTildes(nombreExhibidoSql)}) * 4`)
@@ -1531,6 +1536,11 @@ export interface Facetas {
    * agrega la page del catálogo cuando hay más de uno. Ausente = el filtro no se muestra.
    */
   locales?: { slug: string; nombre: string }[];
+  /**
+   * Las categorías cuentan dentro de esta búsqueda (y de los demás filtros), no el total fijo: lo
+   * pone la page del catálogo cuando hay texto buscado y la búsqueda deja productos. Ausente = total.
+   */
+  categoriasEnBusqueda?: string;
 }
 
 /**

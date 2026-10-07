@@ -37,6 +37,14 @@ export type CriterioPlan = Pick<PlanBusqueda, "consulta" | "blandos"> & {
    * puntaje, antes el producto que está en alguna. Sirve donde los duros no filtran (autocompletar).
    */
   categoriasDelPlan?: string[];
+  /**
+   * Categorías que el plan DEDUJO como duras (`plan.duros.categorias`). No son un filtro de la persona
+   * (no viajan en la URL ni tienen chip): ordenan como blandas de `PESO_DEDUCIDO` y ACOTAN la
+   * recuperación por OR de términos, que sin ellas trae cualquier producto que comparta una palabra
+   * ("luz" en "ventilador de techo con luz"). Nunca dejan afuera a un producto que tiene TODAS las
+   * palabras pedidas (o sus sinónimos), esté en la categoría que esté (`acotarPorDeducidas`).
+   */
+  deducidas?: string[];
 };
 
 const ESPECIALES_REGEX = /[.*+?^${}()|[\]\\]/g;

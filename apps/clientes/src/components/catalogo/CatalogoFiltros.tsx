@@ -8,6 +8,7 @@ import type { FacetaClave } from "@/lib/catalogo-facetas-registro";
 import {
   cambiosDePotencia,
   cambiosDeRango,
+  ordenPorDefecto,
   rangoEfectivo,
   rangoEfectivoPotencia,
   type EstadoCatalogo,
@@ -103,6 +104,19 @@ export function CatalogoFiltros({
   );
   const grupos = (
     <div className="flex flex-col gap-5">
+      {/* Con búsqueda, los números de las categorías son los de la búsqueda: lo dice y la deja quitar. */}
+      {facetas.categoriasEnBusqueda && (
+        <p className="-mb-3 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+          <span>Conteos en «{facetas.categoriasEnBusqueda}»</span>
+          <Button
+            variant="link"
+            size="inline"
+            onClick={() => ir({ query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 })}
+          >
+            Quitar búsqueda
+          </Button>
+        </p>
+      )}
       <FacetGroup
         title="Categorías"
         items={itemsDeFaceta(facetas.categorias, estado.categorias).map((c) => ({
@@ -112,7 +126,8 @@ export function CatalogoFiltros({
           depth: "nivel" in c ? (c.nivel ?? 1) - 1 : 0,
           count: c.count,
           // Va siempre el árbol completo, con o sin búsqueda: las de 0 se ven con su 0,
-          // sin atenuar, y se pueden tildar igual (la regla de ceros no aplica acá).
+          // sin atenuar, y se pueden tildar igual (la regla de ceros no aplica acá). Sin búsqueda el
+          // número es el total fijo; con búsqueda, lo que la búsqueda deja en esa categoría.
           checked: c.checked,
         }))}
         // Tildar una madre saca a sus hijas: la madre ya incluye toda su rama.

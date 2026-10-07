@@ -777,32 +777,6 @@
         }
       }
     },
-    "precintos plasticos": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 1
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "raiz": {
-          "choice": "electricidad",
-          "confidence": 1
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "precintos_y_sujecion_de_cables",
-          "confidence": 1
-        }
-      }
-    },
     "fusible nh": {
       "principal": {
         "intencion": {
@@ -878,32 +852,6 @@
         "sub": {
           "choice": "accesorios_electricos",
           "confidence": 0.67
-        }
-      }
-    },
-    "medidor de energia monofasico": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 1
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 0.98
-        },
-        "raiz": {
-          "choice": "electricidad",
-          "confidence": 1
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "senalizacion_y_medicion",
-          "confidence": 1
         }
       }
     },
@@ -1219,32 +1167,6 @@
         }
       }
     },
-    "extractor para la cocina": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 0.99
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "interior",
-          "confidence": 0.99
-        },
-        "raiz": {
-          "choice": "ventiladores_y_extractores",
-          "confidence": 1
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "campanas_y_purificadores_de_cocina",
-          "confidence": 0.63
-        }
-      }
-    },
     "calefactor para el bano": {
       "principal": {
         "intencion": {
@@ -1262,58 +1184,6 @@
         "raiz": {
           "choice": "ventiladores_y_extractores",
           "confidence": 0.63
-        }
-      }
-    },
-    "taladro percutor": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 1
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "raiz": {
-          "choice": "herramientas",
-          "confidence": 1
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "herramientas_manuales_y_electricas",
-          "confidence": 0.83
-        }
-      }
-    },
-    "destornillador aislado": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 1
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "raiz": {
-          "choice": "herramientas",
-          "confidence": 0.99
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "herramientas_de_electricista",
-          "confidence": 0.98
         }
       }
     },
@@ -2036,32 +1906,6 @@
         "sub": {
           "choice": "luces_de_emergencia",
           "confidence": 1
-        }
-      }
-    },
-    "calefactro para el bano": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 0.98
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 0.97
-        },
-        "ambiente": {
-          "choice": "interior",
-          "confidence": 1
-        },
-        "raiz": {
-          "choice": "ventiladores_y_extractores",
-          "confidence": 0.73
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "calefaccion_y_cortinas_de_aire",
-          "confidence": 0.98
         }
       }
     },
@@ -3171,32 +3015,6 @@
         }
       }
     },
-    "e27": {
-      "principal": {
-        "intencion": {
-          "choice": "codigo_o_modelo",
-          "confidence": 0.47
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 0.99
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "raiz": {
-          "choice": "iluminacion",
-          "confidence": 0.98
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "portalamparas_y_zocalos",
-          "confidence": 0.48
-        }
-      }
-    },
     "ip65": {
       "principal": {
         "intencion": {
@@ -3376,32 +3194,6 @@
         "sub": {
           "choice": "veladores",
           "confidence": 0.95
-        }
-      }
-    },
-    "algo para ajustar un tornillo": {
-      "principal": {
-        "intencion": {
-          "choice": "necesidad",
-          "confidence": 0.97
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "raiz": {
-          "choice": "herramientas",
-          "confidence": 0.99
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "herramientas_de_electricista",
-          "confidence": 0.52
         }
       }
     },
@@ -3743,58 +3535,6 @@
         }
       }
     },
-    "escalera": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 1
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "raiz": {
-          "choice": "herramientas",
-          "confidence": 0.92
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "herramientas_de_electricista",
-          "confidence": 0.85
-        }
-      }
-    },
-    "escalera chica": {
-      "principal": {
-        "intencion": {
-          "choice": "producto",
-          "confidence": 1
-        },
-        "tono": {
-          "choice": "no_especifica",
-          "confidence": 1
-        },
-        "ambiente": {
-          "choice": "no_especifica",
-          "confidence": 0.88
-        },
-        "raiz": {
-          "choice": "herramientas",
-          "confidence": 0.81
-        }
-      },
-      "sub": {
-        "sub": {
-          "choice": "herramientas_de_electricista",
-          "confidence": 0.89
-        }
-      }
-    },
     "luz para la escalera": {
       "principal": {
         "intencion": {
@@ -3844,6 +3584,318 @@
         "sub": {
           "choice": "apliques",
           "confidence": 1
+        }
+      }
+    },
+    "dicroica mr16": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.99
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.86
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.99
+        }
+      }
+    },
+    "dicroica smart": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.91
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 1
+        }
+      }
+    },
+    "precintos plasticos": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "precintos_y_sujecion",
+          "confidence": 1
+        }
+      }
+    },
+    "medidor de energia monofasico": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "raiz": {
+          "choice": "electricidad",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "senalizacion_y_medicion",
+          "confidence": 1
+        }
+      }
+    },
+    "extractor para la cocina": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "campanas_de_cocina",
+          "confidence": 0.46
+        }
+      }
+    },
+    "taladro percutor": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "manuales_y_electricas",
+          "confidence": 0.83
+        }
+      }
+    },
+    "destornillador aislado": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "de_electricista",
+          "confidence": 0.92
+        }
+      }
+    },
+    "calefactro para el bano": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 0.97
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "ventiladores_y_extractores",
+          "confidence": 0.78
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "calefaccion_y_cortinas_de_aire",
+          "confidence": 1
+        }
+      }
+    },
+    "e27": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.33
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.46
+        }
+      }
+    },
+    "algo para ajustar un tornillo": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "de_electricista",
+          "confidence": 0.5
+        }
+      }
+    },
+    "escalera": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.86
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "de_electricista",
+          "confidence": 0.71
+        }
+      }
+    },
+    "escalera chica": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.85
+        },
+        "raiz": {
+          "choice": "herramientas",
+          "confidence": 0.77
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "de_electricista",
+          "confidence": 0.85
         }
       }
     }

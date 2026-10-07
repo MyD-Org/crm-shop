@@ -103,13 +103,13 @@ describe("obtenerPlan con medidas", () => {
 });
 
 describe("ejecutarV2 con medidas", () => {
-  it("rellena ResultadoBanco.medidas y manda los duros a la página", async () => {
+  it("rellena ResultadoBanco.medidas y manda los duros a la página como orden, no como filtro", async () => {
     const r = await ejecutarV2("termica 2x20", { ...ctx, medidas: true });
     expect(r.atributosDuros).toEqual(["polos:2", "corriente_a:20"]);
     expect(r.medidas).toEqual(expect.arrayContaining(["polos:2", "corriente_a:20"]));
     const filtros = getPaginaCatalogo.mock.calls[0][0].filtros;
-    // `estadoConPlan` los ordena (atributosValidos: orden de las claves de medida).
-    expect([...filtros.atributos].sort()).toEqual(["corriente_a:20", "polos:2"]);
+    // `estadoConPlan` ya no los suma a los filtros: ordenan desde lo blando.
+    expect(filtros.atributos).toEqual([]);
     expect(filtros.texto.plan.blandos.atributos).toEqual(expect.arrayContaining([{ id: "polos:2", peso: 1 }]));
   });
 

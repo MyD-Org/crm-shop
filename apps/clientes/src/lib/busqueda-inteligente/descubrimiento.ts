@@ -4,7 +4,6 @@
  * (lo usa SearchAutocomplete); con el flag `busqueda-ia` apagado todo queda
  * como siempre.
  */
-import { STOCK_INCLUYE_SIN_STOCK } from "../catalogo-url";
 import { hrefBuscar } from "../busqueda-v2/enlaces";
 import { EJEMPLOS_PLACEHOLDER, placeholderDe } from "./textos";
 
@@ -31,13 +30,12 @@ export function vistaDesplegable(opts: { busquedaIa: boolean; abierto: boolean; 
 }
 
 /**
- * URL de una búsqueda desde el header. Con todos los productos, no sólo los
- * con stock: las sugerencias incluyen los sin stock y la búsqueda tiene que
- * mostrar lo mismo. Con el flag `busqueda-ia` va a `/buscar` (búsqueda v2:
- * entiende la consulta y redirige al catálogo); sin él, directo al catálogo
- * como siempre.
+ * URL de una búsqueda desde el header: sólo la consulta, sin filtros (el catálogo aplica su
+ * default, "Solo con stock", igual que el desplegable). Con el flag `busqueda-ia` va a `/buscar`
+ * (búsqueda v2: entiende la consulta y redirige al catálogo); sin él, directo al catálogo como
+ * siempre.
  */
 export function hrefBusqueda(texto: string, busquedaIa = false): string {
   if (busquedaIa) return hrefBuscar(texto);
-  return `/catalogo?q=${encodeURIComponent(texto.trim())}&stock=${STOCK_INCLUYE_SIN_STOCK}`;
+  return `/catalogo?q=${encodeURIComponent(texto.trim())}`;
 }

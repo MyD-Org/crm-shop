@@ -319,9 +319,10 @@ describe("aplicarMedidas: diccionario y merge (R6.7, R6.8)", () => {
     expect(blandosDe(r)).toMatchObject({ "zocalo-mr16": 0.9, "zocalo:mr16": PESO_ORDEN_ESTRICTO, "tension-12v": PESO_MEDIDA_BLANDA });
   });
 
-  it("si el zócalo ya es filtro duro del plan no se duplica con el estricto", async () => {
+  it("aunque el zócalo del diccionario quede duro en el plan, el estricto ordena (lo deducido ya no filtra desde /buscar)", async () => {
     const r = await aplicarMedidas(plan("lampara e27", ["lampara"], { duros: { categorias: [], atributos: ["zocalo-e27"] } }), "lampara e27", deps());
-    expect(r.blandos.atributos.some((a) => a.id === "zocalo:e27")).toBe(false);
+    expect(r.blandos.atributos).toContainEqual({ id: "zocalo:e27", peso: PESO_MEDIDA_ESTRICTA });
+    expect(r.duros.atributos).toEqual(["zocalo-e27"]);
   });
 
   it("'tira 12v': el del diccionario, una sola vez si ya estaba en los duros", async () => {

@@ -34,11 +34,11 @@ describe("vistaDesplegable", () => {
 });
 
 describe("hrefBusqueda", () => {
-  it("con todos los productos y el texto codificado", () => {
-    expect(hrefBusqueda("  luz cálida ")).toBe("/catalogo?q=luz%20c%C3%A1lida&stock=todos");
+  it("sólo la consulta, codificada: sin filtros (el catálogo aplica su default de stock)", () => {
+    expect(hrefBusqueda("  luz cálida ")).toBe("/catalogo?q=luz%20c%C3%A1lida");
   });
 
   it("con el flag `busqueda-ia`, a /buscar (la búsqueda v2 entiende y redirige)", () => {
-    expect(hrefBusqueda("  luz cálida ", true)).toBe("/buscar?q=luz+c%C3%A1lida&stock=todos");
+    expect(hrefBusqueda("  luz cálida ", true)).toBe("/buscar?q=luz+c%C3%A1lida");
   });
 });

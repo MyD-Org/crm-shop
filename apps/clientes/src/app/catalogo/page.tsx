@@ -146,35 +146,34 @@ async function CatalogoResultados({ searchParams }: Props) {
   //   las categorías dentro de las marcas tildadas, para que la lista no ofrezca marcas ajenas a
   //   lo que se está viendo; el rango de precio sale del conjunto filtrado sin el propio rango;
   // - las cuotas sin interés viajan en cada producto (flag `cuotas-cobro`; sin él, ninguna).
+  const pedido = {
+    consulta: estado.query,
+    filtros: {
+      ...filtrosDeEstado(estado),
+      ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
+      // Sin búsqueda, las categorías del panel traen su total fijo (`categoriasTotales`). Con la
+      // búsqueda inteligente se cuentan dentro de la búsqueda: para el panel cuando hay texto
+      // (`categoriasDeLaBusqueda`) y para las sugerencias "+ Afinar".
+      ...(conBusquedaIa ? {} : { sinFacetaCategorias: true }),
+      ...(estructurados ? { atributosEstructurados: true } : {}),
+      ...porTipo,
+    },
+    orden: estado.orden,
+    pagina: estado.pagina,
+    porPagina: PRODUCTOS_POR_PAGINA,
+  };
+  const contexto = {
+    superficie: "catalogo" as const,
+    soloVisibles,
+    disp,
+    destacado: mediosPrecio?.destacado,
+    cuotas: mediosPrecio?.cuotas,
+    conPlanDeUrl: estado.ia === IA_PLAN,
+    busquedaIa: conBusquedaIa,
+  };
   const [pagina, categoriasTotales] = await Promise.all([
-    buscarEnShop(
-      {
-        consulta: estado.query,
-        filtros: {
-          ...filtrosDeEstado(estado),
-          ...(conBusquedaIa ? {} : { sinFacetaAtributos: true }),
-          // Las categorías del panel traen su total fijo (`categoriasTotales`). Sólo con la búsqueda
-          // inteligente se siguen contando dentro de la búsqueda, para las sugerencias "+ Afinar".
-          ...(conBusquedaIa ? {} : { sinFacetaCategorias: true }),
-          ...(estructurados ? { atributosEstructurados: true } : {}),
-          ...porTipo,
-        },
-        orden: estado.orden,
-        pagina: estado.pagina,
-        porPagina: PRODUCTOS_POR_PAGINA,
-      },
-      {
-        superficie: "catalogo",
-        soloVisibles,
-        disp,
-        destacado: mediosPrecio?.destacado,
-        cuotas: mediosPrecio?.cuotas,
-        conPlanDeUrl: estado.ia === IA_PLAN,
-        conFacetas: true,
-        busquedaIa: conBusquedaIa,
-      },
-    ),
-    // El número de cada categoría del panel: el total del catálogo, no el de la búsqueda ni los
+    buscarEnShop(pedido, { ...contexto, conFacetas: true }),
+    // El número de cada categoría del panel sin búsqueda: el total del catálogo, no el de los
     // filtros. Una sola clave de la caché compartida, para todos los visitantes.
     categoriasTotalesPublicas(soloVisibles, dispGeneral),
   ]);
@@ -183,7 +182,13 @@ async function CatalogoResultados({ searchParams }: Props) {
   // categorías…"): sin nada para tocar, la única salida era borrar el texto.
   // En ese caso el panel muestra los filtros sin la búsqueda, y tocar uno la
   // quita (ver `filtrosSinBusqueda` en CatalogoClient).
-  const filtrosSinBusqueda = pagina.total === 0 && Boolean(estado.query?.trim());
+  // Con texto buscado, el panel cuenta las categorías DENTRO de la búsqueda (y de los demás
+  // filtros, sin el de categoría): el número dice lo que se ve al tildarla. Sólo si la búsqueda deja
+  // algo en alguna categoría; si no (la búsqueda sola da 0), van los totales fijos y tocar un filtro
+  // quita la búsqueda (`filtrosSinBusqueda`).
+  const categoriasDeLaBusqueda =
+    estado.query?.trim() && pagina.facetas?.categorias.some((c) => c.count > 0) ? pagina.facetas.categorias : null;
+  const filtrosSinBusqueda = pagina.total === 0 && Boolean(estado.query?.trim()) && !categoriasDeLaBusqueda;
   const facetas =
     filtrosSinBusqueda || !pagina.facetas
       ? // Sin la búsqueda ni su plan: tocar un filtro quita la búsqueda (y con ella `ia`).
@@ -193,6 +198,14 @@ async function CatalogoResultados({ searchParams }: Props) {
           disp,
         )
       : pagina.facetas;
+
+  // "Solo con stock" es el default de la tienda y la búsqueda lo respeta (nunca lo apaga sola). Si
+  // la búsqueda da 0 con stock, se cuenta lo que daría incluyendo los sin stock: el "sin
+  // resultados" lo avisa y deja verlos (apagarlo es elección de la persona).
+  const sinStock =
+    pagina.total === 0 && estado.query?.trim() && pedido.filtros.soloStock && !estado.retiroEn
+      ? (await buscarEnShop({ ...pedido, filtros: { ...pedido.filtros, soloStock: false }, pagina: 1 }, contexto)).total
+      : 0;
 
   // Búsqueda inteligente (flag `busqueda-ia`): franja del plan y salidas del "sin resultados".
   const busquedaIa = conBusquedaIa
@@ -213,8 +226,15 @@ async function CatalogoResultados({ searchParams }: Props) {
         // La página efectiva, no la pedida: si la URL dice 99 y hay 12, manda 12.
         estado={{ ...estado, pagina: pagina.pagina }}
         // El filtro "Con stock en <local>" sólo tiene sentido con más de un local.
-        facetas={{ ...facetas, categorias: categoriasTotales, ...(locales.length > 1 ? { locales } : {}) }}
+        facetas={{
+          ...facetas,
+          ...(categoriasDeLaBusqueda
+            ? { categorias: categoriasDeLaBusqueda, categoriasEnBusqueda: estado.query?.trim() }
+            : { categorias: categoriasTotales }),
+          ...(locales.length > 1 ? { locales } : {}),
+        }}
         filtrosSinBusqueda={filtrosSinBusqueda}
+        sinStock={sinStock}
         busquedaIa={busquedaIa}
         etapa={pagina.etapa}
         conFacetasPorTipo={conCar}
@@ -227,10 +247,10 @@ async function CatalogoResultados({ searchParams }: Props) {
  * Lo que la búsqueda inteligente suma a la grilla (búsqueda v2, spec 2026-10-01). La página
  * NUNCA redirige ni llama a Jev: eso lo hace `/buscar` antes de llegar acá.
  *
- * - Con plan (`ia=1`): las sugerencias "+ Afinar" (categorías y atributos blandos que todavía no
- *   son filtro; aplicarlas las vuelve duras vía URL) y la intención (una pregunta destaca al
- *   asesor). Si aun así no hay resultados (los duros solos dan 0), las mismas como alternativas
- *   que reemplazan la búsqueda.
+ * - Con plan (`ia=1`): las sugerencias "+ Afinar" (lo que entendió el plan, primero lo deducido
+ *   como duro y después lo blando, que todavía no es filtro: la búsqueda nunca lo aplica sola;
+ *   tocarlo lo vuelve filtro vía URL) y la intención (una pregunta destaca al asesor). Si aun así no
+ *   hay resultados, las mismas como alternativas que reemplazan la búsqueda.
  * - Búsqueda clásica sin resultados (`/catalogo?q=` directo, o `ia=0`): alternativas del plan
  *   determinista (sin Jev, sin escribir nada) y "Ver productos relacionados" → `/buscar`.
  */
@@ -240,9 +260,10 @@ async function busquedaInteligente(
   plan: PlanBusqueda | null,
   opciones: { soloVisibles: boolean; disp: ContextoDisponibilidad | undefined; conProductos: Set<string> },
 ) {
+  // Lo deducido como duro va primero: es lo que el plan entendió con más seguridad.
   const blandos = (p: PlanBusqueda) => ({
-    categorias: p.blandos.categorias.slice(0, MAX_SUGERENCIAS).map((c) => c.nombre),
-    atributos: p.blandos.atributos.map((a) => a.id),
+    categorias: [...new Set([...p.duros.categorias, ...p.blandos.categorias.map((c) => c.nombre)])].slice(0, MAX_SUGERENCIAS),
+    atributos: [...new Set([...p.duros.atributos, ...p.blandos.atributos.map((a) => a.id)])],
   });
   if (plan) {
     // Un "+ Afinar" que lleva a 0 productos (una categoría vacía) no se ofrece, ni una raíz
@@ -282,7 +303,7 @@ async function busquedaInteligente(
         )
       : [],
     // Una búsqueda que no pasó por `/buscar` (o se pidió tal cual) puede entenderse ahora.
-    ...(estado.ia ? {} : { relacionadosHref: hrefBuscar(q, estado.soloStock) }),
+    ...(estado.ia ? {} : { relacionadosHref: hrefBuscar(q, !estado.soloStock) }),
   };
 }
 

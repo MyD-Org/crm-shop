@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { getPaginaCatalogo, type FiltrosCatalogo } from "@/lib/catalog";
@@ -90,6 +90,15 @@ async function sembrar() {
   }
 }
 
+/** Marca destacados del admin (`catalog_overlay.orden`): id → posición (9999 = sin posición). */
+async function destacar(posiciones: Record<string, number>) {
+  for (const [id, orden] of Object.entries(posiciones)) {
+    await getDb().execute(
+      sql`update public.catalog_overlay set orden = ${orden} where tenant_id = ${TENANT} and alegra_id = ${id}`,
+    );
+  }
+}
+
 const ILUMINACION: FiltrosCatalogo = { categorias: ["Iluminacion"] };
 
 const pagina = async (opts: { filtros?: FiltrosCatalogo; pagina?: number; porPagina?: number; disp?: ContextoDisponibilidad }) =>
@@ -147,6 +156,71 @@ describe.skipIf(process.env.ORDEN_SQL !== "1")("orden destacados en Postgres", (
     expect(r).toHaveLength(11);
     expect(r.slice(0, 2)).toEqual(["a1", "b1"]);
     expect(r.at(-1)).toBe("aSinStock");
+  });
+
+  describe("destacados manuales (catalog_overlay.orden)", () => {
+    afterEach(async () => {
+      await getDb().execute(sql`update public.catalog_overlay set orden = null where tenant_id = ${TENANT}`);
+    });
+
+    it("un destacado sale primero en su categoría aunque sea accesorio (gana a todas las claves automáticas)", async () => {
+      await destacar({ c1: 1 });
+      expect((await ids({ categorias: ["Accesorios"] }))[0]).toBe("c1");
+      expect((await ids(ILUMINACION))[0]).toBe("c1");
+    });
+
+    it("el destacado de una subcategoría sale primero en la raíz (ancestras) y sin categoría", async () => {
+      await destacar({ b2: 1 });
+      expect((await ids(ILUMINACION))[0]).toBe("b2");
+      expect((await ids({}))[0]).toBe("b2");
+    });
+
+    it("menor posición primero; el resto sigue el orden automático", async () => {
+      await destacar({ b2: 2, a4: 1 });
+      const r = await ids(ILUMINACION);
+      expect(r.slice(0, 2)).toEqual(["a4", "b2"]);
+      expect(r.slice(2)).toEqual(["a1", "b1", "a2", "a3", "aPocoStock", "aAcc", "c1", "aSinFoto", "aSinStock"]);
+    });
+
+    it("9999 (sin posición) empata entre destacados y se ordenan por las claves automáticas", async () => {
+      await destacar({ a3: 9999, b2: 9999 });
+      // b2 es el 2.º de su subcategoría (ronda 2) y a3 el 3.º de la suya (ronda 3).
+      expect((await ids(ILUMINACION)).slice(0, 2)).toEqual(["b2", "a3"]);
+    });
+
+    it("una posición explícita gana a un 9999", async () => {
+      await destacar({ a1: 9999, c1: 5 });
+      expect((await ids(ILUMINACION)).slice(0, 2)).toEqual(["c1", "a1"]);
+    });
+
+    it("sólo ordena: un destacado de otra categoría no entra y los filtros siguen mandando", async () => {
+      await destacar({ fuera: 1 });
+      const r = await ids(ILUMINACION);
+      expect(r).not.toContain("fuera");
+      expect(r).toHaveLength(11);
+      expect(await ids({ ...ILUMINACION, soloStock: true })).not.toContain("aSinStock");
+    });
+
+    it("con orden=nombre los destacados no cambian nada (alfabético)", async () => {
+      await destacar({ c1: 1 });
+      const r = (await getPaginaCatalogo({ soloVisibles: false, orden: "nombre", filtros: ILUMINACION })).productos.map((p) => p.id);
+      expect(r.indexOf("c1")).toBeGreaterThan(0);
+    });
+
+    it("dos páginas consecutivas no repiten ni pierden productos con destacados", async () => {
+      await destacar({ c1: 1, b2: 2, a3: 9999 });
+      const todo = await ids(ILUMINACION);
+      const paginas = [];
+      for (const n of [1, 2, 3]) paginas.push(...(await pagina({ filtros: ILUMINACION, pagina: n, porPagina: 4 })).productos.map((p) => p.id));
+      expect(paginas).toEqual(todo);
+      expect(todo.slice(0, 3)).toEqual(["c1", "b2", "a3"]);
+    });
+
+    it("con stock por sucursal (disp) los destacados también van primero", async () => {
+      await destacar({ c1: 1 });
+      const disp: ContextoDisponibilidad = { zona: "igz", activas: ["igz"], contarEn: ["igz"], stockHeredado: "igz" };
+      expect((await ids(ILUMINACION, disp))[0]).toBe("c1");
+    });
   });
 
   it("el patrón de nombre de accesorio da lo mismo en Postgres que en JS", async () => {

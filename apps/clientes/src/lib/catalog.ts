@@ -1232,8 +1232,9 @@ function contextoDestacados(arbol: NodoCategoria[]): ContextoDestacados {
 /**
  * ORDER BY de "Destacados" (default sin búsqueda), claves lexicográficas sobre TODO el conjunto
  * filtrado (no sólo la página, así la paginación queda estable):
- * 1. (pendiente: destacados a mano del admin, `catalog_overlay.orden`, cuando el Shop declare la
- *    columna en crm.ts) — hoy no se lee;
+ * 1. destacados a mano del admin (`catalog_overlay.orden` no nulo): primero, por `orden` asc. Un
+ *    destacado de una subcategoría sale primero también en sus categorías ancestras y sin categoría.
+ *    Los de `orden` 9999 (destacado sin posición) empatan y se ordenan por las claves siguientes;
  * 2. escalón: con stock → con foto → no accesorio → stock holgado (≥ STOCK_HOLGADO o no
  *    inventariable). Accesorio = categoría propia o ancestra, o de Alegra, que arranca con
  *    accesorios/repuestos, o nombre que arranca por una palabra de accesorio (catalogo-destacados.ts);
@@ -1288,6 +1289,8 @@ function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilid
     order by ${tramoPrecio} desc, ${crmCatalogo.name}, ${crmCatalogo.alegraId})`;
   const posicionGrupo = sql`array_position(${literal(literalUuids(ctx.intercalado))}::uuid[], ${crmOverlay.categoriaId})`;
   return [
+    sql`(${crmOverlay.orden} is null) asc`,
+    sql`${crmOverlay.orden} asc`,
     sql`first_value(${escalon}) ${ventana} asc`,
     sql`row_number() ${ventana} asc`,
     sql`${posicionGrupo} asc nulls last`,

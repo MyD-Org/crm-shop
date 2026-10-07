@@ -183,8 +183,15 @@ describe("orden por defecto (SQL-5): destacados", () => {
     expect(orden).toContain("array_position(");
     expect(orden).toContain("jsonb_array_length(");
     expect(orden).toMatch(/"catalog_products_shop"\."name" asc, "catalog_products_shop"\."alegra_id" asc limit/);
-    // Sin manuales todavía: no lee `catalog_overlay.orden`.
-    expect(orden).not.toContain('"catalog_overlay"."orden"');
+    // Los destacados del admin (`catalog_overlay.orden`) van antes que todo lo automático.
+    expect(orden).toMatch(/^ order by \("public"\."catalog_overlay"\."orden" is null\) asc, "public"\."catalog_overlay"\."orden" asc, first_value\(/);
+  });
+
+  it("los destacados manuales sólo se leen con orden=destacados", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, orden: "nombre" });
+    expect(grabadora.consultas[1].sql).not.toContain('"catalog_overlay"."orden"');
+    await getPaginaCatalogo({ soloVisibles: false, orden: "precio-asc" });
+    for (const c of sinLecturaDelArbol(grabadora.consultas).slice(-2)) expect(c.sql).not.toMatch(/"catalog_overlay"\."orden"/);
   });
 
   it("orden=nombre sigue siendo el alfabético, sin leer el árbol", async () => {

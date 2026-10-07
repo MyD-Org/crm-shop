@@ -1,7 +1,7 @@
 {
   "modelo": "jev-1.13.0",
   "grabadoEl": "2026-10-01",
-  "ampliadoEl": "2026-10-06",
+  "ampliadoEl": "2026-10-07",
   "respuestas": {
     "algo para sacar el olor del bano": {
       "principal": {
@@ -3298,6 +3298,136 @@
         "sub": {
           "choice": "tubos",
           "confidence": 0.44
+        }
+      }
+    },
+    "proyector para patio": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "reflectores",
+          "confidence": 0.77
+        }
+      }
+    },
+    "foco smart": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 0.98
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.99
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 1
+        }
+      }
+    },
+    "foco inteligente": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 1
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.98
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.99
+        }
+      }
+    },
+    "escritorio luz": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.84
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.91
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.7
+        }
+      }
+    },
+    "luz calida living": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.37
+        },
+        "tono": {
+          "choice": "calido",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "lamparas",
+          "confidence": 0.82
         }
       }
     }

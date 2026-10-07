@@ -1154,6 +1154,7 @@ function piezasBusqueda(filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad)
     cumpleAtributo: (id) => cumpleAtributoSql(ctx, id),
     contradiceAtributo: (id) => contradiceIdAtributoSql(ctx, id),
     conStock: conStock(disp),
+    potencia: potenciaSql(),
   };
 }
 
@@ -1210,24 +1211,34 @@ function condicionesDe(
  * ORDER BY según el criterio elegido. El default (`nombre`) es el alfabético.
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
+ *
+ * En `relevancia`, antes del nombre desempata el stock (más primero; los no
+ * inventariables al final): entre dos productos que responden igual de bien,
+ * el que más se mueve. Con el alfabético, "Reflector industrial" le ganaba a
+ * todos los "Reflector LED" sólo por la letra.
  */
+const desempateRelevancia = (disp?: ContextoDisponibilidad) => [
+  sql`${disp ? stockSucursalSql(disp) : stockSql} desc nulls last`,
+  asc(crmCatalogo.name),
+];
+
 function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad) {
   switch (orden) {
     case "relevancia": {
       // Búsqueda v2: el puntaje del plan, aunque no quede texto filtrando.
       const texto = textoDe(filtros);
       if (texto.plan) {
-        const puntaje = puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp));
+        const puntaje = puntajeBusqueda(texto.plan, piezasBusqueda(filtros, disp), { categoriasFiltro: filtros.categorias });
         // Segundo intento con plan: el puntaje del plan más el parecido de cada término que recupera.
         const parecido = texto.tolerante
           ? terminosParecidos(texto.plan).map((t) => sql`public.word_similarity(${raizPlural(t)}, ${sinTildes(nombreExhibidoSql)}) * 4`)
           : [];
-        return [sql`${parecido.length ? sql.join([puntaje, ...parecido], sql` + `) : puntaje} desc`, asc(crmCatalogo.name)];
+        return [sql`${parecido.length ? sql.join([puntaje, ...parecido], sql` + `) : puntaje} desc`, ...desempateRelevancia(disp)];
       }
       // Sin términos útiles no hay con qué puntuar: alfabético.
       if (!texto.q || !terminosBusqueda(texto.q).length) return [asc(crmCatalogo.name)];
       const codigo = texto.codigo ? normalizarCodigo(texto.q) : "";
-      return [sql`${relevanciaSql(texto.q, !!texto.tolerante, codigo)} desc`, asc(crmCatalogo.name)];
+      return [sql`${relevanciaSql(texto.q, !!texto.tolerante, codigo)} desc`, ...desempateRelevancia(disp)];
     }
     case "precio-asc":
       return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];

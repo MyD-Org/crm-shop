@@ -33,4 +33,13 @@ describe("CheckoutClient: cuenta para transferir", () => {
     expect(fuente).toContain("cuentaPago: json.cuentaPago ?? null,");
     expect(fuente).toContain("<CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />");
   });
+
+  it("Pedido recibido: una acción principal, secundarias chicas y sin textos redundantes", () => {
+    expect(fuente).not.toContain("Medio de pago elegido:");
+    expect(fuente).toContain('<Button variant="outline">Ver mis pedidos</Button>');
+    expect(fuente).toContain('<Button variant="ghost">Seguir comprando</Button>');
+    // El plazo de contacto se omite con transferencia (lo da el texto del comprobante) y WhatsApp es un enlace chico.
+    expect(fuente).toContain("mostrarPlazo={!conCuenta}");
+    expect(fuente).toContain("enlaceChico");
+  });
 });

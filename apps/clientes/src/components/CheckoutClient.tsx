@@ -1005,7 +1005,7 @@ export function CheckoutClient({
             {pagado ? "¡Pago acreditado!" : "Pedido recibido"}
           </h1>
           <p className={`mt-2 text-sm font-semibold text-text ${ENTRADA_EXITO} delay-[180ms]`}>{confirmado.numero}</p>
-          <p className={`mt-3 text-sm text-muted ${ENTRADA_EXITO} delay-[240ms]`}>
+          <p className={`mx-auto mt-3 max-w-md text-sm text-muted ${ENTRADA_EXITO} delay-[240ms]`}>
             {pagado ? (
               <>
                 Ya cobramos su pedido. Nos comunicaremos con usted para coordinar el{" "}
@@ -1015,33 +1015,32 @@ export function CheckoutClient({
               <>
                 Su pedido quedó a confirmar; todavía no se realizó ningún cobro. {textoPagaConMedio(medioSel.nombre)}
               </>
-            ) : medioSel ? (
-              <>
-                Su pedido quedó a confirmar; todavía no se realizó ningún cobro. Medio de pago elegido:{" "}
-                {medioSel.nombre}.
-              </>
-            ) : (
+            ) : !medioSel ? (
               // Sin medio elegido: ningún medio aplicaba a la entrega.
               <>
                 Un asesor se comunicará con usted para coordinar el{" "}
                 {entrega === "envio" ? "envío" : "retiro"} y el pago.
               </>
+            ) : null}
+            {emailCliente && (
+              <>
+                {(pagado || esCuentaCorriente || !medioSel) && " "}Le enviamos el detalle a {emailCliente}.
+              </>
             )}
-            {emailCliente && <> Le enviamos el detalle a {emailCliente}.</>}
           </p>
           {!pagado && conCuenta && (
-            <div className={`mt-4 text-left ${ENTRADA_EXITO} delay-[260ms]`}>
+            <div className={`mt-6 text-left ${ENTRADA_EXITO} delay-[260ms]`}>
               <p className="mb-2 text-sm font-semibold text-text">Datos para transferir</p>
               <CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />
               {/* Sin cuenta todavía no hay a dónde transferir: el comprobante se pide recién con los datos. */}
               {confirmado.cuentaPago &&
                 (comprobanteInformado ? (
-                  <p className="mt-4 rounded-lg bg-success/10 p-3 text-sm text-success">
+                  <p className="mt-4 rounded-lg bg-success/10 p-3 text-center text-sm text-success">
                     Recibimos su comprobante. Le avisaremos cuando registremos el pago.
                   </p>
                 ) : (
-                  <div className="mt-4">
-                    <p className="mb-2 text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
+                  <div className="mt-4 flex flex-col gap-3">
+                    <p className="text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
                     <InformarPago
                       ultimos={[]}
                       pedido={{ id: confirmado.id, numero: confirmado.numero, total: confirmado.total }}
@@ -1051,21 +1050,23 @@ export function CheckoutClient({
                 ))}
             </div>
           )}
+          <div className={`mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center ${ENTRADA_EXITO} delay-[300ms]`}>
+            <Link href="/mi-cuenta" className="flex flex-col sm:block">
+              <Button variant="outline">Ver mis pedidos</Button>
+            </Link>
+            <Link href="/catalogo" className="flex flex-col sm:block">
+              <Button variant="ghost">Seguir comprando</Button>
+            </Link>
+          </div>
           {!pagado && confirmado.contacto && (
             <PedidoContacto
               contacto={confirmado.contacto}
               centrado
-              className={`mt-3 ${ENTRADA_EXITO} delay-[270ms]`}
+              enlaceChico
+              mostrarPlazo={!conCuenta}
+              className={`mt-5 ${ENTRADA_EXITO} delay-[330ms]`}
             />
           )}
-          <div className={`mt-6 flex justify-center gap-3 ${ENTRADA_EXITO} delay-[300ms]`}>
-            <Link href="/mi-cuenta">
-              <Button>Ver mis pedidos</Button>
-            </Link>
-            <Link href="/catalogo">
-              <Button variant="secondary">Seguir comprando</Button>
-            </Link>
-          </div>
         </div>
       </main>
     );

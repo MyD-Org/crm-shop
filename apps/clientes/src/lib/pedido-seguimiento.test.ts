@@ -73,11 +73,11 @@ describe("seguimientoPedido", () => {
     ]);
   });
 
-  it("un pago fallido no cambia el seguimiento (lo dice la pill)", () => {
+  it("un pago fallido no mueve el seguimiento (sólo cambia la etiqueta del paso)", () => {
     for (const estado of ESTADOS) {
       for (const entrega of ENTREGAS) {
-        expect(pasos(entrega, estado, "fallido"), `${estado}/${entrega}`).toEqual(
-          pasos(entrega, estado, "pendiente"),
+        expect(resumen(entrega, estado, "fallido"), `${estado}/${entrega}`).toEqual(
+          resumen(entrega, estado, "pendiente"),
         );
       }
     }
@@ -160,5 +160,27 @@ describe("seguimientoPedido", () => {
       const o = { entregaTipo: "retiro", estado: "pendiente", pagoEstado: "pendiente" } as const;
       expect(seguimientoPedido(o)![1].label).toBe("Pedido confirmado");
     });
+  });
+
+  it("pago en línea rechazado: el paso actual dice 'Pago rechazado'", () => {
+    const p = pasos("retiro", "pendiente", "fallido")!;
+    expect(p.map((x) => `${x.id}:${x.state}:${x.label}`)).toContain("pago:current:Pago rechazado");
+  });
+
+  it("pago en línea en proceso: el paso actual dice 'Pago en proceso'", () => {
+    const p = seguimientoPedido({
+      entregaTipo: "envio",
+      estado: "pendiente",
+      pagoEstado: "pendiente",
+      pagoMetodoSlug: "mercadopago",
+      pagoEnProceso: true,
+    })!;
+    expect(p[1]).toMatchObject({ id: "pago", state: "current", label: "Pago en proceso" });
+  });
+
+  it("pago en línea pendiente sin proceso, o fuera de línea: etiqueta habitual", () => {
+    expect(pasos("retiro", "pendiente", "pendiente")![1].label).toBe("Pago confirmado");
+    const t = seguimientoPedido({ entregaTipo: "retiro", estado: "pendiente", pagoEstado: "fallido", pagoMetodoSlug: "transferencia" })!;
+    expect(t[1].label).toBe("Pedido confirmado");
   });
 });

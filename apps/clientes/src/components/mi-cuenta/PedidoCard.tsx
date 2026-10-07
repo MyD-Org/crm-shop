@@ -1,5 +1,6 @@
 import { Badge, Card, Divider, Stepper } from "@myd-org/ui";
 import type { Order } from "@/data/orders";
+import { puedeReintentarPago } from "@/lib/pago-estado-visible";
 import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
@@ -76,6 +77,7 @@ export function PedidoCard({ pedido }: { pedido: Order }) {
           items={pedido.items}
           facturaId={pedido.facturaId}
           facturaNumero={pedido.facturaNumero}
+          reintentarPago={puedeReintentarPago(pedido)}
         />
       </div>
     </Card>

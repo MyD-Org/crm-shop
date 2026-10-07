@@ -49,7 +49,14 @@ function eleccionParaCheckout(e: EleccionUbicacion): EleccionInicialCheckout {
  * quien no vinculó compra a lista general (decisión de producto). Se corta acá,
  * en el servidor, para que la página nunca renderice sin identidad.
  */
-export default async function CheckoutPage() {
+export default async function CheckoutPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pedido?: string | string[] }>;
+}) {
+  const { pedido } = await searchParams;
+  // Reintento del pago de un pedido existente (`/checkout?pedido=<id>`): el servidor lo valida.
+  const pedidoReintento = typeof pedido === "string" && pedido ? pedido : null;
   // Las reglas y los medios de pago no dependen de la identidad: arrancan antes de esperarla para
   // que se resuelvan en paralelo con esa consulta en vez de después (misma
   // semántica, una espera menos en la cascada). `identidadActual` decide el
@@ -142,6 +149,7 @@ export default async function CheckoutPage() {
         mediosPago={mediosPago}
         esCuentaCorriente={esCuentaCorriente}
         eleccionInicial={eleccion}
+        pedidoReintento={pedidoReintento}
       />
     </>
   );

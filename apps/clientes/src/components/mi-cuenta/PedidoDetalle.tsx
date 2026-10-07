@@ -3,7 +3,7 @@ import type { Order } from "@/data/orders";
 import { estadoPedidoPill } from "@/lib/estado-pedido-pill";
 import { fmtFecha, fmtPrecio } from "@/lib/format";
 import { esPagoEnLinea } from "@/lib/medios-pago";
-import { pagoEstadoVista } from "@/lib/pago-estado-visible";
+import { pagoEstadoVista, puedeReintentarPago } from "@/lib/pago-estado-visible";
 import { seguimientoPedido } from "@/lib/pedido-seguimiento";
 import { puedeCancelarPedido } from "@/lib/pedido-cancelable";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
@@ -46,7 +46,7 @@ export function PedidoDetalle({
   const enLinea = esPagoEnLinea(pedido.pagoMetodoSlug ?? "");
   // Con el pago en línea pendiente se consulta al procesador, por si ya se resolvió.
   const consultarPago = enLinea && pedido.estado === "pendiente" && pedido.pagoEstado === "pendiente";
-  const puedeReintentar = enLinea && pedido.estado === "pendiente" && pedido.pagoEstado === "fallido";
+  const puedeReintentar = puedeReintentarPago(pedido);
   // Transferencia pendiente: la cuenta congelada al pedir (sin snapshot, el mensaje neutro).
   const cuentaVisible = cuentaDelPedido(pedido);
 
@@ -81,7 +81,7 @@ export function PedidoDetalle({
           {consultarPago && <ActualizarPagoPedido pedidoId={pedido.id} />}
           {puedeReintentar && (
             <div className="mt-3">
-              <BotonEnlace size="sm" href="/checkout">
+              <BotonEnlace size="sm" href={`/checkout?pedido=${pedido.id}`}>
                 Reintentar el pago
               </BotonEnlace>
             </div>

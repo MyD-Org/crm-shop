@@ -49,3 +49,13 @@ export function pagoEstadoVista(
   }
   return { label: "Pago pendiente" };
 }
+
+/**
+ * ¿Se ofrece "Reintentar el pago" de un pedido? Sólo si se cobra en línea, el pago fue rechazado y
+ * el pedido sigue pendiente (aún cobrable). Puro: lo usan la card y el detalle.
+ */
+export function puedeReintentarPago(
+  o: Pick<Order, "estado" | "pagoEstado" | "pagoMetodoSlug">,
+): boolean {
+  return esPagoEnLinea(o.pagoMetodoSlug ?? "") && o.estado === "pendiente" && o.pagoEstado === "fallido";
+}

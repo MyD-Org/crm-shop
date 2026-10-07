@@ -48,7 +48,8 @@ describe("CheckoutClient con medios de pago de la tabla", () => {
   });
 
   it("el rescate del pendiente corre siempre: el servidor decide si hay algo que retomar", () => {
-    expect(fuente).toContain('fetch("/api/pedidos/pendiente")');
+    expect(fuente).toContain('"/api/pedidos/pendiente"');
+    expect(fuente).toContain("fetch(url)");
     expect(fuente).toContain("useState(true)");
   });
 

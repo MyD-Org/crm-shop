@@ -13,11 +13,12 @@ function CheckIcon() {
 /**
  * Bloque de metas del carrito (envío gratis, más cuotas sin interés): una barra por meta, apiladas en
  * el MISMO recuadro y ya ordenadas (la más cercana primero). Sin metas no se dibuja nada.
+ * `compacta`: variante del checkout (menos aire y barra fina), con el mismo texto y énfasis.
  */
-export function MetasCarrito({ metas }: { metas: MetaCarrito[] }) {
+export function MetasCarrito({ metas, compacta = false }: { metas: MetaCarrito[]; compacta?: boolean }) {
   if (metas.length === 0) return null;
   return (
-    <div className="space-y-4 rounded-2xl bg-bg p-4" aria-live="polite">
+    <div className={`rounded-2xl bg-bg ${compacta ? "space-y-3 p-3" : "space-y-4 p-4"}`} aria-live="polite">
       {metas.map((m) => (
         <div key={m.id} className="space-y-2.5" data-meta={m.id}>
           <p className="flex items-center gap-2 text-sm font-medium text-text">
@@ -31,7 +32,7 @@ export function MetasCarrito({ metas }: { metas: MetaCarrito[] }) {
             </span>
             <span><TextoConEnfasis texto={m.texto} enfasis={m.enfasis} /></span>
           </p>
-          <Progress value={m.pct} aria-label={m.aria} tone="success" />
+          <Progress value={m.pct} aria-label={m.aria} tone="success" size={compacta ? "sm" : undefined} />
         </div>
       ))}
     </div>

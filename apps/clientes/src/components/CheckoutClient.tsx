@@ -1,13 +1,13 @@
 "use client";
 
-import { TextoConEnfasis } from "@/components/carrito/TextoConEnfasis";
+import { OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
-import { pagoParaCotizar } from "@/lib/lista-medio";
+import { pagoParaCotizar, totalVariaSegunMedio } from "@/lib/lista-medio";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { PagoPayway } from "@/components/PagoPayway";
@@ -32,7 +32,6 @@ import {
   type Complemento,
 } from "@/lib/contacto-alegra";
 import type { DatosDelContactoPublico } from "@/lib/datos-del-contacto";
-import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { nombreConMarca } from "@/lib/formato-nombre";
 import { formatMarca } from "@/lib/formato-rubro";
 import {
@@ -244,6 +243,8 @@ const AVISO_PAGO_A_COORDINAR =
   "El pago se coordina con un asesor después de confirmar su pedido.";
 
 interface Props {
+  /** Id del pedido cuyo pago se reintenta (`/checkout?pedido=`): se retoma ese, nunca se crea otro. */
+  pedidoReintento?: string | null;
   nombreSugerido: string;
   /**
    * Teléfono precargado: el de Alegra del vinculado (`facturacion.telefonoAlegra`,
@@ -318,6 +319,8 @@ type PedidoRescatado = {
   lineas?: { id: string; qty: number }[];
   /** Ya hay un cobro enviado al procesador y sin resolver: se retoma en "Estamos confirmando su pago". */
   pagoEnCurso?: boolean;
+  /** Vino de `?pedido=`: se retoma siempre, sin compararlo con el carrito ni cancelarlo. */
+  explicito?: boolean;
 };
 
 export function CheckoutClient({
@@ -334,6 +337,7 @@ export function CheckoutClient({
   mediosPago = [],
   esCuentaCorriente = false,
   eleccionInicial = null,
+  pedidoReintento = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready, addItems } = useCart();
 
@@ -517,6 +521,8 @@ export function CheckoutClient({
   const [buscandoPendiente, setBuscandoPendiente] = useState(true);
   /** Pedido pendiente encontrado al montar, a decidir cuando cargue el carrito. */
   const [rescate, setRescate] = useState<PedidoRescatado | null>(null);
+  /** El pedido a reintentar ya no se puede cobrar: se explica y se ofrece volver a comprar. */
+  const [errorReintento, setErrorReintento] = useState<string | null>(null);
   /**
    * Al montar, se chequea si hay un pedido pendiente reciente de este comprador
    * (ver `pedidoPendienteMasReciente` en pedidos.ts). Sin este atajo, quien
@@ -528,11 +534,24 @@ export function CheckoutClient({
     // El servidor contesta `{ pedido: null }` sin credenciales de Mercado Pago, y rescata el pedido
     // aunque el medio se haya desactivado en el CRM: el pedido ya existe.
     let cancelado = false;
-    fetch("/api/pedidos/pendiente")
-      .then((r) => (r.ok ? r.json() : null))
+    const url = pedidoReintento
+      ? `/api/pedidos/pendiente?pedido=${encodeURIComponent(pedidoReintento)}`
+      : "/api/pedidos/pendiente";
+    fetch(url)
+      .then(async (r) => {
+        if (r.ok) return r.json();
+        if (pedidoReintento && (r.status === 404 || r.status === 409)) {
+          const j = (await r.json().catch(() => null)) as { error?: string } | null;
+          return { falla: j?.error ?? "Este pedido ya no se puede pagar." };
+        }
+        return null;
+      })
       .then((data) => {
         if (cancelado) return;
-        if (data?.pedido) setRescate(data.pedido);
+        if (data?.falla) {
+          setErrorReintento(data.falla);
+          setBuscandoPendiente(false);
+        } else if (data?.pedido) setRescate(pedidoReintento ? { ...data.pedido, explicito: true } : data.pedido);
         else setBuscandoPendiente(false);
       })
       .catch(() => {
@@ -543,7 +562,7 @@ export function CheckoutClient({
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [pedidoReintento]);
 
   /**
    * Con el carrito cargado se decide qué hacer con el pendiente. El carrito sigue
@@ -554,6 +573,8 @@ export function CheckoutClient({
    */
   const rescateDistinto =
     rescate !== null &&
+    // Un reintento explícito nunca cancela el pedido aunque el carrito sea otro.
+    !rescate.explicito &&
     ready &&
     items.length > 0 &&
     Array.isArray(rescate.lineas) &&
@@ -1066,6 +1087,25 @@ export function CheckoutClient({
     );
   }
 
+  // ------------------------- el pedido a reintentar ya no se puede cobrar
+  if (errorReintento) {
+    return (
+      <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20 text-center">
+        <p role="alert" className="text-lg font-semibold text-text">{errorReintento}</p>
+        <div className="flex flex-wrap justify-center gap-3">
+          {pedidoReintento && (
+            <Link href={`/mi-cuenta/pedidos/${pedidoReintento}`}>
+              <Button>Volver a comprar</Button>
+            </Link>
+          )}
+          <Link href="/catalogo">
+            <Button variant="outline">Ver catálogo</Button>
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   // ------------------------------------------ buscando un pedido para retomar
   if (ready && items.length === 0 && buscandoPendiente) {
     return (
@@ -1448,36 +1488,16 @@ export function CheckoutClient({
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
                 {pagaEnLinea && opcionesCuotas.length > 1 && (
-                  <fieldset className="mt-4" aria-label={TEXTOS_CUOTAS.checkoutTitulo}>
-                    <legend className="mb-2 text-sm font-semibold text-text">{TEXTOS_CUOTAS.checkoutTitulo}</legend>
-                    <div className="grid gap-3">
-                      {opcionesCuotas.map((o) => (
-                        <RadioCard
-                          key={o.cuotas}
-                          selected={cuotasElegidas === o.cuotas}
-                          disabled={estado === "cargando"}
-                          onClick={() => setCuotasSel(o.cuotas)}
-                          title={
-                            o.cuotas === 1
-                              ? TEXTOS_CUOTAS.checkoutUnPago(o.total)
-                              : TEXTOS_CUOTAS.checkoutCuotas(o.cuotas, o.montoCuota, o.total)
-                          }
-                        />
-                      ))}
-                    </div>
-                    <p className="mt-2 text-xs text-muted">{TEXTOS_CUOTAS.checkoutAyuda(medioSel?.nombre ?? "")}</p>
-                  </fieldset>
-                )}
-                {pagaEnLinea && cotizacion?.proximoEscalon && (
-                  <p className="mt-2 text-xs text-muted">
-                    <TextoConEnfasis
-                      texto={TEXTOS_CUOTAS.faltaParaCuotas(cotizacion.proximoEscalon.falta, cotizacion.proximoEscalon.cuotas)}
-                      enfasis={TEXTOS_CUOTAS.montoFaltante(cotizacion.proximoEscalon.falta)}
-                    />
-                  </p>
+                  <OpcionesCuotas
+                    opciones={opcionesCuotas}
+                    elegida={cuotasElegidas}
+                    onElegir={setCuotasSel}
+                    deshabilitado={estado === "cargando"}
+                    progreso={cotizacion?.progresoCuotas}
+                  />
                 )}
                 {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
-                {!esCuentaCorriente && <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>}
+                {!esCuentaCorriente && totalVariaSegunMedio(mediosParaElegir) && <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>}
                 {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
               </>
             ) : (

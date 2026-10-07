@@ -201,9 +201,11 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   const saludo = nombre ? `Hola, ${nombre}:` : "Hola:";
   const subject = `${oneLine(d.comercio)} — Pedido ${d.numero} ${copy.asunto}`.slice(0, 200);
   const conResumen = d.aviso !== "pago_rechazado" && (d.lineas?.length ?? 0) > 0;
-  const contacto = d.aviso !== "pago_rechazado" ? d.contacto : undefined;
-  const whatsappOk = Boolean(contacto?.whatsappUrl && contacto.whatsappVisible);
   const transferencia = d.aviso === "recibido" ? d.transferencia : undefined;
+  // Con transferencia el mail ya dice qué hacer (datos y plazo del comprobante): sin plazo de contacto
+  // ni botón de WhatsApp, igual que la pantalla del checkout.
+  const contacto = d.aviso !== "pago_rechazado" && !transferencia ? d.contacto : undefined;
+  const whatsappOk = Boolean(contacto?.whatsappUrl && contacto.whatsappVisible);
   const reintento = d.aviso === "pago_rechazado" ? d.checkoutUrl : undefined;
 
   const cuerpoHtml = `

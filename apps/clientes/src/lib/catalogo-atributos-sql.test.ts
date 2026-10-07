@@ -202,6 +202,13 @@ describe("cumpleAtributoSql (el positivo del boost y de recuperar)", () => {
     expect(texto).not.toContain("~*");
   });
 
+  it("apto-humedad (de contexto): ordena por IP >= 44 (dato) o por el patrón del nombre", () => {
+    const { sql: texto, params } = render(cumpleAtributoSql(ctxWhere(), "apto-humedad")!);
+    expect(texto).toContain("CUMPLE_FALSO($");
+    expect(texto).toContain(" or TEXTO ~* ");
+    expect(params[0]).toBe("ip");
+  });
+
   it("aunque el contexto sea el de no contradicción, el boost es positivo", () => {
     const { sql: texto } = render(cumpleAtributoSql(ctxWhere({ medidaPositiva: false }), "corriente_a:20")!);
     expect(texto).not.toContain("not exists");

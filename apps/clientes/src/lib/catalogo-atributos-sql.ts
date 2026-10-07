@@ -186,7 +186,8 @@ function condicionMedida(ctx: ContextoAtributos, a: AtributoMedida): SQL | undef
 export function cumpleAtributoSql(ctx: ContextoAtributos, id: string): SQL | undefined {
   const a = atributoPorId(id);
   if (!a) return undefined;
-  return "medida" in a ? cumpleMedida(ctx, a) : filtroAtributosSql(ctx, [id]);
+  // Directo, sin pasar por `atributosValidos`: un atributo de contexto (apto-humedad) ordena pero no se filtra.
+  return "medida" in a ? cumpleMedida(ctx, a) : cumple(ctx, a);
 }
 
 /**

@@ -24,4 +24,22 @@ describe("candidatos del diccionario", () => {
     expect(candidatos("interruptor 2x20", arbol).categorias).toContain("Interruptores termomagnéticos");
     expect(candidatos("extractor para baño", arbol).categorias).toContain("Extractores de aire");
   });
+
+  it("un lugar exterior sugiere apto exterior (blando de contexto)", () => {
+    for (const lugar of ["patio", "terraza", "balcon", "galeria"]) {
+      expect(candidatos(`luz para la ${lugar}`, arbol).atributosContexto).toEqual(["apto-exterior"]);
+    }
+    expect(candidatos("luz para el living", arbol).atributosContexto).toEqual([]);
+  });
+
+  it("baño, ducha o lavadero sugieren apto humedad (IP44 o más), no apto exterior", () => {
+    for (const q of ["lampara para el bano", "aplique para el bano", "luz para la ducha", "luz para el lavadero"]) {
+      expect(candidatos(q, arbol).atributosContexto).toEqual(["apto-humedad"]);
+    }
+  });
+
+  it("un lugar húmedo y uno exterior suman los dos; escribir 'exterior' no suma el de contexto", () => {
+    expect(candidatos("luz para el bano y el patio", arbol).atributosContexto).toEqual(["apto-exterior", "apto-humedad"]);
+    expect(candidatos("luz exterior para el patio", arbol).atributosContexto).toEqual([]);
+  });
 });

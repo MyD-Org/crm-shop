@@ -201,13 +201,29 @@ export async function combinar(entrada: EntradaCombinar): Promise<PlanBusqueda> 
     // Con Jev, el diccionario sólo suma lo que cae dentro de la raíz que eligió Jev.
     else if (raiz && contiene(arbol, raiz.nombre, c)) sumarCategoria(c, PESO_CATEGORIA_DICCIONARIO_CON_JEV);
   }
+  // Un atributo duro que vacía lo que las palabras de la consulta encuentran ("panel para exterior": hay
+  // paneles y hay exteriores, pero ningún panel exterior) no puede dejar la página en 0: pasa a blando
+  // (ordena en vez de filtrar) y el plan ya no lo lleva como duro, así que la URL y los chips no muestran
+  // un filtro que no se aplicó. Sólo si los términos solos SÍ encuentran productos: si no encuentran nada
+  // (un error de tipeo) el culpable no es el atributo y se deja como estaba. Con categoría dura ya se
+  // contó junto con los atributos (`enCategoria > 0`).
+  let duros = atributosDuros;
+  if (!dura && atributosDuros.length) {
+    const terminos = e.terminos.filter((t) => t.peso >= PESO_MINIMO_RECUPERAR).map((t) => t.texto);
+    if (terminos.length && (await e.contar({ categorias: [], atributos: atributosDuros, terminos })) === 0) {
+      if ((await e.contar({ categorias: [], atributos: [], terminos })) > 0) {
+        for (const id of atributosDuros) atributosBlandos.set(id, Math.max(PESO_ATRIBUTO_EXPLICITO, atributosBlandos.get(id) ?? 0));
+        duros = [];
+      }
+    }
+  }
   const redondear = (n: number) => Math.round(n * 100) / 100;
 
   return {
     version: 1,
     consulta: e.consulta,
     intencion,
-    duros: { categorias: dura ? [dura] : [], atributos: atributosDuros },
+    duros: { categorias: dura ? [dura] : [], atributos: duros },
     blandos: {
       categorias: [...blandas]
         .sort((a, b) => b[1] - a[1])

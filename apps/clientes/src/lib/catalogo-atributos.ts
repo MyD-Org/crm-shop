@@ -300,7 +300,25 @@ export const ATRIBUTOS: readonly Atributo[] = [
   },
 ];
 
-const POR_ID = new Map(ATRIBUTOS.map((a) => [a.id, a]));
+/**
+ * Atributos que sólo sugiere el contexto de la búsqueda (blandos del plan: ordenan, nunca filtran), no
+ * se pueden pedir ni escribir. Resuelven por id (`atributoPorId`: patrón y dato estructurado, para
+ * ordenar), pero no están en `ATRIBUTOS`: sin faceta en el panel, sin chip, sin `?atr=`, sin etiqueta en
+ * las cards del chat ni facetas del agente, y sin sinónimos que lo disparen escribiéndolo.
+ */
+export const ATRIBUTOS_DE_CONTEXTO: readonly Atributo[] = [
+  {
+    id: "apto-humedad",
+    grupo: "ambiente",
+    nombre: "Apto humedad",
+    // IP44 o más (salpicaduras): lo que va en un baño, una ducha o un lavadero.
+    patron: `${INI}ip ?-?(4[4-9]|[56][0-9])${FIN}`,
+    sinonimos: [],
+    estructurado: { clave: "ip", desde: 44 },
+  },
+];
+
+const POR_ID = new Map([...ATRIBUTOS, ...ATRIBUTOS_DE_CONTEXTO].map((a) => [a.id, a]));
 
 function sintetizar(id: string, m: MedidaId): AtributoMedida {
   return {

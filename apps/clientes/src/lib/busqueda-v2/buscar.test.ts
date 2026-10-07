@@ -20,10 +20,12 @@ const deps = (cambios: Partial<DepsBuscar> = {}): DepsBuscar => ({
 });
 
 describe("/buscar: destino", () => {
-  it("con plan: la consulta original, los duros como filtros e ia=1; resumen para la telemetría", async () => {
-    const r = await destinoDeBusqueda({ q: "foco cálido e27", stock: "todos" }, deps());
-    expect(r.href).toBe(
-      "/catalogo?q=foco+c%C3%A1lido+e27&categoria=L%C3%A1mparas&atr=tono-calido&atr=zocalo-e27&stock=todos&ia=1",
+  it("con plan: la consulta original e ia=1, sin los duros como filtros (ordenan); resumen para la telemetría", async () => {
+    const r = await destinoDeBusqueda({ q: "foco cálido e27" }, deps());
+    expect(r.href).toBe("/catalogo?q=foco+c%C3%A1lido+e27&ia=1");
+    // Quien ya había apagado "Solo con stock" lo conserva: es su elección.
+    expect((await destinoDeBusqueda({ q: "foco cálido e27", stock: "todos" }, deps())).href).toBe(
+      "/catalogo?q=foco+c%C3%A1lido+e27&stock=todos&ia=1",
     );
     expect(r.resumen).toEqual({ intencion: "producto", fuente: "jev", duros: 3, blandos: 1, ms_jev: 420 });
   });

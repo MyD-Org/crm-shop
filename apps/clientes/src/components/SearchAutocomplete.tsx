@@ -119,8 +119,7 @@ export function SearchAutocomplete({ busquedaIa = false }: { busquedaIa?: boolea
   const submit = (texto = query) => {
     if (!texto.trim()) return;
     setOpen(false);
-    // Con todos los productos, no solo los con stock: las sugerencias incluyen
-    // los sin stock y la búsqueda tiene que mostrar lo mismo.
+    // Sólo la consulta: el catálogo aplica su default ("Solo con stock"), como el desplegable.
     router.push(hrefBusqueda(texto, busquedaIa));
   };
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { condicionRecuperar, terminosQueRecuperan } from "./recuperar";
+import { acotarPorDeducidas, condicionRecuperar, terminosQueRecuperan } from "./recuperar";
 import { POTENCIA_NO_DOMESTICA_W, PUNTOS, esConsultaDeCasa, gruposDeOriginales, puntajeBusqueda } from "./ordenar";
 import { patronFrase, patronInicio, patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
@@ -294,21 +294,25 @@ describe("consulta de la casa: lo industrial o de alta potencia baja (nunca se e
 describe("orden de las medidas discretas: el que cumple, antes que el que contradice", () => {
   const puntaje = (atributos: { id: string; peso: number }[], p: PiezasBusqueda = piezas) => render(puntajeBusqueda(plan({ atributos }, "diferencial 25a"), p)).sql;
 
-  it("una medida discreta de peso 1 suma +medidaDiscreta si cumple y resta si contradice (contradice manda)", () => {
+  it("una medida discreta de peso 1 suma +medidaDiscreta si cumple y resta contradiceMedida si contradice (contradice manda)", () => {
     const sqlTexto = puntaje([{ id: "corriente_a:25", peso: 1 }]);
-    expect(sqlTexto).toContain(`case when CONTRADICE_corriente_a_25 then -${PUNTOS.medidaDiscreta} when ATRIBUTO_corriente_a:25 then ${PUNTOS.medidaDiscreta} else 0 end`);
+    expect(sqlTexto).toContain(`case when CONTRADICE_corriente_a_25 then -${PUNTOS.contradiceMedida} when ATRIBUTO_corriente_a:25 then ${PUNTOS.medidaDiscreta} else 0 end`);
     // además del boost de siempre
     expect(sqlTexto).toContain("(case when ATRIBUTO_corriente_a:25 then $");
   });
 
   it("la penalidad y el premio superan por mucho cualquier otra parte del puntaje", () => {
-    const otras = Object.entries(PUNTOS).filter(([k]) => k !== "medidaDiscreta").reduce((t, [, v]) => t + v, 0);
+    const otras = Object.entries(PUNTOS).filter(([k]) => k !== "medidaDiscreta" && k !== "contradiceMedida").reduce((t, [, v]) => t + v, 0);
     expect(PUNTOS.medidaDiscreta).toBeGreaterThan(10 * otras);
+  });
+
+  it("contradecir una clave pesa más que cumplir las cuatro discretas: sin contradicción primero, como orden", () => {
+    expect(PUNTOS.contradiceMedida).toBeGreaterThan(4 * PUNTOS.medidaDiscreta + 10 * PUNTOS.frase);
   });
 
   it("las cuatro claves discretas: polos, corriente, sensibilidad y zócalo", () => {
     for (const id of ["polos:2", "corriente_a:25", "sensibilidad_ma:30", "zocalo:e27"]) {
-      expect(puntaje([{ id, peso: 1 }])).toContain(`when CONTRADICE_${id.replace(":", "_")} then -${PUNTOS.medidaDiscreta}`);
+      expect(puntaje([{ id, peso: 1 }])).toContain(`when CONTRADICE_${id.replace(":", "_")} then -${PUNTOS.contradiceMedida}`);
     }
   });
 
@@ -335,6 +339,48 @@ describe("orden de las medidas discretas: el que cumple, antes que el que contra
 
   it("dos medidas discretas suman cada una por separado", () => {
     const sqlTexto = puntaje([{ id: "polos:2", peso: 1 }, { id: "corriente_a:25", peso: 1 }]);
-    expect(sqlTexto.match(new RegExp(`then -${PUNTOS.medidaDiscreta}`, "g"))).toHaveLength(2);
+    expect(sqlTexto.match(new RegExp(`then -${PUNTOS.contradiceMedida}`, "g"))).toHaveLength(2);
+  });
+});
+
+describe("acotarPorDeducidas: la categoría deducida acota sin filtro ni chip", () => {
+  const conDeducida = (terminos: CriterioPlan["blandos"]["terminos"]): CriterioPlan => ({
+    ...plan({ categorias: [{ nombre: "Dicroicas", peso: 1 }], terminos }, "dicroica mr16"),
+    deducidas: ["Dicroicas"],
+  });
+
+  it("sin deducidas devuelve la misma condición", () => {
+    const c = sql`RECUPERAR`;
+    expect(acotarPorDeducidas(plan(), piezas, c)).toBe(c);
+  });
+
+  it("la deducida no recupera su categoría entera: sólo la acota", () => {
+    const p = conDeducida([{ texto: "dicroica", peso: 1 }, { texto: "mr16", peso: 0.4 }]);
+    const { sql: texto } = render(condicionRecuperar(p, piezas)!);
+    expect(texto).not.toContain("EN_CATEGORIAS");
+  });
+
+  it("acota a la categoría O a lo que tiene TODAS las palabras significativas (o un sinónimo de cada una)", () => {
+    const p = conDeducida([
+      { texto: "dicroica", peso: 1 },
+      { texto: "mr16", peso: 0.4 },
+      { texto: "dicro", peso: 0.7 },
+    ]);
+    const { sql: texto, params } = render(acotarPorDeducidas(p, piezas, sql`RECUPERAR`)!);
+    expect(texto).toBe("((EN_CATEGORIAS($1) or ((TEXTO ~ $2 or TEXTO ~ $3) and TEXTO ~ $4)) and RECUPERAR)");
+    expect(params).toEqual(["Dicroicas", patronTermino("dicroica"), patronTermino("dicro"), patronTermino("mr16")]);
+  });
+
+  it("con una sola palabra pedida no hay escape: sólo la categoría (\"pilas\" no trae \"pilastra\")", () => {
+    const p = { ...conDeducida([{ texto: "pilas", peso: 1 }, { texto: "bateria", peso: 0.7 }]), deducidas: ["Pilas y baterias"] };
+    const { sql: texto } = render(acotarPorDeducidas(p, piezas, sql`RECUPERAR`)!);
+    expect(texto).toBe("(EN_CATEGORIAS($1) and RECUPERAR)");
+  });
+
+  it("sin nada que recupere, la categoría deducida entera (como cuando era filtro)", () => {
+    const p = { ...conDeducida([{ texto: "patio", peso: 0.3 }]), deducidas: ["Luminarias exteriores"] };
+    const { sql: texto, params } = render(acotarPorDeducidas(p, piezas, undefined)!);
+    expect(texto).toBe("EN_CATEGORIAS($1)");
+    expect(params).toEqual(["Luminarias exteriores"]);
   });
 });

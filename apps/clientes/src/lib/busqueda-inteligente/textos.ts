@@ -28,6 +28,12 @@ export const TEXTOS_SIN_RESULTADOS = {
       : `No hay productos con stock en ${local}`,
   descripcionLocal: "Puede ver los productos de todos los locales.",
   verEnTodosLosLocales: "Ver en todos los locales",
+  /** Con "Solo con stock" (el default) la búsqueda da 0, pero hay productos sin stock que coinciden. */
+  sinStock: (n: number) =>
+    n === 1
+      ? "Hay 1 producto sin stock que coincide con su búsqueda."
+      : `Hay ${n} productos sin stock que coinciden con su búsqueda.`,
+  verSinStock: "Ver también los productos sin stock",
 } as const;
 
 /**

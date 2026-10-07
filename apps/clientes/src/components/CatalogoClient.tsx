@@ -28,6 +28,7 @@ import {
 } from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
 import type { ChipSugerido } from "@/lib/busqueda-inteligente/url";
+import { TEXTOS_SIN_RESULTADOS } from "@/lib/busqueda-inteligente/textos";
 import type { Intencion } from "@/lib/busqueda-v2/plan";
 import { enviarBusquedaEnviada, enviarClickResultado } from "@/lib/busqueda-v2/telemetria";
 import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
@@ -53,6 +54,7 @@ export function CatalogoClient({
   total,
   paginas,
   filtrosSinBusqueda = false,
+  sinStock = 0,
   busquedaIa,
   etapa,
   conFacetasPorTipo = false,
@@ -70,6 +72,11 @@ export function CatalogoClient({
    * (ver catalogo/page.tsx): tocar un filtro también quita la búsqueda.
    */
   filtrosSinBusqueda?: boolean;
+  /**
+   * La búsqueda dio 0 con "Solo con stock" (el default), pero incluyendo los sin stock daría esto:
+   * el "sin resultados" lo avisa y ofrece verlos. 0 = no aplica.
+   */
+  sinStock?: number;
   /**
    * Búsqueda inteligente (flag `busqueda-ia`); ausente = catálogo de siempre.
    * - `intencion` y `sugerencias`: del plan de la búsqueda v2 (`?ia=1`), para la franja
@@ -210,6 +217,7 @@ export function CatalogoClient({
   // y ofrece quitarlo: `ir` también olvida la cookie, igual que el chip y el panel.
   const sinLocal = sinResultadosPorLocal(estado, facetas.locales ?? [], consultaVacia);
   const quitarLocal = () => ir({ retiroEn: undefined });
+  const verSinStock = () => ir({ soloStock: false });
 
   // Señales de la invitación proactiva del asesor (src/lib/iniciativa/): cada
   // búsqueda distinta y si terminó sin resultados (después del rescate de la
@@ -308,6 +316,7 @@ export function CatalogoClient({
               relacionadosHref={busquedaIa.relacionadosHref}
               verTodos={() => ir({ ...limpiarFiltros(), query: undefined, ia: undefined })}
               local={sinLocal ? { ...sinLocal, quitar: quitarLocal } : undefined}
+              sinStock={sinStock > 0 ? { total: sinStock, ver: verSinStock } : undefined}
             />
           ) : productos.length === 0 ? (
             // Sin culpar al visitante ("revise la ortografía"): se dice qué
@@ -315,11 +324,20 @@ export function CatalogoClient({
             estado.query ? (
               <EmptyState
                 title={sinLocal?.titulo ?? `No hay resultados para "${estado.query}"`}
-                description={sinLocal?.descripcion ?? "Puede buscar con otras palabras o elegir una categoría de la lista."}
+                description={
+                  sinLocal?.descripcion ??
+                  (sinStock > 0
+                    ? TEXTOS_SIN_RESULTADOS.sinStock(sinStock)
+                    : "Puede buscar con otras palabras o elegir una categoría de la lista.")
+                }
                 action={
                   sinLocal ? (
                     <Button variant="primary" onClick={quitarLocal}>
                       {sinLocal.accion}
+                    </Button>
+                  ) : sinStock > 0 ? (
+                    <Button variant="primary" onClick={verSinStock}>
+                      {TEXTOS_SIN_RESULTADOS.verSinStock}
                     </Button>
                   ) : (
                     <Button variant="secondary" onClick={() => ir({ ...limpiarFiltros(), query: undefined })}>

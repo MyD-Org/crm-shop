@@ -23,8 +23,11 @@
  *   escritorio antes que los bulbos de la categoría blanda;
  * - categoría blanda +6 × peso; atributo blando +3 × peso;
  * - medida DISCRETA de confianza alta (polos, corriente, sensibilidad, zócalo; peso 1): el que la cumple +1000, el
- *   que tiene el dato de OTRO valor -1000 y el que no tiene dato 0. Es un escalón por encima de todo lo demás: el
- *   que cumple va siempre antes que el que contradice (los sin dato, en el medio). Sólo ordena, nunca excluye;
+ *   que tiene el dato de OTRO valor -10000 y el que no tiene dato 0. Es un escalón por encima de todo lo demás: el
+ *   que cumple va siempre antes que el que contradice (los sin dato, en el medio). La penalidad supera la suma de
+ *   los premios de todas las claves: con dos o más medidas ("termica 2x20"), un producto que contradice ALGUNA va
+ *   después de todos los que no contradicen ninguna (menos contradicciones primero; a igual cantidad, más
+ *   cumplidas). Es la "sin contradicción" que antes hacía el filtro duro, como orden. Sólo ordena, nunca excluye;
  * - consulta de la casa (patio, living, cocina…, sin galpón, cancha ni
  *   industrial): lo industrial o de más de 200 W -2. Señal blanda, nunca
  *   excluye: en el patio de una casa se pone un reflector de 20–50 W, no uno de
@@ -57,6 +60,11 @@ export const PUNTOS = {
   industrialEnCasa: 2,
   /** Escalón del orden estricto de las medidas discretas: mayor que toda la suma de las demás partes, con holgura. */
   medidaDiscreta: 1000,
+  /**
+   * Penalidad por contradecir una medida discreta: mayor que los premios de todas las claves juntas (a lo sumo 4
+   * discretas), así contradecir alguna manda sobre cumplir otras.
+   */
+  contradiceMedida: 10000,
 } as const;
 
 /** Entero literal (constante de código): como parámetro, el CASE no sabría su tipo. */
@@ -147,7 +155,7 @@ export function puntajeBusqueda(plan: CriterioPlan, p: PiezasBusqueda, opciones:
     // Orden estricto: contradecir (dato de otro valor) manda sobre cumplir por el nombre.
     if (cumple && p.contradiceAtributo && a.peso >= PESO_ORDEN_ESTRICTO && esMedidaDiscreta(a.id)) {
       const contradice = p.contradiceAtributo(a.id);
-      if (contradice) partes.push(sql`(case when ${contradice} then -${n(PUNTOS.medidaDiscreta)} when ${cumple} then ${n(PUNTOS.medidaDiscreta)} else 0 end)`);
+      if (contradice) partes.push(sql`(case when ${contradice} then -${n(PUNTOS.contradiceMedida)} when ${cumple} then ${n(PUNTOS.medidaDiscreta)} else 0 end)`);
     }
   }
   if (esConsultaDeCasa(plan.consulta)) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { usarAtributosEstructurados } from "@/lib/catalogo-atributos-uso";
 import { buscarEnShop } from "@/lib/busqueda-v2/motor-servidor";
+import { SOLO_STOCK_DEFAULT } from "@/lib/catalogo-url";
 import { flagsPublicos } from "@/lib/flags-publicos";
 import { dispCatalogo } from "@/lib/zona-servidor";
 
@@ -22,6 +23,9 @@ const MAX_LIMIT = 200;
  * flag `busqueda-ia`, el desplegable busca igual que el Enter (`/buscar` → `?ia=1`), con el plan
  * de la consulta; si no encuentra nada, la búsqueda exacta y, al final, la tolerante a errores de
  * tipeo. Sin caché a propósito: cada texto buscado sería una entrada nueva.
+ *
+ * Sólo con stock, como el Enter: la búsqueda llega al catálogo con el default de la tienda ("Solo
+ * con stock"), así el desplegable y el Enter devuelven el mismo conjunto.
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -43,7 +47,7 @@ export async function GET(req: NextRequest) {
     const resultado = await buscarEnShop(
       {
         consulta: q,
-        filtros: estructurados ? { atributosEstructurados: true } : {},
+        filtros: { soloStock: SOLO_STOCK_DEFAULT, ...(estructurados ? { atributosEstructurados: true } : {}) },
         orden: "relevancia",
         pagina: 1,
         porPagina: limit,

@@ -5,7 +5,6 @@ import { AccentText } from "@myd-org/ui";
 import { ChispaIcon } from "@/components/catalogo/iconos";
 import { Reveal } from "@/components/Reveal";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
-import { STOCK_INCLUYE_SIN_STOCK } from "@/lib/catalogo-url";
 import { RUTA_BUSCAR, hrefBuscar } from "@/lib/busqueda-v2/enlaces";
 import { TEXTOS_CUENTENOS } from "@/lib/iniciativa/textos";
 import {
@@ -23,9 +22,8 @@ import { SeccionEditable } from "./SeccionEditable";
  * catálogo) y tres ejemplos que se tocan. No depende del chat: sale con el
  * flag `busqueda-ia`, que es el que hace que una frase encuentre algo.
  *
- * Misma URL que el buscador del header (`hrefBuscar`: `q` y todos los
- * productos, no sólo los con stock), así la home y el header muestran lo
- * mismo. `next/form`: el envío navega del lado del cliente (el router sigue
+ * Misma URL que el buscador del header (`hrefBuscar`: sólo `q`, sin filtros),
+ * así la home y el header muestran lo mismo. `next/form`: el envío navega del lado del cliente (el router sigue
  * el 307 de `/buscar`) y sin JS es un `<form method="get">` común.
  *
  * Textos y ejemplos editables desde la home (sección `busquedaAsistida`); la
@@ -97,7 +95,6 @@ export function CuentenosQueNecesita({ contenido }: { contenido: BusquedaAsistid
                   placeholder={placeholder}
                   className="min-w-0 flex-1 bg-transparent py-2 text-base text-text outline-none placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
                 />
-                <input type="hidden" name="stock" value={STOCK_INCLUYE_SIN_STOCK} />
                 <button
                   type="submit"
                   className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-extrabold text-white transition-colors hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"

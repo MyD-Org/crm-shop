@@ -10,12 +10,12 @@ import { STOCK_INCLUYE_SIN_STOCK } from "../catalogo-url";
 export const RUTA_BUSCAR = "/buscar";
 
 /**
- * `/buscar?q=…`. Por defecto con todos los productos (`stock=todos`), como el
- * buscador del header: las sugerencias incluyen los sin stock y la búsqueda
- * tiene que mostrar lo mismo.
+ * `/buscar?q=…`. Sin filtros: la búsqueda llega al catálogo con el default de la tienda ("Solo con
+ * stock", sin chip) y nunca agrega uno que la persona no eligió. `incluyeSinStock` sólo conserva la
+ * elección de quien ya había apagado "Solo con stock" (el "Ver productos relacionados" del catálogo).
  */
-export function hrefBuscar(texto: string, soloStock = false): string {
+export function hrefBuscar(texto: string, incluyeSinStock = false): string {
   const sp = new URLSearchParams({ q: texto.trim() });
-  if (!soloStock) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
+  if (incluyeSinStock) sp.set("stock", STOCK_INCLUYE_SIN_STOCK);
   return `${RUTA_BUSCAR}?${sp.toString()}`;
 }

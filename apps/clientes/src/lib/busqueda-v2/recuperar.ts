@@ -27,9 +27,10 @@
  *
  * Sin nada que recupere, `undefined` (ver `condicionesDe`).
  */
-import { or, sql, type SQL } from "drizzle-orm";
+import { and, or, sql, type SQL } from "drizzle-orm";
 import { esMedidaId } from "../catalogo-atributos-medida";
 import { PESO_MINIMO_RECUPERAR } from "./plan";
+import { gruposDeOriginales } from "./ordenar";
 import { patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
 /** Términos del plan que recuperan (los de contexto y las medidas sólo ordenan). */
@@ -70,11 +71,39 @@ function recuperarMedida(plan: CriterioPlan, p: PiezasBusqueda): SQL | undefined
 export function condicionRecuperar(plan: CriterioPlan, p: PiezasBusqueda): SQL | undefined {
   if (esSoloMedida(plan)) return recuperarMedida(plan, p);
   const fuertes: SQL[] = terminosQueRecuperan(plan).map((t) => sql`${p.texto} ~ ${patronTermino(t)}`);
-  const categoriasFuertes = plan.blandos.categorias.filter((c) => c.peso >= PESO_MINIMO_RECUPERAR).map((c) => c.nombre);
+  // Las deducidas no recuperan su categoría entera: acotan (`acotarPorDeducidas`).
+  const deducidas = new Set(plan.deducidas ?? []);
+  const categoriasFuertes = plan.blandos.categorias
+    .filter((c) => c.peso >= PESO_MINIMO_RECUPERAR && !deducidas.has(c.nombre))
+    .map((c) => c.nombre);
   if (categoriasFuertes.length) fuertes.push(p.enCategorias(categoriasFuertes));
   const partes = fuertes.length ? fuertes : debiles(plan, p);
   if (!partes.length) return undefined;
   return partes.length === 1 ? partes[0] : or(...partes);
+}
+
+/**
+ * Lo que el plan dedujo como categoría (sin chip ni filtro en la URL) acota los candidatos: quedan
+ * los de esas categorías y, con dos o más palabras pedidas, también los que tienen TODAS (cada
+ * palabra significativa o un sinónimo suyo, y cada medida escrita) en cualquier categoría: lo que se
+ * llama como se lo pidió nunca queda afuera ("dicroica mr16" encuentra la dicroica smart aunque viva
+ * en otra subcategoría). Con una sola palabra no hay escape: sería la recuperación por esa palabra
+ * entera ("pilas" traería "pilastra"). Es lo que hacía la categoría dura de la URL, sin ocultar lo
+ * que nombra todo lo escrito y sin tildar nada.
+ *
+ * `condicion`: la recuperación por términos (o `undefined`: entonces la categoría entera, como
+ * cuando la categoría era un filtro y ninguna palabra recuperaba). Sin deducidas, la misma condición.
+ */
+export function acotarPorDeducidas(plan: CriterioPlan, p: PiezasBusqueda, condicion: SQL | undefined): SQL | undefined {
+  if (!plan.deducidas?.length) return condicion;
+  const originales = plan.blandos.terminos.filter((t) => t.peso >= 1).map((t) => t.texto);
+  const medidas = plan.blandos.terminos.filter((t) => t.peso < 1 && /\d/.test(t.texto)).map((t) => [t.texto]);
+  const grupos = [...gruposDeOriginales(originales, plan.blandos.terminos), ...medidas];
+  const todas = grupos.length >= 2
+    ? and(...grupos.map((g) => or(...g.map((t) => sql`${p.texto} ~ ${patronTermino(t)}`))))
+    : undefined;
+  const ancla = todas ? or(p.enCategorias(plan.deducidas), todas) : p.enCategorias(plan.deducidas);
+  return condicion ? and(ancla, condicion) : ancla;
 }
 
 function debiles(plan: CriterioPlan, p: PiezasBusqueda): SQL[] {

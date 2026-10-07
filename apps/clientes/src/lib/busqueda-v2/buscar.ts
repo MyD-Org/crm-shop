@@ -9,7 +9,8 @@
  * - Si no: el plan (caché o Entender con Jev) EN PARALELO con el conteo de la
  *   búsqueda clásica. Un plan que no agrega nada a la clásica (sin duros, sin
  *   blandos, sin sinónimos) con resultados clásicos ⇒ la clásica: el OR de
- *   la v2 sólo sumaría ruido. Si no, `/catalogo?q=<consulta>&categoria=…&atr=…&ia=1`.
+ *   la v2 sólo sumaría ruido. Si no, `/catalogo?q=<consulta>&ia=1`: sin filtros deducidos (la
+ *   categoría, los atributos y las medidas que entendió el plan ordenan en la página, no filtran).
  * - Cualquier falla: la clásica. Nunca se queda sin destino.
  */
 import { hrefCatalogo, leerEstado, type EstadoCatalogo } from "../catalogo-url";

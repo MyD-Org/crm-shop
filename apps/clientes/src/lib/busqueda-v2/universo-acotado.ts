@@ -23,7 +23,7 @@ export interface FiltrosUniverso {
 }
 
 export function universoAcotado(f: FiltrosUniverso): boolean {
-  if (f.categorias?.length) return true;
+  if (f.categorias?.length || f.planBusqueda?.deducidas?.length) return true;
   if (f.planBusqueda) return terminosQueRecuperan(f.planBusqueda).length > 0;
   return Boolean(f.busqueda?.trim());
 }

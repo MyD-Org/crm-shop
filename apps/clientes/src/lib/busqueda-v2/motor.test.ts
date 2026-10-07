@@ -242,10 +242,10 @@ describe("buscar: el plan", () => {
       },
     });
     const { deps, llamadas } = crearDeps(() => 1);
-    // Los duros viajan como filtros (así los lee la página de la URL): llegan tal cual y no se
-    // descuentan dos veces de lo blando, salvo las medidas (`criterioDe`, M2 de busqueda-medidas): su
-    // duro es "sin contradicción" y no puntúa, así que el blando sigue subiendo a los que tienen el
-    // dato. Lo blando restante pasa sin que el motor lo interprete.
+    // Los filtros que la persona eligió (URL) llegan tal cual y no se descuentan dos veces de lo
+    // blando, salvo las medidas (`criterioDe`, M2 de busqueda-medidas): su duro es "sin
+    // contradicción" y no puntúa, así que el blando sigue subiendo a los que tienen el dato. Lo
+    // blando restante pasa sin que el motor lo interprete.
     const filtros = { atributos: ["corriente_a:20", "id-fuera-del-diccionario"] };
     await buscar(pedido({ filtros }), cascada("catalogo", { planDe: async () => plan }), deps);
     expect(llamadas[0].filtros.atributos).toEqual(filtros.atributos);
@@ -254,10 +254,19 @@ describe("buscar: el plan", () => {
       atributos: [{ id: "corriente_a:20", peso: 1 }, { id: "tension_v:24", peso: 0.8 }],
       terminos: plan.blandos.terminos,
     });
-    // Sin duros en la URL (autocompletar), todos los blandos llegan, ids arbitrarios incluidos.
+    // Sin filtros en la URL (autocompletar), lo deducido como duro entra a lo blando con el peso más
+    // alto y todos los blandos llegan, ids arbitrarios incluidos.
     llamadas.length = 0;
     await buscar(pedido({ porPagina: 8 }), cascada("autocompletar", { planDe: async () => plan }), deps);
-    expect(llamadas[0].filtros.texto?.plan?.blandos).toEqual(plan.blandos);
+    expect(llamadas[0].filtros.texto?.plan?.blandos).toEqual({
+      categorias: [],
+      atributos: [
+        { id: "corriente_a:20", peso: 1 },
+        { id: "id-fuera-del-diccionario", peso: 1 },
+        { id: "tension_v:24", peso: 0.8 },
+      ],
+      terminos: plan.blandos.terminos,
+    });
   });
 });
 

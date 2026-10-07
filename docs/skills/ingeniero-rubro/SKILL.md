@@ -42,7 +42,7 @@ productos parecidos?*
 - **Diccionario** (`diccionario.ts`): propone categorías candidatas (todas las palabras o el sustantivo
   principal) y atributos explícitos ("cálido", "e27", "ip65"). Los sustantivos ambiguos
   (`interruptor`, `llave`) sólo proponen categoría si están **escritos**, no si llegan por sinónimo (#468).
-- **Medidas** (`medidas.ts`): conservador; lee la consulta CRUDA. Confianza alta puede filtrar duro;
+- **Medidas** (`medidas.ts`): conservador; lee la consulta CRUDA. Confianza alta es "dura" en el plan, pero desde `/buscar` ordena (escalón), no filtra;
   media sólo ordena; baja no se usa. `NxM` sólo se interpreta con contexto (protección, cable, panel).
 - **Atributos** (`catalog_atributos`): claves cerradas con rango (`DEFINICION_ATRIBUTOS` del admin). Una
   clave sólo es faceta si está en `REGISTRO` (cobertura ≥ 30 %, ≥ 2 valores, tope 6 grupos).
@@ -65,10 +65,15 @@ productos parecidos?*
    no son el dato del producto que se filtra.
 5. **No inventar.** Ante la duda, no leer la medida ni proponer la categoría: lo que falta lo cubre el
    texto; lo inventado filtra mal.
-6. **Decisiones vigentes que no se rompen:** el header arranca limpio (sin local recordado); el panel
-   de categorías muestra el árbol completo con total fijo por categoría; en medidas, los que cumplen van
-   primero **sin excluir** al resto (claves discretas); desplegable y Enter devuelven el mismo set (el
-   orden puede diferir).
+6. **Decisiones vigentes que no se rompen:** el header arranca limpio (sin local recordado); **la
+   búsqueda no aplica filtros que la persona no eligió** (estilo Mercado Libre): `/buscar` deja sólo
+   `q` + `ia=1` y lo que el plan deduce como duro (categoría, atributo, medida) ORDENA con
+   `PESO_DEDUCIDO` y la categoría recupera como blanda fuerte, sin chip ni filtro; "Solo con stock" (el
+   default) se respeta y el "sin resultados" avisa si hay coincidencias sin stock; el panel de
+   categorías muestra el árbol completo: sin búsqueda, total fijo por categoría; con texto buscado,
+   lo que la búsqueda deja en cada una ("Conteos en «…» · Quitar búsqueda"); en medidas, los que
+   cumplen van primero **sin excluir** al resto (claves discretas); desplegable y Enter devuelven el
+   mismo set (el orden puede diferir).
 7. **Repo público:** sin marcas de clientes, nombres de la empresa, URLs de producción, ids de tenant ni
    consultas reales en el código, el banco versionado o el PR. Ejemplos genéricos del rubro.
 

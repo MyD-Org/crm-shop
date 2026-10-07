@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("GET /buscar", () => {
-  it("307 a la URL con el plan, sin caché, con la cookie del resumen; la IP va al tope de Jev", async () => {
+  it("307 a la URL con el plan (sin la categoría deducida como filtro), sin caché, con la cookie del resumen; la IP va al tope de Jev", async () => {
     planParaBuscar.mockResolvedValue({
       plan: {
         version: 1,
@@ -51,7 +51,7 @@ describe("GET /buscar", () => {
     const r = await pedir("q=reflector+para+el+patio&stock=todos", { "x-forwarded-for": "203.0.113.7, 10.0.0.1" });
     expect(r.status).toBe(307);
     expect(r.headers.get("location")).toBe(
-      "https://tienda.example/catalogo?q=reflector+para+el+patio&categoria=Reflectores&stock=todos&ia=1",
+      "https://tienda.example/catalogo?q=reflector+para+el+patio&stock=todos&ia=1",
     );
     expect(r.headers.get("cache-control")).toBe("private, no-store");
     expect(r.cookies.get("busqueda_resumen")?.value).toContain('"intencion":"producto"');

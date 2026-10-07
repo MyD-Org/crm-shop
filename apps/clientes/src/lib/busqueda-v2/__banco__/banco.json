@@ -153,6 +153,8 @@
     { "q": "lampara para el baño", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true },
     { "q": "luz para la ducha", "perfil": "particular", "intencion": "necesidad", "nuncaSinResultados": true },
     { "q": "panel para exterior", "perfil": "particular", "intencion": "producto", "categoria": ["Paneles", "Embutidos", "ILUMINACION"], "debeIncluirEnTop24": ["panel"], "nuncaSinResultados": true },
-    { "q": "lampara para la terraza", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true }
+    { "q": "lampara para la terraza", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true },
+    { "q": "dicroica mr16", "perfil": "particular", "intencion": "producto", "tipo": "medida", "categoria": ["Dicroicas", "Lámparas", "Smart", "ILUMINACION"], "debeIncluirEnTop24": ["mr16"], "nuncaSinResultados": true, "medidas": [{"clave": "zocalo", "valor": "mr16"}] },
+    { "q": "dicroica smart", "perfil": "particular", "intencion": "producto", "categoria": ["Smart", "Dicroicas", "Lámparas", "ILUMINACION"], "debeIncluirEnTop24": ["smart"], "nuncaSinResultados": true }
   ]
 }

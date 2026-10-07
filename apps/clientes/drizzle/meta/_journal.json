@@ -225,6 +225,13 @@
       "when": 1791301534023,
       "tag": "0031_orders_cuotas",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791416482401,
+      "tag": "0032_orders_avisos_enviados_en",
+      "breakpoints": true
     }
   ]
 }

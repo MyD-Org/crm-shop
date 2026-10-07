@@ -7,7 +7,7 @@
  *
  * No importa `pedidos.ts` (que es quien llama a `avisarCobro`): lee el pedido por su cuenta.
  */
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, ne, notInArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmSucursales, crmTenants } from "@/db/crm";
 import { orderItems, orders } from "@/db/schema";
@@ -15,7 +15,7 @@ import { datosTenant } from "./cuenta-corriente/tenant-cc";
 import { enviarEmail } from "./email";
 import { etiquetaEntrega } from "./envio";
 import { contactoDeSucursal } from "./contacto-pedido-repo";
-import { esMedioCuentaCorriente, esPagoEnLinea, nombreDelPago } from "./medios-pago";
+import { esMedioCuentaCorriente, esPagoEnLinea, nombreDelPago, slugsPagoEnLinea } from "./medios-pago";
 import { leerMediosPagoTolerante } from "./medios-pago-repo";
 import { urlSitioMail } from "./mail-layout";
 import {
@@ -174,6 +174,59 @@ export async function avisarCobro(
   // El pedido con pago en línea recién le llega al local cuando se aprueba el pago
   // (ver `avisoOperadorAlCrear`). La clave del mail evita duplicarlo.
   if (aviso === "pago_recibido") await avisarOperadorPedidoNuevo(pedidoId);
+}
+
+/** Con transferencia, cuánto se espera como máximo para avisar si el comprador no se fue de la pantalla. */
+export const ESPERA_AVISOS_MS = 15 * 60_000;
+
+/**
+ * Los avisos de un pedido sin cobro en línea ("Recibimos su pedido" y "Nuevo pedido"), UNA sola vez y
+ * con el medio que tenga el pedido en este momento. Se queda con el pedido marcando
+ * `avisos_enviados_en` en la misma sentencia (si dos caminos llegan juntos —irse de la pantalla y el
+ * cron—, sólo uno manda) y recién después envía. Nunca lanza. Devuelve si le tocó avisar.
+ */
+export async function avisarPedidoSiFalta(pedidoId: string): Promise<boolean> {
+  try {
+    const [marcado] = await getDb()
+      .update(orders)
+      .set({ avisosEnviadosEn: new Date() })
+      .where(
+        and(
+          eq(orders.id, pedidoId),
+          eq(orders.tenantId, shopTenantId()),
+          isNull(orders.avisosEnviadosEn),
+          ne(orders.estado, "cancelado"),
+          notInArray(orders.pagoMetodo, slugsPagoEnLinea()),
+        ),
+      )
+      .returning({ id: orders.id });
+    if (!marcado) return false;
+    await avisarPedidoRecibido(pedidoId);
+    await avisarOperadorPedidoNuevo(pedidoId);
+    return true;
+  } catch (err) {
+    console.error(`[avisos pedido] ${pedidoId}: no se pudo avisar`, err);
+    return false;
+  }
+}
+
+/** Pedidos sin cobro en línea que esperan sus avisos hace más de `ESPERA_AVISOS_MS` (para el cron). */
+export async function pedidosConAvisosPendientes(ahora = new Date()): Promise<string[]> {
+  const filas = await getDb()
+    .select({ id: orders.id })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.tenantId, shopTenantId()),
+        isNull(orders.avisosEnviadosEn),
+        ne(orders.estado, "cancelado"),
+        notInArray(orders.pagoMetodo, slugsPagoEnLinea()),
+        lt(orders.createdAt, new Date(ahora.getTime() - ESPERA_AVISOS_MS)),
+      ),
+    )
+    .orderBy(asc(orders.createdAt))
+    .limit(50);
+  return filas.map((f) => f.id);
 }
 
 /**

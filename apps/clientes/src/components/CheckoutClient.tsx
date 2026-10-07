@@ -74,6 +74,7 @@ import { TEXTO_PLAZO_COMPROBANTE_CHECKOUT } from "@/lib/comprobantes/pedido";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { PasoNumerado } from "@/components/PasoNumerado";
+import { useAvisarAlSalir } from "@/components/checkout/useAvisarAlSalir";
 import { PIE_TRANSFERENCIA } from "@/lib/pie-pago-transferencia";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 import { precargaDeEntrega, puedeCambiarMedioPago, type EntregaDelPedido } from "@/lib/cambiar-medio-pago";
@@ -666,6 +667,8 @@ export function CheckoutClient({
 
   // Transferencia: el servidor devuelve la cuenta que corresponde a la entrega, el local y el total.
   const conCuenta = pagoParaEnviar === SLUG_TRANSFERENCIA;
+  // Los avisos del pedido por transferencia salen al irse de su pantalla (ver `useAvisarAlSalir`).
+  const omitirAvisoAlSalir = useAvisarAlSalir(confirmado && !pagado && conCuenta ? confirmado.id : null);
   const localParaCuenta = sucursales && entrega === "retiro" && localRetiro ? localRetiro : undefined;
 
   // La elección se valida contra las opciones vigentes (derivado en el render, sin efecto): si la
@@ -1209,7 +1212,14 @@ export function CheckoutClient({
             </Button>
             {/* Antes de informar el comprobante puede pasar a otro medio (el servidor lo vuelve a validar). */}
             {!comprobanteInformado && (
-              <Button variant="ghost" onClick={cambiarMedio} disabled={cancelando}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  omitirAvisoAlSalir();
+                  void cambiarMedio();
+                }}
+                disabled={cancelando}
+              >
                 {cancelando ? "Un momento…" : "Cambiar medio de pago"}
               </Button>
             )}

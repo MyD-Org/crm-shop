@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { confirmarComprobante } from "@/lib/comprobantes/confirmar";
 import { enviarAvisoComprobante } from "@/lib/comprobantes/mail";
 import { COMPROBANTES_NO_DISPONIBLE, CONFIRM_CAIDO } from "@/lib/comprobantes/mensajes";
@@ -5,6 +6,7 @@ import * as repo from "@/lib/comprobantes/repo";
 import { jsonNoStore, requerirComprador } from "@/lib/cuenta-corriente/guard";
 import { datosTenant } from "@/lib/cuenta-corriente/tenant-cc";
 import { numeroDePedido } from "@/lib/pedidos";
+import { avisarPedidoSiFalta } from "@/lib/pedido-avisos";
 import { getComprobantesR2 } from "@/lib/r2";
 import { shopTenantId } from "@/lib/tenant";
 
@@ -61,6 +63,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     );
 
     if (result.ok) {
+      // Comprobante de un pedido por transferencia: si sus avisos todavía no salieron (el comprador lo
+      // subió desde la pantalla de transferencia), salen ahora. Nunca lanza.
+      after(async () => {
+        const fila = await repo.buscarPublicado(tenantId, id).catch(() => null);
+        if (fila?.shopOrderId) await avisarPedidoSiFalta(fila.shopOrderId);
+      });
       return jsonNoStore({
         id,
         status: result.status,

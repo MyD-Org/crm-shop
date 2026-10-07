@@ -1653,6 +1653,16 @@ export async function cancelarPedidoPendiente(
   });
 }
 
+/** ¿El pedido existe y es de quien lo pide (en este tenant)? */
+export async function esPedidoPropio(id: string, dueno: DuenoPedidos): Promise<boolean> {
+  const [p] = await getDb()
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.id, id), esDeSuDueno(dueno)))
+    .limit(1);
+  return Boolean(p);
+}
+
 /**
  * Lo que hace falta del pedido pendiente propio para cambiarle el medio de pago (entrega, medio
  * actual y líneas), sin lock: la decisión definitiva se toma en `cambiarMedioPedido`. null = no es
@@ -1665,6 +1675,8 @@ export async function pedidoParaCambiarMedio(
   entregaTipo: EntregaTipo;
   pagoMetodo: string;
   lineas: { id: string; qty: number }[];
+  /** Si ya salieron "Recibimos su pedido" y "Nuevo pedido" (pedido sin cobro en línea). */
+  avisosEnviados: boolean;
   /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
   entrega: { local: string | null; ciudad: string | null; direccion: string | null };
   contacto: { nombre: string; telefono: string };
@@ -1679,6 +1691,7 @@ export async function pedidoParaCambiarMedio(
       entregaDireccion: orders.entregaDireccion,
       contactoNombre: orders.contactoNombre,
       contactoTelefono: orders.contactoTelefono,
+      avisosEnviadosEn: orders.avisosEnviadosEn,
     })
     .from(orders)
     .where(and(eq(orders.id, id), esDeSuDueno(dueno), eq(orders.estado, "pendiente")))
@@ -1693,6 +1706,7 @@ export async function pedidoParaCambiarMedio(
     entregaTipo: p.entregaTipo as EntregaTipo,
     pagoMetodo: p.pagoMetodo,
     lineas: items.map((i) => ({ id: i.id, qty: Number(i.qty) })),
+    avisosEnviados: p.avisosEnviadosEn !== null,
     entrega: {
       // Con retiro, la sucursal del pedido es el local elegido.
       local: p.entregaTipo === "retiro" ? (p.sucursal ?? null) : null,

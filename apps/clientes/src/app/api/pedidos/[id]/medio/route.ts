@@ -10,7 +10,7 @@ import { medioAdmiteCambio } from "@/lib/cambiar-medio-pago";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
 import { procesadorConfigurado, proveedorPago } from "@/lib/pagos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
-import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
+import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisarPedidoSiFalta, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { cambiarMedioPedido, intentoAbiertoDelPedido, lineasDelPedidoParaCarrito, pedidoParaCambiarMedio } from "@/lib/pedidos";
 import { permitir } from "@/lib/rate-limit";
@@ -189,22 +189,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // La reserva cambió de vencimiento: el listado cacheado se renueva. Nunca tira.
     marcarStockCambiado("cambiar el medio de pago de un pedido");
 
-    // Sin cobro en línea el pedido recién ahora es "recibido": un solo aviso (clave por pedido). Con
-    // cobro en línea no se avisa nada hasta que se apruebe el pago.
-    // Desde la transferencia el pedido ya se había anunciado: el local recibe "Cambió el medio de pago"
-    // (con cualquier medio nuevo) y, si el nuevo es sin cobro en línea, el comprador un "recibido" con
-    // los datos nuevos. Con cobro en línea, su confirmación llega al aprobarse el pago.
-    const desdeTransferencia = pedido.pagoMetodo === SLUG_TRANSFERENCIA && pagoMetodo !== SLUG_TRANSFERENCIA;
-    if (desdeTransferencia) {
+    // Avisos (ver `avisarPedidoSiFalta`):
+    // - Si todavía no salieron (lo normal: el comprador cambia desde la pantalla de transferencia), no
+    //   hay nada que corregir. Con cobro en línea salen al aprobarse el pago; con transferencia, al irse
+    //   de la pantalla o desde el cron; con otro medio sin cobro en línea, ahora.
+    // - Si ya salieron por transferencia (cambió después del cron), el local recibe "Cambió el medio
+    //   de pago" y, si el medio nuevo es sin cobro en línea, el comprador otro "recibido".
+    const desdeTransferenciaAvisada =
+      pedido.pagoMetodo === SLUG_TRANSFERENCIA && pagoMetodo !== SLUG_TRANSFERENCIA && pedido.avisosEnviados;
+    if (desdeTransferenciaAvisada) {
       after(async () => {
         if (avisoOperadorAlCrear(pagoMetodo)) await avisarPedidoRecibido(id, pagoMetodo);
         await avisarOperadorPedidoNuevo(id, { medioAnterior: pedido.pagoMetodo });
       });
-    } else if (avisoOperadorAlCrear(pagoMetodo)) {
-      after(async () => {
-        await avisarPedidoRecibido(id);
-        await avisarOperadorPedidoNuevo(id);
-      });
+    } else if (avisoOperadorAlCrear(pagoMetodo) && pagoMetodo !== SLUG_TRANSFERENCIA) {
+      after(() => avisarPedidoSiFalta(id).then(() => undefined));
     }
 
     const contacto = await contactoDelPedido(id, r.numero);

@@ -20,7 +20,6 @@ import { dispCatalogo, dispConStockEn, localesDeRetiro } from "@/lib/zona-servid
 import type { ContextoDisponibilidad } from "@/lib/disponibilidad-contexto";
 import { busquedaIaHabilitada } from "@/lib/busqueda-ia-flag";
 import { atributosEstructuradosDisponibles } from "@/lib/catalogo-atributos-disponibles";
-import { catalogoFacetasPorTipoHabilitada } from "@/lib/catalogo-facetas-flag";
 import { filtrosPorTipo } from "@/lib/catalogo-car";
 import { PRODUCTOS_POR_PAGINA, getArbolCategorias } from "@/lib/catalog";
 import { chipsSugeridos } from "@/lib/busqueda-inteligente/url";
@@ -100,25 +99,25 @@ async function CatalogoResultados({ searchParams }: Props) {
   // `disp` (flag `disponibilidad-sucursal`; undefined = apagado): el catálogo NO depende de la zona
   // del visitante. "Con stock" = en cualquier local; con `?retiro=<local>`, sólo en ese local. Viaja
   // como argumento a las lecturas cacheadas y es el mismo para todos los visitantes.
-  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa, conFacetasPorTipo] = await Promise.all([
+  const [params, { soloVisibles, mediosPrecio }, dispGeneral, locales, conBusquedaIa] = await Promise.all([
     searchParams,
     flagsPublicos(),
     dispCatalogo(),
     localesDeRetiro(),
     busquedaIaHabilitada(),
-    catalogoFacetasPorTipoHabilitada(),
   ]);
   // Flag `busqueda-ia` apagado: igual que antes del cambio (sin `atr` ni `ia`).
   const leido = conBusquedaIa ? leerEstado(params) : sinBusquedaIa(leerEstado(params));
   // Fichas estructuradas (fase 2): con el flag `busqueda-ia` y `catalog_atributos` legible (la migración del CRM
   // puede no estar aplicada), los atributos miran primero el dato estructurado y aparece el filtro
   // de potencia. Sin la tabla, todo como en la fase 1 (y `potencia_*` se ignora).
-  const estructurados = conBusquedaIa && (await atributosEstructuradosDisponibles());
-  // Facetas por tipo (flag `catalogo-facetas-por-tipo`, change catalogo-filtros-ux): el flag y la tabla
-  // legible, por request y fuera de `use cache` (viajan en los filtros: parte de la clave). Apagado, `?car=`
-  // se ignora (el estado no lo trae: ni filtra, ni viaja en las URLs que arma el panel) y nada cambia.
-  // Prendido, las facetas suman `porClave` (el panel las dibuja) y `car` filtra en forma estricta.
-  const conCar = conFacetasPorTipo && (estructurados || (await atributosEstructuradosDisponibles()));
+  const tablaLegible = await atributosEstructuradosDisponibles();
+  const estructurados = conBusquedaIa && tablaLegible;
+  // Características por tipo (change catalogo-filtros-ux): requieren la tabla legible, que se lee por request
+  // y fuera de `use cache` (viaja en los filtros: parte de la clave). Sin la tabla, `?car=` se ignora (el
+  // estado no lo trae: ni filtra, ni viaja en las URLs que arma el panel) y el panel no ofrece características.
+  // Con ella, las facetas suman `porClave` (el panel las dibuja) y `car` filtra en forma estricta.
+  const conCar = tablaLegible;
   // Un local desconocido (o el flag apagado) se descarta: el filtro vuelve a "cualquier local".
   const dispLocal = leido.retiroEn ? await dispConStockEn(leido.retiroEn) : undefined;
   const estado = {
@@ -252,7 +251,7 @@ async function CatalogoResultados({ searchParams }: Props) {
         sinStock={sinStock}
         busquedaIa={busquedaIa}
         etapa={pagina.etapa}
-        conFacetasPorTipo={conCar}
+        conCaracteristicas={conCar}
         localRecordado={localRecordado}
       />
     </>

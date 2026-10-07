@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 /**
  * Guarda de los flags retirados: `pagos` y `pedido-a-confirmar` (change `medios-pago-desde-admin`:
  * los medios de pago salen de la tabla del CRM) y `busqueda-motor-unico` (change `busqueda-motor-unico`:
- * la cascada es la única política). Nada del código decide por esos interruptores. Los símbolos
+ * la cascada es la única política) y `catalogo-facetas-por-tipo` (change `catalogo-filtros-ux`: el panel de
+ * características por tipo es el único). Nada del código decide por esos interruptores. Los símbolos
  * se arman por partes para que este archivo no se detecte a sí mismo.
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url));
@@ -22,6 +23,11 @@ const RETIRADOS = [
   ["busqueda", "MotorUnico"],
   ['"busqueda-motor', '-unico"'],
   ["busqueda-motor", "-flag"],
+  // Flag `catalogo-facetas-por-tipo` (change `catalogo-filtros-ux`): el panel por tipo es el único camino.
+  ["catalogoFacetasPorTipo", "Flag"],
+  ["catalogoFacetasPorTipo", "Habilitada"],
+  ["catalogo-facetas", "-por-tipo"],
+  ["catalogo-facetas", "-flag"],
 ].map(([a, b]) => a + b);
 
 function archivos(dir: string): string[] {

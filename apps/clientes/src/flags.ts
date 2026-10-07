@@ -72,11 +72,3 @@ export const busquedaMedidasFlag = flag<boolean>({
   defaultValue: false,
   adapter: vercelAdapter,
 });
-
-export const catalogoFacetasPorTipoFlag = flag<boolean>({
-  key: "catalogo-facetas-por-tipo",
-  description:
-    "Filtros del catálogo por tipo de producto: el panel ofrece las características que importan para la categoría o la búsqueda (polos, curva, corriente, color...) con filtro estricto (?car=). Apagado: el panel de siempre",
-  defaultValue: false,
-  adapter: vercelAdapter,
-});

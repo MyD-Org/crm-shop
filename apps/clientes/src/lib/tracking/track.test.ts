@@ -44,10 +44,12 @@ describe("track", () => {
     activarTracking({ fbq, gtag, posthog: { capture } });
     track({ tipo: "busqueda_chip_quitado", chip: "categoria", valor: "Reflectores" });
     track({ tipo: "busqueda_conversar", origen: "pregunta" });
+    track({ tipo: "busqueda_filtro_car", clave: "polos", accion: "agregar", valor: "2" });
     expect(fbq).not.toHaveBeenCalled();
     expect(gtag).not.toHaveBeenCalled();
     expect(capture).toHaveBeenCalledWith("busqueda_chip_quitado", { tipo: "categoria", valor: "Reflectores" });
     expect(capture).toHaveBeenCalledWith("busqueda_conversar", { origen: "pregunta" });
+    expect(capture).toHaveBeenCalledWith("busqueda_filtro_car", { clave: "polos", accion: "agregar", valor: "2" });
   });
 
   it("sin activar (flag apagado) no sale nada y la cola no crece sin límite", () => {

@@ -6,6 +6,7 @@ Las reglas comunes (Next.js, ecosistema, repo público, textos de UI) están en 
 - Esta carpeta no tiene `.npmrc`: para instalar `@myd-org/ui` en local hace falta la configuración del registro `@myd-org` en el `~/.npmrc` del usuario. En CI lo resuelve `actions/setup-node`.
 - Integra con `apps/admin` por HTTP (cuotas, overlay de catálogo, revalidación). Docs en `docs/`.
 - Cambios de búsqueda o de catálogo (sinónimos, diccionario, medidas, categorías, atributos, facetas, banco de búsquedas): usar la skill `ingeniero-rubro` (`docs/skills/ingeniero-rubro/`), con su proceso de banco antes/después. Vive en `docs/` porque el repo no versiona `.claude/`: para que Claude Code la cargue sola, enlazarla una vez con `ln -s "$(pwd)/docs/skills/ingeniero-rubro" ~/.claude/skills/ingeniero-rubro` desde la raíz del checkout principal.
+- Filtros del catálogo: las características del panel salen por tipo de producto (registro en `src/lib/catalogo-facetas-registro.ts`, filtro estricto `?car=`, SQL en `catalogo-facetas-sql.ts`). `?atr=` sigue vivo para la búsqueda (medidas, plan, links viejos, chips) pero ya no es una faceta del panel.
 
 ## Sumar un procesador de pago
 

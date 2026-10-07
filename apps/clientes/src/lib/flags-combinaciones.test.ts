@@ -10,7 +10,6 @@ import { flagsPublicos } from "./flags-publicos";
 import { sucursalesHabilitadas } from "./sucursales-flag";
 import { disponibilidadSucursalHabilitada } from "./disponibilidad-sucursal-flag";
 import { busquedaIaHabilitada } from "./busqueda-ia-flag";
-import { catalogoFacetasPorTipoHabilitada } from "./catalogo-facetas-flag";
 import { etapasDe } from "./busqueda-v2/motor";
 import { planVacio, type PlanBusqueda } from "./busqueda-v2/plan";
 
@@ -115,18 +114,5 @@ describe("búsqueda: kill switch busqueda-ia sobre el motor único", () => {
 
   it("busqueda-ia apagado: un código sigue yendo a la etapa de código (no depende del plan)", () => {
     expect(etapasDe({ superficie: "catalogo", consulta: "DL-18W", plan: null, conPlan: false })).toEqual(["codigo", "tolerante"]);
-  });
-});
-
-describe("catálogo: facetas por tipo (catalogo-facetas-por-tipo)", () => {
-  it.each([
-    // el flag es propio: no depende de busqueda-ia ni de busqueda-medidas
-    { facetas: false, ia: false, medidas: false, esperado: false },
-    { facetas: true, ia: false, medidas: false, esperado: true },
-    { facetas: true, ia: true, medidas: true, esperado: true },
-    { facetas: false, ia: true, medidas: true, esperado: false },
-  ])("facetas=$facetas, busqueda-ia=$ia, busqueda-medidas=$medidas => $esperado", async ({ facetas, ia, medidas, esperado }) => {
-    f({ "catalogo-facetas-por-tipo": facetas, "busqueda-ia": ia, "busqueda-medidas": medidas });
-    expect(await catalogoFacetasPorTipoHabilitada()).toBe(esperado);
   });
 });

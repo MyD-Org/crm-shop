@@ -79,7 +79,7 @@ export interface EstadoCatalogo {
    */
   atributos: string[];
   /**
-   * Características por tipo de producto (`?car=`, flag `catalogo-facetas-por-tipo`; ver
+   * Características por tipo de producto (`?car=`; ver
    * catalogo-car.ts): ids `clave:valor` / `clave:min-max`, ya validados y en el orden de emisión.
    * Son específicas del tipo de producto: cambiar la categoría o la búsqueda las descarta.
    */
@@ -318,8 +318,7 @@ export function sinBusquedaIa(estado: EstadoCatalogo): EstadoCatalogo {
 }
 
 /**
- * El estado sin las características por tipo: con el flag `catalogo-facetas-por-tipo` apagado (o la
- * tabla de atributos ilegible) `?car=` se ignora y el catálogo queda como siempre.
+ * El estado sin las características por tipo: con la tabla de atributos ilegible `?car=` se ignora.
  */
 export function sinCar(estado: EstadoCatalogo): EstadoCatalogo {
   return { ...estado, caracteristicas: [] };
@@ -346,12 +345,12 @@ export function filtrosDesfasados(
   estado: EstadoCatalogo,
   sp: URLSearchParams,
   conBusquedaIa = true,
-  conFacetasPorTipo = false,
+  conCaracteristicas = true,
 ): boolean {
   // Sin el flag los atributos de la URL se ignoran: compararlos pediría la
-  // página una y otra vez. Lo mismo con `car` sin el flag de facetas por tipo.
+  // página una y otra vez. Lo mismo con `car` si la tabla de atributos no se puede leer.
   const leido = conBusquedaIa ? estadoDeBusqueda(sp) : sinBusquedaIa(estadoDeBusqueda(sp));
-  const url = conFacetasPorTipo ? leido : sinCar(leido);
+  const url = conCaracteristicas ? leido : sinCar(leido);
   return (
     !mismoConjunto(estado.categorias, url.categorias) ||
     !mismoConjunto(estado.marcas, url.marcas) ||

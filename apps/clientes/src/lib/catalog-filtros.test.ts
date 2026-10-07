@@ -319,23 +319,8 @@ describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
     expect(conteo.sql).toMatch(/count\(\*\) filter \(where \(coalesce\(\(\("filas_atributos"\."attrs" -> 'tono'\) ->> 't'\) in \(\$\d+\), false\) or "texto" ~\* \$\d+\)\)/);
   });
 
-  it("facetas: una consulta más con el rango de potencia, sin el propio filtro de potencia", async () => {
-    await getFacetas({ atributosEstructurados: true, potenciaMin: 10 }, false);
-    const consultas = sinLecturaDelArbol(grabadora.consultas);
-    // Con el filtro de potencia, el conteo de categorías va precedido del de todo el catálogo.
-    expect(consultas).toHaveLength(6);
-    const potencia = consultas.find((c) => c.sql.includes('floor(min((select "public"."catalog_atributos"."valor_num"'));
-    expect(potencia).toBeDefined();
-    expect(potencia!.sql).toMatch(/'potencia_w'\) is not null/);
-    expect(potencia!.sql).not.toMatch(/"valor_num" >= \$\d+/);
-    // Las otras facetas sí aplican el filtro de potencia.
-    const marcas = consultas.find((c) => c.sql.includes("group by (case when"));
-    expect(marcas!.sql).toMatch(/"valor_num" >= \$\d+/);
-  });
-
-  it("con el flag apagado (sinFacetaAtributos) no hay faceta de potencia aunque la tabla exista", async () => {
-    const f = await getFacetas({ atributosEstructurados: true, sinFacetaAtributos: true }, false);
-    expect(f.potencia).toBeUndefined();
+  it("con sinFacetaAtributos no corre el conteo de atributos aunque la tabla exista", async () => {
+    await getFacetas({ atributosEstructurados: true, sinFacetaAtributos: true }, false);
     expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
   });
 });

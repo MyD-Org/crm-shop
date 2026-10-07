@@ -59,7 +59,7 @@ export function CatalogoClient({
   sinStock = 0,
   busquedaIa,
   etapa,
-  conFacetasPorTipo = false,
+  conCaracteristicas = true,
   localRecordado,
 }: {
   /** Sólo la página actual, nunca el catálogo entero. */
@@ -96,10 +96,10 @@ export function CatalogoClient({
   /** Etapa del motor de búsqueda que resolvió el listado (sólo telemetría: `busqueda_enviada`). */
   etapa?: string;
   /**
-   * Facetas por tipo prendidas (flag `catalogo-facetas-por-tipo` y tabla legible): `?car=` filtra y el
-   * panel dibuja `facetas.porClave`. Apagado, `car` de la URL se ignora.
+   * Características por tipo disponibles (la tabla de atributos es legible): `?car=` filtra y el panel
+   * dibuja `facetas.porClave`. `false`: `car` de la URL se ignora.
    */
-  conFacetasPorTipo?: boolean;
+  conCaracteristicas?: boolean;
   /**
    * Nombre del local cuando el filtro "Con stock en <local>" se aplicó solo, por el local recordado
    * (cookie) y no por una elección de esta visita: se muestra un aviso con la salida.
@@ -116,7 +116,7 @@ export function CatalogoClient({
   // sigue restaurando los filtros, que viajan en la URL.
   const [entrada, setEntrada] = useState(0);
   useAlOcultar(() => setEntrada((n) => n + 1));
-  const sinCarSiApagado = (e: EstadoCatalogo) => (conFacetasPorTipo ? e : sinCar(e));
+  const sinCarSiNoHay = (e: EstadoCatalogo) => (conCaracteristicas ? e : sinCar(e));
   // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
   // en vez de quedarse muda.
   const [navegando, startTransition] = useTransition();
@@ -127,13 +127,13 @@ export function CatalogoClient({
   // Si la URL del router y lo que renderizó el servidor no coinciden, se
   // muestra lo que dice la URL y se pide la página de nuevo.
   const searchParams = useSearchParams();
-  const desfasado = filtrosDesfasados(estado, searchParams, !!busquedaIa, conFacetasPorTipo);
+  const desfasado = filtrosDesfasados(estado, searchParams, !!busquedaIa, conCaracteristicas);
   const claveUrl = searchParams.toString();
   useEffect(() => {
     if (desfasado) startTransition(() => router.refresh());
   }, [desfasado, claveUrl, router]);
   const estadoBase = desfasado
-    ? sinCarSiApagado(busquedaIa ? estadoDeBusqueda(searchParams) : sinBusquedaIa(estadoDeBusqueda(searchParams)))
+    ? sinCarSiNoHay(busquedaIa ? estadoDeBusqueda(searchParams) : sinBusquedaIa(estadoDeBusqueda(searchParams)))
     : estado;
 
   // Estado optimista: el filtro que toca el visitante se marca en el acto,
@@ -271,7 +271,6 @@ export function CatalogoClient({
                 facetas={facetas}
                 estado={estadoFiltros}
                 navegar={navegar}
-                conFacetasPorTipo={conFacetasPorTipo}
                 navegando={navegando || desfasado}
               />
             </div>

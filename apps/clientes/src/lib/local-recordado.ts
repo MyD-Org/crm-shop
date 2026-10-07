@@ -15,6 +15,13 @@ export const LOCAL_COOKIE = "local_retiro";
 /** Valor de `?sucursal=` / `?retiro=` que borra el local recordado. */
 export const LOCAL_TODOS = "todos";
 export const LOCAL_MAX_AGE = 60 * 60 * 24 * 30;
+/**
+ * Marcador que agrega el redirect del proxy cuando el local sale de la cookie (no del link ni
+ * de la elección de esta visita): el catálogo lo lee para avisar que el filtro se aplicó solo.
+ * Navegar dentro del catálogo no lo emite (`hrefCatalogo` no lo conoce), así que no viaja en las
+ * URLs que se arman después.
+ */
+export const PARAM_RECORDADO = "recordado";
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
@@ -51,6 +58,15 @@ export function decidirLocal({
       : { cookie: { accion: "ninguna" } };
   if (!esCatalogo) return decision;
 
+  // El marcador sólo vale si lo puso el redirect de ESTA cookie. Uno que llega en un link
+  // compartido (sin la cookie, o con otro local) se saca: la URL queda limpia y nadie ve el aviso
+  // "lo eligió antes" sin haberlo elegido.
+  if (search.has(PARAM_RECORDADO) && !(local && local === previa)) {
+    const sp = new URLSearchParams(search);
+    sp.delete(PARAM_RECORDADO);
+    return { ...decision, redirigirA: sp.toString() };
+  }
+
   // En el catálogo el filtro viaja como `retiro`: se traduce `sucursal`, se saca `todos` y,
   // sin parámetro, se agrega el local recordado.
   if (search.has("sucursal") || todos) {
@@ -66,9 +82,28 @@ export function decidirLocal({
   if (param == null && previa && !buscando) {
     const sp = new URLSearchParams(search);
     sp.set("retiro", previa);
+    sp.set(PARAM_RECORDADO, "1");
     return { ...decision, redirigirA: sp.toString() };
   }
   return decision;
+}
+
+/**
+ * ¿El filtro de local vigente se aplicó solo, por la cookie? Pide el marcador del redirect Y que la
+ * cookie de quien mira coincida con el local filtrado: un link compartido con el marcador no le
+ * avisa a quien no lo eligió antes.
+ */
+export function vinoDeLaCookie({
+  recordado,
+  retiroEn,
+  cookie,
+}: {
+  recordado: string | undefined;
+  retiroEn: string | undefined;
+  cookie: string | undefined;
+}): boolean {
+  if (recordado !== "1" || !retiroEn) return false;
+  return comoSlug(cookie) === retiroEn.trim().toLowerCase();
 }
 
 /**

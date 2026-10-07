@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, EmptyState, Pagination } from "@myd-org/ui";
+import { CatalogoAvisoLocal } from "@/components/catalogo/CatalogoAvisoLocal";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
 import { CatalogoControles } from "@/components/catalogo/CatalogoControles";
 import { CatalogoEncabezado } from "@/components/catalogo/CatalogoEncabezado";
@@ -37,6 +38,7 @@ import { useChatIa } from "@/hooks/useChatIa";
 import { mejorCuotaProducto, type OpcionCuotas } from "@/lib/cuotas-sin-interes";
 import { sinResultadosPorLocal } from "@/lib/catalogo-sin-resultados";
 import { olvidarLocalRecordado } from "@/lib/local-recordado";
+import { useAlOcultar } from "@/lib/use-al-ocultar";
 
 /**
  * UI del catálogo: encabezado, filtros, productos y paginación, todo
@@ -58,6 +60,7 @@ export function CatalogoClient({
   busquedaIa,
   etapa,
   conCaracteristicas = true,
+  localRecordado,
 }: {
   /** Sólo la página actual, nunca el catálogo entero. */
   productos: Product[];
@@ -97,8 +100,22 @@ export function CatalogoClient({
    * dibuja `facetas.porClave`. `false`: `car` de la URL se ignora.
    */
   conCaracteristicas?: boolean;
+  /**
+   * Nombre del local cuando el filtro "Con stock en <local>" se aplicó solo, por el local recordado
+   * (cookie) y no por una elección de esta visita: se muestra un aviso con la salida.
+   */
+  localRecordado?: string;
 }) {
   const router = useRouter();
+  // Con Cache Components Next no desmonta el catálogo al salir (logo, nav de la home, un
+  // producto): lo esconde con `<Activity>` y, al volver por un link, reusa la misma instancia
+  // —la clave del segmento no mira los search params— con su estado local. Los filtros tildados
+  // salen de la URL y no se arrastran, pero lo que el panel guarda por su cuenta sí (texto de
+  // "Buscar marca…", "Ver todas las marcas", categorías abiertas, precio a medio editar). Al
+  // salir se cambia `entrada`: el panel se remonta y la próxima entrada arranca limpia. Atrás
+  // sigue restaurando los filtros, que viajan en la URL.
+  const [entrada, setEntrada] = useState(0);
+  useAlOcultar(() => setEntrada((n) => n + 1));
   const sinCarSiNoHay = (e: EstadoCatalogo) => (conCaracteristicas ? e : sinCar(e));
   // Navegar es un round-trip al servidor: mientras tanto, la grilla se atenúa
   // en vez de quedarse muda.
@@ -272,6 +289,10 @@ export function CatalogoClient({
         ir={ir}
       />
 
+      {localRecordado && estado.retiroEn ? (
+        <CatalogoAvisoLocal local={localRecordado} quitar={quitarLocal} />
+      ) : null}
+
       <div className="mt-8 flex gap-6">
         {/*
           Filtros sticky en desktop: quedan a la vista mientras se recorre la
@@ -303,7 +324,7 @@ export function CatalogoClient({
                   : ""
           }`}
         >
-          <CatalogoFiltros facetas={facetas} estado={estadoFiltros} ir={irFiltros} />
+          <CatalogoFiltros key={entrada} facetas={facetas} estado={estadoFiltros} ir={irFiltros} />
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">

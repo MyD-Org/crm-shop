@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import type { Metadata } from "next";
 import { categoriasTotalesPublicas, facetasPublicas } from "@/lib/catalogo-publico";
 import { flagsPublicos } from "@/lib/flags-publicos";
@@ -11,6 +12,7 @@ import {
   type EstadoCatalogo,
   type ParamCrudo,
 } from "@/lib/catalogo-url";
+import { LOCAL_COOKIE, PARAM_RECORDADO, vinoDeLaCookie } from "@/lib/local-recordado";
 import { indexable } from "@/lib/catalogo-vista";
 import { CatalogoClient } from "@/components/CatalogoClient";
 import { CatalogoSkeleton } from "@/components/catalogo/CatalogoSkeleton";
@@ -45,6 +47,7 @@ type Props = {
     vista?: ParamCrudo;
     ia?: ParamCrudo;
     car?: ParamCrudo;
+    recordado?: ParamCrudo;
   }>;
 };
 
@@ -122,6 +125,18 @@ async function CatalogoResultados({ searchParams }: Props) {
     ...(conCar ? {} : { caracteristicas: [] }),
   };
   const disp = dispLocal ?? dispGeneral;
+  // El local llegó solo, por la cookie (el proxy marcó el redirect con `recordado=1`): se avisa.
+  // La URL del marcador no se rearma al navegar dentro del catálogo (`hrefCatalogo` no lo emite).
+  const marcador = params[PARAM_RECORDADO];
+  const localRecordado =
+    typeof marcador === "string" &&
+    vinoDeLaCookie({
+      recordado: marcador,
+      retiroEn: estado.retiroEn,
+      cookie: (await cookies()).get(LOCAL_COOKIE)?.value,
+    })
+      ? (locales.find((l) => l.slug === estado.retiroEn)?.nombre ?? estado.retiroEn)
+      : undefined;
   // Los mismos filtros para la página y para las facetas: `getFacetas` decide
   // qué grupo excluye en cada conteo. "Solo con stock" viene prendido por
   // defecto (ver `SOLO_STOCK_DEFAULT`).
@@ -237,6 +252,7 @@ async function CatalogoResultados({ searchParams }: Props) {
         busquedaIa={busquedaIa}
         etapa={pagina.etapa}
         conCaracteristicas={conCar}
+        localRecordado={localRecordado}
       />
     </>
   );

@@ -32,6 +32,7 @@ const productos = await import("@/app/api/admin/catalogo/productos/route")
 const producto = await import("@/app/api/admin/catalogo/productos/[alegraId]/route")
 const masiva = await import("@/app/api/admin/catalogo/productos/masiva/route")
 const contar = await import("@/app/api/admin/catalogo/productos/masiva/contar/route")
+const moverDestacado = await import("@/app/api/admin/catalogo/productos/destacados/mover/route")
 
 const TENANT_A = "tenant-a"
 const TENANT_B = "tenant-b"
@@ -545,6 +546,144 @@ describe("API del panel de catálogo — productos", () => {
       )
       expect(res.status).toBe(400)
       expect(await getDb().select().from(catalogOverlay)).toHaveLength(0)
+    })
+  })
+
+  describe("destacar en masa", () => {
+    const post = (seleccion: unknown, accion: unknown) =>
+      masiva.POST(req("/api/admin/catalogo/productos/masiva", { body: { seleccion, accion } }))
+    const ordenes = async () => {
+      const filas = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.tenantId, TENANT_A))
+      return Object.fromEntries(filas.map((f) => [f.alegraId, f.orden]))
+    }
+
+    it("destacar deja 9999 a los que no tenían posición y NO pisa la posición ya cargada", async () => {
+      for (const id of ["1", "2", "3"]) await seedProducto(TENANT_A, id)
+      await seedProducto(TENANT_B, "9")
+      await guardarOverlay(TENANT_A, "1", { orden: 3 })
+      await guardarOverlay(TENANT_A, "2", { visible: true })
+
+      const res = await post({ tipo: "ids", alegraIds: ["1", "2", "3"] }, { tipo: "destacado", valor: true })
+      expect(res.status).toBe(200)
+      expect((await res.json()).afectados).toBe(3)
+      expect(await ordenes()).toEqual({ "1": 3, "2": 9999, "3": 9999 })
+      expect(await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.tenantId, TENANT_B))).toHaveLength(0)
+    })
+
+    it("quitar destacado deja orden en null, sin crear filas de overlay para los que nunca se destacaron", async () => {
+      for (const id of ["1", "2", "3"]) await seedProducto(TENANT_A, id)
+      await guardarOverlay(TENANT_A, "1", { orden: 2, visible: true })
+      await guardarOverlay(TENANT_A, "2", { orden: 9999 })
+
+      const res = await post({ tipo: "ids", alegraIds: ["1", "2", "3"] }, { tipo: "destacado", valor: false })
+      expect(res.status).toBe(200)
+      expect((await res.json()).afectados).toBe(2)
+      expect(await ordenes()).toEqual({ "1": null, "2": null })
+      // Lo demás de la fila (visible) queda como estaba.
+      const [fila] = await getDb().select().from(catalogOverlay).where(and(eq(catalogOverlay.tenantId, TENANT_A), eq(catalogOverlay.alegraId, "1")))
+      expect(fila.visible).toBe(true)
+    })
+
+    it("sobre todo lo que coincide con el filtro (y respetando `excluir`)", async () => {
+      for (const id of ["1", "2", "3"]) await seedProducto(TENANT_A, id)
+      const res = await post({ tipo: "filtro", filtros: { foto: "sin" }, excluir: ["3"] }, { tipo: "destacado", valor: true })
+      expect((await res.json()).afectados).toBe(2)
+      expect(await ordenes()).toEqual({ "1": 9999, "2": 9999 })
+    })
+
+    it("bumpea updated_at para que el cambio viaje al Shop", async () => {
+      await seedProducto(TENANT_A, "1")
+      await guardarOverlay(TENANT_A, "1", { orden: 2 })
+      const antes = await updatedAt("1")
+      await post({ tipo: "ids", alegraIds: ["1"] }, { tipo: "destacado", valor: false })
+      expect((await updatedAt("1")).getTime()).toBeGreaterThan(antes.getTime())
+    })
+
+    it("un valor que no es booleano se rechaza", async () => {
+      await seedProducto(TENANT_A, "1")
+      const res = await post({ tipo: "ids", alegraIds: ["1"] }, { tipo: "destacado", valor: "si" })
+      expect(res.status).toBe(400)
+      expect(await getDb().select().from(catalogOverlay)).toHaveLength(0)
+    })
+  })
+
+  describe("reordenar destacados (subir / bajar)", () => {
+    const mover = (cuerpo: unknown, host = TENANT_A) =>
+      moverDestacado.POST(req("/api/admin/catalogo/productos/destacados/mover", { body: cuerpo, host }))
+    let catId: string
+    let otraId: string
+    const ordenes = async () => {
+      const filas = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.tenantId, TENANT_A))
+      return Object.fromEntries(filas.map((f) => [f.alegraId, f.orden]))
+    }
+
+    beforeEach(async () => {
+      const a = await crearCategoria(TENANT_A, { nombre: "Lámparas" })
+      const b = await crearCategoria(TENANT_A, { nombre: "Cables" })
+      if (a.kind !== "ok" || b.kind !== "ok") throw new Error("seed")
+      catId = a.row.id
+      otraId = b.row.id
+    })
+
+    it("baja uno y renumera 1..N los destacados de la categoría, en el orden de la vidriera", async () => {
+      for (const id of ["1", "2", "3", "4"]) await seedProducto(TENANT_A, id)
+      await guardarOverlay(TENANT_A, "1", { categoriaId: catId, orden: 5 })
+      await guardarOverlay(TENANT_A, "2", { categoriaId: catId, orden: 9999 })
+      await guardarOverlay(TENANT_A, "3", { categoriaId: catId, orden: 9999 })
+      await guardarOverlay(TENANT_A, "4", { categoriaId: catId }) // no destacado
+
+      const res = await mover({ categoriaId: catId, alegraId: "1", direccion: "bajar" })
+      expect(res.status).toBe(200)
+      // Orden de partida: 1 (5), 2 (9999), 3 (9999). Bajar "1" => 2, 1, 3.
+      expect(await ordenes()).toEqual({ "1": 2, "2": 1, "3": 3, "4": null })
+    })
+
+    it("sube uno; en el extremo no cambia el orden pero igual renumera a 1..N", async () => {
+      for (const id of ["1", "2", "3"]) await seedProducto(TENANT_A, id)
+      await guardarOverlay(TENANT_A, "1", { categoriaId: catId, orden: 10 })
+      await guardarOverlay(TENANT_A, "2", { categoriaId: catId, orden: 20 })
+      await guardarOverlay(TENANT_A, "3", { categoriaId: catId, orden: 30 })
+
+      expect((await mover({ categoriaId: catId, alegraId: "3", direccion: "subir" })).status).toBe(200)
+      expect(await ordenes()).toEqual({ "1": 1, "2": 3, "3": 2 })
+      // "1" ya es el primero: subir no hace nada visible.
+      expect((await mover({ categoriaId: catId, alegraId: "1", direccion: "subir" })).status).toBe(200)
+      expect(await ordenes()).toEqual({ "1": 1, "2": 3, "3": 2 })
+    })
+
+    it("no toca los destacados de otra categoría ni los de otro tenant", async () => {
+      for (const id of ["1", "2", "3"]) await seedProducto(TENANT_A, id)
+      await seedProducto(TENANT_B, "1")
+      await guardarOverlay(TENANT_A, "1", { categoriaId: catId, orden: 1 })
+      await guardarOverlay(TENANT_A, "2", { categoriaId: catId, orden: 2 })
+      await guardarOverlay(TENANT_A, "3", { categoriaId: otraId, orden: 40 })
+      await guardarOverlay(TENANT_B, "1", { orden: 7 })
+
+      await mover({ categoriaId: catId, alegraId: "1", direccion: "bajar" })
+      expect(await ordenes()).toEqual({ "1": 2, "2": 1, "3": 40 })
+      const [ajena] = await getDb().select().from(catalogOverlay).where(eq(catalogOverlay.tenantId, TENANT_B))
+      expect(ajena.orden).toBe(7)
+    })
+
+    it("un producto que no está destacado en esa categoría es 404; un cuerpo inválido, 400", async () => {
+      await seedProducto(TENANT_A, "1")
+      await guardarOverlay(TENANT_A, "1", { categoriaId: catId })
+      expect((await mover({ categoriaId: catId, alegraId: "1", direccion: "bajar" })).status).toBe(404)
+      expect((await mover({ categoriaId: catId, alegraId: "nope", direccion: "bajar" })).status).toBe(404)
+      expect((await mover({ categoriaId: catId, alegraId: "1", direccion: "arriba" })).status).toBe(400)
+      expect((await mover({ categoriaId: "no-uuid", alegraId: "1", direccion: "bajar" })).status).toBe(400)
+      expect((await mover({ alegraId: "1", direccion: "bajar" })).status).toBe(400)
+    })
+
+    it("sin sesión es 401 y un operador recibe el mismo 404 que ante un recurso inexistente", async () => {
+      await seedProducto(TENANT_A, "1")
+      await guardarOverlay(TENANT_A, "1", { categoriaId: catId, orden: 1 })
+      login(operador)
+      const res = await mover({ categoriaId: catId, alegraId: "1", direccion: "bajar" })
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual(NOT_FOUND_BODY)
+      session = {}
+      expect((await mover({ categoriaId: catId, alegraId: "1", direccion: "bajar" })).status).toBe(401)
     })
   })
 })

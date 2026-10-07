@@ -27,6 +27,7 @@ import {
   type NodoCategoria,
   type TagValido,
 } from "@/lib/catalogo-overlay"
+import { ORDEN_DESTACADO_SIN_POSICION } from "@/components/admin/catalogo/destacado"
 import { sonSlugsDeSucursal } from "@/lib/sucursales-repo"
 
 // Acceso a datos del catálogo comercial. TODO filtra por el `tenantId` del guard, nunca por uno
@@ -614,12 +615,16 @@ function seleccionSql(tenantId: string, seleccion: Seleccion): SQL {
 export async function masivaOverlay(
   tenantId: string,
   seleccion: Seleccion,
-  accion: { tipo: "visible"; valor: boolean } | { tipo: "categoria"; categoriaId: string | null },
+  accion:
+    | { tipo: "visible"; valor: boolean }
+    | { tipo: "categoria"; categoriaId: string | null }
+    | { tipo: "destacado"; valor: boolean },
   updatedBy: string | null = null,
   ejecutor: Ejecutor = getDb(),
 ): Promise<ResultadoMasiva> {
   const malo = validarSeleccion(seleccion)
   if (malo) return malo
+  if (accion.tipo === "destacado") return masivaDestacado(tenantId, seleccion, accion.valor, updatedBy, ejecutor)
   // Una categoría de otro tenant tiene que comportarse igual que una inexistente: la FK apunta
   // a shop_categories.id sin mirar el tenant y sola no alcanza (REQ-MT-01).
   if (accion.tipo === "categoria" && accion.categoriaId !== null && !(await categoriaPropia(tenantId, accion.categoriaId))) {
@@ -638,6 +643,85 @@ export async function masivaOverlay(
     RETURNING 1
   `)
   return { kind: "ok", afectados: filas.length }
+}
+
+/**
+ * Destacar / quitar el destacado en masa (`catalog_overlay.orden`: null = no destacado, 9999 =
+ * destacado sin posición, 1..9998 = posición).
+ *  - Destacar crea las filas que falten con 9999 y NO pisa la posición que un producto ya tenía.
+ *  - Quitar sólo toca filas existentes que estén destacadas: un producto que nunca se destacó no
+ *    gana una fila de overlay vacía, y `afectados` cuenta los que de verdad cambiaron.
+ */
+async function masivaDestacado(
+  tenantId: string,
+  seleccion: Seleccion,
+  destacar: boolean,
+  updatedBy: string | null,
+  ejecutor: Ejecutor,
+): Promise<ResultadoMasiva> {
+  const sel = seleccionSql(tenantId, seleccion)
+  if (destacar) {
+    const filas = await ejecutor.execute(sql`
+      INSERT INTO ${catalogOverlay} (tenant_id, alegra_id, orden, updated_by, updated_at)
+      SELECT ${tenantId}, s.alegra_id, ${ORDEN_DESTACADO_SIN_POSICION}, ${updatedBy}, now() FROM (${sel}) s
+      ON CONFLICT (tenant_id, alegra_id) DO UPDATE
+        SET orden = coalesce(${catalogOverlay}.orden, excluded.orden), updated_by = excluded.updated_by, updated_at = now()
+      RETURNING 1
+    `)
+    return { kind: "ok", afectados: filas.length }
+  }
+  const filas = await ejecutor.execute(sql`
+    UPDATE ${catalogOverlay} SET orden = NULL, updated_by = ${updatedBy}, updated_at = now()
+    WHERE tenant_id = ${tenantId} AND orden IS NOT NULL
+      AND alegra_id IN (SELECT s.alegra_id FROM (${sel}) s)
+    RETURNING 1
+  `)
+  return { kind: "ok", afectados: filas.length }
+}
+
+export type ResultadoMover = { kind: "ok" } | { kind: "not_found" }
+
+/**
+ * Subir / bajar un destacado dentro de su categoría y renumerar 1..N. El conjunto es el que ve la
+ * usuaria con "Destacados" + esa categoría (subárbol incluido), en el orden de la vidriera:
+ * posición, nombre, alegra_id. Renumera todos (los 9999 sin posición pasan a tener una explícita)
+ * en UNA transacción, así nunca queda un orden a medias. En el extremo (subir el primero, bajar
+ * el último) no cambia el orden relativo. `not_found` si el producto no está destacado en esa
+ * categoría de ESTE tenant.
+ */
+export async function moverDestacado(
+  tenantId: string,
+  categoriaId: string,
+  alegraId: string,
+  direccion: "subir" | "bajar",
+  updatedBy: string | null = null,
+): Promise<ResultadoMover> {
+  if (!esUuid(categoriaId)) return { kind: "not_found" }
+  const nombre = nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)
+  const where = whereListado(tenantId, { categoria: categoriaId, destacado: "si" })
+
+  return getDb().transaction(async (tx) => {
+    // Bloquea las filas del conjunto: dos "bajar" simultáneos se serializan en vez de pisarse.
+    const filas = await tx.execute(sql`
+      SELECT p.alegra_id AS id ${desdeListado}
+      WHERE ${where}
+      ORDER BY o.orden ASC, ${nombre} ASC, p.alegra_id ASC
+      FOR UPDATE OF o
+    `)
+    const ids = (filas as unknown as { id: string }[]).map((f) => f.id)
+    const i = ids.indexOf(alegraId)
+    if (i === -1) return { kind: "not_found" } as ResultadoMover
+    const j = direccion === "subir" ? i - 1 : i + 1
+    if (j >= 0 && j < ids.length) [ids[i], ids[j]] = [ids[j], ids[i]]
+
+    const valores = sql.join(ids.map((id, k) => sql`(${id}::text, ${k + 1}::int)`), sql`, `)
+    await tx.execute(sql`
+      UPDATE ${catalogOverlay} o SET orden = v.n, updated_by = ${updatedBy}, updated_at = now()
+      FROM (VALUES ${valores}) AS v(id, n)
+      WHERE o.tenant_id = ${tenantId} AND o.alegra_id = v.id
+    `)
+    return { kind: "ok" } as ResultadoMover
+  })
 }
 
 /**

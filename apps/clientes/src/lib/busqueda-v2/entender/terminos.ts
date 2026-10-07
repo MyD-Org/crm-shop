@@ -53,7 +53,7 @@ export const CONTEXTO = new Set([
   "quiero", "necesito", "busco", "buscando", "tenga", "tengo", "tengan", "sirva", "sirve", "usar", "uso",
   "poner", "colocar", "instalar", "instalo", "prenda", "prende", "encienda", "funcione", "venden", "vendan",
   "sacar", "ver", "medir", "leer", "gire", "pasa", "consume", "conviene", "puedo", "alguien", "sola", "solo",
-  "cuanto", "cuanta", "varios", "varias", "cosa", "necesita", "hace", "falta", "desde",
+  "cuanto", "cuanta", "varios", "varias", "cosa", "necesita", "hace", "falta", "desde", "hasta", "menos",
   // Clima.
   "agua", "lluvia", "moje", "moja", "mojar", "mojen", "sol",
   // Adjetivos genéricos y colores de luz.

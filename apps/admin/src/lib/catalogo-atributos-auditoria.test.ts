@@ -153,7 +153,7 @@ describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => 
   const prod = (alegraId: string, name: string, description: string | null = null) => ({ alegraId, name, description })
 
   it("las claves que admite el backfill por nombre", () => {
-    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm"])
+    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos"])
   })
 
   it("diametro_mm: sólo esa clave, fuente nombre, nunca pisa pdf/manual", () => {

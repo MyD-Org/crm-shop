@@ -1,6 +1,6 @@
 /**
  * Backfill por NOMBRE de UNA clave numérica (fuente 'nombre'): `seccion_mm2` (cables, por defecto),
- * `diametro_mm` (caños y accesorios de caño) o `ancho_mm` (bandejas portacables), elegida con `--clave`.
+ * `diametro_mm` (caños y accesorios de caño), `ancho_mm` (bandejas portacables) o `polos` ("2 POLOS"), elegida con `--clave`.
  *
  * Escribe SOLO esa clave y SOLO con fuente 'nombre'. Nunca pisa una fila `pdf` o
  * `manual` (precedencia manual > pdf > nombre: la impone el SQL del upsert de

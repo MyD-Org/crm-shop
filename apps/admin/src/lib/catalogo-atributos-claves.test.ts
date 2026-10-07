@@ -68,8 +68,8 @@ describe("paridad de claves de catalog_atributos", () => {
     expect(Object.keys(DESCRIPCION_PDF).sort()).toEqual([...fixture.claves].sort())
     for (const c of CLAVES_ATRIBUTO) {
       const tipo = (s.properties as Record<string, { type: string[] }>)[c].type
-      // La tensión es num en la base pero el modelo puede devolver un rango de texto ("85-265").
-      expect(tipo).toEqual([fixture.tipos[c] === "num" && c !== "tension_v" ? "number" : "string", "null"])
+      // La tensión y la corriente son num en la base pero el modelo puede devolver un rango de texto ("85-265", "4-6").
+      expect(tipo).toEqual([fixture.tipos[c] === "num" && c !== "tension_v" && c !== "corriente_a" ? "number" : "string", "null"])
     }
   })
 

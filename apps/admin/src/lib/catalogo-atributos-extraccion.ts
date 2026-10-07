@@ -37,9 +37,13 @@
  * (plafón/aplique/estanco → aplicar, araña/luminaria de suspensión → colgante; "de superficie" = aplicar),
  * `largo_m` en centímetros de tubos/listones/regletas/tiras de luz ("120CM" → 1,2), `diametro_mm` de accesorios
  * de caño que no dicen "caño" (curva/unión/grampa/cupla + medida de la serie, también en pulgadas), `ancho_mm`
- * de piezas de bandeja que no dicen "bandeja" ("TEE 200/50") y `tono` desde las siglas WW/NW/CW. El rango de
- * regulación de relés térmicos y guardamotores ("4-6A") sigue sin leerse: el Shop muestra `corriente_a` sólo
- * por su número y un "6 A" se confundiría con una térmica de 6 A.
+ * de piezas de bandeja que no dicen "bandeja" ("TEE 200/50") y `tono` desde las siglas WW/NW/CW.
+ *
+ * Rango de REGULACIÓN de relés térmicos y guardamotores (2026-10-07, `regulacionDeNombre`): "4-6A", "1.6-2.5 A",
+ * "4…6 A", "6A A 10A", "Reg: 0,63 - 1A" se guardan como `corriente_a` con `valor_texto` = "4-6" (punto decimal) y
+ * `valor_num` = el tope (misma convención que la tensión "85-265"). Sólo con la palabra del aparato en el texto
+ * (relé térmico / de sobrecarga, guardamotor, protector térmico o de motor): fuera de ese contexto un "13-18A"
+ * sigue sin leerse (puede ser cualquier cosa) y "1200/5A" es una relación. El Shop lo muestra "4–6 A".
  *
  * Módulo puro (sin DB): lo usan la sync de Alegra, el backfill y la normalización de lo que lee el
  * PDF o carga el panel (`normalizarAtributos`).
@@ -142,7 +146,7 @@ export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
   flujo_lm: { tipo: "num", etiqueta: "Flujo luminoso (lm)", rango: [1, 1_000_000], pista: "1200" },
   tension_v: { tipo: "num", etiqueta: "Tensión (V)", rango: [1, 1000], pista: "220 o 85-265" },
   zocalo: { tipo: "texto", etiqueta: "Zócalo", pista: "E27, GU10…" },
-  corriente_a: { tipo: "num", etiqueta: "Corriente (A)", rango: [0.1, 6300], pista: "25" },
+  corriente_a: { tipo: "num", etiqueta: "Corriente (A)", rango: [0.1, 6300], pista: "25 o 4-6" },
   polos: { tipo: "num", etiqueta: "Polos", rango: [1, 4], entero: true, pista: "1 a 4" },
   seccion_mm2: { tipo: "num", etiqueta: "Sección (mm²)", rango: [0.5, 1000], pista: "2,5" },
   medidas_mm: { tipo: "texto", etiqueta: "Medidas (mm)", pista: "AxB o AxBxC, p. ej. 300x400" },
@@ -433,6 +437,28 @@ const RE_CORRIENTE = new RegExp(`${INIC}(?<![0-9][-/])(${NUM})(?: ?(?:amperes?|a
 const RE_LARGO = new RegExp(`(^|[^0-9a-z.,/-])(${NUM}) ?(?:metros?|mts?|m)${FIN}(?![-/][0-9a-z])`)
 const RE_ANGULO = new RegExp(`${INIC}(\\d{1,3}) ?(?:°|º|grados?|deg)${FIN}`)
 
+/**
+ * El producto ES un relé térmico (o de sobrecarga), un guardamotor o un protector térmico/de motor: el único
+ * contexto donde "4-6A" es un rango de regulación. Un accesorio "para guardamotor" (caja, contacto) no lo es.
+ */
+const CONTEXTO_REGULACION =
+  /(?:^|[^0-9a-z])(?<!(?:para|p\/) )(?:reles? (?:de sobrecarga )?termicos?|reles? de sobrecarga|relevos? termicos?|guarda ?motor(?:es)?|prot(?:ector|\.)? ?termicos?|protector(?:es)? de motor)(?![0-9a-z])/
+/**
+ * "4-6A", "1.6-2.5 A", "4…6 A", "6A A 10A", "0,63 - 1A", "REGULACION 17-23". Grupos: 2 = "reg"/"regulación"
+ * delante, 3 y 4 = los extremos, 5 = la unidad. Sin unidad sólo vale con "reg" delante ("para 4 a 20 kW" no).
+ */
+const RE_REGULACION = new RegExp(
+  `${INIC}(reg(?:ulacion)?\\.?:? ?)?(${NUM})(?: ?a)?(?: ?(?:-|–|…|\\.\\.\\.) ?| a )(${NUM})(?: ?(a|amps?|amperes?))?${FIN}`,
+)
+
+/** Rango de regulación [a, b] (a < b, dentro del rango válido de la corriente) leído del texto, o null. */
+function regulacion(m: RegExpExecArray): [number, number] | null {
+  if (!m[2] && !m[5]) return null
+  const [a, b] = [numero(m[3]), numero(m[4])]
+  const r = DEFINICION_ATRIBUTOS.corriente_a.rango!
+  return a < b && a >= r[0] && b <= r[1] ? [a, b] : null
+}
+
 /** Corrientes nominales normalizadas (serie IEC) que aceptamos tras una letra de curva ("C16"). */
 const SERIE_IEC = new Set([1, 2, 3, 4, 6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125])
 const CONTEXTO_PROTECCION = /termomagnetic|termica|llave|interruptor|disyuntor|automatico|breaker|mcb|\bdin\b|curva|icn/
@@ -577,6 +603,20 @@ function extraerAmpliadas(t: string, nombre: string): AtributoExtraido[] {
   const polos: number[] = []
   const corriente: number[] = []
 
+  // 4b. Rango de regulación de un relé térmico o un guardamotor ("4-6A"): sólo con ese contexto. Se consume para que
+  // la corriente suelta no lea su tope.
+  const rangos: string[] = []
+  let tope: number | null = null
+  if (CONTEXTO_REGULACION.test(t)) {
+    c = consumir(resto, RE_REGULACION, (m) => regulacion(m) !== null)
+    resto = c.resto
+    for (const m of c.hallados) {
+      const [a, b] = regulacion(m)!
+      rangos.push(`${a}-${b}`)
+      tope = b
+    }
+  }
+
   // 5. NxNA: "2X25A" = 2 polos de 25 A ("2X36W" no: termina en W)
   c = consumir(resto, RE_NXA)
   resto = c.resto
@@ -616,7 +656,12 @@ function extraerAmpliadas(t: string, nombre: string): AtributoExtraido[] {
 
   if (!CONTEXTO_TELECOM.test(t)) {
     num("polos", unico(polos))
-    num("corriente_a", unico(corriente))
+    if (rangos.length === 0) num("corriente_a", unico(corriente))
+    else {
+      // Un solo rango (dos distintos = nada) y ninguna otra corriente que no sea su tope.
+      const rango = unico(rangos)
+      if (rango && corriente.every((x) => x === tope)) out.push({ clave: "corriente_a", valorNum: tope, valorTexto: rango })
+    }
   }
 
   // 9. largo_m (metros; y centímetros sólo en tubos, listones, regletas y tiras de luz, desde el nombre)
@@ -916,6 +961,9 @@ export function extraerAtributosDeNombre(nombre: string, descripcion?: string | 
   return out.filter((a) => !fuera.has(a.clave)).sort((a, b) => orden(a.clave) - orden(b.clave))
 }
 
+/** Rango de regulación en texto: "4-6", "1.6-2.5 A", "0,63 – 1". */
+const RE_RANGO_CORRIENTE = /^\s*(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*(?:a)?\s*$/i
+
 function comoNumero(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? v : null
   if (typeof v === "string" && /^\s*\d+(?:[.,]\d+)?\s*$/.test(v)) return numero(v.trim())
@@ -973,6 +1021,12 @@ export function normalizarAtributos(entrada: unknown): AtributoExtraido[] {
     } else if (clave === "medidas_mm") {
       const me = medidasValidas(v)
       if (me) out.push({ clave, valorNum: null, valorTexto: me })
+    } else if (clave === "corriente_a" && typeof v === "string" && RE_RANGO_CORRIENTE.test(v)) {
+      // Rango de regulación de un relé térmico o un guardamotor ("4-6", "1,6-2,5 A"): texto canónico con punto
+      // decimal y, como número, el tope.
+      const m = RE_RANGO_CORRIENTE.exec(v)!
+      const [a, b] = [enRango(clave, numero(m[1])), enRango(clave, numero(m[2]))]
+      if (a != null && b != null && a < b) out.push({ clave, valorNum: b, valorTexto: `${a}-${b}` })
     } else if (clave === "tension_v") {
       const rango = typeof v === "string" ? /^\s*(\d{1,3})\s*([-/])\s*(\d{1,3})\s*$/.exec(v) : null
       if (rango) {

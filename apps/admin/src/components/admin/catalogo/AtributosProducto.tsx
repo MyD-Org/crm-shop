@@ -77,10 +77,10 @@ const OPCIONES: Partial<Record<ClaveAtributo, { label: string; value: string }[]
   })),
 }
 
-/** Valor como lo edita el operador: el rango de tensión se muestra como texto. */
+/** Valor como lo edita el operador: el rango de tensión o de regulación de corriente se muestra como texto. */
 function comoTexto(a: AtributoDto | undefined): string {
   if (!a) return ""
-  if (a.clave === "tension_v" && a.valorTexto) return a.valorTexto
+  if ((a.clave === "tension_v" || a.clave === "corriente_a") && a.valorTexto) return a.valorTexto
   if (a.valorNum != null) return String(a.valorNum)
   return a.valorTexto ?? ""
 }

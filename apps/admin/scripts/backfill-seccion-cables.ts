@@ -3,7 +3,9 @@
  * - numéricas: `seccion_mm2` (cables, por defecto), `diametro_mm` (caños y accesorios de caño), `ancho_mm`
  *   (bandejas y sus accesorios), `polos` ("2 POLOS"), `largo_m` (incluye "120CM" de tubos y listones);
  * - de texto (valor_texto): `montaje` (por familia: plafón/aplique/estanco → aplicar, araña → colgante) y
- *   `tono` (también desde WW/CW/NW).
+ *   `tono` (también desde WW/CW/NW);
+ * - `corriente_a`: SÓLO el rango de regulación de relés térmicos y guardamotores ("4-6A" → valor_texto "4-6",
+ *   valor_num 6). La corriente suelta no la toca (la escribe la sync).
  *
  * Escribe SOLO esa clave y SOLO con fuente 'nombre'. Nunca pisa una fila `pdf` o
  * `manual` (precedencia manual > pdf > nombre: la impone el SQL del upsert de

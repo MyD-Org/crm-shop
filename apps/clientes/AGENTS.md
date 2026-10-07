@@ -16,6 +16,10 @@ El cobro en línea es por procesador: el medio de pago (`slug` de `medios_pago_s
 4. Las rutas ya existen: `POST /api/pagos/[proveedor]` y `POST /api/pagos/[proveedor]/webhook` (404 si el proveedor no tiene `verificarWebhook`; el gate de `proxy.ts` ya deja pasar `/api/pagos/<x>/webhook`). La de Mercado Pago conserva su URL histórica. Sin credenciales, `configurado()` es `false` y el medio no se ofrece ni se acepta.
 5. Tests: copiar el patrón de `route.caracterizacion.test.ts` (ruta) y `reconciliar.proveedores.test.ts`; el CSP del navegador (`headers-seguridad.ts`) se amplía en el cambio del componente de pago.
 
+### Mercado Pago: dinero en cuenta
+
+Según la documentación del Payment Brick (`mercadoPago` en `paymentMethods`), la opción "Cuenta de Mercado Pago" exige `initialization.preferenceId`: una preferencia con `purpose: "wallet_purchase"`. El pago con cuenta se completa en el flujo de Mercado Pago (no por nuestro `POST /v1/payments`) y vuelve por `back_urls`. Implementación: `POST /api/pagos/mercadopago/preferencia` (monto y `external_reference` = id del pedido, del pedido persistido; `back_urls` a `/checkout?pedido=<id>&pago=mp`; `notification_url` = el webhook de siempre; 1 cuota) y `mercadopago-preferencia.ts` (puro). Sólo se ofrece con el pedido en 1 pago; sin preferencia el Brick queda sólo con tarjeta. Al volver, el checkout abre "Estamos confirmando su pago" (sondeo) y el cobro lo registra el webhook por `external_reference` (`registrarCobro`, idempotente). Prueba: credenciales TEST- y un usuario comprador de prueba de Mercado Pago (la billetera no deja pagar con la misma cuenta vendedora); en local no hay `back_urls` ni webhook (exigen https público).
+
 ### Payway (ex Decidir)
 
 Adaptador en `src/lib/pagos/payway.ts` (HTTP) y `payway-estados.ts` (puro: estados, motivos, ids de medio). Lo que condiciona todo, según la documentación oficial:

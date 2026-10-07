@@ -18,17 +18,23 @@ export interface CustomizacionBrick {
   readonly paymentMethods: {
     readonly creditCard: "all";
     readonly debitCard: "all";
-    readonly mercadoPago: "all";
+    readonly mercadoPago?: "all";
     readonly maxInstallments?: number;
   };
   readonly visual: { readonly style: { readonly theme: "default" } };
 }
 
-const cache = new Map<number | "sin", CustomizacionBrick>();
+const cache = new Map<string, CustomizacionBrick>();
 
-export function customizacionBrick(maxCuotas: number | undefined): CustomizacionBrick {
+/**
+ * `cuentaMp` (por defecto, sí): ofrecer "Cuenta de Mercado Pago". Sólo se ofrece en un pago (con 2 o más
+ * cuotas congeladas es sólo tarjeta de crédito) y el componente lo apaga si no pudo crear la preferencia
+ * (`initialization.preferenceId`, que la opción exige).
+ */
+export function customizacionBrick(maxCuotas: number | undefined, cuentaMp = true): CustomizacionBrick {
   const valido = typeof maxCuotas === "number" && Number.isInteger(maxCuotas) && maxCuotas >= 1;
-  const clave = valido ? maxCuotas : "sin";
+  const conCuenta = cuentaMp && (!valido || maxCuotas === 1);
+  const clave = `${valido ? maxCuotas : "sin"}|${conCuenta ? "cuenta" : "tarjeta"}`;
   const previa = cache.get(clave);
   if (previa) return previa;
 
@@ -36,7 +42,7 @@ export function customizacionBrick(maxCuotas: number | undefined): Customizacion
     paymentMethods: {
       creditCard: "all",
       debitCard: "all",
-      mercadoPago: "all",
+      ...(conCuenta ? { mercadoPago: "all" as const } : {}),
       ...(valido ? { maxInstallments: maxCuotas } : {}),
     },
     visual: { style: { theme: "default" } },

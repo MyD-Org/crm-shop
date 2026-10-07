@@ -52,11 +52,13 @@ function eleccionParaCheckout(e: EleccionUbicacion): EleccionInicialCheckout {
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pedido?: string | string[] }>;
+  searchParams: Promise<{ pedido?: string | string[]; pago?: string | string[] }>;
 }) {
-  const { pedido } = await searchParams;
+  const { pedido, pago } = await searchParams;
   // Reintento del pago de un pedido existente (`/checkout?pedido=<id>`): el servidor lo valida.
   const pedidoReintento = typeof pedido === "string" && pedido ? pedido : null;
+  // `pago=mp`: el comprador vuelve de pagar con su cuenta de Mercado Pago (back_urls de la preferencia).
+  const retornoMercadoPago = pedidoReintento !== null && pago === "mp";
   // Las reglas y los medios de pago no dependen de la identidad: arrancan antes de esperarla para
   // que se resuelvan en paralelo con esa consulta en vez de después (misma
   // semántica, una espera menos en la cascada). `identidadActual` decide el
@@ -150,6 +152,7 @@ export default async function CheckoutPage({
         esCuentaCorriente={esCuentaCorriente}
         eleccionInicial={eleccion}
         pedidoReintento={pedidoReintento}
+        retornoMercadoPago={retornoMercadoPago}
       />
     </>
   );

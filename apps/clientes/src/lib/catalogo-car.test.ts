@@ -173,3 +173,14 @@ describe("filtrosPorTipo (lo que la page suma a los filtros)", () => {
     });
   });
 });
+
+describe("corriente: rango de regulación en ?car=", () => {
+  it("corriente_a:4-6 es un valor de lista (no un rango de slider) y su chip dice 4–6 A", () => {
+    expect(leerIdCar("corriente_a:4-6")).toEqual({ clave: "corriente_a", op: "valor", valor: "4-6" });
+    expect(leerIdCar("corriente_a:1.6-2.5")).toEqual({ clave: "corriente_a", op: "valor", valor: "1.6-2.5" });
+    expect(etiquetaCar("corriente_a:4-6")).toBe("Corriente: 4–6 A");
+    expect(etiquetaCar("corriente_a:6")).toBe("Corriente: 6 A");
+    expect(leerIdCar("corriente_a:6-4")).toBeNull();
+    expect(leerIdCar("polos:1-2")).toBeNull();
+  });
+});

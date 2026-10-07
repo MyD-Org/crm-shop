@@ -197,3 +197,47 @@ describe("entradaDeFilas", () => {
     expect(e.rangos).toEqual([]);
   });
 });
+
+describe("corriente: rango de regulación (relé térmico, guardamotor) como valor propio", () => {
+  it("el rango filtra por valor_texto exacto; el número suelto excluye a los que tienen rango", () => {
+    const rango = render(condicionesPorClave(ctx, ["corriente_a:4-6"]).get("corriente_a")!);
+    expect(rango.sql).toContain("VT in (");
+    expect(rango.params).toEqual(["4-6"]);
+    const suelto = render(condicionesPorClave(ctx, ["corriente_a:6"]).get("corriente_a")!);
+    expect(suelto.sql).toContain("VN in (");
+    expect(suelto.sql).toContain("not coalesce(VT ~ ");
+    expect(suelto.params).toEqual([6, "^[0-9]+([.][0-9]+)?-[0-9]+([.][0-9]+)?$"]);
+  });
+
+  it("los dos tildados: OR entre el número suelto y el rango", () => {
+    const { sql: texto, params } = render(condicionesPorClave(ctx, ["corriente_a:6", "corriente_a:1.6-2.5"]).get("corriente_a")!);
+    expect(texto).toContain(" or ");
+    expect(params).toContain(6);
+    expect(params).toContain("1.6-2.5");
+  });
+
+  it("otras claves numéricas no cambian (polos sigue con valor_num solo)", () => {
+    expect(render(condicionesPorClave(ctx, ["polos:2"]).get("polos")!).sql).not.toContain("VT");
+    expect(condicionesPorClave(ctx, ["polos:1-2"]).size).toBe(0);
+  });
+
+  it("la consulta de conteo lista el rango de texto aparte del número (columna rangotexto del registro)", () => {
+    const { sql: texto } = render(consultaFacetasPorTipoSql({ base: sql`select 1 as id`, activas: [], tenant: "t" }));
+    expect(texto).toContain("rangotexto");
+    expect(texto).toMatch(/when reg\.num and reg\.rangotexto and .*valor_texto.* ~ \$\d+ then/);
+  });
+
+  it("entradaDeFilas conserva el rango como valor (no lo pasa a número)", () => {
+    const e = entradaDeFilas(
+      [
+        { tipo: "lista", clave: "corriente_a", valor: "4-6", n: 2, min: null, max: null },
+        { tipo: "lista", clave: "corriente_a", valor: "6.00", n: 3, min: null, max: null },
+      ],
+      [],
+    );
+    expect(e.filas).toEqual([
+      { clave: "corriente_a", valor: "4-6", n: 2 },
+      { clave: "corriente_a", valor: "6", n: 3 },
+    ]);
+  });
+});

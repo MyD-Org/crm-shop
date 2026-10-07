@@ -22,7 +22,7 @@ import { crmAtributos } from "@/db/crm";
 import { rangoDeClave } from "./catalogo-atributos-medida";
 import { TIPO, type ClaveEstructurada } from "./catalogo-caracteristicas";
 import { leerCar, leerIdCar } from "./catalogo-car";
-import { REGISTRO, RE_VALOR_CAR, claveFacetable, type EntradaFacetas } from "./catalogo-facetas-registro";
+import { REGISTRO, RE_VALOR_CAR, claveFacetable, rangoDeValorLista, type EntradaFacetas } from "./catalogo-facetas-registro";
 
 /** `valor_num` y `valor_texto` de la fila de `catalog_atributos` dentro del `EXISTS`. */
 export interface ColumnasAtributo {
@@ -42,6 +42,8 @@ export interface RangoPotencia {
 }
 
 const CLAVE_POTENCIA = "potencia_w";
+/** Rango "a-b" en `valor_texto` (mismo patrón que `criterioSql` de catalogo-atributos-sql.ts). */
+const RANGO_TEXTO = "^[0-9]+([.][0-9]+)?-[0-9]+([.][0-9]+)?$";
 const ORDEN = new Map<string, number>(REGISTRO.map((c) => [c.clave, c.orden]));
 const porOrden = (a: string, b: string) => (ORDEN.get(a) ?? 0) - (ORDEN.get(b) ?? 0);
 
@@ -53,7 +55,8 @@ function condicionPotencia(cols: ColumnasAtributo, p?: RangoPotencia): SQL | und
 /**
  * Por clave activa, la condición sobre SU fila de `catalog_atributos` (OR de los ids de esa clave), en el
  * orden del registro. Los ids inválidos se descartan (`leerCar`). La potencia entra como `potencia_w`
- * cuando hay rango de potencia.
+ * cuando hay rango de potencia. En una clave con `rangoEnTexto` (corriente) el valor "4-6" es el rango de
+ * `valor_texto` y el número suelto ("6") excluye a los que tienen rango: mismo reparto que los conteos.
  */
 export function condicionesPorClave(cols: ColumnasAtributo, ids: readonly string[] | undefined, potencia?: RangoPotencia): Map<string, SQL> {
   const valores = new Map<string, (string | number)[]>();
@@ -66,7 +69,8 @@ export function condicionesPorClave(cols: ColumnasAtributo, ids: readonly string
       rangos.set(c.clave, lista);
     } else {
       const lista = valores.get(c.clave) ?? [];
-      lista.push(TIPO[c.clave as ClaveEstructurada] === "num" ? Number(c.valor) : c.valor);
+      const rango = rangoDeValorLista(c.clave, c.valor) !== null;
+      lista.push(TIPO[c.clave as ClaveEstructurada] === "num" && !rango ? Number(c.valor) : c.valor);
       valores.set(c.clave, lista);
     }
   }
@@ -74,7 +78,19 @@ export function condicionesPorClave(cols: ColumnasAtributo, ids: readonly string
   const pot = condicionPotencia(cols, potencia);
   if (pot) out.set(CLAVE_POTENCIA, pot);
   for (const [clave, vs] of valores) {
-    const columna = TIPO[clave as ClaveEstructurada] === "num" ? cols.num : cols.texto;
+    const num = TIPO[clave as ClaveEstructurada] === "num";
+    if (num && claveFacetable(clave)?.rangoEnTexto) {
+      const rangos = vs.filter((v) => rangoDeValorLista(clave, String(v)));
+      const sueltos = vs.filter((v) => !rangoDeValorLista(clave, String(v))).map(Number);
+      const partes: SQL[] = [];
+      if (sueltos.length) {
+        partes.push(sql`(${cols.num} in (${sql.join(sueltos.map((v) => sql`${v}`), sql`, `)}) and not coalesce(${cols.texto} ~ ${RANGO_TEXTO}, false))`);
+      }
+      if (rangos.length) partes.push(sql`${cols.texto} in (${sql.join(rangos.map((v) => sql`${String(v)}`), sql`, `)})`);
+      out.set(clave, partes.length === 1 ? partes[0] : or(...partes)!);
+      continue;
+    }
+    const columna = num ? cols.num : cols.texto;
     out.set(clave, sql`${columna} in (${sql.join(vs.map((v) => sql`${v}`), sql`, `)})`);
   }
   for (const [clave, partes] of rangos) out.set(clave, partes.length === 1 ? partes[0] : or(...partes)!);
@@ -100,12 +116,12 @@ export function columnasCumpleSql(ctx: ContextoCar, condiciones: ReadonlyMap<str
   return Object.fromEntries([...condiciones].map(([clave, c], i) => [`c${i}`, ctx.existe(clave, c)]));
 }
 
-/** Claves de la consulta: las del registro, con su control, si son numéricas y su rango válido. */
+/** Claves de la consulta: las del registro, con su control, si son numéricas, su rango válido y si listan rangos de texto. */
 function registroValuesSql(): SQL {
   const filas = REGISTRO.map((c) => {
     const rango = rangoDeClave(c.clave);
     const num = TIPO[c.clave] === "num";
-    return sql`(${c.clave}::text, ${c.control}::text, ${num}::boolean, ${rango?.[0] ?? null}::numeric, ${rango?.[1] ?? null}::numeric)`;
+    return sql`(${c.clave}::text, ${c.control}::text, ${num}::boolean, ${rango?.[0] ?? null}::numeric, ${rango?.[1] ?? null}::numeric, ${Boolean(c.rangoEnTexto)}::boolean)`;
   });
   return sql.join(filas, sql`, `);
 }
@@ -114,7 +130,8 @@ function registroValuesSql(): SQL {
  * Conteos de las facetas por tipo en UNA consulta. `base` es el SELECT del conjunto sin `car` ni potencia
  * con la columna `id` (alegra_id) y, si hay claves `activas`, una columna booleana `c<i>` por cada una
  * (`columnasCumpleSql`, mismo orden). Devuelve filas `(tipo, clave, valor, n, min, max)`:
- *  - `lista`: cuántos productos tienen cada valor de una clave de lista;
+ *  - `lista`: cuántos productos tienen cada valor de una clave de lista (en una clave con `rangoEnTexto`, el
+ *    rango de `valor_texto` es su propio valor: "4-6" aparte de "6");
  *  - `rango`: extremos y cantidad de productos con dato de una clave de rango;
  *  - `denominador`: con `clave` null, los productos que cumplen todo; con clave K, los que solo fallan K.
  * Los valores fuera del rango válido (RANGOS) o con forma inválida no cuentan.
@@ -130,9 +147,12 @@ export function consultaFacetasPorTipoSql(a: { base: SQL; activas: readonly stri
 filas as materialized (
   select id, fallada from (select id, ${nfallas} as nfallas, ${fallada} as fallada from base) x${filtroFallas}
 ),
-reg (clave, control, num, lo, hi) as (values ${registroValuesSql()})
+reg (clave, control, num, lo, hi, rangotexto) as (values ${registroValuesSql()})
 select reg.control as tipo, ${crmAtributos.clave} as clave,
-  (case when reg.control = 'lista' then (case when reg.num then ${crmAtributos.valorNum}::text else ${crmAtributos.valorTexto} end) end) as valor,
+  (case when reg.control = 'lista' then (case
+    when reg.num and reg.rangotexto and ${crmAtributos.valorTexto} ~ ${RANGO_TEXTO} then ${crmAtributos.valorTexto}
+    when reg.num then ${crmAtributos.valorNum}::text
+    else ${crmAtributos.valorTexto} end) end) as valor,
   count(*)::int as n, min(${crmAtributos.valorNum})::float8 as min, max(${crmAtributos.valorNum})::float8 as max
 from filas f
 join ${crmAtributos} on ${crmAtributos.tenantId} = ${a.tenant} and ${crmAtributos.alegraId} = f.id
@@ -181,7 +201,7 @@ export function entradaDeFilas(filas: readonly FilaFacetasPorTipo[], activas: re
     }
     if (f.tipo !== "lista" || f.valor == null) continue;
     let valor = f.valor;
-    if (TIPO[f.clave as ClaveEstructurada] === "num") {
+    if (TIPO[f.clave as ClaveEstructurada] === "num" && !rangoDeValorLista(f.clave, valor)) {
       const v = numero(valor);
       if (!Number.isFinite(v)) continue;
       valor = String(v);

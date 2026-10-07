@@ -38,8 +38,8 @@ export type ClaveEstructurada = (typeof CLAVES_ESTRUCTURADAS)[number];
 
 /**
  * Dónde vive el valor de cada clave: `num` = `valor_num`, `texto` = `valor_texto`. Se cruza con
- * `__fixtures__/atributos-claves.json` (contrato compartido con el CRM). `tension_v` es numérica
- * (un rango "85-265" viaja además en `t`).
+ * `__fixtures__/atributos-claves.json` (contrato compartido con el CRM). `tension_v` y `corriente_a` son
+ * numéricas y un rango viaja además en `t` (`CLAVES_CON_RANGO`).
  */
 export const TIPO: Record<ClaveEstructurada, "num" | "texto"> = {
   potencia_w: "num",
@@ -68,6 +68,22 @@ export const TIPO: Record<ClaveEstructurada, "num" | "texto"> = {
   dimerizable: "texto",
   modulos: "num",
 };
+
+/**
+ * Claves numéricas cuyo `valor_texto` puede traer un RANGO "a-b" (con decimales de punto): la tensión de entrada
+ * de un driver ("85-265", `valor_num` = 220 si lo incluye) y el rango de regulación de un relé térmico o un
+ * guardamotor ("4-6", "1.6-2.5", `valor_num` = el tope). Convención del CRM (`normalizarAtributos`).
+ */
+export const CLAVES_CON_RANGO: readonly ClaveEstructurada[] = ["tension_v", "corriente_a"];
+
+/** Rango "a-b" de `valor_texto` (a < b, punto decimal), o null si el texto no es un rango. */
+const RE_RANGO = /^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/;
+export function leerRango(t: string | null | undefined): [number, number] | null {
+  const m = t ? RE_RANGO.exec(t) : null;
+  if (!m) return null;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a < b ? [a, b] : null;
+}
 
 /** Un valor tal como viaja en la consulta: `n` = valor_num, `t` = valor_texto. */
 export interface ValorEstructurado {
@@ -193,8 +209,12 @@ export function formatoValor(clave: ClaveEstructurada, v: ValorEstructurado | un
       return v.t ? (TONO[v.t] ?? null) : null;
     case "zocalo":
       return v.t ? v.t.toUpperCase() : null;
-    case "corriente_a":
+    case "corriente_a": {
+      // Rango de regulación (relé térmico, guardamotor): "4–6 A", nunca el tope solo (se confundiría con una térmica de 6 A).
+      const r = leerRango(v.t);
+      if (r) return `${num2(r[0])}–${num2(r[1])} A`;
       return v.n != null ? `${num2(v.n)} A` : null;
+    }
     case "polos":
       if (v.n == null || !Number.isInteger(v.n) || v.n < 1 || v.n > 4) return null;
       return v.n === 1 ? "1 polo" : `${v.n} polos`;
@@ -245,7 +265,7 @@ export function caracteristicasDe(a: AtributosEstructurados | undefined): { etiq
 
 /**
  * Forma compacta para el modelo del chat (`ProductoAgente.atributos`): número para las numéricas,
- * texto para las categóricas y para un rango de tensión ("85-265").
+ * texto para las categóricas y para un rango de tensión ("85-265") o de regulación de corriente ("4-6").
  */
 export function atributosParaAgente(a: AtributosEstructurados | undefined): Record<string, number | string> | undefined {
   if (!a) return undefined;
@@ -255,7 +275,8 @@ export function atributosParaAgente(a: AtributosEstructurados | undefined): Reco
     if (!v) continue;
     // Sólo se informa lo que el Shop sabe mostrar: un valor fuera de vocabulario no llega al modelo.
     if (formatoValor(c, v) == null) continue;
-    const valor = TIPO[c] === "texto" || (c === "tension_v" && v.t) ? v.t : v.n;
+    const rango = c === "tension_v" ? Boolean(v.t) : CLAVES_CON_RANGO.includes(c) && leerRango(v.t) !== null;
+    const valor = TIPO[c] === "texto" || rango ? v.t : v.n;
     if (valor != null) out[c] = valor;
   }
   return Object.keys(out).length ? out : undefined;

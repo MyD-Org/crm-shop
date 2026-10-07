@@ -302,3 +302,20 @@ describe("tipo de luz (tono) y color del producto", () => {
     expect(atributosParaAgente({ tono: { n: null, t: "turquesa" } })).toBeUndefined();
   });
 });
+
+describe("corriente con rango de regulación (relé térmico, guardamotor)", () => {
+  const rele = { n: 6, t: "4-6" };
+  it("la ficha y los chips muestran el rango, nunca el tope solo", () => {
+    expect(formatoValor("corriente_a", rele)).toBe("4–6 A");
+    expect(formatoValor("corriente_a", { n: 2.5, t: "1.6-2.5" })).toBe("1,6–2,5 A");
+    expect(formatoValor("corriente_a", { n: 6, t: null })).toBe("6 A");
+    expect(formatoValor("corriente_a", { n: 6, t: "basura" })).toBe("6 A");
+    expect(caracteristicasDe({ corriente_a: rele })).toEqual([{ etiqueta: "Corriente", valor: "4–6 A" }]);
+    expect(etiquetasTecnicas({ corriente_a: rele, polos: n(3) })).toEqual(["4–6 A", "3 polos"]);
+  });
+
+  it("al modelo del chat le llega el rango como texto; una térmica, el número", () => {
+    expect(atributosParaAgente({ corriente_a: rele })).toEqual({ corriente_a: "4-6" });
+    expect(atributosParaAgente({ corriente_a: n(16) })).toEqual({ corriente_a: 16 });
+  });
+});

@@ -228,6 +228,19 @@ describe("POST /api/carrito/cotizar: progreso de cuotas (barra del carrito)", ()
     expect(j.progresoCuotas).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 1210, minimo: 2420 }, pct: 50, montoCuota: 363 });
   });
 
+  it("con precioLineas, el progreso trae los totales por línea de la lista alcanzada (y sin pedirlo, no)", async () => {
+    medios = [conMinimo(2420)];
+    const base = cotizar.getMockImplementation()!;
+    cotizar.mockImplementation(async (l: unknown, o: { idListaMedio?: string }) => ({
+      ...(await base(l, o)),
+      lineas: [{ id: "1", qty: 2, total: 1089 }],
+    }));
+    const con = (await (await carrito({ precioLineas: true })).json()).progresoCuotas;
+    expect(con.lineasAlcanzada).toHaveLength(1);
+    expect(con.lineasAlcanzada[0]).toEqual({ id: "1", qty: 2, total: 1089 });
+    expect((await (await carrito()).json()).progresoCuotas.lineasAlcanzada).toBeUndefined();
+  });
+
   it("si no se puede cotizar la lista del nivel alcanzado, informa las cuotas sin monto", async () => {
     medios = [conMinimo(2420)];
     const original = cotizar.getMockImplementation();

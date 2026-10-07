@@ -97,11 +97,41 @@ describe("MediosDePagoDetalle con cuotas que el producto no alcanza", () => {
   const t = texto(html);
 
   it("texto con el mínimo y sin monto por cuota, atenuadas y después de las alcanzadas", () => {
-    expect(t).toContain("6 cuotas sin interés en compras desde $ 90.000,00");
-    expect(t).toContain("12 cuotas sin interés en compras desde $ 200.000,00");
+    expect(t).toContain("6 cuotas sin interés en compras desde $ 90.000");
+    expect(t).toContain("12 cuotas sin interés en compras desde $ 200.000");
     expect(t).not.toMatch(/6 cuotas de/);
     expect(html.match(/data-no-alcanzada/g)).toHaveLength(2);
     expect(html.indexOf("3 cuotas de")).toBeLessThan(html.indexOf("data-no-alcanzada"));
     expect(html).toContain("text-muted");
+  });
+});
+
+describe("MediosDePagoDetalle con el carrito", () => {
+  const props = {
+    precioContado: 5000,
+    opciones: [opcion({ cuotas: 6, total: 5382.06, montoCuota: 897.01 })],
+    noAlcanzadas: [
+      { cuotas: 8, minimo: 30000 },
+      { cuotas: 12, minimo: 90000 },
+    ],
+  };
+
+  it("el nivel que alcanza con el carrito pasa a ser una fila de cuotas con el monto del producto y la nota", () => {
+    const html = renderToStaticMarkup(
+      createElement(MediosDePagoDetalle, { ...props, conCarrito: { cuotas: 8, total: 15113.84, montoCuota: 1889.23 } }),
+    );
+    const t = texto(html);
+    expect(t).toContain("8 cuotas de $ 1.889,23 Sin interés Con su carrito ya alcanza este plan.");
+    expect(t).not.toContain("8 cuotas sin interés en compras desde");
+    expect(t).toContain("12 cuotas sin interés en compras desde $ 90.000");
+    expect(html.match(/data-no-alcanzada/g)).toHaveLength(1);
+    expect(html.indexOf("6 cuotas de")).toBeLessThan(html.indexOf("8 cuotas de"));
+  });
+
+  it("sin carrito, la fila queda atenuada con el mínimo sin ,00", () => {
+    const t = texto(renderToStaticMarkup(createElement(MediosDePagoDetalle, props)));
+    expect(t).toContain("8 cuotas sin interés en compras desde $ 30.000");
+    expect(t).not.toContain("30.000,00");
+    expect(t).not.toContain("Con su carrito");
   });
 });

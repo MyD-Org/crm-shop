@@ -55,15 +55,10 @@ export const TEXTOS_CUOTAS = {
   /** Carrito y checkout, en el nivel más alto. */
   compraYaTiene: (cuotas: number, montoCuota: number) =>
     `Su compra ya tiene ${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}.`,
-  /**
-   * Ficha, con el carrito y un nivel más alto por delante: "Con su carrito, ya tiene 8 cuotas sin
-   * interés." Sin monto: el de la cuota del producto ya está en la línea de arriba.
-   */
-  fichaYaTieneCuotas: (cuotas: number) => `Con su carrito, ya tiene ${cuotasDe(cuotas)} sin interés.`,
-  /** El fragmento de `fichaYaTieneCuotas` que va en negrita: "8 cuotas sin interés". */
-  cuotasSinInteres: (cuotas: number) => `${cuotasDe(cuotas)} sin interés`,
-  /** Ficha, con el carrito, en el nivel más alto: "Con su carrito, su compra ya tiene 8 cuotas sin interés." */
-  fichaCompraYaTiene: (cuotas: number) => `Con su carrito, su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
+  /** Ficha: leyenda chica debajo de la línea verde cuando el nivel se alcanza gracias al carrito. */
+  conSuCarrito: "Con su carrito.",
+  /** Modal de la ficha: nota de la fila de cuotas que se alcanza gracias al carrito. */
+  conSuCarritoAlcanza: "Con su carrito ya alcanza este plan.",
   /**
    * Ficha, debajo de la línea de cuotas del producto: el nivel mayor que se alcanza con una compra
    * más grande. "Hasta 8 cuotas sin interés en compras desde $30.000".
@@ -76,9 +71,9 @@ export const TEXTOS_CUOTAS = {
   fichaFaltaParaCuotas: (falta: number, cuotas: number) =>
     `Con su carrito y este producto, sume ${fmtPrecioCorto(falta)} más y pague en ${cuotasDe(cuotas)} sin interés.`,
   barraAria: "Progreso hacia más cuotas sin interés",
-  /** Fila atenuada del modal: "6 cuotas sin interés en compras desde $90.000". */
+  /** Fila atenuada del modal: "6 cuotas sin interés en compras desde $90.000" (sin ",00"). */
   filaNoAlcanzada: (cuotas: number, minimo: number) =>
-    `${cuotasDe(cuotas)} sin interés en compras desde ${fmtPrecio(minimo)}`,
+    `${cuotasDe(cuotas)} sin interés en compras desde ${fmtPrecioCorto(minimo)}`,
   /** Fila del selector del checkout: "1 pago" / "6 cuotas de $20.000" (el total va aparte). */
   checkoutOpcion: (cuotas: number, montoCuota: number) =>
     cuotas === 1 ? "1 pago" : `${cuotasDe(cuotas)} de ${fmtPrecio(montoCuota)}`,

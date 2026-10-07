@@ -72,7 +72,7 @@ import { InformarPago } from "@/components/mi-cuenta/cuenta-corriente/InformarPa
 import { TEXTO_PLAZO_COMPROBANTE } from "@/lib/comprobantes/pedido";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
-import { pieTransferencia } from "@/lib/pie-pago-transferencia";
+import { PIE_TRANSFERENCIA } from "@/lib/pie-pago-transferencia";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 
 /*
@@ -217,22 +217,6 @@ const DESCRIPCION_PAGO_EN_LINEA = "Paga ahora con tarjeta, en cuotas si lo desea
  * Datos de la cuenta para transferir en el paso Pago. `undefined` = todavía no llegó la cotización
  * (o no hay sesión): no se muestra nada hasta tenerla; `null` = sin cuenta aplicable.
  */
-function BloqueCuentaPago({
-  cuenta,
-  total,
-}: {
-  cuenta: CuentaPagoSnapshot | null | undefined;
-  total: number | undefined;
-}) {
-  if (cuenta === undefined) return null;
-  return (
-    <div className="mt-4">
-      <p className="mb-2 text-sm font-semibold text-text">Datos para transferir</p>
-      <CuentaTransferencia cuenta={cuenta} importe={cuenta ? total : undefined} />
-    </div>
-  );
-}
-
 const TEXTO_SESION_VENCIDA = "Su sesión venció. Inicie sesión para confirmar el pedido.";
 
 /**
@@ -1496,7 +1480,6 @@ export function CheckoutClient({
                     progreso={cotizacion?.progresoCuotas}
                   />
                 )}
-                {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}
                 {!esCuentaCorriente && totalVariaSegunMedio(mediosParaElegir) && <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>}
                 {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
               </>
@@ -1645,7 +1628,7 @@ export function CheckoutClient({
           )}
 
           <p className="mt-3 text-center text-xs text-muted">
-            {conCuenta ? pieTransferencia(Boolean(cotizacion?.cuentaTransferencia)) : pieDelMedio(medioSel)}
+            {conCuenta ? PIE_TRANSFERENCIA : pieDelMedio(medioSel)}
           </p>
         </div>
       </div>

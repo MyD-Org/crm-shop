@@ -1,14 +1,7 @@
 /**
- * Pie del resumen del checkout cuando el medio elegido es Transferencia: coherente con lo que se
- * muestra arriba (los datos de la cuenta, o el mensaje neutro si no hay cuenta aplicable).
+ * Pie del resumen del checkout cuando el medio elegido es Transferencia. Los datos de la cuenta
+ * NO se muestran antes de confirmar: aparecen recién en "Pedido recibido" (y en el mail y en Mis
+ * pedidos), con la cuenta congelada en el pedido.
  */
-export const PIE_TRANSFERENCIA_CON_CUENTA =
-  "No se le cobra nada ahora. Transfiera a la cuenta indicada y luego informe el pago desde Mis pedidos.";
-
-export const PIE_TRANSFERENCIA_SIN_CUENTA =
-  "No se le cobra nada ahora. Le enviaremos los datos para transferir.";
-
-/** `cuentaResuelta`: hay una cuenta para mostrar (no null ni todavía sin cotización). */
-export function pieTransferencia(cuentaResuelta: boolean): string {
-  return cuentaResuelta ? PIE_TRANSFERENCIA_CON_CUENTA : PIE_TRANSFERENCIA_SIN_CUENTA;
-}
+export const PIE_TRANSFERENCIA =
+  "No se le cobra nada ahora. Al confirmar el pedido verá los datos para transferir.";

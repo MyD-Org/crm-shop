@@ -93,6 +93,11 @@ export const crmOverlay = publico.table("catalog_overlay", {
   ocultoEnSucursales: text("oculto_en_sucursales").array().notNull(),
   /** false = no exhibir la marca del producto (card, ficha, filtro, carrito). Migración 0048 del CRM. */
   mostrarMarca: boolean("mostrar_marca").notNull(),
+  /**
+   * Destacado a mano del admin: null = sin destacar; menor primero; 9999 = destacado sin posición.
+   * Columna de la migración 0027 del CRM (sin migración nueva: el SELECT de tabla de 0038 la cubre).
+   */
+  orden: integer("orden"),
 });
 
 // ---------------------------------------------------------------------------

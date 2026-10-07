@@ -145,7 +145,7 @@ describe("aviso al local con pago en línea", () => {
     colas.length = 0;
     colas.push([{ ...PEDIDO, pagoMetodo: "mercadopago", pagoEstado: "fallido" }]);
     await avisarCobro("p1", { antes: "pendiente", despues: "fallido", reversion: false, referencia: "r1" });
-    expect(enviarEmail.mock.calls[0][0].html).toContain("https://tienda.cliente.example/checkout");
+    expect(enviarEmail.mock.calls[0][0].html).toContain("https://tienda.cliente.example/checkout?pedido=p1");
   });
 
   it("al crear un pedido con cobro en línea no sale el mail de pedido recibido", async () => {

@@ -108,7 +108,7 @@ async function enviarAviso(
       comercio: comercio || "Su pedido",
       logoUrl: urlLogoMail(),
       pedidosUrl: urlPedidos(),
-      checkoutUrl: aviso === "pago_rechazado" ? urlPedidos(undefined, RUTA_CHECKOUT) : null,
+      checkoutUrl: aviso === "pago_rechazado" ? urlPedidos(undefined, `${RUTA_CHECKOUT}?pedido=${encodeURIComponent(pedidoId)}`) : null,
       sitioUrl: urlSitioMail(),
       lineas: lineas.map((l) => ({ nombre: l.nombre, cantidad: Number(l.cantidad) })),
       total: Number(pedido.total),

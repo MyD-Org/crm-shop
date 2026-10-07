@@ -25,7 +25,7 @@ afterEach(() => vi.unstubAllEnvs());
 const TABLA = '"public"."catalog_atributos"';
 const NOT_EXISTS = /not exists \(select 1 from "public"\."catalog_atributos"/g;
 const cuenta = (sql: string, re: RegExp) => sql.match(re)?.length ?? 0;
-const conteo = () => grabadora.consultas[0];
+const conteo = () => sinLecturaDelArbol(grabadora.consultas)[0];
 
 const pagina = (filtros: Parameters<typeof getPaginaCatalogo>[0]["filtros"]) =>
   getPaginaCatalogo({ soloVisibles: false, filtros: { atributosEstructurados: true, ...filtros } });
@@ -33,7 +33,7 @@ const pagina = (filtros: Parameters<typeof getPaginaCatalogo>[0]["filtros"]) =>
 describe("filtro por una medida dinámica", () => {
   it("con categoría dura: sin contradicción (NOT EXISTS); el valor solo en params (R4.2)", async () => {
     await pagina({ categorias: ["Termomagnéticas"], atributos: ["corriente_a:20"] });
-    for (const { sql, params } of grabadora.consultas) {
+    for (const { sql, params } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(cuenta(sql, NOT_EXISTS)).toBe(1);
       expect(sql).toMatch(/not coalesce\(/);
       expect(params).toEqual(expect.arrayContaining(["corriente_a", 20]));
@@ -99,7 +99,7 @@ describe("filtro por una medida dinámica", () => {
 
   it("sin datos estructurados no restringen y no nombran la tabla", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { atributos: ["corriente_a:20", "polos:2"], categorias: ["X"] } });
-    for (const { sql } of grabadora.consultas) expect(sql).not.toContain("catalog_atributos");
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sql).not.toContain("catalog_atributos");
   });
 
   it("OR dentro del mismo grupo y AND entre grupos", async () => {
@@ -109,7 +109,7 @@ describe("filtro por una medida dinámica", () => {
 
   it("ids inválidos (inyección) no llegan al SQL", async () => {
     await pagina({ categorias: ["X"], atributos: ["corriente_a:20' OR 1=1--", "polos:9"] });
-    for (const { sql, params } of grabadora.consultas) {
+    for (const { sql, params } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(cuenta(sql, NOT_EXISTS)).toBe(0);
       expect(params.some((p) => typeof p === "string" && p.includes("OR 1=1"))).toBe(false);
     }
@@ -144,7 +144,7 @@ describe("boost y recuperación (siempre en positivo)", () => {
       orden: "relevancia",
       filtros: { atributosEstructurados: true, categorias: ["Termomagnéticas"], texto: { q: "", plan }, atributos: ["polos:2"] },
     });
-    const filas = grabadora.consultas[1];
+    const filas = sinLecturaDelArbol(grabadora.consultas)[1];
     const order = filas.sql.slice(filas.sql.indexOf("order by"));
     expect(order).toContain(TABLA);
     expect(order).toContain("~*");

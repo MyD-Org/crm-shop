@@ -102,6 +102,12 @@ export function parsearQueryListado(url: URL): QueryListado | Response {
     filtros.stock = stock
   }
 
+  const destacado = p.get("destacado")
+  if (destacado !== null) {
+    if (destacado !== "si") return invalidResponse("El filtro de destacados es inválido", "destacado")
+    filtros.destacado = destacado
+  }
+
   const tag = p.get("tag")
   if (tag !== null) {
     if (!esUuid(tag)) return invalidResponse("La etiqueta es inválida", "tag")
@@ -171,7 +177,7 @@ export function parsearSeleccion(body: unknown): Seleccion | Response {
     // masiva "sobre todo lo que coincide" tiene que resolver exactamente el mismo conjunto.
     const params = new URLSearchParams()
     if (esObjeto(s.filtros)) {
-      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "tag", "cuenta", "sucursal", "stockEn"]) {
+      for (const clave of ["q", "categoria", "estado", "foto", "nombre", "alegra", "precio", "stock", "destacado", "tag", "cuenta", "sucursal", "stockEn"]) {
         const valor = s.filtros[clave]
         if (typeof valor === "string" && valor !== "") params.set(clave, valor)
       }

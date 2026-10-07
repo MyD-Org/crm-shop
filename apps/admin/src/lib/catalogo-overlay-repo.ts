@@ -372,6 +372,8 @@ export interface FiltrosAdmin {
   sucursal?: string
   /** Slug de sucursal: solo productos con stock mayor a cero en ESA sucursal (`catalog_stock_sucursal`). */
   stockEn?: string
+  /** "si" = solo los destacados (`catalog_overlay.orden` no nulo). Combinable con `categoria` (subárbol). */
+  destacado?: "si"
 }
 
 /** `visible:<slug>` u `oculto:<slug>`, con el formato del slug de sucursal. */
@@ -483,6 +485,8 @@ export function condicionesListado(tenantId: string, f: FiltrosAdmin): SQL[] {
         AND css.sucursal = ${f.stockEn} AND css.stock > 0
     )`)
   }
+
+  if (f.destacado === "si") cond.push(sql`o.orden IS NOT NULL`)
 
   if (f.tag && esUuid(f.tag)) {
     cond.push(sql`EXISTS (
@@ -1083,12 +1087,16 @@ export async function listarProductos(
   const limit = Math.min(LIMITE_LISTADO_MAX, Math.max(1, opciones.limit ?? LIMITE_LISTADO_DEFAULT))
   const where = whereListado(tenantId, filtros)
   const nombre = nombreEfectivoSql(sql`o.nombre`, sql`p.description`, sql`p.name`, sql`p.code`)
+  // Con el filtro "Destacados" el orden por defecto es el de la vidriera: posición (menor primero),
+  // y a igual posición por nombre. Un orden explícito distinto del alfabético se respeta.
   const orden =
     opciones.orden === "nombre-desc"
       ? sql`${nombre} DESC, p.alegra_id DESC`
       : opciones.orden === "actualizado"
         ? sql`o.updated_at DESC NULLS LAST, p.alegra_id ASC`
-        : sql`${nombre} ASC, p.alegra_id ASC`
+        : filtros.destacado === "si"
+          ? sql`o.orden ASC, ${nombre} ASC, p.alegra_id ASC`
+          : sql`${nombre} ASC, p.alegra_id ASC`
 
   const db = getDb()
   const [filas, conteo] = await Promise.all([

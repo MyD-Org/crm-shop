@@ -37,6 +37,8 @@ const PRECIO_MAXIMO = /\/ 100\) <= \$\d+/g;
 // (ver stock-disponible.ts).
 const STOCK = /coalesce\("stock_reservado"\."qty", 0\)\) end\) is null or \(case when .*coalesce\("stock_reservado"\."qty", 0\)\) end\) > 0/;
 const cuenta = (sql: string, re: RegExp) => sql.match(re)?.length ?? 0;
+/** Sin el ORDER BY: "Destacados" ordena por stock, y eso no es un filtro. */
+const sinOrden = (sql: string) => sql.split(" order by ")[0];
 
 /** Separa las tres consultas de `getFacetas` por lo que agrupan/calculan. */
 function facetas(consultas: ConsultaGrabada[]) {
@@ -56,8 +58,8 @@ function facetas(consultas: ConsultaGrabada[]) {
 describe("filtro por rango de precio (SQL-1)", () => {
   it("con mínimo y máximo, el conteo y la página comparan el precio exhibido con los dos", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { precioMin: 500, precioMax: 50000 } });
-    expect(grabadora.consultas).toHaveLength(2);
-    for (const { sql, params } of grabadora.consultas) {
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(2);
+    for (const { sql, params } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(sql).toContain("jsonb_array_elements");
       expect(cuenta(sql, PRECIO_MINIMO)).toBe(1);
       expect(cuenta(sql, PRECIO_MAXIMO)).toBe(1);
@@ -68,7 +70,7 @@ describe("filtro por rango de precio (SQL-1)", () => {
 
   it("sólo con mínimo, hay una sola comparación (>=) y ninguna <=", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { precioMin: 1000 } });
-    for (const { sql, params } of grabadora.consultas) {
+    for (const { sql, params } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(cuenta(sql, PRECIO_MINIMO)).toBe(1);
       expect(cuenta(sql, PRECIO_MAXIMO)).toBe(0);
       expect(params).toContain(1000);
@@ -77,8 +79,8 @@ describe("filtro por rango de precio (SQL-1)", () => {
 
   it("sin filtros nuevos, el WHERE no menciona stock ni rango (misma forma que hoy)", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
-    for (const { sql } of grabadora.consultas) {
-      expect(sql).not.toMatch(STOCK);
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) {
+      expect(sinOrden(sql)).not.toMatch(STOCK);
       expect(cuenta(sql, PRECIO_MINIMO)).toBe(0);
       expect(cuenta(sql, PRECIO_MAXIMO)).toBe(0);
     }
@@ -88,15 +90,15 @@ describe("filtro por rango de precio (SQL-1)", () => {
 describe('filtro "solo con stock" (SQL-1)', () => {
   it("exige stock nulo (no inventariable) o positivo", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { soloStock: true } });
-    expect(grabadora.consultas).toHaveLength(2);
-    for (const { sql } of grabadora.consultas) expect(sql).toMatch(STOCK);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(2);
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sql).toMatch(STOCK);
   });
 
 
   it("el estado por defecto de la URL (sin parámetros) filtra por stock", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: filtrosDeEstado(leerEstado({})) });
-    expect(grabadora.consultas).toHaveLength(2);
-    for (const { sql } of grabadora.consultas) expect(sql).toMatch(STOCK);
+    expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(2);
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sql).toMatch(STOCK);
   });
 
 
@@ -105,7 +107,7 @@ describe('filtro "solo con stock" (SQL-1)', () => {
       soloVisibles: false,
       filtros: filtrosDeEstado(leerEstado({ stock: STOCK_INCLUYE_SIN_STOCK })),
     });
-    for (const { sql } of grabadora.consultas) expect(sql).not.toMatch(STOCK);
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sinOrden(sql)).not.toMatch(STOCK);
   });
 });
 
@@ -113,7 +115,7 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
   it("son cuatro consultas: categorías, marcas, rango de precio y atributos", async () => {
     await getFacetas({}, false);
     expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(4);
-    const { categorias, marcas, precio } = facetas(grabadora.consultas);
+    const { categorias, marcas, precio } = facetas(sinLecturaDelArbol(grabadora.consultas));
     expect(categorias.sql).toContain('"catalog_categories_shop"."name"');
     // Sin marca en la vista, cuenta bajo el nombre de su categoría de Alegra
     // (p. ej. "Iluminación"), con la categoría del mismo tenant.
@@ -127,7 +129,7 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
 
   it("cada grupo aplica el rango de precio salvo el propio rango", async () => {
     await getFacetas({ precioMin: 500, marcas: ["X"] }, false);
-    const { categorias, marcas, precio } = facetas(grabadora.consultas);
+    const { categorias, marcas, precio } = facetas(sinLecturaDelArbol(grabadora.consultas));
 
     expect(cuenta(categorias.sql, PRECIO_MINIMO)).toBe(1);
     expect(categorias.sql).toContain("in ($");
@@ -143,7 +145,7 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
 
   it("las marcas se cuentan con el stock filtrado y sin el filtro de marcas", async () => {
     await getFacetas({ soloStock: true, marcas: ["GENROD"] }, false);
-    const { categorias, marcas, precio } = facetas(grabadora.consultas);
+    const { categorias, marcas, precio } = facetas(sinLecturaDelArbol(grabadora.consultas));
     expect(marcas.sql).toMatch(STOCK);
     expect(marcas.params).not.toContain("GENROD");
     expect(categorias.sql).toMatch(STOCK);
@@ -170,23 +172,37 @@ describe("facetas con precio y stock (SQL-2, SQL-3)", () => {
   });
 });
 
-describe("orden por defecto (SQL-5)", () => {
-  it("sin orden explícito ordena sólo por nombre", async () => {
+describe("orden por defecto (SQL-5): destacados", () => {
+  it("sin orden explícito: stock, foto, accesorio, ronda por subcategoría, árbol, nombre y alegra_id", async () => {
     await getPaginaCatalogo({ soloVisibles: false });
-    const pagina = grabadora.consultas[1];
-    expect(pagina.sql).toMatch(/order by "catalog_products_shop"\."name" asc limit/);
+    // Lee el árbol de categorías para el preorden y las categorías de accesorios.
+    expect(grabadora.consultas.some((c) => c.sql.includes('"public"."shop_categories"'))).toBe(true);
+    const pagina = sinLecturaDelArbol(grabadora.consultas)[1];
+    const orden = pagina.sql.slice(pagina.sql.indexOf(" order by "));
+    expect(orden).toContain("row_number() over");
+    expect(orden).toContain("array_position(");
+    expect(orden).toContain("jsonb_array_length(");
+    expect(orden).toMatch(/"catalog_products_shop"\."name" asc, "catalog_products_shop"\."alegra_id" asc limit/);
+    // Sin manuales todavía: no lee `catalog_overlay.orden`.
+    expect(orden).not.toContain('"catalog_overlay"."orden"');
+  });
+
+  it("orden=nombre sigue siendo el alfabético, sin leer el árbol", async () => {
+    await getPaginaCatalogo({ soloVisibles: false, orden: "nombre" });
+    expect(grabadora.consultas).toHaveLength(2);
+    expect(grabadora.consultas[1].sql).toMatch(/order by "catalog_products_shop"\."name" asc limit/);
   });
 
   it("por precio conserva el desempate por nombre", async () => {
     await getPaginaCatalogo({ soloVisibles: false, orden: "precio-asc" });
-    const pagina = grabadora.consultas[1];
+    const pagina = sinLecturaDelArbol(grabadora.consultas)[1];
     expect(pagina.sql).toMatch(/\/ 100\) asc, "catalog_products_shop"\."name" asc limit/);
   });
 
   it('ninguna consulta menciona "ventas"', async () => {
     await getPaginaCatalogo({ soloVisibles: false });
     await getFacetas({}, false);
-    for (const { sql, params } of grabadora.consultas) {
+    for (const { sql, params } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(sql).not.toContain("ventas");
       expect(params).not.toContain("ventas");
     }
@@ -202,7 +218,7 @@ describe("filtro y facetas de atributos (`atr`)", () => {
       soloVisibles: false,
       filtros: { atributos: ["tono-calido", "tono-frio", "apto-exterior"] },
     });
-    for (const { sql, params } of grabadora.consultas) {
+    for (const { sql, params } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(cuenta(sql, REGEX)).toBe(3);
       expect(sql).toMatch(/\(.* ~\* \$\d+ or .* ~\* \$\d+\) and .* ~\* \$\d+/);
       expect(params).toContain(patron("tono-calido"));
@@ -214,7 +230,7 @@ describe("filtro y facetas de atributos (`atr`)", () => {
   it("ids desconocidos no filtran; sin atributos el WHERE no tiene `~*`", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { atributos: ["inventado"] } });
     await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
-    for (const { sql } of grabadora.consultas) expect(sql).not.toContain("~*");
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sql).not.toContain("~*");
   });
 
   it("una sola consulta de facetas cuenta cada atributo con los filtros de los OTROS grupos", async () => {
@@ -240,7 +256,7 @@ describe("faceta de atributos con el flag busqueda-ia apagado", () => {
     const f = await getFacetas({ sinFacetaAtributos: true }, false);
     expect(f.atributos).toEqual([]);
     expect(sinLecturaDelArbol(grabadora.consultas)).toHaveLength(3);
-    for (const { sql } of grabadora.consultas) expect(sql).not.toContain("count(*) filter");
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) expect(sql).not.toContain("count(*) filter");
   });
 });
 
@@ -250,7 +266,7 @@ describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
   it("sin `atributosEstructurados` ninguna consulta nombra la tabla (idéntico a la fase 1)", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { atributos: ["tono-calido"], potenciaMin: 10 } });
     await getFacetas({ atributos: ["tono-calido"], potenciaMax: 50 }, false);
-    for (const { sql } of grabadora.consultas) {
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(sql).not.toContain("catalog_atributos");
       expect(sql).not.toContain("potencia_w");
     }
@@ -264,14 +280,14 @@ describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
       soloVisibles: false,
       filtros: { atributos: ["tono-calido", "tension-220v"], atributosEstructurados: true, soloStock: false },
     });
-    const [conteo, pagina] = grabadora.consultas;
+    const [conteo, pagina] = sinLecturaDelArbol(grabadora.consultas);
     for (const { sql, params } of [conteo, pagina]) {
       expect(sql).toContain(TABLA);
       // Dos atributos ⇒ exactamente dos EXISTS en el WHERE (sin subconsultas repetidas).
       expect(cuenta(sql.split(" where (").slice(1).join(" where ("), EXISTS)).toBe(2);
       // OR con el patrón: el estructurado sólo suma productos.
       expect(sql).toMatch(/"valor_texto" in \(\$\d+\)\) or "shop"\.immutable_unaccent\(lower\(concat_ws\([\s\S]*?\)\)\) ~\* \$\d+\)/);
-      expect(sql).not.toMatch(/coalesce\(\(case when/);
+      expect(sinOrden(sql)).not.toMatch(/coalesce\(\(case when/);
       expect(params).toContain("tenant-test");
       expect(params).toEqual(expect.arrayContaining(["tono", "calido", "tension_v", 220, 230]));
       expect(params).toContain(ATRIBUTOS.find((a) => a.id === "tono-calido")!.patron);
@@ -283,7 +299,7 @@ describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
 
   it("potencia: los dos extremos en UN solo EXISTS sobre potencia_w, sólo con estructurados", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { atributosEstructurados: true, potenciaMin: 10, potenciaMax: 50, soloStock: false } });
-    const [conteo] = grabadora.consultas;
+    const [conteo] = sinLecturaDelArbol(grabadora.consultas);
     expect(cuenta(conteo.sql, EXISTS)).toBe(1);
     expect(conteo.sql).toMatch(/"valor_num" >= \$\d+ and "public"\."catalog_atributos"\."valor_num" <= \$\d+\)\)/);
     expect(conteo.params).toEqual(expect.arrayContaining(["potencia_w", 10, 50]));

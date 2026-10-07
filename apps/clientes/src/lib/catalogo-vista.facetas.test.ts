@@ -19,7 +19,7 @@ const base: EstadoCatalogo = {
   marcas: [],
   atributos: [],
   caracteristicas: [],
-  orden: "nombre",
+  orden: "destacados",
   pagina: 1,
   soloStock: true,
   vista: "grilla",

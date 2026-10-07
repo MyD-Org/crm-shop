@@ -282,6 +282,19 @@ describe("validarCamposOverlay", () => {
     expect(validarCamposOverlay(null).ok).toBe(false)
   })
 
+  it("el orden fuera de rango se rechaza con un mensaje en usted", () => {
+    for (const orden of [-1, 1.5, 10000, "abc"]) {
+      const r = validarCamposOverlay({ orden })
+      expect(r.ok).toBe(false)
+      if (!r.ok) {
+        expect(r.campo).toBe("orden")
+        expect(r.error).toBe("Ingrese un número entero entre 0 y 9999.")
+      }
+    }
+    expect(valor({ orden: 9999 })).toEqual({ orden: 9999 })
+    expect(valor({ orden: 0 })).toEqual({ orden: 0 })
+  })
+
   it("categoría y orden vacíos significan 'sin categoría' y 'sin destacar'", () => {
     expect(valor({ categoriaId: "", orden: null })).toEqual({ categoriaId: null, orden: null })
   })

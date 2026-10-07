@@ -22,6 +22,7 @@ import { AYUDA_VISIBLE_EN } from "./ayudas"
 import { FotosProducto } from "./FotosProducto"
 import { FichaTecnicaProducto } from "./FichaTecnicaProducto"
 import { AtributosProducto } from "./AtributosProducto"
+import { formularioDeOrden, ordenDeFormulario } from "./destacado"
 
 interface Props {
   producto: ProductoDto
@@ -59,6 +60,10 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
   const [visible, setVisible] = useState(producto.visible)
   const [ocultoEn, setOcultoEn] = useState<string[]>(producto.ocultoEnSucursales)
   const [mostrarMarca, setMostrarMarca] = useState(producto.mostrarMarca)
+  const formularioInicial = formularioDeOrden(producto.orden)
+  const [destacado, setDestacado] = useState(formularioInicial.destacado)
+  const [posicion, setPosicion] = useState(formularioInicial.posicion)
+  const [errorPosicion, setErrorPosicion] = useState("")
   // Las fotos y la ficha técnica se guardan APARTE del resto de la ficha: cada cambio se
   // persiste solo, porque la subida ya ocurrió y perderla al cancelar el diálogo dejaría
   // objetos huérfanos en R2.
@@ -74,8 +79,16 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
   ]
 
   async function guardar() {
-    setGuardando(true)
     setError("")
+    setErrorPosicion("")
+    // Solo se manda `orden` si cambió la casilla o la posición: guardar otro dato no debe tocarlo.
+    const cambioDestacado = destacado !== formularioInicial.destacado || posicion.trim() !== formularioInicial.posicion
+    const orden = ordenDeFormulario({ destacado, posicion })
+    if (cambioDestacado && !orden.ok) {
+      setErrorPosicion(orden.error)
+      return
+    }
+    setGuardando(true)
     try {
       const { producto: actualizado } = await api<{ producto: ProductoDto }>(
         `/api/admin/catalogo/productos/${encodeURIComponent(producto.alegraId)}`,
@@ -88,6 +101,7 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
             visible,
             mostrarMarca,
             tagIds,
+            ...(cambioDestacado && orden.ok ? { orden: orden.orden } : {}),
             // Solo se manda si el campo se mostró: con una sola sucursal no hay nada que elegir.
             ...(sucursales.length > 1 ? { ocultoEnSucursales: ocultoEn } : {}),
           }),
@@ -281,6 +295,30 @@ export function ProductoDialog({ producto, categorias, tags, sucursales, sincron
               <Checkbox checked={mostrarMarca} onCheckedChange={setMostrarMarca} aria-label="Mostrar la marca en la tienda" />
               Mostrar la marca en la tienda
             </label>
+
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--ink)" }}>
+                <Checkbox checked={destacado} onCheckedChange={setDestacado} aria-label="Destacar en la categoría" />
+                Destacar en la categoría
+              </label>
+              <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+                Se muestra primero en su categoría y en las categorías que la contienen.
+              </p>
+              {destacado && (
+                <Field
+                  label="Posición (opcional)"
+                  hint="Un número menor se muestra antes. Sin posición, queda después de los que tienen una."
+                  error={errorPosicion || undefined}
+                >
+                  <Input
+                    value={posicion}
+                    onChange={(e) => setPosicion(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="Por ejemplo: 1"
+                  />
+                </Field>
+              )}
+            </div>
 
             {sucursales.length > 1 && (
               <VisibleEn sucursales={sucursales} ocultoEn={ocultoEn} onCambio={setOcultoEn} />

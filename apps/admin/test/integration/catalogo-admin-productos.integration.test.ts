@@ -234,6 +234,55 @@ describe("API del panel de catálogo — productos", () => {
       expect((await listar("?categoria=sin")).body.total).toBe(1)
     })
 
+    it("filtro 'Destacados': sólo los que tienen orden, por posición y luego nombre", async () => {
+      await seedProducto(TENANT_A, "1", { name: "Zócalo" })
+      await seedProducto(TENANT_A, "2", { name: "Caja" })
+      await seedProducto(TENANT_A, "3", { name: "Borne" })
+      await seedProducto(TENANT_A, "4", { name: "Aislador" })
+      await seedProducto(TENANT_A, "5", { name: "Sin destacar" })
+      await guardarOverlay(TENANT_A, "1", { orden: 9999 })
+      await guardarOverlay(TENANT_A, "2", { orden: 2 })
+      await guardarOverlay(TENANT_A, "3", { orden: 9999 })
+      await guardarOverlay(TENANT_A, "4", { orden: 1 })
+      await guardarOverlay(TENANT_A, "5", { orden: null })
+
+      const r = await listar("?destacado=si")
+      expect(r.body.total).toBe(4)
+      // 1 (Aislador), 2 (Caja) y los 9999 sin posición por nombre (Borne, Zócalo).
+      expect(r.body.items.map((i) => i.alegraId)).toEqual(["4", "2", "3", "1"])
+      // Sin el filtro vuelve el listado completo.
+      expect((await listar("")).body.total).toBe(5)
+    })
+
+    it("'Destacados' se combina con la categoría y trae el subárbol, sin los de otro tenant", async () => {
+      const padre = await crearCategoria(TENANT_A, { nombre: "Electricidad" })
+      if (padre.kind !== "ok") throw new Error("seed")
+      const hija = await crearCategoria(TENANT_A, { nombre: "Cables", parentId: padre.row.id })
+      if (hija.kind !== "ok") throw new Error("seed")
+      const otra = await crearCategoria(TENANT_A, { nombre: "Iluminación" })
+      if (otra.kind !== "ok") throw new Error("seed")
+
+      for (const id of ["1", "2", "3", "4"]) await seedProducto(TENANT_A, id, { description: `Producto ${id}` })
+      await seedProducto(TENANT_B, "1", { description: "Ajeno" })
+      await guardarOverlay(TENANT_A, "1", { categoriaId: padre.row.id, orden: 3 })
+      await guardarOverlay(TENANT_A, "2", { categoriaId: hija.row.id, orden: 1 })
+      await guardarOverlay(TENANT_A, "3", { categoriaId: otra.row.id, orden: 1 })
+      await guardarOverlay(TENANT_A, "4", { categoriaId: hija.row.id })
+      await guardarOverlay(TENANT_B, "1", { orden: 1 })
+
+      const r = await listar(`?destacado=si&categoria=${padre.row.id}`)
+      expect(r.body.total).toBe(2)
+      expect(r.body.items.map((i) => i.alegraId)).toEqual(["2", "1"])
+    })
+
+    it("un valor de 'destacado' fuera de dominio es 400", async () => {
+      const res = await productos.GET(req("/api/admin/catalogo/productos?destacado=no"))
+      expect(res.status).toBe(400)
+      const body = (await res.json()) as { error: string; campo?: string }
+      expect(body.campo).toBe("destacado")
+      expect(body.error).toMatch(/^El\s/)
+    })
+
     it("busca por nombre propio, por descripción de Alegra y por el código viejo", async () => {
       await seedProducto(TENANT_A, "1", { name: "JDSDA261", description: "TERMICA 2X16" })
       await seedProducto(TENANT_A, "2", { name: "OTRO", description: "CABLE 2.5" })
@@ -335,6 +384,22 @@ describe("API del panel de catálogo — productos", () => {
       expect((await listar("?orden=nombre")).body.items.map((i) => (i as { nombreEfectivo?: string }).nombreEfectivo)).toEqual([
         "PUNTAS PH2 X 50MM",
       ])
+    })
+
+    it("destacar, dar posición y quitar: el PATCH persiste orden 9999, N y null", async () => {
+      await seedProducto(TENANT_A, "1")
+      const patch = async (body: unknown) => {
+        const res = await producto.PATCH(req("/api/admin/catalogo/productos/1", { method: "PATCH", body }), params("1"))
+        return { status: res.status, body: (await res.json()) as { producto?: { orden: number | null }; error?: string } }
+      }
+
+      expect((await patch({ orden: 9999 })).body.producto?.orden).toBe(9999)
+      expect((await patch({ orden: 3 })).body.producto?.orden).toBe(3)
+      expect((await patch({ orden: null })).body.producto?.orden).toBeNull()
+
+      const fuera = await patch({ orden: 10000 })
+      expect(fuera.status).toBe(422)
+      expect(fuera.body.error).toBe("Ingrese un número entero entre 0 y 9999.")
     })
 
     it("guardar sólo el nombre no toca categoría, etiquetas ni fotos", async () => {

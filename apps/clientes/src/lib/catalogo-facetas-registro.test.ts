@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import fixture from "../db/__fixtures__/atributos-claves.json";
 import { CLAVES_ESTRUCTURADAS } from "./catalogo-caracteristicas";
 import { RANGOS, RANGOS_SOLO_FACETA, rangoDeClave } from "./catalogo-atributos-medida";
-import { REGISTRO, UMBRAL_COBERTURA, claveFacetable, elegirFacetas, etiquetaValor, type EntradaFacetas } from "./catalogo-facetas-registro";
+import {
+  REGISTRO,
+  UMBRAL_COBERTURA,
+  claveFacetable,
+  elegirFacetas,
+  etiquetaValor,
+  rangoDeValorLista,
+  valorDeListaValido,
+  type EntradaFacetas,
+} from "./catalogo-facetas-registro";
 
 /** Distribuciones sintéticas: ningún dato real de clientes. */
 const entrada = (parcial: Partial<EntradaFacetas> = {}): EntradaFacetas => ({
@@ -56,6 +65,8 @@ describe("etiquetaValor", () => {
     ["polos", "2", "2"],
     ["corriente_a", "20", "20 A"],
     ["corriente_a", "0.5", "0,5 A"],
+    ["corriente_a", "4-6", "4–6 A"],
+    ["corriente_a", "1.6-2.5", "1,6–2,5 A"],
     ["ip", "54", "IP54"],
     ["zocalo", "e27", "E27"],
     ["curva", "c", "C"],
@@ -321,5 +332,33 @@ describe("diametro_mm y ancho_mm (caños y bandejas)", () => {
 
   it("sin filas (la migración 0070 todavía no escribió nada) no se ofrece nada y no rompe", () => {
     expect(elegirFacetas(entrada({ denominadores: { diametro_mm: 100, ancho_mm: 100 } }))).toEqual([]);
+  });
+});
+
+describe("corriente: rangos de regulación como opciones de la lista", () => {
+  it("un rango es un valor válido de corriente (a < b, dentro del rango de la clave); no de otras claves", () => {
+    expect(valorDeListaValido("corriente_a", "4-6")).toBe(true);
+    expect(valorDeListaValido("corriente_a", "0.63-1")).toBe(true);
+    expect(rangoDeValorLista("corriente_a", "1.6-2.5")).toEqual([1.6, 2.5]);
+    expect(valorDeListaValido("corriente_a", "6-4")).toBe(false);
+    expect(valorDeListaValido("corriente_a", "4-4")).toBe(false);
+    expect(valorDeListaValido("corriente_a", "04-6")).toBe(false);
+    expect(valorDeListaValido("corriente_a", "4-9000")).toBe(false);
+    expect(valorDeListaValido("polos", "1-2")).toBe(false);
+    expect(valorDeListaValido("seccion_mm2", "1.5-2.5")).toBe(false);
+  });
+
+  it("'4–6 A' va separado de '6 A' y ordenado por mínimo y tope", () => {
+    const r = elegirFacetas(
+      entrada({ filas: filas("corriente_a", { "6": 10, "4-6": 2, "6-10": 3, "1.6-2.5": 1, "10": 4 }), denominadores: { corriente_a: 20 } }),
+    );
+    if (r[0]?.control !== "lista") throw new Error("lista");
+    expect(r[0].items.map((i) => [i.valor, i.etiqueta, i.count])).toEqual([
+      ["1.6-2.5", "1,6–2,5 A", 1],
+      ["4-6", "4–6 A", 2],
+      ["6", "6 A", 10],
+      ["6-10", "6–10 A", 3],
+      ["10", "10 A", 4],
+    ]);
   });
 });

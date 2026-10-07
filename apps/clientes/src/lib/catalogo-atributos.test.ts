@@ -238,7 +238,7 @@ describe("ids dinámicos de medida (R4.1, R4.4, R4.6, R4.7)", () => {
   it("el atributo sintetizado trae su medida, su criterio y su patrón", () => {
     const a = atributoPorId("corriente_a:20")!;
     expect("medida" in a && a.medida).toEqual({ clave: "corriente_a", op: "eq", valor: 20 });
-    expect(a.estructurado).toEqual({ clave: "corriente_a", numeros: [20] });
+    expect(a.estructurado).toEqual({ clave: "corriente_a", numeros: [20], enRango: 20 });
     expect(a.patron).toBeDefined();
     expect(new RegExp(a.patron!, "i").test("interruptor 2p 20a c")).toBe(true);
     expect(new RegExp(a.patron!, "i").test("interruptor 2p 25a c")).toBe(false);
@@ -329,5 +329,20 @@ describe("ids dinámicos de medida (R4.1, R4.4, R4.6, R4.7)", () => {
       if (a) expect(a.id).toBe(id);
       expect(atributosValidos([id]).length).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("corriente: un relé térmico o guardamotor de regulación a-b cumple lo que cae adentro", () => {
+  const crit = (id: string) => atributoPorId(id)!.estructurado!;
+  const rele = { n: 6, t: "4-6" };
+  it("5 A: cumple el relé 4-6 (número = tope); contradice la térmica de 6 A", () => {
+    expect(cumpleEstructurado(crit("corriente_a:5"), rele)).toBe(true);
+    expect(cumpleEstructurado(crit("corriente_a:5"), { n: 6, t: null })).toBe(false);
+    expect(cumpleEstructurado(crit("corriente_a:8"), rele)).toBe(false);
+    expect(cumpleEstructurado(crit("corriente_a:2"), { n: 2.5, t: "1.6-2.5" })).toBe(true);
+  });
+  it("6 A: cumplen la térmica de 6 A y el relé 4-6", () => {
+    expect(cumpleEstructurado(crit("corriente_a:6"), { n: 6, t: null })).toBe(true);
+    expect(cumpleEstructurado(crit("corriente_a:6"), rele)).toBe(true);
   });
 });

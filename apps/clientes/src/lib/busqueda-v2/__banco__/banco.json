@@ -153,6 +153,8 @@
     { "q": "lampara para el baño", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true },
     { "q": "luz para la ducha", "perfil": "particular", "intencion": "necesidad", "nuncaSinResultados": true },
     { "q": "panel para exterior", "perfil": "particular", "intencion": "producto", "categoria": ["Paneles", "Embutidos", "ILUMINACION"], "debeIncluirEnTop24": ["panel"], "nuncaSinResultados": true },
-    { "q": "lampara para la terraza", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true }
+    { "q": "lampara para la terraza", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true },
+    { "q": "rele termico 5a", "perfil": "profesional", "tipo": "medida", "intencion": "producto", "categoria": ["Reles termicos", "Reles"], "debeIncluirEnTop24": ["rele"], "nuncaSinResultados": true, "medidas": [{ "clave": "corriente_a", "valor": 5 }] },
+    { "q": "guardamotor 4a", "perfil": "profesional", "tipo": "medida", "intencion": "producto", "categoria": ["Protecciones electricas", "Contactores", "Automatismo y control"], "debeIncluirEnTop24": ["guardamotor"], "nuncaSinResultados": true, "medidas": [{ "clave": "corriente_a", "valor": 4 }] }
   ]
 }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/context/CartContext";
 import { MetasCarrito } from "@/components/carrito/MetasCarrito";
-import { lineasConProducto, metaCuotasFicha } from "@/lib/ficha-cuotas-carrito";
+import { lineasConProducto } from "@/lib/ficha-cuotas-carrito";
 import type { MetaCarrito } from "@/lib/metas-carrito";
 import type { ProgresoCuotas } from "@/lib/cuotas-sin-interes";
 
@@ -11,19 +11,19 @@ import type { ProgresoCuotas } from "@/lib/cuotas-sin-interes";
 const ESPERA_MS = 350;
 
 interface Resultado {
-  /** Producto y líneas que originaron la meta: una meta de otro producto no se muestra. */
+  /** Producto que originó el progreso: el de otro producto no se usa. */
   productoId: string;
-  meta: MetaCarrito | null;
+  progreso: ProgresoCuotas | null;
 }
 
 /**
  * Cuotas sin interés de la ficha "con su carrito": cotiza (sin tocar el carrito) lo que ya tiene más
- * este producto con la cantidad elegida y dice si la compra llega a cuotas sin interés o cuánto falta.
- * Todo del lado del navegador: la ficha pública y cacheada no sabe nada del carrito. Carrito vacío,
- * flag de cuotas apagado, cuenta corriente, lista privada o sin mínimos cargados: no dibuja nada
- * (el servidor no devuelve progreso). Mientras recotiza conserva la última meta, sin parpadeo.
+ * este producto con la cantidad elegida. Devuelve el progreso de la compra o null. Todo del lado del
+ * navegador: la ficha pública y cacheada no sabe nada del carrito. Carrito vacío, `activo` en false, flag de cuotas apagado, cuenta
+ * corriente, lista privada o sin mínimos cargados: null (el servidor no devuelve progreso). Mientras
+ * recotiza conserva el último, sin parpadeo.
  */
-export function CuotasConCarrito({ productoId, qty }: { productoId: string; qty: number }) {
+export function useProgresoCuotasCarrito(productoId: string, qty: number, activo = true): ProgresoCuotas | null {
   const { items, ready } = useCart();
   const [res, setRes] = useState<Resultado | null>(null);
 
@@ -34,9 +34,9 @@ export function CuotasConCarrito({ productoId, qty }: { productoId: string; qty:
       productoId,
       qty,
     );
-    if (!lineas) return null;
+    if (!lineas || !activo) return null;
     return JSON.stringify([...lineas].sort((a, b) => a.id.localeCompare(b.id)));
-  }, [items, productoId, qty]);
+  }, [items, productoId, qty, activo]);
 
   useEffect(() => {
     if (!ready || clave === null) return;
@@ -52,14 +52,14 @@ export function CuotasConCarrito({ productoId, qty }: { productoId: string; qty:
         });
         if (!r.ok) {
           // 429 o error: es un dato accesorio, no se muestra nada ni se avisa.
-          setRes({ productoId, meta: null });
+          setRes({ productoId, progreso: null });
           return;
         }
         const json = (await r.json()) as { progresoCuotas?: ProgresoCuotas };
-        setRes({ productoId, meta: metaCuotasFicha(json.progresoCuotas) });
+        setRes({ productoId, progreso: json.progresoCuotas ?? null });
       } catch (err) {
         if ((err as Error)?.name === "AbortError") return;
-        setRes({ productoId, meta: null });
+        setRes({ productoId, progreso: null });
       }
     }, ESPERA_MS);
     return () => {
@@ -68,10 +68,16 @@ export function CuotasConCarrito({ productoId, qty }: { productoId: string; qty:
     };
   }, [clave, ready, productoId]);
 
-  if (clave === null || res === null || res.productoId !== productoId || res.meta === null) return null;
+  if (clave === null || res === null || res.productoId !== productoId) return null;
+  return res.progreso;
+}
+
+/** El recuadro con la barra (`metaCuotasFicha`): qué nivel ya tiene la compra con el carrito o cuánto le falta. */
+export function CuotasConCarrito({ meta }: { meta: MetaCarrito | null }) {
+  if (!meta) return null;
   return (
     <div className="mt-3" data-testid="cuotas-con-carrito">
-      <MetasCarrito metas={[res.meta]} compacta />
+      <MetasCarrito metas={[meta]} compacta />
     </div>
   );
 }

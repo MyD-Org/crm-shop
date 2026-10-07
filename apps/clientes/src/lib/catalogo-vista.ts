@@ -62,20 +62,21 @@ export function migas(estado: EstadoCatalogo): BreadcrumbItem[] {
  */
 export const ORDENES: { label: string; value: OrdenCatalogo }[] = [
   { label: "Relevancia", value: "relevancia" },
+  { label: "Destacados", value: "destacados" },
   { label: "Nombre A-Z", value: "nombre" },
   { label: "Precio: menor a mayor", value: "precio-asc" },
   { label: "Precio: mayor a menor", value: "precio-desc" },
 ];
 
 /**
- * Órdenes que se ofrecen para un estado: "Relevancia" sólo con búsqueda (o si
- * ya es el orden vigente: con `filtrosSinBusqueda` el panel recibe el estado
- * sin `query`, y el Select no puede quedar sin la opción elegida).
+ * Órdenes que se ofrecen para un estado: "Relevancia" sólo con búsqueda y
+ * "Destacados" sólo sin búsqueda, salvo que sea el orden vigente (con
+ * `filtrosSinBusqueda` el panel recibe el estado sin `query`, y el Select no
+ * puede quedar sin la opción elegida).
  */
 export function ordenesPara(estado: Pick<EstadoCatalogo, "query" | "orden">) {
-  return estado.query || estado.orden === "relevancia"
-    ? ORDENES
-    : ORDENES.filter((o) => o.value !== "relevancia");
+  const fueraDeCaso: OrdenCatalogo = estado.query ? "destacados" : "relevancia";
+  return ORDENES.filter((o) => o.value !== fueraDeCaso || o.value === estado.orden);
 }
 
 /**

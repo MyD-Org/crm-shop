@@ -48,6 +48,13 @@ import { activoSql, joinReserva, preciosSql, stockSql } from "./stock-disponible
 import { enTenantCatalogo, joinCategoriasAlegra } from "./catalogo-fuente";
 import { ORDEN_DEFAULT, type OrdenCatalogo, type RangoPrecio } from "./catalogo-url";
 import { fotosPermitidas, hostsDeMedios } from "./catalogo-medios";
+import {
+  PATRON_CATEGORIA_ACCESORIO,
+  PATRON_NOMBRE_ACCESORIO,
+  idsCategoriasAccesorio,
+  literalUuids,
+  preordenArbol,
+} from "./catalogo-destacados";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
 import { precioFinal } from "./precio-final";
@@ -1207,11 +1214,71 @@ function condicionesDe(
 }
 
 /**
- * ORDER BY según el criterio elegido. El default (`nombre`) es el alfabético.
+ * Lo que el orden "destacados" necesita del árbol de categorías propias, ya calculado en TS
+ * (catalogo-destacados.ts): el orden de lectura del árbol y las categorías de accesorios.
+ */
+interface ContextoDestacados {
+  preorden: string[];
+  accesorio: string[];
+}
+
+/** Contexto de destacados a partir del árbol (vacío = el tenant no armó árbol). */
+function contextoDestacados(arbol: NodoCategoria[]): ContextoDestacados {
+  return { preorden: preordenArbol(arbol), accesorio: idsCategoriasAccesorio(arbol) };
+}
+
+/**
+ * ORDER BY de "Destacados" (default sin búsqueda), claves lexicográficas sobre TODO el conjunto
+ * filtrado (no sólo la página, así la paginación queda estable):
+ * 1. (pendiente: destacados a mano del admin, `catalog_overlay.orden`, cuando el Shop declare la
+ *    columna en crm.ts) — hoy no se lee;
+ * 2. con stock (null = no inventariable = disponible) primero;
+ * 3. con foto primero;
+ * 4. no accesorio primero (categoría propia o ancestra, o de Alegra, de accesorios; o el nombre
+ *    arranca por una palabra de accesorio: ver catalogo-destacados.ts);
+ * 5. ronda: el puesto del producto dentro de su escalón (2–4) y su subcategoría, por stock desc.
+ *    Ordenar por la ronda intercala las subcategorías: el 1.º de cada una, después el 2.º…;
+ * 6. dentro de la ronda, la subcategoría por su lugar en el árbol (sin árbol, la de Alegra);
+ * 7. nombre y `alegra_id`: desempate estable.
+ * Sólo ordena: no saca a nadie del resultado.
+ */
+function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilidad) {
+  const stock = disp ? stockSucursalSql(disp) : stockSql;
+  const sinStock = sql`(case when ${stock} is null or ${stock} > 0 then 0 else 1 end)`;
+  const sinFoto = sql`(case when jsonb_typeof(${crmOverlay.fotos}) = 'array' and jsonb_array_length(${crmOverlay.fotos}) > 0 then 0 else 1 end)`;
+  const accesorio = sql`(case when ${crmOverlay.categoriaId} = any(${literalUuids(ctx.accesorio)}::uuid[])
+      or coalesce(btrim(${sinTildes(crmCategoriasAlegra.name)}) ~ ${PATRON_CATEGORIA_ACCESORIO}, false)
+      or btrim(${sinTildes(nombreExhibidoSql)}) ~ ${PATRON_NOMBRE_ACCESORIO}
+    then 1 else 0 end)`;
+  const grupo = sql`coalesce(${crmOverlay.categoriaId}::text, ${crmCategoriasAlegra.name}, '')`;
+  const ronda = sql`row_number() over (
+    partition by ${sinStock}, ${sinFoto}, ${accesorio}, ${grupo}
+    order by ${stock} desc nulls last, ${crmCatalogo.name}, ${crmCatalogo.alegraId})`;
+  const posicionGrupo = sql`array_position(${literalUuids(ctx.preorden)}::uuid[], ${crmOverlay.categoriaId})`;
+  return [
+    sql`${sinStock} asc`,
+    sql`${sinFoto} asc`,
+    sql`${accesorio} asc`,
+    sql`${ronda} asc`,
+    sql`${posicionGrupo} asc nulls last`,
+    sql`${grupo} asc`,
+    asc(crmCatalogo.name),
+    asc(crmCatalogo.alegraId),
+  ];
+}
+
+/**
+ * ORDER BY según el criterio elegido. Sin búsqueda el default es `destacados`
+ * (ver `ordenDestacadosSql`); `nombre` es el alfabético.
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
  */
-function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: ContextoDisponibilidad) {
+function ordenDe(
+  orden: OrdenCatalogo,
+  filtros: FiltrosCatalogo,
+  disp?: ContextoDisponibilidad,
+  destacados?: ContextoDestacados,
+) {
   switch (orden) {
     case "relevancia": {
       // Búsqueda v2: el puntaje del plan, aunque no quede texto filtrando.
@@ -1233,6 +1300,8 @@ function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: Contexto
       return [sql`${precioExhibidoSql} asc`, asc(crmCatalogo.name)];
     case "precio-desc":
       return [sql`${precioExhibidoSql} desc`, asc(crmCatalogo.name)];
+    case "destacados":
+      return ordenDestacadosSql(destacados ?? contextoDestacados([]), disp);
     default:
       return [asc(crmCatalogo.name)];
   }
@@ -1291,8 +1360,13 @@ export async function getPaginaCatalogo(opts: {
   const total = conteo?.total ?? 0;
   const paginas = Math.max(Math.ceil(total / porPagina), 1);
   const pagina = opts.sinConteo ? 1 : acotarPagina(opts.pagina ?? 1, paginas);
+  const orden = opts.orden ?? ORDEN_DEFAULT;
+  const hayFilas = Boolean(total || opts.sinConteo);
+  // El árbol sólo hace falta para "destacados" (y sólo si hay algo que ordenar).
+  const destacados =
+    hayFilas && orden === "destacados" ? contextoDestacados(await getArbolCategorias()) : undefined;
 
-  const filas = total || opts.sinConteo
+  const filas = hayFilas
     ? await getDb()
         .select(columnasCatalogo(opts.disp, filtros.atributosEstructurados))
         .from(crmCatalogo)
@@ -1300,7 +1374,7 @@ export async function getPaginaCatalogo(opts: {
         .leftJoin(crmOverlay, joinOverlay())
         .leftJoin(stockReservado, joinReserva())
         .where(where)
-        .orderBy(...ordenDe(opts.orden ?? ORDEN_DEFAULT, filtros, opts.disp))
+        .orderBy(...ordenDe(orden, filtros, opts.disp, destacados))
         .limit(porPagina)
         .offset((pagina - 1) * porPagina)
     : [];

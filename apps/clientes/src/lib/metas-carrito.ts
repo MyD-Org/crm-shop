@@ -11,6 +11,13 @@ export interface MetaCarrito {
   texto: string;
   /** Fragmento de `texto` que se resalta (el monto que falta); ausente = sin énfasis. */
   enfasis?: string;
+  /**
+   * Segunda línea, ARRIBA de `texto`, con lo ya alcanzado (ej. "Ya tiene 8 cuotas sin interés de
+   * $20.000."): `texto` y la barra quedan para el próximo nivel. Ausente = una sola línea.
+   */
+  textoAlcanzado?: string;
+  /** Fragmento de `textoAlcanzado` que se resalta. */
+  enfasisAlcanzado?: string;
   /** 0..100 */
   pct: number;
   alcanzada: boolean;
@@ -34,10 +41,18 @@ export function metaEnvio(p: { faltante: number; pct: number; alcanzado: boolean
 export function metaCuotas(p: ProgresoCuotas | null | undefined): MetaCarrito | null {
   if (!p) return null;
   if (p.proximo) {
+    const alcanzado =
+      p.cuotasActuales !== null && p.montoCuota != null
+        ? {
+            textoAlcanzado: TEXTOS_CUOTAS.yaTiene(p.cuotasActuales, p.montoCuota),
+            enfasisAlcanzado: TEXTOS_CUOTAS.cuotasConMonto(p.cuotasActuales, p.montoCuota),
+          }
+        : {};
     return {
       id: "cuotas",
       texto: TEXTOS_CUOTAS.faltaParaCuotas(p.proximo.falta, p.proximo.cuotas),
       enfasis: TEXTOS_CUOTAS.montoFaltante(p.proximo.falta),
+      ...alcanzado,
       pct: p.pct,
       alcanzada: false,
       aria: TEXTOS_CUOTAS.barraAria,
@@ -46,7 +61,10 @@ export function metaCuotas(p: ProgresoCuotas | null | undefined): MetaCarrito | 
   if (p.cuotasActuales === null) return null;
   return {
     id: "cuotas",
-    texto: TEXTOS_CUOTAS.cuotasCompletas(p.cuotasActuales),
+    texto:
+      p.montoCuota != null
+        ? TEXTOS_CUOTAS.compraYaTiene(p.cuotasActuales, p.montoCuota)
+        : TEXTOS_CUOTAS.cuotasCompletas(p.cuotasActuales),
     pct: 100,
     alcanzada: true,
     aria: TEXTOS_CUOTAS.barraAria,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button, QuantityStepper, Skeleton } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
+import { CuotasConCarrito } from "@/components/producto/CuotasConCarrito";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { hayCuotasParaModal, mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
@@ -307,6 +308,7 @@ export function ProductoClient({
                   />
                 </div>
               )}
+              {!noComprable && !agotado && <CuotasConCarrito productoId={producto.id} qty={qty} />}
             </div>
 
             <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${estado.clases}`}>

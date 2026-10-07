@@ -34,6 +34,7 @@ const LISTA_BLANCA = new Set([
   "app/api/carrito/route.ts",
   "app/api/carrito/cotizar/route.ts",
   "app/api/pedidos/route.ts",
+  "app/api/pedidos/[id]/medio/route.ts",
   "app/api/chat-ia/productos/route.ts",
 ]);
 

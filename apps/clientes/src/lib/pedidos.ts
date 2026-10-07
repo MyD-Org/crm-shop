@@ -1653,6 +1653,169 @@ export async function cancelarPedidoPendiente(
 }
 
 /**
+ * Lo que hace falta del pedido pendiente propio para cambiarle el medio de pago (entrega, medio
+ * actual y líneas), sin lock: la decisión definitiva se toma en `cambiarMedioPedido`. null = no es
+ * del comprador o no está pendiente.
+ */
+export async function pedidoParaCambiarMedio(
+  id: string,
+  dueno: DuenoPedidos,
+): Promise<{ entregaTipo: EntregaTipo; pagoMetodo: string; lineas: { id: string; qty: number }[] } | null> {
+  const db = getDb();
+  const [p] = await db
+    .select({ entregaTipo: orders.entregaTipo, pagoMetodo: orders.pagoMetodo })
+    .from(orders)
+    .where(and(eq(orders.id, id), esDeSuDueno(dueno), eq(orders.estado, "pendiente")))
+    .limit(1);
+  if (!p) return null;
+  const items = await db
+    .select({ id: orderItems.alegraItemId, qty: orderItems.qty })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, id))
+    .orderBy(asc(orderItems.id));
+  return {
+    entregaTipo: p.entregaTipo as EntregaTipo,
+    pagoMetodo: p.pagoMetodo,
+    lineas: items.map((i) => ({ id: i.id, qty: Number(i.qty) })),
+  };
+}
+
+export type ResultadoCambioMedio =
+  | { ok: true; id: string; numero: string; cuotas: number | null; total: number; cuentaPago: CuentaPagoSnapshot | null }
+  | {
+      ok: false;
+      motivo:
+        | "no_existe"
+        /** El medio actual no es de cobro en línea: el pedido ya quedó "a confirmar", no se cambia. */
+        | "no_cambia"
+        | "pago_en_curso"
+        | "pago_informado"
+        /** Las líneas del pedido ya no coinciden con las cotizadas. */
+        | "lineas_distintas";
+    };
+
+/**
+ * Cambia el medio de pago de un pedido pendiente con cobro en línea, SOBRE EL MISMO pedido (mismo id y
+ * número). Una transacción con el lock de la fila (el mismo que `reservarIntento` y la cancelación):
+ * no corre a la vez que un cobro. Valida dueño, estado y que no haya intento abierto ni comprobante
+ * informado; congela medio, lista, cuotas, precios de las líneas, totales, cuenta (transferencia) y
+ * vencimiento de la reserva. Las cantidades no cambian: la reserva de stock se mantiene. Con un medio
+ * sin cobro en línea el pedido pasa a ser una compra: se vacía el carrito del servidor.
+ */
+export async function cambiarMedioPedido(
+  id: string,
+  dueno: DuenoPedidos,
+  nuevo: {
+    pagoMetodo: string;
+    cuotas: number | null;
+    /** Lista efectivamente usada para cotizar (privada del comprador, o la del medio). */
+    idPriceList: string | null;
+    cotizacion: Cotizacion;
+  },
+): Promise<ResultadoCambioMedio> {
+  const cot = nuevo.cotizacion;
+  if (cot.hayProblemas) throw new Error("No se puede cambiar el medio con una cotización con problemas");
+  return getDb().transaction(async (tx): Promise<ResultadoCambioMedio> => {
+    const [pedido] = await tx
+      .select({
+        id: orders.id,
+        numero: orders.numero,
+        pagoMetodo: orders.pagoMetodo,
+        sucursal: orders.sucursal,
+        costoEnvio: orders.costoEnvio,
+        clerkUserId: orders.clerkUserId,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.id, id),
+          esDeSuDueno(dueno),
+          eq(orders.estado, "pendiente"),
+          inArray(orders.pagoEstado, ["pendiente", "fallido"]),
+          isNull(orders.facturaAlegraId),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!pedido) return { ok: false, motivo: "no_existe" };
+    if (!esPagoEnLinea(pedido.pagoMetodo)) return { ok: false, motivo: "no_cambia" };
+
+    const [abierto] = await tx
+      .select({ id: pagoIntentos.id })
+      .from(pagoIntentos)
+      .where(and(eq(pagoIntentos.orderId, id), eq(pagoIntentos.estado, "pendiente"), intentoDeEsteTenant()))
+      .limit(1);
+    if (abierto) return { ok: false, motivo: "pago_en_curso" };
+    if ((await pedidosConComprobanteInformado(shopTenantId(), [id], tx)).has(id)) {
+      return { ok: false, motivo: "pago_informado" };
+    }
+
+    // Las mismas líneas y cantidades: el cambio sólo recotiza precios.
+    const filas = await tx
+      .select({ id: orderItems.alegraItemId, qty: orderItems.qty })
+      .from(orderItems)
+      .where(eq(orderItems.orderId, id));
+    const actuales = new Map(filas.map((f) => [f.id, Number(f.qty)]));
+    const mismas =
+      actuales.size === cot.lineas.length && cot.lineas.every((l) => actuales.get(l.id) === l.qty);
+    if (!mismas) return { ok: false, motivo: "lineas_distintas" };
+
+    // Reserva: el vencimiento depende del medio (24 h en línea; `reserva_dias` sin cobro en línea).
+    let reglasReserva: Pick<ReglasVentaTenant, "reservaDias"> | null = null;
+    try {
+      reglasReserva = await tx.transaction((sp) => leerReglasVenta(sp));
+    } catch {
+      reglasReserva = null;
+    }
+    const reservaVenceEn = calcularReservaVenceEn(nuevo.pagoMetodo, reglasReserva);
+
+    // Subtotal + impuestos de las líneas; el envío congelado en el pedido no se toca.
+    const costoEnvio = num(pedido.costoEnvio);
+    const total = Math.round((cot.subtotal + cot.iva + costoEnvio) * 100) / 100;
+    let cuentaPago: CuentaPagoSnapshot | null = null;
+    if (nuevo.pagoMetodo === SLUG_TRANSFERENCIA) {
+      const entrada = { sucursal: pedido.sucursal ?? null, total };
+      const resuelta = resolverCuenta(await leerCuentasBancariasEnTx(tx), entrada);
+      cuentaPago = resuelta ? armarSnapshotCuenta(resuelta, entrada) : null;
+    }
+
+    for (const l of cot.lineas) {
+      await tx
+        .update(orderItems)
+        .set({
+          precioUnitario: String(l.precioUnitario),
+          ivaPorcentaje: String(l.ivaPorcentaje),
+          subtotal: String(l.subtotal),
+          iva: String(l.iva),
+          total: String(l.total),
+        })
+        .where(and(eq(orderItems.orderId, id), eq(orderItems.alegraItemId, l.id)));
+    }
+    await tx
+      .update(orders)
+      .set({
+        pagoMetodo: nuevo.pagoMetodo,
+        pagoCuenta: cuentaPago,
+        idPriceList: nuevo.idPriceList,
+        cuotas: nuevo.cuotas,
+        subtotal: String(cot.subtotal),
+        iva: String(cot.iva),
+        total: String(total),
+        // Un rechazo previo no se arrastra al medio nuevo.
+        pagoEstado: "pendiente",
+        reservaVenceEn: reservaVenceEn === RESERVA_SIN_VENCIMIENTO ? sql`'infinity'::timestamptz` : reservaVenceEn,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(orders.id, id), esDeEsteTenant()));
+
+    // Sin cobro en línea el pedido ya es una compra (igual que al crearlo): el carrito del servidor se vacía.
+    if (pedido.clerkUserId && !esPagoEnLinea(nuevo.pagoMetodo)) await vaciarCarritoTx(tx, pedido.clerkUserId);
+
+    return { ok: true, id, numero: formatearNumero(pedido.numero), cuotas: nuevo.cuotas, total, cuentaPago };
+  });
+}
+
+/**
  * Las líneas de un pedido como ítems del carrito, para devolverlas al cancelarlo desde el checkout
  * ("Volver al carrito" con el pago en línea sin hacer). El precio es referencial (con IVA): el
  * carrito recotiza. Sólo se llama tras `cancelarPedidoPendiente`, que ya validó al dueño. Nunca

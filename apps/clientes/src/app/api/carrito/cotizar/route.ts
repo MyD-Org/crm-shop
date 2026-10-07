@@ -15,7 +15,7 @@ import { sucursalesCacheadas } from "@/lib/sucursales-datos";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
 import { cuotasHabilitadas } from "@/lib/cuotas-flag";
-import { baseParaCuotas, condicionesAplicables, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
+import { baseParaCuotas, condicionAlcanzada, condicionesAplicables, cuotasElegidas, montoPorCuota, progresoCuotas, proximoEscalon } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { idListaDelMedio } from "@/lib/lista-medio";
 import { procesadorConfigurado } from "@/lib/pagos";
@@ -219,6 +219,7 @@ export async function POST(req: Request) {
     // Barra del carrito: sin medio elegido, el progreso combinado entre los medios de cobro en línea
     // elegibles (cada uno con su base). Sin cuenta corriente, lista privada ni flag: nada.
     let progreso: ReturnType<typeof progresoCuotas> = null;
+    let mediosProgreso: { condiciones: typeof mediosCrm[number]["condicionesCuotas"]; base: number }[] = [];
     if (body.progresoCuotas === true && !conMedio && !esCuentaCorriente && !idListaPrivada && (await cuotasHabilitadas())) {
       const todos = await leerMediosPagoTolerante();
       const medios = mediosParaModalidad(todos, entregaTipo, { procesadorDisponible: procesadorConfigurado }).filter(
@@ -230,10 +231,29 @@ export async function POST(req: Request) {
             medios.map(async (m) => ({ condiciones: m.condicionesCuotas, base: await baseDelMedio(todos, m.slug) })),
           )
         ).filter((b): b is { condiciones: typeof b.condiciones; base: number } => b.base !== null);
-        if (bases.length > 0) progreso = progresoCuotas(bases);
+        if (bases.length > 0) {
+          mediosProgreso = bases;
+          progreso = progresoCuotas(bases);
+        }
       }
     } else if (conCuotas && body.conCuotas === true && baseValida && totalBase !== undefined) {
-      progreso = progresoCuotas([{ condiciones: medioCobro?.condicionesCuotas, base: totalBase }]);
+      mediosProgreso = [{ condiciones: medioCobro?.condicionesCuotas, base: totalBase }];
+      progreso = progresoCuotas(mediosProgreso);
+    }
+    // Monto de cada cuota del nivel ya alcanzado: el total de ESTA compra a la lista de esa condición
+    // dividido N. Si no se puede calcular, la barra informa sólo la cantidad (nunca un monto inventado).
+    if (progreso && progreso.cuotasActuales !== null) {
+      const alcanzada = condicionAlcanzada(mediosProgreso, progreso.cuotasActuales);
+      if (alcanzada) {
+        try {
+          const q = await cotizar(lineas, { ...opcionesCotizar, idListaMedio: alcanzada.idListaPrecios });
+          if (!q.hayProblemas && q.total > 0) {
+            progreso = { ...progreso, montoCuota: montoPorCuota(q.total, alcanzada.cuotas) };
+          }
+        } catch (err) {
+          console.error("[/api/carrito/cotizar] monto de la cuota alcanzada:", err);
+        }
+      }
     }
     const disponibilidad = await disponibilidadParaMostrar(
       lineas.map((l) => l.id),

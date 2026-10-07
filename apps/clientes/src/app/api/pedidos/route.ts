@@ -13,14 +13,12 @@ import { guardarTelefonoSiFalta } from "@/lib/facturacion-db";
 import { congelarFacturacion, telefonoParaAlegra, validarComplemento } from "@/lib/contacto-alegra";
 import { sincronizarContactoConPerfil } from "@/lib/contacto-write-through";
 import { datosDelContacto, type DatosLeidos } from "@/lib/datos-del-contacto";
-import { cuotasElegidas } from "@/lib/cuotas-sin-interes";
+import { cotizarConMedio } from "@/lib/pedido-medio";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import { cuotasHabilitadas } from "@/lib/cuotas-flag";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
-import { esCompradorCuentaCorriente, mediosParaModalidad, pagoValidoConMedios } from "@/lib/medios-pago";
+import { esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
 import { procesadorConfigurado } from "@/lib/pagos";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
-import { idListaDelMedio } from "@/lib/lista-medio";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { motivoRevisionPedido } from "@/lib/motivo-revision";
 import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
@@ -348,45 +346,27 @@ export async function POST(req: Request) {
       : undefined;
     const dispCotizacion = disp ? contextoUnion(disp) : undefined;
     const soloVisibles = await catalogoSoloVisibles();
-    // Precio por medio de pago: la lista sale del slug ya validado (medios releídos sin caché más
-    // arriba), nunca del body. Con lista privada el precio ya no depende del medio: se ignora.
-    const conMedio = !idListaPrivada;
-    // Cuotas sin interés (flag `cuotas-cobro`): sólo con cobro en línea. La cantidad sale del body pero
-    // se acepta únicamente si el medio tiene una condición para ella; cada cantidad es una lista de
-    // precios distinta, y esa lista cotiza el pedido. Con el flag apagado (o con lista privada) no hay
-    // cuotas: el pedido no las congela y el cobro sigue como siempre.
-    const medioDelPedido = mediosParaModalidad(mediosCrm, entregaTipo, opcionesMedios).find(
-      (m) => m.slug === pagoMetodo,
-    );
-    let cuotasPedido: number | null = null;
-    if (conMedio && medioDelPedido?.cobroOnline && (await cuotasHabilitadas())) {
-      // Monto mínimo por cantidad de cuotas: la base es el total con impuestos a la lista del PAGO ÚNICO
-      // del medio, cotizado acá en el servidor. Sólo se cotiza si hay algún mínimo y se pidieron cuotas;
-      // el mínimo no se congela en el pedido (sólo `cuotas`), pero se deja la base en el log.
-      const hayMinimos = (medioDelPedido.condicionesCuotas ?? []).some((c) => c.montoMinimo != null);
-      let totalBase: number | undefined;
-      if (hayMinimos && typeof body.cuotas === "number" && body.cuotas >= 2) {
-        const cotBase = await cotizar(lineas, {
-          idListaMedio: idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, 1),
-          entregaTipo,
-          disp: dispCotizacion,
-          soloVisibles,
-        });
-        totalBase = cotBase.hayProblemas ? 0 : cotBase.total;
-        console.info(`[/api/pedidos] cuotas=${body.cuotas}: base del pago único ${totalBase} contra el mínimo de la condición`);
-      }
-      const elegidas = cuotasElegidas(body.cuotas, medioDelPedido.condicionesCuotas, totalBase);
-      if (!elegidas.ok) {
-        return NextResponse.json(
-          { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },
-          { status: 422 },
-        );
-      }
-      cuotasPedido = elegidas.cuotas;
+    // Precio por medio de pago, cuotas y lista: una sola resolución para crear y para cambiar el medio
+    // (`cotizarConMedio`). La lista sale del slug ya validado (medios releídos sin caché más arriba),
+    // nunca del body.
+    const resuelto = await cotizarConMedio({
+      lineas,
+      entregaTipo,
+      pagoMetodo,
+      cuotasPedidas: body.cuotas,
+      mediosCrm,
+      opcionesMedios,
+      idListaPrivada,
+      disp: dispCotizacion,
+      soloVisibles,
+    });
+    if (!resuelto.ok) {
+      return NextResponse.json(
+        { error: TEXTOS_CUOTAS.cuotasNoDisponibles, motivo: "cuotas_no_disponibles" },
+        { status: 422 },
+      );
     }
-    const idListaMedio = conMedio ? idListaDelMedio(mediosCrm, entregaTipo, pagoMetodo, undefined, cuotasPedido) : undefined;
-    const opcionesCotizar = { idListaPrivada, idListaMedio, entregaTipo, disp: dispCotizacion, soloVisibles };
-    const cotizacion = await cotizar(lineas, opcionesCotizar);
+    const { cuotasPedido, idListaMedio, opcionesCotizar, cotizacion } = resuelto;
 
     // Nada se persiste si hay una sola línea con problema: se devuelve la
     // cotización entera para que el checkout marque exactamente cuál falla.

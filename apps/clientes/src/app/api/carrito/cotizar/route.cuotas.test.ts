@@ -225,13 +225,24 @@ describe("POST /api/carrito/cotizar: progreso de cuotas (barra del carrito)", ()
   it("sin medio elegido, el progreso combinado entre los medios de cobro en línea", async () => {
     medios = [conMinimo(2420)];
     const j = await (await carrito()).json();
+    expect(j.progresoCuotas).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 1210, minimo: 2420 }, pct: 50, montoCuota: 363 });
+  });
+
+  it("si no se puede cotizar la lista del nivel alcanzado, informa las cuotas sin monto", async () => {
+    medios = [conMinimo(2420)];
+    const original = cotizar.getMockImplementation();
+    cotizar.mockImplementation(async (l: unknown, o: { idListaMedio?: string }) => {
+      if (o.idListaMedio === "L3") throw new Error("lista caída");
+      return original!(l, o);
+    });
+    const j = await (await carrito()).json();
     expect(j.progresoCuotas).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 1210, minimo: 2420 }, pct: 50 });
   });
 
   it("en el escalón más alto, lleno", async () => {
     medios = [conMinimo(1000)];
     const j = await (await carrito()).json();
-    expect(j.progresoCuotas).toEqual({ cuotasActuales: 6, proximo: null, pct: 100 });
+    expect(j.progresoCuotas).toEqual({ cuotasActuales: 6, proximo: null, pct: 100, montoCuota: 193.6 });
   });
 
   it("sin mínimos o sin pedirlo, no hay progreso", async () => {
@@ -283,7 +294,7 @@ describe("POST /api/carrito/cotizar: progreso de cuotas (barra del carrito)", ()
       medios = [conMinimo(2420, { idListaPrecios: null })];
       const j = await (await carrito()).json();
       expect(listaUsada()).toBeUndefined();
-      expect(j.progresoCuotas).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 1210, minimo: 2420 }, pct: 50 });
+      expect(j.progresoCuotas).toEqual({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 1210, minimo: 2420 }, pct: 50, montoCuota: 363 });
     });
 
     it("la lista del pago único no tiene precio de un producto: cae a la referencia y no promete con base 0", async () => {

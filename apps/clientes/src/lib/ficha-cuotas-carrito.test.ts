@@ -31,11 +31,11 @@ describe("lineasConProducto", () => {
 const solo6 = { cuotas: 6, total: 11335.38, montoCuota: 1889.23, sinInteres: true as const };
 
 describe("cuotasFichaConCarrito", () => {
-  it("nivel mayor que el del producto solo: el monto es el de ESTE producto a la lista alcanzada, por la cantidad", () => {
+  it("nivel mayor que el del producto solo: el monto es el de UNA unidad de este producto a la lista alcanzada", () => {
     const p = { cuotasActuales: 8, proximo: null, pct: 100, montoCuota: 9999, lineasAlcanzada: [{ id: "1", qty: 3, total: 90000 }, { id: "10", qty: 2, total: 20000 }] };
-    expect(cuotasFichaConCarrito(p, "10", 2, solo6)).toEqual({ cuotas: 8, total: 20000, montoCuota: 2500 });
-    // la cantidad elegida manda: unitario 10.000 × 3 ÷ 8 = 3.750
-    expect(cuotasFichaConCarrito(p, "10", 3, solo6)).toEqual({ cuotas: 8, total: 30000, montoCuota: 3750 });
+    expect(cuotasFichaConCarrito(p, "10", 2, solo6)).toEqual({ cuotas: 8, total: 10000, montoCuota: 1250 });
+    // la cantidad elegida no cambia el monto: es por unidad, como la línea sin carrito
+    expect(cuotasFichaConCarrito(p, "10", 3, solo6)).toEqual({ cuotas: 8, total: 10000, montoCuota: 1250 });
   });
   it("redondea la cuota como montoPorCuota (centavo hacia arriba)", () => {
     const p = { cuotasActuales: 3, proximo: null, pct: 100, lineasAlcanzada: [{ id: "10", qty: 1, total: 100 }] };
@@ -83,9 +83,9 @@ describe("metaCuotasFicha", () => {
     const textos = [
       metaCuotasFicha({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 1, minimo: 2 }, pct: 50 }, true),
       metaCuotasFicha({ cuotasActuales: null, proximo: { cuotas: 6, falta: 1, minimo: 2 }, pct: 50 }),
-    ].map((m) => m?.texto).join(" ") + TEXTOS_CUOTAS.conSuCarrito + TEXTOS_CUOTAS.conSuCarritoAlcanza;
+    ].map((m) => m?.texto).join(" ") + TEXTOS_CUOTAS.enComprasDesde(30000);
     expect(textos).not.toMatch(/\b(tu|tus|te|vos|sumá|pagá|tenés)\b/i);
-    expect(TEXTOS_CUOTAS.conSuCarrito).toBe("Con su carrito.");
+    expect(TEXTOS_CUOTAS.enComprasDesde(30000).replace(/\u00a0/g, " ")).toBe("En compras desde $ 30.000");
   });
 });
 

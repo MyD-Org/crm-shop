@@ -53,7 +53,7 @@ import {
   PATRON_NOMBRE_ACCESORIO,
   idsCategoriasAccesorio,
   literalUuids,
-  preordenArbol,
+  ordenIntercaladoArbol,
 } from "./catalogo-destacados";
 import { basePublicaMedios } from "./shop-media";
 import { shopTenantId } from "./tenant";
@@ -1215,16 +1215,17 @@ function condicionesDe(
 
 /**
  * Lo que el orden "destacados" necesita del árbol de categorías propias, ya calculado en TS
- * (catalogo-destacados.ts): el orden de lectura del árbol y las categorías de accesorios.
+ * (catalogo-destacados.ts): el orden en que se intercalan las categorías (alternando raíces) y
+ * las categorías de accesorios.
  */
 interface ContextoDestacados {
-  preorden: string[];
+  intercalado: string[];
   accesorio: string[];
 }
 
 /** Contexto de destacados a partir del árbol (vacío = el tenant no armó árbol). */
 function contextoDestacados(arbol: NodoCategoria[]): ContextoDestacados {
-  return { preorden: preordenArbol(arbol), accesorio: idsCategoriasAccesorio(arbol) };
+  return { intercalado: ordenIntercaladoArbol(arbol), accesorio: idsCategoriasAccesorio(arbol) };
 }
 
 /**
@@ -1232,34 +1233,62 @@ function contextoDestacados(arbol: NodoCategoria[]): ContextoDestacados {
  * filtrado (no sólo la página, así la paginación queda estable):
  * 1. (pendiente: destacados a mano del admin, `catalog_overlay.orden`, cuando el Shop declare la
  *    columna en crm.ts) — hoy no se lee;
- * 2. con stock (null = no inventariable = disponible) primero;
- * 3. con foto primero;
- * 4. no accesorio primero (categoría propia o ancestra, o de Alegra, de accesorios; o el nombre
- *    arranca por una palabra de accesorio: ver catalogo-destacados.ts);
- * 5. ronda: el puesto del producto dentro de su escalón (2–4) y su subcategoría, por stock desc.
- *    Ordenar por la ronda intercala las subcategorías: el 1.º de cada una, después el 2.º…;
- * 6. dentro de la ronda, la subcategoría por su lugar en el árbol (sin árbol, la de Alegra);
- * 7. nombre y `alegra_id`: desempate estable.
+ * 2. escalón: con stock → con foto → no accesorio → stock holgado (≥ STOCK_HOLGADO o no
+ *    inventariable). Accesorio = categoría propia o ancestra, o de Alegra, que arranca con
+ *    accesorios/repuestos, o nombre que arranca por una palabra de accesorio (catalogo-destacados.ts);
+ * 3. ronda: el puesto del producto dentro de su escalón y su subcategoría. Ordenar por la ronda
+ *    intercala las subcategorías (el 1.º de cada una, después el 2.º…). Dentro de la subcategoría el
+ *    puesto NO sale del stock bruto (premiaba consumibles de miles de unidades) sino del precio en
+ *    tramos (×√10, de mayor a menor: el producto "principal" suele valer más que sus consumibles);
+ * 4. dentro de la ronda, la subcategoría según `ordenIntercaladoArbol`: alterna raíces (la 1.ª
+ *    subcategoría de cada raíz, después la 2.ª…), así la vidriera general mezcla rubros; con una
+ *    categoría elegida es el orden de lectura de su subárbol. Sin árbol, la categoría de Alegra;
+ * 5. nombre y `alegra_id`: desempate estable.
  * Sólo ordena: no saca a nadie del resultado.
  */
+/**
+ * Literal de texto de SQL para constantes PROPIAS (patrones de catalogo-destacados.ts y literales
+ * de uuids ya validados): nunca para datos de afuera. Tira si trae una comilla.
+ */
+function literal(texto: string) {
+  if (texto.includes("'") || texto.includes("\\")) throw new Error("literal: texto no apto");
+  return sql.raw(`'${texto}'`);
+}
+
+/** Unidades desde las que el stock de un destacado se considera holgado (ver `ordenDestacadosSql`). */
+const STOCK_HOLGADO = 3;
+
 function ordenDestacadosSql(ctx: ContextoDestacados, disp?: ContextoDisponibilidad) {
-  const stock = disp ? stockSucursalSql(disp) : stockSql;
-  const sinStock = sql`(case when ${stock} is null or ${stock} > 0 then 0 else 1 end)`;
+  // Postgres calcula UNA vez las expresiones idénticas que se repiten (la clave del PARTITION BY y el
+  // argumento de `first_value`), y dos parámetros ($6 y $9) no son idénticos. Por eso todo va como
+  // literal: las constantes propias con `literal` y el stock por sucursal con `inlineParams()`
+  // (su subconsulta por fila es lo más caro con `disp`).
+  const stock = disp ? stockSucursalSql(disp).inlineParams() : stockSql;
+  const holgado = sql.raw(String(STOCK_HOLGADO));
+  // Stock en 0..STOCK_HOLGADO (null = no inventariable = holgado), evaluado una sola vez.
+  const nivelStock = sql`greatest(least(coalesce(${stock}, ${holgado}), ${holgado}), 0)`;
   const sinFoto = sql`(case when jsonb_typeof(${crmOverlay.fotos}) = 'array' and jsonb_array_length(${crmOverlay.fotos}) > 0 then 0 else 1 end)`;
-  const accesorio = sql`(case when ${crmOverlay.categoriaId} = any(${literalUuids(ctx.accesorio)}::uuid[])
-      or coalesce(btrim(${sinTildes(crmCategoriasAlegra.name)}) ~ ${PATRON_CATEGORIA_ACCESORIO}, false)
-      or btrim(${sinTildes(nombreExhibidoSql)}) ~ ${PATRON_NOMBRE_ACCESORIO}
+  const accesorio = sql`(case when ${crmOverlay.categoriaId} = any(${literal(literalUuids(ctx.accesorio))}::uuid[])
+      or coalesce(btrim(${sinTildes(crmCategoriasAlegra.name)}) ~ ${literal(PATRON_CATEGORIA_ACCESORIO)}, false)
+      or btrim(lower(${nombreExhibidoSql})) ~ ${literal(PATRON_NOMBRE_ACCESORIO)}
     then 1 else 0 end)`;
   const grupo = sql`coalesce(${crmOverlay.categoriaId}::text, ${crmCategoriasAlegra.name}, '')`;
-  const ronda = sql`row_number() over (
-    partition by ${sinStock}, ${sinFoto}, ${accesorio}, ${grupo}
-    order by ${stock} desc nulls last, ${crmCatalogo.name}, ${crmCatalogo.alegraId})`;
-  const posicionGrupo = sql`array_position(${literalUuids(ctx.preorden)}::uuid[], ${crmOverlay.categoriaId})`;
+  // Precio aproximado y barato (el primero de la lista, sin IVA): para tramos de ×√10 alcanza, y
+  // evita el `jsonb_array_elements` por fila de `precioSql`.
+  const precioAprox = sql`(case when jsonb_typeof(${preciosSql}) = 'array' then (${preciosSql}->0->>'price')::numeric end)`;
+  // En float8: `log` de numeric es de precisión arbitraria y costaba ~15 µs por fila.
+  const tramoPrecio = sql`floor(log(greatest(coalesce(${precioAprox}, 1), 1)::float8) * 2)`;
+  // Escalón como UNA clave: sin stock (8) > sin foto (4) > accesorio (2) > stock corto (1). La
+  // ventana lo calcula una vez por fila y el ORDER BY lo lee de ella (`first_value`): repetir las
+  // expresiones afuera hacía que Postgres las evaluara de nuevo.
+  const escalon = sql`((case ${nivelStock} when 0 then 8 when ${holgado} then 0 else 1 end) + ${sinFoto} * 4 + ${accesorio} * 2)`;
+  const ventana = sql`over (
+    partition by ${escalon}, ${grupo}
+    order by ${tramoPrecio} desc, ${crmCatalogo.name}, ${crmCatalogo.alegraId})`;
+  const posicionGrupo = sql`array_position(${literal(literalUuids(ctx.intercalado))}::uuid[], ${crmOverlay.categoriaId})`;
   return [
-    sql`${sinStock} asc`,
-    sql`${sinFoto} asc`,
-    sql`${accesorio} asc`,
-    sql`${ronda} asc`,
+    sql`first_value(${escalon}) ${ventana} asc`,
+    sql`row_number() ${ventana} asc`,
     sql`${posicionGrupo} asc nulls last`,
     sql`${grupo} asc`,
     asc(crmCatalogo.name),

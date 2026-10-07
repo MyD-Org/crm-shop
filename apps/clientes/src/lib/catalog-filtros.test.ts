@@ -287,7 +287,7 @@ describe("fase 2: atributos estructurados (`catalog_atributos`)", () => {
       expect(cuenta(sql.split(" where (").slice(1).join(" where ("), EXISTS)).toBe(2);
       // OR con el patrón: el estructurado sólo suma productos.
       expect(sql).toMatch(/"valor_texto" in \(\$\d+\)\) or "shop"\.immutable_unaccent\(lower\(concat_ws\([\s\S]*?\)\)\) ~\* \$\d+\)/);
-      expect(sql).not.toMatch(/coalesce\(\(case when/);
+      expect(sinOrden(sql)).not.toMatch(/coalesce\(\(case when/);
       expect(params).toContain("tenant-test");
       expect(params).toEqual(expect.arrayContaining(["tono", "calido", "tension_v", 220, 230]));
       expect(params).toContain(ATRIBUTOS.find((a) => a.id === "tono-calido")!.patron);

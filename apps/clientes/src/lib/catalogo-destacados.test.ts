@@ -4,6 +4,7 @@ import {
   esNombreAccesorio,
   idsCategoriasAccesorio,
   literalUuids,
+  ordenIntercaladoArbol,
   preordenArbol,
   type CategoriaArbol,
 } from "./catalogo-destacados";
@@ -98,6 +99,34 @@ describe("preordenArbol", () => {
       nodo("huerfana", "Sin madre", "inactiva", 0),
     ];
     expect(preordenArbol(arbol)).toEqual(["a", "a1", "a11", "a2", "a3", "b"]);
+  });
+});
+
+describe("ordenIntercaladoArbol", () => {
+  const arbol = [
+    nodo("ilu", "Iluminación", null, 1),
+    nodo("ilu1", "Lámparas", "ilu", 1),
+    nodo("ilu2", "Reflectores", "ilu", 2),
+    nodo("ilu3", "Spots", "ilu", 3),
+    nodo("ele", "Electricidad", null, 2),
+    nodo("ele1", "Bornes", "ele", 1),
+    nodo("ele2", "Contactores", "ele", 2),
+    nodo("her", "Herramientas", null, 3),
+    nodo("her1", "Pinzas", "her", 1),
+  ];
+
+  it("alterna raíces: la 1.ª subcategoría de cada raíz, después la 2.ª…; lo cargado en la raíz misma, al final", () => {
+    expect(ordenIntercaladoArbol(arbol)).toEqual([
+      "ilu1", "ele1", "her1",
+      "ilu2", "ele2",
+      "ilu3",
+      "ilu", "ele", "her",
+    ]);
+  });
+
+  it("dentro de una sola raíz queda el orden de lectura del árbol (la raíz al final)", () => {
+    const una = arbol.filter((n) => n.id === "ilu" || n.parentId === "ilu");
+    expect(ordenIntercaladoArbol(una)).toEqual([...preordenArbol(una).slice(1), "ilu"]);
   });
 });
 

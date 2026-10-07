@@ -24,25 +24,31 @@ const CAT = {
   b: "00000000-0000-4000-8000-00000000000b",
   c: "00000000-0000-4000-8000-00000000000c",
   otra: "00000000-0000-4000-8000-0000000000ff",
+  otraHoja: "00000000-0000-4000-8000-0000000000fe",
 };
 
 const FOTO = [{ key: "foto/x.webp", w: 800 }];
 
-/** id → [nombre, stock, categoría propia, con foto] */
-const PRODUCTOS: Record<string, [string, number, string, boolean]> = {
-  a1: ["Lampara uno", 40, CAT.a, true],
-  a2: ["Lampara dos", 30, CAT.a, true],
-  a3: ["Lampara tres", 20, CAT.a, true],
-  a4: ["Lampara cuatro", 10, CAT.a, true],
-  b1: ["Reflector uno", 50, CAT.b, true],
-  b2: ["Reflector dos", 5, CAT.b, true],
+/**
+ * id → [nombre, stock, categoría propia, con foto, precio]. Dentro de una subcategoría manda el
+ * precio en tramos (×√10), no el stock bruto: a1..a4 tienen precios de tramos distintos.
+ */
+const PRODUCTOS: Record<string, [string, number, string, boolean, number]> = {
+  a1: ["Lampara uno", 10, CAT.a, true, 100000],
+  a2: ["Lampara dos", 20, CAT.a, true, 10000],
+  a3: ["Lampara tres", 30, CAT.a, true, 1000],
+  a4: ["Lampara cuatro", 900, CAT.a, true, 100],
+  // La más cara, pero con stock corto: escalón aparte, después de los principales con stock holgado.
+  aPocoStock: ["Lampara poco stock", 1, CAT.a, true, 500000],
+  b1: ["Reflector uno", 50, CAT.b, true, 1000],
+  b2: ["Reflector dos", 5, CAT.b, true, 100],
   // Accesorio por el nombre, aunque esté en una subcategoría de principales.
-  aAcc: ["Acoplador de rieles", 100, CAT.a, true],
+  aAcc: ["Acoplador de rieles", 100, CAT.a, true, 100],
   // Accesorio por la categoría.
-  c1: ["Riel recto", 100, CAT.c, true],
-  aSinFoto: ["Lampara sin foto", 100, CAT.a, false],
-  aSinStock: ["Lampara sin stock", 0, CAT.a, true],
-  fuera: ["Cable fuera", 100, CAT.otra, true],
+  c1: ["Riel recto", 100, CAT.c, true, 100],
+  aSinFoto: ["Lampara sin foto", 100, CAT.a, false, 100],
+  aSinStock: ["Lampara sin stock", 0, CAT.a, true, 100],
+  fuera: ["Cable unipolar", 100, CAT.otraHoja, true, 100],
 };
 
 async function limpiar() {
@@ -64,6 +70,7 @@ async function sembrar() {
     [CAT.b, CAT.raiz, "Reflectores", 2],
     [CAT.c, CAT.raiz, "Accesorios", 3],
     [CAT.otra, null, "Cables", 1],
+    [CAT.otraHoja, CAT.otra, "Unipolares", 1],
   ];
   for (const [id, parent, nombre, orden] of categorias) {
     await db.execute(
@@ -71,10 +78,10 @@ async function sembrar() {
           values (${id}, ${TENANT}, ${parent}, ${nombre}, ${nombre.toLowerCase()}, ${orden})`,
     );
   }
-  for (const [id, [nombre, stock, categoria, foto]] of Object.entries(PRODUCTOS)) {
+  for (const [id, [nombre, stock, categoria, foto, precio]] of Object.entries(PRODUCTOS)) {
     await db.execute(
       sql`insert into public.catalog_products (tenant_id, alegra_id, name, stock, status, alegra_status, precios_online)
-          values (${TENANT}, ${id}, ${nombre}, ${stock}, 'active', 'active', ${JSON.stringify([{ price: 100, main: true }])}::jsonb)`,
+          values (${TENANT}, ${id}, ${nombre}, ${stock}, 'active', 'active', ${JSON.stringify([{ price: precio, main: true }])}::jsonb)`,
     );
     await db.execute(
       sql`insert into public.catalog_overlay (tenant_id, alegra_id, visible, categoria_id, fotos)
@@ -107,6 +114,7 @@ describe.skipIf(process.env.ORDEN_SQL !== "1")("orden destacados en Postgres", (
       "a2", "b2",
       "a3",
       "a4",
+      "aPocoStock", // stock corto: después de los holgados aunque sea el más caro, antes de los accesorios
       "aAcc", "c1", // accesorios con foto (por nombre y por categoría)
       "aSinFoto",
       "aSinStock",
@@ -117,8 +125,12 @@ describe.skipIf(process.env.ORDEN_SQL !== "1")("orden destacados en Postgres", (
     expect(await ids({ ...ILUMINACION, soloStock: true })).not.toContain("aSinStock");
   });
 
-  it("en una hoja (un solo grupo) queda por stock", async () => {
-    expect(await ids({ categorias: ["Lamparas"] })).toEqual(["a1", "a2", "a3", "a4", "aAcc", "aSinFoto", "aSinStock"]);
+  it("en una hoja (un solo grupo) queda por stock holgado y precio", async () => {
+    expect(await ids({ categorias: ["Lamparas"] })).toEqual(["a1", "a2", "a3", "a4", "aPocoStock", "aAcc", "aSinFoto", "aSinStock"]);
+  });
+
+  it("sin categoría alterna raíces: una de cada raíz antes de repetir", async () => {
+    expect((await ids({})).slice(0, 3)).toEqual(["a1", "fuera", "b1"]);
   });
 
   it("dos páginas consecutivas no repiten ni pierden productos", async () => {
@@ -132,7 +144,7 @@ describe.skipIf(process.env.ORDEN_SQL !== "1")("orden destacados en Postgres", (
   it("con stock por sucursal (disp) la ventana con la subconsulta de stock funciona", async () => {
     const disp: ContextoDisponibilidad = { zona: "igz", activas: ["igz"], contarEn: ["igz"], stockHeredado: "igz" };
     const r = await ids(ILUMINACION, disp);
-    expect(r).toHaveLength(10);
+    expect(r).toHaveLength(11);
     expect(r.slice(0, 2)).toEqual(["a1", "b1"]);
     expect(r.at(-1)).toBe("aSinStock");
   });
@@ -150,10 +162,13 @@ describe.skipIf(process.env.ORDEN_SQL !== "1")("orden destacados en Postgres", (
       "Kit solar 1 kW",
       "Controlador RGB",
       "  ADAPTADOR E27",
+      "UNIÓN PARA CAÑO",
+      "TAPÓN CIEGO",
+      "Kit de instalación",
     ];
     for (const n of nombres) {
       const [fila] = (await getDb().execute(
-        sql`select btrim("shop".immutable_unaccent(lower(${n}))) ~ ${PATRON_NOMBRE_ACCESORIO} as es`,
+        sql`select btrim(lower(${n})) ~ ${PATRON_NOMBRE_ACCESORIO} as es`,
       )) as unknown as { es: boolean }[];
       expect({ n, es: fila.es }).toEqual({ n, es: esNombreAccesorio(n) });
     }

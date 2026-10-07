@@ -15,7 +15,12 @@
  * `~` en Postgres (ARE), sobre texto ya en minúsculas y sin tildes.
  */
 
-/** Primeras palabras que hacen accesorio a un producto (singular, sin tildes). */
+/**
+ * Primeras palabras que hacen accesorio a un producto (singular, en minúsculas). La vocal que
+ * puede llevar tilde va como clase (`[oóÓ]`): en SQL el patrón se aplica sobre `lower(nombre)` SIN
+ * unaccent (el unaccent por fila era lo más caro del orden) y, según el locale de la base, `lower`
+ * puede no bajar la Ó.
+ */
 export const PALABRAS_ACCESORIO = [
   "accesorio",
   "acople",
@@ -24,9 +29,9 @@ export const PALABRAS_ACCESORIO = [
   "amplificador",
   "conector",
   "empalme",
-  "union",
+  "uni[oóÓ]n",
   "tapa",
-  "tapon",
+  "tap[oóÓ]n",
   "soporte",
   "grampa",
   "clip",
@@ -35,13 +40,13 @@ export const PALABRAS_ACCESORIO = [
 ] as const;
 
 /**
- * Nombre (minúsculas, sin tildes, sin espacios al borde) que arranca por una palabra de
+ * Nombre (minúsculas, con o sin tildes, sin espacios al borde) que arranca por una palabra de
  * `PALABRAS_ACCESORIO` (o su plural) o por "kit de fijación/montaje/instalación" o "control
  * remoto". La palabra tiene que terminar ahí: "tapaluz" no es "tapa".
  */
 export const PATRON_NOMBRE_ACCESORIO =
   `^(?:(?:${PALABRAS_ACCESORIO.join("|")})(?:s|es)?` +
-  `|kits? de (?:fijacion|montaje|instalacion)` +
+  `|kits? de (?:fijaci[oóÓ]n|montaje|instalaci[oóÓ]n)` +
   `|control(?:es)? remotos?)(?:[^a-z0-9]|$)`;
 
 /**
@@ -125,6 +130,47 @@ export function preordenArbol(arbol: CategoriaArbol[]): string[] {
   };
   recorrer(null);
   return salida;
+}
+
+/**
+ * Orden de las categorías para intercalar la vidriera: primero por la POSICIÓN de la categoría
+ * dentro de su raíz (en orden de lectura) y, a igual posición, por el orden de las raíces. Así una
+ * ronda trae una categoría de cada raíz antes de repetir raíz (Iluminación, Electricidad,
+ * Herramientas…, después la 2.ª de cada una…). Con una sola raíz (una categoría elegida) es el
+ * orden de lectura de siempre. Lo clasificado en la raíz misma (sin subcategoría: suele ser lo que
+ * quedó sin ordenar) va después de todas las subcategorías.
+ */
+export function ordenIntercaladoArbol(arbol: CategoriaArbol[]): string[] {
+  const porId = new Map(arbol.map((n) => [n.id, n]));
+  const raizDe = (n: CategoriaArbol) => {
+    const vistos = new Set<string>();
+    let a = n;
+    while (a.parentId && porId.has(a.parentId) && !vistos.has(a.id)) {
+      vistos.add(a.id);
+      a = porId.get(a.parentId)!;
+    }
+    return a.id;
+  };
+  const preorden = preordenArbol(arbol);
+  const posRaiz = new Map<string, number>();
+  const idxEnRaiz = new Map<string, number>();
+  const contador = new Map<string, number>();
+  for (const id of preorden) {
+    const raiz = raizDe(porId.get(id)!);
+    if (!posRaiz.has(raiz)) posRaiz.set(raiz, posRaiz.size);
+    if (id === raiz) {
+      idxEnRaiz.set(id, Number.MAX_SAFE_INTEGER);
+      continue;
+    }
+    const i = contador.get(raiz) ?? 0;
+    idxEnRaiz.set(id, i);
+    contador.set(raiz, i + 1);
+  }
+  return [...preorden].sort(
+    (a, b) =>
+      idxEnRaiz.get(a)! - idxEnRaiz.get(b)! ||
+      posRaiz.get(raizDe(porId.get(a)!))! - posRaiz.get(raizDe(porId.get(b)!))!,
+  );
 }
 
 /**

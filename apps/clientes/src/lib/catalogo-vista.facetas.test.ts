@@ -80,7 +80,6 @@ const lista = (clave: string, titulo: string, items: [string, string, number][])
   titulo,
   control: "lista",
   items: items.map(([valor, etiqueta, count]) => ({ valor, etiqueta, count })),
-  visibles: 6,
 });
 
 describe("panelPorTipo (qué muestra el panel con el flag prendido)", () => {

@@ -74,7 +74,7 @@ export function cuotasFichaConCarrito(
  * línea verde (`cuotasFichaConCarrito`), así no se repite ni se contradice.
  * - `nivelMayor` (la línea ya muestra un nivel subido por el carrito): sólo si hay un nivel más alto,
  *   "Sume $Y más y pague en 12 cuotas sin interés."; si no hay más, nada.
- * - Si no: "Con su carrito y este producto, sume $Y más…" cuando falta algo; si no, nada.
+ * - Si no: "Le faltan $Y para pagar en…" (carrito + este producto) cuando falta algo; si no, nada.
  */
 export function metaCuotasFicha(p: ProgresoCuotas | null | undefined, nivelMayor = false): MetaCarrito | null {
   if (!p?.proximo) return null;

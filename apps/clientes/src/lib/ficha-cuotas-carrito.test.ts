@@ -69,7 +69,7 @@ describe("metaCuotasFicha", () => {
   it("sin nivel mayor: cuánto falta con su carrito y este producto", () => {
     for (const actuales of [null, 6]) {
       const m = metaCuotasFicha({ cuotasActuales: actuales, proximo: { cuotas: 8, falta: 15000, minimo: 60000 }, pct: 75 });
-      expect(sinNbsp(m?.texto)).toBe("Con su carrito y este producto, sume $ 15.000 más y pague en 8 cuotas sin interés.");
+      expect(sinNbsp(m?.texto)).toBe("Le faltan $ 15.000 para pagar en 8 cuotas sin interés.");
       expect(sinNbsp(m?.enfasis)).toBe("$ 15.000");
     }
   });

@@ -55,13 +55,23 @@ export const TEXTOS_CUOTAS = {
   /** Carrito y checkout, en el nivel más alto. */
   compraYaTiene: (cuotas: number, montoCuota: number) =>
     `Su compra ya tiene ${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}.`,
-  /** Ficha, con el carrito (con o sin nivel más alto por delante). */
-  fichaYaTiene: (cuotas: number, montoCuota: number) =>
-    `Con su carrito, ya tiene ${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}.`,
+  /**
+   * Ficha, con el carrito y un nivel más alto por delante: "Con su carrito, ya tiene 8 cuotas sin
+   * interés." Sin monto: el de la cuota del producto ya está en la línea de arriba.
+   */
+  fichaYaTieneCuotas: (cuotas: number) => `Con su carrito, ya tiene ${cuotasDe(cuotas)} sin interés.`,
+  /** El fragmento de `fichaYaTieneCuotas` que va en negrita: "8 cuotas sin interés". */
+  cuotasSinInteres: (cuotas: number) => `${cuotasDe(cuotas)} sin interés`,
+  /** Ficha, con el carrito, en el nivel más alto: "Con su carrito, su compra ya tiene 8 cuotas sin interés." */
+  fichaCompraYaTiene: (cuotas: number) => `Con su carrito, su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
+  /**
+   * Ficha, debajo de la línea de cuotas del producto: el nivel mayor que se alcanza con una compra
+   * más grande. "Hasta 8 cuotas sin interés en compras desde $30.000".
+   */
+  hastaCuotasDesde: (cuotas: number, minimo: number) =>
+    `Hasta ${cuotasDe(cuotas)} sin interés en compras desde ${fmtPrecioCorto(minimo)}`,
   /** Ficha del producto, con el carrito: "6 cuotas" (el fragmento que va en negrita). */
   cantidadCuotas: (cuotas: number) => cuotasDe(cuotas),
-  /** Ficha: la compra (carrito + este producto) llega a cuotas sin interés. */
-  fichaEntraEnCuotas: (cuotas: number) => `Con su carrito, este producto entra en ${cuotasDe(cuotas)} sin interés.`,
   /** Ficha: la compra no llega todavía; el monto va en negrita (`montoFaltante`). */
   fichaFaltaParaCuotas: (falta: number, cuotas: number) =>
     `Con su carrito y este producto, sume ${fmtPrecioCorto(falta)} más y pague en ${cuotasDe(cuotas)} sin interés.`,

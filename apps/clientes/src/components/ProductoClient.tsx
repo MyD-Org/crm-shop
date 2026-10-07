@@ -5,7 +5,9 @@ import Link from "next/link";
 import { Button, QuantityStepper, Skeleton } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
-import { CuotasConCarrito } from "@/components/producto/CuotasConCarrito";
+import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
+import { cuotasHastaFicha, metaCuotasFicha } from "@/lib/ficha-cuotas-carrito";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
 import { hayCuotasParaModal, mejorCuotaProducto } from "@/lib/cuotas-sin-interes";
@@ -136,7 +138,6 @@ export function ProductoClient({
 
   // Cuotas sobre el precio final unitario: sin IVA conocido no se calcula nada.
   const cuotas = producto.cuotasSinInteres;
-  const mejorCuota = mejorCuotaProducto(cuotas);
 
   const estado = ESTADO_STOCK[producto.stock];
   const agotado = producto.stock === "out";
@@ -149,6 +150,13 @@ export function ProductoClient({
   const sinPrecio = !(producto.price > 0);
   // Mientras llega el precio de su cuenta no se puede agregar (el precio real todavía no se conoce).
   const noComprable = sinPrecio || precioPendiente;
+  // La línea verde es la del producto solo. Debajo, el nivel mayor que da una compra más grande
+  // ("Hasta 8 cuotas… desde $X", datos públicos: sirve en la ficha cacheada). Con carrito, el
+  // recuadro de abajo lo reemplaza (ya tiene / cuánto falta), para no decir lo mismo dos veces.
+  const mejorCuota = mejorCuotaProducto(cuotas);
+  const progresoCarrito = useProgresoCuotasCarrito(producto.id, qty, !noComprable && !agotado);
+  const metaCarrito = metaCuotasFicha(progresoCarrito);
+  const cuotasHasta = metaCarrito ? null : cuotasHastaFicha(cuotas);
   // Sólo para mostrar: el nombre real (para buscar, ordenar, SEO/JSON-LD)
   // sigue siendo `producto.name` tal como lo resolvió el servidor.
   const { nombre: nombreParaMostrar } = nombreConMarca(
@@ -301,6 +309,11 @@ export function ProductoClient({
               {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {mejorCuota && <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />}
+                  {cuotasHasta && (
+                    <span className="block text-sm text-muted" data-testid="cuotas-hasta">
+                      {TEXTOS_CUOTAS.hastaCuotasDesde(cuotasHasta.cuotas, cuotasHasta.minimo)}
+                    </span>
+                  )}
                   <MediosDePagoModal
                     precioFinal={producto.precioFinal}
                     cuotas={cuotas}
@@ -308,7 +321,7 @@ export function ProductoClient({
                   />
                 </div>
               )}
-              {!noComprable && !agotado && <CuotasConCarrito productoId={producto.id} qty={qty} />}
+              {!noComprable && !agotado && <CuotasConCarrito meta={metaCarrito} />}
             </div>
 
             <p className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${estado.clases}`}>

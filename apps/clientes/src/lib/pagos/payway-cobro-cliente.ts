@@ -66,7 +66,7 @@ export async function enviarCobro(p: ParamsCobro, doFetch: typeof fetch = fetch)
   if (json.estado === "fallido") {
     return {
       fase: "rechazado",
-      mensaje: json.mensaje ?? "No pudimos procesar el pago. Inténtelo de nuevo o elija transferencia.",
+      mensaje: json.mensaje ?? "No pudimos procesar el pago. Inténtelo de nuevo o elija otro medio de pago.",
       reintentable: json.reintentable ?? false,
     };
   }

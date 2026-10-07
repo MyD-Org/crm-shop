@@ -144,7 +144,7 @@ describe("PagoMercadoPago.tsx: cableado", () => {
   const fuente = leer("./PagoMercadoPago.tsx");
 
   it("Reintentar remonta el Brick (key) y vuelve a cargando", () => {
-    expect(fuente).toMatch(/<Payment\s+key=\{intento\}/);
+    expect(fuente).toMatch(/<CardPayment\s+key=\{`\$\{tipoTarjeta\}-\$\{intento\}`\}/);
     const fn = fuente.slice(fuente.indexOf("function reintentar()"));
     const cuerpo = fn.slice(0, fn.indexOf("\n  }"));
     expect(cuerpo).toContain("setIntento((n) => n + 1)");
@@ -153,7 +153,7 @@ describe("PagoMercadoPago.tsx: cableado", () => {
   });
 
   it("el plazo corre sólo mientras carga (con configuración) y se reinicia por intento", () => {
-    expect(fuente).toContain('cargandoConBrick = !faltaKey && estado.fase === "cargando"');
+    expect(fuente).toContain('cargandoConBrick = !faltaKey && opcion !== "cuenta" && estado.fase === "cargando"');
     expect(fuente).toMatch(/\[cargandoConBrick, intento\]/);
     expect(fuente).toContain("iniciarPlazoCarga(");
   });

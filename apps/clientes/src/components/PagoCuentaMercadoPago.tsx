@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Card } from "@myd-org/ui";
+import { Alert, Button } from "@myd-org/ui";
 
 /**
- * Pagar con la cuenta de Mercado Pago (dinero disponible o tarjetas guardadas). Va fuera del Payment
- * Brick: se lleva al comprador al sitio de Mercado Pago y vuelve a `/checkout?pedido=<id>` al terminar
- * (ver `/api/pagos/mercadopago/preferencia`). El botón dice a dónde va, cosa que el Brick no permite.
+ * Pagar con la cuenta de Mercado Pago (dinero disponible o tarjetas guardadas): el contenido de esa
+ * opción en "¿Cómo quiere pagar?". Se lleva al comprador al sitio de Mercado Pago y vuelve a
+ * `/checkout?pedido=<id>` al terminar (ver `/api/pagos/mercadopago/preferencia`). El botón dice a dónde
+ * va, cosa que el Brick no permite.
  */
-export function PagoCuentaMercadoPago({ pedidoId }: { pedidoId: string }) {
+export function PagoCuentaMercadoPago({ pedidoId, cuotas }: { pedidoId: string; cuotas?: number }) {
   const [yendo, setYendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,18 +38,15 @@ export function PagoCuentaMercadoPago({ pedidoId }: { pedidoId: string }) {
   }
 
   return (
-    <Card
-      title="Cuenta de Mercado Pago"
-      description="Pague con su dinero disponible o con las tarjetas guardadas en su cuenta. Lo llevamos a Mercado Pago para completar el pago y vuelve a esta página."
-    >
-      {error && (
-        <Alert tone="danger" className="mb-3">
-          {error}
-        </Alert>
-      )}
-      <Button variant="outline" onClick={irAMercadoPago} disabled={yendo}>
+    <div className="flex flex-col gap-4">
+      <Alert>
+        Lo llevamos a Mercado Pago para completar el pago. Al terminar, vuelve a esta página con su pedido.
+        {cuotas !== undefined && cuotas > 1 && ` Allá puede elegir hasta ${cuotas} cuotas.`}
+      </Alert>
+      {error && <Alert tone="danger">{error}</Alert>}
+      <Button onClick={irAMercadoPago} loading={yendo} disabled={yendo}>
         {yendo ? "Abriendo Mercado Pago…" : "Ir a Mercado Pago"}
       </Button>
-    </Card>
+    </div>
   );
 }

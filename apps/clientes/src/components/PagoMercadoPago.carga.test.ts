@@ -5,7 +5,7 @@ import { PagoMercadoPago } from "./PagoMercadoPago";
 
 vi.mock("@mercadopago/sdk-react", () => ({
   initMercadoPago: vi.fn(),
-  Payment: () => createElement("div", { id: "paymentBrick_container" }),
+  CardPayment: () => createElement("div", { id: "paymentBrick_container" }),
   StatusScreen: () => null,
 }));
 
@@ -26,7 +26,7 @@ describe("carga inicial del formulario de Mercado Pago", () => {
     vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-public-key");
     const html = renderPago();
 
-    expect(html).toContain("Cargando los medios de pago");
+    expect(html).toContain("Cargando el formulario de pago");
     expect(html).toContain('aria-busy="true"');
     expect(html).toMatch(/aria-hidden="true"[^>]*class="[^"]*invisible/);
     expect(html).toContain('id="paymentBrick_container"');
@@ -34,13 +34,17 @@ describe("carga inicial del formulario de Mercado Pago", () => {
     expect(html).not.toContain("Elija transferencia");
   });
 
-  it("ofrece la cuenta de Mercado Pago aparte, con un botón que dice a dónde lleva", () => {
+  it("pregunta cómo pagar: crédito (abierta), débito y cuenta de Mercado Pago", () => {
     vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "TEST-public-key");
-    for (const cuotas of [1, 6]) {
-      const html = renderPago(cuotas);
-      expect(html).toContain("Ir a Mercado Pago");
-      expect(html).toContain("Lo llevamos a Mercado Pago");
-    }
+    const html = renderPago(6);
+    expect(html).toContain("¿Cómo quiere pagar?");
+    expect(html).toContain("Tarjeta de crédito");
+    expect(html).toContain("6 cuotas sin interés");
+    expect(html).toContain("Cuenta de Mercado Pago");
+    // Con cuotas el débito no se puede elegir y dice por qué.
+    expect(html).toContain("Sólo en un pago");
+    // La cuenta no está elegida: su botón todavía no aparece.
+    expect(html).not.toContain("Ir a Mercado Pago");
   });
 
   it("no deja un loader infinito cuando falta la configuración", () => {
@@ -48,7 +52,7 @@ describe("carga inicial del formulario de Mercado Pago", () => {
     const html = renderPago();
 
     expect(html).toContain("no está configurado");
-    expect(html).not.toContain("Cargando los medios de pago");
+    expect(html).not.toContain("Cargando el formulario de pago");
     expect(html).not.toContain('id="paymentBrick_container"');
   });
 });

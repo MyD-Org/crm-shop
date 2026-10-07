@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { customizacionBrick } from "./pago-brick";
+import { customizacionBrick, textoCuotas } from "./pago-brick";
 
 /**
  * Test de regresión a nivel de código fuente, sin montar React.
@@ -22,8 +22,8 @@ const fuente = readFileSync(
 );
 
 function bloquePayment(): string {
-  const inicio = fuente.indexOf("<Payment");
-  expect(inicio, "no se encontró <Payment en el componente").toBeGreaterThan(-1);
+  const inicio = fuente.indexOf("<CardPayment");
+  expect(inicio, "no se encontró <CardPayment en el componente").toBeGreaterThan(-1);
   const fin = fuente.indexOf("/>", inicio);
   return fuente.slice(inicio, fin);
 }
@@ -59,54 +59,63 @@ describe("PagoMercadoPago — props del Payment Brick", () => {
  * `customizacionBrick` (memo por valor) y se verifica que el componente la use
  * con deps `[maxCuotas]`.
  */
+const sinTema = () => ({});
+
 describe("customizacionBrick", () => {
-  it("con maxCuotas=3 → paymentMethods.maxInstallments === 3", () => {
-    expect(customizacionBrick(3).paymentMethods.maxInstallments).toBe(3);
+  it("crédito con cuotas: exactamente esas (mínimo = máximo), sólo tarjeta de crédito", () => {
+    const c = customizacionBrick("credito", 6, 1000, sinTema);
+    expect(c.paymentMethods).toEqual({ types: { included: ["credit_card"] }, minInstallments: 6, maxInstallments: 6 });
   });
 
-  it("sin maxCuotas → sólo tarjetas, sin tope ni textos", () => {
-    expect(customizacionBrick(undefined)).toEqual({
-      paymentMethods: { creditCard: "all", debitCard: "all" },
-      visual: { style: { theme: "default" } },
-    });
+  it("débito: sólo tarjeta de débito y sin cuotas, aunque el pedido tenga", () => {
+    expect(customizacionBrick("debito", 6, 1000, sinTema).paymentMethods).toEqual({ types: { included: ["debit_card"] } });
   });
 
-  it("con cuotas: exactamente esas (mínimo = máximo) y el texto de la tarjeta de crédito las dice", () => {
-    const c = customizacionBrick(6);
-    expect(c.paymentMethods).toEqual({ creditCard: "all", debitCard: "all", minInstallments: 6, maxInstallments: 6 });
-    expect(c.visual.texts?.paymentMethods.creditCardValueProp).toBe("En 6 cuotas");
-    expect(customizacionBrick(1).visual.texts?.paymentMethods.creditCardValueProp).toBe("En un pago");
+  it("sin cuotas congeladas: sin tope (lo que ofrezca Mercado Pago)", () => {
+    expect("maxInstallments" in customizacionBrick("credito", undefined, 1000, sinTema).paymentMethods).toBe(false);
   });
 
-  it("nunca ofrece la cuenta ni el crédito de Mercado Pago dentro del Brick (van con su propio botón)", () => {
-    for (const n of [undefined, 1, 6]) expect("mercadoPago" in customizacionBrick(n).paymentMethods).toBe(false);
+  it("sin título propio y el botón dice el monto", () => {
+    const c = customizacionBrick("credito", 1, 245300, sinTema);
+    expect(c.visual.hideFormTitle).toBe(true);
+    expect(c.visual.texts.formSubmit).toMatch(/^Pagar \$\s?245\.300(,00)?$/);
   });
 
-  it("misma identidad para el mismo maxCuotas (re-renders del padre)", () => {
-    expect(customizacionBrick(6)).toBe(customizacionBrick(6));
-    expect(customizacionBrick(undefined)).toBe(customizacionBrick(undefined));
+  it("toma los colores del tema que le pasan", () => {
+    const c = customizacionBrick("credito", 3, 777, () => ({ baseColor: "#16283f" }));
+    expect(c.visual.style.customVariables).toEqual({ baseColor: "#16283f" });
   });
 
-  it("identidad distinta si cambia el valor", () => {
-    expect(customizacionBrick(6)).not.toBe(customizacionBrick(3));
-    expect(customizacionBrick(6)).not.toBe(customizacionBrick(undefined));
+  it("textoCuotas", () => {
+    expect(textoCuotas(6)).toBe("6 cuotas sin interés");
+    expect(textoCuotas(1)).toBe("En un pago");
   });
 
-  it("valores inválidos se tratan como sin máximo", () => {
-    expect(customizacionBrick(0)).toBe(customizacionBrick(undefined));
-    expect(customizacionBrick(2.5)).toBe(customizacionBrick(undefined));
+  it("misma identidad para los mismos valores (re-renders del padre)", () => {
+    expect(customizacionBrick("credito", 6, 500, sinTema)).toBe(customizacionBrick("credito", 6, 500, sinTema));
+  });
+
+  it("identidad distinta si cambia la tarjeta, las cuotas o el monto", () => {
+    const base = customizacionBrick("credito", 6, 500, sinTema);
+    expect(customizacionBrick("debito", 6, 500, sinTema)).not.toBe(base);
+    expect(customizacionBrick("credito", 3, 500, sinTema)).not.toBe(base);
+    expect(customizacionBrick("credito", 6, 501, sinTema)).not.toBe(base);
+  });
+
+  it("cuotas inválidas se tratan como sin tope", () => {
+    expect(customizacionBrick("credito", 0, 90, sinTema)).toBe(customizacionBrick("credito", undefined, 90, sinTema));
+    expect(customizacionBrick("credito", 2.5, 90, sinTema)).toBe(customizacionBrick("credito", undefined, 90, sinTema));
   });
 
   it("no se congela: el SDK del Brick puede mutarla sin romper el checkout", () => {
-    expect(Object.isFrozen(customizacionBrick(6))).toBe(false);
-    expect(Object.isFrozen(customizacionBrick(undefined).paymentMethods)).toBe(false);
+    expect(Object.isFrozen(customizacionBrick("credito", 6, 1000, sinTema))).toBe(false);
   });
 });
 
 describe("PagoMercadoPago usa la customization estable", () => {
-  it("memoiza con deps [maxCuotas] y pasa esa instancia al Brick", () => {
+  it("memoiza con deps [tipoTarjeta, maxCuotas, monto] y pasa esa instancia al Brick", () => {
     expect(fuente).toMatch(
-      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(maxCuotas\) as CustomizacionSdk,\s*\[maxCuotas\]\s*,?\s*\)/,
+      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(tipoTarjeta, maxCuotas, monto\) as CustomizacionSdk,\s*\[tipoTarjeta, maxCuotas, monto\]\s*,?\s*\)/,
     );
     expect(fuente).toMatch(/customization=\{customization\}/);
   });

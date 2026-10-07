@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, Field, Input, SegmentedControl, Select } from "@myd-org/ui";
+import { Alert, Button, Field, Input, RadioGroup, Select, type RadioOption } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
 import {
   MARCAS,
@@ -21,9 +21,12 @@ import { crearSesionSdk, precargarSdk, tokenizar, type ConfigPayway } from "@/li
 import { entornoSdkNavegador } from "@/lib/pagos/payway-sdk-navegador";
 import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
+import { AvisoProcesador } from "@/components/AvisoProcesador";
+import { textoCuotas } from "@/components/pago-brick";
 
 /**
- * Cobro con tarjeta de crédito o débito con Payway, dentro del sitio.
+ * Cobro con tarjeta de crédito o débito con Payway, dentro del sitio: "¿Cómo quiere pagar?" con las dos
+ * tarjetas (`RadioGroup` del DS) y el formulario dentro de la elegida, igual que con Mercado Pago.
  *
  * Modelo "NO PCI" de Payway: el número y el código de seguridad van del navegador a Payway (SDK
  * oficial, ver `payway-token.ts`) y vuelve un token; a NUESTRO servidor sólo llegan el token, el BIN,
@@ -90,6 +93,8 @@ export function PagoPayway({
   const [modalidad, setModalidad] = useState<ModalidadTarjeta>("credito");
   // null = se usa la sugerencia por el prefijo del número.
   const [marcaElegida, setMarcaElegida] = useState<Marca | null>(null);
+  // La marca se detecta por el número: el selector aparece sólo si no se reconoce o si la quiere cambiar.
+  const [cambiarMarca, setCambiarMarca] = useState(false);
   const [errores, setErrores] = useState<Errores>({});
   const formRef = useRef<HTMLFormElement>(null);
   // Una sola instancia del SDK por formulario: su huella de dispositivo (Cybersource) tiene que
@@ -120,7 +125,7 @@ export function PagoPayway({
   const sugerida = marcaPorPrefijo(pan);
   const marca = marcaElegida ?? sugerida;
   const debitoEnCuotas = modalidad === "debito" && cuotas > 1;
-  const cuotasTexto = cuotas > 1 ? `${cuotas} cuotas` : "un pago";
+  const mostrarSelectorMarca = cambiarMarca || !sugerida || marcaElegida !== null || Boolean(errores.marca);
 
   function validar(): Errores {
     const e: Errores = {};
@@ -232,31 +237,10 @@ export function PagoPayway({
 
   const procesando = estado.fase === "procesando";
 
-  return (
-    <form ref={formRef} onSubmit={pagar} noValidate autoComplete="on" className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5">
-      <p className="text-sm text-muted">
-        Pago de {fmtPrecio(monto)} en {cuotasTexto} con tarjeta de crédito o débito.
-      </p>
+  const etiquetaMarca = MARCAS.find((m) => m.id === sugerida)?.etiqueta;
 
-      {estado.fase === "rechazado" && (
-        <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 p-4">
-          <p className="text-sm font-semibold text-danger">No se pudo completar el pago</p>
-          <p className="mt-1 text-sm text-text">{estado.mensaje}</p>
-        </div>
-      )}
-
-      <Field label="Tipo de tarjeta" error={errores.modalidad}>
-        <SegmentedControl
-          ariaLabel="Tipo de tarjeta"
-          options={[
-            { label: "Crédito", value: "credito", disabled: procesando },
-            { label: "Débito", value: "debito", disabled: procesando },
-          ]}
-          value={modalidad}
-          onValueChange={(v) => setModalidad(v as ModalidadTarjeta)}
-        />
-      </Field>
-
+  const campos = (
+    <div className="flex flex-col gap-4">
       <Field label="Número de tarjeta" error={errores.pan}>
         <Input
           data-campo="pan"
@@ -269,6 +253,25 @@ export function PagoPayway({
           disabled={procesando}
         />
       </Field>
+      {!mostrarSelectorMarca && etiquetaMarca && (
+        <p className="-mt-2 flex items-center gap-2 text-sm text-muted">
+          Tarjeta {etiquetaMarca}.
+          <Button type="button" variant="link" size="sm" onClick={() => setCambiarMarca(true)} disabled={procesando}>
+            Cambiar marca
+          </Button>
+        </p>
+      )}
+      {mostrarSelectorMarca && (
+        <Field label="Marca" hint={sugerida && !marcaElegida ? "Detectada por el número; puede cambiarla." : undefined} error={errores.marca}>
+          <Select
+            options={MARCAS.map((m) => ({ label: m.etiqueta, value: m.id }))}
+            value={marca ?? ""}
+            onValueChange={(v) => setMarcaElegida(v as Marca)}
+            placeholder="Seleccionar marca"
+            disabled={procesando}
+          />
+        </Field>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Vencimiento (MM/AA)" error={errores.venc}>
@@ -321,15 +324,17 @@ export function PagoPayway({
         />
       </Field>
 
-      <Field label="Marca" hint={sugerida && !marcaElegida ? "Detectada por el número; puede cambiarla." : undefined} error={errores.marca}>
-        <Select
-          options={MARCAS.map((m) => ({ label: m.etiqueta, value: m.id }))}
-          value={marca ?? ""}
-          onValueChange={(v) => setMarcaElegida(v as Marca)}
-          placeholder="Seleccionar marca"
-          disabled={procesando}
-        />
-      </Field>
+      {modalidad === "credito" && (
+        <div className="flex items-center justify-between gap-3 rounded-md bg-elevated px-4 py-3 text-sm">
+          <span className="flex flex-col">
+            <span className="text-muted">Cuotas</span>
+            <span className="font-semibold text-text">
+              {cuotas > 1 ? `${cuotas} cuotas sin interés de ${fmtPrecio(monto / cuotas)}` : `1 pago de ${fmtPrecio(monto)}`}
+            </span>
+          </span>
+          <span className="text-right text-muted">Elegidas en el carrito</span>
+        </div>
+      )}
 
       <Button type="submit" disabled={procesando || config === null}>
         {procesando ? "Procesando su pago…" : `Pagar ${fmtPrecio(monto)}`}
@@ -340,14 +345,45 @@ export function PagoPayway({
           Estamos procesando su pago. Puede demorar hasta un minuto; no cierre ni recargue esta página.
         </p>
       )}
+    </div>
+  );
 
-      <p className="flex items-start gap-1.5 text-xs text-muted">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-px shrink-0">
-          <rect x="4" y="11" width="16" height="10" rx="2" />
-          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-        </svg>
-        <span>Pago seguro: los datos de su tarjeta van directo al procesador y no se guardan en este sitio.</span>
-      </p>
+  const opciones: RadioOption[] = [
+    {
+      value: "credito",
+      label: "Tarjeta de crédito",
+      description: "Visa, Mastercard, American Express, Cabal, Naranja y Diners",
+      badge: { label: textoCuotas(cuotas), tone: cuotas > 1 ? "success" : "neutral" },
+      content: campos,
+      disabled: procesando && modalidad !== "credito",
+    },
+    {
+      value: "debito",
+      label: "Tarjeta de débito",
+      description: cuotas > 1 ? "Para pagar con débito, pase su compra a un pago." : "Visa, Mastercard, Maestro y Cabal de débito",
+      ...(cuotas > 1 ? { badge: { label: "Sólo en un pago" } } : {}),
+      content: campos,
+      disabled: cuotas > 1 || (procesando && modalidad !== "debito"),
+    },
+  ];
+
+  return (
+    <form ref={formRef} onSubmit={pagar} noValidate autoComplete="on" className="flex flex-col gap-4">
+      {estado.fase === "rechazado" && (
+        <Alert tone="danger" title="No se pudo completar el pago">
+          {estado.mensaje}
+        </Alert>
+      )}
+      {errores.modalidad && <Alert tone="danger">{errores.modalidad}</Alert>}
+
+      <RadioGroup
+        legend="¿Cómo quiere pagar?"
+        options={opciones}
+        value={modalidad}
+        onValueChange={(v) => setModalidad(v as ModalidadTarjeta)}
+      />
+
+      <AvisoProcesador>Payway procesa el pago. Los datos de su tarjeta van directo a Payway y no se guardan en nuestro sitio.</AvisoProcesador>
     </form>
   );
 }

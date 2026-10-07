@@ -1,17 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Spinner } from "@myd-org/ui";
+import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
+import { RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
-import { customizacionBrick, type CustomizacionSdk } from "./pago-brick";
+import { customizacionBrick, textoCuotas, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
+import { AvisoProcesador } from "./AvisoProcesador";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 
 /**
- * Cobro con tarjeta dentro del sitio, con Checkout Bricks.
+ * Cobro con Mercado Pago: "¿Cómo quiere pagar?" con tarjeta de crédito, de débito o la cuenta de
+ * Mercado Pago (`RadioGroup` del DS). Cada opción muestra lo suyo adentro: el formulario de tarjeta
+ * (Card Payment Brick) o el botón "Ir a Mercado Pago".
  *
  * Los datos de la tarjeta viven en iframes de Mercado Pago y nunca tocan
  * nuestro código: acá solo llega un token de un solo uso. Eso es lo que nos
@@ -31,6 +34,8 @@ function inicializar() {
   initMercadoPago(key, { locale: "es-AR" });
   iniciado = true;
 }
+
+type Opcion = TipoTarjeta | "cuenta";
 
 type Estado =
   | { fase: "cargando" }
@@ -85,6 +90,9 @@ export function PagoMercadoPago({
 }: Props) {
   const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "cargando" });
   const [intento, setIntento] = useState(0);
+  const [opcion, setOpcion] = useState<Opcion>("credito");
+  /** El débito es siempre un pago: con cuotas congeladas no se ofrece. */
+  const debitoDisponible = !(maxCuotas !== undefined && maxCuotas > 1);
 
   useEffect(() => {
     inicializar();
@@ -113,12 +121,13 @@ export function PagoMercadoPago({
   );
 
   /**
-   * Sólo tarjetas, con las cuotas del pedido congelado (ver `pago-brick.ts`). La identidad sólo cambia
-   * si cambia `maxCuotas` (test de regresión #21). La cuenta de Mercado Pago va aparte, debajo.
+   * La tarjeta elegida, con las cuotas del pedido congelado (ver `pago-brick.ts`). La identidad sólo
+   * cambia si cambia la tarjeta, las cuotas o el monto (test de regresión #21).
    */
+  const tipoTarjeta: TipoTarjeta = opcion === "debito" ? "debito" : "credito";
   const customization = useMemo(
-    () => customizacionBrick(maxCuotas) as CustomizacionSdk,
-    [maxCuotas],
+    () => customizacionBrick(tipoTarjeta, maxCuotas, monto) as CustomizacionSdk,
+    [tipoTarjeta, maxCuotas, monto],
   );
 
   /**
@@ -133,19 +142,7 @@ export function PagoMercadoPago({
       token?: string;
       installments?: number;
       payment_method_id?: string;
-      payment_type_id?: string;
     };
-
-    /**
-     * Detección del medio del lado del cliente (por si el Brick devolviera dinero en cuenta): MP lo marca con
-     * `payment_method_id === "account_money"` (y `payment_type_id === "account_money"`).
-     * El server igual re-decide con lo que le llega — el cliente puede mentir —
-     * pero mandar el medio correcto acá evita que un dinero en cuenta se
-     * intente cobrar como tarjeta y falle por token faltante.
-     */
-    const esCuentaMp =
-      datos?.payment_method_id === "account_money" ||
-      datos?.payment_type_id === "account_money";
 
     try {
       const res = await fetch("/api/pagos/mercadopago", {
@@ -153,7 +150,7 @@ export function PagoMercadoPago({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pedidoId,
-          medio: esCuentaMp ? "cuenta_mp" : "tarjeta",
+          medio: "tarjeta",
           token: datos?.token,
           cuotas: datos?.installments,
           metodoPagoId: datos?.payment_method_id,
@@ -222,12 +219,10 @@ export function PagoMercadoPago({
     enviarRef.current = enviar;
   });
 
-  const onSubmit = useCallback(
-    async ({ formData }: { formData: unknown }) => {
-      await enviarRef.current(formData);
-    },
-    [],
-  );
+  // El Card Payment Brick llama `onSubmit(formData)` directo (el Payment Brick lo envolvía).
+  const onSubmit = useCallback(async (formData: unknown) => {
+    await enviarRef.current(formData);
+  }, []);
 
   /**
    * `onReady` y `onError` también tienen que ser estables. El `useEffect` del
@@ -265,16 +260,28 @@ export function PagoMercadoPago({
    * Se limpia al llegar `onReady`, al fallar, al desmontar y al reintentar, y cada
    * intento (`intento`) arranca su propio plazo.
    */
-  const cargandoConBrick = !faltaKey && estado.fase === "cargando";
+  const cargandoConBrick = !faltaKey && opcion !== "cuenta" && estado.fase === "cargando";
   useEffect(() => {
     if (!cargandoConBrick) return;
     return iniciarPlazoCarga(() => setEstado(alVencerPlazo));
   }, [cargandoConBrick, intento]);
 
-  /** Remonta el Brick (`key={intento}`) y vuelve a cargar: el token de MP es de un solo uso. */
+  /** Remonta el Brick (`key`) y vuelve a cargar: el token de MP es de un solo uso. */
   function reintentar() {
     setIntento((n) => n + 1);
     setEstado({ fase: "cargando" });
+  }
+
+  /** Otra opción: una tarjeta monta su Brick de cero; la cuenta no tiene nada que cargar. */
+  function elegir(nueva: Opcion) {
+    if (nueva === opcion || estado.fase === "procesando") return;
+    setOpcion(nueva);
+    if (nueva === "cuenta") {
+      setEstado({ fase: "formulario" });
+    } else {
+      setIntento((n) => n + 1);
+      setEstado({ fase: "cargando" });
+    }
   }
 
   if (faltaKey) {
@@ -334,8 +341,61 @@ export function PagoMercadoPago({
     );
   }
 
+  const procesando = estado.fase === "procesando";
+
+  const formularioTarjeta = (
+    <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>
+      {estado.fase === "cargando" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface">
+          <Spinner label="Cargando el formulario de pago" />
+          <p className="text-sm text-muted">Cargando el formulario de pago…</p>
+        </div>
+      )}
+      {/* Sigue montado para que el SDK pueda terminar de cargar. Sus estados
+          intermedios no son un error ni deben pedir que se cambie de medio. */}
+      <div aria-hidden={estado.fase === "cargando"} className={estado.fase === "cargando" ? "invisible" : undefined}>
+        <CardPayment
+          key={`${tipoTarjeta}-${intento}`}
+          initialization={initialization}
+          customization={customization}
+          onSubmit={onSubmit}
+          onReady={onReady}
+          onError={onError}
+        />
+      </div>
+    </div>
+  );
+
+  const opciones: RadioOption[] = [
+    {
+      value: "credito",
+      label: "Tarjeta de crédito",
+      description: "Visa, Mastercard, American Express y más",
+      ...(maxCuotas !== undefined
+        ? { badge: { label: textoCuotas(maxCuotas), tone: maxCuotas > 1 ? ("success" as const) : ("neutral" as const) } }
+        : {}),
+      content: formularioTarjeta,
+      disabled: procesando && opcion !== "credito",
+    },
+    {
+      value: "debito",
+      label: "Tarjeta de débito",
+      description: debitoDisponible ? "Visa Débito, Maestro y más" : "Para pagar con débito, pase su compra a un pago.",
+      ...(debitoDisponible ? {} : { badge: { label: "Sólo en un pago" } }),
+      content: formularioTarjeta,
+      disabled: !debitoDisponible || (procesando && opcion !== "debito"),
+    },
+    {
+      value: "cuenta",
+      label: "Cuenta de Mercado Pago",
+      description: "Dinero disponible o tarjetas guardadas en su cuenta",
+      content: <PagoCuentaMercadoPago pedidoId={pedidoId} cuotas={maxCuotas} />,
+      disabled: procesando,
+    },
+  ];
+
   return (
-    <div>
+    <div className="flex flex-col gap-4">
       {estado.fase === "error_formulario" && <AvisoFormularioNoCargo onReintentar={reintentar} />}
       {estado.fase === "rechazado" && (
         <AvisoPagoRechazado
@@ -345,35 +405,9 @@ export function PagoMercadoPago({
         />
       )}
 
-      <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>
-        {estado.fase === "cargando" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-surface p-6">
-            <Spinner label="Cargando los medios de pago" />
-            <p className="text-sm text-muted">Cargando los medios de pago…</p>
-          </div>
-        )}
-        {/* Sigue montado para que el SDK pueda terminar de cargar. Sus estados
-            intermedios no son un error ni deben pedir que se cambie de medio. */}
-        <div
-          aria-hidden={estado.fase === "cargando"}
-          className={estado.fase === "cargando" ? "invisible" : undefined}
-        >
-          <Payment
-            key={intento}
-            initialization={initialization}
-            customization={customization}
-            onSubmit={onSubmit}
-            onReady={onReady}
-            onError={onError}
-          />
-        </div>
-      </div>
+      <RadioGroup legend="¿Cómo quiere pagar?" options={opciones} value={opcion} onValueChange={(v) => elegir(v as Opcion)} />
 
-      {estado.fase !== "procesando" && (
-        <div className="mt-4">
-          <PagoCuentaMercadoPago pedidoId={pedidoId} />
-        </div>
-      )}
+      <AvisoProcesador>Mercado Pago procesa el pago. Los datos de su tarjeta no pasan por nuestro sitio.</AvisoProcesador>
     </div>
   );
 }

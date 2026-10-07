@@ -25,6 +25,9 @@ import {
   puedeNavegarSolo,
 } from "@/lib/chat-ia-integracion";
 
+/** Invitación proactiva del chat (teaser junto a la burbuja). Apagada: la burbuja sigue disponible. */
+const INVITACION_PROACTIVA = false;
+
 /**
  * El widget habla con ai-api por `/ai-api/*` (rewrite same-origin de
  * next.config.ts, sin CORS) y pide su token a `POST /api/ai-token`, que decide
@@ -263,7 +266,9 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       onPresentationChange={setPresentacion}
       // Invitación proactiva (src/lib/iniciativa/): el puente cuenta los topes
       // al aceptar o cerrar; el widget sólo la dibuja.
-      teaser={teaser ?? undefined}
+      // Apagada por pedido de la usuaria (2026-10-07): el mensaje proactivo ("¿Necesita ayuda?") no se
+      // muestra. Para volver a encenderla, poner INVITACION_PROACTIVA en true.
+      teaser={INVITACION_PROACTIVA ? (teaser ?? undefined) : undefined}
       onTeaserAction={aceptarTeaser}
       onTeaserDismiss={descartarTeaser}
     />

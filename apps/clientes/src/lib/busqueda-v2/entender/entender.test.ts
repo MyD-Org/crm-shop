@@ -88,4 +88,16 @@ describe("entender", () => {
     expect(r?.plan.duros.categorias).toEqual([]);
     expect(r?.plan.blandos.categorias).toEqual([{ nombre: "Reflectores", peso: 0.8 }]);
   });
+
+  it("sin Jev, 'luz para el patio' recupera por la categoría de la luz (no por 'apto exterior' solo, que trae cámaras y cajas estancas)", async () => {
+    const r = await entender("luz para el patio", { arbol, jev: null, contar });
+    expect(r?.plan.blandos.categorias).toEqual([{ nombre: "ILUMINACION", peso: 0.8 }]);
+    expect(r?.plan.blandos.atributos).toEqual([{ id: "apto-exterior", peso: 0.6 }]);
+    expect(r?.plan.duros).toEqual({ categorias: [], atributos: [] });
+  });
+
+  it("sin Jev, 'camara para el patio' no suma la categoría de la luz", async () => {
+    const r = await entender("camara para el patio", { arbol, jev: null, contar });
+    expect(r?.plan.blandos.categorias.map((c) => c.nombre)).not.toContain("ILUMINACION");
+  });
 });

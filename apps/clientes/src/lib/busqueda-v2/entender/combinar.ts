@@ -196,6 +196,9 @@ export async function combinar(entrada: EntradaCombinar): Promise<PlanBusqueda> 
   };
   if (sub && sub.confianza >= MINIMO_SUB_BLANDA) sumarCategoria(sub.nombre, sub.confianza);
   if (raiz && (!sub || sub.confianza < UMBRAL_PREGUNTA)) sumarCategoria(raiz.nombre, raiz.confianza * FACTOR_RAIZ);
+  // Sin Jev, "luz para el patio" no tiene otra pista de categoría: sin ésta recuperaría todo lo "apto exterior"
+  // (cámaras, cajas estancas). Con Jev, la categoría la dice Jev.
+  if (!jev) for (const c of dic.categoriasDeLuz ?? []) sumarCategoria(c, PESO_CATEGORIA_DICCIONARIO);
   for (const c of dic.categorias) {
     if (!jev) sumarCategoria(c, PESO_CATEGORIA_DICCIONARIO);
     // Con Jev, el diccionario sólo suma lo que cae dentro de la raíz que eligió Jev.

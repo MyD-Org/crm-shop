@@ -14,6 +14,19 @@ con ellos si están **escritos** en la consulta. La versión amplia (ningún sin
 categoría) rompía "calefactor para el baño": por eso quedó acotada. Lección: un sinónimo correcto
 en una familia arrastra la categoría equivocada si la palabra destino es ambigua.
 
+## Caso real: "luz para el patio" → cámaras y luz de emergencia primero
+
+Sin Jev (la página del catálogo recalcula el plan sin Jev; también el desplegable y los planes que
+no se pudieron guardar), "luz para el patio" no tenía ni un término que recuperara (`luz` y `patio`
+son contexto, peso 0,3) ni categoría: lo único que recuperaba era el atributo de contexto "apto
+exterior" (IP65 o "exterior" en el texto) y traía cualquier producto de intemperie: cámaras bullet,
+torreta, cajas estancas, la luz de emergencia IP65. Criterio del rubro: "luz/iluminar/alumbrar +
+lugar" pide **luminarias**. Arreglo: con una palabra de luz, un lugar y ninguna palabra de producto
+ni sinónimo (`llave de luz`, `luz que se prenda sola` → sensor, `luz de emergencia` quedan afuera),
+y sólo sin Jev, el plan suma como blanda la categoría de la luz (la raíz de iluminación) y, en un
+lugar de intemperie, la luminaria "exterior". "cámara para el patio" no cambia (su sustantivo lo
+resuelve la categoría de cámaras).
+
 ## Palabras ambiguas
 
 | Palabra | Familias | Qué decide | Cuidado con |

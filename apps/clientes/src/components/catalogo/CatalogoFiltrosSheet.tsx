@@ -41,7 +41,6 @@ export function CatalogoFiltrosSheet({
   facetas,
   estado,
   navegar,
-  conFacetasPorTipo = false,
   navegando = false,
 }: {
   facetas: Facetas;
@@ -49,8 +48,6 @@ export function CatalogoFiltrosSheet({
   estado: EstadoCatalogo;
   /** Navega a una URL del catálogo (el padre la envuelve en una transición). */
   navegar: (href: string) => void;
-  /** Facetas por tipo prendidas (flag `catalogo-facetas-por-tipo`): la categoría se aplica en el acto. */
-  conFacetasPorTipo?: boolean;
   /** Hay una navegación en curso (la categoría recién elegida está cargando). */
   navegando?: boolean;
 }) {
@@ -90,12 +87,10 @@ export function CatalogoFiltrosSheet({
   };
 
   // La hoja sigue abierta: sólo navega (si hay algo que aplicar) y espera la respuesta.
-  const alElegirCategoria = conFacetasPorTipo
-    ? (categorias: string[]) => {
-        const href = hrefAlElegirCategoria(estado, borrador, categorias);
-        if (href) navegar(href);
-      }
-    : undefined;
+  const alElegirCategoria = (categorias: string[]) => {
+    const href = hrefAlElegirCategoria(estado, borrador, categorias);
+    if (href) navegar(href);
+  };
 
   return (
     <>

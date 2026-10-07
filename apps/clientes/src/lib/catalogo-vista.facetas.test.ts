@@ -82,7 +82,7 @@ const lista = (clave: string, titulo: string, items: [string, string, number][])
   items: items.map(([valor, etiqueta, count]) => ({ valor, etiqueta, count })),
 });
 
-describe("panelPorTipo (qué muestra el panel con el flag prendido)", () => {
+describe("panelPorTipo (qué muestra el panel de características)", () => {
   const arbol = [
     { label: "ELECTRICIDAD", count: 10, nivel: 1 },
     { label: "TERMICAS", count: 4, nivel: 2 },
@@ -91,9 +91,9 @@ describe("panelPorTipo (qué muestra el panel con el flag prendido)", () => {
   ];
   const grupos = [lista("polos", "Polos", [["2", "2", 3], ["4", "4", 1]])];
 
-  it("porClave ausente (flag apagado, tabla ausente o falla): el panel de siempre", () => {
-    expect(panelPorTipo(undefined, base, arbol)).toEqual({ modo: "actual" });
-    expect(panelPorTipo(undefined, { ...base, categorias: ["TERMICAS"] }, arbol)).toEqual({ modo: "actual" });
+  it("porClave ausente (tabla ausente o falla de la consulta): no hay nada que decir", () => {
+    expect(panelPorTipo(undefined, base, arbol)).toEqual({ modo: "vacio" });
+    expect(panelPorTipo(undefined, { ...base, categorias: ["TERMICAS"] }, arbol)).toEqual({ modo: "vacio" });
   });
 
   it("sin categoría ni búsqueda: no hay grupos y se pide elegir una categoría", () => {

@@ -45,7 +45,7 @@ describe("CatalogoFiltros: categorías", () => {
   });
 });
 
-describe("CatalogoFiltros: marcas y características (regla de ceros, subtítulos)", () => {
+describe("CatalogoFiltros: marcas (regla de ceros)", () => {
   const conFiltros: Facetas = {
     ...facetas,
     marcas: [
@@ -71,12 +71,10 @@ describe("CatalogoFiltros: marcas y características (regla de ceros, subtítulo
     expect(renderizarCon(conFiltros, { marca: "Zafiro" })).toContain("Zafiro 0");
   });
 
-  it("las características van bajo un subtítulo por grupo y sin los ítems en 0", () => {
+  it("el conteo plano de atributos no se dibuja en el panel (las características salen por tipo)", () => {
     const t = renderizarCon(conFiltros);
-    expect(t).toContain("Tono de luz");
-    expect(t).toContain("Zócalo");
-    expect(t).not.toContain("Ambiente");
-    expect(t).toContain("Rosca E27 2");
-    expect(t).not.toContain("Rosca E14");
+    expect(t).not.toContain("Tono de luz");
+    expect(t).not.toContain("Zócalo");
+    expect(t).not.toContain("Rosca E27");
   });
 });

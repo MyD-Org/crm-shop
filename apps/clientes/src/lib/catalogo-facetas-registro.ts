@@ -1,5 +1,5 @@
 /**
- * Facetas por tipo de producto (change `catalogo-filtros-ux`, flag `catalogo-facetas-por-tipo`).
+ * Facetas por tipo de producto (change `catalogo-filtros-ux`).
  *
  * Módulo puro, sin IO. Dos piezas:
  *  - `REGISTRO`: qué claves estructuradas (`catalog_atributos`) se pueden ofrecer como filtro, con su

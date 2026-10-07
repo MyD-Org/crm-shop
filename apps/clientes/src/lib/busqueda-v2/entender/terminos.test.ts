@@ -25,6 +25,12 @@ describe("términos con peso", () => {
     expect(peso("camara para ver la casa desde el celular")).toMatchObject({ camara: 1, casa: PESO_CONTEXTO, celular: 1 });
   });
 
+  it("los operadores de rango («hasta», «menos de», «desde») son contexto: la medida decide, no recuperan", () => {
+    expect(peso("hasta 50w")).toEqual({ hasta: PESO_CONTEXTO, "50w": PESO_MEDIDA });
+    expect(peso("lampara de menos de 10w")).toEqual({ lampara: 1, menos: PESO_CONTEXTO, "10w": PESO_MEDIDA });
+    expect(peso("reflector de mas de 100w")).toEqual({ reflector: 1, proyector: PESO_EXPANSION, "100w": PESO_MEDIDA });
+  });
+
   it("una frase sólo de contexto no deja nada que recupere", () => {
     expect(Object.values(peso("luz para el patio que no se moje")).every((p) => p < 0.6)).toBe(true);
   });

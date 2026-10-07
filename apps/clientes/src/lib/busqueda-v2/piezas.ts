@@ -31,7 +31,13 @@ export interface PiezasBusqueda {
 }
 
 /** Lo que del plan usan Recuperar y Ordenar (lo demás lo resuelve la URL). */
-export type CriterioPlan = Pick<PlanBusqueda, "consulta" | "blandos">;
+export type CriterioPlan = Pick<PlanBusqueda, "consulta" | "blandos"> & {
+  /**
+   * Todas las categorías que entendió el plan (duras y blandas), por nombre. Sólo desempata: a igual
+   * puntaje, antes el producto que está en alguna. Sirve donde los duros no filtran (autocompletar).
+   */
+  categoriasDelPlan?: string[];
+};
 
 const ESPECIALES_REGEX = /[.*+?^${}()|[\]\\]/g;
 

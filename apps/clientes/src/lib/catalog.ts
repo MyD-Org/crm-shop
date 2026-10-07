@@ -1212,12 +1212,15 @@ function condicionesDe(
  * El desempate por nombre mantiene la paginación estable (sin él, dos productos
  * del mismo precio pueden intercambiarse entre páginas).
  *
- * En `relevancia`, antes del nombre desempata el stock (más primero; los no
- * inventariables al final): entre dos productos que responden igual de bien,
- * el que más se mueve. Con el alfabético, "Reflector industrial" le ganaba a
+ * En `relevancia`, antes del nombre desempatan: estar en alguna categoría que
+ * entendió el plan (duras o blandas; importa donde los duros no filtran, como
+ * el autocompletar) y el stock (más primero; los no inventariables al final):
+ * entre dos productos que responden igual de bien, el del tipo pedido y el que
+ * más se mueve. Con el alfabético, "Reflector industrial" le ganaba a
  * todos los "Reflector LED" sólo por la letra.
  */
-const desempateRelevancia = (disp?: ContextoDisponibilidad) => [
+const desempateRelevancia = (disp?: ContextoDisponibilidad, categorias?: string[]) => [
+  ...(categorias?.length ? [sql`(case when ${filtroCategoriasSql(categorias)} then 0 else 1 end) asc`] : []),
   sql`${disp ? stockSucursalSql(disp) : stockSql} desc nulls last`,
   asc(crmCatalogo.name),
 ];
@@ -1233,7 +1236,7 @@ function ordenDe(orden: OrdenCatalogo, filtros: FiltrosCatalogo, disp?: Contexto
         const parecido = texto.tolerante
           ? terminosParecidos(texto.plan).map((t) => sql`public.word_similarity(${raizPlural(t)}, ${sinTildes(nombreExhibidoSql)}) * 4`)
           : [];
-        return [sql`${parecido.length ? sql.join([puntaje, ...parecido], sql` + `) : puntaje} desc`, ...desempateRelevancia(disp)];
+        return [sql`${parecido.length ? sql.join([puntaje, ...parecido], sql` + `) : puntaje} desc`, ...desempateRelevancia(disp, texto.plan.categoriasDelPlan)];
       }
       // Sin términos útiles no hay con qué puntuar: alfabético.
       if (!texto.q || !terminosBusqueda(texto.q).length) return [asc(crmCatalogo.name)];

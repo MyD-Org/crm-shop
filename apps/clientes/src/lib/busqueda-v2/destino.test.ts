@@ -41,6 +41,14 @@ describe("criterioDe: lo blando que ordena y recupera", () => {
   });
 });
 
+describe("criterioDe: las categorías del plan (duras y blandas) viajan para desempatar", () => {
+  it("une duras y blandas sin repetir; sin categorías, no agrega el campo", () => {
+    const p = { ...plan({ categorias: ["Luminarias exteriores"] }), blandos: { categorias: [{ nombre: "Reflectores", peso: 0.8 }, { nombre: "Luminarias exteriores", peso: 0.5 }], atributos: [], terminos: [] } };
+    expect(criterioDe(p, { categorias: [], atributos: [] }).categoriasDelPlan).toEqual(["Luminarias exteriores", "Reflectores"]);
+    expect(criterioDe(plan({}), { categorias: [], atributos: [] })).not.toHaveProperty("categoriasDelPlan");
+  });
+});
+
 describe("estadoConPlan: los duros viajan por la URL y los inválidos se descartan", () => {
   it("suma las medidas duras a los filtros vigentes, validadas y en orden canónico", () => {
     const e = estadoConPlan({ ...base, atributos: ["zocalo-e27"] }, plan({ atributos: ["polos:2", "corriente_a:20"] }));

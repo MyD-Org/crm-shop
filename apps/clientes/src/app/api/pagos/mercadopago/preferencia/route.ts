@@ -4,14 +4,14 @@ import { getPedidoParaPago, motivoNoCobrable } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitir } from "@/lib/rate-limit";
 import { crearPreferencia, mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
-import { armarPreferencia, cuentaMpDisponible } from "@/lib/pagos/mercadopago-preferencia";
+import { armarPreferencia } from "@/lib/pagos/mercadopago-preferencia";
 
 const MAX_PEDIDOS = 20;
 const VENTANA_MS = 5 * 60_000;
 
 /**
- * POST /api/pagos/mercadopago/preferencia — crea la preferencia que habilita "Cuenta de Mercado Pago"
- * (dinero en cuenta) en el Payment Brick, para un pedido propio ya creado.
+ * POST /api/pagos/mercadopago/preferencia — crea la preferencia para pagar con la cuenta de Mercado Pago
+ * un pedido propio ya creado, y devuelve la URL de Mercado Pago a la que se lleva al comprador.
  *
  * No cobra nada: el comprador paga en el flujo de Mercado Pago, vuelve a `/checkout?pedido=<id>` y el
  * webhook (o la consulta del sondeo) registra el cobro por `registrarCobro`, por `external_reference`.
@@ -59,24 +59,18 @@ export async function POST(req: Request) {
       { status: 409 },
     );
   }
-  if (!cuentaMpDisponible(pedido.cuotas)) {
-    return NextResponse.json(
-      { error: "El pago con cuenta de Mercado Pago sólo está disponible en un pago.", motivo: "cuotas_distintas" },
-      { status: 409 },
-    );
-  }
-
   try {
-    const preferenceId = await crearPreferencia(
+    const url = await crearPreferencia(
       armarPreferencia({
         pedidoId: pedido.id,
         numero: pedido.numero,
         total: pedido.total,
         origen: new URL(req.url).origin,
         emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
+        cuotas: pedido.cuotas,
       }),
     );
-    return NextResponse.json({ preferenceId }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ url }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error("[/api/pagos/mercadopago/preferencia] error:", err);
     return NextResponse.json(

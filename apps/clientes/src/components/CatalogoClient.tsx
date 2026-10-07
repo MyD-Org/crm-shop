@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, EmptyState, Pagination } from "@myd-org/ui";
+import { Button, EmptyState, FadeScroll, Pagination } from "@myd-org/ui";
 import { CatalogoAvisoLocal } from "@/components/catalogo/CatalogoAvisoLocal";
 import { CatalogoChips } from "@/components/catalogo/CatalogoChips";
 import { CatalogoControles } from "@/components/catalogo/CatalogoControles";
@@ -152,26 +152,6 @@ export function CatalogoClient({
   // aunque todavía no haya habido un render de por medio (la hoja de mobile
   // no tiene este problema porque su borrador vive en un `useState` con
   // updater funcional, ver CatalogoFiltrosSheet).
-  const panelRef = useRef<HTMLElement>(null);
-  const [hayMasAbajo, setHayMasAbajo] = useState(false);
-  const [hayMasArriba, setHayMasArriba] = useState(false);
-  const medirPanel = () => {
-    const el = panelRef.current;
-    if (!el) return;
-    setHayMasAbajo(el.scrollHeight - el.scrollTop - el.clientHeight > 1);
-    setHayMasArriba(el.scrollTop > 1);
-  };
-  // El alto del contenido cambia al expandir marcas o al redimensionar.
-  useEffect(() => {
-    const el = panelRef.current;
-    if (!el) return;
-    medirPanel();
-    const ro = new ResizeObserver(medirPanel);
-    ro.observe(el);
-    if (el.firstElementChild) ro.observe(el.firstElementChild);
-    return () => ro.disconnect();
-  }, []);
-
   const estadoVisibleRef = useRef(estadoVisible);
   useEffect(() => {
     estadoVisibleRef.current = estadoVisible;
@@ -308,24 +288,17 @@ export function CatalogoClient({
             scrollea adentro: el alto máximo es la pantalla menos el `top-20`,
             para que el borde inferior del panel (y su difuminado) quede
             dentro de la pantalla.
-          - Sin barra de scroll: un difuminado de 48px arriba y/o abajo, sólo
-            del lado donde haya más contenido por ver; el `pb-12` deja el último filtro por encima de él.
+          - Sin barra de scroll: `FadeScroll` del DS difumina 48px arriba y/o
+            abajo, sólo del lado donde haya más contenido por ver; el `pb-12`
+            deja el último filtro por encima de él.
         */}
-        <aside
-          ref={panelRef}
-          onScroll={medirPanel}
-          className={`sticky top-20 hidden max-h-[calc(100dvh-5rem)] w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-12 [scrollbar-width:none] lg:block ${
-            hayMasArriba && hayMasAbajo
-              ? "[mask-image:linear-gradient(to_bottom,transparent,black_48px,black_calc(100%-48px),transparent)]"
-              : hayMasAbajo
-                ? "[mask-image:linear-gradient(to_bottom,black_calc(100%-48px),transparent)]"
-                : hayMasArriba
-                  ? "[mask-image:linear-gradient(to_bottom,transparent,black_48px)]"
-                  : ""
-          }`}
+        <FadeScroll
+          as="aside"
+          fadeFrom="lg"
+          className="sticky top-20 hidden max-h-[calc(100dvh-5rem)] w-64 shrink-0 self-start overflow-y-auto overscroll-contain pb-12 lg:block"
         >
           <CatalogoFiltros key={entrada} facetas={facetas} estado={estadoFiltros} ir={irFiltros} />
-        </aside>
+        </FadeScroll>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
           {productos.length === 0 && busquedaIa && consultaVacia ? (

@@ -34,7 +34,7 @@ const pedir = (body: unknown = { pedidoId: "p1" }) =>
 beforeEach(() => {
   configurado = true;
   sesion = true;
-  crearPreferencia.mockReset().mockResolvedValue("pref-123");
+  crearPreferencia.mockReset().mockResolvedValue("https://mp.example/checkout/pref-123");
   pedido = {
     id: "p1", numero: "000001", total: 120000, pagoEstado: "pendiente", pagoMetodo: "mercadopago",
     clienteEmail: "ana@cliente.example", facturacionTipoDoc: null, facturacionNroDoc: null,
@@ -43,15 +43,15 @@ beforeEach(() => {
 });
 
 describe("POST /api/pagos/mercadopago/preferencia", () => {
-  it("crea la preferencia desde el pedido congelado y devuelve sólo el id", async () => {
+  it("crea la preferencia desde el pedido congelado y devuelve sólo el link de pago", async () => {
     const res = await pedir();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ preferenceId: "pref-123" });
+    expect(await res.json()).toEqual({ url: "https://mp.example/checkout/pref-123" });
     const pref = crearPreferencia.mock.calls[0][0];
     expect(pref.items[0].unit_price).toBe(120000);
     expect(pref.external_reference).toBe("p1");
     expect(pref.purpose).toBe("wallet_purchase");
-    expect(pref.payment_methods).toEqual({ installments: 1 });
+    expect(pref.payment_methods).toEqual({ installments: 1, excluded_payment_methods: [{ id: "consumer_credits" }] });
     expect(pref.back_urls.success).toBe("https://tienda.example/checkout?pedido=p1&pago=mp");
   });
 
@@ -65,11 +65,10 @@ describe("POST /api/pagos/mercadopago/preferencia", () => {
     expect((await pedir()).status).toBe(200);
   });
 
-  it("con 2 o más cuotas congeladas: 409 y no se crea nada", async () => {
+  it("con cuotas congeladas: la ofrece con ese tope de cuotas", async () => {
     pedido!.cuotas = 3;
-    const res = await pedir();
-    expect(res.status).toBe(409);
-    expect(crearPreferencia).not.toHaveBeenCalled();
+    expect((await pedir()).status).toBe(200);
+    expect(crearPreferencia.mock.calls[0][0].payment_methods.installments).toBe(3);
   });
 
   it("sin sesión: 401", async () => {

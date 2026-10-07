@@ -207,11 +207,13 @@ async function pedir(
  * Idempotencia: cada llamada es una preferencia nueva e inofensiva (no cobra nada hasta que el comprador
  * paga en Mercado Pago), así que no lleva clave.
  */
+/** Crea la preferencia y devuelve la URL de Mercado Pago a la que se lleva al comprador (`init_point`). */
 export async function crearPreferencia(preferencia: Preferencia): Promise<string> {
   const r = await pedir(API_PREFERENCIAS, { method: "POST", body: JSON.stringify(preferencia) });
-  const id = typeof r.id === "string" ? r.id : "";
-  if (!id) throw new ErrorProveedor("Mercado Pago no devolvió el id de la preferencia", 502);
-  return id;
+  const initPoint = (r as { init_point?: unknown }).init_point;
+  const url = typeof initPoint === "string" ? initPoint : "";
+  if (!url) throw new ErrorProveedor("Mercado Pago no devolvió el link de pago de la preferencia", 502);
+  return url;
 }
 
 export const mercadoPago: ProveedorPago = {

@@ -271,14 +271,14 @@ describe("crearPreferencia", () => {
     items: [{ id: "p", title: "Pedido", quantity: 1 as const, unit_price: 10, currency_id: "ARS" as const }],
     external_reference: "p",
     purpose: "wallet_purchase" as const,
-    payment_methods: { installments: 1 as const },
+    payment_methods: { installments: 1, excluded_payment_methods: [{ id: "consumer_credits" }] },
   };
 
-  it("hace POST a /checkout/preferences con el Access Token y devuelve sólo el id", async () => {
+  it("hace POST a /checkout/preferences con el Access Token y devuelve el link de pago (init_point)", async () => {
     vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "pref-9", init_point: "https://x.example" }), { status: 201 }));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(crearPreferencia(pref)).resolves.toBe("pref-9");
+    await expect(crearPreferencia(pref)).resolves.toBe("https://x.example");
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.mercadopago.com/checkout/preferences");
     expect(init.method).toBe("POST");
@@ -286,7 +286,7 @@ describe("crearPreferencia", () => {
     expect(JSON.parse(init.body as string).purpose).toBe("wallet_purchase");
   });
 
-  it("sin id en la respuesta, falla", async () => {
+  it("sin link de pago en la respuesta, falla", async () => {
     vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 201 })));
     await expect(crearPreferencia(pref)).rejects.toThrow();

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { rutaIngreso } from "@/lib/ingreso";
-import { Button, QuantityStepper } from "@myd-org/ui";
+import { Button, FadeScroll, QuantityStepper } from "@myd-org/ui";
 import type { CartItem } from "@/lib/carrito-cliente";
 import { AvisoQuitado } from "@/components/AvisoQuitado";
 import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio, type EntregaTipo } from "@/lib/envio";
@@ -463,9 +463,11 @@ export function CarritoClient({
             })}
           </ul>
 
-          {/* Resumen */}
-          <aside
+          {/* Resumen. En desktop puede superar la ventana: scrollea sin barra y difumina donde hay más. */}
+          <FadeScroll
+            as="aside"
             ref={resumenRef}
+            fadeFrom="lg"
             className={`h-fit space-y-5 rounded-[22px] bg-surface p-5 shadow-[var(--shadow-1)] transition-[opacity,translate] duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:sticky lg:top-24 lg:max-h-[calc(100dvh-12rem)] lg:translate-y-0 lg:overflow-y-auto lg:p-6 lg:opacity-100 ${
               resumenALaVista ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
             }`}
@@ -543,7 +545,7 @@ export function CarritoClient({
               detallePorLocal={resumenEntrega?.detallePorLocal}
               ubicacionConocida={ubicacionConocida ?? provincia !== null}
             />
-          </aside>
+          </FadeScroll>
         </div>
 
         {/* Barra de compra en mobile: sticky y última del main, acompaña el

@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Button } from "@myd-org/ui";
+import { Spinner } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
-import { cuentaMpDisponible } from "@/lib/pagos/mercadopago-preferencia";
-import { customizacionBrick } from "./pago-brick";
+import { customizacionBrick, type CustomizacionSdk } from "./pago-brick";
+import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
+import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
+import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 
 /**
  * Cobro con tarjeta dentro del sitio, con Checkout Bricks.
@@ -32,6 +34,7 @@ function inicializar() {
 
 type Estado =
   | { fase: "cargando" }
+  | { fase: "error_formulario" }
   | { fase: "formulario" }
   | { fase: "procesando" }
   | { fase: "pagado" }
@@ -90,33 +93,6 @@ export function PagoMercadoPago({
   const faltaKey = !process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
 
   /**
-   * "Cuenta de Mercado Pago" (dinero en cuenta) exige una preferencia creada en el servidor
-   * (`initialization.preferenceId`): el comprador paga en el flujo de Mercado Pago y vuelve a
-   * `/checkout?pedido=<id>`. Sólo en un pago. `undefined` = todavía pidiéndola (el Brick espera, así no
-   * se remonta); `null` = sin cuenta (cuotas, o no se pudo crear): queda sólo tarjeta.
-   */
-  const ofreceCuenta = cuentaMpDisponible(maxCuotas) && !iniciarEnConfirmacion && !faltaKey;
-  const [preferenceId, setPreferenceId] = useState<string | null | undefined>(ofreceCuenta ? undefined : null);
-  useEffect(() => {
-    if (!ofreceCuenta) return;
-    let vigente = true;
-    fetch("/api/pagos/mercadopago/preferencia", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedidoId }),
-      signal: AbortSignal.timeout(10_000),
-    })
-      .then(async (r) => ((await r.json().catch(() => ({}))) as { preferenceId?: string }).preferenceId ?? null)
-      .catch(() => null)
-      .then((id) => {
-        if (vigente) setPreferenceId(id);
-      });
-    return () => {
-      vigente = false;
-    };
-  }, [ofreceCuenta, pedidoId]);
-
-  /**
    * `initialization` y `customization` DEBEN tener identidad estable.
    *
    * Eran objetos literales, o sea nuevos en cada render. Al apretar "Pagar" el
@@ -132,25 +108,17 @@ export function PagoMercadoPago({
     () => ({
       amount: monto,
       payer: emailComprador ? { email: emailComprador } : undefined,
-      ...(preferenceId ? { preferenceId } : {}),
     }),
-    [monto, emailComprador, preferenceId],
+    [monto, emailComprador],
   );
 
   /**
-   * `mercadoPago: "all"` habilita dinero en cuenta dentro del mismo brick: MP
-   * abre un popup para que el comprador se loguee y elija saldo, y devuelve
-   * `payment_method_id: "account_money"` sin token. La doc §6 hablaba de un
-   * Wallet Brick separado con aviso previo, pero el propio card de MP dentro
-   * del Payment Brick ya cumple ese rol (logo grande, texto de MP) y ahorra
-   * mantener dos bricks distintos. El aviso literal está debajo del componente.
-   *
-   * `maxInstallments` sale del pedido congelado. La identidad sólo cambia si
-   * cambia `maxCuotas` (ver `pago-brick.ts` y su test de regresión #21).
+   * Sólo tarjetas, con las cuotas del pedido congelado (ver `pago-brick.ts`). La identidad sólo cambia
+   * si cambia `maxCuotas` (test de regresión #21). La cuenta de Mercado Pago va aparte, debajo.
    */
   const customization = useMemo(
-    () => customizacionBrick(maxCuotas, Boolean(preferenceId)),
-    [maxCuotas, preferenceId],
+    () => customizacionBrick(maxCuotas) as CustomizacionSdk,
+    [maxCuotas],
   );
 
   /**
@@ -169,7 +137,7 @@ export function PagoMercadoPago({
     };
 
     /**
-     * Detección del medio del lado del cliente: MP marca dinero en cuenta con
+     * Detección del medio del lado del cliente (por si el Brick devolviera dinero en cuenta): MP lo marca con
      * `payment_method_id === "account_money"` (y `payment_type_id === "account_money"`).
      * El server igual re-decide con lo que le llega — el cliente puede mentir —
      * pero mandar el medio correcto acá evita que un dinero en cuenta se
@@ -275,24 +243,42 @@ export function PagoMercadoPago({
    * Solo usan `setEstado`, que React garantiza estable: sin dependencias.
    */
   const onReady = useCallback(() => {
-    setEstado((e) => (e.fase === "cargando" ? { fase: "formulario" } : e));
+    // El SDK puede recuperarse de un error de carga. Esto nunca borra un
+    // rechazo real ni modifica un pago que ya se está procesando.
+    setEstado(alEstarListo);
   }, []);
 
+  /**
+   * El SDK distingue `critical` de `non_critical`: sólo los críticos dejan el
+   * formulario inutilizable y piden "Reintentar". Los no críticos (p. ej. datos de
+   * tarjeta inválidos) ya los muestra el Brick en sus campos: acá sólo se loguean.
+   */
   const onError = useCallback((error: unknown) => {
     console.error("[brick mp]", error);
-    setEstado({
-      fase: "rechazado",
-      mensaje: "Hubo un problema con el formulario de pago. Recargue la página.",
-      reintentable: false,
-    });
+    setEstado((e) => alFallarBrick(e, error));
   }, []);
 
+  /**
+   * Tiempo límite de carga: si el Brick montado no avisa `onReady` en
+   * `PLAZO_CARGA_MS`, se pasa a `error_formulario` con "Reintentar" (ver el plazo
+   * en `pago-mp-carga.ts`). Corre sólo mientras se está cargando.
+   * Se limpia al llegar `onReady`, al fallar, al desmontar y al reintentar, y cada
+   * intento (`intento`) arranca su propio plazo.
+   */
+  const cargandoConBrick = !faltaKey && estado.fase === "cargando";
+  useEffect(() => {
+    if (!cargandoConBrick) return;
+    return iniciarPlazoCarga(() => setEstado(alVencerPlazo));
+  }, [cargandoConBrick, intento]);
+
+  /** Remonta el Brick (`key={intento}`) y vuelve a cargar: el token de MP es de un solo uso. */
+  function reintentar() {
+    setIntento((n) => n + 1);
+    setEstado({ fase: "cargando" });
+  }
+
   if (faltaKey) {
-    return (
-      <p className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
-        El pago con tarjeta no está configurado. Elija transferencia o escríbanos.
-      </p>
-    );
+    return <AvisoSinConfigurar />;
   }
 
   // ------------------------------------------------------------------ pagado
@@ -348,42 +334,46 @@ export function PagoMercadoPago({
     );
   }
 
-  // Esperando la preferencia de dinero en cuenta: el Brick se monta una sola vez, ya con su configuración final.
-  if (preferenceId === undefined) {
-    return <p role="status" className="text-sm text-muted">Cargando los medios de pago…</p>;
-  }
-
   return (
     <div>
+      {estado.fase === "error_formulario" && <AvisoFormularioNoCargo onReintentar={reintentar} />}
       {estado.fase === "rechazado" && (
-        <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-4">
-          <p className="text-sm font-semibold text-danger">No se pudo completar el pago</p>
-          <p className="mt-1 text-sm text-text">{estado.mensaje}</p>
-          {estado.reintentable && (
-            <Button
-              variant="secondary"
-              className="mt-3"
-              onClick={() => {
-                // Remontar el brick: el token de MP es de un solo uso, así que
-                // reintentar con el mismo formulario fallaría siempre.
-                setIntento((n) => n + 1);
-                setEstado({ fase: "formulario" });
-              }}
-            >
-              Probar de nuevo
-            </Button>
-          )}
-        </div>
+        <AvisoPagoRechazado
+          mensaje={estado.mensaje}
+          reintentable={estado.reintentable}
+          onReintentar={reintentar}
+        />
       )}
 
-      <Payment
-        key={intento}
-        initialization={initialization}
-        customization={customization}
-        onSubmit={onSubmit}
-        onReady={onReady}
-        onError={onError}
-      />
+      <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>
+        {estado.fase === "cargando" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-surface p-6">
+            <Spinner label="Cargando los medios de pago" />
+            <p className="text-sm text-muted">Cargando los medios de pago…</p>
+          </div>
+        )}
+        {/* Sigue montado para que el SDK pueda terminar de cargar. Sus estados
+            intermedios no son un error ni deben pedir que se cambie de medio. */}
+        <div
+          aria-hidden={estado.fase === "cargando"}
+          className={estado.fase === "cargando" ? "invisible" : undefined}
+        >
+          <Payment
+            key={intento}
+            initialization={initialization}
+            customization={customization}
+            onSubmit={onSubmit}
+            onReady={onReady}
+            onError={onError}
+          />
+        </div>
+      </div>
+
+      {estado.fase !== "procesando" && (
+        <div className="mt-4">
+          <PagoCuentaMercadoPago pedidoId={pedidoId} />
+        </div>
+      )}
     </div>
   );
 }

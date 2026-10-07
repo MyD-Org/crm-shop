@@ -149,6 +149,13 @@ describe("armarMailPedido: contacto del pedido a confirmar", () => {
     expect(m.text).toContain("Escríbanos por WhatsApp: https://wa.me/5491155550100?text=Hola");
   });
 
+  it("recibido por transferencia: sin plazo de contacto ni WhatsApp (ya lleva los datos para transferir)", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido", contacto, transferencia: { cuenta: null } });
+    expect(m.html).not.toContain(contacto.mensaje);
+    expect(m.html).not.toContain("Escribir por WhatsApp");
+    expect(m.text).not.toContain("WhatsApp");
+  });
+
   it("sin WhatsApp: sólo el plazo, sin enlace", () => {
     const m = armarMailPedido({ ...base, aviso: "recibido", contacto: { mensaje: contacto.mensaje } });
     expect(m.text).toContain(contacto.mensaje);

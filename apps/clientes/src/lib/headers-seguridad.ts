@@ -96,6 +96,8 @@ const CYBERSOURCE_FINGERPRINT = "https://h.online-metrix.net";
 const MERCADO_PAGO = [
   "https://sdk.mercadopago.com",
   "https://*.mercadopago.com",
+  // Dinero en cuenta: el flujo de la billetera vive en el dominio argentino (el Brick abre sus ventanas ahí).
+  "https://*.mercadopago.com.ar",
   "https://*.mercadolibre.com",
   "https://*.mlstatic.com",
 ];

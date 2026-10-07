@@ -46,8 +46,8 @@ export const TEXTOS_CUOTAS = {
     `Sume ${fmtPrecioCorto(falta)} más y pague en ${cuotasDe(cuotas)} sin interés.`,
   /** El fragmento del texto de `faltaParaCuotas` que va en negrita. */
   montoFaltante: (falta: number) => fmtPrecioCorto(falta),
-  /** Estado lleno de la barra: "¡Listo! Su compra ya tiene 12 cuotas sin interés." */
-  cuotasCompletas: (cuotas: number) => `¡Listo! Su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
+  /** Estado lleno de la barra: "Su compra ya tiene 12 cuotas sin interés." */
+  cuotasCompletas: (cuotas: number) => `Su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
   /** Nivel ya alcanzado con su cuota: "8 cuotas sin interés de $20.000" (el fragmento en negrita). */
   cuotasConMonto: (cuotas: number, montoCuota: number) => `${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}`,
   /** Carrito y checkout, con un nivel más alto por delante: "Ya tiene 8 cuotas sin interés de $20.000." */

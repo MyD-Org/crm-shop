@@ -5,6 +5,7 @@ import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
 import { Button } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
+import { cuentaMpDisponible } from "@/lib/pagos/mercadopago-preferencia";
 import { customizacionBrick } from "./pago-brick";
 
 /**
@@ -89,6 +90,33 @@ export function PagoMercadoPago({
   const faltaKey = !process.env.NEXT_PUBLIC_MP_PUBLIC_KEY;
 
   /**
+   * "Cuenta de Mercado Pago" (dinero en cuenta) exige una preferencia creada en el servidor
+   * (`initialization.preferenceId`): el comprador paga en el flujo de Mercado Pago y vuelve a
+   * `/checkout?pedido=<id>`. Sólo en un pago. `undefined` = todavía pidiéndola (el Brick espera, así no
+   * se remonta); `null` = sin cuenta (cuotas, o no se pudo crear): queda sólo tarjeta.
+   */
+  const ofreceCuenta = cuentaMpDisponible(maxCuotas) && !iniciarEnConfirmacion && !faltaKey;
+  const [preferenceId, setPreferenceId] = useState<string | null | undefined>(ofreceCuenta ? undefined : null);
+  useEffect(() => {
+    if (!ofreceCuenta) return;
+    let vigente = true;
+    fetch("/api/pagos/mercadopago/preferencia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedidoId }),
+      signal: AbortSignal.timeout(10_000),
+    })
+      .then(async (r) => ((await r.json().catch(() => ({}))) as { preferenceId?: string }).preferenceId ?? null)
+      .catch(() => null)
+      .then((id) => {
+        if (vigente) setPreferenceId(id);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [ofreceCuenta, pedidoId]);
+
+  /**
    * `initialization` y `customization` DEBEN tener identidad estable.
    *
    * Eran objetos literales, o sea nuevos en cada render. Al apretar "Pagar" el
@@ -104,8 +132,9 @@ export function PagoMercadoPago({
     () => ({
       amount: monto,
       payer: emailComprador ? { email: emailComprador } : undefined,
+      ...(preferenceId ? { preferenceId } : {}),
     }),
-    [monto, emailComprador],
+    [monto, emailComprador, preferenceId],
   );
 
   /**
@@ -119,7 +148,10 @@ export function PagoMercadoPago({
    * `maxInstallments` sale del pedido congelado. La identidad sólo cambia si
    * cambia `maxCuotas` (ver `pago-brick.ts` y su test de regresión #21).
    */
-  const customization = useMemo(() => customizacionBrick(maxCuotas), [maxCuotas]);
+  const customization = useMemo(
+    () => customizacionBrick(maxCuotas, Boolean(preferenceId)),
+    [maxCuotas, preferenceId],
+  );
 
   /**
    * El brick espera una promesa: mientras no se resuelva, mantiene el botón en
@@ -314,6 +346,11 @@ export function PagoMercadoPago({
         }}
       />
     );
+  }
+
+  // Esperando la preferencia de dinero en cuenta: el Brick se monta una sola vez, ya con su configuración final.
+  if (preferenceId === undefined) {
+    return <p role="status" className="text-sm text-muted">Cargando los medios de pago…</p>;
   }
 
   return (

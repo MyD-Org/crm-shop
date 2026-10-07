@@ -13,16 +13,39 @@ export function PedidoContacto({
   contacto,
   mostrarPlazo = true,
   centrado = false,
+  enlaceChico = false,
   className = "",
 }: {
   contacto: ContactoPedidoVista;
   mostrarPlazo?: boolean;
   /** Texto y botón centrados (pantalla de confirmación). */
   centrado?: boolean;
+  /** WhatsApp como enlace de texto chico al final, en lugar del botón (pantalla de confirmación). */
+  enlaceChico?: boolean;
   className?: string;
 }) {
   const { whatsapp } = contacto;
   if (!mostrarPlazo && !whatsapp) return null;
+  if (enlaceChico) {
+    return (
+      <div className={`flex flex-col gap-2 ${centrado ? "items-center text-center" : ""} ${className}`}>
+        {mostrarPlazo && <p className="whitespace-pre-line text-sm text-text">{contacto.mensaje}</p>}
+        {whatsapp && (
+          <p className="text-xs text-muted">
+            ¿Tiene dudas?{" "}
+            <a
+              href={whatsapp.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-primary hover:underline"
+            >
+              Escríbanos por WhatsApp
+            </a>
+          </p>
+        )}
+      </div>
+    );
+  }
   return (
     <div
       className={`flex flex-col gap-3 ${centrado ? "items-center text-center" : ""} ${className}`}

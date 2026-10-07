@@ -10,7 +10,7 @@ describe("metaCuotas", () => {
   });
   it("en el escalón más alto: lleno", () => {
     expect(metaCuotas({ cuotasActuales: 12, proximo: null, pct: 100 })).toMatchObject({
-      texto: "¡Listo! Su compra ya tiene 12 cuotas sin interés.",
+      texto: "Su compra ya tiene 12 cuotas sin interés.",
       pct: 100,
       alcanzada: true,
     });

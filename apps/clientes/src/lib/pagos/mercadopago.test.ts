@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claveIdempotencia, interpretar, mercadoPagoConfigurado } from "./mercadopago";
+import { claveIdempotencia, crearPreferencia, interpretar, mercadoPagoConfigurado } from "./mercadopago";
 import type { DatosPago } from "./tipos";
 
 /**
@@ -258,5 +258,37 @@ describe("mercadoPagoConfigurado", () => {
     vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
     vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "");
     expect(mercadoPagoConfigurado()).toBe(false);
+  });
+});
+
+describe("crearPreferencia", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  const pref = {
+    items: [{ id: "p", title: "Pedido", quantity: 1 as const, unit_price: 10, currency_id: "ARS" as const }],
+    external_reference: "p",
+    purpose: "wallet_purchase" as const,
+    payment_methods: { installments: 1 as const },
+  };
+
+  it("hace POST a /checkout/preferences con el Access Token y devuelve sólo el id", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "pref-9", init_point: "https://x.example" }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(crearPreferencia(pref)).resolves.toBe("pref-9");
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.mercadopago.com/checkout/preferences");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer TEST-token");
+    expect(JSON.parse(init.body as string).purpose).toBe("wallet_purchase");
+  });
+
+  it("sin id en la respuesta, falla", async () => {
+    vi.stubEnv("MP_ACCESS_TOKEN", "TEST-token");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 201 })));
+    await expect(crearPreferencia(pref)).rejects.toThrow();
   });
 });

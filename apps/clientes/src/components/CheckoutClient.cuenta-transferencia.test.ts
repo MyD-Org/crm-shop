@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 /**
  * Guardas de texto del checkout con los datos de la cuenta para transferir (change
  * `pago-transferencia-comprobante`): ya no promete "Le enviamos el CBU", pide la cuenta junto con
- * la cotización cuando el medio es Transferencia, la muestra en el paso Pago y en Pedido recibido con lo que devolvió el pedido.
+ * la cotización cuando el medio es Transferencia, la muestra solo en Pedido recibido con lo que devolvió el pedido.
  */
 const fuente = readFileSync(join(__dirname, "CheckoutClient.tsx"), "utf8");
 
@@ -20,17 +20,26 @@ describe("CheckoutClient: cuenta para transferir", () => {
     expect(fuente).toContain("sucursalRetiro: localParaCuenta,");
   });
 
-  it("muestra la cuenta en el paso Pago", () => {
-    expect(fuente.match(/<BloqueCuentaPago /g)?.length).toBe(1);
+  it("NO muestra los datos de la cuenta antes de confirmar el pedido (solo en Pedido recibido)", () => {
+    expect(fuente).not.toContain("BloqueCuentaPago");
+    expect(fuente.match(/<CuentaTransferencia /g)?.length).toBe(1);
   });
 
-  it("el pie del resumen con transferencia es coherente con los datos mostrados; otros medios mantienen su texto", () => {
-    expect(fuente).toContain("? pieTransferencia(Boolean(cotizacion?.cuentaTransferencia))");
-    expect(fuente).toContain("pieDelMedio(medioSel)");
+  it("el pie del resumen con transferencia avisa que los datos aparecen al confirmar; otros medios mantienen su texto", () => {
+    expect(fuente).toContain("? PIE_TRANSFERENCIA : pieDelMedio(medioSel)");
   });
 
   it("Pedido recibido usa la cuenta congelada que devolvió el pedido", () => {
     expect(fuente).toContain("cuentaPago: json.cuentaPago ?? null,");
     expect(fuente).toContain("<CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />");
+  });
+
+  it("Pedido recibido: una acción principal, secundarias chicas y sin textos redundantes", () => {
+    expect(fuente).not.toContain("Medio de pago elegido:");
+    expect(fuente).toContain('<Button variant="outline">Ver mis pedidos</Button>');
+    expect(fuente).toContain('<Button variant="ghost">Seguir comprando</Button>');
+    // El plazo de contacto se omite con transferencia (lo da el texto del comprobante) y WhatsApp es un enlace chico.
+    expect(fuente).toContain("mostrarPlazo={!conCuenta}");
+    expect(fuente).toContain("enlaceChico");
   });
 });

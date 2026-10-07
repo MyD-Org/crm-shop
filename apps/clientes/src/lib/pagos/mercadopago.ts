@@ -33,8 +33,10 @@ import {
   type RespuestaMercadoPago,
 } from "./mercadopago-estados";
 import { firmaValida } from "./mercadopago-firma";
+import type { Preferencia } from "./mercadopago-preferencia";
 
 const API = "https://api.mercadopago.com/v1/payments";
+const API_PREFERENCIAS = "https://api.mercadopago.com/checkout/preferences";
 const TIMEOUT_MS = 15_000;
 
 /**
@@ -197,6 +199,19 @@ async function pedir(
   }
 
   return cuerpo;
+}
+
+/**
+ * Crea la preferencia con la que el Payment Brick ofrece dinero en cuenta (`initialization.preferenceId`).
+ * Devuelve sólo el id: lo demás de la respuesta (init_point, etc.) no se usa ni sale al navegador.
+ * Idempotencia: cada llamada es una preferencia nueva e inofensiva (no cobra nada hasta que el comprador
+ * paga en Mercado Pago), así que no lleva clave.
+ */
+export async function crearPreferencia(preferencia: Preferencia): Promise<string> {
+  const r = await pedir(API_PREFERENCIAS, { method: "POST", body: JSON.stringify(preferencia) });
+  const id = typeof r.id === "string" ? r.id : "";
+  if (!id) throw new ErrorProveedor("Mercado Pago no devolvió el id de la preferencia", 502);
+  return id;
 }
 
 export const mercadoPago: ProveedorPago = {

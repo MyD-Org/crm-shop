@@ -5,11 +5,12 @@ describe("metaCuotas", () => {
   it("con próximo escalón: Le faltan $X para N cuotas sin interés.", () => {
     const m = metaCuotas({ cuotasActuales: 3, proximo: { cuotas: 6, falta: 15000, minimo: 60000 }, pct: 75 });
     expect(m).toMatchObject({ id: "cuotas", pct: 75, alcanzada: false });
-    expect(m?.texto).toMatch(/^Le faltan .*15\.000.* para 6 cuotas sin interés\.$/);
+    expect(m?.texto.replace(/[\u00a0\u202f]/g, " ")).toBe("Sume $ 15.000 más y pague en 6 cuotas sin interés.");
+    expect(m?.enfasis?.replace(/[\u00a0\u202f]/g, " ")).toBe("$ 15.000");
   });
   it("en el escalón más alto: lleno", () => {
     expect(metaCuotas({ cuotasActuales: 12, proximo: null, pct: 100 })).toMatchObject({
-      texto: "Su compra ya tiene 12 cuotas sin interés.",
+      texto: "¡Listo! Su compra ya tiene 12 cuotas sin interés.",
       pct: 100,
       alcanzada: true,
     });

@@ -9,6 +9,8 @@ import type { ProgresoCuotas } from "./cuotas-sin-interes";
 export interface MetaCarrito {
   id: "envio" | "cuotas";
   texto: string;
+  /** Fragmento de `texto` que se resalta (el monto que falta); ausente = sin énfasis. */
+  enfasis?: string;
   /** 0..100 */
   pct: number;
   alcanzada: boolean;
@@ -35,6 +37,7 @@ export function metaCuotas(p: ProgresoCuotas | null | undefined): MetaCarrito | 
     return {
       id: "cuotas",
       texto: TEXTOS_CUOTAS.faltaParaCuotas(p.proximo.falta, p.proximo.cuotas),
+      enfasis: TEXTOS_CUOTAS.montoFaltante(p.proximo.falta),
       pct: p.pct,
       alcanzada: false,
       aria: TEXTOS_CUOTAS.barraAria,

@@ -28,6 +28,9 @@ const ARCHIVOS = [
   "hooks/useCotizacion.ts",
   "lib/pagos/tipos.ts",
   "lib/cuotas-textos.ts",
+  "lib/metas-carrito.ts",
+  "components/carrito/MetasCarrito.tsx",
+  "components/carrito/TextoConEnfasis.tsx",
   "lib/envio.ts",
 ];
 

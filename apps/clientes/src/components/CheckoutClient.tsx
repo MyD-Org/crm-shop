@@ -1,5 +1,6 @@
 "use client";
 
+import { TextoConEnfasis } from "@/components/carrito/TextoConEnfasis";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1469,7 +1470,10 @@ export function CheckoutClient({
                 )}
                 {pagaEnLinea && cotizacion?.proximoEscalon && (
                   <p className="mt-2 text-xs text-muted">
-                    {TEXTOS_CUOTAS.faltaParaCuotas(cotizacion.proximoEscalon.falta, cotizacion.proximoEscalon.cuotas)}
+                    <TextoConEnfasis
+                      texto={TEXTOS_CUOTAS.faltaParaCuotas(cotizacion.proximoEscalon.falta, cotizacion.proximoEscalon.cuotas)}
+                      enfasis={TEXTOS_CUOTAS.montoFaltante(cotizacion.proximoEscalon.falta)}
+                    />
                   </p>
                 )}
                 {conCuenta && <BloqueCuentaPago cuenta={cotizacion?.cuentaTransferencia} total={cotizacion?.total} />}

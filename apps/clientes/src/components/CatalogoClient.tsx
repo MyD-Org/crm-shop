@@ -27,7 +27,7 @@ import {
   type EstadoCatalogo,
 } from "@/lib/catalogo-url";
 import { anuncioResultados, hayFiltros, interpretacionVigente, limpiarFiltros } from "@/lib/catalogo-vista";
-import { hrefTalCual, type ChipSugerido } from "@/lib/busqueda-inteligente/url";
+import type { ChipSugerido } from "@/lib/busqueda-inteligente/url";
 import type { Intencion } from "@/lib/busqueda-v2/plan";
 import { enviarBusquedaEnviada, enviarClickResultado } from "@/lib/busqueda-v2/telemetria";
 import { fijarCatalogoParaChat } from "@/lib/chat-ia-puente";
@@ -217,8 +217,8 @@ export function CatalogoClient({
   // el chat se carga aparte, así que se vuelve a anotar cuando aparece (la
   // misma búsqueda no cuenta dos veces).
   const { disponible: chatDisponible } = useChatIa();
-  // Con la búsqueda inteligente, el sin resultados (CatalogoSinResultados) ya
-  // invita al asesor en línea: el teaser no se suma encima.
+  // Con la búsqueda inteligente, en el sin resultados (CatalogoSinResultados) no se
+  // invita al asesor: el teaser tampoco aparece ahí.
   const sinResultados = productos.length === 0;
   const conInvitacionEnLinea = sinResultados && !!busquedaIa;
   useEffect(() => {
@@ -304,7 +304,7 @@ export function CatalogoClient({
             <CatalogoSinResultados
               consulta={consultaVacia}
               alternativas={busquedaIa.alternativas}
-              talCualHref={interpretacionVigente(estado) ? hrefTalCual(estado, consultaVacia) : undefined}
+              sinFiltros={conFiltros ? () => ir(limpiarFiltros()) : undefined}
               relacionadosHref={busquedaIa.relacionadosHref}
               verTodos={() => ir({ ...limpiarFiltros(), query: undefined, ia: undefined })}
               local={sinLocal ? { ...sinLocal, quitar: quitarLocal } : undefined}

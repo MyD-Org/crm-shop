@@ -1,29 +1,17 @@
 /**
- * De una interpretación a URLs del catálogo (chips y "tal cual"). Módulo puro: todo pasa por
+ * De una interpretación a URLs del catálogo (chips sugeridos). Módulo puro: todo pasa por
  * `lib/catalogo-url.ts`, que descarta lo inválido (un atributo desconocido no
  * llega a la URL). Ni Jev ni el agente tocan la UI: proponen un estado y el
  * Shop lo valida y navega.
  */
 import { atributoPorId, nombreAtributo } from "../catalogo-atributos";
 import {
-  IA_DESACTIVADA,
   estadoConCambios,
   hrefCatalogo,
   type EstadoCatalogo,
 } from "../catalogo-url";
 import { formatRubro } from "../formato-rubro";
 import type { FiltrosInterpretados } from "./tipos";
-
-/**
- * "Ver resultados de «consulta» tal cual": la búsqueda original, sin los
- * filtros que salieron de interpretarla y con `ia=0` (no se vuelve a
- * interpretar). Conserva marcas, precio, stock y vista.
- */
-export function hrefTalCual(estado: EstadoCatalogo, consulta: string): string {
-  return hrefCatalogo(
-    estadoConCambios(estado, { query: consulta, categorias: [], atributos: [], ia: IA_DESACTIVADA, orden: "relevancia" }),
-  );
-}
 
 /** Un filtro propuesto como chip que se toca para aplicarlo (un link). */
 export interface ChipSugerido {

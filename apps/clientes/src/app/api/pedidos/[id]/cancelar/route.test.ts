@@ -107,4 +107,48 @@ describe("POST /api/pedidos/:id/cancelar", () => {
     await cancelar();
     expect(cancelarPedidoPendiente).toHaveBeenCalledWith("p1", { clerkUserId: "user_1", clienteCodigo: undefined });
   });
+
+  describe("para cambiar el medio de pago (?para=cambiar-medio)", () => {
+    const cambiar = () =>
+      POST(new Request("http://localhost/api/pedidos/p1/cancelar?para=cambiar-medio", { method: "POST" }), {
+        params: Promise.resolve({ id: "p1" }),
+      });
+
+    it("rechazo o formulario sin enviar: cancela y devuelve las líneas", async () => {
+      const r = await cambiar();
+      expect(r.status).toBe(200);
+      expect(await r.json()).toEqual({ ok: true, items: LINEAS });
+    });
+
+    it("pago en vuelo: 409 en usted, sin tocar el pedido", async () => {
+      intentoAbiertoDelPedido.mockResolvedValue(abierto);
+      resolverIntentoAbierto.mockResolvedValue("en_curso");
+      const r = await cambiar();
+      expect(r.status).toBe(409);
+      const j = await r.json();
+      expect(j.motivo).toBe("pago_en_curso");
+      expect(j.error).toContain("antes de cambiar el medio de pago");
+      expect(cancelarPedidoPendiente).not.toHaveBeenCalled();
+    });
+
+    it("ya pagado: 409 'pagado' con el texto del cambio", async () => {
+      intentoAbiertoDelPedido.mockResolvedValue(abierto);
+      resolverIntentoAbierto.mockResolvedValue("pagado");
+      const r = await cambiar();
+      expect(r.status).toBe(409);
+      const j = await r.json();
+      expect(j.motivo).toBe("pagado");
+      expect(j.error).toContain("no se puede cambiar el medio de pago");
+    });
+
+    it("pedido ajeno o que no está pendiente: 404 genérico", async () => {
+      cancelarPedidoPendiente.mockResolvedValue(null);
+      expect((await cambiar()).status).toBe(404);
+    });
+
+    it("sin sesión: 401", async () => {
+      identidadActual.mockResolvedValue({ clerkUserId: null, cliente: null });
+      expect((await cambiar()).status).toBe(401);
+    });
+  });
 });

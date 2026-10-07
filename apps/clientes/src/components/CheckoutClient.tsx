@@ -74,6 +74,7 @@ import { rutaIngreso } from "@/lib/ingreso";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { PIE_TRANSFERENCIA } from "@/lib/pie-pago-transferencia";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
+import { pasoAlCambiarMedio, puedeCambiarMedioPago } from "@/lib/cambiar-medio-pago";
 
 /*
  * Entrada de la pantalla de éxito (momento único por compra: acá sí va algo de
@@ -493,6 +494,8 @@ export function CheckoutClient({
     cuentaPago?: CuentaPagoSnapshot | null;
   } | null>(null);
   const [pagado, setPagado] = useState(false);
+  /** El pedido salió de este formulario (entrega, medio y cuotas siguen cargados): "Cambiar medio de pago" cae en el paso Pago. */
+  const [estadoCargado, setEstadoCargado] = useState(false);
   /** El carrito es el de este pedido y todavía no se envió ningún cobro: recién ahí se vacía. */
   const [carritoDelPedido, setCarritoDelPedido] = useState(false);
   /** El procesador todavía no confirmó el cobro: no se ofrece cancelar, sólo volver a la tienda. */
@@ -580,6 +583,7 @@ export function CheckoutClient({
     });
     setPagoEnConfirmacion(Boolean(pedido.pagoEnCurso) || (retornoMercadoPago && pedido.id === pedidoReintento));
     setCarritoDelPedido(false);
+    setEstadoCargado(false);
   }
   // Mismo carrito (o vacío): se retoma en el render, sin un frame del formulario.
   if (rescate && ready && !rescateDistinto) retomarRescate(rescate);
@@ -835,6 +839,7 @@ export function CheckoutClient({
       // sin duplicarlo, o lo cancela si el carrito cambió.
       const total = json.cotizacion?.total ?? cotizacion?.total ?? 0;
       setCarritoDelPedido(esPagoEnLinea(pagoParaEnviar));
+      setEstadoCargado(true);
       setConfirmado({
         numero: json.numero,
         id: json.id,
@@ -896,6 +901,45 @@ export function CheckoutClient({
         res.status === 409 && json?.error
           ? json.error
           : "No se pudo cancelar el pedido. Inténtelo de nuevo en un momento.",
+      );
+    } catch {
+      setErrorCancelar("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
+    } finally {
+      setCancelando(false);
+    }
+  }
+
+  /**
+   * "Cambiar medio de pago": se cancela el pedido pendiente (el servidor valida dueño, estado y que
+   * no haya un cobro en vuelo ni pago informado) y se vuelve al paso Pago con lo cargado. El pedido
+   * nuevo se crea al confirmar, por el camino normal. Ver `lib/cambiar-medio-pago.ts`.
+   */
+  async function cambiarMedio() {
+    if (!confirmado) return;
+    setCancelando(true);
+    setErrorCancelar(null);
+    try {
+      const res = await fetch(`/api/pedidos/${confirmado.id}/cancelar?para=cambiar-medio`, { method: "POST" });
+      // 404: ya no está pendiente (otra pestaña lo canceló): igual se vuelve a elegir.
+      if (res.ok || res.status === 404) {
+        const json = (await res.json().catch(() => null)) as { items?: CartItem[] } | null;
+        const lineas = Array.isArray(json?.items) ? json.items : [];
+        if (items.length === 0 && lineas.length > 0) addItems(lineas.map(({ qty, ...item }) => ({ item, qty })));
+        setConfirmado(null);
+        setPagado(false);
+        setPagoEnConfirmacion(false);
+        setCarritoDelPedido(false);
+        setErrorEnvio(null);
+        // La clave era del pedido cancelado: sin resetearla, confirmar traería el pedido viejo.
+        claveIntento.current = null;
+        irAPaso(pasoAlCambiarMedio({ estadoCargado }));
+        return;
+      }
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      setErrorCancelar(
+        res.status === 409 && json?.error
+          ? json.error
+          : "No se pudo cambiar el medio de pago. Inténtelo de nuevo en un momento.",
       );
     } catch {
       setErrorCancelar("No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.");
@@ -970,9 +1014,15 @@ export function CheckoutClient({
         )}
 
         <div className="flex flex-col items-center gap-2">
+          {/* Sin cobro aprobado ni en vuelo se puede elegir otro medio o cuotas; el servidor lo vuelve a validar. */}
+          {puedeCambiarMedioPago({ pagado, pagoEnConfirmacion }) && !esCuentaCorriente && (
+            <Button variant="outline" onClick={cambiarMedio} disabled={cancelando}>
+              {cancelando ? "Un momento…" : "Cambiar medio de pago"}
+            </Button>
+          )}
           {pagoEnConfirmacion ? (
-            // Con el cobro en confirmación no se cancela (el pago puede acreditarse). Si se
-            // rechaza, vuelve el formulario y reaparece "Volver al carrito".
+            // Con el cobro en confirmación no se cancela (el pago puede acreditarse) ni se cambia el
+            // medio. Si se rechaza, vuelve el formulario y reaparecen las dos opciones.
             <Link href="/" className="text-sm text-muted underline">
               Volver a la tienda
             </Link>
@@ -981,7 +1031,7 @@ export function CheckoutClient({
               type="button"
               onClick={cancelarYVolver}
               disabled={cancelando}
-              className="text-sm text-muted underline disabled:opacity-50"
+              className="text-xs text-muted underline disabled:opacity-50"
             >
               {cancelando ? "Cancelando…" : "Volver al carrito"}
             </button>

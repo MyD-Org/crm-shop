@@ -19,8 +19,8 @@
 import { raizPlural } from "../../catalogo-busqueda";
 import { deterministico, palabrasCategoria, tokensDe } from "../../busqueda-inteligente/deterministico";
 import type { NodoArbol } from "../../busqueda-inteligente/tipos";
-import { expansiones } from "./sinonimos";
-import { CONTEXTO } from "./terminos";
+import { PESO_EXPANSION, expansiones } from "./sinonimos";
+import { CONTEXTO, esLugar, terminosDe } from "./terminos";
 
 /** Lugares que sugieren "apto exterior" sin pedirlo. */
 const LUGARES_EXTERIOR = new Set([
@@ -37,11 +37,28 @@ const LUGARES_HUMEDAD = new Set(["bano", "ducha", "lavadero"]);
  */
 const AMBIGUOS = new Set(["interruptor", "llave"]);
 
+/**
+ * Palabras que piden luz en general, sin nombrar el artefacto ("luz para el patio", "iluminar el jardín"). La
+ * categoría que se llama como la luz (la raíz de iluminación) es la candidata cuando, además, hay un lugar y
+ * ninguna palabra de producto: quien pide "luz para el patio" busca luminarias, no cámaras ni cajas estancas
+ * que comparten el "exterior".
+ */
+const PIDE_LUZ = new Set(["luz", "iluminacion", "iluminar", "ilumine", "alumbrar", "alumbre", "alumbrado"]);
+
+/** La categoría de la luz en general: la que se llama como la raíz de iluminación. */
+const CATEGORIA_DE_LUZ = "iluminacion";
+
 /** Tope de categorías candidatas. */
 const MAX_CANDIDATAS = 5;
 
 export interface CandidatosDiccionario {
   categorias: string[];
+  /**
+   * "luz" + lugar y nada más ("luz para el patio"): la categoría de la luz y, en un lugar de intemperie, la
+   * luminaria exterior. Aparte de `categorias` porque NO es evidencia para que una categoría pase a dura con
+   * Jev: sólo suma de blanda cuando no hay Jev (`combinar`).
+   */
+  categoriasDeLuz?: string[];
   atributosExplicitos: string[];
   atributosContexto: string[];
   /** Tokens que absorbió un atributo explícito. */
@@ -77,6 +94,21 @@ export function candidatos(consultaNorm: string, arbol: NodoArbol[]): Candidatos
   const sustantivos = new Set(
     [...conExpansiones].filter((t) => !CONTEXTO.has(t) && (!AMBIGUOS.has(t) || tokens.includes(t))),
   );
+  // "luz" + lugar y ninguna palabra de producto ni expansión ("luz para el patio"): la candidata es la categoría
+  // de la luz. Con una palabra que nombra otra cosa ("llave de luz", "luz que se prenda sola" → sensor) no aplica.
+  const terminos = terminosDe(consultaNorm, det.absorbidos);
+  const soloLuzYLugar =
+    tokens.some((t) => PIDE_LUZ.has(t)) && tokens.some((t) => esLugar(t)) && !terminos.some((t) => t.peso >= PESO_EXPANSION);
+  // Y si el lugar es de intemperie, también la luminaria que se llama "exterior" (la luz de un patio no es la de un pasillo).
+  const alAire = soloLuzYLugar && tokens.some((t) => LUGARES_EXTERIOR.has(t));
+  const categoriasDeLuz = soloLuzYLugar
+    ? vivas(arbol)
+        .filter((n) => {
+          const palabras = palabrasCategoria(n.nombre);
+          return palabras[0] === CATEGORIA_DE_LUZ || (alAire && palabras.includes("exterior"));
+        })
+        .map((n) => n.nombre)
+    : [];
   const porSustantivo = vivas(arbol)
     .filter((n) => {
       const palabras = palabrasCategoria(n.nombre);
@@ -88,6 +120,7 @@ export function candidatos(consultaNorm: string, arbol: NodoArbol[]): Candidatos
   const humedad = tokens.some((t) => LUGARES_HUMEDAD.has(t)) && !det.atributos.includes("apto-humedad");
   return {
     categorias,
+    categoriasDeLuz,
     atributosExplicitos: det.atributos,
     atributosContexto: [...(exterior ? ["apto-exterior"] : []), ...(humedad ? ["apto-humedad"] : [])],
     absorbidos: det.absorbidos,

@@ -57,8 +57,9 @@ export interface PlanObtenido {
  * v3: sinónimos nuevos (tira, decorativa, ajustar, luz de mesa, celu).
  * v4: contexto de humedad (baño, ducha, lavadero), lugares exteriores nuevos y duro que deja 0 → blando.
  * v5: un lugar que es también un producto ("escalera chica") pesa como producto si no hay otra palabra de producto ni de luz.
+ * v6: "luz" + lugar sin otra palabra de producto ("luz para el patio") propone la categoría de la luz (y la luminaria exterior).
  */
-export const VERSION_REGLAS_PLAN = 5;
+export const VERSION_REGLAS_PLAN = 6;
 
 /** Clave del plan en la caché: el árbol activo, el flag `catalogo-solo-visibles` y la versión de las reglas (≤ 64 caracteres). */
 export function clavePlan(arbol: readonly NodoArbol[], soloVisibles: boolean): string {

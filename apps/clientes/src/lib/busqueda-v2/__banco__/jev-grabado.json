@@ -3898,6 +3898,84 @@
           "confidence": 0.85
         }
       }
+    },
+    "luz para el patio": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.89
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "luminarias_exteriores",
+          "confidence": 0.99
+        }
+      }
+    },
+    "luz para el jardin": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.59
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "luminarias_exteriores",
+          "confidence": 0.99
+        }
+      }
+    },
+    "camara para el patio": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.95
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "seguridad",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "camaras",
+          "confidence": 0.79
+        }
+      }
     }
   }
 }

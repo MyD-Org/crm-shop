@@ -351,4 +351,30 @@ describe("combinar: atributos e intención", () => {
     expect(intencionHeuristica("aplique para el baño", "aplique para el bano", [{ texto: "aplique", peso: 1 }])).toBe("producto");
     expect(intencionHeuristica("reflector 50w", "reflector 50w")).toBe("producto");
   });
+
+  describe("categoría de la luz ('luz para el patio')", () => {
+    const dic = {
+      categorias: [],
+      categoriasDeLuz: ["ILUMINACION"],
+      atributosExplicitos: [],
+      atributosContexto: ["apto-exterior"],
+      absorbidos: new Set<string>(),
+    };
+    const terminos = [{ texto: "luz", peso: 0.3 }, { texto: "patio", peso: 0.3 }];
+
+    it("sin Jev suma la categoría como blanda fuerte (recupera luminarias, no todo lo 'apto exterior')", async () => {
+      const p = await combinar(base({ consulta: "luz para el patio", consultaNorm: "luz para el patio", diccionario: dic, terminos }));
+      expect(p.duros.categorias).toEqual([]);
+      expect(p.blandos.categorias).toEqual([{ nombre: "ILUMINACION", peso: 0.8 }]);
+    });
+
+    it("con Jev no cambia nada: no es evidencia para que una categoría pase a dura", async () => {
+      const aporte = jev({ raiz: { nombre: "SEGURIDAD", confianza: 0.99 }, sub: { nombre: "Camaras", confianza: 0.5 } });
+      const con = await combinar(base({ consulta: "luz para el patio", consultaNorm: "luz para el patio", diccionario: dic, terminos, jev: aporte }));
+      const sin = await combinar(
+        base({ consulta: "luz para el patio", consultaNorm: "luz para el patio", diccionario: { ...dic, categoriasDeLuz: [] }, terminos, jev: aporte }),
+      );
+      expect(con).toEqual(sin);
+    });
+  });
 });

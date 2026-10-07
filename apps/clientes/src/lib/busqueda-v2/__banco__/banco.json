@@ -161,6 +161,9 @@
     { "q": "luz para la escalera", "perfil": "particular", "intencion": "necesidad", "categoria": ["Apliques", "Sensores y fotocelulas", "Luces de emergencia", "ILUMINACION"], "debeIncluirEnTop24": ["aplique", "luz", "lampara", "led"], "nuncaSinResultados": true },
     { "q": "aplique para escalera", "perfil": "particular", "intencion": "necesidad", "categoria": ["Apliques", "ILUMINACION"], "debeIncluirEnTop24": ["aplique"], "nuncaSinResultados": true },
     { "q": "dicroica mr16", "perfil": "particular", "intencion": "producto", "tipo": "medida", "categoria": ["Dicroicas", "Lámparas", "Smart", "ILUMINACION"], "debeIncluirEnTop24": ["mr16"], "nuncaSinResultados": true, "medidas": [{"clave": "zocalo", "valor": "mr16"}] },
-    { "q": "dicroica smart", "perfil": "particular", "intencion": "producto", "categoria": ["Smart", "Dicroicas", "Lámparas", "ILUMINACION"], "debeIncluirEnTop24": ["smart"], "nuncaSinResultados": true }
+    { "q": "dicroica smart", "perfil": "particular", "intencion": "producto", "categoria": ["Smart", "Dicroicas", "Lámparas", "ILUMINACION"], "debeIncluirEnTop24": ["smart"], "nuncaSinResultados": true },
+    { "q": "luz para el patio", "perfil": "particular", "intencion": "necesidad", "categoria": ["Luminarias exteriores", "Reflectores", "Faroles", "Apliques", "ILUMINACION"], "debeIncluirEnTop24": ["reflector", "aplique", "farol"], "nuncaSinResultados": true },
+    { "q": "luz para el jardin", "perfil": "particular", "intencion": "necesidad", "categoria": ["Luminarias exteriores", "Reflectores", "Faroles", "Apliques", "ILUMINACION"], "debeIncluirEnTop24": ["reflector", "aplique", "farol"], "nuncaSinResultados": true },
+    { "q": "camara para el patio", "perfil": "particular", "intencion": "producto", "categoria": ["Camaras", "Camara wifi", "SEGURIDAD"], "categoriaEnTop24": ["Camaras"], "debeIncluirEnTop24": ["camara"], "nuncaSinResultados": true }
   ]
 }

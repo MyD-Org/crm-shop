@@ -66,14 +66,14 @@ describe("búsqueda del catálogo", () => {
     expect(params).toContain("%luz%");
   });
 
-  it("con búsqueda ordena por relevancia (y desempata por nombre)", async () => {
+  it("con búsqueda ordena por relevancia (y desempata por stock, después por nombre)", async () => {
     await buscar("foco");
     const { sql } = grabadora.consultas[0];
     const orden = sql.slice(sql.indexOf(" order by "));
     expect(orden).toMatch(/^ order by \(case when /);
     expect(orden).toContain("then 4 when");
     expect(orden).toContain("then 20 else 0 end");
-    expect(orden).toMatch(/ desc, "catalog_products_shop"\."name" asc/);
+    expect(orden).toMatch(/ desc, \(case when "catalog_products_shop"\."stock" is null then null else .+ end\) desc nulls last, "catalog_products_shop"\."name" asc/);
   });
 
   it("la búsqueda tolerante suma el parecido por trigramas, calificado en public", async () => {

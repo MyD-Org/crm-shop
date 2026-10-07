@@ -47,5 +47,8 @@ export function criterioDe(plan: PlanBusqueda, estado: Pick<EstadoCatalogo, "cat
       atributos: plan.blandos.atributos.filter((a) => esMedidaId(a.id) || !estado.atributos.includes(a.id)),
       terminos: plan.blandos.terminos,
     },
+    ...(categoriasDelPlan(plan).length ? { categoriasDelPlan: categoriasDelPlan(plan) } : {}),
   };
 }
+
+const categoriasDelPlan = (plan: PlanBusqueda) => [...new Set([...plan.duros.categorias, ...plan.blandos.categorias.map((c) => c.nombre)])];

@@ -144,6 +144,11 @@
     { "q": "luz de mesa", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas"], "debeIncluirEnTop24": ["velador"], "categoriaEnTop24": ["Veladores"], "nuncaSinResultados": true },
     { "q": "algo para ajustar un tornillo", "perfil": "particular", "intencion": "necesidad", "debeIncluirEnTop24": ["destornill", "atornill"], "nuncaSinResultados": true },
     { "q": "foco para usar desde el celular", "perfil": "particular", "intencion": "necesidad", "debeIncluirEnTop24": ["wifi", "smart", "inteligente"], "nuncaSinResultados": true },
-    { "q": "foco para usar desde el celu", "perfil": "particular", "intencion": "necesidad", "debeIncluirEnTop24": ["wifi", "smart", "inteligente"], "nuncaSinResultados": true }
+    { "q": "foco para usar desde el celu", "perfil": "particular", "intencion": "necesidad", "debeIncluirEnTop24": ["wifi", "smart", "inteligente"], "nuncaSinResultados": true },
+    { "q": "proyector para patio", "perfil": "particular", "intencion": "producto", "categoria": ["Reflectores", "Luminarias exteriores"], "expande": ["reflector"], "debeIncluirEnTop24": ["reflector"], "nuncaSinResultados": true },
+    { "q": "foco smart", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["smart"], "nuncaSinResultados": true },
+    { "q": "foco inteligente", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "expande": ["smart"], "debeIncluirEnTop24": ["smart"], "nuncaSinResultados": true },
+    { "q": "luz calida living", "perfil": "particular", "intencion": "necesidad", "categoria": ["Colgantes", "Lámparas", "Apliques", "Bulbos", "Filamento y vintage", "ILUMINACION"], "atributosDuros": ["tono-calido"], "debeIncluirEnTop24": ["bulbo"], "nuncaSinResultados": true },
+    { "q": "escritorio luz", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas", "ILUMINACION"], "debeIncluirEnTop24": ["escritorio"], "categoriaEnTop24": ["Veladores"], "nuncaSinResultados": true }
   ]
 }

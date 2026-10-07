@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { condicionRecuperar, terminosQueRecuperan } from "./recuperar";
-import { PUNTOS, puntajeBusqueda } from "./ordenar";
+import { POTENCIA_NO_DOMESTICA_W, PUNTOS, esConsultaDeCasa, gruposDeOriginales, puntajeBusqueda } from "./ordenar";
 import { patronFrase, patronInicio, patronTermino, type CriterioPlan, type PiezasBusqueda } from "./piezas";
 
 const dialecto = new PgDialect();
@@ -196,8 +196,8 @@ describe("ordenar", () => {
     expect(texto).toContain(`(case when CODIGO = $`);
     expect(texto).toContain(`then ${PUNTOS.codigoExacto} else 0 end)`);
     expect(texto).toMatch(/\(case when NOMBRE ~ \$\d+ then 2 else 0 end\)/);
-    // "todos": los dos originales significativos (no el contexto ni la expansión).
-    expect(texto).toMatch(/\(case when TEXTO ~ \$\d+ and TEXTO ~ \$\d+ then 3 else 0 end\)/);
+    // "todos": los dos originales significativos (no el contexto); "reflector" cumple también por su expansión.
+    expect(texto).toMatch(/\(case when \(TEXTO ~ \$\d+ or TEXTO ~ \$\d+\) and TEXTO ~ \$\d+ then 3 else 0 end\)/);
     expect(texto).toContain("(case when EN_CATEGORIAS(");
     expect(texto).toContain("(case when ATRIBUTO_apto_exterior then $");
     expect(texto).toContain("(case when CON_STOCK then 1 else 0 end)");
@@ -218,9 +218,39 @@ describe("ordenar", () => {
     expect(PUNTOS.frase).toBeGreaterThan(PUNTOS.categoria);
   });
 
-  it("con un solo original no hay frase", () => {
-    const { sql: texto } = render(puntajeBusqueda(plan({ terminos: [{ texto: "lampara", peso: 1 }, { texto: "luz", peso: 0.3 }] }, "lampara luz"), piezas));
+  it("con un solo original, la «frase» es el nombre que lo contiene (o a una de sus expansiones)", () => {
+    const p = plan({ terminos: [{ texto: "escritorio", peso: 1 }, { texto: "luz", peso: 0.3 }], categorias: [{ nombre: "Lámparas", peso: 0.7 }] }, "escritorio luz");
+    const { sql: texto, params } = render(puntajeBusqueda(p, piezas));
+    expect(texto).toMatch(new RegExp(`\\(case when NOMBRE ~ \\$\\d+ then ${PUNTOS.frase} else 0 end\\)`));
+    expect(params).toContain(patronTermino("escritorio"));
+    // El nombre le gana a la categoría blanda más el contexto ("luz" en el nombre).
+    expect(PUNTOS.nombre + PUNTOS.frase).toBeGreaterThan(PUNTOS.categoria + 0.3 * PUNTOS.nombre);
+    const conSinonimo = render(puntajeBusqueda(plan({ terminos: [{ texto: "proyector", peso: 1 }, { texto: "reflector", peso: 0.7 }] }, "proyector"), piezas));
+    expect(conSinonimo.sql).toMatch(new RegExp(`\\(case when \\(NOMBRE ~ \\$\\d+ or NOMBRE ~ \\$\\d+\\) then ${PUNTOS.frase} else 0 end\\)`));
+  });
+
+  it("con una medida en la consulta, un solo original no es frase ('hasta 50w': decide la medida)", () => {
+    const { sql: texto } = render(puntajeBusqueda(plan({ terminos: [{ texto: "hasta", peso: 1 }, { texto: "50w", peso: 0.4 }] }, "hasta 50w"), piezas));
     expect(texto).not.toContain(`then ${PUNTOS.frase} else 0 end`);
+  });
+
+  it("«todos» cuenta una expansión como el original ('foco smart': un bulbo smart cumple)", () => {
+    const terminos = [{ texto: "foco", peso: 1 }, { texto: "smart", peso: 1 }, { texto: "lampara", peso: 0.7 }, { texto: "bulbo", peso: 0.7 }];
+    expect(gruposDeOriginales(["foco", "smart"], terminos)).toEqual([["foco", "lampara", "bulbo"], ["smart"]]);
+    const { sql: texto, params } = render(puntajeBusqueda(plan({ terminos }, "foco smart"), piezas));
+    expect(texto).toMatch(/\(case when \(TEXTO ~ \$\d+ or TEXTO ~ \$\d+ or TEXTO ~ \$\d+\) and TEXTO ~ \$\d+ then 3 else 0 end\)/);
+    expect(params).toContain(patronTermino("bulbo"));
+  });
+
+  it("con la categoría filtrada que nombra a un original, «todos» pide sólo el resto ('foco inteligente' en Lámparas)", () => {
+    const terminos = [{ texto: "foco", peso: 1 }, { texto: "inteligente", peso: 1 }, { texto: "lampara", peso: 0.7 }, { texto: "smart", peso: 0.7 }];
+    const { sql: texto } = render(puntajeBusqueda(plan({ terminos }, "foco inteligente"), piezas, { categoriasFiltro: ["Lámparas"] }));
+    expect(texto).toMatch(/\(case when \(TEXTO ~ \$\d+ or TEXTO ~ \$\d+\) then 3 else 0 end\)/);
+    // Sin el filtro, los dos grupos.
+    const sinFiltro = render(puntajeBusqueda(plan({ terminos }, "foco inteligente"), piezas)).sql;
+    expect(sinFiltro).toMatch(/\(case when \(TEXTO ~ \$\d+ or TEXTO ~ \$\d+\) and \(TEXTO ~ \$\d+ or TEXTO ~ \$\d+\) then 3 else 0 end\)/);
+    // Una categoría que no nombra a ninguno no cubre nada.
+    expect(render(puntajeBusqueda(plan({ terminos }, "foco inteligente"), piezas, { categoriasFiltro: ["Reflectores"] })).sql).toBe(sinFiltro);
   });
 
   it("sin términos originales: sin prefijo ni «todos»", () => {
@@ -228,6 +258,37 @@ describe("ordenar", () => {
     expect(texto).not.toMatch(/then 2 else 0 end/);
     expect(texto).not.toMatch(/then 3 else 0 end/);
   });
+});
+
+describe("consulta de la casa: lo industrial o de alta potencia baja (nunca se excluye)", () => {
+  it("lugares de la casa sin contexto industrial", () => {
+    expect(esConsultaDeCasa("proyector para patio")).toBe(true);
+    expect(esConsultaDeCasa("luz cálida para el living")).toBe(true);
+    expect(esConsultaDeCasa("reflector para los balcones")).toBe(true);
+    expect(esConsultaDeCasa("reflector para galpón")).toBe(false);
+    expect(esConsultaDeCasa("proyector cancha padel")).toBe(false);
+    expect(esConsultaDeCasa("reflector industrial para el patio")).toBe(false);
+    expect(esConsultaDeCasa("reflector 50w")).toBe(false);
+  });
+
+  it("resta por 'industrial' en el nombre o potencia > 200 W; sin la pieza de potencia, sólo el nombre", () => {
+    const p = plan({ terminos: [{ texto: "proyector", peso: 1 }, { texto: "patio", peso: 0.3 }] }, "proyector para patio");
+    const conPotencia = render(puntajeBusqueda(p, { ...piezas, potencia: sql`POTENCIA` }));
+    expect(conPotencia.sql).toContain(`-(case when (NOMBRE ~ $`);
+    expect(conPotencia.sql).toContain(`or coalesce(POTENCIA, 0) > ${POTENCIA_NO_DOMESTICA_W}) then ${PUNTOS.industrialEnCasa} else 0 end)`);
+    expect(conPotencia.params).toContain(patronTermino("industrial"));
+    const sinPotencia = render(puntajeBusqueda(p, piezas));
+    expect(sinPotencia.sql).toContain(`-(case when (NOMBRE ~ $`);
+    expect(sinPotencia.sql).not.toContain("POTENCIA");
+    // Menos que un término en el nombre: dentro de un empate reordena, no cambia de tipo de producto.
+    expect(PUNTOS.industrialEnCasa).toBeLessThan(PUNTOS.nombre);
+  });
+
+  it("sin lugar de la casa (o con contexto industrial), no hay resta", () => {
+    const p = plan({ terminos: [{ texto: "proyector", peso: 1 }, { texto: "cancha", peso: 0.3 }] }, "proyector cancha padel");
+    expect(render(puntajeBusqueda(p, { ...piezas, potencia: sql`POTENCIA` })).sql).not.toContain("-(case");
+  });
+
 });
 
 describe("orden de las medidas discretas: el que cumple, antes que el que contradice", () => {

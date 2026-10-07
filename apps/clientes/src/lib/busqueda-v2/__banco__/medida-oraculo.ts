@@ -103,12 +103,24 @@ export function ordenDeVeredictos(veredictos: readonly (boolean | null)[]): { in
   return { inversiones, arriba };
 }
 
-/** ¿El valor estructurado cumple la medida? `null` = sin dato del tipo que la medida pide. */
+/** Rango "a-b" del texto (tensión de entrada "85-265", regulación de un relé térmico "4-6"); espejo propio, no de producción. */
+function rangoDeTexto(t: string | null): [number, number] | null {
+  const m = t ? /^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(t) : null;
+  return m && Number(m[1]) < Number(m[2]) ? [Number(m[1]), Number(m[2])] : null;
+}
+
+/**
+ * ¿El valor estructurado cumple la medida? `null` = sin dato del tipo que la medida pide. Un valor exacto pedido
+ * (5 A, 110 V) lo cumple también un rango de texto que lo contiene: un relé térmico de regulación 4-6 A sirve para
+ * 5 A aunque su número guardado sea el tope.
+ */
 export function cumpleMedida(m: MedidaBanco, v: ValorEstructurado | undefined): boolean | null {
   if (typeof m.valor === "string") {
     if (!v || v.t === null) return null;
     return v.t.toLowerCase() === m.valor.toLowerCase();
   }
+  const rango = typeof m.valor === "number" && m.clave !== "ip" && v ? rangoDeTexto(v.t) : null;
+  if (rango && m.valor! >= rango[0] - EPSILON && m.valor! <= rango[1] + EPSILON) return true;
   if (!v || v.n === null) return null;
   if (typeof m.valor === "number") return m.clave === "ip" ? v.n >= m.valor - EPSILON : Math.abs(v.n - m.valor) < EPSILON;
   return (m.min === undefined || v.n >= m.min - EPSILON) && (m.max === undefined || v.n <= m.max + EPSILON);

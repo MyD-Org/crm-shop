@@ -153,7 +153,31 @@ describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => 
   const prod = (alegraId: string, name: string, description: string | null = null) => ({ alegraId, name, description })
 
   it("las claves que admite el backfill por nombre", () => {
-    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono"])
+    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono", "modulos", "dimerizable", "corriente_a"])
+  })
+
+  it("corriente_a: sólo los rangos de regulación (la corriente suelta la escribe la sync); nunca pisa pdf/manual", () => {
+    const productos = [
+      prod("1", "RELES DE SOBRECARGA TERMICOS NXR-25, 4-6A"), // nueva
+      prod("2", "GUARDAMOTOR 4 A 6.3A TRIFASICO"), // cambia (nombre guardado 6.3 sin texto)
+      prod("3", "GUARDAMOTOR REGULACION 1-1.6A"), // protegida (pdf)
+      prod("4", "RELE TERMICO 9-13A"), // igual
+      prod("5", "TERMICA BIPOLAR 20A"), // corriente suelta: el backfill no la toca
+    ]
+    const plan = planearBackfillClave(
+      "corriente_a",
+      productos,
+      new Map([
+        ["2", { fuente: "nombre" as const, valorNum: 6.3, valorTexto: null }],
+        ["3", { fuente: "pdf" as const, valorNum: 1.6, valorTexto: null }],
+        ["4", { fuente: "nombre" as const, valorNum: 13, valorTexto: "9-13" }],
+      ]),
+    )
+    expect(plan).toMatchObject({ nuevas: 1, cambian: 1, iguales: 1, protegidas: 1, protegidasDistintas: 1 })
+    expect(plan.filas).toEqual([
+      { alegraId: "1", clave: "corriente_a", valorNum: 6, valorTexto: "4-6" },
+      { alegraId: "2", clave: "corriente_a", valorNum: 6.3, valorTexto: "4-6.3" },
+    ])
   })
 
   it("montaje (texto): escribe valor_texto, nunca pisa pdf/manual y es idempotente", () => {
@@ -233,6 +257,26 @@ describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => 
     const p2 = planearBackfillClave("ancho_mm", productos, guardadas)
     expect(p2.filas).toEqual([])
     expect(p2.iguales).toBe(2)
+  })
+
+  it("dimerizable (texto si/no) y modulos (numérica): nunca pisan pdf/manual y son idempotentes", () => {
+    const productos = [
+      prod("1", "LAMPARA LED 9W E27 DIMERIZABLE"), // nueva
+      prod("2", "PANEL LED 18W NO DIMERIZABLE"), // protegida (pdf con otro valor)
+      prod("3", "DIMMER LED BLANCO"), // sin lectura
+    ]
+    const plan = planearBackfillClave("dimerizable", productos, new Map([["2", { fuente: "pdf" as const, valorNum: null, valorTexto: "si" }]]))
+    expect(plan).toMatchObject({ nuevas: 1, cambian: 0, iguales: 0, protegidas: 1, protegidasDistintas: 1 })
+    expect(plan.filas).toEqual([{ alegraId: "1", clave: "dimerizable", valorNum: null, valorTexto: "si" }])
+
+    const cajas = [prod("1", "Caja de embutir p/ 12 mód. DIN pta fume"), prod("2", "Caja IP65 p/24 polos DIN"), prod("3", "Caja exterior 3 módulos")]
+    const p1 = planearBackfillClave("modulos", cajas, new Map())
+    expect(p1.filas).toEqual([
+      { alegraId: "1", clave: "modulos", valorNum: 12, valorTexto: null },
+      { alegraId: "2", clave: "modulos", valorNum: 24, valorTexto: null },
+    ])
+    const guardadas = new Map(p1.filas.map((f) => [f.alegraId, { fuente: "nombre" as const, valorNum: f.valorNum }]))
+    expect(planearBackfillClave("modulos", cajas, guardadas)).toMatchObject({ filas: [], iguales: 2 })
   })
 
   it("planearBackfillSeccion sigue siendo planearBackfillClave('seccion_mm2')", () => {

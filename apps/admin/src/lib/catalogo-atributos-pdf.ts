@@ -41,7 +41,8 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
   flujo_lm: "Flujo luminoso en lúmenes (número).",
   tension_v: 'Tensión de alimentación: un número ("220") o un rango ("85-265"). null si no se indica.',
   zocalo: 'Zócalo o base de la lámpara ("E27", "GU10", "G9"…). null si no tiene.',
-  corriente_a: "Corriente nominal en amperes (número). No poner sensibilidad en mA ni poder de corte en kA.",
+  corriente_a:
+    'Corriente nominal en amperes ("25"). En un relé térmico o un guardamotor, el rango de regulación ("4-6", "1.6-2.5"). No poner sensibilidad en mA ni poder de corte en kA.',
   polos: "Cantidad de polos, entero de 1 a 4.",
   seccion_mm2: "Sección del conductor en mm2 (número), no la cantidad de conductores.",
   medidas_mm: 'Dimensiones externas en mm como "AxB" o "AxBxC" (p. ej. "300x1200"); null si no hay.',
@@ -63,13 +64,18 @@ export const DESCRIPCION_PDF: Record<ClaveAtributo, string> = {
     'Diámetro en milímetros (número, p. ej. 20 o 32) de un caño, tubo, conector, unión, curva, grampa de caño o cablecanal redondo. SOLO el diámetro exterior o nominal del caño; no la sección de un cable ni un espesor.',
   ancho_mm:
     'Ancho en milímetros (entero, p. ej. 100 o 300) de una bandeja portacables o de su tapa o accesorio. SOLO el ancho (el primer número de "100/50"); no el alto ni el largo.',
+  dimerizable:
+    '"si" o "no": si la ficha dice que ESTE producto (lámpara, panel, tira LED o driver) es dimerizable ("Dimerizable: Sí", "Dimmable", "regulable con dimmer TRIAC") o que no lo es ("No dimerizable"). null si no lo dice. No lo de un dimmer ni "compatible con dimmer" de otro producto.',
+  modulos:
+    'Cantidad de módulos DIN (entero, p. ej. 12 o 36) de un gabinete, caja o tablero ("12 módulos DIN", "p/12 polos", "10 bocas"). null para cualquier otro producto; no son los módulos de una caja de teclas y tomas.',
 }
 
 /**
- * Tipo JSON de cada campo en la herramienta: el de `DEFINICION_ATRIBUTOS`, salvo la tensión, que el
- * modelo puede devolver como rango de texto ("85-265").
+ * Tipo JSON de cada campo en la herramienta: el de `DEFINICION_ATRIBUTOS`, salvo la tensión y la corriente, que el
+ * modelo puede devolver como rango de texto ("85-265", "4-6").
  */
-const tipoDeCampo = (c: ClaveAtributo) => (DEFINICION_ATRIBUTOS[c].tipo === "num" && c !== "tension_v" ? "number" : "string")
+const tipoDeCampo = (c: ClaveAtributo) =>
+  DEFINICION_ATRIBUTOS[c].tipo === "num" && c !== "tension_v" && c !== "corriente_a" ? "number" : "string"
 
 /** Propiedades del esquema, armadas desde `CLAVES_ATRIBUTO`: nunca queda desfasado de la base. */
 const PROPIEDADES = Object.fromEntries(

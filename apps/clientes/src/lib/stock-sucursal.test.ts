@@ -12,7 +12,7 @@ const TENANT = "tenant-test";
 let grabadora = dbGrabadora();
 vi.mock("@/db", () => ({ getDb: () => grabadora.db }));
 
-import { getCatalogo, getFacetas, getPaginaCatalogo } from "./catalog";
+import { contarCatalogo, getCatalogo, getFacetas, getPaginaCatalogo } from "./catalog";
 import { cotizar } from "./cotizacion";
 import { leerDisponibilidadBruta } from "./stock-sucursal";
 import type { ContextoDisponibilidad } from "./disponibilidad-contexto";
@@ -33,37 +33,56 @@ afterEach(() => vi.unstubAllEnvs());
 const ultima = () => grabadora.consultas[grabadora.consultas.length - 1];
 
 describe("catálogo con `disp`", () => {
-  it("el stock sale de catalog_stock_sucursal menos stock_reservado_sucursal, con el tenant en cada join", async () => {
+  it("el stock sale de catalog_stock_sucursal menos stock_reservado_sucursal, con el tenant en cada lectura", async () => {
     await getCatalogo({ soloVisibles: false, disp });
     const { sql, params } = ultima();
-    expect(sql).toContain("from unnest(ARRAY[$");
-    expect(sql).toContain('left join "public"."catalog_stock_sucursal"');
-    expect(sql).toContain('left join "shop"."stock_reservado_sucursal"');
-    expect(sql).toContain('"public"."catalog_stock_sucursal"."tenant_id" = $');
-    expect(sql).toContain('"stock_reservado_sucursal"."tenant_id" = $');
-    expect(sql).toContain('"stock_reservado_sucursal"."sucursal" = s.slug');
+    // stock de la sucursal: por la PK (tenant, sucursal, producto)
+    expect(sql).toMatch(
+      /select "public"\."catalog_stock_sucursal"\."stock" from "public"\."catalog_stock_sucursal"\s+where "public"\."catalog_stock_sucursal"\."tenant_id" = \$\d+ and "public"\."catalog_stock_sucursal"\."sucursal" = \$\d+\s+and "public"\."catalog_stock_sucursal"\."alegra_id" = "catalog_products_shop"\."alegra_id"/,
+    );
+    // lo reservado: un mapa por sucursal calculado una vez por consulta (sin correlación)
+    expect(sql).toMatch(
+      /select jsonb_object_agg\("stock_reservado_sucursal"\."alegra_item_id", "stock_reservado_sucursal"\."qty"\)\s+from "shop"\."stock_reservado_sucursal"\s+where "stock_reservado_sucursal"\."tenant_id" = \$\d+ and "stock_reservado_sucursal"\."sucursal" = \$\d+\s+\) ->> "catalog_products_shop"\."alegra_id"/,
+    );
     // el tenant y los slugs viajan como parámetros
     expect(params.filter((p) => p === TENANT).length).toBeGreaterThanOrEqual(4);
     expect(params).toContain("sede-a");
     expect(params).toContain("sede-b");
   });
 
-  it("nunca negativo y respalda el stock de la vista SOLO si el producto no tiene filas por sucursal", async () => {
+  it("nunca negativo, el mejor entre las sucursales y respalda el stock de la vista SOLO si el producto no tiene filas por sucursal", async () => {
     await getCatalogo({ soloVisibles: false, disp });
     const { sql } = ultima();
     expect(sql).toContain("greatest(0,");
-    expect(sql).toContain('select 1 from "public"."catalog_stock_sucursal" x');
-    expect(sql).toContain('then "catalog_products_shop"."stock" else 0 end');
-    expect(sql).toContain(
-      'when "catalog_products_shop"."stock" is null then null',
+    expect(sql).toContain('when "catalog_products_shop"."stock" is null then null else coalesce(greatest(');
+    // el respaldo: una vez por expresión (sólo en la sucursal que hereda), por hash y no por fila
+    const respaldos = sql.match(
+      /"catalog_products_shop"\."alegra_id" not in \(\s*select "public"\."catalog_stock_sucursal"\."alegra_id" from "public"\."catalog_stock_sucursal" where "public"\."catalog_stock_sucursal"\."tenant_id" = \$\d+\s*\) then "catalog_products_shop"\."stock" else 0 end/g,
     );
+    const expresiones = sql.match(/else coalesce\(greatest\(/g);
+    expect(respaldos?.length).toBe(expresiones?.length);
   });
 
   it("no cuenta el stock de una sucursal donde el producto está oculto", async () => {
     await getCatalogo({ soloVisibles: false, disp });
-    expect(ultima().sql).toContain(
-      'where s.slug <> all(coalesce("public"."catalog_overlay"."oculto_en_sucursales", \'{}\'::text[]))',
+    const ocultas = ultima().sql.match(
+      /case when \$\d+ <> all\(coalesce\("public"\."catalog_overlay"\."oculto_en_sucursales", '\{\}'::text\[\]\)\) then greatest\(0,/g,
     );
+    // una por sucursal que cuenta, en cada expresión
+    expect((ocultas?.length ?? 0) % disp.contarEn.length).toBe(0);
+    expect(ocultas?.length).toBeGreaterThanOrEqual(disp.contarEn.length);
+  });
+
+  it("toda consulta del catálogo usa el lateral por sucursal y no la reserva única", async () => {
+    await getPaginaCatalogo({ soloVisibles: true, filtros: { soloStock: true }, disp });
+    await getFacetas({ soloStock: true }, true, disp);
+    await contarCatalogo({ soloVisibles: true, filtros: { soloStock: true }, disp });
+    const delCatalogo = grabadora.consultas.filter((c) => c.sql.includes('from "public"."catalog_products_shop"'));
+    expect(delCatalogo.length).toBeGreaterThanOrEqual(5);
+    for (const c of delCatalogo) {
+      expect(c.sql).toContain('left join lateral (select max(d.v) as "disponible" from (select (case when');
+      expect(c.sql).not.toContain('left join "shop"."stock_reservado" on');
+    }
   });
 
   it("excluye lo oculto en todas las sucursales activas", async () => {
@@ -91,8 +110,12 @@ describe("catálogo con `disp`", () => {
     const consulta = grabadora.consultas.find((c) =>
       c.sql.includes("count(*)"),
     )!;
-    expect(consulta.sql).toContain("unnest(ARRAY[");
-    expect(consulta.sql).toMatch(/\) is null or \(case when/);
+    // del lateral: calculado una vez por fila, no dos veces en el WHERE
+    expect(consulta.sql).toContain('left join lateral (select max(d.v) as "disponible"');
+    expect(consulta.sql).toContain(
+      '("stock_sucursal"."disponible" is null or "stock_sucursal"."disponible" > 0)',
+    );
+    expect(consulta.sql.match(/else coalesce\(greatest\(/g)?.length).toBe(1);
   });
 
   it("en modalidad retiro el local elegido tampoco puede tenerlo oculto", async () => {

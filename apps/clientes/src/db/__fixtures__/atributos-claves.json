@@ -22,7 +22,9 @@
     "potencia_w_m",
     "leds_rollo",
     "diametro_mm",
-    "ancho_mm"
+    "ancho_mm",
+    "dimerizable",
+    "modulos"
   ],
   "tipos": {
     "potencia_w": "num",
@@ -47,10 +49,13 @@
     "potencia_w_m": "num",
     "leds_rollo": "num",
     "diametro_mm": "num",
-    "ancho_mm": "num"
+    "ancho_mm": "num",
+    "dimerizable": "texto",
+    "modulos": "num"
   },
   "rangos_solo_faceta": {
     "diametro_mm": [5, 200],
-    "ancho_mm": [30, 1000]
+    "ancho_mm": [30, 1000],
+    "modulos": [1, 200]
   }
 }

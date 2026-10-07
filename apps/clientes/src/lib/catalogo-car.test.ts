@@ -15,6 +15,9 @@ describe("leerIdCar", () => {
     ["diametro_mm:25", { clave: "diametro_mm", op: "valor", valor: "25" }],
     ["diametro_mm:12.5", { clave: "diametro_mm", op: "valor", valor: "12.5" }],
     ["ancho_mm:150", { clave: "ancho_mm", op: "valor", valor: "150" }],
+    ["modulos:12", { clave: "modulos", op: "valor", valor: "12" }],
+    ["dimerizable:si", { clave: "dimerizable", op: "valor", valor: "si" }],
+    ["dimerizable:no", { clave: "dimerizable", op: "valor", valor: "no" }],
   ])("%s es válido", (id, esperado) => {
     expect(leerIdCar(id)).toEqual(esperado);
   });
@@ -39,6 +42,12 @@ describe("leerIdCar", () => {
     "diametro_mm:20-25", // clave de lista: sólo valor exacto
     "ancho_mm:20", // fuera de 30-1000
     "ancho_mm:1001",
+    "modulos:0", // fuera de 1-200
+    "modulos:201",
+    "modulos:012", // no canónico
+    "modulos:12-24", // clave de lista: sólo valor exacto
+    "dimerizable:Si", // mayúscula fuera de la gramática
+    "dimerizable:si;drop",
     "potencia_w:10-50", // la potencia usa potencia_min/max
     "potencia_w:10",
     "flujo_lm:800", // una clave de rango solo admite rango
@@ -162,5 +171,16 @@ describe("filtrosPorTipo (lo que la page suma a los filtros)", () => {
       facetasPorTipo: true,
       caracteristicas: ["polos:2", "curva:c"],
     });
+  });
+});
+
+describe("corriente: rango de regulación en ?car=", () => {
+  it("corriente_a:4-6 es un valor de lista (no un rango de slider) y su chip dice 4–6 A", () => {
+    expect(leerIdCar("corriente_a:4-6")).toEqual({ clave: "corriente_a", op: "valor", valor: "4-6" });
+    expect(leerIdCar("corriente_a:1.6-2.5")).toEqual({ clave: "corriente_a", op: "valor", valor: "1.6-2.5" });
+    expect(etiquetaCar("corriente_a:4-6")).toBe("Corriente: 4–6 A");
+    expect(etiquetaCar("corriente_a:6")).toBe("Corriente: 6 A");
+    expect(leerIdCar("corriente_a:6-4")).toBeNull();
+    expect(leerIdCar("polos:1-2")).toBeNull();
   });
 });

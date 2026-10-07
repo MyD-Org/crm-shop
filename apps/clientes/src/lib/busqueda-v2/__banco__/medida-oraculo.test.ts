@@ -32,6 +32,17 @@ describe("cumpleMedida (oráculo propio del banco)", () => {
     expect(cumpleMedida({ clave: "potencia_w", valor: 9.5 }, num(9.5000000001))).toBe(true);
   });
 
+  it("rango de regulación en texto (relé térmico 4-6 A, número = tope): cumple lo que cae adentro", () => {
+    const rele = { n: 6, t: "4-6" };
+    expect(cumpleMedida({ clave: "corriente_a", valor: 5 }, rele)).toBe(true);
+    expect(cumpleMedida({ clave: "corriente_a", valor: 4 }, rele)).toBe(true);
+    expect(cumpleMedida({ clave: "corriente_a", valor: 6 }, rele)).toBe(true);
+    expect(cumpleMedida({ clave: "corriente_a", valor: 8 }, rele)).toBe(false);
+    expect(cumpleMedida({ clave: "corriente_a", valor: 2 }, { n: 2.5, t: "1.6-2.5" })).toBe(true);
+    // Una térmica de 6 A (sin rango) sigue siendo exacta.
+    expect(cumpleMedida({ clave: "corriente_a", valor: 5 }, num(6))).toBe(false);
+  });
+
   it("texto: sin distinguir mayúsculas", () => {
     expect(cumpleMedida({ clave: "zocalo", valor: "e27" }, txt("E27"))).toBe(true);
     expect(cumpleMedida({ clave: "zocalo", valor: "e27" }, txt("e14"))).toBe(false);

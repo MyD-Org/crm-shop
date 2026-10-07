@@ -132,6 +132,6 @@ describe("MediosDePagoDetalle con el carrito", () => {
     const t = texto(renderToStaticMarkup(createElement(MediosDePagoDetalle, props)));
     expect(t).toContain("8 cuotas sin interés en compras desde $ 30.000");
     expect(t).not.toContain("30.000,00");
-    expect(t).not.toContain("Con su carrito");
+    expect(t).not.toContain("Le faltan");
   });
 });

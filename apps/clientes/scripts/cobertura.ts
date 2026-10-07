@@ -10,7 +10,7 @@
  *   `publicados` (activo + overlay visible + precio) o `activos`, siempre
  *   restringido a los que tienen stock disponible. Es el denominador.
  * - Todo se cuenta por producto DISTINTO (nunca por fila).
- * - Las 23 claves vienen de `CLAVES_ESTRUCTURADAS` (única fuente de verdad del
+ * - Las 25 claves vienen de `CLAVES_ESTRUCTURADAS` (única fuente de verdad del
  *   Shop, cruzada con el fixture compartido con el CRM en los tests).
  * - Sin nombres de producto ni ids en el resultado: sólo categorías, claves,
  *   valores de atributo y conteos (apto para pegar en un PR).
@@ -39,7 +39,7 @@ export interface NodoCobertura {
 
 export interface OpcionesCobertura {
   universo: UniversoCobertura;
-  /** Por defecto las 23 de `CLAVES_ESTRUCTURADAS`. */
+  /** Por defecto las 25 de `CLAVES_ESTRUCTURADAS`. */
   claves?: readonly string[];
   /** Por defecto `clavesUsadasHoy()`. */
   usadasHoy?: ReadonlySet<string>;

@@ -41,12 +41,14 @@ const MUESTRA: Record<ClaveEstructurada, { n: number | null; t: string | null }>
   leds_rollo: n(300),
   diametro_mm: n(25),
   ancho_mm: n(150),
+  dimerizable: t("si"),
+  modulos: n(12),
 };
 
 describe("paridad con el contrato de claves (fixture compartido con el CRM)", () => {
   it("CLAVES_ESTRUCTURADAS = fixture.claves, en el mismo orden", () => {
     expect([...CLAVES_ESTRUCTURADAS]).toEqual(fixture.claves);
-    expect(CLAVES_ESTRUCTURADAS).toHaveLength(23);
+    expect(CLAVES_ESTRUCTURADAS).toHaveLength(25);
   });
 
   it("ETIQUETA y TIPO cubren exactamente las claves del fixture, con el tipo del fixture", () => {
@@ -143,6 +145,16 @@ describe("formato de las claves ampliadas (es-AR)", () => {
     expect(formatoValor("ancho_mm", t("150"))).toBeNull();
     expect(ETIQUETA.diametro_mm).toBe("Diámetro");
     expect(ETIQUETA.ancho_mm).toBe("Ancho");
+    expect(formatoValor("dimerizable", t("si"))).toBe("Sí");
+    expect(formatoValor("dimerizable", t("no"))).toBe("No");
+    expect(formatoValor("dimerizable", t("quizas"))).toBeNull();
+    expect(formatoValor("dimerizable", n(1))).toBeNull();
+    expect(formatoValor("modulos", n(12))).toBe("12 módulos");
+    expect(formatoValor("modulos", n(1))).toBe("1 módulo");
+    expect(formatoValor("modulos", n(12.5))).toBeNull();
+    expect(formatoValor("modulos", t("12"))).toBeNull();
+    expect(ETIQUETA.dimerizable).toBe("Dimerizable");
+    expect(ETIQUETA.modulos).toBe("Módulos");
   });
 
   it("polos: singular, plural y fuera de 1–4 o no entero sin fila", () => {
@@ -213,7 +225,7 @@ describe("solo se muestra lo que el producto tiene", () => {
 
   it("ningún texto tiene null, undefined, guion ni 'No informado'", () => {
     const filas = caracteristicasDe(MUESTRA);
-    expect(filas).toHaveLength(23);
+    expect(filas).toHaveLength(25);
     for (const f of filas) {
       expect(`${f.etiqueta} ${f.valor}`).not.toMatch(/null|undefined|No informado/i);
       expect(f.valor.trim()).not.toBe("-");
@@ -288,5 +300,22 @@ describe("tipo de luz (tono) y color del producto", () => {
   it("el agente recibe el tipo de luz de color, no uno inventado", () => {
     expect(atributosParaAgente({ tono: { n: null, t: "verde" } })).toEqual({ tono: "verde" });
     expect(atributosParaAgente({ tono: { n: null, t: "turquesa" } })).toBeUndefined();
+  });
+});
+
+describe("corriente con rango de regulación (relé térmico, guardamotor)", () => {
+  const rele = { n: 6, t: "4-6" };
+  it("la ficha y los chips muestran el rango, nunca el tope solo", () => {
+    expect(formatoValor("corriente_a", rele)).toBe("4–6 A");
+    expect(formatoValor("corriente_a", { n: 2.5, t: "1.6-2.5" })).toBe("1,6–2,5 A");
+    expect(formatoValor("corriente_a", { n: 6, t: null })).toBe("6 A");
+    expect(formatoValor("corriente_a", { n: 6, t: "basura" })).toBe("6 A");
+    expect(caracteristicasDe({ corriente_a: rele })).toEqual([{ etiqueta: "Corriente", valor: "4–6 A" }]);
+    expect(etiquetasTecnicas({ corriente_a: rele, polos: n(3) })).toEqual(["4–6 A", "3 polos"]);
+  });
+
+  it("al modelo del chat le llega el rango como texto; una térmica, el número", () => {
+    expect(atributosParaAgente({ corriente_a: rele })).toEqual({ corriente_a: "4-6" });
+    expect(atributosParaAgente({ corriente_a: n(16) })).toEqual({ corriente_a: 16 });
   });
 });

@@ -234,7 +234,9 @@ export function parsearAceptado(linea: string): { id: string; atributo: Atributo
   if (typeof r.id !== "string" || !r.id || typeof r.clave !== "string") return null
   if (!(CLAVES_ATRIBUTO as readonly string[]).includes(r.clave)) return null
   const clave = r.clave as ClaveAtributo
-  const bruto = DEFINICION_ATRIBUTOS[clave].tipo === "num" && clave !== "tension_v" ? r.valorNum : (r.valorTexto ?? r.valorNum)
+  // La tensión y la corriente pueden traer un rango en texto ("85-265", "4-6"): manda el texto.
+  const conRango = clave === "tension_v" || clave === "corriente_a"
+  const bruto = DEFINICION_ATRIBUTOS[clave].tipo === "num" && !conRango ? r.valorNum : (r.valorTexto ?? r.valorNum)
   const valido = normalizarAtributos({ [clave]: bruto }).find((a) => a.clave === clave)
   if (!valido) return null
   return { id: r.id, atributo: valido }

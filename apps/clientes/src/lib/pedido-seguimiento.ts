@@ -10,7 +10,10 @@
  * actual y los siguientes quedan pendientes. "Pago confirmado" también se da
  * por hecho cuando el operador ya confirmó el pedido: el cobro puede haber
  * sido offline (en el local, transferencia). Un pago fallido no mueve el
- * seguimiento: lo comunica la pill (`estado-pedido-pill.ts`). Un pedido
+ * seguimiento (sigue siendo el paso actual), pero el paso se rotula "Pago
+ * rechazado" para no decir "confirmado" de un pago que no se cobró; con el
+ * pago en línea en proceso, "Pago en proceso". El DS no tiene estado de error
+ * en el Stepper: el tono lo da la etiqueta. Un pedido
  * cancelado no tiene seguimiento.
  *
  * "Listo para retiro" NO existe: el CRM no tiene ese estado (CHECK
@@ -40,7 +43,8 @@ export interface PasoSeguimiento {
   state: StepState;
 }
 
-type Pedido = Pick<Order, "estado" | "pagoEstado" | "entregaTipo" | "pagoMetodoSlug">;
+type Pedido = Pick<Order, "estado" | "pagoEstado" | "entregaTipo" | "pagoMetodoSlug"> &
+  Partial<Pick<Order, "pagoEnProceso">>;
 
 const PASOS: Record<EntregaTipoPedido, readonly IdPasoSeguimiento[]> = {
   retiro: ["recibido", "pago", "preparando", "retirado"],
@@ -88,7 +92,11 @@ export function seguimientoPedido(o: Pedido): PasoSeguimiento[] | null {
       state = "current";
       actualAsignado = true;
     } else state = "pending";
-    const label = id === "pago" && !pagoEnLinea ? "Pedido confirmado" : LABEL[id];
+    let label = id === "pago" && !pagoEnLinea ? "Pedido confirmado" : LABEL[id];
+    if (id === "pago" && state === "current" && pagoEnLinea && o.estado === "pendiente") {
+      if (o.pagoEstado === "fallido") label = "Pago rechazado";
+      else if (o.pagoEstado === "pendiente" && o.pagoEnProceso) label = "Pago en proceso";
+    }
     return { id, label, state };
   });
 }

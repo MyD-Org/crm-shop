@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Button, DocumentViewer, Tooltip, useToast } from "@myd-org/ui";
+import { Button, DocumentViewer, useToast } from "@myd-org/ui";
 import { linkNext } from "@/components/catalogo/link-next";
 import { useCart } from "@/context/CartContext";
 import type { OrderItem } from "@/data/orders";
@@ -23,6 +23,7 @@ export function PedidoAcciones({
   items,
   facturaId,
   facturaNumero,
+  reintentarPago = false,
   mostrarDetalle = true,
   alPie = false,
   extra,
@@ -31,6 +32,8 @@ export function PedidoAcciones({
   items: OrderItem[];
   facturaId?: string;
   facturaNumero?: string;
+  /** Pago en línea rechazado y pedido cobrable: "Reintentar el pago" pasa a ser la acción principal. */
+  reintentarPago?: boolean;
   mostrarDetalle?: boolean;
   /** Al pie de una card (con separador): una fila en escritorio, apiladas a lo ancho en mobile. */
   alPie?: boolean;
@@ -81,29 +84,19 @@ export function PedidoAcciones({
 
   return (
     <div className={contenedor}>
+      {reintentarPago && (
+        <Button href="/checkout" renderLink={linkNext}>
+          Reintentar el pago
+        </Button>
+      )}
       {mostrarDetalle && (
-        <Button href={hrefPedido(pedidoId)} renderLink={linkNext}>
+        <Button variant={reintentarPago ? "outline" : "primary"} href={hrefPedido(pedidoId)} renderLink={linkNext}>
           Ver detalle <IconoFlecha />
         </Button>
       )}
-      {alPie ? (
-        <Button variant="outline" loading={agregando} onClick={volverAComprar}>
-          <IconoRefresh /> Volver a comprar
-        </Button>
-      ) : (
-        // En la card de la lista, sólo el ícono (el nombre va en el tooltip y en aria-label).
-        <Tooltip content="Volver a comprar">
-          <Button
-            size="icon-lg"
-            variant="outline"
-            loading={agregando}
-            onClick={volverAComprar}
-            aria-label="Volver a comprar"
-          >
-            <IconoRefresh />
-          </Button>
-        </Tooltip>
-      )}
+      <Button variant="outline" loading={agregando} onClick={volverAComprar}>
+        <IconoRefresh /> Volver a comprar
+      </Button>
       {facturaId && (
         <>
           <Button variant="outline" onClick={() => setVerFactura(true)}>

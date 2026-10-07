@@ -312,17 +312,12 @@ export function ProductoClient({
               {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
                   {cuotasConCarrito ? (
-                    <>
-                      <CuotasLinea
-                        opcion={{ ...cuotasConCarrito, sinInteres: true }}
-                        tono="claro"
-                        tamano="lg"
-                        className="block"
-                      />
-                      <span className="block text-sm text-muted" data-testid="cuotas-con-su-carrito">
-                        {TEXTOS_CUOTAS.conSuCarrito}
-                      </span>
-                    </>
+                    <CuotasLinea
+                      opcion={{ ...cuotasConCarrito, sinInteres: true }}
+                      tono="claro"
+                      tamano="lg"
+                      className="block"
+                    />
                   ) : (
                     mejorCuota && <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />
                   )}

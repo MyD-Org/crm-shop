@@ -116,12 +116,12 @@ describe("MediosDePagoDetalle con el carrito", () => {
     ],
   };
 
-  it("el nivel que alcanza con el carrito pasa a ser una fila de cuotas con el monto del producto y la nota", () => {
+  it("el nivel que alcanza con el carrito pasa a ser una fila de cuotas con el monto del producto y la nota del mínimo", () => {
     const html = renderToStaticMarkup(
       createElement(MediosDePagoDetalle, { ...props, conCarrito: { cuotas: 8, total: 15113.84, montoCuota: 1889.23 } }),
     );
     const t = texto(html);
-    expect(t).toContain("8 cuotas de $ 1.889,23 Sin interés Con su carrito ya alcanza este plan.");
+    expect(t).toContain("8 cuotas de $ 1.889,23 Sin interés En compras desde $ 30.000");
     expect(t).not.toContain("8 cuotas sin interés en compras desde");
     expect(t).toContain("12 cuotas sin interés en compras desde $ 90.000");
     expect(html.match(/data-no-alcanzada/g)).toHaveLength(1);

@@ -59,11 +59,13 @@ export function cuotasFichaConCarrito(
   soloProducto: OpcionCuotas | null | undefined,
 ): CuotasFichaCarrito | null {
   if (!p || p.cuotasActuales === null || p.cuotasActuales <= (soloProducto?.cuotas ?? 0)) return null;
-  const cant = Number.isFinite(qty) && qty >= 1 ? Math.floor(qty) : 1;
+  // Unitario, como la línea sin carrito ("6 cuotas de $X" es por 1 unidad): la cantidad elegida
+  // sólo cuenta para alcanzar el nivel, no para el monto que se muestra.
+  void qty;
   const linea = p.lineasAlcanzada?.find((l) => l.id === productoId && l.qty > 0 && l.total > 0);
   const unitario = linea ? linea.total / linea.qty : soloProducto?.total;
   if (unitario === undefined || !(unitario > 0)) return null;
-  const total = Math.round(unitario * cant * 100) / 100;
+  const total = Math.round(unitario * 100) / 100;
   return { cuotas: p.cuotasActuales, total, montoCuota: montoPorCuota(total, p.cuotasActuales) };
 }
 

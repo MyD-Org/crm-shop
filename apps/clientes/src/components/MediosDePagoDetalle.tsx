@@ -25,12 +25,15 @@ export function MediosDePagoDetalle({
    */
   conCarrito?: Pick<OpcionCuotas, "cuotas" | "total" | "montoCuota"> | null;
 }) {
-  const filas: (OpcionCuotas & { conCarrito: boolean })[] = conCarrito
+  // Mínimo de la cantidad que se alcanza con el carrito: la fila lo aclara ("En compras desde $X"),
+  // sin mencionar el carrito.
+  const minimoConCarrito = conCarrito ? noAlcanzadas.find((n) => n.cuotas === conCarrito.cuotas)?.minimo : undefined;
+  const filas: (OpcionCuotas & { minimo?: number })[] = conCarrito
     ? [
-        ...opciones.filter((o) => o.cuotas !== conCarrito.cuotas).map((o) => ({ ...o, conCarrito: false })),
-        { ...conCarrito, sinInteres: true as const, conCarrito: true },
+        ...opciones.filter((o) => o.cuotas !== conCarrito.cuotas),
+        { ...conCarrito, sinInteres: true as const, minimo: minimoConCarrito },
       ].sort((a, b) => a.cuotas - b.cuotas)
-    : opciones.map((o) => ({ ...o, conCarrito: false }));
+    : opciones;
   const atenuadas = conCarrito ? noAlcanzadas.filter((n) => n.cuotas !== conCarrito.cuotas) : noAlcanzadas;
   return (
     <div className="space-y-5">
@@ -53,9 +56,9 @@ export function MediosDePagoDetalle({
                 <span className="ml-2 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
                   {TEXTOS_CUOTAS.sinInteres}
                 </span>
-                {o.conCarrito && (
+                {o.minimo !== undefined && (
                   <span className="block text-xs text-muted" data-testid="fila-con-carrito">
-                    {TEXTOS_CUOTAS.conSuCarritoAlcanza}
+                    {TEXTOS_CUOTAS.enComprasDesde(o.minimo)}
                   </span>
                 )}
               </span>

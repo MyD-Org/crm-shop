@@ -56,9 +56,9 @@ export const TEXTOS_CUOTAS = {
   compraYaTiene: (cuotas: number, montoCuota: number) =>
     `Su compra ya tiene ${cuotasDe(cuotas)} sin interés de ${fmtPrecio(montoCuota)}.`,
   /** Ficha: leyenda chica debajo de la línea verde cuando el nivel se alcanza gracias al carrito. */
-  conSuCarrito: "Con su carrito.",
   /** Modal de la ficha: nota de la fila de cuotas que se alcanza gracias al carrito. */
-  conSuCarritoAlcanza: "Con su carrito ya alcanza este plan.",
+  /** Fila del modal alcanzada con el carrito: "En compras desde $30.000". */
+  enComprasDesde: (minimo: number) => `En compras desde ${fmtPrecioCorto(minimo)}`,
   /**
    * Ficha, debajo de la línea de cuotas del producto: el nivel mayor que se alcanza con una compra
    * más grande. "Hasta 8 cuotas sin interés en compras desde $30.000".

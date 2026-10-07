@@ -112,7 +112,7 @@ export interface FilaGuardada {
  * Claves que el backfill por nombre sabe escribir (`scripts/backfill-seccion-cables.ts --clave <clave>`).
  * Numéricas (valor_num) y de texto (`montaje`, `tono`, `dimerizable`: valor_texto).
  */
-export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono", "modulos", "dimerizable"] as const
+export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono", "modulos", "dimerizable", "corriente_a"] as const
 export type ClaveBackfillNombre = (typeof CLAVES_BACKFILL_NOMBRE)[number]
 
 /** Valor numérico que lee el extractor del nombre (+ descripción) para una clave; null si no lee ninguno. */
@@ -148,6 +148,8 @@ export type PlanBackfillSeccion = PlanBackfill
 /**
  * Qué escribiría el backfill de UNA clave (numérica o de texto): sólo esa clave, sólo fuente 'nombre',
  * nunca sobre pdf/manual y sin borrar nada. `existentes` = fila actual de la clave por alegraId (ausente = no hay).
+ * En `corriente_a` sólo los RANGOS de regulación (relé térmico, guardamotor: "4-6"): la corriente suelta ya la
+ * escribe la sync, y así el backfill no toca nada más.
  */
 export function planearBackfillClave(
   clave: ClaveBackfillNombre,
@@ -158,6 +160,7 @@ export function planearBackfillClave(
   for (const p of productos) {
     const valor = atributoDeNombre(clave, p.name, p.description)
     if (valor == null) continue
+    if (clave === "corriente_a" && valor.valorTexto == null) continue
     const actual = existentes.get(p.alegraId)
     const igual = actual != null && actual.valorNum === valor.valorNum && (actual.valorTexto ?? null) === valor.valorTexto
     if (actual && actual.fuente !== "nombre") {

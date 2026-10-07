@@ -153,7 +153,31 @@ describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => 
   const prod = (alegraId: string, name: string, description: string | null = null) => ({ alegraId, name, description })
 
   it("las claves que admite el backfill por nombre", () => {
-    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono", "modulos", "dimerizable"])
+    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono", "modulos", "dimerizable", "corriente_a"])
+  })
+
+  it("corriente_a: sólo los rangos de regulación (la corriente suelta la escribe la sync); nunca pisa pdf/manual", () => {
+    const productos = [
+      prod("1", "RELES DE SOBRECARGA TERMICOS NXR-25, 4-6A"), // nueva
+      prod("2", "GUARDAMOTOR 4 A 6.3A TRIFASICO"), // cambia (nombre guardado 6.3 sin texto)
+      prod("3", "GUARDAMOTOR REGULACION 1-1.6A"), // protegida (pdf)
+      prod("4", "RELE TERMICO 9-13A"), // igual
+      prod("5", "TERMICA BIPOLAR 20A"), // corriente suelta: el backfill no la toca
+    ]
+    const plan = planearBackfillClave(
+      "corriente_a",
+      productos,
+      new Map([
+        ["2", { fuente: "nombre" as const, valorNum: 6.3, valorTexto: null }],
+        ["3", { fuente: "pdf" as const, valorNum: 1.6, valorTexto: null }],
+        ["4", { fuente: "nombre" as const, valorNum: 13, valorTexto: "9-13" }],
+      ]),
+    )
+    expect(plan).toMatchObject({ nuevas: 1, cambian: 1, iguales: 1, protegidas: 1, protegidasDistintas: 1 })
+    expect(plan.filas).toEqual([
+      { alegraId: "1", clave: "corriente_a", valorNum: 6, valorTexto: "4-6" },
+      { alegraId: "2", clave: "corriente_a", valorNum: 6.3, valorTexto: "4-6.3" },
+    ])
   })
 
   it("montaje (texto): escribe valor_texto, nunca pisa pdf/manual y es idempotente", () => {

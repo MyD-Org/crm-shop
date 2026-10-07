@@ -4,7 +4,9 @@
  *   (bandejas y sus accesorios), `polos` ("2 POLOS"), `largo_m` (incluye "120CM" de tubos y listones),
  *   `modulos` (módulos DIN de gabinetes y cajas: "p/12 Mod DIN", "12 polos", "10 bocas");
  * - de texto (valor_texto): `montaje` (por familia: plafón/aplique/estanco → aplicar, araña → colgante),
- *   `tono` (también desde WW/CW/NW) y `dimerizable` ("si"/"no": "DIMERIZABLE", "DIMEABLE", "NO DIMERIZABLE").
+ *   `tono` (también desde WW/CW/NW) y `dimerizable` ("si"/"no": "DIMERIZABLE", "DIMEABLE", "NO DIMERIZABLE");
+ * - `corriente_a`: SÓLO el rango de regulación de relés térmicos y guardamotores ("4-6A" → valor_texto "4-6",
+ *   valor_num 6). La corriente suelta no la toca (la escribe la sync).
  *
  * Escribe SOLO esa clave y SOLO con fuente 'nombre'. Nunca pisa una fila `pdf` o
  * `manual` (precedencia manual > pdf > nombre: la impone el SQL del upsert de

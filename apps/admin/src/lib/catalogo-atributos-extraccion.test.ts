@@ -469,8 +469,8 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["LAMPARA A60 9W", {}],
       ["LAMPARA A19 9W", {}],
       ["FUENTE 5A Y 10A", {}],
-      ["RELE TERMICO 1-1.6A", {}],
-      ["RELE TERMICO 13-18A", {}],
+      // Con contexto de relé térmico el rango sí se lee (ver "rango de regulación"); sin contexto, no.
+      ["TERMINAL 13-18A", {}],
       ["TRAFO DE CORRIENTE 1200/5A", {}],
       ["CONTACTOR NCH8-63M/20 63A", { corriente_a: 63 }],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
@@ -1075,8 +1075,98 @@ describe("familias del nombre (montaje, largo en cm, accesorios sin palabra de c
     ])("%s", (nombre, esperado) => expect(tono(nombre as string)).toEqual(esperado))
   })
 
-  it("relé térmico y guardamotor: el rango de regulación sigue sin leerse como corriente", () => {
-    expect(nuevas("RELE TERMICO 4-6A")).toEqual({})
-    expect(nuevas("GUARDAMOTOR 1.6-2.5 A")).toEqual({})
+  it("relé térmico y guardamotor: el rango de regulación se lee como corriente con texto (ver abajo)", () => {
+    expect(nuevas("RELE TERMICO 4-6A")).toEqual({ corriente_a: 6 })
+    expect(nuevas("GUARDAMOTOR 1.6-2.5 A")).toEqual({ corriente_a: 2.5 })
+  })
+})
+
+describe("rango de regulación de relés térmicos y guardamotores (corriente_a con valor_texto)", () => {
+  const corriente = (nombre: string, descripcion?: string) =>
+    extraerAtributosDeNombre(nombre, descripcion).find((a) => a.clave === "corriente_a") ?? null
+  const rango = (texto: string, num: number) => ({ clave: "corriente_a", valorNum: num, valorTexto: texto })
+
+  it.each([
+    ["RELES DE SOBRECARGA TERMICOS NXR-25, 4-6A", "4-6", 6],
+    ["RELES DE SOBRECARGA TERMICOS NXR-12, 1,6-2,5A", "1.6-2.5", 2.5],
+    ["RELE TERMICO 1-1.6A", "1-1.6", 1.6],
+    ["RELE TERMICO 13-18A", "13-18", 18],
+    ["RELE TERMICO 4…6 A", "4-6", 6],
+    ["RELE TERMICO 4 – 6 A", "4-6", 6],
+    ["GUARDAMOTOR NS2-25X 1.6-2.5 A", "1.6-2.5", 2.5],
+    ["GUARDAMOTOR 6A A 10A TRIFASICO", "6-10", 10],
+    ["GUARDAMOTOR 4 A 6.3A TRIFASICO", "4-6.3", 6.3],
+    ["GUARDAMOTOR 0.63 -1 A TRIFASICO", "0.63-1", 1],
+    ["GUARDAMOTOR REGULACION 17-23", "17-23", 23],
+    ["GUARDAMOTOR TM 0,25kW-400V - Reg: 0,63 - 1A - Icu: 100kA", "0.63-1", 1],
+    ["Guardamotor magnetotérmico 9-14A 100kA", "9-14", 14],
+    ["RELE PROTECTOR DE MOTOR - reg 8A a 40A - para 4 a 20 Kw", "8-40", 40],
+    ["PROT.TERMICO MONOF 5-12A", "5-12", 12],
+  ])("%s → %s A", (nombre, texto, num) => {
+    expect(corriente(nombre as string)).toEqual(rango(texto as string, num as number))
+  })
+
+  it("también desde la descripción de Alegra (modelo y rango de ajuste iguales)", () => {
+    expect(corriente("GUARDAMOTOR TM 0,37kW-400V", "Modelo: NS2-25X 1-1.6A\n- Rango de ajuste: 1-1,6 A")).toEqual(rango("1-1.6", 1.6))
+  })
+
+  it("el código del modelo no es un rango ('NS2-25X', 'NXR-25,')", () => {
+    expect(corriente("GUARDAMOTOR NS2-25X")).toBeNull()
+    expect(corriente("RELES DE SOBRECARGA TERMICOS NXR-25")).toBeNull()
+  })
+
+  it.each([
+    // Sin contexto de relé/guardamotor, un "a-b A" no se lee: puede ser cualquier cosa.
+    ["INTERRUPTOR CAJA MOLDEADA 3P 250A REG. ELEC. L:125-250A", 250],
+    ["AMPERIMETRO 96X96 ANALOGICO 0-100A", null],
+    ["SHUNT RELEASE 400V 315-1250A REGULABLE", null],
+    ["BARRA COLECTORA DE PUESTA A TIERRA 1-19-125A", null],
+    ["TRAFO DE CORRIENTE 1200/5A", null],
+    ["FUENTE AC85-265V 5A", 5],
+  ])("sin contexto: %s", (nombre, num) => {
+    const c = corriente(nombre as string)
+    expect(c?.valorTexto ?? null).toBeNull()
+    expect(c?.valorNum ?? null).toBe(num)
+  })
+
+  it.each([
+    // Con contexto pero sin rango de corriente: no se inventa.
+    ["CAJA VACIA PARA GUARDAMOTOR NS2 HASTA 32A IP55", 32],
+    ["GUARDAMOTOR 27A", 27],
+    ["RELE TERMICO 85-265V", null],
+    ["RELE PROTECTOR DE MOTOR para 4 a 20 Kw", null],
+    ["GUARDAMOTOR REGULACION 6-4A", null],
+  ])("con contexto y sin rango válido: %s", (nombre, num) => {
+    const c = corriente(nombre as string)
+    expect(c?.valorTexto ?? null).toBeNull()
+    expect(c?.valorNum ?? null).toBe(num)
+  })
+
+  it("dos rangos distintos, o un rango y otra corriente: nada (ante la duda)", () => {
+    expect(corriente("RELE TERMICO 4-6A / 6-10A")).toBeNull()
+    expect(corriente("GUARDAMOTOR 4-6A 25A")).toBeNull()
+    expect(corriente("GUARDAMOTOR 4-6A", "Rango de ajuste: 4-6 A")).toEqual(rango("4-6", 6))
+  })
+
+  it("no cambia las demás claves del producto", () => {
+    expect(extraer("GUARDAMOTOR TM 0,25kW-400V - Reg: 0,63 - 1A - Icu: 100kA")).toMatchObject({ potencia_w: 250, tension_v: 400, poder_corte_ka: 100 })
+  })
+})
+
+describe("normalizarAtributos: rango de regulación de corriente", () => {
+  const n = (v: unknown) => normalizarAtributos({ corriente_a: v })
+  it.each([
+    ["4-6", 6, "4-6"],
+    ["1,6-2,5", 2.5, "1.6-2.5"],
+    ["0.63 – 1 A", 1, "0.63-1"],
+    ["4-6A", 6, "4-6"],
+  ])("%s → texto %s", (v, num, texto) => {
+    expect(n(v)).toEqual([{ clave: "corriente_a", valorNum: num, valorTexto: texto }])
+  })
+  it("rango invertido, igual o fuera de rango: nada; un número sigue siendo número", () => {
+    expect(n("6-4")).toEqual([])
+    expect(n("4-4")).toEqual([])
+    expect(n("4-9000")).toEqual([])
+    expect(n("16")).toEqual([{ clave: "corriente_a", valorNum: 16, valorTexto: null }])
   })
 })

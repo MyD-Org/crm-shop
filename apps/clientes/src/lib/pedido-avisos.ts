@@ -150,8 +150,11 @@ async function enviarAviso(
  * "Recibimos su pedido", al crearlo. Quien llama descarta los pedidos repetidos. Con cobro en
  * línea no sale (no hace nada): el comprador recibe un solo mail al aprobarse el pago.
  */
-export function avisarPedidoRecibido(pedidoId: string): Promise<void> {
-  return enviarAviso(pedidoId, "recibido", `pedido/${pedidoId}/recibido`);
+export function avisarPedidoRecibido(pedidoId: string, medioNuevo?: string): Promise<void> {
+  // Con `medioNuevo` (el comprador dejó la transferencia por otro medio sin cobro en línea) va otro
+  // "recibido" con los datos del medio nuevo: la clave distinta evita que se descarte por repetido.
+  const clave = medioNuevo ? `pedido/${pedidoId}/recibido/${medioNuevo}` : `pedido/${pedidoId}/recibido`;
+  return enviarAviso(pedidoId, "recibido", clave);
 }
 
 /** Aviso del cobro en línea, si corresponde (ver `avisoDelCobro`). */
@@ -193,7 +196,11 @@ function urlPedidoAdmin(id: string, base = process.env.CRM_ADMIN_URL): string | 
  * `tenants.receipts_email`; si tampoco, no se manda nada (sólo se loguea, sin datos del comprador).
  * Nunca lanza. Quien llama descarta los pedidos repetidos.
  */
-export async function avisarOperadorPedidoNuevo(pedidoId: string): Promise<void> {
+export async function avisarOperadorPedidoNuevo(
+  pedidoId: string,
+  /** Medio que tenía el pedido antes de que el comprador lo cambiara: el aviso es "Cambió el medio de pago". */
+  cambio?: { medioAnterior: string },
+): Promise<void> {
   try {
     const db = getDb();
     const tenantId = shopTenantId();
@@ -261,6 +268,7 @@ export async function avisarOperadorPedidoNuevo(pedidoId: string): Promise<void>
       pedidoUrl: urlPedidoAdmin(pedidoId),
       logoUrl: urlLogoMail(),
       sitioUrl: urlSitioMail(),
+      ...(cambio ? { medioAnterior: nombreDelPago(cambio.medioAnterior, null) } : {}),
     });
 
     const replyTo = looksLikeEmail(pedido.clienteEmail?.trim() ?? null) ? pedido.clienteEmail!.trim() : undefined;
@@ -269,7 +277,9 @@ export async function avisarOperadorPedidoNuevo(pedidoId: string): Promise<void>
       ...mail,
       ...(replyTo ? { replyTo } : {}),
       tags: [{ name: "tipo", value: "pedido_operador" }],
-      idempotencyKey: `pedido/${pedidoId}/operador`,
+      idempotencyKey: cambio
+        ? `pedido/${pedidoId}/operador/cambio/${cambio.medioAnterior}-${pedido.pagoMetodo}`
+        : `pedido/${pedidoId}/operador`,
     });
     if (r.ok) console.log(`[avisos pedido] ${pedidoId} operador: enviado`);
     else if (!r.noConfigurado) console.error(`[avisos pedido] ${pedidoId} operador: ${r.error}`);

@@ -193,11 +193,21 @@ describe("POST /api/pedidos/:id/medio", () => {
     expect(cambiarMedioPedido).not.toHaveBeenCalled();
   });
 
-  it("el pedido ya no es de cobro en línea: 409 no_cambia", async () => {
-    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "transferencia", lineas: [] });
+  it("un medio sin cobro que no es transferencia (lo coordina el local): 409 no_cambia", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "efectivo", lineas: [] });
     const r = await llamar({ pagoMetodo: "mercadopago" });
     expect(r.status).toBe(409);
     expect(await r.json()).toMatchObject({ motivo: "no_cambia" });
+  });
+
+  it("de transferencia a Mercado Pago: cambia y avisa al local del cambio, sin otro 'recibido' al comprador", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "transferencia", lineas: [{ id: "1", qty: 2 }] });
+    const r = await llamar({ pagoMetodo: "mercadopago" });
+    expect(r.status).toBe(200);
+    expect(cambiarMedioPedido.mock.calls[0][2]).toMatchObject({ pagoMetodo: "mercadopago" });
+    await Promise.all(despues.map((f) => f()));
+    expect(avisarOperadorPedidoNuevo).toHaveBeenCalledWith("p1", { medioAnterior: "transferencia" });
+    expect(avisarPedidoRecibido).not.toHaveBeenCalled();
   });
 
   it("los bloqueos de la transacción (intento abierto entre medio, comprobante informado) salen como 409", async () => {

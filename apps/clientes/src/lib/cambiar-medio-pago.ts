@@ -7,7 +7,20 @@
  * haya cobro en vuelo, pago aprobado ni comprobante informado (409 en usted), revalida que el medio sea
  * ofrecible y recotiza con las mismas funciones que crear (`cotizarConMedio`). Las cantidades no cambian:
  * la reserva se mantiene. El mail de "pedido recibido" sale sólo si el medio nuevo es sin cobro en línea.
+ * También desde la transferencia (antes de informar el comprobante): ver `medioAdmiteCambio`.
  */
+
+import { SLUG_TRANSFERENCIA } from "./cuentas-bancarias";
+import { esPagoEnLinea } from "./medios-pago";
+
+/**
+ * ¿El medio ACTUAL del pedido admite cambiarlo desde la tienda? Los de cobro en línea (sin cobro
+ * aprobado ni en vuelo) y la transferencia mientras no haya comprobante informado (eso lo valida el
+ * servidor). Los demás medios sin cobro (cuenta corriente, a coordinar) los coordina el local.
+ */
+export function medioAdmiteCambio(pagoMetodoActual: string): boolean {
+  return esPagoEnLinea(pagoMetodoActual) || pagoMetodoActual === SLUG_TRANSFERENCIA;
+}
 
 /** Sólo se ofrece sin cobro aprobado ni en vuelo: formulario sin enviar o tras un rechazo. */
 export function puedeCambiarMedioPago(e: { pagado: boolean; pagoEnConfirmacion: boolean }): boolean {

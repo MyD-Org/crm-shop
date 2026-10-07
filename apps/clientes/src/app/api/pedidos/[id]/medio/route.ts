@@ -5,7 +5,9 @@ import { marcarStockCambiado } from "@/lib/cache-invalidar";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { leerMediosPagoTolerante } from "@/lib/medios-pago-repo";
-import { esCompradorCuentaCorriente, esPagoEnLinea, pagoValidoConMedios } from "@/lib/medios-pago";
+import { esCompradorCuentaCorriente, pagoValidoConMedios } from "@/lib/medios-pago";
+import { medioAdmiteCambio } from "@/lib/cambiar-medio-pago";
+import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
 import { procesadorConfigurado, proveedorPago } from "@/lib/pagos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
@@ -85,7 +87,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const pedido = await pedidoParaCambiarMedio(id, dueno);
     // No existe, es de otro o ya no está pendiente: el mismo 404 genérico que cancelar.
     if (!pedido) return NextResponse.json({ error: "No se pudo cambiar el medio de pago" }, { status: 404 });
-    if (!esPagoEnLinea(pedido.pagoMetodo)) {
+    if (!medioAdmiteCambio(pedido.pagoMetodo)) {
       return conflicto("Este pedido ya no admite cambiar el medio de pago.", "no_cambia");
     }
 
@@ -189,7 +191,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     // Sin cobro en línea el pedido recién ahora es "recibido": un solo aviso (clave por pedido). Con
     // cobro en línea no se avisa nada hasta que se apruebe el pago.
-    if (avisoOperadorAlCrear(pagoMetodo)) {
+    // Desde la transferencia el pedido ya se había anunciado: el local recibe "Cambió el medio de pago"
+    // (con cualquier medio nuevo) y, si el nuevo es sin cobro en línea, el comprador un "recibido" con
+    // los datos nuevos. Con cobro en línea, su confirmación llega al aprobarse el pago.
+    const desdeTransferencia = pedido.pagoMetodo === SLUG_TRANSFERENCIA && pagoMetodo !== SLUG_TRANSFERENCIA;
+    if (desdeTransferencia) {
+      after(async () => {
+        if (avisoOperadorAlCrear(pagoMetodo)) await avisarPedidoRecibido(id, pagoMetodo);
+        await avisarOperadorPedidoNuevo(id, { medioAnterior: pedido.pagoMetodo });
+      });
+    } else if (avisoOperadorAlCrear(pagoMetodo)) {
       after(async () => {
         await avisarPedidoRecibido(id);
         await avisarOperadorPedidoNuevo(id);

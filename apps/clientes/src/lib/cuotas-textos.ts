@@ -48,6 +48,13 @@ export const TEXTOS_CUOTAS = {
   montoFaltante: (falta: number) => fmtPrecioCorto(falta),
   /** Estado lleno de la barra: "¡Listo! Su compra ya tiene 12 cuotas sin interés." */
   cuotasCompletas: (cuotas: number) => `¡Listo! Su compra ya tiene ${cuotasDe(cuotas)} sin interés.`,
+  /** Ficha del producto, con el carrito: "6 cuotas" (el fragmento que va en negrita). */
+  cantidadCuotas: (cuotas: number) => cuotasDe(cuotas),
+  /** Ficha: la compra (carrito + este producto) llega a cuotas sin interés. */
+  fichaEntraEnCuotas: (cuotas: number) => `Con su carrito, este producto entra en ${cuotasDe(cuotas)} sin interés.`,
+  /** Ficha: la compra no llega todavía; el monto va en negrita (`montoFaltante`). */
+  fichaFaltaParaCuotas: (falta: number, cuotas: number) =>
+    `Con su carrito y este producto, sume ${fmtPrecioCorto(falta)} más y pague en ${cuotasDe(cuotas)} sin interés.`,
   barraAria: "Progreso hacia más cuotas sin interés",
   /** Fila atenuada del modal: "6 cuotas sin interés en compras desde $90.000". */
   filaNoAlcanzada: (cuotas: number, minimo: number) =>

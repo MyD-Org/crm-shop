@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Button } from "@myd-org/ui";
+import { Button, Spinner } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { cuentaMpDisponible } from "@/lib/pagos/mercadopago-preferencia";
@@ -32,6 +32,7 @@ function inicializar() {
 
 type Estado =
   | { fase: "cargando" }
+  | { fase: "error_formulario" }
   | { fase: "formulario" }
   | { fase: "procesando" }
   | { fase: "pagado" }
@@ -275,22 +276,26 @@ export function PagoMercadoPago({
    * Solo usan `setEstado`, que React garantiza estable: sin dependencias.
    */
   const onReady = useCallback(() => {
-    setEstado((e) => (e.fase === "cargando" ? { fase: "formulario" } : e));
+    // El SDK puede recuperarse de un error de carga. Esto nunca borra un
+    // rechazo real ni modifica un pago que ya se está procesando.
+    setEstado((e) =>
+      e.fase === "cargando" || e.fase === "error_formulario" ? { fase: "formulario" } : e,
+    );
   }, []);
 
   const onError = useCallback((error: unknown) => {
     console.error("[brick mp]", error);
-    setEstado({
-      fase: "rechazado",
-      mensaje: "Hubo un problema con el formulario de pago. Recargue la página.",
-      reintentable: false,
-    });
+    setEstado((e) =>
+      e.fase === "cargando" || e.fase === "formulario" || e.fase === "error_formulario"
+        ? { fase: "error_formulario" }
+        : e,
+    );
   }, []);
 
   if (faltaKey) {
     return (
       <p className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
-        El pago con tarjeta no está configurado. Elija transferencia o escríbanos.
+        El pago con Mercado Pago no está configurado. Elija transferencia o escríbanos.
       </p>
     );
   }
@@ -348,13 +353,24 @@ export function PagoMercadoPago({
     );
   }
 
-  // Esperando la preferencia de dinero en cuenta: el Brick se monta una sola vez, ya con su configuración final.
-  if (preferenceId === undefined) {
-    return <p role="status" className="text-sm text-muted">Cargando los medios de pago…</p>;
-  }
-
   return (
     <div>
+      {estado.fase === "error_formulario" && (
+        <div role="alert" className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-4">
+          <p className="text-sm font-semibold text-danger">No se pudo cargar el formulario de pago</p>
+          <p className="mt-1 text-sm text-text">Revise su conexión e inténtelo de nuevo.</p>
+          <Button
+            variant="secondary"
+            className="mt-3"
+            onClick={() => {
+              setIntento((n) => n + 1);
+              setEstado({ fase: "cargando" });
+            }}
+          >
+            Reintentar
+          </Button>
+        </div>
+      )}
       {estado.fase === "rechazado" && (
         <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-4">
           <p className="text-sm font-semibold text-danger">No se pudo completar el pago</p>
@@ -367,7 +383,7 @@ export function PagoMercadoPago({
                 // Remontar el brick: el token de MP es de un solo uso, así que
                 // reintentar con el mismo formulario fallaría siempre.
                 setIntento((n) => n + 1);
-                setEstado({ fase: "formulario" });
+                setEstado({ fase: "cargando" });
               }}
             >
               Probar de nuevo
@@ -376,14 +392,32 @@ export function PagoMercadoPago({
         </div>
       )}
 
-      <Payment
-        key={intento}
-        initialization={initialization}
-        customization={customization}
-        onSubmit={onSubmit}
-        onReady={onReady}
-        onError={onError}
-      />
+      <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>
+        {estado.fase === "cargando" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-surface p-6">
+            <Spinner label="Cargando los medios de pago" />
+            <p className="text-sm text-muted">Cargando los medios de pago…</p>
+          </div>
+        )}
+        {/* Sigue montado para que el SDK pueda terminar de cargar. Sus estados
+            intermedios no son un error ni deben pedir que se cambie de medio. */}
+        <div
+          aria-hidden={estado.fase === "cargando"}
+          className={estado.fase === "cargando" ? "invisible" : undefined}
+        >
+          {/* Espera la preferencia y se monta una sola vez, con su configuración final. */}
+          {preferenceId !== undefined && (
+            <Payment
+              key={intento}
+              initialization={initialization}
+              customization={customization}
+              onSubmit={onSubmit}
+              onReady={onReady}
+              onError={onError}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1586,7 +1586,7 @@ export function CheckoutClient({
                         selected={medioSel.slug === m.slug}
                         onClick={() => setMedioSlug(m.slug)}
                         title={m.nombre}
-                        description={esPagoEnLinea(m.slug) ? DESCRIPCION_PAGO_EN_LINEA : undefined}
+                        description={m.slug !== SLUG_MERCADOPAGO && esPagoEnLinea(m.slug) ? DESCRIPCION_PAGO_EN_LINEA : undefined}
                         chips={m.chips}
                       />
                     ))}

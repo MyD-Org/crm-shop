@@ -14,6 +14,7 @@ import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
 import {
   ATRIBUTO_DOCK,
+  ATRIBUTO_OCULTO,
   ATRIBUTO_PEEK,
   BREAKPOINT_MOBILE,
   MEDIA_DOCK,
@@ -22,6 +23,7 @@ import {
   hojaMinimizada,
   hrefDeFiltros,
   idProductoDeRuta,
+  ocultarLauncherEnRuta,
   puedeNavegarSolo,
 } from "@/lib/chat-ia-integracion";
 
@@ -160,6 +162,16 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
     else html.removeAttribute(ATRIBUTO_PEEK);
     return () => html.removeAttribute(ATRIBUTO_PEEK);
   }, [minimizada]);
+
+  // En el checkout el launcher no se muestra en mobile (globals.css, por este
+  // atributo): sólo se oculta la burbuja, un chat ya abierto no se cierra.
+  const ocultar = ocultarLauncherEnRuta(pathname);
+  useEffect(() => {
+    const html = document.documentElement;
+    if (ocultar) html.setAttribute(ATRIBUTO_OCULTO, "");
+    else html.removeAttribute(ATRIBUTO_OCULTO);
+    return () => html.removeAttribute(ATRIBUTO_OCULTO);
+  }, [ocultar]);
 
   // Invitación proactiva (src/lib/iniciativa/): chat abierto, checkout,
   // agregados al carrito y la espera en la ficha. El teaser queda en el puente

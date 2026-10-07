@@ -34,7 +34,7 @@ const base: EstadoCatalogo = {
   marcas: [],
   atributos: [],
   caracteristicas: [],
-  orden: "nombre",
+  orden: "destacados",
   pagina: 1,
   soloStock: true,
   vista: "grilla",
@@ -62,10 +62,30 @@ describe("lectura de la query string", () => {
     expect(comoPagina(undefined)).toBe(1);
   });
 
-  it("los órdenes ofrecidos son relevancia, nombre y precio; sin búsqueda el default es nombre", () => {
-    expect(ORDENES).toEqual(["relevancia", "nombre", "precio-asc", "precio-desc"]);
+  it("los órdenes ofrecidos son relevancia, destacados, nombre y precio; sin búsqueda el default es destacados", () => {
+    expect(ORDENES).toEqual(["relevancia", "destacados", "nombre", "precio-asc", "precio-desc"]);
     expect(ORDENES).not.toContain("ventas");
-    expect(ORDEN_DEFAULT).toBe("nombre");
+    expect(ORDEN_DEFAULT).toBe("destacados");
+  });
+
+  it("destacados no aplica a una búsqueda: con texto cae a relevancia", () => {
+    expect(comoOrden("destacados", "lampara")).toBe("relevancia");
+    expect(leerEstado({ q: "lampara", orden: "destacados" }).orden).toBe("relevancia");
+    expect(leerEstado({ categoria: "ILUMINACION" }).orden).toBe("destacados");
+    expect(hrefCatalogo(leerEstado({ categoria: "ILUMINACION" }))).toBe("/catalogo?categoria=ILUMINACION");
+  });
+
+  it("un link viejo con orden=nombre conserva el alfabético y lo vuelve a emitir", () => {
+    const estado = leerEstado({ categoria: "X", orden: "nombre" });
+    expect(estado.orden).toBe("nombre");
+    expect(hrefCatalogo(estado)).toBe("/catalogo?categoria=X&orden=nombre");
+  });
+
+  it("agregar una búsqueda con orden destacados pasa a relevancia", () => {
+    expect(estadoConCambios(base, { query: "led" }).orden).toBe("relevancia");
+    expect(hrefCon(base, { query: "led" })).toBe("/catalogo?q=led");
+    // Un orden elegido a mano sobrevive a la búsqueda.
+    expect(estadoConCambios({ ...base, orden: "nombre" }, { query: "led" }).orden).toBe("nombre");
   });
 
   it("con búsqueda el default es relevancia; sin búsqueda, relevancia no vale", () => {
@@ -73,9 +93,9 @@ describe("lectura de la query string", () => {
     expect(comoOrden("basura", "led")).toBe("relevancia");
     expect(comoOrden("ventas", "led")).toBe("relevancia");
     expect(comoOrden("nombre", "led")).toBe("nombre");
-    expect(comoOrden("relevancia")).toBe("nombre");
+    expect(comoOrden("relevancia")).toBe("destacados");
     expect(leerEstado({ q: "led" }).orden).toBe("relevancia");
-    expect(leerEstado({ q: "  ", orden: "relevancia" }).orden).toBe("nombre");
+    expect(leerEstado({ q: "  ", orden: "relevancia" }).orden).toBe("destacados");
   });
 
   it("relevancia con búsqueda no viaja en la URL; nombre con búsqueda sí", () => {
@@ -85,9 +105,9 @@ describe("lectura de la query string", () => {
     );
   });
 
-  it("quitar la búsqueda con orden relevancia vuelve al alfabético", () => {
+  it("quitar la búsqueda con orden relevancia vuelve a destacados", () => {
     const conBusqueda = { ...base, query: "led", orden: "relevancia" as const };
-    expect(estadoConCambios(conBusqueda, { query: undefined }).orden).toBe("nombre");
+    expect(estadoConCambios(conBusqueda, { query: undefined }).orden).toBe("destacados");
     expect(hrefCon(conBusqueda, { query: undefined })).toBe("/catalogo");
     // Un orden elegido a mano sobrevive.
     expect(hrefCon({ ...conBusqueda, orden: "precio-asc" }, { query: undefined })).toBe(
@@ -98,12 +118,12 @@ describe("lectura de la query string", () => {
   it("un orden que no existe cae en el default", () => {
     expect(comoOrden("precio-desc")).toBe("precio-desc");
     expect(comoOrden("precio-asc")).toBe("precio-asc");
-    expect(comoOrden("drop-table")).toBe("nombre");
-    expect(comoOrden(undefined)).toBe("nombre");
+    expect(comoOrden("drop-table")).toBe("destacados");
+    expect(comoOrden(undefined)).toBe("destacados");
   });
 
   it('"ventas" (links viejos) se acepta como alias del default', () => {
-    expect(comoOrden("ventas")).toBe("nombre");
+    expect(comoOrden("ventas")).toBe("destacados");
   });
 
   it("un precio de la URL es un entero no negativo; cualquier otra cosa no es precio", () => {
@@ -219,7 +239,8 @@ describe("armado de URLs", () => {
   });
 
   it("no escribe el orden ni la página cuando están en su default", () => {
-    expect(hrefCatalogo({ ...base, orden: "nombre", pagina: 1 })).toBe("/catalogo");
+    expect(hrefCatalogo({ ...base, orden: "destacados", pagina: 1 })).toBe("/catalogo");
+    expect(hrefCatalogo({ ...base, orden: "nombre", pagina: 1 })).toBe("/catalogo?orden=nombre");
     expect(hrefCatalogo({ ...base, orden: "precio-asc", pagina: 3 })).toBe(
       "/catalogo?orden=precio-asc&pagina=3"
     );
@@ -252,7 +273,7 @@ describe("armado de URLs", () => {
 
   it("un link viejo con orden=ventas se reescribe sin el orden", () => {
     const estado = leerEstado({ orden: "ventas", pagina: "3" });
-    expect(estado.orden).toBe("nombre");
+    expect(estado.orden).toBe("destacados");
     expect(hrefCatalogo(estado)).toBe("/catalogo?pagina=3");
   });
 

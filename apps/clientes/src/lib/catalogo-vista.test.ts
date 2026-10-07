@@ -21,6 +21,7 @@ import {
   interpretacionVigente,
   itemsDeCaracteristicasAgrupados,
   itemsVisibles,
+  ordenesPara,
 } from "./catalogo-vista";
 import type { EstadoCatalogo } from "./catalogo-url";
 
@@ -30,7 +31,7 @@ const base: EstadoCatalogo = {
   marcas: [],
   atributos: [],
   caracteristicas: [],
-  orden: "nombre",
+  orden: "destacados",
   pagina: 1,
   soloStock: true,
   vista: "grilla",
@@ -543,5 +544,32 @@ describe("itemsDeCaracteristicasAgrupados (grupo Características del panel)", (
 
   it("sin faceta ni tildados, nada", () => {
     expect(itemsDeCaracteristicasAgrupados([], [])).toEqual([]);
+  });
+});
+
+describe("ordenesPara", () => {
+  const etiquetas = (e: Pick<EstadoCatalogo, "query" | "orden">) => ordenesPara(e).map((o) => o.label);
+
+  it("sin búsqueda: Destacados primero, sin Relevancia", () => {
+    expect(etiquetas(base)).toEqual([
+      "Destacados",
+      "Nombre A-Z",
+      "Precio: menor a mayor",
+      "Precio: mayor a menor",
+    ]);
+  });
+
+  it("con búsqueda: Relevancia primero, sin Destacados", () => {
+    expect(etiquetas({ query: "led", orden: "relevancia" })).toEqual([
+      "Relevancia",
+      "Nombre A-Z",
+      "Precio: menor a mayor",
+      "Precio: mayor a menor",
+    ]);
+  });
+
+  it("el orden vigente siempre está entre las opciones", () => {
+    expect(etiquetas({ query: undefined, orden: "relevancia" })).toContain("Relevancia");
+    expect(etiquetas({ query: "led", orden: "destacados" })).toContain("Destacados");
   });
 });

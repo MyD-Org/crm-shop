@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { dbGrabadora, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fixtures__/db-grabadora";
+import { dbGrabadora, sinLecturaDelArbol, esLecturaDelArbol, type ConsultaGrabada } from "@/db/__fixtures__/db-grabadora";
 
 /**
  * Categorías propias del CRM en la tienda: el árbol que llega por la sync del
@@ -129,7 +129,7 @@ describe("categoriasPlanasConConteo", () => {
 describe("filtro por categoría", () => {
   it("con árbol, busca en el subárbol de la categoría por la clasificación del CRM", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
-    for (const { sql, params } of grabadora.consultas) {
+    for (const { sql, params } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(sql).toContain("with recursive arbol");
       expect(sql).toContain('"public"."catalog_overlay"."categoria_id" in');
       expect(params).toContain("ILUMINACION");
@@ -139,7 +139,7 @@ describe("filtro por categoría", () => {
 
   it("sin árbol cae a la categoría de Alegra, en la misma consulta", async () => {
     await getPaginaCatalogo({ soloVisibles: false, filtros: { categorias: ["ILUMINACION"] } });
-    for (const { sql } of grabadora.consultas) {
+    for (const { sql } of sinLecturaDelArbol(grabadora.consultas)) {
       expect(sql).toMatch(/not exists \(select 1 from "public"\."shop_categories" where activa and tenant_id = \$\d+\)/);
       expect(sql).toContain('"catalog_categories_shop"."name" in');
     }
@@ -155,7 +155,7 @@ describe("facetas de categorías", () => {
       { label: "Focos led", count: 2, nivel: 2 },
       { label: "ELECTRICIDAD", count: 4, nivel: 1 },
     ]);
-    expect(grabadora.consultas.some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(false);
+    expect(sinLecturaDelArbol(grabadora.consultas).some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(false);
   });
 
   it("con búsqueda, el árbol sigue completo: lo que la búsqueda deja afuera cuenta 0", async () => {
@@ -193,14 +193,14 @@ describe("facetas de categorías", () => {
     grabadora = conArbol();
     const f = await getFacetas({ texto: { q: "foco" }, sinFacetaCategorias: true }, false);
     expect(f.categorias).toEqual([]);
-    expect(grabadora.consultas.some(esConteoPorCategoria)).toBe(false);
+    expect(sinLecturaDelArbol(grabadora.consultas).some(esConteoPorCategoria)).toBe(false);
   });
 
   it("el total fijo de cada categoría no depende de la búsqueda, la marca ni el precio", async () => {
     const consulta = async (filtros: Parameters<typeof getFacetaCategorias>[0]) => {
       grabadora = conArbol();
       await getFacetaCategorias(filtros, false);
-      return grabadora.consultas.filter(esConteoPorCategoria).map((c) => c.sql + JSON.stringify(c.params));
+      return sinLecturaDelArbol(grabadora.consultas).filter(esConteoPorCategoria).map((c) => c.sql + JSON.stringify(c.params));
     };
     const fijo = await consulta({ soloStock: true });
     // El panel pide siempre lo mismo (sólo el default de stock), sin importar lo que se busque.
@@ -211,8 +211,8 @@ describe("facetas de categorías", () => {
 
   it("sin árbol, siguen agrupando por la categoría de Alegra", async () => {
     await getFacetas({}, false);
-    expect(grabadora.consultas.some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(true);
-    expect(grabadora.consultas.some(esConteoPorCategoria)).toBe(false);
+    expect(sinLecturaDelArbol(grabadora.consultas).some((c) => c.sql.includes('group by "catalog_categories_shop"."name"'))).toBe(true);
+    expect(sinLecturaDelArbol(grabadora.consultas).some(esConteoPorCategoria)).toBe(false);
   });
 });
 
@@ -225,7 +225,7 @@ describe("menú (getCategorias)", () => {
   it("con árbol, cuenta con el mismo criterio que la grilla (activos y con precio)", async () => {
     grabadora = conArbol();
     await getCategorias(false);
-    const conteo = grabadora.consultas.find(esConteoPorCategoria);
+    const conteo = sinLecturaDelArbol(grabadora.consultas).find(esConteoPorCategoria);
     expect(conteo?.sql).toContain('and "catalog_products_shop"."activo" and');
     expect(conteo?.sql).toMatch(/coalesce\(\s*case when jsonb_typeof[\s\S]*?\)\s*>\s*0/);
   });
@@ -234,7 +234,7 @@ describe("menú (getCategorias)", () => {
 describe("menú sin árbol (categorías de Alegra de la vista del CRM)", () => {
   it("una categoría con activo = false no se lista: se filtra en la consulta", async () => {
     await getCategorias(false);
-    const c = grabadora.consultas.find((q) => q.sql.includes('from "public"."catalog_categories_shop"'));
+    const c = sinLecturaDelArbol(grabadora.consultas).find((q) => q.sql.includes('from "public"."catalog_categories_shop"'));
     const m = c?.sql.match(/"catalog_categories_shop"\."activo" = \$(\d+)/);
     expect(m, c?.sql).not.toBeNull();
     expect(c!.params[Number(m![1]) - 1]).toBe(true);

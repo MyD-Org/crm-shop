@@ -357,7 +357,7 @@ async function leerDestacados(args: ArgsDestacados): Promise<{ productos: Produc
     console.error("[catalogo-publico] no se pudieron cargar los destacados:", err);
   };
   const [iluminacion, general] = await Promise.all([
-    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, pagina: 1, soloVisibles, disp, mediosPrecio }).catch(
+    getPaginaCatalogo({ filtros: { categorias: [CATEGORIA_DESTACADOS] }, orden: "destacados", pagina: 1, soloVisibles, disp, mediosPrecio }).catch(
       (err: unknown): { productos: Product[] } => {
         registrar(err);
         return { productos: [] };
@@ -388,6 +388,7 @@ async function primeraPaginaCategoria(
   try {
     const { productos } = await getPaginaCatalogo({
       filtros: { categorias: [categoria] },
+      orden: "destacados",
       pagina: 1,
       soloVisibles,
       disp,
@@ -489,7 +490,7 @@ export async function relacionadosProducto(args: {
     "categoria-relacionados",
     () => primeraPaginaCategoria(categoria, soloVisibles, disp, destacado, cuotas),
     () =>
-      getPaginaCatalogo({ filtros: { categorias: [categoria] }, pagina: 1, soloVisibles, disp, ...conMedios({ destacado, cuotas }) })
+      getPaginaCatalogo({ filtros: { categorias: [categoria] }, orden: "destacados", pagina: 1, soloVisibles, disp, ...conMedios({ destacado, cuotas }) })
         .then((r) => r.productos)
         .catch(() => []),
   );

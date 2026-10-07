@@ -180,6 +180,7 @@ describe("destacadosHome", () => {
     expect(out.map((p) => p.id)).toEqual(["9", "1"]);
     expect(cat.getPaginaCatalogo).toHaveBeenCalledWith({
       filtros: { categorias: ["ILUMINACION"] },
+      orden: "destacados",
       pagina: 1,
       soloVisibles: true,
     });

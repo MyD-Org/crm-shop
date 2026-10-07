@@ -219,11 +219,11 @@ describe("normalizarAtributos: claves ampliadas (0053)", () => {
     expect(
       n({
         corriente_a: 25, polos: 2, seccion_mm2: 2.5, medidas_mm: "300x1200", color: "Blanca", poder_corte_ka: 6,
-        curva: "C", sensibilidad_ma: 30, largo_m: 100, montaje: "Embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300, diametro_mm: 25, ancho_mm: 150,
+        curva: "C", sensibilidad_ma: 30, largo_m: 100, montaje: "Embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300, diametro_mm: 25, ancho_mm: 150, dimerizable: "Sí", modulos: 12,
       }),
     ).toEqual({
       corriente_a: 25, polos: 2, seccion_mm2: 2.5, medidas_mm: "300x1200", color: "blanco", poder_corte_ka: 6,
-      curva: "c", sensibilidad_ma: 30, largo_m: 100, montaje: "embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300, diametro_mm: 25, ancho_mm: 150,
+      curva: "c", sensibilidad_ma: 30, largo_m: 100, montaje: "embutir", angulo_grados: 60, leds_m: 120, potencia_w_m: 14.4, leds_rollo: 300, diametro_mm: 25, ancho_mm: 150, dimerizable: "si", modulos: 12,
     })
   })
 
@@ -234,6 +234,7 @@ describe("normalizarAtributos: claves ampliadas (0053)", () => {
     ["leds_m", 0], ["leds_m", 2000], ["leds_m", 60.5], ["potencia_w_m", 0.01], ["potencia_w_m", 5000],
     ["leds_rollo", 0], ["leds_rollo", 20000], ["leds_rollo", 300.5],
     ["diametro_mm", 4], ["diametro_mm", 250], ["ancho_mm", 20], ["ancho_mm", 1200], ["ancho_mm", 150.5],
+    ["modulos", 0], ["modulos", 201], ["modulos", 12.5],
   ])("%s = %s fuera de rango (o no entero) se descarta", (clave, valor) => {
     expect(n({ [clave]: valor })).toEqual({})
   })
@@ -306,6 +307,11 @@ function nuevas(nombre: string): Record<string, number | string> {
 }
 
 /** Sólo diámetro y ancho: lo que lean las otras claves del mismo nombre se prueba en sus propios casos. */
+/** Sólo una clave del extractor (dimerizable, módulos): lo que lean las otras del mismo nombre se prueba en sus propios casos. */
+function soloClave(nombre: string, descripcion: string | undefined, clave: string): Record<string, number | string> {
+  return Object.fromEntries(Object.entries(extraer(nombre, descripcion)).filter(([k]) => k === clave))
+}
+
 function diaAncho(nombre: string): Record<string, number | string> {
   return Object.fromEntries(Object.entries(extraer(nombre)).filter(([k]) => k === "diametro_mm" || k === "ancho_mm"))
 }
@@ -604,6 +610,108 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["Bandeja fija ciega 19\" regulable P. 600/800 mm", {}],
       ["Bandeja fija ventilada 19\" x 1U P. 300 mm", {}],
     ])("%s", (nombre, esperado) => expect(diaAncho(nombre as string)).toEqual(esperado))
+  })
+
+  describe("dimerizable (lámparas, paneles, tiras y drivers)", () => {
+    it.each([
+      ["LAMPARA LED E27 9W DIMERIZABLE", { dimerizable: "si" }],
+      ["Lámpara filamento 8W E27 dimeable", { dimerizable: "si" }],
+      ["LAMPARA AR111 15W DIMMABLE", { dimerizable: "si" }],
+      ["LAMPARA AR111 15W DIMMERIZABLE", { dimerizable: "si" }],
+      ["DICROICA GU10 5W TRIAC DIM AC180-260V", { dimerizable: "si" }],
+      ["FUENTE LED SLIM DIMERIZABLE 12V 60W", { dimerizable: "si" }],
+      ["DRIVER DIMERIZABLE PARA PANEL 24W", { dimerizable: "si" }],
+      ["LAMPARA LED VELADOR 5W NO DIMERIZABLE", { dimerizable: "no" }],
+      ["PANEL LED 18W no dimeable", { dimerizable: "no" }],
+      ["PANEL LED 18W (NO ES DIMERIZABLE)", { dimerizable: "no" }],
+      // Sin el dato, nada: una lámpara que no lo dice no es "no dimerizable".
+      ["LAMPARA LED E27 9W CALIDA", {}],
+      // El producto regula a otro: un dimmer, una tecla o un variador no son "dimerizables".
+      ["DIMMER LED BLANCO", {}],
+      ["TECLA Y DIMMER LED BLANCO", {}],
+      ["TECLA DIMERIZABLE SMART 1.5A MAX BLANCA", {}],
+      ["VARIADOR DE LUMINOSIDAD DIMERIZABLE", {}],
+      ["SENSOR TACTIL PARA ENCENDIDO Y DIMERIZADO DE TIRAS LED", {}],
+      // Es dato de otro producto ("para lámparas dimerizables", "compatible con").
+      ["TRANSFORMADOR PARA LAMPARAS DIMERIZABLES", {}],
+      ["CONTROLADOR COMPATIBLE CON TIRAS DIMERIZABLE", {}],
+      // Contradicción: ambos sentidos en el mismo producto = ninguno.
+      ["LAMPARA 9W DIMERIZABLE / NO DIMERIZABLE", {}],
+    ])("%s", (nombre, esperado) => expect(soloClave(nombre as string, undefined, "dimerizable")).toEqual(esperado))
+
+    it("lee la descripción de Alegra, pero un dimmer sigue siendo un dimmer", () => {
+      expect(soloClave("LAMPARA LED VELADOR NEGRO 18W", "AC100-240V, RA>90, DIMEABLE, MEMORIA ULTIMA FUNCION", "dimerizable")).toEqual({ dimerizable: "si" })
+      expect(soloClave("Llave modular blanca", "DIMMER LED", "dimerizable")).toEqual({})
+      expect(soloClave("GALPONERA 150W", "FRIO 5700K, IP65, DIMERIZABLE 0-10V", "dimerizable")).toEqual({ dimerizable: "si" })
+    })
+
+    it("normalizarAtributos acepta sí/no/booleano y descarta el resto", () => {
+      const n = (v: unknown) => comoMapa(normalizarAtributos({ dimerizable: v }))
+      expect(n("Sí")).toEqual({ dimerizable: "si" })
+      expect(n("NO")).toEqual({ dimerizable: "no" })
+      expect(n(true)).toEqual({ dimerizable: "si" })
+      expect(n(false)).toEqual({ dimerizable: "no" })
+      expect(n("tal vez")).toEqual({})
+      expect(n(1)).toEqual({})
+    })
+  })
+
+  describe("modulos (módulos DIN de gabinetes, cajas y tableros)", () => {
+    it.each([
+      ["Caja de embutir p/ 12 mód. DIN pta fume", { modulos: 12 }],
+      ["Caja emb. 4 mod. DIN c/ tapa", { modulos: 4 }],
+      ["Cajas p/ Pilastra 8 Mod. DIN IP65 Blanca", { modulos: 8 }],
+      ["Caja p/Pilar para 9 Mod DIN (IP 65) con tapa transparente", { modulos: 9 }],
+      ["Gabinete modular P/96 Mod DIN 550x637x180mm", { modulos: 96 }],
+      ["Gab. P/24 Módulos DIN 330x315x180mm", { modulos: 24 }],
+      ["Caja IP65 p/12 polos DIN", { modulos: 12 }],
+      ["Caja embutir 36 polos frente y puerta blanca", { modulos: 36 }],
+      ["Gab. estanco 420x420X210 96 P. cierre media vuelta", { modulos: 96 }],
+      ["Caja ext. TM 4 bocas c/tapa fumé", { modulos: 4 }],
+      ["Caja IP 65 190x285x185 p/10 Bocas Puerta Opaca", { modulos: 10 }],
+      ["Gabinete para térmicas IP65 12 módulos 15 x 27 x 10,1 cm", { modulos: 12 }],
+      ["Tablero 18 bocas", { modulos: 18 }],
+      // Los módulos que acompañan a los polos no son la capacidad: gana lo explícito de polos/DIN.
+      ["Caja IP65 p/12 polos DIN + dos módulos ciegos", { modulos: 12 }],
+      ["Caja IP65 p/12 polos DIN + 2 módulos p/tomas", { modulos: 12 }],
+      // Módulos de bastidor de una caja de mecanismos (teclas y tomas): otra unidad, no se leen.
+      ["Caja de superficie vacía 2 módulos negro", {}],
+      ["Caja armada 2 interruptores 10 Ax (2 módulos) negro", {}],
+      ["Caja exterior 3 módulos armada c/ 1 interruptor", {}],
+      // Accesorios y otras familias que dicen "polos" o "módulos".
+      ["Contrafrente abisagrado calado p/12 Polos", {}],
+      ["Contraf. Abisagrado Calado 20 Mod DIN. p/ gabinete", {}],
+      ["Tapa DIN para 4 polos blanca", {}],
+      ["Caballete regulable 9 polos", {}],
+      ["Riel DIN 35 mm. Longitud 1 metro", {}],
+      ["Modulo p/19 polos DIN 19” x 3U", {}],
+      ["Interruptor 2 polos 25A", {}],
+      ["Bornera 4 polos termorigida", {}],
+      ["Interruptor caja moldeada 4 polos 50A", {}],
+      ["Interruptor 2 mod blanco", {}],
+      // Dos capacidades distintas = ninguna.
+      ["Caja p/12 polos DIN o 24 polos DIN", {}],
+      // Fuera de rango.
+      ["Gabinete p/288 Mod DIN", {}],
+    ])("%s", (nombre, esperado) => expect(soloClave(nombre as string, undefined, "modulos")).toEqual(esperado))
+
+    it("la capacidad puede venir en la descripción de Alegra", () => {
+      expect(soloClave("Gab. estanco 200x200x100", "CF calado p/6 Mod DIN.", "modulos")).toEqual({ modulos: 6 })
+      expect(soloClave("Caja sobreponer 4P marco blanco", "Caja sobreponer 4 polos marco blanco", "modulos")).toEqual({ modulos: 4 })
+      // Pero el producto tiene que SER la envolvente: la descripción de un accesorio no cuenta.
+      expect(soloClave("Soporte de riel", "para gabinete de 12 Mod DIN", "modulos")).toEqual({})
+    })
+
+    it("normalizarAtributos: entero de 1 a 200", () => {
+      const n = (v: unknown) => comoMapa(normalizarAtributos({ modulos: v }))
+      expect(n(12)).toEqual({ modulos: 12 })
+      expect(n("36")).toEqual({ modulos: 36 })
+      expect(n(1)).toEqual({ modulos: 1 })
+      expect(n(200)).toEqual({ modulos: 200 })
+      expect(n(0)).toEqual({})
+      expect(n(201)).toEqual({})
+      expect(n(12.5)).toEqual({})
+    })
   })
 
   describe("angulo_grados", () => {

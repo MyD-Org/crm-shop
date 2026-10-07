@@ -76,6 +76,11 @@ que el encabezado y el valor no son texto contiguo: por eso no se exige la cita 
    **Diámetro y ancho** (`diametro_mm`, `ancho_mm`, migración 0070): en milímetros ("ø25 mm", "Diámetro 25", "Ancho 150 mm"); el
    diámetro es el de un caño, tubo o accesorio de caño, y el ancho el de una bandeja portacables (el primer número de "100/50").
    Una sección ("4 mm²") no es un diámetro (`unidad_no_en_texto`).
+   **Dimerizable** (`dimerizable`, migración 0072; texto "si"/"no"): "si" sólo si la ficha dice del PRODUCTO que es dimerizable
+   ("Dimerizable: Sí", "Dimmable", "Regulable con dimmer TRIAC"); "no" si dice que no ("No dimerizable"). "Compatible con dimmer" en un
+   dimmer o "para lámparas dimerizables" en un driver no es el dato del producto; una lámpara que no menciona el tema queda sin dato.
+   **Módulos** (`modulos`, migración 0072): módulos DIN de un gabinete, caja o tablero ("12 módulos DIN", "p/12 polos", "10 bocas");
+   no los módulos de bastidor de una caja de teclas y tomas, ni los polos de una bornera o un seccionador.
    Una potencia o corriente "máxima" (carga admitida de un riel, controlador o tecla: "200W Máx", "Carga máxima 200W",
    "Potencia máxima de lámpara: 60W", "hasta 60W") no es la del producto: si "máx", "máximo/a", "maximum" o "hasta" está en su
    celda, en el rótulo de su fila o columna o en la celda pegada de la misma línea, se descarta (`valor_maximo`).

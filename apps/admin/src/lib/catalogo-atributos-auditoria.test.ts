@@ -153,7 +153,7 @@ describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => 
   const prod = (alegraId: string, name: string, description: string | null = null) => ({ alegraId, name, description })
 
   it("las claves que admite el backfill por nombre", () => {
-    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono"])
+    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono", "modulos", "dimerizable"])
   })
 
   it("montaje (texto): escribe valor_texto, nunca pisa pdf/manual y es idempotente", () => {
@@ -233,6 +233,26 @@ describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => 
     const p2 = planearBackfillClave("ancho_mm", productos, guardadas)
     expect(p2.filas).toEqual([])
     expect(p2.iguales).toBe(2)
+  })
+
+  it("dimerizable (texto si/no) y modulos (numérica): nunca pisan pdf/manual y son idempotentes", () => {
+    const productos = [
+      prod("1", "LAMPARA LED 9W E27 DIMERIZABLE"), // nueva
+      prod("2", "PANEL LED 18W NO DIMERIZABLE"), // protegida (pdf con otro valor)
+      prod("3", "DIMMER LED BLANCO"), // sin lectura
+    ]
+    const plan = planearBackfillClave("dimerizable", productos, new Map([["2", { fuente: "pdf" as const, valorNum: null, valorTexto: "si" }]]))
+    expect(plan).toMatchObject({ nuevas: 1, cambian: 0, iguales: 0, protegidas: 1, protegidasDistintas: 1 })
+    expect(plan.filas).toEqual([{ alegraId: "1", clave: "dimerizable", valorNum: null, valorTexto: "si" }])
+
+    const cajas = [prod("1", "Caja de embutir p/ 12 mód. DIN pta fume"), prod("2", "Caja IP65 p/24 polos DIN"), prod("3", "Caja exterior 3 módulos")]
+    const p1 = planearBackfillClave("modulos", cajas, new Map())
+    expect(p1.filas).toEqual([
+      { alegraId: "1", clave: "modulos", valorNum: 12, valorTexto: null },
+      { alegraId: "2", clave: "modulos", valorNum: 24, valorTexto: null },
+    ])
+    const guardadas = new Map(p1.filas.map((f) => [f.alegraId, { fuente: "nombre" as const, valorNum: f.valorNum }]))
+    expect(planearBackfillClave("modulos", cajas, guardadas)).toMatchObject({ filas: [], iguales: 2 })
   })
 
   it("planearBackfillSeccion sigue siendo planearBackfillClave('seccion_mm2')", () => {

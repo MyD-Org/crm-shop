@@ -505,6 +505,13 @@
       "when": 1792583600000,
       "tag": "0071_medios_pago_chips",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1792670000000,
+      "tag": "0072_atributos_dimerizable_modulos",
+      "breakpoints": true
     }
   ]
 }

@@ -760,6 +760,35 @@ describe("diametro_mm y ancho_mm: en milímetros", () => {
   })
 })
 
+describe("modulos: módulos DIN de un gabinete o caja", () => {
+  const una = (txt: string, valor = 12) =>
+    verificarLectura(lectura(null, { modulos: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "GABINETE" }))
+  it.each(["12 módulos", "12 Mod. DIN", "12 polos", "Capacidad 12", "12 bocas"])("acepta %s", (txt) => {
+    expect(aceptados(una(txt))).toEqual([["modulos", 12]])
+  })
+  it.each(["12 mm", "12 kg", "12 V"])("rechaza %s", (txt) => {
+    expect(motivos(una(txt))).toEqual(["modulos:unidad_no_en_texto"])
+  })
+})
+
+describe("dimerizable: sí/no del producto", () => {
+  const una = (txt: string, valor: string) =>
+    verificarLectura(lectura(null, { dimerizable: { valor } }), ctx([RELLENO, ["Dato", 40, 700], [txt, 120, 700]], { unicoProducto: true, nombre: "LAMPARA LED" }))
+  it.each(["Dimerizable: Sí", "Dimerizable SI", "Dimmable: Yes", "Dimerizable"])("sí: acepta %s", (txt) => {
+    expect(aceptados(una(txt, "si"))).toEqual([["dimerizable", "si"]])
+  })
+  it.each(["Dimerizable: No", "No dimerizable", "Dimmable: No"])("no: acepta %s", (txt) => {
+    expect(aceptados(una(txt, "no"))).toEqual([["dimerizable", "no"]])
+  })
+  it("no confunde un sí con un no ni al revés", () => {
+    expect(motivos(una("Dimerizable: No", "si"))).toEqual(["dimerizable:valor_no_en_texto"])
+    expect(motivos(una("Dimerizable: Sí", "no"))).toEqual(["dimerizable:valor_no_en_texto"])
+  })
+  it("sin la palabra no hay evidencia", () => {
+    expect(motivos(una("Regulable", "si"))).toEqual(["dimerizable:valor_no_en_texto"])
+  })
+})
+
 describe("angulo_grados: sólo el ángulo de luz", () => {
   const ficha = (celdas: Celda[]) => ctx([RELLENO, ...celdas], { unicoProducto: true, nombre: "SPOT LED", code: "SP-001-XYZ" })
   const ang = (valor: number, celdas: Celda[]) => verificarLectura(lectura(null, { angulo_grados: { valor } }), ficha(celdas))

@@ -15,6 +15,25 @@ describe("metaCuotas", () => {
       alcanzada: true,
     });
   });
+  it("nivel alcanzado con cuota y uno más alto: dos líneas y barra hacia el siguiente", () => {
+    const m = metaCuotas({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 15000, minimo: 60000 }, pct: 75, montoCuota: 12500 });
+    expect(m).toMatchObject({ pct: 75, alcanzada: false });
+    const n = (t?: string) => t?.replace(/[\u00a0\u202f]/g, " ");
+    expect(n(m?.textoAlcanzado)).toBe("Ya tiene 8 cuotas sin interés de $ 12.500,00.");
+    expect(n(m?.enfasisAlcanzado)).toBe("8 cuotas sin interés de $ 12.500,00");
+    expect(n(m?.texto)).toBe("Sume $ 15.000 más y pague en 12 cuotas sin interés.");
+  });
+  it("nivel más alto con cuota: una línea, barra llena", () => {
+    const m = metaCuotas({ cuotasActuales: 12, proximo: null, pct: 100, montoCuota: 10000 });
+    expect(m?.alcanzada).toBe(true);
+    expect(m?.pct).toBe(100);
+    expect(m?.textoAlcanzado).toBeUndefined();
+    expect(m?.texto.replace(/[\u00a0\u202f]/g, " ")).toBe("Su compra ya tiene 12 cuotas sin interés de $ 10.000,00.");
+  });
+  it("sin monto de cuota (no se pudo calcular): como antes, sin inventar un monto", () => {
+    const m = metaCuotas({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 5, minimo: 10 }, pct: 50 });
+    expect(m?.textoAlcanzado).toBeUndefined();
+  });
   it("sin progreso o sin cuotas: nada", () => {
     expect(metaCuotas(null)).toBeNull();
     expect(metaCuotas(undefined)).toBeNull();

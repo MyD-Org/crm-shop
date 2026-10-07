@@ -241,6 +241,28 @@ export interface ProgresoCuotas {
   proximo: { cuotas: number; falta: number; minimo: number } | null;
   /** 0..100: base / mínimo del próximo escalón (100 si no hay próximo). */
   pct: number;
+  /**
+   * Monto de cada cuota de `cuotasActuales`: total de la compra a la lista de esa condición dividido
+   * N (ver `montoPorCuota`). Lo agrega el servidor; ausente = no se pudo calcular (sólo se informa la
+   * cantidad de cuotas, nunca un monto inventado).
+   */
+  montoCuota?: number;
+}
+
+/**
+ * La condición que sostiene `cuotasActuales`: la de esa cantidad de cuotas que alcanza su base (la
+ * primera de los medios, en orden). Su lista de precios es la de la que sale el monto por cuota.
+ */
+export function condicionAlcanzada(
+  medios: readonly { condiciones: readonly CondicionCuotas[] | null | undefined; base: number }[],
+  cuotas: number | null,
+): CondicionCuotas | null {
+  if (cuotas === null) return null;
+  for (const m of medios) {
+    const c = condicionesAplicables(m.condiciones, m.base).find((x) => x.cuotas === cuotas);
+    if (c) return c;
+  }
+  return null;
 }
 
 /**

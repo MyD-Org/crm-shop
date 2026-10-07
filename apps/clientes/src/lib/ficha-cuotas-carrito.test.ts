@@ -45,6 +45,18 @@ describe("metaCuotasFicha", () => {
     expect(sinNbsp(m?.texto)).toBe("Con su carrito y este producto, sume $ 15.000 más y pague en 6 cuotas sin interés.");
     expect(sinNbsp(m?.enfasis)).toBe("$ 15.000");
   });
+  it("con cuota y un nivel más alto: dos líneas y barra hacia el siguiente", () => {
+    const m = metaCuotasFicha({ cuotasActuales: 8, proximo: { cuotas: 12, falta: 15000, minimo: 60000 }, pct: 75, montoCuota: 12500 });
+    expect(m).toMatchObject({ alcanzada: false, pct: 75 });
+    expect(sinNbsp(m?.textoAlcanzado)).toBe("Con su carrito, ya tiene 8 cuotas sin interés de $ 12.500,00.");
+    expect(sinNbsp(m?.enfasisAlcanzado)).toBe("8 cuotas sin interés de $ 12.500,00");
+    expect(sinNbsp(m?.texto)).toBe("Sume $ 15.000 más y pague en 12 cuotas sin interés.");
+  });
+  it("con cuota en el nivel más alto: una línea, barra llena", () => {
+    const m = metaCuotasFicha({ cuotasActuales: 12, proximo: null, pct: 100, montoCuota: 10000 });
+    expect(m).toMatchObject({ alcanzada: true, pct: 100 });
+    expect(sinNbsp(m?.texto)).toBe("Con su carrito, ya tiene 12 cuotas sin interés de $ 10.000,00.");
+  });
   it("sin progreso o sin nada que informar: null", () => {
     expect(metaCuotasFicha(null)).toBeNull();
     expect(metaCuotasFicha(undefined)).toBeNull();

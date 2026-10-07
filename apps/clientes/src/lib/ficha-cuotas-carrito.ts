@@ -31,6 +31,22 @@ export function lineasConProducto(
 /** Sin progreso o sin cuotas que informar: null. Si la compra ya tiene cuotas, se informa eso; si no, cuánto falta. */
 export function metaCuotasFicha(p: ProgresoCuotas | null | undefined): MetaCarrito | null {
   if (!p) return null;
+  if (p.cuotasActuales !== null && p.montoCuota != null) {
+    const ya = TEXTOS_CUOTAS.fichaYaTiene(p.cuotasActuales, p.montoCuota);
+    if (!p.proximo) {
+      return { id: "cuotas", texto: ya, pct: 100, alcanzada: true, aria: TEXTOS_CUOTAS.barraAria };
+    }
+    return {
+      id: "cuotas",
+      texto: TEXTOS_CUOTAS.faltaParaCuotas(p.proximo.falta, p.proximo.cuotas),
+      enfasis: TEXTOS_CUOTAS.montoFaltante(p.proximo.falta),
+      textoAlcanzado: ya,
+      enfasisAlcanzado: TEXTOS_CUOTAS.cuotasConMonto(p.cuotasActuales, p.montoCuota),
+      pct: p.pct,
+      alcanzada: false,
+      aria: TEXTOS_CUOTAS.barraAria,
+    };
+  }
   if (p.cuotasActuales !== null) {
     return {
       id: "cuotas",

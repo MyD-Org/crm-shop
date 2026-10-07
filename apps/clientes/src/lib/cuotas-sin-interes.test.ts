@@ -12,6 +12,7 @@ import {
   cuotasNoAlcanzadas,
   filasNoAlcanzadas,
   progresoCuotas,
+  condicionAlcanzada,
   hayCuotasParaModal,
   type MedioCuotas,
 } from "./cuotas-sin-interes";
@@ -393,6 +394,18 @@ describe("progresoCuotas (barra del carrito, combinado entre medios)", () => {
   it("sin cuotas alcanzadas todavía: cuotasActuales null", () => {
     const r = progresoCuotas([{ condiciones: [cond(6, 60000)], base: 0 }]);
     expect(r).toEqual({ cuotasActuales: null, proximo: { cuotas: 6, falta: 60000, minimo: 60000 }, pct: 0 });
+  });
+});
+
+describe("condicionAlcanzada", () => {
+  const cond = (cuotas: number, montoMinimo?: number | null) => ({ cuotas, idListaPrecios: `L${cuotas}`, montoMinimo });
+  it("la condición de esas cuotas que alcanza su base", () => {
+    const medios = [{ condiciones: [cond(3), cond(6, 60000)], base: 70000 }];
+    expect(condicionAlcanzada(medios, 6)?.idListaPrecios).toBe("L6");
+  });
+  it("sin cuotas alcanzadas o sin condición vigente: null", () => {
+    expect(condicionAlcanzada([{ condiciones: [cond(6, 60000)], base: 0 }], null)).toBeNull();
+    expect(condicionAlcanzada([{ condiciones: [cond(6, 60000)], base: 100 }], 6)).toBeNull();
   });
 });
 

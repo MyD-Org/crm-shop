@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { rutaIngreso } from "@/lib/ingreso";
-import { Button, QuantityStepper } from "@myd-org/ui";
+import { Button, FadeScroll, QuantityStepper } from "@myd-org/ui";
 import type { CartItem } from "@/lib/carrito-cliente";
 import { AvisoQuitado } from "@/components/AvisoQuitado";
 import { CONFIG_ENVIO_DEFAULT, progresoEnvioGratis, type ConfigEnvio, type EntregaTipo } from "@/lib/envio";
@@ -120,17 +120,6 @@ export function CarritoClient({
    */
   const resumenRef = useRef<HTMLElement>(null);
   const [resumenALaVista, setResumenALaVista] = useState(false);
-  // En desktop el resumen puede superar la ventana. Conserva su scroll, pero
-  // sin barra visible: los difuminados indican si todavía hay contenido arriba
-  // o abajo, igual que el panel de filtros del catálogo.
-  const [hayMasResumenAbajo, setHayMasResumenAbajo] = useState(false);
-  const [hayMasResumenArriba, setHayMasResumenArriba] = useState(false);
-  const medirResumen = () => {
-    const el = resumenRef.current;
-    if (!el) return;
-    setHayMasResumenAbajo(el.scrollHeight - el.scrollTop - el.clientHeight > 1);
-    setHayMasResumenArriba(el.scrollTop > 1);
-  };
   const hayItems = items.length > 0;
   useEffect(() => {
     const el = resumenRef.current;
@@ -140,18 +129,6 @@ export function CarritoClient({
     });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [ready, hayItems]);
-  // La cotización y la disponibilidad cambian el alto del resumen después del
-  // primer render, y el viewport puede redimensionarse: se vuelve a medir en
-  // ambos casos para que el difuminado siempre refleje el overflow real.
-  useEffect(() => {
-    const el = resumenRef.current;
-    if (!ready || !hayItems || !el) return;
-    medirResumen();
-    const ro = new ResizeObserver(medirResumen);
-    ro.observe(el);
-    for (const child of el.children) ro.observe(child);
-    return () => ro.disconnect();
   }, [ready, hayItems]);
 
   /**
@@ -486,20 +463,13 @@ export function CarritoClient({
             })}
           </ul>
 
-          {/* Resumen */}
-          <aside
+          {/* Resumen. En desktop puede superar la ventana: scrollea sin barra y difumina donde hay más. */}
+          <FadeScroll
+            as="aside"
             ref={resumenRef}
-            onScroll={medirResumen}
-            className={`no-scrollbar h-fit space-y-5 rounded-[22px] bg-surface p-5 shadow-[var(--shadow-1)] transition-[opacity,translate] duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:sticky lg:top-24 lg:max-h-[calc(100dvh-12rem)] lg:translate-y-0 lg:overflow-y-auto lg:p-6 lg:opacity-100 ${
+            fadeFrom="lg"
+            className={`h-fit space-y-5 rounded-[22px] bg-surface p-5 shadow-[var(--shadow-1)] transition-[opacity,translate] duration-[250ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:sticky lg:top-24 lg:max-h-[calc(100dvh-12rem)] lg:translate-y-0 lg:overflow-y-auto lg:p-6 lg:opacity-100 ${
               resumenALaVista ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
-            } ${
-              hayMasResumenArriba && hayMasResumenAbajo
-                ? "lg:[mask-image:linear-gradient(to_bottom,transparent,black_48px,black_calc(100%-48px),transparent)]"
-                : hayMasResumenAbajo
-                  ? "lg:[mask-image:linear-gradient(to_bottom,black_calc(100%-48px),transparent)]"
-                  : hayMasResumenArriba
-                    ? "lg:[mask-image:linear-gradient(to_bottom,transparent,black_48px)]"
-                    : ""
             }`}
           >
             <MetasCarrito metas={metas} />
@@ -575,7 +545,7 @@ export function CarritoClient({
               detallePorLocal={resumenEntrega?.detallePorLocal}
               ubicacionConocida={ubicacionConocida ?? provincia !== null}
             />
-          </aside>
+          </FadeScroll>
         </div>
 
         {/* Barra de compra en mobile: sticky y última del main, acompaña el

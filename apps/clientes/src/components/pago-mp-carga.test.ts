@@ -152,8 +152,8 @@ describe("PagoMercadoPago.tsx: cableado", () => {
     expect(fuente).toContain("onReintentar={reintentar}");
   });
 
-  it("el plazo corre sólo con el Brick montado y se reinicia por intento", () => {
-    expect(fuente).toContain("brickMontado = !faltaKey && preferenceId !== undefined");
+  it("el plazo corre sólo mientras carga (con configuración) y se reinicia por intento", () => {
+    expect(fuente).toContain('cargandoConBrick = !faltaKey && estado.fase === "cargando"');
     expect(fuente).toMatch(/\[cargandoConBrick, intento\]/);
     expect(fuente).toContain("iniciarPlazoCarga(");
   });

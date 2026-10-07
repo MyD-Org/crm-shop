@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fixture from "../db/__fixtures__/atributos-claves.json";
 import { CLAVES_ESTRUCTURADAS } from "./catalogo-caracteristicas";
 import { RANGOS, RANGOS_SOLO_FACETA, rangoDeClave } from "./catalogo-atributos-medida";
-import { REGISTRO, UMBRAL_COBERTURA, VISIBLES, claveFacetable, elegirFacetas, etiquetaValor, type EntradaFacetas } from "./catalogo-facetas-registro";
+import { REGISTRO, UMBRAL_COBERTURA, claveFacetable, elegirFacetas, etiquetaValor, type EntradaFacetas } from "./catalogo-facetas-registro";
 
 /** Distribuciones sintéticas: ningún dato real de clientes. */
 const entrada = (parcial: Partial<EntradaFacetas> = {}): EntradaFacetas => ({
@@ -144,11 +144,6 @@ describe("elegirFacetas: cobertura y valores", () => {
   it("claves desconocidas no se ofrecen aunque tengan datos", () => {
     const r = elegirFacetas(entrada({ filas: filas("medidas_mm", { "10x10": 50, "20x20": 50 }), denominadores: { medidas_mm: 100 } }));
     expect(r).toEqual([]);
-  });
-
-  it("la lista lleva el tope de valores visibles del registro", () => {
-    const r = elegirFacetas(entrada({ filas: filas("polos", { "1": 50, "2": 50 }), denominadores: { polos: 100 } }));
-    expect(r[0].control === "lista" && r[0].visibles).toBe(VISIBLES);
   });
 });
 

@@ -9,7 +9,7 @@
  * - categorías candidatas: las que tienen todas sus palabras en la consulta
  *   (o en sus expansiones) y las que tienen su sustantivo principal (la
  *   primera palabra significativa del nombre: "Extractores de aire" →
- *   extractor). Sirven para que una categoría de Jev pase a dura sólo con el
+ *   extractor; uno ambiguo, como "interruptor", sólo si está escrito). Sirven para que una categoría de Jev pase a dura sólo con el
  *   acuerdo de las dos fuentes, y como blandas cuando no hay Jev;
  * - atributos explícitos: un sinónimo del diccionario de atributos escrito tal
  *   cual ("cálido", "e27", "ip65"). Son candidatos FUERTES;
@@ -24,6 +24,13 @@ import { CONTEXTO } from "./terminos";
 
 /** Lugares que sugieren "apto exterior" sin pedirlo. */
 const LUGARES_EXTERIOR = new Set(["patio", "jardin", "fachada", "vereda", "pileta", "piscina", "parque", "quincho", "cancha"]);
+
+/**
+ * Sustantivos que nombran productos distintos según el rubro: "interruptor" (de luz o
+ * termomagnético), "llave" (de luz, térmica o de tubo). Como sinónimo de otra palabra no proponen
+ * la categoría que empieza con ellos; escritos tal cual, sí.
+ */
+const AMBIGUOS = new Set(["interruptor", "llave"]);
 
 /** Tope de categorías candidatas. */
 const MAX_CANDIDATAS = 5;
@@ -60,7 +67,11 @@ export function candidatos(consultaNorm: string, arbol: NodoArbol[]): Candidatos
   const tokens = tokensDe(consultaNorm).filter((t) => !det.absorbidos.has(t)).map(raizPlural);
   const conExpansiones = new Set([...tokens, ...expansiones(tokens, consultaNorm).map(raizPlural)]);
   // El sustantivo principal no cuenta si es contexto: "luz" no hace candidata a "Luces de emergencia".
-  const sustantivos = new Set([...conExpansiones].filter((t) => !CONTEXTO.has(t)));
+  // Un sustantivo AMBIGUO cuenta sólo si se escribió: "tecla" se expande a "interruptor" para
+  // encontrar productos, pero eso no hace candidata a "Interruptores termomagnéticos" (otro producto).
+  const sustantivos = new Set(
+    [...conExpansiones].filter((t) => !CONTEXTO.has(t) && (!AMBIGUOS.has(t) || tokens.includes(t))),
+  );
   const porSustantivo = vivas(arbol)
     .filter((n) => {
       const palabras = palabrasCategoria(n.nombre);

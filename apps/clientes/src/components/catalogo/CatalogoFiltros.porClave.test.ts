@@ -12,7 +12,6 @@ const polos: FacetaClave = {
   clave: "polos",
   titulo: "Polos",
   control: "lista",
-  visibles: 6,
   items: [
     { valor: "1", etiqueta: "1", count: 12 },
     { valor: "2", etiqueta: "2", count: 7 },

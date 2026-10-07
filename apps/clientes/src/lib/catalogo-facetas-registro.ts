@@ -26,8 +26,6 @@ export interface ClaveFacetable {
   umbral?: number;
   /** Valores distintos mínimos para ofrecer una lista. Default 2. */
   minValores?: number;
-  /** Valores visibles antes de "Ver todas". Default 6. */
-  visibles?: number;
   /** Etiqueta de cada valor (la enumeración, en orden de aparición). Sin mapa se capitaliza el valor. */
   valores?: Readonly<Record<string, string>>;
   /** Rango con parámetros propios en la URL (la potencia usa `potencia_min`/`potencia_max`, no `?car=`). */
@@ -43,7 +41,6 @@ export interface ClaveFacetable {
  */
 export const UMBRAL_COBERTURA = 0.3;
 export const MIN_VALORES = 2;
-export const VISIBLES = 6;
 /** Tope de grupos por tipo que se muestran a la vez. */
 export const TOPE_GRUPOS = 6;
 /** Valor de lista que viaja en la URL: corto y sin nada que no sea minúscula, dígito, punto, guion o guion bajo. */
@@ -181,7 +178,7 @@ export interface ValorFaceta {
 }
 
 export type FacetaClave =
-  | { clave: ClaveEstructurada; titulo: string; control: "lista"; items: ValorFaceta[]; visibles: number }
+  | { clave: ClaveEstructurada; titulo: string; control: "lista"; items: ValorFaceta[] }
   | { clave: ClaveEstructurada; titulo: string; control: "rango"; unidad?: string; rango: { min: number; max: number }; param?: "potencia" };
 
 export interface EntradaFacetas {
@@ -219,7 +216,7 @@ function facetaDeLista(def: ClaveFacetable, e: EntradaFacetas, activa: boolean):
   const elegible = denominador > 0 && total / denominador >= (def.umbral ?? UMBRAL_COBERTURA) && porValor.size >= (def.minValores ?? MIN_VALORES);
   if (!elegible && !activa) return null;
   const items = [...porValor.keys()].sort(ordenDeValores(def)).map((valor) => ({ valor, etiqueta: etiquetaValor(def.clave, valor), count: porValor.get(valor)! }));
-  return { clave: def.clave, titulo: def.titulo, control: "lista", items, visibles: def.visibles ?? VISIBLES };
+  return { clave: def.clave, titulo: def.titulo, control: "lista", items };
 }
 
 function facetaDeRango(def: ClaveFacetable, e: EntradaFacetas, activa: boolean): FacetaClave | null {

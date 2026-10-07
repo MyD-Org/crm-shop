@@ -1,12 +1,17 @@
 "use client";
 
 import { Chip } from "@myd-org/ui";
-import type { EstadoCatalogo, RangoPrecio } from "@/lib/catalogo-url";
+import { TEXTOS_FRANJA } from "@/lib/busqueda-inteligente/textos";
+import { ordenPorDefecto, type EstadoCatalogo, type RangoPrecio } from "@/lib/catalogo-url";
 import { chipsActivos } from "@/lib/catalogo-vista";
 
 /**
  * Filtros activos como chips removibles, debajo del encabezado. Sin filtros no
  * devuelve nada — ni el nodo ni su margen.
+ *
+ * Lo buscado va primero como un chip más («Búsqueda: …»): quitarlo saca el texto y
+ * la interpretación (`ia`) y deja lo que se entendió (categoría, medidas) como
+ * filtros sueltos, que se quitan cada uno con su `×`.
  *
  * Sin "Limpiar filtros" en la fila: cada chip ya tiene su `×`, y borrar todo
  * de una sigue estando en el pie de la hoja de filtros. Al final de una fila
@@ -34,22 +39,24 @@ export function CatalogoChips({
   rango,
   locales,
   ir,
-  sinInterpretados = false,
 }: {
   estado: EstadoCatalogo;
   rango: RangoPrecio | null;
   /** Locales del filtro "Con stock en": ponen el nombre en el chip. */
   locales?: { slug: string; nombre: string }[];
   ir: (cambios: Partial<EstadoCatalogo>) => void;
-  /**
-   * Categorías y atributos ya se muestran en la franja "Entendimos" (búsqueda
-   * interpretada): acá quedan sólo los demás filtros, para no repetirlos.
-   */
-  sinInterpretados?: boolean;
 }) {
-  const chips = chipsActivos(estado, rango, locales).filter(
-    (c) => !sinInterpretados || !/^(categoria|atributo):/.test(c.clave),
-  );
+  const busqueda = estado.query
+    ? [
+        {
+          clave: "busqueda",
+          etiqueta: TEXTOS_FRANJA.texto(estado.query),
+          removeLabel: TEXTOS_FRANJA.quitarTexto(estado.query),
+          cambios: { query: undefined, ia: undefined, orden: ordenPorDefecto(undefined), pagina: 1 } as Partial<EstadoCatalogo>,
+        },
+      ]
+    : [];
+  const chips = [...busqueda, ...chipsActivos(estado, rango, locales)];
   if (chips.length === 0) return null;
 
   return (

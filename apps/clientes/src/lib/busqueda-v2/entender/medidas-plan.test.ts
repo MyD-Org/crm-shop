@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { atributoPorId, cumpleEstructurado } from "../../catalogo-atributos";
-import { esMedidaId } from "../../catalogo-atributos-medida";
+import { esMedidaId, PESO_ORDEN_ESTRICTO } from "../../catalogo-atributos-medida";
 import type { AtributosEstructurados } from "../../catalogo-caracteristicas";
 import { PUNTOS } from "../ordenar";
 import { planVacio, type Intencion, type PlanBusqueda } from "../plan";
@@ -308,11 +308,20 @@ describe("aplicarMedidas: semántica y guard (C1, C14)", () => {
 });
 
 describe("aplicarMedidas: diccionario y merge (R6.7, R6.8)", () => {
-  it("'lampara e27': emite el id del diccionario (blando 0,9), no zocalo:e27", async () => {
+  it("'lampara e27' (zócalo sin quedar duro): el id del diccionario (0,9) y, por ser discreta de confianza alta, el orden estricto zocalo:e27", async () => {
     const r = await aplicarMedidas(plan("lampara e27", ["lampara", "e27"]), "lampara e27", deps());
-    expect(blandosDe(r)).toEqual({ "zocalo-e27": 0.9 });
-    expect(r.blandos.atributos.some((a) => a.id === "zocalo:e27")).toBe(false);
+    expect(blandosDe(r)).toEqual({ "zocalo-e27": 0.9, "zocalo:e27": PESO_ORDEN_ESTRICTO });
     expect(r.duros.atributos).toEqual([]);
+  });
+
+  it("'dicroica mr16 12v': el MR16 escrito ordena estricto (antes que el GU10); la tensión no (no es discreta)", async () => {
+    const r = await aplicarMedidas(plan("dicroica mr16 12v", ["dicroica", "mr16", "12v"]), "dicroica mr16 12v", deps());
+    expect(blandosDe(r)).toMatchObject({ "zocalo-mr16": 0.9, "zocalo:mr16": PESO_ORDEN_ESTRICTO, "tension-12v": PESO_MEDIDA_BLANDA });
+  });
+
+  it("si el zócalo ya es filtro duro del plan no se duplica con el estricto", async () => {
+    const r = await aplicarMedidas(plan("lampara e27", ["lampara"], { duros: { categorias: [], atributos: ["zocalo-e27"] } }), "lampara e27", deps());
+    expect(r.blandos.atributos.some((a) => a.id === "zocalo:e27")).toBe(false);
   });
 
   it("'tira 12v': el del diccionario, una sola vez si ya estaba en los duros", async () => {
@@ -516,14 +525,12 @@ describe("consulta de SOLO medida: la medida también viaja como id dinámico (p
 
   it("'e27' y '12v' sin otro término: el id del diccionario y el dinámico", async () => {
     const e27 = await aplicarMedidas(plan("e27", []), "e27", deps());
-    expect(blandosDe(e27)).toMatchObject({ "zocalo-e27": PESO_MEDIDA_BLANDA, "zocalo:e27": PESO_MEDIDA_BLANDA });
+    expect(blandosDe(e27)).toMatchObject({ "zocalo-e27": PESO_MEDIDA_BLANDA, "zocalo:e27": PESO_ORDEN_ESTRICTO });
     const v12 = await aplicarMedidas(plan("12v", [], {}, ["12v"]), "12v", deps());
     expect(blandosDe(v12)).toMatchObject({ "tension-12v": PESO_MEDIDA_BLANDA, "tension_v:12": PESO_MEDIDA_BLANDA });
   });
 
-  it("con un término que recupera ('lampara e27', 'tira 12v') sigue SIN id dinámico duplicado (R6.8)", async () => {
-    const r = await aplicarMedidas(plan("lampara e27", ["lampara"]), "lampara e27", deps());
-    expect(r.blandos.atributos.some((a) => a.id === "zocalo:e27")).toBe(false);
+  it("con un término que recupera ('tira 12v') sigue SIN id dinámico duplicado (R6.8; la tensión no es discreta)", async () => {
     const t = await aplicarMedidas(plan("tira 12v", ["tira"], {}, ["12v"]), "tira 12v", deps());
     expect(t.blandos.atributos.some((a) => a.id === "tension_v:12")).toBe(false);
   });

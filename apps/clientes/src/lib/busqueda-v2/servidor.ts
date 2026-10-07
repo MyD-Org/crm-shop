@@ -55,7 +55,7 @@ export interface PlanObtenido {
  * `shop.busqueda_interpretaciones`) dejan de leerse en vez de seguir sirviendo una decisión que ya
  * no se toma. v2: la categoría dura no puede dejar afuera productos que se llaman como se pidió.
  */
-export const VERSION_REGLAS_PLAN = 2;
+export const VERSION_REGLAS_PLAN = 3;
 
 /** Clave del plan en la caché: el árbol activo, el flag `catalogo-solo-visibles` y la versión de las reglas (≤ 64 caracteres). */
 export function clavePlan(arbol: readonly NodoArbol[], soloVisibles: boolean): string {

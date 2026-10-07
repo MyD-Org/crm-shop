@@ -4,6 +4,7 @@ import {
   ORDEN_DESTACADO_SIN_POSICION,
   formularioDeOrden,
   ordenDeFormulario,
+  reordenarDisponible,
 } from "./destacado"
 
 describe("formularioDeOrden", () => {
@@ -50,5 +51,42 @@ describe("ordenDeFormulario", () => {
     for (const orden of [null, 9999, 1, 42, 9998]) {
       expect(ordenDeFormulario(formularioDeOrden(orden))).toEqual({ ok: true, orden })
     }
+  })
+})
+
+describe("reordenarDisponible", () => {
+  const CAT = "0b9f1c7e-3f5a-4c8e-9d1a-2b3c4d5e6f70"
+
+  it("sólo con Destacados + una categoría concreta y ningún otro filtro", () => {
+    expect(reordenarDisponible({ destacado: "si", categoria: CAT })).toBe(true)
+  })
+
+  it("no sin el filtro Destacados, sin categoría o con «sin clasificar»", () => {
+    expect(reordenarDisponible({ categoria: CAT })).toBe(false)
+    expect(reordenarDisponible({ destacado: "si" })).toBe(false)
+    expect(reordenarDisponible({ destacado: "si", categoria: "sin" })).toBe(false)
+  })
+
+  it("no si hay otro filtro o búsqueda: la lista visible no sería el conjunto que se renumera", () => {
+    const otros = [
+      { q: "led" },
+      { estado: "visible" },
+      { foto: "con" },
+      { nombre: "sin" },
+      { alegra: "active" },
+      { precio: "con" },
+      { stock: "con" },
+      { tag: "t" },
+      { cuenta: "principal" },
+      { sucursal: "visible:igz" },
+      { stockEn: "igz" },
+    ]
+    for (const extra of otros) {
+      expect(reordenarDisponible({ destacado: "si", categoria: CAT, ...extra }), JSON.stringify(extra)).toBe(false)
+    }
+  })
+
+  it("una búsqueda vacía no cuenta", () => {
+    expect(reordenarDisponible({ destacado: "si", categoria: CAT, q: "" })).toBe(true)
   })
 })

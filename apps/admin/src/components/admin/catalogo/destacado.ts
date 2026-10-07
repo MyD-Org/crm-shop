@@ -35,3 +35,19 @@ export function ordenDeFormulario({ destacado, posicion }: FormularioDestacado):
   if (n < 1 || n > POSICION_MAX) return { ok: false, error: MSG_POSICION_INVALIDA }
   return { ok: true, orden: n }
 }
+
+const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Todo filtro que no sea Categoría ni Destacados (incluida la búsqueda por texto). */
+const OTROS_FILTROS = ["q", "estado", "foto", "nombre", "alegra", "precio", "stock", "tag", "cuenta", "sucursal", "stockEn"]
+
+/**
+ * ¿Se muestran las flechas de subir/bajar? Sólo cuando la lista es EXACTAMENTE «los destacados de
+ * una categoría»: con otro filtro la pantalla mostraría un subconjunto y una flecha movería el
+ * producto respecto de otros que no se ven. El servidor resuelve y renumera el conjunto completo.
+ */
+export function reordenarDisponible(filtros: Record<string, string | undefined>): boolean {
+  if (filtros.destacado !== "si") return false
+  if (!filtros.categoria || !RE_UUID.test(filtros.categoria)) return false
+  return OTROS_FILTROS.every((k) => !filtros[k])
+}

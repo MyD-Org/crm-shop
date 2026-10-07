@@ -22,7 +22,13 @@ export const AYUDA_SOLO_EN =
   "El producto existe únicamente en la cuenta de Alegra de esta sucursal."
 
 export const AYUDA_DESTACADO =
-  "Se muestra primero en su categoría y en las que la contienen. Se cambia desde Editar, con «Destacar en la categoría»."
+  "Se muestra primero en su categoría y en las que la contienen. Se cambia desde Editar, con «Destacar en la categoría», o en varios a la vez desde la selección."
+
+export const AYUDA_DESTACAR_MASIVO =
+  "Destaca los productos seleccionados en su categoría. Los que ya tienen una posición la conservan; el resto queda al final de los destacados."
+
+export const AYUDA_REORDENAR_DESTACADOS =
+  "Use las flechas para subir o bajar un destacado. Al moverlo, los destacados de la categoría se numeran del 1 en adelante."
 
 export const AYUDA_PUBLICAR =
   "Muestra los productos en la tienda. No cambia en qué sucursales se ofrecen."

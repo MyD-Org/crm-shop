@@ -192,6 +192,13 @@ describe("parsearLecturaCruda / parsearAceptado", () => {
     expect(parsearAceptado('{"id":"1","clave":"color","valorNum":null,"valorTexto":"fucsia"}')).toBeNull()
     expect(parsearAceptado('{"id":"1","clave":"inventada","valorNum":1,"valorTexto":null}')).toBeNull()
     expect(parsearAceptado('{"id":"1","clave":"tension_v","valorNum":175,"valorTexto":"85-265"}')?.atributo.valorTexto).toBe("85-265")
+    // Rango de regulación de un relé térmico o guardamotor: manda el texto; el número queda en el tope.
+    expect(parsearAceptado('{"id":"1","clave":"corriente_a","valorNum":6,"valorTexto":"4-6"}')?.atributo).toEqual({
+      clave: "corriente_a",
+      valorNum: 6,
+      valorTexto: "4-6",
+    })
+    expect(parsearAceptado('{"id":"1","clave":"corriente_a","valorNum":16,"valorTexto":null}')?.atributo).toMatchObject({ valorNum: 16, valorTexto: null })
   })
 })
 

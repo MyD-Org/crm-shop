@@ -29,6 +29,7 @@
 import {
   CLAVES_ATRIBUTO,
   DEFINICION_ATRIBUTOS,
+  dimerizableDeTexto,
   extraerAtributosDeNombre,
   medidasValidas,
   normalizarAtributos,
@@ -257,6 +258,8 @@ const EVIDENCIA_NUM: Partial<Record<ClaveAtributo, { unidad: string; palabra: st
   // ("4 mm²") no es un diámetro: la unidad no admite el ² ni un dígito pegado.
   diametro_mm: { unidad: "\\s?(?:MM|MILIMETROS?)(?![A-Z0-9²])", palabra: "DIAMETRO|DIAM\\b|Ø" },
   ancho_mm: { unidad: "\\s?(?:MM|MILIMETROS?)(?![A-Z0-9²])", palabra: "ANCHO" },
+  // Módulos DIN de un gabinete o caja (0072): "12 módulos", "12 Mod. DIN", "12 polos", "10 bocas"; o la palabra del campo con el número.
+  modulos: { unidad: "\\s?(?:MODULOS?|MODS?\\.?|POLOS?|BOCAS?|P\\.)(?![A-Z0-9])", palabra: "MODULOS|CAPACIDAD|BOCAS" },
 }
 
 const POLOS_PALABRA: Record<string, number> = { UNIPOLAR: 1, MONOPOLAR: 1, BIPOLAR: 2, TRIPOLAR: 3, TETRAPOLAR: 4 }
@@ -333,6 +336,15 @@ export function enRangoOLista(clave: ClaveAtributo, n: number, texto: string): b
 const sinonimosDePdf = (clave: ClaveAtributo, t: string): string =>
   clave === "montaje" ? t.replace(/(?<![A-Z0-9])(?:DE )?SUPERFICIE(?![A-Z0-9])/g, "APLICAR") : t
 
+/** "Dimerizable: Sí" / "Dimerizable | No" (rótulo y valor en la misma celda o línea) o, si no, la lectura del nombre. */
+function dimerizableDeCelda(citaNorm: string): "si" | "no" | null {
+  const campo = /(?<![A-Z])DIM{1,2}(?:ER(?:IZ)?|E)?ABLE(?![A-Z])\W{0,3}(SI|YES|NO|NOT)(?![A-Z])/.exec(citaNorm)
+  if (campo) return campo[1] === "NO" || campo[1] === "NOT" ? "no" : "si"
+  // El rótulo solo ("Dimerizable" | "Función dimerizable") no dice nada: el valor está en la celda de al lado.
+  if (/^(?:(?:FUNCION|CARACTERISTICA)\W*)?DIM{1,2}(?:ER(?:IZ)?|E)?ABLES?\W*$/.test(citaNorm.trim())) return null
+  return dimerizableDeTexto(citaNorm)
+}
+
 function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, citaCruda: string): EvidenciaValor {
   const cita = sinonimosDePdf(clave, citaCruda)
   const v = a.valorTexto ?? ""
@@ -366,6 +378,11 @@ function evidenciaTexto(clave: ClaveAtributo, a: AtributoExtraido, citaCruda: st
       // Misma lectura que el nombre: sinónimos del vocabulario, y "LUZ BLANCA" no es color.
       const hallado = extraerAtributosDeNombre(cita).find((x) => x.clave === clave)
       return hallado?.valorTexto === v ? "ok" : "valor_no_en_texto"
+    }
+    case "dimerizable": {
+      // "Dimerizable: Sí" / "Dimmable" = sí; "No dimerizable" / "Dimerizable: No" = no. Una fila de otro producto ("para lámparas
+      // dimerizables") no cuenta: es la lectura del nombre, con la misma negación y la misma exclusión.
+      return dimerizableDeCelda(cita) === v ? "ok" : "valor_no_en_texto"
     }
     case "curva": {
       const hallado = extraerAtributosDeNombre(cita).find((x) => x.clave === "curva")
@@ -613,6 +630,10 @@ export function terminosEn(clave: ClaveAtributo, texto: string): string[] {
       if (v) out.push(v)
     }
     return out
+  }
+  if (clave === "dimerizable") {
+    const v = dimerizableDeCelda(texto)
+    return v ? [v] : []
   }
   if (DEFINICION_ATRIBUTOS[clave].tipo === "texto") {
     const v = extraerAtributosDeNombre(sinonimosDePdf(clave, texto)).find((x) => x.clave === clave)?.valorTexto

@@ -4,7 +4,7 @@
  * Módulo puro, sin IO. Dos piezas:
  *  - `REGISTRO`: qué claves estructuradas (`catalog_atributos`) se pueden ofrecer como filtro, con su
  *    título, unidad, control (lista de valores o rango), orden y umbrales. Una clave que no está acá
- *    NUNCA se ofrece (medidas_mm, leds_*, potencia_w_m...). diametro_mm y ancho_mm sí (migración 0070 del CRM).
+ *    NUNCA se ofrece (medidas_mm, leds_*, potencia_w_m...). diametro_mm, ancho_mm (migración 0070 del CRM), modulos y dimerizable (0072) sí.
  *  - `elegirFacetas`: dada la distribución de valores del conjunto que se está viendo, decide QUÉ
  *    claves mostrar (cobertura suficiente, más de un valor, tope de grupos) y con qué valores.
  *
@@ -31,6 +31,12 @@ export interface ClaveFacetable {
   /** Rango con parámetros propios en la URL (la potencia usa `potencia_min`/`potencia_max`, no `?car=`). */
   param?: "potencia";
   grupo: "electricas" | "iluminacion" | "fisicas";
+  /**
+   * La lista ofrece además los RANGOS de `valor_texto` como valores propios ("4-6" ⇒ "4–6 A"), separados del
+   * número suelto: el rango de regulación de un relé térmico o un guardamotor no es "6 A" (su `valor_num` es el
+   * tope). Sólo claves numéricas de `CLAVES_CON_RANGO`.
+   */
+  rangoEnTexto?: true;
 }
 
 /**
@@ -97,7 +103,7 @@ const deMedida = (clave: ClaveMedida) => ({ titulo: ESPECIFICACION[clave].etique
  */
 export const REGISTRO: readonly ClaveFacetable[] = [
   { clave: "potencia_w", ...deMedida("potencia_w"), control: "rango", orden: 10, param: "potencia", grupo: "iluminacion" },
-  { clave: "corriente_a", ...deMedida("corriente_a"), control: "lista", orden: 20, grupo: "electricas" },
+  { clave: "corriente_a", ...deMedida("corriente_a"), control: "lista", orden: 20, grupo: "electricas", rangoEnTexto: true },
   { clave: "polos", ...deMedida("polos"), control: "lista", orden: 30, grupo: "electricas" },
   { clave: "curva", ...deMedida("curva"), control: "lista", orden: 40, valores: mapa(CURVAS, mayuscula), grupo: "electricas" },
   { clave: "poder_corte_ka", ...deMedida("poder_corte_ka"), control: "lista", orden: 50, grupo: "electricas" },
@@ -106,6 +112,8 @@ export const REGISTRO: readonly ClaveFacetable[] = [
   // Caños, tubos y accesorios de caño (diámetro) y bandejas portacables (ancho): valores comerciales discretos, de ahí lista.
   { clave: "diametro_mm", titulo: "Diámetro", unidad: "mm", control: "lista", orden: 72, grupo: "fisicas" },
   { clave: "ancho_mm", titulo: "Ancho", unidad: "mm", control: "lista", orden: 74, grupo: "fisicas" },
+  // Capacidad de gabinetes y cajas DIN (migración 0072 del CRM): "12 módulos" = 12 bocas = 12 polos.
+  { clave: "modulos", titulo: "Módulos", unidad: "módulos", control: "lista", orden: 76, grupo: "fisicas" },
   { clave: "tension_v", ...deMedida("tension_v"), control: "lista", orden: 80, grupo: "electricas" },
   { clave: "zocalo", ...deMedida("zocalo"), control: "lista", orden: 90, valores: mapa(ZOCALOS, mayuscula), grupo: "iluminacion" },
   { clave: "temperatura_k", ...deMedida("temperatura_k"), control: "lista", orden: 100, grupo: "iluminacion" },
@@ -116,6 +124,8 @@ export const REGISTRO: readonly ClaveFacetable[] = [
   { clave: "largo_m", ...deMedida("largo_m"), control: "rango", orden: 150, grupo: "fisicas" },
   { clave: "color", titulo: "Color", control: "lista", orden: 160, valores: COLORES, grupo: "fisicas" },
   { clave: "montaje", titulo: "Montaje", control: "lista", orden: 170, valores: MONTAJES, grupo: "fisicas" },
+  // Sí / No del producto (lámparas, paneles, tiras y drivers). Sin el dato no se ofrece: cobertura y 2 valores como el resto.
+  { clave: "dimerizable", titulo: "Dimerizable", control: "lista", orden: 180, valores: { si: "Sí", no: "No" }, grupo: "iluminacion" },
 ];
 
 const POR_CLAVE = new Map<string, ClaveFacetable>(REGISTRO.map((c) => [c.clave, c]));
@@ -142,17 +152,36 @@ export const OVERRIDES: Readonly<Record<string, OverrideCategoria>> = {};
 const formatoNumero = (n: number) => n.toLocaleString("es-AR", { maximumFractionDigits: 2, useGrouping: false });
 const capitalizar = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-/** Etiqueta legible de un valor de lista: "20 A", "IP54", "E27", "Cálido". */
+/**
+ * Rango "a-b" de un valor de lista de una clave con `rangoEnTexto` (números canónicos dentro del rango válido,
+ * a < b), o null. Es la misma forma que guarda el CRM en `valor_texto` ("4-6", "1.6-2.5").
+ */
+export function rangoDeValorLista(clave: string, valor: string): [number, number] | null {
+  if (!claveFacetable(clave)?.rangoEnTexto) return null;
+  const trozos = valor.split("-");
+  if (trozos.length !== 2) return null;
+  const [a, b] = trozos.map(numeroCanonico);
+  const valido = rangoDeClave(clave);
+  if (a === null || b === null || a >= b) return null;
+  if (valido && (a < valido[0] || b > valido[1])) return null;
+  return [a, b];
+}
+
+/** Etiqueta legible de un valor de lista: "20 A", "4–6 A" (rango de regulación), "IP54", "E27", "Cálido". */
 export function etiquetaValor(clave: string, valor: string): string {
   const def = claveFacetable(clave);
   if (clave === "ip") return `IP${valor}`;
   const propia = def?.valores?.[valor];
   if (propia) return propia;
+  if (clave === "modulos" && valor === "1") return "1 módulo";
   if (TIPO[clave as ClaveEstructurada] === "num") {
+    const unidad = def?.unidad;
+    const sufijo = unidad ? (unidad === "°" ? "°" : ` ${unidad}`) : "";
+    const rango = rangoDeValorLista(clave, valor);
+    if (rango) return `${formatoNumero(rango[0])}–${formatoNumero(rango[1])}${sufijo}`;
     const n = Number(valor);
     if (!Number.isFinite(n)) return valor;
-    const unidad = def?.unidad;
-    return `${formatoNumero(n)}${unidad ? (unidad === "°" ? "°" : ` ${unidad}`) : ""}`;
+    return `${formatoNumero(n)}${sufijo}`;
   }
   return capitalizar(valor);
 }
@@ -164,6 +193,7 @@ export function etiquetaValor(clave: string, valor: string): string {
 export function valorDeListaValido(clave: string, valor: string): boolean {
   if (!RE_VALOR_CAR.test(valor)) return false;
   if (TIPO[clave as ClaveEstructurada] !== "num") return true;
+  if (rangoDeValorLista(clave, valor)) return true;
   const n = numeroCanonico(valor);
   if (n === null) return false;
   const rango = rangoDeClave(clave);
@@ -194,9 +224,18 @@ export interface EntradaFacetas {
   categoria?: string;
 }
 
-/** Orden de los valores de una lista: números de menor a mayor; texto en el orden del vocabulario y luego alfabético. */
+/**
+ * Orden de los valores de una lista: números de menor a mayor (un rango "a-b" por su mínimo y después por su tope:
+ * "4" < "4–6" < "6" < "6–10"); texto en el orden del vocabulario y luego alfabético.
+ */
 function ordenDeValores(def: ClaveFacetable): (a: string, b: string) => number {
-  if (TIPO[def.clave] === "num") return (a, b) => Number(a) - Number(b);
+  if (TIPO[def.clave] === "num") {
+    const extremos = (v: string): [number, number] => rangoDeValorLista(def.clave, v) ?? [Number(v), Number(v)];
+    return (a, b) => {
+      const [ea, eb] = [extremos(a), extremos(b)];
+      return ea[0] - eb[0] || ea[1] - eb[1];
+    };
+  }
   const vocabulario = Object.keys(def.valores ?? {});
   const pos = (v: string) => {
     const i = vocabulario.indexOf(v);

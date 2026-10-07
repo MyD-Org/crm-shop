@@ -42,6 +42,21 @@ export const MEDIA_MOBILE = `(max-width: ${BREAKPOINT_MOBILE - 0.02}px)`;
 export const ATRIBUTO_PEEK = "data-chat-peek";
 
 /**
+ * Atributos de `<html>` que ocultan el launcher (y el teaser) del chat en mobile
+ * (< 768 px): globals.css hace el `display: none`. En desktop no cambia nada.
+ * - `data-chat-oculto`: lo pone ChatIaWidget según la ruta (`ocultarLauncherEnRuta`).
+ * - `data-filtros-abiertos`: lo pone la hoja de filtros del catálogo mientras está abierta.
+ * Sólo se oculta el launcher: si el chat ya estaba abierto, la hoja sigue como está.
+ */
+export const ATRIBUTO_OCULTO = "data-chat-oculto";
+export const ATRIBUTO_FILTROS_ABIERTOS = "data-filtros-abiertos";
+
+/** Rutas donde el launcher del chat no se muestra en mobile: todo el checkout (incluye "Pague su pedido" y "Pedido recibido"). */
+export function ocultarLauncherEnRuta(pathname: string): boolean {
+  return /^\/checkout(\/|$)/.test(pathname);
+}
+
+/**
  * Filtros del agente → estado del catálogo, con las MISMAS reglas que la URL
  * (`leerEstado`): lo inválido se descarta (atributo desconocido, precio
  * negativo, orden raro). `in_stock_only: false` incluye los sin stock; sin el

@@ -52,6 +52,8 @@ import {
 import { provinciaCanonica } from "@/lib/provincias";
 import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
+import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
+import type { ChipMedio } from "@/lib/medios-pago-chips";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import {
   NOTA_PAGO_A_CONFIRMAR,
@@ -177,12 +179,15 @@ function RadioCard({
   onClick,
   title,
   description,
+  chips,
   disabled,
 }: {
   selected: boolean;
   onClick: () => void;
   title: string;
   description?: string;
+  /** Etiquetas del medio (las carga el admin): se muestran resaltadas bajo el título. */
+  chips?: ChipMedio[];
   disabled?: boolean;
 }) {
   return (
@@ -206,6 +211,7 @@ function RadioCard({
       <span>
         <span className="block text-sm font-semibold text-text">{title}</span>
         {description && <span className="mt-0.5 block text-xs text-muted">{description}</span>}
+        <ChipsMedioPago chips={chips} />
       </span>
     </button>
   );
@@ -1581,6 +1587,7 @@ export function CheckoutClient({
                         onClick={() => setMedioSlug(m.slug)}
                         title={m.nombre}
                         description={esPagoEnLinea(m.slug) ? DESCRIPCION_PAGO_EN_LINEA : undefined}
+                        chips={m.chips}
                       />
                     ))}
                   </div>

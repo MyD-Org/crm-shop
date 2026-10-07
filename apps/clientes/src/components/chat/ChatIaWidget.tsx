@@ -14,6 +14,7 @@ import { useSenalesIniciativa } from "@/hooks/useSenalesIniciativa";
 import { contextoParaChat } from "@/lib/chat-ia-puente";
 import {
   ATRIBUTO_DOCK,
+  ATRIBUTO_OCULTO,
   ATRIBUTO_PEEK,
   BREAKPOINT_MOBILE,
   MEDIA_DOCK,
@@ -22,8 +23,12 @@ import {
   hojaMinimizada,
   hrefDeFiltros,
   idProductoDeRuta,
+  ocultarLauncherEnRuta,
   puedeNavegarSolo,
 } from "@/lib/chat-ia-integracion";
+
+/** Invitación proactiva del chat (teaser junto a la burbuja). Apagada: la burbuja sigue disponible. */
+const INVITACION_PROACTIVA = false;
 
 /**
  * El widget habla con ai-api por `/ai-api/*` (rewrite same-origin de
@@ -158,6 +163,16 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
     return () => html.removeAttribute(ATRIBUTO_PEEK);
   }, [minimizada]);
 
+  // En el checkout el launcher no se muestra en mobile (globals.css, por este
+  // atributo): sólo se oculta la burbuja, un chat ya abierto no se cierra.
+  const ocultar = ocultarLauncherEnRuta(pathname);
+  useEffect(() => {
+    const html = document.documentElement;
+    if (ocultar) html.setAttribute(ATRIBUTO_OCULTO, "");
+    else html.removeAttribute(ATRIBUTO_OCULTO);
+    return () => html.removeAttribute(ATRIBUTO_OCULTO);
+  }, [ocultar]);
+
   // Invitación proactiva (src/lib/iniciativa/): chat abierto, checkout,
   // agregados al carrito y la espera en la ficha. El teaser queda en el puente
   // (`teaser`, `aceptarTeaser`, `descartarTeaser`) para el launcher.
@@ -263,7 +278,9 @@ export default function ChatIaWidget({ agentId, titulo }: PropsChatIa) {
       onPresentationChange={setPresentacion}
       // Invitación proactiva (src/lib/iniciativa/): el puente cuenta los topes
       // al aceptar o cerrar; el widget sólo la dibuja.
-      teaser={teaser ?? undefined}
+      // Apagada por pedido de la usuaria (2026-10-07): el mensaje proactivo ("¿Necesita ayuda?") no se
+      // muestra. Para volver a encenderla, poner INVITACION_PROACTIVA en true.
+      teaser={INVITACION_PROACTIVA ? (teaser ?? undefined) : undefined}
       onTeaserAction={aceptarTeaser}
       onTeaserDismiss={descartarTeaser}
     />

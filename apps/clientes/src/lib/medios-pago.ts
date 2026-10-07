@@ -9,6 +9,7 @@
  * (`procesadorDisponible`).
  */
 import type { CondicionCuotas } from "./cuotas-sin-interes";
+import type { ChipMedio } from "./medios-pago-chips";
 import { PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
 
 export interface MedioPago {
@@ -43,6 +44,11 @@ export interface MedioPago {
    * siempre por este campo, nunca por el nombre ni el slug.
    */
   audiencia?: AudienciaMedio;
+  /**
+   * Etiquetas que el admin carga para este medio (migración 0071 del CRM): se muestran resaltadas
+   * sobre la opción del medio en el checkout, en este orden (hasta 3). Ausente = sin etiquetas.
+   */
+  chips?: ChipMedio[];
 }
 
 export type AudienciaMedio = "publico" | "cuenta_corriente";

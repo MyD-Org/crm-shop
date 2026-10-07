@@ -246,10 +246,11 @@ export async function calcularMedidas(plan: PlanBusqueda, consultaCruda: string,
     if (dic) {
       registrar(dic);
       if (!yaEnElPlan(dic)) poner(dic, PESO_MEDIDA_BLANDA);
-      // Un zócalo escrito (confianza alta) que no quedó como filtro duro ("mr16": pocos productos) igual manda en
-      // el orden: el MR16 (12 V) va antes que el GU10 (220 V), que baja. El id del diccionario sólo suma 0,9 y
-      // pierde contra el nombre ("DICROICA…" gana a "DICRO … MR16"); el dinámico es el orden estricto.
-      if (m.clave === "zocalo" && m.confianza === "alta" && !base.duros.atributos.includes(dic)) {
+      // Un zócalo escrito (confianza alta) manda en el orden: el MR16 (12 V) va antes que el GU10 (220 V), que
+      // baja. El id del diccionario sólo suma 0,9 y pierde contra el nombre ("DICROICA…" gana a "DICRO … MR16");
+      // el dinámico es el orden estricto. También cuando el del diccionario quedó duro en el plan: lo deducido ya
+      // no filtra desde `/buscar` (ordena), así que el escalón es el que pone primero al que cumple.
+      if (m.clave === "zocalo" && m.confianza === "alta") {
         const estricto = idDeMedida({ clave: m.clave, op: m.op, valor: m.valor, min: m.min, max: m.max });
         if (estricto) {
           registrar(estricto);

@@ -229,6 +229,8 @@ const AVISO_PAGO_A_COORDINAR =
 interface Props {
   /** Id del pedido cuyo pago se reintenta (`/checkout?pedido=`): se retoma ese, nunca se crea otro. */
   pedidoReintento?: string | null;
+  /** Vuelve de pagar con su cuenta de Mercado Pago: se retoma en "Estamos confirmando su pago" (sondeo; el webhook registra el cobro). */
+  retornoMercadoPago?: boolean;
   nombreSugerido: string;
   /**
    * Teléfono precargado: el de Alegra del vinculado (`facturacion.telefonoAlegra`,
@@ -322,6 +324,7 @@ export function CheckoutClient({
   esCuentaCorriente = false,
   eleccionInicial = null,
   pedidoReintento = null,
+  retornoMercadoPago = false,
 }: Props) {
   const { items, vaciarTrasPedido, ready, addItems } = useCart();
 
@@ -575,7 +578,7 @@ export function CheckoutClient({
       // El servidor manda el medio del pedido; sin él (respuesta anterior) era Mercado Pago.
       procesador: procesadorDeMedio(pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
     });
-    setPagoEnConfirmacion(Boolean(pedido.pagoEnCurso));
+    setPagoEnConfirmacion(Boolean(pedido.pagoEnCurso) || (retornoMercadoPago && pedido.id === pedidoReintento));
     setCarritoDelPedido(false);
   }
   // Mismo carrito (o vacío): se retoma en el render, sin un frame del formulario.

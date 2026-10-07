@@ -73,6 +73,18 @@ describe("customizacionBrick", () => {
     });
   });
 
+  it("dinero en cuenta sólo en un pago: con 2 o más cuotas la tarjeta de crédito queda sola", () => {
+    expect(customizacionBrick(3).paymentMethods).toEqual({ creditCard: "all", debitCard: "all", maxInstallments: 3 });
+    expect(customizacionBrick(1).paymentMethods.mercadoPago).toBe("all");
+    expect(customizacionBrick(undefined).paymentMethods.mercadoPago).toBe("all");
+  });
+
+  it("sin preferencia (cuentaMp=false) no se ofrece la cuenta aunque sea en un pago", () => {
+    expect(customizacionBrick(undefined, false).paymentMethods).toEqual({ creditCard: "all", debitCard: "all" });
+    expect(customizacionBrick(1, false).paymentMethods.mercadoPago).toBeUndefined();
+    expect(customizacionBrick(undefined, false)).toBe(customizacionBrick(undefined, false));
+  });
+
   it("misma identidad para el mismo maxCuotas (re-renders del padre)", () => {
     expect(customizacionBrick(6)).toBe(customizacionBrick(6));
     expect(customizacionBrick(undefined)).toBe(customizacionBrick(undefined));
@@ -96,7 +108,9 @@ describe("customizacionBrick", () => {
 
 describe("PagoMercadoPago usa la customization estable", () => {
   it("memoiza con deps [maxCuotas] y pasa esa instancia al Brick", () => {
-    expect(fuente).toMatch(/useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(maxCuotas\),\s*\[maxCuotas\]\s*\)/);
+    expect(fuente).toMatch(
+      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(maxCuotas, Boolean\(preferenceId\)\),\s*\[maxCuotas, preferenceId\]\s*,?\s*\)/,
+    );
     expect(fuente).toMatch(/customization=\{customization\}/);
   });
 });

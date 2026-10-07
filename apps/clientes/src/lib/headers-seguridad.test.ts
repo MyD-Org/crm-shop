@@ -42,6 +42,8 @@ describe("politicaCsp", () => {
     });
     expect(csp).toMatch(/script-src [^;]*https:\/\/sdk\.mercadopago\.com/);
     expect(csp).toMatch(/frame-src [^;]*https:\/\/\*\.mercadopago\.com/);
+    expect(csp).toMatch(/frame-src [^;]*https:\/\/\*\.mercadopago\.com\.ar/);
+    expect(csp).toMatch(/form-action [^;]*https:\/\/\*\.mercadopago\.com\.ar/);
     expect(csp).toMatch(/img-src [^;]*https:\/\/media\.plataforma\.example [^;]*https:\/\/otro\.example/);
     expect(csp).toMatch(/connect-src [^;]*https:\/\/\*\.r2\.cloudflarestorage\.com/);
     // Sin duplicar el host que aparece en las dos variables.

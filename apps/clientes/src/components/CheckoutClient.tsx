@@ -1207,9 +1207,20 @@ export function CheckoutClient({
             <Button variant="outline" href="/mi-cuenta">
               Ver mis pedidos
             </Button>
+            {/* Antes de informar el comprobante puede pasar a otro medio (el servidor lo vuelve a validar). */}
+            {!comprobanteInformado && (
+              <Button variant="ghost" onClick={cambiarMedio} disabled={cancelando}>
+                {cancelando ? "Un momento…" : "Cambiar medio de pago"}
+              </Button>
+            )}
             <Link href="/catalogo" className="self-center py-2 text-sm text-muted underline">
               Seguir comprando
             </Link>
+            {errorCancelar && (
+              <p role="alert" className="text-center text-sm text-danger">
+                {errorCancelar}
+              </p>
+            )}
           </div>
           {confirmado.contacto && (
             <PedidoContacto contacto={confirmado.contacto} centrado enlaceChico mostrarPlazo={false} />

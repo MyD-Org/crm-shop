@@ -205,6 +205,14 @@ describe("armarMailPedidoOperador", () => {
     pedidoUrl: "https://admin.plataforma.example/admin/pedidos/abc",
   };
 
+  it("cambio de medio: asunto y título propios, con el medio anterior y el nuevo", () => {
+    const m = armarMailPedidoOperador({ ...op, pago: "Mercado Pago", medioAnterior: "Transferencia" });
+    expect(m.subject).toBe("Tienda <Demo> — Pedido PED-00000042: cambió el medio de pago");
+    expect(m.html).toContain("Cambió el medio de pago");
+    expect(m.text).toContain("cambió el medio de pago de Transferencia a Mercado Pago");
+    expect(m.html).not.toContain("Nuevo pedido");
+  });
+
   it("asunto, datos del comprador escapados y botón al tablero", () => {
     const m = armarMailPedidoOperador(op);
     expect(m.subject).toBe("Tienda <Demo> — Nuevo pedido PED-00000042");

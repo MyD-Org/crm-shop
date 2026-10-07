@@ -48,6 +48,7 @@ import {
   type CuentaPagoSnapshot,
 } from "./cuentas-bancarias";
 import { leerCuentasBancariasEnTx } from "./cuentas-bancarias-repo";
+import { medioAdmiteCambio } from "./cambiar-medio-pago";
 import type { PedidoParaComprobante } from "./comprobantes/pedido";
 import { pedidosConComprobanteInformado } from "./comprobantes/repo";
 
@@ -1760,7 +1761,7 @@ export async function cambiarMedioPedido(
       .limit(1)
       .for("update");
     if (!pedido) return { ok: false, motivo: "no_existe" };
-    if (!esPagoEnLinea(pedido.pagoMetodo)) return { ok: false, motivo: "no_cambia" };
+    if (!medioAdmiteCambio(pedido.pagoMetodo)) return { ok: false, motivo: "no_cambia" };
 
     const [abierto] = await tx
       .select({ id: pagoIntentos.id })

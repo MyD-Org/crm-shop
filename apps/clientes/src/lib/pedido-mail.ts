@@ -311,12 +311,22 @@ export interface DatosMailPedidoOperador {
   pedidoUrl?: string | null;
   logoUrl?: string | null;
   sitioUrl?: string | null;
+  /**
+   * El comprador le cambió el medio a un pedido que el local ya conocía (por ejemplo, de
+   * transferencia a Mercado Pago): nombre del medio anterior. El mail pasa a ser "Cambió el medio
+   * de pago" y `pago` es el medio nuevo.
+   */
+  medioAnterior?: string;
 }
 
 /** Mail al local: "Nuevo pedido". Puro; todo dato del comprador pasa por `escapeHtml`. */
 export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido {
-  const subject = `${oneLine(d.comercio)} — Nuevo pedido ${d.numero}`.slice(0, 200);
-  const bajada = "Se registró un pedido nuevo en la tienda. Revíselo y coordine con la persona compradora.";
+  const cambio = d.medioAnterior?.trim();
+  const titulo = cambio ? "Cambió el medio de pago" : "Nuevo pedido";
+  const subject = `${oneLine(d.comercio)} — ${cambio ? `Pedido ${d.numero}: cambió el medio de pago` : `Nuevo pedido ${d.numero}`}`.slice(0, 200);
+  const bajada = cambio
+    ? `La persona compradora cambió el medio de pago de ${cambio} a ${d.pago ?? "otro medio"}. Ya no espere el pago anterior.`
+    : "Se registró un pedido nuevo en la tienda. Revíselo y coordine con la persona compradora.";
   const comprador: [string, string | undefined][] = [
     ["Nombre", d.contactoNombre.trim() || undefined],
     ["Teléfono", d.contactoTelefono.trim() || undefined],
@@ -354,7 +364,7 @@ export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido 
 
   const cuerpoHtml = `
       <tr><td style="padding:20px 32px 0;font-family:${FUENTE_MAIL};color:#1c2733">
-        <p style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700">Nuevo pedido</p>
+        <p style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700">${e(titulo)}</p>
         <p style="margin:0;font-size:15px;line-height:1.55;color:#77808a">${e(bajada)}</p>
         <p style="margin:12px 0 0;font-size:14px;color:#77808a">Pedido <strong style="color:#1c2733">${e(d.numero)}</strong></p>
       </td></tr>
@@ -372,7 +382,7 @@ export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido 
       </td></tr>`;
 
   const html = tarjetaMail({
-    preheader: `Nuevo pedido ${d.numero} · ${moneda(d.total)}`,
+    preheader: `${titulo} · ${d.numero} · ${moneda(d.total)}`,
     logoUrl: d.logoUrl,
     nombreComercio: d.comercio,
     cuerpoHtml,
@@ -380,7 +390,7 @@ export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido 
   });
 
   const text = [
-    "Nuevo pedido",
+    titulo,
     "",
     bajada,
     "",

@@ -11,7 +11,9 @@ const fuente = readFileSync(join(__dirname, "CheckoutClient.tsx"), "utf8");
 describe("CheckoutClient: cambiar medio de pago", () => {
   it("el botón sólo se renderiza detrás de puedeCambiarMedioPago (ni pagado ni cobro en vuelo) y sin cuenta corriente", () => {
     expect(fuente).toContain("puedeCambiarMedioPago({ pagado, pagoEnConfirmacion }) && !esCuentaCorriente");
-    expect(fuente.split(': "Cambiar medio de pago"}')).toHaveLength(2);
+    // Dos lugares: el cobro en línea y la pantalla de transferencia (ésta, sólo sin comprobante informado).
+    expect(fuente.split(': "Cambiar medio de pago"}')).toHaveLength(3);
+    expect(fuente).toContain("{!comprobanteInformado && (\n              <Button variant=\"ghost\" onClick={cambiarMedio}");
   });
 
   it("no cancela: confirma sobre el mismo pedido con POST /api/pedidos/:id/medio y vuelve siempre al paso Pago", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { precargaDeEntrega, puedeCambiarMedioPago } from "./cambiar-medio-pago";
+import { medioAdmiteCambio, precargaDeEntrega, puedeCambiarMedioPago } from "./cambiar-medio-pago";
 
 describe("puedeCambiarMedioPago", () => {
   it("con el formulario de pago sin enviar o tras un rechazo, sí", () => {
@@ -33,5 +33,13 @@ describe("precargaDeEntrega", () => {
   it("envío a una dirección no guardada: otra dirección con lo tipeado en el pedido", () => {
     const p = precargaDeEntrega({ tipo: "envio", local: null, ciudad: "Oberá", direccion: "Calle Falsa 123" }, direcciones, locales);
     expect(p).toEqual({ opcion: "domicilio", local: null, direccionGuardada: null, tipeada: { ciudad: "Oberá", direccion: "Calle Falsa 123" } });
+  });
+});
+
+describe("medioAdmiteCambio", () => {
+  it("los de cobro en línea y la transferencia, sí; los que coordina el local, no", () => {
+    expect(medioAdmiteCambio("mercadopago")).toBe(true);
+    expect(medioAdmiteCambio("transferencia")).toBe(true);
+    expect(medioAdmiteCambio("efectivo")).toBe(false);
   });
 });

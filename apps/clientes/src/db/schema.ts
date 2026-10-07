@@ -422,6 +422,14 @@ export const orders = shop.table(
      * el flag `cuotas-cobro` apagado (rige el clamp de siempre). El cobro tiene que coincidir.
      */
     cuotas: integer("cuotas"),
+    /**
+     * Cuándo salieron los avisos "Recibimos su pedido" (comprador) y "Nuevo pedido" (local) de un
+     * pedido sin cobro en línea. Con transferencia no salen al crearlo: salen al irse de la pantalla
+     * de transferencia, al informar el comprobante o, como respaldo, desde el cron a los 15 minutos
+     * (`avisarPedidoSiFalta`), con el medio que tenga el pedido en ese momento. null = todavía no.
+     * Con cobro en línea no se usa: los avisos salen al aprobarse el pago.
+     */
+    avisosEnviadosEn: timestamp("avisos_enviados_en", { withTimezone: true }),
     /** Cuotas reales que informó el proveedor al confirmar el pago. */
     pagoCuotas: integer("pago_cuotas"),
     /** Total pagado real (con interés) según el proveedor. `total` no cambia. */

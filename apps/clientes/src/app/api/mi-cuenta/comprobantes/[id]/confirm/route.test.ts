@@ -17,13 +17,23 @@ const avisar = vi.fn();
 const datosTenant = vi.fn();
 const numeroDePedido = vi.fn();
 
+const despues: (() => Promise<void> | void)[] = [];
+const buscarPublicado = vi.fn();
+const avisarPedidoSiFalta = vi.fn(async () => true);
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: (f: () => Promise<void> | void) => {
+    despues.push(f);
+  },
+}));
+vi.mock("@/lib/pedido-avisos", () => ({ avisarPedidoSiFalta: (...a: unknown[]) => avisarPedidoSiFalta(...(a as [])) }));
 vi.mock("@/lib/auth", () => ({ identidadActual: () => identidad() }));
 vi.mock("@/lib/acceso-facturacion", () => ({ accesoFacturacion: () => acceso() }));
 vi.mock("@/lib/r2", () => ({ getComprobantesR2: () => getR2() }));
 vi.mock("@/lib/tenant", () => ({ shopTenantId: () => "tenant-a" }));
 vi.mock("@/lib/pedidos", () => ({ numeroDePedido: (...a: unknown[]) => numeroDePedido(...a) }));
 vi.mock("@/lib/cuenta-corriente/tenant-cc", () => ({ datosTenant: () => datosTenant() }));
-vi.mock("@/lib/comprobantes/repo", () => ({}));
+vi.mock("@/lib/comprobantes/repo", () => ({ buscarPublicado: (...a: unknown[]) => buscarPublicado(...a) }));
 vi.mock("@/lib/comprobantes/mail", () => ({ enviarAvisoComprobante: (...a: unknown[]) => avisar(...a) }));
 vi.mock("@/lib/comprobantes/confirmar", () => ({ confirmarComprobante: (...a: unknown[]) => confirmar(...a) }));
 
@@ -148,5 +158,19 @@ describe("POST /api/mi-cuenta/comprobantes/[id]/confirm", () => {
     const res = await pedir();
     expect(res.status).toBe(500);
     expect((await res.json()).error).toBe("No pudimos procesar el comprobante. Inténtelo de nuevo en unos minutos.");
+  });
+});
+
+describe("avisos del pedido al informar su comprobante", () => {
+  it("si el comprobante es de un pedido, salen sus avisos si faltaban", async () => {
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
+    getR2.mockReturnValue({});
+    confirmar.mockResolvedValue({ ok: true, status: "pendiente" });
+    buscarPublicado.mockResolvedValue({ shopOrderId: "pedido-1" });
+    despues.length = 0;
+    const r = await pedir();
+    expect(r.status).toBe(200);
+    await Promise.all(despues.map((f) => f()));
+    expect(avisarPedidoSiFalta).toHaveBeenCalledWith("pedido-1");
   });
 });

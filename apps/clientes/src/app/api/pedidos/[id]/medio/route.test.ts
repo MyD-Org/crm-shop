@@ -7,6 +7,7 @@ import type { IntentoAbierto } from "@/lib/pedidos";
  */
 
 const pedidoParaCambiarMedio = vi.fn();
+const avisarPedidoSiFalta = vi.fn(async (_id: string) => true);
 const cambiarMedioPedido = vi.fn();
 const intentoAbiertoDelPedido = vi.fn();
 const resolverIntentoAbierto = vi.fn();
@@ -40,6 +41,7 @@ vi.mock("@/lib/pedido-avisos", () => ({
   avisoOperadorAlCrear: (m: string) => m !== "mercadopago" && m !== "payway",
   avisarPedidoRecibido: (...a: unknown[]) => avisarPedidoRecibido(...a),
   avisarOperadorPedidoNuevo: (...a: unknown[]) => avisarOperadorPedidoNuevo(...a),
+  avisarPedidoSiFalta: (id: string) => avisarPedidoSiFalta(id),
 }));
 vi.mock("@/lib/cotizacion", async (orig) => ({
   ...(await orig<typeof import("@/lib/cotizacion")>()),
@@ -96,7 +98,7 @@ const abierto: IntentoAbierto = { id: "i1", proveedor: "mercadopago", referencia
 beforeEach(() => {
   for (const f of [
     pedidoParaCambiarMedio, cambiarMedioPedido, intentoAbiertoDelPedido, resolverIntentoAbierto, cotizar,
-    avisarPedidoRecibido, avisarOperadorPedidoNuevo,
+    avisarPedidoRecibido, avisarOperadorPedidoNuevo, avisarPedidoSiFalta,
   ]) f.mockReset();
   despues.length = 0;
   mediosOk = true;
@@ -113,7 +115,7 @@ beforeEach(() => {
 });
 
 describe("POST /api/pedidos/:id/medio", () => {
-  it("a un medio sin cobro en línea: actualiza el MISMO pedido, no crea otro y manda 'pedido recibido' una vez", async () => {
+  it("a transferencia: actualiza el MISMO pedido, no crea otro y los avisos esperan a que se vaya de la pantalla", async () => {
     const r = await llamar({ pagoMetodo: "transferencia" });
     expect(r.status).toBe(200);
     const j = await r.json();
@@ -122,8 +124,8 @@ describe("POST /api/pedidos/:id/medio", () => {
     expect(cambiarMedioPedido.mock.calls[0][0]).toBe("p1");
     expect(cambiarMedioPedido.mock.calls[0][2]).toMatchObject({ pagoMetodo: "transferencia", cuotas: null });
     await Promise.all(despues.map((f) => f()));
-    expect(avisarPedidoRecibido).toHaveBeenCalledTimes(1);
-    expect(avisarPedidoRecibido).toHaveBeenCalledWith("p1");
+    expect(avisarPedidoRecibido).not.toHaveBeenCalled();
+    expect(avisarPedidoSiFalta).not.toHaveBeenCalled();
   });
 
   it("a otro medio en línea: no manda mails hasta el pago", async () => {
@@ -200,8 +202,17 @@ describe("POST /api/pedidos/:id/medio", () => {
     expect(await r.json()).toMatchObject({ motivo: "no_cambia" });
   });
 
-  it("de transferencia a Mercado Pago: cambia y avisa al local del cambio, sin otro 'recibido' al comprador", async () => {
-    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "transferencia", lineas: [{ id: "1", qty: 2 }] });
+  it("de transferencia todavía sin avisar a Mercado Pago: no sale ningún aviso (llegan con el pago)", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "transferencia", lineas: [{ id: "1", qty: 2 }], avisosEnviados: false });
+    expect((await llamar({ pagoMetodo: "mercadopago" })).status).toBe(200);
+    await Promise.all(despues.map((f) => f()));
+    expect(avisarOperadorPedidoNuevo).not.toHaveBeenCalled();
+    expect(avisarPedidoRecibido).not.toHaveBeenCalled();
+    expect(avisarPedidoSiFalta).not.toHaveBeenCalled();
+  });
+
+  it("de transferencia YA avisada a Mercado Pago: cambia y avisa al local del cambio, sin otro 'recibido' al comprador", async () => {
+    pedidoParaCambiarMedio.mockResolvedValue({ entregaTipo: "retiro", pagoMetodo: "transferencia", lineas: [{ id: "1", qty: 2 }], avisosEnviados: true });
     const r = await llamar({ pagoMetodo: "mercadopago" });
     expect(r.status).toBe(200);
     expect(cambiarMedioPedido.mock.calls[0][2]).toMatchObject({ pagoMetodo: "mercadopago" });

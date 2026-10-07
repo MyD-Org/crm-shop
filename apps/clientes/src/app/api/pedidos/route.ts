@@ -21,7 +21,8 @@ import { procesadorConfigurado } from "@/lib/pagos";
 import { contactoDelPedido } from "@/lib/contacto-pedido-repo";
 import { listaPrivadaDelComprador } from "@/lib/lista-cuenta-repo";
 import { motivoRevisionPedido } from "@/lib/motivo-revision";
-import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
+import { avisarPedidoSiFalta, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
+import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
 import { permitir } from "@/lib/rate-limit";
 import { sucursalesHabilitadas } from "@/lib/sucursales-flag";
 import { SucursalPedidoError } from "@/lib/sucursales-pedido";
@@ -518,12 +519,11 @@ export async function POST(req: Request) {
       // Y el aviso al local (sucursal del pedido, o el email de la empresa), en el mismo after():
       // ninguno de los dos lanza, y el del comprador sale primero. Con pago en línea ambos
       // esperan a que se apruebe el cobro (los manda `avisarCobro`).
-      const avisarAlCrear = avisoOperadorAlCrear(pagoMetodo);
-      if (avisarAlCrear) {
-        after(async () => {
-          await avisarPedidoRecibido(pedidoId);
-          await avisarOperadorPedidoNuevo(pedidoId);
-        });
+      // Con transferencia se espera: el comprador todavía puede cambiar el medio desde la pantalla de
+      // transferencia. Los avisos salen al irse de ella, al informar el comprobante o desde el cron
+      // (`avisarPedidoSiFalta`), con el medio que tenga el pedido entonces.
+      if (avisoOperadorAlCrear(pagoMetodo) && pagoMetodo !== SLUG_TRANSFERENCIA) {
+        after(() => avisarPedidoSiFalta(pedidoId).then(() => undefined));
       }
     }
 

@@ -78,6 +78,7 @@ export function InformarPago({
   ultimos,
   onInformado,
   pedido,
+  abrirAlMontar = false,
 }: {
   /** Los últimos comprobantes enviados, para no duplicar. */
   ultimos: ComprobanteCliente[];
@@ -89,9 +90,11 @@ export function InformarPago({
    * pedido viaja en el init como `pedidoId`.
    */
   pedido?: { id: string; numero: string; total: number };
+  /** Arranca con el formulario abierto (link "Cargar comprobante" de Mis pedidos). */
+  abrirAlMontar?: boolean;
 }) {
   const { toast } = useToast();
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(abrirAlMontar);
   const [file, setFile] = useState<File | null>(null);
   const [monto, setMonto] = useState(pedido ? montoPrecargado(pedido.total) : "");
   // Por defecto, hoy (en Argentina): lo más común es informar la transferencia el mismo día.

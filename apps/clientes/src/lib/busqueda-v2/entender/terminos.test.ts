@@ -36,6 +36,29 @@ describe("términos con peso", () => {
   });
 });
 
+describe("un lugar que también es un producto, sin otra palabra de producto ni de luz", () => {
+  it("«escalera» y «escalera chica» buscan la escalera; el tamaño sigue siendo contexto", () => {
+    expect(peso("escalera")).toEqual({ escalera: 1 });
+    expect(peso("escalera chica")).toEqual({ escalera: 1, chica: PESO_CONTEXTO });
+    expect(peso("escaleras")).toEqual({ escaleras: 1 });
+    expect(peso("necesito una escalera")).toMatchObject({ escalera: 1, necesito: PESO_CONTEXTO });
+  });
+
+  it("con luz o con una palabra de producto, la escalera sigue siendo el lugar", () => {
+    expect(peso("luz para la escalera")).toEqual({ luz: PESO_CONTEXTO, escalera: PESO_CONTEXTO });
+    expect(peso("iluminar la escalera")).toEqual({ iluminar: PESO_CONTEXTO, escalera: PESO_CONTEXTO });
+    expect(peso("algo que se prenda solo en la escalera")).toMatchObject({ escalera: PESO_CONTEXTO });
+    expect(peso("aplique para escalera")).toMatchObject({ aplique: 1, escalera: PESO_CONTEXTO });
+    expect(peso("lampara para la escalera")).toMatchObject({ lampara: 1, escalera: PESO_CONTEXTO });
+  });
+
+  it("los demás lugares no cambian: «patio», «frente», «jardin» solos siguen como contexto", () => {
+    expect(peso("patio")).toEqual({ patio: PESO_CONTEXTO });
+    expect(peso("frente")).toEqual({ frente: PESO_CONTEXTO });
+    expect(peso("algo para el jardin")).toMatchObject({ jardin: PESO_CONTEXTO });
+  });
+});
+
 describe("palabras que nombran un tipo de producto no son contexto", () => {
   it.each(["escritorio", "mesa", "techo", "pared", "piso"])("«%s» recupera y ordena con peso 1", (palabra) => {
     expect(peso(`lampara de ${palabra}`)).toMatchObject({ lampara: 1, [palabra]: 1 });

@@ -1470,6 +1470,19 @@ export async function pedidoPendienteMasReciente(
     .limit(1);
 
   if (!fila) return null;
+  return armarRescate(fila);
+}
+
+type FilaRescate = {
+  id: string;
+  numero: number;
+  total: string | null;
+  cuotas: number | null;
+  pagoMetodo: string;
+};
+
+/** Completa un pedido a retomar con sus líneas y si ya hay un cobro enviado sin resolver. */
+async function armarRescate(fila: FilaRescate) {
   const lineas = await getDb()
     .select({ id: orderItems.alegraItemId, qty: orderItems.qty })
     .from(orderItems)
@@ -1495,6 +1508,49 @@ export async function pedidoPendienteMasReciente(
     lineas: lineas.map((l) => ({ id: l.id, qty: num(l.qty) })),
     pagoEnCurso: Boolean(enCurso),
   };
+}
+
+export type ReintentoPago =
+  | { ok: true; pedido: NonNullable<Awaited<ReturnType<typeof pedidoPendienteMasReciente>>> }
+  | { ok: false; motivo: "no_existe" | "pagado" | "no_cobrable" };
+
+/**
+ * Retoma el cobro de UN pedido concreto (el link "Reintentar el pago"), incluso con el pago
+ * rechazado (`pago_estado = 'fallido'`), que el rescate genérico no cubre. Nunca crea un pedido:
+ * devuelve el mismo, con su total y cuotas congelados. Sólo del dueño (pedido ajeno = `no_existe`),
+ * con cobro en línea, sin pago aprobado y todavía cobrable (`motivoNoCobrable`).
+ */
+export async function pedidoParaReintentarPago(
+  dueno: DuenoPedidos,
+  id: string,
+  slugsPagoLinea: readonly string[] = slugsPagoEnLinea(),
+  ahora = Date.now(),
+): Promise<ReintentoPago> {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(id)) return { ok: false, motivo: "no_existe" };
+  const [fila] = await getDb()
+    .select({
+      id: orders.id,
+      numero: orders.numero,
+      total: orders.total,
+      cuotas: orders.cuotas,
+      pagoMetodo: orders.pagoMetodo,
+      pagoEstado: orders.pagoEstado,
+      estado: orders.estado,
+      createdAt: orders.createdAt,
+    })
+    .from(orders)
+    .where(and(eq(orders.id, id), esDeSuDueno(dueno)))
+    .limit(1);
+  if (!fila) return { ok: false, motivo: "no_existe" };
+  if (fila.pagoEstado === "pagado") return { ok: false, motivo: "pagado" };
+  if (
+    !slugsPagoLinea.includes(fila.pagoMetodo) ||
+    motivoNoCobrable({ estado: fila.estado as OrderEstado, creadoEn: fila.createdAt }, ahora)
+  ) {
+    return { ok: false, motivo: "no_cobrable" };
+  }
+  return { ok: true, pedido: await armarRescate(fila) };
 }
 
 /**

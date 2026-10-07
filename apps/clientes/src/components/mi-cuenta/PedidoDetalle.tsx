@@ -81,7 +81,7 @@ export function PedidoDetalle({
           {consultarPago && <ActualizarPagoPedido pedidoId={pedido.id} />}
           {puedeReintentar && (
             <div className="mt-3">
-              <BotonEnlace size="sm" href="/checkout">
+              <BotonEnlace size="sm" href={`/checkout?pedido=${pedido.id}`}>
                 Reintentar el pago
               </BotonEnlace>
             </div>

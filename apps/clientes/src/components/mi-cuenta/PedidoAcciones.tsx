@@ -85,7 +85,7 @@ export function PedidoAcciones({
   return (
     <div className={contenedor}>
       {reintentarPago && (
-        <Button href="/checkout" renderLink={linkNext}>
+        <Button href={`/checkout?pedido=${pedidoId}`} renderLink={linkNext}>
           Reintentar el pago
         </Button>
       )}

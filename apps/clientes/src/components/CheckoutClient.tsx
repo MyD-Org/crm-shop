@@ -244,6 +244,8 @@ const AVISO_PAGO_A_COORDINAR =
   "El pago se coordina con un asesor después de confirmar su pedido.";
 
 interface Props {
+  /** Id del pedido cuyo pago se reintenta (`/checkout?pedido=`): se retoma ese, nunca se crea otro. */
+  pedidoReintento?: string | null;
   nombreSugerido: string;
   /**
    * Teléfono precargado: el de Alegra del vinculado (`facturacion.telefonoAlegra`,
@@ -318,6 +320,8 @@ type PedidoRescatado = {
   lineas?: { id: string; qty: number }[];
   /** Ya hay un cobro enviado al procesador y sin resolver: se retoma en "Estamos confirmando su pago". */
   pagoEnCurso?: boolean;
+  /** Vino de `?pedido=`: se retoma siempre, sin compararlo con el carrito ni cancelarlo. */
+  explicito?: boolean;
 };
 
 export function CheckoutClient({
@@ -334,6 +338,7 @@ export function CheckoutClient({
   mediosPago = [],
   esCuentaCorriente = false,
   eleccionInicial = null,
+  pedidoReintento = null,
 }: Props) {
   const { items, vaciarTrasPedido, ready, addItems } = useCart();
 
@@ -517,6 +522,8 @@ export function CheckoutClient({
   const [buscandoPendiente, setBuscandoPendiente] = useState(true);
   /** Pedido pendiente encontrado al montar, a decidir cuando cargue el carrito. */
   const [rescate, setRescate] = useState<PedidoRescatado | null>(null);
+  /** El pedido a reintentar ya no se puede cobrar: se explica y se ofrece volver a comprar. */
+  const [errorReintento, setErrorReintento] = useState<string | null>(null);
   /**
    * Al montar, se chequea si hay un pedido pendiente reciente de este comprador
    * (ver `pedidoPendienteMasReciente` en pedidos.ts). Sin este atajo, quien
@@ -528,11 +535,24 @@ export function CheckoutClient({
     // El servidor contesta `{ pedido: null }` sin credenciales de Mercado Pago, y rescata el pedido
     // aunque el medio se haya desactivado en el CRM: el pedido ya existe.
     let cancelado = false;
-    fetch("/api/pedidos/pendiente")
-      .then((r) => (r.ok ? r.json() : null))
+    const url = pedidoReintento
+      ? `/api/pedidos/pendiente?pedido=${encodeURIComponent(pedidoReintento)}`
+      : "/api/pedidos/pendiente";
+    fetch(url)
+      .then(async (r) => {
+        if (r.ok) return r.json();
+        if (pedidoReintento && (r.status === 404 || r.status === 409)) {
+          const j = (await r.json().catch(() => null)) as { error?: string } | null;
+          return { falla: j?.error ?? "Este pedido ya no se puede pagar." };
+        }
+        return null;
+      })
       .then((data) => {
         if (cancelado) return;
-        if (data?.pedido) setRescate(data.pedido);
+        if (data?.falla) {
+          setErrorReintento(data.falla);
+          setBuscandoPendiente(false);
+        } else if (data?.pedido) setRescate(pedidoReintento ? { ...data.pedido, explicito: true } : data.pedido);
         else setBuscandoPendiente(false);
       })
       .catch(() => {
@@ -543,7 +563,7 @@ export function CheckoutClient({
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [pedidoReintento]);
 
   /**
    * Con el carrito cargado se decide qué hacer con el pendiente. El carrito sigue
@@ -554,6 +574,8 @@ export function CheckoutClient({
    */
   const rescateDistinto =
     rescate !== null &&
+    // Un reintento explícito nunca cancela el pedido aunque el carrito sea otro.
+    !rescate.explicito &&
     ready &&
     items.length > 0 &&
     Array.isArray(rescate.lineas) &&
@@ -1061,6 +1083,25 @@ export function CheckoutClient({
               <Button variant="secondary">Seguir comprando</Button>
             </Link>
           </div>
+        </div>
+      </main>
+    );
+  }
+
+  // ------------------------- el pedido a reintentar ya no se puede cobrar
+  if (errorReintento) {
+    return (
+      <main className="mx-auto flex w-full max-w-contenido flex-1 flex-col items-center justify-center gap-4 px-4 py-20 text-center">
+        <p role="alert" className="text-lg font-semibold text-text">{errorReintento}</p>
+        <div className="flex flex-wrap justify-center gap-3">
+          {pedidoReintento && (
+            <Link href={`/mi-cuenta/pedidos/${pedidoReintento}`}>
+              <Button>Volver a comprar</Button>
+            </Link>
+          )}
+          <Link href="/catalogo">
+            <Button variant="outline">Ver catálogo</Button>
+          </Link>
         </div>
       </main>
     );

@@ -56,8 +56,9 @@ export interface PlanObtenido {
  * no se toma. v2: la categoría dura no puede dejar afuera productos que se llaman como se pidió.
  * v3: sinónimos nuevos (tira, decorativa, ajustar, luz de mesa, celu).
  * v4: contexto de humedad (baño, ducha, lavadero), lugares exteriores nuevos y duro que deja 0 → blando.
+ * v5: un lugar que es también un producto ("escalera chica") pesa como producto si no hay otra palabra de producto ni de luz.
  */
-export const VERSION_REGLAS_PLAN = 4;
+export const VERSION_REGLAS_PLAN = 5;
 
 /** Clave del plan en la caché: el árbol activo, el flag `catalogo-solo-visibles` y la versión de las reglas (≤ 64 caracteres). */
 export function clavePlan(arbol: readonly NodoArbol[], soloVisibles: boolean): string {

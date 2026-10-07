@@ -15,6 +15,9 @@
  * - medida o número ("20", "2.5", "60x60"): `PESO_MEDIDA`, sólo ordena;
  * - el resto, significativo: peso 1, recupera y ordena.
  *
+ * Excepción: si la consulta se queda sin ninguna palabra de producto ni de luz y nombra un lugar que
+ * también es un producto ("escalera chica"), ese lugar pasa a peso 1.
+ *
  * Las expansiones (sinónimos) recuperan con `PESO_EXPANSION`.
  */
 import { raizPlural } from "../../catalogo-busqueda";
@@ -62,6 +65,20 @@ export const CONTEXTO = new Set([
   "producto", "nuevo", "nueva", "comun", "blanca", "blanco", "amarilla", "amarillo", "silencioso",
   // Unidades escritas como palabra.
   "amper", "ampere", "amperes", "watt", "watts", "volt", "volts", "metro", "metros", "mm", "cm", "mts",
+]);
+
+/**
+ * Lugares que, escritos solos, nombran un producto del catálogo: quien pide "escalera" o "escalera
+ * chica" busca la escalera, no luz para una escalera. Se promueven a peso 1 sólo cuando la consulta no
+ * tiene ninguna palabra de producto ni de luz (`terminosDe`). No entra cualquier lugar que aparezca
+ * en nombres: "frente" (de tecla) o "galpón" (galponera) conservan su lectura de lugar.
+ */
+const LUGARES_QUE_SON_PRODUCTO = new Set(["escalera"]);
+
+/** Contexto que dice "luminaria / se enciende": con él, un lugar sigue siendo el sitio donde va la luz. */
+const CONTEXTO_DE_LUZ = new Set([
+  "led", "luz", "iluminacion", "iluminar", "ilumine", "alumbrar", "alumbre", "alumbrado",
+  "prenda", "prende", "encienda", "noche",
 ]);
 
 /** ¿Es un lugar o ambiente (en singular normalizado, o plural)? */
@@ -117,6 +134,10 @@ export function terminosDe(consultaNorm: string, absorbidos: ReadonlySet<string>
       continue;
     }
     poner(t, 1);
+  }
+  // Una consulta que es sólo un lugar-producto ("escalera", "escalera chica") busca ese producto.
+  if (![...salida.values()].some((p) => p >= 1) && !tokens.some((t) => CONTEXTO_DE_LUZ.has(t) || CONTEXTO_DE_LUZ.has(raizPlural(t)))) {
+    for (const [texto, p] of salida) if (p === PESO_CONTEXTO && LUGARES_QUE_SON_PRODUCTO.has(raizPlural(texto))) salida.set(texto, 1);
   }
   // Las expansiones salen sólo de lo que no es contexto ni vacío (y de las frases).
   const significativos = tokens.filter((t) => (salida.get(t) ?? 0) >= 1).map(raizPlural);

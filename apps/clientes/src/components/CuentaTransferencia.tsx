@@ -32,15 +32,23 @@ function BotonCopiar({ valor, etiqueta }: { valor: string; etiqueta: string }) {
   );
 }
 
+/** El importe tal como se pega en el homebanking: sin "$" ni puntos de miles, con coma decimal. */
+export function importeParaCopiar(importe: number): string {
+  return Number.isInteger(importe) ? String(importe) : importe.toFixed(2).replace(".", ",");
+}
+
 function Fila({
   nombre,
   valor,
   copiable,
+  copiar,
   destacada,
 }: {
   nombre: string;
   valor: string;
   copiable?: boolean;
+  /** Lo que se copia, si no es el valor que se ve. */
+  copiar?: string;
   destacada?: boolean;
 }) {
   return (
@@ -48,7 +56,7 @@ function Fila({
       <dt className={destacada ? "font-semibold text-text" : "text-muted"}>{nombre}</dt>
       <dd className={`flex items-baseline gap-3 text-right font-semibold text-text ${destacada ? "text-lg" : ""}`}>
         <span className="break-all">{valor}</span>
-        {copiable && <BotonCopiar valor={valor} etiqueta={nombre} />}
+        {(copiable || copiar !== undefined) && <BotonCopiar valor={copiar ?? valor} etiqueta={nombre} />}
       </dd>
     </div>
   );
@@ -73,7 +81,7 @@ export function CuentaTransferencia({
   }
   return (
     <dl className={`divide-y divide-border/50 rounded-lg border border-border/50 bg-surface px-4 py-2 text-sm ${className}`}>
-      {importe !== undefined && <Fila nombre="Importe" valor={fmtPrecio(importe)} destacada />}
+      {importe !== undefined && <Fila nombre="Importe" valor={fmtPrecio(importe)} copiar={importeParaCopiar(importe)} destacada />}
       <Fila nombre="Alias" valor={cuenta.alias} copiable />
       <Fila nombre="CBU" valor={cuenta.cbu} copiable />
       {cuenta.banco && <Fila nombre="Banco" valor={cuenta.banco} />}

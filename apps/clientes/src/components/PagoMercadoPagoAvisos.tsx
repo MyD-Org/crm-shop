@@ -4,7 +4,7 @@ import { Alert, Button } from "@myd-org/ui";
 
 export function AvisoFormularioNoCargo({ onReintentar }: { onReintentar: () => void }) {
   return (
-    <Alert tone="danger" title="No se pudo cargar el formulario de pago" className="mb-4">
+    <Alert tone="danger" title="No se pudo cargar el formulario de pago">
       <p>Revise su conexión e inténtelo de nuevo.</p>
       <Button variant="secondary" className="mt-3" onClick={onReintentar}>
         Reintentar
@@ -23,7 +23,7 @@ export function AvisoPagoRechazado({
   onReintentar: () => void;
 }) {
   return (
-    <Alert tone="danger" title="No se pudo completar el pago" className="mb-4">
+    <Alert tone="danger" title="No se pudo completar el pago">
       <p>{mensaje}</p>
       {reintentable && (
         <Button variant="secondary" className="mt-3" onClick={onReintentar}>

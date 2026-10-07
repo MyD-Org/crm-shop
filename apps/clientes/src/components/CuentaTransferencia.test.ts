@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
-import { CuentaTransferencia, TEXTO_SIN_CUENTA } from "./CuentaTransferencia";
+import { CuentaTransferencia, TEXTO_SIN_CUENTA, importeParaCopiar } from "./CuentaTransferencia";
 
 const texto = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
@@ -57,5 +57,12 @@ describe("CuentaTransferencia", () => {
     const t = texto(renderToStaticMarkup(createElement(CuentaTransferencia, { cuenta: null })));
     expect(t).toBe("Le enviaremos los datos para transferir");
     expect(t).not.toContain("CBU");
+  });
+});
+
+describe("importeParaCopiar", () => {
+  it("sin $ ni puntos de miles, con coma decimal sólo si hay centavos", () => {
+    expect(importeParaCopiar(215000)).toBe("215000");
+    expect(importeParaCopiar(1500.5)).toBe("1500,50");
   });
 });

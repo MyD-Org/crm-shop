@@ -4,7 +4,7 @@ import { OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
+import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { pagoParaCotizar, totalVariaSegunMedio } from "@/lib/lista-medio";
@@ -74,6 +74,7 @@ import { InformarPago } from "@/components/mi-cuenta/cuenta-corriente/InformarPa
 import { TEXTO_PLAZO_COMPROBANTE } from "@/lib/comprobantes/pedido";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
+import { PasoNumerado } from "@/components/PasoNumerado";
 import { PIE_TRANSFERENCIA } from "@/lib/pie-pago-transferencia";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "@/lib/cuentas-bancarias";
 import { pasoAlCambiarMedio, puedeCambiarMedioPago } from "@/lib/cambiar-medio-pago";
@@ -1036,79 +1037,159 @@ export function CheckoutClient({
 
   if (confirmado && confirmado.pagoEnLinea && !pagado) {
     return (
-      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col gap-5 px-4 py-10">
-        <div className="text-center">
-          <h1 className="font-display text-[clamp(30px,3.4vw,46px)] font-medium tracking-tight text-text">
-            Pague su pedido
-          </h1>
-          <p className="mt-1 text-sm font-semibold text-text">{confirmado.numero}</p>
-        </div>
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10 lg:flex-row lg:items-start">
+        <section className="min-w-0 flex-1 rounded-[28px] border border-border bg-surface p-5 sm:p-8">
+          <h1 className="font-display text-[clamp(28px,3vw,36px)] font-medium tracking-tight text-text">Pague su pedido</h1>
+          <p className="mt-1 mb-6 text-sm text-muted">Pedido {confirmado.numero}</p>
 
-        {/* Un componente de pago por procesador: sumar otro es un caso más acá. */}
-        {confirmado.procesador === "payway" ? (
-          <PagoPayway
-            pedidoId={confirmado.id}
-            numero={confirmado.numero}
-            monto={confirmado.total}
-            cuotas={confirmado.cuotas ?? undefined}
-            onPagado={alPagar}
-            onPendiente={alQuedarPendiente}
-            onRechazado={() => {
-              setPagoEnConfirmacion(false);
-              setCarritoDelPedido(false);
-            }}
-            iniciarEnConfirmacion={pagoEnConfirmacion}
-          />
-        ) : confirmado.procesador === "mercadopago" ? (
-          <PagoMercadoPago
-            pedidoId={confirmado.id}
-            numero={confirmado.numero}
-            monto={confirmado.total}
-            emailComprador={emailCliente}
-            maxCuotas={confirmado.cuotas ?? undefined}
-            onPagado={alPagar}
-            onPendiente={alQuedarPendiente}
-            onRechazado={() => {
-              setPagoEnConfirmacion(false);
-              setCarritoDelPedido(false);
-            }}
-            iniciarEnConfirmacion={pagoEnConfirmacion}
-          />
-        ) : (
-          <p role="alert" className="text-center text-sm text-danger">
-            Este medio de pago no está disponible en este momento. Vuelva al carrito y elija otro.
-          </p>
-        )}
-
-        <div className="flex flex-col items-center gap-2">
-          {/* Sin cobro aprobado ni en vuelo se puede elegir otro medio o cuotas; el servidor lo vuelve a validar. */}
-          {puedeCambiarMedioPago({ pagado, pagoEnConfirmacion }) && !esCuentaCorriente && (
-            <Button variant="outline" onClick={cambiarMedio} disabled={cancelando}>
-              {cancelando ? "Un momento…" : "Cambiar medio de pago"}
-            </Button>
-          )}
-          {pagoEnConfirmacion ? (
-            // Con el cobro en confirmación no se cancela (el pago puede acreditarse) ni se cambia el
-            // medio. Si se rechaza, vuelve el formulario y reaparecen las dos opciones.
-            <Link href="/" className="text-sm text-muted underline">
-              Volver a la tienda
-            </Link>
+          {/* Un componente de pago por procesador: sumar otro es un caso más acá. */}
+          {confirmado.procesador === "payway" ? (
+            <PagoPayway
+              pedidoId={confirmado.id}
+              numero={confirmado.numero}
+              monto={confirmado.total}
+              cuotas={confirmado.cuotas ?? undefined}
+              onPagado={alPagar}
+              onPendiente={alQuedarPendiente}
+              onRechazado={() => {
+                setPagoEnConfirmacion(false);
+                setCarritoDelPedido(false);
+              }}
+              iniciarEnConfirmacion={pagoEnConfirmacion}
+            />
+          ) : confirmado.procesador === "mercadopago" ? (
+            <PagoMercadoPago
+              pedidoId={confirmado.id}
+              numero={confirmado.numero}
+              monto={confirmado.total}
+              emailComprador={emailCliente}
+              maxCuotas={confirmado.cuotas ?? undefined}
+              onPagado={alPagar}
+              onPendiente={alQuedarPendiente}
+              onRechazado={() => {
+                setPagoEnConfirmacion(false);
+                setCarritoDelPedido(false);
+              }}
+              iniciarEnConfirmacion={pagoEnConfirmacion}
+            />
           ) : (
-            <button
-              type="button"
-              onClick={cancelarYVolver}
-              disabled={cancelando}
-              className="text-xs text-muted underline disabled:opacity-50"
-            >
-              {cancelando ? "Cancelando…" : "Volver al carrito"}
-            </button>
-          )}
-          {errorCancelar && (
             <p role="alert" className="text-center text-sm text-danger">
-              {errorCancelar}
+              Este medio de pago no está disponible en este momento. Vuelva al carrito y elija otro.
             </p>
           )}
-        </div>
+        </section>
+
+        <aside className="flex flex-col gap-4 rounded-[28px] border border-border bg-surface p-6 lg:sticky lg:top-24 lg:w-80 lg:shrink-0">
+          <h2 className="font-display text-lg font-medium text-text">Resumen</h2>
+          <div className="flex items-baseline justify-between gap-3 border-t border-border pt-4">
+            <span className="font-semibold text-text">Total</span>
+            <span className="font-display text-2xl font-medium tracking-tight text-text">{fmtPrecio(confirmado.total)}</span>
+          </div>
+          {confirmado.cuotas !== null && confirmado.cuotas > 1 && (
+            <p className="rounded-md bg-success-soft px-3 py-2 text-sm font-semibold text-success">
+              {confirmado.cuotas} cuotas sin interés de {fmtPrecio(confirmado.total / confirmado.cuotas)}
+            </p>
+          )}
+          <div className="flex flex-col items-stretch gap-2 border-t border-border pt-4">
+            {/* Sin cobro aprobado ni en vuelo se puede elegir otro medio o cuotas; el servidor lo vuelve a validar. */}
+            {puedeCambiarMedioPago({ pagado, pagoEnConfirmacion }) && !esCuentaCorriente && (
+              <Button variant="outline" onClick={cambiarMedio} disabled={cancelando}>
+                {cancelando ? "Un momento…" : "Cambiar medio de pago"}
+              </Button>
+            )}
+            {pagoEnConfirmacion ? (
+              // Con el cobro en confirmación no se cancela (el pago puede acreditarse) ni se cambia el
+              // medio. Si se rechaza, vuelve el formulario y reaparecen las dos opciones.
+              <Link href="/" className="self-center py-2 text-sm text-muted underline">
+                Volver a la tienda
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={cancelarYVolver}
+                disabled={cancelando}
+                className="self-center py-2 text-sm text-muted underline disabled:opacity-50"
+              >
+                {cancelando ? "Cancelando…" : "Volver al carrito"}
+              </button>
+            )}
+            {errorCancelar && (
+              <p role="alert" className="text-center text-sm text-danger">
+                {errorCancelar}
+              </p>
+            )}
+          </div>
+        </aside>
+      </main>
+    );
+  }
+
+  // ------------------------------------- transferencia: los datos para transferir y el comprobante
+  if (confirmado && !pagado && conCuenta) {
+    const cuenta = confirmado.cuentaPago ?? null;
+    return (
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 py-10 lg:flex-row lg:items-start">
+        <section className="min-w-0 flex-1 rounded-[28px] border border-border bg-surface p-5 sm:p-8">
+          <h1 className="font-display text-[clamp(28px,3vw,36px)] font-medium tracking-tight text-text">
+            {comprobanteInformado ? "Estamos revisando su pago" : "Transfiera para confirmar su pedido"}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            Pedido {confirmado.numero} · Lo preparamos cuando registremos el pago.
+          </p>
+          <ol className="mt-8 flex flex-col gap-8">
+            <PasoNumerado numero={1} titulo="Transfiera el importe exacto">
+              <CuentaTransferencia cuenta={cuenta} importe={confirmado.total} />
+            </PasoNumerado>
+            {/* Sin cuenta todavía no hay a dónde transferir: el comprobante se pide recién con los datos. */}
+            {cuenta && (
+              <PasoNumerado numero={2} titulo="Envíenos el comprobante" hecho={comprobanteInformado}>
+                {comprobanteInformado ? (
+                  <Alert tone="success">Recibimos su comprobante. Le avisaremos cuando registremos el pago.</Alert>
+                ) : (
+                  <div className="flex flex-col items-start gap-3">
+                    <InformarPago
+                      ultimos={[]}
+                      pedido={{ id: confirmado.id, numero: confirmado.numero, total: confirmado.total }}
+                      onInformado={() => setComprobanteInformado(true)}
+                    />
+                    <p className="text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
+                  </div>
+                )}
+              </PasoNumerado>
+            )}
+            <PasoNumerado numero={cuenta ? 3 : 2} titulo="Le avisamos">
+              <p className="text-sm text-muted">
+                Cuando registremos el pago le escribimos{emailCliente ? ` a ${emailCliente}` : ""} y preparamos su
+                pedido.
+              </p>
+            </PasoNumerado>
+          </ol>
+        </section>
+
+        <aside className="flex flex-col gap-4 rounded-[28px] border border-border bg-surface p-6 lg:sticky lg:top-24 lg:w-80 lg:shrink-0">
+          <h2 className="font-display text-lg font-medium text-text">Resumen</h2>
+          <dl className="flex flex-col gap-2 border-t border-border pt-4 text-sm">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Medio de pago</dt>
+              <dd className="font-semibold text-text">Transferencia</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3 pt-2">
+              <dt className="text-base font-semibold text-text">Total</dt>
+              <dd className="font-display text-2xl font-medium tracking-tight text-text">{fmtPrecio(confirmado.total)}</dd>
+            </div>
+          </dl>
+          <div className="flex flex-col items-stretch gap-2 border-t border-border pt-4">
+            <Button variant="outline" href="/mi-cuenta">
+              Ver mis pedidos
+            </Button>
+            <Link href="/catalogo" className="self-center py-2 text-sm text-muted underline">
+              Seguir comprando
+            </Link>
+          </div>
+          {confirmado.contacto && (
+            <PedidoContacto contacto={confirmado.contacto} centrado enlaceChico mostrarPlazo={false} />
+          )}
+        </aside>
       </main>
     );
   }
@@ -1148,28 +1229,6 @@ export function CheckoutClient({
               </>
             )}
           </p>
-          {!pagado && conCuenta && (
-            <div className={`mt-6 text-left ${ENTRADA_EXITO} delay-[260ms]`}>
-              <p className="mb-2 text-sm font-semibold text-text">Datos para transferir</p>
-              <CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />
-              {/* Sin cuenta todavía no hay a dónde transferir: el comprobante se pide recién con los datos. */}
-              {confirmado.cuentaPago &&
-                (comprobanteInformado ? (
-                  <p className="mt-4 rounded-lg bg-success/10 p-3 text-center text-sm text-success">
-                    Recibimos su comprobante. Le avisaremos cuando registremos el pago.
-                  </p>
-                ) : (
-                  <div className="mt-4 flex flex-col gap-3">
-                    <p className="text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
-                    <InformarPago
-                      ultimos={[]}
-                      pedido={{ id: confirmado.id, numero: confirmado.numero, total: confirmado.total }}
-                      onInformado={() => setComprobanteInformado(true)}
-                    />
-                  </div>
-                ))}
-            </div>
-          )}
           <div className={`mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center ${ENTRADA_EXITO} delay-[300ms]`}>
             <Link href="/mi-cuenta" className="flex flex-col sm:block">
               <Button variant="outline">Ver mis pedidos</Button>
@@ -1183,7 +1242,6 @@ export function CheckoutClient({
               contacto={confirmado.contacto}
               centrado
               enlaceChico
-              mostrarPlazo={!conCuenta}
               className={`mt-5 ${ENTRADA_EXITO} delay-[330ms]`}
             />
           )}

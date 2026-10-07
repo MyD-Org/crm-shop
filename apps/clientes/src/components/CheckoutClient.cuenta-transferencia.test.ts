@@ -29,9 +29,10 @@ describe("CheckoutClient: cuenta para transferir", () => {
     expect(fuente).toContain("? PIE_TRANSFERENCIA : pieDelMedio(medioSel)");
   });
 
-  it("Pedido recibido usa la cuenta congelada que devolvió el pedido", () => {
+  it("la pantalla de transferencia usa la cuenta congelada que devolvió el pedido", () => {
     expect(fuente).toContain("cuentaPago: json.cuentaPago ?? null,");
-    expect(fuente).toContain("<CuentaTransferencia cuenta={confirmado.cuentaPago ?? null} importe={confirmado.total} />");
+    expect(fuente).toContain("const cuenta = confirmado.cuentaPago ?? null;");
+    expect(fuente).toContain("<CuentaTransferencia cuenta={cuenta} importe={confirmado.total} />");
   });
 
   it("Pedido recibido: una acción principal, secundarias chicas y sin textos redundantes", () => {
@@ -39,7 +40,13 @@ describe("CheckoutClient: cuenta para transferir", () => {
     expect(fuente).toContain('<Button variant="outline">Ver mis pedidos</Button>');
     expect(fuente).toContain('<Button variant="ghost">Seguir comprando</Button>');
     // El plazo de contacto se omite con transferencia (lo da el texto del comprobante) y WhatsApp es un enlace chico.
-    expect(fuente).toContain("mostrarPlazo={!conCuenta}");
-    expect(fuente).toContain("enlaceChico");
+    expect(fuente).toContain("<PedidoContacto contacto={confirmado.contacto} centrado enlaceChico mostrarPlazo={false} />");
+  });
+
+  it("transferencia: pasos numerados, sin etiqueta de estado y con el comprobante en el paso 2", () => {
+    expect(fuente).toContain('"Transfiera para confirmar su pedido"');
+    expect(fuente).toContain('titulo="Transfiera el importe exacto"');
+    expect(fuente).toContain('titulo="Envíenos el comprobante" hecho={comprobanteInformado}');
+    expect(fuente).not.toContain("Falta el pago");
   });
 });

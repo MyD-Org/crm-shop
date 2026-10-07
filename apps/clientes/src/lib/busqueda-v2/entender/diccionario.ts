@@ -14,7 +14,7 @@
  * - atributos explícitos: un sinónimo del diccionario de atributos escrito tal
  *   cual ("cálido", "e27", "ip65"). Son candidatos FUERTES;
  * - atributos de contexto: el lugar sugiere un atributo sin pedirlo ("patio" →
- *   apto exterior). Siempre blandos.
+ *   apto exterior, "baño" → apto humedad). Siempre blandos.
  */
 import { raizPlural } from "../../catalogo-busqueda";
 import { deterministico, palabrasCategoria, tokensDe } from "../../busqueda-inteligente/deterministico";
@@ -23,7 +23,12 @@ import { expansiones } from "./sinonimos";
 import { CONTEXTO } from "./terminos";
 
 /** Lugares que sugieren "apto exterior" sin pedirlo. */
-const LUGARES_EXTERIOR = new Set(["patio", "jardin", "fachada", "vereda", "pileta", "piscina", "parque", "quincho", "cancha"]);
+const LUGARES_EXTERIOR = new Set([
+  "patio", "jardin", "fachada", "vereda", "pileta", "piscina", "parque", "quincho", "cancha", "terraza", "balcon", "galeria",
+]);
+
+/** Lugares con humedad que sugieren "apto humedad" (IP44 o más) sin pedirlo: no hace falta intemperie, sí salpicaduras. */
+const LUGARES_HUMEDAD = new Set(["bano", "ducha", "lavadero"]);
 
 /**
  * Sustantivos que nombran productos distintos según el rubro: "interruptor" (de luz o
@@ -79,11 +84,12 @@ export function candidatos(consultaNorm: string, arbol: NodoArbol[]): Candidatos
     })
     .map((n) => n.nombre);
   const categorias = [...new Set([...det.categorias, ...porSustantivo])].slice(0, MAX_CANDIDATAS);
-  const contexto = tokens.some((t) => LUGARES_EXTERIOR.has(t)) && !det.atributos.includes("apto-exterior");
+  const exterior = tokens.some((t) => LUGARES_EXTERIOR.has(t)) && !det.atributos.includes("apto-exterior");
+  const humedad = tokens.some((t) => LUGARES_HUMEDAD.has(t)) && !det.atributos.includes("apto-humedad");
   return {
     categorias,
     atributosExplicitos: det.atributos,
-    atributosContexto: contexto ? ["apto-exterior"] : [],
+    atributosContexto: [...(exterior ? ["apto-exterior"] : []), ...(humedad ? ["apto-humedad"] : [])],
     absorbidos: det.absorbidos,
   };
 }

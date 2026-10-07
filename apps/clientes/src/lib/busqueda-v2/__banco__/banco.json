@@ -138,6 +138,10 @@
     { "q": "caño 20mm", "perfil": "profesional", "tipo": "medida", "intencion": "producto", "categoria": ["Caños y cablecanal", "ELECTRICIDAD"], "debeIncluirEnTop24": ["caño", "cano"], "nuncaSinResultados": true, "medidas": [] },
     { "q": "lampara de escritorio", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas"], "debeIncluirEnTop24": ["lampara de escritorio"], "categoriaEnTop24": ["Veladores"], "nuncaSinResultados": true },
     { "q": "lampara de pie", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas"], "debeIncluirEnTop24": ["lampara de pie"], "nuncaSinResultados": true },
-    { "q": "escritorio", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas", "ILUMINACION"], "debeIncluirEnTop24": ["escritorio"], "categoriaEnTop24": ["Veladores"], "nuncaSinResultados": true }
+    { "q": "escritorio", "perfil": "particular", "intencion": "producto", "categoria": ["Veladores", "Lámparas", "ILUMINACION"], "debeIncluirEnTop24": ["escritorio"], "categoriaEnTop24": ["Veladores"], "nuncaSinResultados": true },
+    { "q": "lampara para el baño", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true },
+    { "q": "luz para la ducha", "perfil": "particular", "intencion": "necesidad", "nuncaSinResultados": true },
+    { "q": "panel para exterior", "perfil": "particular", "intencion": "producto", "categoria": ["Paneles", "Embutidos", "ILUMINACION"], "debeIncluirEnTop24": ["panel"], "nuncaSinResultados": true },
+    { "q": "lampara para la terraza", "perfil": "particular", "intencion": "producto", "categoria": ["Lámparas", "Bulbos", "ILUMINACION"], "debeIncluirEnTop24": ["lampara", "bulbo"], "nuncaSinResultados": true }
   ]
 }

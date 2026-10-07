@@ -1,7 +1,7 @@
 {
   "modelo": "jev-1.13.0",
   "grabadoEl": "2026-10-01",
-  "ampliadoEl": "2026-10-06",
+  "ampliadoEl": "2026-10-07",
   "respuestas": {
     "algo para sacar el olor del bano": {
       "principal": {
@@ -3298,6 +3298,110 @@
         "sub": {
           "choice": "tubos",
           "confidence": 0.44
+        }
+      }
+    },
+    "lampara para el bano": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.99
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "apliques",
+          "confidence": 0.46
+        }
+      }
+    },
+    "luz para la ducha": {
+      "principal": {
+        "intencion": {
+          "choice": "necesidad",
+          "confidence": 0.81
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "interior",
+          "confidence": 0.95
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "apliques",
+          "confidence": 0.54
+        }
+      }
+    },
+    "panel para exterior": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.97
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 0.98
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "paneles",
+          "confidence": 0.66
+        }
+      }
+    },
+    "lampara para la terraza": {
+      "principal": {
+        "intencion": {
+          "choice": "producto",
+          "confidence": 0.96
+        },
+        "tono": {
+          "choice": "no_especifica",
+          "confidence": 1
+        },
+        "ambiente": {
+          "choice": "exterior",
+          "confidence": 1
+        },
+        "raiz": {
+          "choice": "iluminacion",
+          "confidence": 1
+        }
+      },
+      "sub": {
+        "sub": {
+          "choice": "luminarias_exteriores",
+          "confidence": 0.92
         }
       }
     }

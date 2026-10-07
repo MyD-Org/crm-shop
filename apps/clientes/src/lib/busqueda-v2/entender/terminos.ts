@@ -41,7 +41,7 @@ export const LUGARES = new Set([
   "pileta", "piscina", "vereda", "fachada", "frente", "entrada", "escalera", "pasillo", "balcon", "terraza",
   "quincho", "parrilla", "casa", "departamento", "noche",
   "calle", "cancha", "padel", "futbol", "tenis", "reja", "parque", "auto", "exterior", "interior", "afuera",
-  "adentro", "lugar", "ambiente",
+  "adentro", "lugar", "ambiente", "galeria", "ducha", "lavadero",
 ]);
 
 /** Contexto: no identifica un producto. En singular normalizado. */

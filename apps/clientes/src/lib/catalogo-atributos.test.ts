@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ATRIBUTOS,
+  ATRIBUTOS_DE_CONTEXTO,
   atributoPorId,
   atributosDeProducto,
   atributosDeTexto,
@@ -98,6 +99,30 @@ describe("diccionario", () => {
     expect(nombreAtributo("apto-exterior")).toBe("Apto exterior");
     expect(nombreAtributo("otro")).toBe("otro");
     expect(atributoPorId("tension-12v")?.grupo).toBe("tension");
+  });
+});
+
+describe("atributos de contexto (apto-humedad): sólo ordenan, no son filtro ni faceta", () => {
+  const humedad = ATRIBUTOS_DE_CONTEXTO.find((a) => a.id === "apto-humedad")!;
+
+  it("resuelven por id (para ordenar) pero no están en el diccionario público", () => {
+    expect(ATRIBUTOS.some((a) => a.id === "apto-humedad")).toBe(false);
+    expect(atributoPorId("apto-humedad")?.grupo).toBe("ambiente");
+    expect(nombreAtributo("apto-humedad")).toBe("Apto humedad");
+    expect(humedad.sinonimos).toEqual([]);
+    expect(humedad.estructurado).toEqual({ clave: "ip", desde: 44 });
+  });
+
+  it("no se pueden pedir por la URL ni salen como etiqueta de un producto", () => {
+    expect(atributosValidos(["apto-humedad", "tono-frio"])).toEqual(["tono-frio"]);
+    expect(atributosDeProducto("APLIQUE IP65", { ip: { n: 66, t: null } }).map((a) => a.id)).toEqual(["apto-exterior"]);
+    expect(atributosDeTexto("APLIQUE IP54").map((a) => a.id)).toEqual([]);
+  });
+
+  it("el patrón es IP44 o más; IP20 y 440 no", () => {
+    const re = new RegExp(humedad.patron, "i");
+    for (const t of ["aplique ip44", "aplique ip 54", "ip-65 negro", "ip69"]) expect(re.test(t), t).toBe(true);
+    for (const t of ["tira ip20", "caja ip440", "ip4", "aplique ip70"]) expect(re.test(t), t).toBe(false);
   });
 });
 

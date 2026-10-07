@@ -237,6 +237,71 @@ describe("combinar: atributos e intención", () => {
     expect(p.blandos.atributos).toEqual([{ id: "zocalo-e27", peso: 0.9 }]);
   });
 
+  it("un atributo duro que vacía lo que encuentran los términos pasa a blando: el plan no lo lleva como duro", async () => {
+    // «panel para exterior»: hay paneles y hay exteriores, pero ningún panel exterior.
+    const contar = vi.fn(async ({ atributos }: { atributos: string[] }) => (atributos.includes("apto-exterior") ? 0 : 10));
+    const dic = { categorias: [], atributosExplicitos: ["apto-exterior"], atributosContexto: [], absorbidos: new Set<string>() };
+    const p = await combinar(
+      base({
+        consulta: "panel para exterior",
+        consultaNorm: "panel para exterior",
+        diccionario: dic,
+        terminos: [{ texto: "panel", peso: 1 }, { texto: "exterior", peso: 0.3 }],
+        conteoAtributos: { "apto-exterior": 50 },
+        contar,
+      }),
+    );
+    expect(p.duros.atributos).toEqual([]);
+    expect(p.blandos.atributos).toEqual([{ id: "apto-exterior", peso: 0.9 }]);
+    // Cuenta con los términos que recuperan (no con el contexto), con y sin el atributo.
+    expect(contar).toHaveBeenCalledWith({ categorias: [], atributos: ["apto-exterior"], terminos: ["panel"] });
+    expect(contar).toHaveBeenCalledWith({ categorias: [], atributos: [], terminos: ["panel"] });
+  });
+
+  it("si los términos solos tampoco encuentran nada (un error de tipeo), el atributo sigue duro: «reflecotr led exterior»", async () => {
+    const contar = vi.fn(async ({ terminos }: { terminos?: string[] }) => (terminos?.length ? 0 : 10));
+    const dic = { categorias: [], atributosExplicitos: ["apto-exterior"], atributosContexto: [], absorbidos: new Set<string>() };
+    const p = await combinar(base({ diccionario: dic, terminos: [{ texto: "reflecotr", peso: 1 }], conteoAtributos: { "apto-exterior": 50 }, contar }));
+    expect(p.duros.atributos).toEqual(["apto-exterior"]);
+    expect(p.blandos.atributos).toEqual([]);
+  });
+
+  it("sin términos que recuperen (sólo el atributo, «ip65») no se cuenta ni se degrada", async () => {
+    const contar = vi.fn(async () => 0);
+    const dic = { categorias: [], atributosExplicitos: ["apto-exterior"], atributosContexto: [], absorbidos: new Set<string>() };
+    const p = await combinar(base({ diccionario: dic, terminos: [{ texto: "ip65", peso: 0.4 }], conteoAtributos: { "apto-exterior": 50 }, contar }));
+    expect(p.duros.atributos).toEqual(["apto-exterior"]);
+    expect(contar).not.toHaveBeenCalled();
+  });
+
+  it("con resultados el atributo duro sigue duro; sin duros no se cuenta de más", async () => {
+    const contar = vi.fn(async () => 10);
+    const dic = { categorias: [], atributosExplicitos: ["tono-calido"], atributosContexto: [], absorbidos: new Set<string>() };
+    const duro = await combinar(base({ diccionario: dic, conteoAtributos: { "tono-calido": 50 }, contar }));
+    expect(duro.duros.atributos).toEqual(["tono-calido"]);
+    expect(duro.blandos.atributos).toEqual([]);
+
+    const contarNada = vi.fn(async () => 0);
+    const blando = await combinar(base({ diccionario: dic, conteoAtributos: { "tono-calido": 2 }, contar: contarNada }));
+    expect(blando.duros.atributos).toEqual([]);
+    expect(contarNada).not.toHaveBeenCalled();
+  });
+
+  it("con categoría dura (ya contada con los atributos) no se vuelve a contar ni se degrada", async () => {
+    const contar = vi.fn(async () => 10);
+    const dic = { categorias: ["Reflectores"], atributosExplicitos: ["tono-calido"], atributosContexto: [], absorbidos: new Set<string>() };
+    const p = await combinar(
+      base({
+        diccionario: dic,
+        conteoAtributos: { "tono-calido": 50 },
+        contar,
+        jev: jev({ raiz: { nombre: "ILUMINACION", confianza: 0.99 }, sub: { nombre: "Reflectores", confianza: 0.95 } }),
+      }),
+    );
+    expect(p.duros).toEqual({ categorias: ["Reflectores"], atributos: ["tono-calido"] });
+    expect(contar).toHaveBeenCalledTimes(1);
+  });
+
   it("tono y ambiente de Jev siempre blandos; lo escrito le gana a Jev en el mismo grupo", async () => {
     const dic = { categorias: [], atributosExplicitos: ["tono-calido"], atributosContexto: ["apto-exterior"], absorbidos: new Set<string>() };
     const p = await combinar(

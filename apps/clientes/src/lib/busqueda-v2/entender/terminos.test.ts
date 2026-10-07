@@ -47,6 +47,13 @@ describe("palabras que nombran un tipo de producto no son contexto", () => {
     expect(peso("luz para el patio")).toEqual({ luz: PESO_CONTEXTO, patio: PESO_CONTEXTO });
     expect(peso("lampara de jardin")).toMatchObject({ lampara: 1, jardin: PESO_CONTEXTO });
     expect(esLugar("jardines")).toBe(true);
+  });
+
+  it("baño, ducha, lavadero y galería son lugares: «luz para la ducha» no busca productos que se llamen «ducha»", () => {
+    expect(peso("luz para la ducha")).toEqual({ luz: PESO_CONTEXTO, ducha: PESO_CONTEXTO });
+    expect(peso("luz para el lavadero")).toEqual({ luz: PESO_CONTEXTO, lavadero: PESO_CONTEXTO });
+    expect(peso("lampara para la galeria")).toMatchObject({ lampara: 1, galeria: PESO_CONTEXTO });
+    expect(peso("lampara para el bano")).toMatchObject({ lampara: 1, bano: PESO_CONTEXTO });
     expect(esLugar("escritorio")).toBe(false);
   });
 });

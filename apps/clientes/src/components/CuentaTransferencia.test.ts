@@ -33,6 +33,11 @@ describe("CuentaTransferencia", () => {
     expect(t).not.toContain(TEXTO_SIN_CUENTA);
   });
 
+  it("el importe va primero (destacado)", () => {
+    const t = texto(renderToStaticMarkup(createElement(CuentaTransferencia, { cuenta, importe: 121000 })));
+    expect(t.indexOf("Importe")).toBeLessThan(t.indexOf("Alias"));
+  });
+
   it("sin importe no muestra la fila del importe", () => {
     const t = texto(renderToStaticMarkup(createElement(CuentaTransferencia, { cuenta })));
     expect(t).not.toContain("Importe");

@@ -7,7 +7,7 @@ import { puedeSubirComprobante } from "./pedido";
 export type AvisoComprobante = "falta" | "en_revision";
 
 export const TEXTO_AVISO_FALTA =
-  "Falta el comprobante de la transferencia. Súbalo dentro de las 24 h hábiles para que podamos registrar su pago.";
+  "Falta el comprobante de la transferencia. Súbalo dentro de las 24 h hábiles para que no se cancele su pedido.";
 export const TEXTO_AVISO_EN_REVISION = "Recibimos su comprobante. Le avisaremos cuando registremos el pago.";
 
 /**

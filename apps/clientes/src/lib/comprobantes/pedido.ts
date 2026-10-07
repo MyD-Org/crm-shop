@@ -14,7 +14,7 @@ export const MAX_COMPROBANTES_POR_PEDIDO = 5;
  * Mi cuenta y mail). Es un pedido, no una regla: nada cancela el pedido si se pasa.
  */
 export const TEXTO_PLAZO_COMPROBANTE =
-  "Suba el comprobante de la transferencia ahora o, a más tardar, dentro de las próximas 24 h hábiles. También puede hacerlo desde Mis pedidos.";
+  "Suba el comprobante de la transferencia desde Mis pedidos dentro de las próximas 24 h hábiles. Si no lo recibimos en ese plazo, su pedido podrá ser cancelado.";
 
 /** Lo mínimo del pedido que necesita informar un pago, ya validado contra su dueño. */
 export interface PedidoParaComprobante {

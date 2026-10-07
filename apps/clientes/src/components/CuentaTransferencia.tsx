@@ -32,11 +32,21 @@ function BotonCopiar({ valor, etiqueta }: { valor: string; etiqueta: string }) {
   );
 }
 
-function Fila({ nombre, valor, copiable }: { nombre: string; valor: string; copiable?: boolean }) {
+function Fila({
+  nombre,
+  valor,
+  copiable,
+  destacada,
+}: {
+  nombre: string;
+  valor: string;
+  copiable?: boolean;
+  destacada?: boolean;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <dt className="text-muted">{nombre}</dt>
-      <dd className="flex items-baseline gap-3 text-right font-semibold text-text">
+    <div className={`flex items-baseline justify-between gap-3 ${destacada ? "py-2.5" : "py-1.5"}`}>
+      <dt className={destacada ? "font-semibold text-text" : "text-muted"}>{nombre}</dt>
+      <dd className={`flex items-baseline gap-3 text-right font-semibold text-text ${destacada ? "text-lg" : ""}`}>
         <span className="break-all">{valor}</span>
         {copiable && <BotonCopiar valor={valor} etiqueta={nombre} />}
       </dd>
@@ -45,7 +55,7 @@ function Fila({ nombre, valor, copiable }: { nombre: string; valor: string; copi
 }
 
 /**
- * Datos de la cuenta para transferir: alias, CBU, banco, titular, CUIT e importe. Se usa en el
+ * Datos de la cuenta para transferir: importe (primero y destacado), alias, CBU, banco, titular y CUIT. Se usa en el
  * paso Pago del checkout, en Pedido recibido y en el detalle del pedido de Mi cuenta. `cuenta`
  * es la vista previa (checkout) o el snapshot congelado del pedido; `null` = sin cuenta aplicable.
  */
@@ -63,12 +73,12 @@ export function CuentaTransferencia({
   }
   return (
     <dl className={`divide-y divide-border/50 rounded-lg border border-border/50 bg-surface px-4 py-2 text-sm ${className}`}>
+      {importe !== undefined && <Fila nombre="Importe" valor={fmtPrecio(importe)} destacada />}
       <Fila nombre="Alias" valor={cuenta.alias} copiable />
       <Fila nombre="CBU" valor={cuenta.cbu} copiable />
       {cuenta.banco && <Fila nombre="Banco" valor={cuenta.banco} />}
       {cuenta.titular && <Fila nombre="Titular" valor={cuenta.titular} />}
       {cuenta.cuit && <Fila nombre="CUIT" valor={cuenta.cuit} />}
-      {importe !== undefined && <Fila nombre="Importe" valor={fmtPrecio(importe)} />}
     </dl>
   );
 }

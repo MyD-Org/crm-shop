@@ -118,6 +118,8 @@ export interface Filtros {
   alegra?: "active" | "inactive"
   precio?: "con" | "sin"
   stock?: "con" | "sin"
+  /** "si" = solo los destacados en la categoría. */
+  destacado?: "si"
   tag?: string
   /** "principal" o el slug de una cuenta secundaria. */
   cuenta?: string

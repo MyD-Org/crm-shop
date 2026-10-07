@@ -21,6 +21,9 @@ export const AYUDA_OCULTO_EN =
 export const AYUDA_SOLO_EN =
   "El producto existe únicamente en la cuenta de Alegra de esta sucursal."
 
+export const AYUDA_DESTACADO =
+  "Se muestra primero en su categoría y en las que la contienen. Se cambia desde Editar, con «Destacar en la categoría»."
+
 export const AYUDA_PUBLICAR =
   "Muestra los productos en la tienda. No cambia en qué sucursales se ofrecen."
 

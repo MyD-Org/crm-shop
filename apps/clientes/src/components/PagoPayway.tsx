@@ -249,8 +249,8 @@ export function PagoPayway({
         <SegmentedControl
           ariaLabel="Tipo de tarjeta"
           options={[
-            { label: "Crédito", value: "credito" },
-            { label: "Débito", value: "debito" },
+            { label: "Crédito", value: "credito", disabled: procesando },
+            { label: "Débito", value: "debito", disabled: procesando },
           ]}
           value={modalidad}
           onValueChange={(v) => setModalidad(v as ModalidadTarjeta)}
@@ -327,6 +327,7 @@ export function PagoPayway({
           value={marca ?? ""}
           onValueChange={(v) => setMarcaElegida(v as Marca)}
           placeholder="Seleccionar marca"
+          disabled={procesando}
         />
       </Field>
 

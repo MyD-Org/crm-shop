@@ -480,6 +480,9 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
   mostrarEnFicha: boolean("mostrar_en_ficha").notNull(),
   // Migración 0069 del CRM: 'publico' | 'cuenta_corriente' (el medio de las cuentas corrientes).
   audiencia: text("audiencia").notNull(),
+  // Migración 0071 del CRM: etiquetas del medio [{texto, tono}], hasta 3. Se lee de forma tolerante
+  // (`leerChipsMedio`): lo que no cumple el formato se descarta.
+  chips: jsonb("chips").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

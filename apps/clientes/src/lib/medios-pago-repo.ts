@@ -17,6 +17,7 @@ import { crmListaPrecioCondiciones, crmMediosPagoShop } from "@/db/crm";
 import { shopTenantId } from "./tenant";
 import type { CondicionCuotas } from "./cuotas-sin-interes";
 import type { AudienciaMedio, MedioPago } from "./medios-pago";
+import { leerChipsMedio } from "./medios-pago-chips";
 
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
 type Ejecutor = Pick<ReturnType<typeof getDb>, "select">;
@@ -101,6 +102,7 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
       destacarEnCatalogo: crmMediosPagoShop.destacarEnCatalogo,
       mostrarEnFicha: crmMediosPagoShop.mostrarEnFicha,
       audiencia: crmMediosPagoShop.audiencia,
+      chips: crmMediosPagoShop.chips,
     })
     .from(crmMediosPagoShop)
     .where(eq(crmMediosPagoShop.tenantId, shopTenantId()))
@@ -110,6 +112,8 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
     ...f,
     // Lo desconocido se trata como público: sólo el valor exacto restringe el medio.
     audiencia: (f.audiencia === "cuenta_corriente" ? "cuenta_corriente" : "publico") as AudienciaMedio,
+    // Etiquetas del checkout: tolerante (lo inválido o ausente es []).
+    chips: leerChipsMedio(f.chips),
     idListaPrecios: condiciones.get(f.slug)?.idListaPrecios ?? null,
     condicionesCuotas: condiciones.get(f.slug)?.condicionesCuotas ?? [],
   }));

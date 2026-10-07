@@ -208,6 +208,7 @@
     "destacar_en_catalogo": "boolean",
     "mostrar_en_ficha": "boolean",
     "audiencia": "text",
+    "chips": "jsonb",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
   },

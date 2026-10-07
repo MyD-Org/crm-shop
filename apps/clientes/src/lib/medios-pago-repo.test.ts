@@ -31,7 +31,7 @@ describe("leerMediosPago", () => {
     const g = dbGrabadora((c) =>
       c.sql.includes("lista_precio_condiciones")
         ? [["efectivo", UUID_LISTA, null]]
-        : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false, "publico"]],
+        : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false, "publico", [{ texto: "15% OFF", tono: "exito" }]]],
     );
     const r = await leerMediosPago(g.db as never);
     expect(r).toEqual([
@@ -49,6 +49,7 @@ describe("leerMediosPago", () => {
         destacarEnCatalogo: true,
         mostrarEnFicha: false,
         audiencia: "publico",
+        chips: [{ texto: "15% OFF", tono: "exito" }],
       },
     ]);
     const medios = g.consultas[0];
@@ -72,6 +73,22 @@ describe("leerMediosPago", () => {
     const r = await leerMediosPago(g.db as never);
     expect(r.map((m) => m.audiencia)).toEqual(["cuenta_corriente", "publico"]);
     expect(g.consultas[0].sql).toContain('"audiencia"');
+  });
+
+  it("las etiquetas (chips) se leen de la columna del CRM, tolerantes: ausente o inválido da []", async () => {
+    const buenos = [
+      { texto: "Hasta 8 cuotas sin interés", tono: "destacado" },
+      { texto: "Recomendado", tono: "info" },
+    ];
+    const g = dbGrabadora(() => [
+      ["a", "A", "", true, true, true, false, 0, false, false, "publico", buenos],
+      ["b", "B", "", true, true, true, false, 1, false, false, "publico", "no-es-una-lista"],
+      ["c", "C", "", true, true, true, false, 2, false, false, "publico", [{ texto: "<b>x</b>", tono: "info" }, 7]],
+      ["d", "D", "", true, true, true, false, 3, false, false, "publico", null],
+    ]);
+    const r = await leerMediosPago(g.db as never);
+    expect(r.map((m) => m.chips)).toEqual([buenos, [], [], []]);
+    expect(g.consultas[0].sql).toContain('"chips"');
   });
 
   it("un medio sin condición no tiene lista: rige la de referencia", async () => {

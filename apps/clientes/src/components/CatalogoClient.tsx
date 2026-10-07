@@ -10,7 +10,6 @@ import { CatalogoFiltros } from "@/components/catalogo/CatalogoFiltros";
 import { CatalogoFiltrosSheet } from "@/components/catalogo/CatalogoFiltrosSheet";
 import { CatalogoProductos } from "@/components/catalogo/CatalogoProductos";
 import { CatalogoSinResultados } from "@/components/catalogo/CatalogoSinResultados";
-import { FranjaInterpretada } from "@/components/catalogo/FranjaBusqueda";
 import { linkNext } from "@/components/catalogo/link-next";
 import type { Product } from "@/data/products";
 import { usePreciosCuenta } from "@/hooks/usePreciosCuenta";
@@ -205,9 +204,6 @@ export function CatalogoClient({
     : ir;
   const estadoFiltros = filtrosSinBusqueda ? { ...estadoVisible, query: undefined } : estadoVisible;
 
-  // Búsqueda interpretada (`?ia=`): la franja "Entendimos" muestra categorías y
-  // atributos, y los chips de mobile dejan de repetirlos.
-  const interpretada = busquedaIa ? interpretacionVigente(estadoVisible) : undefined;
   const consultaVacia = interpretacionVigente(estado) ?? estado.query;
 
   // Con el filtro de local activo (también el recordado por cookie), el sin resultados lo dice
@@ -267,7 +263,6 @@ export function CatalogoClient({
         rango={facetas.precio}
         locales={facetas.locales}
         ir={ir}
-        sinInterpretados={!!interpretada}
       />
 
       <div className="mt-8 flex gap-6">
@@ -305,22 +300,6 @@ export function CatalogoClient({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col gap-6">
-          {/* Franja de la búsqueda inteligente. La región `aria-live` existe
-              desde el primer render (vacía) y lo que llega por streaming se
-              anuncia; una región que aparece junto con su contenido no. Vacía,
-              el margen negativo compensa el `gap` de la columna. */}
-          {busquedaIa && (
-            <div aria-live="polite" className="empty:-mb-6">
-              {interpretada && (
-                <FranjaInterpretada
-                  estado={estadoVisible}
-                  ir={ir}
-                  sugerencias={busquedaIa.sugerencias}
-                  intencion={busquedaIa.intencion}
-                />
-              )}
-            </div>
-          )}
           {productos.length === 0 && busquedaIa && consultaVacia ? (
             <CatalogoSinResultados
               consulta={consultaVacia}

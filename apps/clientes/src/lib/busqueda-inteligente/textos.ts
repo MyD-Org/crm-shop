@@ -1,21 +1,14 @@
 /**
- * Copy de la búsqueda inteligente del Shop: franja, "sin resultados",
+ * Copy de la búsqueda inteligente del Shop: chip de la búsqueda, "sin resultados",
  * placeholder que rota y guía del buscador. Español formal de usted
  * (CLAUDE.md; lo verifica textos.test.ts). Módulo puro: lo importan
  * componentes cliente.
  */
 
 export const TEXTOS_FRANJA = {
-  entendimos: "Entendimos:",
-  afinar: "Para afinar su búsqueda:",
-  aplicarTodo: "Aplicar todo",
-  regionFranja: "Sugerencias de búsqueda",
   talCual: (consulta: string) => `Ver resultados de «${consulta}» tal cual`,
-  quitarTexto: (texto: string) => `Quitar el texto «${texto}» de la búsqueda`,
-  texto: (texto: string) => `Texto: «${texto}»`,
-  pista: "Puede describir lo que necesita con sus palabras.",
-  cerrarPista: "Entendido",
-  pregunta: "Esto parece una consulta para el asesor",
+  quitarTexto: (texto: string) => `Quitar la búsqueda «${texto}»`,
+  texto: (texto: string) => `Búsqueda: «${texto}»`,
 } as const;
 
 export const TEXTOS_SIN_RESULTADOS = {

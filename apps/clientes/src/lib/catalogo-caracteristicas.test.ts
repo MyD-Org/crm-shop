@@ -41,12 +41,14 @@ const MUESTRA: Record<ClaveEstructurada, { n: number | null; t: string | null }>
   leds_rollo: n(300),
   diametro_mm: n(25),
   ancho_mm: n(150),
+  dimerizable: t("si"),
+  modulos: n(12),
 };
 
 describe("paridad con el contrato de claves (fixture compartido con el CRM)", () => {
   it("CLAVES_ESTRUCTURADAS = fixture.claves, en el mismo orden", () => {
     expect([...CLAVES_ESTRUCTURADAS]).toEqual(fixture.claves);
-    expect(CLAVES_ESTRUCTURADAS).toHaveLength(23);
+    expect(CLAVES_ESTRUCTURADAS).toHaveLength(25);
   });
 
   it("ETIQUETA y TIPO cubren exactamente las claves del fixture, con el tipo del fixture", () => {
@@ -143,6 +145,16 @@ describe("formato de las claves ampliadas (es-AR)", () => {
     expect(formatoValor("ancho_mm", t("150"))).toBeNull();
     expect(ETIQUETA.diametro_mm).toBe("Diámetro");
     expect(ETIQUETA.ancho_mm).toBe("Ancho");
+    expect(formatoValor("dimerizable", t("si"))).toBe("Sí");
+    expect(formatoValor("dimerizable", t("no"))).toBe("No");
+    expect(formatoValor("dimerizable", t("quizas"))).toBeNull();
+    expect(formatoValor("dimerizable", n(1))).toBeNull();
+    expect(formatoValor("modulos", n(12))).toBe("12 módulos");
+    expect(formatoValor("modulos", n(1))).toBe("1 módulo");
+    expect(formatoValor("modulos", n(12.5))).toBeNull();
+    expect(formatoValor("modulos", t("12"))).toBeNull();
+    expect(ETIQUETA.dimerizable).toBe("Dimerizable");
+    expect(ETIQUETA.modulos).toBe("Módulos");
   });
 
   it("polos: singular, plural y fuera de 1–4 o no entero sin fila", () => {
@@ -213,7 +225,7 @@ describe("solo se muestra lo que el producto tiene", () => {
 
   it("ningún texto tiene null, undefined, guion ni 'No informado'", () => {
     const filas = caracteristicasDe(MUESTRA);
-    expect(filas).toHaveLength(23);
+    expect(filas).toHaveLength(25);
     for (const f of filas) {
       expect(`${f.etiqueta} ${f.valor}`).not.toMatch(/null|undefined|No informado/i);
       expect(f.valor.trim()).not.toBe("-");

@@ -150,9 +150,9 @@ describe("calcularCobertura: categoría raíz vs directa", () => {
 });
 
 describe("calcularCobertura: las claves siempre son columnas", () => {
-  it("las 23 claves aparecen en el global y en cada grupo, incluidas las de 0 %", () => {
+  it("las 25 claves aparecen en el global y en cada grupo, incluidas las de 0 %", () => {
     const c = calcularCobertura([fila("a")], [atr("a", "ip", "65")], ARBOL, { universo: "publicados" });
-    expect(CLAVES).toHaveLength(23);
+    expect(CLAVES).toHaveLength(25);
     expect(Object.keys(c.global.claves)).toEqual([...CLAVES]);
     expect(c.global.claves.leds_rollo).toEqual({ n: 0, pct: 0 });
     expect(c.porClave.map((f) => f.clave)).toEqual([...CLAVES]);
@@ -267,7 +267,7 @@ describe("claves usadas hoy por la búsqueda", () => {
     const si = c.porClave.filter((f) => f.usadaHoy).map((f) => f.clave).sort();
     expect(si).toEqual(["ip", "potencia_w", "tension_v", "tono", "zocalo"]);
     const no = c.porClave.filter((f) => !f.usadaHoy);
-    expect(no).toHaveLength(18);
+    expect(no).toHaveLength(20);
     expect(no.find((f) => f.clave === "polos")).toMatchObject({ n: 1, pct: 100, tipo: "num" });
   });
 
@@ -284,12 +284,12 @@ describe("claves usadas hoy por la búsqueda", () => {
     }
   });
 
-  it("deriva: no hay claves usadas que no existan en las 23", () => {
+  it("deriva: no hay claves usadas que no existan en las 25", () => {
     for (const k of usadas) expect((CLAVES as readonly string[]).includes(k)).toBe(true);
   });
 });
 
-describe("las 23 claves salen del código del Shop, no de una lista propia", () => {
+describe("las 25 claves salen del código del Shop, no de una lista propia", () => {
   it("coinciden con el fixture compartido con el CRM (claves y tipos)", () => {
     expect([...CLAVES]).toEqual(atributosClaves.claves);
     expect(TIPO).toEqual(atributosClaves.tipos);

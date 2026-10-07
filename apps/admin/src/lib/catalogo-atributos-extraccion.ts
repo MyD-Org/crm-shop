@@ -41,6 +41,11 @@
  * regulación de relés térmicos y guardamotores ("4-6A") sigue sin leerse: el Shop muestra `corriente_a` sólo
  * por su número y un "6 A" se confundiría con una térmica de 6 A.
  *
+ * Migración 0072: dimerizable (texto "si"/"no": "DIMERIZABLE", "DIMEABLE", "DIMMABLE", "TRIAC DIM" o la sigla "DIM" de una lámpara = sí; "NO DIMERIZABLE" y "NO DIM" = no; sólo
+ * si el producto ES la lámpara, panel, tira o driver: un dimmer, una tecla o un regulador no son "dimerizables") y modulos (cantidad de
+ * módulos DIN de un gabinete, caja o tablero: "p/12 Mod DIN", "12 polos", "10 bocas"; NO los módulos de bastidor de una caja de
+ * mecanismos, que son otra unidad). Ver `dimerizableDeTexto` y `modulosDeNombre`.
+ *
  * Módulo puro (sin DB): lo usan la sync de Alegra, el backfill y la normalización de lo que lee el
  * PDF o carga el panel (`normalizarAtributos`).
  */
@@ -69,6 +74,8 @@ export const CLAVES_ATRIBUTO = [
   "leds_rollo",
   "diametro_mm",
   "ancho_mm",
+  "dimerizable",
+  "modulos",
 ] as const
 export type ClaveAtributo = (typeof CLAVES_ATRIBUTO)[number]
 
@@ -114,6 +121,10 @@ export type Montaje = (typeof MONTAJES)[number]
 
 export const CURVAS = ["b", "c", "d"] as const
 
+/** Valores de `dimerizable` (texto, como `montaje` o `color`): el producto regula su luz con un dimmer, sí o no. */
+export const DIMERIZABLES = ["si", "no"] as const
+export type Dimerizable = (typeof DIMERIZABLES)[number]
+
 export interface AtributoExtraido {
   clave: ClaveAtributo
   valorNum: number | null
@@ -158,6 +169,8 @@ export const DEFINICION_ATRIBUTOS: Record<ClaveAtributo, DefinicionAtributo> = {
   leds_rollo: { tipo: "num", etiqueta: "LED por rollo", rango: [1, 10000], entero: true, pista: "300" },
   diametro_mm: { tipo: "num", etiqueta: "Diámetro (mm)", rango: [5, 200], pista: "25" },
   ancho_mm: { tipo: "num", etiqueta: "Ancho (mm)", rango: [30, 1000], entero: true, pista: "150" },
+  dimerizable: { tipo: "texto", etiqueta: "Dimerizable", pista: DIMERIZABLES.join(" o ") },
+  modulos: { tipo: "num", etiqueta: "Módulos DIN", rango: [1, 200], entero: true, pista: "12" },
 }
 
 /** Etiquetas para el admin (el Shop tiene las suyas). Derivado de `DEFINICION_ATRIBUTOS`. */
@@ -348,6 +361,17 @@ export function montajeValido(v: unknown): Montaje | null {
   if (t === "din") return "din"
   if (t === "superficie") return "aplicar"
   for (const m of MONTAJES) if (new RegExp(`^(?:${MONTAJE_PALABRAS[m]})$`).test(t)) return m
+  return null
+}
+
+/** "sí" | "Si" | "no" | true | false → "si" | "no" (lo que el PDF o el panel escriben para `dimerizable`). */
+export function dimerizableValido(v: unknown): Dimerizable | null {
+  if (v === true) return "si"
+  if (v === false) return "no"
+  if (typeof v !== "string") return null
+  const t = normalizar(v.trim())
+  if (t === "si" || t === "true" || t === "yes") return "si"
+  if (t === "no" || t === "false") return "no"
   return null
 }
 
@@ -831,6 +855,87 @@ export function anchoDeNombre(nombre: string): number | null {
   return null
 }
 
+// ---------------------------------------------------------------------------------------------
+// dimerizable (0072). Texto "si"/"no". Se lee del nombre y de la descripción (es una palabra del producto,
+// no una medida), pero sólo si el producto ES lo que se regula (lámpara, panel, tira, driver, luminaria):
+// un dimmer, una tecla, un variador o un sensor "dimerizan", no "son dimerizables".
+// ---------------------------------------------------------------------------------------------
+
+/** "dimerizable", "dimeable", "dimmable", "dimmerizable", "dimmeable" (singular: en plural suele ser "para lámparas dimerizables"). */
+const RE_DIMERIZABLE = /(?<![a-z])dim{1,2}(?:er(?:iz)?|e)?able(?![a-z])/g
+const RE_TRIAC_DIM = /(?<![a-z])triac dim(?![a-z])/g
+/**
+ * La sigla "DIM" / "NO DIM" de los nombres de lámparas ("AR111 15W GU10 DIM", "DICROICA 7W NO DIM"). Sólo del NOMBRE y sólo en
+ * un producto con señal de lámpara (potencia en W, tensión AC o un zócalo): "DIM" suelto en otro rubro suele ser "dimensión".
+ */
+const RE_SIGLA_DIM = /(?<![a-z0-9])(no )?dim(?![a-z0-9.])(?! ?\d+(?:[.,]\d+)? ?[x×*])/g
+const RE_SENAL_LAMPARA = /(?<![a-z0-9.,])\d+(?:[.,]\d+)? ?w(?![a-z0-9])|(?<![a-z])ac ?\d|(?<![a-z0-9])(?:gu10|gu5\.3|e27|e14|mr16|g9|g4)(?![a-z0-9])/
+/** Lo que regula a otro, no lo regulado: el nombre del producto dice que es un dimmer o un mando. */
+const RE_ES_DIMMER =
+  /(?:^|[^a-z])(?:dimm?ers?|regulador(?:es)?|variador(?:es)?)(?![a-z])|^(?:\d+ )?(?:teclas?|llaves?|interruptor(?:es)?|pulsador(?:es)?|sensor(?:es)?|controlador(?:es)?|control|modulo|selector(?:es)?|kit)(?![a-z])/
+/** Negación pegada antes de la palabra: "NO DIMERIZABLE", "no es dimeable", "sin dimmer". */
+const RE_NEGADO = /(?:^|[^a-z])(?:no|non|sin|ni)(?: es| son)?[ -]?$/
+/** "para lámparas dimerizables", "compatible con dimmer": el dato es de otra cosa, no del producto. */
+const RE_PARA_OTRO = /(?:^|[^a-z])(?:para|p\/|compatibles? con|aptos? para|aptas? para)(?: \w+){0,2} ?$/
+
+/** Sí/no del nombre (+ descripción) según su familia; null si no lo dice, es un dimmer o hay contradicción. */
+export function dimerizableDeTexto(nombre: string, descripcion?: string | null): Dimerizable | null {
+  const n = normalizar(nombre ?? "").replace(/\s+/g, " ").trim()
+  const t = normalizar(`${nombre ?? ""} ${descripcion ?? ""}`).replace(/\s+/g, " ").trim()
+  if (!t || RE_ES_DIMMER.test(n)) return null
+  const hallados: Dimerizable[] = []
+  for (const re of [RE_DIMERIZABLE, RE_TRIAC_DIM]) {
+    for (const m of t.matchAll(re)) {
+      const antes = t.slice(Math.max(0, m.index - 24), m.index)
+      if (RE_PARA_OTRO.test(antes)) continue
+      hallados.push(RE_NEGADO.test(antes) ? "no" : "si")
+    }
+  }
+  if (RE_SENAL_LAMPARA.test(n)) {
+    for (const m of n.matchAll(RE_SIGLA_DIM)) {
+      const antes = n.slice(Math.max(0, m.index - 24), m.index)
+      if (RE_PARA_OTRO.test(antes)) continue
+      hallados.push(m[1] || RE_NEGADO.test(antes) ? "no" : "si")
+    }
+  }
+  return unico(hallados)
+}
+
+// ---------------------------------------------------------------------------------------------
+// modulos (0072). Capacidad en módulos DIN (18 mm) de un gabinete, caja o tablero: lo que decide la compra de la envolvente
+// ("tablero de 12 bocas"). Sólo del producto que ES la envolvente (su nombre empieza con caja/gabinete/tablero):
+// un contrafrente, una tapa, un riel o un caballete "p/12 polos" son accesorios. Los "módulos" de bastidor de una caja de
+// mecanismos (teclas y tomas: "Caja Stik 2 módulos") son otra unidad y no se leen; tampoco los polos de una bornera o un seccionador.
+// ---------------------------------------------------------------------------------------------
+
+const RE_ENVOLVENTE_DIN = /^(?:\d+ )?(?:cajas?|gabinetes?|gab\.?|tableros?|envolventes?)(?![0-9a-z])/
+/** "12 Mod DIN", "p/ 4 mód. DIN", "8 modulos DIN": módulos con la palabra DIN. */
+const RE_MOD_DIN = /(?<![0-9a-z.,])(\d{1,3}) ?(?:modulos?|mods?)\.? ?din(?![a-z])/g
+/** "12 polos" (también "p/12 polos DIN" y "96 P." de algunos gabinetes estancos) de una caja o gabinete: capacidad en polos = módulos. */
+const RE_POLOS_CAJA = /(?<![0-9a-z.,])(\d{1,3}) ?(?:polos?(?![a-z])|p\.(?![a-z]))/g
+const RE_BOCAS = /(?<![0-9a-z.,])(\d{1,3}) ?bocas?(?![a-z])/g
+/** "2 módulos" de una caja para térmicas: sólo con contexto DIN (térmicas, pilar/pilastra, DIN, IP65). */
+const RE_MODULOS_SUELTO = /(?<![0-9a-z.,x×/-])(\d{1,3}) ?modulos?(?![a-z])/g
+const RE_CONTEXTO_DIN = /(?<![a-z])(?:din|termicas?|pilar|pilastra|ip ?65)(?![a-z])/
+
+/** Módulos DIN de un gabinete, caja o tablero según el nombre (+ descripción); null si dudoso. */
+export function modulosDeNombre(nombre: string, descripcion?: string | null): number | null {
+  const n = normalizar(nombre ?? "").replace(/\s+/g, " ").trim()
+  if (!RE_ENVOLVENTE_DIN.test(n)) return null
+  const t = normalizar(`${nombre ?? ""} ${descripcion ?? ""}`).replace(/\s+/g, " ").trim()
+  const valores = (re: RegExp) => [...t.matchAll(re)].map((m) => Number(m[1]))
+  const primeros = [...valores(RE_MOD_DIN), ...valores(RE_POLOS_CAJA)]
+  const crudos =
+    primeros.length > 0
+      ? primeros
+      : valores(RE_BOCAS).length > 0
+        ? valores(RE_BOCAS)
+        : RE_CONTEXTO_DIN.test(t)
+          ? valores(RE_MODULOS_SUELTO)
+          : []
+  return enRango("modulos", unico(crudos))
+}
+
 /** Valores por metro, leídos del texto completo (antes de `sinRelaciones`). Dos distintos = ninguno. */
 function porMetro(t: string): AtributoExtraido[] {
   const out: AtributoExtraido[] = []
@@ -910,6 +1015,9 @@ export function extraerAtributosDeNombre(nombre: string, descripcion?: string | 
   out.push(...extraerAmpliadas(t, normalizar(nombre ?? "").replace(/\s+/g, " ").trim()))
   num("diametro_mm", diametroDeNombre(nombre))
   num("ancho_mm", anchoDeNombre(nombre))
+  const dimerizable = dimerizableDeTexto(nombre, descripcion)
+  if (dimerizable) out.push({ clave: "dimerizable", valorNum: null, valorTexto: dimerizable })
+  num("modulos", modulosDeNombre(nombre, descripcion))
 
   const fuera = clavesDescartadasPorNombre(nombre)
   const orden = (c: ClaveAtributo) => CLAVES_ATRIBUTO.indexOf(c)
@@ -967,6 +1075,9 @@ export function normalizarAtributos(entrada: unknown): AtributoExtraido[] {
     } else if (clave === "montaje") {
       const mo = montajeValido(v)
       if (mo) out.push({ clave, valorNum: null, valorTexto: mo })
+    } else if (clave === "dimerizable") {
+      const di = dimerizableValido(v)
+      if (di) out.push({ clave, valorNum: null, valorTexto: di })
     } else if (clave === "curva") {
       const cu = curvaValida(v)
       if (cu) out.push({ clave, valorNum: null, valorTexto: cu })

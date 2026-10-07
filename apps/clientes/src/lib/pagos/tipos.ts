@@ -79,7 +79,7 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
   control_seguridad:
     "El pago no pasó el control de seguridad del procesador. Inténtelo con otra tarjeta o elija otro medio de pago.",
   desconocido:
-    "No pudimos procesar el pago. Inténtelo de nuevo o elija transferencia.",
+    "No pudimos procesar el pago. Inténtelo de nuevo o elija otro medio de pago.",
 };
 
 /**

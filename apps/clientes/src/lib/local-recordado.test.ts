@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decidirLocal } from "./local-recordado";
+import { decidirLocal, vinoDeLaCookie } from "./local-recordado";
 
 const d = (pathname: string, qs: string, cookie?: string) =>
   decidirLocal({ pathname, search: new URLSearchParams(qs), cookie });
@@ -34,11 +34,11 @@ describe("decidirLocal", () => {
   it("entrar al catálogo sin retiro con local recordado redirige agregándolo", () => {
     expect(d("/catalogo", "categoria=paneles", "mdp")).toEqual({
       cookie: { accion: "ninguna" },
-      redirigirA: "categoria=paneles&retiro=mdp",
+      redirigirA: "categoria=paneles&retiro=mdp&recordado=1",
     });
     expect(d("/catalogo", "", "mdp")).toEqual({
       cookie: { accion: "ninguna" },
-      redirigirA: "retiro=mdp",
+      redirigirA: "retiro=mdp&recordado=1",
     });
   });
 
@@ -61,7 +61,7 @@ describe("decidirLocal", () => {
   it("una q vacía no cuenta como búsqueda", () => {
     expect(d("/catalogo", "q=", "mdp")).toEqual({
       cookie: { accion: "ninguna" },
-      redirigirA: "q=&retiro=mdp",
+      redirigirA: "q=&retiro=mdp&recordado=1",
     });
   });
 
@@ -87,5 +87,44 @@ describe("decidirLocal", () => {
 
   it("una cookie inválida no redirige", () => {
     expect(d("/catalogo", "", "../x")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+});
+
+describe("marcador recordado", () => {
+  it("se conserva cuando coincide con la cookie (el catálogo ya redirigido no vuelve a redirigir)", () => {
+    expect(d("/catalogo", "retiro=mdp&recordado=1", "mdp")).toEqual({ cookie: { accion: "ninguna" } });
+  });
+
+  it("se saca de un link compartido: sin cookie o con otro local", () => {
+    expect(d("/catalogo", "retiro=mdp&recordado=1")).toEqual({
+      cookie: { accion: "guardar", local: "mdp" },
+      redirigirA: "retiro=mdp",
+    });
+    expect(d("/catalogo", "retiro=mdp&recordado=1", "igz")).toEqual({
+      cookie: { accion: "guardar", local: "mdp" },
+      redirigirA: "retiro=mdp",
+    });
+    expect(d("/catalogo", "recordado=1")).toEqual({ cookie: { accion: "ninguna" }, redirigirA: "" });
+  });
+});
+
+describe("vinoDeLaCookie", () => {
+  it("sí: el redirect del proxy marcó la URL y la cookie coincide con el local filtrado", () => {
+    expect(vinoDeLaCookie({ recordado: "1", retiroEn: "mdp", cookie: "mdp" })).toBe(true);
+    expect(vinoDeLaCookie({ recordado: "1", retiroEn: "mdp", cookie: "MDP" })).toBe(true);
+  });
+
+  it("no: sin marcador (el local lo eligió en esta visita o vino en un link)", () => {
+    expect(vinoDeLaCookie({ recordado: undefined, retiroEn: "mdp", cookie: "mdp" })).toBe(false);
+    expect(vinoDeLaCookie({ recordado: "0", retiroEn: "mdp", cookie: "mdp" })).toBe(false);
+  });
+
+  it("no: un link compartido con el marcador no avisa a quien no tiene esa cookie", () => {
+    expect(vinoDeLaCookie({ recordado: "1", retiroEn: "mdp", cookie: undefined })).toBe(false);
+    expect(vinoDeLaCookie({ recordado: "1", retiroEn: "mdp", cookie: "igz" })).toBe(false);
+  });
+
+  it("no: sin filtro de local vigente (desconocido o apagado)", () => {
+    expect(vinoDeLaCookie({ recordado: "1", retiroEn: undefined, cookie: "mdp" })).toBe(false);
   });
 });

@@ -11,6 +11,8 @@ import { masivaOverlay, masivaSucursal, masivaTags, type Seleccion } from "@/lib
 //   accion:    { tipo:"visible", valor } | { tipo:"categoria", categoriaId }
 //            | { tipo:"tag", tagId, modo:"agregar"|"quitar" }
 //            | { tipo:"sucursal", slug, visible }   (visible:false = deja de ofrecerse en esa sucursal)
+//            | { tipo:"destacado", valor }          (true = destacar sin pisar la posición ya cargada;
+//                                                    false = quitar el destacado)
 //
 // La selección por FILTRO se re-evalúa en el servidor en una sola sentencia: "todo lo que
 // coincide" pueden ser ~5959 productos y el navegador no manda esa lista (REQ-ADM-03). La
@@ -56,6 +58,10 @@ async function ejecutar(
   if (accion.tipo === "visible") {
     if (typeof accion.valor !== "boolean") return invalidResponse("Estado de publicación inválido", "valor")
     return masivaOverlay(tenantId, seleccion, { tipo: "visible", valor: accion.valor }, updatedBy)
+  }
+  if (accion.tipo === "destacado") {
+    if (typeof accion.valor !== "boolean") return invalidResponse("El estado de destacado es inválido", "valor")
+    return masivaOverlay(tenantId, seleccion, { tipo: "destacado", valor: accion.valor }, updatedBy)
   }
   if (accion.tipo === "categoria") {
     const categoriaId = accion.categoriaId

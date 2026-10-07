@@ -6,7 +6,7 @@ import { Button, QuantityStepper, Skeleton } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
-import { cuotasHastaFicha, metaCuotasFicha } from "@/lib/ficha-cuotas-carrito";
+import { cuotasFichaConCarrito, cuotasHastaFicha, metaCuotasFicha } from "@/lib/ficha-cuotas-carrito";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { MediosDePagoModal } from "@/components/MediosDePagoModal";
 import { FichaTecnicaModal } from "@/components/FichaTecnicaModal";
@@ -155,8 +155,11 @@ export function ProductoClient({
   // recuadro de abajo lo reemplaza (ya tiene / cuánto falta), para no decir lo mismo dos veces.
   const mejorCuota = mejorCuotaProducto(cuotas);
   const progresoCarrito = useProgresoCuotasCarrito(producto.id, qty, !noComprable && !agotado);
-  const metaCarrito = metaCuotasFicha(progresoCarrito);
-  const cuotasHasta = metaCarrito ? null : cuotasHastaFicha(cuotas);
+  // Con el carrito la compra puede alcanzar un nivel mayor que el del producto solo: la línea verde
+  // pasa a ese nivel (con el monto de ESTE producto) y el recuadro sólo habla de lo que falta.
+  const cuotasConCarrito = cuotasFichaConCarrito(progresoCarrito, producto.id, qty, mejorCuota);
+  const metaCarrito = metaCuotasFicha(progresoCarrito, cuotasConCarrito !== null);
+  const cuotasHasta = metaCarrito || cuotasConCarrito ? null : cuotasHastaFicha(cuotas);
   // Sólo para mostrar: el nombre real (para buscar, ordenar, SEO/JSON-LD)
   // sigue siendo `producto.name` tal como lo resolvió el servidor.
   const { nombre: nombreParaMostrar } = nombreConMarca(
@@ -308,7 +311,16 @@ export function ProductoClient({
               )}
               {!sinPrecio && cuotas && producto.precioFinal != null && hayCuotasParaModal(cuotas) && (
                 <div className="mt-3">
-                  {mejorCuota && <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />}
+                  {cuotasConCarrito ? (
+                    <CuotasLinea
+                      opcion={{ ...cuotasConCarrito, sinInteres: true }}
+                      tono="claro"
+                      tamano="lg"
+                      className="block"
+                    />
+                  ) : (
+                    mejorCuota && <CuotasLinea opcion={mejorCuota} tono="claro" tamano="lg" className="block" />
+                  )}
                   {cuotasHasta && (
                     <span className="block text-sm text-muted" data-testid="cuotas-hasta">
                       {TEXTOS_CUOTAS.hastaCuotasDesde(cuotasHasta.cuotas, cuotasHasta.minimo)}
@@ -317,6 +329,7 @@ export function ProductoClient({
                   <MediosDePagoModal
                     precioFinal={producto.precioFinal}
                     cuotas={cuotas}
+                    conCarrito={cuotasConCarrito}
                     className="mt-0.5 text-accent transition-colors hover:text-primary"
                   />
                 </div>

@@ -4,7 +4,7 @@
  * Módulo puro, sin IO. Dos piezas:
  *  - `REGISTRO`: qué claves estructuradas (`catalog_atributos`) se pueden ofrecer como filtro, con su
  *    título, unidad, control (lista de valores o rango), orden y umbrales. Una clave que no está acá
- *    NUNCA se ofrece (medidas_mm, leds_*, potencia_w_m...). diametro_mm y ancho_mm sí (migración 0070 del CRM).
+ *    NUNCA se ofrece (medidas_mm, leds_*, potencia_w_m...). diametro_mm, ancho_mm (migración 0070 del CRM), modulos y dimerizable (0072) sí.
  *  - `elegirFacetas`: dada la distribución de valores del conjunto que se está viendo, decide QUÉ
  *    claves mostrar (cobertura suficiente, más de un valor, tope de grupos) y con qué valores.
  *
@@ -112,6 +112,8 @@ export const REGISTRO: readonly ClaveFacetable[] = [
   // Caños, tubos y accesorios de caño (diámetro) y bandejas portacables (ancho): valores comerciales discretos, de ahí lista.
   { clave: "diametro_mm", titulo: "Diámetro", unidad: "mm", control: "lista", orden: 72, grupo: "fisicas" },
   { clave: "ancho_mm", titulo: "Ancho", unidad: "mm", control: "lista", orden: 74, grupo: "fisicas" },
+  // Capacidad de gabinetes y cajas DIN (migración 0072 del CRM): "12 módulos" = 12 bocas = 12 polos.
+  { clave: "modulos", titulo: "Módulos", unidad: "módulos", control: "lista", orden: 76, grupo: "fisicas" },
   { clave: "tension_v", ...deMedida("tension_v"), control: "lista", orden: 80, grupo: "electricas" },
   { clave: "zocalo", ...deMedida("zocalo"), control: "lista", orden: 90, valores: mapa(ZOCALOS, mayuscula), grupo: "iluminacion" },
   { clave: "temperatura_k", ...deMedida("temperatura_k"), control: "lista", orden: 100, grupo: "iluminacion" },
@@ -122,6 +124,8 @@ export const REGISTRO: readonly ClaveFacetable[] = [
   { clave: "largo_m", ...deMedida("largo_m"), control: "rango", orden: 150, grupo: "fisicas" },
   { clave: "color", titulo: "Color", control: "lista", orden: 160, valores: COLORES, grupo: "fisicas" },
   { clave: "montaje", titulo: "Montaje", control: "lista", orden: 170, valores: MONTAJES, grupo: "fisicas" },
+  // Sí / No del producto (lámparas, paneles, tiras y drivers). Sin el dato no se ofrece: cobertura y 2 valores como el resto.
+  { clave: "dimerizable", titulo: "Dimerizable", control: "lista", orden: 180, valores: { si: "Sí", no: "No" }, grupo: "iluminacion" },
 ];
 
 const POR_CLAVE = new Map<string, ClaveFacetable>(REGISTRO.map((c) => [c.clave, c]));
@@ -169,6 +173,7 @@ export function etiquetaValor(clave: string, valor: string): string {
   if (clave === "ip") return `IP${valor}`;
   const propia = def?.valores?.[valor];
   if (propia) return propia;
+  if (clave === "modulos" && valor === "1") return "1 módulo";
   if (TIPO[clave as ClaveEstructurada] === "num") {
     const unidad = def?.unidad;
     const sufijo = unidad ? (unidad === "°" ? "°" : ` ${unidad}`) : "";

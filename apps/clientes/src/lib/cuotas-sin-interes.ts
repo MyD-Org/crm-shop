@@ -247,6 +247,12 @@ export interface ProgresoCuotas {
    * cantidad de cuotas, nunca un monto inventado).
    */
   montoCuota?: number;
+  /**
+   * Sólo si el pedido lo pide (`precioLineas`, la ficha): las líneas de la cotización a la lista de
+   * la condición alcanzada (total con impuestos de cada una), para que la ficha calcule la cuota de
+   * SU producto. Ausente = no se pidió o no se pudo cotizar.
+   */
+  lineasAlcanzada?: { id: string; qty: number; total: number }[];
 }
 
 /**

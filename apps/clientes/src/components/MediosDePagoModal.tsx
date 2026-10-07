@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Dialog } from "@myd-org/ui";
 import { MediosDePagoDetalle } from "@/components/MediosDePagoDetalle";
+import type { CuotasFichaCarrito } from "@/lib/ficha-cuotas-carrito";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { filasNoAlcanzadas, opcionesCombinadas, type CuotasProducto } from "@/lib/cuotas-sin-interes";
 
@@ -17,11 +18,14 @@ import { filasNoAlcanzadas, opcionesCombinadas, type CuotasProducto } from "@/li
 export function MediosDePagoModal({
   precioFinal,
   cuotas,
+  conCarrito = null,
   className = "",
 }: {
   /** Precio contado del producto (1 pago), con IVA. */
   precioFinal: number;
   cuotas: CuotasProducto;
+  /** Nivel que sube el carrito (ver `cuotasFichaConCarrito`): se muestra como fila propia. */
+  conCarrito?: CuotasFichaCarrito | null;
   className?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -55,6 +59,7 @@ export function MediosDePagoModal({
           <MediosDePagoDetalle
             opciones={opcionesCombinadas(cuotas)}
             noAlcanzadas={filasNoAlcanzadas(cuotas)}
+            conCarrito={conCarrito}
             precioContado={precioFinal}
           />
         )}

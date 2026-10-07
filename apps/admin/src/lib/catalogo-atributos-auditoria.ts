@@ -32,6 +32,7 @@ export const RANGOS_PLAUSIBLES: Partial<Record<ClaveAtributo, [number, number]>>
   leds_rollo: [1, 5000],
   diametro_mm: [10, 160],
   ancho_mm: [50, 600],
+  modulos: [2, 150],
 }
 
 export interface FilaAuditada {
@@ -103,15 +104,15 @@ export function seccionDeNombre(nombre: string, descripcion?: string | null): nu
 export interface FilaGuardada {
   fuente: FuenteAtributo
   valorNum: number | null
-  /** Para las claves de texto (montaje, tono). Ausente = null. */
+  /** Para las claves de texto (montaje, tono, dimerizable). Ausente = null. */
   valorTexto?: string | null
 }
 
 /**
  * Claves que el backfill por nombre sabe escribir (`scripts/backfill-seccion-cables.ts --clave <clave>`).
- * Numéricas (valor_num) y de texto (`montaje`, `tono`: valor_texto).
+ * Numéricas (valor_num) y de texto (`montaje`, `tono`, `dimerizable`: valor_texto).
  */
-export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono"] as const
+export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono", "modulos", "dimerizable"] as const
 export type ClaveBackfillNombre = (typeof CLAVES_BACKFILL_NOMBRE)[number]
 
 /** Valor numérico que lee el extractor del nombre (+ descripción) para una clave; null si no lee ninguno. */

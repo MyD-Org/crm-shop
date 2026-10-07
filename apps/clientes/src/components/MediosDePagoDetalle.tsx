@@ -13,12 +13,28 @@ export function MediosDePagoDetalle({
   opciones,
   precioContado,
   noAlcanzadas = [],
+  conCarrito = null,
 }: {
   opciones: OpcionCuotas[];
   precioContado: number;
   /** Cantidades que el producto no alcanza por mínimo: filas secundarias, sin monto por cuota. */
   noAlcanzadas?: CuotaNoAlcanzada[];
+  /**
+   * Con el carrito la compra alcanza un nivel que el producto solo no: se muestra como fila de
+   * cuotas (con el monto de este producto) y deja de ser una fila atenuada "desde $X".
+   */
+  conCarrito?: Pick<OpcionCuotas, "cuotas" | "total" | "montoCuota"> | null;
 }) {
+  // Mínimo de la cantidad que se alcanza con el carrito: la fila lo aclara ("En compras desde $X"),
+  // sin mencionar el carrito.
+  const minimoConCarrito = conCarrito ? noAlcanzadas.find((n) => n.cuotas === conCarrito.cuotas)?.minimo : undefined;
+  const filas: (OpcionCuotas & { minimo?: number })[] = conCarrito
+    ? [
+        ...opciones.filter((o) => o.cuotas !== conCarrito.cuotas),
+        { ...conCarrito, sinInteres: true as const, minimo: minimoConCarrito },
+      ].sort((a, b) => a.cuotas - b.cuotas)
+    : opciones;
+  const atenuadas = conCarrito ? noAlcanzadas.filter((n) => n.cuotas !== conCarrito.cuotas) : noAlcanzadas;
   return (
     <div className="space-y-5">
       <section aria-labelledby="medio-cuotas">
@@ -33,13 +49,18 @@ export function MediosDePagoDetalle({
             </span>
             <span className="text-sm font-semibold text-text">{fmtPrecio(precioContado)}</span>
           </li>
-          {opciones.map((o) => (
+          {filas.map((o) => (
             <li key={o.cuotas} className="flex items-start justify-between gap-4 px-3 py-2.5">
               <span className="text-sm text-text">
                 {TEXTOS_CUOTAS.filaCuotas(o.cuotas, o.montoCuota)}
                 <span className="ml-2 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
                   {TEXTOS_CUOTAS.sinInteres}
                 </span>
+                {o.minimo !== undefined && (
+                  <span className="block text-xs text-muted" data-testid="fila-con-carrito">
+                    {TEXTOS_CUOTAS.enComprasDesde(o.minimo)}
+                  </span>
+                )}
               </span>
               <span className="shrink-0 text-right text-xs text-muted">
                 {TEXTOS_CUOTAS.total}
@@ -47,7 +68,7 @@ export function MediosDePagoDetalle({
               </span>
             </li>
           ))}
-          {noAlcanzadas.map((n) => (
+          {atenuadas.map((n) => (
             <li key={`min-${n.cuotas}`} data-no-alcanzada className="px-3 py-2.5 text-xs text-muted">
               {TEXTOS_CUOTAS.filaNoAlcanzada(n.cuotas, n.minimo)}
             </li>

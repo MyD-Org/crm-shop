@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
-import { Check, Copy, Package, RefreshCw } from "lucide-react"
+import { ArrowDown, ArrowUp, Check, Copy, Package, RefreshCw } from "lucide-react"
 import {
   Badge,
   Button,
@@ -17,12 +17,14 @@ import {
 } from "@myd-org/ui"
 import { ProductoDialog, caminoCategoria } from "./ProductoDialog"
 import { contarFotos } from "./FotosProducto"
-import { ORDEN_DESTACADO_SIN_POSICION } from "./destacado"
+import { ORDEN_DESTACADO_SIN_POSICION, reordenarDisponible } from "./destacado"
 import { SincronizarAlegra } from "./SincronizarAlegra"
 import { AyudaTooltip } from "../AyudaTooltip"
 import {
   AYUDA_CUENTA_ORIGEN,
   AYUDA_DESTACADO,
+  AYUDA_DESTACAR_MASIVO,
+  AYUDA_REORDENAR_DESTACADOS,
   AYUDA_ESTADO,
   AYUDA_OCULTAR,
   AYUDA_OCULTO_EN,
@@ -70,6 +72,7 @@ type Accion =
   | { tipo: "categoria"; categoriaId: string | null }
   | { tipo: "tag"; tagId: string; modo: "agregar" | "quitar" }
   | { tipo: "sucursal"; slug: string; visible: boolean }
+  | { tipo: "destacado"; valor: boolean }
 
 interface Pendiente {
   accion: Accion
@@ -148,6 +151,7 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
   const [abierto, setAbierto] = useState<ProductoDto | null>(null)
   const [pendiente, setPendiente] = useState<Pendiente | null>(null)
   const [aplicando, setAplicando] = useState(false)
+  const [moviendo, setMoviendo] = useState(false)
 
   // Sólo vale la respuesta del último pedido: una consulta vieja que llega tarde (p. ej. la de los
   // filtros iniciales después de "Limpiar filtros") no debe pisar el listado actual.
@@ -263,8 +267,30 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
     }
   }
 
+  /**
+   * Subir / bajar un destacado. El servidor renumera 1..N los destacados de la categoría y la
+   * lista se vuelve a cargar: no se mueve nada en pantalla por cuenta propia.
+   */
+  async function mover(p: ProductoDto, direccion: "subir" | "bajar") {
+    if (!filtros.categoria) return
+    setMoviendo(true)
+    try {
+      await api("/api/admin/catalogo/productos/destacados/mover", {
+        method: "POST",
+        body: JSON.stringify({ categoriaId: filtros.categoria, alegraId: p.alegraId, direccion }),
+      })
+      await cargar()
+      onCambio()
+    } catch (err) {
+      setError(err instanceof ErrorApi ? err.message : "No pudimos cambiar la posición.")
+    } finally {
+      setMoviendo(false)
+    }
+  }
+
   const items = datos?.items ?? []
   const total = datos?.total ?? 0
+  const puedeReordenar = reordenarDisponible(filtros as Record<string, string | undefined>)
   const hasta = Math.min(start + items.length, total)
   const seleccionados = todoElFiltro ? total : seleccion.length
 
@@ -405,18 +431,51 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
       key: "acciones",
       header: "",
       align: "right",
-      render: (p) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation()
-            setAbierto(p)
-          }}
-        >
-          Editar
-        </Button>
-      ),
+      render: (p) => {
+        const posicion = start + items.indexOf(p)
+        return (
+          <div className="flex items-center justify-end gap-1">
+            {puedeReordenar && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Subir una posición"
+                  disabled={moviendo || cargando || posicion <= 0}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void mover(p, "subir")
+                  }}
+                >
+                  <ArrowUp size={14} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Bajar una posición"
+                  disabled={moviendo || cargando || posicion >= total - 1}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void mover(p, "bajar")
+                  }}
+                >
+                  <ArrowDown size={14} />
+                </Button>
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                setAbierto(p)
+              }}
+            >
+              Editar
+            </Button>
+          </div>
+        )
+      },
     },
   ]
 
@@ -589,6 +648,14 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
         </div>
       )}
 
+      {filtros.destacado === "si" && filtros.categoria && filtros.categoria !== "sin" && (
+        <p className="text-xs" style={{ color: "var(--ink-faint)" }}>
+          {puedeReordenar
+            ? AYUDA_REORDENAR_DESTACADOS
+            : "Para reordenar los destacados de una categoría, deje activos sólo los filtros Categoría y Destacados."}
+        </p>
+      )}
+
       {seleccionados > 0 && (
         <SelectionBar
           count={seleccionados}
@@ -623,6 +690,22 @@ export function ProductosPanel({ categorias, tags, cuentas, sucursales, busqueda
               Ocultar
             </Button>
           </Tooltip>
+          <Tooltip content={AYUDA_DESTACAR_MASIVO}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void preparar({ tipo: "destacado", valor: true }, (n) => `Va a destacar ${n} producto${n === 1 ? "" : "s"} en su categoría. Los que ya tienen una posición la conservan.`)}
+            >
+              Destacar
+            </Button>
+          </Tooltip>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void preparar({ tipo: "destacado", valor: false }, (n) => `Va a quitar el destacado a ${n} producto${n === 1 ? "" : "s"}. Los que no estaban destacados no cambian.`)}
+          >
+            Quitar destacado
+          </Button>
           <Select
             aria-label="Asignar categoría a la selección"
             value=""

@@ -7,7 +7,9 @@ import {
   filasNoAlcanzadas,
   mejorCuotaProducto,
   type CuotaNoAlcanzada,
+  montoPorCuota,
   type CuotasProducto,
+  type OpcionCuotas,
   type ProgresoCuotas,
 } from "./cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "./cuotas-textos";
@@ -34,39 +36,53 @@ export function lineasConProducto(
   return lineas;
 }
 
+/** Lo que la línea verde y el modal de la ficha dicen cuando el carrito sube el nivel de cuotas. */
+export interface CuotasFichaCarrito {
+  cuotas: number;
+  /** Total DE ESTE PRODUCTO (por la cantidad elegida) a la lista de la condición alcanzada. */
+  total: number;
+  /** `total` / `cuotas`, redondeado como en el resto de la tienda (`montoPorCuota`). */
+  montoCuota: number;
+}
+
 /**
- * Recuadro de la ficha. Sin progreso o sin cuotas que informar: null. Si la compra ya alcanza un
- * nivel, se dice cuál (sin el monto de la cuota de toda la compra: la línea de arriba es la del
- * producto) y, si hay uno más alto, cuánto falta. Si no alcanza ninguno, cuánto falta.
+ * Si con el carrito la compra alcanza un nivel MAYOR que el del producto solo, ese nivel con el
+ * monto de ESTE producto (precio a la lista alcanzada × cantidad elegida ÷ cuotas). El precio sale
+ * de la línea del producto en la cotización de esa lista; si el servidor no la trajo, se usa el
+ * precio de la lista de `soloProducto` (la que ya muestra la línea). Sin ninguno: null (no se
+ * inventa un monto). Sin progreso o sin nivel mayor: null.
  */
-export function metaCuotasFicha(p: ProgresoCuotas | null | undefined): MetaCarrito | null {
-  if (!p) return null;
-  if (p.cuotasActuales !== null) {
-    if (!p.proximo) {
-      return {
-        id: "cuotas",
-        texto: TEXTOS_CUOTAS.fichaCompraYaTiene(p.cuotasActuales),
-        enfasis: TEXTOS_CUOTAS.cuotasSinInteres(p.cuotasActuales),
-        pct: 100,
-        alcanzada: true,
-        aria: TEXTOS_CUOTAS.barraAria,
-      };
-    }
-    return {
-      id: "cuotas",
-      texto: TEXTOS_CUOTAS.faltaParaCuotas(p.proximo.falta, p.proximo.cuotas),
-      enfasis: TEXTOS_CUOTAS.montoFaltante(p.proximo.falta),
-      textoAlcanzado: TEXTOS_CUOTAS.fichaYaTieneCuotas(p.cuotasActuales),
-      enfasisAlcanzado: TEXTOS_CUOTAS.cuotasSinInteres(p.cuotasActuales),
-      pct: p.pct,
-      alcanzada: false,
-      aria: TEXTOS_CUOTAS.barraAria,
-    };
-  }
-  if (!p.proximo) return null;
+export function cuotasFichaConCarrito(
+  p: ProgresoCuotas | null | undefined,
+  productoId: string,
+  qty: number,
+  soloProducto: OpcionCuotas | null | undefined,
+): CuotasFichaCarrito | null {
+  if (!p || p.cuotasActuales === null || p.cuotasActuales <= (soloProducto?.cuotas ?? 0)) return null;
+  // Unitario, como la línea sin carrito ("6 cuotas de $X" es por 1 unidad): la cantidad elegida
+  // sólo cuenta para alcanzar el nivel, no para el monto que se muestra.
+  void qty;
+  const linea = p.lineasAlcanzada?.find((l) => l.id === productoId && l.qty > 0 && l.total > 0);
+  const unitario = linea ? linea.total / linea.qty : soloProducto?.total;
+  if (unitario === undefined || !(unitario > 0)) return null;
+  const total = Math.round(unitario * 100) / 100;
+  return { cuotas: p.cuotasActuales, total, montoCuota: montoPorCuota(total, p.cuotasActuales) };
+}
+
+/**
+ * Recuadro de la ficha (la barra). Sólo habla de lo que FALTA: lo que la compra ya tiene lo dice la
+ * línea verde (`cuotasFichaConCarrito`), así no se repite ni se contradice.
+ * - `nivelMayor` (la línea ya muestra un nivel subido por el carrito): sólo si hay un nivel más alto,
+ *   "Sume $Y más y pague en 12 cuotas sin interés."; si no hay más, nada.
+ * - Si no: "Le faltan $Y para pagar en…" (carrito + este producto) cuando falta algo; si no, nada.
+ */
+export function metaCuotasFicha(p: ProgresoCuotas | null | undefined, nivelMayor = false): MetaCarrito | null {
+  if (!p?.proximo) return null;
   return {
     id: "cuotas",
-    texto: TEXTOS_CUOTAS.fichaFaltaParaCuotas(p.proximo.falta, p.proximo.cuotas),
+    texto: nivelMayor
+      ? TEXTOS_CUOTAS.faltaParaCuotas(p.proximo.falta, p.proximo.cuotas)
+      : TEXTOS_CUOTAS.fichaFaltaParaCuotas(p.proximo.falta, p.proximo.cuotas),
     enfasis: TEXTOS_CUOTAS.montoFaltante(p.proximo.falta),
     pct: p.pct,
     alcanzada: false,

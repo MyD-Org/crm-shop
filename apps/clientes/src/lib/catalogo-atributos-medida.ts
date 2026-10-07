@@ -57,7 +57,7 @@ export const RANGOS: Readonly<Partial<Record<ClaveMedida, readonly [number, numb
 };
 
 /** Claves que el Shop filtra y muestra pero que el buscador no lee de una consulta (no son `ClaveMedida`). */
-export type ClaveSoloFaceta = "diametro_mm" | "ancho_mm";
+export type ClaveSoloFaceta = "diametro_mm" | "ancho_mm" | "modulos";
 
 /**
  * Rango válido de las claves sólo facetables. Espejo de `DEFINICION_ATRIBUTOS.rango` del CRM (lo hace cumplir
@@ -67,6 +67,7 @@ export type ClaveSoloFaceta = "diametro_mm" | "ancho_mm";
 export const RANGOS_SOLO_FACETA: Readonly<Record<ClaveSoloFaceta, readonly [number, number]>> = {
   diametro_mm: [5, 200],
   ancho_mm: [30, 1000],
+  modulos: [1, 200],
 };
 
 /** Rango válido de cualquier clave numérica que el Shop sabe validar (medidas del buscador y sólo facetables). */

@@ -20,11 +20,11 @@ function archivos(dir: string): string[] {
 }
 
 describe("CheckoutClient con medios de pago de la tabla", () => {
-  it("el paso Pago ofrece los medios aplicables a la modalidad y trae la nota para los manuales", () => {
+  it("el paso Pago ofrece los medios aplicables a la modalidad, sin notas debajo", () => {
     expect(fuente).toContain("const mediosParaElegir = mediosParaModalidad(mediosPago, entrega, opcionesMedios);");
     expect(fuente).toContain(">Medio de pago</h2>");
-    expect(fuente).toContain("{!pagaEnLinea && <p");
-    expect(fuente).toContain("{NOTA_PAGO_A_CONFIRMAR}");
+    expect(fuente).not.toContain("El total se actualiza según el medio de pago.");
+    expect(fuente).not.toContain("NOTA_PAGO_A_CONFIRMAR");
   });
 
   it("sin medios aplicables muestra la sección Pago con el aviso de coordinar", () => {

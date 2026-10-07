@@ -328,7 +328,7 @@ export function PagoPayway({
       </Field>
 
       {modalidad === "credito" && (
-        <div className="flex items-center justify-between gap-3 rounded-md bg-elevated px-4 py-3 text-sm">
+        <div className="flex items-center justify-between gap-3 rounded-md bg-bg px-4 py-3 text-sm">
           <span className="flex flex-col">
             <span className="text-muted">Cuotas</span>
             <span className="font-semibold text-text">

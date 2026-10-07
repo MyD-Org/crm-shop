@@ -48,12 +48,3 @@ export function pagoParaCotizar(
   const canonico = mediosParaModalidad(medios, entrega, opts).find((m) => m.idListaPrecios === listaKey);
   return { listaKey, pagoMetodo: canonico?.slug };
 }
-
-/**
- * ¿El total puede cambiar según el medio elegido? Sólo si los medios ofrecidos no comparten lista de
- * precios (cada medio apunta a una lista; sin lista rige la general). Con una sola lista distinta el
- * aviso "el total se actualiza" no aporta nada.
- */
-export function totalVariaSegunMedio(medios: readonly Pick<MedioPago, "idListaPrecios">[]): boolean {
-  return new Set(medios.map((m) => m.idListaPrecios || "")).size > 1;
-}

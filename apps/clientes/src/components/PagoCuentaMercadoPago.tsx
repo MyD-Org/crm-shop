@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Alert, Button } from "@myd-org/ui";
+import { IconoSalida } from "./PagoIconos";
 
 /**
  * Pagar con la cuenta de Mercado Pago (dinero disponible o tarjetas guardadas): el contenido de esa
@@ -39,10 +40,13 @@ export function PagoCuentaMercadoPago({ pedidoId, cuotas }: { pedidoId: string; 
 
   return (
     <div className="flex flex-col gap-4">
-      <Alert>
-        Lo llevamos a Mercado Pago para completar el pago. Al terminar, vuelve a esta página con su pedido.
-        {cuotas !== undefined && cuotas > 1 && ` Allá puede elegir hasta ${cuotas} cuotas.`}
-      </Alert>
+      <p className="flex items-start gap-2 text-sm text-muted">
+        <IconoSalida />
+        <span>
+          Lo llevamos a Mercado Pago para completar el pago. Al terminar, vuelve a esta página con su pedido.
+          {cuotas !== undefined && cuotas > 1 && ` Allá puede elegir hasta ${cuotas} cuotas.`}
+        </span>
+      </p>
       {error && <Alert tone="danger">{error}</Alert>}
       <Button onClick={irAMercadoPago} loading={yendo} disabled={yendo}>
         {yendo ? "Abriendo Mercado Pago…" : "Ir a Mercado Pago"}

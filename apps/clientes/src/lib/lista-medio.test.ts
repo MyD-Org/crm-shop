@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MedioPago } from "./medios-pago";
-import { idListaDelMedio, pagoParaCotizar, totalVariaSegunMedio } from "./lista-medio";
+import { idListaDelMedio, pagoParaCotizar } from "./lista-medio";
 
 const medio = (o: Partial<MedioPago>): MedioPago => ({
   slug: "transferencia",
@@ -114,16 +114,5 @@ describe("idListaDelMedio con cuotas sin interés (rebanada D)", () => {
 
   it("sin credenciales de Mercado Pago el medio no aplica: sin lista", () => {
     expect(idListaDelMedio([mp], "retiro", "mercadopago", { mpDisponible: false }, 6)).toBeUndefined();
-  });
-});
-
-describe("totalVariaSegunMedio", () => {
-  it("es falso si los medios comparten lista (o ninguno tiene)", () => {
-    expect(totalVariaSegunMedio([{ idListaPrecios: null }, { idListaPrecios: null }])).toBe(false);
-    expect(totalVariaSegunMedio([{ idListaPrecios: "7" }, { idListaPrecios: "7" }])).toBe(false);
-  });
-  it("es verdadero si hay listas distintas o una con lista y otra sin", () => {
-    expect(totalVariaSegunMedio([{ idListaPrecios: "7" }, { idListaPrecios: "8" }])).toBe(true);
-    expect(totalVariaSegunMedio([{ idListaPrecios: "7" }, { idListaPrecios: null }])).toBe(true);
   });
 });

@@ -42,6 +42,16 @@ export function IconoBilletera() {
   );
 }
 
+/** Flecha "sale del sitio" (la cuenta de Mercado Pago se completa allá). */
+export function IconoSalida() {
+  return (
+    <svg {...trazo} width={18} height={18} className="mt-px shrink-0">
+      <path d="M7 17 17 7" />
+      <path d="M8 7h9v9" />
+    </svg>
+  );
+}
+
 export function IconoCandado() {
   return (
     <svg {...trazo} width={18} height={18} strokeWidth={2}>

@@ -762,8 +762,8 @@
       "id": "G46",
       "consulta": "tubo led 120cm",
       "esperado": [],
-      "paridad": true,
-      "nota": "Sin clave de largo en centimetros (hueco de datos)."
+      "paridad": false,
+      "nota": "El CRM lee el largo en centimetros de tubos y listones de luz (largo_m=1.2); el buscador del Shop todavia no lee centimetros en la consulta."
     },
     {
       "id": "G47",

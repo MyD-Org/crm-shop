@@ -24,7 +24,8 @@ describe("extraerAtributosDeNombre: nombres reales del catálogo", () => {
 
   it("PANEL PLAFON CUADRADO 12W AC85-265V CALIDO 3000K", () => {
     const a = extraerAtributosDeNombre("PANEL PLAFON CUADRADO 12W AC85-265V CALIDO 3000K")
-    expect(comoMapa(a)).toEqual({ potencia_w: 12, tension_v: 220, tono: "calido", temperatura_k: 3000 })
+    // El plafón se aplica (montaje por familia del nombre).
+    expect(comoMapa(a)).toEqual({ potencia_w: 12, tension_v: 220, tono: "calido", temperatura_k: 3000, montaje: "aplicar" })
     // El rango de entrada se conserva en el texto; el número es el nominal (220 cae dentro).
     expect(a.find((x) => x.clave === "tension_v")).toEqual({ clave: "tension_v", valorNum: 220, valorTexto: "85-265" })
   })
@@ -114,7 +115,7 @@ describe("extraerAtributosDeNombre: bordes", () => {
 
   it("IP65 y exterior; IPX4 no se guarda (no es un número)", () => {
     expect(extraer("REFLECTOR 100W IP65")).toEqual({ potencia_w: 100, ip: 65 })
-    expect(extraer("APLIQUE IPX4")).toEqual({})
+    expect(extraer("APLIQUE IPX4")).toEqual({ montaje: "aplicar" })
   })
 
   it("lúmenes con separador de miles", () => {
@@ -642,7 +643,8 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["PROYECTOR PARA RIEL", { montaje: "riel" }],
       ["SPOT TRACK", { montaje: "riel" }],
       ["CAJA EMBUTIR/APLICAR", {}],
-      ["APLIQUE LED", {}],
+      // La familia "aplique" ya dice el montaje (ver "familias del nombre").
+      ["APLIQUE LED", { montaje: "aplicar" }],
     ])("%s", (nombre, esperado) => expect(nuevas(nombre as string)).toEqual(esperado))
   })
 
@@ -791,5 +793,171 @@ describe("magnitudes de la descripción que no son del producto (se decide por e
     const a = extraer("GUARDAMOTOR TM 0,37kW-400V")
     expect(a.potencia_w).toBe(370)
     expect(a.tension_v).toBe(400)
+  })
+})
+
+describe("familias del nombre (montaje, largo en cm, accesorios sin palabra de caño o bandeja, tono abreviado)", () => {
+  const solo = (clave: string) => (nombre: string, descripcion?: string) => {
+    const v = extraer(nombre, descripcion)[clave]
+    return v === undefined ? {} : { [clave]: v }
+  }
+
+  describe("montaje por familia de producto (sólo si el nombre no dice el montaje)", () => {
+    const montaje = solo("montaje")
+    it.each([
+      // Familias: el plafón y el aplique se aplican; la araña y la luminaria de suspensión cuelgan.
+      ["PLAFON LED 18W CUADRADO", { montaje: "aplicar" }],
+      ["PLAFONIER E27 BLANCO", { montaje: "aplicar" }],
+      ["PANEL PLAFON CIRCULAR 12W FRIO 6000K", { montaje: "aplicar" }],
+      ["ARTEFACTO PLAFON DICRO X2 BLANCO", { montaje: "aplicar" }],
+      ["APLIQUE LED", { montaje: "aplicar" }],
+      ["Aplique bidireccional de polipropileno E27 IP44", { montaje: "aplicar" }],
+      ["ARAÑA 4 BRAZOS", { montaje: "colgante" }],
+      ["LUMINARIA DE SUSPENSION LED 40W", { montaje: "colgante" }],
+      // Estanco (luminaria o gabinete/caja): se aplica.
+      ["ESTANCO LED 50W FRIO 6500K", { montaje: "aplicar" }],
+      ["ESTANCO TUBO 18W COMPATIBLE 1 TUBO LED T8", { montaje: "aplicar" }],
+      ["GABINETE ESTANCO METALICO 300X300X150 PUERTA CIEGA", { montaje: "aplicar" }],
+      ["Caja estanca plástica 115x165x80 tapa transparente IP65", { montaje: "aplicar" }],
+      // El montaje dicho en el nombre manda sobre la familia.
+      ["PLAFON LED EMBUTIR REDONDO 18W", { montaje: "embutir" }],
+      ["ESTANCO LED DE EMBUTIR 20W", { montaje: "embutir" }],
+      ["APLIQUE PARA RIEL MAGNETICO 12W", { montaje: "riel" }],
+      ["PANEL LED DE EMBUTIR 18W", { montaje: "embutir" }],
+      // Dos montajes en el nombre: ninguno (tampoco el de la familia).
+      ["PLAFON EMBUTIR/APLICAR 24W", {}],
+      ["COLGANTE ESFERICO PARA RIEL MAGNETICO 10W", {}],
+      ["EXTENSOR PARA RIEL DE EMBUTIR O SUSPENSION", {}],
+      // "Superficie" / "sobreponer" = de aplicar.
+      ["Caja con tapa de superficie 3 módulos", { montaje: "aplicar" }],
+      ["TOMA SUPERFICIE 3P+T 16A IP44", { montaje: "aplicar" }],
+      ["PANEL LED SOBREPONER 24W", { montaje: "aplicar" }],
+      // Negativos: suspensión que no es luminaria, accesorios "para" la familia, terminaciones de superficie.
+      ["TRAPECIO DE SUSPENSION 200 GALVANIZADO", {}],
+      ["KIT DE SUSPENSION DE CUADROS 200 PIEZAS", {}],
+      ["ACCESORIO SUSPENSION PANEL LED", {}],
+      ["SUJETADORES DE ACRILICO PARA APLIQUE DE TIRA NEON", {}],
+      ["Bastidor con tapa estanca", {}],
+      ["INTERRUPTOR BIPOLAR 30A C/ CAJA ESTANCA", {}],
+      ["PRENSACABLE ESTANCO 20MM", {}],
+      ["TUERCA HEXAGONAL CON SUPERFICIE GALVANIZADA", {}],
+      ["MANIJA DE PUERTA SUPERFICIE CROMADA", {}],
+      ["Soporte complementario para caja de superficie", {}],
+      ["LAMPARA LED 9W E27", {}],
+      ["DRIVER DE REPUESTO DE PANELES Y PLAFONES 12W", {}],
+      ["Aplique tulipa cerrada para columna de 2\"", {}],
+    ])("%s", (nombre, esperado) => expect(montaje(nombre as string)).toEqual(esperado))
+
+    it("la familia y la superficie se leen sólo del nombre, no de la descripción", () => {
+      expect(montaje("ARTEFACTO LED 20W", "Ideal para reemplazar plafones")).toEqual({})
+      expect(montaje("ALICATE DE CORTE", "Superficie templada de alta dureza")).toEqual({})
+      expect(montaje("ALICATE DE CORTE", "Corta sobre cualquier superficie")).toEqual({})
+    })
+
+    it("el valor externo acepta 'de superficie'", () => {
+      expect(normalizarAtributos({ montaje: "de superficie" })).toEqual([{ clave: "montaje", valorNum: null, valorTexto: "aplicar" }])
+    })
+  })
+
+  describe("largo_m desde centímetros (tubos, listones, regletas y tiras de luz)", () => {
+    const largo = solo("largo_m")
+    it.each([
+      ["TUBO LED T8 18W 120CM FRIO", { largo_m: 1.2 }],
+      ["TUBO VIDRIO 9W AC185-265V 60CM CALIDO 3000K", { largo_m: 0.6 }],
+      ["LISTON LED T5 CON INTERRUPTOR, 90cm 13W, CALIDO", { largo_m: 0.9 }],
+      ["Listón LED T5 con interruptor 18W 120 cm IP20", { largo_m: 1.2 }],
+      ["LISTON PARA TUBO LED T8 150CM SIMPLE", { largo_m: 1.5 }],
+      ["REGLETA LED 60 cm 9W", { largo_m: 0.6 }],
+      ["TIRA LED 50CM 12V", { largo_m: 0.5 }],
+      // Lo que ya leía en metros no cambia.
+      ["TIRA LED 5MTS", { largo_m: 5 }],
+      // Negativos: sin contexto de tubo/listón/tira de luz, diámetros, caños, dos largos distintos.
+      ["Colgante globo Ø 60 cm, 3 luces", {}],
+      ["LAMPARA 120CM", {}],
+      ["Barral para ventilador de techo 120 cm", {}],
+      ["TUBO TERMOCONTRAIBLE 100CM", {}],
+      ["CINTA AISLADORA 50 CM", {}],
+      ["TUBO LED 18W 120CM ROLLO 5M", {}],
+      ["PANEL LED 60X60CM 40W", {}],
+    ])("%s", (nombre, esperado) => expect(largo(nombre as string)).toEqual(esperado))
+  })
+
+  describe("diametro_mm de accesorios de caño sin la palabra caño", () => {
+    it.each([
+      ["Grampa abierta a presión 20 mm", { diametro_mm: 20 }],
+      ["Unión rígida IP44 40 mm", { diametro_mm: 40 }],
+      ["Curva rígida 90° radio estándar IP44 25 mm", { diametro_mm: 25 }],
+      ["Curva 25mm", { diametro_mm: 25 }],
+      // Pulgadas (designación comercial del caño eléctrico → mm de la serie métrica).
+      ["Cupla 3/4", { diametro_mm: 20 }],
+      ["CUPLA 7/8\"", { diametro_mm: 22 }],
+      ["Curva 1\"", { diametro_mm: 25 }],
+      ["Cupla 1 1/4\"", { diametro_mm: 32 }],
+      ["Curva para caño 3/4", { diametro_mm: 20 }],
+      // Negativos: conector suelto, fuera de la serie, aire comprimido, tuercas, dos medidas, piezas de bandeja.
+      ["Conector 25mm", {}],
+      ["Curva 12mm", {}],
+      ["Unión rígida 20 mm y 25 mm", {}],
+      ["CONECTOR RAPIDO DE AIRE ROSCA MACHO 1/4''", {}],
+      ["CUPLA RAPIDA PARA MANGUERA 3/4", {}],
+      ["TUERCA COMUN 3/4", {}],
+      ["NIPLE 1/2 CINCADO", {}],
+      ["Cupla 1/2", {}],
+      ["Cupla 1", {}],
+      ["Cupla perfil C 44 x 28", {}],
+      ["CURVA 45º 300/50 0.7", { ancho_mm: 300 }],
+      ["PINZA DE PUNTA CURVA 160MM", {}],
+      ["TUBO 3/4 PULGADAS", {}],
+      ["Conector de empalme de 2 conductores de hasta 4mm²", {}],
+    ])("%s", (nombre, esperado) => expect(diaAncho(nombre as string)).toEqual(esperado))
+  })
+
+  describe("ancho_mm de accesorios de bandeja sin la palabra bandeja", () => {
+    it.each([
+      ["CURVA 45º 300/50 0.7 GALVANIZADA", { ancho_mm: 300 }],
+      ["TEE 200/50", { ancho_mm: 200 }],
+      ["CURVA PLANA 90º 150/50", { ancho_mm: 150 }],
+      ["CRUZ 450/64 1.24", { ancho_mm: 450 }],
+      ["REDUCCION 300/50 1.6", { ancho_mm: 300 }],
+      ["D. PARALELA 100/50 0.7", { ancho_mm: 100 }],
+      ["DERIVACION PERPENDICULAR 200/50", { ancho_mm: 200 }],
+      ["PIEZA R. CENTRAL 250/50 0.7", { ancho_mm: 250 }],
+      ["R.SIMPLE 75/92 1.24", { ancho_mm: 75 }],
+      ["ACOMETIDA A TABLERO 300/50 0.9", { ancho_mm: 300 }],
+      // Negativos: anchos fuera de serie, ala fuera de serie, otras relaciones, cajas, dos anchos.
+      ["CURVA 90º 1200/50", {}],
+      ["TEE 200/12", {}],
+      ["CURVA 20/25", {}],
+      ["Caja de derivación T de 3 vías para caño 20/25 mm", {}],
+      ["INTERRUPTOR TERMOMAGNETICO 3P C80 230/400 V", {}],
+      ["CURVA 90º 100/50 y 200/50", {}],
+      ["TRANSFORMADOR DE CORRIENTE 1200/5A", {}],
+    ])("%s", (nombre, esperado) => expect(diaAncho(nombre as string)).toEqual(esperado))
+  })
+
+  describe("tono desde WW / CW / NW", () => {
+    const tono = solo("tono")
+    it.each([
+      ["REFLECTOR NEGRO CW", { tono: "frio" }],
+      ["PANEL PLAFON WW", { tono: "calido" }],
+      ["PANEL EMBUTIR NW", { tono: "neutro" }],
+      ["MR16 8W 12V DIM WW", { tono: "calido" }],
+      ["REFLECTOR XB-50W-CW", { tono: "frio" }],
+      ["TUBO T8 150CM 25W-NW", { tono: "neutro" }],
+      ["LAMPARA XY-WW-12", { tono: "calido" }],
+      // Negativos: pegado a un número o a otro código, RGB+WW, dos tonos, otras siglas.
+      ["BULBO E27 15CW", {}],
+      ["LAMPARA AB-10WW", {}],
+      ["PANEL XY18CWW", {}],
+      ["SECCIONADOR 3P Icw 2kA", {}],
+      ["REFLECTOR SMART 20W RGB+WW", { tono: "rgb" }],
+      ["PANEL WW/CW", {}],
+      ["PANEL CALIDO CW", {}],
+    ])("%s", (nombre, esperado) => expect(tono(nombre as string)).toEqual(esperado))
+  })
+
+  it("relé térmico y guardamotor: el rango de regulación sigue sin leerse como corriente", () => {
+    expect(nuevas("RELE TERMICO 4-6A")).toEqual({})
+    expect(nuevas("GUARDAMOTOR 1.6-2.5 A")).toEqual({})
   })
 })

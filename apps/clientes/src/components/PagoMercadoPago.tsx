@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Payment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Button, Spinner } from "@myd-org/ui";
+import { Spinner } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { cuentaMpDisponible } from "@/lib/pagos/mercadopago-preferencia";
 import { customizacionBrick } from "./pago-brick";
+import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
+import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 
 /**
  * Cobro con tarjeta dentro del sitio, con Checkout Bricks.
@@ -278,26 +280,42 @@ export function PagoMercadoPago({
   const onReady = useCallback(() => {
     // El SDK puede recuperarse de un error de carga. Esto nunca borra un
     // rechazo real ni modifica un pago que ya se está procesando.
-    setEstado((e) =>
-      e.fase === "cargando" || e.fase === "error_formulario" ? { fase: "formulario" } : e,
-    );
+    setEstado(alEstarListo);
   }, []);
 
+  /**
+   * El SDK distingue `critical` de `non_critical`: sólo los críticos dejan el
+   * formulario inutilizable y piden "Reintentar". Los no críticos (p. ej. datos de
+   * tarjeta inválidos) ya los muestra el Brick en sus campos: acá sólo se loguean.
+   */
   const onError = useCallback((error: unknown) => {
     console.error("[brick mp]", error);
-    setEstado((e) =>
-      e.fase === "cargando" || e.fase === "formulario" || e.fase === "error_formulario"
-        ? { fase: "error_formulario" }
-        : e,
-    );
+    setEstado((e) => alFallarBrick(e, error));
   }, []);
 
+  /**
+   * Tiempo límite de carga: si el Brick montado no avisa `onReady` en
+   * `PLAZO_CARGA_MS`, se pasa a `error_formulario` con "Reintentar" (ver el plazo
+   * en `pago-mp-carga.ts`). Corre sólo mientras se está cargando con el Brick
+   * montado (no mientras se espera la preferencia: eso tiene su propio corte).
+   * Se limpia al llegar `onReady`, al fallar, al desmontar y al reintentar, y cada
+   * intento (`intento`) arranca su propio plazo.
+   */
+  const brickMontado = !faltaKey && preferenceId !== undefined;
+  const cargandoConBrick = brickMontado && estado.fase === "cargando";
+  useEffect(() => {
+    if (!cargandoConBrick) return;
+    return iniciarPlazoCarga(() => setEstado(alVencerPlazo));
+  }, [cargandoConBrick, intento]);
+
+  /** Remonta el Brick (`key={intento}`) y vuelve a cargar: el token de MP es de un solo uso. */
+  function reintentar() {
+    setIntento((n) => n + 1);
+    setEstado({ fase: "cargando" });
+  }
+
   if (faltaKey) {
-    return (
-      <p className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">
-        El pago con Mercado Pago no está configurado. Elija transferencia o escríbanos.
-      </p>
-    );
+    return <AvisoSinConfigurar />;
   }
 
   // ------------------------------------------------------------------ pagado
@@ -355,41 +373,13 @@ export function PagoMercadoPago({
 
   return (
     <div>
-      {estado.fase === "error_formulario" && (
-        <div role="alert" className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-4">
-          <p className="text-sm font-semibold text-danger">No se pudo cargar el formulario de pago</p>
-          <p className="mt-1 text-sm text-text">Revise su conexión e inténtelo de nuevo.</p>
-          <Button
-            variant="secondary"
-            className="mt-3"
-            onClick={() => {
-              setIntento((n) => n + 1);
-              setEstado({ fase: "cargando" });
-            }}
-          >
-            Reintentar
-          </Button>
-        </div>
-      )}
+      {estado.fase === "error_formulario" && <AvisoFormularioNoCargo onReintentar={reintentar} />}
       {estado.fase === "rechazado" && (
-        <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-4">
-          <p className="text-sm font-semibold text-danger">No se pudo completar el pago</p>
-          <p className="mt-1 text-sm text-text">{estado.mensaje}</p>
-          {estado.reintentable && (
-            <Button
-              variant="secondary"
-              className="mt-3"
-              onClick={() => {
-                // Remontar el brick: el token de MP es de un solo uso, así que
-                // reintentar con el mismo formulario fallaría siempre.
-                setIntento((n) => n + 1);
-                setEstado({ fase: "cargando" });
-              }}
-            >
-              Probar de nuevo
-            </Button>
-          )}
-        </div>
+        <AvisoPagoRechazado
+          mensaje={estado.mensaje}
+          reintentable={estado.reintentable}
+          onReintentar={reintentar}
+        />
       )}
 
       <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>

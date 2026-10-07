@@ -218,7 +218,7 @@ function RadioCard({
 }
 
 /** Descripción de los medios que disparan el cobro en línea (los demás muestran sus instrucciones del CRM). */
-const DESCRIPCION_PAGO_EN_LINEA = "Paga ahora con tarjeta, en cuotas si lo desea";
+const DESCRIPCION_PAGO_EN_LINEA = "Pague ahora con tarjeta, en cuotas si lo desea";
 
 /**
  * Datos de la cuenta para transferir en el paso Pago. `undefined` = todavía no llegó la cotización

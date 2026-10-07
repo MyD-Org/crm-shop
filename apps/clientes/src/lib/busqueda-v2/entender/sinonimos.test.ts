@@ -32,7 +32,7 @@ describe("sinónimos", () => {
     for (const verbo of ["ajustar", "ajustador", "apretar"]) {
       expect(expansiones([verbo, "tornillo"], `${verbo} tornillo`)).toEqual(["destornill", "atornill"]);
     }
-    expect(expansiones(["luz", "mesa"], "luz de mesa")).toEqual(["velador"]);
+    expect(expansiones(["luz", "mesa"], "luz de mesa")).toEqual(["velador", "escritorio"]);
     expect(expansiones(["foco", "celu"], "foco para usar desde el celu")).toEqual(
       expect.arrayContaining(["lampara", "bulbo", "wifi", "smart", "inteligente"]),
     );

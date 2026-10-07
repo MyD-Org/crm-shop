@@ -41,7 +41,8 @@ export const SINONIMOS: Readonly<Record<string, readonly string[]>> = {
   suspension: ["colgante"],
   "lampara de pie": ["velador", "pie"],
   "lampara de mesa": ["velador"],
-  "luz de mesa": ["velador"],
+  // Una luz de mesa es un velador o una lámpara de escritorio.
+  "luz de mesa": ["velador", "escritorio"],
   velador: ["lampara de pie", "lampara de mesa"],
   farola: ["farol"],
   poste: ["farol", "columna"],

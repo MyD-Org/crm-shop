@@ -1,6 +1,9 @@
 /**
- * Backfill por NOMBRE de UNA clave numérica (fuente 'nombre'): `seccion_mm2` (cables, por defecto),
- * `diametro_mm` (caños y accesorios de caño), `ancho_mm` (bandejas portacables) o `polos` ("2 POLOS"), elegida con `--clave`.
+ * Backfill por NOMBRE de UNA clave (fuente 'nombre'), elegida con `--clave`:
+ * - numéricas: `seccion_mm2` (cables, por defecto), `diametro_mm` (caños y accesorios de caño), `ancho_mm`
+ *   (bandejas y sus accesorios), `polos` ("2 POLOS"), `largo_m` (incluye "120CM" de tubos y listones);
+ * - de texto (valor_texto): `montaje` (por familia: plafón/aplique/estanco → aplicar, araña → colgante) y
+ *   `tono` (también desde WW/CW/NW).
  *
  * Escribe SOLO esa clave y SOLO con fuente 'nombre'. Nunca pisa una fila `pdf` o
  * `manual` (precedencia manual > pdf > nombre: la impone el SQL del upsert de
@@ -9,13 +12,14 @@
  * Dry-run por defecto: sin --aplicar sólo imprime el resumen de lo que escribiría. Escribir exige
  * el flag explícito --aplicar. La lógica de qué escribir es la de `planearBackfillClave` (pura).
  *
- *   DATABASE_URL="<conexión de la base>" npx tsx scripts/backfill-seccion-cables.ts --tenant <id> [--clave diametro_mm]            # dry-run
- *   DATABASE_URL="<conexión de la base>" npx tsx scripts/backfill-seccion-cables.ts --tenant <id> [--clave diametro_mm] --aplicar
+ *   DATABASE_URL="<conexión de la base>" npx tsx scripts/backfill-seccion-cables.ts --tenant <id> [--clave montaje]            # dry-run
+ *   DATABASE_URL="<conexión de la base>" npx tsx scripts/backfill-seccion-cables.ts --tenant <id> [--clave montaje] --aplicar
  *
  * diametro_mm y ancho_mm exigen la migración 0070 en la base de destino (si no, el CHECK de `clave` rechaza el INSERT).
  *
  * Sin DATABASE_URL usa la base local. La próxima sync de Alegra escribe lo mismo sola (el extractor
- * es el mismo): este script sólo adelanta el resultado.
+ * es el mismo): este script sólo adelanta el resultado. Correrlo con --aplicar DESPUÉS de mergear el
+ * extractor: si no, la sync (con el extractor anterior) vuelve atrás lo escrito.
  */
 import { and, asc, eq, gt } from "drizzle-orm"
 import { getDb } from "../src/db"
@@ -62,7 +66,7 @@ async function main() {
     const existentes = new Map<string, FilaGuardada>()
     for (const p of lote) {
       const g = guardadas.get(`${p.alegraId}|${clave}`)
-      if (g) existentes.set(p.alegraId, { fuente: g.fuente, valorNum: g.valorNum })
+      if (g) existentes.set(p.alegraId, { fuente: g.fuente, valorNum: g.valorNum, valorTexto: g.valorTexto })
     }
     const plan = planearBackfillClave(clave, lote, existentes)
     for (const k of Object.keys(total) as (keyof typeof total)[]) total[k] += plan[k]

@@ -33,6 +33,14 @@
  * la misma clave en el nombre = ninguno. Los vocabularios cerrados (color, montaje, curva) viven
  * acá, en código, no en el CHECK de la base: ampliarlos no necesita migración.
  *
+ * Lecturas por FAMILIA del producto (2026-10-07, sólo del nombre): `montaje` cuando el nombre no lo dice
+ * (plafón/aplique/estanco → aplicar, araña/luminaria de suspensión → colgante; "de superficie" = aplicar),
+ * `largo_m` en centímetros de tubos/listones/regletas/tiras de luz ("120CM" → 1,2), `diametro_mm` de accesorios
+ * de caño que no dicen "caño" (curva/unión/grampa/cupla + medida de la serie, también en pulgadas), `ancho_mm`
+ * de piezas de bandeja que no dicen "bandeja" ("TEE 200/50") y `tono` desde las siglas WW/NW/CW. El rango de
+ * regulación de relés térmicos y guardamotores ("4-6A") sigue sin leerse: el Shop muestra `corriente_a` sólo
+ * por su número y un "6 A" se confundiría con una térmica de 6 A.
+ *
  * Módulo puro (sin DB): lo usan la sync de Alegra, el backfill y la normalización de lo que lee el
  * PDF o carga el panel (`normalizarAtributos`).
  */
@@ -206,10 +214,18 @@ const PALABRAS_LUZ_COLOR: Record<string, string> = {
 }
 const FRASE_LUZ_COLOR = `luz (?:${Object.values(PALABRAS_LUZ_COLOR).join("|")})`
 
+/**
+ * Siglas de tono de los códigos de luminaria: WW (warm white) = cálido, NW = neutro, CW (cool white) =
+ * frío. Sólo como token suelto o sufijo separado por guion ("PANEL WW", "XB-50W-CW", "XY-WW-12"): pegadas a
+ * un número o a otro código ("15CW", "18CWW") no se leen, y "RGB+WW" no es luz blanca (sigue siendo RGB).
+ */
+const INI_SIGLA = "(?:^|[^0-9a-z.,+])"
+const sigla = (s: string) => `${INI_SIGLA}${s}${FIN}`
+
 const PALABRAS_TONO: [Tono, RegExp][] = [
-  ["calido", new RegExp(`${INI}(?:calid[oa]s?|warm)${FIN}`)],
-  ["neutro", new RegExp(`${INI}neutr[oa]s?${FIN}`)],
-  ["frio", new RegExp(`${INI}(?:fri[oa]s?|luz (?:de )?dia|daylight)${FIN}`)],
+  ["calido", new RegExp(`(?:${INI}(?:calid[oa]s?|warm)|${sigla("ww")})${FIN}`)],
+  ["neutro", new RegExp(`(?:${INI}neutr[oa]s?|${sigla("nw")})${FIN}`)],
+  ["frio", new RegExp(`(?:${INI}(?:fri[oa]s?|luz (?:de )?dia|daylight)|${sigla("cw")})${FIN}`)],
   ...Object.entries(PALABRAS_LUZ_COLOR).map(
     ([tono, src]) => [tono as Tono, new RegExp(`${INI}luz (?:${src})${FIN}`)] as [Tono, RegExp],
   ),
@@ -316,11 +332,21 @@ export function colorValido(v: unknown): Color | null {
   return null
 }
 
-/** Texto libre → montaje del vocabulario ("de aplicar", "riel din"…). */
+/**
+ * "De superficie" = de aplicar ("TOMA SUPERFICIE", "Caja de superficie"). Sólo se lee del NOMBRE (las
+ * descripciones de herramientas y tornillería hablan de la superficie del material) y no es la terminación
+ * ("superficie galvanizada", "del cuerpo") ni lo que es PARA una caja de superficie.
+ */
+const RE_SUPERFICIE = new RegExp(
+  `${INI}(?<!para (?:caja )?(?:de )?)superficie(?! (?:del?|galvanizad|cromad|niquelad|pulid|lis|rugos))${FIN}`,
+)
+
+/** Texto libre → montaje del vocabulario ("de aplicar", "riel din", "de superficie"…). */
 export function montajeValido(v: unknown): Montaje | null {
   if (typeof v !== "string") return null
   const t = normalizar(v.trim()).replace(/^(?:de|para|a)\s+/, "")
   if (t === "din") return "din"
+  if (t === "superficie") return "aplicar"
   for (const m of MONTAJES) if (new RegExp(`^(?:${MONTAJE_PALABRAS[m]})$`).test(t)) return m
   return null
 }
@@ -496,10 +522,11 @@ function medidasDeNombre(m: RegExpExecArray): string | null {
 }
 
 /**
- * Las once claves de la migración 0053 a partir del nombre ya normalizado. Corre DESPUÉS de las siete
+ * Las once claves de la migración 0053 a partir del nombre ya normalizado (`t` = nombre + descripción;
+ * `nombre` = sólo el nombre normalizado, para las lecturas por familia). Corre DESPUÉS de las siete
  * originales, que no cambian. Orden de las reglas = orden de consumo.
  */
-function extraerAmpliadas(t: string): AtributoExtraido[] {
+function extraerAmpliadas(t: string, nombre: string): AtributoExtraido[] {
   const out: AtributoExtraido[] = []
   const num = (clave: ClaveAtributo, v: number | null) => {
     const r = DEFINICION_ATRIBUTOS[clave].rango
@@ -592,10 +619,10 @@ function extraerAmpliadas(t: string): AtributoExtraido[] {
     num("corriente_a", unico(corriente))
   }
 
-  // 9. largo_m
+  // 9. largo_m (metros; y centímetros sólo en tubos, listones, regletas y tiras de luz, desde el nombre)
   c = consumir(resto, RE_LARGO)
   resto = c.resto
-  num("largo_m", unico(c.hallados.map((m) => numero(m[2]))))
+  num("largo_m", unico([...c.hallados.map((m) => numero(m[2])), ...largosEnCm(nombre)]))
 
   // 10. angulo_grados
   c = consumir(resto, RE_ANGULO)
@@ -613,9 +640,55 @@ function extraerAmpliadas(t: string): AtributoExtraido[] {
   for (const m of ["embutir", "aplicar", "colgante", "riel"] as const) {
     if (new RegExp(`${INI}(?:${MONTAJE_PALABRAS[m]})${FIN}`).test(resto)) montajes.push(m)
   }
-  texto("montaje", unico(montajes))
+  if (RE_SUPERFICIE.test(nombre) && !montajes.includes("aplicar")) montajes.push("aplicar")
+  // Sin montaje dicho, el de la familia del producto (sólo del NOMBRE). Con uno o más dichos, manda lo dicho.
+  texto("montaje", montajes.length > 0 ? unico(montajes) : montajeDeFamilia(nombre))
 
   return out
+}
+
+/**
+ * Largo en centímetros ("120CM", "60 cm") → metros, sólo en un tubo, listón, regleta o tira DE LUZ (el nombre
+ * dice LED, T5/T8, vidrio, nano o una potencia): "TUBO LED T8 18W 120CM" = 1,2 m. Un "Ø 60 cm" de un colgante,
+ * un barral o una lámpara "120CM" sin esa palabra no se leen. Las medidas "60x60cm" tampoco (son de panel).
+ */
+const RE_LARGO_CM_CONTEXTO = /(?:^|[^0-9a-z])(?:tubos?|liston(?:es)?|regletas?|tiras?)(?![0-9a-z])/
+const RE_LARGO_CM_LUZ = /(?:^|[^0-9a-z])(?:leds?|t5|t8|t12|fluorescentes?|vidrio|nano)(?![0-9a-z])|\d ?w(?![0-9a-z])/
+const RE_LARGO_CM_NO = /(?:^|[^0-9a-z])(?:canos?|corrugad[oa]s?|termocontraibles?)(?![0-9a-z])/
+const RE_LARGO_CM = /(?<![0-9a-z.,/øǿ⌀-])(?<![x×*] ?)(\d{2,3}) ?cm(?![0-9a-z²³])(?! ?[x×*] ?\d)/g
+
+function largosEnCm(nombre: string): number[] {
+  if (!RE_LARGO_CM_CONTEXTO.test(nombre) || !RE_LARGO_CM_LUZ.test(nombre) || RE_LARGO_CM_NO.test(nombre)) return []
+  return [...nombre.matchAll(RE_LARGO_CM)].map((m) => Number(m[1])).filter((cm) => cm >= 10 && cm <= 300).map((cm) => cm / 100)
+}
+
+/**
+ * Montaje por la FAMILIA del producto cuando el nombre no lo dice: el plafón, el plafonier y el aplique se
+ * aplican; la araña y la luminaria de suspensión cuelgan; un estanco (luminaria, gabinete o caja estanca) se
+ * aplica. Sólo del nombre y sólo si el producto ES de la familia: un accesorio "para aplique", una tapa o un
+ * interruptor "con caja estanca", o un trapecio "de suspensión" (bandejas) no lo son.
+ */
+const RE_FAMILIA_APLICAR = /(?:^|[^0-9a-z])(?<!(?:para|p\/) ?)(?:plafon(?:es)?|plafonier(?:es|s)?|apliques?)(?![0-9a-z])/
+const RE_FAMILIA_COLGANTE = /(?:^|[^0-9a-z])aranas?(?![0-9a-z])/
+const RE_SUSPENSION = /(?:^|[^0-9a-z])suspension(?![0-9a-z])/
+const RE_ESTANCO = /(?:^|[^0-9a-z])(?<!(?:c\/|con|p\/|para|tapa) (?:(?:una|la) )?(?:caja )?)estanc[oa]s?(?![0-9a-z])/
+/** Señales de luminaria (para "suspensión" y "estanco"). */
+const RE_LUMINARIA = /(?:^|[^0-9a-z])(?:leds?|luminarias?|artefactos?|lamparas?|tubos?|e27|e40|t8|t5)(?![0-9a-z])|\d ?w(?![0-9a-z])/
+/** Envolventes que se aplican cuando son estancas. */
+const RE_ENVOLVENTE = /(?:^|[^0-9a-z])(?:gabinetes?|gab\.|cajas?|tableros?)(?![0-9a-z])/
+/** El producto es un accesorio o un aparato distinto de la familia (se mira la primera palabra). */
+const RE_NO_ES_FAMILIA =
+  /^(?:\d+ )?(?:accesorios?|kits?|soportes?|sujetador(?:es)?|trapecios?|gr\.|grampas?|extensor(?:es)?|conector(?:es)?|prensa\w*|acoples?|bastidor(?:es)?|tapas?|interruptor(?:es)?|teclas?|tomas?|fichas?|union(?:es)?|cuplas?|boquillas?|selector(?:es)?|conm\w*|repuestos?|drivers?|fuentes?|transformador(?:es)?|trafos?|lamparas?)(?![0-9a-z])/
+/** Va sobre una columna o un poste (luminaria de alumbrado): no es de aplicar en pared o techo. */
+const RE_COLUMNA = /(?:^|[^0-9a-z])(?:columnas?|postes?)(?![0-9a-z])/
+
+function montajeDeFamilia(nombre: string): Montaje | null {
+  if (RE_NO_ES_FAMILIA.test(nombre) || RE_COLUMNA.test(nombre)) return null
+  const hallados = new Set<Montaje>()
+  if (RE_FAMILIA_APLICAR.test(nombre)) hallados.add("aplicar")
+  if (RE_FAMILIA_COLGANTE.test(nombre) || (RE_SUSPENSION.test(nombre) && RE_LUMINARIA.test(nombre))) hallados.add("colgante")
+  if (RE_ESTANCO.test(nombre) && (RE_LUMINARIA.test(nombre) || RE_ENVOLVENTE.test(nombre))) hallados.add("aplicar")
+  return hallados.size === 1 ? [...hallados][0] : null
 }
 
 /**
@@ -663,20 +736,60 @@ const RE_DIAMETRO_EXPLICITO = new RegExp(
   `(?:^|[^0-9a-z])(?:[øǿ⌀]|(?:diametro|diam)\\.? ?:?|d ?:) ?(${NUM_DIAMETRO})(?: ?mm)?(?![0-9a-z²³.,])`,
   "g",
 )
-/** "25mm" suelto, sin ser una dimensión ("20 x 10mm"), un espesor ("esp 1,5mm") ni una sección ("mm2"). */
+/**
+ * "25mm" suelto, sin ser una dimensión ("20 x 10mm"), un espesor ("esp 1,5mm"), una sección ("mm2") ni la
+ * segunda de dos medidas ("para caño 20/25 mm": sirve para los dos, no es UN diámetro).
+ */
 const RE_DIAMETRO_PLANO = new RegExp(
-  `(?<![0-9a-z.,])(?<!\\d ?[x×] ?)(?<!esp(?:esor)?\\.? ?:? ?)(${NUM_DIAMETRO}) ?mm(?![0-9a-z²³])(?! ?[x×] ?\\d)`,
+  `(?<![0-9a-z.,/])(?<!\\d ?[x×] ?)(?<!esp(?:esor)?\\.? ?:? ?)(${NUM_DIAMETRO}) ?mm(?![0-9a-z²³])(?! ?[x×] ?\\d)`,
   "g",
 )
+
+/**
+ * Accesorio de caño que ES el producto (primera palabra del nombre) aunque no diga "caño": "Grampa abierta a
+ * presión 20 mm", "Unión rígida IP44 40 mm", "Cupla 3/4". El conector no entra (los hay de tiras, de empalme,
+ * de datos) y tampoco lo neumático, lo roscado ni las piezas de bandeja ("CUPLA PERFIL C", "CURVA PLANA").
+ */
+const RE_ACCESORIO_CANO_INICIAL = /^(?:curvas?|union(?:es)?|grampas?|cuplas?|codos?|boquillas?)(?![0-9a-z])/
+const NO_ACCESORIO_CANO =
+  /(?:^|[^0-9a-z])(?:aire|neumatic[oa]s?|rosca|roscad[oa]s?|rapid[oa]s?|tiras?|perfil|ala|plana|articulad[oa]s?)(?![0-9a-z])/
+/** Diámetros de la serie métrica de caño eléctrico (IEC 61386), en mm: sin la palabra caño sólo se aceptan estos. */
+const SERIE_DIAMETRO_CANO = new Set([16, 20, 22, 25, 32, 40, 50, 63])
+/**
+ * Designación comercial en pulgadas del caño eléctrico → diámetro nominal de la serie métrica (aproximado:
+ * es la equivalencia del mostrador, no la medida exterior de un caño de agua o gas):
+ * 5/8" → 16, 3/4" → 20, 7/8" → 22, 1" → 25, 1 1/4" → 32, 1 1/2" → 40, 2" → 50.
+ * 1/2" y 1/4" no: en caño eléctrico no hay equivalencia única (son medidas de rosca, tuercas y niples).
+ */
+const PULGADAS_CANO: Record<string, number> = { "5/8": 16, "3/4": 20, "7/8": 22, "1": 25, "1 1/4": 32, "1 1/2": 40, "2": 50 }
+const MARCA_PULGADA = `(?:"|''|”|pulgadas?|pulg\\.?)`
+/** Fracciones con o sin comillas ("3/4", "1 1/4\""); los enteros (1, 2) sólo con la marca de pulgada ("1\""). */
+const RE_PULGADAS = new RegExp(
+  `(?<![0-9a-z.,/-])(?:(1[ -]1/[24]|5/8|3/4|7/8)(?: ?${MARCA_PULGADA})?|([12]) ?${MARCA_PULGADA})(?![0-9a-z/.,])`,
+  "g",
+)
+const pulgadasEnMm = (t: string): number[] =>
+  [...t.matchAll(RE_PULGADAS)].map((m) => PULGADAS_CANO[(m[1] ?? m[2]).replace("-", " ")] ?? NaN)
 
 /** Diámetro en mm de un caño, tubo o accesorio de caño según el NOMBRE; null si dudoso. */
 export function diametroDeNombre(nombre: string): number | null {
   const t = normalizar(nombre ?? "").replace(/\s+/g, " ").trim()
   if (!t || NO_DIAMETRO.test(t)) return null
   const explicitos = [...t.matchAll(RE_DIAMETRO_EXPLICITO)].map((m) => numero(m[1]))
-  if (!RE_TUBO.test(t) && !(RE_ACCESORIO_TUBO.test(t) && explicitos.length > 0)) return null
-  const crudos = explicitos.length > 0 ? explicitos : [...t.matchAll(RE_DIAMETRO_PLANO)].map((m) => numero(m[1]))
-  return enRango("diametro_mm", unico(crudos.filter((n) => enRango("diametro_mm", n) != null)))
+  const accesorio = RE_ACCESORIO_CANO_INICIAL.test(t) && !NO_ACCESORIO_CANO.test(t)
+  if (RE_TUBO.test(t) || (RE_ACCESORIO_TUBO.test(t) && explicitos.length > 0)) {
+    const crudos = explicitos.length > 0 ? explicitos : [...t.matchAll(RE_DIAMETRO_PLANO)].map((m) => numero(m[1]))
+    // "Curva para caño 3/4": sin mm, la pulgada del accesorio.
+    if (crudos.length === 0 && accesorio) return deLaSerie(pulgadasEnMm(t))
+    return enRango("diametro_mm", unico(crudos.filter((n) => enRango("diametro_mm", n) != null)))
+  }
+  if (!accesorio) return null
+  return deLaSerie([...[...t.matchAll(RE_DIAMETRO_PLANO)].map((m) => numero(m[1])), ...pulgadasEnMm(t)])
+}
+
+/** El único valor si TODOS son de la serie de caño eléctrico; si no, null (un "12mm" o un "1/2" no se adivinan). */
+function deLaSerie(valores: number[]): number | null {
+  return valores.every((v) => SERIE_DIAMETRO_CANO.has(v)) ? unico(valores) : null
 }
 
 /** Bandeja portacables (y sus tapas y accesorios: "TAPA BANDEJA", "TEE BANDEJA"). */
@@ -687,20 +800,34 @@ const NO_BANDEJA =
   /(?:^|[^0-9a-z])(?:magnetic[oa]s?|pintura|rodillo|horno|cocina|desayuno|asado|parrilla|escritorio|organizador|cubiertos|herramientas?|lamparas?|brazos?|leds?|soportes?|rack)(?![0-9a-z])|\d ?(?:w|watts?|v|u)(?![0-9a-z])|19 ?(?:"|pulgadas?)|(?:^|[^0-9a-z])p\. ?\d/
 /** Anchos comerciales de bandeja portacables, en mm. */
 const ANCHOS_BANDEJA = new Set([50, 75, 100, 150, 200, 250, 300, 400, 450, 500, 600])
+/** Alturas de ala comerciales de bandeja portacables, en mm (el "50" de "300/50"). */
+const ALTOS_BANDEJA = new Set([25, 35, 50, 64, 75, 92, 100])
 /** "100/50": ancho/alto. Un "1200/5A" (relación de transformador) no entra: la unidad pegada lo descarta. */
 const RE_ANCHO_ALTO = /(?<![0-9a-z.,/])(\d{2,4}) ?\/ ?(\d{2,3})(?![0-9a-z/.,])/g
 const RE_ANCHO_SUELTO = /(?<![0-9a-z.,/-])(\d{2,4})(?: ?mm)?(?![0-9a-z²/.,-])/g
+/**
+ * Pieza de bandeja que ES el producto (primera palabra) aunque no diga "bandeja": "CURVA 45º 300/50", "TEE
+ * 200/50", "CRUZ", "REDUCCION", "D. PARALELA", "PIEZA R. CENTRAL", "ACOMETIDA A TABLERO". Sólo con el par
+ * ancho/ala y los dos de la serie: así no entran "230/400 V", "1200/5A" ni la caja "para caño 20/25 mm".
+ */
+const RE_ACCESORIO_BANDEJA_INICIAL =
+  /^(?:curvas?|tees?|te|cruz|cruces|reduccion(?:es)?|union(?:es)?|derivacion(?:es)?|d\. ?(?:paralela|perpendicular)|desvios?|pieza r\.|r\. ?(?:central|lateral|simple)|acometida)(?![0-9a-z])/
 
 /** Ancho en mm de una bandeja portacables (o su tapa o accesorio) según el NOMBRE; null si dudoso. */
 export function anchoDeNombre(nombre: string): number | null {
   const t = normalizar(nombre ?? "").replace(/\s+/g, " ").trim()
   if (!t || NO_BANDEJA.test(t)) return null
-  const pares = [...t.matchAll(RE_ANCHO_ALTO)].map((m) => Number(m[1]))
+  const paresConAlto = [...t.matchAll(RE_ANCHO_ALTO)].map((m) => [Number(m[1]), Number(m[2])] as const)
+  const pares = paresConAlto.map(([ancho]) => ancho)
   if (RE_BANDEJA.test(t)) {
     const crudos = pares.length > 0 ? pares : [...t.matchAll(RE_ANCHO_SUELTO)].map((m) => Number(m[1]))
     return enRango("ancho_mm", unico(crudos.filter((n) => enRango("ancho_mm", n) != null)))
   }
   if (RE_ARTICULADA.test(t)) return enRango("ancho_mm", unico(pares.filter((n) => ANCHOS_BANDEJA.has(n))))
+  if (RE_ACCESORIO_BANDEJA_INICIAL.test(t)) {
+    const deSerie = paresConAlto.every(([ancho, alto]) => ANCHOS_BANDEJA.has(ancho) && ALTOS_BANDEJA.has(alto))
+    return deSerie ? enRango("ancho_mm", unico(pares)) : null
+  }
   return null
 }
 
@@ -780,7 +907,7 @@ export function extraerAtributosDeNombre(nombre: string, descripcion?: string | 
   const z = zocalo(t)
   if (z) out.push({ clave: "zocalo", valorNum: null, valorTexto: z })
 
-  out.push(...extraerAmpliadas(t))
+  out.push(...extraerAmpliadas(t, normalizar(nombre ?? "").replace(/\s+/g, " ").trim()))
   num("diametro_mm", diametroDeNombre(nombre))
   num("ancho_mm", anchoDeNombre(nombre))
 

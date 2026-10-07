@@ -10,7 +10,7 @@ import {
   seccionDeNombre,
   type FilaAuditada,
 } from "./catalogo-atributos-auditoria"
-import { DEFINICION_ATRIBUTOS, pareceCable, type ClaveAtributo } from "./catalogo-atributos-extraccion"
+import { DEFINICION_ATRIBUTOS, extraerAtributosDeNombre, pareceCable, type ClaveAtributo } from "./catalogo-atributos-extraccion"
 
 const fila = (clave: string, valorNum: number | null, extra: Partial<FilaAuditada> = {}): FilaAuditada => ({
   alegraId: "1",
@@ -153,7 +153,49 @@ describe("planearBackfillClave (diametro_mm y ancho_mm desde el nombre)", () => 
   const prod = (alegraId: string, name: string, description: string | null = null) => ({ alegraId, name, description })
 
   it("las claves que admite el backfill por nombre", () => {
-    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos"])
+    expect([...CLAVES_BACKFILL_NOMBRE]).toEqual(["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono"])
+  })
+
+  it("montaje (texto): escribe valor_texto, nunca pisa pdf/manual y es idempotente", () => {
+    const productos = [
+      prod("1", "PLAFON LED 18W CUADRADO"), // nueva
+      prod("2", "GABINETE ESTANCO 300X300X150"), // protegida (manual igual)
+      prod("3", "ARAÑA 4 BRAZOS"), // protegida (pdf con otro valor)
+      prod("4", "APLIQUE LED 6W"), // igual
+      prod("5", "ESTANCO LED 50W"), // cambia (nombre guardado embutir)
+      prod("6", "LAMPARA LED 9W"), // sin lectura
+    ]
+    const plan = planearBackfillClave(
+      "montaje",
+      productos,
+      new Map([
+        ["2", { fuente: "manual" as const, valorNum: null, valorTexto: "aplicar" }],
+        ["3", { fuente: "pdf" as const, valorNum: null, valorTexto: "aplicar" }],
+        ["4", { fuente: "nombre" as const, valorNum: null, valorTexto: "aplicar" }],
+        ["5", { fuente: "nombre" as const, valorNum: null, valorTexto: "embutir" }],
+      ]),
+    )
+    expect(plan).toMatchObject({ nuevas: 1, cambian: 1, iguales: 1, protegidas: 2, protegidasDistintas: 1 })
+    expect(plan.filas).toEqual([
+      { alegraId: "1", clave: "montaje", valorNum: null, valorTexto: "aplicar" },
+      { alegraId: "5", clave: "montaje", valorNum: null, valorTexto: "aplicar" },
+    ])
+    const guardadas = new Map(
+      productos.map((p) => [
+        p.alegraId,
+        { fuente: "nombre" as const, valorNum: null, valorTexto: extraerAtributosDeNombre(p.name).find((a) => a.clave === "montaje")?.valorTexto ?? null },
+      ]),
+    )
+    expect(planearBackfillClave("montaje", productos, guardadas).filas).toEqual([])
+  })
+
+  it("tono (texto) desde WW/CW y largo_m desde cm", () => {
+    expect(planearBackfillClave("tono", [prod("1", "PANEL EMBUTIR CW")], new Map()).filas).toEqual([
+      { alegraId: "1", clave: "tono", valorNum: null, valorTexto: "frio" },
+    ])
+    expect(planearBackfillClave("largo_m", [prod("1", "TUBO LED T8 18W 120CM")], new Map()).filas).toEqual([
+      { alegraId: "1", clave: "largo_m", valorNum: 1.2, valorTexto: null },
+    ])
   })
 
   it("diametro_mm: sólo esa clave, fuente nombre, nunca pisa pdf/manual", () => {

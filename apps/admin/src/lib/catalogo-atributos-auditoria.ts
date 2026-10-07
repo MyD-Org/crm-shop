@@ -6,7 +6,7 @@ import {
 import type { FilaAtributo, FuenteAtributo } from "./catalogo-atributos-repo"
 
 /**
- * Auditoría y backfill por nombre de `seccion_mm2`, `diametro_mm` y `ancho_mm` (lógica PURA, sin DB): la usan los scripts
+ * Auditoría y backfill por nombre de una clave (`CLAVES_BACKFILL_NOMBRE`) (lógica PURA, sin DB): la usan los scripts
  * `atributos-auditoria.ts` y `backfill-seccion-cables.ts`.
  *
  * Los rangos de abajo son PLAUSIBLES, más angostos que los cerrados de `DEFINICION_ATRIBUTOS` (esos
@@ -103,16 +103,31 @@ export function seccionDeNombre(nombre: string, descripcion?: string | null): nu
 export interface FilaGuardada {
   fuente: FuenteAtributo
   valorNum: number | null
+  /** Para las claves de texto (montaje, tono). Ausente = null. */
+  valorTexto?: string | null
 }
 
-/** Claves que el backfill por nombre sabe escribir (`scripts/backfill-seccion-cables.ts --clave <clave>`). */
-export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm", "polos"] as const
+/**
+ * Claves que el backfill por nombre sabe escribir (`scripts/backfill-seccion-cables.ts --clave <clave>`).
+ * Numéricas (valor_num) y de texto (`montaje`, `tono`: valor_texto).
+ */
+export const CLAVES_BACKFILL_NOMBRE = ["seccion_mm2", "diametro_mm", "ancho_mm", "polos", "largo_m", "montaje", "tono"] as const
 export type ClaveBackfillNombre = (typeof CLAVES_BACKFILL_NOMBRE)[number]
 
 /** Valor numérico que lee el extractor del nombre (+ descripción) para una clave; null si no lee ninguno. */
 export function valorDeNombre(clave: ClaveAtributo, nombre: string, descripcion?: string | null): number | null {
   const a = extraerAtributosDeNombre(nombre, descripcion).find((x) => x.clave === clave)
   return a?.valorNum ?? null
+}
+
+/** Valor (numérico o de texto) que lee el extractor del nombre (+ descripción) para una clave; null si no lee ninguno. */
+export function atributoDeNombre(
+  clave: ClaveAtributo,
+  nombre: string,
+  descripcion?: string | null,
+): { valorNum: number | null; valorTexto: string | null } | null {
+  const a = extraerAtributosDeNombre(nombre, descripcion).find((x) => x.clave === clave)
+  return a ? { valorNum: a.valorNum, valorTexto: a.valorTexto } : null
 }
 
 export interface PlanBackfill {
@@ -130,8 +145,8 @@ export interface PlanBackfill {
 export type PlanBackfillSeccion = PlanBackfill
 
 /**
- * Qué escribiría el backfill de UNA clave numérica: sólo esa clave, sólo fuente 'nombre', nunca sobre
- * pdf/manual y sin borrar nada. `existentes` = fila actual de la clave por alegraId (ausente = no hay).
+ * Qué escribiría el backfill de UNA clave (numérica o de texto): sólo esa clave, sólo fuente 'nombre',
+ * nunca sobre pdf/manual y sin borrar nada. `existentes` = fila actual de la clave por alegraId (ausente = no hay).
  */
 export function planearBackfillClave(
   clave: ClaveBackfillNombre,
@@ -140,21 +155,22 @@ export function planearBackfillClave(
 ): PlanBackfill {
   const plan: PlanBackfill = { filas: [], nuevas: 0, cambian: 0, iguales: 0, protegidas: 0, protegidasDistintas: 0 }
   for (const p of productos) {
-    const valor = valorDeNombre(clave, p.name, p.description)
+    const valor = atributoDeNombre(clave, p.name, p.description)
     if (valor == null) continue
     const actual = existentes.get(p.alegraId)
+    const igual = actual != null && actual.valorNum === valor.valorNum && (actual.valorTexto ?? null) === valor.valorTexto
     if (actual && actual.fuente !== "nombre") {
       plan.protegidas += 1
-      if (actual.valorNum !== valor) plan.protegidasDistintas += 1
+      if (!igual) plan.protegidasDistintas += 1
       continue
     }
-    if (actual && actual.valorNum === valor) {
+    if (igual) {
       plan.iguales += 1
       continue
     }
     if (actual) plan.cambian += 1
     else plan.nuevas += 1
-    plan.filas.push({ alegraId: p.alegraId, clave, valorNum: valor, valorTexto: null })
+    plan.filas.push({ alegraId: p.alegraId, clave, valorNum: valor.valorNum, valorTexto: valor.valorTexto })
   }
   return plan
 }

@@ -624,6 +624,17 @@ describe("extracción de claves nuevas desde el nombre", () => {
       ["LAMPARA LED VELADOR 5W NO DIMERIZABLE", { dimerizable: "no" }],
       ["PANEL LED 18W no dimeable", { dimerizable: "no" }],
       ["PANEL LED 18W (NO ES DIMERIZABLE)", { dimerizable: "no" }],
+      // La sigla "DIM" / "NO DIM" de los nombres de lámparas.
+      ["AR111 15W GU10 AC200-240V CALIDO 2700K DIM 30º", { dimerizable: "si" }],
+      ["BULBO G125 FILAMENTO 8W E27 AC180-265V FRIO 6000K DIM", { dimerizable: "si" }],
+      ["DICRO ECO DIM 7W AC100-240V CALIDO 2700K", { dimerizable: "si" }],
+      ["MR16-8W-12-DIM WW", { dimerizable: "si" }],
+      ["AR111 11W GU10 COB NO DIM AC100-240V FP>0.9 NEUTRO 4000K", { dimerizable: "no" }],
+      ["DICROICA VIDRIO GU10 7W NO DIM AC180-265V CALIDO", { dimerizable: "no" }],
+      // "DIM" como dimensión o en un producto sin señal de lámpara no se lee.
+      ["GABINETE DIM 300 X 400 X 150", {}],
+      ["PANEL 18W DIM 300X300", {}],
+      ["CAJA DE PASO DIM", {}],
       // Sin el dato, nada: una lámpara que no lo dice no es "no dimerizable".
       ["LAMPARA LED E27 9W CALIDA", {}],
       // El producto regula a otro: un dimmer, una tecla o un variador no son "dimerizables".

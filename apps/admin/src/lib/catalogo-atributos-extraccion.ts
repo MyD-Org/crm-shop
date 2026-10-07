@@ -41,7 +41,7 @@
  * regulación de relés térmicos y guardamotores ("4-6A") sigue sin leerse: el Shop muestra `corriente_a` sólo
  * por su número y un "6 A" se confundiría con una térmica de 6 A.
  *
- * Migración 0072: dimerizable (texto "si"/"no": "DIMERIZABLE", "DIMEABLE", "DIMMABLE" o "TRIAC DIM" = sí; "NO DIMERIZABLE" = no; sólo
+ * Migración 0072: dimerizable (texto "si"/"no": "DIMERIZABLE", "DIMEABLE", "DIMMABLE", "TRIAC DIM" o la sigla "DIM" de una lámpara = sí; "NO DIMERIZABLE" y "NO DIM" = no; sólo
  * si el producto ES la lámpara, panel, tira o driver: un dimmer, una tecla o un regulador no son "dimerizables") y modulos (cantidad de
  * módulos DIN de un gabinete, caja o tablero: "p/12 Mod DIN", "12 polos", "10 bocas"; NO los módulos de bastidor de una caja de
  * mecanismos, que son otra unidad). Ver `dimerizableDeTexto` y `modulosDeNombre`.
@@ -864,6 +864,12 @@ export function anchoDeNombre(nombre: string): number | null {
 /** "dimerizable", "dimeable", "dimmable", "dimmerizable", "dimmeable" (singular: en plural suele ser "para lámparas dimerizables"). */
 const RE_DIMERIZABLE = /(?<![a-z])dim{1,2}(?:er(?:iz)?|e)?able(?![a-z])/g
 const RE_TRIAC_DIM = /(?<![a-z])triac dim(?![a-z])/g
+/**
+ * La sigla "DIM" / "NO DIM" de los nombres de lámparas ("AR111 15W GU10 DIM", "DICROICA 7W NO DIM"). Sólo del NOMBRE y sólo en
+ * un producto con señal de lámpara (potencia en W, tensión AC o un zócalo): "DIM" suelto en otro rubro suele ser "dimensión".
+ */
+const RE_SIGLA_DIM = /(?<![a-z0-9])(no )?dim(?![a-z0-9.])(?! ?\d+(?:[.,]\d+)? ?[x×*])/g
+const RE_SENAL_LAMPARA = /(?<![a-z0-9.,])\d+(?:[.,]\d+)? ?w(?![a-z0-9])|(?<![a-z])ac ?\d|(?<![a-z0-9])(?:gu10|gu5\.3|e27|e14|mr16|g9|g4)(?![a-z0-9])/
 /** Lo que regula a otro, no lo regulado: el nombre del producto dice que es un dimmer o un mando. */
 const RE_ES_DIMMER =
   /(?:^|[^a-z])(?:dimm?ers?|regulador(?:es)?|variador(?:es)?)(?![a-z])|^(?:\d+ )?(?:teclas?|llaves?|interruptor(?:es)?|pulsador(?:es)?|sensor(?:es)?|controlador(?:es)?|control|modulo|selector(?:es)?|kit)(?![a-z])/
@@ -883,6 +889,13 @@ export function dimerizableDeTexto(nombre: string, descripcion?: string | null):
       const antes = t.slice(Math.max(0, m.index - 24), m.index)
       if (RE_PARA_OTRO.test(antes)) continue
       hallados.push(RE_NEGADO.test(antes) ? "no" : "si")
+    }
+  }
+  if (RE_SENAL_LAMPARA.test(n)) {
+    for (const m of n.matchAll(RE_SIGLA_DIM)) {
+      const antes = n.slice(Math.max(0, m.index - 24), m.index)
+      if (RE_PARA_OTRO.test(antes)) continue
+      hallados.push(m[1] || RE_NEGADO.test(antes) ? "no" : "si")
     }
   }
   return unico(hallados)

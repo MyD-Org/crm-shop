@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  NOTA_PAGO_A_CONFIRMAR,
   SLUGS_RESERVADOS,
   SLUG_MERCADOPAGO,
   PIE_A_COORDINAR,
@@ -188,14 +187,6 @@ describe("nombreDelPago / instruccionesDelPago", () => {
     expect(instruccionesDelPago("transferencia", MEDIOS)).toBe("CBU 000 (ficticio)");
     expect(instruccionesDelPago("efectivo", MEDIOS)).toBeNull();
     expect(instruccionesDelPago("nada", MEDIOS)).toBeNull();
-  });
-});
-
-describe("la nota del paso Pago", () => {
-  it("dice que no se cobra en este paso", () => {
-    expect(NOTA_PAGO_A_CONFIRMAR).toBe(
-      "El pago se coordina después de confirmar el pedido; no se cobra en este paso.",
-    );
   });
 });
 

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
-import { pagoParaCotizar, totalVariaSegunMedio } from "@/lib/lista-medio";
+import { pagoParaCotizar } from "@/lib/lista-medio";
 import { contenidoDistinto, COPY_CARRITO, type CartItem } from "@/lib/carrito-cliente";
 import { PagoMercadoPago } from "@/components/PagoMercadoPago";
 import { PagoPayway } from "@/components/PagoPayway";
@@ -56,7 +56,6 @@ import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import type { ChipMedio } from "@/lib/medios-pago-chips";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import {
-  NOTA_PAGO_A_CONFIRMAR,
   SLUG_MERCADOPAGO,
   procesadorDeMedio,
   esPagoEnLinea,
@@ -71,7 +70,7 @@ import { resumenEntregaPedido, type DisponibilidadVista } from "@/lib/disponibil
 import { itemDe } from "@/lib/tracking/eventos";
 import { track } from "@/lib/tracking/track";
 import { InformarPago } from "@/components/mi-cuenta/cuenta-corriente/InformarPago";
-import { TEXTO_PLAZO_COMPROBANTE } from "@/lib/comprobantes/pedido";
+import { TEXTO_PLAZO_COMPROBANTE_CHECKOUT } from "@/lib/comprobantes/pedido";
 import { rutaIngreso } from "@/lib/ingreso";
 import { CuentaTransferencia } from "@/components/CuentaTransferencia";
 import { PasoNumerado } from "@/components/PasoNumerado";
@@ -1172,13 +1171,13 @@ export function CheckoutClient({
                 {comprobanteInformado ? (
                   <Alert tone="success">Recibimos su comprobante. Le avisaremos cuando registremos el pago.</Alert>
                 ) : (
-                  <div className="flex flex-col items-start gap-3">
+                  <div className="flex flex-col items-stretch gap-3">
                     <InformarPago
                       ultimos={[]}
                       pedido={{ id: confirmado.id, numero: confirmado.numero, total: confirmado.total }}
                       onInformado={() => setComprobanteInformado(true)}
                     />
-                    <p className="text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE}</p>
+                    <p className="text-sm text-muted">{TEXTO_PLAZO_COMPROBANTE_CHECKOUT}</p>
                   </div>
                 )}
               </PasoNumerado>
@@ -1685,8 +1684,6 @@ export function CheckoutClient({
                     progreso={cotizacion?.progresoCuotas}
                   />
                 )}
-                {!esCuentaCorriente && totalVariaSegunMedio(mediosParaElegir) && <p className="mt-3 text-xs text-muted">El total se actualiza según el medio de pago.</p>}
-                {!pagaEnLinea && <p className="mt-3 text-xs text-muted">{NOTA_PAGO_A_CONFIRMAR}</p>}
               </>
             ) : (
               <>

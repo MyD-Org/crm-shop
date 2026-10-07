@@ -139,10 +139,6 @@ function medioOfrecible(slug: string, opts: OpcionesMedios): boolean {
   return slug === SLUG_MERCADOPAGO ? (opts.mpDisponible ?? true) : true;
 }
 
-/** Nota del paso Pago: con los medios manuales el pedido queda "a confirmar", sin cobro. */
-export const NOTA_PAGO_A_CONFIRMAR =
-  "El pago se coordina después de confirmar el pedido; no se cobra en este paso.";
-
 /** Pie bajo "Confirmar pedido" según el medio elegido (la transferencia lo arma el checkout). */
 export const PIE_MERCADOPAGO = "Al confirmar el pedido, pasará a pagar con Mercado Pago.";
 /** Pie del medio con cobro en línea, por procesador; sin entrada propia, el genérico. */

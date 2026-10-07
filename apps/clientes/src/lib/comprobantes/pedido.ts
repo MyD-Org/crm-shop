@@ -13,6 +13,10 @@ export const MAX_COMPROBANTES_POR_PEDIDO = 5;
  * Plazo que se le pide al comprador para informar la transferencia (pantalla "Pedido recibido",
  * Mi cuenta y mail). Es un pedido, no una regla: nada cancela el pedido si se pasa.
  */
+/** El plazo en "Transfiera para confirmar su pedido": ahí el botón para subirlo está al lado. */
+export const TEXTO_PLAZO_COMPROBANTE_CHECKOUT =
+  "Tiene 24 h hábiles para enviarlo; si no lo recibimos, el pedido puede cancelarse. Si ahora no puede, súbalo después desde Mis pedidos.";
+
 export const TEXTO_PLAZO_COMPROBANTE =
   "Suba el comprobante de la transferencia desde Mis pedidos dentro de las próximas 24 h hábiles. Si no lo recibimos en ese plazo, su pedido podrá ser cancelado.";
 

@@ -41,12 +41,15 @@ export const SINONIMOS: Readonly<Record<string, readonly string[]>> = {
   suspension: ["colgante"],
   "lampara de pie": ["velador", "pie"],
   "lampara de mesa": ["velador"],
+  "luz de mesa": ["velador"],
   velador: ["lampara de pie", "lampara de mesa"],
   farola: ["farol"],
   poste: ["farol", "columna"],
   "cinta led": ["tira"],
   "manguera led": ["neon", "tira"],
   neon: ["tira"],
+  // «Tira de led» se dice «tira» (cinta) y el catálogo también la nombra «neón flex».
+  tira: ["neon"],
   guirnalda: ["guirnalda", "luces"],
   navidad: ["guirnalda"],
   portalampara: ["zocalo"],
@@ -72,8 +75,13 @@ export const SINONIMOS: Readonly<Record<string, readonly string[]>> = {
   alargador: ["prolongador"],
   dimmer: ["regulador", "variador", "atenuador"],
   regulador: ["dimmer", "variador"],
+  // Decorativa: lámparas de filamento/vintage y guirnaldas. Sin "deco" como clave ni como valor: es
+  // el nombre de una línea de teclas ("Arq & Deco") y arrastraría interruptores.
+  decorativa: ["filamento", "vintage", "guirnalda"],
+  decorativo: ["filamento", "vintage", "guirnalda"],
   // Domótica y conectividad.
   celular: ["wifi", "smart", "inteligente"],
+  celu: ["wifi", "smart", "inteligente"],
   wifi: ["smart", "inteligente"],
   inteligente: ["smart", "wifi"],
   domotica: ["smart", "wifi"],
@@ -116,6 +124,10 @@ export const SINONIMOS: Readonly<Record<string, readonly string[]>> = {
   "medir tension": ["multimetro", "tester", "buscapolo"],
   multimetro: ["tester"],
   atornillador: ["destornillador", "taladro"],
+  // «Ajustar/apretar un tornillo»: el catálogo dice destornillador o atornillador.
+  ajustar: ["destornill", "atornill"],
+  ajustador: ["destornill", "atornill"],
+  apretar: ["destornill", "atornill"],
   mecha: ["broca"],
   broca: ["mecha"],
   pila: ["bateria"],

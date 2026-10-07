@@ -22,4 +22,24 @@ describe("sinónimos", () => {
     expect(expansiones(["termica"], "termica 20 amperes")).toEqual(["termomagnet"]);
     expect(expansiones(["nada"], "nada")).toEqual([]);
   });
+
+  it("palabras de la calle del rubro: tira, decorativa, ajustar, luz de mesa, celu", () => {
+    expect(expansiones(["tira", "led"], "tira de led")).toEqual(["neon"]);
+    expect(expansiones(["neon"], "neon")).toEqual(["tira"]);
+    expect(expansiones(["tira", "neon"], "tira neon")).toEqual([]);
+    expect(expansiones(["decorativa"], "luz decorativa")).toEqual(["filamento", "vintage", "guirnalda"]);
+    expect(expansiones(["decorativo"], "decorativo")).toEqual(["filamento", "vintage", "guirnalda"]);
+    for (const verbo of ["ajustar", "ajustador", "apretar"]) {
+      expect(expansiones([verbo, "tornillo"], `${verbo} tornillo`)).toEqual(["destornill", "atornill"]);
+    }
+    expect(expansiones(["luz", "mesa"], "luz de mesa")).toEqual(["velador"]);
+    expect(expansiones(["foco", "celu"], "foco para usar desde el celu")).toEqual(
+      expect.arrayContaining(["lampara", "bulbo", "wifi", "smart", "inteligente"]),
+    );
+  });
+
+  it("«deco» (línea de teclas) no expande ni es destino: no arrastra interruptores a «decorativa»", () => {
+    expect(Object.hasOwn(SINONIMOS, "deco")).toBe(false);
+    expect(Object.values(SINONIMOS).flat()).not.toContain("deco");
+  });
 });

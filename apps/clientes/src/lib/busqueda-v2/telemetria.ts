@@ -8,6 +8,7 @@
  *   total que se ve. La consulta viaja normalizada y sólo si no parece un
  *   dato personal.
  * - `busqueda_resultado_click`: posición absoluta del producto elegido.
+ * - `busqueda_filtro_car`: qué filtro por característica (clave del registro) se usa en el panel.
  */
 import { normalizarConsulta } from "../busqueda-inteligente/normalizar";
 import { track } from "../tracking/track";
@@ -44,4 +45,12 @@ export function enviarBusquedaEnviada(
 /** `busqueda_resultado_click` con la posición absoluta (1-based) en el listado. */
 export function enviarClickResultado(pagina: number, indice: number, ia: boolean): void {
   track({ tipo: "busqueda_resultado_click", posicion: (pagina - 1) * POR_PAGINA + indice + 1, ia });
+}
+
+/**
+ * `busqueda_filtro_car`: se tildó (`agregar`) o destildó (`quitar`) un valor de una clave de lista, o se movió el
+ * slider de una clave de rango (`rango`, sin valor). Claves y valores salen del registro cerrado de facetas.
+ */
+export function enviarFiltroCar(clave: string, accion: "agregar" | "quitar" | "rango", valor?: string): void {
+  track({ tipo: "busqueda_filtro_car", clave, accion, ...(valor !== undefined ? { valor } : {}) });
 }

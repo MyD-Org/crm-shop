@@ -1,5 +1,5 @@
 /**
- * SQL de las facetas por tipo (change `catalogo-filtros-ux`, flag `catalogo-facetas-por-tipo`).
+ * SQL de las facetas por tipo (change `catalogo-filtros-ux`).
  *
  * Dos piezas sobre `public.catalog_atributos` (una fila por producto y clave):
  *  - `filtroCaracteristicasSql`: el filtro ESTRICTO de `?car=` (catalogo-car.ts). Un `EXISTS` por clave

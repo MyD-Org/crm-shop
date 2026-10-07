@@ -5,7 +5,7 @@ vi.mock("../tracking/track", () => ({ track: (e: unknown) => track(e) }));
 vi.mock("@/db", () => ({ getDb: () => ({}) }));
 
 import { PRODUCTOS_POR_PAGINA } from "../catalog";
-import { POR_PAGINA, enviarBusquedaEnviada, enviarClickResultado } from "./telemetria";
+import { POR_PAGINA, enviarBusquedaEnviada, enviarClickResultado, enviarFiltroCar } from "./telemetria";
 import { COOKIE_RESUMEN, valorCookieResumen } from "./resumen";
 
 beforeEach(() => track.mockClear());
@@ -63,5 +63,19 @@ describe("telemetría de la búsqueda", () => {
     enviarClickResultado(2, 0, true);
     expect(track).toHaveBeenCalledWith({ tipo: "busqueda_resultado_click", posicion: 25, ia: true });
     expect(POR_PAGINA).toBe(PRODUCTOS_POR_PAGINA);
+  });
+});
+
+describe("telemetría del uso de filtros por característica", () => {
+  it("busqueda_filtro_car con la clave, la acción y el valor tildado (sin datos personales)", () => {
+    enviarFiltroCar("polos", "agregar", "2");
+    expect(track).toHaveBeenCalledWith({ tipo: "busqueda_filtro_car", clave: "polos", accion: "agregar", valor: "2" });
+    enviarFiltroCar("curva", "quitar", "c");
+    expect(track).toHaveBeenCalledWith({ tipo: "busqueda_filtro_car", clave: "curva", accion: "quitar", valor: "c" });
+  });
+
+  it("un rango no lleva valor: sólo qué clave se movió", () => {
+    enviarFiltroCar("flujo_lm", "rango");
+    expect(track).toHaveBeenCalledWith({ tipo: "busqueda_filtro_car", clave: "flujo_lm", accion: "rango" });
   });
 });

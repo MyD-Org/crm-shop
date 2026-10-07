@@ -88,7 +88,7 @@ export function filtrosCacheables(filtros: FiltrosCatalogo): boolean {
     filtros.potenciaMin == null &&
     filtros.potenciaMax == null &&
     // Un `car` de rango (`flujo_lm:800-1200`) es un rango libre; los de lista (`polos:2`) son pocos
-    // valores por categoría y entran en la clave con el resto de los filtros (y el flag `facetasPorTipo`).
+    // valores por categoría y entran en la clave con el resto de los filtros (y la marca `facetasPorTipo`).
     !filtros.caracteristicas?.some((id) => leerIdCar(id)?.op === "rango")
   );
 }

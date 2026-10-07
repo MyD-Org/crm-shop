@@ -19,7 +19,6 @@ import {
   CANTIDAD_MAXIMA,
   tituloCatalogo,
   interpretacionVigente,
-  itemsDeCaracteristicasAgrupados,
   itemsVisibles,
   ordenesPara,
 } from "./catalogo-vista";
@@ -495,55 +494,6 @@ describe("itemsVisibles (regla única de ceros del panel)", () => {
   it("una madre con 0 sin descendientes visibles no se conserva, y la siguiente raíz no cuenta como hija", () => {
     const items = [item("m", 0, false, 0), item("raiz", 5, false, 0)];
     expect(itemsVisibles(items).map((i) => i.value)).toEqual(["raiz"]);
-  });
-});
-
-describe("itemsDeCaracteristicasAgrupados (grupo Características del panel)", () => {
-  const facetas = [
-    { label: "tono-calido", count: 12 },
-    { label: "tono-frio", count: 4 },
-    { label: "apto-exterior", count: 0 },
-    { label: "zocalo-e27", count: 5 },
-    { label: "tension-220v", count: 7 },
-  ];
-
-  it("agrupa por tono, ambiente, zócalo y tensión, con subtítulo, nombre y conteo", () => {
-    const grupos = itemsDeCaracteristicasAgrupados(facetas, ["zocalo-e27"]);
-    expect(grupos.map((g) => g.grupo)).toEqual(["tono", "zocalo", "tension"]);
-    expect(grupos.map((g) => g.titulo)).toEqual(["Tono de luz", "Zócalo", "Tensión"]);
-    expect(grupos[0].items).toEqual([
-      { value: "tono-calido", label: "Luz cálida", count: 12, checked: false },
-      { value: "tono-frio", label: "Luz fría", count: 4, checked: false },
-    ]);
-    expect(grupos[1].items).toEqual([{ value: "zocalo-e27", label: "Rosca E27", count: 5, checked: true }]);
-  });
-
-  it("omite el grupo que no tiene ítems con conteo ni tildados", () => {
-    const grupos = itemsDeCaracteristicasAgrupados([{ label: "tono-calido", count: 3 }, { label: "zocalo-e14", count: 0 }], []);
-    expect(grupos.map((g) => g.grupo)).toEqual(["tono"]);
-  });
-
-  it("un tildado que ahora cuenta 0 sigue en su grupo, primero y con 0", () => {
-    const grupos = itemsDeCaracteristicasAgrupados([{ label: "tono-frio", count: 4 }], ["tono-calido"]);
-    expect(grupos).toHaveLength(1);
-    expect(grupos[0].items.map((i) => [i.value, i.count, i.checked])).toEqual([
-      ["tono-calido", 0, true],
-      ["tono-frio", 4, false],
-    ]);
-  });
-
-  it("una medida activa aparece tildada y sin conteo, en un grupo propio al final", () => {
-    const grupos = itemsDeCaracteristicasAgrupados(facetas, ["corriente_a:20", "zocalo-e27"]);
-    const ultimo = grupos[grupos.length - 1];
-    expect(ultimo.grupo).toBe("medidas");
-    expect(ultimo.titulo).toBe("Medidas");
-    expect(ultimo.items).toEqual([{ value: "corriente_a:20", label: "Corriente: 20 A", count: undefined, checked: true }]);
-    // el zócalo no se mezcla con las medidas
-    expect(grupos.flatMap((g) => g.items).filter((i) => i.checked).map((i) => i.value)).toEqual(["zocalo-e27", "corriente_a:20"]);
-  });
-
-  it("sin faceta ni tildados, nada", () => {
-    expect(itemsDeCaracteristicasAgrupados([], [])).toEqual([]);
   });
 });
 

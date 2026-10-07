@@ -13,12 +13,7 @@ import type { BreadcrumbItem } from "@myd-org/ui";
 import type { Product } from "@/data/products";
 import { fmtPesosEnteros } from "@/lib/format";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
-import {
-  GRUPOS_ATRIBUTO,
-  atributoPorId,
-  nombreAtributo,
-} from "@/lib/catalogo-atributos";
-import { esMedidaId } from "@/lib/catalogo-atributos-medida";
+import { nombreAtributo } from "@/lib/catalogo-atributos";
 import { carDeClave, etiquetaCar } from "@/lib/catalogo-car";
 import { etiquetaValor, type FacetaClave } from "@/lib/catalogo-facetas-registro";
 import {
@@ -393,61 +388,6 @@ export function itemsVisibles<T extends { count?: number; checked: boolean; dept
   });
 }
 
-/** Un ítem del grupo "Características" del panel. */
-export interface ItemCaracteristica {
-  value: string;
-  label: string;
-  count: number | undefined;
-  checked: boolean;
-}
-
-/** Un subgrupo de "Características": su subtítulo y sus ítems visibles. */
-export interface GrupoCaracteristicas {
-  grupo: (typeof GRUPOS_ATRIBUTO)[number] | "medidas";
-  /** Subtítulo en español neutro. */
-  titulo: string;
-  items: ItemCaracteristica[];
-}
-
-const TITULO_GRUPO: Record<(typeof GRUPOS_ATRIBUTO)[number] | "medidas", string> = {
-  tono: "Tono de luz",
-  ambiente: "Ambiente",
-  zocalo: "Zócalo",
-  tension: "Tensión",
-  medidas: "Medidas",
-};
-
-/**
- * Subgrupos de "Características" del panel, en el orden del diccionario (tono → ambiente →
- * zócalo → tensión) y con la regla de ceros (`itemsVisibles`): un grupo sin ítems visibles no
- * aparece. Una medida activa (`corriente_a:20`) no tiene faceta —no hay un conteo que mostrar—:
- * va tildada y sin número en un grupo "Medidas" al final, para poder destildarla desde el panel
- * además del chip.
- */
-export function itemsDeCaracteristicasAgrupados(
-  facetas: { label: string; count: number }[],
-  tildados: string[],
-): GrupoCaracteristicas[] {
-  const porGrupo = new Map<GrupoCaracteristicas["grupo"], ItemCaracteristica[]>();
-  for (const a of itemsDeFaceta(facetas, tildados)) {
-    const resuelto = atributoPorId(a.label);
-    if (!resuelto) continue;
-    const grupo = "medida" in resuelto ? "medidas" : resuelto.grupo;
-    const lista = porGrupo.get(grupo) ?? [];
-    lista.push({
-      value: a.label,
-      label: nombreAtributo(a.label),
-      count: esMedidaId(a.label) ? undefined : a.count,
-      checked: a.checked,
-    });
-    porGrupo.set(grupo, lista);
-  }
-  return [...GRUPOS_ATRIBUTO, "medidas" as const].flatMap((grupo) => {
-    const items = itemsVisibles(porGrupo.get(grupo) ?? []);
-    return items.length ? [{ grupo, titulo: TITULO_GRUPO[grupo], items }] : [];
-  });
-}
-
 /** Índices de las hijas directas de `facetas[i]` (orden de lectura). */
 function hijasDirectas(facetas: { label: string; nivel?: number }[], i: number): number[] {
   const nivel = facetas[i].nivel ?? 1;
@@ -520,22 +460,20 @@ export function alternarCategoria(
   return [...seleccion.filter((x) => x !== valor && !hijas.has(x)), valor];
 }
 
-/** Avisos del panel con las facetas por tipo prendidas (español neutro: son rótulos del panel). */
+/** Avisos del panel de características por tipo (español neutro: son rótulos del panel). */
 export const AVISO_ELEGIR_CATEGORIA = "Elija una categoría para ver más filtros";
 export const AVISO_ELEGIR_CATEGORIA_ESPECIFICA = "Elija una categoría más específica para ver más filtros";
 
 /**
- * Qué muestra el panel entre Disponibilidad y Precio (flag `catalogo-facetas-por-tipo`):
- * - `actual`: `porClave` ausente (flag apagado, tabla ilegible o la consulta falló): el panel de siempre
- *   (Características planas y slider de potencia);
- * - `grupos`: las facetas elegidas para el conjunto (sin el grupo plano ni el slider viejo);
+ * Qué muestra el panel de características entre Disponibilidad y Precio:
+ * - `grupos`: las facetas elegidas para el conjunto;
  * - `aviso`: no hay grupos pero conviene decir por qué: sin categoría ni búsqueda ("Elija una
  *   categoría..."), o una categoría raíz (o una búsqueda) sin ninguna clave elegible ("...más específica...");
- * - `vacio`: una categoría hoja sin claves elegibles: no hay nada que decir.
+ * - `vacio`: una categoría hoja sin claves elegibles, o `porClave` ausente (la tabla de atributos no se
+ *   puede leer o la consulta falló): no hay nada que decir.
  * Un `car` activo mantiene sus grupos aunque no haya categoría ni búsqueda: hay que poder quitarlo.
  */
 export type PanelPorTipo =
-  | { modo: "actual" }
   | { modo: "grupos"; grupos: FacetaClave[] }
   | { modo: "aviso"; texto: string }
   | { modo: "vacio" };
@@ -545,7 +483,7 @@ export function panelPorTipo(
   estado: Pick<EstadoCatalogo, "categorias" | "query" | "caracteristicas">,
   categorias: { label: string; nivel?: number }[],
 ): PanelPorTipo {
-  if (porClave === undefined) return { modo: "actual" };
+  if (porClave === undefined) return { modo: "vacio" };
   if (porClave.length > 0) return { modo: "grupos", grupos: porClave };
   if (estado.categorias.length === 0 && !estado.query) return { modo: "aviso", texto: AVISO_ELEGIR_CATEGORIA };
   // Con categorías elegidas, "más específica" sólo tiene sentido si alguna tiene subcategorías.

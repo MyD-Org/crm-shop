@@ -803,9 +803,9 @@ export interface FiltrosCatalogo {
    */
   atributosEstructurados?: boolean;
   /**
-   * Flag `catalogo-facetas-por-tipo` Y `catalog_atributos` legible (lo decide la page por request, con
-   * `atributosEstructuradosDisponibles`; no depende de `busqueda-ia`). Con él, las facetas suman
-   * `porClave` y `caracteristicas` filtra; sin él, `caracteristicas` se ignora y todo queda como siempre.
+   * `catalog_atributos` legible (lo decide la page por request, con `atributosEstructuradosDisponibles`;
+   * no depende de `busqueda-ia`). Con él, las facetas suman `porClave` y `caracteristicas` filtra; sin él,
+   * `caracteristicas` se ignora y el panel no ofrece características.
    */
   facetasPorTipo?: boolean;
   /**
@@ -1520,15 +1520,9 @@ export interface Facetas {
    */
   precio: RangoPrecio | null;
   /**
-   * Rango real de potencia (W) de los productos filtrados que TIENEN `potencia_w`, sin el propio
-   * filtro de potencia. null = ninguno la tiene; ausente = no se calculó (sin estructurados).
-   */
-  potencia?: RangoPrecio | null;
-  /**
-   * Facetas por tipo de producto (flag `catalogo-facetas-por-tipo` + `catalog_atributos` legible): qué
-   * características ofrecer para el conjunto (`elegirFacetas`). Ausente = no se calculó (flag apagado,
-   * tabla ausente o la consulta falló: el panel queda como siempre); `[]` = nada elegible o sin
-   * categoría ni búsqueda.
+   * Facetas por tipo de producto (con `catalog_atributos` legible): qué características ofrecer para el
+   * conjunto (`elegirFacetas`). Ausente = no se calculó (tabla ausente o la consulta falló: el panel
+   * no ofrece características); `[]` = nada elegible o sin categoría ni búsqueda.
    */
   porClave?: FacetaClave[];
   /**
@@ -1577,21 +1571,6 @@ function consultaConteoAtributos(
     ? { texto: sql`${filas.texto}`, attrs: sql`"filas_atributos"."attrs"`, medidaPositiva }
     : { texto: sql`${filas.texto}`, medidaPositiva };
   return getDb().select(columnasConteoAtributos(ctx, atributos)).from(filas);
-}
-
-/** Rango real de potencia (enteros hacia afuera) sobre los productos que tienen `potencia_w`. */
-function consultaRangoPotencia(where: ReturnType<typeof condicionesDe>, disp?: ContextoDisponibilidad) {
-  const potencia = potenciaSql();
-  return getDb()
-    .select({
-      min: sql<number | null>`floor(min(${potencia}))::int`,
-      max: sql<number | null>`ceil(max(${potencia}))::int`,
-    })
-    .from(crmCatalogo)
-    .leftJoin(crmCategoriasAlegra, joinCategoriasAlegra())
-    .leftJoin(crmOverlay, joinOverlay())
-    .leftJoin(...joinStock(disp))
-    .where(and(where, sql`${potencia} is not null`));
 }
 
 /**
@@ -1665,13 +1644,8 @@ export async function getFacetas(
   const whereMarcas = condicionesDe(filtros, { ...APLICAR_TODOS, marcas: false }, soloVisibles, disp);
   const wherePrecio = condicionesDe(filtros, { ...APLICAR_TODOS, precio: false }, soloVisibles, disp);
   const whereAtributos = condicionesDe(filtros, { ...APLICAR_TODOS, atributos: false }, soloVisibles, disp);
-  // Potencia: sólo con estructurados y con el panel de características (flag `busqueda-ia`).
-  const conPotencia = Boolean(filtros.atributosEstructurados) && !filtros.sinFacetaAtributos;
-  const wherePotencia = conPotencia
-    ? condicionesDe(filtros, { ...APLICAR_TODOS, potencia: false }, soloVisibles, disp)
-    : undefined;
 
-  const [categorias, marcas, [rango], [conteoAtributos], rangoPotencia, porClave] = await Promise.all([
+  const [categorias, marcas, [rango], [conteoAtributos], porClave] = await Promise.all([
     filtros.sinFacetaCategorias ? Promise.resolve([]) : getFacetaCategorias(filtros, soloVisibles, disp),
     getDb()
       .select({ label: marcaSql, count: sql<number>`count(*)::int` })
@@ -1697,7 +1671,6 @@ export async function getFacetas(
     filtros.sinFacetaAtributos
       ? Promise.resolve([])
       : consultaConteoAtributos(whereAtributos, filtros.atributos, filtros.atributosEstructurados, medidasPositivasDe(filtros), disp),
-    conPotencia ? consultaRangoPotencia(wherePotencia, disp).then(([r]) => r) : Promise.resolve(undefined),
     facetasPorTipoDe(filtros, soloVisibles, disp),
   ]);
 
@@ -1706,18 +1679,11 @@ export async function getFacetas(
       ? { min: rango.min, max: rango.max }
       : null;
 
-  const potencia = conPotencia
-    ? rangoPotencia?.min != null && rangoPotencia?.max != null
-      ? { min: rangoPotencia.min, max: rangoPotencia.max }
-      : null
-    : undefined;
-
   return {
     categorias,
     marcas,
     atributos: facetasDeConteos(conteoAtributos),
     precio,
-    ...(potencia !== undefined ? { potencia } : {}),
     ...(porClave !== undefined ? { porClave } : {}),
   };
 }

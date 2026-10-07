@@ -26,26 +26,28 @@ const base: Facetas = {
     { label: "TERMICAS", count: 19, nivel: 2 },
   ],
   marcas: [{ label: "MARCA UNO", count: 4 }],
-  // Lo que traería el panel de siempre: un grupo de tono y el slider de potencia viejo.
+  // El conteo de atributos sigue viajando (lo usan las sugerencias de la búsqueda), pero el panel no lo dibuja.
   atributos: [{ label: "tono-calido", count: 3 }],
   precio: { min: 100, max: 90000 },
-  potencia: { min: 3, max: 200 },
 };
 
 const renderizar = (facetas: Facetas, params: Parameters<typeof leerEstado>[0] = {}) =>
   renderToStaticMarkup(createElement(CatalogoFiltros, { facetas, estado: leerEstado(params), ir: () => {} }));
 
-describe("CatalogoFiltros con el flag apagado (porClave ausente)", () => {
-  it("queda el panel de siempre: Características planas y slider de potencia, sin aviso", () => {
+describe("CatalogoFiltros sin porClave (tabla de atributos ilegible o consulta caída)", () => {
+  it("no ofrece características ni aviso, y no dibuja el conteo plano de atributos", () => {
     const t = texto(renderizar(base, { categoria: "TERMICAS" }));
-    expect(t).toContain("Tono de luz");
-    expect(t).toContain("Potencia");
+    expect(t).not.toContain("Tono de luz");
+    expect(t).not.toContain("Potencia");
     expect(t).not.toContain("Elija una categoría");
+    expect(t).toContain("Marcas");
+    expect(t).toContain("Precio");
   });
 
-  it("Disponibilidad sigue al final, después del precio", () => {
+  it("Disponibilidad queda debajo de Marcas, antes del precio", () => {
     const t = texto(renderizar(base, { categoria: "TERMICAS" }));
-    expect(t.indexOf("Precio")).toBeLessThan(t.indexOf("Disponibilidad"));
+    expect(t.indexOf("Marcas")).toBeLessThan(t.indexOf("Disponibilidad"));
+    expect(t.indexOf("Disponibilidad")).toBeLessThan(t.indexOf("Precio"));
   });
 });
 
@@ -69,7 +71,7 @@ describe("CatalogoFiltros con facetas por tipo (porClave presente)", () => {
     expect(t).not.toContain("Elija una categoría");
   });
 
-  it("ya no muestra el grupo plano de Características ni el slider de potencia viejo", () => {
+  it("no muestra el conteo plano de atributos ni un slider de potencia que no esté en las facetas", () => {
     const t = texto(renderizar({ ...base, porClave: [polos] }, { categoria: "TERMICAS" }));
     expect(t).not.toContain("Tono de luz");
     expect(t).not.toContain("Potencia");

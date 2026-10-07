@@ -18,13 +18,13 @@ import {
   alternarCategoria,
   fmtPesos,
   hayFiltros,
-  itemsDeCaracteristicasAgrupados,
   itemsDeFaceta,
   itemsDeFacetaClave,
   itemsVisibles,
   limpiarFiltros,
   panelPorTipo,
 } from "@/lib/catalogo-vista";
+import { enviarFiltroCar } from "@/lib/busqueda-v2/telemetria";
 import { formatMarca, formatRubro } from "@/lib/formato-rubro";
 import { POSICION_MAX, POSICION_MIN, posicionAPrecio, precioAPosicion } from "@/lib/escala-precio";
 
@@ -38,12 +38,9 @@ const alternar = (lista: string[], valor: string, tildado: boolean) =>
   tildado ? [...lista, valor] : lista.filter((x) => x !== valor);
 
 /**
- * Panel de filtros: categorías, marcas, características (atributos del
- * diccionario agrupados por tono, ambiente, zócalo y tensión, ver catalogo-atributos.ts),
- * precio y disponibilidad. En marcas y características los ítems con conteo 0 se ocultan
- * (ver `itemsVisibles`); categorías muestra siempre el árbol completo. Con las facetas por tipo
- * prendidas (`facetas.porClave` presente, flag `catalogo-facetas-por-tipo`) las características
- * salen por clave según el tipo de producto (`panelPorTipo`) y Disponibilidad sube debajo de Marcas.
+ * Panel de filtros: categorías, marcas, disponibilidad, características por tipo de producto
+ * (`facetas.porClave`, ver `panelPorTipo`) y precio. En marcas y características los ítems con conteo 0
+ * se ocultan (ver `itemsVisibles`); categorías muestra siempre el árbol completo.
  * Puro: todo
  * lo que toca el visitante sale por `ir` como cambios de estado (que el
  * padre convierte en URL). Sin `dentroDeSheet` va dentro de una `Card` con
@@ -70,7 +67,6 @@ export function CatalogoFiltros({
   // useId: el panel se monta dos veces (aside y hoja de mobile).
   const idDisponibilidad = useId();
   const panel = panelPorTipo(facetas.porClave, estado, facetas.categorias);
-  const conPorTipo = panel.modo !== "actual";
   const disponibilidad = (
     <section aria-labelledby={idDisponibilidad} className="flex flex-col gap-3">
       <h3
@@ -158,57 +154,21 @@ export function CatalogoFiltros({
         emptyText="Sin marcas para estos filtros"
         searchEmptyText="No hay marcas que coincidan con su búsqueda."
       />
-      {conPorTipo ? (
+      {/* Disponibilidad va debajo de Marcas: es lo primero que se ajusta, y lo técnico (que depende de
+          la categoría) queda abajo, junto al precio. */}
+      <Divider />
+      {disponibilidad}
+      {panel.modo === "grupos" && <GruposPorTipo grupos={panel.grupos} estado={estado} ir={ir} />}
+      {panel.modo === "aviso" && (
         <>
-          {/* Con las facetas por tipo, Disponibilidad sube debajo de Marcas: es lo primero que se
-              ajusta, y lo técnico (que depende de la categoría) queda abajo, junto al precio. */}
           <Divider />
-          {disponibilidad}
-          {panel.modo === "grupos" && <GruposPorTipo grupos={panel.grupos} estado={estado} ir={ir} />}
-          {panel.modo === "aviso" && (
-            <>
-              <Divider />
-              <p className="text-sm text-muted">{panel.texto}</p>
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          {/* Características: un grupo por subtítulo (tono, ambiente, zócalo, tensión), sólo con algo
-              para ofrecer. Los atributos salen del nombre del producto y en muchas categorías
-              (herramientas, cables) no hay ninguno. Uno tildado que ya no cuenta sigue apareciendo
-              (itemsDeFaceta); los que cuentan 0 se ocultan (itemsVisibles). */}
-          {itemsDeCaracteristicasAgrupados(facetas.atributos, estado.atributos).map((g) => (
-            <Fragment key={g.grupo}>
-              <Divider />
-              <FacetGroup
-                title={g.titulo}
-                items={g.items}
-                onToggle={(valor, tildado) => ir({ atributos: alternar(estado.atributos, valor, tildado) })}
-                emptyText="Sin características para estos filtros"
-              />
-            </Fragment>
-          ))}
-          {/* Potencia (fase 2): sólo con datos estructurados (flag `busqueda-ia` y la tabla del CRM),
-              y sobre los productos que tienen potencia cargada. */}
-          {facetas.potencia && (
-            <>
-              <Divider />
-              <FiltroPotencia rango={facetas.potencia} estado={estado} ir={ir} />
-            </>
-          )}
+          <p className="text-sm text-muted">{panel.texto}</p>
         </>
       )}
       {facetas.precio && (
         <>
           <Divider />
           <FiltroPrecio facetas={facetas} estado={estado} ir={ir} />
-        </>
-      )}
-      {!conPorTipo && (
-        <>
-          <Divider />
-          {disponibilidad}
         </>
       )}
     </div>
@@ -437,28 +397,6 @@ function FiltroRango({
   );
 }
 
-/** Slider de potencia en watts del panel de siempre (`potencia_min`/`potencia_max`). */
-function FiltroPotencia({
-  rango,
-  estado,
-  ir,
-}: {
-  rango: NonNullable<Facetas["potencia"]>;
-  estado: EstadoCatalogo;
-  ir: Ir;
-}) {
-  return (
-    <FiltroRango
-      titulo="Potencia"
-      unidad="W"
-      rango={rango}
-      valor={rangoEfectivoPotencia(estado, rango)}
-      alComprometer={(v) => ir(cambiosDePotencia(v, rango))}
-      etiquetasPulgares={["Potencia mínima", "Potencia máxima"]}
-    />
-  );
-}
-
 /**
  * Los grupos por tipo de producto (`Facetas.porClave`): una lista de casillas por clave de lista,
  * plegada (sólo el título; al abrirla, todas sus opciones, sin "Ver todas") y un slider por clave de rango. La potencia sigue en
@@ -476,9 +414,10 @@ function GruposPorTipo({ grupos, estado, ir }: { grupos: FacetaClave[]; estado: 
               // Cerrado: sólo el título; se abre al tocarlo (y arranca abierto si tiene algo tildado).
               collapsible
               items={itemsDeFacetaClave(g, estado.caracteristicas)}
-              onToggle={(valor, tildado) =>
-                ir({ caracteristicas: alternarCar(estado.caracteristicas, g.clave, valor, tildado) })
-              }
+              onToggle={(valor, tildado) => {
+                enviarFiltroCar(g.clave, tildado ? "agregar" : "quitar", valor);
+                ir({ caracteristicas: alternarCar(estado.caracteristicas, g.clave, valor, tildado) });
+              }}
               emptyText="Sin opciones para estos filtros"
             />
           ) : g.param === "potencia" ? (
@@ -487,7 +426,10 @@ function GruposPorTipo({ grupos, estado, ir }: { grupos: FacetaClave[]; estado: 
               unidad={g.unidad}
               rango={g.rango}
               valor={rangoEfectivoPotencia(estado, g.rango)}
-              alComprometer={(v) => ir(cambiosDePotencia(v, g.rango))}
+              alComprometer={(v) => {
+                enviarFiltroCar(g.clave, "rango");
+                ir(cambiosDePotencia(v, g.rango));
+              }}
               etiquetasPulgares={[`${g.titulo} mínima`, `${g.titulo} máxima`]}
             />
           ) : (
@@ -496,7 +438,10 @@ function GruposPorTipo({ grupos, estado, ir }: { grupos: FacetaClave[]; estado: 
               unidad={g.unidad}
               rango={g.rango}
               valor={valorDeRangoCar(estado.caracteristicas, g.clave, g.rango)}
-              alComprometer={(v) => ir({ caracteristicas: cambiosDeCarRango(estado.caracteristicas, g.clave, v, g.rango) })}
+              alComprometer={(v) => {
+                enviarFiltroCar(g.clave, "rango");
+                ir({ caracteristicas: cambiosDeCarRango(estado.caracteristicas, g.clave, v, g.rango) });
+              }}
               etiquetasPulgares={[`${g.titulo}: mínimo`, `${g.titulo}: máximo`]}
             />
           )}

@@ -103,8 +103,8 @@ export function leerCar(ids: readonly string[]): string[] {
 }
 
 /**
- * Lo que la page del catálogo suma a los filtros según el flag `catalogo-facetas-por-tipo` (y la tabla
- * legible): apagado, nada (`?car=` se ignora); prendido, el flag y los `car` válidos de la URL.
+ * Lo que la page del catálogo suma a los filtros según la tabla de atributos: ilegible, nada (`?car=` se
+ * ignora); legible, la marca de facetas por tipo y los `car` válidos de la URL.
  */
 export function filtrosPorTipo(
   habilitada: boolean,

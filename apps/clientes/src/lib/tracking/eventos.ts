@@ -53,7 +53,13 @@ export type EventoBusqueda =
   | { tipo: "busqueda_chip_quitado"; chip: "categoria" | "atributo"; valor: string }
   | { tipo: "busqueda_ver_tal_cual" }
   | { tipo: "busqueda_conversar"; origen: OrigenConversar }
-  | { tipo: "busqueda_resultado_click"; posicion: number; ia: boolean };
+  | { tipo: "busqueda_resultado_click"; posicion: number; ia: boolean }
+  /**
+   * Uso de un filtro por característica del panel (`?car=`): qué clave (`polos`, `curva`...), si se tildó,
+   * se destildó o se movió un rango y, en las listas, el valor. Las claves y los valores salen del registro
+   * cerrado de `catalogo-facetas-registro.ts`: nunca texto libre de la persona.
+   */
+  | { tipo: "busqueda_filtro_car"; clave: string; accion: "agregar" | "quitar" | "rango"; valor?: string };
 
 /** Todo lo que el Shop puede mandar por `track()`. */
 export type EventoShop = EventoTracking | EventoBusqueda;
@@ -64,6 +70,7 @@ const TIPOS_BUSQUEDA = new Set<EventoShop["tipo"]>([
   "busqueda_ver_tal_cual",
   "busqueda_conversar",
   "busqueda_resultado_click",
+  "busqueda_filtro_car",
 ]);
 
 export function esEventoBusqueda(e: EventoShop): e is EventoBusqueda {

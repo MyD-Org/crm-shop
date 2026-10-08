@@ -51,7 +51,7 @@ export const ATRIBUTO_PEEK = "data-chat-peek";
 export const ATRIBUTO_OCULTO = "data-chat-oculto";
 export const ATRIBUTO_FILTROS_ABIERTOS = "data-filtros-abiertos";
 
-/** Rutas donde el launcher del chat no se muestra en mobile: todo el checkout (incluye "Pague su pedido" y "Pedido recibido"). */
+/** Rutas donde el launcher del chat no se muestra en mobile: todo el checkout (incluye "Complete su compra" y "Pedido recibido"). */
 export function ocultarLauncherEnRuta(pathname: string): boolean {
   return /^\/checkout(\/|$)/.test(pathname);
 }

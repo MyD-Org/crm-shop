@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Button, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
+import { Button, PaymentLogos, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { customizacionBrick, textoCuotas, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
@@ -11,6 +11,7 @@ import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { AvisoProcesador } from "./AvisoProcesador";
 import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
+import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 
@@ -84,6 +85,8 @@ interface Props {
   onCobroEnCurso?: (enCurso: boolean) => void;
   /** "Estamos confirmando" se agotó sin resultado: el checkout vuelve a ofrecer otras salidas. */
   onConfirmacionAgotada?: () => void;
+  /** Tarjetas que acepta Mercado Pago: sus logos van arriba del formulario (crédito o débito, según la opción). */
+  tarjetas?: TarjetasAceptadas;
 }
 
 interface RespuestaPago {
@@ -109,6 +112,7 @@ export function PagoMercadoPago({
   pagoMercadoPagoId,
   onCobroEnCurso,
   onConfirmacionAgotada,
+  tarjetas,
 }: Props) {
   /** El débito es siempre un pago: con cuotas congeladas no se ofrece. */
   const debitoDisponible = !(maxCuotas !== undefined && maxCuotas > 1);
@@ -448,11 +452,17 @@ export function PagoMercadoPago({
     </div>
   );
 
+  // Logos de las tarjetas que acepta Mercado Pago, bajo el título de cada opción (sin lista, el texto de siempre).
+  const logosCredito = (tarjetas?.credito ?? []).map((t) => ({ name: t.nombre, src: t.logo }));
+  const logosDebito = (tarjetas?.debito ?? []).map((t) => ({ name: t.nombre, src: t.logo }));
+
   const todas: RadioOption[] = [
     {
       value: "credito",
       label: "Tarjeta de crédito",
-      description: "Visa, Mastercard, American Express y más",
+      ...(logosCredito.length > 0
+        ? { media: <PaymentLogos aria-label="Tarjetas de crédito aceptadas" logos={logosCredito} /> }
+        : { description: "Visa, Mastercard, American Express y más" }),
       icon: <IconoTarjeta />,
       ...(maxCuotas !== undefined
         ? { badge: { label: textoCuotas(maxCuotas), tone: maxCuotas > 1 ? ("success" as const) : ("neutral" as const) } }
@@ -463,7 +473,11 @@ export function PagoMercadoPago({
     {
       value: "debito",
       label: "Tarjeta de débito",
-      description: debitoDisponible ? "Visa Débito, Maestro y más" : "Para pagar con débito, pase su compra a un pago.",
+      ...(!debitoDisponible
+        ? { description: "Para pagar con débito, pase su compra a un pago." }
+        : logosDebito.length > 0
+          ? { media: <PaymentLogos aria-label="Tarjetas de débito aceptadas" logos={logosDebito} /> }
+          : { description: "Visa Débito, Maestro y más" }),
       icon: <IconoTarjetaDebito />,
       ...(debitoDisponible ? {} : { badge: { label: "Sólo en un pago" } }),
       content: formularioTarjeta,

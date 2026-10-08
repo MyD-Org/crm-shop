@@ -4,6 +4,7 @@ import { listaPrecioCondiciones, listasPrecioOnline, mediosPagoShop } from "@/db
 import { leerChips, type ChipMedio } from "@/lib/medios-pago-shop-chips"
 import { avisosDeMedio } from "@/lib/medios-pago-shop-avisos"
 import { OPCIONES_COBRO, errorDeOpcionesResultantes, type OpcionCobro } from "@/lib/medios-pago-shop-opciones"
+import { consultarInteresDeReferencia, type InteresMPCuenta } from "@/lib/mercadopago-planes-aviso"
 import {
   AUDIENCIA_CUENTA_CORRIENTE,
   MSG_CC_COBRO_ONLINE,
@@ -11,6 +12,7 @@ import {
   MSG_CC_OTRO,
   MSG_CC_PRECIOS,
   MSG_SIN_ENTREGA,
+  SLUG_MERCADOPAGO,
   type AudienciaMedio,
   esSlugCobro,
   validarMedioPagoCambios,
@@ -205,10 +207,32 @@ async function listasMasCaras(tenantId: string, ids: string[]): Promise<Set<stri
   }
 }
 
-/** Calcula los avisos no bloqueantes de cada medio (lista desactivada, más cara, destacado/ficha sin efecto). */
+/** Monto de referencia para preguntarle a Mercado Pago por las cuotas: alcanza para las cantidades sin mínimo. */
+const MONTO_REFERENCIA_MP = 100_000
+
+/**
+ * Cuotas con interés en Mercado Pago, sólo si hay algo que comparar (Mercado Pago activo con cuotas sin
+ * interés configuradas). Es un aviso informativo: sin clave pública o con Mercado Pago caído se omite.
+ */
+async function interesDeMercadoPago(medios: MedioPagoDto[]): Promise<InteresMPCuenta[]> {
+  const mp = medios.find((m) => m.slug === SLUG_MERCADOPAGO && m.activo && m.condicionesCuotas.length > 0)
+  if (!mp) return []
+  const minimos = mp.condicionesCuotas.map((c) => Number(c.montoMinimo)).filter((n) => Number.isFinite(n))
+  try {
+    return await consultarInteresDeReferencia(Math.ceil(Math.max(MONTO_REFERENCIA_MP, ...minimos)))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Calcula los avisos no bloqueantes de cada medio (lista desactivada, más cara, destacado/ficha sin
+ * efecto, cuotas sin interés que Mercado Pago cobra con interés).
+ */
 export async function conAvisos(tenantId: string, medios: MedioPagoDto[]): Promise<MedioPagoConAvisos[]> {
   const enlazadas = [...new Set(medios.map((m) => m.listaOnlineId).filter((x): x is string => x !== null))]
-  const ctx = { listasMasCaras: await listasMasCaras(tenantId, enlazadas) }
+  const [masCaras, interesMP] = await Promise.all([listasMasCaras(tenantId, enlazadas), interesDeMercadoPago(medios)])
+  const ctx = { listasMasCaras: masCaras, interesMP }
   return medios.map((m) => ({ ...m, avisos: avisosDeMedio(m, ctx) }))
 }
 

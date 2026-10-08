@@ -4,7 +4,7 @@ import { OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
+import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, Stepper, type PaymentLogo } from "@myd-org/ui";
 import { useCart } from "@/context/CartContext";
 import { useCotizacion } from "@/hooks/useCotizacion";
 import { pagoParaCotizar } from "@/lib/lista-medio";
@@ -54,6 +54,7 @@ import { useAlOcultar } from "@/lib/use-al-ocultar";
 import { PedidoContacto } from "@/components/PedidoContacto";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import type { ChipMedio } from "@/lib/medios-pago-chips";
+import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import {
   SLUG_MERCADOPAGO,
@@ -181,6 +182,7 @@ function RadioCard({
   title,
   description,
   chips,
+  logos,
   disabled,
 }: {
   selected: boolean;
@@ -189,6 +191,8 @@ function RadioCard({
   description?: string;
   /** Etiquetas del medio (las carga el admin): se muestran resaltadas bajo el título. */
   chips?: ChipMedio[];
+  /** Logos de las tarjetas que acepta el medio (Mercado Pago: los de su API). */
+  logos?: PaymentLogo[];
   disabled?: boolean;
 }) {
   return (
@@ -213,6 +217,7 @@ function RadioCard({
         <span className="block text-sm font-semibold text-text">{title}</span>
         {description && <span className="mt-0.5 block text-xs text-muted">{description}</span>}
         <ChipsMedioPago chips={chips} />
+        {logos && logos.length > 0 && <PaymentLogos logos={logos} className="mt-2" />}
       </span>
     </button>
   );
@@ -290,6 +295,8 @@ interface Props {
    * ninguno el pedido sale "a_coordinar". `mercadopago` dispara el cobro en línea.
    */
   mediosPago?: MedioPago[];
+  /** Tarjetas que acepta Mercado Pago (su API): logos bajo "Mercado Pago" en el paso Pago y sobre el formulario. */
+  tarjetasMercadoPago?: TarjetasAceptadas;
   /**
    * El comprador tiene cuenta corriente (lo resuelve el server). Su único medio es el de audiencia
    * `cuenta_corriente`: sin elegir, sin cuotas ni cobro en línea; el pedido queda "a confirmar". El
@@ -329,6 +336,7 @@ export function CheckoutClient({
   sugerirVincular = false,
   sucursales = null,
   mediosPago = [],
+  tarjetasMercadoPago,
   esCuentaCorriente = false,
   eleccionInicial = null,
   pedidoReintento = null,
@@ -1120,6 +1128,7 @@ export function CheckoutClient({
               pagoMercadoPagoId={pagoMercadoPagoId}
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
+              tarjetas={tarjetasMercadoPago}
               onPagado={alPagar}
               onPendiente={alQuedarPendiente}
               onRechazado={() => {
@@ -1718,6 +1727,7 @@ export function CheckoutClient({
                         onClick={() => setMedioSlug(m.slug)}
                         title={m.nombre}
                         chips={m.chips}
+                        logos={m.slug === SLUG_MERCADOPAGO && tarjetasMercadoPago ? logosTarjetas(tarjetasMercadoPago) : undefined}
                       />
                     ))}
                   </div>

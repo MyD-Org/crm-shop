@@ -30,7 +30,8 @@ const DIRECTIVA = /^\s*["']use cache(?::\s*(?:remote|private))?["'];?\s*$/m;
  * visitante y nada del visitante: contenido de la home, año del footer, el
  * catálogo público y los archivos de la
  * imagen OG del sitio. También las búsquedas frecuentes de la guía del
- * buscador (iguales para todos; salen de la caché de interpretaciones).
+ * buscador (iguales para todos; salen de la caché de interpretaciones). Y la lista
+ * de tarjetas que acepta Mercado Pago (footer y checkout): igual para todos, no cotiza.
  */
 const CON_CACHE = [
   "app/opengraph-image.tsx",
@@ -41,6 +42,7 @@ const CON_CACHE = [
   "lib/busqueda-inteligente/frecuentes.ts",
   "lib/medios-pago-datos.ts",
   "lib/cuentas-bancarias-datos.ts",
+  "lib/pagos/tarjetas-aceptadas-mp.ts",
 ];
 
 /** Lo que cotiza o cobra: siempre del espejo en vivo (FRS-4). */

@@ -91,3 +91,94 @@ describe("avisosDeMedio: medio solo para cuentas corrientes", () => {
     expect(a).toEqual(["Este medio es solo para cuentas corrientes: la lista enlazada no se usa."])
   })
 })
+
+describe("avisosDeMedio: cuotas sin interés vs Mercado Pago", () => {
+  const mp: MedioParaAvisos = {
+    ...base,
+    slug: "mercadopago",
+    nombre: "Mercado Pago",
+    condicionesCuotas: [{ cuotas: 3 }, { cuotas: 6 }],
+  }
+  const cuenta = (marcas: { nombre: string; cuotasConInteres: number[] }[], cuentaId = "principal") => ({
+    cuentaId,
+    marcas: marcas.map((m) => ({ nombre: m.nombre, cuotasConInteres: new Set(m.cuotasConInteres) })),
+  })
+  const conInteres = (...cuentas: ReturnType<typeof cuenta>[]) => ({ listasMasCaras: new Set<string>(), interesMP: cuentas })
+
+  it("avisa qué cantidad tiene interés en qué marca", () => {
+    const a = avisosDeMedio(mp, conInteres(cuenta([{ nombre: "Naranja", cuotasConInteres: [6] }, { nombre: "Visa", cuotasConInteres: [] }])))
+    expect(a).toEqual([
+      "En Mercado Pago, 6 cuotas tienen interés con Naranja. Márquelas sin interés en el panel de Mercado Pago o el cliente pagará interés encima.",
+    ])
+  })
+
+  it("agrupa las cantidades que afectan a las mismas marcas", () => {
+    const a = avisosDeMedio(
+      mp,
+      conInteres(
+        cuenta([
+          { nombre: "Visa", cuotasConInteres: [3, 6] },
+          { nombre: "Mastercard", cuotasConInteres: [3, 6] },
+          { nombre: "Naranja", cuotasConInteres: [6] },
+        ]),
+      ),
+    )
+    expect(a).toHaveLength(2)
+    expect(a[0]).toContain("3 cuotas tienen interés con Visa y Mastercard.")
+    expect(a[1]).toContain("6 cuotas tienen interés con Visa, Mastercard y Naranja.")
+  })
+
+  it("ignora las cantidades que la tienda no ofrece sin interés", () => {
+    const a = avisosDeMedio(mp, conInteres(cuenta([{ nombre: "Visa", cuotasConInteres: [12, 18] }])))
+    expect(a).toEqual([])
+  })
+
+  it("tasa 0 (sin cantidades con interés) => sin aviso", () => {
+    expect(avisosDeMedio(mp, conInteres(cuenta([{ nombre: "Visa", cuotasConInteres: [] }])))).toEqual([])
+  })
+
+  it("sin consulta (clave ausente o MP caído) => sin aviso", () => {
+    expect(avisosDeMedio(mp, ctx())).toEqual([])
+    expect(avisosDeMedio(mp, conInteres())).toEqual([])
+  })
+
+  it("un medio sin cuotas sin interés o inactivo no avisa", () => {
+    const hay = conInteres(cuenta([{ nombre: "Visa", cuotasConInteres: [6] }]))
+    expect(avisosDeMedio({ ...mp, condicionesCuotas: [] }, hay)).toEqual([])
+    expect(avisosDeMedio({ ...mp, activo: false }, hay)).toEqual([])
+  })
+
+  it("otro medio (aunque tenga cuotas) no recibe el aviso de Mercado Pago", () => {
+    const hay = conInteres(cuenta([{ nombre: "Visa", cuotasConInteres: [6] }]))
+    expect(avisosDeMedio({ ...mp, slug: "payway" }, hay).some((x) => x.includes("Mercado Pago"))).toBe(false)
+  })
+
+  it("con varias cuentas dice a cuál se refiere", () => {
+    const a = avisosDeMedio(
+      mp,
+      conInteres(
+        cuenta([{ nombre: "Visa", cuotasConInteres: [6] }], "mdp"),
+        cuenta([{ nombre: "Visa", cuotasConInteres: [6] }], "igz"),
+      ),
+    )
+    expect(a).toHaveLength(2)
+    expect(a[0]).toContain("En la cuenta «mdp» de Mercado Pago, 6 cuotas tienen interés con Visa.")
+    expect(a[1]).toContain("En la cuenta «igz» de Mercado Pago")
+  })
+
+  it("el texto está en usted", () => {
+    const [a] = avisosDeMedio(mp, conInteres(cuenta([{ nombre: "Visa", cuotasConInteres: [6] }])))
+    expect(a).toMatch(/Márquelas/)
+    expect(a).not.toMatch(/\b(tu|tus|te|vos|marcalas)\b/i)
+  })
+})
+
+describe("avisosDeMedio: cantidades con las mismas marcas", () => {
+  it("3 y 6 cuotas con interés en las mismas marcas van en un solo aviso", () => {
+    const mp: MedioParaAvisos = { ...base, slug: "mercadopago", condicionesCuotas: [{ cuotas: 3 }, { cuotas: 6 }, { cuotas: 12 }] }
+    const interesMP = [{ cuentaId: "principal", marcas: [{ nombre: "Visa", cuotasConInteres: new Set([3, 6]) }] }]
+    const a = avisosDeMedio(mp, { listasMasCaras: new Set(), interesMP })
+    expect(a).toHaveLength(1)
+    expect(a[0]).toContain("3 y 6 cuotas tienen interés con Visa.")
+  })
+})

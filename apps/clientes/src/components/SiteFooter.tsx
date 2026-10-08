@@ -6,6 +6,8 @@ import { BotonEditarFooterSiAdmin } from "@/components/footer/BotonEditarFooterS
 import { textoBarra } from "@/data/footer";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { columnasFooter } from "@/lib/legales/footer";
+import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
+import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
 
 /**
  * Footer global del layout. "Led" con el color de marca del tema sobre oscuro
@@ -24,11 +26,20 @@ import { columnasFooter } from "@/lib/legales/footer";
  * En mobile no se muestra en las páginas con una barra fija abajo (ficha,
  * carrito, checkout): ver `[data-sin-footer-mobile]` en globals.css.
  *
+ * "Medios de pago": logos de las tarjetas que acepta Mercado Pago en la cuenta (`getTarjetasMercadoPago`,
+ * cacheado por días). Si Mercado Pago no responde, la fila no se muestra.
+ *
  * Admin: botón "Editar footer" arriba del footer, en un hueco aparte
  * (`BotonEditarFooterSiAdmin` dentro de `<Suspense fallback={null}>`).
  */
 export async function SiteFooter() {
-  const [anio, legal, footer] = await Promise.all([anioActual(), getDatosLegales(), getDatosFooter()]);
+  const [anio, legal, footer, tarjetas] = await Promise.all([
+    anioActual(),
+    getDatosLegales(),
+    getDatosFooter(),
+    getTarjetasMercadoPago(),
+  ]);
+  const logos = logosTarjetas(tarjetas);
   return (
     <div className="footer-global">
       <Suspense fallback={null}>
@@ -43,6 +54,7 @@ export async function SiteFooter() {
         columns={columnasFooter({ arrepentimiento: true, footer })}
         barLeft={textoBarra(footer.barraIzquierda, anio)}
         barRight={textoBarra(footer.barraDerecha, anio)}
+        payments={{ title: "Medios de pago", logos }}
         barExtra={
           legal.dataFiscalUrl ? (
             <a href={legal.dataFiscalUrl} target="_blank" rel="noopener noreferrer">

@@ -18,6 +18,11 @@ export interface DatosPreferencia {
   emailComprador?: string;
   /** Cuotas congeladas en el pedido (1 o null = un pago): tope de cuotas dentro de Mercado Pago. */
   cuotas?: number | null;
+  /**
+   * Hasta cuándo se puede pagar (el vencimiento del pedido con cobro en línea). Pasado eso Mercado
+   * Pago no deja pagar: antes el link servía siempre y se podía pagar un pedido ya vencido o cancelado.
+   */
+  venceEn?: Date;
 }
 
 export interface Preferencia {
@@ -33,6 +38,8 @@ export interface Preferencia {
   back_urls?: { success: string; pending: string; failure: string };
   auto_return?: "approved";
   notification_url?: string;
+  expires?: true;
+  expiration_date_to?: string;
 }
 
 /**
@@ -77,6 +84,7 @@ export function armarPreferencia(d: DatosPreferencia): Preferencia {
       ? { back_urls: { success: retorno, pending: retorno, failure: retorno }, auto_return: "approved" as const }
       : {}),
     ...(webhook ? { notification_url: webhook } : {}),
+    ...(d.venceEn ? { expires: true as const, expiration_date_to: d.venceEn.toISOString() } : {}),
   };
 }
 
@@ -89,5 +97,14 @@ export function volvioConPagoDeMercadoPago(q: {
   payment_id?: string | string[];
   collection_id?: string | string[];
 }): boolean {
-  return [q.payment_id, q.collection_id].flat().some((v) => typeof v === "string" && /^\d+$/.test(v));
+  return idPagoDeRetorno(q) !== null;
+}
+
+/** El id del pago con el que volvió de Mercado Pago, o null (volvió sin pagar). */
+export function idPagoDeRetorno(q: {
+  payment_id?: string | string[];
+  collection_id?: string | string[];
+}): string | null {
+  const id = [q.payment_id, q.collection_id].flat().find((v) => typeof v === "string" && /^\d+$/.test(v));
+  return id ?? null;
 }

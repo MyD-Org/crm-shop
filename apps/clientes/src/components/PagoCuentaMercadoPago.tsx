@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button } from "@myd-org/ui";
 import { IconoSalida } from "./PagoIconos";
 
@@ -13,6 +13,16 @@ import { IconoSalida } from "./PagoIconos";
 export function PagoCuentaMercadoPago({ pedidoId, cuotas }: { pedidoId: string; cuotas?: number }) {
   const [yendo, setYendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Volver con "atrás" desde Mercado Pago restaura la página de la memoria del navegador (bfcache) con
+  // el botón todavía en "Abriendo Mercado Pago…": se lo devuelve a su estado.
+  useEffect(() => {
+    const alVolver = (e: PageTransitionEvent) => {
+      if (e.persisted) setYendo(false);
+    };
+    window.addEventListener("pageshow", alVolver);
+    return () => window.removeEventListener("pageshow", alVolver);
+  }, []);
 
   async function irAMercadoPago() {
     setYendo(true);

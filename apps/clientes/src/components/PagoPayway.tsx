@@ -44,7 +44,8 @@ type Estado =
   | { fase: "procesando" }
   | { fase: "pagado" }
   | { fase: "pendiente" }
-  | { fase: "rechazado"; mensaje: string };
+  /** `noCobrable`: el pedido ya no se puede pagar (vencido o cancelado): sin formulario. */
+  | { fase: "rechazado"; mensaje: string; noCobrable?: boolean };
 
 interface Props {
   pedidoId: string;
@@ -60,6 +61,10 @@ interface Props {
   onRechazado?: () => void;
   /** El pedido ya tiene un cobro en curso (se retomó): arranca en "Estamos confirmando su pago". */
   iniciarEnConfirmacion?: boolean;
+  /** Hay un cobro en vuelo: el checkout oculta "Cambiar medio de pago" y "Volver al carrito". */
+  onCobroEnCurso?: (enCurso: boolean) => void;
+  /** "Estamos confirmando" se agotó sin resultado: el checkout vuelve a ofrecer otras salidas. */
+  onConfirmacionAgotada?: () => void;
 }
 
 type Errores = Partial<Record<"pan" | "venc" | "cvv" | "titular" | "doc" | "marca" | "modalidad", string>>;
@@ -82,8 +87,14 @@ export function PagoPayway({
   onPendiente,
   onRechazado,
   iniciarEnConfirmacion = false,
+  onCobroEnCurso,
+  onConfirmacionAgotada,
 }: Props) {
   const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "formulario" });
+  const cobroEnCurso = estado.fase === "procesando";
+  useEffect(() => {
+    onCobroEnCurso?.(cobroEnCurso);
+  }, [cobroEnCurso, onCobroEnCurso]);
   const [config, setConfig] = useState<ConfigPayway | null | "error">(null);
 
   const [pan, setPan] = useState("");
@@ -218,12 +229,13 @@ export function PagoPayway({
     return (
       <PagoEnConfirmacion
         pedidoId={pedidoId}
+        onAgotado={onConfirmacionAgotada}
         onPagado={() => {
           setEstado({ fase: "pagado" });
           onPagado();
         }}
-        onRechazado={(mensaje) => {
-          setEstado({ fase: "rechazado", mensaje });
+        onRechazado={(mensaje, cobrable) => {
+          setEstado({ fase: "rechazado", mensaje, noCobrable: !cobrable });
           onRechazado?.();
         }}
       />
@@ -239,6 +251,16 @@ export function PagoPayway({
   }
 
   const procesando = estado.fase === "procesando";
+
+  // Pedido que ya no se puede pagar (vencido o cancelado mientras se pagaba): sólo el aviso. Con el
+  // formulario a la vista el comprador reintentaba y el servidor lo rechazaba una y otra vez.
+  if (estado.fase === "rechazado" && estado.noCobrable) {
+    return (
+      <Alert tone="danger" title="No se pudo completar el pago">
+        {estado.mensaje}
+      </Alert>
+    );
+  }
 
   const etiquetaMarca = MARCAS.find((m) => m.id === sugerida)?.etiqueta;
 

@@ -311,19 +311,33 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
         : {}),
     });
 
-    await registrarCobro(
-      pedido.id,
-      {
-        proveedor: proveedor.id,
-        referencia: resultado.referencia,
-        estado: resultado.estado,
-        detalle: resultado.detalle,
-        medio,
-        cuotas: resultado.cuotasPagadas,
-        totalPagado: resultado.totalPagado,
-      },
-      { intentoId },
-    );
+    /**
+     * Aparte del `try` del cobro: si el procesador ya respondió y lo que falla es guardar el resultado
+     * (la base), el cobro existe igual. Antes caía al `catch` de abajo y el comprador veía "No pudimos
+     * procesar el pago" con el formulario vacío, aunque se le había cobrado. Ahora se le responde lo que
+     * dijo el procesador. Lo registra después el webhook (Mercado Pago, por `external_reference`) o la
+     * conciliación (Payway: el intento ya tiene su referencia anotada antes de cobrar).
+     */
+    try {
+      await registrarCobro(
+        pedido.id,
+        {
+          proveedor: proveedor.id,
+          referencia: resultado.referencia,
+          estado: resultado.estado,
+          detalle: resultado.detalle,
+          medio,
+          cuotas: resultado.cuotasPagadas,
+          totalPagado: resultado.totalPagado,
+        },
+        { intentoId },
+      );
+    } catch (err) {
+      console.error(
+        `[/api/pagos/${proveedor.id}] pedido=${pedido.id}: el procesador respondió ${resultado.estado} pero no se pudo registrar; lo retoma la conciliación`,
+        err,
+      );
+    }
 
     /**
      * Se responde el estado traducido, nunca el crudo de Mercado Pago: sus

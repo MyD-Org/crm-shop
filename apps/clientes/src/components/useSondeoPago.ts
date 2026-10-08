@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  MENSAJE_SIN_COBRO,
   VENTANA_SONDEO_MS,
   consultarPagoDelPedido,
   esperaSondeo,
@@ -22,7 +23,10 @@ import {
 export function useSondeoPago(
   pedidoId: string,
   onResuelto: (r: Extract<ResultadoSondeo, { fase: "pagado" | "rechazado" }>) => void,
-  { inmediato = false }: { inmediato?: boolean } = {},
+  {
+    inmediato = false,
+    pagoMercadoPagoId,
+  }: { inmediato?: boolean; pagoMercadoPagoId?: string } = {},
 ) {
   const [agotado, setAgotado] = useState(false);
   // Cada vez que cambia, arranca una espera nueva.
@@ -39,10 +43,14 @@ export function useSondeoPago(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const inicio = Date.now();
 
+    let sinCobroSeguidas = 0;
     async function sondear(n: number) {
-      const r = await consultarPagoDelPedido(pedidoId);
+      const r = await consultarPagoDelPedido(pedidoId, fetch, pagoMercadoPagoId);
       if (!vigente) return;
       if (r.fase === "pagado" || r.fase === "rechazado") return aviso.current(r);
+      // Dos veces seguidas sin ningún cobro en curso: el envío nunca llegó. No hay nada que esperar.
+      sinCobroSeguidas = r.fase === "sinCobro" ? sinCobroSeguidas + 1 : 0;
+      if (sinCobroSeguidas >= 2) return aviso.current({ fase: "rechazado", mensaje: MENSAJE_SIN_COBRO, cobrable: true });
       const espera = esperaSondeo(n + 1);
       if (r.fase === "perdido" || Date.now() - inicio + espera > VENTANA_SONDEO_MS) {
         setAgotado(true);
@@ -56,7 +64,7 @@ export function useSondeoPago(
       vigente = false;
       if (timer) clearTimeout(timer);
     };
-  }, [pedidoId, ronda, inmediato]);
+  }, [pedidoId, ronda, inmediato, pagoMercadoPagoId]);
 
   return {
     agotado,

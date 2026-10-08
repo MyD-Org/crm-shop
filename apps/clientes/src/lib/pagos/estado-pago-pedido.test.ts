@@ -11,11 +11,13 @@ const intentoAbiertoDelPedido = vi.fn();
 const conciliarIntento = vi.fn();
 const proveedor = { id: "payway", configurado: () => true, cancelarPago: vi.fn() };
 const proveedorPago = vi.fn();
+const registrarCobro = vi.fn(async () => true);
 
 vi.mock("@/lib/pedidos", () => ({
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
   intentoAbiertoDelPedido: (...a: unknown[]) => intentoAbiertoDelPedido(...a),
   motivoNoCobrable: (p: { estado: string }) => (p.estado === "cancelado" ? "cancelado" : null),
+  registrarCobro: (...a: unknown[]) => registrarCobro(...(a as [])),
 }));
 vi.mock("@/lib/pagos", async () => {
   const tipos = await import("./tipos");
@@ -123,5 +125,46 @@ describe("estadoPagoDelPedido", () => {
     getPedidoParaPago.mockResolvedValue(pedido("fallido", { estado: "cancelado" }));
     intentoAbiertoDelPedido.mockResolvedValue(null);
     expect(await estadoPagoDelPedido("p1", dueno)).toMatchObject({ estado: "fallido", cobrable: false });
+  });
+});
+
+describe("estadoPagoDelPedido: sin cobro en curso y vuelta de Mercado Pago", () => {
+  it("pendiente sin ningún intento abierto: sinCobro (el envío nunca llegó al procesador)", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente"));
+    intentoAbiertoDelPedido.mockResolvedValue(null);
+    expect(await estadoPagoDelPedido("p1", dueno)).toMatchObject({ estado: "pendiente", sinCobro: true });
+  });
+
+  it("con un intento abierto no es sinCobro", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente"));
+    expect((await estadoPagoDelPedido("p1", dueno))?.sinCobro).toBeUndefined();
+  });
+
+  it("con el payment_id de la vuelta: consulta ese pago y, si es de este pedido, lo registra", async () => {
+    const mp = {
+      id: "mercadopago",
+      configurado: () => true,
+      consultarPago: vi.fn(async () => ({ estado: "pagado", detalle: "accredited", pedidoId: "p1" })),
+    };
+    proveedorPago.mockImplementation((id: string) => (id === "mercadopago" ? mp : proveedor));
+    getPedidoParaPago
+      .mockResolvedValueOnce(pedido("pendiente", { pagoMetodo: "mercadopago" }))
+      .mockResolvedValue(pedido("pagado", { pagoMetodo: "mercadopago" }));
+    const r = await estadoPagoDelPedido("p1", dueno, { pagoMercadoPagoId: "123" });
+    expect(mp.consultarPago).toHaveBeenCalledWith("123");
+    expect(registrarCobro).toHaveBeenCalledWith("p1", expect.objectContaining({ proveedor: "mercadopago", referencia: "123", estado: "pagado" }));
+    expect(r).toMatchObject({ estado: "pagado" });
+  });
+
+  it("un payment_id de OTRO pedido no se registra", async () => {
+    const mp = {
+      id: "mercadopago",
+      configurado: () => true,
+      consultarPago: vi.fn(async () => ({ estado: "pagado", detalle: "accredited", pedidoId: "otro" })),
+    };
+    proveedorPago.mockImplementation((id: string) => (id === "mercadopago" ? mp : proveedor));
+    getPedidoParaPago.mockResolvedValue(pedido("pendiente", { pagoMetodo: "mercadopago" }));
+    await estadoPagoDelPedido("p1", dueno, { pagoMercadoPagoId: "999" });
+    expect(registrarCobro).not.toHaveBeenCalled();
   });
 });

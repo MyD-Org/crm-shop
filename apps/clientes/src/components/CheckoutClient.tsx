@@ -1,7 +1,7 @@
 "use client";
 
 import { OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, Button, Checkbox, Field, Input, Select, Spinner, Stepper } from "@myd-org/ui";
@@ -237,6 +237,8 @@ interface Props {
   pedidoReintento?: string | null;
   /** Vuelve de pagar con su cuenta de Mercado Pago: se retoma en "Estamos confirmando su pago" (sondeo; el webhook registra el cobro). */
   retornoMercadoPago?: boolean;
+  /** El `payment_id` de esa vuelta: el sondeo le pide al servidor que consulte ese pago si no lo conoce. */
+  pagoMercadoPagoId?: string;
   nombreSugerido: string;
   /**
    * Teléfono precargado: el de Alegra del vinculado (`facturacion.telefonoAlegra`,
@@ -331,6 +333,7 @@ export function CheckoutClient({
   eleccionInicial = null,
   pedidoReintento = null,
   retornoMercadoPago = false,
+  pagoMercadoPagoId,
 }: Props) {
   const { items, vaciarTrasPedido, ready, addItems } = useCart();
 
@@ -507,6 +510,9 @@ export function CheckoutClient({
   const [carritoDelPedido, setCarritoDelPedido] = useState(false);
   /** El procesador todavía no confirmó el cobro: no se ofrece cancelar, sólo volver a la tienda. */
   const [pagoEnConfirmacion, setPagoEnConfirmacion] = useState(false);
+  /** El formulario de pago tiene un cobro en vuelo (enviando o validación del banco): sin salidas laterales. */
+  const [cobroEnCurso, setCobroEnCurso] = useState(false);
+  const alAgotarConfirmacion = useCallback(() => setPagoEnConfirmacion(false), []);
   const [cancelando, setCancelando] = useState(false);
   const [errorCancelar, setErrorCancelar] = useState<string | null>(null);
   /**
@@ -538,14 +544,25 @@ export function CheckoutClient({
       .then(async (r) => {
         if (r.ok) return r.json();
         if (pedidoReintento && (r.status === 404 || r.status === 409)) {
-          const j = (await r.json().catch(() => null)) as { error?: string } | null;
+          const j = (await r.json().catch(() => null)) as {
+            error?: string;
+            motivo?: string;
+            pedido?: { id: string; numero: string; total: number };
+          } | null;
+          // Ya pagado (lo común al volver de Mercado Pago: el webhook llega antes que el comprador).
+          if (j?.motivo === "pagado" && j.pedido) return { yaPagado: j.pedido };
           return { falla: j?.error ?? "Este pedido ya no se puede pagar." };
         }
         return null;
       })
       .then((data) => {
         if (cancelado) return;
-        if (data?.falla) {
+        if (data?.yaPagado) {
+          setConfirmado({ ...data.yaPagado, cuotas: null, pagoEnLinea: true, procesador: SLUG_MERCADOPAGO });
+          setPagado(true);
+          if (retornoMercadoPago) vaciarTrasPedido();
+          setBuscandoPendiente(false);
+        } else if (data?.falla) {
           setErrorReintento(data.falla);
           setBuscandoPendiente(false);
         } else if (data?.pedido) setRescate(pedidoReintento ? { ...data.pedido, explicito: true } : data.pedido);
@@ -559,7 +576,8 @@ export function CheckoutClient({
     return () => {
       cancelado = true;
     };
-  }, [pedidoReintento]);
+    // `retornoMercadoPago` es fijo (viene de la URL) y `vaciarTrasPedido` es estable: no la vuelven a disparar.
+  }, [pedidoReintento, retornoMercadoPago, vaciarTrasPedido]);
 
   /**
    * Con el carrito cargado se decide qué hacer con el pendiente. El carrito sigue
@@ -1077,6 +1095,8 @@ export function CheckoutClient({
               numero={confirmado.numero}
               monto={confirmado.total}
               cuotas={confirmado.cuotas ?? undefined}
+              onCobroEnCurso={setCobroEnCurso}
+              onConfirmacionAgotada={alAgotarConfirmacion}
               onPagado={alPagar}
               onPendiente={alQuedarPendiente}
               onRechazado={() => {
@@ -1092,6 +1112,9 @@ export function CheckoutClient({
               monto={confirmado.total}
               emailComprador={emailCliente}
               maxCuotas={confirmado.cuotas ?? undefined}
+              pagoMercadoPagoId={pagoMercadoPagoId}
+              onCobroEnCurso={setCobroEnCurso}
+              onConfirmacionAgotada={alAgotarConfirmacion}
               onPagado={alPagar}
               onPendiente={alQuedarPendiente}
               onRechazado={() => {
@@ -1119,13 +1142,14 @@ export function CheckoutClient({
             </p>
           )}
           <div className="flex flex-col items-stretch gap-2 border-t border-border pt-4">
-            {/* Sin cobro aprobado ni en vuelo se puede elegir otro medio o cuotas; el servidor lo vuelve a validar. */}
-            {puedeCambiarMedioPago({ pagado, pagoEnConfirmacion }) && !esCuentaCorriente && (
+            {/* Sin cobro aprobado ni en vuelo se puede elegir otro medio o cuotas; el servidor lo vuelve a validar.
+                En vuelo cuenta también el envío y la validación del banco (`cobroEnCurso`). */}
+            {puedeCambiarMedioPago({ pagado, pagoEnConfirmacion: pagoEnConfirmacion || cobroEnCurso }) && !esCuentaCorriente && (
               <Button variant="outline" onClick={cambiarMedio} disabled={cancelando}>
                 {cancelando ? "Un momento…" : "Cambiar medio de pago"}
               </Button>
             )}
-            {pagoEnConfirmacion ? (
+            {pagoEnConfirmacion || cobroEnCurso ? (
               // Con el cobro en confirmación no se cancela (el pago puede acreditarse) ni se cambia el
               // medio. Si se rechaza, vuelve el formulario y reaparecen las dos opciones.
               <Link href="/" className="self-center py-2 text-sm text-muted underline">

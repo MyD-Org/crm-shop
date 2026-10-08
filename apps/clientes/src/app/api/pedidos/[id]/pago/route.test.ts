@@ -41,9 +41,17 @@ describe("GET /api/pedidos/[id]/pago", () => {
   it("filtra por el dueño de la sesión y devuelve el estado sin cache", async () => {
     identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: { codigocliente: "C1" } });
     const r = await GET(req, ctx("p9"));
-    expect(estadoPago).toHaveBeenCalledWith("p9", { clerkUserId: "user_1", clienteCodigo: "C1" });
+    expect(estadoPago).toHaveBeenCalledWith("p9", { clerkUserId: "user_1", clienteCodigo: "C1" }, {});
     expect(r.status).toBe(200);
     expect(r.headers.get("cache-control")).toBe("no-store");
     expect(await r.json()).toEqual({ estado: "pendiente", enLinea: true, cobrable: true });
+  });
+
+  it("con ?pago_mp (vuelta de Mercado Pago) pasa ese id; uno que no es numérico se ignora", async () => {
+    identidad.mockResolvedValue({ clerkUserId: "user_1", cliente: null });
+    await GET(new Request("http://localhost/api/pedidos/p9/pago?pago_mp=123456"), ctx("p9"));
+    expect(estadoPago).toHaveBeenLastCalledWith("p9", { clerkUserId: "user_1", clienteCodigo: undefined }, { pagoMercadoPagoId: "123456" });
+    await GET(new Request("http://localhost/api/pedidos/p9/pago?pago_mp=null"), ctx("p9"));
+    expect(estadoPago).toHaveBeenLastCalledWith("p9", { clerkUserId: "user_1", clienteCodigo: undefined }, {});
   });
 });

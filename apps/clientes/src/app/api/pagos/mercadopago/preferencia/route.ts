@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { identidadActual } from "@/lib/auth";
-import { getPedidoParaPago, motivoNoCobrable } from "@/lib/pedidos";
+import { VENTANA_PAGO_MS, getPedidoParaPago, motivoNoCobrable } from "@/lib/pedidos";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitir } from "@/lib/rate-limit";
 import { crearPreferencia, mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
         origen: new URL(req.url).origin,
         emailComprador: pedido.clienteEmail ?? cliente?.email ?? email ?? undefined,
         cuotas: pedido.cuotas,
+        venceEn: new Date(pedido.creadoEn.getTime() + VENTANA_PAGO_MS),
       }),
     );
     return NextResponse.json({ url }, { headers: { "Cache-Control": "no-store" } });

@@ -1461,7 +1461,10 @@ export async function pedidoPendienteMasReciente(
     .where(
       and(
         esDeSuDueno(dueno),
-        eq(orders.pagoEstado, "pendiente"),
+        // También con el pago rechazado: si no, recargar el checkout tras un rechazo creaba un pedido
+        // nuevo y el viejo quedaba reservando stock hasta vencer. Se retoma (o se cancela si el carrito
+        // ya es otro) igual que uno pendiente.
+        inArray(orders.pagoEstado, ["pendiente", "fallido"]),
         eq(orders.estado, "pendiente"),
         inArray(orders.pagoMetodo, [...slugsPagoLinea]),
         gte(orders.createdAt, desde),
@@ -1513,7 +1516,9 @@ async function armarRescate(fila: FilaRescate) {
 
 export type ReintentoPago =
   | { ok: true; pedido: NonNullable<Awaited<ReturnType<typeof pedidoPendienteMasReciente>>> }
-  | { ok: false; motivo: "no_existe" | "pagado" | "no_cobrable" };
+  | { ok: false; motivo: "no_existe" | "no_cobrable" }
+  /** Ya pagado: el comprador vuelve de Mercado Pago con el webhook ya procesado. Lo justo para "¡Pago acreditado!". */
+  | { ok: false; motivo: "pagado"; pedido: { id: string; numero: string; total: number } };
 
 /**
  * Retoma el cobro de UN pedido concreto (el link "Reintentar el pago"), incluso con el pago
@@ -1544,7 +1549,13 @@ export async function pedidoParaReintentarPago(
     .where(and(eq(orders.id, id), esDeSuDueno(dueno)))
     .limit(1);
   if (!fila) return { ok: false, motivo: "no_existe" };
-  if (fila.pagoEstado === "pagado") return { ok: false, motivo: "pagado" };
+  if (fila.pagoEstado === "pagado") {
+    return {
+      ok: false,
+      motivo: "pagado",
+      pedido: { id: fila.id, numero: formatearNumero(fila.numero), total: Number(fila.total) },
+    };
+  }
   if (
     !slugsPagoLinea.includes(fila.pagoMetodo) ||
     motivoNoCobrable({ estado: fila.estado as OrderEstado, creadoEn: fila.createdAt }, ahora)
@@ -1986,6 +1997,11 @@ export async function intentosPendientesDeReconciliar(opciones: {
   /** Creados después de esto. */
   creadosDesde: Date;
   limite: number;
+  /**
+   * También los dados por "no llegó" (`fallido` / `no_llego`) creados después de esto: el procesador
+   * no los conocía, pero si los aprueba tarde quedaban cobrados sin registrar (Payway).
+   */
+  noLlegoDesde?: Date;
 }): Promise<{ orderId: string; referencia: string; creadoEn: Date }[]> {
   const filas = await getDb()
     .select({ orderId: pagoIntentos.orderId, referencia: pagoIntentos.referencia, creadoEn: pagoIntentos.createdAt })
@@ -1995,7 +2011,16 @@ export async function intentosPendientesDeReconciliar(opciones: {
         // La base es compartida con el CRM y acá no hay comprador que acote la
         // consulta: sin esto, el cron de un Shop reconciliaría pedidos de otro.
         intentoDeEsteTenant(),
-        eq(pagoIntentos.estado, "pendiente"),
+        opciones.noLlegoDesde
+          ? or(
+              eq(pagoIntentos.estado, "pendiente"),
+              and(
+                eq(pagoIntentos.estado, "fallido"),
+                eq(pagoIntentos.detalle, "no_llego"),
+                gte(pagoIntentos.createdAt, opciones.noLlegoDesde),
+              ),
+            )
+          : eq(pagoIntentos.estado, "pendiente"),
         eq(pagoIntentos.proveedor, opciones.proveedor),
         sql`${pagoIntentos.referencia} is not null`,
         lt(pagoIntentos.updatedAt, opciones.quietosDesde),

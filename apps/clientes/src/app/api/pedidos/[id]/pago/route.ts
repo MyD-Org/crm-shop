@@ -15,7 +15,7 @@ const VENTANA_MS = 5 * 60_000;
  * procesador (sólo consulta) y registra el resultado: ver `estadoPagoDelPedido`. Un pedido ajeno
  * responde 404, igual que uno inexistente.
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { clerkUserId, cliente } = await identidadActual();
   if (!clerkUserId && !cliente) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -31,10 +31,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   if (!id) return NextResponse.json({ error: "Falta el pedido." }, { status: 400 });
 
-  const estado = await estadoPagoDelPedido(id, {
-    clerkUserId,
-    clienteCodigo: cliente?.codigocliente,
-  });
+  // `?pago_mp=<payment_id>`: vuelve de Mercado Pago con ese pago (ver `estadoPagoDelPedido`).
+  const pagoMp = new URL(req.url).searchParams.get("pago_mp");
+  const estado = await estadoPagoDelPedido(
+    id,
+    { clerkUserId, clienteCodigo: cliente?.codigocliente },
+    pagoMp && /^\d{1,30}$/.test(pagoMp) ? { pagoMercadoPagoId: pagoMp } : {},
+  );
   if (!estado) return NextResponse.json({ error: "No encontramos ese pedido." }, { status: 404 });
 
   return NextResponse.json(estado, { headers: { "Cache-Control": "no-store" } });

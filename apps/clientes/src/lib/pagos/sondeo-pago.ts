@@ -23,12 +23,22 @@ export type ResultadoSondeo =
   /** Rechazado: `cobrable` = se puede volver a pagar este mismo pedido. */
   | { fase: "rechazado"; mensaje: string; cobrable: boolean }
   /** No hay nada que seguir consultando (sin sesión o pedido inexistente). */
-  | { fase: "perdido" };
+  | { fase: "perdido" }
+  /**
+   * El pedido sigue pendiente y no hay ningún cobro en curso: el envío nunca llegó al procesador (se
+   * cortó la conexión antes). Quien sondea lo da por "no se cobró" si se repite (ver `useSondeoPago`).
+   */
+  | { fase: "sinCobro" };
+
+/** Lo que se le dice al comprador cuando el cobro nunca salió: nada que esperar, puede reintentar. */
+export const MENSAJE_SIN_COBRO =
+  "No se realizó ningún cobro: el pago no llegó a enviarse. Inténtelo de nuevo o elija otro medio de pago.";
 
 interface RespuestaEstado {
   estado?: string;
   mensaje?: string;
   cobrable?: boolean;
+  sinCobro?: boolean;
 }
 
 const MENSAJE_NO_COBRABLE =
@@ -37,10 +47,13 @@ const MENSAJE_NO_COBRABLE =
 export async function consultarPagoDelPedido(
   pedidoId: string,
   doFetch: typeof fetch = fetch,
+  /** Id del pago con el que volvió de Mercado Pago (`payment_id`): el servidor lo consulta si no lo conoce. */
+  pagoMercadoPagoId?: string,
 ): Promise<ResultadoSondeo> {
   let res: Response;
+  const query = pagoMercadoPagoId ? `?pago_mp=${encodeURIComponent(pagoMercadoPagoId)}` : "";
   try {
-    res = await doFetch(`/api/pedidos/${encodeURIComponent(pedidoId)}/pago`, { cache: "no-store" });
+    res = await doFetch(`/api/pedidos/${encodeURIComponent(pedidoId)}/pago${query}`, { cache: "no-store" });
   } catch {
     // Sin conexión un rato: se sigue esperando, no es un resultado.
     return { fase: "pendiente" };
@@ -55,5 +68,6 @@ export async function consultarPagoDelPedido(
     const mensaje = json.mensaje ?? "No pudimos procesar el pago. Inténtelo de nuevo o elija otro medio de pago.";
     return { fase: "rechazado", mensaje: cobrable ? mensaje : `${mensaje} ${MENSAJE_NO_COBRABLE}`, cobrable };
   }
+  if (json.sinCobro) return { fase: "sinCobro" };
   return { fase: "pendiente" };
 }

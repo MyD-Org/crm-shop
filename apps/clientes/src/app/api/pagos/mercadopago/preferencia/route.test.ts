@@ -13,6 +13,7 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
+  VENTANA_PAGO_MS: (await original<typeof import("@/lib/pedidos")>()).VENTANA_PAGO_MS,
   getPedidoParaPago: async () => pedido,
 }));
 vi.mock("@/lib/pagos/mercadopago", async (original) => ({

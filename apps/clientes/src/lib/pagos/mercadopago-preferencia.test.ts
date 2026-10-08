@@ -93,3 +93,16 @@ describe("volvioConPagoDeMercadoPago", () => {
     expect(volvioConPagoDeMercadoPago({ payment_id: "" })).toBe(false);
   });
 });
+
+describe("armarPreferencia: vencimiento", () => {
+  it("con venceEn, la preferencia vence ahí (no se puede pagar un pedido vencido)", () => {
+    const venceEn = new Date("2026-10-08T12:00:00.000Z");
+    const p = armarPreferencia({ ...base, venceEn });
+    expect(p.expires).toBe(true);
+    expect(p.expiration_date_to).toBe("2026-10-08T12:00:00.000Z");
+  });
+  it("sin venceEn, sin vencimiento", () => {
+    expect(armarPreferencia(base)).not.toHaveProperty("expires");
+  });
+});
+

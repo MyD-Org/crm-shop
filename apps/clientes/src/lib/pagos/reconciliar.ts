@@ -41,6 +41,12 @@ const ESPERA_WEBHOOK_MS = 5 * 60_000;
  */
 const VENTANA_MS = 3 * 24 * 60 * 60_000;
 
+/**
+ * Un intento dado por "no llegó" (el procesador no lo conocía a los 10 minutos) se sigue consultando
+ * este tiempo: si el procesador lo aprueba tarde, se registra en vez de quedar cobrado sin registrar.
+ */
+const VENTANA_NO_LLEGO_MS = 24 * 60 * 60_000;
+
 export interface ResultadoReconciliacion {
   revisados: number;
   actualizados: number;
@@ -91,6 +97,7 @@ async function reconciliarProveedor(
     proveedor: proveedor.id,
     quietosDesde: corteWebhook,
     creadosDesde: corteAntiguedad,
+    noLlegoDesde: new Date(ahora - VENTANA_NO_LLEGO_MS),
     limite,
   });
 

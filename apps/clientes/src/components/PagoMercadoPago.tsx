@@ -46,7 +46,8 @@ type Estado =
   | { fase: "pagado" }
   | { fase: "pendiente"; detalle?: string }
   | { fase: "desafio3ds"; referencia: string; url: string; creq: string }
-  | { fase: "rechazado"; mensaje: string; reintentable: boolean };
+  /** `noCobrable`: el pedido ya no se puede pagar (vencido o cancelado): sin formulario. */
+  | { fase: "rechazado"; mensaje: string; reintentable: boolean; noCobrable?: boolean };
 
 interface Props {
   pedidoId: string;
@@ -67,6 +68,15 @@ interface Props {
   onRechazado?: () => void;
   /** El pedido ya tiene un cobro en curso (se retomó): arranca en "Estamos confirmando su pago". */
   iniciarEnConfirmacion?: boolean;
+  /** `payment_id` con el que volvió de Mercado Pago (cuenta de Mercado Pago): se consulta ese pago. */
+  pagoMercadoPagoId?: string;
+  /**
+   * Hay un cobro en vuelo (enviando o en la validación del banco): el checkout oculta "Cambiar medio de
+   * pago" y "Volver al carrito", que desmontarían este formulario a mitad del cobro.
+   */
+  onCobroEnCurso?: (enCurso: boolean) => void;
+  /** "Estamos confirmando" se agotó sin resultado: el checkout vuelve a ofrecer otras salidas. */
+  onConfirmacionAgotada?: () => void;
 }
 
 interface RespuestaPago {
@@ -88,9 +98,16 @@ export function PagoMercadoPago({
   onPendiente,
   onRechazado,
   iniciarEnConfirmacion = false,
+  pagoMercadoPagoId,
+  onCobroEnCurso,
+  onConfirmacionAgotada,
 }: Props) {
   const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "cargando" });
   const [intento, setIntento] = useState(0);
+  const cobroEnCurso = estado.fase === "procesando" || estado.fase === "desafio3ds";
+  useEffect(() => {
+    onCobroEnCurso?.(cobroEnCurso);
+  }, [cobroEnCurso, onCobroEnCurso]);
   const [opcion, setOpcion] = useState<Opcion>("credito");
   /** El débito es siempre un pago: con cuotas congeladas no se ofrece. */
   const debitoDisponible = !(maxCuotas !== undefined && maxCuotas > 1);
@@ -320,13 +337,12 @@ export function PagoMercadoPago({
   }
 
   // ---------------------------------------------------------------- 3DS
+  // La validación del banco la explica la propia pantalla de Mercado Pago: sin texto ni recuadro
+  // nuestro alrededor (se desarmaba). Debajo, sin mostrar nada, se consulta el resultado: al aprobarse
+  // o rechazarse la pantalla avanza sola (antes quedaba la de Mercado Pago, sin volver al checkout).
   if (estado.fase === "desafio3ds") {
     return (
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <p className="mb-3 text-sm text-muted">
-          Su banco necesita validar esta compra. Complete la verificación aquí abajo
-          — tiene unos minutos antes de que venza.
-        </p>
+      <div className="w-full min-w-0 overflow-hidden">
         <StatusScreen
           initialization={{
             paymentId: estado.referencia,
@@ -337,6 +353,19 @@ export function PagoMercadoPago({
           }}
           onReady={() => {}}
         />
+        <PagoEnConfirmacion
+          pedidoId={pedidoId}
+          silencioso
+          onPagado={() => {
+            setEstado({ fase: "pagado" });
+            onPagado();
+          }}
+          onRechazado={(mensaje, cobrable) => {
+            setIntento((n) => n + 1);
+            setEstado({ fase: "rechazado", mensaje, reintentable: true, noCobrable: !cobrable });
+            onRechazado?.();
+          }}
+        />
       </div>
     );
   }
@@ -346,14 +375,17 @@ export function PagoMercadoPago({
     return (
       <PagoEnConfirmacion
         pedidoId={pedidoId}
+        pagoMercadoPagoId={pagoMercadoPagoId}
+        onAgotado={onConfirmacionAgotada}
         onPagado={() => {
           setEstado({ fase: "pagado" });
           onPagado();
         }}
-        onRechazado={(mensaje) => {
+        onRechazado={(mensaje, cobrable) => {
           // Se vuelve al formulario sobre el mismo pedido: remontar el brick (el token es de un solo uso).
+          // Si el pedido ya no se puede pagar (vencido, cancelado), sin "Probar de nuevo".
           setIntento((n) => n + 1);
-          setEstado({ fase: "rechazado", mensaje, reintentable: true });
+          setEstado({ fase: "rechazado", mensaje, reintentable: true, noCobrable: !cobrable });
           onRechazado?.();
         }}
       />
@@ -361,6 +393,12 @@ export function PagoMercadoPago({
   }
 
   const procesando = estado.fase === "procesando";
+
+  // Pedido que ya no se puede pagar (vencido o cancelado mientras se pagaba): sólo el aviso. Con el
+  // formulario a la vista el comprador reintentaba y el servidor lo rechazaba una y otra vez.
+  if (estado.fase === "rechazado" && estado.noCobrable) {
+    return <AvisoPagoRechazado mensaje={estado.mensaje} reintentable={false} onReintentar={reintentar} />;
+  }
 
   const formularioTarjeta = (
     <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>

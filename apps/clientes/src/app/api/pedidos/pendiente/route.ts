@@ -35,6 +35,8 @@ export async function GET(request?: Request) {
             ? "Este pedido ya está pagado."
             : "Este pedido ya no se puede pagar. Puede volver a comprar los mismos productos.",
         motivo: r.motivo,
+        // Pagado: el checkout muestra "¡Pago acreditado!" en vez de un error (vuelta de Mercado Pago).
+        ...(r.motivo === "pagado" ? { pedido: r.pedido } : {}),
       },
       { status: 409 },
     );

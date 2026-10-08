@@ -61,3 +61,22 @@ describe("consultarPagoDelPedido", () => {
     expect(await consulta(respuesta(404))).toEqual({ fase: "perdido" });
   });
 });
+
+describe("consultarPagoDelPedido: sin cobro y vuelta de Mercado Pago", () => {
+  const conJson = (json: unknown) => (async () => new Response(JSON.stringify(json), { status: 200 })) as unknown as typeof fetch;
+
+  it("sinCobro del servidor: fase sinCobro (quien sondea la da por 'no se cobró' si se repite)", async () => {
+    expect(await consultarPagoDelPedido("p1", conJson({ estado: "pendiente", sinCobro: true }))).toEqual({ fase: "sinCobro" });
+  });
+
+  it("con el payment_id de la vuelta, lo manda como ?pago_mp", async () => {
+    let url = "";
+    const doFetch = (async (u: string) => {
+      url = u;
+      return new Response(JSON.stringify({ estado: "pendiente" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await consultarPagoDelPedido("p1", doFetch, "123");
+    expect(url).toBe("/api/pedidos/p1/pago?pago_mp=123");
+  });
+});
+

@@ -129,6 +129,15 @@ describe("cobrarPedido — referencia del intento antes de cobrar", () => {
     expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ intentoId: "i1", bin: "450799" }));
   });
 
+  it("cobro aprobado pero falla registrarlo en la base: responde 'pagado' igual (no 'no pudimos procesar')", async () => {
+    crearPago.mockResolvedValue({ estado: "pagado", referencia: "ref-i1", detalle: "ok" });
+    registrarCobro.mockRejectedValue(new Error("DB caída"));
+    const r = await pagarCon(conReferencia());
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ estado: "pagado" });
+    expect(registrarIntentoFallido).not.toHaveBeenCalled();
+  });
+
   it("timeout o 5xx del procesador: el intento queda abierto CON referencia (no se descarta) para consultarlo", async () => {
     crearPago.mockRejectedValue(new ErrorProveedor("Payway respondió 503", 503));
     const r = await pagarCon(conReferencia());

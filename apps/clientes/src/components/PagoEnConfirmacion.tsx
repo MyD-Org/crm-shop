@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@myd-org/ui";
 import { hrefPedido } from "@/lib/mi-cuenta-nav";
@@ -11,21 +12,50 @@ import { useSondeoPago } from "./useSondeoPago";
  * Mientras está en pantalla consulta el estado del pago (`GET /api/pedidos/[id]/pago`, que le pregunta
  * al procesador) cada pocos segundos durante unos minutos y avisa a quien lo usa apenas se resuelve:
  * `onPagado` o `onRechazado` (con el mensaje ya traducido y si el pedido se puede volver a pagar). Si
- * se agota la espera no inventa un resultado: indica que llegará por correo y dónde verlo.
+ * se agota la espera no inventa un resultado: indica que llegará por correo y dónde verlo, y avisa
+ * (`onAgotado`) para que el checkout vuelva a ofrecer "Cambiar medio de pago" y "Volver al carrito".
  */
 export function PagoEnConfirmacion({
   pedidoId,
   onPagado,
   onRechazado,
+  onAgotado,
+  silencioso = false,
+  pagoMercadoPagoId,
 }: {
   pedidoId: string;
   onPagado: () => void;
   onRechazado: (mensaje: string, cobrable: boolean) => void;
+  /** Se agotó la espera sin resultado: quien lo usa vuelve a ofrecer otras salidas (otro medio, carrito). */
+  onAgotado?: () => void;
+  /** Sin texto mientras espera (debajo de la validación del banco, que ya explica qué hacer). */
+  silencioso?: boolean;
+  /** `payment_id` con el que volvió de Mercado Pago, si lo hay. */
+  pagoMercadoPagoId?: string;
 }) {
-  const { agotado, reiniciar } = useSondeoPago(pedidoId, (r) => {
-    if (r.fase === "pagado") onPagado();
-    else onRechazado(r.mensaje, r.cobrable);
-  });
+  const { agotado, reiniciar } = useSondeoPago(
+    pedidoId,
+    (r) => {
+      if (r.fase === "pagado") onPagado();
+      else onRechazado(r.mensaje, r.cobrable);
+    },
+    { pagoMercadoPagoId },
+  );
+
+  useEffect(() => {
+    if (agotado) onAgotado?.();
+  }, [agotado, onAgotado]);
+
+  if (agotado && silencioso) {
+    return (
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted">
+        <span>¿Ya completó la validación?</span>
+        <Button variant="secondary" size="sm" onClick={reiniciar}>
+          Consultar ahora
+        </Button>
+      </div>
+    );
+  }
 
   if (agotado) {
     return (
@@ -44,6 +74,8 @@ export function PagoEnConfirmacion({
       </div>
     );
   }
+
+  if (silencioso) return null;
 
   return (
     <div role="status" aria-live="polite" className="rounded-xl border border-border bg-surface p-5">

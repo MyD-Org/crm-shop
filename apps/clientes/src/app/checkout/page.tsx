@@ -15,7 +15,7 @@ import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfrecibles } from "@/lib/medios-pago-datos";
 import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
-import { volvioConPagoDeMercadoPago } from "@/lib/pagos/mercadopago-preferencia";
+import { idPagoDeRetorno } from "@/lib/pagos/mercadopago-preferencia";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -66,8 +66,8 @@ export default async function CheckoutPage({
   // `pago=mp`: el comprador vuelve de Mercado Pago (back_urls de la preferencia). Sólo hay un pago que
   // confirmar si Mercado Pago manda su id: con "Volver a la tienda" sin pagar llega `payment_id=null`
   // y el checkout tiene que volver a ofrecer los medios de pago, no quedarse en "Estamos confirmando".
-  const retornoMercadoPago =
-    pedidoReintento !== null && pago === "mp" && volvioConPagoDeMercadoPago({ payment_id, collection_id });
+  const pagoMercadoPagoId = pedidoReintento !== null && pago === "mp" ? idPagoDeRetorno({ payment_id, collection_id }) : null;
+  const retornoMercadoPago = pagoMercadoPagoId !== null;
   // Las reglas y los medios de pago no dependen de la identidad: arrancan antes de esperarla para
   // que se resuelvan en paralelo con esa consulta en vez de después (misma
   // semántica, una espera menos en la cascada). `identidadActual` decide el
@@ -162,6 +162,7 @@ export default async function CheckoutPage({
         eleccionInicial={eleccion}
         pedidoReintento={pedidoReintento}
         retornoMercadoPago={retornoMercadoPago}
+        pagoMercadoPagoId={pagoMercadoPagoId ?? undefined}
       />
     </>
   );

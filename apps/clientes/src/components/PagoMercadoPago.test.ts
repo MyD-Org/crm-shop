@@ -121,6 +121,10 @@ describe("PagoMercadoPago: props del Brick estables", () => {
     expect(fuente).toMatch(/onBinChange=\{onBinChange\}/);
   });
 
+  it("mientras procesa, los campos de la tarjeta quedan bloqueados (inert), como el resto del formulario", () => {
+    expect(fuente).toMatch(/inert=\{procesando\}/);
+  });
+
   it("cobra las cuotas de nuestro desplegable, no las del Brick", () => {
     expect(fuente).not.toMatch(/cuotas:\s*datos\?\.installments/);
   });

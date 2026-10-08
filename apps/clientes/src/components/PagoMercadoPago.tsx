@@ -513,7 +513,12 @@ export function PagoMercadoPago({
       )}
       {/* Sigue montado para que el SDK pueda terminar de cargar. Sus estados
           intermedios no son un error ni deben pedir que se cambie de medio. */}
-      <div aria-hidden={estado.fase === "cargando"} className={estado.fase === "cargando" ? "invisible" : undefined}>
+      {/* Mientras se procesa el pago, la tarjeta no se puede tocar (como el desplegable y las otras opciones). */}
+      <div
+        aria-hidden={estado.fase === "cargando"}
+        inert={procesando}
+        className={estado.fase === "cargando" ? "invisible" : procesando ? "opacity-60" : undefined}
+      >
         <CardPayment
           key={`${tipoTarjeta}-${intento}`}
           initialization={initialization}

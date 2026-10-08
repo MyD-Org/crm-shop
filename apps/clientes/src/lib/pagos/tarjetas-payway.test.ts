@@ -79,14 +79,45 @@ describe("tarjetasPayway", () => {
     expect(nombres).not.toMatch(/Naranja|Diners|Maestro/);
   });
 
-  it("si Mercado Pago no devolvió una marca, ese logo no aparece", () => {
+  it("si Mercado Pago no devolvió una marca, esa marca usa el logo propio y el resto el de Mercado Pago", () => {
     const t = tarjetasPayway(tarjetasDeMercadoPago(respuestaMp.filter((m) => m.id !== "amex" && m.id !== "debcabal")));
-    expect(t.credito.map((x) => x.nombre)).toEqual(["Visa", "Mastercard", "Cabal"]);
-    expect(t.debito.map((x) => x.nombre)).toEqual(["Visa Débito", "Mastercard Débito"]);
+    expect(t.credito.map((x) => x.nombre)).toEqual(["Visa", "Mastercard", "American Express", "Cabal"]);
+    expect(t.credito.map((x) => x.logo)).toEqual([
+      "https://img.example/visa.gif",
+      "https://img.example/master.gif",
+      "/images/tarjetas/amex.svg",
+      "https://img.example/cabal.gif",
+    ]);
+    expect(t.debito.map((x) => x.logo)).toEqual([
+      "https://img.example/debvisa.gif",
+      "https://img.example/debmaster.gif",
+      "/images/tarjetas/cabal.svg",
+    ]);
   });
 
-  it("sin tarjetas de Mercado Pago (o sin datos) no hay logos", () => {
-    expect(tarjetasPayway(tarjetasDeMercadoPago([]))).toEqual({ credito: [], debito: [] });
-    expect(tarjetasPayway(undefined)).toEqual({ credito: [], debito: [] });
+  it("con una lista de Mercado Pago sin `id` (caché vieja) salen los 4 logos propios del convenio en crédito", () => {
+    const sinId = {
+      credito: [{ nombre: "Visa", logo: "https://img.example/visa.gif" }, { nombre: "Naranja", logo: "https://img.example/naranja.gif" }],
+      debito: [{ nombre: "Visa Débito", logo: "https://img.example/debvisa.gif" }],
+    } as unknown as Parameters<typeof tarjetasPayway>[0];
+    const t = tarjetasPayway(sinId);
+    expect(t.credito.map((x) => x.logo)).toEqual([
+      "/images/tarjetas/visa.svg",
+      "/images/tarjetas/mastercard.svg",
+      "/images/tarjetas/amex.svg",
+      "/images/tarjetas/cabal.svg",
+    ]);
+    expect(t.debito.map((x) => x.logo)).toEqual([
+      "/images/tarjetas/visa.svg",
+      "/images/tarjetas/mastercard.svg",
+      "/images/tarjetas/cabal.svg",
+    ]);
+  });
+
+  it("sin tarjetas de Mercado Pago (o sin datos) los logos son los propios", () => {
+    for (const t of [tarjetasPayway(tarjetasDeMercadoPago([])), tarjetasPayway(undefined)]) {
+      expect(t.credito.map((x) => x.nombre)).toEqual(["Visa", "Mastercard", "American Express", "Cabal"]);
+      expect(t.debito.map((x) => x.nombre)).toEqual(["Visa Débito", "Mastercard Débito", "Cabal Débito"]);
+    }
   });
 });

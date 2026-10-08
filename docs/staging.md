@@ -48,9 +48,19 @@ Los crons de `apps/admin/vercel.json` corren solo en producción. El `ignoreComm
 
 ## Uso diario
 
-- **Probar una rama antes del merge:** traerla a staging con un merge (nunca `push --force`):
-  `git switch staging && git merge origin/main && git merge <rama> && git push`.
+**Flujo de PRs: primero `staging`, después `main`.**
+
+1. **Cada cambio** se abre como PR con base `staging` (`gh pr create --base staging`), desde una rama
+   que parte de `origin/staging`. Al mergearlo, Vercel despliega en Preview y ahí se prueba. Las
+   ramas de PR no tienen Preview propia: sólo se despliegan `main` y `staging`.
+2. **Promoción:** cuando Preview está bien, un PR aparte `staging` → `main`. Se mergea con **merge
+   commit, no squash**: con squash `staging` queda divergente de `main`. Lleva todo lo que haya en
+   `staging`; si algo no está listo, se saca antes.
+3. **Después de cada merge a `main`** (o si `main` recibe un cambio directo, como un hotfix), traer
+   `main` a `staging`: `git switch staging && git merge origin/main && git push`. Nunca `push --force`.
 - **Migraciones:** primero contra la branch `staging` de Neon, se prueba, y recién después contra
-  producción (siempre antes de abrir el PR, como hasta ahora).
+  producción (siempre antes de abrir el PR de promoción).
 - **Volver a alinear:** `git switch staging && git merge origin/main && git push`. Si staging
-  acumuló ramas descartadas, borrar la rama en GitHub y crearla de nuevo desde `main` (paso 4).
+  acumuló ramas descartadas, borrar la rama en GitHub y crearla de nuevo desde `main` (paso 4 de la
+  puesta en marcha).
+- No apilar PRs sobre otras ramas de cambio: cada uno parte de `staging`.

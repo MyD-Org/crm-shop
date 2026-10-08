@@ -178,6 +178,7 @@ export function PagoMercadoPago({
       const json = (await res.json()) as RespuestaPago;
 
       if (!res.ok) {
+        setIntento((n) => n + 1);
         setEstado({
           fase: "rechazado",
           mensaje: json?.error ?? "No pudimos procesar el pago.",
@@ -204,6 +205,7 @@ export function PagoMercadoPago({
       }
 
       if (json.estado === "fallido") {
+        setIntento((n) => n + 1);
         setEstado({
           fase: "rechazado",
           mensaje: json.mensaje ?? "No pudimos procesar el pago.",
@@ -215,6 +217,7 @@ export function PagoMercadoPago({
       setEstado({ fase: "pendiente" });
       onPendiente?.();
     } catch {
+      setIntento((n) => n + 1);
       setEstado({
         fase: "rechazado",
         mensaje: "No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.",
@@ -397,7 +400,7 @@ export function PagoMercadoPago({
   // Pedido que ya no se puede pagar (vencido o cancelado mientras se pagaba): sólo el aviso. Con el
   // formulario a la vista el comprador reintentaba y el servidor lo rechazaba una y otra vez.
   if (estado.fase === "rechazado" && estado.noCobrable) {
-    return <AvisoPagoRechazado mensaje={estado.mensaje} reintentable={false} onReintentar={reintentar} />;
+    return <AvisoPagoRechazado mensaje={estado.mensaje} />;
   }
 
   const formularioTarjeta = (
@@ -466,11 +469,7 @@ export function PagoMercadoPago({
     <div className="flex flex-col gap-4">
       {estado.fase === "error_formulario" && <AvisoFormularioNoCargo onReintentar={reintentar} />}
       {estado.fase === "rechazado" && (
-        <AvisoPagoRechazado
-          mensaje={estado.mensaje}
-          reintentable={estado.reintentable}
-          onReintentar={reintentar}
-        />
+<AvisoPagoRechazado mensaje={estado.mensaje} />
       )}
 
       <TituloComoPagar />

@@ -13,23 +13,14 @@ export function AvisoFormularioNoCargo({ onReintentar }: { onReintentar: () => v
   );
 }
 
-export function AvisoPagoRechazado({
-  mensaje,
-  reintentable,
-  onReintentar,
-}: {
-  mensaje: string;
-  reintentable: boolean;
-  onReintentar: () => void;
-}) {
+/**
+ * Rechazo del pago: sólo el motivo, sin botón. El formulario de abajo ya quedó listo para otro intento
+ * (se remonta al rechazar: el token de Mercado Pago es de un solo uso).
+ */
+export function AvisoPagoRechazado({ mensaje }: { mensaje: string }) {
   return (
     <Alert tone="danger" title="No se pudo completar el pago">
       <p>{mensaje}</p>
-      {reintentable && (
-        <Button variant="secondary" className="mt-3" onClick={onReintentar}>
-          Probar de nuevo
-        </Button>
-      )}
     </Alert>
   );
 }

@@ -785,6 +785,42 @@ export function CheckoutClient({
     pasoActual === "pago" &&
     !enviando;
 
+  /** Por qué "Confirmar pedido" está deshabilitado (resumen y barra de mobile). */
+  const ayudaConfirmar =
+    puedeConfirmar || enviando
+      ? null
+      : estado === "no_auth"
+        ? "Inicie sesión para confirmar el pedido."
+        : !facturacionCompleta
+          ? "Cargue sus datos de facturación para continuar."
+          : pasoActual !== "pago"
+            ? "Complete los pasos para confirmar el pedido."
+            : cotizacion?.hayProblemas
+              ? "Revise los productos marcados en rojo."
+              : !datosCompletos
+                ? "Complete todos los campos para continuar."
+                : aDomicilio && !envioDisponible
+                  ? "Elija retiro en el local: el envío no está disponible."
+                  : "Confirmando precios y stock…";
+
+  /**
+   * Mobile, paso de pago: "Confirmar pedido" va fijo abajo (como la barra del
+   * carrito) porque el resumen queda debajo del formulario. Cuando el botón
+   * del resumen entra en pantalla, la barra se retira: nunca hay dos a la vez.
+   * Ref por callback: el resumen se desmonta y vuelve (p. ej. al cambiar el
+   * medio de un pedido) y el observador tiene que seguir al nodo nuevo.
+   */
+  const [anclaConfirmar, setAnclaConfirmar] = useState<HTMLDivElement | null>(null);
+  const [confirmarALaVista, setConfirmarALaVista] = useState(false);
+  useEffect(() => {
+    if (!anclaConfirmar) return;
+    const obs = new IntersectionObserver(([e]) => setConfirmarALaVista(e.isIntersecting), {
+      threshold: 0.6,
+    });
+    obs.observe(anclaConfirmar);
+    return () => obs.disconnect();
+  }, [anclaConfirmar]);
+
   /** El pedido ya existe: se le cambia el medio (y cuotas) y sigue el flujo normal con ese mismo número. */
   async function confirmarCambioDeMedio(previo: NonNullable<typeof confirmado>) {
     try {
@@ -1852,33 +1888,47 @@ export function CheckoutClient({
             <p className="mt-4 rounded-lg bg-danger/5 p-3 text-xs text-danger">{errorEnvio}</p>
           )}
 
-          <Button className="mt-5 w-full" disabled={!puedeConfirmar} onClick={confirmar}>
-            {enviando ? "Confirmando…" : "Confirmar pedido"}
-          </Button>
+          <div ref={setAnclaConfirmar}>
+            <Button className="mt-5 w-full" disabled={!puedeConfirmar} onClick={confirmar}>
+              {enviando ? "Confirmando…" : "Confirmar pedido"}
+            </Button>
 
-          {!puedeConfirmar && !enviando && (
-            <p className="mt-2 text-center text-xs text-muted">
-              {estado === "no_auth"
-                ? "Inicie sesión para confirmar el pedido."
-                : !facturacionCompleta
-                ? "Cargue sus datos de facturación para continuar."
-                : pasoActual !== "pago"
-                  ? "Complete los pasos para confirmar el pedido."
-                : cotizacion?.hayProblemas
-                  ? "Revise los productos marcados en rojo."
-                  : !datosCompletos
-                    ? "Complete todos los campos para continuar."
-                    : aDomicilio && !envioDisponible
-                      ? "Elija retiro en el local: el envío no está disponible."
-                      : "Confirmando precios y stock…"}
-            </p>
-          )}
+            {ayudaConfirmar && (
+              <p className="mt-2 text-center text-xs text-muted">{ayudaConfirmar}</p>
+            )}
+          </div>
 
           <p className="mt-3 text-center text-xs text-muted">
             {conCuenta ? PIE_TRANSFERENCIA : pieDelMedio(medioSel)}
           </p>
         </div>
       </div>
+
+      {/* Barra de confirmar en mobile: sticky y última del main, acompaña el
+          scroll y se detiene donde empieza el footer. Sólo en el paso de pago
+          (los anteriores tienen su "Continuar"). */}
+      {pasoActual === "pago" && (
+        <div
+          data-barra-compra
+          aria-hidden={confirmarALaVista || undefined}
+          inert={confirmarALaVista || undefined}
+          className={`sticky bottom-0 z-30 -mx-4 mt-8 rounded-t-[20px] border-t border-border bg-surface/95 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur transition-[opacity,translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:hidden ${
+            confirmarALaVista ? "pointer-events-none translate-y-full opacity-0" : "translate-y-0 opacity-100"
+          }`}
+        >
+          <div className="flex items-center gap-4">
+            <p className="shrink-0 font-display text-lg font-bold tabular-nums text-text">
+              {fmtPrecio(cotizacion?.total ?? 0)}
+            </p>
+            <Button className="min-w-0 flex-1" disabled={!puedeConfirmar} onClick={confirmar}>
+              {enviando ? "Confirmando…" : "Confirmar pedido"}
+            </Button>
+          </div>
+          {ayudaConfirmar && (
+            <p className="mt-1.5 text-center text-xs text-muted">{ayudaConfirmar}</p>
+          )}
+        </div>
+      )}
     </main>
   );
 }

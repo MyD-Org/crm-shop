@@ -9,7 +9,8 @@
  * (`tarjetas-aceptadas.ts`), unidos por la marca canónica de `marcas.ts`. Módulo PURO.
  */
 import { marcaDeMercadoPago, nombreDeMarca, type MarcaTarjeta } from "./marcas";
-import { SIN_TARJETAS, type TarjetaAceptada, type TarjetasAceptadas } from "./tarjetas-aceptadas";
+import type { TarjetaAceptada, TarjetasAceptadas } from "./tarjetas-aceptadas";
+import { conRespaldoPropio } from "./tarjetas-propias";
 
 export type ModalidadConvenio = "credito" | "debito";
 
@@ -36,14 +37,14 @@ export function textoMarcasPayway(modalidad: ModalidadConvenio, conjuncion: "y" 
 
 /**
  * Las tarjetas del convenio con el logo que devolvió Mercado Pago. Una marca que Mercado Pago no devolvió
- * no aparece (mejor un logo menos que uno roto); sin ninguna, la lista queda vacía y el formulario
- * muestra el texto de las marcas.
+ * no aparece (mejor un logo menos que uno roto). Si Mercado Pago no devolvió ninguna tarjeta, los logos son
+ * los propios (`tarjetas-propias.ts`).
  */
 export function tarjetasPayway(deMercadoPago: TarjetasAceptadas | undefined): TarjetasAceptadas {
-  if (!deMercadoPago) return SIN_TARJETAS;
+  const origen = conRespaldoPropio(deMercadoPago);
   const de = (modalidad: ModalidadConvenio): TarjetaAceptada[] =>
     TARJETAS_PAYWAY[modalidad].flatMap((marca) => {
-      const t = deMercadoPago[modalidad].find((x) => marcaDeMercadoPago(x.id) === marca);
+      const t = origen[modalidad].find((x) => marcaDeMercadoPago(x.id) === marca);
       return t ? [t] : [];
     });
   return { credito: de("credito"), debito: de("debito") };

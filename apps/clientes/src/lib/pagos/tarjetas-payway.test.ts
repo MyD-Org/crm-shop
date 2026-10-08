@@ -85,8 +85,10 @@ describe("tarjetasPayway", () => {
     expect(t.debito.map((x) => x.nombre)).toEqual(["Visa Débito", "Mastercard Débito"]);
   });
 
-  it("sin tarjetas de Mercado Pago (o sin datos) no hay logos", () => {
-    expect(tarjetasPayway(tarjetasDeMercadoPago([]))).toEqual({ credito: [], debito: [] });
-    expect(tarjetasPayway(undefined)).toEqual({ credito: [], debito: [] });
+  it("sin tarjetas de Mercado Pago (o sin datos) los logos son los propios", () => {
+    for (const t of [tarjetasPayway(tarjetasDeMercadoPago([])), tarjetasPayway(undefined)]) {
+      expect(t.credito.map((x) => x.nombre)).toEqual(["Visa", "Mastercard", "American Express", "Cabal"]);
+      expect(t.debito.map((x) => x.nombre)).toEqual(["Visa Débito", "Mastercard Débito", "Cabal Débito"]);
+    }
   });
 });

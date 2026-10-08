@@ -22,6 +22,7 @@ const medio = (parcial: Partial<MedioPagoDto>): MedioPagoDto => ({
   mostrarEnFicha: false,
   audiencia: "publico",
   chips: [],
+  opcionesCobro: ["credito", "debito", "cuenta_mp"],
   ...parcial,
 })
 

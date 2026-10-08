@@ -1,11 +1,13 @@
 /**
  * Tarjetas que acepta la tienda, con su logo: el footer ("Medios de pago") y "Ver tarjetas aceptadas" del
  * checkout. Con Mercado Pago salen de su API (`GET /v1/payment_methods`): son las habilitadas para la cuenta,
- * no una lista escrita a mano. Payway no tiene esa consulta (depende del convenio del comercio): se sumará
- * desde el admin cuando se carguen sus marcas.
+ * no una lista escrita a mano. Payway no tiene esa consulta (depende del convenio del comercio): sus marcas
+ * están en `tarjetas-payway.ts` y reutilizan estos logos.
  */
 
 export interface TarjetaAceptada {
+  /** `payment_method_id` de Mercado Pago ("visa", "debmaster"): se mapea a la marca canónica en `marcas.ts`. */
+  id: string;
   /** "Visa", "Mastercard Débito". */
   nombre: string;
   /** URL https del logo (lo sirve Mercado Pago). */
@@ -59,7 +61,7 @@ export function tarjetasDeMercadoPago(respuesta: unknown): TarjetasAceptadas {
     validas
       .filter((m) => m.payment_type_id === tipo)
       .sort(ordenar)
-      .map((m) => ({ nombre: m.name.trim(), logo: m.secure_thumbnail }));
+      .map((m) => ({ id: m.id, nombre: m.name.trim(), logo: m.secure_thumbnail }));
   return { credito: de("credit_card"), debito: de("debit_card") };
 }
 

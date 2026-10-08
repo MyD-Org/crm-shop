@@ -4,7 +4,7 @@ import { MetaCuotas } from "@/components/checkout/MetaCuotas";
 import { resumenCuotas, type EleccionCuotas } from "@/lib/cuotas-formulario";
 import { montoPorCuota } from "@/lib/cuotas-sin-interes";
 import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, Button, Checkbox, Field, Input, PaymentLogos, Select, Spinner, Stepper, type PaymentLogo } from "@myd-org/ui";
@@ -58,6 +58,7 @@ import { PedidoContacto } from "@/components/PedidoContacto";
 import { ChipsMedioPago } from "@/components/checkout/ChipsMedioPago";
 import type { ChipMedio } from "@/lib/medios-pago-chips";
 import { logosTarjetas, type TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
+import { tarjetasPayway } from "@/lib/pagos/tarjetas-payway";
 import type { ContactoPedidoVista } from "@/lib/contacto-pedido";
 import {
   SLUG_MERCADOPAGO,
@@ -401,6 +402,8 @@ export function CheckoutClient({
   pagoMercadoPagoId,
 }: Props) {
   const { items, vaciarTrasPedido, ready, addItems } = useCart();
+  // Payway reutiliza los logos de Mercado Pago para las marcas de su convenio.
+  const tarjetasDelConvenioPayway = useMemo(() => tarjetasPayway(tarjetasMercadoPago), [tarjetasMercadoPago]);
 
   // Inicio de checkout: una vez por visita, cuando el carrito ya cargó con algo.
   const checkoutMedido = useRef(false);
@@ -1181,6 +1184,7 @@ export function CheckoutClient({
               onEleccionCuotas={setEleccionCuotas}
               onPedidoActualizado={alActualizarPedido}
               opcionesCobro={opcionesCobroDe(confirmado.procesador)}
+              tarjetas={tarjetasDelConvenioPayway}
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
               onPagado={alPagar}
@@ -1797,7 +1801,13 @@ export function CheckoutClient({
                         onClick={() => setMedioSlug(m.slug)}
                         title={m.nombre}
                         chips={m.chips}
-                        logos={m.slug === SLUG_MERCADOPAGO && tarjetasMercadoPago ? logosTarjetas(tarjetasMercadoPago) : undefined}
+                        logos={
+                          m.slug === SLUG_MERCADOPAGO && tarjetasMercadoPago
+                            ? logosTarjetas(tarjetasMercadoPago)
+                            : m.slug === SLUG_PAYWAY
+                              ? logosTarjetas(tarjetasDelConvenioPayway)
+                              : undefined
+                        }
                       />
                     ))}
                   </div>

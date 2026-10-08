@@ -43,6 +43,10 @@ export type MotivoRechazo =
   | "riesgo"
   /** El control de seguridad del procesador (Cybersource) rechazó el pago: sirve otra tarjeta u otro medio. */
   | "control_seguridad"
+  /** La tarjeta no aprobó el pago sin dar un motivo (o no se acepta para esta compra): otra tarjeta u otro medio. */
+  | "no_aprobado"
+  /** El banco pidió validar al titular (3DS) y la validación no se completó. */
+  | "validacion_banco"
   | "desconocido";
 
 /**
@@ -78,8 +82,12 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
     "No pudimos procesar el pago. Pruebe con otro medio o escríbanos y lo resolvemos.",
   control_seguridad:
     "El pago no pasó el control de seguridad del procesador. Inténtelo con otra tarjeta o elija otro medio de pago.",
+  no_aprobado:
+    "Su tarjeta no aprobó el pago y no se le cobró nada. Pruebe con otra tarjeta o elija otro medio de pago.",
+  validacion_banco:
+    "Su banco no pudo validar la compra y no se le cobró nada. Inténtelo de nuevo y complete la validación que le pida el banco, o use otra tarjeta.",
   desconocido:
-    "No pudimos procesar el pago. Inténtelo de nuevo o elija otro medio de pago.",
+    "El pago no se aprobó y no se le cobró nada. Inténtelo de nuevo o elija otro medio de pago.",
 };
 
 /**
@@ -93,7 +101,8 @@ export function convieneReintentar(motivo: MotivoRechazo): boolean {
   return (
     motivo === "datos_invalidos" ||
     motivo === "cuotas_no_disponibles" ||
-    motivo === "desafio_vencido"
+    motivo === "desafio_vencido" ||
+    motivo === "validacion_banco"
   );
 }
 

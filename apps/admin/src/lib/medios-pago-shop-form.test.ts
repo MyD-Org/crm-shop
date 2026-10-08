@@ -74,8 +74,8 @@ describe("cuotas sin interés del medio", () => {
     ).toEqual({
       ok: true,
       filas: [
-        { cuotas: 3, listaId: LISTA_A, montoMinimo: null },
-        { cuotas: 6, listaId: LISTA_B, montoMinimo: null },
+        { cuotas: 3, listaId: LISTA_A, montoMinimo: null, marcas: null },
+        { cuotas: 6, listaId: LISTA_B, montoMinimo: null, marcas: null },
       ],
     })
     expect(validarFilasCuotas([])).toEqual({ ok: true, filas: [] })
@@ -91,10 +91,10 @@ describe("cuotas sin interés del medio", () => {
     expect(r).toEqual({
       ok: true,
       filas: [
-        { cuotas: 3, listaId: LISTA_A, montoMinimo: null },
-        { cuotas: 6, listaId: LISTA_A, montoMinimo: "60000.00" },
-        { cuotas: 9, listaId: LISTA_A, montoMinimo: "80000.50" },
-        { cuotas: 12, listaId: LISTA_A, montoMinimo: "0.00" },
+        { cuotas: 3, listaId: LISTA_A, montoMinimo: null, marcas: null },
+        { cuotas: 6, listaId: LISTA_A, montoMinimo: "60000.00", marcas: null },
+        { cuotas: 9, listaId: LISTA_A, montoMinimo: "80000.50", marcas: null },
+        { cuotas: 12, listaId: LISTA_A, montoMinimo: "0.00", marcas: null },
       ],
     })
   })
@@ -130,30 +130,64 @@ describe("cuotas sin interés del medio", () => {
 
   it("cambiosDeCuotas: alta, cambio de lista y baja; lo igual no genera cambio", () => {
     const actuales = [
-      { cuotas: 3, listaId: LISTA_A, montoMinimo: null },
-      { cuotas: 6, listaId: LISTA_A, montoMinimo: null },
-      { cuotas: 9, listaId: LISTA_A, montoMinimo: null },
+      { cuotas: 3, listaId: LISTA_A, montoMinimo: null, marcas: null },
+      { cuotas: 6, listaId: LISTA_A, montoMinimo: null, marcas: null },
+      { cuotas: 9, listaId: LISTA_A, montoMinimo: null, marcas: null },
     ]
     const deseadas = [
-      { cuotas: 3, listaId: LISTA_A, montoMinimo: null },
-      { cuotas: 6, listaId: LISTA_B, montoMinimo: null },
-      { cuotas: 12, listaId: LISTA_B, montoMinimo: null },
+      { cuotas: 3, listaId: LISTA_A, montoMinimo: null, marcas: null },
+      { cuotas: 6, listaId: LISTA_B, montoMinimo: null, marcas: null },
+      { cuotas: 12, listaId: LISTA_B, montoMinimo: null, marcas: null },
     ]
     expect(cambiosDeCuotas("mercadopago", actuales, deseadas)).toEqual([
-      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_B, montoMinimo: null },
-      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 12, listaId: LISTA_B, montoMinimo: null },
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_B, montoMinimo: null, marcas: null },
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 12, listaId: LISTA_B, montoMinimo: null, marcas: null },
       { op: "setCondicion", medioSlug: "mercadopago", cuotas: 9, listaId: null },
     ])
     expect(cambiosDeCuotas("mercadopago", actuales, actuales)).toEqual([])
   })
 
   it("cambiosDeCuotas: cambiar solo el mínimo genera un cambio; quitarlo también", () => {
-    const base = [{ cuotas: 6, listaId: LISTA_A, montoMinimo: "50000.00" }]
-    expect(cambiosDeCuotas("mercadopago", base, [{ cuotas: 6, listaId: LISTA_A, montoMinimo: "80000.00" }])).toEqual([
-      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: "80000.00" },
+    const base = [{ cuotas: 6, listaId: LISTA_A, montoMinimo: "50000.00", marcas: null }]
+    expect(cambiosDeCuotas("mercadopago", base, [{ cuotas: 6, listaId: LISTA_A, montoMinimo: "80000.00", marcas: null }])).toEqual([
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: "80000.00", marcas: null },
     ])
-    expect(cambiosDeCuotas("mercadopago", base, [{ cuotas: 6, listaId: LISTA_A, montoMinimo: null }])).toEqual([
-      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: null },
+    expect(cambiosDeCuotas("mercadopago", base, [{ cuotas: 6, listaId: LISTA_A, montoMinimo: null, marcas: null }])).toEqual([
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: null, marcas: null },
+    ])
+  })
+
+  it("validarFilasCuotas: tarjetas 'Todas' (null) o elegidas; 'Elegir' sin ninguna es un error en usted", () => {
+    expect(
+      validarFilasCuotas([
+        { cuotas: "3", listaId: LISTA_A, marcas: null },
+        { cuotas: "6", listaId: LISTA_A, marcas: ["mastercard", "visa"] },
+      ]),
+    ).toEqual({
+      ok: true,
+      filas: [
+        { cuotas: 3, listaId: LISTA_A, montoMinimo: null, marcas: null },
+        { cuotas: 6, listaId: LISTA_A, montoMinimo: null, marcas: ["visa", "mastercard"] },
+      ],
+    })
+    expect(validarFilasCuotas([{ cuotas: "6", listaId: LISTA_A, marcas: [] }])).toEqual({
+      ok: false,
+      error: "Seleccione al menos una tarjeta o elija todas.",
+    })
+  })
+
+  it("cambiosDeCuotas: cambiar solo las tarjetas genera un cambio, sin importar el orden; todo cambio lleva las marcas", () => {
+    const base = [{ cuotas: 6, listaId: LISTA_A, montoMinimo: "50000.00", marcas: ["visa", "mastercard"] }]
+    expect(cambiosDeCuotas("mercadopago", base, [{ ...base[0], marcas: ["mastercard", "visa"] }])).toEqual([])
+    expect(cambiosDeCuotas("mercadopago", base, [{ ...base[0], marcas: ["visa"] }])).toEqual([
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: "50000.00", marcas: ["visa"] },
+    ])
+    expect(cambiosDeCuotas("mercadopago", base, [{ ...base[0], marcas: null }])).toEqual([
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: "50000.00", marcas: null },
+    ])
+    // Cambiar el mínimo no borra las tarjetas elegidas.
+    expect(cambiosDeCuotas("mercadopago", base, [{ ...base[0], montoMinimo: null }])).toEqual([
+      { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: null, marcas: ["visa", "mastercard"] },
     ])
   })
 })

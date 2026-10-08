@@ -14,6 +14,7 @@ import {
   type FilaCuotasForm,
 } from "@/lib/medios-pago-shop-form"
 import { normalizarIdentificador } from "@/lib/identificador"
+import { MARCAS_TARJETA } from "@/lib/marcas-tarjeta"
 import { EditorChipsMedio } from "@/components/admin/EditorChipsMedio"
 import { TONO_BADGE_DE_CHIP, type ChipMedio } from "@/lib/medios-pago-shop-chips"
 import {
@@ -86,6 +87,7 @@ const desdeDto = (m: MedioPagoDto): Form => ({
     cuotas: String(c.cuotas),
     listaId: c.listaId,
     montoMinimo: c.montoMinimo === null ? "" : String(Number(c.montoMinimo)),
+    marcas: c.marcas,
   })),
   destacarEnCatalogo: m.destacarEnCatalogo,
   mostrarEnFicha: m.mostrarEnFicha,
@@ -254,7 +256,12 @@ export function MediosPagoShopCard() {
         cambiosPrecios.push(
           ...cambiosDeCuotas(
             nuevo.slug,
-            nuevo.condicionesCuotas.map((c) => ({ cuotas: c.cuotas, listaId: c.listaId, montoMinimo: c.montoMinimo })),
+            nuevo.condicionesCuotas.map((c) => ({
+              cuotas: c.cuotas,
+              listaId: c.listaId,
+              montoMinimo: c.montoMinimo,
+              marcas: c.marcas,
+            })),
             cuotasDeseadas,
           ),
         )
@@ -577,62 +584,103 @@ export function MediosPagoShopCard() {
                   financiero queda dentro del coeficiente de la lista. La tienda las ofrece sólo con el cobro en cuotas
                   habilitado, y tienen que estar activadas en su cuenta del procesador de cobro. Con «Desde $» la tienda
                   ofrece esa cantidad de cuotas sólo si el total del pedido, con impuestos y al precio de pago único, alcanza
-                  ese monto; vacío significa sin mínimo. El cambio queda en el historial de Precios online.
+                  ese monto; vacío significa sin mínimo. En «Tarjetas» puede limitar cada cantidad de cuotas a algunas
+                  tarjetas. El cambio queda en el historial de Precios online.
                 </p>
                 {form.cuotasFilas.map((f, i) => (
-                  <div key={i} className="flex flex-wrap items-end gap-2">
-                    <Field label="Cuotas">
-                      <Input
-                        inputMode="numeric"
-                        value={f.cuotas}
-                        aria-label={`Cantidad de cuotas ${i + 1}`}
-                        onChange={(e) =>
-                          cambiar({ cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, cuotas: e.target.value } : x)) })
-                        }
-                      />
-                    </Field>
-                    <Field label="Lista de precios">
-                      <Select
-                        aria-label={`Lista de precios de la fila ${i + 1}`}
-                        value={f.listaId || LISTA_POR_DEFECTO}
-                        onValueChange={(v) =>
-                          cambiar({
-                            cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, listaId: v === LISTA_POR_DEFECTO ? "" : v } : x)),
-                          })
-                        }
-                        options={[
-                          { value: LISTA_POR_DEFECTO, label: "Seleccione una lista" },
-                          ...listas.map((l) => ({ value: l.id, label: l.nombre })),
-                          ...(f.listaId && !listas.some((l) => l.id === f.listaId)
-                            ? [{ value: f.listaId, label: "Lista desactivada" }]
-                            : []),
-                        ]}
-                      />
-                    </Field>
-                    <Field label="Desde $ (con impuestos, opcional)">
-                      <Input
-                        inputMode="decimal"
-                        value={f.montoMinimo ?? ""}
-                        aria-label={`Monto mínimo de la fila ${i + 1}`}
-                        onChange={(e) =>
-                          cambiar({ cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, montoMinimo: e.target.value } : x)) })
-                        }
-                      />
-                    </Field>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => cambiar({ cuotasFilas: form.cuotasFilas.filter((_, j) => j !== i) })}
-                    >
-                      Quitar
-                    </Button>
+                  <div key={i} className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <Field label="Cuotas">
+                        <Input
+                          inputMode="numeric"
+                          value={f.cuotas}
+                          aria-label={`Cantidad de cuotas ${i + 1}`}
+                          onChange={(e) =>
+                            cambiar({ cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, cuotas: e.target.value } : x)) })
+                          }
+                        />
+                      </Field>
+                      <Field label="Lista de precios">
+                        <Select
+                          aria-label={`Lista de precios de la fila ${i + 1}`}
+                          value={f.listaId || LISTA_POR_DEFECTO}
+                          onValueChange={(v) =>
+                            cambiar({
+                              cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, listaId: v === LISTA_POR_DEFECTO ? "" : v } : x)),
+                            })
+                          }
+                          options={[
+                            { value: LISTA_POR_DEFECTO, label: "Seleccione una lista" },
+                            ...listas.map((l) => ({ value: l.id, label: l.nombre })),
+                            ...(f.listaId && !listas.some((l) => l.id === f.listaId)
+                              ? [{ value: f.listaId, label: "Lista desactivada" }]
+                              : []),
+                          ]}
+                        />
+                      </Field>
+                      <Field label="Desde $ (con impuestos, opcional)">
+                        <Input
+                          inputMode="decimal"
+                          value={f.montoMinimo ?? ""}
+                          aria-label={`Monto mínimo de la fila ${i + 1}`}
+                          onChange={(e) =>
+                            cambiar({ cuotasFilas: form.cuotasFilas.map((x, j) => (j === i ? { ...x, montoMinimo: e.target.value } : x)) })
+                          }
+                        />
+                      </Field>
+                      <Field label="Tarjetas">
+                        <Select
+                          aria-label={`Tarjetas de la fila ${i + 1}`}
+                          value={f.marcas ? "elegir" : "todas"}
+                          onValueChange={(v) =>
+                            cambiar({
+                              cuotasFilas: form.cuotasFilas.map((x, j) =>
+                                j === i ? { ...x, marcas: v === "elegir" ? (x.marcas ?? []) : null } : x,
+                              ),
+                            })
+                          }
+                          options={[
+                            { value: "todas", label: "Todas" },
+                            { value: "elegir", label: "Elegir" },
+                          ]}
+                        />
+                      </Field>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => cambiar({ cuotasFilas: form.cuotasFilas.filter((_, j) => j !== i) })}
+                      >
+                        Quitar
+                      </Button>
+                    </div>
+                    {f.marcas && (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1" role="group" aria-label={`Tarjetas elegidas de la fila ${i + 1}`}>
+                        {MARCAS_TARJETA.map((m) => (
+                          <CheckboxLabel
+                            key={m.id}
+                            id={`medio-cuotas-${i}-marca-${m.id}`}
+                            checked={f.marcas?.includes(m.id) ?? false}
+                            onChange={(v) =>
+                              cambiar({
+                                cuotasFilas: form.cuotasFilas.map((x, j) =>
+                                  j === i
+                                    ? { ...x, marcas: v ? [...(x.marcas ?? []), m.id] : (x.marcas ?? []).filter((y) => y !== m.id) }
+                                    : x,
+                                ),
+                              })
+                            }
+                            label={m.nombre}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div>
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => cambiar({ cuotasFilas: [...form.cuotasFilas, { cuotas: "", listaId: "", montoMinimo: "" }] })}
+                    onClick={() => cambiar({ cuotasFilas: [...form.cuotasFilas, { cuotas: "", listaId: "", montoMinimo: "", marcas: null }] })}
                   >
                     Agregar cantidad de cuotas
                   </Button>

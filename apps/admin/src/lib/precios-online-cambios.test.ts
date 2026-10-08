@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { decimalCanonico, validarCambios, MSG_COEF, MSG_NOMBRE, MSG_SIN_CAMBIOS, MAX_CAMBIOS } from "./precios-online-cambios"
+import { decimalCanonico, validarCambios, MSG_COEF, MSG_MARCAS_VACIAS, MSG_NOMBRE, MSG_SIN_CAMBIOS, MAX_CAMBIOS } from "./precios-online-cambios"
 
 // B.8: validación de los cambios de precios online. Datos inventados.
 
@@ -124,6 +124,40 @@ describe("validarCambios: monto mínimo de cuotas", () => {
     expect(
       validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 6, listaId: null, montoMinimo: "1000" }]),
     ).toMatchObject({ ok: true, cambios: [{ listaId: null, montoMinimo: null }] })
+  })
+})
+
+describe("validarCambios: marcas de tarjeta por condición", () => {
+  const cond = (extra: Record<string, unknown>) => [{ op: "setCondicion", medioSlug: "tarjeta", listaId: ID, ...extra }]
+
+  it("acepta marcas válidas en filas de cuotas y las devuelve en el orden de la lista", () => {
+    expect(validarCambios(cond({ cuotas: 6, marcas: ["mastercard", "visa"] }))).toMatchObject({
+      ok: true,
+      cambios: [{ cuotas: 6, marcas: ["visa", "mastercard"] }],
+    })
+  })
+
+  it("ausente o null = todas las tarjetas", () => {
+    expect(validarCambios(cond({ cuotas: 6 }))).toMatchObject({ ok: true, cambios: [{ marcas: null }] })
+    expect(validarCambios(cond({ cuotas: 6, marcas: null }))).toMatchObject({ ok: true, cambios: [{ marcas: null }] })
+  })
+
+  it("rechaza vacío, ids desconocidos, duplicados y no arreglos", () => {
+    for (const m of [[], ["Visa"], ["maestro"], ["visa", "visa"], "visa", [1], {}]) {
+      expect(validarCambios(cond({ cuotas: 6, marcas: m }))).toMatchObject({ ok: false, campo: "cambios[0].marcas" })
+    }
+    expect(validarCambios(cond({ cuotas: 6, marcas: [] }))).toMatchObject({ error: MSG_MARCAS_VACIAS })
+  })
+
+  it("el pago único no lleva marcas", () => {
+    expect(validarCambios(cond({ cuotas: null, marcas: ["visa"] }))).toMatchObject({ ok: false, campo: "cambios[0].marcas" })
+    expect(validarCambios(cond({ marcas: ["visa"] }))).toMatchObject({ ok: false })
+  })
+
+  it("una baja (listaId null) ignora las marcas", () => {
+    expect(
+      validarCambios([{ op: "setCondicion", medioSlug: "tarjeta", cuotas: 6, listaId: null, marcas: ["visa"] }]),
+    ).toMatchObject({ ok: true, cambios: [{ listaId: null, marcas: null }] })
   })
 })
 

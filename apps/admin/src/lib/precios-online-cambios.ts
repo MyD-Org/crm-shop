@@ -4,6 +4,8 @@
 // Un "cambio" es una operación sobre las listas, sus overrides o los umbrales. La vista previa y
 // el aplicar reciben el MISMO arreglo, así lo que se previsualizó es exactamente lo que se aplica.
 
+import { esMarcaValida, ordenarMarcas } from "./marcas-tarjeta"
+
 const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 // Cuenta de Alegra (slug de la cuenta) y id de la lista de Alegra: ids/slug simples, sin espacios.
 const CUENTA_ALEGRA_RE = /^[A-Za-z0-9_-]{1,60}$/
@@ -20,6 +22,8 @@ export const MSG_NOMBRE = "Ingrese el nombre de la lista."
 export const MSG_BODY = "Los datos indicados no son válidos."
 export const MSG_SIN_CAMBIOS = "No hay cambios para aplicar."
 export const MSG_UMBRAL = "El umbral debe ser un número mayor que 0."
+export const MSG_MARCAS_VACIAS = "Seleccione al menos una tarjeta o elija todas."
+export const MSG_MARCAS = "Las tarjetas indicadas no son válidas."
 
 export type CambioPrecios =
   | { op: "crearLista"; nombre: string; coeficiente: string; orden?: number; privada?: boolean }
@@ -43,9 +47,17 @@ export type CambioPrecios =
    * Qué lista rige para un medio de pago (y cantidad de cuotas, desde la rebanada D). `listaId` null
    * quita la condición: el medio vuelve a la lista de referencia. `montoMinimo` (numeric como texto,
    * con impuestos) sólo aplica a filas de cuotas: la cantidad se ofrece desde ese total; ausente o
-   * null = sin mínimo.
+   * null = sin mínimo. `marcas` (0074, ids de marcas-tarjeta.ts) también sólo en cuotas: a qué
+   * tarjetas aplica esa cantidad; ausente o null = todas.
    */
-  | { op: "setCondicion"; medioSlug: string; cuotas: number | null; listaId: string | null; montoMinimo?: string | null }
+  | {
+      op: "setCondicion"
+      medioSlug: string
+      cuotas: number | null
+      listaId: string | null
+      montoMinimo?: string | null
+      marcas?: string[] | null
+    }
   /**
    * Enlace "lista de Alegra del contacto -> lista online privada" por cuenta de Alegra (0068).
    * `listaId` null quita el enlace; con valor lo crea o lo mueve a esa lista (que debe ser privada).
@@ -274,7 +286,21 @@ function validarUno(raw: unknown, i: number): { ok: true; cambio: CambioPrecios 
         if (cuotas === null) return invalido(`${campo}.montoMinimo`, "El monto mínimo sólo aplica a las cuotas.")
         montoMinimo = m
       }
-      return { ok: true, cambio: { op: "setCondicion", medioSlug: raw.medioSlug, cuotas, listaId: raw.listaId, montoMinimo } }
+      let marcas: string[] | null = null
+      // Una baja tampoco lleva marcas.
+      if (raw.listaId !== null && raw.marcas !== undefined && raw.marcas !== null) {
+        const v = raw.marcas
+        if (Array.isArray(v) && v.length === 0) return invalido(`${campo}.marcas`, MSG_MARCAS_VACIAS)
+        if (!Array.isArray(v) || !v.every(esMarcaValida) || new Set(v).size !== v.length) {
+          return invalido(`${campo}.marcas`, MSG_MARCAS)
+        }
+        if (cuotas === null) return invalido(`${campo}.marcas`, "Las tarjetas sólo se eligen para las cuotas.")
+        marcas = ordenarMarcas(v)
+      }
+      return {
+        ok: true,
+        cambio: { op: "setCondicion", medioSlug: raw.medioSlug, cuotas, listaId: raw.listaId, montoMinimo, marcas },
+      }
     }
     case "setMapeo": {
       if (typeof raw.alegraAccount !== "string" || !CUENTA_ALEGRA_RE.test(raw.alegraAccount)) {

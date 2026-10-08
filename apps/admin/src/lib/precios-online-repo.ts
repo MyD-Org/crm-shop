@@ -18,6 +18,7 @@ import { combinarListasAlegra, leerListasDeAlegra, type ListaAlegraSelector } fr
 import { getTenantByIdFromDb } from "./tenants"
 import { pingShopRevalidarSucursales } from "./shop-revalidar"
 import { normalizarMarca, type CambioPrecios } from "./precios-online-cambios"
+import { ordenarMarcas } from "./marcas-tarjeta"
 
 // Capa de aplicación de las listas de precio online (change `listas-precio-online`, rebanada B).
 //
@@ -59,6 +60,12 @@ export async function lockTenant(tx: Tx, tenantId: string): Promise<void> {
 export function idsSql(ids: string[] | null) {
   if (ids === null) return sql`NULL::text[]`
   return sql`ARRAY[${sql.join(ids.map((i) => sql`${i}`), sql`, `)}]::text[]`
+}
+
+/** Mismas marcas sin importar el orden; null (todas) sólo es igual a null. */
+function mismaListaDeMarcas(a: string[] | null, b: string[] | null): boolean {
+  if (a === null || b === null) return a === b
+  return a.length === b.length && ordenarMarcas(a).join(",") === ordenarMarcas(b).join(",")
 }
 
 // ── Configuración (umbrales + versión) ──────────────────────────────────────────────────────
@@ -351,6 +358,11 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
       if (montoMinimo !== null && cuotas === null) {
         throw new PreciosOnlineError(422, "monto_minimo_invalido", "El monto mínimo sólo aplica a las cuotas.")
       }
+      // Ausente = todas las tarjetas. Igual que el mínimo, sólo en filas de cuotas (CHECK de la 0074).
+      const marcas = c.marcas && c.marcas.length > 0 ? ordenarMarcas(c.marcas) : null
+      if (marcas !== null && cuotas === null) {
+        throw new PreciosOnlineError(422, "marcas_invalidas", "Las tarjetas sólo se eligen para las cuotas.")
+      }
       const [medio] = await tx
         .select({ slug: mediosPagoShop.slug })
         .from(mediosPagoShop)
@@ -373,8 +385,8 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
       const objeto = `condicion:${medioSlug}:${cuotas ?? 0}`
       const snap = (x: typeof previo | undefined) =>
         x
-          ? { medioSlug: x.medioSlug, cuotas: x.cuotas, listaId: x.listaId, montoMinimo: x.montoMinimo }
-          : { medioSlug: medioSlug, cuotas: cuotas, listaId: null, montoMinimo: null }
+          ? { medioSlug: x.medioSlug, cuotas: x.cuotas, listaId: x.listaId, montoMinimo: x.montoMinimo, marcas: x.marcas }
+          : { medioSlug: medioSlug, cuotas: cuotas, listaId: null, montoMinimo: null, marcas: null }
       if (listaId === null) {
         if (!previo) throw new PreciosOnlineError(422, "sin_cambios", "Ese medio de pago no tiene una lista enlazada.")
         await tx.delete(listaPrecioCondiciones).where(eq(listaPrecioCondiciones.id, previo.id))
@@ -386,18 +398,19 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
         (previo.montoMinimo === null
           ? montoMinimo === null
           : montoMinimo !== null && Number(previo.montoMinimo) === Number(montoMinimo))
-      if (previo?.listaId === listaId && mismoMonto) {
+      const mismasMarcas = previo !== undefined && mismaListaDeMarcas(previo.marcas, marcas)
+      if (previo?.listaId === listaId && mismoMonto && mismasMarcas) {
         throw new PreciosOnlineError(422, "sin_cambios", "Ese medio de pago ya usa esa lista.")
       }
       if (previo) {
         await tx
           .update(listaPrecioCondiciones)
-          .set({ listaId: listaId, montoMinimo: montoMinimo, updatedAt: sql`now()` })
+          .set({ listaId: listaId, montoMinimo: montoMinimo, marcas: marcas, updatedAt: sql`now()` })
           .where(eq(listaPrecioCondiciones.id, previo.id))
       } else {
         await tx
           .insert(listaPrecioCondiciones)
-          .values({ tenantId, listaId: listaId, medioSlug: medioSlug, cuotas: cuotas, montoMinimo: montoMinimo })
+          .values({ tenantId, listaId: listaId, medioSlug: medioSlug, cuotas: cuotas, montoMinimo: montoMinimo, marcas: marcas })
       }
       return [
         {
@@ -405,7 +418,7 @@ async function aplicarUno(tx: Tx, tenantId: string, c: CambioPrecios): Promise<E
           objeto,
           listaId: listaId,
           antes: snap(previo),
-          despues: { medioSlug: medioSlug, cuotas: cuotas, listaId: listaId, montoMinimo: montoMinimo },
+          despues: { medioSlug: medioSlug, cuotas: cuotas, listaId: listaId, montoMinimo: montoMinimo, marcas: marcas },
         },
       ]
     }
@@ -937,6 +950,8 @@ async function inversosDe(tx: Tx | Db, tenantId: string, entradaId: string): Pro
           listaId: (a.listaId as string | null) ?? null,
           // Entradas anteriores a la 0066 no guardaron el mínimo: restauran "sin mínimo".
           montoMinimo: a.montoMinimo === null || a.montoMinimo === undefined ? null : String(a.montoMinimo),
+          // Entradas anteriores a la 0074 no guardaron las marcas: restauran "todas las tarjetas".
+          marcas: Array.isArray(a.marcas) && a.marcas.length > 0 ? a.marcas.map(String) : null,
         },
       ]
       break

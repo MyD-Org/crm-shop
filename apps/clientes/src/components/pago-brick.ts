@@ -61,7 +61,8 @@ export function variablesDelTema(): VariablesBrick {
     ["baseColorFirstVariant", token("--color-primary-hover")],
     ["buttonTextColor", token("--color-on-primary")],
     ["textPrimaryColor", token("--color-text")],
-    ["textSecondaryColor", token("--color-muted")],
+    // Placeholders ("1234 1234 1234 1234", "MM/AA"…): con `--color-muted` parecían datos ya cargados.
+    ["textSecondaryColor", token("--color-subtle") || token("--color-muted")],
     ["formBackgroundColor", token("--color-surface")],
     ["inputBackgroundColor", token("--color-surface")],
     ["errorColor", token("--color-danger")],

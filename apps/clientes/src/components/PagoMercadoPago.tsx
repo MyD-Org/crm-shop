@@ -407,7 +407,7 @@ export function PagoMercadoPago({
     return <AvisoPagoRechazado mensaje={estado.mensaje} />;
   }
 
-  const formularioBrick = (
+  const formularioTarjeta = (
     <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>
       {estado.fase === "cargando" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface">
@@ -438,23 +438,17 @@ export function PagoMercadoPago({
     </div>
   );
 
-  const formularioTarjeta = (
-    <div className="flex flex-col gap-3">
-      {tarjetas && (
-        <PaymentLogos
-          aria-label={tipoTarjeta === "debito" ? "Tarjetas de débito aceptadas" : "Tarjetas de crédito aceptadas"}
-          logos={tarjetas[tipoTarjeta].map((t) => ({ name: t.nombre, src: t.logo }))}
-        />
-      )}
-      {formularioBrick}
-    </div>
-  );
+  // Logos de las tarjetas que acepta Mercado Pago, bajo el título de cada opción (sin lista, el texto de siempre).
+  const logosCredito = (tarjetas?.credito ?? []).map((t) => ({ name: t.nombre, src: t.logo }));
+  const logosDebito = (tarjetas?.debito ?? []).map((t) => ({ name: t.nombre, src: t.logo }));
 
   const opciones: RadioOption[] = [
     {
       value: "credito",
       label: "Tarjeta de crédito",
-      description: "Visa, Mastercard, American Express y más",
+      ...(logosCredito.length > 0
+        ? { media: <PaymentLogos aria-label="Tarjetas de crédito aceptadas" logos={logosCredito} /> }
+        : { description: "Visa, Mastercard, American Express y más" }),
       icon: <IconoTarjeta />,
       ...(maxCuotas !== undefined
         ? { badge: { label: textoCuotas(maxCuotas), tone: maxCuotas > 1 ? ("success" as const) : ("neutral" as const) } }
@@ -465,7 +459,11 @@ export function PagoMercadoPago({
     {
       value: "debito",
       label: "Tarjeta de débito",
-      description: debitoDisponible ? "Visa Débito, Maestro y más" : "Para pagar con débito, pase su compra a un pago.",
+      ...(!debitoDisponible
+        ? { description: "Para pagar con débito, pase su compra a un pago." }
+        : logosDebito.length > 0
+          ? { media: <PaymentLogos aria-label="Tarjetas de débito aceptadas" logos={logosDebito} /> }
+          : { description: "Visa Débito, Maestro y más" }),
       icon: <IconoTarjetaDebito />,
       ...(debitoDisponible ? {} : { badge: { label: "Sólo en un pago" } }),
       content: formularioTarjeta,

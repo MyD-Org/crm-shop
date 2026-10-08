@@ -14,7 +14,7 @@
  * homologación se puede volver a Orders: los `status_detail` son los mismos.
  */
 
-import type { MotivoRechazo } from "./tipos";
+import type { InfoPago, MotivoRechazo, TipoMedioPago } from "./tipos";
 import type { PagoEstado } from "@/data/orders";
 
 /**
@@ -92,6 +92,14 @@ export interface RespuestaMercadoPago {
   installments?: number;
   /** `total_paid_amount` incluye el interés de las cuotas. */
   transaction_details?: { total_paid_amount?: number };
+  /** 'credit_card' | 'debit_card' | 'prepaid_card' | 'account_money' | … */
+  payment_type_id?: string;
+  /** 'visa' | 'master' | 'debvisa' | 'account_money' | … */
+  payment_method_id?: string;
+  /** Sólo lo que se guarda: nunca el titular ni los primeros dígitos. */
+  card?: { last_four_digits?: string | null } | null;
+  date_approved?: string | null;
+  authorization_code?: string | null;
 }
 
 export function statusEfectivo(pago: RespuestaMercadoPago): string | undefined {
@@ -156,4 +164,55 @@ export function esPendienteConocido(status: string | undefined): boolean {
  */
 export function esReversion(status: string | undefined): boolean {
   return status === "charged_back" || status === "refunded";
+}
+
+/* ───────────────────────────── medio con el que se cobró ───────────────────────────── */
+
+const TIPOS_MP: Record<string, TipoMedioPago> = {
+  credit_card: "credito",
+  debit_card: "debito",
+  prepaid_card: "prepaga",
+  account_money: "dinero_en_cuenta",
+};
+
+/** `payment_method_id` de Mercado Pago → marca legible. Uno desconocido se muestra con su id. */
+const MARCAS_MP: Record<string, string> = {
+  visa: "Visa",
+  debvisa: "Visa",
+  master: "Mastercard",
+  debmaster: "Mastercard",
+  maestro: "Maestro",
+  amex: "American Express",
+  cabal: "Cabal",
+  debcabal: "Cabal",
+  naranja: "Naranja",
+  nativa: "Nativa",
+  cencosud: "Cencosud",
+  cmr: "CMR",
+  diners: "Diners",
+  tarshop: "Tarjeta Shopping",
+  argencard: "Argencard",
+};
+
+const texto = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+/**
+ * Con qué pagó el comprador, según el pago de Mercado Pago. Sólo marca, tipo, últimos 4, fecha de
+ * aprobación y código de autorización: nunca el titular ni el BIN. `{}` si no informó nada.
+ */
+export function infoDeMercadoPago(pago: RespuestaMercadoPago): { info?: InfoPago } {
+  const info: InfoPago = {};
+  const tipoId = texto(pago.payment_type_id);
+  if (tipoId && Object.hasOwn(TIPOS_MP, tipoId)) info.tipo = TIPOS_MP[tipoId];
+  const metodo = texto(pago.payment_method_id)?.toLowerCase();
+  if (metodo && metodo !== "account_money") {
+    info.marca = Object.hasOwn(MARCAS_MP, metodo) ? MARCAS_MP[metodo] : metodo;
+  }
+  const ultimos4 = texto(pago.card?.last_four_digits);
+  if (ultimos4 && /^\d{4}$/.test(ultimos4)) info.ultimos4 = ultimos4;
+  const aprobadoEn = texto(pago.date_approved);
+  if (aprobadoEn && !Number.isNaN(Date.parse(aprobadoEn))) info.aprobadoEn = new Date(aprobadoEn).toISOString();
+  const autorizacion = texto(pago.authorization_code);
+  if (autorizacion) info.autorizacion = autorizacion;
+  return Object.keys(info).length > 0 ? { info } : {};
 }

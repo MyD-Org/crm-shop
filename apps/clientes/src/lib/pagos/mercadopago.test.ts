@@ -292,3 +292,44 @@ describe("crearPreferencia", () => {
     await expect(crearPreferencia(pref)).rejects.toThrow();
   });
 });
+
+describe("interpretar — medio con el que se cobró (info)", () => {
+  it("tarjeta: marca, tipo, últimos 4, fecha y autorización; nunca titular ni BIN", () => {
+    const e = interpretar({
+      id: 1,
+      status: "approved",
+      payment_type_id: "credit_card",
+      payment_method_id: "master",
+      card: { last_four_digits: "4623", first_six_digits: "548392", cardholder: { name: "APRO" } } as never,
+      date_approved: "2026-10-07T15:30:00.000-04:00",
+      authorization_code: "123456",
+    });
+    expect(e.info).toEqual({
+      tipo: "credito",
+      marca: "Mastercard",
+      ultimos4: "4623",
+      aprobadoEn: "2026-10-07T19:30:00.000Z",
+      autorizacion: "123456",
+    });
+    expect(JSON.stringify(e.info)).not.toMatch(/548392|APRO/);
+  });
+
+  it("débito con id propio de MP (debvisa) → Visa débito", () => {
+    const e = interpretar({ id: 2, status: "approved", payment_type_id: "debit_card", payment_method_id: "debvisa" });
+    expect(e.info).toEqual({ tipo: "debito", marca: "Visa" });
+  });
+
+  it("dinero en cuenta: sin marca", () => {
+    const e = interpretar({ id: 3, status: "approved", payment_type_id: "account_money", payment_method_id: "account_money" });
+    expect(e.info).toEqual({ tipo: "dinero_en_cuenta" });
+  });
+
+  it("sin datos del medio: no agrega info; últimos 4 inválidos se descartan", () => {
+    expect(interpretar({ id: 4, status: "approved" }).info).toBeUndefined();
+    expect(interpretar({ id: 5, status: "approved", card: { last_four_digits: "12" } }).info).toBeUndefined();
+  });
+
+  it("una marca desconocida se guarda con su id", () => {
+    expect(interpretar({ id: 6, status: "approved", payment_method_id: "nuevamarca" }).info).toEqual({ marca: "nuevamarca" });
+  });
+});

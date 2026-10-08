@@ -15,6 +15,28 @@ import type { PagoEstado } from "@/data/orders";
 /** Medios que puede elegir el comprador dentro de un proveedor online. */
 export type PagoMedio = "tarjeta" | "cuenta_mp";
 
+/** Con qué pagó el comprador, según el proveedor. */
+export type TipoMedioPago = "credito" | "debito" | "prepaga" | "dinero_en_cuenta";
+
+/**
+ * Datos del medio con el que se cobró, para que el local vea cómo pagó el cliente (detalle del pedido
+ * en el CRM). Sólo lo que el proveedor informa en la respuesta del pago: nunca el titular ni el BIN.
+ * Todos opcionales: cada proveedor trae lo suyo (Payway no informa los últimos 4 dígitos).
+ */
+export interface InfoPago {
+  tipo?: TipoMedioPago;
+  /** Marca legible: "Visa", "Mastercard". */
+  marca?: string;
+  /** Últimos 4 dígitos de la tarjeta. */
+  ultimos4?: string;
+  /** Cuándo se aprobó el pago (ISO 8601). */
+  aprobadoEn?: string;
+  /** Código de autorización del emisor. */
+  autorizacion?: string;
+  /** Número de cupón (ticket) de Payway. */
+  cupon?: string;
+}
+
 /**
  * Por qué se cayó un pago, en términos nuestros.
  *
@@ -138,6 +160,8 @@ export interface EstadoPago {
   cuotasPagadas?: number;
   /** Total que paga el comprador, con interés. Nunca reemplaza el total del pedido. */
   totalPagado?: number;
+  /** Medio con el que se cobró (marca, últimos 4, etc.), si el proveedor lo informó. */
+  info?: InfoPago;
   /**
    * El proveedor no conoce ese pago (consulta sin resultado). No significa "fallido": el request pudo
    * no haber llegado o seguir en vuelo. Quien reconcilia decide, según la antigüedad del intento,

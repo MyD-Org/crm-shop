@@ -21,6 +21,7 @@ import { avisoDevolucion, ofreceCancelar, opcionesOtroEstado, pasosPedido, sigui
 import {
   PAGO_REVISION_INFO,
   condicionIvaLabel,
+  datosCobroEnLinea,
   entregaLabel,
   fmtCantidad,
   fmtFechaPedido,
@@ -348,6 +349,10 @@ export function PedidoDetalle({
             <dl className="mb-2 flex flex-col gap-1">
               <Dato label="Medio de pago">{Object.hasOwn(mediosPago, pedido.pagoMetodo) ? mediosPago[pedido.pagoMetodo] : pagoMetodoLabel(pedido.pagoMetodo)}</Dato>
               <Dato label="Estado del pago">{pagoEstadoLabel(pedido.pagoEstado)}</Dato>
+              {pedido.pagoEnLinea &&
+                datosCobroEnLinea(pedido.pagoEnLinea, pedido.total).map((d) => (
+                  <Dato key={d.label} label={d.label}>{d.valor}</Dato>
+                ))}
               {pedido.pagoManual && pedido.pagoRegistradoPorNombre && (
                 <Dato label={pedido.pagoEstado === "pagado" ? "Pago registrado" : "Pago anulado"}>
                   {textoUltimoCambio(pedido.pagoRegistradoPorNombre, pedido.pagoActualizadoEn)}

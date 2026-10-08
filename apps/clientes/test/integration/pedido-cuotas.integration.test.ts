@@ -158,3 +158,17 @@ describe("registrarCobro: reconciliación de cuotas y monto", () => {
     expect((await fila(p.id)).pago_revision).toBeNull();
   });
 });
+
+describe("registrarCobro: medio con el que se cobró (pago_info)", () => {
+  it("se guarda en el intento y en el pedido; un evento sin info no lo borra", async () => {
+    const p = await crearPedido(cliente, datos({ cuotas: 6 }), cotizacion);
+    const info = { tipo: "credito" as const, marca: "Mastercard", ultimos4: "4623", aprobadoEn: "2026-10-07T19:30:00.000Z" };
+    await registrarCobro(p.id, { ...cobro({ cuotas: 6, totalPagado: 1210 }), info }, { avisar: false });
+    await registrarCobro(p.id, cobro({ cuotas: 6, totalPagado: 1210 }), { avisar: false });
+    const [f] = (await getDb().execute(
+      sql`select o.pago_info, i.info from shop.orders o join shop.pago_intentos i on i.order_id = o.id where o.id = ${p.id}`,
+    )) as unknown as { pago_info: unknown; info: unknown }[];
+    expect(f.pago_info).toEqual(info);
+    expect(f.info).toEqual(info);
+  });
+});

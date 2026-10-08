@@ -93,6 +93,7 @@ export async function resolverIntentoAbierto(
     reversion: estado.reversion,
     cuotas: estado.cuotasPagadas,
     totalPagado: estado.totalPagado,
+    ...(estado.info ? { info: estado.info } : {}),
   }, { avisar: estado.estado !== "fallido" });
 
   if (estado.estado === "pagado") return "pagado";

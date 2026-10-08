@@ -85,6 +85,7 @@ export async function procesarWebhook(
       reversion: estado.reversion,
       cuotas: estado.cuotasPagadas,
       totalPagado: estado.totalPagado,
+      ...(estado.info ? { info: estado.info } : {}),
     });
 
     console.log(

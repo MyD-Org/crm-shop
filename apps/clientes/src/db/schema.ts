@@ -15,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PlanDeCuotas, PlanPedido } from "../lib/pagos/cuotas-tipos";
+import type { InfoPago } from "../lib/pagos/tipos";
 import type { ReglaAplicada } from "../lib/sucursales";
 import type { CuentaPagoSnapshot } from "../lib/cuentas-bancarias";
 
@@ -434,6 +435,8 @@ export const orders = shop.table(
     pagoCuotas: integer("pago_cuotas"),
     /** Total pagado real (con interés) según el proveedor. `total` no cambia. */
     pagoTotalPagado: numeric("pago_total_pagado", { precision: 14, scale: 2 }),
+    /** Medio con el que se cobró (marca, tipo, últimos 4…), del intento que decide el estado. */
+    pagoInfo: jsonb("pago_info").$type<InfoPago>(),
     /**
      * Pago que un operador tiene que revisar, o null si está todo en orden:
      * - `cobro_duplicado`: más de un intento aprobado; hay que devolver el
@@ -811,6 +814,8 @@ export const pagoIntentos = shop.table(
     medio: text("medio"),
     cuotas: integer("cuotas"),
     totalPagado: numeric("total_pagado", { precision: 14, scale: 2 }),
+    /** Medio con el que se cobró, según el proveedor (ver `InfoPago`). */
+    info: jsonb("info").$type<InfoPago>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

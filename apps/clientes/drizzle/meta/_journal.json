@@ -232,6 +232,13 @@
       "when": 1791416482401,
       "tag": "0032_orders_avisos_enviados_en",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791424405992,
+      "tag": "0033_pago_info",
+      "breakpoints": true
     }
   ]
 }

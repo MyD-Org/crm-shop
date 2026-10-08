@@ -77,6 +77,14 @@ export const shopOrders = shop.table("orders", {
   pagoRegistradoPorNombre: text("pago_registrado_por_nombre"),
   // 'cobro_duplicado' | 'pagado_cancelado' | 'cuotas_distintas' | 'monto_distinto' | null. Lo escribe el Shop al registrar cada cobro.
   pagoRevision: text("pago_revision"),
+  // Datos del cobro en línea, los escribe el Shop al registrar cada cobro (`registrarCobroTx`). El CRM
+  // sólo los muestra. `pago_info` (0033 del Shop): marca, tipo, últimos 4, fecha, autorización, cupón.
+  pagoReferencia: text("pago_referencia"),
+  // 'tarjeta' | 'cuenta_mp'.
+  pagoMedio: text("pago_medio"),
+  pagoCuotas: integer("pago_cuotas"),
+  pagoTotalPagado: numeric("pago_total_pagado", { precision: 14, scale: 2 }),
+  pagoInfo: jsonb("pago_info").$type<Record<string, unknown>>(),
 
   // --- Estado + auditoría del último cambio ---
   estado: text("estado").notNull().default("pendiente"),

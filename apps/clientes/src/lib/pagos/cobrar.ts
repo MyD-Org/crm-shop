@@ -329,6 +329,7 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
           medio,
           cuotas: resultado.cuotasPagadas,
           totalPagado: resultado.totalPagado,
+          ...(resultado.info ? { info: resultado.info } : {}),
         },
         { intentoId },
       );

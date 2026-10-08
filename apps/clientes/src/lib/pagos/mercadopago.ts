@@ -28,6 +28,7 @@ import {
   detalleEfectivo,
   esReversion,
   estadoDeMercadoPago,
+  infoDeMercadoPago,
   motivoDeMercadoPago,
   statusEfectivo,
   type RespuestaMercadoPago,
@@ -141,6 +142,7 @@ export function interpretar(pago: RespuestaMercadoPago): EstadoPago {
         ? pago.installments
         : undefined,
     totalPagado: montoValido(pago.transaction_details?.total_paid_amount),
+    ...infoDeMercadoPago(pago),
   };
 }
 

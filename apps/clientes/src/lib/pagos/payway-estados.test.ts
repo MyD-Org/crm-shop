@@ -54,6 +54,13 @@ describe("interpretarPago", () => {
     expect(e.totalPagado).toBe(10);
     expect(e.reversion).toBeFalsy();
     expect(e.motivo).toBeUndefined();
+    expect(e.info).toEqual({
+      tipo: "credito",
+      marca: "Visa",
+      aprobadoEn: "2026-10-06T12:00:00.000Z",
+      autorizacion: "180644",
+      cupon: "1560",
+    });
     expect(e.detalle).toContain("payment_id=15403386");
     expect(e.detalle).toContain("status=approved");
   });
@@ -199,5 +206,16 @@ describe("payment_method_id", () => {
     const ids = idsMedioPermitidos();
     for (const id of [1, 31, 104, 105, 106, 65, 63, 108, 24]) expect(ids.has(id)).toBe(true);
     for (const offline of [25, 26, 48, 51]) expect(ids.has(offline)).toBe(false);
+  });
+});
+
+describe("interpretarPago — medio con el que se cobró (info)", () => {
+  it("débito por payment_method_id, marca de la tabla si falta card_brand; sin fecha si no se aprobó", () => {
+    const e = interpretarPago({ status: "review", payment_method_id: 105, date: "2026-10-06T12:00:00Z" });
+    expect(e.info).toEqual({ tipo: "debito", marca: "Mastercard" });
+  });
+  it("rechazo: autorización vacía no se guarda", () => {
+    const e = interpretarPago({ status: "rejected", status_details: { card_authorization_code: "", ticket: null } });
+    expect(e.info).toBeUndefined();
   });
 });

@@ -1,4 +1,6 @@
 import { cache, Suspense } from "react";
+import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
+import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { productoPublico, rutaCategoriaPublica } from "@/lib/catalogo-publico";
@@ -47,12 +49,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProductoPage({ params }: Props) {
   const { id } = await params;
-  const [producto, reglas, { soloVisibles, mediosPrecio }, disp, dispEntrega] = await Promise.all([
+  const [producto, reglas, { soloVisibles, mediosPrecio }, disp, dispEntrega, tarjetas] = await Promise.all([
     productoDe(id),
     reglasVentaCacheadas(),
     flagsPublicos(),
     dispCatalogo(),
     dispDelVisitante(),
+    getTarjetasMercadoPago(),
   ]);
   // Local de retiro elegido en "Enviar a" (si la lectura falla, sin local elegido).
   const eleccion = (await ubicacionDelVisitante().catch(() => null))?.eleccion;
@@ -98,6 +101,7 @@ export default async function ProductoPage({ params }: Props) {
             : undefined
         }
         rutaCategorias={rutaCategorias}
+        logosTarjetas={logosTarjetas(tarjetas)}
         relacionados={
           producto.categoriaPropiaId || producto.category ? (
             <Suspense fallback={null}>

@@ -119,18 +119,13 @@ describe("avisos con el Alert del DS", () => {
     expect(html).toContain("Reintentar");
   });
 
-  it("rechazo reintentable: muestra el motivo y Probar de nuevo; no reintentable: sin botón", () => {
-    const con = renderToStaticMarkup(
-      createElement(AvisoPagoRechazado, { mensaje: "Fondos insuficientes", reintentable: true, onReintentar: noop }),
-    );
-    expect(con).toContain('role="alert"');
-    expect(con).toContain("No se pudo completar el pago");
-    expect(con).toContain("Fondos insuficientes");
-    expect(con).toContain("Probar de nuevo");
-    const sin = renderToStaticMarkup(
-      createElement(AvisoPagoRechazado, { mensaje: "Fondos insuficientes", reintentable: false, onReintentar: noop }),
-    );
-    expect(sin).not.toContain("Probar de nuevo");
+  it("rechazo: muestra el motivo, sin botón (el formulario de abajo ya quedó listo para reintentar)", () => {
+    const html = renderToStaticMarkup(createElement(AvisoPagoRechazado, { mensaje: "Fondos insuficientes" }));
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("No se pudo completar el pago");
+    expect(html).toContain("Fondos insuficientes");
+    expect(html).not.toContain("Probar de nuevo");
+    expect(html).not.toContain("<button");
   });
 
   it("falta de configuración", () => {

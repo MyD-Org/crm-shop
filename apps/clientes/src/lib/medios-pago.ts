@@ -10,6 +10,7 @@
  */
 import type { CondicionCuotas } from "./cuotas-sin-interes";
 import type { ChipMedio } from "./medios-pago-chips";
+import { opcionesAplicables, type OpcionCobro } from "./pagos/opciones-cobro";
 import { PAGO_LABEL, type EntregaTipo, type PagoMetodo } from "./envio";
 
 export interface MedioPago {
@@ -49,6 +50,11 @@ export interface MedioPago {
    * sobre la opción del medio en el checkout, en este orden (hasta 3). Ausente = sin etiquetas.
    */
   chips?: ChipMedio[];
+  /**
+   * Formas de pago del cobro en línea (migración 0073 del CRM): `credito`, `debito`, `cuenta_mp`.
+   * Ausente (columna sin migrar) = todas las del procesador; `[]` = ninguna: el medio no se ofrece.
+   */
+  opcionesCobro?: OpcionCobro[];
 }
 
 export type AudienciaMedio = "publico" | "cuenta_corriente";
@@ -131,10 +137,15 @@ export interface OpcionesMedios {
   esCuentaCorriente?: boolean;
 }
 
-/** ¿Se puede ofrecer este medio con las credenciales que hay? Los medios manuales siempre. */
-function medioOfrecible(slug: string, opts: OpcionesMedios): boolean {
+/**
+ * ¿Se puede ofrecer este medio con las credenciales que hay y con al menos una forma de pago que su
+ * procesador cobre? Los medios manuales siempre.
+ */
+function medioOfrecible(m: Pick<MedioPago, "slug" | "opcionesCobro">, opts: OpcionesMedios): boolean {
+  const slug = m.slug;
   const procesador = procesadorDeMedio(slug);
   if (procesador === null) return true;
+  if (opcionesAplicables(procesador, m.opcionesCobro).length === 0) return false;
   if (opts.procesadorDisponible) return opts.procesadorDisponible(procesador);
   return slug === SLUG_MERCADOPAGO ? (opts.mpDisponible ?? true) : true;
 }
@@ -178,7 +189,7 @@ export function mediosParaModalidad(
       (m) =>
         m.activo &&
         !SLUGS_RESERVADOS.includes(m.slug) &&
-        medioOfrecible(m.slug, opts) &&
+        medioOfrecible(m, opts) &&
         esMedioCuentaCorriente(m) === (opts.esCuentaCorriente === true) &&
         (entrega === "retiro" ? m.aplicaRetiro : m.aplicaEnvio),
     )

@@ -18,6 +18,7 @@ import { shopTenantId } from "./tenant";
 import type { CondicionCuotas } from "./cuotas-sin-interes";
 import type { AudienciaMedio, MedioPago } from "./medios-pago";
 import { leerChipsMedio } from "./medios-pago-chips";
+import { leerOpcionesCobro, type OpcionCobro } from "./pagos/opciones-cobro";
 
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
 type Ejecutor = Pick<ReturnType<typeof getDb>, "select">;
@@ -29,6 +30,39 @@ function esTablaAusenteOSinPermiso(err: unknown): boolean {
     if (code === "42P01" || code === "42501") return true;
   }
   return false;
+}
+
+/** ¿El error es Postgres 42703 (columna inexistente)? Mira también `cause`. */
+function esColumnaAusente(err: unknown): boolean {
+  for (let e: unknown = err, i = 0; e && i < 4; e = (e as { cause?: unknown }).cause, i++) {
+    if ((e as { code?: unknown }).code === "42703") return true;
+  }
+  return false;
+}
+
+/**
+ * Formas de pago del cobro en línea de cada medio (migración 0073 del CRM): slug -> opciones. Va en
+ * una consulta APARTE de la de medios para que un desfasaje de migración degrade (sin dato = todas
+ * las del procesador, como antes de la columna) en vez de dejar todos los medios "a coordinar".
+ * Columna ausente => mapa vacío; otro error tira (lo maneja quien lee los medios).
+ */
+async function opcionesCobroDeLosMedios(db: Ejecutor): Promise<Map<string, OpcionCobro[]>> {
+  try {
+    const filas = await db
+      .select({ slug: crmMediosPagoShop.slug, opcionesCobro: crmMediosPagoShop.opcionesCobro })
+      .from(crmMediosPagoShop)
+      .where(eq(crmMediosPagoShop.tenantId, shopTenantId()));
+    const porMedio = new Map<string, OpcionCobro[]>();
+    for (const f of filas) {
+      const opciones = leerOpcionesCobro(f.opcionesCobro);
+      if (opciones !== null) porMedio.set(f.slug, opciones);
+    }
+    return porMedio;
+  } catch (err) {
+    if (!esColumnaAusente(err)) throw err;
+    console.warn("[medios-pago] la migración 0073 del CRM no está aplicada; los medios ofrecen todas sus formas de pago.");
+    return new Map();
+  }
 }
 
 /** Lo que enlazan las condiciones del CRM para un medio: la lista del pago único y las de cuotas. */
@@ -108,6 +142,7 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
     .where(eq(crmMediosPagoShop.tenantId, shopTenantId()))
     .orderBy(asc(crmMediosPagoShop.orden), asc(crmMediosPagoShop.nombre));
   const condiciones = await condicionesDeLosMedios(db);
+  const opciones = await opcionesCobroDeLosMedios(db);
   return filas.map((f) => ({
     ...f,
     // Lo desconocido se trata como público: sólo el valor exacto restringe el medio.
@@ -116,6 +151,8 @@ export async function leerMediosPago(db: Ejecutor = getDb()): Promise<MedioPago[
     chips: leerChipsMedio(f.chips),
     idListaPrecios: condiciones.get(f.slug)?.idListaPrecios ?? null,
     condicionesCuotas: condiciones.get(f.slug)?.condicionesCuotas ?? [],
+    // Sin dato (columna ausente) el campo no va: rigen las formas de pago del procesador.
+    ...(opciones.has(f.slug) ? { opcionesCobro: opciones.get(f.slug) } : {}),
   }));
 }
 

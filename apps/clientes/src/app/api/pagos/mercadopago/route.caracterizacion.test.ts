@@ -23,6 +23,10 @@ let identidad: {
 let permitido = true;
 let configurado = true;
 
+// Formas de pago del medio (migración 0073 del CRM): sin dato = todas las de su procesador.
+vi.mock("@/lib/medios-pago-repo", () => ({
+  leerMediosPagoTolerante: async () => [{ slug: "mercadopago" }, { slug: "payway" }],
+}));
 vi.mock("@/lib/auth", () => ({ identidadActual: async () => identidad }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => permitido }));
 vi.mock("@/lib/pedidos", async (original) => ({

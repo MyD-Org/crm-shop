@@ -5,6 +5,7 @@ import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitir } from "@/lib/rate-limit";
 import { crearPreferencia, mercadoPagoConfigurado } from "@/lib/pagos/mercadopago";
 import { armarPreferencia } from "@/lib/pagos/mercadopago-preferencia";
+import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
 
 const MAX_PEDIDOS = 20;
 const VENTANA_MS = 5 * 60_000;
@@ -59,6 +60,9 @@ export async function POST(req: Request) {
       { status: 409 },
     );
   }
+  // La cuenta de Mercado Pago puede estar deshabilitada para el medio en el admin (migración 0073).
+  const rechazoOpcion = await rechazoPorOpcionDeCobro(pedido.pagoMetodo, "mercadopago", "cuenta_mp");
+  if (rechazoOpcion) return rechazoOpcion;
   try {
     const url = await crearPreferencia(
       armarPreferencia({

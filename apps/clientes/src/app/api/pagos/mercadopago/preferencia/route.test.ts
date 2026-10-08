@@ -6,6 +6,9 @@ let pedido: PedidoParaPago | null;
 let configurado = true;
 let sesion = true;
 
+// Formas de pago del medio (migración 0073 del CRM): sin dato = todas las de su procesador.
+let medios: { slug: string; opcionesCobro?: string[] }[] = [];
+vi.mock("@/lib/medios-pago-repo", () => ({ leerMediosPagoTolerante: async () => medios }));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () =>
     sesion ? { clerkUserId: "user_1", cliente: null, email: "ana@cliente.example" } : { clerkUserId: null, cliente: null },
@@ -33,6 +36,7 @@ const pedir = (body: unknown = { pedidoId: "p1" }) =>
   );
 
 beforeEach(() => {
+  medios = [{ slug: "mercadopago" }];
   configurado = true;
   sesion = true;
   crearPreferencia.mockReset().mockResolvedValue("https://mp.example/checkout/pref-123");
@@ -115,5 +119,21 @@ describe("POST /api/pagos/mercadopago/preferencia", () => {
 
   it("sin pedidoId: 400", async () => {
     expect((await pedir({})).status).toBe(400);
+  });
+});
+
+describe("POST /api/pagos/mercadopago/preferencia — forma de pago (migración 0073 del CRM)", () => {
+  it("cuenta de Mercado Pago deshabilitada en el medio: 422 en usted, sin crear la preferencia", async () => {
+    medios = [{ slug: "mercadopago", opcionesCobro: ["credito", "debito"] }];
+    const res = await pedir();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ motivo: "opcion_no_habilitada" });
+    expect(crearPreferencia).not.toHaveBeenCalled();
+  });
+
+  it("medio que no se puede leer: 502 sin crear la preferencia", async () => {
+    medios = [];
+    expect((await pedir()).status).toBe(502);
+    expect(crearPreferencia).not.toHaveBeenCalled();
   });
 });

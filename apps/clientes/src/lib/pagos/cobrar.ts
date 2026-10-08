@@ -21,6 +21,8 @@ import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
 import { procesadorDeMedio } from "@/lib/medios-pago";
 import { permitir } from "@/lib/rate-limit";
 import { validarCuotasPago } from "@/lib/pagos/cuotas-validacion";
+import { opcionDelCobro } from "@/lib/pagos/opciones-cobro";
+import { rechazoPorOpcionDeCobro } from "@/lib/pagos/opcion-cobro-guard";
 
 /** Intentos de cobro por usuario. Alto para no molestar a quien reintenta bien. */
 const MAX_INTENTOS = 10;
@@ -148,6 +150,16 @@ export async function cobrarPedido(proveedor: ProveedorPago, req: Request): Prom
   }
 
   const metodoPagoId = texto(body.metodoPagoId, 40) || undefined;
+
+  // Forma de pago habilitada para el medio en el admin (crédito, débito, cuenta de Mercado Pago). Se
+  // decide con lo que manda el navegador; un id desconocido cuenta como crédito. Rechazo sin reservar
+  // intento ni llamar al procesador.
+  const rechazoOpcion = await rechazoPorOpcionDeCobro(
+    pedido.pagoMetodo,
+    proveedor.id,
+    opcionDelCobro({ procesadorId: proveedor.id, medio, metodoPagoId }),
+  );
+  if (rechazoOpcion) return rechazoOpcion;
 
   /**
    * Cuotas contra lo congelado en el pedido: IGUALDAD estricta (cada cantidad es una lista de precios

@@ -676,6 +676,9 @@ export function CheckoutClient({
   // que el servidor rechazaría.
   const opcionesMedios = { esCuentaCorriente };
   const mediosParaElegir = mediosParaModalidad(mediosPago, entrega, opcionesMedios);
+  /** Formas de pago (crédito, débito, cuenta de Mercado Pago) que el admin habilitó para el medio del procesador. */
+  const opcionesCobroDe = (procesador: string | null | undefined) =>
+    mediosPago.find((m) => procesador && procesadorDeMedio(m.slug) === procesador)?.opcionesCobro;
   const medioSel = medioElegido(mediosPago, entrega, medioSlug, opcionesMedios);
   const pagoParaEnviar: string = medioSel?.slug ?? "a_coordinar";
   const pagaEnLinea = esPagoEnLinea(pagoParaEnviar);
@@ -1095,6 +1098,7 @@ export function CheckoutClient({
               numero={confirmado.numero}
               monto={confirmado.total}
               cuotas={confirmado.cuotas ?? undefined}
+              opcionesCobro={opcionesCobroDe(confirmado.procesador)}
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}
               onPagado={alPagar}
@@ -1112,6 +1116,7 @@ export function CheckoutClient({
               monto={confirmado.total}
               emailComprador={emailCliente}
               maxCuotas={confirmado.cuotas ?? undefined}
+              opcionesCobro={opcionesCobroDe(confirmado.procesador)}
               pagoMercadoPagoId={pagoMercadoPagoId}
               onCobroEnCurso={setCobroEnCurso}
               onConfirmacionAgotada={alAgotarConfirmacion}

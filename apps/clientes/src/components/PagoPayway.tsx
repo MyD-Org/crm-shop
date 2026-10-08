@@ -23,6 +23,8 @@ import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { AvisoProcesador } from "@/components/AvisoProcesador";
 import { textoCuotas } from "@/components/pago-brick";
+import { modalidadesPaywayHabilitadas } from "@/components/pago-opciones";
+import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "@/components/PagoIconos";
 
 /**
@@ -53,6 +55,11 @@ interface Props {
   monto: number;
   /** Cuotas congeladas en el pedido (1 = un pago). */
   cuotas?: number;
+  /**
+   * Formas de pago habilitadas para el medio en el admin (migración 0073 del CRM). Sin valor, crédito
+   * y débito. Las deshabilitadas no se muestran; el servidor igual las rechaza.
+   */
+  opcionesCobro?: readonly OpcionCobro[];
   /** Se llama cuando el cobro quedó confirmado. */
   onPagado: () => void;
   /** Se llama cuando el procesador todavía no confirmó el cobro (queda "Estamos confirmando"). */
@@ -83,6 +90,7 @@ export function PagoPayway({
   numero,
   monto,
   cuotas = 1,
+  opcionesCobro,
   onPagado,
   onPendiente,
   onRechazado,
@@ -102,7 +110,11 @@ export function PagoPayway({
   const [cvv, setCvv] = useState("");
   const [titular, setTitular] = useState("");
   const [doc, setDoc] = useState("");
-  const [modalidad, setModalidad] = useState<ModalidadTarjeta>("credito");
+  const habilitadas = modalidadesPaywayHabilitadas(opcionesCobro);
+  // Arranca en la primera modalidad habilitada que se pueda usar (el débito no, con cuotas congeladas).
+  const [modalidad, setModalidad] = useState<ModalidadTarjeta>(
+    () => habilitadas.find((m) => m !== "debito" || cuotas <= 1) ?? habilitadas[0] ?? "credito",
+  );
   // null = se usa la sugerencia por el prefijo del número.
   const [marcaElegida, setMarcaElegida] = useState<Marca | null>(null);
   // La marca se detecta por el número: el selector aparece sólo si no se reconoce o si la quiere cambiar.
@@ -374,7 +386,7 @@ export function PagoPayway({
     </div>
   );
 
-  const opciones: RadioOption[] = [
+  const todas: RadioOption[] = [
     {
       value: "credito",
       label: "Tarjeta de crédito",
@@ -394,6 +406,7 @@ export function PagoPayway({
       disabled: cuotas > 1 || (procesando && modalidad !== "debito"),
     },
   ];
+  const opciones = todas.filter((o) => habilitadas.includes(o.value as ModalidadTarjeta));
 
   return (
     <form ref={formRef} onSubmit={pagar} noValidate autoComplete="on" className="flex flex-col gap-4">

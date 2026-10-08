@@ -9,6 +9,7 @@ import { ErrorProveedor, type ProveedorPago } from "./tipos";
  */
 
 const registrarCobro = vi.fn();
+const reservarIntento = vi.fn(async (..._a: unknown[]) => ({ intentoId: "i1" }));
 const getPedidoParaPago = vi.fn();
 const getItemsParaAntifraude = vi.fn();
 const crearPago = vi.fn();
@@ -17,13 +18,18 @@ const cerrarIntentoSinPago = vi.fn();
 const registrarIntentoFallido = vi.fn();
 const orden: string[] = [];
 
+// Formas de pago del medio (migración 0073 del CRM). Por defecto, sin dato = todas las del procesador.
+const medios = vi.hoisted(() => ({ lista: null as null | { slug: string; opcionesCobro?: string[] }[] }));
+vi.mock("@/lib/medios-pago-repo", () => ({
+  leerMediosPagoTolerante: async () => medios.lista ?? [{ slug: "mercadopago" }, { slug: "payway" }],
+}));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "a@cliente.example" }),
 }));
 vi.mock("@/lib/rate-limit", () => ({ permitir: () => true }));
 vi.mock("@/lib/pedidos", async (original) => ({
   motivoNoCobrable: (await original<typeof import("@/lib/pedidos")>()).motivoNoCobrable,
-  reservarIntento: async () => ({ intentoId: "i1" }),
+  reservarIntento: (...a: unknown[]) => reservarIntento(...a),
   getPedidoParaPago: (...a: unknown[]) => getPedidoParaPago(...a),
   getItemsParaAntifraude: (...a: unknown[]) => getItemsParaAntifraude(...a),
   registrarCobro: (...a: unknown[]) => registrarCobro(...a),
@@ -69,6 +75,7 @@ beforeEach(() => {
   configurado = true;
   for (const f of [registrarCobro, getPedidoParaPago, getItemsParaAntifraude, crearPago, fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockReset();
   orden.length = 0;
+  medios.lista = null;
   for (const f of [fijarReferenciaIntento, cerrarIntentoSinPago, registrarIntentoFallido]) f.mockResolvedValue(undefined);
   crearPago.mockResolvedValue({ estado: "pagado", referencia: "r1", detalle: "ok" });
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -236,5 +243,61 @@ describe("cobrarPedido — datos del control de fraude", () => {
     await pagarCon(conReferencia());
     expect(getItemsParaAntifraude).not.toHaveBeenCalled();
     expect(crearPago.mock.calls[0][0]).not.toHaveProperty("antifraude");
+  });
+});
+
+describe("cobrarPedido — forma de pago habilitada (migración 0073 del CRM)", () => {
+  const mp = { ...otro, id: "mercadopago" };
+  beforeEach(() => {
+    getPedidoParaPago.mockResolvedValue(pedido("mercadopago"));
+    reservarIntento.mockClear();
+  });
+
+  it("crédito deshabilitado: 422 en usted, sin reservar intento ni llamar al procesador", async () => {
+    medios.lista = [{ slug: "mercadopago", opcionesCobro: ["debito", "cuenta_mp"] }];
+    const r = await pagarCon(mp, { metodoPagoId: "visa" });
+    expect(r.status).toBe(422);
+    expect(await r.json()).toEqual({
+      error: "Esa forma de pago no está disponible para este medio. Elija otra forma de pago u otro medio de pago.",
+      motivo: "opcion_no_habilitada",
+    });
+    expect(crearPago).not.toHaveBeenCalled();
+    expect(reservarIntento).not.toHaveBeenCalled();
+  });
+
+  it("débito habilitado: se cobra normal", async () => {
+    medios.lista = [{ slug: "mercadopago", opcionesCobro: ["debito"] }];
+    const r = await pagarCon(mp, { metodoPagoId: "debvisa" });
+    expect(r.status).toBe(200);
+    expect(crearPago).toHaveBeenCalledTimes(1);
+  });
+
+  it("un id desconocido cuenta como crédito: con crédito deshabilitado se rechaza", async () => {
+    medios.lista = [{ slug: "mercadopago", opcionesCobro: ["debito"] }];
+    expect((await pagarCon(mp, { metodoPagoId: "marca-nueva" })).status).toBe(422);
+    expect(crearPago).not.toHaveBeenCalled();
+  });
+
+  it("Payway: débito deshabilitado rechaza un id de débito", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("payway"));
+    medios.lista = [{ slug: "payway", opcionesCobro: ["credito"] }];
+    expect((await pagarCon(conReferencia(), { metodoPagoId: "31" })).status).toBe(422);
+    expect(crearPago).not.toHaveBeenCalled();
+  });
+
+  it("medio ausente o lectura fallida: 502, falla cerrado y no cobra", async () => {
+    medios.lista = [];
+    const r = await pagarCon(mp, { metodoPagoId: "visa" });
+    expect(r.status).toBe(502);
+    expect((await r.json()).error).toBe("No pudimos verificar el medio de pago. Inténtelo de nuevo en unos minutos.");
+    expect(crearPago).not.toHaveBeenCalled();
+    expect(reservarIntento).not.toHaveBeenCalled();
+  });
+
+  it("pedido ya pagado: responde pagado sin mirar las formas de pago", async () => {
+    medios.lista = [{ slug: "mercadopago", opcionesCobro: [] }];
+    getPedidoParaPago.mockResolvedValue({ ...pedido("mercadopago"), pagoEstado: "pagado" });
+    const r = await pagarCon(mp, { metodoPagoId: "visa" });
+    expect(await r.json()).toMatchObject({ estado: "pagado", yaEstaba: true });
   });
 });

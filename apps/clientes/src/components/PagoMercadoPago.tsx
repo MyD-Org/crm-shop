@@ -6,6 +6,8 @@ import { Button, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { customizacionBrick, textoCuotas, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
+import { opcionesMercadoPagoHabilitadas as opcionesHabilitadas, type OpcionMercadoPago } from "./pago-opciones";
+import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { AvisoProcesador } from "./AvisoProcesador";
 import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
@@ -36,7 +38,7 @@ function inicializar() {
   iniciado = true;
 }
 
-type Opcion = TipoTarjeta | "cuenta";
+type Opcion = OpcionMercadoPago;
 
 type Estado =
   | { fase: "cargando" }
@@ -60,6 +62,11 @@ interface Props {
    * constante durante la vida del pedido: no reinicia el Brick.
    */
   maxCuotas?: number;
+  /**
+   * Formas de pago habilitadas para el medio en el admin (migración 0073 del CRM). Sin valor, todas.
+   * Las deshabilitadas no se muestran; el servidor igual las rechaza.
+   */
+  opcionesCobro?: readonly OpcionCobro[];
   /** Se llama cuando el cobro quedó confirmado. */
   onPagado: () => void;
   /** Se llama cuando el procesador todavía no confirmó el cobro (queda "Estamos confirmando"). */
@@ -94,6 +101,7 @@ export function PagoMercadoPago({
   monto,
   emailComprador,
   maxCuotas,
+  opcionesCobro,
   onPagado,
   onPendiente,
   onRechazado,
@@ -102,15 +110,21 @@ export function PagoMercadoPago({
   onCobroEnCurso,
   onConfirmacionAgotada,
 }: Props) {
-  const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "cargando" });
+  /** El débito es siempre un pago: con cuotas congeladas no se ofrece. */
+  const debitoDisponible = !(maxCuotas !== undefined && maxCuotas > 1);
+  const habilitadas = opcionesHabilitadas(opcionesCobro);
+  // Arranca en la primera forma habilitada que se pueda usar (el débito no, con cuotas congeladas).
+  const [opcion, setOpcion] = useState<Opcion>(
+    () => habilitadas.find((o) => o !== "debito" || debitoDisponible) ?? habilitadas[0] ?? "credito",
+  );
+  const [estado, setEstado] = useState<Estado>(
+    iniciarEnConfirmacion ? { fase: "pendiente" } : opcion === "cuenta" ? { fase: "formulario" } : { fase: "cargando" },
+  );
   const [intento, setIntento] = useState(0);
   const cobroEnCurso = estado.fase === "procesando" || estado.fase === "desafio3ds";
   useEffect(() => {
     onCobroEnCurso?.(cobroEnCurso);
   }, [cobroEnCurso, onCobroEnCurso]);
-  const [opcion, setOpcion] = useState<Opcion>("credito");
-  /** El débito es siempre un pago: con cuotas congeladas no se ofrece. */
-  const debitoDisponible = !(maxCuotas !== undefined && maxCuotas > 1);
 
   useEffect(() => {
     inicializar();
@@ -434,7 +448,7 @@ export function PagoMercadoPago({
     </div>
   );
 
-  const opciones: RadioOption[] = [
+  const todas: RadioOption[] = [
     {
       value: "credito",
       label: "Tarjeta de crédito",
@@ -464,6 +478,7 @@ export function PagoMercadoPago({
       disabled: procesando,
     },
   ];
+  const opciones = todas.filter((o) => habilitadas.includes(o.value as Opcion));
 
   return (
     <div className="flex flex-col gap-4">
@@ -485,3 +500,4 @@ export function PagoMercadoPago({
     </div>
   );
 }
+

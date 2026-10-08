@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claveIdempotencia, crearPreferencia, interpretar, mercadoPagoConfigurado } from "./mercadopago";
+import { claveIdempotencia, crearPreferencia, interpretar, mercadoPagoConfigurado, modo3DS } from "./mercadopago";
 import type { DatosPago } from "./tipos";
 
 /**
@@ -331,5 +331,14 @@ describe("interpretar — medio con el que se cobró (info)", () => {
 
   it("una marca desconocida se guarda con su id", () => {
     expect(interpretar({ id: 6, status: "approved", payment_method_id: "nuevamarca" }).info).toEqual({ marca: "nuevamarca" });
+  });
+});
+
+describe("modo3DS", () => {
+  it("obligatorio sólo para compras de MÁS de $300.000; opcional hasta ese monto", () => {
+    expect(modo3DS(300_000.01)).toBe("mandatory");
+    expect(modo3DS(1_200_000)).toBe("mandatory");
+    expect(modo3DS(300_000)).toBe("optional");
+    expect(modo3DS(95_956.58)).toBe("optional");
   });
 });

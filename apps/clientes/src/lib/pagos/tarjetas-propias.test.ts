@@ -38,16 +38,21 @@ describe("TARJETAS_PROPIAS (respaldo cuando Mercado Pago no devuelve la lista)",
   });
 
   it("cada logo es un archivo propio de /images/tarjetas, sin hosts externos", () => {
-    for (const t of todas) expect(t.logo).toMatch(/^\/images\/tarjetas\/[a-z]+\.svg$/);
+    for (const t of todas) expect(t.logo).toMatch(/^\/images\/tarjetas\/[a-z]+\.(png|svg)$/);
   });
 
-  it("cada logo existe en public/ y es un SVG autocontenido (sin scripts ni recursos externos)", () => {
+  it("cada logo existe en public/ y es una imagen válida (PNG por su firma, SVG sin scripts ni recursos externos)", () => {
     for (const t of todas) {
       const archivo = resolve(PUBLIC, t.logo.slice(1));
       expect(existsSync(archivo), t.logo).toBe(true);
-      const svg = readFileSync(archivo, "utf8");
-      expect(svg).toMatch(/^<svg\b[^>]*\bviewBox="[^"]+"/);
-      expect(svg).not.toMatch(/<script|<image|<foreignObject|xlink:href|https?:\/\/(?!www\.w3\.org\/2000\/svg)|@import|url\(\s*["']?https?:/i);
+      const bytes = readFileSync(archivo);
+      if (t.logo.endsWith(".png")) {
+        expect(bytes.subarray(0, 8).toString("hex"), t.logo).toBe("89504e470d0a1a0a");
+      } else {
+        const svg = bytes.toString("utf8");
+        expect(svg, t.logo).toMatch(/^<svg\b/);
+        expect(svg, t.logo).not.toMatch(/<script|<image|<foreignObject|xlink:href|@import|url\(\s*["']?https?:|\son\w+=/i);
+      }
     }
   });
 

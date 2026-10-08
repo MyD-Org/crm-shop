@@ -85,13 +85,13 @@ describe("tarjetasPayway", () => {
     expect(t.credito.map((x) => x.logo)).toEqual([
       "https://img.example/visa.gif",
       "https://img.example/master.gif",
-      "/images/tarjetas/amex.svg",
+      "/images/tarjetas/amex.png",
       "https://img.example/cabal.gif",
     ]);
     expect(t.debito.map((x) => x.logo)).toEqual([
       "https://img.example/debvisa.gif",
       "https://img.example/debmaster.gif",
-      "/images/tarjetas/cabal.svg",
+      "/images/tarjetas/cabal.png",
     ]);
   });
 
@@ -102,15 +102,15 @@ describe("tarjetasPayway", () => {
     } as unknown as Parameters<typeof tarjetasPayway>[0];
     const t = tarjetasPayway(sinId);
     expect(t.credito.map((x) => x.logo)).toEqual([
-      "/images/tarjetas/visa.svg",
-      "/images/tarjetas/mastercard.svg",
-      "/images/tarjetas/amex.svg",
-      "/images/tarjetas/cabal.svg",
+      "/images/tarjetas/visa.png",
+      "/images/tarjetas/mastercard.png",
+      "/images/tarjetas/amex.png",
+      "/images/tarjetas/cabal.png",
     ]);
     expect(t.debito.map((x) => x.logo)).toEqual([
-      "/images/tarjetas/visa.svg",
-      "/images/tarjetas/mastercard.svg",
-      "/images/tarjetas/cabal.svg",
+      "/images/tarjetas/visa.png",
+      "/images/tarjetas/mastercard.png",
+      "/images/tarjetas/cabal.png",
     ]);
   });
 

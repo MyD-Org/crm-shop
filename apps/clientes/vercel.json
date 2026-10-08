@@ -2,6 +2,7 @@
   "git": {
     "deploymentEnabled": {
       "main": true,
+      "staging": true,
       "**": false
     }
   },

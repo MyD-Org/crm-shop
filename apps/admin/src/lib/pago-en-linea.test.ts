@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest"
+import { parseInfoPago, textoMedioCobrado, type PagoEnLineaDto } from "./pago-en-linea"
+import { toPagoEnLineaDto } from "./pedidos-repo"
+import { datosCobroEnLinea } from "@/components/admin/pedidos/format"
+
+// Datos inventados.
+
+const vacio = parseInfoPago(null)
+
+describe("parseInfoPago", () => {
+  it("lee los campos válidos y descarta lo que no tiene la forma esperada", () => {
+    expect(
+      parseInfoPago({ tipo: "credito", marca: "Mastercard", ultimos4: "4623", aprobadoEn: "2026-10-07T19:30:00Z", autorizacion: "123456" }),
+    ).toEqual({
+      tipo: "credito",
+      marca: "Mastercard",
+      ultimos4: "4623",
+      aprobadoEn: "2026-10-07T19:30:00.000Z",
+      autorizacion: "123456",
+      cupon: null,
+    })
+    expect(parseInfoPago({ tipo: "otro", ultimos4: "12", aprobadoEn: "ayer", marca: 3 })).toEqual(vacio)
+    expect(parseInfoPago("x")).toEqual(vacio)
+    expect(parseInfoPago([1])).toEqual(vacio)
+  })
+})
+
+describe("textoMedioCobrado", () => {
+  const p = (medio: string | null, info: Partial<PagoEnLineaDto["info"]>) => ({ medio, info: { ...vacio, ...info } })
+
+  it("tarjeta con todos los datos", () => {
+    expect(textoMedioCobrado(p("tarjeta", { tipo: "credito", marca: "Mastercard", ultimos4: "4623" }))).toBe(
+      "Mastercard crédito •••• 4623",
+    )
+  })
+  it("dinero en cuenta y tarjeta desde la cuenta de Mercado Pago", () => {
+    expect(textoMedioCobrado(p("cuenta_mp", { tipo: "dinero_en_cuenta" }))).toBe("Dinero en cuenta de Mercado Pago")
+    expect(textoMedioCobrado(p("cuenta_mp", { tipo: "debito", marca: "Visa" }))).toBe(
+      "Visa débito (desde la cuenta de Mercado Pago)",
+    )
+  })
+  it("sin marca y pagos anteriores sin info", () => {
+    expect(textoMedioCobrado(p("tarjeta", { tipo: "credito" }))).toBe("Tarjeta de crédito")
+    expect(textoMedioCobrado(p("tarjeta", {}))).toBe("Tarjeta")
+    expect(textoMedioCobrado(p("cuenta_mp", {}))).toBe("Cuenta de Mercado Pago")
+    expect(textoMedioCobrado(p(null, {}))).toBeNull()
+  })
+})
+
+describe("toPagoEnLineaDto", () => {
+  const fila = {
+    pagoProveedor: "mercadopago",
+    pagoReferencia: "1234567890",
+    pagoMedio: "tarjeta",
+    pagoCuotas: 6,
+    pagoTotalPagado: "1210.00",
+    pagoInfo: { tipo: "credito", marca: "Visa" },
+  }
+  it("pago offline (sin proveedor) → null", () => {
+    expect(toPagoEnLineaDto({ ...fila, pagoProveedor: null })).toBeNull()
+  })
+  it("cobro en línea", () => {
+    expect(toPagoEnLineaDto(fila)).toEqual({
+      proveedor: "mercadopago",
+      referencia: "1234567890",
+      medio: "tarjeta",
+      cuotas: 6,
+      totalPagado: 1210,
+      info: { ...vacio, tipo: "credito", marca: "Visa" },
+    })
+  })
+})
+
+describe("datosCobroEnLinea", () => {
+  const base: PagoEnLineaDto = {
+    proveedor: "mercadopago",
+    referencia: "1234567890",
+    medio: "tarjeta",
+    cuotas: 6,
+    totalPagado: 1210,
+    info: { ...vacio, tipo: "credito", marca: "Mastercard", ultimos4: "4623", aprobadoEn: "2026-10-07T19:30:00.000Z" },
+  }
+  it("Mercado Pago: medio, cuotas, fecha y número de operación; total sólo si difiere", () => {
+    expect(datosCobroEnLinea(base, 1210)).toEqual([
+      { label: "Pagó con", valor: "Mastercard crédito •••• 4623" },
+      { label: "Cuotas", valor: "6 cuotas" },
+      { label: "Fecha del pago", valor: "07/10/2026, 16:30" },
+      { label: "N° de operación de Mercado Pago", valor: "1234567890" },
+    ])
+    expect(datosCobroEnLinea(base, 1100).map((d) => d.label)).toContain("Total pagado por el cliente")
+  })
+  it("Payway: cupón y autorización, sin el id interno", () => {
+    const payway: PagoEnLineaDto = {
+      ...base,
+      proveedor: "payway",
+      referencia: "0123456789abcdef0123456789abcdef",
+      cuotas: 1,
+      info: { ...vacio, tipo: "debito", marca: "Visa", cupon: "1560", autorizacion: "180644" },
+    }
+    expect(datosCobroEnLinea(payway, 1210)).toEqual([
+      { label: "Pagó con", valor: "Visa débito" },
+      { label: "Cuotas", valor: "1 pago" },
+      { label: "Cupón", valor: "1560" },
+      { label: "Código de autorización", valor: "180644" },
+    ])
+  })
+})

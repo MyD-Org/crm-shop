@@ -8,6 +8,7 @@
 import type { BadgeTone } from "@myd-org/ui"
 import type { EventoHistorialDto, PagoRevision } from "@/lib/pedidos-repo"
 import { ESTADO_PEDIDO_LABEL, esEstadoPedido, type EstadoPedido } from "@/lib/pedidos-transiciones"
+import { textoMedioCobrado, type PagoEnLineaDto } from "@/lib/pago-en-linea"
 import { fmtMonto } from "../comprobantes/format"
 
 /** 123456.7 → "$ 123.456,70". Reusa el formateador de moneda del admin (comprobantes). */
@@ -319,4 +320,28 @@ export function textoEvento(evento: EventoHistorialDto): string {
     default:
       return "Movimiento del pedido"
   }
+}
+
+/**
+ * Datos del cobro en línea para la tarjeta "Pago" del detalle: con qué pagó, cuotas, total con
+ * interés (sólo si difiere del total del pedido), fecha y los números para buscarlo en el proveedor.
+ * Sólo los que hay: un pago anterior a `pago_info` muestra medio, cuotas y número de operación.
+ */
+export function datosCobroEnLinea(p: PagoEnLineaDto, totalPedido: number): { label: string; valor: string }[] {
+  const datos: { label: string; valor: string }[] = []
+  const medio = textoMedioCobrado(p)
+  if (medio) datos.push({ label: "Pagó con", valor: medio })
+  if (p.cuotas != null && p.cuotas >= 1) {
+    datos.push({ label: "Cuotas", valor: p.cuotas === 1 ? "1 pago" : `${p.cuotas} cuotas` })
+  }
+  if (p.totalPagado != null && Math.abs(p.totalPagado - totalPedido) > 0.01) {
+    datos.push({ label: "Total pagado por el cliente", valor: fmtMoneda(p.totalPagado) })
+  }
+  if (p.info.aprobadoEn) datos.push({ label: "Fecha del pago", valor: fmtFechaPedido(p.info.aprobadoEn) })
+  if (p.proveedor === "mercadopago" && p.referencia) {
+    datos.push({ label: "N° de operación de Mercado Pago", valor: p.referencia })
+  }
+  if (p.info.cupon) datos.push({ label: "Cupón", valor: p.info.cupon })
+  if (p.info.autorizacion) datos.push({ label: "Código de autorización", valor: p.info.autorizacion })
+  return datos
 }

@@ -71,6 +71,7 @@ export async function estadoPagoDelPedido(
             reversion: estado.reversion,
             cuotas: estado.cuotasPagadas,
             totalPagado: estado.totalPagado,
+            ...(estado.info ? { info: estado.info } : {}),
           });
           if (estado.estado === "fallido" && estado.motivo) mensaje = MENSAJE_RECHAZO[estado.motivo];
           pedido = (await getPedidoParaPago(id, dueno)) ?? pedido;

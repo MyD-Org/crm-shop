@@ -19,6 +19,7 @@ import { estadoContacto, predicadoSinContactar } from "@/lib/pedidos-contacto-re
 import { reservaDePendiente, type ReservaPedido } from "@/lib/pedido-reserva"
 import type { ReglaAplicada } from "@/lib/sucursales-zona"
 import { VENTANA_PAGO_MS, motivosNoCancelable, type EntregaTipo, type EstadoPedido, type MotivoNoCancelable } from "@/lib/pedidos-transiciones"
+import { parseInfoPago, type PagoEnLineaDto } from "@/lib/pago-en-linea"
 
 // Ejecutor de consultas: `getDb()` fuera de una transacción, o el `tx` que da `db.transaction`
 // dentro de una. Todas las escrituras de este archivo que insertan un evento van adentro de una
@@ -1504,6 +1505,21 @@ export interface CuentaPagoDto {
   cuit: string
 }
 
+/** Datos del cobro en línea, o null en un pago offline (sin proveedor). */
+export function toPagoEnLineaDto(
+  row: Pick<PedidoRow, "pagoProveedor" | "pagoReferencia" | "pagoMedio" | "pagoCuotas" | "pagoTotalPagado" | "pagoInfo">,
+): PagoEnLineaDto | null {
+  if (row.pagoProveedor == null) return null
+  return {
+    proveedor: row.pagoProveedor,
+    referencia: row.pagoReferencia,
+    medio: row.pagoMedio,
+    cuotas: row.pagoCuotas,
+    totalPagado: row.pagoTotalPagado == null ? null : num(row.pagoTotalPagado),
+    info: parseInfoPago(row.pagoInfo),
+  }
+}
+
 function toCuentaPagoDto(snapshot: unknown): CuentaPagoDto | null {
   if (!snapshot || typeof snapshot !== "object") return null
   const s = snapshot as Record<string, unknown>
@@ -1563,6 +1579,8 @@ export interface PedidoDetalleDto extends PedidoListaDto {
   pagoActualizadoEn: string | null
   /** Operador que registró o anuló el último pago offline. */
   pagoRegistradoPorNombre: string | null
+  /** Cobro en línea (Mercado Pago, Payway): con qué pagó el comprador. null = pago offline. */
+  pagoEnLinea: PagoEnLineaDto | null
   /** Cuenta bancaria congelada al crear el pedido por transferencia (`pago_cuenta`), o null. */
   cuentaPago: CuentaPagoDto | null
   /** Pagos registrados a mano; los anulados quedan con `anulado`. */
@@ -1691,6 +1709,7 @@ export function toPedidoDetalleDto(
     pagoManual: pagoManual ?? esPagoManual(row),
     pagoActualizadoEn: iso(row.pagoActualizadoEn),
     pagoRegistradoPorNombre: row.pagoRegistradoPorNombre,
+    pagoEnLinea: toPagoEnLineaDto(row),
     cuentaPago: toCuentaPagoDto(row.pagoCuenta),
     pagos,
     comprobantes,

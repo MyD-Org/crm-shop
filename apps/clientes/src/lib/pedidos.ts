@@ -27,6 +27,7 @@ import { disponiblesEnTx, noVisiblesEnTx, ProductoNoDisponibleError, StockInsufi
 import type { Cotizacion } from "./cotizacion";
 import { revisionDeCuotas, type RevisionDeCuotas } from "./pagos/cuotas-validacion";
 import type { MotivoRevisionPedido } from "./motivo-revision";
+import type { InfoPago } from "./pagos/tipos";
 import {
   etiquetaEntrega,
   PAGO_LABEL,
@@ -932,6 +933,8 @@ export interface ResultadoCobro {
   cuotas?: number;
   /** Total pagado con interés, si el proveedor lo informó. */
   totalPagado?: number;
+  /** Medio con el que se cobró (marca, tipo, últimos 4…), si el proveedor lo informó. */
+  info?: InfoPago;
 }
 
 /**
@@ -1172,6 +1175,7 @@ async function registrarCobroTx(
         ...(cobro.medio ? { medio: cobro.medio } : {}),
         ...(cuotas.pagoCuotas !== undefined ? { cuotas: cuotas.pagoCuotas } : {}),
         ...(cuotas.pagoTotalPagado !== undefined ? { totalPagado: cuotas.pagoTotalPagado } : {}),
+        ...(cobro.info ? { info: cobro.info } : {}),
         ...(cambiaIntento ? { estado: cobro.estado } : {}),
         updatedAt: new Date(),
       })
@@ -1185,6 +1189,7 @@ async function registrarCobroTx(
         medio: pagoIntentos.medio,
         cuotas: pagoIntentos.cuotas,
         totalPagado: pagoIntentos.totalPagado,
+        info: pagoIntentos.info,
       })
       .from(pagoIntentos)
       .where(and(eq(pagoIntentos.orderId, pedidoId), intentoDeEsteTenant()))
@@ -1239,6 +1244,7 @@ async function registrarCobroTx(
               ...(decisivo.medio ? { pagoMedio: decisivo.medio } : {}),
               ...(decisivo.cuotas != null ? { pagoCuotas: decisivo.cuotas } : {}),
               ...(decisivo.totalPagado != null ? { pagoTotalPagado: decisivo.totalPagado } : {}),
+              ...(decisivo.info ? { pagoInfo: decisivo.info } : {}),
             }
           : {}),
         ...(nuevo !== actual ? { pagoEstado: nuevo } : {}),

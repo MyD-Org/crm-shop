@@ -7,7 +7,7 @@
  * de un pago.
  */
 
-import type { EstadoPago, MotivoRechazo } from "./tipos";
+import type { EstadoPago, InfoPago, MotivoRechazo } from "./tipos";
 
 /** Forma (parcial) del objeto de pago de Payway: sólo lo que leemos. Todo es opcional a propósito. */
 export interface RespuestaPayway {
@@ -23,7 +23,14 @@ export interface RespuestaPayway {
       reason?: { id?: number | string; description?: string };
     } | null;
     ticket?: string | null;
+    card_authorization_code?: string | null;
   } | null;
+  /** Marca legible ("Visa"). */
+  card_brand?: string | null;
+  /** Id de medio de Payway: marca y modalidad (ver `CREDITO` / `DEBITO`). */
+  payment_method_id?: number | string | null;
+  /** Fecha del pago (ISO 8601). */
+  date?: string | null;
 }
 
 /** Pesos a centavos enteros. Falla ruidoso con un monto que Payway rechazaría o que no es dinero. */
@@ -139,7 +146,30 @@ export function interpretarPago(pago: RespuestaPayway): EstadoPago {
     cuotasPagadas: Number.isInteger(cuotas) && (cuotas as number) >= 1 ? cuotas : undefined,
     totalPagado:
       typeof amount === "number" && Number.isSafeInteger(amount) && amount >= 0 ? amount / 100 : undefined,
+    ...infoDePayway(pago, estado),
   };
+}
+
+const texto = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+/**
+ * Con qué pagó el comprador, según el pago de Payway: marca, crédito o débito, fecha, autorización y
+ * cupón. Payway no informa los últimos 4 dígitos en el pago. `{}` si no informó nada.
+ */
+function infoDePayway(pago: RespuestaPayway, estado: EstadoPago["estado"]): { info?: InfoPago } {
+  const info: InfoPago = {};
+  const id = typeof pago.payment_method_id === "string" ? Number(pago.payment_method_id) : pago.payment_method_id;
+  const idValido = typeof id === "number" && Number.isInteger(id) && IDS_PERMITIDOS.has(id) ? id : null;
+  if (idValido !== null) info.tipo = esDebito(idValido) ? "debito" : "credito";
+  const marca = texto(pago.card_brand) ?? (idValido !== null ? marcaDeId(idValido) : undefined);
+  if (marca) info.marca = marca;
+  const fecha = texto(pago.date);
+  if (estado === "pagado" && fecha && !Number.isNaN(Date.parse(fecha))) info.aprobadoEn = new Date(fecha).toISOString();
+  const autorizacion = texto(pago.status_details?.card_authorization_code);
+  if (autorizacion) info.autorizacion = autorizacion;
+  const cupon = texto(pago.status_details?.ticket);
+  if (cupon) info.cupon = cupon;
+  return Object.keys(info).length > 0 ? { info } : {};
 }
 
 /* ───────────────────────────── payment_method_id ───────────────────────────── */
@@ -178,6 +208,31 @@ export function idMedioPago(marca: string, modalidad: ModalidadTarjeta): number 
   const tabla = modalidad === "debito" ? DEBITO : CREDITO;
   const k = String(marca ?? "").toLowerCase();
   return Object.hasOwn(tabla, k) ? tabla[k] : null;
+}
+
+const MARCAS: Record<string, string> = {
+  visa: "Visa",
+  amex: "American Express",
+  mastercard: "Mastercard",
+  maestro: "Maestro",
+  cabal: "Cabal",
+  naranja: "Naranja",
+  diners: "Diners",
+  nativa: "Nativa",
+  cencosud: "Cencosud",
+  carrefour: "Carrefour",
+  shopping: "Tarjeta Shopping",
+  argencard: "Argencard",
+  sol: "Sol",
+  anonima: "La Anónima",
+  tuya: "Tuya",
+};
+
+/** Marca legible de un `payment_method_id` de las tablas de arriba. */
+function marcaDeId(id: number): string | undefined {
+  const clave = Object.entries(CREDITO).find(([, v]) => v === id)?.[0]
+    ?? Object.entries(DEBITO).find(([, v]) => v === id)?.[0];
+  return clave ? (MARCAS[clave] ?? clave) : undefined;
 }
 
 const IDS_DEBITO = new Set(Object.values(DEBITO));

@@ -15,6 +15,7 @@ import type { EleccionInicialCheckout } from "@/lib/checkout-ubicacion";
 import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfrecibles } from "@/lib/medios-pago-datos";
 import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
+import { volvioConPagoDeMercadoPago } from "@/lib/pagos/mercadopago-preferencia";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -52,13 +53,21 @@ function eleccionParaCheckout(e: EleccionUbicacion): EleccionInicialCheckout {
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pedido?: string | string[]; pago?: string | string[] }>;
+  searchParams: Promise<{
+    pedido?: string | string[];
+    pago?: string | string[];
+    payment_id?: string | string[];
+    collection_id?: string | string[];
+  }>;
 }) {
-  const { pedido, pago } = await searchParams;
+  const { pedido, pago, payment_id, collection_id } = await searchParams;
   // Reintento del pago de un pedido existente (`/checkout?pedido=<id>`): el servidor lo valida.
   const pedidoReintento = typeof pedido === "string" && pedido ? pedido : null;
-  // `pago=mp`: el comprador vuelve de pagar con su cuenta de Mercado Pago (back_urls de la preferencia).
-  const retornoMercadoPago = pedidoReintento !== null && pago === "mp";
+  // `pago=mp`: el comprador vuelve de Mercado Pago (back_urls de la preferencia). Sólo hay un pago que
+  // confirmar si Mercado Pago manda su id: con "Volver a la tienda" sin pagar llega `payment_id=null`
+  // y el checkout tiene que volver a ofrecer los medios de pago, no quedarse en "Estamos confirmando".
+  const retornoMercadoPago =
+    pedidoReintento !== null && pago === "mp" && volvioConPagoDeMercadoPago({ payment_id, collection_id });
   // Las reglas y los medios de pago no dependen de la identidad: arrancan antes de esperarla para
   // que se resuelvan en paralelo con esa consulta en vez de después (misma
   // semántica, una espera menos en la cascada). `identidadActual` decide el

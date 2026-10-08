@@ -79,3 +79,15 @@ export function armarPreferencia(d: DatosPreferencia): Preferencia {
     ...(webhook ? { notification_url: webhook } : {}),
   };
 }
+
+/**
+ * ¿La vuelta de Mercado Pago (`back_urls`) trae un pago? Mercado Pago agrega `payment_id` y
+ * `collection_id` numéricos; si el comprador tocó "Volver a la tienda" sin pagar llegan "null" (o
+ * nada) y no hay nada que confirmar.
+ */
+export function volvioConPagoDeMercadoPago(q: {
+  payment_id?: string | string[];
+  collection_id?: string | string[];
+}): boolean {
+  return [q.payment_id, q.collection_id].flat().some((v) => typeof v === "string" && /^\d+$/.test(v));
+}

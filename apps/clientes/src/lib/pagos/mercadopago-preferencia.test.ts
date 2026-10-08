@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { armarPreferencia, cuotasPreferencia, urlRetorno } from "./mercadopago-preferencia";
+import { armarPreferencia, cuotasPreferencia, urlRetorno, volvioConPagoDeMercadoPago } from "./mercadopago-preferencia";
 
 const base = {
   pedidoId: "ped-1",
@@ -79,5 +79,17 @@ describe("armarPreferencia", () => {
 
   it("redondea el monto a centavos", () => {
     expect(armarPreferencia({ ...base, total: 10.0051 }).items[0].unit_price).toBe(10.01);
+  });
+});
+
+describe("volvioConPagoDeMercadoPago", () => {
+  it("con el id del pago (numérico), hay un pago que confirmar", () => {
+    expect(volvioConPagoDeMercadoPago({ payment_id: "123456789", collection_id: "123456789" })).toBe(true);
+    expect(volvioConPagoDeMercadoPago({ collection_id: "987" })).toBe(true);
+  });
+  it("'Volver a la tienda' sin pagar: payment_id=null o sin parámetros", () => {
+    expect(volvioConPagoDeMercadoPago({ payment_id: "null", collection_id: "null" })).toBe(false);
+    expect(volvioConPagoDeMercadoPago({})).toBe(false);
+    expect(volvioConPagoDeMercadoPago({ payment_id: "" })).toBe(false);
   });
 });

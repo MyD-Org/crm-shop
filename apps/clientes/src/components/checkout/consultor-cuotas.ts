@@ -1,7 +1,7 @@
 /**
  * Quién pide las opciones de cuotas del formulario de pago y cuándo (lo usa `useOpcionesCuotas`; fuera
- * de React para poder testearlo sin DOM): al montar enseguida y, en cada cambio del BIN de la tarjeta,
- * con una demora corta para no consultar por cada dígito. Una consulta nueva aborta la anterior: nunca
+ * de React para poder testearlo sin DOM): al montar enseguida y, en cada cambio de la tarjeta (el BIN en
+ * Mercado Pago, la marca en Payway), con una demora corta para no consultar por cada dígito. Una consulta nueva aborta la anterior: nunca
  * se pisa una respuesta nueva con una vieja.
  */
 import type { OpcionesCuotasPedido } from "@/lib/checkout-cuotas-cliente";
@@ -19,8 +19,8 @@ export function binValido(bin: string | null | undefined): string | null {
   return typeof bin === "string" && /^\d{6,8}$/.test(bin) ? bin : null;
 }
 
-export function crearConsultorCuotas(a: {
-  consultar: (bin: string | null, signal: AbortSignal) => Promise<OpcionesCuotasPedido | null>;
+export function crearConsultorCuotas<T>(a: {
+  consultar: (tarjeta: T, signal: AbortSignal) => Promise<OpcionesCuotasPedido | null>;
   alResultado: (r: ResultadoCuotas) => void;
   demoraMs?: number;
 }) {
@@ -34,13 +34,13 @@ export function crearConsultorCuotas(a: {
     enVuelo = null;
   };
 
-  const lanzar = async (bin: string | null) => {
+  const lanzar = async (tarjeta: T) => {
     temporizador = null;
     const control = new AbortController();
     enVuelo = control;
     let r: ResultadoCuotas;
     try {
-      const datos = await a.consultar(bin, control.signal);
+      const datos = await a.consultar(tarjeta, control.signal);
       r = { datos, error: datos === null };
     } catch {
       r = { datos: null, error: true };
@@ -51,9 +51,9 @@ export function crearConsultorCuotas(a: {
   };
 
   return {
-    pedir(bin: string | null, opciones?: { inmediato?: boolean }) {
+    pedir(tarjeta: T, opciones?: { inmediato?: boolean }) {
       cancelar();
-      temporizador = setTimeout(() => void lanzar(bin), opciones?.inmediato ? 0 : (a.demoraMs ?? DEMORA_BIN_MS));
+      temporizador = setTimeout(() => void lanzar(tarjeta), opciones?.inmediato ? 0 : (a.demoraMs ?? DEMORA_BIN_MS));
     },
     cerrar: cancelar,
   };

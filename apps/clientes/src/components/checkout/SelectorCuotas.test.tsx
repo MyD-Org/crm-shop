@@ -54,4 +54,14 @@ describe("SelectorCuotas", () => {
     const h = html({ elegida: seis });
     expect(h).toContain("CFT 169,00% · TEA 130,00%. Las cuotas con interés las financia Mercado Pago.");
   });
+
+  it("la elegida no está con esta tarjeta: avisa en usted que quedó 1 pago", () => {
+    const aviso = "6 cuotas sin interés no están disponibles con su Naranja. Quedó seleccionado 1 pago; puede elegir otra cantidad.";
+    expect(html({ marca: { id: "naranja", nombre: "Naranja" }, noDisponible: aviso })).toContain(aviso);
+    expect(html()).not.toContain("no están disponibles");
+  });
+
+  it("Payway: nombra a Payway en el aviso de financiación", () => {
+    expect(html({ elegida: seis, procesador: "Payway" })).toContain("las financia Payway.");
+  });
 });

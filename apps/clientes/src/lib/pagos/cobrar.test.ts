@@ -19,7 +19,9 @@ const registrarIntentoFallido = vi.fn();
 const orden: string[] = [];
 
 // Formas de pago del medio (migración 0073 del CRM). Por defecto, sin dato = todas las del procesador.
-const medios = vi.hoisted(() => ({ lista: null as null | { slug: string; opcionesCobro?: string[] }[] }));
+const medios = vi.hoisted(() => ({
+  lista: null as null | { slug: string; opcionesCobro?: string[]; condicionesCuotas?: { cuotas: number; marcas?: string[] | null }[] }[],
+}));
 vi.mock("@/lib/medios-pago-repo", () => ({
   leerMediosPagoTolerante: async () => medios.lista ?? [{ slug: "mercadopago" }, { slug: "payway" }],
 }));
@@ -299,5 +301,39 @@ describe("cobrarPedido — forma de pago habilitada (migración 0073 del CRM)", 
     getPedidoParaPago.mockResolvedValue({ ...pedido("mercadopago"), pagoEstado: "pagado" });
     const r = await pagarCon(mp, { metodoPagoId: "visa" });
     expect(await r.json()).toMatchObject({ estado: "pagado", yaEstaba: true });
+  });
+});
+
+describe("cobrarPedido — cuotas con Payway (rebanada 5 de cuotas-en-el-formulario)", () => {
+  beforeEach(() => {
+    reservarIntento.mockClear();
+  });
+
+  it("9 cuotas que no son sin interés del admin (pedido en 1 pago): 422 sin reservar intento ni llamar a Payway", async () => {
+    getPedidoParaPago.mockResolvedValue(pedido("payway"));
+    const r = await pagarCon(conReferencia(), { metodoPagoId: "1", cuotas: 9 });
+    expect(r.status).toBe(422);
+    expect((await r.json()).motivo).toBe("cuotas_no_disponibles");
+    expect(reservarIntento).not.toHaveBeenCalled();
+    expect(crearPago).not.toHaveBeenCalled();
+  });
+
+  it("6 cuotas sólo Visa y Mastercard con una Naranja (id 24): 422 marca_no_permitida, sin cobrar", async () => {
+    getPedidoParaPago.mockResolvedValue({ ...pedido("payway"), cuotas: 6 });
+    medios.lista = [{ slug: "payway", condicionesCuotas: [{ cuotas: 6, marcas: ["visa", "mastercard"] }] }];
+    const r = await pagarCon(conReferencia(), { metodoPagoId: "24", cuotas: 6 });
+    expect(r.status).toBe(422);
+    expect((await r.json()).motivo).toBe("marca_no_permitida");
+    expect(reservarIntento).not.toHaveBeenCalled();
+    expect(crearPago).not.toHaveBeenCalled();
+  });
+
+  it("la marca sale del id de Payway: Visa crédito (id 1) en 6 cuotas de esa condición se cobra", async () => {
+    getPedidoParaPago.mockResolvedValue({ ...pedido("payway"), cuotas: 6 });
+    medios.lista = [{ slug: "payway", condicionesCuotas: [{ cuotas: 6, marcas: ["visa", "mastercard"] }] }];
+    const r = await pagarCon(conReferencia(), { metodoPagoId: "1", cuotas: 6 });
+    expect(r.status).toBe(200);
+    expect(crearPago).toHaveBeenCalledTimes(1);
+    expect(crearPago.mock.calls[0][0]).toMatchObject({ cuotas: 6 });
   });
 });

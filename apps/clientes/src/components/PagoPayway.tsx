@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Button, Field, Input, RadioGroup, Select, type RadioOption } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
 import {
@@ -22,8 +22,19 @@ import { entornoSdkNavegador } from "@/lib/pagos/payway-sdk-navegador";
 import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { AvisoProcesador } from "@/components/AvisoProcesador";
-import { textoCuotas } from "@/components/pago-brick";
 import { modalidadesPaywayHabilitadas } from "@/components/pago-opciones";
+import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
+import {
+  avisoCuotasNoDisponibles,
+  claveDelPedido,
+  eleccionPayway,
+  opcionesCuotasPayway,
+  opcionesDeRespaldo,
+  textoBotonPagar,
+  type EleccionCuotas,
+} from "@/lib/cuotas-formulario";
+import { SelectorCuotas } from "@/components/checkout/SelectorCuotas";
+import { useOpcionesCuotas } from "@/components/checkout/useOpcionesCuotas";
 import type { OpcionCobro } from "@/lib/pagos/opciones-cobro";
 import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "@/components/PagoIconos";
 
@@ -37,9 +48,16 @@ import { IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from 
  * de este formulario: no se guardan, no se loguean ni se mandan a analítica, y el número y el código
  * se borran apenas se obtiene el token.
  *
- * El monto que se muestra es informativo. El que se cobra sale del pedido persistido en el servidor,
- * igual que las cuotas (congeladas en el pedido: acá no se eligen).
+ * Las cuotas se eligen en el desplegable "Cuotas" (`SelectorCuotas`, el mismo de Mercado Pago), sólo en
+ * crédito: 1 pago y las sin interés de la tienda para la marca detectada por el número o elegida a mano
+ * (Payway no ofrece cuotas con interés). Débito: sin desplegable y en 1 pago. Al pagar, el pedido pasa
+ * primero a las cuotas elegidas (`asegurarCuotasDelPedido`) y recién después se tokeniza y se cobra. El
+ * monto que se muestra es informativo: el que se cobra sale del pedido persistido en el servidor, que
+ * vuelve a validar las cuotas y la marca.
  */
+
+/** Procesador que financiaría las cuotas con interés (no hay en Payway; el aviso lo nombra si aparecen). */
+const PROCESADOR = "Payway";
 
 type Estado =
   | { fase: "formulario" }
@@ -53,8 +71,14 @@ interface Props {
   pedidoId: string;
   numero: string;
   monto: number;
-  /** Cuotas congeladas en el pedido (1 = un pago). */
-  cuotas?: number;
+  /** Medio de pago del pedido (slug): va en el `POST /medio` que re-congela las cuotas antes de cobrar. */
+  pagoMetodo: string;
+  /** Cuotas congeladas hoy en el pedido (null = sin elegir, cuenta como 1 pago). */
+  cuotasPedido: number | null;
+  /** Lo elegido en el desplegable, para el resumen lateral (null al salir del formulario). Estable. */
+  onEleccionCuotas?: (e: EleccionCuotas | null) => void;
+  /** El pedido pasó a otras cuotas (y otro total) antes de cobrar. */
+  onPedidoActualizado?: (p: { cuotas: number | null; total: number }) => void;
   /**
    * Formas de pago habilitadas para el medio en el admin (migración 0073 del CRM). Sin valor, crédito
    * y débito. Las deshabilitadas no se muestran; el servidor igual las rechaza.
@@ -74,7 +98,7 @@ interface Props {
   onConfirmacionAgotada?: () => void;
 }
 
-type Errores = Partial<Record<"pan" | "venc" | "cvv" | "titular" | "doc" | "marca" | "modalidad", string>>;
+type Errores = Partial<Record<"pan" | "venc" | "cvv" | "titular" | "doc" | "marca", string>>;
 
 /** Número de a grupos de 4 para leerlo mejor. El valor que se usa es el normalizado. */
 const agruparPan = (s: string) => normalizarPan(s).replace(/\D/g, "").slice(0, 19).replace(/(\d{4})(?=\d)/g, "$1 ");
@@ -89,7 +113,10 @@ export function PagoPayway({
   pedidoId,
   numero,
   monto,
-  cuotas = 1,
+  pagoMetodo,
+  cuotasPedido,
+  onEleccionCuotas,
+  onPedidoActualizado,
   opcionesCobro,
   onPagado,
   onPendiente,
@@ -111,10 +138,8 @@ export function PagoPayway({
   const [titular, setTitular] = useState("");
   const [doc, setDoc] = useState("");
   const habilitadas = modalidadesPaywayHabilitadas(opcionesCobro);
-  // Arranca en la primera modalidad habilitada que se pueda usar (el débito no, con cuotas congeladas).
-  const [modalidad, setModalidad] = useState<ModalidadTarjeta>(
-    () => habilitadas.find((m) => m !== "debito" || cuotas <= 1) ?? habilitadas[0] ?? "credito",
-  );
+  // Arranca en la primera modalidad habilitada (el débito pasa el pedido a 1 pago al cobrar).
+  const [modalidad, setModalidad] = useState<ModalidadTarjeta>(() => habilitadas[0] ?? "credito");
   // null = se usa la sugerencia por el prefijo del número.
   const [marcaElegida, setMarcaElegida] = useState<Marca | null>(null);
   // La marca se detecta por el número: el selector aparece sólo si no se reconoce o si la quiere cambiar.
@@ -148,7 +173,38 @@ export function PagoPayway({
 
   const sugerida = marcaPorPrefijo(pan);
   const marca = marcaElegida ?? sugerida;
-  const debitoEnCuotas = modalidad === "debito" && cuotas > 1;
+  // Al obtener el token se borra el número, y con él la marca detectada: las cuotas siguen con la marca
+  // del cobro (no se re-consultan a mitad del pago) hasta que vuelva a tipear el número o la marca.
+  const [marcaDelCobro, setMarcaDelCobro] = useState<Marca | null>(null);
+  const marcaCuotas = marcaDelCobro ?? marca;
+
+  /**
+   * Cuotas: las opciones del pedido para la marca de la tarjeta (las de Payway son las mismas que las ids
+   * canónicas del servidor). Sin respuesta del servidor queda lo que el pedido ya tiene congelado, que el
+   * cobro acepta tal cual, más 1 pago para el débito.
+   */
+  const consultar = estado.fase !== "pendiente" && estado.fase !== "pagado";
+  const cuotas = useOpcionesCuotas(pedidoId, { marca: modalidad === "credito" ? marcaCuotas : null }, consultar);
+  const datosCuotas = cuotas.datos;
+  const precioUnPago = datosCuotas?.precioUnPago ?? monto;
+  const opcionesCuotas = useMemo(() => {
+    if (datosCuotas && datosCuotas.opciones.length > 0) return opcionesCuotasPayway(datosCuotas.opciones);
+    const respaldo = opcionesDeRespaldo({ cuotas: cuotasPedido, total: monto });
+    return respaldo.some((o) => o.tipo === "un_pago") ? respaldo : [...opcionesDeRespaldo({ cuotas: null, total: monto }), ...respaldo];
+  }, [datosCuotas, cuotasPedido, monto]);
+  const [claveCuotas, setClaveCuotas] = useState<string | null>(null);
+  // Si la elegida deja de ofrecerse (otra marca), vuelve a 1 pago y se avisa. Débito: siempre 1 pago.
+  // Sin elegir todavía, arranca en lo que el pedido ya tiene congelado (un pedido retomado en N cuotas).
+  const { opcion: eleccion, conSelector } = eleccionPayway({ modalidad, opciones: opcionesCuotas, clave: claveCuotas, cuotasPedido });
+  const noDisponible = conSelector
+    ? avisoCuotasNoDisponibles(opcionesCuotas, claveCuotas ?? claveDelPedido(cuotasPedido), datosCuotas?.marca ?? null)
+    : null;
+
+  useEffect(() => {
+    onEleccionCuotas?.({ opcion: eleccion, precioUnPago });
+  }, [eleccion, precioUnPago, onEleccionCuotas]);
+  // Al salir del formulario (otro medio, pagado), el resumen vuelve al total del pedido.
+  useEffect(() => () => onEleccionCuotas?.(null), [onEleccionCuotas]);
   // Con 6 dígitos ya se reconoce la marca: antes no se pregunta (con el número vacío confundía).
   const sinReconocer = normalizarPan(pan).replace(/\D/g, "").length >= 6 && !sugerida;
   const mostrarSelectorMarca = cambiarMarca || sinReconocer || marcaElegida !== null || Boolean(errores.marca);
@@ -170,9 +226,6 @@ export function PagoPayway({
     else if (metodoPagoIdDe(marca, modalidad) === null) {
       e.marca = modalidad === "debito" ? "Esa tarjeta no admite débito. Elija crédito u otra tarjeta." : "Seleccione la marca de la tarjeta.";
     }
-    if (debitoEnCuotas) {
-      e.modalidad = "El débito se paga en un solo pago. Vuelva al carrito y elija 1 cuota, o pague con crédito.";
-    }
     return e;
   }
 
@@ -184,7 +237,7 @@ export function PagoPayway({
     setErrores(e);
     if (Object.keys(e).length > 0) {
       // Foco al primer campo con error.
-      const orden = ["pan", "venc", "cvv", "titular", "doc", "marca", "modalidad"] as const;
+      const orden = ["pan", "venc", "cvv", "titular", "doc", "marca"] as const;
       const primero = orden.find((k) => e[k]);
       formRef.current?.querySelector<HTMLElement>(`[data-campo="${primero}"]`)?.focus();
       return;
@@ -192,6 +245,25 @@ export function PagoPayway({
 
     const metodoPagoId = metodoPagoIdDe(marca, modalidad)!;
     setEstado({ fase: "procesando" });
+    setMarcaDelCobro(marca);
+
+    // Antes de tokenizar (el token es de un solo uso): el pedido queda en las cuotas de la opción (N sin
+    // interés de la tienda; 1 para el pago único y el débito). Un 409/422 vuelve a pedir las opciones.
+    const elegida = eleccion;
+    const asegurado = await asegurarCuotasDelPedido({
+      pedidoId,
+      pagoMetodo,
+      cuotas: elegida.pedidoCuotas,
+      totalVisto: datosCuotas ? elegida.total : undefined,
+      actual: { cuotas: cuotasPedido, total: monto },
+    });
+    if (!asegurado.ok) {
+      cuotas.recargar();
+      // Sin token no se cobró nada: se conserva lo tipeado.
+      setEstado({ fase: "rechazado", mensaje: asegurado.error });
+      return;
+    }
+    if (asegurado.cambio) onPedidoActualizado?.({ cuotas: asegurado.cuotas, total: asegurado.total });
 
     const v = formatearVenc(venc).split("/");
     const solicitud = armarSolicitudToken({
@@ -214,7 +286,7 @@ export function PagoPayway({
     setPan("");
     setCvv("");
 
-    const r = await enviarCobro({ pedidoId, token: token.token, bin: token.bin, metodoPagoId, cuotas });
+    const r = await enviarCobro({ pedidoId, token: token.token, bin: token.bin, metodoPagoId, cuotas: elegida.cuotas });
     if (r.fase === "pagado") {
       setEstado({ fase: "pagado" });
       onPagado();
@@ -231,7 +303,7 @@ export function PagoPayway({
       <div className="rounded-xl border border-success/30 bg-success/5 p-5 text-center">
         <p className="text-sm font-bold text-text">Pago acreditado</p>
         <p className="mt-1 text-sm text-muted">
-          Cobramos {fmtPrecio(monto)} para el pedido {numero}.
+          Cobramos {fmtPrecio(eleccion.total)} para el pedido {numero}.
         </p>
       </div>
     );
@@ -275,6 +347,7 @@ export function PagoPayway({
   }
 
   const etiquetaMarca = MARCAS.find((m) => m.id === sugerida)?.etiqueta;
+  const textoBoton = textoBotonPagar(eleccion);
 
   const campos = (
     <div className="flex flex-col gap-4">
@@ -286,7 +359,10 @@ export function PagoPayway({
           inputMode="numeric"
           placeholder="0000 0000 0000 0000"
           value={pan}
-          onChange={(e) => setPan(agruparPan(e.target.value))}
+          onChange={(e) => {
+            setPan(agruparPan(e.target.value));
+            setMarcaDelCobro(null);
+          }}
           disabled={procesando}
         />
       </Field>
@@ -303,7 +379,10 @@ export function PagoPayway({
           <Select
             options={MARCAS.map((m) => ({ label: m.etiqueta, value: m.id }))}
             value={marca ?? ""}
-            onValueChange={(v) => setMarcaElegida(v as Marca)}
+            onValueChange={(v) => {
+              setMarcaElegida(v as Marca);
+              setMarcaDelCobro(null);
+            }}
             placeholder="Seleccionar marca"
             disabled={procesando}
           />
@@ -361,21 +440,30 @@ export function PagoPayway({
         />
       </Field>
 
-      {modalidad === "credito" && (
-        <div className="flex items-center justify-between gap-3 rounded-md bg-bg px-4 py-3 text-sm">
-          <span className="flex flex-col">
-            <span className="text-muted">Cuotas</span>
-            <span className="font-semibold text-text">
-              {cuotas > 1 ? `${cuotas} cuotas sin interés de ${fmtPrecio(monto / cuotas)}` : `1 pago de ${fmtPrecio(monto)}`}
-            </span>
-          </span>
-          <span className="text-right text-muted">Elegidas en el carrito</span>
-        </div>
+      {conSelector && (
+        <SelectorCuotas
+          opciones={opcionesCuotas}
+          elegida={eleccion}
+          onElegir={setClaveCuotas}
+          marca={datosCuotas?.marca ?? null}
+          restringidas={datosCuotas?.restringidas ?? []}
+          procesador={PROCESADOR}
+          noDisponible={noDisponible}
+          deshabilitado={procesando}
+        />
       )}
 
       <Button type="submit" size="lg" loading={procesando} disabled={procesando || config === null}>
         <IconoCandado />
-        {procesando ? "Procesando su pago…" : `Pagar ${fmtPrecio(monto)}`}
+        {procesando ? (
+          "Procesando su pago…"
+        ) : (
+          <>
+            {/* En el celular, la versión corta ("Pagar 6 × $X") para que entre en una línea. */}
+            <span className="sm:hidden">{textoBoton.corto}</span>
+            <span className="hidden sm:inline">{textoBoton.largo}</span>
+          </>
+        )}
       </Button>
 
       {procesando && (
@@ -392,18 +480,16 @@ export function PagoPayway({
       label: "Tarjeta de crédito",
       description: "Visa, Mastercard, American Express, Cabal, Naranja y Diners",
       icon: <IconoTarjeta />,
-      badge: { label: textoCuotas(cuotas), tone: cuotas > 1 ? "success" : "neutral" },
       content: campos,
       disabled: procesando && modalidad !== "credito",
     },
     {
       value: "debito",
       label: "Tarjeta de débito",
-      description: cuotas > 1 ? "Para pagar con débito, pase su compra a un pago." : "Visa, Mastercard, Maestro y Cabal de débito",
+      description: "Visa, Mastercard, Maestro y Cabal de débito",
       icon: <IconoTarjetaDebito />,
-      ...(cuotas > 1 ? { badge: { label: "Sólo en un pago" } } : {}),
       content: campos,
-      disabled: cuotas > 1 || (procesando && modalidad !== "debito"),
+      disabled: procesando && modalidad !== "debito",
     },
   ];
   const opciones = todas.filter((o) => habilitadas.includes(o.value as ModalidadTarjeta));
@@ -415,7 +501,6 @@ export function PagoPayway({
           {estado.mensaje}
         </Alert>
       )}
-      {errores.modalidad && <Alert tone="danger">{errores.modalidad}</Alert>}
 
       <TituloComoPagar />
       <RadioGroup

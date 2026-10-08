@@ -13,7 +13,14 @@ import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloC
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
 import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { asegurarCuotasDelPedido } from "@/lib/checkout-cuotas-cliente";
-import { claveDelPedido, eleccionVigente, opcionesDeRespaldo, textoBotonPagar, type EleccionCuotas } from "@/lib/cuotas-formulario";
+import {
+  avisoCuotasNoDisponibles,
+  claveDelPedido,
+  eleccionVigente,
+  opcionesDeRespaldo,
+  textoBotonPagar,
+  type EleccionCuotas,
+} from "@/lib/cuotas-formulario";
 import { SelectorCuotas } from "./checkout/SelectorCuotas";
 import { binValido } from "./checkout/consultor-cuotas";
 import { useOpcionesCuotas } from "./checkout/useOpcionesCuotas";
@@ -160,7 +167,7 @@ export function PagoMercadoPago({
     setIntento((n) => n + 1);
     setBin(null);
   }
-  const cuotas = useOpcionesCuotas(pedidoId, opcion === "credito" ? bin : null, !faltaKey);
+  const cuotas = useOpcionesCuotas(pedidoId, { bin: opcion === "credito" ? bin : null }, !faltaKey);
   const datosCuotas = cuotas.datos;
   const opcionesCuotas = useMemo(
     () => (datosCuotas && datosCuotas.opciones.length > 0 ? datosCuotas.opciones : opcionesDeRespaldo({ cuotas: cuotasPedido, total: monto })),
@@ -176,6 +183,9 @@ export function PagoMercadoPago({
   // Sin elegir todavía, arranca en lo que el pedido ya tiene congelado (un pedido retomado en N cuotas).
   const eleccion =
     opcion === "credito" ? (eleccionVigente(opcionesCuotas, claveCuotas ?? claveDelPedido(cuotasPedido)) ?? unPago) : unPago;
+  // La elegida no está con la tarjeta cargada: se avisa que quedó 1 pago.
+  const noDisponible =
+    opcion === "credito" ? avisoCuotasNoDisponibles(opcionesCuotas, claveCuotas ?? claveDelPedido(cuotasPedido), datosCuotas?.marca ?? null) : null;
 
   useEffect(() => {
     onEleccionCuotas?.({ opcion: eleccion, precioUnPago });
@@ -538,6 +548,7 @@ export function PagoMercadoPago({
             marca={datosCuotas?.marca ?? null}
             restringidas={datosCuotas?.restringidas ?? []}
             procesador={PROCESADOR}
+            noDisponible={noDisponible}
             deshabilitado={procesando}
           />
         </div>

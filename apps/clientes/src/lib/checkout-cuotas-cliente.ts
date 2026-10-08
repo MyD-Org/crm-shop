@@ -3,7 +3,8 @@
  * `cuotas-en-el-formulario`, design D1/D2):
  *
  * - `consultarOpcionesCuotas`: `POST /api/pedidos/[id]/cuotas` (sin efectos) con el BIN de la tarjeta
- *   cargada; el servidor junta las sin interés de la tienda con los planes de Mercado Pago.
+ *   cargada (Mercado Pago) o su marca (Payway); el servidor junta las sin interés de la tienda con los
+ *   planes de Mercado Pago.
  * - `asegurarCuotasDelPedido`: antes de cobrar, si la opción elegida pide otras cuotas que las que el
  *   pedido tiene congeladas (N sin interés, o 1 para el pago único, las con interés, el débito y la
  *   cuenta de Mercado Pago), UN `POST /api/pedidos/[id]/medio` con el total visto. Se omite si ya
@@ -19,16 +20,22 @@ type Fetcher = (url: string, init: RequestInit & { body: string }) => Promise<Re
 const SIN_CONEXION = "No pudimos conectarnos. Revise su conexión e inténtelo de nuevo.";
 const NO_SE_PUDO = "No pudimos actualizar las cuotas de su pedido. Inténtelo de nuevo.";
 
+/** Con qué tarjeta se consultan las cuotas: Mercado Pago manda el BIN; Payway, la marca (detectada o elegida). */
+export interface ConsultaCuotas {
+  bin?: string | null;
+  marca?: string | null;
+}
+
 export async function consultarOpcionesCuotas(
   pedidoId: string,
-  bin: string | null,
+  consulta: ConsultaCuotas,
   signal: AbortSignal,
   fetcher: Fetcher = fetch,
 ): Promise<OpcionesCuotasPedido | null> {
   const res = await fetcher(`/api/pedidos/${encodeURIComponent(pedidoId)}/cuotas`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(bin ? { bin } : {}),
+    body: JSON.stringify({ ...(consulta.bin ? { bin: consulta.bin } : {}), ...(consulta.marca ? { marca: consulta.marca } : {}) }),
     signal,
   });
   if (!res.ok) return null;

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { OpcionCuotasPedido } from "./cuotas-pedido";
 import {
   avisoConInteres,
+  avisoCuotasNoDisponibles,
+  eleccionPayway,
+  opcionesCuotasPayway,
   claveDelPedido,
   eleccionVigente,
   etiquetaOpcion,
@@ -162,5 +165,56 @@ describe("opcionesDeRespaldo (no se pudieron consultar las cuotas)", () => {
   });
   it("pedido ya congelado sin interés: esas cuotas, que el servidor acepta", () => {
     expect(opcionesDeRespaldo({ cuotas: 3, total: 54000 })).toEqual([{ ...tres }]);
+  });
+});
+
+const seisSinInteres: OpcionCuotasPedido = { clave: "sin_interes-6", cuotas: 6, tipo: "sin_interes", montoCuota: 9500, total: 57000, pedidoCuotas: 6 };
+
+describe("avisoCuotasNoDisponibles (la elegida no está con la tarjeta cargada)", () => {
+  it("Naranja sin 6 cuotas sin interés: lo avisa en usted y dice que quedó 1 pago", () => {
+    expect(avisoCuotasNoDisponibles([unPago, tres], "sin_interes-6", { id: "naranja", nombre: "Naranja" })).toBe(
+      "6 cuotas sin interés no están disponibles con su Naranja. Quedó seleccionado 1 pago; puede elegir otra cantidad.",
+    );
+  });
+  it("una con interés que la tarjeta no tiene: sin decir 'sin interés'", () => {
+    expect(avisoCuotasNoDisponibles([unPago], "con_interes-18", { id: "amex", nombre: "American Express" })).toBe(
+      "18 cuotas no están disponibles con su American Express. Quedó seleccionado 1 pago; puede elegir otra cantidad.",
+    );
+  });
+  it("sin aviso si sigue ofreciéndose, si no eligió nada, si es 1 pago o si no hay tarjeta cargada", () => {
+    expect(avisoCuotasNoDisponibles([unPago, tres], "sin_interes-3", { id: "visa", nombre: "Visa" })).toBeNull();
+    expect(avisoCuotasNoDisponibles([unPago, tres], null, { id: "visa", nombre: "Visa" })).toBeNull();
+    expect(avisoCuotasNoDisponibles([unPago, tres], "un_pago-1", { id: "visa", nombre: "Visa" })).toBeNull();
+    expect(avisoCuotasNoDisponibles([unPago, tres], "sin_interes-6", null)).toBeNull();
+  });
+  it("marca desconocida (sin nombre): 'su tarjeta'", () => {
+    expect(avisoCuotasNoDisponibles([unPago], "sin_interes-6", { id: null })).toBe(
+      "6 cuotas sin interés no están disponibles con su tarjeta. Quedó seleccionado 1 pago; puede elegir otra cantidad.",
+    );
+  });
+});
+
+describe("Payway", () => {
+  it("sólo 1 pago y las sin interés de la tienda: nunca las con interés", () => {
+    expect(opcionesCuotasPayway([unPago, tres, seis, seisSinInteres])).toEqual([unPago, tres, seisSinInteres]);
+  });
+  it("crédito: la elegida, con desplegable", () => {
+    expect(eleccionPayway({ modalidad: "credito", opciones: [unPago, tres, seisSinInteres], clave: "sin_interes-6", cuotasPedido: null })).toEqual({
+      opcion: seisSinInteres,
+      conSelector: true,
+    });
+  });
+  it("crédito sin elegir: arranca en las cuotas del pedido retomado, si siguen; si no, 1 pago", () => {
+    expect(eleccionPayway({ modalidad: "credito", opciones: [unPago, tres], clave: null, cuotasPedido: 3 }).opcion).toBe(tres);
+    expect(eleccionPayway({ modalidad: "credito", opciones: [unPago, tres], clave: null, cuotasPedido: 6 }).opcion).toBe(unPago);
+  });
+  it("una con interés que llegara igual no se puede elegir: queda 1 pago", () => {
+    expect(eleccionPayway({ modalidad: "credito", opciones: [unPago, seis], clave: "con_interes-6", cuotasPedido: null }).opcion).toBe(unPago);
+  });
+  it("débito: sin desplegable y en 1 pago, aunque el pedido o la elección tengan cuotas", () => {
+    expect(eleccionPayway({ modalidad: "debito", opciones: [unPago, tres], clave: "sin_interes-3", cuotasPedido: 3 })).toEqual({
+      opcion: unPago,
+      conSelector: false,
+    });
   });
 });

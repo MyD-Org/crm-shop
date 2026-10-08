@@ -133,39 +133,25 @@ describe("avisoDelCobro", () => {
 });
 
 describe("armarMailPedido: contacto del pedido a confirmar", () => {
-  const contacto = {
-    mensaje: "Nos comunicaremos dentro de las 24 horas hábiles.",
-    whatsappVisible: "+54 9 11 5555-0100",
-    whatsappUrl: "https://wa.me/5491155550100?text=Hola",
-  };
+  const contacto = { mensaje: "Nos comunicaremos dentro de las 24 horas hábiles." };
 
-  it("recibido: incluye el plazo y el enlace de WhatsApp (escapados), sin mostrar el número", () => {
+  it("recibido: incluye el plazo, sin botón de WhatsApp", () => {
     const m = armarMailPedido({ ...base, aviso: "recibido", contacto });
-    expect(m.html).toContain("Nos comunicaremos dentro de las 24 horas hábiles.");
-    expect(m.html).toContain('href="https://wa.me/5491155550100?text=Hola"');
-    expect(m.html).toContain("Escribir por WhatsApp");
-    expect(m.html).not.toContain("+54 9 11 5555-0100");
-    expect(m.text).toContain("Nos comunicaremos dentro de las 24 horas hábiles.");
-    expect(m.text).toContain("Escríbanos por WhatsApp: https://wa.me/5491155550100?text=Hola");
-  });
-
-  it("recibido por transferencia: sin plazo de contacto ni WhatsApp (ya lleva los datos para transferir)", () => {
-    const m = armarMailPedido({ ...base, aviso: "recibido", contacto, transferencia: { cuenta: null } });
-    expect(m.html).not.toContain(contacto.mensaje);
-    expect(m.html).not.toContain("Escribir por WhatsApp");
-    expect(m.text).not.toContain("WhatsApp");
-  });
-
-  it("sin WhatsApp: sólo el plazo, sin enlace", () => {
-    const m = armarMailPedido({ ...base, aviso: "recibido", contacto: { mensaje: contacto.mensaje } });
+    expect(m.html).toContain(contacto.mensaje);
     expect(m.text).toContain(contacto.mensaje);
     expect(m.html).not.toContain("wa.me");
+    expect(m.html).not.toContain("WhatsApp");
     expect(m.text).not.toContain("WhatsApp");
+  });
+
+  it("recibido por transferencia: sin plazo de contacto (ya lleva los datos para transferir)", () => {
+    const m = armarMailPedido({ ...base, aviso: "recibido", contacto, transferencia: { cuenta: null } });
+    expect(m.html).not.toContain(contacto.mensaje);
   });
 
   it("pago recibido lleva el contacto; el rechazo no", () => {
-    expect(armarMailPedido({ ...base, aviso: "pago_recibido", contacto }).html).toContain("wa.me");
-    expect(armarMailPedido({ ...base, aviso: "pago_rechazado", contacto }).html).not.toContain("wa.me");
+    expect(armarMailPedido({ ...base, aviso: "pago_recibido", contacto }).html).toContain(contacto.mensaje);
+    expect(armarMailPedido({ ...base, aviso: "pago_rechazado", contacto }).html).not.toContain(contacto.mensaje);
   });
 
   it("sin contacto (flag apagado) el mail queda como siempre", () => {

@@ -122,14 +122,7 @@ async function enviarAviso(
         ? { transferencia: transferenciaParaMail(pedido.pagoMetodo, pedido.pagoCuenta) }
         : {}),
       ...(contacto
-        ? {
-            contacto: {
-              mensaje: contacto.mensaje,
-              ...(contacto.whatsapp
-                ? { whatsappVisible: contacto.whatsapp.visible, whatsappUrl: contacto.whatsapp.url }
-                : {}),
-            },
-          }
+        ? { contacto: { mensaje: contacto.mensaje } }
         : {}),
     });
 

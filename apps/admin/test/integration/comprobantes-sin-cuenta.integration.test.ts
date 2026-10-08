@@ -121,7 +121,8 @@ describe("admin: comprobante de un comprador sin cuenta corriente", () => {
 
   it("el detalle trae el mismo pedido y un comprobante clásico trae pedido null", async () => {
     const res = await detailRoute(adminReq(`/api/admin/comprobantes/${receiptId}`), idParams(receiptId))
-    expect((await res.json()).pedido).toEqual({ id: pedidoId, numero: pedidoNumero })
+    // Con los datos del pedido para "Registrar pago del pedido" (recién creado: sin pagar ni cancelar).
+    expect((await res.json()).pedido).toMatchObject({ id: pedidoId, numero: pedidoNumero, pagado: false, cancelado: false })
 
     const clasico = await seedReceipt(TENANT_A, "416")
     const res2 = await detailRoute(adminReq(`/api/admin/comprobantes/${clasico.id}`), idParams(clasico.id))
@@ -133,7 +134,8 @@ describe("admin: comprobante de un comprador sin cuenta corriente", () => {
     const ajeno = await seedShopOrder("tenant-b")
     const r = await seedReceipt(TENANT_A, null, { shopOrderId: ajeno.id, clerkUserId: "user_2" })
     const res = await detailRoute(adminReq(`/api/admin/comprobantes/${r.id}`), idParams(r.id))
-    expect((await res.json()).pedido).toEqual({ id: ajeno.id, numero: null })
+    // Ni número ni total: los datos del pedido de otro tenant no se leen.
+    expect((await res.json()).pedido).toEqual({ id: ajeno.id, numero: null, total: null, pagado: false, cancelado: false })
   })
 
   it("GET load-context → 409 en usted, sin llamar a Alegra", async () => {

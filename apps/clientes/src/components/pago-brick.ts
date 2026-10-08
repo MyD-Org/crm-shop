@@ -61,6 +61,8 @@ export function variablesDelTema(): VariablesBrick {
     ["baseColorFirstVariant", token("--color-primary-hover")],
     ["buttonTextColor", token("--color-on-primary")],
     ["textPrimaryColor", token("--color-text")],
+    // Placeholders de nombre y documento. Los de número, vencimiento y código viven en los campos seguros
+    // de Mercado Pago (iframes) y no se pueden cambiar: con otro gris acá quedaban de dos tonos distintos.
     ["textSecondaryColor", token("--color-muted")],
     ["formBackgroundColor", token("--color-surface")],
     ["inputBackgroundColor", token("--color-surface")],

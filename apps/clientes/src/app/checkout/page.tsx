@@ -16,6 +16,7 @@ import type { EleccionUbicacion } from "@/lib/ubicacion";
 import { mediosOfrecibles } from "@/lib/medios-pago-datos";
 import { esCompradorCuentaCorriente, mediosVisiblesPara } from "@/lib/medios-pago";
 import { idPagoDeRetorno } from "@/lib/pagos/mercadopago-preferencia";
+import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
 
 /**
  * Direcciones guardadas para precargar el envío. Si la consulta falla (por
@@ -74,6 +75,7 @@ export default async function CheckoutPage({
   // redirect, así que a ella sí hay que esperarla antes de renderizar.
   const reglasPromise = reglasVentaCacheadas();
   const mediosPromise = mediosOfrecibles();
+  const tarjetasPromise = getTarjetasMercadoPago();
 
   const { clerkUserId, cliente, nombre, email } = await identidadActual();
   if (!clerkUserId && !cliente) {
@@ -88,7 +90,11 @@ export default async function CheckoutPage({
   // Los medios de pago son los del CRM, sin Mercado Pago si faltan las credenciales en el Shop. Las
   // cuotas sin interés viajan en cada medio (`condicionesCuotas`); el servidor sólo las ofrece con el
   // flag `cuotas-cobro` prendido.
-  const [reglas, mediosOfrecidos] = await Promise.all([reglasPromise, mediosPromise]);
+  const [reglas, mediosOfrecidos, tarjetasMercadoPago] = await Promise.all([
+    reglasPromise,
+    mediosPromise,
+    tarjetasPromise,
+  ]);
   // Cuenta corriente: al navegador sólo viaja el medio de su audiencia; al resto, nunca ese medio
   // (ni su nombre ni sus instrucciones). El servidor vuelve a validar en `POST /api/pedidos`.
   const esCuentaCorriente = esCompradorCuentaCorriente(cliente);
@@ -158,6 +164,7 @@ export default async function CheckoutPage({
         sugerirVincular={sugerirVincular}
         sucursales={sucursales}
         mediosPago={mediosPago}
+        tarjetasMercadoPago={tarjetasMercadoPago}
         esCuentaCorriente={esCuentaCorriente}
         eleccionInicial={eleccion}
         pedidoReintento={pedidoReintento}

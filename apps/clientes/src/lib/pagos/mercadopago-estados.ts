@@ -79,7 +79,8 @@ const RECHAZOS: Record<string, MotivoRechazo> = {
   cc_rejected_blacklist: "riesgo",
   rejected_high_risk: "riesgo",
   cc_rejected_3ds_challenge: "validacion_banco",
-  cc_rejected_3ds_mandatory: "validacion_banco",
+  // 3DS obligatorio (ver `modo3DS`) con una tarjeta o un banco que no lo admite.
+  cc_rejected_3ds_mandatory: "sin_3ds",
   // Sin motivo dado por el banco, tarjeta no admitida para la compra o pago repetido por el mismo monto:
   // en los tres sirve otra tarjeta u otro medio.
   cc_rejected_other_reason: "no_aprobado",

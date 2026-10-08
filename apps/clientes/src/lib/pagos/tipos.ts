@@ -69,6 +69,8 @@ export type MotivoRechazo =
   | "no_aprobado"
   /** El banco pidió validar al titular (3DS) y la validación no se completó. */
   | "validacion_banco"
+  /** 3DS obligatorio (compras grandes) y la tarjeta o el banco no lo admite: reintentar no sirve, otra tarjeta u otro medio. */
+  | "sin_3ds"
   | "desconocido";
 
 /**
@@ -108,6 +110,8 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
     "Su tarjeta no aprobó el pago y no se le cobró nada. Pruebe con otra tarjeta o elija otro medio de pago.",
   validacion_banco:
     "Su banco no pudo validar la compra y no se le cobró nada. Inténtelo de nuevo y complete la validación que le pida el banco, o use otra tarjeta.",
+  sin_3ds:
+    "Para compras de este monto su banco tiene que validar la compra, y esta tarjeta no lo permite. No se le cobró nada. Use otra tarjeta o pague por transferencia.",
   desconocido:
     "El pago no se aprobó y no se le cobró nada. Inténtelo de nuevo o elija otro medio de pago.",
 };

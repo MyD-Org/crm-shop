@@ -102,6 +102,11 @@ dominio ni certificado propio.
 | `SHOP_ENABLED` | `false` (o `true` si el shop está deployado) |
 | `NEXT_PUBLIC_SHOP_URL` | URL del shop, solo si `SHOP_ENABLED=true` |
 
+### Mercado Pago (aviso de cuotas, opcional)
+| Var | Valor |
+|---|---|
+| `MP_PUBLIC_KEY` | Clave **pública** (`APP_USR-…`) de la cuenta de Mercado Pago de la tienda. No es un secreto ni un interruptor: sólo permite preguntarle a Mercado Pago si las cuotas sin interés de Medios de pago tienen interés en su cuenta. Sin ella, ese aviso no se muestra y nada más cambia. |
+
 ### Tenant `central-led`
 | Var | Valor |
 |---|---|

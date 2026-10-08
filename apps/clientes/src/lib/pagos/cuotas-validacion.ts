@@ -52,13 +52,43 @@ export type RevisionDeCuotas = "cuotas_distintas" | "monto_distinto";
 const TOLERANCIA_MONTO = 0.0105;
 
 /**
- * Reconciliación: lo que informó el procesador contra lo congelado en el pedido. Sólo se acusa lo
- * que el procesador informó; un pedido sin cuotas congeladas nunca se revisa por esto.
+ * Lo que se le pidió al procesador en un intento (`pago_intentos`, migración 0034). Lo escribe la ruta de
+ * cobro al reservar el intento; la reconciliación lo usa para distinguir un cobro con interés que el
+ * comprador ELIGIÓ de uno que no.
+ */
+export interface IntencionCobro {
+  /** Cuotas pedidas al procesador. */
+  cuotas: number;
+  /** Monto mandado al procesador: el total del pedido (con interés, el precio de 1 pago). */
+  totalEsperado: number;
+  /** true = cuotas con interés del procesador: el comprador paga más que `totalEsperado`. */
+  conInteres: boolean;
+}
+
+/**
+ * Reconciliación: lo que informó el procesador contra lo esperado. Sólo se acusa lo que el procesador
+ * informó.
+ *
+ * - Con intención (intento reservado por la ruta de cobro): se compara contra lo pedido. Con interés, el
+ *   total pagado puede ser MAYOR (el interés lo cobra el procesador); menor es discrepancia, con una
+ *   tolerancia de un centavo por cuota (redondeo de cada cuota).
+ * - Sin intención (intento anterior a la 0034 o recuperado por el webhook): contra lo congelado en el
+ *   pedido; un pedido sin cuotas congeladas nunca se revisa por esto.
  */
 export function revisionDeCuotas(
   pedido: { cuotas: number | null; total: number },
   cobro: { cuotas?: number; totalPagado?: number },
+  intencion: IntencionCobro | null = null,
 ): RevisionDeCuotas | null {
+  if (intencion) {
+    if (typeof cobro.cuotas === "number" && cobro.cuotas !== intencion.cuotas) return "cuotas_distintas";
+    if (typeof cobro.totalPagado !== "number") return null;
+    if (intencion.conInteres) {
+      const tolerancia = Math.max(TOLERANCIA_MONTO, 0.01 * intencion.cuotas);
+      return cobro.totalPagado < intencion.totalEsperado - tolerancia ? "monto_distinto" : null;
+    }
+    return Math.abs(cobro.totalPagado - intencion.totalEsperado) > TOLERANCIA_MONTO ? "monto_distinto" : null;
+  }
   if (pedido.cuotas === null) return null;
   if (typeof cobro.cuotas === "number" && cobro.cuotas !== pedido.cuotas) return "cuotas_distintas";
   if (typeof cobro.totalPagado === "number" && Math.abs(cobro.totalPagado - pedido.total) > TOLERANCIA_MONTO) {

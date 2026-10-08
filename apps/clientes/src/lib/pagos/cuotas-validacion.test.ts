@@ -84,3 +84,75 @@ describe("revisionDeCuotas (reconciliación contra lo que informó el procesador
     expect(revisionDeCuotas({ cuotas: null, total: 1200 }, { cuotas: 12, totalPagado: 2000 })).toBeNull();
   });
 });
+
+describe("revisionDeCuotas con la intención del intento (migración 0034)", () => {
+  const conInteres = (cuotas: number, totalEsperado: number) => ({ cuotas, totalEsperado, conInteres: true });
+  const sinInteres = (cuotas: number, totalEsperado: number) => ({ cuotas, totalEsperado, conInteres: false });
+
+  it("con interés elegido: mismas cuotas y total mayor (el interés) → sin marca", () => {
+    expect(
+      revisionDeCuotas({ cuotas: 1, total: 50000 }, { cuotas: 6, totalPagado: 66070 }, conInteres(6, 50000)),
+    ).toBeNull();
+  });
+
+  it("con interés: el pedido en 1 pago o sin cuotas congeladas (null) igual se revisa", () => {
+    expect(
+      revisionDeCuotas({ cuotas: null, total: 50000 }, { cuotas: 3, totalPagado: 59845 }, conInteres(6, 50000)),
+    ).toBe("cuotas_distintas");
+    expect(
+      revisionDeCuotas({ cuotas: null, total: 50000 }, { cuotas: 6, totalPagado: 66070 }, conInteres(6, 50000)),
+    ).toBeNull();
+  });
+
+  it("con interés: cuotas pagadas distintas de las pedidas → cuotas_distintas", () => {
+    expect(
+      revisionDeCuotas({ cuotas: 1, total: 50000 }, { cuotas: 3, totalPagado: 66070 }, conInteres(6, 50000)),
+    ).toBe("cuotas_distintas");
+  });
+
+  it("con interés: total pagado MENOR al esperado → monto_distinto", () => {
+    expect(
+      revisionDeCuotas({ cuotas: 1, total: 50000 }, { cuotas: 6, totalPagado: 40000 }, conInteres(6, 50000)),
+    ).toBe("monto_distinto");
+  });
+
+  it("con interés: tolera el redondeo de las cuotas (un centavo por cuota)", () => {
+    expect(
+      revisionDeCuotas({ cuotas: 1, total: 50000 }, { cuotas: 6, totalPagado: 49999.95 }, conInteres(6, 50000)),
+    ).toBeNull();
+    expect(
+      revisionDeCuotas({ cuotas: 1, total: 50000 }, { cuotas: 6, totalPagado: 49999.93 }, conInteres(6, 50000)),
+    ).toBe("monto_distinto");
+    // Con una sola cuota la tolerancia sigue siendo un centavo.
+    expect(
+      revisionDeCuotas({ cuotas: 1, total: 50000 }, { cuotas: 1, totalPagado: 49999.98 }, conInteres(1, 50000)),
+    ).toBe("monto_distinto");
+  });
+
+  it("sin interés con intención: contra lo pedido, igual que antes (total distinto → monto_distinto)", () => {
+    expect(
+      revisionDeCuotas({ cuotas: 3, total: 52000 }, { cuotas: 3, totalPagado: 60000 }, sinInteres(3, 52000)),
+    ).toBe("monto_distinto");
+    expect(
+      revisionDeCuotas({ cuotas: 3, total: 52000 }, { cuotas: 3, totalPagado: 52000 }, sinInteres(3, 52000)),
+    ).toBeNull();
+    expect(
+      revisionDeCuotas({ cuotas: 3, total: 52000 }, { cuotas: 6, totalPagado: 52000 }, sinInteres(3, 52000)),
+    ).toBe("cuotas_distintas");
+  });
+
+  it("1 pago con intención y pedido sin cuotas congeladas: SÍ se revisa", () => {
+    expect(
+      revisionDeCuotas({ cuotas: null, total: 50000 }, { cuotas: 6, totalPagado: 66070 }, sinInteres(1, 50000)),
+    ).toBe("cuotas_distintas");
+  });
+
+  it("sin intención (intento anterior o recuperado por el webhook): reglas de antes", () => {
+    expect(revisionDeCuotas({ cuotas: 6, total: 1200 }, { cuotas: 6, totalPagado: 1290 }, null)).toBe("monto_distinto");
+    expect(revisionDeCuotas({ cuotas: null, total: 1200 }, { cuotas: 12, totalPagado: 2000 }, null)).toBeNull();
+  });
+
+  it("datos que el procesador no informó no se acusan", () => {
+    expect(revisionDeCuotas({ cuotas: 1, total: 50000 }, {}, conInteres(6, 50000))).toBeNull();
+  });
+});

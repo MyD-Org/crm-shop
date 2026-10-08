@@ -33,6 +33,7 @@ import {
   statusEfectivo,
   type RespuestaMercadoPago,
 } from "./mercadopago-estados";
+import { credencialesMercadoPago } from "./credenciales";
 import { firmaValida } from "./mercadopago-firma";
 import type { Preferencia } from "./mercadopago-preferencia";
 
@@ -45,11 +46,12 @@ const TIMEOUT_MS = 15_000;
  * falta alguna, el medio `mercadopago` no se ofrece ni se acepta aunque esté activo en el CRM.
  */
 export function mercadoPagoConfigurado(): boolean {
-  return Boolean(process.env.MP_ACCESS_TOKEN) && Boolean(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY);
+  const { accessToken, publicKey } = credencialesMercadoPago();
+  return Boolean(accessToken) && Boolean(publicKey);
 }
 
 function accessToken(): string {
-  const token = process.env.MP_ACCESS_TOKEN;
+  const token = credencialesMercadoPago().accessToken;
   if (!token) {
     // Falla ruidoso: sin token no hay cobro posible, y seguir devolvería un
     // "pendiente" que nadie va a resolver nunca.
@@ -344,7 +346,7 @@ export const mercadoPago: ProveedorPago = {
       signature: req.headers.get("x-signature"),
       requestId: req.headers.get("x-request-id"),
       dataId,
-      secreto: process.env.MP_WEBHOOK_SECRET ?? "",
+      secreto: credencialesMercadoPago().webhookSecret ?? "",
     });
 
     if (!resultado.valido) {

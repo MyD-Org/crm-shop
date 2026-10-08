@@ -25,6 +25,7 @@ import {
   type EstadoPago,
   type ProveedorPago,
 } from "./tipos";
+import { credencialesPayway } from "./credenciales";
 import { armarFraudDetection } from "./payway-antifraude";
 import {
   centavos,
@@ -49,7 +50,7 @@ const PAUSA_MS = 3_000;
 
 /** Base de la API (sin barra final ni `/api/v2`), o null si falta o no es https. */
 function baseUrl(): string | null {
-  const crudo = process.env.PAYWAY_BASE_URL?.trim();
+  const crudo = credencialesPayway().baseUrl;
   if (!crudo) return null;
   let url: URL;
   try {
@@ -66,9 +67,8 @@ function baseUrl(): string | null {
  * la URL base de la API. Sin alguna, el medio `payway` no se ofrece ni se acepta aunque esté activo.
  */
 export function paywayConfigurado(): boolean {
-  return (
-    Boolean(process.env.PAYWAY_API_PRIVATE_KEY) && Boolean(process.env.PAYWAY_API_PUBLIC_KEY) && baseUrl() !== null
-  );
+  const { privateKey, publicKey } = credencialesPayway();
+  return Boolean(privateKey) && Boolean(publicKey) && baseUrl() !== null;
 }
 
 /**
@@ -79,7 +79,7 @@ export function paywayConfigurado(): boolean {
  */
 export function paywayConfigPublica(): { publicKey: string; baseUrl: string } | null {
   const baseUrlOk = baseUrl();
-  const publicKey = process.env.PAYWAY_API_PUBLIC_KEY?.trim();
+  const publicKey = credencialesPayway().publicKey;
   if (!paywayConfigurado() || !baseUrlOk || !publicKey) return null;
   return { publicKey, baseUrl: baseUrlOk };
 }
@@ -109,7 +109,7 @@ export function crearPayway(deps: Deps = {}): ProveedorPago & { requiereBin: tru
   /** Request a la API. Tira `ErrorProveedor(504)` si no hay respuesta (timeout o red). */
   async function pedir(ruta: string, init: { method: "GET" | "POST"; body?: unknown }): Promise<Respuesta> {
     const base = baseUrl();
-    const key = process.env.PAYWAY_API_PRIVATE_KEY;
+    const key = credencialesPayway().privateKey;
     if (!base || !key) throw new Error("Falta la configuración de Payway (PAYWAY_API_PRIVATE_KEY, PAYWAY_BASE_URL).");
 
     let res: Response;

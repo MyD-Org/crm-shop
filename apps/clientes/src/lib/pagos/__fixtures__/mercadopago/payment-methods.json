@@ -1,0 +1,134 @@
+[
+  {
+    "id": "amex",
+    "name": "American Express",
+    "payment_type_id": "credit_card",
+    "status": "active"
+  },
+  {
+    "id": "argencard",
+    "name": "Argencard",
+    "payment_type_id": "credit_card",
+    "status": "active"
+  },
+  {
+    "id": "cabal",
+    "name": "Cabal",
+    "payment_type_id": "credit_card",
+    "status": "active"
+  },
+  {
+    "id": "cabal",
+    "name": "Cabal",
+    "payment_type_id": "prepaid_card",
+    "status": "active"
+  },
+  {
+    "id": "cobroexpress",
+    "name": "Cobro Express",
+    "payment_type_id": "ticket",
+    "status": "testing"
+  },
+  {
+    "id": "debcabal",
+    "name": "Cabal Débito",
+    "payment_type_id": "debit_card",
+    "status": "active"
+  },
+  {
+    "id": "debin_transfer",
+    "name": "DEBIN",
+    "payment_type_id": "bank_transfer",
+    "status": "testing"
+  },
+  {
+    "id": "debmaster",
+    "name": "Mastercard Débito",
+    "payment_type_id": "debit_card",
+    "status": "active"
+  },
+  {
+    "id": "debvisa",
+    "name": "Visa Débito",
+    "payment_type_id": "debit_card",
+    "status": "active"
+  },
+  {
+    "id": "diners",
+    "name": "Diners",
+    "payment_type_id": "credit_card",
+    "status": "active"
+  },
+  {
+    "id": "favacard",
+    "name": "Favacard",
+    "payment_type_id": "credit_card",
+    "status": "testing"
+  },
+  {
+    "id": "maestro",
+    "name": "Maestro",
+    "payment_type_id": "debit_card",
+    "status": "active"
+  },
+  {
+    "id": "master",
+    "name": "Mastercard",
+    "payment_type_id": "credit_card",
+    "status": "active"
+  },
+  {
+    "id": "master",
+    "name": "Mastercard Prepaid",
+    "payment_type_id": "prepaid_card",
+    "status": "active"
+  },
+  {
+    "id": "mercadopago_cc",
+    "name": "Mercado Pago + Banco Patagonia",
+    "payment_type_id": "credit_card",
+    "status": "testing"
+  },
+  {
+    "id": "naranja",
+    "name": "Naranja",
+    "payment_type_id": "credit_card",
+    "status": "active"
+  },
+  {
+    "id": "pagofacil",
+    "name": "Pago Fácil",
+    "payment_type_id": "ticket",
+    "status": "active"
+  },
+  {
+    "id": "rapipago",
+    "name": "Rapipago",
+    "payment_type_id": "ticket",
+    "status": "active"
+  },
+  {
+    "id": "sol",
+    "name": "Sol",
+    "payment_type_id": "credit_card",
+    "status": "testing"
+  },
+  {
+    "id": "ultra",
+    "name": "ULTRA",
+    "payment_type_id": "credit_card",
+    "status": "testing"
+  },
+  {
+    "id": "visa",
+    "name": "Visa",
+    "payment_type_id": "credit_card",
+    "status": "active"
+  },
+  {
+    "id": "visa",
+    "name": "Visa Prepaid",
+    "payment_type_id": "prepaid_card",
+    "status": "active"
+  }
+]

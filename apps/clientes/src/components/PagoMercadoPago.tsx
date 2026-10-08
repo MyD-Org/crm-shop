@@ -2,14 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardPayment, StatusScreen, initMercadoPago } from "@mercadopago/sdk-react";
-import { Button, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
+import { Button, PaymentLogos, RadioGroup, Spinner, type RadioOption } from "@myd-org/ui";
 import { PagoEnConfirmacion } from "@/components/PagoEnConfirmacion";
 import { fmtPrecio } from "@/lib/format";
 import { customizacionBrick, textoCuotas, type CustomizacionSdk, type TipoTarjeta } from "./pago-brick";
 import { AvisoProcesador } from "./AvisoProcesador";
 import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
-import { TarjetasAceptadasModal } from "./TarjetasAceptadasModal";
+import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 
@@ -78,6 +78,8 @@ interface Props {
   onCobroEnCurso?: (enCurso: boolean) => void;
   /** "Estamos confirmando" se agotó sin resultado: el checkout vuelve a ofrecer otras salidas. */
   onConfirmacionAgotada?: () => void;
+  /** Tarjetas que acepta Mercado Pago: sus logos van arriba del formulario (crédito o débito, según la opción). */
+  tarjetas?: TarjetasAceptadas;
 }
 
 interface RespuestaPago {
@@ -102,6 +104,7 @@ export function PagoMercadoPago({
   pagoMercadoPagoId,
   onCobroEnCurso,
   onConfirmacionAgotada,
+  tarjetas,
 }: Props) {
   const [estado, setEstado] = useState<Estado>(iniciarEnConfirmacion ? { fase: "pendiente" } : { fase: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -437,7 +440,12 @@ export function PagoMercadoPago({
 
   const formularioTarjeta = (
     <div className="flex flex-col gap-3">
-      <TarjetasAceptadasModal tipo={tipoTarjeta} />
+      {tarjetas && (
+        <PaymentLogos
+          aria-label={tipoTarjeta === "debito" ? "Tarjetas de débito aceptadas" : "Tarjetas de crédito aceptadas"}
+          logos={tarjetas[tipoTarjeta].map((t) => ({ name: t.nombre, src: t.logo }))}
+        />
+      )}
       {formularioBrick}
     </div>
   );

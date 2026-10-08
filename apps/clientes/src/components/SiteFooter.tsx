@@ -7,6 +7,7 @@ import { textoBarra } from "@/data/footer";
 import { getDatosFooter, getDatosLegales } from "@/lib/home-datos";
 import { columnasFooter } from "@/lib/legales/footer";
 import { getTarjetasMercadoPago } from "@/lib/pagos/tarjetas-aceptadas-mp";
+import { logosTarjetas } from "@/lib/pagos/tarjetas-aceptadas";
 
 /**
  * Footer global del layout. "Led" con el color de marca del tema sobre oscuro
@@ -38,10 +39,7 @@ export async function SiteFooter() {
     getDatosFooter(),
     getTarjetasMercadoPago(),
   ]);
-  // Crédito y débito juntos, sin repetir logos (algunas marcas usan el mismo para los dos).
-  const logos = [...tarjetas.credito, ...tarjetas.debito]
-    .filter((t, i, todas) => todas.findIndex((o) => o.logo === t.logo) === i)
-    .map((t) => ({ name: t.nombre, src: t.logo }));
+  const logos = logosTarjetas(tarjetas);
   return (
     <div className="footer-global">
       <Suspense fallback={null}>

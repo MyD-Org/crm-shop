@@ -23,7 +23,8 @@ export async function getTarjetasMercadoPago(): Promise<TarjetasAceptadas> {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const tarjetas = tarjetasDeMercadoPago(await res.json());
-    cacheLife(tarjetas.credito.length + tarjetas.debito.length > 0 ? "days" : "degradado");
+    if (tarjetas.credito.length + tarjetas.debito.length > 0) cacheLife("days");
+    else cacheLife("degradado");
     return tarjetas;
   } catch (err) {
     console.error("[tarjetas-mp] no se pudo leer la lista de medios de pago:", err);

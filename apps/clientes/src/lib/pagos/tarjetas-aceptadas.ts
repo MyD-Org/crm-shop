@@ -62,3 +62,13 @@ export function tarjetasDeMercadoPago(respuesta: unknown): TarjetasAceptadas {
       .map((m) => ({ nombre: m.name.trim(), logo: m.secure_thumbnail }));
   return { credito: de("credit_card"), debito: de("debit_card") };
 }
+
+/**
+ * Crédito y débito juntos como logos, sin repetir (algunas marcas usan el mismo logo para los dos): la fila
+ * del footer y la tarjeta "Mercado Pago" del checkout.
+ */
+export function logosTarjetas(t: TarjetasAceptadas): { name: string; src: string }[] {
+  return [...t.credito, ...t.debito]
+    .filter((x, i, todas) => todas.findIndex((o) => o.logo === x.logo) === i)
+    .map((x) => ({ name: x.nombre, src: x.logo }));
+}

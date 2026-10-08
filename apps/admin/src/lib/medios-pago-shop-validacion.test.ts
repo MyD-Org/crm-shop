@@ -164,3 +164,30 @@ describe("audiencia del medio (solo cuentas corrientes)", () => {
     })
   })
 })
+
+describe("opcionesCobro (migración 0073)", () => {
+  it("las valida y las deja en orden canónico", () => {
+    expect(validarMedioPagoCambios({ opcionesCobro: ["cuenta_mp", "debito"] })).toEqual({
+      ok: true,
+      cambios: { opcionesCobro: ["debito", "cuenta_mp"] },
+    })
+  })
+
+  it("un valor desconocido o repetido es inválido, con el campo y el mensaje en usted", () => {
+    expect(validarMedioPagoCambios({ opcionesCobro: ["efectivo"] })).toEqual({
+      ok: false,
+      campo: "opcionesCobro",
+      error: "Las formas de pago indicadas no son válidas.",
+    })
+    expect(validarMedioPagoCambios({ opcionesCobro: ["debito", "debito"] })).toMatchObject({ ok: false, campo: "opcionesCobro" })
+  })
+
+  it("una lista vacía pasa la validación del cuerpo: la regla de al menos una se aplica sobre el estado resultante", () => {
+    expect(validarMedioPagoCambios({ opcionesCobro: [] })).toEqual({ ok: true, cambios: { opcionesCobro: [] } })
+  })
+
+  it("sin el campo, el cambio no lo menciona", () => {
+    const r = validarMedioPagoCambios({ nombre: "Mercado Pago" })
+    expect(r.ok && "opcionesCobro" in r.cambios).toBe(false)
+  })
+})

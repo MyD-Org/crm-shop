@@ -3,6 +3,7 @@ import { getDb } from "@/db"
 import { listaPrecioCondiciones, listasPrecioOnline, mediosPagoShop } from "@/db/schema"
 import { leerChips, type ChipMedio } from "@/lib/medios-pago-shop-chips"
 import { avisosDeMedio } from "@/lib/medios-pago-shop-avisos"
+import { OPCIONES_COBRO, errorDeOpcionesResultantes, type OpcionCobro } from "@/lib/medios-pago-shop-opciones"
 import { consultarInteresDeReferencia, type InteresMPCuenta } from "@/lib/mercadopago-planes-aviso"
 import {
   AUDIENCIA_CUENTA_CORRIENTE,
@@ -54,6 +55,8 @@ export interface MedioPagoDto {
   audiencia: AudienciaMedio
   /** Etiquetas que el checkout muestra sobre este medio (hasta 3, en este orden). */
   chips: ChipMedio[]
+  /** Formas de pago del cobro en línea habilitadas (orden canónico). Sólo tienen efecto con cobro en línea. */
+  opcionesCobro: OpcionCobro[]
 }
 
 export interface CondicionCuotasDto {
@@ -94,6 +97,7 @@ export const toMedioPagoDto = (
   mostrarEnFicha: r.mostrarEnFicha,
   audiencia: r.audiencia === AUDIENCIA_CUENTA_CORRIENTE ? AUDIENCIA_CUENTA_CORRIENTE : "publico",
   chips: leerChips(r.chips),
+  opcionesCobro: OPCIONES_COBRO.filter((o) => r.opcionesCobro.includes(o)),
 })
 
 export type ResultadoMedio =
@@ -308,6 +312,14 @@ async function actualizarEnTx(
     const retiro = cambios.aplicaRetiro ?? actual.aplicaRetiro
     const envio = cambios.aplicaEnvio ?? actual.aplicaEnvio
     if (!retiro && !envio) return { kind: "invalid", campo: "aplicaRetiro", error: MSG_SIN_ENTREGA }
+
+    const errorOpciones = errorDeOpcionesResultantes({
+      slug,
+      activo: cambios.activo ?? actual.activo,
+      cobroOnline: actual.cobroOnline,
+      opcionesCobro: cambios.opcionesCobro ?? actual.opcionesCobro,
+    })
+    if (errorOpciones) return { kind: "invalid", campo: "opcionesCobro", error: errorOpciones }
 
     // Medio solo para cuentas corrientes: se valida contra el estado RESULTANTE (también al editar uno ya marcado).
     const audiencia = cambios.audiencia ?? actual.audiencia

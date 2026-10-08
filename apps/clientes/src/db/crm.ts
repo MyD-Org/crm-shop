@@ -488,6 +488,9 @@ export const crmMediosPagoShop = publico.table("medios_pago_shop", {
   // Migración 0071 del CRM: etiquetas del medio [{texto, tono}], hasta 3. Se lee de forma tolerante
   // (`leerChipsMedio`): lo que no cumple el formato se descarta.
   chips: jsonb("chips").notNull(),
+  // Migración 0073 del CRM: formas de pago del cobro en línea ('credito' | 'debito' | 'cuenta_mp').
+  // Se lee en una consulta aparte, tolerante a la columna ausente (`opcionesCobroDeLosMedios`).
+  opcionesCobro: text("opciones_cobro").array().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

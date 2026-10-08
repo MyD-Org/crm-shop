@@ -17,6 +17,10 @@ const getPedidoParaPago = vi.fn();
 let pedido: PedidoParaPago | null;
 let configurado = true;
 
+// Formas de pago del medio (migración 0073 del CRM): sin dato = todas las de su procesador.
+vi.mock("@/lib/medios-pago-repo", () => ({
+  leerMediosPagoTolerante: async () => [{ slug: "mercadopago" }, { slug: "payway" }],
+}));
 vi.mock("@/lib/auth", () => ({
   identidadActual: async () => ({ clerkUserId: "user_1", cliente: null, email: "ana@cliente.example" }),
 }));

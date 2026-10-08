@@ -70,3 +70,30 @@ describe("pie del medio y slugs en línea", () => {
     expect(slugsPagoEnLinea()).toEqual(["mercadopago", "payway"]);
   });
 });
+
+describe("formas de pago del cobro en línea (migración 0073 del CRM)", () => {
+  const mp = (opcionesCobro?: MedioPago["opcionesCobro"]) => ({ ...medio("mercadopago", true), opcionesCobro });
+
+  it("sin dato (columna sin migrar) se ofrece como hasta ahora", () => {
+    expect(mediosParaModalidad([mp(undefined)], "retiro").map((m) => m.slug)).toEqual(["mercadopago"]);
+  });
+
+  it("con alguna forma habilitada se ofrece", () => {
+    expect(mediosParaModalidad([mp(["debito"])], "retiro").map((m) => m.slug)).toEqual(["mercadopago"]);
+  });
+
+  it("vacío explícito: no se ofrece y los demás medios siguen; el pedido no lo acepta", () => {
+    const medios = [medio("transferencia"), mp([])];
+    expect(mediosParaModalidad(medios, "retiro").map((m) => m.slug)).toEqual(["transferencia"]);
+    expect(pagoValidoConMedios(medios, "retiro", "mercadopago")).toBe(false);
+  });
+
+  it("Payway sólo con la cuenta de Mercado Pago no tiene formas aplicables: no se ofrece", () => {
+    const pw = { ...medio("payway", true), opcionesCobro: ["cuenta_mp" as const] };
+    expect(mediosParaModalidad([pw], "retiro")).toEqual([]);
+  });
+
+  it("un medio manual ignora las formas de pago", () => {
+    expect(mediosParaModalidad([{ ...medio("transferencia"), opcionesCobro: [] }], "retiro")).toHaveLength(1);
+  });
+});

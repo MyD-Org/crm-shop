@@ -512,6 +512,13 @@
       "when": 1792670000000,
       "tag": "0072_atributos_dimerizable_modulos",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1792756400000,
+      "tag": "0073_medios_pago_opciones_cobro",
+      "breakpoints": true
     }
   ]
 }

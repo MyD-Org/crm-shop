@@ -2,6 +2,7 @@
 // formulario de Configuración → Sucursales y ventas. Textos en usted.
 
 import { validarChips, type ChipMedio } from "@/lib/medios-pago-shop-chips"
+import { validarOpciones, type OpcionCobro } from "@/lib/medios-pago-shop-opciones"
 
 export const SLUG_MEDIO_RE = /^[a-z0-9-]{2,30}$/
 export const MAX_NOMBRE = 60
@@ -40,6 +41,12 @@ export interface MedioPagoValido {
   audiencia?: AudienciaMedio
   /** Etiquetas del medio en el checkout (migración 0071). Ausente en el alta = [] (default de la base). */
   chips?: ChipMedio[]
+  /**
+   * Formas de pago del cobro en línea (migración 0073). Ausente = no cambia (default de la base: todas).
+   * La regla "activo con cobro en línea => al menos una aplicable" se valida sobre el estado
+   * resultante, en el repo (errorDeOpcionesResultantes).
+   */
+  opcionesCobro?: OpcionCobro[]
 }
 
 /** Cambios parciales: además de los campos del medio, destacado y ficha. La lista se enlaza por Precios online. */
@@ -101,6 +108,12 @@ function validarCampos(body: Record<string, unknown>): { ok: true; cambios: Camb
     const r = validarChips(body.chips)
     if (!r.ok) return invalido("chips", r.error)
     cambios.chips = r.chips
+  }
+
+  if (body.opcionesCobro !== undefined) {
+    const r = validarOpciones(body.opcionesCobro)
+    if (!r.ok) return invalido("opcionesCobro", r.error)
+    cambios.opcionesCobro = r.opciones
   }
 
   if (body.orden !== undefined) {

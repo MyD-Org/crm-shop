@@ -57,6 +57,8 @@ export type MotivoRechazo =
   | "cuotas_no_disponibles"
   /** La cantidad de cuotas del pago no es la congelada en el pedido (otra lista de precios). */
   | "cuotas_distintas"
+  /** La forma de pago (crédito, débito, cuenta de Mercado Pago) está deshabilitada para el medio en el admin. */
+  | "opcion_no_habilitada"
   /** Se resuelve rehaciendo el intento, sin cambiar nada. */
   | "desafio_vencido"
   /** Requiere que el cliente hable con su banco. */
@@ -96,6 +98,8 @@ export const MENSAJE_RECHAZO: Record<MotivoRechazo, string> = {
     "Esa cantidad de cuotas no está disponible para su tarjeta. Elija otra opción de cuotas.",
   cuotas_distintas:
     "La cantidad de cuotas no coincide con la seleccionada. Vuelva a elegir su medio de pago.",
+  opcion_no_habilitada:
+    "Esa forma de pago no está disponible para este medio. Elija otra forma de pago u otro medio de pago.",
   desafio_vencido:
     "Se venció el tiempo para validar el pago con su banco. Vuelva a intentarlo y complete la validación apenas se la pida.",
   banco_rechazo:

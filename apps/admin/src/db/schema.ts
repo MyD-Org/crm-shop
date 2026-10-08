@@ -1150,6 +1150,13 @@ export const mediosPagoShop = pgTable(
     // Etiquetas del medio en el checkout (migración 0071): [{texto, tono}], hasta 3. Drift solo en
     // SQL: el CHECK de que sea un array; la validación fina vive en medios-pago-shop-chips.ts.
     chips: jsonb("chips").notNull().default(sql`'[]'::jsonb`),
+    // Formas de pago que ofrece el cobro online (migración 0073): 'credito' | 'debito' | 'cuenta_mp'
+    // (Payway ignora 'cuenta_mp'). Drift solo en SQL: el CHECK de valores permitidos; la regla de
+    // "al menos una aplicable" vive en medios-pago-shop-validacion.ts.
+    opcionesCobro: text("opciones_cobro")
+      .array()
+      .notNull()
+      .default(sql`ARRAY['credito','debito','cuenta_mp']::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

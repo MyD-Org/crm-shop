@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
-import { aplicarMedioGuardado, cambiosDeCuotas, cuerpoDePrecios, validarFilasCuotas } from "@/lib/medios-pago-shop-form"
+import { aplicarMedioGuardado, cambiosDeCuotas, cuerpoDeOpciones, cuerpoDePrecios, validarFilasCuotas } from "@/lib/medios-pago-shop-form"
 
 const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPagoConAvisos => ({
   slug,
@@ -19,6 +19,7 @@ const medio = (slug: string, extra: Partial<MedioPagoConAvisos> = {}): MedioPago
   mostrarEnFicha: false,
   audiencia: "publico",
   chips: [],
+  opcionesCobro: ["credito", "debito", "cuenta_mp"],
   avisos: [],
   ...extra,
 })
@@ -154,5 +155,18 @@ describe("cuotas sin interés del medio", () => {
     expect(cambiosDeCuotas("mercadopago", base, [{ cuotas: 6, listaId: LISTA_A, montoMinimo: null }])).toEqual([
       { op: "setCondicion", medioSlug: "mercadopago", cuotas: 6, listaId: LISTA_A, montoMinimo: null },
     ])
+  })
+})
+
+describe("cuerpoDeOpciones", () => {
+  it("sin cambios no manda el campo (aunque el orden sea otro)", () => {
+    expect(cuerpoDeOpciones(["debito", "credito"], ["credito", "debito"])).toEqual({})
+  })
+
+  it("con cambios manda la lista completa en orden canónico", () => {
+    expect(cuerpoDeOpciones(["cuenta_mp", "credito"], ["credito", "debito", "cuenta_mp"])).toEqual({
+      opcionesCobro: ["credito", "cuenta_mp"],
+    })
+    expect(cuerpoDeOpciones([], ["debito"])).toEqual({ opcionesCobro: [] })
   })
 })

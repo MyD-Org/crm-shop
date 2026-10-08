@@ -31,7 +31,9 @@ describe("leerMediosPago", () => {
     const g = dbGrabadora((c) =>
       c.sql.includes("lista_precio_condiciones")
         ? [["efectivo", UUID_LISTA, null]]
-        : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false, "publico", [{ texto: "15% OFF", tono: "exito" }]]],
+        : c.sql.includes("opciones_cobro")
+          ? [["efectivo", ["credito", "debito", "cuenta_mp"]]]
+          : [["efectivo", "Efectivo", "", true, true, false, false, 1, true, false, "publico", [{ texto: "15% OFF", tono: "exito" }]]],
     );
     const r = await leerMediosPago(g.db as never);
     expect(r).toEqual([
@@ -50,6 +52,7 @@ describe("leerMediosPago", () => {
         mostrarEnFicha: false,
         audiencia: "publico",
         chips: [{ texto: "15% OFF", tono: "exito" }],
+        opcionesCobro: ["credito", "debito", "cuenta_mp"],
       },
     ]);
     const medios = g.consultas[0];
@@ -154,6 +157,46 @@ describe("leerMediosPago", () => {
 
   it("tira si la tabla no existe (variante con db que rechaza)", async () => {
     await expect(leerMediosPago(dbQueTira('relation "public.medios_pago_shop" does not exist') as never)).rejects.toThrow();
+  });
+});
+
+describe("formas de pago del cobro en línea (migración 0073 del CRM)", () => {
+  const MP = ["mercadopago", "Mercado Pago", "", true, true, true, true, 0, false, false, "publico"];
+  const conOpciones = (opciones: (c: { sql: string }) => unknown[][]) =>
+    dbGrabadora((c) =>
+      c.sql.includes("lista_precio_condiciones") ? [] : c.sql.includes("opciones_cobro") ? opciones(c) : [MP],
+    );
+
+  it("las lee en una consulta aparte, del tenant; desconocidas se descartan y vacío queda vacío", async () => {
+    const g = conOpciones(() => [["mercadopago", ["cuenta_mp", "efectivo"]], ["payway", []]]);
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.opcionesCobro).toEqual(["cuenta_mp"]);
+    const consulta = g.consultas.find((c) => c.sql.includes("opciones_cobro"))!;
+    expect(consulta.sql).toContain('"public"."medios_pago_shop"');
+    expect(consulta.params).toContain("tenant-ejemplo");
+    // La consulta principal no la pide: una columna ausente no puede tirar la lectura de los medios.
+    expect(g.consultas[0].sql).not.toContain("opciones_cobro");
+  });
+
+  it("vacío explícito se conserva (nunca se lee como todas)", async () => {
+    const g = conOpciones(() => [["mercadopago", []]]);
+    expect((await leerMediosPago(g.db as never))[0].opcionesCobro).toEqual([]);
+  });
+
+  it("columna ausente (42703): los medios siguen, sin el campo (= todas las del procesador)", async () => {
+    const g = conOpciones(() => {
+      throw Object.assign(new Error('column "opciones_cobro" does not exist'), { code: "42703" });
+    });
+    const [mp] = await leerMediosPago(g.db as never);
+    expect(mp.slug).toBe("mercadopago");
+    expect("opcionesCobro" in mp).toBe(false);
+  });
+
+  it("otro error al leerlas no se disfraza: tira", async () => {
+    const g = conOpciones(() => {
+      throw Object.assign(new Error("se cortó la conexión"), { code: "08006" });
+    });
+    await expect(leerMediosPago(g.db as never)).rejects.toThrow();
   });
 });
 

@@ -1,4 +1,5 @@
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
+import { OPCIONES_COBRO, type OpcionCobro } from "@/lib/medios-pago-shop-opciones"
 
 // Lógica pura de la tarjeta de medios de pago (lista de precios, destacado y ficha): arma el
 // cuerpo del PATCH y refleja en la lista local lo que el servidor ya hizo (destacar un medio
@@ -17,6 +18,18 @@ export function cuerpoDePrecios(f: PreciosForm) {
     destacarEnCatalogo: f.destacarEnCatalogo,
     mostrarEnFicha: f.mostrarEnFicha,
   }
+}
+
+/**
+ * Formas de pago del cobro en línea: van en el PATCH sólo si cambiaron, para que editar otro dato
+ * de un medio no dispare la validación de opciones con lo que ya estaba guardado.
+ */
+export function cuerpoDeOpciones(
+  deseadas: readonly OpcionCobro[],
+  actuales: readonly OpcionCobro[],
+): { opcionesCobro?: OpcionCobro[] } {
+  const iguales = deseadas.length === actuales.length && deseadas.every((o) => actuales.includes(o))
+  return iguales ? {} : { opcionesCobro: OPCIONES_COBRO.filter((o) => deseadas.includes(o)) }
 }
 
 const porOrden = (a: MedioPagoConAvisos, b: MedioPagoConAvisos) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)

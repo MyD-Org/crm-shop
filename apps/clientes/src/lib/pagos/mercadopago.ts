@@ -218,6 +218,19 @@ export async function crearPreferencia(preferencia: Preferencia): Promise<string
   return url;
 }
 
+/**
+ * Desde este total (en pesos, estricto: "más de") la validación del banco (3DS) es OBLIGATORIA. Con 3DS,
+ * un contracargo por fraude ("yo no hice esta compra") pasa a ser responsabilidad del banco; en las compras
+ * grandes es donde un fraude más duele. Abajo queda opcional: el banco la pide sólo si ve riesgo, así no se
+ * pierden ventas de tarjetas o bancos que no la soportan (con `mandatory` esos pagos se rechazan con
+ * `cc_rejected_3ds_mandatory`).
+ */
+export const MONTO_3DS_OBLIGATORIO = 300_000;
+
+export function modo3DS(monto: number): "mandatory" | "optional" {
+  return monto > MONTO_3DS_OBLIGATORIO ? "mandatory" : "optional";
+}
+
 export const mercadoPago: ProveedorPago = {
   id: "mercadopago",
 
@@ -241,8 +254,8 @@ export const mercadoPago: ProveedorPago = {
       // depender de que MP nos devuelva la metadata.
       external_reference: datos.pedidoId,
       ...(datos.urlNotificacion ? { notification_url: datos.urlNotificacion } : {}),
-      // Habilita el desafío 3DS: el brick lo renderiza con Status Screen.
-      three_d_secure_mode: "optional",
+      // Desafío 3DS (el brick lo renderiza con Status Screen): obligatorio desde un monto, opcional abajo.
+      three_d_secure_mode: modo3DS(datos.monto),
     };
 
     if (datos.medio === "cuenta_mp") {

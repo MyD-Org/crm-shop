@@ -125,6 +125,7 @@ describe("motivoDeMercadoPago", () => {
     expect(motivoDeMercadoPago("rejected", "cc_rejected_high_risk")).toBe("riesgo");
     expect(motivoDeMercadoPago("rejected", "cc_rejected_invalid_installments")).toBe("cuotas_no_disponibles");
     expect(motivoDeMercadoPago("rejected", "cc_rejected_3ds_challenge")).toBe("validacion_banco");
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_3ds_mandatory")).toBe("sin_3ds");
   });
 
   it("un código nuevo de MP cae en desconocido, no rompe", () => {

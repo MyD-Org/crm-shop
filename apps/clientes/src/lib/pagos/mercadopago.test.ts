@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claveIdempotencia, crearPreferencia, interpretar, mercadoPagoConfigurado } from "./mercadopago";
+import { claveIdempotencia, crearPreferencia, interpretar, mercadoPagoConfigurado, modo3DS } from "./mercadopago";
 import type { DatosPago } from "./tipos";
 
 /**
@@ -381,5 +381,14 @@ describe("interpretar — neto que recibe la tienda y cargos de Mercado Pago", (
       interpretar({ id: 10, status: "pending", transaction_amount: 10000, transaction_details: { net_received_amount: 0 } }).info,
     ).toBeUndefined();
     expect(interpretar({ id: 11, status: "approved", transaction_amount: 10000, fee_details: [] }).info).toBeUndefined();
+  });
+});
+
+describe("modo3DS", () => {
+  it("obligatorio sólo para compras de MÁS de $300.000; opcional hasta ese monto", () => {
+    expect(modo3DS(300_000.01)).toBe("mandatory");
+    expect(modo3DS(1_200_000)).toBe("mandatory");
+    expect(modo3DS(300_000)).toBe("optional");
+    expect(modo3DS(95_956.58)).toBe("optional");
   });
 });

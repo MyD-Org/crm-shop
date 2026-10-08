@@ -1,22 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Button, Field, Input, RadioGroup, Select, type RadioOption } from "@myd-org/ui";
+import { Alert, Button, Field, Input, PaymentLogos, RadioGroup, Select, type RadioOption } from "@myd-org/ui";
 import { fmtPrecio } from "@/lib/format";
 import {
   MARCAS,
+  MARCAS_CONVENIO,
   armarSolicitudToken,
   marcaPorPrefijo,
   metodoPagoIdDe,
   normalizarPan,
   validarCvv,
   validarDocumento,
+  validarMarcaDelConvenio,
   validarPan,
   validarTitular,
   validarVencimiento,
   type Marca,
   type ModalidadTarjeta,
 } from "@/lib/pagos/payway-tarjeta";
+import { marcaAceptadaPorPayway, textoMarcasPayway } from "@/lib/pagos/tarjetas-payway";
+import type { TarjetasAceptadas } from "@/lib/pagos/tarjetas-aceptadas";
 import { crearSesionSdk, precargarSdk, tokenizar, type ConfigPayway } from "@/lib/pagos/payway-token";
 import { entornoSdkNavegador } from "@/lib/pagos/payway-sdk-navegador";
 import { enviarCobro } from "@/lib/pagos/payway-cobro-cliente";
@@ -84,6 +88,8 @@ interface Props {
    * y débito. Las deshabilitadas no se muestran; el servidor igual las rechaza.
    */
   opcionesCobro?: readonly OpcionCobro[];
+  /** Logos de las tarjetas del convenio de Payway (`tarjetasPayway(...)`). Sin logos, el texto de las marcas. */
+  tarjetas?: TarjetasAceptadas;
   /** Se llama cuando el cobro quedó confirmado. */
   onPagado: () => void;
   /** Se llama cuando el procesador todavía no confirmó el cobro (queda "Estamos confirmando"). */
@@ -118,6 +124,7 @@ export function PagoPayway({
   onEleccionCuotas,
   onPedidoActualizado,
   opcionesCobro,
+  tarjetas,
   onPagado,
   onPendiente,
   onRechazado,
@@ -173,6 +180,8 @@ export function PagoPayway({
 
   const sugerida = marcaPorPrefijo(pan);
   const marca = marcaElegida ?? sugerida;
+  // Naranja, Diners y Maestro se reconocen por el número pero no están en el convenio (lo elegido a mano sí).
+  const marcaNoAceptada = marca !== null && !marcaAceptadaPorPayway(marca);
   // Al obtener el token se borra el número, y con él la marca detectada: las cuotas siguen con la marca
   // del cobro (no se re-consultan a mitad del pago) hasta que vuelva a tipear el número o la marca.
   const [marcaDelCobro, setMarcaDelCobro] = useState<Marca | null>(null);
@@ -206,7 +215,9 @@ export function PagoPayway({
   // Al salir del formulario (otro medio, pagado), el resumen vuelve al total del pedido.
   useEffect(() => () => onEleccionCuotas?.(null), [onEleccionCuotas]);
   // Con 6 dígitos ya se reconoce la marca: antes no se pregunta (con el número vacío confundía).
-  const sinReconocer = normalizarPan(pan).replace(/\D/g, "").length >= 6 && !sugerida;
+  const conSeisDigitos = normalizarPan(pan).replace(/\D/g, "").length >= 6;
+  const sinReconocer = conSeisDigitos && (!sugerida || marcaNoAceptada);
+  const avisoMarca = conSeisDigitos && marcaNoAceptada ? validarMarcaDelConvenio(marca, modalidad) : null;
   const mostrarSelectorMarca = cambiarMarca || sinReconocer || marcaElegida !== null || Boolean(errores.marca);
 
   function validar(): Errores {
@@ -222,10 +233,8 @@ export function PagoPayway({
     if (!t.ok) e.titular = t.mensaje;
     const d = validarDocumento(doc);
     if (!d.ok) e.doc = d.mensaje;
-    if (!marca) e.marca = "Seleccione la marca de la tarjeta.";
-    else if (metodoPagoIdDe(marca, modalidad) === null) {
-      e.marca = modalidad === "debito" ? "Esa tarjeta no admite débito. Elija crédito u otra tarjeta." : "Seleccione la marca de la tarjeta.";
-    }
+    const m = validarMarcaDelConvenio(marca, modalidad);
+    if (!m.ok) e.marca = m.mensaje;
     return e;
   }
 
@@ -366,7 +375,7 @@ export function PagoPayway({
           disabled={procesando}
         />
       </Field>
-      {!mostrarSelectorMarca && etiquetaMarca && (
+      {!mostrarSelectorMarca && etiquetaMarca && !marcaNoAceptada && (
         <p className="-mt-2 flex items-center gap-2 text-sm text-muted">
           Tarjeta {etiquetaMarca}.
           <Button type="button" variant="link" size="sm" onClick={() => setCambiarMarca(true)} disabled={procesando}>
@@ -375,10 +384,14 @@ export function PagoPayway({
         </p>
       )}
       {mostrarSelectorMarca && (
-        <Field label="Marca" hint={sugerida && !marcaElegida ? "Detectada por el número; puede cambiarla." : undefined} error={errores.marca}>
+        <Field
+          label="Marca"
+          hint={sugerida && !marcaElegida && !marcaNoAceptada ? "Detectada por el número; puede cambiarla." : undefined}
+          error={errores.marca ?? (avisoMarca && !avisoMarca.ok ? avisoMarca.mensaje : undefined)}
+        >
           <Select
-            options={MARCAS.map((m) => ({ label: m.etiqueta, value: m.id }))}
-            value={marca ?? ""}
+            options={MARCAS_CONVENIO.map((m) => ({ label: m.etiqueta, value: m.id }))}
+            value={marca && !marcaNoAceptada ? marca : ""}
             onValueChange={(v) => {
               setMarcaElegida(v as Marca);
               setMarcaDelCobro(null);
@@ -474,11 +487,17 @@ export function PagoPayway({
     </div>
   );
 
+  // Logos de las tarjetas del convenio, bajo el título de cada opción (sin ninguno, el texto de las marcas).
+  const logosCredito = (tarjetas?.credito ?? []).map((t) => ({ name: t.nombre, src: t.logo }));
+  const logosDebito = (tarjetas?.debito ?? []).map((t) => ({ name: t.nombre, src: t.logo }));
+
   const todas: RadioOption[] = [
     {
       value: "credito",
       label: "Tarjeta de crédito",
-      description: "Visa, Mastercard, American Express, Cabal, Naranja y Diners",
+      ...(logosCredito.length > 0
+        ? { media: <PaymentLogos aria-label="Tarjetas de crédito aceptadas" logos={logosCredito} /> }
+        : { description: textoMarcasPayway("credito") }),
       icon: <IconoTarjeta />,
       content: campos,
       disabled: procesando && modalidad !== "credito",
@@ -486,7 +505,9 @@ export function PagoPayway({
     {
       value: "debito",
       label: "Tarjeta de débito",
-      description: "Visa, Mastercard, Maestro y Cabal de débito",
+      ...(logosDebito.length > 0
+        ? { media: <PaymentLogos aria-label="Tarjetas de débito aceptadas" logos={logosDebito} /> }
+        : { description: textoMarcasPayway("debito") }),
       icon: <IconoTarjetaDebito />,
       content: campos,
       disabled: procesando && modalidad !== "debito",

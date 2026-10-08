@@ -115,3 +115,27 @@ describe("CheckoutClient: sin elección de cuotas antes del pedido", () => {
     expect(checkout).toMatch(/<ResumenTotalPedido confirmado=\{confirmado\} eleccion=\{eleccionCuotas\} \/>/);
   });
 });
+
+describe("PagoPayway: tarjetas del convenio (Visa, Mastercard, American Express y Cabal)", () => {
+  const sinComentarios = componente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  it("muestra los logos bajo crédito y débito, y si no hay ninguno el texto del convenio", () => {
+    expect(sinComentarios).toMatch(/logosCredito\.length > 0[\s\S]*<PaymentLogos[\s\S]*textoMarcasPayway\("credito"\)/);
+    expect(sinComentarios).toMatch(/logosDebito\.length > 0[\s\S]*<PaymentLogos[\s\S]*textoMarcasPayway\("debito"\)/);
+  });
+
+  it("no nombra Naranja ni Diners en los textos de las opciones", () => {
+    expect(sinComentarios).not.toMatch(/"[^"]*(Naranja|Diners)[^"]*"/);
+  });
+
+  it("el selector de marca ofrece sólo las del convenio y se valida contra ellas", () => {
+    expect(sinComentarios).toContain("MARCAS_CONVENIO.map(");
+    expect(sinComentarios).not.toMatch(/options=\{MARCAS\.map/);
+    expect(sinComentarios).toContain("validarMarcaDelConvenio(marca, modalidad)");
+  });
+
+  it("el checkout le pasa los logos y los muestra bajo la tarjeta del medio Payway", () => {
+    expect(checkout).toMatch(/<PagoPayway[\s\S]*tarjetas=\{tarjetasDelConvenioPayway\}/);
+    expect(checkout).toMatch(/m\.slug === SLUG_PAYWAY\s*\?\s*logosTarjetas\(tarjetasDelConvenioPayway\)/);
+  });
+});

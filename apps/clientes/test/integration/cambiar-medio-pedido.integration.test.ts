@@ -149,10 +149,18 @@ describe("cambiarMedioPedido", () => {
     expect((await fila(p.id)).pago_metodo).toBe("mercadopago");
   });
 
-  it("un pedido que ya es sin cobro en línea no se cambia (no_cambia): el mail ya salió", async () => {
-    const p = await crear({ pagoMetodo: "transferencia" });
+  it("un pedido sin cobro en línea que coordina el local no se cambia (no_cambia): el mail ya salió", async () => {
+    const p = await crear({ pagoMetodo: "efectivo" });
     const r = await cambiarMedioPedido(p.id, dueno, { pagoMetodo: "mercadopago", cuotas: null, idPriceList: null, cotizacion: cot(900) });
     expect(r).toEqual({ ok: false, motivo: "no_cambia" });
+    expect((await fila(p.id)).pago_metodo).toBe("efectivo");
+  });
+
+  it("desde la transferencia sin comprobante informado sí se cambia, sobre el mismo pedido", async () => {
+    const p = await crear({ pagoMetodo: "transferencia" });
+    const r = await cambiarMedioPedido(p.id, dueno, { pagoMetodo: "mercadopago", cuotas: null, idPriceList: null, cotizacion: cot(900) });
+    expect(r).toMatchObject({ ok: true, id: p.id });
+    expect((await fila(p.id)).pago_metodo).toBe("mercadopago");
   });
 
   it("líneas distintas a las del pedido: no cambia", async () => {

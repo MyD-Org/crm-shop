@@ -99,10 +99,14 @@ describe("pedidoParaReintentarPago", () => {
     expect(await pedidoParaReintentarPago(dueno, "no-es-un-id", SLUGS)).toEqual({ ok: false, motivo: "no_existe" });
   });
 
-  it("pedido pagado: no se reintenta", async () => {
+  it("pedido pagado: no se reintenta y trae lo justo para \"¡Pago acreditado!\"", async () => {
     const id = await pedidoRechazado();
     await getDb().execute(sql`update shop.orders set pago_estado = 'pagado' where id = ${id}`);
-    expect(await pedidoParaReintentarPago(dueno, id, SLUGS)).toEqual({ ok: false, motivo: "pagado" });
+    expect(await pedidoParaReintentarPago(dueno, id, SLUGS)).toEqual({
+      ok: false,
+      motivo: "pagado",
+      pedido: { id, numero: expect.stringMatching(/^PED-\d+$/), total: 1210 },
+    });
   });
 
   it("cancelado o vencido: no es cobrable", async () => {

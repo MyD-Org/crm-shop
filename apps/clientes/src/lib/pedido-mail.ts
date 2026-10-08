@@ -51,10 +51,9 @@ export interface DatosMailPedido {
   /** Sólo "recibido": el pedido es de una cuenta corriente y `pago` es el nombre de su medio. */
   pagoCuentaCorriente?: boolean;
   /**
-   * "recibido" y "pago_recibido": plazo de contacto (mensaje ya resuelto) y
-   * WhatsApp de la sucursal asignada. Sin `whatsappUrl` va sólo el mensaje.
+   * "recibido" y "pago_recibido": plazo de contacto (mensaje ya resuelto).
    */
-  contacto?: { mensaje: string; whatsappVisible?: string; whatsappUrl?: string };
+  contacto?: { mensaje: string };
   /**
    * Sólo "recibido" y sólo si el pedido es por transferencia: la cuenta congelada en el pedido
    * (`orders.pago_cuenta`). `cuenta: null` = sin cuenta aplicable: mensaje neutro, sin datos.
@@ -203,9 +202,8 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
   const conResumen = d.aviso !== "pago_rechazado" && (d.lineas?.length ?? 0) > 0;
   const transferencia = d.aviso === "recibido" ? d.transferencia : undefined;
   // Con transferencia el mail ya dice qué hacer (datos y plazo del comprobante): sin plazo de contacto
-  // ni botón de WhatsApp, igual que la pantalla del checkout.
+  // igual que la pantalla del checkout.
   const contacto = d.aviso !== "pago_rechazado" && !transferencia ? d.contacto : undefined;
-  const whatsappOk = Boolean(contacto?.whatsappUrl && contacto.whatsappVisible);
   const reintento = d.aviso === "pago_rechazado" ? d.checkoutUrl : undefined;
 
   const cuerpoHtml = `
@@ -215,11 +213,7 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
         <p style="margin:0;font-size:15px;line-height:1.55;color:#77808a">${e(bajada)}</p>
         ${
           contacto
-            ? `<p style="margin:12px 0 0;font-size:15px;line-height:1.55;white-space:pre-line">${e(contacto.mensaje)}</p>${
-                whatsappOk
-                  ? `<p style="margin:12px 0 0;font-size:14px;line-height:1.55"><a href="${e(contacto.whatsappUrl!)}" style="display:inline-block;background:#1e5aa8;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:8px 16px;border-radius:6px">Escribir por WhatsApp</a></p>`
-                  : ""
-              }`
+            ? `<p style="margin:12px 0 0;font-size:15px;line-height:1.55;white-space:pre-line">${e(contacto.mensaje)}</p>`
             : ""
         }
         <p style="margin:12px 0 0;font-size:14px;color:#77808a">Pedido <strong style="color:#1c2733">${e(d.numero)}</strong></p>
@@ -261,9 +255,6 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
     saludo,
     bajada,
     ...(contacto ? ["", contacto.mensaje] : []),
-    ...(contacto && whatsappOk
-      ? [`Escríbanos por WhatsApp: ${contacto.whatsappUrl}`]
-      : []),
     "",
     `Pedido ${d.numero}`,
     ...lineasTexto,

@@ -1,53 +1,149 @@
 import { describe, expect, it } from "vitest";
-import { revisionDeCuotas, validarCuotasPago, type EntradaValidacionCuotas } from "./cuotas-validacion";
+import {
+  requierePlanesMP,
+  revisionDeCuotas,
+  validarCuotasPago,
+  type EntradaValidacionCuotas,
+} from "./cuotas-validacion";
+import type { PlanMP } from "./mercadopago-planes";
 
-const base: EntradaValidacionCuotas = { cuotas: 6, medio: "tarjeta", cuotasPedido: 6 };
+const plan = (cuotas: number, conInteres = true): PlanMP => ({
+  cuotas,
+  montoCuota: 1,
+  total: 1,
+  tasaPct: conInteres ? 10 : 0,
+  cft: conInteres ? "100,00" : null,
+  tea: conInteres ? "80,00" : null,
+  conInteres,
+});
+const planesOk = { ok: true as const, entrada: { metodoPagoId: "visa", emisor: null, logo: null, planes: [plan(3), plan(6), plan(12)] } };
+
+const base: EntradaValidacionCuotas = {
+  cuotas: 6,
+  medio: "tarjeta",
+  cuotasPedido: 6,
+  procesadorId: "mercadopago",
+  opcion: "credito",
+  marca: "visa",
+  marcasCondicion: null,
+  totalPedido: 1200,
+  planes: null,
+};
 const validar = (p: Partial<EntradaValidacionCuotas>) => validarCuotasPago({ ...base, ...p });
-const rechazo = { ok: false, motivo: "cuotas_distintas" };
+const rechazo = (motivo: string) => ({ ok: false, motivo });
+const sinInteres = (cuotas: number, total = 1200) => ({
+  ok: true,
+  cuotas,
+  intencion: { cuotas, totalEsperado: total, conInteres: false },
+});
 
-describe("validarCuotasPago: pedido con cuotas congeladas = IGUALDAD estricta", () => {
-  it("las mismas cuotas pasan", () => {
-    expect(validar({})).toEqual({ ok: true, cuotas: 6 });
-    expect(validar({ cuotas: 3, cuotasPedido: 3 })).toEqual({ ok: true, cuotas: 3 });
+describe("validarCuotasPago: cuotas sin interés congeladas en el pedido = IGUALDAD estricta", () => {
+  it("las mismas cuotas pasan, con la intención sin interés", () => {
+    expect(validar({})).toEqual(sinInteres(6));
+    expect(validar({ cuotas: 3, cuotasPedido: 3 })).toEqual(sinInteres(3));
   });
 
-  it("MENOS cuotas que las congeladas se rechaza (el comprador bajó la cantidad en el formulario)", () => {
-    expect(validar({ cuotas: 3 })).toEqual(rechazo);
-    expect(validar({ cuotas: 1 })).toEqual(rechazo);
-  });
-
-  it("MÁS cuotas que las congeladas se rechaza", () => {
-    expect(validar({ cuotas: 12, cuotasPedido: 6 })).toEqual(rechazo);
-    expect(validar({ cuotas: 6, cuotasPedido: 3 })).toEqual(rechazo);
-  });
-
-  it("un pedido congelado en un pago (1) sólo acepta 1 (o ausente)", () => {
-    expect(validar({ cuotas: 1, cuotasPedido: 1 })).toEqual({ ok: true, cuotas: 1 });
-    expect(validar({ cuotas: undefined, cuotasPedido: 1 })).toEqual({ ok: true, cuotas: 1 });
-    expect(validar({ cuotas: 2, cuotasPedido: 1 })).toEqual(rechazo);
+  it("MENOS o MÁS cuotas que las congeladas se rechaza", () => {
+    expect(validar({ cuotas: 3 })).toEqual(rechazo("cuotas_distintas"));
+    expect(validar({ cuotas: 1 })).toEqual(rechazo("cuotas_distintas"));
+    expect(validar({ cuotas: 12, planes: planesOk })).toEqual(rechazo("cuotas_distintas"));
   });
 
   it("sin cuotas en el body con un pedido en N >= 2: rechazo (no se asume)", () => {
-    expect(validar({ cuotas: undefined })).toEqual(rechazo);
+    expect(validar({ cuotas: undefined })).toEqual(rechazo("cuotas_distintas"));
   });
 
-  it.each([0, -3, "abc", 2.5, Number.NaN, "6", null, {}])("cuotas %s con pedido en 6 → rechazo", (cuotas) => {
-    expect(validar({ cuotas })).toEqual(rechazo);
+  it.each([0, -3, "abc", 2.5, Number.NaN, "6", null, {}, 25])("cuotas %s → rechazo", (cuotas) => {
+    expect(validar({ cuotas })).toEqual(rechazo("cuotas_distintas"));
   });
 
-  it("aplica con cualquier medio del procesador (no depende del proveedor)", () => {
-    expect(validar({ medio: "cuenta_mp", cuotas: 3 })).toEqual(rechazo);
+  it("marca no incluida en la condición → marca_no_permitida", () => {
+    expect(validar({ marcasCondicion: ["visa", "mastercard"], marca: "amex" })).toEqual(rechazo("marca_no_permitida"));
+  });
+
+  it("marca desconocida con condición restringida → marca_no_permitida; sin restricción pasa", () => {
+    expect(validar({ marcasCondicion: ["visa"], marca: null })).toEqual(rechazo("marca_no_permitida"));
+    expect(validar({ marcasCondicion: null, marca: null })).toEqual(sinInteres(6));
+  });
+
+  it("marca incluida pasa", () => {
+    expect(validar({ marcasCondicion: ["visa", "mastercard"], marca: "mastercard" })).toEqual(sinInteres(6));
+  });
+
+  it("Payway: mismas reglas sin interés", () => {
+    expect(validar({ procesadorId: "payway", marcasCondicion: ["visa"], marca: "naranja" })).toEqual(
+      rechazo("marca_no_permitida"),
+    );
+    expect(validar({ procesadorId: "payway" })).toEqual(sinInteres(6));
   });
 });
 
-describe("validarCuotasPago: pedido sin cuotas congeladas (flag apagado o anterior) = clamp de siempre", () => {
-  const legacy = { cuotasPedido: null };
-  it("clamp 1..24", () => {
-    expect(validar({ ...legacy, cuotas: 12 })).toEqual({ ok: true, cuotas: 12 });
-    expect(validar({ ...legacy, cuotas: 30 })).toEqual({ ok: true, cuotas: 1 });
-    expect(validar({ ...legacy, cuotas: 2.7 })).toEqual({ ok: true, cuotas: 2 });
-    expect(validar({ ...legacy, cuotas: "abc" })).toEqual({ ok: true, cuotas: 1 });
-    expect(validar({ ...legacy, cuotas: undefined })).toEqual({ ok: true, cuotas: 1 });
+describe("validarCuotasPago: 1 pago", () => {
+  it.each([1, null])("pedido en %s: 1 (o ausente) pasa", (cuotasPedido) => {
+    expect(validar({ cuotasPedido, cuotas: 1 })).toEqual(sinInteres(1));
+    expect(validar({ cuotasPedido, cuotas: undefined })).toEqual(sinInteres(1));
+  });
+
+  it("no consulta planes ni exige marca", () => {
+    expect(requierePlanesMP({ ...base, cuotas: 1, cuotasPedido: 1 })).toBe(false);
+    expect(validar({ cuotasPedido: 1, cuotas: 1, marca: null, marcasCondicion: ["visa"] })).toEqual(sinInteres(1));
+  });
+});
+
+describe("validarCuotasPago: cuotas con interés de Mercado Pago (pedido en 1 pago o sin congelar)", () => {
+  const conInteres = { cuotasPedido: 1, cuotas: 6, planes: planesOk };
+
+  it("N dentro del plan de MP para el BIN: pasa con intención con interés y el total del pedido", () => {
+    expect(validar(conInteres)).toEqual({
+      ok: true,
+      cuotas: 6,
+      intencion: { cuotas: 6, totalEsperado: 1200, conInteres: true },
+    });
+  });
+
+  it("pedido sin cuotas congeladas (null): ya NO acepta cualquier 1..24, exige el plan", () => {
+    expect(validar({ ...conInteres, cuotasPedido: null }).ok).toBe(true);
+    expect(validar({ ...conInteres, cuotasPedido: null, cuotas: 7 })).toEqual(rechazo("cuotas_distintas"));
+  });
+
+  it("N fuera del plan → cuotas_distintas", () => {
+    expect(validar({ ...conInteres, cuotas: 18 })).toEqual(rechazo("cuotas_distintas"));
+  });
+
+  it("plan de MP sin interés (a cargo del vendedor): pasa con intención sin interés", () => {
+    const planes = { ok: true as const, entrada: { ...planesOk.entrada, planes: [plan(3, false)] } };
+    expect(validar({ ...conInteres, cuotas: 3, planes })).toEqual({
+      ok: true,
+      cuotas: 3,
+      intencion: { cuotas: 3, totalEsperado: 1200, conInteres: false },
+    });
+  });
+
+  it("MP caído (o no consultado) → planes_no_disponibles", () => {
+    expect(validar({ ...conInteres, planes: { ok: false } })).toEqual(rechazo("planes_no_disponibles"));
+    expect(validar({ ...conInteres, planes: null })).toEqual(rechazo("planes_no_disponibles"));
+  });
+
+  it("MP respondió sin planes de crédito para la tarjeta → cuotas_no_disponibles", () => {
+    expect(validar({ ...conInteres, planes: { ok: true, entrada: null } })).toEqual(rechazo("cuotas_no_disponibles"));
+  });
+
+  it("sólo tarjeta de crédito: débito o cuenta de Mercado Pago → cuotas_no_disponibles", () => {
+    expect(validar({ ...conInteres, opcion: "debito" })).toEqual(rechazo("cuotas_no_disponibles"));
+    expect(validar({ ...conInteres, medio: "cuenta_mp", opcion: "cuenta_mp" })).toEqual(rechazo("cuotas_no_disponibles"));
+  });
+
+  it("sólo Mercado Pago: Payway con interés → cuotas_no_disponibles", () => {
+    expect(validar({ ...conInteres, procesadorId: "payway" })).toEqual(rechazo("cuotas_no_disponibles"));
+  });
+
+  it("requierePlanesMP: sólo MP, crédito, N >= 2 sobre un pedido en 1 pago o sin congelar", () => {
+    expect(requierePlanesMP({ ...base, ...conInteres })).toBe(true);
+    expect(requierePlanesMP({ ...base, ...conInteres, cuotasPedido: null })).toBe(true);
+    expect(requierePlanesMP({ ...base, ...conInteres, cuotasPedido: 6 })).toBe(false);
+    expect(requierePlanesMP({ ...base, ...conInteres, procesadorId: "payway" })).toBe(false);
+    expect(requierePlanesMP({ ...base, ...conInteres, opcion: "debito" })).toBe(false);
+    expect(requierePlanesMP({ ...base, ...conInteres, cuotas: "6" })).toBe(false);
   });
 });
 

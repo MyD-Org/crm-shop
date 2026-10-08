@@ -1723,6 +1723,11 @@ export async function pedidoParaCambiarMedio(
   entregaTipo: EntregaTipo;
   pagoMetodo: string;
   lineas: { id: string; qty: number }[];
+  /** Cuotas y total congelados hoy (el formulario de pago los compara con la opción elegida). */
+  cuotas: number | null;
+  total: number;
+  /** Sucursal del pedido (credenciales del procesador por sucursal, a futuro). */
+  sucursal: string | null;
   /** Si ya salieron "Recibimos su pedido" y "Nuevo pedido" (pedido sin cobro en línea). */
   avisosEnviados: boolean;
   /** Lo que el checkout precarga al volver al paso Pago con un pedido retomado. */
@@ -1734,6 +1739,8 @@ export async function pedidoParaCambiarMedio(
     .select({
       entregaTipo: orders.entregaTipo,
       pagoMetodo: orders.pagoMetodo,
+      cuotas: orders.cuotas,
+      total: orders.total,
       sucursal: orders.sucursal,
       entregaCiudad: orders.entregaCiudad,
       entregaDireccion: orders.entregaDireccion,
@@ -1754,6 +1761,9 @@ export async function pedidoParaCambiarMedio(
     entregaTipo: p.entregaTipo as EntregaTipo,
     pagoMetodo: p.pagoMetodo,
     lineas: items.map((i) => ({ id: i.id, qty: Number(i.qty) })),
+    cuotas: p.cuotas,
+    total: Number(p.total),
+    sucursal: p.sucursal ?? null,
     avisosEnviados: p.avisosEnviadosEn !== null,
     entrega: {
       // Con retiro, la sucursal del pedido es el local elegido.

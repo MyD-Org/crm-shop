@@ -42,6 +42,9 @@ const DE_MERCADO_PAGO: Readonly<Record<string, MarcaTarjeta>> = {
   diners: "diners",
 };
 
+/** Los ids de Mercado Pago que se reconocen (el test `marcas.mp-ids` los verifica contra el fixture). */
+export const IDS_MERCADO_PAGO: readonly string[] = Object.keys(DE_MERCADO_PAGO);
+
 export function marcaDeMercadoPago(id: string | null | undefined): MarcaTarjeta | null {
   return typeof id === "string" && Object.hasOwn(DE_MERCADO_PAGO, id) ? DE_MERCADO_PAGO[id] : null;
 }

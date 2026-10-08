@@ -97,10 +97,12 @@ describe("POST /api/pagos/mercadopago — cuotas (igualdad con lo congelado)", (
     expect((await pagar({ cuotas: 6 })).status).toBe(422);
   });
 
-  it("pedido sin cuotas congeladas (flag apagado al crearlo o anterior): clamp 1..24 de siempre", async () => {
+  it("pedido sin cuotas congeladas: 1 pago sí; más cuotas ya no por clamp, sólo con interés de MP (exige BIN)", async () => {
     pedido = { ...pedido, cuotas: null };
-    expect((await pagar({ cuotas: 12, metodoPagoId: "visa" })).status).toBe(200);
-    expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ cuotas: 12 }));
+    expect((await pagar({ cuotas: 12, metodoPagoId: "visa" })).status).toBe(422);
+    expect(crearPago).not.toHaveBeenCalled();
+    expect((await pagar({ cuotas: 1, metodoPagoId: "visa" })).status).toBe(200);
+    expect(crearPago).toHaveBeenCalledWith(expect.objectContaining({ cuotas: 1 }));
   });
 
   it("lo congelado manda aunque el flag se apague después", async () => {

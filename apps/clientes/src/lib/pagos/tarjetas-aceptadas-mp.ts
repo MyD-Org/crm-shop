@@ -1,4 +1,5 @@
 import { cacheLife, cacheTag } from "next/cache";
+import { credencialesMercadoPago } from "./credenciales";
 import { SIN_TARJETAS, tarjetasDeMercadoPago, type TarjetasAceptadas } from "./tarjetas-aceptadas";
 
 export const TAG_TARJETAS_MP = "tarjetas-mp";
@@ -11,7 +12,7 @@ export const TAG_TARJETAS_MP = "tarjetas-mp";
 export async function getTarjetasMercadoPago(): Promise<TarjetasAceptadas> {
   "use cache";
   cacheTag(TAG_TARJETAS_MP);
-  const token = process.env.MP_ACCESS_TOKEN;
+  const token = credencialesMercadoPago().accessToken;
   if (!token) {
     cacheLife("degradado");
     return SIN_TARJETAS;

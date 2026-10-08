@@ -27,8 +27,9 @@ const f = (flags: Partial<Record<FlagDeTest, boolean>>) => {
 describe("cuotas: validación del cobro según lo congelado en el pedido", () => {
   it.each([
     // [cuotas congeladas, cuotas pedidas, resultado]
-    [null, 12, { ok: true, cuotas: 12 }], // sin congelar (flag apagado al crear o anterior): clamp 1..24
-    [null, 30, { ok: true, cuotas: 1 }],
+    [null, 1, { ok: true, cuotas: 1 }], // sin congelar (flag apagado al crear o anterior): 1 pago
+    [null, 12, { ok: false, motivo: "planes_no_disponibles" }], // más cuotas: sólo con interés de MP (planes)
+    [null, 30, { ok: false, motivo: "cuotas_distintas" }],
     [6, 6, { ok: true, cuotas: 6 }],
     [6, 12, { ok: false, motivo: "cuotas_distintas" }], // igualdad estricta
     [6, 3, { ok: false, motivo: "cuotas_distintas" }],
@@ -36,7 +37,19 @@ describe("cuotas: validación del cobro según lo congelado en el pedido", () =>
     [1, undefined, { ok: true, cuotas: 1 }],
     [6, 1.5, { ok: false, motivo: "cuotas_distintas" }],
   ] as const)("congeladas=%s pide=%s → %j", (cuotasPedido, cuotas, esperado) => {
-    expect(validarCuotasPago({ cuotas, medio: "tarjeta", cuotasPedido })).toEqual(esperado);
+    expect(
+      validarCuotasPago({
+        cuotas,
+        medio: "tarjeta",
+        cuotasPedido,
+        procesadorId: "mercadopago",
+        opcion: "credito",
+        marca: "visa",
+        marcasCondicion: null,
+        totalPedido: 100,
+        planes: null,
+      }),
+    ).toMatchObject(esperado);
   });
 });
 

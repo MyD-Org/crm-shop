@@ -10,6 +10,7 @@ import { medioAdmiteCambio } from "@/lib/cambiar-medio-pago";
 import { SLUG_TRANSFERENCIA } from "@/lib/cuentas-bancarias";
 import { procesadorConfigurado, proveedorPago } from "@/lib/pagos";
 import { resolverIntentoAbierto } from "@/lib/pagos/intento-abierto";
+import { mpPublicKeyPara } from "@/lib/pagos/mp-public-key";
 import { avisarOperadorPedidoNuevo, avisarPedidoRecibido, avisarPedidoSiFalta, avisoOperadorAlCrear } from "@/lib/pedido-avisos";
 import { cotizarConMedio } from "@/lib/pedido-medio";
 import { cambiarMedioPedido, intentoAbiertoDelPedido, lineasDelPedidoParaCarrito, pedidoParaCambiarMedio } from "@/lib/pedidos";
@@ -215,6 +216,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       cuentaPago: r.cuentaPago,
       cotizacion,
       ...(contacto ? { contacto } : {}),
+      ...mpPublicKeyPara(pagoMetodo),
     });
   } catch (err) {
     console.error("[/api/pedidos/:id/medio] POST error:", err);

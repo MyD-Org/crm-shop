@@ -1,5 +1,7 @@
 import type { MedioPagoConAvisos } from "@/lib/medios-pago-shop-repo"
 import { OPCIONES_COBRO, type OpcionCobro } from "@/lib/medios-pago-shop-opciones"
+import { ordenarMarcas } from "@/lib/marcas-tarjeta"
+import { MSG_MARCAS_VACIAS } from "@/lib/precios-online-cambios"
 
 // Lógica pura de la tarjeta de medios de pago (lista de precios, destacado y ficha): arma el
 // cuerpo del PATCH y refleja en la lista local lo que el servidor ya hizo (destacar un medio
@@ -52,6 +54,8 @@ export interface FilaCuotasForm {
   listaId: string
   /** "Desde $" (con impuestos), tal como se escribe; vacío o ausente = sin mínimo. */
   montoMinimo?: string
+  /** Tarjetas: null o ausente = "Todas"; arreglo = "Elegir" (vacío es un error). */
+  marcas?: string[] | null
 }
 
 export interface CondicionCuotasForm {
@@ -59,6 +63,8 @@ export interface CondicionCuotasForm {
   listaId: string
   /** Texto numérico con dos decimales; null = sin mínimo. */
   montoMinimo: string | null
+  /** Ids de marcas-tarjeta.ts en el orden de la lista; null = todas. */
+  marcas: string[] | null
 }
 
 const MSG_MONTO = "Indique un monto válido, igual o mayor que cero, o deje 'Desde $' vacío."
@@ -86,7 +92,8 @@ export function validarFilasCuotas(
     if (salida.some((x) => x.cuotas === n)) return { ok: false, error: `No puede repetir la cantidad de cuotas: ${n}.` }
     const montoMinimo = montoDeFila(f.montoMinimo)
     if (montoMinimo === undefined) return { ok: false, error: MSG_MONTO }
-    salida.push({ cuotas: n, listaId: f.listaId, montoMinimo })
+    if (f.marcas && f.marcas.length === 0) return { ok: false, error: MSG_MARCAS_VACIAS }
+    salida.push({ cuotas: n, listaId: f.listaId, montoMinimo, marcas: f.marcas ? ordenarMarcas(f.marcas) : null })
   }
   return { ok: true, filas: salida.sort((a, b) => a.cuotas - b.cuotas) }
 }
@@ -94,6 +101,7 @@ export function validarFilasCuotas(
 /**
  * Cambios de precios (`setCondicion`) que llevan las condiciones de cuotas actuales a las deseadas:
  * altas y cambios de lista primero, bajas al final (`listaId: null`). Lo que no cambia no genera nada.
+ * Cada alta o cambio lleva mínimo y tarjetas completos: `setCondicion` reemplaza la fila entera.
  */
 export function cambiosDeCuotas(
   medioSlug: string,
@@ -106,11 +114,19 @@ export function cambiosDeCuotas(
     cuotas: number
     listaId: string | null
     montoMinimo?: string | null
+    marcas?: string[] | null
   }[] = []
   for (const d of deseadas) {
     const a = actuales.find((x) => x.cuotas === d.cuotas)
-    if (a?.listaId !== d.listaId || (a.montoMinimo ?? null) !== d.montoMinimo) {
-      cambios.push({ op: "setCondicion", medioSlug, cuotas: d.cuotas, listaId: d.listaId, montoMinimo: d.montoMinimo })
+    if (a?.listaId !== d.listaId || (a.montoMinimo ?? null) !== d.montoMinimo || clave(a.marcas) !== clave(d.marcas)) {
+      cambios.push({
+        op: "setCondicion",
+        medioSlug,
+        cuotas: d.cuotas,
+        listaId: d.listaId,
+        montoMinimo: d.montoMinimo,
+        marcas: d.marcas,
+      })
     }
   }
   for (const a of actuales) {
@@ -119,4 +135,9 @@ export function cambiosDeCuotas(
     }
   }
   return cambios
+}
+
+/** Clave comparable de unas tarjetas: "" = todas; si no, ids en el orden de la lista. */
+function clave(marcas: readonly string[] | null | undefined): string {
+  return marcas ? `:${ordenarMarcas(marcas).join(",")}` : ""
 }

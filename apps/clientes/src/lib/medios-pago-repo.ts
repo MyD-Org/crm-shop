@@ -11,7 +11,7 @@
  * (`mediosParaModalidad`), y el nombre de un medio ya desactivado sigue haciendo falta para mostrar
  * pedidos viejos.
  */
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db";
 import { crmListaPrecioCondiciones, crmMediosPagoShop } from "@/db/crm";
 import { shopTenantId } from "./tenant";
@@ -19,6 +19,7 @@ import type { CondicionCuotas } from "./cuotas-sin-interes";
 import type { AudienciaMedio, MedioPago } from "./medios-pago";
 import { leerChipsMedio } from "./medios-pago-chips";
 import { leerOpcionesCobro, type OpcionCobro } from "./pagos/opciones-cobro";
+import { leerMarcas } from "./pagos/marcas";
 
 /** Lo mínimo que hace falta de una conexión o transacción de drizzle. */
 type Ejecutor = Pick<ReturnType<typeof getDb>, "select">;
@@ -61,6 +62,35 @@ async function opcionesCobroDeLosMedios(db: Ejecutor): Promise<Map<string, Opcio
   } catch (err) {
     if (!esColumnaAusente(err)) throw err;
     console.warn("[medios-pago] la migración 0073 del CRM no está aplicada; los medios ofrecen todas sus formas de pago.");
+    return new Map();
+  }
+}
+
+/**
+ * Tarjetas de cada condición de cuotas (migración 0074 del CRM): "slug:cuotas" -> marcas. Consulta
+ * APARTE, como las opciones de cobro: columna ausente => mapa vacío (todas las tarjetas, como antes
+ * de la columna); otro error tira. Una restricción que queda vacía tras descartar las marcas que el
+ * Shop no conoce vuelve inaccesible la condición (`"inaccesible"`).
+ */
+async function marcasDeLasCondiciones(db: Ejecutor): Promise<Map<string, string[] | null | "inaccesible">> {
+  try {
+    const filas = await db
+      .select({
+        medioSlug: crmListaPrecioCondiciones.medioSlug,
+        cuotas: crmListaPrecioCondiciones.cuotas,
+        marcas: crmListaPrecioCondiciones.marcas,
+      })
+      .from(crmListaPrecioCondiciones)
+      .where(and(eq(crmListaPrecioCondiciones.tenantId, shopTenantId()), isNotNull(crmListaPrecioCondiciones.cuotas)));
+    const porCondicion = new Map<string, string[] | null | "inaccesible">();
+    for (const f of filas) {
+      const { marcas, inaccesible } = leerMarcas(f.marcas);
+      porCondicion.set(`${f.medioSlug}:${f.cuotas}`, inaccesible ? "inaccesible" : marcas);
+    }
+    return porCondicion;
+  } catch (err) {
+    if (!esColumnaAusente(err)) throw err;
+    console.warn("[medios-pago] la migración 0074 del CRM no está aplicada; las cuotas valen para todas las tarjetas.");
     return new Map();
   }
 }
@@ -108,12 +138,26 @@ async function condicionesDeLosMedios(db: Ejecutor): Promise<Map<string, Condici
       }
       porMedio.set(f.medioSlug, m);
     }
+    if (filas.some((f) => f.cuotas !== null)) await aplicarMarcas(db, porMedio);
     for (const m of porMedio.values()) m.condicionesCuotas.sort((a, b) => a.cuotas - b.cuotas);
     return porMedio;
   } catch (err) {
     if (!esTablaAusenteOSinPermiso(err)) throw err;
     console.warn("[medios-pago] la migración 0065 del CRM no está aplicada; los medios usan la lista de referencia.");
     return new Map();
+  }
+}
+
+/** Suma las marcas a cada condición de cuotas; las inaccesibles se quitan, con aviso. */
+async function aplicarMarcas(db: Ejecutor, porMedio: Map<string, CondicionesDelMedio>): Promise<void> {
+  const marcas = await marcasDeLasCondiciones(db);
+  for (const [slug, m] of porMedio) {
+    m.condicionesCuotas = m.condicionesCuotas.flatMap((c) => {
+      const v = marcas.get(`${slug}:${c.cuotas}`) ?? null;
+      if (v !== "inaccesible") return [{ ...c, marcas: v }];
+      console.warn(`[medios-pago] ${slug}, ${c.cuotas} cuotas: ninguna de sus tarjetas es conocida por la tienda; no se ofrece.`);
+      return [];
+    });
   }
 }
 

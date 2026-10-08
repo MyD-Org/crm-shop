@@ -221,6 +221,7 @@
     "medio_slug": "text",
     "cuotas": "integer",
     "monto_minimo": "numeric(14, 2)",
+    "marcas": "text[]",
     "created_at": "timestamp with time zone",
     "updated_at": "timestamp with time zone"
   },

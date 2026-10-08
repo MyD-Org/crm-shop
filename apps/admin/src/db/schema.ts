@@ -1526,6 +1526,9 @@ export const listaPrecioCondiciones = pgTable(
     // Mínimo CON impuestos (a la lista del pago único) para ofrecer esa cantidad de cuotas (0066).
     // NULL = sin mínimo. Drift solo-SQL: CHECK (null, o con cuotas y >= 0).
     montoMinimo: numeric("monto_minimo", { precision: 14, scale: 2 }),
+    // Tarjetas a las que aplica esa cantidad de cuotas (0074): ids de src/lib/marcas-tarjeta.ts.
+    // NULL = todas. Drift solo-SQL: CHECK (null, o con cuotas, 1..20 ids [a-z0-9]+).
+    marcas: text("marcas").array(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

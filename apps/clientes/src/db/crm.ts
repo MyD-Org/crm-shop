@@ -512,6 +512,10 @@ export const crmListaPrecioCondiciones = publico.table("lista_precio_condiciones
   // Mínimo CON impuestos para ofrecer esa cantidad de cuotas (migración 0066 del CRM, change
   // `payway-cobro`). numeric -> string; NULL = sin mínimo. Aditiva: el SELECT es de tabla entera.
   montoMinimo: numeric("monto_minimo", { precision: 14, scale: 2 }),
+  // Tarjetas a las que aplica esa cantidad de cuotas (migración 0074 del CRM, change
+  // `cuotas-en-el-formulario`): ids canónicos de `lib/pagos/marcas.ts`; NULL = todas. Se lee en una
+  // consulta aparte, tolerante a la columna ausente (`marcasDeLasCondiciones`).
+  marcas: text("marcas").array(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });

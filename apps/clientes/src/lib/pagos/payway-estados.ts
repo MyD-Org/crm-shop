@@ -228,10 +228,15 @@ const MARCAS: Record<string, string> = {
   tuya: "Tuya",
 };
 
+/** Clave de marca ("visa", "maestro"…) de un `payment_method_id` de las tablas de arriba. */
+export function claveDeMarcaPayway(id: number): string | undefined {
+  return Object.entries(CREDITO).find(([, v]) => v === id)?.[0]
+    ?? Object.entries(DEBITO).find(([, v]) => v === id)?.[0];
+}
+
 /** Marca legible de un `payment_method_id` de las tablas de arriba. */
 function marcaDeId(id: number): string | undefined {
-  const clave = Object.entries(CREDITO).find(([, v]) => v === id)?.[0]
-    ?? Object.entries(DEBITO).find(([, v]) => v === id)?.[0];
+  const clave = claveDeMarcaPayway(id);
   return clave ? (MARCAS[clave] ?? clave) : undefined;
 }
 

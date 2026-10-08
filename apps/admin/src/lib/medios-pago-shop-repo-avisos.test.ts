@@ -17,7 +17,7 @@ const medio = (parcial: Partial<MedioPagoDto>): MedioPagoDto => ({
   listaOnlineId: null,
   listaOnlineNombre: null,
   listaOnlineActiva: false,
-  condicionesCuotas: [{ cuotas: 6, montoMinimo: null, listaId: "l1", listaNombre: "Lista 6", listaActiva: true }],
+  condicionesCuotas: [{ cuotas: 6, montoMinimo: null, marcas: null, listaId: "l1", listaNombre: "Lista 6", listaActiva: true }],
   destacarEnCatalogo: false,
   mostrarEnFicha: false,
   audiencia: "publico",
@@ -79,7 +79,7 @@ describe("conAvisos: cuotas sin interés vs Mercado Pago", () => {
     const f = vi.fn().mockImplementation(async () => ok(planes(0)))
     vi.stubGlobal("fetch", f)
     await conAvisos("t1", [
-      medio({ condicionesCuotas: [{ cuotas: 12, montoMinimo: "250000.50", listaId: "l1", listaNombre: "L", listaActiva: true }] }),
+      medio({ condicionesCuotas: [{ cuotas: 12, montoMinimo: "250000.50", marcas: null, listaId: "l1", listaNombre: "L", listaActiva: true }] }),
     ])
     expect((f.mock.calls[0][0] as URL).searchParams.get("amount")).toBe("250001")
   })

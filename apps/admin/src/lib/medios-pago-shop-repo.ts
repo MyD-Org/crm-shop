@@ -63,6 +63,8 @@ export interface CondicionCuotasDto {
   cuotas: number
   /** Mínimo CON impuestos (texto numérico) desde el que se ofrece esta cantidad de cuotas; null = sin mínimo. */
   montoMinimo: string | null
+  /** Tarjetas a las que aplica (ids de marcas-tarjeta.ts); null = todas. */
+  marcas: string[] | null
   listaId: string
   listaNombre: string
   listaActiva: boolean
@@ -157,6 +159,7 @@ async function condicionesDeCuotas(tenantId: string, ej: Pick<ReturnType<typeof 
       slug: listaPrecioCondiciones.medioSlug,
       cuotas: listaPrecioCondiciones.cuotas,
       montoMinimo: listaPrecioCondiciones.montoMinimo,
+      marcas: listaPrecioCondiciones.marcas,
       listaId: listasPrecioOnline.id,
       listaNombre: listasPrecioOnline.nombre,
       listaActiva: listasPrecioOnline.activa,
@@ -169,7 +172,14 @@ async function condicionesDeCuotas(tenantId: string, ej: Pick<ReturnType<typeof 
   for (const f of filas) {
     if (f.cuotas === null) continue
     const arr = porMedio.get(f.slug) ?? []
-    arr.push({ cuotas: f.cuotas, montoMinimo: f.montoMinimo, listaId: f.listaId, listaNombre: f.listaNombre, listaActiva: f.listaActiva })
+    arr.push({
+      cuotas: f.cuotas,
+      montoMinimo: f.montoMinimo,
+      marcas: f.marcas,
+      listaId: f.listaId,
+      listaNombre: f.listaNombre,
+      listaActiva: f.listaActiva,
+    })
     porMedio.set(f.slug, arr)
   }
   return porMedio

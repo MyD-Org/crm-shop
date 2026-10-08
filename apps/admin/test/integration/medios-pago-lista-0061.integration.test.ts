@@ -185,8 +185,8 @@ describe("cuotas sin interés (rebanada D): condiciones con cantidad de cuotas",
     const [mp] = (await listarMediosPago(A)).filter((m) => m.slug === "tarjeta")
     expect(mp.listaOnlineId).toBe(listaRef)
     expect(mp.condicionesCuotas).toEqual([
-      { cuotas: 3, montoMinimo: null, listaId: listaRef, listaNombre: "Lista A", listaActiva: true },
-      { cuotas: 6, montoMinimo: null, listaId: listaTransf, listaNombre: "Lista transferencia", listaActiva: true },
+      { cuotas: 3, montoMinimo: null, marcas: null, listaId: listaRef, listaNombre: "Lista A", listaActiva: true },
+      { cuotas: 6, montoMinimo: null, marcas: null, listaId: listaTransf, listaNombre: "Lista transferencia", listaActiva: true },
     ])
   })
 

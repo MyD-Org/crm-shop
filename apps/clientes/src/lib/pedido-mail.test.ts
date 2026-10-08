@@ -66,7 +66,24 @@ describe("armarMailPedido", () => {
     expect(ok.html).toContain("Ver mis pedidos");
   });
 
-  it("pago recibido en cuotas con interés: el total del pedido a 1 pago y lo que pagó, informativo", () => {
+  it("pago recibido en cuotas sin interés: el medio con las cuotas que cobró el procesador", () => {
+    const m = armarMailPedido({
+      ...base,
+      aviso: "pago_recibido",
+      lineas: [{ nombre: "Lámpara", cantidad: 1 }],
+      total: 83767.62,
+      pago: "Mercado Pago",
+      pagado: { total: 83767.62, cuotas: 12 },
+    });
+    const t = m.text.replace(/\s/g, " ");
+    expect(t).toMatch(/Total: \$ ?83\.767,62/);
+    expect(t).toMatch(/Pago: Mercado Pago, 12 cuotas de \$ ?6\.980,64\n?/);
+    expect(t).not.toContain("total pagado");
+    expect(m.html.replace(/\s/g, " ")).toMatch(/Mercado Pago, 12 cuotas de \$ ?6\.980,64/);
+    expect(infracciones(m.text, REGISTRO)).toEqual([]);
+  });
+
+  it("pago recibido en cuotas con interés: el total del pedido a 1 pago y, en el pago, lo que pagó", () => {
     const m = armarMailPedido({
       ...base,
       aviso: "pago_recibido",
@@ -77,14 +94,21 @@ describe("armarMailPedido", () => {
     });
     const t = m.text.replace(/\s/g, " ");
     expect(t).toMatch(/Total: \$ ?50\.000/);
-    expect(t).toMatch(/Pagado: \$ ?66\.000(,00)? en 6 cuotas/);
-    expect(m.html.replace(/\s/g, " ")).toMatch(/\$ ?66\.000(,00)? en 6 cuotas/);
+    expect(t).toMatch(/Pago: Mercado Pago, 6 cuotas de \$ ?11\.000,00 \(total pagado \$ ?66\.000,00\)/);
     expect(infracciones(m.text, REGISTRO)).toEqual([]);
   });
 
-  it("sin interés o en 1 pago no agrega la fila de lo pagado", () => {
-    const m = armarMailPedido({ ...base, aviso: "pago_recibido", lineas: [{ nombre: "L", cantidad: 1 }], total: 54000 });
-    expect(m.text).not.toContain("Pagado:");
+  it("en 1 pago, el medio solo", () => {
+    const m = armarMailPedido({
+      ...base,
+      aviso: "pago_recibido",
+      lineas: [{ nombre: "L", cantidad: 1 }],
+      total: 54000,
+      pago: "Mercado Pago",
+      pagado: { total: 54000, cuotas: 1 },
+    });
+    expect(m.text).toContain("Pago: Mercado Pago\n");
+    expect(m.text).not.toContain("cuotas");
   });
 
   it("pago rechazado: sin resumen, con enlace para reintentar el pago", () => {
@@ -211,6 +235,20 @@ describe("armarMailPedidoOperador", () => {
     pago: "Transferencia bancaria",
     pedidoUrl: "https://admin.plataforma.example/admin/pedidos/abc",
   };
+
+  it("pago en cuotas: el medio con las cuotas que cobró el procesador", () => {
+    const m = armarMailPedidoOperador({
+      numero: "PED-00000042",
+      comercio: "Tienda",
+      contactoNombre: "Ana",
+      contactoTelefono: "11",
+      lineas: [{ nombre: "L", cantidad: 1 }],
+      total: 50000,
+      pago: "Mercado Pago",
+      pagado: { total: 66000, cuotas: 6 },
+    });
+    expect(m.text.replace(/\s/g, " ")).toMatch(/Mercado Pago, 6 cuotas de \$ ?11\.000,00 \(total pagado \$ ?66\.000,00\)/);
+  });
 
   it("cambio de medio: asunto y título propios, con el medio anterior y el nuevo", () => {
     const m = armarMailPedidoOperador({ ...op, pago: "Mercado Pago", medioAnterior: "Transferencia" });

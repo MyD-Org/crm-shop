@@ -405,5 +405,6 @@ de Mercado Pago, sync y cron, ya retirados).
 - **Total**: el botón ("Pagar $X", "Pagar en N cuotas de $X"; en el celular "Pagar N × $X") y el
   resumen lateral (`ResumenTotalPedido`: con interés, "Precio en 1 pago", "Interés de la financiación",
   total y "N cuotas de $X") salen de la misma opción (`lib/cuotas-formulario.ts`).
-- **Mail "pago recibido"**: con cuotas con interés agrega "Pagado: $X en N cuotas" (de
-  `pago_total_pagado`/`pago_cuotas`); el total del pedido sigue siendo el de 1 pago.
+- **Mails "pago recibido" y aviso al local**: en cuotas, la fila del medio dice lo que cobró el
+  procesador ("Mercado Pago, 12 cuotas de $X", de `pago_cuotas`/`pago_total_pagado`); con interés agrega
+  "(total pagado $X)". El total del pedido sigue siendo el de 1 pago.

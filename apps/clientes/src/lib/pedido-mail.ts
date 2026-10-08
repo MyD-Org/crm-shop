@@ -14,6 +14,8 @@ import { FUENTE_MAIL, pieTexto, tarjetaMail } from "./mail-layout";
 import { textoPagaConMedio } from "./medios-pago";
 import { SLUG_TRANSFERENCIA, type CuentaPagoSnapshot } from "./cuentas-bancarias";
 import { TEXTO_PLAZO_COMPROBANTE } from "./comprobantes/pedido";
+import { montoPorCuota } from "./cuotas-sin-interes";
+import { TEXTOS_CUOTAS } from "./cuotas-textos";
 
 export interface MailPedido {
   subject: string;
@@ -49,8 +51,9 @@ export interface DatosMailPedido {
   entrega?: string;
   pago?: string;
   /**
-   * "pago_recibido" en cuotas con interés del procesador: lo que pagó el comprador (informativo; el
-   * total del pedido y la factura quedan al precio de 1 pago).
+   * "pago_recibido": lo que cobró el procesador (cuotas y total pagado). En cuotas se agrega al medio
+   * ("Mercado Pago, 12 cuotas de $X"); con interés, también el total pagado (informativo: el total del
+   * pedido y la factura quedan al precio de 1 pago).
    */
   pagado?: { total: number; cuotas: number };
   /** Sólo "recibido": el pedido es de una cuenta corriente y `pago` es el nombre de su medio. */
@@ -164,11 +167,17 @@ const COPY: Record<AvisoPedidoShop, { asunto: string; titulo: string; bajada: (d
   },
 };
 
-/** "$66.000 en 6 cuotas": sólo si pagó en cuotas más que el total del pedido (interés del procesador). */
-function textoPagado(d: DatosMailPedido): string | undefined {
+/**
+ * El medio con lo que cobró el procesador: "Mercado Pago, 12 cuotas de $6.980,64" y, si pagó más que el
+ * total del pedido (interés de las cuotas), "(total pagado $X)". En 1 pago, el medio solo.
+ */
+function textoPago(d: { pago?: string; total?: number; pagado?: { total: number; cuotas: number } }): string | undefined {
   const p = d.pagado;
-  if (!p || p.cuotas < 2 || d.total === undefined || p.total <= d.total + 0.01) return undefined;
-  return `${moneda(p.total)} en ${p.cuotas} cuotas`;
+  if (!d.pago || !p || p.cuotas < 2) return d.pago;
+  const conInteres = d.total !== undefined && p.total > d.total + 0.01;
+  return `${d.pago}, ${TEXTOS_CUOTAS.cuotasDe(p.cuotas, montoPorCuota(p.total, p.cuotas))}${
+    conInteres ? ` (total pagado ${moneda(p.total)})` : ""
+  }`;
 }
 
 function resumen(d: DatosMailPedido): string {
@@ -183,9 +192,8 @@ function resumen(d: DatosMailPedido): string {
     .join("");
   const datos: [string, string | undefined][] = [
     ["Total", d.total !== undefined ? moneda(d.total) : undefined],
-    ["Pagado", textoPagado(d)],
     ["Entrega", d.entrega],
-    ["Pago", d.pago],
+    ["Pago", textoPago(d)],
   ];
   const datosHtml = datos
     .filter((f): f is [string, string] => Boolean(f[1]))
@@ -258,9 +266,8 @@ export function armarMailPedido(d: DatosMailPedido): MailPedido {
         "",
         ...(d.lineas ?? []).map((l) => `- ${l.nombre} × ${cantidad(l.cantidad)}`),
         ...(d.total !== undefined ? [`Total: ${moneda(d.total)}`] : []),
-        ...(textoPagado(d) ? [`Pagado: ${textoPagado(d)}`] : []),
         ...(d.entrega ? [`Entrega: ${d.entrega}`] : []),
-        ...(d.pago ? [`Pago: ${d.pago}`] : []),
+        ...(d.pago ? [`Pago: ${textoPago(d)}`] : []),
       ]
     : [];
   const text = [
@@ -311,6 +318,8 @@ export interface DatosMailPedidoOperador {
   lineas: LineaMail[];
   total: number;
   entrega?: string;
+  /** Lo que cobró el procesador (ver `DatosMailPedido.pagado`). */
+  pagado?: { total: number; cuotas: number };
   pago?: string;
   /** Link absoluto al pedido en el administrador (`CRM_ADMIN_URL`). Sin él, el mail va sin botón. */
   pedidoUrl?: string | null;
@@ -341,7 +350,7 @@ export function armarMailPedidoOperador(d: DatosMailPedidoOperador): MailPedido 
     ["Sucursal", d.sucursal?.trim() || undefined],
     ["Total", moneda(d.total)],
     ["Entrega", d.entrega],
-    ["Pago", d.pago],
+    ["Pago", textoPago(d)],
   ];
   const filasDe = (datos: [string, string | undefined][]) =>
     datos

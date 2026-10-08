@@ -114,7 +114,7 @@ async function enviarAviso(
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
-      // Cuotas con interés del procesador: lo pagado va aparte (el total del pedido es el de 1 pago).
+      // Lo que cobró el procesador (cuotas y total pagado): va junto al medio.
       ...(aviso === "pago_recibido" && pedido.pagoCuotas && pedido.pagoTotalPagado
         ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
         : {}),
@@ -315,6 +315,9 @@ export async function avisarOperadorPedidoNuevo(
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, null),
+      ...(pedido.pagoCuotas && pedido.pagoTotalPagado
+        ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
+        : {}),
       pedidoUrl: urlPedidoAdmin(pedidoId),
       logoUrl: urlLogoMail(),
       sitioUrl: urlSitioMail(),

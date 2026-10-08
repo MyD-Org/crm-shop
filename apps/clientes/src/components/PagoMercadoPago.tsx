@@ -9,6 +9,7 @@ import { customizacionBrick, textoCuotas, type CustomizacionSdk, type TipoTarjet
 import { AvisoProcesador } from "./AvisoProcesador";
 import { IconoBilletera, IconoCandado, IconoTarjeta, IconoTarjetaDebito, TituloComoPagar } from "./PagoIconos";
 import { PagoCuentaMercadoPago } from "./PagoCuentaMercadoPago";
+import { TarjetasAceptadasModal } from "./TarjetasAceptadasModal";
 import { alEstarListo, alFallarBrick, alVencerPlazo, iniciarPlazoCarga } from "./pago-mp-carga";
 import { AvisoFormularioNoCargo, AvisoPagoRechazado, AvisoSinConfigurar } from "./PagoMercadoPagoAvisos";
 
@@ -403,7 +404,7 @@ export function PagoMercadoPago({
     return <AvisoPagoRechazado mensaje={estado.mensaje} />;
   }
 
-  const formularioTarjeta = (
+  const formularioBrick = (
     <div className="relative min-h-48" aria-busy={estado.fase === "cargando"}>
       {estado.fase === "cargando" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-surface">
@@ -431,6 +432,13 @@ export function PagoMercadoPago({
           </Button>
         </div>
       )}
+    </div>
+  );
+
+  const formularioTarjeta = (
+    <div className="flex flex-col gap-3">
+      <TarjetasAceptadasModal tipo={tipoTarjeta} />
+      {formularioBrick}
     </div>
   );
 

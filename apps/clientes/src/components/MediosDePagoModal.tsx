@@ -68,7 +68,6 @@ export function MediosDePagoModal({
         )}
         {abierto && logos.length > 0 && (
           <div className="mt-5 border-t border-border pt-4">
-            <p className="mb-2 text-sm font-semibold text-text">Tarjetas aceptadas</p>
             <PaymentLogos aria-label="Tarjetas aceptadas" logos={logos} />
           </div>
         )}

@@ -94,10 +94,12 @@ describe("el respaldo con Payway", () => {
     expect(tarjetasPayway(SIN_TARJETAS)).toEqual(tarjetasPayway(TARJETAS_PROPIAS));
   });
 
-  it("con las de Mercado Pago, Payway sigue usando los logos de Mercado Pago", () => {
+  it("con las de Mercado Pago, Payway usa sus logos y completa las marcas que faltan con los propios", () => {
     const mp = tarjetasDeMercadoPago([medio("visa", "Visa", "credit_card"), medio("debvisa", "Visa Débito", "debit_card")]);
     const t = tarjetasPayway(mp);
-    expect(t.credito.map((x) => x.logo)).toEqual(["https://img.example/visa.gif"]);
-    expect(t.debito.map((x) => x.logo)).toEqual(["https://img.example/debvisa.gif"]);
+    expect(t.credito.map((x) => x.logo)[0]).toBe("https://img.example/visa.gif");
+    expect(t.debito.map((x) => x.logo)[0]).toBe("https://img.example/debvisa.gif");
+    expect(t.credito).toHaveLength(4);
+    expect(t.debito).toHaveLength(3);
   });
 });

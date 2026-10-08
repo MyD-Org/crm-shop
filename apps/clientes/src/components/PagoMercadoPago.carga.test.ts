@@ -11,12 +11,14 @@ vi.mock("@mercadopago/sdk-react", () => ({
 
 afterEach(() => vi.unstubAllEnvs());
 
-function renderPago(maxCuotas = 6) {
+function renderPago(cuotasPedido: number | null = 6, publicKey?: string) {
   return renderToStaticMarkup(createElement(PagoMercadoPago, {
     pedidoId: "pedido-prueba",
     numero: "PED-PRUEBA",
     monto: 1000,
-    maxCuotas,
+    pagoMetodo: "mercadopago",
+    cuotasPedido,
+    publicKey,
     onPagado: () => {},
   }));
 }
@@ -39,12 +41,20 @@ describe("carga inicial del formulario de Mercado Pago", () => {
     const html = renderPago(6);
     expect(html).toContain("¿Cómo quiere pagar?");
     expect(html).toContain("Tarjeta de crédito");
-    expect(html).toContain("6 cuotas sin interés");
     expect(html).toContain("Cuenta de Mercado Pago");
-    // Con cuotas el débito no se puede elegir y dice por qué.
-    expect(html).toContain("Sólo en un pago");
+    // Las cuotas se eligen dentro del formulario: el débito se puede elegir siempre (el pedido pasa
+    // a 1 pago al cobrar) y la opción de crédito no lleva las cuotas del pedido.
+    expect(html).not.toContain("Sólo en un pago");
+    expect(html).not.toContain("6 cuotas sin interés");
     // La cuenta no está elegida: su botón todavía no aparece.
     expect(html).not.toContain("Ir a Mercado Pago");
+  });
+
+  it("la public key que manda el servidor alcanza (sin la del entorno)", () => {
+    vi.stubEnv("NEXT_PUBLIC_MP_PUBLIC_KEY", "");
+    const html = renderPago(null, "TEST-public-key-cuenta");
+    expect(html).not.toContain("no está configurado");
+    expect(html).toContain('id="paymentBrick_container"');
   });
 
   it("no deja un loader infinito cuando falta la configuración", () => {

@@ -1,6 +1,9 @@
 "use client";
 
-import { OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
+import { MetaCuotas, OpcionesCuotas } from "@/components/checkout/OpcionesCuotas";
+import { resumenCuotas, type EleccionCuotas } from "@/lib/cuotas-formulario";
+import { montoPorCuota } from "@/lib/cuotas-sin-interes";
+import { TEXTOS_CUOTAS } from "@/lib/cuotas-textos";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -322,7 +325,60 @@ type PedidoRescatado = {
   pagoEnCurso?: boolean;
   /** Vino de `?pedido=`: se retoma siempre, sin compararlo con el carrito ni cancelarlo. */
   explicito?: boolean;
+  mpPublicKey?: string;
 };
+
+/**
+ * Total del resumen lateral del pago. Con Mercado Pago sale de lo elegido en el formulario (lo mismo que
+ * dice el botón "Pagar"): con interés desglosa el precio en 1 pago y el interés de la financiación.
+ */
+function ResumenTotalPedido({
+  confirmado,
+  eleccion,
+}: {
+  confirmado: { total: number; cuotas: number | null };
+  eleccion: EleccionCuotas | null;
+}) {
+  const r = eleccion
+    ? resumenCuotas(eleccion.opcion, eleccion.precioUnPago)
+    : {
+        total: confirmado.total,
+        ...(confirmado.cuotas !== null && confirmado.cuotas > 1
+          ? { linea: { texto: TEXTOS_CUOTAS.linea(confirmado.cuotas, montoPorCuota(confirmado.total, confirmado.cuotas)), sinInteres: true } }
+          : {}),
+      };
+  return (
+    <>
+      {r.interes !== undefined && r.precioUnPago !== undefined && (
+        <dl className="flex flex-col gap-1 border-t border-border pt-4 text-sm">
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted">{TEXTOS_CUOTAS.precioUnPago}</dt>
+            <dd className="text-text">{fmtPrecio(r.precioUnPago)}</dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted">{TEXTOS_CUOTAS.interesFinanciacion}</dt>
+            <dd className="text-text">{fmtPrecio(r.interes)}</dd>
+          </div>
+        </dl>
+      )}
+      <div className="flex items-baseline justify-between gap-3 border-t border-border pt-4">
+        <span className="font-semibold text-text">Total</span>
+        <span className="font-display text-2xl font-medium tracking-tight text-text">{fmtPrecio(r.total)}</span>
+      </div>
+      {r.linea && (
+        <p
+          className={
+            r.linea.sinInteres
+              ? "rounded-md bg-success-soft px-3 py-2 text-sm font-semibold text-success"
+              : "rounded-md bg-elevated px-3 py-2 text-sm font-semibold text-text"
+          }
+        >
+          {r.linea.texto}
+        </p>
+      )}
+    </>
+  );
+}
 
 export function CheckoutClient({
   nombreSugerido,
@@ -504,6 +560,10 @@ export function CheckoutClient({
     pagoEnLinea?: boolean;
     /** Procesador que cobra el pedido (id del registro de pagos); elige el componente de pago. */
     procesador?: string | null;
+    /** Medio de pago del pedido (slug). */
+    pagoMetodo?: string;
+    /** Mercado Pago: public key de la cuenta del pedido (la manda el servidor). */
+    mpPublicKey?: string;
     /** Plazo y WhatsApp de la sucursal. */
     contacto?: ContactoPedidoVista | null;
     /** Cuenta congelada en el pedido (transferencia); null = sin cuenta aplicable. */
@@ -613,6 +673,8 @@ export function CheckoutClient({
       pagoEnLinea: true,
       // El servidor manda el medio del pedido; sin él (respuesta anterior) era Mercado Pago.
       procesador: procesadorDeMedio(pedido.pagoMetodo ?? SLUG_MERCADOPAGO),
+      pagoMetodo: pedido.pagoMetodo ?? SLUG_MERCADOPAGO,
+      ...(pedido.mpPublicKey ? { mpPublicKey: pedido.mpPublicKey } : {}),
     });
     setPagoEnConfirmacion(Boolean(pedido.pagoEnCurso) || (retornoMercadoPago && pedido.id === pedidoReintento));
     setCarritoDelPedido(false);
@@ -693,6 +755,10 @@ export function CheckoutClient({
   // Cuotas sin interés: el medio de cobro en línea con condiciones las pide al servidor, que sólo
   // devuelve opciones con el flag `cuotas-cobro` prendido. Sin opciones no hay selector ni cuotas.
   const pideCuotas = Boolean(medioSel?.cobroOnline && (medioSel.condicionesCuotas?.length ?? 0) > 0);
+  // Mercado Pago: las cuotas se eligen dentro del formulario de pago, según la tarjeta (`SelectorCuotas`).
+  // El pedido se crea en 1 pago y acá sólo queda la meta "Sume $X más…". Payway, hasta su rebanada, las
+  // sigue eligiendo antes de crear el pedido.
+  const cuotasEnFormulario = Boolean(medioSel && procesadorDeMedio(medioSel.slug) === "mercadopago");
 
   // Transferencia: el servidor devuelve la cuenta que corresponde a la entrega, el local y el total.
   const conCuenta = pagoParaEnviar === SLUG_TRANSFERENCIA;
@@ -722,14 +788,21 @@ export function CheckoutClient({
       // refetch incluye la lista (o el medio, si no tiene lista de pago único).
       return pideCuotas && medioSel ? { listaKey: base.listaKey || medioSel.slug, pagoMetodo: medioSel.slug } : base;
     })(),
-    cuotas: pideCuotas ? cuotasSel : 1,
+    cuotas: pideCuotas && !cuotasEnFormulario ? cuotasSel : 1,
     conCuotas: pideCuotas,
     // Una vez confirmado el carrito queda vacío: no tiene sentido recotizar.
     activo: !confirmado,
   });
 
   const opcionesCuotas = pideCuotas ? (cotizacion?.cuotasOpciones ?? ultimasCuotasOpciones ?? []) : [];
-  const cuotasElegidas = opcionesCuotas.some((o) => o.cuotas === cuotasSel) ? cuotasSel : 1;
+  const cuotasElegidas = !cuotasEnFormulario && opcionesCuotas.some((o) => o.cuotas === cuotasSel) ? cuotasSel : 1;
+
+  /** Lo elegido en el formulario de Mercado Pago (para el resumen); null fuera de él. */
+  const [eleccionCuotas, setEleccionCuotas] = useState<EleccionCuotas | null>(null);
+  /** El formulario pasó el pedido a otras cuotas antes de cobrar: total y cuotas nuevos. */
+  const alActualizarPedido = useCallback((p: { cuotas: number | null; total: number }) => {
+    setConfirmado((c) => (c ? { ...c, cuotas: p.cuotas, total: p.total } : c));
+  }, []);
 
   // Flag `disponibilidad-sucursal`: de la disponibilidad por modalidad que devolvió la cotización,
   // sólo lo de la modalidad elegida (el envío, o el local de retiro seleccionado).
@@ -826,6 +899,8 @@ export function CheckoutClient({
           cuotas: typeof json.cuotas === "number" ? json.cuotas : null,
           pagoEnLinea: enLinea,
           procesador: procesadorDeMedio(pagoParaEnviar),
+          pagoMetodo: pagoParaEnviar,
+          ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
           contacto: json.contacto ?? null,
           cuentaPago: json.cuentaPago ?? null,
         });
@@ -949,6 +1024,8 @@ export function CheckoutClient({
         cuotas: typeof json.cuotas === "number" ? json.cuotas : null,
         pagoEnLinea: esPagoEnLinea(pagoParaEnviar),
         procesador: procesadorDeMedio(pagoParaEnviar),
+        pagoMetodo: pagoParaEnviar,
+        ...(typeof json.mpPublicKey === "string" ? { mpPublicKey: json.mpPublicKey } : {}),
         contacto: json.contacto ?? null,
         cuentaPago: json.cuentaPago ?? null,
       });
@@ -1123,7 +1200,11 @@ export function CheckoutClient({
               numero={confirmado.numero}
               monto={confirmado.total}
               emailComprador={emailCliente}
-              maxCuotas={confirmado.cuotas ?? undefined}
+              pagoMetodo={confirmado.pagoMetodo ?? SLUG_MERCADOPAGO}
+              cuotasPedido={confirmado.cuotas}
+              publicKey={confirmado.mpPublicKey}
+              onEleccionCuotas={setEleccionCuotas}
+              onPedidoActualizado={alActualizarPedido}
               opcionesCobro={opcionesCobroDe(confirmado.procesador)}
               pagoMercadoPagoId={pagoMercadoPagoId}
               onCobroEnCurso={setCobroEnCurso}
@@ -1146,15 +1227,7 @@ export function CheckoutClient({
 
         <aside className="flex flex-col gap-4 rounded-[28px] border border-border bg-surface p-6 lg:sticky lg:top-24 lg:w-80 lg:shrink-0">
           <h2 className="font-display text-lg font-medium text-text">Resumen</h2>
-          <div className="flex items-baseline justify-between gap-3 border-t border-border pt-4">
-            <span className="font-semibold text-text">Total</span>
-            <span className="font-display text-2xl font-medium tracking-tight text-text">{fmtPrecio(confirmado.total)}</span>
-          </div>
-          {confirmado.cuotas !== null && confirmado.cuotas > 1 && (
-            <p className="rounded-md bg-success-soft px-3 py-2 text-sm font-semibold text-success">
-              {confirmado.cuotas} cuotas sin interés de {fmtPrecio(confirmado.total / confirmado.cuotas)}
-            </p>
-          )}
+          <ResumenTotalPedido confirmado={confirmado} eleccion={confirmado.procesador === "mercadopago" ? eleccionCuotas : null} />
           <div className="flex flex-col items-stretch gap-2 border-t border-border pt-4">
             {/* Sin cobro aprobado ni en vuelo se puede elegir otro medio o cuotas; el servidor lo vuelve a validar.
                 En vuelo cuenta también el envío y la validación del banco (`cobroEnCurso`). */}
@@ -1735,7 +1808,8 @@ export function CheckoutClient({
                 {medioSel.instrucciones.trim() && (
                   <p className="mt-3 whitespace-pre-line text-sm text-text">{medioSel.instrucciones.trim()}</p>
                 )}
-                {pagaEnLinea && opcionesCuotas.length > 1 && (
+                {pagaEnLinea && cuotasEnFormulario && <MetaCuotas progreso={cotizacion?.progresoCuotas} />}
+                {pagaEnLinea && !cuotasEnFormulario && opcionesCuotas.length > 1 && (
                   <OpcionesCuotas
                     opciones={opcionesCuotas}
                     elegida={cuotasElegidas}

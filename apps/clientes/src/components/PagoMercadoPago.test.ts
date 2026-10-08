@@ -52,38 +52,37 @@ describe("PagoMercadoPago — props del Payment Brick", () => {
 
 /**
  * Regresión de #21: si `customization` cambia de identidad entre renders, el
- * SDK desmonta y recrea el Brick y el comprador pierde lo que cargó. Con
- * `maxCuotas` la identidad sólo puede cambiar cuando cambia el valor.
+ * SDK desmonta y recrea el Brick y el comprador pierde lo que cargó. Las cuotas
+ * se eligen en nuestro desplegable (`SelectorCuotas`), no en el Brick: su
+ * customization depende sólo del tipo de tarjeta, así que cambiar las cuotas
+ * nunca la cambia.
  *
  * Los tests corren en node (sin DOM): la identidad la garantiza
  * `customizacionBrick` (memo por valor) y se verifica que el componente la use
- * con deps `[maxCuotas]`.
+ * con deps `[tipoTarjeta]`.
  */
 const sinTema = () => ({});
 
 describe("customizacionBrick", () => {
-  it("crédito con cuotas: exactamente esas (mínimo = máximo), sólo tarjeta de crédito", () => {
-    const c = customizacionBrick("credito", 6, sinTema);
-    expect(c.paymentMethods).toEqual({ types: { included: ["credit_card"] }, minInstallments: 6, maxInstallments: 6 });
+  // Primero: la instancia queda memoizada por tipo con las variables de la primera lectura.
+  it("toma los colores del tema que le pasan", () => {
+    const c = customizacionBrick("credito", () => ({ baseColor: "#16283f" }));
+    expect(c.visual.style.customVariables).toEqual({ baseColor: "#16283f" });
   });
 
-  it("débito: sólo tarjeta de débito y sin cuotas, aunque el pedido tenga", () => {
-    expect(customizacionBrick("debito", 6, sinTema).paymentMethods).toEqual({ types: { included: ["debit_card"] } });
+  it("crédito: un pago para el Brick (mínimo = máximo = 1, su selector queda oculto)", () => {
+    const c = customizacionBrick("credito", sinTema);
+    expect(c.paymentMethods).toEqual({ types: { included: ["credit_card"] }, minInstallments: 1, maxInstallments: 1 });
   });
 
-  it("sin cuotas congeladas: sin tope (lo que ofrezca Mercado Pago)", () => {
-    expect("maxInstallments" in customizacionBrick("credito", undefined, sinTema).paymentMethods).toBe(false);
+  it("débito: sólo tarjeta de débito y sin cuotas", () => {
+    expect(customizacionBrick("debito", sinTema).paymentMethods).toEqual({ types: { included: ["debit_card"] } });
   });
 
   it("sin título ni botón propios (el botón es un Button del DS)", () => {
-    const c = customizacionBrick("credito", 1, sinTema);
+    const c = customizacionBrick("credito", sinTema);
     expect(c.visual.hideFormTitle).toBe(true);
     expect(c.visual.hidePaymentButton).toBe(true);
-  });
-
-  it("toma los colores del tema que le pasan", () => {
-    const c = customizacionBrick("credito", 3, () => ({ baseColor: "#16283f" }));
-    expect(c.visual.style.customVariables).toEqual({ baseColor: "#16283f" });
   });
 
   it("textoCuotas", () => {
@@ -91,31 +90,42 @@ describe("customizacionBrick", () => {
     expect(textoCuotas(1)).toBe("En un pago");
   });
 
-  it("misma identidad para los mismos valores (re-renders del padre)", () => {
-    expect(customizacionBrick("credito", 6, sinTema)).toBe(customizacionBrick("credito", 6, sinTema));
+  it("misma identidad para el mismo tipo (re-renders del padre, cambio de cuotas)", () => {
+    expect(customizacionBrick("credito", sinTema)).toBe(customizacionBrick("credito", sinTema));
   });
 
-  it("identidad distinta si cambia la tarjeta o las cuotas", () => {
-    const base = customizacionBrick("credito", 6, sinTema);
-    expect(customizacionBrick("debito", 6, sinTema)).not.toBe(base);
-    expect(customizacionBrick("credito", 3, sinTema)).not.toBe(base);
-  });
-
-  it("cuotas inválidas se tratan como sin tope", () => {
-    expect(customizacionBrick("credito", 0, sinTema)).toBe(customizacionBrick("credito", undefined, sinTema));
-    expect(customizacionBrick("credito", 2.5, sinTema)).toBe(customizacionBrick("credito", undefined, sinTema));
+  it("identidad distinta sólo si cambia la tarjeta", () => {
+    expect(customizacionBrick("debito", sinTema)).not.toBe(customizacionBrick("credito", sinTema));
   });
 
   it("no se congela: el SDK del Brick puede mutarla sin romper el checkout", () => {
-    expect(Object.isFrozen(customizacionBrick("credito", 6, sinTema))).toBe(false);
+    expect(Object.isFrozen(customizacionBrick("credito", sinTema))).toBe(false);
   });
 });
 
-describe("PagoMercadoPago usa la customization estable", () => {
-  it("memoiza con deps [tipoTarjeta, maxCuotas] y pasa esa instancia al Brick", () => {
+describe("PagoMercadoPago: props del Brick estables", () => {
+  it("memoiza la customization con deps [tipoTarjeta] y pasa esa instancia al Brick", () => {
     expect(fuente).toMatch(
-      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(tipoTarjeta, maxCuotas\) as CustomizacionSdk,\s*\[tipoTarjeta, maxCuotas\]\s*,?\s*\)/,
+      /useMemo\(\s*\(\)\s*=>\s*customizacionBrick\(tipoTarjeta\) as CustomizacionSdk,\s*\[tipoTarjeta\]\s*,?\s*\)/,
     );
     expect(fuente).toMatch(/customization=\{customization\}/);
+  });
+
+  it("el monto del Brick queda congelado: cambiar las cuotas no lo remonta ni borra la tarjeta", () => {
+    expect(fuente).toMatch(/const \[montoBrick\] = useState\(monto\)/);
+    expect(fuente).toMatch(/amount: montoBrick/);
+  });
+
+  it("onBinChange estable (useCallback sin dependencias) y pasado al Brick", () => {
+    expect(fuente).toMatch(/const onBinChange = useCallback\([^]*?\[\]\)/);
+    expect(fuente).toMatch(/onBinChange=\{onBinChange\}/);
+  });
+
+  it("mientras procesa, los campos de la tarjeta quedan bloqueados (inert), como el resto del formulario", () => {
+    expect(fuente).toMatch(/inert=\{procesando\}/);
+  });
+
+  it("cobra las cuotas de nuestro desplegable, no las del Brick", () => {
+    expect(fuente).not.toMatch(/cuotas:\s*datos\?\.installments/);
   });
 });

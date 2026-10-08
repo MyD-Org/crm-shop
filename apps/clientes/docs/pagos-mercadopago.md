@@ -380,3 +380,31 @@ de Mercado Pago, sync y cron, ya retirados).
   (hoy un juego, cuenta `principal`; mañana una por sucursal). La public key del Brick sale del servidor
   (`mpPublicKey` en las respuestas de crear, retomar y cambiar el medio del pedido, y `publicKey` en las
   opciones de cuotas).
+
+### Formulario (rebanada 4: Mercado Pago)
+
+- **Antes del pedido** no se eligen cuotas con Mercado Pago: el pedido se crea en 1 pago y en el paso
+  Pago queda sólo la meta "Sume $X más…" (`MetaCuotas`). Payway sigue con el selector previo
+  (`OpcionesCuotas`) hasta su rebanada.
+- **En el formulario** (`PagoMercadoPago.tsx`): el Brick va en un pago (`customizacionBrick(tipo)`:
+  crédito con `minInstallments = maxInstallments = 1`, su selector queda oculto) y las cuotas se eligen
+  en `SelectorCuotas` (DS `Select` con `badge` "Sin interés"), debajo de la tarjeta. Las opciones las
+  pide `useOpcionesCuotas` al montar y en cada cambio de BIN (`onBinChange`, demora 250 ms, la consulta
+  nueva aborta la anterior; `consultor-cuotas.ts`). Sin respuesta queda lo que el pedido ya tiene
+  congelado (`opcionesDeRespaldo`). Si la elegida deja de ofrecerse con la tarjeta cargada, vuelve a
+  1 pago. El aviso "CFT X% · TEA Y%. Las cuotas con interés las financia Mercado Pago." aparece sólo con
+  una cuota con interés elegida.
+- **Invariantes del Brick**: `initialization.amount` congelado al montar (`useState(monto)`), y
+  `customization` (deps `[tipoTarjeta]`), `onBinChange`, `onSubmit`, `onReady` y `onError` con identidad
+  estable: cambiar las cuotas no remonta el Brick ni borra la tarjeta (`PagoMercadoPago.test.ts`).
+- **Al pagar**: si la opción pide otras cuotas que las del pedido (`pedidoCuotas`), UN
+  `POST /api/pedidos/[id]/medio { pagoMetodo, cuotas, totalVisto }` (`asegurarCuotasDelPedido`); si
+  falla (409/422), el mensaje queda sobre el formulario, la tarjeta sigue cargada y se vuelven a pedir las
+  opciones. Después `POST /api/pagos/mercadopago` con las cuotas del desplegable y el BIN. Débito y cuenta
+  de Mercado Pago pasan el pedido a 1 pago antes de cobrar.
+- **Total**: el botón ("Pagar $X", "Pagar en N cuotas de $X"; en el celular "Pagar N × $X") y el
+  resumen lateral (`ResumenTotalPedido`: con interés, "Precio en 1 pago", "Interés de la financiación",
+  total y "N cuotas de $X") salen de la misma opción (`lib/cuotas-formulario.ts`).
+- **Mails "pago recibido" y aviso al local**: en cuotas, la fila del medio dice lo que cobró el
+  procesador ("Mercado Pago, 12 cuotas de $X", de `pago_cuotas`/`pago_total_pagado`); con interés agrega
+  "(total pagado $X)". El total del pedido sigue siendo el de 1 pago.

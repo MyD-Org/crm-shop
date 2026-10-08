@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { OpcionesCuotas } from "./OpcionesCuotas";
+import { MetaCuotas, OpcionesCuotas } from "./OpcionesCuotas";
 
 const opciones = [
   { cuotas: 1, total: 100000, montoCuota: 100000 },
@@ -32,5 +32,17 @@ describe("OpcionesCuotas", () => {
   it("sin próximo escalón no muestra la meta", () => {
     expect(html({ cuotasActuales: 12, proximo: null, pct: 100 })).not.toContain("data-meta");
     expect(html(null)).not.toContain("data-meta");
+  });
+});
+
+describe("MetaCuotas (Mercado Pago: las cuotas van en el formulario)", () => {
+  it("sólo la meta, sin el selector", () => {
+    const h = renderToStaticMarkup(<MetaCuotas progreso={{ cuotasActuales: 3, proximo: { cuotas: 6, falta: 15000, minimo: 90000 }, pct: 83 }} />);
+    expect(h).toContain('data-meta="cuotas"');
+    expect(h).not.toContain("Cantidad de cuotas");
+  });
+  it("sin próximo escalón, nada", () => {
+    expect(renderToStaticMarkup(<MetaCuotas progreso={{ cuotasActuales: 12, proximo: null, pct: 100 }} />)).toBe("");
+    expect(renderToStaticMarkup(<MetaCuotas progreso={null} />)).toBe("");
   });
 });

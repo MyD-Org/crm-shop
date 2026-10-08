@@ -114,6 +114,10 @@ async function enviarAviso(
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, medios),
+      // Lo que cobró el procesador (cuotas y total pagado): va junto al medio.
+      ...(aviso === "pago_recibido" && pedido.pagoCuotas && pedido.pagoTotalPagado
+        ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
+        : {}),
       // Cuenta corriente: el medio del pedido es el de audiencia `cuenta_corriente` (por el campo,
       // nunca por el nombre ni el slug).
       pagoCuentaCorriente: Boolean(medios?.some((m) => m.slug === pedido.pagoMetodo && esMedioCuentaCorriente(m))),
@@ -311,6 +315,9 @@ export async function avisarOperadorPedidoNuevo(
       total: Number(pedido.total),
       entrega: etiquetaEntrega(pedido.entregaTipo, pedido.entregaCiudad, pedido.entregaDireccion),
       pago: nombreDelPago(pedido.pagoMetodo, null),
+      ...(pedido.pagoCuotas && pedido.pagoTotalPagado
+        ? { pagado: { total: Number(pedido.pagoTotalPagado), cuotas: pedido.pagoCuotas } }
+        : {}),
       pedidoUrl: urlPedidoAdmin(pedidoId),
       logoUrl: urlLogoMail(),
       sitioUrl: urlSitioMail(),

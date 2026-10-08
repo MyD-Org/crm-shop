@@ -142,8 +142,13 @@ describe("PagoMercadoPago.tsx: cableado", () => {
     expect(fuente).toMatch(/<CardPayment\s+key=\{`\$\{tipoTarjeta\}-\$\{intento\}`\}/);
     const fn = fuente.slice(fuente.indexOf("function reintentar()"));
     const cuerpo = fn.slice(0, fn.indexOf("\n  }"));
-    expect(cuerpo).toContain("setIntento((n) => n + 1)");
+    expect(cuerpo).toContain("remontarBrick()");
     expect(cuerpo).toContain('setEstado({ fase: "cargando" })');
+    // Remontar = nueva `key` y sin el BIN de la tarjeta anterior.
+    const remontar = fuente.slice(fuente.indexOf("function remontarBrick()"));
+    const cuerpoRemontar = remontar.slice(0, remontar.indexOf("\n  }"));
+    expect(cuerpoRemontar).toContain("setIntento((n) => n + 1)");
+    expect(cuerpoRemontar).toContain("setBin(null)");
     expect(fuente).toContain("onReintentar={reintentar}");
   });
 

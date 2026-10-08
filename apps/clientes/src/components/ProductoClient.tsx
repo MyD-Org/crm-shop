@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Button, QuantityStepper, Skeleton } from "@myd-org/ui";
+import { Button, QuantityStepper, Skeleton, type PaymentLogo } from "@myd-org/ui";
 import { PrecioConImpuestos } from "@/components/PrecioConImpuestos";
 import { CuotasLinea } from "@/components/CuotasLinea";
 import { CuotasConCarrito, useProgresoCuotasCarrito } from "@/components/producto/CuotasConCarrito";
@@ -84,6 +84,7 @@ export function ProductoClient({
   relacionados = null,
   rutaCategorias = [],
   disponibilidad,
+  logosTarjetas = [],
 }: {
   producto: Product;
   /**
@@ -103,6 +104,8 @@ export function ProductoClient({
   relacionados?: ReactNode;
   /** Categoría del admin con sus padres (raíz → hoja), para las migas. Vacío = la de Alegra. */
   rutaCategorias?: string[];
+  /** Logos de las tarjetas que acepta Mercado Pago: van al pie de "Ver medios de pago". */
+  logosTarjetas?: PaymentLogo[];
 }) {
   // La ficha viene cacheada con el precio público; si el visitante tiene una lista privada, se pisa
   // acá (precio, sin "con medio" ni cuotas). Con sesión, hasta que llega se muestra un marcador.
@@ -330,6 +333,7 @@ export function ProductoClient({
                     precioFinal={producto.precioFinal}
                     cuotas={cuotas}
                     conCarrito={cuotasConCarrito}
+                    logos={logosTarjetas}
                     className="mt-0.5 text-accent transition-colors hover:text-primary"
                   />
                 </div>

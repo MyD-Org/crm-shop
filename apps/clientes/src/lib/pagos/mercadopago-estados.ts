@@ -11,7 +11,12 @@
  * producción homologadas — sin este endpoint no se puede probar nada. Payments
  * API está marcada como "legacy" por MP en su panel, pero no está deprecada y
  * sigue siendo la que la mayoría de integraciones usan. Cuando llegue la
- * homologación se puede volver a Orders: los `status_detail` son los mismos.
+ * homologación se puede volver a Orders.
+ *
+ * OJO: los `status_detail` NO son los mismos. La Payments API rechaza con `cc_rejected_*`
+ * (`cc_rejected_other_reason`, `cc_rejected_high_risk`, …); la Orders API, con los cortos
+ * (`rejected_by_issuer`, `high_risk`, …). Se mapean los dos: con sólo los de Orders, todo rechazo
+ * real de la Payments API caía en `desconocido` y el comprador veía el mensaje genérico.
  */
 
 import type { MotivoRechazo } from "./tipos";
@@ -58,6 +63,30 @@ const RECHAZOS: Record<string, MotivoRechazo> = {
    */
   invalid_card_token: "desconocido",
   processing_error: "desconocido",
+
+  // Payments API (`POST /v1/payments`, la que usamos): los mismos motivos con los códigos `cc_rejected_*`.
+  cc_rejected_bad_filled_card_number: "datos_invalidos",
+  cc_rejected_bad_filled_date: "datos_invalidos",
+  cc_rejected_bad_filled_security_code: "datos_invalidos",
+  cc_rejected_bad_filled_other: "datos_invalidos",
+  cc_rejected_insufficient_amount: "fondos",
+  cc_amount_rate_limit_exceeded: "limite",
+  cc_rejected_invalid_installments: "cuotas_no_disponibles",
+  cc_rejected_call_for_authorize: "requiere_autorizacion",
+  cc_rejected_card_disabled: "tarjeta_inhabilitada",
+  cc_rejected_max_attempts: "demasiados_intentos",
+  cc_rejected_high_risk: "riesgo",
+  cc_rejected_blacklist: "riesgo",
+  rejected_high_risk: "riesgo",
+  cc_rejected_3ds_challenge: "validacion_banco",
+  cc_rejected_3ds_mandatory: "validacion_banco",
+  // Sin motivo dado por el banco, tarjeta no admitida para la compra o pago repetido por el mismo monto:
+  // en los tres sirve otra tarjeta u otro medio.
+  cc_rejected_other_reason: "no_aprobado",
+  cc_rejected_card_error: "no_aprobado",
+  cc_rejected_card_type_not_allowed: "no_aprobado",
+  cc_rejected_duplicated_payment: "no_aprobado",
+  rejected_by_bank: "no_aprobado",
 };
 
 /** Estados de pago que significan "todavía no se sabe". */

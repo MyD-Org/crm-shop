@@ -117,6 +117,16 @@ describe("motivoDeMercadoPago", () => {
     expect(motivoDeMercadoPago("rejected", "processing_error")).toBe("desconocido");
   });
 
+  it("los rechazos de la Payments API (cc_rejected_*) tienen su motivo, no el genérico", () => {
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_other_reason")).toBe("no_aprobado");
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_bad_filled_security_code")).toBe("datos_invalidos");
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_insufficient_amount")).toBe("fondos");
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_call_for_authorize")).toBe("requiere_autorizacion");
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_high_risk")).toBe("riesgo");
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_invalid_installments")).toBe("cuotas_no_disponibles");
+    expect(motivoDeMercadoPago("rejected", "cc_rejected_3ds_challenge")).toBe("validacion_banco");
+  });
+
   it("un código nuevo de MP cae en desconocido, no rompe", () => {
     expect(motivoDeMercadoPago("rejected", "codigo_que_no_existe")).toBe("desconocido");
     expect(motivoDeMercadoPago("rejected", undefined)).toBe("desconocido");

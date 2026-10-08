@@ -67,8 +67,9 @@ const estadoDeStatus = (status: string): EstadoPago["estado"] => {
 
 /**
  * Código de rechazo del autorizador (`status_details.error.reason.id`) a la categoría que decide
- * qué le decimos al comprador. Los de configuración del comercio (03, 12, 13, 30, 31, 57, 58, 89)
- * caen en `desconocido`: el comprador no puede arreglarlos y no se le explican.
+ * qué le decimos al comprador. Los de configuración del comercio (03, 12, 13, 30, 31, 58, 89)
+ * caen en `desconocido`: el comprador no puede arreglarlos y no se le explican. El 57 ("no permitida
+ * a esta tarjeta") es de la TARJETA, no del comercio: con otra tarjeta se resuelve.
  */
 const MOTIVOS: Record<number, MotivoRechazo> = {
   51: "fondos",
@@ -84,9 +85,12 @@ const MOTIVOS: Record<number, MotivoRechazo> = {
   5: "banco_rechazo",
   4: "banco_rechazo",
   7: "banco_rechazo",
+  41: "banco_rechazo",
   43: "banco_rechazo",
   53: "tarjeta_inhabilitada",
   56: "tarjeta_inhabilitada",
+  62: "tarjeta_inhabilitada",
+  57: "no_aprobado",
   1: "requiere_autorizacion",
   2: "requiere_autorizacion",
   76: "requiere_autorizacion",

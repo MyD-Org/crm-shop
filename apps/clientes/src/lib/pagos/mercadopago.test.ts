@@ -333,3 +333,53 @@ describe("interpretar — medio con el que se cobró (info)", () => {
     expect(interpretar({ id: 6, status: "approved", payment_method_id: "nuevamarca" }).info).toEqual({ marca: "nuevamarca" });
   });
 });
+
+describe("interpretar — neto que recibe la tienda y cargos de Mercado Pago", () => {
+  it("neto informado: costo = monto − neto (comisión + costo de las cuotas sin interés)", () => {
+    const e = interpretar({
+      id: 7,
+      status: "approved",
+      transaction_amount: 10000,
+      transaction_details: { total_paid_amount: 10000, net_received_amount: 8790.35 },
+      fee_details: [
+        { type: "mercadopago_fee", amount: 761, fee_payer: "collector" },
+        { type: "financing_fee", amount: 448.65, fee_payer: "collector" },
+      ],
+    });
+    expect(e.info).toEqual({ netoRecibido: 8790.35, costoProcesador: 1209.65 });
+  });
+
+  it("cuotas con interés del comprador: el interés no cuenta como costo de la tienda", () => {
+    const e = interpretar({
+      id: 8,
+      status: "approved",
+      transaction_amount: 10000,
+      transaction_details: { total_paid_amount: 12100, net_received_amount: 9239 },
+      fee_details: [
+        { type: "mercadopago_fee", amount: 761, fee_payer: "collector" },
+        { type: "financing_fee", amount: 2100, fee_payer: "payer" },
+      ],
+    });
+    expect(e.info).toEqual({ netoRecibido: 9239, costoProcesador: 761 });
+  });
+
+  it("sin monto: el costo sale de los cargos que paga el vendedor", () => {
+    const e = interpretar({
+      id: 9,
+      status: "approved",
+      transaction_details: { net_received_amount: 9239 },
+      fee_details: [
+        { type: "mercadopago_fee", amount: 761, fee_payer: "collector" },
+        { type: "financing_fee", amount: 2100, fee_payer: "payer" },
+      ],
+    });
+    expect(e.info).toEqual({ netoRecibido: 9239, costoProcesador: 761 });
+  });
+
+  it("pago sin aprobar (MP informa neto 0) o sin el dato: no se guarda nada", () => {
+    expect(
+      interpretar({ id: 10, status: "pending", transaction_amount: 10000, transaction_details: { net_received_amount: 0 } }).info,
+    ).toBeUndefined();
+    expect(interpretar({ id: 11, status: "approved", transaction_amount: 10000, fee_details: [] }).info).toBeUndefined();
+  });
+});

@@ -24,6 +24,12 @@ describe("tarjetasDeMercadoPago", () => {
     expect(t.credito[0].logo).toBe("https://img.example/visa.gif");
   });
 
+  it("guarda el id de Mercado Pago de cada tarjeta", () => {
+    const t = tarjetasDeMercadoPago([medio("visa", "Visa", "credit_card"), medio("debmaster", "Mastercard Débito", "debit_card")]);
+    expect(t.credito[0].id).toBe("visa");
+    expect(t.debito[0].id).toBe("debmaster");
+  });
+
   it("descarta inactivas, otros tipos, logos sin https y datos incompletos", () => {
     const t = tarjetasDeMercadoPago([
       medio("visa", "Visa", "credit_card", { status: "deactive" }),

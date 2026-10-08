@@ -10,6 +10,7 @@
  */
 
 import { idMedioPago, type ModalidadTarjeta } from "./payway-estados";
+import { marcaAceptadaPorPayway, textoMarcasPayway } from "./tarjetas-payway";
 
 export type { ModalidadTarjeta };
 
@@ -25,6 +26,12 @@ export const MARCAS: ReadonlyArray<{ id: Marca; etiqueta: string }> = [
   { id: "naranja", etiqueta: "Naranja" },
   { id: "diners", etiqueta: "Diners" },
 ];
+
+/**
+ * Las marcas del convenio de Payway (ver `tarjetas-payway.ts`): el selector de marca ofrece sólo éstas.
+ * `MARCAS` queda completa para reconocer por el prefijo del número y avisar que esa tarjeta no se acepta.
+ */
+export const MARCAS_CONVENIO = MARCAS.filter((m) => marcaAceptadaPorPayway(m.id));
 
 export type Validacion = { ok: true } | { ok: false; mensaje: string };
 const OK: Validacion = { ok: true };
@@ -134,6 +141,19 @@ export function validarDocumento(nro: string): Validacion {
 /** `payment_method_id` de Payway para esa marca y modalidad; null si no existe esa combinación. */
 export function metodoPagoIdDe(marca: string | null, modalidad: ModalidadTarjeta): number | null {
   return marca ? idMedioPago(marca, modalidad) : null;
+}
+
+/**
+ * La marca tiene que estar en el convenio y admitir la modalidad. Naranja, Diners y Maestro se reconocen por
+ * el prefijo pero no se cobran: se avisa antes de tokenizar (Payway las rechazaría igual).
+ */
+export function validarMarcaDelConvenio(marca: Marca | null, modalidad: ModalidadTarjeta): Validacion {
+  if (!marca) return error("Seleccione la marca de la tarjeta.");
+  if (!marcaAceptadaPorPayway(marca)) {
+    return error(`Esa tarjeta no se acepta en esta tienda. Pague con ${textoMarcasPayway(modalidad, "o")}.`);
+  }
+  if (metodoPagoIdDe(marca, modalidad) === null) return error("Esa tarjeta no admite débito. Elija crédito u otra tarjeta.");
+  return OK;
 }
 
 /** El débito se cobra en un pago: Payway no lo admite en cuotas. */

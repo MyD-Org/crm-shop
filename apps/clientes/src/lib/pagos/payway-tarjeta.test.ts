@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   armarSolicitudToken,
+  MARCAS_CONVENIO,
   cuotasPermitidas,
   marcaPorPrefijo,
   metodoPagoIdDe,
   normalizarPan,
   validarCvv,
   validarDocumento,
+  validarMarcaDelConvenio,
   validarPan,
   validarTitular,
   validarVencimiento,
@@ -163,6 +165,40 @@ describe("armarSolicitudToken", () => {
       card_expiration_month: "08",
       card_expiration_year: "30",
       card_holder_identification: { type: "dni", number: "25123456" },
+    });
+  });
+});
+
+describe("marcas del convenio de Payway", () => {
+  it("el selector de marca ofrece sólo Visa, Mastercard, American Express y Cabal", () => {
+    expect(MARCAS_CONVENIO.map((m) => m.id)).toEqual(["visa", "mastercard", "amex", "cabal"]);
+  });
+
+  it("validarMarcaDelConvenio acepta las del convenio según la modalidad", () => {
+    expect(validarMarcaDelConvenio("visa", "credito")).toEqual({ ok: true });
+    expect(validarMarcaDelConvenio("cabal", "debito")).toEqual({ ok: true });
+  });
+
+  it("pide elegir la marca cuando no hay ninguna", () => {
+    expect(validarMarcaDelConvenio(null, "credito")).toEqual({ ok: false, mensaje: "Seleccione la marca de la tarjeta." });
+  });
+
+  it("rechaza Naranja, Diners y Maestro con un mensaje en usted que nombra las del convenio", () => {
+    for (const m of ["naranja", "diners", "maestro"] as const) {
+      const r = validarMarcaDelConvenio(m, "credito");
+      expect(r).toEqual({
+        ok: false,
+        mensaje: "Esa tarjeta no se acepta en esta tienda. Pague con Visa, Mastercard, American Express o Cabal.",
+      });
+    }
+    const d = validarMarcaDelConvenio("naranja", "debito");
+    expect(d).toEqual({ ok: false, mensaje: "Esa tarjeta no se acepta en esta tienda. Pague con Visa, Mastercard o Cabal." });
+  });
+
+  it("American Express no admite débito", () => {
+    expect(validarMarcaDelConvenio("amex", "debito")).toEqual({
+      ok: false,
+      mensaje: "Esa tarjeta no admite débito. Elija crédito u otra tarjeta.",
     });
   });
 });
